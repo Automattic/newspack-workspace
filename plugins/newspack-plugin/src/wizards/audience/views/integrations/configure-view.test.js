@@ -17,11 +17,7 @@ jest.mock( '@wordpress/data', () => ( {
 // The columns are Stacks, and an empty one is a real element costing a real
 // gap, so the stub keeps it queryable for the tests that assert none is left.
 jest.mock( '@wordpress/ui', () => ( {
-	Stack: ( { children, gap } ) => (
-		<div data-testid="stack" data-gap={ gap }>
-			{ children }
-		</div>
-	),
+	Stack: ( { children } ) => <div data-testid="stack">{ children }</div>,
 } ) );
 // Stub the components barrel: with @wordpress/data mocked, the real barrel eagerly loads @wordpress/rich-text, whose module-load combineReducers() call throws.
 // Cover everything SettingsField imports so a future select/oauth/textarea fixture renders a stub, not `undefined`.
@@ -737,6 +733,25 @@ describe( 'ConfigureView per-direction sections', () => {
 		expect( screen.getByLabelText( 'Enable outbound sync' ).checked ).toBe( true );
 		expect( screen.queryByLabelText( 'How to sync deletion' ) ).toBeNull();
 		expect( screen.queryAllByTestId( 'toggle-divider' ) ).toHaveLength( 0 );
+	} );
+
+	// A payload predating the per-direction toggles has nothing but its pickers,
+	// so once those come back empty neither section has anything left to show.
+	it( 'renders no section for a legacy payload whose pickers have no options', () => {
+		renderConfigureView( {
+			integrations: {
+				esp: {
+					...INTEGRATION,
+					settings: [
+						{ key: 'incoming_metadata_fields', type: 'metadata', label: 'Incoming', value: {}, options: [] },
+						{ key: 'outgoing_metadata_fields', type: 'metadata', label: 'Outgoing', value: [], grouped_options: [] },
+					],
+				},
+			},
+		} );
+		expect( screen.queryByText( 'Inbound' ) ).toBeNull();
+		expect( screen.queryByText( 'Outbound' ) ).toBeNull();
+		expect( screen.queryAllByTestId( 'section-divider' ) ).toHaveLength( 0 );
 	} );
 
 	// get_list_options() turns an ESP error into an empty array, so an expired
