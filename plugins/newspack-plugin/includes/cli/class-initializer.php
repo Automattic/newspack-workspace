@@ -36,6 +36,7 @@ class Initializer {
 		include_once NEWSPACK_ABSPATH . 'includes/cli/class-institutions-migration.php';
 		include_once NEWSPACK_ABSPATH . 'includes/cli/class-membership-gates-migration.php';
 		include_once NEWSPACK_ABSPATH . 'includes/cli/class-premium-newsletters-migration.php';
+		include_once NEWSPACK_ABSPATH . 'includes/cli/class-premium-newsletters-verify.php';
 	}
 
 	/**
@@ -132,6 +133,11 @@ class Initializer {
 			WP_CLI::add_command( 'newspack migrate-membership-gates', [ 'Newspack\CLI\Membership_Gates_Migration', 'migrate_membership_gates' ] );
 			WP_CLI::add_command( 'newspack migrate-premium-newsletters', [ 'Newspack\CLI\Premium_Newsletters_Migration', 'migrate_premium_newsletters' ] );
 		}
+
+		// Registered unconditionally, unlike the migration commands: this one runs
+		// after WooCommerce Memberships is deactivated, so gating it on Memberships
+		// would remove it at exactly the moment it is needed.
+		WP_CLI::add_command( 'newspack verify-premium-newsletters', [ 'Newspack\CLI\Premium_Newsletters_Verify', 'verify_premium_newsletters' ] );
 
 		Optional_Modules::register_commands();
 	}

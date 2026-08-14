@@ -268,6 +268,7 @@ class Test_Premium_Newsletters_Verify extends \WP_UnitTestCase {
 
 		$this->assertCount( 1, $partitioned['verifiable'] );
 		$this->assertSame( 10, $partitioned['verifiable'][0]['id'] );
+		$this->assertSame( [ 46 ], $partitioned['verifiable'][0]['product_ids'] );
 		$this->assertSame( [], $partitioned['registration_only'] );
 	}
 
@@ -298,5 +299,36 @@ class Test_Premium_Newsletters_Verify extends \WP_UnitTestCase {
 
 		$this->assertSame( [], $partitioned['verifiable'] );
 		$this->assertCount( 1, $partitioned['registration_only'] );
+	}
+
+	/**
+	 * Expected state is meaningless while WooCommerce Memberships is active: the
+	 * evaluator hands the decision back to Memberships and every list reads as
+	 * unrestricted, so a run would report every entitled reader as a gap and every
+	 * leak as clean. The command refuses rather than producing that.
+	 */
+	public function test_preflight_blocks_while_memberships_is_active() {
+		$blocked = $this->invoke_private_static( 'describe_blocking_preflight', [ true, true ] );
+
+		$this->assertIsString( $blocked );
+		$this->assertStringContainsString( 'WooCommerce Memberships', $blocked );
+	}
+
+	/**
+	 * With gating inactive nothing enforces, so there is no expected state to
+	 * compare against.
+	 */
+	public function test_preflight_blocks_when_gating_is_inactive() {
+		$blocked = $this->invoke_private_static( 'describe_blocking_preflight', [ false, false ] );
+
+		$this->assertIsString( $blocked );
+		$this->assertStringContainsString( 'gating', $blocked );
+	}
+
+	/**
+	 * After cutover, with gating live, the run may proceed.
+	 */
+	public function test_preflight_allows_a_post_cutover_site() {
+		$this->assertNull( $this->invoke_private_static( 'describe_blocking_preflight', [ false, true ] ) );
 	}
 }
