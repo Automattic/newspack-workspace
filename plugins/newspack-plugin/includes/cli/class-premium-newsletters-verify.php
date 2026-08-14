@@ -90,4 +90,71 @@ class Premium_Newsletters_Verify {
 	private static function verification_failed( array $summary ): bool {
 		return 0 < ( $summary['leak'] ?? 0 ) || 0 < ( $summary['unresolved'] ?? 0 );
 	}
+
+	/**
+	 * The product IDs a gate's access rules require.
+	 *
+	 * Only `subscription` rules name products; other rule types carry values of a
+	 * different kind (institution IDs, for instance) that must not be read as
+	 * products. Values arrive as strings on some write paths, so they are cast.
+	 *
+	 * @param array $access_rules Grouped access rules.
+	 *
+	 * @return int[] Deduplicated product IDs.
+	 */
+	private static function product_ids_from_access_rules( array $access_rules ): array {
+		$product_ids = [];
+		foreach ( $access_rules as $group ) {
+			if ( ! is_array( $group ) ) {
+				continue;
+			}
+			foreach ( $group as $rule ) {
+				if ( 'subscription' !== ( $rule['slug'] ?? '' ) ) {
+					continue;
+				}
+				foreach ( (array) ( $rule['value'] ?? [] ) as $product_id ) {
+					$product_ids[] = (int) $product_id;
+				}
+			}
+		}
+		return array_values( array_unique( array_filter( $product_ids ) ) );
+	}
+
+	/**
+	 * Split gates into the ones this command can check and the ones it cannot.
+	 *
+	 * A gate is verifiable when its paid access mode is active and names products:
+	 * that gives both an exclusion to test and a bounded population to test it
+	 * against. A registration-only gate has neither — every registered reader is
+	 * entitled, so no reader can be wrongly subscribed, and the only possible gap
+	 * spans the whole reader base. A paid gate with no products constrains nothing
+	 * and lands in the same bucket.
+	 *
+	 * Unverifiable gates are returned rather than dropped so the report can name
+	 * them and say why.
+	 *
+	 * @param array[] $gates Gate arrays as Content_Gate::get_gate() returns them.
+	 *
+	 * @return array{verifiable: array[], registration_only: array[]}
+	 */
+	private static function partition_gates( array $gates ): array {
+		$verifiable        = [];
+		$registration_only = [];
+		foreach ( $gates as $gate ) {
+			$is_paid     = ! empty( $gate['custom_access']['active'] );
+			$product_ids = $is_paid
+				? self::product_ids_from_access_rules( $gate['custom_access']['access_rules'] ?? [] )
+				: [];
+			if ( $is_paid && ! empty( $product_ids ) ) {
+				$gate['product_ids'] = $product_ids;
+				$verifiable[]        = $gate;
+			} else {
+				$registration_only[] = $gate;
+			}
+		}
+		return [
+			'verifiable'        => $verifiable,
+			'registration_only' => $registration_only,
+		];
+	}
 }

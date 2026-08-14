@@ -181,4 +181,122 @@ class Test_Premium_Newsletters_Verify extends \WP_UnitTestCase {
 
 		$this->assertFalse( $this->invoke_private_static( 'verification_failed', [ $summary ] ) );
 	}
+
+	/**
+	 * Build a gate array shaped like Content_Gate::get_gate() returns.
+	 *
+	 * @param int   $id            Gate ID.
+	 * @param bool  $paid_active   Whether the paid access mode is active.
+	 * @param array $access_rules  Grouped access rules.
+	 *
+	 * @return array
+	 */
+	private function make_gate( int $id, bool $paid_active, array $access_rules = [] ): array {
+		return [
+			'id'            => $id,
+			'title'         => 'Gate ' . $id,
+			'registration'  => [ 'active' => true ],
+			'custom_access' => [
+				'active'       => $paid_active,
+				'access_rules' => $access_rules,
+			],
+		];
+	}
+
+	/**
+	 * Product IDs are read out of the grouped access-rule structure, across groups,
+	 * deduplicated, and cast to int — the value is stored as strings on some paths.
+	 */
+	public function test_product_ids_from_access_rules_reads_across_groups() {
+		$rules = [
+			[
+				[
+					'slug'  => 'subscription',
+					'value' => [ '46', 47 ],
+				],
+			],
+			[
+				[
+					'slug'  => 'subscription',
+					'value' => [ 47, 48 ],
+				],
+			],
+		];
+
+		$this->assertSame( [ 46, 47, 48 ], $this->invoke_private_static( 'product_ids_from_access_rules', [ $rules ] ) );
+	}
+
+	/**
+	 * Only subscription rules name products. Another rule type in the same group
+	 * must not contribute its values, which are not product IDs.
+	 */
+	public function test_product_ids_from_access_rules_ignores_other_rule_types() {
+		$rules = [
+			[
+				[
+					'slug'  => 'institution',
+					'value' => [ 900 ],
+				],
+				[
+					'slug'  => 'subscription',
+					'value' => [ 46 ],
+				],
+			],
+		];
+
+		$this->assertSame( [ 46 ], $this->invoke_private_static( 'product_ids_from_access_rules', [ $rules ] ) );
+	}
+
+	/**
+	 * A gate with an active paid mode and products is what this command can check.
+	 */
+	public function test_partition_gates_selects_paid_gates_as_verifiable() {
+		$gate = $this->make_gate(
+			10,
+			true,
+			[
+				[
+					[
+						'slug'  => 'subscription',
+						'value' => [ 46 ],
+					],
+				],
+			] 
+		);
+
+		$partitioned = $this->invoke_private_static( 'partition_gates', [ [ $gate ] ] );
+
+		$this->assertCount( 1, $partitioned['verifiable'] );
+		$this->assertSame( 10, $partitioned['verifiable'][0]['id'] );
+		$this->assertSame( [], $partitioned['registration_only'] );
+	}
+
+	/**
+	 * A registration-only gate has no exclusion to test: every registered reader is
+	 * entitled. It is reported rather than dropped, so the operator can see it was
+	 * considered.
+	 */
+	public function test_partition_gates_reports_registration_only_gates_separately() {
+		$gate = $this->make_gate( 11, false );
+
+		$partitioned = $this->invoke_private_static( 'partition_gates', [ [ $gate ] ] );
+
+		$this->assertSame( [], $partitioned['verifiable'] );
+		$this->assertCount( 1, $partitioned['registration_only'] );
+		$this->assertSame( 11, $partitioned['registration_only'][0]['id'] );
+	}
+
+	/**
+	 * A paid mode with no products constrains nothing, so there is no population to
+	 * enumerate and nothing this command can check. It belongs with the
+	 * registration-only gates, not with the verifiable ones.
+	 */
+	public function test_partition_gates_treats_a_paid_gate_with_no_products_as_unverifiable() {
+		$gate = $this->make_gate( 12, true, [] );
+
+		$partitioned = $this->invoke_private_static( 'partition_gates', [ [ $gate ] ] );
+
+		$this->assertSame( [], $partitioned['verifiable'] );
+		$this->assertCount( 1, $partitioned['registration_only'] );
+	}
 }
