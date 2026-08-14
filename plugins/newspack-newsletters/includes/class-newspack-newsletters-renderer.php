@@ -898,6 +898,34 @@ final class Newspack_Newsletters_Renderer {
 	}
 
 	/**
+	 * Get a button's width as a column percentage, or null when it sets none.
+	 *
+	 * Buttons carry their width in one of two shapes. Newsletters authored before
+	 * WordPress 7.1 store a bare `width` attribute; WordPress 7.1 moved
+	 * `core/button` to the `dimensions` block support, so the editor rewrites the
+	 * markup to a percentage string under `style.dimensions.width` the first time a
+	 * newsletter is re-saved. Both forms can coexist in the same newsletter, so
+	 * every width read goes through here (NEWS-2852).
+	 *
+	 * Only percentages translate to MJML column widths. Any other unit is treated
+	 * as "no width set", which lets the button fall back to the shared default
+	 * rather than producing a nonsense column.
+	 *
+	 * @param array $attrs A core/button block's attributes.
+	 * @return int|null Width as a percentage, or null when unset.
+	 */
+	private static function get_button_width( $attrs ) {
+		if ( isset( $attrs['width'] ) && '' !== $attrs['width'] ) {
+			return intval( $attrs['width'] );
+		}
+		$dimensions_width = $attrs['style']['dimensions']['width'] ?? null;
+		if ( null === $dimensions_width || ! preg_match( '/^\s*(\d+(?:\.\d+)?)\s*%\s*$/', (string) $dimensions_width, $matches ) ) {
+			return null;
+		}
+		return intval( $matches[1] );
+	}
+
+	/**
 	 * Convert a Gutenberg block to an MJML component.
 	 * MJML component will be put in an mj-column in an mj-section for consistent layout,
 	 * unless it's a group or a columns block.
@@ -1212,8 +1240,9 @@ final class Newspack_Newsletters_Renderer {
 				$total_defined_width = array_reduce(
 					$inner_blocks,
 					function ( $acc, $block ) {
-						if ( isset( $block['attrs']['width'] ) ) {
-							$acc += intval( $block['attrs']['width'] );
+						$width = self::get_button_width( $block['attrs'] ?? [] );
+						if ( null !== $width ) {
+							$acc += $width;
 						}
 						return $acc;
 					},
@@ -1225,7 +1254,7 @@ final class Newspack_Newsletters_Renderer {
 					array_filter(
 						$inner_blocks,
 						function ( $block ) {
-							return empty( $block['attrs']['width'] );
+							return null === self::get_button_width( $block['attrs'] ?? [] );
 						}
 					)
 				);
@@ -1322,8 +1351,9 @@ final class Newspack_Newsletters_Renderer {
 
 					$column_attrs['css-class'] = 'mj-column-has-width';
 					$column_width              = $default_width;
-					if ( ! empty( $attrs['width'] ) ) {
-						$column_width                  = $attrs['width'];
+					$button_width              = self::get_button_width( $attrs );
+					if ( null !== $button_width ) {
+						$column_width                  = $button_width;
 						$default_button_attrs['width'] = '100%'; // Buttons with defined width should fill their column.
 					}
 					$column_attrs['width'] = $column_width . '%';
