@@ -12,7 +12,7 @@ A collapsed item is hidden with `hidden="until-found"`, so the browser's find-in
 |------|------|---------|-------------|
 | `className` | `string` | — | Additional class on the group wrapper. |
 | `hideSingleTitle` | `boolean` | `false` | When the group holds exactly one item, render it open and drop its title. Use it where a group can collapse to a single section and the title would repeat the heading above it. |
-| `spacing` | `number` | `6` | `VStack` gap in 4px units. The divider is a sibling of the items rather than part of one, so the gap applies on both sides of it and items sit twice this far apart: 49px at the default. |
+| `gap` | `GapSize` | `'xl'` | `Stack` gap, on the design system's token scale (`'xl'` is 24px). The divider is a sibling of the items rather than part of one, so the gap applies on both sides of it and items sit twice this far apart: 49px at the default. |
 | `titleLevel` | `1 \| 2 \| 3 \| 4 \| 5 \| 6` | inherited, or `2` | Heading level for every item title. Set it once on the group so the items share one place in the document outline: under a section header rendered as `h2`, pass `3`. It changes the tag only, never the size, so the same group looks the same wherever it sits. A group nested inside another matches the level it inherits rather than descending a step, so give a nested group its own `titleLevel`. |
 
 Children must be `CollapsibleGroup.Item`. Bare text and numbers are dropped; any other element counts as one item and takes a divider, so a wrapper component, or a `Fragment` holding two items, puts the dividers in the wrong place.
