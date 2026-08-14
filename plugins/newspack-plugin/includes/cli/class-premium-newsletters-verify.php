@@ -126,9 +126,13 @@ class Premium_Newsletters_Verify {
 		$batch_size  = max( 1, (int) \WP_CLI\Utils\get_flag_value( $assoc_args, 'batch-size', 100 ) );
 		$max_batches = (int) \WP_CLI\Utils\get_flag_value( $assoc_args, 'max-batches', 0 );
 
+		// Shared across every gate below, by reference, so --max-batches caps the
+		// whole run as its help text promises rather than resetting per gate.
+		$batches = 0;
+
 		$rows = [];
 		foreach ( $partitioned['verifiable'] as $gate ) {
-			$rows = array_merge( $rows, self::verify_gate( $gate, $auto_signup, $live, $batch_size, $max_batches ) );
+			$rows = array_merge( $rows, self::verify_gate( $gate, $auto_signup, $live, $batch_size, $max_batches, $batches ) );
 		}
 
 		$summary = self::summarize_rows( $rows );
@@ -391,13 +395,19 @@ class Premium_Newsletters_Verify {
 	 * @param bool  $auto_signup Whether the site auto-subscribes entitled readers.
 	 * @param bool  $live        Whether to remove readers from lists they are not entitled to.
 	 * @param int   $batch_size  Readers to check between pauses.
-	 * @param int   $max_batches Stop after this many batches; 0 for no limit.
+	 * @param int   $max_batches Stop after this many batches, across the whole run; 0 for no limit.
+	 * @param int   $batches     Batches completed so far in this run, by reference. Shared across
+	 *                           every gate's call so the cap in $max_batches means the whole run,
+	 *                           not this gate alone.
 	 *
 	 * @return array[] Result rows.
 	 */
-	private static function verify_gate( array $gate, bool $auto_signup, bool $live, int $batch_size, int $max_batches ): array {
+	private static function verify_gate( array $gate, bool $auto_signup, bool $live, int $batch_size, int $max_batches, int &$batches ): array {
 		$list_ids = self::restricted_list_ids_for_gate( $gate );
 		if ( empty( $list_ids ) ) {
+			return [];
+		}
+		if ( $max_batches && $batches >= $max_batches ) {
 			return [];
 		}
 		$population = self::population_for_gate( $gate );
@@ -408,10 +418,10 @@ class Premium_Newsletters_Verify {
 
 		WP_CLI::line( sprintf( '"%s" (gate %d): checking %d reader(s) against %d list(s)…', $gate['title'], $gate['id'], count( $population ), count( $list_ids ) ) );
 
-		$rows      = [];
-		$batches   = 0;
-		$in_batch  = 0;
-		foreach ( $population as $user_id ) {
+		$rows              = [];
+		$in_batch          = 0;
+		$population_count  = count( $population );
+		foreach ( $population as $index => $user_id ) {
 			$user = \get_user_by( 'id', $user_id );
 			if ( ! $user ) {
 				continue;
@@ -450,14 +460,20 @@ class Premium_Newsletters_Verify {
 				}
 			}
 
+			$more_work_remains = ( $index + 1 ) < $population_count;
 			if ( ++$in_batch >= $batch_size ) {
 				$in_batch = 0;
-				++$batches;
-				if ( $max_batches && $batches >= $max_batches ) {
-					WP_CLI::warning( sprintf( 'Stopped after %d batch(es) because of --max-batches. This run does not cover the whole population.', $batches ) );
-					break;
+				// Only count and pause when this gate's population is not yet
+				// exhausted: there is no next batch to space out otherwise, so
+				// counting or sleeping here would be pointless.
+				if ( $more_work_remains ) {
+					++$batches;
+					if ( $max_batches && $batches >= $max_batches ) {
+						WP_CLI::warning( sprintf( 'Stopped after %d batch(es) total because of --max-batches. This run does not cover the whole population.', $batches ) );
+						break;
+					}
+					sleep( 1 );
 				}
-				sleep( 1 );
 			}
 		}
 		return $rows;
