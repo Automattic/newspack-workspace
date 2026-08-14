@@ -308,7 +308,7 @@ class Test_Premium_Newsletters_Verify extends \WP_UnitTestCase {
 	 * leak as clean. The command refuses rather than producing that.
 	 */
 	public function test_preflight_blocks_while_memberships_is_active() {
-		$blocked = $this->invoke_private_static( 'describe_blocking_preflight', [ true, true, true ] );
+		$blocked = $this->invoke_private_static( 'describe_blocking_preflight', [ true, true, true, true ] );
 
 		$this->assertIsString( $blocked );
 		$this->assertStringContainsString( 'WooCommerce Memberships', $blocked );
@@ -319,7 +319,7 @@ class Test_Premium_Newsletters_Verify extends \WP_UnitTestCase {
 	 * compare against.
 	 */
 	public function test_preflight_blocks_when_gating_is_inactive() {
-		$blocked = $this->invoke_private_static( 'describe_blocking_preflight', [ false, false, true ] );
+		$blocked = $this->invoke_private_static( 'describe_blocking_preflight', [ false, false, true, true ] );
 
 		$this->assertIsString( $blocked );
 		$this->assertStringContainsString( 'gating', $blocked );
@@ -332,18 +332,32 @@ class Test_Premium_Newsletters_Verify extends \WP_UnitTestCase {
 	 * command refuses instead of silently checking nobody.
 	 */
 	public function test_preflight_blocks_when_woocommerce_subscriptions_is_unavailable() {
-		$blocked = $this->invoke_private_static( 'describe_blocking_preflight', [ false, true, false ] );
+		$blocked = $this->invoke_private_static( 'describe_blocking_preflight', [ false, true, false, true ] );
 
 		$this->assertIsString( $blocked );
 		$this->assertStringContainsString( 'WooCommerce Subscriptions', $blocked );
 	}
 
 	/**
-	 * After cutover, with gating live and WooCommerce Subscriptions active, the run
-	 * may proceed.
+	 * On a provider that does not support subscription management (Campaign Monitor,
+	 * Letterhead), Newspack_Newsletters_Subscription::get_contact_lists() returns a
+	 * WP_Error for every reader, so an unguarded run would report the whole
+	 * population as unresolved rather than comparing anything. The command refuses
+	 * instead of dumping the entire population into the attention table.
+	 */
+	public function test_preflight_blocks_when_subscription_management_is_unavailable() {
+		$blocked = $this->invoke_private_static( 'describe_blocking_preflight', [ false, true, true, false ] );
+
+		$this->assertIsString( $blocked );
+		$this->assertStringContainsString( 'subscription management', $blocked );
+	}
+
+	/**
+	 * After cutover, with gating live, WooCommerce Subscriptions active and the ESP
+	 * supporting subscription management, the run may proceed.
 	 */
 	public function test_preflight_allows_a_post_cutover_site() {
-		$this->assertNull( $this->invoke_private_static( 'describe_blocking_preflight', [ false, true, true ] ) );
+		$this->assertNull( $this->invoke_private_static( 'describe_blocking_preflight', [ false, true, true, true ] ) );
 	}
 
 	/**

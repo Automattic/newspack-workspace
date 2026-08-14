@@ -128,7 +128,8 @@ class Premium_Newsletters_Verify {
 		$blocked = self::describe_blocking_preflight(
 			\Newspack\Memberships::is_active(),
 			\Newspack\Content_Gate::is_gating_active(),
-			function_exists( 'wcs_get_subscriptions' )
+			function_exists( 'wcs_get_subscriptions' ),
+			\Newspack_Newsletters_Subscription::has_subscription_management()
 		);
 		if ( null !== $blocked ) {
 			WP_CLI::error( $blocked );
@@ -361,17 +362,19 @@ class Premium_Newsletters_Verify {
 	/**
 	 * Why this run must not proceed, or null when it may.
 	 *
-	 * Taking all three conditions as parameters keeps the decision testable without
-	 * WooCommerce Memberships or WooCommerce Subscriptions, neither of which the
-	 * unit-test harness loads.
+	 * Taking all four conditions as parameters keeps the decision testable without
+	 * WooCommerce Memberships, WooCommerce Subscriptions or a configured ESP, none of
+	 * which the unit-test harness loads.
 	 *
-	 * @param bool $memberships_active        Whether WooCommerce Memberships is active.
-	 * @param bool $gating_active             Whether content gating is active.
-	 * @param bool $subscriptions_available   Whether WooCommerce Subscriptions is active.
+	 * @param bool $memberships_active                 Whether WooCommerce Memberships is active.
+	 * @param bool $gating_active                      Whether content gating is active.
+	 * @param bool $subscriptions_available             Whether WooCommerce Subscriptions is active.
+	 * @param bool $subscription_management_available  Whether the active ESP supports subscription
+	 *                                                  management (Newspack_Newsletters_Subscription::has_subscription_management()).
 	 *
 	 * @return string|null The reason to stop, or null to proceed.
 	 */
-	private static function describe_blocking_preflight( bool $memberships_active, bool $gating_active, bool $subscriptions_available ): ?string {
+	private static function describe_blocking_preflight( bool $memberships_active, bool $gating_active, bool $subscriptions_available, bool $subscription_management_available ): ?string {
 		if ( $memberships_active ) {
 			return 'WooCommerce Memberships is still active, so every restricted list reads as unrestricted and this comparison would be meaningless. Run this after deactivating it.';
 		}
@@ -380,6 +383,9 @@ class Premium_Newsletters_Verify {
 		}
 		if ( ! $subscriptions_available ) {
 			return 'WooCommerce Subscriptions is not active, so the command cannot enumerate who holds a gate\'s products and would silently check nobody. Activate it and run this again.';
+		}
+		if ( ! $subscription_management_available ) {
+			return 'The active ESP does not support subscription management (no get_contact_lists()/update_contact_lists()), so every reader\'s list read would come back an error and the run would report the entire population as unresolved rather than comparing anything. Switch to a provider that supports subscription management before running this.';
 		}
 		return null;
 	}
