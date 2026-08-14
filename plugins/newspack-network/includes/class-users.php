@@ -85,7 +85,7 @@ class Users {
 					'%s: <code>%s</code><br><a href="%s">%s</a>',
 					__( 'Last Activity', 'newspack-network' ),
 					esc_html( $last_activity[0]->get_summary() ),
-					$event_log_url,
+					esc_url( $event_log_url ),
 					__( 'View all', 'newspack-network' )
 				);
 			} elseif ( Site_Role::is_node() ) {
@@ -98,7 +98,7 @@ class Users {
 				);
 				return sprintf(
 					'<a href="%s">%s</a>',
-					$event_log_url,
+					esc_url( $event_log_url ),
 					__( 'View activity', 'newspack-network' )
 				);
 			}

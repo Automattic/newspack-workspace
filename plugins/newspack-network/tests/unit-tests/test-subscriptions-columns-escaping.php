@@ -29,7 +29,7 @@ class Test_Subscriptions_Columns_Escaping extends WP_UnitTestCase {
 		update_post_meta( $post_id, 'user_name', $payload );
 		update_post_meta( $post_id, 'formatted_total', $payload );
 		update_post_meta( $post_id, 'payment_method_title', $payload );
-		update_post_meta( $post_id, 'payment_count', '3' );
+		update_post_meta( $post_id, 'payment_count', $payload );
 		update_post_meta( $post_id, 'remote_id', '42' );
 		add_post_meta(
 			$post_id,
@@ -62,7 +62,7 @@ class Test_Subscriptions_Columns_Escaping extends WP_UnitTestCase {
 		$payload = '<img src=x onerror=NPPM3042>';
 		$post_id = $this->make_subscription( $payload );
 
-		foreach ( [ 'subscription', 'items', 'total' ] as $column ) {
+		foreach ( [ 'subscription', 'items', 'orders', 'total' ] as $column ) {
 			$out = $this->render( $column, $post_id );
 			$this->assertStringNotContainsString( '<img src=x', $out, "Column {$column} rendered a live tag" );
 			$this->assertStringContainsString( '&lt;img src=x onerror=NPPM3042&gt;', $out, "Column {$column} not escaped" );

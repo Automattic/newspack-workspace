@@ -15,6 +15,14 @@ use Newspack_Network\Utils\Users as Users_Utils;
 class Test_Users_Columns_Escaping extends WP_UnitTestCase {
 
 	/**
+	 * Restore the site-role option so it cannot leak into later tests.
+	 */
+	public function tear_down() {
+		delete_option( Site_Role::OPTION_NAME );
+		parent::tear_down();
+	}
+
+	/**
 	 * The Network User column must escape the remote-site anchor text.
 	 */
 	public function test_network_user_column_escapes_remote_site() {
