@@ -189,7 +189,10 @@ class IP_Access_Rule {
 		}
 
 		$data = [ 'valid' => $valid ];
-		if ( $inst_name ) {
+		// Only disclose the institution name to a visitor who actually matched it;
+		// otherwise an unauthenticated caller could enumerate every institution's
+		// name by iterating institution_id.
+		if ( $valid && $inst_name ) {
 			$data['institution'] = $inst_name;
 		}
 
