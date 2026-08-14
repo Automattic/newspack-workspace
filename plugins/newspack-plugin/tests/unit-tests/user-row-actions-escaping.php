@@ -83,7 +83,7 @@ class Newspack_Test_User_Row_Actions_Escaping extends WP_UnitTestCase {
 		$actions                = Magic_Link::user_row_actions( [], $reader );
 
 		$this->assertArrayHasKey( 'newspack-magic-link-send', $actions, 'Precondition: the magic-link row action is present.' );
-		$this->assertStringNotContainsString( '"><svg', $actions['newspack-magic-link-send'], 'The row-action href must not be breakable out of.' );
+		$this->assert_href_not_breakable( $actions['newspack-magic-link-send'] );
 	}
 
 	/**
@@ -100,6 +100,21 @@ class Newspack_Test_User_Row_Actions_Escaping extends WP_UnitTestCase {
 		$actions                = Contact_Sync_Admin::user_row_actions( [], $target );
 
 		$this->assertArrayHasKey( Contact_Sync_Admin::ADMIN_ACTION, $actions, 'Precondition: the contact-sync row action is present.' );
-		$this->assertStringNotContainsString( '"><svg', $actions[ Contact_Sync_Admin::ADMIN_ACTION ], 'The row-action href must not be breakable out of.' );
+		$this->assert_href_not_breakable( $actions[ Contact_Sync_Admin::ADMIN_ACTION ] );
+	}
+
+	/**
+	 * Assert a row-action anchor cannot be broken out of at the href attribute.
+	 *
+	 * A well-formed `<a href="…">…</a>` carries exactly the two href-delimiter
+	 * quotes. Any reflected value that escapes the attribute introduces a third,
+	 * so the quote count is the escaping invariant — robust against a partial
+	 * filter that perturbs `<svg` but leaves the attribute-closing `"` intact,
+	 * and against breakout vectors that use no `<` (e.g. `" onmouseover=…`).
+	 *
+	 * @param string $anchor The rendered row-action anchor markup.
+	 */
+	private function assert_href_not_breakable( $anchor ) {
+		$this->assertSame( 2, substr_count( $anchor, '"' ), 'The row-action href must not be breakable out of: ' . $anchor );
 	}
 }
