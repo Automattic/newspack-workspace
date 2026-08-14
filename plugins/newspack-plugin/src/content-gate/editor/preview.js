@@ -39,7 +39,7 @@ export default function GatePreview() {
 		return null;
 	}
 
-	const { preview_post: previewPost, frontend_url: frontendUrl, query_param: queryParam, preview_query_keys: previewQueryKeys } = preview;
+	const { preview_post: previewPost, query_param: queryParam, preview_query_keys: previewQueryKeys } = preview;
 
 	// Map edited meta onto the abbreviated query keys the server understands.
 	const abbreviatedKeys = {};
@@ -54,22 +54,14 @@ export default function GatePreview() {
 		...abbreviatedKeys,
 	};
 
-	const onWebPreviewLoad = iframeEl => {
-		if ( ! iframeEl ) {
-			return;
-		}
-		// Same-origin access can throw a DOMException on a cross-origin iframe
-		// (mapped domains, scheme mismatch). Link-rewriting is a nicety; never let
-		// it break opening the preview.
-		try {
-			[ ...iframeEl.contentWindow.document.querySelectorAll( 'a[href^="' + frontendUrl + '"]' ) ].forEach( anchor => {
-				anchor.setAttribute( 'href', addQueryArgs( anchor.getAttribute( 'href' ), query ) );
-			} );
-		} catch ( e ) {
-			// eslint-disable-next-line no-console
-			console.warn( 'Gate preview: could not rewrite in-iframe links (cross-origin).', e );
-		}
-	};
+	// Links inside the preview keep their preview params, but the previewed
+	// document does that for itself — see propagateGatePreviewParams() in
+	// src/content-gate/preview-links.js. This used to reach into the preview
+	// iframe from out here, guarded by a try/catch for genuinely cross-origin
+	// setups. WordPress 7.1 turned that guard into a silent failure: it serves the
+	// block editor with `Document-Isolation-Policy`, which severs access to the
+	// frame even when it is same-origin, so the rewrite stopped happening and only
+	// a console warning marked it.
 
 	// Open the preview after the autosave settles. On a failed autosave, still
 	// open it: the server falls back to the layout's saved content, so the reader
@@ -85,7 +77,6 @@ export default function GatePreview() {
 	return (
 		<WebPreview
 			url={ addQueryArgs( previewPost, query ) }
-			onLoad={ onWebPreviewLoad }
 			renderButton={ ( { showPreview } ) => (
 				<Button variant="primary" isBusy={ isSavingPost } disabled={ isSavingPost } onClick={ () => previewAfterAutosave( showPreview ) }>
 					{ __( 'Preview', 'newspack-plugin' ) }

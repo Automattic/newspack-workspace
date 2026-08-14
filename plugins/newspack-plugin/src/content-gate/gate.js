@@ -6,6 +6,7 @@ import './gate.scss';
 import { getEventPayload, sendEvent } from '../reader-activation/analytics';
 import { debugLog } from '../reader-activation/utils';
 import { persistCtaAttribution } from '../shared/js/cta-attribution';
+import { propagateGatePreviewParams } from './preview-links';
 
 const EVENT_NAME = 'np_gate_interaction';
 
@@ -388,6 +389,11 @@ function handleFloatingElements() {
 		}
 	} );
 }
+
+// Registered on its own rather than inside the gate initialisation below, so the
+// two cannot break each other: a preview nicety must never take down gate
+// rendering, and the gate's early return must never skip propagation.
+domReady( propagateGatePreviewParams );
 
 domReady( function () {
 	const gate = document.querySelector( '.newspack-content-gate__gate' );

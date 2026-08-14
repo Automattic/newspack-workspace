@@ -344,12 +344,11 @@ class Gate_Preview {
 	/**
 	 * Data localized to the layout editor to power the Preview button.
 	 *
-	 * @return array{preview_post:string, frontend_url:string, query_param:string, preview_query_keys:array}
+	 * @return array{preview_post:string, query_param:string, preview_query_keys:array}
 	 */
 	public static function get_editor_preview_data() {
 		return [
 			'preview_post'       => self::preview_post_permalink(),
-			'frontend_url'       => get_site_url(),
 			'query_param'        => self::PREVIEW_QUERY_PARAM,
 			'preview_query_keys' => self::PREVIEW_QUERY_KEYS,
 		];
