@@ -85,6 +85,9 @@ class Premium_Newsletters_Verify {
 		if ( ! class_exists( 'Newspack_Newsletters_Subscription' ) ) {
 			WP_CLI::error( 'Newspack Newsletters is not active, so the ESP cannot be read. Aborting.' );
 		}
+		if ( $live && ! class_exists( 'Newspack_Newsletters_Contacts' ) ) {
+			WP_CLI::error( 'Newspack_Newsletters_Contacts class not found, so --live cannot write removals. Aborting.' );
+		}
 
 		$blocked = self::describe_blocking_preflight(
 			\Newspack\Memberships::is_active(),
