@@ -40,7 +40,10 @@ final class Data_Events {
 		}
 
 		/**
-		 * Modal Checkout Interaction: Completed Order.
+		 * Modal Checkout Interaction: Order Processed.
+		 *
+		 * Both hooks fire when the order is created, before payment is
+		 * processed — not when the order reaches the "completed" status.
 		 *
 		 * Both WooCommerce checkout pipelines feed the same Data Events action:
 		 * classic checkout fires woocommerce_checkout_order_processed, while
@@ -84,7 +87,8 @@ final class Data_Events {
 	 * three arguments; only a scalar order ID crosses into the shared payload
 	 * builder, so neither callback can misread the other hook's argument list.
 	 *
-	 * @param \WC_Order $order Order object.
+	 * @param mixed $order Order object. The hook contract promises a \WC_Order;
+	 *                     anything else is ignored rather than trusted.
 	 *
 	 * @return array|void The event payload; void suppresses the dispatch.
 	 */
