@@ -126,8 +126,12 @@ class Premium_Newsletters_Migration {
 			WP_CLI::error( 'Newspack Newsletters is not active, so there are no newsletter lists to migrate. Aborting.' );
 		}
 
-		if ( ! \Newspack\Content_Gate::is_newspack_feature_enabled() ) {
-			WP_CLI::warning( 'The content gates feature (NEWSPACK_CONTENT_GATES) is not enabled on this site: premium newsletter gates will be created but will remain dormant until it is enabled.' );
+		$dormant_gating = self::describe_inactive_gating(
+			\Newspack\Content_Gate::is_newspack_feature_enabled(),
+			\Newspack\Reader_Activation::is_enabled()
+		);
+		if ( null !== $dormant_gating ) {
+			WP_CLI::warning( $dormant_gating );
 		}
 
 		if ( $dry_run ) {
@@ -421,6 +425,43 @@ class Premium_Newsletters_Migration {
 	 */
 	private static function is_valid_plan_arg( $plan_arg ): bool {
 		return ctype_digit( (string) $plan_arg ) && (int) $plan_arg > 0;
+	}
+
+	/**
+	 * Why gates written by this run would not enforce, or null when they will.
+	 *
+	 * Enforcement asks Content_Gate::is_gating_active(), which is
+	 * is_newspack_feature_enabled() AND Reader_Activation::is_enabled():
+	 * Content_Restriction_Control::is_post_restricted() returns early without both,
+	 * and Premium_Newsletters::check_access() — the half that adds and removes list
+	 * members at the ESP — bails on the same predicate. The feature constant alone is
+	 * therefore not the question a preflight should ask: a site that defines it with
+	 * Audience Management off gets gates that restrict nobody, and no warning.
+	 *
+	 * Both conditions are taken as arguments rather than read here, so the
+	 * composition can be tested without define()ing a constant for the rest of the
+	 * PHPUnit process.
+	 *
+	 * @param bool $feature_enabled          Whether Content_Gate::is_newspack_feature_enabled().
+	 * @param bool $reader_activation_active Whether Reader_Activation::is_enabled().
+	 *
+	 * @return string|null The warning to print, or null when gating is active.
+	 */
+	private static function describe_inactive_gating( bool $feature_enabled, bool $reader_activation_active ): ?string {
+		$missing = [];
+		if ( ! $feature_enabled ) {
+			$missing[] = 'the content gates feature (NEWSPACK_CONTENT_GATES) is not enabled';
+		}
+		if ( ! $reader_activation_active ) {
+			$missing[] = 'Audience Management (Reader Activation) is not enabled';
+		}
+		if ( empty( $missing ) ) {
+			return null;
+		}
+		return sprintf(
+			'Gates will not enforce on this site: %s. Enforcement asks Content_Gate::is_gating_active(), which needs both — so the gates below will be written but stay dormant, restricting nobody and subscribing nobody, until that is fixed.',
+			implode( ', and ', $missing )
+		);
 	}
 
 	/**
