@@ -8,11 +8,16 @@ import './patterns.scss';
 import { handleSegmentation } from './segmentation';
 import { handleAnalytics } from './analytics/ga4';
 import { handleContextualPromptAnalytics } from './analytics/contextual-prompt';
+import { propagatePreviewParams } from './preview-links';
 import { domReady, logPageview, getPrompts } from './utils';
 
 import './merge-tags';
 
 domReady( () => {
+	// Runs regardless of the prompt-disabled flag: a preview has to survive
+	// navigation even on a page where prompts are switched off.
+	propagatePreviewParams();
+
 	window.newspackRAS = window.newspackRAS || [];
 	window.newspackRAS.push( logPageview ); // Pageviews should be logged whether or not prompts are enabled.
 

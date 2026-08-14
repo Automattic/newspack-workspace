@@ -1088,6 +1088,18 @@ final class Newspack_Popups_Inserter {
 				$script_data['donor_landing_page'] = $donor_landing_page;
 			}
 
+			// In a prompt preview the previewed document carries its own preview
+			// params onto same-origin links, so the preview survives navigation.
+			// It needs the key list to know which of its query params those are.
+			// Sent only on a preview request: outside one there is nothing to
+			// propagate, and the keys would be dead weight on every page.
+			if ( Newspack_Popups::is_preview_request() ) {
+				$script_data['preview_query_keys'] = array_merge(
+					[ Newspack_Popups::NEWSPACK_POPUP_PREVIEW_QUERY_PARAM ],
+					array_values( Newspack_Popups::PREVIEW_QUERY_KEYS )
+				);
+			}
+
 			\wp_localize_script( $script_handle, 'newspack_popups_view', $script_data );
 			\wp_enqueue_script( $script_handle );
 		}
