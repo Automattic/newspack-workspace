@@ -1090,11 +1090,17 @@ final class Newspack_Popups_Inserter {
 
 			// In a prompt preview the previewed document carries its own preview
 			// params onto same-origin links, so the preview survives navigation.
-			// It needs the key list to know which of its query params those are.
-			// Sent only on a preview request: outside one there is nothing to
-			// propagate, and the keys would be dead weight on every page.
-			if ( Newspack_Popups::is_preview_request() ) {
-				$script_data['preview_query_keys'] = array_merge(
+			// It needs the param list to know which of its query params those are.
+			//
+			// Gated on the prompt preview specifically, not on is_preview_request():
+			// that covers preset, view-as and customizer previews too, and it is not
+			// a capability check — previewed_popup_id() reads `pid` from any request,
+			// signed in or not. `pid` is also a common campaign parameter, so without
+			// is_user_admin() an ordinary reader arriving on `?pid=…` would have it
+			// stamped onto every link for the rest of their session while seeing no
+			// prompts at all. preset_popup_id() guards itself the same way.
+			if ( Newspack_Popups::previewed_popup_id() && Newspack_Popups::is_user_admin() ) {
+				$script_data['preview_query_params'] = array_merge(
 					[ Newspack_Popups::NEWSPACK_POPUP_PREVIEW_QUERY_PARAM ],
 					array_values( Newspack_Popups::PREVIEW_QUERY_KEYS )
 				);

@@ -968,7 +968,6 @@ final class Newspack_Popups {
 			'newspack-popups',
 			'newspack_popups_data',
 			[
-				'frontend_url'                 => get_site_url(),
 				'preview_post'                 => self::preview_post_permalink(),
 				'preview_archive'              => self::preview_archive_permalink(),
 				'custom_placements'            => Newspack_Popups_Custom_Placements::get_custom_placements(),

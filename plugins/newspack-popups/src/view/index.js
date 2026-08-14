@@ -14,12 +14,12 @@ import { domReady, logPageview, getPrompts } from './utils';
 import './merge-tags';
 
 domReady( () => {
-	// Runs regardless of the prompt-disabled flag: a preview has to survive
-	// navigation even on a page where prompts are switched off.
-	propagatePreviewParams();
-
 	window.newspackRAS = window.newspackRAS || [];
 	window.newspackRAS.push( logPageview ); // Pageviews should be logged whether or not prompts are enabled.
+
+	// After the pageview push on purpose: link rewriting is a preview nicety, and
+	// nothing about it should be able to cost a real reader their pageview.
+	propagatePreviewParams();
 
 	if ( ! newspack_popups_view?.has_disabled_prompts ) {
 		// Fetch all prompts on the page just once.
