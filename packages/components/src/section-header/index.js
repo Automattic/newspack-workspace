@@ -36,7 +36,7 @@ import classnames from 'classnames';
  * @property {boolean}            [isWhite=false]    - Indicates if the header should use a white theme.
  * @property {boolean}            [noMargin=false]   - Indicates if the header should have no margin.
  * @property {boolean}            [pageHeader=false] - Indicates if the header is used as a page header.
- * @property {string}             [size='default']   - Size variant, either 'default' or 'small'.
+ * @property {string}             [size='default']   - Size variant, either 'default' or 'small'. Scales the title, and the icon with it, independently of `pageHeader`.
  * @property {string}             title              - The title of the section.
  * @property {?string}            [id=null]          - Optional ID for the header element.
  * @property {?string|Function|*} [children=null]    - Optional children to display in the header.
