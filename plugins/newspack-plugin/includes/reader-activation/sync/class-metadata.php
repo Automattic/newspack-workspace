@@ -654,13 +654,21 @@ class Metadata {
 			$metadata = array_merge( $metadata, $instance->get_metadata() );
 		}
 
-		return self::normalize_contact_data(
-			[
-				'email'    => $core_contact->get_email(),
-				'name'     => $core_contact->get_full_name(),
-				'metadata' => $metadata,
-			]
-		);
+		$contact = [
+			'email'    => $core_contact->get_email(),
+			'metadata' => $metadata,
+		];
+
+		// Omit the key rather than sending an empty name: connectors branch on
+		// isset(), so an empty string is written over whatever name the contact
+		// already has at the provider — including one that arrived by list
+		// import. Mirrors Sync\WooCommerce::get_contact_from_customer().
+		$name = $core_contact->get_full_name();
+		if ( '' !== $name ) {
+			$contact['name'] = $name;
+		}
+
+		return self::normalize_contact_data( $contact );
 	}
 
 	/**

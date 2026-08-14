@@ -3,6 +3,7 @@
  */
 import { addFilter } from '@wordpress/hooks';
 import { createHigherOrderComponent } from '@wordpress/compose';
+import { useSelect } from '@wordpress/data';
 import { InspectorControls } from '@wordpress/block-editor';
 import {
 	FormTokenField,
@@ -421,7 +422,16 @@ addFilter(
 	'newspack-plugin/block-visibility/inspector',
 	createHigherOrderComponent( BlockEdit => {
 		const WithBlockVisibilityPanel = ( props: BlockEditProps ) => {
-			if ( ! TARGET_BLOCKS.includes( props.name ) ) {
+			// Access rules are post context. A pattern's own editor — including the
+			// post editor's focus mode — is editing a design, not a post, so there is
+			// nothing for the rules to resolve against.
+			const isPatternEditor = useSelect(
+				select =>
+					'wp_block' ===
+					( select( 'core/editor' ) as { getCurrentPostType?: () => string | undefined } | undefined )?.getCurrentPostType?.(),
+				[]
+			);
+			if ( isPatternEditor || ! TARGET_BLOCKS.includes( props.name ) ) {
 				return <BlockEdit { ...props } />;
 			}
 			return (

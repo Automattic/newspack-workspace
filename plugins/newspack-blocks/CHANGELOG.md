@@ -1,3 +1,10 @@
+## @automattic/newspack-blocks [4.29.2](https://github.com/Automattic/newspack-workspace/compare/newspack-blocks@4.29.1...newspack-blocks@4.29.2) (2026-08-07)
+
+
+### Bug Fixes
+
+* **blocks:** input validation hardening for author, iframe and checkout surfaces ([#782](https://github.com/Automattic/newspack-workspace/issues/782)) ([20230c1](https://github.com/Automattic/newspack-workspace/commit/20230c12471e327e8cbdf6d3ffe7d9823a28b00b))
+
 ## @automattic/newspack-blocks [4.29.1](https://github.com/Automattic/newspack-workspace/compare/newspack-blocks@4.29.0...newspack-blocks@4.29.1) (2026-08-04)
 
 

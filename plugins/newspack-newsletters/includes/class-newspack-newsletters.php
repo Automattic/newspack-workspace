@@ -219,6 +219,11 @@ final class Newspack_Newsletters {
 	public static function set_service_provider( $service_provider ) {
 		update_option( 'newspack_newsletters_service_provider', $service_provider );
 		self::$provider = self::get_service_provider_instance( $service_provider );
+		// get_lists_config() is provider-scoped, so a provider switch must clear its
+		// memo or the previous provider's config sticks for the rest of the request.
+		if ( class_exists( 'Newspack_Newsletters_Subscription' ) ) {
+			Newspack_Newsletters_Subscription::reset_lists_config_cache();
+		}
 	}
 
 	/**
