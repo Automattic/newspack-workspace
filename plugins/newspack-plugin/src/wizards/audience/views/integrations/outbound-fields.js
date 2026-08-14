@@ -43,11 +43,21 @@ const isSunset = definition => 'legacy' === definition?.status;
  * pre-Phase-2 UI).
  *
  * @param {Object[]} definitions Definitions from the settings payload.
- * @param {string[]} enabledIds  Enabled field ids.
+ * @param {string[]} enabledIds  Enabled field ids (the draft, while editing).
+ * @param {string[]} [savedIds]  Stored field ids. Defaults to `enabledIds`.
  * @return {Object[]} Ordered row objects.
  */
-export const buildFieldRows = ( definitions, enabledIds ) => {
+export const buildFieldRows = ( definitions, enabledIds, savedIds ) => {
 	const enabled = new Set( enabledIds || [] );
+	// Visibility considers the saved selection as well as the draft, while
+	// `checked` tracks the draft alone. Sunsetting on the draft would pull a
+	// legacy row — and its own checkbox — out of the list the instant it was
+	// unchecked, leaving no way to undo, and showing the field as gone while
+	// the server still has it enabled. Taking the union means the rule only
+	// ever hides a legacy field nobody is using in either state: one already
+	// stored stays listed for the whole editing session and sunsets on the
+	// next load after the save.
+	const stored = new Set( savedIds || enabledIds || [] );
 	const byName = new Map();
 	( definitions || [] ).forEach( d => {
 		if ( ! byName.has( d.name ) ) {
@@ -76,8 +86,9 @@ export const buildFieldRows = ( definitions, enabledIds ) => {
 		}
 		const checked = Boolean( enabledVersion );
 		const activeDefinition = active[ 0 ];
-		if ( ! checked && isSunset( activeDefinition ) ) {
-			return; // Sunset rule: legacy fields list only while enabled.
+		const inUse = checked || VERSIONS.some( v => candidates[ v ].some( d => stored.has( d.id ) ) );
+		if ( ! inUse && isSunset( activeDefinition ) ) {
+			return; // Sunset rule: legacy fields list only while in use.
 		}
 		const supersededByDef = ( activeDefinition.superseded_by || [] ).map( id => ( definitions || [] ).find( d => d.id === id ) ).find( Boolean );
 		rows.push( {
@@ -182,7 +193,8 @@ export const badgesForRow = row => {
  */
 const OutboundFields = ( { field, value, onChange } ) => {
 	const enabledIds = Array.isArray( value ) ? value : field.value_ids || [];
-	const rows = useMemo( () => buildFieldRows( field.definitions, enabledIds ), [ field.definitions, enabledIds ] );
+	const savedIds = field.value_ids || [];
+	const rows = useMemo( () => buildFieldRows( field.definitions, enabledIds, savedIds ), [ field.definitions, enabledIds, savedIds ] );
 	const sections = useMemo( () => visibleSections( rows ), [ rows ] );
 	return (
 		<Accordion hideSingleTitle>
