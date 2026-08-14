@@ -59,7 +59,7 @@ class Users {
 					'<a href="%swp-admin/user-edit.php?user_id=%d">%s</a>',
 					trailingslashit( esc_url( $remote_site ) ),
 					$remote_id,
-					sprintf( '%s (#%d)', $remote_site, $remote_id )
+					sprintf( '%s (#%d)', esc_html( $remote_site ), $remote_id )
 				);
 			}
 		}
@@ -84,7 +84,7 @@ class Users {
 				return sprintf(
 					'%s: <code>%s</code><br><a href="%s">%s</a>',
 					__( 'Last Activity', 'newspack-network' ),
-					$last_activity[0]->get_summary(),
+					esc_html( $last_activity[0]->get_summary() ),
 					$event_log_url,
 					__( 'View all', 'newspack-network' )
 				);
