@@ -1900,7 +1900,7 @@ final class Newspack_Newsletters_Active_Campaign extends \Newspack_Newsletters_S
 	}
 
 	/**
-	 * After Newsletter post is deleted, clean up by deleting corresponding ESP campaign.
+	 * After Newsletter post is trashed, clean up by deleting corresponding ESP campaign.
 	 *
 	 * Cleanup covers the post's own campaigns and nothing else. There is
 	 * deliberately no `ac_message_id` cleanup: messages and campaigns are
