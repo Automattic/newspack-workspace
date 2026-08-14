@@ -1291,4 +1291,325 @@ class Test_Premium_Newsletters_Migration extends \WP_UnitTestCase {
 	public function test_prompt_is_answerable_at_a_terminal() {
 		$this->assertFalse( $this->invoke_private_static( 'prompt_is_unanswerable', [ [], true ] ) );
 	}
+
+	/**
+	 * Enforcement asks Content_Gate::is_gating_active(), which is the feature constant
+	 * AND Reader_Activation::is_enabled(). A site that defines the constant with
+	 * Audience Management off enforces nothing — Content_Restriction_Control::
+	 * is_post_restricted() and Premium_Newsletters::check_access() both bail — so the
+	 * preflight must warn, and say which half is missing.
+	 */
+	public function test_describe_inactive_gating_warns_when_reader_activation_is_off() {
+		$warning = $this->invoke_private_static( 'describe_inactive_gating', [ true, false ] );
+
+		$this->assertNotNull( $warning );
+		$this->assertStringContainsString( 'Audience Management', $warning );
+		$this->assertStringNotContainsString( 'NEWSPACK_CONTENT_GATES', $warning );
+	}
+
+	/**
+	 * The other half, unchanged from before: no feature constant, no enforcement.
+	 */
+	public function test_describe_inactive_gating_warns_when_the_feature_constant_is_off() {
+		$warning = $this->invoke_private_static( 'describe_inactive_gating', [ false, true ] );
+
+		$this->assertNotNull( $warning );
+		$this->assertStringContainsString( 'NEWSPACK_CONTENT_GATES', $warning );
+		$this->assertStringNotContainsString( 'Audience Management', $warning );
+	}
+
+	/**
+	 * With both off, both are named: the operator who fixes only the one they were
+	 * told about would re-run and still get dormant gates.
+	 */
+	public function test_describe_inactive_gating_names_both_missing_halves() {
+		$warning = $this->invoke_private_static( 'describe_inactive_gating', [ false, false ] );
+
+		$this->assertStringContainsString( 'NEWSPACK_CONTENT_GATES', $warning );
+		$this->assertStringContainsString( 'Audience Management', $warning );
+	}
+
+	/**
+	 * Both conditions met is the only silent case.
+	 */
+	public function test_describe_inactive_gating_is_silent_when_gating_is_active() {
+		$this->assertNull( $this->invoke_private_static( 'describe_inactive_gating', [ true, true ] ) );
+	}
+
+	/**
+	 * A summary row for a group whose gate failed to write.
+	 *
+	 * @param string $action The row's action text.
+	 *
+	 * @return array A summary row.
+	 */
+	private function make_summary_row( string $action ): array {
+		return [
+			'plan_name'   => 'Fixture',
+			'action'      => $action,
+			'gate_id'     => 1,
+			'lists'       => 1,
+			'access_type' => 'signup',
+		];
+	}
+
+	/**
+	 * A group whose gate failed to write migrated no lists, so it must be kept out of
+	 * the site-wide auto-signup derivation.
+	 */
+	public function test_count_incomplete_groups_counts_a_failed_write() {
+		$summary = [
+			$this->make_summary_row( 'created' ),
+			$this->make_summary_row( 'ERROR: could not insert post' ),
+		];
+
+		$this->assertSame( 1, $this->invoke_private_static( 'count_incomplete_groups', [ $summary ] ) );
+	}
+
+	/**
+	 * A WARN row counts too: $migrated_lists is appended before verify_migrated_gate()
+	 * runs, so a gate the evaluator cannot enforce feeds the derivation unless this
+	 * catches it.
+	 */
+	public function test_count_incomplete_groups_counts_a_warn_row() {
+		$summary = [
+			$this->make_summary_row( 'updated' ),
+			$this->make_summary_row( 'WARN: it has no content rules' ),
+		];
+
+		$this->assertSame( 1, $this->invoke_private_static( 'count_incomplete_groups', [ $summary ] ) );
+	}
+
+	/**
+	 * A clean run counts nothing, so the ordinary path still writes the setting.
+	 */
+	public function test_count_incomplete_groups_ignores_clean_rows() {
+		$summary = [
+			$this->make_summary_row( 'created' ),
+			$this->make_summary_row( 'updated (dry-run)' ),
+		];
+
+		$this->assertSame( 0, $this->invoke_private_static( 'count_incomplete_groups', [ $summary ] ) );
+	}
+
+	/**
+	 * The derivation is over the lists this run migrated, so a group that failed
+	 * leaves its lists out of it — and dropping lists can turn a genuine modal /
+	 * non-modal disagreement into a determinate value. The option must be left alone
+	 * even under --live.
+	 */
+	public function test_report_auto_signup_writes_nothing_when_a_group_is_incomplete() {
+		update_option( 'newspack_premium_newsletters_auto_signup', 0 );
+		$this->set_signup_modal_lists( [] ); // Derives to on, which differs from the stored value.
+
+		$this->invoke_private_static( 'report_auto_signup', [ [ $this->list_a ], false, false, 1 ] );
+
+		$this->assertFalse( (bool) get_option( 'newspack_premium_newsletters_auto_signup' ) );
+	}
+
+	/**
+	 * And says so: an operator who passed --live and saw a derivation printed needs to
+	 * be told why it was not written, and that a re-run settles it.
+	 */
+	public function test_report_auto_signup_says_why_an_incomplete_run_wrote_nothing() {
+		update_option( 'newspack_premium_newsletters_auto_signup', 0 );
+		$this->set_signup_modal_lists( [] );
+
+		$this->invoke_private_static( 'report_auto_signup', [ [ $this->list_a ], false, false, 2 ] );
+
+		$matching_lines = array_filter(
+			\WP_CLI::$output,
+			fn( $line ) => str_contains( $line, 'failed to write or will not enforce' )
+		);
+		$this->assertNotEmpty( $matching_lines, 'Expected the incomplete run to explain why it wrote nothing.' );
+		$this->assertStringContainsString( '2 gate(s)', reset( $matching_lines ) );
+	}
+
+	/**
+	 * A dry run predicts the same suppression rather than promising a write that the
+	 * live run would not make.
+	 */
+	public function test_report_auto_signup_dry_run_predicts_the_suppression() {
+		update_option( 'newspack_premium_newsletters_auto_signup', 0 );
+		$this->set_signup_modal_lists( [] );
+
+		$this->invoke_private_static( 'report_auto_signup', [ [ $this->list_a ], true, false, 1 ] );
+
+		$this->assertEmpty(
+			array_filter( \WP_CLI::$output, fn( $line ) => str_contains( $line, 'would be set to' ) ),
+			'A dry run over an incomplete set must not promise a write.'
+		);
+	}
+
+	/**
+	 * A run where every group failed derives from no lists at all. That used to print
+	 * nothing — indistinguishable from a run with nothing to change — so it must say
+	 * something.
+	 */
+	public function test_report_auto_signup_reports_a_run_that_migrated_no_lists() {
+		update_option( 'newspack_premium_newsletters_auto_signup', 1 );
+
+		$this->invoke_private_static( 'report_auto_signup', [ [], false, false, 3 ] );
+
+		$matching_warnings = array_filter(
+			\WP_CLI::$warnings,
+			fn( $warning ) => str_contains( $warning, 'Auto-signup was not derived' )
+		);
+		$this->assertNotEmpty( $matching_warnings, 'Expected an auto-signup line for a run that migrated nothing.' );
+		$this->assertStringContainsString( 'all 3 gate(s)', reset( $matching_warnings ) );
+	}
+
+	/**
+	 * The same line covers an empty run with no failures, without claiming a failure
+	 * that did not happen.
+	 */
+	public function test_report_auto_signup_reports_an_empty_run_without_blaming_failures() {
+		update_option( 'newspack_premium_newsletters_auto_signup', 1 );
+
+		$this->invoke_private_static( 'report_auto_signup', [ [], false, false, 0 ] );
+
+		$matching_warnings = array_filter(
+			\WP_CLI::$warnings,
+			fn( $warning ) => str_contains( $warning, 'Auto-signup was not derived' )
+		);
+		$this->assertNotEmpty( $matching_warnings );
+		$this->assertStringNotContainsString( 'failed to write', reset( $matching_warnings ) );
+	}
+
+	/**
+	 * Point a gate mode at a given layout post ID.
+	 *
+	 * @param int    $gate_id   The gate post ID.
+	 * @param string $mode      Either 'registration' or 'custom_access'.
+	 * @param int    $layout_id The layout post ID to store.
+	 */
+	private function set_gate_layout_id( int $gate_id, string $mode, int $layout_id ) {
+		if ( 'custom_access' === $mode ) {
+			\Newspack\Content_Gate::update_custom_access_settings( $gate_id, [ 'gate_layout_id' => $layout_id ] );
+			return;
+		}
+		\Newspack\Content_Gate::update_registration_settings( $gate_id, [ 'gate_layout_id' => $layout_id ] );
+	}
+
+	/**
+	 * The evaluator ends each gate's turn on `if ( $is_restricted && $gate_layout_id )`,
+	 * and the settings getters always return a gate_layout_id defaulting to 0 — so the
+	 * `??` fallbacks beside it never fire and a gate with no layout restricts nothing.
+	 * create_gate() can produce exactly that: it discards a WP_Error from
+	 * create_gate_layout() and still returns the gate ID.
+	 */
+	public function test_verify_migrated_gate_flags_an_active_mode_with_no_layout() {
+		$gate_id = $this->create_premium_gate( [ $this->list_a ] );
+		$this->set_gate_layout_id( $gate_id, 'registration', 0 );
+
+		$issues = $this->invoke_private_static( 'verify_migrated_gate', [ $gate_id ] );
+
+		$this->assertCount( 1, $issues );
+		$this->assertStringContainsString( 'points at no gate layout', $issues[0] );
+		$this->assertStringContainsString( 'registration', $issues[0] );
+	}
+
+	/**
+	 * The paid access mode is checked on the same terms when it is the active one.
+	 */
+	public function test_verify_migrated_gate_flags_a_paid_access_mode_with_no_layout() {
+		$gate_id = $this->create_premium_gate( [ $this->list_a ], true );
+		$this->set_gate_layout_id( $gate_id, 'custom_access', 0 );
+
+		$issues = $this->invoke_private_static( 'verify_migrated_gate', [ $gate_id, true ] );
+
+		$this->assertCount( 1, $issues );
+		$this->assertStringContainsString( 'paid access', $issues[0] );
+	}
+
+	/**
+	 * An existing gate whose layout post was deleted keeps a truthy stale ID, so it
+	 * still restricts — but the layout is gone from under it and readers get the
+	 * hard-coded default gate instead of the publisher's.
+	 */
+	public function test_verify_migrated_gate_flags_a_layout_post_that_no_longer_exists() {
+		$gate_id   = $this->create_premium_gate( [ $this->list_a ] );
+		$layout_id = (int) \Newspack\Content_Gate::get_registration_settings( $gate_id )['gate_layout_id'];
+		$this->assertGreaterThan( 0, $layout_id, 'create_gate() should have seeded a registration layout.' );
+		wp_delete_post( $layout_id, true );
+
+		$issues = $this->invoke_private_static( 'verify_migrated_gate', [ $gate_id ] );
+
+		$this->assertCount( 1, $issues );
+		$this->assertStringContainsString( 'no longer exists', $issues[0] );
+		$this->assertStringContainsString( (string) $layout_id, $issues[0] );
+	}
+
+	/**
+	 * An inactive mode's layout is not the gate's problem: the evaluator never reads
+	 * it, so flagging it would be noise on every signup-only gate.
+	 */
+	public function test_verify_migrated_gate_ignores_the_layout_of_an_inactive_mode() {
+		$gate_id = $this->create_premium_gate( [ $this->list_a ] );
+		$this->set_gate_layout_id( $gate_id, 'custom_access', 0 );
+
+		$this->assertSame( [], $this->invoke_private_static( 'verify_migrated_gate', [ $gate_id ] ) );
+	}
+
+	/**
+	 * A group that would update an existing gate can have its layouts checked before
+	 * the write: they are on the site now, and the update path leaves them alone.
+	 */
+	public function test_compute_pre_write_issues_flags_an_existing_gates_missing_layout() {
+		$gate_id   = $this->create_premium_gate( [ $this->list_a ] );
+		$layout_id = (int) \Newspack\Content_Gate::get_registration_settings( $gate_id )['gate_layout_id'];
+		wp_delete_post( $layout_id, true );
+
+		$issues = $this->invoke_private_static( 'compute_pre_write_issues', [ [ $this->list_a ], false, [], $gate_id ] );
+
+		$this->assertCount( 1, $issues );
+		$this->assertStringContainsString( 'no longer exists', $issues[0] );
+	}
+
+	/**
+	 * A group that would create its gate has no layouts to read yet — create_gate()
+	 * makes them as part of the write — so the dry run predicts nothing about them
+	 * rather than inventing a verdict.
+	 */
+	public function test_compute_pre_write_issues_predicts_no_layout_for_a_gate_that_does_not_exist() {
+		$this->assertSame( [], $this->invoke_private_static( 'compute_pre_write_issues', [ [ $this->list_a ], false, [], null ] ) );
+	}
+
+	/**
+	 * A manual-only plan is skipped, but the lists it restricted are what the operator
+	 * has to decide about. The row used to report "—" whether the plan restricted five
+	 * lists or none.
+	 */
+	public function test_report_manual_only_plan_row_carries_the_real_list_count() {
+		$row = $this->invoke_private_static( 'report_manual_only_plan', [ 'Staff comps', [ $this->list_a, $this->list_b ] ] );
+
+		$this->assertSame( 2, $row['lists'] );
+		$this->assertSame( 'skipped (manual-only)', $row['action'] );
+	}
+
+	/**
+	 * And the lists are named, because the table cannot say whether they will go open
+	 * to everyone or have their members unsubscribed by another plan's gate.
+	 */
+	public function test_report_manual_only_plan_warns_naming_its_lists() {
+		$this->invoke_private_static( 'report_manual_only_plan', [ 'Staff comps', [ $this->list_a ] ] );
+
+		$matching_warnings = array_filter(
+			\WP_CLI::$warnings,
+			fn( $warning ) => str_contains( $warning, 'manual-only' )
+		);
+		$this->assertNotEmpty( $matching_warnings, 'Expected a warning naming the skipped plan\'s lists.' );
+		$this->assertStringContainsString( (string) $this->list_a, reset( $matching_warnings ) );
+	}
+
+	/**
+	 * A manual-only plan that restricted no list has nothing to warn about, and a
+	 * warning per such plan would bury the ones that matter.
+	 */
+	public function test_report_manual_only_plan_is_quiet_without_lists() {
+		$row = $this->invoke_private_static( 'report_manual_only_plan', [ 'Staff comps', [] ] );
+
+		$this->assertSame( 0, $row['lists'] );
+		$this->assertEmpty( \WP_CLI::$warnings );
+	}
 }
