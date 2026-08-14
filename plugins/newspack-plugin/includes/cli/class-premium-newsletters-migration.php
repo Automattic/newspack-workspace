@@ -1362,6 +1362,47 @@ class Premium_Newsletters_Migration {
 	}
 
 	/**
+	 * The summary row for a manual-only plan, and the warning its restricted lists
+	 * earn.
+	 *
+	 * Manual-only plans are skipped: membership is assigned by hand, so there is no
+	 * purchase or registration for a gate's rules to key on. The lists such a plan
+	 * restricts do not go away with it, though. At cutover they either go open to
+	 * every reader, or — if another plan's gate restricts the same lists — that gate
+	 * judges this plan's members unentitled and Premium_Newsletters::check_access()
+	 * unsubscribes them at the ESP. Which of the two happens cannot be read off the
+	 * table, so the lists are named and the operator decides.
+	 *
+	 * Takes the list IDs as an argument, which forces the caller to extract them
+	 * before deciding to skip: the row used to be built ahead of the extraction and
+	 * reported "—" whether the plan restricted five lists or none.
+	 *
+	 * @param string $plan_name The plan name.
+	 * @param int[]  $list_ids  The newsletter lists the plan restricts.
+	 *
+	 * @return array The skipped-plan summary row.
+	 */
+	private static function report_manual_only_plan( string $plan_name, array $list_ids ): array {
+		if ( ! empty( $list_ids ) ) {
+			WP_CLI::warning(
+				sprintf(
+					'"%s" is manual-only, so it is skipped and nothing migrates the %d newsletter list(s) it restricts: %s. At cutover those lists go open to every reader unless another plan\'s gate restricts them — and if one does, that gate unsubscribes this plan\'s members at the ESP. Decide what should happen to them before deactivating WooCommerce Memberships.',
+					$plan_name,
+					count( $list_ids ),
+					implode( ', ', $list_ids )
+				)
+			);
+		}
+		return [
+			'plan_name'   => $plan_name,
+			'action'      => 'skipped (manual-only)',
+			'gate_id'     => '—',
+			'lists'       => count( $list_ids ),
+			'access_type' => '—',
+		];
+	}
+
+	/**
 	 * Group published plans by the set of newsletter lists they restrict.
 	 *
 	 * Manual-only plans (which have no content gates) and plans that restrict no
@@ -1394,18 +1435,15 @@ class Premium_Newsletters_Migration {
 			$plan_name     = $plan->get_name();
 			$access_method = $plan->get_access_method();
 
+			// Extracted before the manual-only skip rather than after it: a skipped plan's
+			// lists are exactly what the operator has to act on ({@see report_manual_only_plan()}).
+			$list_ids = self::extract_list_ids( $plan->get_content_restriction_rules() );
+
 			if ( 'manual-only' === $access_method ) {
-				$skipped[] = [
-					'plan_name'   => $plan_name,
-					'action'      => 'skipped (manual-only)',
-					'gate_id'     => '—',
-					'lists'       => '—',
-					'access_type' => '—',
-				];
+				$skipped[] = self::report_manual_only_plan( $plan_name, $list_ids );
 				continue;
 			}
 
-			$list_ids = self::extract_list_ids( $plan->get_content_restriction_rules() );
 			if ( empty( $list_ids ) ) {
 				$skipped[] = [
 					'plan_name'   => $plan_name,
