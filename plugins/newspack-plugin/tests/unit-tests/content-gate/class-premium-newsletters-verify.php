@@ -474,4 +474,123 @@ class Test_Premium_Newsletters_Verify extends \WP_UnitTestCase {
 
 		$this->assertSame( [ 5 ], $this->invoke_private_static( 'restricted_list_ids_for_gate', [ $gate ] ) );
 	}
+
+	/**
+	 * WP-CLI strips a bare `--gate` before the command runs, so the command sees no
+	 * gate at all and the run would widen to every gate on the site — and under
+	 * --live, remove readers from ESP lists across the whole site rather than the one
+	 * gate the operator named. The raw argv is the only place the mistake is still
+	 * visible.
+	 */
+	public function test_get_valueless_value_flags_reports_a_bare_gate() {
+		$this->assertSame(
+			[ '--gate' ],
+			$this->invoke_private_static(
+				'get_valueless_value_flags',
+				[ [ 'wp', 'newspack', 'verify-premium-newsletters', '--gate', '--live' ] ]
+			)
+		);
+	}
+
+	/**
+	 * All three value-requiring flags are checked, not just --gate.
+	 */
+	public function test_get_valueless_value_flags_reports_all_three_bare_flags() {
+		$this->assertSame(
+			[ '--gate', '--batch-size', '--max-batches' ],
+			$this->invoke_private_static(
+				'get_valueless_value_flags',
+				[ [ 'wp', 'newspack', 'verify-premium-newsletters', '--gate', '--batch-size', '--max-batches' ] ]
+			)
+		);
+	}
+
+	/**
+	 * A flag that carries its value is the ordinary invocation and must pass.
+	 */
+	public function test_get_valueless_value_flags_ignores_flags_with_values() {
+		$this->assertSame(
+			[],
+			$this->invoke_private_static(
+				'get_valueless_value_flags',
+				[ [ 'wp', 'newspack', 'verify-premium-newsletters', '--gate=90', '--batch-size=50', '--max-batches=3', '--live' ] ]
+			)
+		);
+	}
+
+	/**
+	 * The guard has to be wired into the command, not merely available: a bare
+	 * --gate with --live would otherwise remove readers from ESP lists across every
+	 * gate on the site rather than the one the operator named.
+	 */
+	public function test_verify_premium_newsletters_aborts_on_a_bare_gate_flag() {
+		$_SERVER['argv'] = [ 'wp', 'newspack', 'verify-premium-newsletters', '--gate', '--live' ];
+		$verify           = new Premium_Newsletters_Verify();
+
+		$this->expectException( \WP_CLI_Mock_Exception::class );
+		$this->expectExceptionMessage( 'require a value but arrived without one' );
+
+		$verify->verify_premium_newsletters( [], [ 'live' => true ] );
+	}
+
+	/**
+	 * (int) '-1' is truthy, so an unvalidated negative --max-batches would satisfy
+	 * verify_gate()'s `$max_batches && $batches >= $max_batches` guard on the very
+	 * first gate and skip the whole run without checking a single reader.
+	 */
+	public function test_verify_premium_newsletters_aborts_on_a_negative_max_batches() {
+		$_SERVER['argv'] = [ 'wp', 'newspack', 'verify-premium-newsletters' ];
+		$verify           = new Premium_Newsletters_Verify();
+
+		$this->expectException( \WP_CLI_Mock_Exception::class );
+		$this->expectExceptionMessage( 'Invalid --max-batches value' );
+
+		$verify->verify_premium_newsletters( [], [ 'max-batches' => '-1' ] );
+	}
+
+	/**
+	 * An explicit 0 is rejected too, rather than silently reinterpreted as the same
+	 * "unlimited" meaning as the flag being entirely absent.
+	 */
+	public function test_verify_premium_newsletters_aborts_on_a_zero_max_batches() {
+		$_SERVER['argv'] = [ 'wp', 'newspack', 'verify-premium-newsletters' ];
+		$verify           = new Premium_Newsletters_Verify();
+
+		$this->expectException( \WP_CLI_Mock_Exception::class );
+		$this->expectExceptionMessage( 'Invalid --max-batches value' );
+
+		$verify->verify_premium_newsletters( [], [ 'max-batches' => '0' ] );
+	}
+
+	/**
+	 * A positive --max-batches must pass this guard. What happens next is not this
+	 * test's concern, and is not even stable to assert on: several sibling test
+	 * files require the shared newsletters mock at file scope (not inside their own
+	 * set_up_before_class()), so by the time any test in this suite runs,
+	 * Newspack_Newsletters_Subscription already exists as whatever that shared mock
+	 * currently supports — this file deliberately does not touch it (see the class
+	 * docblock). So this only proves the --max-batches guard itself did not reject a
+	 * value it should accept: any WP_CLI_Mock_Exception it might still hit is
+	 * asserted not to be about --max-batches, and any other failure only proves
+	 * execution got past the guard in the first place. Without this test, the guard
+	 * above could pass by rejecting every value, positive included.
+	 */
+	public function test_verify_premium_newsletters_accepts_a_positive_max_batches() {
+		$_SERVER['argv'] = [ 'wp', 'newspack', 'verify-premium-newsletters' ];
+		$verify           = new Premium_Newsletters_Verify();
+
+		try {
+			$verify->verify_premium_newsletters( [], [ 'max-batches' => '3' ] );
+		} catch ( \WP_CLI_Mock_Exception $exception ) {
+			$this->assertStringNotContainsString( 'Invalid --max-batches', $exception->getMessage() );
+			return;
+		} catch ( \Throwable $throwable ) {
+			// Whatever broke, it broke past the --max-batches guard, which is what
+			// this test exists to prove.
+			$this->assertTrue( true );
+			return;
+		}
+		// No exception at all also means the guard did not reject the value.
+		$this->assertTrue( true );
+	}
 }

@@ -68,7 +68,7 @@ class Premium_Newsletters_Verify {
 	 * : Readers to check between pauses. Default 100. Each reader costs two ESP calls, so a large batch size is a large burst of API traffic.
 	 *
 	 * [--max-batches=<number>]
-	 * : Stop after roughly this many batches, across the whole run. Useful for sampling a large site before committing to a full run. Not an exact cap: a gate's last batch is never counted against it, so a run spanning several gates can check somewhat more readers than batch-size times max-batches implies.
+	 * : Stop after roughly this many batches, across the whole run. Useful for sampling a large site before committing to a full run. Must be a positive integer; omit it for no limit. Not an exact cap: a gate's last batch is never counted against it, so a run spanning several gates can check somewhat more readers than batch-size times max-batches implies.
 	 *
 	 * ## EXAMPLES
 	 *
@@ -83,6 +83,37 @@ class Premium_Newsletters_Verify {
 	 */
 	public function verify_premium_newsletters( $args, $assoc_args ) {
 		$live = (bool) \WP_CLI\Utils\get_flag_value( $assoc_args, 'live', false );
+
+		// A bare --gate, --batch-size or --max-batches never reaches the validation
+		// below: WP-CLI warns and strips it, so the command sees no value at all and
+		// runs against every gate on the site. Under --live that means ESP removals
+		// across the whole site rather than the one gate the operator named. The raw
+		// command line is the only place the mistake is still visible.
+		$bare_flags = self::get_valueless_value_flags();
+		if ( ! empty( $bare_flags ) ) {
+			WP_CLI::error( sprintf( 'The following flag(s) require a value but arrived without one: %s. WP-CLI strips a bare flag before the command runs, so the run would widen to every gate on the site — fix the invocation and re-run.', implode( ', ', $bare_flags ) ) );
+		}
+
+		// Validated here, alongside the bare-flag guard above and before any
+		// class or preflight dependency, rather than down near its only use beside
+		// $batch_size: a mistyped or non-positive --max-batches must never silently
+		// produce a run that checks nobody, and this is where the command already
+		// settles bad arguments before doing anything else. 0 remains the "no limit"
+		// default when the flag is omitted entirely. An explicit negative value is
+		// worse than that default: (int) casts it to a truthy number, so
+		// verify_gate()'s `$max_batches && $batches >= $max_batches` guard is
+		// satisfied on the very first gate (0 >= a negative number), and the whole
+		// run skips every gate's population without checking a single reader. An
+		// explicit 0 is rejected too, rather than silently reinterpreted as
+		// "unlimited" — a value the operator typed should mean what it says.
+		$max_batches_arg = \WP_CLI\Utils\get_flag_value( $assoc_args, 'max-batches', null );
+		$max_batches     = 0;
+		if ( null !== $max_batches_arg ) {
+			$max_batches = (int) $max_batches_arg;
+			if ( $max_batches <= 0 ) {
+				WP_CLI::error( sprintf( 'Invalid --max-batches value "%s". Pass a positive integer.', $max_batches_arg ) );
+			}
+		}
 
 		if ( ! class_exists( 'Newspack\Content_Gate' ) ) {
 			WP_CLI::error( 'Newspack\Content_Gate class not found. Is newspack-plugin active? Aborting.' );
@@ -132,7 +163,6 @@ class Premium_Newsletters_Verify {
 
 		$auto_signup = (bool) \get_option( 'newspack_premium_newsletters_auto_signup', 1 );
 		$batch_size  = max( 1, (int) \WP_CLI\Utils\get_flag_value( $assoc_args, 'batch-size', 100 ) );
-		$max_batches = (int) \WP_CLI\Utils\get_flag_value( $assoc_args, 'max-batches', 0 );
 
 		// Shared across every gate below, by reference, so --max-batches caps the
 		// whole run as its help text promises rather than resetting per gate.
@@ -156,6 +186,41 @@ class Premium_Newsletters_Verify {
 			);
 		}
 		WP_CLI::success( 'Verification passed: no reader is on a premium list they are not entitled to.' );
+	}
+
+	/**
+	 * Value-requiring verify-premium-newsletters flags found bare (no `=value`) on
+	 * the raw command line.
+	 *
+	 * WP-CLI validates flags against the command synopsis before invoking the command:
+	 * a bare `--gate` (or `--batch-size` / `--max-batches`) draws only a warning, then
+	 * the flag is stripped and the command receives the flag's default — so a run the
+	 * operator scoped to one gate would silently widen to every gate on the site, and
+	 * under --live that means ESP removals across the whole site rather than the one
+	 * gate named. Reading the raw argv is the only place the mistake is still visible.
+	 *
+	 * Copied from Premium_Newsletters_Migration::get_valueless_value_flags()
+	 * (includes/cli/class-premium-newsletters-migration.php) rather than reused: that
+	 * method's value-flag list is hardcoded to `--plan`, so calling it here would mean
+	 * adding a parameter to a sibling command's method for this command's sake. The
+	 * logic below is otherwise identical.
+	 *
+	 * @param string[]|null $argv Raw argument vector; defaults to $_SERVER['argv'].
+	 *
+	 * @return string[] The value-requiring flags present without a value.
+	 */
+	private static function get_valueless_value_flags( $argv = null ): array {
+		if ( null === $argv ) {
+			$argv = isset( $_SERVER['argv'] ) ? (array) $_SERVER['argv'] : []; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput
+		}
+		$value_flags = [ '--gate', '--batch-size', '--max-batches' ];
+		$bare_flags  = [];
+		foreach ( $argv as $token ) {
+			if ( in_array( $token, $value_flags, true ) ) {
+				$bare_flags[] = $token;
+			}
+		}
+		return array_values( array_unique( $bare_flags ) );
 	}
 
 	/**
