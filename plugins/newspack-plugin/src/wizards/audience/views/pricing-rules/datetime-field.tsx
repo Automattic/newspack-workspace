@@ -45,10 +45,8 @@ function is12HourFormat( format: string ): boolean {
 	return /a(?!\\)/i.test( format.replace( /\\\\/g, '' ).split( '' ).reverse().join( '' ) );
 }
 
-// Left unseeded, the picker labels its cells in UTC while selecting browser-local
-// dates, so east of UTC the first pick on an empty field lands a day early. Seeding
-// with now in the same wall-clock shape the field stores makes an empty field
-// behave like one that already holds a value.
+// Left unseeded the picker labels its cells in UTC while selecting browser-local
+// dates, so east of UTC the first pick lands a day early.
 function nowAsWallClock(): string {
 	const now = new Date();
 	return new Date( now.getTime() - now.getTimezoneOffset() * 60000 ).toISOString().slice( 0, 16 );

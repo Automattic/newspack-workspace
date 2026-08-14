@@ -98,8 +98,7 @@ function DatetimeCondition( {
 	const returnFocusToMode = useRef( false );
 
 	// Clearing unmounts the whole field, so the popover has no toggle left to hand
-	// focus back to and it falls to <body>. Send it to the selector the clear just
-	// moved to "Anytime".
+	// focus back to and it would fall to <body>.
 	useEffect( () => {
 		if ( ! returnFocusToMode.current ) {
 			return;

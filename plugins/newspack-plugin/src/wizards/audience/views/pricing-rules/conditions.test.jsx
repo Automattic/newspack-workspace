@@ -36,7 +36,6 @@ const customToggle = ts => {
 	return `${ LABEL }: ${ display }`;
 };
 
-// The toggle names itself "<condition label>: <resolved date>".
 const ANY_CUSTOM_TOGGLE = new RegExp( `^${ LABEL }: .` );
 
 describe( 'the cohort-gate datetime condition', () => {
@@ -124,8 +123,7 @@ describe( 'the cohort-gate datetime condition', () => {
 		expect( lastValue( onChange ) ).toEqual( { cohort_start: null } );
 		expect( screen.getByLabelText( LABEL ) ).toHaveValue( 'none' );
 		expect( screen.queryByRole( 'button', { name: ANY_CUSTOM_TOGGLE } ) ).not.toBeInTheDocument();
-		// Clearing tears down the toggle the popover would have restored focus to,
-		// so without this focus lands on <body> and Tab restarts from the top.
+		// Clearing tears down the toggle the popover would have returned focus to.
 		expect( screen.getByLabelText( LABEL ) ).toHaveFocus();
 	} );
 
