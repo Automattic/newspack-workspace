@@ -1913,7 +1913,7 @@ final class Newspack_Newsletters_Active_Campaign extends \Newspack_Newsletters_S
 	 * orphaned message left in ActiveCampaign is inert. Mailchimp and Constant
 	 * Contact clean up the same way.
 	 *
-	 * @param string $post_id Numeric ID of the campaign.
+	 * @param int $post_id Numeric ID of the newsletter post.
 	 */
 	public function trash( $post_id ) {
 		if ( Newspack_Newsletters::NEWSPACK_NEWSLETTERS_CPT !== get_post_type( $post_id ) ) {
@@ -1931,7 +1931,13 @@ final class Newspack_Newsletters_Active_Campaign extends \Newspack_Newsletters_S
 		}
 		$campaign_id = get_post_meta( $post_id, 'ac_campaign_id', true );
 		if ( $campaign_id ) {
-			$this->delete_campaign( $campaign_id );
+			// Clear the stored ID only once the campaign is really gone. A refusal
+			// means it still exists in ActiveCampaign (delete_campaign() declines
+			// anything past draft), and the post must keep pointing at it.
+			$delete_res = $this->delete_campaign( $campaign_id );
+			if ( ! is_wp_error( $delete_res ) ) {
+				delete_post_meta( $post_id, 'ac_campaign_id', $campaign_id );
+			}
 		}
 	}
 

@@ -146,7 +146,8 @@ class ActiveCampaignTrashTest extends WP_UnitTestCase {
 
 	/**
 	 * The cleanup that should still happen: a post with its own campaign gets
-	 * that campaign, and only that campaign, deleted.
+	 * that campaign, and only that campaign, deleted. The stored ID is cleared
+	 * once the campaign is really gone, so nothing later reuses a dead pointer.
 	 */
 	public function test_trash_deletes_the_posts_own_campaign() {
 		$this->responses['campaign_list'] = [
@@ -170,11 +171,13 @@ class ActiveCampaignTrashTest extends WP_UnitTestCase {
 			}
 		}
 		$this->assertSame( [ '4242' ], $deleted, 'Only the campaign ID from ac_campaign_id may be deleted.' );
+		$this->assertSame( '', get_post_meta( $post_id, 'ac_campaign_id', true ), 'The stored campaign ID should be cleared once the campaign is gone.' );
 	}
 
 	/**
 	 * A campaign that has already gone out stays put: the deletable-status guard
-	 * in delete_campaign() still applies to the campaign branch.
+	 * in delete_campaign() still applies to the campaign branch. The stored ID
+	 * stays too, because the campaign it names is still there.
 	 */
 	public function test_trash_leaves_a_sent_campaign_alone() {
 		$this->responses['campaign_list'] = [
@@ -187,6 +190,7 @@ class ActiveCampaignTrashTest extends WP_UnitTestCase {
 
 		$this->assertContains( 'campaign_list', $this->actions(), 'The status guard should be consulted.' );
 		$this->assertNotContains( 'campaign_delete', $this->actions(), 'A completed campaign must not be deleted.' );
+		$this->assertSame( '4242', get_post_meta( $post_id, 'ac_campaign_id', true ), 'A campaign that survives keeps its stored ID.' );
 	}
 
 	/**
