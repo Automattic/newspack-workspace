@@ -7,6 +7,13 @@
  * would read in English beside a noun PHP had already resolved in the site's language.
  * Anything that puts the noun in a sentence belongs in this file, and its template in
  * the `groupPhrases` payload.
+ *
+ * Keep this list short. It exists only because no handle here calls
+ * `wp_set_script_translations` and no `.json` catalogues are generated, so JS `__()`
+ * returns its msgid verbatim. Once that build step lands, these templates should move
+ * back to the call sites and this file should shrink to the two nouns. Until then,
+ * counted phrases here are limited to the singular/plural pair a payload can carry —
+ * real plural forms need the catalogues.
  */
 
 import { __, sprintf } from '@wordpress/i18n';
@@ -25,16 +32,18 @@ export const GROUP_LABEL_PLURAL = cfg.groupLabelPlural || cfg.groupLabelDefaultP
 const phrase = ( key, fallback ) => ( cfg.groupPhrases || {} )[ key ] || fallback;
 
 /**
- * Spoken phrasing for a group count, e.g. "14 Groups total". The noun is whichever one
- * the heading shows — the publisher's own or the translated default — so the two agree.
+ * Spoken phrasing for a group count, e.g. "14 Groups". The noun is whichever one the
+ * heading shows — the publisher's own or the translated default — so the two agree.
+ * No "total": the list ships a default filter that hides cancelled groups, so the
+ * number describes the current view rather than the site.
  *
- * @param {number} total Number of groups.
+ * @param {number} total Number of groups in the current view.
  * @return {string} Translated count phrase.
  */
 export function groupCountLabel( total ) {
 	return sprintf(
 		/* translators: 1: number of groups. 2: the group label, e.g. "Groups". */
-		phrase( 'count', __( '%1$s %2$s total', 'newspack-plugin' ) ),
+		phrase( 'count', __( '%1$s %2$s', 'newspack-plugin' ) ),
 		formatCount( total ),
 		1 === total ? GROUP_LABEL : GROUP_LABEL_PLURAL
 	);

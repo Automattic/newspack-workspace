@@ -1277,8 +1277,8 @@ class Subscribers_Wizard extends Wizard {
 					'groupLabelDefault'       => Group_Subscription::get_default_label( 'singular' ),
 					'groupLabelDefaultPlural' => Group_Subscription::get_default_label( 'plural' ),
 					'groupPhrases'            => [
-						/* translators: 1: number of groups. 2: the group label, e.g. "Groups". */
-						'count'      => __( '%1$s %2$s total', 'newspack-plugin' ),
+						/* translators: 1: number of groups. 2: the group label, e.g. "Groups". Word order only; the noun already carries number. */
+						'count'      => __( '%1$s %2$s', 'newspack-plugin' ),
 						/* translators: %s: the group label, e.g. "Group". */
 						'role'       => __( '%s role', 'newspack-plugin' ),
 						/* translators: 1: the group label, e.g. "Groups". 2: the error message. */

@@ -117,13 +117,13 @@ describe( 'the group list header count', () => {
 		await act( async () => {
 			render( <GroupList /> );
 		} );
-		expect( publishedSection().countLabel ).toBe( '1 Group total' );
+		expect( publishedSection().countLabel ).toBe( '1 Group' );
 
 		headerCalls = [];
 		apiFetch.mockResolvedValue( { items: [ group( 1 ), group( 2 ) ] } );
 		await act( async () => {
 			render( <GroupList /> );
 		} );
-		expect( publishedSection().countLabel ).toBe( '2 Groups total' );
+		expect( publishedSection().countLabel ).toBe( '2 Groups' );
 	} );
 } );

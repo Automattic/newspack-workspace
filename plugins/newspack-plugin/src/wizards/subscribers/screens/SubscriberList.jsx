@@ -323,7 +323,7 @@ export default function SubscriberList() {
 					count: subscribersLoading || error ? undefined : total,
 					countLabel: sprintf(
 						/* translators: %s: number of subscribers matching the current view. */
-						_n( '%s subscriber total', '%s subscribers total', total, 'newspack-plugin' ),
+						_n( '%s subscriber', '%s subscribers', total, 'newspack-plugin' ),
 						formatCount( total )
 					),
 				},

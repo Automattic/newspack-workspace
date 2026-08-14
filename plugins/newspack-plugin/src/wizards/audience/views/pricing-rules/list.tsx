@@ -266,7 +266,7 @@ export default function PricingRulesList() {
 					count: isLoading || hasError ? undefined : totalItems,
 					countLabel: sprintf(
 						/* translators: %s: number of pricing rules matching the current view. */
-						_n( '%s rule total', '%s rules total', totalItems, 'newspack-plugin' ),
+						_n( '%s rule', '%s rules', totalItems, 'newspack-plugin' ),
 						formatCount( totalItems )
 					),
 				},

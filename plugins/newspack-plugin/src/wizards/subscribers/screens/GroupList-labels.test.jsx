@@ -79,6 +79,6 @@ describe( 'the group list header under a publisher’s own noun', () => {
 
 		expect( publishedSection().label ).toBe( 'Teams' );
 		expect( publishedSection().count ).toBe( 2 );
-		expect( publishedSection().countLabel ).toBe( '2 Teams total' );
+		expect( publishedSection().countLabel ).toBe( '2 Teams' );
 	} );
 } );

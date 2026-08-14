@@ -58,25 +58,26 @@ const SCOPE_LABELS: Record< Scope, string > = {
 	groups: __( 'Plan bundles', 'newspack-plugin' ),
 };
 
-// Each scope names what it counts, so the heading announces "12 donations total"
-// rather than the generic "12 items" every other counted surface avoids.
+// Each scope names what it counts, so the heading announces "12 donations" rather
+// than the generic "12 items" every other counted surface avoids. No "total": the
+// list ships a default status filter, so the number describes the current view.
 const SCOPE_COUNT_LABELS: Record< Scope, ( total: number ) => string > = {
 	subscriptions: total =>
 		sprintf(
 			/* translators: %s: number of subscription plans matching the current view. */
-			_n( '%s subscription total', '%s subscriptions total', total, 'newspack-plugin' ),
+			_n( '%s subscription', '%s subscriptions', total, 'newspack-plugin' ),
 			formatCount( total )
 		),
 	donations: total =>
 		sprintf(
 			/* translators: %s: number of donation products matching the current view. */
-			_n( '%s donation total', '%s donations total', total, 'newspack-plugin' ),
+			_n( '%s donation', '%s donations', total, 'newspack-plugin' ),
 			formatCount( total )
 		),
 	groups: total =>
 		sprintf(
 			/* translators: %s: number of plan bundles matching the current view. */
-			_n( '%s plan bundle total', '%s plan bundles total', total, 'newspack-plugin' ),
+			_n( '%s plan bundle', '%s plan bundles', total, 'newspack-plugin' ),
 			formatCount( total )
 		),
 };

@@ -115,7 +115,7 @@ describe( 'the Pricing Rules list header count', () => {
 
 		expect( publishedSection().label ).toBe( 'Pricing Rules' );
 		expect( publishedSection().count ).toBe( 3 );
-		expect( publishedSection().countLabel ).toBe( '3 rules total' );
+		expect( publishedSection().countLabel ).toBe( '3 rules' );
 	} );
 
 	it( 'announces a single rule in the singular', async () => {
@@ -124,7 +124,7 @@ describe( 'the Pricing Rules list header count', () => {
 			render( <PricingRulesList /> );
 		} );
 
-		expect( publishedSection().countLabel ).toBe( '1 rule total' );
+		expect( publishedSection().countLabel ).toBe( '1 rule' );
 	} );
 
 	it( 'publishes no count while the read is in flight', async () => {

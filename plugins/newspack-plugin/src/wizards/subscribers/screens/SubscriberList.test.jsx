@@ -120,13 +120,13 @@ describe( 'the subscriber list header count', () => {
 		await act( async () => {
 			render( <SubscriberList /> );
 		} );
-		expect( publishedSection().countLabel ).toBe( '1 subscriber total' );
+		expect( publishedSection().countLabel ).toBe( '1 subscriber' );
 
 		headerCalls = [];
 		apiFetch.mockResolvedValue( page( 2 ) );
 		await act( async () => {
 			render( <SubscriberList /> );
 		} );
-		expect( publishedSection().countLabel ).toBe( '2 subscribers total' );
+		expect( publishedSection().countLabel ).toBe( '2 subscribers' );
 	} );
 } );

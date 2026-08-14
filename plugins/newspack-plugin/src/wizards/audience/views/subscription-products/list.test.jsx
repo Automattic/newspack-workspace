@@ -102,9 +102,9 @@ describe( 'the Plans list header count', () => {
 	// name the tab the publisher activated. Each row carries a product from another
 	// scope, so the count can only be right if it is the scoped one.
 	it.each( [
-		[ 'subscriptions', 'Subscriptions', '2 subscriptions total', {}, { type: 'grouped' } ],
-		[ 'donations', 'Donations', '2 donations total', { is_donation: true }, { type: 'grouped' } ],
-		[ 'groups', 'Plan bundles', '2 plan bundles total', { type: 'grouped' }, { is_donation: true } ],
+		[ 'subscriptions', 'Subscriptions', '2 subscriptions', {}, { type: 'grouped' } ],
+		[ 'donations', 'Donations', '2 donations', { is_donation: true }, { type: 'grouped' } ],
+		[ 'groups', 'Plan bundles', '2 plan bundles', { type: 'grouped' }, { is_donation: true } ],
 	] )( 'publishes the %s count once the products land', async ( scope, label, countLabel, shape, outsider ) => {
 		apiFetch.mockResolvedValue( {
 			products: [
@@ -123,7 +123,7 @@ describe( 'the Plans list header count', () => {
 		apiFetch.mockResolvedValue( { products: [ { ...product( 1 ), is_donation: true } ] } );
 		await renderList( 'donations' );
 
-		expect( publishedSection().countLabel ).toBe( '1 donation total' );
+		expect( publishedSection().countLabel ).toBe( '1 donation' );
 	} );
 
 	it( 'publishes no count while the read is in flight', async () => {

@@ -17,30 +17,30 @@ describe( 'group labels', () => {
 	it( 'inflects the default noun on a site with no override', () => {
 		const { groupCountLabel } = loadLabels();
 
-		expect( groupCountLabel( 14 ) ).toBe( '14 Groups total' );
-		expect( groupCountLabel( 1 ) ).toBe( '1 Group total' );
+		expect( groupCountLabel( 14 ) ).toBe( '14 Groups' );
+		expect( groupCountLabel( 1 ) ).toBe( '1 Group' );
 	} );
 
 	it( 'interpolates the publisher’s own noun instead', () => {
 		const { groupCountLabel } = loadLabels( { groupLabel: 'Team', groupLabelPlural: 'Teams' } );
 
-		expect( groupCountLabel( 14 ) ).toBe( '14 Teams total' );
-		expect( groupCountLabel( 1 ) ).toBe( '1 Team total' );
+		expect( groupCountLabel( 14 ) ).toBe( '14 Teams' );
+		expect( groupCountLabel( 1 ) ).toBe( '1 Team' );
 	} );
 
 	it( 'speaks the same noun the heading shows when only the singular is set', () => {
 		const { GROUP_LABEL, GROUP_LABEL_PLURAL, groupCountLabel } = loadLabels( { groupLabel: 'Team', groupLabelPlural: '' } );
 
-		expect( groupCountLabel( 1 ) ).toBe( `1 ${ GROUP_LABEL } total` );
-		expect( groupCountLabel( 14 ) ).toBe( `14 ${ GROUP_LABEL_PLURAL } total` );
+		expect( groupCountLabel( 1 ) ).toBe( `1 ${ GROUP_LABEL }` );
+		expect( groupCountLabel( 14 ) ).toBe( `14 ${ GROUP_LABEL_PLURAL }` );
 	} );
 
 	it( 'speaks the same noun the heading shows when only the plural is set', () => {
 		const { GROUP_LABEL, GROUP_LABEL_PLURAL, groupCountLabel } = loadLabels( { groupLabel: '', groupLabelPlural: 'Teams' } );
 
 		expect( GROUP_LABEL_PLURAL ).toBe( 'Teams' );
-		expect( groupCountLabel( 1 ) ).toBe( `1 ${ GROUP_LABEL } total` );
-		expect( groupCountLabel( 14 ) ).toBe( `14 ${ GROUP_LABEL_PLURAL } total` );
+		expect( groupCountLabel( 1 ) ).toBe( `1 ${ GROUP_LABEL }` );
+		expect( groupCountLabel( 14 ) ).toBe( `14 ${ GROUP_LABEL_PLURAL }` );
 	} );
 
 	it( 'supplies the default nouns when the payload carries none', () => {
