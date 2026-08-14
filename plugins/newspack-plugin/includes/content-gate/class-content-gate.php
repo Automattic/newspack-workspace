@@ -780,13 +780,23 @@ class Content_Gate {
 			true
 		);
 		\wp_script_add_data( $handle, 'async', true );
-		\wp_localize_script(
-			$handle,
-			'newspack_content_gate',
-			[
-				'metadata' => self::get_gate_metadata(),
-			]
-		);
+		$script_data = [
+			'metadata' => self::get_gate_metadata(),
+		];
+
+		// On a gate preview the previewed document carries its own preview params
+		// onto same-origin links, so the preview survives navigation. It needs the
+		// param list to know which of its query params those are. Gate_Preview's
+		// own check already requires the preview capability, so this does not ship
+		// to ordinary readers.
+		if ( Content_Gate\Gate_Preview::is_preview_request() ) {
+			$script_data['preview_query_params'] = array_merge(
+				[ Content_Gate\Gate_Preview::PREVIEW_QUERY_PARAM ],
+				array_values( Content_Gate\Gate_Preview::PREVIEW_QUERY_KEYS )
+			);
+		}
+
+		\wp_localize_script( $handle, 'newspack_content_gate', $script_data );
 		\wp_enqueue_style(
 			$handle,
 			Newspack::plugin_url() . '/dist/content-gate.css',
