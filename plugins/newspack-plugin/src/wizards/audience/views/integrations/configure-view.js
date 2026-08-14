@@ -5,6 +5,7 @@ import { __ } from '@wordpress/i18n';
 import { CheckboxControl, SelectControl, ToggleControl } from '@wordpress/components';
 import { useDispatch } from '@wordpress/data';
 import { useEffect, useMemo, useRef, useState } from '@wordpress/element';
+import { Stack } from '@wordpress/ui';
 
 /**
  * Internal dependencies
@@ -452,7 +453,7 @@ const ConfigureViewInner = ( { integrations, loading, inFlightChanges, saving, o
 				{ visibleSettingsFields.length > 0 && (
 					<Grid columns={ 2 } gutter={ 32 }>
 						<SectionHeader heading={ 2 } title={ __( 'Settings', 'newspack-plugin' ) } />
-						<Grid columns={ 1 } gutter={ 24 }>
+						<Stack direction="column" gap="xl">
 							{ visibleSettingsFields.map( field => (
 								<SettingsField
 									key={ field.key }
@@ -461,7 +462,7 @@ const ConfigureViewInner = ( { integrations, loading, inFlightChanges, saving, o
 									onChange={ val => handleFieldChange( field.key, val ) }
 								/>
 							) ) }
-						</Grid>
+						</Stack>
 					</Grid>
 				) }
 
@@ -471,10 +472,10 @@ const ConfigureViewInner = ( { integrations, loading, inFlightChanges, saving, o
 						<Divider alignment="full-width" variant="tertiary" marginTop={ 64 } marginBottom={ 64 } />
 						<Grid columns={ 2 } gutter={ 32 } noMargin>
 							<SectionHeader heading={ 2 } title={ __( 'Inbound', 'newspack-plugin' ) } noMargin />
-							<Grid columns={ 1 } rowGap={ 24 } noMargin>
+							<Stack direction="column" gap="xl">
 								{ renderSectionToggle( inboundToggleField, inboundEnabled && ( inboundField.options || [] ).length > 0 ) }
 								{ inboundEnabled && ( inboundField.options || [] ).length > 0 && (
-									<Grid columns={ 1 } rowGap={ 8 } noMargin>
+									<Stack direction="column" gap="sm">
 										{ ( inboundField.options || [] ).map( option => {
 											// Options are always { value, label, matching_function, has_options } objects
 											// for this field (see class-integration.php:get_settings_config()).
@@ -519,9 +520,9 @@ const ConfigureViewInner = ( { integrations, loading, inFlightChanges, saving, o
 												</div>
 											);
 										} ) }
-									</Grid>
+									</Stack>
 								) }
-							</Grid>
+							</Stack>
 						</Grid>
 					</>
 				) }
@@ -532,7 +533,7 @@ const ConfigureViewInner = ( { integrations, loading, inFlightChanges, saving, o
 						<Divider alignment="full-width" variant="tertiary" marginTop={ 64 } marginBottom={ 64 } />
 						<Grid columns={ 2 } gutter={ 32 } noMargin>
 							<SectionHeader heading={ 2 } title={ __( 'Outbound', 'newspack-plugin' ) } noMargin />
-							<Grid columns={ 1 } rowGap={ 24 } noMargin>
+							<Stack direction="column" gap="xl">
 								{ renderSectionToggle(
 									outboundToggleField,
 									outboundEnabled && ( visibleOutboundSettingsFields.length > 0 || !! outboundField )
@@ -560,7 +561,7 @@ const ConfigureViewInner = ( { integrations, loading, inFlightChanges, saving, o
 													title={ group.section }
 													defaultOpen={ index === 0 }
 												>
-													<Grid columns={ 1 } rowGap={ 8 } noMargin>
+													<Stack direction="column" gap="sm">
 														{ group.fields.map( fieldName => (
 															<CheckboxControl
 																className="newspack-checkbox-control"
@@ -572,13 +573,13 @@ const ConfigureViewInner = ( { integrations, loading, inFlightChanges, saving, o
 																}
 															/>
 														) ) }
-													</Grid>
+													</Stack>
 												</CollapsibleGroup.Item>
 											);
 										} ) }
 									</CollapsibleGroup>
 								) }
-							</Grid>
+							</Stack>
 						</Grid>
 					</>
 				) }
