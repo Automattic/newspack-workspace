@@ -49,15 +49,28 @@ const SegmentationPreview = props => {
 	};
 
 	const onWebPreviewLoad = iframeEl => {
-		if ( iframeEl ) {
+		if ( ! iframeEl ) {
+			return;
+		}
+
+		// Open the preview first. Reaching into the frame below can throw — a
+		// genuinely cross-origin setup today, and cross-origin isolation if
+		// WordPress ever extends it past the post-editor screens it currently
+		// covers. Rewriting links is a nicety; leaving the modal stuck on
+		// "Loading…" because a nicety threw is not.
+		setIsOpen( true );
+		onLoad( iframeEl );
+
+		try {
 			[ ...iframeEl.contentWindow.document.querySelectorAll( 'a' ) ].forEach( anchor => {
 				const href = anchor.getAttribute( 'href' );
 				if ( href.indexOf( frontendUrl ) === 0 ) {
 					anchor.setAttribute( 'href', decorateUrl( href ) );
 				}
 			} );
-			setIsOpen( true );
-			onLoad( iframeEl );
+		} catch ( e ) {
+			// eslint-disable-next-line no-console
+			console.warn( 'Segmentation preview: could not rewrite in-iframe links.', e );
 		}
 	};
 
