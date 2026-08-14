@@ -48,12 +48,22 @@ jest.mock( '@wordpress/components', () => ( {
 jest.mock( '../../../../../packages/components/src', () => ( {
 	Button: ( { children } ) => children,
 	CollapsibleGroup: Object.assign( ( { children } ) => children, { Item: ( { children } ) => children } ),
-	// Section dividers pass alignment="full-width"; the divider under a section
-	// toggle does not, so the stub tags them apart for the tests that assert on
-	// whether a toggle divider has anything to divide.
-	Divider: ( { alignment } ) => <hr data-testid={ 'full-width' === alignment ? 'section-divider' : 'toggle-divider' } />,
+	// The view renders three dividers that differ only by props: section dividers
+	// pass alignment="full-width", the one between the outbound settings and the
+	// field groups carries its own class, and the one under a section toggle
+	// carries neither. The stub tags all three apart so a test can assert on the
+	// one it means rather than on a count that spans them.
+	Divider: ( { alignment, className } ) => {
+		let testId = 'toggle-divider';
+		if ( 'full-width' === alignment ) {
+			testId = 'section-divider';
+		} else if ( className && className.includes( 'group-divider' ) ) {
+			testId = 'group-divider';
+		}
+		return <hr data-testid={ testId } />;
+	},
 	Grid: ( { children } ) => children,
-	SectionHeader: () => null,
+	SectionHeader: ( { title } ) => <h2>{ title }</h2>,
 	SelectControl: ( { label, value, onChange } ) => (
 		<input aria-label={ label } value={ value || '' } onChange={ e => onChange( e.target.value ) } />
 	),
@@ -716,5 +726,95 @@ describe( 'ConfigureView per-direction sections', () => {
 		expect( screen.getByLabelText( 'Enable outbound sync' ).checked ).toBe( true );
 		expect( screen.queryByLabelText( 'How to sync deletion' ) ).toBeNull();
 		expect( screen.queryAllByTestId( 'toggle-divider' ) ).toHaveLength( 0 );
+	} );
+
+	// get_list_options() turns an ESP error into an empty array, so an expired
+	// key leaves the inbound field declared but with nothing to pick from.
+	it( 'keeps the inbound toggle but drops its list when the ESP returns no fields', () => {
+		renderConfigureView( {
+			integrations: {
+				esp: {
+					...INTEGRATION,
+					settings: [
+						{ key: 'incoming_sync_enabled', type: 'checkbox', label: 'Enable inbound sync', value: true },
+						{ key: 'incoming_metadata_fields', type: 'metadata', label: 'Incoming metadata fields', value: {}, options: [] },
+					],
+				},
+			},
+		} );
+		expect( screen.getByLabelText( 'Enable inbound sync' ).checked ).toBe( true );
+		expect( screen.queryByLabelText( 'VIP' ) ).toBeNull();
+		expect( screen.queryAllByTestId( 'toggle-divider' ) ).toHaveLength( 0 );
+	} );
+
+	const outboundIntegration = groupedOptions => ( {
+		esp: {
+			...INTEGRATION,
+			settings: [
+				{ key: 'outgoing_sync_enabled', type: 'checkbox', label: 'Enable outbound sync', value: true },
+				{ key: 'metadata_prefix', type: 'text', label: 'Metadata prefix', value: 'NP_' },
+				{
+					key: 'outgoing_metadata_fields',
+					type: 'metadata',
+					label: 'Outgoing metadata fields',
+					value: [],
+					grouped_options: groupedOptions,
+				},
+			],
+		},
+	} );
+
+	it( 'divides the outbound settings from the field groups only when both are present', () => {
+		const { unmount } = renderConfigureView( {
+			integrations: outboundIntegration( [ { section: 'Basic', fields: [ 'Full Name' ] } ] ),
+		} );
+		expect( screen.getByLabelText( 'Metadata prefix' ).value ).toBe( 'NP_' );
+		expect( screen.getByLabelText( 'Full Name' ) ).toBeTruthy();
+		expect( screen.queryAllByTestId( 'group-divider' ) ).toHaveLength( 1 );
+		unmount();
+
+		// A settings field with no groups beneath it has nothing to divide from.
+		renderConfigureView( { integrations: outboundIntegration( [] ) } );
+		expect( screen.getByLabelText( 'Metadata prefix' ).value ).toBe( 'NP_' );
+		expect( screen.queryAllByTestId( 'group-divider' ) ).toHaveLength( 0 );
+	} );
+
+	// Every section a metadata class declares is skipped when it contributes no
+	// available field, so the grouped list can come back empty.
+	it( 'renders no outbound group container or divider when the field declares no groups', () => {
+		renderConfigureView( {
+			integrations: {
+				esp: {
+					...INTEGRATION,
+					settings: [
+						{ key: 'outgoing_sync_enabled', type: 'checkbox', label: 'Enable outbound sync', value: true },
+						{ key: 'outgoing_metadata_fields', type: 'metadata', label: 'Outgoing metadata fields', value: [], grouped_options: [] },
+					],
+				},
+			},
+		} );
+		expect( screen.getByLabelText( 'Enable outbound sync' ).checked ).toBe( true );
+		expect( screen.queryAllByTestId( 'toggle-divider' ) ).toHaveLength( 0 );
+		expect( screen.queryAllByTestId( 'group-divider' ) ).toHaveLength( 0 );
+	} );
+
+	// A select whose options never arrived renders nothing, so a Settings group
+	// holding only that field would otherwise be a heading above an empty column.
+	it( 'drops the Settings section when its only field has no options to offer', () => {
+		const withAudienceOptions = options => ( {
+			esp: {
+				...INTEGRATION,
+				settings: [ { key: 'mailchimp_audience_id', type: 'select', label: 'Audience', value: '', options } ],
+			},
+		} );
+
+		const { unmount } = renderConfigureView( { integrations: withAudienceOptions( [ { value: 'a', label: 'Readers' } ] ) } );
+		expect( screen.getByText( 'Settings' ) ).toBeTruthy();
+		expect( screen.getByLabelText( 'Audience' ) ).toBeTruthy();
+		unmount();
+
+		renderConfigureView( { integrations: withAudienceOptions( [] ) } );
+		expect( screen.queryByText( 'Settings' ) ).toBeNull();
+		expect( screen.queryByLabelText( 'Audience' ) ).toBeNull();
 	} );
 } );
