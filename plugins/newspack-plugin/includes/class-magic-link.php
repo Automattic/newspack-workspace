@@ -1006,7 +1006,9 @@ final class Magic_Link {
 	 * @param string $action  Which admin action get the URL for.
 	 * @param int    $user_id User to get the URL for.
 	 *
-	 * @return string Admin URL to perform an admin action.
+	 * @return string Admin URL to perform an admin action. Built from the current
+	 *                request, so callers must escape it with esc_url() when
+	 *                rendering it into markup.
 	 */
 	private static function get_admin_action_url( $action, $user_id ) {
 		if ( ! \is_admin() ) {
