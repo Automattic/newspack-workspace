@@ -366,4 +366,45 @@ class Test_Premium_Newsletters_Verify extends \WP_UnitTestCase {
 
 		$this->assertSame( 'list-' . $post_id, $this->invoke_private_static( 'public_id_for_list', [ $post_id ] ) );
 	}
+
+	/**
+	 * Mailchimp's and Active Campaign's dedicated not-found codes both end in this
+	 * suffix, so a genuine miss on either provider reads as "no lists" rather than
+	 * a failed lookup.
+	 */
+	public function test_is_contact_not_found_error_matches_the_shared_not_found_suffix() {
+		$this->assertTrue(
+			$this->invoke_private_static(
+				'is_contact_not_found_error',
+				[ new \WP_Error( 'newspack_newsletters_mailchimp_contact_not_found', 'Contact not found' ) ]
+			)
+		);
+		$this->assertTrue(
+			$this->invoke_private_static(
+				'is_contact_not_found_error',
+				[ new \WP_Error( 'newspack_newsletters_contact_not_found', 'Contact not found' ) ]
+			)
+		);
+	}
+
+	/**
+	 * Any other error code — a genuine API failure such as Mailchimp's
+	 * search-members error, or Constant Contact's generic code that conflates a
+	 * miss with a failure — must not be read as "no lists", or a provider outage
+	 * would misreport as a clean run.
+	 */
+	public function test_is_contact_not_found_error_rejects_other_codes() {
+		$this->assertFalse(
+			$this->invoke_private_static(
+				'is_contact_not_found_error',
+				[ new \WP_Error( 'newspack_newsletters_mailchimp_search_members', 'Error reaching to search-members endpoint' ) ]
+			)
+		);
+		$this->assertFalse(
+			$this->invoke_private_static(
+				'is_contact_not_found_error',
+				[ new \WP_Error( 'newspack_newsletters_error', 'Contact not found.' ) ]
+			)
+		);
+	}
 }

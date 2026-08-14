@@ -46,6 +46,11 @@ class Premium_Newsletters_Verify {
 	 * Exits non-zero while any leak or unresolved row remains, so a cutover script
 	 * can gate on it.
 	 *
+	 * Each reader costs two ESP calls, not one: a contact lookup before the list
+	 * read, so a failed API call can be told apart from a reader with no contact at
+	 * all. Every shipped provider's list read otherwise swallows that distinction
+	 * into an empty array, which would misreport an outage as a clean run.
+	 *
 	 * ## OPTIONS
 	 *
 	 * [--live]
@@ -55,7 +60,7 @@ class Premium_Newsletters_Verify {
 	 * : Only verify this gate.
 	 *
 	 * [--batch-size=<number>]
-	 * : Readers to check between pauses. Default 100.
+	 * : Readers to check between pauses. Default 100. Each reader costs two ESP calls, so a large batch size is a large burst of API traffic.
 	 *
 	 * [--max-batches=<number>]
 	 * : Stop after this many batches. Useful for sampling a large site before committing to a full run.
@@ -358,6 +363,28 @@ class Premium_Newsletters_Verify {
 	}
 
 	/**
+	 * Whether a WP_Error from get_contact_data() means "no such contact" rather
+	 * than a failed lookup.
+	 *
+	 * Mailchimp and Active Campaign each expose a dedicated not-found code
+	 * alongside their failure codes — `newspack_newsletters_mailchimp_contact_not_found`
+	 * and `newspack_newsletters_contact_not_found` respectively — so matching that
+	 * shared suffix tells the two apart. Constant Contact does not: its
+	 * get_contact_data() returns the same generic `newspack_newsletters_error` code
+	 * for both "no such contact" and a failed request, so on that provider every
+	 * error reaching here is necessarily treated as unresolved rather than as an
+	 * empty list. That is the same safe default this command already applies to any
+	 * lookup it cannot trust.
+	 *
+	 * @param \WP_Error $error The error get_contact_data() returned.
+	 *
+	 * @return bool
+	 */
+	private static function is_contact_not_found_error( \WP_Error $error ): bool {
+		return str_ends_with( $error->get_error_code(), '_contact_not_found' );
+	}
+
+	/**
 	 * Check one gate's population against the ESP.
 	 *
 	 * @param array $gate        Gate array carrying 'product_ids'.
@@ -389,24 +416,38 @@ class Premium_Newsletters_Verify {
 			if ( ! $user ) {
 				continue;
 			}
-			$contact_lists = \Newspack_Newsletters_Subscription::get_contact_lists( $user->user_email );
-			$unresolved    = \is_wp_error( $contact_lists ) || ! is_array( $contact_lists );
 
-			foreach ( $list_ids as $list_id ) {
-				$public_id = self::public_id_for_list( $list_id );
-				if ( $unresolved || null === $public_id ) {
+			// Every shipped provider's get_contact_lists() swallows a failed API
+			// call into an empty array rather than a WP_Error, so it cannot tell
+			// "no contact" from "could not ask". Reading get_contact_data() first
+			// recovers that distinction: its WP_Error code names a genuine miss on
+			// Mailchimp and Active Campaign (is_contact_not_found_error()), so that
+			// case still counts as "no lists" rather than failing the reader.
+			$contact_data = \Newspack_Newsletters_Subscription::get_contact_data( $user->user_email );
+			if ( \is_wp_error( $contact_data ) && ! self::is_contact_not_found_error( $contact_data ) ) {
+				foreach ( $list_ids as $list_id ) {
 					$rows[] = self::make_row( $gate, $list_id, $user, 'unresolved' );
-					continue;
 				}
-				$is_restricted = \Newspack\Content_Restriction_Control::is_post_restricted( false, $list_id, $user_id );
-				$is_subscribed = in_array( $public_id, $contact_lists, true );
-				$status        = self::classify_reader( $is_restricted, $is_subscribed, $auto_signup );
+			} else {
+				$contact_lists = \is_wp_error( $contact_data ) ? [] : \Newspack_Newsletters_Subscription::get_contact_lists( $user->user_email );
+				$unresolved    = \is_wp_error( $contact_lists ) || ! is_array( $contact_lists );
 
-				if ( 'leak' === $status && $live ) {
-					$removed = \Newspack_Newsletters_Contacts::add_and_remove_lists( $user->user_email, [], [ $public_id ], 'Verifying premium newsletter lists' );
-					$status  = \is_wp_error( $removed ) ? 'unresolved' : 'ok';
+				foreach ( $list_ids as $list_id ) {
+					$public_id = self::public_id_for_list( $list_id );
+					if ( $unresolved || null === $public_id ) {
+						$rows[] = self::make_row( $gate, $list_id, $user, 'unresolved' );
+						continue;
+					}
+					$is_restricted = \Newspack\Content_Restriction_Control::is_post_restricted( false, $list_id, $user_id );
+					$is_subscribed = in_array( $public_id, $contact_lists, true );
+					$status        = self::classify_reader( $is_restricted, $is_subscribed, $auto_signup );
+
+					if ( 'leak' === $status && $live ) {
+						$removed = \Newspack_Newsletters_Contacts::add_and_remove_lists( $user->user_email, [], [ $public_id ], 'Verifying premium newsletter lists' );
+						$status  = \is_wp_error( $removed ) ? 'unresolved' : 'ok';
+					}
+					$rows[] = self::make_row( $gate, $list_id, $user, $status );
 				}
-				$rows[] = self::make_row( $gate, $list_id, $user, $status );
 			}
 
 			if ( ++$in_batch >= $batch_size ) {
