@@ -85,7 +85,7 @@ class Contact_Sync_Admin {
 			return $actions;
 		}
 		$url = self::get_admin_action_url( $user->ID );
-		$actions[ self::ADMIN_ACTION ] = '<a href="' . $url . '">' . \esc_html__( 'Resync contact to ESP', 'newspack-plugin' ) . '</a>';
+		$actions[ self::ADMIN_ACTION ] = '<a href="' . \esc_url( $url ) . '">' . \esc_html__( 'Resync contact to ESP', 'newspack-plugin' ) . '</a>';
 		return $actions;
 	}
 
