@@ -35,6 +35,13 @@ jobs:
   release:
     name: Release
     runs-on: ubuntu-latest
+    # Dependent jobs must tell "released" from "ran and released nothing".
+    # post-release.sh identifies what the release came from via `git log --skip
+    # 1`, assuming an automated release commit at the tip. A no-release run
+    # creates none, so that read lands a commit early, and a stale `Merge ...
+    # alpha` sitting there sends it down the path that force-pushes alpha.
+    outputs:
+      release_needed: ${{ steps.plan.outputs.release_needed }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -223,7 +230,7 @@ jobs:
   # the default branch. Only runs on the release branch (not alpha/hotfix/epic).
   post-release:
     name: Post-release branch sync
-    if: github.ref == 'refs/heads/release'
+    if: github.ref == 'refs/heads/release' && needs.release.outputs.release_needed == 'true'
     needs: release
     runs-on: ubuntu-latest
     steps:
@@ -244,7 +251,7 @@ jobs:
   # WP.org deploys are plugin-specific and only run on the release branch.
   release-wporg-newsletters:
     name: WP.org / newspack-newsletters
-    if: github.ref == 'refs/heads/release'
+    if: github.ref == 'refs/heads/release' && needs.release.outputs.release_needed == 'true'
     needs: release
     uses: ./.github/workflows/_release-wporg.yml
     with:
@@ -256,7 +263,7 @@ jobs:
 
   release-wporg-scaip:
     name: WP.org / super-cool-ad-inserter
-    if: github.ref == 'refs/heads/release'
+    if: github.ref == 'refs/heads/release' && needs.release.outputs.release_needed == 'true'
     needs: release
     uses: ./.github/workflows/_release-wporg.yml
     with:
@@ -268,7 +275,7 @@ jobs:
 
   release-wporg-rtt:
     name: WP.org / republication-tracker-tool
-    if: github.ref == 'refs/heads/release'
+    if: github.ref == 'refs/heads/release' && needs.release.outputs.release_needed == 'true'
     needs: release
     uses: ./.github/workflows/_release-wporg.yml
     with:
