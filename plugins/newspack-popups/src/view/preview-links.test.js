@@ -13,12 +13,12 @@ const hrefs = () => [ ...document.querySelectorAll( 'a' ) ].map( anchor => ancho
 
 describe( 'propagatePreviewParams', () => {
 	beforeEach( () => {
-		global.newspack_popups_view = { preview_query_keys: [ 'pid', 'n_bc' ] };
+		global.newspack_popups_view = { preview_query_params: [ 'pid', 'n_bc' ] };
 		setSearch( '' );
 		setLinks( '' );
 	} );
 
-	it( 'does nothing outside a preview, where the keys are not localized', () => {
+	it( 'does nothing outside a preview, where the params are not localized', () => {
 		global.newspack_popups_view = {};
 		setSearch( '?pid=42' );
 		setLinks( '<a href="/other/">x</a>' );
@@ -88,6 +88,45 @@ describe( 'propagatePreviewParams', () => {
 		propagatePreviewParams();
 
 		expect( hrefs() ).toEqual( [ abs( '/other/?utm_source=nl&pid=42' ) ] );
+	} );
+
+	it( 'survives the global being absent entirely', () => {
+		delete global.newspack_popups_view;
+		setSearch( '?pid=42' );
+		setLinks( '<a href="/other/">x</a>' );
+
+		expect( () => propagatePreviewParams() ).not.toThrow();
+		expect( hrefs() ).toEqual( [ '/other/' ] );
+	} );
+
+	it( 'rewrites an SVG anchor correctly rather than corrupting it', () => {
+		setSearch( '?pid=42' );
+		setLinks( '<svg xmlns="http://www.w3.org/2000/svg"><a href="/chart/"><text>x</text></a></svg>' );
+
+		propagatePreviewParams();
+
+		// The selector matches SVG <a> too, and an SVGAElement's href *property* is
+		// an SVGAnimatedString — resolving it yields a same-origin garbage path that
+		// silently replaces the link. Reading the attribute keeps it intact.
+		expect( document.querySelector( 'svg a' ).getAttribute( 'href' ) ).toBe( abs( '/chart/?pid=42' ) );
+	} );
+
+	it( 'resolves a relative href against the document base', () => {
+		setSearch( '?pid=42' );
+		setLinks( '<a href="sub/page/">x</a>' );
+
+		propagatePreviewParams();
+
+		expect( hrefs() ).toEqual( [ abs( '/post/sub/page/?pid=42' ) ] );
+	} );
+
+	it( 'keeps the fragment on a same-origin link', () => {
+		setSearch( '?pid=42' );
+		setLinks( '<a href="/other/#top">x</a>' );
+
+		propagatePreviewParams();
+
+		expect( hrefs() ).toEqual( [ abs( '/other/?pid=42#top' ) ] );
 	} );
 
 	it( 'is idempotent, so a second pass does not duplicate params', () => {
