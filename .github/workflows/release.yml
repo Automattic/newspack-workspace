@@ -119,12 +119,15 @@ jobs:
             # of 18 packages` when something is, so the count is real corroboration.
             # Matched loosely so a cosmetic reformat cannot redden a no-op push.
             grep -qiE 'released +0 +of +[0-9]+ +packages?' msr-dryrun.log || zero_status=$?
-            if [ "$zero_status" -ne 0 ]; then
+            if [ "$zero_status" -eq 1 ]; then
               echo "Neither a release version nor a zero-release marker found; the dry-run output may have changed."
               # Whole log: this fires when the shape is unknown, and a tail of a
               # multi-package run shows only the last package. `|| true` so exit 1 wins.
               cat msr-dryrun.log || true
               exit 1
+            elif [ "$zero_status" -ne 0 ]; then
+              echo "Failed to scan the dry-run log for the zero-release marker (grep exit $zero_status)"
+              exit "$zero_status"
             fi
             echo "release_needed=false" >> "$GITHUB_OUTPUT"
             echo "No package requires a release; skipping build and release."
