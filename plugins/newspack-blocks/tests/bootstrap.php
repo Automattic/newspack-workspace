@@ -27,12 +27,6 @@ function newspack_blocks_manually_load_plugin() {
 }
 tests_add_filter( 'muplugins_loaded', 'newspack_blocks_manually_load_plugin' );
 
-/**
- * Load test stubs for dependencies not available in the isolated test environment.
- */
-require_once __DIR__ . '/class-newspack-tag-labels-stub.php';
-require_once __DIR__ . '/class-newspack-block-visibility-stub.php';
-
 // Print errors to stdout.
 ini_set( 'error_log', 'php://stdout' ); // phpcs:ignore WordPress.PHP.IniSet.Risky
 
@@ -54,6 +48,17 @@ if ( ! $autoloader_loaded ) {
 	fwrite( STDERR, "Composer autoloader not found. Run `composer install` in plugins/newspack-blocks or at the monorepo root.\n" );
 	exit( 1 );
 }
+
+/**
+ * Load test stubs for dependencies not available in the isolated test environment.
+ *
+ * After the autoloader deliberately: each stub guards on class_exists(), which can
+ * only find a real implementation once autoloading is available. Loaded earlier, the
+ * stub always wins and the guard -- plus the markTestSkipped that depends on it -- is
+ * unreachable.
+ */
+require_once __DIR__ . '/class-newspack-tag-labels-stub.php';
+require_once __DIR__ . '/class-newspack-block-visibility-stub.php';
 
 // Start up the WP testing environment.
 require $newspack_blocks_tests_dir . '/includes/bootstrap.php';

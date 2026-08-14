@@ -24,7 +24,11 @@ class Content_Gate_Excerpt {
 		// monorepo and both have drifted from core.
 		$removed = remove_filter( 'get_the_excerpt', 'wp_trim_excerpt', 10 );
 		if ( ! $removed ) {
-			Logger::log( 'Failed to remove core wp_trim_excerpt filter; excerpts may bypass the content gate.', 'CONTENT-GATE-EXCERPT' );
+			// Not a gate bypass: core's callback would then run first at this same
+			// priority, and the auto branch below ignores whatever $text it produced,
+			// rebuilding from the sanitized clone either way. The cost is a duplicate
+			// trim, so this is a performance signal rather than a correctness one.
+			Logger::log( 'Could not remove core wp_trim_excerpt filter; excerpts are trimmed twice.', 'CONTENT-GATE-EXCERPT' );
 		}
 		add_filter( 'get_the_excerpt', [ __CLASS__, 'filter_get_the_excerpt' ], 10, 2 );
 	}

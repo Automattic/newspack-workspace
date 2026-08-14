@@ -444,8 +444,8 @@ class Newspack_Test_Block_Visibility extends WP_UnitTestCase {
 	 * Sanitization returns early when the raw content does not contain the literal
 	 * 'newspackAccessControl'. That is a performance guard sitting on a security
 	 * boundary: if a gated block could ever serialize without the literal, the guard
-	 * would skip sanitization rather than merely skip work. Pin the assumption
-	 * instead of trusting it, and confirm the block is actually removed.
+	 * would skip sanitization rather than merely skip work. This pins the assumption
+	 * instead of trusting it; removal itself is covered by the stripping tests above.
 	 */
 	public function test_gated_blocks_always_serialize_with_the_guard_literal() {
 		$registration = [
@@ -475,8 +475,6 @@ class Newspack_Test_Block_Visibility extends WP_UnitTestCase {
 				'newspackAccessControlVisibility' => 'visible',
 			],
 		];
-
-		wp_set_current_user( 0 );
 
 		foreach ( $shapes as $label => $attrs ) {
 			$block = [

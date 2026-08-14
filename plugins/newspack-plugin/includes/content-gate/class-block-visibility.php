@@ -193,16 +193,26 @@ class Block_Visibility {
 				$inner_content = [];
 				$index         = 0;
 
-				foreach ( (array) $block['innerContent'] as $chunk ) {
+				// innerContent is always set by parse_blocks(), but this method is public
+				// API another plugin can call with a hand-built array, where a missing
+				// key would silently drop every child.
+				foreach ( (array) ( $block['innerContent'] ?? [] ) as $chunk ) {
 					if ( is_string( $chunk ) ) {
 						$inner_content[] = $chunk;
 						continue;
 					}
 					$child = $block['innerBlocks'][ $index++ ] ?? null;
-					if ( null === $child || self::is_hidden_for_user( $child, 0 ) ) {
+					if ( null === $child ) {
 						continue;
 					}
-					$stripped        = self::strip_hidden( [ $child ] );
+					// The recursive call evaluates the child itself and returns nothing
+					// when it is withheld, so testing the result replaces a second
+					// is_hidden_for_user() call here and makes $stripped[0] safe by
+					// construction rather than by the two evaluations agreeing.
+					$stripped = self::strip_hidden( [ $child ] );
+					if ( empty( $stripped ) ) {
+						continue;
+					}
 					$inner_blocks[]  = $stripped[0];
 					$inner_content[] = null;
 				}
