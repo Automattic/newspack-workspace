@@ -53,24 +53,40 @@ const SegmentationPreview = props => {
 			return;
 		}
 
-		// Open the preview first. Reaching into the frame below can throw — a
-		// genuinely cross-origin setup today, and cross-origin isolation if
-		// WordPress ever extends it past the post-editor screens it currently
-		// covers. Rewriting links is a nicety; leaving the modal stuck on
-		// "Loading…" because a nicety threw is not.
-		setIsOpen( true );
-		onLoad( iframeEl );
-
+		// Reaching into the frame can throw — a genuinely cross-origin setup today,
+		// and cross-origin isolation if WordPress ever extends it past the
+		// post-editor screens it currently covers. The `finally` keeps the original
+		// ordering while guaranteeing the state update still runs: without it a
+		// throw left `isOpen` false, so the effect that recomputes the decorated URL
+		// never re-ran and every reopened preview reused the first session ID.
 		try {
-			[ ...iframeEl.contentWindow.document.querySelectorAll( 'a' ) ].forEach( anchor => {
+			const frameDoc = iframeEl.contentWindow.document;
+			[ ...frameDoc.querySelectorAll( 'a[href]' ) ].forEach( anchor => {
 				const href = anchor.getAttribute( 'href' );
-				if ( href.indexOf( frontendUrl ) === 0 ) {
-					anchor.setAttribute( 'href', decorateUrl( href ) );
+				if ( href.startsWith( '#' ) ) {
+					return;
 				}
+				let target;
+				try {
+					target = new URL( href, frameDoc.baseURI );
+				} catch ( e ) {
+					return;
+				}
+				// Compare origins rather than prefix-matching `frontendUrl`, which
+				// falls back to '/' — under that fallback a protocol-relative
+				// off-site href like //example.com also "starts with" it, and would
+				// carry the segment and session IDs to a third party.
+				if ( target.origin !== new URL( frontendUrl, frameDoc.baseURI ).origin ) {
+					return;
+				}
+				anchor.setAttribute( 'href', decorateUrl( target.toString() ) );
 			} );
 		} catch ( e ) {
 			// eslint-disable-next-line no-console
 			console.warn( 'Segmentation preview: could not rewrite in-iframe links.', e );
+		} finally {
+			setIsOpen( true );
+			onLoad( iframeEl );
 		}
 	};
 

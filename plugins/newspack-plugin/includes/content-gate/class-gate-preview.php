@@ -84,6 +84,26 @@ class Gate_Preview {
 		add_filter( 'newspack_gate_layout_content', [ __CLASS__, 'filter_gate_layout_content' ], PHP_INT_MAX, 2 );
 		add_filter( 'get_post_metadata', [ __CLASS__, 'filter_layout_meta' ], 10, 4 );
 		add_filter( 'show_admin_bar', [ __CLASS__, 'filter_show_admin_bar' ] ); // phpcs:ignore WordPressVIPMinimum.UserExperience.AdminBarRemoval.RemovalDetected
+		add_action( 'template_redirect', [ __CLASS__, 'prevent_preview_caching' ] );
+	}
+
+	/**
+	 * Keep preview responses out of caches.
+	 *
+	 * A preview response is capability-varying: the post is force-restricted, the
+	 * layout's autosaved content is substituted, and the front-end script carries
+	 * the preview param list. An edge cache keying on URL alone would serve all of
+	 * that to a reader, whose links would then be rewritten to carry `ngp_id` —
+	 * shareable and crawlable. The sibling per-user gate paths guard the same way.
+	 */
+	public static function prevent_preview_caching() {
+		if ( ! self::is_preview_request() ) {
+			return;
+		}
+		if ( function_exists( 'batcache_cancel' ) ) {
+			batcache_cancel();
+		}
+		nocache_headers();
 	}
 
 	/**

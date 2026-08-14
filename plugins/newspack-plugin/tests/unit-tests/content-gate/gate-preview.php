@@ -500,4 +500,47 @@ class Test_Gate_Preview extends \WP_UnitTestCase {
 		unset( $_GET[ Gate_Preview::PREVIEW_QUERY_PARAM ] );
 		$this->assertTrue( Gate_Preview::filter_show_admin_bar( true ), 'Admin bar is shown when not previewing.' );
 	}
+
+	/**
+	 * The preview param list reaches the front-end script only on a preview
+	 * request, which by definition means a user who can preview.
+	 *
+	 * The list itself is not secret — it is constant param names — but shipping it
+	 * is what makes the previewed document rewrite every same-origin link. A
+	 * reader who received it would carry the preview params for the rest of their
+	 * session.
+	 */
+	public function test_preview_params_localized_only_for_a_previewing_user() {
+		wp_set_current_user( $this->admin_id );
+		$this->set_query_param( Gate_Preview::PREVIEW_QUERY_PARAM, $this->layout_id );
+
+		$data = Content_Gate::get_frontend_script_data( false, Gate_Preview::is_preview_request() );
+		$this->assertArrayHasKey( 'preview_query_params', $data, 'An admin previewing gets the param list.' );
+		$this->assertContains( Gate_Preview::PREVIEW_QUERY_PARAM, $data['preview_query_params'], 'The list carries the preview param itself.' );
+		$this->assertArrayNotHasKey( 'metadata', $data, 'No gate metadata is sent where no gate renders.' );
+	}
+
+	/**
+	 * A subscriber on the same URL gets nothing, because is_preview_request()
+	 * requires the preview capability on every call.
+	 */
+	public function test_preview_params_absent_for_subscriber_on_preview_url() {
+		wp_set_current_user( $this->subscriber_id );
+		$this->set_query_param( Gate_Preview::PREVIEW_QUERY_PARAM, $this->layout_id );
+
+		$data = Content_Gate::get_frontend_script_data( false, Gate_Preview::is_preview_request() );
+		$this->assertArrayNotHasKey( 'preview_query_params', $data, 'A subscriber on the preview URL gets no param list.' );
+	}
+
+	/**
+	 * Outside a preview the key is absent, so an ordinary page load carries no
+	 * extra payload.
+	 */
+	public function test_preview_params_absent_without_the_param() {
+		wp_set_current_user( $this->admin_id );
+
+		$data = Content_Gate::get_frontend_script_data( true, Gate_Preview::is_preview_request() );
+		$this->assertArrayNotHasKey( 'preview_query_params', $data, 'No param list without a preview request.' );
+		$this->assertArrayHasKey( 'metadata', $data, 'A rendering gate still gets its metadata.' );
+	}
 }

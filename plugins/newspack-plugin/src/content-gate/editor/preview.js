@@ -22,6 +22,15 @@ import WebPreview from '../../../packages/components/src/web-preview';
  * newspack-popups prompt preview: the reader's unsaved meta rides along in the
  * URL (autosaves don't persist meta), and in-iframe article links are rewritten
  * to keep the preview active as the reader navigates.
+ *
+ * That rewriting happens in the previewed document — see
+ * propagateGatePreviewParams() in src/content-gate/preview-links.js — not from
+ * out here. This component used to reach into the preview iframe, guarded by a
+ * try/catch for genuinely cross-origin setups. WordPress 7.1 turned that guard
+ * into a silent failure: it serves the block editor with
+ * `Document-Isolation-Policy`, which severs access to the frame even when it is
+ * same-origin, so the rewrite stopped happening and only a console warning
+ * marked it.
  */
 export default function GatePreview() {
 	const { postId, meta, isSavingPost } = useSelect( select => {
@@ -53,15 +62,6 @@ export default function GatePreview() {
 		[ queryParam ]: postId,
 		...abbreviatedKeys,
 	};
-
-	// Links inside the preview keep their preview params, but the previewed
-	// document does that for itself — see propagateGatePreviewParams() in
-	// src/content-gate/preview-links.js. This used to reach into the preview
-	// iframe from out here, guarded by a try/catch for genuinely cross-origin
-	// setups. WordPress 7.1 turned that guard into a silent failure: it serves the
-	// block editor with `Document-Isolation-Policy`, which severs access to the
-	// frame even when it is same-origin, so the rewrite stopped happening and only
-	// a console warning marked it.
 
 	// Open the preview after the autosave settles. On a failed autosave, still
 	// open it: the server falls back to the layout's saved content, so the reader
