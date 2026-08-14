@@ -6,7 +6,7 @@ export type CollapsibleGroupProps = {
 	hideSingleTitle?: boolean;
 	/** `VStack` spacing between items, in 4px units. */
 	spacing?: number;
-	/** Heading level for every item title, so the group shares one place in the outline. */
+	/** Heading level for every item title, so the group shares one place in the outline. Defaults to the level inherited from an enclosing group, or 2. */
 	titleLevel?: HeadingLevel;
 	children?: React.ReactNode;
 };

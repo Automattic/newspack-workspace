@@ -1,7 +1,7 @@
 /**
  * External dependencies
  */
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 
 /**
  * Internal dependencies
@@ -90,6 +90,32 @@ describe( 'CollapsibleGroup item state', () => {
 
 	it( 'leaves a collapsed panel reachable by find-in-page', () => {
 		const { container } = renderItems( 1 );
+		expect( container.querySelector( '.newspack-collapsible-group__panel' ) ).toHaveAttribute( 'hidden', 'until-found' );
+		// Find-in-page can only match mounted text, so a collapsed item keeps its children.
+		expect( screen.getByText( 'content' ) ).toBeInTheDocument();
+	} );
+
+	it( 'opens an item when its trigger is clicked', () => {
+		const { container } = renderItems( 1 );
+		const trigger = screen.getByRole( 'button', { name: 'Panel 0' } );
+
+		fireEvent.click( trigger );
+
+		expect( trigger ).toHaveAttribute( 'aria-expanded', 'true' );
+		// The chevron rotates off `data-panel-open`, an attribute owned by the library.
+		expect( trigger ).toHaveAttribute( 'data-panel-open' );
+		expect( container.querySelector( '.newspack-collapsible-group__panel' ) ).not.toHaveAttribute( 'hidden' );
+	} );
+
+	it( 'closes an open item when its trigger is clicked', () => {
+		const { container } = renderItems( 1 );
+		const trigger = screen.getByRole( 'button', { name: 'Panel 0' } );
+
+		fireEvent.click( trigger );
+		fireEvent.click( trigger );
+
+		expect( trigger ).toHaveAttribute( 'aria-expanded', 'false' );
+		expect( trigger ).not.toHaveAttribute( 'data-panel-open' );
 		expect( container.querySelector( '.newspack-collapsible-group__panel' ) ).toHaveAttribute( 'hidden', 'until-found' );
 	} );
 } );

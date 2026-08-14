@@ -2,9 +2,9 @@
 
 A stack of independently collapsible items, separated by dividers and sitting flush with the surrounding column. Built on `Collapsible` from `@wordpress/ui`.
 
-Each item is its own disclosure: opening one does not close the others. This is deliberately not a W3C accordion, which coordinates its panels and moves focus between headers with the arrow keys, so the component is not named for one.
+Each item is its own disclosure: opening one does not close the others. This is deliberately not a W3C accordion, which coordinates its panels and moves focus between headers with the arrow keys, so the component is not named for one. It is also not `CollapsibleCard` from the same library, which renders its root as a `Card` and so brings a border, a background and card padding; this component sits flush with the column around it.
 
-A collapsed item is hidden with `hidden="until-found"`, so the browser's find-in-page can match text inside it and expand the item to reveal the result.
+A collapsed item is hidden with `hidden="until-found"`, so the browser's find-in-page can match text inside it and expand the item to reveal the result. Find-in-page can only match text that exists, so a collapsed item keeps its children mounted, out of the focus order and the accessibility tree but present in the DOM. Every item therefore renders on first paint, and a child's state and effects persist while it is closed. Keep expensive children, or anything that fetches on mount, behind the item's own open state.
 
 ## Props
 
@@ -13,7 +13,7 @@ A collapsed item is hidden with `hidden="until-found"`, so the browser's find-in
 | `className` | `string` | — | Additional class on the group wrapper. |
 | `hideSingleTitle` | `boolean` | `false` | When the group holds exactly one item, render it open and drop its title. Use it where a group can collapse to a single section and the title would repeat the heading above it. |
 | `spacing` | `number` | `6` | `VStack` spacing between items, in 4px units. |
-| `titleLevel` | `1 \| 2 \| 3 \| 4 \| 5 \| 6` | `2` | Heading level for every item title. Set it once on the group so the items share one place in the document outline: under a section header rendered as `h2`, pass `3`. |
+| `titleLevel` | `1 \| 2 \| 3 \| 4 \| 5 \| 6` | inherited, or `2` | Heading level for every item title. Set it once on the group so the items share one place in the document outline: under a section header rendered as `h2`, pass `3`. It changes the tag only, never the size, so the same group looks the same wherever it sits. A nested group inherits the level unless it sets its own. |
 
 ### `CollapsibleGroup.Item`
 

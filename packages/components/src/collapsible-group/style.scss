@@ -20,8 +20,9 @@
 		text-align: left;
 		width: 100%;
 
-		&:focus:not(:focus-visible) {
-			box-shadow: none;
+		&:focus-visible {
+			outline: var( --wpds-border-width-focus, var( --wp-admin-border-width-focus, #{wp-vars.$border-width-focus-fallback} ) ) solid var( --wpds-color-stroke-focus-brand, var( --wp-admin-theme-color ) );
+			outline-offset: wp-vars.$grid-unit-05;
 		}
 
 		svg {
@@ -37,10 +38,6 @@
 				transition: transform 0.1s ease-out;
 			}
 		}
-	}
-
-	&__panel[hidden]:not([hidden="until-found"]) {
-		display: none;
 	}
 
 	&__panel-inner {
