@@ -28,20 +28,8 @@
 }
 
 .newspack-breadcrumbs__count {
-	color: wp-colors.$gray-700;
+	color: var(--wpds-color-foreground-content-neutral-weak, #{wp-colors.$gray-700});
 	font-weight: wp-vars.$font-weight-regular;
-
-	.screen-reader-text {
-		border: 0;
-		clip-path: inset(50%);
-		height: 1px;
-		margin: -1px;
-		overflow: hidden;
-		padding: 0;
-		position: absolute;
-		width: 1px;
-		word-wrap: normal;
-	}
 }
 
 .newspack-breadcrumbs__separator {

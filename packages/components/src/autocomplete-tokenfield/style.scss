@@ -36,7 +36,7 @@
 	.newspack-autocomplete-tokenfield__help {
 		color: wp-colors.$gray-700;
 		font-size: wp-vars.$helptext-font-size;
-		line-height: 1.5;
+		line-height: wp-vars.$default-line-height;
 		margin: wp-vars.$grid-unit-10 0 0;
 	}
 
