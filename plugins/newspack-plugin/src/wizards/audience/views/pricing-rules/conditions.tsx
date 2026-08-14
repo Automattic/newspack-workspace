@@ -43,12 +43,14 @@ function DatetimeCondition( {
 	publishedAt,
 	isNew,
 	onChange,
+	onModeChange,
 }: {
 	matcher: PricingRuleConditionVocab;
 	value: number | null;
 	publishedAt: number | null;
 	isNew: boolean;
 	onChange: ( v: number | null ) => void;
+	onModeChange?: ( mode: DateMode ) => void;
 } ) {
 	const derive = (): DateMode => {
 		if ( ! value ) {
@@ -65,17 +67,21 @@ function DatetimeCondition( {
 	const resolvePublish = () => publishedAt ?? Math.floor( Date.now() / 1000 );
 
 	// Apply the new-rule default (Rule publish date) to the parent on mount, so a
-	// rule left at the default saves with the cohort gate set.
+	// rule left at the default saves with the cohort gate set. The mode goes up too:
+	// an auto-applied default and a date the publisher picked are the same timestamp
+	// from the outside, and only the second is worth warning about losing.
 	useEffect( () => {
 		if ( 'publish' === mode && ! value ) {
 			onChange( resolvePublish() );
 		}
+		onModeChange?.( mode );
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [] );
 
 	const choose = ( next: string ) => {
 		const m = next as DateMode;
 		setMode( m );
+		onModeChange?.( m );
 		if ( 'none' === m ) {
 			onChange( null );
 		} else if ( 'publish' === m ) {
@@ -174,10 +180,11 @@ interface ConditionsProps {
 	publishedAt: number | null;
 	isNew: boolean;
 	onChange: ( next: ConditionsMap ) => void;
+	onDateModeChange?: ( id: string, mode: DateMode ) => void;
 	path: string;
 }
 
-export default function Conditions( { vocab, value, publishedAt, isNew, onChange, path }: ConditionsProps ) {
+export default function Conditions( { vocab, value, publishedAt, isNew, onChange, onDateModeChange, path }: ConditionsProps ) {
 	if ( ! vocab?.length ) {
 		return null;
 	}
@@ -208,6 +215,7 @@ export default function Conditions( { vocab, value, publishedAt, isNew, onChange
 							publishedAt={ publishedAt }
 							isNew={ isNew }
 							onChange={ v => setOne( matcher.id, v ) }
+							onModeChange={ mode => onDateModeChange?.( matcher.id, mode ) }
 						/>
 					);
 				}

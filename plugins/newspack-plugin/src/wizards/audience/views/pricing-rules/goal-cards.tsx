@@ -15,15 +15,20 @@ import { pathOptions, pathSummary, type PricingPath } from './recipes';
 interface GoalCardsProps {
 	selected: PricingPath | null;
 	onSelect: ( goal: PricingPath ) => void;
+	/** An existing rule's goal cannot change, so the set becomes a record of the choice. */
+	disabled?: boolean;
 }
 
-export default function GoalCards( { selected, onSelect }: GoalCardsProps ) {
+export default function GoalCards( { selected, onSelect, disabled = false }: GoalCardsProps ) {
 	const options = pathOptions();
 	const selectedIndex = options.findIndex( opt => opt.value === selected );
 	// With nothing selected the group still needs one tab stop: the first card.
 	const activeIndex = selectedIndex === -1 ? 0 : selectedIndex;
 
 	const onKeyDown = ( event: React.KeyboardEvent< HTMLDivElement > ) => {
+		if ( disabled ) {
+			return;
+		}
 		// The cards lay out in a flex row, so horizontal arrows follow writing direction.
 		const nextKey = isRTL() ? 'ArrowLeft' : 'ArrowRight';
 		const previousKey = isRTL() ? 'ArrowRight' : 'ArrowLeft';
@@ -39,7 +44,14 @@ export default function GoalCards( { selected, onSelect }: GoalCardsProps ) {
 	};
 
 	return (
-		<HStack spacing={ 4 } alignment="stretch" role="radiogroup" aria-label={ __( 'Rule goal', 'newspack-plugin' ) } onKeyDown={ onKeyDown }>
+		<HStack
+			spacing={ 4 }
+			alignment="stretch"
+			className="newspack-pricing-rules__goals"
+			role="radiogroup"
+			aria-label={ __( 'Rule goal', 'newspack-plugin' ) }
+			onKeyDown={ onKeyDown }
+		>
 			{ options.map( ( opt, index ) => (
 				<Card
 					key={ opt.value }
@@ -48,19 +60,28 @@ export default function GoalCards( { selected, onSelect }: GoalCardsProps ) {
 					__experimentalCoreProps={ {
 						as: 'button',
 						type: 'button',
+						// A heading, not a span, so it inherits CoreCard's own header
+						// typography and active colour instead of restating them.
 						header: (
 							<>
-								<span className="newspack-pricing-rules__goal-title">{ opt.label }</span>
+								<h3>{ opt.label }</h3>
 								<span>{ pathSummary( opt.value ) }</span>
 							</>
 						),
 						icon: opt.icon,
 						iconBackgroundColor: true,
 						isVertical: true,
-						onClick: () => onSelect( opt.value ),
+						onClick: () => {
+							if ( ! disabled ) {
+								onSelect( opt.value );
+							}
+						},
 						isActive: opt.value === selected,
 						role: 'radio',
 						'aria-checked': opt.value === selected ? 'true' : 'false',
+						// Not `disabled`: the group stays readable and focusable, matching the
+						// accessibleWhenDisabled behaviour the rest of this screen uses.
+						'aria-disabled': disabled ? 'true' : undefined,
 						tabIndex: index === activeIndex ? 0 : -1,
 					} }
 				/>

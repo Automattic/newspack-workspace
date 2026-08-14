@@ -12,9 +12,7 @@ import { useState, useEffect, useCallback, useMemo, useRef } from '@wordpress/el
 import { useDispatch } from '@wordpress/data';
 import apiFetch from '@wordpress/api-fetch';
 import {
-	BaseControl,
 	Button,
-	Modal,
 	TextControl,
 	SelectControl,
 	ToggleControl,
@@ -27,13 +25,13 @@ import { trash } from '@wordpress/icons';
 /**
  * Internal dependencies
  */
-import { Grid, Router, SectionHeader, Divider } from '../../../../../packages/components/src';
+import { Grid, Router, SectionHeader, Divider, useConfirmDialog } from '../../../../../packages/components/src';
 import { WIZARD_STORE_NAMESPACE } from '../../../../../packages/components/src/wizard/store';
 import ScopeTargets from './scope-targets';
 import Conditions, { type ConditionsMap } from './conditions';
 import RulePreview from './rule-preview';
 import { tsToLocalInput, localInputToTs } from './datetime';
-import { RECIPES, applyRecipeConditions, isConditionVisible, intentLabel, pathDescription, type PricingPath } from './recipes';
+import { RECIPES, applyRecipeConditions, isConditionVisible, isPricingPath, intentLabel, type PricingPath } from './recipes';
 import GoalCards from './goal-cards';
 import { RULES_API_PATH as API_PATH } from './constants';
 
@@ -45,9 +43,6 @@ interface StepRowState {
 	value: string;
 	label: string;
 }
-
-const GOAL_HELP_ID = 'newspack-pricing-rule-goal__help';
-const GOAL_MODAL_DESCRIPTION_ID = 'newspack-pricing-rule-goal-modal__description';
 
 interface RuleFormProps {
 	isNew: boolean;
@@ -136,8 +131,6 @@ export default function RuleForm( { isNew, initialPath = null, rule, vocab, onDo
 	const [ intentNote, setIntentNote ] = useState( rule?.intent_note ?? '' );
 	const [ path, setPath ] = useState< string >( rule?.intent || initialPath || ( isNew ? '' : 'custom' ) );
 	const needsGoal = isNew && ! path;
-	const [ isChangingGoal, setIsChangingGoal ] = useState( needsGoal );
-	const [ pendingGoal, setPendingGoal ] = useState< PricingPath | null >( null );
 	const recipe = Object.prototype.hasOwnProperty.call( RECIPES, path ) ? RECIPES[ path as PricingPath ] : null;
 
 	/** Apply a goal's recipe to the fields that goal owns. Everything typed is left alone. */
@@ -169,8 +162,8 @@ export default function RuleForm( { isNew, initialPath = null, rule, vocab, onDo
 
 	// A goal changed outside the form arrives as a prop, never as a remount. A URL
 	// that has dropped the goal is canonicalised back to the one on screen: clearing
-	// `path` instead would discard the recipe and everything typed, and would not
-	// reopen the picker, leaving a form that can never be saved.
+	// `path` instead would discard the recipe and everything typed, and would leave
+	// the form unsaveable until the publisher noticed the goal had gone.
 	useEffect( () => {
 		if ( ! isNew ) {
 			return;
@@ -183,30 +176,74 @@ export default function RuleForm( { isNew, initialPath = null, rule, vocab, onDo
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [ initialPath ] );
 
-	const confirmGoal = () => {
-		if ( pendingGoal ) {
-			choosePath( pendingGoal );
-		}
-		setIsChangingGoal( false );
-	};
-
-	// WP would return focus to the document body after the first-run modal, so land
-	// the publisher on the Change button instead.
-	const changeGoalRef = useRef< HTMLButtonElement >( null );
-	const isFirstRun = useRef( needsGoal );
-	useEffect( () => {
-		if ( ! isChangingGoal && isFirstRun.current ) {
-			isFirstRun.current = false;
-			changeGoalRef.current?.focus();
-		}
-	}, [ isChangingGoal ] );
-
 	const [ activeFrom, setActiveFrom ] = useState( tsToLocalInput( rule?.active_from ?? null ) );
 	const [ activeUntil, setActiveUntil ] = useState( tsToLocalInput( rule?.active_until ?? null ) );
 	const [ conditions, setConditions ] = useState< ConditionsMap >( () =>
 		seedPath ? applyRecipeConditions( seedPath, {} ) : seedConditions( rule?.conditions )
 	);
 	const [ isSaving, setIsSaving ] = useState( false );
+	const [ dateModes, setDateModes ] = useState< Record< string, string > >( {} );
+
+	/**
+	 * What a switch to a named goal would discard. Priority, compose mode and the
+	 * date gates render only under Custom, so leaving Custom is the one switch that
+	 * loses anything. Boolean matchers are excluded: a named goal owning the
+	 * lifecycle gate is the point of picking one, not a side effect. A date gate
+	 * counts only in `custom` mode — new rules auto-apply the publish date, and
+	 * warning about a default nobody chose would put a dialog on every switch.
+	 */
+	const goalChangeLosses = useMemo( () => {
+		if ( ! recipe?.isCustom ) {
+			return [] as string[];
+		}
+		const lost: string[] = [];
+		if ( '100' !== priority ) {
+			lost.push( __( 'Priority', 'newspack-plugin' ) );
+		}
+		if ( 'min' !== composeMode ) {
+			lost.push( __( 'When multiple rules match', 'newspack-plugin' ) );
+		}
+		( vocab.conditions ?? [] ).forEach( matcher => {
+			if ( 'datetime' === matcher.field_type && 'custom' === dateModes[ matcher.id ] ) {
+				lost.push( matcher.label );
+			}
+		} );
+		return lost;
+	}, [ recipe, priority, composeMode, dateModes, vocab.conditions ] );
+
+	const { confirmDialog: goalDialog, requestConfirm: requestGoalChange } = useConfirmDialog( {
+		when: goalChangeLosses.length > 0,
+		title: __( 'Change goal?', 'newspack-plugin' ),
+		confirmButtonText: __( 'Change Goal', 'newspack-plugin' ),
+		message: (
+			<>
+				<p>
+					{ __(
+						'A named goal presets its own eligibility, price locking, products and cycle counting. These Custom settings do not carry over:',
+						'newspack-plugin'
+					) }
+				</p>
+				<ul>
+					{ goalChangeLosses.map( label => (
+						<li key={ label }>{ label }</li>
+					) ) }
+				</ul>
+				<p>
+					{ __(
+						'Your pricing, steps and dates stay as they are, and the name follows the goal until you write your own.',
+						'newspack-plugin'
+					) }
+				</p>
+			</>
+		),
+	} );
+
+	const requestGoal = ( next: PricingPath ) => {
+		if ( next === path ) {
+			return;
+		}
+		requestGoalChange( () => choosePath( next ) );
+	};
 
 	// A save can outlive the form; its callbacks must not then navigate.
 	const isMounted = useRef( true );
@@ -412,52 +449,30 @@ export default function RuleForm( { isNew, initialPath = null, rule, vocab, onDo
 		// outlives them, so each one has to republish it.
 	}, [ setHeaderData, submit, isNew, isSaving, canSubmit, pathname ] );
 
-	const goalHelp = [
-		pathDescription( path as PricingPath ),
-		! isNew && __( 'Set when the rule was created; create a new rule to use a different goal.', 'newspack-plugin' ),
+	// A saved rule's goal cannot change, so it carries one extra sentence saying so.
+	const goalDescription = [
+		__( 'The goal presets who qualifies, whether the price locks in at purchase, and which products the rule covers.', 'newspack-plugin' ),
+		! isNew && __( 'It is set when the rule is created; create a new rule to use a different one.', 'newspack-plugin' ),
 	]
 		.filter( Boolean )
 		.join( ' ' );
 
 	return (
 		<div className="newspack-pricing-rules__form">
-			<Grid columns={ 2 } gutter={ 32 }>
+			<div className="newspack-pricing-rules__goal-section">
+				<SectionHeader title={ __( 'Goal', 'newspack-plugin' ) } description={ goalDescription } noMargin />
+				<GoalCards selected={ isPricingPath( path ) ? path : null } onSelect={ requestGoal } disabled={ ! isNew || isSaving } />
+			</div>
+
+			<Divider alignment="full-width" variant="tertiary" />
+
+			<Grid columns={ 2 } gutter={ 32 } noMargin>
 				<SectionHeader
 					title={ __( 'Rule Details', 'newspack-plugin' ) }
-					description={ __( 'The goal it is built around, its name and status, and which products it applies to.', 'newspack-plugin' ) }
+					description={ __( 'Its name and status, and which products it applies to.', 'newspack-plugin' ) }
 					noMargin
 				/>
 				<VStack spacing={ 6 } className="newspack-pricing-rules__details">
-					<BaseControl id="newspack-pricing-rule-goal" label={ __( 'Goal', 'newspack-plugin' ) } help={ goalHelp } __nextHasNoMarginBottom>
-						<HStack className="newspack-pricing-rules__goal" alignment="center" spacing={ 2 }>
-							<FlexBlock>
-								<input
-									id="newspack-pricing-rule-goal"
-									className="components-text-control__input"
-									type="text"
-									value={ intentLabel( path ) }
-									placeholder={ __( 'No goal chosen yet', 'newspack-plugin' ) }
-									aria-describedby={ goalHelp ? GOAL_HELP_ID : undefined }
-									readOnly
-								/>
-							</FlexBlock>
-							{ isNew && (
-								<Button
-									ref={ changeGoalRef }
-									variant="secondary"
-									onClick={ () => {
-										setPendingGoal( path as PricingPath );
-										setIsChangingGoal( true );
-									} }
-									aria-label={ __( 'Change goal', 'newspack-plugin' ) }
-									disabled={ isSaving }
-									__next40pxDefaultSize
-								>
-									{ __( 'Change', 'newspack-plugin' ) }
-								</Button>
-							) }
-						</HStack>
-					</BaseControl>
 					{ recipe?.isCustom && (
 						<TextControl
 							label={ __( 'Goal note', 'newspack-plugin' ) }
@@ -747,6 +762,7 @@ export default function RuleForm( { isNew, initialPath = null, rule, vocab, onDo
 						publishedAt={ rule?.published_at ?? null }
 						isNew={ isNew }
 						onChange={ setConditions }
+						onDateModeChange={ ( id, mode ) => setDateModes( prev => ( { ...prev, [ id ]: mode } ) ) }
 						path={ path }
 					/>
 				</VStack>
@@ -769,53 +785,7 @@ export default function RuleForm( { isNew, initialPath = null, rule, vocab, onDo
 					<RulePreview body={ previewBody } />
 				) }
 			</div>
-			{ isChangingGoal && (
-				<Modal
-					title={ needsGoal ? __( 'Choose a Goal', 'newspack-plugin' ) : __( 'Change Goal', 'newspack-plugin' ) }
-					onRequestClose={ () => setIsChangingGoal( false ) }
-					isDismissible={ ! needsGoal }
-					shouldCloseOnEsc={ ! needsGoal }
-					shouldCloseOnClickOutside={ ! needsGoal }
-					size="large"
-					className="newspack-pricing-rules__goal-modal"
-					aria={ { describedby: GOAL_MODAL_DESCRIPTION_ID } }
-				>
-					<VStack spacing={ 6 }>
-						<p className="newspack-pricing-rules__muted" id={ GOAL_MODAL_DESCRIPTION_ID }>
-							{ needsGoal
-								? __(
-										'Pick a goal and we preset the options that match it: who qualifies, whether the price locks in at purchase, and which products it covers. You fill in the pricing. Choose Custom to set everything yourself.',
-										'newspack-plugin'
-								  )
-								: __(
-										'A new goal presets its own eligibility, price locking, products, and how cycles are counted. Your pricing, steps and dates stay as they are, and the name follows the goal until you write your own.',
-										'newspack-plugin'
-								  ) }
-						</p>
-						<GoalCards selected={ pendingGoal } onSelect={ setPendingGoal } />
-						<HStack justify="flex-end" spacing={ 2 }>
-							{ needsGoal ? (
-								<Button variant="tertiary" href="#/" __next40pxDefaultSize>
-									{ __( 'Back', 'newspack-plugin' ) }
-								</Button>
-							) : (
-								<Button variant="tertiary" onClick={ () => setIsChangingGoal( false ) } __next40pxDefaultSize>
-									{ __( 'Cancel', 'newspack-plugin' ) }
-								</Button>
-							) }
-							<Button
-								variant="primary"
-								onClick={ confirmGoal }
-								disabled={ ! pendingGoal || pendingGoal === path }
-								accessibleWhenDisabled
-								__next40pxDefaultSize
-							>
-								{ needsGoal ? __( 'Select Goal', 'newspack-plugin' ) : __( 'Update Goal', 'newspack-plugin' ) }
-							</Button>
-						</HStack>
-					</VStack>
-				</Modal>
-			) }
+			{ goalDialog }
 		</div>
 	);
 }

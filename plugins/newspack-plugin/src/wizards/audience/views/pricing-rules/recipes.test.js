@@ -10,7 +10,6 @@ import {
 	isPricingPath,
 	pathOptions,
 	pathSummary,
-	pathDescription,
 } from './recipes';
 
 const mockX = jest.fn( text => text );
@@ -90,11 +89,6 @@ describe( 'recipes', () => {
 		expect( isConditionVisible( 'bogus', 'select' ) ).toBe( true );
 		expect( isConditionVisible( 'custom', 'boolean' ) ).toBe( true );
 		expect( isConditionVisible( 'retention', 'boolean' ) ).toBe( false );
-	} );
-
-	it( 'pathDescription falls back to an empty string for an unknown intent', () => {
-		expect( pathDescription( 'mystery' ) ).toBe( '' );
-		pathOptions().forEach( opt => expect( pathDescription( opt.value ).length ).toBeGreaterThan( 0 ) );
 	} );
 
 	it( 'the picker offers exactly the paths the recipe map defines', () => {

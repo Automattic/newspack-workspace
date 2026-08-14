@@ -61,9 +61,6 @@ describe( 'the rule editor header', () => {
 		await act( async () => {
 			fireEvent.click( screen.getByRole( 'radio', { name: /Win-Back/ } ) );
 		} );
-		await act( async () => {
-			fireEvent.click( screen.getByRole( 'button', { name: 'Select Goal' } ) );
-		} );
 	} );
 
 	it( 'publishes Save and the leaf crumb once a goal is chosen', () => {
@@ -77,13 +74,20 @@ describe( 'the rule editor header', () => {
 		expect( screen.getByRole( 'link', { name: 'Pricing Rules' } ) ).toHaveAttribute( 'href', '#/' );
 	} );
 
+	// The crumb owns the page's only "Add Rule"; a section title repeating it made
+	// heading navigation announce the same words twice.
+	it( 'names the screen once, as the h1', () => {
+		expect( screen.getAllByRole( 'heading', { name: 'Add Rule' } ) ).toHaveLength( 1 );
+		expect( currentPage() ).toHaveTextContent( 'Add Rule' );
+	} );
+
 	it( 'keeps them when a goal-less URL is canonicalised back to the goal on screen', async () => {
 		await act( async () => {
 			routerHistory.replace( '/new' );
 		} );
 
 		expect( window.location.hash ).toBe( '#/new/winback' );
-		expect( screen.getByLabelText( 'Goal' ) ).toHaveValue( 'Win-Back' );
+		expect( screen.getByRole( 'radio', { checked: true } ) ).toHaveAccessibleName( /^Win-Back/ );
 		expect( headerSave() ).toBeInTheDocument();
 		expect( headerSave() ).not.toBeDisabled();
 		expect( currentPage() ).toHaveTextContent( 'Add Rule' );

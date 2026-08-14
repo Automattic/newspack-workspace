@@ -24,10 +24,10 @@ jest.mock( '@wordpress/i18n', () => ( {
 	isRTL: jest.fn( () => false ),
 } ) );
 
-// Selection is owned by the picker modal, so mirror that here.
-const Picker = ( { initial = null } ) => {
+// Selection is owned by the form, so mirror that here.
+const Picker = ( { initial = null, disabled = false } ) => {
 	const [ selected, setSelected ] = useState( initial );
-	return <GoalCards selected={ selected } onSelect={ setSelected } />;
+	return <GoalCards selected={ selected } onSelect={ setSelected } disabled={ disabled } />;
 };
 
 const radios = () => screen.getAllByRole( 'radio' );
@@ -150,6 +150,45 @@ describe( 'GoalCards', () => {
 
 	it( 'names each goal by its title and summary, not its icon', () => {
 		render( <Picker /> );
-		expect( radios()[ 0 ] ).toHaveAccessibleName( 'New Subscriptions An intro or stepped offer for first-time subscribers.' );
+		expect( radios()[ 0 ] ).toHaveAccessibleName( 'New Subscriptions An introduction or stepped offer for first-time subscribers.' );
+	} );
+
+	it( 'renders the title as a heading so the card supplies its own typography', () => {
+		render( <Picker /> );
+		expect( screen.getByRole( 'heading', { name: 'New Subscriptions', level: 3 } ) ).toBeInTheDocument();
+	} );
+
+	describe( 'when the goal is fixed', () => {
+		it( 'marks every card aria-disabled rather than disabled, so the set stays readable', () => {
+			render( <Picker initial="save" disabled /> );
+			radios().forEach( radio => {
+				expect( radio ).toHaveAttribute( 'aria-disabled', 'true' );
+				expect( radio ).not.toBeDisabled();
+			} );
+		} );
+
+		it( 'still shows which goal was chosen, and keeps it reachable', () => {
+			render( <Picker initial="save" disabled /> );
+			expect( checked() ).toHaveAccessibleName( /^Save/ );
+			expect( checked() ).toHaveAttribute( 'tabindex', '0' );
+		} );
+
+		it( 'ignores a click on another goal', () => {
+			render( <Picker initial="save" disabled /> );
+			fireEvent.click( radios()[ 0 ] );
+			expect( checked() ).toHaveAccessibleName( /^Save/ );
+		} );
+
+		it( 'ignores the arrow keys', () => {
+			render( <Picker initial="save" disabled /> );
+			const current = checked();
+			current.focus();
+
+			const event = createEvent.keyDown( current, { key: 'ArrowRight' } );
+			fireEvent( current, event );
+
+			expect( event.defaultPrevented ).toBe( false );
+			expect( checked() ).toBe( current );
+		} );
 	} );
 } );
