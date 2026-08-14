@@ -40,27 +40,67 @@ final class Data_Events {
 		}
 
 		/**
-		 * Modal Checkout Interation: Completed Order.
+		 * Modal Checkout Interaction: Completed Order.
+		 *
+		 * Both WooCommerce checkout pipelines feed the same Data Events action:
+		 * classic checkout fires woocommerce_checkout_order_processed, while
+		 * Store API checkouts (the transport express wallets such as Apple Pay
+		 * and Google Pay use) fire woocommerce_store_api_checkout_order_processed
+		 * instead. Each hook gets a callback matching its exact argument shape.
 		 */
 		\Newspack\Data_Events::register_listener(
 			'woocommerce_checkout_order_processed',
 			'modal_checkout_interaction',
 			[ __CLASS__, 'order_status_completed' ]
 		);
+		\Newspack\Data_Events::register_listener(
+			'woocommerce_store_api_checkout_order_processed',
+			'modal_checkout_interaction',
+			[ __CLASS__, 'store_api_order_processed' ]
+		);
 	}
 
 	/**
-	 * Send data to GA4.
+	 * Classic checkout listener callback.
 	 *
 	 * @param string    $order_id Order's ID.
 	 * @param array     $posted_data Posted Data.
 	 * @param \WC_Order $order Order object.
 	 */
-	public static function order_status_completed( $order_id, $posted_data, $order ) {
-		// Check if in a modal checkout; if no, bail.
-		// phpcs:ignore WordPress.Security.NonceVerification.Recommended
-		$is_modal_checkout = ( isset( $_REQUEST['modal_checkout'] ) ? true : false );
-		if ( ! $is_modal_checkout ) {
+	public static function order_status_completed( $order_id, $posted_data = null, $order = null ) {
+		return self::get_modal_checkout_interaction_data( $order_id );
+	}
+
+	/**
+	 * Store API checkout listener callback.
+	 *
+	 * The Store API hook passes a single \WC_Order, unlike the classic hook's
+	 * three arguments; only a scalar order ID crosses into the shared payload
+	 * builder, so neither callback can misread the other hook's argument list.
+	 *
+	 * @param \WC_Order $order Order object.
+	 */
+	public static function store_api_order_processed( $order ) {
+		if ( ! is_a( $order, 'WC_Order' ) ) {
+			return;
+		}
+
+		return self::get_modal_checkout_interaction_data( $order->get_id() );
+	}
+
+	/**
+	 * Build the modal checkout interaction payload for an order, or bail when
+	 * the request is not modal-origin.
+	 *
+	 * Origin detection covers all three modal request shapes: the
+	 * modal_checkout request param (classic card), express_payment_type in
+	 * $_POST (classic express), and the modal referer carried by Store API
+	 * JSON submissions.
+	 *
+	 * @param string $order_id Order's ID.
+	 */
+	private static function get_modal_checkout_interaction_data( $order_id ) {
+		if ( ! \Newspack_Blocks\Modal_Checkout::is_modal_checkout_origin() ) {
 			return;
 		}
 

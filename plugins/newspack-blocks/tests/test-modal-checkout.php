@@ -44,6 +44,7 @@ if ( ! function_exists( 'wcs_get_product_limitation' ) ) {
 }
 
 require_once __DIR__ . '/mocks/newspack-plugin-mocks.php';
+require_once __DIR__ . '/class-wc-order-stub.php';
 
 if ( ! function_exists( 'WC' ) ) {
 	/**
@@ -309,7 +310,7 @@ class ModalCheckoutTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 		}
 		remove_all_filters( 'woocommerce_cart_item_removed_message' );
 		remove_all_filters( 'newspack_blocks_donate_billing_fields_keys' );
-		unset( $_POST['billing_email'], $_POST['post_data'], $_REQUEST['modal_checkout'], $_REQUEST['post_data'], $_SERVER['HTTP_REFERER'] );
+		unset( $_POST['billing_email'], $_POST['post_data'], $_POST['express_payment_type'], $_REQUEST['modal_checkout'], $_REQUEST['post_data'], $_SERVER['HTTP_REFERER'] );
 		parent::tear_down();
 	}
 
@@ -1173,5 +1174,128 @@ class ModalCheckoutTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 		WC()->cart = null;
 
 		$this->assertFalse( \Newspack_Blocks\Modal_Checkout::should_hide_coupon_form() );
+	}
+
+	/**
+	 * The modal_checkout request param marks a request as modal-origin.
+	 */
+	public function test_is_modal_checkout_origin_true_for_request_param() {
+		$this->set_modal_checkout_request();
+
+		$this->assertTrue( \Newspack_Blocks\Modal_Checkout::is_modal_checkout_origin() );
+	}
+
+	/**
+	 * A modal-checkout referer alone marks a request as modal-origin. This is
+	 * the shape of an express-wallet (Apple Pay / Google Pay) Store API
+	 * submission: JSON body, no request params, referer set to the modal
+	 * checkout iframe URL.
+	 */
+	public function test_is_modal_checkout_origin_true_for_modal_referer_only() {
+		$this->set_modal_checkout_referer();
+
+		$this->assertTrue( \Newspack_Blocks\Modal_Checkout::is_modal_checkout_origin() );
+	}
+
+	/**
+	 * A classic express-checkout submission (express_payment_type in POST plus
+	 * the modal referer, no modal_checkout param) is modal-origin.
+	 */
+	public function test_is_modal_checkout_origin_true_for_express_post_with_modal_referer() {
+		$_POST['express_payment_type'] = 'apple_pay';
+		$this->set_modal_checkout_referer();
+
+		$this->assertTrue( \Newspack_Blocks\Modal_Checkout::is_modal_checkout_origin() );
+	}
+
+	/**
+	 * With no modal signals at all, a request is not modal-origin.
+	 */
+	public function test_is_modal_checkout_origin_false_without_signals() {
+		$this->assertFalse( \Newspack_Blocks\Modal_Checkout::is_modal_checkout_origin() );
+	}
+
+	/**
+	 * A referer pointing at the standard checkout page (no modal_checkout
+	 * query) is not modal-origin — a block-based /checkout/ purchase keeps
+	 * vanilla behavior.
+	 */
+	public function test_is_modal_checkout_origin_false_for_plain_checkout_referer() {
+		$_SERVER['HTTP_REFERER'] = 'https://example.com/checkout/';
+
+		$this->assertFalse( \Newspack_Blocks\Modal_Checkout::is_modal_checkout_origin() );
+	}
+
+	/**
+	 * When a request presents as My Account-originated and its only modal
+	 * signal is the request param, the My Account exclusion inside
+	 * is_modal_checkout() still applies to the origin check.
+	 */
+	public function test_is_modal_checkout_origin_respects_my_account_exclusion_for_param_only() {
+		\Newspack\WooCommerce_My_Account::$is_from_my_account = true;
+		$this->set_modal_checkout_request();
+
+		$this->assertFalse( \Newspack_Blocks\Modal_Checkout::is_modal_checkout_origin() );
+	}
+
+	/**
+	 * A modal-checkout referer marks a request as modal-origin even when the
+	 * request also presents as My Account-originated. No real flow produces
+	 * this shape since #2121 strips the my_account_checkout marker from every
+	 * URL the modal opens; the My Account exclusion targets the legacy
+	 * non-modal flows, whose referers never carry modal_checkout.
+	 */
+	public function test_is_modal_checkout_origin_true_for_modal_referer_despite_my_account_flag() {
+		\Newspack\WooCommerce_My_Account::$is_from_my_account = true;
+		$this->set_modal_checkout_referer();
+
+		$this->assertTrue( \Newspack_Blocks\Modal_Checkout::is_modal_checkout_origin() );
+	}
+
+	/**
+	 * The order-received URL is decorated with the modal params for a
+	 * modal-origin Store API request (express wallet shape: modal referer,
+	 * no request params), so the wallet's follow-up page load renders the
+	 * modal thank-you and fires the front-end GA4 purchase event.
+	 */
+	public function test_return_url_decorated_for_modal_origin_store_api_request() {
+		$this->set_modal_checkout_referer();
+		$order = new WC_Order( 123, 'wc_order_testkey' );
+
+		$url = \Newspack_Blocks\Modal_Checkout::woocommerce_get_return_url( 'https://example.com/checkout/order-received/123/', $order );
+
+		$query = [];
+		wp_parse_str( (string) wp_parse_url( $url, PHP_URL_QUERY ), $query );
+		$this->assertSame( '1', $query['modal_checkout'] ?? null );
+		$this->assertSame( '123', $query['order_id'] ?? null );
+		$this->assertSame( 'wc_order_testkey', $query['key'] ?? null );
+	}
+
+	/**
+	 * The order-received URL is untouched when a request carries no modal
+	 * signals.
+	 */
+	public function test_return_url_untouched_without_modal_signals() {
+		$order = new WC_Order( 123, 'wc_order_testkey' );
+
+		$this->assertSame(
+			'https://example.com/checkout/order-received/123/',
+			\Newspack_Blocks\Modal_Checkout::woocommerce_get_return_url( 'https://example.com/checkout/order-received/123/', $order )
+		);
+	}
+
+	/**
+	 * The order-received URL is untouched for a standard checkout-page
+	 * referer — a block-based /checkout/ purchase keeps its vanilla
+	 * thank-you page.
+	 */
+	public function test_return_url_untouched_for_plain_checkout_referer() {
+		$_SERVER['HTTP_REFERER'] = 'https://example.com/checkout/';
+		$order                   = new WC_Order( 123, 'wc_order_testkey' );
+
+		$this->assertSame(
+			'https://example.com/checkout/order-received/123/',
+			\Newspack_Blocks\Modal_Checkout::woocommerce_get_return_url( 'https://example.com/checkout/order-received/123/', $order )
+		);
 	}
 }

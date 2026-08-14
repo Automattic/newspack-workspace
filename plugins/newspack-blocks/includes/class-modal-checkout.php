@@ -1621,13 +1621,18 @@ final class Modal_Checkout {
 	/**
 	 * Return URL for modal checkout "thank you" page.
 	 *
+	 * Origin detection covers the referer so that express-wallet (Apple Pay /
+	 * Google Pay) Store API submissions — JSON bodies with no request params —
+	 * get a decorated return URL and land on the modal thank-you, where the
+	 * front-end GA4 purchase event fires.
+	 *
 	 * @param string   $url The URL to redirect to.
 	 * @param WC_Order $order The order related to the transaction.
 	 *
 	 * @return string
 	 */
 	public static function woocommerce_get_return_url( $url, $order ) {
-		if ( ! self::is_modal_checkout() || self::has_unsupported_payment_gateway() ) {
+		if ( ! self::is_modal_checkout_origin() || self::has_unsupported_payment_gateway() ) {
 			return $url;
 		}
 
@@ -1946,7 +1951,7 @@ final class Modal_Checkout {
 	 * @return array
 	 */
 	public static function relax_configured_off_locale_fields( $locale ) {
-		if ( ! self::is_modal_checkout_referer() && ! self::is_modal_checkout() ) {
+		if ( ! self::is_modal_checkout_origin() ) {
 			return $locale;
 		}
 
@@ -2309,6 +2314,11 @@ final class Modal_Checkout {
 
 	/**
 	 * Is this request using the modal checkout?
+	 *
+	 * Detects modal request *data* (request params, serialized post_data, or a
+	 * classic express-checkout submission). For origin detection that also
+	 * covers parameter-less Store API JSON submissions, see
+	 * is_modal_checkout_origin().
 	 */
 	public static function is_modal_checkout() {
 		// Until we use the modal checkout flow from My Account, we don't want to show the modal checkout thank you template for checkouts originating from My Account.
@@ -2326,6 +2336,31 @@ final class Modal_Checkout {
 		}
 
 		return $is_modal_checkout;
+	}
+
+	/**
+	 * Does this request originate from the modal checkout?
+	 *
+	 * Superset of is_modal_checkout(): additionally true for Store API JSON
+	 * submissions (express wallets such as Apple Pay and Google Pay) whose only
+	 * modal signal is the same-origin referer query, since JSON bodies carry no
+	 * request params and leave $_POST empty.
+	 *
+	 * The referer is client-controlled, so this gates analytics and
+	 * presentation decisions only — never authorization.
+	 *
+	 * Known edge: a wallet submission from the My Account-origin modal reads as
+	 * modal-origin, because the modal strips the my_account_checkout marker
+	 * from every URL it opens (src/modal-checkout/modal.js). Since #2121 that
+	 * is also how My Account card checkouts behave, so wallet and card flows
+	 * stay in parity; the My Account exclusion inside is_modal_checkout()
+	 * continues to govern the legacy non-modal flows, whose referers never
+	 * carry modal_checkout.
+	 *
+	 * @return bool
+	 */
+	public static function is_modal_checkout_origin() {
+		return self::is_modal_checkout() || self::is_modal_checkout_referer();
 	}
 
 	/**
