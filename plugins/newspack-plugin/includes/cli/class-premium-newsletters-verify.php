@@ -424,6 +424,7 @@ class Premium_Newsletters_Verify {
 			return [];
 		}
 		if ( $max_batches && $batches >= $max_batches ) {
+			WP_CLI::warning( sprintf( '"%s" (gate %d): skipped entirely because --max-batches was already reached by an earlier gate.', $gate['title'], $gate['id'] ) );
 			return [];
 		}
 		$population = self::population_for_gate( $gate );
