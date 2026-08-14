@@ -13,10 +13,11 @@ import classNames from 'classnames';
  * Internal dependencies
  */
 import Divider from '../divider';
+import { TitleLevelContext } from './context';
 import type { CollapsibleGroupProps } from './types';
 import './style.scss';
 
-const Root = ( { children, className, hideSingleTitle = false, spacing = 6 }: CollapsibleGroupProps ) => {
+const Root = ( { children, className, hideSingleTitle = false, spacing = 6, titleLevel = 2 }: CollapsibleGroupProps ) => {
 	const items = Children.toArray( children ) as React.ReactElement[];
 
 	// With nothing to collapse against, a lone item can render open and untitled.
@@ -29,14 +30,16 @@ const Root = ( { children, className, hideSingleTitle = false, spacing = 6 }: Co
 	}
 
 	return (
-		<VStack className={ classNames( 'newspack-collapsible-group', className ) } spacing={ spacing }>
-			{ items.map( ( item, index ) => (
-				<Fragment key={ item.key }>
-					{ item }
-					{ index < items.length - 1 && <Divider variant="secondary" marginBottom={ 0 } marginTop={ 0 } /> }
-				</Fragment>
-			) ) }
-		</VStack>
+		<TitleLevelContext.Provider value={ titleLevel }>
+			<VStack className={ classNames( 'newspack-collapsible-group', className ) } spacing={ spacing }>
+				{ items.map( ( item, index ) => (
+					<Fragment key={ item.key }>
+						{ item }
+						{ index < items.length - 1 && <Divider variant="secondary" marginBottom={ 0 } marginTop={ 0 } /> }
+					</Fragment>
+				) ) }
+			</VStack>
+		</TitleLevelContext.Provider>
 	);
 };
 

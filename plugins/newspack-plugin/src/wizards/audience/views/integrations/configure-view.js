@@ -547,7 +547,7 @@ const ConfigureViewInner = ( { integrations, loading, inFlightChanges, saving, o
 										/>
 									) ) }
 								{ outboundEnabled && outboundField && (
-									<CollapsibleGroup hideSingleTitle>
+									<CollapsibleGroup hideSingleTitle titleLevel={ 3 }>
 										{ ( outboundField.grouped_options || [] ).map( ( group, index ) => {
 											const currentValue = getFieldValue( outboundField );
 											const selected = Array.isArray( currentValue ) ? currentValue : [];

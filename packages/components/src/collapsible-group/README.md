@@ -13,6 +13,7 @@ A collapsed item is hidden with `hidden="until-found"`, so the browser's find-in
 | `className` | `string` | — | Additional class on the group wrapper. |
 | `hideSingleTitle` | `boolean` | `false` | When the group holds exactly one item, render it open and drop its title. Use it where a group can collapse to a single section and the title would repeat the heading above it. |
 | `spacing` | `number` | `6` | `VStack` spacing between items, in 4px units. |
+| `titleLevel` | `1 \| 2 \| 3 \| 4 \| 5 \| 6` | `2` | Heading level for every item title. Set it once on the group so the items share one place in the document outline: under a section header rendered as `h2`, pass `3`. |
 
 ### `CollapsibleGroup.Item`
 
@@ -20,14 +21,14 @@ A collapsed item is hidden with `hidden="until-found"`, so the browser's find-in
 |------|------|---------|-------------|
 | `className` | `string` | — | Additional class on the item. |
 | `defaultOpen` | `boolean` | `false` | Whether the item starts expanded. |
-| `title` | `string` | — | Trigger label, rendered as a button inside an `h2`. Without a title there is no trigger and the content renders permanently open. |
+| `title` | `string` | — | Trigger label, rendered as a button inside the heading. Without a title there is no trigger and the content renders permanently open. |
 
 ## Usage
 
 ```jsx
 import { CollapsibleGroup } from 'newspack-components';
 
-<CollapsibleGroup>
+<CollapsibleGroup titleLevel={ 3 }>
 	<CollapsibleGroup.Item title="Contact fields" defaultOpen>
 		…
 	</CollapsibleGroup.Item>

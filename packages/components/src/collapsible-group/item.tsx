@@ -12,22 +12,27 @@ import classNames from 'classnames';
 /**
  * Internal dependencies
  */
+import { useTitleLevel } from './context';
 import type { CollapsibleGroupItemProps } from './types';
 
 const Item = ( { children, className, defaultOpen = false, title }: CollapsibleGroupItemProps ) => {
+	const titleLevel = useTitleLevel();
+
 	if ( ! title ) {
 		return <div className={ classNames( 'newspack-collapsible-group__item', className ) }>{ children }</div>;
 	}
 
+	const Heading = `h${ titleLevel }` as const;
+
 	return (
 		<Collapsible.Root className={ classNames( 'newspack-collapsible-group__item', className ) } defaultOpen={ defaultOpen }>
 			{ /* Heading wraps the trigger, per the W3C accordion pattern. */ }
-			<h2 className="newspack-collapsible-group__heading">
+			<Heading className="newspack-collapsible-group__heading">
 				<Collapsible.Trigger className="newspack-collapsible-group__trigger">
 					{ title }
 					<Icon icon={ chevronDown } size={ 24 } />
 				</Collapsible.Trigger>
-			</h2>
+			</Heading>
 			{ /* `hiddenUntilFound` lets the browser's find-in-page expand a collapsed item. */ }
 			<Collapsible.Panel className="newspack-collapsible-group__panel" hiddenUntilFound>
 				<div className="newspack-collapsible-group__panel-inner">{ children }</div>

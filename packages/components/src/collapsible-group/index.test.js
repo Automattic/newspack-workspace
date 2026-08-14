@@ -42,6 +42,19 @@ describe( 'CollapsibleGroup dividers', () => {
 	} );
 } );
 
+describe( 'CollapsibleGroup titleLevel', () => {
+	it( 'renders item titles as h2 by default', () => {
+		renderItems( 2 );
+		expect( screen.getAllByRole( 'heading', { level: 2 } ) ).toHaveLength( 2 );
+	} );
+
+	it( 'renders every item title at the level given', () => {
+		renderItems( 2, { titleLevel: 3 } );
+		expect( screen.getAllByRole( 'heading', { level: 3 } ) ).toHaveLength( 2 );
+		expect( screen.queryByRole( 'heading', { level: 2 } ) ).not.toBeInTheDocument();
+	} );
+} );
+
 describe( 'CollapsibleGroup hideSingleTitle', () => {
 	it( 'keeps the title on a lone item by default', () => {
 		renderItems( 1 );

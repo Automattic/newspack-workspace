@@ -395,7 +395,7 @@ class ComponentsDemo extends Component {
 									'newspack-plugin'
 								) }
 							</p>
-							<CollapsibleGroup>
+							<CollapsibleGroup titleLevel={ 3 }>
 								<CollapsibleGroup.Item title={ __( 'Contact fields', 'newspack-plugin' ) } defaultOpen>
 									<p>{ __( 'An item set to defaultOpen starts expanded.', 'newspack-plugin' ) }</p>
 								</CollapsibleGroup.Item>
