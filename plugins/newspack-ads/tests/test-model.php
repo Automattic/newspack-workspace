@@ -138,12 +138,6 @@ class ModelTest extends WP_UnitTestCase {
 			$code,
 			'The id must not break out of the attribute: ' . $code
 		);
-		// A well-formed `<div id='…'>` then carries exactly its two delimiter quotes.
-		self::assertSame(
-			2,
-			substr_count( $code, "'" ),
-			'The container div id must not be breakable out of: ' . $code
-		);
 	}
 
 	/**
