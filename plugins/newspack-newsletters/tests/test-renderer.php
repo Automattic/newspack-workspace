@@ -305,28 +305,42 @@ class Newsletters_Renderer_Test extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Build a `core/buttons` block wrapping one `core/button` with the given attributes.
+	 * Build a `core/buttons` block wrapping one `core/button` per set of attributes.
 	 *
-	 * @param array $button_attrs Attributes for the inner core/button block.
+	 * @param array ...$button_attrs One attributes array per button, in order.
 	 * @return array Parsed-block array suitable for render_mjml_component().
 	 */
-	private function buttons_block( $button_attrs ) {
+	private function buttons_block( ...$button_attrs ) {
 		$inner_html = '<button><a>Test Button</a></button>';
+		$buttons    = [];
+		foreach ( $button_attrs as $attrs ) {
+			$buttons[] = [
+				'blockName'    => 'core/button',
+				'attrs'        => $attrs,
+				'innerBlocks'  => [],
+				'innerContent' => [ $inner_html ],
+				'innerHTML'    => $inner_html,
+			];
+		}
 		return [
 			'blockName'    => 'core/buttons',
 			'attrs'        => [],
-			'innerBlocks'  => [
-				[
-					'blockName'    => 'core/button',
-					'attrs'        => $button_attrs,
-					'innerBlocks'  => [],
-					'innerContent' => [ $inner_html ],
-					'innerHTML'    => $inner_html,
-				],
-			],
+			'innerBlocks'  => $buttons,
 			'innerContent' => [ '<div>', null, '</div>' ],
 			'innerHTML'    => '<div></div>',
 		];
+	}
+
+	/**
+	 * Render a buttons block and return its `mj-column` widths, in order.
+	 *
+	 * @param array ...$button_attrs One attributes array per button.
+	 * @return array Width strings, e.g. `[ '50%', '25%' ]`.
+	 */
+	private function button_column_widths( ...$button_attrs ) {
+		$mjml = Newspack_Newsletters_Renderer::render_mjml_component( $this->buttons_block( ...$button_attrs ) );
+		preg_match_all( '/<mj-column[^>]*width="([^"]*)"/', $mjml, $matches );
+		return $matches[1];
 	}
 
 	/**
@@ -336,10 +350,9 @@ class Newsletters_Renderer_Test extends WP_UnitTestCase {
 	 * authored before WP 7.1 still carries on disk.
 	 */
 	public function test_button_width_legacy_attribute() {
-		$mjml = Newspack_Newsletters_Renderer::render_mjml_component( $this->buttons_block( [ 'width' => 50 ] ) );
-		$this->assertStringContainsString(
-			'width="50%"',
-			$mjml,
+		$this->assertSame(
+			[ '50%' ],
+			$this->button_column_widths( [ 'width' => 50 ] ),
 			'Expected a button with the legacy width attribute to render a 50% column.'
 		);
 	}
@@ -348,18 +361,104 @@ class Newsletters_Renderer_Test extends WP_UnitTestCase {
 	 * A button width set the WP 7.1 way renders the same column percentage.
 	 *
 	 * WP 7.1 moved core/button width from a top-level `width` attribute to the
-	 * `dimensions.width` block support, so the editor rewrites stored markup the
-	 * first time a newsletter is re-saved. Without this the column silently falls
-	 * back to full width and the sent email loses the author's layout (NEWS-2852).
+	 * `dimensions` block support, so the editor rewrites stored markup the first
+	 * time a newsletter is re-saved. Without this the column silently falls back
+	 * to the shared default and the sent email loses the author's layout
+	 * (NEWS-2852).
 	 */
 	public function test_button_width_dimensions_support() {
-		$mjml = Newspack_Newsletters_Renderer::render_mjml_component(
-			$this->buttons_block( [ 'style' => [ 'dimensions' => [ 'width' => '50%' ] ] ] )
-		);
-		$this->assertStringContainsString(
-			'width="50%"',
-			$mjml,
+		$this->assertSame(
+			[ '50%' ],
+			$this->button_column_widths( [ 'style' => [ 'dimensions' => [ 'width' => '50%' ] ] ] ),
 			'Expected a button using the WP 7.1 dimensions support to render a 50% column.'
+		);
+	}
+
+	/**
+	 * A `dimensions` width naming a preset resolves to that preset's size.
+	 *
+	 * WordPress stores a chosen preset as `var:preset|dimension|<slug>` rather
+	 * than a literal size, and resolves it at render time. Core ships 25/50/75/100
+	 * presets for buttons, so this shape is reachable on every site — not only
+	 * where a theme defines its own.
+	 */
+	public function test_button_width_dimensions_preset() {
+		$this->assertSame(
+			[ '50%' ],
+			$this->button_column_widths( [ 'style' => [ 'dimensions' => [ 'width' => 'var:preset|dimension|50' ] ] ] ),
+			'Expected a preset width reference to resolve to the preset size.'
+		);
+	}
+
+	/**
+	 * Widths MJML columns can't express fall back to the shared default.
+	 *
+	 * An absolute unit, an unresolvable preset, a missing `width` key, or a value
+	 * outside 1-100 all mean "no usable column percentage". The button then takes
+	 * the default share, which is what a lone width-less button gets: 100%.
+	 * Emitting the raw value instead would produce columns like `200%` or `-50%`
+	 * and break the whole row, not just that button.
+	 *
+	 * @dataProvider unusable_button_width_provider
+	 *
+	 * @param array  $attrs A core/button block's attributes.
+	 * @param string $case  Human-readable label for the failure message.
+	 */
+	public function test_button_width_unusable_values_fall_back( $attrs, $case ) {
+		$this->assertSame(
+			[ '100%' ],
+			$this->button_column_widths( $attrs ),
+			sprintf( 'Expected %s to fall back to the default column width.', $case )
+		);
+	}
+
+	/**
+	 * Width values that cannot become an MJML column percentage.
+	 *
+	 * @return array[]
+	 */
+	public function unusable_button_width_provider() {
+		return [
+			'absolute unit'       => [ [ 'style' => [ 'dimensions' => [ 'width' => '200px' ] ] ], 'an absolute unit' ],
+			'unknown preset'      => [ [ 'style' => [ 'dimensions' => [ 'width' => 'var:preset|dimension|nope' ] ] ], 'an unresolvable preset' ],
+			'dimensions no width' => [ [ 'style' => [ 'dimensions' => [] ] ], 'dimensions without a width' ],
+			'legacy zero'         => [ [ 'width' => 0 ], 'a zero legacy width' ],
+			'legacy negative'     => [ [ 'width' => -50 ], 'a negative legacy width' ],
+			'legacy over 100'     => [ [ 'width' => 150 ], 'a legacy width above 100' ],
+		];
+	}
+
+	/**
+	 * The legacy attribute wins when a block carries both shapes.
+	 *
+	 * WP 7.1's migration deletes the old key as it writes the new one, so the two
+	 * should never coexist — but hand-edited or partially-migrated content can
+	 * carry both, and the read order needs to be deterministic either way.
+	 */
+	public function test_button_width_legacy_wins_over_dimensions() {
+		$this->assertSame(
+			[ '50%' ],
+			$this->button_column_widths(
+				[
+					'width' => 50,
+					'style' => [ 'dimensions' => [ 'width' => '25%' ] ],
+				]
+			),
+			'Expected the legacy width attribute to take precedence.'
+		);
+	}
+
+	/**
+	 * A fractional width keeps its precision.
+	 *
+	 * MJML accepts fractional column widths, so rounding to an integer would make
+	 * three equal thirds sum to 99% and leave the row visibly short.
+	 */
+	public function test_button_width_keeps_fraction() {
+		$this->assertSame(
+			[ '33.9%' ],
+			$this->button_column_widths( [ 'style' => [ 'dimensions' => [ 'width' => '33.9%' ] ] ] ),
+			'Expected a fractional width to survive rather than being truncated.'
 		);
 	}
 
@@ -368,37 +467,17 @@ class Newsletters_Renderer_Test extends WP_UnitTestCase {
 	 *
 	 * A newsletter can hold both forms at once: re-saving rewrites the buttons the
 	 * editor parsed, while untouched ones keep the legacy attribute. Widths are
-	 * chosen so the two cases can't coincide — if `dimensions` were ignored, the
+	 * chosen so the two cases can't coincide - if `dimensions` were ignored, the
 	 * 30% button would fall back to the 25% default share.
 	 */
 	public function test_button_width_mixed_forms() {
-		$inner_html = '<button><a>Test Button</a></button>';
-		$button     = function ( $attrs ) use ( $inner_html ) {
-			return [
-				'blockName'    => 'core/button',
-				'attrs'        => $attrs,
-				'innerBlocks'  => [],
-				'innerContent' => [ $inner_html ],
-				'innerHTML'    => $inner_html,
-			];
-		};
-		$mjml = Newspack_Newsletters_Renderer::render_mjml_component(
-			[
-				'blockName'    => 'core/buttons',
-				'attrs'        => [],
-				'innerBlocks'  => [
-					$button( [ 'width' => 50 ] ),
-					$button( [ 'style' => [ 'dimensions' => [ 'width' => '30%' ] ] ] ),
-					$button( [] ),
-				],
-				'innerContent' => [ '<div>', null, '</div>' ],
-				'innerHTML'    => '<div></div>',
-			]
-		);
-		preg_match_all( '/<mj-column[^>]*width="([^"]*)"/', $mjml, $matches );
 		$this->assertSame(
 			[ '50%', '30%', '25%' ],
-			$matches[1],
+			$this->button_column_widths(
+				[ 'width' => 50 ],
+				[ 'style' => [ 'dimensions' => [ 'width' => '30%' ] ] ],
+				[]
+			),
 			'Expected each button to keep its own width, with the width-less button taking the remaining share.'
 		);
 	}

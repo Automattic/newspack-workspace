@@ -903,26 +903,82 @@ final class Newspack_Newsletters_Renderer {
 	 * Buttons carry their width in one of two shapes. Newsletters authored before
 	 * WordPress 7.1 store a bare `width` attribute; WordPress 7.1 moved
 	 * `core/button` to the `dimensions` block support, so the editor rewrites the
-	 * markup to a percentage string under `style.dimensions.width` the first time a
-	 * newsletter is re-saved. Both forms can coexist in the same newsletter, so
-	 * every width read goes through here (NEWS-2852).
+	 * markup under `style.dimensions.width` the first time a newsletter is
+	 * re-saved. Both forms can coexist in the same newsletter, so every width read
+	 * goes through here (NEWS-2852).
 	 *
-	 * Only percentages translate to MJML column widths. Any other unit is treated
-	 * as "no width set", which lets the button fall back to the shared default
-	 * rather than producing a nonsense column.
+	 * The `dimensions` shape has three variants, and WordPress resolves all of them
+	 * before rendering (`wp-includes/blocks/button.php`): a literal percentage, a
+	 * `var:preset|dimension|<slug>` reference to a `dimensionSizes` preset (core
+	 * ships 25/50/75/100 for buttons, so this is reachable on every site), and an
+	 * absolute unit such as `200px`. Only percentages map onto an MJML column, so
+	 * presets are resolved first and absolute units are treated as "no width set" —
+	 * the button then takes the shared default rather than producing a nonsense
+	 * column.
+	 *
+	 * Widths outside 1–100 are also treated as unset. Nothing in the block editor
+	 * can produce them, but hand-edited or migrated content can, and an
+	 * `mj-column` with a negative or >100% width breaks the whole row rather than
+	 * just that button.
+	 *
+	 * Safe to call with either raw parsed-block attributes or the output of
+	 * `process_attributes()`, which touches neither width key.
 	 *
 	 * @param array $attrs A core/button block's attributes.
-	 * @return int|null Width as a percentage, or null when unset.
+	 * @return float|null Width as a percentage, or null when unset.
 	 */
 	private static function get_button_width( $attrs ) {
-		if ( isset( $attrs['width'] ) && '' !== $attrs['width'] ) {
-			return intval( $attrs['width'] );
+		$width = null;
+
+		if ( isset( $attrs['width'] ) && is_scalar( $attrs['width'] ) && '' !== $attrs['width'] ) {
+			$width = $attrs['width'];
+		} elseif ( isset( $attrs['style']['dimensions']['width'] ) && is_scalar( $attrs['style']['dimensions']['width'] ) ) {
+			$width = self::resolve_dimension_preset( (string) $attrs['style']['dimensions']['width'] );
 		}
-		$dimensions_width = $attrs['style']['dimensions']['width'] ?? null;
-		if ( null === $dimensions_width || ! preg_match( '/^\s*(\d+(?:\.\d+)?)\s*%\s*$/', (string) $dimensions_width, $matches ) ) {
+
+		if ( null === $width || ! preg_match( '/^\s*(\d+(?:\.\d+)?)\s*%?\s*$/', (string) $width, $matches ) ) {
 			return null;
 		}
-		return intval( $matches[1] );
+
+		$percentage = (float) $matches[1];
+
+		return ( $percentage > 0 && $percentage <= 100 ) ? $percentage : null;
+	}
+
+	/**
+	 * Resolve a `dimensions.width` value to its literal size.
+	 *
+	 * Mirrors the preset lookup WordPress does in `wp-includes/blocks/button.php`:
+	 * a `var:preset|dimension|<slug>` reference is looked up against the
+	 * `dimensionSizes` presets, searching custom, then theme, then default origins.
+	 * Any other value is returned unchanged.
+	 *
+	 * @param string $width The raw `style.dimensions.width` value.
+	 * @return string The resolved width.
+	 */
+	private static function resolve_dimension_preset( $width ) {
+		$prefix = 'var:preset|dimension|';
+		if ( 0 !== strpos( $width, $prefix ) ) {
+			return $width;
+		}
+
+		$slug    = substr( $width, strlen( $prefix ) );
+		$presets = wp_get_global_settings( [ 'dimensions', 'dimensionSizes' ], [ 'block_name' => 'core/button' ] );
+
+		if ( is_array( $presets ) ) {
+			foreach ( [ 'custom', 'theme', 'default' ] as $origin ) {
+				if ( empty( $presets[ $origin ] ) || ! is_array( $presets[ $origin ] ) ) {
+					continue;
+				}
+				foreach ( $presets[ $origin ] as $preset ) {
+					if ( isset( $preset['slug'] ) && (string) $preset['slug'] === $slug ) {
+						return (string) ( $preset['size'] ?? $width );
+					}
+				}
+			}
+		}
+
+		return $width;
 	}
 
 	/**
