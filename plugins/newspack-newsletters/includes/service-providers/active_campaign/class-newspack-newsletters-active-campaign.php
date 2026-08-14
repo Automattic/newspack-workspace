@@ -1902,6 +1902,17 @@ final class Newspack_Newsletters_Active_Campaign extends \Newspack_Newsletters_S
 	/**
 	 * After Newsletter post is deleted, clean up by deleting corresponding ESP campaign.
 	 *
+	 * Cleanup covers the post's own campaigns and nothing else. There is
+	 * deliberately no `ac_message_id` cleanup: messages and campaigns are
+	 * separate ActiveCampaign entities numbered from separate sequences, so a
+	 * message ID is meaningless to any campaign endpoint and a lookup cannot
+	 * tell you whether a campaign of the same number is ours. Reaching for
+	 * `message_delete` instead is no safer — one message backs every send a post
+	 * ever made, so deleting it damages the history of campaigns already out the
+	 * door, which is exactly what DELETABLE_STATUSES exists to prevent. An
+	 * orphaned message left in ActiveCampaign is inert. Mailchimp and Constant
+	 * Contact clean up the same way.
+	 *
 	 * @param string $post_id Numeric ID of the campaign.
 	 */
 	public function trash( $post_id ) {
@@ -1919,15 +1930,8 @@ final class Newspack_Newsletters_Active_Campaign extends \Newspack_Newsletters_S
 			}
 		}
 		$campaign_id = get_post_meta( $post_id, 'ac_campaign_id', true );
-		$message_id  = get_post_meta( $post_id, 'ac_message_id', true );
 		if ( $campaign_id ) {
 			$this->delete_campaign( $campaign_id );
-		}
-		if ( $message_id ) {
-			$message = $this->api_v1_request( 'message_view', 'GET', [ 'query' => [ 'id' => $message_id ] ] );
-			if ( ! is_wp_error( $message ) ) {
-				$this->api_v1_request( 'campaign_delete', 'GET', [ 'query' => [ 'id' => $message_id ] ] );
-			}
 		}
 	}
 
