@@ -33,31 +33,17 @@ const isSunset = definition => 'legacy' === definition?.status;
  * one field whose stored v1 ids the save path upgrades to the v2 twin. Those
  * collapse to a single row under the surviving identity.
  *
- * Visibility is the sunset rule, read off the active definition's `status`:
- * a legacy field lists only while enabled, so a site never picks up a new
- * dependency on a field that is on its way out, while a site already syncing
- * one keeps seeing (and can turn off) what it has. Everything else — new,
- * updated, existing, filter-added — always lists, on every site: there is no
- * per-site schema any more, so every current field has to be discoverable and
- * enableable everywhere. Unavailable definitions never list (matching the
- * pre-Phase-2 UI).
+ * Every field lists on every site, legacy included: legacy fields are
+ * grouped under the Legacy section and ordered last, so the direction of
+ * travel stays visible without hiding what a site can still sync. Only
+ * unavailable definitions are hidden (matching the pre-Phase-2 UI).
  *
  * @param {Object[]} definitions Definitions from the settings payload.
- * @param {string[]} enabledIds  Enabled field ids (the draft, while editing).
- * @param {string[]} [savedIds]  Stored field ids. Defaults to `enabledIds`.
+ * @param {string[]} enabledIds  Enabled field ids.
  * @return {Object[]} Ordered row objects.
  */
-export const buildFieldRows = ( definitions, enabledIds, savedIds ) => {
+export const buildFieldRows = ( definitions, enabledIds ) => {
 	const enabled = new Set( enabledIds || [] );
-	// Visibility considers the saved selection as well as the draft, while
-	// `checked` tracks the draft alone. Sunsetting on the draft would pull a
-	// legacy row — and its own checkbox — out of the list the instant it was
-	// unchecked, leaving no way to undo, and showing the field as gone while
-	// the server still has it enabled. Taking the union means the rule only
-	// ever hides a legacy field nobody is using in either state: one already
-	// stored stays listed for the whole editing session and sunsets on the
-	// next load after the save.
-	const stored = new Set( savedIds || enabledIds || [] );
 	const byName = new Map();
 	( definitions || [] ).forEach( d => {
 		if ( ! byName.has( d.name ) ) {
@@ -86,10 +72,6 @@ export const buildFieldRows = ( definitions, enabledIds, savedIds ) => {
 		}
 		const checked = Boolean( enabledVersion );
 		const activeDefinition = active[ 0 ];
-		const inUse = checked || VERSIONS.some( v => candidates[ v ].some( d => stored.has( d.id ) ) );
-		if ( ! inUse && isSunset( activeDefinition ) ) {
-			return; // Sunset rule: legacy fields list only while in use.
-		}
 		const supersededByDef = ( activeDefinition.superseded_by || [] ).map( id => ( definitions || [] ).find( d => d.id === id ) ).find( Boolean );
 		rows.push( {
 			key: activeDefinition.id,
@@ -193,8 +175,7 @@ export const badgesForRow = row => {
  */
 const OutboundFields = ( { field, value, onChange } ) => {
 	const enabledIds = Array.isArray( value ) ? value : field.value_ids || [];
-	const savedIds = field.value_ids || [];
-	const rows = useMemo( () => buildFieldRows( field.definitions, enabledIds, savedIds ), [ field.definitions, enabledIds, savedIds ] );
+	const rows = useMemo( () => buildFieldRows( field.definitions, enabledIds ), [ field.definitions, enabledIds ] );
 	const sections = useMemo( () => visibleSections( rows ), [ rows ] );
 	return (
 		<Accordion hideSingleTitle>

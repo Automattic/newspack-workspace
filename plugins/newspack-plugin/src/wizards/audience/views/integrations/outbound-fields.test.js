@@ -66,39 +66,20 @@ describe( 'buildFieldRows', () => {
 	} );
 
 	it( 'groups same-version raw keys sharing a name into one row', () => {
-		// Enabled, since the pair is legacy and would otherwise be sunset out.
 		const rows = buildFieldRows( DEFS, [ 'v1:registration_page' ] );
 		const page = rows.find( r => r.name === 'Registration Page' );
 		expect( page.ids.sort() ).toEqual( [ 'v1:current_page_url', 'v1:registration_page' ] );
 	} );
 
-	// The sunset rule is read off `status` alone, so it holds identically on
-	// every site — there is no site-level schema left to consult.
-	it( 'hides legacy fields unless enabled', () => {
-		expect( buildFieldRows( DEFS, [] ).find( r => r.name === 'Registration Method' ) ).toBeUndefined();
-		expect( buildFieldRows( DEFS, [ 'v1:registration_method' ] ).find( r => r.name === 'Registration Method' )?.checked ).toBe( true );
-	} );
-
-	// Sunsetting on the draft would pull the row — and its checkbox — out of
-	// the list the moment it was unchecked, with no way to undo and the field
-	// still enabled on the server until saved.
-	it( 'keeps a stored legacy field listed after it is unchecked in the draft', () => {
-		const saved = [ 'v1:registration_method' ];
-		const row = buildFieldRows( DEFS, [], saved ).find( r => r.name === 'Registration Method' );
-		expect( row ).toBeDefined();
-		expect( row.checked ).toBe( false );
-	} );
-
-	// ...and it does sunset on the next load, once the removal is stored.
-	it( 'sunsets a legacy field once the save removes it', () => {
-		expect( buildFieldRows( DEFS, [], [] ).find( r => r.name === 'Registration Method' ) ).toBeUndefined();
-	} );
-
-	// Enabling a legacy field mid-draft lists it right away: the sunset rule
-	// only ever hides, so a draft addition is visible before it is saved.
-	it( 'lists a legacy field enabled in the draft but not yet saved', () => {
-		const row = buildFieldRows( DEFS, [ 'v1:registration_method' ], [] ).find( r => r.name === 'Registration Method' );
-		expect( row?.checked ).toBe( true );
+	// Legacy fields always list — grouped under Legacy and ordered last —
+	// so what a site can still sync stays visible and controllable in every
+	// state. The sunset story lives in the grouping and ordering, not in
+	// visibility.
+	it( 'lists legacy fields whether or not they are enabled', () => {
+		const off = buildFieldRows( DEFS, [] ).find( r => r.name === 'Registration Method' );
+		expect( off ).toBeDefined();
+		expect( off.checked ).toBe( false );
+		expect( buildFieldRows( DEFS, [ 'v1:registration_method' ] ).find( r => r.name === 'Registration Method' ).checked ).toBe( true );
 	} );
 
 	// The migration motion the pivot needs: every current field is offered
