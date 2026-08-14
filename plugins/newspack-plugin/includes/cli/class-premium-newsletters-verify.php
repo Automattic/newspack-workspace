@@ -83,7 +83,8 @@ class Premium_Newsletters_Verify {
 
 		$blocked = self::describe_blocking_preflight(
 			\Newspack\Memberships::is_active(),
-			\Newspack\Content_Gate::is_gating_active()
+			\Newspack\Content_Gate::is_gating_active(),
+			function_exists( 'wcs_get_subscriptions' )
 		);
 		if ( null !== $blocked ) {
 			WP_CLI::error( $blocked );
@@ -278,20 +279,25 @@ class Premium_Newsletters_Verify {
 	/**
 	 * Why this run must not proceed, or null when it may.
 	 *
-	 * Taking both conditions as parameters keeps the decision testable without
-	 * WooCommerce Memberships, which the unit-test harness does not load.
+	 * Taking all three conditions as parameters keeps the decision testable without
+	 * WooCommerce Memberships or WooCommerce Subscriptions, neither of which the
+	 * unit-test harness loads.
 	 *
-	 * @param bool $memberships_active Whether WooCommerce Memberships is active.
-	 * @param bool $gating_active      Whether content gating is active.
+	 * @param bool $memberships_active        Whether WooCommerce Memberships is active.
+	 * @param bool $gating_active             Whether content gating is active.
+	 * @param bool $subscriptions_available   Whether WooCommerce Subscriptions is active.
 	 *
 	 * @return string|null The reason to stop, or null to proceed.
 	 */
-	private static function describe_blocking_preflight( bool $memberships_active, bool $gating_active ): ?string {
+	private static function describe_blocking_preflight( bool $memberships_active, bool $gating_active, bool $subscriptions_available ): ?string {
 		if ( $memberships_active ) {
 			return 'WooCommerce Memberships is still active, so every restricted list reads as unrestricted and this comparison would be meaningless. Run this after deactivating it.';
 		}
 		if ( ! $gating_active ) {
 			return 'Content gating is inactive, so no gate enforces anything and there is no expected state to compare against. Enable Audience Management and Reader Activation first.';
+		}
+		if ( ! $subscriptions_available ) {
+			return 'WooCommerce Subscriptions is not active, so the command cannot enumerate who holds a gate\'s products and would silently check nobody. Activate it and run this again.';
 		}
 		return null;
 	}
