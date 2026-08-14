@@ -471,7 +471,7 @@ const ConfigureViewInner = ( { integrations, loading, inFlightChanges, saving, o
 						<Divider alignment="full-width" variant="tertiary" marginTop={ 64 } marginBottom={ 64 } />
 						<Grid columns={ 2 } gutter={ 32 } noMargin>
 							<SectionHeader heading={ 2 } title={ __( 'Inbound', 'newspack-plugin' ) } noMargin />
-							<Grid columns={ 1 } rowGap={ 16 } noMargin>
+							<Grid columns={ 1 } rowGap={ 24 } noMargin>
 								{ renderSectionToggle( inboundToggleField, inboundEnabled && ( inboundField.options || [] ).length > 0 ) }
 								{ inboundEnabled && (
 									<Grid columns={ 1 } rowGap={ 8 } noMargin>
@@ -532,7 +532,7 @@ const ConfigureViewInner = ( { integrations, loading, inFlightChanges, saving, o
 						<Divider alignment="full-width" variant="tertiary" marginTop={ 64 } marginBottom={ 64 } />
 						<Grid columns={ 2 } gutter={ 32 } noMargin>
 							<SectionHeader heading={ 2 } title={ __( 'Outbound', 'newspack-plugin' ) } noMargin />
-							<Grid columns={ 1 } rowGap={ 16 } noMargin>
+							<Grid columns={ 1 } rowGap={ 24 } noMargin>
 								{ renderSectionToggle(
 									outboundToggleField,
 									outboundEnabled && ( visibleOutboundSettingsFields.length > 0 || !! outboundField )
@@ -546,6 +546,9 @@ const ConfigureViewInner = ( { integrations, loading, inFlightChanges, saving, o
 											onChange={ val => handleFieldChange( field.key, val ) }
 										/>
 									) ) }
+								{ outboundEnabled && outboundField && visibleOutboundSettingsFields.length > 0 && (
+									<Divider variant="tertiary" marginTop={ 0 } marginBottom={ 0 } />
+								) }
 								{ outboundEnabled && outboundField && (
 									<CollapsibleGroup hideSingleTitle titleLevel={ 3 }>
 										{ ( outboundField.grouped_options || [] ).map( ( group, index ) => {
