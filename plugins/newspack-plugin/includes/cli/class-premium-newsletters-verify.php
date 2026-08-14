@@ -24,6 +24,13 @@ defined( 'ABSPATH' ) || exit;
 class Premium_Newsletters_Verify {
 
 	/**
+	 * The newsletter list post type, used when Newspack Newsletters is not loaded.
+	 *
+	 * Mirrors Premium_Newsletters_Migration::NEWSLETTER_LIST_CPT_FALLBACK.
+	 */
+	const NEWSLETTER_LIST_CPT_FALLBACK = 'newspack_nl_list';
+
+	/**
 	 * Compare premium newsletter gates against the ESP and report the difference.
 	 *
 	 * For each gate with an active paid access mode, collects every reader who
@@ -410,13 +417,41 @@ class Premium_Newsletters_Verify {
 	}
 
 	/**
+	 * The newsletter list post type.
+	 *
+	 * Read from Newspack Newsletters when it is loaded so the two stay in step. The
+	 * literal fallback is unreachable in practice — the command's preflight hard-errors
+	 * when Newspack_Newsletters_Subscription is missing — but it keeps the helper
+	 * correct on its own terms for any caller that reaches it outside that flow.
+	 *
+	 * @return string The list post type.
+	 */
+	private static function get_list_cpt(): string {
+		if ( class_exists( 'Newspack\Newsletters\Subscription_Lists' ) ) {
+			$cpt = \Newspack\Newsletters\Subscription_Lists::CPT;
+			if ( $cpt ) {
+				return $cpt;
+			}
+		}
+		return self::NEWSLETTER_LIST_CPT_FALLBACK;
+	}
+
+	/**
 	 * A list's public (ESP) ID, or null when it cannot be resolved.
+	 *
+	 * The post type is checked first because Subscription_List's constructor does not
+	 * check it: it throws only when the post does not exist, so a live post of any
+	 * other type would construct and hand back a bogus public ID. The guard is what
+	 * makes a stale or mistyped ID return null instead of silently passing as a list.
 	 *
 	 * @param int $list_id The list post ID.
 	 *
 	 * @return string|null
 	 */
 	private static function public_id_for_list( int $list_id ): ?string {
+		if ( \get_post_type( $list_id ) !== self::get_list_cpt() ) {
+			return null;
+		}
 		if ( ! class_exists( 'Newspack\Newsletters\Subscription_List' ) ) {
 			return null;
 		}

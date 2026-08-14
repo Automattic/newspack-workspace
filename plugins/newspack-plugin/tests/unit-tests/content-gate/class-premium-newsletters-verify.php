@@ -331,4 +331,25 @@ class Test_Premium_Newsletters_Verify extends \WP_UnitTestCase {
 	public function test_preflight_allows_a_post_cutover_site() {
 		$this->assertNull( $this->invoke_private_static( 'describe_blocking_preflight', [ false, true ] ) );
 	}
+
+	/**
+	 * Subscription_List's constructor throws only when the post does not exist, not
+	 * when it is the wrong type, so a stale or mistyped list ID pointing at an
+	 * ordinary post must be rejected before it ever reaches the constructor.
+	 * Without the post-type check this returns the mock's public ID for any post.
+	 */
+	public function test_public_id_for_list_rejects_a_post_of_the_wrong_type() {
+		$post_id = self::factory()->post->create( [ 'post_type' => 'post' ] );
+
+		$this->assertNull( $this->invoke_private_static( 'public_id_for_list', [ $post_id ] ) );
+	}
+
+	/**
+	 * A post of the newsletter list type resolves normally.
+	 */
+	public function test_public_id_for_list_resolves_a_list_post() {
+		$post_id = self::factory()->post->create( [ 'post_type' => \Newspack\Newsletters\Subscription_Lists::CPT ] );
+
+		$this->assertSame( 'list-' . $post_id, $this->invoke_private_static( 'public_id_for_list', [ $post_id ] ) );
+	}
 }
