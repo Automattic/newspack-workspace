@@ -169,7 +169,8 @@ class Test_Grouped_Metadata extends WP_UnitTestCase {
 
 		// Every group from the first Legacy group onward must also be Legacy:
 		// nothing (including Additional) is allowed to sort after it.
-		for ( $i = $first_legacy_index; $i < count( $sections ); $i++ ) {
+		$section_count = count( $sections );
+		for ( $i = $first_legacy_index; $i < $section_count; $i++ ) {
 			$this->assertSame( 'Legacy', $sections[ $i ], 'Legacy groups must be the last groups in the list.' );
 		}
 	}
