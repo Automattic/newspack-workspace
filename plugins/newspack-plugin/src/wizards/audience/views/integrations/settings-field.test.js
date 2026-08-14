@@ -28,8 +28,6 @@ describe( 'settingsFieldRenders', () => {
 		expect( settingsFieldRenders( { type: 'hidden' } ) ).toBe( false );
 	} );
 
-	// A select and a metadata field both render from their options, so neither
-	// puts anything on screen worth spacing when the list comes back empty.
 	it( 'reports no output for an option-driven field with no options', () => {
 		[ 'select', 'metadata' ].forEach( type => {
 			expect( settingsFieldRenders( { type } ) ).toBe( false );
@@ -54,8 +52,7 @@ describe( 'SettingsField', () => {
 	const renderField = field => render( <SettingsField field={ field } value="" onChange={ () => {} } /> );
 
 	// The ESP list call returns an empty array on failure, and core's
-	// SelectControl renders nothing for it, so the wrapper must not be left
-	// behind as an empty child of the column laying these fields out.
+	// SelectControl renders nothing for it, so only the wrapper would remain.
 	it( 'renders nothing for a select with no options', () => {
 		const { container } = renderField( { key: 'audience', type: 'select', label: 'Audience', options: [] } );
 		expect( container ).toBeEmptyDOMElement();

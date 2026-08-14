@@ -12,9 +12,6 @@ import { Button, Grid, SelectControl, TextControl } from '../../../../../package
 /**
  * Whether a field declaration produces any rendered output.
  *
- * Callers lay these fields out in a gapped column, so a field that renders
- * nothing has to be excluded from the count rather than left to collapse.
- *
  * @param {Object} field Field declaration.
  * @return {boolean} True when `SettingsField` renders something for the field.
  */

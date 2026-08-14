@@ -424,7 +424,7 @@ const ConfigureViewInner = ( { integrations, loading, inFlightChanges, saving, o
 	const outboundEnabled = ! outboundToggleField || toBool( getFieldValue( outboundToggleField ) );
 
 	// Counting declarations would print a section heading above a column whose
-	// every field turned out to render nothing, so the guards count output.
+	// every field turned out to render nothing.
 	const fieldIsRendered = field => fieldIsVisible( field ) && settingsFieldRenders( field );
 
 	const visibleSettingsFields = settingsFields.filter( fieldIsRendered );
@@ -434,8 +434,7 @@ const ConfigureViewInner = ( { integrations, loading, inFlightChanges, saving, o
 
 	// The divider separates the toggle from the section content below it, so it
 	// only renders when there is content to divide: the caller passes false for a
-	// paused direction or an empty section. Its own margins are zeroed so the
-	// column's gap is the only thing spacing it.
+	// paused direction or an empty section.
 	const renderSectionToggle = ( toggleSetting, showDivider ) =>
 		toggleSetting && (
 			<>
