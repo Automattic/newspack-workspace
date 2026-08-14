@@ -57,13 +57,13 @@ class Bulk_Actions_Test extends WP_UnitTestCase {
 	 * A user who can edit the newsletter updates it, and the count reflects it.
 	 */
 	public function test_bulk_handler_updates_newsletters_the_user_can_edit() {
-		$editor = self::factory()->user->create( [ 'role' => 'administrator' ] );
-		wp_set_current_user( $editor );
+		$admin = self::factory()->user->create( [ 'role' => 'administrator' ] );
+		wp_set_current_user( $admin );
 		$newsletter = self::factory()->post->create(
 			[
 				'post_type'   => \Newspack_Newsletters::NEWSPACK_NEWSLETTERS_CPT,
 				'post_status' => 'publish',
-				'post_author' => $editor,
+				'post_author' => $admin,
 			]
 		);
 
@@ -78,13 +78,13 @@ class Bulk_Actions_Test extends WP_UnitTestCase {
 	 * editable newsletter.
 	 */
 	public function test_bulk_handler_non_public_branch_updates_and_counts() {
-		$editor = self::factory()->user->create( [ 'role' => 'administrator' ] );
-		wp_set_current_user( $editor );
+		$admin = self::factory()->user->create( [ 'role' => 'administrator' ] );
+		wp_set_current_user( $admin );
 		$newsletter = self::factory()->post->create(
 			[
 				'post_type'   => \Newspack_Newsletters::NEWSPACK_NEWSLETTERS_CPT,
 				'post_status' => 'publish',
-				'post_author' => $editor,
+				'post_author' => $admin,
 			]
 		);
 		update_post_meta( $newsletter, 'is_public', true );
