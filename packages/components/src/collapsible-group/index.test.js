@@ -53,6 +53,32 @@ describe( 'CollapsibleGroup titleLevel', () => {
 		expect( screen.getAllByRole( 'heading', { level: 3 } ) ).toHaveLength( 2 );
 		expect( screen.queryByRole( 'heading', { level: 2 } ) ).not.toBeInTheDocument();
 	} );
+
+	it( 'inherits the level in a nested group', () => {
+		render(
+			<CollapsibleGroup titleLevel={ 4 }>
+				<CollapsibleGroup.Item title="Outer" defaultOpen>
+					<CollapsibleGroup>
+						<CollapsibleGroup.Item title="Inner">content</CollapsibleGroup.Item>
+					</CollapsibleGroup>
+				</CollapsibleGroup.Item>
+			</CollapsibleGroup>
+		);
+		expect( screen.getByRole( 'heading', { level: 4, name: 'Inner' } ) ).toBeInTheDocument();
+	} );
+
+	it( 'inherits the level in a nested group when the title is hidden', () => {
+		render(
+			<CollapsibleGroup titleLevel={ 4 } hideSingleTitle>
+				<CollapsibleGroup.Item title="Outer">
+					<CollapsibleGroup>
+						<CollapsibleGroup.Item title="Inner">content</CollapsibleGroup.Item>
+					</CollapsibleGroup>
+				</CollapsibleGroup.Item>
+			</CollapsibleGroup>
+		);
+		expect( screen.getByRole( 'heading', { level: 4, name: 'Inner' } ) ).toBeInTheDocument();
+	} );
 } );
 
 describe( 'CollapsibleGroup hideSingleTitle', () => {

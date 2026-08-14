@@ -4,7 +4,7 @@ export type CollapsibleGroupProps = {
 	className?: string;
 	/** Renders a lone item open and untitled, since it has nothing to collapse against. */
 	hideSingleTitle?: boolean;
-	/** `VStack` spacing between items, in 4px units. */
+	/** `VStack` gap either side of each divider, in 4px units, so items sit twice this far apart. */
 	spacing?: number;
 	/** Heading level for every item title, so the group shares one place in the outline. Defaults to the level inherited from an enclosing group, or 2. */
 	titleLevel?: HeadingLevel;

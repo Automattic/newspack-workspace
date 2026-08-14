@@ -18,17 +18,15 @@ import type { CollapsibleGroupItemProps, CollapsibleGroupProps } from './types';
 import './style.scss';
 
 const Root = ( { children, className, hideSingleTitle = false, spacing = 6, titleLevel }: CollapsibleGroupProps ) => {
-	// An unspecified level inherits, so a nested group sits below its parent rather than resetting.
+	// An unspecified level matches the enclosing group rather than resetting to the default.
 	const inheritedTitleLevel = useTitleLevel();
 	const items = Children.toArray( children ).filter( isValidElement ) as React.ReactElement< CollapsibleGroupItemProps >[];
 
 	// With nothing to collapse against, a lone item can render untitled, and so permanently open.
-	if ( hideSingleTitle && items.length === 1 ) {
-		return <div className={ classNames( 'newspack-collapsible-group', className ) }>{ cloneElement( items[ 0 ], { title: undefined } ) }</div>;
-	}
-
-	return (
-		<TitleLevelContext.Provider value={ titleLevel ?? inheritedTitleLevel }>
+	const content =
+		hideSingleTitle && items.length === 1 ? (
+			<div className={ classNames( 'newspack-collapsible-group', className ) }>{ cloneElement( items[ 0 ], { title: undefined } ) }</div>
+		) : (
 			<VStack className={ classNames( 'newspack-collapsible-group', className ) } spacing={ spacing }>
 				{ items.map( ( item, index ) => (
 					<Fragment key={ item.key }>
@@ -37,8 +35,9 @@ const Root = ( { children, className, hideSingleTitle = false, spacing = 6, titl
 					</Fragment>
 				) ) }
 			</VStack>
-		</TitleLevelContext.Provider>
-	);
+		);
+
+	return <TitleLevelContext.Provider value={ titleLevel ?? inheritedTitleLevel }>{ content }</TitleLevelContext.Provider>;
 };
 
 export default Root;
