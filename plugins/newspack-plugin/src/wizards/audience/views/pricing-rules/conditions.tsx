@@ -9,8 +9,8 @@
 /**
  * WordPress dependencies
  */
-import { __, sprintf } from '@wordpress/i18n';
-import { useState, useEffect } from '@wordpress/element';
+import { __ } from '@wordpress/i18n';
+import { useState, useEffect, useRef } from '@wordpress/element';
 import {
 	SelectControl,
 	ToggleControl,
@@ -94,11 +94,26 @@ function DatetimeCondition( {
 		}
 	};
 
+	const modeSelectId = `newspack-pricing-rule-condition-${ matcher.id }__mode`;
+	const returnFocusToMode = useRef( false );
+
+	// Clearing unmounts the whole field, so the popover has no toggle left to hand
+	// focus back to and it falls to <body>. Send it to the selector the clear just
+	// moved to "Anytime".
+	useEffect( () => {
+		if ( ! returnFocusToMode.current ) {
+			return;
+		}
+		returnFocusToMode.current = false;
+		document.getElementById( modeSelectId )?.focus();
+	}, [ mode, modeSelectId ] );
+
 	// Clearing stores null, so the selector has to follow it to Anytime.
 	const changeCustom = ( s: string ) => {
 		const ts = localInputToTs( s );
 		setCustomTs( ts );
 		if ( null === ts ) {
+			returnFocusToMode.current = true;
 			setMode( 'none' );
 		}
 		onChange( ts );
@@ -107,6 +122,7 @@ function DatetimeCondition( {
 	return (
 		<VStack spacing={ 2 }>
 			<SelectControl
+				id={ modeSelectId }
 				label={ matcher.label }
 				help={ matcher.help }
 				value={ mode }
@@ -121,11 +137,7 @@ function DatetimeCondition( {
 			{ 'custom' === mode && (
 				<DateTimeField
 					id={ `newspack-pricing-rule-condition-${ matcher.id }` }
-					label={ sprintf(
-						/* translators: %s: the condition's label, e.g. "Subscriptions started on/after". */
-						__( '%s: custom date', 'newspack-plugin' ),
-						matcher.label
-					) }
+					label={ matcher.label }
 					hideLabelFromVision
 					value={ tsToLocalInput( customTs ) }
 					placeholder={ __( 'Select a date', 'newspack-plugin' ) }

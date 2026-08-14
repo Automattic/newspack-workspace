@@ -33,8 +33,11 @@ const lastValue = ( onChange, prev = {} ) => {
 const customToggle = ts => {
 	const { formats } = getSettings();
 	const display = gmdateI18n( `${ formats.date } ${ formats.time }`, `${ tsToLocalInput( ts ) }Z` );
-	return `${ LABEL }: custom date: ${ display }`;
+	return `${ LABEL }: ${ display }`;
 };
+
+// The toggle names itself "<condition label>: <resolved date>".
+const ANY_CUSTOM_TOGGLE = new RegExp( `^${ LABEL }: .` );
 
 describe( 'the cohort-gate datetime condition', () => {
 	it( 'arms a new rule with the publish-date default', () => {
@@ -120,7 +123,10 @@ describe( 'the cohort-gate datetime condition', () => {
 
 		expect( lastValue( onChange ) ).toEqual( { cohort_start: null } );
 		expect( screen.getByLabelText( LABEL ) ).toHaveValue( 'none' );
-		expect( screen.queryByRole( 'button', { name: /custom date:/ } ) ).not.toBeInTheDocument();
+		expect( screen.queryByRole( 'button', { name: ANY_CUSTOM_TOGGLE } ) ).not.toBeInTheDocument();
+		// Clearing tears down the toggle the popover would have restored focus to,
+		// so without this focus lands on <body> and Tab restarts from the top.
+		expect( screen.getByLabelText( LABEL ) ).toHaveFocus();
 	} );
 
 	it( 'seeds a date when Custom is chosen on a rule with no gate', () => {
@@ -134,7 +140,7 @@ describe( 'the cohort-gate datetime condition', () => {
 		const stored = lastValue( onChange ).cohort_start;
 		expect( stored ).not.toBeNull();
 		expect( Math.abs( stored - Math.floor( Date.now() / 1000 ) ) ).toBeLessThan( 60 );
-		expect( screen.getByRole( 'button', { name: /: custom date:/ } ) ).toBeInTheDocument();
+		expect( screen.getByRole( 'button', { name: ANY_CUSTOM_TOGGLE } ) ).toBeInTheDocument();
 	} );
 
 	it( 'sets the custom date through the shared picker', () => {
