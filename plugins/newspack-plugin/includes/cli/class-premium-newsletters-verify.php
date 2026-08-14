@@ -519,6 +519,15 @@ class Premium_Newsletters_Verify {
 		foreach ( $population as $index => $user_id ) {
 			$user = \get_user_by( 'id', $user_id );
 			if ( ! $user ) {
+				// The subscription still names a list to check, but there is no WP_User
+				// to build a make_row() from — no email, and nothing to ask the ESP
+				// about. Leaving this reader out of the rows entirely would mean an
+				// email still on a restricted list at the ESP could never be reported as
+				// a leak, so it is recorded as unresolved instead, the same status a
+				// failed ESP lookup gets.
+				foreach ( $list_ids as $list_id ) {
+					$rows[] = self::make_missing_user_row( $gate, $list_id, $user_id );
+				}
 				continue;
 			}
 
@@ -654,6 +663,31 @@ class Premium_Newsletters_Verify {
 			'user_id' => $user->ID,
 			'email'   => $user->user_email,
 			'status'  => $status,
+		];
+	}
+
+	/**
+	 * Build one result row for a subscription whose WP user no longer exists.
+	 *
+	 * There is no \WP_User to build a make_row() row from, so there is no email to
+	 * show either — only the ID the subscription still carries. Always 'unresolved':
+	 * the ESP was never asked, so this is not evidence the reader is clean, the same
+	 * as a failed lookup.
+	 *
+	 * @param array $gate    Gate array.
+	 * @param int   $list_id List post ID.
+	 * @param int   $user_id The subscription's user ID, which get_user_by() could not resolve.
+	 *
+	 * @return array
+	 */
+	private static function make_missing_user_row( array $gate, int $list_id, int $user_id ): array {
+		return [
+			'gate'    => $gate['title'],
+			'gate_id' => $gate['id'],
+			'list_id' => $list_id,
+			'user_id' => $user_id,
+			'email'   => sprintf( '(no WP user found for ID %d)', $user_id ),
+			'status'  => 'unresolved',
 		];
 	}
 

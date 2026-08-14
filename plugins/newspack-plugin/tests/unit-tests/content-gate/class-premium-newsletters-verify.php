@@ -607,4 +607,23 @@ class Test_Premium_Newsletters_Verify extends \WP_UnitTestCase {
 		// No exception at all also means the guard did not reject the value.
 		$this->assertTrue( true );
 	}
+
+	/**
+	 * The subscription's user ID no longer resolves to a WP_User, so there is no
+	 * email to report — only the ID the subscription still carries. The row must
+	 * still be readable and must still be 'unresolved', the same status a failed ESP
+	 * lookup gets, so it counts toward the run's failure condition instead of being
+	 * silently dropped.
+	 */
+	public function test_make_missing_user_row_is_unresolved_and_readable() {
+		$gate = $this->make_gate( 30, true );
+
+		$row = $this->invoke_private_static( 'make_missing_user_row', [ $gate, 10, 456 ] );
+
+		$this->assertSame( 'unresolved', $row['status'] );
+		$this->assertSame( 456, $row['user_id'] );
+		$this->assertSame( 10, $row['list_id'] );
+		$this->assertSame( 30, $row['gate_id'] );
+		$this->assertStringContainsString( '456', $row['email'] );
+	}
 }
