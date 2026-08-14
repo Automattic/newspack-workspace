@@ -96,7 +96,6 @@
 			pointer-events: none;
 
 			&:not(.newspack-card--core__is-active) {
-				/* stylelint-disable-next-line plugin-wpds/no-unknown-ds-tokens -- linter validates a 0.15.0 list; the runtime ships these 0.16.0 names. */
 				background: var(--wpds-color-background-surface-neutral-weak, #{wp-colors.$gray-100});
 
 				h3 {
@@ -104,7 +103,6 @@
 				}
 
 				.newspack-card--core__icon {
-					/* stylelint-disable-next-line plugin-wpds/no-unknown-ds-tokens -- linter validates a 0.15.0 list; the runtime ships these 0.16.0 names. */
 					background: var(--wpds-color-background-interactive-neutral-strong-disabled, #{wp-colors.$gray-200});
 
 					svg {
