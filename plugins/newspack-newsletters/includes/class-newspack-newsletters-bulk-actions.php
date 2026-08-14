@@ -58,19 +58,42 @@ class Newspack_Newsletters_Bulk_Actions {
 		$redirect_to = remove_query_arg( array( 'newsletters_public_count', 'newsletters_non_public_count' ), $redirect_to );
 		switch ( $action_name ) {
 			case 'newsletters_public':
-				foreach ( $post_ids as $post_id ) {
-					update_post_meta( $post_id, 'is_public', true );
-				}
-				$redirect_to = add_query_arg( 'newsletters_public_count', count( $post_ids ), $redirect_to );
+				$count       = self::set_public_status( $post_ids, true );
+				$redirect_to = add_query_arg( 'newsletters_public_count', $count, $redirect_to );
 				break;
 			case 'newsletters_non_public':
-				foreach ( $post_ids as $post_id ) {
-					update_post_meta( $post_id, 'is_public', false );
-				}
-				$redirect_to = add_query_arg( 'newsletters_non_public_count', count( $post_ids ), $redirect_to );
+				$count       = self::set_public_status( $post_ids, false );
+				$redirect_to = add_query_arg( 'newsletters_non_public_count', $count, $redirect_to );
 				break;
 		}
 		return $redirect_to;
+	}
+
+	/**
+	 * Set the `is_public` meta on the submitted newsletters, skipping any the
+	 * current user cannot edit or that are not newsletters.
+	 *
+	 * The bulk-actions nonce core verifies binds to the user and the action, not
+	 * to the target posts, so the submitted ids must be authorized per post here.
+	 *
+	 * @param int[] $post_ids  Submitted post IDs.
+	 * @param bool  $is_public Whether the newsletter pages should be public.
+	 *
+	 * @return int Number of newsletters actually updated.
+	 */
+	private static function set_public_status( $post_ids, $is_public ) {
+		$updated = 0;
+		foreach ( $post_ids as $post_id ) {
+			if ( \Newspack_Newsletters::NEWSPACK_NEWSLETTERS_CPT !== get_post_type( $post_id ) ) {
+				continue;
+			}
+			if ( ! current_user_can( 'edit_post', $post_id ) ) {
+				continue;
+			}
+			update_post_meta( $post_id, 'is_public', (bool) $is_public );
+			$updated++;
+		}
+		return $updated;
 	}
 
 	/**
