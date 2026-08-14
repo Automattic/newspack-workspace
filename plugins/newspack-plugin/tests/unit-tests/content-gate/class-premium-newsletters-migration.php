@@ -541,8 +541,12 @@ class Test_Premium_Newsletters_Migration extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * With custom lists off, the modal shows every list rather than a chosen set, so
-	 * the saved list selection is not the carve-out and must be ignored.
+	 * With custom lists off there is no post-checkout modal at all —
+	 * render_newsletters_signup_modal() returns early on
+	 * is_newsletters_signup_available(), which is `(bool) get_setting(
+	 * 'use_custom_lists' )` — so nothing was left to reader opt-in and the saved list
+	 * selection is not a carve-out. (The selection still serves the registration
+	 * form, which is a different surface.)
 	 */
 	public function test_derive_auto_signup_ignores_the_saved_lists_when_custom_lists_are_off() {
 		update_option( 'newspack_reader_activation_use_custom_lists', 0 );

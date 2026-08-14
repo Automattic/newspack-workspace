@@ -1027,9 +1027,29 @@ class Premium_Newsletters_Migration {
 	 * The public list IDs shown in the post-checkout newsletter signup modal.
 	 *
 	 * Mirrors the lookup the pre-Access-Control WooCommerce Memberships integration
-	 * used to decide which lists to leave to reader opt-in. With custom lists off the
-	 * modal offers every list rather than a chosen set, so the saved selection is not
-	 * a carve-out and the set is empty.
+	 * used to decide which lists to leave to reader opt-in.
+	 *
+	 * With custom lists off the set is empty because there is no post-checkout modal
+	 * at all: Reader_Activation::render_newsletters_signup_modal() returns early on
+	 * is_newsletters_signup_available(), which is literally
+	 * `(bool) self::get_setting( 'use_custom_lists' )`. No modal means no list was
+	 * left to reader opt-in, so there is no carve-out. (It is
+	 * get_available_newsletter_lists() that falls back to every list when custom
+	 * lists are off, and that serves the registration form, not this modal — reading
+	 * the saved selection here would carve out lists no reader was offered at
+	 * checkout.)
+	 *
+	 * The stored selection is read raw, without asking the ESP which of those lists
+	 * still exist. The modal shows the intersection of the selection with
+	 * Newspack_Newsletters_Subscription::get_lists_config(), so a list that has since
+	 * been deleted at the ESP counts as a modal list here though no reader is ever
+	 * offered it. That is deliberate: get_lists_config() is a remote call, and it
+	 * returns a WP_Error when the ESP is unreachable — which this derivation would
+	 * read as "no list is in the modal" and turn into auto-signup ON, mailing readers
+	 * who may have declined, off the back of an ESP outage mid-migration. The
+	 * inaccuracy left in place errs the other way: an extra list counted as modal can
+	 * only push the derivation toward OFF or toward the undecided value that writes
+	 * nothing, and both leave the operator to opt readers in deliberately.
 	 *
 	 * @return string[] Public list IDs.
 	 */
