@@ -917,6 +917,15 @@ class Membership_Gates_Migration {
 				)
 			);
 		}
+		if ( ! empty( $dropped['variations'] ) ) {
+			WP_CLI::warning(
+				sprintf(
+					'"%s": dropped product variation ID(s) %s. Gates restrict access by parent product, not by variation, so a plan that required one of these specific variations no longer has that restriction from this gate. Check the plan\'s products.',
+					$gate_title,
+					implode( ', ', $dropped['variations'] )
+				)
+			);
+		}
 	}
 
 	/**

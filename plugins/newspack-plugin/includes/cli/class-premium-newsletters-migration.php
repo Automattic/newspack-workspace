@@ -1042,17 +1042,20 @@ class Premium_Newsletters_Migration {
 	 * the saved selection here would carve out lists no reader was offered at
 	 * checkout.)
 	 *
-	 * The stored selection is read raw, without asking the ESP which of those lists
-	 * still exist. The modal shows the intersection of the selection with
-	 * Newspack_Newsletters_Subscription::get_lists_config(), so a list that has since
-	 * been deleted at the ESP counts as a modal list here though no reader is ever
-	 * offered it. That is deliberate: get_lists_config() is a remote call, and it
-	 * returns a WP_Error when the ESP is unreachable — which this derivation would
-	 * read as "no list is in the modal" and turn into auto-signup ON, mailing readers
-	 * who may have declined, off the back of an ESP outage mid-migration. The
-	 * inaccuracy left in place errs the other way: an extra list counted as modal can
-	 * only push the derivation toward OFF or toward the undecided value that writes
-	 * nothing, and both leave the operator to opt readers in deliberately.
+	 * The stored selection is read raw, without checking it against
+	 * Newspack_Newsletters_Subscription::get_lists_config(), which is what the modal
+	 * actually renders from. A list that has since been unpublished, or otherwise
+	 * dropped from that live set, still counts as a modal list here even though the
+	 * modal would no longer show it. That gap is left in place because of the
+	 * direction it errs in: over-counting a list as modal can only push
+	 * derive_auto_signup() toward OFF or toward the undecided value that writes
+	 * nothing, never toward ON — so the operator is left to opt readers in
+	 * deliberately rather than the migration silently auto-enrolling someone who was
+	 * never actually offered that list. (get_lists_config() is not a remote call: it
+	 * reads local Subscription_List CPT posts, and is_active() is a plain
+	 * post_status check; it returns a WP_Error only when no ESP provider is
+	 * configured at all — that is not a failure mode this derivation needs to guard
+	 * against.)
 	 *
 	 * @return string[] Public list IDs.
 	 */
@@ -1288,8 +1291,8 @@ class Premium_Newsletters_Migration {
 		}
 
 		$layout_problems = [
-			self::describe_layout_problem( ! empty( $registration['active'] ), (int) ( $registration['gate_layout_id'] ?? 0 ), 'registration' ),
-			self::describe_layout_problem( ! empty( $custom_access['active'] ), (int) ( $custom_access['gate_layout_id'] ?? 0 ), 'paid access' ),
+			self::describe_layout_problem( ! empty( $registration['active'] ), (int) $registration['gate_layout_id'], 'registration' ),
+			self::describe_layout_problem( ! empty( $custom_access['active'] ), (int) $custom_access['gate_layout_id'], 'paid access' ),
 		];
 		$issues          = array_merge( $issues, array_values( array_filter( $layout_problems ) ) );
 
