@@ -73,7 +73,7 @@ class Test_Subscriptions_Columns_Escaping extends WP_UnitTestCase {
 	 * The formatted_total meta is plain text: a mixed legit+malicious value
 	 * is fully escaped (no executable payload survives).
 	 */
-	public function test_total_neutralises_mixed_payload() {
+	public function test_total_neutralizes_mixed_payload() {
 		$post_id = $this->make_subscription( 'x' );
 		update_post_meta( $post_id, 'formatted_total', '<span class="amount">$1</span><script>x()</script>' );
 

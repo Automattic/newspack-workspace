@@ -126,5 +126,6 @@ class Test_Event_Log_List_Table_Escaping extends WP_UnitTestCase {
 		$out      = $table->column_default( $big, 'data' );
 		$this->assertStringNotContainsString( '</textarea><img', $out );
 		$this->assertStringNotContainsString( '<img src=x', $out );
+		$this->assertStringContainsString( '&lt;img src=x onerror=NPPM3042&gt;', $out );
 	}
 }
