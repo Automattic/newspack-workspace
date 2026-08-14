@@ -407,4 +407,59 @@ class Test_Premium_Newsletters_Verify extends \WP_UnitTestCase {
 			)
 		);
 	}
+
+	/**
+	 * Only 'newsletters' rules name lists to check. A rule of another type in the
+	 * same gate must not contribute its value, which is not a list ID.
+	 */
+	public function test_restricted_list_ids_for_gate_ignores_non_newsletters_rules() {
+		$gate = [
+			'content_rules' => [
+				[
+					'slug'  => 'category',
+					'value' => [ 5 ],
+				],
+				[
+					'slug'  => 'newsletters',
+					'value' => [ 10 ],
+				],
+			],
+		];
+
+		$this->assertSame( [ 10 ], $this->invoke_private_static( 'restricted_list_ids_for_gate', [ $gate ] ) );
+	}
+
+	/**
+	 * A rule's value can arrive as a single scalar rather than an array on some
+	 * write paths, and must still resolve to a one-element list of IDs.
+	 */
+	public function test_restricted_list_ids_for_gate_casts_a_scalar_value() {
+		$gate = [
+			'content_rules' => [
+				[
+					'slug'  => 'newsletters',
+					'value' => '7',
+				],
+			],
+		];
+
+		$this->assertSame( [ 7 ], $this->invoke_private_static( 'restricted_list_ids_for_gate', [ $gate ] ) );
+	}
+
+	/**
+	 * A duplicate ID (as an int or as the equal string) and a zero/empty value must
+	 * not produce a duplicate or a phantom list to check.
+	 */
+	public function test_restricted_list_ids_for_gate_dedupes_and_drops_zero() {
+		$gate = [
+			'content_rules' => [
+				[
+					'slug'  => 'newsletters',
+					'value' => [ 5, '5', 0, '' ],
+				],
+			],
+		];
+
+		$this->assertSame( [ 5 ], $this->invoke_private_static( 'restricted_list_ids_for_gate', [ $gate ] ) );
+	}
 }
