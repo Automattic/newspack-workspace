@@ -531,6 +531,20 @@ class Premium_Newsletters_Verify {
 				$contact_lists = \is_wp_error( $contact_data ) ? [] : \Newspack_Newsletters_Subscription::get_contact_lists( $user->user_email );
 				$unresolved    = \is_wp_error( $contact_lists ) || ! is_array( $contact_lists );
 
+				// Mailchimp's get_contact_lists() builds its audience IDs with
+				// array_keys() over the contact's raw list data, and PHP silently
+				// casts an all-digit array key to int — so a numeric list's public ID
+				// would never strict-match here even though the reader really is
+				// subscribed, reading a leak as clean. Premium_Newsletters::add_and_remove_lists()
+				// (includes/content-gate/class-premium-newsletters.php), the runtime
+				// this command mirrors, compares the same two value spaces with
+				// array_intersect(), which string-casts both sides before comparing.
+				// Normalizing here keeps this command in agreement with it, without
+				// loosening the comparison below to loose in_array().
+				if ( ! $unresolved ) {
+					$contact_lists = array_map( 'strval', $contact_lists );
+				}
+
 				foreach ( $list_ids as $list_id ) {
 					$public_id = $public_ids[ $list_id ];
 					if ( $unresolved || null === $public_id ) {
