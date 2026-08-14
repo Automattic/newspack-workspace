@@ -160,10 +160,8 @@ export default function RuleForm( { isNew, initialPath = null, rule, vocab, onDo
 		}
 	};
 
-	// A goal changed outside the form arrives as a prop, never as a remount. A URL
-	// that has dropped the goal is canonicalised back to the one on screen: clearing
-	// `path` instead would discard the recipe and everything typed, and would leave
-	// the form unsaveable until the publisher noticed the goal had gone.
+	// A goal-less URL is canonicalised back to the goal on screen; clearing `path`
+	// instead would discard the recipe and everything typed.
 	useEffect( () => {
 		if ( ! isNew ) {
 			return;
@@ -430,7 +428,6 @@ export default function RuleForm( { isNew, initialPath = null, rule, vocab, onDo
 		onDone,
 	] );
 
-	// Disabled until the form's hard requirement is met: a name (mirrors submit()).
 	const canSubmit = title.trim() !== '' && ! needsGoal;
 	useEffect( () => {
 		setHeaderData( {
@@ -449,7 +446,6 @@ export default function RuleForm( { isNew, initialPath = null, rule, vocab, onDo
 		// outlives them, so each one has to republish it.
 	}, [ setHeaderData, submit, isNew, isSaving, canSubmit, pathname ] );
 
-	// A saved rule's goal cannot change, so it carries one extra sentence saying so.
 	const goalDescription = [
 		__( 'The goal presets who qualifies, whether the price locks in at purchase, and which products the rule covers.', 'newspack-plugin' ),
 		! isNew && __( 'It is set when the rule is created; create a new rule to use a different one.', 'newspack-plugin' ),

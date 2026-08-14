@@ -60,8 +60,7 @@ export default function GoalCards( { selected, onSelect, disabled = false }: Goa
 					__experimentalCoreProps={ {
 						as: 'button',
 						type: 'button',
-						// A heading, not a span, so it inherits CoreCard's own header
-						// typography and active colour instead of restating them.
+						// A heading inherits CoreCard's header typography instead of restating it.
 						header: (
 							<>
 								<h3>{ opt.label }</h3>
@@ -80,8 +79,7 @@ export default function GoalCards( { selected, onSelect, disabled = false }: Goa
 						isActive: opt.value === selected,
 						role: 'radio',
 						'aria-checked': opt.value === selected ? 'true' : 'false',
-						// Not `disabled`: the group stays readable and focusable, matching the
-						// accessibleWhenDisabled behaviour the rest of this screen uses.
+						// Not `disabled`, so the chosen goal stays readable and focusable.
 						'aria-disabled': disabled ? 'true' : undefined,
 						tabIndex: index === activeIndex ? 0 : -1,
 					} }

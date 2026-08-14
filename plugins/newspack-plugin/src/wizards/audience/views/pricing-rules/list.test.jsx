@@ -160,7 +160,6 @@ describe( 'the Pricing Rules list header count', () => {
 
 		expect( publishedSection().label ).toBe( 'Pricing Rules' );
 		expect( publishedSection().count ).toBeUndefined();
-		// A failed read must not read as an empty list: say so, and offer a retry.
 		expect( screen.getByRole( 'alert' ) ).toHaveTextContent( 'Could not load pricing rules.' );
 		expect( screen.getByRole( 'button', { name: 'Retry' } ) ).toBeInTheDocument();
 	} );

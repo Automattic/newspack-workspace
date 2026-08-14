@@ -157,7 +157,6 @@ describe( 'the Plans list header count', () => {
 
 		expect( publishedSection().count ).toBeUndefined();
 		expect( publishedSection().label ).toBe( 'Subscriptions' );
-		// A failed read must not read as an empty list: say so, and offer a retry.
 		expect( screen.getByRole( 'alert' ) ).toHaveTextContent( 'Could not load subscription products.' );
 		expect( screen.getByRole( 'button', { name: 'Retry' } ) ).toBeInTheDocument();
 	} );

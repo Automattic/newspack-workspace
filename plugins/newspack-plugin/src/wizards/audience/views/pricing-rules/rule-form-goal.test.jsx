@@ -374,8 +374,8 @@ describe( 'choosing the goal from the form', () => {
 			expect( screen.getByRole( 'dialog' ) ).toHaveTextContent( 'Subscriptions started on or after' );
 		} );
 
-		// A new rule auto-applies the publish date, so warning about it would put a
-		// dialog on every switch out of Custom for a default nobody chose.
+		// A new rule auto-applies the publish date; warning about a default nobody
+		// chose would put a dialog on every switch out of Custom.
 		it( 'stays quiet about a cohort date left on the publish-date default', async () => {
 			await renderForm( 'custom' );
 			expect( field( 'Subscriptions started on or after' ) ).toHaveValue( 'publish' );

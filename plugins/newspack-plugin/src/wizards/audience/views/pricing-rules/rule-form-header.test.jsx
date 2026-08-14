@@ -74,8 +74,7 @@ describe( 'the rule editor header', () => {
 		expect( screen.getByRole( 'link', { name: 'Pricing Rules' } ) ).toHaveAttribute( 'href', '#/' );
 	} );
 
-	// The crumb owns the page's only "Add Rule"; a section title repeating it made
-	// heading navigation announce the same words twice.
+	// A section title repeating the crumb made heading navigation say it twice.
 	it( 'names the screen once, as the h1', () => {
 		expect( screen.getAllByRole( 'heading', { name: 'Add Rule' } ) ).toHaveLength( 1 );
 		expect( currentPage() ).toHaveTextContent( 'Add Rule' );
