@@ -423,8 +423,8 @@ const ConfigureViewInner = ( { integrations, loading, inFlightChanges, saving, o
 	const inboundEnabled = ! inboundToggleField || toBool( getFieldValue( inboundToggleField ) );
 	const outboundEnabled = ! outboundToggleField || toBool( getFieldValue( outboundToggleField ) );
 
-	// A field that renders nothing still counts towards a column's gaps, so the
-	// section guards below have to test rendered output rather than declarations.
+	// Counting declarations would print a section heading above a column whose
+	// every field turned out to render nothing, so the guards count output.
 	const fieldIsRendered = field => fieldIsVisible( field ) && settingsFieldRenders( field );
 
 	const visibleSettingsFields = settingsFields.filter( fieldIsRendered );
@@ -472,7 +472,7 @@ const ConfigureViewInner = ( { integrations, loading, inFlightChanges, saving, o
 				) }
 
 				{ /* Section 2: Inbound */ }
-				{ inboundField && (
+				{ inboundField && ( inboundOptions.length > 0 || !! inboundToggleField ) && (
 					<>
 						<Divider alignment="full-width" variant="tertiary" marginTop={ 64 } marginBottom={ 64 } />
 						<Grid columns={ 2 } gutter={ 32 } noMargin>
@@ -536,7 +536,7 @@ const ConfigureViewInner = ( { integrations, loading, inFlightChanges, saving, o
 				) }
 
 				{ /* Section 3: Outbound */ }
-				{ ( outboundField || outboundSettingsFields.length > 0 ) && (
+				{ ( outboundGroups.length > 0 || visibleOutboundSettingsFields.length > 0 || !! outboundToggleField ) && (
 					<>
 						<Divider alignment="full-width" variant="tertiary" marginTop={ 64 } marginBottom={ 64 } />
 						<Grid columns={ 2 } gutter={ 32 } noMargin>

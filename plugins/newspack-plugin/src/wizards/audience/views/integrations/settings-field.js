@@ -23,6 +23,7 @@ export const settingsFieldRenders = field => {
 		case 'hidden':
 			return false;
 		case 'select':
+		case 'metadata':
 			return ( field.options || [] ).length > 0;
 		default:
 			return true;
@@ -38,6 +39,10 @@ export const settingsFieldRenders = field => {
  * @param {Function} props.onChange Change handler.
  */
 export const SettingsField = ( { field, value, onChange } ) => {
+	if ( ! settingsFieldRenders( field ) ) {
+		return null;
+	}
+
 	const { key, type, label, description, placeholder, options, help_url: helpUrl } = field;
 	const help = (
 		<>
@@ -52,8 +57,6 @@ export const SettingsField = ( { field, value, onChange } ) => {
 	);
 
 	switch ( type ) {
-		case 'hidden':
-			return null;
 		case 'oauth': {
 			const isConnected = !! value;
 			const oauthUrl = field.oauth_url || '';
@@ -99,6 +102,7 @@ export const SettingsField = ( { field, value, onChange } ) => {
 									const newFields = checked ? [ ...selectedFields, optionValue ] : selectedFields.filter( f => f !== optionValue );
 									onChange( newFields );
 								} }
+								__nextHasNoMarginBottom
 							/>
 						) ) }
 					</Grid>
@@ -107,12 +111,7 @@ export const SettingsField = ( { field, value, onChange } ) => {
 		}
 		case 'checkbox':
 			return <CheckboxControl key={ key } label={ label } help={ help } checked={ !! value } onChange={ onChange } __nextHasNoMarginBottom />;
-		case 'select': {
-			// Core's SelectControl renders nothing without options, so returning
-			// early keeps the wrapper from leaving an empty child behind.
-			if ( ! settingsFieldRenders( field ) ) {
-				return null;
-			}
+		case 'select':
 			return (
 				<SelectControl
 					key={ key }
@@ -128,7 +127,6 @@ export const SettingsField = ( { field, value, onChange } ) => {
 					__nextHasNoMarginBottom
 				/>
 			);
-		}
 		case 'textarea':
 			return (
 				<TextareaControl
@@ -151,6 +149,7 @@ export const SettingsField = ( { field, value, onChange } ) => {
 					placeholder={ placeholder }
 					onChange={ onChange }
 					type="number"
+					withMargin={ false }
 					__next40pxDefaultSize
 					__nextHasNoMarginBottom
 				/>
@@ -165,6 +164,7 @@ export const SettingsField = ( { field, value, onChange } ) => {
 					placeholder={ placeholder }
 					onChange={ onChange }
 					type="password"
+					withMargin={ false }
 					__next40pxDefaultSize
 					__nextHasNoMarginBottom
 				/>
@@ -179,6 +179,7 @@ export const SettingsField = ( { field, value, onChange } ) => {
 					value={ value || '' }
 					placeholder={ placeholder }
 					onChange={ onChange }
+					withMargin={ false }
 					__next40pxDefaultSize
 					__nextHasNoMarginBottom
 				/>
