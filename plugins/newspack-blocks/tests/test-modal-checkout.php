@@ -1232,6 +1232,10 @@ class ModalCheckoutTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 	 * is_modal_checkout() still applies to the origin check.
 	 */
 	public function test_is_modal_checkout_origin_respects_my_account_exclusion_for_param_only() {
+		if ( ! property_exists( \Newspack\WooCommerce_My_Account::class, 'is_from_my_account' ) ) {
+			$this->markTestSkipped( 'The WooCommerce_My_Account mock is not in use.' );
+		}
+
 		\Newspack\WooCommerce_My_Account::$is_from_my_account = true;
 		$this->set_modal_checkout_request();
 
@@ -1246,6 +1250,10 @@ class ModalCheckoutTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 	 * non-modal flows, whose referers never carry modal_checkout.
 	 */
 	public function test_is_modal_checkout_origin_true_for_modal_referer_despite_my_account_flag() {
+		if ( ! property_exists( \Newspack\WooCommerce_My_Account::class, 'is_from_my_account' ) ) {
+			$this->markTestSkipped( 'The WooCommerce_My_Account mock is not in use.' );
+		}
+
 		\Newspack\WooCommerce_My_Account::$is_from_my_account = true;
 		$this->set_modal_checkout_referer();
 

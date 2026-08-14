@@ -2343,8 +2343,8 @@ final class Modal_Checkout {
 	 *
 	 * Superset of is_modal_checkout(): additionally true for Store API JSON
 	 * submissions (express wallets such as Apple Pay and Google Pay) whose only
-	 * modal signal is the same-origin referer query, since JSON bodies carry no
-	 * request params and leave $_POST empty.
+	 * modal signal is the referer query, since JSON bodies carry no request
+	 * params and leave $_POST empty.
 	 *
 	 * The referer is client-controlled, so this gates analytics and
 	 * presentation decisions only — never authorization.

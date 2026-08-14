@@ -53,7 +53,7 @@ if ( ! class_exists( WooCommerce_My_Account::class ) ) {
 	 * The $is_from_my_account flag defaults to false so that code paths guarded by
 	 * method_exists + is_from_my_account() behave the same as when the class is
 	 * absent. Tests that need a My Account request set the flag and the shared
-	 * set_up() resets it.
+	 * tear_down() resets it.
 	 */
 	class WooCommerce_My_Account {
 		public static $is_from_my_account = false;

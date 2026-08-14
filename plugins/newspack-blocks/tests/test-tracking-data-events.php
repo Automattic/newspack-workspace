@@ -107,10 +107,25 @@ class TrackingDataEventsTest extends WP_UnitTestCase_Blocks {
 	}
 
 	/**
-	 * The Store API callback returns empty without a modal origin, so a
-	 * standard block-based /checkout/ purchase dispatches nothing.
+	 * The Store API callback returns empty when the request carries no
+	 * referer at all.
 	 */
-	public function test_store_api_callback_empty_without_modal_origin() {
+	public function test_store_api_callback_empty_without_any_referer() {
+		\Newspack\Data_Events\Utils::$order_data_fixtures = [ 123 => $this->get_order_data_fixture( 123 ) ];
+
+		$this->assertEmpty( \Newspack_Blocks\Tracking\Data_Events::store_api_order_processed( new WC_Order( 123, 'wc_order_testkey' ) ) );
+	}
+
+	/**
+	 * The Store API callback returns empty for a standard block-based
+	 * /checkout/ purchase, whose referer carries no modal_checkout query.
+	 *
+	 * Pins the query check specifically: a referer test loosened to "any
+	 * referer present" would emit purchase events for every standard
+	 * checkout on the site.
+	 */
+	public function test_store_api_callback_empty_for_plain_checkout_referer() {
+		$_SERVER['HTTP_REFERER'] = 'https://example.com/checkout/';
 		\Newspack\Data_Events\Utils::$order_data_fixtures = [ 123 => $this->get_order_data_fixture( 123 ) ];
 
 		$this->assertEmpty( \Newspack_Blocks\Tracking\Data_Events::store_api_order_processed( new WC_Order( 123, 'wc_order_testkey' ) ) );

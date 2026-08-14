@@ -63,9 +63,15 @@ final class Data_Events {
 	/**
 	 * Classic checkout listener callback.
 	 *
-	 * @param string    $order_id Order's ID.
-	 * @param array     $posted_data Posted Data.
-	 * @param \WC_Order $order Order object.
+	 * $posted_data and $order are accepted to match the classic hook's
+	 * signature and are deliberately unused: the payload is built from the
+	 * order ID alone, so both checkout pipelines share one builder.
+	 *
+	 * @param int            $order_id Order's ID.
+	 * @param array|null     $posted_data Posted Data.
+	 * @param \WC_Order|null $order Order object.
+	 *
+	 * @return array|void The event payload; void suppresses the dispatch.
 	 */
 	public static function order_status_completed( $order_id, $posted_data = null, $order = null ) {
 		return self::get_modal_checkout_interaction_data( $order_id );
@@ -79,6 +85,8 @@ final class Data_Events {
 	 * builder, so neither callback can misread the other hook's argument list.
 	 *
 	 * @param \WC_Order $order Order object.
+	 *
+	 * @return array|void The event payload; void suppresses the dispatch.
 	 */
 	public static function store_api_order_processed( $order ) {
 		if ( ! is_a( $order, 'WC_Order' ) ) {
@@ -97,7 +105,9 @@ final class Data_Events {
 	 * $_POST (classic express), and the modal referer carried by Store API
 	 * JSON submissions.
 	 *
-	 * @param string $order_id Order's ID.
+	 * @param int $order_id Order's ID.
+	 *
+	 * @return array|void The event payload; void suppresses the dispatch.
 	 */
 	private static function get_modal_checkout_interaction_data( $order_id ) {
 		if ( ! \Newspack_Blocks\Modal_Checkout::is_modal_checkout_origin() ) {
