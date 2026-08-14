@@ -35,7 +35,7 @@ const Root = ( { children, className, hideSingleTitle = false, spacing = 6, titl
 				{ items.map( ( item, index ) => (
 					<Fragment key={ item.key }>
 						{ item }
-						{ index < items.length - 1 && <Divider variant="secondary" marginBottom={ 0 } marginTop={ 0 } /> }
+						{ index < items.length - 1 && <Divider variant="tertiary" marginBottom={ 0 } marginTop={ 0 } /> }
 					</Fragment>
 				) ) }
 			</VStack>

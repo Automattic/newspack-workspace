@@ -36,9 +36,9 @@ describe( 'CollapsibleGroup dividers', () => {
 		expect( container.querySelector( '.newspack-collapsible-group' ).lastElementChild ).not.toHaveClass( 'newspack-divider' );
 	} );
 
-	it( 'renders secondary dividers', () => {
+	it( 'renders tertiary dividers', () => {
 		const { container } = renderItems( 2 );
-		expect( dividers( container )[ 0 ] ).toHaveClass( 'newspack-divider--variant-secondary' );
+		expect( dividers( container )[ 0 ] ).toHaveClass( 'newspack-divider--variant-tertiary' );
 	} );
 } );
 
