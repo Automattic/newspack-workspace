@@ -58,6 +58,12 @@ class Content_Gate_Excerpt {
 		$sanitized               = clone $resolved;
 		$sanitized->post_content = Block_Visibility::strip_blocks_hidden_from_public( $resolved->post_content );
 
+		// wp_trim_excerpt() opens with get_post(), which ends in WP_Post::filter( 'raw' ).
+		// That returns $this only when the property already reads 'raw'; on any other
+		// value it re-reads the row by ID and the clone -- with its sanitized content --
+		// is silently discarded. A display-form post reaching this filter is enough.
+		$sanitized->filter = 'raw';
+
 		// A manually written excerpt is the author's own words; core returns it
 		// untouched and so do we. Read it from the post rather than from $text,
 		// which is whatever the filter chain holds by the time this runs and is not

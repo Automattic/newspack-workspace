@@ -223,4 +223,24 @@ class Newspack_Test_Content_Gate_Excerpt extends WP_UnitTestCase {
 
 		$this->assertSame( 'THIRDPARTYEXCERPT', $excerpt, 'An ungated post must not have an upstream excerpt discarded.' );
 	}
+
+	/**
+	 * The sanitized clone survives wp_trim_excerpt()'s internal get_post().
+	 *
+	 * That call ends in WP_Post::filter( 'raw' ), which re-reads the row by ID for
+	 * any post not already in raw form -- discarding the clone and its stripped
+	 * content. Passing a display-form post is enough to reach it.
+	 */
+	public function test_display_form_post_still_has_gated_blocks_withheld() {
+		$attrs   = '{"newspackAccessControlMode":"custom","newspackAccessControlRules":{"registration":{"active":true}},"newspackAccessControlVisibility":"visible"}';
+		$post_id = $this->make_post( $attrs );
+
+		wp_set_current_user( 0 );
+		Block_Visibility::reset_cache_for_tests();
+
+		$display = get_post( $post_id, OBJECT, 'display' );
+		$excerpt = apply_filters( 'get_the_excerpt', $display->post_excerpt, $display );
+
+		$this->assertStringNotContainsString( 'SECRETMARK', $excerpt, 'A display-form post must not bypass sanitization.' );
+	}
 }
