@@ -48,6 +48,29 @@ describe( 'ConfirmDialog navigation blocking', () => {
 		expect( history.location.pathname ).toBe( '/' );
 	} );
 
+	// v5 keeps a single prompt slot, so an unprompted re-sync would be caught by
+	// whichever dialog on the screen did install a blocker.
+	it( 'cancels an unprompted dialog without tripping another blocker', () => {
+		const historyRef = { current: null };
+		render(
+			<MemoryRouter>
+				<HistoryGrabber historyRef={ historyRef } />
+				<ConfirmDialog when confirmButtonText="Leave" cancelButtonText="Stay">
+					Wizard guard
+				</ConfirmDialog>
+				<ConfirmDialog isOpen confirmButtonText="Discard changes" cancelButtonText="Keep editing">
+					Unsaved changes
+				</ConfirmDialog>
+			</MemoryRouter>
+		);
+		const replaceSpy = jest.spyOn( historyRef.current, 'replace' );
+
+		cancelNavigation();
+		expect( dialog() ).not.toBeInTheDocument();
+		expect( screen.queryByText( 'Wizard guard' ) ).not.toBeInTheDocument();
+		expect( replaceSpy ).not.toHaveBeenCalled();
+	} );
+
 	it( 'replays a blocked push on confirm: re-sync replace first, then push, and re-arms the blocker', () => {
 		const history = renderWithHistory();
 		const replaceSpy = jest.spyOn( history, 'replace' );
@@ -138,5 +161,128 @@ describe( 'ConfirmDialog navigation blocking', () => {
 		act( () => history.push( '/elsewhere' ) );
 		expect( history.location.pathname ).toBe( '/' );
 		expect( dialog() ).toBeInTheDocument();
+	} );
+} );
+
+// `useHistory` returns undefined outside a wizard, where `newspack-multibranded-site`
+// runs react-router v6 against this package's v5.
+describe( 'ConfirmDialog without a router', () => {
+	const renderUnrouted = ( props = {} ) =>
+		render(
+			<ConfirmDialog isOpen confirmButtonText="Discard changes" cancelButtonText="Keep editing" { ...props }>
+				Unsaved changes
+			</ConfirmDialog>
+		);
+
+	it( 'cancels with no history to re-sync', () => {
+		const onCancel = jest.fn();
+		renderUnrouted( { onCancel } );
+		expect( dialog() ).toBeInTheDocument();
+
+		cancelNavigation();
+		expect( onCancel ).toHaveBeenCalled();
+		expect( dialog() ).not.toBeInTheDocument();
+	} );
+
+	it( 'confirms with no history to re-sync', () => {
+		const onConfirm = jest.fn();
+		renderUnrouted( { onConfirm } );
+
+		confirmNavigation();
+		expect( onConfirm ).toHaveBeenCalled();
+		expect( dialog() ).not.toBeInTheDocument();
+	} );
+
+	it( 'installs no blocker when asked to block without a router', () => {
+		expect( () => renderUnrouted( { when: true } ) ).not.toThrow();
+		expect( dialog() ).toBeInTheDocument();
+	} );
+} );
+
+describe( 'ConfirmDialog controlled by isOpen', () => {
+	const tree = isOpen => (
+		<ConfirmDialog isOpen={ isOpen } confirmButtonText="Discard changes" cancelButtonText="Keep editing">
+			Unsaved changes
+		</ConfirmDialog>
+	);
+
+	it( 'closes when isOpen goes false', () => {
+		const { rerender } = render( tree( true ) );
+		expect( dialog() ).toBeInTheDocument();
+
+		rerender( tree( false ) );
+		expect( dialog() ).not.toBeInTheDocument();
+	} );
+
+	it( 'opens again afterwards', () => {
+		const { rerender } = render( tree( true ) );
+		rerender( tree( false ) );
+
+		rerender( tree( true ) );
+		expect( dialog() ).toBeInTheDocument();
+	} );
+
+	it( 'leaves a blocked navigation prompt up', () => {
+		const historyRef = { current: null };
+		render(
+			<MemoryRouter>
+				<HistoryGrabber historyRef={ historyRef } />
+				<ConfirmDialog when isOpen={ false } confirmButtonText="Discard changes" cancelButtonText="Keep editing">
+					Unsaved changes
+				</ConfirmDialog>
+			</MemoryRouter>
+		);
+
+		act( () => historyRef.current.push( '/next' ) );
+		expect( dialog() ).toBeInTheDocument();
+	} );
+
+	it( 'withdraws a blocked navigation prompt when isOpen goes false', () => {
+		const historyRef = { current: null };
+		const withOpen = isOpen => (
+			<MemoryRouter>
+				<HistoryGrabber historyRef={ historyRef } />
+				<ConfirmDialog when isOpen={ isOpen } confirmButtonText="Discard changes" cancelButtonText="Keep editing">
+					Unsaved changes
+				</ConfirmDialog>
+			</MemoryRouter>
+		);
+		const { rerender } = render( withOpen( true ) );
+		act( () => historyRef.current.push( '/next' ) );
+		expect( dialog() ).toBeInTheDocument();
+
+		rerender( withOpen( false ) );
+		expect( dialog() ).not.toBeInTheDocument();
+		expect( historyRef.current.location.pathname ).toBe( '/' );
+
+		// Confirming the next prompt must not replay the abandoned destination.
+		rerender( withOpen( true ) );
+		confirmNavigation();
+		expect( historyRef.current.location.pathname ).toBe( '/' );
+	} );
+} );
+
+describe( 'ConfirmDialog named by a hidden title', () => {
+	it( 'takes its accessible name from the title while hiding the header', () => {
+		render(
+			<ConfirmDialog isOpen hideTitle title="Unsaved changes" confirmButtonText="Discard changes">
+				You have unsaved changes that will be lost. Discard changes?
+			</ConfirmDialog>
+		);
+
+		const frame = screen.getByRole( 'dialog', { name: 'Unsaved changes' } );
+		expect( frame ).toHaveClass( 'newspack-modal--hide-title' );
+		expect( frame.querySelector( '.components-modal__header' ) ).toContainElement( screen.getByRole( 'heading', { name: 'Unsaved changes' } ) );
+	} );
+
+	it( 'has no accessible name without a title', () => {
+		render(
+			<ConfirmDialog isOpen hideTitle confirmButtonText="Discard changes">
+				You have unsaved changes that will be lost. Discard changes?
+			</ConfirmDialog>
+		);
+
+		expect( screen.queryByRole( 'dialog', { name: 'Unsaved changes' } ) ).not.toBeInTheDocument();
+		expect( screen.getByRole( 'dialog' ) ).not.toHaveAttribute( 'aria-labelledby' );
 	} );
 } );

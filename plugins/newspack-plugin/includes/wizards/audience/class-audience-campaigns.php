@@ -87,18 +87,34 @@ class Audience_Campaigns extends Wizard {
 			'newspack-wizards',
 			'newspackAudienceCampaigns',
 			[
-				'api'                => '/' . NEWSPACK_API_NAMESPACE . '/wizard/' . $this->slug,
-				'preview_post'       => $preview_post,
-				'preview_archive'    => $preview_archive,
-				'frontend_url'       => get_site_url(),
-				'custom_placements'  => $custom_placements,
-				'overlay_placements' => $overlay_placements,
-				'overlay_sizes'      => $overlay_sizes,
-				'preview_query_keys' => $preview_query_keys,
-				'experimental'       => Reader_Activation::is_enabled(),
-				'criteria'           => $criteria,
+				'api'                        => '/' . NEWSPACK_API_NAMESPACE . '/wizard/' . $this->slug,
+				'preview_post'               => $preview_post,
+				'preview_archive'            => $preview_archive,
+				'frontend_url'               => get_site_url(),
+				'custom_placements'          => $custom_placements,
+				'overlay_placements'         => $overlay_placements,
+				'overlay_sizes'              => $overlay_sizes,
+				'preview_query_keys'         => $preview_query_keys,
+				'experimental'               => Reader_Activation::is_enabled(),
+				'criteria'                   => $criteria,
+				'contextual_prompts_enabled' => self::is_contextual_prompts_enabled(),
 			]
 		);
+	}
+
+	/**
+	 * Whether the Contextual Prompts feature is enabled.
+	 *
+	 * Defers to the newspack-popups provider (the canonical constant check lives
+	 * on \Newspack_Popups::is_contextual_prompts_enabled()), so an older popups
+	 * that lacks the helper or the CP REST routes never exposes the tab.
+	 *
+	 * @return bool
+	 */
+	private static function is_contextual_prompts_enabled() {
+		return class_exists( 'Newspack_Popups' )
+			&& method_exists( 'Newspack_Popups', 'is_contextual_prompts_enabled' )
+			&& \Newspack_Popups::is_contextual_prompts_enabled();
 	}
 
 	/**

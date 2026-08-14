@@ -755,13 +755,29 @@ class Emails {
 	/**
 	 * Can email of a particular type be sent?
 	 *
-	 * @param string $type Type of the email.
+	 * @param string $type              Type of the email.
+	 * @param bool   $create_if_missing Whether a missing email post may be created to answer
+	 *                                  the question. Defaults to true, which preserves the
+	 *                                  original behavior: get_email_config_by_type() lazily
+	 *                                  publishes the email post (and refreshes newsletter
+	 *                                  palette keys) on a miss. Pass false for a read-only
+	 *                                  probe — a caller that must not write, such as a CLI
+	 *                                  dry run, would otherwise break its own no-writes
+	 *                                  promise and repair the very condition it reports,
+	 *                                  suppressing the warning it exists to print. Both
+	 *                                  modes share query_email_post() and serialize_email(),
+	 *                                  so they agree whenever the post exists.
 	 */
-	public static function can_send_email( $type ) {
+	public static function can_send_email( $type, $create_if_missing = true ) {
 		if ( ! self::supports_emails() ) {
 			return false;
 		}
-		$email_config = self::get_email_config_by_type( $type );
+		if ( $create_if_missing ) {
+			$email_config = self::get_email_config_by_type( $type );
+		} else {
+			$email_post   = self::query_email_post( $type );
+			$email_config = $email_post ? self::serialize_email( $type, $email_post->ID ) : false;
+		}
 		if ( ! $email_config || 'publish' !== $email_config['status'] ) {
 			return false;
 		}
@@ -1105,14 +1121,18 @@ class Emails {
 	}
 
 	/**
-	 * Get the email for a specific type.
-	 * If the email does not exist, it will be created based on default template.
+	 * Find the email post holding a given config type, without creating one.
+	 *
+	 * The read half shared by get_email_config_by_type() (which lazily creates
+	 * the post on a miss) and can_send_email()'s read-only probe mode (which
+	 * must not) — one query, so the two paths cannot drift on how the post is
+	 * located.
 	 *
 	 * @param string $type Type of the email.
 	 *
-	 * @return array|false The serialized email config or false if not available or supported.
+	 * @return \WP_Post|null The email post, or null when none exists.
 	 */
-	public static function get_email_config_by_type( $type ) {
+	private static function query_email_post( $type ) {
 		$emails_query = new \WP_Query(
 			[
 				'post_type'      => self::POST_TYPE,
@@ -1124,8 +1144,21 @@ class Emails {
 				'order'          => 'ASC',
 			]
 		);
-		if ( $emails_query->post ) {
-			return self::serialize_email( $type, $emails_query->post->ID );
+		return $emails_query->post ?? null;
+	}
+
+	/**
+	 * Get the email for a specific type.
+	 * If the email does not exist, it will be created based on default template.
+	 *
+	 * @param string $type Type of the email.
+	 *
+	 * @return array|false The serialized email config or false if not available or supported.
+	 */
+	public static function get_email_config_by_type( $type ) {
+		$email_post = self::query_email_post( $type );
+		if ( $email_post ) {
+			return self::serialize_email( $type, $email_post->ID );
 		} elseif ( ! function_exists( 'is_user_logged_in' ) ) {
 			/** Only attempt to create the email post if wp-includes/pluggable.php is loaded. */
 			return false;

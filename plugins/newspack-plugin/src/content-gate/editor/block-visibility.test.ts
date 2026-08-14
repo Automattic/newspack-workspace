@@ -1,11 +1,17 @@
 /**
- * Tests for block-visibility attribute registration filter.
+ * Tests for the block-visibility attribute registration filter and the
+ * Inspector panel injection.
  */
 
 /**
  * Capture callbacks registered via addFilter, keyed by namespace.
  */
-const registeredFilters: Record< string, ( settings: any, name: string ) => any > = {};
+const registeredFilters: Record< string, any > = {};
+
+/**
+ * The post type the editor reports, swapped per test.
+ */
+let mockPostType: string | undefined;
 
 jest.mock( '@wordpress/hooks', () => ( {
 	addFilter: jest.fn( ( _hook: string, namespace: string, callback: ( settings: any, name: string ) => any ) => {
@@ -24,11 +30,16 @@ jest.mock( '@wordpress/element', () => ( {
 	useEffect: jest.fn(),
 } ) );
 jest.mock( '@wordpress/api-fetch', () => jest.fn() );
+jest.mock( '@wordpress/data', () => ( {
+	useSelect: ( mapSelect: ( select: ( store: string ) => unknown ) => unknown ) =>
+		mapSelect( () => ( { getCurrentPostType: () => mockPostType } ) ),
+} ) );
 
 // Importing the module triggers the addFilter side effects.
 require( './block-visibility' );
 
 const attributeFilter = registeredFilters[ 'newspack-plugin/block-visibility/attributes' ];
+const inspectorFilter = registeredFilters[ 'newspack-plugin/block-visibility/inspector' ];
 
 describe( 'block-visibility attribute registration', () => {
 	it( 'adds attributes to core/group', () => {
@@ -69,5 +80,36 @@ describe( 'block-visibility attribute registration', () => {
 		const result = attributeFilter( { attributes: { align: { type: 'string' } } }, 'core/group' );
 		expect( result.attributes ).toHaveProperty( 'align' );
 		expect( result.attributes ).toHaveProperty( 'newspackAccessControlVisibility' );
+	} );
+} );
+
+describe( 'block-visibility inspector panel', () => {
+	const BlockEdit = () => null;
+	const render = ( name: string ) => inspectorFilter( BlockEdit )( { name } );
+
+	// The panel is a sibling of <BlockEdit/> inside a fragment, so a bare
+	// <BlockEdit/> element is the panel being withheld.
+	const isPanelHidden = ( element: { type: unknown } ) => element.type === BlockEdit;
+
+	it( 'adds the panel to a target block on a post', () => {
+		mockPostType = 'post';
+		expect( isPanelHidden( render( 'core/group' ) ) ).toBe( false );
+	} );
+
+	// Access rules are post context; a pattern is a design, not a post.
+	it( 'withholds the panel while a pattern is being edited', () => {
+		mockPostType = 'wp_block';
+		expect( isPanelHidden( render( 'core/group' ) ) ).toBe( true );
+	} );
+
+	it( 'withholds the panel from non-target blocks', () => {
+		mockPostType = 'post';
+		expect( isPanelHidden( render( 'core/paragraph' ) ) ).toBe( true );
+	} );
+
+	// An editor that reports no post type is not a pattern editor.
+	it( 'adds the panel when the post type is unknown', () => {
+		mockPostType = undefined;
+		expect( isPanelHidden( render( 'core/group' ) ) ).toBe( false );
 	} );
 } );
