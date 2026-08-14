@@ -10,6 +10,26 @@ import { CheckboxControl, ExternalLink, TextareaControl } from '@wordpress/compo
 import { Button, Grid, SelectControl, TextControl } from '../../../../../packages/components/src';
 
 /**
+ * Whether a field declaration produces any rendered output.
+ *
+ * Callers lay these fields out in a gapped column, so a field that renders
+ * nothing has to be excluded from the count rather than left to collapse.
+ *
+ * @param {Object} field Field declaration.
+ * @return {boolean} True when `SettingsField` renders something for the field.
+ */
+export const settingsFieldRenders = field => {
+	switch ( field.type ) {
+		case 'hidden':
+			return false;
+		case 'select':
+			return ( field.options || [] ).length > 0;
+		default:
+			return true;
+	}
+};
+
+/**
  * Render a single settings field.
  *
  * @param {Object}   props          Component props.
@@ -86,11 +106,11 @@ export const SettingsField = ( { field, value, onChange } ) => {
 			);
 		}
 		case 'checkbox':
-			return <CheckboxControl key={ key } label={ label } help={ help } checked={ !! value } onChange={ onChange } />;
+			return <CheckboxControl key={ key } label={ label } help={ help } checked={ !! value } onChange={ onChange } __nextHasNoMarginBottom />;
 		case 'select': {
-			// Core's SelectControl renders nothing without options, leaving the
-			// Newspack wrapper as an empty grid child that still takes a gap.
-			if ( ! ( options || [] ).length ) {
+			// Core's SelectControl renders nothing without options, so returning
+			// early keeps the wrapper from leaving an empty child behind.
+			if ( ! settingsFieldRenders( field ) ) {
 				return null;
 			}
 			return (

@@ -13,7 +13,7 @@ import { Stack } from '@wordpress/ui';
 import { CollapsibleGroup, Divider, Grid, SectionHeader, useUnsavedChangesDialog } from '../../../../../packages/components/src';
 import { WIZARD_STORE_NAMESPACE } from '../../../../../packages/components/src/wizard/store';
 import WizardsTab from '../../../wizards-tab';
-import { SettingsField } from './settings-field';
+import { SettingsField, settingsFieldRenders } from './settings-field';
 
 import './configure-view.scss';
 
@@ -423,14 +423,19 @@ const ConfigureViewInner = ( { integrations, loading, inFlightChanges, saving, o
 	const inboundEnabled = ! inboundToggleField || toBool( getFieldValue( inboundToggleField ) );
 	const outboundEnabled = ! outboundToggleField || toBool( getFieldValue( outboundToggleField ) );
 
-	const visibleSettingsFields = settingsFields.filter( fieldIsVisible );
-	const visibleOutboundSettingsFields = outboundSettingsFields.filter( fieldIsVisible );
+	// A field that renders nothing still counts towards a column's gaps, so the
+	// section guards below have to test rendered output rather than declarations.
+	const fieldIsRendered = field => fieldIsVisible( field ) && settingsFieldRenders( field );
+
+	const visibleSettingsFields = settingsFields.filter( fieldIsRendered );
+	const visibleOutboundSettingsFields = outboundSettingsFields.filter( fieldIsRendered );
+	const inboundOptions = inboundField?.options || [];
+	const outboundGroups = outboundField?.grouped_options || [];
 
 	// The divider separates the toggle from the section content below it, so it
 	// only renders when there is content to divide: the caller passes false for a
-	// paused direction or an empty section. Its spacing comes entirely from the
-	// section grid's rowGap — `.newspack-grid > *` zeroes child margins with
-	// !important, so margins set on the divider itself can never take effect.
+	// paused direction or an empty section. Its own margins are zeroed so the
+	// column's gap is the only thing spacing it.
 	const renderSectionToggle = ( toggleSetting, showDivider ) =>
 		toggleSetting && (
 			<>
@@ -473,10 +478,10 @@ const ConfigureViewInner = ( { integrations, loading, inFlightChanges, saving, o
 						<Grid columns={ 2 } gutter={ 32 } noMargin>
 							<SectionHeader heading={ 2 } title={ __( 'Inbound', 'newspack-plugin' ) } noMargin />
 							<Stack direction="column" gap="xl">
-								{ renderSectionToggle( inboundToggleField, inboundEnabled && ( inboundField.options || [] ).length > 0 ) }
-								{ inboundEnabled && ( inboundField.options || [] ).length > 0 && (
+								{ renderSectionToggle( inboundToggleField, inboundEnabled && inboundOptions.length > 0 ) }
+								{ inboundEnabled && inboundOptions.length > 0 && (
 									<Stack direction="column" gap="sm">
-										{ ( inboundField.options || [] ).map( option => {
+										{ inboundOptions.map( option => {
 											// Options are always { value, label, matching_function, has_options } objects
 											// for this field (see class-integration.php:get_settings_config()).
 											const optionValue = option.value;
@@ -501,6 +506,7 @@ const ConfigureViewInner = ( { integrations, loading, inFlightChanges, saving, o
 														onChange={ isChecked =>
 															handleFieldChange( inboundField.key, toggleField( currentMap, option, isChecked ) )
 														}
+														__nextHasNoMarginBottom
 													/>
 													{ checked && (
 														<SelectControl
@@ -515,6 +521,8 @@ const ConfigureViewInner = ( { integrations, loading, inFlightChanges, saving, o
 																	[ optionValue ]: operator,
 																} )
 															}
+															__next40pxDefaultSize
+															__nextHasNoMarginBottom
 														/>
 													) }
 												</div>
@@ -536,7 +544,7 @@ const ConfigureViewInner = ( { integrations, loading, inFlightChanges, saving, o
 							<Stack direction="column" gap="xl">
 								{ renderSectionToggle(
 									outboundToggleField,
-									outboundEnabled && ( visibleOutboundSettingsFields.length > 0 || !! outboundField )
+									outboundEnabled && ( visibleOutboundSettingsFields.length > 0 || outboundGroups.length > 0 )
 								) }
 								{ outboundEnabled &&
 									visibleOutboundSettingsFields.map( field => (
@@ -547,12 +555,17 @@ const ConfigureViewInner = ( { integrations, loading, inFlightChanges, saving, o
 											onChange={ val => handleFieldChange( field.key, val ) }
 										/>
 									) ) }
-								{ outboundEnabled && outboundField && visibleOutboundSettingsFields.length > 0 && (
-									<Divider variant="tertiary" marginTop={ 0 } marginBottom={ 0 } />
+								{ outboundEnabled && outboundGroups.length > 0 && visibleOutboundSettingsFields.length > 0 && (
+									<Divider
+										className="newspack-configure-view__group-divider"
+										variant="tertiary"
+										marginTop={ 0 }
+										marginBottom={ 0 }
+									/>
 								) }
-								{ outboundEnabled && outboundField && (
+								{ outboundEnabled && outboundGroups.length > 0 && (
 									<CollapsibleGroup hideSingleTitle titleLevel={ 3 }>
-										{ ( outboundField.grouped_options || [] ).map( ( group, index ) => {
+										{ outboundGroups.map( ( group, index ) => {
 											const currentValue = getFieldValue( outboundField );
 											const selected = Array.isArray( currentValue ) ? currentValue : [];
 											return (
@@ -571,6 +584,7 @@ const ConfigureViewInner = ( { integrations, loading, inFlightChanges, saving, o
 																onChange={ checked =>
 																	handleCheckboxListChange( outboundField.key, currentValue, fieldName, checked )
 																}
+																__nextHasNoMarginBottom
 															/>
 														) ) }
 													</Stack>
