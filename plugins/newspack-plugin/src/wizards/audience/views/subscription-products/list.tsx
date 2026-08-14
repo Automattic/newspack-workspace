@@ -16,12 +16,12 @@ import { useDispatch } from '@wordpress/data';
 import apiFetch from '@wordpress/api-fetch';
 import { filterSortAndPaginate } from '@wordpress/dataviews';
 import type { Action, Field, View } from '@wordpress/dataviews';
-import { Spinner, Notice, Button } from '@wordpress/components';
+import { Spinner, Notice as CoreNotice, Button } from '@wordpress/components';
 
 /**
  * Internal dependencies
  */
-import { DataViews, Badge, Router } from '../../../../../packages/components/src';
+import { DataViews, Badge, Notice, Router } from '../../../../../packages/components/src';
 import { formatCount } from '../../../../../packages/components/src/breadcrumbs/format-count';
 import { WIZARD_STORE_NAMESPACE } from '../../../../../packages/components/src/wizard/store';
 import { PolicyChips, EffectivePrice } from './policy-cells';
@@ -105,7 +105,7 @@ const DEFAULT_VIEW: View = {
 };
 
 export default function SubscriptionProductsList( { scope = 'subscriptions' }: { scope?: Scope } ) {
-	const { setHeaderData, addNotice } = useDispatch( WIZARD_STORE_NAMESPACE );
+	const { setHeaderData } = useDispatch( WIZARD_STORE_NAMESPACE );
 	const history = useHistory();
 	const [ data, setData ] = useState< SubscriptionProduct[] >( [] );
 	const [ currency, setCurrency ] = useState< SubscriptionProductsCurrency >( DEFAULT_CURRENCY );
@@ -150,16 +150,9 @@ export default function SubscriptionProductsList( { scope = 'subscriptions' }: {
 				}
 				setPolicyIsMock( Boolean( response.policy_source_is_mock ) );
 			} )
-			.catch( () => {
-				setHasError( true );
-				addNotice( {
-					message: __( 'Failed to load subscription products. Please refresh the page.', 'newspack-plugin' ),
-					type: 'error',
-					id: 'subscription-products-fetch-error',
-				} );
-			} )
+			.catch( () => setHasError( true ) )
 			.finally( () => setIsLoading( false ) );
-	}, [ addNotice ] );
+	}, [] );
 
 	useEffect( () => {
 		fetchData();
@@ -393,15 +386,25 @@ export default function SubscriptionProductsList( { scope = 'subscriptions' }: {
 		);
 	}
 
+	if ( hasError ) {
+		return (
+			<Notice isError noticeText={ __( 'Could not load subscription products.', 'newspack-plugin' ) }>
+				<Button variant="link" onClick={ fetchData }>
+					{ __( 'Retry', 'newspack-plugin' ) }
+				</Button>
+			</Notice>
+		);
+	}
+
 	return (
 		<div className="newspack-subscription-products">
 			{ policyIsMock && (
-				<Notice status="info" isDismissible={ false } className="newspack-subscription-products__mock-notice">
+				<CoreNotice status="info" isDismissible={ false } className="newspack-subscription-products__mock-notice">
 					{ __(
 						'Applied policies and effective price use mock data. They swap to the live policy engine through a single read API with no UI change.',
 						'newspack-plugin'
 					) }
-				</Notice>
+				</CoreNotice>
 			) }
 			<DataViews
 				className="newspack-subscription-products__dataviews"

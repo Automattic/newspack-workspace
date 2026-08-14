@@ -21,7 +21,7 @@ import {
 /**
  * Internal dependencies
  */
-import { DataViews, Badge, Router } from '../../../../../packages/components/src';
+import { DataViews, Badge, Notice, Router } from '../../../../../packages/components/src';
 import { formatCount } from '../../../../../packages/components/src/breadcrumbs/format-count';
 import { WIZARD_STORE_NAMESPACE } from '../../../../../packages/components/src/wizard/store';
 import CatalogImpact from './catalog-impact';
@@ -91,16 +91,9 @@ export default function PricingRulesList() {
 				} );
 				setSegmentMap( map );
 			} )
-			.catch( () => {
-				setHasError( true );
-				addNotice( {
-					message: __( 'Failed to load pricing rules. Please refresh the page.', 'newspack-plugin' ),
-					type: 'error',
-					id: 'pricing-rules-fetch-error',
-				} );
-			} )
+			.catch( () => setHasError( true ) )
 			.finally( () => setIsLoading( false ) );
-	}, [ addNotice ] );
+	}, [] );
 
 	useEffect( () => {
 		fetchData();
@@ -277,11 +270,19 @@ export default function PricingRulesList() {
 	return (
 		<div className="newspack-pricing-rules">
 			<CatalogImpact />
-			{ isLoading ? (
+			{ isLoading && (
 				<div style={ { display: 'flex', justifyContent: 'center', padding: '48px' } }>
 					<Spinner />
 				</div>
-			) : (
+			) }
+			{ ! isLoading && hasError && (
+				<Notice isError noticeText={ __( 'Could not load pricing rules.', 'newspack-plugin' ) }>
+					<Button variant="link" onClick={ fetchData }>
+						{ __( 'Retry', 'newspack-plugin' ) }
+					</Button>
+				</Notice>
+			) }
+			{ ! isLoading && ! hasError && (
 				<DataViews
 					data={ processedData }
 					fields={ fields }

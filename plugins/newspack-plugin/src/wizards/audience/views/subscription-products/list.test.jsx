@@ -6,7 +6,7 @@
 /**
  * External dependencies
  */
-import { render, act } from '@testing-library/react';
+import { render, act, screen } from '@testing-library/react';
 
 /**
  * WordPress dependencies
@@ -30,6 +30,12 @@ jest.mock( '../../../../../packages/components/src', () => {
 	return {
 		DataViews: () => null,
 		Badge: () => null,
+		Notice: ( { noticeText, children } ) => (
+			<div role="alert">
+				{ noticeText }
+				{ children }
+			</div>
+		),
 		Router: { useHistory: () => history },
 	};
 } );
@@ -151,6 +157,8 @@ describe( 'the Plans list header count', () => {
 
 		expect( publishedSection().count ).toBeUndefined();
 		expect( publishedSection().label ).toBe( 'Subscriptions' );
-		expect( notices ).toHaveLength( 1 );
+		// A failed read must not read as an empty list: say so, and offer a retry.
+		expect( screen.getByRole( 'alert' ) ).toHaveTextContent( 'Could not load subscription products.' );
+		expect( screen.getByRole( 'button', { name: 'Retry' } ) ).toBeInTheDocument();
 	} );
 } );
