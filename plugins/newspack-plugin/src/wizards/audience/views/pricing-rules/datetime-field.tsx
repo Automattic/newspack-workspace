@@ -45,6 +45,15 @@ function is12HourFormat( format: string ): boolean {
 	return /a(?!\\)/i.test( format.replace( /\\\\/g, '' ).split( '' ).reverse().join( '' ) );
 }
 
+// Left unseeded, the picker labels its cells in UTC while selecting browser-local
+// dates, so east of UTC the first pick on an empty field lands a day early. Seeding
+// with now in the same wall-clock shape the field stores makes an empty field
+// behave like one that already holds a value.
+function nowAsWallClock(): string {
+	const now = new Date();
+	return new Date( now.getTime() - now.getTimezoneOffset() * 60000 ).toISOString().slice( 0, 16 );
+}
+
 export default function DateTimeField( {
 	id,
 	label,
@@ -91,7 +100,7 @@ export default function DateTimeField( {
 				renderContent={ ( { onClose } ) => (
 					<VStack spacing={ 2 }>
 						<DateTimePicker
-							currentDate={ value || undefined }
+							currentDate={ value || nowAsWallClock() }
 							is12Hour={ is12HourFormat( settings.formats.time ) }
 							startOfWeek={ startOfWeek }
 							onChange={ next => onChange( next ? next.slice( 0, 16 ) : '' ) }
