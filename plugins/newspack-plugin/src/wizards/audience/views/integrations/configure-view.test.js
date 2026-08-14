@@ -14,6 +14,15 @@ const mockSetHeaderData = jest.fn();
 jest.mock( '@wordpress/data', () => ( {
 	useDispatch: () => ( { setHeaderData: mockSetHeaderData } ),
 } ) );
+// The columns are Stacks, and an empty one is a real element costing a real
+// gap, so the stub keeps it queryable for the tests that assert none is left.
+jest.mock( '@wordpress/ui', () => ( {
+	Stack: ( { children, gap } ) => (
+		<div data-testid="stack" data-gap={ gap }>
+			{ children }
+		</div>
+	),
+} ) );
 // Stub the components barrel: with @wordpress/data mocked, the real barrel eagerly loads @wordpress/rich-text, whose module-load combineReducers() call throws.
 // Cover everything SettingsField imports so a future select/oauth/textarea fixture renders a stub, not `undefined`.
 jest.mock( '@wordpress/components', () => ( {
@@ -47,7 +56,9 @@ jest.mock( '@wordpress/components', () => ( {
 } ) );
 jest.mock( '../../../../../packages/components/src', () => ( {
 	Button: ( { children } ) => children,
-	CollapsibleGroup: Object.assign( ( { children } ) => children, { Item: ( { children } ) => children } ),
+	CollapsibleGroup: Object.assign( ( { children } ) => <div data-testid="collapsible-group">{ children }</div>, {
+		Item: ( { children } ) => children,
+	} ),
 	// The view renders three dividers that differ only by props: section dividers
 	// pass alignment="full-width", the one between the outbound settings and the
 	// field groups carries its own class, and the one under a section toggle
@@ -745,6 +756,9 @@ describe( 'ConfigureView per-direction sections', () => {
 		expect( screen.getByLabelText( 'Enable inbound sync' ).checked ).toBe( true );
 		expect( screen.queryByLabelText( 'VIP' ) ).toBeNull();
 		expect( screen.queryAllByTestId( 'toggle-divider' ) ).toHaveLength( 0 );
+		// Only the section column itself; the list it would have wrapped is gone
+		// rather than left as an empty element taking a gap under the toggle.
+		expect( screen.queryAllByTestId( 'stack' ) ).toHaveLength( 1 );
 	} );
 
 	const outboundIntegration = groupedOptions => ( {
@@ -774,8 +788,16 @@ describe( 'ConfigureView per-direction sections', () => {
 		unmount();
 
 		// A settings field with no groups beneath it has nothing to divide from.
-		renderConfigureView( { integrations: outboundIntegration( [] ) } );
+		const { unmount: unmountEmpty } = renderConfigureView( { integrations: outboundIntegration( [] ) } );
 		expect( screen.getByLabelText( 'Metadata prefix' ).value ).toBe( 'NP_' );
+		expect( screen.queryByTestId( 'collapsible-group' ) ).toBeNull();
+		expect( screen.queryAllByTestId( 'group-divider' ) ).toHaveLength( 0 );
+		unmountEmpty();
+
+		// Groups with no settings field above them have nothing to divide from
+		// either: the section toggle's own divider already separates them.
+		renderConfigureView( { integrations: bidirectionalIntegration() } );
+		expect( screen.getByTestId( 'collapsible-group' ) ).toBeTruthy();
 		expect( screen.queryAllByTestId( 'group-divider' ) ).toHaveLength( 0 );
 	} );
 
@@ -796,6 +818,9 @@ describe( 'ConfigureView per-direction sections', () => {
 		expect( screen.getByLabelText( 'Enable outbound sync' ).checked ).toBe( true );
 		expect( screen.queryAllByTestId( 'toggle-divider' ) ).toHaveLength( 0 );
 		expect( screen.queryAllByTestId( 'group-divider' ) ).toHaveLength( 0 );
+		// The group renders its own wrapper even with no items in it, so the
+		// guard has to keep it out of the column rather than let it collapse.
+		expect( screen.queryByTestId( 'collapsible-group' ) ).toBeNull();
 	} );
 
 	// A select whose options never arrived renders nothing, so a Settings group

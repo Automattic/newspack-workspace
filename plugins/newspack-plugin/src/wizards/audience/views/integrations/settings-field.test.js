@@ -28,17 +28,23 @@ describe( 'settingsFieldRenders', () => {
 		expect( settingsFieldRenders( { type: 'hidden' } ) ).toBe( false );
 	} );
 
-	it( 'reports no output for a select with no options', () => {
-		expect( settingsFieldRenders( { type: 'select' } ) ).toBe( false );
-		expect( settingsFieldRenders( { type: 'select', options: [] } ) ).toBe( false );
+	// A select and a metadata field both render from their options, so neither
+	// puts anything on screen worth spacing when the list comes back empty.
+	it( 'reports no output for an option-driven field with no options', () => {
+		[ 'select', 'metadata' ].forEach( type => {
+			expect( settingsFieldRenders( { type } ) ).toBe( false );
+			expect( settingsFieldRenders( { type, options: [] } ) ).toBe( false );
+		} );
 	} );
 
-	it( 'reports output for a select that has options', () => {
-		expect( settingsFieldRenders( { type: 'select', options: [ { value: 'a', label: 'A' } ] } ) ).toBe( true );
+	it( 'reports output for an option-driven field that has options', () => {
+		[ 'select', 'metadata' ].forEach( type => {
+			expect( settingsFieldRenders( { type, options: [ { value: 'a', label: 'A' } ] } ) ).toBe( true );
+		} );
 	} );
 
 	it( 'reports output for every other field type', () => {
-		[ 'text', 'password', 'number', 'textarea', 'checkbox', 'metadata', 'oauth' ].forEach( type => {
+		[ 'text', 'password', 'number', 'textarea', 'checkbox', 'oauth' ].forEach( type => {
 			expect( settingsFieldRenders( { type } ) ).toBe( true );
 		} );
 	} );
