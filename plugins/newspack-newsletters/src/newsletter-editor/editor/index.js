@@ -37,7 +37,6 @@ const Editor = compose( [
 		return {
 			html: meta[ newspack_email_editor_data.email_html_meta ],
 			colorPalette: colors.reduce( ( _colors, { slug, color } ) => ( { ..._colors, [ slug ]: color } ), {} ),
-			meta,
 			sent,
 			newsletterSendErrors: meta.newsletter_send_errors,
 			isCustomFieldsMetaBoxActive: getAllMetaBoxes().some( box => box.id === 'postcustom' ),
@@ -69,6 +68,17 @@ const Editor = compose( [
 	sent,
 	successNote,
 } ) => {
+	// This component holds no validation-based saving lock, by design. Sending is
+	// gated by the Send button itself (see components/send-button), which is the
+	// control that dispatches to the ESP; an incomplete newsletter is still a
+	// perfectly good draft. WordPress 7.1 added the post-saving lock to core's
+	// "Save draft" disabled condition, so holding one here left authors unable to
+	// save work in progress until they had filled in sender and list (NEWS-2888).
+	//
+	// Note this is only about the *validation* lock: `editor/mjml` still takes a
+	// short-lived `newspack-newsletters-refresh-html` saving lock around the
+	// post-save HTML refresh, so a greyed-out "Save draft" is not automatically
+	// this file's doing.
 	const [ publishEl ] = useState( document.createElement( 'div' ) );
 
 	useEffect( () => {
@@ -88,14 +98,6 @@ const Editor = compose( [
 			method: 'POST',
 		} );
 	}, [ JSON.stringify( colorPalette ) ] );
-
-	// Sending is gated on newsletter validation by the Send button itself (see
-	// components/send-button), which is the control that actually dispatches to
-	// the ESP. Saving deliberately is not gated: an incomplete newsletter is a
-	// perfectly good draft, and holding a post-saving lock open would also disable
-	// "Save draft" on WordPress 7.1+, which added the saving lock to that button's
-	// disabled condition. That left authors unable to save work in progress until
-	// they had filled in sender and list (NEWS-2888).
 
 	useEffect( () => {
 		if ( sent ) {
