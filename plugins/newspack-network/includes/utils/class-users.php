@@ -135,10 +135,11 @@ class Users {
 			$avatar_url = $user_data[ $avatar_meta_key ]['full'];
 
 			// The avatar URL comes from the network event payload and is fetched server-side
-			// (media_sideload_image -> download_url -> wp_remote_get, which does not block
-			// private/reserved hosts), so a peer could otherwise make this site request an
-			// internal address (SSRF). Reject anything that isn't a valid external URL.
-			if ( ! is_string( $avatar_url ) || ! wp_http_validate_url( $avatar_url ) ) {
+			// via media_sideload_image -> download_url -> wp_safe_remote_get. Core blocks
+			// RFC1918 and loopback there but not the 169.254.0.0/16 cloud-metadata range, so
+			// a peer could otherwise make this site request that internal address (SSRF).
+			// is_safe_sideload_url() adds the reserved-range check core omits.
+			if ( ! Network::is_safe_sideload_url( $avatar_url ) ) {
 				Debugger::log( 'Avatar URL is not a valid external URL, skipping sideload' );
 				return false;
 			}

@@ -10,6 +10,7 @@ namespace Newspack_Network\Content_Distribution;
 use Newspack_Network\Content_Distribution as Content_Distribution_Class;
 use Newspack_Network\Debugger;
 use Newspack_Network\User_Update_Watcher;
+use Newspack_Network\Utils\Network;
 use Newspack_Network\Utils\Users as User_Utils;
 use WP_Error;
 use WP_Post;
@@ -459,6 +460,15 @@ class Incoming_Post {
 			if ( $strip_photon( $thumbnail_url ) === $strip_photon( $current_thumbnail_url ) ) {
 				return;
 			}
+		}
+
+		// The thumbnail URL comes from the peer's payload and is fetched server-side. Core's
+		// wp_safe_remote_get blocks RFC1918 and loopback but not the 169.254.0.0/16
+		// cloud-metadata range, so refuse any URL that resolves into a private or reserved
+		// range before making the request (SSRF).
+		if ( ! Network::is_safe_sideload_url( $thumbnail_url ) ) {
+			self::log( 'Featured image URL is not a valid external URL, skipping sideload for post ' . $this->ID );
+			return;
 		}
 
 		if ( ! function_exists( 'media_sideload_image' ) ) {
