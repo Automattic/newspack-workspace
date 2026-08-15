@@ -30,12 +30,7 @@ jest.mock( '../../../../../packages/components/src', () => {
 	return {
 		DataViews: () => null,
 		Badge: () => null,
-		Notice: ( { noticeText, children } ) => (
-			<div role="alert">
-				{ noticeText }
-				{ children }
-			</div>
-		),
+		WizardBanner: ( { children } ) => <>{ children }</>,
 		Router: { useHistory: () => history },
 	};
 } );
@@ -160,7 +155,7 @@ describe( 'the Pricing Rules list header count', () => {
 
 		expect( publishedSection().label ).toBe( 'Pricing Rules' );
 		expect( publishedSection().count ).toBeUndefined();
-		expect( screen.getByRole( 'alert' ) ).toHaveTextContent( 'Could not load pricing rules.' );
+		expect( document.querySelector( '.components-notice.is-error' ) ).toHaveTextContent( 'Could not load pricing rules.' );
 		expect( screen.getByRole( 'button', { name: 'Retry' } ) ).toBeInTheDocument();
 	} );
 } );

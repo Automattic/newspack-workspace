@@ -30,12 +30,7 @@ jest.mock( '../../../../../packages/components/src', () => {
 	return {
 		DataViews: () => null,
 		Badge: () => null,
-		Notice: ( { noticeText, children } ) => (
-			<div role="alert">
-				{ noticeText }
-				{ children }
-			</div>
-		),
+		WizardBanner: ( { children } ) => <>{ children }</>,
 		Router: { useHistory: () => history },
 	};
 } );
@@ -157,7 +152,7 @@ describe( 'the Plans list header count', () => {
 
 		expect( publishedSection().count ).toBeUndefined();
 		expect( publishedSection().label ).toBe( 'Subscriptions' );
-		expect( screen.getByRole( 'alert' ) ).toHaveTextContent( 'Could not load subscription products.' );
+		expect( document.querySelector( '.components-notice.is-error' ) ).toHaveTextContent( 'Could not load subscription products.' );
 		expect( screen.getByRole( 'button', { name: 'Retry' } ) ).toBeInTheDocument();
 	} );
 } );

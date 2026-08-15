@@ -16,12 +16,12 @@ import { useDispatch } from '@wordpress/data';
 import apiFetch from '@wordpress/api-fetch';
 import { filterSortAndPaginate } from '@wordpress/dataviews';
 import type { Action, Field, View } from '@wordpress/dataviews';
-import { Spinner, Notice as CoreNotice, Button } from '@wordpress/components';
+import { Spinner, Notice, Button } from '@wordpress/components';
 
 /**
  * Internal dependencies
  */
-import { DataViews, Badge, Notice, Router } from '../../../../../packages/components/src';
+import { DataViews, Badge, Router, WizardBanner } from '../../../../../packages/components/src';
 import { formatCount } from '../../../../../packages/components/src/breadcrumbs/format-count';
 import { WIZARD_STORE_NAMESPACE } from '../../../../../packages/components/src/wizard/store';
 import { PolicyChips, EffectivePrice } from './policy-cells';
@@ -388,23 +388,28 @@ export default function SubscriptionProductsList( { scope = 'subscriptions' }: {
 
 	if ( hasError ) {
 		return (
-			<Notice isError noticeText={ __( 'Could not load subscription products.', 'newspack-plugin' ) }>
-				<Button variant="link" onClick={ fetchData }>
-					{ __( 'Retry', 'newspack-plugin' ) }
-				</Button>
-			</Notice>
+			<WizardBanner>
+				<Notice
+					className="newspack-wizard__load-error"
+					status="error"
+					isDismissible={ false }
+					actions={ [ { label: __( 'Retry', 'newspack-plugin' ), onClick: fetchData } ] }
+				>
+					{ __( 'Could not load subscription products.', 'newspack-plugin' ) }
+				</Notice>
+			</WizardBanner>
 		);
 	}
 
 	return (
 		<div className="newspack-subscription-products">
 			{ policyIsMock && (
-				<CoreNotice status="info" isDismissible={ false } className="newspack-subscription-products__mock-notice">
+				<Notice status="info" isDismissible={ false } className="newspack-subscription-products__mock-notice">
 					{ __(
 						'Applied policies and effective price use mock data. They swap to the live policy engine through a single read API with no UI change.',
 						'newspack-plugin'
 					) }
-				</CoreNotice>
+				</Notice>
 			) }
 			<DataViews
 				className="newspack-subscription-products__dataviews"

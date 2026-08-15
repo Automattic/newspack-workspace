@@ -7,7 +7,7 @@ import classnames from 'classnames';
  * WordPress dependencies.
  */
 // Notice is aliased: `Notice` below is Newspack's own, which this file also uses.
-import { DropdownMenu, MenuGroup, MenuItem, Notice as CoreNotice } from '@wordpress/components';
+import { DropdownMenu, MenuGroup, MenuItem, Notice as CoreNotice, SlotFillProvider, createSlotFill } from '@wordpress/components';
 import { useDispatch, useSelect } from '@wordpress/data';
 import { cloneElement, createInterpolateElement, isValidElement, useEffect, useState, forwardRef } from '@wordpress/element';
 import { __ } from '@wordpress/i18n';
@@ -24,6 +24,14 @@ import WizardSnackbar from './components/WizardSnackbar';
 import WizardError from './components/WizardError';
 
 registerStore();
+
+/**
+ * Renders a view's page-level banner outside the padded content column, so it sits
+ * flush beneath the header rather than indented within the section it describes.
+ */
+const { Slot: WizardBannerSlot, Fill: WizardBanner } = createSlotFill( 'NewspackWizardBanner' );
+
+export { WizardBanner };
 
 /**
  * Icon registry for resolving icon name strings passed through the data store.
@@ -218,6 +226,7 @@ const Wizard = (
 
 			<div className="newspack-wizard__main">
 				{ inertGatingNotice }
+				<WizardBannerSlot bubblesVirtually />
 				<Switch>
 					{ routedSections.map( ( section, index ) => {
 						const SectionComponent = section.render;
@@ -321,38 +330,40 @@ const Wizard = (
 		) : undefined;
 
 	return (
-		<div ref={ ref }>
-			<div
-				className={ classnames( isLoading ? 'newspack-wizard__is-loading' : 'newspack-wizard__is-loaded', {
-					'newspack-wizard__is-loading-quiet': isQuietLoading,
-				} ) }
-			>
-				<HashRouter hashType="slash">
-					{ newspack_aux_data.is_debug_mode && <Notice debugMode /> }
-					<WizardHeaderRegion
-						hideHeader={ hideHeader }
-						headerText={ headerText }
-						sections={ routedSections }
-						sectionName={ sectionName }
-						subTitle={ subHeaderText }
-						actions={ headerActions }
-						tabbedNavigation={ tabbedNavigation }
-					>
-						{ content }
-					</WizardHeaderRegion>
-				</HashRouter>
-				{ notices?.length > 0 && (
-					<div className="newspack-wizard__snackbar-list">
-						{ notices.map( ( notice, index ) => (
-							<WizardSnackbar key={ notice.id || index } id={ notice.id } type={ notice.type } actions={ notice.actions }>
-								{ notice.message }
-							</WizardSnackbar>
-						) ) }
-					</div>
-				) }
+		<SlotFillProvider>
+			<div ref={ ref }>
+				<div
+					className={ classnames( isLoading ? 'newspack-wizard__is-loading' : 'newspack-wizard__is-loaded', {
+						'newspack-wizard__is-loading-quiet': isQuietLoading,
+					} ) }
+				>
+					<HashRouter hashType="slash">
+						{ newspack_aux_data.is_debug_mode && <Notice debugMode /> }
+						<WizardHeaderRegion
+							hideHeader={ hideHeader }
+							headerText={ headerText }
+							sections={ routedSections }
+							sectionName={ sectionName }
+							subTitle={ subHeaderText }
+							actions={ headerActions }
+							tabbedNavigation={ tabbedNavigation }
+						>
+							{ content }
+						</WizardHeaderRegion>
+					</HashRouter>
+					{ notices?.length > 0 && (
+						<div className="newspack-wizard__snackbar-list">
+							{ notices.map( ( notice, index ) => (
+								<WizardSnackbar key={ notice.id || index } id={ notice.id } type={ notice.type } actions={ notice.actions }>
+									{ notice.message }
+								</WizardSnackbar>
+							) ) }
+						</div>
+					) }
+				</div>
+				{ ! isLoading && <Footer simple={ hasSimpleFooter } /> }
 			</div>
-			{ ! isLoading && <Footer simple={ hasSimpleFooter } /> }
-		</div>
+		</SlotFillProvider>
 	);
 };
 

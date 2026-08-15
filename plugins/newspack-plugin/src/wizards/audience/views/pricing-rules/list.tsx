@@ -14,6 +14,7 @@ import type { Action, Field, View, RenderModalProps } from '@wordpress/dataviews
 import {
 	Spinner,
 	Button,
+	Notice,
 	__experimentalVStack as VStack, // eslint-disable-line @wordpress/no-unsafe-wp-apis
 	__experimentalHStack as HStack, // eslint-disable-line @wordpress/no-unsafe-wp-apis
 } from '@wordpress/components';
@@ -21,7 +22,7 @@ import {
 /**
  * Internal dependencies
  */
-import { DataViews, Badge, Notice, Router } from '../../../../../packages/components/src';
+import { DataViews, Badge, Router, WizardBanner } from '../../../../../packages/components/src';
 import { formatCount } from '../../../../../packages/components/src/breadcrumbs/format-count';
 import { WIZARD_STORE_NAMESPACE } from '../../../../../packages/components/src/wizard/store';
 import CatalogImpact from './catalog-impact';
@@ -276,11 +277,16 @@ export default function PricingRulesList() {
 				</div>
 			) }
 			{ ! isLoading && hasError && (
-				<Notice isError noticeText={ __( 'Could not load pricing rules.', 'newspack-plugin' ) }>
-					<Button variant="link" onClick={ fetchData }>
-						{ __( 'Retry', 'newspack-plugin' ) }
-					</Button>
-				</Notice>
+				<WizardBanner>
+					<Notice
+						className="newspack-wizard__load-error"
+						status="error"
+						isDismissible={ false }
+						actions={ [ { label: __( 'Retry', 'newspack-plugin' ), onClick: fetchData } ] }
+					>
+						{ __( 'Could not load pricing rules.', 'newspack-plugin' ) }
+					</Notice>
+				</WizardBanner>
 			) }
 			{ ! isLoading && ! hasError && (
 				<DataViews
