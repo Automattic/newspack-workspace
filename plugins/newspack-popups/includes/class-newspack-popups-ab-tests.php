@@ -25,6 +25,16 @@ final class Newspack_Popups_AB_Tests {
 
 	const USER_META_BUCKET_PREFIX = 'newspack_popups_ab_bucket_';
 
+	/**
+	 * Autoloaded flag recording whether any valid test exists.
+	 *
+	 * Three states, and the distinction matters: '1' and absent both fall through to
+	 * the discovery query, only '0' short-circuits. Invalidation therefore deletes
+	 * the option rather than writing '0', so a missed invalidation degrades to an
+	 * extra query rather than to tests silently not running.
+	 */
+	const OPTION_HAS_TESTS = 'newspack_popups_ab_has_tests';
+
 	const VALID_VARIANTS = [ 'a', 'b', 'c', 'd' ];
 
 	const DEFAULT_CONTROL_SHARE = 50;
@@ -41,6 +51,51 @@ final class Newspack_Popups_AB_Tests {
 	 */
 	public static function init() {
 		add_action( 'init', [ __CLASS__, 'register_meta' ] );
+
+		// Anything that can add or remove a test invalidates the flag. Scoped to the
+		// prompts CPT and to the test-id meta key: a news site saves posts constantly,
+		// and invalidating on those would reinstate the per-request query this exists
+		// to avoid. Meta hooks are covered separately because update_post_meta() can
+		// set a test id without firing save_post.
+		add_action( 'save_post_' . Newspack_Popups::NEWSPACK_POPUPS_CPT, [ __CLASS__, 'invalidate_has_tests' ] );
+		foreach ( [ 'deleted_post', 'trashed_post', 'untrashed_post' ] as $hook ) {
+			add_action( $hook, [ __CLASS__, 'invalidate_has_tests_for_post' ] );
+		}
+		foreach ( [ 'added_post_meta', 'updated_post_meta', 'deleted_post_meta' ] as $hook ) {
+			add_action( $hook, [ __CLASS__, 'invalidate_has_tests_for_meta' ], 10, 3 );
+		}
+	}
+
+	/**
+	 * Drop the has-tests flag.
+	 */
+	public static function invalidate_has_tests() {
+		delete_option( self::OPTION_HAS_TESTS );
+		self::$tests_config = null;
+	}
+
+	/**
+	 * Drop the flag when a prompt is deleted, trashed or restored.
+	 *
+	 * @param int $post_id Post ID.
+	 */
+	public static function invalidate_has_tests_for_post( $post_id ) {
+		if ( Newspack_Popups::NEWSPACK_POPUPS_CPT === get_post_type( $post_id ) ) {
+			self::invalidate_has_tests();
+		}
+	}
+
+	/**
+	 * Drop the flag when a prompt's test-id meta changes.
+	 *
+	 * @param int    $meta_id   Meta ID.
+	 * @param int    $object_id Post ID.
+	 * @param string $meta_key  Meta key.
+	 */
+	public static function invalidate_has_tests_for_meta( $meta_id, $object_id, $meta_key ) {
+		if ( self::META_TEST_ID === $meta_key ) {
+			self::invalidate_has_tests_for_post( $object_id );
+		}
 	}
 
 	/**
@@ -186,6 +241,15 @@ final class Newspack_Popups_AB_Tests {
 			return self::$tests_config;
 		}
 
+		// Every non-AMP front-end request reaches this, on every site. WP's query cache
+		// absorbs the repeat cost only until the next post save, which on a news site
+		// is continuous -- so without this a site with zero tests pays a postmeta-join
+		// query more or less per request, forever.
+		if ( '0' === get_option( self::OPTION_HAS_TESTS, '' ) ) {
+			self::$tests_config = [];
+			return self::$tests_config;
+		}
+
 		$prompt_ids = get_posts(
 			[
 				'post_type'      => Newspack_Popups::NEWSPACK_POPUPS_CPT,
@@ -252,6 +316,10 @@ final class Newspack_Popups_AB_Tests {
 		foreach ( $config as $test_id => $test ) {
 			sort( $config[ $test_id ]['variants'] );
 		}
+
+		// update_option() is a no-op when the stored value already matches, so this
+		// does not write on every request.
+		update_option( self::OPTION_HAS_TESTS, empty( $config ) ? '0' : '1', true );
 
 		self::$tests_config = $config;
 		return $config;
@@ -375,6 +443,7 @@ final class Newspack_Popups_AB_Tests {
 	 */
 	public static function reset_config_cache() {
 		self::$tests_config = null;
+		delete_option( self::OPTION_HAS_TESTS );
 	}
 }
 

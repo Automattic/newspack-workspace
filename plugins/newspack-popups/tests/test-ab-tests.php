@@ -38,6 +38,73 @@ class ABTestsTest extends WP_UnitTestCase_PageWithPopups {
 	}
 
 	/**
+	 * A site with no tests records the flag, so later requests skip the query.
+	 */
+	public function test_zero_test_site_records_the_has_tests_flag() {
+		self::assertSame( [], Newspack_Popups_AB_Tests::get_tests_config() );
+		self::assertSame( '0', get_option( Newspack_Popups_AB_Tests::OPTION_HAS_TESTS ) );
+	}
+
+	/**
+	 * A recorded "no tests" must not survive a test being created.
+	 *
+	 * This is the failure the flag can cause: a stale '0' short-circuits the config
+	 * builder, and every live test silently stops running with nothing in the logs.
+	 * Creating a variant has to invalidate it through the meta hook.
+	 */
+	public function test_creating_a_test_invalidates_a_stale_flag() {
+		update_option( Newspack_Popups_AB_Tests::OPTION_HAS_TESTS, '0' );
+
+		$this->create_test_variant( 'flag-test', 'a' );
+		$this->create_test_variant( 'flag-test', 'b' );
+
+		$config = Newspack_Popups_AB_Tests::get_tests_config();
+		self::assertArrayHasKey( 'flag-test', $config, 'A stale flag must not hide a newly created test.' );
+	}
+
+	/**
+	 * Adding test meta to an existing prompt invalidates the flag.
+	 *
+	 * Distinct from the case above: creating a prompt fires save_post, which
+	 * invalidates on its own, so that path exercises the post hook and never the
+	 * meta hook. update_post_meta() on an already-saved prompt fires neither
+	 * save_post nor any post-lifecycle hook, so only the meta hook can catch it --
+	 * and a test id set this way is how a test can appear with no post save at all.
+	 */
+	public function test_setting_test_meta_on_an_existing_prompt_invalidates_the_flag() {
+		$control    = $this->createPopup();
+		$challenger = $this->createPopup();
+
+		// Record "no tests" the way a real request would.
+		self::assertSame( [], Newspack_Popups_AB_Tests::get_tests_config() );
+		self::assertSame( '0', get_option( Newspack_Popups_AB_Tests::OPTION_HAS_TESTS ) );
+
+		update_post_meta( $control, Newspack_Popups_AB_Tests::META_TEST_ID, 'meta-only-test' );
+		update_post_meta( $control, Newspack_Popups_AB_Tests::META_VARIANT, 'a' );
+		update_post_meta( $challenger, Newspack_Popups_AB_Tests::META_TEST_ID, 'meta-only-test' );
+		update_post_meta( $challenger, Newspack_Popups_AB_Tests::META_VARIANT, 'b' );
+
+		$config = Newspack_Popups_AB_Tests::get_tests_config();
+		self::assertArrayHasKey( 'meta-only-test', $config, 'A test id set via meta must invalidate the flag.' );
+	}
+
+	/**
+	 * Deleting the last prompt of a test invalidates the flag.
+	 */
+	public function test_deleting_a_prompt_invalidates_the_flag() {
+		$control    = $this->create_test_variant( 'gone-test', 'a' );
+		$challenger = $this->create_test_variant( 'gone-test', 'b' );
+		self::assertArrayHasKey( 'gone-test', Newspack_Popups_AB_Tests::get_tests_config() );
+		self::assertSame( '1', get_option( Newspack_Popups_AB_Tests::OPTION_HAS_TESTS ) );
+
+		wp_delete_post( $control, true );
+		wp_delete_post( $challenger, true );
+
+		self::assertFalse( get_option( Newspack_Popups_AB_Tests::OPTION_HAS_TESTS ), 'Deleting a prompt must drop the flag.' );
+		self::assertSame( [], Newspack_Popups_AB_Tests::get_tests_config() );
+	}
+
+	/**
 	 * A/B meta keys are registered on the prompts CPT with REST support.
 	 */
 	public function test_ab_meta_registered() {
