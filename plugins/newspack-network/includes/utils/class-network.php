@@ -70,15 +70,18 @@ class Network {
 	}
 
 	/**
-	 * Sideload a peer-supplied image, validating every request hop against the SSRF guard.
+	 * Sideload a peer-supplied image, refusing the initial URL or any redirect hop that
+	 * resolves into a blocked range.
 	 *
-	 * The URL the peer gave us is validated by is_safe_sideload_url(), but that URL can 302
-	 * to an internal address, and core re-checks each hop with the same wp_http_validate_url
-	 * this guard exists to strengthen — so a redirect could reach the address we just refused.
-	 * This runs is_safe_sideload_url() on every HTTP request the sideload makes, the initial
-	 * fetch and each redirect target alike, refusing any that resolves into a blocked range.
-	 * Legitimate images behind a redirect still load; only redirects to internal addresses
-	 * are stopped. Callers should still pre-check the URL so an obviously bad one skips early.
+	 * The fetch (media_sideload_image() -> download_url()) follows redirects inside the bundled
+	 * Requests library, which never re-enters WP_Http::request() — so a pre_http_request or
+	 * http_request_args filter would only ever see the initial URL. Core re-validates each
+	 * hop through the Requests before_redirect bridge, but with wp_http_validate_url(), the
+	 * same weak check this guard exists to strengthen, so on older WordPress a 302 to
+	 * 169.254.169.254 still lands. This registers on that bridge and re-checks every redirect
+	 * target with is_safe_sideload_url(), and validates the initial URL up front so the
+	 * wrapper holds even if a caller skips its own pre-check. Legitimate images behind a
+	 * redirect still load; only hops into a blocked range are stopped.
 	 *
 	 * @param string      $url     External image URL.
 	 * @param int         $post_id Parent post ID (0 for none).
@@ -88,23 +91,40 @@ class Network {
 	 * @return int|string|\WP_Error Whatever media_sideload_image returns; WP_Error if a hop is refused.
 	 */
 	public static function sideload_peer_image( string $url, int $post_id = 0, ?string $desc = null, string $return = 'html' ) {
+		if ( ! self::is_safe_sideload_url( $url ) ) {
+			return new \WP_Error( 'newspack_network_unsafe_sideload_url', __( 'Refused a sideload request to a private or reserved address.', 'newspack-network' ) );
+		}
+
 		if ( ! function_exists( 'media_sideload_image' ) ) {
 			require_once ABSPATH . 'wp-admin/includes/media.php';
 			require_once ABSPATH . 'wp-admin/includes/file.php';
 			require_once ABSPATH . 'wp-admin/includes/image.php';
 		}
 
-		$guard = function ( $pre, $args, $request_url ) {
-			if ( is_string( $request_url ) && ! self::is_safe_sideload_url( $request_url ) ) {
-				return new \WP_Error( 'newspack_network_unsafe_sideload_url', __( 'Refused a sideload request to a private or reserved address.', 'newspack-network' ) );
-			}
-			return $pre;
-		};
-		add_filter( 'pre_http_request', $guard, 10, 3 );
+		// Requests fires this bridge action before following each redirect; the callback
+		// throws on an unsafe target, which Requests turns into a WP_Error for the caller.
+		add_action( 'requests-requests.before_redirect', [ __CLASS__, 'assert_safe_redirect' ] ); // phpcs:ignore WordPress.NamingConventions.ValidHookName.UseUnderscores
 		try {
 			return media_sideload_image( $url, $post_id, $desc, $return );
 		} finally {
-			remove_filter( 'pre_http_request', $guard, 10 );
+			remove_action( 'requests-requests.before_redirect', [ __CLASS__, 'assert_safe_redirect' ] ); // phpcs:ignore WordPress.NamingConventions.ValidHookName.UseUnderscores
+		}
+	}
+
+	/**
+	 * Refuse a redirect whose target resolves into a private or reserved range.
+	 *
+	 * Registered on the Requests before_redirect bridge during a peer sideload. Throwing
+	 * aborts the redirect the way core's own reject_unsafe_urls check does, but through
+	 * is_safe_sideload_url(), which blocks the ranges core misses on older WordPress.
+	 *
+	 * @param string $location Redirect target URL.
+	 *
+	 * @throws \WpOrg\Requests\Exception If the target is not a safe sideload URL.
+	 */
+	public static function assert_safe_redirect( $location ) {
+		if ( is_string( $location ) && ! self::is_safe_sideload_url( $location ) ) {
+			throw new \WpOrg\Requests\Exception( esc_html__( 'Refused a sideload redirect to a private or reserved address.', 'newspack-network' ), 'newspack_network_unsafe_sideload_redirect' );
 		}
 	}
 
