@@ -43,8 +43,13 @@ class Content_Gate_Excerpt {
 	public static function filter_get_the_excerpt( $text, $post = null ) {
 		$resolved = $post instanceof \WP_Post ? $post : get_post( $post );
 
+		// Handing an unresolvable value to core would not fail -- wp_trim_excerpt()
+		// calls get_the_content( '', false, null ), which falls back to $GLOBALS['post']
+		// and builds an excerpt from whatever the loop has set up, unsanitized. A filter
+		// whose job is withholding content must not answer for a post it was never
+		// asked about, so return $text and let the caller have nothing.
 		if ( ! $resolved instanceof \WP_Post ) {
-			return wp_trim_excerpt( $text, $post );
+			return $text;
 		}
 
 		// Core returns a non-empty $text untouched; the branches below deliberately
@@ -69,12 +74,15 @@ class Content_Gate_Excerpt {
 		$sanitized->filter = 'raw';
 
 		// A manually written excerpt is the author's own words; core returns it
-		// untouched and so do we. Read it from the post rather than from $text,
-		// which is whatever the filter chain holds by the time this runs and is not
-		// necessarily the manual excerpt. If an earlier filter blanked $text, core
-		// rebuilds — from the sanitized clone, not the original.
+		// untouched and so do we. Pass the post's own excerpt rather than $text: by
+		// the time this runs $text is whatever the filter chain holds, and core
+		// returns a non-empty value verbatim, so an upstream filter deriving $text
+		// from post_content would put gated blocks straight into the teaser. The auto
+		// branch below refuses to trust $text for the same reason; this keeps the two
+		// consistent. The cost is that on a gated post a filter's substitution loses
+		// to the author's excerpt, which is the conservative way to lose.
 		if ( '' !== trim( (string) $resolved->post_excerpt ) ) {
-			return wp_trim_excerpt( $text, $sanitized );
+			return wp_trim_excerpt( $resolved->post_excerpt, $sanitized );
 		}
 
 		// Pass an empty $text so core rebuilds from the sanitized post.

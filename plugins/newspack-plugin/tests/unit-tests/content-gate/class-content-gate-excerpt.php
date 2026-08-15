@@ -6,6 +6,7 @@
  */
 
 use Newspack\Block_Visibility;
+use Newspack\Content_Gate_Excerpt;
 
 /**
  * Excerpt gating tests.
@@ -242,5 +243,62 @@ class Newspack_Test_Content_Gate_Excerpt extends WP_UnitTestCase {
 		$excerpt = apply_filters( 'get_the_excerpt', $display->post_excerpt, $display );
 
 		$this->assertStringNotContainsString( 'SECRETMARK', $excerpt, 'A display-form post must not bypass sanitization.' );
+	}
+
+	/**
+	 * An unresolvable post yields nothing rather than the loop's current post.
+	 *
+	 * Core would fall back to $GLOBALS['post'] via get_the_content( '', false, null ),
+	 * so a gated post set up in the loop would supply the excerpt for a post this
+	 * filter was never asked about.
+	 */
+	public function test_unresolvable_post_does_not_borrow_the_global_post() {
+		$attrs   = '{"newspackAccessControlMode":"custom","newspackAccessControlRules":{"registration":{"active":true}},"newspackAccessControlVisibility":"visible"}';
+		$post_id = $this->make_post( $attrs );
+
+		$GLOBALS['post'] = get_post( $post_id );
+		setup_postdata( $GLOBALS['post'] );
+		wp_set_current_user( 0 );
+		Block_Visibility::reset_cache_for_tests();
+
+		// Call the filter method directly rather than through apply_filters(): other
+		// callbacks on this hook assume core's contract of a WP_Post second argument
+		// and fatal on a bare ID, which would mask the branch under test.
+		$excerpt = Content_Gate_Excerpt::filter_get_the_excerpt( '', 99999999 );
+
+		$this->assertStringNotContainsString( 'SECRETMARK', $excerpt, 'An unresolvable post must not borrow the global post.' );
+		$this->assertStringNotContainsString( 'PUBLICMARK', $excerpt, 'An unresolvable post must not build an excerpt at all.' );
+
+		unset( $GLOBALS['post'] );
+	}
+
+	/**
+	 * A manual excerpt plus a non-empty upstream $text does not leak gated blocks.
+	 *
+	 * Core returns a non-empty $text verbatim, so a filter deriving $text from
+	 * post_content would reach the teaser on a post that also has a hand-written
+	 * excerpt -- the quadrant the auto-branch test does not cover.
+	 */
+	public function test_manual_excerpt_with_upstream_text_does_not_leak() {
+		$attrs   = '{"newspackAccessControlMode":"custom","newspackAccessControlRules":{"registration":{"active":true}},"newspackAccessControlVisibility":"visible"}';
+		$post_id = $this->make_post( $attrs );
+		wp_update_post(
+			[
+				'ID'           => $post_id,
+				'post_excerpt' => 'Hand written.',
+			]
+		);
+
+		wp_set_current_user( 0 );
+		Block_Visibility::reset_cache_for_tests();
+
+		$from_content = function () use ( $post_id ) {
+			return get_post( $post_id )->post_content;
+		};
+		add_filter( 'get_the_excerpt', $from_content, 6 );
+		$excerpt = get_the_excerpt( $post_id );
+		remove_filter( 'get_the_excerpt', $from_content, 6 );
+
+		$this->assertStringNotContainsString( 'SECRETMARK', $excerpt, 'A manual excerpt must not carry gated blocks from upstream $text.' );
 	}
 }
