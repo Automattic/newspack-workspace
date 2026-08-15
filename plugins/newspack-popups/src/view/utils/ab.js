@@ -41,7 +41,22 @@ export const getReaderId = ( cookieString = null ) => {
 	const cookieName = getViewData().cid_cookie || DEFAULT_CID_COOKIE;
 	const cookies = null === cookieString ? document.cookie || '' : cookieString;
 	const match = cookies.match( new RegExp( '(?:^|;\\s*)' + cookieName + '=([^;]+)' ) );
-	return match ? decodeURIComponent( match[ 1 ] ) : null;
+	if ( ! match ) {
+		return null;
+	}
+	try {
+		// A cookie value the reader set by hand can contain a stray percent, which
+		// throws URIError here. Uncaught, that aborts prompt processing for the whole
+		// page, so an unreadable id degrades to "no id" rather than to no prompts.
+		//
+		// The server reads this same cookie with sanitize_text_field(), which does not
+		// URL-decode. The two agree for Newspack-generated client IDs; a value needing
+		// decoding is a second way the pair can diverge, beyond the ASCII-only
+		// precondition documented on computeBucket().
+		return decodeURIComponent( match[ 1 ] );
+	} catch ( e ) {
+		return null;
+	}
 };
 
 /**

@@ -44,6 +44,13 @@ describe( 'getReaderId', () => {
 		expect( getReaderId( 'foo=bar' ) ).toBeNull();
 		expect( getReaderId( '' ) ).toBeNull();
 	} );
+	it( 'returns null instead of throwing on an undecodable cookie value', () => {
+		// A stray percent makes decodeURIComponent throw URIError. Uncaught, that
+		// propagates out of prompt processing and no prompts render on the page, so
+		// the failure has to degrade to "no reader id", not to "no prompts".
+		expect( () => getReaderId( 'newspack-cid=100%' ) ).not.toThrow();
+		expect( getReaderId( 'newspack-cid=100%' ) ).toBeNull();
+	} );
 } );
 
 describe( 'computeBucket', () => {
