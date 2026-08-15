@@ -65,6 +65,15 @@ amp-script .tag-labels {
 	.cat-links + .tag-labels {
 		margin-left: 0.5em;
 	}
+
+	// The sponsor label is `inline-flex` globally (newspack-sponsors.scss), but
+	// `.wpnbha .cat-links` sets `display: flex` at higher specificity, which makes it
+	// block-level and drops the tag labels onto the next line. Restore its own display
+	// without touching the flex/gap layout the exclusion above exists to protect.
+	// `.wpnbpc` never overrides `.cat-links` display, so this is a no-op there.
+	.cat-links.sponsor-label:has( + .tag-labels ) {
+		display: inline-flex;
+	}
 }
 
 /* Single Posts */
