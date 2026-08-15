@@ -233,7 +233,7 @@ class Email_Preview {
 				// Card expiry warning details.
 				'*CARD_LAST_4*'           => '4242',
 				'*EXPIRY_DATE*'           => '12/2026',
-				'*RENEWAL_DATE*'          => wp_date( get_option( 'date_format', 'F j, Y' ), strtotime( '+1 year' ) ),
+				'*RENEWAL_DATE*'          => wp_date( get_option( 'date_format', 'F j, Y' ), strtotime( '+30 days' ) ),
 
 				// OTP code — stable sample value.
 				'*MAGIC_LINK_OTP*'        => '123456',

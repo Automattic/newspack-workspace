@@ -89,6 +89,15 @@ class Newspack_Test_IP_Access_Rule extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Test the bypass cookie lifetime is long enough to keep institutional
+	 * access persistent (see the COOKIE_EXPIRATION docblock).
+	 */
+	public function test_bypass_cookie_lifetime_is_at_least_thirty_days() {
+		$thirty_days_in_seconds = 30 * DAY_IN_SECONDS;
+		$this->assertGreaterThanOrEqual( $thirty_days_in_seconds, IP_Access_Rule::COOKIE_EXPIRATION );
+	}
+
+	/**
 	 * Test that the REST route is registered.
 	 */
 	public function test_rest_route_registered() {
@@ -177,7 +186,7 @@ class Newspack_Test_IP_Access_Rule extends WP_UnitTestCase {
 		$method->setAccessible( true );
 		$url = $method->invoke( null );
 
-		$this->assertSame( home_url( '/target-page/' ), $url );
+		$this->assertSame( '/target-page/', $url );
 
 		$_GET = [];
 	}
@@ -192,7 +201,7 @@ class Newspack_Test_IP_Access_Rule extends WP_UnitTestCase {
 		$method->setAccessible( true );
 		$url = $method->invoke( null );
 
-		$this->assertSame( home_url( '/' ), $url );
+		$this->assertSame( '/', $url );
 
 		$_GET = [];
 	}
@@ -207,7 +216,7 @@ class Newspack_Test_IP_Access_Rule extends WP_UnitTestCase {
 		$method->setAccessible( true );
 		$url = $method->invoke( null );
 
-		$this->assertSame( home_url( '/' ), $url );
+		$this->assertSame( '/', $url );
 	}
 
 	/**
@@ -710,5 +719,39 @@ class Newspack_Test_IP_Access_Rule extends WP_UnitTestCase {
 		$this->assertSame( $replacement, $response->get_data(), 'Response should reflect the filter return value.' );
 
 		remove_all_filters( 'newspack_content_gate_ip_allowlist' );
+	}
+
+	/**
+	 * Test the loading-page check URL is host-relative.
+	 *
+	 * The dedicated endpoint's loading page verifies via a client-side fetch.
+	 * Under a rewriting reverse proxy (e.g. a library EZproxy) an absolute URL
+	 * is left unrewritten inside the inline script, so the fetch goes direct
+	 * from the reader's real IP and bypasses the proxy. A host-relative URL
+	 * resolves against the document origin (the proxy host) and stays proxied,
+	 * so the origin sees the proxy's whitelisted IP. See NPPD-2039.
+	 */
+	public function test_check_url_is_host_relative() {
+		$method = new ReflectionMethod( IP_Access_Rule::class, 'get_check_url' );
+		$method->setAccessible( true );
+
+		$url = $method->invoke( null, null );
+
+		$this->assertStringStartsWith( '/', $url, 'Check URL should be host-relative.' );
+		$this->assertStringNotContainsString( '://', $url, 'Check URL should not contain a scheme or host.' );
+		$this->assertStringContainsString( 'institutional-access/check', $url );
+	}
+
+	/**
+	 * Test the check URL carries the institution scope and stays host-relative.
+	 */
+	public function test_check_url_includes_institution_id() {
+		$method = new ReflectionMethod( IP_Access_Rule::class, 'get_check_url' );
+		$method->setAccessible( true );
+
+		$url = $method->invoke( null, 4242 );
+
+		$this->assertStringNotContainsString( '://', $url, 'Check URL should not contain a scheme or host.' );
+		$this->assertStringContainsString( 'institution_id=4242', $url );
 	}
 }

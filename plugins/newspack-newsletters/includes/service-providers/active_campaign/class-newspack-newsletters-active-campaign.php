@@ -16,6 +16,58 @@ use Newspack\Newsletters\Send_List;
 final class Newspack_Newsletters_Active_Campaign extends \Newspack_Newsletters_Service_Provider {
 
 	/**
+	 * Default timeout, in seconds, for ActiveCampaign API requests.
+	 *
+	 * @var int
+	 */
+	const DEFAULT_REQUEST_TIMEOUT = 45;
+
+	/**
+	 * Timeout, in seconds, for best-effort cleanup requests (deleting a
+	 * previously-created campaign before a new send). ActiveCampaign
+	 * occasionally stops responding to calls that reference a particular
+	 * campaign; when that happens the campaign_list/campaign_delete cleanup must
+	 * fail fast instead of consuming the whole request budget and stranding the
+	 * send behind a stuck campaign it was only trying to tidy up.
+	 *
+	 * This bound is also reused for the safety-critical status check in
+	 * get_campaign_dispatch_state(): a fast failure there is desirable, since a
+	 * slow/unresponsive ActiveCampaign correctly routes to the fail-safe
+	 * "unverified" branch that blocks the resend. Don't lower it on the
+	 * assumption it only affects disposable cleanup calls.
+	 *
+	 * @var int
+	 */
+	const CLEANUP_REQUEST_TIMEOUT = 15;
+
+	/**
+	 * Dispatch states for a stored campaign, returned by
+	 * get_campaign_dispatch_state(): a confirmed fresh draft that is safe to
+	 * (re)send, a campaign that has already been dispatched and must never be
+	 * resent, or an indeterminate state that needs manual review before resending.
+	 */
+	const CAMPAIGN_DRAFT              = 'draft';
+	const CAMPAIGN_ALREADY_DISPATCHED = 'dispatched';
+	const CAMPAIGN_NEEDS_REVIEW       = 'needs_review';
+
+	/**
+	 * ActiveCampaign V1 campaign status codes (the `status` field on a campaign).
+	 * See https://www.activecampaign.com/api/example.php?call=campaign_status.
+	 */
+	const STATUS_DRAFT     = '0';
+	const STATUS_SCHEDULED = '1';
+	const STATUS_SENDING   = '2';
+	const STATUS_PAUSED    = '3';
+	const STATUS_STOPPED   = '4';
+	const STATUS_COMPLETED = '5';
+	const STATUS_DISABLED  = '6';
+
+	/**
+	 * Campaign statuses that can be safely deleted (not mid- or post-send).
+	 */
+	const DELETABLE_STATUSES = [ self::STATUS_DRAFT, self::STATUS_SCHEDULED, self::STATUS_DISABLED ];
+
+	/**
 	 * Provider name.
 	 *
 	 * @var string
@@ -436,13 +488,15 @@ final class Newspack_Newsletters_Active_Campaign extends \Newspack_Newsletters_S
 		$credentials = $this->api_credentials();
 		$api_path    = '/api/3/';
 		$query       = isset( $options['query'] ) ? $options['query'] : [];
+		$timeout     = isset( $options['timeout'] ) ? (int) $options['timeout'] : self::DEFAULT_REQUEST_TIMEOUT;
+		unset( $options['timeout'] );
 		$url         = add_query_arg(
 			$query,
 			rtrim( $credentials['url'], '/' ) . $api_path . $resource
 		);
 		$args        = [
 			'method'  => $method,
-			'timeout' => 45, // phpcs:ignore WordPressVIPMinimum.Performance.RemoteRequestTimeout.timeout_timeout
+			'timeout' => $timeout, // phpcs:ignore WordPressVIPMinimum.Performance.RemoteRequestTimeout.timeout_timeout
 			'headers' => [
 				'Content-Type' => 'application/json',
 				'Accept'       => 'application/json',
@@ -451,13 +505,16 @@ final class Newspack_Newsletters_Active_Campaign extends \Newspack_Newsletters_S
 		];
 		$response    = wp_safe_remote_request( $url, $args + $options );
 		if ( is_wp_error( $response ) ) {
-			return $response;
+			return $this->humanize_transport_error( $response );
 		}
 		$response_code = wp_remote_retrieve_response_code( $response );
 		$response_body = json_decode( wp_remote_retrieve_body( $response ), true );
 		$response_message = wp_remote_retrieve_response_message( $response );
 
-		if ( 400 < $response_code || ! empty( $response_body['errors'] ) ) {
+		// Treat HTTP 400 (Bad Request) as an error, not just 401+: a bare 400 with
+		// no `errors` array would otherwise slip through as a valid response and
+		// feed bad data into callers (including the dispatch-state reasoning).
+		if ( 400 <= $response_code || ! empty( $response_body['errors'] ) ) {
 			$errors = new WP_Error();
 			if ( isset( $response_body['errors'] ) && is_array( $response_body['errors'] ) ) {
 				foreach ( $response_body['errors'] as $error ) {
@@ -470,6 +527,49 @@ final class Newspack_Newsletters_Active_Campaign extends \Newspack_Newsletters_S
 			return $errors;
 		}
 		return $response_body;
+	}
+
+	/**
+	 * Translate a low-level HTTP transport failure into a publisher-friendly error.
+	 *
+	 * ActiveCampaign sometimes stops responding to calls that reference a
+	 * particular campaign, which surfaces from wp_safe_remote_request as a cURL
+	 * timeout (error 28, "0 bytes received"). That raw message is meaningless to
+	 * a publisher, so timeouts are rephrased into actionable guidance. Every
+	 * other transport error is returned unchanged so genuine failures keep their
+	 * original, more specific message.
+	 *
+	 * The substring match is for the publisher-facing *message* only; it is not
+	 * relied on for send-safety. get_campaign_dispatch_state() fails safe on
+	 * ANY error, so a timeout that this match ever missed would still block a
+	 * resend rather than slip through.
+	 *
+	 * The 'cURL error 28' token is locale-stable (cURL error numbers aren't
+	 * translated), so the important case is always caught. The 'timed out'
+	 * fallback is locale/transport-fragile (cron/CLI or non-English builds may
+	 * phrase it differently); when it misses, the publisher sees the raw message.
+	 * That is a residual UX gap only, never a safety issue.
+	 *
+	 * @param WP_Error $error A WP_Error returned by wp_safe_remote_request.
+	 *
+	 * @return WP_Error The original error, or a friendlier one for timeouts.
+	 */
+	private function humanize_transport_error( $error ) {
+		$message = $error->get_error_message();
+		if ( false !== stripos( $message, 'timed out' ) || false !== stripos( $message, 'cURL error 28' ) ) {
+			return new \WP_Error(
+				'newspack_newsletters_active_campaign_timeout',
+				__( 'ActiveCampaign did not respond in time. This is usually a temporary issue on ActiveCampaign\'s end. Please wait a few minutes and try again; if the problem continues, try sending a fresh copy of the newsletter.', 'newspack-newsletters' ),
+				// Preserve the original transport failure for logging and support
+				// tooling; the publisher sees the friendly message above.
+				[
+					'original_error_code'    => $error->get_error_code(),
+					'original_error_message' => $message,
+					'original_error_data'    => $error->get_error_data(),
+				]
+			);
+		}
+		return $error;
 	}
 
 	/**
@@ -500,6 +600,8 @@ final class Newspack_Newsletters_Active_Campaign extends \Newspack_Newsletters_S
 			$options_query = $options['query'];
 			unset( $options['query'] );
 		}
+		$timeout = isset( $options['timeout'] ) ? (int) $options['timeout'] : self::DEFAULT_REQUEST_TIMEOUT;
+		unset( $options['timeout'] );
 		$content_type = 'application/json';
 		$url          = rtrim( $credentials['url'], '/' ) . $api_path;
 		$body         = null;
@@ -515,7 +617,7 @@ final class Newspack_Newsletters_Active_Campaign extends \Newspack_Newsletters_S
 		}
 		$args     = [
 			'method'  => $method,
-			'timeout' => 45, // phpcs:ignore WordPressVIPMinimum.Performance.RemoteRequestTimeout.timeout_timeout
+			'timeout' => $timeout, // phpcs:ignore WordPressVIPMinimum.Performance.RemoteRequestTimeout.timeout_timeout
 			'headers' => [
 				'Content-Type' => $content_type,
 				'Accept'       => 'application/json',
@@ -525,7 +627,7 @@ final class Newspack_Newsletters_Active_Campaign extends \Newspack_Newsletters_S
 		];
 		$response = wp_safe_remote_request( $url, $args + $options );
 		if ( is_wp_error( $response ) ) {
-			return $response;
+			return $this->humanize_transport_error( $response );
 		}
 		$body = json_decode( $response['body'], true );
 
@@ -1205,7 +1307,7 @@ final class Newspack_Newsletters_Active_Campaign extends \Newspack_Newsletters_S
 					$send_sublist_id               = $legacy_sublist_id;
 				}
 			}
-			$send_lists = $this->get_send_lists( // Get first 10 top-level send lists for autocomplete.
+			$send_lists = $this->get_send_lists_with_fallback( // Get first 10 top-level send lists for autocomplete.
 				[
 					'ids'  => $send_list_id ? [ $send_list_id ] : null, // If we have a selected list, make sure to fetch it.
 					'type' => 'list',
@@ -1217,7 +1319,7 @@ final class Newspack_Newsletters_Active_Campaign extends \Newspack_Newsletters_S
 			}
 			$newsletter_data['lists'] = $send_lists;
 			$send_sublists = $send_list_id || $send_sublist_id ?
-				$this->get_send_lists(
+				$this->get_send_lists_with_fallback(
 					[
 						'ids'       => [ $send_sublist_id ], // If we have a selected sublist, make sure to fetch it. Otherwise, we'll populate sublists later.
 						'parent_id' => $send_list_id,
@@ -1585,22 +1687,42 @@ final class Newspack_Newsletters_Active_Campaign extends \Newspack_Newsletters_S
 	 * @return array|WP_Error API response data or error.
 	 */
 	private function delete_campaign( $campaign_id, $force = false ) {
-		$campaigns = $this->api_v1_request( 'campaign_list', 'GET', [ 'query' => [ 'ids' => $campaign_id ] ] );
-		if ( is_wp_error( $campaigns ) ) {
-			return $campaigns;
-		}
-		$deletable_statuses = [
-			'0', // Draft.
-			'1', // Scheduled.
-			'6', // Disabled.
-		];
-		if ( true !== $force && ! in_array( $campaigns[0]['status'], $deletable_statuses ) ) {
-			return new \WP_Error(
-				'newspack_newsletters_active_campaign_campaign_not_deletable',
-				__( 'Campaign is not deletable.', 'newspack-newsletters' )
+		// Deleting a previous campaign is best-effort cleanup, never the operation
+		// the publisher is waiting on, so it must fail fast: a campaign stuck in
+		// ActiveCampaign would otherwise hang this call for the full request
+		// timeout and strand the new send behind it.
+		//
+		// The status look-up only exists to enforce the deletable-status guard,
+		// so it is skipped entirely when forcing — saving a round-trip (the
+		// callers that pass $force already know the campaign is disposable).
+		if ( true !== $force ) {
+			$campaigns = $this->api_v1_request(
+				'campaign_list',
+				'GET',
+				[
+					'query'   => [ 'ids' => $campaign_id ],
+					'timeout' => self::CLEANUP_REQUEST_TIMEOUT,
+				]
 			);
+			if ( is_wp_error( $campaigns ) ) {
+				return $campaigns;
+			}
+			$status = isset( $campaigns[0]['status'] ) ? (string) $campaigns[0]['status'] : '';
+			if ( ! in_array( $status, self::DELETABLE_STATUSES, true ) ) {
+				return new \WP_Error(
+					'newspack_newsletters_active_campaign_campaign_not_deletable',
+					__( 'Campaign is not deletable.', 'newspack-newsletters' )
+				);
+			}
 		}
-		return $this->api_v1_request( 'campaign_delete', 'GET', [ 'query' => [ 'id' => $campaign_id ] ] );
+		return $this->api_v1_request(
+			'campaign_delete',
+			'GET',
+			[
+				'query'   => [ 'id' => $campaign_id ],
+				'timeout' => self::CLEANUP_REQUEST_TIMEOUT,
+			]
+		);
 	}
 
 	/**
@@ -1634,6 +1756,78 @@ final class Newspack_Newsletters_Active_Campaign extends \Newspack_Newsletters_S
 	}
 
 	/**
+	 * Determine whether a stored campaign has already been dispatched, so send()
+	 * can avoid sending the same newsletter twice.
+	 *
+	 * A send attempt can time out *after* ActiveCampaign has begun dispatching the
+	 * campaign, so the campaign's own status — not the success of our last
+	 * request — is the source of truth for whether the newsletter already went
+	 * out. Only a confirmed draft is safe to recreate and (re)send.
+	 *
+	 * @param string $campaign_id The ActiveCampaign campaign ID.
+	 *
+	 * @return string|WP_Error One of the CAMPAIGN_* dispatch states, or a WP_Error
+	 *                         when the status could not be verified (a timeout),
+	 *                         in which case the caller must not resend.
+	 */
+	private function get_campaign_dispatch_state( $campaign_id ) {
+		$campaigns = $this->api_v1_request(
+			'campaign_list',
+			'GET',
+			[
+				'query'   => [ 'ids' => $campaign_id ],
+				'timeout' => self::CLEANUP_REQUEST_TIMEOUT,
+			]
+		);
+		if ( is_wp_error( $campaigns ) ) {
+			// ANY error (timeout, HTTP 5xx, auth, malformed) means we cannot
+			// confirm whether the campaign already started sending, so fail safe
+			// and refuse to resend rather than risk a duplicate send to the full
+			// list. A campaign that genuinely no longer exists does NOT arrive
+			// here: ActiveCampaign returns it as a successful empty list, handled
+			// below. The error code is deliberately not inspected — an HTTP 5xx
+			// during an AC incident (exactly when this matters) carries the
+			// generic api_error code, not the timeout code, and must still block.
+			return new \WP_Error(
+				'newspack_newsletters_active_campaign_unverified_campaign',
+				__( 'Newspack could not confirm with ActiveCampaign whether this newsletter had already started sending, so it was not resent (to avoid a duplicate). Please wait a few minutes and try again, or check the campaign status in ActiveCampaign.', 'newspack-newsletters' )
+			);
+		}
+		// A successful response with no campaign means it no longer exists in
+		// ActiveCampaign: nothing was dispatched, so it is safe to recreate.
+		//
+		// This is the only branch that defaults toward recreate-and-send on an
+		// absent row, and its safety rests on an ActiveCampaign behavior: AC is
+		// documented never to return an empty *success* for a campaign that was
+		// dispatched and then deleted (it returns result_code=0, which lands in
+		// the is_wp_error() fail-safe branch above). If that assumption ever
+		// broke, the cost would be a duplicate send to the full list, so do not
+		// widen this default without re-verifying that AC behavior.
+		$status = isset( $campaigns[0]['status'] ) ? (string) $campaigns[0]['status'] : self::STATUS_DRAFT;
+		switch ( $status ) {
+			case self::STATUS_DRAFT: // Never dispatched.
+				return self::CAMPAIGN_DRAFT;
+			case self::STATUS_SCHEDULED:
+			case self::STATUS_SENDING:
+			case self::STATUS_COMPLETED:
+				return self::CAMPAIGN_ALREADY_DISPATCHED;
+			default:
+				// Paused (3) and stopped (4) are campaigns that were sending and
+				// got halted, so they have likely already delivered to part of
+				// the list; an unknown status is equally indeterminate. None are
+				// safe to recreate-and-resend, so route them to manual review.
+				//
+				// Disabled (6) reaches this default too. It is intentionally NOT
+				// treated as a fresh draft here even though it appears in
+				// DELETABLE_STATUSES: "deletable" only means the cleanup path may
+				// remove it, not that its dispatch state is known to be safe to
+				// resend. A disabled campaign is genuinely indeterminate, so it
+				// belongs in needs-review, not the recreate-and-send path.
+				return self::CAMPAIGN_NEEDS_REVIEW;
+		}
+	}
+
+	/**
 	 * Send a campaign.
 	 *
 	 * @param WP_Post $post Post to send.
@@ -1643,11 +1837,30 @@ final class Newspack_Newsletters_Active_Campaign extends \Newspack_Newsletters_S
 	public function send( $post ) {
 		$post_id = $post->ID;
 
-		$error = null;
-
-		/** Clean up existing campaign. */
+		// A campaign created by a previous attempt may already have been
+		// dispatched even if that attempt ended in a timeout: ActiveCampaign can
+		// begin sending before the HTTP response returns. So before doing
+		// anything destructive, verify the stored campaign's state. Never delete,
+		// recreate, or re-trigger a campaign we cannot confirm is still a fresh
+		// draft, or the newsletter could go out twice.
 		$campaign_id = get_post_meta( $post_id, 'ac_campaign_id', true );
 		if ( $campaign_id ) {
+			$dispatch_state = $this->get_campaign_dispatch_state( $campaign_id );
+			if ( is_wp_error( $dispatch_state ) ) {
+				return $dispatch_state;
+			}
+			if ( self::CAMPAIGN_ALREADY_DISPATCHED === $dispatch_state ) {
+				// A prior attempt already started the send; its response was just
+				// lost. Treat as success so it is marked sent, not resent.
+				return true;
+			}
+			if ( self::CAMPAIGN_NEEDS_REVIEW === $dispatch_state ) {
+				return new \WP_Error(
+					'newspack_newsletters_active_campaign_send_needs_review',
+					__( "This newsletter's ActiveCampaign campaign is in an unexpected state (paused or stopped) and may have already partially sent. To avoid sending it twice, Newspack did not resend it. Please review the campaign in ActiveCampaign before trying again.", 'newspack-newsletters' )
+				);
+			}
+			// Confirmed draft: safe to clean up and recreate below.
 			$this->delete_campaign( $campaign_id, true );
 		}
 		/** Clean up existing test campaigns. */
@@ -1786,8 +1999,50 @@ final class Newspack_Newsletters_Active_Campaign extends \Newspack_Newsletters_S
 			$existing_fields = $this->get_all_contact_fields();
 			foreach ( $contact['metadata'] as $field_title => $value ) {
 				$field_perstag = strtoupper( str_replace( '-', '_', sanitize_title( $field_title ) ) );
-				/** For optimization, don't add the field if it already exists. */
-				if ( is_wp_error( $existing_fields ) || false === array_search( $field_perstag, array_column( $existing_fields, 'perstag' ) ) ) {
+
+				/**
+				 * For optimization, don't add the field if it already exists.
+				 * Match by perstag first, then by title — an ActiveCampaign
+				 * admin may have renamed a field's perstag, and creating a
+				 * field with a duplicate title fails.
+				 */
+				$existing_index = false;
+				if ( ! is_wp_error( $existing_fields ) ) {
+					// Index-preserving lookups: array_column() would reindex and skip
+					// rows missing the key, mapping a match to the wrong field.
+					// A row with an empty perstag can't supply a usable payload key, so
+					// it must never match — `! empty()` rather than `isset()`.
+					foreach ( $existing_fields as $index => $existing_field ) {
+						if ( ! empty( $existing_field['perstag'] ) && $existing_field['perstag'] === $field_perstag ) {
+							$existing_index = $index;
+							break;
+						}
+					}
+					if ( false === $existing_index ) {
+						foreach ( $existing_fields as $index => $existing_field ) {
+							if (
+								! empty( $existing_field['title'] ) && ! empty( $existing_field['perstag'] ) &&
+								0 === strcasecmp( trim( $existing_field['title'] ), trim( $field_title ) )
+							) {
+								$existing_index = $index;
+								break;
+							}
+						}
+					}
+				}
+
+				if ( false !== $existing_index ) {
+					/** Use the existing field's actual perstag — it may differ from the generated one. */
+					$field_perstag = $existing_fields[ $existing_index ]['perstag'];
+				} elseif ( empty( $field_perstag ) ) {
+					/**
+					 * The title sanitized down to nothing, so there's no perstag to create the
+					 * field under and no valid payload key to write to. Skip rather than emit a
+					 * malformed `field[%%,0]` key that two such fields would collide on.
+					 */
+					error_log( '[NEWSPACK-NEWSLETTERS]: Skipped ActiveCampaign field "' . sanitize_text_field( $field_title ) . '": title produced an empty perstag.' ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+					continue;
+				} else {
 					$field_res = $this->api_v3_request(
 						'fields',
 						'POST',
@@ -1805,7 +2060,20 @@ final class Newspack_Newsletters_Active_Campaign extends \Newspack_Newsletters_S
 						]
 					);
 					if ( \is_wp_error( $field_res ) ) {
-						return $field_res;
+						/**
+						 * A field that can't be registered must never block the signup — sync the
+						 * contact without it.
+						 *
+						 * Logged with error_log() rather than Newspack_Newsletters_Logger, which
+						 * no-ops unless NEWSPACK_LOG_LEVEL is defined — undefined on a default
+						 * production site. The dropped field carries Reader Activation data that
+						 * segments and automations key on, so it must stay diagnosable.
+						 *
+						 * Both interpolated values are sanitized: the error message is remote
+						 * API text, and a newline in it would forge a second log line.
+						 */
+						error_log( '[NEWSPACK-NEWSLETTERS]: Error creating ActiveCampaign field "' . sanitize_text_field( $field_title ) . '": ' . sanitize_text_field( $field_res->get_error_message() ) ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+						continue;
 					}
 					/** Set list relation. */
 					$this->api_v3_request(
@@ -2035,7 +2303,10 @@ final class Newspack_Newsletters_Active_Campaign extends \Newspack_Newsletters_S
 			return $result;
 		}
 		if ( ! isset( $result['contacts'], $result['contacts'][0] ) ) {
-			return new WP_Error( 'newspack_newsletters', __( 'No contact data found.' ) );
+			// A dedicated code (rather than the generic `newspack_newsletters`) so
+			// callers can tell "no such contact" from an actual failure, matching
+			// Mailchimp's dedicated not-found code.
+			return new WP_Error( 'newspack_newsletters_contact_not_found', __( 'No contact data found.' ) );
 		}
 		$contact_data = $result['contacts'][0];
 		if ( $return_details ) {
@@ -2055,7 +2326,7 @@ final class Newspack_Newsletters_Active_Campaign extends \Newspack_Newsletters_S
 			if ( \is_wp_error( $contact_result ) ) {
 				return $contact_result;
 			}
-			$contact_fields           = array_reduce(
+			$contact_fields = array_reduce(
 				$contact_result['fieldValues'],
 				function ( $acc, $field ) use ( $fields_perstag_by_id ) {
 					if ( isset( $field['value'] ) && isset( $fields_perstag_by_id[ $field['field'] ] ) ) {
@@ -2065,7 +2336,11 @@ final class Newspack_Newsletters_Active_Campaign extends \Newspack_Newsletters_S
 				},
 				[]
 			);
-			$contact_data['metadata'] = $contact_fields;
+			// The API mostly omits fields the contact has no value for, but can
+			// report an empty value — filter those out explicitly so `metadata`
+			// carries the same meaning as on other providers rather than leaning
+			// on that API behavior.
+			$contact_data['metadata'] = self::filter_set_field_values( $contact_fields );
 		}
 		return $contact_data;
 	}
@@ -2207,9 +2482,11 @@ final class Newspack_Newsletters_Active_Campaign extends \Newspack_Newsletters_S
 	 * but not promoted by default.
 	 *
 	 * Matching function depends on selection cardinality. Per AC's Contact Custom Fields API
-	 * Guide, dropdown / radio / listbox are single-selection types (their stored value is the
-	 * raw chosen option), so 'default' (strict equality) matching is correct. Checkbox and
-	 * multiselect are multi-selection types: AC stores the chosen options with a `||` delimiter
+	 * Guide, dropdown / radio are single-selection types (their stored value is the raw chosen
+	 * option), so 'default' (strict equality) matching is correct. Checkbox, listbox and
+	 * multiselect are multi-selection types — AC's "Checkbox" is a multi-select checkbox group
+	 * (not a boolean toggle) and its "List Box" is a multi-select list, so a contact can hold
+	 * several values for either. AC stores the chosen options with a `||` delimiter
 	 * (e.g. `||Option A||Option C||`), which `default` matching cannot resolve — those types
 	 * use 'list__in', and the consumer's parse_list_value() recognizes the delimiter.
 	 *
@@ -2223,8 +2500,8 @@ final class Newspack_Newsletters_Active_Campaign extends \Newspack_Newsletters_S
 		}
 
 		$type                       = isset( $field['type'] ) ? $field['type'] : 'text';
-		$single_select_enum_types   = [ 'dropdown', 'radio', 'listbox' ];
-		$multi_select_enum_types    = [ 'checkbox', 'multiselect' ];
+		$single_select_enum_types   = [ 'dropdown', 'radio' ];
+		$multi_select_enum_types    = [ 'checkbox', 'listbox', 'multiselect' ];
 		$enumerated_types           = array_merge( $single_select_enum_types, $multi_select_enum_types );
 		$eligible_types             = array_merge( [ 'text', 'textarea', 'date', 'datetime' ], $enumerated_types );
 		$is_promoted_by_default     = in_array( $type, $eligible_types, true );
@@ -2235,10 +2512,26 @@ final class Newspack_Newsletters_Active_Campaign extends \Newspack_Newsletters_S
 			$options = $this->fetch_field_options( $field['id'] );
 		}
 
+		// Derive value_type from AC's field type so the framework constrains the
+		// operator dropdown to the field shape (a date field can't be typed
+		// "Number"). Mirrors newspack-manager's ActiveCampaign integration so the
+		// same field types identically whether a contact syncs through this ESP
+		// path or the managed integration.
+		$value_type = 'string';
+		if ( $is_multi_select ) {
+			$value_type = 'multiselect';
+		} elseif ( in_array( $type, $single_select_enum_types, true ) ) {
+			$value_type = 'select';
+		} elseif ( 'datetime' === $type ) {
+			$value_type = 'datetime';
+		} elseif ( 'date' === $type || false !== strpos( (string) $type, 'date' ) ) {
+			$value_type = 'date';
+		}
+
 		return [
 			'key'                 => $perstag,
 			'name'                => ! empty( $field['title'] ) ? $field['title'] : $perstag,
-			'value_type'          => 'string',
+			'value_type'          => $value_type,
 			'matching_function'   => $is_multi_select ? 'list__in' : 'default',
 			'options'             => $options,
 			'description'         => ! empty( $field['descript'] ) ? $field['descript'] : '',

@@ -1,0 +1,86 @@
+@use "../../../colors/colors.module" as colors;
+@use "~@wordpress/base-styles/colors" as wp-colors;
+@use "~@wordpress/base-styles/mixins" as wp-mixins;
+@use "~@wordpress/base-styles/variables" as wp-vars;
+
+// Design-system tokens ride with the Page header into any consuming bundle.
+// Known tech debt: this reaches past the package's public exports entry
+// (`@wordpress/theme/design-tokens.css`) into its internal layout, because
+// postcss-import cannot resolve exports maps, and resolving the public
+// specifier through sass/webpack leaks a bogus `wp-theme/design-tokens.css`
+// script dependency into consumers' asset manifests, which silently blocks
+// their enqueues. If upstream moves `src/prebuilt/`, this fails loudly at
+// build time.
+/* stylelint-disable-next-line no-invalid-position-at-import-rule -- sass @use must precede the CSS @import; postcss-import inlines it at build time. */
+@import "@wordpress/theme/src/prebuilt/css/design-tokens.css";
+
+// Newspack brand mapping: the wpds brand color tokens ship in WordPress
+// blue; remap them onto the Newspack primary scale so every design-system
+// component (focus rings, brand buttons, toggles) renders in brand colors
+// without per-component overrides.
+/* stylelint-disable plugin-wpds/no-setting-wpds-custom-properties -- deliberate Newspack brand override of the wpds brand tokens. */
+:root {
+	--wpds-color-background-interactive-brand-strong: #{colors.$primary-600};
+	--wpds-color-background-interactive-brand-strong-active: #{colors.$primary-800};
+	--wpds-color-background-interactive-brand-weak-active: #{colors.$primary-000};
+	--wpds-color-background-surface-brand: #{colors.$primary-000};
+	--wpds-color-background-thumb-brand: #{colors.$primary-600};
+	--wpds-color-background-thumb-brand-active: #{colors.$primary-600};
+	--wpds-color-foreground-interactive-brand: #{colors.$primary-600};
+	--wpds-color-foreground-interactive-brand-active: #{colors.$primary-800};
+	--wpds-color-foreground-interactive-brand-disabled: #{colors.$primary-400};
+	--wpds-color-stroke-focus: #{colors.$primary-600};
+	--wpds-color-stroke-interactive-brand: #{colors.$primary-600};
+	--wpds-color-stroke-interactive-brand-active: #{colors.$primary-800};
+	--wpds-color-stroke-interactive-brand-disabled: #{colors.$primary-100};
+	--wpds-color-stroke-surface-brand: #{colors.$primary-000};
+	--wpds-color-stroke-surface-brand-strong: #{colors.$primary-600};
+}
+/* stylelint-enable plugin-wpds/no-setting-wpds-custom-properties */
+
+[role="region"].newspack-page {
+	background-color: wp-colors.$white;
+}
+
+.newspack-page__header-region {
+	@include wp-mixins.break-medium {
+		position: sticky;
+		top: var(--wp-admin--admin-bar--height);
+		z-index: 3;
+	}
+}
+
+.newspack-page__header {
+	/* stylelint-disable-next-line plugin-wpds/no-unknown-ds-tokens -- the plugin's token list lags the prebuilt design-tokens.css names. */
+	background: var(--wpds-color-background-surface-neutral-strong);
+	border-block-end: var(--wpds-border-width-xs) solid var(--wpds-color-stroke-surface-neutral-weak);
+	padding: var(--wpds-dimension-padding-lg) var(--wpds-dimension-padding-2xl);
+}
+
+.newspack-page__header-actions {
+	flex-shrink: 0;
+}
+
+.newspack-page__header-subtitle {
+	/* stylelint-disable-next-line plugin-wpds/no-unknown-ds-tokens -- the plugin's token list lags the prebuilt design-tokens.css names. */
+	color: var(--wpds-color-foreground-content-neutral-weak);
+	padding-block-end: var(--wpds-dimension-padding-xs);
+}
+
+.newspack-page__header-visual {
+	display: grid;
+	flex-shrink: 0;
+	height: 24px;
+	place-items: center;
+	width: 24px;
+
+	svg path {
+		transform: scale(1.1111);
+		transform-box: view-box;
+		transform-origin: center;
+	}
+}
+
+.newspack-page__breadcrumbs {
+	min-height: wp-vars.$button-size;
+}

@@ -5,7 +5,7 @@ See `../../AGENTS.md` for shared workspace conventions (Docker, `n` script, codi
 ## Gotchas
 
 - **Mixed autoloading with order dependency.** Composer classmap on `includes/` plus manual `require_once` in `newspack-newsletters.php`. Interfaces and base classes must be required FIRST (before provider implementations). After adding a new class file, you must both add a `require_once` to the main plugin file AND run `composer dump-autoload`.
-- **`npm run lint` runs JS and SCSS only.** PHP linting requires separate `npm run lint:php`. Running only `npm run lint` will miss PHP violations.
+- **`npm run lint` runs JS and SCSS only** and will miss PHP violations. Lint PHP from the workspace root (see the root guide).
 - **The Newsletters wizard UI lives in `newspack-plugin`, not here.** This repo provides ESP APIs, editor, blocks, and rendering. The settings page (Engagement > Newsletters) is in newspack-plugin.
 - **Publishing or making a post private triggers an ESP campaign send.** This is irreversible. The `transition_post_status` hook in the service provider base class sends the newsletter automatically. Be extremely careful with post status transitions, especially bulk operations.
 - **Campaign Monitor is deprecated.** Code still exists in `service-providers/campaign_monitor/` but has zero client usage. Do not extend it. Active ESPs are Mailchimp, ActiveCampaign, and Constant Contact.

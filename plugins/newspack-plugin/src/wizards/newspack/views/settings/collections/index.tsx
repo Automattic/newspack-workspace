@@ -109,7 +109,7 @@ function Collections() {
 
 	return (
 		<div className="newspack-wizard__sections">
-			<h1>{ __( 'Collections Settings', 'newspack-plugin' ) }</h1>
+			<h2 className="newspack-wizard__heading">{ __( 'Collections Settings', 'newspack-plugin' ) }</h2>
 
 			<WizardsActionCard
 				isMedium

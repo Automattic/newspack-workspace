@@ -146,7 +146,7 @@ const DuplicateButton = ( { autosave, campaignGroups, duplicateOf, isSavingPost,
 export default compose( [
 	withSelect( select => {
 		const { isSavingPost, getCurrentPostId, getEditedPostAttribute } = select( 'core/editor' );
-		const { duplicate_of: duplicateOf } = getEditedPostAttribute( 'meta' );
+		const { duplicate_of: duplicateOf } = getEditedPostAttribute( 'meta' ) || {};
 		return {
 			postId: getCurrentPostId(),
 			isSavingPost: isSavingPost(),

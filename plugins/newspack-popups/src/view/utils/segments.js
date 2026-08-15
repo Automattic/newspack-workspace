@@ -112,6 +112,46 @@ export const getBestPrioritySegment = ( segments, viewAsString = null ) => {
 };
 
 /**
+ * Get the IDs of every segment the reader currently matches, sorted for stable
+ * serialization (so equal sets compare equal). Unlike getBestPrioritySegment,
+ * this returns the full set, not just the highest-priority winner.
+ *
+ * @param {Object} segments Segments keyed by ID with { criteria, priority } values.
+ *
+ * @return {string[]} Sorted array of matching segment IDs.
+ */
+export const getMatchingSegmentIds = segments => {
+	const ids = [];
+	for ( const segmentId in segments ) {
+		if ( match( segments[ segmentId ].criteria ) ) {
+			ids.push( segmentId );
+		}
+	}
+	return ids.sort();
+};
+
+/**
+ * Persist the reader's matching segment set to the reader-data store so
+ * server-side consumers can read it. Writes only for authenticated readers
+ * (anonymous readers have no server-side snapshot) and only when the set
+ * changed (the store syncs the write to user meta; avoid redundant churn).
+ *
+ * @param {Object} ras      Reader Activation library object (window.newspackReaderActivation).
+ * @param {Object} segments Segments keyed by ID.
+ */
+export const syncMatchedSegments = ( ras, segments ) => {
+	if ( ! ras?.store || ! ras.store.get( 'reader' )?.authenticated ) {
+		return;
+	}
+	const ids = getMatchingSegmentIds( segments );
+	const current = ( ras.store.get( 'matched_segments' ) || [] ).slice().sort();
+	if ( JSON.stringify( ids ) === JSON.stringify( current ) ) {
+		return;
+	}
+	ras.store.set( 'matched_segments', ids );
+};
+
+/**
  * Check the reader's activity against a given prompt's assigned segments.
  *
  * @param {HTMLElement}  prompt          HTML element of the prompt being checked.

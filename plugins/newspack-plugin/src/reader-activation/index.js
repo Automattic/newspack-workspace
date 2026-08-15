@@ -217,33 +217,6 @@ export function openNewslettersSignupModal( config = {} ) {
 }
 
 /**
- * Open the post-registration verification modal.
- *
- * Public cross-plugin entry point. The actual implementation is registered by
- * the reader-activation-auth bundle via `_openVerificationModal`. Returns true
- * when the modal was opened; calls `config.onDismiss` and returns false when the
- * modal isn't available (older newspack-plugin or modal markup not rendered).
- *
- * @param {Object}   config
- * @param {string}   config.email             Email to display in the modal copy.
- * @param {string}   config.verificationNonce Nonce authorizing the OTP request.
- * @param {Function} [config.onSendCode]      Called after the OTP is successfully sent.
- * @param {Function} [config.onDismiss]       Called when the modal closes without sending a code.
- *
- * @return {boolean} Whether the modal was opened.
- */
-export function openVerificationModal( config = {} ) {
-	if ( readerActivation?._openVerificationModal ) {
-		return readerActivation._openVerificationModal( config );
-	}
-	console.warn( 'Verification modal not available' ); // eslint-disable-line no-console
-	if ( config?.onDismiss && typeof config.onDismiss === 'function' ) {
-		config.onDismiss();
-	}
-	return false;
-}
-
-/**
  * Get the reader's OTP hash for the current authentication request.
  *
  * @return {string} OTP hash.
@@ -535,13 +508,16 @@ function acquireV2InvisibleToken( siteKey ) {
 /**
  * Register a reader via a frontend integration.
  *
- * @param {string} email                  Reader email address.
- * @param {string} integrationId          Registered integration ID.
- * @param {Object} profileFields          Optional profile fields: { first_name, last_name, metadata }.
- * @param {Object} profileFields.metadata Optional arbitrary key-value pairs to store as user meta.
+ * @param {string}  email                  Reader email address.
+ * @param {string}  integrationId          Registered integration ID.
+ * @param {Object}  profileFields          Optional profile fields: { first_name, last_name, metadata }.
+ * @param {Object}  profileFields.metadata Optional arbitrary key-value pairs to store as user meta.
+ * @param {Object}  options                Optional transport options.
+ * @param {boolean} options.keepalive      Keep the request alive through page navigation.
+ * @param {string}  options.captchaToken   Pre-acquired reCAPTCHA token, skips acquisition.
  * @return {Promise} Resolves with reader data on success, rejects with error on failure.
  */
-function register( email, integrationId, profileFields = {} ) {
+export function register( email, integrationId, profileFields = {}, options = {} ) {
 	const config = newspack_ras_config?.frontend_registration_integrations || {};
 	const integration = config[ integrationId ];
 
@@ -571,7 +547,10 @@ function register( email, integrationId, profileFields = {} ) {
 	const captchaVersion = newspack_ras_config?.captcha_version;
 	let captchaPromise;
 
-	if ( captchaSiteKey ) {
+	if ( options.captchaToken ) {
+		// Pre-acquired token (e.g. warmed before a page-navigating form submit).
+		captchaPromise = Promise.resolve( options.captchaToken );
+	} else if ( captchaSiteKey ) {
 		if ( ! window.grecaptcha ) {
 			return Promise.reject( new Error( 'reCAPTCHA is configured but not loaded.' ) );
 		}
@@ -609,10 +588,16 @@ function register( email, integrationId, profileFields = {} ) {
 			if ( nonce ) {
 				headers[ 'X-WP-Nonce' ] = nonce;
 			}
+			// keepalive: Firefox only supports it from version 133 (unknown init
+			// keys are silently ignored), so on older Firefox the request may
+			// still be cancelled at page unload. Accepted for v1: a
+			// navigator.sendBeacon fallback cannot carry the response callers
+			// consume here.
 			return fetch( newspack_ras_config.frontend_registration_url, {
 				method: 'POST',
 				headers,
 				credentials: 'same-origin',
+				keepalive: Boolean( options.keepalive ),
 				body: JSON.stringify( body ),
 			} );
 		} )
@@ -643,11 +628,27 @@ function register( email, integrationId, profileFields = {} ) {
 			return data;
 		} )
 		.catch( function ( error ) {
-			dispatchActivity( 'reader_registration_failed', {
-				email,
-				integration_id: integrationId,
-				error: error.code || 'network_error',
-			} );
+			if ( 'reader_already_exists' === error.code ) {
+				// A 409 is a successful outcome server-side: the reader exists and
+				// the auth intention is pinned to this email. Reflect the identity
+				// in the client store (which popups/segmentation read) and record
+				// a registration activity with the 'existing' status rather than a
+				// failure — on sites with returning readers this is the routine
+				// result. The promise still rejects so callers can distinguish
+				// created from existing.
+				setReaderEmail( email );
+				dispatchActivity( 'reader_registered', {
+					email,
+					integration_id: integrationId,
+					status: 'existing',
+				} );
+			} else {
+				dispatchActivity( 'reader_registration_failed', {
+					email,
+					integration_id: integrationId,
+					error: error.code || 'network_error',
+				} );
+			}
 			throw error;
 		} );
 }
@@ -666,7 +667,11 @@ const readerActivation = {
 	refreshAuthentication,
 	getReader,
 	openNewslettersSignupModal,
-	openVerificationModal,
+	// openVerificationModal and maybeConfirmRegistration are attached at runtime by
+	// the reader-activation-auth bundle (see reader-activation-auth/index.js). They
+	// aren't included in this literal because they depend on auth-modal markup that
+	// only ships when the auth modal is rendered. Cross-plugin consumers gate access
+	// with `typeof ras?.openVerificationModal === 'function'`.
 	hasAuthLink,
 	getOTPHash,
 	setOTPTimer,

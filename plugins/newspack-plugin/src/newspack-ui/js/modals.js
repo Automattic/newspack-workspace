@@ -130,6 +130,7 @@ domReady( function () {
 							const errorsDiv = document.createElement( 'div' );
 							errorsDiv.textContent = error || 'An error occurred.';
 							errorsDiv.classList.add( 'newspack-ui__notice', 'newspack-ui__notice--error' );
+							errorsDiv.setAttribute( 'role', 'alert' );
 							content.insertBefore( errorsDiv, content.firstChild );
 						} )
 						.finally( () => {

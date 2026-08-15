@@ -24,6 +24,18 @@ class Test_Group_Subscriptions extends \WP_UnitTestCase {
 	protected $user_ids = [];
 
 	/**
+	 * Setup before each test.
+	 */
+	public function set_up() {
+		parent::set_up();
+		// The group subscription REST routes and invite flows are gated behind the
+		// Access Control feature flag; turn it on so the surfaces under test are wired.
+		if ( ! defined( 'NEWSPACK_CONTENT_GATES' ) ) {
+			define( 'NEWSPACK_CONTENT_GATES', true );
+		}
+	}
+
+	/**
 	 * Teardown after tests.
 	 */
 	public function tear_down() {
@@ -305,8 +317,8 @@ class Test_Group_Subscriptions extends \WP_UnitTestCase {
 		$owner_id  = $this->create_reader_user();
 		$member1   = $this->create_reader_user();
 		$member2   = $this->create_reader_user();
-		// Limit is 1.
-		$group_sub = $this->create_group_subscription( $owner_id, [ 'limit' => 1 ] );
+		// Limit is 2 — the owner takes one seat, leaving a single member seat.
+		$group_sub = $this->create_group_subscription( $owner_id, [ 'limit' => 2 ] );
 
 		Group_Subscription::update_members( $group_sub, [ $member1 ] );
 		$result = Group_Subscription::update_members( $group_sub, [ $member2 ] );
@@ -747,8 +759,9 @@ class Test_Group_Subscriptions extends \WP_UnitTestCase {
 	public function test_generate_invite_limit_reached() {
 		$admin_id  = $this->create_admin_user();
 		$owner_id  = $this->create_reader_user();
-		// Limit of 1 – one fresh invite will consume the full allowance.
-		$group_sub = $this->create_group_subscription( $owner_id, [ 'limit' => 1 ] );
+		// Limit of 2 – the owner takes one seat, so one fresh invite consumes the lone
+		// remaining allowance.
+		$group_sub = $this->create_group_subscription( $owner_id, [ 'limit' => 2 ] );
 		wp_set_current_user( $admin_id );
 
 		// First invite fills the slot.
@@ -1071,7 +1084,8 @@ class Test_Group_Subscriptions extends \WP_UnitTestCase {
 		$member1   = $this->create_reader_user( 'member1@example.com' );
 		$email2    = 'member2@example.com';
 		$this->create_reader_user( $email2 );
-		$group_sub = $this->create_group_subscription( $owner_id, [ 'limit' => 1 ] );
+		// Limit is 2 — the owner takes one seat, leaving a single member seat.
+		$group_sub = $this->create_group_subscription( $owner_id, [ 'limit' => 2 ] );
 		wp_set_current_user( $admin_id );
 
 		// Fill the single slot.
@@ -1986,8 +2000,9 @@ class Test_Group_Subscriptions extends \WP_UnitTestCase {
 		$owner_id   = $this->create_reader_user();
 		$existing   = $this->create_reader_user();
 		$visitor_id = $this->create_reader_user();
-		// Limit is 1 — adding $existing fills the group.
-		$group_sub = $this->create_group_subscription( $owner_id, [ 'limit' => 1 ] );
+		// Limit is 2 — the owner takes one seat, so adding $existing fills the lone
+		// remaining member seat.
+		$group_sub = $this->create_group_subscription( $owner_id, [ 'limit' => 2 ] );
 
 		// Generate the link as the manager.
 		wp_set_current_user( $owner_id );
