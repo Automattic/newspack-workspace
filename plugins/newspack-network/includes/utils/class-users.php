@@ -146,13 +146,7 @@ class Users {
 
 			Debugger::log( 'Updating user avatar' );
 
-			if ( ! function_exists( 'media_sideload_image' ) ) {
-				require_once ABSPATH . 'wp-admin/includes/media.php';
-				require_once ABSPATH . 'wp-admin/includes/file.php';
-				require_once ABSPATH . 'wp-admin/includes/image.php';
-			}
-
-			$avatar_id = media_sideload_image( $avatar_url, 0, null, 'id' );
+			$avatar_id = Network::sideload_peer_image( $avatar_url, 0, null, 'id' );
 
 			if ( is_wp_error( $avatar_id ) ) {
 				Debugger::log( 'Error sideloading avatar: ' . $avatar_id->get_error_message() );

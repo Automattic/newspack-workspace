@@ -70,17 +70,57 @@ class Network {
 	}
 
 	/**
+	 * Sideload a peer-supplied image, validating every request hop against the SSRF guard.
+	 *
+	 * The URL the peer gave us is validated by is_safe_sideload_url(), but that URL can 302
+	 * to an internal address, and core re-checks each hop with the same wp_http_validate_url
+	 * this guard exists to strengthen — so a redirect could reach the address we just refused.
+	 * This runs is_safe_sideload_url() on every HTTP request the sideload makes, the initial
+	 * fetch and each redirect target alike, refusing any that resolves into a blocked range.
+	 * Legitimate images behind a redirect still load; only redirects to internal addresses
+	 * are stopped. Callers should still pre-check the URL so an obviously bad one skips early.
+	 *
+	 * @param string      $url     External image URL.
+	 * @param int         $post_id Parent post ID (0 for none).
+	 * @param string|null $desc    Image description.
+	 * @param string      $return  media_sideload_image return type ('html', 'src' or 'id').
+	 *
+	 * @return int|string|\WP_Error Whatever media_sideload_image returns; WP_Error if a hop is refused.
+	 */
+	public static function sideload_peer_image( string $url, int $post_id = 0, ?string $desc = null, string $return = 'html' ) {
+		if ( ! function_exists( 'media_sideload_image' ) ) {
+			require_once ABSPATH . 'wp-admin/includes/media.php';
+			require_once ABSPATH . 'wp-admin/includes/file.php';
+			require_once ABSPATH . 'wp-admin/includes/image.php';
+		}
+
+		$guard = function ( $pre, $args, $request_url ) {
+			if ( is_string( $request_url ) && ! self::is_safe_sideload_url( $request_url ) ) {
+				return new \WP_Error( 'newspack_network_unsafe_sideload_url', __( 'Refused a sideload request to a private or reserved address.', 'newspack-network' ) );
+			}
+			return $pre;
+		};
+		add_filter( 'pre_http_request', $guard, 10, 3 );
+		try {
+			return media_sideload_image( $url, $post_id, $desc, $return );
+		} finally {
+			remove_filter( 'pre_http_request', $guard, 10 );
+		}
+	}
+
+	/**
 	 * Whether a peer-supplied URL is safe to fetch server-side with media_sideload_image.
 	 *
 	 * The sideload runs through wp_safe_remote_get, which blocks RFC1918 and loopback
 	 * but not 169.254.0.0/16 — the cloud-metadata range — so a peer could otherwise point
 	 * this site at an internal address (SSRF). This adds the reserved-range check core
-	 * omits, and resolves hostnames so a name pointing at a blocked address is refused as
-	 * well as a literal IP.
+	 * omits, and resolves hostnames (both A and AAAA) so a name pointing at a blocked
+	 * address is refused as well as a literal IP.
 	 *
-	 * IPv6 note: literal addresses are range-checked, but hostnames are only resolved over
-	 * IPv4 (gethostbynamel). A hostname whose sole AAAA record is link-local is out of
-	 * scope for this guard, which is acceptable for a blind vector against an IPv4 endpoint.
+	 * Residual: this validates the address at resolve time, and the fetch re-resolves at
+	 * connect time, so a peer that controls a short-TTL record could rebind between the two
+	 * (a DNS-rebinding window core shares and does not close either). Closing it fully needs
+	 * pinning the connection to the validated IP; out of scope here — see the follow-up.
 	 *
 	 * @param mixed $url Candidate URL from the network payload.
 	 *
@@ -88,7 +128,8 @@ class Network {
 	 */
 	public static function is_safe_sideload_url( $url ): bool {
 		// wp_http_validate_url enforces the http(s) scheme, the allowed ports, and core's
-		// own RFC1918/loopback checks; the reserved-range check below covers what it misses.
+		// own RFC1918/loopback checks, and rejects any host containing ':' — so IPv6-literal
+		// URLs never reach the resolution below. The reserved-range check covers what it misses.
 		if ( ! is_string( $url ) || ! wp_http_validate_url( $url ) ) {
 			return false;
 		}
@@ -98,14 +139,15 @@ class Network {
 			return false;
 		}
 
-		// A bracketed IPv6 literal arrives with its brackets; strip them before validating.
+		// A bracketed IPv6 literal would arrive with its brackets; strip them before
+		// validating. This is defensive, since wp_http_validate_url already rejects such hosts.
 		$host = trim( $host, '[]' );
 
 		if ( filter_var( $host, FILTER_VALIDATE_IP ) ) {
 			$ips = [ $host ];
 		} else {
-			$ips = gethostbynamel( $host );
-			if ( false === $ips ) {
+			$ips = self::resolve_host( $host );
+			if ( empty( $ips ) ) {
 				// Unresolvable host: fail closed rather than let the fetch resolve it later.
 				return false;
 			}
@@ -121,18 +163,74 @@ class Network {
 	}
 
 	/**
+	 * Resolve a hostname to every IPv4 and IPv6 address it advertises.
+	 *
+	 * Both families are needed: a host with a public A record and an internal AAAA record
+	 * (::1, fe80::, fd00::) would otherwise clear an IPv4-only check while happy-eyeballs
+	 * connects over v6.
+	 *
+	 * @param string $host Hostname to resolve.
+	 *
+	 * @return string[] Resolved IP addresses; empty if the host resolves to none.
+	 */
+	private static function resolve_host( string $host ): array {
+		$ips = gethostbynamel( $host );
+		$ips = ( false === $ips ) ? [] : $ips;
+
+		$aaaa = dns_get_record( $host, DNS_AAAA );
+		if ( is_array( $aaaa ) ) {
+			foreach ( $aaaa as $record ) {
+				if ( ! empty( $record['ipv6'] ) ) {
+					$ips[] = $record['ipv6'];
+				}
+			}
+		}
+
+		return $ips;
+	}
+
+	/**
 	 * Whether an IP address falls in a range we refuse to sideload from.
 	 *
 	 * Covers loopback, the RFC1918 private ranges and the reserved ranges — including
-	 * 169.254.0.0/16, which wp_safe_remote_get does not block. Kept I/O-free and separate
-	 * from is_safe_sideload_url() so the range logic is unit-testable without DNS. A value
-	 * that is not a valid IP is treated as blocked, so the guard fails closed.
+	 * 169.254.0.0/16, which wp_safe_remote_get does not block — plus two ranges PHP's
+	 * filter flags omit: RFC6598 CGNAT (100.64.0.0/10, which reaches some cloud metadata
+	 * endpoints) and RFC2544 benchmarking (198.18.0.0/15). Kept I/O-free and separate from
+	 * is_safe_sideload_url() so the range logic is unit-testable without DNS. A value that
+	 * is not a valid IP is treated as blocked, so the guard fails closed.
 	 *
 	 * @param string $ip IPv4 or IPv6 address.
 	 *
 	 * @return bool True if the address is private or reserved and must be refused.
 	 */
 	public static function is_blocked_sideload_ip( string $ip ): bool {
-		return false === filter_var( $ip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE );
+		if ( false === filter_var( $ip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE ) ) {
+			return true;
+		}
+
+		foreach ( [ '100.64.0.0/10', '198.18.0.0/15' ] as $cidr ) {
+			if ( self::ipv4_in_cidr( $ip, $cidr ) ) {
+				return true;
+			}
+		}
+
+		return false;
+	}
+
+	/**
+	 * Whether an IPv4 address sits inside a CIDR block. Non-IPv4 input returns false.
+	 *
+	 * @param string $ip   IP address to test.
+	 * @param string $cidr CIDR block, e.g. '100.64.0.0/10'.
+	 *
+	 * @return bool True if $ip is IPv4 and within $cidr.
+	 */
+	private static function ipv4_in_cidr( string $ip, string $cidr ): bool {
+		if ( ! filter_var( $ip, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4 ) ) {
+			return false;
+		}
+		list( $subnet, $bits ) = explode( '/', $cidr );
+		$mask = -1 << ( 32 - (int) $bits );
+		return ( ip2long( $ip ) & $mask ) === ( ip2long( $subnet ) & $mask );
 	}
 }

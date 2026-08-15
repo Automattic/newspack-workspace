@@ -73,4 +73,39 @@ class TestNetworkUtils extends WP_UnitTestCase {
 		$this->assertFalse( Network::is_safe_sideload_url( 'ftp://169.254.169.254/x.jpg' ), 'non-http scheme' );
 		$this->assertFalse( Network::is_safe_sideload_url( null ), 'null' );
 	}
+
+	/**
+	 * The CGNAT and benchmarking ranges PHP's filter flags omit are blocked, and addresses
+	 * just outside them are not.
+	 */
+	public function test_cgnat_and_benchmarking_ranges_are_blocked() {
+		$this->assertTrue( Network::is_blocked_sideload_ip( '100.64.0.1' ), '100.64/10 low' );
+		$this->assertTrue( Network::is_blocked_sideload_ip( '100.100.100.200' ), 'Alibaba metadata' );
+		$this->assertTrue( Network::is_blocked_sideload_ip( '100.127.255.255' ), '100.64/10 high' );
+		$this->assertFalse( Network::is_blocked_sideload_ip( '100.128.0.1' ), 'just above 100.64/10' );
+		$this->assertTrue( Network::is_blocked_sideload_ip( '198.18.0.1' ), '198.18/15 low' );
+		$this->assertTrue( Network::is_blocked_sideload_ip( '198.19.255.255' ), '198.18/15 high' );
+		$this->assertFalse( Network::is_blocked_sideload_ip( '198.20.0.1' ), 'just above 198.18/15' );
+	}
+
+	/**
+	 * IPv6 loopback, link-local and unique-local addresses are blocked; a public v6 is not.
+	 */
+	public function test_ipv6_private_and_reserved_are_blocked() {
+		$this->assertTrue( Network::is_blocked_sideload_ip( '::1' ), 'loopback' );
+		$this->assertTrue( Network::is_blocked_sideload_ip( 'fe80::1' ), 'link-local' );
+		$this->assertTrue( Network::is_blocked_sideload_ip( 'fd00::1' ), 'unique-local' );
+		$this->assertFalse( Network::is_blocked_sideload_ip( '2606:4700:4700::1111' ), 'public v6' );
+	}
+
+	/**
+	 * The peer sideload validates every HTTP request it makes, so a request to an internal
+	 * address — as a redirect hop would be — is refused at the HTTP layer rather than fetched.
+	 */
+	public function test_sideload_peer_image_refuses_unsafe_request() {
+		$result = Network::sideload_peer_image( 'http://169.254.169.254/x.jpg', 0, null, 'id' );
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'newspack_network_unsafe_sideload_url', $result->get_error_code() );
+	}
 }

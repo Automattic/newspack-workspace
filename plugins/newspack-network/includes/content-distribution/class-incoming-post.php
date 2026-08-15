@@ -471,13 +471,7 @@ class Incoming_Post {
 			return;
 		}
 
-		if ( ! function_exists( 'media_sideload_image' ) ) {
-			require_once ABSPATH . 'wp-admin/includes/media.php';
-			require_once ABSPATH . 'wp-admin/includes/file.php';
-			require_once ABSPATH . 'wp-admin/includes/image.php';
-		}
-
-		$attachment_id = media_sideload_image( $thumbnail_url, $this->ID, '', 'id' );
+		$attachment_id = Network::sideload_peer_image( $thumbnail_url, $this->ID, '', 'id' );
 		if ( is_wp_error( $attachment_id ) ) {
 			self::log( 'Failed to upload featured image for post ' . $this->ID . ' with message: ' . $attachment_id->get_error_message() );
 
