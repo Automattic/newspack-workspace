@@ -166,7 +166,18 @@ class Block_Visibility {
 		if ( ! has_blocks( $content ) ) {
 			return $content;
 		}
-		return serialize_blocks( self::strip_hidden( parse_blocks( $content ) ) );
+
+		// A homepage runs this twice per post -- once from the priority-10 excerpt
+		// filter, then again inside the priority-11 closure whose result discards the
+		// first pass -- and each call is a full parse_blocks() plus recursive walk plus
+		// serialize_blocks(). The three call sites cannot coordinate, so memoize here
+		// instead. Keyed on the content because the decision is evaluated against the
+		// anonymous reader either way, and pure within a request.
+		$key = md5( $content );
+		if ( ! isset( self::$strip_cache[ $key ] ) ) {
+			self::$strip_cache[ $key ] = serialize_blocks( self::strip_hidden( parse_blocks( $content ) ) );
+		}
+		return self::$strip_cache[ $key ];
 	}
 
 	/**
@@ -341,10 +352,18 @@ class Block_Visibility {
 	private static $rules_match_cache = [];
 
 	/**
-	 * Reset the per-request cache. Used in unit tests only.
+	 * Per-request cache of stripped content, keyed by md5 of the input.
+	 *
+	 * @var string[]
+	 */
+	private static $strip_cache = [];
+
+	/**
+	 * Reset the per-request caches. Used in unit tests only.
 	 */
 	public static function reset_cache_for_tests() {
 		self::$rules_match_cache = [];
+		self::$strip_cache       = [];
 	}
 
 	/**

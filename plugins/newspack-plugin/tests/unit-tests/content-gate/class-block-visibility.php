@@ -539,6 +539,30 @@ class Newspack_Test_Block_Visibility extends WP_UnitTestCase {
 		$this->assertSame( 1, $call_count );
 	}
 
+	/**
+	 * The stripped-content memo does not survive a cache reset.
+	 *
+	 * The memo itself saves a parse/walk/serialize on repeat calls, which this suite
+	 * cannot observe: rules_match_cache already suppresses the rule callbacks a
+	 * counting test would measure, so such a test would pass with or without it. What
+	 * is observable, and what matters for test isolation, is that the memo clears.
+	 */
+	public function test_strip_memo_clears_on_reset() {
+		$content = '<!-- wp:group {"newspackAccessControlMode":"custom","newspackAccessControlRules":{"registration":{"active":true}},"newspackAccessControlVisibility":"visible"} -->'
+			. '<div class="wp-block-group"><!-- wp:paragraph --><p>MEMOMARK</p><!-- /wp:paragraph --></div>'
+			. '<!-- /wp:group -->';
+
+		wp_set_current_user( 0 );
+		Block_Visibility::reset_cache_for_tests();
+		$first = Block_Visibility::strip_blocks_hidden_from_public( $content );
+
+		Block_Visibility::reset_cache_for_tests();
+		$second = Block_Visibility::strip_blocks_hidden_from_public( $content );
+
+		$this->assertSame( $first, $second, 'A reset must not change what stripping produces.' );
+		$this->assertStringNotContainsString( 'MEMOMARK', $first, 'The gated block is withheld from the anonymous reader.' );
+	}
+
 	// -----------------------------------------------------------------------
 	// Gate mode tests
 	// -----------------------------------------------------------------------
