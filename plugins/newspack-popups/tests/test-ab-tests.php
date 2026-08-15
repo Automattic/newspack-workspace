@@ -212,10 +212,10 @@ class ABTestsTest extends WP_UnitTestCase_PageWithPopups {
 		self::assertArrayHasKey( 'sticky-test', $buckets );
 		$assigned = $buckets['sticky-test'];
 		self::assertContains( $assigned, [ 'a', 'b' ] );
-		self::assertSame( $assigned, get_user_meta( $user_id, 'np_ab_bucket_sticky-test', true ) );
+		self::assertSame( $assigned, get_user_meta( $user_id, 'newspack_popups_ab_bucket_sticky-test', true ) );
 
 		// A changed control share must not re-bucket an already-assigned reader.
-		update_user_meta( $user_id, 'np_ab_bucket_sticky-test', 'b' );
+		update_user_meta( $user_id, 'newspack_popups_ab_bucket_sticky-test', 'b' );
 		$buckets = Newspack_Popups_AB_Tests::get_logged_in_buckets( Newspack_Popups_AB_Tests::get_tests_config() );
 		self::assertSame( 'b', $buckets['sticky-test'] );
 

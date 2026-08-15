@@ -18,12 +18,12 @@ defined( 'ABSPATH' ) || exit;
  */
 final class Newspack_Popups_AB_Tests {
 
-	const META_TEST_ID       = 'newspack_ab_test_id';
-	const META_VARIANT       = 'newspack_ab_variant';
-	const META_GOAL          = 'newspack_ab_test_goal';
-	const META_CONTROL_SHARE = 'newspack_ab_control_share';
+	const META_TEST_ID       = 'newspack_popups_ab_test_id';
+	const META_VARIANT       = 'newspack_popups_ab_variant';
+	const META_GOAL          = 'newspack_popups_ab_test_goal';
+	const META_CONTROL_SHARE = 'newspack_popups_ab_control_share';
 
-	const USER_META_BUCKET_PREFIX = 'np_ab_bucket_';
+	const USER_META_BUCKET_PREFIX = 'newspack_popups_ab_bucket_';
 
 	const VALID_VARIANTS = [ 'a', 'b', 'c', 'd' ];
 
