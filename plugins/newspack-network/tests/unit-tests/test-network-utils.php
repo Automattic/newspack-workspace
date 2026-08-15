@@ -115,7 +115,10 @@ class TestNetworkUtils extends WP_UnitTestCase {
 	 * metadata address is aborted rather than fetched.
 	 */
 	public function test_redirect_validator_refuses_internal_target() {
-		$this->expectException( \WpOrg\Requests\Exception::class );
+		// The thrown class is version-dependent (Requests_Exception below WP 6.2), matching
+		// the production guard; assert whichever the running core provides.
+		$expected = class_exists( \WpOrg\Requests\Exception::class ) ? \WpOrg\Requests\Exception::class : \Requests_Exception::class;
+		$this->expectException( $expected );
 		Network::assert_safe_redirect( 'http://169.254.169.254/latest/meta-data/#x.jpg' );
 	}
 
@@ -142,7 +145,8 @@ class TestNetworkUtils extends WP_UnitTestCase {
 		$threw = false;
 		try {
 			$hooks->dispatch( 'requests.before_redirect', [ &$location ] );
-		} catch ( \WpOrg\Requests\Exception $e ) {
+		} catch ( \Exception $e ) {
+			// Both the namespaced (WP 6.2+) and legacy Requests_Exception extend \Exception.
 			$threw = true;
 		} finally {
 			remove_action( 'requests-requests.before_redirect', [ Network::class, 'assert_safe_redirect' ] );
