@@ -120,11 +120,19 @@ class Network {
 	 *
 	 * @param string $location Redirect target URL.
 	 *
-	 * @throws \WpOrg\Requests\Exception If the target is not a safe sideload URL.
+	 * @throws \WpOrg\Requests\Exception If the target is unsafe, on WordPress 6.2+.
+	 * @throws \Requests_Exception       If the target is unsafe, on WordPress < 6.2.
 	 */
 	public static function assert_safe_redirect( $location ) {
 		if ( is_string( $location ) && ! self::is_safe_sideload_url( $location ) ) {
-			throw new \WpOrg\Requests\Exception( esc_html__( 'Refused a sideload redirect to a private or reserved address.', 'newspack-network' ), 'newspack_network_unsafe_sideload_redirect' );
+			// The namespaced Requests exception only exists on WordPress 6.2+, but this guard
+			// protects older versions too, where the class is Requests_Exception. Throw whichever
+			// the running core provides so WP_Http catches it and returns a WP_Error, rather than
+			// fataling with class-not-found on the exact versions we target.
+			if ( class_exists( '\WpOrg\Requests\Exception' ) ) {
+				throw new \WpOrg\Requests\Exception( esc_html__( 'Refused a sideload redirect to a private or reserved address.', 'newspack-network' ), 'newspack_network_unsafe_sideload_redirect' );
+			}
+			throw new \Requests_Exception( esc_html__( 'Refused a sideload redirect to a private or reserved address.', 'newspack-network' ), 'newspack_network_unsafe_sideload_redirect' );
 		}
 	}
 
@@ -197,7 +205,9 @@ class Network {
 		$ips = gethostbynamel( $host );
 		$ips = ( false === $ips ) ? [] : $ips;
 
-		$aaaa = dns_get_record( $host, DNS_AAAA );
+		// Peers control the hostname, so an unresolvable one would emit an E_WARNING per event;
+		// the empty/false return is handled fail-closed below, so the warning carries nothing.
+		$aaaa = @dns_get_record( $host, DNS_AAAA ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
 		if ( is_array( $aaaa ) ) {
 			foreach ( $aaaa as $record ) {
 				if ( ! empty( $record['ipv6'] ) ) {
