@@ -26,6 +26,18 @@ if ( ! class_exists( __NAMESPACE__ . '\Block_Visibility' ) ) {
 		public static $sanitization_was_called = false;
 
 		/**
+		 * The content the stub last received.
+		 *
+		 * Recorded so a test can assert *when* the call happened, not merely that it
+		 * did. The marker removal below would succeed at any point in the pipeline,
+		 * including after excerpt_remove_blocks() has already flattened the block
+		 * structure -- which is the ordering bug the real call site exists to avoid.
+		 *
+		 * @var string
+		 */
+		public static $received_content = '';
+
+		/**
 		 * Strip blocks withheld from public (non-authenticated) readers.
 		 *
 		 * This stub records that the method was called (verifying the integration
@@ -37,6 +49,7 @@ if ( ! class_exists( __NAMESPACE__ . '\Block_Visibility' ) ) {
 		 */
 		public static function strip_blocks_hidden_from_public( $content ) {
 			self::$sanitization_was_called = true;
+			self::$received_content        = $content;
 			// Remove the fixture marker that represents gated content.
 			// This stub verifies the integration point, not the real stripping logic.
 			return str_replace( 'SECRETMARK', '', $content );
@@ -49,6 +62,7 @@ if ( ! class_exists( __NAMESPACE__ . '\Block_Visibility' ) ) {
 		 */
 		public static function reset_sanitization_for_tests() {
 			self::$sanitization_was_called = false;
+			self::$received_content        = '';
 		}
 	}
 }

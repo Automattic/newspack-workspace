@@ -372,6 +372,21 @@ class HomepagePostsBlockTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 			'Block_Visibility::strip_blocks_hidden_from_public() must be called by filter_excerpt().'
 		);
 
+		// Verify *when*: the call has to land before excerpt_remove_blocks(), which
+		// unwraps core/group and destroys the access-control attributes the real
+		// implementation matches on. The stub's marker removal would succeed either
+		// way, so without this the test passes while production strips nothing.
+		self::assertStringContainsString(
+			'newspackAccessControl',
+			\Newspack\Block_Visibility::$received_content,
+			'Sanitization must run while the block attributes are still intact.'
+		);
+		self::assertStringContainsString(
+			'<!-- wp:group',
+			\Newspack\Block_Visibility::$received_content,
+			'Sanitization must run before the block structure is flattened.'
+		);
+
 		// Verify: gated content was stripped; public content remains.
 		self::assertStringNotContainsString( 'SECRETMARK', $excerpt, 'Gated block content must not appear in excerpt.' );
 		self::assertStringContainsString( 'PUBLICMARK', $excerpt, 'Public block content must remain in excerpt.' );
