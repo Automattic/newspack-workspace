@@ -29,9 +29,9 @@ class Newspack_Newsletters_Subscription {
 	const LISTS_CACHE_PREFIX = 'newspack_newsletters_lists_';
 
 	/**
-	 * Memoized lists config.
+	 * Memoized lists config. Null is the cache-miss sentinel (see get_lists_config()).
 	 *
-	 * @var array
+	 * @var array|null
 	 */
 	private static $lists_config;
 
@@ -59,6 +59,10 @@ class Newspack_Newsletters_Subscription {
 		add_filter( 'woocommerce_get_query_vars', [ __CLASS__, 'add_query_var' ] );
 		add_filter( 'woocommerce_account_menu_items', [ __CLASS__, 'add_menu_item' ], 20 );
 		add_action( 'woocommerce_account_newsletters_endpoint', [ __CLASS__, 'endpoint_content' ] );
+
+		/** Subscription management through Newspack's native My Account (no WooCommerce). */
+		add_filter( 'newspack_my_account_endpoints', [ __CLASS__, 'add_native_my_account_endpoint' ] );
+		add_action( 'newspack_my_account_content', [ __CLASS__, 'render_native_my_account_content' ] );
 		add_action( 'template_redirect', [ __CLASS__, 'process_subscription_update' ] );
 		add_action( 'init', [ __CLASS__, 'flush_rewrite_rules' ] );
 
@@ -491,25 +495,37 @@ class Newspack_Newsletters_Subscription {
 			/**
 			 * We loop through the lists returned by the ESP.
 			 * Only remote lists that still exist in the ESP will be returned.
+			 *
+			 * Lists missing a name or an ID are dropped, and the array is then
+			 * reindexed: a sparse array is serialized as a JSON object, and the
+			 * admin screens map over the REST response as an array.
 			 */
-			$return_lists = array_map(
-				function ( $list ) {
-					if ( ! isset( $list['id'], $list['name'] ) || empty( $list['id'] ) || empty( $list['name'] ) ) {
-						return;
-					}
+			$return_lists = array_values(
+				array_filter(
+					array_map(
+						function ( $list ) {
+							// Mirror the validation in Subscription_Lists::get_or_create_remote_list():
+							// it throws on a blank title rather than returning a WP_Error, and the
+							// outer catch would turn that into a WP_Error for the whole payload. It
+							// also accepts a title of "0", which `empty()` would reject.
+							if ( ! isset( $list['id'], $list['name'] ) || empty( $list['id'] ) || ! is_string( $list['name'] ) || '' === trim( $list['name'] ) ) {
+								return;
+							}
 
-					// This is messy, when the ESP returns lists, it's name, when we get it from our UIs, it's title... we need both.
-					$list['title'] = $list['name'];
+							// The ESP calls this field 'name'; our own UIs call it 'title'. We need both.
+							$list['title'] = $list['name'];
 
-					$stored_list = Subscription_Lists::get_or_create_remote_list( $list );
+							$stored_list = Subscription_Lists::get_or_create_remote_list( $list );
 
-					if ( is_wp_error( $stored_list ) ) {
-						return;
-					}
+							if ( is_wp_error( $stored_list ) ) {
+								return;
+							}
 
-					return $stored_list->to_array();
-				},
-				$lists
+							return $stored_list->to_array();
+						},
+						$lists
+					)
+				)
 			);
 
 			/**
@@ -565,10 +581,19 @@ class Newspack_Newsletters_Subscription {
 	/**
 	 * Get the lists configuration for the active provider.
 	 *
+	 * Note: on sites with premium newsletter gates, the result is filtered per the
+	 * current user (via the newspack_newsletters_subscription_lists filter →
+	 * Premium_Newsletters::filter_subscription_lists()). The per-request memo
+	 * therefore bakes in the current user's view; a caller that changes the current
+	 * user mid-request must call reset_lists_config_cache() before re-reading.
+	 *
 	 * @return array[]|WP_Error Associative array with list configuration keyed by list ID or error.
 	 */
 	public static function get_lists_config() {
-		if ( self::$lists_config ) {
+		// Skip the memo under PHPUnit, mirroring Subscription_Lists::get_all():
+		// static memos persist across the DB rollback between tests.
+		$use_cache = ! ( defined( 'IS_TEST_ENV' ) && IS_TEST_ENV );
+		if ( $use_cache && null !== self::$lists_config ) {
 			return self::$lists_config;
 		}
 		$provider = Newspack_Newsletters::get_service_provider();
@@ -586,8 +611,20 @@ class Newspack_Newsletters_Subscription {
 			$active_lists[ $list->get_public_id() ] = $list->to_array();
 		}
 
-		self::$lists_config = $active_lists;
-		return self::$lists_config;
+		if ( $use_cache ) {
+			self::$lists_config = $active_lists;
+		}
+		return $active_lists;
+	}
+
+	/**
+	 * Reset the memoized lists config so the next get_lists_config() call rebuilds
+	 * it. Called when a subscription list changes within the same request.
+	 *
+	 * @return void
+	 */
+	public static function reset_lists_config_cache() {
+		self::$lists_config = null;
 	}
 
 	/**
@@ -1146,7 +1183,12 @@ class Newspack_Newsletters_Subscription {
 
 		$url = home_url();
 		if ( function_exists( 'wc_get_account_endpoint_url' ) ) {
-			$url = wc_get_account_endpoint_url( 'newsletters' );
+			$url = wc_get_account_endpoint_url( self::WC_ENDPOINT );
+		} elseif ( class_exists( 'Newspack\My_Account' ) ) {
+			$native_url = \Newspack\My_Account::get_endpoint_url( self::WC_ENDPOINT );
+			if ( $native_url ) {
+				$url = $native_url;
+			}
 		}
 		$url = add_query_arg(
 			[
@@ -1214,9 +1256,7 @@ class Newspack_Newsletters_Subscription {
 			\restore_previous_locale();
 		}
 
-		if ( function_exists( 'wc_add_notice' ) ) {
-			wc_add_notice( __( 'Check your email address for a verification link.', 'newspack-newsletters' ), 'success' );
-		}
+		self::add_account_notice( __( 'Check your email address for a verification link.', 'newspack-newsletters' ), 'success' );
 		wp_safe_redirect( add_query_arg( [ 'verification_sent' => 1 ], remove_query_arg( self::EMAIL_VERIFIED_REQUEST, wp_get_referer() ) ) );
 		exit;
 	}
@@ -1244,9 +1284,7 @@ class Newspack_Newsletters_Subscription {
 
 		delete_transient( $transient_key );
 
-		if ( function_exists( 'wc_add_notice' ) ) {
-			wc_add_notice( __( 'Your email has been verified.', 'newspack-newsletters' ), 'success' );
-		}
+		self::add_account_notice( __( 'Your email has been verified.', 'newspack-newsletters' ), 'success' );
 		wp_safe_redirect( remove_query_arg( [ self::EMAIL_VERIFIED_CONFIRM, 'token' ] ) );
 		exit;
 	}
@@ -1303,6 +1341,62 @@ class Newspack_Newsletters_Subscription {
 	}
 
 	/**
+	 * Add the Newsletters endpoint to the native My Account nav (used when
+	 * WooCommerce is not active). Mirrors add_menu_item()'s gating.
+	 *
+	 * @param array $endpoints Map of slug => label.
+	 * @return array
+	 */
+	public static function add_native_my_account_endpoint( $endpoints ) {
+		if ( self::has_subscription_management() ) {
+			$endpoints[ self::WC_ENDPOINT ] = __( 'Newsletters', 'newspack-newsletters' );
+		}
+		return $endpoints;
+	}
+
+	/**
+	 * Render the Newsletters tab content on the native My Account page.
+	 *
+	 * @param string $endpoint Current My Account endpoint slug.
+	 */
+	public static function render_native_my_account_content( $endpoint ) {
+		if ( self::WC_ENDPOINT === $endpoint ) {
+			self::endpoint_content();
+		}
+	}
+
+	/**
+	 * Add a My Account notice, using WooCommerce notices when available and
+	 * falling back to Newspack UI snackbars on the native (no-WooCommerce) page.
+	 *
+	 * @param string $message Notice message.
+	 * @param string $type    Notice type: 'success' | 'error' | 'notice'.
+	 */
+	private static function add_account_notice( $message, $type = 'success' ) {
+		// Prefer the shared newspack-plugin helper so the WooCommerce / native
+		// notice fallback lives in one place. Fall back to a local implementation
+		// when newspack-plugin is absent (this plugin must work standalone).
+		if ( method_exists( 'Newspack\My_Account', 'add_notice' ) ) {
+			\Newspack\My_Account::add_notice( $message, $type );
+			return;
+		}
+		if ( function_exists( 'wc_add_notice' ) ) {
+			wc_add_notice( $message, $type );
+			return;
+		}
+		if ( class_exists( 'Newspack\Newspack_UI' ) ) {
+			\Newspack\Newspack_UI::add_notice(
+				$message,
+				[
+					'type'           => $type,
+					'autohide'       => true,
+					'active_on_load' => true,
+				]
+			);
+		}
+	}
+
+	/**
 	 * Endpoint content.
 	 */
 	public static function endpoint_content() {
@@ -1319,7 +1413,7 @@ class Newspack_Newsletters_Subscription {
 					<?php esc_html_e( 'Please verify your email address before managing your newsletters subscriptions.', 'newspack-newsletters' ); ?>
 				</p>
 				<p>
-					<a href="<?php echo esc_url( wp_nonce_url( remove_query_arg( self::EMAIL_VERIFIED_REQUEST ), self::EMAIL_VERIFIED_REQUEST, self::EMAIL_VERIFIED_REQUEST ) ); ?>" class="button button-primary">
+					<a href="<?php echo esc_url( wp_nonce_url( remove_query_arg( self::EMAIL_VERIFIED_REQUEST ), self::EMAIL_VERIFIED_REQUEST, self::EMAIL_VERIFIED_REQUEST ) ); ?>" class="newspack-ui__button newspack-ui__button--primary">
 						<?php esc_html_e( 'Verify Email', 'newspack-newsletters' ); ?>
 					</a>
 				</p>
@@ -1394,17 +1488,24 @@ class Newspack_Newsletters_Subscription {
 	 * Process user newsletters subscription update.
 	 */
 	public static function process_subscription_update() {
-		if ( ! isset( $_POST[ self::SUBSCRIPTION_UPDATE ] ) || ! wp_verify_nonce( sanitize_text_field( $_POST[ self::SUBSCRIPTION_UPDATE ] ), self::SUBSCRIPTION_UPDATE ) ) {
+		if ( ! isset( $_POST[ self::SUBSCRIPTION_UPDATE ] ) || ! wp_verify_nonce( sanitize_text_field( wp_unslash( $_POST[ self::SUBSCRIPTION_UPDATE ] ) ), self::SUBSCRIPTION_UPDATE ) ) {
+			return;
+		}
+		// Scope to the My Account page so this template_redirect handler doesn't
+		// process the POST on unrelated requests. My_Account::is_account_page()
+		// covers both the WooCommerce and native shells; a no-op when
+		// newspack-plugin is absent.
+		if ( method_exists( 'Newspack\My_Account', 'is_account_page' ) && ! \Newspack\My_Account::is_account_page() ) {
 			return;
 		}
 		if ( ! self::has_subscription_management() ) {
 			return;
 		}
 		if ( ! is_user_logged_in() || ! self::is_email_verified() ) {
-			wc_add_notice( __( 'You must be logged in and verified to update your subscriptions.', 'newspack-newsletters' ), 'error' );
+			self::add_account_notice( __( 'You must be logged in and verified to update your subscriptions.', 'newspack-newsletters' ), 'error' );
 		} else {
 			$email         = get_userdata( get_current_user_id() )->user_email;
-			$lists         = isset( $_POST['lists'] ) ? array_map( 'sanitize_text_field', $_POST['lists'] ) : [];
+			$lists         = isset( $_POST['lists'] ) && is_array( $_POST['lists'] ) ? array_map( 'sanitize_text_field', wp_unslash( $_POST['lists'] ) ) : [];
 			$lists_config   = self::get_lists_config();
 			$lists_to_add  = array_intersect( array_keys( $lists_config ), $lists );
 			$current_lists = [];
@@ -1428,11 +1529,11 @@ class Newspack_Newsletters_Subscription {
 						$result
 					)
 					: $result->get_error_message();
-				wc_add_notice( $message, 'error' );
+				self::add_account_notice( $message, 'error' );
 			} elseif ( false === $result ) {
-				wc_add_notice( __( 'You must select newsletters to update.', 'newspack-newsletters' ), 'error' );
+				self::add_account_notice( __( 'You must select newsletters to update.', 'newspack-newsletters' ), 'error' );
 			} else {
-				wc_add_notice( __( 'Your subscriptions were updated.', 'newspack-newsletters' ), 'success' );
+				self::add_account_notice( __( 'Your subscriptions were updated.', 'newspack-newsletters' ), 'success' );
 				if ( ! empty( $lists_to_add ) ) {
 					wp_safe_redirect(
 						add_query_arg(

@@ -1,3 +1,32 @@
+## newspack-listings [3.6.5](https://github.com/Automattic/newspack-workspace/compare/newspack-listings@3.6.4...newspack-listings@3.6.5) (2026-08-03)
+
+
+### Dependencies
+
+* **newspack-components:** upgraded to 4.6.0
+* **newspack-scripts:** upgraded to 5.10.0
+
+## newspack-listings [3.6.4](https://github.com/Automattic/newspack-workspace/compare/newspack-listings@3.6.3...newspack-listings@3.6.4) (2026-07-20)
+
+
+### Dependencies
+
+* **newspack-components:** upgraded to 4.5.0
+
+## newspack-listings [3.6.3](https://github.com/Automattic/newspack-workspace/compare/newspack-listings@3.6.2...newspack-listings@3.6.3) (2026-07-02)
+
+
+### Bug Fixes
+
+* **listings:** authorize self-serve premium listing create/delete ([#507](https://github.com/Automattic/newspack-workspace/issues/507)) ([60efb47](https://github.com/Automattic/newspack-workspace/commit/60efb475797b0a16d331396f3cd2d0bcad10b31e))
+
+## newspack-listings [3.6.2](https://github.com/Automattic/newspack-workspace/compare/newspack-listings@3.6.1...newspack-listings@3.6.2) (2026-06-29)
+
+
+### Dependencies
+
+* **newspack-components:** upgraded to 4.4.0
+
 ## [3.6.1](https://github.com/Automattic/newspack-listings/compare/v3.6.0...v3.6.1) (2026-04-13)
 
 

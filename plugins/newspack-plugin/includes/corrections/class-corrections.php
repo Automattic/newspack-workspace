@@ -88,7 +88,7 @@ class Corrections {
 			'newspack-corrections-single',
 			Newspack::plugin_url() . '/dist/other-scripts/corrections.css',
 			[],
-			NEWSPACK_PLUGIN_VERSION
+			Newspack::asset_version( 'other-scripts/corrections' )
 		);
 
 		if ( ! is_admin() || ! filter_input( INPUT_GET, 'post', FILTER_VALIDATE_INT ) ) {
@@ -105,7 +105,7 @@ class Corrections {
 			'newspack-corrections-modal',
 			Newspack::plugin_url() . '/dist/other-scripts/corrections-modal.js',
 			[ 'wp-edit-post', 'wp-data', 'wp-components', 'wp-element' ],
-			NEWSPACK_PLUGIN_VERSION,
+			Newspack::asset_version( 'other-scripts/corrections-modal' ),
 			true
 		);
 
@@ -123,7 +123,7 @@ class Corrections {
 			'newspack-corrections-modal',
 			Newspack::plugin_url() . '/dist/other-scripts/corrections-modal.css',
 			[],
-			NEWSPACK_PLUGIN_VERSION
+			Newspack::asset_version( 'other-scripts/corrections-modal' )
 		);
 	}
 
@@ -313,7 +313,7 @@ class Corrections {
 	public static function get_corrections( $post_id ) {
 		$corrections = get_posts( // phpcs:ignore WordPressVIPMinimum.Functions.RestrictedFunctions.get_posts_get_posts
 			[
-				'posts_per_page' => -1,
+				'posts_per_page' => -1, // phpcs:ignore WordPressVIPMinimum.Performance.NoPaging -- Corrections attached to a single post; per-post bounded.
 				'post_type'      => self::POST_TYPE,
 				'post_status'    => 'any',
 				'meta_key'       => self::CORRECTION_POST_ID_META, // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key

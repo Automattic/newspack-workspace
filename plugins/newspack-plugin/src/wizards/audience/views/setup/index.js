@@ -29,6 +29,8 @@ import Emails from './emails';
 
 const { HashRouter, Redirect, Route, Switch } = Router;
 
+const ROOT = [ { label: __( 'Audience Management', 'newspack-plugin' ) } ];
+
 function AudienceWizard( { pluginRequirements, wizardApiFetch }, ref ) {
 	const [ inFlight, setInFlight ] = useState( false );
 	const [ config, setConfig ] = useState( {} );
@@ -37,6 +39,7 @@ function AudienceWizard( { pluginRequirements, wizardApiFetch }, ref ) {
 	const [ espSyncErrors, setEspSyncErrors ] = useState( [] );
 	const [ requiredPlugins, setRequiredPlugins ] = useState( {} );
 	const [ configLoaded, setConfigLoaded ] = useState( false );
+	const [ verificationRequiredByGates, setVerificationRequiredByGates ] = useState( [] );
 
 	const fetchConfig = () => {
 		setError( false );
@@ -44,11 +47,12 @@ function AudienceWizard( { pluginRequirements, wizardApiFetch }, ref ) {
 		return wizardApiFetch( {
 			path: '/newspack/v1/wizard/newspack-audience/audience-management',
 		} )
-			.then( ( { config: fetchedConfig, prerequisites_status, required_plugins, can_esp_sync } ) => {
+			.then( ( { config: fetchedConfig, prerequisites_status, required_plugins, can_esp_sync, verification_required_by_gates } ) => {
 				setPrerequisites( prerequisites_status );
 				setRequiredPlugins( required_plugins || {} );
 				setConfig( fetchedConfig );
 				setEspSyncErrors( can_esp_sync.errors );
+				setVerificationRequiredByGates( verification_required_by_gates || [] );
 				setConfigLoaded( true );
 			} )
 			.catch( setError )
@@ -66,11 +70,17 @@ function AudienceWizard( { pluginRequirements, wizardApiFetch }, ref ) {
 			quiet: true,
 			data,
 		} )
-			.then( ( { config: fetchedConfig, prerequisites_status, required_plugins, can_esp_sync } ) => {
+			.then( ( { config: fetchedConfig, prerequisites_status, required_plugins, can_esp_sync, verification_required_by_gates } ) => {
 				setPrerequisites( prerequisites_status );
 				setRequiredPlugins( required_plugins || {} );
 				setConfig( fetchedConfig );
 				setEspSyncErrors( can_esp_sync.errors );
+				// The update endpoint omits verification_required_by_gates (saving an
+				// unrelated setting can't change the gate list), so preserve whatever the
+				// initial GET fetched. Skip + activate endpoints behave the same way.
+				if ( Array.isArray( verification_required_by_gates ) ) {
+					setVerificationRequiredByGates( verification_required_by_gates );
+				}
 			} )
 			.catch( setError )
 			.finally( () => setInFlight( false ) );
@@ -112,26 +122,31 @@ function AudienceWizard( { pluginRequirements, wizardApiFetch }, ref ) {
 				{
 					label: config.enabled ? __( 'Configuration', 'newspack-plugin' ) : __( 'Setup', 'newspack-plugin' ),
 					path: '/',
+					breadcrumbs: [ ...ROOT, { label: config.enabled ? __( 'Configuration', 'newspack-plugin' ) : __( 'Setup', 'newspack-plugin' ) } ],
 				},
 				config.enabled &&
 					newspackAudience.has_memberships && {
 						label: __( 'Content Gating', 'newspack-plugin' ),
 						path: '/content-gating',
+						breadcrumbs: [ ...ROOT, { label: __( 'Content Gating', 'newspack-plugin' ) } ],
 					},
 				[ 'wc', 'nrh' ].includes( platform ) && {
 					label: __( 'Checkout & Payment', 'newspack-plugin' ),
 					path: '/payment',
+					breadcrumbs: [ ...ROOT, { label: __( 'Checkout & Payment', 'newspack-plugin' ) } ],
 				},
 				// NPPD-1538: Emails screen under Audience > Configuration.
 				showEmails && {
 					label: __( 'Emails', 'newspack-plugin' ),
 					path: '/emails',
+					breadcrumbs: [ ...ROOT, { label: __( 'Emails', 'newspack-plugin' ) } ],
 				},
 				// "Advanced settings" hosts the Group labels override, which only makes
 				// sense when the Newspack Content Gate / Group subscriptions feature is on.
 				newspackAudience.is_newspack_feature_enabled && {
-					label: __( 'Advanced settings', 'newspack-plugin' ),
+					label: __( 'Advanced Settings', 'newspack-plugin' ),
 					path: '/groups',
+					breadcrumbs: [ ...ROOT, { label: __( 'Advanced Settings', 'newspack-plugin' ) } ],
 				},
 		  ];
 	tabs = tabs.filter( tab => tab );
@@ -173,6 +188,7 @@ function AudienceWizard( { pluginRequirements, wizardApiFetch }, ref ) {
 		requiredPlugins,
 		onChangePlatform: () => setShowChooser( true ),
 		platform,
+		verificationRequiredByGates,
 	};
 
 	return (
@@ -188,6 +204,7 @@ function AudienceWizard( { pluginRequirements, wizardApiFetch }, ref ) {
 								<PlatformSelection
 									{ ...props }
 									tabbedNavigation={ null }
+									breadcrumbItems={ ROOT }
 									platformSelected={ platformSelected }
 									showEnableToggle={ platformSelected }
 									onComplete={ () => {
@@ -217,8 +234,18 @@ function AudienceWizard( { pluginRequirements, wizardApiFetch }, ref ) {
 							)
 						}
 					/>
-					<Route path="/campaign" render={ () => ( configLoaded && ! config.enabled ? <Redirect to="/" /> : <Campaign { ...props } /> ) } />
-					<Route path="/complete" render={ () => ( configLoaded && ! config.enabled ? <Redirect to="/" /> : <Complete { ...props } /> ) } />
+					<Route
+						path="/campaign"
+						render={ () =>
+							configLoaded && ! config.enabled ? <Redirect to="/" /> : <Campaign { ...props } breadcrumbItems={ ROOT } />
+						}
+					/>
+					<Route
+						path="/complete"
+						render={ () =>
+							configLoaded && ! config.enabled ? <Redirect to="/" /> : <Complete { ...props } breadcrumbItems={ ROOT } />
+						}
+					/>
 					<Redirect to="/" />
 				</Switch>
 			</HashRouter>

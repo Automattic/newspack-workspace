@@ -21,6 +21,11 @@ class Google_OAuth {
 	const AUTH_CALLBACK        = 'newspack_google_oauth_callback';
 	const CSRF_TOKEN_NAMESPACE = 'google';
 
+	/**
+	 * Option storing the Google OAuth client id the proxy issues tokens for.
+	 */
+	const CLIENT_ID_OPTION_NAME = 'newspack_google_oauth_client_id';
+
 	const REQUIRED_SCOPES = [
 		'https://www.googleapis.com/auth/userinfo.email', // User's email address.
 		'https://www.googleapis.com/auth/admanager',
@@ -151,6 +156,23 @@ class Google_OAuth {
 
 
 	/**
+	 * Shorten a response body for the error log.
+	 *
+	 * The proxy can fail with a full HTML error page; log enough to identify it, not all of it.
+	 *
+	 * @param string $body Raw response body.
+	 *
+	 * @return string
+	 */
+	private static function truncate_for_log( $body ) {
+		if ( ! is_string( $body ) || '' === $body ) {
+			return '(empty)';
+		}
+		$body = trim( $body );
+		return strlen( $body ) > 500 ? substr( $body, 0, 500 ) . '…' : $body;
+	}
+
+	/**
 	 * Get the URL for a redirection to Google consent page.
 	 *
 	 * @param array $auth_params OAuth proxy params.
@@ -168,20 +190,51 @@ class Google_OAuth {
 			if ( is_wp_error( $result ) ) {
 				return $result;
 			}
-			if ( 200 !== $result['response']['code'] ) {
-				$error_text  = __( 'Request failed.', 'newspack' );
-				$parsed_data = json_decode( $result['body'] );
-				if ( property_exists( $parsed_data, 'message' ) ) {
+			$response_code = wp_remote_retrieve_response_code( $result );
+			$response_raw  = wp_remote_retrieve_body( $result );
+			if ( 200 !== $response_code ) {
+				$error_text  = __( 'Request failed.', 'newspack-plugin' );
+				$parsed_data = json_decode( $response_raw );
+				if ( is_object( $parsed_data ) && ! empty( $parsed_data->message ) && is_string( $parsed_data->message ) ) {
 					$error_text = $parsed_data->message;
 				}
+				Logger::error( sprintf( 'OAuth proxy /start responded with HTTP %s. Body: %s', $response_code, self::truncate_for_log( $response_raw ) ) );
 				return new WP_Error(
 					'newspack_google_oauth',
-					$error_text
+					$error_text,
+					[ 'status' => $response_code ]
 				);
 			}
-			$response_body = json_decode( $result['body'] );
+			$response_body = json_decode( $response_raw );
+			// Guard against an unparseable or malformed proxy response. The url is handed to a
+			// popup opened as about:blank, which inherits this site's origin, so confirm it is a
+			// well-formed http(s) address rather than any string the proxy happened to return.
+			if (
+				! is_object( $response_body )
+				|| empty( $response_body->url )
+				|| ! is_string( $response_body->url )
+				|| ! wp_http_validate_url( $response_body->url )
+			) {
+				Logger::error( sprintf( 'OAuth proxy /start returned an unusable body: %s', self::truncate_for_log( $response_raw ) ) );
+				return new WP_Error(
+					'newspack_google_oauth',
+					__( 'Could not parse the authentication response.', 'newspack-plugin' )
+				);
+			}
+			// Remember the client id the proxy issues tokens for, so received tokens can be
+			// confirmed to have been issued to this app. Only a usable value may replace a stored
+			// one: sanitize_text_field() flattens an array to '', and an empty expected client id
+			// is what makes validate_token_and_get_email_address() skip the audience check.
+			if ( ! empty( $response_body->client_id ) && is_string( $response_body->client_id ) ) {
+				update_option( self::CLIENT_ID_OPTION_NAME, sanitize_text_field( $response_body->client_id ), false );
+			} elseif ( isset( $response_body->client_id ) ) {
+				Logger::error( 'OAuth proxy /start returned an unusable client id; keeping the stored value.' );
+			}
 			return $response_body->url;
-		} catch ( \Exception $e ) {
+		} catch ( \Throwable $e ) {
+			// \Throwable, not \Exception: a TypeError from dereferencing an unexpected response
+			// shape extends \Error, and would otherwise escape as a fatal from a public route.
+			Logger::error( 'Failed getting the Google OAuth URL: ' . $e->getMessage() );
 			return new WP_Error(
 				'newspack_google_oauth',
 				$e->getMessage()
@@ -353,6 +406,50 @@ class Google_OAuth {
 			// We always request the email scope. Otherwise, the https://www.googleapis.com/oauth2/v2/userinfo endpoint can be used
 			// to retrieve the user email.
 			if ( isset( $token_info->email ) ) {
+				// Confirm the token was issued to this site's own OAuth client, when that is known.
+				$expected_client_id = self::get_expected_client_id();
+				if ( '' !== $expected_client_id ) {
+					// Prefer a non-empty audience, falling back to issued_to; treat an empty
+					// audience as unset so a valid issued_to is not ignored.
+					$token_client_id = '' !== ( $token_info->audience ?? '' )
+						? $token_info->audience
+						: ( $token_info->issued_to ?? '' );
+					if ( (string) $expected_client_id !== (string) $token_client_id ) {
+						Logger::error( 'OAuth token was issued to a different client id than expected.' );
+						// Surface via the always-on log so a rejection (an attack attempt, or a
+						// legitimate login broken by a client-id skew) is auditable fleet-wide.
+						Logger::newspack_log(
+							'newspack_google_oauth',
+							'Google sign-in rejected: token was issued to a different OAuth client id than expected.',
+							[ 'file' => 'newspack_google_oauth' ],
+							'error'
+						);
+						return new \WP_Error( 'newspack_google_oauth', __( 'Invalid Google credentials. Please reconnect.', 'newspack' ) );
+					}
+				} else {
+					// Surface via newspack_log (not just the level-gated logger) so sites still
+					// running without a known client id can be audited across the fleet.
+					Logger::newspack_log(
+						'newspack_google_oauth',
+						'Google sign-in proceeded without OAuth client id verification: no expected client id is known yet.',
+						[ 'file' => 'newspack_google_oauth' ],
+						'warning'
+					);
+				}
+
+				// Only trust a verified email address. The tokeninfo endpoint has returned this
+				// as either a boolean or a string, so normalize before checking.
+				if ( ! filter_var( $token_info->verified_email ?? false, FILTER_VALIDATE_BOOLEAN ) ) {
+					Logger::error( 'Google account email address is not verified.' );
+					Logger::newspack_log(
+						'newspack_google_oauth',
+						'Google sign-in rejected: account email address is not verified.',
+						[ 'file' => 'newspack_google_oauth' ],
+						'error'
+					);
+					return new \WP_Error( 'newspack_google_oauth', __( 'Invalid Google credentials. Please reconnect.', 'newspack' ) );
+				}
+
 				return $token_info->email;
 			} else {
 				Logger::error( 'User email missing in the response.' );
@@ -365,6 +462,23 @@ class Google_OAuth {
 			Logger::error( 'Failed retrieving user info – invalid credentials.' );
 			return new \WP_Error( 'newspack_google_oauth', __( 'Invalid Google credentials. Please reconnect.', 'newspack' ) );
 		}
+	}
+
+	/**
+	 * The Google OAuth client id that access tokens are expected to be issued to.
+	 *
+	 * Defaults to the value most recently reported by the OAuth proxy and stored
+	 * locally. Returns an empty string when none is known yet.
+	 *
+	 * @return string
+	 */
+	public static function get_expected_client_id() {
+		/**
+		 * Filters the Google OAuth client id that access tokens are expected to be issued to.
+		 *
+		 * @param string $client_id The stored client id, or empty string if none is known.
+		 */
+		return (string) apply_filters( 'newspack_google_oauth_expected_client_id', (string) get_option( self::CLIENT_ID_OPTION_NAME, '' ) );
 	}
 
 	/**

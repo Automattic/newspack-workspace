@@ -18,7 +18,12 @@ args.push( 'test-unit-js' );
 const JEST_CONFIG = {
 	rootDir: modules.rootDirectory,
 	setupFilesAfterEnv: [ path.resolve( __dirname, 'utils/jestSetup.js' ) ],
-	testMatch: [ '<rootDir>/**/*test.js?(x)' ],
+	// TypeScript test files count too — the transform below already handles them,
+	// and matching only .js/.jsx silently collects nothing from a .ts test.
+	testMatch: [ '<rootDir>/**/*test.[jt]s?(x)' ],
+	// Skip compiled copies (packages compile src into dist/ and shared/) and
+	// PHP vendor trees; <rootDir> anchors keep plugin src/shared/ tests running.
+	testPathIgnorePatterns: [ '/node_modules/', '<rootDir>/dist/', '<rootDir>/shared/', '/vendor/' ],
 	transform: {
 		'^.+\\.(j|t)sx?$': path.resolve( __dirname, 'utils/babelJestTransformer.js' ),
 	},
@@ -38,7 +43,7 @@ const JEST_CONFIG = {
 	},
 	modulePaths: [ path.resolve( modules.rootDirectory, 'node_modules' ), path.resolve( __dirname, '../node_modules' ) ],
 	testEnvironment: 'jsdom',
-	collectCoverageFrom: [ '**/*.{js,jsx}', '!**/node_modules/**', '!**/dist/**', '!**/vendor/**' ],
+	collectCoverageFrom: [ '**/*.{js,jsx,ts,tsx}', '!**/*.d.ts', '!**/node_modules/**', '!**/dist/**', '!**/vendor/**' ],
 };
 
 args.push( '--config', JSON.stringify( JEST_CONFIG ) );

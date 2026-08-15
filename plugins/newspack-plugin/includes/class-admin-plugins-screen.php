@@ -204,7 +204,7 @@ class Admin_Plugins_Screen {
 			'newspack_plugins_screen',
 			Newspack::plugin_url() . '/dist/plugins-screen.js',
 			[ 'jquery', 'mediaelement-core' ],
-			NEWSPACK_PLUGIN_VERSION,
+			Newspack::asset_version( 'plugins-screen' ),
 			true
 		);
 
@@ -251,7 +251,7 @@ class Admin_Plugins_Screen {
 			'newspack_plugins_screen',
 			Newspack::plugin_url() . '/dist/plugins-screen.css',
 			[],
-			NEWSPACK_PLUGIN_VERSION
+			Newspack::asset_version( 'plugins-screen' )
 		);
 		wp_style_add_data( 'newspack_plugins_screen', 'rtl', 'replace' );
 		wp_enqueue_style( 'newspack_plugins_screen' );

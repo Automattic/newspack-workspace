@@ -25,6 +25,38 @@ function register_block() {
 add_action( 'init', __NAMESPACE__ . '\\register_block' );
 
 /**
+ * Expose whether a product is a donation to the products REST response.
+ *
+ * The block editor needs this to tell the publisher that an attached coupon
+ * will not be applied: Newspack disables coupons for any cart containing a
+ * donation (see Newspack\Donations::disable_coupons()). It cannot be derived
+ * from the product meta alone, because the legacy donation product and its
+ * children are matched by ID rather than by the donation flag, so the answer
+ * is delegated to Donations::is_donation_product().
+ */
+function register_donation_rest_field() {
+	if ( ! class_exists( '\Newspack\Donations' ) || ! method_exists( '\Newspack\Donations', 'is_donation_product' ) ) {
+		return;
+	}
+	register_rest_field(
+		'product',
+		'newspack_is_donation',
+		[
+			'get_callback' => function ( $product ) {
+				return (bool) \Newspack\Donations::is_donation_product( $product['id'] );
+			},
+			'schema'       => [
+				'description' => __( 'Whether the product is treated as a donation by Newspack.', 'newspack-blocks' ),
+				'type'        => 'boolean',
+				'context'     => [ 'view', 'edit' ],
+				'readonly'    => true,
+			],
+		]
+	);
+}
+add_action( 'rest_api_init', __NAMESPACE__ . '\\register_donation_rest_field' );
+
+/**
  * Render the block.
  *
  * @param array $attributes Block attributes.
@@ -49,7 +81,7 @@ function render_callback( $attributes ) {
 		? $attributes['product']
 		: $product_id;
 	\Newspack_Blocks\Modal_Checkout::enqueue_modal( $modal_product_id );
-	\Newspack_Blocks::enqueue_view_assets( 'checkout-button' );
+	\Newspack_Blocks::enqueue_view_assets( 'checkout-button', 'defer' );
 
 	$background_color           = $attributes['backgroundColor'] ?? '';
 	$text_color                 = $attributes['textColor'] ?? '';
@@ -62,6 +94,7 @@ function render_callback( $attributes ) {
 	$after_success_behavior     = $attributes['afterSuccessBehavior'] ?? '';
 	$after_success_button_label = $attributes['afterSuccessButtonLabel'] ?? '';
 	$after_success_url          = $attributes['afterSuccessURL'] ?? '';
+	$coupon                     = $attributes['coupon'] ?? '';
 	$is_variable                = $attributes['is_variable'];
 
 	if ( $is_variable && $variation_id ) {
@@ -113,6 +146,16 @@ function render_callback( $attributes ) {
 		$hidden_fields .= $after_success_behavior ? '<input type="hidden" name="after_success_behavior" value="' . esc_attr( $after_success_behavior ) . '" />' : '';
 		$hidden_fields .= $after_success_button_label ? '<input type="hidden" name="after_success_button_label" value="' . esc_attr( $after_success_button_label ) . '" />' : '';
 		$hidden_fields .= $after_success_url ? '<input type="hidden" name="after_success_url" value="' . esc_attr( $after_success_url ) . '" />' : '';
+		// Vouched for here because this is the last point the destination is known to come
+		// from the block's own settings rather than from the request.
+		$after_success_token = $after_success_url ? Modal_Checkout::get_after_success_token( $after_success_url ) : '';
+		$hidden_fields      .= $after_success_token ? '<input type="hidden" name="after_success_token" value="' . esc_attr( $after_success_token ) . '" />' : '';
+	}
+	// Always emit the coupon field (not gated on the gateway check): it is
+	// applied server-side for both the modal and the redirect checkout flows.
+	// Strict check so a coupon code of "0" is still emitted.
+	if ( '' !== $coupon ) {
+		$hidden_fields .= '<input type="hidden" name="coupon" value="' . esc_attr( $coupon ) . '" />';
 	}
 
 	ob_start();
@@ -153,8 +196,8 @@ function render_callback( $attributes ) {
 		$checkout_data = Checkout_Data::get_checkout_data( $product );
 
 		$form = sprintf(
-			'<form data-checkout="%1$s">%2$s %3$s</form>',
-			esc_attr( wp_json_encode( $checkout_data ) ),
+			'<form %1$s>%2$s %3$s</form>',
+			Checkout_Data::data_checkout_attr( $checkout_data ),
 			$button,
 			$hidden_fields
 		);
@@ -177,7 +220,7 @@ function render_callback( $attributes ) {
 	);
 	return sprintf(
 		'<div class="%1$s">%2$s</div>',
-		$container_classes,
+		esc_attr( $container_classes ),
 		$form
 	);
 }
