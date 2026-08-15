@@ -140,7 +140,7 @@ class Network {
 	 * Residual: this validates the address at resolve time, and the fetch re-resolves at
 	 * connect time, so a peer that controls a short-TTL record could rebind between the two
 	 * (a DNS-rebinding window core shares and does not close either). Closing it fully needs
-	 * pinning the connection to the validated IP; out of scope here — see the follow-up.
+	 * pinning the connection to the validated IP, which is out of scope for this helper.
 	 *
 	 * @param mixed $url Candidate URL from the network payload.
 	 *
