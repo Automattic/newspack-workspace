@@ -411,8 +411,16 @@ final class Newspack_Popups_AB_Tests {
 	 * identity and hash the anonymous client-side assignment uses — so a reader
 	 * who registers mid-test stays in the arm they were already seeing. The user
 	 * ID is the fallback key when no client ID is available. The persisted value
-	 * always wins thereafter, so mid-test control-share edits never re-bucket a
-	 * reader, and assignment is stable across devices once logged in.
+	 * wins thereafter for as long as it names a published variant, so mid-test
+	 * control-share edits never re-bucket a reader, and assignment is stable across
+	 * devices once logged in.
+	 *
+	 * The exception is a stored variant that leaves the published set: the guard
+	 * below recomputes and overwrites it. In a two-arm test that cannot happen --
+	 * unpublishing the only challenger ends the test -- but with three or more arms,
+	 * briefly drafting one variant permanently reassigns every reader holding it, and
+	 * republishing does not bring them back. Tracked separately; the fix is to keep
+	 * any stored VALID_VARIANTS value and fall back only for display.
 	 *
 	 * @param array $tests_config Config from get_tests_config().
 	 * @return array Buckets keyed by test ID.

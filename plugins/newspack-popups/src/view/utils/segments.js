@@ -15,7 +15,7 @@ export const periods = {
  *
  * @return {Object|null} View_as object or null.
  */
-export const parseViewAs = ( queryString = null ) => {
+const parseViewAs = ( queryString = null ) => {
 	if ( ! queryString ) {
 		queryString = window.location.search;
 	}

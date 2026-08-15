@@ -1088,6 +1088,11 @@ final class Newspack_Popups_Inserter {
 				$script_data['donor_landing_page'] = $donor_landing_page;
 			}
 
+			// Variant suppression is entirely client-side, and this whole block sits
+			// inside the non-AMP branch, so AMP requests get no A/B config at all.
+			// That is correct only because AMP prompt display is currently disabled:
+			// if it is ever restored, every arm of a test would render un-suppressed
+			// unless suppression is reimplemented for that path.
 			$ab_tests = Newspack_Popups_AB_Tests::get_tests_config();
 			if ( ! empty( $ab_tests ) ) {
 				$script_data['ab_tests']   = $ab_tests;
