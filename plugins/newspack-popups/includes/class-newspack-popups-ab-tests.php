@@ -257,7 +257,7 @@ final class Newspack_Popups_AB_Tests {
 				// The prompts CPT is inherently small (tens of posts) and this is
 				// further narrowed by the meta filter; a bound here would silently
 				// truncate the config and drop whole tests (fail-open, uncounted).
-				'posts_per_page' => -1, // phpcs:ignore WordPress.WP.PostsPerPage.posts_per_page_posts_per_page
+				'posts_per_page' => -1, // phpcs:ignore WordPressVIPMinimum.Performance.NoPaging -- Prompts CPT; config-scale.
 				'fields'         => 'ids',
 				'meta_query'     => [ // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query
 					[
