@@ -12,7 +12,14 @@ type HeaderAction = {
 	separator?: boolean;
 };
 
-type GateAccessRuleValue = string | string[] | boolean;
+// An entry in a section's kebab menu, or the header's secondary action. A
+// HeaderAction without the store-assigned `type`: either an `action` callback
+// or an `href` carries the behaviour.
+type SectionMenuItem = Omit< HeaderAction, 'type' >;
+
+// Single source of truth for the composite value shape lives with the control.
+type OneTimePurchaseRuleValue = import( '../../../../../content-gate/components/one-time-purchase-rule-control' ).OneTimePurchaseValue;
+type GateAccessRuleValue = string | string[] | boolean | OneTimePurchaseRuleValue;
 type AccessRule = {
 	name: string;
 	default: GateAccessRuleValue;
@@ -119,6 +126,8 @@ type CustomAccess = {
 	metering: Metering;
 	gate_layout_id: number;
 	access_rules: GateAccessRuleGroup[];
+	// Optional: gates saved before the setting existed lack the key; reads treat absence as ON.
+	payment_recovery_grace?: boolean;
 };
 
 type ContentGiftingConfig = {
@@ -145,8 +154,11 @@ type MeteringCountdownConfig = {
 	cta_product_id: number;
 };
 
+type FeedRestrictionMode = 'truncate' | 'exclude';
+
 type AdvancedSettingsConfig = {
 	restrict_feeds: boolean;
+	feed_restriction_mode: FeedRestrictionMode;
 	newsletter_link_bypass_enabled: boolean;
 };
 
@@ -154,6 +166,7 @@ type GateSettings = {
 	content_gifting?: ContentGiftingConfig;
 	countdown_banner?: MeteringCountdownConfig;
 	advanced_settings?: AdvancedSettingsConfig;
+	has_institutions?: boolean;
 };
 
 type GateConfig = {

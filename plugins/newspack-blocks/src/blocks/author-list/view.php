@@ -78,8 +78,8 @@ function newspack_blocks_render_block_author_list( $attributes ) {
 	}
 
 	// Enqueue required front-end assets.
-	Newspack_Blocks::enqueue_view_assets( 'author-list' );
-	Newspack_Blocks::enqueue_view_assets( 'author-profile' );
+	Newspack_Blocks::enqueue_view_assets( 'author-list', 'defer' );
+	Newspack_Blocks::enqueue_view_assets( 'author-profile', 'defer' );
 
 	// Class names for the list container.
 	$container_classes = [ 'newspack-blocks__author-list-container' ];
