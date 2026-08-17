@@ -919,6 +919,10 @@ class Premium_Newsletters_Verify {
 			} elseif ( 'stop' === $batch_action ) {
 				++$batches;
 				WP_CLI::warning( sprintf( 'Stopped after %d batch(es) total because of --max-batches. This run does not cover the whole population.', $batches ) );
+				// The warning above goes to STDERR, which a cutover script gating on
+				// $? never sees. Recording the truncation is what actually stops this
+				// run being read as a pass.
+				$coverage = self::with_incomplete_gate( $coverage, self::COVERAGE_TRUNCATED, $gate );
 				break;
 			}
 		}
