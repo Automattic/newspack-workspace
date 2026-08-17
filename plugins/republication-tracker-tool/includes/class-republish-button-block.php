@@ -59,7 +59,10 @@ final class Republication_Tracker_Tool_Republish_Button_Block {
 			return;
 		}
 
-		$block_dir = REPUBLICATION_TRACKER_TOOL_PATH . 'src/blocks/republish-button';
+		// block.json is copied into the build directory by the build step; src/
+		// is stripped from the distributed plugin, so registration must read the
+		// shipped copy under dist/.
+		$block_dir = REPUBLICATION_TRACKER_TOOL_PATH . 'dist/blocks/republish-button';
 		$args      = [
 			'render_callback' => [ __CLASS__, 'render_block' ],
 		];
@@ -209,7 +212,10 @@ final class Republication_Tracker_Tool_Republish_Button_Block {
 			REPUBLICATION_TRACKER_TOOL_URL . 'assets/clipboard-utils.js',
 			[],
 			REPUBLICATION_TRACKER_TOOL_VERSION,
-			true
+			[
+				'in_footer' => true,
+				'strategy'  => 'defer',
+			]
 		);
 
 		// Block frontend script.
@@ -226,7 +232,10 @@ final class Republication_Tracker_Tool_Republish_Button_Block {
 			REPUBLICATION_TRACKER_TOOL_URL . 'dist/republish-button-view.js',
 			array_merge( $asset['dependencies'], [ 'republication-tracker-tool-clipboard-utils' ] ),
 			$asset['version'],
-			true
+			[
+				'in_footer' => true,
+				'strategy'  => 'defer',
+			]
 		);
 	}
 }

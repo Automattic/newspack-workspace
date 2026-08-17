@@ -1,3 +1,17 @@
+## newspack-network [2.21.2](https://github.com/Automattic/newspack-workspace/compare/newspack-network@2.21.1...newspack-network@2.21.2) (2026-08-03)
+
+
+### Dependencies
+
+* **newspack-scripts:** upgraded to 5.10.0
+
+## newspack-network [2.21.1](https://github.com/Automattic/newspack-workspace/compare/newspack-network@2.21.0...newspack-network@2.21.1) (2026-07-23)
+
+
+### Bug Fixes
+
+* **content-distribution:** don't mark failed dispatch as distributed ([#702](https://github.com/Automattic/newspack-workspace/issues/702)) ([c8792bb](https://github.com/Automattic/newspack-workspace/commit/c8792bb4f6983d8358f8b8dd23a31ba38edc9379))
+
 # newspack-network [2.21.0](https://github.com/Automattic/newspack-workspace/compare/newspack-network@2.20.6...newspack-network@2.21.0) (2026-07-20)
 
 

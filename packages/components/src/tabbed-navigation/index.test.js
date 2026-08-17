@@ -2,7 +2,7 @@
  * External dependencies.
  */
 import { act, fireEvent, render, screen } from '@testing-library/react';
-import { MemoryRouter, useHistory } from 'react-router-dom';
+import { MemoryRouter, Redirect, useHistory } from 'react-router-dom';
 
 /**
  * Internal dependencies.
@@ -149,6 +149,57 @@ describe( 'TabbedNavigation with routed items', () => {
 		ITEMS.forEach( ( { label } ) => {
 			expect( getTab( label ) ).toHaveAttribute( 'aria-disabled', 'true' );
 		} );
+	} );
+
+	it( 'renders the content outside the panels when no tab owns the route', () => {
+		// A route no tab matches — an edit screen registered as hidden, or a stale
+		// URL. The content must still mount, or the page body is blank.
+		renderTabs( { initialEntries: [ '/edit/123' ] } );
+
+		// Assert positively: with nothing selected the panels unmount entirely, so
+		// a `closest( '[role=tabpanel]' )` check alone would pass even if the
+		// content rendered somewhere wrong. Exactly one copy also guards the mutual
+		// exclusivity with the in-panel render.
+		const matches = screen.getAllByText( 'Routed content' );
+		expect( matches ).toHaveLength( 1 );
+		expect( matches[ 0 ].closest( '.newspack-tabbed-navigation__root' ) ).not.toBeNull();
+		expect( matches[ 0 ].closest( '[role="tabpanel"]' ) ).toBeNull();
+		ITEMS.forEach( ( { label } ) => {
+			expect( getTab( label ) ).toHaveAttribute( 'aria-selected', 'false' );
+		} );
+	} );
+
+	it( 'renders the content when the only matching item is hidden from the bar', () => {
+		// The wizard routes hidden sections but filters them out of the bar, so the
+		// item exists and yet can never own the route.
+		render(
+			<MemoryRouter initialEntries={ [ '/edit/123' ] }>
+				<TabbedNavigation
+					items={ [ ...ITEMS, { label: 'Edit', path: '/edit/:id', isHiddenInTabbedNavigation: true } ] }
+					content={ <div>Routed content</div> }
+				/>
+			</MemoryRouter>
+		);
+		expect( screen.getAllByText( 'Routed content' ) ).toHaveLength( 1 );
+		expect( screen.queryByRole( 'tab', { name: 'Edit' } ) ).not.toBeInTheDocument();
+	} );
+
+	it( 'renders unowned content even when disableUpcoming disables every tab', () => {
+		// The setup wizard's Welcome and Completed screens are hidden from the bar
+		// AND use disableUpcoming, so `index > activeIndex` disables every tab. The
+		// content still has to render — this is the case that left onboarding blank.
+		renderTabs( { initialEntries: [ '/unowned' ], disableUpcoming: true } );
+		expect( screen.getAllByText( 'Routed content' ) ).toHaveLength( 1 );
+		ITEMS.forEach( ( { label } ) => {
+			expect( getTab( label ) ).toHaveAttribute( 'aria-disabled', 'true' );
+		} );
+	} );
+
+	it( 'mounts unowned content so a router fallback inside it still runs', () => {
+		// The wizard's trailing <Redirect> lives inside this content, so dropping
+		// it would strand the route instead of correcting it.
+		renderTabs( { initialEntries: [ '/unknown' ], content: <Redirect to="/stories" /> } );
+		expect( getTab( 'Stories' ) ).toHaveAttribute( 'aria-selected', 'true' );
 	} );
 
 	it( 'navigates when the active tab changes so panels follow the route', () => {

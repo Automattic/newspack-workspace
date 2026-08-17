@@ -20,6 +20,15 @@ permissions:
 
 env:
   PNPM_VERSION: 10.33.0
+  # Pinned WP-CLI for the translation-file regeneration step: make-pot and
+  # make-json output (including the md5-suffixed JSON translation filenames)
+  # varies across i18n-command versions, so an unpinned binary could silently
+  # rename generated files between releases. Keep in sync with i18n.yml.
+  WP_CLI_VERSION: 2.12.0
+  # sha512 of wp-cli-2.12.0.phar, pinned rather than fetched alongside the
+  # download: the upstream .sha512 asset sits in the same replaceable release, so
+  # fetching it proves only that two files agree. Keep in sync with i18n.yml.
+  WP_CLI_SHA512: be928f6b8ca1e8dfb9d2f4b75a13aa4aee0896f8a9a0a1c45cd5d2c98605e6172e6d014dda2e27f88c98befc16c040cbb2bd1bfa121510ea5cdf5f6a30fe8832
   # Every commit this workflow makes is automation-generated: the
   # @semantic-release/git prepare commit, the package.json version sync, and
   # the post-release branch-sync work (merge commits + the "restore
@@ -104,6 +113,11 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+          # The dry-run runs semantic-release's verifyConditions, which calls
+          # npm whoami. setup-node's registry-url wrote an .npmrc keyed on
+          # ${NODE_AUTH_TOKEN}; without it npm auth 401s and the gate fails even
+          # though the token is valid. Mirror the Release step below.
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
           NODE_OPTIONS: --max-old-space-size=12288
       - name: Build shared packages
         if: steps.plan.outputs.release_needed == 'true'
@@ -111,6 +125,40 @@ jobs:
       - name: Build all
         if: steps.plan.outputs.release_needed == 'true'
         run: pnpm run build
+      # continue-on-error: this only enables translation regeneration, which is
+      # non-blocking by design, so an apt or release-asset blip must not take a
+      # product release with it. The script exits 2 when its tools are missing,
+      # degrading down the same path as a failed unit.
+      - name: Install WP-CLI and gettext
+        if: steps.plan.outputs.release_needed == 'true'
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP"
+          curl -fsSL --retry 3 -O \
+            "https://github.com/wp-cli/wp-cli/releases/download/v${WP_CLI_VERSION}/wp-cli-${WP_CLI_VERSION}.phar"
+          # Digest line built here: the published .sha512 asset is a bare digest
+          # with no filename, which sha512sum -c rejects as improperly formatted.
+          printf '%s  wp-cli-%s.phar\n' "$WP_CLI_SHA512" "$WP_CLI_VERSION" | sha512sum -c -
+          chmod +x "wp-cli-${WP_CLI_VERSION}.phar"
+          sudo mv "wp-cli-${WP_CLI_VERSION}.phar" /usr/local/bin/wp
+          wp --version
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq gettext
+      # After "Build all" because make-pot scans the built bundles, and before
+      # multi-semantic-release, which commits languages/** for each package it
+      # releases. release:archive zips the working tree, so every channel's zip
+      # carries fresh templates even where nothing is committed, and post-release
+      # syncs the release commits back to main.
+      #
+      # No --strict: a failing unit is restored to its committed template and
+      # reported rather than blocking an otherwise-good release. Dispatch the
+      # i18n workflow to regenerate outside a release.
+      - name: Regenerate translation files
+        id: i18n
+        if: steps.plan.outputs.release_needed == 'true'
+        continue-on-error: true
+        run: ./.github/scripts/update-translations.sh
       # Install each plugin's production PHP dependencies so release:archive
       # bundles vendor/ into the release zips. Without this the published zips
       # are missing composer dependencies (e.g. newspack-ads' googleads lib).
@@ -158,6 +206,39 @@ jobs:
       # stops post-release.sh's release -> alpha / default-branch sync from
       # colliding on version headers. The prerelease zip is built from the
       # working tree regardless, so nothing downstream needs this commit.
+      # Whatever is still uncommitted here has already served its purpose: the
+      # zips were built from the working tree above. On the release branch that
+      # is the units that did not release, since gitCommitStep committed the
+      # ones that did; on prerelease channels it is everything, because
+      # gitCommitStep returns no step there at all. Either way it goes nowhere
+      # from this point, so drop it and let the steps below start from a clean
+      # tree, since `git pull --rebase` refuses to run on a dirty one.
+      #
+      # The pathspecs need the trailing /* : a glob pathspec has to match the
+      # full file path, so 'plugins/*/languages' alone matches nothing at all
+      # and every command here silently becomes a no-op. The * crosses
+      # directory separators, which is what reaches the classic theme's nested
+      # themes/newspack-theme/newspack-theme/languages/. The final check is a
+      # gate rather than a print, so a future edit that breaks the pathspecs
+      # fails here instead of passing quietly.
+      # continue-on-error: this runs after multi-semantic-release has published,
+      # so a failure here would red-flag a shipped release and skip post-release
+      # (which resets alpha and syncs main). A dirty tree breaks nothing anyway:
+      # the version sync below rebases with autostash.
+      - name: Discard uncommitted translation output
+        if: steps.plan.outputs.release_needed == 'true'
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          git checkout -- 'plugins/*/languages/*' 'themes/*/languages/*' 2> /dev/null || true
+          git clean -fdq -- 'plugins/*/languages/*' 'themes/*/languages/*'
+          leftover=$(git status --porcelain -- 'plugins/*/languages/*' 'themes/*/languages/*')
+          if [ -n "$leftover" ]; then
+            echo "::warning title=i18n::Translation files still uncommitted after cleanup"
+            printf '%s\n' "$leftover"
+            exit 1
+          fi
+
       - name: Sync package.json versions
         if: ${{ github.ref_name == 'release' }}
         run: |
@@ -165,8 +246,11 @@ jobs:
           # The release is already published by this point, so the branch must not
           # be left without the synced version. If a concurrent push to the same
           # ref rejects ours, rebase the sync commit on top and retry.
+          # autoStash as a backstop: the discard step above should have left the
+          # tree clean, and this recovery path runs after packages are published,
+          # so it must not be the thing that fails.
           git push origin "HEAD:${GITHUB_REF_NAME}" || {
-            git pull --rebase origin "${GITHUB_REF_NAME}"
+            git -c rebase.autoStash=true pull --rebase origin "${GITHUB_REF_NAME}"
             git push origin "HEAD:${GITHUB_REF_NAME}"
           }
 
@@ -188,6 +272,10 @@ jobs:
           SLACK_A8C_RELEASE_CHANNEL_ID: ${{ secrets.SLACK_A8C_RELEASE_CHANNEL_ID }}
           SLACK_NEWSPACK_RELEASE_CHANNEL_ID: ${{ secrets.SLACK_NEWSPACK_RELEASE_CHANNEL_ID }}
           SLACK_SUPPORT_TEAM_SUBTEAM_ID: ${{ github.ref_name == 'release' && secrets.SLACK_SUPPORT_TEAM_SUBTEAM_ID || '' }}
+          # The script writes I18N_FAILED_UNITS only at the end of a normal run,
+          # so a step that died earlier leaves it empty. The outcome fallback
+          # keeps a whole-step failure from passing as a clean release.
+          I18N_FAILED_UNITS: ${{ steps.i18n.outcome == 'failure' && 'regeneration step failed, see the job log' || env.I18N_FAILED_UNITS }}
         run: ./.github/scripts/notify-release.sh
 
   # Branch maintenance after a stable release: reset alpha and sync release into

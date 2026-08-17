@@ -1,11 +1,7 @@
 @use "~@wordpress/base-styles/variables" as wp-vars;
 
 :root {
-	--newspack-newsletters-header-font: arial, sans-serif;
-	--newspack-newsletters-body-font: georgia, serif;
 	--newspack-newsletters-max-width: 600px;
-	--newspack-header-font: var(--newspack-newsletters-header-font);
-	--newspack-body-font: var(--newspack-newsletters-body-font);
 	--newspack-max-width: var(--newspack-newsletters-max-width);
 	--wp--style--global--content-size: 600px;
 	--wp--style--global--wide-size: 600px;
@@ -49,8 +45,6 @@
 	}
 
 	.editor-post-title {
-		font-family: var(--newspack-newsletters-header-font);
-		line-height: 1.5;
 		max-width: var(--newspack-newsletters-max-width);
 		margin-left: auto;
 		margin-right: auto;
@@ -60,28 +54,6 @@
 	}
 
 	.block-editor-block-list__layout {
-		--wp--preset--font-size--xx-small: 8px;
-		--wp--preset--font-size--x-small: 10px;
-		--wp--preset--font-size--small: 12px;
-		--wp--preset--font-size--normal: 16px;
-		--wp--preset--font-size--medium: 16px;
-		--wp--preset--font-size--large: 24px;
-		--wp--preset--font-size--x-large: 36px;
-		--wp--preset--font-size--huge: 36px;
-		--wp--preset--font-size--xx-large: 40px;
-		--wp--preset--font-size--xxx-large: 48px;
-		--wp--preset--font-size--xxxx-large: 56px;
-		--wp--preset--font-size--xxxxx-large: 64px;
-		--wp--preset--font-size--xxxxxx-large: 72px;
-
-		--wp--preset--spacing--20: 8px;
-		--wp--preset--spacing--30: 16px;
-		--wp--preset--spacing--40: 24px;
-		--wp--preset--spacing--50: 32px;
-		--wp--preset--spacing--60: 32px;
-		--wp--preset--spacing--70: 48px;
-		--wp--preset--spacing--80: 64px;
-
 		&.is-root-container {
 			// Root padding is zeroed, so zero the CSS variables core uses
 			// for the alignfull break-out negative margin — otherwise full-
@@ -107,69 +79,7 @@
 			}
 		}
 
-		* {
-			line-height: 1.5;
-
-			&:not(code) {
-				font-family: var(--newspack-newsletters-body-font);
-			}
-		}
-
-		.block-editor-block-list__block .components-placeholder,
-		.block-editor-block-list__block .components-placeholder div {
-			font-family: "Noto Serif", helvetica, arial, sans-serif;
-		}
-
-		h1,
-		h2,
-		h3,
-		h4,
-		h5,
-		h6 {
-			font-family: var(--newspack-newsletters-header-font);
-			line-height: 1.5;
-		}
-
-		h1 {
-			font-size: 2.44em;
-			line-height: 1.24;
-		}
-
-		h2 {
-			font-size: 1.95em;
-			line-height: 1.36;
-		}
-
-		h3 {
-			font-size: 1.56em;
-			line-height: 1.44;
-		}
-
-		h4 {
-			font-size: 1.25em;
-			line-height: 1.6;
-		}
-
-		h5 {
-			font-size: 1em;
-		}
-
-		h6 {
-			font-size: 0.8em;
-			line-height: 1.56;
-		}
-
-		a {
-			font-family: inherit;
-			text-decoration: underline;
-		}
-
 		a:not(:is(.wp-block-paragraph.has-link-color a, .wp-block-paragraph.has-link-color * a)) {
-			color: inherit;
-		}
-
-		code {
-			background: none;
 			color: inherit;
 		}
 
@@ -195,145 +105,8 @@
 			padding-left: 0;
 			padding-right: 0;
 
-			&.has-background {
-				padding-bottom: 0;
-				padding-top: 0;
-			}
-
 			.block-list-appender {
 				margin: 0 20px;
-			}
-		}
-
-		.wp-block-buttons {
-			font-weight: bold;
-			text-align: center;
-
-			.block-list-appender {
-				margin: 0;
-			}
-
-			.wp-block-button__link {
-				font-size: 1em;
-				padding: 0.75em 1.5em;
-			}
-
-			// Default to left alignment styles.
-			.wp-block-button {
-				margin-left: 0 !important;
-				margin-right: auto !important;
-			}
-
-			&.is-content-justification-right {
-				.wp-block-button {
-					margin-left: auto !important;
-					margin-right: 0 !important;
-				}
-			}
-
-			&.is-content-justification-center {
-				.wp-block-button {
-					margin-left: auto !important;
-					margin-right: auto !important;
-				}
-			}
-		}
-
-		.wp-block-button {
-			padding: 0;
-		}
-
-		.wp-block-social-links {
-			gap: 0 !important;
-
-			&.is-style-circle-black {
-				.wp-social-link {
-					background: black;
-					color: white;
-				}
-			}
-
-			&.is-style-filled-black {
-				.wp-social-link {
-					background: transparent;
-					color: black;
-				}
-			}
-
-			&.is-style-circle-white {
-				.wp-social-link {
-					background: white;
-					color: black;
-				}
-			}
-
-			&.is-style-filled-white {
-				.wp-social-link {
-					background: transparent;
-					color: white;
-				}
-			}
-		}
-
-		.wp-social-link {
-			border-radius: 19px;
-			height: 38px;
-			margin: 4px;
-			padding: 7px;
-			width: 38px;
-		}
-
-		.wp-block-quote {
-			margin: 0 auto;
-
-			&::before {
-				left: 12px;
-			}
-
-			p {
-				margin: 0;
-				padding: 8px 0;
-			}
-
-			&__citation {
-				color: #767676;
-				font-size: inherit;
-				font-style: italic;
-				margin-top: 0;
-				text-align: inherit;
-			}
-
-			&:not(.is-style-plain, .is-style-large) {
-				border: 0;
-				margin: 12px auto;
-				padding: 0;
-				padding-left: calc(24px + 0.25em);
-				position: relative;
-
-				&::before {
-					background: currentcolor;
-					bottom: 0;
-					content: "";
-					display: block;
-					position: absolute;
-					left: 12px;
-					top: 0;
-					width: 0.25em;
-				}
-
-				+ .wp-block-quote:not(.is-style-plain, .is-style-large) {
-					margin-top: 24px;
-				}
-			}
-
-			&.is-style-large {
-				padding: 12px;
-			}
-		}
-
-		.wp-block-heading {
-			> span {
-				font-family: inherit;
 			}
 		}
 
@@ -366,44 +139,73 @@
 		.wp-block {
 			padding: 6px 12px;
 
+			&[data-type="core/spacer"] {
+				.components-resizable-box__container {
+					margin-bottom: 0;
+				}
+			}
+
+			// The button block has no padded wrapper in the rendered email — the
+			// button cell is the colored box itself. Zero the editor's generic
+			// block-spacing padding on the button wrapper so the canvas button
+			// matches the render (this reset is render-agnostic, not MJML-specific,
+			// so it lives here rather than in the flag-gated legacy bundle).
 			&[data-type="core/button"] {
 				padding: 0;
 			}
 
-			// More specific styles for the list block.
+			// The canvas default separator uses core's 2px editor rule in a darker
+			// gray; the email and the standard post editor render a light-gray 1px
+			// rule. Thin it to 1px and set the email's default color (#dddddd, the
+			// Separator renderer's DEFAULT_COLOR). A colour-styled separator
+			// additionally fills the generic `.wp-block` inset (6px 12px) with its
+			// inline background colour (`box-sizing: border-box`), rendering as a
+			// thick bar — clear the fill (`!important` beats the inline colour) and
+			// draw the rule as a 1px border instead (`currentColor` is the
+			// separator's chosen colour), keeping the block inset so stacked
+			// separators stay spaced. Flag-off needs no cancellation: it renders a
+			// 1px rule already, and its legacy `border-bottom` shorthand resets the
+			// colour back to `currentColor`.
+			&[data-type="core/separator"] {
+				border-bottom-width: 1px;
+				border-bottom-color: #dddddd;
+
+				&.has-background {
+					background-color: transparent !important;
+					border-bottom: 1px solid;
+				}
+			}
+
+			// The social-link block button inherits the generic `.wp-block` inset
+			// (6px 12px); the asymmetric padding stretches each round icon into an
+			// oval. Use a symmetric inset so the icon keeps the round shape shown in
+			// the email and the standard post editor.
+			&[data-type="core/social-link"] {
+				padding: 6px;
+			}
+
+			// Batch C canvas↔email parity. On a classic theme the canvas otherwise
+			// falls to WP-core editor defaults (common.css / block-library theme.css)
+			// plus this generic `.wp-block` inset, which under-render these blocks
+			// relative to the WC email output (e.g. the list loses its bullet indent,
+			// the quote shows core's 4px rule, the site title renders smaller). Align
+			// the canvas to the rendered email so the preview is accurate. This is a
+			// targeted patch for the batch-C blocks; theme-agnostic canvas/theme.json
+			// parity is tracked separately.
 			&[data-type="core/list"] {
-				padding: 6px 12px 6px 30px;
-				li:first-child {
-					padding: 12px 7px 0;
-				}
-				li {
-					padding: 0 7px;
-				}
+				padding-left: 40px;
 			}
 
-			&[data-type="core/separator"],
-			.wp-block-separator {
-				background: none !important;
-				border-bottom: 1px solid;
-				max-width: calc(var(--newspack-newsletters-max-width) - 24px);
-				margin-bottom: 12px;
-				opacity: 1;
-				padding-top: 12px;
+			&[data-type="core/quote"] {
+				padding: 20px;
+				border-left-width: 2px;
+				font-size: 20px;
 
-				&:not(.is-style-wide, .is-style-dots) {
-					border-bottom-width: 1px;
-					width: 128px;
-				}
-
-				hr {
-					margin-bottom: 0;
-					margin-top: 0;
-				}
-			}
-
-			&[data-type="core/spacer"] {
-				.components-resizable-box__container {
-					margin-bottom: 0;
+				// The quote's own 20px padding already insets its contents to match
+				// the email; zero the generic `.wp-block` inset on the inner blocks so
+				// the text isn't double-padded (email inner paragraph has no padding).
+				.wp-block {
+					padding: 0;
 				}
 			}
 
@@ -416,37 +218,18 @@
 					padding-bottom: 12px;
 				}
 			}
-
-			&[data-align="center"] {
-				.wp-block-social-links {
-					margin-left: 8px;
-					margin-right: 0;
-				}
-			}
-
-			&[data-align="left"] {
-				.wp-block-social-links {
-					margin-left: 0;
-				}
-			}
-
-			&[data-align="right"] {
-				.wp-block-social-links {
-					margin-right: 0;
-				}
-			}
-
-			.wp-social-link {
-				align-items: center;
-				display: flex;
-				justify-content: center;
-				padding: 0;
-
-				&:not([contenteditable]):focus::after {
-					right: 0;
-				}
-			}
 		}
+		// Batch C canvas↔email parity for the site title: its block data-type sits on
+		// the heading element itself, so size it by tag + class (not a descendant) to
+		// match the email render (h1 40px / h2 32px).
+		h1.wp-block-site-title {
+			font-size: 40px;
+		}
+
+		h2.wp-block-site-title {
+			font-size: 32px;
+		}
+
 		.has-xx-small-font-size {
 			font-size: var(--wp--preset--font-size--xx-small);
 		}

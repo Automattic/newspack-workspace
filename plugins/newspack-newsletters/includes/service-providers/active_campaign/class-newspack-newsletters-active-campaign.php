@@ -1307,7 +1307,7 @@ final class Newspack_Newsletters_Active_Campaign extends \Newspack_Newsletters_S
 					$send_sublist_id               = $legacy_sublist_id;
 				}
 			}
-			$send_lists = $this->get_send_lists( // Get first 10 top-level send lists for autocomplete.
+			$send_lists = $this->get_send_lists_with_fallback( // Get first 10 top-level send lists for autocomplete.
 				[
 					'ids'  => $send_list_id ? [ $send_list_id ] : null, // If we have a selected list, make sure to fetch it.
 					'type' => 'list',
@@ -1319,7 +1319,7 @@ final class Newspack_Newsletters_Active_Campaign extends \Newspack_Newsletters_S
 			}
 			$newsletter_data['lists'] = $send_lists;
 			$send_sublists = $send_list_id || $send_sublist_id ?
-				$this->get_send_lists(
+				$this->get_send_lists_with_fallback(
 					[
 						'ids'       => [ $send_sublist_id ], // If we have a selected sublist, make sure to fetch it. Otherwise, we'll populate sublists later.
 						'parent_id' => $send_list_id,
@@ -2303,7 +2303,10 @@ final class Newspack_Newsletters_Active_Campaign extends \Newspack_Newsletters_S
 			return $result;
 		}
 		if ( ! isset( $result['contacts'], $result['contacts'][0] ) ) {
-			return new WP_Error( 'newspack_newsletters', __( 'No contact data found.' ) );
+			// A dedicated code (rather than the generic `newspack_newsletters`) so
+			// callers can tell "no such contact" from an actual failure, matching
+			// Mailchimp's dedicated not-found code.
+			return new WP_Error( 'newspack_newsletters_contact_not_found', __( 'No contact data found.' ) );
 		}
 		$contact_data = $result['contacts'][0];
 		if ( $return_details ) {
@@ -2323,7 +2326,7 @@ final class Newspack_Newsletters_Active_Campaign extends \Newspack_Newsletters_S
 			if ( \is_wp_error( $contact_result ) ) {
 				return $contact_result;
 			}
-			$contact_fields           = array_reduce(
+			$contact_fields = array_reduce(
 				$contact_result['fieldValues'],
 				function ( $acc, $field ) use ( $fields_perstag_by_id ) {
 					if ( isset( $field['value'] ) && isset( $fields_perstag_by_id[ $field['field'] ] ) ) {
@@ -2333,7 +2336,11 @@ final class Newspack_Newsletters_Active_Campaign extends \Newspack_Newsletters_S
 				},
 				[]
 			);
-			$contact_data['metadata'] = $contact_fields;
+			// The API mostly omits fields the contact has no value for, but can
+			// report an empty value — filter those out explicitly so `metadata`
+			// carries the same meaning as on other providers rather than leaning
+			// on that API behavior.
+			$contact_data['metadata'] = self::filter_set_field_values( $contact_fields );
 		}
 		return $contact_data;
 	}
@@ -2475,9 +2482,11 @@ final class Newspack_Newsletters_Active_Campaign extends \Newspack_Newsletters_S
 	 * but not promoted by default.
 	 *
 	 * Matching function depends on selection cardinality. Per AC's Contact Custom Fields API
-	 * Guide, dropdown / radio / listbox are single-selection types (their stored value is the
-	 * raw chosen option), so 'default' (strict equality) matching is correct. Checkbox and
-	 * multiselect are multi-selection types: AC stores the chosen options with a `||` delimiter
+	 * Guide, dropdown / radio are single-selection types (their stored value is the raw chosen
+	 * option), so 'default' (strict equality) matching is correct. Checkbox, listbox and
+	 * multiselect are multi-selection types — AC's "Checkbox" is a multi-select checkbox group
+	 * (not a boolean toggle) and its "List Box" is a multi-select list, so a contact can hold
+	 * several values for either. AC stores the chosen options with a `||` delimiter
 	 * (e.g. `||Option A||Option C||`), which `default` matching cannot resolve — those types
 	 * use 'list__in', and the consumer's parse_list_value() recognizes the delimiter.
 	 *
@@ -2491,8 +2500,8 @@ final class Newspack_Newsletters_Active_Campaign extends \Newspack_Newsletters_S
 		}
 
 		$type                       = isset( $field['type'] ) ? $field['type'] : 'text';
-		$single_select_enum_types   = [ 'dropdown', 'radio', 'listbox' ];
-		$multi_select_enum_types    = [ 'checkbox', 'multiselect' ];
+		$single_select_enum_types   = [ 'dropdown', 'radio' ];
+		$multi_select_enum_types    = [ 'checkbox', 'listbox', 'multiselect' ];
 		$enumerated_types           = array_merge( $single_select_enum_types, $multi_select_enum_types );
 		$eligible_types             = array_merge( [ 'text', 'textarea', 'date', 'datetime' ], $enumerated_types );
 		$is_promoted_by_default     = in_array( $type, $eligible_types, true );
@@ -2503,10 +2512,26 @@ final class Newspack_Newsletters_Active_Campaign extends \Newspack_Newsletters_S
 			$options = $this->fetch_field_options( $field['id'] );
 		}
 
+		// Derive value_type from AC's field type so the framework constrains the
+		// operator dropdown to the field shape (a date field can't be typed
+		// "Number"). Mirrors newspack-manager's ActiveCampaign integration so the
+		// same field types identically whether a contact syncs through this ESP
+		// path or the managed integration.
+		$value_type = 'string';
+		if ( $is_multi_select ) {
+			$value_type = 'multiselect';
+		} elseif ( in_array( $type, $single_select_enum_types, true ) ) {
+			$value_type = 'select';
+		} elseif ( 'datetime' === $type ) {
+			$value_type = 'datetime';
+		} elseif ( 'date' === $type || false !== strpos( (string) $type, 'date' ) ) {
+			$value_type = 'date';
+		}
+
 		return [
 			'key'                 => $perstag,
 			'name'                => ! empty( $field['title'] ) ? $field['title'] : $perstag,
-			'value_type'          => 'string',
+			'value_type'          => $value_type,
 			'matching_function'   => $is_multi_select ? 'list__in' : 'default',
 			'options'             => $options,
 			'description'         => ! empty( $field['descript'] ) ? $field['descript'] : '',

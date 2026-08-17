@@ -1,3 +1,10 @@
+## newspack-theme [2.24.1](https://github.com/Automattic/newspack-workspace/compare/newspack-theme@2.24.0...newspack-theme@2.24.1) (2026-08-03)
+
+
+### Dependencies
+
+* **newspack-scripts:** upgraded to 5.10.0
+
 # newspack-theme [2.24.0](https://github.com/Automattic/newspack-workspace/compare/newspack-theme@2.23.7...newspack-theme@2.24.0) (2026-07-20)
 
 

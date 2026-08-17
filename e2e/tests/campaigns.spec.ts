@@ -11,12 +11,12 @@ test("Create and view a prompt",  {
   await goToAdminMenu("Audience", "Campaigns", page);
 
   await expect(page.getByRole("heading", { name: "Everyone" })).toBeVisible();
-  await page.getByRole("button", { name: "Add New Campaign" }).click();
+  await page.getByRole("button", { name: "Add Campaign" }).click();
   await page.getByPlaceholder("Campaign Name").fill("Basic");
   await page.getByRole("button", { name: "Add" }).click();
   await page.waitForURL("**/campaigns/**");
 
-  await page.getByRole("button", { name: "Add New Prompt" }).click();
+  await page.getByRole("button", { name: "Add Prompt" }).click();
   await page.getByRole("link", { name: "Center Overlay Fixed at the" }).click();
   await page.waitForURL(/post_type=newspack_popups_cpt/);
 
@@ -85,11 +85,17 @@ test("Create and view a prompt",  {
     .click();
   await expect(page.getByText(campaignBody)).not.toBeVisible();
 
-  // Delete the prompt.
+  // Delete the prompt. A prior run's retry — say a network blip during this
+  // cleanup step — can leave its prompt published, and a bare "More options"
+  // locator then matches one button per leftover card and fails strict mode.
+  // Scope to this test's own card, matching on the title element rather than
+  // the card's whole text: prompts sharing a segment each grow a "Conflict
+  // detected" notice naming the others, so a whole-card match is ambiguous too.
   await goToAdminMenu("Audience", "Campaigns", page);
-  await page.getByLabel("More options").click();
+  const promptCard = page.locator(".newspack-action-card").filter({
+    has: page.locator(".newspack-action-card__title", { hasText: campaignTitle }),
+  });
+  await promptCard.getByLabel("More options").click();
   await page.getByRole("menuitem", { name: "Delete" }).click();
-  await expect(
-    page.getByText("No active prompts in this segment.")
-  ).toBeVisible();
+  await expect(promptCard).not.toBeVisible();
 });

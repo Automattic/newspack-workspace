@@ -7,6 +7,7 @@ import './style.scss';
 import './patterns.scss';
 import { handleSegmentation } from './segmentation';
 import { handleAnalytics } from './analytics/ga4';
+import { handleContextualPromptAnalytics } from './analytics/contextual-prompt';
 import { domReady, logPageview, getPrompts } from './utils';
 
 import './merge-tags';
@@ -22,4 +23,9 @@ domReady( () => {
 		handleSegmentation( prompts );
 		handleAnalytics( prompts );
 	}
+
+	// The Contextual Prompt card is body content, not a prompt, so its tracking
+	// is independent of the prompt-disabled flag — it runs whenever the card is
+	// on the page.
+	handleContextualPromptAnalytics();
 } );
