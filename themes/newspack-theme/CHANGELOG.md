@@ -1,3 +1,20 @@
+# newspack-theme [2.25.0](https://github.com/Automattic/newspack-workspace/compare/newspack-theme@2.24.1...newspack-theme@2.25.0) (2026-08-17)
+
+
+### Bug Fixes
+
+* align image captions with image ([#386](https://github.com/Automattic/newspack-workspace/issues/386)) ([807008f](https://github.com/Automattic/newspack-workspace/commit/807008f94b9061ab28eed810bbdec3a9e49d9129))
+
+
+### Features
+
+* **performance:** defer reader-facing JS assets (NPPM-3037) ([#722](https://github.com/Automattic/newspack-workspace/issues/722)) ([2855574](https://github.com/Automattic/newspack-workspace/commit/2855574099c4f416a984cda8565b269e5a9f0fb0))
+
+
+### Dependencies
+
+* **newspack-scripts:** upgraded to 5.11.0
+
 ## newspack-theme [2.24.1](https://github.com/Automattic/newspack-workspace/compare/newspack-theme@2.24.0...newspack-theme@2.24.1) (2026-08-03)
 
 
