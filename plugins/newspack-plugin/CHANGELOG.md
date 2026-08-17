@@ -1,3 +1,10 @@
+## newspack [6.48.1](https://github.com/Automattic/newspack-workspace/compare/newspack@6.48.0...newspack@6.48.1) (2026-08-17)
+
+
+### Bug Fixes
+
+* **reader-revenue:** payment method merge field shows card details ([#589](https://github.com/Automattic/newspack-workspace/issues/589)) ([67716de](https://github.com/Automattic/newspack-workspace/commit/67716def1b146d59712acbbfc48090975ae588a2))
+
 # newspack [6.48.0](https://github.com/Automattic/newspack-workspace/compare/newspack@6.47.8...newspack@6.48.0) (2026-08-17)
 
 
