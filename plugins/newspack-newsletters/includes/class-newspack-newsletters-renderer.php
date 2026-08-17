@@ -907,73 +907,105 @@ final class Newspack_Newsletters_Renderer {
 	 * re-saved. Both forms can coexist in the same newsletter, so every width read
 	 * goes through here (NEWS-2852).
 	 *
-	 * The `dimensions` shape has three variants, and WordPress resolves all of them
-	 * before rendering (`wp-includes/blocks/button.php`): a literal percentage, a
-	 * `var:preset|dimension|<slug>` reference to a `dimensionSizes` preset (core
-	 * ships 25/50/75/100 for buttons, so this is reachable on every site), and an
-	 * absolute unit such as `200px`. Only percentages map onto an MJML column, so
-	 * presets are resolved first and absolute units are treated as "no width set" —
-	 * the button then takes the shared default rather than producing a nonsense
-	 * column.
+	 * The legacy attribute is preferred when it yields a usable width, but an
+	 * unusable one falls through to the `dimensions` value rather than discarding
+	 * it — partially-migrated content is exactly what this helper exists to
+	 * survive.
 	 *
-	 * Widths outside 1–100 are also treated as unset. Nothing in the block editor
-	 * can produce them, but hand-edited or migrated content can, and an
-	 * `mj-column` with a negative or >100% width breaks the whole row rather than
-	 * just that button.
+	 * A width is usable only if it resolves to a percentage in 1-100. Absolute
+	 * units have no meaning as an MJML column share, and a column outside that
+	 * range disturbs the rest of its row; either way the button falls back to the
+	 * default share, which is what a width-less button gets.
 	 *
 	 * Safe to call with either raw parsed-block attributes or the output of
 	 * `process_attributes()`, which touches neither width key.
 	 *
 	 * @param array $attrs A core/button block's attributes.
-	 * @return float|null Width as a percentage, or null when unset.
+	 * @return float|null Width as a percentage, or null when unset or unusable.
 	 */
-	private static function get_button_width( $attrs ) {
-		$width = null;
+	private static function get_button_width( array $attrs ): ?float {
+		$candidates = [];
 
-		if ( isset( $attrs['width'] ) && is_scalar( $attrs['width'] ) && '' !== $attrs['width'] ) {
-			$width = $attrs['width'];
-		} elseif ( isset( $attrs['style']['dimensions']['width'] ) && is_scalar( $attrs['style']['dimensions']['width'] ) ) {
-			$width = self::resolve_dimension_preset( (string) $attrs['style']['dimensions']['width'] );
+		if ( isset( $attrs['width'] ) && is_scalar( $attrs['width'] ) ) {
+			$candidates[] = (string) $attrs['width'];
+		}
+		if ( isset( $attrs['style']['dimensions']['width'] ) && is_scalar( $attrs['style']['dimensions']['width'] ) ) {
+			$candidates[] = self::resolve_dimension_preset( (string) $attrs['style']['dimensions']['width'] );
 		}
 
-		if ( null === $width || ! preg_match( '/^\s*(\d+(?:\.\d+)?)\s*%?\s*$/', (string) $width, $matches ) ) {
-			return null;
+		foreach ( $candidates as $candidate ) {
+			if ( ! preg_match( '/^\s*(\d+(?:\.\d+)?)\s*%?\s*$/', $candidate, $matches ) ) {
+				continue;
+			}
+			$percentage = (float) $matches[1];
+			if ( $percentage > 0 && $percentage <= 100 ) {
+				return $percentage;
+			}
 		}
 
-		$percentage = (float) $matches[1];
-
-		return ( $percentage > 0 && $percentage <= 100 ) ? $percentage : null;
+		return null;
 	}
 
 	/**
-	 * Resolve a `dimensions.width` value to its literal size.
+	 * Resolve a `dimensions.width` preset reference to its literal size.
 	 *
-	 * Mirrors the preset lookup WordPress does in `wp-includes/blocks/button.php`:
-	 * a `var:preset|dimension|<slug>` reference is looked up against the
-	 * `dimensionSizes` presets, searching custom, then theme, then default origins.
-	 * Any other value is returned unchanged.
+	 * WordPress stores a chosen preset as `var:preset|dimension|<slug>` rather than
+	 * a size. On the web an unresolved reference still renders, because the style
+	 * engine falls back to the `--wp--preset--dimension--<slug>` custom property
+	 * that theme.json emits. Email clients do not support custom properties, so the
+	 * reference has to be resolved here or the width is simply lost — which is why
+	 * this looks harder for the preset than core does.
+	 *
+	 * Core's own lookup (`render_block_core_button()`) reads only the
+	 * `blocks.core/button` node, with the origins and exact-slug match mirrored
+	 * below. That is enough for core because of the custom-property fallback; it
+	 * isn't enough for us, so this also reads the root `dimensions.dimensionSizes`
+	 * group, includes the `blocks` origin that `wp_theme_json_data_blocks` writes
+	 * to, and tolerates a kebab-cased reference to a camelCase slug.
 	 *
 	 * @param string $width The raw `style.dimensions.width` value.
-	 * @return string The resolved width.
+	 * @return string The resolved width, or the input unchanged when it isn't a
+	 *                preset reference or names an unknown preset.
 	 */
-	private static function resolve_dimension_preset( $width ) {
+	private static function resolve_dimension_preset( string $width ): string {
 		$prefix = 'var:preset|dimension|';
-		if ( 0 !== strpos( $width, $prefix ) ) {
+		if ( ! str_starts_with( $width, $prefix ) ) {
 			return $width;
 		}
+		$slug = substr( $width, strlen( $prefix ) );
 
-		$slug    = substr( $width, strlen( $prefix ) );
-		$presets = wp_get_global_settings( [ 'dimensions', 'dimensionSizes' ], [ 'block_name' => 'core/button' ] );
+		// Read the settings once and index into them. `wp_get_global_settings()`
+		// returns the *whole* settings array when the requested path is absent, so
+		// asking it for a path and testing `is_array()` on the result never fails —
+		// it just hands back a different array to walk.
+		$settings = wp_get_global_settings();
+		$groups   = [];
+		if ( isset( $settings['blocks']['core/button']['dimensions']['dimensionSizes'] ) ) {
+			$groups[] = $settings['blocks']['core/button']['dimensions']['dimensionSizes'];
+		}
+		if ( isset( $settings['dimensions']['dimensionSizes'] ) ) {
+			$groups[] = $settings['dimensions']['dimensionSizes'];
+		}
 
-		if ( is_array( $presets ) ) {
-			foreach ( [ 'custom', 'theme', 'default' ] as $origin ) {
+		foreach ( $groups as $presets ) {
+			if ( ! is_array( $presets ) ) {
+				continue;
+			}
+			// Origin priority, most specific first.
+			foreach ( [ 'custom', 'theme', 'blocks', 'default' ] as $origin ) {
 				if ( empty( $presets[ $origin ] ) || ! is_array( $presets[ $origin ] ) ) {
 					continue;
 				}
 				foreach ( $presets[ $origin ] as $preset ) {
-					if ( isset( $preset['slug'] ) && (string) $preset['slug'] === $slug ) {
-						return (string) ( $preset['size'] ?? $width );
+					if ( ! is_array( $preset ) || ! isset( $preset['slug'] ) || ! is_scalar( $preset['slug'] ) ) {
+						continue;
 					}
+					$preset_slug = (string) $preset['slug'];
+					if ( $preset_slug !== $slug && _wp_to_kebab_case( $preset_slug ) !== $slug ) {
+						continue;
+					}
+					$size = $preset['size'] ?? null;
+					return is_scalar( $size ) ? (string) $size : $width;
 				}
 			}
 		}
@@ -1405,6 +1437,11 @@ final class Newspack_Newsletters_Renderer {
 						$button_attrs['css-class'] = $attrs['className'];
 					}
 
+					// NOTE: the width below goes on $default_button_attrs, which is what
+					// the emit at the end of this case actually serializes. The
+					// $button_attrs built just above is dead (pre-existing) — if that
+					// is ever cleaned up, move this width with it or buttons silently
+					// lose their width again.
 					$column_attrs['css-class'] = 'mj-column-has-width';
 					$column_width              = $default_width;
 					$button_width              = self::get_button_width( $attrs );

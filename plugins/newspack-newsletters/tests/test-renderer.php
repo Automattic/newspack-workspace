@@ -14,6 +14,11 @@ class Newsletters_Renderer_Test extends WP_UnitTestCase {
 	 * Clean up after each test.
 	 */
 	public function tear_down() {
+		if ( null !== $this->dimension_preset_filter ) {
+			remove_filter( 'wp_theme_json_data_theme', $this->dimension_preset_filter );
+			$this->dimension_preset_filter = null;
+			wp_clean_theme_json_cache();
+		}
 		parent::tear_down();
 		// Reset stub RDB to prevent test pollution.
 		\RemoteDataBlocks\Editor\DataBinding\BlockBindings::reset();
@@ -305,6 +310,53 @@ class Newsletters_Renderer_Test extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Registers dimension presets at the theme layer, for the current test only.
+	 *
+	 * The preset tests must not depend on what the installed WordPress ships: core
+	 * only gained `dimensionSizes` for `core/button` in 7.1, so asserting against
+	 * its built-in 25/50/75/100 passes locally on an RC and fails on CI, which
+	 * installs the latest stable release. Declaring our own preset keeps the test
+	 * hermetic, and puts it at the theme layer's root — the natural place for a
+	 * theme to declare one, and a node core's own lookup does not read.
+	 *
+	 * @return void
+	 */
+	private function register_dimension_presets() {
+		$this->dimension_preset_filter = function ( $theme_json ) {
+			return $theme_json->update_with(
+				[
+					'version'  => 3,
+					'settings' => [
+						'dimensions' => [
+							'dimensionSizes' => [
+								[
+									'name' => 'QA Half',
+									'slug' => 'qa-half',
+									'size' => '50%',
+								],
+								[
+									'name' => 'QA Camel',
+									'slug' => 'qaCamelQuarter',
+									'size' => '25%',
+								],
+							],
+						],
+					],
+				]
+			);
+		};
+		add_filter( 'wp_theme_json_data_theme', $this->dimension_preset_filter );
+		wp_clean_theme_json_cache();
+	}
+
+	/**
+	 * Filter registered by register_dimension_presets(), removed on tear down.
+	 *
+	 * @var callable|null
+	 */
+	private $dimension_preset_filter = null;
+
+	/**
 	 * Build a `core/buttons` block wrapping one `core/button` per set of attributes.
 	 *
 	 * @param array ...$button_attrs One attributes array per button, in order.
@@ -377,16 +429,36 @@ class Newsletters_Renderer_Test extends WP_UnitTestCase {
 	/**
 	 * A `dimensions` width naming a preset resolves to that preset's size.
 	 *
-	 * WordPress stores a chosen preset as `var:preset|dimension|<slug>` rather
-	 * than a literal size, and resolves it at render time. Core ships 25/50/75/100
-	 * presets for buttons, so this shape is reachable on every site — not only
-	 * where a theme defines its own.
+	 * WordPress stores a chosen preset as `var:preset|dimension|<slug>` rather than
+	 * a size, and on the web an unresolved reference still renders via the
+	 * `--wp--preset--dimension--*` custom property. Email has no custom properties,
+	 * so failing to resolve here loses the width outright.
+	 *
+	 * The preset is declared at the theme layer's root, which is where a theme
+	 * would naturally put one — and which core's own button lookup does not read.
 	 */
 	public function test_button_width_dimensions_preset() {
+		$this->register_dimension_presets();
 		$this->assertSame(
 			[ '50%' ],
-			$this->button_column_widths( [ 'style' => [ 'dimensions' => [ 'width' => 'var:preset|dimension|50' ] ] ] ),
-			'Expected a preset width reference to resolve to the preset size.'
+			$this->button_column_widths( [ 'style' => [ 'dimensions' => [ 'width' => 'var:preset|dimension|qa-half' ] ] ] ),
+			'Expected a theme-declared preset reference to resolve to the preset size.'
+		);
+	}
+
+	/**
+	 * A kebab-cased reference resolves against a camelCase preset slug.
+	 *
+	 * WordPress kebab-cases slugs when it builds custom-property names, so a
+	 * reference can reach us in a different case than the slug was declared in.
+	 * Matching both ways costs nothing and avoids silently dropping the width.
+	 */
+	public function test_button_width_dimensions_preset_kebab_cased() {
+		$this->register_dimension_presets();
+		$this->assertSame(
+			[ '25%' ],
+			$this->button_column_widths( [ 'style' => [ 'dimensions' => [ 'width' => 'var:preset|dimension|qa-camel-quarter' ] ] ] ),
+			'Expected a kebab-cased reference to resolve against its camelCase slug.'
 		);
 	}
 
@@ -468,7 +540,11 @@ class Newsletters_Renderer_Test extends WP_UnitTestCase {
 	 * A newsletter can hold both forms at once: re-saving rewrites the buttons the
 	 * editor parsed, while untouched ones keep the legacy attribute. Widths are
 	 * chosen so the two cases can't coincide - if `dimensions` were ignored, the
-	 * 30% button would fall back to the 25% default share.
+	 * 30% button would fall back to the default share.
+	 *
+	 * Note the width-less button here lands on the 25% floor rather than the 20%
+	 * actually left over; see test_button_width_shares_remainder() for a fixture
+	 * that pins the remainder arithmetic itself.
 	 */
 	public function test_button_width_mixed_forms() {
 		$this->assertSame(
@@ -479,6 +555,24 @@ class Newsletters_Renderer_Test extends WP_UnitTestCase {
 				[]
 			),
 			'Expected each button to keep its own width, with the width-less button taking the remaining share.'
+		);
+	}
+
+	/**
+	 * A width-less button takes what's actually left, not a fixed share.
+	 *
+	 * This is the fixture that pins the accumulation itself: 60% leaves 40%, which
+	 * is above the 25% floor, so the floor can't mask a wrong total. Reading the
+	 * defined width as anything other than 60 gives the width-less button 50%.
+	 */
+	public function test_button_width_shares_remainder() {
+		$this->assertSame(
+			[ '60%', '40%' ],
+			$this->button_column_widths(
+				[ 'style' => [ 'dimensions' => [ 'width' => '60%' ] ] ],
+				[]
+			),
+			'Expected the width-less button to take the exact remainder.'
 		);
 	}
 
