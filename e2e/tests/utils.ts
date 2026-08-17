@@ -159,3 +159,11 @@ export const clickMyAccountMenuItem = async (page, label) => {
     await link.click({ timeout: 5000 });
   }).toPass({ timeout: 30000 });
 };
+
+// Locate a snackbar notice by its message text. Snackbar messages are mirrored
+// into a visually-hidden ARIA live region (#newspack-ui__sr-live-polite / -assertive)
+// for screen readers, so a bare page.getByText() resolves to two elements and
+// trips Playwright's strict mode; scoping to the snackbar container keeps the
+// locator unique.
+export const getSnackbar = (page, text) =>
+  page.locator(".newspack-ui__snackbar").getByText(text);

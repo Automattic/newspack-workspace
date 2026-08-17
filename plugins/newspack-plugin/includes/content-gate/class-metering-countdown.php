@@ -186,7 +186,7 @@ class Metering_Countdown {
 				return;
 			}
 			\Newspack_Blocks\Modal_Checkout::enqueue_modal( $product->get_id() );
-			\Newspack_Blocks::enqueue_view_assets( 'checkout-button' );
+			\Newspack_Blocks::enqueue_view_assets( 'checkout-button', 'defer' );
 			$checkout_data = \Newspack_Blocks\Modal_Checkout\Checkout_Data::get_checkout_data( $product );
 			?>
 			<div class="wp-block-newspack-blocks-checkout-button">

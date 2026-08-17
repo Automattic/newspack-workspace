@@ -22,15 +22,19 @@ class Newspack_Test_WooCommerce_Subscriptions extends WP_UnitTestCase {
 	 */
 	public function set_up() {
 		parent::set_up();
-		global $subscriptions_database, $products_database, $wcs_mock_total_paid_including_signup_fee, $wcs_mock_last_calculate_total_paid_args, $wcs_mock_order_items, $wcs_mock_items_sign_up_fee, $wcs_mock_prices_include_tax, $wcs_mock_last_items_sign_up_fee_tax;
+		global $subscriptions_database, $products_database, $orders_database, $wcs_mock_total_paid_including_signup_fee, $wcs_mock_last_calculate_total_paid_args, $wcs_mock_order_items, $wcs_mock_items_sign_up_fee, $wcs_mock_prices_include_tax, $wcs_mock_last_items_sign_up_fee_tax, $wcs_mock_cart_switches, $wcs_mock_product_switchable;
 		$subscriptions_database                   = [];
 		$products_database                        = [];
+		$orders_database                          = [];
 		$wcs_mock_total_paid_including_signup_fee = 0;
 		$wcs_mock_last_calculate_total_paid_args  = null;
 		$wcs_mock_order_items                     = [];
 		$wcs_mock_items_sign_up_fee               = 0;
 		$wcs_mock_prices_include_tax              = false;
 		$wcs_mock_last_items_sign_up_fee_tax      = null;
+		$wcs_mock_cart_switches                   = null;
+		$wcs_mock_product_switchable              = null;
+		wc_mocks_reset_order_items();
 		wp_set_current_user( 0 );
 		unset( $_POST['billing_email'], $_POST['post_data'], $_REQUEST['modal_checkout'], $_REQUEST['post_data'] );
 	}
@@ -40,13 +44,15 @@ class Newspack_Test_WooCommerce_Subscriptions extends WP_UnitTestCase {
 	 * not leak across tests.
 	 */
 	public function tear_down() {
-		global $wcs_mock_total_paid_including_signup_fee, $wcs_mock_last_calculate_total_paid_args, $wcs_mock_order_items, $wcs_mock_items_sign_up_fee, $wcs_mock_prices_include_tax, $wcs_mock_last_items_sign_up_fee_tax;
+		global $wcs_mock_total_paid_including_signup_fee, $wcs_mock_last_calculate_total_paid_args, $wcs_mock_order_items, $wcs_mock_items_sign_up_fee, $wcs_mock_prices_include_tax, $wcs_mock_last_items_sign_up_fee_tax, $wcs_mock_cart_switches, $wcs_mock_product_switchable;
 		$wcs_mock_total_paid_including_signup_fee = 0;
 		$wcs_mock_last_calculate_total_paid_args  = null;
 		$wcs_mock_order_items                     = [];
 		$wcs_mock_items_sign_up_fee               = 0;
 		$wcs_mock_prices_include_tax              = false;
 		$wcs_mock_last_items_sign_up_fee_tax      = null;
+		$wcs_mock_cart_switches                   = null;
+		$wcs_mock_product_switchable              = null;
 		remove_all_filters( 'newspack_wc_subs_switch_include_signup_fee' );
 		wp_set_current_user( 0 );
 		unset( $_POST['billing_email'], $_POST['post_data'], $_REQUEST['modal_checkout'], $_REQUEST['post_data'] );
@@ -1158,5 +1164,277 @@ class Newspack_Test_WooCommerce_Subscriptions extends WP_UnitTestCase {
 		$result = WooCommerce_Subscriptions::recover_total_paid_for_switch( 8.0, $subscription, $existing_item );
 
 		$this->assertSame( 8.0, $result, 'A positive WCS value (normal history) must be returned untouched even with the opt-in on.' );
+	}
+
+	/**
+	 * Build a subscription eligible for the pending-cancel switch grant, with a
+	 * line item to switch. Overrides let each test break exactly one condition.
+	 *
+	 * @param array $overrides Subscription data overrides.
+	 *
+	 * @return array [ \WC_Subscription, \WC_Order_Item_Product ]
+	 */
+	private function make_pending_cancel_switch_fixture( $overrides = [] ) {
+		$item         = new WC_Order_Item_Product( [ 'product_id' => 77 ] );
+		$subscription = wcs_create_subscription(
+			array_merge(
+				[
+					'customer_id' => 1,
+					'status'      => 'pending-cancel',
+					'items'       => [ $item ],
+					'dates'       => [ 'last_order_date_created' => '2026-01-01 00:00:00' ],
+				],
+				$overrides
+			)
+		);
+		return [ $subscription, $item ];
+	}
+
+	/**
+	 * The pending-cancel eligibility grant: a reactivatable pending-cancel
+	 * subscription with a switchable line item may be switched.
+	 */
+	public function test_pending_cancel_switch_eligibility_granted() {
+		[ $subscription, $item ] = $this->make_pending_cancel_switch_fixture();
+
+		$this->assertTrue( WooCommerce_Subscriptions::allow_pending_cancel_subscription_switch( false, $item, $subscription ) );
+	}
+
+	/**
+	 * Pins the real WC_Order_Item ArrayAccess asymmetry the eligibility filter
+	 * depends on: `$item['type']` resolves through the getter, but
+	 * `isset( $item['type'] )` is false because offsetExists() does not report
+	 * getter-backed virtual keys. Reading the type behind isset() denied every
+	 * real switch while the (previously over-permissive) mock kept tests green.
+	 */
+	public function test_order_item_type_read_matches_real_wc_asymmetry() {
+		$item = new WC_Order_Item_Product( [ 'product_id' => 77 ] );
+
+		$this->assertSame( 'line_item', $item['type'] );
+		$this->assertFalse( isset( $item['type'] ), 'Real WC_Order_Item::offsetExists() does not report getter-backed keys; the mock must not either.' );
+	}
+
+	/**
+	 * An already-eligible switch passes through untouched, and non-pending-cancel
+	 * statuses are left to WCS's own verdict.
+	 */
+	public function test_pending_cancel_switch_eligibility_passes_through() {
+		[ $subscription, $item ] = $this->make_pending_cancel_switch_fixture();
+		$this->assertTrue( WooCommerce_Subscriptions::allow_pending_cancel_subscription_switch( true, $item, $subscription ), 'An eligible verdict must pass through.' );
+
+		[ $active_sub, $active_item ] = $this->make_pending_cancel_switch_fixture( [ 'status' => 'active' ] );
+		$this->assertFalse( WooCommerce_Subscriptions::allow_pending_cancel_subscription_switch( false, $active_item, $active_sub ), 'An active subscription is WCS\'s call, not this filter\'s.' );
+
+		[ $cancelled_sub, $cancelled_item ] = $this->make_pending_cancel_switch_fixture( [ 'status' => 'cancelled' ] );
+		$this->assertFalse( WooCommerce_Subscriptions::allow_pending_cancel_subscription_switch( false, $cancelled_item, $cancelled_sub ), 'A fully cancelled subscription must not become switchable.' );
+	}
+
+	/**
+	 * Eligibility requires that the subscription can actually be reactivated —
+	 * completing the switch reactivates it, so a subscription whose payment
+	 * method (or expired term) forbids the transition must not be offered one.
+	 */
+	public function test_pending_cancel_switch_requires_reactivatable_subscription() {
+		[ $subscription, $item ] = $this->make_pending_cancel_switch_fixture( [ 'can_update_to' => [] ] );
+
+		$this->assertFalse( WooCommerce_Subscriptions::allow_pending_cancel_subscription_switch( false, $item, $subscription ) );
+	}
+
+	/**
+	 * The non-status checks mirrored from WCS's is_action_allowed() still
+	 * apply: product switchability, a last order date, and payment-method
+	 * support for amount and date changes.
+	 */
+	public function test_pending_cancel_switch_keeps_wcs_non_status_checks() {
+		global $wcs_mock_product_switchable;
+
+		[ $subscription, $item ] = $this->make_pending_cancel_switch_fixture();
+		$wcs_mock_product_switchable = false;
+		$this->assertFalse( WooCommerce_Subscriptions::allow_pending_cancel_subscription_switch( false, $item, $subscription ), 'A non-switchable product type stays non-switchable.' );
+		$wcs_mock_product_switchable = null;
+
+		[ $no_order_sub, $no_order_item ] = $this->make_pending_cancel_switch_fixture( [ 'dates' => [] ] );
+		$this->assertFalse( WooCommerce_Subscriptions::allow_pending_cancel_subscription_switch( false, $no_order_item, $no_order_sub ), 'A subscription without a last order date stays non-switchable.' );
+
+		[ $limited_sub, $limited_item ] = $this->make_pending_cancel_switch_fixture( [ 'payment_method_supports' => [ 'subscription_amount_changes' ] ] );
+		$this->assertFalse( WooCommerce_Subscriptions::allow_pending_cancel_subscription_switch( false, $limited_item, $limited_sub ), 'A payment method without date-change support stays non-switchable.' );
+	}
+
+	/**
+	 * At checkout, the reader's own pending-cancel subscription being switched
+	 * is reactivated right before WCS processes the switch, and the order is
+	 * stamped for the compensating revert.
+	 */
+	public function test_reactivates_owned_pending_cancel_switch_at_checkout() {
+		global $wcs_mock_cart_switches;
+
+		$user_id = self::factory()->user->create();
+		wp_set_current_user( $user_id );
+
+		[ $subscription ] = $this->make_pending_cancel_switch_fixture( [ 'customer_id' => $user_id ] );
+		$order            = new WC_Order( [ 'status' => 'pending' ] );
+
+		$wcs_mock_cart_switches = [
+			'cart_key_1' => [ 'subscription_id' => $subscription->get_id() ],
+		];
+
+		WooCommerce_Subscriptions::maybe_reactivate_pending_cancel_switch( $order->get_id() );
+
+		$this->assertSame( 'active', $subscription->get_status() );
+		$this->assertSame( [ $subscription->get_id() ], $order->get_meta( WooCommerce_Subscriptions::REACTIVATED_FOR_SWITCH_META ) );
+	}
+
+	/**
+	 * Reactivation is scoped to the current reader's own subscriptions and to
+	 * subscriptions actually in the pending-cancel + reactivatable state.
+	 */
+	public function test_reactivation_skips_ineligible_subscriptions() {
+		global $wcs_mock_cart_switches;
+
+		$user_id  = self::factory()->user->create();
+		$other_id = self::factory()->user->create();
+		wp_set_current_user( $user_id );
+
+		[ $foreign_sub ]  = $this->make_pending_cancel_switch_fixture( [ 'customer_id' => $other_id ] );
+		[ $active_sub ]   = $this->make_pending_cancel_switch_fixture(
+			[
+				'customer_id' => $user_id,
+				'status'      => 'active',
+				'id'          => 20,
+			]
+		);
+		[ $unreactivatable_sub ] = $this->make_pending_cancel_switch_fixture(
+			[
+				'customer_id'   => $user_id,
+				'can_update_to' => [],
+				'id'            => 30,
+			]
+		);
+		$order = new WC_Order( [ 'status' => 'pending' ] );
+
+		$wcs_mock_cart_switches = [
+			'cart_key_1' => [ 'subscription_id' => $foreign_sub->get_id() ],
+			'cart_key_2' => [ 'subscription_id' => $active_sub->get_id() ],
+			'cart_key_3' => [ 'subscription_id' => $unreactivatable_sub->get_id() ],
+		];
+
+		WooCommerce_Subscriptions::maybe_reactivate_pending_cancel_switch( $order->get_id() );
+
+		$this->assertSame( 'pending-cancel', $foreign_sub->get_status(), 'Another reader\'s subscription must be left for WCS to reject.' );
+		$this->assertSame( 'active', $active_sub->get_status(), 'An active subscription needs no reactivation.' );
+		$this->assertArrayNotHasKey( 'status_updates', $active_sub->data, 'An active subscription must not go through a status update.' );
+		$this->assertSame( 'pending-cancel', $unreactivatable_sub->get_status(), 'A non-reactivatable subscription must be left alone.' );
+		$this->assertSame( '', $order->get_meta( WooCommerce_Subscriptions::REACTIVATED_FOR_SWITCH_META ), 'No reactivation, no revert stamp.' );
+	}
+
+	/**
+	 * A checkout without switch items — or an anonymous one — never touches
+	 * subscription status.
+	 */
+	public function test_reactivation_noop_without_switches_or_user() {
+		global $wcs_mock_cart_switches;
+
+		$user_id = self::factory()->user->create();
+
+		[ $subscription ] = $this->make_pending_cancel_switch_fixture( [ 'customer_id' => $user_id ] );
+		$order            = new WC_Order( [ 'status' => 'pending' ] );
+
+		// No switches in the cart.
+		wp_set_current_user( $user_id );
+		WooCommerce_Subscriptions::maybe_reactivate_pending_cancel_switch( $order->get_id() );
+		$this->assertSame( 'pending-cancel', $subscription->get_status() );
+
+		// Switches in the cart, but no logged-in reader.
+		wp_set_current_user( 0 );
+		$wcs_mock_cart_switches = [ 'cart_key_1' => [ 'subscription_id' => $subscription->get_id() ] ];
+		WooCommerce_Subscriptions::maybe_reactivate_pending_cancel_switch( $order->get_id() );
+		$this->assertSame( 'pending-cancel', $subscription->get_status() );
+	}
+
+	/**
+	 * A failed (or cancelled) unpaid switch order reverts the reactivation:
+	 * the reader's auto-renewal-off choice must not be silently undone by a
+	 * declined payment. The stamp is consumed so the revert runs only once.
+	 */
+	public function test_revert_on_failed_unpaid_switch_order() {
+		$user_id = self::factory()->user->create();
+
+		[ $subscription ] = $this->make_pending_cancel_switch_fixture( [ 'customer_id' => $user_id ] );
+		$subscription->update_status( 'active' );
+		$order = new WC_Order(
+			[
+				'status'    => 'failed',
+				'date_paid' => '',
+				'meta'      => [ WooCommerce_Subscriptions::REACTIVATED_FOR_SWITCH_META => [ $subscription->get_id() ] ],
+			]
+		);
+
+		WooCommerce_Subscriptions::maybe_revert_reactivation_on_failed_switch( $order->get_id() );
+
+		$this->assertSame( 'pending-cancel', $subscription->get_status() );
+		$this->assertFalse( $order->meta_exists( WooCommerce_Subscriptions::REACTIVATED_FOR_SWITCH_META ), 'The stamp is consumed by the revert.' );
+
+		// A later transition of the same order (failed → cancelled) must not
+		// re-cancel a subscription the reader reactivated on purpose since.
+		$subscription->update_status( 'active' );
+		WooCommerce_Subscriptions::maybe_revert_reactivation_on_failed_switch( $order->get_id() );
+		$this->assertSame( 'active', $subscription->get_status() );
+	}
+
+	/**
+	 * The revert leaves paid orders and moved-on subscriptions alone: a paid
+	 * switch order completed its switch, and a subscription no longer active
+	 * is not in the state this integration created.
+	 */
+	public function test_revert_skips_paid_orders_and_moved_on_subscriptions() {
+		$user_id = self::factory()->user->create();
+
+		// Paid order: the switch completed; a later cancellation (refund) must
+		// not undo the state the reader paid for.
+		[ $paid_sub ] = $this->make_pending_cancel_switch_fixture( [ 'customer_id' => $user_id ] );
+		$paid_sub->update_status( 'active' );
+		$paid_order = new WC_Order(
+			[
+				'status' => 'cancelled',
+				'meta'   => [ WooCommerce_Subscriptions::REACTIVATED_FOR_SWITCH_META => [ $paid_sub->get_id() ] ],
+			]
+		);
+		WooCommerce_Subscriptions::maybe_revert_reactivation_on_failed_switch( $paid_order->get_id() );
+		$this->assertSame( 'active', $paid_sub->get_status() );
+
+		// Moved-on subscription: the reader re-cancelled on their own before
+		// the order failed — no second cancellation is recorded.
+		[ $moved_on_sub ] = $this->make_pending_cancel_switch_fixture(
+			[
+				'customer_id' => $user_id,
+				'id'          => 40,
+			]
+		);
+		$moved_on_order = new WC_Order(
+			[
+				'status'    => 'failed',
+				'date_paid' => '',
+				'meta'      => [ WooCommerce_Subscriptions::REACTIVATED_FOR_SWITCH_META => [ $moved_on_sub->get_id() ] ],
+			]
+		);
+		$updates_before = count( $moved_on_sub->data['status_updates'] ?? [] );
+		WooCommerce_Subscriptions::maybe_revert_reactivation_on_failed_switch( $moved_on_order->get_id() );
+		$this->assertSame( 'pending-cancel', $moved_on_sub->get_status() );
+		$this->assertCount( $updates_before, $moved_on_sub->data['status_updates'] ?? [], 'No status update is recorded for a subscription already back in pending-cancel.' );
+		$this->assertFalse( $moved_on_order->meta_exists( WooCommerce_Subscriptions::REACTIVATED_FOR_SWITCH_META ), 'The stale stamp is still consumed.' );
+	}
+
+	/**
+	 * The reactivate-then-switch pair is wired up in the right order: the
+	 * reactivation must run before WC_Subscriptions_Switcher::process_checkout()
+	 * (priority 50 on both checkout hooks), and the revert listens on both
+	 * failure transitions.
+	 */
+	public function test_pending_cancel_switch_hook_registrations() {
+		$this->assertSame( 10, has_filter( 'woocommerce_subscriptions_can_item_be_switched', [ WooCommerce_Subscriptions::class, 'allow_pending_cancel_subscription_switch' ] ) );
+		$this->assertSame( 40, has_action( 'woocommerce_checkout_order_processed', [ WooCommerce_Subscriptions::class, 'maybe_reactivate_pending_cancel_switch' ] ) );
+		$this->assertSame( 40, has_action( 'woocommerce_store_api_checkout_order_processed', [ WooCommerce_Subscriptions::class, 'maybe_reactivate_pending_cancel_switch' ] ) );
+		$this->assertSame( 10, has_action( 'woocommerce_order_status_failed', [ WooCommerce_Subscriptions::class, 'maybe_revert_reactivation_on_failed_switch' ] ) );
+		$this->assertSame( 10, has_action( 'woocommerce_order_status_cancelled', [ WooCommerce_Subscriptions::class, 'maybe_revert_reactivation_on_failed_switch' ] ) );
 	}
 }

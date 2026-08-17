@@ -50,7 +50,7 @@ A user can have admin UI access but fail REST calls (or vice versa).
 
 ## Lint commands
 
-`npm run lint` runs JS + SCSS only. PHP linting requires a separate `npm run lint:php`.
+`npm run lint` runs JS + SCSS only. Lint PHP from the workspace root (see the root guide).
 
 ## Test base class
 

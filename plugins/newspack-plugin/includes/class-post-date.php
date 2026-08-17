@@ -437,7 +437,16 @@ class Post_Date {
 
 		$asset = include NEWSPACK_ABSPATH . 'dist/other-scripts/relative-time.asset.php';
 
-		wp_enqueue_script( $handle, $url, $asset['dependencies'] ?? [], $asset['version'] ?? false, true );
+		wp_enqueue_script(
+			$handle,
+			$url,
+			$asset['dependencies'] ?? [],
+			$asset['version'] ?? false,
+			[
+				'in_footer' => true,
+				'strategy'  => 'defer',
+			]
+		);
 		wp_localize_script(
 			$handle,
 			'newspackRelativeTime',

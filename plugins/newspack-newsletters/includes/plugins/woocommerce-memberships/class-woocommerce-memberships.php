@@ -214,18 +214,22 @@ class Woocommerce_Memberships {
 			}
 		}
 
-		// Bail if there are no lists we need to remove.
-		if ( empty( $lists_to_remove ) ) {
-			return;
-		}
-
 		/**
-		 * Check if the user is already in one of the lists. If they are, store it.
+		 * Snapshot which of this plan's lists the reader is currently subscribed to,
+		 * BEFORE narrowing the removal set below. This snapshot is stored as the
+		 * membership's deactivation history and is what a later reactivation uses to
+		 * resubscribe the reader to exactly the lists they were in.
 		 *
-		 * If they are granted this membership again, we can resubscribe them only to the lists they were in.
+		 * It must be computed from the full plan list, not the post-exclusion removal
+		 * set: if a shared list is excluded from removal (below) and it was the only
+		 * one of this plan's lists the reader was subscribed to, computing this after
+		 * the exclusion would store an empty history — and add_user_to_lists() treats
+		 * an empty history as "no restriction" and re-adds every plan list on
+		 * reactivation, resubscribing the reader to lists they had opted out of.
 		 *
-		 * Also, during a subscription renewal, a membership can be momentarily marked as paused, causing the user to be removed from the lists
-		 * in which case we want to resubscribe them to the lists they were in.
+		 * Also, during a subscription renewal, a membership can be momentarily marked
+		 * as paused, causing the user to be removed from the lists, in which case we
+		 * want to resubscribe them only to the lists they were in. See NPPM-3000.
 		 */
 		$current_user_lists = \Newspack_Newsletters_Subscription::get_contact_lists( $user_email );
 		$existing_lists     = [];
@@ -234,10 +238,82 @@ class Woocommerce_Memberships {
 			$existing_lists = array_values( array_intersect( $current_user_lists, $lists_to_remove ) );
 		}
 
+		// Don't remove lists the reader still has access to via another active
+		// membership. When switching between plans that share a Subscription List
+		// (e.g. monthly and annual premium newsletters that share a "member" list),
+		// deactivating the old plan must not strip a list the new, still-active plan
+		// also grants — otherwise the shared list is lost. See NPPM-3000.
+		//
+		// This makes the switch order-independent when the new plan is already active
+		// at the moment the old one deactivates (so it appears in the active-
+		// memberships scan below) — the order seen in the reported production flow.
+		// If a flow instead deactivates the old plan BEFORE the new one becomes
+		// active, the shared list is removed here and re-added when the new plan
+		// activates via add_user_to_lists(); that re-add covers plan-tied lists but
+		// not lists gated behind the post-checkout signup modal, so a shared list
+		// that is also a signup-modal list could still be dropped in that ordering.
+		$lists_still_granted = self::get_lists_granted_by_other_active_memberships( $user->ID, $user_membership->get_id() );
+		if ( ! empty( $lists_still_granted ) ) {
+			$lists_to_remove = array_values( array_diff( $lists_to_remove, $lists_still_granted ) );
+		}
+
+		// Bail if there are no lists we need to remove.
+		if ( empty( $lists_to_remove ) ) {
+			return;
+		}
+
 		self::update_user_lists_on_deactivation( $user->ID, $user_membership->get_id(), $existing_lists );
 
 		Newspack_Newsletters_Contacts::add_and_remove_lists( $user_email, [], $lists_to_remove, 'Removing user from lists tied to Memberships being marked as inactive' );
 		Newspack_Newsletters_Logger::log( 'Reader ' . $user_email . ' removed from the following lists: ' . implode( ', ', $lists_to_remove ) );
+	}
+
+	/**
+	 * Get the public IDs of all Subscription Lists granted by the user's OTHER
+	 * active memberships (i.e. excluding the membership being deactivated).
+	 *
+	 * Used to avoid removing a reader from a list they still qualify for through a
+	 * different active membership — e.g. when switching between two plans that share
+	 * a list. See NPPM-3000.
+	 *
+	 * @param int $user_id               The user ID.
+	 * @param int $exclude_membership_id The membership ID being deactivated (excluded from the scan).
+	 * @return string[] Public list IDs still granted by the user's other active memberships.
+	 */
+	private static function get_lists_granted_by_other_active_memberships( $user_id, $exclude_membership_id ) {
+		if ( ! function_exists( 'wc_memberships_get_user_active_memberships' ) ) {
+			return [];
+		}
+		$active_memberships = wc_memberships_get_user_active_memberships( $user_id );
+		if ( empty( $active_memberships ) || ! is_array( $active_memberships ) ) {
+			return [];
+		}
+		$lists = [];
+		foreach ( $active_memberships as $membership ) {
+			if ( ! $membership instanceof \WC_Memberships_User_Membership ) {
+				continue;
+			}
+			if ( (int) $membership->get_id() === (int) $exclude_membership_id ) {
+				continue;
+			}
+			$plan = $membership->get_plan();
+			if ( ! $plan instanceof \WC_Memberships_Membership_Plan ) {
+				continue;
+			}
+			foreach ( $plan->get_content_restriction_rules() as $rule ) {
+				if ( Subscription_Lists::CPT !== $rule->get_content_type_name() ) {
+					continue;
+				}
+				foreach ( $rule->get_object_ids() as $object_id ) {
+					try {
+						$lists[] = ( new Subscription_List( $object_id ) )->get_public_id();
+					} catch ( \InvalidArgumentException $e ) {
+						continue;
+					}
+				}
+			}
+		}
+		return array_values( array_unique( $lists ) );
 	}
 
 	/**
