@@ -121,7 +121,8 @@ class Test_Premium_Newsletters_Verify extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * The summary counts every bucket, including rows the ESP could not answer for.
+	 * The summary counts every bucket, including rows the ESP could not answer for
+	 * and leaks a --live run removed.
 	 */
 	public function test_summarize_rows_counts_every_bucket() {
 		$rows = [
@@ -129,6 +130,7 @@ class Test_Premium_Newsletters_Verify extends \WP_UnitTestCase {
 			[ 'status' => 'leak' ],
 			[ 'status' => 'gap' ],
 			[ 'status' => 'ok' ],
+			[ 'status' => 'removed' ],
 			[ 'status' => 'not_asserted' ],
 			[ 'status' => 'unresolved' ],
 		];
@@ -138,6 +140,7 @@ class Test_Premium_Newsletters_Verify extends \WP_UnitTestCase {
 				'leak'         => 2,
 				'gap'          => 1,
 				'ok'           => 1,
+				'removed'      => 1,
 				'not_asserted' => 1,
 				'unresolved'   => 1,
 			],
@@ -155,6 +158,7 @@ class Test_Premium_Newsletters_Verify extends \WP_UnitTestCase {
 				'leak'         => 0,
 				'gap'          => 0,
 				'ok'           => 0,
+				'removed'      => 0,
 				'not_asserted' => 0,
 				'unresolved'   => 0,
 			],
@@ -163,18 +167,54 @@ class Test_Premium_Newsletters_Verify extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * A coverage record for a run that walked whole populations, built through the
+	 * same helpers the command uses.
+	 *
+	 * @param int[] $gate_ids   Gates walked.
+	 * @param int[] $reader_ids Readers checked.
+	 *
+	 * @return array
+	 */
+	private function complete_coverage( array $gate_ids = [ 1 ], array $reader_ids = [ 101, 102 ] ): array {
+		$coverage = $this->invoke_private_static( 'new_coverage', [] );
+		foreach ( $gate_ids as $gate_id ) {
+			$coverage = $this->invoke_private_static( 'with_gate_walked', [ $coverage, $this->make_gate( $gate_id, true ) ] );
+		}
+		foreach ( $reader_ids as $reader_id ) {
+			$coverage = $this->invoke_private_static( 'with_reader_checked', [ $coverage, $reader_id ] );
+		}
+		return $coverage;
+	}
+
+	/**
+	 * A summary with nothing wrong in it, so a test asserting on coverage is not
+	 * also asserting on findings.
+	 *
+	 * @param array<string,int> $overrides Buckets to set.
+	 *
+	 * @return array<string,int>
+	 */
+	private function clean_summary( array $overrides = [] ): array {
+		return array_merge(
+			[
+				'leak'         => 0,
+				'gap'          => 0,
+				'ok'           => 5,
+				'removed'      => 0,
+				'not_asserted' => 0,
+				'unresolved'   => 0,
+			],
+			$overrides
+		);
+	}
+
+	/**
 	 * A leak fails the run: that is the assertion the command exists to make.
 	 */
 	public function test_verification_fails_on_a_leak() {
-		$summary = [
-			'leak'         => 1,
-			'gap'          => 0,
-			'ok'           => 5,
-			'not_asserted' => 0,
-			'unresolved'   => 0,
-		];
+		$summary = $this->clean_summary( [ 'leak' => 1 ] );
 
-		$this->assertTrue( $this->invoke_private_static( 'verification_failed', [ $summary ] ) );
+		$this->assertTrue( $this->invoke_private_static( 'verification_failed', [ $summary, $this->complete_coverage() ] ) );
 	}
 
 	/**
@@ -183,15 +223,9 @@ class Test_Premium_Newsletters_Verify extends \WP_UnitTestCase {
 	 * report a site as ready to flip.
 	 */
 	public function test_verification_fails_on_an_unresolved_row() {
-		$summary = [
-			'leak'         => 0,
-			'gap'          => 0,
-			'ok'           => 5,
-			'not_asserted' => 0,
-			'unresolved'   => 1,
-		];
+		$summary = $this->clean_summary( [ 'unresolved' => 1 ] );
 
-		$this->assertTrue( $this->invoke_private_static( 'verification_failed', [ $summary ] ) );
+		$this->assertTrue( $this->invoke_private_static( 'verification_failed', [ $summary, $this->complete_coverage() ] ) );
 	}
 
 	/**
@@ -200,15 +234,220 @@ class Test_Premium_Newsletters_Verify extends \WP_UnitTestCase {
 	 * deliberately never writes an addition to fix it.
 	 */
 	public function test_verification_passes_with_gaps_but_no_leaks() {
-		$summary = [
-			'leak'         => 0,
-			'gap'          => 3,
-			'ok'           => 5,
-			'not_asserted' => 2,
-			'unresolved'   => 0,
+		$summary = $this->clean_summary(
+			[
+				'gap'          => 3,
+				'not_asserted' => 2,
+			]
+		);
+
+		$this->assertFalse( $this->invoke_private_static( 'verification_failed', [ $summary, $this->complete_coverage() ] ) );
+	}
+
+	/**
+	 * The baseline the whole wave rests on: a run that walked every population and
+	 * found nothing wrong is complete, passes, and exits 0. Without this, a change
+	 * that failed every run would still satisfy every other coverage test here.
+	 */
+	public function test_a_complete_clean_run_passes() {
+		$coverage = $this->complete_coverage();
+
+		$this->assertTrue( $this->invoke_private_static( 'coverage_is_complete', [ $coverage ] ) );
+		$this->assertFalse( $this->invoke_private_static( 'verification_failed', [ $this->clean_summary(), $coverage ] ) );
+	}
+
+	/**
+	 * --max-batches stopping a gate part-way leaves readers unchecked, so a clean
+	 * result is not evidence and the run must fail — whatever it found before it
+	 * stopped. This is the reproduced blocker: the truncated run used to warn on
+	 * STDERR, which a cutover script gating on $? never sees, and then exit 0.
+	 */
+	public function test_a_truncated_run_fails_whatever_its_findings() {
+		$coverage = $this->invoke_private_static(
+			'with_incomplete_gate',
+			[ $this->complete_coverage(), Premium_Newsletters_Verify::COVERAGE_TRUNCATED, $this->make_gate( 1, true ) ]
+		);
+
+		$this->assertFalse( $this->invoke_private_static( 'coverage_is_complete', [ $coverage ] ) );
+		$this->assertTrue( $this->invoke_private_static( 'verification_failed', [ $this->clean_summary(), $coverage ] ) );
+		$this->assertTrue( $this->invoke_private_static( 'verification_failed', [ $this->clean_summary( [ 'gap' => 4 ] ), $coverage ] ) );
+		$this->assertTrue( $this->invoke_private_static( 'verification_failed', [ $this->clean_summary( [ 'removed' => 4 ] ), $coverage ] ) );
+	}
+
+	/**
+	 * A gate the run never reached at all, because an earlier gate had already
+	 * spent --max-batches, is the same silent pass one step further along: its
+	 * whole population is unchecked and its rows are simply absent from the counts.
+	 */
+	public function test_a_gate_skipped_for_an_exhausted_cap_fails_the_run() {
+		$coverage = $this->invoke_private_static(
+			'with_incomplete_gate',
+			[ $this->complete_coverage(), Premium_Newsletters_Verify::COVERAGE_CAP_EXHAUSTED, $this->make_gate( 2, true ) ]
+		);
+
+		$this->assertTrue( $this->invoke_private_static( 'verification_failed', [ $this->clean_summary(), $coverage ] ) );
+	}
+
+	/**
+	 * A verifiable gate that yields nobody is suspicious, not clean. The migration
+	 * writes non-subscription product IDs into a `subscription` access rule that
+	 * wcs_get_subscriptions() can never match, so a gate really can name products
+	 * no subscription matches — producing an empty population, zero findings, and
+	 * exactly the silent pass this wave exists to kill.
+	 */
+	public function test_an_empty_population_on_a_verifiable_gate_fails_the_run() {
+		$coverage = $this->invoke_private_static(
+			'with_incomplete_gate',
+			[ $this->invoke_private_static( 'new_coverage', [] ), Premium_Newsletters_Verify::COVERAGE_EMPTY_POPULATION, $this->make_gate( 3, true ) ]
+		);
+
+		$this->assertTrue( $this->invoke_private_static( 'verification_failed', [ $this->clean_summary( [ 'ok' => 0 ] ), $coverage ] ) );
+	}
+
+	/**
+	 * The case an operator is actually trying to reach, and the one this wave must
+	 * not break: a --live run that found leaks, removed every one of them and
+	 * confirmed each gone still passes and still exits 0 — with the removals
+	 * visible in the counts rather than folded into OK.
+	 */
+	public function test_a_live_run_that_removed_every_leak_passes_with_the_removals_counted() {
+		$summary = $this->invoke_private_static(
+			'summarize_rows',
+			[
+				[
+					[ 'status' => 'removed' ],
+					[ 'status' => 'removed' ],
+					[ 'status' => 'ok' ],
+				],
+			]
+		);
+
+		$this->assertSame( 2, $summary['removed'] );
+		$this->assertSame( 0, $summary['leak'] );
+		$this->assertFalse( $this->invoke_private_static( 'verification_failed', [ $summary, $this->complete_coverage() ] ) );
+	}
+
+	/**
+	 * Coverage counts distinct readers, not visits. A reader who holds products for
+	 * two gates is checked under both, and counting them twice would inflate the
+	 * number the success line quotes.
+	 */
+	public function test_coverage_counts_a_reader_once_across_two_gates() {
+		$coverage = $this->complete_coverage( [ 1, 2 ], [ 101, 102, 101 ] );
+
+		$this->assertStringContainsString( '2 reader(s) across 2 gate(s)', $this->invoke_private_static( 'describe_checked_scope', [ $coverage ] ) );
+	}
+
+	/**
+	 * The success line has to name the population it checked. Its old wording —
+	 * "no reader is on a premium list they are not entitled to" — claimed the whole
+	 * site, which the population query cannot see: a reader entitled by a
+	 * non-subscription purchase, one who joined before the list became premium, and
+	 * one granted a membership by hand are all outside it.
+	 */
+	public function test_the_success_line_names_the_population_it_checked() {
+		$message = $this->invoke_private_static( 'describe_success', [ $this->complete_coverage( [ 1, 2 ], [ 101, 102, 103 ] ) ] );
+
+		$this->assertStringContainsString( '3 reader(s) across 2 gate(s)', $message );
+		$this->assertStringNotContainsString( 'no reader is on a premium list', $message );
+	}
+
+	/**
+	 * A run that failed only on coverage must not also report "0 leak(s)", which
+	 * invites the reader to conclude nothing was wrong. Only the reasons that
+	 * apply are named.
+	 */
+	public function test_the_failure_line_names_only_the_reasons_that_apply() {
+		$coverage = $this->invoke_private_static(
+			'with_incomplete_gate',
+			[ $this->complete_coverage(), Premium_Newsletters_Verify::COVERAGE_TRUNCATED, $this->make_gate( 1, true ) ]
+		);
+
+		$message = $this->invoke_private_static( 'describe_failure', [ $this->clean_summary(), $coverage ] );
+
+		$this->assertStringContainsString( '1 gate(s) not fully checked', $message );
+		$this->assertStringNotContainsString( 'leak(s)', $message );
+		$this->assertStringContainsString( '2 reader(s) across 1 gate(s)', $message );
+	}
+
+	/**
+	 * Every incompleteness reason the command can record has a message explaining
+	 * it, and each names the gate. Wave 4 adds a fourth reason; this is what tells
+	 * whoever adds it that a constant without a message is not finished.
+	 */
+	public function test_every_coverage_reason_renders_a_message_naming_its_gate() {
+		$reasons = [
+			Premium_Newsletters_Verify::COVERAGE_TRUNCATED,
+			Premium_Newsletters_Verify::COVERAGE_CAP_EXHAUSTED,
+			Premium_Newsletters_Verify::COVERAGE_EMPTY_POPULATION,
 		];
 
-		$this->assertFalse( $this->invoke_private_static( 'verification_failed', [ $summary ] ) );
+		$this->assertSame( $reasons, array_keys( Premium_Newsletters_Verify::COVERAGE_REASON_MESSAGES ) );
+
+		foreach ( $reasons as $reason ) {
+			$coverage = $this->invoke_private_static(
+				'with_incomplete_gate',
+				[ $this->invoke_private_static( 'new_coverage', [] ), $reason, $this->make_gate( 7, true ) ]
+			);
+			$lines    = $this->invoke_private_static( 'describe_coverage_gaps', [ $coverage ] );
+
+			$this->assertCount( 1, $lines );
+			$this->assertStringContainsString( 'Gate 7', $lines[0] );
+			$this->assertStringContainsString( 'gate 7', $lines[0] );
+		}
+	}
+
+	/**
+	 * A complete run has nothing to say about coverage gaps.
+	 */
+	public function test_describe_coverage_gaps_is_empty_for_a_complete_run() {
+		$this->assertSame( [], $this->invoke_private_static( 'describe_coverage_gaps', [ $this->complete_coverage() ] ) );
+	}
+
+	/**
+	 * A removal the ESP reports as done, with the list gone from the contact
+	 * afterwards, is the only case that counts as removed.
+	 */
+	public function test_classify_removal_records_a_confirmed_removal() {
+		$this->assertSame(
+			'removed',
+			$this->invoke_private_static( 'classify_removal', [ true, [ '456' ], '123' ] )
+		);
+	}
+
+	/**
+	 * The blocker this closes: update_contact_lists_handling_local() re-reads the
+	 * contact and, when that read fails for any reason, takes its create-contact
+	 * branch and returns true without removing anything. Treating that as success
+	 * stamps a still-subscribed reader as clean — a real leak turned into a pass,
+	 * on the one path this command writes. So a re-read that still shows the list
+	 * is 'unresolved', which also fails the run.
+	 */
+	public function test_classify_removal_rejects_a_removal_the_esp_did_not_make() {
+		$status = $this->invoke_private_static( 'classify_removal', [ true, [ '123', '456' ], '123' ] );
+
+		$this->assertSame( 'unresolved', $status );
+		$this->assertTrue(
+			$this->invoke_private_static(
+				'verification_failed',
+				[ $this->clean_summary( [ 'unresolved' => 1 ] ), $this->complete_coverage() ]
+			)
+		);
+	}
+
+	/**
+	 * A removal that errored outright, and one whose confirming re-read failed, are
+	 * both unconfirmed and mean the same thing to an operator: re-run.
+	 */
+	public function test_classify_removal_is_unresolved_when_it_cannot_be_confirmed() {
+		$this->assertSame(
+			'unresolved',
+			$this->invoke_private_static( 'classify_removal', [ new \WP_Error( 'newspack_newsletters_error', 'Nope' ), [], '123' ] )
+		);
+		$this->assertSame(
+			'unresolved',
+			$this->invoke_private_static( 'classify_removal', [ true, new \WP_Error( 'newspack_newsletters_error', 'Nope' ), '123' ] )
+		);
 	}
 
 	/**
