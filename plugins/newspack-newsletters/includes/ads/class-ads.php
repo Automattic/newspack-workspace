@@ -618,7 +618,7 @@ final class Ads {
 		$all_ads = get_posts(
 			[
 				'post_type'      => self::CPT,
-				'posts_per_page' => -1,
+				'posts_per_page' => -1, // phpcs:ignore WordPressVIPMinimum.Performance.NoPaging -- Newsletter ads CPT; config-scale.
 			]
 		);
 		$ads     = [];
