@@ -8,6 +8,7 @@
  */
 
 const mockPropagate = jest.fn();
+let warnSpy;
 
 jest.mock( './preview-links', () => ( {
 	propagateGatePreviewParams: ( ...args ) => mockPropagate( ...args ),
@@ -27,11 +28,13 @@ describe( 'gate.js preview-param wiring', () => {
 		// the path a footer/async script actually takes.
 		Object.defineProperty( document, 'readyState', { value: 'interactive', configurable: true } );
 		document.body.innerHTML = '<div class="newspack-content-gate__gate"></div>';
-		jest.spyOn( console, 'warn' ).mockImplementation( () => {} );
+		// Held in a variable rather than reached for as `console.warn`, which the
+		// no-console rule rejects.
+		warnSpy = jest.spyOn( console, 'warn' ).mockImplementation( () => {} );
 	} );
 
 	afterEach( () => {
-		console.warn.mockRestore();
+		warnSpy.mockRestore();
 	} );
 
 	it( 'runs propagation on load', () => {
@@ -48,6 +51,6 @@ describe( 'gate.js preview-param wiring', () => {
 		// The throw is swallowed rather than aborting module evaluation, so the
 		// gate's own registration below it still runs.
 		expect( () => require( './gate' ) ).not.toThrow();
-		expect( console.warn ).toHaveBeenCalled();
+		expect( warnSpy ).toHaveBeenCalled();
 	} );
 } );

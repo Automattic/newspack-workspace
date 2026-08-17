@@ -20,11 +20,21 @@
  * change one, change the other.
  */
 export function propagateGatePreviewParams() {
+	// Previews only ever render inside the editor's preview iframe, so requiring a
+	// frame is what keeps preview mode from following an editor around the site.
+	// Someone who lands on a preview URL top-level — a new tab, a pasted link — is
+	// browsing, not previewing, and should get ordinary links. Comparing
+	// `window.top` is a reference check, which cross-origin isolation still
+	// permits.
+	if ( window.self === window.top ) {
+		return;
+	}
+
 	// Only localized on a gate preview, so its absence means there is nothing to
 	// propagate. Read through `window.` rather than as a bare identifier:
 	// optional chaining guards a null value, not an undeclared binding, and an
 	// undeclared one throws.
-	const params = window.newspack_content_gate?.preview_query_params;
+	const params = window.newspack_content_gate?.preview_param_names;
 	if ( ! params?.length ) {
 		return;
 	}
@@ -63,12 +73,28 @@ export function propagateGatePreviewParams() {
 		}
 
 		// Off-site links, and schemes like mailto: and tel: that resolve to a null
-		// origin, are none of our business.
+		// origin, are none of our business. Matching on origin rather than on the
+		// site URL means a subdirectory install also stamps links that sit outside
+		// WordPress; that is deliberate, because it is what makes multibranded
+		// sites work, where brands are same-origin paths. A stray `ngp_id` on such
+		// a page resolves to no layout and does nothing.
 		if ( url.origin !== window.location.origin ) {
 			return;
 		}
 
 		present.forEach( ( [ key, value ] ) => url.searchParams.set( key, value ) );
-		anchor.setAttribute( 'href', url.toString() );
+
+		// Keep the href in the shape the page wrote it, because a preview exists to
+		// show what production does. Re-serializing through URL() turns a relative
+		// href absolute, which breaks exactly the theme code a preview should
+		// exercise: `a[href^="/"]` selectors, "current item" scripts comparing an
+		// href against location.pathname. Only the query is ours to change. Two
+		// residual differences we accept: a path-relative href comes back
+		// root-relative, since resolving it is what told us where it points, and
+		// URLSearchParams re-encodes an existing query (`%20` to `+`) — forms
+		// servers treat as equivalent, and unpicking it would mean editing the
+		// query string by hand.
+		const isAbsolute = /^(?:[a-z][a-z0-9+.-]*:)?\/\//i.test( href );
+		anchor.setAttribute( 'href', isAbsolute ? url.toString() : url.pathname + url.search + url.hash );
 	} );
 }

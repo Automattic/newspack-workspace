@@ -1,20 +1,44 @@
 import { propagateGatePreviewParams } from './preview-links';
 
-// The jsdom origin, whatever the runner sets it to. Expectations are built from
-// it independently of the code under test.
-const abs = path => new URL( path, window.location.origin ).toString();
-
 const setSearch = search => window.history.replaceState( {}, '', '/post/' + search );
 const setLinks = html => {
 	document.body.innerHTML = html;
 };
 const hrefs = () => [ ...document.querySelectorAll( 'a' ) ].map( anchor => anchor.getAttribute( 'href' ) );
 
+// Propagation only runs inside the preview iframe, so every positive case has to
+// look framed. jsdom's `top` points at the window itself.
+const setFramed = framed => {
+	Object.defineProperty( window, 'top', { value: framed ? {} : window, configurable: true } );
+};
+
+// Pins the contract that the early returns bail before touching the DOM at all,
+// which is what keeps this off the critical path of an ordinary page load. An
+// assertion on hrefs alone would still pass if the function walked every anchor
+// and happened to rewrite nothing.
+const expectNoTraversal = run => {
+	const spy = jest.spyOn( document, 'querySelectorAll' );
+	run();
+	expect( spy ).not.toHaveBeenCalled();
+	spy.mockRestore();
+};
+
 describe( 'propagateGatePreviewParams', () => {
 	beforeEach( () => {
-		global.newspack_content_gate = { preview_query_params: [ 'ngp_id', 'ngp_st' ] };
+		global.newspack_content_gate = { preview_param_names: [ 'ngp_id', 'ngp_st' ] };
+		setFramed( true );
 		setSearch( '' );
 		setLinks( '' );
+	} );
+
+	it( 'does nothing top-level, so preview mode cannot follow an editor around the site', () => {
+		setFramed( false );
+		setSearch( '?ngp_id=7' );
+		setLinks( '<a href="/other/">x</a>' );
+
+		expectNoTraversal( propagateGatePreviewParams );
+
+		expect( hrefs() ).toEqual( [ '/other/' ] );
 	} );
 
 	it( 'does nothing outside a preview, where the params are not localized', () => {
@@ -22,7 +46,7 @@ describe( 'propagateGatePreviewParams', () => {
 		setSearch( '?ngp_id=7' );
 		setLinks( '<a href="/other/">x</a>' );
 
-		propagateGatePreviewParams();
+		expectNoTraversal( propagateGatePreviewParams );
 
 		expect( hrefs() ).toEqual( [ '/other/' ] );
 	} );
@@ -39,7 +63,7 @@ describe( 'propagateGatePreviewParams', () => {
 	it( 'does nothing when no preview param is present in the URL', () => {
 		setLinks( '<a href="/other/">x</a>' );
 
-		propagateGatePreviewParams();
+		expectNoTraversal( propagateGatePreviewParams );
 
 		expect( hrefs() ).toEqual( [ '/other/' ] );
 	} );
@@ -50,7 +74,7 @@ describe( 'propagateGatePreviewParams', () => {
 
 		propagateGatePreviewParams();
 
-		expect( hrefs() ).toEqual( [ abs( '/other/?ngp_id=7&ngp_st=locked' ) ] );
+		expect( hrefs() ).toEqual( [ '/other/?ngp_id=7&ngp_st=locked' ] );
 	} );
 
 	it( 'leaves off-site links, in-page anchors and non-http schemes alone', () => {
@@ -62,6 +86,15 @@ describe( 'propagateGatePreviewParams', () => {
 		expect( hrefs() ).toEqual( [ 'https://elsewhere.test/page/', '#section', 'mailto:hi@example.com' ] );
 	} );
 
+	it( 'leaves an unparseable href alone rather than throwing', () => {
+		setSearch( '?ngp_id=7' );
+		setLinks( '<a href="http://[">x</a><a href="/other/">y</a>' );
+
+		expect( () => propagateGatePreviewParams() ).not.toThrow();
+		// The bad href is skipped and the pass carries on to the next anchor.
+		expect( hrefs() ).toEqual( [ 'http://[', '/other/?ngp_id=7' ] );
+	} );
+
 	it( 'rewrites an SVG anchor correctly rather than corrupting it', () => {
 		setSearch( '?ngp_id=7' );
 		setLinks( '<svg xmlns="http://www.w3.org/2000/svg"><a href="/chart/"><text>x</text></a></svg>' );
@@ -70,16 +103,40 @@ describe( 'propagateGatePreviewParams', () => {
 
 		// An SVGAElement's href *property* is an SVGAnimatedString; resolving it
 		// yields a same-origin garbage path that silently replaces the link.
-		expect( document.querySelector( 'svg a' ).getAttribute( 'href' ) ).toBe( abs( '/chart/?ngp_id=7' ) );
+		expect( document.querySelector( 'svg a' ).getAttribute( 'href' ) ).toBe( '/chart/?ngp_id=7' );
 	} );
 
-	it( 'resolves a relative href against the document base', () => {
-		setSearch( '?ngp_id=7' );
-		setLinks( '<a href="sub/page/">x</a>' );
+	describe( 'href shape', () => {
+		// A preview should differ from production in what it shows, not in the form
+		// of its markup: theme code keyed on href shape has to behave the same here.
+		it( 'keeps a root-relative href root-relative', () => {
+			setSearch( '?ngp_id=7' );
+			setLinks( '<a href="/other/">x</a>' );
 
-		propagateGatePreviewParams();
+			propagateGatePreviewParams();
 
-		expect( hrefs() ).toEqual( [ abs( '/post/sub/page/?ngp_id=7' ) ] );
+			expect( hrefs() ).toEqual( [ '/other/?ngp_id=7' ] );
+		} );
+
+		it( 'keeps an absolute href absolute', () => {
+			setSearch( '?ngp_id=7' );
+			setLinks( `<a href="${ window.location.origin }/other/">x</a>` );
+
+			propagateGatePreviewParams();
+
+			expect( hrefs() ).toEqual( [ `${ window.location.origin }/other/?ngp_id=7` ] );
+		} );
+
+		it( 'resolves a path-relative href against the document base', () => {
+			setSearch( '?ngp_id=7' );
+			setLinks( '<a href="sub/page/">x</a>' );
+
+			propagateGatePreviewParams();
+
+			// Root-relative rather than absolute: resolving it is what told us where
+			// it points, so this is as close to the original shape as we can get.
+			expect( hrefs() ).toEqual( [ '/post/sub/page/?ngp_id=7' ] );
+		} );
 	} );
 
 	it( 'keeps the fragment and unrelated params, and overwrites a stale one', () => {
@@ -88,7 +145,7 @@ describe( 'propagateGatePreviewParams', () => {
 
 		propagateGatePreviewParams();
 
-		expect( hrefs() ).toEqual( [ abs( '/other/?utm_source=nl&ngp_id=7#top' ) ] );
+		expect( hrefs() ).toEqual( [ '/other/?utm_source=nl&ngp_id=7#top' ] );
 	} );
 
 	it( 'is idempotent, so a second pass does not duplicate params', () => {
