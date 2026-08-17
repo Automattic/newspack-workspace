@@ -12,7 +12,7 @@ Do not add new blocks to this repo. New blocks should be added to `newspack-plug
 
 ## Gotchas
 
-- **`npm run lint` skips PHP.** Run `npm run lint:php` separately for PHP linting.
+- **`npm run lint` skips PHP.** Lint PHP from the workspace root (see the root guide).
 - **`style.css` and `style-rtl.css` are generated.** They are copied from `dist/` after the webpack build. Edit the SCSS source in `src/scss/`, not the root CSS files.
 - **Nested patterns are not auto-registered by WordPress.** WordPress only auto-registers pattern files at the top level of `/patterns/`. Subdirectory patterns are handled by the recursive `register_nested_patterns()` in `includes/class-patterns.php`, which traverses all depths automatically — no manual registration is needed when adding a new file to a subdirectory. Note that `patterns/plugins/jetpack/` is a two-level-deep subdirectory containing Jetpack sharing button patterns; plugin-specific patterns live there.
 - **Webpack entry points for blocks are auto-discovered.** Any `.js`, `.jsx`, `.ts`, or `.tsx` file in `includes/blocks/*/` becomes an entry point automatically. No changes to `webpack.config.js` are needed.

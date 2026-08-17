@@ -40,3 +40,37 @@ export const SubscriptionLink = ( { href, children } ) => {
 		</a>
 	);
 };
+
+/**
+ * Where a group's name goes.
+ *
+ * The in-wizard group detail screen is not registered yet, and the wizard
+ * redirects an unmatched route back to the subscriber list — so pointing a group
+ * at `#/groups/<id>` today would silently strand the user rather than 404. Until
+ * that screen lands the target stays the group's own subscription edit screen,
+ * which is what the group list already links to.
+ *
+ * SINGLE SWITCH: when the group detail route is registered, change this to
+ * return `#/groups/${ id }` and every group affordance in the wizard follows.
+ *
+ * @param {Object} group A group entry carrying `id` and `editUrl`.
+ * @return {string} The href, or '' when there is nothing to open.
+ */
+export const groupDetailHref = group => group?.editUrl || '';
+
+/**
+ * Whether a value is a safe in-wizard hash route (`#/…`).
+ *
+ * Guards the person profile's `?from=` origin, which is read straight from the
+ * URL and placed into anchor `href`s (the back chevron, the breadcrumb, the
+ * not-found button). Without this an attacker-supplied `from=javascript:…` would
+ * render a live `javascript:` URL in an authenticated `manage_options` origin,
+ * and `from=https://evil.example` would be a silent off-site redirect. Only a
+ * value beginning `#/` — the wizard's own HashRouter paths — is accepted, and a
+ * protocol-relative `#//host` (which a browser can treat as off-site) is rejected
+ * by requiring a non-slash immediately after `#/`.
+ *
+ * @param {*} value The candidate hash path.
+ * @return {boolean} Whether it is an internal wizard route.
+ */
+export const isInternalHashPath = value => typeof value === 'string' && /^#\/(?!\/)/.test( value );

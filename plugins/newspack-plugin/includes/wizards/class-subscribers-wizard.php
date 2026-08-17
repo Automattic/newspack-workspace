@@ -254,6 +254,28 @@ class Subscribers_Wizard extends Wizard {
 				],
 			]
 		);
+
+		// The single-subscriber read backing the person profile (L1). Registered
+		// after the collection route; the two regexes are disjoint, so order is
+		// presentational rather than load-bearing.
+		register_rest_route(
+			NEWSPACK_API_NAMESPACE,
+			'/wizard/' . $this->slug . '/subscribers/(?P<id>\d+)',
+			[
+				'methods'             => \WP_REST_Server::READABLE,
+				'callback'            => [ $this, 'api_get_subscriber' ],
+				'permission_callback' => [ $this, 'api_permissions_check' ],
+				'args'                => [
+					'id' => [
+						'type'              => 'integer',
+						'required'          => true,
+						'minimum'           => 1,
+						'sanitize_callback' => 'absint',
+						'validate_callback' => 'rest_validate_request_arg',
+					],
+				],
+			]
+		);
 	}
 
 	/**
@@ -310,10 +332,8 @@ class Subscribers_Wizard extends Wizard {
 	 * @return \WP_REST_Response
 	 */
 	public function api_get_groups() {
-		$this->group_subscriptions_cache = null;
-		$this->group_membership_index    = null;
-		$this->raw_status_ids_cache      = [];
-		$items                           = [];
+		$this->reset_request_caches();
+		$items = [];
 		foreach ( $this->get_group_subscriptions() as $group ) {
 			$items[] = $this->prepare_group( $group['subscription'], $group['settings'] );
 		}
@@ -516,7 +536,7 @@ class Subscribers_Wizard extends Wizard {
 		$owner_id   = (int) $subscription->get_user_id();
 		$owner      = $owner_id ? get_userdata( $owner_id ) : false;
 		$created    = $subscription->get_date_created();
-		$created_at = $created ? gmdate( 'Y-m-d', $created->getTimestamp() ) : null;
+		$created_at = $this->local_date( $created ? $created->getTimestamp() : null );
 
 		return [
 			'id'          => (int) $subscription->get_id(),
@@ -577,12 +597,10 @@ class Subscribers_Wizard extends Wizard {
 	 * @return \WP_REST_Response
 	 */
 	public function api_get_subscribers( $request ) {
-		$this->group_subscriptions_cache = null;
-		$this->group_membership_index    = null;
-		$this->raw_status_ids_cache      = [];
-		$per_page                        = (int) $request->get_param( 'per_page' );
-		$page                            = (int) $request->get_param( 'page' );
-		$search                          = trim( (string) $request->get_param( 'search' ) );
+		$this->reset_request_caches();
+		$per_page = (int) $request->get_param( 'per_page' );
+		$page     = (int) $request->get_param( 'page' );
+		$search   = trim( (string) $request->get_param( 'search' ) );
 
 		$query_args = [
 			'role__in'    => Reader_Activation::get_reader_roles(),
@@ -634,6 +652,64 @@ class Subscribers_Wizard extends Wizard {
 	}
 
 	/**
+	 * GET one subscriber in full, hydrated for the admin person profile (L1).
+	 *
+	 * Where the collection read returns just enough to draw a row, this returns
+	 * everything one person's profile shows: every subscription they hold —
+	 * individual and group alike — each with the billing detail its card renders.
+	 *
+	 * RESPONSE SHAPE (NPPD-1753 §3.3) — a group arrives as a WHOLE OBJECT, not an
+	 * ID the client resolves. A group card needs the group's name, status, seat
+	 * usage, owner identity, billing rate and this reader's role and joined date;
+	 * with IDs the screen would have to issue a request per group just to draw a
+	 * card it already knows it needs. The embedded object is prepare_group()'s
+	 * output — the same shape the /groups collection returns — plus billing,
+	 * `role` and `joinedAt`, so the group-detail read can hand back the same
+	 * object and both screens can share one card component.
+	 *
+	 * Any user who belongs to the current site resolves, not only reader-role
+	 * ones: a group owner or manager is often an editor or shop manager, and their
+	 * profile must still be reachable from the group they own. The lookup is bound
+	 * to the current site (is_user_member_of_blog) so that on multisite this can
+	 * only read users an admin already administers here, matching the reach of the
+	 * native user-edit screen this stands in for — not every user on the network.
+	 *
+	 * @param \WP_REST_Request $request The request.
+	 *
+	 * @return \WP_REST_Response|\WP_Error
+	 */
+	public function api_get_subscriber( $request ) {
+		$this->reset_request_caches();
+
+		$user_id = (int) $request->get_param( 'id' );
+		$user    = get_userdata( $user_id );
+		// A missing user, or (on multisite) one who is not a member of this site,
+		// is a 404 distinguished from an empty profile so the screen can say "no
+		// such subscriber" rather than render a blank person.
+		if ( ! $user || ! is_user_member_of_blog( $user_id, get_current_blog_id() ) ) {
+			return new \WP_Error(
+				'newspack_subscriber_not_found',
+				__( 'Subscriber not found.', 'newspack-plugin' ),
+				[ 'status' => 404 ]
+			);
+		}
+
+		return rest_ensure_response( $this->prepare_subscriber( $user, true ) );
+	}
+
+	/**
+	 * Clear the per-request memoized caches at the start of each endpoint.
+	 *
+	 * Every callback resolves group data fresh; the memos exist only to avoid
+	 * re-resolving within a single request, so each entry point starts clean.
+	 */
+	private function reset_request_caches() {
+		$this->group_subscriptions_cache = null;
+		$this->group_membership_index    = null;
+		$this->raw_status_ids_cache      = [];
+	}
+
+	/**
 	 * Shape a reader user for the admin subscriber list.
 	 *
 	 * Cost note: group memberships are indexed once per request
@@ -649,31 +725,37 @@ class Subscribers_Wizard extends Wizard {
 	 * matches the existing convention elsewhere in the plugin
 	 * (Sync\Contact_Metadata\Engagement::get_latest_order).
 	 *
-	 * @param \WP_User $user The reader user.
+	 * @param \WP_User $user     The reader user.
+	 * @param bool     $detailed Whether to hydrate the per-subscription billing
+	 *                           detail the person profile renders. Off for the
+	 *                           list, whose rows never show it and would pay for
+	 *                           it on every row of every page.
 	 *
 	 * @return array
 	 */
-	private function prepare_subscriber( $user ) {
+	private function prepare_subscriber( $user, $detailed = false ) {
 		$user_id = (int) $user->ID;
 		// Resolve the user's own subscriptions once and reuse them, so hydration
 		// doesn't fetch the same list twice per row.
 		$owned_subscriptions = function_exists( 'wcs_get_users_subscriptions' ) ? \wcs_get_users_subscriptions( $user_id ) : [];
-		$subscriptions       = $this->get_individual_subscriptions( $user_id, $owned_subscriptions );
-		$groups              = $this->get_group_memberships( $user_id );
+		$subscriptions       = $this->get_individual_subscriptions( $user_id, $owned_subscriptions, $detailed );
+		$groups              = $this->get_group_memberships( $user_id, $detailed );
 
-		// user_registered can be a zero date ('0000-00-00 …'), which is truthy but
+		// user_registered is stored in GMT, so anchor the parse to UTC before it is
+		// localized. It can also be a zero date ('0000-00-00 …'), which is truthy but
 		// unparseable; guard on the parsed timestamp so it degrades to null, not 1970.
-		$registered = $user->user_registered ? strtotime( $user->user_registered ) : false;
+		$registered = $user->user_registered ? strtotime( $user->user_registered . ' UTC' ) : false;
 
 		return [
 			'id'            => $user_id,
 			'name'          => $user->display_name,
 			'email'         => $user->user_email,
-			// Interim click-through target: the native user-edit screen (self edits
-			// resolve to profile.php), until the in-wizard person profile lands (PR 5).
+			// The native user-edit screen (self edits resolve to profile.php). The
+			// in-wizard profile does not yet cover editing the WordPress user, so the
+			// profile keeps this as a header action rather than stranding the admin.
 			'editUrl'       => get_edit_user_link( $user_id ),
 			'status'        => $this->reduced_status( $subscriptions, $groups ),
-			'memberSince'   => $registered ? gmdate( 'Y-m-d', $registered ) : null,
+			'memberSince'   => $this->local_date( $registered ),
 			'lastPayment'   => $this->last_payment_date( $user_id ),
 			// Wired to reader activity in a later slice; the column is hidden by default.
 			'lastSeen'      => null,
@@ -693,12 +775,13 @@ class Subscribers_Wizard extends Wizard {
 	 * get_group_memberships()) by keeping only subs the user actually owns and
 	 * that are not group-enabled.
 	 *
-	 * @param int                $user_id      The reader user ID.
+	 * @param int                $user_id             The reader user ID.
 	 * @param \WC_Subscription[] $owned_subscriptions The user's subscriptions, already fetched by the caller.
+	 * @param bool               $detailed            Whether to add the billing detail (see subscription_billing()).
 	 *
 	 * @return array<int,array>
 	 */
-	private function get_individual_subscriptions( $user_id, $owned_subscriptions ) {
+	private function get_individual_subscriptions( $user_id, $owned_subscriptions, $detailed = false ) {
 		$out = [];
 		foreach ( $owned_subscriptions as $subscription ) {
 			if ( ! $subscription instanceof \WC_Subscription || (int) $subscription->get_customer_id() !== $user_id ) {
@@ -708,14 +791,98 @@ class Subscribers_Wizard extends Wizard {
 			if ( ! empty( $settings['enabled'] ) ) {
 				continue; // Group subscriptions are surfaced via get_group_memberships().
 			}
-			$out[] = [
+			$entry = [
 				'id'      => (int) $subscription->get_id(),
 				'plan'    => $this->individual_plan_name( $subscription ),
 				'status'  => self::map_subscription_status( $subscription->get_status() ),
 				'editUrl' => $this->subscription_edit_url( $subscription ),
 			];
+			$out[] = $detailed ? array_merge( $entry, $this->subscription_billing( $subscription ) ) : $entry;
 		}
 		return $out;
+	}
+
+	/**
+	 * The billing shape a subscription card renders: what it costs, how often, and
+	 * the four dates the card's label/value rows show.
+	 *
+	 * Shared by individual subscriptions and groups so one card component renders
+	 * both, and so the person profile and the group-detail billing drawer cannot
+	 * disagree about a subscription's cadence or currency.
+	 *
+	 * Amount and currency travel as raw values rather than a pre-formatted price:
+	 * a store can bill in more than one currency, and the client formats via Intl
+	 * in the viewer's locale.
+	 *
+	 * @param \WC_Subscription $subscription The subscription.
+	 *
+	 * @return array
+	 */
+	private function subscription_billing( $subscription ) {
+		$total  = $subscription->get_total();
+		$period = (string) $subscription->get_billing_period();
+
+		return [
+			'amount'          => is_numeric( $total ) ? (float) $total : null,
+			'currency'        => (string) $subscription->get_currency(),
+			'billingPeriod'   => $period,
+			'billingInterval' => (int) $subscription->get_billing_interval(),
+			'startDate'       => $this->subscription_date( $subscription, 'start' ),
+			'nextBillingDate' => $this->subscription_date( $subscription, 'next_payment' ),
+			// When a subscription is ending — cancelled outright, or in its prepaid
+			// term after a pending-cancel — the card shows this in place of the
+			// next-billing row. `end` is the access-end date the reader actually
+			// keeps until; `cancelled` (the moment cancellation was *requested*) is
+			// only the fallback for the rare cancelled subscription with no end date
+			// recorded, so the row never blanks. WCS deletes next_payment on
+			// pending-cancel, so a subscription with an end date and no next payment
+			// is ending even while its status still maps to active (still entitled).
+			'endDate'         => $this->subscription_date( $subscription, 'end' ) ?? $this->subscription_date( $subscription, 'cancelled' ),
+			'lastPayment'     => $this->subscription_date( $subscription, 'last_order_date_paid' ),
+		];
+	}
+
+	/**
+	 * The calendar day an instant falls on in the publisher's timezone, as a bare
+	 * 'Y-m-d' string.
+	 *
+	 * EVERY date this wizard emits goes through here, so one profile cannot mix
+	 * bases: a UTC-formatted "First subscribed" sitting directly above a localized
+	 * "Last payment" can read a day apart for the same instant on a negative-offset
+	 * site, and the publisher cross-checks these numbers against WooCommerce's own
+	 * admin screens, which localize. wp_date() formats a Unix timestamp in the site
+	 * timezone; callers are responsible for handing over a UTC-anchored timestamp.
+	 *
+	 * @param int|false|null $timestamp A Unix timestamp, or a falsy value when the date is unset.
+	 *
+	 * @return string|null 'YYYY-MM-DD', or null when there is no timestamp.
+	 */
+	private function local_date( $timestamp ) {
+		return $timestamp ? wp_date( 'Y-m-d', (int) $timestamp ) : null;
+	}
+
+	/**
+	 * One of a subscription's dates as a bare 'Y-m-d' string in the site's
+	 * timezone, or null when unset.
+	 *
+	 * WC_Subscription::get_date() hands back a GMT 'Y-m-d H:i:s' string, or the
+	 * integer 0 when the date is not set. The wizard shows calendar days, so the
+	 * GMT instant is converted to the publisher's timezone before the time is
+	 * dropped — see local_date().
+	 *
+	 * @param \WC_Subscription $subscription The subscription.
+	 * @param string           $date_type    A WCS date type, e.g. 'next_payment'.
+	 *
+	 * @return string|null 'YYYY-MM-DD', or null when the date is not set.
+	 */
+	private function subscription_date( $subscription, $date_type ) {
+		$date = $subscription->get_date( $date_type );
+		if ( empty( $date ) ) {
+			return null;
+		}
+		// get_date() returns GMT; anchor the parse to UTC so a server default
+		// timezone can't shift the instant before it is localized.
+		return $this->local_date( strtotime( (string) $date . ' UTC' ) );
 	}
 
 	/**
@@ -737,16 +904,91 @@ class Subscribers_Wizard extends Wizard {
 	/**
 	 * A reader's group memberships, shaped as { id, plan, status, role, editUrl }.
 	 *
-	 * Read from the per-request membership index rather than re-querying the
-	 * user's owned/managed/member subscriptions per row.
+	 * On the list path (`$detailed` false) this reads from the per-request
+	 * membership index — built once by walking the site's groups — because the
+	 * cost amortizes across a whole page of rows.
 	 *
-	 * @param int $user_id The reader user ID.
+	 * On the single-profile path (`$detailed` true) that index is the wrong tool:
+	 * nothing amortizes it for one person, and building it walks every group and
+	 * every group's full membership. A single site here can hold a group with tens
+	 * of thousands of members. So the detail path resolves only the groups THIS
+	 * user is attached to — via the per-user helpers that already exist — and
+	 * widens each into the whole group object the profile's card renders
+	 * (prepare_group + billing + this reader's role and joinedAt). See
+	 * api_get_subscriber() for why the group travels whole rather than as an ID.
+	 *
+	 * @param int  $user_id  The reader user ID.
+	 * @param bool $detailed Whether to resolve the whole group object per membership.
 	 *
 	 * @return array<int,array>
 	 */
-	private function get_group_memberships( $user_id ) {
-		$index = $this->get_group_membership_index();
-		return $index[ $user_id ] ?? [];
+	private function get_group_memberships( $user_id, $detailed = false ) {
+		if ( ! $detailed ) {
+			$index = $this->get_group_membership_index();
+			return $index[ $user_id ] ?? [];
+		}
+		return $this->get_detailed_group_memberships( $user_id );
+	}
+
+	/**
+	 * The whole group object for each group a single user is attached to, for the
+	 * person profile.
+	 *
+	 * Resolves only this user's groups rather than the whole estate: the groups
+	 * they own or manage via get_managed_subscriptions_for_user(), and those they
+	 * are a plain member of via get_group_subscriptions_for_user(), unioned by ID.
+	 * Role is derived from the (small, owner-inclusive) manager set, so the
+	 * expensive full-membership walk is only ever done for the counts prepare_group
+	 * needs on the user's own group(s) — never once per group site-wide.
+	 *
+	 * @param int $user_id The user ID.
+	 *
+	 * @return array<int,array>
+	 */
+	private function get_detailed_group_memberships( $user_id ) {
+		if ( ! class_exists( '\Newspack\Group_Subscription' ) || ! class_exists( '\Newspack\Group_Subscription_Settings' ) ) {
+			return [];
+		}
+
+		// Union owned/managed and member-of subscriptions, keyed by ID so a user
+		// who is both (a promoted manager was first a member) is resolved once.
+		$subscriptions = [];
+		foreach ( Group_Subscription::get_managed_subscriptions_for_user( $user_id ) as $subscription ) {
+			$subscriptions[ (int) $subscription->get_id() ] = $subscription;
+		}
+		foreach ( Group_Subscription::get_group_subscriptions_for_user( $user_id ) as $subscription ) {
+			$subscriptions[ (int) $subscription->get_id() ] = $subscription;
+		}
+
+		$out = [];
+		foreach ( $subscriptions as $subscription ) {
+			$settings = Group_Subscription_Settings::get_subscription_settings( $subscription );
+			if ( empty( $settings['enabled'] ) ) {
+				continue;
+			}
+			// Role precedence matches the list index: owner (the subscription
+			// customer), else manager (get_managers is owner-inclusive and small),
+			// else plain member.
+			if ( (int) $subscription->get_user_id() === $user_id ) {
+				$role = 'owner';
+			} elseif ( in_array( $user_id, array_map( 'intval', Group_Subscription::get_managers( $subscription ) ), true ) ) {
+				$role = 'manager';
+			} else {
+				$role = 'member';
+			}
+			$joined_at = Group_Subscription::get_member_joined_at( $user_id, $subscription );
+			$out[]     = array_merge(
+				$this->prepare_group( $subscription, $settings ),
+				$this->subscription_billing( $subscription ),
+				[
+					'role'     => $role,
+					// Null for a member who predates the joined-at meta, rather than a
+					// misleading Unix epoch.
+					'joinedAt' => $this->local_date( $joined_at ),
+				]
+			);
+		}
+		return $out;
 	}
 
 	/**
@@ -872,7 +1114,7 @@ class Subscribers_Wizard extends Wizard {
 			return null;
 		}
 		$paid = $orders[0]->get_date_paid();
-		return $paid ? gmdate( 'Y-m-d', $paid->getTimestamp() ) : null;
+		return $this->local_date( $paid ? $paid->getTimestamp() : null );
 	}
 
 	/**
