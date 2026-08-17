@@ -206,15 +206,11 @@ type Select = ( namespace: string ) => {
  * wordpress/data selector for blocks using this custom store.
  */
 export const postsBlockSelector = (
-	// The wordpress/data HOCs type mapSelect params loosely (registry select,
-	// Record ownProps); accept what they pass and narrow once.
-	select: unknown,
-	ownProps: Record< string, unknown >
+	select: Select,
+	{ clientId, attributes }: { clientId: Block[ 'clientId' ]; attributes: HomepageArticlesAttributes }
 ): HomepageArticlesPropsFromDataSelector => {
-	const typedSelect = select as Select;
-	const { clientId, attributes } = ownProps as { clientId: Block[ 'clientId' ]; attributes: HomepageArticlesAttributes };
-	const { getBlocks } = typedSelect( 'core/block-editor' );
-	const { getEditedPostAttribute } = typedSelect( 'core/editor' );
+	const { getBlocks } = select( 'core/block-editor' );
+	const { getEditedPostAttribute } = select( 'core/editor' );
 
 	const editorBlocks = getEditedPostAttribute( 'blocks' ) || [];
 	const allEditorBlocks = [];
@@ -235,7 +231,7 @@ export const postsBlockSelector = (
 	// The block might be rendered in the block styles preview, not in the editor.
 	const isEditorBlock = editorBlocksIds.length === 0 || editorBlocksIds.indexOf( clientId ) >= 0 || isWidgetEditor;
 
-	const { getPosts, getError, isUIDisabled } = typedSelect( STORE_NAMESPACE );
+	const { getPosts, getError, isUIDisabled } = select( STORE_NAMESPACE );
 	const props = {
 		isEditorBlock,
 		isUIDisabled: isUIDisabled(),
@@ -247,15 +243,18 @@ export const postsBlockSelector = (
 	return props;
 };
 
+// STORE_NAMESPACE - TODO: move this to src/blocks/homepage-articles/store.js once it's TS.
+type Dispatch = ( namespace: string ) => {
+	reflow: () => void;
+};
+
 /**
  * wordpress/data dispatch for blocks using this custom store.
  */
-export const postsBlockDispatch = ( dispatch: unknown, ownProps: Record< string, unknown > ) => {
-	const { isEditorBlock } = ownProps as { isEditorBlock: boolean };
-	const typedDispatch = dispatch as ( store: string ) => Record< string, ( ...args: unknown[] ) => unknown >;
+export const postsBlockDispatch = ( dispatch: Dispatch, { isEditorBlock }: { isEditorBlock: boolean } ) => {
 	return {
 		// Only editor blocks can trigger reflows.
-		triggerReflow: isEditorBlock ? typedDispatch( STORE_NAMESPACE ).reflow : () => undefined,
+		triggerReflow: isEditorBlock ? dispatch( STORE_NAMESPACE ).reflow : () => undefined,
 	};
 };
 

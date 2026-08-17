@@ -15,12 +15,14 @@ import classNames from 'classnames';
 /**
  * Divider component.
  *
- * @param {Object}        props                - Component props.
- * @param {string}        [props.alignment]    - Horizontal alignment of the divider.
- * @param {string}        [props.className]    - Additional class name.
- * @param {number|string} [props.marginBottom] - Bottom margin, in pixels when numeric.
- * @param {number|string} [props.marginTop]    - Top margin, in pixels when numeric.
- * @param {string}        [props.variant]      - Visual variant of the divider.
+ * Every prop beyond the documented ones is forwarded to the `hr` element.
+ *
+ * @param {import('react').ComponentPropsWithoutRef<'hr'> & {
+ *   alignment?: string,
+ *   marginBottom?: number|string,
+ *   marginTop?: number|string,
+ *   variant?: string,
+ * }} props - Component props: the documented options plus any `hr` attribute.
  * @return {JSX.Element} Divider component.
  */
 const Divider = ( { alignment = 'none', className = undefined, marginBottom = 64, marginTop = 64, variant = 'default', ...otherProps } ) => {

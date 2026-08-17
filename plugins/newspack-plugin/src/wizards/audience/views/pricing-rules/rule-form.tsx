@@ -94,9 +94,10 @@ export default function RuleForm( { isNew, rule, vocab, onDone }: RuleFormProps 
 	const [ scopeType, setScopeType ] = useState( rule?.scope_type ?? vocab.scopes[ 0 ]?.id ?? 'all_products' );
 	const [ scopeIds, setScopeIds ] = useState< number[] >( rule?.scope_ids ?? [] );
 	const [ priority, setPriority ] = useState( String( rule?.priority ?? 100 ) );
-	const [ composeMode, setComposeMode ] = useState< 'min' | 'priority_exclusive' >(
-		rule?.compose_mode === 'priority_exclusive' ? 'priority_exclusive' : 'min'
-	);
+	// The rule schema leaves compose_mode open, and the select only offers the two
+	// modes below. Hold whatever the server sent so a value this UI doesn't know
+	// round-trips on save instead of being rewritten to 'min'.
+	const [ composeMode, setComposeMode ] = useState< PricingRuleRow[ 'compose_mode' ] >( rule?.compose_mode ?? 'min' );
 	const [ application, setApplication ] = useState( rule?.application === 'locked' ? 'locked' : 'current' );
 	const [ cycleAnchor, setCycleAnchor ] = useState< 'subscription_start' | 'rule_application' >(
 		rule?.cycle_anchor === 'rule_application' ? 'rule_application' : 'subscription_start'
@@ -596,10 +597,12 @@ export default function RuleForm( { isNew, rule, vocab, onDone }: RuleFormProps 
 								<SelectControl
 									label={ __( 'When multiple rules match', 'newspack-plugin' ) }
 									value={ composeMode }
-									options={ [
-										{ label: __( 'Best price wins (default)', 'newspack-plugin' ), value: 'min' },
-										{ label: __( 'This rule only (stop checking others)', 'newspack-plugin' ), value: 'priority_exclusive' },
-									] }
+									options={
+										[
+											{ label: __( 'Best price wins (default)', 'newspack-plugin' ), value: 'min' },
+											{ label: __( 'This rule only (stop checking others)', 'newspack-plugin' ), value: 'priority_exclusive' },
+										] as { label: string; value: PricingRuleRow[ 'compose_mode' ] }[]
+									}
 									onChange={ setComposeMode }
 									__next40pxDefaultSize
 								/>

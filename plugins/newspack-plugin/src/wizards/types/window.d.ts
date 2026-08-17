@@ -19,6 +19,16 @@ declare global {
 			preview_post: string;
 			preview_archive: string;
 			integrations_settings_enabled: boolean;
+			// Optional: only localized when the content-gifting and institutions
+			// features are available, so every read guards with `?.`.
+			available_products?: PurchasableProductOption[];
+			content_gifting?: {
+				has_metering?: boolean;
+				can_use_gifting?: {
+					errors?: Record< string, string[] >;
+				};
+			};
+			institutional_access_url?: string;
 			// Optional: consumers guard with `?.`/fallbacks because the
 			// payload can be absent (plugin filter strips it, non-Audience
 			// mount, HMR reseed) — keep the type honest about that.

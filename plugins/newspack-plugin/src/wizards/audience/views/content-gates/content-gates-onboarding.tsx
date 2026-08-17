@@ -15,14 +15,15 @@ import { envelope, postList, settings } from '@wordpress/icons';
 import { Card, Grid, SectionHeader } from '../../../../../packages/components/src';
 import { contentLocked, emailPremium } from '../../../../../packages/icons';
 
-// Rendered as `start`/`end` DOM attributes on the stack element, which the
+// `start`/`end` are forwarded to the stack element as DOM attributes, which the
 // Grid stylesheet targets via attribute selectors for column placement.
-const gridPlacementProps = { start: 2, end: 4 };
+type GridPlacement = { start?: number; end?: number };
+const GridPlacedVStack: React.FC< React.ComponentProps< typeof VStack > & GridPlacement > = props => <VStack { ...props } />;
 
 const ContentGatesOnboarding = ( { isNewsletter = false }: { isNewsletter?: boolean } ) => {
 	return (
 		<Grid columns={ 4 } noMargin>
-			<VStack { ...gridPlacementProps } spacing={ 8 }>
+			<GridPlacedVStack start={ 2 } end={ 4 } spacing={ 8 }>
 				<SectionHeader
 					icon={ isNewsletter ? emailPremium : contentLocked }
 					title={ sprintf(
@@ -100,7 +101,7 @@ const ContentGatesOnboarding = ( { isNewsletter = false }: { isNewsletter?: bool
 						} }
 					/>
 				</VStack>
-			</VStack>
+			</GridPlacedVStack>
 		</Grid>
 	);
 };

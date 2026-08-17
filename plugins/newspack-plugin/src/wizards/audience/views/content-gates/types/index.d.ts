@@ -174,6 +174,8 @@ type GateSettings = {
 	countdown_banner?: MeteringCountdownConfig;
 	advanced_settings?: AdvancedSettingsConfig;
 	has_institutions?: boolean;
+	// Capability flags the gates endpoint returns alongside the stored settings.
+	has_newsletters?: boolean;
 };
 
 type GateConfig = {
@@ -191,27 +193,12 @@ type ContentGatesWizardData = {
 	config?: GateSettings;
 };
 
+// A product the publisher can attach to a gate CTA. Localized by the Audience
+// wizard on `window.newspackAudience` (see wizards/types/window.d.ts).
 type PurchasableProductOption = {
 	label: string;
 	value: number;
 };
-
-/**
- * Data localized by the Audience wizard (`Audience_Wizard`) as
- * `newspackAudience`. Only the slice consumed by the content-gates screens is
- * typed here; the full window-level shape lives in wizards/types/window.d.ts.
- */
-declare const newspackAudience:
-	| {
-			available_products?: PurchasableProductOption[];
-			content_gifting?: {
-				has_metering?: boolean;
-				can_use_gifting?: {
-					errors?: Record< string, string[] >;
-				};
-			};
-	  }
-	| undefined;
 
 type Institution = {
 	id: number;

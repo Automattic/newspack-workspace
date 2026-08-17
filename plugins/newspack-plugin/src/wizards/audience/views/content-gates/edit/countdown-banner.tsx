@@ -1,5 +1,3 @@
-/* global newspackAudience */
-
 /**
  * Metered Countdown settings page.
  */
@@ -37,7 +35,7 @@ const CountdownBannerSettings = () => {
 	const { addNotice, resetNotices, setHeaderData, updateWizardSettings } = useDispatch( WIZARD_STORE_NAMESPACE );
 	const { wizardApiFetch, errorMessage, resetError } = useWizardApiFetch( AUDIENCE_CONTENT_GATES_WIZARD_SLUG );
 	const [ config, setConfig ] = useState< GateSettings >( wizardData?.config || {} );
-	const availableProducts = newspackAudience?.available_products || [];
+	const availableProducts = window.newspackAudience?.available_products || [];
 	const isDirty = useMemo( () => {
 		return (
 			config?.countdown_banner &&

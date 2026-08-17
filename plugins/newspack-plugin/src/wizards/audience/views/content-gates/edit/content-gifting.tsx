@@ -1,5 +1,3 @@
-/* global newspackAudience */
-
 /**
  * Content Gifting settings page.
  */
@@ -47,9 +45,9 @@ const ContentGiftingSettings = () => {
 	const { addNotice, resetNotices, setHeaderData, updateWizardSettings } = useDispatch( WIZARD_STORE_NAMESPACE );
 	const { wizardApiFetch, errorMessage, resetError } = useWizardApiFetch( AUDIENCE_CONTENT_GATES_WIZARD_SLUG );
 	const [ config, setConfig ] = useState< GateSettings >( wizardData?.config || {} );
-	const availableProducts = newspackAudience?.available_products || [];
-	const hasMetering = newspackAudience?.content_gifting?.has_metering;
-	const giftingErrors = Object.values( newspackAudience?.content_gifting?.can_use_gifting?.errors || {} ).flat() as string[];
+	const availableProducts = window.newspackAudience?.available_products || [];
+	const hasMetering = window.newspackAudience?.content_gifting?.has_metering;
+	const giftingErrors = Object.values( window.newspackAudience?.content_gifting?.can_use_gifting?.errors || {} ).flat();
 	const isDirty = useMemo( () => {
 		return (
 			config?.content_gifting &&

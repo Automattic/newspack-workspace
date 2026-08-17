@@ -20,14 +20,6 @@ import { WIZARD_STORE_NAMESPACE } from '../../../../../packages/components/src/w
 import { useWizardApiFetch } from '../../../hooks/use-wizard-api-fetch';
 import { AUDIENCE_CONTENT_GATES_WIZARD_SLUG } from './consts';
 
-/**
- * Shape of the content-gates wizard store data consumed by this component.
- * `has_newsletters` is provided by the wizard endpoint alongside the gate settings.
- */
-type ContentGatesWizardData = {
-	config?: GateSettings & { has_newsletters?: boolean };
-};
-
 // Modes and their labels come from PHP, where the same list backs the REST
 // schema's enum and the storage sanitizer.
 const feedRestrictionModes = window.newspackAudienceContentGates?.feed_restriction_modes || [];
