@@ -1,4 +1,4 @@
-import { getCarriedSegmentIds } from './carried-segments';
+import { getCarriedSegmentIds, CARRIED_SEGMENTS_NONE } from './carried-segments';
 
 const COOKIE = 'np_carried_segments';
 const SESSION_KEY = 'newspack-popups-carried-segments';
@@ -60,15 +60,18 @@ describe( 'getCarriedSegmentIds', () => {
 		expect( getCarriedSegmentIds( [ '5', '7' ] ) ).toEqual( [ '5', '7' ] );
 		expect( window.sessionStorage.getItem( SESSION_KEY ) ).toBe( '5,7' );
 
-		// Second arrival: a different account resolves to zero segments. The
-		// fixed PHP side hands this off as a present-but-empty cookie — a
-		// session cookie, never a past-expiry deletion — precisely so this
-		// case is distinguishable from "no handoff happened" and can override
-		// what an earlier arrival remembered. See
-		// Newspack_Popups_Segmentation::set_carried_segments_cookie().
-		setCookie( '' );
+		// Second arrival: a different account resolves to zero segments. PHP
+		// hands this off as the CARRIED_SEGMENTS_NONE sentinel — a session
+		// cookie, never a past-expiry deletion, and never an empty string
+		// either: PHP's setcookie() sends an empty value as a deletion
+		// regardless of the expiry passed, which a real browser would then
+		// never actually deliver. The sentinel is what makes this case
+		// distinguishable from "no handoff happened" and lets it override what
+		// an earlier arrival remembered. See
+		// Newspack_Popups_Segmentation::get_carried_segments_cookie_value().
+		setCookie( CARRIED_SEGMENTS_NONE );
 		expect( getCarriedSegmentIds( [ '5', '7' ] ) ).toEqual( [] );
-		expect( window.sessionStorage.getItem( SESSION_KEY ) ).toBe( '' );
+		expect( window.sessionStorage.getItem( SESSION_KEY ) ).toBe( CARRIED_SEGMENTS_NONE );
 	} );
 
 	it( 'drops IDs the page does not know about', () => {

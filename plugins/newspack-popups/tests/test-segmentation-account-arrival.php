@@ -40,6 +40,18 @@ class SegmentationAccountArrivalTest extends WP_UnitTestCase {
 	private static $cookie_options_method;
 
 	/**
+	 * Reflection onto the private, static get_carried_segments_cookie_value().
+	 * Same rationale as $cookie_options_method above: it isolates the cookie
+	 * *value* PHP computes from the delivery mechanism (`setcookie()`) that
+	 * never runs under PHPUnit, so a test can prove the value itself is never
+	 * empty independent of whatever arrive() happens to observe via the
+	 * $_COOKIE mirror.
+	 *
+	 * @var ReflectionMethod
+	 */
+	private static $cookie_value_method;
+
+	/**
 	 * Set up: two active segments, one disabled segment, and an empty snapshot
 	 * store.
 	 */
@@ -48,6 +60,10 @@ class SegmentationAccountArrivalTest extends WP_UnitTestCase {
 		if ( ! self::$cookie_options_method ) {
 			self::$cookie_options_method = new ReflectionMethod( 'Newspack_Popups_Segmentation', 'get_carried_segments_cookie_options' );
 			self::$cookie_options_method->setAccessible( true );
+		}
+		if ( ! self::$cookie_value_method ) {
+			self::$cookie_value_method = new ReflectionMethod( 'Newspack_Popups_Segmentation', 'get_carried_segments_cookie_value' );
+			self::$cookie_value_method->setAccessible( true );
 		}
 		Newspack_Segments_Model::delete_all_segments();
 		Newspack_Popups_Segmentation::create_segment(
@@ -149,6 +165,19 @@ class SegmentationAccountArrivalTest extends WP_UnitTestCase {
 	 */
 	private function cookie_options() {
 		return self::$cookie_options_method->invoke( null );
+	}
+
+	/**
+	 * The carried-segments cookie value get_carried_segments_cookie_value()
+	 * computes for a given resolved set — via reflection, see
+	 * $cookie_value_method.
+	 *
+	 * @param string[] $segment_ids Active segment IDs.
+	 *
+	 * @return string
+	 */
+	private function cookie_value( $segment_ids ) {
+		return self::$cookie_value_method->invoke( null, $segment_ids );
 	}
 
 	/**
@@ -263,12 +292,14 @@ class SegmentationAccountArrivalTest extends WP_UnitTestCase {
 	/**
 	 * An account with no snapshot resolves to no segments, which is an
 	 * explicit "matches nothing" assertion (see
-	 * set_carried_segments_cookie()'s docblock) — an empty-string cookie, not
-	 * an absent one.
+	 * set_carried_segments_cookie()'s docblock) — a cookie carrying the
+	 * CARRIED_SEGMENTS_NONE sentinel, not an absent one, and not an
+	 * empty-string one either: setcookie() would send an empty string as a
+	 * deletion, indistinguishable from no handoff ever having happened.
 	 */
 	public function test_unknown_account_carries_nothing() {
 		$this->assertSame( '/p/?a=1', $this->arrive( '/p/?a=1&np_account=777' ) );
-		$this->assertSame( '', $this->cookie() );
+		$this->assertSame( Newspack_Popups_Segmentation::CARRIED_SEGMENTS_NONE, $this->cookie() );
 	}
 
 	/**
@@ -276,27 +307,28 @@ class SegmentationAccountArrivalTest extends WP_UnitTestCase {
 	 * first read, but on an arrival where that script never runs (a page with
 	 * no prompts, JS disabled), a previous arrival's segments must not carry
 	 * into the next click. An arrival that resolves nothing must overwrite
-	 * the mirror with an empty string — the "matches nothing" assertion —
-	 * not leave the previous arrival's value in place, and not unset it
-	 * either, since an unset mirror is indistinguishable from no handoff
-	 * ever having happened.
+	 * the mirror with the CARRIED_SEGMENTS_NONE sentinel — the "matches
+	 * nothing" assertion — not leave the previous arrival's value in place.
+	 * It must not become an empty string either (setcookie() would send that
+	 * as a deletion) or be unset (indistinguishable from no handoff ever
+	 * having happened).
 	 */
-	public function test_clears_a_previous_cookie_when_nothing_resolves() {
+	public function test_overwrites_a_previous_cookie_when_nothing_resolves() {
 		\Newspack\Reader_Data::$matched_segments = [ 42 => [ $this->segment_ids['carried-one'] ] ];
 		$this->arrive( '/p/?np_account=42' );
 		$this->assertSame( $this->segment_ids['carried-one'], $this->cookie() );
 
 		// A second, later arrival for an account with nothing to carry.
 		$this->arrive( '/p/?np_account=777' );
-		$this->assertSame( '', $this->cookie() );
+		$this->assertSame( Newspack_Popups_Segmentation::CARRIED_SEGMENTS_NONE, $this->cookie() );
 	}
 
 	/**
 	 * Unlike a valid ID that resolves to nothing (see
-	 * test_clears_a_previous_cookie_when_nothing_resolves() above), a value
-	 * that never passes the positive-integer gate makes no assertion about the
-	 * reader at all — e.g. an unsubstituted merge tag arriving from a
-	 * newsletter that already went out. It must leave an earlier arrival's
+	 * test_overwrites_a_previous_cookie_when_nothing_resolves() above), a
+	 * value that never passes the positive-integer gate makes no assertion
+	 * about the reader at all — e.g. an unsubstituted merge tag arriving from
+	 * a newsletter that already went out. It must leave an earlier arrival's
 	 * carried segments alone, even though the redirect itself still fires
 	 * unconditionally.
 	 *
@@ -327,8 +359,9 @@ class SegmentationAccountArrivalTest extends WP_UnitTestCase {
 	/**
 	 * No param, nothing to do — the overwhelmingly common request. Also
 	 * confirms an existing cookie is left alone: without the early return, a
-	 * param-less pageview would otherwise fall through to the cookie-clearing
-	 * path and wipe a legitimately carried set.
+	 * param-less pageview would otherwise fall through to the
+	 * cookie-assertion path and overwrite a legitimately carried set with the
+	 * "matches nothing" sentinel.
 	 */
 	public function test_ignores_request_without_the_param() {
 		$_COOKIE[ Newspack_Popups_Segmentation::CARRIED_SEGMENTS_COOKIE ] = $this->segment_ids['carried-one']; // phpcs:ignore WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___COOKIE
@@ -366,23 +399,53 @@ class SegmentationAccountArrivalTest extends WP_UnitTestCase {
 	}
 
 	/**
-	 * The cookie-options helper always returns one set of options: since an
-	 * empty resolution is itself the "matches nothing" assertion (see
-	 * set_carried_segments_cookie()'s docblock), there is no longer a separate
-	 * "clearing" form to distinguish it from. set_carried_segments_cookie()'s
-	 * own setcookie() call never runs under PHPUnit (headers_sent() is always
-	 * true here), so no test that goes through arrive() ever exercises the
-	 * option values below — e.g. an `httponly => true` typo would silently
-	 * break the view script's document.cookie read, or an `expires` other
-	 * than 0 would make a real browser delete an empty resolution instead of
-	 * delivering it — and every other test here would still pass. Exercise
-	 * get_carried_segments_cookie_options() directly instead.
+	 * The cookie-options helper always returns one set of options, regardless
+	 * of the resolved value — keeping the value itself non-empty is
+	 * get_carried_segments_cookie_value()'s job, exercised separately below.
+	 * set_carried_segments_cookie()'s own setcookie() call never runs under
+	 * PHPUnit (headers_sent() is always true here), so no test that goes
+	 * through arrive() ever exercises the option values below — e.g. an
+	 * `httponly => true` typo would silently break the view script's
+	 * document.cookie read — and every other test here would still pass.
+	 * Exercise get_carried_segments_cookie_options() directly instead.
 	 */
 	public function test_cookie_options_are_js_readable_session_scoped_and_site_wide() {
 		$options = $this->cookie_options();
-		$this->assertSame( 0, $options['expires'], 'Must always be a session cookie, including when the value is empty — a past expiry would make a real browser delete the cookie instead of delivering the "matches nothing" assertion.' );
+		$this->assertSame( 0, $options['expires'], 'Must always be a session cookie.' );
 		$this->assertFalse( $options['httponly'], 'The view script reads this cookie via document.cookie; httponly would silently break the feature.' );
 		$this->assertSame( 'Lax', $options['samesite'] );
 		$this->assertSame( '/', $options['path'] );
+	}
+
+	/**
+	 * The cookie value computed by get_carried_segments_cookie_value() must
+	 * never be an empty string: PHP's setcookie() sends a deletion whenever
+	 * the value is empty, no matter what `expires` is passed (see
+	 * get_carried_segments_cookie_options()'s docblock), so a real browser
+	 * would then never deliver the "matches nothing" assertion at all. This
+	 * is the defect two prior review passes missed — set_carried_segments_cookie()'s
+	 * own setcookie() call never runs under PHPUnit, so a test that only goes
+	 * through arrive() and inspects the $_COOKIE mirror could never observe
+	 * it; this test exercises the value-computation seam directly instead.
+	 */
+	public function test_cookie_value_for_no_segments_is_the_sentinel_not_empty() {
+		$value = $this->cookie_value( [] );
+		$this->assertNotSame( '', $value, 'An empty string would be sent by setcookie() as a deletion, indistinguishable from no handoff at all.' );
+		$this->assertSame( Newspack_Popups_Segmentation::CARRIED_SEGMENTS_NONE, $value );
+	}
+
+	/**
+	 * A single resolved segment is carried as-is, with nothing to join.
+	 */
+	public function test_cookie_value_for_one_segment_is_just_that_id() {
+		$this->assertSame( '5', $this->cookie_value( [ '5' ] ) );
+	}
+
+	/**
+	 * Multiple resolved segments are carried as a comma-joined list — the
+	 * form the view script's carried-segments.js splits back apart.
+	 */
+	public function test_cookie_value_for_multiple_segments_is_comma_joined() {
+		$this->assertSame( '5,7', $this->cookie_value( [ '5', '7' ] ) );
 	}
 }

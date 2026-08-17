@@ -28,8 +28,15 @@ export const handleSegmentation = prompts => {
 		// matching is live, so a snapshot from their last visit can only make it
 		// staler — and their own matched_segments write must stay criteria-only.
 		const carriedIds = getCarriedSegmentIds( Object.keys( segments ) );
-		const carried = ras?.store?.get( 'reader' )?.authenticated ? [] : carriedIds;
-		const matchingSegment = getBestPrioritySegment( segments, null, carried );
+		// Re-read the authenticated flag fresh each time this is called, rather
+		// than freezing it in a variable: RAS's setAuthenticated() can flip a
+		// reader to authenticated mid-page with no reload, and a delayed or
+		// scroll-triggered prompt's unhide() re-check (below) must see that
+		// change even though it runs long after this function returns. Reuses
+		// carriedIds itself rather than calling getCarriedSegmentIds() again —
+		// it already consumed the cookie, so a second call would find nothing.
+		const getCarried = () => ( ras?.store?.get( 'reader' )?.authenticated ? [] : carriedIds );
+		const matchingSegment = getBestPrioritySegment( segments, null, getCarried() );
 		debug( 'matchingSegment', matchingSegment );
 
 		// Register segments and set match via RAS if available.
@@ -71,8 +78,12 @@ export const handleSegmentation = prompts => {
 				};
 				const unhide = () => {
 					// Conditions may have changed since the prompt was delayed.
-					// Verify whether the prompt can still be displayed.
-					const updatedMatchingSegment = getBestPrioritySegment( segments, null, carried );
+					// Verify whether the prompt can still be displayed. Re-derive the
+					// carried set here (via getCarried()) rather than closing over the
+					// value computed above: a reader who authenticates mid-delay must
+					// have their live matching win over a stale carried snapshot even
+					// for a prompt that was already pending when that happened.
+					const updatedMatchingSegment = getBestPrioritySegment( segments, null, getCarried() );
 					if ( ras?.segments ) {
 						ras.segments.setMatch( updatedMatchingSegment );
 					}

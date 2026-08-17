@@ -18,6 +18,25 @@ const COOKIE_NAME = 'np_carried_segments';
 const SESSION_KEY = 'newspack-popups-carried-segments';
 
 /**
+ * Sentinel cookie/session value asserting that an account matched no
+ * segments — distinct from an absent cookie, which means no handoff
+ * happened at all.
+ *
+ * Mirrors Newspack_Popups_Segmentation::CARRIED_SEGMENTS_NONE in
+ * class-newspack-popups-segmentation.php — keep the two in sync. PHP never
+ * writes an empty string here: `setcookie()` treats an empty value as a
+ * request to delete the cookie regardless of the expiry passed, which a real
+ * browser would then never actually deliver.
+ *
+ * No special-casing is needed below to handle it: the sentinel is not a
+ * segment ID (real IDs are always numeric term IDs), so filterKnown()
+ * already drops it like any other unrecognised value, naturally yielding
+ * `[]` — while it's still written to sessionStorage verbatim below, which is
+ * what lets it override a previously-remembered non-empty set.
+ */
+export const CARRIED_SEGMENTS_NONE = 'none';
+
+/**
  * Read the handoff cookie.
  *
  * @return {string|null} Raw cookie value, or null when absent.

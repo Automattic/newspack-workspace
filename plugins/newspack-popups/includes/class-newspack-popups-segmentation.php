@@ -72,6 +72,26 @@ final class Newspack_Popups_Segmentation {
 	const CARRIED_SEGMENTS_COOKIE = 'np_carried_segments';
 
 	/**
+	 * Sentinel cookie value asserting that an account matched no segments —
+	 * distinct from an absent cookie, which means no handoff happened at all.
+	 *
+	 * Never a valid segment ID: segment IDs are always positive-integer term
+	 * IDs (see get_carried_segments_for_account()), so this string can never
+	 * collide with a real one. This can never be an empty string instead:
+	 * PHP's `setcookie()` sends a deletion whenever the *value* is empty,
+	 * ignoring whatever `expires` is passed — confirmed against Apache in
+	 * this project's container. A real browser then deletes the cookie and
+	 * never sends it again, indistinguishable from no handoff ever having
+	 * happened, so the "matches nothing" assertion would silently never
+	 * reach the view script. See get_carried_segments_cookie_value() and
+	 * set_carried_segments_cookie()'s docblocks.
+	 *
+	 * Mirrored in carried-segments.js as CARRIED_SEGMENTS_NONE — keep the two
+	 * in sync.
+	 */
+	const CARRIED_SEGMENTS_NONE = 'none';
+
+	/**
 	 * Installed version number of the custom table.
 	 */
 	const TABLE_VERSION = '1.0';
@@ -397,10 +417,20 @@ final class Newspack_Popups_Segmentation {
 	 * after, so `/post/#section` becomes `/post/?np_account=TAG#section`
 	 * instead of the unparseable `/post/#section?np_account=TAG`.
 	 *
+	 * Because $value is concatenated in raw, with no urlencode(), the caller
+	 * must guarantee it contains none of `&`, `=`, or `#`: unlike
+	 * add_query_arg(), nothing here escapes them. A `&` would start a bogus
+	 * extra param, truncating this one; a `#` would start a bogus fragment,
+	 * truncating the query string; and a bare `=` is not spec-safe inside a
+	 * query value even where a particular parser happens to tolerate it. Every
+	 * current caller passes an ESP merge tag (e.g. `*|TAG|*`, `%TAG%`), whose
+	 * delimiter syntaxes don't use any of the three.
+	 *
 	 * @param string $url   URL to append to; may already carry a query string
 	 *                      and/or a fragment.
 	 * @param string $param Parameter name.
-	 * @param string $value Raw (unencoded) parameter value.
+	 * @param string $value Raw (unencoded) parameter value. Must not contain
+	 *                      `&`, `=`, or `#` — see above.
 	 *
 	 * @return string
 	 */
@@ -659,18 +689,17 @@ final class Newspack_Popups_Segmentation {
 	 * set_carried_segments_cookie()'s own `setcookie()` call only runs when
 	 * `! headers_sent()`, which is never true under PHPUnit, so without this
 	 * extraction none of these option values would be exercised by any test in
-	 * the suite — e.g. an `expires` other than 0 would pass every test while
-	 * silently stopping a real browser from ever delivering an empty
-	 * resolution as anything but a deletion.
+	 * the suite — e.g. an `httponly => true` typo would silently break the
+	 * view script's document.cookie read, and every other test would still
+	 * pass.
 	 *
-	 * Always a session cookie, including when the value being written is
-	 * empty: an empty value is itself the "matches nothing" assertion, not a
-	 * request to delete the cookie. A past-expiry `Set-Cookie` (the pattern
-	 * used elsewhere for actual deletion — see class-magic-link.php and
-	 * class-reader-activation.php) is exactly that to a real browser: it
-	 * removes the cookie and never sends it again, so the view script would
-	 * never observe the empty value at all. See
-	 * set_carried_segments_cookie()'s docblock.
+	 * Always a session cookie (`expires => 0`). That alone does not guarantee
+	 * a "matches nothing" resolution is ever delivered, though: PHP's
+	 * `setcookie()` sends a deletion whenever the cookie's *value* is empty,
+	 * regardless of the `expires` passed here — confirmed against Apache in
+	 * this project's container. Keeping the value non-empty is
+	 * get_carried_segments_cookie_value()'s job, not this method's; the two
+	 * only work together. See set_carried_segments_cookie()'s docblock.
 	 *
 	 * @return array `setcookie()`'s `$options` argument.
 	 */
@@ -687,6 +716,34 @@ final class Newspack_Popups_Segmentation {
 	}
 
 	/**
+	 * The carried-segments cookie *value* for a resolved set of segment IDs.
+	 *
+	 * Extracted into its own seam so it's reachable directly from a test:
+	 * set_carried_segments_cookie()'s own `setcookie()` call never runs under
+	 * PHPUnit (`headers_sent()` is always true there), so a test that only
+	 * exercises that method and inspects the $_COOKIE mirror can prove what
+	 * ends up in PHP's superglobal, but not what a real browser's Set-Cookie
+	 * header would actually carry — the exact gap that let this cookie ship
+	 * as a real-browser deletion twice under review.
+	 *
+	 * Never empty: PHP's `setcookie()` treats an empty string value as a
+	 * request to delete the cookie, no matter what `expires` is passed (see
+	 * get_carried_segments_cookie_options()'s docblock) — a real browser then
+	 * never delivers the "matches nothing" assertion at all. CARRIED_SEGMENTS_NONE
+	 * is the non-empty sentinel used instead; it can never collide with a real
+	 * segment ID, which is always a positive integer term ID.
+	 *
+	 * @param string[] $segment_ids Active segment IDs; an empty array asserts
+	 *                               that the account matches no segments.
+	 *
+	 * @return string Comma-joined segment IDs, or CARRIED_SEGMENTS_NONE when
+	 *                $segment_ids is empty.
+	 */
+	private static function get_carried_segments_cookie_value( array $segment_ids ): string {
+		return empty( $segment_ids ) ? self::CARRIED_SEGMENTS_NONE : implode( ',', $segment_ids );
+	}
+
+	/**
 	 * Hand the resolved segment IDs to the view script. An empty array is a
 	 * real assertion — "this account matches no segments" — and must reach
 	 * the browser as such, not as a deleted cookie.
@@ -700,10 +757,12 @@ final class Newspack_Popups_Segmentation {
 	 * is authoritative — including overriding a previous arrival's segments
 	 * when this one resolves none. The cookie is always written with the same
 	 * session-lifetime options (see get_carried_segments_cookie_options()),
-	 * whether or not the value is empty: expiring it in the past instead would
-	 * make a real browser delete it rather than deliver it, so the view
-	 * script would never see the empty value and would fall through to
-	 * whatever a previous arrival already left in sessionStorage — silently
+	 * and the value written is never an empty string (see
+	 * get_carried_segments_cookie_value()): PHP's `setcookie()` sends a
+	 * deletion whenever the value is empty, no matter what `expires` is
+	 * passed, so a real browser would then never deliver the "matches
+	 * nothing" assertion at all — the view script would fall through to
+	 * whatever a previous arrival already left in sessionStorage, silently
 	 * keeping a stale, previously-matched segment set alive for the rest of
 	 * the session. The view script deletes the cookie on first read, but on
 	 * an arrival where that script never runs (a page with no prompts, JS
@@ -719,7 +778,7 @@ final class Newspack_Popups_Segmentation {
 	 *                              that the account matches no segments.
 	 */
 	private static function set_carried_segments_cookie( $segment_ids ) {
-		$value = implode( ',', $segment_ids );
+		$value = self::get_carried_segments_cookie_value( $segment_ids );
 		if ( ! headers_sent() ) {
 			// phpcs:ignore WordPressVIPMinimum.Functions.RestrictedFunctions.cookies_setcookie
 			setcookie(
@@ -730,8 +789,10 @@ final class Newspack_Popups_Segmentation {
 		}
 		// Unconditionally update $_COOKIE so same-request readers (and tests, where
 		// headers are already sent) see the same assertion a real browser would
-		// receive — including an empty string when nothing resolved, rather than
-		// unsetting it, which would be indistinguishable from no handoff at all.
+		// receive — including the CARRIED_SEGMENTS_NONE sentinel when nothing
+		// resolved, rather than an empty string (which setcookie() above would
+		// have sent as a deletion) or unsetting it (indistinguishable from no
+		// handoff at all).
 		$_COOKIE[ self::CARRIED_SEGMENTS_COOKIE ] = $value; // phpcs:ignore WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___COOKIE
 	}
 
