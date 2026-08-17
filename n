@@ -492,9 +492,6 @@ case $1 in
     root)
         echo "$NABSPATH"
         ;;
-    setup-agents)
-        "$NABSPATH/bin/setup-agents.sh"
-        ;;
     help)
         echo "Available commands:"
         echo ""
@@ -546,9 +543,6 @@ case $1 in
         echo "Isolated Environments:"
         echo "  worktree [args]              Manage Git worktrees for repositories (add, list, remove, cleanup)."
         echo "  env [args]                   Manage isolated environments (create, up, down, destroy, list, cleanup)."
-        echo ""
-        echo "AI Agents:"
-        echo "  setup-agents                 Set up AI agent tooling for Newspack development."
         echo ""
         echo "Other:"
         echo "  root                         Print the absolute path to the workspace root directory."

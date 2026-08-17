@@ -59,6 +59,41 @@ export function findCheckoutButtonForm( root, productId, variationId = null ) {
 }
 
 /**
+ * Find the button whose context a picker submission should inherit.
+ *
+ * Prefers a button that is not locked to a single variation: it stands for the
+ * whole product, so its context — including any attached coupon — applies to
+ * whichever variation the reader picks. A locked button was configured for one
+ * specific variation and is only used when nothing better exists.
+ *
+ * @param {Document|HTMLElement} root      The DOM root to search.
+ * @param {string}               productId The requested product ID.
+ *
+ * @return {HTMLFormElement|null} The donor form, or null.
+ */
+function findContextDonorForm( root, productId ) {
+	const buttons = root.querySelectorAll( '.wp-block-newspack-blocks-checkout-button' );
+	let fallback = null;
+	let unlocked = null;
+	buttons.forEach( button => {
+		if ( unlocked ) {
+			return;
+		}
+		const form = button.querySelector( 'form' );
+		const data = readCheckoutData( form );
+		if ( ! data || String( data.product_id ) !== String( productId ) ) {
+			return;
+		}
+		if ( ! data.variation_id ) {
+			unlocked = form;
+			return;
+		}
+		fallback = fallback || form;
+	} );
+	return unlocked || fallback;
+}
+
+/**
  * Select the requested variation in a product picker.
  * Picker forms use the selected radio value instead of `data-checkout`.
  *
@@ -98,20 +133,69 @@ export function selectPickerForm( root, productId, variationId, options = {} ) {
 /**
  * Hidden fields copied from a source checkout button to a picker submission.
  *
+ * The picker form is rendered once per variable product in the footer and is
+ * submitted instead of the button's own form, so anything the block attached to
+ * that button — after-success behavior, attribution, the auto-applied coupon —
+ * is lost unless it is listed here. Shared with modal.js so the click path and
+ * the URL-trigger path carry the same context.
+ *
  * @type {string[]}
  */
 export const PICKER_CONTEXT_FIELDS = [
 	'after_success_behavior',
 	'after_success_url',
 	'after_success_button_label',
+	'after_success_token',
 	'gate_post_id',
 	'newspack_popup_id',
 	'prompt_title',
+	'coupon',
 ];
+
+/**
+ * Stamp context fields onto a picker form from the button that opened it.
+ *
+ * Authoritative, unlike copyContextFields(): the picker is rendered once per
+ * parent product and shared by every button targeting it, and nothing clears it
+ * when the modal closes, so each open must overwrite whatever the previous one
+ * left behind. An absent value removes the field rather than preserving a stale
+ * one — for `coupon` that is the difference between the reader's discount and
+ * a discount attached to a different button.
+ *
+ * @param {HTMLFormElement|null} targetForm Picker form to stamp.
+ * @param {Object|null}          data       Checkout data read from the clicked button's form.
+ * @param {string[]}             fields     Field names to stamp.
+ *
+ * @return {void}
+ */
+export function applyContextFields( targetForm, data, fields = PICKER_CONTEXT_FIELDS ) {
+	if ( ! targetForm || ! data ) {
+		return;
+	}
+	const doc = targetForm.ownerDocument;
+	fields.forEach( name => {
+		// Drop whatever a previous open left behind before writing this one's value.
+		targetForm.querySelectorAll( `input[name="${ name }"]` ).forEach( input => input.remove() );
+		const raw = data[ name ];
+		const value = raw === undefined || raw === null ? '' : String( raw );
+		if ( ! value ) {
+			return;
+		}
+		const input = doc.createElement( 'input' );
+		input.type = 'hidden';
+		input.name = name;
+		input.value = value;
+		targetForm.prepend( input );
+	} );
+}
 
 /**
  * Copy context fields. Target values are preserved, empty source values are
  * skipped, and null forms are ignored.
+ *
+ * Used by the URL-trigger path, which runs once on load before any click. The
+ * click path uses applyContextFields() instead and overwrites anything left
+ * here, so preserving existing values cannot strand a stale coupon.
  *
  * @param {HTMLFormElement|null} sourceForm Checkout button form to read from.
  * @param {HTMLFormElement|null} targetForm Picker form to copy into.
@@ -173,12 +257,14 @@ export function resolveCheckoutButtonForm( root, productId, variationId, options
 
 	const picker = selectPickerForm( root, productId, variationId, options );
 	if ( picker ) {
-		// The source button may be locked to another variation. Use it only
-		// for block context, then submit the picker. The picker is only reached
-		// because no button matches the requested variation, so when several
-		// buttons share this parent product there is no single correct one to
-		// prefer: the first in DOM order supplies the context.
-		copyContextFields( findCheckoutButtonForm( root, productId, null ), picker );
+		// The picker is only reached because no button matches the requested
+		// variation, so the context has to come from some other button for this
+		// product. Since PICKER_CONTEXT_FIELDS now carries `coupon`, that choice
+		// decides a discount: a button locked to a variation was configured for
+		// that variation, so its coupon should not follow the reader to a
+		// different one. Prefer an unlocked button, which stands for the whole
+		// product, and fall back to DOM order only when there isn't one.
+		copyContextFields( findContextDonorForm( root, productId ), picker );
 		return picker;
 	}
 

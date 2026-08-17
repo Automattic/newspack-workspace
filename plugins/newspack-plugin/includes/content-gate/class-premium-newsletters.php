@@ -160,6 +160,26 @@ class Premium_Newsletters {
 		if ( is_admin() ) {
 			return $lists;
 		}
+
+		// With no gates at all, no list can be restricted, so skip the per-list
+		// check entirely. Both kinds have to be absent: get_gates()'s $is_newsletter
+		// argument selects between premium newsletter gates and ordinary ones rather
+		// than widening to both — the meta query is EXISTS vs NOT EXISTS — while the
+		// per-list check below runs through Content_Restriction_Control, which
+		// honours any gate whose content rules match the list. Testing only the
+		// newsletter half would skip lists an ordinary gate restricts. In non-test
+		// requests both gate lookups are cached (Content_Gate::get_gates cache is
+		// disabled under PHPUnit), so the fast path stays cheap.
+		if ( empty( self::get_gates() ) && empty( Content_Gate::get_gates( Content_Gate::GATE_CPT, 'publish' ) ) ) {
+			return $lists;
+		}
+
+		// Goes inert with the rest of gating (NPPD-1846). With Audience Management off
+		// Access Control restricts nothing at all, and that includes premium lists:
+		// restricted lists reappear in signup forms and anyone can join them. That is
+		// the intended feature, not a leak — "Audience Management off" is meant to be
+		// indistinguishable, for readers, from never having enabled Access Control.
+		// The disable confirmation says so before the publisher commits to it.
 		$lists = array_values(
 			array_filter(
 				$lists,
@@ -285,6 +305,13 @@ class Premium_Newsletters {
 	 * @return void
 	 */
 	private static function check_access( $user_id, $source = '' ) {
+		// This uses restriction as an *access* decision, not a render decision, so it
+		// cannot inherit the render path's "inert means unrestricted" reading: that
+		// would turn every restricted list from one to remove into one to add and push
+		// the result to the ESP. Bail before any per-user or per-list lookup.
+		if ( ! Content_Gate::is_gating_active() ) {
+			return;
+		}
 		$user = get_user_by( 'id', $user_id );
 		if ( ! $user ) {
 			return;
@@ -378,6 +405,14 @@ class Premium_Newsletters {
 	 * @return void
 	 */
 	private static function add_user_to_queue( $user_id, $source = '' ) {
+		// Guarded at the chokepoint rather than per handler: the renewal handler
+		// reaches this directly rather than through maybe_enqueue_access_check(), and
+		// a fifth entry point would otherwise have to remember on its own. Nothing
+		// accumulates while gating is inactive, so re-enabling processes current
+		// events rather than a backlog of stale ones.
+		if ( ! Content_Gate::is_gating_active() ) {
+			return;
+		}
 		$user_id = (int) $user_id;
 		if ( ! $user_id ) {
 			return;
@@ -436,6 +471,26 @@ class Premium_Newsletters {
 	 * @return void
 	 */
 	public static function register_access_check_event() {
+		// Runs on every `init`, which is what makes this self-healing: the event is
+		// cleared on the first request after gating goes inactive and re-armed on the
+		// first request after it comes back, whatever changed the setting. A hook on the
+		// setting transition would miss a direct option write, and unscheduling from
+		// there would be undone by this method on the very next request anyway.
+		//
+		// Clearing discards pending entries rather than holding them, so re-enabling
+		// processes current events instead of replaying a stale backlog. The cost is
+		// that entitlement changes made during the off window are not reconciled: a
+		// reader who cancels while gating is inactive keeps their premium list
+		// membership until their next subscription event. Accepted deliberately —
+		// acting on hours-old subscription state is the worse failure — but it means
+		// the off window is not free, and a reconciliation sweep on re-enable is the
+		// fix if that ever bites.
+		if ( ! Content_Gate::is_gating_active() ) {
+			if ( wp_next_scheduled( self::SCHEDULED_HOOK ) || ! empty( get_option( self::QUEUE_OPTION, [] ) ) ) {
+				self::unschedule_access_check_event();
+			}
+			return;
+		}
 		if ( ! wp_next_scheduled( self::SCHEDULED_HOOK ) ) {
 			self::process_access_check_queue();
 			wp_schedule_event( time(), 'hourly', self::SCHEDULED_HOOK );
@@ -513,6 +568,12 @@ class Premium_Newsletters {
 	 * @param int   $client_id ID of the client that triggered the event.
 	 */
 	public static function set_subscribed_lists( $timestamp, $data, $client_id ) {
+		// Bail before the work, not just before the queue write: the snapshot below
+		// costs a remote ESP round-trip and a user-meta write, and it exists only to
+		// inform an access check that cannot run while gating is inactive.
+		if ( ! Content_Gate::is_gating_active() ) {
+			return;
+		}
 		if ( empty( $data['user_id'] ) ) {
 			return;
 		}

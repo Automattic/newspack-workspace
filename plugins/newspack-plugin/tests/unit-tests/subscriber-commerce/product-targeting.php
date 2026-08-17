@@ -113,11 +113,13 @@ class Test_Product_Targeting extends \WP_UnitTestCase {
 	/**
 	 * Create a product post plus its mock, registered so wc_get_product() finds it.
 	 *
-	 * @param int $parent_id Parent product ID, for a variation.
+	 * @param int    $parent_id Parent product ID, for a variation.
+	 * @param string $type      WooCommerce product type.
+	 * @param int[]  $children  Child product IDs, for a grouped product.
 	 *
 	 * @return \WC_Product
 	 */
-	private function create_product( $parent_id = 0 ) {
+	private function create_product( $parent_id = 0, $type = 'simple', $children = [] ) {
 		$post_id = $this->factory->post->create(
 			[
 				'post_type'   => $parent_id ? 'product_variation' : 'product',
@@ -128,6 +130,8 @@ class Test_Product_Targeting extends \WP_UnitTestCase {
 			[
 				'id'        => $post_id,
 				'parent_id' => $parent_id,
+				'type'      => $type,
+				'children'  => $children,
 			]
 		);
 
@@ -263,6 +267,39 @@ class Test_Product_Targeting extends \WP_UnitTestCase {
 		);
 
 		$this->assertFalse( Product_Targeting::rule_covers_product( $rule, $this->variation ) );
+	}
+
+	/**
+	 * Excluding a grouped product does NOT free the standalone products sold
+	 * under it.
+	 *
+	 * A grouped product's children are ordinary top-level products, also sold on
+	 * their own, so reaching through the container to exclude them would lift the
+	 * rule off those products everywhere — widening access on the strength of one
+	 * bundle exclusion. An exclusion therefore means exactly the IDs listed (and
+	 * their variations), and excluding a grouped container is a no-op on its
+	 * children. Whether it should behave otherwise is a product decision left to
+	 * the branch owner (PR #742 review); this test pins today's behaviour so the
+	 * decision can't be reversed by accident.
+	 */
+	public function test_excluding_a_grouped_product_does_not_free_its_children() {
+		$grouped = $this->create_product(
+			0,
+			'grouped',
+			[ $this->product->get_id() ]
+		);
+
+		$rule = $this->make_rule(
+			[
+				'targeting'            => 'all',
+				'excluded_product_ids' => [ $grouped->get_id() ],
+			]
+		);
+
+		// The grouped container itself, named in the list, is excluded.
+		$this->assertFalse( Product_Targeting::rule_covers_product( $rule, $grouped ) );
+		// Its child, a standalone product, stays covered by the "all" rule.
+		$this->assertTrue( Product_Targeting::rule_covers_product( $rule, $this->product ) );
 	}
 
 	/**

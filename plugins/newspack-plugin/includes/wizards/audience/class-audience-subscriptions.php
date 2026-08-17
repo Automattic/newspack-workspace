@@ -244,6 +244,18 @@ class Audience_Subscriptions extends Wizard {
 		// rule binds as soon as they go live — so let publishers pick them.
 		$posts = $this->search_products( $request, [ 'publish', 'private', 'draft' ] );
 
+		// `per_page` bounds the number of parent products the query returns;
+		// variations are appended on top, so a variable product always appears
+		// with ALL of its variations rather than a truncated slice a publisher
+		// couldn't finish picking from. The response size is therefore parents ×
+		// their variations, bounded by the query's own limit — not a flat cap.
+		//
+		// Hydrating saved tokens (`include`) is the exception: it asks for named
+		// IDs and needs each one back as itself, so variations aren't expanded
+		// there — a saved variation resolves on its own, and expanding would spend
+		// the response on rows nobody asked for.
+		$expand_variations = empty( $request->get_param( 'include' ) );
+
 		$data = [];
 		foreach ( $posts as $post ) {
 			$product = wc_get_product( $post->ID );
@@ -251,6 +263,16 @@ class Audience_Subscriptions extends Wizard {
 				continue;
 			}
 			$data[] = self::get_product_data( $product );
+
+			// Only variable products carry variations. `WC_Product_Variable` is the
+			// base for both `variable` and Subscriptions' `variable-subscription`,
+			// so the instanceof check catches both — an `is_type( 'variable' )`
+			// test would silently miss subscription variations in this very wizard.
+			// A grouped product's children are standalone top-level products that
+			// already appear in the results on their own, so they're left alone.
+			if ( ! $expand_variations || ! $product instanceof \WC_Product_Variable ) {
+				continue;
+			}
 			foreach ( $product->get_children() as $variation_id ) {
 				$variation = wc_get_product( $variation_id );
 				if ( $variation instanceof \WC_Product ) {
@@ -355,7 +377,9 @@ class Audience_Subscriptions extends Wizard {
 		}
 
 		if ( ! empty( $include ) ) {
-			$ids = array_filter( array_map( 'absint', explode( ',', $include ) ) );
+			// Capped to match the `per_page` ceiling: the CSV is caller-supplied and
+			// otherwise sets the width of the post__in clause on its own.
+			$ids = array_slice( array_filter( array_map( 'absint', explode( ',', $include ) ) ), 0, 100 );
 			if ( empty( $ids ) ) {
 				return [];
 			}
@@ -405,7 +429,9 @@ class Audience_Subscriptions extends Wizard {
 
 		$include = $request->get_param( 'include' );
 		if ( ! empty( $include ) ) {
-			$ids = array_filter( array_map( 'absint', explode( ',', $include ) ) );
+			// Capped as in search_products(): the CSV is caller-supplied and would
+			// otherwise set the width of the term query on its own.
+			$ids = array_slice( array_filter( array_map( 'absint', explode( ',', $include ) ) ), 0, 100 );
 			if ( empty( $ids ) ) {
 				return rest_ensure_response( [] );
 			}

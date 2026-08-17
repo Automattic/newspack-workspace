@@ -21,11 +21,18 @@ defined( 'ABSPATH' ) || exit;
  *
  * Only *held* subscriptions count. A subscription sitting in the reader's cart,
  * or one being purchased in the same order, does not make them a subscriber.
+ *
+ * Two policies come with the underlying lookup rather than from here, and every
+ * caller inherits them: a seat in a group subscription counts, and a subscription
+ * on hold inside the payment-recovery window counts by default — so a reader whose
+ * renewal is mid-retry keeps their subscriber pricing and access until the retries
+ * are exhausted.
  */
 class Subscriber_Eligibility {
 
 	/**
-	 * Eligibility verdicts, keyed by "{user_id}:{sorted product IDs}".
+	 * Eligibility verdicts, keyed by
+	 * "{blog_id}:{user_id}:{sorted product IDs}:{payment-recovery grace}".
 	 *
 	 * @var array<string, bool>
 	 */
@@ -50,7 +57,23 @@ class Subscriber_Eligibility {
 		}
 
 		sort( $product_ids );
-		$cache_key = $user_id . ':' . implode( ',', $product_ids );
+
+		// The verdict is not a function of the arguments alone:
+		// has_active_subscription() also reads `payment_recovery_grace` from the
+		// ambient evaluation context, which with_evaluation_context() swaps in and
+		// out around each gate. Keying on it keeps a verdict reached inside one
+		// gate's context from being served to a caller outside it — a reader in
+		// the failed-payment window would otherwise get whichever answer the first
+		// caller in the request happened to produce.
+		$cache_key = implode(
+			':',
+			[
+				get_current_blog_id(),
+				$user_id,
+				implode( ',', $product_ids ),
+				Access_Rules::get_evaluation_context( 'payment_recovery_grace', true ) ? 'grace' : 'strict',
+			]
+		);
 		if ( ! isset( self::$verdicts[ $cache_key ] ) ) {
 			self::$verdicts[ $cache_key ] = (bool) Access_Rules::has_active_subscription( $user_id, $product_ids );
 		}

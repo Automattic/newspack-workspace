@@ -445,21 +445,35 @@ class Test_Subscriber_Discounts_Pricing extends \WP_UnitTestCase {
 		$this->add_book_discount();
 		wp_set_current_user( $this->subscriber_id );
 
-		// Enforcement is off in the test environment, so the filters are turned
-		// on deliberately for this one assertion and removed again afterwards.
-		add_filter( 'newspack_subscriber_commerce_enforcement_active', '__return_true' );
+		// The stand-down check has to answer yes for real here: its filter can
+		// only turn enforcement off, so this satisfies the two conditions it
+		// actually reads. WooCommerce is present via the mocks and Memberships is
+		// absent, leaving the content-gates flag as the one thing to switch on.
+		$this->enable_gates();
 		Subscriber_Discounts_Pricing::register_price_filters();
 
 		$price      = (float) $this->book->get_price();
 		$sale_price = (float) $this->book->get_sale_price();
 		$on_sale    = $this->book->is_on_sale();
 
-		remove_filter( 'newspack_subscriber_commerce_enforcement_active', '__return_true' );
 		self::remove_price_filters();
 
 		$this->assertSame( 90.0, $price, 'The reader is charged 10% off.' );
 		$this->assertSame( 90.0, $sale_price, 'The advertised sale price is the same figure, not the discount applied a second time.' );
 		$this->assertTrue( $on_sale, 'The product presents as on sale so the original renders struck through.' );
+	}
+
+	/**
+	 * Turn the content-gates flag on, which is what makes
+	 * Subscriber_Commerce::is_enforcement_active() answer yes here.
+	 *
+	 * A constant, so it cannot be switched back off — only the test that needs
+	 * enforcement genuinely active calls this.
+	 */
+	private function enable_gates() {
+		if ( ! defined( 'NEWSPACK_CONTENT_GATES' ) ) {
+			define( 'NEWSPACK_CONTENT_GATES', true );
+		}
 	}
 
 	/**

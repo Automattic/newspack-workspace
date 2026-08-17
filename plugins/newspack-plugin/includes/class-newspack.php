@@ -154,6 +154,7 @@ final class Newspack {
 		include_once NEWSPACK_ABSPATH . 'includes/class-cta-intent-classifier.php';
 		include_once NEWSPACK_ABSPATH . 'includes/content-gate/trait-content-gate-layout.php';
 		include_once NEWSPACK_ABSPATH . 'includes/content-gate/class-content-gate.php';
+		include_once NEWSPACK_ABSPATH . 'includes/content-gate/class-inert-gating-notice.php';
 
 		// Shared infrastructure for rules that tie store products to subscriptions.
 		include_once NEWSPACK_ABSPATH . 'includes/subscriber-commerce/class-subscriber-commerce.php';
@@ -176,6 +177,7 @@ final class Newspack {
 
 		include_once NEWSPACK_ABSPATH . 'includes/wizards/traits/trait-wizards-admin-header.php';
 		include_once NEWSPACK_ABSPATH . 'includes/wizards/traits/trait-content-gate-preferences.php';
+		include_once NEWSPACK_ABSPATH . 'includes/wizards/traits/trait-audience-management-dependency.php';
 
 		// Newspack Wizards and Sections.
 		include_once NEWSPACK_ABSPATH . 'includes/wizards/newspack/class-newspack-dashboard.php';
@@ -265,6 +267,7 @@ final class Newspack {
 		include_once NEWSPACK_ABSPATH . 'includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-myaccount.php';
 		include_once NEWSPACK_ABSPATH . 'includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-settings.php';
 		include_once NEWSPACK_ABSPATH . 'includes/plugins/class-woocommerce-gateway-stripe.php';
+		include_once NEWSPACK_ABSPATH . 'includes/export/class-csv-exports.php';
 		include_once NEWSPACK_ABSPATH . 'includes/plugins/class-teams-for-memberships.php';
 		include_once NEWSPACK_ABSPATH . 'includes/plugins/class-newspack-elections.php';
 		include_once NEWSPACK_ABSPATH . 'includes/plugins/class-yoast.php';
@@ -595,6 +598,11 @@ final class Newspack {
 			true
 		);
 		wp_enqueue_script( 'newspack_commons' );
+
+		// Defer on the front end only; admin and block editor requests (is_admin()) are left untouched.
+		if ( ! is_admin() ) {
+			wp_script_add_data( 'newspack_commons', 'strategy', 'defer' );
+		}
 
 		wp_register_style(
 			'newspack-commons',

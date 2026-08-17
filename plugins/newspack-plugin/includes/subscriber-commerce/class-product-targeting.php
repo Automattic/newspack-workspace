@@ -54,6 +54,20 @@ class Product_Targeting {
 	private static array $expanded_categories = [];
 
 	/**
+	 * Namespace a per-request cache key to the current site.
+	 *
+	 * Product, term and user IDs are per-site: under switch_to_blog() term 5 on
+	 * two sites would otherwise share an entry and return each other's answers.
+	 *
+	 * @param string $key The key.
+	 *
+	 * @return string
+	 */
+	private static function cache_key( string $key ): string {
+		return get_current_blog_id() . ':' . $key;
+	}
+
+	/**
 	 * Get the rules from a rule set that cover a product, memoized per request.
 	 *
 	 * Inactive rules are never returned.
@@ -69,7 +83,7 @@ class Product_Targeting {
 			return [];
 		}
 
-		$cache_key = md5( wp_json_encode( $rules ) ) . ':' . $product->get_id();
+		$cache_key = self::cache_key( md5( wp_json_encode( $rules ) ) . ':' . $product->get_id() );
 		if ( ! isset( self::$matching_rules[ $cache_key ] ) ) {
 			self::$matching_rules[ $cache_key ] = array_values(
 				array_filter(
@@ -123,6 +137,13 @@ class Product_Targeting {
 	/**
 	 * Whether a product is excluded from a rule.
 	 *
+	 * Tests the product's own ID and its parent's, so excluding a variable
+	 * product also excludes its variations. Note this does NOT reach the products
+	 * sold under a grouped product: excluding a grouped container is a no-op on
+	 * its children, which are standalone products in their own right. Whether
+	 * that should change is a product decision (see PR #742 review) — until it is
+	 * made, an exclusion means exactly the IDs listed and their variations.
+	 *
 	 * @param array $rule       The rule.
 	 * @param int   $product_id The product (or variation) ID.
 	 * @param int   $parent_id  The parent product ID, 0 for a non-variation.
@@ -148,7 +169,7 @@ class Product_Targeting {
 		if ( empty( $category_ids ) ) {
 			return [];
 		}
-		$cache_key = md5( wp_json_encode( $category_ids ) );
+		$cache_key = self::cache_key( md5( wp_json_encode( $category_ids ) ) );
 		if ( ! isset( self::$expanded_categories[ $cache_key ] ) ) {
 			$expanded = $category_ids;
 			foreach ( $category_ids as $category_id ) {
