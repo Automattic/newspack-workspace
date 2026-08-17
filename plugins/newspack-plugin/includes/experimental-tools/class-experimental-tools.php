@@ -250,6 +250,10 @@ class Experimental_Tools {
 				} elseif ( ! isset( $field['value'] ) && isset( $field['default'] ) ) {
 					$field['value'] = $field['default'];
 				}
+
+				// Server-side only: a callable would serialize into the response as
+				// an object's public properties, or as an opaque {} for a closure.
+				unset( $field['sanitize_callback'] );
 			}
 			unset( $field );
 
@@ -371,9 +375,19 @@ class Experimental_Tools {
 		}
 
 		foreach ( $fields as $key => $value ) {
-			if ( isset( $declared_fields[ $key ] ) ) {
-				$all_settings[ $slug ]['fields'][ $key ] = self::sanitize_field_value( $declared_fields[ $key ], $value );
+			if ( ! isset( $declared_fields[ $key ] ) ) {
+				continue;
 			}
+
+			// The route validates that `fields` is an object but says nothing about
+			// the values inside it. A non-scalar has no meaningful sanitized form,
+			// and writing one through would replace a saved value with an empty
+			// string on a malformed request; leave the stored value alone instead.
+			if ( ! is_scalar( $value ) ) {
+				continue;
+			}
+
+			$all_settings[ $slug ]['fields'][ $key ] = self::sanitize_field_value( $declared_fields[ $key ], $value );
 		}
 
 		update_option( self::OPTION_NAME, $all_settings );
@@ -398,18 +412,50 @@ class Experimental_Tools {
 	 * needs. The callback is registration data, not user input, and an
 	 * uncallable one falls back to the default rather than storing raw input.
 	 *
+	 * The callback is always handed a string, so it can declare `string` without
+	 * risking a TypeError on a hand-crafted request, and must return a scalar,
+	 * since the stored value is merged back into the field definition and sent
+	 * over REST. A non-scalar return is stored as an empty string, which is what
+	 * the default does with one. Anything narrower than scalar would rule out
+	 * `rest_sanitize_boolean` and friends on a toggle field.
+	 *
+	 * `sanitize_callback` is a literal in the registration — PHP from a loaded
+	 * plugin, never read from the option or the request — so applying it is no
+	 * wider a trust boundary than the registration itself. A tool that ever
+	 * derived the callback from stored data would change that. Deriving field
+	 * keys or values that way is fine and already done.
+	 *
 	 * @param array $field The registered field definition.
-	 * @param mixed $value The submitted value.
-	 * @return mixed The sanitized value.
+	 * @param mixed $value The submitted value, already known to be scalar.
+	 * @return string|int|float|bool The sanitized value.
 	 */
-	private static function sanitize_field_value( $field, $value ) {
+	private static function sanitize_field_value( array $field, mixed $value ): string|int|float|bool {
 		$callback = $field['sanitize_callback'] ?? null;
 
-		if ( null !== $callback && is_callable( $callback ) ) {
-			return call_user_func( $callback, $value );
+		if ( null === $callback ) {
+			return sanitize_textarea_field( $value );
 		}
 
-		return sanitize_textarea_field( $value );
+		if ( ! is_callable( $callback ) ) {
+			$message = sprintf(
+				/* translators: %1$s: the sanitize_callback registration key. %2$s: field key. */
+				__( 'The %1$s declared for the %2$s field is not callable. Falling back to the default sanitizer, which strips percent-encoded sequences.', 'newspack-plugin' ),
+				'<code>sanitize_callback</code>',
+				'<code>' . ( $field['key'] ?? '' ) . '</code>'
+			);
+
+			_doing_it_wrong(
+				__METHOD__,
+				// phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- _doing_it_wrong expects a translated string.
+				$message,
+				'6.47.9'
+			);
+			return sanitize_textarea_field( $value );
+		}
+
+		$sanitized = $callback( (string) $value );
+
+		return is_scalar( $sanitized ) ? $sanitized : '';
 	}
 
 	/**

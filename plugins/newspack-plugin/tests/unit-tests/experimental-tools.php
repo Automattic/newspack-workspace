@@ -197,6 +197,10 @@ class Newspack_Test_Experimental_Tools extends WP_UnitTestCase {
 	 * than fataling or storing the value unsanitized.
 	 */
 	public function test_uncallable_sanitize_callback_falls_back_to_the_default() {
+		// The fallback is safe, but silent would hide a registration typo behind
+		// the exact sanitizer the callback was declared to escape.
+		$this->setExpectedIncorrectUsage( 'Newspack\Experimental_Tools::sanitize_field_value' );
+
 		$slug = $this->register_test_tool(
 			[
 				'fields' => [
@@ -210,11 +214,50 @@ class Newspack_Test_Experimental_Tools extends WP_UnitTestCase {
 			]
 		);
 
-		Experimental_Tools::save_tool_fields( $slug, [ 'template' => "hi <script>alert('x')</script>" ] );
+		Experimental_Tools::save_tool_fields( $slug, [ 'template' => "hi %CATEGORIES% <script>alert('x')</script>" ] );
 
 		$settings = Experimental_Tools::get_tool_settings( $slug );
 
 		$this->assertStringNotContainsString( '<script>', $settings['fields']['template'] );
+		$this->assertStringContainsString(
+			'TEGORIES%',
+			$settings['fields']['template'],
+			"The default sanitizer's fingerprint proves which one ran."
+		);
+	}
+
+	/**
+	 * A non-scalar value is not storable, and a malformed request must not wipe
+	 * what the publisher saved. The route validates that `fields` is an object
+	 * but nothing about the values inside it, so this is reachable.
+	 */
+	public function test_a_non_scalar_value_leaves_the_stored_value_alone() {
+		$called = false;
+		$slug   = $this->register_test_tool(
+			[
+				'fields' => [
+					[
+						'type'              => 'textarea',
+						'key'               => 'template',
+						'label'             => 'Template',
+						'sanitize_callback' => function ( string $value ) use ( &$called ) {
+							$called = true;
+							return $value;
+						},
+					],
+				],
+			]
+		);
+
+		Experimental_Tools::save_tool_fields( $slug, [ 'template' => 'the publisher wrote this' ] );
+		Experimental_Tools::save_tool_fields( $slug, [ 'template' => [ 'an', 'array' ] ] );
+
+		$this->assertSame(
+			'the publisher wrote this',
+			Experimental_Tools::get_tool_settings( $slug )['fields']['template'],
+			'A malformed value must not overwrite a saved one.'
+		);
+		$this->assertTrue( $called, 'The scalar save did reach the callback.' );
 	}
 
 	/**
@@ -248,6 +291,60 @@ class Newspack_Test_Experimental_Tools extends WP_UnitTestCase {
 		Experimental_Tools::save_tool_fields( $slug, [ 'template' => 'Use %CATEGORIES% here' ] );
 
 		$this->assertEquals( 'Use %CATEGORIES% here|marked', $captured['template'] );
+	}
+
+	/**
+	 * The callback is server-side only and never reaches a client. A callable
+	 * serializes into the REST response as an object's public properties, or as
+	 * an opaque object for a closure, and the UI has no use for either.
+	 */
+	public function test_sanitize_callback_is_not_exposed_in_the_rest_payload() {
+		$this->register_test_tool(
+			[
+				'fields' => [
+					[
+						'type'              => 'textarea',
+						'key'               => 'template',
+						'label'             => 'Template',
+						'sanitize_callback' => [ __CLASS__, 'sanitize_marking_the_value' ],
+					],
+				],
+			]
+		);
+
+		$tools = Experimental_Tools::get_tools();
+
+		$this->assertArrayNotHasKey( 'sanitize_callback', $tools[0]['fields'][0] );
+		$this->assertEquals( 'template', $tools[0]['fields'][0]['key'], 'The rest of the field definition still travels.' );
+	}
+
+	/**
+	 * A callback returning something other than a scalar cannot reach the option:
+	 * the stored value is merged back into the field definition and rendered by a
+	 * text input. The default sanitizer returns an empty string for a non-scalar,
+	 * so the custom path matches it.
+	 */
+	public function test_non_scalar_return_is_stored_as_an_empty_string() {
+		$slug = $this->register_test_tool(
+			[
+				'fields' => [
+					[
+						'type'              => 'textarea',
+						'key'               => 'template',
+						'label'             => 'Template',
+						'sanitize_callback' => function () {
+							return [ 'not', 'a', 'scalar' ];
+						},
+					],
+				],
+			]
+		);
+
+		Experimental_Tools::save_tool_fields( $slug, [ 'template' => 'anything' ] );
+
+		$settings = Experimental_Tools::get_tool_settings( $slug );
+
+		$this->assertSame( '', $settings['fields']['template'] );
 	}
 
 	/**
