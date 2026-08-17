@@ -1088,6 +1088,28 @@ final class Newspack_Popups_Inserter {
 				$script_data['donor_landing_page'] = $donor_landing_page;
 			}
 
+			// Variant suppression is entirely client-side, and this whole block sits
+			// inside the non-AMP branch, so AMP requests get no A/B config at all.
+			// That is correct only because AMP prompt display is currently disabled:
+			// if it is ever restored, every arm of a test would render un-suppressed
+			// unless suppression is reimplemented for that path.
+			$ab_tests = Newspack_Popups_AB_Tests::get_tests_config();
+			if ( ! empty( $ab_tests ) ) {
+				$script_data['ab_tests']   = $ab_tests;
+				$script_data['cid_cookie'] = defined( 'NEWSPACK_CLIENT_ID_COOKIE_NAME' ) ? NEWSPACK_CLIENT_ID_COOKIE_NAME : 'newspack-cid';
+				$ab_buckets                = Newspack_Popups_AB_Tests::get_logged_in_buckets( $ab_tests );
+				if ( ! empty( $ab_buckets ) ) {
+					$script_data['ab_buckets'] = $ab_buckets;
+				}
+				// Variant preview (view_as=ab_variant:x) is echoed server-side via the
+				// admin-gated View_As spec rather than parsed from the URL in JS, so a
+				// non-privileged visitor cannot self-select an arm (and pollute GA).
+				$view_as_spec = Newspack_Popups_View_As::parse_view_as();
+				if ( ! empty( $view_as_spec['ab_variant'] ) && in_array( $view_as_spec['ab_variant'], Newspack_Popups_AB_Tests::VALID_VARIANTS, true ) ) {
+					$script_data['ab_view_as'] = $view_as_spec['ab_variant'];
+				}
+			}
+
 			\wp_localize_script( $script_handle, 'newspack_popups_view', $script_data );
 			\wp_enqueue_script( $script_handle );
 		}
