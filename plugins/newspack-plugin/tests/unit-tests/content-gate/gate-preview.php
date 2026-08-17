@@ -515,8 +515,8 @@ class Test_Gate_Preview extends \WP_UnitTestCase {
 		$this->set_query_param( Gate_Preview::PREVIEW_QUERY_PARAM, $this->layout_id );
 
 		$data = Content_Gate::get_frontend_script_data( false, Gate_Preview::is_preview_request() );
-		$this->assertArrayHasKey( 'preview_query_params', $data, 'An admin previewing gets the param list.' );
-		$this->assertContains( Gate_Preview::PREVIEW_QUERY_PARAM, $data['preview_query_params'], 'The list carries the preview param itself.' );
+		$this->assertArrayHasKey( 'preview_param_names', $data, 'An admin previewing gets the param list.' );
+		$this->assertContains( Gate_Preview::PREVIEW_QUERY_PARAM, $data['preview_param_names'], 'The list carries the preview param itself.' );
 		$this->assertArrayNotHasKey( 'metadata', $data, 'No gate metadata is sent where no gate renders.' );
 	}
 
@@ -529,7 +529,7 @@ class Test_Gate_Preview extends \WP_UnitTestCase {
 		$this->set_query_param( Gate_Preview::PREVIEW_QUERY_PARAM, $this->layout_id );
 
 		$data = Content_Gate::get_frontend_script_data( false, Gate_Preview::is_preview_request() );
-		$this->assertArrayNotHasKey( 'preview_query_params', $data, 'A subscriber on the preview URL gets no param list.' );
+		$this->assertArrayNotHasKey( 'preview_param_names', $data, 'A subscriber on the preview URL gets no param list.' );
 	}
 
 	/**
@@ -540,7 +540,7 @@ class Test_Gate_Preview extends \WP_UnitTestCase {
 		wp_set_current_user( $this->admin_id );
 
 		$data = Content_Gate::get_frontend_script_data( true, Gate_Preview::is_preview_request() );
-		$this->assertArrayNotHasKey( 'preview_query_params', $data, 'No param list without a preview request.' );
+		$this->assertArrayNotHasKey( 'preview_param_names', $data, 'No param list without a preview request.' );
 		$this->assertArrayHasKey( 'metadata', $data, 'A rendering gate still gets its metadata.' );
 	}
 }

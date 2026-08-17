@@ -824,7 +824,7 @@ class Content_Gate {
 		// own check already requires the preview capability, so this does not ship
 		// to ordinary readers.
 		if ( $is_preview ) {
-			$script_data['preview_query_params'] = array_merge(
+			$script_data['preview_param_names'] = array_merge(
 				[ Content_Gate\Gate_Preview::PREVIEW_QUERY_PARAM ],
 				array_values( Content_Gate\Gate_Preview::PREVIEW_QUERY_KEYS )
 			);
