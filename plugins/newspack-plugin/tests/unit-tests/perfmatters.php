@@ -1,32 +1,168 @@
 <?php
 /**
- * Tests for the Perfmatters integration WooCommerce veto.
+ * Tests the Perfmatters integration.
  *
- * @package Newspack
+ * @package Newspack\Tests
  */
 
 use Newspack\Perfmatters;
 use Newspack\WooCommerce_Content_Detector;
 
+require_once __DIR__ . '/../mocks/newspack-popups-model-mock.php';
+
 /**
- * Test the perfmatters_disable_woocommerce_scripts callback.
+ * Tests for Newspack's default Perfmatters configuration.
+ *
+ * @group perfmatters
  */
 class Newspack_Test_Perfmatters extends WP_UnitTestCase {
+	/**
+	 * Newspack forces RUCSS on, so its defaults must exclude the Complianz
+	 * stylesheets: the consent banner markup is injected client-side, its
+	 * selectors never reach the server-generated used-CSS snapshot, and the
+	 * delayed original stylesheet leaves the banner unstyled until user
+	 * interaction or the delay timeout.
+	 */
+	public function test_complianz_stylesheets_excluded_from_rucss_defaults() {
+		$options = Perfmatters::set_defaults( [] );
+
+		$this->assertTrue( $options['assets']['remove_unused_css'] );
+		$this->assertContains(
+			'plugins/complianz-gdpr',
+			$options['assets']['rucss_excluded_stylesheets'],
+			'Complianz plugin-dir CSS (free + premium, prefix-matched) must be excluded from RUCSS.'
+		);
+		$this->assertContains(
+			'uploads/complianz',
+			$options['assets']['rucss_excluded_stylesheets'],
+			'Complianz generated banner CSS in uploads must be excluded from RUCSS.'
+		);
+	}
+
+	/**
+	 * The backstop filter enforces the same exclusions even when a publisher's
+	 * saved settings override the defaults, and preserves publisher entries.
+	 */
+	public function test_complianz_stylesheets_excluded_via_backstop_filter() {
+		$this->assertNotFalse(
+			has_filter( 'perfmatters_rucss_excluded_stylesheets', [ Perfmatters::class, 'add_rucss_excluded_stylesheets' ] ),
+			'The backstop filter must be registered so exclusions apply even when saved settings override the defaults.'
+		);
+
+		$exclusions = Perfmatters::add_rucss_excluded_stylesheets( [ 'example-publisher-entry' ] );
+
+		$this->assertContains( 'plugins/complianz-gdpr', $exclusions );
+		$this->assertContains( 'uploads/complianz', $exclusions );
+		$this->assertContains( 'example-publisher-entry', $exclusions );
+	}
 
 	/**
 	 * Reset the detector memo before each test.
 	 */
-	public function setUp(): void {
-		parent::setUp();
+	public function set_up() {
+		parent::set_up();
 		WooCommerce_Content_Detector::reset_memo();
 	}
 
 	/**
-	 * Reset the detector memo after each test.
+	 * Reset the above-header flag and the detector memo after each test.
 	 */
-	public function tearDown(): void {
+	public function tear_down() {
+		\Newspack_Popups_Model::$has_above_header = false;
 		WooCommerce_Content_Detector::reset_memo();
-		parent::tearDown();
+		parent::tear_down();
+	}
+
+	/**
+	 * Without above-header prompts, the prompt reveal scripts stay in the JS delay queue.
+	 */
+	public function test_reveal_scripts_delayed_without_above_header_prompts() {
+		\Newspack_Popups_Model::$has_above_header = false;
+
+		$options = Perfmatters::set_defaults( [] );
+
+		$this->assertContains( 'newspack-popups', $options['assets']['delay_js_inclusions'] );
+		$this->assertContains( 'window.newspack', $options['assets']['delay_js_inclusions'] );
+		$this->assertNotContains( 'newspack-popups', $options['assets']['js_exclusions'] );
+		$this->assertNotContains( 'newspack-plugin', $options['assets']['js_exclusions'] );
+	}
+
+	/**
+	 * With published above-header prompts, the reveal scripts are removed from the JS
+	 * delay queue and excluded from deferral so the prompts appear immediately.
+	 */
+	public function test_reveal_scripts_undelayed_with_above_header_prompts() {
+		\Newspack_Popups_Model::$has_above_header = true;
+
+		$options = Perfmatters::set_defaults( [] );
+
+		$this->assertNotContains( 'newspack-popups', $options['assets']['delay_js_inclusions'] );
+		$this->assertNotContains( 'window.newspack', $options['assets']['delay_js_inclusions'] );
+		$this->assertNotContains( 'newspack-plugin', $options['assets']['delay_js_inclusions'] );
+
+		$this->assertContains( 'newspack-popups', $options['assets']['js_exclusions'] );
+		$this->assertContains( 'newspack-plugin', $options['assets']['js_exclusions'] );
+
+		// `window.newspack` is an inline token; deferral only applies to external <script src>
+		// files, so it is intentionally kept out of the defer exclusions even while present in
+		// the delay exclusions. Assert the asymmetry so the two lists cannot silently drift.
+		$this->assertNotContains( 'window.newspack', $options['assets']['js_exclusions'] );
+	}
+
+	/**
+	 * Perfmatters persists its delay list whenever its settings are saved through the UI,
+	 * so on a configured site the stored option already contains the reveal scripts. They
+	 * must be subtracted from the merged list, not merely omitted from Newspack's own
+	 * contribution – otherwise the merge puts them back and the prompts stay delayed on
+	 * exactly the sites this targets.
+	 */
+	public function test_reveal_scripts_undelayed_when_already_in_saved_option() {
+		\Newspack_Popups_Model::$has_above_header = true;
+
+		$options = Perfmatters::set_defaults(
+			[
+				'assets' => [
+					'delay_js_inclusions' => [ 'newspack-popups', 'window.newspack', 'newspack-plugin', 'publisher-script' ],
+				],
+			]
+		);
+
+		$this->assertNotContains( 'newspack-popups', $options['assets']['delay_js_inclusions'] );
+		$this->assertNotContains( 'window.newspack', $options['assets']['delay_js_inclusions'] );
+		$this->assertNotContains( 'newspack-plugin', $options['assets']['delay_js_inclusions'] );
+
+		// The publisher's own entries survive.
+		$this->assertContains( 'publisher-script', $options['assets']['delay_js_inclusions'] );
+	}
+
+	/**
+	 * Without above-header prompts, a saved delay list keeps the reveal scripts.
+	 */
+	public function test_saved_delay_list_is_preserved_without_above_header_prompts() {
+		\Newspack_Popups_Model::$has_above_header = false;
+
+		$options = Perfmatters::set_defaults(
+			[
+				'assets' => [
+					'delay_js_inclusions' => [ 'newspack-popups', 'publisher-script' ],
+				],
+			]
+		);
+
+		$this->assertContains( 'newspack-popups', $options['assets']['delay_js_inclusions'] );
+		$this->assertContains( 'publisher-script', $options['assets']['delay_js_inclusions'] );
+	}
+
+	/**
+	 * Unrelated scripts remain delayed regardless of above-header prompts.
+	 */
+	public function test_other_scripts_still_delayed_with_above_header_prompts() {
+		\Newspack_Popups_Model::$has_above_header = true;
+
+		$options = Perfmatters::set_defaults( [] );
+
+		$this->assertContains( 'newspack-blocks', $options['assets']['delay_js_inclusions'] );
+		$this->assertContains( 'recaptcha', $options['assets']['delay_js_inclusions'] );
 	}
 
 	/**
@@ -69,9 +205,31 @@ class Newspack_Test_Perfmatters extends WP_UnitTestCase {
 	 * @runInSeparateProcess
 	 * @preserveGlobalState disabled
 	 */
-	public function test_ignore_defaults_passes_through() {
+	public function test_ignore_defaults_leaves_backstop_untouched() {
 		define( 'NEWSPACK_IGNORE_PERFMATTERS_DEFAULTS', true );
-		$this->assertTrue( Perfmatters::maybe_keep_woocommerce_assets( true ) );
-		$this->assertFalse( Perfmatters::maybe_keep_woocommerce_assets( false ) );
+
+		$input = [ 'example-publisher-entry' ];
+
+		$this->assertSame( $input, Perfmatters::add_rucss_excluded_stylesheets( $input ) );
+	}
+
+	/**
+	 * A saved option that already carries the manually-applied workaround entry
+	 * doesn't end up with duplicates after the defaults merge.
+	 */
+	public function test_no_duplicate_exclusions_after_merge() {
+		$options = Perfmatters::set_defaults(
+			[
+				'assets' => [
+					'rucss_excluded_stylesheets' => [ 'plugins/complianz-gdpr' ],
+				],
+			]
+		);
+
+		$this->assertSame(
+			array_unique( $options['assets']['rucss_excluded_stylesheets'] ),
+			$options['assets']['rucss_excluded_stylesheets']
+		);
+		$this->assertContains( 'plugins/complianz-gdpr', $options['assets']['rucss_excluded_stylesheets'] );
 	}
 }
