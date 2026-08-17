@@ -8,6 +8,13 @@ db_name_for_env() {
     echo "wordpress_$(echo "$1" | tr '-' '_')"
 }
 
+# The PHPUnit database for an env. Created lazily by the first `n test-php` run
+# in the env, so it may not exist. Keep in step with bin/test-php.sh, which
+# derives the same name inside the container from $MYSQL_DATABASE.
+test_db_name_for_env() {
+    echo "wp_tests_$(echo "$1" | tr '-' '_')"
+}
+
 # Find the next available loopback IP (127.0.0.2+).
 # Checks both compose files and running containers to avoid conflicts.
 next_loopback_ip() {
@@ -316,7 +323,7 @@ networks:
 YAML
         echo "Created $compose_file (db: $db_name, domain: $domain, ip: $ip)"
         # Check networking prerequisites (macOS only — Linux routes all 127.x.x.x by default).
-        if [[ "$(uname)" == "Darwin" ]] && ! ifconfig lo0 2>/dev/null | grep -q "$ip"; then
+        if [[ "$(uname)" == "Darwin" ]] && ! lo0_alias_exists "$ip"; then
             if command -v newspack-manage-host >/dev/null 2>&1; then
                 sudo newspack-manage-host alias-add "$ip"
             else
@@ -433,7 +440,7 @@ MIGRATE
         # Re-read domain after potential migration.
         domain=$(domain_for_env "$compose_file")
         # Ensure loopback alias exists (macOS only — Linux routes all 127.x.x.x by default).
-        if [[ "$(uname)" == "Darwin" && -n "$ip" && "$ip" != "127.0.0.1" ]] && ! ifconfig lo0 | grep -q "$ip"; then
+        if [[ "$(uname)" == "Darwin" && -n "$ip" && "$ip" != "127.0.0.1" ]] && ! lo0_alias_exists "$ip"; then
             if command -v newspack-manage-host >/dev/null 2>&1; then
                 sudo newspack-manage-host alias-add "$ip"
             else
@@ -598,6 +605,7 @@ MIGRATE
         compose_file="$NABSPATH/docker-compose.env-${env_name}.yml"
         container_name=$(echo "newspack_env_${env_name}" | tr '-' '_')
         db_name=$(db_name_for_env "$env_name")
+        test_db_name=$(test_db_name_for_env "$env_name")
         # Read domain, IP, and worktrees before removing compose file.
         domain=""
         ip=""
@@ -611,7 +619,8 @@ MIGRATE
         fi
         docker stop "$container_name" 2>/dev/null
         docker rm "$container_name" 2>/dev/null
-        # Drop the environment database via docker compose (avoids hardcoding container name).
+        # Drop the environment databases via docker compose (avoids hardcoding container name).
+        # The test database only exists if `n test-php` ever ran in this env, hence IF EXISTS.
         set -a
         source "$NABSPATH/default.env"
         [[ -f "$NABSPATH/.env" ]] && source "$NABSPATH/.env"
@@ -619,8 +628,8 @@ MIGRATE
         docker compose -f "$NABSPATH/docker-compose.yml" up -d db 2>/dev/null
         docker compose -f "$NABSPATH/docker-compose.yml" exec -T db \
             mariadb -h localhost -u root -p"${MYSQL_ROOT_PASSWORD}" \
-            -e "DROP DATABASE IF EXISTS \`${db_name}\`" 2>/dev/null
-        echo "Dropped database $db_name"
+            -e "DROP DATABASE IF EXISTS \`${db_name}\`; DROP DATABASE IF EXISTS \`${test_db_name}\`" 2>/dev/null
+        echo "Dropped databases $db_name, $test_db_name"
         # Remove env html and certs directories.
         if [[ -d "$NABSPATH/envs/${env_name}" ]]; then
             rm -rf "$NABSPATH/envs/${env_name}"
@@ -652,18 +661,23 @@ MIGRATE
         # remove the worktree directory the env was bound to, not whatever
         # branch is currently checked out there.
         #
-        # Known follow-up: for monorepo worktrees the safe form (e.g. feat-foo)
-        # won't match the real branch (feat/foo) in worktree.sh's final
-        # `git branch -D`, so the local branch ref is left dangling after the
-        # worktree dir is removed. Harmless (re-create reuses it) but accrues
-        # across create/destroy cycles. A proper fix removes the dir by safe
-        # name and deletes the branch by its resolved real name separately.
         for entry in "${worktree_entries[@]}"; do
             IFS='|' read -r wt_repo wt_branch wt_kind <<< "$entry"
             if [[ "$wt_kind" == "repos" ]]; then
+                # Standalone repos/ worktrees keep their (long-lived) branch.
                 "$NABSPATH/bin/worktree.sh" remove-repos --yes "$wt_repo" "$wt_branch"
             else
+                # Remove the worktree DIR by its safe form (the identifier the env
+                # was bound to -- stable even if someone `git checkout`ed a
+                # different branch inside it), then delete the REAL branch
+                # separately: worktree.sh's own `git branch -D <safe>` no-ops
+                # against a slash-named branch (feat/foo vs feat-foo), which
+                # previously left the local ref dangling across create/destroy.
+                real_branch=$(resolve_unsanitized_branch "$wt_branch" "")
                 "$NABSPATH/bin/worktree.sh" remove --yes "$wt_repo" "$wt_branch"
+                if [[ -n "$real_branch" && "$real_branch" != "$wt_branch" ]]; then
+                    git -C "$NABSPATH" branch -D "$real_branch" 2>/dev/null && echo "Deleted branch $real_branch"
+                fi
             fi
         done
         echo "Destroyed environment '$env_name'"

@@ -30,3 +30,13 @@ export function getAdminUrl() {
 export function getCptSlug() {
 	return getGlobal()?.cptSlug || DEFAULT_CPT_SLUG;
 }
+
+/**
+ * Resolve the current user's persisted view preferences, keyed by screen.
+ *
+ * @return {Object} Preferences map (empty when none saved).
+ */
+export function getViewPrefs() {
+	const prefs = getGlobal()?.viewPrefs;
+	return prefs && typeof prefs === 'object' ? prefs : {};
+}

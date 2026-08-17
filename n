@@ -1,6 +1,7 @@
 #!/bin/bash
 
 NABSPATH="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
+source "$(dirname "${BASH_SOURCE[0]}")/bin/_common.sh"
 source "$(dirname "${BASH_SOURCE[0]}")/bin/repos.sh"
 
 # Use -it flags only when TTY is available
@@ -152,7 +153,17 @@ start() {
         if [ "$1" == "8.2" ]; then
             file="docker-compose-82.yml"
         fi
-        docker compose -f $file up -d
+        compose_files=(-f "$file")
+        # Honor a developer-local docker-compose.override.yml for the main dev
+        # stack. Passing an explicit -f disables Compose's automatic override
+        # loading, so re-add the file here when it exists (a no-op otherwise,
+        # which preserves the default stack). Isolated env containers
+        # deliberately skip this file -- they layer their own
+        # docker-compose.env-*.yml overrides instead.
+        if [[ -f docker-compose.override.yml ]]; then
+            compose_files+=(-f docker-compose.override.yml)
+        fi
+        docker compose "${compose_files[@]}" up -d
 
     # Create shared network for inter-container communication.
     # Env containers join this network with their domain as an alias,
@@ -170,10 +181,9 @@ start() {
     # These don't survive reboots, so this runs on every start.
     if [[ "$(uname)" == "Darwin" ]]; then
         missing_aliases=()
-        lo0_addrs=$(ifconfig lo0 2>/dev/null)
         for octet in $(seq 2 100); do
             ip="127.0.0.$octet"
-            if ! echo "$lo0_addrs" | grep -qE "inet $ip( |$)"; then
+            if ! lo0_alias_exists "$ip"; then
                 missing_aliases+=("$ip")
             fi
         done
@@ -482,9 +492,6 @@ case $1 in
     root)
         echo "$NABSPATH"
         ;;
-    setup-agents)
-        "$NABSPATH/bin/setup-agents.sh"
-        ;;
     help)
         echo "Available commands:"
         echo ""
@@ -536,9 +543,6 @@ case $1 in
         echo "Isolated Environments:"
         echo "  worktree [args]              Manage Git worktrees for repositories (add, list, remove, cleanup)."
         echo "  env [args]                   Manage isolated environments (create, up, down, destroy, list, cleanup)."
-        echo ""
-        echo "AI Agents:"
-        echo "  setup-agents                 Set up AI agent tooling for Newspack development."
         echo ""
         echo "Other:"
         echo "  root                         Print the absolute path to the workspace root directory."

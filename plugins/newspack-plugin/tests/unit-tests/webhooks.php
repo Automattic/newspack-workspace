@@ -5,6 +5,8 @@
  * @package Newspack\Tests
  */
 
+// phpcs:disable WordPressVIPMinimum.Performance.NoPaging -- Unbounded queries are acceptable in tests.
+
 use Newspack\Data_Events;
 
 /**

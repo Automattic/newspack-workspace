@@ -267,7 +267,7 @@ final class Ads {
 			'menu_name'                => _x( 'Newsletter Ads', 'admin menu', 'newspack-newsletters' ),
 			'name_admin_bar'           => _x( 'Newsletter Ad', 'add new on admin bar', 'newspack-newsletters' ),
 			'add_new'                  => _x( 'Add New', 'popup', 'newspack-newsletters' ),
-			'add_new_item'             => __( 'Add New Newsletter Ad', 'newspack-newsletters' ),
+			'add_new_item'             => __( 'Add Newsletter Ad', 'newspack-newsletters' ),
 			'new_item'                 => __( 'New Newsletter Ad', 'newspack-newsletters' ),
 			'edit_item'                => __( 'Edit Newsletter Ad', 'newspack-newsletters' ),
 			'view_item'                => __( 'View Newsletter Ad', 'newspack-newsletters' ),
@@ -372,6 +372,32 @@ final class Ads {
 			return "{$matches[1]}-{$matches[2]}-{$matches[3]}";
 		}
 		return '';
+	}
+
+	/**
+	 * Format a date-only ad meta value for display.
+	 *
+	 * `start_date`/`expiry_date` are whole calendar days: `is_ad_active()`
+	 * compares them as `Y-m-d` strings against the newsletter's own date, so
+	 * they carry neither a time nor a timezone. Anchoring at midnight in the
+	 * site timezone is what keeps the rendered day equal to the stored one —
+	 * `strtotime( 'Y-m-d' )` resolves against PHP's default zone (UTC under
+	 * WordPress) and `wp_date()` then converts into the site zone, which moved
+	 * the date a day earlier on every site at a negative UTC offset.
+	 *
+	 * @param mixed $value Raw meta value.
+	 * @return string Localized date, or '' when the value is empty or invalid.
+	 */
+	public static function format_ad_date( $value ) {
+		$value = self::sanitize_ad_date( $value );
+		if ( '' === $value ) {
+			return '';
+		}
+		$date = date_create_immutable( $value . ' 00:00:00', wp_timezone() );
+		if ( false === $date ) {
+			return '';
+		}
+		return wp_date( __( 'F j, Y' ), $date->getTimestamp() );
 	}
 
 	/**
@@ -592,7 +618,7 @@ final class Ads {
 		$all_ads = get_posts(
 			[
 				'post_type'      => self::CPT,
-				'posts_per_page' => -1,
+				'posts_per_page' => -1, // phpcs:ignore WordPressVIPMinimum.Performance.NoPaging -- Newsletter ads CPT; config-scale.
 			]
 		);
 		$ads     = [];
@@ -740,19 +766,11 @@ final class Ads {
 	 */
 	public static function custom_column( $column_name, $post_id ) {
 		if ( 'start_date' === $column_name ) {
-			$start_date = get_post_meta( $post_id, 'start_date', true );
-			if ( ! empty( $start_date ) ) {
-				echo esc_html( wp_date( __( 'F j, Y' ), strtotime( $start_date ) ) );
-			} else {
-				echo '—';
-			}
+			$start_date = self::format_ad_date( get_post_meta( $post_id, 'start_date', true ) );
+			echo '' === $start_date ? '—' : esc_html( $start_date );
 		} elseif ( 'expiry_date' === $column_name ) {
-			$expiry_date = get_post_meta( $post_id, 'expiry_date', true );
-			if ( ! empty( $expiry_date ) ) {
-				echo esc_html( wp_date( __( 'F j, Y' ), strtotime( $expiry_date ) ) );
-			} else {
-				echo '—';
-			}
+			$expiry_date = self::format_ad_date( get_post_meta( $post_id, 'expiry_date', true ) );
+			echo '' === $expiry_date ? '—' : esc_html( $expiry_date );
 		} elseif ( 'price' === $column_name ) {
 			$price = get_post_meta( $post_id, 'price', true );
 			if ( ! empty( $price ) ) {
@@ -899,6 +917,24 @@ final class Ads {
 	 */
 	public static function is_ad_inserted( $newsletter_id, $ad_id ) {
 		return ! empty( self::$inserted_ads[ $newsletter_id ] ) && in_array( $ad_id, self::$inserted_ads[ $newsletter_id ], true );
+	}
+
+	/**
+	 * Reset the in-memory inserted-ads tracking.
+	 *
+	 * `mark_ad_inserted()`/`is_ad_inserted()` use a process-global static that is
+	 * otherwise never cleared within a request, so a second render of the same
+	 * newsletter in one request would see every ad already inserted and drop it.
+	 * Callers starting a fresh render should reset first.
+	 *
+	 * @param int|null $newsletter_id Newsletter to reset, or null to reset all.
+	 */
+	public static function reset_inserted_ads( $newsletter_id = null ) {
+		if ( null === $newsletter_id ) {
+			self::$inserted_ads = [];
+			return;
+		}
+		unset( self::$inserted_ads[ $newsletter_id ] );
 	}
 
 	/**

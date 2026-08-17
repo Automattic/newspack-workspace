@@ -61,7 +61,7 @@ const ContentGiftingSettings = () => {
 	const { confirmDialog, requestConfirm } = useConfirmDialog( {
 		when: !! ( isDirty && ! isSaving.current ),
 		message: __( 'You have unsaved changes that will be lost. Discard changes?', 'newspack-plugin' ),
-		confirmButtonText: __( 'Discard changes', 'newspack-plugin' ),
+		confirmButtonText: __( 'Discard Changes', 'newspack-plugin' ),
 		isDestructive: true,
 		hideTitle: true,
 	} );
@@ -127,7 +127,6 @@ const ContentGiftingSettings = () => {
 					type: 'more',
 				},
 			],
-			sectionName: __( 'Content gifting', 'newspack-plugin' ),
 		} );
 	}, [ config, isDirty, setHeaderData ] );
 
