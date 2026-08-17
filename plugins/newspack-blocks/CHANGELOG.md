@@ -1,3 +1,10 @@
+## @automattic/newspack-blocks [4.30.1](https://github.com/Automattic/newspack-workspace/compare/newspack-blocks@4.30.0...newspack-blocks@4.30.1) (2026-08-17)
+
+
+### Dependencies
+
+* **newspack-components:** upgraded to 4.6.2
+
 # @automattic/newspack-blocks [4.30.0](https://github.com/Automattic/newspack-workspace/compare/newspack-blocks@4.29.2...newspack-blocks@4.30.0) (2026-08-17)
 
 
