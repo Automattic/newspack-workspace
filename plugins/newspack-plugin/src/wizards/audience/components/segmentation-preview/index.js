@@ -61,6 +61,9 @@ const SegmentationPreview = props => {
 		// never re-ran and every reopened preview reused the first session ID.
 		try {
 			const frameDoc = iframeEl.contentWindow.document;
+			// Loop-invariant: both operands are fixed for the whole pass, and a
+			// preview page can easily carry a few hundred anchors.
+			const referenceOrigin = new URL( frontendUrl, frameDoc.baseURI ).origin;
 			[ ...frameDoc.querySelectorAll( 'a[href]' ) ].forEach( anchor => {
 				const href = anchor.getAttribute( 'href' );
 				if ( href.startsWith( '#' ) ) {
@@ -76,7 +79,7 @@ const SegmentationPreview = props => {
 				// falls back to '/' — under that fallback a protocol-relative
 				// off-site href like //example.com also "starts with" it, and would
 				// carry the segment and session IDs to a third party.
-				if ( target.origin !== new URL( frontendUrl, frameDoc.baseURI ).origin ) {
+				if ( target.origin !== referenceOrigin ) {
 					return;
 				}
 				anchor.setAttribute( 'href', decorateUrl( target.toString() ) );

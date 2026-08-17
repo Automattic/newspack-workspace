@@ -760,20 +760,39 @@ class Content_Gate {
 	}
 
 	/**
+	 * Whether the gate's front-end script should load on this request, and why.
+	 *
+	 * The decision lives here, not just its payload, so it can be asserted without
+	 * building assets: the script also has to load on a gate preview where no gate
+	 * renders — archives, home, search — so the previewed params survive a click
+	 * through one of those pages. Gate them out and the preview ends silently at
+	 * the first non-singular view, which is not what the pre-7.1 editor-side
+	 * handler did: it re-ran on every navigation inside the preview frame.
+	 * Returning both inputs alongside the verdict saves the caller recomputing them.
+	 *
+	 * @return array{enqueue: bool, renders_gate: bool, is_preview: bool}
+	 */
+	public static function get_frontend_script_context() {
+		$renders_gate = self::has_gate() && is_singular() && self::is_post_restricted();
+		$is_preview   = Content_Gate\Gate_Preview::is_preview_request();
+		return [
+			'enqueue'      => $renders_gate || $is_preview,
+			'renders_gate' => $renders_gate,
+			'is_preview'   => $is_preview,
+		];
+	}
+
+	/**
 	 * Enqueue frontend scripts and styles for gated content.
 	 */
 	public static function enqueue_scripts() {
 		self::enqueue_content_banner_assets();
 
-		$renders_gate = self::has_gate() && is_singular() && self::is_post_restricted();
-		$is_preview   = Content_Gate\Gate_Preview::is_preview_request();
+		$context      = self::get_frontend_script_context();
+		$renders_gate = $context['renders_gate'];
+		$is_preview   = $context['is_preview'];
 
-		// The script also loads on a gate preview where no gate renders — archives,
-		// home, search — so the previewed params survive a click through one of
-		// those pages. Gate them out and the preview ends silently at the first
-		// non-singular view, which is not something the pre-7.1 editor-side handler
-		// did: it re-ran on every navigation inside the preview frame.
-		if ( ! $renders_gate && ! $is_preview ) {
+		if ( ! $context['enqueue'] ) {
 			return;
 		}
 
@@ -803,13 +822,17 @@ class Content_Gate {
 	/**
 	 * Data localized to the front-end gate script.
 	 *
-	 * Split out from enqueue_scripts() so the preview branch — the one seam that
-	 * decides whether the preview params reach the page — is assertable without
-	 * touching the filesystem for asset versions.
+	 * Split out from enqueue_scripts() so the payload is assertable without
+	 * touching the filesystem for asset versions. Whether the script loads at all
+	 * is decided in get_frontend_script_context().
+	 *
+	 * The two keys are independently optional: gate.js reads `metadata`, and
+	 * preview-links.js reads `preview_param_names`. A preview on a view where no
+	 * gate renders carries only the second.
 	 *
 	 * @param bool $renders_gate Whether a gate renders on this request.
 	 * @param bool $is_preview   Whether this is a gate preview request.
-	 * @return array
+	 * @return array{metadata?: array, preview_param_names?: string[]}
 	 */
 	public static function get_frontend_script_data( $renders_gate, $is_preview ) {
 		$script_data = [];

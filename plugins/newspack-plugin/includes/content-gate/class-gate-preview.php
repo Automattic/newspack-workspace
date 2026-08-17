@@ -95,15 +95,23 @@ class Gate_Preview {
 	 * the preview param list. An edge cache keying on URL alone would serve all of
 	 * that to a reader, whose links would then be rewritten to carry `ngp_id` —
 	 * shareable and crawlable. The sibling per-user gate paths guard the same way.
+	 *
+	 * Returns whether it acted. The action discards the value; it is there because
+	 * both side effects are unobservable under PHPUnit — nocache_headers() bails on
+	 * headers_sent() and batcache_cancel() is not loaded — which would otherwise
+	 * leave the capability gate untestable.
+	 *
+	 * @return bool Whether cache prevention was applied.
 	 */
 	public static function prevent_preview_caching() {
 		if ( ! self::is_preview_request() ) {
-			return;
+			return false;
 		}
 		if ( function_exists( 'batcache_cancel' ) ) {
 			batcache_cancel();
 		}
 		nocache_headers();
+		return true;
 	}
 
 	/**
@@ -379,7 +387,8 @@ class Gate_Preview {
 	 *
 	 * Runs at PHP_INT_MAX so it wins over Content_Restriction_Control (which
 	 * returns false for users who can edit the post, and caches per
-	 * post/user). Only the queried post is forced; other post IDs pass through.
+	 * post/user). Only the queried post is forced; other post IDs pass through, and
+	 * nothing is forced on a view whose queried object is not a post.
 	 *
 	 * @param bool $restricted Whether the post is restricted.
 	 * @param int  $post_id    Post ID.
@@ -390,13 +399,23 @@ class Gate_Preview {
 		if ( ! self::is_preview_request() ) {
 			return $restricted;
 		}
+		// The queried object has to be an actual post. A preview session now spans
+		// archive, home and search views, where get_queried_object_id() returns a
+		// term or user id instead — and those ids share no numbering with post ids,
+		// so comparing them would force-restrict whichever unrelated post happened
+		// to carry the same number. Testing the type rather than is_singular() ties
+		// the guard to the thing being compared.
+		$queried = get_queried_object();
+		if ( ! $queried instanceof \WP_Post ) {
+			return $restricted;
+		}
+
 		// Force only the queried (previewed) post. An empty $post_id resolves to
-		// the queried object so in-loop calls still gate, but an explicit,
-		// unrelated post id is never force-restricted, and nothing is forced when
-		// there is no singular queried object.
-		$queried_id = (int) get_queried_object_id();
+		// the queried post so in-loop calls still gate, but an explicit, unrelated
+		// post id is never force-restricted.
+		$queried_id = (int) $queried->ID;
 		$target_id  = empty( $post_id ) ? $queried_id : (int) $post_id;
-		if ( $queried_id && $target_id === $queried_id ) {
+		if ( $target_id === $queried_id ) {
 			return true;
 		}
 		return $restricted;

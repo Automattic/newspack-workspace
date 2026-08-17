@@ -24,6 +24,7 @@ describe( 'gate.js preview-param wiring', () => {
 		jest.resetModules();
 		mockPropagate.mockReset();
 		global.newspack_content_gate = { metadata: {} };
+		window.newspackRAS = [];
 		// `interactive` makes gate.js's domReady() invoke synchronously, which is
 		// the path a footer/async script actually takes.
 		Object.defineProperty( document, 'readyState', { value: 'interactive', configurable: true } );
@@ -48,9 +49,12 @@ describe( 'gate.js preview-param wiring', () => {
 			throw new Error( 'isolation' );
 		} );
 
-		// The throw is swallowed rather than aborting module evaluation, so the
-		// gate's own registration below it still runs.
 		expect( () => require( './gate' ) ).not.toThrow();
 		expect( warnSpy ).toHaveBeenCalled();
+		// Assert the gate actually initialised rather than inferring it from module
+		// evaluation completing: gate.js pushes onto newspackRAS on the gate path, so
+		// this fails if someone ever moves that registration above the propagation
+		// block — the arrangement this test exists to protect.
+		expect( window.newspackRAS.length ).toBeGreaterThan( 0 );
 	} );
 } );

@@ -543,4 +543,85 @@ class Test_Gate_Preview extends \WP_UnitTestCase {
 		$this->assertArrayNotHasKey( 'preview_param_names', $data, 'No param list without a preview request.' );
 		$this->assertArrayHasKey( 'metadata', $data, 'A rendering gate still gets its metadata.' );
 	}
+
+	/**
+	 * The enqueue decision itself — not just its payload — has to survive a
+	 * non-singular view, which is the whole point of the preview-session change.
+	 *
+	 * Asserts the context rather than driving enqueue_scripts(), because that would
+	 * need built assets for its filemtime() cache-busters and CI runs PHPUnit
+	 * without a build.
+	 */
+	public function test_script_loads_on_an_archive_during_a_preview() {
+		wp_set_current_user( $this->admin_id );
+		// After go_to(): it resets $_GET and repopulates it from the URL.
+		$this->go_to( get_category_link( self::factory()->category->create() ) );
+		$this->set_query_param( Gate_Preview::PREVIEW_QUERY_PARAM, $this->layout_id );
+
+		$context = Content_Gate::get_frontend_script_context();
+
+		$this->assertFalse( $context['renders_gate'], 'No gate renders on an archive.' );
+		$this->assertTrue( $context['is_preview'], 'The request is still a preview.' );
+		$this->assertTrue( $context['enqueue'], 'The script has to load anyway, so a click through this page keeps the preview.' );
+	}
+
+	/**
+	 * The same view without a preview stays clean — the counterpart that would fail
+	 * if the decision were widened to "always enqueue".
+	 */
+	public function test_script_does_not_load_on_an_ordinary_archive() {
+		$this->go_to( get_category_link( self::factory()->category->create() ) );
+
+		$context = Content_Gate::get_frontend_script_context();
+
+		$this->assertFalse( $context['is_preview'], 'Not a preview request.' );
+		$this->assertFalse( $context['enqueue'], 'Nothing to enqueue on an ordinary archive.' );
+	}
+
+	/**
+	 * A term ID is not a post ID. On an archive the queried object is a term, and
+	 * comparing its ID against post IDs force-restricted whichever unrelated post
+	 * happened to share the number.
+	 */
+	public function test_archive_preview_does_not_force_restrict_an_unrelated_post() {
+		wp_set_current_user( $this->admin_id );
+		$term_id = self::factory()->category->create();
+		// After go_to(): it resets $_GET and repopulates it from the URL. Setting the
+		// param first would leave this not-a-preview, and the assertions below would
+		// pass trivially on filter_is_post_restricted()'s own early return.
+		$this->go_to( get_category_link( $term_id ) );
+		$this->set_query_param( Gate_Preview::PREVIEW_QUERY_PARAM, $this->layout_id );
+
+		$this->assertTrue( Gate_Preview::is_preview_request(), 'Guard: the preview really is active here.' );
+
+		// A post whose ID collides with the queried term ID is the case that bit:
+		// it has nothing to do with the preview.
+		$this->assertFalse(
+			Gate_Preview::filter_is_post_restricted( false, $term_id ),
+			'A post sharing an ID with the queried term is not part of the preview.'
+		);
+		$this->assertFalse(
+			Gate_Preview::filter_is_post_restricted( false, 0 ),
+			'Out of the loop on an archive there is no previewed post to force.'
+		);
+	}
+
+	/**
+	 * Cache-cancelling is gated on the capability, like every other preview seam.
+	 */
+	public function test_preview_caching_only_prevented_for_a_previewing_user() {
+		$this->set_query_param( Gate_Preview::PREVIEW_QUERY_PARAM, $this->layout_id );
+
+		wp_set_current_user( $this->subscriber_id );
+		$this->assertFalse(
+			Gate_Preview::prevent_preview_caching(),
+			'A subscriber on the preview URL gets ordinary cache headers.'
+		);
+
+		wp_set_current_user( $this->admin_id );
+		$this->assertTrue(
+			Gate_Preview::prevent_preview_caching(),
+			'A previewing admin gets the page kept out of the cache.'
+		);
+	}
 }

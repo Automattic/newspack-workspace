@@ -15,9 +15,13 @@
  *
  * Kept deliberately in step with newspack-popups/src/view/preview-links.js,
  * which solves the same problem for prompt previews. The two are duplicated
- * rather than shared: a shared package would tie two independently released
- * plugins to one version, which is the wrong trade for a fix this small. If you
- * change one, change the other.
+ * rather than shared because there is nowhere good to share them to: `packages/`
+ * is React components and build tooling, not view-layer utilities, and this is
+ * ~50 lines of dependency-free DOM code reading a differently-named global in
+ * each plugin. (Sharing would not create version coupling — workspace packages
+ * are bundled into each plugin's own dist/ at build time — so that is not the
+ * reason.) If you change one, change the other; there is a test file on each
+ * side to catch drift.
  */
 export function propagateGatePreviewParams() {
 	// Previews only ever render inside the editor's preview iframe, so requiring a
