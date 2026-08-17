@@ -80,12 +80,18 @@ const match = segmentCriteria => {
 /**
  * Get the reader's highest-priority segment match, or the segment to preview.
  *
+ * Carried segment IDs — resolved server-side from a newsletter click and handed
+ * to this session, see carried-segments.js — count as matched in addition to
+ * whatever the criteria match locally. They join the priority comparison because
+ * prompt targeting is decided against the single winner, not the matched set.
+ *
  * @param {Object}      segments     Segments.
  * @param {string|null} viewAsString Optional, for testing. A query string with viewAs params for previewing a segment.
+ * @param {string[]}    carriedIds   Segment IDs carried in from a newsletter click.
  *
  * @return {string|null} Segment ID, or null.
  */
-export const getBestPrioritySegment = ( segments, viewAsString = null ) => {
+export const getBestPrioritySegment = ( segments, viewAsString = null, carriedIds = [] ) => {
 	// If previewing as a specific segment.
 	const viewAs = parseViewAs( viewAsString );
 	if ( viewAs?.segment ) {
@@ -94,7 +100,7 @@ export const getBestPrioritySegment = ( segments, viewAsString = null ) => {
 
 	const matchingSegments = [];
 	for ( const segmentId in segments ) {
-		if ( match( segments[ segmentId ].criteria ) ) {
+		if ( carriedIds.includes( segmentId ) || match( segments[ segmentId ].criteria ) ) {
 			matchingSegments.push( {
 				id: segmentId,
 				priority: segments[ segmentId ].priority,
@@ -115,6 +121,11 @@ export const getBestPrioritySegment = ( segments, viewAsString = null ) => {
  * Get the IDs of every segment the reader currently matches, sorted for stable
  * serialization (so equal sets compare equal). Unlike getBestPrioritySegment,
  * this returns the full set, not just the highest-priority winner.
+ *
+ * Criteria matches only: segment IDs carried in from a newsletter click are
+ * deliberately excluded, because this set is what syncMatchedSegments() persists
+ * to reader data. A carried ID is forgeable and link-supplied; writing it to the
+ * snapshot the server trusts would feed it back out through the next newsletter.
  *
  * @param {Object} segments Segments keyed by ID with { criteria, priority } values.
  *

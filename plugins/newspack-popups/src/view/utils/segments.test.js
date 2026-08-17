@@ -293,4 +293,44 @@ describe( 'segmentation API', () => {
 		setWindowLocation( 'example.com', '' );
 		expect( shouldPromptBeDisplayed( prompt, null, ras ) ).toBeFalsy();
 	} );
+
+	it( 'should let a carried segment win the priority match', () => {
+		// Nothing matches locally: `simple` holds a value no segment expects and
+		// `list__in` is unset. Stands in for a logged-out reader whose browsing
+		// data alone cannot satisfy, say, a donors segment.
+		ras.store.set( 'simple', 'initial-value' );
+		expect( getBestPrioritySegment( segments ) ).toBeNull();
+		expect( getBestPrioritySegment( segments, null, [ 'segment2' ] ) ).toBe( 'segment2' );
+	} );
+
+	it( 'should respect priority across several carried segments', () => {
+		ras.store.set( 'simple', 'initial-value' );
+		// segment1 is priority 0, segment4 is priority 2.
+		expect( getBestPrioritySegment( segments, null, [ 'segment4', 'segment1' ] ) ).toBe( 'segment1' );
+	} );
+
+	it( 'should ignore a carried ID that is not a known segment', () => {
+		ras.store.set( 'simple', 'initial-value' );
+		expect( getBestPrioritySegment( segments, null, [ 'not-a-segment' ] ) ).toBeNull();
+	} );
+
+	it( 'should let a criteria match still win over a lower-priority carried segment', () => {
+		// Carried segments are additive, not overriding: segment2 matches locally
+		// on priority 1 and must beat a carried segment4 on priority 2.
+		ras.store.set( 'simple', 'simple-match' );
+		expect( getBestPrioritySegment( segments, null, [ 'segment4' ] ) ).toBe( 'segment2' );
+	} );
+
+	it( 'should keep carried segments out of the set persisted to reader data', () => {
+		// Carried IDs are forgeable and link-supplied. Persisting one would launder
+		// it into the snapshot the server trusts and feed it back out through the
+		// next newsletter. segment4 is carried but does not match locally, so it
+		// must be absent from what syncMatchedSegments writes.
+		window.sessionStorage.setItem( 'newspack-popups-carried-segments', 'segment4' );
+		ras.store.set( 'reader', { authenticated: true } );
+		ras.store.set( 'simple', 'simple-match' );
+		syncMatchedSegments( ras, segments );
+		expect( ras.store.get( 'matched_segments' ) ).toEqual( [ 'segment2', 'segment3' ] );
+		window.sessionStorage.removeItem( 'newspack-popups-carried-segments' );
+	} );
 } );

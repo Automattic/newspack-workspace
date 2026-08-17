@@ -11,6 +11,7 @@ import {
 	shouldPromptBeDisplayed,
 	syncMatchedSegments,
 } from './utils';
+import { getCarriedSegmentIds } from './utils/carried-segments';
 
 /**
  * Match reader to segments.
@@ -22,7 +23,13 @@ export const handleSegmentation = prompts => {
 			return;
 		}
 		const segments = newspack_popups_view?.segments || {};
-		const matchingSegment = getBestPrioritySegment( segments );
+		// Always consume the handoff, so the cookie is cleared even for a reader
+		// whose carried IDs are then discarded. A signed-in reader's local
+		// matching is live, so a snapshot from their last visit can only make it
+		// staler — and their own matched_segments write must stay criteria-only.
+		const carriedIds = getCarriedSegmentIds( Object.keys( segments ) );
+		const carried = ras?.store?.get( 'reader' )?.authenticated ? [] : carriedIds;
+		const matchingSegment = getBestPrioritySegment( segments, null, carried );
 		debug( 'matchingSegment', matchingSegment );
 
 		// Register segments and set match via RAS if available.
@@ -65,7 +72,7 @@ export const handleSegmentation = prompts => {
 				const unhide = () => {
 					// Conditions may have changed since the prompt was delayed.
 					// Verify whether the prompt can still be displayed.
-					const updatedMatchingSegment = getBestPrioritySegment( segments );
+					const updatedMatchingSegment = getBestPrioritySegment( segments, null, carried );
 					if ( ras?.segments ) {
 						ras.segments.setMatch( updatedMatchingSegment );
 					}
