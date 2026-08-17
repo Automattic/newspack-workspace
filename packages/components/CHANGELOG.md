@@ -1,3 +1,16 @@
+## newspack-components [4.6.1](https://github.com/Automattic/newspack-workspace/compare/newspack-components@4.6.0...newspack-components@4.6.1) (2026-08-17)
+
+
+### Bug Fixes
+
+* **content-gate:** surface the Institutions entry point when institutions exist (NPPD-1492, [#708](https://github.com/Automattic/newspack-workspace/issues/708)) ([6ebb8c4](https://github.com/Automattic/newspack-workspace/commit/6ebb8c40f43b3f6d890900b683514eb9e6d65f2f))
+
+
+### Dependencies
+
+* **newspack-icons:** upgraded to 1.1.1
+* **newspack-scripts:** upgraded to 5.11.0
+
 # newspack-components [4.6.0](https://github.com/Automattic/newspack-workspace/compare/newspack-components@4.5.0...newspack-components@4.6.0) (2026-08-03)
 
 
