@@ -31,6 +31,17 @@ class Premium_Newsletters_Verify {
 	const NEWSLETTER_LIST_CPT_FALLBACK = 'newspack_nl_list';
 
 	/**
+	 * How many subscriptions to hydrate at a time while walking a gate's
+	 * population.
+	 *
+	 * Not exposed as a flag, and unrelated to --batch-size: this paces database
+	 * reads, which are local and cheap, while --batch-size paces ESP calls, which
+	 * are neither. An operator has no reason to tune it, and tying the two together
+	 * would make a small --batch-size mean a needlessly chatty walk.
+	 */
+	const POPULATION_CHUNK_SIZE = 200;
+
+	/**
 	 * A gate whose population the batch cap cut short mid-walk.
 	 */
 	const COVERAGE_TRUNCATED = 'truncated';
@@ -152,7 +163,7 @@ class Premium_Newsletters_Verify {
 	 * : Readers to check between pauses. Default 100. A dry run costs two ESP calls per reader — a contact lookup and a list read. Under --live each removal adds more on top: the removal itself re-reads the contact before writing, and this command re-reads the contact's lists afterwards to confirm the removal landed. So a large batch size is a large burst of API traffic, and larger still on a run that is removing.
 	 *
 	 * [--max-batches=<number>]
-	 * : Stop after roughly this many batches, across the whole run. Useful for sampling a large site before committing to a full run. Must be a positive integer; omit it for no limit. Not an exact cap: a gate's last batch is never counted against it, so a run spanning several gates can check somewhat more readers than batch-size times max-batches implies.
+	 * : Stop after roughly this many batches, across the whole run. Useful for sampling a large site before committing to a full run: the population is walked lazily, so a run that stops early never reads the rest of it. Must be a positive integer; omit it for no limit. Not an exact cap: a gate's last batch is never counted against it, so a run spanning several gates can check somewhat more readers than batch-size times max-batches implies.
 	 *
 	 * ## EXAMPLES
 	 *
@@ -212,7 +223,10 @@ class Premium_Newsletters_Verify {
 		$blocked = self::describe_blocking_preflight(
 			\Newspack\Memberships::is_active(),
 			\Newspack\Content_Gate::is_gating_active(),
-			function_exists( 'wcs_get_subscriptions' ),
+			// The two functions the population walk actually calls, rather than the
+			// wcs_get_subscriptions() it used to: all three ship together in
+			// subscriptions-core, but a preflight should test what the run will use.
+			function_exists( 'wcs_get_subscriptions_for_product' ) && function_exists( 'wcs_get_subscription' ),
 			\Newspack_Newsletters_Subscription::has_subscription_management()
 		);
 		if ( null !== $blocked ) {
@@ -900,38 +914,128 @@ class Premium_Newsletters_Verify {
 	}
 
 	/**
-	 * The readers whose state on this gate's lists is worth checking.
+	 * The IDs of every subscription to one of a gate's products.
 	 *
-	 * Every subscription to one of the gate's products, in any status. Status
-	 * `any` is the point: a cancelled or expired subscriber is exactly the reader
-	 * who may still be on a paid list, so filtering to active would hide every
-	 * leak this command exists to find.
+	 * In any status, which is the point: a cancelled or expired subscriber is
+	 * exactly the reader who may still be on a paid list, so filtering to active
+	 * would hide every leak this command exists to find.
+	 *
+	 * wcs_get_subscriptions_for_product() rather than wcs_get_subscriptions(): it
+	 * answers for all of a gate's products in one SQL query, returns IDs without
+	 * building a WC_Subscription for any of them, and matches a subscription
+	 * through either `_product_id` or `_variation_id` — the same two item meta keys
+	 * wcs_get_subscriptions() reaches this function to match on when it is given a
+	 * product and no customer, so the set of subscriptions is unchanged from what
+	 * this command used to walk.
+	 *
+	 * One difference, in the widening direction: this function applies no status
+	 * clause for `any`, so it also returns trashed subscriptions, which
+	 * wcs_get_subscriptions()' `any` leaves out. Their holders held the product,
+	 * which makes them leak candidates like any other, and every reader is
+	 * evaluated against the live gate afterwards — so a wider population produces
+	 * more checking, never a false leak.
 	 *
 	 * @param array $gate Gate array carrying a 'product_ids' key.
 	 *
-	 * @return int[] Distinct user IDs.
+	 * @return int[] Subscription IDs, ascending, deduplicated by the query.
 	 */
-	private static function population_for_gate( array $gate ): array {
-		if ( ! function_exists( 'wcs_get_subscriptions' ) ) {
+	private static function subscription_ids_for_gate( array $gate ): array {
+		if ( ! function_exists( 'wcs_get_subscriptions_for_product' ) ) {
+			return [];
+		}
+		return array_map( 'intval', array_values( \wcs_get_subscriptions_for_product( $gate['product_ids'], 'ids' ) ) );
+	}
+
+	/**
+	 * The user IDs behind a chunk of subscriptions.
+	 *
+	 * Each subscription is hydrated and dropped again within the loop, so the peak
+	 * cost is one WC_Subscription rather than one per subscription in the chunk.
+	 *
+	 * @param int[] $subscription_ids Subscription IDs.
+	 *
+	 * @return int[] User IDs, in the order the subscriptions were given, including
+	 *               repeats and zeros for the caller to filter.
+	 */
+	private static function user_ids_for_subscriptions( array $subscription_ids ): array {
+		if ( ! function_exists( 'wcs_get_subscription' ) ) {
 			return [];
 		}
 		$user_ids = [];
-		foreach ( $gate['product_ids'] as $product_id ) {
-			$subscriptions = \wcs_get_subscriptions(
-				[
-					'product_id'             => $product_id,
-					'subscription_status'    => 'any',
-					'subscriptions_per_page' => -1,
-				]
-			);
-			foreach ( $subscriptions as $subscription ) {
-				$user_id = (int) $subscription->get_user_id();
-				if ( $user_id ) {
-					$user_ids[ $user_id ] = true;
+		foreach ( $subscription_ids as $subscription_id ) {
+			$subscription = \wcs_get_subscription( $subscription_id );
+			if ( ! $subscription ) {
+				continue;
+			}
+			$user_ids[] = (int) $subscription->get_user_id();
+		}
+		return $user_ids;
+	}
+
+	/**
+	 * Walk a gate's population, yielding each distinct reader exactly once.
+	 *
+	 * Lazily, in chunks, which is the whole point. The population query used to
+	 * hydrate a WC_Subscription for every match of every product before a single
+	 * reader was checked, so a publisher with years of subscription history — the
+	 * site where an operator reaches for --max-batches to sample — ran out of
+	 * memory before the command printed anything. Neither pacing flag bounded it:
+	 * they pace the ESP calls downstream of a population that was already fully
+	 * built.
+	 *
+	 * Resolving a chunk at a time bounds that. A subscription ID costs a machine
+	 * word; a hydrated subscription costs kilobytes, and only $chunk_size of them
+	 * exist at once. Because this is a generator, a run the batch cap stops walks
+	 * no further than the reader it stopped on, give or take the chunk in hand.
+	 *
+	 * Deduplication is by reader across the whole walk, not within a chunk: one
+	 * reader with five subscriptions to a gate's products is one reader to check,
+	 * and the seen-set holds integers, so it stays small even where the population
+	 * does not.
+	 *
+	 * The chunk is a database concern and a batch is an ESP concern, so a chunk
+	 * boundary is not a batch boundary and neither is a coverage boundary. What
+	 * makes a run complete is finishing this walk; stopping part-way is recorded by
+	 * the caller as COVERAGE_TRUNCATED, exactly as it was when the population was
+	 * an array.
+	 *
+	 * @param int[]    $subscription_ids  Subscription IDs to resolve readers from.
+	 * @param int      $chunk_size        Subscriptions to resolve at a time; forced to at least 1.
+	 * @param callable $resolve_user_ids  Given a chunk of subscription IDs, returns their user IDs.
+	 *
+	 * @return \Generator<int> Distinct, non-zero user IDs.
+	 */
+	private static function walk_population( array $subscription_ids, int $chunk_size, callable $resolve_user_ids ): \Generator {
+		$chunk_size = max( 1, $chunk_size );
+		$total      = count( $subscription_ids );
+		$seen       = [];
+		for ( $offset = 0; $offset < $total; $offset += $chunk_size ) {
+			// array_slice() rather than array_chunk(): chunking the whole list up
+			// front would hold a second copy of every ID for the length of the walk.
+			foreach ( $resolve_user_ids( array_slice( $subscription_ids, $offset, $chunk_size ) ) as $user_id ) {
+				$user_id = (int) $user_id;
+				// A subscription with no user — a guest checkout, or one whose user
+				// row is gone — leaves nobody to ask the ESP about. Readers whose WP
+				// user was deleted after the fact are a different case, and are
+				// reported as unresolved rows rather than skipped here.
+				if ( ! $user_id || isset( $seen[ $user_id ] ) ) {
+					continue;
 				}
+				$seen[ $user_id ] = true;
+				yield $user_id;
 			}
 		}
-		return array_map( 'intval', array_keys( $user_ids ) );
+	}
+
+	/**
+	 * The readers whose state on a gate's lists is worth checking.
+	 *
+	 * @param int[] $subscription_ids Subscription IDs from subscription_ids_for_gate().
+	 *
+	 * @return \Generator<int> Distinct user IDs.
+	 */
+	private static function population_walker( array $subscription_ids ): \Generator {
+		return self::walk_population( $subscription_ids, self::POPULATION_CHUNK_SIZE, [ __CLASS__, 'user_ids_for_subscriptions' ] );
 	}
 
 	/**
@@ -1065,14 +1169,17 @@ class Premium_Newsletters_Verify {
 			$coverage = self::with_incomplete_gate( $coverage, self::COVERAGE_CAP_EXHAUSTED, $gate );
 			return [];
 		}
-		$population = self::population_for_gate( $gate );
-		if ( empty( $population ) ) {
+		$subscription_ids = self::subscription_ids_for_gate( $gate );
+		if ( empty( $subscription_ids ) ) {
 			WP_CLI::warning( sprintf( '"%s" (gate %d): no reader holds or has held its products, so there is nobody to check.', $gate['title'], $gate['id'] ) );
 			$coverage = self::with_incomplete_gate( $coverage, self::COVERAGE_EMPTY_POPULATION, $gate );
 			return [];
 		}
 
-		WP_CLI::line( sprintf( '"%s" (gate %d): checking %d reader(s) against %d list(s)…', $gate['title'], $gate['id'], count( $population ), count( $list_ids ) ) );
+		// Subscriptions rather than readers: the readers behind them are resolved a
+		// chunk at a time as the walk runs, so their number is not known yet, and one
+		// reader can hold several of these. It is an upper bound, and said as one.
+		WP_CLI::line( sprintf( '"%s" (gate %d): checking the reader(s) behind %d subscription(s) against %d list(s)…', $gate['title'], $gate['id'], count( $subscription_ids ), count( $list_ids ) ) );
 		$coverage = self::with_gate_walked( $coverage, $gate );
 
 		// Resolved once per gate rather than once per reader: a list ID's public ID
@@ -1082,11 +1189,22 @@ class Premium_Newsletters_Verify {
 			$public_ids[ $list_id ] = self::public_id_for_list( $list_id );
 		}
 
-		$rows              = [];
-		$in_batch          = 0;
-		$population_count  = count( $population );
-		foreach ( $population as $index => $user_id ) {
-			$coverage = self::with_reader_checked( $coverage, (int) $user_id );
+		$rows       = [];
+		$in_batch   = 0;
+		$checked    = 0;
+		$population = self::population_walker( $subscription_ids );
+		// Consumed by hand rather than with foreach, because the batch bookkeeping
+		// needs to know whether another reader is coming before it decides to pause
+		// or stop. Advancing first and asking valid() afterwards is that lookahead;
+		// it resolves at most one chunk further than the reader in hand.
+		$population->rewind();
+		while ( $population->valid() ) {
+			$user_id = (int) $population->current();
+			$population->next();
+			$more_work_remains = $population->valid();
+
+			++$checked;
+			$coverage = self::with_reader_checked( $coverage, $user_id );
 			$user     = \get_user_by( 'id', $user_id );
 			if ( ! $user ) {
 				// The subscription still names a list to check, but there is no WP_User
@@ -1137,7 +1255,6 @@ class Premium_Newsletters_Verify {
 				}
 			}
 
-			$more_work_remains = ( $index + 1 ) < $population_count;
 			++$in_batch;
 			$batch_action = self::next_batch_action( $in_batch, $batch_size, $batches, $max_batches, $more_work_remains );
 			if ( $in_batch >= $batch_size ) {
@@ -1156,6 +1273,16 @@ class Premium_Newsletters_Verify {
 				break;
 			}
 		}
+
+		if ( 0 === $checked ) {
+			// Subscriptions to the gate's products exist, but not one of them belongs
+			// to a reader account: they are guest checkouts, or their customer link is
+			// gone. Nobody was checked, and a run that reported that as a clean gate
+			// would be making the empty-population claim by another route.
+			WP_CLI::warning( sprintf( '"%s" (gate %d): its subscriptions belong to no reader account, so there was nobody to check.', $gate['title'], $gate['id'] ) );
+			$coverage = self::with_incomplete_gate( $coverage, self::COVERAGE_EMPTY_POPULATION, $gate );
+		}
+
 		return $rows;
 	}
 
