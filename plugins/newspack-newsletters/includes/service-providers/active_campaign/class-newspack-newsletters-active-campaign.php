@@ -103,6 +103,28 @@ final class Newspack_Newsletters_Active_Campaign extends \Newspack_Newsletters_S
 	private $contact_data = [];
 
 	/**
+	 * Per-request memo of get_field_merge_tag_name() results, keyed by field
+	 * name, sitting in front of that method's transient cache.
+	 *
+	 * Static rather than an instance property: Newspack_Newsletters_Service_Provider::instance()
+	 * hands back a brand-new object on every call in a test environment (see
+	 * its IS_TEST_ENV escape hatch), so an instance property would not survive
+	 * from one instance() call to the next even within a single request/render.
+	 *
+	 * This is the memo half of the design; get_field_merge_tag_name()'s
+	 * transient is the other half. Link decoration runs once per link per
+	 * newsletter render, and the underlying fetch (get_all_contact_fields())
+	 * is a recursive, paginated API call, so whenever the transient layer
+	 * cannot return — a dead object-cache drop-in is a recurring failure mode
+	 * on this platform, and it makes get_transient() silently always miss —
+	 * this memo is what stops a 40-link newsletter from repeating that fetch
+	 * up to 40 times inside one render.
+	 *
+	 * @var array<string, string>
+	 */
+	private static $field_merge_tag_name_memo = [];
+
+	/**
 	 * Whether the provider has support to tags and tags based Subscription Lists.
 	 *
 	 * @var boolean
@@ -2293,6 +2315,9 @@ final class Newspack_Newsletters_Active_Campaign extends \Newspack_Newsletters_S
 	 * Cached because the field list is an uncached, paginated fetch and link
 	 * decoration runs once per link per newsletter render. Misses are cached
 	 * briefly so a field created after the first lookup is picked up soon.
+	 * A static per-request memo sits in front of the transient — see
+	 * $field_merge_tag_name_memo — for when the transient layer itself can't
+	 * return.
 	 *
 	 * @param string      $field_name Field title as synced (e.g. 'NP_Account').
 	 * @param string|null $list_id    Unused; ActiveCampaign fields are account-wide.
@@ -2305,14 +2330,24 @@ final class Newspack_Newsletters_Active_Campaign extends \Newspack_Newsletters_S
 			return '';
 		}
 
+		if ( array_key_exists( $field_name, self::$field_merge_tag_name_memo ) ) {
+			return self::$field_merge_tag_name_memo[ $field_name ];
+		}
+
 		$cache_key = 'np_nl_field_tag_' . md5( $field_name );
 		$cached    = get_transient( $cache_key );
 		if ( false !== $cached ) {
+			self::$field_merge_tag_name_memo[ $field_name ] = (string) $cached;
 			return (string) $cached;
 		}
 
 		$fields = $this->get_all_contact_fields();
 		if ( is_wp_error( $fields ) || ! is_array( $fields ) ) {
+			// Deliberately not memoized: a transport failure or missing
+			// credentials can be transient within the same render (e.g. a
+			// slow upstream that succeeds on a later link's retry), so the
+			// next link for the same field should try again rather than be
+			// locked into '' for the rest of the request.
 			return '';
 		}
 
@@ -2337,6 +2372,7 @@ final class Newspack_Newsletters_Active_Campaign extends \Newspack_Newsletters_S
 		}
 
 		set_transient( $cache_key, $perstag, '' === $perstag ? 15 * MINUTE_IN_SECONDS : 12 * HOUR_IN_SECONDS );
+		self::$field_merge_tag_name_memo[ $field_name ] = $perstag;
 		return $perstag;
 	}
 

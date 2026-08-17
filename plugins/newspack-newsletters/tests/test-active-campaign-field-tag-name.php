@@ -38,6 +38,13 @@ class ActiveCampaignFieldTagNameTest extends WP_UnitTestCase {
 		$this->list_calls    = 0;
 		delete_transient( 'np_nl_field_tag_' . md5( 'NP_Account' ) );
 		delete_transient( 'np_nl_field_tag_' . md5( 'NP_Missing' ) );
+		// The per-request memo is a static property (see
+		// $field_merge_tag_name_memo's docblock), so it otherwise survives
+		// across every test in this process, not just within one. Reset it
+		// directly via reflection; there's no public API for it.
+		$memo = new ReflectionProperty( 'Newspack_Newsletters_Active_Campaign', 'field_merge_tag_name_memo' );
+		$memo->setAccessible( true );
+		$memo->setValue( null, [] );
 		Newspack_Newsletters_Active_Campaign::instance()->set_api_credentials(
 			[
 				'url' => 'https://example.api-us1.com',
@@ -182,5 +189,45 @@ class ActiveCampaignFieldTagNameTest extends WP_UnitTestCase {
 			Newspack_Newsletters_Active_Campaign::instance()->get_field_merge_tag_name( '' )
 		);
 		$this->assertSame( 0, $this->list_calls );
+	}
+
+	/**
+	 * A dead object-cache drop-in makes get_transient() silently miss every
+	 * time, whether or not set_transient() actually persisted anything — a
+	 * recurring failure mode on this platform. Without a per-request memo in
+	 * front of the transient, link decoration (which resolves the same field
+	 * once per link) would repeat the whole paginated fetch for every link in
+	 * the newsletter.
+	 *
+	 * Forces that failure mode directly via the `transient_{$transient}`
+	 * filter, which WordPress applies unconditionally to get_transient()'s
+	 * return value — unlike `pre_transient_{$transient}`, whose own default
+	 * is `false`, so a filter merely returning `false` there is a no-op and
+	 * would not actually force a miss against a value that was successfully
+	 * set.
+	 *
+	 * instance() hands back a brand-new object on every call in this test
+	 * environment (see its IS_TEST_ENV escape hatch), so resolving twice via
+	 * two separate instance() calls also proves the memo is static — an
+	 * instance property would not have survived between them.
+	 */
+	public function test_memoizes_within_a_request_when_transient_cannot_return() {
+		$this->remote_fields = [
+			[
+				'title'   => 'NP_Account',
+				'perstag' => 'NP_ACCOUNT',
+			],
+		];
+		$cache_key = 'np_nl_field_tag_' . md5( 'NP_Account' );
+		add_filter( "transient_{$cache_key}", '__return_false' );
+
+		try {
+			$this->assertSame( 'NP_ACCOUNT', Newspack_Newsletters_Active_Campaign::instance()->get_field_merge_tag_name( 'NP_Account' ) );
+			$this->assertSame( 'NP_ACCOUNT', Newspack_Newsletters_Active_Campaign::instance()->get_field_merge_tag_name( 'NP_Account' ) );
+		} finally {
+			remove_filter( "transient_{$cache_key}", '__return_false' );
+		}
+
+		$this->assertSame( 1, $this->list_calls, 'A per-request memo must prevent a second fetch when the transient layer cannot return a cached value.' );
 	}
 }
