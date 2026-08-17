@@ -1,3 +1,10 @@
+## newspack-multibranded-site [2.4.1](https://github.com/Automattic/newspack-workspace/compare/newspack-multibranded-site@2.4.0...newspack-multibranded-site@2.4.1) (2026-08-05)
+
+
+### Bug Fixes
+
+* **multibrand:** treat brand front page as a page, not an archive ([#658](https://github.com/Automattic/newspack-workspace/issues/658)) ([63f5193](https://github.com/Automattic/newspack-workspace/commit/63f51934ec945dfa3363906fd6a775736fcf0889))
+
 # newspack-multibranded-site [2.4.0](https://github.com/Automattic/newspack-workspace/compare/newspack-multibranded-site@2.3.1...newspack-multibranded-site@2.4.0) (2026-08-03)
 
 
