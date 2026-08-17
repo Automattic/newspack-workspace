@@ -12,6 +12,28 @@ defined( 'ABSPATH' ) || exit;
  */
 final class Newspack_Popups_Model {
 	/**
+	 * Transient key caching whether the site has any published above-header prompts.
+	 *
+	 * @var string
+	 */
+	const HAS_ABOVE_HEADER_TRANSIENT = 'newspack_popups_has_above_header';
+
+	/**
+	 * Request-level memo of has_published_above_header_prompts(). Null when unresolved.
+	 *
+	 * @var bool|null
+	 */
+	private static $has_above_header_memo = null;
+
+	/**
+	 * Whether has_published_above_header_prompts() is mid-resolution, to catch a nested
+	 * read triggered from within its own query.
+	 *
+	 * @var bool
+	 */
+	private static $is_resolving_above_header = false;
+
+	/**
 	 * Possible placements of overlay popups.
 	 *
 	 * @var array
@@ -88,7 +110,7 @@ final class Newspack_Popups_Model {
 				[
 					'post_type'      => Newspack_Popups::NEWSPACK_POPUPS_CPT,
 					'post_status'    => 'publish',
-					'posts_per_page' => -1,
+					'posts_per_page' => -1, // phpcs:ignore WordPressVIPMinimum.Performance.NoPaging -- Prompt CPT; accepted cost. Unlike retrieve_popups() above this is frontend-reachable, so a cap would change which prompts render and is left to a follow-up.
 				]
 			),
 			true
@@ -852,6 +874,100 @@ final class Newspack_Popups_Model {
 			return false;
 		}
 		return 'above_header' === $popup['options']['placement'];
+	}
+
+	/**
+	 * Whether the site has at least one published above-header prompt.
+	 *
+	 * Detection is intentionally coarse: it keys only on post status (`publish`) and
+	 * placement (`above_header`), not on full display eligibility (active campaign
+	 * group, activation/deactivation window, segment match). Evaluating real display
+	 * eligibility would duplicate the Inserter's per-request logic and is too expensive
+	 * for this path, which the Perfmatters integration reads on essentially every
+	 * front-end request. The trade-off is deliberate and fail-safe: a published
+	 * above-header prompt that never actually renders (parked in an inactive campaign,
+	 * expired, or behind a non-matching segment) will keep the reveal-path scripts out
+	 * of Perfmatters' JS delay/defer queues site-wide, forfeiting that optimization
+	 * until the prompt is unpublished or deleted. Nothing breaks – it only loses a
+	 * performance win – so over-counting is preferred to a delayed (invisible) prompt.
+	 *
+	 * The result is cached in a transient flushed via flush_above_header_cache()
+	 * whenever a prompt is saved, has its status transitioned, has its `placement` meta
+	 * changed, or is deleted (see Newspack_Popups). The transient flush is immediate, but
+	 * on a cached page (batcache / Perfmatters page cache) the script-loading change only
+	 * takes effect once that page's own cache entry is purged or expires. Publishing a
+	 * prompt purges the prompt's own URL, not necessarily the article/home pages where
+	 * the reveal scripts actually matter, so already-cached pages keep the old behavior
+	 * until their cache entries turn over.
+	 *
+	 * On top of the transient, the result is memoized for the rest of the request. The
+	 * Perfmatters integration reads it from `option_perfmatters_options`, which fires on
+	 * every read of that option and Perfmatters reads it many times per request; without
+	 * the memo each of those repeats the transient lookup (an uncached options query on
+	 * sites with no persistent object cache). The memo is reset by
+	 * flush_above_header_cache(), so an in-request change is still picked up.
+	 *
+	 * @return boolean True if at least one published above-header prompt exists.
+	 */
+	public static function has_published_above_header_prompts() {
+		if ( null !== self::$has_above_header_memo ) {
+			return self::$has_above_header_memo;
+		}
+
+		// The WP_Query below runs inside the option_perfmatters_options filter on a
+		// transient miss. Anything it touches that reads perfmatters_options again would
+		// re-enter this method, and with nothing memoized yet would start the query over,
+		// recursing without end. Report "no prompts" to such a nested read - it resolves
+		// before the outer pass has an answer to give it - and let the outer pass memoize
+		// the real result.
+		if ( self::$is_resolving_above_header ) {
+			return false;
+		}
+		self::$is_resolving_above_header = true;
+
+		// Reset the recursion guard unconditionally: if get_transient() or the WP_Query
+		// throws (or a hook firing inside them does), leaving the guard set would make every
+		// later call this request short-circuit to false, silently re-delaying the reveal
+		// scripts - the exact symptom this path fixes.
+		try {
+			$cached = get_transient( self::HAS_ABOVE_HEADER_TRANSIENT );
+			if ( false !== $cached ) {
+				self::$has_above_header_memo = '1' === $cached;
+				return self::$has_above_header_memo;
+			}
+
+			$query = new WP_Query(
+				[
+					'post_type'              => Newspack_Popups::NEWSPACK_POPUPS_CPT,
+					'post_status'            => 'publish',
+					'posts_per_page'         => 1,
+					'fields'                 => 'ids',
+					'no_found_rows'          => true,
+					'update_post_meta_cache' => false,
+					'update_post_term_cache' => false,
+					'orderby'                => 'none', // Pure existence check - skip the default post_date filesort.
+					'meta_key'               => 'placement', // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key
+					'meta_value'             => 'above_header', // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_value
+				]
+			);
+			$has_above_header = $query->have_posts();
+
+			set_transient( self::HAS_ABOVE_HEADER_TRANSIENT, $has_above_header ? '1' : '0', DAY_IN_SECONDS );
+
+			self::$has_above_header_memo = $has_above_header;
+
+			return $has_above_header;
+		} finally {
+			self::$is_resolving_above_header = false;
+		}
+	}
+
+	/**
+	 * Flush the cached above-header prompt detection.
+	 */
+	public static function flush_above_header_cache() {
+		self::$has_above_header_memo = null;
+		delete_transient( self::HAS_ABOVE_HEADER_TRANSIENT );
 	}
 
 	/**
