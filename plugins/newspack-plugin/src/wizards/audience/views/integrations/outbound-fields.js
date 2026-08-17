@@ -13,9 +13,8 @@ import { Accordion, AccordionPanel, Badge, Grid } from '../../../../../packages/
 const VERSIONS = [ 'v1', 'v2', 'neutral' ];
 
 /**
- * Whether a definition is on its way out. The single input to both the sunset
- * visibility rule and sunset-last ordering, so a field's fate is only ever
- * `status` — no site-level schema is consulted.
+ * Whether a definition is on its way out — the single input to both sunset
+ * visibility and sunset-last ordering; no site-level schema is consulted.
  *
  * @param {Object} definition A definition from the settings payload.
  * @return {boolean} True for legacy definitions.
@@ -25,18 +24,14 @@ const isSunset = definition => 'legacy' === definition?.status;
 /**
  * Build UI rows from the merged definitions payload.
  *
- * One row per ESP field name, and never a version choice: the two schemas no
- * longer claim an ESP name in common (Field_Registry::get_conflict_groups() is
- * empty by construction, guarded by
- * Test_Field_Registry::test_no_esp_name_is_claimed_by_both_schemas), so a name
- * carrying both a v1 and a v2 definition is always a value-equivalent pair —
- * one field whose stored v1 ids the save path upgrades to the v2 twin. Those
- * collapse to a single row under the surviving identity.
+ * One row per ESP field name, never a version choice: conflict groups are
+ * empty by construction, so a name carrying both a v1 and v2 definition is
+ * always a value-equivalent pair, collapsing to a single row under the
+ * surviving (v2) identity.
  *
- * Every field lists on every site, legacy included: legacy fields are
- * grouped under the Legacy section and ordered last, so the direction of
- * travel stays visible without hiding what a site can still sync. Only
- * unavailable definitions are hidden (matching the pre-Phase-2 UI).
+ * Every field lists on every site, legacy included — grouped under the
+ * Legacy section and ordered last, so the direction of travel stays
+ * visible. Only unavailable definitions are hidden.
  *
  * @param {Object[]} definitions Definitions from the settings payload.
  * @param {string[]} enabledIds  Enabled field ids.
@@ -58,10 +53,9 @@ export const buildFieldRows = ( definitions, enabledIds ) => {
 		const collapsed = candidates.v1.length > 0 && candidates.v2.length > 0;
 		const enabledVersion = VERSIONS.find( v => candidates[ v ].some( d => enabled.has( d.id ) ) );
 		const hasAvailable = v => candidates[ v ].some( d => d.available );
-		// A collapsed pair renders under v2, its surviving spelling — falling
-		// back to v1 only while v2 is unavailable. This overrides an enabled v1
-		// id on purpose: a selection stored before the upgrade still means the
-		// one field, so it shows checked under the v2 identity.
+		// A collapsed pair renders under v2, falling back to v1 only while v2
+		// is unavailable — deliberately overriding an enabled v1 id, since a
+		// pre-upgrade selection still means the same field.
 		let activeVersion = enabledVersion || present[ 0 ];
 		if ( collapsed ) {
 			activeVersion = hasAvailable( 'v2' ) || ! hasAvailable( 'v1' ) ? 'v2' : 'v1';
@@ -87,11 +81,9 @@ export const buildFieldRows = ( definitions, enabledIds ) => {
 			supersededHint: supersededByDef ? supersededByDef.name : null,
 		} );
 	} );
-	// Sunset-last, scoped to each section: the rows a site should be adopting
-	// come first, the ones it is keeping alive sink to the bottom of their own
-	// section. Sorting on the section's first-appearance index leaves the
-	// section order itself alone, and the sort is stable, so rows that tie keep
-	// their definition order.
+	// Sunset-last, scoped to each section: rows a site should adopt come
+	// first, legacy ones sink to the bottom. Sorting on first-appearance
+	// index preserves section order; a stable sort preserves tie order.
 	const sectionOrder = new Map();
 	rows.forEach( row => {
 		if ( ! sectionOrder.has( row.section ) ) {
@@ -109,12 +101,9 @@ export const buildFieldRows = ( definitions, enabledIds ) => {
 /**
  * Group visible rows by section, preserving row order within each section.
  *
- * Sections made up entirely of sunset (legacy-status) rows sort after every
- * other section, including "Additional" — keyed on each row's own `status`
- * via `isSunset`, not the section's (translated) label, so this keeps working
- * regardless of what a legacy section is named or how it's translated.
- * Relative order is otherwise unchanged: within each partition, sections keep
- * the order they first appear in `rows`.
+ * Sections made entirely of legacy-status rows sort after every other
+ * section (keyed on each row's `status`, not the section's translated
+ * label). Relative order is otherwise unchanged from first appearance.
  *
  * @param {Object[]} rows Rows from buildFieldRows.
  * @return {{section: string, rows: Object[]}[]} Ordered section groups.
@@ -148,10 +137,9 @@ export const toggleRow = ( enabledIds, row, checked ) => {
 };
 
 /**
- * Badges for a row, read straight off the active definition's status: new and
- * updated fields arrived with the current schema. Legacy fields carry no
- * badge — they are surfaced by sorting into their own Legacy section instead,
- * last (see visibleSections). Everything else is unbadged.
+ * Badges for a row, read off the active definition's status. Legacy fields
+ * carry no badge — they're surfaced by sorting into their own Legacy
+ * section instead. Everything else is unbadged.
  *
  * @param {Object} row Row from buildFieldRows.
  * @return {{text: string, level: string}[]} Badge descriptors.

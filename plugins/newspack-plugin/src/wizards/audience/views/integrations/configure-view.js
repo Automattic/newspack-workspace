@@ -206,10 +206,9 @@ const ConfigureViewInner = ( { integrations, loading, inFlightChanges, saving, o
 			if ( ! field ) {
 				return true;
 			}
-			// The outbound picker's draft is an ids array (see the outbound draft
-			// accessor below); value_ids is its saved-state counterpart. The
-			// legacy `value` (names) that external consumers still read would
-			// never equal an ids array, reading every touch as permanently dirty.
+			// The outbound picker's draft is an ids array; value_ids is its
+			// saved-state counterpart. The legacy `value` (names) would never
+			// equal an ids array, reading every touch as permanently dirty.
 			const savedValue = Array.isArray( field.value_ids ) ? field.value_ids : field.value;
 			return ! valuesMatch( savedValue, draft[ key ] );
 		} );
