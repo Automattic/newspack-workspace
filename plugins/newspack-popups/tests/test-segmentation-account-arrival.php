@@ -145,12 +145,10 @@ class SegmentationAccountArrivalTest extends WP_UnitTestCase {
 	 * The setcookie() options get_carried_segments_cookie_options() returns,
 	 * via reflection — see $cookie_options_method.
 	 *
-	 * @param bool $clearing Whether to fetch the clearing form's options.
-	 *
 	 * @return array
 	 */
-	private function cookie_options( $clearing ) {
-		return self::$cookie_options_method->invoke( null, $clearing );
+	private function cookie_options() {
+		return self::$cookie_options_method->invoke( null );
 	}
 
 	/**
@@ -263,18 +261,25 @@ class SegmentationAccountArrivalTest extends WP_UnitTestCase {
 	}
 
 	/**
-	 * An account with no snapshot carries nothing and behaves as today.
+	 * An account with no snapshot resolves to no segments, which is an
+	 * explicit "matches nothing" assertion (see
+	 * set_carried_segments_cookie()'s docblock) — an empty-string cookie, not
+	 * an absent one.
 	 */
 	public function test_unknown_account_carries_nothing() {
 		$this->assertSame( '/p/?a=1', $this->arrive( '/p/?a=1&np_account=777' ) );
-		$this->assertNull( $this->cookie() );
+		$this->assertSame( '', $this->cookie() );
 	}
 
 	/**
 	 * Each arrival is authoritative: the view script deletes the cookie on
 	 * first read, but on an arrival where that script never runs (a page with
 	 * no prompts, JS disabled), a previous arrival's segments must not carry
-	 * into the next click. An arrival that resolves nothing must clear it.
+	 * into the next click. An arrival that resolves nothing must overwrite
+	 * the mirror with an empty string — the "matches nothing" assertion —
+	 * not leave the previous arrival's value in place, and not unset it
+	 * either, since an unset mirror is indistinguishable from no handoff
+	 * ever having happened.
 	 */
 	public function test_clears_a_previous_cookie_when_nothing_resolves() {
 		\Newspack\Reader_Data::$matched_segments = [ 42 => [ $this->segment_ids['carried-one'] ] ];
@@ -283,7 +288,7 @@ class SegmentationAccountArrivalTest extends WP_UnitTestCase {
 
 		// A second, later arrival for an account with nothing to carry.
 		$this->arrive( '/p/?np_account=777' );
-		$this->assertNull( $this->cookie() );
+		$this->assertSame( '', $this->cookie() );
 	}
 
 	/**
@@ -361,46 +366,23 @@ class SegmentationAccountArrivalTest extends WP_UnitTestCase {
 	}
 
 	/**
-	 * The set_carried_segments_cookie() method's own setcookie() call never
-	 * runs under PHPUnit (headers_sent() is always true here), so no test that
-	 * goes through arrive() ever exercises the option values below — e.g. an
-	 * `httponly => true` typo would silently break the view script's
-	 * document.cookie read and every other test here would still pass.
-	 * Exercise get_carried_segments_cookie_options() directly instead, for
-	 * both the setting and clearing forms.
+	 * The cookie-options helper always returns one set of options: since an
+	 * empty resolution is itself the "matches nothing" assertion (see
+	 * set_carried_segments_cookie()'s docblock), there is no longer a separate
+	 * "clearing" form to distinguish it from. set_carried_segments_cookie()'s
+	 * own setcookie() call never runs under PHPUnit (headers_sent() is always
+	 * true here), so no test that goes through arrive() ever exercises the
+	 * option values below — e.g. an `httponly => true` typo would silently
+	 * break the view script's document.cookie read, or an `expires` other
+	 * than 0 would make a real browser delete an empty resolution instead of
+	 * delivering it — and every other test here would still pass. Exercise
+	 * get_carried_segments_cookie_options() directly instead.
 	 */
-	public function test_cookie_options_are_js_readable_and_site_wide() {
-		foreach ( [ false, true ] as $clearing ) {
-			$options = $this->cookie_options( $clearing );
-			$this->assertFalse( $options['httponly'], 'The view script reads this cookie via document.cookie; httponly would silently break the feature.' );
-			$this->assertSame( 'Lax', $options['samesite'] );
-			$this->assertSame( '/', $options['path'] );
-		}
-	}
-
-	/**
-	 * The setting form (a resolved, non-empty segment set) must be a session
-	 * cookie — expires at 0 — so it does not outlive the browsing session.
-	 */
-	public function test_setting_cookie_options_are_a_session_cookie() {
-		$this->assertSame( 0, $this->cookie_options( false )['expires'] );
-	}
-
-	/**
-	 * The clearing form (an empty resolved set) must expire in the past, or a
-	 * cookie set by an earlier arrival would never actually clear from the
-	 * reader's browser — see set_carried_segments_cookie()'s docblock.
-	 *
-	 * `assertLessThan( time(), ... )` alone would NOT catch an `expires => 0`
-	 * regression: 0 is itself less than time(), yet PHP's setcookie() treats a
-	 * literal 0 as the "no expiry" session-cookie sentinel, not as a past
-	 * timestamp — it would never clear anything. Asserting `expires > 0` first
-	 * rules that sentinel out, so only a genuine past Unix timestamp passes
-	 * both assertions.
-	 */
-	public function test_clearing_cookie_options_expire_in_the_past() {
-		$expires = $this->cookie_options( true )['expires'];
-		$this->assertGreaterThan( 0, $expires, 'expires must be a real past timestamp, not the 0 "session cookie" sentinel — that would never clear the cookie at all.' );
-		$this->assertLessThan( time(), $expires );
+	public function test_cookie_options_are_js_readable_session_scoped_and_site_wide() {
+		$options = $this->cookie_options();
+		$this->assertSame( 0, $options['expires'], 'Must always be a session cookie, including when the value is empty — a past expiry would make a real browser delete the cookie instead of delivering the "matches nothing" assertion.' );
+		$this->assertFalse( $options['httponly'], 'The view script reads this cookie via document.cookie; httponly would silently break the feature.' );
+		$this->assertSame( 'Lax', $options['samesite'] );
+		$this->assertSame( '/', $options['path'] );
 	}
 }

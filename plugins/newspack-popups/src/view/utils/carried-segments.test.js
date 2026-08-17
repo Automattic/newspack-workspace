@@ -37,6 +37,12 @@ describe( 'getCarriedSegmentIds', () => {
 	it( 'deletes the cookie so no later request carries it', () => {
 		setCookie( '11' );
 		getCarriedSegmentIds( [ '11' ] );
+		// jsdom's document.cookie is a simplified approximation of a real
+		// browser's cookie jar, so this alone cannot prove real-browser
+		// deletion — a browser only lets a `max-age=0` write remove a cookie
+		// whose Path (and Domain) match the original exactly. What makes this
+		// assertion meaningful is that setCookie() above and deleteCookie() in
+		// carried-segments.js both write `path=/`, satisfying that requirement.
 		expect( document.cookie ).not.toContain( COOKIE );
 	} );
 
@@ -46,6 +52,23 @@ describe( 'getCarriedSegmentIds', () => {
 		// Cookie is gone; a later pageview reads the remembered set.
 		expect( getCarriedSegmentIds( [ '11', '22' ] ) ).toEqual( [ '11', '22' ] );
 		expect( window.sessionStorage.getItem( SESSION_KEY ) ).toBe( '11,22' );
+	} );
+
+	it( 'overrides remembered segments when a later arrival resolves to none', () => {
+		// First arrival: a real match, remembered for the rest of the session.
+		setCookie( '5,7' );
+		expect( getCarriedSegmentIds( [ '5', '7' ] ) ).toEqual( [ '5', '7' ] );
+		expect( window.sessionStorage.getItem( SESSION_KEY ) ).toBe( '5,7' );
+
+		// Second arrival: a different account resolves to zero segments. The
+		// fixed PHP side hands this off as a present-but-empty cookie — a
+		// session cookie, never a past-expiry deletion — precisely so this
+		// case is distinguishable from "no handoff happened" and can override
+		// what an earlier arrival remembered. See
+		// Newspack_Popups_Segmentation::set_carried_segments_cookie().
+		setCookie( '' );
+		expect( getCarriedSegmentIds( [ '5', '7' ] ) ).toEqual( [] );
+		expect( window.sessionStorage.getItem( SESSION_KEY ) ).toBe( '' );
 	} );
 
 	it( 'drops IDs the page does not know about', () => {
@@ -68,7 +91,7 @@ describe( 'getCarriedSegmentIds', () => {
 		const setSpy = jest.spyOn( Storage.prototype, 'setItem' ).mockImplementation( () => {
 			throw new Error( 'sessionStorage unavailable' );
 		} );
-		expect( () => getCarriedSegmentIds( [ '11' ] ) ).not.toThrow();
+		expect( getCarriedSegmentIds( [ '11' ] ) ).toEqual( [ '11' ] );
 		setSpy.mockRestore();
 	} );
 

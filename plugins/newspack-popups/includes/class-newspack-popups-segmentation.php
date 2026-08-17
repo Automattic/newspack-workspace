@@ -659,21 +659,24 @@ final class Newspack_Popups_Segmentation {
 	 * set_carried_segments_cookie()'s own `setcookie()` call only runs when
 	 * `! headers_sent()`, which is never true under PHPUnit, so without this
 	 * extraction none of these option values would be exercised by any test in
-	 * the suite — e.g. an `expires => 0` typo in the clearing branch, which
-	 * would stop the cookie ever clearing, would pass every test.
+	 * the suite — e.g. an `expires` other than 0 would pass every test while
+	 * silently stopping a real browser from ever delivering an empty
+	 * resolution as anything but a deletion.
 	 *
-	 * @param bool $clearing Whether this is the clearing (empty-resolution)
-	 *                       form rather than the setting form.
+	 * Always a session cookie, including when the value being written is
+	 * empty: an empty value is itself the "matches nothing" assertion, not a
+	 * request to delete the cookie. A past-expiry `Set-Cookie` (the pattern
+	 * used elsewhere for actual deletion — see class-magic-link.php and
+	 * class-reader-activation.php) is exactly that to a real browser: it
+	 * removes the cookie and never sends it again, so the view script would
+	 * never observe the empty value at all. See
+	 * set_carried_segments_cookie()'s docblock.
 	 *
 	 * @return array `setcookie()`'s `$options` argument.
 	 */
-	private static function get_carried_segments_cookie_options( bool $clearing ): array {
+	private static function get_carried_segments_cookie_options(): array {
 		return [
-			// An empty resolved set clears the cookie by expiring it in the past,
-			// mirroring the unset( $_COOKIE ) below — see class-magic-link.php and
-			// class-reader-activation.php for the same expire-in-the-past pattern.
-			// A non-empty set is a session cookie: expires at 0.
-			'expires'  => $clearing ? time() - YEAR_IN_SECONDS : 0,
+			'expires'  => 0,
 			'path'     => '/',
 			'secure'   => is_ssl(),
 			// Must stay readable by the view script; this is a segmentation
@@ -684,8 +687,9 @@ final class Newspack_Popups_Segmentation {
 	}
 
 	/**
-	 * Hand the resolved segment IDs to the view script, or clear a previous
-	 * arrival's handoff when a valid account ID resolves nothing.
+	 * Hand the resolved segment IDs to the view script. An empty array is a
+	 * real assertion — "this account matches no segments" — and must reach
+	 * the browser as such, not as a deleted cookie.
 	 *
 	 * A session cookie, readable by JavaScript (the view script moves it into
 	 * sessionStorage and deletes it on first read) and named so Batcache does not
@@ -693,19 +697,26 @@ final class Newspack_Popups_Segmentation {
 	 *
 	 * Called for every arrival whose np_account value passes the
 	 * positive-integer gate (see handle_account_param()), so each such arrival
-	 * is authoritative — including clearing when a valid ID resolves no
-	 * segments. The view script deletes the cookie on first read, but on an
-	 * arrival where that script never runs (a page with no prompts, JS
+	 * is authoritative — including overriding a previous arrival's segments
+	 * when this one resolves none. The cookie is always written with the same
+	 * session-lifetime options (see get_carried_segments_cookie_options()),
+	 * whether or not the value is empty: expiring it in the past instead would
+	 * make a real browser delete it rather than deliver it, so the view
+	 * script would never see the empty value and would fall through to
+	 * whatever a previous arrival already left in sessionStorage — silently
+	 * keeping a stale, previously-matched segment set alive for the rest of
+	 * the session. The view script deletes the cookie on first read, but on
+	 * an arrival where that script never runs (a page with no prompts, JS
 	 * disabled), a previous arrival's segments would otherwise carry into the
 	 * next click.
 	 *
 	 * Not called at all for a value that never passed the gate: such a value
 	 * makes no assertion about the reader — e.g. an unsubstituted merge tag
 	 * from an already-delivered newsletter — so an existing carried set is left
-	 * alone rather than wiped.
+	 * alone rather than overwritten.
 	 *
-	 * @param string[] $segment_ids Active segment IDs; an empty array clears
-	 *                              the cookie instead of setting it.
+	 * @param string[] $segment_ids Active segment IDs; an empty array asserts
+	 *                              that the account matches no segments.
 	 */
 	private static function set_carried_segments_cookie( $segment_ids ) {
 		$value = implode( ',', $segment_ids );
@@ -714,16 +725,14 @@ final class Newspack_Popups_Segmentation {
 			setcookie(
 				self::CARRIED_SEGMENTS_COOKIE,
 				$value,
-				self::get_carried_segments_cookie_options( empty( $segment_ids ) )
+				self::get_carried_segments_cookie_options()
 			);
 		}
 		// Unconditionally update $_COOKIE so same-request readers (and tests, where
-		// headers are already sent) can see the handoff, or its absence.
-		if ( empty( $segment_ids ) ) {
-			unset( $_COOKIE[ self::CARRIED_SEGMENTS_COOKIE ] ); // phpcs:ignore WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___COOKIE
-		} else {
-			$_COOKIE[ self::CARRIED_SEGMENTS_COOKIE ] = $value; // phpcs:ignore WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___COOKIE
-		}
+		// headers are already sent) see the same assertion a real browser would
+		// receive — including an empty string when nothing resolved, rather than
+		// unsetting it, which would be indistinguishable from no handoff at all.
+		$_COOKIE[ self::CARRIED_SEGMENTS_COOKIE ] = $value; // phpcs:ignore WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___COOKIE
 	}
 
 	/**
