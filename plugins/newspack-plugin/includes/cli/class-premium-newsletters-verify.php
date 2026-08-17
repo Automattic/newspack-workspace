@@ -280,7 +280,7 @@ class Premium_Newsletters_Verify {
 			// gate was named above, in which case this run fails without having
 			// compared anything. The success line below is only reachable when that
 			// list was empty, which is what keeps it true.
-			$summary = self::summarize_rows( [] );
+			$summary = self::new_summary();
 			self::print_coverage_gaps( $coverage );
 			if ( self::verification_failed( $summary, $coverage ) ) {
 				WP_CLI::error( self::describe_failure( $summary, $coverage ) );
@@ -296,12 +296,12 @@ class Premium_Newsletters_Verify {
 		// whole run as its help text promises rather than resetting per gate.
 		$batches = 0;
 
-		$rows = [];
+		$rows    = [];
+		$summary = self::new_summary();
 		foreach ( $partitioned['verifiable'] as $gate ) {
-			$rows = array_merge( $rows, self::verify_gate( $gate, $auto_signup, $live, $batch_size, $max_batches, $batches, $coverage ) );
+			$rows = array_merge( $rows, self::verify_gate( $gate, $auto_signup, $live, $batch_size, $max_batches, $batches, $coverage, $summary ) );
 		}
 
-		$summary = self::summarize_rows( $rows );
 		self::report( $rows, $summary, $coverage, $auto_signup, $live );
 
 		if ( self::verification_failed( $summary, $coverage ) ) {
@@ -410,17 +410,27 @@ class Premium_Newsletters_Verify {
 	}
 
 	/**
-	 * Count each outcome across a run's rows.
+	 * The statuses whose rows the report lists one by one.
+	 *
+	 * Everything else is only ever counted, which is why those rows are not kept:
+	 * see record_row(). 'removed' is here despite passing — it is the only
+	 * irreversible thing this command does, and a run that unsubscribed 500 readers
+	 * must not print the same output as one that found nothing.
+	 */
+	const ATTENTION_STATUSES = [ 'leak', 'removed', 'gap', 'unresolved' ];
+
+	/**
+	 * An empty count of outcomes, before any reader has been checked.
 	 *
 	 * Every bucket is present even at zero so callers can read one without first
-	 * checking it exists.
+	 * checking it exists. 'checked' counts every row the run produced, including
+	 * the ones no longer kept.
 	 *
-	 * @param array[] $rows Result rows, each carrying a 'status' key.
-	 *
-	 * @return array<string,int> Counts keyed by status.
+	 * @return array<string,int>
 	 */
-	private static function summarize_rows( array $rows ): array {
-		$summary = [
+	private static function new_summary(): array {
+		return [
+			'checked'      => 0,
 			'leak'         => 0,
 			'gap'          => 0,
 			'ok'           => 0,
@@ -428,13 +438,58 @@ class Premium_Newsletters_Verify {
 			'not_asserted' => 0,
 			'unresolved'   => 0,
 		];
-		foreach ( $rows as $row ) {
-			$status = $row['status'] ?? '';
-			if ( isset( $summary[ $status ] ) ) {
-				++$summary[ $status ];
-			}
+	}
+
+	/**
+	 * Count one more outcome.
+	 *
+	 * An unrecognized status still counts as checked, so the total cannot silently
+	 * drift from the number of rows the run actually produced.
+	 *
+	 * @param array<string,int> $summary Counts so far.
+	 * @param string            $status  The row's status.
+	 *
+	 * @return array<string,int> The counts with this outcome added.
+	 */
+	private static function with_status_counted( array $summary, string $status ): array {
+		++$summary['checked'];
+		if ( isset( $summary[ $status ] ) ) {
+			++$summary[ $status ];
 		}
 		return $summary;
+	}
+
+	/**
+	 * Whether the report lists this status row by row, rather than only counting it.
+	 *
+	 * @param string $status A row status.
+	 *
+	 * @return bool
+	 */
+	private static function status_needs_attention( string $status ): bool {
+		return in_array( $status, self::ATTENTION_STATUSES, true );
+	}
+
+	/**
+	 * Count a row, and keep it only if the report will show it.
+	 *
+	 * A passing row is read by nothing but the counts, so holding it for the length
+	 * of the run costs memory to no end: a site with 200,000 clean readers on three
+	 * lists would carry 600,000 arrays to print a single number. Counting as we go
+	 * keeps that number exact and the memory flat.
+	 *
+	 * @param array[]           $rows    Retained rows, by reference.
+	 * @param array<string,int> $summary Counts, by reference.
+	 * @param array             $row     The row just produced.
+	 *
+	 * @return void
+	 */
+	private static function record_row( array &$rows, array &$summary, array $row ): void {
+		$status  = (string) ( $row['status'] ?? '' );
+		$summary = self::with_status_counted( $summary, $status );
+		if ( self::status_needs_attention( $status ) ) {
+			$rows[] = $row;
+		}
 	}
 
 	/**
@@ -601,7 +656,7 @@ class Premium_Newsletters_Verify {
 	 * --live run that removed everything it found is exactly the run an operator is
 	 * trying to reach.
 	 *
-	 * @param array<string,int> $summary  Counts from summarize_rows().
+	 * @param array<string,int> $summary  Counts from new_summary(), added up by with_status_counted().
 	 * @param array             $coverage Coverage record.
 	 *
 	 * @return bool
@@ -619,7 +674,7 @@ class Premium_Newsletters_Verify {
 	 * on coverage does not also report "0 leak(s)" and invite the reader to
 	 * conclude nothing was wrong.
 	 *
-	 * @param array<string,int> $summary  Counts from summarize_rows().
+	 * @param array<string,int> $summary  Counts from new_summary(), added up by with_status_counted().
 	 * @param array             $coverage Coverage record.
 	 *
 	 * @return string
@@ -1144,10 +1199,12 @@ class Premium_Newsletters_Verify {
 	 * @param array $coverage    Coverage record, by reference. Shared across every gate's call so
 	 *                           the run's terminal message can name the whole population it
 	 *                           checked, and fail when any part of it went unwalked.
+	 * @param array $summary     Outcome counts, by reference. Every row is counted here; only the
+	 *                           ones the report lists are returned.
 	 *
-	 * @return array[] Result rows.
+	 * @return array[] The rows needing attention, per status_needs_attention().
 	 */
-	private static function verify_gate( array $gate, bool $auto_signup, bool $live, int $batch_size, int $max_batches, int &$batches, array &$coverage ): array {
+	private static function verify_gate( array $gate, bool $auto_signup, bool $live, int $batch_size, int $max_batches, int &$batches, array &$coverage, array &$summary ): array {
 		$list_ids = self::restricted_list_ids_for_gate( $gate );
 		if ( empty( $list_ids ) ) {
 			WP_CLI::line( self::describe_gate_without_lists( $gate ) );
@@ -1214,7 +1271,7 @@ class Premium_Newsletters_Verify {
 				// a leak, so it is recorded as unresolved instead, the same status a
 				// failed ESP lookup gets.
 				foreach ( $list_ids as $list_id ) {
-					$rows[] = self::make_missing_user_row( $gate, $list_id, $user_id );
+					self::record_row( $rows, $summary, self::make_missing_user_row( $gate, $list_id, $user_id ) );
 				}
 				continue;
 			}
@@ -1228,7 +1285,7 @@ class Premium_Newsletters_Verify {
 			$contact_data = \Newspack_Newsletters_Subscription::get_contact_data( $user->user_email );
 			if ( \is_wp_error( $contact_data ) && ! self::is_contact_not_found_error( $contact_data ) ) {
 				foreach ( $list_ids as $list_id ) {
-					$rows[] = self::make_row( $gate, $list_id, $user, 'unresolved' );
+					self::record_row( $rows, $summary, self::make_row( $gate, $list_id, $user, 'unresolved' ) );
 				}
 			} else {
 				$contact_lists = \is_wp_error( $contact_data ) ? [] : \Newspack_Newsletters_Subscription::get_contact_lists( $user->user_email );
@@ -1237,7 +1294,7 @@ class Premium_Newsletters_Verify {
 				foreach ( $list_ids as $list_id ) {
 					$public_id = $public_ids[ $list_id ];
 					if ( $unresolved || null === $public_id ) {
-						$rows[] = self::make_row( $gate, $list_id, $user, 'unresolved' );
+						self::record_row( $rows, $summary, self::make_row( $gate, $list_id, $user, 'unresolved' ) );
 						continue;
 					}
 					$is_restricted = \Newspack\Content_Restriction_Control::is_post_restricted( false, $list_id, $user_id );
@@ -1251,7 +1308,7 @@ class Premium_Newsletters_Verify {
 						$lists_after = \is_wp_error( $removed ) ? [] : \Newspack_Newsletters_Subscription::get_contact_lists( $user->user_email );
 						$status      = self::classify_removal( $removed, $lists_after, $public_id );
 					}
-					$rows[] = self::make_row( $gate, $list_id, $user, $status );
+					self::record_row( $rows, $summary, self::make_row( $gate, $list_id, $user, $status ) );
 				}
 			}
 
@@ -1408,8 +1465,9 @@ class Premium_Newsletters_Verify {
 	/**
 	 * Print the summary, then the rows that need attention.
 	 *
-	 * @param array[]           $rows        Result rows.
-	 * @param array<string,int> $summary     Counts from summarize_rows().
+	 * @param array[]           $rows        The rows needing attention. Passing rows are counted
+	 *                                       in $summary and not kept, so this is not every row.
+	 * @param array<string,int> $summary     Counts from new_summary(), added up by with_status_counted().
 	 * @param array             $coverage    Coverage record.
 	 * @param bool              $auto_signup Whether auto-signup is on.
 	 * @param bool              $live        Whether removals were written.
@@ -1424,7 +1482,7 @@ class Premium_Newsletters_Verify {
 			'table',
 			[
 				[
-					'Checked'      => count( $rows ),
+					'Checked'      => $summary['checked'],
 					'Leaks'        => $summary['leak'],
 					'Removed'      => $summary['removed'],
 					'Gaps'         => $summary['gap'],
@@ -1436,10 +1494,10 @@ class Premium_Newsletters_Verify {
 			[ 'Checked', 'Leaks', 'Removed', 'Gaps', 'OK', 'Not asserted', 'Unresolved' ]
 		);
 
-		// 'removed' is listed even though it passes. It is the only irreversible
-		// thing this command does, and a run that unsubscribed 500 readers must not
-		// print the same table as one that found nothing.
-		$attention = array_values( array_filter( $rows, fn( $r ) => in_array( $r['status'], [ 'leak', 'removed', 'gap', 'unresolved' ], true ) ) );
+		// Already only the rows worth listing — record_row() dropped the rest as they
+		// were counted — but filtered again rather than trusted, so this stays correct
+		// if a caller ever hands it a full set.
+		$attention = array_values( array_filter( $rows, fn( $r ) => self::status_needs_attention( $r['status'] ?? '' ) ) );
 		if ( ! empty( $attention ) ) {
 			WP_CLI::line( '' );
 			\WP_CLI\Utils\format_items(
