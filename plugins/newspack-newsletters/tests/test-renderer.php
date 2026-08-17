@@ -11,6 +11,14 @@
 class Newsletters_Renderer_Test extends WP_UnitTestCase {
 
 	/**
+	 * Filter registered by register_dimension_presets(), removed on tear down.
+	 *
+	 * @var callable|null
+	 */
+	private $dimension_preset_filter = null;
+
+
+	/**
 	 * Clean up after each test.
 	 */
 	public function tear_down() {
@@ -350,13 +358,6 @@ class Newsletters_Renderer_Test extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Filter registered by register_dimension_presets(), removed on tear down.
-	 *
-	 * @var callable|null
-	 */
-	private $dimension_preset_filter = null;
-
-	/**
 	 * Build a `core/buttons` block wrapping one `core/button` per set of attributes.
 	 *
 	 * @param array ...$button_attrs One attributes array per button, in order.
@@ -447,26 +448,28 @@ class Newsletters_Renderer_Test extends WP_UnitTestCase {
 	}
 
 	/**
-	 * A kebab-cased reference resolves against a camelCase preset slug.
+	 * A camelCase preset slug resolves from its verbatim reference.
 	 *
-	 * WordPress kebab-cases slugs when it builds custom-property names, so a
-	 * reference can reach us in a different case than the slug was declared in.
-	 * Matching both ways costs nothing and avoids silently dropping the width.
+	 * The editor writes the slug into the reference unchanged, so a camelCase slug
+	 * arrives camelCased. Core kebab-cases slugs only when building the CSS
+	 * custom-property name, never the stored value - so an exact comparison is
+	 * both what core does and all that real content needs.
 	 */
-	public function test_button_width_dimensions_preset_kebab_cased() {
+	public function test_button_width_dimensions_preset_camel_case_slug() {
 		$this->register_dimension_presets();
 		$this->assertSame(
 			[ '25%' ],
-			$this->button_column_widths( [ 'style' => [ 'dimensions' => [ 'width' => 'var:preset|dimension|qa-camel-quarter' ] ] ] ),
-			'Expected a kebab-cased reference to resolve against its camelCase slug.'
+			$this->button_column_widths( [ 'style' => [ 'dimensions' => [ 'width' => 'var:preset|dimension|qaCamelQuarter' ] ] ] ),
+			'Expected a camelCase slug to resolve from its verbatim reference.'
 		);
 	}
 
 	/**
 	 * Widths MJML columns can't express fall back to the shared default.
 	 *
-	 * An absolute unit, an unresolvable preset, a missing `width` key, or a value
-	 * outside 1-100 all mean "no usable column percentage". The button then takes
+	 * An absolute unit, an unresolvable preset, a kebab-cased reference to a
+	 * camelCase slug, a missing `width` key, or a value outside the usable range
+	 * all mean "no usable column percentage". The button then takes
 	 * the default share, which is what a lone width-less button gets: 100%.
 	 * Emitting the raw value instead would produce columns like `200%` or `-50%`
 	 * and break the whole row, not just that button.
@@ -477,6 +480,9 @@ class Newsletters_Renderer_Test extends WP_UnitTestCase {
 	 * @param string $case  Human-readable label for the failure message.
 	 */
 	public function test_button_width_unusable_values_fall_back( $attrs, $case ) {
+		// Registered so the kebab-cased row is a real miss against an existing
+		// camelCase preset, rather than passing because nothing was declared.
+		$this->register_dimension_presets();
 		$this->assertSame(
 			[ '100%' ],
 			$this->button_column_widths( $attrs ),
@@ -493,10 +499,54 @@ class Newsletters_Renderer_Test extends WP_UnitTestCase {
 		return [
 			'absolute unit'       => [ [ 'style' => [ 'dimensions' => [ 'width' => '200px' ] ] ], 'an absolute unit' ],
 			'unknown preset'      => [ [ 'style' => [ 'dimensions' => [ 'width' => 'var:preset|dimension|nope' ] ] ], 'an unresolvable preset' ],
+			'kebab-cased slug'    => [ [ 'style' => [ 'dimensions' => [ 'width' => 'var:preset|dimension|qa-camel-quarter' ] ] ], 'a kebab-cased reference to a camelCase slug' ],
 			'dimensions no width' => [ [ 'style' => [ 'dimensions' => [] ] ], 'dimensions without a width' ],
 			'legacy zero'         => [ [ 'width' => 0 ], 'a zero legacy width' ],
 			'legacy negative'     => [ [ 'width' => -50 ], 'a negative legacy width' ],
 			'legacy over 100'     => [ [ 'width' => 150 ], 'a legacy width above 100' ],
+		];
+	}
+
+	/**
+	 * An unusable legacy width falls through to the `dimensions` value.
+	 *
+	 * The legacy attribute is preferred, but only when it yields a usable width.
+	 * Choosing the branch on the legacy key's mere presence - and validating only
+	 * afterwards - would discard a perfectly good `dimensions` width and drop the
+	 * button to the default share. Partially-migrated content is exactly where
+	 * both keys coexist, so this is the case the preference order exists to get
+	 * right.
+	 *
+	 * @dataProvider unusable_legacy_falls_through_provider
+	 *
+	 * @param mixed  $legacy The unusable legacy `width` attribute.
+	 * @param string $case   Human-readable label for the failure message.
+	 */
+	public function test_button_width_unusable_legacy_falls_through( $legacy, $case ) {
+		$this->assertSame(
+			[ '40%' ],
+			$this->button_column_widths(
+				[
+					'width' => $legacy,
+					'style' => [ 'dimensions' => [ 'width' => '40%' ] ],
+				]
+			),
+			sprintf( 'Expected %s to fall through to the dimensions width.', $case )
+		);
+	}
+
+	/**
+	 * Unusable legacy widths that should not mask a usable `dimensions` width.
+	 *
+	 * @return array[]
+	 */
+	public function unusable_legacy_falls_through_provider() {
+		return [
+			'zero'        => [ 0, 'a zero legacy width' ],
+			'negative'    => [ -50, 'a negative legacy width' ],
+			'over 100'    => [ 150, 'a legacy width above 100' ],
+			'empty'       => [ '', 'an empty legacy width' ],
+			'non-numeric' => [ 'abc', 'a non-numeric legacy width' ],
 		];
 	}
 

@@ -912,7 +912,8 @@ final class Newspack_Newsletters_Renderer {
 	 * it — partially-migrated content is exactly what this helper exists to
 	 * survive.
 	 *
-	 * A width is usable only if it resolves to a percentage in 1-100. Absolute
+	 * A width is usable only if it resolves to a percentage above 0 and at most
+	 * 100. Absolute
 	 * units have no meaning as an MJML column share, and a column outside that
 	 * range disturbs the rest of its row; either way the button falls back to the
 	 * default share, which is what a width-less button gets.
@@ -957,11 +958,12 @@ final class Newspack_Newsletters_Renderer {
 	 * this looks harder for the preset than core does.
 	 *
 	 * Core's own lookup (`render_block_core_button()`) reads only the
-	 * `blocks.core/button` node, with the origins and exact-slug match mirrored
-	 * below. That is enough for core because of the custom-property fallback; it
-	 * isn't enough for us, so this also reads the root `dimensions.dimensionSizes`
-	 * group, includes the `blocks` origin that `wp_theme_json_data_blocks` writes
-	 * to, and tolerates a kebab-cased reference to a camelCase slug.
+	 * `blocks.core/button` node. That is enough for core because of the
+	 * custom-property fallback; it isn't enough for us, so this also reads the
+	 * root `dimensions.dimensionSizes` group and includes the `blocks` origin.
+	 * Slugs are compared exactly, as core compares them: the editor writes the
+	 * slug verbatim into the reference, and `_wp_to_kebab_case()` is applied only
+	 * when core builds the CSS custom-property name, never to the stored value.
 	 *
 	 * @param string $width The raw `style.dimensions.width` value.
 	 * @return string The resolved width, or the input unchanged when it isn't a
@@ -1000,8 +1002,7 @@ final class Newspack_Newsletters_Renderer {
 					if ( ! is_array( $preset ) || ! isset( $preset['slug'] ) || ! is_scalar( $preset['slug'] ) ) {
 						continue;
 					}
-					$preset_slug = (string) $preset['slug'];
-					if ( $preset_slug !== $slug && _wp_to_kebab_case( $preset_slug ) !== $slug ) {
+					if ( (string) $preset['slug'] !== $slug ) {
 						continue;
 					}
 					$size = $preset['size'] ?? null;
