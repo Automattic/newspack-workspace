@@ -7,12 +7,18 @@
 @use "sass:math";
 
 @function to-rgb($color) {
-	@return color.channel($color, "red", $space: rgb) + ", " + color.channel($color, "green", $space: rgb) + ", " + color.channel($color, "blue", $space: rgb);
+	@return color.channel($color, "red", $space: rgb) + ", " + color.channel($color, "green", $space: rgb) + ", " +
+		color.channel($color, "blue", $space: rgb);
 }
 
 @function to-rgba($color) {
 	$alpha: math.div(math.round(color.channel($color, "alpha") * 100), 100);
-	@return rgba(color.channel($color, "red", $space: rgb), color.channel($color, "green", $space: rgb), color.channel($color, "blue", $space: rgb), $alpha);
+	@return rgba(
+		color.channel($color, "red", $space: rgb),
+		color.channel($color, "green", $space: rgb),
+		color.channel($color, "blue", $space: rgb),
+		$alpha
+	);
 }
 
 // Primary: Hex
