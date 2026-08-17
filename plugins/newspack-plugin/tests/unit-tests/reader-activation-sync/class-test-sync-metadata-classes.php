@@ -127,13 +127,9 @@ class Test_Sync_Metadata_Classes extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * A saved-empty selection means "push no metadata fields", so no
-	 * version-scoped class is computed at all — there is no site-wide schema
-	 * version left to fall back to, and computing one version's classes for a
-	 * site that pushes nothing would be pure waste.
-	 *
-	 * Version-neutral classes still participate: they belong to no version, so
-	 * an empty version set does not exclude them.
+	 * A saved-empty selection computes no version-scoped classes — there is no
+	 * site-wide version to fall back to — but version-neutral classes still
+	 * participate.
 	 */
 	public function test_stored_empty_selection_computes_no_version_classes() {
 		$this->integration->update_enabled_outgoing_fields( [] );
@@ -144,14 +140,9 @@ class Test_Sync_Metadata_Classes extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * A site that has not been seeded yet (no stored selection anywhere) falls
-	 * back to a DERIVED default set, and that set is scoped to a single schema
-	 * version — so only that version's classes are computed, never both.
-	 *
-	 * Deriving from the merged registry instead would compute every class on
-	 * every sync for an unseeded site, on top of putting both schemas' field
-	 * names in front of the provider. With no evidence of prior use here, the
-	 * derivation answers with the new schema.
+	 * An unseeded site (no stored selection) falls back to a derived default
+	 * scoped to one schema version — new, absent other evidence — so only
+	 * that version's classes are computed, never both.
 	 */
 	public function test_unseeded_site_computes_one_version() {
 		\delete_option( Integration::OUTGOING_FIELDS_OPTION_PREFIX . 'scope-test' );

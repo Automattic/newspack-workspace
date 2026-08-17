@@ -982,10 +982,9 @@ abstract class Integration {
 	 * Get the enabled outgoing metadata field ids for this integration.
 	 *
 	 * Lazily migrates stored display names (pre-coexistence format) to
-	 * version-qualified field ids and writes the option back in the new
-	 * format. The write-back is conditional: it is skipped whenever any
-	 * stored name fails to resolve, so migration can retry (and succeed) on a
-	 * later read instead of permanently losing that entry from the option.
+	 * version-qualified field ids and writes the option back — skipped when
+	 * any stored name fails to resolve, so migration can retry on a later
+	 * read instead of permanently losing that entry.
 	 *
 	 * An integration that never saved a selection inherits one — see
 	 * get_inherited_outgoing_field_ids(). An explicitly saved selection
@@ -996,10 +995,9 @@ abstract class Integration {
 	public function get_enabled_outgoing_field_ids() {
 		$stored = \get_option( self::OUTGOING_FIELDS_OPTION_PREFIX . $this->id, false );
 		if ( ! is_array( $stored ) ) {
-			// Never configured (option absent), or a corrupt non-array value:
-			// inherit rather than fail closed to an empty selection, which
-			// would silently stop syncing every field. A stored empty array
-			// (the admin deselected everything) still means none.
+			// Absent or corrupt: inherit rather than fail closed to empty,
+			// which would silently stop syncing every field. A stored empty
+			// array (the admin deselected everything) still means none.
 			return $this->get_inherited_outgoing_field_ids();
 		}
 		if ( empty( $stored ) ) {
@@ -1028,10 +1026,9 @@ abstract class Integration {
 			// "Registration Page"); resolve to all of them.
 			$definitions = Sync\Field_Registry::resolve_name( (string) $entry );
 			if ( empty( $definitions ) ) {
-				// Route through newspack_log so the repeating, never-resolving
-				// migration is operator-visible (Newspack Manager consumes the
-				// newspack_log action) — Logger::log() is a no-op at the
-				// default production log level.
+				// newspack_log (not Logger::log(), a no-op at the default log
+				// level) so the repeating unresolved migration is visible to
+				// Newspack Manager.
 				Logger::newspack_log(
 					'outgoing_fields_migration_unresolved',
 					sprintf( 'Outgoing fields migration: no definition found for "%s" in integration "%s".', $entry, $this->id ),
@@ -1050,18 +1047,13 @@ abstract class Integration {
 		$ids = array_values( array_unique( $ids ) );
 
 		// Migration is a write path too: upgrade value-equivalent v1 ids to
-		// their v2 twins (see update_enabled_outgoing_fields()) so the
-		// written-back option is already on the surviving id shape.
+		// their v2 twins so the written-back option already uses the
+		// surviving id shape.
 		$ids = Sync\Field_Registry::upgrade_equivalent_ids( $ids );
 
-		// Only write the migrated ids back when every stored entry resolved.
-		// A name can fail to resolve when the plugin that declares its field
-		// is inactive (e.g. newspack-network deactivated, or a WooCommerce
-		// Teams field gated off); persisting the reduced list now would drop
-		// that name from the option permanently, so reactivating the
-		// provider could never restore the reader's prior selection. Leaving
-		// the option untouched lets migration retry - and succeed - on a
-		// later read once the field becomes resolvable again.
+		// Write back only when every entry resolved — a reduced list would
+		// permanently drop a name whose declaring plugin is temporarily
+		// inactive (e.g. newspack-network); leave it for migration to retry.
 		if ( ! $has_unresolved ) {
 			\update_option( self::OUTGOING_FIELDS_OPTION_PREFIX . $this->id, $ids, false );
 		}
@@ -1073,31 +1065,23 @@ abstract class Integration {
 	 * every available field, resolved to ids, without persisting — so
 	 * defaults keep tracking availability changes.
 	 *
-	 * A safety net rather than a normal read path. The ESP integration's
-	 * selection is materialised by Field_Registry::seed_default_field_selections(),
-	 * at activation or lazily on the ESP's first option-less read, and every
-	 * other integration inherits it — so this only answers when seeding could
-	 * not store anything (no definitions loaded), or for an integration
-	 * constructed outside the registry with no ESP to inherit from.
+	 * A safety net, not the normal path: the ESP integration's selection is
+	 * normally materialised at activation or first read (see
+	 * Field_Registry::seed_default_field_selections()) and inherited by
+	 * every other integration. This only answers when seeding stored
+	 * nothing, or for an integration built outside the registry.
 	 *
-	 * Scoped to one schema version, derived and never stored (see
-	 * Field_Registry::get_derivation_schema_version()). Resolving against the
-	 * merged registry instead would answer with both schemas' field names, and
-	 * this set does reach real providers: a configured non-ESP push integration
-	 * inheriting while the ESP is unconfigured pushes whatever this returns.
+	 * Scoped to one schema version and never stored: the merged registry
+	 * would leak both schemas' names into a real push, since a non-ESP
+	 * integration can inherit this while the ESP is unconfigured.
 	 *
-	 * Memoized per (registry generation, version, names): prepare_contact()
-	 * calls this once per contact per integration, and a CLI backfill must not
-	 * rebuild the name resolution for every row. The key derives from the
-	 * resolution inputs, so registry resets and availability changes
-	 * invalidate it naturally.
+	 * Memoized per (registry generation, version, names), since
+	 * prepare_contact() calls this once per contact per integration; the key
+	 * derives from the resolution inputs, so it self-invalidates.
 	 *
-	 * Deliberately NOT canonicalized: the equivalence upgrade is a write-path
-	 * behavior (see update_enabled_outgoing_fields()), and nothing here may
-	 * write — a persisted derived set would stop tracking availability.
-	 * prepare_contact() resolves an id to its ESP name/raw key regardless of
-	 * version, so an un-upgraded v1 id for an equivalent field still emits
-	 * under the shared canonical name (see Test_Prepare_Contact).
+	 * Deliberately not canonicalized: the equivalence upgrade is a
+	 * write-path behavior, and prepare_contact() resolves ids to ESP names
+	 * regardless of version.
 	 *
 	 * @return string[] List of field ids.
 	 */
@@ -1112,20 +1096,16 @@ abstract class Integration {
 		$ids = [];
 		foreach ( $names as $name ) {
 			foreach ( Sync\Field_Registry::resolve_name( $name, $version ) as $definition ) {
-				// The name list is the merged one, so a label only the other
-				// schema declares reaches resolve_name()'s any-version fallback
-				// and would smuggle that schema back in. Keep the derived
-				// version's own fields, plus the version-neutral ones, which
-				// belong to every version's default set.
+				// The merged name list can smuggle in the other schema via
+				// resolve_name()'s any-version fallback. Keep only this
+				// version's own fields, plus the version-neutral ones.
 				if ( $version === $definition['version'] || Sync\Field_Registry::VERSION_NEUTRAL === $definition['version'] ) {
 					$ids[] = $definition['id'];
 				}
 			}
 		}
-		// This dedup is defensive: resolve_name() guarantees distinct names
-		// yield distinct ids, so this only matters if $names itself contains a
-		// duplicate name. It no longer routes through upgrade_equivalent_ids(),
-		// which used to do it as a side effect.
+		// Defensive: resolve_name() guarantees distinct names yield distinct
+		// ids, so this only matters if $names itself has a duplicate.
 		$cache[ $key ] = array_values( array_unique( $ids ) );
 		return $cache[ $key ];
 	}
@@ -1135,12 +1115,9 @@ abstract class Integration {
 	 * its own.
 	 *
 	 * Every integration other than the ESP inherits the ESP integration's
-	 * effective selection, so a newly registered integration pushes exactly
-	 * what the site already pushes rather than everything available — the
-	 * NPPD-2107 bug, where an ESP narrowed to Account-only still saw
-	 * ActiveCampaign push `NP_Total Paid`. The ESP itself has nothing above
-	 * it to inherit from, so it keeps the dynamic all-defaults fallback that
-	 * matches the pre-selection passthrough.
+	 * effective selection, so a newly registered integration pushes what the
+	 * site already pushes rather than everything available (NPPD-2107). The
+	 * ESP itself falls back to the dynamic all-defaults set.
 	 *
 	 * Override to inherit something else, or return an empty array to opt out
 	 * of inheritance entirely (an integration that does so pushes no metadata
@@ -1170,12 +1147,10 @@ abstract class Integration {
 					$ids[] = $definition['id'];
 				}
 			}
-			// Deliberately not canonicalized, same reasoning as
-			// get_default_outgoing_field_ids(): this is a read path and the
-			// equivalence upgrade belongs to writes. Still de-duplicated the
-			// same way — defensive, since resolve_name() guarantees distinct
-			// names yield distinct ids, but a duplicated name in this
-			// hand-edited legacy option would otherwise yield duplicate ids.
+			// Not canonicalized, same reasoning as get_default_outgoing_field_ids()
+			// (read path; the equivalence upgrade belongs to writes). Still
+			// de-duplicated defensively, since a hand-edited legacy option
+			// could repeat a name.
 			return array_values( array_unique( $ids ) );
 		}
 
@@ -1186,11 +1161,10 @@ abstract class Integration {
 	 * Get the enabled outgoing metadata fields for this integration.
 	 *
 	 * Back-compat surface: returns display names derived from the stored
-	 * field ids. The old settings UI consumes and posts these names. The
-	 * round-trip is lossy for the five value-equivalent pairs, whose two ids
-	 * share one name: they collapse to that name here, and
-	 * update_enabled_outgoing_fields() re-resolves it to the surviving v2 id.
-	 * The per-field UI (Phase 2) must post ids, not names.
+	 * field ids, for the old settings UI. Lossy for the five value-equivalent
+	 * pairs, whose two ids share one name — they collapse to that name here,
+	 * and update_enabled_outgoing_fields() re-resolves it to the surviving
+	 * v2 id. The per-field UI (Phase 2) must post ids, not names.
 	 *
 	 * The never-configured fallback (inheriting the ESP integration's
 	 * effective selection) lives in get_enabled_outgoing_field_ids(), so the
@@ -1490,39 +1464,22 @@ abstract class Integration {
 	 * Prepare contact data for this integration by resolving enabled field
 	 * ids to prefixed ESP field names.
 	 *
-	 * Incoming metadata may mix raw keys from any schema version. Raw keys
-	 * survive only when enabled for this integration; enabled dynamic-suffix
-	 * fields (UTM) match by raw-key prefix and never by their bare key, which
-	 * carries no suffix and is therefore not a syncable field. Schema-owned
-	 * field names are collision-free by construction —
-	 * Field_Registry::get_conflict_groups() is permanently empty, guarded by
-	 * Test_Field_Registry::test_no_esp_name_is_claimed_by_both_schemas — and
-	 * where a v1/v2 pair shares a field outright the v1 raw keys alias onto
-	 * the surviving v2 definition. That guarantee is scoped to schema-owned
-	 * definitions: a `newspack_ras_metadata_keys` callback can add an extra
-	 * that sits outside the collision derivation, or rename a schema-owned
-	 * definition at runtime, either of which can still produce two enabled
-	 * fields with the same output name. When two raw keys resolve to the
-	 * same output key — a filter collision, or legacy same-name siblings
-	 * like registration_page / current_page_url — resolution keeps
-	 * last-write-wins; only an explicitly-supplied prefixed value is
-	 * protected from being overwritten.
+	 * Raw keys survive only when enabled; dynamic-suffix (UTM) fields match
+	 * by raw-key prefix only, never by their bare key. Schema-owned names
+	 * are collision-free by construction (Field_Registry::get_conflict_groups()
+	 * is always empty), but a `newspack_ras_metadata_keys` callback can add
+	 * or rename a field outside that guarantee — when two raw keys then
+	 * resolve to the same output key, resolution is last-write-wins, except
+	 * an explicitly-supplied prefixed value is never overwritten.
 	 *
-	 * Already-prefixed inputs are explicit injections (callers, the
-	 * normalize filter): they pass through when they match an enabled field
-	 * OR when the registry doesn't know their name at all — a custom field a
-	 * site snippet adds the documented way must keep reaching the provider,
-	 * as it did when the legacy pipeline forwarded filter output verbatim.
-	 * Only prefixed keys naming a registered-but-disabled field are dropped,
-	 * respecting the per-integration selection. An explicitly-supplied
-	 * prefixed value also wins over a raw key resolving to the same output
-	 * name (the raw UTM expansion must not overwrite a supplied
-	 * `NP_Signup UTM: source`).
+	 * Already-prefixed input passes through when it matches an enabled field
+	 * or the registry doesn't recognize the name at all (custom fields from
+	 * site snippets must keep working); it is dropped only when registered
+	 * but disabled for this integration.
 	 *
-	 * Filtering is unconditional and per-integration, including for `esp`:
-	 * there is no upstream pre-filter to defer to any more, so an explicitly
-	 * saved empty Outbound selection means no metadata fields, not all of
-	 * them (NPPD-2107).
+	 * Filtering is unconditional per integration, including `esp`: an
+	 * explicitly saved empty Outbound selection means no metadata fields for
+	 * anyone, not all of them (NPPD-2107).
 	 *
 	 * @param array $contact Contact data with raw metadata keys.
 	 * @return array Contact data with filtered, prefixed metadata.
@@ -1551,10 +1508,9 @@ abstract class Integration {
 			}
 			$by_raw[ $definition['raw_key'] ] = $definition;
 			$by_name[ $definition['name'] ]   = $definition;
-			// An equivalent-group id accepts its v1 counterparts' raw keys as
-			// input aliases: callers still hand-build contacts with legacy raw
-			// keys (the deletion connector passes `account`), and the values
-			// are identical by declaration — only the key spelling differs.
+			// v1 counterparts' raw keys alias to the equivalent v2 id too:
+			// callers still hand-build legacy keys (the deletion connector
+			// passes `account`), and both resolve to the same value.
 			foreach ( Sync\Field_Registry::get_equivalent_input_raw_keys( $id ) as $alias_raw_key ) {
 				if ( ! isset( $by_raw[ $alias_raw_key ] ) ) {
 					$by_raw[ $alias_raw_key ] = $definition;

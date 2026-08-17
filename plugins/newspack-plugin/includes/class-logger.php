@@ -71,10 +71,9 @@ class Logger {
 	/**
 	 * Log a data payload, honoring the `NEWSPACK_LOG_LEVEL` payload threshold.
 	 *
-	 * Payloads are only emitted at level 3+ (see log()). Use this instead of
-	 * log() whenever the logged value is the data itself — especially reader
-	 * contact data, which carries PII — so a site running at the common
-	 * level 1 or 2 gets the surrounding summary lines without the payload.
+	 * Use instead of log() when the value itself is the data (e.g. reader
+	 * contact data, which carries PII), so lower log levels get the summary
+	 * lines without the payload.
 	 *
 	 * @param mixed  $payload The payload to log.
 	 * @param string $header  Log message header.

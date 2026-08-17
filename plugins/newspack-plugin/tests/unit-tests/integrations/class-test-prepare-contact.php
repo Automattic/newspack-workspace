@@ -87,11 +87,9 @@ class Test_Prepare_Contact extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * The NPPD-2107 regression: with the ESP integration narrowed to a single
-	 * field, a second integration that never saved an Outbound selection of
-	 * its own must push that same single field — not the full default set. The
-	 * live bug was an ESP narrowed to Account-only while ActiveCampaign still
-	 * pushed `NP_Total Paid`.
+	 * The NPPD-2107 regression: a second integration with no Outbound
+	 * selection of its own must inherit and push only the ESP's selection,
+	 * not the full default set.
 	 */
 	public function test_never_configured_integration_pushes_only_inherited_esp_fields() {
 
@@ -460,12 +458,9 @@ class Test_Prepare_Contact extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * Test the prefixed-input contract: a prefixed key unknown to the
-	 * registry passes through (it is indistinguishable from an
-	 * explicitly-injected custom field, which must keep reaching the
-	 * provider), while a prefixed key naming a registered field the
-	 * integration has not enabled is dropped, respecting the
-	 * per-integration selection.
+	 * A prefixed key unknown to the registry passes through (indistinguishable
+	 * from an injected custom field), while a prefixed key naming a
+	 * registered-but-disabled field is dropped.
 	 */
 	public function test_already_prefixed_keys_follow_registry_contract() {
 
@@ -566,14 +561,10 @@ class Test_Prepare_Contact extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * Registration Page's equivalence spans two legacy raw keys, not one:
-	 * the direct `registration_page` enrichment and the event-time
-	 * `current_page_url` (see
-	 * Test_Field_Registry::test_equivalence_spans_multiple_legacy_raw_keys).
-	 * This pins the second alias at the payload level, the same way
-	 * test_equivalent_id_accepts_legacy_raw_key_input pins Account's single
-	 * one — a hand-built contact using the event-time key must keep syncing
-	 * once only the v2 twin is enabled.
+	 * Registration Page's equivalence spans two legacy raw keys
+	 * (`registration_page` and `current_page_url`): a hand-built contact
+	 * using the event-time key must keep syncing once only the v2 twin is
+	 * enabled.
 	 */
 	public function test_equivalent_id_accepts_second_legacy_raw_key_input() {
 		$this->integration->update_enabled_outgoing_fields( [ 'v2:Registration_Page' ] );
@@ -593,20 +584,9 @@ class Test_Prepare_Contact extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * A value-equivalent pair's v1 id must emit under the shared canonical ESP
-	 * name, un-upgraded, and the pair must emit ONE field rather than two.
-	 *
-	 * This is what lets the equivalence upgrade stay a write-path behavior:
-	 * read paths that skip it (the legacy-global branch of
-	 * get_inherited_outgoing_field_ids(), a selection stored before the upgrade
-	 * existed) can surface either id of a pair, or both. prepare_contact()
-	 * builds its raw-key/name lookup from Field_Registry::get_definition() per
-	 * id, and a pair's two definitions share the same 'name' by construction —
-	 * so either id, or both, resolves the 'account' raw key to 'Account'.
-	 *
-	 * Stored directly: a save would upgrade the v1 id to its v2 twin, and an
-	 * option-less read either seeds or derives a single version's ids, so
-	 * neither route can produce the mixed pair this has to cover.
+	 * A value-equivalent pair's v1 id must still emit under the shared
+	 * canonical ESP name, un-upgraded, and the pair must emit ONE field
+	 * rather than two.
 	 */
 	public function test_unupgraded_default_id_still_emits_canonical_name() {
 
@@ -642,16 +622,10 @@ class Test_Prepare_Contact extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * What dissolving the name conflicts buys: both versions of a
-	 * changed-meaning field can be enabled at once and each reaches the
-	 * provider as its own ESP field. "Last Payment Amount" is every payment
-	 * including donations; "Last Subscription Payment Amount" is only the
-	 * current non-donation subscription — a publisher mid-migration wants both,
-	 * and under the old pick-one rule could only have had one.
-	 *
-	 * Stored directly rather than through update_enabled_outgoing_fields(),
-	 * which drops fields whose class is unavailable — both of these are
-	 * WooCommerce-gated and the test environment has no WooCommerce.
+	 * Both versions of a changed-meaning field ("Last Payment Amount" counts
+	 * every payment including donations; "Last Subscription Payment Amount"
+	 * only the current subscription) can be enabled at once, each reaching
+	 * the provider as its own ESP field.
 	 */
 	public function test_both_versions_of_a_renamed_field_reach_the_provider() {
 		\update_option(
