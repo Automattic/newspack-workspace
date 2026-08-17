@@ -52,9 +52,12 @@ describe( 'gate.js preview-param wiring', () => {
 		expect( () => require( './gate' ) ).not.toThrow();
 		expect( warnSpy ).toHaveBeenCalled();
 		// Assert the gate actually initialised rather than inferring it from module
-		// evaluation completing: gate.js pushes onto newspackRAS on the gate path, so
-		// this fails if someone ever moves that registration above the propagation
-		// block — the arrangement this test exists to protect.
+		// evaluation completing. The assertion above already catches the try/catch
+		// being deleted outright, since that lets the throw escape require(). What
+		// only this line catches is the gate's own registration being folded *inside*
+		// the propagation try block: then require() still succeeds, the warning still
+		// fires, and nothing but an empty newspackRAS reveals that the gate never
+		// initialised.
 		expect( window.newspackRAS.length ).toBeGreaterThan( 0 );
 	} );
 } );

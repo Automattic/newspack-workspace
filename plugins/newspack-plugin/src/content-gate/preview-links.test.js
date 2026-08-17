@@ -127,6 +127,26 @@ describe( 'propagateGatePreviewParams', () => {
 			expect( hrefs() ).toEqual( [ `${ window.location.origin }/other/?ngp_id=7` ] );
 		} );
 
+		it( 'leaves an opaque-path URL alone rather than flattening it to a page URL', () => {
+			setSearch( '?ngp_id=7' );
+			// A blob URL reports its inner origin, so it passes the origin test; the
+			// shape logic would turn it into an ordinary page URL and kill the link.
+			setLinks( `<a href="blob:${ window.location.origin }/abc-123">x</a>` );
+
+			propagateGatePreviewParams();
+
+			expect( hrefs() ).toEqual( [ `blob:${ window.location.origin }/abc-123` ] );
+		} );
+
+		it( 'promotes a same-origin protocol-relative href, the one shape it cannot keep', () => {
+			setSearch( '?ngp_id=7' );
+			setLinks( `<a href="//${ window.location.host }/other/">x</a>` );
+
+			propagateGatePreviewParams();
+
+			expect( hrefs() ).toEqual( [ `${ window.location.origin }/other/?ngp_id=7` ] );
+		} );
+
 		it( 'resolves a path-relative href against the document base', () => {
 			setSearch( '?ngp_id=7' );
 			setLinks( '<a href="sub/page/">x</a>' );

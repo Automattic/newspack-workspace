@@ -558,7 +558,7 @@ class Test_Gate_Preview extends \WP_UnitTestCase {
 		$this->go_to( get_category_link( self::factory()->category->create() ) );
 		$this->set_query_param( Gate_Preview::PREVIEW_QUERY_PARAM, $this->layout_id );
 
-		$context = Content_Gate::get_frontend_script_context();
+		$context = Content_Gate::get_frontend_script_conditions();
 
 		$this->assertFalse( $context['renders_gate'], 'No gate renders on an archive.' );
 		$this->assertTrue( $context['is_preview'], 'The request is still a preview.' );
@@ -572,7 +572,7 @@ class Test_Gate_Preview extends \WP_UnitTestCase {
 	public function test_script_does_not_load_on_an_ordinary_archive() {
 		$this->go_to( get_category_link( self::factory()->category->create() ) );
 
-		$context = Content_Gate::get_frontend_script_context();
+		$context = Content_Gate::get_frontend_script_conditions();
 
 		$this->assertFalse( $context['is_preview'], 'Not a preview request.' );
 		$this->assertFalse( $context['enqueue'], 'Nothing to enqueue on an ordinary archive.' );
@@ -594,8 +594,8 @@ class Test_Gate_Preview extends \WP_UnitTestCase {
 
 		$this->assertTrue( Gate_Preview::is_preview_request(), 'Guard: the preview really is active here.' );
 
-		// A post whose ID collides with the queried term ID is the case that bit:
-		// it has nothing to do with the preview.
+		// An id equal to the queried term id is the case that bit: nothing is created
+		// at that id here, because the filter never loads the post — it only compares.
 		$this->assertFalse(
 			Gate_Preview::filter_is_post_restricted( false, $term_id ),
 			'A post sharing an ID with the queried term is not part of the preview.'

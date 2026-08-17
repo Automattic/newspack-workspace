@@ -76,9 +76,17 @@ export function propagateGatePreviewParams() {
 			return;
 		}
 
-		// Off-site links, and schemes like mailto: and tel: that resolve to a null
-		// origin, are none of our business. Matching on origin rather than on the
-		// site URL means a subdirectory install also stamps links that sit outside
+		// Only http(s). An opaque-path URL like `blob:https://site/uuid` reports the
+		// inner origin, so it passes the origin test, but it has no meaningful path
+		// or query — the shape logic below would rewrite it into an ordinary page URL
+		// and destroy the link. Restricting the scheme keeps the rewrite to the two
+		// the shape logic was written for.
+		if ( 'http:' !== url.protocol && 'https:' !== url.protocol ) {
+			return;
+		}
+
+		// Off-site links are none of our business. Matching on origin rather than on
+		// the site URL means a subdirectory install also stamps links that sit outside
 		// WordPress; that is deliberate, because it is what makes multibranded
 		// sites work, where brands are same-origin paths. A stray `ngp_id` on such
 		// a page resolves to no layout and does nothing.
@@ -92,12 +100,14 @@ export function propagateGatePreviewParams() {
 		// show what production does. Re-serializing through URL() turns a relative
 		// href absolute, which breaks exactly the theme code a preview should
 		// exercise: `a[href^="/"]` selectors, "current item" scripts comparing an
-		// href against location.pathname. Only the query is ours to change. Two
+		// href against location.pathname. Only the query is ours to change. Three
 		// residual differences we accept: a path-relative href comes back
 		// root-relative, since resolving it is what told us where it points, and
 		// URLSearchParams re-encodes an existing query (`%20` to `+`) — forms
 		// servers treat as equivalent, and unpicking it would mean editing the
-		// query string by hand.
+		// query string by hand. A same-origin protocol-relative href also comes back
+		// scheme-absolute — the one shape we do not preserve, because telling it
+		// apart needs a third branch and it is vanishingly rare in theme output.
 		const isAbsolute = /^(?:[a-z][a-z0-9+.-]*:)?\/\//i.test( href );
 		anchor.setAttribute( 'href', isAbsolute ? url.toString() : url.pathname + url.search + url.hash );
 	} );

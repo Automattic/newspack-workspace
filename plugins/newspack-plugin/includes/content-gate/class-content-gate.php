@@ -772,8 +772,11 @@ class Content_Gate {
 	 *
 	 * @return array{enqueue: bool, renders_gate: bool, is_preview: bool}
 	 */
-	public static function get_frontend_script_context() {
-		$renders_gate = self::has_gate() && is_singular() && self::is_post_restricted();
+	public static function get_frontend_script_conditions() {
+		// is_singular() first, matching enqueue_content_banner_assets(): during a
+		// preview on an archive, has_gate() would otherwise scan the gate list and have
+		// the result thrown away by the very next operand.
+		$renders_gate = is_singular() && self::has_gate() && self::is_post_restricted();
 		$is_preview   = Content_Gate\Gate_Preview::is_preview_request();
 		return [
 			'enqueue'      => $renders_gate || $is_preview,
@@ -788,7 +791,7 @@ class Content_Gate {
 	public static function enqueue_scripts() {
 		self::enqueue_content_banner_assets();
 
-		$context      = self::get_frontend_script_context();
+		$context      = self::get_frontend_script_conditions();
 		$renders_gate = $context['renders_gate'];
 		$is_preview   = $context['is_preview'];
 
@@ -824,7 +827,7 @@ class Content_Gate {
 	 *
 	 * Split out from enqueue_scripts() so the payload is assertable without
 	 * touching the filesystem for asset versions. Whether the script loads at all
-	 * is decided in get_frontend_script_context().
+	 * is decided in get_frontend_script_conditions().
 	 *
 	 * The two keys are independently optional: gate.js reads `metadata`, and
 	 * preview-links.js reads `preview_param_names`. A preview on a view where no

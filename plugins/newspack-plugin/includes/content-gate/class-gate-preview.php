@@ -96,10 +96,11 @@ class Gate_Preview {
 	 * that to a reader, whose links would then be rewritten to carry `ngp_id` —
 	 * shareable and crawlable. The sibling per-user gate paths guard the same way.
 	 *
-	 * Returns whether it acted. The action discards the value; it is there because
-	 * both side effects are unobservable under PHPUnit — nocache_headers() bails on
-	 * headers_sent() and batcache_cancel() is not loaded — which would otherwise
-	 * leave the capability gate untestable.
+	 * Returns whether it acted, so a test can assert that this consults the preview
+	 * gate rather than firing on every request. The action discards the value. Both
+	 * side effects are unobservable under PHPUnit: batcache_cancel() is not loaded,
+	 * and nocache_headers() bails on headers_sent(), which is true by the time any
+	 * test body runs because the WordPress test bootstrap has already printed.
 	 *
 	 * @return bool Whether cache prevention was applied.
 	 */
@@ -399,25 +400,35 @@ class Gate_Preview {
 		if ( ! self::is_preview_request() ) {
 			return $restricted;
 		}
-		// The queried object has to be an actual post. A preview session now spans
-		// archive, home and search views, where get_queried_object_id() returns a
-		// term or user id instead — and those ids share no numbering with post ids,
-		// so comparing them would force-restrict whichever unrelated post happened
-		// to carry the same number. Testing the type rather than is_singular() ties
-		// the guard to the thing being compared.
+		// Both halves are load-bearing. The type check is what makes the comparison
+		// below sound: a preview session now spans archive views, where
+		// get_queried_object_id() returns a term id (category, tag, taxonomy) or a
+		// user id (author) — numbering that shares nothing with post ids, so
+		// comparing them force-restricted whichever unrelated post carried the same
+		// number. is_singular() then confines the forcing to views that actually
+		// render one post: the blog posts index on a static-front-page site, and a
+		// 404 whose pagename matched an unpublished page, both hand back a WP_Post
+		// while not being singular. Every render path already guards on
+		// is_singular(), so those two are inert today — this keeps them that way
+		// without relying on callers to stay careful.
+		if ( ! is_singular() ) {
+			return $restricted;
+		}
 		$queried = get_queried_object();
 		if ( ! $queried instanceof \WP_Post ) {
 			return $restricted;
 		}
 
-		// Force only the queried (previewed) post. An empty $post_id resolves to
-		// the queried post so in-loop calls still gate, but an explicit, unrelated
-		// post id is never force-restricted.
+		// Force only the queried (previewed) post. An empty $post_id means the call
+		// came from outside the loop — Content_Gate::is_post_restricted() substitutes
+		// get_the_ID() before applying this filter, so in-loop calls always arrive
+		// with an explicit id — and an explicit, unrelated post id is never forced.
 		//
 		// Deliberate consequence: because this forces restriction, a preview session
 		// can render a gate on singular pages the ordinary path skips.
 		// Content_Gate::restrict_post() bails on the privacy policy, account, terms,
-		// cart and checkout pages; Content_Gate::render_overlay_gate() has no such
+		// accessibility statement, cart and checkout pages, among others;
+		// Content_Gate::render_overlay_gate() has no such
 		// bails, so previewing an overlay layout and navigating to My Account shows
 		// the overlay there. That is wanted: the editor asked to see this layout, and
 		// a preview that silently declined to render on some pages would be a worse
