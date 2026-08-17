@@ -31,6 +31,37 @@ class Premium_Newsletters_Verify {
 	const NEWSLETTER_LIST_CPT_FALLBACK = 'newspack_nl_list';
 
 	/**
+	 * A gate whose population the batch cap cut short mid-walk.
+	 */
+	const COVERAGE_TRUNCATED = 'truncated';
+
+	/**
+	 * A gate never walked at all, because an earlier gate had already spent the
+	 * batch cap.
+	 */
+	const COVERAGE_CAP_EXHAUSTED = 'cap_exhausted';
+
+	/**
+	 * A verifiable gate whose population query returned nobody.
+	 */
+	const COVERAGE_EMPTY_POPULATION = 'empty_population';
+
+	/**
+	 * Why each incompleteness reason means the run cannot be read as a pass.
+	 *
+	 * Keyed by the COVERAGE_* reason constants; each value is a sprintf template
+	 * taking the gate title and the gate ID, in that order. Adding a reason means
+	 * adding a constant and an entry here — describe_coverage_gaps() renders
+	 * whatever is in this map, and coverage_is_complete() does not care which
+	 * reason it is looking at.
+	 */
+	const COVERAGE_REASON_MESSAGES = [
+		self::COVERAGE_TRUNCATED        => '"%1$s" (gate %2$d): --max-batches stopped this gate part-way, so some of its readers were never checked.',
+		self::COVERAGE_CAP_EXHAUSTED    => '"%1$s" (gate %2$d): skipped entirely, because an earlier gate had already spent --max-batches.',
+		self::COVERAGE_EMPTY_POPULATION => '"%1$s" (gate %2$d): no reader holds or has held its products, so nobody was checked. A gate whose products no subscription can match yields an empty population and a clean-looking run, which is indistinguishable from a gate that is genuinely unused.',
+	];
+
+	/**
 	 * Compare premium newsletter gates against the ESP and report the difference.
 	 *
 	 * For each gate with an active paid access mode, collects every reader who
@@ -43,8 +74,20 @@ class Premium_Newsletters_Verify {
 	 * reads as unrestricted and the comparison is meaningless — the command
 	 * refuses rather than producing a misleading clean result.
 	 *
-	 * Exits non-zero while any leak or unresolved row remains, so a cutover script
-	 * can gate on it.
+	 * Exits non-zero while any leak or unresolved row remains, and while the run's
+	 * coverage is incomplete, so a cutover script can gate on it. A clean result
+	 * over a population the run never finished walking is not evidence of anything,
+	 * and must not read the same as a full pass.
+	 *
+	 * What a passing run claims is bounded by that population: readers who hold or
+	 * have held one of a gate's products. It cannot see a reader who satisfied the
+	 * source Memberships plan by buying a non-subscription product (the migration
+	 * writes those product IDs into a `subscription` access rule, which
+	 * wcs_get_subscriptions() can never match), one who joined a list before it
+	 * became premium, or one whose membership was granted by hand. Widening the
+	 * population would not reach them either — there is no provider-agnostic bulk
+	 * read of ESP list membership to widen it with — so the terminal message names
+	 * the population it checked rather than claiming the site as a whole.
 	 *
 	 * Each reader costs two ESP calls, not one: a contact lookup before the list
 	 * read, because every shipped provider's list read swallows a failed request
@@ -169,24 +212,19 @@ class Premium_Newsletters_Verify {
 		// whole run as its help text promises rather than resetting per gate.
 		$batches = 0;
 
-		$rows = [];
+		$rows     = [];
+		$coverage = self::new_coverage();
 		foreach ( $partitioned['verifiable'] as $gate ) {
-			$rows = array_merge( $rows, self::verify_gate( $gate, $auto_signup, $live, $batch_size, $max_batches, $batches ) );
+			$rows = array_merge( $rows, self::verify_gate( $gate, $auto_signup, $live, $batch_size, $max_batches, $batches, $coverage ) );
 		}
 
 		$summary = self::summarize_rows( $rows );
-		self::report( $rows, $summary, $auto_signup, $live );
+		self::report( $rows, $summary, $coverage, $auto_signup, $live );
 
-		if ( self::verification_failed( $summary ) ) {
-			WP_CLI::error(
-				sprintf(
-					'Verification failed: %d leak(s), %d unresolved. Do not treat this site as reconciled.',
-					$summary['leak'],
-					$summary['unresolved']
-				)
-			);
+		if ( self::verification_failed( $summary, $coverage ) ) {
+			WP_CLI::error( self::describe_failure( $summary, $coverage ) );
 		}
-		WP_CLI::success( 'Verification passed: no reader is on a premium list they are not entitled to.' );
+		WP_CLI::success( self::describe_success( $coverage ) );
 	}
 
 	/**
@@ -277,19 +315,201 @@ class Premium_Newsletters_Verify {
 	}
 
 	/**
-	 * Whether the run should report failure.
+	 * An empty coverage record, before any gate has been walked.
 	 *
-	 * Leaks fail because they are the defect this command looks for. Unresolved
-	 * rows fail because an unread contact is not evidence of safety — without
-	 * this, a provider outage would report a site as ready to flip. Gaps do not
-	 * fail: nothing is leaking, and this command never writes an addition.
+	 * Coverage answers a question the status counts cannot: how much of the site
+	 * this run actually looked at. Without it a run that checked nobody and a run
+	 * that checked everyone and found nothing produce the same zero counts and the
+	 * same exit status, which is the failure mode this record exists to end.
 	 *
-	 * @param array<string,int> $summary Counts from summarize_rows().
+	 * Gate and reader IDs are held as array keys rather than values so a reader
+	 * appearing under two gates is counted once. The counts are what the terminal
+	 * message quotes, so they have to be distinct readers to mean anything.
+	 *
+	 * @return array{gate_ids: array<int,bool>, reader_ids: array<int,bool>, incomplete: array[]}
+	 */
+	private static function new_coverage(): array {
+		return [
+			'gate_ids'   => [],
+			'reader_ids' => [],
+			'incomplete' => [],
+		];
+	}
+
+	/**
+	 * Record that a gate's population is being walked.
+	 *
+	 * Called when the walk starts, not when it finishes: a gate the batch cap cuts
+	 * short was still partly checked, and the readers it did reach are real
+	 * coverage. What makes that run fail is the incompleteness entry recorded
+	 * alongside, not the absence of the gate here.
+	 *
+	 * @param array $coverage Coverage record.
+	 * @param array $gate     Gate array carrying an 'id'.
+	 *
+	 * @return array The coverage record with this gate counted.
+	 */
+	private static function with_gate_walked( array $coverage, array $gate ): array {
+		$coverage['gate_ids'][ (int) ( $gate['id'] ?? 0 ) ] = true;
+		return $coverage;
+	}
+
+	/**
+	 * Record that one reader was checked.
+	 *
+	 * @param array $coverage Coverage record.
+	 * @param int   $user_id  The reader's user ID.
+	 *
+	 * @return array The coverage record with this reader counted.
+	 */
+	private static function with_reader_checked( array $coverage, int $user_id ): array {
+		$coverage['reader_ids'][ $user_id ] = true;
+		return $coverage;
+	}
+
+	/**
+	 * Record that a gate was not fully checked, and why.
+	 *
+	 * @param array  $coverage Coverage record.
+	 * @param string $reason   One of the COVERAGE_* reason constants.
+	 * @param array  $gate     Gate array carrying 'id' and 'title'.
+	 *
+	 * @return array The coverage record with this gap noted.
+	 */
+	private static function with_incomplete_gate( array $coverage, string $reason, array $gate ): array {
+		$coverage['incomplete'][] = [
+			'reason'  => $reason,
+			'gate'    => (string) ( $gate['title'] ?? '' ),
+			'gate_id' => (int) ( $gate['id'] ?? 0 ),
+		];
+		return $coverage;
+	}
+
+	/**
+	 * Whether every verifiable gate had its whole population walked.
+	 *
+	 * Deliberately not inferred from the counts. "Zero readers checked" can mean a
+	 * site with no paid subscribers or a run that never got started, and no
+	 * arithmetic over the status buckets tells those apart — only a recorded reason
+	 * does.
+	 *
+	 * @param array $coverage Coverage record.
 	 *
 	 * @return bool
 	 */
-	private static function verification_failed( array $summary ): bool {
-		return 0 < ( $summary['leak'] ?? 0 ) || 0 < ( $summary['unresolved'] ?? 0 );
+	private static function coverage_is_complete( array $coverage ): bool {
+		return empty( $coverage['incomplete'] );
+	}
+
+	/**
+	 * One human-readable line per gap in the run's coverage.
+	 *
+	 * A reason with no entry in COVERAGE_REASON_MESSAGES still produces a line
+	 * naming the gate and the raw reason, so a reason added without a message is
+	 * visible in the output rather than silently dropped from it.
+	 *
+	 * @param array $coverage Coverage record.
+	 *
+	 * @return string[] One line per incomplete gate, in the order they were recorded.
+	 */
+	private static function describe_coverage_gaps( array $coverage ): array {
+		$lines = [];
+		foreach ( $coverage['incomplete'] ?? [] as $gap ) {
+			$reason   = $gap['reason'] ?? '';
+			$template = self::COVERAGE_REASON_MESSAGES[ $reason ] ?? '"%1$s" (gate %2$d): not fully checked (' . $reason . ').';
+			$lines[]  = sprintf( $template, $gap['gate'] ?? '', (int) ( $gap['gate_id'] ?? 0 ) );
+		}
+		return $lines;
+	}
+
+	/**
+	 * The population this run actually checked, as a phrase.
+	 *
+	 * @param array $coverage Coverage record.
+	 *
+	 * @return string For example "7 reader(s) across 2 gate(s)".
+	 */
+	private static function describe_checked_scope( array $coverage ): string {
+		return sprintf(
+			'%d reader(s) across %d gate(s)',
+			count( $coverage['reader_ids'] ?? [] ),
+			count( $coverage['gate_ids'] ?? [] )
+		);
+	}
+
+	/**
+	 * Whether the run should report failure.
+	 *
+	 * Leaks fail because they are the defect this command looks for. Unresolved
+	 * rows fail because an unread contact is not evidence of safety — without this,
+	 * a provider outage would report a site as ready to flip. Incomplete coverage
+	 * fails for the same reason one step earlier: a population that was never
+	 * walked cannot have been found clean, and a truncated run that exits 0 tells a
+	 * cutover script the opposite of the truth.
+	 *
+	 * Gaps do not fail: nothing is leaking, and this command never writes an
+	 * addition. Removals do not fail either — a removed leak is a fixed leak, and a
+	 * --live run that removed everything it found is exactly the run an operator is
+	 * trying to reach.
+	 *
+	 * @param array<string,int> $summary  Counts from summarize_rows().
+	 * @param array             $coverage Coverage record.
+	 *
+	 * @return bool
+	 */
+	private static function verification_failed( array $summary, array $coverage ): bool {
+		return 0 < ( $summary['leak'] ?? 0 )
+			|| 0 < ( $summary['unresolved'] ?? 0 )
+			|| ! self::coverage_is_complete( $coverage );
+	}
+
+	/**
+	 * The message a failing run ends on.
+	 *
+	 * Only the reasons that actually apply are named, so a run that failed purely
+	 * on coverage does not also report "0 leak(s)" and invite the reader to
+	 * conclude nothing was wrong.
+	 *
+	 * @param array<string,int> $summary  Counts from summarize_rows().
+	 * @param array             $coverage Coverage record.
+	 *
+	 * @return string
+	 */
+	private static function describe_failure( array $summary, array $coverage ): string {
+		$reasons = [];
+		if ( 0 < ( $summary['leak'] ?? 0 ) ) {
+			$reasons[] = sprintf( '%d leak(s)', $summary['leak'] );
+		}
+		if ( 0 < ( $summary['unresolved'] ?? 0 ) ) {
+			$reasons[] = sprintf( '%d unresolved row(s)', $summary['unresolved'] );
+		}
+		if ( ! self::coverage_is_complete( $coverage ) ) {
+			$reasons[] = sprintf( '%d gate(s) not fully checked', count( $coverage['incomplete'] ) );
+		}
+		return sprintf(
+			'Verification failed: %s. Checked %s. Do not treat this site as reconciled.',
+			implode( ', ', $reasons ),
+			self::describe_checked_scope( $coverage )
+		);
+	}
+
+	/**
+	 * The message a passing run ends on.
+	 *
+	 * Scoped to the population the run walked, on purpose. The command can only
+	 * enumerate readers holding a gate's products, and several reachable
+	 * populations sit outside that — see the command docblock — so a claim about
+	 * "no reader" would assert more than the evidence carries.
+	 *
+	 * @param array $coverage Coverage record.
+	 *
+	 * @return string
+	 */
+	private static function describe_success( array $coverage ): string {
+		return sprintf(
+			'Verification passed: of the %s checked, none is on a premium list they are not entitled to.',
+			self::describe_checked_scope( $coverage )
+		);
 	}
 
 	/**
@@ -548,25 +768,38 @@ class Premium_Newsletters_Verify {
 	 * @param int   $batches     Batches completed so far in this run, by reference. Shared across
 	 *                           every gate's call so the cap in $max_batches means the whole run,
 	 *                           not this gate alone.
+	 * @param array $coverage    Coverage record, by reference. Shared across every gate's call so
+	 *                           the run's terminal message can name the whole population it
+	 *                           checked, and fail when any part of it went unwalked.
 	 *
 	 * @return array[] Result rows.
 	 */
-	private static function verify_gate( array $gate, bool $auto_signup, bool $live, int $batch_size, int $max_batches, int &$batches ): array {
+	private static function verify_gate( array $gate, bool $auto_signup, bool $live, int $batch_size, int $max_batches, int &$batches, array &$coverage ): array {
 		$list_ids = self::restricted_list_ids_for_gate( $gate );
 		if ( empty( $list_ids ) ) {
+			// Not a coverage gap. This gate restricts no newsletter list at all — it
+			// is a paid gate over some other kind of content, which get_gates()
+			// returns alongside the newsletter ones — so it contributes no premium
+			// list for a reader to be wrongly subscribed to, and there is nothing
+			// here for the run's claim to be missing. Said out loud rather than
+			// skipped in silence, so the operator can see it was considered.
+			WP_CLI::line( sprintf( '"%s" (gate %d): restricts no newsletter list, so it puts no reader on a premium list. Nothing to check.', $gate['title'], $gate['id'] ) );
 			return [];
 		}
 		if ( $max_batches && $batches >= $max_batches ) {
 			WP_CLI::warning( sprintf( '"%s" (gate %d): skipped entirely because --max-batches was already reached by an earlier gate.', $gate['title'], $gate['id'] ) );
+			$coverage = self::with_incomplete_gate( $coverage, self::COVERAGE_CAP_EXHAUSTED, $gate );
 			return [];
 		}
 		$population = self::population_for_gate( $gate );
 		if ( empty( $population ) ) {
-			WP_CLI::line( sprintf( '"%s" (gate %d): no reader holds or has held its products, so there is nobody to check.', $gate['title'], $gate['id'] ) );
+			WP_CLI::warning( sprintf( '"%s" (gate %d): no reader holds or has held its products, so there is nobody to check.', $gate['title'], $gate['id'] ) );
+			$coverage = self::with_incomplete_gate( $coverage, self::COVERAGE_EMPTY_POPULATION, $gate );
 			return [];
 		}
 
 		WP_CLI::line( sprintf( '"%s" (gate %d): checking %d reader(s) against %d list(s)…', $gate['title'], $gate['id'], count( $population ), count( $list_ids ) ) );
+		$coverage = self::with_gate_walked( $coverage, $gate );
 
 		// Resolved once per gate rather than once per reader: a list ID's public ID
 		// does not vary by reader, and every reader checks the same $list_ids.
@@ -579,7 +812,8 @@ class Premium_Newsletters_Verify {
 		$in_batch          = 0;
 		$population_count  = count( $population );
 		foreach ( $population as $index => $user_id ) {
-			$user = \get_user_by( 'id', $user_id );
+			$coverage = self::with_reader_checked( $coverage, (int) $user_id );
+			$user     = \get_user_by( 'id', $user_id );
 			if ( ! $user ) {
 				// The subscription still names a list to check, but there is no WP_User
 				// to build a make_row() from — no email, and nothing to ask the ESP
@@ -743,12 +977,13 @@ class Premium_Newsletters_Verify {
 	 *
 	 * @param array[]           $rows        Result rows.
 	 * @param array<string,int> $summary     Counts from summarize_rows().
+	 * @param array             $coverage    Coverage record.
 	 * @param bool              $auto_signup Whether auto-signup is on.
 	 * @param bool              $live        Whether removals were written.
 	 *
 	 * @return void
 	 */
-	private static function report( array $rows, array $summary, bool $auto_signup, bool $live ): void {
+	private static function report( array $rows, array $summary, array $coverage, bool $auto_signup, bool $live ): void {
 		WP_CLI::line( '' );
 		WP_CLI::line( $live ? '=== VERIFICATION SUMMARY (--live: leaks removed) ===' : '=== VERIFICATION SUMMARY (report only) ===' );
 		WP_CLI::line( '' );
@@ -786,6 +1021,18 @@ class Premium_Newsletters_Verify {
 		}
 
 		WP_CLI::line( '' );
+		WP_CLI::line( sprintf( 'Coverage: %s.', self::describe_checked_scope( $coverage ) ) );
+		WP_CLI::line( 'This covers readers who hold or have held a gate\'s products, and nobody else. A reader who satisfied the source Memberships plan with a non-subscription product, one who joined a list before it became premium, and one whose membership was granted by hand are all restricted after cutover and all invisible here — no provider-agnostic bulk read of ESP list membership exists to reach them.' );
+
+		$coverage_gaps = self::describe_coverage_gaps( $coverage );
+		if ( ! empty( $coverage_gaps ) ) {
+			WP_CLI::line( '' );
+			WP_CLI::line( 'Coverage is incomplete, so this run is not a pass whatever it found:' );
+			foreach ( $coverage_gaps as $gap_line ) {
+				WP_CLI::line( '  - ' . $gap_line );
+			}
+		}
+
 		if ( ! $auto_signup ) {
 			WP_CLI::line( 'Auto-signup is off, so an entitled reader who is not subscribed is counted as "not asserted" rather than a gap: they opt in themselves.' );
 		}
