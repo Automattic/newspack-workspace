@@ -42,6 +42,13 @@ jobs:
   release:
     name: Release
     runs-on: ubuntu-latest
+    # Dependent jobs must tell "released" from "ran and released nothing".
+    # post-release.sh identifies what the release came from via `git log --skip
+    # 1`, assuming an automated release commit at the tip. A no-release run
+    # creates none, so that read lands a commit early, and a stale `Merge ...
+    # alpha` sitting there sends it down the path that force-pushes alpha.
+    outputs:
+      release_needed: ${{ steps.plan.outputs.release_needed }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -77,8 +84,12 @@ jobs:
           # would silently skip a real release, the one outcome we must avoid.
           set +e
           pnpm exec multi-semantic-release --dry-run --sequential-init 2>&1 | tee msr-dryrun.log
-          dryrun_status=${PIPESTATUS[0]}
-          tee_status=${PIPESTATUS[1]}
+          # Copy the whole array in one go: PIPESTATUS is rebuilt after every
+          # command, and an assignment is a command, so reading [1] on the line
+          # after reading [0] returns empty and the tee check below never fires.
+          pipe_status=("${PIPESTATUS[@]}")
+          dryrun_status=${pipe_status[0]}
+          tee_status=${pipe_status[1]}
           set -e
           if [ "$dryrun_status" -ne 0 ]; then
             echo "multi-semantic-release dry-run failed (exit $dryrun_status)"
@@ -97,11 +108,34 @@ jobs:
           # X" for an existing package, but "There is no previous release, the
           # next release version is X" for a package's first-ever release --
           # missing the latter would silently skip that release.
-          grep -qi 'the next release version is' msr-dryrun.log
-          grep_status=$?
+          # `|| grep_status=$?` rather than a bare call: under `set -e` a bare grep
+          # that matches nothing exits 1 and kills the script, so the "no release
+          # needed" branch below is never reached. Exit 2 (a real grep error) still
+          # falls through to the failure branch.
+          grep_status=0
+          grep -qi 'the next release version is' msr-dryrun.log || grep_status=$?
           if [ "$grep_status" -eq 0 ]; then
             echo "release_needed=true" >> "$GITHUB_OUTPUT"
           elif [ "$grep_status" -eq 1 ]; then
+            # Absence of the version phrase is weak evidence on its own: a
+            # wording change upstream would read as "nothing to release" and
+            # silently skip a real one. Require multi-semantic-release's own
+            # zero-count line to corroborate before trusting the skip.
+            zero_status=0
+            # msr logs `Released 0 of 18 packages` when nothing is due and `Released 1
+            # of 18 packages` when something is, so the count is real corroboration.
+            # Matched loosely so a cosmetic reformat cannot redden a no-op push.
+            grep -qiE 'released +0 +of +[0-9]+ +packages?' msr-dryrun.log || zero_status=$?
+            if [ "$zero_status" -eq 1 ]; then
+              echo "Neither a release version nor a zero-release marker found; the dry-run output may have changed."
+              # Whole log: this fires when the shape is unknown, and a tail of a
+              # multi-package run shows only the last package. `|| true` so exit 1 wins.
+              cat msr-dryrun.log || true
+              exit 1
+            elif [ "$zero_status" -ne 0 ]; then
+              echo "Failed to scan the dry-run log for the zero-release marker (grep exit $zero_status)"
+              exit "$zero_status"
+            fi
             echo "release_needed=false" >> "$GITHUB_OUTPUT"
             echo "No package requires a release; skipping build and release."
           else
@@ -279,7 +313,7 @@ jobs:
   # the default branch. Only runs on the release branch (not alpha).
   post-release:
     name: Post-release branch sync
-    if: github.ref == 'refs/heads/release'
+    if: github.ref == 'refs/heads/release' && needs.release.outputs.release_needed == 'true'
     needs: release
     runs-on: ubuntu-latest
     steps:
@@ -300,7 +334,7 @@ jobs:
   # WP.org deploys are plugin-specific and only run on the release branch.
   release-wporg-newsletters:
     name: WP.org / newspack-newsletters
-    if: github.ref == 'refs/heads/release'
+    if: github.ref == 'refs/heads/release' && needs.release.outputs.release_needed == 'true'
     needs: release
     uses: ./.github/workflows/_release-wporg.yml
     with:
@@ -312,7 +346,7 @@ jobs:
 
   release-wporg-scaip:
     name: WP.org / super-cool-ad-inserter
-    if: github.ref == 'refs/heads/release'
+    if: github.ref == 'refs/heads/release' && needs.release.outputs.release_needed == 'true'
     needs: release
     uses: ./.github/workflows/_release-wporg.yml
     with:
@@ -324,7 +358,7 @@ jobs:
 
   release-wporg-rtt:
     name: WP.org / republication-tracker-tool
-    if: github.ref == 'refs/heads/release'
+    if: github.ref == 'refs/heads/release' && needs.release.outputs.release_needed == 'true'
     needs: release
     uses: ./.github/workflows/_release-wporg.yml
     with:
