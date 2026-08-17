@@ -605,8 +605,11 @@ final class Newspack_Popups_Segmentation {
 	}
 
 	/**
-	 * A reader's last-known matching segment IDs, filtered to segments this site
-	 * still ships to the browser.
+	 * A reader's last-known matching segment IDs, filtered to the site's active
+	 * segments — not the narrower set the inserter actually ships to the
+	 * browser (see class-newspack-popups-inserter.php), which also requires
+	 * non-empty criteria. A surplus ID here just matches nothing, so the
+	 * difference is harmless.
 	 *
 	 * The snapshot is client-asserted and only as fresh as the reader's last
 	 * visit — deliberately uncapped, so a dormant reader can be matched on old
@@ -627,6 +630,19 @@ final class Newspack_Popups_Segmentation {
 			return [];
 		}
 
+		// The snapshot is client-asserted (see docblock above), so guard against
+		// shapes strval() would mishandle below: a nested array raises "Array to
+		// string conversion", and strval( true ) is '1', which could alias
+		// segment ID 1. A real segment ID is only ever an int or a numeric
+		// string. Unreachable through the real Reader_Data::get_matched_segments(),
+		// which already filters non-scalars — this is defence in depth.
+		$snapshot = array_filter(
+			$snapshot,
+			function ( $value ) {
+				return is_int( $value ) || is_string( $value );
+			}
+		);
+
 		$active = [];
 		foreach ( self::get_segments( false ) as $segment ) {
 			if ( ! empty( $segment['id'] ) ) {
@@ -638,13 +654,20 @@ final class Newspack_Popups_Segmentation {
 	}
 
 	/**
-	 * Hand the resolved segment IDs to the view script.
+	 * Hand the resolved segment IDs to the view script, or clear a previous
+	 * arrival's handoff when this one resolves nothing.
 	 *
 	 * A session cookie, readable by JavaScript (the view script moves it into
 	 * sessionStorage and deletes it on first read) and named so Batcache does not
 	 * treat it as a cache-bypass signal — see CARRIED_SEGMENTS_COOKIE.
 	 *
-	 * @param string[] $segment_ids Active segment IDs.
+	 * Called unconditionally on every arrival so each one is authoritative. The
+	 * view script deletes the cookie on first read, but on an arrival where that
+	 * script never runs (a page with no prompts, JS disabled), a previous
+	 * arrival's segments would otherwise carry into the next click.
+	 *
+	 * @param string[] $segment_ids Active segment IDs; an empty array clears
+	 *                              the cookie instead of setting it.
 	 */
 	private static function set_carried_segments_cookie( $segment_ids ) {
 		$value = implode( ',', $segment_ids );
@@ -654,7 +677,10 @@ final class Newspack_Popups_Segmentation {
 				self::CARRIED_SEGMENTS_COOKIE,
 				$value,
 				[
-					'expires'  => 0,
+					// An empty resolved set clears the cookie by expiring it in the past,
+					// mirroring the unset( $_COOKIE ) below — see class-magic-link.php and
+					// class-reader-activation.php for the same expire-in-the-past pattern.
+					'expires'  => empty( $segment_ids ) ? time() - YEAR_IN_SECONDS : 0,
 					'path'     => '/',
 					'secure'   => is_ssl(),
 					// Must stay readable by the view script; this is a segmentation
@@ -665,8 +691,12 @@ final class Newspack_Popups_Segmentation {
 			);
 		}
 		// Unconditionally update $_COOKIE so same-request readers (and tests, where
-		// headers are already sent) can see the handoff.
-		$_COOKIE[ self::CARRIED_SEGMENTS_COOKIE ] = $value; // phpcs:ignore WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___COOKIE
+		// headers are already sent) can see the handoff, or its absence.
+		if ( empty( $segment_ids ) ) {
+			unset( $_COOKIE[ self::CARRIED_SEGMENTS_COOKIE ] ); // phpcs:ignore WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___COOKIE
+		} else {
+			$_COOKIE[ self::CARRIED_SEGMENTS_COOKIE ] = $value; // phpcs:ignore WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___COOKIE
+		}
 	}
 
 	/**
@@ -701,13 +731,14 @@ final class Newspack_Popups_Segmentation {
 			return;
 		}
 
-		$raw = sanitize_text_field( wp_unslash( $_GET[ self::ACCOUNT_QUERY_PARAM ] ) ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		$raw         = sanitize_text_field( wp_unslash( $_GET[ self::ACCOUNT_QUERY_PARAM ] ) ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		$segment_ids = [];
 		if ( 1 === preg_match( '/^[1-9][0-9]*$/', $raw ) ) {
 			$segment_ids = self::get_carried_segments_for_account( (int) $raw );
-			if ( ! empty( $segment_ids ) ) {
-				self::set_carried_segments_cookie( $segment_ids );
-			}
 		}
+		// Unconditional so each arrival is authoritative — see
+		// set_carried_segments_cookie()'s docblock.
+		self::set_carried_segments_cookie( $segment_ids );
 
 		// This response carries a per-reader Set-Cookie and must never be stored.
 		if ( function_exists( 'batcache_cancel' ) ) {

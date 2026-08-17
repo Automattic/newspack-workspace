@@ -29,7 +29,8 @@ class SegmentationAccountArrivalTest extends WP_UnitTestCase {
 	private $segment_ids = [];
 
 	/**
-	 * Set up: two active segments and an empty snapshot store.
+	 * Set up: two active segments, one disabled segment, and an empty snapshot
+	 * store.
 	 */
 	public function set_up() {
 		parent::set_up();
@@ -46,8 +47,19 @@ class SegmentationAccountArrivalTest extends WP_UnitTestCase {
 				'configuration' => [],
 			]
 		);
+		// Disabled, not deleted: exercises the `false` argument to get_segments()
+		// in get_carried_segments_for_account(), which a nonexistent ID cannot.
+		Newspack_Popups_Segmentation::create_segment(
+			[
+				'name'          => 'carried-disabled',
+				'configuration' => [ 'is_disabled' => true ],
+			]
+		);
+		// Include inactive here so $this->segment_ids also carries the disabled
+		// segment's real ID; get_carried_segments_for_account() does its own
+		// active-only filtering internally via get_segments( false ).
 		$this->segment_ids = [];
-		foreach ( Newspack_Popups_Segmentation::get_segments( false ) as $segment ) {
+		foreach ( Newspack_Popups_Segmentation::get_segments() as $segment ) {
 			$this->segment_ids[ $segment['name'] ] = (string) $segment['id'];
 		}
 		\Newspack\Reader_Data::$matched_segments = [];
@@ -143,12 +155,27 @@ class SegmentationAccountArrivalTest extends WP_UnitTestCase {
 	}
 
 	/**
-	 * A snapshot can name a segment that has since been deleted or disabled.
-	 * Only IDs the site still ships to the browser are worth carrying.
+	 * A snapshot can name a segment ID that no longer exists at all (e.g.
+	 * deleted since the snapshot was taken). An ID with no matching term can
+	 * never match anything, so it's dropped here rather than carried.
 	 */
-	public function test_drops_segment_ids_that_are_not_active() {
+	public function test_drops_unknown_segment_ids() {
 		\Newspack\Reader_Data::$matched_segments = [
 			42 => [ $this->segment_ids['carried-one'], '999999' ],
+		];
+		$this->arrive( '/p/?np_account=42' );
+		$this->assertSame( $this->segment_ids['carried-one'], $this->cookie() );
+	}
+
+	/**
+	 * A snapshot can also name a segment that still exists but has since been
+	 * disabled. This exercises the `false` (active-only) argument to
+	 * get_segments() inside get_carried_segments_for_account() specifically —
+	 * a nonexistent ID alone can't distinguish that from no filtering at all.
+	 */
+	public function test_drops_disabled_segment_ids() {
+		\Newspack\Reader_Data::$matched_segments = [
+			42 => [ $this->segment_ids['carried-one'], $this->segment_ids['carried-disabled'] ],
 		];
 		$this->arrive( '/p/?np_account=42' );
 		$this->assertSame( $this->segment_ids['carried-one'], $this->cookie() );
@@ -190,10 +217,45 @@ class SegmentationAccountArrivalTest extends WP_UnitTestCase {
 	}
 
 	/**
+	 * `np_account[]=…` puts an array in $_GET rather than a string — the one
+	 * value shape not covered by unresolvable_value_provider(), because it
+	 * can't be interpolated into a URL as a scalar. Confirmed safe rather than
+	 * assumed: core's sanitize_text_field() (via _sanitize_text_fields())
+	 * returns '' for an array, so preg_match() never sees one, and the
+	 * redirect still fires with nothing carried.
+	 *
+	 * Account 42 is seeded with a real snapshot so this also catches a
+	 * regression where the array is naively reduced to its first element
+	 * ('42') instead of being rejected outright — that would resolve and
+	 * cookie a match, which must not happen here.
+	 */
+	public function test_ignores_array_shaped_param_value() {
+		\Newspack\Reader_Data::$matched_segments = [ 42 => [ $this->segment_ids['carried-one'] ] ];
+		$this->assertSame( '/p/?a=1', $this->arrive( '/p/?a=1&np_account[]=42' ) );
+		$this->assertNull( $this->cookie() );
+	}
+
+	/**
 	 * An account with no snapshot carries nothing and behaves as today.
 	 */
 	public function test_unknown_account_carries_nothing() {
 		$this->assertSame( '/p/?a=1', $this->arrive( '/p/?a=1&np_account=777' ) );
+		$this->assertNull( $this->cookie() );
+	}
+
+	/**
+	 * Each arrival is authoritative: the view script deletes the cookie on
+	 * first read, but on an arrival where that script never runs (a page with
+	 * no prompts, JS disabled), a previous arrival's segments must not carry
+	 * into the next click. An arrival that resolves nothing must clear it.
+	 */
+	public function test_clears_a_previous_cookie_when_nothing_resolves() {
+		\Newspack\Reader_Data::$matched_segments = [ 42 => [ $this->segment_ids['carried-one'] ] ];
+		$this->arrive( '/p/?np_account=42' );
+		$this->assertSame( $this->segment_ids['carried-one'], $this->cookie() );
+
+		// A second, later arrival for an account with nothing to carry.
+		$this->arrive( '/p/?np_account=777' );
 		$this->assertNull( $this->cookie() );
 	}
 
@@ -224,8 +286,16 @@ class SegmentationAccountArrivalTest extends WP_UnitTestCase {
 	/**
 	 * The resolver is the seam the handler is built on; exercise it directly for
 	 * the degenerate inputs.
+	 *
+	 * The mock is seeded with a real, active segment ID under keys `0` and
+	 * `-1` so an empty result can only come from the $account_id < 1 guard,
+	 * not from the mock having nothing to return for those keys anyway.
 	 */
 	public function test_resolver_rejects_non_positive_ids() {
+		\Newspack\Reader_Data::$matched_segments = [
+			0  => [ $this->segment_ids['carried-one'] ],
+			-1 => [ $this->segment_ids['carried-one'] ],
+		];
 		$this->assertSame( [], Newspack_Popups_Segmentation::get_carried_segments_for_account( 0 ) );
 		$this->assertSame( [], Newspack_Popups_Segmentation::get_carried_segments_for_account( -1 ) );
 	}
