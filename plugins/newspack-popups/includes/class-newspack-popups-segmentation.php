@@ -354,10 +354,49 @@ final class Newspack_Popups_Segmentation {
 			return $url;
 		}
 
-		$url = add_query_arg( self::ACCOUNT_QUERY_PARAM, $merge_tag, $url );
-		// add_query_arg() URL-encodes the value, but ESPs substitute only the raw
-		// merge-tag syntax. Restore the raw tag so the ESP resolves it.
-		return str_replace( urlencode( $merge_tag ), $merge_tag, $url );
+		// Deliberately no is_url_safe_merge_tag() guard here, unlike the donor
+		// handler above: an unsubstituted np_account never reaches a consumer
+		// because it's always redirected away before output. Full reasoning is
+		// in the ACCOUNT_QUERY_PARAM docblock.
+		return self::append_raw_query_param( $url, self::ACCOUNT_QUERY_PARAM, $merge_tag );
+	}
+
+	/**
+	 * Append a query parameter to a URL with its value left completely raw,
+	 * bypassing add_query_arg().
+	 *
+	 * Calling add_query_arg() here would reparse the URL's entire existing
+	 * query string and run urlencode_deep() over every value already in it —
+	 * see the "This re-URL-encodes things that were already in the query
+	 * string" comment at wp-includes/functions.php:1183. On a URL that already
+	 * carries another handler's raw merge tag (e.g.
+	 * append_donor_segment_param()'s np_seg_donor, appended earlier in the same
+	 * newspack_newsletters_process_link chain), that reparse re-encodes it
+	 * right back into a form no ESP substitutes — exactly the corruption this
+	 * helper exists to avoid. Do NOT replace this with add_query_arg(): plain
+	 * string concatenation never looks at the existing query string, so it
+	 * cannot corrupt it.
+	 *
+	 * Fragment-aware: the param is inserted before a `#fragment` rather than
+	 * after, so `/post/#section` becomes `/post/?np_account=TAG#section`
+	 * instead of the unparseable `/post/#section?np_account=TAG`.
+	 *
+	 * @param string $url   URL to append to; may already carry a query string
+	 *                      and/or a fragment.
+	 * @param string $param Parameter name.
+	 * @param string $value Raw (unencoded) parameter value.
+	 *
+	 * @return string
+	 */
+	private static function append_raw_query_param( $url, $param, $value ) {
+		$fragment = '';
+		$hash_pos = strpos( $url, '#' );
+		if ( false !== $hash_pos ) {
+			$fragment = substr( $url, $hash_pos );
+			$url      = substr( $url, 0, $hash_pos );
+		}
+		$separator = false === strpos( $url, '?' ) ? '?' : '&';
+		return $url . $separator . $param . '=' . $value . $fragment;
 	}
 
 	/**

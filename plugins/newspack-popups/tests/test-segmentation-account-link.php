@@ -74,10 +74,44 @@ class SegmentationAccountLinkTest extends WP_UnitTestCase {
 		$this->assertArrayHasKey( 'np_account', $args );
 		$this->assertSame( '*|NP_ACCOUNT|*', $args['np_account'] );
 
-		// ESPs substitute only the literal syntax; add_query_arg() encodes by
-		// default, so this guards the str_replace that restores the raw tag.
+		// ESPs substitute only the literal syntax, never a percent-encoded form,
+		// so the tag must appear raw in the URL for the ESP to resolve it.
 		$this->assertStringContainsString( 'np_account=*|NP_ACCOUNT|*', $result );
 		$this->assertStringNotContainsString( '%2A%7C', $result );
+	}
+
+	/**
+	 * A query param appended after a URL fragment would become part of the
+	 * fragment instead of a real query param — e.g. the unparseable
+	 * `/post/#section?np_account=TAG` — so the tag must land before it.
+	 */
+	public function test_appends_before_url_fragment() {
+		$base   = home_url( '/some-article/' );
+		$url    = $base . '#section';
+		$result = Newspack_Popups_Segmentation::append_account_param( $url, $url, $this->make_newsletter() );
+
+		$this->assertSame( $base . '?np_account=*|NP_ACCOUNT|*#section', $result );
+	}
+
+	/**
+	 * Regression test for the REAL newspack_newsletters_process_link chain, not
+	 * a handler called standalone. append_donor_segment_param() is registered
+	 * first (see the constructor) and restores its own tag raw; if
+	 * append_account_param() ran that URL through add_query_arg(), WordPress's
+	 * urlencode_deep() would re-encode the donor handler's already-raw tag right
+	 * back into the unresolvable %2A%7C... form. Every other test in this file
+	 * calls a single handler directly, which cannot catch this — the corruption
+	 * only appears when both handlers actually run back-to-back through the
+	 * filter, which is exactly what this test does.
+	 */
+	public function test_real_filter_chain_keeps_both_tags_raw() {
+		update_option( 'newspack_popups_mc_donor_merge_field', 'HUB-MEMBER' );
+
+		$url    = home_url( '/some-article/' );
+		$result = apply_filters( 'newspack_newsletters_process_link', $url, $url, $this->make_newsletter() );
+
+		$this->assertStringContainsString( 'np_seg_donor=*|HUB-MEMBER|*', $result );
+		$this->assertStringContainsString( 'np_account=*|NP_ACCOUNT|*', $result );
 	}
 
 	/**
