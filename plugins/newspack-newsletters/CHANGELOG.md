@@ -1,3 +1,23 @@
+# newspack-newsletters [3.39.0](https://github.com/Automattic/newspack-workspace/compare/newspack-newsletters@3.38.6...newspack-newsletters@3.39.0) (2026-08-17)
+
+
+### Bug Fixes
+
+* **newsletters:** guard fix_public_status exit for non-page requests ([#701](https://github.com/Automattic/newspack-workspace/issues/701)) ([3c2ea7f](https://github.com/Automattic/newspack-workspace/commit/3c2ea7f19f7bf52717af3ae74ed08d27459673bb))
+* **newsletters:** keep flag-off public newsletters on the theme template ([#780](https://github.com/Automattic/newspack-workspace/issues/780)) ([80ad43c](https://github.com/Automattic/newspack-workspace/commit/80ad43ccf2722490193e289ba0c96302deabacab))
+
+
+### Features
+
+* **reader-activation:** generic integrations backfill CLI (NPPD-2076) ([#678](https://github.com/Automattic/newspack-workspace/issues/678)) ([d1c8219](https://github.com/Automattic/newspack-workspace/commit/d1c8219bcffb85a320bddb05981c5e8b40d64e24))
+
+
+### Dependencies
+
+* **newspack-components:** upgraded to 4.6.1
+* **newspack-icons:** upgraded to 1.1.1
+* **newspack-scripts:** upgraded to 5.11.0
+
 ## newspack-newsletters [3.38.6](https://github.com/Automattic/newspack-workspace/compare/newspack-newsletters@3.38.5...newspack-newsletters@3.38.6) (2026-08-13)
 
 
