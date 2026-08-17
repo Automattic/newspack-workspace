@@ -1,3 +1,15 @@
+## newspack-ads [3.14.1](https://github.com/Automattic/newspack-workspace/compare/newspack-ads@3.14.0...newspack-ads@3.14.1) (2026-08-17)
+
+
+### Bug Fixes
+
+* **ads:** remove colored gaps from empty Broadstreet ad slots ([#578](https://github.com/Automattic/newspack-workspace/issues/578)) ([c16c8fc](https://github.com/Automattic/newspack-workspace/commit/c16c8fcb2dbce437cc452be74d42514631b3fd6b))
+
+
+### Dependencies
+
+* **newspack-components:** upgraded to 4.6.2
+
 # newspack-ads [3.14.0](https://github.com/Automattic/newspack-workspace/compare/newspack-ads@3.13.1...newspack-ads@3.14.0) (2026-08-17)
 
 
