@@ -13,12 +13,7 @@ const defaultConfig = require( '@wordpress/scripts/config/webpack.config' );
 // bundle `ui` and `admin-ui` internally; listing them here keeps that behaviour
 // stable for a consumer whose lockfile resolves an older release. `theme` is
 // kept for the same reason even though core does register `wp-theme`.
-const FORCE_BUNDLE = new Set( [
-	'@wordpress/ui',
-	'@wordpress/admin-ui',
-	'@wordpress/theme',
-	'@wordpress/style-runtime',
-] );
+const FORCE_BUNDLE = new Set( [ '@wordpress/ui', '@wordpress/admin-ui', '@wordpress/theme', '@wordpress/style-runtime' ] );
 
 // `newspack-icons` publishes raw JSX under `src/` with no compile step, so every
 // consumer has to transpile it. @wordpress/scripts' babel-loader excludes
@@ -60,6 +55,12 @@ module.exports = ( ...args ) => {
 		);
 
 	// Transpile newspack-icons wherever it resolves, including nested copies.
+	// The loader and preset are `require.resolve`d from this package, the way
+	// @wordpress/scripts resolves its own babel rule, so they come from
+	// newspack-scripts' dependency tree rather than the consumer's - a bare
+	// name would fail under a layout that doesn't hoist them (pnpm) and could
+	// pick a different version. The preset is the one the rest of the build
+	// uses (see ./babel.config.js), so icons get the same transform as source.
 	// Rebuilt rather than pushed: `config` is a shallow copy of the module-level
 	// defaultConfig, so mutating its rules array would stack a duplicate rule on
 	// every call in the same process.
@@ -71,12 +72,11 @@ module.exports = ( ...args ) => {
 				test: /\.jsx?$/,
 				include: ICONS_MODULE,
 				use: {
-					loader: 'babel-loader',
+					loader: require.resolve( 'babel-loader' ),
 					options: {
-						presets: [
-							'@babel/preset-env',
-							[ '@babel/preset-react', { runtime: 'automatic' } ],
-						],
+						babelrc: false,
+						configFile: false,
+						presets: [ require.resolve( '@wordpress/babel-preset-default' ) ],
 					},
 				},
 			},
