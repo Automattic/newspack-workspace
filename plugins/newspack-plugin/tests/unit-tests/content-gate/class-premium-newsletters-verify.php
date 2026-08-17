@@ -122,21 +122,16 @@ class Test_Premium_Newsletters_Verify extends \WP_UnitTestCase {
 
 	/**
 	 * The summary counts every bucket, including rows the ESP could not answer for
-	 * and leaks a --live run removed.
+	 * and leaks a --live run removed. Counted as each row is produced, because a
+	 * passing row is not kept: 'checked' is what the report prints in place of the
+	 * row count it used to take.
 	 */
-	public function test_summarize_rows_counts_every_bucket() {
-		$rows = [
-			[ 'status' => 'leak' ],
-			[ 'status' => 'leak' ],
-			[ 'status' => 'gap' ],
-			[ 'status' => 'ok' ],
-			[ 'status' => 'removed' ],
-			[ 'status' => 'not_asserted' ],
-			[ 'status' => 'unresolved' ],
-		];
+	public function test_the_summary_counts_every_bucket() {
+		$summary = $this->summary_of( [ 'leak', 'leak', 'gap', 'ok', 'removed', 'not_asserted', 'unresolved' ] );
 
 		$this->assertSame(
 			[
+				'checked'      => 7,
 				'leak'         => 2,
 				'gap'          => 1,
 				'ok'           => 1,
@@ -144,17 +139,36 @@ class Test_Premium_Newsletters_Verify extends \WP_UnitTestCase {
 				'not_asserted' => 1,
 				'unresolved'   => 1,
 			],
-			$this->invoke_private_static( 'summarize_rows', [ $rows ] )
+			$summary
 		);
+	}
+
+	/**
+	 * Only the rows the report lists are kept; the rest are counted and dropped. A
+	 * clean run over a large site used to hold every one of its passing rows for
+	 * the length of the run to print a single number.
+	 */
+	public function test_record_row_keeps_only_the_rows_the_report_lists() {
+		$rows    = [];
+		$summary = $this->invoke_private_static( 'new_summary', [] );
+		foreach ( [ 'ok', 'leak', 'not_asserted', 'gap', 'removed', 'unresolved' ] as $status ) {
+			$this->invoke_record_row( $rows, $summary, [ 'status' => $status ] );
+		}
+
+		$this->assertSame( [ 'leak', 'gap', 'removed', 'unresolved' ], array_column( $rows, 'status' ) );
+		$this->assertSame( 6, $summary['checked'] );
+		$this->assertSame( 1, $summary['ok'] );
+		$this->assertSame( 1, $summary['not_asserted'] );
 	}
 
 	/**
 	 * An empty run counts zero of everything rather than returning a short array,
 	 * so callers can read any bucket without checking it exists first.
 	 */
-	public function test_summarize_rows_returns_every_key_for_an_empty_run() {
+	public function test_a_new_summary_carries_every_key_at_zero() {
 		$this->assertSame(
 			[
+				'checked'      => 0,
 				'leak'         => 0,
 				'gap'          => 0,
 				'ok'           => 0,
@@ -162,8 +176,39 @@ class Test_Premium_Newsletters_Verify extends \WP_UnitTestCase {
 				'not_asserted' => 0,
 				'unresolved'   => 0,
 			],
-			$this->invoke_private_static( 'summarize_rows', [ [] ] )
+			$this->invoke_private_static( 'new_summary', [] )
 		);
+	}
+
+	/**
+	 * Counts built from a list of statuses, the way the run builds them.
+	 *
+	 * @param string[] $statuses Row statuses, in the order they were produced.
+	 *
+	 * @return array<string,int>
+	 */
+	private function summary_of( array $statuses ): array {
+		$summary = $this->invoke_private_static( 'new_summary', [] );
+		foreach ( $statuses as $status ) {
+			$summary = $this->invoke_private_static( 'with_status_counted', [ $summary, $status ] );
+		}
+		return $summary;
+	}
+
+	/**
+	 * Call record_row(), whose first two parameters are by reference and so cannot
+	 * go through invoke_private_static().
+	 *
+	 * @param array[]           $rows    Retained rows, by reference.
+	 * @param array<string,int> $summary Counts, by reference.
+	 * @param array             $row     The row to record.
+	 *
+	 * @return void
+	 */
+	private function invoke_record_row( array &$rows, array &$summary, array $row ): void {
+		$reflected_method = new \ReflectionMethod( Premium_Newsletters_Verify::class, 'record_row' );
+		$reflected_method->setAccessible( true );
+		$reflected_method->invokeArgs( null, [ &$rows, &$summary, $row ] );
 	}
 
 	/**
@@ -197,6 +242,7 @@ class Test_Premium_Newsletters_Verify extends \WP_UnitTestCase {
 	private function clean_summary( array $overrides = [] ): array {
 		return array_merge(
 			[
+				'checked'      => 5,
 				'leak'         => 0,
 				'gap'          => 0,
 				'ok'           => 5,
@@ -311,16 +357,7 @@ class Test_Premium_Newsletters_Verify extends \WP_UnitTestCase {
 	 * visible in the counts rather than folded into OK.
 	 */
 	public function test_a_live_run_that_removed_every_leak_passes_with_the_removals_counted() {
-		$summary = $this->invoke_private_static(
-			'summarize_rows',
-			[
-				[
-					[ 'status' => 'removed' ],
-					[ 'status' => 'removed' ],
-					[ 'status' => 'ok' ],
-				],
-			]
-		);
+		$summary = $this->summary_of( [ 'removed', 'removed', 'ok' ] );
 
 		$this->assertSame( 2, $summary['removed'] );
 		$this->assertSame( 0, $summary['leak'] );
