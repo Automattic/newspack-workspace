@@ -34,6 +34,7 @@ require plugin_dir_path( __FILE__ ) . 'includes/compatibility-co-authors-plus.ph
 require plugin_dir_path( __FILE__ ) . 'includes/class-republication-rewrite.php';
 require plugin_dir_path( __FILE__ ) . 'includes/class-republish-button-block.php';
 require plugin_dir_path( __FILE__ ) . 'includes/class-republish-pattern.php';
+require plugin_dir_path( __FILE__ ) . 'includes/pixel-functions.php';
 
 /**
  * Main initiation class.

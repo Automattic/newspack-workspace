@@ -84,6 +84,35 @@ class Gate_Preview {
 		add_filter( 'newspack_gate_layout_content', [ __CLASS__, 'filter_gate_layout_content' ], PHP_INT_MAX, 2 );
 		add_filter( 'get_post_metadata', [ __CLASS__, 'filter_layout_meta' ], 10, 4 );
 		add_filter( 'show_admin_bar', [ __CLASS__, 'filter_show_admin_bar' ] ); // phpcs:ignore WordPressVIPMinimum.UserExperience.AdminBarRemoval.RemovalDetected
+		add_action( 'template_redirect', [ __CLASS__, 'prevent_preview_caching' ] );
+	}
+
+	/**
+	 * Keep preview responses out of caches.
+	 *
+	 * A preview response is capability-varying: the post is force-restricted, the
+	 * layout's autosaved content is substituted, and the front-end script carries
+	 * the preview param list. An edge cache keying on URL alone would serve all of
+	 * that to a reader, whose links would then be rewritten to carry `ngp_id` —
+	 * shareable and crawlable. The sibling per-user gate paths guard the same way.
+	 *
+	 * Returns whether it acted, so a test can assert that this consults the preview
+	 * gate rather than firing on every request. The action discards the value. Both
+	 * side effects are unobservable under PHPUnit: batcache_cancel() is not loaded,
+	 * and nocache_headers() bails on headers_sent(), which is true by the time any
+	 * test body runs because the WordPress test bootstrap has already printed.
+	 *
+	 * @return bool Whether cache prevention was applied.
+	 */
+	public static function prevent_preview_caching() {
+		if ( ! self::is_preview_request() ) {
+			return false;
+		}
+		if ( function_exists( 'batcache_cancel' ) ) {
+			batcache_cancel();
+		}
+		nocache_headers();
+		return true;
 	}
 
 	/**
@@ -344,12 +373,11 @@ class Gate_Preview {
 	/**
 	 * Data localized to the layout editor to power the Preview button.
 	 *
-	 * @return array{preview_post:string, frontend_url:string, query_param:string, preview_query_keys:array}
+	 * @return array{preview_post:string, query_param:string, preview_query_keys:array}
 	 */
 	public static function get_editor_preview_data() {
 		return [
 			'preview_post'       => self::preview_post_permalink(),
-			'frontend_url'       => get_site_url(),
 			'query_param'        => self::PREVIEW_QUERY_PARAM,
 			'preview_query_keys' => self::PREVIEW_QUERY_KEYS,
 		];
@@ -360,7 +388,8 @@ class Gate_Preview {
 	 *
 	 * Runs at PHP_INT_MAX so it wins over Content_Restriction_Control (which
 	 * returns false for users who can edit the post, and caches per
-	 * post/user). Only the queried post is forced; other post IDs pass through.
+	 * post/user). Only the queried post is forced; other post IDs pass through, and
+	 * nothing is forced on a view whose queried object is not a post.
 	 *
 	 * @param bool $restricted Whether the post is restricted.
 	 * @param int  $post_id    Post ID.
@@ -371,13 +400,43 @@ class Gate_Preview {
 		if ( ! self::is_preview_request() ) {
 			return $restricted;
 		}
-		// Force only the queried (previewed) post. An empty $post_id resolves to
-		// the queried object so in-loop calls still gate, but an explicit,
-		// unrelated post id is never force-restricted, and nothing is forced when
-		// there is no singular queried object.
-		$queried_id = (int) get_queried_object_id();
+		// Both halves are load-bearing. The type check is what makes the comparison
+		// below sound: a preview session now spans archive views, where
+		// get_queried_object_id() returns a term id (category, tag, taxonomy) or a
+		// user id (author) — numbering that shares nothing with post ids, so
+		// comparing them force-restricted whichever unrelated post carried the same
+		// number. is_singular() then confines the forcing to views that actually
+		// render one post: the blog posts index on a static-front-page site, and a
+		// 404 whose pagename matched an unpublished page, both hand back a WP_Post
+		// while not being singular. Every render path already guards on
+		// is_singular(), so those two are inert today — this keeps them that way
+		// without relying on callers to stay careful.
+		if ( ! is_singular() ) {
+			return $restricted;
+		}
+		$queried = get_queried_object();
+		if ( ! $queried instanceof \WP_Post ) {
+			return $restricted;
+		}
+
+		// Force only the queried (previewed) post. An empty $post_id means the call
+		// came from outside the loop — Content_Gate::is_post_restricted() substitutes
+		// get_the_ID() before applying this filter, so in-loop calls always arrive
+		// with an explicit id — and an explicit, unrelated post id is never forced.
+		//
+		// Deliberate consequence: because this forces restriction, a preview session
+		// can render a gate on singular pages the ordinary path skips.
+		// Content_Gate::restrict_post() bails on the privacy policy, account, terms,
+		// accessibility statement, cart and checkout pages, among others;
+		// Content_Gate::render_overlay_gate() has no such
+		// bails, so previewing an overlay layout and navigating to My Account shows
+		// the overlay there. That is wanted: the editor asked to see this layout, and
+		// a preview that silently declined to render on some pages would be a worse
+		// lie than one that renders everywhere. It is preview-only and limited to
+		// users who may preview, so no reader is affected.
+		$queried_id = (int) $queried->ID;
 		$target_id  = empty( $post_id ) ? $queried_id : (int) $post_id;
-		if ( $queried_id && $target_id === $queried_id ) {
+		if ( $target_id === $queried_id ) {
 			return true;
 		}
 		return $restricted;
