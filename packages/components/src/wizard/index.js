@@ -8,7 +8,7 @@ import classnames from 'classnames';
  */
 import { DropdownMenu, MenuGroup, MenuItem } from '@wordpress/components';
 import { useDispatch, useSelect } from '@wordpress/data';
-import { cloneElement, isValidElement, useEffect, useState, forwardRef } from '@wordpress/element';
+import { cloneElement, isValidElement, useEffect, useRef, useState, forwardRef } from '@wordpress/element';
 import { __ } from '@wordpress/i18n';
 import { category, chevronLeft, moreVertical } from '@wordpress/icons';
 
@@ -138,15 +138,36 @@ const Wizard = (
 
 	let displayedSections = sections.filter( section => ! section.isHidden );
 
+	const { invalidateResolution } = useDispatch( WIZARD_STORE_NAMESPACE );
 	const [ pluginRequirementsSatisfied, setPluginRequirementsSatisfied ] = useState( requiredPlugins.length === 0 );
+
+	// The wizard fetches its data once, on mount. When a required plugin is
+	// missing that fetch runs against an endpoint that cannot answer yet — some
+	// return an error outright — so the response it caches describes a site
+	// without the plugin. Remember that we saw the requirements unmet, so the
+	// data can be refetched once the installer satisfies them. Without the
+	// refetch the section mounts against that stale response and renders empty
+	// until the user saves. Requirements already met on mount need nothing: the
+	// one fetch saw the real site.
+	const requirementsWereUnmet = useRef( false );
+	const onPluginStatus = ( { complete } ) => {
+		if ( ! complete ) {
+			requirementsWereUnmet.current = true;
+		} else if ( requirementsWereUnmet.current ) {
+			requirementsWereUnmet.current = false;
+			if ( apiSlug && isInitialFetchTriggered ) {
+				invalidateResolution( 'getWizardAPIData', [ apiSlug ] );
+			}
+		}
+		setPluginRequirementsSatisfied( complete );
+	};
+
 	if ( ! pluginRequirementsSatisfied ) {
 		headerText = requiredPlugins.length > 1 ? __( 'Required plugins', 'newspack-plugin' ) : __( 'Required plugin', 'newspack-plugin' );
 		displayedSections = [
 			{
 				path: '/',
-				render: () => (
-					<PluginInstaller plugins={ requiredPlugins } onStatus={ ( { complete } ) => setPluginRequirementsSatisfied( complete ) } />
-				),
+				render: () => <PluginInstaller plugins={ requiredPlugins } onStatus={ onPluginStatus } />,
 			},
 		];
 	}
