@@ -305,7 +305,7 @@ class Memberships {
 			[
 				'post_type'      => self::GATE_CPT,
 				'post_status'    => [ 'publish', 'draft', 'trash', 'pending', 'future' ],
-				'posts_per_page' => -1,
+				'posts_per_page' => -1, // phpcs:ignore WordPressVIPMinimum.Performance.NoPaging -- Content-gate CPT; config-scale.
 			]
 		);
 		foreach ( $gates as $gate ) {
