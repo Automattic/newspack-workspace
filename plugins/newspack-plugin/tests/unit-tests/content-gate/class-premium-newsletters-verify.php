@@ -945,7 +945,10 @@ class Test_Premium_Newsletters_Verify extends \WP_UnitTestCase {
 		$this->assertFileExists( $file, "Expected provider file not found at $relative_path; this test's path needs updating." );
 		$this->assertStringContainsString(
 			"'" . $code . "'",
-			file_get_contents( $file ), // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- reading a sibling plugin's source for a test assertion, not serving a request.
+			// The path is built from __DIR__, so it is always a local file; the VIP sniff
+			// cannot see that statically and assumes any non-literal argument may be a URL.
+			// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents, WordPressVIPMinimum.Performance.FetchingRemoteData.FileGetContentsUnknown -- local source file read in a test, never a remote fetch.
+			file_get_contents( $file ),
 			"$relative_path no longer contains '$code'; update it here or is_contact_not_found_error() is no longer being tested against a real code."
 		);
 	}
