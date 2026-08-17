@@ -1131,6 +1131,68 @@ class Test_Premium_Newsletters_Verify extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * The population walk is paged so it never holds every subscription at once,
+	 * and paging must not change who gets checked: every reader behind the page
+	 * boundary is still reached, each of them once, whichever page they first
+	 * appeared on. A reader with subscriptions in two different pages used to be
+	 * deduplicated by an array key built before any of them were checked; the
+	 * seen-set carried across pages is what replaces that.
+	 */
+	public function test_walk_population_yields_each_reader_once_across_pages() {
+		$pages     = [];
+		$resolved  = [
+			[ 501, 502 ],
+			[ 501, 0 ],
+			[ 503, 502 ],
+		];
+		$resolver  = function ( array $chunk ) use ( &$pages, $resolved ) {
+			$pages[] = $chunk;
+			return $resolved[ count( $pages ) - 1 ];
+		};
+		$population = $this->invoke_private_static( 'walk_population', [ [ 11, 12, 13, 14, 15, 16 ], 2, $resolver ] );
+
+		$this->assertSame( [ 501, 502, 503 ], iterator_to_array( $population, false ) );
+		$this->assertSame( [ [ 11, 12 ], [ 13, 14 ], [ 15, 16 ] ], $pages );
+	}
+
+	/**
+	 * The walk is lazy, which is what makes --max-batches a sampling flag rather
+	 * than a promise the population query has already broken. A caller that stops
+	 * after the first reader must leave the rest of the subscriptions unread.
+	 */
+	public function test_walk_population_reads_no_page_it_was_not_asked_for() {
+		$pages    = [];
+		$resolver = function ( array $chunk ) use ( &$pages ) {
+			$pages[] = $chunk;
+			return [ 601, 602 ];
+		};
+
+		$population = $this->invoke_private_static( 'walk_population', [ [ 21, 22, 23, 24 ], 2, $resolver ] );
+		$population->rewind();
+		$first = $population->current();
+
+		$this->assertSame( 601, $first );
+		$this->assertCount( 1, $pages );
+	}
+
+	/**
+	 * No subscriptions means no pages read and nobody yielded — the caller reports
+	 * that as an empty population rather than as a clean gate.
+	 */
+	public function test_walk_population_reads_nothing_for_an_empty_population() {
+		$called   = 0;
+		$resolver = function ( array $chunk ) use ( &$called ) {
+			++$called;
+			return [ 701 ];
+		};
+
+		$population = $this->invoke_private_static( 'walk_population', [ [], 2, $resolver ] );
+
+		$this->assertSame( [], iterator_to_array( $population, false ) );
+		$this->assertSame( 0, $called );
+	}
+
+	/**
 	 * Below the batch size, the loop simply keeps going: no count, no pause.
 	 */
 	public function test_next_batch_action_continues_below_batch_size() {
