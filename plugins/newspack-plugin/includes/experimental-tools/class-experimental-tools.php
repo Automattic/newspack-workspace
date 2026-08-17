@@ -199,6 +199,12 @@ class Experimental_Tools {
 	/**
 	 * Get registered tools from the filter (raw, without saved state).
 	 *
+	 * Each tool declares `slug`, `label` and optionally `fields`. A field carries
+	 * `key`, `type` and `label`; a `type` of `display` is read-only and never
+	 * stored. A field may also declare `sanitize_callback`, which
+	 * save_tool_fields() applies instead of the default sanitizer — see
+	 * sanitize_field_value() for when a tool needs that.
+	 *
 	 * @return array Keyed by slug.
 	 */
 	private static function get_registered_tools() {
@@ -353,19 +359,20 @@ class Experimental_Tools {
 			];
 		}
 
-		// Only accept keys declared in the tool registration.
-		$valid_keys = [];
+		// Only accept keys declared in the tool registration, keeping each field's
+		// definition so its own sanitizer can be applied below.
+		$declared_fields = [];
 		if ( isset( $registered[ $slug ]['fields'] ) ) {
 			foreach ( $registered[ $slug ]['fields'] as $field ) {
 				if ( ! empty( $field['key'] ) && ( $field['type'] ?? '' ) !== 'display' ) {
-					$valid_keys[] = $field['key'];
+					$declared_fields[ $field['key'] ] = $field;
 				}
 			}
 		}
 
 		foreach ( $fields as $key => $value ) {
-			if ( in_array( $key, $valid_keys, true ) ) {
-				$all_settings[ $slug ]['fields'][ $key ] = sanitize_textarea_field( $value );
+			if ( isset( $declared_fields[ $key ] ) ) {
+				$all_settings[ $slug ]['fields'][ $key ] = self::sanitize_field_value( $declared_fields[ $key ], $value );
 			}
 		}
 
@@ -378,6 +385,31 @@ class Experimental_Tools {
 		 * @param array  $fields Saved key-value pairs.
 		 */
 		do_action( 'newspack_experimental_tool_fields_saved', $slug, $all_settings[ $slug ]['fields'] );
+	}
+
+	/**
+	 * Sanitize one submitted field value.
+	 *
+	 * Defaults to sanitize_textarea_field(), which suits free text but destroys a
+	 * value carrying syntax of its own: it deletes a percent sign followed by two
+	 * hex digits, reading it as a URL-encoded octet, so a template placeholder
+	 * such as %CATEGORIES% is stored as TEGORIES%. A field may therefore declare
+	 * `sanitize_callback` in its registration and keep the rules its own format
+	 * needs. The callback is registration data, not user input, and an
+	 * uncallable one falls back to the default rather than storing raw input.
+	 *
+	 * @param array $field The registered field definition.
+	 * @param mixed $value The submitted value.
+	 * @return mixed The sanitized value.
+	 */
+	private static function sanitize_field_value( $field, $value ) {
+		$callback = $field['sanitize_callback'] ?? null;
+
+		if ( null !== $callback && is_callable( $callback ) ) {
+			return call_user_func( $callback, $value );
+		}
+
+		return sanitize_textarea_field( $value );
 	}
 
 	/**

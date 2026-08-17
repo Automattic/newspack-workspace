@@ -137,6 +137,131 @@ class Newspack_Test_Experimental_Tools extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Field values are sanitized on the way in.
+	 */
+	public function test_save_fields_sanitizes_by_default() {
+		$slug = $this->register_test_tool();
+
+		Experimental_Tools::save_tool_fields( $slug, [ 'api_key' => "key <script>alert('x')</script>" ] );
+
+		$settings = Experimental_Tools::get_tool_settings( $slug );
+
+		$this->assertStringNotContainsString( '<script>', $settings['fields']['api_key'] );
+		$this->assertStringContainsString( 'key', $settings['fields']['api_key'] );
+	}
+
+	/**
+	 * A field can declare its own sanitizer. Some tools store values with syntax
+	 * of their own — a prompt template carrying %PLACEHOLDER% tokens, say — that
+	 * the default sanitizer destroys, and only the owning tool knows the rules.
+	 */
+	public function test_field_sanitize_callback_is_used_when_declared() {
+		$slug = $this->register_test_tool(
+			[
+				'fields' => [
+					[
+						'type'              => 'textarea',
+						'key'               => 'template',
+						'label'             => 'Template',
+						'sanitize_callback' => [ __CLASS__, 'sanitize_marking_the_value' ],
+					],
+				],
+			]
+		);
+
+		Experimental_Tools::save_tool_fields( $slug, [ 'template' => 'Use %CATEGORIES% here' ] );
+
+		$settings = Experimental_Tools::get_tool_settings( $slug );
+
+		$this->assertEquals( 'Use %CATEGORIES% here|marked', $settings['fields']['template'] );
+	}
+
+	/**
+	 * The case the per-field callback exists for: the default sanitizer reads a
+	 * percent sign followed by two hex digits as a URL-encoded octet and deletes
+	 * it, so %CATEGORIES% is stored as TEGORIES%.
+	 */
+	public function test_default_sanitizer_destroys_hex_leading_placeholders() {
+		$slug = $this->register_test_tool();
+
+		Experimental_Tools::save_tool_fields( $slug, [ 'api_key' => 'Use %CATEGORIES% here' ] );
+
+		$settings = Experimental_Tools::get_tool_settings( $slug );
+
+		$this->assertStringNotContainsString( '%CATEGORIES%', $settings['fields']['api_key'] );
+		$this->assertStringContainsString( 'TEGORIES%', $settings['fields']['api_key'] );
+	}
+
+	/**
+	 * A declared callback that cannot be called falls back to the default rather
+	 * than fataling or storing the value unsanitized.
+	 */
+	public function test_uncallable_sanitize_callback_falls_back_to_the_default() {
+		$slug = $this->register_test_tool(
+			[
+				'fields' => [
+					[
+						'type'              => 'textarea',
+						'key'               => 'template',
+						'label'             => 'Template',
+						'sanitize_callback' => 'newspack_no_such_sanitizer',
+					],
+				],
+			]
+		);
+
+		Experimental_Tools::save_tool_fields( $slug, [ 'template' => "hi <script>alert('x')</script>" ] );
+
+		$settings = Experimental_Tools::get_tool_settings( $slug );
+
+		$this->assertStringNotContainsString( '<script>', $settings['fields']['template'] );
+	}
+
+	/**
+	 * The saved-fields action carries what was stored, so a listener never has to
+	 * re-sanitize or reconstruct the value.
+	 */
+	public function test_fields_saved_action_receives_the_sanitized_value() {
+		$slug = $this->register_test_tool(
+			[
+				'fields' => [
+					[
+						'type'              => 'textarea',
+						'key'               => 'template',
+						'label'             => 'Template',
+						'sanitize_callback' => [ __CLASS__, 'sanitize_marking_the_value' ],
+					],
+				],
+			]
+		);
+
+		$captured = null;
+		add_action(
+			'newspack_experimental_tool_fields_saved',
+			function ( $action_slug, $fields ) use ( &$captured ) {
+				$captured = $fields;
+			},
+			10,
+			2
+		);
+
+		Experimental_Tools::save_tool_fields( $slug, [ 'template' => 'Use %CATEGORIES% here' ] );
+
+		$this->assertEquals( 'Use %CATEGORIES% here|marked', $captured['template'] );
+	}
+
+	/**
+	 * Stand-in for a tool-owned sanitizer, marking the value so the test can tell
+	 * which sanitizer ran.
+	 *
+	 * @param string $value The submitted value.
+	 * @return string
+	 */
+	public static function sanitize_marking_the_value( $value ) {
+		return $value . '|marked';
+	}
+
+	/**
 	 * Saved field values are merged into the tool's fields in get_tools().
 	 */
 	public function test_saved_values_appear_in_get_tools() {
