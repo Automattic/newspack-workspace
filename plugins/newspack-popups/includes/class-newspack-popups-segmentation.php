@@ -630,10 +630,9 @@ final class Newspack_Popups_Segmentation {
 			return [];
 		}
 
-		// The snapshot is client-asserted (see docblock above), so guard against
-		// shapes strval() would mishandle below: a nested array raises "Array to
-		// string conversion", and strval( true ) is '1', which could alias
-		// segment ID 1. A real segment ID is only ever an int or a numeric
+		// The snapshot is client-asserted (see docblock above), so guard against a
+		// shape strval() would mishandle below: a nested array raises "Array to
+		// string conversion". A real segment ID is only ever an int or a numeric
 		// string. Unreachable through the real Reader_Data::get_matched_segments(),
 		// which already filters non-scalars — this is defence in depth.
 		$snapshot = array_filter(
@@ -654,17 +653,56 @@ final class Newspack_Popups_Segmentation {
 	}
 
 	/**
+	 * The `setcookie()` options for the carried-segments cookie.
+	 *
+	 * Extracted purely so these values are reachable from a test:
+	 * set_carried_segments_cookie()'s own `setcookie()` call only runs when
+	 * `! headers_sent()`, which is never true under PHPUnit, so without this
+	 * extraction none of these option values would be exercised by any test in
+	 * the suite — e.g. an `expires => 0` typo in the clearing branch, which
+	 * would stop the cookie ever clearing, would pass every test.
+	 *
+	 * @param bool $clearing Whether this is the clearing (empty-resolution)
+	 *                       form rather than the setting form.
+	 *
+	 * @return array `setcookie()`'s `$options` argument.
+	 */
+	private static function get_carried_segments_cookie_options( bool $clearing ): array {
+		return [
+			// An empty resolved set clears the cookie by expiring it in the past,
+			// mirroring the unset( $_COOKIE ) below — see class-magic-link.php and
+			// class-reader-activation.php for the same expire-in-the-past pattern.
+			// A non-empty set is a session cookie: expires at 0.
+			'expires'  => $clearing ? time() - YEAR_IN_SECONDS : 0,
+			'path'     => '/',
+			'secure'   => is_ssl(),
+			// Must stay readable by the view script; this is a segmentation
+			// hint, never a credential.
+			'httponly' => false,
+			'samesite' => 'Lax',
+		];
+	}
+
+	/**
 	 * Hand the resolved segment IDs to the view script, or clear a previous
-	 * arrival's handoff when this one resolves nothing.
+	 * arrival's handoff when a valid account ID resolves nothing.
 	 *
 	 * A session cookie, readable by JavaScript (the view script moves it into
 	 * sessionStorage and deletes it on first read) and named so Batcache does not
 	 * treat it as a cache-bypass signal — see CARRIED_SEGMENTS_COOKIE.
 	 *
-	 * Called unconditionally on every arrival so each one is authoritative. The
-	 * view script deletes the cookie on first read, but on an arrival where that
-	 * script never runs (a page with no prompts, JS disabled), a previous
-	 * arrival's segments would otherwise carry into the next click.
+	 * Called for every arrival whose np_account value passes the
+	 * positive-integer gate (see handle_account_param()), so each such arrival
+	 * is authoritative — including clearing when a valid ID resolves no
+	 * segments. The view script deletes the cookie on first read, but on an
+	 * arrival where that script never runs (a page with no prompts, JS
+	 * disabled), a previous arrival's segments would otherwise carry into the
+	 * next click.
+	 *
+	 * Not called at all for a value that never passed the gate: such a value
+	 * makes no assertion about the reader — e.g. an unsubstituted merge tag
+	 * from an already-delivered newsletter — so an existing carried set is left
+	 * alone rather than wiped.
 	 *
 	 * @param string[] $segment_ids Active segment IDs; an empty array clears
 	 *                              the cookie instead of setting it.
@@ -676,18 +714,7 @@ final class Newspack_Popups_Segmentation {
 			setcookie(
 				self::CARRIED_SEGMENTS_COOKIE,
 				$value,
-				[
-					// An empty resolved set clears the cookie by expiring it in the past,
-					// mirroring the unset( $_COOKIE ) below — see class-magic-link.php and
-					// class-reader-activation.php for the same expire-in-the-past pattern.
-					'expires'  => empty( $segment_ids ) ? time() - YEAR_IN_SECONDS : 0,
-					'path'     => '/',
-					'secure'   => is_ssl(),
-					// Must stay readable by the view script; this is a segmentation
-					// hint, never a credential.
-					'httponly' => false,
-					'samesite' => 'Lax',
-				]
+				self::get_carried_segments_cookie_options( empty( $segment_ids ) )
 			);
 		}
 		// Unconditionally update $_COOKIE so same-request readers (and tests, where
@@ -714,7 +741,10 @@ final class Newspack_Popups_Segmentation {
 	 * Only a plain positive integer is accepted. That single rule rejects every
 	 * unsubstituted merge-tag shape at once, so unlike
 	 * scrub_unsubstituted_donor_param() there is no need to inspect the raw,
-	 * still-encoded query string.
+	 * still-encoded query string. Unlike the redirect, the cookie handoff below
+	 * is conditional on this gate: a value that fails it makes no assertion
+	 * about the reader, so it must not overwrite an existing carried set — see
+	 * set_carried_segments_cookie()'s docblock.
 	 */
 	public static function handle_account_param() {
 		// Redirecting a POST would discard its body, and a redirect is only
@@ -731,16 +761,16 @@ final class Newspack_Popups_Segmentation {
 			return;
 		}
 
-		$raw         = sanitize_text_field( wp_unslash( $_GET[ self::ACCOUNT_QUERY_PARAM ] ) ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
-		$segment_ids = [];
+		$raw = sanitize_text_field( wp_unslash( $_GET[ self::ACCOUNT_QUERY_PARAM ] ) ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
 		if ( 1 === preg_match( '/^[1-9][0-9]*$/', $raw ) ) {
-			$segment_ids = self::get_carried_segments_for_account( (int) $raw );
+			// A value reaching here passed the positive-integer gate, so it makes
+			// a real assertion about the reader — including "no segments match"
+			// when the resolved set is empty. Handing that off keeps every valid
+			// arrival authoritative; see set_carried_segments_cookie().
+			self::set_carried_segments_cookie( self::get_carried_segments_for_account( (int) $raw ) );
 		}
-		// Unconditional so each arrival is authoritative — see
-		// set_carried_segments_cookie()'s docblock.
-		self::set_carried_segments_cookie( $segment_ids );
 
-		// This response carries a per-reader Set-Cookie and must never be stored.
+		// This redirect may carry a per-reader Set-Cookie and must never be stored.
 		if ( function_exists( 'batcache_cancel' ) ) {
 			batcache_cancel();
 		}

@@ -29,11 +29,26 @@ class SegmentationAccountArrivalTest extends WP_UnitTestCase {
 	private $segment_ids = [];
 
 	/**
+	 * Reflection onto the private, static get_carried_segments_cookie_options().
+	 * set_carried_segments_cookie()'s own setcookie() call is gated on
+	 * `! headers_sent()`, which is never true under PHPUnit, so this is the
+	 * only way any test here can reach the option values it would pass. (Same
+	 * pattern as test-overlay-sort.php.)
+	 *
+	 * @var ReflectionMethod
+	 */
+	private static $cookie_options_method;
+
+	/**
 	 * Set up: two active segments, one disabled segment, and an empty snapshot
 	 * store.
 	 */
 	public function set_up() {
 		parent::set_up();
+		if ( ! self::$cookie_options_method ) {
+			self::$cookie_options_method = new ReflectionMethod( 'Newspack_Popups_Segmentation', 'get_carried_segments_cookie_options' );
+			self::$cookie_options_method->setAccessible( true );
+		}
 		Newspack_Segments_Model::delete_all_segments();
 		Newspack_Popups_Segmentation::create_segment(
 			[
@@ -124,6 +139,18 @@ class SegmentationAccountArrivalTest extends WP_UnitTestCase {
 	private function cookie() {
 		// phpcs:ignore WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___COOKIE, WordPress.Security.ValidatedSanitizedInput.InputNotSanitized
 		return $_COOKIE[ Newspack_Popups_Segmentation::CARRIED_SEGMENTS_COOKIE ] ?? null;
+	}
+
+	/**
+	 * The setcookie() options get_carried_segments_cookie_options() returns,
+	 * via reflection — see $cookie_options_method.
+	 *
+	 * @param bool $clearing Whether to fetch the clearing form's options.
+	 *
+	 * @return array
+	 */
+	private function cookie_options( $clearing ) {
+		return self::$cookie_options_method->invoke( null, $clearing );
 	}
 
 	/**
@@ -260,6 +287,29 @@ class SegmentationAccountArrivalTest extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Unlike a valid ID that resolves to nothing (see
+	 * test_clears_a_previous_cookie_when_nothing_resolves() above), a value
+	 * that never passes the positive-integer gate makes no assertion about the
+	 * reader at all — e.g. an unsubstituted merge tag arriving from a
+	 * newsletter that already went out. It must leave an earlier arrival's
+	 * carried segments alone, even though the redirect itself still fires
+	 * unconditionally.
+	 *
+	 * @param string $value Raw param value as it arrives.
+	 *
+	 * @dataProvider unresolvable_value_provider
+	 */
+	public function test_unresolvable_value_leaves_existing_cookie_intact( $value ) {
+		\Newspack\Reader_Data::$matched_segments = [ 42 => [ $this->segment_ids['carried-one'] ] ];
+		$this->arrive( '/p/?np_account=42' );
+		$this->assertSame( $this->segment_ids['carried-one'], $this->cookie() );
+
+		// A second, later arrival carrying a value that never resolves.
+		$this->assertSame( '/p/?a=1', $this->arrive( '/p/?a=1&np_account=' . $value ) );
+		$this->assertSame( $this->segment_ids['carried-one'], $this->cookie() );
+	}
+
+	/**
 	 * The redirect target must not itself trigger another redirect.
 	 */
 	public function test_redirect_result_does_not_redirect_again() {
@@ -270,17 +320,27 @@ class SegmentationAccountArrivalTest extends WP_UnitTestCase {
 	}
 
 	/**
-	 * No param, nothing to do — the overwhelmingly common request.
+	 * No param, nothing to do — the overwhelmingly common request. Also
+	 * confirms an existing cookie is left alone: without the early return, a
+	 * param-less pageview would otherwise fall through to the cookie-clearing
+	 * path and wipe a legitimately carried set.
 	 */
 	public function test_ignores_request_without_the_param() {
+		$_COOKIE[ Newspack_Popups_Segmentation::CARRIED_SEGMENTS_COOKIE ] = $this->segment_ids['carried-one']; // phpcs:ignore WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___COOKIE
 		$this->assertNull( $this->arrive( '/p/?utm_medium=email' ) );
+		$this->assertSame( $this->segment_ids['carried-one'], $this->cookie() );
 	}
 
 	/**
-	 * Redirecting a POST would discard its body.
+	 * Redirecting a POST would discard its body. Also confirms an existing
+	 * cookie is left alone: without the early return, a POST that happens to
+	 * carry np_account (e.g. a form submit on a page reached via a newsletter
+	 * link) would otherwise resolve and overwrite a legitimately carried set.
 	 */
 	public function test_ignores_non_get_requests() {
+		$_COOKIE[ Newspack_Popups_Segmentation::CARRIED_SEGMENTS_COOKIE ] = $this->segment_ids['carried-one']; // phpcs:ignore WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___COOKIE
 		$this->assertNull( $this->arrive( '/p/?np_account=42', 'POST' ) );
+		$this->assertSame( $this->segment_ids['carried-one'], $this->cookie() );
 	}
 
 	/**
@@ -298,5 +358,49 @@ class SegmentationAccountArrivalTest extends WP_UnitTestCase {
 		];
 		$this->assertSame( [], Newspack_Popups_Segmentation::get_carried_segments_for_account( 0 ) );
 		$this->assertSame( [], Newspack_Popups_Segmentation::get_carried_segments_for_account( -1 ) );
+	}
+
+	/**
+	 * The set_carried_segments_cookie() method's own setcookie() call never
+	 * runs under PHPUnit (headers_sent() is always true here), so no test that
+	 * goes through arrive() ever exercises the option values below — e.g. an
+	 * `httponly => true` typo would silently break the view script's
+	 * document.cookie read and every other test here would still pass.
+	 * Exercise get_carried_segments_cookie_options() directly instead, for
+	 * both the setting and clearing forms.
+	 */
+	public function test_cookie_options_are_js_readable_and_site_wide() {
+		foreach ( [ false, true ] as $clearing ) {
+			$options = $this->cookie_options( $clearing );
+			$this->assertFalse( $options['httponly'], 'The view script reads this cookie via document.cookie; httponly would silently break the feature.' );
+			$this->assertSame( 'Lax', $options['samesite'] );
+			$this->assertSame( '/', $options['path'] );
+		}
+	}
+
+	/**
+	 * The setting form (a resolved, non-empty segment set) must be a session
+	 * cookie — expires at 0 — so it does not outlive the browsing session.
+	 */
+	public function test_setting_cookie_options_are_a_session_cookie() {
+		$this->assertSame( 0, $this->cookie_options( false )['expires'] );
+	}
+
+	/**
+	 * The clearing form (an empty resolved set) must expire in the past, or a
+	 * cookie set by an earlier arrival would never actually clear from the
+	 * reader's browser — see set_carried_segments_cookie()'s docblock.
+	 *
+	 * `assertLessThan( time(), ... )` alone would NOT catch an `expires => 0`
+	 * regression: 0 is itself less than time(), yet PHP's setcookie() treats a
+	 * literal 0 as the "no expiry" session-cookie sentinel, not as a past
+	 * timestamp — it would never clear anything. Asserting `expires > 0` first
+	 * rules that sentinel out, so only a genuine past Unix timestamp passes
+	 * both assertions.
+	 */
+	public function test_clearing_cookie_options_expire_in_the_past() {
+		$expires = $this->cookie_options( true )['expires'];
+		$this->assertGreaterThan( 0, $expires, 'expires must be a real past timestamp, not the 0 "session cookie" sentinel — that would never clear the cookie at all.' );
+		$this->assertLessThan( time(), $expires );
 	}
 }
