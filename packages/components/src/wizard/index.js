@@ -126,6 +126,7 @@ const Wizard = (
 	const isQuietLoading = useSelect( select => select( WIZARD_STORE_NAMESPACE ).isQuietLoading() );
 	const headerData = useSelect( select => select( WIZARD_STORE_NAMESPACE ).getHeaderData() );
 	const notices = useSelect( select => select( WIZARD_STORE_NAMESPACE ).getNotices() );
+	const { invalidateResolution } = useDispatch( WIZARD_STORE_NAMESPACE );
 	const { actions, backNav, badges, sectionDescription, sectionMenu, sectionName, sectionTitle, sectionPrimaryAction, sectionSecondaryAction } =
 		headerData;
 
@@ -138,17 +139,15 @@ const Wizard = (
 
 	let displayedSections = sections.filter( section => ! section.isHidden );
 
-	const { invalidateResolution } = useDispatch( WIZARD_STORE_NAMESPACE );
 	const [ pluginRequirementsSatisfied, setPluginRequirementsSatisfied ] = useState( requiredPlugins.length === 0 );
 
-	// The wizard fetches its data once, on mount. When a required plugin is
-	// missing that fetch runs against an endpoint that cannot answer yet — some
-	// return an error outright — so the response it caches describes a site
-	// without the plugin. Remember that we saw the requirements unmet, so the
-	// data can be refetched once the installer satisfies them. Without the
-	// refetch the section mounts against that stale response and renders empty
-	// until the user saves. Requirements already met on mount need nothing: the
-	// one fetch saw the real site.
+	// The data fetch above runs once per mount, while the required plugins are
+	// still missing — endpoints that need them answer empty or error outright,
+	// and either way the resolver records that as the answer. So the installer
+	// has to trigger a refetch, or the section mounts against it and renders
+	// nothing until the user saves. Requirements already met on mount are left
+	// alone: that fetch saw the real site, and refetching would cost every such
+	// wizard a second request on every load.
 	const requirementsWereUnmet = useRef( false );
 	const onPluginStatus = ( { complete } ) => {
 		if ( ! complete ) {

@@ -1,7 +1,7 @@
 /**
  * External dependencies.
  */
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 
 /**
  * WordPress dependencies.
@@ -23,30 +23,21 @@ window.newspack_urls = { support: 'https://help.newspack.com/' };
 
 const SETTINGS = { minimumDonation: '5' };
 
-/**
- * Stands in for a wizard section that can only render once its API data has
- * arrived — the shape every Newspack wizard section has.
- *
- * @param {Object} props      Component props.
- * @param {string} props.slug Wizard API slug.
- * @return {JSX.Element} Section content.
- */
+// Stands in for a wizard section that can only render once its API data has
+// arrived — the shape every Newspack wizard section has.
 const Section = ( { slug } ) => {
 	const wizardData = useWizardData( slug );
 	return <div>{ wizardData.settings ? 'Settings form' : null }</div>;
 };
 
-/**
- * Mocks the endpoints a wizard hits, gated on whether the required plugin is
- * active: the wizard's own endpoint 400s while the plugin is missing, exactly
- * as Audience_Donations::api_get_donation_settings() does without WooCommerce.
- *
- * @param {string} slug Wizard API slug.
- * @return {Object} Call counters.
- */
-const mockEndpoints = slug => {
+// Mocks the endpoints a wizard hits, gated on whether the required plugin is
+// active: the wizard's own endpoint 400s while the plugin is missing, exactly as
+// Audience_Donations::api_get_donation_settings() does without WooCommerce.
+// Returns a counter so a test can assert how many times the wizard refetched.
+const mockEndpoints = ( slug, initialStatus = 'inactive' ) => {
 	const counts = { wizard: 0 };
-	let pluginStatus = 'inactive';
+	let pluginStatus = initialStatus;
+	const plugin = () => ( { Name: 'WooCommerce', Description: 'Store', Status: pluginStatus, Download: 'wporg' } );
 	apiFetch.mockImplementation( ( { path, method } ) => {
 		if ( path === `/newspack/v1/wizard/${ slug }` && 'POST' !== method ) {
 			counts.wizard++;
@@ -58,13 +49,11 @@ const mockEndpoints = slug => {
 				  } );
 		}
 		if ( path === '/newspack/v1/plugins/' ) {
-			return Promise.resolve( {
-				woocommerce: { Name: 'WooCommerce', Description: 'Store', Status: pluginStatus, Download: 'wporg' },
-			} );
+			return Promise.resolve( { woocommerce: plugin() } );
 		}
 		if ( path === '/newspack/v1/plugins/woocommerce/configure/' ) {
 			pluginStatus = 'active';
-			return Promise.resolve( { Name: 'WooCommerce', Description: 'Store', Status: 'active', Download: 'wporg' } );
+			return Promise.resolve( plugin() );
 		}
 		return Promise.resolve( {} );
 	} );
@@ -80,6 +69,10 @@ const renderWizard = slug =>
 			sections={ [ { label: 'Configuration', path: '/configuration', render: () => <Section slug={ slug } /> } ] }
 		/>
 	);
+
+// Lets every already-queued promise settle, so an assertion that something did
+// NOT happen has actually given it the chance to.
+const flushPending = () => act( () => new Promise( resolve => setTimeout( resolve, 0 ) ) );
 
 describe( 'Wizard', () => {
 	beforeEach( () => {
@@ -110,23 +103,12 @@ describe( 'Wizard', () => {
 
 	it( 'does not refetch when the required plugins were already active', async () => {
 		const slug = 'test-wizard-no-refetch';
-		const counts = mockEndpoints( slug );
-		apiFetch.mockImplementation( ( { path } ) => {
-			if ( path === `/newspack/v1/wizard/${ slug }` ) {
-				counts.wizard++;
-				return Promise.resolve( { settings: SETTINGS } );
-			}
-			if ( path === '/newspack/v1/plugins/' ) {
-				return Promise.resolve( {
-					woocommerce: { Name: 'WooCommerce', Description: 'Store', Status: 'active', Download: 'wporg' },
-				} );
-			}
-			return Promise.resolve( {} );
-		} );
+		const counts = mockEndpoints( slug, 'active' );
 
 		renderWizard( slug );
 
 		expect( await screen.findByText( 'Settings form' ) ).toBeInTheDocument();
-		await waitFor( () => expect( counts.wizard ).toBe( 1 ) );
+		await flushPending();
+		expect( counts.wizard ).toBe( 1 );
 	} );
 } );
