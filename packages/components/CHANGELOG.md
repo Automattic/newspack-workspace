@@ -1,3 +1,10 @@
+## newspack-components [4.6.2](https://github.com/Automattic/newspack-workspace/compare/newspack-components@4.6.1...newspack-components@4.6.2) (2026-08-17)
+
+
+### Bug Fixes
+
+* three WordPress 7.1 regressions in Newsletters ([#876](https://github.com/Automattic/newspack-workspace/issues/876)) ([#894](https://github.com/Automattic/newspack-workspace/issues/894)) ([3b6ac6c](https://github.com/Automattic/newspack-workspace/commit/3b6ac6cce050f2d70f73df1d98f175de1f19a759))
+
 ## newspack-components [4.6.1](https://github.com/Automattic/newspack-workspace/compare/newspack-components@4.6.0...newspack-components@4.6.1) (2026-08-17)
 
 

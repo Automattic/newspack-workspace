@@ -1,3 +1,10 @@
+## newspack-theme [2.25.1](https://github.com/Automattic/newspack-workspace/compare/newspack-theme@2.25.0...newspack-theme@2.25.1) (2026-08-17)
+
+
+### Bug Fixes
+
+* **ads:** remove colored gaps from empty Broadstreet ad slots ([#578](https://github.com/Automattic/newspack-workspace/issues/578)) ([c16c8fc](https://github.com/Automattic/newspack-workspace/commit/c16c8fcb2dbce437cc452be74d42514631b3fd6b))
+
 # newspack-theme [2.25.0](https://github.com/Automattic/newspack-workspace/compare/newspack-theme@2.24.1...newspack-theme@2.25.0) (2026-08-17)
 
 

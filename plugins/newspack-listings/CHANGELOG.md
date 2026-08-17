@@ -1,3 +1,10 @@
+## newspack-listings [3.7.1](https://github.com/Automattic/newspack-workspace/compare/newspack-listings@3.7.0...newspack-listings@3.7.1) (2026-08-17)
+
+
+### Dependencies
+
+* **newspack-components:** upgraded to 4.6.2
+
 # newspack-listings [3.7.0](https://github.com/Automattic/newspack-workspace/compare/newspack-listings@3.6.5...newspack-listings@3.7.0) (2026-08-17)
 
 
