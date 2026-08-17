@@ -1,3 +1,16 @@
+## newspack-popups [3.16.2](https://github.com/Automattic/newspack-workspace/compare/newspack-popups@3.16.1...newspack-popups@3.16.2) (2026-08-17)
+
+
+### Bug Fixes
+
+* **campaigns:** show above-header prompts without JS delay (NPPM-2934) ([#449](https://github.com/Automattic/newspack-workspace/issues/449)) ([44fe406](https://github.com/Automattic/newspack-workspace/commit/44fe40691529b05b9c141b1fb28717c91b2e7909))
+
+
+### Dependencies
+
+* **newspack-components:** upgraded to 4.6.1
+* **newspack-scripts:** upgraded to 5.11.0
+
 ## newspack-popups [3.16.1](https://github.com/Automattic/newspack-workspace/compare/newspack-popups@3.16.0...newspack-popups@3.16.1) (2026-08-04)
 
 
