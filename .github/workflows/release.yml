@@ -176,6 +176,11 @@ jobs:
       # packages were published.
       - name: Snapshot existing tags
         run: git tag > "$RUNNER_TEMP/tags-before.txt"
+      # A failed run here is not recoverable by re-running it: after a partial
+      # multi-semantic-release the re-run checks out the original trigger SHA
+      # while msr's own pushed commits have advanced the branch, so
+      # semantic-release refuses with "The local branch release is behind the
+      # remote one". Recovery is a new push to the branch, not a re-run.
       - name: Release
         if: steps.plan.outputs.release_needed == 'true'
         run: pnpm exec multi-semantic-release --sequential-init
