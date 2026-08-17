@@ -150,6 +150,10 @@ const Wizard = (
 	// wizard a second request on every load.
 	const requirementsWereUnmet = useRef( false );
 	const onPluginStatus = ( { complete } ) => {
+		// Leave the installer first: whatever happens to the refetch, the user
+		// should not be stranded on a required-plugins screen for a plugin they
+		// just installed.
+		setPluginRequirementsSatisfied( complete );
 		if ( ! complete ) {
 			requirementsWereUnmet.current = true;
 		} else if ( requirementsWereUnmet.current ) {
@@ -158,7 +162,6 @@ const Wizard = (
 				invalidateResolution( 'getWizardAPIData', [ apiSlug ] );
 			}
 		}
-		setPluginRequirementsSatisfied( complete );
 	};
 
 	if ( ! pluginRequirementsSatisfied ) {
