@@ -725,12 +725,14 @@ class Test_Premium_Newsletters_Verify extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * Two rules that restrict without naming an enumerable population: a
-	 * subscription rule with no product grants on any active subscription at all
-	 * (has_active_subscription() passes an empty product filter through to
-	 * WooCommerce_Connection::get_active_subscriptions_for_user()), and an
-	 * unconfigured one-time purchase fails closed rather than granting, so it
-	 * restricts everyone.
+	 * Two rules restrict even with an empty value, so neither may be skipped as
+	 * unconfigured. A subscription rule naming no product grants on any active
+	 * subscription at all — has_active_subscription() passes the empty product
+	 * filter through to WooCommerce_Connection::get_active_subscriptions_for_user(),
+	 * which then accepts any of them — and an empty one-time purchase rule fails
+	 * closed in has_one_time_purchase() rather than granting, so it restricts
+	 * everyone. Both are the opposite of is_email_domain_whitelisted() and
+	 * Institution::evaluate(), which return true on an empty value.
 	 */
 	public function test_unenumerable_paid_rules_counts_the_two_rules_that_restrict_while_empty() {
 		$rules = [
@@ -741,11 +743,7 @@ class Test_Premium_Newsletters_Verify extends \WP_UnitTestCase {
 				],
 				[
 					'slug'  => 'one_time_purchase',
-					'value' => [
-						'product_ids'    => [],
-						'duration_value' => 0,
-						'duration_unit'  => 'forever',
-					],
+					'value' => [],
 				],
 			],
 		];
