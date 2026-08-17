@@ -372,14 +372,16 @@ class Test_Premium_Newsletters_Verify extends \WP_UnitTestCase {
 
 	/**
 	 * Every incompleteness reason the command can record has a message explaining
-	 * it, and each names the gate. Wave 4 adds a fourth reason; this is what tells
-	 * whoever adds it that a constant without a message is not finished.
+	 * it, and each names the gate. A constant without a message is not finished:
+	 * this is what tells whoever adds the next reason so.
 	 */
 	public function test_every_coverage_reason_renders_a_message_naming_its_gate() {
 		$reasons = [
 			Premium_Newsletters_Verify::COVERAGE_TRUNCATED,
 			Premium_Newsletters_Verify::COVERAGE_CAP_EXHAUSTED,
 			Premium_Newsletters_Verify::COVERAGE_EMPTY_POPULATION,
+			Premium_Newsletters_Verify::COVERAGE_UNENUMERABLE_PAYWALL,
+			Premium_Newsletters_Verify::COVERAGE_PARTIAL_POPULATION,
 		];
 
 		$this->assertSame( $reasons, array_keys( Premium_Newsletters_Verify::COVERAGE_REASON_MESSAGES ) );
@@ -387,7 +389,7 @@ class Test_Premium_Newsletters_Verify extends \WP_UnitTestCase {
 		foreach ( $reasons as $reason ) {
 			$coverage = $this->invoke_private_static(
 				'with_incomplete_gate',
-				[ $this->invoke_private_static( 'new_coverage', [] ), $reason, $this->make_gate( 7, true ) ]
+				[ $this->invoke_private_static( 'new_coverage', [] ), $reason, $this->make_gate( 7, true ), 'a one-time purchase rule' ]
 			);
 			$lines    = $this->invoke_private_static( 'describe_coverage_gaps', [ $coverage ] );
 
@@ -395,6 +397,50 @@ class Test_Premium_Newsletters_Verify extends \WP_UnitTestCase {
 			$this->assertStringContainsString( 'Gate 7', $lines[0] );
 			$this->assertStringContainsString( 'gate 7', $lines[0] );
 		}
+	}
+
+	/**
+	 * A gate paywalled by rules this command cannot enumerate fails the run, and
+	 * says which rules put it out of reach. Reported as "nothing to verify" before
+	 * this wave, which was false in every clause: it has a paid rule, non-buyers
+	 * are restricted, and a leak among them went unchecked while the run exited 0.
+	 */
+	public function test_an_unenumerable_paywall_fails_the_run_and_names_its_rules() {
+		$coverage = $this->invoke_private_static(
+			'with_incomplete_gate',
+			[
+				$this->invoke_private_static( 'new_coverage', [] ),
+				Premium_Newsletters_Verify::COVERAGE_UNENUMERABLE_PAYWALL,
+				$this->make_gate( 8, true ),
+				'a one-time purchase rule',
+			]
+		);
+
+		$this->assertTrue( $this->invoke_private_static( 'verification_failed', [ $this->clean_summary( [ 'ok' => 0 ] ), $coverage ] ) );
+
+		$lines = $this->invoke_private_static( 'describe_coverage_gaps', [ $coverage ] );
+		$this->assertStringContainsString( 'a one-time purchase rule', $lines[0] );
+		$this->assertStringNotContainsString( 'nothing to verify', $lines[0] );
+	}
+
+	/**
+	 * One gate can collect two reasons — partly unenumerable, then cut short by
+	 * --max-batches — and the failure line counts gates, not entries. "2 gate(s)
+	 * not fully checked" for a run over one gate would be false.
+	 */
+	public function test_a_gate_with_two_reasons_is_counted_once_in_the_failure_line() {
+		$gate     = $this->make_gate( 9, true );
+		$coverage = $this->invoke_private_static(
+			'with_incomplete_gate',
+			[ $this->complete_coverage( [ 9 ] ), Premium_Newsletters_Verify::COVERAGE_PARTIAL_POPULATION, $gate, 'an institutional access rule' ]
+		);
+		$coverage = $this->invoke_private_static(
+			'with_incomplete_gate',
+			[ $coverage, Premium_Newsletters_Verify::COVERAGE_TRUNCATED, $gate ]
+		);
+
+		$this->assertSame( 1, $this->invoke_private_static( 'count_incomplete_gates', [ $coverage ] ) );
+		$this->assertStringContainsString( '1 gate(s) not fully checked', $this->invoke_private_static( 'describe_failure', [ $this->clean_summary(), $coverage ] ) );
 	}
 
 	/**
@@ -537,7 +583,162 @@ class Test_Premium_Newsletters_Verify extends \WP_UnitTestCase {
 		$this->assertCount( 1, $partitioned['verifiable'] );
 		$this->assertSame( 10, $partitioned['verifiable'][0]['id'] );
 		$this->assertSame( [ 46 ], $partitioned['verifiable'][0]['product_ids'] );
+		$this->assertSame( [], $partitioned['verifiable'][0]['unenumerable_rules'] );
 		$this->assertSame( [], $partitioned['registration_only'] );
+		$this->assertSame( [], $partitioned['unenumerable'] );
+	}
+
+	/**
+	 * A gate paywalled only by a one-time purchase is paywalled all the same: its
+	 * non-buyers are restricted and a leak among them is possible. It used to land
+	 * with the registration-only gates and be reported as having "no paid access
+	 * rules", which was false, and the run passed anyway. It belongs in neither the
+	 * checkable bucket nor the harmless one.
+	 */
+	public function test_partition_gates_files_a_non_subscription_paywall_on_its_own() {
+		$gate = $this->make_gate(
+			13,
+			true,
+			[
+				[
+					[
+						'slug'  => 'one_time_purchase',
+						'value' => [
+							'product_ids'    => [ 55 ],
+							'duration_value' => 0,
+							'duration_unit'  => 'forever',
+						],
+					],
+				],
+			]
+		);
+
+		$partitioned = $this->invoke_private_static( 'partition_gates', [ [ $gate ] ] );
+
+		$this->assertSame( [], $partitioned['verifiable'] );
+		$this->assertSame( [], $partitioned['registration_only'] );
+		$this->assertCount( 1, $partitioned['unenumerable'] );
+		$this->assertSame( 13, $partitioned['unenumerable'][0]['id'] );
+		$this->assertSame( [ 'one_time_purchase' ], $partitioned['unenumerable'][0]['unenumerable_rules'] );
+	}
+
+	/**
+	 * A gate whose products are walked can still hand access to readers this
+	 * command cannot list — an institution grants it without any purchase. The gate
+	 * is worth checking, so it stays verifiable, but it carries the rules that make
+	 * its population only part of the story.
+	 */
+	public function test_partition_gates_keeps_a_mixed_gate_verifiable_and_flags_it() {
+		$gate = $this->make_gate(
+			14,
+			true,
+			[
+				[
+					[
+						'slug'  => 'subscription',
+						'value' => [ 46 ],
+					],
+				],
+				[
+					[
+						'slug'  => 'institution',
+						'value' => [ 900 ],
+					],
+				],
+			]
+		);
+
+		$partitioned = $this->invoke_private_static( 'partition_gates', [ [ $gate ] ] );
+
+		$this->assertCount( 1, $partitioned['verifiable'] );
+		$this->assertSame( [ 46 ], $partitioned['verifiable'][0]['product_ids'] );
+		$this->assertSame( [ 'institution' ], $partitioned['verifiable'][0]['unenumerable_rules'] );
+		$this->assertSame( [], $partitioned['unenumerable'] );
+	}
+
+	/**
+	 * An unconfigured rule paywalls nobody — is_email_domain_whitelisted() and
+	 * Institution::evaluate() both return true on an empty value — so a gate
+	 * carrying only those is genuinely harmless and must not start failing runs.
+	 */
+	public function test_partition_gates_treats_unconfigured_rules_as_harmless() {
+		$gate = $this->make_gate(
+			15,
+			true,
+			[
+				[
+					[
+						'slug'  => 'email_domain',
+						'value' => '',
+					],
+					[
+						'slug'  => 'institution',
+						'value' => [],
+					],
+				],
+			]
+		);
+
+		$partitioned = $this->invoke_private_static( 'partition_gates', [ [ $gate ] ] );
+
+		$this->assertSame( [], $partitioned['verifiable'] );
+		$this->assertSame( [], $partitioned['unenumerable'] );
+		$this->assertCount( 1, $partitioned['registration_only'] );
+		$this->assertFalse( $this->invoke_private_static( 'verification_failed', [ $this->clean_summary(), $this->complete_coverage() ] ) );
+	}
+
+	/**
+	 * Two rules that restrict without naming an enumerable population: a
+	 * subscription rule with no product grants on any active subscription at all
+	 * (has_active_subscription() passes an empty product filter through to
+	 * WooCommerce_Connection::get_active_subscriptions_for_user()), and an
+	 * unconfigured one-time purchase fails closed rather than granting, so it
+	 * restricts everyone.
+	 */
+	public function test_unenumerable_paid_rules_counts_the_two_rules_that_restrict_while_empty() {
+		$rules = [
+			[
+				[
+					'slug'  => 'subscription',
+					'value' => [],
+				],
+				[
+					'slug'  => 'one_time_purchase',
+					'value' => [
+						'product_ids'    => [],
+						'duration_value' => 0,
+						'duration_unit'  => 'forever',
+					],
+				],
+			],
+		];
+
+		$this->assertSame(
+			[ 'subscription', 'one_time_purchase' ],
+			$this->invoke_private_static( 'unenumerable_paid_rules', [ $rules ] )
+		);
+	}
+
+	/**
+	 * A rule this command has never heard of can restrict anything it likes —
+	 * Access_Rules::register_rule() is open to other plugins — so an unrecognized
+	 * slug carrying a value counts as a paywall rather than being assumed safe, and
+	 * is named as itself rather than mislabelled.
+	 */
+	public function test_unenumerable_paid_rules_counts_an_unrecognized_rule() {
+		$rules = [
+			[
+				[
+					'slug'  => 'partner_perk',
+					'value' => [ 'acme' ],
+				],
+			],
+		];
+
+		$slugs = $this->invoke_private_static( 'unenumerable_paid_rules', [ $rules ] );
+
+		$this->assertSame( [ 'partner_perk' ], $slugs );
+		$this->assertStringContainsString( '"partner_perk"', $this->invoke_private_static( 'describe_rule_slugs', [ $slugs ] ) );
 	}
 
 	/**
@@ -556,16 +757,17 @@ class Test_Premium_Newsletters_Verify extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * A paid mode with no products constrains nothing, so there is no population to
-	 * enumerate and nothing this command can check. It belongs with the
-	 * registration-only gates, not with the verifiable ones.
+	 * A paid mode with no rules at all restricts nobody — Access_Rules::evaluate_rules()
+	 * grants access on an empty rule set — so there is nothing to check and nothing
+	 * to warn about. It belongs with the registration-only gates.
 	 */
-	public function test_partition_gates_treats_a_paid_gate_with_no_products_as_unverifiable() {
+	public function test_partition_gates_treats_a_paid_gate_with_no_rules_as_unverifiable() {
 		$gate = $this->make_gate( 12, true, [] );
 
 		$partitioned = $this->invoke_private_static( 'partition_gates', [ [ $gate ] ] );
 
 		$this->assertSame( [], $partitioned['verifiable'] );
+		$this->assertSame( [], $partitioned['unenumerable'] );
 		$this->assertCount( 1, $partitioned['registration_only'] );
 	}
 
