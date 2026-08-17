@@ -47,18 +47,49 @@ class Premium_Newsletters_Verify {
 	const COVERAGE_EMPTY_POPULATION = 'empty_population';
 
 	/**
+	 * A gate paywalled entirely by access rules whose holders this command cannot
+	 * enumerate, so none of its readers were checked.
+	 */
+	const COVERAGE_UNENUMERABLE_PAYWALL = 'unenumerable_paywall';
+
+	/**
+	 * A gate whose subscription population was walked, but which also grants
+	 * access through a rule whose holders were never enumerated.
+	 */
+	const COVERAGE_PARTIAL_POPULATION = 'partial_population';
+
+	/**
 	 * Why each incompleteness reason means the run cannot be read as a pass.
 	 *
 	 * Keyed by the COVERAGE_* reason constants; each value is a sprintf template
-	 * taking the gate title and the gate ID, in that order. Adding a reason means
-	 * adding a constant and an entry here — describe_coverage_gaps() renders
-	 * whatever is in this map, and coverage_is_complete() does not care which
-	 * reason it is looking at.
+	 * taking the gate title, the gate ID, and a per-gap detail string, in that
+	 * order. A template is free to use only the first two — sprintf ignores
+	 * arguments it has no placeholder for — and the detail is '' for every reason
+	 * that does not record one. Adding a reason means adding a constant and an
+	 * entry here — describe_coverage_gaps() renders whatever is in this map, and
+	 * coverage_is_complete() does not care which reason it is looking at.
 	 */
 	const COVERAGE_REASON_MESSAGES = [
-		self::COVERAGE_TRUNCATED        => '"%1$s" (gate %2$d): --max-batches stopped this gate part-way, so some of its readers were never checked.',
-		self::COVERAGE_CAP_EXHAUSTED    => '"%1$s" (gate %2$d): skipped entirely, because an earlier gate had already spent --max-batches.',
-		self::COVERAGE_EMPTY_POPULATION => '"%1$s" (gate %2$d): no reader holds or has held its products, so nobody was checked. A gate whose products no subscription can match yields an empty population and a clean-looking run, which is indistinguishable from a gate that is genuinely unused.',
+		self::COVERAGE_TRUNCATED            => '"%1$s" (gate %2$d): --max-batches stopped this gate part-way, so some of its readers were never checked.',
+		self::COVERAGE_CAP_EXHAUSTED        => '"%1$s" (gate %2$d): skipped entirely, because an earlier gate had already spent --max-batches.',
+		self::COVERAGE_EMPTY_POPULATION     => '"%1$s" (gate %2$d): no reader holds or has held its products, so nobody was checked. A gate whose products no subscription can match yields an empty population and a clean-looking run, which is indistinguishable from a gate that is genuinely unused.',
+		self::COVERAGE_UNENUMERABLE_PAYWALL => '"%1$s" (gate %2$d): paywalled by %3$s. This command has no way to list who holds or has held that access, so not one of its readers was checked and a leak behind it would go unreported.',
+		self::COVERAGE_PARTIAL_POPULATION   => '"%1$s" (gate %2$d): its subscription products were walked, but it also grants access through %3$s. Readers who reached its lists that way were never enumerated, so this gate is only partly checked.',
+	];
+
+	/**
+	 * How each shipped access rule is named in operator-facing output.
+	 *
+	 * A slug with no entry here is printed as itself: third-party rules are
+	 * registerable through Access_Rules::register_rule(), and naming one wrongly
+	 * would be worse than naming it plainly.
+	 */
+	const RULE_LABELS = [
+		'subscription'      => 'a subscription rule naming no product (any active subscription)',
+		'one_time_purchase' => 'a one-time purchase rule',
+		'institution'       => 'an institutional access rule',
+		'email_domain'      => 'an email domain rule',
+		'reader_data'       => 'a reader data rule',
 	];
 
 	/**
@@ -82,12 +113,18 @@ class Premium_Newsletters_Verify {
 	 * What a passing run claims is bounded by that population: readers who hold or
 	 * have held one of a gate's products. It cannot see a reader who satisfied the
 	 * source Memberships plan by buying a non-subscription product (the migration
-	 * writes those product IDs into a `subscription` access rule, which
-	 * wcs_get_subscriptions() can never match), one who joined a list before it
+	 * writes those product IDs into a `subscription` access rule, which a
+	 * subscription lookup can never match), one who joined a list before it
 	 * became premium, or one whose membership was granted by hand. Widening the
 	 * population would not reach them either — there is no provider-agnostic bulk
 	 * read of ESP list membership to widen it with — so the terminal message names
 	 * the population it checked rather than claiming the site as a whole.
+	 *
+	 * The same boundary decides which gates it can speak for at all. A gate
+	 * paywalled by a rule other than `subscription` — a one-time purchase, an
+	 * institution, an email domain, reader data — restricts readers this command
+	 * cannot list, so it is named in the output and fails the run rather than
+	 * passing as "nothing to verify". See unenumerable_paid_rules().
 	 *
 	 * Each reader costs two ESP calls, not one: a contact lookup before the list
 	 * read, because every shipped provider's list read swallows a failed request
@@ -193,6 +230,7 @@ class Premium_Newsletters_Verify {
 		}
 
 		$partitioned = self::partition_gates( $gates );
+		$coverage    = self::new_coverage();
 
 		foreach ( $partitioned['registration_only'] as $gate ) {
 			WP_CLI::line(
@@ -204,7 +242,35 @@ class Premium_Newsletters_Verify {
 			);
 		}
 
+		foreach ( $partitioned['unenumerable'] as $gate ) {
+			// A paid gate over content other than newsletters restricts nobody's
+			// list membership, so its unenumerable rules cost this run nothing.
+			if ( empty( self::restricted_list_ids_for_gate( $gate ) ) ) {
+				WP_CLI::line( self::describe_gate_without_lists( $gate ) );
+				continue;
+			}
+			$rules    = self::describe_rule_slugs( $gate['unenumerable_rules'] );
+			$coverage = self::with_incomplete_gate( $coverage, self::COVERAGE_UNENUMERABLE_PAYWALL, $gate, $rules );
+			WP_CLI::warning(
+				sprintf(
+					'"%s" (gate %d): paywalled by %s, so readers who lack it are restricted — and this command cannot list who holds it, so none of them were checked.',
+					$gate['title'],
+					$gate['id'],
+					$rules
+				)
+			);
+		}
+
 		if ( empty( $partitioned['verifiable'] ) ) {
+			// Reached with an incomplete coverage record whenever an unenumerable
+			// gate was named above, in which case this run fails without having
+			// compared anything. The success line below is only reachable when that
+			// list was empty, which is what keeps it true.
+			$summary = self::summarize_rows( [] );
+			self::print_coverage_gaps( $coverage );
+			if ( self::verification_failed( $summary, $coverage ) ) {
+				WP_CLI::error( self::describe_failure( $summary, $coverage ) );
+			}
 			WP_CLI::success( 'No premium newsletter gate restricts a list behind a product, so there is nothing to compare.' );
 			return;
 		}
@@ -216,8 +282,7 @@ class Premium_Newsletters_Verify {
 		// whole run as its help text promises rather than resetting per gate.
 		$batches = 0;
 
-		$rows     = [];
-		$coverage = self::new_coverage();
+		$rows = [];
 		foreach ( $partitioned['verifiable'] as $gate ) {
 			$rows = array_merge( $rows, self::verify_gate( $gate, $auto_signup, $live, $batch_size, $max_batches, $batches, $coverage ) );
 		}
@@ -417,14 +482,20 @@ class Premium_Newsletters_Verify {
 	 * @param array  $coverage Coverage record.
 	 * @param string $reason   One of the COVERAGE_* reason constants.
 	 * @param array  $gate     Gate array carrying 'id' and 'title'.
+	 * @param string $detail   Extra text the reason's message renders as its third
+	 *                         placeholder, for reasons that vary per gate (which
+	 *                         access rules could not be enumerated, say). Reasons
+	 *                         whose message says the same thing every time leave it
+	 *                         empty.
 	 *
 	 * @return array The coverage record with this gap noted.
 	 */
-	private static function with_incomplete_gate( array $coverage, string $reason, array $gate ): array {
+	private static function with_incomplete_gate( array $coverage, string $reason, array $gate, string $detail = '' ): array {
 		$coverage['incomplete'][] = [
 			'reason'  => $reason,
 			'gate'    => (string) ( $gate['title'] ?? '' ),
 			'gate_id' => (int) ( $gate['id'] ?? 0 ),
+			'detail'  => $detail,
 		];
 		return $coverage;
 	}
@@ -461,9 +532,29 @@ class Premium_Newsletters_Verify {
 		foreach ( $coverage['incomplete'] ?? [] as $gap ) {
 			$reason   = $gap['reason'] ?? '';
 			$template = self::COVERAGE_REASON_MESSAGES[ $reason ] ?? '"%1$s" (gate %2$d): not fully checked (' . $reason . ').';
-			$lines[]  = sprintf( $template, $gap['gate'] ?? '', (int) ( $gap['gate_id'] ?? 0 ) );
+			$lines[]  = sprintf( $template, $gap['gate'] ?? '', (int) ( $gap['gate_id'] ?? 0 ), (string) ( $gap['detail'] ?? '' ) );
 		}
 		return $lines;
+	}
+
+	/**
+	 * How many distinct gates the run failed to check in full.
+	 *
+	 * Counted by gate rather than by entry: one gate can collect two reasons at
+	 * once — a gate paywalled partly by rules this command cannot enumerate and
+	 * then cut short by --max-batches records both — and "2 gate(s) not fully
+	 * checked" for a run over a single gate would be false.
+	 *
+	 * @param array $coverage Coverage record.
+	 *
+	 * @return int
+	 */
+	private static function count_incomplete_gates( array $coverage ): int {
+		$gate_ids = [];
+		foreach ( $coverage['incomplete'] ?? [] as $gap ) {
+			$gate_ids[ (int) ( $gap['gate_id'] ?? 0 ) ] = true;
+		}
+		return count( $gate_ids );
 	}
 
 	/**
@@ -528,7 +619,7 @@ class Premium_Newsletters_Verify {
 			$reasons[] = sprintf( '%d unresolved row(s)', $summary['unresolved'] );
 		}
 		if ( ! self::coverage_is_complete( $coverage ) ) {
-			$reasons[] = sprintf( '%d gate(s) not fully checked', count( $coverage['incomplete'] ) );
+			$reasons[] = sprintf( '%d gate(s) not fully checked', self::count_incomplete_gates( $coverage ) );
 		}
 		return sprintf(
 			'Verification failed: %s. Checked %s. Do not treat this site as reconciled.',
@@ -586,39 +677,152 @@ class Premium_Newsletters_Verify {
 	}
 
 	/**
-	 * Split gates into the ones this command can check and the ones it cannot.
+	 * The slugs of a gate's access rules that paywall it but whose population this
+	 * command cannot enumerate.
 	 *
-	 * A gate is verifiable when its paid access mode is active and names products:
-	 * that gives both an exclusion to test and a bounded population to test it
-	 * against. A registration-only gate has neither — every registered reader is
-	 * entitled, so no reader can be wrongly subscribed, and the only possible gap
-	 * spans the whole reader base. A paid gate with no products constrains nothing
-	 * and lands in the same bucket.
+	 * A rule's population is enumerable only when the site keeps a record of every
+	 * reader who ever satisfied it, reachable from the rule's own value.
+	 * `subscription` is the only shipped rule that qualifies: it names product IDs,
+	 * and WooCommerce Subscriptions indexes subscriptions by product in any status,
+	 * so a reader whose subscription ended is still findable — which is exactly the
+	 * reader who leaks. The rest do not:
+	 *
+	 * - `one_time_purchase` names products too, and WooCommerce does record every
+	 *   purchase, but there is no supported reverse lookup from a product to its
+	 *   purchasers: wc_customer_bought_product() answers per customer, and
+	 *   wc_get_orders() takes no product argument — which is why
+	 *   Access_Rules::customer_bought_product_after()
+	 *   (includes/content-gate/class-access-rules.php) reads a customer's orders and
+	 *   walks their line items. Enumerating it would mean a bespoke order-item
+	 *   query this command does not have, so it is named rather than pretended over.
+	 * - `email_domain`, `reader_data` and `institution` are decided from the
+	 *   reader's attributes at the moment of asking — the email domain on their
+	 *   account, their reader-data values, and an institution match that
+	 *   Institution::evaluate() resolves partly from the request itself (IP). Nothing
+	 *   records who satisfied them yesterday, so the readers who could have been
+	 *   subscribed while entitled are indistinguishable from the whole reader base.
+	 *
+	 * An unconfigured rule is skipped, because it paywalls nothing:
+	 * is_email_domain_whitelisted(), has_reader_data() and Institution::evaluate()
+	 * each return true on an empty value. Two rules are exceptions, both verified
+	 * against their evaluators:
+	 *
+	 * - `one_time_purchase` counts whatever its value: has_one_time_purchase() fails
+	 *   closed on an empty product list, so an unconfigured one restricts everyone.
+	 * - `subscription` counts when it names no product: has_active_subscription()
+	 *   then passes an empty product filter to
+	 *   WooCommerce_Connection::get_active_subscriptions_for_user(), which grants on
+	 *   any active subscription at all. That is a real paywall, and not one a
+	 *   product-keyed population query can enumerate.
+	 *
+	 * An unrecognized slug with a value counts too. A third-party rule registered
+	 * through Access_Rules::register_rule() can restrict anything it likes, and
+	 * assuming otherwise is how a gate ends up reported as safe unchecked.
+	 *
+	 * @param array $access_rules Grouped access rules.
+	 *
+	 * @return string[] Deduplicated rule slugs, in the order first seen.
+	 */
+	private static function unenumerable_paid_rules( array $access_rules ): array {
+		$slugs = [];
+		foreach ( $access_rules as $group ) {
+			if ( ! is_array( $group ) ) {
+				continue;
+			}
+			foreach ( $group as $rule ) {
+				$slug  = (string) ( $rule['slug'] ?? '' );
+				$value = $rule['value'] ?? null;
+				if ( '' === $slug ) {
+					continue;
+				}
+				if ( 'subscription' === $slug ) {
+					// A subscription rule naming products is the one population this
+					// command can walk, so it is not a gap.
+					if ( ! empty( array_filter( array_map( 'intval', (array) $value ) ) ) ) {
+						continue;
+					}
+				} elseif ( 'one_time_purchase' !== $slug && empty( $value ) ) {
+					continue;
+				}
+				$slugs[] = $slug;
+			}
+		}
+		return array_values( array_unique( $slugs ) );
+	}
+
+	/**
+	 * Rule slugs as one operator-readable phrase.
+	 *
+	 * @param string[] $slugs Rule slugs.
+	 *
+	 * @return string For example "a one-time purchase rule and an institutional access rule".
+	 */
+	private static function describe_rule_slugs( array $slugs ): string {
+		$labels = array_map(
+			fn( $slug ) => self::RULE_LABELS[ $slug ] ?? sprintf( 'the "%s" access rule', $slug ),
+			$slugs
+		);
+		if ( empty( $labels ) ) {
+			return 'access rules this command cannot enumerate';
+		}
+		if ( 1 === count( $labels ) ) {
+			return $labels[0];
+		}
+		$last = array_pop( $labels );
+		return implode( ', ', $labels ) . ' and ' . $last;
+	}
+
+	/**
+	 * Split gates three ways: checkable, harmless, and paywalled but unenumerable.
+	 *
+	 * A gate is verifiable when its paid access mode is active and a subscription
+	 * rule names products: that gives both an exclusion to test and a bounded
+	 * population to test it against.
+	 *
+	 * A gate is harmless when nothing about it paywalls anything — the paid mode is
+	 * off, or it is on with no rule that restricts anyone. Every registered reader
+	 * is then entitled, so no reader can be wrongly subscribed.
+	 *
+	 * The third bucket is the one that matters: a gate that really is paywalled,
+	 * by rules whose holders this command cannot list (see
+	 * unenumerable_paid_rules()). Readers behind it are restricted, a leak among
+	 * them is possible, and nothing here can look for it — so it is neither
+	 * checkable nor harmless, and reporting it as either would be a lie. A
+	 * verifiable gate can carry such rules too, alongside its products; its slugs
+	 * ride along in 'unenumerable_rules' so the run can say its population was only
+	 * part of the story.
 	 *
 	 * Unverifiable gates are returned rather than dropped so the report can name
 	 * them and say why.
 	 *
 	 * @param array[] $gates Gate arrays as Content_Gate::get_gate() returns them.
 	 *
-	 * @return array{verifiable: array[], registration_only: array[]}
+	 * @return array{verifiable: array[], unenumerable: array[], registration_only: array[]}
 	 */
 	private static function partition_gates( array $gates ): array {
 		$verifiable        = [];
+		$unenumerable      = [];
 		$registration_only = [];
 		foreach ( $gates as $gate ) {
-			$is_paid     = ! empty( $gate['custom_access']['active'] );
-			$product_ids = $is_paid
-				? self::product_ids_from_access_rules( $gate['custom_access']['access_rules'] ?? [] )
-				: [];
-			if ( $is_paid && ! empty( $product_ids ) ) {
+			if ( empty( $gate['custom_access']['active'] ) ) {
+				$registration_only[] = $gate;
+				continue;
+			}
+			$access_rules               = $gate['custom_access']['access_rules'] ?? [];
+			$product_ids                = self::product_ids_from_access_rules( $access_rules );
+			$gate['unenumerable_rules'] = self::unenumerable_paid_rules( $access_rules );
+			if ( ! empty( $product_ids ) ) {
 				$gate['product_ids'] = $product_ids;
 				$verifiable[]        = $gate;
+			} elseif ( ! empty( $gate['unenumerable_rules'] ) ) {
+				$unenumerable[] = $gate;
 			} else {
 				$registration_only[] = $gate;
 			}
 		}
 		return [
 			'verifiable'        => $verifiable,
+			'unenumerable'      => $unenumerable,
 			'registration_only' => $registration_only,
 		];
 	}
@@ -652,6 +856,27 @@ class Premium_Newsletters_Verify {
 			return 'The active ESP does not support subscription management (no get_contact_lists()/update_contact_lists()), so every reader\'s list read would come back an error and the run would report the entire population as unresolved rather than comparing anything. Switch to a provider that supports subscription management before running this.';
 		}
 		return null;
+	}
+
+	/**
+	 * What to print for a gate that restricts no newsletter list.
+	 *
+	 * Not a coverage gap. Such a gate is a paid gate over some other kind of
+	 * content, which get_gates() returns alongside the newsletter ones, so it
+	 * contributes no premium list for a reader to be wrongly subscribed to and
+	 * there is nothing here for the run's claim to be missing. Said out loud rather
+	 * than skipped in silence, so the operator can see it was considered.
+	 *
+	 * Shared by the two places that reach this conclusion — a verifiable gate and a
+	 * gate paywalled by rules this command cannot enumerate — so the two cannot
+	 * drift into saying different things about the same situation.
+	 *
+	 * @param array $gate Gate array carrying 'id' and 'title'.
+	 *
+	 * @return string
+	 */
+	private static function describe_gate_without_lists( array $gate ): string {
+		return sprintf( '"%s" (gate %d): restricts no newsletter list, so it puts no reader on a premium list. Nothing to check.', $gate['title'], $gate['id'] );
 	}
 
 	/**
@@ -821,14 +1046,19 @@ class Premium_Newsletters_Verify {
 	private static function verify_gate( array $gate, bool $auto_signup, bool $live, int $batch_size, int $max_batches, int &$batches, array &$coverage ): array {
 		$list_ids = self::restricted_list_ids_for_gate( $gate );
 		if ( empty( $list_ids ) ) {
-			// Not a coverage gap. This gate restricts no newsletter list at all — it
-			// is a paid gate over some other kind of content, which get_gates()
-			// returns alongside the newsletter ones — so it contributes no premium
-			// list for a reader to be wrongly subscribed to, and there is nothing
-			// here for the run's claim to be missing. Said out loud rather than
-			// skipped in silence, so the operator can see it was considered.
-			WP_CLI::line( sprintf( '"%s" (gate %d): restricts no newsletter list, so it puts no reader on a premium list. Nothing to check.', $gate['title'], $gate['id'] ) );
+			WP_CLI::line( self::describe_gate_without_lists( $gate ) );
 			return [];
+		}
+		if ( ! empty( $gate['unenumerable_rules'] ) ) {
+			// This gate's products give a population to walk, but they are not the
+			// only way into its lists: another rule grants access to readers this
+			// command cannot list. The walk below is real coverage and the gate is
+			// still worth checking — it just is not the whole gate, and a run that
+			// claimed otherwise would be making the same promise the empty-population
+			// case does.
+			$rules    = self::describe_rule_slugs( $gate['unenumerable_rules'] );
+			$coverage = self::with_incomplete_gate( $coverage, self::COVERAGE_PARTIAL_POPULATION, $gate, $rules );
+			WP_CLI::warning( sprintf( '"%s" (gate %d): also grants access through %s, whose holders are not in the population below.', $gate['title'], $gate['id'], $rules ) );
 		}
 		if ( $max_batches && $batches >= $max_batches ) {
 			WP_CLI::warning( sprintf( '"%s" (gate %d): skipped entirely because --max-batches was already reached by an earlier gate.', $gate['title'], $gate['id'] ) );
@@ -1025,6 +1255,30 @@ class Premium_Newsletters_Verify {
 	}
 
 	/**
+	 * Print each gap in the run's coverage, or nothing when there are none.
+	 *
+	 * Called from the full report and from the early exit a run takes when it has
+	 * no verifiable gate to walk, because that exit can now fail — a gate paywalled
+	 * by rules this command cannot enumerate produces a gap and no rows at all —
+	 * and the operator needs the same explanation either way.
+	 *
+	 * @param array $coverage Coverage record.
+	 *
+	 * @return void
+	 */
+	private static function print_coverage_gaps( array $coverage ): void {
+		$coverage_gaps = self::describe_coverage_gaps( $coverage );
+		if ( empty( $coverage_gaps ) ) {
+			return;
+		}
+		WP_CLI::line( '' );
+		WP_CLI::line( 'Coverage is incomplete, so this run is not a pass whatever it found:' );
+		foreach ( $coverage_gaps as $gap_line ) {
+			WP_CLI::line( '  - ' . $gap_line );
+		}
+	}
+
+	/**
 	 * Print the summary, then the rows that need attention.
 	 *
 	 * @param array[]           $rows        Result rows.
@@ -1080,14 +1334,7 @@ class Premium_Newsletters_Verify {
 		WP_CLI::line( sprintf( 'Coverage: %s.', self::describe_checked_scope( $coverage ) ) );
 		WP_CLI::line( 'This covers readers who hold or have held a gate\'s products, and nobody else. A reader who satisfied the source Memberships plan with a non-subscription product, one who joined a list before it became premium, and one whose membership was granted by hand are all restricted after cutover and all invisible here — no provider-agnostic bulk read of ESP list membership exists to reach them.' );
 
-		$coverage_gaps = self::describe_coverage_gaps( $coverage );
-		if ( ! empty( $coverage_gaps ) ) {
-			WP_CLI::line( '' );
-			WP_CLI::line( 'Coverage is incomplete, so this run is not a pass whatever it found:' );
-			foreach ( $coverage_gaps as $gap_line ) {
-				WP_CLI::line( '  - ' . $gap_line );
-			}
-		}
+		self::print_coverage_gaps( $coverage );
 
 		WP_CLI::line( '' );
 		if ( 0 < $summary['removed'] ) {
