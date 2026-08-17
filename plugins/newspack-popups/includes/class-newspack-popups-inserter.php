@@ -1009,6 +1009,52 @@ final class Newspack_Popups_Inserter {
 	}
 
 	/**
+	 * The preview slice of the view script's localized data.
+	 *
+	 * Separate from preview_param_names() so the localized *key* is assertable, not
+	 * just the list: the front end reads `newspack_popups_view.preview_param_names`,
+	 * and renaming either side alone would leave both suites green while previews
+	 * silently stopped surviving a click. Named for the shape it has — a flat list of
+	 * param names, where newspack_popups_data.preview_query_keys is a
+	 * meta-key => param map.
+	 *
+	 * @return array Empty when this is not a prompt preview.
+	 */
+	public static function get_view_script_preview_data() {
+		$names = self::preview_param_names();
+		return empty( $names ) ? [] : [ 'preview_param_names' => $names ];
+	}
+
+	/**
+	 * The preview query param names to hand the previewed document, so it can carry
+	 * them onto same-origin links and keep the preview alive across a click.
+	 *
+	 * Both checks earn their place, because previewed_popup_id() only reports that
+	 * the request carries a `pid` — not that anyone may preview, nor that the id is a
+	 * prompt. `pid` is a common campaign parameter, so without can_preview_popup() a
+	 * reader arriving on `?pid=…` would have it stamped onto every link for the rest
+	 * of their session while seeing no prompts at all, and an editor who follows an
+	 * ad or newsletter link carrying an unrelated `pid` would get the same.
+	 * is_preview_request() is the wrong test here — it also covers preset, view-as
+	 * and customizer previews, which pass their state differently.
+	 *
+	 * The JS half of this contract has its own guard: propagation only runs inside
+	 * the preview frame. See src/view/preview-links.js.
+	 *
+	 * @return array Param names, empty when this is not a prompt preview.
+	 */
+	public static function preview_param_names() {
+		$previewed_popup_id = Newspack_Popups::previewed_popup_id();
+		if ( ! $previewed_popup_id || ! Newspack_Popups::can_preview_popup( $previewed_popup_id ) ) {
+			return [];
+		}
+		return array_merge(
+			[ Newspack_Popups::NEWSPACK_POPUP_PREVIEW_QUERY_PARAM ],
+			array_values( Newspack_Popups::PREVIEW_QUERY_KEYS )
+		);
+	}
+
+	/**
 	 * Enqueue the assets needed to display the popups.
 	 */
 	public static function enqueue_scripts() {
@@ -1109,6 +1155,8 @@ final class Newspack_Popups_Inserter {
 					$script_data['ab_view_as'] = $view_as_spec['ab_variant'];
 				}
 			}
+
+			$script_data = array_merge( $script_data, self::get_view_script_preview_data() );
 
 			\wp_localize_script( $script_handle, 'newspack_popups_view', $script_data );
 			\wp_enqueue_script( $script_handle );

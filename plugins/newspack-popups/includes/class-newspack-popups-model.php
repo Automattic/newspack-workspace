@@ -316,12 +316,7 @@ final class Newspack_Popups_Model {
 	 *                    the post is not a prompt, or the id does not resolve to a post.
 	 */
 	public static function retrieve_preview_popup( $post_id ) {
-		// Previews render unsaved prompt content, so restrict them to users who can manage
-		// prompts and to the prompts CPT, mirroring the plugin's other preview entry points.
-		if ( ! Newspack_Popups::is_user_admin() ) {
-			return null;
-		}
-		if ( Newspack_Popups::NEWSPACK_POPUPS_CPT !== get_post_type( $post_id ) ) {
+		if ( ! Newspack_Popups::can_preview_popup( $post_id ) ) {
 			return null;
 		}
 		// The editor's autosave only holds the freshest content while there are
