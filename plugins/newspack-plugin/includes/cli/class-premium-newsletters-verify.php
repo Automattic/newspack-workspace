@@ -99,6 +99,10 @@ class Premium_Newsletters_Verify {
 	 * unsubscribed reader. That window is narrow, and an outage large enough to
 	 * matter trips the contact lookup for everyone, so it is left as is.
 	 *
+	 * A --live removal costs more again, on the write path only: the removal itself
+	 * re-reads the contact before writing, and this command then re-reads the
+	 * contact's lists to confirm the list is actually gone.
+	 *
 	 * ## OPTIONS
 	 *
 	 * [--live]
@@ -108,7 +112,7 @@ class Premium_Newsletters_Verify {
 	 * : Only verify this gate.
 	 *
 	 * [--batch-size=<number>]
-	 * : Readers to check between pauses. Default 100. Each reader costs two ESP calls, so a large batch size is a large burst of API traffic.
+	 * : Readers to check between pauses. Default 100. A dry run costs two ESP calls per reader — a contact lookup and a list read. Under --live each removal adds more on top: the removal itself re-reads the contact before writing, and this command re-reads the contact's lists afterwards to confirm the removal landed. So a large batch size is a large burst of API traffic, and larger still on a run that is removing.
 	 *
 	 * [--max-batches=<number>]
 	 * : Stop after roughly this many batches, across the whole run. Useful for sampling a large site before committing to a full run. Must be a positive integer; omit it for no limit. Not an exact cap: a gate's last batch is never counted against it, so a run spanning several gates can check somewhat more readers than batch-size times max-batches implies.
@@ -288,6 +292,45 @@ class Premium_Newsletters_Verify {
 	}
 
 	/**
+	 * What a --live removal attempt actually achieved, per the ESP's own answer
+	 * afterwards.
+	 *
+	 * The removal's return value is not evidence on its own.
+	 * Newspack_Newsletters_Contacts::add_and_remove_lists() hands off to the service
+	 * provider's update_contact_lists_handling_local()
+	 * (newspack-newsletters/includes/service-providers/class-newspack-newsletters-service-provider.php),
+	 * which opens by re-reading the contact with get_contact_data(). When *that*
+	 * read fails — for any reason, a transient provider failure included, since it
+	 * only tests is_wp_error() — it takes its create-contact branch, upserts the
+	 * contact with the (here empty) add list, and returns true. So a removal that
+	 * never touched the list can still come back true, and treating that as success
+	 * would stamp a still-subscribed reader as clean: a real leak converted into a
+	 * pass, in the one place this command writes.
+	 *
+	 * Reading the lists back closes that. Anything short of the list being visibly
+	 * gone is 'unresolved' rather than 'removed' — a failed removal, a failed
+	 * re-read and a re-read still showing the list all mean the same thing to an
+	 * operator, which is that this reader's removal is not confirmed and the run
+	 * has to be repeated.
+	 *
+	 * @param mixed  $removal_result What add_and_remove_lists() returned.
+	 * @param mixed  $lists_after    What get_contact_lists() returned afterwards, or [] when the
+	 *                               removal itself errored and no re-read was made.
+	 * @param string $public_id      The list's public (ESP) ID.
+	 *
+	 * @return string 'removed' when the list is confirmed gone, 'unresolved' otherwise.
+	 */
+	private static function classify_removal( $removal_result, $lists_after, string $public_id ): string {
+		if ( \is_wp_error( $removal_result ) ) {
+			return 'unresolved';
+		}
+		if ( \is_wp_error( $lists_after ) || ! is_array( $lists_after ) ) {
+			return 'unresolved';
+		}
+		return self::is_subscribed_to_list( $public_id, $lists_after ) ? 'unresolved' : 'removed';
+	}
+
+	/**
 	 * Count each outcome across a run's rows.
 	 *
 	 * Every bucket is present even at zero so callers can read one without first
@@ -302,6 +345,7 @@ class Premium_Newsletters_Verify {
 			'leak'         => 0,
 			'gap'          => 0,
 			'ok'           => 0,
+			'removed'      => 0,
 			'not_asserted' => 0,
 			'unresolved'   => 0,
 		];
@@ -854,7 +898,10 @@ class Premium_Newsletters_Verify {
 
 					if ( 'leak' === $status && $live ) {
 						$removed = \Newspack_Newsletters_Contacts::add_and_remove_lists( $user->user_email, [], [ $public_id ], 'Verifying premium newsletter lists' );
-						$status  = \is_wp_error( $removed ) ? 'unresolved' : 'ok';
+						// A non-error return is not proof the list is gone, so the lists
+						// are read again and the removal is only recorded once it shows.
+						$lists_after = \is_wp_error( $removed ) ? [] : \Newspack_Newsletters_Subscription::get_contact_lists( $user->user_email );
+						$status      = self::classify_removal( $removed, $lists_after, $public_id );
 					}
 					$rows[] = self::make_row( $gate, $list_id, $user, $status );
 				}
@@ -932,7 +979,8 @@ class Premium_Newsletters_Verify {
 	 * @param array    $gate    Gate array.
 	 * @param int      $list_id List post ID.
 	 * @param \WP_User $user    The reader.
-	 * @param string   $status  One of the classify_reader() statuses, or 'unresolved'.
+	 * @param string   $status  One of the classify_reader() statuses, 'removed' (a leak this run
+	 *                          removed and confirmed gone), or 'unresolved'.
 	 *
 	 * @return array
 	 */
@@ -993,16 +1041,20 @@ class Premium_Newsletters_Verify {
 				[
 					'Checked'      => count( $rows ),
 					'Leaks'        => $summary['leak'],
+					'Removed'      => $summary['removed'],
 					'Gaps'         => $summary['gap'],
 					'OK'           => $summary['ok'],
 					'Not asserted' => $summary['not_asserted'],
 					'Unresolved'   => $summary['unresolved'],
 				],
 			],
-			[ 'Checked', 'Leaks', 'Gaps', 'OK', 'Not asserted', 'Unresolved' ]
+			[ 'Checked', 'Leaks', 'Removed', 'Gaps', 'OK', 'Not asserted', 'Unresolved' ]
 		);
 
-		$attention = array_values( array_filter( $rows, fn( $r ) => in_array( $r['status'], [ 'leak', 'gap', 'unresolved' ], true ) ) );
+		// 'removed' is listed even though it passes. It is the only irreversible
+		// thing this command does, and a run that unsubscribed 500 readers must not
+		// print the same table as one that found nothing.
+		$attention = array_values( array_filter( $rows, fn( $r ) => in_array( $r['status'], [ 'leak', 'removed', 'gap', 'unresolved' ], true ) ) );
 		if ( ! empty( $attention ) ) {
 			WP_CLI::line( '' );
 			\WP_CLI\Utils\format_items(
@@ -1033,6 +1085,10 @@ class Premium_Newsletters_Verify {
 			}
 		}
 
+		WP_CLI::line( '' );
+		if ( 0 < $summary['removed'] ) {
+			WP_CLI::line( sprintf( '%d subscription(s) were removed at the ESP and confirmed gone. They are listed above; this is the only record of them.', $summary['removed'] ) );
+		}
 		if ( ! $auto_signup ) {
 			WP_CLI::line( 'Auto-signup is off, so an entitled reader who is not subscribed is counted as "not asserted" rather than a gap: they opt in themselves.' );
 		}
