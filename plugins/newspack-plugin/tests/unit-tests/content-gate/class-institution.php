@@ -136,6 +136,30 @@ class Newspack_Test_Institution extends WP_UnitTestCase {
 	}
 
 	/**
+	 * The has_institutions() helper reflects existence without depending on the
+	 * cache being a countable array, which count() at the call site would have.
+	 */
+	public function test_has_institutions() {
+		delete_transient( Institution::TRANSIENT_KEY );
+		$this->assertFalse( Institution::has_institutions(), 'No institutions means has_institutions() is false.' );
+
+		$institution_id = Institution::create( 'Existence University' );
+		$this->assertIsInt( $institution_id );
+		$this->post_ids[] = $institution_id;
+
+		$this->assertTrue( Institution::has_institutions(), 'A published institution means has_institutions() is true.' );
+
+		// A filter returning a non-array transient value must not fatal the way
+		// count() at the call site would; existence is all the caller needs.
+		$non_array_transient = function () {
+			return 'not-an-array';
+		};
+		add_filter( 'pre_transient_' . Institution::TRANSIENT_KEY, $non_array_transient );
+		$this->assertTrue( Institution::has_institutions(), 'A scalar cache value is treated as present, not fatal.' );
+		remove_filter( 'pre_transient_' . Institution::TRANSIENT_KEY, $non_array_transient );
+	}
+
+	/**
 	 * Test cache is built and can be invalidated.
 	 */
 	public function test_cache_built_and_invalidated() {
