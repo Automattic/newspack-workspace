@@ -5,6 +5,8 @@
  * @package Newspack_Newsletters
  */
 
+// phpcs:disable WordPressVIPMinimum.Performance.NoPaging -- Unbounded queries are acceptable in tests.
+
 use Newspack\Newsletters\Admin\Ads_List_REST;
 use Newspack_Newsletters\Ads;
 
