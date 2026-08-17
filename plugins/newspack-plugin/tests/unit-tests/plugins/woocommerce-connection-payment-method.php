@@ -324,6 +324,10 @@ class Newspack_Test_WooCommerce_Connection_Payment_Method extends WP_UnitTestCas
 				'status'               => 'completed',
 				'customer_id'          => 9,
 				'total'                => 20,
+				// The receipt builds a *DATE* placeholder from get_date_created(),
+				// which is unguarded against null. A real completed order always
+				// has a date; the fixture has to supply one too.
+				'date_paid'            => '2026-08-05 12:00:00',
 				'billing_email'        => 'donor@tests.com',
 				'payment_method'       => 'stripe',
 				'payment_method_title' => 'Credit / Debit Card',

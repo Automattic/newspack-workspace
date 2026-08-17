@@ -580,9 +580,6 @@ class WC_Order {
 	public function get_billing_last_name() {
 		return $this->data['billing_last_name'] ?? '';
 	}
-	public function get_date_created() {
-		return new WC_DateTime( $this->data['date_created'] ?? $this->data['date_paid'] ?? 'now' );
-	}
 	public function get_formatted_order_total() {
 		return '$' . number_format( (float) $this->get_total(), 2 );
 	}
