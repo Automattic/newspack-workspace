@@ -476,6 +476,68 @@ class Premium_Newsletters_Verify {
 	}
 
 	/**
+	 * Whether a reader is subscribed to a list, per the ESP's raw contact-lists data.
+	 *
+	 * Mailchimp's get_contact_lists() builds its audience IDs with array_keys() over
+	 * the contact's raw list data, and PHP silently casts an all-digit array key to
+	 * int — so a numeric list's public ID would never strict-match here even though
+	 * the reader really is subscribed, reading a leak as clean.
+	 * Premium_Newsletters::add_and_remove_lists()
+	 * (includes/content-gate/class-premium-newsletters.php), the runtime this
+	 * command mirrors, compares the same two value spaces with array_intersect(),
+	 * which string-casts both sides before comparing. Normalizing here keeps this
+	 * command in agreement with it, without loosening the comparison below to loose
+	 * in_array().
+	 *
+	 * @param string $public_id     The list's public (ESP) ID, as public_id_for_list() returns it.
+	 * @param array  $contact_lists Raw contact-lists array, as get_contact_lists() returns it.
+	 *
+	 * @return bool
+	 */
+	private static function is_subscribed_to_list( string $public_id, array $contact_lists ): bool {
+		$contact_lists = array_map( 'strval', $contact_lists );
+		return in_array( $public_id, $contact_lists, true );
+	}
+
+	/**
+	 * What the reader loop should do next, after checking one more reader.
+	 *
+	 * A pure question-and-answer seam over the batch bookkeeping verify_gate() used
+	 * to do inline, so it can be tested without a WooCommerce Subscriptions
+	 * population or an ESP to read. It only answers; it does not mutate $in_batch or
+	 * $batches itself — the caller still owns stepping those, exactly as before.
+	 *
+	 * 'continue' covers two different situations identically: not yet at a batch
+	 * boundary, and at a boundary with no more work left in this gate's population.
+	 * The two are conflated deliberately because they are handled identically by the
+	 * caller today — neither counts a batch nor sleeps — not because they mean the
+	 * same thing.
+	 *
+	 * @param int  $in_batch          Readers checked since the last batch boundary, including
+	 *                                the reader just checked.
+	 * @param int  $batch_size        Readers to check between pauses.
+	 * @param int  $batches           Batches completed so far, before this boundary is counted.
+	 * @param int  $max_batches       Stop after this many batches, across the whole run; 0 for no limit.
+	 * @param bool $more_work_remains Whether this gate's population has a reader left to check
+	 *                                after the one just checked.
+	 *
+	 * @return string One of 'continue', 'pause', 'stop'.
+	 */
+	private static function next_batch_action( int $in_batch, int $batch_size, int $batches, int $max_batches, bool $more_work_remains ): string {
+		if ( $in_batch < $batch_size ) {
+			return 'continue';
+		}
+		if ( ! $more_work_remains ) {
+			return 'continue';
+		}
+		$next_batches = $batches + 1;
+		if ( $max_batches && $next_batches >= $max_batches ) {
+			return 'stop';
+		}
+		return 'pause';
+	}
+
+	/**
 	 * Check one gate's population against the ESP.
 	 *
 	 * @param array $gate        Gate array carrying 'product_ids'.
@@ -546,20 +608,6 @@ class Premium_Newsletters_Verify {
 				$contact_lists = \is_wp_error( $contact_data ) ? [] : \Newspack_Newsletters_Subscription::get_contact_lists( $user->user_email );
 				$unresolved    = \is_wp_error( $contact_lists ) || ! is_array( $contact_lists );
 
-				// Mailchimp's get_contact_lists() builds its audience IDs with
-				// array_keys() over the contact's raw list data, and PHP silently
-				// casts an all-digit array key to int — so a numeric list's public ID
-				// would never strict-match here even though the reader really is
-				// subscribed, reading a leak as clean. Premium_Newsletters::add_and_remove_lists()
-				// (includes/content-gate/class-premium-newsletters.php), the runtime
-				// this command mirrors, compares the same two value spaces with
-				// array_intersect(), which string-casts both sides before comparing.
-				// Normalizing here keeps this command in agreement with it, without
-				// loosening the comparison below to loose in_array().
-				if ( ! $unresolved ) {
-					$contact_lists = array_map( 'strval', $contact_lists );
-				}
-
 				foreach ( $list_ids as $list_id ) {
 					$public_id = $public_ids[ $list_id ];
 					if ( $unresolved || null === $public_id ) {
@@ -567,7 +615,7 @@ class Premium_Newsletters_Verify {
 						continue;
 					}
 					$is_restricted = \Newspack\Content_Restriction_Control::is_post_restricted( false, $list_id, $user_id );
-					$is_subscribed = in_array( $public_id, $contact_lists, true );
+					$is_subscribed = self::is_subscribed_to_list( $public_id, $contact_lists );
 					$status        = self::classify_reader( $is_restricted, $is_subscribed, $auto_signup );
 
 					if ( 'leak' === $status && $live ) {
@@ -579,19 +627,18 @@ class Premium_Newsletters_Verify {
 			}
 
 			$more_work_remains = ( $index + 1 ) < $population_count;
-			if ( ++$in_batch >= $batch_size ) {
+			++$in_batch;
+			$batch_action = self::next_batch_action( $in_batch, $batch_size, $batches, $max_batches, $more_work_remains );
+			if ( $in_batch >= $batch_size ) {
 				$in_batch = 0;
-				// Only count and pause when this gate's population is not yet
-				// exhausted: there is no next batch to space out otherwise, so
-				// counting or sleeping here would be pointless.
-				if ( $more_work_remains ) {
-					++$batches;
-					if ( $max_batches && $batches >= $max_batches ) {
-						WP_CLI::warning( sprintf( 'Stopped after %d batch(es) total because of --max-batches. This run does not cover the whole population.', $batches ) );
-						break;
-					}
-					sleep( 1 );
-				}
+			}
+			if ( 'pause' === $batch_action ) {
+				++$batches;
+				sleep( 1 );
+			} elseif ( 'stop' === $batch_action ) {
+				++$batches;
+				WP_CLI::warning( sprintf( 'Stopped after %d batch(es) total because of --max-batches. This run does not cover the whole population.', $batches ) );
+				break;
 			}
 		}
 		return $rows;
