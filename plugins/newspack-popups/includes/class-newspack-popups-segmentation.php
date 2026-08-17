@@ -61,6 +61,17 @@ final class Newspack_Popups_Segmentation {
 	const ACCOUNT_QUERY_PARAM = 'np_account';
 
 	/**
+	 * Cookie used to hand the resolved segment IDs from the inbound redirect to
+	 * the view script, which moves them into sessionStorage and deletes the
+	 * cookie on first read.
+	 *
+	 * The name must NOT begin with `wp`, `wordpress`, or `comment_author`:
+	 * Batcache skips page cache for any request carrying such a cookie, which
+	 * would defeat the point of redirecting to a shared cacheable URL.
+	 */
+	const CARRIED_SEGMENTS_COOKIE = 'np_carried_segments';
+
+	/**
 	 * Installed version number of the custom table.
 	 */
 	const TABLE_VERSION = '1.0';
@@ -119,6 +130,11 @@ final class Newspack_Popups_Segmentation {
 		// consumers which decode query params strictly — see NPPM-3032. Priority 1
 		// so it runs before redirect_canonical() and before any HTML is generated.
 		add_action( 'template_redirect', [ __CLASS__, 'scrub_unsubstituted_donor_param' ], 1 );
+
+		// Resolve an inbound account ID to the reader's last-known segments and
+		// redirect the param away before any output. Priority 1 so it runs before
+		// redirect_canonical() and before any HTML is generated.
+		add_action( 'template_redirect', [ __CLASS__, 'handle_account_param' ], 1 );
 	}
 
 	/**
@@ -586,6 +602,126 @@ final class Newspack_Popups_Segmentation {
 			}
 		}
 		return '';
+	}
+
+	/**
+	 * A reader's last-known matching segment IDs, filtered to segments this site
+	 * still ships to the browser.
+	 *
+	 * The snapshot is client-asserted and only as fresh as the reader's last
+	 * visit — deliberately uncapped, so a dormant reader can be matched on old
+	 * evidence. IDs the browser doesn't know about would never match anything,
+	 * so they're dropped here rather than carried.
+	 *
+	 * @param int $account_id WordPress user ID from the inbound param.
+	 *
+	 * @return string[] Active segment IDs as strings.
+	 */
+	public static function get_carried_segments_for_account( int $account_id ): array {
+		if ( $account_id < 1 || ! method_exists( '\Newspack\Reader_Data', 'get_matched_segments' ) ) {
+			return [];
+		}
+
+		$snapshot = \Newspack\Reader_Data::get_matched_segments( $account_id );
+		if ( empty( $snapshot ) || ! is_array( $snapshot ) ) {
+			return [];
+		}
+
+		$active = [];
+		foreach ( self::get_segments( false ) as $segment ) {
+			if ( ! empty( $segment['id'] ) ) {
+				$active[] = (string) $segment['id'];
+			}
+		}
+
+		return array_values( array_intersect( array_map( 'strval', $snapshot ), $active ) );
+	}
+
+	/**
+	 * Hand the resolved segment IDs to the view script.
+	 *
+	 * A session cookie, readable by JavaScript (the view script moves it into
+	 * sessionStorage and deletes it on first read) and named so Batcache does not
+	 * treat it as a cache-bypass signal — see CARRIED_SEGMENTS_COOKIE.
+	 *
+	 * @param string[] $segment_ids Active segment IDs.
+	 */
+	private static function set_carried_segments_cookie( $segment_ids ) {
+		$value = implode( ',', $segment_ids );
+		if ( ! headers_sent() ) {
+			// phpcs:ignore WordPressVIPMinimum.Functions.RestrictedFunctions.cookies_setcookie
+			setcookie(
+				self::CARRIED_SEGMENTS_COOKIE,
+				$value,
+				[
+					'expires'  => 0,
+					'path'     => '/',
+					'secure'   => is_ssl(),
+					// Must stay readable by the view script; this is a segmentation
+					// hint, never a credential.
+					'httponly' => false,
+					'samesite' => 'Lax',
+				]
+			);
+		}
+		// Unconditionally update $_COOKIE so same-request readers (and tests, where
+		// headers are already sent) can see the handoff.
+		$_COOKIE[ self::CARRIED_SEGMENTS_COOKIE ] = $value; // phpcs:ignore WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___COOKIE
+	}
+
+	/**
+	 * Action callback: resolve an inbound account ID to carried segments, hand
+	 * them off in a cookie, and redirect to the clean URL.
+	 *
+	 * The redirect is unconditional whenever the param is present, whether or not
+	 * anything resolved. That is what keeps the landing page a shared cacheable
+	 * URL — a per-reader query param would make every newsletter click a cache
+	 * miss during a send — and it is why this param is safe to emit for
+	 * ActiveCampaign: an unsubstituted `%FIELD%` is a malformed percent-escape
+	 * that throws in strict client-side decoders (NPPM-3032), and it never
+	 * survives into a rendered page.
+	 *
+	 * Only a plain positive integer is accepted. That single rule rejects every
+	 * unsubstituted merge-tag shape at once, so unlike
+	 * scrub_unsubstituted_donor_param() there is no need to inspect the raw,
+	 * still-encoded query string.
+	 */
+	public static function handle_account_param() {
+		// Redirecting a POST would discard its body, and a redirect is only
+		// meaningful for a document request in a browser.
+		if ( ! isset( $_SERVER['REQUEST_METHOD'] ) || 'GET' !== $_SERVER['REQUEST_METHOD'] ) {
+			return;
+		}
+		if ( ! isset( $_SERVER['REQUEST_URI'] ) ) {
+			return;
+		}
+		// Reading a URL param to decide where to redirect; there is no form
+		// submission or state change here to nonce-verify.
+		if ( ! isset( $_GET[ self::ACCOUNT_QUERY_PARAM ] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+			return;
+		}
+
+		$raw = sanitize_text_field( wp_unslash( $_GET[ self::ACCOUNT_QUERY_PARAM ] ) ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		if ( 1 === preg_match( '/^[1-9][0-9]*$/', $raw ) ) {
+			$segment_ids = self::get_carried_segments_for_account( (int) $raw );
+			if ( ! empty( $segment_ids ) ) {
+				self::set_carried_segments_cookie( $segment_ids );
+			}
+		}
+
+		// This response carries a per-reader Set-Cookie and must never be stored.
+		if ( function_exists( 'batcache_cancel' ) ) {
+			batcache_cancel();
+		}
+		nocache_headers();
+
+		$clean_url = remove_query_arg(
+			self::ACCOUNT_QUERY_PARAM,
+			esc_url_raw( wp_unslash( $_SERVER['REQUEST_URI'] ) )
+		);
+		// Temporary: the param is a property of this one link, not of the page.
+		wp_safe_redirect( $clean_url, 302 );
+		exit;
 	}
 
 	/**
