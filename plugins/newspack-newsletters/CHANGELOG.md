@@ -1,3 +1,10 @@
+## newspack-newsletters [3.39.2](https://github.com/Automattic/newspack-workspace/compare/newspack-newsletters@3.39.1...newspack-newsletters@3.39.2) (2026-08-17)
+
+
+### Bug Fixes
+
+* **newsletters:** stop AC trash cleanup deleting an unrelated campaign ([#884](https://github.com/Automattic/newspack-workspace/issues/884)) ([0111f26](https://github.com/Automattic/newspack-workspace/commit/0111f26b24736f70151471b9a84f6ff8a3d669b2))
+
 ## newspack-newsletters [3.39.1](https://github.com/Automattic/newspack-workspace/compare/newspack-newsletters@3.39.0...newspack-newsletters@3.39.1) (2026-08-17)
 
 
