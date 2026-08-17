@@ -910,7 +910,7 @@ class Group_Subscription_Settings {
 		$product_ids = \get_posts( // phpcs:ignore WordPressVIPMinimum.Functions.RestrictedFunctions.get_posts_get_posts
 			[
 				'post_type'      => [ 'product', 'product_variation' ],
-				'posts_per_page' => -1, // phpcs:ignore WordPress.WP.PostsPerPage.posts_per_page_posts_per_page
+				'posts_per_page' => -1, // phpcs:ignore WordPress.WP.PostsPerPage.posts_per_page_posts_per_page, WordPressVIPMinimum.Performance.NoPaging -- Group-subscription-enabled products only; small meta-filtered set.
 				'fields'         => 'ids',
 				'meta_key'       => $meta_key, // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key
 				'meta_value'     => 'yes', // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_value
@@ -1055,7 +1055,8 @@ class Group_Subscription_Settings {
 
 	/**
 	 * Apply the group subscription filter to a set of query args by mutating
-	 * post__in / post__not_in. Shared by the HPOS and CPT filter callbacks.
+	 * post__in / post__not_in. Shared by the HPOS and CPT filter callbacks,
+	 * and by the subscriptions CSV exporter (Subscriptions_CSV_Exporter).
 	 *
 	 * @param array  $args      The query args (HPOS) or query vars (CPT).
 	 * @param string $filter    Either 'group' or 'non-group'.
@@ -1063,7 +1064,7 @@ class Group_Subscription_Settings {
 	 *
 	 * @return array The mutated args.
 	 */
-	private static function apply_group_filter( $args, $filter, $group_ids ) {
+	public static function apply_group_filter( $args, $filter, $group_ids ) {
 		if ( 'group' === $filter ) {
 			if ( empty( $group_ids ) ) {
 				$args['post__in'] = [ 0 ];

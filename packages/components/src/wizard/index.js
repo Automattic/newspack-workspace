@@ -6,9 +6,10 @@ import classnames from 'classnames';
 /**
  * WordPress dependencies.
  */
-import { DropdownMenu, MenuGroup, MenuItem } from '@wordpress/components';
+// Notice is aliased: `Notice` below is Newspack's own, which this file also uses.
+import { DropdownMenu, MenuGroup, MenuItem, Notice as CoreNotice } from '@wordpress/components';
 import { useDispatch, useSelect } from '@wordpress/data';
-import { cloneElement, isValidElement, useEffect, useState, forwardRef } from '@wordpress/element';
+import { cloneElement, createInterpolateElement, isValidElement, useEffect, useState, forwardRef } from '@wordpress/element';
 import { __ } from '@wordpress/i18n';
 import { category, chevronLeft, moreVertical } from '@wordpress/icons';
 
@@ -38,6 +39,34 @@ const resolveIcon = icon => {
 };
 
 const { HashRouter, Redirect, Route, Switch, useLocation } = Router;
+
+/**
+ * Interpolate a translated message's named tags, falling back to plain text.
+ *
+ * The message is translated, so its tags are site-controlled: any .mo file under
+ * wp-content/languages/plugins, any GlotPress export, or any `gettext`-filter
+ * plugin can supply one. `createInterpolateElement` throws on an unbalanced
+ * closing tag whose name is in the conversion map - verified against core's own
+ * element.js, which is what runs here since the bundle externalizes wp-element.
+ * Nothing above this renders an error boundary, so an uncaught throw would blank
+ * the whole wizard, including the screen the inert-gating notice links to as the
+ * fix. Degraded copy is recoverable; a blank screen is not.
+ *
+ * The other malformed cases already degrade on their own and are left alone: an
+ * unclosed opener drops that tag and renders the rest as text, and a tag not in
+ * the map renders literally.
+ *
+ * @param {string} message    Translated message carrying named tags.
+ * @param {Object} conversion Conversion map for createInterpolateElement.
+ * @return {JSX.Element|string} The interpolated message, or the message with its tags stripped.
+ */
+const interpolateOrPlainText = ( message, conversion ) => {
+	try {
+		return createInterpolateElement( message, conversion );
+	} catch {
+		return message.replace( /<\/?[a-zA-Z][a-zA-Z0-9]*\s*\/?>/g, '' );
+	}
+};
 
 /**
  * Reset the header data when a new section is rendered.
@@ -161,6 +190,26 @@ const Wizard = (
 		</TabbedNavigation>
 	);
 
+	// Rendered here rather than as a core admin notice, which wizards strip at
+	// priority -9999. Sits as the first child of .newspack-wizard__main so it lands
+	// flush beneath the header region and spans the full width in every view: this
+	// describes the state of the whole site, not of the section below it, so it reads
+	// as page chrome rather than as content.
+	const inertGating = window.newspack_aux_data?.inert_gating;
+	const inertGatingNotice = inertGating?.show && (
+		<CoreNotice status="warning" isDismissible={ false } className="newspack-wizard__inert-gating-notice">
+			{ /* The conversion map takes childless elements and fills them from the
+			     translated string, so jsx-a11y can't see the content they end up with. */ }
+			{ interpolateOrPlainText( inertGating.message, {
+				/* eslint-disable jsx-a11y/anchor-has-content */
+				accessControl: <a href={ inertGating.urls.accessControl } />,
+				audience: <a href={ inertGating.urls.audience } />,
+				/* eslint-enable jsx-a11y/anchor-has-content */
+				strong: <strong />,
+			} ) }
+		</CoreNotice>
+	);
+
 	const content = (
 		<>
 			<HandoffMessage />
@@ -168,6 +217,7 @@ const Wizard = (
 			{ sections.length > 1 && <ResetHeaderData /> }
 
 			<div className="newspack-wizard__main">
+				{ inertGatingNotice }
 				<Switch>
 					{ routedSections.map( ( section, index ) => {
 						const SectionComponent = section.render;

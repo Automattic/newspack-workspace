@@ -178,7 +178,7 @@ class Teams_For_Memberships_Diagnostics {
 				[
 					'post_type'      => 'wc_memberships_team',
 					'post_status'    => 'any',
-					'posts_per_page' => -1,
+					'posts_per_page' => -1, // phpcs:ignore WordPressVIPMinimum.Performance.NoPaging -- Operator-run CLI command; unbounded by design.
 					'author'         => $target->post_author,
 				]
 			);
@@ -762,7 +762,7 @@ class Teams_For_Memberships_Diagnostics {
 		$query_args = [
 			'post_type'      => 'wc_memberships_team',
 			'post_status'    => 'any',
-			'posts_per_page' => -1,
+			'posts_per_page' => -1, // phpcs:ignore WordPressVIPMinimum.Performance.NoPaging -- Operator-run CLI command; unbounded by design.
 		];
 		if ( self::$team_id ) {
 			$query_args['p'] = self::$team_id;
