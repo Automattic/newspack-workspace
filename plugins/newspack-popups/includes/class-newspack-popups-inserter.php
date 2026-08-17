@@ -1009,6 +1009,39 @@ final class Newspack_Popups_Inserter {
 	}
 
 	/**
+	 * The preview query param names to hand the previewed document, so it can carry
+	 * them onto same-origin links and keep the preview alive across a click.
+	 *
+	 * All three checks earn their place, because previewed_popup_id() only reports
+	 * that the request carries a `pid` — not that anyone may preview, nor that the
+	 * id is a prompt. `pid` is a common campaign parameter, so without
+	 * is_user_admin() a reader arriving on `?pid=…` would have it stamped onto every
+	 * link for the rest of their session while seeing no prompts at all; without the
+	 * post-type check an editor who follows an ad or newsletter link carrying an
+	 * unrelated `pid` would get the same. Together they make this mean "an actual
+	 * prompt preview", matching the gate on
+	 * Newspack_Popups_Model::retrieve_preview_popup(), which is what renders one.
+	 * is_preview_request() is the wrong test here — it also covers preset, view-as
+	 * and customizer previews, which pass their state differently.
+	 *
+	 * @return array Param names, empty when this is not a prompt preview.
+	 */
+	public static function preview_param_names() {
+		$previewed_popup_id = Newspack_Popups::previewed_popup_id();
+		if (
+			! $previewed_popup_id
+			|| ! Newspack_Popups::is_user_admin()
+			|| Newspack_Popups::NEWSPACK_POPUPS_CPT !== get_post_type( $previewed_popup_id )
+		) {
+			return [];
+		}
+		return array_merge(
+			[ Newspack_Popups::NEWSPACK_POPUP_PREVIEW_QUERY_PARAM ],
+			array_values( Newspack_Popups::PREVIEW_QUERY_KEYS )
+		);
+	}
+
+	/**
 	 * Enqueue the assets needed to display the popups.
 	 */
 	public static function enqueue_scripts() {
@@ -1088,22 +1121,11 @@ final class Newspack_Popups_Inserter {
 				$script_data['donor_landing_page'] = $donor_landing_page;
 			}
 
-			// In a prompt preview the previewed document carries its own preview
-			// params onto same-origin links, so the preview survives navigation.
-			// It needs the param list to know which of its query params those are.
-			//
-			// Gated on the prompt preview specifically, not on is_preview_request():
-			// that covers preset, view-as and customizer previews too, and it is not
-			// a capability check — previewed_popup_id() reads `pid` from any request,
-			// signed in or not. `pid` is also a common campaign parameter, so without
-			// is_user_admin() an ordinary reader arriving on `?pid=…` would have it
-			// stamped onto every link for the rest of their session while seeing no
-			// prompts at all. preset_popup_id() guards itself the same way.
-			if ( Newspack_Popups::previewed_popup_id() && Newspack_Popups::is_user_admin() ) {
-				$script_data['preview_query_params'] = array_merge(
-					[ Newspack_Popups::NEWSPACK_POPUP_PREVIEW_QUERY_PARAM ],
-					array_values( Newspack_Popups::PREVIEW_QUERY_KEYS )
-				);
+			// Named for the shape it has: a flat list of param names, where
+			// newspack_popups_data.preview_query_keys is a meta-key => param map.
+			$preview_param_names = self::preview_param_names();
+			if ( ! empty( $preview_param_names ) ) {
+				$script_data['preview_param_names'] = $preview_param_names;
 			}
 
 			\wp_localize_script( $script_handle, 'newspack_popups_view', $script_data );

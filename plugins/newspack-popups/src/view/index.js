@@ -17,9 +17,17 @@ domReady( () => {
 	window.newspackRAS = window.newspackRAS || [];
 	window.newspackRAS.push( logPageview ); // Pageviews should be logged whether or not prompts are enabled.
 
-	// After the pageview push on purpose: link rewriting is a preview nicety, and
-	// nothing about it should be able to cost a real reader their pageview.
-	propagatePreviewParams();
+	// Wrapped, and after the pageview push, on purpose. Everything below runs for
+	// every reader, while link rewriting is an admin-only preview nicety; a throw
+	// here would otherwise take prompt display and prompt analytics down with it.
+	// Nothing in it can throw today, so this keeps that a property of the structure
+	// rather than of the current implementation.
+	try {
+		propagatePreviewParams();
+	} catch ( e ) {
+		// eslint-disable-next-line no-console
+		console.warn( 'Prompt preview: could not propagate preview params.', e );
+	}
 
 	if ( ! newspack_popups_view?.has_disabled_prompts ) {
 		// Fetch all prompts on the page just once.

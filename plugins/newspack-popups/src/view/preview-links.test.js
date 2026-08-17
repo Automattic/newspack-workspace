@@ -1,21 +1,44 @@
 import { propagatePreviewParams } from './preview-links';
 
-// The jsdom origin, whatever the runner sets it to. Expectations are built from
-// it independently of the code under test.
-const origin = () => window.location.origin;
-const abs = path => new URL( path, origin() ).toString();
-
 const setSearch = search => window.history.replaceState( {}, '', '/post/' + search );
 const setLinks = html => {
 	document.body.innerHTML = html;
 };
 const hrefs = () => [ ...document.querySelectorAll( 'a' ) ].map( anchor => anchor.getAttribute( 'href' ) );
 
+// Propagation only runs inside the preview iframe, so every positive case has to
+// look framed. jsdom's `top` points at the window itself.
+const setFramed = framed => {
+	Object.defineProperty( window, 'top', { value: framed ? {} : window, configurable: true } );
+};
+
+// Pins the contract that the early returns bail before touching the DOM at all,
+// which is what keeps this off the critical path of an ordinary page load. An
+// assertion on hrefs alone would still pass if the function walked every anchor
+// and happened to rewrite nothing.
+const expectNoTraversal = run => {
+	const spy = jest.spyOn( document, 'querySelectorAll' );
+	run();
+	expect( spy ).not.toHaveBeenCalled();
+	spy.mockRestore();
+};
+
 describe( 'propagatePreviewParams', () => {
 	beforeEach( () => {
-		global.newspack_popups_view = { preview_query_params: [ 'pid', 'n_bc' ] };
+		global.newspack_popups_view = { preview_param_names: [ 'pid', 'n_bc' ] };
+		setFramed( true );
 		setSearch( '' );
 		setLinks( '' );
+	} );
+
+	it( 'does nothing top-level, so preview mode cannot follow an admin around the site', () => {
+		setFramed( false );
+		setSearch( '?pid=42' );
+		setLinks( '<a href="/other/">x</a>' );
+
+		expectNoTraversal( propagatePreviewParams );
+
+		expect( hrefs() ).toEqual( [ '/other/' ] );
 	} );
 
 	it( 'does nothing outside a preview, where the params are not localized', () => {
@@ -23,7 +46,7 @@ describe( 'propagatePreviewParams', () => {
 		setSearch( '?pid=42' );
 		setLinks( '<a href="/other/">x</a>' );
 
-		propagatePreviewParams();
+		expectNoTraversal( propagatePreviewParams );
 
 		expect( hrefs() ).toEqual( [ '/other/' ] );
 	} );
@@ -31,7 +54,7 @@ describe( 'propagatePreviewParams', () => {
 	it( 'does nothing when no preview param is present in the URL', () => {
 		setLinks( '<a href="/other/">x</a>' );
 
-		propagatePreviewParams();
+		expectNoTraversal( propagatePreviewParams );
 
 		expect( hrefs() ).toEqual( [ '/other/' ] );
 	} );
@@ -42,7 +65,7 @@ describe( 'propagatePreviewParams', () => {
 
 		propagatePreviewParams();
 
-		expect( hrefs() ).toEqual( [ abs( '/other/?pid=42&n_bc=blue' ) ] );
+		expect( hrefs() ).toEqual( [ '/other/?pid=42&n_bc=blue' ] );
 	} );
 
 	it( 'only carries the preview params actually present in the URL', () => {
@@ -51,7 +74,7 @@ describe( 'propagatePreviewParams', () => {
 
 		propagatePreviewParams();
 
-		expect( hrefs() ).toEqual( [ abs( '/other/?pid=42' ) ] );
+		expect( hrefs() ).toEqual( [ '/other/?pid=42' ] );
 	} );
 
 	it( 'leaves off-site links alone', () => {
@@ -81,13 +104,22 @@ describe( 'propagatePreviewParams', () => {
 		expect( hrefs() ).toEqual( [ 'mailto:hi@example.com', 'tel:+15551234' ] );
 	} );
 
+	it( 'leaves an unparseable href alone rather than throwing', () => {
+		setSearch( '?pid=42' );
+		setLinks( '<a href="http://[">x</a><a href="/other/">y</a>' );
+
+		expect( () => propagatePreviewParams() ).not.toThrow();
+		// The bad href is skipped and the pass carries on to the next anchor.
+		expect( hrefs() ).toEqual( [ 'http://[', '/other/?pid=42' ] );
+	} );
+
 	it( 'keeps unrelated query params and overwrites a stale preview param', () => {
 		setSearch( '?pid=42' );
 		setLinks( '<a href="/other/?utm_source=nl&pid=7">x</a>' );
 
 		propagatePreviewParams();
 
-		expect( hrefs() ).toEqual( [ abs( '/other/?utm_source=nl&pid=42' ) ] );
+		expect( hrefs() ).toEqual( [ '/other/?utm_source=nl&pid=42' ] );
 	} );
 
 	it( 'survives the global being absent entirely', () => {
@@ -108,25 +140,49 @@ describe( 'propagatePreviewParams', () => {
 		// The selector matches SVG <a> too, and an SVGAElement's href *property* is
 		// an SVGAnimatedString — resolving it yields a same-origin garbage path that
 		// silently replaces the link. Reading the attribute keeps it intact.
-		expect( document.querySelector( 'svg a' ).getAttribute( 'href' ) ).toBe( abs( '/chart/?pid=42' ) );
+		expect( document.querySelector( 'svg a' ).getAttribute( 'href' ) ).toBe( '/chart/?pid=42' );
 	} );
 
-	it( 'resolves a relative href against the document base', () => {
-		setSearch( '?pid=42' );
-		setLinks( '<a href="sub/page/">x</a>' );
+	describe( 'href shape', () => {
+		// A preview should differ from production in what it shows, not in the form
+		// of its markup: theme code keyed on href shape has to behave the same here.
+		it( 'keeps a root-relative href root-relative', () => {
+			setSearch( '?pid=42' );
+			setLinks( '<a href="/other/">x</a>' );
 
-		propagatePreviewParams();
+			propagatePreviewParams();
 
-		expect( hrefs() ).toEqual( [ abs( '/post/sub/page/?pid=42' ) ] );
-	} );
+			expect( hrefs() ).toEqual( [ '/other/?pid=42' ] );
+		} );
 
-	it( 'keeps the fragment on a same-origin link', () => {
-		setSearch( '?pid=42' );
-		setLinks( '<a href="/other/#top">x</a>' );
+		it( 'keeps an absolute href absolute', () => {
+			setSearch( '?pid=42' );
+			setLinks( `<a href="${ window.location.origin }/other/">x</a>` );
 
-		propagatePreviewParams();
+			propagatePreviewParams();
 
-		expect( hrefs() ).toEqual( [ abs( '/other/?pid=42#top' ) ] );
+			expect( hrefs() ).toEqual( [ `${ window.location.origin }/other/?pid=42` ] );
+		} );
+
+		it( 'resolves a path-relative href against the document base', () => {
+			setSearch( '?pid=42' );
+			setLinks( '<a href="sub/page/">x</a>' );
+
+			propagatePreviewParams();
+
+			// Root-relative rather than absolute: resolving it is what told us where
+			// it points, so this is as close to the original shape as we can get.
+			expect( hrefs() ).toEqual( [ '/post/sub/page/?pid=42' ] );
+		} );
+
+		it( 'keeps the fragment on a same-origin link', () => {
+			setSearch( '?pid=42' );
+			setLinks( '<a href="/other/#top">x</a>' );
+
+			propagatePreviewParams();
+
+			expect( hrefs() ).toEqual( [ '/other/?pid=42#top' ] );
+		} );
 	} );
 
 	it( 'is idempotent, so a second pass does not duplicate params', () => {
