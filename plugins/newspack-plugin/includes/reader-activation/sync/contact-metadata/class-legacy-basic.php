@@ -122,9 +122,8 @@ class Legacy_Basic extends Contact_Metadata {
 	/**
 	 * Get the metadata for the given user, customer or order, as raw keys.
 	 *
-	 * Builds the raw legacy contact from the WooCommerce helper. Raw-key
-	 * enrichment, filtering and prefixing are handled centrally afterwards
-	 * (normalize_contact_data() and the integration's prepare_contact()).
+	 * Enrichment, filtering and prefixing happen centrally afterwards, in
+	 * normalize_contact_data() and the integration's prepare_contact().
 	 *
 	 * @return array
 	 */
@@ -138,10 +137,8 @@ class Legacy_Basic extends Contact_Metadata {
 			return [];
 		}
 
-		// Enrichment (add_registration_data_raw/add_utm_data_raw) is applied
-		// centrally in Metadata::get_contact_with_metadata() via
-		// normalize_contact_data(), so applying it per-class here would be
-		// redundant.
+		// Enrichment (add_registration_data_raw/add_utm_data_raw) happens
+		// centrally in Metadata::get_contact_with_metadata(); redundant here.
 		return $contact['metadata'] ?? [];
 	}
 }

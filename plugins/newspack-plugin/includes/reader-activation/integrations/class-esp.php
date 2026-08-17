@@ -345,28 +345,18 @@ class ESP extends Integration {
 	/**
 	 * Ensure the per-integration outgoing fields option is seeded.
 	 *
-	 * Two sources, in order. The legacy global option
-	 * (Sync\Metadata::FIELDS_OPTION) is copied verbatim, raw display names and
-	 * all, and the base class's lazy migration resolves them to ids on read
-	 * under its preserve-unresolved rules. Resolving here (via
-	 * update_enabled_outgoing_fields()) would drop any currently-unavailable
-	 * definition — e.g. every payment field while WooCommerce is inactive —
-	 * and since the seeded option shadows the legacy option permanently, those
-	 * selections could never be restored.
+	 * Two sources, in order: the legacy global option
+	 * (Sync\Metadata::FIELDS_OPTION), copied verbatim so the base class's lazy
+	 * migration resolves it to ids under its preserve-unresolved rules —
+	 * resolving here instead would permanently drop any currently-unavailable
+	 * definition (e.g. payment fields while WooCommerce is inactive); or, with
+	 * nothing stored anywhere, the registry's default selection.
 	 *
-	 * With nothing stored anywhere, the site has never made a selection, and
-	 * the registry seeder materialises the one it has effectively been syncing
-	 * all along. That call is the lazy half of seeding, and the half that
-	 * actually matters: `newspack_activation` fires only on plugin activation,
-	 * so an in-place update — the normal upgrade path — would otherwise leave a
-	 * legacy site unseeded, deriving from the merged all-versions default set
-	 * and pushing the other schema's field names to the publisher's ESP. Doing
-	 * it here makes the WordPress trigger irrelevant: the first sync or admin
-	 * read after the upgrade seeds correctly.
-	 *
-	 * Only the ESP seeds. Every other integration inherits the ESP's effective
-	 * selection (NPPD-2107), so its inheritance read reaches this method and
-	 * seeds transitively rather than materialising a selection of its own.
+	 * Seeding on read — rather than relying only on `newspack_activation`,
+	 * which never fires on an in-place upgrade — makes the first sync or admin
+	 * read after upgrade self-healing. Only the ESP seeds; every other
+	 * integration inherits its selection and so seeds transitively through
+	 * this method.
 	 *
 	 * @return bool True if a stored per-integration option exists (parent
 	 *              accessors can be used), false if the ESP should fall back
@@ -542,12 +532,10 @@ class ESP extends Integration {
 	 * Remove the deleted reader from every ESP list when flagged instead of
 	 * hard-deleted.
 	 *
-	 * Restores the pre-refactor behavior of legacy sites with
-	 * `sync_esp_delete=false`, whose old handler called
-	 * `Newspack_Newsletters_Contacts::update_lists( $email, [], ... )` directly:
-	 * keep the contact record (carrying the Account_Deleted / Membership_Status
-	 * flags written by the flag-mode metadata push) but stop further outreach
-	 * by clearing all list membership.
+	 * Restores pre-refactor behavior for legacy `sync_esp_delete=false` sites:
+	 * keep the contact record (carrying the Account_Deleted /
+	 * Membership_Status flags from the flag-mode metadata push) but stop
+	 * further outreach by clearing all list membership.
 	 *
 	 * @param string $email Email address of the deleted reader.
 	 *

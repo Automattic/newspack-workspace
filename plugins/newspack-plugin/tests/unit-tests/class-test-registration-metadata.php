@@ -95,12 +95,8 @@ class Test_Registration_Metadata extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Registration_Date is equivalent-flagged to the legacy `registration_date`
-	 * field (Sync\WooCommerce::get_contact_from_customer()), which converts the
-	 * UTC `user_registered` value to the site's local timezone via
-	 * get_date_from_gmt(). On a non-UTC site the two must keep agreeing: this
-	 * pins the site-local value, not the UTC one format_date() would have
-	 * produced before this fix.
+	 * On a non-UTC site, Registration_Date must match the legacy field's
+	 * site-local value, not the raw UTC timestamp.
 	 */
 	public function test_registration_date_matches_site_local_timezone() {
 		// 23:30 UTC is 19:30 the same day in a UTC-4 zone (America/New_York, DST).

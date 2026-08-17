@@ -628,17 +628,12 @@ class Contact_Sync extends Sync {
 					}
 				}
 
-				// Run the integration's list/audience cleanup regardless of whether the
-				// metadata push above succeeded: "keep the record, stop the emails" is
-				// independent of whether the Account_Deleted/Membership_Status metadata
-				// landed. This restores the pre-refactor behavior of legacy sites with
-				// sync_esp_delete=false, whose handler removed the contact from every
-				// ESP list on deletion. A cleanup failure must be as durable as a push
-				// failure — a transient provider error here would otherwise leave the
-				// deleted reader subscribed to every list with no retry — so when the
-				// flag push succeeded (a failed push already scheduled a retry whose
-				// success re-runs cleanup), schedule the same flag retry: the re-push
-				// is an idempotent upsert and a successful retry re-runs cleanup.
+				// Runs regardless of whether the push above succeeded: list cleanup is
+				// independent of whether the Account_Deleted/Membership_Status
+				// metadata landed. A cleanup failure must retry like a push failure
+				// would (else a transient error leaves the reader subscribed with no
+				// retry), so it reuses the same idempotent flag retry, which also
+				// re-runs cleanup on success.
 				$cleanup_result = $integration->flag_deletion_cleanup( $email );
 				if ( \is_wp_error( $cleanup_result ) ) {
 					$errors[] = sprintf( '[%s] %s', $integration_id, $cleanup_result->get_error_message() );
@@ -952,11 +947,9 @@ class Contact_Sync extends Sync {
 
 		static::log( sprintf( 'Executing retry %d/%d for integration "%s" sync of user %d (%s).', $retry_count, self::MAX_RETRIES, $integration_id, $user_id, $contact['email'] ?? 'unknown' ) );
 
-		// The contact from get_contact_data() is already normalized (and the
-		// primary sync path applies no further normalization after this
-		// filter) — normalizing again here would fire
-		// `newspack_esp_sync_normalize_contact` a second time per retry,
-		// double-applying any non-idempotent publisher callback.
+		// get_contact_data() already normalizes the contact; normalizing again
+		// here would fire `newspack_esp_sync_normalize_contact` a second time
+		// per retry, double-applying any non-idempotent publisher callback.
 		/** This filter is documented in includes/reader-activation/sync/class-contact-sync.php */
 		$contact = \apply_filters( 'newspack_esp_sync_contact', $contact, $context );
 
@@ -1308,17 +1301,12 @@ class Contact_Sync extends Sync {
 				\ActionScheduler_Logger::instance()->log( self::$current_as_action_id, $success_message );
 			}
 
-			// The original flag push already ran flag_deletion_cleanup() once (see
-			// handle_account_deletion()), independent of whether that push succeeded.
-			// If the initial push failed and landed here as a retry, cleanup may have
-			// already cleared the reader from ESP lists; this retry's successful
-			// upsert would otherwise silently re-add them, reversing that completed
-			// list-removal. Re-run cleanup so the retry can't undo it. It's
-			// idempotent (clearing lists twice is harmless). Mirrors
-			// handle_account_deletion(): a cleanup failure must not fail this retry
-			// (the push landed), but it schedules the next flag retry — bounded by
-			// the shared retry count — so a still-subscribed deleted reader keeps a
-			// path to list removal.
+			// handle_account_deletion() already ran cleanup once, regardless of push
+			// outcome; without a re-run here, a successful retry upsert could
+			// silently re-subscribe a reader whose lists cleanup already cleared.
+			// Re-running is idempotent. A cleanup failure here doesn't fail this
+			// retry (the push landed) but schedules another flag retry, bounded by
+			// the shared retry count.
 			if ( 'flag' === $mode ) {
 				$cleanup_result = $integration->flag_deletion_cleanup( $email );
 				if ( \is_wp_error( $cleanup_result ) ) {

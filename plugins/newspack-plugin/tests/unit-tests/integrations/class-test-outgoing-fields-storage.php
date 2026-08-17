@@ -122,11 +122,9 @@ class Test_Outgoing_Fields_Storage extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * Legacy maps two raw keys (registration_page, current_page_url) to this
-	 * one name. Migration resolves the stored name to both ids and the
-	 * equivalence upgrade then collapses both onto the single v2 field they
-	 * share — one id, one ESP field, no payload lost. That both raw keys are
-	 * resolved and aliased is pinned in Test_Field_Registry.
+	 * Legacy's two raw keys for this name (registration_page,
+	 * current_page_url) resolve and collapse onto the single v2 field they
+	 * share via the equivalence upgrade.
 	 */
 	public function test_migration_resolves_multi_raw_key_names_to_all_ids() {
 		\update_option(
@@ -141,14 +139,8 @@ class Test_Outgoing_Fields_Storage extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * A v2-origin site with legacy display-name storage migrates to v2 ids
-	 * on read.
-	 *
-	 * "Total Paid" is claimed by both schemas, so the v2-origin resolution
-	 * picks the v2 definition. A name only the legacy schema declares (the
-	 * renamed payment fields, say) would resolve to its v1 id even here, and
-	 * must: the stored name is what the publisher's ESP field is called, and
-	 * the legacy definition is the one that feeds it.
+	 * A v2-origin site with legacy display-name storage migrates to v2 ids on
+	 * read — a name claimed by both schemas resolves to the v2 definition.
 	 */
 	public function test_legacy_format_migrates_to_v2_ids_when_origin_is_v2() {
 		\update_option(
@@ -182,14 +174,10 @@ class Test_Outgoing_Fields_Storage extends \WP_UnitTestCase {
 	 * Updating enabled fields accepts a mix of display names and ids, and
 	 * stores everything as ids.
 	 *
-	 * The update tests below use always-available fields (Legacy_Basic,
-	 * Identity, Registration classes): WooCommerce-gated fields
-	 * (Legacy_Payment, Subscription, Donation) are 'available' => false in
-	 * the unit-test env and update_enabled_outgoing_fields() drops
-	 * unavailable fields — same behavior as the old get_default_fields()
-	 * intersection. Migration (get_enabled_outgoing_field_ids) deliberately
-	 * does NOT gate on availability, preserving stored selections for when
-	 * WC activates.
+	 * The tests below use always-available fields, since
+	 * update_enabled_outgoing_fields() drops unavailable ones — unlike the
+	 * id-based migration read, which deliberately does not gate on
+	 * availability.
 	 */
 	public function test_update_accepts_names_and_ids_and_stores_ids() {
 
@@ -202,16 +190,9 @@ class Test_Outgoing_Fields_Storage extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * Both versions of a field can be enabled at once: they no longer share an
-	 * ESP name, so there is nothing to arbitrate and nothing is dropped. This
-	 * is the behavior that replaced the keep-first-version rule.
-	 *
-	 * `v1:last_payment_amount` and `v2:Last_Payment_Amount` are the changed-
-	 * meaning pair — legacy counts any payment including donations, the new
-	 * field only the current non-donation subscription — so they are two
-	 * separate ESP fields and a publisher may want both during a transition.
-	 * Storage does not gate on availability, unlike update(), which is why
-	 * this asserts through the migration read.
+	 * Both versions of a changed-meaning field (legacy counts all payments;
+	 * v2 only the current subscription) can be enabled at once, since they no
+	 * longer share an ESP name — nothing is dropped or arbitrated.
 	 */
 	public function test_both_versions_of_a_renamed_field_coexist() {
 		\update_option(
@@ -286,16 +267,10 @@ class Test_Outgoing_Fields_Storage extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * With neither the per-integration option nor the legacy global option
-	 * ever stored, and an ESP that is not set up, the read falls back to all
-	 * available fields resolved to ids against the merged registry — without
-	 * persisting anything.
-	 *
-	 * Lazy seeding deliberately declines here: with the ESP unconfigured,
-	 * detection cannot tell this site from a legacy one whose provider is
-	 * momentarily unavailable, and freezing the wrong answer would change the
-	 * field names a real legacy site's ESP automations key on. Nothing syncs
-	 * from an unconfigured ESP, so the derived set never reaches a provider.
+	 * With no option ever stored and an ESP that is not set up, the read
+	 * falls back to all available fields resolved to ids — without
+	 * persisting, since an unconfigured ESP can't be confidently told apart
+	 * from a momentarily-unavailable legacy one.
 	 */
 	public function test_esp_defaults_resolve_to_ids_without_persisting() {
 		\delete_option( Integration::OUTGOING_FIELDS_OPTION_PREFIX . 'esp' );
@@ -319,14 +294,9 @@ class Test_Outgoing_Fields_Storage extends \WP_UnitTestCase {
 
 	/**
 	 * A derived selection is scoped to ONE schema version, never the merged
-	 * registry — the set does reach real providers, through a configured
-	 * non-ESP push integration inheriting while the ESP is unconfigured, and
-	 * merged resolution would put both schemas' field names in front of them.
-	 *
-	 * Which version is a derivation-only question (nothing is stored, and no
-	 * confidence is required), so both answers are pinned: an unseeded site
-	 * with no evidence derives the new schema, and one carrying legacy evidence
-	 * derives the legacy schema.
+	 * registry, since it can reach real providers: a site with no evidence
+	 * derives the new schema, and one carrying legacy evidence derives the
+	 * legacy schema.
 	 */
 	public function test_derived_defaults_are_scoped_to_one_version() {
 		\delete_option( Integration::OUTGOING_FIELDS_OPTION_PREFIX . 'storage-test' );
@@ -353,17 +323,9 @@ class Test_Outgoing_Fields_Storage extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * Derived id sets are deliberately NOT canonicalized: the equivalence
-	 * upgrade is a write-path behavior (see update_enabled_outgoing_fields()),
-	 * and a derived set may not write — persisting it would freeze the
-	 * fallback and stop it tracking availability and the ESP's own selection.
-	 * So both ids of a value-equivalent pair survive a derived read, rather
+	 * Derived id sets are deliberately NOT canonicalized: a derived read must
+	 * not persist, so both ids of a value-equivalent pair survive it rather
 	 * than collapsing onto the v2 twin.
-	 *
-	 * The payload is unaffected: prepare_contact() resolves an id to its ESP
-	 * name/raw key regardless of version, so the pair emits once, under the
-	 * shared canonical name (see
-	 * Test_Prepare_Contact::test_unupgraded_default_id_still_emits_canonical_name).
 	 */
 	public function test_derived_id_sets_are_not_canonicalized() {
 		\delete_option( Integration::OUTGOING_FIELDS_OPTION_PREFIX . 'storage-test' );
@@ -418,12 +380,9 @@ class Test_Outgoing_Fields_Storage extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * With no ESP integration in the registry (pre-init, or a directly
-	 * constructed integration — integrations register on init priority 5),
-	 * inheritance mirrors the ESP's own fallback chain: the legacy global
-	 * option first, then the full default set. Failing closed to an empty
-	 * selection there would strip every field on a site whose pre-selection
-	 * behavior was full passthrough.
+	 * With no ESP registered, inheritance mirrors the ESP's own fallback
+	 * chain (legacy global option, then the full default set) rather than
+	 * failing closed to an empty selection.
 	 */
 	public function test_inheritance_without_registered_esp_uses_legacy_global_option() {
 		\delete_option( Integration::OUTGOING_FIELDS_OPTION_PREFIX . 'storage-test' );
@@ -490,11 +449,10 @@ class Test_Outgoing_Fields_Storage extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * Seeding from the legacy global option must not drop selections whose
-	 * definitions are currently unavailable (e.g. payment fields while
-	 * WooCommerce is inactive). The seeded option shadows the legacy option
-	 * permanently, so a resolve-and-filter seed — which drops unavailable
-	 * definitions — would lose those selections for good.
+	 * Seeding must not drop selections that are currently unavailable (e.g.
+	 * payment fields without WooCommerce): the seeded option shadows the
+	 * legacy one permanently, so filtering them out now would lose them for
+	 * good.
 	 */
 	public function test_esp_seeding_preserves_unavailable_field_selections() {
 		\delete_option( Integration::OUTGOING_FIELDS_OPTION_PREFIX . 'esp' );
@@ -606,11 +564,9 @@ class Test_Outgoing_Fields_Storage extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * Saving a value-equivalent v1 id stores the v2 twin. A v1 id whose v2
-	 * counterpart is a separate ESP field (`registration_method` was renamed
-	 * to "Registration Strategy") is stored as submitted — it has no twin to
-	 * collapse onto. Reads of an already-stored v1 id do not rewrite the
-	 * option; the upgrade is a write-path behavior.
+	 * Saving a value-equivalent v1 id upgrades it to the v2 twin; a v1 id
+	 * with no shared-meaning v2 counterpart is stored as submitted. Reads
+	 * never rewrite an already-stored id.
 	 */
 	public function test_update_upgrades_equivalent_ids_to_v2() {
 

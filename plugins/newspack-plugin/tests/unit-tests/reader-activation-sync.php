@@ -25,14 +25,8 @@ class Newspack_Test_Reader_Activation_Sync extends WP_UnitTestCase {
 	const LEGACY_EVIDENCE_OPTION = \Newspack\Reader_Activation\Integration::OUTGOING_FIELDS_OPTION_PREFIX . 'legacy-evidence';
 
 	/**
-	 * These tests describe the legacy field set and its labels, so the site has
-	 * to read as a legacy one. A pre-coexistence, bare-display-name selection
-	 * stored by some other integration is exactly that evidence, and it makes
-	 * the ESP's never-configured read seed the legacy defaults.
-	 *
-	 * The registry reset guards the other half: these tests derive their
-	 * expectations from the live field maps, so a cache left over from another
-	 * test's filters would silently change what they assert against.
+	 * Seeds a pre-coexistence field selection so the site reads as legacy,
+	 * and resets the registry cache so live field maps drive expectations.
 	 */
 	public function set_up() {
 		parent::set_up();

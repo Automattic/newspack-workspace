@@ -128,16 +128,9 @@ class Test_Field_Selection_Seeding extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * Seeding stores a version's ENTIRE definition set, availability included.
-	 *
-	 * The stored snapshot is permanent while availability is a property of the
-	 * moment seeding runs — a fresh install seeds before WooCommerce
-	 * Subscriptions is installed or the content gates are switched on. Filtering
-	 * unavailable definitions out would bar those fields from ever syncing, with
-	 * nothing left to un-bar them. Storing them is inert until their class
-	 * lights up (Metadata::get_contact_with_metadata() skips unavailable
-	 * classes), so the set is pinned structurally rather than by toggling
-	 * availability, which the WooCommerce mocks make unfakeable here.
+	 * Seeding stores a version's ENTIRE definition set, availability included
+	 * — filtering unavailable definitions out now would bar those fields from
+	 * ever syncing, with nothing left to un-bar them later.
 	 */
 	public function test_seeding_stores_every_definition_of_the_version() {
 		$expected = [];
@@ -157,11 +150,9 @@ class Test_Field_Selection_Seeding extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * The cohort seeding exists for: a legacy site that never opened the field
-	 * picker, so it has no stored selection and no marker, and was syncing the
-	 * legacy defaults all along. Its selection must be materialised as legacy
-	 * ids — seeding the merged set would start pushing the new schema's field
-	 * names to the publisher's ESP.
+	 * A legacy site with no stored selection and no marker must seed its
+	 * legacy defaults, not the merged set — or its ESP would suddenly start
+	 * receiving the new schema's field names.
 	 */
 	public function test_legacy_site_seeds_legacy_defaults() {
 		$this->register_configured_esp();
@@ -200,13 +191,9 @@ class Test_Field_Selection_Seeding extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * A marker recorded by an earlier release is the site's own answer and
-	 * outranks every heuristic below it — here a configured ESP, which would
-	 * otherwise say v1. It is deleted the moment it has been used.
-	 *
-	 * A legacy global fields option is deliberately NOT part of this shape: it
-	 * short-circuits ahead of detection entirely, so the ESP can copy it
-	 * verbatim (see test_legacy_global_selection_is_copied_not_replaced_by_defaults).
+	 * A recorded schema-origin marker outranks every detection heuristic
+	 * below it — here a configured ESP, which would otherwise say v1 — and is
+	 * deleted the moment it has been used.
 	 */
 	public function test_recorded_marker_wins_over_detection_then_is_deleted() {
 		\update_option( self::ORIGIN_MARKER, 'v2' );
@@ -264,15 +251,9 @@ class Test_Field_Selection_Seeding extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * The shape seeding actually has to survive: an in-place plugin update,
-	 * where `newspack_activation` never fires. The first read of the ESP's
-	 * selection seeds it from the same decision chain the activation hook
-	 * would have used, so the site keeps syncing the legacy field set instead
-	 * of deriving from the merged all-versions default.
-	 *
-	 * The second read must come from storage, not from a re-run of detection —
-	 * proven by flipping what detection would answer (a `v2` marker) between
-	 * the two calls and getting the same legacy ids back.
+	 * An in-place plugin update, where `newspack_activation` never fires,
+	 * must still seed on the ESP's first read — and a second read must come
+	 * from storage, not a re-run of detection.
 	 */
 	public function test_in_place_update_seeds_on_first_read() {
 		$esp = $this->register_upgraded_legacy_esp();
@@ -296,12 +277,9 @@ class Test_Field_Selection_Seeding extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * A never-configured non-ESP integration inherits the ESP's effective
-	 * selection (NPPD-2107), and that inheritance read goes through the ESP's
-	 * accessor — so it seeds the ESP transitively and inherits the seeded ids.
-	 *
-	 * Seeding stays the ESP's alone: the inheriting integration must not
-	 * materialise a selection of its own, or it would stop tracking the ESP.
+	 * A never-configured non-ESP integration inherits the ESP's selection
+	 * (NPPD-2107) by reading through it, seeding the ESP transitively — but
+	 * must not materialise a selection of its own.
 	 */
 	public function test_non_esp_inheritance_seeds_the_esp_transitively() {
 		$this->register_upgraded_legacy_esp();
@@ -342,14 +320,9 @@ class Test_Field_Selection_Seeding extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * Activation may act on the fresh-install guess, but only for a site that
-	 * has not completed setup.
-	 *
-	 * A completed setup means an existing site — one whose ESP merely happens
-	 * to be unconfigured at this moment, which is exactly what the guess cannot
-	 * tell apart from a new one. Reactivating the plugin during a Newsletters
-	 * outage must not freeze it onto the new schema. This is the prior-usage
-	 * guard the retired seed_fresh_install_origin() carried.
+	 * Activation only acts on the fresh-install guess for a site that has
+	 * never completed setup — an existing site whose ESP is momentarily
+	 * unconfigured must not be frozen onto the new schema.
 	 */
 	public function test_activation_declines_the_guess_on_a_set_up_site() {
 		\update_option( 'newspack_setup_complete', '1' );
@@ -364,11 +337,9 @@ class Test_Field_Selection_Seeding extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * The pre-integrations global option is the publisher's own selection, and
-	 * usually a narrowed one. The seeder must leave it to
-	 * ESP::ensure_outgoing_fields_seeded(), which copies it verbatim — writing
-	 * the full default set here would shadow it permanently and silently
-	 * re-enable every field they had turned off.
+	 * The seeder must leave a publisher's narrowed legacy global selection to
+	 * ESP::ensure_outgoing_fields_seeded() to copy verbatim, not overwrite it
+	 * with the full default set.
 	 */
 	public function test_legacy_global_selection_is_copied_not_replaced_by_defaults() {
 		$narrowed = [ 'Account', 'Registration Date' ];
@@ -389,18 +360,9 @@ class Test_Field_Selection_Seeding extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * The lazy path must not act on the fresh-install guess.
-	 *
-	 * Its discriminator is ESP::is_set_up(), which is transiently false any
-	 * time Newspack Newsletters is deactivated or unconfigured — and, as
-	 * Test_Contact_Sync_Options' own set_up demonstrates, any time the ESP is
-	 * read earlier in a request than its settings are written. Freezing a
-	 * legacy site onto the new schema in that window would silently change the
-	 * field names its ESP automations key on, permanently.
-	 *
-	 * Nothing is lost by waiting: an ESP that is not set up cannot sync. Once
-	 * it reports itself configured, the next read seeds the legacy set — the
-	 * answer the guess would have gotten wrong.
+	 * The lazy path must not act while ESP::is_set_up() is transiently false:
+	 * an unconfigured ESP can't sync yet, so seeding must wait for a
+	 * confident read instead of freezing the wrong schema.
 	 */
 	public function test_lazy_seeding_defers_an_unconfident_detection() {
 		$esp = new ESP();

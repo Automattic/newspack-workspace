@@ -66,11 +66,8 @@ class Registration extends Contact_Metadata {
 				'supersedes'  => 'v1:registration_date',
 				'equivalent'  => true,
 			],
-			// Value-equivalent to the legacy pair: this reads the same
-			// REGISTRATION_PAGE user meta the legacy `registration_page`
-			// enrichment reads, and every registration producer of the legacy
-			// `current_page_url` writes that same meta in the same request. Both
-			// legacy raw keys therefore alias onto this field as inputs.
+			// Equivalent to legacy registration_page/current_page_url: both
+			// read/write the same REGISTRATION_PAGE user meta this field uses.
 			'Registration_Page'         => [
 				'name'        => 'Registration Page',
 				'description' => __( 'URL of the page where reader registered', 'newspack-plugin' ),
@@ -121,14 +118,9 @@ class Registration extends Contact_Metadata {
 		}
 
 		return [
-			// Equivalent-flagged to the legacy `registration_date` field, which
-			// converts this same UTC value to the site's local timezone via
-			// get_date_from_gmt() (see Sync\WooCommerce::get_contact_from_customer()).
-			// format_date() is deliberately not used here: it renders in UTC via
-			// gmdate(), which would make this field's value diverge from its v1
-			// twin on any non-UTC site. Other date fields on this class (and on
-			// Sync\Contact_Metadata\Subscription) are not equivalence-flagged and
-			// keep using format_date().
+			// Equivalence-flagged to legacy registration_date: this converts the
+			// same UTC value via get_date_from_gmt(), not format_date() (which
+			// uses gmdate() and would diverge from the v1 twin on non-UTC sites).
 			'Registration_Date'         => $this->user->user_registered ? \get_date_from_gmt( $this->user->user_registered, self::DATE_FORMAT ) : '',
 			'Registration_Page'         => (string) \get_user_meta( $this->user->ID, Reader_Activation::REGISTRATION_PAGE, true ),
 			'Registration_Strategy'     => (string) \get_user_meta( $this->user->ID, Reader_Activation::REGISTRATION_METHOD, true ),

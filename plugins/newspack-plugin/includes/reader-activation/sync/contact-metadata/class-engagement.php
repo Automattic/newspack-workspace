@@ -92,17 +92,9 @@ class Engagement extends Contact_Metadata {
 				'example'     => 'politics,climate,local',
 				'status'      => 'new',
 			],
-			// Placeholder name pending naming review (NPPD-2067). Renamed away
-			// from the legacy "Payment Page" because the two fields do not mean
-			// the same thing: the legacy field follows the reader's "Current
-			// Product" order (active subscription, then most recently
-			// cancelled/expired subscription, then last one-time donation),
-			// while this one is always the latest completed order of any
-			// product type. Renewal orders never carry the original referer, so
-			// the two permanently diverge for recurring subscribers; for a
-			// one-time non-donation purchaser the legacy field is always empty
-			// while this one is not. A distinct ESP name lets both schemas sync
-			// at once.
+			// Placeholder name pending naming review (NPPD-2067). Distinct from
+			// the legacy field, which follows the reader's current
+			// subscription/donation rather than the latest completed order.
 			'Payment_Page'         => [
 				'name'        => 'Last Payment Page',
 				'description' => __( 'URL of the checkout page from the reader\'s most recent completed order, of any product type. Unlike the legacy Payment Page, which follows the reader\'s current subscription or last one-time donation, this can diverge for recurring subscribers and one-time non-donation purchasers.', 'newspack-plugin' ),

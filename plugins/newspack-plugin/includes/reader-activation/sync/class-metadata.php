@@ -35,10 +35,6 @@ class Metadata {
 	 * They pass through syncing unprefixed and are never subject to outbound
 	 * field selection.
 	 *
-	 * Re-homed here from the retired Legacy_Metadata class; the surviving
-	 * consumer is Integration::prepare_contact(), whose passthrough list this
-	 * is.
-	 *
 	 * @var string[]
 	 */
 	const SYNC_CONTROL_KEYS = [ 'status', 'status_if_new' ];
@@ -50,10 +46,9 @@ class Metadata {
 	 * exactly, so a label that happens to prefix another can never carry that
 	 * other field past the selection.
 	 *
-	 * Re-homed here from the retired Legacy_Metadata class. The registry
-	 * marks the same fields with `dynamic_suffix`, which is what
-	 * Integration::prepare_contact() matches on; this constant is the raw-key
-	 * form the pre-registry helpers (get_utm_key()) still work in.
+	 * The registry marks the same fields with `dynamic_suffix`; this constant
+	 * is the raw-key form the pre-registry helpers (get_utm_key()) still work
+	 * in.
 	 *
 	 * @var string[]
 	 */
@@ -93,15 +88,10 @@ class Metadata {
 	 * Get the metadata classes whose schema versions are actually in play
 	 * for outgoing sync.
 	 *
-	 * The registry keeps every version's definitions, but computing metadata
-	 * for a version no integration has enabled would run its WooCommerce
-	 * subscription/order queries on every sync only for
-	 * Integration::prepare_contact() to discard the result. Scope the
-	 * compute to the union of versions enabled across push-capable
-	 * integrations. No enabled ids at all means nothing version-scoped is
-	 * pushed, so nothing version-scoped is computed. Version-neutral classes
-	 * (Content Gate) are always included, in the same position they hold in
-	 * the full merged list so key-collision precedence is unchanged.
+	 * Scoped to the versions enabled across push-capable integrations, so an
+	 * unused version skips its (often WooCommerce-heavy) computation.
+	 * Version-neutral classes (Content Gate) are always included, in their
+	 * original merged-list position so key-collision precedence is unchanged.
 	 *
 	 * @return array List of metadata classes.
 	 */
@@ -220,11 +210,8 @@ class Metadata {
 	 * fields enabled for the ESP integration and returns the prefixed,
 	 * suffixed ESP name (e.g. "NP_Signup UTM: source"), or false.
 	 *
-	 * The dynamic-suffix UTM fields are declared only by the legacy schema
-	 * (the new schema splits them into discrete source/medium/campaign
-	 * fields under their own names), so the get_raw_keys() check is now
-	 * purely "is this field enabled for the ESP" — it no longer doubles as a
-	 * filter on which schema the site started from.
+	 * Only the legacy schema declares these dynamic-suffix fields; the new
+	 * schema splits them into discrete source/medium/campaign fields.
 	 *
 	 * @param string $key Key to check.
 	 *
@@ -259,8 +246,8 @@ class Metadata {
 	 * As a fallback, this method returns the fields enabled for the ESP Integration.
 	 *
 	 * This is the name-space view of "the ESP's effective selection" — the set
-	 * every other integration inherits until it saves one of its own
-	 * (NPPD-2107). The inheritance itself works in id space and lives in
+	 * every other integration inherits until it saves one of its own. The
+	 * inheritance itself works in id space and lives in
 	 * Integration::get_inherited_outgoing_field_ids(); the registry-miss chain
 	 * below mirrors it, minus Esp::get_enabled_outgoing_fields()'s
 	 * lazy-migration write, which stays on the ESP integration itself.
@@ -395,18 +382,13 @@ class Metadata {
 	 * legacy classes, which both declare "Legacy" — and filter-added fields
 	 * that belong to no class land in "Additional".
 	 *
-	 * A group renders last when every one of its fields carries 'legacy'
-	 * status in the field registry (Legacy_Basic and Legacy_Payment always
-	 * do), so the Legacy group(s) sink below "Additional" while every other
-	 * group keeps its class-map order. The check reads registry status rather
-	 * than comparing against the translated section label, so it keeps
-	 * working regardless of that label's copy or locale.
+	 * All-legacy groups (every field 'legacy' in the field registry) sort
+	 * last, checked via registry status rather than the section label so it
+	 * survives label translation or renaming.
 	 *
-	 * A class's labels are read out of the filtered map by the class's own raw
-	 * keys, so `newspack_ras_metadata_keys` removals and renames are respected
-	 * per key. Matching on the labels themselves would let a class survive on
-	 * another class's identically-labelled field, which the merged map makes
-	 * possible: the legacy `account` and the new `Account` are both "Account".
+	 * Each class's fields are resolved from the filtered map by its own raw
+	 * keys, not by label text — labels can collide across classes (legacy
+	 * `account` and new `Account` are both "Account").
 	 *
 	 * @return array<int, array{section: string, fields: list<string>}> List of
 	 *   groups, each with a non-empty section label and an ordered list of field
@@ -481,11 +463,9 @@ class Metadata {
 	 * Map of metadata class => raw key => field status, sourced from the field
 	 * registry.
 	 *
-	 * Backs the all-legacy group check in get_grouped_default_fields(): reading
-	 * the registry's `status` keeps that check aligned with the same signal
-	 * that drives the per-row sunset rule and (pre-removal) the per-row Legacy
-	 * badge in the settings UI, rather than re-deriving legacy-ness from a
-	 * class's own translated section label.
+	 * Backs the all-legacy group check in get_grouped_default_fields(),
+	 * reading the same registry `status` signal as the per-row sunset rule
+	 * rather than re-deriving legacy-ness from a translated section label.
 	 *
 	 * @return array<string, array<string, string|null>>
 	 */
@@ -502,11 +482,8 @@ class Metadata {
 	/**
 	 * Get all metadata fields.
 	 *
-	 * The merged, all-versions raw_key => label map. Both schemas' raw keys
-	 * are distinct and, since the pivot, so are their ESP names, so this is a
-	 * plain superset: it feeds the field-selection UI, get_key() and the
-	 * partial-payload builders, none of which can now miss a field because it
-	 * belongs to the schema the site did not start on.
+	 * The merged, all-versions raw_key => label map — a plain superset, since
+	 * both schemas' raw keys and ESP names are distinct.
 	 *
 	 * @param boolean $only_available Whether to return only available fields or all fields.
 	 * @return array List of fields.
@@ -523,13 +500,10 @@ class Metadata {
 		/**
 		 * Filters the list of key/value pairs for metadata fields to be synced to the connected ESP.
 		 *
-		 * Applied twice per request against the same merged raw_key => label
-		 * map: here, optionally narrowed to available fields, and in
-		 * Field_Registry::get_definitions() with $only_available hardcoded to
-		 * false. Add/remove/rename callbacks behave identically on both; a
-		 * callback that replaces the map wholesale also constrains the
-		 * registry, and one that inspects the incoming map sees the available
-		 * subset here and the full set there.
+		 * Applied twice per request against the same merged map: here (optionally
+		 * narrowed to available fields) and in Field_Registry::get_definitions()
+		 * (always unfiltered by availability) — a callback that inspects the
+		 * incoming map sees a different subset in each place.
 		 *
 		 * @param array $keys The list of key/value pairs for metadata fields to be synced to the connected ESP.
 		 * @param boolean $only_available Whether the list of fields is filtered to only available fields or not.
@@ -636,10 +610,8 @@ class Metadata {
 	 */
 	public static function get_contact_with_metadata( $user_customer_or_order, $fields = null ) {
 		$core_contact = new Contact_Metadata\Core_Contact( $user_customer_or_order );
-		// The contact carries raw keys from every schema version in play, and
-		// each integration filters them in prepare_contact(); versions no
-		// integration has enabled are skipped so their (WooCommerce-heavy)
-		// metadata isn't computed just to be discarded.
+		// Scoped to versions actually in play; each integration filters its
+		// raw keys in prepare_contact().
 		$classes      = self::get_sync_metadata_classes();
 		$metadata     = [];
 
@@ -849,13 +821,10 @@ class Metadata {
 		/**
 		 * Filters the normalized contact data before syncing to the ESP.
 		 *
-		 * The metadata carries raw keys at this point (e.g. `account`,
-		 * `signup_page_utm_source`) — prefixing happens later, per
-		 * integration, in Integration::prepare_contact(). Raw keys added
-		 * here sync only when registered (via `newspack_ras_metadata_keys`)
-		 * and enabled for the integration; already-prefixed keys pass
-		 * through preparation untouched unless they belong to a registered
-		 * field the integration has disabled.
+		 * Metadata is raw-keyed here (e.g. `account`) — prefixing happens later
+		 * in Integration::prepare_contact(). Raw keys added here sync only if
+		 * registered and enabled for the integration; already-prefixed keys
+		 * pass through unless tied to a disabled registered field.
 		 *
 		 * @param array $contact Contact data.
 		 */

@@ -308,10 +308,9 @@ class Test_Account_Deletion extends \WP_UnitTestCase {
 	 * prefixed `Account_Deleted` datetime in metadata and not call
 	 * delete_contact.
 	 *
-	 * Because prepare_contact() drops the raw `account_deleted` key (it is not
-	 * a registered outgoing field), the dispatcher re-injects the signal under
-	 * the integration's prefix afterwards. That prefixed key is the durable
-	 * ESP-side contract.
+	 * The raw `account_deleted` key is dropped by prepare_contact(); the
+	 * dispatcher re-injects it under the integration's prefix, which is the
+	 * durable ESP-side contract.
 	 */
 	public function test_handle_account_deletion_calls_push_with_timestamp_when_handling_flag() {
 		$this->reset_integrations();
@@ -701,10 +700,8 @@ class Test_Account_Deletion extends \WP_UnitTestCase {
 
 	/**
 	 * A cleanup (list-removal) failure must be as durable as a push failure:
-	 * without a retry, a transient provider error leaves the deleted reader
-	 * subscribed to every list indefinitely. The failure notification must
-	 * also carry an error classification, or the alert recorder files a
-	 * permanent condition as transient.
+	 * it schedules a retry and reports an error classification, so the alert
+	 * recorder can tell a transient failure from a permanent one.
 	 */
 	public function test_handle_account_deletion_schedules_retry_on_cleanup_failure() {
 		if ( ! function_exists( 'as_schedule_single_action' ) ) {
@@ -897,11 +894,8 @@ class Test_Account_Deletion extends \WP_UnitTestCase {
 
 	/**
 	 * A successful flag-mode retry must re-run flag_deletion_cleanup(), not
-	 * just the metadata push: if the original push failed, flag_deletion_cleanup()
-	 * may have already cleared the reader's ESP list membership independently
-	 * (see handle_account_deletion()). Without re-running cleanup here, this
-	 * retry's successful upsert would silently re-add the reader to ESP lists,
-	 * reversing a completed list-removal.
+	 * just the metadata push — otherwise a retry after a failed push would
+	 * silently re-add the reader to ESP lists that cleanup already cleared.
 	 */
 	public function test_execute_deletion_retry_flag_mode_reruns_cleanup_on_success() {
 		if ( ! function_exists( 'as_schedule_single_action' ) ) {
@@ -1049,12 +1043,9 @@ class Test_Account_Deletion extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * Account_deleted is a synthetic, system-level signal: it is not declared
-	 * as a field by any metadata class, so Integration::prepare_contact()
-	 * always strips it regardless of the integration's enabled outgoing
-	 * fields. The dispatcher must re-inject it (with the integration's
-	 * prefix) AFTER prepare_contact() so the deletion signal still reaches
-	 * the ESP.
+	 * Account_deleted is a synthetic signal with no declared field, so
+	 * prepare_contact() always strips it; the dispatcher must re-inject it,
+	 * prefixed, afterwards so the deletion signal still reaches the ESP.
 	 */
 	public function test_handle_account_deletion_flag_preserves_account_deleted() {
 		$this->reset_integrations();
@@ -1150,12 +1141,9 @@ class Test_Account_Deletion extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * End-to-end with the real ESP integration in flag mode: the base class's
-	 * flag_deletion_cleanup() call must reach the ESP's override, which
-	 * removes the reader from every ESP list via
-	 * Newspack_Newsletters_Contacts::update_lists(), using the exact legacy
-	 * reason string the retired sync_esp_delete=false handler used to send
-	 * (see the retired Contact_Sync_Connector::reader_deleted() branch).
+	 * End-to-end with the real ESP integration in flag mode: cleanup must
+	 * remove the reader from every ESP list, using the same reason string the
+	 * retired sync_esp_delete=false handler used to send.
 	 */
 	public function test_handle_account_deletion_esp_flag_mode_removes_lists() {
 		\Newspack_Newsletters_Contacts::reset_calls();
@@ -1194,10 +1182,8 @@ class Test_Account_Deletion extends \WP_UnitTestCase {
 
 	/**
 	 * The flag_deletion_cleanup() hook must still run even when the flag push
-	 * itself fails: "keep the record, stop the emails" is independent of
-	 * whether the Account_Deleted/Membership_Status metadata landed. Without
-	 * this, a publisher relying on cleanup to stop outreach would keep
-	 * emailing a deleted reader for as long as the metadata push keeps failing.
+	 * itself fails, so outreach stops regardless of whether the metadata push
+	 * succeeded.
 	 */
 	public function test_handle_account_deletion_flag_push_failure_still_runs_cleanup() {
 		$this->reset_integrations();
@@ -1223,11 +1209,9 @@ class Test_Account_Deletion extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * A flag_deletion_cleanup() failure must not prevent or roll back the
-	 * flag push: the metadata push already landed independently of cleanup.
-	 * The dispatcher's error-return contract aggregates any per-integration
-	 * error (push OR cleanup) into a single WP_Error, so the cleanup failure
-	 * surfaces the same way a push failure would.
+	 * A flag_deletion_cleanup() failure must not roll back the already-landed
+	 * flag push; it surfaces through the same aggregated WP_Error contract a
+	 * push failure would.
 	 */
 	public function test_handle_account_deletion_cleanup_failure_does_not_block_flag_push() {
 		$this->reset_integrations();

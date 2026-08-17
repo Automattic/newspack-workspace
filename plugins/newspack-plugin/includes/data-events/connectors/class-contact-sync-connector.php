@@ -35,12 +35,9 @@ class Contact_Sync_Connector {
 			return;
 		}
 		Data_Events::register_handler( [ __CLASS__, 'reader_registered' ], 'reader_registered' );
-		// Deletion always routes through the unified, per-integration
-		// Contact_Sync::handle_account_deletion() path (see reader_delete_sync()
-		// below); the legacy reader_deleted() handler, which predated
-		// per-integration account-deletion settings, has been removed — its
-		// flag/delete behaviors are covered by the per-integration
-		// account_deletion_handling modes.
+		// Deletion always routes through Contact_Sync::handle_account_deletion();
+		// the legacy reader_deleted() handler is removed, its flag/delete
+		// behaviors now covered by per-integration account_deletion_handling.
 		Data_Events::register_handler( [ __CLASS__, 'reader_delete_sync' ], 'reader_delete_sync' );
 		Data_Events::register_handler( [ __CLASS__, 'reader_logged_in' ], 'reader_logged_in' );
 		Data_Events::register_handler( [ __CLASS__, 'order_completed' ], 'order_completed' );

@@ -29,10 +29,9 @@ class Field_Registry {
 	private static $definitions = null;
 
 	/**
-	 * Per-request cache of a derived — never persisted — schema version.
-	 * Records whether the 'esp' integration was registered when the value
-	 * was computed, because that is the one input that can change the
-	 * answer within a request (see get_derivation_schema_version()).
+	 * Per-request cache of a derived, never-persisted schema version. Also
+	 * tracks ESP-integration registration, the one input that can change
+	 * the answer mid-request.
 	 *
 	 * @var array|null { version: string, esp_registered: bool }
 	 */
@@ -154,11 +153,9 @@ class Field_Registry {
 		/** This filter is documented in includes/reader-activation/sync/class-metadata.php */
 		$filtered_map = \apply_filters( 'newspack_ras_metadata_keys', $merged_map, false );
 
-		// Drop definitions whose raw key was removed by the filter, and adopt
-		// filter renames: a callback that relabels an existing raw key must
-		// relabel the definition too, or name-based resolution (defaults,
-		// migration, settings saves) would look for the filtered label and
-		// find nothing — silently dropping the field from outgoing sync.
+		// Drop filter-removed raw keys, and adopt filter renames — a relabeled
+		// raw key must relabel the definition too, or name-based resolution
+		// would look for the old label and find nothing.
 		foreach ( $definitions as $id => $definition ) {
 			$raw_key = $definition['raw_key'];
 			if ( ! isset( $filtered_map[ $raw_key ] ) ) {
@@ -263,9 +260,9 @@ class Field_Registry {
 	 * Get every definition sharing an ESP field name, optionally restricted
 	 * to one schema version.
 	 *
-	 * Needed because the legacy schema maps multiple raw keys to a single
-	 * ESP name (registration_page and current_page_url both map to
-	 * "Registration Page") — resolving a name must yield all of them.
+	 * The legacy schema maps multiple raw keys to one ESP name (e.g.
+	 * registration_page and current_page_url both map to "Registration
+	 * Page"), so a name can resolve to more than one definition.
 	 *
 	 * @param string      $name    ESP field name (unprefixed).
 	 * @param string|null $version Schema version, or null for every version.
@@ -287,17 +284,11 @@ class Field_Registry {
 	 * Resolve an ESP field name to its definitions, with the single-match
 	 * fallback.
 	 *
-	 * Encodes the resolution invariant used by defaults, migration and
-	 * settings saves. Production callers resolve without a version: the two
-	 * schemas no longer contest a name, so a name identifies a field
-	 * outright. It can still map to several definitions — the legacy schema
-	 * maps two raw keys to "Registration Page", and the five value-equivalent
-	 * pairs are one field spelled twice, whose ids the write paths collapse
-	 * onto the v2 twin (see upgrade_equivalent_ids()).
-	 *
-	 * Passing a version restricts the match to that version, falling back to
-	 * a single any-version match when it has none — which is what covers
-	 * version-neutral (filter-added) fields.
+	 * Can return more than one definition: the legacy schema maps two raw
+	 * keys to "Registration Page", and value-equivalent pairs are one field
+	 * spelled twice. A given $version restricts the match, falling back to
+	 * any version when there is no match — which covers version-neutral
+	 * (filter-added) fields.
 	 *
 	 * @param string      $name    ESP field name (unprefixed).
 	 * @param string|null $version Preferred schema version, or null for every version.
@@ -318,10 +309,8 @@ class Field_Registry {
 	 * definition, including dynamic-suffix matches (e.g. "Signup UTM: source"
 	 * matches the "Signup UTM: " definition).
 	 *
-	 * Used by Integration::prepare_contact() to tell an explicitly-injected
-	 * custom prefixed key (unknown to the registry: passes through) from a
-	 * registered field that is simply not enabled for the integration
-	 * (dropped, respecting the per-integration selection).
+	 * Distinguishes an unregistered custom key (passes through) from a
+	 * registered-but-disabled field (dropped).
 	 *
 	 * @param string $name ESP field name (unprefixed).
 	 *
@@ -347,11 +336,9 @@ class Field_Registry {
 	 * Get name-collision groups: ESP names claimed by both schema versions,
 	 * including the pairs equivalence has since collapsed.
 	 *
-	 * The raw derivation, and deliberately private. get_equivalent_upgrades()
-	 * has to read this rather than the public view: the collapse is defined in
-	 * terms of these groups, so reading the filtered view would empty the
-	 * upgrade map — and with it the id upgrade and the input aliasing that make
-	 * a collapsed pair work at all.
+	 * Deliberately private: get_equivalent_upgrades() must read this raw
+	 * view rather than the filtered one, or the collapse it defines would
+	 * empty the very upgrade map that collapse depends on.
 	 *
 	 * @return array Map of ESP name => list of definition ids.
 	 */
@@ -377,14 +364,9 @@ class Field_Registry {
 	 * Get conflict groups: ESP names a publisher cannot enable on both schema
 	 * versions at once.
 	 *
-	 * Empty by construction, and meant to stay that way. Every v1/v2 name
-	 * collision is dissolved one of two ways: same-meaning pairs declare the v2
-	 * field `equivalent` and become one field (the v1 ids upgrade to the v2
-	 * twin, the v1 raw keys alias onto it as inputs), and changed-meaning v2
-	 * fields get their own ESP name. That is what lets both schemas run at once
-	 * with no backfill. Test_Field_Registry asserts this returns [], so a new
-	 * field that re-claims a legacy name fails the suite instead of silently
-	 * needing back the pick-one save rule this replaced.
+	 * Empty by construction: every v1/v2 name collision is dissolved by
+	 * declaring the v2 field `equivalent` (collapsing into one field) or by
+	 * giving a changed-meaning v2 field its own ESP name.
 	 *
 	 * @return array Map of ESP name => list of definition ids.
 	 */
@@ -452,9 +434,8 @@ class Field_Registry {
 	 * Build the equivalent-upgrade map: v1 id => v2 ids, restricted to
 	 * name-collision groups whose every v2 member declares `equivalent`.
 	 *
-	 * Equivalence is an authored claim on the v2 config — "the v2 pipeline
-	 * produces the identical value for the same ESP name" — audited against
-	 * the field-inventory sheet, never inferred from matching copy.
+	 * Equivalence is an authored, audited claim — never inferred from
+	 * matching copy.
 	 *
 	 * @return array Map of v1 definition id => list of v2 definition ids.
 	 */
@@ -492,12 +473,9 @@ class Field_Registry {
 	/**
 	 * Upgrade v1 ids of value-equivalent conflict pairs to their v2 twins.
 	 *
-	 * The storage-time sunset lever: because an equivalent pair produces a
-	 * byte-identical ESP payload on either version, rewriting the stored id
-	 * is unobservable at the provider and retires legacy ids for free. This
-	 * is only safe where the registry attests equivalence — divergent pairs
-	 * (different values or formats on the same ESP name) are never touched;
-	 * their migration stays an explicit publisher decision in the UI.
+	 * Safe because an equivalent pair produces a byte-identical ESP payload
+	 * on either version. Divergent pairs are never touched; their migration
+	 * stays an explicit publisher decision in the UI.
 	 *
 	 * @param string[] $ids Field ids.
 	 *
@@ -521,11 +499,9 @@ class Field_Registry {
 	/**
 	 * Raw keys an equivalent-group v2 id accepts as input aliases.
 	 *
-	 * Callers still hand-build contacts with legacy raw keys (the deletion
-	 * connector passes `account`, for one), so an enabled v2 id from an
-	 * equivalent pair must match its v1 counterparts' raw keys in
-	 * Integration::prepare_contact() — the values are identical by
-	 * declaration, only the internal key spelling differs.
+	 * Needed because callers still hand-build contacts with legacy raw keys
+	 * (e.g. the deletion connector passes `account`), so an enabled v2 id
+	 * must also match its v1 counterparts' raw keys.
 	 *
 	 * @param string $id Field id.
 	 *
@@ -546,23 +522,17 @@ class Field_Registry {
 	}
 
 	/**
-	 * The retired schema-origin marker. Read once, by the seeder below, and
-	 * deleted the moment it has done its job. Nothing else in the codebase
-	 * knows this option exists.
+	 * The retired schema-origin marker. Read once by the seeder, then
+	 * deleted; nothing else in the codebase knows this option exists.
 	 *
 	 * @var string
 	 */
 	private const RETIRED_ORIGIN_OPTION = 'newspack_sync_schema_origin';
 
 	/**
-	 * Re-entrancy guard for seed_default_field_selections().
-	 *
-	 * Detection asks the ESP integration whether it is set up, and the lazy
-	 * trigger sits on the ESP's own read path, so a future is_set_up() that
-	 * consulted the selection would loop. Structurally it cannot today —
-	 * seeding resolves ids from the registry's definitions, never from an
-	 * integration read — and this makes that a hard guarantee rather than a
-	 * property of the current call graph.
+	 * Re-entrancy guard for seed_default_field_selections(): a future
+	 * is_set_up() that consults the selection would loop through the lazy
+	 * seed trigger on the ESP's own read path.
 	 *
 	 * @var bool
 	 */
@@ -571,47 +541,17 @@ class Field_Registry {
 	/**
 	 * Seed the ESP integration's stored outgoing-field selection, once.
 	 *
-	 * Coexistence made the registry a merged, all-versions view: a site with
-	 * no stored selection would derive its defaults from that merged view and
-	 * start pushing the other schema's field names to the publisher's ESP.
-	 * Materialising the site's current effective default selection as stored
-	 * ids freezes what it already syncs, and is what lets every runtime path
-	 * stop asking which schema the site came from. That freeze holds only
-	 * until the next Outbound settings save, since update_enabled_outgoing_fields()
-	 * drops any currently-unavailable id.
+	 * Materialises the site's current effective defaults as stored ids so
+	 * every runtime path can stop asking which schema the site came from.
+	 * Idempotent and trigger-independent: runs from both the activation
+	 * hook and lazily from ESP::ensure_outgoing_fields_seeded(); whichever
+	 * fires first wins. An existing selection, including a deliberately
+	 * empty one, is never overwritten.
 	 *
-	 * Idempotent and trigger-independent, because the trigger cannot be
-	 * relied on: `newspack_activation` fires only on plugin activation, which
-	 * an in-place update never does. So this runs from two places — the
-	 * activation hook as an early bird, and lazily from
-	 * ESP::ensure_outgoing_fields_seeded() the first time the ESP is read
-	 * without a stored option. Whichever fires first wins; the other becomes
-	 * a no-op.
-	 *
-	 * The only path that PERSISTS anything derived from the retired origin
-	 * logic. Once a selection is stored, that logic is out of the picture for
-	 * good: reads answer from the stored ids, and neither the marker nor the
-	 * `NEWSPACK_SYNC_METADATA_VERSION*` constants are consulted again. (An
-	 * unseeded site still consults the same detection to scope a derived
-	 * fallback — see get_derivation_schema_version() — but stores nothing.) An
-	 * existing selection, including a deliberately empty one, is never
-	 * overwritten.
-	 *
-	 * @param bool $only_when_confident Skip seeding when detection had to fall
-	 *   back to its fresh-install guess. The lazy caller passes true: that
-	 *   guess is discriminated by ESP::is_set_up(), which is transiently false
-	 *   whenever Newspack Newsletters is deactivated, unconfigured, or simply
-	 *   read mid-request before its settings are in place — and a legacy site
-	 *   read during that window would be frozen onto the new schema forever,
-	 *   silently changing the field names its ESP automations key on. Declining
-	 *   to seed costs nothing there: an ESP that is not set up cannot sync, so
-	 *   the derived fallback never reaches a provider, and a later read seeds
-	 *   correctly. (`NEWSPACK_FORCE_ALLOW_ESP_SYNC` bypasses the validation
-	 *   that premise rests on, but it forces sync past an unconfigured ESP
-	 *   too — a site running it is already outside the guarantee.) Activation
-	 *   passes false and may act on the guess, since activation is the one
-	 *   moment "no prior usage at all" is checkable; it still refuses on a
-	 *   site that has completed setup.
+	 * @param bool $only_when_confident Confidence-gated: an unconfident
+	 *   guess is never persisted from the lazy path, since a transiently
+	 *   unset-up ESP would otherwise freeze a legacy site onto the new
+	 *   schema forever. Activation passes false and may act on the guess.
 	 *
 	 * @return void
 	 */
@@ -627,11 +567,10 @@ class Field_Registry {
 			return;
 		}
 
-		// The pre-integrations global option is the publisher's own selection,
-		// and very likely a narrowed one. ESP::ensure_outgoing_fields_seeded()
-		// copies it verbatim; seeding the full default set here would shadow it
-		// permanently, silently re-enabling fields the publisher turned off.
-		// Defer to that copy — the shapes are mutually exclusive by design.
+		// The pre-integrations global option is the publisher's own selection;
+		// defer to it, since ESP::ensure_outgoing_fields_seeded() copies it
+		// verbatim, and seeding here too would shadow it, re-enabling fields
+		// the publisher turned off.
 		if ( is_array( \get_option( Metadata::FIELDS_OPTION, null ) ) ) {
 			self::retire_origin_marker();
 			return;
@@ -644,11 +583,8 @@ class Field_Registry {
 				if ( $only_when_confident ) {
 					return;
 				}
-				// Activation, on a guess. Only a site with no prior usage can be
-				// the fresh install this branch assumes: a completed setup means
-				// an existing site whose ESP merely happens to be unconfigured
-				// right now, and freezing it onto the new schema would change
-				// the field names its ESP automations key on.
+				// Activation may still be acting on a guess; only do so before
+				// setup completes, when "no prior usage" is actually checkable.
 				$setup_option = defined( 'NEWSPACK_SETUP_COMPLETE' ) ? NEWSPACK_SETUP_COMPLETE : 'newspack_setup_complete';
 				if ( '1' === \get_option( $setup_option, '0' ) ) {
 					return;
@@ -660,9 +596,8 @@ class Field_Registry {
 		}
 
 		if ( empty( $ids ) ) {
-			// No definitions at all (the metadata classes have not loaded).
-			// Storing an empty selection here would read as "push nothing", so
-			// leave both options untouched and retry on the next read.
+			// No definitions loaded yet. Storing an empty selection here would
+			// read as "push nothing", so leave it untouched and retry later.
 			return;
 		}
 
@@ -674,14 +609,10 @@ class Field_Registry {
 	 * Every definition belonging to a schema version, plus the version-neutral
 	 * ones.
 	 *
-	 * Availability is deliberately NOT filtered. The stored snapshot is
-	 * permanent, but availability is a runtime property of the moment seeding
-	 * happens: a fresh install seeds before WooCommerce Subscriptions is
-	 * installed or the content gates are switched on, so filtering here would
-	 * bar those fields from ever syncing, with nothing to un-bar them.
-	 * Storing an unavailable id is inert — Metadata::get_contact_with_metadata()
-	 * skips any class whose is_available() is false, so the field simply
-	 * produces no value until its class lights up, and then starts working.
+	 * Availability is deliberately not filtered: a fresh install seeds
+	 * before dependent features (e.g. WooCommerce Subscriptions) exist.
+	 * Stored ids for unavailable fields are inert until their class becomes
+	 * available.
 	 *
 	 * @param string $version Schema version.
 	 *
@@ -700,10 +631,8 @@ class Field_Registry {
 	/**
 	 * Drop the retired schema-origin marker.
 	 *
-	 * Idempotent, and safe to call from any path that has settled the question
-	 * the marker existed to answer — including the ESP's own short-circuits,
-	 * which reach a stored selection without going through the seeder at all.
-	 * Leaving it behind would strand dead state on every upgraded site.
+	 * Idempotent; safe to call from any path that has settled the question
+	 * the marker existed to answer, including ones that bypass the seeder.
 	 *
 	 * @return void
 	 */
@@ -712,28 +641,16 @@ class Field_Registry {
 	}
 
 	/**
-	 * The schema version a derived — never persisted — default selection
+	 * The schema version a derived, never-persisted default selection
 	 * resolves against.
 	 *
-	 * Not a reinstatement of the origin marker: nothing is stored (though a
-	 * meaningless, corrupt marker may be deleted on sight), no confidence is
-	 * required, and a wrong answer costs one request rather than the site's
-	 * future. It exists because the alternative for an unseeded site is
-	 * resolving names against the merged registry, which yields both
-	 * schemas' field names — and a configured non-ESP push integration
-	 * inheriting from an unconfigured ESP would put them in front of a real
-	 * provider. Scoping the derivation restores the pre-coexistence behavior
-	 * for exactly that window.
+	 * Needed because an unseeded site resolving names against the merged
+	 * registry would leak both schemas' field names to any push integration
+	 * inheriting from an unconfigured ESP.
 	 *
-	 * Memoized per request: an unseeded site reaches this once per contact
-	 * per push-capable integration on the sync path — get_enabled_outgoing_field_ids()
-	 * calling get_default_outgoing_field_ids(), fanned out across
-	 * integrations by Metadata::get_sync_metadata_classes() — and re-running
-	 * detection's $wpdb LIKE query and ESP::is_set_up() chain that often
-	 * would be wasteful. The one input that can change the answer
-	 * mid-request is the 'esp' integration registering, so a value computed
-	 * before that happened is re-detected once an integration is present;
-	 * anything else is served from the cache. reset() clears it.
+	 * Memoized per request; re-detected once the ESP integration registers,
+	 * the one input that can change the answer mid-request. reset() clears
+	 * the cache.
 	 *
 	 * @return string 'v1' or 'v2'.
 	 */
@@ -755,22 +672,8 @@ class Field_Registry {
 	}
 
 	/**
-	 * Which schema the site was on before coexistence — the seeding input,
-	 * and the only place this question is still asked.
-	 *
-	 * A marker recorded by an earlier release wins outright. Otherwise the
-	 * retired global version switch decides directly; sites with existing
-	 * outgoing-field selections resolve to the version those selections carry
-	 * (bare display names are the pre-coexistence format, so v1); the
-	 * pre-integrations global fields option is v1; a site with a configured
-	 * ESP but none of those (it never opened the metadata-fields settings) is
-	 * still an existing legacy site syncing dynamic defaults, so it is also
-	 * v1; everything else is a fresh install and starts on v2.
-	 *
-	 * Every branch but the last rests on stored evidence and is reported as
-	 * confident. The last is a guess — a legacy site whose ESP is momentarily
-	 * unconfigured is indistinguishable from a fresh install — which is why
-	 * the lazy caller refuses to act on it.
+	 * Detection order: stored marker, constants, existing selections, legacy
+	 * fields option, set-up ESP (v1), else v2.
 	 *
 	 * @return array{version: string, confident: bool}
 	 */
@@ -780,9 +683,7 @@ class Field_Registry {
 			return self::certain( $recorded );
 		}
 		if ( null !== $recorded ) {
-			// Stored but meaningless. It can never decide anything, so retire it
-			// on sight rather than leaving it to be re-read by every later
-			// attempt on a site seeding declines to seed.
+			// Meaningless value; retire it now rather than re-reading it forever.
 			\delete_option( self::RETIRED_ORIGIN_OPTION );
 		}
 
@@ -805,11 +706,10 @@ class Field_Registry {
 			return self::certain( self::VERSION_V1 );
 		}
 
-		// A configured ESP with no stored selections is an existing legacy
-		// site syncing dynamic defaults — not a fresh install. Seeding runs at
-		// activation, before integrations register on init priority 5, so fall
-		// back to constructing the ESP integration directly; is_set_up() reads
-		// stored configuration only, never the live provider API.
+		// A configured ESP with no stored selections is a legacy site on
+		// dynamic defaults, not a fresh install. Construct it directly, since
+		// seeding runs at activation before integrations register; is_set_up()
+		// only reads stored config, never the live provider API.
 		$esp = \Newspack\Reader_Activation\Integrations::get_integration( \Newspack\Reader_Activation\Integration::ESP_INTEGRATION_ID );
 		if ( ! $esp && class_exists( \Newspack\Reader_Activation\Integrations\ESP::class ) ) {
 			$esp = new \Newspack\Reader_Activation\Integrations\ESP();
@@ -858,11 +758,9 @@ class Field_Registry {
 	/**
 	 * Derive the pre-coexistence schema version from stored selection values.
 	 *
-	 * Bare display names are the pre-coexistence storage format, so any of
-	 * them means v1. All-id selections carry their version explicitly: the
-	 * first non-neutral version wins (a site that saved v2 ids before the
-	 * question was settled must not be read as v1 by the mere existence of
-	 * the option).
+	 * Bare display names mean v1 (the pre-coexistence format). All-id
+	 * selections carry their version explicitly; the first non-neutral
+	 * version wins.
 	 *
 	 * @param array $selection_values Stored option values (unserialized).
 	 *

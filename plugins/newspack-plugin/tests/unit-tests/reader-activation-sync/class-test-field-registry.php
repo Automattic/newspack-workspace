@@ -44,16 +44,9 @@ class Test_Field_Registry extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * The structural guarantee schema coexistence rests on: no ESP field name
-	 * is claimed by both schemas, so a publisher can enable both versions of
-	 * any field at once and nothing has to arbitrate between them.
-	 *
-	 * Every collision is dissolved one of two ways — same-meaning pairs
-	 * declare the v2 field `equivalent` and collapse into one field, and
-	 * changed-meaning v2 fields carry their own ESP name. A failure here means
-	 * a new or renamed field has re-created a conflict: fix the field, not
-	 * this test. Restoring the pick-one save rule this replaced would break
-	 * dual-schema sync.
+	 * No ESP field name is claimed by both schemas — every naming collision
+	 * is dissolved by collapsing into an equivalent pair or renaming apart —
+	 * so a publisher can enable both versions of a field at once.
 	 */
 	public function test_no_esp_name_is_claimed_by_both_schemas() {
 		$this->assertSame( [], Field_Registry::get_conflict_groups() );
@@ -77,16 +70,9 @@ class Test_Field_Registry extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * Content Gate fields are registered as version-neutral and are always
-	 * excluded from conflict groups.
-	 *
-	 * This must reach past get_conflict_groups(), which is permanently empty
-	 * (see test_no_esp_name_is_claimed_by_both_schemas) — a loop over its
-	 * return value would never iterate, so it could never actually catch a
-	 * neutral field sneaking into a group. Reflection reaches the private raw
-	 * derivation, get_name_collision_groups(), instead — its groups are not
-	 * empty, so this exercises real data and actually verifies neutral fields
-	 * are excluded, rather than passing vacuously.
+	 * Content Gate fields are version-neutral, so they never appear in a
+	 * conflict group. Checked via the private raw collision-group derivation
+	 * (not the always-empty public API), so the test exercises real data.
 	 */
 	public function test_content_gate_is_neutral() {
 		$defs    = Field_Registry::get_definitions();
@@ -129,12 +115,7 @@ class Test_Field_Registry extends \WP_UnitTestCase {
 
 	/**
 	 * `get_by_name()` prefers the requested version when both schemas declare
-	 * the name, and still resolves an unqualified lookup to some definition.
-	 *
-	 * Since the conflicting names were dissolved, the only remaining shape
-	 * where one name maps to both versions is a collapsed equivalent pair —
-	 * equivalence does not rewrite either definition's name, it only decides
-	 * which id survives a save.
+	 * a name, and still resolves an unqualified lookup to some definition.
 	 */
 	public function test_get_by_name_prefers_requested_version() {
 		$v1 = Field_Registry::get_by_name( 'Total Paid', 'v1' );
@@ -159,13 +140,10 @@ class Test_Field_Registry extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * A v2 field that renames/replaces a v1 field declares `supersedes`
-	 * with the v1 id; the registry derives the reverse `superseded_by`
-	 * link onto the v1 definition.
-	 *
-	 * The Content Gate "Content Access" field is registered as
-	 * version-neutral (see Field_Registry::get_class_map()), so its id is
-	 * `neutral:Content_Access`, not `v2:Content_Access`.
+	 * A v2 field that renames/replaces a v1 field declares `supersedes` with
+	 * the v1 id, and the registry derives the reverse `superseded_by` link
+	 * onto the v1 definition — including the version-neutral Content Access
+	 * field, whose id is `neutral:Content_Access`, not `v2:Content_Access`.
 	 */
 	public function test_supersedes_links_are_bidirectional() {
 		$defs = Field_Registry::get_definitions();
@@ -347,14 +325,9 @@ class Test_Field_Registry extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * Equivalence spans every legacy raw key sharing the name. The legacy
-	 * schema maps two raw keys to "Registration Page" — `registration_page`
-	 * and the event-time `current_page_url` — and the v2 field is equivalent
-	 * to both: they are the same value at two moments, since every
-	 * registration producer of `current_page_url` writes it to the same user
-	 * meta the v2 field reads. Both have to upgrade to the v2 twin, and both
-	 * have to alias onto it as inputs, or a hand-built contact carrying the
-	 * legacy key would silently stop syncing.
+	 * Equivalence spans every legacy raw key sharing a name: both
+	 * `registration_page` and `current_page_url` map to "Registration Page",
+	 * and both must upgrade to, and alias onto, the same v2 twin.
 	 */
 	public function test_equivalence_spans_multiple_legacy_raw_keys() {
 		$this->assertSame(
@@ -368,21 +341,9 @@ class Test_Field_Registry extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * The schema-version derivation is memoized per request. An unseeded
-	 * site reaches get_derivation_schema_version() once per contact per
-	 * push-capable integration on the sync path (see
-	 * Metadata::get_sync_metadata_classes() and
-	 * Integration::get_default_outgoing_field_ids()), and re-running
-	 * detect_retired_schema_version() — a $wpdb LIKE query plus an
-	 * ESP::is_set_up() chain — that often would be wasteful.
-	 *
-	 * Spied through detect_retired_schema_version()'s own corrupt-marker
-	 * cleanup, since that is a side effect only a real detection run
-	 * performs: a meaningless marker value is deleted the moment detection
-	 * sees it. Restoring the marker between two calls and asserting it
-	 * survives the second proves the second call did not run detection
-	 * again — the marker would otherwise be gone, exactly as it is after
-	 * the first call.
+	 * Schema-version derivation is memoized per request. Verified via
+	 * detect_retired_schema_version()'s corrupt-marker cleanup, a side
+	 * effect only a real detection run performs.
 	 */
 	public function test_get_derivation_schema_version_memoizes_detection() {
 		Field_Registry::reset();
