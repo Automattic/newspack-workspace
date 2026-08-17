@@ -34,6 +34,35 @@ class Test_Premium_Newsletters_Verify extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * The argument vector PHPUnit was invoked with, restored after each test.
+	 *
+	 * @var array|null
+	 */
+	private $original_argv;
+
+	/**
+	 * Save the argument vector so tear_down() can restore it.
+	 */
+	public function set_up() {
+		parent::set_up();
+		// phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- Raw argv, kept verbatim so tear_down() can restore it.
+		$this->original_argv = $_SERVER['argv'] ?? null;
+	}
+
+	/**
+	 * Put back the argument vector the bare-flag tests overwrite, so this file
+	 * cannot leak $_SERVER['argv'] state into another test class.
+	 */
+	public function tear_down() {
+		if ( null === $this->original_argv ) {
+			unset( $_SERVER['argv'] );
+		} else {
+			$_SERVER['argv'] = $this->original_argv;
+		}
+		parent::tear_down();
+	}
+
+	/**
 	 * Invoke a private static method on the CLI class via reflection.
 	 *
 	 * @param string $method_name The method name.
@@ -625,5 +654,97 @@ class Test_Premium_Newsletters_Verify extends \WP_UnitTestCase {
 		$this->assertSame( 10, $row['list_id'] );
 		$this->assertSame( 30, $row['gate_id'] );
 		$this->assertStringContainsString( '456', $row['email'] );
+	}
+
+	/**
+	 * Mailchimp's get_contact_lists() builds its audience IDs with array_keys() over
+	 * the contact's raw list data, and PHP silently casts an all-digit array key to
+	 * int. public_id_for_list() always returns a string, so an unnormalized strict
+	 * comparison against an int-keyed audience ID would never match — reading a real
+	 * leak as clean. This is the regression this extraction guards.
+	 */
+	public function test_is_subscribed_to_list_matches_an_int_list_id_against_a_string_public_id() {
+		$this->assertTrue(
+			$this->invoke_private_static( 'is_subscribed_to_list', [ '123', [ 123 ] ] )
+		);
+	}
+
+	/**
+	 * A contact-lists array that already carries strings (Active Campaign, Constant
+	 * Contact) must still match: the normalization is a no-op for the common case.
+	 */
+	public function test_is_subscribed_to_list_matches_a_string_list_id() {
+		$this->assertTrue(
+			$this->invoke_private_static( 'is_subscribed_to_list', [ '123', [ '123' ] ] )
+		);
+	}
+
+	/**
+	 * A public ID absent from the contact's lists, in both int and string form, is
+	 * not a match. Proves normalization does not create a false positive.
+	 */
+	public function test_is_subscribed_to_list_rejects_an_absent_public_id() {
+		$this->assertFalse(
+			$this->invoke_private_static( 'is_subscribed_to_list', [ '999', [ 123, '123' ] ] )
+		);
+	}
+
+	/**
+	 * Below the batch size, the loop simply keeps going: no count, no pause.
+	 */
+	public function test_next_batch_action_continues_below_batch_size() {
+		$this->assertSame(
+			'continue',
+			$this->invoke_private_static( 'next_batch_action', [ 3, 10, 0, 0, true ] )
+		);
+	}
+
+	/**
+	 * At the batch boundary, with more readers left to check and no --max-batches
+	 * limit, the run pauses to space out ESP traffic.
+	 */
+	public function test_next_batch_action_pauses_at_the_boundary_with_more_work() {
+		$this->assertSame(
+			'pause',
+			$this->invoke_private_static( 'next_batch_action', [ 10, 10, 0, 0, true ] )
+		);
+	}
+
+	/**
+	 * At the batch boundary, with more readers left, and this boundary's batch would
+	 * meet or exceed --max-batches, the run stops rather than pausing.
+	 */
+	public function test_next_batch_action_stops_when_max_batches_is_reached() {
+		$this->assertSame(
+			'stop',
+			$this->invoke_private_static( 'next_batch_action', [ 10, 10, 2, 3, true ] )
+		);
+	}
+
+	/**
+	 * --max-batches of 0 means unlimited: even with many batches already completed,
+	 * the run never stops on that account.
+	 */
+	public function test_next_batch_action_never_stops_when_max_batches_is_zero() {
+		$this->assertSame(
+			'pause',
+			$this->invoke_private_static( 'next_batch_action', [ 10, 10, 1000, 0, true ] )
+		);
+	}
+
+	/**
+	 * At the batch boundary but with no more work left in this gate's population,
+	 * there is no next batch to space out, so the run does not pause — even when a
+	 * --max-batches limit would otherwise have been reached.
+	 */
+	public function test_next_batch_action_does_not_pause_when_no_work_remains() {
+		$this->assertSame(
+			'continue',
+			$this->invoke_private_static( 'next_batch_action', [ 10, 10, 0, 0, false ] )
+		);
+		$this->assertSame(
+			'continue',
+			$this->invoke_private_static( 'next_batch_action', [ 10, 10, 2, 3, false ] )
+		);
 	}
 }
