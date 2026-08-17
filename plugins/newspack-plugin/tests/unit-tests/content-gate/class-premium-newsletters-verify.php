@@ -888,55 +888,109 @@ class Test_Premium_Newsletters_Verify extends \WP_UnitTestCase {
 
 	/**
 	 * Mailchimp's, Active Campaign's and Constant Contact's dedicated not-found
-	 * codes all end in this suffix, so a genuine miss on any of the three reads as
-	 * "no lists" rather than a failed lookup.
+	 * codes, each paired with the newspack-newsletters file that must still
+	 * contain it verbatim.
+	 *
+	 * Keyed by code rather than listed alongside it in a flat array, so the same
+	 * code can't accidentally appear twice under two different "real" files.
+	 *
+	 * @var array<string,string> Code => path, relative to
+	 *                           newspack-newsletters/includes/service-providers/.
+	 */
+	const REAL_CONTACT_NOT_FOUND_CODES = [
+		'newspack_newsletters_mailchimp_contact_not_found' => 'mailchimp/class-newspack-newsletters-mailchimp.php',
+		'newspack_newsletters_contact_not_found'           => 'active_campaign/class-newspack-newsletters-active-campaign.php',
+		'newspack_newsletters_constant_contact_contact_not_found' => 'constant_contact/class-newspack-newsletters-constant-contact.php',
+	];
+
+	/**
+	 * Real provider error codes that must NOT be read as "contact not found":
+	 * a genuine API failure (Mailchimp's search-members error, Constant
+	 * Contact's SDK-level get_contact() failure) and the generic code the base
+	 * service-provider class raises for unrelated failures.
+	 *
+	 * @var array<string,string> Code => path, relative to
+	 *                           newspack-newsletters/includes/service-providers/.
+	 */
+	const REAL_NON_NOT_FOUND_CODES = [
+		'newspack_newsletters_mailchimp_search_members' => 'mailchimp/class-newspack-newsletters-mailchimp.php',
+		'newspack_newsletter_error_get_contact'         => 'constant_contact/class-newspack-newsletters-constant-contact-sdk.php',
+		'newspack_newsletters_error'                    => 'class-newspack-newsletters-service-provider.php',
+	];
+
+	/**
+	 * Assert that $code still appears verbatim, as a WP_Error argument, in a
+	 * real newspack-newsletters provider file.
+	 *
+	 * Without this, a test that only feeds is_contact_not_found_error() a
+	 * string literal the test itself wrote passes or fails on nothing but its
+	 * own fixture — it would still pass if that literal never matched anything
+	 * a provider actually returns. Reading the sibling plugin's source ties the
+	 * assertion to what ships, so a provider renaming its error code, not just
+	 * is_contact_not_found_error() itself, is a change this test can catch.
+	 *
+	 * newspack-newsletters is a monorepo sibling of newspack-plugin, not a
+	 * dependency it declares or loads — plugins/newspack-newsletters is read
+	 * directly by relative path rather than through any autoloader or
+	 * class_exists() check, which is why this only works from a checkout that
+	 * has both, as `n test-php` always does.
+	 *
+	 * @param string $code          The error code to look for.
+	 * @param string $relative_path Path under newspack-newsletters/includes/service-providers/.
+	 *
+	 * @return void
+	 */
+	private function assert_code_is_shipped( string $code, string $relative_path ): void {
+		$file = dirname( __DIR__, 4 ) . '/newspack-newsletters/includes/service-providers/' . $relative_path;
+		$this->assertFileExists( $file, "Expected provider file not found at $relative_path; this test's path needs updating." );
+		$this->assertStringContainsString(
+			"'" . $code . "'",
+			file_get_contents( $file ), // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- reading a sibling plugin's source for a test assertion, not serving a request.
+			"$relative_path no longer contains '$code'; update it here or is_contact_not_found_error() is no longer being tested against a real code."
+		);
+	}
+
+	/**
+	 * Mailchimp's, Active Campaign's and Constant Contact's dedicated not-found
+	 * codes all end in this suffix, so a genuine miss on any of the three reads
+	 * as "no lists" rather than a failed lookup.
+	 *
+	 * Each code is first confirmed against the real provider source
+	 * (assert_code_is_shipped()) before it is fed to the function under test, so
+	 * this fails both when a provider's real code drifts from what is
+	 * hardcoded here and when is_contact_not_found_error() stops recognising a
+	 * code that is still genuinely shipped.
 	 */
 	public function test_is_contact_not_found_error_matches_the_shared_not_found_suffix() {
-		$this->assertTrue(
-			$this->invoke_private_static(
-				'is_contact_not_found_error',
-				[ new \WP_Error( 'newspack_newsletters_mailchimp_contact_not_found', 'Contact not found' ) ]
-			)
-		);
-		$this->assertTrue(
-			$this->invoke_private_static(
-				'is_contact_not_found_error',
-				[ new \WP_Error( 'newspack_newsletters_contact_not_found', 'Contact not found' ) ]
-			)
-		);
-		$this->assertTrue(
-			$this->invoke_private_static(
-				'is_contact_not_found_error',
-				[ new \WP_Error( 'newspack_newsletters_constant_contact_contact_not_found', 'Contact not found' ) ]
-			)
-		);
+		foreach ( self::REAL_CONTACT_NOT_FOUND_CODES as $code => $relative_path ) {
+			$this->assert_code_is_shipped( $code, $relative_path );
+			$this->assertTrue(
+				$this->invoke_private_static( 'is_contact_not_found_error', [ new \WP_Error( $code, 'Contact not found' ) ] ),
+				"is_contact_not_found_error() should recognise $relative_path's real not-found code ($code)."
+			);
+		}
 	}
 
 	/**
 	 * Any other error code — a genuine API failure such as Mailchimp's
 	 * search-members error, Constant Contact's SDK-level get_contact() failure
-	 * code, or an unrelated generic code — must not be read as "no lists", or a
-	 * provider outage would misreport as a clean run.
+	 * code, or the unrelated generic code the base service-provider class
+	 * raises — must not be read as "no lists", or a provider outage would
+	 * misreport as a clean run.
+	 *
+	 * Each code is confirmed against real provider source the same way the
+	 * not-found codes are, so this is exercising is_contact_not_found_error()
+	 * against failures a provider can actually produce, not three strings this
+	 * test invented to look like them.
 	 */
 	public function test_is_contact_not_found_error_rejects_other_codes() {
-		$this->assertFalse(
-			$this->invoke_private_static(
-				'is_contact_not_found_error',
-				[ new \WP_Error( 'newspack_newsletters_mailchimp_search_members', 'Error reaching to search-members endpoint' ) ]
-			)
-		);
-		$this->assertFalse(
-			$this->invoke_private_static(
-				'is_contact_not_found_error',
-				[ new \WP_Error( 'newspack_newsletter_error_get_contact', 'Some SDK failure' ) ]
-			)
-		);
-		$this->assertFalse(
-			$this->invoke_private_static(
-				'is_contact_not_found_error',
-				[ new \WP_Error( 'newspack_newsletters_error', 'Some unrelated generic error' ) ]
-			)
-		);
+		foreach ( self::REAL_NON_NOT_FOUND_CODES as $code => $relative_path ) {
+			$this->assert_code_is_shipped( $code, $relative_path );
+			$this->assertFalse(
+				$this->invoke_private_static( 'is_contact_not_found_error', [ new \WP_Error( $code, 'Some real failure' ) ] ),
+				"is_contact_not_found_error() should not treat $relative_path's real failure code ($code) as a contact-not-found miss."
+			);
+		}
 	}
 
 	/**
