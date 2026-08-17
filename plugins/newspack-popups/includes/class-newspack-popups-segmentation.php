@@ -40,6 +40,27 @@ final class Newspack_Popups_Segmentation {
 	const DONOR_SEGMENT_QUERY_PARAM = 'np_seg_donor';
 
 	/**
+	 * Query param appended to newsletter links carrying the reader's account ID.
+	 * Its value is the ESP merge tag for the synced Account field, which the ESP
+	 * substitutes with the recipient's WordPress user ID at send time. On arrival
+	 * the ID is resolved to that reader's last-known matching segments, which
+	 * count as matched for the browsing session — no login required.
+	 *
+	 * This is an unsigned, reader-visible, forgeable signal, and the ID space is
+	 * enumerable: it must only ever drive prompt segmentation, never content
+	 * access, never analytics identity, and never a write to the reader profile.
+	 * Restricted content stays behind the HMAC-signed newsletter pass (see
+	 * Newspack\Newsletters_Access).
+	 *
+	 * Unlike DONOR_SEGMENT_QUERY_PARAM, this param is emitted for every supported
+	 * ESP including ActiveCampaign, whose `%FIELD%` syntax is not URL-safe when
+	 * unsubstituted (NPPM-3032). It is safe here because handle_account_param()
+	 * always redirects the param away before any output, so no consumer that
+	 * percent-decodes query params ever sees it.
+	 */
+	const ACCOUNT_QUERY_PARAM = 'np_account';
+
+	/**
 	 * Installed version number of the custom table.
 	 */
 	const TABLE_VERSION = '1.0';
@@ -86,6 +107,11 @@ final class Newspack_Popups_Segmentation {
 		// The handler self-guards on the donor merge field being configured and
 		// the ESP being supported, so it's cheap to register unconditionally.
 		add_filter( 'newspack_newsletters_process_link', [ __CLASS__, 'append_donor_segment_param' ], 30, 3 );
+
+		// Append the reader's account ID to newsletter links so a logged-out click
+		// can be resolved to that reader's last-known segments. Self-guards on the
+		// Account field being synced, so it's cheap to register unconditionally.
+		add_filter( 'newspack_newsletters_process_link', [ __CLASS__, 'append_account_param' ], 30, 3 );
 
 		// Strip unsubstituted donor merge tags from inbound URLs. Newsletters
 		// already delivered carry tags this plugin can no longer stop emitting, and
@@ -277,6 +303,104 @@ final class Newspack_Popups_Segmentation {
 		// Restore the raw tag so the ESP substitutes the recipient's value at send
 		// time. An unsubstituted literal is ignored client-side, so this stays fail-safe.
 		return str_replace( urlencode( $merge_tag ), $merge_tag, $url );
+	}
+
+	/**
+	 * Filter callback: append the reader's account-ID merge tag to first-party
+	 * newsletter links.
+	 *
+	 * Skips when the Newsletters helpers are unavailable, the post isn't a
+	 * newsletter (ad links are proxied separately and wouldn't forward the
+	 * param), the link is third-party, the Account field can't be resolved, or
+	 * the ESP reports no tag for it — which also means the field isn't synced
+	 * there, so there would be nothing to substitute.
+	 *
+	 * @param string        $url          Processed URL (may already carry other params).
+	 * @param string        $original_url Original URL before processing.
+	 * @param \WP_Post|null $post         Newsletter post object, or null.
+	 *
+	 * @return string
+	 */
+	public static function append_account_param( $url, $original_url, $post ) {
+		// Guard on methods, not classes: these helpers postdate their classes, so
+		// an older newspack-newsletters or newspack-plugin can satisfy a
+		// class_exists() check while lacking them — calling one would fatal
+		// mid-render and break every newsletter on the site.
+		if ( ! method_exists( '\Newspack_Newsletters\Tracking\Utils', 'get_merge_tag' ) ) {
+			return $url;
+		}
+		if ( ! method_exists( '\Newspack\Reader_Activation\Sync\Metadata', 'get_key' ) ) {
+			return $url;
+		}
+		if ( ! self::is_newsletter_post( $post ) ) {
+			return $url;
+		}
+		if ( ! self::is_first_party_url( $url ) ) {
+			return $url;
+		}
+
+		$field_name = self::get_account_field_name();
+		if ( '' === $field_name ) {
+			return $url;
+		}
+
+		$tag_name = self::get_esp_field_tag_name( $field_name, $post );
+		if ( '' === $tag_name ) {
+			return $url;
+		}
+
+		$merge_tag = \Newspack_Newsletters\Tracking\Utils::get_merge_tag( $tag_name );
+		if ( empty( $merge_tag ) ) {
+			return $url;
+		}
+
+		$url = add_query_arg( self::ACCOUNT_QUERY_PARAM, $merge_tag, $url );
+		// add_query_arg() URL-encodes the value, but ESPs substitute only the raw
+		// merge-tag syntax. Restore the raw tag so the ESP resolves it.
+		return str_replace( urlencode( $merge_tag ), $merge_tag, $url );
+	}
+
+	/**
+	 * The prefixed ESP field name carrying the reader's account ID.
+	 *
+	 * The raw metadata key differs by schema version — 'Account' in v1, 'account'
+	 * in legacy — and the prefix is configurable per integration, so resolve
+	 * through Metadata::get_key() rather than hardcoding 'NP_Account'.
+	 *
+	 * @return string Prefixed field name, or '' when unresolvable.
+	 */
+	private static function get_account_field_name() {
+		foreach ( [ 'Account', 'account' ] as $raw_key ) {
+			$key = \Newspack\Reader_Activation\Sync\Metadata::get_key( $raw_key );
+			if ( ! empty( $key ) ) {
+				return (string) $key;
+			}
+		}
+		return '';
+	}
+
+	/**
+	 * Ask the connected ESP for its merge-tag name for a synced field.
+	 *
+	 * The tag is not derivable from the field name: ActiveCampaign generates a
+	 * perstag an admin can rename, and Mailchimp assigns its own tag per
+	 * audience — hence the newsletter's send list.
+	 *
+	 * @param string   $field_name Prefixed ESP field name.
+	 * @param \WP_Post $post       Newsletter post.
+	 *
+	 * @return string Tag name, or '' when unresolvable.
+	 */
+	private static function get_esp_field_tag_name( $field_name, $post ) {
+		if ( ! method_exists( '\Newspack_Newsletters', 'get_service_provider' ) ) {
+			return '';
+		}
+		$provider = \Newspack_Newsletters::get_service_provider();
+		if ( empty( $provider ) || ! method_exists( $provider, 'get_field_merge_tag_name' ) ) {
+			return '';
+		}
+		$list_id = (string) get_post_meta( $post->ID, 'send_list_id', true );
+		return (string) $provider->get_field_merge_tag_name( $field_name, '' === $list_id ? null : $list_id );
 	}
 
 	/**

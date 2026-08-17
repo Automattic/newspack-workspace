@@ -15,5 +15,21 @@ if ( ! class_exists( 'Newspack_Newsletters' ) ) {
 	 */
 	class Newspack_Newsletters {
 		const NEWSPACK_NEWSLETTERS_CPT = 'newspack_nl_cpt';
+
+		/**
+		 * Provider instance returned by get_service_provider().
+		 *
+		 * @var object|null
+		 */
+		public static $provider = null;
+
+		/**
+		 * The connected ESP service provider.
+		 *
+		 * @return object|null
+		 */
+		public static function get_service_provider() {
+			return self::$provider;
+		}
 	}
 }
