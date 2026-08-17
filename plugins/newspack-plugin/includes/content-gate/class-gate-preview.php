@@ -413,6 +413,16 @@ class Gate_Preview {
 		// Force only the queried (previewed) post. An empty $post_id resolves to
 		// the queried post so in-loop calls still gate, but an explicit, unrelated
 		// post id is never force-restricted.
+		//
+		// Deliberate consequence: because this forces restriction, a preview session
+		// can render a gate on singular pages the ordinary path skips.
+		// Content_Gate::restrict_post() bails on the privacy policy, account, terms,
+		// cart and checkout pages; Content_Gate::render_overlay_gate() has no such
+		// bails, so previewing an overlay layout and navigating to My Account shows
+		// the overlay there. That is wanted: the editor asked to see this layout, and
+		// a preview that silently declined to render on some pages would be a worse
+		// lie than one that renders everywhere. It is preview-only and limited to
+		// users who may preview, so no reader is affected.
 		$queried_id = (int) $queried->ID;
 		$target_id  = empty( $post_id ) ? $queried_id : (int) $post_id;
 		if ( $target_id === $queried_id ) {
