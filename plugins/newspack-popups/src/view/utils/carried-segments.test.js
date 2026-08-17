@@ -1,0 +1,92 @@
+import { getCarriedSegmentIds } from './carried-segments';
+
+const COOKIE = 'np_carried_segments';
+const SESSION_KEY = 'newspack-popups-carried-segments';
+
+/**
+ * Set the handoff cookie as the inbound redirect would.
+ *
+ * @param {string} value Comma-joined segment IDs.
+ */
+const setCookie = value => {
+	document.cookie = `${ COOKIE }=${ value }; path=/`;
+};
+
+/**
+ * Remove the handoff cookie.
+ */
+const clearCookie = () => {
+	document.cookie = `${ COOKIE }=; path=/; max-age=0`;
+};
+
+describe( 'getCarriedSegmentIds', () => {
+	beforeEach( () => {
+		window.sessionStorage.clear();
+		clearCookie();
+	} );
+
+	it( 'returns nothing when there is no cookie and nothing remembered', () => {
+		expect( getCarriedSegmentIds( [ '11', '22' ] ) ).toEqual( [] );
+	} );
+
+	it( 'reads the cookie on the landing page', () => {
+		setCookie( '11,22' );
+		expect( getCarriedSegmentIds( [ '11', '22' ] ) ).toEqual( [ '11', '22' ] );
+	} );
+
+	it( 'deletes the cookie so no later request carries it', () => {
+		setCookie( '11' );
+		getCarriedSegmentIds( [ '11' ] );
+		expect( document.cookie ).not.toContain( COOKIE );
+	} );
+
+	it( 'remembers the IDs for the rest of the session', () => {
+		setCookie( '11,22' );
+		getCarriedSegmentIds( [ '11', '22' ] );
+		// Cookie is gone; a later pageview reads the remembered set.
+		expect( getCarriedSegmentIds( [ '11', '22' ] ) ).toEqual( [ '11', '22' ] );
+		expect( window.sessionStorage.getItem( SESSION_KEY ) ).toBe( '11,22' );
+	} );
+
+	it( 'drops IDs the page does not know about', () => {
+		setCookie( '11,999' );
+		expect( getCarriedSegmentIds( [ '11', '22' ] ) ).toEqual( [ '11' ] );
+	} );
+
+	it( 'drops every ID when the page knows no segments', () => {
+		setCookie( '11,22' );
+		expect( getCarriedSegmentIds( [] ) ).toEqual( [] );
+	} );
+
+	it( 'tolerates whitespace and empty entries', () => {
+		setCookie( ' 11 ,,22 ' );
+		expect( getCarriedSegmentIds( [ '11', '22' ] ) ).toEqual( [ '11', '22' ] );
+	} );
+
+	it( 'still returns the landing-page IDs when the sessionStorage write is blocked', () => {
+		setCookie( '11' );
+		const setSpy = jest.spyOn( Storage.prototype, 'setItem' ).mockImplementation( () => {
+			throw new Error( 'sessionStorage unavailable' );
+		} );
+		expect( () => getCarriedSegmentIds( [ '11' ] ) ).not.toThrow();
+		setSpy.mockRestore();
+	} );
+
+	it( 'fails closed when sessionStorage is fully unavailable and no cookie is present', () => {
+		const getSpy = jest.spyOn( Storage.prototype, 'getItem' ).mockImplementation( () => {
+			throw new Error( 'sessionStorage unavailable' );
+		} );
+		expect( getCarriedSegmentIds( [ '11' ] ) ).toEqual( [] );
+		getSpy.mockRestore();
+	} );
+
+	it( 'decodes a percent-encoded cookie value as PHP setcookie() produces it', () => {
+		// PHP's setcookie() URL-encodes the value it writes, so a two-segment
+		// handoff of `5,7` arrives in document.cookie as `5%2C7`, not `5,7`.
+		// readCookie() must decodeURIComponent() the captured group, or every
+		// multi-segment reader silently loses their carried segments while
+		// single-segment readers (no comma to encode) keep working.
+		setCookie( '5%2C7' );
+		expect( getCarriedSegmentIds( [ '5', '7' ] ) ).toEqual( [ '5', '7' ] );
+	} );
+} );
