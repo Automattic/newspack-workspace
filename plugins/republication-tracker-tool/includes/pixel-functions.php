@@ -266,7 +266,7 @@ function wprtt_maybe_snapshot_guarded_baseline( int $post_id ): void {
 			'started' => time(),
 			'raw'     => is_array( $raw ) ? $raw : [],
 		],
-		true // Unique: concurrent first views can't write a second baseline.
+		true // Unique: check-then-act, so a duplicate row is possible; only the first is ever read.
 	);
 }
 

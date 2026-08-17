@@ -5,7 +5,7 @@
  * @package Creative_Commons_Sharing
  */
 
-// Load the composer autoloader.
+// Load the composer autoloader (provides the PHPUnit Polyfills required by the WP test suite).
 $rtt_autoload = __DIR__ . '/../vendor/autoload.php';
 if ( ! file_exists( $rtt_autoload ) ) {
 	fwrite( STDERR, "Composer autoloader not found. Run `composer install` before running the test suite.\n" ); // phpcs:ignore WordPressVIPMinimum.Functions.RestrictedFunctions.file_ops_fwrite
@@ -17,11 +17,6 @@ $_tests_dir = getenv( 'WP_TESTS_DIR' );
 if ( ! $_tests_dir ) {
 	$_tests_dir = '/tmp/wordpress-tests-lib';
 }
-
-// Load the composer autoloader (provides the PHPUnit Polyfills required by the WP test suite).
-// Required unconditionally so a missing vendor/ fails loudly instead of surfacing as a
-// confusing "class not found" later in the run.
-require_once dirname( __DIR__ ) . '/vendor/autoload.php';
 
 // Give access to tests_add_filter() function.
 require_once $_tests_dir . '/includes/functions.php';
