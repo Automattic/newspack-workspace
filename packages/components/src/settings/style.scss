@@ -1,3 +1,5 @@
+@use "~@wordpress/base-styles/variables" as wp-vars;
+
 .newspack-settings {
 	&__card {
 		&.newspack-card.newspack-action-card {
@@ -30,10 +32,11 @@
 			&__title {
 				align-items: center;
 				display: flex;
+				gap: var(--wpds-dimension-gap-xs, #{wp-vars.$grid-unit-05});
 				margin: 0;
 
 				span {
-					line-height: 24px;
+					line-height: wp-vars.$button-size-small;
 				}
 			}
 			&__content {

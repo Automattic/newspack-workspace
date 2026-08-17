@@ -133,7 +133,7 @@ When building a screen, use the **spacing scale** (8px unit: 16, 24, 32, 48, 64)
 - **`Popover`** - Popover component
 - **`WebPreview`** - Web preview iframe component
 - **`NewspackIcon`** - Newspack icon wrapper component
-- **`InfoButton`** - Info button with tooltip
+- **`InfoButton`** - Reveals supplementary context from a `description` prop. Anything a reader needs in order to use a control belongs in visible help text instead
 - **`GlobalNotices`** - Global notice system component
 
 ### Settings Components
