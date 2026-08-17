@@ -21,9 +21,13 @@
  *
  * Kept deliberately in step with
  * newspack-plugin/src/content-gate/preview-links.js, which solves the same
- * problem for gate previews. The two are duplicated rather than shared: a shared
- * package would tie two independently released plugins to one version, which is
- * the wrong trade for a fix this small. If you change one, change the other.
+ * problem for gate previews. The two are duplicated rather than shared because
+ * there is nowhere good to share them to: `packages/` is React components and
+ * build tooling, not view-layer utilities, and this is ~50 lines of
+ * dependency-free DOM code reading a differently-named global in each plugin.
+ * (Sharing would not create version coupling — workspace packages are bundled
+ * into each plugin's own dist/ at build time — so that is not the reason.) If you
+ * change one, change the other; there is a test file on each side to catch drift.
  */
 export function propagatePreviewParams() {
 	// Previews only ever render inside the editor's preview iframe, so requiring a
@@ -31,8 +35,18 @@ export function propagatePreviewParams() {
 	// admin who lands on a preview URL top-level — a new tab, a pasted link — is
 	// browsing, not previewing, and should get ordinary links; preview mode also
 	// hides the admin bar, so sticky params there would leave no way out but
-	// editing the URL by hand. Comparing `window.top` is a reference check, which
-	// cross-origin isolation still permits.
+	// editing the URL by hand.
+	//
+	// Belt and braces with the capability gate on the PHP side
+	// (Newspack_Popups_Inserter::preview_param_names): that one decides whether the
+	// param list is published at all, this one decides whether a published list is
+	// acted on. Neither makes the other redundant — dropping the PHP gate would hand
+	// the list to any framed reader, and dropping this one puts an editor's whole
+	// browsing session in preview mode.
+	//
+	// Verified against WordPress 7.1-RC3 in Chrome: inside the preview frame,
+	// `document` access from the editor throws but the frame still reports
+	// `self !== top`, so isolation does not defeat this check.
 	if ( window.self === window.top ) {
 		return;
 	}
@@ -54,9 +68,11 @@ export function propagatePreviewParams() {
 
 	// One eager pass at domReady. Overlays are already in the DOM (they print at
 	// wp_footer), but anchors added later — "Load more", modal checkout, anything
-	// AJAX — keep their own hrefs and leave the preview on the first click. That
-	// matches the handler this replaced; a capture-phase click interceptor would
-	// close the gap if it ever proves worth the extra surface.
+	// AJAX — keep their own hrefs and leave the preview on the first click. Forms
+	// are untouched too, so a GET submission (theme site search is the common one)
+	// drops preview mode the same way. That matches the handler this replaced; a
+	// capture-phase interceptor would close both gaps if it ever proves worth the
+	// extra surface.
 	document.querySelectorAll( 'a[href]' ).forEach( anchor => {
 		// Read the attribute rather than the `href` property: the selector also
 		// matches SVG <a>, whose property is an SVGAnimatedString, and resolving
@@ -78,8 +94,16 @@ export function propagatePreviewParams() {
 			return;
 		}
 
-		// Off-site links, and schemes like mailto: and tel: that resolve to a
-		// null origin, are none of our business. Matching on origin rather than on
+		// Only http(s). An opaque-path URL like `blob:https://site/uuid` reports the
+		// inner origin, so it passes the origin test, but it has no meaningful path
+		// or query — the shape logic below would rewrite it into an ordinary page URL
+		// and destroy the link. Restricting the scheme keeps the rewrite to the two
+		// the shape logic was written for.
+		if ( 'http:' !== url.protocol && 'https:' !== url.protocol ) {
+			return;
+		}
+
+		// Off-site links are none of our business. Matching on origin rather than on
 		// the site URL means a subdirectory install also stamps links that sit
 		// outside WordPress; that is deliberate, because it is what makes
 		// multibranded sites work, where brands are same-origin paths. A stray
@@ -94,12 +118,14 @@ export function propagatePreviewParams() {
 		// show what production does. Re-serializing through URL() turns a relative
 		// href absolute, which breaks exactly the theme code a preview should
 		// exercise: `a[href^="/"]` selectors, "current item" scripts comparing an
-		// href against location.pathname. Only the query is ours to change. Two
+		// href against location.pathname. Only the query is ours to change. Three
 		// residual differences we accept: a path-relative href comes back
 		// root-relative, since resolving it is what told us where it points, and
 		// URLSearchParams re-encodes an existing query (`%20` to `+`) — forms
 		// servers treat as equivalent, and unpicking it would mean editing the
-		// query string by hand.
+		// query string by hand. A same-origin protocol-relative href also comes back
+		// scheme-absolute — the one shape we do not preserve, because telling it
+		// apart needs a third branch and it is vanishingly rare in theme output.
 		const isAbsolute = /^(?:[a-z][a-z0-9+.-]*:)?\/\//i.test( href );
 		anchor.setAttribute( 'href', isAbsolute ? url.toString() : url.pathname + url.search + url.hash );
 	} );

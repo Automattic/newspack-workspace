@@ -1009,30 +1009,43 @@ final class Newspack_Popups_Inserter {
 	}
 
 	/**
+	 * The preview slice of the view script's localized data.
+	 *
+	 * Separate from preview_param_names() so the localized *key* is assertable, not
+	 * just the list: the front end reads `newspack_popups_view.preview_param_names`,
+	 * and renaming either side alone would leave both suites green while previews
+	 * silently stopped surviving a click. Named for the shape it has — a flat list of
+	 * param names, where newspack_popups_data.preview_query_keys is a
+	 * meta-key => param map.
+	 *
+	 * @return array Empty when this is not a prompt preview.
+	 */
+	public static function get_view_script_preview_data() {
+		$names = self::preview_param_names();
+		return empty( $names ) ? [] : [ 'preview_param_names' => $names ];
+	}
+
+	/**
 	 * The preview query param names to hand the previewed document, so it can carry
 	 * them onto same-origin links and keep the preview alive across a click.
 	 *
-	 * All three checks earn their place, because previewed_popup_id() only reports
-	 * that the request carries a `pid` — not that anyone may preview, nor that the
-	 * id is a prompt. `pid` is a common campaign parameter, so without
-	 * is_user_admin() a reader arriving on `?pid=…` would have it stamped onto every
-	 * link for the rest of their session while seeing no prompts at all; without the
-	 * post-type check an editor who follows an ad or newsletter link carrying an
-	 * unrelated `pid` would get the same. Together they make this mean "an actual
-	 * prompt preview", matching the gate on
-	 * Newspack_Popups_Model::retrieve_preview_popup(), which is what renders one.
+	 * Both checks earn their place, because previewed_popup_id() only reports that
+	 * the request carries a `pid` — not that anyone may preview, nor that the id is a
+	 * prompt. `pid` is a common campaign parameter, so without can_preview_popup() a
+	 * reader arriving on `?pid=…` would have it stamped onto every link for the rest
+	 * of their session while seeing no prompts at all, and an editor who follows an
+	 * ad or newsletter link carrying an unrelated `pid` would get the same.
 	 * is_preview_request() is the wrong test here — it also covers preset, view-as
 	 * and customizer previews, which pass their state differently.
+	 *
+	 * The JS half of this contract has its own guard: propagation only runs inside
+	 * the preview frame. See src/view/preview-links.js.
 	 *
 	 * @return array Param names, empty when this is not a prompt preview.
 	 */
 	public static function preview_param_names() {
 		$previewed_popup_id = Newspack_Popups::previewed_popup_id();
-		if (
-			! $previewed_popup_id
-			|| ! Newspack_Popups::is_user_admin()
-			|| Newspack_Popups::NEWSPACK_POPUPS_CPT !== get_post_type( $previewed_popup_id )
-		) {
+		if ( ! $previewed_popup_id || ! Newspack_Popups::can_preview_popup( $previewed_popup_id ) ) {
 			return [];
 		}
 		return array_merge(
@@ -1121,12 +1134,7 @@ final class Newspack_Popups_Inserter {
 				$script_data['donor_landing_page'] = $donor_landing_page;
 			}
 
-			// Named for the shape it has: a flat list of param names, where
-			// newspack_popups_data.preview_query_keys is a meta-key => param map.
-			$preview_param_names = self::preview_param_names();
-			if ( ! empty( $preview_param_names ) ) {
-				$script_data['preview_param_names'] = $preview_param_names;
-			}
+			$script_data = array_merge( $script_data, self::get_view_script_preview_data() );
 
 			\wp_localize_script( $script_handle, 'newspack_popups_view', $script_data );
 			\wp_enqueue_script( $script_handle );

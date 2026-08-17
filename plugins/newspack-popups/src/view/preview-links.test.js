@@ -128,6 +128,7 @@ describe( 'propagatePreviewParams', () => {
 		setLinks( '<a href="/other/">x</a>' );
 
 		expect( () => propagatePreviewParams() ).not.toThrow();
+		expectNoTraversal( propagatePreviewParams );
 		expect( hrefs() ).toEqual( [ '/other/' ] );
 	} );
 
@@ -161,6 +162,28 @@ describe( 'propagatePreviewParams', () => {
 
 			propagatePreviewParams();
 
+			expect( hrefs() ).toEqual( [ `${ window.location.origin }/other/?pid=42` ] );
+		} );
+
+		it( 'leaves an opaque-path URL alone rather than flattening it to a page URL', () => {
+			setSearch( '?pid=42' );
+			// A blob URL reports its inner origin, so it passes the origin test; the
+			// shape logic would turn it into an ordinary page URL and kill the link.
+			setLinks( `<a href="blob:${ window.location.origin }/abc-123">x</a>` );
+
+			propagatePreviewParams();
+
+			expect( hrefs() ).toEqual( [ `blob:${ window.location.origin }/abc-123` ] );
+		} );
+
+		it( 'promotes a same-origin protocol-relative href, the one shape it cannot keep', () => {
+			setSearch( '?pid=42' );
+			setLinks( `<a href="//${ window.location.host }/other/">x</a>` );
+
+			propagatePreviewParams();
+
+			// Documented in the module: telling this apart needs a third branch. Pinned
+			// so the behaviour is a decision rather than a surprise.
 			expect( hrefs() ).toEqual( [ `${ window.location.origin }/other/?pid=42` ] );
 		} );
 
