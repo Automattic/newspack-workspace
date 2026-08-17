@@ -126,10 +126,16 @@ class Premium_Newsletters_Verify {
 	 * source Memberships plan by buying a non-subscription product (the migration
 	 * writes those product IDs into a `subscription` access rule, which a
 	 * subscription lookup can never match), one who joined a list before it
-	 * became premium, or one whose membership was granted by hand. Widening the
-	 * population would not reach them either — there is no provider-agnostic bulk
-	 * read of ESP list membership to widen it with — so the terminal message names
-	 * the population it checked rather than claiming the site as a whole.
+	 * became premium, one whose membership was granted by hand, or a
+	 * group-subscription member — entitled through someone else's subscription
+	 * rather than holding one themselves, per Access_Rules::has_active_subscription()
+	 * (includes/content-gate/class-access-rules.php). That population query keys on
+	 * who holds a subscription, so a current group member missing from a list is
+	 * never reported as a gap, and a lapsed group member still on a paid list is a
+	 * leak this command cannot see either. Widening the population would not reach
+	 * any of them — there is no provider-agnostic bulk read of ESP list membership
+	 * to widen it with — so the terminal message names the population it checked
+	 * rather than claiming the site as a whole.
 	 *
 	 * The same boundary decides which gates it can speak for at all. A gate
 	 * paywalled by a rule other than `subscription` — a one-time purchase, an
@@ -1517,7 +1523,7 @@ class Premium_Newsletters_Verify {
 
 		WP_CLI::line( '' );
 		WP_CLI::line( sprintf( 'Coverage: %s.', self::describe_checked_scope( $coverage ) ) );
-		WP_CLI::line( 'This covers readers who hold or have held a gate\'s products, and nobody else. A reader who satisfied the source Memberships plan with a non-subscription product, one who joined a list before it became premium, and one whose membership was granted by hand are all restricted after cutover and all invisible here — no provider-agnostic bulk read of ESP list membership exists to reach them.' );
+		WP_CLI::line( 'This covers readers who hold or have held a gate\'s products, and nobody else. A reader who satisfied the source Memberships plan with a non-subscription product, one who joined a list before it became premium, one whose membership was granted by hand, and a group-subscription member entitled through someone else\'s subscription rather than their own are all restricted after cutover and all invisible here — no provider-agnostic bulk read of ESP list membership exists to reach them. A current group member missing from a list is never reported as a gap, and a lapsed group member still on one is a leak this command cannot see.' );
 
 		self::print_coverage_gaps( $coverage );
 
