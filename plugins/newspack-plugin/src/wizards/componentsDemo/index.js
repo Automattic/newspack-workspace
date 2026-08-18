@@ -9,7 +9,16 @@ import '../../shared/js/public-path';
 /**
  * WordPress dependencies.
  */
-import { CardBody, CardDivider, CardMedia, ExternalLink, ToggleControl, __experimentalVStack as VStack } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
+import {
+	CardBody,
+	CardDivider,
+	CardMedia,
+	CheckboxControl,
+	ExternalLink,
+	ToggleControl,
+	__experimentalVStack as VStack, // eslint-disable-line @wordpress/no-unsafe-wp-apis
+	__experimentalHStack as HStack, // eslint-disable-line @wordpress/no-unsafe-wp-apis
+} from '@wordpress/components';
 import { Component, Fragment, render, createInterpolateElement, createRef } from '@wordpress/element';
 import { __ } from '@wordpress/i18n';
 import { Icon, plus, postList, settings } from '@wordpress/icons';
@@ -42,6 +51,7 @@ import {
 	SelectControl,
 	TextControl,
 	Divider,
+	Drawer,
 	Waiting,
 	WebPreview,
 } from '../../../packages/components/src';
@@ -64,6 +74,10 @@ class ComponentsDemo extends Component {
 			selectValue3: '',
 			selectValues: [],
 			modalShown: false,
+			drawerShown: false,
+			drawerActionCount: 2,
+			drawerSize: 'medium',
+			drawerIsDirty: false,
 			color1: '#003da5',
 			draggableList: [
 				{ id: 1, title: 'Draggable Item 1' },
@@ -81,6 +95,48 @@ class ComponentsDemo extends Component {
 		this.dragWrapperRef = createRef();
 	}
 
+	drawerActions( count ) {
+		const close = () => this.setState( { drawerShown: false } );
+		const save = (
+			<Drawer.Action
+				key="save"
+				variant="primary"
+				/* translators: extended name for the Save action. Must contain "Save" as translated below. */
+				ariaLabel={ __( 'Save the drawer demo', 'newspack-plugin' ) }
+				onClick={ close }
+			>
+				{ __( 'Save', 'newspack-plugin' ) }
+			</Drawer.Action>
+		);
+		const cancel = (
+			<Drawer.Action
+				key="cancel"
+				variant="secondary"
+				/* translators: extended name for the Cancel action. Must contain "Cancel" as translated below. */
+				ariaLabel={ __( 'Cancel the drawer demo', 'newspack-plugin' ) }
+				closes
+			>
+				{ __( 'Cancel', 'newspack-plugin' ) }
+			</Drawer.Action>
+		);
+		const reset = (
+			<Drawer.Action
+				key="reset"
+				variant="tertiary"
+				isDestructive
+				/* translators: extended name for the Reset action. Must contain "Reset" as translated below. */
+				ariaLabel={ __( 'Reset the drawer demo', 'newspack-plugin' ) }
+				closes
+			>
+				{ __( 'Reset', 'newspack-plugin' ) }
+			</Drawer.Action>
+		);
+		if ( 1 === count ) {
+			return [ save ];
+		}
+		return 2 === count ? [ cancel, save ] : [ save, cancel, reset ];
+	}
+
 	/**
 	 * Render the example stub.
 	 */
@@ -94,6 +150,10 @@ class ComponentsDemo extends Component {
 			selectValue2,
 			selectValue3,
 			modalShown,
+			drawerShown,
+			drawerActionCount,
+			drawerSize,
+			drawerIsDirty,
 			actionCardToggleChecked,
 			color1,
 		} = this.state;
@@ -177,7 +237,7 @@ class ComponentsDemo extends Component {
 						</Card>
 						<Card>
 							<h2>{ __( 'Web Previews', 'newspack-plugin' ) }</h2>
-							<Card buttonsCard noBorder className="items-center">
+							<HStack justify="flex-start" alignment="center" spacing={ 4 } wrap>
 								<WebPreview url="//newspack.com/" label={ __( 'Preview Newspack Site', 'newspack-plugin' ) } variant="primary" />
 								<WebPreview
 									url="//newspack.com/"
@@ -188,24 +248,22 @@ class ComponentsDemo extends Component {
 									) }
 									title={ __( 'Preview Newspack Site', 'newspack-plugin' ) }
 								/>
-							</Card>
+							</HStack>
 						</Card>
 						<Card>
 							<h2>{ __( 'Waiting', 'newspack-plugin' ) }</h2>
-							<Card buttonsCard noBorder>
-								<Grid columns={ 1 } gutter={ 16 } className="w-100">
-									<Waiting />
-									<div className="flex items-center">
-										<Waiting isLeft />
-										{ __( 'Spinner on the left', 'newspack-plugin' ) }
-									</div>
-									<div className="flex items-center">
-										<Waiting isRight />
-										{ __( 'Spinner on the right', 'newspack-plugin' ) }
-									</div>
-									<Waiting isCenter />
-								</Grid>
-							</Card>
+							<Grid columns={ 1 } gutter={ 16 }>
+								<Waiting />
+								<HStack justify="flex-start" alignment="center" spacing={ 2 } expanded={ false }>
+									<Waiting isLeft />
+									<span>{ __( 'Spinner on the left', 'newspack-plugin' ) }</span>
+								</HStack>
+								<HStack justify="flex-start" alignment="center" spacing={ 2 } expanded={ false }>
+									<Waiting isRight />
+									<span>{ __( 'Spinner on the right', 'newspack-plugin' ) }</span>
+								</HStack>
+								<Waiting isCenter />
+							</Grid>
 						</Card>
 						<Card>
 							<h2>{ __( 'Color picker', 'newspack-plugin' ) }</h2>
@@ -217,7 +275,7 @@ class ComponentsDemo extends Component {
 						</Card>
 						<Card>
 							<h2>{ __( 'Handoff Buttons', 'newspack-plugin' ) }</h2>
-							<Card buttonsCard noBorder>
+							<HStack justify="flex-start" spacing={ 4 } wrap>
 								<Handoff plugin="jetpack" />
 								<Handoff plugin="google-site-kit" />
 								<Handoff plugin="woocommerce" />
@@ -231,15 +289,15 @@ class ComponentsDemo extends Component {
 								>
 									{ __( 'Go to Dashboard', 'newspack-plugin' ) }
 								</Handoff>
-							</Card>
+							</HStack>
 						</Card>
 						<Card>
 							<h2>{ __( 'Modal', 'newspack-plugin' ) }</h2>
-							<Card buttonsCard noBorder>
+							<HStack justify="flex-start" spacing={ 4 } wrap>
 								<Button isPrimary onClick={ () => this.setState( { modalShown: true } ) }>
 									{ __( 'Open modal', 'newspack-plugin' ) }
 								</Button>
-							</Card>
+							</HStack>
 							{ modalShown && (
 								<Modal
 									title={ __( 'This is the modal title', 'newspack-plugin' ) }
@@ -251,16 +309,82 @@ class ComponentsDemo extends Component {
 											'newspack-plugin'
 										) }
 									</p>
-									<Card buttonsCard noBorder className="justify-end">
+									<HStack justify="flex-end" spacing={ 4 } wrap className="newspack-modal__footer">
 										<Button isPrimary onClick={ () => this.setState( { modalShown: false } ) }>
 											{ __( 'Dismiss', 'newspack-plugin' ) }
 										</Button>
 										<Button isSecondary onClick={ () => this.setState( { modalShown: false } ) }>
 											{ __( 'Also dismiss', 'newspack-plugin' ) }
 										</Button>
-									</Card>
+									</HStack>
 								</Modal>
 							) }
+						</Card>
+						<Card>
+							<h2>{ __( 'Drawer', 'newspack-plugin' ) }</h2>
+							<VStack spacing={ 4 }>
+								<Grid columns={ 2 } gutter={ 16 } noMargin>
+									<SelectControl
+										label={ __( 'Footer actions', 'newspack-plugin' ) }
+										value={ String( drawerActionCount ) }
+										options={ [
+											{ label: '1', value: '1' },
+											{ label: '2', value: '2' },
+											{ label: '3', value: '3' },
+										] }
+										onChange={ value => this.setState( { drawerActionCount: parseInt( value, 10 ) } ) }
+									/>
+									<SelectControl
+										label={ __( 'Size', 'newspack-plugin' ) }
+										value={ drawerSize }
+										options={ [
+											{ label: __( 'Small', 'newspack-plugin' ), value: 'small' },
+											{ label: __( 'Medium', 'newspack-plugin' ), value: 'medium' },
+											{ label: __( 'Large', 'newspack-plugin' ), value: 'large' },
+											{ label: __( 'X-Large', 'newspack-plugin' ), value: 'x-large' },
+											{ label: __( 'Full', 'newspack-plugin' ), value: 'full' },
+										] }
+										onChange={ value => this.setState( { drawerSize: value } ) }
+									/>
+								</Grid>
+								<CheckboxControl
+									label={ __( 'Unsaved changes (confirm before closing)', 'newspack-plugin' ) }
+									checked={ drawerIsDirty }
+									onChange={ value => this.setState( { drawerIsDirty: value } ) }
+								/>
+								<HStack justify="flex-start">
+									<Button isPrimary onClick={ () => this.setState( { drawerShown: true } ) }>
+										{ __( 'Open drawer', 'newspack-plugin' ) }
+									</Button>
+								</HStack>
+							</VStack>
+							<Drawer.Root
+								isOpen={ drawerShown }
+								size={ drawerSize }
+								isDirty={ drawerIsDirty }
+								onRequestClose={ () => this.setState( { drawerShown: false } ) }
+							>
+								<Drawer.Header>
+									<Icon className="newspack-drawer__icon" icon={ settings } size={ 24 } />
+									<Drawer.Title>{ __( 'Drawer title', 'newspack-plugin' ) }</Drawer.Title>
+									<Drawer.CloseIcon />
+								</Drawer.Header>
+								<Drawer.Content>
+									<p>
+										{ __(
+											'A drawer is a modal: the page behind it is inert, and clicking the scrim closes it. Each Drawer.Content is a section, and a Drawer.Divider draws a full-width rule between two of them.',
+											'newspack-plugin'
+										) }
+									</p>
+								</Drawer.Content>
+								<Drawer.Divider />
+								<Drawer.Content padding={ 0 }>
+									<p style={ { margin: 0, padding: '16px 24px' } }>
+										{ __( 'This section is flush (padding 0) and brings its own spacing.', 'newspack-plugin' ) }
+									</p>
+								</Drawer.Content>
+								<Drawer.Footer>{ this.drawerActions( drawerActionCount ) }</Drawer.Footer>
+							</Drawer.Root>
 						</Card>
 						<Card>
 							<h2>{ __( 'Notice', 'newspack-plugin' ) }</h2>
@@ -604,18 +728,18 @@ class ComponentsDemo extends Component {
 								<p>
 									<strong>{ __( 'Default', 'newspack-plugin' ) }</strong>
 								</p>
-								<Card buttonsCard noBorder>
+								<HStack justify="flex-start" spacing={ 4 } wrap>
 									<Button variant="primary">{ __( 'Primary', 'newspack-plugin' ) }</Button>
 									<Button variant="secondary">{ __( 'Secondary', 'newspack-plugin' ) }</Button>
 									<Button variant="tertiary">{ __( 'Tertiary', 'newspack-plugin' ) }</Button>
 									<Button>{ __( 'Default', 'newspack-plugin' ) }</Button>
 									<Button isLink>{ __( 'isLink', 'newspack-plugin' ) }</Button>
-								</Card>
+								</HStack>
 								<Divider variant="tertiary" />
 								<p>
 									<strong>{ __( 'Disabled', 'newspack-plugin' ) }</strong>
 								</p>
-								<Card buttonsCard noBorder>
+								<HStack justify="flex-start" spacing={ 4 } wrap>
 									<Button variant="primary" disabled>
 										{ __( 'Primary', 'newspack-plugin' ) }
 									</Button>
@@ -629,12 +753,12 @@ class ComponentsDemo extends Component {
 									<Button isLink disabled>
 										{ __( 'isLink', 'newspack-plugin' ) }
 									</Button>
-								</Card>
+								</HStack>
 								<Divider variant="tertiary" />
 								<p>
 									<strong>{ __( 'Small', 'newspack-plugin' ) }</strong>
 								</p>
-								<Card buttonsCard noBorder>
+								<HStack justify="flex-start" spacing={ 4 } wrap>
 									<Button variant="primary" isSmall>
 										{ __( 'isPrimary', 'newspack-plugin' ) }
 									</Button>
@@ -648,7 +772,7 @@ class ComponentsDemo extends Component {
 									<Button isLink isSmall>
 										{ __( 'isLink', 'newspack-plugin' ) }
 									</Button>
-								</Card>
+								</HStack>
 							</Grid>
 						</Card>
 						<Card>
@@ -1075,12 +1199,12 @@ class ComponentsDemo extends Component {
 									}
 								) }
 							</p>
-							<Grid columns={ 4 } gutter={ 16 } className="items-start">
+							<Grid columns={ 4 } gutter={ 16 }>
 								{ Object.entries( newspackIcons ).map( ( [ name, icon ] ) => (
-									<div key={ name } className="flex flex-column items-center tc">
+									<VStack key={ name } alignment="center" spacing={ 2 }>
 										<Icon icon={ icon } />
-										<code style={ { marginTop: 8 } }>{ name }</code>
-									</div>
+										<code>{ name }</code>
+									</VStack>
 								) ) }
 							</Grid>
 						</Card>

@@ -28,7 +28,15 @@ class MoneyInput extends Component {
 				<p className="input-label">{ label }</p>
 				<div className="newspack-donations-wizard__money-input">
 					<div className="currency">{ currencySymbol }</div>
-					<TextControl type="number" hideLabelFromVision label={ label } min={ min } value={ value } onChange={ onChange } />
+					<TextControl
+						type="number"
+						hideLabelFromVision
+						label={ label }
+						min={ min }
+						value={ value }
+						onChange={ onChange }
+						withMargin={ false }
+					/>
 				</div>
 				{ error && <p className="newspack-donations-wizard__money-input-error">{ error }</p> }
 			</div>

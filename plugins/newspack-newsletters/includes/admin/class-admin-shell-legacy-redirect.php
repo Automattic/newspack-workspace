@@ -16,8 +16,9 @@ class Admin_Shell_Legacy_Redirect {
 	/**
 	 * Query args forwarded from the legacy URL onto the React page.
 	 *
-	 * `paged` is deliberately omitted — legacy WP_List_Table uses 20
-	 * per page vs DataView's 25, so the slice wouldn't translate.
+	 * `paged` is deliberately omitted — the DataView's per-page is a
+	 * per-user preference, so the legacy slice wouldn't reliably
+	 * translate.
 	 */
 	const FORWARDED_LEGACY_ARGS = [
 		'post_status',

@@ -41,7 +41,7 @@ class Product_Updated extends Abstract_Backfiller {
 			[
 				'post_type'   => 'product',
 				'post_status' => 'any',
-				'numberposts' => -1,
+				'numberposts' => -1, // phpcs:ignore WordPressVIPMinimum.Performance.NoPaging -- Operator-run CLI command; unbounded by design.
 				'meta_query'  => [ // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query
 					[
 						'key'     => Product_Admin::NETWORK_ID_META_KEY,

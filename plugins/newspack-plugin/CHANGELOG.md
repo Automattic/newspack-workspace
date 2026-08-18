@@ -1,3 +1,230 @@
+## newspack [6.48.4](https://github.com/Automattic/newspack-workspace/compare/newspack@6.48.3...newspack@6.48.4) (2026-08-18)
+
+
+### Bug Fixes
+
+* **content-gate:** keep withheld blocks out of generated excerpts ([#832](https://github.com/Automattic/newspack-workspace/issues/832)) ([86eecfe](https://github.com/Automattic/newspack-workspace/commit/86eecfeef6eb07440afc8d5ffa239907cceb45a3))
+
+## newspack [6.48.3](https://github.com/Automattic/newspack-workspace/compare/newspack@6.48.2...newspack@6.48.3) (2026-08-18)
+
+
+### Bug Fixes
+
+* **previews:** keep prompt and gate previews alive under WP 7.1 ([#896](https://github.com/Automattic/newspack-workspace/issues/896)) ([f711941](https://github.com/Automattic/newspack-workspace/commit/f71194149ca82e82976e251051d2cece0436842e))
+
+## newspack [6.48.2](https://github.com/Automattic/newspack-workspace/compare/newspack@6.48.1...newspack@6.48.2) (2026-08-17)
+
+
+### Bug Fixes
+
+* three WordPress 7.1 regressions in Newsletters ([#876](https://github.com/Automattic/newspack-workspace/issues/876)) ([#894](https://github.com/Automattic/newspack-workspace/issues/894)) ([3b6ac6c](https://github.com/Automattic/newspack-workspace/commit/3b6ac6cce050f2d70f73df1d98f175de1f19a759))
+
+
+### Dependencies
+
+* **newspack-components:** upgraded to 4.6.2
+
+## newspack [6.48.1](https://github.com/Automattic/newspack-workspace/compare/newspack@6.48.0...newspack@6.48.1) (2026-08-17)
+
+
+### Bug Fixes
+
+* **reader-revenue:** payment method merge field shows card details ([#589](https://github.com/Automattic/newspack-workspace/issues/589)) ([67716de](https://github.com/Automattic/newspack-workspace/commit/67716def1b146d59712acbbfc48090975ae588a2))
+
+# newspack [6.48.0](https://github.com/Automattic/newspack-workspace/compare/newspack@6.47.8...newspack@6.48.0) (2026-08-17)
+
+
+### Bug Fixes
+
+* **campaigns:** show above-header prompts without JS delay (NPPM-2934) ([#449](https://github.com/Automattic/newspack-workspace/issues/449)) ([44fe406](https://github.com/Automattic/newspack-workspace/commit/44fe40691529b05b9c141b1fb28717c91b2e7909))
+* **cli:** key migrate-teams group reuse on team ID, not owner (NPPD-2060, [#634](https://github.com/Automattic/newspack-workspace/issues/634)) ([fac949f](https://github.com/Automattic/newspack-workspace/commit/fac949f3f7b9762c33d515551e612adcd7e76aac))
+* **content-gate:** allow zero Free Views in metering settings (NPPD-2056, [#707](https://github.com/Automattic/newspack-workspace/issues/707)) ([92990b6](https://github.com/Automattic/newspack-workspace/commit/92990b6b36761c0894738cbff52376cc51222331))
+* **content-gate:** apply third-party content filters to gated teasers (NPPD-2096, [#681](https://github.com/Automattic/newspack-workspace/issues/681)) ([25bf877](https://github.com/Automattic/newspack-workspace/commit/25bf877a1c1d2cde0575bd472d5cdaa2a8f89fb7))
+* **content-gate:** surface the Institutions entry point when institutions exist (NPPD-1492, [#708](https://github.com/Automattic/newspack-workspace/issues/708)) ([6ebb8c4](https://github.com/Automattic/newspack-workspace/commit/6ebb8c40f43b3f6d890900b683514eb9e6d65f2f))
+* **group-subscription:** hide add-member fields at member limit in admin metabox (NPPD-1483, [#604](https://github.com/Automattic/newspack-workspace/issues/604)) ([e7b24cf](https://github.com/Automattic/newspack-workspace/commit/e7b24cf586b67739b9f1173ce1e0a866f5822569))
+* **group-subscriptions:** count group capacity in seats, not members ([#716](https://github.com/Automattic/newspack-workspace/issues/716)) ([08a1d6c](https://github.com/Automattic/newspack-workspace/commit/08a1d6cd69ce6366baf3f0a35a7bf7baa485b9fa))
+* **reader-activation:** legacy-mode outbound field filtering ([#698](https://github.com/Automattic/newspack-workspace/issues/698)) ([e138c67](https://github.com/Automattic/newspack-workspace/commit/e138c67e1ddb185701331a2195d4d17efed0dccf))
+
+
+### Features
+
+* **cli:** port migrate-membership-gates into in-plugin migration CLI (NPPD-2059) ([#635](https://github.com/Automattic/newspack-workspace/issues/635)) ([27a96fe](https://github.com/Automattic/newspack-workspace/commit/27a96feee3c27887de84ddabbc200285e4fa0a22))
+* **content-gate:** add RSS feed restriction modes for WCM parity (NPPD-1750, [#546](https://github.com/Automattic/newspack-workspace/issues/546)) ([a74e997](https://github.com/Automattic/newspack-workspace/commit/a74e997e9fea961e406ab1211217f6511a9d4763))
+* **content-gate:** grant paid access from one-time purchases with an access duration (NPPD-2053, [#693](https://github.com/Automattic/newspack-workspace/issues/693)) ([ae041fe](https://github.com/Automattic/newspack-workspace/commit/ae041fe123bce498dc6c98ab1247d2fcbcb74ba3))
+* **content-gate:** keep paid access during subscription payment recovery (NPPD-2052, [#687](https://github.com/Automattic/newspack-workspace/issues/687)) ([a256448](https://github.com/Automattic/newspack-workspace/commit/a256448ea0d3598f5c31119f8abeb6f49d62a6a4))
+* **export:** post-Memberships subscription & user CSV exports (NPPD-1730) ([#499](https://github.com/Automattic/newspack-workspace/issues/499)) ([686e03a](https://github.com/Automattic/newspack-workspace/commit/686e03ac5675d8ddc2340b221231cf802c87593d))
+* **performance:** defer reader-facing JS assets (NPPM-3037) ([#722](https://github.com/Automattic/newspack-workspace/issues/722)) ([2855574](https://github.com/Automattic/newspack-workspace/commit/2855574099c4f416a984cda8565b269e5a9f0fb0))
+* **reader-activation:** generic integrations backfill CLI (NPPD-2076) ([#678](https://github.com/Automattic/newspack-workspace/issues/678)) ([d1c8219](https://github.com/Automattic/newspack-workspace/commit/d1c8219bcffb85a320bddb05981c5e8b40d64e24))
+* **reader-activation:** inbound form capture integration ([#684](https://github.com/Automattic/newspack-workspace/issues/684)) ([#851](https://github.com/Automattic/newspack-workspace/issues/851)) ([28f0026](https://github.com/Automattic/newspack-workspace/commit/28f002620d3acc74f092a8649f003b7dd56f34bc))
+* **reader-activation:** per-direction sync capabilities and toggles ([#700](https://github.com/Automattic/newspack-workspace/issues/700)) ([ba7d8ca](https://github.com/Automattic/newspack-workspace/commit/ba7d8ca63946e567b38f7a9a5a661ad32a551c41))
+* **subscribers:** audience wizard shell + read endpoints (NPPD-1753, [#631](https://github.com/Automattic/newspack-workspace/issues/631)) ([2242544](https://github.com/Automattic/newspack-workspace/commit/2242544c73d91fd13272894aabecc266326021b0))
+* **subscribers:** person profile with in-wizard navigation (NPPD-1753, [#726](https://github.com/Automattic/newspack-workspace/issues/726)) ([c852b9d](https://github.com/Automattic/newspack-workspace/commit/c852b9d47579d80478f4474e42fe1df39ac5a1c1)), closes [#631](https://github.com/Automattic/newspack-workspace/issues/631) [#631](https://github.com/Automattic/newspack-workspace/issues/631) [#631](https://github.com/Automattic/newspack-workspace/issues/631) [#631](https://github.com/Automattic/newspack-workspace/issues/631) [#631](https://github.com/Automattic/newspack-workspace/issues/631) [#631](https://github.com/Automattic/newspack-workspace/issues/631) [#741](https://github.com/Automattic/newspack-workspace/issues/741)
+
+
+### Dependencies
+
+* **newspack-colors:** upgraded to 1.1.3
+* **newspack-components:** upgraded to 4.6.1
+* **newspack-icons:** upgraded to 1.1.1
+* **newspack-scripts:** upgraded to 5.11.0
+
+## newspack [6.47.8](https://github.com/Automattic/newspack-workspace/compare/newspack@6.47.7...newspack@6.47.8) (2026-08-13)
+
+
+### Bug Fixes
+
+* **guest-contributors:** restore empty-email creation on WP 7.0.3+ ([#858](https://github.com/Automattic/newspack-workspace/issues/858)) ([ce4aed4](https://github.com/Automattic/newspack-workspace/commit/ce4aed49331129e0c039fb76e9fc6b326244760c))
+
+## newspack [6.47.7](https://github.com/Automattic/newspack-workspace/compare/newspack@6.47.6...newspack@6.47.7) (2026-08-10)
+
+
+### Bug Fixes
+
+* **newsletters:** cut per-render subscription-list and gate overhead ([#769](https://github.com/Automattic/newspack-workspace/issues/769)) ([fe939fd](https://github.com/Automattic/newspack-workspace/commit/fe939fd2fe603785555fa087dae35eb64a5956c2))
+
+## newspack [6.47.6](https://github.com/Automattic/newspack-workspace/compare/newspack@6.47.5...newspack@6.47.6) (2026-08-10)
+
+
+### Bug Fixes
+
+* **plugin-manager:** use centralized download URLs for plugin updates ([#823](https://github.com/Automattic/newspack-workspace/issues/823)) ([cf1eb01](https://github.com/Automattic/newspack-workspace/commit/cf1eb014bc7607a3568ab12e57639366ec521f59))
+
+## newspack [6.47.5](https://github.com/Automattic/newspack-workspace/compare/newspack@6.47.4...newspack@6.47.5) (2026-08-10)
+
+
+### Bug Fixes
+
+* **perfmatters:** exclude Complianz CSS from RUCSS (NPPM-3052) ([#739](https://github.com/Automattic/newspack-workspace/issues/739)) ([b9a5464](https://github.com/Automattic/newspack-workspace/commit/b9a54643b5fa61895ff22a973c1e190eaa04d94b))
+
+## newspack [6.47.4](https://github.com/Automattic/newspack-workspace/compare/newspack@6.47.3...newspack@6.47.4) (2026-08-07)
+
+
+### Bug Fixes
+
+* **blocks:** input validation hardening for author, iframe and checkout surfaces ([#782](https://github.com/Automattic/newspack-workspace/issues/782)) ([20230c1](https://github.com/Automattic/newspack-workspace/commit/20230c12471e327e8cbdf6d3ffe7d9823a28b00b))
+* **content-gate:** prevent restrict_post re-entry via wp_reset_postdata ([#821](https://github.com/Automattic/newspack-workspace/issues/821)) ([6f5c479](https://github.com/Automattic/newspack-workspace/commit/6f5c479147b99356531e175bffe5b1846d2bfa71))
+* **reader-activation:** error on non-reader email in registration block ([#625](https://github.com/Automattic/newspack-workspace/issues/625)) ([f2c0db7](https://github.com/Automattic/newspack-workspace/commit/f2c0db725e4c3e376d4e85d01e19da625154e421))
+
+## newspack [6.47.3](https://github.com/Automattic/newspack-workspace/compare/newspack@6.47.2...newspack@6.47.3) (2026-08-05)
+
+
+### Bug Fixes
+
+* **guest-contributors:** don't email generated placeholder addresses ([#572](https://github.com/Automattic/newspack-workspace/issues/572)) ([9f0e73c](https://github.com/Automattic/newspack-workspace/commit/9f0e73cda02949076d83a49b476c94755f481ba9))
+
+## newspack [6.47.2](https://github.com/Automattic/newspack-workspace/compare/newspack@6.47.1...newspack@6.47.2) (2026-08-05)
+
+
+### Bug Fixes
+
+* accept Gutenberg theme.json data class in filter callbacks ([#807](https://github.com/Automattic/newspack-workspace/issues/807)) ([94e18e2](https://github.com/Automattic/newspack-workspace/commit/94e18e24cabac25b9f6a491cf6a1ba2e321b9550))
+
+## newspack [6.47.1](https://github.com/Automattic/newspack-workspace/compare/newspack@6.47.0...newspack@6.47.1) (2026-08-04)
+
+
+### Bug Fixes
+
+* **reader-activation:** reserve internal user meta keys on registration ([#793](https://github.com/Automattic/newspack-workspace/issues/793)) ([dfe7eda](https://github.com/Automattic/newspack-workspace/commit/dfe7eda9e236bf92723756a2b5467ebd117888ac))
+
+# newspack [6.47.0](https://github.com/Automattic/newspack-workspace/compare/newspack@6.46.1...newspack@6.47.0) (2026-08-03)
+
+
+### Bug Fixes
+
+* **audience:** unblock the ESP connect flow in Integrations ([#258](https://github.com/Automattic/newspack-workspace/issues/258)) ([93f3a67](https://github.com/Automattic/newspack-workspace/commit/93f3a67a825b95e0e0f43ac09dad536ee5ccf6f2))
+* **checkout-button:** apply attached coupon through the variation picker ([#768](https://github.com/Automattic/newspack-workspace/issues/768)) ([ab60934](https://github.com/Automattic/newspack-workspace/commit/ab60934d72746a28196f59a043877a76f1168fa5))
+* **cli:** clear object cache between teams in backfill-team-managers loop ([#643](https://github.com/Automattic/newspack-workspace/issues/643)) ([63ca3b4](https://github.com/Automattic/newspack-workspace/commit/63ca3b4517e707e8d3d2a1b827e0dbd72bda37ae))
+* **complianz:** use edge country code to skip per-visitor GeoIP lookup (NPPM-2905, [#329](https://github.com/Automattic/newspack-workspace/issues/329)) ([c4a8811](https://github.com/Automattic/newspack-workspace/commit/c4a8811f55f59bb6df584258dd46f882c0f24ff1))
+* **content-gate:** derive new gate priority from its own bucket (NPPD-2035) ([#605](https://github.com/Automattic/newspack-workspace/issues/605)) ([7626c8d](https://github.com/Automattic/newspack-workspace/commit/7626c8d046527d70364c96001f0a9ee0b2a65c3f))
+* Contributor/Author newsletter + content-gate permission errors (NPPM-2982) ([#579](https://github.com/Automattic/newspack-workspace/issues/579)) ([35c7476](https://github.com/Automattic/newspack-workspace/commit/35c747695189b5f85c2f5573926de9a61d33790a))
+* **nicename-change:** robustness tweaks in data events, user admin, and dev scripts ([#648](https://github.com/Automattic/newspack-workspace/issues/648)) ([5ec9bac](https://github.com/Automattic/newspack-workspace/commit/5ec9bac08768508332bd016c8fe7afafb57ae347))
+* **oauth:** guard unparseable proxy /start response ([#523](https://github.com/Automattic/newspack-workspace/issues/523)) ([9c4b3b1](https://github.com/Automattic/newspack-workspace/commit/9c4b3b1bc6e97367e8297e698497816a474b4f62))
+* **perfmatters:** keep WooCommerce assets on WC-rendering pages ([#173](https://github.com/Automattic/newspack-workspace/issues/173)) ([5aa59b0](https://github.com/Automattic/newspack-workspace/commit/5aa59b07db1c6fa644f2ee00113295f9a43865ce))
+* **reader-data:** apply newspack_reader_data_max_items filter ([#685](https://github.com/Automattic/newspack-workspace/issues/685)) ([904a38f](https://github.com/Automattic/newspack-workspace/commit/904a38ff816065a8e9d8e43f1e2526acd2d384f9))
+* **subscription-tiers:** prevent switching to the current subscription ([#542](https://github.com/Automattic/newspack-workspace/issues/542)) ([89fca28](https://github.com/Automattic/newspack-workspace/commit/89fca283c72e621c0cbf2fc61f2b0599e9581442))
+* **subscriptions:** expire on-hold subs after Radar cancels retry ([#505](https://github.com/Automattic/newspack-workspace/issues/505)) ([0f5b469](https://github.com/Automattic/newspack-workspace/commit/0f5b469c7d70c76989835340cd1a7a5a88b09776))
+
+
+### Features
+
+* **audience:** engine-priced effective price on Plans (integration) ([#466](https://github.com/Automattic/newspack-workspace/issues/466)) ([e2c7c4a](https://github.com/Automattic/newspack-workspace/commit/e2c7c4acacf8a4440b07115ab6abf2a451fb3367))
+* **audience:** let group owners rename their groups (NPPD-1813, [#460](https://github.com/Automattic/newspack-workspace/issues/460)) ([1abd243](https://github.com/Automattic/newspack-workspace/commit/1abd243e73cea35a69fa013750a570ae24291ebf))
+* **audience:** per-field operators for incoming ESP field criteria ([#628](https://github.com/Automattic/newspack-workspace/issues/628)) ([f4449a8](https://github.com/Automattic/newspack-workspace/commit/f4449a806b9794e03bcf3aa2e3f87f42beb67904))
+* **audience:** pricing rules wizard + reader-segment foundation ([#465](https://github.com/Automattic/newspack-workspace/issues/465)) ([496f0e0](https://github.com/Automattic/newspack-workspace/commit/496f0e0047dc30211a530a64395daa1d6e8c6d9e))
+* **audience:** subscription products (Plans) wizard ([#464](https://github.com/Automattic/newspack-workspace/issues/464)) ([36e980c](https://github.com/Automattic/newspack-workspace/commit/36e980ced9116319720b6fb7d2721a3cb253a63f))
+* **content-gate:** add a duplicate action to the gates list (NPPD-1693, [#606](https://github.com/Automattic/newspack-workspace/issues/606)) ([18622a7](https://github.com/Automattic/newspack-workspace/commit/18622a7cddd073976d3b548e1b6b6c7aee0a6320))
+* **content-gate:** add in-editor gate preview (NPPD-1871, [#555](https://github.com/Automattic/newspack-workspace/issues/555)) ([76e4e79](https://github.com/Automattic/newspack-workspace/commit/76e4e799d0cfb8a6dc05db25d12e9757387cdc41))
+* explicit breadcrumb API for Newspack admin headers ([#472](https://github.com/Automattic/newspack-workspace/issues/472)) ([7c43233](https://github.com/Automattic/newspack-workspace/commit/7c4323301f5323822937e93274c4fda4279a787f))
+* **icons:** add chartReport icon ([#623](https://github.com/Automattic/newspack-workspace/issues/623)) ([3c64783](https://github.com/Automattic/newspack-workspace/commit/3c647837746735d3c38d36e7c106b9b2507159fa))
+* improved handling/logging for integrations sync errors ([#591](https://github.com/Automattic/newspack-workspace/issues/591)) ([bae3f3b](https://github.com/Automattic/newspack-workspace/commit/bae3f3bac5d1a9308d9981e745afd8fff9189b7d))
+* **indesign-export:** platform + post types settings, en-dash fix ([#463](https://github.com/Automattic/newspack-workspace/issues/463)) ([67b2c0c](https://github.com/Automattic/newspack-workspace/commit/67b2c0cd3696ae12c90406273b1560d99e37c86f))
+* **newsletters:** custom Mailchimp resubscribe error message ([#590](https://github.com/Automattic/newspack-workspace/issues/590)) ([765b716](https://github.com/Automattic/newspack-workspace/commit/765b7160ab8f7f2b0a39677dcc94b0f21f5adfd9))
+* **reader-activation:** add --skip-lists and --fields to esp sync CLI (NPPD-1883) ([#556](https://github.com/Automattic/newspack-workspace/issues/556)) ([dcbe4f0](https://github.com/Automattic/newspack-workspace/commit/dcbe4f0138072245cc293ed8436db66bb1f02792))
+* **reader-activation:** per-direction sync capabilities and toggles ([#700](https://github.com/Automattic/newspack-workspace/issues/700)) ([3f66692](https://github.com/Automattic/newspack-workspace/commit/3f66692e90bdbd88cc6aec581bccff39fb9a2673))
+* **subscribers:** group manager roles + peer-removal guard (NPPD-1753, [#608](https://github.com/Automattic/newspack-workspace/issues/608)) ([692bc97](https://github.com/Automattic/newspack-workspace/commit/692bc9754899507841d9f231cd3409699f3de114))
+* **subscribers:** membership migration CLI + manager backfill (NPPD-2059, [#626](https://github.com/Automattic/newspack-workspace/issues/626)) ([ad87204](https://github.com/Automattic/newspack-workspace/commit/ad87204837c019613f055863d82fba85d720a7a3))
+
+
+### Dependencies
+
+* **newspack-colors:** upgraded to 1.1.1
+* **newspack-components:** upgraded to 4.6.0
+* **newspack-icons:** upgraded to 1.1.0
+* **newspack-scripts:** upgraded to 5.10.0
+
+## newspack [6.46.1](https://github.com/Automattic/newspack-workspace/compare/newspack@6.46.0...newspack@6.46.1) (2026-07-21)
+
+
+### Bug Fixes
+
+* **content-gate:** keep anonymous metering tied to registered access ([#671](https://github.com/Automattic/newspack-workspace/issues/671)) ([8561061](https://github.com/Automattic/newspack-workspace/commit/856106166a11585b55b63d0290d6e8ed03891078))
+
+# newspack [6.46.0](https://github.com/Automattic/newspack-workspace/compare/newspack@6.45.3...newspack@6.46.0) (2026-07-20)
+
+
+### Bug Fixes
+
+* **advertising:** stabilize placement button width, add a11y labels ([#4755](https://github.com/Automattic/newspack-workspace/issues/4755)) ([b573fdf](https://github.com/Automattic/newspack-workspace/commit/b573fdfc110af8cb9aae195564afc0a0e13e7f09))
+* **audience:** avoid [object Object] in segment summary ([#541](https://github.com/Automattic/newspack-workspace/issues/541)) ([336e382](https://github.com/Automattic/newspack-workspace/commit/336e382e489ee65f98fb75e33dfe2517da76e78b))
+* **build:** content-hash async CSS chunks so they cache-bust on deploy ([#420](https://github.com/Automattic/newspack-workspace/issues/420)) ([f9ec5fb](https://github.com/Automattic/newspack-workspace/commit/f9ec5fb6a3160f091368bb193e4a17b4afe8dbe5))
+* **checkout:** sync repeat trial pricing in modal checkout ([#264](https://github.com/Automattic/newspack-workspace/issues/264)) ([ce943c6](https://github.com/Automattic/newspack-workspace/commit/ce943c61d137f81326704deb7be0b73d82da3f17))
+* **cli:** match duplicate teams by normalized title (NPPM-2741, [#462](https://github.com/Automattic/newspack-workspace/issues/462)) ([fb48aeb](https://github.com/Automattic/newspack-workspace/commit/fb48aebdfb621f89d9165eeb65c70d6f367db290))
+* **cli:** treat separate-purchase teams as non-duplicates (NPPM-2741, [#380](https://github.com/Automattic/newspack-workspace/issues/380)) ([d8d3044](https://github.com/Automattic/newspack-workspace/commit/d8d3044001065dbab8f2064af5ab54ef72334699))
+* **content-gate:** preserve gate_layout_id when editing gate settings ([3de186d](https://github.com/Automattic/newspack-workspace/commit/3de186d4180bd17b5593a42408ab85977853bbfb))
+* **group-subscription:** gate management UX behind content gates flag (NPPD-1752) ([#405](https://github.com/Automattic/newspack-workspace/issues/405)) ([c6a268f](https://github.com/Automattic/newspack-workspace/commit/c6a268fd18620b7436e27f002163513bd65c16c2))
+* **integrations:** skip unconfigured integrations on deletion sync ([60bcfb4](https://github.com/Automattic/newspack-workspace/commit/60bcfb4a8556d97c424a327afe3378455e821dc1))
+* **integrations:** sync reader-account deletion to ESP ([#4731](https://github.com/Automattic/newspack-workspace/issues/4731)) ([e501345](https://github.com/Automattic/newspack-workspace/commit/e5013457a93cb911f7f483e11cd2e0e111288e0c))
+* **newsletters:** create account on logged-in signup (NPPM-2936, [#467](https://github.com/Automattic/newspack-workspace/issues/467)) ([02a3ba2](https://github.com/Automattic/newspack-workspace/commit/02a3ba274fc1532e97c52bc61df0b18721619d85))
+* **newspack-plugin:** cache-bust assets by content hash ([#290](https://github.com/Automattic/newspack-workspace/issues/290)) ([0149ca3](https://github.com/Automattic/newspack-workspace/commit/0149ca32ed643084f515eb57f690b022708b453d))
+* **parse.ly:** update meta_type default ([#4724](https://github.com/Automattic/newspack-workspace/issues/4724)) ([65335bf](https://github.com/Automattic/newspack-workspace/commit/65335bf4d5242a6843e765c7a6334ab53eb53b51))
+* **reader-activation:** clear local data on account switch (NPPM-2899) ([#227](https://github.com/Automattic/newspack-workspace/issues/227)) ([718f203](https://github.com/Automattic/newspack-workspace/commit/718f203cc8211f122744cf7729aeb796c978861c))
+* **stripe:** disable adaptive pricing when modal checkout omits country ([#296](https://github.com/Automattic/newspack-workspace/issues/296)) ([fa96ed7](https://github.com/Automattic/newspack-workspace/commit/fa96ed75223f475512523842348d59b99761989b))
+* **web-preview:** right-align toolbar close button ([c3e2f6b](https://github.com/Automattic/newspack-workspace/commit/c3e2f6b980702c72e42f7a7d45dac35760a502bb))
+* **wizards:** align content gate test with renamed toggle label ([#599](https://github.com/Automattic/newspack-workspace/issues/599)) ([3ab5e57](https://github.com/Automattic/newspack-workspace/commit/3ab5e5756fc05761737fcbf59d58fadc28fd87ad))
+* **woocommerce:** close group subscription member-privacy, fatal, and REST-gating gaps (NPPD-1593, [#279](https://github.com/Automattic/newspack-workspace/issues/279)) ([6bd6bf1](https://github.com/Automattic/newspack-workspace/commit/6bd6bf1c8f8655c106f2d998c568b5d806446117))
+
+
+### Features
+
+* add support for displaying tags as labels ([#4381](https://github.com/Automattic/newspack-workspace/issues/4381)) ([226df98](https://github.com/Automattic/newspack-workspace/commit/226df98653736641d138952211c853537d86ee3c))
+* **components:** standardize wp-admin snackbars, bottom-centered ([#447](https://github.com/Automattic/newspack-workspace/issues/447)) ([8c09d8b](https://github.com/Automattic/newspack-workspace/commit/8c09d8bc005d95032f04267b1bdd71df029708c5))
+* **content-gate:** add pre-save checklist and gate preferences ([#408](https://github.com/Automattic/newspack-workspace/issues/408)) ([5ef856b](https://github.com/Automattic/newspack-workspace/commit/5ef856b5355f0929aea1a83ca744a98a64b947de))
+* **content-gate:** search institutions by ID (NPPD-1841, [#498](https://github.com/Automattic/newspack-workspace/issues/498)) ([16d9f3d](https://github.com/Automattic/newspack-workspace/commit/16d9f3d1aca3ecae0f3f86b48b4b903830a5f63a))
+* **emails-rr:** card expiry warning email (NPPD-1524) ([#155](https://github.com/Automattic/newspack-workspace/issues/155)) ([418917b](https://github.com/Automattic/newspack-workspace/commit/418917b643dda45c044bcc1491aaf1911fd98867))
+* **emails-wc:** sync site brand styles into WC classic email options (NPPD-1537) ([#150](https://github.com/Automattic/newspack-workspace/issues/150)) ([c577c38](https://github.com/Automattic/newspack-workspace/commit/c577c389eea43506bfa05a523f927f62f9f839d1)), closes [#4758](https://github.com/Automattic/newspack-workspace/issues/4758) [xhi#effort](https://github.com/xhi/issues/effort) [#720eec](https://github.com/Automattic/newspack-workspace/issues/720eec) [#8526ff](https://github.com/Automattic/newspack-workspace/issues/8526ff) [#2](https://github.com/Automattic/newspack-workspace/issues/2) [#1](https://github.com/Automattic/newspack-workspace/issues/1) [#4](https://github.com/Automattic/newspack-workspace/issues/4)
+* **emails:** allow test-sends for inactive Newspack-managed emails (NPPD-1547) ([#187](https://github.com/Automattic/newspack-workspace/issues/187)) ([e82985d](https://github.com/Automattic/newspack-workspace/commit/e82985dda2bb758e829082c18a97162edd197847)), closes [#4](https://github.com/Automattic/newspack-workspace/issues/4) [#6](https://github.com/Automattic/newspack-workspace/issues/6) [#1](https://github.com/Automattic/newspack-workspace/issues/1) [#13](https://github.com/Automattic/newspack-workspace/issues/13) [#2](https://github.com/Automattic/newspack-workspace/issues/2) [#3](https://github.com/Automattic/newspack-workspace/issues/3)
+* **emails:** email preview for transactional emails (NPPD-1525) ([#146](https://github.com/Automattic/newspack-workspace/issues/146)) ([2ae4bac](https://github.com/Automattic/newspack-workspace/commit/2ae4bac83a61ef4bc992af7839af6767315311b1))
+* **emails:** move Emails screen to Audience > Configuration (NPPD-1538) ([#197](https://github.com/Automattic/newspack-workspace/issues/197)) ([633cf3c](https://github.com/Automattic/newspack-workspace/commit/633cf3cea43c4774bc919d7ebfa27b68eb87c742))
+* **emails:** move sender/contact settings into Emails screen (NPPD-1566) ([#162](https://github.com/Automattic/newspack-workspace/issues/162)) ([c82db38](https://github.com/Automattic/newspack-workspace/commit/c82db381c309de16ca98ddf5e671af2e6d675598))
+* **emails:** surface WooCommerce emails in unified UI (NPPD-1527) ([#144](https://github.com/Automattic/newspack-workspace/issues/144)) ([c8a43a5](https://github.com/Automattic/newspack-workspace/commit/c8a43a5094ed4fdf14b1b9737a3d90655d0641c8))
+* **emails:** two-phase idempotent transactional send (NPPD-1768) ([#412](https://github.com/Automattic/newspack-workspace/issues/412)) ([de91d7f](https://github.com/Automattic/newspack-workspace/commit/de91d7f31bd8c88819a1b1a1211585a4031a2e3c))
+* **emails:** unified emails management UI on newspack_email_configs schema (NPPD-945) ([#137](https://github.com/Automattic/newspack-workspace/issues/137)) ([f73cd88](https://github.com/Automattic/newspack-workspace/commit/f73cd88225752067871e2e6e9b82d394ea0907dd))
+* **experimental-tools:** show location hint for enabled tools ([#583](https://github.com/Automattic/newspack-workspace/issues/583)) ([f1d1a1d](https://github.com/Automattic/newspack-workspace/commit/f1d1a1d68452ce6c7a98539e0fb0d262ac56cd06))
+* **integrations:** handle my-account without woo ([#220](https://github.com/Automattic/newspack-workspace/issues/220)) ([c33acfc](https://github.com/Automattic/newspack-workspace/commit/c33acfc5844f84731a95bd77b0aafb9ce327ac29))
+* **newspack-ui:** standardize snackbars + accessible notices ([#445](https://github.com/Automattic/newspack-workspace/issues/445)) ([0b8f39b](https://github.com/Automattic/newspack-workspace/commit/0b8f39beb69b52b944dc8ba889a1e4e90597f604))
+* **reader-auth:** publisher-controllable verification setting ([#223](https://github.com/Automattic/newspack-workspace/issues/223)) ([b5bb709](https://github.com/Automattic/newspack-workspace/commit/b5bb70970203eb00d6b0ab818f82fc78408ae055)), closes [#135](https://github.com/Automattic/newspack-workspace/issues/135)
+* **tags:** make private tags opt-out and add reader-data toggle ([#435](https://github.com/Automattic/newspack-workspace/issues/435)) ([6f6aa20](https://github.com/Automattic/newspack-workspace/commit/6f6aa20527eee10799c332f40e1ec3d948d21e6a))
+
 ## newspack [6.45.3](https://github.com/Automattic/newspack-workspace/compare/newspack@6.45.2...newspack@6.45.3) (2026-07-15)
 
 

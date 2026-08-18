@@ -37,28 +37,36 @@ class Membership_Gates_Migration {
 	 * For each gate (group of plans):
 	 * - Creates a new content gate (or updates an existing one matched by title).
 	 * - Sets content rules from the shared restriction rules.
-	 * - Enables registration settings (always) and custom_access settings (if any
-	 *   plan in the group requires a purchase). Paid-access rules are derived from
-	 *   the plans' linked products: subscription products map to a 'subscription'
-	 *   rule, simple (one-time) products map to a 'one_time_purchase' rule whose
-	 *   duration is the plan's membership length (unlimited → forever), with the
-	 *   rules OR-ed on the gate. A purchase group whose paid rules cannot be
-	 *   mapped at all is flagged as a WARN row and its paid access mode is left
-	 *   untouched — never activated with an empty (unrestricted) rule set.
+	 * - Enables registration settings (always) and custom_access settings (only
+	 *   when every plan in the group requires a purchase — a group that also holds a
+	 *   signup plan is registration-gated, since either plan grants access in WCM).
 	 * - Copies block content from the first plan's np_memberships_gate post (falling
 	 *   back to the Primary gate) into the gate's registration / paid-access layouts.
 	 *
 	 * Dry-run by default; pass --live to write.
 	 *
-	 * On --live each written gate is re-read and checked against the conditions the
-	 * frontend evaluator applies, and any gate that would not restrict is reported as
-	 * a WARN row rather than counted as a plain success. Migrated gates stay dormant
-	 * until WooCommerce Memberships is deactivated, so without this an unenforceable
-	 * gate would look migrated for as long as it takes someone to notice at cutover.
+	 * Paid access rules are mapped from the plan's granting products: subscription
+	 * products go to a 'subscription' rule, simple (one-time) products to a
+	 * 'one_time_purchase' rule whose duration comes from the plan's membership length.
+	 *
+	 * Both modes surface predictable migration issues as WARN rows. Purchase-mode
+	 * gaps (no custom_access layout found, no products mappable to a paid access rule)
+	 * and content-rule slugs the evaluator cannot resolve are computable from the
+	 * group data before any write, so they appear in dry-run and make the planning
+	 * pass predictive rather than optimistic. On --live each written gate is
+	 * additionally re-read and checked against the full set of conditions the frontend
+	 * evaluator applies; any gate that would not restrict — or would restrict less
+	 * than the plan it came from, e.g. a paid plan that migrated to a gate any
+	 * registered reader passes — is reported as a WARN row rather than counted as a
+	 * plain success. Migrated gates stay dormant until WooCommerce Memberships is
+	 * deactivated, so without this an unenforceable gate would look migrated for as
+	 * long as it takes someone to notice at cutover.
 	 *
 	 * Re-running is NOT edit-preserving: an existing gate matched by title has its
 	 * content rules and layout content overwritten with freshly extracted markup, so
-	 * any customization made in the admin after a previous run is lost.
+	 * any customization made in the admin after a previous run is lost. A layout is
+	 * left alone when nothing could be extracted for it, so an empty extraction never
+	 * blanks a working layout.
 	 *
 	 * ## OPTIONS
 	 *
@@ -152,23 +160,17 @@ class Membership_Gates_Migration {
 			$ac_rules      = $group[0]['ac_rules'];
 			$gate_title    = implode( ' | ', array_column( $group, 'name' ) );
 			$gate_key      = trim( strtolower( $gate_title ) );
-			$has_purchase  = ! empty(
-				array_filter( $group, fn( $g ) => 'purchase' === $g['access_method'] )
-			);
-			$access_type = $has_purchase ? 'purchase' : 'signup';
+			$has_purchase = self::group_requires_purchase( $group );
+			$access_type  = $has_purchase ? 'purchase' : 'signup';
 
-			// Paid-access mapping: subscription products go to the 'subscription' rule,
+			// Paid-access mapping: subscription products map to the 'subscription' rule,
 			// simple (one-time) products to a 'one_time_purchase' rule whose duration
-			// comes from the plan's membership length (NPPD-2106).
-			$paid_access_rules = self::build_paid_access_rules( self::get_group_paid_descriptors( $group ) );
-
-			// A purchase group whose paid rules all failed to map must not activate
-			// the paid access mode with an empty rule set — both gate evaluators
-			// treat empty access rules as unrestricted, so the "paid" gate would be
-			// open to every registered reader. apply_paid_access() skips the write
-			// (leaving any previously written rules untouched) and the row is
-			// flagged as a WARN below.
-			$paid_rules_missing = $has_purchase && empty( $paid_access_rules );
+			// comes from the plan's membership length (NPPD-2106). Only purchase groups
+			// carry paid rules; a signup or mixed group is registration-gated, so it is
+			// skipped here — matching apply_paid_access()/verify_migrated_gate().
+			$paid_access_rules = $has_purchase
+				? self::build_paid_access_rules( self::get_group_paid_descriptors( $group ) )
+				: [];
 
 			// Gate identity is the title, but groups are keyed by rule fingerprint —
 			// so two same-named plans with different rules land in different groups
@@ -241,33 +243,32 @@ class Membership_Gates_Migration {
 					$layout_errors[] = 'registration layout';
 				}
 
-				// Paid access mode (purchase plans only).
+				// Custom access layout — only when every plan in the group requires a
+				// purchase (see $has_purchase). A mixed group is left registration-gated.
+				// apply_paid_access() leaves the mode untouched when no rules mapped, so
+				// the paid mode is never activated with an empty (unrestricted) rule set.
 				if ( $has_purchase && 'error' === self::apply_paid_access( $gate_id, $gate_title, $layouts['custom_access'], $paid_access_rules ) ) {
 					$layout_errors[] = 'paid access layout';
 				}
 			}
 
-			// Post-write verification. The writes above only report that nothing
-			// errored; they say nothing about whether the resulting gate will
-			// actually restrict once WooCommerce Memberships is deactivated. Because
-			// migrated gates lie dormant until that cutover, an unenforceable gate
-			// would otherwise be reported as a success today and go unnoticed for
-			// weeks.
+			// Verification. In live mode, the written gate is re-read against the full
+			// set of conditions the frontend evaluator applies — an unenforceable gate
+			// that looks migrated could otherwise go unnoticed until cutover. In
+			// dry-run mode, a computable pre-write subset of the same checks runs off
+			// the group data so the planning pass is predictive rather than optimistic:
+			// purchase-mode gaps and unresolvable content-rule slugs surface before
+			// anything is written.
 			$verification_issues = [];
-			if ( $paid_rules_missing ) {
-				// Distinguish "nothing was ever configured" from a re-run that skipped
-				// the write but left a previous run's correct rules in place.
-				$existing_custom_access = $gate_id ? \Newspack\Content_Gate::get_custom_access_settings( $gate_id ) : [];
-				if ( ! empty( $existing_custom_access['active'] ) && ! empty( $existing_custom_access['access_rules'] ) ) {
-					$verification_issues[] = 'no mappable paid access rules — the gate\'s existing paid access settings were left untouched';
-				} else {
-					$verification_issues[] = 'paid access is NOT configured (no mappable paid access rules) — registered readers would not be restricted';
-				}
-			}
 			if ( ! $dry_run && empty( $layout_errors ) && $gate_id ) {
-				$verification_issues = array_merge( $verification_issues, self::verify_migrated_gate( $gate_id ) );
+				$verification_issues = self::verify_migrated_gate( $gate_id, $has_purchase );
 				foreach ( $verification_issues as $issue ) {
-					WP_CLI::warning( sprintf( '"%s" (gate %d) will not restrict: %s', $gate_title, $gate_id, $issue ) );
+					WP_CLI::warning( sprintf( '"%s" (gate %d) will not restrict as intended: %s', $gate_title, $gate_id, $issue ) );
+				}
+			} elseif ( $dry_run ) {
+				$verification_issues = self::compute_pre_write_issues( $ac_rules, $has_purchase, $layouts, $paid_access_rules );
+				foreach ( $verification_issues as $issue ) {
+					WP_CLI::warning( sprintf( '"%s" will not migrate correctly: %s', $gate_title, $issue ) );
 				}
 			}
 
@@ -279,21 +280,13 @@ class Membership_Gates_Migration {
 				$row_action = $dry_run ? $action . ' (dry-run)' : $action;
 			}
 
-			// The paid rules are only written when the source gate yields a paid access
-			// layout, so a mapping the run cannot apply is labeled as such instead of
-			// looking migrated in the summary.
-			$paid_rules_label = self::describe_paid_access_rules( $paid_access_rules );
-			if ( '—' !== $paid_rules_label && null === $layouts['custom_access'] ) {
-				$paid_rules_label .= ' (NOT applied: no paid access layout in the source gate)';
-			}
-
 			$summary[] = [
 				'plan_name'     => $gate_title,
 				'action'        => $row_action,
 				'gate_id'       => $gate_id ?? '(pending)',
 				'content_rules' => count( $ac_rules ),
 				'access_type'   => $access_type,
-				'paid_rules'    => $paid_rules_label,
+				'paid_rules'    => self::describe_paid_access_rules( $paid_access_rules ),
 			];
 		}
 
@@ -345,7 +338,7 @@ class Membership_Gates_Migration {
 		if ( $unenforceable ) {
 			WP_CLI::warning(
 				sprintf(
-					'%d of those gate(s) will not restrict anything as written (see the WARN rows above). Fix them before deactivating WooCommerce Memberships.',
+					'%d of those gate(s) will not restrict as intended (see the WARN rows above). Fix them before deactivating WooCommerce Memberships.',
 					$unenforceable
 				)
 			);
@@ -355,15 +348,17 @@ class Membership_Gates_Migration {
 	/**
 	 * Re-read a freshly written gate and report why it would fail to restrict.
 	 *
-	 * Mirrors the conditions Content_Restriction_Control::get_post_gates() applies
-	 * when deciding whether a gate applies to a post, so a gate that passes here is
-	 * one the evaluator can actually act on.
+	 * Mirrors the conditions Content_Restriction_Control::get_post_gates() and
+	 * is_post_restricted() apply when deciding whether a gate applies to a post and
+	 * whether a given reader is stopped by it, so a gate that passes here is one the
+	 * evaluator can actually act on — for the readers the source plan restricted.
 	 *
-	 * @param int $gate_id The content gate post ID.
+	 * @param int  $gate_id      The content gate post ID.
+	 * @param bool $has_purchase Whether every plan behind this gate requires a purchase.
 	 *
 	 * @return string[] Human-readable problems; empty when the gate is enforceable.
 	 */
-	private static function verify_migrated_gate( int $gate_id ): array {
+	private static function verify_migrated_gate( int $gate_id, bool $has_purchase = false ): array {
 		$issues = [];
 
 		if ( 'publish' !== \get_post_status( $gate_id ) ) {
@@ -393,6 +388,17 @@ class Membership_Gates_Migration {
 				'none of its content rules resolve to a post type or taxonomy the evaluator can match (%s)',
 				implode( ', ', $unresolvable )
 			);
+		} elseif ( ! empty( $unresolvable ) ) {
+			// A partially dead rule set is a partial leak, not a clean gate: the rules
+			// combine with 'any', so the content selected by the unresolvable rules is
+			// left ungated while the rest is covered. A plan restricting all posts plus a
+			// category is exactly this shape, and it is a common way plans are configured.
+			$issues[] = sprintf(
+				'%d of its %d content rules do not resolve to a post type or taxonomy the evaluator can match (%s), so the content they select stays ungated',
+				count( $unresolvable ),
+				count( $content_rules ),
+				implode( ', ', $unresolvable )
+			);
 		}
 
 		// A gate with neither mode active is skipped outright; an active mode with no
@@ -406,16 +412,106 @@ class Membership_Gates_Migration {
 			'registration' => $registration,
 			'paid access'  => $custom_access,
 		] as $label => $settings ) {
-			if ( ! empty( $settings['active'] ) && empty( $settings['gate_layout_id'] ) ) {
+			if ( empty( $settings['active'] ) ) {
+				continue;
+			}
+			if ( empty( $settings['gate_layout_id'] ) ) {
 				$issues[] = sprintf( 'the %s mode is active with no layout', $label );
+				continue;
+			}
+			// The evaluator only checks that the layout ID is truthy, so a missing or
+			// blank layout post still counts as "restricted" — the reader gets a
+			// truncated article with nothing underneath it: no form, no upsell, no
+			// explanation of why the article stops.
+			$layout_post = \get_post( $settings['gate_layout_id'] );
+			if ( ! $layout_post ) {
+				$issues[] = sprintf( 'the %s mode points at layout post %d, which no longer exists', $label, $settings['gate_layout_id'] );
+			} elseif ( '' === trim( $layout_post->post_content ) ) {
+				$issues[] = sprintf( 'the %s mode points at an empty layout (post %d), so the reader would see a blank gate', $label, $settings['gate_layout_id'] );
 			}
 		}
 
-		// Both gate evaluators (Content_Restriction_Control and User_Gate_Access)
-		// treat empty access rules as unrestricted, so an active paid mode with no
-		// rules is a "paid" gate every registered reader walks through.
+		// A plan that required a purchase must migrate to a gate that gates on the
+		// purchase. Registration mode alone stops nobody who has an account —
+		// is_post_restricted() only re-checks a logged-in reader when
+		// require_verification is set, which this migration never writes — so a paid
+		// plan whose paid access mode never activated turns into content any reader
+		// can unlock by registering a free account.
+		if ( $has_purchase && empty( $custom_access['active'] ) ) {
+			$issues[] = 'it migrates a plan that requires a purchase, but its paid access mode is not active — any registered reader would get in';
+		}
+
+		// An active paid mode with no access rules is unrestricted regardless of how
+		// the group was classified: both gate evaluators treat empty access rules as
+		// "don't block", so every registered reader walks through. This is checked
+		// unconditionally, not only for purchase groups, because a signup or mixed
+		// group can still carry a leftover active-but-ruleless paid mode (a prior run,
+		// or a hand-edit) that this migration does not itself write (NPPD-2106).
 		if ( ! empty( $custom_access['active'] ) && empty( $custom_access['access_rules'] ) ) {
-			$issues[] = 'the paid access mode is active with no access rules — registered readers are not restricted by it';
+			$issues[] = 'its paid access mode is active but has no access rules, so it asks for no purchase — any registered reader would get in';
+		}
+
+		return $issues;
+	}
+
+	/**
+	 * Predict migration issues from group data alone, without writing anything.
+	 *
+	 * A computable subset of verify_migrated_gate() that needs no written gate: slugs
+	 * that the evaluator cannot resolve, and purchase-mode gaps (no custom_access
+	 * layout extracted, or no products could be mapped to a paid access rule). Called
+	 * in dry-run mode so the planning pass surfaces the same warnings --live would.
+	 *
+	 * @param array[] $ac_rules          AC-format content rules: [ [ 'slug' => string, 'value' => string[] ], ... ].
+	 * @param bool    $has_purchase      Whether every plan in the group requires a purchase.
+	 * @param array   $layouts           Extracted layout markup keyed by 'registration' and 'custom_access'.
+	 * @param array[] $paid_access_rules Mapped paid-access rule groups from build_paid_access_rules().
+	 *
+	 * @return string[] Human-readable problems; empty when no issues are predicted.
+	 */
+	private static function compute_pre_write_issues( array $ac_rules, bool $has_purchase, array $layouts, array $paid_access_rules ): array {
+		$issues = [];
+
+		// Mirror the unresolvable-slug check from verify_migrated_gate(): slugs the
+		// evaluator cannot resolve map to no content, so those rules leave their
+		// content ungated after cutover.
+		$unresolvable = array_values(
+			array_filter(
+				array_column( $ac_rules, 'slug' ),
+				fn( $slug ) => ! self::is_content_rule_slug_resolvable( $slug )
+			)
+		);
+		if ( ! empty( $unresolvable ) ) {
+			if ( count( $unresolvable ) === count( $ac_rules ) ) {
+				$issues[] = sprintf(
+					'none of its content rules resolve to a post type or taxonomy the evaluator can match (%s)',
+					implode( ', ', $unresolvable )
+				);
+			} else {
+				$issues[] = sprintf(
+					'%d of its %d content rules do not resolve to a post type or taxonomy the evaluator can match (%s), so the content they select stays ungated',
+					count( $unresolvable ),
+					count( $ac_rules ),
+					implode( ', ', $unresolvable )
+				);
+			}
+		}
+
+		if ( $has_purchase ) {
+			if ( null === $layouts['custom_access'] ) {
+				// No custom_access layout found → apply_layout() is never called for
+				// the custom_access mode → paid access mode stays inactive → any
+				// registered reader passes. Mirrors verify_migrated_gate()'s "paid
+				// access mode is not active" check.
+				$issues[] = 'it migrates a plan that requires a purchase, but no paid access layout was found — the paid access mode will not be activated, so any registered reader would get in';
+			} elseif ( empty( $paid_access_rules ) ) {
+				// No product mapped to a paid access rule (all variations, unmappable
+				// one-time durations, or the one_time_purchase rule unregistered on this
+				// build) → apply_paid_access() skips the write → the paid mode is never
+				// activated, so any registered reader passes. Mirrors verify_migrated_gate()'s
+				// "paid access mode is not active" check for the pre-write pass.
+				$issues[] = 'its paid access mode will have no access rules (no products could be mapped to a paid access rule), so it will ask for no purchase — any registered reader would get in';
+			}
 		}
 
 		return $issues;
@@ -457,8 +553,7 @@ class Membership_Gates_Migration {
 	 * @param array $skipped  Skipped-plan summary rows, appended to by reference.
 	 *
 	 * @return array<string,array> Map of fingerprint => list of plan descriptors, each
-	 *                             [ 'pid', 'name', 'access_method', 'ac_rules', 'product_ids',
-	 *                             'access_length_amount', 'access_length_period', 'access_length_type' ].
+	 *                             [ 'pid', 'name', 'access_method', 'ac_rules', 'product_ids' ].
 	 */
 	private static function group_plans_by_fingerprint( array $plan_ids, array &$skipped ): array {
 		$plan_groups = [];
@@ -513,20 +608,35 @@ class Membership_Gates_Migration {
 
 			$fingerprint                   = self::compute_rules_fingerprint( $ac_rules );
 			$plan_groups[ $fingerprint ][] = [
-				'pid'                  => $pid,
-				'name'                 => $plan_name,
-				'access_method'        => $access_method,
-				'ac_rules'             => $ac_rules,
-				'product_ids'          => 'purchase' === $access_method ? array_values( $plan->get_product_ids() ) : [],
-				// The membership length feeds the one_time_purchase rule duration for
-				// simple (one-time) products; '' amount/period means unlimited.
-				'access_length_amount' => $plan->get_access_length_amount(),
-				'access_length_period' => $plan->get_access_length_period(),
-				'access_length_type'   => $plan->get_access_length_type(),
+				'pid'           => $pid,
+				'name'          => $plan_name,
+				'access_method' => $access_method,
+				'ac_rules'      => $ac_rules,
+				'product_ids'   => 'purchase' === $access_method ? array_values( $plan->get_product_ids() ) : [],
 			];
 		}
 
 		return $plan_groups;
+	}
+
+	/**
+	 * Whether a plan group should migrate to a purchase-gated gate.
+	 *
+	 * True only when every plan in the group requires a purchase. The two gate modes
+	 * compose with AND for a logged-in reader — registration mode passes them, then
+	 * custom_access restricts them unless they hold a subscription — so activating
+	 * paid access on a group that also holds a signup plan would demand the
+	 * subscription from everyone. WooCommerce Memberships grants access to a holder of
+	 * *either* plan (OR semantics), so the signup plan's free-registration members
+	 * would silently lose access at cutover. Keeping the most-permissive plan's
+	 * requirement (registration-gate a mixed group) is the faithful migration.
+	 *
+	 * @param array[] $group Plan descriptors, each carrying an 'access_method' key.
+	 *
+	 * @return bool
+	 */
+	private static function group_requires_purchase( array $group ): bool {
+		return ! array_filter( $group, fn( $g ) => 'purchase' !== $g['access_method'] );
 	}
 
 	/**
@@ -839,12 +949,17 @@ class Membership_Gates_Migration {
 	 * Create or update a gate layout post and point the gate's registration or
 	 * custom_access settings at it.
 	 *
-	 * @param int        $gate_id      The content gate post ID.
-	 * @param string     $gate_title   The gate title (used to name new layout posts).
-	 * @param string     $mode         Either 'registration' or 'custom_access'.
-	 * @param string     $content      The block markup for the layout.
-	 * @param array|null $access_rules Paid-access rule groups (from build_paid_access_rules())
-	 *                                 for the custom_access mode.
+	 * An empty $content never overwrites an existing layout: nothing was extracted to
+	 * migrate, and blanking the layout the gate already points at (for a new gate, the
+	 * default seeded by Content_Gate::create_gate()) would leave readers a truncated
+	 * article with an empty gate under it.
+	 *
+	 * @param int          $gate_id      The content gate post ID.
+	 * @param string       $gate_title   The gate title (used to name new layout posts).
+	 * @param string       $mode         Either 'registration' or 'custom_access'.
+	 * @param string       $content      The block markup for the layout.
+	 * @param array[]|null $access_rules Paid-access rule groups (from build_paid_access_rules())
+	 *                                  for the custom_access mode; ignored for registration.
 	 *
 	 * @return bool True when the mode was activated against a usable layout post. False
 	 *              when no layout could be written — the mode is then left untouched,
@@ -861,54 +976,65 @@ class Membership_Gates_Migration {
 			$label     = 'Registration Layout';
 		}
 
-		// Gate content authored by an admin with unfiltered_html can legitimately
-		// contain iframes/embeds/Custom HTML. A WP-CLI run has no user, so kses would
-		// strip those on re-save and the migrated layout would not match its source.
-		$kses_was_active = \has_filter( 'content_save_pre', 'wp_filter_post_kses' );
-		if ( $kses_was_active ) {
-			\kses_remove_filters();
-		}
-
-		if ( $layout_id ) {
-			// The overwrite is unconditional even when $content is '' — mirroring the
-			// drop-in. Content_Gate::create_gate() seeds a default block-pattern layout,
-			// which this replaces with the migrated markup; an empty $content (no
-			// np_memberships_gate found for the group, or a nested/reusable wrapper) thus
-			// blanks that default. Preserving those defaults on empty content is the
-			// empty-layout fix tracked in NPPD-2058; kept faithful here.
-			$updated = \wp_update_post(
-				[
-					'ID'           => $layout_id,
-					'post_content' => $content,
-				],
-				true // Return WP_Error on failure.
+		if ( $layout_id && '' === $content ) {
+			// Content_Gate::create_gate() seeds both layout posts with a default block
+			// pattern, so this update path is the normal one, not the exception — writing
+			// empty content here would blank a working layout and leave the reader a
+			// truncated article with nothing underneath it. create_gate_layout()
+			// substitutes the default for empty content; keep the two paths in agreement
+			// by leaving whatever the layout already holds in place.
+			WP_CLI::warning(
+				sprintf(
+					'No %s content could be extracted for "%s" — keeping the existing layout (post %d) rather than blanking it. Review it before cutover.',
+					strtolower( $label ),
+					$gate_title,
+					$layout_id
+				)
 			);
-			if ( \is_wp_error( $updated ) || ! $updated ) {
-				// A stale gate_layout_id pointing at a deleted post makes this a no-op.
-				WP_CLI::warning(
-					sprintf(
-						'Could not update %s (post %d) for "%s": %s',
-						strtolower( $label ),
-						$layout_id,
-						$gate_title,
-						\is_wp_error( $updated ) ? $updated->get_error_message() : 'the layout post no longer exists'
-					)
-				);
-				$layout_id = 0;
-			}
 		} else {
-			$layout_id = \Newspack\Content_Gate::create_gate_layout(
-				sprintf( '%s — %s', $gate_title, $label ),
-				$content
-			);
-			if ( \is_wp_error( $layout_id ) ) {
-				WP_CLI::warning( sprintf( 'Could not create %s for "%s": %s', strtolower( $label ), $gate_title, $layout_id->get_error_message() ) );
-				$layout_id = 0;
+			// Gate content authored by an admin with unfiltered_html can legitimately
+			// contain iframes/embeds/Custom HTML. A WP-CLI run has no user, so kses would
+			// strip those on re-save and the migrated layout would not match its source.
+			$kses_was_active = \has_filter( 'content_save_pre', 'wp_filter_post_kses' );
+			if ( $kses_was_active ) {
+				\kses_remove_filters();
 			}
-		}
 
-		if ( $kses_was_active ) {
-			\kses_init_filters();
+			if ( $layout_id ) {
+				$updated = \wp_update_post(
+					[
+						'ID'           => $layout_id,
+						'post_content' => $content,
+					],
+					true // Return WP_Error on failure.
+				);
+				if ( \is_wp_error( $updated ) || ! $updated ) {
+					// A stale gate_layout_id pointing at a deleted post makes this a no-op.
+					WP_CLI::warning(
+						sprintf(
+							'Could not update %s (post %d) for "%s": %s',
+							strtolower( $label ),
+							$layout_id,
+							$gate_title,
+							\is_wp_error( $updated ) ? $updated->get_error_message() : 'the layout post no longer exists'
+						)
+					);
+					$layout_id = 0;
+				}
+			} else {
+				$layout_id = \Newspack\Content_Gate::create_gate_layout(
+					sprintf( '%s — %s', $gate_title, $label ),
+					$content
+				);
+				if ( \is_wp_error( $layout_id ) ) {
+					WP_CLI::warning( sprintf( 'Could not create %s for "%s": %s', strtolower( $label ), $gate_title, $layout_id->get_error_message() ) );
+					$layout_id = 0;
+				}
+			}
+
+			if ( $kses_was_active ) {
+				\kses_init_filters();
+			}
 		}
 
 		// Without a layout post the mode must stay as it is: Content_Restriction_Control
@@ -951,7 +1077,7 @@ class Membership_Gates_Migration {
 		$args = [
 			'post_type'      => 'wc_membership_plan',
 			'post_status'    => 'publish',
-			'posts_per_page' => -1,
+			'posts_per_page' => -1, // phpcs:ignore WordPressVIPMinimum.Performance.NoPaging -- Operator-run CLI command; unbounded by design.
 			'fields'         => 'ids',
 			'no_found_rows'  => true,
 			'orderby'        => 'ID',

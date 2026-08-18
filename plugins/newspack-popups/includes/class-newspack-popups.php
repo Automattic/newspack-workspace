@@ -93,8 +93,14 @@ final class Newspack_Popups {
 		add_action( 'add_meta_boxes_' . self::NEWSPACK_POPUPS_CPT, [ __CLASS__, 'remove_custom_fields_meta_box' ], 99 );
 		add_filter( 'display_post_states', [ __CLASS__, 'display_post_states' ], 10, 2 );
 		add_action( 'save_post_' . self::NEWSPACK_POPUPS_CPT, [ __CLASS__, 'popup_default_fields' ], 10, 3 );
+		add_action( 'save_post_' . self::NEWSPACK_POPUPS_CPT, [ 'Newspack_Popups_Model', 'flush_above_header_cache' ] );
 		add_action( 'transition_post_status', [ __CLASS__, 'prevent_default_category_on_publish' ], 10, 3 );
 		add_action( 'transition_post_status', [ __CLASS__, 'store_activation_dates' ], 10, 3 );
+		add_action( 'transition_post_status', [ __CLASS__, 'flush_above_header_cache_on_transition' ], 10, 3 );
+		add_action( 'before_delete_post', [ __CLASS__, 'flush_above_header_cache_on_delete' ], 10, 2 );
+		add_action( 'added_post_meta', [ __CLASS__, 'flush_above_header_cache_on_meta' ], 10, 3 );
+		add_action( 'updated_post_meta', [ __CLASS__, 'flush_above_header_cache_on_meta' ], 10, 3 );
+		add_action( 'deleted_post_meta', [ __CLASS__, 'flush_above_header_cache_on_meta' ], 10, 3 );
 		add_action( 'pre_delete_term', [ __CLASS__, 'prevent_default_category_on_term_delete' ], 10, 2 );
 		add_filter( 'show_admin_bar', [ __CLASS__, 'show_admin_bar' ], 10, 2 ); // phpcs:ignore WordPressVIPMinimum.UserExperience.AdminBarRemoval.RemovalDetected
 		add_filter( 'newspack_blocks_should_deduplicate', [ __CLASS__, 'newspack_blocks_should_deduplicate' ], 10, 2 );
@@ -104,17 +110,82 @@ final class Newspack_Popups {
 		include_once __DIR__ . '/class-newspack-segments-migration.php';
 		include_once __DIR__ . '/class-newspack-segments-model.php';
 		include_once __DIR__ . '/class-newspack-popups-presets.php';
+		include_once __DIR__ . '/class-newspack-popups-contextual-prompt-pattern.php';
+		// Registered whether or not the feature is on: rolling the flag back must
+		// not leave the pattern deletable, since deleting it and re-enabling would
+		// orphan every instance a site already published.
+		Newspack_Popups_Contextual_Prompt_Pattern::init_protection();
+		if ( self::is_contextual_prompts_enabled() ) {
+			Newspack_Popups_Contextual_Prompt_Pattern::init();
+		}
+		include_once __DIR__ . '/class-newspack-popups-contextual-prompt-render.php';
+		if ( self::is_contextual_prompts_enabled() ) {
+			Newspack_Popups_Contextual_Prompt_Render::init();
+		}
+		// Registered whether or not the feature is on, so turning it off hides the
+		// prompts a site already publishes — and so a post saved on the beta, when
+		// a prompt was its own block, stops rendering an unmanaged card.
+		add_filter( 'render_block_core/block', [ 'Newspack_Popups_Contextual_Prompt_Render', 'maybe_strip_instance' ], 8, 2 );
+		add_filter( 'render_block', [ 'Newspack_Popups_Contextual_Prompt_Render', 'strip_legacy_block' ], 8, 2 );
 		include_once __DIR__ . '/class-newspack-popups-inserter.php';
 		include_once __DIR__ . '/class-newspack-popups-api.php';
 		include_once __DIR__ . '/class-newspack-popups-settings.php';
+		if ( self::is_contextual_prompts_enabled() ) {
+			// Registered outside the admin-only Settings init: an opt-in flipped
+			// over WP-CLI has to leave the same record as one flipped in the wizard.
+			Newspack_Popups_Settings::register_opt_in_audit();
+		}
 		include_once __DIR__ . '/class-newspack-popups-segmentation.php';
 		include_once __DIR__ . '/class-newspack-popups-custom-placements.php';
 		include_once __DIR__ . '/class-newspack-popups-view-as.php';
 		include_once __DIR__ . '/class-newspack-popups-data-api.php';
+		include_once __DIR__ . '/class-newspack-popups-ab-tests.php';
 		include_once __DIR__ . '/class-newspack-popups-criteria.php';
 		include_once __DIR__ . '/class-newspack-popups-expiry.php';
 		include_once __DIR__ . '/merge-tags/class-merge-tag.php';
 		include_once __DIR__ . '/merge-tags/class-merge-tags.php';
+	}
+
+	/**
+	 * Permalink of the configured donor landing page, or an empty string.
+	 *
+	 * @return string
+	 */
+	public static function get_donor_landing_url() {
+		$page_id = (int) Newspack_Popups_Settings::donor_landing_page();
+		if ( ! $page_id || 'publish' !== get_post_status( $page_id ) ) {
+			return '';
+		}
+		return (string) get_permalink( $page_id );
+	}
+
+	/**
+	 * Lowercased singular label of the post type being edited, for prompt UI
+	 * strings ("post", "page", "listing"…). Falls back to "post".
+	 *
+	 * @return string
+	 */
+	public static function get_current_post_type_label() {
+		$post_type_object = get_post_type_object( (string) get_post_type() );
+		if ( $post_type_object && ! empty( $post_type_object->labels->singular_name ) ) {
+			$label = $post_type_object->labels->singular_name;
+			return function_exists( 'mb_strtolower' ) ? mb_strtolower( $label ) : strtolower( $label );
+		}
+		return __( 'post', 'newspack-popups' );
+	}
+
+	/**
+	 * The singular label as the post type declares it, for headings ("Top of
+	 * Post"). Kept as-is: recasing it would mis-case some locales.
+	 *
+	 * @return string
+	 */
+	public static function get_current_post_type_heading() {
+		$post_type_object = get_post_type_object( (string) get_post_type() );
+		if ( $post_type_object && ! empty( $post_type_object->labels->singular_name ) ) {
+			return (string) $post_type_object->labels->singular_name;
+		}
+		return __( 'Post', 'newspack-popups' );
 	}
 
 	/**
@@ -699,6 +770,33 @@ final class Newspack_Popups {
 	}
 
 	/**
+	 * Whether the Contextual Prompts feature is enabled.
+	 *
+	 * @return bool
+	 */
+	public static function is_contextual_prompts_enabled() {
+		/**
+		 * Enables the Contextual Prompts feature, which lets editors generate
+		 * story-specific donation call-to-action copy with AI.
+		 *
+		 * @constant NEWSPACK_CONTEXTUAL_PROMPTS
+		 * @type     bool
+		 * @default  Contextual Prompts disabled
+		 * @status   draft
+		 *
+		 * @example define( 'NEWSPACK_CONTEXTUAL_PROMPTS', true );
+		 */
+		if ( defined( 'IS_TEST_ENV' ) && IS_TEST_ENV ) {
+			return defined( 'NEWSPACK_CONTEXTUAL_PROMPTS' ) && NEWSPACK_CONTEXTUAL_PROMPTS;
+		}
+		static $enabled = null;
+		if ( null === $enabled ) {
+			$enabled = defined( 'NEWSPACK_CONTEXTUAL_PROMPTS' ) && NEWSPACK_CONTEXTUAL_PROMPTS;
+		}
+		return $enabled;
+	}
+
+	/**
 	 * Load block assets in the editor.
 	 */
 	public static function enqueue_block_assets() {
@@ -714,6 +812,10 @@ final class Newspack_Popups {
 			return;
 		}
 
+		// The rollout flag plus the admin opt-in: nothing Contextual Prompts is
+		// exposed, and no pattern is seeded, before the AI disclosure is accepted.
+		$contextual_prompts_enabled = self::is_contextual_prompts_enabled() && Newspack_Popups_Settings::is_ai_copy_assistant_enabled();
+
 		$blocks_asset = require $blocks_asset_path;
 		\wp_enqueue_script(
 			'newspack-popups-blocks',
@@ -727,10 +829,21 @@ final class Newspack_Popups {
 			'newspack-popups-blocks',
 			'newspack_popups_blocks_data',
 			[
-				'custom_placements' => Newspack_Popups_Custom_Placements::get_custom_placements(),
-				'endpoint'          => '/newspack-popups/v1/prompts',
-				'post_type'         => self::NEWSPACK_POPUPS_CPT,
-				'is_prompt'         => self::NEWSPACK_POPUPS_CPT == get_post_type(),
+				'custom_placements'             => Newspack_Popups_Custom_Placements::get_custom_placements(),
+				'endpoint'                      => '/newspack-popups/v1/prompts',
+				'post_type'                     => self::NEWSPACK_POPUPS_CPT,
+				'is_prompt'                     => self::NEWSPACK_POPUPS_CPT == get_post_type(),
+				// Gates the Contextual Prompt inspector on the client.
+				'contextual_prompts_enabled'    => $contextual_prompts_enabled,
+				// The pattern every Contextual Prompt instance references, which is
+				// how the editor recognizes one.
+				'contextual_prompts_pattern_id' => $contextual_prompts_enabled ? Newspack_Popups_Contextual_Prompt_Pattern::get_pattern_id() : 0,
+				// The edited content's own noun ("post", "page", "listing"…), so
+				// prompt UI strings speak the publisher's language.
+				'post_type_label'               => self::get_current_post_type_label(),
+				// The label as the post type declares it, for headings; recasing
+				// the lowercased noun client-side would mis-case some locales.
+				'post_type_heading'             => self::get_current_post_type_heading(),
 			]
 		);
 
@@ -814,6 +927,24 @@ final class Newspack_Popups {
 					$document_settings_asset['version'] ?? filemtime( $document_settings_script_path ),
 					true
 				);
+				// The script also carries the long-standing "Disable prompts" panel,
+				// so only the Contextual Prompt data is gated on the rollout flag.
+				if ( self::is_contextual_prompts_enabled() ) {
+					$opted_in = Newspack_Popups_Settings::is_ai_copy_assistant_enabled();
+					\wp_localize_script(
+						'newspack-popups',
+						'newspackPopupsContextualPrompt',
+						[
+							'enabled'         => $opted_in,
+							// The pattern instances the panel inserts and updates.
+							// Reading the id seeds it, so it is only asked for once
+							// the site has opted in.
+							'patternId'       => $opted_in ? Newspack_Popups_Contextual_Prompt_Pattern::get_pattern_id() : 0,
+							'postTypeLabel'   => self::get_current_post_type_label(),
+							'postTypeHeading' => self::get_current_post_type_heading(),
+						]
+					);
+				}
 			}
 
 			return;
@@ -838,7 +969,6 @@ final class Newspack_Popups {
 			'newspack-popups',
 			'newspack_popups_data',
 			[
-				'frontend_url'                 => get_site_url(),
 				'preview_post'                 => self::preview_post_permalink(),
 				'preview_archive'              => self::preview_archive_permalink(),
 				'custom_placements'            => Newspack_Popups_Custom_Placements::get_custom_placements(),
@@ -920,6 +1050,23 @@ final class Newspack_Popups {
 	}
 
 	/**
+	 * Whether the current user may preview a given prompt.
+	 *
+	 * Previews render unsaved, request-supplied prompt content, so both halves
+	 * matter: the capability, and the id actually naming a prompt. Shared so the
+	 * renderer (Newspack_Popups_Model::retrieve_preview_popup) and the front-end
+	 * param list (Newspack_Popups_Inserter::preview_param_names) cannot drift apart
+	 * — a gate stricter than the renderer would produce a preview whose links go
+	 * nowhere, and one looser would leak preview state onto ordinary pages.
+	 *
+	 * @param int|string $post_id Prompt ID from the request.
+	 * @return bool
+	 */
+	public static function can_preview_popup( $post_id ) {
+		return self::is_user_admin() && self::NEWSPACK_POPUPS_CPT === get_post_type( $post_id );
+	}
+
+	/**
 	 * Get previewed popup id from the URL.
 	 *
 	 * @return number|null Popup id, if found in the URL
@@ -938,11 +1085,17 @@ final class Newspack_Popups {
 	 * @return string|null Popup slug, if found in the URL
 	 */
 	public static function preset_popup_id() {
+		// Param first, so a normal request does not pay for a capability check.
 		// Not using filter_input since it's not playing well with phpunit.
-		if ( isset( $_GET[ self::NEWSPACK_POPUP_PRESET_QUERY_PARAM ] ) && $_GET[ self::NEWSPACK_POPUP_PRESET_QUERY_PARAM ] ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended, WordPress.Security.ValidatedSanitizedInput.InputNotSanitized
-			return sanitize_text_field( $_GET[ self::NEWSPACK_POPUP_PRESET_QUERY_PARAM ] ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		if ( ! isset( $_GET[ self::NEWSPACK_POPUP_PRESET_QUERY_PARAM ] ) || ! $_GET[ self::NEWSPACK_POPUP_PRESET_QUERY_PARAM ] ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended, WordPress.Security.ValidatedSanitizedInput.InputNotSanitized
+			return null;
 		}
-		return null;
+		// Ignored for everyone else: preview mode suppresses prompts and swaps the
+		// reader data store.
+		if ( ! self::is_user_admin() ) {
+			return null;
+		}
+		return sanitize_text_field( $_GET[ self::NEWSPACK_POPUP_PRESET_QUERY_PARAM ] ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
 	}
 
 	/**
@@ -1044,11 +1197,17 @@ final class Newspack_Popups {
 	 * Is the user an admin or editor user?
 	 * If so, prompts will be shown to these users while logged in, but analytics
 	 * will not be fired for them.
+	 *
+	 * This also gates the prompt and preset preview paths, which render
+	 * request-supplied content, so widening it widens who can reach those.
 	 */
 	public static function is_user_admin() {
 		/**
 		 * Filter to allow other plugins to decide which capability should be checked
 		 * to determine whether a user's activity should be tracked via Google Analytics.
+		 *
+		 * Also gates the prompt and preset previews, so widening this widens who can
+		 * render request-supplied content through them.
 		 *
 		 * @param string $capability Capability to check. Default: edit_others_pages.
 		 * @return string Filtered capability string.
@@ -1201,6 +1360,51 @@ final class Newspack_Popups {
 	}
 
 	/**
+	 * Flush the above-header prompt detection cache when a prompt's status changes.
+	 *
+	 * @param string  $new_status New status.
+	 * @param string  $old_status Old status.
+	 * @param WP_Post $post       Post.
+	 */
+	public static function flush_above_header_cache_on_transition( $new_status, $old_status, $post ) {
+		if ( self::NEWSPACK_POPUPS_CPT === $post->post_type ) {
+			Newspack_Popups_Model::flush_above_header_cache();
+		}
+	}
+
+	/**
+	 * Flush the above-header prompt detection cache when a prompt is permanently deleted.
+	 *
+	 * @param int          $post_id Post ID.
+	 * @param WP_Post|null $post    Post object.
+	 */
+	public static function flush_above_header_cache_on_delete( $post_id, $post = null ) {
+		$post_type = $post instanceof WP_Post ? $post->post_type : get_post_type( $post_id );
+		if ( self::NEWSPACK_POPUPS_CPT === $post_type ) {
+			Newspack_Popups_Model::flush_above_header_cache();
+		}
+	}
+
+	/**
+	 * Flush the above-header prompt detection cache when a prompt's placement meta
+	 * changes outside of a post save (e.g. a CLI/importer/programmatic meta update).
+	 *
+	 * Shared handler for added_post_meta / updated_post_meta / deleted_post_meta, whose
+	 * second and third arguments are the object ID and meta key in every case. WordPress
+	 * offers no post-type-scoped variant of these hooks, so the post type is checked here;
+	 * the meta key is compared first to keep that check off the path of unrelated writes.
+	 *
+	 * @param int|int[] $meta_id   Meta ID (or IDs, for deleted_post_meta). Unused.
+	 * @param int       $object_id Post ID the meta belongs to.
+	 * @param string    $meta_key  Meta key being changed.
+	 */
+	public static function flush_above_header_cache_on_meta( $meta_id, $object_id, $meta_key ) {
+		if ( 'placement' === $meta_key && self::NEWSPACK_POPUPS_CPT === get_post_type( $object_id ) ) {
+			Newspack_Popups_Model::flush_above_header_cache();
+		}
+	}
+
+	/**
 	 * When a category is deleted, any posts that have only that category assigned
 	 * are automatically assigned the site's default category (usually "Uncategorized").
 	 * We want to prevent this behavior for prompts, as prompts with the default
@@ -1229,7 +1433,7 @@ final class Newspack_Popups {
 				'fields'           => 'ids',
 				'post_status'      => 'any',
 				'post_type'        => self::NEWSPACK_POPUPS_CPT,
-				'posts_per_page'   => -1,
+				'posts_per_page'   => -1, // phpcs:ignore WordPressVIPMinimum.Performance.NoPaging -- Prompt CPT; config-scale.
 			]
 		);
 

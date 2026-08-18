@@ -425,19 +425,24 @@ class ESP extends Integration {
 	/**
 	 * Push contact data to the integration destination.
 	 *
-	 * @param array      $contact The contact data to push.
-	 * @param string     $context Optional. The context of the sync.
+	 * @param array      $contact          The contact data to push.
+	 * @param string     $context          Optional. The context of the sync.
 	 * @param array|null $existing_contact Optional. Existing contact data if available.
+	 * @param array      $options          Optional. Sync options. Recognized keys:
+	 *                                     `skip_lists` (bool) — upsert without a master
+	 *                                     list so an unsubscribed contact is not
+	 *                                     resubscribed (the contact is still created if
+	 *                                     missing, but joins no list).
 	 *
 	 * @return true|\WP_Error True on success or WP_Error on failure.
 	 */
-	public function push_contact_data( $contact, $context = '', $existing_contact = null ) {
+	public function push_contact_data( $contact, $context = '', $existing_contact = null, $options = [] ) {
 		$can_sync = $this->can_sync( true );
 		if ( $can_sync->has_errors() ) {
 			return $can_sync;
 		}
 
-		$master_list_id = $this->get_master_list_id();
+		$master_list_id = ! empty( $options['skip_lists'] ) ? false : $this->get_master_list_id();
 
 		return Newspack_Newsletters_Contacts::upsert( $contact, $master_list_id, $context, $existing_contact );
 	}
@@ -485,10 +490,44 @@ class ESP extends Integration {
 
 		$contact_data = Newspack_Newsletters_Subscription::get_contact_data( $user->user_email, true );
 
+		// The provider may memoize each contact's raw API payload for the life of
+		// the request (ActiveCampaign does); a bulk pull reads each contact once,
+		// so release the entry as soon as it is consumed — the batch loops'
+		// object-cache flush cannot reach provider-internal caches.
+		$provider = \Newspack_Newsletters::get_service_provider();
+		if ( $provider && method_exists( $provider, 'clear_contact_data' ) ) {
+			$provider->clear_contact_data( $user->user_email );
+		}
+
 		if ( is_wp_error( $contact_data ) ) {
+			// Providers name "no such contact" differently (Mailchimp has a
+			// dedicated code, ActiveCampaign a generic one); normalize to the
+			// framework's canonical code so batch drivers can classify the
+			// reader as skipped without provider knowledge.
+			$not_found_codes = [
+				'newspack_newsletters_mailchimp_contact_not_found',
+				'newspack_newsletters_contact_not_found',
+			];
+			if ( in_array( $contact_data->get_error_code(), $not_found_codes, true ) ) {
+				return new \WP_Error( self::CONTACT_NOT_FOUND_ERROR_CODE, $contact_data->get_error_message() );
+			}
 			return $contact_data;
 		}
 
+		// The enabled incoming fields are defined from one specific list — see
+		// get_available_incoming_fields(), which resolves the field schema from
+		// get_master_list_id(). Providers whose fields are per-list (Mailchimp
+		// merge fields belong to an audience) report them keyed by list, so read
+		// the configured list's entry: a reader belonging to several lists would
+		// otherwise get whichever list the provider happened to report last,
+		// storing another list's values or none at all.
+		$master_list_id = $this->get_master_list_id();
+		if ( $master_list_id && isset( $contact_data['metadata_by_list'] ) && is_array( $contact_data['metadata_by_list'] ) ) {
+			return $contact_data['metadata_by_list'][ $master_list_id ] ?? [];
+		}
+
+		// Providers with account-wide fields (ActiveCampaign) report a single flat
+		// map, with no per-list ambiguity to resolve.
 		if ( ! empty( $contact_data['metadata'] ) ) {
 			return $contact_data['metadata'];
 		}

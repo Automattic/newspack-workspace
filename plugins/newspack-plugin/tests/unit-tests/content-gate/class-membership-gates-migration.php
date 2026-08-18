@@ -1,11 +1,14 @@
 <?php
 /**
- * Characterization tests for the migrate-membership-gates CLI (NPPD-2059).
+ * Tests for the migrate-membership-gates CLI (NPPD-2059, NPPD-2106).
  *
- * These pin the behavior of the pure mapping/fingerprint/layout-extraction
- * helpers exactly as ported from the standalone drop-in. Where a test asserts a
- * buggy result on purpose it is flagged with the follow-up issue ID; those
- * stacked fixes will flip the corresponding assertion:
+ * These pin the behavior of the pure mapping/fingerprint/layout-extraction and
+ * paid-access-rule (subscription / one_time_purchase) helpers. The NPPD-2106
+ * paid-access mapping tests (map_access_length_to_duration, build_paid_access_rules,
+ * describe_paid_access_rules, apply_paid_access, get_group_paid_descriptors) sit
+ * alongside the original characterization tests. Where a test asserts a buggy result
+ * on purpose it is flagged with the follow-up issue ID; those stacked fixes will flip
+ * the corresponding assertion:
  *
  * - NPPD-2058: extract_gate_layouts() only inspects top-level wrapper blocks, so
  *   nested / reusable-block gate layouts migrate as empty. Pinned by the
@@ -29,6 +32,8 @@ namespace Newspack\Tests\Content_Gate;
 
 use Newspack\CLI\Membership_Gates_Migration;
 
+// The get_group_paid_descriptors tests assert on WP_CLI warnings, so the recording
+// WP_CLI mock (which captures them in WP_CLI::$warnings) must be loaded.
 require_once dirname( __DIR__, 2 ) . '/mocks/wp-cli-mock.php';
 require_once dirname( __DIR__, 3 ) . '/includes/cli/class-membership-gates-migration.php';
 
@@ -108,6 +113,50 @@ class Test_Membership_Gates_Migration extends \WP_UnitTestCase {
 				return $this->object_ids;
 			}
 		};
+	}
+
+	/**
+	 * Build a plan-group descriptor as group_plans_by_fingerprint() would, carrying
+	 * just the access method group_requires_purchase() inspects.
+	 *
+	 * @param string $access_method The WCM plan access method ('purchase' or 'signup').
+	 *
+	 * @return array
+	 */
+	private function make_group_plan( string $access_method ): array {
+		return [
+			'pid'           => 0,
+			'name'          => 'Plan',
+			'access_method' => $access_method,
+			'ac_rules'      => [],
+			'product_ids'   => [],
+		];
+	}
+
+	/**
+	 * A group is purchase-gated only when EVERY plan requires a purchase — the two
+	 * gate modes AND for a logged-in reader, so a mixed group would demand the
+	 * subscription from members the signup plan granted for free. A group holding one
+	 * signup plan and one purchase plan is therefore registration-gated, not
+	 * purchase-gated.
+	 */
+	public function test_group_requires_purchase_only_when_every_plan_is_purchase() {
+		$all_purchase = [ $this->make_group_plan( 'purchase' ), $this->make_group_plan( 'purchase' ) ];
+		$mixed        = [ $this->make_group_plan( 'signup' ), $this->make_group_plan( 'purchase' ) ];
+		$all_signup   = [ $this->make_group_plan( 'signup' ) ];
+
+		$this->assertTrue(
+			$this->invoke_private_static( 'group_requires_purchase', [ $all_purchase ] ),
+			'A group where every plan requires a purchase is purchase-gated.'
+		);
+		$this->assertFalse(
+			$this->invoke_private_static( 'group_requires_purchase', [ $mixed ] ),
+			'A mixed signup+purchase group is registration-gated — the signup plan grants the more permissive access.'
+		);
+		$this->assertFalse(
+			$this->invoke_private_static( 'group_requires_purchase', [ $all_signup ] ),
+			'A signup-only group is registration-gated.'
+		);
 	}
 
 	/**
@@ -344,6 +393,153 @@ HTML;
 	}
 
 	/**
+	 * A gate whose rules are only partly resolvable under-gates rather than failing
+	 * outright: the rules combine with 'any', so the content behind the dead slugs is
+	 * left readable while the rest is gated. That partial leak is reported too — a
+	 * plan restricting all posts plus a category (a common WCM configuration) maps to
+	 * exactly this shape, and reporting it clean would hide the NPPD-2063 blast radius
+	 * until cutover.
+	 */
+	public function test_verify_migrated_gate_flags_content_rules_only_some_of_which_resolve() {
+		$gate_id = $this->create_enforceable_gate(
+			[
+				[
+					'slug'  => 'post',
+					'value' => [ '1' ],
+				],
+				[
+					'slug'  => 'category',
+					'value' => [ '2' ],
+				],
+			]
+		);
+
+		$issues = $this->invoke_private_static( 'verify_migrated_gate', [ $gate_id ] );
+
+		$this->assertCount( 1, $issues );
+		$this->assertStringContainsString( '1 of its 2 content rules do not resolve', $issues[0] );
+		$this->assertStringContainsString( 'post', $issues[0], 'The dead slug is named so the operator knows what is left ungated.' );
+	}
+
+	/**
+	 * A gate migrated from a plan that required a purchase, but whose paid access mode
+	 * was never activated, lets any registered reader through: registration mode alone
+	 * stops nobody with an account, since the migration never writes
+	 * require_verification. That is a worse outcome than an inert gate — the content
+	 * silently loses its paywall at cutover — so it must not pass verification.
+	 */
+	public function test_verify_migrated_gate_flags_a_purchase_gate_with_no_paid_access_mode() {
+		$gate_id = $this->create_enforceable_gate(
+			[
+				[
+					'slug'  => 'post_types',
+					'value' => [ 'post' ],
+				],
+			]
+		);
+
+		$issues = $this->invoke_private_static( 'verify_migrated_gate', [ $gate_id, true ] );
+
+		$this->assertCount( 1, $issues );
+		$this->assertStringContainsString( 'its paid access mode is not active', $issues[0] );
+		$this->assertSame(
+			[],
+			$this->invoke_private_static( 'verify_migrated_gate', [ $gate_id, false ] ),
+			'The same gate is fine for a signup-only plan — only the purchase requirement makes it a leak.'
+		);
+	}
+
+	/**
+	 * An active paid access mode with no access rules asks for no purchase:
+	 * is_post_restricted() skips an empty rule set, so a registered reader passes.
+	 * Reachable when every one of a plan's products is a variation (dropped as gates
+	 * reference parent products only) or when the plan has no products at all.
+	 */
+	public function test_verify_migrated_gate_flags_a_purchase_gate_whose_paid_access_has_no_rules() {
+		$gate_id = $this->create_enforceable_gate(
+			[
+				[
+					'slug'  => 'post_types',
+					'value' => [ 'post' ],
+				],
+			]
+		);
+		\Newspack\Content_Gate::update_custom_access_settings(
+			$gate_id,
+			[
+				'active'         => true,
+				'gate_layout_id' => \Newspack\Content_Gate::create_gate_layout( 'Paid access fixture layout', '' ),
+				'access_rules'   => [],
+			]
+		);
+
+		$issues = $this->invoke_private_static( 'verify_migrated_gate', [ $gate_id, true ] );
+
+		$this->assertCount( 1, $issues );
+		$this->assertStringContainsString( 'no access rules', $issues[0] );
+	}
+
+	/**
+	 * The paid path migrated fully — an active paid access mode constrained by the
+	 * plan's products — so nothing is reported.
+	 */
+	public function test_verify_migrated_gate_passes_a_purchase_gate_with_product_access_rules() {
+		$gate_id = $this->create_enforceable_gate(
+			[
+				[
+					'slug'  => 'post_types',
+					'value' => [ 'post' ],
+				],
+			]
+		);
+		\Newspack\Content_Gate::update_custom_access_settings(
+			$gate_id,
+			[
+				'active'         => true,
+				'gate_layout_id' => \Newspack\Content_Gate::create_gate_layout( 'Paid access fixture layout', '' ),
+				'access_rules'   => [
+					[
+						[
+							'slug'  => 'subscription',
+							'value' => [ 123 ],
+						],
+					],
+				],
+			]
+		);
+
+		$this->assertSame( [], $this->invoke_private_static( 'verify_migrated_gate', [ $gate_id, true ] ) );
+	}
+
+	/**
+	 * The evaluator only checks that a mode's layout ID is truthy, so a blank layout
+	 * post counts as "gated" and the reader gets a truncated article with nothing
+	 * under it — no form, no upsell, no explanation.
+	 */
+	public function test_verify_migrated_gate_flags_an_active_mode_with_an_empty_layout() {
+		$gate_id = $this->create_enforceable_gate(
+			[
+				[
+					'slug'  => 'post_types',
+					'value' => [ 'post' ],
+				],
+			]
+		);
+		$layout_id = \Newspack\Content_Gate::get_registration_settings( $gate_id )['gate_layout_id'];
+		wp_update_post(
+			[
+				'ID'           => $layout_id,
+				'post_content' => '',
+			]
+		);
+
+		$issues = $this->invoke_private_static( 'verify_migrated_gate', [ $gate_id ] );
+
+		$this->assertCount( 1, $issues );
+		$this->assertStringContainsString( 'points at an empty layout', $issues[0] );
+	}
+
+	/**
 	 * A gate written with rule slugs the evaluator handles by name, an active mode and
 	 * a layout post passes verification with no issues.
 	 */
@@ -423,6 +619,191 @@ HTML;
 				sprintf( 'Expected "%s" to be unresolvable.', $unresolvable_slug )
 			);
 		}
+	}
+
+	// -------------------------------------------------------------------------
+	// compute_pre_write_issues() — dry-run predictive verification
+	// -------------------------------------------------------------------------
+
+	/**
+	 * A plan with all-unresolvable content-rule slugs is flagged in dry-run, mirroring
+	 * the "none of its content rules resolve" check in verify_migrated_gate().
+	 */
+	public function test_compute_pre_write_issues_flags_all_unresolvable_slugs() {
+		$ac_rules = [
+			[
+				'slug'  => 'post',
+				'value' => [ '1' ],
+			],
+		];
+		$layouts  = [
+			'registration'  => '',
+			'custom_access' => null,
+		];
+
+		$issues = $this->invoke_private_static(
+			'compute_pre_write_issues',
+			[ $ac_rules, false, $layouts, [] ]
+		);
+
+		$this->assertCount( 1, $issues );
+		$this->assertStringContainsString( 'none of its content rules resolve', $issues[0] );
+		$this->assertStringContainsString( 'post', $issues[0] );
+	}
+
+	/**
+	 * When only some slugs are unresolvable, the partial-leak variant of the message
+	 * is produced — the content behind the dead rules stays ungated while the rest is
+	 * covered.
+	 */
+	public function test_compute_pre_write_issues_flags_partially_unresolvable_slugs() {
+		$ac_rules = [
+			[
+				'slug'  => 'post',
+				'value' => [ '1' ],
+			],
+			[
+				'slug'  => 'category',
+				'value' => [ '2' ],
+			],
+		];
+		$layouts = [
+			'registration'  => '',
+			'custom_access' => null,
+		];
+
+		$issues = $this->invoke_private_static(
+			'compute_pre_write_issues',
+			[ $ac_rules, false, $layouts, [] ]
+		);
+
+		$this->assertCount( 1, $issues );
+		$this->assertStringContainsString( '1 of its 2 content rules do not resolve', $issues[0] );
+	}
+
+	/**
+	 * A purchase plan with no custom_access layout extracted is flagged — apply_layout()
+	 * will be skipped for the paid access mode, so any registered reader gets through.
+	 * Mirrors verify_migrated_gate()'s "paid access mode is not active" check.
+	 */
+	public function test_compute_pre_write_issues_flags_purchase_plan_with_no_custom_access_layout() {
+		$ac_rules = [
+			[
+				'slug'  => 'post_types',
+				'value' => [ 'post' ],
+			],
+		];
+		$layouts  = [
+			'registration'  => '<p>Upsell.</p>',
+			'custom_access' => null,
+		];
+
+		$issues = $this->invoke_private_static(
+			'compute_pre_write_issues',
+			[
+				$ac_rules,
+				true,
+				$layouts,
+				[
+					[
+						[
+							'slug'  => 'subscription',
+							'value' => [ 123 ],
+						],
+					],
+				],
+			]
+		);
+
+		$this->assertCount( 1, $issues );
+		$this->assertStringContainsString( 'paid access mode will not be activated', $issues[0] );
+	}
+
+	/**
+	 * A purchase plan whose products all failed to map to a paid access rule is flagged
+	 * — access_rules will be an empty array, so the paid access mode asks for no
+	 * purchase and any registered reader passes. Mirrors verify_migrated_gate()'s
+	 * "active but has no access rules" check.
+	 */
+	public function test_compute_pre_write_issues_flags_purchase_plan_with_no_mappable_paid_rules() {
+		$ac_rules = [
+			[
+				'slug'  => 'post_types',
+				'value' => [ 'post' ],
+			],
+		];
+		$layouts  = [
+			'registration'  => '<p>Upsell.</p>',
+			'custom_access' => '<p>Member content.</p>',
+		];
+
+		$issues = $this->invoke_private_static(
+			'compute_pre_write_issues',
+			[ $ac_rules, true, $layouts, [] ]
+		);
+
+		$this->assertCount( 1, $issues );
+		$this->assertStringContainsString( 'no access rules', $issues[0] );
+	}
+
+	/**
+	 * A signup-only plan with resolvable slugs produces no pre-write issues.
+	 */
+	public function test_compute_pre_write_issues_returns_empty_for_a_clean_signup_plan() {
+		$ac_rules = [
+			[
+				'slug'  => 'post_types',
+				'value' => [ 'post' ],
+			],
+		];
+		$layouts  = [
+			'registration'  => '<p>Register.</p>',
+			'custom_access' => null,
+		];
+
+		$this->assertSame(
+			[],
+			$this->invoke_private_static(
+				'compute_pre_write_issues',
+				[ $ac_rules, false, $layouts, [] ]
+			)
+		);
+	}
+
+	/**
+	 * A purchase plan with a custom_access layout and a mapped paid access rule is clean.
+	 */
+	public function test_compute_pre_write_issues_returns_empty_for_a_clean_purchase_plan() {
+		$ac_rules = [
+			[
+				'slug'  => 'post_types',
+				'value' => [ 'post' ],
+			],
+		];
+		$layouts  = [
+			'registration'  => '<p>Upsell.</p>',
+			'custom_access' => '<p>Welcome.</p>',
+		];
+
+		$this->assertSame(
+			[],
+			$this->invoke_private_static(
+				'compute_pre_write_issues',
+				[
+					$ac_rules,
+					true,
+					$layouts,
+					[
+						[
+							[
+								'slug'  => 'subscription',
+								'value' => [ 99 ],
+							],
+						],
+					],
+				]
+			)
+		);
 	}
 
 	/**
@@ -710,11 +1091,15 @@ HTML;
 	}
 
 	/**
-	 * NPPD-2106 review: both gate evaluators treat empty access rules as
-	 * unrestricted, so a paid access mode that is active with no rules leaves the
-	 * gate open to every registered reader — verify_migrated_gate() must flag it.
+	 * NPPD-2106 review: an active paid mode with no rules is flagged even when the gate
+	 * was NOT classified as a purchase — verify_migrated_gate() is called with the
+	 * default $has_purchase (false) here. Both evaluators treat empty access rules as
+	 * unrestricted, so a signup or mixed gate carrying a leftover active-but-ruleless
+	 * paid mode (a prior run, or a hand-edit) still leaks to every registered reader.
+	 * The purchase-classified case is covered by
+	 * test_verify_migrated_gate_flags_a_purchase_gate_whose_paid_access_has_no_rules().
 	 */
-	public function test_verify_migrated_gate_flags_an_active_paid_access_mode_with_no_access_rules() {
+	public function test_verify_migrated_gate_flags_an_active_ruleless_paid_mode_even_without_purchase() {
 		$gate_id = $this->create_enforceable_gate(
 			[
 				[
@@ -732,10 +1117,11 @@ HTML;
 			]
 		);
 
+		// No $has_purchase argument: the check must fire on the default (false).
 		$issues = $this->invoke_private_static( 'verify_migrated_gate', [ $gate_id ] );
 
 		$this->assertContains(
-			'the paid access mode is active with no access rules — registered readers are not restricted by it',
+			'its paid access mode is active but has no access rules, so it asks for no purchase — any registered reader would get in',
 			$issues
 		);
 	}
@@ -839,7 +1225,7 @@ HTML;
 		try {
 			$descriptors = $this->invoke_private_static(
 				'get_group_paid_descriptors',
-				[ [ $this->make_group_plan( [ 201 ] ) ] ]
+				[ [ $this->make_paid_group_plan( [ 201 ] ) ] ]
 			);
 		} finally {
 			$rules_property->setValue( null, $original_rules );
@@ -874,7 +1260,7 @@ HTML;
 		try {
 			$descriptors = $this->invoke_private_static(
 				'get_group_paid_descriptors',
-				[ [ $this->make_group_plan( [ $variation_id, 201 ] ) ] ]
+				[ [ $this->make_paid_group_plan( [ $variation_id, 201 ] ) ] ]
 			);
 		} finally {
 			$rules_property->setValue( null, $original_rules );
@@ -897,7 +1283,7 @@ HTML;
 	 *
 	 * @return array The plan descriptor.
 	 */
-	private function make_group_plan( array $product_ids, $access_length_amount = '', string $access_length_period = '', string $access_length_type = 'unlimited' ): array {
+	private function make_paid_group_plan( array $product_ids, $access_length_amount = '', string $access_length_period = '', string $access_length_type = 'unlimited' ): array {
 		return [
 			'pid'                  => 0,
 			'name'                 => 'Guard fixture plan',

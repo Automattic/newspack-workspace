@@ -14,6 +14,12 @@ defined( 'ABSPATH' ) || exit;
  */
 class WooCommerce_Subscriptions {
 	/**
+	 * Order meta holding the IDs of pending-cancel subscriptions that were
+	 * reactivated for a switch processed on that order.
+	 */
+	const REACTIVATED_FOR_SWITCH_META = '_newspack_switch_reactivated_subscriptions';
+
+	/**
 	 * Initialize hooks and filters.
 	 */
 	public static function init() {
@@ -26,6 +32,28 @@ class WooCommerce_Subscriptions {
 		add_filter( 'wcs_switch_proration_days_in_old_cycle', [ __CLASS__, 'bound_switch_proration_days_in_old_cycle' ], 10, 2 );
 		add_filter( 'wcs_switch_sign_up_fee', [ __CLASS__, 'apply_stepped_pricing_switch_charge' ], 10, 2 );
 		add_filter( 'wcs_can_user_resubscribe_to_subscription', [ __CLASS__, 'allow_migrated_subscription_to_resubscribe' ], 10, 3 );
+
+		// Pending-cancel switches: eligibility plus the reactivate-then-switch
+		// pair. The three callbacks work together — see
+		// allow_pending_cancel_subscription_switch() for the whole story.
+		add_filter( 'woocommerce_subscriptions_can_item_be_switched', [ __CLASS__, 'allow_pending_cancel_subscription_switch' ], 10, 3 );
+		// Priority 40: WC_Subscriptions_Switcher::process_checkout() runs at 50
+		// on both hooks, and it must see an already-active subscription.
+		add_action( 'woocommerce_checkout_order_processed', [ __CLASS__, 'maybe_reactivate_pending_cancel_switch' ], 40 );
+		add_action( 'woocommerce_store_api_checkout_order_processed', [ __CLASS__, 'maybe_reactivate_pending_cancel_switch' ], 40 );
+		add_action( 'woocommerce_order_status_failed', [ __CLASS__, 'maybe_revert_reactivation_on_failed_switch' ] );
+		add_action( 'woocommerce_order_status_cancelled', [ __CLASS__, 'maybe_revert_reactivation_on_failed_switch' ] );
+
+		// Adding a card to a subscription that has no next payment date: eligibility
+		// plus the follow-through that resumes billing. See
+		// allow_add_payment_method_without_next_payment() for the whole story.
+		// Priority 20: WCS registers its own answer at 10 and we only override a no.
+		add_filter( 'woocommerce_can_subscription_be_updated_to_new-payment-method', [ __CLASS__, 'allow_add_payment_method_without_next_payment' ], 20, 2 );
+		// Not `woocommerce_subscription_payment_method_updated`: that fires before the
+		// card is validated or charged, so a declined card would still leave a
+		// schedule behind. This filter runs after process_payment() and carries its
+		// result, so the schedule can follow the payment instead of preceding it.
+		add_filter( 'woocommerce_subscriptions_process_payment_for_change_method_via_pay_shortcode', [ __CLASS__, 'schedule_next_payment_after_payment_method_added' ], 10, 2 );
 	}
 
 	/**
@@ -90,6 +118,470 @@ class WooCommerce_Subscriptions {
 		}
 
 		return $can_switch;
+	}
+
+	/**
+	 * Allow a pending-cancel subscription to be switched.
+	 *
+	 * WCS's own eligibility test (WC_Subscriptions_Switcher::is_action_allowed())
+	 * requires `active` status, which shuts the tiers/upgrade modal for exactly
+	 * the win-back readers it targets (NPPM-2952): a reader who turned off
+	 * auto-renew is `pending-cancel` for the rest of their paid term.
+	 *
+	 * Granting eligibility alone is not enough, though: WCS's checkout
+	 * processing computes a `next_payment` date update for the switched
+	 * subscription, and its date validation rejects any `next_payment` on a
+	 * subscription carrying a `cancelled` date — the switch would hard-fail at
+	 * checkout. The completing half is therefore
+	 * {@see maybe_reactivate_pending_cancel_switch()}, which reactivates the
+	 * subscription immediately before WCS processes the switch order, restoring
+	 * exactly the state WCS's active-switch flow is built for (cancelled date
+	 * cleared, next payment back on the prepaid-term end). A switch initiated
+	 * from a pending-cancel subscription thus means "resume auto-renewal on the
+	 * new tier". If the switch order fails,
+	 * {@see maybe_revert_reactivation_on_failed_switch()} puts the subscription
+	 * back to pending-cancel.
+	 *
+	 * Eligibility is gated on `can_be_updated_to( 'active' )` so the offer is
+	 * only made when that reactivation can actually happen (end date still in
+	 * the future; payment method supports reactivation and date changes, or
+	 * manual renewals). The remaining checks mirror the non-status half of
+	 * WCS's own is_action_allowed().
+	 *
+	 * @param bool                   $can_switch   Whether the item can be switched.
+	 * @param \WC_Order_Item_Product $item         An order item on the subscription to switch.
+	 * @param \WC_Subscription       $subscription An instance of WC_Subscription.
+	 *
+	 * @return bool Whether the item can be switched.
+	 */
+	public static function allow_pending_cancel_subscription_switch( $can_switch, $item, $subscription ) {
+		if ( $can_switch ) {
+			return $can_switch;
+		}
+
+		if ( ! ( $subscription instanceof \WC_Subscription ) || ! $subscription->has_status( 'pending-cancel' ) ) {
+			return $can_switch;
+		}
+
+		if ( ! $subscription->can_be_updated_to( 'active' ) ) {
+			return $can_switch;
+		}
+
+		if ( ! function_exists( 'wcs_get_canonical_product_id' ) || ! function_exists( 'wcs_is_product_switchable_type' ) ) {
+			return $can_switch;
+		}
+
+		// The non-status checks from WC_Subscriptions_Switcher::is_action_allowed().
+		// The type read must be bare, like WCS's own and allow_migrated_subscription_switch()'s:
+		// WC_Order_Item::offsetGet() resolves getter-backed keys such as `type`, but
+		// offsetExists() does not report them, so an isset() here is false on a real
+		// order item and would deny every switch.
+		$product_id            = wcs_get_canonical_product_id( $item );
+		$is_product_switchable = 'line_item' === $item['type'] && wcs_is_product_switchable_type( $product_id );
+		$has_last_order        = 0 !== $subscription->get_date( 'last_order_date_created' );
+		$can_be_updated        = $subscription->payment_method_supports( 'subscription_amount_changes' ) && $subscription->payment_method_supports( 'subscription_date_changes' );
+
+		if ( $is_product_switchable && $has_last_order && $can_be_updated ) {
+			return true;
+		}
+
+		return $can_switch;
+	}
+
+	/**
+	 * Reactivate the current reader's pending-cancel subscriptions that are
+	 * being switched by the order just processed at checkout.
+	 *
+	 * Runs right before WCS's own switch processing (priority 50 on the same
+	 * hooks) so the date updates it computes are validated against an active
+	 * subscription — see {@see allow_pending_cancel_subscription_switch()} for
+	 * why a pending-cancel subscription cannot go through it directly.
+	 * Reactivation restores the next payment date to the prepaid-term end, so
+	 * the switch proration math is unchanged from what the reader was shown.
+	 *
+	 * Only subscriptions the current reader owns are touched: a switch on
+	 * someone else's subscription is left for WCS to reject.
+	 *
+	 * @param int|\WC_Order $order The order processed at checkout (ID on the classic hook, object on the Store API hook).
+	 */
+	public static function maybe_reactivate_pending_cancel_switch( $order ) {
+		if (
+			! class_exists( 'WC_Subscriptions_Switcher' )
+			|| ! function_exists( 'wcs_get_subscription' )
+			|| ! is_callable( [ 'WC_Subscriptions_Switcher', 'cart_contains_switches' ] )
+		) {
+			return;
+		}
+
+		$switches = \WC_Subscriptions_Switcher::cart_contains_switches( 'switch' );
+		if ( empty( $switches ) || ! is_array( $switches ) ) {
+			return;
+		}
+
+		$order = $order instanceof \WC_Order ? $order : wc_get_order( $order );
+		if ( ! $order ) {
+			return;
+		}
+
+		$user_id = get_current_user_id();
+		if ( ! $user_id ) {
+			return;
+		}
+
+		$reactivated = [];
+		foreach ( $switches as $switch_details ) {
+			if ( empty( $switch_details['subscription_id'] ) ) {
+				continue;
+			}
+			$subscription = wcs_get_subscription( $switch_details['subscription_id'] );
+			if (
+				! $subscription
+				|| ! $subscription->has_status( 'pending-cancel' )
+				|| (int) $subscription->get_user_id() !== $user_id
+				|| ! $subscription->can_be_updated_to( 'active' )
+			) {
+				continue;
+			}
+			$subscription->update_status(
+				'active',
+				sprintf(
+					/* translators: %s: the order number of the switch order. */
+					__( 'Subscription reactivated for the tier switch in order %s.', 'newspack-plugin' ),
+					$order->get_id()
+				)
+			);
+			$reactivated[] = $subscription->get_id();
+		}
+
+		if ( empty( $reactivated ) ) {
+			return;
+		}
+
+		// Stamp the order so the reactivation can be reverted if this switch
+		// order never completes.
+		$order->update_meta_data( self::REACTIVATED_FOR_SWITCH_META, $reactivated );
+		$order->save();
+	}
+
+	/**
+	 * Revert a reactivation performed by
+	 * {@see maybe_reactivate_pending_cancel_switch()} when its switch order
+	 * fails or is cancelled without payment.
+	 *
+	 * The reader turned off auto-renewal before attempting the switch; a
+	 * declined or abandoned switch payment must not leave that choice silently
+	 * undone. Re-cancelling recomputes the prepaid-term end from the restored
+	 * next payment date, so the subscription returns to the state it was in
+	 * before the switch attempt. If the order is later paid anyway, WCS
+	 * completes the item switch on the pending-cancel subscription (its
+	 * completion-time date updates carry no next payment), leaving the reader
+	 * on the new tier for the rest of the prepaid term.
+	 *
+	 * @param int $order_id The failed or cancelled order.
+	 */
+	public static function maybe_revert_reactivation_on_failed_switch( $order_id ) {
+		if ( ! function_exists( 'wcs_get_subscription' ) || ! function_exists( 'wc_get_order' ) ) {
+			return;
+		}
+
+		$order = wc_get_order( $order_id );
+		if ( ! $order ) {
+			return;
+		}
+
+		// A switch order that was paid at some point completed its switch — a
+		// later cancellation (e.g. an admin refund) must not undo the
+		// subscription state the reader paid for.
+		if ( $order->get_date_paid() ) {
+			return;
+		}
+
+		$subscription_ids = $order->get_meta( self::REACTIVATED_FOR_SWITCH_META );
+		if ( empty( $subscription_ids ) || ! is_array( $subscription_ids ) ) {
+			return;
+		}
+
+		foreach ( $subscription_ids as $subscription_id ) {
+			$subscription = wcs_get_subscription( $subscription_id );
+			if (
+				! $subscription
+				// Only revert the state this integration created: a subscription
+				// that has moved on (renewed, cancelled, completed another switch)
+				// is left alone.
+				|| ! $subscription->has_status( 'active' )
+				|| ! $subscription->can_be_updated_to( 'pending-cancel' )
+			) {
+				continue;
+			}
+			$subscription->update_status(
+				'pending-cancel',
+				sprintf(
+					/* translators: %s: the order number of the failed switch order. */
+					__( 'Reactivation reverted: the switch order %s was not completed.', 'newspack-plugin' ),
+					$order->get_id()
+				)
+			);
+		}
+
+		// One revert per stamp: a later transition of the same order (e.g.
+		// failed, then cancelled) must not re-cancel a subscription the reader
+		// reactivated on purpose in the meantime.
+		$order->delete_meta_data( self::REACTIVATED_FOR_SWITCH_META );
+		$order->save();
+	}
+
+	/**
+	 * Let a reader add a card to a subscription that has no next payment date.
+	 *
+	 * WCS withholds the "change payment method" action from any subscription
+	 * whose next payment date is unset, in
+	 * {@see \WC_Subscriptions_Change_Payment_Gateway::can_subscription_be_updated_to_new_payment_method()}.
+	 * That rule assumes a next payment date always exists once a subscription is
+	 * running, which holds for subscriptions bought at checkout but not for ones
+	 * a publisher creates by hand in wp-admin: those start with no payment method
+	 * and nothing scheduled, so the reader is offered no way to put a card on
+	 * file and the subscription can never be paid (NPPD-2170).
+	 *
+	 * The rule is enforced in exactly one place, and every part of the flow reads
+	 * it — the action button, the form, and the request validator all call
+	 * `can_be_updated_to( 'new-payment-method' )`. The POST handler applies no
+	 * status or date test of its own, so granting eligibility is sufficient to
+	 * open the flow end to end. WCS then labels the action "Add payment" rather
+	 * than "Change payment" whenever the subscription has no gateway yet, which
+	 * is the wording this case wants.
+	 *
+	 * Deliberately narrow. WCS refuses the action for several distinct reasons;
+	 * this reproduces the ones current WCS applies in
+	 * `can_subscription_be_updated_to_new_payment_method()` — automatic payments
+	 * switched off store-wide, no recurring charge, no gateway that can take a
+	 * customer card, a gateway that cannot cancel — and overrides only the
+	 * missing-next-payment / not-active refusal it targets. If a future WCS adds a
+	 * refusal, mirror it below. Overriding just the one refusal, rather than
+	 * returning a blanket `true`, is what keeps a publisher's "no automatic
+	 * renewals" choice intact.
+	 *
+	 * Paired with {@see schedule_next_payment_after_payment_method_added()},
+	 * which schedules the payment the missing date would otherwise leave unset.
+	 *
+	 * @param bool             $can_be_updated Whether WCS allows the change.
+	 * @param \WC_Subscription $subscription   The subscription being checked.
+	 *
+	 * @return bool Whether the payment method can be changed.
+	 */
+	public static function allow_add_payment_method_without_next_payment( $can_be_updated, $subscription ) {
+		if ( $can_be_updated ) {
+			return $can_be_updated;
+		}
+
+		if ( ! ( $subscription instanceof \WC_Subscription ) ) {
+			return $can_be_updated;
+		}
+
+		// Reproduce every WCS refusal except the missing-next-payment / not-active
+		// one this filter exists to override. See
+		// WC_Subscriptions_Change_Payment_Gateway::can_subscription_be_updated_to_new_payment_method().
+
+		// The store has turned automatic payments off entirely — a publisher
+		// configuration choice, not a per-subscription state. static:: so a test
+		// subclass can override the WCS-dependent read.
+		if ( static::store_requires_manual_renewal() ) {
+			return $can_be_updated;
+		}
+
+		// Nothing recurring to charge, so nothing to add a card for. WCS reads the
+		// filtered ('view') total here; 'edit' is deliberate, so a site filtering
+		// order totals cannot open the flow on a subscription with nothing to bill.
+		if ( (float) $subscription->get_total( 'edit' ) <= 0 ) {
+			return $can_be_updated;
+		}
+
+		// No gateway can take a card from the reader, so the flow would dead-end.
+		if ( ! self::one_gateway_supports_customer_payment_method_change() ) {
+			return $can_be_updated;
+		}
+
+		// The subscription's own gateway cannot cancel, which WCS requires before
+		// letting a reader swap payment method. A card-less subscription reads as
+		// manual here, so this passes for the hand-made case it targets.
+		if ( ! $subscription->payment_method_supports( 'subscription_cancellation' ) ) {
+			return $can_be_updated;
+		}
+
+		// The refusal we override, limited to statuses where putting a card on file
+		// leads somewhere: awaiting a first payment, suspended, or running.
+		// pending-cancel is excluded — its next payment is already cleared by
+		// design, so it would always match, and the action would do nothing for a
+		// subscription winding down (reactivating restores WCS's own flow).
+		if ( ! $subscription->has_status( [ 'pending', 'on-hold', 'active' ] ) ) {
+			return $can_be_updated;
+		}
+
+		if ( $subscription->get_time( 'next_payment' ) > 0 ) {
+			return $can_be_updated;
+		}
+
+		return true;
+	}
+
+	/**
+	 * Whether the store has switched automatic payments off — WCS's manual
+	 * renewals required with the reader-facing auto-renew toggle disabled. Under
+	 * that configuration WCS deliberately hides the payment-method change action,
+	 * and the eligibility filter must not re-open it.
+	 *
+	 * `protected` rather than `private` and called through `static::` so a test
+	 * can override this WCS-dependent read with a subclass, without the eligibility
+	 * filter having to load WooCommerce Subscriptions or define its globals. A
+	 * missing toggle class leaves the manual-renewal setting to decide, matching
+	 * WCS's own guard.
+	 *
+	 * @return bool
+	 */
+	protected static function store_requires_manual_renewal() {
+		$required       = function_exists( 'wcs_is_manual_renewal_required' ) && \wcs_is_manual_renewal_required();
+		$toggle_enabled = class_exists( 'WCS_My_Account_Auto_Renew_Toggle' ) && \WCS_My_Account_Auto_Renew_Toggle::is_enabled();
+
+		return $required && ! $toggle_enabled;
+	}
+
+	/**
+	 * Whether any gateway lets a reader change their own payment method.
+	 *
+	 * Routed through the WCS handler class rather than
+	 * `WC_Subscriptions_Payment_Gateways` directly, because WooPayments
+	 * substitutes its own handler and WCS resolves the capability through
+	 * whichever is active.
+	 *
+	 * @return bool
+	 */
+	private static function one_gateway_supports_customer_payment_method_change() {
+		if ( ! class_exists( 'WC_Subscriptions_Core_Plugin' ) ) {
+			return false;
+		}
+
+		$handler = \WC_Subscriptions_Core_Plugin::instance()->get_gateways_handler_class();
+		if ( ! is_callable( [ $handler, 'one_gateway_supports' ] ) ) {
+			return false;
+		}
+
+		return (bool) $handler::one_gateway_supports( 'subscription_payment_method_change_customer' );
+	}
+
+	/**
+	 * Schedule the next payment once a card is attached to a subscription that
+	 * had none.
+	 *
+	 * The other half of {@see allow_add_payment_method_without_next_payment()},
+	 * and deliberately narrower than it: eligibility opens the form for three
+	 * statuses, but only `active` gets a date written here.
+	 *
+	 * An `active` subscription is, by WCS's own model, currently inside a paid
+	 * period — the reader has access. For the subscriptions this targets, a human
+	 * granted that period on purpose (support setting a stuck subscription active
+	 * so the reader keeps access). Scheduling the first *future* charge one
+	 * billing period out is consistent with both facts, and it is what unlocks
+	 * WCS's early renewal — `wcs_can_user_renew_early()` refuses on
+	 * `subscription_no_next_payment`, so a reader who wants to pay sooner has no
+	 * self-serve route until a date exists. With a date set, "Renew now" appears
+	 * and takes payment immediately, resetting the cycle from that payment.
+	 *
+	 * `pending` and `on-hold` are left to WooCommerce: they carry an unpaid order,
+	 * and paying it is what activates the subscription and sets its date. Writing
+	 * a date for them would also withdraw the "Add payment method" action (this
+	 * pair steps back once a date exists, while WCS still refuses a non-active
+	 * subscription), stranding the reader with a card on file and no way back.
+	 *
+	 * `calculate_date( 'next_payment' )` derives the date from the last payment or
+	 * the start date plus one billing period, keeps it far enough out to survive a
+	 * daylight-saving shift, and returns `0` when the next period would fall past
+	 * the subscription's end date; a `0` is respected. `can_date_be_updated()`
+	 * additionally gates on the gateway supporting date changes, so a gateway that
+	 * owns the billing agreement and refuses them (PayPal Standard) never gets a
+	 * Woo-side schedule it would not honour.
+	 *
+	 * Runs on `woocommerce_subscriptions_process_payment_for_change_method_via_pay_shortcode`,
+	 * which WCS applies after `process_payment()` and before it bails on a
+	 * non-success result. Scheduling from the earlier
+	 * `woocommerce_subscription_payment_method_updated` action would write a date
+	 * for a card that was later declined, leaving an automatic renewal queued
+	 * against a card the gateway never accepted.
+	 *
+	 * @param array            $result       The payment result, with a `result` key.
+	 * @param \WC_Subscription $subscription The subscription whose method changed.
+	 *
+	 * @return array The unmodified payment result.
+	 */
+	public static function schedule_next_payment_after_payment_method_added( $result, $subscription ) {
+		if ( ! ( $subscription instanceof \WC_Subscription ) ) {
+			return $result;
+		}
+
+		// Only once the card has actually been accepted. WCS returns here after
+		// process_payment() and bails on anything but success, so a declined card
+		// must leave no schedule behind.
+		if ( ! is_array( $result ) || ! isset( $result['result'] ) || 'success' !== $result['result'] ) {
+			return $result;
+		}
+
+		// Ask the subscription whether a chargeable gateway is attached rather than
+		// trusting a method string: this runs for admin and bulk updates too, and
+		// has_payment_gateway() is the same predicate the My Account label uses.
+		if ( ! $subscription->has_payment_gateway() || $subscription->is_manual() ) {
+			return $result;
+		}
+
+		// Only the gap this pair exists to close. An already-scheduled payment is
+		// the reader's or WCS's, and is never rewritten.
+		if ( $subscription->get_time( 'next_payment' ) > 0 ) {
+			return $result;
+		}
+
+		// Active only. See the note above on why pending / on-hold are left to
+		// WooCommerce's own payment-completes-then-schedules flow.
+		if ( ! $subscription->has_status( 'active' ) ) {
+			return $result;
+		}
+
+		// Respect the same gate WCS applies to every date write: the gateway must
+		// support date changes, or its schedule and Woo's would silently diverge.
+		if ( ! $subscription->can_date_be_updated( 'next_payment' ) ) {
+			return $result;
+		}
+
+		$next_payment = $subscription->calculate_date( 'next_payment' );
+		if ( empty( $next_payment ) ) {
+			return $result;
+		}
+
+		// update_dates() validates the new date against the subscription's other
+		// dates and throws when they disagree. A subscription we could not
+		// schedule is left as it was: the reader still has their card on file,
+		// and the publisher can set the date by hand.
+		try {
+			$subscription->update_dates( [ 'next_payment' => $next_payment ] );
+			$subscription->save();
+			$subscription->add_order_note(
+				sprintf(
+					/* translators: %s: the newly scheduled next payment date, localised. */
+					__( 'Next payment scheduled for %s after the subscriber added a payment method.', 'newspack-plugin' ),
+					$subscription->get_date_to_display( 'next_payment' )
+				)
+			);
+		} catch ( \Exception $e ) {
+			// An order note rather than Logger::error(): Logger::log() returns early
+			// unless NEWSPACK_LOG_LEVEL is defined and non-zero, which it is not on a
+			// stock site, so the one failure this method plans for would otherwise
+			// leave no trace anywhere the publisher looks.
+			$subscription->add_order_note(
+				sprintf(
+					/* translators: %s: the reason the date could not be set. */
+					__( 'A payment method was added, but the next payment date could not be scheduled: %s. The next payment date may need setting by hand.', 'newspack-plugin' ),
+					$e->getMessage()
+				)
+			);
+		}
+
+		return $result;
 	}
 
 	/**

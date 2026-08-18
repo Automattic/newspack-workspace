@@ -1,3 +1,17 @@
+## super-cool-ad-inserter [0.7.6](https://github.com/Automattic/newspack-workspace/compare/super-cool-ad-inserter@0.7.5...super-cool-ad-inserter@0.7.6) (2026-08-17)
+
+
+### Dependencies
+
+* **newspack-scripts:** upgraded to 5.11.0
+
+## super-cool-ad-inserter [0.7.5](https://github.com/Automattic/newspack-workspace/compare/super-cool-ad-inserter@0.7.4...super-cool-ad-inserter@0.7.5) (2026-08-03)
+
+
+### Dependencies
+
+* **newspack-scripts:** upgraded to 5.10.0
+
 ## [0.7.4](https://github.com/Automattic/super-cool-ad-inserter-plugin/compare/v0.7.3...v0.7.4) (2026-05-18)
 
 

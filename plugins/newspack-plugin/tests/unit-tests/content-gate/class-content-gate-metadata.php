@@ -178,7 +178,7 @@ class Newspack_Test_Content_Gate_Metadata extends WP_UnitTestCase {
 	 * @return int Institution post ID.
 	 */
 	private function create_institution( $title, $rules ) {
-		$id = Institution::create( $title, '', $rules );
+		$id                      = Institution::create( $title, '', $rules );
 		$this->institution_ids[] = $id;
 		Institution::invalidate_cache();
 		return $id;
@@ -189,10 +189,11 @@ class Newspack_Test_Content_Gate_Metadata extends WP_UnitTestCase {
 	 *
 	 * @param string $title        Gate title.
 	 * @param array  $access_rules Access rules array.
+	 * @param array  $extra        Additional custom_access settings (e.g. payment_recovery_grace).
 	 *
 	 * @return int Gate post ID.
 	 */
-	private function create_gate_with_rules( $title, $access_rules ) {
+	private function create_gate_with_rules( $title, $access_rules, $extra = [] ) {
 		$gate_id = $this->factory->post->create(
 			[
 				'post_type'   => Content_Gate::GATE_CPT,
@@ -203,10 +204,13 @@ class Newspack_Test_Content_Gate_Metadata extends WP_UnitTestCase {
 		update_post_meta(
 			$gate_id,
 			'custom_access',
-			[
-				'active'       => true,
-				'access_rules' => $access_rules,
-			]
+			array_merge(
+				[
+					'active'       => true,
+					'access_rules' => $access_rules,
+				],
+				$extra
+			)
 		);
 		return $gate_id;
 	}
@@ -943,5 +947,143 @@ class Newspack_Test_Content_Gate_Metadata extends WP_UnitTestCase {
 
 		$this->assertEquals( 'No', $result['Content_Access'] );
 		$this->assertEmpty( $result['Content_Access_Group'], 'Denied access should yield an empty group label.' );
+	}
+
+	/**
+	 * The source labels are produced by re-running the subscription rule callback
+	 * to work out *which* product granted access. That re-run has to happen under
+	 * the gate's own evaluation context: called bare it falls back to the
+	 * callback's grace-ON default, and a gate with payment-recovery grace turned
+	 * off would still report an in-recovery subscription as a source — sending
+	 * publishers a paid-segment label their gate deliberately denies.
+	 *
+	 * The reader here holds one active and one in-recovery subscription, so the
+	 * gate grants access either way and only the attribution can differ.
+	 */
+	public function test_source_labels_respect_gate_payment_recovery_grace() {
+		$active_product_id      = $this->create_mock_product( 610, 'Active Plan' );
+		$in_recovery_product_id = $this->create_mock_product( 611, 'In Recovery Plan' );
+
+		$this->create_subscription( self::$user_id, [ $active_product_id ] );
+		$this->create_subscription(
+			self::$user_id,
+			[ $in_recovery_product_id ],
+			[
+				'status' => 'on-hold',
+				'times'  => [ 'payment_retry' => time() + HOUR_IN_SECONDS ],
+			]
+		);
+
+		$rules = [
+			[
+				[
+					'slug'  => 'subscription',
+					'value' => [ $active_product_id, $in_recovery_product_id ],
+				],
+			],
+		];
+
+		$grace_off_gate_id = $this->create_gate_with_rules( 'Grace Off Gate', $rules, [ 'payment_recovery_grace' => false ] );
+
+		$grace_off_result = $this->get_metadata_for_user( self::$user_id );
+		$this->assertEquals( 'Yes', $grace_off_result['Content_Access'], 'The active subscription grants access regardless of the grace setting.' );
+		$this->assertEquals(
+			'Active Plan',
+			$grace_off_result['Content_Access_Source'],
+			'Grace off: the in-recovery subscription must not be reported as a source.'
+		);
+
+		// Flip only the stored setting; the same reader must now be attributed to both.
+		update_post_meta(
+			$grace_off_gate_id,
+			'custom_access',
+			[
+				'active'                 => true,
+				'access_rules'           => $rules,
+				'payment_recovery_grace' => true,
+			]
+		);
+		Content_Gate_Metadata::reset_cache();
+
+		$grace_on_result = $this->get_metadata_for_user( self::$user_id );
+		$this->assertEquals(
+			'Active Plan, In Recovery Plan',
+			$grace_on_result['Content_Access_Source'],
+			'Grace on: both the active and the in-recovery subscription are sources.'
+		);
+	}
+
+	/**
+	 * A reader whose only route in is a one-time purchase still gets a source.
+	 * The rule shipped in NPPD-2053 after this resolver was written, so it used
+	 * to fall through and sync Content_Access "Yes" with an empty source.
+	 */
+	public function test_one_time_purchase_rule_reports_a_source() {
+		$this->create_gate_with_rules(
+			'One-time purchase gate',
+			[
+				[
+					[
+						'slug'  => 'one_time_purchase',
+						'value' => [
+							'product_ids'    => [ 4242 ],
+							'duration_value' => 1,
+							'duration_unit'  => 'months',
+						],
+					],
+				],
+			]
+		);
+
+		// Force the purchase check to pass without standing up a WooCommerce
+		// order; the rule's own coverage lives with Access_Rules.
+		add_filter( 'newspack_access_rules_has_one_time_purchase', '__return_true' );
+
+		$result = ( new Content_Gate_Metadata( get_user_by( 'id', self::$user_id ) ) )->get_metadata();
+
+		remove_filter( 'newspack_access_rules_has_one_time_purchase', '__return_true' );
+
+		$this->assertSame( 'Yes', $result['Content_Access'] );
+		$this->assertSame( 'one_time_purchase', $result['Content_Access_Source'] );
+	}
+
+	/**
+	 * Attribution memoizes the reader's subscriptions for the request, and a
+	 * sync run is one request spanning many readers and many minutes. Whatever
+	 * clears this class's own cache has to clear that memo too, or a
+	 * subscription that activates between two syncs is invisible to the second
+	 * one — reporting a stale set of product names while Content_Access itself,
+	 * which is not memoized, moves on.
+	 */
+	public function test_reset_cache_clears_the_subscription_attribution_memo() {
+		$first_product_id  = $this->create_mock_product( 620, 'First Plan' );
+		$second_product_id = $this->create_mock_product( 621, 'Second Plan' );
+		$this->create_subscription( self::$user_id, [ $first_product_id ] );
+
+		$this->create_gate_with_rules(
+			'Memo Gate',
+			[
+				[
+					[
+						'slug'  => 'subscription',
+						'value' => [ $first_product_id, $second_product_id ],
+					],
+				],
+			]
+		);
+
+		$first_result = $this->get_metadata_for_user( self::$user_id );
+		$this->assertEquals( 'First Plan', $first_result['Content_Access_Source'] );
+
+		// The reader buys the second plan while the sync process is still alive.
+		$this->create_subscription( self::$user_id, [ $second_product_id ] );
+		Content_Gate_Metadata::reset_cache();
+
+		$second_result = $this->get_metadata_for_user( self::$user_id );
+		$this->assertEquals(
+			'First Plan, Second Plan',
+			$second_result['Content_Access_Source'],
+			'The second sync must see the new subscription, not the memo from the first.'
+		);
 	}
 }
