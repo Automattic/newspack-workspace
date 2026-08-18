@@ -84,6 +84,27 @@ assert_name ".." rejected "a bare traversal is rejected, as validate_name alread
 assert_name "a..b" rejected "an embedded traversal is rejected on both validators"
 assert_name "" rejected "an empty name is rejected"
 
+assert_new_name() {
+	local name="$1" want="$2" desc="$3" got
+	got=$(classify validate_new_env_name "$name")
+	if [[ "$got" == "$want" ]]; then
+		echo "  ok: $desc"
+	else
+		echo "  FAIL: $desc — want $want, got $got"
+		failures=$((failures + 1))
+	fi
+}
+
+echo ""
+echo "validate_new_env_name (create path only):"
+assert_new_name "demo" accepted "a plain name is accepted"
+assert_new_name "1demo" accepted "a leading digit is accepted"
+assert_new_name ".demo" rejected "a leading dot is rejected at creation; it would yield an empty first DNS label"
+assert_new_name "_demo" rejected "a leading underscore is rejected at creation, for the same reason"
+assert_new_name "--help" rejected "the option shape is still rejected"
+assert_new_name ".." rejected "a traversal is still rejected"
+assert_new_name "" rejected "an empty name is rejected"
+
 assert_path_name() {
 	local name="$1" want="$2" desc="$3" got
 	got=$(classify validate_name "$name" "branch")
@@ -164,6 +185,25 @@ done
 
 echo
 echo "no environment is created by any of the above:"
+# The create arm must actually reach the stricter validator. Asserting
+# validate_new_env_name directly cannot see the call site, so reverting create to
+# the lax validator would leave every assertion above green.
+assert_create_rejects() {
+	local name="$1" desc="$2" out status=0
+	out=$(PATH="$STUB:$PATH" NABSPATH="$SANDBOX" bash "$SCRIPT_DIR/../env.sh" create "$name" </dev/null 2>&1) || status=$?
+	if [[ "$status" -eq 1 && "$out" == *"must start with a letter or digit"* ]]; then
+		echo "  ok: $desc"
+	else
+		echo "  FAIL: $desc — want exit 1 with the create-path message, got exit $status: $out"
+		failures=$((failures + 1))
+	fi
+}
+
+echo ""
+echo "n env create reaches the stricter validator:"
+assert_create_rejects ".demo" "a leading dot is refused by the create arm itself"
+assert_create_rejects "_demo" "a leading underscore is refused by the create arm itself"
+
 leaked=$(find "$SANDBOX" -mindepth 1 ! -name n)
 if [[ -n "$leaked" ]]; then
 	echo "  FAIL: the sandbox gained files — $(echo "$leaked" | tr '\n' ' ')"

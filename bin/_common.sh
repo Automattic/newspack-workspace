@@ -29,6 +29,20 @@ validate_name() {
 # `destroy`, so a rule that rejected leading dots or underscores would strand an
 # environment created under an older, laxer one — unmanageable and removable
 # only by hand.
+# Stricter still for a name being created. The leniency in validate_env_name
+# exists so environments made under an older, laxer rule stay manageable by
+# `up`/`down`/`destroy`, and that reason cannot apply to a name that does not
+# exist yet. A leading dot is the case it costs: `.demo` yields
+# https://.demo.test, whose first DNS label is empty, and the container name and
+# certificate are derived from the same string.
+validate_new_env_name() {
+    validate_env_name "$1"
+    if [[ ! "$1" =~ ^[a-zA-Z0-9] ]]; then
+        echo "Error: invalid environment name '$1' (must start with a letter or digit)"
+        exit 1
+    fi
+}
+
 validate_env_name() {
     # The `..` clause matches validate_name's. `n env destroy ..` would otherwise
     # validate and reach `rm -rf "$NABSPATH/envs/.."`, i.e. the workspace root.

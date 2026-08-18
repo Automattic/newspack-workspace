@@ -150,7 +150,7 @@ case $1 in
         if [[ -z "$env_name" ]] || is_help_arg "$env_name"; then
             env_usage "$env_name" "Usage: n env create <name> --worktree <repo>:<branch> [--worktree ...] [--domain <domain>] [--up]"
         fi
-        validate_env_name "$env_name"
+        validate_new_env_name "$env_name"
         # Reject names that would collide after dash/underscore normalization.
         normalized=$(echo "$env_name" | tr '-' '_')
         for f in "$NABSPATH"/docker-compose.env-*.yml; do
