@@ -404,26 +404,13 @@ class Experimental_Tools {
 	/**
 	 * Sanitize one submitted field value.
 	 *
-	 * Defaults to sanitize_textarea_field(), which suits free text but destroys a
-	 * value carrying syntax of its own: it deletes a percent sign followed by two
-	 * hex digits, reading it as a URL-encoded octet, so a template placeholder
-	 * such as %CATEGORIES% is stored as TEGORIES%. A field may therefore declare
-	 * `sanitize_callback` in its registration and keep the rules its own format
-	 * needs. The callback is registration data, not user input, and an
-	 * uncallable one falls back to the default rather than storing raw input.
+	 * The default, sanitize_textarea_field(), deletes a percent sign followed by
+	 * two hex digits as a URL-encoded octet, which destroys a value carrying
+	 * placeholders of its own. A field may declare `sanitize_callback` to keep the
+	 * rules its format needs; an uncallable one falls back to the default.
 	 *
-	 * The callback is always handed a string, so it can declare `string` without
-	 * risking a TypeError on a hand-crafted request, and must return a scalar,
-	 * since the stored value is merged back into the field definition and sent
-	 * over REST. A non-scalar return is stored as an empty string, which is what
-	 * the default does with one. Anything narrower than scalar would rule out
-	 * `rest_sanitize_boolean` and friends on a toggle field.
-	 *
-	 * `sanitize_callback` is a literal in the registration — PHP from a loaded
-	 * plugin, never read from the option or the request — so applying it is no
-	 * wider a trust boundary than the registration itself. A tool that ever
-	 * derived the callback from stored data would change that. Deriving field
-	 * keys or values that way is fine and already done.
+	 * The callback is handed a string and must return a scalar. It is a literal in
+	 * the registration, never read from the option or the request.
 	 *
 	 * @param array $field The registered field definition.
 	 * @param mixed $value The submitted value, already known to be scalar.

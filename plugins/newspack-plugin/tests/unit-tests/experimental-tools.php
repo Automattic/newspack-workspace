@@ -152,7 +152,7 @@ class Newspack_Test_Experimental_Tools extends WP_UnitTestCase {
 
 	/**
 	 * A field can declare its own sanitizer. Some tools store values with syntax
-	 * of their own — a prompt template carrying %PLACEHOLDER% tokens, say — that
+	 * of their own — a template carrying %PLACEHOLDER% tokens, say — that
 	 * the default sanitizer destroys, and only the owning tool knows the rules.
 	 */
 	public function test_field_sanitize_callback_is_used_when_declared() {
@@ -169,27 +169,27 @@ class Newspack_Test_Experimental_Tools extends WP_UnitTestCase {
 			]
 		);
 
-		Experimental_Tools::save_tool_fields( $slug, [ 'template' => 'Use %CATEGORIES% here' ] );
+		Experimental_Tools::save_tool_fields( $slug, [ 'template' => 'Use %CACHE_KEY% here' ] );
 
 		$settings = Experimental_Tools::get_tool_settings( $slug );
 
-		$this->assertEquals( 'Use %CATEGORIES% here|marked', $settings['fields']['template'] );
+		$this->assertEquals( 'Use %CACHE_KEY% here|marked', $settings['fields']['template'] );
 	}
 
 	/**
 	 * The case the per-field callback exists for: the default sanitizer reads a
 	 * percent sign followed by two hex digits as a URL-encoded octet and deletes
-	 * it, so %CATEGORIES% is stored as TEGORIES%.
+	 * it, so %CACHE_KEY% is stored as CHE_KEY%.
 	 */
 	public function test_default_sanitizer_destroys_hex_leading_placeholders() {
 		$slug = $this->register_test_tool();
 
-		Experimental_Tools::save_tool_fields( $slug, [ 'api_key' => 'Use %CATEGORIES% here' ] );
+		Experimental_Tools::save_tool_fields( $slug, [ 'api_key' => 'Use %CACHE_KEY% here' ] );
 
 		$settings = Experimental_Tools::get_tool_settings( $slug );
 
-		$this->assertStringNotContainsString( '%CATEGORIES%', $settings['fields']['api_key'] );
-		$this->assertStringContainsString( 'TEGORIES%', $settings['fields']['api_key'] );
+		$this->assertStringNotContainsString( '%CACHE_KEY%', $settings['fields']['api_key'] );
+		$this->assertStringContainsString( 'CHE_KEY%', $settings['fields']['api_key'] );
 	}
 
 	/**
@@ -214,13 +214,13 @@ class Newspack_Test_Experimental_Tools extends WP_UnitTestCase {
 			]
 		);
 
-		Experimental_Tools::save_tool_fields( $slug, [ 'template' => "hi %CATEGORIES% <script>alert('x')</script>" ] );
+		Experimental_Tools::save_tool_fields( $slug, [ 'template' => "hi %CACHE_KEY% <script>alert('x')</script>" ] );
 
 		$settings = Experimental_Tools::get_tool_settings( $slug );
 
 		$this->assertStringNotContainsString( '<script>', $settings['fields']['template'] );
 		$this->assertStringContainsString(
-			'TEGORIES%',
+			'CHE_KEY%',
 			$settings['fields']['template'],
 			"The default sanitizer's fingerprint proves which one ran."
 		);
@@ -288,9 +288,9 @@ class Newspack_Test_Experimental_Tools extends WP_UnitTestCase {
 			2
 		);
 
-		Experimental_Tools::save_tool_fields( $slug, [ 'template' => 'Use %CATEGORIES% here' ] );
+		Experimental_Tools::save_tool_fields( $slug, [ 'template' => 'Use %CACHE_KEY% here' ] );
 
-		$this->assertEquals( 'Use %CATEGORIES% here|marked', $captured['template'] );
+		$this->assertEquals( 'Use %CACHE_KEY% here|marked', $captured['template'] );
 	}
 
 	/**
