@@ -180,6 +180,10 @@ h1 {
 		place-items: center;
 		position: absolute;
 		width: 100%;
+
+		strong {
+			font-weight: wp-vars.$font-weight-medium;
+		}
 	}
 
 	&.newspack-dashboard {
