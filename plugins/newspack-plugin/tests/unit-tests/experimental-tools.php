@@ -137,125 +137,37 @@ class Newspack_Test_Experimental_Tools extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Register a tool with one plain field and one declaring its own sanitizer.
+	 * A template placeholder survives being saved.
 	 *
-	 * @param callable|string $callback The sanitize_callback to declare.
-	 * @return string The tool slug.
+	 * WordPress deletes a percent sign followed by two hex digits as a URL-encoded
+	 * octet, so %CACHE_KEY% used to be stored as CHE_KEY% — and the surrounding
+	 * spacing has to survive with it.
 	 */
-	private function register_tool_with_callback( $callback ) {
-		return $this->register_test_tool(
-			[
-				'fields' => [
-					[
-						'type' => 'textarea',
-						'key'  => 'plain',
-					],
-					[
-						'type'              => 'textarea',
-						'key'               => 'declared',
-						'sanitize_callback' => $callback,
-					],
-				],
-			]
-		);
-	}
+	public function test_placeholders_survive_saving() {
+		$slug = $this->register_test_tool();
 
-	/**
-	 * A field's own sanitizer replaces the default, and only for that field.
-	 *
-	 * The default reads a percent sign followed by two hex digits as a URL-encoded
-	 * octet and deletes it, so %CACHE_KEY% is stored as CHE_KEY%. That is what a
-	 * tool storing placeholders needs to escape, and what every other field keeps.
-	 */
-	public function test_a_declared_callback_replaces_the_default_for_that_field_only() {
-		$slug = $this->register_tool_with_callback( 'wp_kses_post' );
-
-		Experimental_Tools::save_tool_fields(
-			$slug,
-			[
-				'plain'    => 'Use %CACHE_KEY% here',
-				'declared' => 'Use %CACHE_KEY% here',
-			]
-		);
-
-		$fields = Experimental_Tools::get_tool_settings( $slug )['fields'];
-
-		$this->assertSame( 'Use CHE_KEY% here', $fields['plain'], 'An undeclared field keeps the default.' );
-		$this->assertSame( 'Use %CACHE_KEY% here', $fields['declared'], "The field's own sanitizer runs instead." );
-	}
-
-	/**
-	 * A callback that cannot be called falls back to the default rather than
-	 * fataling or storing raw input. Silent would hide a registration typo behind
-	 * the very sanitizer the callback was declared to escape.
-	 */
-	public function test_an_uncallable_callback_falls_back_to_the_default() {
-		$this->setExpectedIncorrectUsage( 'Newspack\\Experimental_Tools::sanitize_field_value' );
-
-		$slug = $this->register_tool_with_callback( 'newspack_no_such_sanitizer' );
-
-		Experimental_Tools::save_tool_fields( $slug, [ 'declared' => 'Use %CACHE_KEY% here' ] );
+		Experimental_Tools::save_tool_fields( $slug, [ 'api_key' => "Use %CACHE_KEY% here.\nAnd %CONTENT% there." ] );
 
 		$this->assertSame(
-			'Use CHE_KEY% here',
-			Experimental_Tools::get_tool_settings( $slug )['fields']['declared'],
-			"The default sanitizer's fingerprint proves which one ran."
+			"Use %CACHE_KEY% here.\nAnd %CONTENT% there.",
+			Experimental_Tools::get_tool_settings( $slug )['fields']['api_key']
 		);
 	}
 
 	/**
-	 * A non-scalar value is not storable, and a malformed request must not wipe
-	 * what was saved. The route validates that `fields` is an object but nothing
-	 * about the values inside it, so this is reachable. The typed callback also
-	 * pins that it is never handed one.
+	 * Everything that is not a placeholder is still sanitized: markup goes, and a
+	 * bare percent-encoded octet is still an octet rather than a placeholder.
 	 */
-	public function test_a_non_scalar_value_leaves_the_stored_value_alone() {
-		$slug = $this->register_tool_with_callback(
-			function ( string $value ) {
-				return $value;
-			}
-		);
+	public function test_non_placeholder_content_is_still_sanitized() {
+		$slug = $this->register_test_tool();
 
-		Experimental_Tools::save_tool_fields( $slug, [ 'declared' => 'what was written' ] );
-		Experimental_Tools::save_tool_fields( $slug, [ 'declared' => [ 'an', 'array' ] ] );
+		Experimental_Tools::save_tool_fields( $slug, [ 'api_key' => "a <script>alert('x')</script> %CA b" ] );
 
-		$this->assertSame(
-			'what was written',
-			Experimental_Tools::get_tool_settings( $slug )['fields']['declared'],
-			'A malformed request must not overwrite a saved value.'
-		);
+		$stored = Experimental_Tools::get_tool_settings( $slug )['fields']['api_key'];
+
+		$this->assertStringNotContainsString( '<script>', $stored );
+		$this->assertStringNotContainsString( '%CA', $stored );
 	}
-
-	/**
-	 * A non-scalar return cannot reach the option either: the stored value is
-	 * merged back into the field definition and sent over REST.
-	 */
-	public function test_a_non_scalar_return_is_stored_as_an_empty_string() {
-		$slug = $this->register_tool_with_callback(
-			function () {
-				return [ 'not', 'a', 'scalar' ];
-			}
-		);
-
-		Experimental_Tools::save_tool_fields( $slug, [ 'declared' => 'anything' ] );
-
-		$this->assertSame( '', Experimental_Tools::get_tool_settings( $slug )['fields']['declared'] );
-	}
-
-	/**
-	 * The callback is server-side only. A callable would serialize into the REST
-	 * response as an object's public properties, or as an opaque object for a
-	 * closure, and the UI has no use for either.
-	 */
-	public function test_the_callback_is_not_exposed_in_the_rest_payload() {
-		$this->register_tool_with_callback( 'wp_kses_post' );
-
-		$fields = Experimental_Tools::get_tools()[0]['fields'];
-
-		$this->assertArrayNotHasKey( 'sanitize_callback', $fields[1] );
-		$this->assertSame( 'declared', $fields[1]['key'], 'The rest of the definition still travels.' );
-	}
-
 
 	/**
 	 * Saved field values are merged into the tool's fields in get_tools().

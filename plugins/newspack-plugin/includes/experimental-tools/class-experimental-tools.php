@@ -199,12 +199,6 @@ class Experimental_Tools {
 	/**
 	 * Get registered tools from the filter (raw, without saved state).
 	 *
-	 * Each tool declares `slug`, `label` and optionally `fields`. A field carries
-	 * `key`, `type` and `label`; a `type` of `display` is read-only and never
-	 * stored. A field may also declare `sanitize_callback`, which
-	 * save_tool_fields() applies instead of the default sanitizer — see
-	 * sanitize_field_value() for when a tool needs that.
-	 *
 	 * @return array Keyed by slug.
 	 */
 	private static function get_registered_tools() {
@@ -250,10 +244,6 @@ class Experimental_Tools {
 				} elseif ( ! isset( $field['value'] ) && isset( $field['default'] ) ) {
 					$field['value'] = $field['default'];
 				}
-
-				// Server-side only: a callable would serialize into the response as
-				// an object's public properties, or as an opaque {} for a closure.
-				unset( $field['sanitize_callback'] );
 			}
 			unset( $field );
 
@@ -363,31 +353,20 @@ class Experimental_Tools {
 			];
 		}
 
-		// Only accept keys declared in the tool registration, keeping each field's
-		// definition so its own sanitizer can be applied below.
-		$declared_fields = [];
+		// Only accept keys declared in the tool registration.
+		$valid_keys = [];
 		if ( isset( $registered[ $slug ]['fields'] ) ) {
 			foreach ( $registered[ $slug ]['fields'] as $field ) {
 				if ( ! empty( $field['key'] ) && ( $field['type'] ?? '' ) !== 'display' ) {
-					$declared_fields[ $field['key'] ] = $field;
+					$valid_keys[] = $field['key'];
 				}
 			}
 		}
 
 		foreach ( $fields as $key => $value ) {
-			if ( ! isset( $declared_fields[ $key ] ) ) {
-				continue;
+			if ( in_array( $key, $valid_keys, true ) ) {
+				$all_settings[ $slug ]['fields'][ $key ] = self::sanitize_field_value( $value );
 			}
-
-			// The route validates that `fields` is an object but says nothing about
-			// the values inside it. A non-scalar has no meaningful sanitized form,
-			// and writing one through would replace a saved value with an empty
-			// string on a malformed request; leave the stored value alone instead.
-			if ( ! is_scalar( $value ) ) {
-				continue;
-			}
-
-			$all_settings[ $slug ]['fields'][ $key ] = self::sanitize_field_value( $declared_fields[ $key ], $value );
 		}
 
 		update_option( self::OPTION_NAME, $all_settings );
@@ -402,47 +381,44 @@ class Experimental_Tools {
 	}
 
 	/**
-	 * Sanitize one submitted field value.
+	 * Sanitize a field value without destroying its placeholders.
 	 *
-	 * The default, sanitize_textarea_field(), deletes a percent sign followed by
-	 * two hex digits as a URL-encoded octet, which destroys a value carrying
-	 * placeholders of its own. A field may declare `sanitize_callback` to keep the
-	 * rules its format needs; an uncallable one falls back to the default.
+	 * WordPress deletes a percent sign followed by two hex digits, reading it as a
+	 * URL-encoded octet. A field holding a template therefore loses any
+	 * placeholder whose name opens with two hex characters — %CACHE_KEY% is stored
+	 * as CHE_KEY% — and the tool that owns it has no way to tell, because the
+	 * saved-fields action carries the sanitized value. Hold the placeholders out
+	 * of the sanitizer and put them back.
 	 *
-	 * The callback is handed a string and must return a scalar. It is a literal in
-	 * the registration, never read from the option or the request.
-	 *
-	 * @param array $field The registered field definition.
-	 * @param mixed $value The submitted value, already known to be scalar.
-	 * @return string|int|float|bool The sanitized value.
+	 * @param mixed $value The submitted value.
+	 * @return string The sanitized value.
 	 */
-	private static function sanitize_field_value( array $field, mixed $value ): string|int|float|bool {
-		$callback = $field['sanitize_callback'] ?? null;
-
-		if ( null === $callback ) {
+	private static function sanitize_field_value( $value ) {
+		if ( ! is_scalar( $value ) ) {
 			return sanitize_textarea_field( $value );
 		}
 
-		if ( ! is_callable( $callback ) ) {
-			$message = sprintf(
-				/* translators: %1$s: the sanitize_callback registration key. %2$s: field key. */
-				__( 'The %1$s declared for the %2$s field is not callable. Falling back to the default sanitizer, which strips percent-encoded sequences.', 'newspack-plugin' ),
-				'<code>sanitize_callback</code>',
-				'<code>' . ( $field['key'] ?? '' ) . '</code>'
-			);
+		// Random per call: the restore is a blind strtr, so a fixed token that the
+		// value itself contained would come back as a placeholder nobody wrote.
+		$prefix       = 'npeaPlaceholder' . wp_generate_password( 12, false );
+		$placeholders = [];
 
-			_doing_it_wrong(
-				__METHOD__,
-				// phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- _doing_it_wrong expects a translated string.
-				$message,
-				'6.47.9'
-			);
+		$held = preg_replace_callback(
+			'/%[A-Z][A-Z0-9_]*%/',
+			function ( $matches ) use ( &$placeholders, $prefix ) {
+				$token                  = $prefix . count( $placeholders );
+				$placeholders[ $token ] = $matches[0];
+				return $token;
+			},
+			(string) $value
+		);
+
+		// PCRE returns null on failure; sanitizing that would silently store ''.
+		if ( null === $held ) {
 			return sanitize_textarea_field( $value );
 		}
 
-		$sanitized = $callback( (string) $value );
-
-		return is_scalar( $sanitized ) ? $sanitized : '';
+		return strtr( sanitize_textarea_field( $held ), $placeholders );
 	}
 
 	/**
