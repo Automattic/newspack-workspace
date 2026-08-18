@@ -7,9 +7,6 @@
  * buggy result on purpose it is flagged with the follow-up issue ID; those
  * stacked fixes will flip the corresponding assertion:
  *
- * - NPPD-2058: extract_gate_layouts() only inspects top-level wrapper blocks, so
- *   nested / reusable-block gate layouts migrate as empty. Pinned by the
- *   extract_gate_layouts / serialize_gate_inner_blocks tests below (they flip red).
  * - NPPD-2063: map_rules_to_ac_format() emits the raw WooCommerce content-type
  *   name as the AC rule slug instead of remapping to 'post_types' / 'specific_posts'.
  *   Pinned by the map_rules_to_ac_format tests below (they flip red).
@@ -29,6 +26,7 @@ namespace Newspack\Tests\Content_Gate;
 
 use Newspack\CLI\Membership_Gates_Migration;
 
+require_once dirname( __DIR__, 2 ) . '/mocks/wp-cli-mocks.php';
 require_once dirname( __DIR__, 3 ) . '/includes/cli/class-membership-gates-migration.php';
 
 /**
@@ -322,25 +320,132 @@ HTML;
 	}
 
 	/**
-	 * NPPD-2058: only top-level wrapper blocks are inspected, so a gate whose
-	 * non-member-content wrapper is nested inside another block (here a group)
-	 * migrates as an EMPTY registration layout. The stacked NPPD-2058 fix walks
-	 * nested/reusable blocks and will make these assertions non-empty.
+	 * A wrapper nested inside another block (here a group) is found and migrated —
+	 * the top-level-only extraction that made these gates migrate empty is gone
+	 * (NPPD-2058).
 	 */
-	public function test_extract_gate_layouts_returns_empty_for_nested_wrapper_blocks() {
+	public function test_extract_gate_layouts_finds_nested_wrapper_blocks() {
 		$gate_content = <<<'HTML'
 <!-- wp:group --><div class="wp-block-group">
+<!-- wp:columns --><div class="wp-block-columns">
 <!-- wp:woocommerce-memberships/non-member-content -->
 <!-- wp:paragraph --><p>Nested upsell.</p><!-- /wp:paragraph -->
 <!-- /wp:woocommerce-memberships/non-member-content -->
+</div><!-- /wp:columns -->
 </div><!-- /wp:group -->
 HTML;
 		$gate_post = $this->create_gate_post( $gate_content );
 
 		$layouts = $this->invoke_private_static( 'extract_gate_layouts', [ $gate_post ] );
 
-		$this->assertSame( '', $layouts['registration'], 'A nested non-member-content wrapper yields an empty registration layout (NPPD-2058 bug).' );
-		$this->assertNull( $layouts['custom_access'], 'No top-level member-content wrapper means a null custom-access layout.' );
+		$this->assertStringContainsString( 'Nested upsell.', $layouts['registration'] );
+		$this->assertNull( $layouts['custom_access'], 'No member-content wrapper anywhere means a null custom-access layout.' );
+	}
+
+	/**
+	 * A gate authored as a synced pattern holds its wrappers in a separate wp_block
+	 * post; the `core/block` reference is resolved so that content migrates too.
+	 */
+	public function test_extract_gate_layouts_resolves_reusable_block_references() {
+		$pattern_id   = $this->create_pattern_post(
+			<<<'HTML'
+<!-- wp:woocommerce-memberships/non-member-content -->
+<!-- wp:paragraph --><p>Pattern upsell.</p><!-- /wp:paragraph -->
+<!-- /wp:woocommerce-memberships/non-member-content -->
+<!-- wp:woocommerce-memberships/member-content -->
+<!-- wp:paragraph --><p>Pattern members-only.</p><!-- /wp:paragraph -->
+<!-- /wp:woocommerce-memberships/member-content -->
+HTML
+		);
+		$gate_post = $this->create_gate_post( '<!-- wp:block {"ref":' . $pattern_id . '} /-->' );
+
+		$layouts = $this->invoke_private_static( 'extract_gate_layouts', [ $gate_post ] );
+
+		$this->assertStringContainsString( 'Pattern upsell.', $layouts['registration'] );
+		$this->assertStringContainsString( 'Pattern members-only.', $layouts['custom_access'] );
+	}
+
+	/**
+	 * The reference guard is scoped to one path of the walk, not the whole gate, so a
+	 * pattern placed twice contributes twice — the same "no authored content dropped"
+	 * rule that governs repeated inline wrappers.
+	 */
+	public function test_extract_gate_layouts_keeps_both_copies_of_a_repeated_pattern() {
+		$pattern_id = $this->create_pattern_post(
+			<<<'HTML'
+<!-- wp:woocommerce-memberships/non-member-content -->
+<!-- wp:paragraph --><p>Reused upsell.</p><!-- /wp:paragraph -->
+<!-- /wp:woocommerce-memberships/non-member-content -->
+HTML
+		);
+		$reference = '<!-- wp:block {"ref":' . $pattern_id . '} /-->';
+		$gate_post = $this->create_gate_post( $reference . "\n" . $reference );
+
+		$layouts = $this->invoke_private_static( 'extract_gate_layouts', [ $gate_post ] );
+
+		$this->assertSame( 2, substr_count( $layouts['registration'], 'Reused upsell.' ) );
+	}
+
+	/**
+	 * A pattern that references itself would otherwise recurse forever. The walk stops
+	 * at the repeat and still reaches the wrapper that follows it.
+	 */
+	public function test_extract_gate_layouts_survives_a_self_referencing_pattern() {
+		$pattern_id = $this->create_pattern_post( 'placeholder' );
+		wp_update_post(
+			[
+				'ID'           => $pattern_id,
+				'post_content' => '<!-- wp:block {"ref":' . $pattern_id . '} /-->'
+					. '<!-- wp:woocommerce-memberships/non-member-content -->'
+					. '<!-- wp:paragraph --><p>Upsell past the loop.</p><!-- /wp:paragraph -->'
+					. '<!-- /wp:woocommerce-memberships/non-member-content -->',
+			]
+		);
+		$gate_post = $this->create_gate_post( '<!-- wp:block {"ref":' . $pattern_id . '} /-->' );
+
+		$layouts = $this->invoke_private_static( 'extract_gate_layouts', [ $gate_post ] );
+
+		$this->assertStringContainsString( 'Upsell past the loop.', $layouts['registration'] );
+	}
+
+	/**
+	 * An unpublished pattern renders nothing for a reader, so extraction skips it the
+	 * same way — but the operator is told, because the gate will migrate short of the
+	 * content its author sees in the editor.
+	 */
+	public function test_extract_gate_layouts_warns_on_an_unpublished_pattern_reference() {
+		\WP_CLI::$messages = [];
+		$pattern_id        = $this->create_pattern_post(
+			<<<'HTML'
+<!-- wp:woocommerce-memberships/non-member-content -->
+<!-- wp:paragraph --><p>Draft upsell.</p><!-- /wp:paragraph -->
+<!-- /wp:woocommerce-memberships/non-member-content -->
+HTML
+			,
+			'draft'
+		);
+		$gate_post = $this->create_gate_post( '<!-- wp:block {"ref":' . $pattern_id . '} /-->' );
+
+		$layouts = $this->invoke_private_static( 'extract_gate_layouts', [ $gate_post ] );
+
+		$this->assertSame( '', $layouts['registration'] );
+		$warnings = array_filter( \WP_CLI::$messages, fn( $m ) => 'warning' === $m[0] );
+		$this->assertNotEmpty( $warnings, 'The skipped pattern reference is warned about.' );
+		$this->assertStringContainsString( (string) $pattern_id, implode( ' ', array_column( $warnings, 1 ) ) );
+	}
+
+	/**
+	 * With no wrapper anywhere in the tree, registration comes back as an empty string
+	 * and custom_access as null. apply_layout() reads that distinction to leave the
+	 * gate's seeded default layout alone rather than blanking it.
+	 */
+	public function test_extract_gate_layouts_returns_empty_when_no_wrapper_exists() {
+		$gate_post = $this->create_gate_post( '<!-- wp:paragraph --><p>Just an article.</p><!-- /wp:paragraph -->' );
+
+		$layouts = $this->invoke_private_static( 'extract_gate_layouts', [ $gate_post ] );
+
+		$this->assertSame( '', $layouts['registration'] );
+		$this->assertNull( $layouts['custom_access'] );
 	}
 
 	/**
@@ -795,6 +900,25 @@ HTML;
 			]
 		);
 		return $gate_id;
+	}
+
+	/**
+	 * Create a synced-pattern (wp_block) post for `core/block` reference tests.
+	 *
+	 * @param string $content The block markup.
+	 * @param string $status  Post status; 'draft' stands in for a pattern the walker
+	 *                        must skip.
+	 *
+	 * @return int The wp_block post ID.
+	 */
+	private function create_pattern_post( string $content, string $status = 'publish' ): int {
+		return self::factory()->post->create(
+			[
+				'post_type'    => 'wp_block',
+				'post_content' => $content,
+				'post_status'  => $status,
+			]
+		);
 	}
 
 	/**

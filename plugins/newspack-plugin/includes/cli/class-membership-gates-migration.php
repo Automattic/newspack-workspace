@@ -902,9 +902,6 @@ class Membership_Gates_Migration {
 	 * Membership wrapper blocks (member-content and non-member-content) are
 	 * conditional and should not be included in the migrated gate layout content.
 	 *
-	 * Part of the layout-extraction seam for NPPD-2058 (empty layouts for
-	 * reusable-block / nested gate layouts).
-	 *
 	 * @param array $inner_blocks The innerBlocks array from a parsed block.
 	 *
 	 * @return string Serialized block markup.
@@ -925,43 +922,102 @@ class Membership_Gates_Migration {
 	 * Extract registration and custom_access layout block content from an
 	 * np_memberships_gate post.
 	 *
-	 * - Registration layout: inner block content of the top-level
+	 * - Registration layout: inner block content of the
 	 *   `woocommerce-memberships/non-member-content` block(s) (the gate/upsell shown to
 	 *   non-members).
-	 * - Custom access layout: inner block content of the top-level
+	 * - Custom access layout: inner block content of the
 	 *   `woocommerce-memberships/member-content` block(s) (shown to paying members).
 	 *
-	 * A gate post may interleave several top-level wrappers of the same type — a post
-	 * mixing public and members-only sections. Each type's wrappers are concatenated in
-	 * document order so no authored content is dropped.
+	 * The whole block tree is searched and reusable `core/block` references are
+	 * resolved to the referenced `wp_block` post, so a gate whose wrappers sit inside a
+	 * group or columns block — or live in a synced pattern — migrates with its authored
+	 * content instead of an empty layout (NPPD-2058).
 	 *
-	 * This is the layout-extraction seam for NPPD-2058: only top-level wrapper
-	 * blocks are inspected, so gates whose wrappers are nested (e.g. inside a group
-	 * or a reusable `core/block`) yield empty layouts. The stacked NPPD-2058 PR
-	 * walks nested/reusable blocks; this port preserves the top-level-only behavior.
+	 * A gate post may hold several wrappers of the same type — a post mixing public and
+	 * members-only sections. Each type's wrappers are concatenated in document order so
+	 * no authored content is dropped.
 	 *
 	 * @param \WP_Post $gate_post The np_memberships_gate post.
 	 *
 	 * @return array{registration: string, custom_access: string|null}
 	 */
 	private static function extract_gate_layouts( \WP_Post $gate_post ): array {
-		$blocks               = \parse_blocks( $gate_post->post_content );
-		$registration_markup  = null;
-		$custom_access_markup = null;
-
-		foreach ( $blocks as $block ) {
-			if ( 'woocommerce-memberships/non-member-content' === $block['blockName'] ) {
-				$registration_markup = ( $registration_markup ?? '' ) . self::serialize_gate_inner_blocks( $block['innerBlocks'] );
-			}
-			if ( 'woocommerce-memberships/member-content' === $block['blockName'] ) {
-				$custom_access_markup = ( $custom_access_markup ?? '' ) . self::serialize_gate_inner_blocks( $block['innerBlocks'] );
-			}
-		}
+		$wrappers = [
+			'registration'  => null,
+			'custom_access' => null,
+		];
+		self::collect_gate_wrappers( \parse_blocks( $gate_post->post_content ), $wrappers, [], $gate_post->ID );
 
 		return [
-			'registration'  => $registration_markup ?? '',
-			'custom_access' => $custom_access_markup,
+			'registration'  => $wrappers['registration'] ?? '',
+			'custom_access' => $wrappers['custom_access'],
 		];
+	}
+
+	/**
+	 * Walk parsed blocks and concatenate the inner content of every WooCommerce
+	 * Memberships wrapper block found, at any depth.
+	 *
+	 * A wrapper's own inner blocks are not searched again: everything inside a
+	 * member-content block already belongs to that wrapper's layout, and
+	 * serialize_gate_inner_blocks() drops a wrapper nested directly within it.
+	 *
+	 * @param array $blocks       Parsed blocks to search.
+	 * @param array $wrappers     Accumulated markup keyed 'registration' and
+	 *                            'custom_access', filled by reference. Each stays null
+	 *                            until its wrapper type is found, which is what tells
+	 *                            the caller "no custom access layout" apart from "an
+	 *                            empty one".
+	 * @param array $visited      wp_block post IDs already resolved on the path taken to
+	 *                            reach these blocks, keyed by ID. Each descent gets a
+	 *                            copy rather than sharing one set, so a pattern placed
+	 *                            twice contributes twice while a pattern that reaches
+	 *                            itself cannot recurse forever.
+	 * @param int   $gate_post_id The gate post being extracted, for warning context.
+	 *
+	 * @return void
+	 */
+	private static function collect_gate_wrappers( array $blocks, array &$wrappers, array $visited, int $gate_post_id ): void {
+		foreach ( $blocks as $block ) {
+			$block_name = $block['blockName'] ?? null;
+
+			if ( 'woocommerce-memberships/non-member-content' === $block_name ) {
+				$wrappers['registration'] = ( $wrappers['registration'] ?? '' ) . self::serialize_gate_inner_blocks( $block['innerBlocks'] );
+				continue;
+			}
+			if ( 'woocommerce-memberships/member-content' === $block_name ) {
+				$wrappers['custom_access'] = ( $wrappers['custom_access'] ?? '' ) . self::serialize_gate_inner_blocks( $block['innerBlocks'] );
+				continue;
+			}
+
+			if ( 'core/block' === $block_name ) {
+				$ref = (int) ( $block['attrs']['ref'] ?? 0 );
+				if ( ! $ref || isset( $visited[ $ref ] ) ) {
+					continue;
+				}
+				$referenced = \get_post( $ref );
+				// The same guard core/block's own render callback applies, so extraction
+				// sees what a reader would: an unpublished pattern renders nothing.
+				if ( ! $referenced instanceof \WP_Post || 'wp_block' !== $referenced->post_type || 'publish' !== $referenced->post_status ) {
+					WP_CLI::warning(
+						sprintf(
+							'Gate post %d references synced pattern %d, which is missing or not published — any gate content it holds will not migrate.',
+							$gate_post_id,
+							$ref
+						)
+					);
+					continue;
+				}
+				// The descent gets its own copy of the set, so the guard follows one path
+				// down rather than the whole gate — see the $visited docblock.
+				self::collect_gate_wrappers( \parse_blocks( $referenced->post_content ), $wrappers, $visited + [ $ref => true ], $gate_post_id );
+				continue;
+			}
+
+			if ( ! empty( $block['innerBlocks'] ) ) {
+				self::collect_gate_wrappers( $block['innerBlocks'], $wrappers, $visited, $gate_post_id );
+			}
+		}
 	}
 
 	/**
