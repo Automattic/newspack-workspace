@@ -52,6 +52,9 @@ const NextdoorPostSidebar = ( { postId, postStatus } ) => {
 	// Which post the panel is on now, readable from a call bound to an earlier render.
 	const postIdRef = useRef( postId );
 	postIdRef.current = postId;
+	// Each action takes a number, so a slow one finishing after a newer one started can be
+	// told apart and leave the busy state to whichever action owns it now.
+	const actionRef = useRef( 0 );
 
 	// A successful action replaces the control that was pressed, dropping keyboard position
 	// to the top of the document. Only called for something the publisher initiated: on an
@@ -102,6 +105,8 @@ const NextdoorPostSidebar = ( { postId, postStatus } ) => {
 		// The answer describes the post the action fired on. Once the editor has moved on it
 		// belongs to neither the panel on screen nor the reader looking at it.
 		const isCurrent = () => postId === postIdRef.current;
+		const request = ++actionRef.current;
+		const ownsAction = () => request === actionRef.current;
 
 		try {
 			setAction( name );
@@ -125,10 +130,13 @@ const NextdoorPostSidebar = ( { postId, postStatus } ) => {
 				setError( err.message || __( 'Failed to communicate with Nextdoor.', 'newspack-plugin' ) );
 			}
 		} finally {
-			// The one piece of state a post change does not clear, and it was set before the
-			// request went out, so releasing it belongs to whichever request finishes rather
-			// than to the post it started on. Leaving it set wedges the buttons as busy.
-			setAction( null );
+			// Released whether or not the editor moved on, since nothing else clears it and a
+			// request that kept it would wedge the buttons as busy. Only by the action that
+			// still owns it, so an older one finishing cannot free a newer one's controls and
+			// invite a second press while that request is still out.
+			if ( ownsAction() ) {
+				setAction( null );
+			}
 
 			if ( isCurrent() ) {
 				clearMessages();

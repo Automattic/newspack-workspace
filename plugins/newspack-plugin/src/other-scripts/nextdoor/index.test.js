@@ -51,6 +51,8 @@ const UNSHARED = {
 	ingestion_errors: [],
 };
 
+const SHARED = { ...UNSHARED, is_shared: true, guid: 'guid-1', ingestion_status: 'valid' };
+
 /**
  * A promise the test resolves when it wants the request to come back.
  *
@@ -88,7 +90,7 @@ describe( 'Nextdoor post sidebar', () => {
 
 		apiFetch.mockResolvedValueOnce( { success: true, message: 'Published to Nextdoor.' } );
 		// A success is followed by a fresh status read, which is what the panel renders.
-		apiFetch.mockResolvedValue( { ...UNSHARED, is_shared: true, guid: 'guid-1', ingestion_status: 'valid' } );
+		apiFetch.mockResolvedValue( SHARED );
 		fireEvent.click( screen.getByRole( 'button', { name: 'Publish on Nextdoor' } ) );
 
 		await waitFor( () => expect( within( container ).getByText( 'Published to Nextdoor.' ) ).toBeInTheDocument() );
@@ -117,6 +119,36 @@ describe( 'Nextdoor post sidebar', () => {
 		// button as busy for the life of the editor.
 		await waitFor( () => expect( screen.getByRole( 'button', { name: 'Publish on Nextdoor' } ) ).toBeInTheDocument() );
 		expect( screen.queryByRole( 'button', { name: 'Publishing…' } ) ).not.toBeInTheDocument();
+	} );
+
+	it( 'leaves a newer action busy when an older one finishes', async () => {
+		const { rerender } = await openOnAPublishedPost();
+
+		const first = pending();
+		apiFetch.mockReturnValueOnce( first.promise );
+		fireEvent.click( screen.getByRole( 'button', { name: 'Publish on Nextdoor' } ) );
+		await waitFor( () => expect( screen.getByRole( 'button', { name: 'Publishing…' } ) ).toBeInTheDocument() );
+
+		// A post already shared, whose Update is only held by an update or a remove, so it
+		// is pressable while the publish above is still out.
+		mockPostId = 2;
+		apiFetch.mockResolvedValue( SHARED );
+		rerender( <NextdoorPostSidebarPlugin /> );
+		await waitFor( () => expect( screen.getByRole( 'button', { name: 'Update' } ) ).toBeInTheDocument() );
+
+		const second = pending();
+		apiFetch.mockReturnValueOnce( second.promise );
+		fireEvent.click( screen.getByRole( 'button', { name: 'Update' } ) );
+		await waitFor( () => expect( screen.getByRole( 'button', { name: 'Updating…' } ) ).toBeInTheDocument() );
+
+		await act( async () => {
+			first.resolve( { success: true, message: 'Published to Nextdoor.' } );
+		} );
+
+		// The button belongs to the request still out. Freeing it here would invite a
+		// second press, and the guard against a repeat is only written once the first
+		// request has come back.
+		expect( screen.getByRole( 'button', { name: 'Updating…' } ) ).toBeInTheDocument();
 	} );
 
 	it( 'does not show one post its answer for another', async () => {
