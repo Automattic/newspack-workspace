@@ -44,6 +44,12 @@ final class Pixel {
 		\add_action( 'wp', [ __CLASS__, 'schedule_log_processing' ] );
 		\add_action( 'newspack_newsletters_tracking_pixel_process_log', [ __CLASS__, 'process_logs' ] );
 		\add_filter( 'newspack_newsletters_tracking_pixel_url', [ __CLASS__, 'log_pixel_url' ], 10, 4 );
+
+		// When pixel tracking is turned off, tear the pixel machinery down:
+		// the standalone pixel file keeps logging opens from previously sent
+		// emails, and with scheduling gated nothing would ever drain that log.
+		\add_action( 'add_option_newspack_newsletters_use_tracking_pixel', [ __CLASS__, 'maybe_teardown_pixel' ] );
+		\add_action( 'update_option_newspack_newsletters_use_tracking_pixel', [ __CLASS__, 'maybe_teardown_pixel' ] );
 	}
 
 	/**
@@ -307,6 +313,34 @@ final class Pixel {
 		if ( ! \wp_next_scheduled( 'newspack_newsletters_tracking_pixel_process_log' ) ) {
 			\wp_schedule_single_event( time() + 60, 'newspack_newsletters_tracking_pixel_process_log' );
 		}
+	}
+
+	/**
+	 * Remove the standalone pixel file, its logs and the scheduled processing
+	 * when pixel tracking is turned off. Historical emails keep requesting the
+	 * pixel; without the file those hits 404 instead of filling a log nothing
+	 * reads. Re-enabling self-heals: the next processing run recreates the
+	 * files via rotate_log_file().
+	 */
+	public static function maybe_teardown_pixel() {
+		if ( Admin::is_tracking_pixel_enabled() ) {
+			return;
+		}
+		// phpcs:disable WordPressVIPMinimum.Functions.RestrictedFunctions.file_ops_unlink
+		$pixel_file = WP_CONTENT_DIR . '/np-newsletters-pixel.php';
+		if ( file_exists( $pixel_file ) ) {
+			unlink( $pixel_file );
+		}
+		foreach ( [ 'newspack_newsletters_tracking_pixel_log_file', 'newspack_newsletters_tracking_pixel_previous_log_file' ] as $option ) {
+			$log_file = \get_option( $option );
+			if ( $log_file && file_exists( $log_file ) ) {
+				unlink( $log_file );
+			}
+			\delete_option( $option );
+		}
+		// phpcs:enable WordPressVIPMinimum.Functions.RestrictedFunctions.file_ops_unlink
+		\delete_option( 'newspack_newsletters_pixel_log_offset' );
+		\wp_clear_scheduled_hook( 'newspack_newsletters_tracking_pixel_process_log' );
 	}
 
 	/**

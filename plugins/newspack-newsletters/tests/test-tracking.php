@@ -510,4 +510,23 @@ class Newsletters_Tracking_Test extends WP_UnitTestCase {
 		// Clean up.
 		wp_clear_scheduled_hook( 'newspack_newsletters_tracking_pixel_process_log' );
 	}
+
+	/**
+	 * Turning pixel tracking off removes the standalone pixel file, its logs and
+	 * the scheduled processing, so nothing keeps logging into a file nothing reads.
+	 */
+	public function test_disabling_pixel_tracking_tears_down_pixel_machinery() {
+		update_option( 'newspack_newsletters_use_tracking_pixel', 1 );
+		Pixel::process_logs(); // Bootstraps the standalone pixel file and log file.
+
+		$pixel_file = WP_CONTENT_DIR . '/np-newsletters-pixel.php';
+		$this->assertFileExists( $pixel_file );
+		$this->assertNotEmpty( get_option( 'newspack_newsletters_tracking_pixel_log_file' ) );
+
+		update_option( 'newspack_newsletters_use_tracking_pixel', 0 );
+
+		$this->assertFileDoesNotExist( $pixel_file );
+		$this->assertFalse( get_option( 'newspack_newsletters_tracking_pixel_log_file' ) );
+		$this->assertFalse( wp_next_scheduled( 'newspack_newsletters_tracking_pixel_process_log' ) );
+	}
 }
