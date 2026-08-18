@@ -1247,6 +1247,11 @@ class Newspack_Blocks {
 
 			// Recreate logic from wp_trim_excerpt (https://developer.wordpress.org/reference/functions/wp_trim_excerpt/).
 			$excerpt = strip_shortcodes( $excerpt );
+			// Strip blocks the content gate withholds from the public before
+			// excerpt_remove_blocks() flattens the block structure.
+			if ( class_exists( 'Newspack\Block_Visibility' ) && method_exists( 'Newspack\Block_Visibility', 'strip_blocks_hidden_from_public' ) ) {
+				$excerpt = \Newspack\Block_Visibility::strip_blocks_hidden_from_public( $excerpt );
+			}
 			$excerpt = excerpt_remove_blocks( $excerpt );
 			$excerpt = wpautop( $excerpt );
 			$excerpt = str_replace( ']]>', ']]&gt;', $excerpt );

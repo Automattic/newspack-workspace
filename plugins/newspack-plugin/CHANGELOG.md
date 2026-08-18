@@ -1,3 +1,10 @@
+## newspack [6.48.4](https://github.com/Automattic/newspack-workspace/compare/newspack@6.48.3...newspack@6.48.4) (2026-08-18)
+
+
+### Bug Fixes
+
+* **content-gate:** keep withheld blocks out of generated excerpts ([#832](https://github.com/Automattic/newspack-workspace/issues/832)) ([86eecfe](https://github.com/Automattic/newspack-workspace/commit/86eecfeef6eb07440afc8d5ffa239907cceb45a3))
+
 ## newspack [6.48.3](https://github.com/Automattic/newspack-workspace/compare/newspack@6.48.2...newspack@6.48.3) (2026-08-18)
 
 
