@@ -14,8 +14,12 @@
  */
 
 use Newspack\CLI\Teams_Migration;
+use Newspack\Emails;
 use Newspack\Group_Subscription;
+use Newspack\Group_Subscription_Invite;
 use Newspack\Group_Subscription_Settings;
+
+require_once dirname( __DIR__, 4 ) . '/mocks/newsletters-mocks.php';
 
 /**
  * Test the migration data-layer helpers and the manager backfill.
@@ -39,7 +43,19 @@ class Test_Teams_Migration extends WP_UnitTestCase {
 	private $team_ids = [];
 
 	/**
+	 * Invitation post IDs to clean up.
+	 *
+	 * @var int[]
+	 */
+	private $invitation_ids = [];
+
+	/**
 	 * Include the WC mocks.
+	 *
+	 * The `wcmti-` invitation statuses are deliberately left unregistered so the fixtures
+	 * reproduce the Teams-deactivated case the reader's PHP-side pending filter guards
+	 * (see get_pending_team_invitation_emails()'s docblock): the status clause is dropped
+	 * and every status returns, and wp_insert_post stores the unregistered status verbatim.
 	 */
 	public static function set_up_before_class() {
 		parent::set_up_before_class();
@@ -47,13 +63,75 @@ class Test_Teams_Migration extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Reset the mock subscription store and the per-request cache between tests.
+	 * The invitation email config callback registered in set_up.
+	 *
+	 * @var callable|null
+	 */
+	private $email_config_filter = null;
+
+	/**
+	 * Post ID of the published invitation email post created in set_up.
+	 *
+	 * @var int|null
+	 */
+	private $email_post_id = null;
+
+	/**
+	 * Reset the mock subscription store and the per-request cache between tests, and
+	 * make the invitation email genuinely sendable.
+	 *
+	 * Group_Subscription_Invite::init() early-returns without the Access Control feature
+	 * flag, so in the suite the invitation email config is never registered and every
+	 * send returns false before a single wp_mail() call. Registering the config and
+	 * publishing its email post here is what makes the mail assertions below mean
+	 * something: without it they would pass just as happily against a run that emails
+	 * nobody — which is exactly the failure the migration must not report as success.
 	 */
 	public function set_up() {
 		parent::set_up();
-		global $subscriptions_database;
+		global $subscriptions_database, $products_database;
 		$subscriptions_database = [];
+		// Products registered by one test are visible to every later one, and the
+		// mock's set_product_id() guard now reads this store to decide whether an ID
+		// is a variation — so a leaked registration could change another test's
+		// outcome. Every sibling test class resets it here for the same reason.
+		$products_database = [];
 		Group_Subscription::reset_cache();
+
+		reset_phpmailer_instance();
+		// The outbound-mail guard treats the example.com placeholder domain as
+		// unroutable: it short-circuits wp_mail() and reports success without
+		// dispatching — exactly the false-success shape this suite's mailer
+		// assertions exist to catch, and the mixed-case fixtures below live on
+		// Example.com. Off, so a suppressed send can never pass as a delivered one.
+		add_filter( 'newspack_guest_author_mail_guard_active', '__return_false' );
+		$this->email_config_filter = function ( $configs ) {
+			return Group_Subscription_Invite::add_email_config( $configs );
+		};
+		add_filter( 'newspack_email_configs', $this->email_config_filter );
+		Emails::reset_email_configs_cache();
+		$this->email_post_id = wp_insert_post(
+			[
+				'post_type'   => Emails::POST_TYPE,
+				'post_status' => 'publish',
+				'post_title'  => 'Group subscription invitation (test)',
+				'meta_input'  => [
+					Emails::EMAIL_CONFIG_NAME_META         => Group_Subscription_Invite::EMAIL_TYPE,
+					// serialize_email() returns false without an HTML payload, which
+					// would make the email unsendable again.
+					\Newspack_Newsletters::EMAIL_HTML_META => '<p>*INVITE_URL*</p>',
+				],
+			]
+		);
+	}
+
+	/**
+	 * Count the emails dispatched so far in this test.
+	 *
+	 * @return array[] The mailer's sent-message records.
+	 */
+	private function get_sent_emails(): array {
+		return tests_retrieve_phpmailer_instance()->mock_sent;
 	}
 
 	/**
@@ -62,28 +140,46 @@ class Test_Teams_Migration extends WP_UnitTestCase {
 	public function tear_down() {
 		global $subscriptions_database;
 		$subscriptions_database = [];
+		if ( $this->email_config_filter ) {
+			remove_filter( 'newspack_email_configs', $this->email_config_filter );
+			$this->email_config_filter = null;
+		}
+		Emails::reset_email_configs_cache();
+		if ( $this->email_post_id ) {
+			wp_delete_post( $this->email_post_id, true );
+			$this->email_post_id = null;
+		}
+		remove_filter( 'pre_wp_mail', '__return_false' );
+		remove_filter( 'newspack_guest_author_mail_guard_active', '__return_false' );
+		reset_phpmailer_instance();
 		foreach ( $this->user_ids as $user_id ) {
 			wp_delete_user( $user_id );
 		}
 		foreach ( $this->team_ids as $team_id ) {
 			wp_delete_post( $team_id, true );
 		}
-		$this->user_ids = [];
-		$this->team_ids = [];
+		foreach ( $this->invitation_ids as $invitation_id ) {
+			wp_delete_post( $invitation_id, true );
+		}
+		$this->user_ids       = [];
+		$this->team_ids       = [];
+		$this->invitation_ids = [];
 		parent::tear_down();
 	}
 
 	/**
 	 * Create a reader user (a valid group member).
 	 *
+	 * @param string|null $email Account email; a unique lowercase one is generated when null.
+	 *                           Pass an explicit address to pin case-sensitive behaviour.
 	 * @return int User ID.
 	 */
-	private function create_reader(): int {
+	private function create_reader( ?string $email = null ): int {
 		$user_id = wp_insert_user(
 			[
 				'user_login' => 'user-' . wp_generate_password( 6, false ),
 				'user_pass'  => wp_generate_password(),
-				'user_email' => 'user-' . wp_generate_password( 6, false ) . '@test.com',
+				'user_email' => $email ?? 'user-' . wp_generate_password( 6, false ) . '@test.com',
 				'role'       => 'subscriber',
 			]
 		);
@@ -486,6 +582,635 @@ class Test_Teams_Migration extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Create a WooCommerce Teams invitation post (a `wc_team_invitation` whose title
+	 * holds the invitee email and whose parent is the team), mirroring how the Teams
+	 * plugin stores pending invites.
+	 *
+	 * @param int    $team_id The team post ID.
+	 * @param string $email   The invitee email (stored as the post title).
+	 * @param string $status  The invitation post status (defaults to pending).
+	 * @return int Invitation post ID.
+	 */
+	private function create_team_invitation( int $team_id, string $email, string $status = 'wcmti-pending' ): int {
+		$invitation_id = wp_insert_post(
+			[
+				'post_type'   => 'wc_team_invitation',
+				'post_status' => $status,
+				'post_title'  => $email,
+				'post_parent' => $team_id,
+			]
+		);
+		$this->assertNotWPError( $invitation_id, 'Fixture invitation creation should succeed.' );
+		$this->assertGreaterThan( 0, $invitation_id, 'Fixture invitation should receive a post ID.' );
+		$this->invitation_ids[] = $invitation_id;
+		return $invitation_id;
+	}
+
+	/**
+	 * The pending-invitation reader returns only the emails of pending invitations for
+	 * the given team: accepted/cancelled invites, malformed titles, other teams'
+	 * invites, and duplicate addresses are all excluded/deduped.
+	 */
+	public function test_get_pending_team_invitation_emails_returns_pending_valid_emails_only() {
+		$owner   = $this->create_reader();
+		$team_id = $this->create_team( $owner, [], null );
+
+		$pending_one = 'pending-one@test.com';
+		$pending_two = 'pending-two@test.com';
+		$this->create_team_invitation( $team_id, $pending_one );
+		$this->create_team_invitation( $team_id, $pending_two );
+		// A second pending invitation for the same address is deduped, not returned twice.
+		$this->create_team_invitation( $team_id, $pending_one );
+		// A case variant of the same mailbox is deduped too (matching is case-insensitive,
+		// though the address that survives keeps the casing it was stored with).
+		$this->create_team_invitation( $team_id, 'Pending-One@TEST.com' );
+		// Non-pending invitations are not carried over.
+		$this->create_team_invitation( $team_id, 'accepted@test.com', 'wcmti-accepted' );
+		$this->create_team_invitation( $team_id, 'cancelled@test.com', 'wcmti-cancelled' );
+		// A malformed title is dropped rather than handed to generate_invite().
+		$this->create_team_invitation( $team_id, 'not-an-email' );
+		// A pending invitation on another team must not leak in.
+		$other_team = $this->create_team( $owner, [], null );
+		$this->create_team_invitation( $other_team, 'other-team@test.com' );
+
+		$emails = Teams_Migration::get_pending_team_invitation_emails( $team_id );
+
+		sort( $emails );
+		$this->assertSame( [ $pending_one, $pending_two ], $emails, 'Only pending, valid, same-team invitation emails should be returned, deduped.' );
+	}
+
+	/**
+	 * The bulk pre-pass reader must return exactly what the per-team reader returns
+	 * for each team — one query instead of one per team is a shape change, not a
+	 * behaviour change — and it counts the pending invitations it drops for holding
+	 * a non-email title, the one case the re-invite list cannot show.
+	 */
+	public function test_bulk_invitation_reader_matches_per_team_reader_and_counts_drops() {
+		$owner  = $this->create_reader();
+		$team_a = $this->create_team( $owner, [], null );
+		$team_b = $this->create_team( $owner, [], null );
+		$team_c = $this->create_team( $owner, [], null ); // No invitations at all.
+
+		$this->create_team_invitation( $team_a, 'bulk-a-one@test.com' );
+		$this->create_team_invitation( $team_a, 'Bulk-A-One@TEST.com' ); // Case-variant dupe — deduped, not dropped.
+		$this->create_team_invitation( $team_a, 'not-an-email' ); // Dropped and counted.
+		$this->create_team_invitation( $team_a, 'accepted@test.com', 'wcmti-accepted' ); // Not pending — excluded, not a drop.
+		$this->create_team_invitation( $team_b, 'bulk-b-one@test.com' );
+		$this->create_team_invitation( $team_b, 'also not an email' ); // Dropped and counted.
+
+		// Order matters for the chunked call below: the data-bearing team B goes
+		// LAST so it lands in the true final chunk — an off-by-one that drops the
+		// last chunk then fails instead of hiding behind the empty team C.
+		$dropped = 0;
+		$bulk    = Teams_Migration::get_pending_team_invitation_emails_for_teams( [ $team_a, $team_c, $team_b ], $dropped );
+
+		$this->assertSame( Teams_Migration::get_pending_team_invitation_emails( $team_a ), $bulk[ $team_a ], 'Bulk and per-team readers must agree on team A.' );
+		$this->assertSame( Teams_Migration::get_pending_team_invitation_emails( $team_b ), $bulk[ $team_b ], 'Bulk and per-team readers must agree on team B.' );
+		$this->assertArrayNotHasKey( $team_c, $bulk, 'A team with no pending invitations is omitted from the bulk result.' );
+		$this->assertSame( 2, $dropped, 'Each pending invitation with a non-email title is counted exactly once.' );
+
+		// Chunking only bounds the per-query load; it must not change the result.
+		// chunk_size 1 with team B last puts the invitations AND the drop in the
+		// true final chunk, so an implementation that kept only earlier chunks,
+		// dropped the last chunk to an off-by-one, or reset the by-reference drop
+		// tally between round trips fails these assertions instead of hiding
+		// behind an empty trailing team.
+		$chunked_dropped = 0;
+		$chunked         = Teams_Migration::get_pending_team_invitation_emails_for_teams( [ $team_a, $team_c, $team_b ], $chunked_dropped, 1 );
+		$this->assertSame( $bulk, $chunked, 'A chunked read must return exactly what the one-shot read returns, including trailing chunks.' );
+		$this->assertSame( $dropped, $chunked_dropped, 'The drop tally must accumulate across chunks.' );
+	}
+
+	/**
+	 * A present-but-invalid --limit must abort, never silently become "no cap":
+	 * the scripted shape --limit=$BATCH --yes --live with an unset variable would
+	 * otherwise run the full burst with the disclosing prompt suppressed.
+	 */
+	public function test_validate_send_limit_rejects_everything_but_positive_integers() {
+		$this->assertSame( 0, Teams_Migration::validate_send_limit( null ), 'Flag absent means no cap.' );
+		$this->assertSame( 7, Teams_Migration::validate_send_limit( '7' ), 'A positive integer string is the cap.' );
+		$this->assertSame( 100, Teams_Migration::validate_send_limit( 100 ), 'A positive integer is the cap.' );
+
+		foreach ( [ '', 'abc', '0', 0, '-5', -5, '5.5', true ] as $bad ) {
+			$result = Teams_Migration::validate_send_limit( $bad );
+			$this->assertWPError( $result, sprintf( 'Value %s must be rejected, not collapsed into "no cap".', wp_json_encode( $bad ) ) );
+		}
+	}
+
+	/**
+	 * The re-invite table's outcome labels, pinned per state. The two orderings
+	 * that matter most: a team-level error on a live run must never read as a
+	 * rehearsal, and a flagless run's lapsed invitee must read "not sent" —
+	 * matching the table's own header — never "would send again … (dry run)".
+	 */
+	public function test_invitation_outcome_label_covers_every_state() {
+		$result = [
+			'emails'       => [],
+			'sent'         => [ 'sent@test.com', 'resent@test.com' ],
+			'resent'       => [ 'resent@test.com' ],
+			'skipped'      => [ 'skipped@test.com' => 'Already invited.' ],
+			'failed'       => [ 'failed@test.com' => 'Relay said no.' ],
+			'would_resend' => [ 'lapsed@test.com' ],
+		];
+
+		$this->assertSame( 'invite sent', Teams_Migration::invitation_outcome_label( $result, 'sent@test.com', true ) );
+		$this->assertSame( 'invite sent (earlier invite had lapsed)', Teams_Migration::invitation_outcome_label( $result, 'resent@test.com', true ) );
+		$this->assertSame( 'skipped — Already invited.', Teams_Migration::invitation_outcome_label( $result, 'skipped@test.com', true ) );
+		$this->assertSame( 'FAILED — Relay said no.', Teams_Migration::invitation_outcome_label( $result, 'failed@test.com', true ) );
+		$this->assertSame( 'would send again — earlier invite lapsed (dry run)', Teams_Migration::invitation_outcome_label( $result, 'lapsed@test.com', true ), 'A flagged rehearsal labels the lapsed invitee as the second email it would be.' );
+		$this->assertSame( 'would send (dry run)', Teams_Migration::invitation_outcome_label( $result, 'fresh@test.com', true ) );
+
+		// Without the flag, nothing about a rehearsal may appear — including for
+		// a lapsed invitee, whose would_resend entry must rank below the flag check.
+		$this->assertSame( 'not sent (pass --migrate-invitations to send)', Teams_Migration::invitation_outcome_label( $result, 'lapsed@test.com', false ), 'A flagless run must not claim a rehearsal happened.' );
+		$this->assertSame( 'not sent (pass --migrate-invitations to send)', Teams_Migration::invitation_outcome_label( $result, 'fresh@test.com', false ) );
+
+		// A team-level error outranks both dry-run fallbacks, on any run mode.
+		$errored = array_merge(
+			$result,
+			[
+				'errored' => true,
+				'sent'    => [],
+				'resent'  => [],
+				'skipped' => [],
+				'failed'  => [],
+			]
+		);
+		$this->assertSame( 'not attempted (team error — see errors above)', Teams_Migration::invitation_outcome_label( $errored, 'anyone@test.com', true ) );
+		$this->assertSame( 'not attempted (team error — see errors above)', Teams_Migration::invitation_outcome_label( $errored, 'lapsed@test.com', true ), 'An errored team\'s lapsed invitee reads as not attempted, not as a rehearsal.' );
+	}
+
+	/**
+	 * Failed attempts consume --limit's budget: each failure is a relay attempt
+	 * plus a write/rollback cycle, which is the load the cap exists to bound. A
+	 * budget counting only successes would let a struggling relay turn a bounded
+	 * run into unbounded attempts.
+	 */
+	public function test_migrate_team_invitations_failed_attempts_consume_the_limit() {
+		$owner        = $this->create_reader();
+		$subscription = $this->create_group_subscription( $owner );
+		$team_id      = $this->create_team( $owner, [], $subscription->get_id() );
+		$this->create_team_invitation( $team_id, 'budget-a@test.com' );
+		$this->create_team_invitation( $team_id, 'budget-b@test.com' );
+		$this->create_team_invitation( $team_id, 'budget-c@test.com' );
+
+		add_filter( 'pre_wp_mail', '__return_false' );
+		$run = Teams_Migration::migrate_team_invitations( $subscription, $team_id, true, null, 2 );
+		remove_filter( 'pre_wp_mail', '__return_false' );
+
+		$this->assertSame( [], $run['sent'], 'Nothing is delivered while the relay fails.' );
+		$this->assertCount( 2, $run['failed'], 'Exactly two attempts are made under a budget of two.' );
+		$this->assertCount( 1, $run['skipped'], 'The third invitee is skipped by the spent budget, not attempted.' );
+		$this->assertStringContainsString( '--limit', (string) array_values( $run['skipped'] )[0], 'The skip reason names the flag.' );
+		$this->assertEmpty( Group_Subscription_Invite::get_invites( $subscription ), 'Both failed attempts are rolled back.' );
+	}
+
+	/**
+	 * A lapsed invitee's rehearsal outcome must say a live run would email them a
+	 * SECOND time — labelled as a plain send, the double-email warning would never
+	 * fire on the rehearsal, the one preview gap that under-warns.
+	 */
+	public function test_migrate_team_invitations_dry_rehearsal_labels_lapsed_resends() {
+		$owner        = $this->create_reader();
+		$subscription = $this->create_group_subscription( $owner );
+		$team_id      = $this->create_team( $owner, [], $subscription->get_id() );
+		$invitee      = 'lapsed-rehearsal@test.com';
+		$this->create_team_invitation( $team_id, $invitee );
+
+		Teams_Migration::migrate_team_invitations( $subscription, $team_id, true );
+
+		// Age the stored invite past its expiry.
+		$invites = Group_Subscription_Invite::get_invites( $subscription );
+		foreach ( array_keys( $invites ) as $key ) {
+			$invites[ $key ]['expiration'] = time() - HOUR_IN_SECONDS;
+		}
+		$subscription->update_meta_data( Group_Subscription_Invite::META, $invites );
+		$subscription->save();
+
+		$rehearsal = Teams_Migration::migrate_team_invitations( $subscription, $team_id, false );
+
+		$this->assertSame( [ $invitee ], $rehearsal['would_resend'], 'The rehearsal must flag the lapsed invitee as a would-be second email.' );
+		$this->assertSame( [], $rehearsal['sent'], 'A rehearsal sends nothing.' );
+		$this->assertSame( [], $rehearsal['skipped'], 'A lapsed invitee is not skipped — a live run would email them.' );
+		$this->assertCount( 1, $this->get_sent_emails(), 'Only the original live send dispatched mail.' );
+	}
+
+	/**
+	 * The dry-run sendability check must not repair the state it reports:
+	 * can_send_email()'s default miss path publishes the email post (and rewrites
+	 * newsletter palette keys), which would break the rehearsal's no-writes promise
+	 * and silence the warning by fixing the unsendable condition it exists to
+	 * surface. The read-only probe answers without writing.
+	 */
+	public function test_sendability_probe_is_read_only() {
+		wp_delete_post( $this->email_post_id, true );
+		$this->email_post_id = null;
+
+		$count_email_posts = function () {
+			return count(
+				get_posts(
+					[
+						'post_type'      => Emails::POST_TYPE,
+						'post_status'    => 'any',
+						'posts_per_page' => -1, // phpcs:ignore WordPressVIPMinimum.Performance.NoPaging -- Test fixture; the suite seeds at most one email post.
+						'fields'         => 'ids',
+					]
+				)
+			);
+		};
+		$before            = $count_email_posts();
+
+		$this->assertFalse( Emails::can_send_email( Group_Subscription_Invite::EMAIL_TYPE, false ), 'With no email post, the probe reports unsendable.' );
+		$this->assertSame( $before, $count_email_posts(), 'The probe must not create the email post — the dry-run rehearsal depends on it being read-only.' );
+	}
+
+	/**
+	 * With sending disabled (the default, and always the case in a dry-run or without
+	 * --migrate-invitations), migrate_team_invitations() still reports the pending
+	 * invitees so the re-invite list is never lost — but writes no invite and sends
+	 * no email.
+	 */
+	public function test_migrate_team_invitations_lists_without_sending_when_disabled() {
+		$owner        = $this->create_reader();
+		$subscription = $this->create_group_subscription( $owner );
+		$team_id      = $this->create_team( $owner, [], $subscription->get_id() );
+		$this->create_team_invitation( $team_id, 'invitee-a@test.com' );
+		$this->create_team_invitation( $team_id, 'invitee-b@test.com' );
+
+		$result = Teams_Migration::migrate_team_invitations( $subscription, $team_id, false );
+
+		sort( $result['emails'] );
+		$this->assertSame( [ 'invitee-a@test.com', 'invitee-b@test.com' ], $result['emails'], 'The pending invitees must be reported even when sending is disabled.' );
+		$this->assertSame( [], $result['sent'], 'No invites should be sent when sending is disabled.' );
+		$this->assertSame( [], $result['skipped'], 'Nothing should be skipped when no send is attempted.' );
+		$this->assertEmpty( Group_Subscription_Invite::get_invites( $subscription ), 'A disabled run must not write any invite onto the subscription.' );
+	}
+
+	/**
+	 * The dry run is the rehearsal an operator trusts before the recovery re-run.
+	 * After a completed live run it must report the already-invited readers as
+	 * skipped, not as still waiting — a rehearsal promising N sends where a live
+	 * run would send zero rehearses the wrong play.
+	 */
+	public function test_migrate_team_invitations_dry_rehearsal_reflects_live_invites() {
+		$owner        = $this->create_reader();
+		$subscription = $this->create_group_subscription( $owner );
+		$team_id      = $this->create_team( $owner, [], $subscription->get_id() );
+		$invitee      = 'rehearsal-invitee@test.com';
+		$this->create_team_invitation( $team_id, $invitee );
+
+		$live = Teams_Migration::migrate_team_invitations( $subscription, $team_id, true );
+		$this->assertSame( [ $invitee ], $live['sent'], 'The live run should send the invite.' );
+
+		$rehearsal = Teams_Migration::migrate_team_invitations( $subscription, $team_id, false );
+
+		$this->assertSame( [], $rehearsal['sent'], 'A rehearsal must send nothing.' );
+		$this->assertArrayHasKey( $invitee, $rehearsal['skipped'], 'After a live run, the rehearsal must report the invitee as already invited rather than still waiting.' );
+		$this->assertCount( 1, $this->get_sent_emails(), 'The rehearsal must not dispatch mail — only the live run\'s message leaves.' );
+	}
+
+	/**
+	 * The rehearsal applies generate_invite()'s cheap rejections with the live run's
+	 * wording, so an invitee a live run would refuse as a member or non-reader is not
+	 * previewed as "would send". Only the seat limit is exempt (order-dependent).
+	 */
+	public function test_migrate_team_invitations_dry_rehearsal_reports_live_rejections() {
+		$owner        = $this->create_reader();
+		$subscription = $this->create_group_subscription( $owner );
+		$team_id      = $this->create_team( $owner, [], $subscription->get_id() );
+
+		$member       = $this->create_reader();
+		$member_email = get_userdata( $member )->user_email;
+		Teams_Migration::add_group_member( $subscription, $member );
+		$this->create_team_invitation( $team_id, $member_email );
+
+		$editor       = $this->create_editor();
+		$editor_email = get_userdata( $editor )->user_email;
+		$this->create_team_invitation( $team_id, $editor_email );
+
+		$fresh = 'fresh-rehearsal@test.com';
+		$this->create_team_invitation( $team_id, $fresh );
+
+		$rehearsal = Teams_Migration::migrate_team_invitations( $subscription, $team_id, false );
+
+		$this->assertSame( [], $rehearsal['sent'], 'A rehearsal sends nothing.' );
+		$this->assertArrayHasKey( $member_email, $rehearsal['skipped'], 'A current member is reported as a live run would report them.' );
+		$this->assertArrayHasKey( $editor_email, $rehearsal['skipped'], 'A non-reader is reported as a live run would report them.' );
+		$this->assertCount( 2, $rehearsal['skipped'], 'The fresh invitee stays unlisted so the outcome chain labels them "would send".' );
+		$this->assertCount( 0, $this->get_sent_emails(), 'A rehearsal dispatches no mail.' );
+		$this->assertEmpty( Group_Subscription_Invite::get_invites( $subscription ), 'A rehearsal writes no invite.' );
+
+		// The reasons match the live run word for word, so tables compare across runs.
+		$live = Teams_Migration::migrate_team_invitations( $subscription, $team_id, true );
+		$this->assertSame( $rehearsal['skipped'][ $member_email ], $live['skipped'][ $member_email ], 'Member rejection wording must match the live run.' );
+		$this->assertSame( $rehearsal['skipped'][ $editor_email ], $live['skipped'][ $editor_email ], 'Non-reader rejection wording must match the live run.' );
+		$this->assertSame( [ $fresh ], $live['sent'], 'The live run sends exactly the invitee the rehearsal previewed.' );
+	}
+
+	/**
+	 * --limit's per-run budget: sends stop at the cap, the invitees beyond it stay
+	 * listed with an actionable reason, and the already-invited gate makes the
+	 * follow-up run resume where the capped run stopped — each reader emailed once.
+	 */
+	public function test_migrate_team_invitations_send_limit_caps_and_resumes() {
+		$owner        = $this->create_reader();
+		$subscription = $this->create_group_subscription( $owner );
+		$team_id      = $this->create_team( $owner, [], $subscription->get_id() );
+		$this->create_team_invitation( $team_id, 'limit-a@test.com' );
+		$this->create_team_invitation( $team_id, 'limit-b@test.com' );
+		$this->create_team_invitation( $team_id, 'limit-c@test.com' );
+
+		$first = Teams_Migration::migrate_team_invitations( $subscription, $team_id, true, null, 2 );
+
+		$this->assertCount( 2, $first['sent'], 'The cap limits this run to two sends.' );
+		$this->assertCount( 1, $first['skipped'], 'The invitee beyond the cap is listed, not lost.' );
+		$this->assertStringContainsString( '--limit', (string) array_values( $first['skipped'] )[0], 'The reason names the flag so the operator knows why.' );
+		$this->assertCount( 2, $this->get_sent_emails(), 'Exactly two messages leave under the cap.' );
+
+		$second = Teams_Migration::migrate_team_invitations( $subscription, $team_id, true, null, 2 );
+
+		$this->assertCount( 1, $second['sent'], 'The follow-up run resumes with the remaining invitee.' );
+		$this->assertCount( 2, $second['skipped'], 'The two already-invited readers are skipped, not re-emailed.' );
+		$this->assertCount( 3, $this->get_sent_emails(), 'Across both runs each invitee is emailed exactly once.' );
+	}
+
+	/**
+	 * With sending enabled, migrate_team_invitations() creates a group-subscription
+	 * invite for each pending invitee and the invites land on the subscription.
+	 */
+	public function test_migrate_team_invitations_sends_invites_when_enabled() {
+		$owner        = $this->create_reader();
+		$subscription = $this->create_group_subscription( $owner );
+		$team_id      = $this->create_team( $owner, [], $subscription->get_id() );
+		$invitee_one  = 'new-invitee-one@test.com';
+		$invitee_two  = 'new-invitee-two@test.com';
+		$this->create_team_invitation( $team_id, $invitee_one );
+		$this->create_team_invitation( $team_id, $invitee_two );
+
+		$result = Teams_Migration::migrate_team_invitations( $subscription, $team_id, true );
+
+		sort( $result['sent'] );
+		$this->assertSame( [ $invitee_one, $invitee_two ], $result['sent'], 'Both pending invitees should receive a group-subscription invite.' );
+		$this->assertSame( [], $result['skipped'], 'No invitee should be skipped in the clean case.' );
+
+		$invited_emails = array_column( Group_Subscription_Invite::get_invites( $subscription ), 'email' );
+		sort( $invited_emails );
+		$this->assertSame( [ $invitee_one, $invitee_two ], $invited_emails, 'The invites should land on the group subscription.' );
+	}
+
+	/**
+	 * A current group member and a non-reader account are both rejected by
+	 * generate_invite(); the migration must record these as skipped (with a reason)
+	 * rather than fatal, and still send the valid invite.
+	 */
+	public function test_migrate_team_invitations_skips_existing_members_and_non_readers() {
+		$owner        = $this->create_reader();
+		$subscription = $this->create_group_subscription( $owner );
+		$team_id      = $this->create_team( $owner, [], $subscription->get_id() );
+
+		// A brand-new email with no account — the only invitable case here.
+		$new_email = 'fresh-invitee@test.com';
+		$this->create_team_invitation( $team_id, $new_email );
+
+		// A current group member — re-inviting a member is rejected.
+		$member       = $this->create_reader();
+		$member_email = get_userdata( $member )->user_email;
+		Teams_Migration::add_group_member( $subscription, $member );
+		$this->create_team_invitation( $team_id, $member_email );
+
+		// A non-reader account (editor) — not a valid reader target.
+		$editor       = $this->create_editor();
+		$editor_email = get_userdata( $editor )->user_email;
+		$this->create_team_invitation( $team_id, $editor_email );
+
+		$result = Teams_Migration::migrate_team_invitations( $subscription, $team_id, true );
+
+		$this->assertSame( [ $new_email ], $result['sent'], 'Only the fresh invitee should be invited.' );
+		$this->assertArrayHasKey( $member_email, $result['skipped'], 'An existing member should be skipped, not re-invited.' );
+		$this->assertArrayHasKey( $editor_email, $result['skipped'], 'A non-reader should be skipped, not invited.' );
+		$this->assertCount( 2, $result['skipped'], 'Exactly the two invalid invitees should be skipped.' );
+	}
+
+	/**
+	 * A re-run must not re-email an already-invited reader. The source `wc_team_invitation`
+	 * post is never consumed (it stays pending), and generate_invite() re-sends
+	 * unconditionally, so the reader would be re-emailed on every re-run without the
+	 * already-invited gate. This pins the endorsed recovery re-run as safe.
+	 */
+	public function test_migrate_team_invitations_second_run_sends_nothing() {
+		$owner        = $this->create_reader();
+		$subscription = $this->create_group_subscription( $owner );
+		$team_id      = $this->create_team( $owner, [], $subscription->get_id() );
+		$invitee      = 'rerun-invitee@test.com';
+		$this->create_team_invitation( $team_id, $invitee );
+
+		$first = Teams_Migration::migrate_team_invitations( $subscription, $team_id, true );
+		$this->assertSame( [ $invitee ], $first['sent'], 'The first run should send the invite.' );
+
+		$second = Teams_Migration::migrate_team_invitations( $subscription, $team_id, true );
+		$this->assertSame( [], $second['sent'], 'A re-run must send nothing while the invite is still live.' );
+		$this->assertArrayHasKey( $invitee, $second['skipped'], 'The already-invited reader should be reported as skipped on the re-run.' );
+		$this->assertCount( 1, Group_Subscription_Invite::get_invites( $subscription ), 'The subscription should still hold exactly one invite for the reader.' );
+	}
+
+	/**
+	 * Two teams owned by the same owner resolve to the same group subscription. When both
+	 * carry a pending invitation for the same email, it must be sent once — the second
+	 * team sees the invite the first team wrote and skips it, so no reader is double-emailed
+	 * within a single run.
+	 */
+	public function test_migrate_team_invitations_merged_teams_send_shared_email_once() {
+		$owner        = $this->create_reader();
+		$subscription = $this->create_group_subscription( $owner );
+		$team_a       = $this->create_team( $owner, [], $subscription->get_id() );
+		$team_b       = $this->create_team( $owner, [], $subscription->get_id() );
+		$shared       = 'shared-invitee@test.com';
+		$this->create_team_invitation( $team_a, $shared );
+		$this->create_team_invitation( $team_b, $shared );
+
+		$first  = Teams_Migration::migrate_team_invitations( $subscription, $team_a, true );
+		$second = Teams_Migration::migrate_team_invitations( $subscription, $team_b, true );
+
+		$this->assertSame( [ $shared ], $first['sent'], 'The first team should send the shared invite.' );
+		$this->assertSame( [], $second['sent'], 'The second team must not re-send the shared invite.' );
+		$this->assertArrayHasKey( $shared, $second['skipped'], 'The shared invitee should be skipped on the second team.' );
+		$this->assertCount( 1, Group_Subscription_Invite::get_invites( $subscription ), 'Only one invite should exist for the shared email.' );
+	}
+
+	/**
+	 * The feature's whole point is the email: with sending disabled no mail is dispatched,
+	 * and with it enabled exactly one message goes out per invitee. Asserted on the mailer
+	 * rather than on invite meta, because an invite row is written whether or not anything
+	 * is actually delivered.
+	 */
+	public function test_migrate_team_invitations_dispatches_one_email_per_invitee_only_when_sending() {
+		$owner        = $this->create_reader();
+		$subscription = $this->create_group_subscription( $owner );
+		$team_id      = $this->create_team( $owner, [], $subscription->get_id() );
+		$invitee_one  = 'mail-one@test.com';
+		$invitee_two  = 'mail-two@test.com';
+		$this->create_team_invitation( $team_id, $invitee_one );
+		$this->create_team_invitation( $team_id, $invitee_two );
+
+		Teams_Migration::migrate_team_invitations( $subscription, $team_id, false );
+		$this->assertCount( 0, $this->get_sent_emails(), 'A listing-only run must email nobody.' );
+
+		$result = Teams_Migration::migrate_team_invitations( $subscription, $team_id, true );
+
+		$this->assertCount( 2, $result['sent'], 'Both invitees should be reported as sent.' );
+		$recipients = array_map(
+			function ( $mail ) {
+				return $mail['to'][0][0];
+			},
+			$this->get_sent_emails()
+		);
+		sort( $recipients );
+		$this->assertSame( [ $invitee_one, $invitee_two ], $recipients, 'Exactly one invitation email should go to each invitee.' );
+	}
+
+	/**
+	 * An invite whose email did not go out must not be reported as sent, and must not be
+	 * left on the subscription: a stored invite makes the already-invited gate answer
+	 * "Already invited." forever, so the corrective re-run could never reach the reader.
+	 */
+	public function test_migrate_team_invitations_rolls_back_an_invite_whose_email_failed() {
+		$owner        = $this->create_reader();
+		$subscription = $this->create_group_subscription( $owner );
+		$team_id      = $this->create_team( $owner, [], $subscription->get_id() );
+		$invitee      = 'undeliverable@test.com';
+		$this->create_team_invitation( $team_id, $invitee );
+
+		add_filter( 'pre_wp_mail', '__return_false' );
+		$failed_run = Teams_Migration::migrate_team_invitations( $subscription, $team_id, true );
+		remove_filter( 'pre_wp_mail', '__return_false' );
+
+		$this->assertSame( [], $failed_run['sent'], 'An undelivered invitation must not be counted as sent.' );
+		$this->assertArrayHasKey( $invitee, $failed_run['failed'], 'The undelivered invitee should be reported as failed.' );
+		$this->assertEmpty( Group_Subscription_Invite::get_invites( $subscription ), 'The invite must be rolled back so a re-run can retry it.' );
+
+		// The retry the operator is told to run now actually reaches the reader.
+		$retry = Teams_Migration::migrate_team_invitations( $subscription, $team_id, true );
+		$this->assertSame( [ $invitee ], $retry['sent'], 'The re-run must be able to send the invitation that failed.' );
+		$this->assertCount( 1, $this->get_sent_emails(), 'The retry is the only message that leaves.' );
+	}
+
+	/**
+	 * The send path propagates throws — Emails::send_email() wraps the dispatch in
+	 * try/finally with no catch — and a throw lands after generate_invite() has
+	 * already written the invite row. The catch must roll that row back exactly like
+	 * a false `email_sent`: without the rollback, the stored invite answers "Already
+	 * invited." to every corrective re-run for its 30-day life, while the reader was
+	 * emailed zero times and the phantom invite holds a seat of the group's limit.
+	 */
+	public function test_migrate_team_invitations_rolls_back_an_invite_whose_send_threw() {
+		$owner        = $this->create_reader();
+		$subscription = $this->create_group_subscription( $owner );
+		$team_id      = $this->create_team( $owner, [], $subscription->get_id() );
+		$invitee      = 'throwing-send@test.com';
+		$this->create_team_invitation( $team_id, $invitee );
+
+		$thrower = function () {
+			throw new \RuntimeException( 'Mail provider rejected the connection.' );
+		};
+		add_filter( 'pre_wp_mail', $thrower );
+		$failed_run = Teams_Migration::migrate_team_invitations( $subscription, $team_id, true );
+		remove_filter( 'pre_wp_mail', $thrower );
+
+		$this->assertSame( [], $failed_run['sent'], 'A throwing send must not be counted as sent.' );
+		$this->assertArrayHasKey( $invitee, $failed_run['failed'], 'The invitee whose send threw should be reported as failed.' );
+		$this->assertStringContainsString( 'rolled back', $failed_run['failed'][ $invitee ], 'The failure reason should say the invite was rolled back.' );
+		$this->assertEmpty( Group_Subscription_Invite::get_invites( $subscription ), 'The stored invite must be rolled back after a throwing send, or the re-run could never retry this reader.' );
+
+		// The corrective re-run the FAILED wording recommends now actually sends.
+		$retry = Teams_Migration::migrate_team_invitations( $subscription, $team_id, true );
+		$this->assertSame( [ $invitee ], $retry['sent'], 'The re-run must be able to send the invitation whose send threw.' );
+		$this->assertCount( 1, $this->get_sent_emails(), 'The retry is the only message that leaves.' );
+	}
+
+	/**
+	 * The address is stored and emailed in its original casing. The acceptance handler
+	 * compares it strictly against the reader's stored user_email, which WordPress keeps
+	 * in whatever case they registered with — a lowercased invite would send a reader
+	 * with a mixed-case account a link they can never accept.
+	 */
+	public function test_migrate_team_invitations_preserves_invitee_email_case() {
+		$owner        = $this->create_reader();
+		$subscription = $this->create_group_subscription( $owner );
+		$team_id      = $this->create_team( $owner, [], $subscription->get_id() );
+		$mixed_case   = 'Dana.Smith@Example.com';
+		$this->create_team_invitation( $team_id, $mixed_case );
+
+		$result = Teams_Migration::migrate_team_invitations( $subscription, $team_id, true );
+
+		$this->assertSame( [ $mixed_case ], $result['sent'], 'The invitee should be reported with the casing they were invited with.' );
+		$this->assertSame(
+			[ $mixed_case ],
+			array_column( Group_Subscription_Invite::get_invites( $subscription ), 'email' ),
+			'The stored invite must keep the original casing so the acceptance check can match the account email.'
+		);
+		$this->assertSame( $mixed_case, $this->get_sent_emails()[0]['to'][0][0], 'The email must go to the original-cased address.' );
+	}
+
+	/**
+	 * The reason the casing is preserved: an invitee whose *account* email carries
+	 * uppercase characters must be able to accept what the migration sent them.
+	 * accept_invite() compares the stored invite address strictly against the address in
+	 * the link, and process_invite_request() compares that address strictly against the
+	 * logged-in reader's user_email — so a lowercased invite would be unacceptable for
+	 * this reader, and only an end-to-end accept proves it isn't.
+	 */
+	public function test_migrate_team_invitations_invite_is_acceptable_by_a_mixed_case_account() {
+		$owner        = $this->create_reader();
+		$subscription = $this->create_group_subscription( $owner );
+		$team_id      = $this->create_team( $owner, [], $subscription->get_id() );
+
+		$account_email = 'Dana.Smith@Example.com';
+		$invitee       = $this->create_reader( $account_email );
+		$this->assertSame( $account_email, get_userdata( $invitee )->user_email, 'WordPress stores the account email in the case it was registered with.' );
+		$this->create_team_invitation( $team_id, $account_email );
+
+		$result = Teams_Migration::migrate_team_invitations( $subscription, $team_id, true );
+		$this->assertSame( [ $account_email ], $result['sent'], 'The mixed-case invitee should be invited.' );
+
+		$invites    = Group_Subscription_Invite::get_invites( $subscription );
+		$invite_key = array_key_first( $invites );
+		$this->assertSame( $account_email, $invites[ $invite_key ]['email'], 'The stored invite must carry the address in the account\'s own casing.' );
+
+		$accepted = Group_Subscription_Invite::accept_invite( $subscription, $invite_key, $account_email );
+		$this->assertTrue( $accepted, 'The reader must be able to accept the invitation the migration sent them.' );
+		$this->assertContains( $invitee, array_map( 'absint', Group_Subscription::get_members( $subscription ) ), 'Accepting should make the mixed-case reader a group member.' );
+	}
+
+	/**
+	 * The already-invited gate reads live invites only, so it guarantees "a re-run emails
+	 * nobody twice" for as long as an invite lives, not forever. Past that window the
+	 * invitee is invited again — reported separately so the operator can see who is being
+	 * emailed a second time.
+	 */
+	public function test_migrate_team_invitations_reports_a_reinvite_after_the_invite_lapsed() {
+		$owner        = $this->create_reader();
+		$subscription = $this->create_group_subscription( $owner );
+		$team_id      = $this->create_team( $owner, [], $subscription->get_id() );
+		$invitee      = 'lapsed-invitee@test.com';
+		$this->create_team_invitation( $team_id, $invitee );
+
+		Teams_Migration::migrate_team_invitations( $subscription, $team_id, true );
+
+		// Age the stored invite past its expiry.
+		$invites = Group_Subscription_Invite::get_invites( $subscription );
+		foreach ( array_keys( $invites ) as $key ) {
+			$invites[ $key ]['expiration'] = time() - HOUR_IN_SECONDS;
+		}
+		$subscription->update_meta_data( Group_Subscription_Invite::META, $invites );
+		$subscription->save();
+
+		$rerun = Teams_Migration::migrate_team_invitations( $subscription, $team_id, true );
+
+		$this->assertSame( [ $invitee ], $rerun['sent'], 'A lapsed invitation should be reissued.' );
+		$this->assertSame( [ $invitee ], $rerun['resent'], 'The reissue must be reported as a re-invite, not as a first contact.' );
+	}
+
+	/**
 	 * Backfill resolution keys on the team marker for a multi-team owner: a team resolves
 	 * to its own migrated group, never a sibling team's, so managers are never promoted
 	 * across teams. This pins the sibling-command half of the NPPD-2060 fix — the merge
@@ -874,5 +1599,436 @@ class Test_Teams_Migration extends WP_UnitTestCase {
 			'A fresh team should find no reusable group among another team\'s marked group, a cancelled group, and a non-group subscription.'
 		);
 		$this->assertFalse( $reuse['used_owner_fallback'], 'No eligible fallback exists here.' );
+	}
+
+	/**
+	 * Register a variable subscription parent and one variation, as a publisher
+	 * selling seat tiers would have (NPPD-1876).
+	 *
+	 * @return array{parent: WC_Product, variation: WC_Product}
+	 */
+	private function create_variable_subscription_product() {
+		$parent = wc_create_mock_product(
+			[
+				'id'   => 109742,
+				'name' => 'Corporate Self Checkout',
+				'type' => 'variable-subscription',
+			]
+		);
+		$variation = wc_create_mock_product(
+			[
+				'id'        => 109751,
+				'name'      => 'Corporate Self Checkout - Unlimited',
+				'type'      => 'subscription_variation',
+				'parent_id' => 109742,
+			]
+		);
+		return [
+			'parent'    => $parent,
+			'variation' => $variation,
+		];
+	}
+
+	/**
+	 * Call one of the migration's private static creators.
+	 *
+	 * @param string $method Method name.
+	 * @param array  $args   Positional arguments.
+	 *
+	 * @return mixed
+	 */
+	private function invoke_private( $method, $args ) {
+		$reflection = new ReflectionMethod( Teams_Migration::class, $method );
+		$reflection->setAccessible( true );
+		return $reflection->invokeArgs( null, $args );
+	}
+
+	/**
+	 * A team migrated against a variation must end up linked to that variation.
+	 *
+	 * Publishers selling seat tiers hold them as variations of one variable
+	 * subscription product, so `--product-id` is routinely given a variation ID.
+	 * Assigning that ID straight to the line item's `product_id` is rejected by
+	 * WooCommerce and silently dropped, leaving an item linked to nothing — which
+	 * then makes WC Subscriptions refuse to activate the subscription (NPPD-1876).
+	 */
+	public function test_create_migration_subscription_links_a_variation() {
+		$owner    = $this->create_reader();
+		$products = $this->create_variable_subscription_product();
+		$errors   = [];
+
+		$subscription = $this->invoke_private(
+			'create_migration_subscription',
+			[ $owner, $products['variation'], 'month', 1, '2026-01-01 00:00:00', '', &$errors, 94782 ]
+		);
+
+		$this->assertNotNull( $subscription, 'The subscription should be created.' );
+		$items = $subscription->get_items();
+		$this->assertCount( 1, $items, 'The subscription should carry one line item.' );
+		$item = array_shift( $items );
+
+		$this->assertSame( 109742, $item->get_product_id(), 'A variation must be recorded against its parent product ID.' );
+		$this->assertSame( 109751, $item->get_variation_id(), 'The variation ID must be recorded on the line item.' );
+		$this->assertNotFalse( $item->get_product(), 'The line item must resolve to a product; an unresolvable item blocks activation.' );
+		// The name is no longer set explicitly — set_product() carries it over — so
+		// hold that behavior in place rather than leaving it implicit.
+		$this->assertSame( 'Corporate Self Checkout - Unlimited', $item->get_name(), 'The line item should take its name from the linked product.' );
+		$this->assertSame( [], $errors, 'Linking a variation should not record an error.' );
+	}
+
+	/**
+	 * The same linkage is required when re-using a team's existing subscription.
+	 *
+	 * This path never calls update_status(), so a dropped product ID raises no
+	 * exception — the subscription stays active and reports as migrated while
+	 * granting access to nobody, because access is matched by product ID.
+	 */
+	public function test_replace_subscription_product_links_a_variation() {
+		$owner        = $this->create_reader();
+		$products     = $this->create_variable_subscription_product();
+		$errors       = [];
+		$subscription = wcs_create_subscription(
+			[
+				'customer_id'    => $owner,
+				'status'         => 'active',
+				'billing_period' => 'month',
+			]
+		);
+
+		// Seed the team's original line item. This method leads with a removal loop,
+		// so without a pre-existing item the count assertion below would prove only
+		// that one item was added, not that the old one was cleared — and clearing
+		// it is the half that decides whether the group grants access.
+		$old_product = wc_create_mock_product(
+			[
+				'id'   => 500,
+				'name' => 'Legacy Teams product',
+				'type' => 'subscription',
+			]
+		);
+		$old_item = new WC_Order_Item_Product( [ 'id' => 4242 ] );
+		$old_item->set_product( $old_product );
+		$subscription->add_item( $old_item );
+		$this->assertCount( 1, $subscription->get_items(), 'Fixture check: the subscription starts with the legacy item.' );
+
+		$this->invoke_private(
+			'replace_subscription_product',
+			[ $subscription, $products['variation'], 'month', 1, '2026-01-01 00:00:00', '', &$errors, 94782 ]
+		);
+
+		$items = $subscription->get_items();
+		$this->assertCount( 1, $items, 'The reused subscription should carry exactly the migration line item.' );
+		$item = array_shift( $items );
+
+		$this->assertSame( 109742, $item->get_product_id(), 'A variation must be recorded against its parent product ID.' );
+		$this->assertSame( 109751, $item->get_variation_id(), 'The variation ID must be recorded on the line item.' );
+		$this->assertNotFalse( $item->get_product(), 'The line item must resolve to a product, or the group grants no access.' );
+		$this->assertNotSame( 500, $item->get_product_id(), 'The legacy line item should have been removed, not kept alongside.' );
+	}
+
+	/**
+	 * A migration product's availability is decided by the parent's status.
+	 *
+	 * An unpublished product fails activation the same way an unlinked line item
+	 * does, so the pre-flight has to resolve a variation to its parent before
+	 * judging it.
+	 */
+	public function test_product_is_published_resolves_a_variation_to_its_parent() {
+		$products = $this->create_variable_subscription_product();
+
+		$this->assertTrue(
+			$this->invoke_private( 'product_is_published', [ $products['variation'] ] ),
+			'A variation under a published parent counts as published.'
+		);
+		$this->assertTrue(
+			$this->invoke_private( 'product_is_published', [ $products['parent'] ] ),
+			'A published parent counts as published.'
+		);
+
+		$draft_parent = wc_create_mock_product(
+			[
+				'id'     => 700,
+				'name'   => 'Draft parent',
+				'type'   => 'variable-subscription',
+				'status' => 'draft',
+			]
+		);
+		$draft_child  = wc_create_mock_product(
+			[
+				'id'        => 701,
+				'name'      => 'Variation of a draft parent',
+				'type'      => 'subscription_variation',
+				'parent_id' => 700,
+			]
+		);
+
+		$this->assertFalse(
+			$this->invoke_private( 'product_is_published', [ $draft_child ] ),
+			'A variation whose parent is unpublished must not pass pre-flight — it cannot be activated.'
+		);
+		$this->assertFalse(
+			$this->invoke_private( 'product_is_published', [ $draft_parent ] ),
+			'An unpublished product must not pass pre-flight.'
+		);
+	}
+
+	/**
+	 * Gate matching follows has_product(), which accepts a product or its parent.
+	 *
+	 * A flat comparison against the product's own ID would refuse a seat-tier
+	 * variation on a site whose gate names the parent variable product — a
+	 * configuration that works perfectly at runtime.
+	 */
+	public function test_product_grants_gate_access_accepts_a_parent_rule() {
+		$products = $this->create_variable_subscription_product();
+
+		$this->assertTrue(
+			$this->invoke_private( 'product_grants_gate_access', [ $products['variation'], [ 109742 ] ] ),
+			'A gate naming the parent product accepts any of its variations.'
+		);
+		$this->assertTrue(
+			$this->invoke_private( 'product_grants_gate_access', [ $products['variation'], [ 109751 ] ] ),
+			'A gate naming the variation itself accepts it.'
+		);
+		$this->assertTrue(
+			$this->invoke_private( 'product_grants_gate_access', [ $products['parent'], [ 109742 ] ] ),
+			'A gate naming a plain product accepts it.'
+		);
+		$this->assertFalse(
+			$this->invoke_private( 'product_grants_gate_access', [ $products['variation'], [ 109999 ] ] ),
+			'A gate naming only a sibling variation accepts nothing.'
+		);
+		$this->assertFalse(
+			$this->invoke_private( 'product_grants_gate_access', [ $products['parent'], [ 109751 ] ] ),
+			'A gate naming a variation does not accept the bare parent product.'
+		);
+	}
+
+	/**
+	 * The re-run guard must recognise a subscription linked to a variation.
+	 *
+	 * The migrate-manual-members command skips members who already hold a
+	 * migration subscription. Since a variation is stored as parent product ID plus
+	 * variation ID, matching on the product ID alone never recognised the
+	 * command's own output — so each re-run granted every member another $0
+	 * subscription instead of skipping them.
+	 */
+	public function test_member_has_migration_subscription_recognises_a_variation() {
+		$user         = $this->create_reader();
+		$products     = $this->create_variable_subscription_product();
+		$subscription = wcs_create_subscription(
+			[
+				'customer_id'    => $user,
+				'status'         => 'active',
+				'billing_period' => 'month',
+				'created_via'    => 'manual migration',
+			]
+		);
+		$item = new WC_Order_Item_Product();
+		$item->set_product( $products['variation'] );
+		$subscription->add_item( $item );
+
+		$this->assertTrue(
+			$this->invoke_private( 'member_has_migration_subscription', [ $user, 109751 ] ),
+			'A member holding a subscription linked to this variation must be recognised, or a re-run duplicates it.'
+		);
+		$this->assertTrue(
+			$this->invoke_private( 'member_has_migration_subscription', [ $user, 109742 ] ),
+			'The parent product ID must match too, since the line item records it.'
+		);
+		$this->assertFalse(
+			$this->invoke_private( 'member_has_migration_subscription', [ $user, 109999 ] ),
+			'An unrelated product must not match.'
+		);
+	}
+
+	/**
+	 * Whether a reused subscription counts as one the publisher bills.
+	 *
+	 * This predicate decides whether a team's subscription keeps its commercial
+	 * terms or is rewritten to $0 on the migration product, so a false negative
+	 * deletes the product line the publisher sells. It errs toward "paid".
+	 */
+	public function test_subscription_is_paid_errs_toward_paid() {
+		$paid = wcs_create_subscription(
+			[
+				'customer_id'    => $this->create_reader(),
+				'status'         => 'active',
+				'billing_period' => 'month',
+				'total'          => 599,
+			]
+		);
+		$this->assertTrue(
+			$this->invoke_private( 'subscription_is_paid', [ $paid ] ),
+			'A subscription with a recurring total is one the publisher bills.'
+		);
+
+		// A fully-discounted subscription stores a total of 0 but is still sold —
+		// the pre-discount subtotal is what distinguishes it from a $0 migration
+		// subscription, which has neither.
+		$fully_discounted = wcs_create_subscription(
+			[
+				'customer_id'    => $this->create_reader(),
+				'status'         => 'active',
+				'billing_period' => 'month',
+				'total'          => 0,
+				'subtotal'       => 599,
+			]
+		);
+		$this->assertTrue(
+			$this->invoke_private( 'subscription_is_paid', [ $fully_discounted ] ),
+			'A 100% recurring coupon must not read as free, or migration deletes the product being sold.'
+		);
+
+		$migration_created = wcs_create_subscription(
+			[
+				'customer_id'    => $this->create_reader(),
+				'status'         => 'active',
+				'billing_period' => 'month',
+				'total'          => 0,
+				'subtotal'       => 0,
+			]
+		);
+		$this->assertFalse(
+			$this->invoke_private( 'subscription_is_paid', [ $migration_created ] ),
+			'A $0 subscription with no pre-discount value is a migration subscription and stays re-alignable.'
+		);
+
+		$no_total_set = wcs_create_subscription(
+			[
+				'customer_id'    => $this->create_reader(),
+				'status'         => 'active',
+				'billing_period' => 'month',
+			]
+		);
+		$this->assertFalse(
+			$this->invoke_private( 'subscription_is_paid', [ $no_total_set ] ),
+			'A subscription with no total recorded is not treated as paid.'
+		);
+	}
+
+	/**
+	 * A pending-cancel subscription still grants access, so it is reusable.
+	 *
+	 * A team riding out a term it already paid for keeps access until the
+	 * subscription self-cancels. Both Access_Rules and Group_Subscription gate
+	 * member access on WooCommerce_Connection::ACTIVE_SUBSCRIPTION_STATUSES, so
+	 * reusing such a subscription in place carries that expiry across the
+	 * migration; creating a $0 group for the team instead would grant its members
+	 * access forever, after the owner had cancelled.
+	 */
+	public function test_pending_cancel_counts_as_access_granting_for_reuse() {
+		$this->assertContains(
+			'pending-cancel',
+			\Newspack\WooCommerce_Connection::ACTIVE_SUBSCRIPTION_STATUSES,
+			'Reuse keys on this constant; if pending-cancel leaves it, a cancelled-but-paid team would be given a permanent free group instead.'
+		);
+
+		$pending_cancel = wcs_create_subscription(
+			[
+				'customer_id'    => $this->create_reader(),
+				'status'         => 'pending-cancel',
+				'billing_period' => 'month',
+				'total'          => 599,
+			]
+		);
+		$this->assertTrue(
+			$pending_cancel->has_status( \Newspack\WooCommerce_Connection::ACTIVE_SUBSCRIPTION_STATUSES ),
+			'A pending-cancel subscription is reusable, so the migration updates it in place rather than minting a $0 replacement.'
+		);
+		$this->assertTrue(
+			$this->invoke_private( 'subscription_is_paid', [ $pending_cancel ] ),
+			'It is also paid, so its product and price are left alone.'
+		);
+
+		// Even with no total recorded, a pending-cancel subscription must keep its
+		// terms: its scheduled end date is what ends group access on time.
+		$free_pending_cancel = wcs_create_subscription(
+			[
+				'customer_id'    => $this->create_reader(),
+				'status'         => 'pending-cancel',
+				'billing_period' => 'month',
+			]
+		);
+		$this->assertFalse(
+			$this->invoke_private( 'subscription_is_paid', [ $free_pending_cancel ] ),
+			'A $0 pending-cancel subscription is not paid — it is exempted from re-alignment by its status, not its total.'
+		);
+		$this->assertTrue(
+			$free_pending_cancel->has_status( 'pending-cancel' ),
+			'Status is the signal that preserves its end date.'
+		);
+	}
+
+	/**
+	 * Gate coverage for a paid team's own subscription follows has_product().
+	 *
+	 * A team the publisher bills keeps its own product rather than being rewritten
+	 * onto --product-id, so whether its access survives the migration is decided
+	 * by whether a gate accepts the product it already holds. A subscription
+	 * linked to a seat-tier variation is covered by a gate naming either that
+	 * variation or its parent.
+	 */
+	public function test_subscription_covers_access_products_matches_parent_or_variation() {
+		$owner        = $this->create_reader();
+		$products     = $this->create_variable_subscription_product();
+		$subscription = wcs_create_subscription(
+			[
+				'customer_id'    => $owner,
+				'status'         => 'active',
+				'billing_period' => 'month',
+			]
+		);
+		$item = new WC_Order_Item_Product();
+		$item->set_product( $products['variation'] );
+		$subscription->add_item( $item );
+
+		$this->assertTrue(
+			$this->invoke_private( 'subscription_covers_access_products', [ $subscription, [ 109742 ] ] ),
+			'A gate naming the parent product covers a subscription linked to one of its variations.'
+		);
+		$this->assertTrue(
+			$this->invoke_private( 'subscription_covers_access_products', [ $subscription, [ 109751 ] ] ),
+			'A gate naming the variation covers it.'
+		);
+		$this->assertFalse(
+			$this->invoke_private( 'subscription_covers_access_products', [ $subscription, [ 109999 ] ] ),
+			'A gate naming an unrelated product covers nothing — this is what makes a paid team skip rather than migrate.'
+		);
+		$this->assertTrue(
+			$this->invoke_private( 'subscription_covers_access_products', [ $subscription, [] ] ),
+			'With no gate products configured there is nothing to check against.'
+		);
+	}
+
+	/**
+	 * A plain (non-variation) product still links as before.
+	 */
+	public function test_create_migration_subscription_links_a_simple_product() {
+		$owner   = $this->create_reader();
+		$product = wc_create_mock_product(
+			[
+				'id'   => 500,
+				'name' => 'Group Subscription',
+				'type' => 'subscription',
+			]
+		);
+		$errors = [];
+
+		$subscription = $this->invoke_private(
+			'create_migration_subscription',
+			[ $owner, $product, 'month', 1, '2026-01-01 00:00:00', '', &$errors, 94783 ]
+		);
+
+		$this->assertNotNull( $subscription, 'The subscription should be created.' );
+		$this->assertSame( [], $errors, 'Linking a plain product should not record an error.' );
+
+		$items = $subscription->get_items();
+		$this->assertCount( 1, $items, 'The subscription should carry one line item.' );
+		$item = array_shift( $items );
+
+		$this->assertSame( 500, $item->get_product_id(), 'A non-variation product links by product ID.' );
+		$this->assertSame( 0, $item->get_variation_id(), 'A non-variation product has no variation ID.' );
+		$this->assertNotFalse( $item->get_product(), 'The line item must resolve to a product.' );
 	}
 }
