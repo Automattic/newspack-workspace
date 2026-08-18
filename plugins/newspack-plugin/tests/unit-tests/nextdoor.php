@@ -70,6 +70,7 @@ class Newspack_Test_Nextdoor extends WP_UnitTestCase {
 		delete_option( Nextdoor::SETTINGS_SLUG );
 		delete_option( Optional_Modules::OPTION_NAME );
 		delete_option( Auth::REFUSAL_OPTION );
+		delete_transient( Auth::REFRESH_COOLOFF_TRANSIENT );
 	}
 
 	/**
@@ -89,6 +90,7 @@ class Newspack_Test_Nextdoor extends WP_UnitTestCase {
 		delete_option( Nextdoor::SETTINGS_SLUG );
 		delete_option( Optional_Modules::OPTION_NAME );
 		delete_option( Auth::REFUSAL_OPTION );
+		delete_transient( Auth::REFRESH_COOLOFF_TRANSIENT );
 
 		parent::tear_down();
 	}
@@ -265,6 +267,44 @@ class Newspack_Test_Nextdoor extends WP_UnitTestCase {
 
 		self::assertSame( 'site-id', $stored['client_id'] );
 		self::assertSame( 'site-secret', $stored['client_secret'] );
+	}
+
+	/**
+	 * A credential is stored byte for byte. `sanitize_text_field()` drops every `%`
+	 * followed by two hex digits, which would store an opaque secret quietly short.
+	 */
+	public function test_a_credential_keeps_a_percent_sequence() {
+		Optional_Modules::activate_optional_module( 'nextdoor' );
+
+		$secret = 'sk_%2Flive%2Fabc%7C99';
+
+		$this->update_settings(
+			[
+				'client_id'     => 'site-id',
+				'client_secret' => $secret,
+			]
+		);
+
+		self::assertSame( $secret, get_option( Nextdoor::SETTINGS_SLUG )['client_secret'] );
+	}
+
+	/**
+	 * Blank means no change, so a value that sanitises away cannot wipe a working
+	 * credential the form deliberately never sends back.
+	 */
+	public function test_an_emptied_credential_keeps_the_stored_one() {
+		Optional_Modules::activate_optional_module( 'nextdoor' );
+
+		$this->update_settings(
+			[
+				'client_id'     => 'site-id',
+				'client_secret' => 'site-secret',
+			]
+		);
+
+		$this->update_settings( [ 'client_secret' => '   ' ] );
+
+		self::assertSame( 'site-secret', get_option( Nextdoor::SETTINGS_SLUG )['client_secret'] );
 	}
 
 	/**
@@ -496,6 +536,43 @@ class Newspack_Test_Nextdoor extends WP_UnitTestCase {
 
 		self::assertInstanceOf( 'WP_Error', $replayed );
 		self::assertSame( 'nextdoor_oauth_invalid_state', $replayed->get_error_code() );
+	}
+
+	/**
+	 * Declining at Nextdoor returns an error and no code, which has to reach the card
+	 * rather than leaving the publisher on a closed one with nothing said.
+	 */
+	public function test_a_denied_authorization_is_reported() {
+		$redirect_to = null;
+		$capture     = function ( $location ) use ( &$redirect_to ) {
+			$redirect_to = $location;
+			throw new Exception( 'redirect_intercepted' );
+		};
+		add_filter( 'wp_redirect', $capture, 1 );
+
+		$state = Auth::create_oauth_state();
+
+		$_GET['nextdoor_oauth_callback'] = '1';
+		$_GET['state']                   = $state;
+		$_GET['error']                   = 'access_denied';
+		$_GET['error_description']       = 'The publisher declined.';
+
+		try {
+			try {
+				Auth::handle_oauth_callback();
+				self::fail( 'Expected a redirect.' );
+			} catch ( Exception $e ) {
+				self::assertStringContainsString( 'redirect_intercepted', $e->getMessage() );
+			}
+
+			self::assertStringContainsString( 'nextdoor_oauth_error=', (string) $redirect_to );
+			self::assertStringContainsString( rawurlencode( 'The publisher declined.' ), (string) $redirect_to );
+			// Consumed on the way through, so the denied attempt cannot be replayed.
+			self::assertFalse( Auth::verify_oauth_state( $state ) );
+		} finally {
+			remove_filter( 'wp_redirect', $capture, 1 );
+			unset( $_GET['nextdoor_oauth_callback'], $_GET['state'], $_GET['error'], $_GET['error_description'] );
+		}
 	}
 
 	/**
@@ -1214,6 +1291,120 @@ class Newspack_Test_Nextdoor extends WP_UnitTestCase {
 
 		$this->connect_with_a_claimed_page();
 
+		// The report rejects the bearer and the refresh refuses the grant behind it, which
+		// together are what a revoked connection looks like.
+		add_filter(
+			'pre_http_request',
+			function ( $preempt, $args, $url ) {
+				$refused = false !== strpos( $url, '/v2/token' ) ? 'invalid_grant' : 'unauthorized';
+
+				return [
+					'headers'  => [],
+					'body'     => wp_json_encode( [ 'error' => $refused ] ),
+					'response' => [
+						'code'    => 401,
+						'message' => 'Unauthorized',
+					],
+					'cookies'  => [],
+					'filename' => null,
+				];
+			},
+			10,
+			3
+		);
+
+		$request = new WP_REST_Request( 'GET', '/newspack/v1/nextdoor/post-status/' . $post_id );
+		$request->set_param( 'id', $post_id );
+
+		$data = Controller::api_get_post_sharing_status( $request )->get_data();
+
+		self::assertTrue( $data['needs_reconnect'] );
+		self::assertFalse( $data['is_unreachable'] );
+		// Persisted, so the card the reconnect link leads to agrees with this answer.
+		self::assertNotEmpty( get_option( Auth::REFUSAL_OPTION ) );
+		self::assertFalse( Auth::has_usable_token() );
+	}
+
+	/**
+	 * A rejected access token is renewed rather than recorded: the refresh token is a
+	 * separate grant, and a recorded refusal stops any later refresh being attempted.
+	 */
+	public function test_a_rejected_report_is_renewed_before_it_is_recorded() {
+		$post_id = $this->factory->post->create( [ 'post_status' => 'publish' ] );
+		update_post_meta( $post_id, '_nextdoor_guid', 'guid-1' );
+
+		$this->connect_with_a_claimed_page();
+
+		add_filter(
+			'pre_http_request',
+			function ( $preempt, $args, $url ) {
+				if ( false !== strpos( $url, '/v2/token' ) ) {
+					return [
+						'headers'  => [],
+						'body'     => wp_json_encode(
+							[
+								'access_token'  => 'renewed-access',
+								'refresh_token' => 'renewed-refresh',
+								'expires_in'    => 3600,
+							]
+						),
+						'response' => [
+							'code'    => 200,
+							'message' => 'OK',
+						],
+						'cookies'  => [],
+						'filename' => null,
+					];
+				}
+
+				return [
+					'headers'  => [],
+					'body'     => wp_json_encode( [ 'error' => 'unauthorized' ] ),
+					'response' => [
+						'code'    => 401,
+						'message' => 'Unauthorized',
+					],
+					'cookies'  => [],
+					'filename' => null,
+				];
+			},
+			10,
+			3
+		);
+
+		$request = new WP_REST_Request( 'GET', '/newspack/v1/nextdoor/post-status/' . $post_id );
+		$request->set_param( 'id', $post_id );
+
+		$data = Controller::api_get_post_sharing_status( $request )->get_data();
+
+		// Nothing recorded, so the next load can use the renewed token rather than sending
+		// the publisher through a reconnection that also costs them their claimed page.
+		self::assertEmpty( get_option( Auth::REFUSAL_OPTION ) );
+		self::assertSame( 'renewed-access', Nextdoor::get_settings()['access_token'] );
+		self::assertTrue( Auth::has_usable_token() );
+		self::assertFalse( $data['needs_reconnect'] );
+		self::assertTrue( $data['is_unreachable'] );
+	}
+
+	/**
+	 * With nothing to renew with, the rejection is all the evidence there will be.
+	 */
+	public function test_a_rejected_report_without_a_refresh_token_asks_for_a_reconnection() {
+		$post_id = $this->factory->post->create( [ 'post_status' => 'publish' ] );
+		update_post_meta( $post_id, '_nextdoor_guid', 'guid-1' );
+
+		Nextdoor::update_settings(
+			[
+				'client_id'        => 'site-id',
+				'client_secret'    => 'site-secret',
+				'access_token'     => 'valid-access',
+				'refresh_token'    => '',
+				'token_expires_at' => time() + HOUR_IN_SECONDS,
+				'page_id'          => 'page-123',
+			]
+		);
+
+		$this->http_body = wp_json_encode( [ 'error' => 'unauthorized' ] );
 		add_filter(
 			'pre_http_request',
 			function () {
@@ -1236,8 +1427,6 @@ class Newspack_Test_Nextdoor extends WP_UnitTestCase {
 		$data = Controller::api_get_post_sharing_status( $request )->get_data();
 
 		self::assertTrue( $data['needs_reconnect'] );
-		self::assertFalse( $data['is_unreachable'] );
-		// Persisted, so the card the reconnect link leads to agrees with this answer.
 		self::assertNotEmpty( get_option( Auth::REFUSAL_OPTION ) );
 		self::assertFalse( Auth::has_usable_token() );
 	}
