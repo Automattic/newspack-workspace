@@ -48,11 +48,11 @@ class Test_Subscribers_Wizard_Payments_Endpoints extends WP_UnitTestCase {
 	public function set_up() {
 		parent::set_up();
 		global $subscriptions_database, $products_database, $orders_database,
-			$payment_tokens_database, $wc_mock_refunds, $wc_mock_refund_result, $wc_mock_gateways_by_order;
+			$wc_mock_refunds, $wc_mock_refund_result, $wc_mock_gateways_by_order;
 		$subscriptions_database    = [];
 		$products_database         = [];
 		$orders_database           = [];
-		$payment_tokens_database   = [];
+		\WC_Payment_Tokens::$tokens = [];
 		$wc_mock_refunds           = [];
 		$wc_mock_refund_result     = null;
 		$wc_mock_gateways_by_order = [];
@@ -68,11 +68,11 @@ class Test_Subscribers_Wizard_Payments_Endpoints extends WP_UnitTestCase {
 	 */
 	public function tear_down() {
 		remove_filter( 'woocommerce_subscription_payment_meta', [ $this, 'mock_gateway_payment_meta' ], 10 );
-		global $subscriptions_database, $products_database, $orders_database, $payment_tokens_database;
-		$subscriptions_database  = [];
-		$products_database       = [];
-		$orders_database         = [];
-		$payment_tokens_database = [];
+		global $subscriptions_database, $products_database, $orders_database;
+		$subscriptions_database     = [];
+		$products_database          = [];
+		$orders_database            = [];
+		\WC_Payment_Tokens::$tokens = [];
 		foreach ( $this->user_ids as $user_id ) {
 			wp_delete_user( $user_id );
 		}
