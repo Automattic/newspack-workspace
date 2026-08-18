@@ -1,3 +1,17 @@
+## newspack-popups [3.16.4](https://github.com/Automattic/newspack-workspace/compare/newspack-popups@3.16.3...newspack-popups@3.16.4) (2026-08-18)
+
+
+### Bug Fixes
+
+* **previews:** keep prompt and gate previews alive under WP 7.1 ([#896](https://github.com/Automattic/newspack-workspace/issues/896)) ([f711941](https://github.com/Automattic/newspack-workspace/commit/f71194149ca82e82976e251051d2cece0436842e))
+
+## newspack-popups [3.16.3](https://github.com/Automattic/newspack-workspace/compare/newspack-popups@3.16.2...newspack-popups@3.16.3) (2026-08-17)
+
+
+### Dependencies
+
+* **newspack-components:** upgraded to 4.6.2
+
 ## newspack-popups [3.16.2](https://github.com/Automattic/newspack-workspace/compare/newspack-popups@3.16.1...newspack-popups@3.16.2) (2026-08-17)
 
 

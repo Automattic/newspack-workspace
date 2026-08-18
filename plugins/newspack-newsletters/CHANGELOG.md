@@ -1,3 +1,29 @@
+## newspack-newsletters [3.39.3](https://github.com/Automattic/newspack-workspace/compare/newspack-newsletters@3.39.2...newspack-newsletters@3.39.3) (2026-08-17)
+
+
+### Bug Fixes
+
+* three WordPress 7.1 regressions in Newsletters ([#876](https://github.com/Automattic/newspack-workspace/issues/876)) ([#894](https://github.com/Automattic/newspack-workspace/issues/894)) ([3b6ac6c](https://github.com/Automattic/newspack-workspace/commit/3b6ac6cce050f2d70f73df1d98f175de1f19a759))
+
+
+### Dependencies
+
+* **newspack-components:** upgraded to 4.6.2
+
+## newspack-newsletters [3.39.2](https://github.com/Automattic/newspack-workspace/compare/newspack-newsletters@3.39.1...newspack-newsletters@3.39.2) (2026-08-17)
+
+
+### Bug Fixes
+
+* **newsletters:** stop AC trash cleanup deleting an unrelated campaign ([#884](https://github.com/Automattic/newspack-workspace/issues/884)) ([0111f26](https://github.com/Automattic/newspack-workspace/commit/0111f26b24736f70151471b9a84f6ff8a3d669b2))
+
+## newspack-newsletters [3.39.1](https://github.com/Automattic/newspack-workspace/compare/newspack-newsletters@3.39.0...newspack-newsletters@3.39.1) (2026-08-17)
+
+
+### Bug Fixes
+
+* **newsletters:** resolve click proxy redirect target consistently ([#808](https://github.com/Automattic/newspack-workspace/issues/808)) ([d7e3dab](https://github.com/Automattic/newspack-workspace/commit/d7e3dabe6a6e45c092b215d89267ffbc08547bb6))
+
 # newspack-newsletters [3.39.0](https://github.com/Automattic/newspack-workspace/compare/newspack-newsletters@3.38.6...newspack-newsletters@3.39.0) (2026-08-17)
 
 

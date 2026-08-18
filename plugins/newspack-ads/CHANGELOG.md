@@ -1,3 +1,22 @@
+## newspack-ads [3.14.2](https://github.com/Automattic/newspack-workspace/compare/newspack-ads@3.14.1...newspack-ads@3.14.2) (2026-08-18)
+
+
+### Bug Fixes
+
+* **ads:** escape the container id in GAM ad-unit markup ([#874](https://github.com/Automattic/newspack-workspace/issues/874)) ([adc96bc](https://github.com/Automattic/newspack-workspace/commit/adc96bc1dbb0e0f703d739f387fcae4b702a0f12))
+
+## newspack-ads [3.14.1](https://github.com/Automattic/newspack-workspace/compare/newspack-ads@3.14.0...newspack-ads@3.14.1) (2026-08-17)
+
+
+### Bug Fixes
+
+* **ads:** remove colored gaps from empty Broadstreet ad slots ([#578](https://github.com/Automattic/newspack-workspace/issues/578)) ([c16c8fc](https://github.com/Automattic/newspack-workspace/commit/c16c8fcb2dbce437cc452be74d42514631b3fd6b))
+
+
+### Dependencies
+
+* **newspack-components:** upgraded to 4.6.2
+
 # newspack-ads [3.14.0](https://github.com/Automattic/newspack-workspace/compare/newspack-ads@3.13.1...newspack-ads@3.14.0) (2026-08-17)
 
 

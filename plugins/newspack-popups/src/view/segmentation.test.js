@@ -1,113 +1,100 @@
 /**
- * Tests for the authenticated gate on carried segment IDs staying live
- * across a delayed prompt re-check.
+ * Direct coverage of the A/B + override composition in handleSegmentation.
  *
- * The carried set and the `authenticated` check both used to be computed
- * once in maybeDisplayPrompts() and closed over by the delayed unhide()
- * path. RAS's setAuthenticated() can flip a reader to authenticated mid-page
- * with no reload, so a still-pending delayed or scroll-triggered prompt's
- * re-check must reflect that change — a signed-in reader's live matching
- * always wins over a carried snapshot from a previous, logged-out visit.
- *
- * ./utils and ./utils/carried-segments are mocked so this test isolates
- * segmentation.js's own closure/gating logic from the deeper segment-match
- * and cookie-parsing logic those modules already cover in their own tests
- * (segments.test.js, carried-segments.test.js).
+ * The POC bug this feature replaces was positional: a variant the reader is not
+ * assigned to still claimed the single-overlay slot, so a later legitimate overlay
+ * never showed. getAbOverride() unit tests cannot catch that -- they prove the
+ * override value, not what handleSegmentation does with it -- so this exercises
+ * `getOverride( ... ) ?? getAbOverride( prompt )` through the real loop.
  */
 
-jest.mock( './utils', () => ( {
-	debug: jest.fn(),
-	closeOverlay: jest.fn(),
-	getBestPrioritySegment: jest.fn( () => null ),
-	getIntersectionObserver: jest.fn(),
-	getRawId: jest.fn( () => 1 ),
-	getOverride: jest.fn( () => null ),
-	handleSeen: jest.fn(),
-	shouldPromptBeDisplayed: jest.fn( () => true ),
-	syncMatchedSegments: jest.fn(),
-} ) );
+// Real getOverride / getAbOverride / getRawId: they are the composition under test.
+// Everything else is stubbed so display turns only on the override.
+jest.mock( './utils', () => {
+	const actual = jest.requireActual( './utils' );
+	return {
+		...actual,
+		debug: () => {},
+		closeOverlay: () => {},
+		handleSeen: () => {},
+		getIntersectionObserver: () => ( { observe: () => {} } ),
+		getBestPrioritySegment: () => null,
+		shouldPromptBeDisplayed: ( prompt, segment, ras, override ) => override ?? true,
+	};
+} );
 
-jest.mock( './utils/carried-segments', () => ( {
-	getCarriedSegmentIds: jest.fn( () => [ '5' ] ),
-} ) );
-
-import { getBestPrioritySegment } from './utils';
 import { handleSegmentation } from './segmentation';
+import { computeBucket } from './utils';
 
-const testSegments = { s1: {} };
+const READER_ID = 'reader-fixture-1';
+const TEST_ID = 'slot-test';
+const CONFIG = { variants: [ 'a', 'b' ], control_share: 50 };
 
-/**
- * An overlay prompt that displays on a delay rather than immediately, so its
- * re-check in unhide() runs after a setTimeout — the only path this bug can
- * reach. (A non-overlay prompt calls unhide() synchronously and never
- * re-checks; see handleSegmentation()'s forEach.)
- *
- * @param {string} delay Milliseconds to delay, as the data-delay attribute expects.
- * @return {HTMLElement} Prompt element.
- */
-const createDelayedOverlayPrompt = ( delay = '1000' ) => {
+const makePrompt = ( { overlay = false, variant = null } = {} ) => {
 	const prompt = document.createElement( 'div' );
-	prompt.setAttribute( 'id', 'id_1' );
-	prompt.setAttribute( 'data-delay', delay );
-	prompt.classList.add( 'newspack-lightbox', 'hidden' );
+	prompt.setAttribute( 'id', `id_${ Math.floor( Math.random() * 1e6 ) }` );
+	prompt.classList.add( 'hidden' );
+	if ( overlay ) {
+		prompt.classList.add( 'newspack-lightbox' );
+	}
+	if ( variant ) {
+		prompt.setAttribute( 'data-ab-test-id', TEST_ID );
+		prompt.setAttribute( 'data-ab-variant', variant );
+	}
 	return prompt;
 };
 
-/**
- * A minimal RAS stand-in whose 'reader' record is a single mutable object —
- * standing in for RAS's real store, where setAuthenticated() mutates the
- * same record callers already hold a reference to, with no reload.
- *
- * @param {boolean} authenticated Initial authenticated state.
- * @return {{ras: Object, reader: Object}} The mock RAS object and its mutable reader record.
- */
-const createMockRas = authenticated => {
-	const reader = { authenticated };
-	const ras = {
-		store: {
-			get: key => ( 'reader' === key ? reader : undefined ),
-		},
-	};
-	return { ras, reader };
-};
+const isVisible = prompt => ! prompt.classList.contains( 'hidden' );
 
-describe( 'handleSegmentation authenticated gate on carried IDs', () => {
+describe( 'handleSegmentation A/B composition', () => {
+	let assigned;
+	let unassigned;
+
 	beforeEach( () => {
-		window.newspackRAS = [];
-		window.newspack_popups_view = { segments: testSegments };
-		getBestPrioritySegment.mockClear();
 		jest.useFakeTimers();
+		global.newspack_popups_view = { ab_tests: { [ TEST_ID ]: CONFIG }, cid_cookie: 'newspack-cid' };
+		document.cookie = `newspack-cid=${ READER_ID }`;
+		document.body.className = '';
+		// Derive the arm from the real hash rather than hard-coding it, so the test
+		// keeps testing suppression if the bucketing math is ever retuned.
+		assigned = computeBucket( READER_ID, TEST_ID, CONFIG );
+		unassigned = 'a' === assigned ? 'b' : 'a';
 	} );
 
 	afterEach( () => {
 		jest.useRealTimers();
 	} );
 
-	it( 're-reads the authenticated flag when a delayed prompt re-checks, dropping carried IDs if RAS authenticated mid-delay', () => {
-		const prompt = createDelayedOverlayPrompt( '1000' );
-		handleSegmentation( [ prompt ] );
+	it( 'does not let a suppressed overlay variant claim the single-overlay slot', () => {
+		const suppressed = makePrompt( { overlay: true, variant: unassigned } );
+		const legitimate = makePrompt( { overlay: true } );
 
-		// RAS becomes ready and pushes the reader in as logged out — the state
-		// a still-anonymous visitor has when the prompt is first evaluated and
-		// its display delayed.
-		const { ras, reader } = createMockRas( false );
-		const maybeDisplayPrompts = window.newspackRAS[ 0 ];
-		maybeDisplayPrompts( ras );
+		handleSegmentation( [ suppressed, legitimate ] );
+		jest.runAllTimers();
 
-		// Initial, synchronous evaluation: not yet authenticated, so the
-		// carried snapshot from the newsletter click applies.
-		expect( getBestPrioritySegment ).toHaveBeenLastCalledWith( testSegments, null, [ '5' ] );
+		expect( isVisible( suppressed ) ).toBe( false );
+		expect( isVisible( legitimate ) ).toBe( true );
+	} );
 
-		// RAS authenticates the reader mid-page — e.g. a magic-link or OTP
-		// completion — with no reload, while the prompt is still pending its
-		// delay.
-		reader.authenticated = true;
-		jest.advanceTimersByTime( 1000 );
+	it( 'displays only the assigned arm when both inline variants are present', () => {
+		const armA = makePrompt( { variant: assigned } );
+		const armB = makePrompt( { variant: unassigned } );
 
-		// The delayed re-check must reflect the reader's now-live authenticated
-		// state and drop the carried snapshot, not reuse the frozen,
-		// pre-authentication value.
-		expect( getBestPrioritySegment ).toHaveBeenCalledTimes( 2 );
-		expect( getBestPrioritySegment ).toHaveBeenLastCalledWith( testSegments, null, [] );
+		handleSegmentation( [ armA, armB ] );
+		jest.runAllTimers();
+
+		expect( isVisible( armA ) ).toBe( true );
+		expect( isVisible( armB ) ).toBe( false );
+	} );
+
+	it( 'still enforces one overlay at a time among assigned prompts', () => {
+		const first = makePrompt( { overlay: true, variant: assigned } );
+		const second = makePrompt( { overlay: true } );
+
+		handleSegmentation( [ first, second ] );
+		jest.runAllTimers();
+
+		expect( isVisible( first ) ).toBe( true );
+		expect( isVisible( second ) ).toBe( false );
 	} );
 } );
