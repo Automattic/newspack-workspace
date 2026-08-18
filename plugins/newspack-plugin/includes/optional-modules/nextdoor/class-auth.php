@@ -44,6 +44,16 @@ class Auth {
 	const REFRESH_COOLOFF_SECONDS   = 60;
 
 	/**
+	 * What the held-off refresh settled.
+	 *
+	 * Only an attempt that came back an error says the stored token cannot be used now. One
+	 * still in flight, or held off for a grant Nextdoor stated no expiry for, says nothing
+	 * about it, and answering those as unusable would report an outage that is not happening.
+	 */
+	const REFRESH_HELD_FAILED = 'failed';
+	const REFRESH_HELD_OK     = 'ok';
+
+	/**
 	 * Initialise.
 	 */
 	public static function init() {
@@ -410,6 +420,20 @@ class Auth {
 	}
 
 	/**
+	 * Hold off the next refresh attempt, recording what this one settled.
+	 *
+	 * @param bool $failed Whether the attempt came back an error.
+	 * @return void
+	 */
+	private static function hold_off_refresh( $failed = false ) {
+		set_transient(
+			self::REFRESH_COOLOFF_TRANSIENT,
+			$failed ? self::REFRESH_HELD_FAILED : self::REFRESH_HELD_OK,
+			self::REFRESH_COOLOFF_SECONDS
+		);
+	}
+
+	/**
 	 * Try to replace an access token Nextdoor rejected.
 	 *
 	 * A rejected access token is not a rejected grant: the refresh token is issued
@@ -436,20 +460,22 @@ class Auth {
 		}
 
 		// Held off since the last attempt, so this request learns nothing either way.
-		if ( get_transient( self::REFRESH_COOLOFF_TRANSIENT ) ) {
+		if ( false !== get_transient( self::REFRESH_COOLOFF_TRANSIENT ) ) {
 			return true;
 		}
 
-		set_transient( self::REFRESH_COOLOFF_TRANSIENT, 1, self::REFRESH_COOLOFF_SECONDS );
+		self::hold_off_refresh();
 
 		// Called for what it settles rather than what it returns: a refused refresh records
 		// itself against the grant it used, and any other failure says nothing about the
 		// token, where recording a refusal the request cannot support is the worse mistake.
-		self::refresh_access_token(
+		$refresh_response = self::refresh_access_token(
 			$settings['client_id'],
 			$settings['client_secret'],
 			$settings['refresh_token']
 		);
+
+		self::hold_off_refresh( is_wp_error( $refresh_response ) );
 
 		return true;
 	}
@@ -582,17 +608,23 @@ class Auth {
 
 		// Report what is stored rather than spending another blocking request: a grant with
 		// no stated expiry is due on every one, and an outage answers each at the timeout.
-		if ( get_transient( self::REFRESH_COOLOFF_TRANSIENT ) ) {
-			return self::has_usable_token();
+		// An attempt that already failed is the exception, since the caller turns that into
+		// the same "try again shortly" it would have given the failure itself.
+		$held = get_transient( self::REFRESH_COOLOFF_TRANSIENT );
+
+		if ( false !== $held ) {
+			return self::REFRESH_HELD_FAILED !== $held && self::has_usable_token();
 		}
 
-		set_transient( self::REFRESH_COOLOFF_TRANSIENT, 1, self::REFRESH_COOLOFF_SECONDS );
+		self::hold_off_refresh();
 
 		$refresh_response = self::refresh_access_token(
 			$settings['client_id'],
 			$settings['client_secret'],
 			$settings['refresh_token']
 		);
+
+		self::hold_off_refresh( is_wp_error( $refresh_response ) );
 
 		// A refresh replaced mid-flight comes back honoured but unapplied, so only the stored
 		// settings say whether what replaced it is usable.
