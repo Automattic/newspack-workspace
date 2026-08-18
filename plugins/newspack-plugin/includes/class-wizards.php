@@ -74,12 +74,17 @@ class Wizards {
 			'audience-content-gates'  => new Audience_Content_Gates(),
 			'audience-donations'      => new Audience_Donations(),
 			'audience-integrations'   => new Audience_Integrations(),
+			'newspack-subscribers'    => new Subscribers_Wizard(),
 			'listings'                => new Listings_Wizard(),
 			'network'                 => new Network_Wizard(),
 			'newsletters'             => new Newsletters_Wizard(),
 			'premium-newsletters'     => new Premium_Newsletters_Wizard(),
 		];
-		if ( Memberships::is_active() ) {
+		// Memberships sites get the page for its subscription configuration; every
+		// Woo site with content gating gets it for the subscriber-commerce tabs.
+		// Deliberately not gated on enforcement being live: a site migrating off
+		// Memberships configures its rules first and deactivates Memberships after.
+		if ( Memberships::is_active() || Subscriber_Commerce::is_admin_available() ) {
 			self::$wizards['audience-subscriptions'] = new Audience_Subscriptions();
 		}
 		// Plans (Subscription Products) page, gated behind NEWSPACK_PLANS_UI and available
