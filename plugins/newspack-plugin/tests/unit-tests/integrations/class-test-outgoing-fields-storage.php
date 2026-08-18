@@ -141,15 +141,19 @@ class Test_Outgoing_Fields_Storage extends \WP_UnitTestCase {
 	/**
 	 * A v2-origin site with legacy display-name storage migrates to v2 ids on
 	 * read — a name claimed by both schemas resolves to the v2 definition.
+	 *
+	 * 'Total Paid' is deliberately not used here: it no longer resolves onto
+	 * a v2 id at all — see Field_Registry's supersedes-without-equivalent
+	 * doctrine — so it would defeat the point this test is making.
 	 */
 	public function test_legacy_format_migrates_to_v2_ids_when_origin_is_v2() {
 		\update_option(
 			Integration::OUTGOING_FIELDS_OPTION_PREFIX . 'storage-test',
-			[ 'Total Paid', 'Registration UTM Source' ]
+			[ 'Connected Account', 'Registration UTM Source' ]
 		);
 
 		$this->assertEqualsCanonicalizing(
-			[ 'v2:Total_Paid', 'v2:Registration_UTM_Source' ],
+			[ 'v2:Connected_Account', 'v2:Registration_UTM_Source' ],
 			$this->integration->get_enabled_outgoing_field_ids()
 		);
 	}

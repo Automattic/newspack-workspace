@@ -57,7 +57,7 @@ class Engagement extends Contact_Metadata {
 			'Payment_UTM_Source'   => 'Payment UTM Source',
 			'Payment_UTM_Medium'   => 'Payment UTM Medium',
 			'Payment_UTM_Campaign' => 'Payment UTM Campaign',
-			'Total_Paid'           => 'Total Paid',
+			'Total_Paid'           => 'Lifetime Total Paid',
 		];
 	}
 
@@ -123,13 +123,15 @@ class Engagement extends Contact_Metadata {
 				'status'      => 'updated',
 				'supersedes'  => 'v1:payment_page_utm',
 			],
+			// Placeholder name pending naming review (NPPD-2067). Distinct from
+			// the legacy field, which blanks when the reader has no current
+			// subscription or donation; this one never does.
 			'Total_Paid'           => [
-				'name'        => 'Total Paid',
-				'description' => __( 'Lifetime total amount the reader has paid through Newspack\'s WooCommerce system', 'newspack-plugin' ),
+				'name'        => 'Lifetime Total Paid',
+				'description' => __( 'Lifetime total paid across all purchases; unlike the legacy Total Paid, never blanked when no current subscription or donation exists', 'newspack-plugin' ),
 				'example'     => '120',
-				'status'      => 'existing',
+				'status'      => 'updated',
 				'supersedes'  => 'v1:total_paid',
-				'equivalent'  => true,
 			],
 		];
 	}
@@ -157,11 +159,12 @@ class Engagement extends Contact_Metadata {
 			'Payment_UTM_Campaign' => $this->get_order_utm( $order, 'campaign' ),
 		];
 
-		// Value-equivalent to legacy total_paid, which only exists at all when
-		// there is a WooCommerce customer to read it from (Legacy_Basic returns
-		// nothing without one). Emitting an empty string for a reader with no
-		// customer record would blank a live merge field the legacy pipeline
-		// never touched.
+		// Emitting an empty string for a reader with no customer record would
+		// blank a live merge field the legacy pipeline never touched — legacy
+		// total_paid only exists at all when there is a WooCommerce customer to
+		// read it from (Legacy_Basic returns nothing without one). Unlike the
+		// legacy field, this always reports the customer's lifetime spend
+		// rather than blanking when there is no current-product order.
 		if ( $this->customer ) {
 			$metadata['Total_Paid'] = $this->customer->get_total_spent();
 		}

@@ -96,7 +96,7 @@ class Test_Field_Registry extends \WP_UnitTestCase {
 
 		// Not vacuous: shared names really do exist, they are collapsed rather
 		// than contested.
-		$this->assertSame( 5, $shared, 'The five value-equivalent pairs are the only shared ESP names.' );
+		$this->assertSame( 4, $shared, 'The four value-equivalent pairs are the only shared ESP names.' );
 	}
 
 	/**

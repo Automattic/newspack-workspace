@@ -94,7 +94,7 @@ class Identity extends Contact_Metadata {
 			'verified'          => [
 				'name'        => 'Verified',
 				'description' => __( 'Whether the reader has verified their account via email link', 'newspack-plugin' ),
-				'example'     => 'TRUE',
+				'example'     => '1',
 				'status'      => 'new',
 			],
 			'Connected_Account' => [

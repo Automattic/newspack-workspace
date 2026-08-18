@@ -105,7 +105,7 @@ class Metadata {
 	protected static function get_sync_metadata_classes() {
 		$versions = [];
 		foreach ( Integrations::get_active_configured_integrations() as $integration ) {
-			if ( ! $integration->supports_push() ) {
+			if ( ! $integration->is_push_enabled() ) {
 				continue;
 			}
 			foreach ( $integration->get_enabled_outgoing_field_ids() as $id ) {

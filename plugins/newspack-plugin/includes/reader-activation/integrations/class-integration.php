@@ -1258,6 +1258,13 @@ abstract class Integration {
 	 * v2 ids is storable, and both versions of a renamed field can be enabled
 	 * at once.
 	 *
+	 * Explicit ids can therefore store both members of a former pair, unlike
+	 * a name save; when that happens and both raw keys share one ESP name,
+	 * prepare_contact() resolves the collision by metadata-array order, so
+	 * the payload depends on merge order — the name path above is the
+	 * guarded one, since resolving a name always returns a single surviving
+	 * definition.
+	 *
 	 * @param array $fields List of field ids and/or names to enable.
 	 * @return bool True if updated, false otherwise.
 	 */
@@ -1554,9 +1561,11 @@ abstract class Integration {
 	 *
 	 * Memoized because prepare_contact() runs once per contact per
 	 * integration, and a backfill walks the whole user table. The tables
-	 * depend only on the stored id list, so that is the cache key; a
-	 * definitions change (a `newspack_ras_metadata_keys` callback registering
-	 * late, or a test) invalidates through Field_Registry::reset().
+	 * depend only on the stored id list, so that is the cache key.
+	 * Field_Registry's own definitions are frozen for the lifetime of the
+	 * request once first computed, so these lookups can never disagree with
+	 * the registry; Field_Registry::reset() exists to isolate test cases,
+	 * not as a production invalidation path.
 	 *
 	 * @return array{0: array, 1: array, 2: array[]} By raw key, by name, dynamic.
 	 */

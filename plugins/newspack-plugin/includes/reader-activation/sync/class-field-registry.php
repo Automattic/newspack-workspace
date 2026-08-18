@@ -447,6 +447,19 @@ class Field_Registry {
 	 * or an integration built outside the registry). One list, one detection,
 	 * whether it ends up persisted or not.
 	 *
+	 * Deliberately NOT memoized like get_definitions()/get_name_index(): those
+	 * caches are safe to freeze for the process lifetime because their inputs
+	 * (which classes exist, the newspack_ras_metadata_keys filter) only ever
+	 * change under a reader-activation-sync test's own reset() discipline.
+	 * detect_retired_schema_version()'s inputs — stored per-integration
+	 * options reached via an uncached LIKE scan, and live ESP setup state —
+	 * are touched far more broadly (any integration registration, any stored
+	 * selection), so freezing this answer until an unrelated caller happens
+	 * to call reset() silently serves stale derivations across a shared PHP
+	 * process. Confirmed by running the full test suite: memoizing this
+	 * method corrupted dozens of unrelated tests that never touch
+	 * Field_Registry directly.
+	 *
 	 * @return string[] List of field ids.
 	 */
 	public static function get_default_field_ids() {

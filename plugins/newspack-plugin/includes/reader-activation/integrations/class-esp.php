@@ -551,7 +551,11 @@ class ESP extends Integration {
 	 *
 	 * @param string $email Email address of the deleted reader.
 	 *
-	 * @return true|\WP_Error True on success, WP_Error on failure.
+	 * @return true|false|\WP_Error True or false on success — update_lists()
+	 *                              returns false when there was nothing to
+	 *                              do — WP_Error on failure. The caller only
+	 *                              checks is_wp_error(), so anything else is
+	 *                              treated as success.
 	 */
 	public function flag_deletion_cleanup( $email ) {
 		if ( ! class_exists( 'Newspack_Newsletters_Contacts' ) ) {

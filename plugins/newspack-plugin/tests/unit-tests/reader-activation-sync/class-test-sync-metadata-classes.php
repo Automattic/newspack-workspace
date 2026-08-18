@@ -173,6 +173,21 @@ class Test_Sync_Metadata_Classes extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * Same again for an active, configured integration whose outbound toggle
+	 * is off: is_push_enabled() — capability AND the outgoing_sync_enabled
+	 * toggle — is the push path's real gate, so the compute path must consult
+	 * it too rather than the capability-only supports_push().
+	 */
+	public function test_outbound_toggle_off_does_not_widen_the_compute_set() {
+		$this->integration->update_enabled_outgoing_fields( [ 'v2:Registration_Date' ] );
+		$this->integration->update_settings_field_value( 'outgoing_sync_enabled', false );
+
+		$classes = $this->get_sync_classes();
+
+		$this->assertSame( [ Contact_Metadata\Content_Gate::class ], $classes );
+	}
+
+	/**
 	 * An unseeded site (no stored selection) falls back to a derived default
 	 * scoped to one schema version — new, absent other evidence — so only
 	 * that version's classes are computed, never both.
