@@ -450,12 +450,11 @@ class Mailchimp {
 	 * @return array
 	 */
 	private static function get_fields_to_check_for_duplicates() {
-		/**
-		 * Apply the filters that allow other plugins to add their own fields.
-		 *
-		 * This filter is documented in Newspack\Reader_Activation\Sync\Metadata::get_keys().
-		 */
-		$fields = \apply_filters( 'newspack_ras_metadata_keys', Metadata::get_all_fields() );
+		// get_all_fields() already applies `newspack_ras_metadata_keys` — with
+		// both of its documented arguments. Re-applying it here passed only
+		// one, so a publisher callback registered for two would hit an
+		// ArgumentCountError the moment this command ran.
+		$fields = Metadata::get_all_fields();
 		$fields = array_map(
 			function( $key ) {
 				return Metadata::get_key( $key );

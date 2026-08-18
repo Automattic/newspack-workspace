@@ -29,15 +29,6 @@ class Field_Registry {
 	private static $definitions = null;
 
 	/**
-	 * Per-request cache of a derived, never-persisted schema version. Also
-	 * tracks ESP-integration registration, the one input that can change
-	 * the answer mid-request.
-	 *
-	 * @var array|null { version: string, esp_registered: bool }
-	 */
-	private static $derivation_cache = null;
-
-	/**
 	 * Lazily-built index of ESP field name => list of definition ids, in
 	 * definition order. Backs the name-resolution helpers so lookups don't
 	 * scan the full definition set per call.
@@ -47,22 +38,11 @@ class Field_Registry {
 	private static $name_index = null;
 
 	/**
-	 * Monotonic counter bumped on every reset(). Callers memoizing values
-	 * derived from the registry include it in their cache keys so a reset
-	 * (tests, filter changes) invalidates them.
-	 *
-	 * @var int
-	 */
-	private static $generation = 0;
-
-	/**
-	 * Lazily-built map of v1 definition id => v2 definition ids, for the
-	 * conflict groups whose every v2 member declares itself value-equivalent
-	 * to its v1 counterpart. Backs the storage-time id upgrade.
+	 * Lazily-built equivalent-pair index. See get_equivalent_pairs().
 	 *
 	 * @var array|null
 	 */
-	private static $equivalent_upgrades = null;
+	private static $equivalent_pairs = null;
 
 	/**
 	 * Map of schema version to the metadata classes that own its fields.
@@ -94,20 +74,10 @@ class Field_Registry {
 	 * @return void
 	 */
 	public static function reset() {
-		self::$definitions         = null;
-		self::$derivation_cache    = null;
-		self::$name_index          = null;
-		self::$equivalent_upgrades = null;
-		self::$generation++;
-	}
-
-	/**
-	 * Get the registry generation, bumped on every reset().
-	 *
-	 * @return int
-	 */
-	public static function get_generation() {
-		return self::$generation;
+		self::$definitions      = null;
+		self::$name_index       = null;
+		self::$equivalent_pairs = null;
+		\Newspack\Reader_Activation\Integration::flush_prepare_contact_lookups();
 	}
 
 	/**
@@ -131,8 +101,13 @@ class Field_Registry {
 				$section   = $class::get_section_name();
 				$available = $class::is_available();
 				foreach ( $class::get_fields_config() as $raw_key => $config ) {
-					$id                     = $version . ':' . $raw_key;
+					$id = $version . ':' . $raw_key;
+					// Structural fields last: they are derived from where the
+					// definition lives, not authored, so a config key must never
+					// be able to overwrite an id, a version or the availability
+					// of the class that owns it.
 					$definitions[ $id ]     = array_merge(
+						$config,
 						[
 							'id'             => $id,
 							'version'        => $version,
@@ -142,8 +117,7 @@ class Field_Registry {
 							'available'      => $available,
 							'class'          => $class,
 							'dynamic_suffix' => ! empty( $config['dynamic_suffix'] ),
-						],
-						$config
+						]
 					);
 					$merged_map[ $raw_key ] = $config['name'];
 				}
@@ -217,26 +191,24 @@ class Field_Registry {
 	}
 
 	/**
-	 * Get a definition by ESP field name, optionally preferring a version.
+	 * Whether a stored value is spelled as a version-qualified field id rather
+	 * than a bare display name.
 	 *
-	 * @param string      $name              ESP field name (unprefixed).
-	 * @param string|null $preferred_version Version to prefer on name collisions.
+	 * Shape only — an id for a definition that no longer exists still is one,
+	 * which is what distinguishes "already migrated" from "needs migrating".
 	 *
-	 * @return array|null
+	 * @param mixed $value Stored selection entry.
+	 *
+	 * @return bool
 	 */
-	public static function get_by_name( $name, $preferred_version = null ) {
-		$definitions = self::get_definitions();
-		$fallback    = null;
-		foreach ( self::get_name_index()[ $name ] ?? [] as $id ) {
-			$definition = $definitions[ $id ];
-			if ( null === $preferred_version || $definition['version'] === $preferred_version ) {
-				return $definition;
-			}
-			if ( null === $fallback ) {
-				$fallback = $definition;
+	public static function is_field_id( $value ) {
+		$prefixes = [ self::VERSION_V1 . ':', self::VERSION_V2 . ':', self::VERSION_NEUTRAL . ':' ];
+		foreach ( $prefixes as $prefix ) {
+			if ( 0 === strpos( (string) $value, $prefix ) ) {
+				return true;
 			}
 		}
-		return $fallback;
+		return false;
 	}
 
 	/**
@@ -257,51 +229,81 @@ class Field_Registry {
 	}
 
 	/**
-	 * Get every definition sharing an ESP field name, optionally restricted
-	 * to one schema version.
+	 * Resolve an ESP field name to the definitions it enables.
 	 *
-	 * The legacy schema maps multiple raw keys to one ESP name (e.g.
-	 * registration_page and current_page_url both map to "Registration
-	 * Page"), so a name can resolve to more than one definition.
+	 * Deterministic and single-valued per field: an ESP name identifies one
+	 * field, and where both schemas spell that field the same way (a
+	 * value-equivalent pair) the name resolves to the surviving v2 member
+	 * alone. Enabling both members would put two producers on one ESP key and
+	 * make the payload depend on merge order.
 	 *
-	 * @param string      $name    ESP field name (unprefixed).
-	 * @param string|null $version Schema version, or null for every version.
+	 * Can still return more than one definition when a schema deliberately
+	 * spells one field with several raw keys — legacy `registration_page` and
+	 * `current_page_url` both mean "Registration Page".
+	 *
+	 * @param string $name ESP field name (unprefixed).
 	 *
 	 * @return array[] List of definitions (possibly empty).
 	 */
-	public static function get_all_by_name( $name, $version = null ) {
+	public static function resolve_name( $name ) {
 		$definitions = self::get_definitions();
 		$matches     = [];
 		foreach ( self::get_name_index()[ $name ] ?? [] as $id ) {
-			if ( null === $version || $definitions[ $id ]['version'] === $version ) {
-				$matches[] = $definitions[ $id ];
+			$matches[ $id ] = $definitions[ $id ];
+		}
+
+		// An equivalent pair collapses onto its v2 member.
+		foreach ( array_keys( $matches ) as $id ) {
+			$superseded = self::get_equivalent_pairs()[ $id ] ?? [];
+			if ( empty( $superseded ) ) {
+				continue;
+			}
+			foreach ( $superseded as $superseded_id ) {
+				unset( $matches[ $superseded_id ] );
 			}
 		}
-		return $matches;
+
+		return array_values( $matches );
 	}
 
 	/**
-	 * Resolve an ESP field name to its definitions, with the single-match
-	 * fallback.
+	 * The value-equivalent pairs: surviving (v2) definition id => the v1
+	 * definition ids it collapses.
 	 *
-	 * Can return more than one definition: the legacy schema maps two raw
-	 * keys to "Registration Page", and value-equivalent pairs are one field
-	 * spelled twice. A given $version restricts the match, falling back to
-	 * any version when there is no match — which covers version-neutral
-	 * (filter-added) fields.
+	 * Authored, never inferred from matching copy: a v2 definition declares
+	 * `equivalent` and points `supersedes` at its v1 twin. The legacy schema
+	 * spells some fields with more than one raw key under a single ESP name
+	 * (`registration_page` / `current_page_url`), so the twin's same-name v1
+	 * siblings belong to the pair too — they are that same one field.
 	 *
-	 * @param string      $name    ESP field name (unprefixed).
-	 * @param string|null $version Preferred schema version, or null for every version.
-	 *
-	 * @return array[] List of definitions (possibly empty).
+	 * @return array<string, string[]> Map of v2 id => list of v1 ids.
 	 */
-	public static function resolve_name( $name, $version = null ) {
-		$definitions = self::get_all_by_name( $name, $version );
-		if ( ! empty( $definitions ) ) {
-			return $definitions;
+	private static function get_equivalent_pairs() {
+		if ( null !== self::$equivalent_pairs ) {
+			return self::$equivalent_pairs;
 		}
-		$definition = self::get_by_name( $name );
-		return $definition ? [ $definition ] : [];
+		$definitions = self::get_definitions();
+		$pairs       = [];
+		foreach ( $definitions as $id => $definition ) {
+			if ( empty( $definition['equivalent'] ) || empty( $definition['supersedes'] ) ) {
+				continue;
+			}
+			$twin = $definitions[ $definition['supersedes'] ] ?? null;
+			if ( ! $twin || self::VERSION_V1 !== $twin['version'] || $twin['name'] !== $definition['name'] ) {
+				// Equivalence claims a shared ESP name. A `supersedes` target
+				// that renames is a different field, not a pair.
+				continue;
+			}
+			$members = [];
+			foreach ( self::get_name_index()[ $definition['name'] ] ?? [] as $sibling_id ) {
+				if ( $sibling_id !== $id && self::VERSION_V1 === $definitions[ $sibling_id ]['version'] ) {
+					$members[] = $sibling_id;
+				}
+			}
+			$pairs[ $id ] = $members;
+		}
+		self::$equivalent_pairs = $pairs;
+		return self::$equivalent_pairs;
 	}
 
 	/**
@@ -333,70 +335,14 @@ class Field_Registry {
 	}
 
 	/**
-	 * Get name-collision groups: ESP names claimed by both schema versions,
-	 * including the pairs equivalence has since collapsed.
-	 *
-	 * Deliberately private: get_equivalent_upgrades() must read this raw
-	 * view rather than the filtered one, or the collapse it defines would
-	 * empty the very upgrade map that collapse depends on.
-	 *
-	 * @return array Map of ESP name => list of definition ids.
-	 */
-	private static function get_name_collision_groups() {
-		$by_name = [];
-		foreach ( self::get_definitions() as $definition ) {
-			if ( self::VERSION_NEUTRAL === $definition['version'] ) {
-				continue;
-			}
-			$by_name[ $definition['name'] ][ $definition['version'] ][] = $definition['id'];
-		}
-
-		$groups = [];
-		foreach ( $by_name as $name => $versions ) {
-			if ( isset( $versions[ self::VERSION_V1 ], $versions[ self::VERSION_V2 ] ) ) {
-				$groups[ $name ] = array_merge( $versions[ self::VERSION_V1 ], $versions[ self::VERSION_V2 ] );
-			}
-		}
-		return $groups;
-	}
-
-	/**
-	 * Get conflict groups: ESP names a publisher cannot enable on both schema
-	 * versions at once.
-	 *
-	 * Empty by construction: every v1/v2 name collision is dissolved by
-	 * declaring the v2 field `equivalent` (collapsing into one field) or by
-	 * giving a changed-meaning v2 field its own ESP name.
-	 *
-	 * @return array Map of ESP name => list of definition ids.
-	 */
-	public static function get_conflict_groups() {
-		$upgrades = self::get_equivalent_upgrades();
-		$groups   = [];
-		foreach ( self::get_name_collision_groups() as $name => $ids ) {
-			// Every v1 member of a collapsed group is a key of the upgrade map,
-			// so one hit settles the group.
-			$collapsed = false;
-			foreach ( $ids as $id ) {
-				if ( isset( $upgrades[ $id ] ) ) {
-					$collapsed = true;
-					break;
-				}
-			}
-			if ( ! $collapsed ) {
-				$groups[ $name ] = $ids;
-			}
-		}
-		return $groups;
-	}
-
-	/**
 	 * Serialize every definition for the integrations settings payload.
 	 *
 	 * Flat list, all schema versions: the per-field UI derives rows and
-	 * visibility client-side, so it needs both sides of every rename. No
-	 * conflict/equivalence flags — get_conflict_groups() is always empty, so
-	 * the UI reads equivalence off the pair itself.
+	 * visibility client-side, so it needs both sides of every rename. Pairing
+	 * is authored config rather than anything inferred here — the UI reads it
+	 * off `supersedes`/`superseded_by`, which is also what tells it when a
+	 * legacy field and its replacement still share one ESP name and so belong
+	 * on one collapsed row.
 	 *
 	 * `status` drives the New badge ('new'/'updated' only), the sunset rule
 	 * (a legacy field lists only while enabled), and whether a `section`
@@ -426,103 +372,37 @@ class Field_Registry {
 	}
 
 	/**
-	 * Build the equivalent-upgrade map: v1 id => v2 ids, restricted to
-	 * name-collision groups whose every v2 member declares `equivalent`.
+	 * Raw keys an id accepts as input aliases, from across its equivalent pair.
 	 *
-	 * Equivalence is an authored, audited claim — never inferred from
-	 * matching copy.
-	 *
-	 * @return array Map of v1 definition id => list of v2 definition ids.
-	 */
-	private static function get_equivalent_upgrades() {
-		if ( null !== self::$equivalent_upgrades ) {
-			return self::$equivalent_upgrades;
-		}
-		$definitions = self::get_definitions();
-		$map         = [];
-		foreach ( self::get_name_collision_groups() as $ids ) {
-			$v1_ids         = [];
-			$v2_ids         = [];
-			$all_equivalent = true;
-			foreach ( $ids as $id ) {
-				if ( self::VERSION_V1 === $definitions[ $id ]['version'] ) {
-					$v1_ids[] = $id;
-					continue;
-				}
-				$v2_ids[] = $id;
-				if ( empty( $definitions[ $id ]['equivalent'] ) ) {
-					$all_equivalent = false;
-				}
-			}
-			if ( ! $all_equivalent || empty( $v2_ids ) || empty( $v1_ids ) ) {
-				continue;
-			}
-			foreach ( $v1_ids as $v1_id ) {
-				$map[ $v1_id ] = $v2_ids;
-			}
-		}
-		self::$equivalent_upgrades = $map;
-		return self::$equivalent_upgrades;
-	}
-
-	/**
-	 * Upgrade v1 ids of value-equivalent conflict pairs to their v2 twins.
-	 *
-	 * Safe because an equivalent pair produces a byte-identical ESP payload
-	 * on either version. Divergent pairs are never touched; their migration
-	 * stays an explicit publisher decision in the UI.
-	 *
-	 * @param string[] $ids Field ids.
-	 *
-	 * @return string[] Ids with equivalent v1 members upgraded, de-duplicated.
-	 */
-	public static function upgrade_equivalent_ids( $ids ) {
-		$upgrades = self::get_equivalent_upgrades();
-		$upgraded = [];
-		foreach ( (array) $ids as $id ) {
-			if ( isset( $upgrades[ $id ] ) ) {
-				foreach ( $upgrades[ $id ] as $v2_id ) {
-					$upgraded[] = $v2_id;
-				}
-				continue;
-			}
-			$upgraded[] = $id;
-		}
-		return array_values( array_unique( $upgraded ) );
-	}
-
-	/**
-	 * Raw keys an equivalent-group v2 id accepts as input aliases.
-	 *
-	 * Needed because callers still hand-build contacts with legacy raw keys
-	 * (e.g. the deletion connector passes `account`), so an enabled v2 id
-	 * must also match its v1 counterparts' raw keys.
+	 * Bidirectional, because stored ids are never rewritten: a site can be
+	 * pushing either member of a pair, while callers hand-build contacts in
+	 * whichever raw-key spelling their own code has always used (the deletion
+	 * connector passes legacy `account`; the metadata classes emit `Account`).
+	 * Both must land on whichever member is actually enabled.
 	 *
 	 * @param string $id Field id.
 	 *
-	 * @return string[] v1 raw keys aliased to this id (empty for non-equivalent ids).
+	 * @return string[] Raw keys aliased to this id (empty for unpaired ids).
 	 */
 	public static function get_equivalent_input_raw_keys( $id ) {
 		$definitions = self::get_definitions();
-		if ( empty( $definitions[ $id ]['equivalent'] ) ) {
-			return [];
+		$pairs       = self::get_equivalent_pairs();
+		$aliases     = [];
+
+		// The surviving v2 member: its collapsed v1 members' raw keys.
+		foreach ( $pairs[ $id ] ?? [] as $v1_id ) {
+			$aliases[] = $definitions[ $v1_id ]['raw_key'];
 		}
-		$aliases = [];
-		foreach ( self::get_equivalent_upgrades() as $v1_id => $v2_ids ) {
-			if ( in_array( $id, $v2_ids, true ) && isset( $definitions[ $v1_id ]['raw_key'] ) ) {
-				$aliases[] = $definitions[ $v1_id ]['raw_key'];
+
+		// A v1 member: the surviving v2 member's raw key.
+		foreach ( $pairs as $v2_id => $v1_ids ) {
+			if ( in_array( $id, $v1_ids, true ) ) {
+				$aliases[] = $definitions[ $v2_id ]['raw_key'];
 			}
 		}
+
 		return array_values( array_unique( $aliases ) );
 	}
-
-	/**
-	 * The retired schema-origin marker. Read once by the seeder, then
-	 * deleted; nothing else in the codebase knows this option exists.
-	 *
-	 * @var string
-	 */
-	private const RETIRED_ORIGIN_OPTION = 'newspack_sync_schema_origin';
 
 	/**
 	 * Re-entrancy guard for seed_default_field_selections(): a future
@@ -557,8 +437,6 @@ class Field_Registry {
 
 		$option = \Newspack\Reader_Activation\Integration::OUTGOING_FIELDS_OPTION_PREFIX . \Newspack\Reader_Activation\Integration::ESP_INTEGRATION_ID;
 		if ( null !== \get_option( $option, null ) ) {
-			// Already configured: nothing to seed, and the marker is dead.
-			self::retire_origin_marker();
 			return;
 		}
 
@@ -567,7 +445,6 @@ class Field_Registry {
 		// verbatim, and seeding here too would shadow it, re-enabling fields
 		// the publisher turned off.
 		if ( is_array( \get_option( Metadata::FIELDS_OPTION, null ) ) ) {
-			self::retire_origin_marker();
 			return;
 		}
 
@@ -597,7 +474,33 @@ class Field_Registry {
 		}
 
 		\update_option( $option, $ids, false );
-		self::retire_origin_marker();
+	}
+
+	/**
+	 * The site's default outgoing-field selection, derived rather than stored.
+	 *
+	 * The same candidate list seeding persists — computed inline for the reads
+	 * that arrive before a selection could be seeded (an unconfident detection,
+	 * or an integration built outside the registry). One list, one detection,
+	 * whether it ends up persisted or not.
+	 *
+	 * Deliberately NOT memoized like get_definitions()/get_name_index(): those
+	 * caches are safe to freeze for the process lifetime because their inputs
+	 * (which classes exist, the newspack_ras_metadata_keys filter) only ever
+	 * change under a reader-activation-sync test's own reset() discipline.
+	 * detect_retired_schema_version()'s inputs — stored per-integration
+	 * options reached via an uncached LIKE scan, and live ESP setup state —
+	 * are touched far more broadly (any integration registration, any stored
+	 * selection), so freezing this answer until an unrelated caller happens
+	 * to call reset() silently serves stale derivations across a shared PHP
+	 * process. Confirmed by running the full test suite: memoizing this
+	 * method corrupted dozens of unrelated tests that never touch
+	 * Field_Registry directly.
+	 *
+	 * @return string[] List of field ids.
+	 */
+	public static function get_default_field_ids() {
+		return self::get_version_default_field_ids( self::detect_retired_schema_version()['version'] );
 	}
 
 	/**
@@ -624,64 +527,12 @@ class Field_Registry {
 	}
 
 	/**
-	 * Drop the retired schema-origin marker.
-	 *
-	 * Idempotent; safe to call from any path that has settled the question
-	 * the marker existed to answer, including ones that bypass the seeder.
-	 *
-	 * @return void
-	 */
-	public static function retire_origin_marker() {
-		\delete_option( self::RETIRED_ORIGIN_OPTION );
-	}
-
-	/**
-	 * The schema version a derived, never-persisted default selection
-	 * resolves against.
-	 *
-	 * Needed because an unseeded site resolving names against the merged
-	 * registry would leak both schemas' field names to any push integration
-	 * inheriting from an unconfigured ESP.
-	 *
-	 * Memoized per request; re-detected once the ESP integration registers,
-	 * the one input that can change the answer mid-request. reset() clears
-	 * the cache.
-	 *
-	 * @return string 'v1' or 'v2'.
-	 */
-	public static function get_derivation_schema_version() {
-		$esp_integration = \Newspack\Reader_Activation\Integrations::get_integration( \Newspack\Reader_Activation\Integration::ESP_INTEGRATION_ID );
-
-		if ( null !== self::$derivation_cache && ( self::$derivation_cache['esp_registered'] || null === $esp_integration ) ) {
-			return self::$derivation_cache['version'];
-		}
-
-		$version = self::detect_retired_schema_version()['version'];
-
-		self::$derivation_cache = [
-			'version'        => $version,
-			'esp_registered' => null !== $esp_integration,
-		];
-
-		return $version;
-	}
-
-	/**
-	 * Detection order: stored marker, constants, existing selections, legacy
-	 * fields option, set-up ESP (v1), else v2.
+	 * Detection order: constants, existing selections, legacy fields option,
+	 * set-up ESP (v1), else v2.
 	 *
 	 * @return array{version: string, confident: bool}
 	 */
 	private static function detect_retired_schema_version() {
-		$recorded = \get_option( self::RETIRED_ORIGIN_OPTION, null );
-		if ( in_array( $recorded, [ self::VERSION_V1, self::VERSION_V2 ], true ) ) {
-			return self::certain( $recorded );
-		}
-		if ( null !== $recorded ) {
-			// Meaningless value; retire it now rather than re-reading it forever.
-			\delete_option( self::RETIRED_ORIGIN_OPTION );
-		}
-
 		$flag_version = null;
 		if ( defined( 'NEWSPACK_SYNC_METADATA_VERSION' ) ) {
 			$flag_version = NEWSPACK_SYNC_METADATA_VERSION;
@@ -768,11 +619,12 @@ class Field_Registry {
 				continue;
 			}
 			foreach ( $value as $entry ) {
-				if ( ! preg_match( '/^(v1|v2|neutral):/', (string) $entry, $matches ) ) {
+				if ( ! self::is_field_id( $entry ) ) {
 					return self::VERSION_V1;
 				}
-				if ( null === $id_version && self::VERSION_NEUTRAL !== $matches[1] ) {
-					$id_version = $matches[1];
+				$version = (string) strstr( (string) $entry, ':', true );
+				if ( null === $id_version && self::VERSION_NEUTRAL !== $version ) {
+					$id_version = $version;
 				}
 			}
 		}

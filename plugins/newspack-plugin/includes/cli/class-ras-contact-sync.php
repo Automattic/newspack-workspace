@@ -168,9 +168,11 @@ class RAS_Contact_Sync {
 
 			while ( ! empty( $config['subscription_ids'] ) ) {
 				$subscription_id = array_shift( $config['subscription_ids'] );
-				$subscription    = \wcs_get_subscription( $subscription_id );
+				// wcs_get_subscription() returns false for an unknown id, never a
+				// WP_Error, so a falsy check is what actually tallies the skip.
+				$subscription = \wcs_get_subscription( $subscription_id );
 
-				if ( \is_wp_error( $subscription ) ) {
+				if ( ! $subscription ) {
 					static::log(
 						sprintf(
 							// Translators: %d is the subscription ID arg passed to the script.
@@ -215,9 +217,12 @@ class RAS_Contact_Sync {
 		if ( ! empty( $config['order_ids'] ) ) {
 			static::log( __( 'Syncing by order ID...', 'newspack-plugin' ) );
 			foreach ( $config['order_ids'] as $order_id ) {
-				$order = new \WC_Order( $order_id );
+				// wc_get_order(), not new WC_Order(): the constructor's read()
+				// THROWS on an unknown id, so the guard below would never run and
+				// a single bad --order-ids entry would fatal the whole backfill.
+				$order = \wc_get_order( $order_id );
 
-				if ( \is_wp_error( $order ) ) {
+				if ( ! $order ) {
 					static::log(
 						sprintf(
 							// Translators: %d is the order ID.

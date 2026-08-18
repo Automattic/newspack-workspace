@@ -158,10 +158,14 @@ class Test_Registration_Metadata extends WP_UnitTestCase {
 
 	/**
 	 * Test empty fields by default.
+	 *
+	 * Registration Page is omitted rather than emitted empty: its legacy twin
+	 * (v1:registration_page) was only ever written when non-empty, and an
+	 * empty string would blank the ESP field on a migrated site.
 	 */
 	public function test_empty_fields_by_default() {
 		$metadata = ( new Registration( self::$user_id ) )->get_metadata();
-		$this->assertSame( '', $metadata['Registration_Page'] );
+		$this->assertArrayNotHasKey( 'Registration_Page', $metadata );
 		$this->assertSame( '', $metadata['Registration_Strategy'] );
 	}
 

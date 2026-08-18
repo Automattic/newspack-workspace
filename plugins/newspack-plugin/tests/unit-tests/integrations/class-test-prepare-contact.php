@@ -541,13 +541,14 @@ class Test_Prepare_Contact extends \WP_UnitTestCase {
 		$this->assertSame( 'prefixed_value', $result['metadata'][ 'NP_' . $fields[1] ] );
 	}
 	/**
-	 * An equivalent-group v2 id accepts the legacy raw key as input: callers
-	 * still hand-build contacts with v1 raw keys (the deletion connector
-	 * passes `account`), and the pair's values are identical by declaration.
+	 * The surviving v2 member of a pair accepts the legacy raw key as input:
+	 * callers still hand-build contacts with v1 raw keys (the deletion
+	 * connector passes `account`), and the pair's values are identical by
+	 * declaration.
 	 */
 	public function test_equivalent_id_accepts_legacy_raw_key_input() {
-		$this->integration->update_enabled_outgoing_fields( [ 'v1:account' ] );
-		// Stored as the v2 twin by the equivalence upgrade.
+		// A bare name resolves canonically onto the surviving member.
+		$this->integration->update_enabled_outgoing_fields( [ 'Account' ] );
 		$this->assertSame( [ 'v2:Account' ], $this->integration->get_enabled_outgoing_field_ids() );
 
 		$contact = [

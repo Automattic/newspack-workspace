@@ -141,15 +141,19 @@ class Test_Outgoing_Fields_Storage extends \WP_UnitTestCase {
 	/**
 	 * A v2-origin site with legacy display-name storage migrates to v2 ids on
 	 * read — a name claimed by both schemas resolves to the v2 definition.
+	 *
+	 * 'Total Paid' is deliberately not used here: it no longer resolves onto
+	 * a v2 id at all — see Field_Registry's supersedes-without-equivalent
+	 * doctrine — so it would defeat the point this test is making.
 	 */
 	public function test_legacy_format_migrates_to_v2_ids_when_origin_is_v2() {
 		\update_option(
 			Integration::OUTGOING_FIELDS_OPTION_PREFIX . 'storage-test',
-			[ 'Total Paid', 'Registration UTM Source' ]
+			[ 'Connected Account', 'Registration UTM Source' ]
 		);
 
 		$this->assertEqualsCanonicalizing(
-			[ 'v2:Total_Paid', 'v2:Registration_UTM_Source' ],
+			[ 'v2:Connected_Account', 'v2:Registration_UTM_Source' ],
 			$this->integration->get_enabled_outgoing_field_ids()
 		);
 	}
@@ -213,9 +217,8 @@ class Test_Outgoing_Fields_Storage extends \WP_UnitTestCase {
 
 	/**
 	 * A save carrying both versions of a field stores both — no version
-	 * validation remains. The equivalence upgrade still applies, so a pair
-	 * that is one shared field collapses to the surviving v2 id rather than
-	 * being stored twice.
+	 * validation remains, and explicit ids are stored verbatim, including
+	 * both members of a value-equivalent pair.
 	 */
 	public function test_update_stores_both_versions_without_validation() {
 
@@ -224,7 +227,7 @@ class Test_Outgoing_Fields_Storage extends \WP_UnitTestCase {
 		);
 
 		$this->assertEqualsCanonicalizing(
-			[ 'v1:registration_method', 'v2:Registration_Strategy', 'v2:Registration_Date' ],
+			[ 'v1:registration_method', 'v2:Registration_Strategy', 'v1:registration_date', 'v2:Registration_Date' ],
 			\get_option( Integration::OUTGOING_FIELDS_OPTION_PREFIX . 'storage-test' )
 		);
 	}
@@ -323,25 +326,22 @@ class Test_Outgoing_Fields_Storage extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * Derived id sets are deliberately NOT canonicalized: a derived read must
-	 * not persist, so both ids of a value-equivalent pair survive it rather
-	 * than collapsing onto the v2 twin.
+	 * Name resolution is single-valued for a shared field on every path,
+	 * derived reads included: enabling both members of a pair would put two
+	 * producers on one ESP key. The derived read still must not persist.
 	 */
-	public function test_derived_id_sets_are_not_canonicalized() {
+	public function test_derived_id_sets_resolve_shared_names_to_one_id() {
 		\delete_option( Integration::OUTGOING_FIELDS_OPTION_PREFIX . 'storage-test' );
 		\delete_option( Integration::OUTGOING_FIELDS_OPTION_PREFIX . 'esp' );
 
-		// The legacy-global inheritance fallback, with no ESP registered. This
-		// branch resolves the publisher's own stored names, so it stays
-		// version-agnostic (both spellings of a shared field emit one ESP
-		// name) — unlike the defaults tail, which derives from the full field
-		// list and is version-scoped.
+		// The legacy-global inheritance fallback, with no ESP registered: this
+		// branch resolves the publisher's own stored names.
 		\update_option( Metadata::FIELDS_OPTION, [ 'Account', 'Registration Method' ] );
 		$this->assertNull( Integrations::get_integration( 'esp' ), 'This covers the registry-miss path.' );
 		$this->assertEqualsCanonicalizing(
-			[ 'v1:account', 'v2:Account', 'v1:registration_method' ],
+			[ 'v2:Account', 'v1:registration_method' ],
 			$this->integration->get_enabled_outgoing_field_ids(),
-			'A shared name resolves to both its ids, and neither is upgraded on this read path.'
+			'A shared name resolves to the surviving v2 member alone.'
 		);
 		$this->assertNull( \get_option( Integration::OUTGOING_FIELDS_OPTION_PREFIX . 'storage-test', null ) );
 	}
@@ -389,10 +389,8 @@ class Test_Outgoing_Fields_Storage extends \WP_UnitTestCase {
 		\update_option( Metadata::FIELDS_OPTION, [ 'Account' ] );
 
 		$this->assertNull( Integrations::get_integration( 'esp' ), 'This test covers the registry-miss path.' );
-		// Not canonicalized: the stored name resolves to both ids of the pair
-		// and neither is upgraded on this read path.
-		$this->assertEqualsCanonicalizing(
-			[ 'v1:account', 'v2:Account' ],
+		$this->assertSame(
+			[ 'v2:Account' ],
 			$this->integration->get_enabled_outgoing_field_ids()
 		);
 	}
@@ -564,17 +562,46 @@ class Test_Outgoing_Fields_Storage extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * Saving a value-equivalent v1 id upgrades it to the v2 twin; a v1 id
-	 * with no shared-meaning v2 counterpart is stored as submitted. Reads
-	 * never rewrite an already-stored id.
+	 * Ids are stored exactly as submitted, on every path: a stored id is the
+	 * publisher's field, and both members of a value-equivalent pair produce
+	 * the same payload, so there is nothing to gain by rewriting one.
+	 *
+	 * A bare NAME still resolves canonically, which is the only way a legacy
+	 * site's selection moves onto the v2 member.
 	 */
-	public function test_update_upgrades_equivalent_ids_to_v2() {
+	public function test_update_stores_submitted_ids_verbatim() {
 
 		$this->integration->update_enabled_outgoing_fields( [ 'v1:account', 'v1:registration_method' ] );
+
+		$this->assertEqualsCanonicalizing(
+			[ 'v1:account', 'v1:registration_method' ],
+			\get_option( Integration::OUTGOING_FIELDS_OPTION_PREFIX . 'storage-test' )
+		);
+
+		$this->integration->update_enabled_outgoing_fields( [ 'Account', 'Registration Method' ] );
 
 		$this->assertEqualsCanonicalizing(
 			[ 'v2:Account', 'v1:registration_method' ],
 			\get_option( Integration::OUTGOING_FIELDS_OPTION_PREFIX . 'storage-test' )
 		);
+	}
+
+	/**
+	 * A stored legacy id keeps producing through its own class, and its
+	 * new-schema twin's raw key still lands on it — the aliasing that lets a
+	 * site stay on either member of a pair while the metadata classes emit
+	 * whichever spelling they were written in.
+	 */
+	public function test_stored_legacy_id_accepts_the_v2_raw_key() {
+		$this->integration->update_enabled_outgoing_fields( [ 'v1:account' ] );
+
+		$prepared = $this->integration->prepare_contact(
+			[
+				'email'    => 'reader@example.com',
+				'metadata' => [ 'Account' => 42 ],
+			]
+		);
+
+		$this->assertSame( [ 'NP_Account' => 42 ], $prepared['metadata'] );
 	}
 }

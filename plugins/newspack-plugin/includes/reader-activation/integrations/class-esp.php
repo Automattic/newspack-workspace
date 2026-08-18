@@ -22,6 +22,15 @@ defined( 'ABSPATH' ) || exit;
  * Generic integration for ESPs using Newspack Newsletters plugin.
  */
 class ESP extends Integration {
+
+	/**
+	 * Newspack Newsletters' code for "this provider has no list management".
+	 * Campaign Monitor is the current example.
+	 *
+	 * @var string
+	 */
+	const LIST_MANAGEMENT_UNSUPPORTED_ERROR_CODE = 'newspack_newsletters_not_supported';
+
 	/**
 	 * Constructor.
 	 */
@@ -365,7 +374,6 @@ class ESP extends Integration {
 	private function ensure_outgoing_fields_seeded() {
 		$stored = \get_option( self::OUTGOING_FIELDS_OPTION_PREFIX . $this->id, null );
 		if ( null !== $stored && is_array( $stored ) ) {
-			Sync\Field_Registry::retire_origin_marker();
 			return true;
 		}
 
@@ -377,7 +385,6 @@ class ESP extends Integration {
 				array_values( array_unique( array_map( 'strval', $legacy ) ) ),
 				false
 			);
-			Sync\Field_Registry::retire_origin_marker();
 			return true;
 		}
 
@@ -537,9 +544,18 @@ class ESP extends Integration {
 	 * Membership_Status flags from the flag-mode metadata push) but stop
 	 * further outreach by clearing all list membership.
 	 *
+	 * A provider without list management (Campaign Monitor) has no lists to
+	 * clear, so its "not supported" answer is success, not failure — returning
+	 * the error would schedule five retries that can never succeed and alert
+	 * on every reader deletion.
+	 *
 	 * @param string $email Email address of the deleted reader.
 	 *
-	 * @return true|\WP_Error True on success, WP_Error on failure.
+	 * @return true|false|\WP_Error True or false on success — update_lists()
+	 *                              returns false when there was nothing to
+	 *                              do — WP_Error on failure. The caller only
+	 *                              checks is_wp_error(), so anything else is
+	 *                              treated as success.
 	 */
 	public function flag_deletion_cleanup( $email ) {
 		if ( ! class_exists( 'Newspack_Newsletters_Contacts' ) ) {
@@ -548,7 +564,11 @@ class ESP extends Integration {
 				__( 'Newspack Newsletters is not available.', 'newspack-plugin' )
 			);
 		}
-		return \Newspack_Newsletters_Contacts::update_lists( $email, [], 'Reader account deleted' );
+		$result = \Newspack_Newsletters_Contacts::update_lists( $email, [], 'Reader account deleted' );
+		if ( \is_wp_error( $result ) && self::LIST_MANAGEMENT_UNSUPPORTED_ERROR_CODE === $result->get_error_code() ) {
+			return true;
+		}
+		return $result;
 	}
 
 	/**

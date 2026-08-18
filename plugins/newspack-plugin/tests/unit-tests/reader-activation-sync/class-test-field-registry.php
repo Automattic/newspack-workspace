@@ -21,11 +21,21 @@ class Test_Field_Registry extends \WP_UnitTestCase {
 	 * Reset the registry's static cache after each test.
 	 */
 	public function tear_down() {
-		// Spelled out because production code no longer exposes a constant
-		// for it (see test_get_derivation_schema_version_memoizes_detection).
-		\delete_option( 'newspack_sync_schema_origin' );
 		Field_Registry::reset();
 		parent::tear_down();
+	}
+
+	/**
+	 * Group every definition by its ESP name.
+	 *
+	 * @return array<string, array[]> Map of ESP name => definitions.
+	 */
+	private function definitions_by_name() {
+		$by_name = [];
+		foreach ( Field_Registry::get_definitions() as $definition ) {
+			$by_name[ $definition['name'] ][] = $definition;
+		}
+		return $by_name;
 	}
 
 	/**
@@ -44,18 +54,81 @@ class Test_Field_Registry extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * No ESP field name is claimed by both schemas — every naming collision
-	 * is dissolved by collapsing into an equivalent pair or renaming apart —
-	 * so a publisher can enable both versions of a field at once.
+	 * The permanent invariant behind coexistence: no ESP field name may be
+	 * claimed by both schemas, UNLESS the v2 member declares itself
+	 * `equivalent` and points `supersedes` at the v1 member it collapses.
+	 *
+	 * Without that rule two producers write one ESP key and the payload
+	 * depends on merge order; with it, name resolution has one answer.
+	 * Asserted directly over the definitions rather than through a derivation
+	 * that could go vacuous.
 	 */
 	public function test_no_esp_name_is_claimed_by_both_schemas() {
-		$this->assertSame( [], Field_Registry::get_conflict_groups() );
+		$shared = 0;
+		foreach ( $this->definitions_by_name() as $name => $definitions ) {
+			$versions = array_column( $definitions, 'version' );
+			if ( ! in_array( 'v1', $versions, true ) || ! in_array( 'v2', $versions, true ) ) {
+				continue;
+			}
+			++$shared;
 
-		// Not vacuous: shared names still exist, they are collapsed rather than
-		// contested. A derivation that returned [] because it stopped seeing
-		// shared names at all would pass the assertion above on its own.
-		$this->assertSame( 'v1:account', Field_Registry::get_by_name( 'Account', 'v1' )['id'] );
-		$this->assertSame( 'v2:Account', Field_Registry::get_by_name( 'Account', 'v2' )['id'] );
+			$v1_ids = [];
+			foreach ( $definitions as $definition ) {
+				if ( 'v1' === $definition['version'] ) {
+					$v1_ids[] = $definition['id'];
+				}
+			}
+			foreach ( $definitions as $definition ) {
+				if ( 'v2' !== $definition['version'] ) {
+					continue;
+				}
+				$this->assertNotEmpty(
+					$definition['equivalent'] ?? null,
+					"{$definition['id']} shares the ESP name \"{$name}\" with the legacy schema without declaring equivalence."
+				);
+				$this->assertContains(
+					$definition['supersedes'] ?? null,
+					$v1_ids,
+					"{$definition['id']} must supersede the legacy definition it shares \"{$name}\" with."
+				);
+			}
+		}
+
+		// Not vacuous: shared names really do exist, they are collapsed rather
+		// than contested.
+		$this->assertSame( 4, $shared, 'The four value-equivalent pairs are the only shared ESP names.' );
+	}
+
+	/**
+	 * A shared name resolves to the surviving v2 member alone, so a migrating
+	 * site can never end up with both producers writing one ESP key. A name
+	 * only one schema claims resolves to that schema's definitions.
+	 */
+	public function test_resolve_name_collapses_equivalent_pairs() {
+		$this->assertSame(
+			[ 'v2:Account' ],
+			array_column( Field_Registry::resolve_name( 'Account' ), 'id' )
+		);
+
+		// Both legacy raw keys for "Registration Page" collapse onto the one
+		// surviving definition.
+		$this->assertSame(
+			[ 'v2:Registration_Page' ],
+			array_column( Field_Registry::resolve_name( 'Registration Page' ), 'id' )
+		);
+
+		// A renamed v2 field is a different field, not a pair: each name keeps
+		// its own definition.
+		$this->assertSame(
+			[ 'v1:registration_method' ],
+			array_column( Field_Registry::resolve_name( 'Registration Method' ), 'id' )
+		);
+		$this->assertSame(
+			[ 'v2:Registration_Strategy' ],
+			array_column( Field_Registry::resolve_name( 'Registration Strategy' ), 'id' )
+		);
+
+		$this->assertSame( [], Field_Registry::resolve_name( 'No Such Field' ) );
 	}
 
 	/**
@@ -70,25 +143,21 @@ class Test_Field_Registry extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * Content Gate fields are version-neutral, so they never appear in a
-	 * conflict group. Checked via the private raw collision-group derivation
-	 * (not the always-empty public API), so the test exercises real data.
+	 * Content Gate fields are version-neutral: they belong to every version's
+	 * default set, and never share an ESP name with a versioned field (which
+	 * would put them on the wrong side of the coexistence invariant).
 	 */
 	public function test_content_gate_is_neutral() {
 		$defs    = Field_Registry::get_definitions();
 		$neutral = array_filter( $defs, fn( $d ) => 'neutral' === $d['version'] && null !== $d['class'] );
 		$this->assertNotEmpty( $neutral );
 
-		$method = new \ReflectionMethod( Field_Registry::class, 'get_name_collision_groups' );
-		$method->setAccessible( true );
-		$collision_groups = $method->invoke( null );
-		$this->assertNotEmpty( $collision_groups, 'This must exercise real collision groups, not an empty derivation.' );
-
-		// Neutral fields never form (raw) collision groups.
-		foreach ( $collision_groups as $ids ) {
-			foreach ( $ids as $id ) {
-				$this->assertNotSame( 'neutral', Field_Registry::get_definition( $id )['version'] );
-			}
+		foreach ( $neutral as $definition ) {
+			$this->assertSame(
+				[ $definition['id'] ],
+				array_column( $this->definitions_by_name()[ $definition['name'] ], 'id' ),
+				"Version-neutral field {$definition['id']} must not share its ESP name."
+			);
 		}
 	}
 
@@ -114,16 +183,14 @@ class Test_Field_Registry extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * `get_by_name()` prefers the requested version when both schemas declare
-	 * a name, and still resolves an unqualified lookup to some definition.
+	 * A name only the legacy schema claims resolves to the legacy definition —
+	 * canonicalization applies to pairs, not to every name.
 	 */
-	public function test_get_by_name_prefers_requested_version() {
-		$v1 = Field_Registry::get_by_name( 'Total Paid', 'v1' );
-		$v2 = Field_Registry::get_by_name( 'Total Paid', 'v2' );
-		$this->assertSame( 'v1:total_paid', $v1['id'] );
-		$this->assertSame( 'v2:Total_Paid', $v2['id'] );
-		// Unqualified lookup returns some definition for the name.
-		$this->assertNotNull( Field_Registry::get_by_name( 'Newsletter Selection' ) );
+	public function test_legacy_only_name_resolves_to_its_own_definition() {
+		$this->assertSame(
+			[ 'v1:newsletter_selection' ],
+			array_column( Field_Registry::resolve_name( 'Newsletter Selection' ), 'id' )
+		);
 	}
 
 	/**
@@ -194,34 +261,13 @@ class Test_Field_Registry extends \WP_UnitTestCase {
 		\add_filter( 'newspack_ras_metadata_keys', $rename );
 		Field_Registry::reset();
 
-		$definition = Field_Registry::get_by_name( 'Renamed Account' );
+		$definitions = Field_Registry::resolve_name( 'Renamed Account' );
 
 		\remove_filter( 'newspack_ras_metadata_keys', $rename );
 		Field_Registry::reset();
 
-		$this->assertNotNull( $definition, 'A renamed field must resolve under its filtered label.' );
-		$this->assertSame( 'v1:account', $definition['id'] );
-	}
-
-	/**
-	 * Name resolution encodes the shared invariant: every same-version
-	 * definition sharing the name, falling back to a single any-version
-	 * match (which is what covers version-neutral fields).
-	 */
-	public function test_resolve_name_prefers_version_then_falls_back() {
-		// "Registration Page" is declared by two v1 raw keys.
-		$v1 = Field_Registry::resolve_name( 'Registration Page', 'v1' );
-		$this->assertGreaterThan( 1, count( $v1 ) );
-		foreach ( $v1 as $definition ) {
-			$this->assertSame( 'v1', $definition['version'] );
-		}
-
-		// A v2-only name resolves through the any-version fallback.
-		$fallback = Field_Registry::resolve_name( 'User Role', 'v1' );
-		$this->assertCount( 1, $fallback );
-		$this->assertSame( 'v2', $fallback[0]['version'] );
-
-		$this->assertSame( [], Field_Registry::resolve_name( 'No Such Field', 'v1' ) );
+		$this->assertNotEmpty( $definitions, 'A renamed field must resolve under its filtered label.' );
+		$this->assertSame( 'v1:account', $definitions[0]['id'] );
 	}
 
 	/**
@@ -303,74 +349,61 @@ class Test_Field_Registry extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * Value-equivalent pairs (declared on the v2 config) upgrade their v1 ids
-	 * to the v2 twin at storage time. A v1 field whose v2 counterpart carries
-	 * its own ESP name is a separate field, not a pair, so it passes through
-	 * untouched — as do v2 ids and unknown ids.
+	 * Stored ids are never rewritten, so raw-key aliasing runs in both
+	 * directions: whichever member of a pair a site has stored must accept
+	 * the other member's raw key as input. A v2 field with its own ESP name
+	 * is a separate field, not a pair, and aliases nothing.
 	 */
-	public function test_equivalent_pairs_upgrade_and_alias() {
-		$this->assertSame(
-			[ 'v2:Account', 'v1:last_payment_amount' ],
-			Field_Registry::upgrade_equivalent_ids( [ 'v1:account', 'v1:last_payment_amount' ] )
-		);
-		$this->assertSame(
-			[ 'v2:Connected_Account' ],
-			Field_Registry::upgrade_equivalent_ids( [ 'v1:connected_account', 'v2:Connected_Account' ] )
-		);
-		// The v2 twin accepts the v1 raw key as an input alias; separately
-		// named v2 fields and v1 ids alias nothing.
+	public function test_equivalent_pairs_alias_raw_keys_both_ways() {
 		$this->assertSame( [ 'account' ], Field_Registry::get_equivalent_input_raw_keys( 'v2:Account' ) );
+		$this->assertSame( [ 'Account' ], Field_Registry::get_equivalent_input_raw_keys( 'v1:account' ) );
+
 		$this->assertSame( [], Field_Registry::get_equivalent_input_raw_keys( 'v2:Last_Payment_Amount' ) );
-		$this->assertSame( [], Field_Registry::get_equivalent_input_raw_keys( 'v1:account' ) );
+		$this->assertSame( [], Field_Registry::get_equivalent_input_raw_keys( 'v1:last_payment_amount' ) );
 	}
 
 	/**
-	 * Equivalence spans every legacy raw key sharing a name: both
-	 * `registration_page` and `current_page_url` map to "Registration Page",
-	 * and both must upgrade to, and alias onto, the same v2 twin.
+	 * A pair spans every legacy raw key sharing its ESP name: both
+	 * `registration_page` and `current_page_url` mean "Registration Page", so
+	 * both alias onto the surviving definition and it aliases back onto them.
 	 */
 	public function test_equivalence_spans_multiple_legacy_raw_keys() {
-		$this->assertSame(
-			[ 'v2:Registration_Page' ],
-			Field_Registry::upgrade_equivalent_ids( [ 'v1:registration_page', 'v1:current_page_url' ] )
-		);
 		$this->assertEqualsCanonicalizing(
 			[ 'registration_page', 'current_page_url' ],
 			Field_Registry::get_equivalent_input_raw_keys( 'v2:Registration_Page' )
 		);
+		$this->assertSame( [ 'Registration_Page' ], Field_Registry::get_equivalent_input_raw_keys( 'v1:current_page_url' ) );
 	}
 
 	/**
-	 * Schema-version derivation is memoized per request. Verified via
-	 * detect_retired_schema_version()'s corrupt-marker cleanup, a side
-	 * effect only a real detection run performs.
+	 * Ids are recognised by shape, not by resolving them — an id for a
+	 * definition a deactivated plugin no longer declares is still an id, and
+	 * must not be mistaken for a bare display name needing migration.
 	 */
-	public function test_get_derivation_schema_version_memoizes_detection() {
-		Field_Registry::reset();
-		$marker = 'newspack_sync_schema_origin';
-		\update_option( $marker, 'not-a-real-version' );
+	public function test_is_field_id_matches_shape_only() {
+		$this->assertTrue( Field_Registry::is_field_id( 'v1:account' ) );
+		$this->assertTrue( Field_Registry::is_field_id( 'v2:Account' ) );
+		$this->assertTrue( Field_Registry::is_field_id( 'neutral:Content_Access' ) );
+		$this->assertTrue( Field_Registry::is_field_id( 'v2:no_such_definition' ) );
+		$this->assertFalse( Field_Registry::is_field_id( 'Account' ) );
+		$this->assertFalse( Field_Registry::is_field_id( 'v3:account' ) );
+		$this->assertFalse( Field_Registry::is_field_id( '' ) );
+	}
 
-		$first = Field_Registry::get_derivation_schema_version();
+	/**
+	 * The derived default selection is the same list seeding would persist:
+	 * one schema version's definitions plus the version-neutral ones, never
+	 * the merged set.
+	 */
+	public function test_default_field_ids_are_scoped_to_one_version() {
+		$ids = Field_Registry::get_default_field_ids();
 
-		$this->assertFalse( \get_option( $marker ), 'The first call must run detection and clear the corrupt marker.' );
-
-		\update_option( $marker, 'not-a-real-version' );
-
-		$second = Field_Registry::get_derivation_schema_version();
-
-		$this->assertSame( $first, $second, 'The memoized call must answer identically to the first.' );
-		$this->assertSame(
-			'not-a-real-version',
-			\get_option( $marker ),
-			'A second call must be served from the per-request cache, not re-run detection.'
-		);
-
-		Field_Registry::reset();
-		Field_Registry::get_derivation_schema_version();
-
-		$this->assertFalse(
-			\get_option( $marker ),
-			'reset() must clear the cache, so the next call re-runs detection.'
-		);
+		$this->assertNotEmpty( $ids );
+		$versions = [];
+		foreach ( $ids as $id ) {
+			$versions[ Field_Registry::get_definition( $id )['version'] ] = true;
+		}
+		unset( $versions[ Field_Registry::VERSION_NEUTRAL ] );
+		$this->assertCount( 1, $versions, 'A derived default must never mix both schemas.' );
 	}
 }

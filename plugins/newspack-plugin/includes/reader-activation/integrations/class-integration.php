@@ -134,6 +134,26 @@ abstract class Integration {
 	private $settings_fields_cache = null;
 
 	/**
+	 * Memoized prepare_contact() lookup tables, keyed by integration id and the
+	 * stored field-id list. Static rather than per-instance because contacts
+	 * are prepared through whichever instance the registry hands back, and the
+	 * tables depend on nothing instance-local. See
+	 * get_prepare_contact_lookups().
+	 *
+	 * @var array<string, array>
+	 */
+	private static $prepare_contact_lookups = [];
+
+	/**
+	 * Integration id + stored entry pairs already reported as unresolvable by
+	 * the name-to-id migration this request. Keeps the warning at one per
+	 * option per request rather than one per read.
+	 *
+	 * @var array<string, bool>
+	 */
+	private static $logged_unresolved_entries = [];
+
+	/**
 	 * Constructor.
 	 *
 	 * @param string $id          The unique identifier for this integration.
@@ -984,7 +1004,9 @@ abstract class Integration {
 	 * Lazily migrates stored display names (pre-coexistence format) to
 	 * version-qualified field ids and writes the option back — skipped when
 	 * any stored name fails to resolve, so migration can retry on a later
-	 * read instead of permanently losing that entry.
+	 * read instead of permanently losing that entry. Ids themselves are never
+	 * rewritten: a stored id is the publisher's field, and both members of a
+	 * value-equivalent pair produce the same payload.
 	 *
 	 * An integration that never saved a selection inherits one — see
 	 * get_inherited_outgoing_field_ids(). An explicitly saved selection
@@ -1006,7 +1028,7 @@ abstract class Integration {
 
 		$needs_migration = false;
 		foreach ( $stored as $entry ) {
-			if ( ! preg_match( '/^(v1|v2|neutral):/', (string) $entry ) ) {
+			if ( ! Sync\Field_Registry::is_field_id( $entry ) ) {
 				$needs_migration = true;
 				break;
 			}
@@ -1018,7 +1040,7 @@ abstract class Integration {
 		$ids            = [];
 		$has_unresolved = false;
 		foreach ( $stored as $entry ) {
-			if ( preg_match( '/^(v1|v2|neutral):/', (string) $entry ) ) {
+			if ( Sync\Field_Registry::is_field_id( $entry ) ) {
 				$ids[] = $entry;
 				continue;
 			}
@@ -1026,30 +1048,34 @@ abstract class Integration {
 			// "Registration Page"); resolve to all of them.
 			$definitions = Sync\Field_Registry::resolve_name( (string) $entry );
 			if ( empty( $definitions ) ) {
+				$has_unresolved = true;
 				// newspack_log (not Logger::log(), a no-op at the default log
 				// level) so the repeating unresolved migration is visible to
-				// Newspack Manager.
-				Logger::newspack_log(
-					'outgoing_fields_migration_unresolved',
-					sprintf( 'Outgoing fields migration: no definition found for "%s" in integration "%s".', $entry, $this->id ),
-					[
-						'integration_id' => $this->id,
-						'entry'          => (string) $entry,
-					],
-					'warning'
-				);
-				$has_unresolved = true;
+				// Newspack Manager — but once per option per request. This read
+				// runs once per contact plus once per push-capable integration
+				// in class scoping, and the condition (a name whose declaring
+				// plugin is deactivated) persists until someone fixes it, so
+				// logging per read would bury a site's other alerts under a
+				// backfill.
+				$seen_key = $this->id . '|' . $entry;
+				if ( ! isset( self::$logged_unresolved_entries[ $seen_key ] ) ) {
+					self::$logged_unresolved_entries[ $seen_key ] = true;
+					Logger::newspack_log(
+						'outgoing_fields_migration_unresolved',
+						sprintf( 'Outgoing fields migration: no definition found for "%s" in integration "%s".', $entry, $this->id ),
+						[
+							'integration_id' => $this->id,
+							'entry'          => (string) $entry,
+						],
+						'warning'
+					);
+				}
 			}
 			foreach ( $definitions as $definition ) {
 				$ids[] = $definition['id'];
 			}
 		}
 		$ids = array_values( array_unique( $ids ) );
-
-		// Migration is a write path too: upgrade value-equivalent v1 ids to
-		// their v2 twins so the written-back option already uses the
-		// surviving id shape.
-		$ids = Sync\Field_Registry::upgrade_equivalent_ids( $ids );
 
 		// Write back only when every entry resolved — a reduced list would
 		// permanently drop a name whose declaring plugin is temporarily
@@ -1061,53 +1087,24 @@ abstract class Integration {
 	}
 
 	/**
-	 * Get the default outgoing metadata field ids for this integration:
-	 * every available field, resolved to ids, without persisting — so
-	 * defaults keep tracking availability changes.
+	 * Get the default outgoing metadata field ids for this integration.
 	 *
 	 * A safety net, not the normal path: the ESP integration's selection is
 	 * normally materialised at activation or first read (see
 	 * Field_Registry::seed_default_field_selections()) and inherited by
 	 * every other integration. This only answers when seeding stored
-	 * nothing, or for an integration built outside the registry.
+	 * nothing, or for an integration built outside the registry — and it
+	 * returns exactly the list seeding would have stored, so the two can
+	 * never disagree.
 	 *
 	 * Scoped to one schema version and never stored: the merged registry
 	 * would leak both schemas' names into a real push, since a non-ESP
 	 * integration can inherit this while the ESP is unconfigured.
 	 *
-	 * Memoized per (registry generation, version, names), since
-	 * prepare_contact() calls this once per contact per integration; the key
-	 * derives from the resolution inputs, so it self-invalidates.
-	 *
-	 * Deliberately not canonicalized: the equivalence upgrade is a
-	 * write-path behavior, and prepare_contact() resolves ids to ESP names
-	 * regardless of version.
-	 *
 	 * @return string[] List of field ids.
 	 */
 	protected function get_default_outgoing_field_ids() {
-		static $cache = [];
-		$version = Sync\Field_Registry::get_derivation_schema_version();
-		$names   = Sync\Metadata::get_default_fields();
-		$key     = Sync\Field_Registry::get_generation() . '|' . $version . '|' . md5( (string) \wp_json_encode( $names ) );
-		if ( isset( $cache[ $key ] ) ) {
-			return $cache[ $key ];
-		}
-		$ids = [];
-		foreach ( $names as $name ) {
-			foreach ( Sync\Field_Registry::resolve_name( $name, $version ) as $definition ) {
-				// The merged name list can smuggle in the other schema via
-				// resolve_name()'s any-version fallback. Keep only this
-				// version's own fields, plus the version-neutral ones.
-				if ( $version === $definition['version'] || Sync\Field_Registry::VERSION_NEUTRAL === $definition['version'] ) {
-					$ids[] = $definition['id'];
-				}
-			}
-		}
-		// Defensive: resolve_name() guarantees distinct names yield distinct
-		// ids, so this only matters if $names itself has a duplicate.
-		$cache[ $key ] = array_values( array_unique( $ids ) );
-		return $cache[ $key ];
+		return Sync\Field_Registry::get_default_field_ids();
 	}
 
 	/**
@@ -1147,10 +1144,8 @@ abstract class Integration {
 					$ids[] = $definition['id'];
 				}
 			}
-			// Not canonicalized, same reasoning as get_default_outgoing_field_ids()
-			// (read path; the equivalence upgrade belongs to writes). Still
-			// de-duplicated defensively, since a hand-edited legacy option
-			// could repeat a name.
+			// De-duplicated defensively: a hand-edited legacy option could
+			// repeat a name.
 			return array_values( array_unique( $ids ) );
 		}
 
@@ -1164,7 +1159,9 @@ abstract class Integration {
 	 * field ids, for the old settings UI. Lossy for the five value-equivalent
 	 * pairs, whose two ids share one name — they collapse to that name here,
 	 * and update_enabled_outgoing_fields() re-resolves it to the surviving
-	 * v2 id. The per-field UI (Phase 2) must post ids, not names.
+	 * v2 id, which is why re-saving an untouched legacy selection can move it
+	 * onto the pair's v2 member. The per-field UI (Phase 2) must post ids, not
+	 * names.
 	 *
 	 * The never-configured fallback (inheriting the ESP integration's
 	 * effective selection) lives in get_enabled_outgoing_field_ids(), so the
@@ -1253,16 +1250,20 @@ abstract class Integration {
 	 * Update the enabled outgoing metadata fields for this integration.
 	 *
 	 * Accepts field ids and/or display names (the old UI posts names). A name
-	 * resolves against the merged registry: the two schemas no longer contest
-	 * one, so a name identifies a field outright, and where both schemas spell
-	 * a shared field the same way the equivalence upgrade below collapses the
-	 * pair onto the surviving v2 id.
+	 * resolves against the merged registry deterministically: the two schemas
+	 * never contest a name, and where both spell a shared field the same way
+	 * resolution returns the surviving v2 member alone.
 	 *
-	 * Stores ids, with no version validation: any mix of v1 and v2 ids is
-	 * storable and both versions of a renamed field can be enabled at once
-	 * (Field_Registry::get_conflict_groups() is empty by construction). The
-	 * equivalence upgrade is not validation — it collapses the id of a shared
-	 * field onto its surviving spelling.
+	 * Ids are stored verbatim, with no version validation: any mix of v1 and
+	 * v2 ids is storable, and both versions of a renamed field can be enabled
+	 * at once.
+	 *
+	 * Explicit ids can therefore store both members of a former pair, unlike
+	 * a name save; when that happens and both raw keys share one ESP name,
+	 * prepare_contact() resolves the collision by metadata-array order, so
+	 * the payload depends on merge order — the name path above is the
+	 * guarded one, since resolving a name always returns a single surviving
+	 * definition.
 	 *
 	 * @param array $fields List of field ids and/or names to enable.
 	 * @return bool True if updated, false otherwise.
@@ -1271,7 +1272,7 @@ abstract class Integration {
 		$ids = [];
 		foreach ( (array) $fields as $entry ) {
 			$entry = (string) $entry;
-			if ( preg_match( '/^(v1|v2|neutral):/', $entry ) ) {
+			if ( Sync\Field_Registry::is_field_id( $entry ) ) {
 				$definitions = array_filter( [ Sync\Field_Registry::get_definition( $entry ) ] );
 			} else {
 				$definitions = Sync\Field_Registry::resolve_name( $entry );
@@ -1282,14 +1283,8 @@ abstract class Integration {
 				}
 			}
 		}
-		$ids = array_values( array_unique( $ids ) );
 
-		// Value-equivalent conflict pairs store the v2 id: their v2 pipeline
-		// produces the identical value for the same ESP name, so upgrading at
-		// save time retires legacy ids with no observable payload change.
-		$ids = Sync\Field_Registry::upgrade_equivalent_ids( $ids );
-
-		return \update_option( self::OUTGOING_FIELDS_OPTION_PREFIX . $this->id, $ids, false );
+		return \update_option( self::OUTGOING_FIELDS_OPTION_PREFIX . $this->id, array_values( array_unique( $ids ) ), false );
 	}
 
 	/**
@@ -1469,12 +1464,13 @@ abstract class Integration {
 	 * ids to prefixed ESP field names.
 	 *
 	 * Raw keys survive only when enabled; dynamic-suffix (UTM) fields match
-	 * by raw-key prefix only, never by their bare key. Schema-owned names
-	 * are collision-free by construction (Field_Registry::get_conflict_groups()
-	 * is always empty), but a `newspack_ras_metadata_keys` callback can add
-	 * or rename a field outside that guarantee — when two raw keys then
-	 * resolve to the same output key, resolution is last-write-wins, except
-	 * an explicitly-supplied prefixed value is never overwritten.
+	 * by raw-key prefix only, never by their bare key. Schema-owned names are
+	 * collision-free by construction — no ESP name is claimed by both schemas
+	 * unless the v2 member declares the pair equivalent, and then only its own
+	 * id resolves — but a `newspack_ras_metadata_keys` callback can add or
+	 * rename a field outside that guarantee; when two raw keys then resolve to
+	 * the same output key, resolution is last-write-wins, except an
+	 * explicitly-supplied prefixed value is never overwritten.
 	 *
 	 * Already-prefixed input passes through when it matches an enabled field
 	 * or the registry doesn't recognize the name at all (custom fields from
@@ -1493,34 +1489,10 @@ abstract class Integration {
 			return $contact;
 		}
 
+		list( $by_raw, $by_name, $dynamic ) = $this->get_prepare_contact_lookups();
+
 		$prefix      = $this->get_metadata_prefix();
 		$passthrough = Sync\Metadata::SYNC_CONTROL_KEYS;
-		$by_raw      = [];
-		$by_name     = [];
-		$dynamic     = [];
-
-		foreach ( $this->get_enabled_outgoing_field_ids() as $id ) {
-			$definition = Sync\Field_Registry::get_definition( $id );
-			if ( ! $definition ) {
-				continue;
-			}
-			// Dynamic-suffix fields are only ever matched with a suffix, so they
-			// are deliberately kept out of the exact-match lookups.
-			if ( $definition['dynamic_suffix'] ) {
-				$dynamic[] = $definition;
-				continue;
-			}
-			$by_raw[ $definition['raw_key'] ] = $definition;
-			$by_name[ $definition['name'] ]   = $definition;
-			// v1 counterparts' raw keys alias to the equivalent v2 id too:
-			// callers still hand-build legacy keys (the deletion connector
-			// passes `account`), and both resolve to the same value.
-			foreach ( Sync\Field_Registry::get_equivalent_input_raw_keys( $id ) as $alias_raw_key ) {
-				if ( ! isset( $by_raw[ $alias_raw_key ] ) ) {
-					$by_raw[ $alias_raw_key ] = $definition;
-				}
-			}
-		}
 
 		$prepared = [];
 		$explicit = [];
@@ -1585,6 +1557,72 @@ abstract class Integration {
 
 		$contact['metadata'] = $prepared;
 		return $contact;
+	}
+
+	/**
+	 * The three lookup tables prepare_contact() resolves against: raw key =>
+	 * definition, ESP name => definition, and the dynamic-suffix definitions.
+	 *
+	 * Memoized because prepare_contact() runs once per contact per
+	 * integration, and a backfill walks the whole user table. The tables
+	 * depend only on the stored id list, so that is the cache key.
+	 * Field_Registry's own definitions are frozen for the lifetime of the
+	 * request once first computed, so these lookups can never disagree with
+	 * the registry; Field_Registry::reset() exists to isolate test cases,
+	 * not as a production invalidation path.
+	 *
+	 * @return array{0: array, 1: array, 2: array[]} By raw key, by name, dynamic.
+	 */
+	private function get_prepare_contact_lookups() {
+		$ids = $this->get_enabled_outgoing_field_ids();
+		$key = $this->id . '|' . md5( implode( "\n", $ids ) );
+		if ( isset( self::$prepare_contact_lookups[ $key ] ) ) {
+			return self::$prepare_contact_lookups[ $key ];
+		}
+
+		$by_raw  = [];
+		$by_name = [];
+		$dynamic = [];
+		foreach ( $ids as $id ) {
+			$definition = Sync\Field_Registry::get_definition( $id );
+			if ( ! $definition ) {
+				continue;
+			}
+			// Dynamic-suffix fields are only ever matched with a suffix, so they
+			// are deliberately kept out of the exact-match lookups.
+			if ( $definition['dynamic_suffix'] ) {
+				$dynamic[] = $definition;
+				continue;
+			}
+			$by_raw[ $definition['raw_key'] ] = $definition;
+			$by_name[ $definition['name'] ]   = $definition;
+			// The other member of a value-equivalent pair aliases its raw key
+			// onto whichever member is enabled: callers hand-build contacts in
+			// either spelling (the deletion connector passes legacy `account`),
+			// and both mean the same field.
+			foreach ( Sync\Field_Registry::get_equivalent_input_raw_keys( $id ) as $alias_raw_key ) {
+				if ( ! isset( $by_raw[ $alias_raw_key ] ) ) {
+					$by_raw[ $alias_raw_key ] = $definition;
+				}
+			}
+		}
+
+		self::$prepare_contact_lookups[ $key ] = [ $by_raw, $by_name, $dynamic ];
+		return self::$prepare_contact_lookups[ $key ];
+	}
+
+	/**
+	 * Drop every memoized prepare_contact() lookup table, and the record of
+	 * which unresolvable stored names have already been reported.
+	 *
+	 * Called from Field_Registry::reset(), the one thing that can change what
+	 * a given id list — or a given stored name — resolves to.
+	 *
+	 * @return void
+	 */
+	public static function flush_prepare_contact_lookups() {
+		self::$prepare_contact_lookups   = [];
+		self::$logged_unresolved_entries = [];
 	}
 
 	/**
@@ -1737,8 +1775,11 @@ abstract class Integration {
 		$migrated = 'sync_account_deletion' === $key
 			? true
 			: ( \wp_validate_boolean( $legacy_value ) && $this->supports_hard_delete() ? 'delete' : 'flag' );
-		// Persist directly to avoid re-running the migration on every read.
-		\update_option( $option_name, $migrated );
+		// Persist directly to avoid re-running the migration on every read, and
+		// out of the autoload cache like every other per-integration setting —
+		// this creates two options per push-capable integration on every legacy
+		// site, none of them needed on a normal request.
+		\update_option( $option_name, $migrated, false );
 		return $migrated;
 	}
 
