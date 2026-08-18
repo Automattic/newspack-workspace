@@ -114,4 +114,35 @@ class Bulk_Actions_Test extends WP_UnitTestCase {
 		$this->assertFalse( metadata_exists( 'post', $post, 'is_public' ), 'is_public must not be written on a non-newsletter post.' );
 		$this->assertStringContainsString( 'newsletters_public_count=0', urldecode( $redirect ) );
 	}
+
+	/**
+	 * A newsletter already in the requested state still counts.
+	 *
+	 * `update_post_meta()` returns false when the value is unchanged, so counting
+	 * only its truthy returns would report "0 newsletters now have public page
+	 * available" for a selection that is already public. The notice describes the
+	 * resulting state, so an unchanged newsletter belongs in it.
+	 */
+	public function test_bulk_handler_counts_a_newsletter_already_in_the_requested_state() {
+		$admin = self::factory()->user->create( [ 'role' => 'administrator' ] );
+		wp_set_current_user( $admin );
+		$newsletter = self::factory()->post->create(
+			[
+				'post_type'   => \Newspack_Newsletters::NEWSPACK_NEWSLETTERS_CPT,
+				'post_status' => 'publish',
+				'post_author' => $admin,
+			]
+		);
+		update_post_meta( $newsletter, 'is_public', true );
+
+		$this->assertFalse(
+			update_post_meta( $newsletter, 'is_public', true ),
+			'Precondition: re-writing the same value returns false, which is the case this test exists for.'
+		);
+
+		$redirect = Newspack_Newsletters_Bulk_Actions::bulk_action_handler( 'http://example.test/', 'newsletters_public', [ $newsletter ] );
+
+		$this->assertTrue( (bool) get_post_meta( $newsletter, 'is_public', true ), 'is_public stays true.' );
+		$this->assertStringContainsString( 'newsletters_public_count=1', urldecode( $redirect ), 'A newsletter already public still counts toward the notice, which reports the resulting state.' );
+	}
 }

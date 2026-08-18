@@ -79,7 +79,9 @@ class Newspack_Newsletters_Bulk_Actions {
 	 * @param int[] $post_ids  Submitted post IDs.
 	 * @param bool  $is_public Whether the newsletter pages should be public.
 	 *
-	 * @return int Number of newsletters actually updated.
+	 * @return int Number of newsletters the status was applied to. A newsletter
+	 *             already in the requested state counts, since the notice reports
+	 *             the resulting state rather than the number of rows changed.
 	 */
 	private static function set_public_status( $post_ids, $is_public ) {
 		$updated = 0;
