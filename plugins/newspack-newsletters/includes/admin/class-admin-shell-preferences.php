@@ -51,6 +51,13 @@ class Admin_Shell_Preferences {
 	const PER_PAGE_ALL = -1;
 	const PER_PAGE_MAX = 100;
 
+	/**
+	 * DataViews renders these alongside the field checkboxes in View
+	 * options, so they persist with them. Mirrored client side by
+	 * `VISIBILITY_FLAGS` in `use-persisted-view.js`.
+	 */
+	const VISIBILITY_FLAGS = [ 'showTitle', 'showMedia', 'showDescription' ];
+
 	const LAYOUT_TYPES = [ 'table', 'grid', 'list' ];
 	const DENSITIES    = [ 'compact', 'balanced', 'comfortable' ];
 	const ALIGNMENTS   = [ 'start', 'center', 'end' ];
@@ -134,7 +141,7 @@ class Admin_Shell_Preferences {
 			],
 		];
 
-		return [
+		$schema = [
 			'perPage'    => [ 'type' => 'integer' ],
 			'type'       => [
 				'type' => 'string',
@@ -177,6 +184,12 @@ class Admin_Shell_Preferences {
 				],
 			],
 		];
+
+		foreach ( self::VISIBILITY_FLAGS as $flag ) {
+			$schema[ $flag ] = [ 'type' => 'boolean' ];
+		}
+
+		return $schema;
 	}
 
 	/**
@@ -292,6 +305,12 @@ class Admin_Shell_Preferences {
 			}
 			// An empty array is meaningful — every column hidden.
 			$clean['fields'] = $fields;
+		}
+
+		foreach ( self::VISIBILITY_FLAGS as $flag ) {
+			if ( isset( $prefs[ $flag ] ) && is_bool( $prefs[ $flag ] ) ) {
+				$clean[ $flag ] = $prefs[ $flag ];
+			}
 		}
 
 		$sort = isset( $prefs['sort'] ) && is_array( $prefs['sort'] ) ? self::sanitize_sort( $prefs['sort'] ) : null;

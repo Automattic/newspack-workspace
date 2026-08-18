@@ -29,6 +29,11 @@ const DENSITIES = [ 'compact', 'balanced', 'comfortable' ];
 
 const SORT_DIRECTIONS = [ 'asc', 'desc' ];
 
+// DataViews renders these alongside the field checkboxes in View options,
+// so they have to persist with them. Mirrors
+// `Admin_Shell_Preferences::VISIBILITY_FLAGS`.
+const VISIBILITY_FLAGS = [ 'showTitle', 'showMedia', 'showDescription' ];
+
 // Mirrors `Admin_Shell_Preferences::MAX_PREVIEW_SIZE`. The grid stores a
 // pixel width here, not the slider position.
 const MAX_PREVIEW_SIZE = 4000;
@@ -112,6 +117,11 @@ function toPrefs( view = {} ) {
 			direction: SORT_DIRECTIONS.includes( view.sort.direction ) ? view.sort.direction : 'desc',
 		};
 	}
+	for ( const flag of VISIBILITY_FLAGS ) {
+		if ( typeof view[ flag ] === 'boolean' ) {
+			prefs[ flag ] = view[ flag ];
+		}
+	}
 
 	const layout = {};
 	if ( DENSITIES.includes( view.layout?.density ) ) {
@@ -191,6 +201,12 @@ function toViewPatch( prefs, { perPageOptions, fieldIds, layoutTypes } ) {
 		};
 	}
 
+	for ( const flag of VISIBILITY_FLAGS ) {
+		if ( typeof prefs[ flag ] === 'boolean' ) {
+			patch[ flag ] = prefs[ flag ];
+		}
+	}
+
 	const layout = {};
 	if ( DENSITIES.includes( prefs.layout?.density ) ) {
 		layout.density = prefs.layout.density;
@@ -247,23 +263,30 @@ export default function usePersistedView(
 	const serialized = useMemo( () => stableStringify( toPrefs( view ) ), [ view ] );
 
 	// The mounted view is the baseline, so nothing is written until the
-	// user changes something and a one-off legacy deep link can't rewrite
-	// a saved configuration.
+	// user changes something. A legacy deep link therefore doesn't write
+	// on arrival, though its sort does ride along once the user changes
+	// anything else, since the payload is the whole presentation state.
 	const lastSavedRef = useRef( serialized );
 	const desiredRef = useRef( serialized );
-	const inFlightRef = useRef( false );
+	// The payload currently being written, or null.
+	const inFlightRef = useRef( null );
+	const abortRef = useRef( null );
+	const unloadingRef = useRef( false );
 	const flushRef = useRef( () => {} );
 
 	useEffect( () => {
 		// One at a time — concurrent writes could land out of order.
 		const save = ( payload, { attempt = 0, keepalive = false } = {} ) => {
-			inFlightRef.current = true;
+			inFlightRef.current = payload;
 			let failed = false;
+			const controller = 'undefined' === typeof AbortController ? null : new AbortController();
+			abortRef.current = controller;
 			apiFetch( {
 				path: PREFERENCES_PATH,
 				method: 'POST',
 				data: { screen: screenKey, prefs: JSON.parse( payload ) },
 				...( keepalive ? { keepalive: true } : {} ),
+				...( controller ? { signal: controller.signal } : {} ),
 			} )
 				.then( () => {
 					lastSavedRef.current = payload;
@@ -272,7 +295,13 @@ export default function usePersistedView(
 					failed = true;
 				} )
 				.finally( () => {
-					inFlightRef.current = false;
+					inFlightRef.current = null;
+					// The page is going: a chained save would be cancelled
+					// with it, and a retry would re-send what we just
+					// superseded.
+					if ( unloadingRef.current ) {
+						return;
+					}
 					if ( desiredRef.current !== payload && isSavable( desiredRef.current ) ) {
 						save( desiredRef.current );
 						return;
@@ -289,12 +318,19 @@ export default function usePersistedView(
 			if ( payload === lastSavedRef.current || ! isSavable( payload ) ) {
 				return;
 			}
-			// The in-flight guard keeps debounced saves in order. On the way
-			// out ordering no longer matters, and the request in flight was
-			// started without `keepalive`, so the browser is about to cancel
-			// it and the chained save can't be relied on.
-			if ( inFlightRef.current && ! keepalive ) {
-				return;
+			// The in-flight guard keeps debounced saves in order, and the
+			// chained save in `finally` picks up anything newer. On the way
+			// out that chain can't be relied on: the request in flight was
+			// started without `keepalive`, so it goes with the page.
+			if ( inFlightRef.current ) {
+				if ( ! keepalive || inFlightRef.current === payload ) {
+					return;
+				}
+				// Cancel the older write first. Left running, it could reach
+				// the server after this one and put back the values this
+				// payload replaces.
+				unloadingRef.current = true;
+				abortRef.current?.abort();
 			}
 			save( payload, { keepalive } );
 		};
@@ -311,9 +347,15 @@ export default function usePersistedView(
 
 	useEffect( () => {
 		const flushNow = () => flushRef.current( { keepalive: true } );
+		// A page restored from the back/forward cache goes on saving.
+		const resume = () => {
+			unloadingRef.current = false;
+		};
 		window.addEventListener( 'pagehide', flushNow );
+		window.addEventListener( 'pageshow', resume );
 		return () => {
 			window.removeEventListener( 'pagehide', flushNow );
+			window.removeEventListener( 'pageshow', resume );
 			// Navigating between screens unmounts before a debounced save fires.
 			flushRef.current();
 		};

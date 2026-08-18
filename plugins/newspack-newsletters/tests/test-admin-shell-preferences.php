@@ -373,6 +373,54 @@ class Admin_Shell_Preferences_Test extends WP_UnitTestCase {
 	}
 
 	/**
+	 * DataViews renders the Title, Media and Description toggles in the
+	 * same View options list as the field checkboxes, so they have to
+	 * survive a reload alongside them.
+	 */
+	public function test_saves_the_property_visibility_toggles() {
+		$response = rest_do_request(
+			$this->make_request(
+				'layouts-list',
+				[
+					'showMedia'       => false,
+					'showTitle'       => true,
+					'showDescription' => false,
+				]
+			)
+		);
+
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame(
+			[
+				'showTitle'       => true,
+				'showMedia'       => false,
+				'showDescription' => false,
+			],
+			Admin_Shell_Preferences::get_preferences()['layouts-list']
+		);
+	}
+
+	/**
+	 * A non-boolean toggle is dropped rather than coerced, so a stray
+	 * string can't read back as "on".
+	 */
+	public function test_drops_non_boolean_visibility_toggles() {
+		update_user_meta(
+			$this->editor_id,
+			Admin_Shell_Preferences::get_user_meta_key( 'layouts-list' ),
+			[
+				'perPage'   => 24,
+				'showMedia' => 'false',
+			]
+		);
+
+		$this->assertSame(
+			[ 'perPage' => 24 ],
+			Admin_Shell_Preferences::get_preferences()['layouts-list']
+		);
+	}
+
+	/**
 	 * `usermeta` is network-global. Single-site installs keep the
 	 * unprefixed key so preferences saved before this survive.
 	 */

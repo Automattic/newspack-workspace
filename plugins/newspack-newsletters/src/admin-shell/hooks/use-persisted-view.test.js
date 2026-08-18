@@ -21,6 +21,9 @@ const saved = ( prefs, screen = 'newsletters-list' ) => ( {
 	path: PATH,
 	method: 'POST',
 	data: { screen, prefs },
+	// Every save carries one so a `pagehide` flush can cancel the write it
+	// supersedes.
+	signal: expect.any( AbortSignal ),
 } );
 
 describe( 'usePersistedView', () => {
@@ -296,6 +299,24 @@ describe( 'usePersistedView', () => {
 			expect( apiFetch ).toHaveBeenLastCalledWith( { ...saved( { perPage: 20, type: 'table' } ), keepalive: true } );
 		} );
 
+		it( 'does not repeat a save that is already in flight with the same value', async () => {
+			apiFetch.mockImplementationOnce( () => new Promise( () => {} ) );
+
+			const { result } = renderHook( () => usePersistedView( 'newsletters-list', DEFAULT_VIEW ) );
+
+			act( () => {
+				result.current[ 1 ]( current => ( { ...current, perPage: 50 } ) );
+			} );
+			await settle();
+			expect( apiFetch ).toHaveBeenCalledTimes( 1 );
+
+			act( () => {
+				window.dispatchEvent( new window.Event( 'pagehide' ) );
+			} );
+
+			expect( apiFetch ).toHaveBeenCalledTimes( 1 );
+		} );
+
 		// The server rejects the whole payload on an unknown key, which
 		// would take every other appearance setting down with it.
 		it( 'sends only the column-style keys the server stores', async () => {
@@ -312,6 +333,29 @@ describe( 'usePersistedView', () => {
 			expect( apiFetch ).toHaveBeenCalledWith(
 				saved( { perPage: 25, type: 'table', layout: { styles: { status: { width: '120px', minWidth: 40, align: 'center' } } } } )
 			);
+		} );
+	} );
+
+	describe( 'property visibility toggles', () => {
+		it( 'persists them alongside the field checkboxes', async () => {
+			const { result } = renderHook( () => usePersistedView( 'newsletters-list', DEFAULT_VIEW ) );
+
+			act( () => {
+				result.current[ 1 ]( current => ( { ...current, showMedia: false } ) );
+			} );
+			await settle();
+
+			expect( apiFetch ).toHaveBeenCalledWith( saved( { perPage: 25, type: 'table', showMedia: false } ) );
+		} );
+
+		it( 'seeds them from the stored preferences', () => {
+			window.newspackNewslettersAdmin = {
+				viewPrefs: { 'newsletters-list': { showMedia: false, showTitle: true } },
+			};
+
+			const { result } = renderHook( () => usePersistedView( 'newsletters-list', DEFAULT_VIEW ) );
+
+			expect( result.current[ 0 ] ).toMatchObject( { showMedia: false, showTitle: true } );
 		} );
 	} );
 
