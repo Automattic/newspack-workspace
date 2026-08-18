@@ -9,7 +9,7 @@ import classnames from 'classnames';
 // Notice is aliased: `Notice` below is Newspack's own, which this file also uses.
 import { DropdownMenu, MenuGroup, MenuItem, Notice as CoreNotice } from '@wordpress/components';
 import { useDispatch, useSelect } from '@wordpress/data';
-import { cloneElement, createInterpolateElement, isValidElement, useEffect, useState, forwardRef } from '@wordpress/element';
+import { cloneElement, createInterpolateElement, isValidElement, useEffect, useLayoutEffect, useState, forwardRef } from '@wordpress/element';
 import { __ } from '@wordpress/i18n';
 import { category, chevronLeft, moreVertical } from '@wordpress/icons';
 
@@ -167,14 +167,40 @@ const Wizard = (
 
 	let displayedSections = sections.filter( section => ! section.isHidden );
 
+	const { startLoadingData: startGateLoading, finishLoadingData: finishGateLoading } = useDispatch( WIZARD_STORE_NAMESPACE );
 	const [ pluginRequirementsSatisfied, setPluginRequirementsSatisfied ] = useState( requiredPlugins.length === 0 );
+	// Whether the requirements check has reported back. Until it has, the check
+	// rides the store's loading treatment rather than showing the installer's own
+	// spinner and the swapped header, so a wizard's first paint carries one
+	// continuous loader; the installer only surfaces once a plugin is actually
+	// found missing.
+	const [ pluginRequirementsKnown, setPluginRequirementsKnown ] = useState( requiredPlugins.length === 0 );
+	// Layout effect so the loading treatment is on before the first paint;
+	// a passive effect would let the installer's own spinner paint for a frame.
+	useLayoutEffect( () => {
+		if ( requiredPlugins.length > 0 ) {
+			startGateLoading();
+		}
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [] );
 	if ( ! pluginRequirementsSatisfied ) {
-		headerText = requiredPlugins.length > 1 ? __( 'Required plugins', 'newspack-plugin' ) : __( 'Required plugin', 'newspack-plugin' );
+		if ( pluginRequirementsKnown ) {
+			headerText = requiredPlugins.length > 1 ? __( 'Required plugins', 'newspack-plugin' ) : __( 'Required plugin', 'newspack-plugin' );
+		}
 		displayedSections = [
 			{
 				path: '/',
 				render: () => (
-					<PluginInstaller plugins={ requiredPlugins } onStatus={ ( { complete } ) => setPluginRequirementsSatisfied( complete ) } />
+					<div hidden={ ! pluginRequirementsKnown }>
+						<PluginInstaller
+							plugins={ requiredPlugins }
+							onStatus={ ( { complete } ) => {
+								setPluginRequirementsKnown( true );
+								setPluginRequirementsSatisfied( complete );
+								finishGateLoading();
+							} }
+						/>
+					</div>
 				),
 			},
 		];

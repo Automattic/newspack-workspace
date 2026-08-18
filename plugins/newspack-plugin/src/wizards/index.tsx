@@ -9,12 +9,10 @@
  */
 import { __, sprintf } from '@wordpress/i18n';
 import { createRoot, lazy, Suspense } from '@wordpress/element';
-import { __experimentalVStack as VStack } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
 
 /**
  * Internal dependencies
  */
-import * as Components from '../../packages/components/src';
 
 /**
  * Internal dependencies
@@ -78,19 +76,18 @@ if ( window.newspackAudienceIntegrations?.integrations_settings_enabled ) {
 	};
 }
 
+// The same skeleton the wizard shows while its own data loads, so the chunk
+// download and the wizard's loading phases read as one continuous treatment.
 const AdminPageLoader = ( { label }: { label: string } ) => {
 	return (
-		<div className="newspack-wizard__loader">
-			<VStack alignment="center" spacing={ 2 }>
-				<Components.Waiting noMargin />
-				<strong>
-					{
-						/* translators: %s is the label of the page */
-						sprintf( __( '%s loading…', 'newspack-plugin' ), label )
-					}
-				</strong>
-			</VStack>
-		</div>
+		<div
+			className="newspack-wizard__is-loading"
+			role="status"
+			aria-label={
+				/* translators: %s is the label of the page */
+				sprintf( __( '%s loading…', 'newspack-plugin' ), label )
+			}
+		/>
 	);
 };
 
