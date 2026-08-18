@@ -486,4 +486,28 @@ class Newsletters_Tracking_Test extends WP_UnitTestCase {
 		unlink( get_option( 'newspack_newsletters_tracking_pixel_log_file' ) );
 		// phpcs:enable WordPressVIPMinimum.Functions.RestrictedFunctions
 	}
+
+	/**
+	 * Scheduling the log processing event respects the tracking setting.
+	 */
+	public function test_schedule_log_processing_respects_tracking_setting() {
+		wp_clear_scheduled_hook( 'newspack_newsletters_tracking_pixel_process_log' );
+
+		update_option( 'newspack_newsletters_use_tracking_pixel', 0 );
+		Pixel::schedule_log_processing();
+		$this->assertFalse(
+			wp_next_scheduled( 'newspack_newsletters_tracking_pixel_process_log' ),
+			'No log processing should be scheduled while pixel tracking is off.'
+		);
+
+		update_option( 'newspack_newsletters_use_tracking_pixel', 1 );
+		Pixel::schedule_log_processing();
+		$this->assertNotFalse(
+			wp_next_scheduled( 'newspack_newsletters_tracking_pixel_process_log' ),
+			'Log processing should be scheduled while pixel tracking is on.'
+		);
+
+		// Clean up.
+		wp_clear_scheduled_hook( 'newspack_newsletters_tracking_pixel_process_log' );
+	}
 }

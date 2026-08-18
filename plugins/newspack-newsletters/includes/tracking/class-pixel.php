@@ -296,8 +296,14 @@ final class Pixel {
 
 	/**
 	 * Schedule log processing.
+	 *
+	 * No-op while pixel tracking is off, so disabled sites don't keep a
+	 * minutely cron event alive for logs that are discarded anyway.
 	 */
 	public static function schedule_log_processing() {
+		if ( ! Admin::is_tracking_pixel_enabled() ) {
+			return;
+		}
 		if ( ! \wp_next_scheduled( 'newspack_newsletters_tracking_pixel_process_log' ) ) {
 			\wp_schedule_single_event( time() + 60, 'newspack_newsletters_tracking_pixel_process_log' );
 		}
