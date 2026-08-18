@@ -299,7 +299,10 @@ describe( 'usePersistedView', () => {
 			expect( apiFetch ).toHaveBeenLastCalledWith( { ...saved( { perPage: 20, type: 'table' } ), keepalive: true } );
 		} );
 
-		it( 'does not repeat a save that is already in flight with the same value', async () => {
+		// The request in flight was started without `keepalive`, so leaving
+		// it to finish is exactly the nondeterminism the flush exists to
+		// remove, even when it carries the value we want.
+		it( 'reissues an in-flight save with keepalive when the page goes away', async () => {
 			apiFetch.mockImplementationOnce( () => new Promise( () => {} ) );
 
 			const { result } = renderHook( () => usePersistedView( 'newsletters-list', DEFAULT_VIEW ) );
@@ -314,7 +317,22 @@ describe( 'usePersistedView', () => {
 				window.dispatchEvent( new window.Event( 'pagehide' ) );
 			} );
 
-			expect( apiFetch ).toHaveBeenCalledTimes( 1 );
+			expect( apiFetch ).toHaveBeenCalledTimes( 2 );
+			expect( apiFetch ).toHaveBeenLastCalledWith( { ...saved( { perPage: 50, type: 'table' } ), keepalive: true } );
+		} );
+
+		it( 'drops a non-finite column width rather than poisoning the payload', async () => {
+			const { result } = renderHook( () => usePersistedView( 'newsletters-list', DEFAULT_VIEW ) );
+
+			act( () => {
+				result.current[ 1 ]( current => ( {
+					...current,
+					layout: { styles: { status: { width: NaN, minWidth: 40 } } },
+				} ) );
+			} );
+			await settle();
+
+			expect( apiFetch ).toHaveBeenCalledWith( saved( { perPage: 25, type: 'table', layout: { styles: { status: { minWidth: 40 } } } } ) );
 		} );
 
 		// The server rejects the whole payload on an unknown key, which

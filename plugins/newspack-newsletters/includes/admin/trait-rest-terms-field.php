@@ -28,7 +28,7 @@ trait Rest_Terms_Field {
 	 *
 	 * @var array<string, array<string>>
 	 */
-	private static $terms_field_taxonomies = [];
+	private static array $terms_field_taxonomies = [];
 
 	/**
 	 * Register a terms field on the given CPT.

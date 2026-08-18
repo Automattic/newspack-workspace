@@ -57,7 +57,10 @@ function toColumnStyles( styles ) {
 		}
 		const picked = {};
 		for ( const key of [ 'width', 'minWidth', 'maxWidth' ] ) {
-			if ( typeof style[ key ] === 'number' || isNonEmptyString( style[ key ] ) ) {
+			// `Number.isFinite`, not `typeof`: NaN and Infinity serialise to
+			// `null`, which the schema rejects, and a rejected payload is
+			// re-sent on every later change.
+			if ( Number.isFinite( style[ key ] ) || isNonEmptyString( style[ key ] ) ) {
 				picked[ key ] = style[ key ];
 			}
 		}
@@ -268,19 +271,19 @@ export default function usePersistedView(
 	// anything else, since the payload is the whole presentation state.
 	const lastSavedRef = useRef( serialized );
 	const desiredRef = useRef( serialized );
-	// The payload currently being written, or null.
+	// The write currently in flight, or null. Identity matters: each save
+	// clears it only if it is still the one in flight.
 	const inFlightRef = useRef( null );
-	const abortRef = useRef( null );
 	const unloadingRef = useRef( false );
 	const flushRef = useRef( () => {} );
 
 	useEffect( () => {
 		// One at a time — concurrent writes could land out of order.
 		const save = ( payload, { attempt = 0, keepalive = false } = {} ) => {
-			inFlightRef.current = payload;
 			let failed = false;
 			const controller = 'undefined' === typeof AbortController ? null : new AbortController();
-			abortRef.current = controller;
+			const inFlight = { controller };
+			inFlightRef.current = inFlight;
 			apiFetch( {
 				path: PREFERENCES_PATH,
 				method: 'POST',
@@ -295,7 +298,11 @@ export default function usePersistedView(
 					failed = true;
 				} )
 				.finally( () => {
-					inFlightRef.current = null;
+					// Only if this is still the write in flight: an aborted
+					// request settles after its replacement has started.
+					if ( inFlightRef.current === inFlight ) {
+						inFlightRef.current = null;
+					}
 					// The page is going: a chained save would be cancelled
 					// with it, and a retry would re-send what we just
 					// superseded.
@@ -323,14 +330,16 @@ export default function usePersistedView(
 			// out that chain can't be relied on: the request in flight was
 			// started without `keepalive`, so it goes with the page.
 			if ( inFlightRef.current ) {
-				if ( ! keepalive || inFlightRef.current === payload ) {
+				if ( ! keepalive ) {
 					return;
 				}
-				// Cancel the older write first. Left running, it could reach
-				// the server after this one and put back the values this
-				// payload replaces.
+				// Replace the write in flight rather than waiting on it. It
+				// was started without `keepalive`, so navigation is free to
+				// tear it down mid-request, and if it did survive it could
+				// land after this one and put back what this payload
+				// replaces. Re-sending the same payload is harmless.
 				unloadingRef.current = true;
-				abortRef.current?.abort();
+				inFlightRef.current.controller?.abort();
 			}
 			save( payload, { keepalive } );
 		};
@@ -347,9 +356,11 @@ export default function usePersistedView(
 
 	useEffect( () => {
 		const flushNow = () => flushRef.current( { keepalive: true } );
-		// A page restored from the back/forward cache goes on saving.
+		// A page restored from the back/forward cache goes on saving, and
+		// re-sends anything the freeze dropped.
 		const resume = () => {
 			unloadingRef.current = false;
+			flushRef.current();
 		};
 		window.addEventListener( 'pagehide', flushNow );
 		window.addEventListener( 'pageshow', resume );
