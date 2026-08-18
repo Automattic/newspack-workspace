@@ -24,12 +24,14 @@ import {
 /**
  * Internal dependencies.
  */
-import { Button, Card, Divider, Grid, Notice, SectionHeader, Waiting } from '../../../../../../../packages/components/src';
+import { Button, Card, Divider, Grid, Notice, SectionHeader, useUnsavedChangesDialog } from '../../../../../../../packages/components/src';
 import { WIZARD_STORE_NAMESPACE } from '../../../../../../../packages/components/src/wizard/store';
 import WizardsTab from '../../../../../wizards-tab';
 import WizardSection from '../../../../../wizards-section';
 import { registerTab } from '../registry';
 import { WIZARD_ENDPOINT } from '../../constants';
+
+import './style.scss';
 import { DISCOUNTS_ENDPOINT, DISCOUNT_SETTINGS_ENDPOINT } from '../discounts/constants';
 import type { DiscountSettings, DiscountsPayload } from '../discounts/types';
 
@@ -56,6 +58,7 @@ function AdvancedSettings() {
 	}, [] );
 
 	const isDirty = productDraft !== productSaved || JSON.stringify( settingsDraft ) !== JSON.stringify( settingsSaved );
+	const { confirmDialog: navBlockDialog } = useUnsavedChangesDialog( { when: isDirty && ! inFlight } );
 
 	useEffect( () => {
 		const save = () => {
@@ -104,23 +107,8 @@ function AdvancedSettings() {
 		} );
 	}, [ setHeaderData, isLoading, productDraft, productSaved, settingsDraft, settingsSaved, isDirty, inFlight ] );
 
-	if ( isLoading ) {
-		return (
-			<WizardsTab>
-				<WizardSection>
-					<div style={ { display: 'flex', justifyContent: 'center', padding: '48px 0' } }>
-						<VStack alignment="center" spacing={ 2 }>
-							<Waiting noMargin />
-							<strong>{ __( 'Fetching…', 'newspack-plugin' ) }</strong>
-						</VStack>
-					</div>
-				</WizardSection>
-			</WizardsTab>
-		);
-	}
-
 	return (
-		<WizardsTab>
+		<WizardsTab className="newspack-advanced-settings">
 			<WizardSection>
 				{ error && <Notice isError noticeText={ error } /> }
 				<Grid columns={ 2 } gutter={ 32 }>
@@ -188,50 +176,51 @@ function AdvancedSettings() {
 						<Grid columns={ 2 } gutter={ 32 }>
 							<SectionHeader
 								heading={ 2 }
-								title={ __( 'Combining Discounts', 'newspack-plugin' ) }
-								description={ __(
-									'What happens when more than one subscriber discount applies to the same product.',
-									'newspack-plugin'
-								) }
+								title={ __( 'Discounts', 'newspack-plugin' ) }
+								description={ __( 'How subscriber discounts behave across your store.', 'newspack-plugin' ) }
 							/>
-							<VStack spacing={ 4 } justify="flex-start">
-								<RadioControl
-									label={ __( 'Overlapping discounts', 'newspack-plugin' ) }
-									hideLabelFromVision
-									selected={ settingsDraft.overlap }
-									onChange={ ( value: string ) =>
-										setSettingsDraft( { ...settingsDraft, overlap: value as DiscountSettings[ 'overlap' ] } )
-									}
-									options={ [
-										{ value: 'best', label: __( 'Apply the best discount only', 'newspack-plugin' ) },
-										{ value: 'combine', label: __( 'Combine discounts', 'newspack-plugin' ) },
-									] }
-								/>
-								<ToggleControl
-									label={ __( 'Apply on top of sale prices', 'newspack-plugin' ) }
-									help={ __( 'Subscribers get their discount even on products that are already on sale.', 'newspack-plugin' ) }
-									checked={ settingsDraft.apply_on_sale }
-									onChange={ value => setSettingsDraft( { ...settingsDraft, apply_on_sale: value } ) }
-									disabled={ inFlight }
-									__nextHasNoMarginBottom
-								/>
-							</VStack>
-						</Grid>
-						<Divider alignment="full-width" variant="tertiary" />
-						<Grid columns={ 2 } gutter={ 32 }>
-							<SectionHeader heading={ 2 } title={ __( 'Timing', 'newspack-plugin' ) } />
-							<VStack spacing={ 4 } justify="flex-start">
-								<ToggleControl
-									label={ __( 'Apply discounts at checkout', 'newspack-plugin' ) }
-									help={ __(
-										'Give readers their subscriber prices as soon as a subscription is in their cart, before they have completed the purchase.',
-										'newspack-plugin'
-									) }
-									checked={ settingsDraft.apply_at_checkout }
-									onChange={ value => setSettingsDraft( { ...settingsDraft, apply_at_checkout: value } ) }
-									disabled={ inFlight }
-									__nextHasNoMarginBottom
-								/>
+							<VStack spacing={ 6 } justify="flex-start">
+								<VStack spacing={ 4 }>
+									<h3>{ __( 'Combining Discounts', 'newspack-plugin' ) }</h3>
+									<RadioControl
+										label={ __( 'Overlapping discounts', 'newspack-plugin' ) }
+										hideLabelFromVision
+										help={ __(
+											'What happens when more than one subscriber discount applies to the same product.',
+											'newspack-plugin'
+										) }
+										selected={ settingsDraft.overlap }
+										onChange={ ( value: string ) =>
+											setSettingsDraft( { ...settingsDraft, overlap: value as DiscountSettings[ 'overlap' ] } )
+										}
+										options={ [
+											{ value: 'best', label: __( 'Apply the best discount only', 'newspack-plugin' ) },
+											{ value: 'combine', label: __( 'Combine discounts', 'newspack-plugin' ) },
+										] }
+									/>
+									<ToggleControl
+										label={ __( 'Apply on top of sale prices', 'newspack-plugin' ) }
+										help={ __( 'Subscribers get their discount even on products that are already on sale.', 'newspack-plugin' ) }
+										checked={ settingsDraft.apply_on_sale }
+										onChange={ value => setSettingsDraft( { ...settingsDraft, apply_on_sale: value } ) }
+										disabled={ inFlight }
+										__nextHasNoMarginBottom
+									/>
+								</VStack>
+								<VStack spacing={ 4 }>
+									<h3>{ __( 'Timing', 'newspack-plugin' ) }</h3>
+									<ToggleControl
+										label={ __( 'Apply discounts at checkout', 'newspack-plugin' ) }
+										help={ __(
+											'Give readers their subscriber prices as soon as a subscription is in their cart, before they have completed the purchase.',
+											'newspack-plugin'
+										) }
+										checked={ settingsDraft.apply_at_checkout }
+										onChange={ value => setSettingsDraft( { ...settingsDraft, apply_at_checkout: value } ) }
+										disabled={ inFlight }
+										__nextHasNoMarginBottom
+									/>
+								</VStack>
 							</VStack>
 						</Grid>
 					</>
@@ -247,6 +236,7 @@ function AdvancedSettings() {
 					</Card>
 				) }
 			</WizardSection>
+			{ navBlockDialog }
 		</WizardsTab>
 	);
 }

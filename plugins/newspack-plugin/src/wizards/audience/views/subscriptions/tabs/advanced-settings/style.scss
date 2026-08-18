@@ -1,0 +1,8 @@
+@use "~@wordpress/base-styles/variables" as wp-vars;
+
+.newspack-advanced-settings {
+	h3 {
+		font-size: wp-vars.$default-font-size;
+		margin: 0;
+	}
+}
