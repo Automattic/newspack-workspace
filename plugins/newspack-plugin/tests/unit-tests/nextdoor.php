@@ -308,6 +308,42 @@ class Newspack_Test_Nextdoor extends WP_UnitTestCase {
 	}
 
 	/**
+	 * A page that is not a value cannot be stored or rendered, so it is an error rather
+	 * than something persisted into the settings option.
+	 */
+	public function test_claim_page_refuses_a_page_that_is_not_a_value() {
+		$this->connect_with_a_valid_token();
+		$this->http_body = wp_json_encode( [ 'page_id' => [ 'nested' => 'page-123' ] ] );
+		add_filter( 'pre_http_request', [ $this, 'stub_nextdoor_response' ], 10, 3 );
+
+		$request = new WP_REST_Request( 'POST', '/newspack/v1/nextdoor/claim-page' );
+		$request->set_param( 'publication_url', 'https://example.com' );
+
+		$result = Controller::api_claim_page( $request );
+
+		self::assertInstanceOf( 'WP_Error', $result );
+		self::assertSame( 'nextdoor_claim_page_failed', $result->get_error_code() );
+		self::assertSame( '', Nextdoor::get_settings()['page_id'] );
+	}
+
+	/**
+	 * A numeric page is stored and answered as the string the settings type says it is.
+	 */
+	public function test_claim_page_stores_a_numeric_page_as_a_string() {
+		$this->connect_with_a_valid_token();
+		$this->http_body = wp_json_encode( [ 'page_id' => 4815162342 ] );
+		add_filter( 'pre_http_request', [ $this, 'stub_nextdoor_response' ], 10, 3 );
+
+		$request = new WP_REST_Request( 'POST', '/newspack/v1/nextdoor/claim-page' );
+		$request->set_param( 'publication_url', 'https://example.com' );
+
+		$result = Controller::api_claim_page( $request );
+
+		self::assertSame( '4815162342', $result->get_data()['page_id'] );
+		self::assertSame( '4815162342', Nextdoor::get_settings()['page_id'] );
+	}
+
+	/**
 	 * A claim response with no page is an error, not a success.
 	 */
 	public function test_claim_page_reports_a_response_without_a_page() {
@@ -456,6 +492,35 @@ class Newspack_Test_Nextdoor extends WP_UnitTestCase {
 
 		self::assertInstanceOf( 'WP_Error', $result );
 		self::assertSame( 'nextdoor_oauth_start_failed', $result->get_error_code() );
+	}
+
+	/**
+	 * The client navigates to this, so it has to be somewhere a browser can go.
+	 * `esc_url_raw()` passes both of these through untouched: it only strips protocols it
+	 * disallows, and `mailto:` is not one of them.
+	 *
+	 * @dataProvider unusable_login_urls
+	 * @param string $login_url Sign-in link Nextdoor answered with.
+	 */
+	public function test_oauth_start_refuses_a_login_url_the_browser_cannot_open( $login_url ) {
+		$this->http_body = wp_json_encode( [ 'login_url' => $login_url ] );
+
+		$result = $this->start_oauth();
+
+		self::assertInstanceOf( 'WP_Error', $result );
+		self::assertSame( 'nextdoor_oauth_start_failed', $result->get_error_code() );
+	}
+
+	/**
+	 * Sign-in links that survive `esc_url_raw()` but are not navigable.
+	 *
+	 * @return array[]
+	 */
+	public function unusable_login_urls() {
+		return [
+			'scheme relative' => [ '//evil.example/login' ],
+			'no host'         => [ 'mailto:someone@example.com' ],
+		];
 	}
 
 	/**
@@ -800,6 +865,66 @@ class Newspack_Test_Nextdoor extends WP_UnitTestCase {
 		self::assertTrue( Auth::validate_token() );
 		self::assertSame( 'winner-access', Nextdoor::get_settings()['access_token'] );
 		self::assertEmpty( get_option( Auth::REFUSAL_OPTION ) );
+	}
+
+	/**
+	 * A held-off refresh does not spend a second blocking request. Without this a grant
+	 * Nextdoor states no expiry for is due on every request, so every editor load pays for
+	 * a token round trip.
+	 */
+	public function test_a_refresh_is_held_off_after_an_attempt() {
+		Nextdoor::update_settings(
+			[
+				'client_id'        => 'site-id',
+				'client_secret'    => 'site-secret',
+				'access_token'     => 'expired-access',
+				'refresh_token'    => 'stored-refresh',
+				'token_expires_at' => time() - 10,
+			]
+		);
+
+		// No expiry comes back, so the renewed token is due again immediately.
+		$this->http_body = wp_json_encode( [ 'access_token' => 'renewed-access' ] );
+		add_filter( 'pre_http_request', [ $this, 'stub_nextdoor_response' ], 10, 3 );
+
+		self::assertTrue( Auth::validate_token() );
+		self::assertCount( 1, $this->http_requests );
+
+		self::assertTrue( Auth::validate_token() );
+		self::assertCount( 1, $this->http_requests );
+	}
+
+	/**
+	 * A refresh that failed is not held off into a claim the token still works: the caller
+	 * turns a false answer here into "try again shortly" rather than sending the dead token.
+	 */
+	public function test_a_failed_refresh_is_not_held_off_into_a_valid_token() {
+		Nextdoor::update_settings(
+			[
+				'client_id'        => 'site-id',
+				'client_secret'    => 'site-secret',
+				'access_token'     => 'expired-access',
+				'refresh_token'    => 'stored-refresh',
+				'token_expires_at' => time() - 10,
+			]
+		);
+
+		$outage = function () {
+			return new WP_Error( 'http_request_failed', 'Connection timed out' );
+		};
+		add_filter( 'pre_http_request', $outage );
+
+		self::assertFalse( Auth::validate_token() );
+
+		remove_filter( 'pre_http_request', $outage );
+		add_filter( 'pre_http_request', [ $this, 'stub_nextdoor_response' ], 10, 3 );
+
+		// Inside the hold-off, so nothing has re-tested the token.
+		self::assertFalse( Auth::validate_token() );
+		self::assertCount( 0, $this->http_requests );
+		// Still renewable, which is what turns the answer above into an outage rather than
+		// a reconnection.
+		self::assertTrue( Auth::has_usable_token() );
 	}
 
 	/**
@@ -1613,6 +1738,53 @@ class Newspack_Test_Nextdoor extends WP_UnitTestCase {
 		self::assertSame( 'https://example.com', $settings['publication_url'] );
 
 		unset( $_GET['nextdoor_oauth_callback'], $_GET['code'], $_GET['state'] );
+	}
+
+	/**
+	 * An authorization code is opaque and may carry a percent sequence, which
+	 * `sanitize_text_field()` would drop, exchanging a credential that is quietly short.
+	 */
+	public function test_the_authorization_code_reaches_the_exchange_intact() {
+		Nextdoor::update_settings(
+			[
+				'client_id'     => 'site-id',
+				'client_secret' => 'site-secret',
+			]
+		);
+
+		$this->http_body = wp_json_encode(
+			[
+				'access_token' => 'new-access',
+				'expires_in'   => 3600,
+			]
+		);
+		add_filter( 'pre_http_request', [ $this, 'stub_nextdoor_response' ], 10, 3 );
+
+		$code = 'auth%2Fcode%7C99';
+
+		$_GET['nextdoor_oauth_callback'] = '1';
+		$_GET['code']                    = $code;
+		$_GET['state']                   = Auth::create_oauth_state();
+
+		try {
+			Auth::handle_oauth_callback();
+		} catch ( Exception $e ) {
+			// The handler ends in a redirect and never returns normally.
+			unset( $e );
+		}
+
+		self::assertNotEmpty( $this->http_requests );
+		self::assertSame( $code, $this->http_requests[0]['args']['body']['code'] );
+
+		unset( $_GET['nextdoor_oauth_callback'], $_GET['code'], $_GET['state'] );
+	}
+
+	/**
+	 * The callback reads the code before anything has authorised the request, and runs on
+	 * the front end, so an array has to answer empty rather than warn on the cast.
+	 */
+	public function test_an_array_credential_sanitises_to_nothing() {
+		self::assertSame( '', Nextdoor::sanitize_credential( [ 'code' => 'x' ] ) );
 	}
 
 	/**
