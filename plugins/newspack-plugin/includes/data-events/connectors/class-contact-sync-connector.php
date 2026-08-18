@@ -35,9 +35,8 @@ class Contact_Sync_Connector {
 			return;
 		}
 		Data_Events::register_handler( [ __CLASS__, 'reader_registered' ], 'reader_registered' );
-		// Deletion always routes through Contact_Sync::handle_account_deletion();
-		// the legacy reader_deleted() handler is removed, its flag/delete
-		// behaviors now covered by per-integration account_deletion_handling.
+		// Deletion always routes through Contact_Sync::handle_account_deletion(),
+		// which honors each integration's own account_deletion_handling setting.
 		Data_Events::register_handler( [ __CLASS__, 'reader_delete_sync' ], 'reader_delete_sync' );
 		Data_Events::register_handler( [ __CLASS__, 'reader_logged_in' ], 'reader_logged_in' );
 		Data_Events::register_handler( [ __CLASS__, 'order_completed' ], 'order_completed' );

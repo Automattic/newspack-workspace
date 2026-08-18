@@ -335,13 +335,10 @@ class Test_Field_Selection_Seeding extends \WP_UnitTestCase {
 	 * The retired `NEWSPACK_SYNC_METADATA_VERSION` / `..._VERSION_1` branch of
 	 * detect_retired_schema_version() is deliberately NOT covered here.
 	 *
-	 * A PHP constant cannot be undefined once set, and seeding is now reachable
+	 * A PHP constant cannot be undefined once set, and seeding is reachable
 	 * from any ESP read (see ESP::ensure_outgoing_fields_seeded()), so a test
-	 * that defined it would force a confident "new schema" detection for every
-	 * test that ran afterwards in the same process — which is exactly what it
-	 * did before this note replaced it, breaking eight unrelated tests. The
-	 * retired origin machinery never covered this branch either, for the same
-	 * reason. It is six lines of straight defined() checks, carried over
-	 * verbatim, and it decides only the one-shot seeding input.
+	 * that defines it forces a confident "new schema" detection for every
+	 * test that runs afterwards in the same process. Do not add a test for
+	 * this branch here; it needs a separate, isolated process.
 	 */
 }

@@ -306,8 +306,8 @@ class Test_Schema_Parity extends \WP_UnitTestCase {
 		$this->assertArrayNotHasKey( 'NP_Connected Account', $migrated_metadata );
 		$this->assertArrayNotHasKey( 'NP_Registration Page', $migrated_metadata );
 
-		// Nothing else arrives blank either. Total Paid is no longer part of
-		// this selection at all — see test_total_paid_and_lifetime_total_paid_coexist.
+		// Nothing else arrives blank either. Total Paid is not part of this
+		// selection at all — see test_total_paid_and_lifetime_total_paid_coexist.
 		$this->assertSame(
 			[],
 			array_keys( array_filter( $migrated_metadata, fn( $value ) => '' === $value ) ),
@@ -336,7 +336,7 @@ class Test_Schema_Parity extends \WP_UnitTestCase {
 	 * behavior legacy segments may rely on), while v2's Total_Paid — renamed
 	 * "Lifetime Total Paid" so it stops claiming the same ESP name — always
 	 * reports the customer's lifetime spend. Enabling both ids at once
-	 * (explicit ids can store both members of a former pair; see
+	 * (explicit ids can store both members of a pair; see
 	 * Integration::update_enabled_outgoing_fields()) must therefore emit both
 	 * values side by side, each keeping its own semantics, rather than one
 	 * overwriting the other under a shared key.

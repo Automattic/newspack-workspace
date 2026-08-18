@@ -17,9 +17,8 @@ use Sample_Integration;
  *
  * Verifies that register_handlers() always registers the unified
  * `reader_delete_sync` handler (which routes through
- * Contact_Sync::handle_account_deletion()) and never the legacy
- * `reader_deleted` handler, which predates per-integration account-deletion
- * settings and is no longer wired up automatically.
+ * Contact_Sync::handle_account_deletion()), never the legacy
+ * `reader_deleted` handler.
  */
 class Newspack_Test_Contact_Sync_Connector extends \WP_UnitTestCase {
 
@@ -136,8 +135,7 @@ class Newspack_Test_Contact_Sync_Connector extends \WP_UnitTestCase {
 
 	/**
 	 * Register_handlers() should always register the unified
-	 * `reader_delete_sync` handler, regardless of the (now-retired) metadata
-	 * schema version.
+	 * `reader_delete_sync` handler.
 	 */
 	public function test_register_handlers_registers_reader_delete_sync() {
 		$this->reset_data_events_handlers();
@@ -149,8 +147,7 @@ class Newspack_Test_Contact_Sync_Connector extends \WP_UnitTestCase {
 
 	/**
 	 * Register_handlers() should never register the legacy `reader_deleted`
-	 * handler: it predated per-integration account-deletion settings and has
-	 * been removed — deletion always routes through reader_delete_sync.
+	 * handler: deletion always routes through reader_delete_sync.
 	 */
 	public function test_register_handlers_never_registers_reader_deleted() {
 		$this->reset_data_events_handlers();

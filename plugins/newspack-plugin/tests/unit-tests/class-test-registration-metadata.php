@@ -111,7 +111,7 @@ class Test_Registration_Metadata extends WP_UnitTestCase {
 		$metadata = ( new Registration( self::$user_id ) )->get_metadata();
 
 		$this->assertSame( '2024-06-15 19:30:00', $metadata['Registration_Date'] );
-		// The pre-fix behavior would have emitted the un-adjusted UTC value.
+		// Guards against regressing to the un-adjusted UTC value.
 		$this->assertNotSame( '2024-06-15 23:30:00', $metadata['Registration_Date'] );
 	}
 

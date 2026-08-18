@@ -1258,7 +1258,7 @@ abstract class Integration {
 	 * v2 ids is storable, and both versions of a renamed field can be enabled
 	 * at once.
 	 *
-	 * Explicit ids can therefore store both members of a former pair, unlike
+	 * Explicit ids can therefore store both members of a pair, unlike
 	 * a name save; when that happens and both raw keys share one ESP name,
 	 * prepare_contact() resolves the collision by metadata-array order, so
 	 * the payload depends on merge order — the name path above is the

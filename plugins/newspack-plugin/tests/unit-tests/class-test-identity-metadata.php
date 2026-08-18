@@ -110,8 +110,8 @@ class Test_Identity_Metadata extends WP_UnitTestCase {
 
 	/**
 	 * Readers who register through SSO get only the registration-method meta
-	 * (see Reader_Activation::register_reader()), so it is the fallback source
-	 * — as it was in the legacy enrichment.
+	 * (see Reader_Activation::register_reader()), so it is the fallback
+	 * source — matching the legacy enrichment.
 	 */
 	public function test_connected_account_falls_back_to_sso_registration_method() {
 		update_user_meta( self::$user_id, Reader_Activation::REGISTRATION_METHOD, 'google' );

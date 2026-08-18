@@ -213,9 +213,9 @@ class Metadata {
 	/**
 	 * Get the UTM key from a raw or prefixed key.
 	 *
-	 * Port of the legacy helper: validates the UTM family against the
-	 * fields enabled for the ESP integration and returns the prefixed,
-	 * suffixed ESP name (e.g. "NP_Signup UTM: source"), or false.
+	 * Validates the UTM family against the fields enabled for the ESP
+	 * integration and returns the prefixed, suffixed ESP name (e.g.
+	 * "NP_Signup UTM: source"), or false.
 	 *
 	 * Only the legacy schema declares these dynamic-suffix fields; the new
 	 * schema splits them into discrete source/medium/campaign fields.
@@ -760,9 +760,8 @@ class Metadata {
 	/**
 	 * Add user's registration-related data to the given metadata, as raw keys.
 	 *
-	 * Raw-key port of the legacy enrichment: values are looked up from user
-	 * meta when absent, never overwritten, and no prefixing or filtering is
-	 * performed here.
+	 * Values are looked up from user meta when absent, never overwritten, and
+	 * no prefixing or filtering is performed here.
 	 *
 	 * @param array $metadata Metadata to add to.
 	 *
@@ -797,9 +796,8 @@ class Metadata {
 	/**
 	 * Expand UTM parameters from page URLs into raw suffixed keys.
 	 *
-	 * Raw-key port of the legacy UTM expansion: emits keys like
-	 * `signup_page_utm_source` / `payment_page_utm_campaign` instead of
-	 * prefixed ESP names. Existing values are never overwritten.
+	 * Emits keys like `signup_page_utm_source` / `payment_page_utm_campaign`
+	 * instead of prefixed ESP names. Existing values are never overwritten.
 	 *
 	 * @param array $metadata Metadata to add to.
 	 *

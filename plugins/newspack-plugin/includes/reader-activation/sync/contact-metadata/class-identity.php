@@ -154,10 +154,10 @@ class Identity extends Contact_Metadata {
 	/**
 	 * The SSO provider the reader is connected through, or an empty string.
 	 *
-	 * Port of the legacy enrichment's two-source rule: the connected-account
-	 * meta when it names a supported SSO provider, otherwise the registration
-	 * method when that does — readers who registered through SSO only ever get
-	 * the latter (see Reader_Activation::register_reader()).
+	 * Two-source rule: the connected-account meta when it names a supported
+	 * SSO provider, otherwise the registration method when that does —
+	 * readers who registered through SSO only ever get the latter (see
+	 * Reader_Activation::register_reader()).
 	 *
 	 * @return string
 	 */

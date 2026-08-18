@@ -456,9 +456,7 @@ class Field_Registry {
 	 * are touched far more broadly (any integration registration, any stored
 	 * selection), so freezing this answer until an unrelated caller happens
 	 * to call reset() silently serves stale derivations across a shared PHP
-	 * process. Confirmed by running the full test suite: memoizing this
-	 * method corrupted dozens of unrelated tests that never touch
-	 * Field_Registry directly.
+	 * process.
 	 *
 	 * @return string[] List of field ids.
 	 */

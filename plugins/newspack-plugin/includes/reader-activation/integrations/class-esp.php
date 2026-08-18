@@ -539,10 +539,10 @@ class ESP extends Integration {
 	 * Remove the deleted reader from every ESP list when flagged instead of
 	 * hard-deleted.
 	 *
-	 * Restores pre-refactor behavior for legacy `sync_esp_delete=false` sites:
-	 * keep the contact record (carrying the Account_Deleted /
-	 * Membership_Status flags from the flag-mode metadata push) but stop
-	 * further outreach by clearing all list membership.
+	 * For legacy `sync_esp_delete=false` sites, this keeps the contact record
+	 * (carrying the Account_Deleted / Membership_Status flags from the
+	 * flag-mode metadata push) but stops further outreach by clearing all
+	 * list membership.
 	 *
 	 * A provider without list management (Campaign Monitor) has no lists to
 	 * clear, so its "not supported" answer is success, not failure — returning
