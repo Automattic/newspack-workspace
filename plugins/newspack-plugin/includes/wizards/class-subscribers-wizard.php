@@ -716,8 +716,8 @@ class Subscribers_Wizard extends Wizard {
 			$subscription->add_order_note( sprintf( __( 'Renewal payment initiated by %s from the Subscribers admin.', 'newspack-plugin' ), $admin_login ) );
 
 			// The gateway leg of the renewal chain (see the method docblock for
-			// why it is called directly). The action fallback is the unit-test
-			// seam: the mocks don't ship the WCS gateway dispatcher.
+			// why it is called directly), with the umbrella action as the
+			// fallback for an environment where WCS's handler is absent.
 			if ( class_exists( 'WC_Subscriptions_Payment_Gateways' ) ) {
 				\WC_Subscriptions_Payment_Gateways::gateway_scheduled_subscription_payment( $subscription->get_id() );
 			} else {
