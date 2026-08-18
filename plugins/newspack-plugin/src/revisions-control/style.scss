@@ -18,3 +18,15 @@
 .diff-meta-to.newspack-major .major-label {
 	display: inline;
 }
+
+/* Sit alongside core's "Restore This Revision" button, which floats right. */
+.diff-meta input.mark-major,
+.diff-meta .mark-major-message {
+	float: right;
+	margin-left: 6px;
+	margin-right: 6px;
+}
+
+.diff-meta .mark-major-message {
+	line-height: 30px;
+}
