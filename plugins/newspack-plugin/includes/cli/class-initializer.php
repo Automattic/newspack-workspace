@@ -34,6 +34,7 @@ class Initializer {
 		include_once NEWSPACK_ABSPATH . 'includes/cli/class-export.php';
 		include_once NEWSPACK_ABSPATH . 'includes/cli/class-teams-migration.php';
 		include_once NEWSPACK_ABSPATH . 'includes/cli/class-institutions-migration.php';
+		include_once NEWSPACK_ABSPATH . 'includes/cli/trait-one-time-purchase-migration.php';
 		include_once NEWSPACK_ABSPATH . 'includes/cli/class-membership-gates-migration.php';
 		include_once NEWSPACK_ABSPATH . 'includes/cli/class-premium-newsletters-migration.php';
 	}

@@ -17,6 +17,9 @@ namespace Newspack\Tests\Content_Gate;
 use Newspack\CLI\Premium_Newsletters_Migration;
 use Newspack\Newsletters\Subscription_Lists;
 
+// The trait has to be defined before the class that uses it. Production load order
+// comes from CLI\Initializer; a test requiring the class directly supplies it here.
+require_once dirname( __DIR__, 3 ) . '/includes/cli/trait-one-time-purchase-migration.php';
 require_once dirname( __DIR__, 3 ) . '/includes/cli/class-premium-newsletters-migration.php';
 
 /**
@@ -1355,6 +1358,133 @@ class Test_Premium_Newsletters_Migration extends \WP_UnitTestCase {
 		$warning = reset( $matching_warnings );
 		$this->assertStringContainsString( (string) $this->list_a, $warning );
 		$this->assertStringContainsString( (string) $this->list_b, $warning );
+	}
+
+	/**
+	 * Two published gates can be named alike by hand, and indexing them by title is
+	 * last-write-wins: the run would update one and leave the other restricting the
+	 * same lists, invisible to the untouched-gate report because its title is one this
+	 * run wrote.
+	 */
+	public function test_find_duplicate_gate_titles_fires_for_two_gates_sharing_a_title() {
+		$gates = [
+			[
+				'id'    => 11,
+				'title' => 'Premium',
+			],
+			[
+				'id'    => 12,
+				'title' => 'premium',
+			],
+		];
+
+		$this->assertSame( [ 'Premium' ], $this->invoke_private_static( 'find_duplicate_gate_titles', [ $gates ] ) );
+	}
+
+	/**
+	 * Distinct titles are the ordinary case; firing here would refuse every site with
+	 * more than one premium newsletter gate.
+	 */
+	public function test_find_duplicate_gate_titles_is_empty_for_distinct_titles() {
+		$gates = [
+			[
+				'id'    => 11,
+				'title' => 'Premium',
+			],
+			[
+				'id'    => 12,
+				'title' => 'Insider',
+			],
+		];
+
+		$this->assertSame( [], $this->invoke_private_static( 'find_duplicate_gate_titles', [ $gates ] ) );
+	}
+
+	/**
+	 * All three product warnings describe a paid access rule, and a mixed group writes
+	 * none. Reporting that its gate "keeps variation ID(s)" describes a rule that was
+	 * never written; what the group actually lost is reported separately.
+	 */
+	public function test_report_product_id_issues_is_silent_for_a_gate_with_no_product_rule() {
+		// A product ID that does get dropped, so there is a warning to suppress: with a
+		// clean product list this would pass with the guard removed.
+		$payload = $this->invoke_private_static(
+			'build_gate_payload',
+			[
+				[
+					$this->make_payload_plan( 'purchase', [ 0 ], [ $this->list_a ], 'Paid' ),
+					$this->make_payload_plan( 'signup', [], [ $this->list_a ], 'Free' ),
+				],
+			]
+		);
+		$this->assertSame( [ 0 ], $payload['dropped_product_ids']['invalid'] );
+		\WP_CLI::$warnings = [];
+
+		$this->invoke_private_static( 'report_product_id_issues', [ $payload ] );
+
+		$this->assertSame( [], \WP_CLI::$warnings );
+	}
+
+	/**
+	 * The counterpart: the same dropped ID on a group that does write a rule still
+	 * warns, so the guard above suppresses the false case rather than the warning.
+	 */
+	public function test_report_product_id_issues_still_warns_for_a_purchase_group() {
+		$payload = $this->invoke_private_static(
+			'build_gate_payload',
+			[ [ $this->make_payload_plan( 'purchase', [ 0, $this->product ], [ $this->list_a ], 'Paid' ) ] ]
+		);
+		\WP_CLI::$warnings = [];
+
+		$this->invoke_private_static( 'report_product_id_issues', [ $payload ] );
+
+		$this->assertNotEmpty( \WP_CLI::$warnings );
+	}
+
+	/**
+	 * A --plan run writes at most one title, so every other gate on the site comes back
+	 * as untouched. It cannot compute staleness, and listing gates nobody should retire
+	 * trains an operator to skim the warning that matters on a full run.
+	 */
+	public function test_report_stale_gates_is_skipped_under_plan_scope() {
+		// A published gate this run did not write, so the check has something to find:
+		// without one the assertions below would hold with the guard removed.
+		$this->create_premium_gate( [ $this->list_a ], false, 'Untouched fixture' );
+		\WP_CLI::$warnings = [];
+
+		$reported = $this->invoke_private_static( 'report_stale_gates', [ [], false, true ] );
+
+		$this->assertFalse( $reported );
+		$this->assertSame( [], \WP_CLI::$warnings );
+	}
+
+	/**
+	 * The counterpart: on a full run the same gate is reported, and the return value
+	 * is what puts the auto-signup write on the report-only path.
+	 */
+	public function test_report_stale_gates_reports_an_untouched_gate_on_a_full_run() {
+		$this->create_premium_gate( [ $this->list_a ], false, 'Untouched fixture' );
+		\WP_CLI::$warnings = [];
+
+		$reported = $this->invoke_private_static( 'report_stale_gates', [ [], false, false ] );
+
+		$this->assertTrue( $reported );
+		$this->assertNotEmpty( \WP_CLI::$warnings );
+	}
+
+	/**
+	 * The option governs every published gate's lists, while the derivation sees only
+	 * the lists this run migrated. A gate this run did not write contributes to the
+	 * first and not the second, which is the partial view that can turn a genuine
+	 * disagreement into a determinate write.
+	 */
+	public function test_report_auto_signup_leaves_the_option_alone_when_gates_went_untouched() {
+		delete_option( 'newspack_premium_newsletters_auto_signup' );
+		$this->set_signup_modal_lists( [ $this->list_a ] ); // Derives to off.
+
+		$this->invoke_private_static( 'report_auto_signup', [ [ $this->list_a ], false, false, 0, false, true ] );
+
+		$this->assertFalse( get_option( 'newspack_premium_newsletters_auto_signup' ) );
 	}
 
 	/**
