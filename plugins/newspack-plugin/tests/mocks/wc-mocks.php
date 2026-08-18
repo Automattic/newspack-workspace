@@ -235,6 +235,9 @@ $subscriptions_database = [];
 $products_database = [];
 $order_items_database = [];
 $wc_mock_notices = [];
+// Mock registry: product_id => array of grouped-parent product IDs (NPPM-2926).
+global $wcs_grouped_parents;
+$wcs_grouped_parents = [];
 
 /**
  * Reset the order-item lookup table.
@@ -1129,6 +1132,11 @@ if ( ! class_exists( 'WC_Subscriptions_Product' ) ) {
 				return 0;
 			}
 			return (float) $product->get_meta( '_subscription_price' );
+		}
+		public static function get_visible_grouped_parent_product_ids( $product ) {
+			global $wcs_grouped_parents;
+			$id = is_object( $product ) ? $product->get_id() : (int) $product;
+			return $wcs_grouped_parents[ $id ] ?? [];
 		}
 		public static function is_subscription( $product ) {
 			return is_object( $product ) && method_exists( $product, 'get_type' )
