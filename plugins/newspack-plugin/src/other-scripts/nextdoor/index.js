@@ -125,8 +125,12 @@ const NextdoorPostSidebar = ( { postId, postStatus } ) => {
 				setError( err.message || __( 'Failed to communicate with Nextdoor.', 'newspack-plugin' ) );
 			}
 		} finally {
+			// The one piece of state a post change does not clear, and it was set before the
+			// request went out, so releasing it belongs to whichever request finishes rather
+			// than to the post it started on. Leaving it set wedges the buttons as busy.
+			setAction( null );
+
 			if ( isCurrent() ) {
-				setAction( null );
 				clearMessages();
 				restoreFocus();
 			}
