@@ -146,7 +146,7 @@ class Engagement extends Contact_Metadata {
 
 		$order = $this->get_latest_order();
 
-		return [
+		$metadata = [
 			'First_Visit_Date'     => $this->format_reader_data_timestamp( 'first_visit_date' ),
 			'Last_Active'          => $this->format_reader_data_timestamp( 'last_active' ),
 			'Paywall_Hits'         => $this->get_reader_data_int( 'paywall_hits' ),
@@ -155,8 +155,18 @@ class Engagement extends Contact_Metadata {
 			'Payment_UTM_Source'   => $this->get_order_utm( $order, 'source' ),
 			'Payment_UTM_Medium'   => $this->get_order_utm( $order, 'medium' ),
 			'Payment_UTM_Campaign' => $this->get_order_utm( $order, 'campaign' ),
-			'Total_Paid'           => $this->customer ? $this->customer->get_total_spent() : '',
 		];
+
+		// Value-equivalent to legacy total_paid, which only exists at all when
+		// there is a WooCommerce customer to read it from (Legacy_Basic returns
+		// nothing without one). Emitting an empty string for a reader with no
+		// customer record would blank a live merge field the legacy pipeline
+		// never touched.
+		if ( $this->customer ) {
+			$metadata['Total_Paid'] = $this->customer->get_total_spent();
+		}
+
+		return $metadata;
 	}
 
 	/**

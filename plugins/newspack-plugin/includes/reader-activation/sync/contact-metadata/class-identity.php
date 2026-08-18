@@ -111,6 +111,11 @@ class Identity extends Contact_Metadata {
 	/**
 	 * Get the metadata for the given user, customer or order.
 	 *
+	 * `Account` and `Connected Account` are value-equivalent to their legacy
+	 * twins (v1:account / v1:connected_account), so both must reproduce the
+	 * legacy pipeline's value semantics exactly — a migrated site can be
+	 * pushing either version's id, and the ESP field is the same one.
+	 *
 	 * @return array
 	 */
 	public function get_metadata() {
@@ -120,14 +125,44 @@ class Identity extends Contact_Metadata {
 
 		$roles = $this->user->roles;
 
-		return [
-			'first_name'        => $this->user->first_name,
-			'last_name'         => $this->user->last_name,
-			'email'             => $this->user->user_email,
-			'Account'           => (string) $this->user->ID,
-			'User_Role'         => ! empty( $roles ) ? reset( $roles ) : '',
-			'verified'          => (bool) Reader_Activation::is_reader_verified( $this->user ),
-			'Connected_Account' => (string) \get_user_meta( $this->user->ID, Reader_Activation::CONNECTED_ACCOUNT, true ),
+		$metadata = [
+			'first_name' => $this->user->first_name,
+			'last_name'  => $this->user->last_name,
+			'email'      => $this->user->user_email,
+			// Integer, matching the legacy twin's $customer->get_id().
+			'Account'    => (int) $this->user->ID,
+			'User_Role'  => ! empty( $roles ) ? reset( $roles ) : '',
+			'verified'   => (bool) Reader_Activation::is_reader_verified( $this->user ),
 		];
+
+		// Omitted unless the reader actually signed in with a supported SSO
+		// provider, mirroring the legacy enrichment
+		// (Metadata::add_registration_data_raw()). An empty string here would
+		// blank a live merge field at any provider that overwrites on blank.
+		$connected_account = $this->get_connected_account();
+		if ( '' !== $connected_account ) {
+			$metadata['Connected_Account'] = $connected_account;
+		}
+
+		return $metadata;
+	}
+
+	/**
+	 * The SSO provider the reader is connected through, or an empty string.
+	 *
+	 * Port of the legacy enrichment's two-source rule: the connected-account
+	 * meta when it names a supported SSO provider, otherwise the registration
+	 * method when that does — readers who registered through SSO only ever get
+	 * the latter (see Reader_Activation::register_reader()).
+	 *
+	 * @return string
+	 */
+	private function get_connected_account() {
+		$connected_account = (string) \get_user_meta( $this->user->ID, Reader_Activation::CONNECTED_ACCOUNT, true );
+		if ( in_array( $connected_account, Reader_Activation::SSO_REGISTRATION_METHODS, true ) ) {
+			return $connected_account;
+		}
+		$registration_method = (string) \get_user_meta( $this->user->ID, Reader_Activation::REGISTRATION_METHOD, true );
+		return in_array( $registration_method, Reader_Activation::SSO_REGISTRATION_METHODS, true ) ? $registration_method : '';
 	}
 }

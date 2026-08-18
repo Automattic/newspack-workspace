@@ -13,10 +13,15 @@
 namespace Newspack\Tests\Unit\Reader_Activation_Sync;
 
 use Newspack\Reader_Activation;
+use Newspack\Reader_Activation\Integration;
 use Newspack\Reader_Activation\Integrations;
 use Newspack\Reader_Activation\Sync\Field_Registry;
 use Newspack\Reader_Activation\Sync\Metadata;
 use Sample_Integration;
+
+// The value-level parity tests build contacts through the metadata classes,
+// and the legacy half of every shared field is read off a WC_Customer.
+require_once __DIR__ . '/../../mocks/wc-mocks.php';
 
 /**
  * Golden parity tests.
@@ -42,6 +47,10 @@ class Test_Schema_Parity extends \WP_UnitTestCase {
 		// resolve through the ESP integration fallback.
 		$this->esp = new Sample_Integration( 'esp', 'ESP' );
 		Integrations::register( $this->esp );
+		// Enabled and set up, so the metadata classes its selection needs are
+		// actually computed — Metadata::get_sync_metadata_classes() scopes to
+		// the integrations the push path delivers to.
+		Integrations::enable( 'esp' );
 		$this->esp->update_metadata_prefix( 'NP_' );
 		Field_Registry::reset();
 	}
@@ -53,6 +62,8 @@ class Test_Schema_Parity extends \WP_UnitTestCase {
 		// Defensive cleanup: guarantees no test-registered callback survives
 		// even if a test fails before reaching its own remove_filter() call.
 		\remove_all_filters( 'newspack_esp_sync_normalize_contact' );
+		Integrations::disable( 'esp' );
+		\delete_option( Integration::OUTGOING_FIELDS_OPTION_PREFIX . 'esp' );
 		Field_Registry::reset();
 		$this->reset_integrations();
 		Integrations::register_integrations();
@@ -202,5 +213,123 @@ class Test_Schema_Parity extends \WP_UnitTestCase {
 		$prepared = $this->esp->prepare_contact( $contact );
 
 		$this->assertSame( 'Weekly', $prepared['metadata']['NP_Newsletter Selection'] );
+	}
+
+	/**
+	 * The five ESP names both schemas share (Account, Connected Account,
+	 * Registration Date, Registration Page, Total Paid), which are the ids a
+	 * legacy site's stored display names migrate onto.
+	 *
+	 * @var array<string, string[]>
+	 */
+	private const SHARED_FIELD_IDS = [
+		'v1' => [ 'v1:account', 'v1:connected_account', 'v1:registration_date', 'v1:registration_page', 'v1:current_page_url', 'v1:total_paid' ],
+		'v2' => [ 'v2:Account', 'v2:Connected_Account', 'v2:Registration_Date', 'v2:Registration_Page', 'v2:Total_Paid' ],
+	];
+
+	/**
+	 * Store a selection of field ids for the ESP integration, bypassing name
+	 * resolution so the test states the stored shape exactly.
+	 *
+	 * @param string[] $ids Field ids.
+	 */
+	private function store_selection( array $ids ) {
+		\update_option( Integration::OUTGOING_FIELDS_OPTION_PREFIX . 'esp', $ids, false );
+	}
+
+	/**
+	 * Build the outgoing payload the production path produces for a reader.
+	 *
+	 * @param int $user_id Reader user id.
+	 *
+	 * @return array Prepared contact.
+	 */
+	private function build_payload( $user_id ) {
+		return $this->esp->prepare_contact( Metadata::get_contact_with_metadata( $user_id ) );
+	}
+
+	/**
+	 * The load-bearing parity guarantee, at value level rather than key level.
+	 *
+	 * A migrated legacy site's stored display names resolve onto the new
+	 * schema's ids for every shared field, so the new schema's classes start
+	 * producing values the legacy pipeline used to produce. Those values must
+	 * be identical — including which keys are present at all, since a key the
+	 * legacy pipeline omitted arrives at the provider as an empty string and
+	 * Mailchimp writes blanks straight over live merge-field data.
+	 *
+	 * This reader is the divergence case: no SSO connection and no recorded
+	 * registration page, which is most of a typical audience.
+	 */
+	public function test_shared_fields_produce_identical_payload_after_id_migration() {
+		$user_id = self::factory()->user->create(
+			[
+				'user_email' => 'shared-fields@example.com',
+				'first_name' => 'Pat',
+				'last_name'  => 'Reader',
+			]
+		);
+
+		$this->store_selection( self::SHARED_FIELD_IDS['v1'] );
+		$legacy = $this->build_payload( $user_id );
+
+		$this->store_selection( self::SHARED_FIELD_IDS['v2'] );
+		$migrated = $this->build_payload( $user_id );
+
+		$legacy_metadata   = $legacy['metadata'];
+		$migrated_metadata = $migrated['metadata'];
+		ksort( $legacy_metadata );
+		ksort( $migrated_metadata );
+
+		$this->assertSame( $legacy['email'], $migrated['email'] );
+		$this->assertSame(
+			$legacy_metadata,
+			$migrated_metadata,
+			'Migrating a shared field to its new-schema id must not change a single value, or its type.'
+		);
+
+		// Non-vacuous: the shared fields this reader does have must be there.
+		$this->assertArrayHasKey( 'NP_Account', $migrated_metadata );
+		$this->assertArrayHasKey( 'NP_Registration Date', $migrated_metadata );
+
+		// The two keys the legacy pipeline omitted for this reader must stay
+		// omitted — this is the blanking the fix exists to prevent.
+		$this->assertArrayNotHasKey( 'NP_Connected Account', $migrated_metadata );
+		$this->assertArrayNotHasKey( 'NP_Registration Page', $migrated_metadata );
+
+		// Nothing else arrives blank either. Total Paid is the one exception:
+		// the legacy pipeline deliberately clears it for a reader with no
+		// current-product order, and that erase semantics is preserved.
+		$this->assertSame(
+			[ 'NP_Total Paid' ],
+			array_keys( array_filter( $migrated_metadata, fn( $value ) => '' === $value ) ),
+			'A new-schema producer emitted an empty value the legacy pipeline never sent.'
+		);
+	}
+
+	/**
+	 * The mirror case: a reader who does have an SSO connection and a recorded
+	 * registration page must still get both values on either set of ids, so
+	 * the omit-when-empty rule can never be mistaken for omit-always.
+	 */
+	public function test_shared_fields_still_carry_values_after_id_migration() {
+		$user_id = self::factory()->user->create( [ 'user_email' => 'sso-reader@example.com' ] );
+		\update_user_meta( $user_id, Reader_Activation::CONNECTED_ACCOUNT, 'google' );
+		\update_user_meta( $user_id, Reader_Activation::REGISTRATION_PAGE, 'https://example.com/newsletter' );
+
+		$this->store_selection( self::SHARED_FIELD_IDS['v1'] );
+		$legacy = $this->build_payload( $user_id );
+
+		$this->store_selection( self::SHARED_FIELD_IDS['v2'] );
+		$migrated = $this->build_payload( $user_id );
+
+		$legacy_metadata   = $legacy['metadata'];
+		$migrated_metadata = $migrated['metadata'];
+		ksort( $legacy_metadata );
+		ksort( $migrated_metadata );
+
+		$this->assertSame( $legacy_metadata, $migrated_metadata );
+		$this->assertSame( 'google', $migrated_metadata['NP_Connected Account'] );
+		$this->assertSame( 'https://example.com/newsletter', $migrated_metadata['NP_Registration Page'] );
 	}
 }

@@ -43,6 +43,7 @@ class Test_Identity_Metadata extends WP_UnitTestCase {
 	public function tear_down() {
 		delete_user_meta( self::$user_id, Reader_Activation::EMAIL_VERIFIED );
 		delete_user_meta( self::$user_id, Reader_Activation::CONNECTED_ACCOUNT );
+		delete_user_meta( self::$user_id, Reader_Activation::REGISTRATION_METHOD );
 		parent::tear_down();
 	}
 
@@ -54,7 +55,9 @@ class Test_Identity_Metadata extends WP_UnitTestCase {
 		$this->assertSame( 'Jane', $metadata['first_name'] );
 		$this->assertSame( 'Doe', $metadata['last_name'] );
 		$this->assertSame( 'reader@example.com', $metadata['email'] );
-		$this->assertSame( (string) self::$user_id, $metadata['Account'] );
+		// Integer, matching the legacy twin (v1:account) this field is declared
+		// value-equivalent to.
+		$this->assertSame( self::$user_id, $metadata['Account'] );
 		$this->assertSame( 'subscriber', $metadata['User_Role'] );
 	}
 
@@ -76,11 +79,12 @@ class Test_Identity_Metadata extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Test connected account is empty by default.
+	 * A reader who never used SSO gets no Connected Account key at all — the
+	 * legacy twin omitted it, and an empty string would blank the ESP field.
 	 */
-	public function test_connected_account_empty_by_default() {
+	public function test_connected_account_omitted_by_default() {
 		$metadata = ( new Identity( self::$user_id ) )->get_metadata();
-		$this->assertSame( '', $metadata['Connected_Account'] );
+		$this->assertArrayNotHasKey( 'Connected_Account', $metadata );
 	}
 
 	/**
@@ -88,6 +92,27 @@ class Test_Identity_Metadata extends WP_UnitTestCase {
 	 */
 	public function test_connected_account_when_set() {
 		update_user_meta( self::$user_id, Reader_Activation::CONNECTED_ACCOUNT, 'google' );
+		$metadata = ( new Identity( self::$user_id ) )->get_metadata();
+		$this->assertSame( 'google', $metadata['Connected_Account'] );
+	}
+
+	/**
+	 * A connected-account value that names no supported SSO provider is not a
+	 * connected account — same rule the legacy enrichment applied.
+	 */
+	public function test_connected_account_ignores_unsupported_value() {
+		update_user_meta( self::$user_id, Reader_Activation::CONNECTED_ACCOUNT, 'carrier-pigeon' );
+		$metadata = ( new Identity( self::$user_id ) )->get_metadata();
+		$this->assertArrayNotHasKey( 'Connected_Account', $metadata );
+	}
+
+	/**
+	 * Readers who register through SSO get only the registration-method meta
+	 * (see Reader_Activation::register_reader()), so it is the fallback source
+	 * — as it was in the legacy enrichment.
+	 */
+	public function test_connected_account_falls_back_to_sso_registration_method() {
+		update_user_meta( self::$user_id, Reader_Activation::REGISTRATION_METHOD, 'google' );
 		$metadata = ( new Identity( self::$user_id ) )->get_metadata();
 		$this->assertSame( 'google', $metadata['Connected_Account'] );
 	}
