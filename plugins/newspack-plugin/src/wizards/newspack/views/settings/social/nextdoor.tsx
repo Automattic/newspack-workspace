@@ -44,19 +44,21 @@ const readOAuthReturn = () => {
 const hasConnectionStatus = ( data: NextdoorData ): data is NextdoorData & { connection_status: NextdoorStatus } =>
 	typeof ( data?.connection_status as NextdoorStatus )?.is_connected === 'boolean';
 
+// What the card reads until the endpoint has said otherwise.
+const NO_CONNECTION: NextdoorStatus = {
+	is_connected: false,
+	has_credentials: false,
+	has_centralized_credentials: false,
+	has_tokens: false,
+	has_page: false,
+	token_valid: false,
+};
+
 function Nextdoor() {
 	const [ settings, setSettings ] = useState< NextdoorSettings >( {
 		client_id: '',
 		publication_url: '',
 		allowed_roles: [],
-	} );
-	const [ status, setStatus ] = useState< NextdoorStatus >( {
-		is_connected: false,
-		has_credentials: false,
-		has_centralized_credentials: false,
-		has_tokens: false,
-		has_page: false,
-		token_valid: false,
 	} );
 	const [ error, setError ] = useState< string | null >( null );
 	const [ errorNonce, setErrorNonce ] = useState( 0 );
@@ -109,7 +111,6 @@ function Nextdoor() {
 		if ( ! hasConnectionStatus( apiData ) ) {
 			return;
 		}
-		setStatus( apiData.connection_status );
 		setSettings( current => ( { ...current, ...apiData.settings } ) );
 	}, [ apiData ] );
 
@@ -170,10 +171,11 @@ function Nextdoor() {
 	const [ hasAutoOpened, setHasAutoOpened ] = useState( false );
 
 	const isEnabled = apiData.module_enabled_nextdoor;
-	// Read off the payload rather than the state mirrored from it, which is a render behind
-	// on the load the answer arrives in: reading that would report a connection by its
+	// Read off the payload rather than state mirrored from it, which is a render behind on
+	// the load the answer arrives in: reading that would report a connection by its own
 	// defaults, which are indistinguishable from a real "not connected" and a lapsed token.
-	const connection = hasConnectionStatus( apiData ) ? apiData.connection_status : status;
+	// The card and the form it renders take the same value, so neither can lead the other.
+	const connection = hasConnectionStatus( apiData ) ? apiData.connection_status : NO_CONNECTION;
 
 	// Only the OAuth redirect reopens the card: that user arrives on a fresh page load
 	// mid-setup, so their step would otherwise be invisible. A failure reopens it even when
@@ -332,7 +334,7 @@ function Nextdoor() {
 				) }
 				<NextdoorForm
 					settings={ settings }
-					status={ status }
+					status={ connection }
 					error={ error }
 					updateSettings={ updateSettings }
 					startOAuthFlow={ startOAuthFlow }

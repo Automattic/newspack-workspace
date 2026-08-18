@@ -150,10 +150,10 @@ describe( 'Nextdoor card', () => {
 		expect( Array.isArray( mockHookOptions.data.connection_status ) ).toBe( true );
 	} );
 
-	it( 'reads a lapsed token off the answer as it arrives', async () => {
-		// The card starts from its own defaults and the answer lands a render later, so a
-		// badge reading state mirrored from that answer would call the connection healthy
-		// for a render before turning red.
+	it( 'reports a lapsed token once the answer has arrived', async () => {
+		// The card starts from its own defaults and the answer lands later. This pins where
+		// it settles, not the render it passes through: the badge is computed from the
+		// answer itself, and a badge reading state mirrored from it would settle here too.
 		render( <Nextdoor /> );
 
 		await act( async () => {

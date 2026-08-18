@@ -426,9 +426,9 @@ class Auth {
 	 * Hold off the next refresh attempt, recording what this one settled.
 	 *
 	 * @param bool $failed Whether the stored grant should be treated as failing until the
-	 *                       hold-off lapses. What the call concluded rather than what the
-	 *                       request answered: a refusal of a grant another request has since
-	 *                       replaced says nothing about what is stored now.
+	 *                     hold-off lapses. What the call concluded rather than what the
+	 *                     request answered: a refusal of a grant another request has since
+	 *                     replaced says nothing about what is stored now.
 	 * @return void
 	 */
 	private static function hold_off_refresh( $failed = false ) {
