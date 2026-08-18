@@ -51,9 +51,9 @@ export function buildQueryParams( view = {} ) {
 		// No `_links` — see the newsletters-list note for what it costs.
 		//
 		// The terms field is unconditional, unlike the newsletters list:
-		// Quick Edit hydrates advertiser and placement from it and sends
-		// both back on every save, so dropping it when those columns are
-		// hidden would clear them.
+		// Quick Edit hydrates advertiser, placement and category from it,
+		// and has no other source for the names, so the pickers would open
+		// empty whenever those columns are hidden.
 		extraParams: {
 			_fields: 'id,status,title,date,meta,newspack_newsletters_ad_status,newspack_newsletters_terms',
 		},

@@ -157,15 +157,47 @@ class Admin_Shell_Collection_Params_Test extends WP_UnitTestCase {
 	public function test_the_gate_covers_every_raised_collection() {
 		wp_set_current_user( 0 );
 
-		foreach ( Admin_Shell_Collection_Params::get_collections() as $rest_base ) {
+		$checked = 0;
+		foreach ( Admin_Shell_Collection_Params::get_collections() as $name ) {
+			$rest_base = $this->rest_base_for( $name );
+			if ( null === $rest_base ) {
+				continue;
+			}
+
 			$request = new WP_REST_Request( 'GET', '/wp/v2/' . $rest_base );
 			$request->set_param( 'per_page', Admin_Shell_Collection_Params::MAX_PER_PAGE );
 
-			$this->assertContains(
+			$this->assertSame(
+				400,
 				rest_do_request( $request )->get_status(),
-				[ 400, 404 ],
-				'Expected the core cap to hold for a logged-out caller on: ' . $rest_base
+				'Expected the core cap to hold for a logged-out caller on: ' . $name
 			);
+			++$checked;
 		}
+
+		$this->assertGreaterThan( 0, $checked, 'No collection was reachable, so the gate went untested.' );
+	}
+
+	/**
+	 * The REST base a collection is served from, or null when it is not
+	 * exposed to the current caller.
+	 *
+	 * Resolved rather than assumed: `newspack_nl_ad_placement` already
+	 * overrides `rest_base` elsewhere in this plugin, so a name is not
+	 * safe to use as a path.
+	 *
+	 * @param string $name Post type or taxonomy name.
+	 * @return string|null
+	 */
+	private function rest_base_for( $name ) {
+		$object = get_post_type_object( $name );
+		if ( ! $object ) {
+			$object = get_taxonomy( $name );
+		}
+		if ( ! $object || empty( $object->show_in_rest ) ) {
+			return null;
+		}
+
+		return empty( $object->rest_base ) ? $name : $object->rest_base;
 	}
 }
