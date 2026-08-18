@@ -45,7 +45,7 @@ const components: Record< string, any > = {
 		component: lazy( () => import( /* webpackChunkName: "audience-wizards" */ './audience/views/campaigns' ) ),
 	},
 	'newspack-audience-access-control': {
-		label: __( 'Access control', 'newspack-plugin' ),
+		label: __( 'Access Control', 'newspack-plugin' ),
 		component: lazy( () => import( /* webpackChunkName: "audience-wizards" */ './audience/views/content-gates' ) ),
 	},
 	'newspack-audience-donations': {
@@ -55,6 +55,14 @@ const components: Record< string, any > = {
 	'newspack-audience-subscriptions': {
 		label: __( 'Audience Subscriptions', 'newspack-plugin' ),
 		component: lazy( () => import( /* webpackChunkName: "audience-wizards" */ './audience/views/subscriptions' ) ),
+	},
+	'newspack-audience-subscription-products': {
+		label: __( 'Plans', 'newspack-plugin' ),
+		component: lazy( () => import( /* webpackChunkName: "audience-wizards" */ './audience/views/subscription-products' ) ),
+	},
+	'newspack-audience-pricing-rules': {
+		label: __( 'Pricing Rules', 'newspack-plugin' ),
+		component: lazy( () => import( /* webpackChunkName: "audience-wizards" */ './audience/views/pricing-rules' ) ),
 	},
 	'newspack-premium-newsletters': {
 		label: __( 'Premium newsletters', 'newspack-plugin' ),

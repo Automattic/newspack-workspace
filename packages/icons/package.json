@@ -1,6 +1,6 @@
 {
 	"name": "newspack-icons",
-	"version": "1.0.8",
+	"version": "1.1.1",
 	"description": "A collection of custom SVG icons for Newspack projects",
 	"main": "index.js",
 	"module": "index.js",
@@ -29,16 +29,18 @@
 	},
 	"dependencies": {},
 	"peerDependencies": {
-		"@wordpress/primitives": "^3.0.0",
+		"@wordpress/primitives": "^3.0.0 || ^4.0.0",
 		"react": "^16.8.0 || ^17.0.0 || ^18.0.0"
 	},
 	"devDependencies": {
-		"@types/react": "^18.0.0"
+		"@types/react": "^18.0.0",
+		"newspack-scripts": "workspace:*"
 	},
 	"scripts": {
 		"build-types": "node build-types.js",
 		"prepublishOnly": "npm run build-types",
-		"clean": "rm -rf build-types"
+		"clean": "rm -rf build-types",
+		"typescript:check": "newspack-scripts typescript-check"
 	},
 	"files": [
 		"build-types/",

@@ -1,3 +1,74 @@
+## newspack-ads [3.14.2](https://github.com/Automattic/newspack-workspace/compare/newspack-ads@3.14.1...newspack-ads@3.14.2) (2026-08-18)
+
+
+### Bug Fixes
+
+* **ads:** escape the container id in GAM ad-unit markup ([#874](https://github.com/Automattic/newspack-workspace/issues/874)) ([adc96bc](https://github.com/Automattic/newspack-workspace/commit/adc96bc1dbb0e0f703d739f387fcae4b702a0f12))
+
+## newspack-ads [3.14.1](https://github.com/Automattic/newspack-workspace/compare/newspack-ads@3.14.0...newspack-ads@3.14.1) (2026-08-17)
+
+
+### Bug Fixes
+
+* **ads:** remove colored gaps from empty Broadstreet ad slots ([#578](https://github.com/Automattic/newspack-workspace/issues/578)) ([c16c8fc](https://github.com/Automattic/newspack-workspace/commit/c16c8fcb2dbce437cc452be74d42514631b3fd6b))
+
+
+### Dependencies
+
+* **newspack-components:** upgraded to 4.6.2
+
+# newspack-ads [3.14.0](https://github.com/Automattic/newspack-workspace/compare/newspack-ads@3.13.1...newspack-ads@3.14.0) (2026-08-17)
+
+
+### Features
+
+* **performance:** defer reader-facing JS assets (NPPM-3037) ([#722](https://github.com/Automattic/newspack-workspace/issues/722)) ([2855574](https://github.com/Automattic/newspack-workspace/commit/2855574099c4f416a984cda8565b269e5a9f0fb0))
+
+
+### Dependencies
+
+* **newspack-components:** upgraded to 4.6.1
+* **newspack-scripts:** upgraded to 5.11.0
+
+## newspack-ads [3.13.1](https://github.com/Automattic/newspack-workspace/compare/newspack-ads@3.13.0...newspack-ads@3.13.1) (2026-08-03)
+
+
+### Dependencies
+
+* **newspack-components:** upgraded to 4.6.0
+* **newspack-scripts:** upgraded to 5.10.0
+
+# newspack-ads [3.13.0](https://github.com/Automattic/newspack-workspace/compare/newspack-ads@3.12.0...newspack-ads@3.13.0) (2026-07-20)
+
+
+### Features
+
+* **block-theme:** add ad slots and spacing control (NPPD-1558, [#300](https://github.com/Automattic/newspack-workspace/issues/300)) ([7823f2f](https://github.com/Automattic/newspack-workspace/commit/7823f2fefd7cc1eaf854b08d8b4422289fa75f62))
+
+
+### Dependencies
+
+* **newspack-components:** upgraded to 4.5.0
+
+# newspack-ads [3.12.0](https://github.com/Automattic/newspack-workspace/compare/newspack-ads@3.11.2...newspack-ads@3.12.0) (2026-06-29)
+
+
+### Bug Fixes
+
+* **ads:** move shared sticky ads styles to newspack-ads plugin ([#233](https://github.com/Automattic/newspack-workspace/issues/233)) ([165e48c](https://github.com/Automattic/newspack-workspace/commit/165e48c351536e5be2559b20e2ac029c82b14a6a))
+
+
+### Features
+
+* add 'sticky' option to ad unit block ([#1073](https://github.com/Automattic/newspack-workspace/issues/1073)) ([023e47d](https://github.com/Automattic/newspack-workspace/commit/023e47dc9cd7b62b8e32db4b2157c266e4acd810))
+* **block-theme:** add 'Ad Slot' block for faking global placements in block themes ([#1076](https://github.com/Automattic/newspack-workspace/issues/1076)) ([768de1b](https://github.com/Automattic/newspack-workspace/commit/768de1b91e38df3280c918f5b968d02d2c17f9b5))
+* **insights:** GAM API reporting client via SOAP (NPPD-1662) ([#256](https://github.com/Automattic/newspack-workspace/issues/256)) ([8188d2d](https://github.com/Automattic/newspack-workspace/commit/8188d2db21b23b182b7e753b9398f65eef89fea1))
+
+
+### Dependencies
+
+* **newspack-components:** upgraded to 4.4.0
+
 ## [3.11.2](https://github.com/Automattic/newspack-ads/compare/v3.11.1...v3.11.2) (2026-05-19)
 
 

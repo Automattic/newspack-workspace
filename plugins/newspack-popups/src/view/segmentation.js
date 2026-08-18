@@ -3,12 +3,14 @@
 import {
 	debug,
 	closeOverlay,
+	getAbOverride,
 	getBestPrioritySegment,
 	getIntersectionObserver,
 	getRawId,
 	getOverride,
 	handleSeen,
 	shouldPromptBeDisplayed,
+	syncMatchedSegments,
 } from './utils';
 
 /**
@@ -30,12 +32,20 @@ export const handleSegmentation = prompts => {
 			ras.segments.setMatch( matchingSegment );
 		}
 
+		// Persist the full matching set server-side for logged-in readers, so
+		// server-side consumers (dynamic pricing, available-deals) can read it.
+		syncMatchedSegments( ras, segments );
+
 		let overlayDisplayed;
 
 		prompts.forEach( prompt => {
 			const promptId = prompt.getAttribute( 'id' );
 			const isOverlay = prompt.classList.contains( 'newspack-lightbox' );
-			const override = getOverride( getRawId( promptId ), isOverlay, overlayDisplayed );
+			// A/B variant selection composes with the standard override: a test
+			// variant the reader is not assigned to is suppressed before it can
+			// claim the single-overlay slot; the assigned variant goes through
+			// the normal frequency/segmentation checks.
+			const override = getOverride( getRawId( promptId ), isOverlay, overlayDisplayed ) ?? getAbOverride( prompt );
 
 			// Attach event listeners to overlay close buttons.
 			const closeButtons = [ ...prompt.querySelectorAll( '.newspack-lightbox__close, button.newspack-lightbox-overlay' ) ];

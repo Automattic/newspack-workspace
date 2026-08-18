@@ -1,0 +1,126 @@
+@use "~@wordpress/base-styles/colors" as wp-colors;
+
+.newspack-pricing-rules {
+	&__muted {
+		color: wp-colors.$gray-700;
+	}
+
+	// Goal picker: a single-column stack of selectable cards (title + description),
+	// shown in place of the goal dropdown when creating a rule.
+	&__goal-grid {
+		display: grid;
+		grid-template-columns: 1fr;
+		gap: 12px;
+	}
+
+	&__goal-card {
+		display: flex;
+		flex-direction: column;
+		gap: 4px;
+		padding: 16px;
+		text-align: left;
+		background: wp-colors.$white;
+		border: 1px solid wp-colors.$gray-300;
+		border-radius: 4px;
+		cursor: pointer;
+		transition: border-color 0.1s ease, box-shadow 0.1s ease;
+
+		&:hover {
+			border-color: wp-colors.$gray-600;
+		}
+
+		&.is-selected {
+			border-color: var(--wp-admin-theme-color, #{wp-colors.$gray-900});
+			box-shadow: inset 0 0 0 1px var(--wp-admin-theme-color, #{wp-colors.$gray-900});
+		}
+	}
+
+	&__goal-card-title {
+		font-weight: 600;
+	}
+
+	&__goal-card-desc {
+		color: wp-colors.$gray-700;
+		font-size: 13px;
+		line-height: 1.5;
+	}
+
+	// Catalog impact panel sits above the full-width DataViews. Padded 24px to
+	// align its content with the DataViews controls below; margin-bottom leaves
+	// a clean gap after the Newspack DataViews wrapper's full-width
+	// margin-top: -16px pull-up resolves.
+	&__impact {
+		margin-bottom: 48px;
+		padding: 0 48px;
+
+		&--loading {
+			display: flex;
+			justify-content: center;
+			padding: 24px;
+		}
+	}
+
+	&__impact-title {
+		margin: 0 0 4px;
+		font-size: 16px;
+	}
+
+	&__impact-table {
+		width: 100%;
+		border-collapse: collapse;
+		margin-top: 12px;
+
+		th,
+		td {
+			padding: 8px 12px;
+			text-align: left;
+			border-bottom: 1px solid wp-colors.$gray-300;
+		}
+
+		// Flush the outer columns with the 24px panel padding so the table aligns
+		// with the headline and the DataViews controls.
+		th:first-child,
+		td:first-child {
+			padding-left: 0;
+		}
+
+		th:last-child,
+		td:last-child {
+			padding-right: 0;
+		}
+
+		th {
+			font-weight: 600;
+		}
+	}
+
+	&__audience {
+		margin: 8px 0 0;
+		color: wp-colors.$gray-700;
+		font-style: italic;
+	}
+
+	&__preview-section {
+		padding: 0 0 16px;
+	}
+
+	&__preview {
+		&.is-loading {
+			opacity: 0.6;
+		}
+
+		// Draw the eye to the targeted-segment price columns: a faint tint of the
+		// same hue as the changed-cell highlight marks the whole column, mirroring
+		// how the sole "Resulting price" column reads as highlighted with no segment.
+		// A changed cell within the column still gets the solid highlight below
+		// (defined after this rule, so equal-specificity source order wins).
+		.newspack-pricing-rules__impact-table .is-segment-col {
+			background: rgba(wp-colors.$alert-yellow, 0.12);
+		}
+
+		.newspack-pricing-rules__impact-table .is-changed {
+			background: wp-colors.$alert-yellow;
+			font-weight: 600;
+		}
+	}
+}

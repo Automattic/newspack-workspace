@@ -179,6 +179,7 @@ if ( ! function_exists( 'newspack_setup' ) ) :
 		$secondary_color_variation = newspack_adjust_brightness( $secondary_color, -40 );
 
 		// Editor color palette.
+		// phpcs:disable Squiz.Commenting.InlineComment.InvalidEndChar -- Let's not be too precious about the brief comments here.
 		add_theme_support(
 			'editor-color-palette',
 			array(
@@ -224,6 +225,7 @@ if ( ! function_exists( 'newspack_setup' ) ) :
 				),
 			)
 		);
+		// phpcs:enable Squiz.Commenting.InlineComment.InvalidEndChar
 
 		add_theme_support(
 			'editor-gradient-presets',
@@ -267,7 +269,7 @@ if ( ! function_exists( 'newspack_setup' ) ) :
 		// Add support for responsive embedded content.
 		add_theme_support( 'responsive-embeds' );
 
-		// Make our theme AMP/PWA Native
+		// Make our theme AMP/PWA Native.
 		add_theme_support(
 			'amp',
 			array(
@@ -278,7 +280,7 @@ if ( ! function_exists( 'newspack_setup' ) ) :
 			)
 		);
 
-		// Add custom theme support - post subtitle
+		// Add custom theme support - post subtitle.
 		add_theme_support( 'post-subtitle' );
 	}
 endif;
@@ -411,7 +413,7 @@ add_action( 'widgets_init', 'newspack_widgets_init' );
 function newspack_content_width() {
 	$content_width = 780;
 
-	// Check if front page or using One-Column Wide template
+	// Check if front page or using One-Column Wide template.
 	if ( ( is_front_page() && 'posts' !== get_option( 'show_on_front' ) ) || is_page_template( 'single-wide.php' ) ) {
 		$content_width = 1200;
 	}
@@ -481,11 +483,29 @@ function newspack_scripts() {
 			wp_enqueue_script( 'comment-reply' );
 		}
 
-		wp_enqueue_script( 'newspack-amp-fallback', get_theme_file_uri( '/js/dist/amp-fallback.js' ), array(), wp_get_theme()->get( 'Version' ), true );
+		wp_enqueue_script(
+			'newspack-amp-fallback',
+			get_theme_file_uri( '/js/dist/amp-fallback.js' ),
+			array(),
+			wp_get_theme()->get( 'Version' ),
+			array(
+				'in_footer' => true,
+				'strategy'  => 'defer',
+			)
+		);
 		wp_localize_script( 'newspack-amp-fallback', 'newspackScreenReaderText', $newspack_l10n );
 	}
 
-	wp_enqueue_script( 'newspack-menu-accessibility', get_theme_file_uri( '/js/dist/menu-accessibility.js' ), array(), wp_get_theme()->get( 'Version' ), true );
+	wp_enqueue_script(
+		'newspack-menu-accessibility',
+		get_theme_file_uri( '/js/dist/menu-accessibility.js' ),
+		array(),
+		wp_get_theme()->get( 'Version' ),
+		array(
+			'in_footer' => true,
+			'strategy'  => 'defer',
+		)
+	);
 	wp_localize_script( 'newspack-menu-accessibility', 'newspackScreenReaderText', $newspack_l10n );
 
 	if ( newspack_is_sticky_animated_header() ) {
@@ -493,7 +513,16 @@ function newspack_scripts() {
 		wp_enqueue_script( 'amp-position-observer', 'https://cdn.ampproject.org/v0/amp-position-observer-0.1.js', array(), '0.1', true );
 	}
 
-	wp_enqueue_script( 'newspack-font-loading', get_theme_file_uri( '/js/dist/font-loading.js' ), array(), wp_get_theme()->get( 'Version' ), true );
+	wp_enqueue_script(
+		'newspack-font-loading',
+		get_theme_file_uri( '/js/dist/font-loading.js' ),
+		array(),
+		wp_get_theme()->get( 'Version' ),
+		array(
+			'in_footer' => true,
+			'strategy'  => 'defer',
+		)
+	);
 	wp_localize_script(
 		'newspack-font-loading',
 		'newspackFontLoading',
@@ -585,6 +614,7 @@ function newspack_enqueue_scripts() {
 	}
 
 	// Featured Image options.
+	// phpcs:ignore WordPress.WP.EnqueuedResourceParameters.NotInFooter -- TODO: Should we set $in_footer?
 	wp_register_script(
 		'newspack-extend-featured-image-script',
 		get_theme_file_uri( '/js/dist/extend-featured-image-editor.js' ),
@@ -814,6 +844,8 @@ function newspack_check_current_template() {
  *
  * The 'admin-color-' prefix is used to make sure the classes get moved to the <body> tag in the iframed editor as a work-around.
  * See https://github.com/WordPress/gutenberg/issues/28538 for more details.
+ *
+ * @param string $classes Existing classes.
  */
 function newspack_filter_admin_body_class( $classes ) {
 	if ( ! function_exists( 'get_current_screen' ) ) {
@@ -897,9 +929,13 @@ function newspack_override_avatar_downsizing( $default_value, $args ) {
 add_filter( 'jetpack_photon_override_image_downsize', 'newspack_override_avatar_downsizing', 10, 2 );
 
 /**
- * Register meta fields:
- * - Featured Image position option
- * - Article Subtitle
+ * Register the theme's editor-managed post meta:
+ * - Featured image position
+ * - Article subtitle
+ * - Article summary title
+ * - Article summary
+ * - Hide page title (pages)
+ * - Show share buttons (pages)
  */
 function newspack_register_meta() {
 	$featured_image_post_types = newspack_get_featured_image_post_types();
@@ -970,9 +1006,78 @@ function newspack_register_meta() {
 }
 add_action( 'init', 'newspack_register_meta' );
 
+/**
+ * Editor-managed post meta keys the classic "Custom Fields" box must not write.
+ *
+ * These keys are edited through dedicated block-editor panels and saved via the
+ * REST API. See newspack_prevent_classic_metabox_meta_clobber().
+ *
+ * @return string[] Meta keys.
+ */
+function newspack_get_editor_managed_meta_keys() {
+	return array(
+		'newspack_featured_image_position',
+		'newspack_post_subtitle',
+		'newspack_article_summary_title',
+		'newspack_article_summary',
+		'newspack_hide_page_title',
+		'newspack_show_share_buttons',
+	);
+}
+
+/**
+ * Stop the classic "Custom Fields" box from clobbering editor-managed meta.
+ *
+ * The block editor saves these keys via the REST API. When the "Custom Fields"
+ * panel is enabled, the editor also fires a separate classic meta-box save (the
+ * `meta-box-loader` request) that resubmits the box's page-load value for every
+ * existing meta row and writes it through edit_post(). That stale write lands a
+ * moment after the REST save and silently overwrites it.
+ *
+ * Rather than protecting these keys (which would remove them from the Custom
+ * Fields box entirely and block publishers who manage subtitles there, e.g. on
+ * custom post types that have no dedicated panel), we drop our managed keys from
+ * the meta-box-loader payload only. Intentional edits made with the box's own
+ * Add/Update buttons save through a separate admin-ajax request and are
+ * unaffected.
+ *
+ * @return void
+ */
+function newspack_prevent_classic_metabox_meta_clobber() {
+	// Only the block editor's auxiliary meta-box save carries this flag; a genuine
+	// classic-editor save does not, and must keep writing Custom Fields normally.
+	if ( ! isset( $_REQUEST['meta-box-loader'], $_POST['post_ID'], $_POST['_wpnonce'], $_POST['meta'] ) ) {
+		return;
+	}
+
+	// edit_post() processes $_POST['meta'] only after core verifies this nonce for
+	// the 'editpost' action (wp-admin/post.php). This runs earlier (admin_init), so
+	// verify the same nonce here before touching the payload.
+	$post_id = (int) $_POST['post_ID'];
+	$nonce   = sanitize_text_field( wp_unslash( $_POST['_wpnonce'] ) );
+	if ( ! $post_id || ! wp_verify_nonce( $nonce, 'update-post_' . $post_id ) ) {
+		return;
+	}
+
+	$managed = newspack_get_editor_managed_meta_keys();
+	// phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- only the meta-row key is read and sanitized below; the row value is never used, and the nonce is verified above.
+	foreach ( array_keys( (array) $_POST['meta'] ) as $mid ) {
+		$key = isset( $_POST['meta'][ $mid ]['key'] )
+			? sanitize_text_field( wp_unslash( $_POST['meta'][ $mid ]['key'] ) )
+			: '';
+		if ( in_array( $key, $managed, true ) ) {
+			unset( $_POST['meta'][ $mid ] );
+		}
+	}
+}
+add_action( 'admin_init', 'newspack_prevent_classic_metabox_meta_clobber' );
+
 
 /**
  * Migrate theme settings when switching within the family of Newspack themes.
+ *
+ * @param string         $old_name  The name of the old theme.
+ * @param WP_Theme|false $old_theme The old theme object (default: false).
  *
  * @since Newspack Theme 1.0.0
  */
@@ -1123,6 +1228,10 @@ function newspack_sanitize_svgs() {
 
 /**
  * Truncates text to a specific character length, without breaking a character.
+ *
+ * @param string $content The text to truncate.
+ * @param int    $length The character length to truncate to.
+ * @param string $after Text to append after truncation. Default is '...'.
  */
 function newspack_truncate_text( $content, $length, $after = '...' ) {
 	// If content is already shorter than the truncate length, return it.
@@ -1130,10 +1239,10 @@ function newspack_truncate_text( $content, $length, $after = '...' ) {
 		return $content;
 	}
 
-	// Find the first space after the desired length:
+	// Find the first space after the desired length.
 	$breakpoint = strpos( $content, ' ', $length );
 
-	// Make sure $breakpoint isn't returning false, and is less than length of content:
+	// Make sure $breakpoint isn't returning false, and is less than length of content.
 	if ( false !== $breakpoint && $breakpoint < strlen( $content ) - 1 ) {
 		$content = substr( $content, 0, $breakpoint ) . $after;
 	}
@@ -1200,9 +1309,11 @@ add_filter( 'newspack_ads_maybe_use_responsive_placement', 'newspack_theme_newsp
 
 /**
  * Add a extra span and class to the_archive_title, for easier styling.
+ *
+ * @param string $title Archive title to be displayed.
  */
 function newspack_update_the_archive_title( $title ) {
-	// Split the title into parts so we can wrap them with spans:
+	// Split the title into parts so we can wrap them with spans.
 	$title_parts  = explode( '<span class="page-description">', $title, 2 );
 	$title_format = get_theme_mod( 'archive_title_format', 'default' );
 
@@ -1335,6 +1446,13 @@ if ( function_exists( '\Newspack_Sponsors\get_sponsors_for_post' ) ) {
 }
 
 /**
+ * Load Tag Labels compatibility file.
+ */
+if ( class_exists( '\Newspack\Tag_Labels' ) ) {
+	require get_template_directory() . '/inc/newspack-tag-labels.php';
+}
+
+/**
  * Load Newsletters compatibility file.
  */
 if ( class_exists( '\Newspack_Newsletters' ) ) {
@@ -1371,4 +1489,3 @@ if ( defined( 'BEC_PLUGIN_VERSION' ) ) {
  * Woo Templates cache handling
  */
 require get_template_directory() . '/woocommerce/templates.php';
-

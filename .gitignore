@@ -9,7 +9,10 @@ repos/*
 !repos/themes/.gitkeep
 logs
 html
-data
+# Anchored: this is the workspace-root database volume. Unanchored it also
+# swallowed source directories named `data/` inside plugins (e.g. a wizard's
+# data hooks), silently dropping new files there from commits.
+/data
 bin/secrets.json
 snapshots
 manager-html
@@ -21,8 +24,10 @@ bin/newspack-network/nodes-keys.json
 bin/newspack-network/service-accounts.secret
 rootCA.pem
 worktrees
+worktrees-repos
 envs
 docker-compose.env-*.yml
+docker-compose.override.yml
 .claude/settings.local.json
 node_modules/
 .pnpm-store/
@@ -36,3 +41,6 @@ plugins/*/package-lock.json
 themes/*/package-lock.json
 packages/*/package-lock.json
 .cursorignore
+# Per-checkout personal hooks run by .husky/pre-commit (see AGENTS.md).
+# `*.local*` also covers editor backups like pre-commit.local~ / .local.bak.
+.husky/*.local*

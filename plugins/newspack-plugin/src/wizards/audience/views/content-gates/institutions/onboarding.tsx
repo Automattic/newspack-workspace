@@ -24,7 +24,7 @@ const InstitutionsOnboarding = () => {
 			} }
 		>
 			<Grid columns={ 4 } noMargin>
-				<VStack start={ 2 } end={ 4 } spacing={ 8 }>
+				<VStack data-start="2" data-end="4" spacing={ 8 }>
 					<SectionHeader
 						icon={ institution }
 						title={ __( 'Get started with institutions', 'newspack-plugin' ) }
@@ -37,7 +37,7 @@ const InstitutionsOnboarding = () => {
 					/>
 					<HStack alignment="center">
 						<Button variant="primary" href="#/institutions/new">
-							{ __( 'Add new institution', 'newspack-plugin' ) }
+							{ __( 'Add Institution', 'newspack-plugin' ) }
 						</Button>
 					</HStack>
 				</VStack>

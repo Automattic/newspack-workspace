@@ -35,6 +35,7 @@ class WooCommerce_Connection {
 		include_once __DIR__ . '/class-woocommerce-cli.php';
 		include_once __DIR__ . '/class-woocommerce-cover-fees.php';
 		include_once __DIR__ . '/class-woocommerce-emails.php';
+		include_once __DIR__ . '/class-woocommerce-email-style-sync.php';
 		include_once __DIR__ . '/class-woocommerce-order-utm.php';
 		include_once __DIR__ . '/class-woocommerce-products.php';
 		include_once __DIR__ . '/class-woocommerce-checkout.php';
@@ -90,6 +91,66 @@ class WooCommerce_Connection {
 	public static function is_subscription_active( $status ) {
 		$status = str_replace( 'wc-', '', $status ); // Normalize status strings.
 		return in_array( $status, self::ACTIVE_SUBSCRIPTION_STATUSES, true );
+	}
+
+	/**
+	 * Whether a subscription is in payment recovery: on-hold after a failed
+	 * renewal payment, with a retry still outstanding in the Woo Subscriptions
+	 * failed-payment retry system (the dunning window).
+	 *
+	 * The presence of a `payment_retry` date is the signal, not whether that
+	 * date is still in the future. Woo Subscriptions sets the date when it
+	 * applies a retry rule and deletes it as soon as the retry leaves
+	 * pending/processing without a successor being scheduled
+	 * (`WCS_Retry_Manager::maybe_delete_payment_retry_date()`), so the date
+	 * exists exactly while a retry is outstanding and the recovery window
+	 * closes on its own once retries are exhausted. Comparing against the
+	 * current time would instead deny access whenever the Action Scheduler
+	 * queue runs behind — an overdue retry is still a pending one. This matches
+	 * how the rest of the plugin reads the date (see `On_Hold_Duration` and the
+	 * subscription-cleanup CLI command).
+	 *
+	 * One residual case does not self-close: if the scheduled retry action fails
+	 * permanently at the Action Scheduler level, Woo Subscriptions only logs it
+	 * (`WCS_Failed_Scheduled_Action_Manager`) — the retry record stays `pending`,
+	 * so the date is never deleted and recovery persists for as long as the
+	 * subscription stays on-hold. Reading the retry store's status instead would
+	 * not help: the record it would read is the one left pending. Any touch of the
+	 * subscription's status clears the date (`WCS_Retry_Manager::maybe_cancel_retry()`),
+	 * so this only bites a subscription nothing ever touches again. Closing it
+	 * properly needs a bound the retry system does not provide — e.g. capping the
+	 * grace at the configured on-hold duration.
+	 *
+	 * @param \WC_Subscription|false $subscription Subscription object.
+	 *
+	 * @return bool
+	 */
+	public static function is_subscription_in_payment_recovery( $subscription ) {
+		$in_payment_recovery = $subscription
+			&& $subscription->has_status( 'on-hold' )
+			&& (int) $subscription->get_time( 'payment_retry' ) > 0;
+
+		/**
+		 * Filters whether a subscription counts as being in payment recovery.
+		 *
+		 * Note the `payment_retry` date is only set by the Woo Subscriptions retry
+		 * system, which is OFF by default (`woocommerce_subscriptions_enable_retry`
+		 * defaults to 'no'; Newspack force-enables it via
+		 * `force_allow_failed_payment_retry`). Sites relying on gateway-managed
+		 * retries instead (e.g. Stripe smart retries) get no recovery window from
+		 * the default logic and should hook this filter to define their own.
+		 *
+		 * Whatever signal a filter uses must be self-closing. Returning true for
+		 * any on-hold subscription — without checking that a retry is genuinely
+		 * outstanding — grants paid access indefinitely to every subscription
+		 * that is parked on-hold, including ones the retry system gave up on long
+		 * ago. Gate custom logic on a real pending-retry record (e.g. the
+		 * gateway's own dunning state), not on the status alone.
+		 *
+		 * @param bool                   $in_payment_recovery Whether the subscription is in payment recovery.
+		 * @param \WC_Subscription|false $subscription        Subscription object.
+		 */
+		return (bool) apply_filters( 'newspack_is_subscription_in_payment_recovery', $in_payment_recovery, $subscription );
 	}
 
 	/**
@@ -389,19 +450,28 @@ class WooCommerce_Connection {
 	 *
 	 * @param int   $user_id User ID.
 	 * @param array $product_ids Optional array of product IDs to filter by.
+	 * @param bool  $include_payment_recovery Whether to also count on-hold subscriptions in payment recovery (see is_subscription_in_payment_recovery()).
 	 *
 	 * @return int[] Array of active subscription IDs.
 	 */
-	public static function get_active_subscriptions_for_user( $user_id, $product_ids = [] ) {
+	public static function get_active_subscriptions_for_user( $user_id, $product_ids = [], $include_payment_recovery = false ) {
 		if ( ! function_exists( 'wcs_get_users_subscriptions' ) ) {
 			return [];
 		}
 		$subcriptions = array_reduce(
 			array_keys( \wcs_get_users_subscriptions( $user_id ) ),
-			function( $acc, $subscription_id ) use ( $product_ids, $user_id ) {
+			function( $acc, $subscription_id ) use ( $product_ids, $user_id, $include_payment_recovery ) {
 				$subscription = \wcs_get_subscription( $subscription_id );
+				// wcs_get_subscription() returns false when the subscription post is
+				// gone (deleted, or a stale ID left behind on the user).
+				if ( ! $subscription ) {
+					return $acc;
+				}
 				$has_required_products = false;
-				if ( $subscription->has_status( self::ACTIVE_SUBSCRIPTION_STATUSES ) ) {
+				if (
+					$subscription->has_status( self::ACTIVE_SUBSCRIPTION_STATUSES )
+					|| ( $include_payment_recovery && self::is_subscription_in_payment_recovery( $subscription ) )
+				) {
 					if ( ! empty( $product_ids ) ) {
 						foreach ( $product_ids as $product_id ) {
 							if ( $subscription->has_product( $product_id ) ) {
@@ -496,6 +566,90 @@ class WooCommerce_Connection {
 	}
 
 	/**
+	 * Get a human-readable payment method label for an order.
+	 *
+	 * Prefers the card brand and last four digits from a saved payment token —
+	 * read from the order's own tokens (as WooPayments attaches them), or
+	 * recovered from the customer's saved tokens via the gateway reference the
+	 * Stripe gateway stores in order meta. Falls back to the payment gateway's
+	 * customer-facing title (e.g. "Credit / Debit Card"), since the card details
+	 * of a plain one-time payment are not stored locally at all.
+	 *
+	 * @param \WC_Order $order The order.
+	 *
+	 * @return string Payment method label.
+	 */
+	public static function get_payment_method_label( $order ) {
+		if ( class_exists( 'WC_Payment_Tokens' ) ) {
+			// First attempt: tokens attached to the order itself, as WooPayments does.
+			foreach ( $order->get_payment_tokens() as $token_id ) {
+				$label = self::get_card_token_label( \WC_Payment_Tokens::get( $token_id ) );
+				if ( $label ) {
+					return $label;
+				}
+			}
+			/**
+			 * Second attempt: gateways like Stripe save cards against the customer,
+			 * not the order — the order carries only the gateway's payment method
+			 * reference in meta. Match that reference to the customer's saved
+			 * tokens to recover the card.
+			 */
+			$source_id   = $order->get_meta( '_stripe_source_id' );
+			$customer_id = $order->get_customer_id();
+			if ( $source_id && $customer_id ) {
+				foreach ( \WC_Payment_Tokens::get_customer_tokens( $customer_id, $order->get_payment_method() ) as $customer_token ) {
+					if ( $customer_token->get_token() !== $source_id ) {
+						continue;
+					}
+					$label = self::get_card_token_label( $customer_token );
+					if ( $label ) {
+						return $label;
+					}
+				}
+			}
+		}
+		$title = $order->get_payment_method_title();
+		if ( ! empty( $title ) ) {
+			return \wp_strip_all_tags( $title );
+		}
+		return __( 'Card', 'newspack-plugin' );
+	}
+
+	/**
+	 * Build a "<Brand> ending in <last4>" label from a saved credit card token.
+	 *
+	 * @param \WC_Payment_Token|null $token The token, or null.
+	 *
+	 * @return string|false The label, or false when the token isn't a credit
+	 *                      card or is missing its brand or last four digits —
+	 *                      some gateways store tokens without either, and a
+	 *                      partial label would be worse than the gateway title.
+	 */
+	private static function get_card_token_label( $token ) {
+		if ( ! $token || ! is_a( $token, 'WC_Payment_Token_CC' ) ) {
+			return false;
+		}
+		$last4 = $token->get_last4();
+		$type  = $token->get_card_type();
+		if ( ! $last4 || ! $type ) {
+			return false;
+		}
+		$brand = function_exists( 'wc_get_credit_card_type_label' ) ? \wc_get_credit_card_type_label( $type ) : ucwords( str_replace( [ '-', '_' ], ' ', (string) $type ) );
+		// The label lands in the email HTML unescaped, and the brand passes
+		// through a public filter — strip HTML tags, the same treatment the
+		// *AMOUNT* placeholder gets. Placeholder literals are a separate,
+		// negligible concern handled by substitution order, not by this strip.
+		return \wp_strip_all_tags(
+			sprintf(
+				/* translators: 1: card brand, e.g. "Visa". 2: the card's last four digits. */
+				__( '%1$s ending in %2$s', 'newspack-plugin' ),
+				$brand,
+				$last4
+			)
+		);
+	}
+
+	/**
 	 * Send the customizable receipt or welcome email instead of WooCommerce's default receipt.
 	 *
 	 * @param int $order_id The order ID.
@@ -510,8 +664,7 @@ class WooCommerce_Connection {
 		}
 
 		// If there are no donation products in the order, do not override the default WC receipt email.
-		$has_donation_product = \Newspack\Donations::get_order_donation_product_id( $order->get_id() ) !== false;
-		if ( ! $has_donation_product ) {
+		if ( ! Donations::get_order_donation_product_id( $order->get_id() ) ) {
 			return false;
 		}
 
@@ -580,7 +733,7 @@ class WooCommerce_Connection {
 			],
 			[
 				'template' => '*PAYMENT_METHOD*',
-				'value'    => __( 'Card', 'newspack-plugin' ) . ' – ' . $order->get_payment_method(),
+				'value'    => self::get_payment_method_label( $order ),
 			],
 			[
 				'template' => '*RECEIPT_URL*',
@@ -599,9 +752,13 @@ class WooCommerce_Connection {
 		);
 		if ( $sent ) {
 			$order->add_meta_data( $email_sent_meta, true, true );
-			return false;
+			// Persist the marker: this hook fires after the status transition has
+			// already saved the order, on a freshly hydrated instance, so without
+			// an explicit save the already-sent guard never holds across requests.
+			$order->save();
+			return true;
 		}
-		return true;
+		return false;
 	}
 
 	/**

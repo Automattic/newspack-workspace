@@ -14,7 +14,7 @@ import { Grid, SectionHeader } from 'newspack-components';
  * @property {*}        icon         Icon component (from `@wordpress/icons` or similar) for the page header.
  * @property {string}   title        Page-header title (e.g. "Get started with advertisers").
  * @property {string}   description  Short, value-prop description below the title.
- * @property {string}   ctaTitle     Button label (e.g. "Add new advertiser").
+ * @property {string}   ctaTitle     Button label (e.g. "Add Advertiser").
  * @property {string}   [ctaHref]    Button link target. Mutually exclusive with `ctaOnClick`.
  * @property {Function} [ctaOnClick] Click handler. Used when the create flow is in-page (e.g. opens a modal)
  *                                   rather than a navigation. Mutually exclusive with `ctaHref`.
@@ -48,7 +48,7 @@ export default function EmptyState( { icon, title, description, ctaTitle, ctaHre
 
 	return (
 		<Grid className="newspack-newsletters-admin__empty-state" columns={ 4 } noMargin>
-			<VStack start={ 2 } end={ 4 } spacing={ 8 }>
+			<VStack data-start="2" data-end="4" spacing={ 8 }>
 				<SectionHeader icon={ icon } title={ title } description={ description } pageHeader noMargin />
 				<HStack justify="center">
 					<Button { ...buttonProps }>{ ctaTitle }</Button>

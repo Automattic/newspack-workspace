@@ -49,7 +49,6 @@ class Wizards {
 				[
 					'sections' => [
 						'custom-events'    => 'Newspack\Wizards\Newspack\Custom_Events_Section',
-						'emails'           => 'Newspack\Wizards\Newspack\Emails_Section',
 						'social-pixels'    => 'Newspack\Wizards\Newspack\Pixels_Section',
 						'recirculation'    => 'Newspack\Wizards\Newspack\Recirculation_Section',
 						'syndication'      => 'Newspack\Wizards\Newspack\Syndication_Section',
@@ -64,18 +63,39 @@ class Wizards {
 			),
 			'advertising-display-ads' => new Advertising_Display_Ads(),
 			'advertising-sponsors'    => new Advertising_Sponsors(),
-			'audience'                => new Audience_Wizard(),
+			'audience'                => new Audience_Wizard(
+				[
+					'sections' => [
+						'emails' => 'Newspack\Wizards\Newspack\Emails_Section',
+					],
+				]
+			),
 			'audience-campaigns'      => new Audience_Campaigns(),
 			'audience-content-gates'  => new Audience_Content_Gates(),
 			'audience-donations'      => new Audience_Donations(),
 			'audience-integrations'   => new Audience_Integrations(),
+			'newspack-subscribers'    => new Subscribers_Wizard(),
 			'listings'                => new Listings_Wizard(),
 			'network'                 => new Network_Wizard(),
 			'newsletters'             => new Newsletters_Wizard(),
 			'premium-newsletters'     => new Premium_Newsletters_Wizard(),
 		];
-		if ( Memberships::is_active() ) {
+		// Memberships sites get the page for its subscription configuration; every
+		// Woo site with content gating gets it for the subscriber-commerce tabs.
+		// Deliberately not gated on enforcement being live: a site migrating off
+		// Memberships configures its rules first and deactivates Memberships after.
+		if ( Memberships::is_active() || Subscriber_Commerce::is_admin_available() ) {
 			self::$wizards['audience-subscriptions'] = new Audience_Subscriptions();
+		}
+		// Plans (Subscription Products) page, gated behind NEWSPACK_PLANS_UI and available
+		// where Woo Subscriptions is active.
+		if ( defined( 'NEWSPACK_PLANS_UI' ) && NEWSPACK_PLANS_UI && ( class_exists( 'WC_Subscriptions' ) || function_exists( 'wcs_get_subscriptions' ) ) ) {
+			self::$wizards['audience-subscription-products'] = new Audience_Subscription_Products();
+		}
+		// Pricing Rules manager, available when the dynamic-pricing engine
+		// plugin is active (it owns the rules REST API).
+		if ( Dynamic_Pricing_Bridges::is_engine_active() ) {
+			self::$wizards['audience-pricing-rules'] = new Audience_Pricing_Rules();
 		}
 	}
 

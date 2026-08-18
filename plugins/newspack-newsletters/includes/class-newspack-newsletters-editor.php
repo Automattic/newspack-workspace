@@ -102,7 +102,7 @@ final class Newspack_Newsletters_Editor {
 	 */
 	public static function is_editing_email( $post_id = null ) {
 		$post_id = empty( $post_id ) ? get_the_ID() : $post_id;
-		return in_array( get_post_type( $post_id ), self::get_email_editor_cpts() );
+		return in_array( get_post_type( $post_id ), self::get_email_editor_cpts(), true );
 	}
 
 	/**
@@ -119,7 +119,7 @@ final class Newspack_Newsletters_Editor {
 		global $pagenow;
 		$email_editor_cpts = self::get_email_editor_cpts();
 		$is_editing_email  = 'post.php' === $pagenow && isset( $_GET['post'] ) && self::is_editing_email( absint( $_GET['post'] ) ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
-		$is_creating_email = 'post-new.php' === $pagenow && isset( $_GET['post_type'] ) && in_array( $_GET['post_type'], $email_editor_cpts ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		$is_creating_email = 'post-new.php' === $pagenow && isset( $_GET['post_type'] ) && is_string( $_GET['post_type'] ) && in_array( sanitize_key( wp_unslash( $_GET['post_type'] ) ), $email_editor_cpts, true ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
 		return $is_editing_email || $is_creating_email;
 	}
 
@@ -219,6 +219,17 @@ final class Newspack_Newsletters_Editor {
 			return;
 		}
 
+		// Theme-native editor: under the WC renderer, keep the theme's editor styles
+		// ONLY for block themes — they express block appearance via theme.json, which
+		// the WC email render also consumes, so the canvas and the email match (1:1).
+		// Classic themes style blocks via editor CSS the email render can't reproduce,
+		// so they keep stripping and fall back to theme.json + Newspack defaults (which
+		// both the canvas and the email use), preserving 1:1. The legacy MJML editor
+		// (flag off) always strips.
+		if ( \Newspack\Newsletters\Email_Renderers\Feature_Flag::is_enabled() && wp_is_block_theme() ) {
+			return;
+		}
+
 		$allowed_actions = [
 			__CLASS__ . '::enqueue_block_assets',
 			'newspack_enqueue_scripts',
@@ -288,6 +299,13 @@ final class Newspack_Newsletters_Editor {
 		if ( ! self::is_email_editor_request() ) {
 			return;
 		}
+		// Theme-native editor: under the WC renderer, let theme.json drive block
+		// appearance (font sizes, spacing, layout, button) so the canvas matches
+		// the standard post editor. The legacy MJML editor keeps the email-safe
+		// overrides below.
+		if ( \Newspack\Newsletters\Email_Renderers\Feature_Flag::is_enabled() ) {
+			return;
+		}
 		add_theme_support(
 			'editor-font-sizes',
 			[
@@ -328,6 +346,14 @@ final class Newspack_Newsletters_Editor {
 	 */
 	public static function override_theme_json_for_email_editor( $theme_json ) {
 		if ( ! self::is_email_editor_request() ) {
+			return $theme_json;
+		}
+
+		// Theme-native editor: under the WC renderer, let theme.json drive block
+		// appearance (font sizes, spacing, layout, button) so the canvas matches
+		// the standard post editor. The legacy MJML editor keeps the email-safe
+		// overrides below.
+		if ( \Newspack\Newsletters\Email_Renderers\Feature_Flag::is_enabled() ) {
 			return $theme_json;
 		}
 
@@ -409,9 +435,10 @@ final class Newspack_Newsletters_Editor {
 			],
 		];
 
-		// Only override button element styles for block themes — classic themes
-		// use their own neutral defaults and don't need the opinionated blue.
 		if ( wp_is_block_theme() ) {
+			// Legacy (flag off): only override button element styles for block
+			// themes — classic themes use their own neutral defaults and don't need
+			// the opinionated blue.
 			$primary_color = '#36f';
 			if ( method_exists( '\Newspack\Lite_Site', 'get_primary_color' ) ) {
 				$primary_color = Newspack\Lite_Site::get_primary_color();
@@ -501,6 +528,34 @@ final class Newspack_Newsletters_Editor {
 			'remote-data-blocks/foundation-movie',
 			'remote-data-blocks/foundation-movies',
 		);
+
+		// Blocks the WC email-editor engine can render but the legacy MJML
+		// renderer cannot. Only offer them when the WC engine is active, so a
+		// site still on MJML can't insert a block that renders empty at send.
+		if ( \Newspack\Newsletters\Email_Renderers\Feature_Flag::is_enabled() ) {
+			$allowed_block_types = array_merge(
+				$allowed_block_types,
+				array(
+					'core/table',
+					'core/gallery',
+					'core/media-text',
+					'core/cover',
+				)
+			);
+
+			/**
+			 * Whether to allow the experimental audio/video blocks. They have no
+			 * inline playback in email — the WC engine renders them as static
+			 * fallbacks (audio: a "Listen" link; video: a play-poster link), so
+			 * they ship off by default and can be opted into via this filter.
+			 *
+			 * @param bool $enabled Whether experimental blocks are allowed.
+			 */
+			if ( apply_filters( 'newspack_newsletters_wc_experimental_blocks', false ) ) {
+				$allowed_block_types[] = 'core/audio';
+				$allowed_block_types[] = 'core/video';
+			}
+		}
 		/**
 		 * Filters the allowed block types for the Newsletter CPT.
 		 *
@@ -530,8 +585,6 @@ final class Newspack_Newsletters_Editor {
 		return [
 			'email_html_meta'                => Newspack_Newsletters::EMAIL_HTML_META,
 			'mjml_handling_post_types'       => $mjml_handling_post_types,
-			'newsletter_post_type'           => Newspack_Newsletters::NEWSPACK_NEWSLETTERS_CPT,
-			'current_post_type'              => get_post_type(),
 			'conditional_tag_support'        => $conditional_tag_support,
 			'sponsors_flag_hex'              => get_theme_mod( 'sponsored_flag_hex', '#FED850' ),
 			'sponsors_flag_text_color'       => function_exists( 'newspack_get_color_contrast' ) ? newspack_get_color_contrast( \get_theme_mod( 'sponsored_flag_hex', '#FED850' ) ) : 'black',
@@ -542,6 +595,7 @@ final class Newspack_Newsletters_Editor {
 			],
 			'supported_social_icon_services' => Newspack_Newsletters_Renderer::get_supported_social_icons_services(),
 			'supported_esps'                 => Newspack_Newsletters::get_supported_providers(),
+			'use_woo_renderer'               => \Newspack\Newsletters\Email_Renderers\Feature_Flag::is_enabled(),
 			'merge_tags'                     => $provider
 				? $provider::get_merge_tags()
 				: Newspack_Newsletters_Service_Provider::get_merge_tags(),
@@ -571,6 +625,24 @@ final class Newspack_Newsletters_Editor {
 
 			wp_add_inline_style( 'newspack-newsletters', self::get_color_palette_css( '.editor-styles-wrapper' ) );
 
+			// Legacy MJML-era block-appearance styles (separator/button/social/
+			// quote/list). Skip them when the WC email renderer is active so the
+			// editor canvas reflects the WC (vanilla WP) output; MJML sites still
+			// load them, unchanged. Defaults to loading if the flag class is
+			// somehow unavailable, preserving pre-WC behavior.
+			$wc_renderer_active = class_exists( \Newspack\Newsletters\Email_Renderers\Feature_Flag::class )
+				&& \Newspack\Newsletters\Email_Renderers\Feature_Flag::is_enabled();
+			if ( ! $wc_renderer_active ) {
+				wp_register_style(
+					'newspack-newsletters-legacy-block-styles',
+					plugins_url( '../dist/legacyBlockStyles.css', __FILE__ ),
+					[ 'newspack-newsletters' ],
+					filemtime( NEWSPACK_NEWSLETTERS_PLUGIN_FILE . 'dist/legacyBlockStyles.css' )
+				);
+				wp_style_add_data( 'newspack-newsletters-legacy-block-styles', 'rtl', 'replace' );
+				wp_enqueue_style( 'newspack-newsletters-legacy-block-styles' );
+			}
+
 			$editor_asset = include NEWSPACK_NEWSLETTERS_PLUGIN_FILE . 'dist/editor.asset.php';
 			\wp_enqueue_script(
 				'newspack-newsletters-editor',
@@ -595,6 +667,7 @@ final class Newspack_Newsletters_Editor {
 		}
 
 		if ( self::is_editing_newsletter() || self::is_editing_layout() ) {
+			$provider = Newspack_Newsletters::get_service_provider();
 			wp_localize_script(
 				'newspack-newsletters-editor',
 				'newspack_newsletters_data',
@@ -746,12 +819,30 @@ final class Newspack_Newsletters_Editor {
 	}
 
 	/**
-	 * Append author info to the posts REST response so we can append Coauthors, if they exist.
+	 * Register the Posts Inserter's extra REST fields — author info, custom byline,
+	 * sponsor info and featured-media URLs — for every post type the inserter can offer.
 	 */
 	public static function add_newspack_extra_info() {
+		// Register on every post type the Posts Inserter can offer — it mirrors the
+		// inserter's own /wp/v2/types filter (REST-exposed + viewable + show_ui) — so
+		// featured images, author info, custom bylines and sponsor data resolve for
+		// Pages, Newsletters, Events, etc., not just `post`. Regression fix: NPPM-2756 (#1969).
+		$post_types = array_values(
+			array_filter(
+				get_post_types(
+					[
+						'show_ui'      => true,
+						'show_in_rest' => true,
+					],
+					'names'
+				),
+				'is_post_type_viewable'
+			)
+		);
+
 		// Add author info source.
 		register_rest_field(
-			'post',
+			$post_types,
 			'newspack_author_info',
 			[
 				'get_callback' => [ __CLASS__, 'newspack_get_author_info' ],
@@ -766,7 +857,7 @@ final class Newspack_Newsletters_Editor {
 
 		// Add custom byline info.
 		register_rest_field(
-			'post',
+			$post_types,
 			'newspack_custom_byline',
 			[
 				'get_callback' => [ __CLASS__, 'newspack_get_custom_byline' ],
@@ -774,7 +865,7 @@ final class Newspack_Newsletters_Editor {
 					'context' => [
 						'edit',
 					],
-					'type'    => 'string',
+					'type'    => [ 'string', 'null' ],
 				],
 			]
 		);
@@ -782,7 +873,7 @@ final class Newspack_Newsletters_Editor {
 		// Add sponsor info.
 		if ( function_exists( '\Newspack_Sponsors\get_all_sponsors' ) ) {
 			register_rest_field(
-				'post',
+				$post_types,
 				'newspack_sponsors_info',
 				[
 					'get_callback' => [ __CLASS__, 'newspack_get_sponsors_info' ],
@@ -798,7 +889,7 @@ final class Newspack_Newsletters_Editor {
 
 		// Add featured media thumbnail URLs.
 		register_rest_field(
-			'post',
+			$post_types,
 			'featured_media_info',
 			[
 				'get_callback' => [ __CLASS__, 'newspack_get_featured_media_info' ],
@@ -806,7 +897,7 @@ final class Newspack_Newsletters_Editor {
 					'context' => [
 						'edit',
 					],
-					'type'    => 'array',
+					'type'    => 'object',
 				],
 			]
 		);
@@ -886,15 +977,19 @@ final class Newspack_Newsletters_Editor {
 	/**
 	 * Append author data to the REST /posts response, so we can include Coauthors, link and display names.
 	 *
-	 * @param object $post Post object for the post being returned.
-	 * @return object Formatted data for all authors associated with the post.
+	 * @param array $post Prepared REST response data for the post being returned.
+	 * @return array Formatted data for all authors associated with the post.
 	 */
 	public static function newspack_get_author_info( $post ) {
 		$author_data = [];
 
 
 		if ( function_exists( 'get_coauthors' ) ) {
-			$authors = get_coauthors();
+			// Pass the post ID explicitly: this runs as a REST collection callback
+			// without setup_postdata(), so get_coauthors() has no reliable global
+			// $post to fall back on. Now that the field is registered for Pages,
+			// Newsletters, Events, etc. (NPPM-2756), the global is unset here.
+			$authors = get_coauthors( $post['id'] );
 
 			foreach ( $authors as $author ) {
 				$author_link = null;
@@ -911,13 +1006,18 @@ final class Newspack_Newsletters_Editor {
 				];
 			}
 		} else {
+			// Derive the author from the post ID rather than `$post['author']`:
+			// the REST response only carries an `author` key for post types that
+			// support authors, and this field now covers types that may not
+			// (NPPM-2756). `post_author` is always set on the row.
+			$author_id = (int) get_post_field( 'post_author', $post['id'] );
 			$author_data[] = [
 				/* Get the author name */
-				'display_name' => get_the_author_meta( 'display_name', $post['author'] ),
+				'display_name' => get_the_author_meta( 'display_name', $author_id ),
 				/* Get the author ID */
-				'id'           => $post['author'],
+				'id'           => $author_id,
 				/* Get the author Link */
-				'author_link'  => get_author_posts_url( $post['author'] ),
+				'author_link'  => get_author_posts_url( $author_id ),
 			];
 		}
 
@@ -928,7 +1028,7 @@ final class Newspack_Newsletters_Editor {
 	/**
 	 * Get custom byline for the REST /posts response.
 	 *
-	 * @param object $post Post object for the post being returned.
+	 * @param array $post Prepared REST response data for the post being returned.
 	 * @return string|null Formatted custom byline HTML or null if not active.
 	 */
 	public static function newspack_get_custom_byline( $post ) {
@@ -942,17 +1042,19 @@ final class Newspack_Newsletters_Editor {
 	/**
 	 * Append sponsor data to the REST /posts response.
 	 *
-	 * @param object $post Post object for the post being returned.
+	 * @param array $post Prepared REST response data for the post being returned.
 	 * @return array Formatted data for all sponsors associated with the post.
 	 */
 	public static function newspack_get_sponsors_info( $post ) {
-		return \Newspack_Sponsors\get_all_sponsors( $post['id'], null, 'post' );
+		// Cast to array: get_all_sponsors() returns false when none exist, but the
+		// REST schema (and callers) expect an array.
+		return (array) \Newspack_Sponsors\get_all_sponsors( $post['id'], null, 'post' );
 	}
 
 	/**
 	 * Get featured media info for the REST /posts response.
 	 *
-	 * @param object $post Post object for the post being returned.
+	 * @param array $post Prepared REST response data for the post being returned.
 	 * @return object Formatted data for the featured media associated with the post.
 	 */
 	public static function newspack_get_featured_media_info( $post ) {
@@ -965,7 +1067,9 @@ final class Newspack_Newsletters_Editor {
 		if ( $medium_url ) {
 			$featured_media_info['medium_url'] = $medium_url;
 		}
-		return $featured_media_info;
+		// Cast to object so the response always matches the `object` REST schema —
+		// an empty array would otherwise encode as a JSON array `[]`, not `{}`.
+		return (object) $featured_media_info;
 	}
 }
 Newspack_Newsletters_Editor::instance();

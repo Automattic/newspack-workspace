@@ -1,3 +1,88 @@
+## newspack-block-theme [1.31.1](https://github.com/Automattic/newspack-workspace/compare/newspack-block-theme@1.31.0...newspack-block-theme@1.31.1) (2026-08-17)
+
+
+### Dependencies
+
+* **newspack-components:** upgraded to 4.6.2
+
+# newspack-block-theme [1.31.0](https://github.com/Automattic/newspack-workspace/compare/newspack-block-theme@1.30.1...newspack-block-theme@1.31.0) (2026-08-17)
+
+
+### Bug Fixes
+
+* **blocks:** APCA contrast picker and derived accent-contrast color ([#730](https://github.com/Automattic/newspack-workspace/issues/730)) ([b05a658](https://github.com/Automattic/newspack-workspace/commit/b05a6588f4d9ebdeb3dbdbc17b5c06c901012ca7))
+
+
+### Features
+
+* **performance:** defer reader-facing JS assets (NPPM-3037) ([#722](https://github.com/Automattic/newspack-workspace/issues/722)) ([2855574](https://github.com/Automattic/newspack-workspace/commit/2855574099c4f416a984cda8565b269e5a9f0fb0))
+
+
+### Dependencies
+
+* **newspack-components:** upgraded to 4.6.1
+* **newspack-scripts:** upgraded to 5.11.0
+
+## newspack-block-theme [1.30.1](https://github.com/Automattic/newspack-workspace/compare/newspack-block-theme@1.30.0...newspack-block-theme@1.30.1) (2026-08-03)
+
+
+### Dependencies
+
+* **newspack-components:** upgraded to 4.6.0
+* **newspack-scripts:** upgraded to 5.10.0
+
+# newspack-block-theme [1.30.0](https://github.com/Automattic/newspack-workspace/compare/newspack-block-theme@1.29.1...newspack-block-theme@1.30.0) (2026-07-20)
+
+
+### Features
+
+* **block-theme:** add ad slots and spacing control (NPPD-1558, [#300](https://github.com/Automattic/newspack-workspace/issues/300)) ([7823f2f](https://github.com/Automattic/newspack-workspace/commit/7823f2fefd7cc1eaf854b08d8b4422289fa75f62))
+
+
+### Dependencies
+
+* **newspack-components:** upgraded to 4.5.0
+
+## newspack-block-theme [1.29.1](https://github.com/Automattic/newspack-workspace/compare/newspack-block-theme@1.29.0...newspack-block-theme@1.29.1) (2026-07-09)
+
+
+### Bug Fixes
+
+* **themes:** remove unintended highlight behind colored text ([#574](https://github.com/Automattic/newspack-workspace/issues/574)) ([d94254c](https://github.com/Automattic/newspack-workspace/commit/d94254c6427f689d70c140b710a017a102c07a8f))
+
+# newspack-block-theme [1.29.0](https://github.com/Automattic/newspack-workspace/compare/newspack-block-theme@1.28.6...newspack-block-theme@1.29.0) (2026-06-29)
+
+
+### Bug Fixes
+
+* **block-theme:** correcting comment list item styling ([#260](https://github.com/Automattic/newspack-workspace/issues/260)) ([627fc30](https://github.com/Automattic/newspack-workspace/commit/627fc30a72750ebec3a3c9ba5b9eff9f1f259b97))
+* ensure newsletter templates are treated as default CPT templates ([#168](https://github.com/Automattic/newspack-workspace/issues/168)) ([f926233](https://github.com/Automattic/newspack-workspace/commit/f92623389d20b90c689f50417fe8fd42b88fdffe))
+
+
+### Features
+
+* **block-theme:** add a responsive container block for headers/footer ([#204](https://github.com/Automattic/newspack-workspace/issues/204)) ([9db2d4d](https://github.com/Automattic/newspack-workspace/commit/9db2d4d697e9ee5ba3c22ebff8d6b100c36a0e07))
+* **block-theme:** replace template parts with new search overlay block ([#153](https://github.com/Automattic/newspack-workspace/issues/153)) ([aebe8ff](https://github.com/Automattic/newspack-workspace/commit/aebe8ff1eacfd5215bd40afe307d70920673d2af))
+
+
+### Dependencies
+
+* **newspack-components:** upgraded to 4.4.0
+
+## newspack-block-theme [1.28.6](https://github.com/Automattic/newspack-workspace/compare/newspack-block-theme@1.28.5...newspack-block-theme@1.28.6) (2026-06-26)
+
+
+### Bug Fixes
+
+* **theme:** prevent Custom Fields clobber, keep box editable ([#439](https://github.com/Automattic/newspack-workspace/issues/439)) ([f19e1f9](https://github.com/Automattic/newspack-workspace/commit/f19e1f9c1371e9e8a5e0d9bf4420f5ef866be05d))
+
+## newspack-block-theme [1.28.5](https://github.com/Automattic/newspack-workspace/compare/newspack-block-theme@1.28.4...newspack-block-theme@1.28.5) (2026-06-23)
+
+
+### Bug Fixes
+
+* **theme:** stop Custom Fields box overwriting editor post meta ([#375](https://github.com/Automattic/newspack-workspace/issues/375)) ([3738a64](https://github.com/Automattic/newspack-workspace/commit/3738a649164b80508530b75f4cd243b8cf0b94fa))
+
 ## newspack-block-theme [1.28.4](https://github.com/Automattic/newspack-workspace/compare/newspack-block-theme@1.28.3...newspack-block-theme@1.28.4) (2026-06-15)
 
 

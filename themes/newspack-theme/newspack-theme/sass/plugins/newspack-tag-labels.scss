@@ -1,0 +1,121 @@
+@use "../variables-site/variables-site";
+@use "../mixins/mixins-main";
+@use "../mixins/utilities";
+@use "../variables-site/structure";
+
+// Tag labels
+.tag-labels {
+	align-items: stretch;
+	display: inline-flex;
+	position: relative;
+
+	a,
+	a:visited {
+		color: #fff;
+	}
+
+	a:hover {
+		opacity: 0.8;
+	}
+}
+
+/* stylelint-disable selector-type-no-unknown  */
+.tag-labels,
+amp-script .tag-labels {
+	// Use `.tag-label.flag` so this beats `.wpnbha .cat-links a` / `.wpnbpc .cat-links a` on specificity.
+	.tag-label.flag {
+		background: var(--newspack-theme-color-highlight);
+		color: var(--newspack-theme-color-text-main);
+		line-height: 1;
+		padding: 0.3em 0.5em;
+		text-transform: uppercase;
+	}
+	.tag-label + .tag-label {
+		margin-left: 0.3em; // Don't collapse multiple labels.
+	}
+}
+/* stylelint-enable */
+
+// Tag labels render after the category (and sponsor) label and sit on the same line,
+// mirroring the sponsor → category convention. The category `.cat-links` is immediately
+// followed by the tag-labels `.cat-links.tag-labels` in every context (single posts,
+// home, archive, search, and the Content Loop / Carousel blocks), so keep it inline-block
+// and space the tag labels that follow it. The sponsor `.cat-links.sponsor-label` keeps
+// its own layout (from newspack-sponsors), so it is excluded here.
+.cat-links:not( .sponsor-label ):has( + .tag-labels ) {
+	display: inline-block;
+}
+.cat-links + .tag-labels {
+	display: inline-flex;
+	margin-left: 0.5em;
+}
+
+// In the Content Loop (`.wpnbha`) and Carousel (`.wpnbpc`) blocks the category
+// `.cat-links` is block-level (`display: flex` in `.wpnbha`, default block in `.wpnbpc`),
+// which would stack the category and the tag labels that follow it. Re-assert
+// `inline-flex` with higher specificity so the category and tag labels share one line.
+// Sponsor rows (`.cat-links.sponsor-label`) are excluded so their own `flex`/`gap`
+// layout wins deterministically.
+.wpnbha,
+.wpnbpc {
+	.cat-links:not( .sponsor-label ):has( + .tag-labels ),
+	.cat-links + .tag-labels {
+		display: inline-flex;
+	}
+	.cat-links + .tag-labels {
+		margin-left: 0.5em;
+	}
+
+	// The sponsor label is `inline-flex` globally (newspack-sponsors.scss), but
+	// `.wpnbha .cat-links` sets `display: flex` at higher specificity, which makes it
+	// block-level and drops the tag labels onto the next line. Restore its own display
+	// without touching the flex/gap layout the exclusion above exists to protect.
+	// `.wpnbpc` never overrides `.cat-links` display, so this is a no-op there.
+	.cat-links.sponsor-label:has( + .tag-labels ) {
+		display: inline-flex;
+	}
+}
+
+/* Single Posts */
+.single {
+	.tag-labels {
+		display: inline-flex;
+	}
+
+	// Workaround margin/padding override for featured images.
+	.featured-image-behind {
+		.cat-links.tag-labels {
+			a,
+			a:hover {
+				padding: 0.3em 0.5em;
+				margin-right: 0.5em;
+			}
+			.tag-label + .tag-label:hover {
+				margin-left: 0.3em; // Don't collapse multiple labels.
+			}
+		}
+	}
+}
+
+// Archives
+.search,
+.archive,
+.blog {
+	article {
+		.tag-labels {
+			display: inline-flex;
+			font-size: 65%;
+		}
+	}
+}
+
+// Home page.
+.home {
+	article {
+		.tag-labels a,
+		.tag-labels a:hover {
+			padding: 0.3em 0.5em;
+			text-decoration: none;
+		}
+	}
+}

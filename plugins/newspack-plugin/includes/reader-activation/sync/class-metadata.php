@@ -105,6 +105,15 @@ class Metadata {
 	 * This method is deprecated. Now, each integration has its own metadata prefix, which can be retrieved with Integration::get_metadata_prefix().
 	 * As a fallback, this method returns the metadata prefix for the ESP Integration.
 	 *
+	 * One sanctioned remaining caller: de-prefixing legacy-pipeline data
+	 * (Integration::prepare_contact_legacy()). That data carries the prefix this
+	 * method resolves — including the `newspack_ras_metadata_prefix` filter and
+	 * the pre-init PREFIX_OPTION fallback, neither of which
+	 * Integration::get_metadata_prefix() applies — so that path must keep
+	 * calling this rather than the per-integration accessor. A de-prefix miss
+	 * there drops metadata silently, so removing this method needs that caller
+	 * migrated first.
+	 *
 	 * @deprecated Use Integration::get_metadata_prefix() instead.
 	 *
 	 * @return string
@@ -173,12 +182,33 @@ class Metadata {
 	 * This method is deprecated. Now, each integration has its own set of enabled fields, which can be retrieved with Integration::get_enabled_outgoing_fields().
 	 * As a fallback, this method returns the fields enabled for the ESP Integration.
 	 *
+	 * This is the single definition of "the ESP's effective selection" — the set
+	 * the legacy metadata pipeline filters by. Integration::get_enabled_outgoing_fields()
+	 * calls it for legacy-mode inheritance, so the registry-miss chain below
+	 * lives here rather than being restated per caller. It mirrors
+	 * Esp::get_enabled_outgoing_fields() minus that method's lazy-migration
+	 * write, which stays on the ESP integration itself.
+	 *
 	 * @deprecated Use Integration::get_enabled_outgoing_fields() instead.
 	 * @return string[] List of fields to be synced.
 	 */
 	public static function get_fields() {
 		$esp_integration = Integrations::get_integration( 'esp' );
-		return $esp_integration ? $esp_integration->get_enabled_outgoing_fields() : [];
+		if ( $esp_integration ) {
+			return $esp_integration->get_enabled_outgoing_fields();
+		}
+
+		// Registry miss (pre-init, or a directly constructed integration —
+		// integrations register on init priority 5). Fall back to the legacy
+		// global option and then the full default set, rather than failing
+		// closed to an empty selection, which would strip every field where the
+		// pre-selection behavior was full passthrough.
+		$legacy = \get_option( self::FIELDS_OPTION, null );
+		if ( null !== $legacy && is_array( $legacy ) ) {
+			return array_values( $legacy );
+		}
+
+		return self::get_default_fields();
 	}
 
 	/**
@@ -366,29 +396,168 @@ class Metadata {
 
 
 	/**
+	 * Resolve a list of user-supplied field tokens (raw keys or display labels,
+	 * any case) to their canonical display labels.
+	 *
+	 * The label is the canonical unit for field scoping because the final ESP
+	 * key is always `prefix + label` in both metadata modes, and because
+	 * synonymous raw keys (e.g. `registration_page` / `current_page_url`) share
+	 * one label — resolving to labels dedupes them.
+	 *
+	 * @param string[] $inputs Field tokens to resolve.
+	 *
+	 * @return string[]|\WP_Error Ordered, de-duplicated labels, or a WP_Error for
+	 *                            the first token that is unknown
+	 *                            (`newspack_esp_sync_unknown_field`) or known but
+	 *                            currently unavailable
+	 *                            (`newspack_esp_sync_unavailable_field`).
+	 */
+	public static function resolve_field_labels( array $inputs ): array|\WP_Error {
+		$available_lookup = self::build_field_lookup( self::get_all_fields( true ) );
+		$all_lookup       = self::build_field_lookup( self::get_all_fields( false ) );
+
+		$labels = [];
+		foreach ( $inputs as $input ) {
+			$token = strtolower( trim( (string) $input ) );
+			if ( '' === $token ) {
+				continue;
+			}
+
+			if ( isset( $available_lookup[ $token ] ) ) {
+				$label = $available_lookup[ $token ];
+				if ( ! in_array( $label, $labels, true ) ) {
+					$labels[] = $label;
+				}
+				continue;
+			}
+
+			// Known field, but its metadata class is not currently available. Give a
+			// targeted hint for the two common causes.
+			if ( isset( $all_lookup[ $token ] ) ) {
+				return new \WP_Error(
+					'newspack_esp_sync_unavailable_field',
+					sprintf(
+						// Translators: %s is the field name supplied by the operator.
+						__( 'The field "%s" is known but not currently available. Its metadata class may depend on a feature flag or plugin (for example, Content Access fields require the NEWSPACK_CONTENT_GATES feature flag; payment fields require WooCommerce).', 'newspack-plugin' ),
+						$input
+					)
+				);
+			}
+
+			return new \WP_Error(
+				'newspack_esp_sync_unknown_field',
+				sprintf(
+					// Translators: %s is the field name supplied by the operator.
+					__( 'Unknown field "%s". Pass a raw field key or its display label.', 'newspack-plugin' ),
+					$input
+				)
+			);
+		}
+
+		return $labels;
+	}
+
+	/**
+	 * Build a case-insensitive lookup of both raw keys and labels to their
+	 * canonical display label.
+	 *
+	 * @param array $fields Map of raw_key => label.
+	 *
+	 * @return array<string, string> Lowercased raw-key or label => canonical label.
+	 */
+	private static function build_field_lookup( array $fields ): array {
+		$lookup = [];
+		foreach ( $fields as $raw_key => $label ) {
+			// Trim the lookup keys to match resolve_field_labels()'s trimmed tokens,
+			// so a label carrying trailing whitespace (the UTM labels, e.g.
+			// "Signup UTM: ") still resolves when passed literally.
+			$lookup[ strtolower( trim( (string) $raw_key ) ) ] = $label;
+			$lookup[ strtolower( trim( (string) $label ) ) ]   = $label;
+		}
+		return $lookup;
+	}
+
+	/**
 	 * Get a contact array with email and metadata for the given user, customer or order.
 	 *
 	 * @param \WP_User|\WC_Customer|\WC_Order|int $user_customer_or_order WP_User, WC_Customer, WC_Order object or ID.
+	 * @param string[]|null                       $fields                 Optional. Canonical field labels to
+	 *                                                                    restrict computation to. When provided,
+	 *                                                                    metadata classes whose fields don't
+	 *                                                                    intersect the list are skipped (avoiding
+	 *                                                                    their queries). `null` computes every
+	 *                                                                    available field (existing behavior).
 	 *
 	 * @return array Contact array with 'email' and 'metadata' keys.
 	 */
-	public static function get_contact_with_metadata( $user_customer_or_order ) {
+	public static function get_contact_with_metadata( $user_customer_or_order, $fields = null ) {
 		$core_contact = new Contact_Metadata\Core_Contact( $user_customer_or_order );
 		$classes      = self::get_metadata_classes();
 		$metadata     = [];
 
 		foreach ( $classes as $class ) {
-			if ( $class::is_available() ) {
-				$instance = new $class( $user_customer_or_order );
-				$metadata = array_merge( $metadata, $instance->get_metadata() );
+			if ( ! $class::is_available() ) {
+				continue;
+			}
+			if ( is_array( $fields ) && ! self::class_handles_any_field( $class, $fields ) ) {
+				continue;
+			}
+			$instance = new $class( $user_customer_or_order );
+			$metadata = array_merge( $metadata, $instance->get_metadata() );
+		}
+
+		$contact = [
+			'email'    => $core_contact->get_email(),
+			'metadata' => $metadata,
+		];
+
+		// Omit the key rather than sending an empty name: connectors branch on
+		// isset(), so an empty string is written over whatever name the contact
+		// already has at the provider — including one that arrived by list
+		// import. Mirrors Sync\WooCommerce::get_contact_from_customer().
+		$name = $core_contact->get_full_name();
+		if ( '' !== $name ) {
+			$contact['name'] = $name;
+		}
+
+		return $contact;
+	}
+
+	/**
+	 * Whether a metadata class computes any of the requested field labels.
+	 *
+	 * Special case: `Legacy_Basic::get_metadata()` populates ALL legacy fields —
+	 * both its own basic fields and the payment/LTV fields declared by
+	 * `Legacy_Payment` (which computes nothing itself). So `Legacy_Basic` must be
+	 * matched against the full legacy field set, or requesting a payment field
+	 * would silently skip the only class that produces its value.
+	 *
+	 * @param string   $class  Fully-qualified metadata class name.
+	 * @param string[] $fields Requested field labels.
+	 *
+	 * @return bool
+	 */
+	private static function class_handles_any_field( $class, array $fields ): bool {
+		if ( Contact_Metadata\Legacy_Basic::class === $class ) {
+			$class_raw_keys = array_keys( Legacy_Metadata::get_all_fields() );
+		} else {
+			$class_raw_keys = array_keys( $class::get_fields() );
+		}
+
+		// Resolve the class's raw keys to their canonical labels through the same
+		// filtered map (`get_all_fields()`) that resolve_field_labels() and the CLI
+		// pre-flight use, so a site that renames a label via the
+		// `newspack_ras_metadata_keys` filter stays consistent across resolution and
+		// this compute-side skip check.
+		$label_map    = self::get_all_fields();
+		$class_labels = [];
+		foreach ( $class_raw_keys as $raw_key ) {
+			if ( isset( $label_map[ $raw_key ] ) ) {
+				$class_labels[] = $label_map[ $raw_key ];
 			}
 		}
 
-		return [
-			'email'    => $core_contact->get_email(),
-			'name'     => $core_contact->get_full_name(),
-			'metadata' => $metadata,
-		];
+		return ! empty( array_intersect( $fields, $class_labels ) );
 	}
 
 	/**

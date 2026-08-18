@@ -122,8 +122,6 @@ class WooCommerce_Update_Payment_Notice {
 				$notice,
 				[
 					'id'       => $notice_id,
-					'type'     => 'warning',
-					'corner'   => 'top-right',
 					'autohide' => false,
 				]
 			);

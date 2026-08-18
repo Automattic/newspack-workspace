@@ -78,12 +78,12 @@ class Listings_Wizard extends Wizard {
 		// Define admin screens based on Newspack Listings plugin's admin pages and post types.
 		$this->admin_screens = [
 			// Admin post types.
-			'newspack_lst_event'               => __( 'Listings / Events', 'newspack-plugin' ),
-			'newspack_lst_generic'             => __( 'Listings / Generic Listings', 'newspack-plugin' ),
-			'newspack_lst_mktplce'             => __( 'Listings / Marketplace Listings', 'newspack-plugin' ),
-			'newspack_lst_place'               => __( 'Listings / Places', 'newspack-plugin' ),
+			'newspack_lst_event'               => [ [ 'label' => __( 'Listings', 'newspack-plugin' ) ], [ 'label' => __( 'Events', 'newspack-plugin' ) ] ],
+			'newspack_lst_generic'             => [ [ 'label' => __( 'Listings', 'newspack-plugin' ) ], [ 'label' => __( 'Generic Listings', 'newspack-plugin' ) ] ],
+			'newspack_lst_mktplce'             => [ [ 'label' => __( 'Listings', 'newspack-plugin' ) ], [ 'label' => __( 'Marketplace Listings', 'newspack-plugin' ) ] ],
+			'newspack_lst_place'               => [ [ 'label' => __( 'Listings', 'newspack-plugin' ) ], [ 'label' => __( 'Places', 'newspack-plugin' ) ] ],
 			// Admin pages.
-			'newspack-listings-settings-admin' => __( 'Listings / Settings', 'newspack-plugin' ),
+			'newspack-listings-settings-admin' => [ [ 'label' => __( 'Listings', 'newspack-plugin' ) ], [ 'label' => __( 'Settings', 'newspack-plugin' ) ] ],
 		];
 
 		// Remove Listings plugin's menu setup.
@@ -99,7 +99,7 @@ class Listings_Wizard extends Wizard {
 
 			$this->admin_header_init(
 				[
-					'title' => $this->get_name(),
+					'breadcrumbs' => $this->admin_screens[ $this->get_screen_slug() ] ?? [],
 				]
 			);
 
@@ -124,7 +124,8 @@ class Listings_Wizard extends Wizard {
 			'edit_posts', // Copied from Listings plugin...see docblock note above.
 			$this->slug,
 			'',
-			$icon
+			$icon,
+			6
 		);
 
 		if ( is_callable( [ Newspack_Listings_Settings::class, 'create_admin_page' ] ) ) {
@@ -153,7 +154,8 @@ class Listings_Wizard extends Wizard {
 	 * @return string The wizard name.
 	 */
 	public function get_name() {
-		return esc_html( $this->admin_screens[ $this->get_screen_slug() ] );
+		$breadcrumbs = $this->admin_screens[ $this->get_screen_slug() ] ?? [];
+		return esc_html( implode( ' / ', wp_list_pluck( $breadcrumbs, 'label' ) ) );
 	}
 
 	/**

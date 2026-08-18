@@ -33,6 +33,7 @@ export default [
 	{
 		label: __( 'Dashboard', 'newspack' ),
 		path: '/',
+		breadcrumbs: [ { label: __( 'Dashboard', 'newspack' ) } ],
 		render: () => {
 			const dashSectionsKeys = Object.keys( dashSections );
 			return dashSectionsKeys.map( sectionKey => {

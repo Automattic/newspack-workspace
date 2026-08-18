@@ -113,10 +113,23 @@ final class Newspack_Popups_Data_Api {
 			$data['prompt_placement'] = $popup['options']['placement'] ?? '';
 		}
 
+		// A/B test params: a displayed prompt's variant is the reader's assigned
+		// bucket, so static per-prompt params are sufficient for GA analysis.
+		if ( ! empty( $popup['ab_test_id'] ) ) {
+			$data['ab_test_id'] = $popup['ab_test_id'];
+			$data['ab_variant'] = $popup['ab_variant'];
+		}
+
 		$watched_blocks = [
 			'registration'             => 'newspack/reader-registration',
 			'donation'                 => 'newspack-blocks/donate',
 			'newsletters_subscription' => 'newspack-newsletters/subscribe',
+			// NPPD-1755: subscription/paywall capability. Emits `prompt_has_checkout`
+			// on the seen event so Insights can build a checkout-capable impressions
+			// denominator (the prompts analog of the gate `checkout_impressions`),
+			// matched to subscription orders carrying the popup id. Also gives a
+			// checkout-only prompt the `action_type='checkout'` intent (was 'undefined').
+			'checkout'                 => 'newspack-blocks/checkout-button',
 		];
 
 		$data['prompt_blocks']    = [];
