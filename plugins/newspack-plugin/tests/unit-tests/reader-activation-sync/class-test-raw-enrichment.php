@@ -93,9 +93,9 @@ class Test_Raw_Enrichment extends \WP_UnitTestCase {
 	 * has enabled, available or not — while get_key() only knows currently
 	 * available fields and returns false for the rest, as the legacy payment
 	 * UTM field is while WooCommerce is inactive. On PHP 8, strpos( $key,
-	 * false ) coerces the needle to '' and matches at position 0, so without
-	 * an explicit guard every key looked like a match once get_key() missed,
-	 * and get_utm_key() echoed the unrelated key straight back.
+	 * false ) coerces the needle to '' and matches at position 0, so an
+	 * unguarded false get_key() result makes every key look like a match,
+	 * echoing the unrelated key straight back.
 	 */
 	public function test_get_utm_key_rejects_an_unresolvable_raw_key_match() {
 		// Stands in for a field whose declaring class is unavailable — the
