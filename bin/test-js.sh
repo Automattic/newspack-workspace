@@ -51,7 +51,11 @@ if [ $# -eq 0 ]; then
 	exit 1
 fi
 
-PROJECT_DIR=$(find_project "$1")
+# `exit 1` inside find_project ends only the command-substitution subshell, so
+# the status has to be propagated here — otherwise an unknown name leaves
+# PROJECT_DIR empty and the workspace branch below installs and tests every
+# package instead of reporting the typo.
+PROJECT_DIR=$(find_project "$1") || exit 1
 
 if [[ "$PROJECT_DIR" == "$REPOS_PATH"/* ]]; then
     # Standalone repo: outside the pnpm workspace -- run its own test toolchain.
