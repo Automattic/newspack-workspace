@@ -414,6 +414,9 @@ class Auth {
 
 		Nextdoor::update_settings( $settings );
 		self::clear_token_refusal();
+		// What the last attempt settled was about the grant this one replaces, and holding a
+		// failure over would answer the reconnection the publisher just made with an outage.
+		delete_transient( self::REFRESH_COOLOFF_TRANSIENT );
 
 		wp_safe_redirect( admin_url( 'admin.php?page=newspack-settings&oauth_success=1#social' ) );
 		exit;
@@ -624,17 +627,23 @@ class Auth {
 			$settings['refresh_token']
 		);
 
-		self::hold_off_refresh( is_wp_error( $refresh_response ) );
-
 		// A refresh replaced mid-flight comes back honoured but unapplied, so only the stored
 		// settings say whether what replaced it is usable.
 		if ( ! is_wp_error( $refresh_response ) ) {
+			self::hold_off_refresh();
 			return self::has_usable_token();
 		}
 
 		// Losing a refresh race is not a failure: the winner rotated the token while this
 		// request was in flight, so its refusal says nothing about what is stored now.
-		return Nextdoor::get_settings()['refresh_token'] !== $settings['refresh_token'] && self::has_usable_token();
+		$lost_the_race = Nextdoor::get_settings()['refresh_token'] !== $settings['refresh_token'];
+
+		// Recorded as what this call concluded rather than what the request answered, since
+		// the hold-off is site-wide and would otherwise report a connection this very call
+		// found healthy as unreachable to every other request for the next minute.
+		self::hold_off_refresh( ! $lost_the_race );
+
+		return $lost_the_race && self::has_usable_token();
 	}
 }
 
