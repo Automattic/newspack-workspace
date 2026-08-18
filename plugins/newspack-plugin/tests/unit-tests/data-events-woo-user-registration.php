@@ -223,6 +223,27 @@ class Newspack_Test_Woo_User_Registration extends WP_UnitTestCase {
 	}
 
 	/**
+	 * A checkout announces the one account it creates. The Store API batch
+	 * route serves several sub-requests in a single PHP process, so the state a
+	 * checkout raises must not still be standing when an account is created
+	 * later in that process without a checkout of its own.
+	 *
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
+	 */
+	public function test_checkout_state_is_consumed_by_the_account_it_announces() {
+		$this->stub_wc_with_cart();
+		do_action( 'woocommerce_store_api_checkout_update_customer_from_request', null, new WP_REST_Request( 'POST', '/wc/store/v1/checkout' ) );
+		do_action( 'woocommerce_created_customer', self::factory()->user->create( [ 'user_email' => 'checkout-account@example.test' ] ) );
+
+		// No second checkout signal: nothing announces this account.
+		do_action( 'woocommerce_created_customer', self::factory()->user->create( [ 'user_email' => 'unrelated-account@example.test' ] ) );
+
+		$this->assertCount( 1, $this->fired, 'Only the account its checkout created should be announced.' );
+		$this->assertSame( 'checkout-account@example.test', $this->fired[0]['email'] );
+	}
+
+	/**
 	 * Classic checkout keeps announcing (regression control).
 	 *
 	 * @runInSeparateProcess

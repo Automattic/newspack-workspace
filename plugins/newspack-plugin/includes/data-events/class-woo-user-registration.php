@@ -102,6 +102,12 @@ final class Woo_User_Registration {
 			return;
 		}
 
+		// A checkout announces the one account it creates. Consuming the flag
+		// here keeps an account created later in the same process — the Store
+		// API batch route serves several checkouts in one — from being
+		// announced on this checkout's behalf.
+		self::$processing_checkout = false;
+
 		$user = get_user_by( 'id', $user_id );
 
 		if ( ! $user ) {
