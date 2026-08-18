@@ -160,4 +160,18 @@ const store = createReduxStore( WIZARD_STORE_NAMESPACE, {
 	},
 } );
 
-export default () => register( store );
+/**
+ * Register the wizard store, unless it already exists.
+ *
+ * This package is bundled separately into each consuming plugin, so more than one
+ * bundle can call this on the same page (e.g. the block editor loads assets from
+ * both newspack-blocks and newspack-manager). @wordpress/data keeps a single
+ * registry on `wp.data`, so the second call is a no-op that logs
+ * `Store "newspack/wizards" is already registered.` — guard it instead.
+ */
+export default () => {
+	if ( select( WIZARD_STORE_NAMESPACE ) ) {
+		return;
+	}
+	register( store );
+};

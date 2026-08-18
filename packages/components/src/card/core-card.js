@@ -139,7 +139,6 @@ const CoreCard = ( {
 						<ToggleControl
 							className="newspack-card--core__action"
 							label={ otherProps.title }
-							hideLabelFromVision
 							checked={ isActive }
 							onChange={ onToggle }
 						/>
@@ -152,7 +151,6 @@ const CoreCard = ( {
 						<ToggleControl
 							className="newspack-card--core__action"
 							label={ otherProps.title }
-							hideLabelFromVision
 							checked={ isActive }
 							onChange={ onToggle }
 						/>
