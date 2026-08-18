@@ -7,16 +7,17 @@ import classnames from 'classnames';
  * WordPress dependencies.
  */
 // Notice is aliased: `Notice` below is Newspack's own, which this file also uses.
-import { DropdownMenu, MenuGroup, MenuItem, Notice as CoreNotice } from '@wordpress/components';
+// eslint-disable-next-line @wordpress/no-unsafe-wp-apis
+import { DropdownMenu, MenuGroup, MenuItem, Notice as CoreNotice, __experimentalVStack as VStack } from '@wordpress/components';
 import { useDispatch, useSelect } from '@wordpress/data';
-import { cloneElement, createInterpolateElement, isValidElement, useEffect, useLayoutEffect, useState, forwardRef } from '@wordpress/element';
+import { cloneElement, createInterpolateElement, isValidElement, useEffect, useState, forwardRef } from '@wordpress/element';
 import { __ } from '@wordpress/i18n';
 import { category, chevronLeft, moreVertical } from '@wordpress/icons';
 
 /**
  * Internal dependencies
  */
-import { Footer, Notice, Button, TabbedNavigation, PluginInstaller, SectionHeader, HandoffMessage, Page } from '../';
+import { Footer, Notice, Button, TabbedNavigation, PluginInstaller, SectionHeader, HandoffMessage, Page, Waiting } from '../';
 import { activeBreadcrumbs, appendSectionName } from './breadcrumbs-select';
 import Router from '../proxied-imports/router';
 import registerStore, { WIZARD_STORE_NAMESPACE } from './store';
@@ -167,22 +168,12 @@ const Wizard = (
 
 	let displayedSections = sections.filter( section => ! section.isHidden );
 
-	const { startLoadingData: startGateLoading, finishLoadingData: finishGateLoading } = useDispatch( WIZARD_STORE_NAMESPACE );
 	const [ pluginRequirementsSatisfied, setPluginRequirementsSatisfied ] = useState( requiredPlugins.length === 0 );
 	// Whether the requirements check has reported back. Until it has, the check
-	// rides the store's loading treatment rather than showing the installer's own
-	// spinner and the swapped header, so a wizard's first paint carries one
-	// continuous loader; the installer only surfaces once a plugin is actually
-	// found missing.
+	// shows the same fetching treatment as the rest of the wizard rather than
+	// the installer's own spinner and the swapped header; the installer only
+	// surfaces once a plugin is actually found missing.
 	const [ pluginRequirementsKnown, setPluginRequirementsKnown ] = useState( requiredPlugins.length === 0 );
-	// Layout effect so the loading treatment is on before the first paint;
-	// a passive effect would let the installer's own spinner paint for a frame.
-	useLayoutEffect( () => {
-		if ( requiredPlugins.length > 0 ) {
-			startGateLoading();
-		}
-		// eslint-disable-next-line react-hooks/exhaustive-deps
-	}, [] );
 	if ( ! pluginRequirementsSatisfied ) {
 		if ( pluginRequirementsKnown ) {
 			headerText = requiredPlugins.length > 1 ? __( 'Required plugins', 'newspack-plugin' ) : __( 'Required plugin', 'newspack-plugin' );
@@ -191,16 +182,25 @@ const Wizard = (
 			{
 				path: '/',
 				render: () => (
-					<div hidden={ ! pluginRequirementsKnown }>
-						<PluginInstaller
-							plugins={ requiredPlugins }
-							onStatus={ ( { complete } ) => {
-								setPluginRequirementsKnown( true );
-								setPluginRequirementsSatisfied( complete );
-								finishGateLoading();
-							} }
-						/>
-					</div>
+					<>
+						{ ! pluginRequirementsKnown && (
+							<div className="newspack-wizard__loader">
+								<VStack alignment="center" spacing={ 2 }>
+									<Waiting noMargin />
+									<strong>{ __( 'Fetching…', 'newspack-plugin' ) }</strong>
+								</VStack>
+							</div>
+						) }
+						<div hidden={ ! pluginRequirementsKnown }>
+							<PluginInstaller
+								plugins={ requiredPlugins }
+								onStatus={ ( { complete } ) => {
+									setPluginRequirementsKnown( true );
+									setPluginRequirementsSatisfied( complete );
+								} }
+							/>
+						</div>
+					</>
 				),
 			},
 		];

@@ -7,16 +7,15 @@
 /**
  * WordPress dependencies
  */
-import { __, sprintf } from '@wordpress/i18n';
+import { __ } from '@wordpress/i18n';
 import { createRoot, lazy, Suspense } from '@wordpress/element';
+// eslint-disable-next-line @wordpress/no-unsafe-wp-apis
+import { __experimentalVStack as VStack } from '@wordpress/components';
 
 /**
  * Internal dependencies
  */
-
-/**
- * Internal dependencies
- */
+import * as Components from '../../packages/components/src';
 import '../shared/js/public-path';
 
 const pageParam = new URLSearchParams( window.location.search ).get( 'page' ) ?? '';
@@ -76,25 +75,21 @@ if ( window.newspackAudienceIntegrations?.integrations_settings_enabled ) {
 	};
 }
 
-// The same skeleton the wizard shows while its own data loads, so the chunk
-// download and the wizard's loading phases read as one continuous treatment.
-const AdminPageLoader = ( { label }: { label: string } ) => {
+const AdminPageLoader = () => {
 	return (
-		<div
-			className="newspack-wizard__is-loading"
-			role="status"
-			aria-label={
-				/* translators: %s is the label of the page */
-				sprintf( __( '%s loading…', 'newspack-plugin' ), label )
-			}
-		/>
+		<div className="newspack-wizard__loader">
+			<VStack alignment="center" spacing={ 2 }>
+				<Components.Waiting noMargin />
+				<strong>{ __( 'Fetching…', 'newspack-plugin' ) }</strong>
+			</VStack>
+		</div>
 	);
 };
 
 const AdminPages = () => {
 	const PageComponent = components[ pageParam ].component;
 	return (
-		<Suspense fallback={ <AdminPageLoader label={ components[ pageParam ].label } /> }>
+		<Suspense fallback={ <AdminPageLoader /> }>
 			<PageComponent />
 		</Suspense>
 	);

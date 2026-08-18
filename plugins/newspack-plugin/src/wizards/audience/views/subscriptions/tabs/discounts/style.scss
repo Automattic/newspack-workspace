@@ -21,6 +21,12 @@
 		display: block;
 	}
 
+	&__fetching {
+		display: flex;
+		justify-content: center;
+		padding: 48px 0;
+	}
+
 	&__header-count {
 		color: wp-colors.$gray-700;
 		font-weight: normal;

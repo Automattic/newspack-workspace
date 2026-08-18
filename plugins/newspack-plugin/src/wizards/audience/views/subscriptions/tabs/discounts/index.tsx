@@ -8,7 +8,7 @@
  */
 import { __, _n, sprintf } from '@wordpress/i18n';
 import apiFetch from '@wordpress/api-fetch';
-import { useCallback, useEffect, useLayoutEffect, useMemo, useState } from '@wordpress/element';
+import { useCallback, useEffect, useMemo, useState } from '@wordpress/element';
 import { useDispatch } from '@wordpress/data';
 import { dateI18n, getSettings as getDateSettings } from '@wordpress/date';
 import { decodeEntities } from '@wordpress/html-entities';
@@ -22,7 +22,7 @@ import { Icon, __experimentalHStack as HStack, __experimentalVStack as VStack } 
 /**
  * Internal dependencies.
  */
-import { Button, DataViews, Grid, Notice, SectionHeader } from '../../../../../../../packages/components/src';
+import { Button, DataViews, Grid, Notice, SectionHeader, Waiting } from '../../../../../../../packages/components/src';
 import { WIZARD_STORE_NAMESPACE } from '../../../../../../../packages/components/src/wizard/store';
 import { SEARCH_ENDPOINTS, WIZARD_ENDPOINT } from '../../constants';
 import { registerTab } from '../registry';
@@ -57,25 +57,18 @@ function SubscriberDiscounts() {
 	const [ editing, setEditing ] = useState< DiscountRule | null | undefined >( undefined );
 	const [ showSettings, setShowSettings ] = useState( false );
 	const [ error, setError ] = useState( '' );
-	const { setHeaderData, startLoadingData, finishLoadingData } = useDispatch( WIZARD_STORE_NAMESPACE );
+	const { setHeaderData } = useDispatch( WIZARD_STORE_NAMESPACE );
 
 	const reportFailure = ( apiError: { message?: string } ) =>
 		setError( apiError?.message || __( 'That change could not be saved.', 'newspack-plugin' ) );
 
-	// The initial fetch rides the wizard's own loading treatment, so arriving on
-	// the tab shows one continuous loader rather than a second, different one.
-	// Layout effect: dispatched before paint, so the treatment carries over from
-	// the requirements check without a frame of content in between.
-	useLayoutEffect( () => {
-		startLoadingData();
+	useEffect( () => {
 		apiFetch< DiscountsPayload >( { path: DISCOUNTS_ENDPOINT } )
 			.then( setPayload )
 			.catch( reportFailure )
-			.finally( () => {
-				setIsLoading( false );
-				finishLoadingData();
-			} );
-	}, [ startLoadingData, finishLoadingData ] );
+			.finally( () => setIsLoading( false ) );
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [] );
 
 	const [ subscriptionOptions, setSubscriptionOptions ] = useState< { id: number; name: string }[] >( [] );
 
@@ -262,6 +255,19 @@ function SubscriberDiscounts() {
 			actions: [ { type: 'primary', label: __( 'Add Discount', 'newspack-plugin' ), action: () => setEditing( null ) } ],
 		} );
 	}, [ setHeaderData, isLoading, hasRules, total ] );
+
+	if ( isLoading ) {
+		return (
+			<div className="newspack-subscriber-discounts">
+				<div className="newspack-subscriber-discounts__fetching">
+					<VStack alignment="center" spacing={ 2 }>
+						<Waiting noMargin />
+						<strong>{ __( 'Fetching…', 'newspack-plugin' ) }</strong>
+					</VStack>
+				</div>
+			</div>
+		);
+	}
 
 	return (
 		<div className="newspack-subscriber-discounts">
