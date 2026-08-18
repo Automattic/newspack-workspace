@@ -338,11 +338,12 @@ class Field_Registry {
 	 * Serialize every definition for the integrations settings payload.
 	 *
 	 * Flat list, all schema versions: the per-field UI derives rows and
-	 * visibility client-side, so it needs both sides of every rename. Pairing
-	 * is authored config rather than anything inferred here — the UI reads it
-	 * off `supersedes`/`superseded_by`, which is also what tells it when a
-	 * legacy field and its replacement still share one ESP name and so belong
-	 * on one collapsed row.
+	 * visibility client-side, so it needs both sides of every rename. No
+	 * pairing flag is serialized, because none is needed: a pair that still
+	 * shares one ESP `name` collapses to one row on that name alone, and a v2
+	 * field given its own name (Lifetime Total Paid) is a separate field to a
+	 * publisher and lists as its own row. `supersedes`/`superseded_by` carry
+	 * the authored link for the "Superseded by" hint on those split rows.
 	 *
 	 * `status` drives the New badge ('new'/'updated' only), the sunset rule
 	 * (a legacy field lists only while enabled), and whether a `section`
