@@ -169,6 +169,29 @@ class Newspack_Test_Woo_User_Registration extends WP_UnitTestCase {
 	}
 
 	/**
+	 * A checkout signal that arrives with no cart still announces the customer.
+	 *
+	 * Both Store API routes load a cart before firing the signal, so an absent
+	 * cart is a guard against the unexpected rather than a path taken today.
+	 * What it pins down is the priority: harvesting campaign metadata is
+	 * best-effort, announcing the reader is not. Without the guard this test
+	 * dies on get_cart(), and the account goes unannounced.
+	 *
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
+	 */
+	public function test_checkout_signal_without_cart_still_announces() {
+		$this->stub_wc_with_cart();
+		WC()->cart = null;
+		do_action( 'woocommerce_store_api_checkout_update_customer_from_request', null, new WP_REST_Request( 'POST', '/wc/store/v1/checkout' ) );
+		$user_id = self::factory()->user->create( [ 'user_email' => 'no-cart@example.test' ] );
+		do_action( 'woocommerce_created_customer', $user_id );
+
+		$this->assertCount( 1, $this->fired, 'A checkout signal with no cart must still let the watcher announce the new customer.' );
+		$this->assertSame( 'woocommerce', $this->fired[0]['metadata']['registration_method'] );
+	}
+
+	/**
 	 * Each checkout signal harvests its own campaign metadata. The Store API
 	 * batch route serves up to 25 requests in one PHP process, so a second
 	 * checkout must not inherit the first one's attribution.
