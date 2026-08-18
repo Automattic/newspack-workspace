@@ -269,3 +269,5 @@ export function getFields( { advertisers = [], placements = [] } = {} ) {
 		},
 	];
 }
+
+export const FIELD_IDS = getFields().map( field => field.id );

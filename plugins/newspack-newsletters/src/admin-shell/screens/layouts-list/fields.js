@@ -245,3 +245,7 @@ function PreviewCard( { item } ) {
 		</LazyPreview>
 	);
 }
+
+// The IDs this screen defines, for validating a stored view against the
+// columns that still exist.
+export const FIELD_IDS = getFields().map( field => field.id );

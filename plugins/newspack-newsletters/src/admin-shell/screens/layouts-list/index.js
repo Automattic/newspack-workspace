@@ -21,7 +21,7 @@ import { isFetchAllPerPage, PER_PAGE_ALL } from '../../utils/per-page';
 import { LAYOUT_CPT_SLUG } from '../../../utils/consts';
 import useLayoutsData from './use-layouts-data';
 import usePrebuiltLayouts from './use-prebuilt-layouts';
-import { getFields, PREBUILT_AUTHOR_VALUE } from './fields';
+import { FIELD_IDS, getFields, PREBUILT_AUTHOR_VALUE } from './fields';
 import { getActions, renameLayout } from './actions';
 import { getInitialView } from './initial-filters';
 
@@ -59,7 +59,6 @@ const DEFAULT_VIEW = {
 	titleField: 'title',
 	mediaField: 'preview',
 	fields: [ 'author' ],
-	...getInitialView(),
 };
 
 const DEFAULT_LAYOUTS = {
@@ -74,12 +73,19 @@ const DEFAULT_LAYOUTS = {
 const DATAVIEWS_CONFIG = { perPageSizes: [] };
 const PER_PAGE_OPTIONS = [ 12, 24, 48, 96, PER_PAGE_ALL ];
 
+const PERSIST_OPTIONS = {
+	perPageOptions: PER_PAGE_OPTIONS,
+	fieldIds: FIELD_IDS,
+	layoutTypes: Object.keys( DEFAULT_LAYOUTS ),
+	urlPatch: getInitialView(),
+};
+
 export default function LayoutsListScreen() {
 	useEffect( () => {
 		ensureCoreBlocksRegistered();
 	}, [] );
 
-	const [ view, setView ] = usePersistedView( 'layouts-list', DEFAULT_VIEW, PER_PAGE_OPTIONS );
+	const [ view, setView ] = usePersistedView( 'layouts-list', DEFAULT_VIEW, PERSIST_OPTIONS );
 	const [ renamingId, setRenamingId ] = useState( null );
 	// Bumping this forces every write path to refetch the saved data.
 	const [ mutationKey, setMutationKey ] = useState( 0 );

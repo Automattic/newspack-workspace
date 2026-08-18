@@ -22,7 +22,7 @@ import AdvertiserModal from './modal';
 import useAdvertisersData from './use-advertisers-data';
 import useAllAdvertisers from './use-all-advertisers';
 import { getInitialView } from './initial-filters';
-import { getFields } from './fields';
+import { FIELD_IDS, getFields } from './fields';
 import { getActions } from './actions';
 
 const DEFAULT_VIEW = {
@@ -34,17 +34,22 @@ const DEFAULT_VIEW = {
 	filters: [],
 	titleField: 'name',
 	fields: [ 'description', 'slug', 'count' ],
-	...getInitialView(),
 };
 
 const DEFAULT_LAYOUTS = { table: {} };
+
+const PERSIST_OPTIONS = {
+	fieldIds: FIELD_IDS,
+	layoutTypes: Object.keys( DEFAULT_LAYOUTS ),
+	urlPatch: getInitialView(),
+};
 
 // Suppress the built-in ViewConfig per-page control — the custom
 // `ItemsPerPage` renders in its place inside the View options popover.
 const DATAVIEWS_CONFIG = { perPageSizes: [] };
 
 export default function AdvertisersListScreen() {
-	const [ view, setView ] = usePersistedView( 'advertisers-list', DEFAULT_VIEW );
+	const [ view, setView ] = usePersistedView( 'advertisers-list', DEFAULT_VIEW, PERSIST_OPTIONS );
 	const [ modalState, setModalState ] = useState( null ); // null | { mode: 'add' | 'edit', advertiser?: Object }
 	// Single mutation trigger shared by every write path (Modal save,
 	// per-row Delete, bulk Delete). Bumping it refetches both the

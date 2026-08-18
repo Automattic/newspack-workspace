@@ -16,12 +16,11 @@ import { useHeaderActions } from '../../header-actions-context';
 import usePersistedView from '../../hooks/use-persisted-view';
 import useNewslettersData from './use-newsletters-data';
 import useFilterElements from './use-filter-elements';
-import { getFields } from './fields';
+import { FIELD_IDS, getFields } from './fields';
 import { getActions } from './actions';
 import { getInitialView } from './initial-filters';
 import NewslettersQuickEditPanel from './quick-edit-panel';
 
-// URL-seeded patch last so forwarded-from-legacy values override defaults.
 const DEFAULT_VIEW = {
 	type: 'table',
 	page: 1,
@@ -31,17 +30,25 @@ const DEFAULT_VIEW = {
 	filters: [],
 	titleField: 'title',
 	fields: [ 'status', 'date', 'send_date', 'send_list', 'author', 'public_page' ],
-	...getInitialView(),
 };
 
 const DEFAULT_LAYOUTS = { table: {} };
+
+// `urlPatch` is read once, at module scope: it seeds the view a
+// forwarded legacy link asks for, and must not be re-applied when a
+// later preference save re-renders the screen.
+const PERSIST_OPTIONS = {
+	fieldIds: FIELD_IDS,
+	layoutTypes: Object.keys( DEFAULT_LAYOUTS ),
+	urlPatch: getInitialView(),
+};
 
 // Suppress the built-in ViewConfig per-page control — the custom
 // `ItemsPerPage` renders in its place inside the View options popover.
 const DATAVIEWS_CONFIG = { perPageSizes: [] };
 
 export default function NewslettersListScreen() {
-	const [ view, setView ] = usePersistedView( 'newsletters-list', DEFAULT_VIEW );
+	const [ view, setView ] = usePersistedView( 'newsletters-list', DEFAULT_VIEW, PERSIST_OPTIONS );
 	const [ quickEditItem, setQuickEditItem ] = useState( null );
 	const { data, paginationInfo, isLoading, hasResolved, hasLoadedOnce, trashCount, progress, refresh } = useNewslettersData( view );
 	const filterElements = useFilterElements();

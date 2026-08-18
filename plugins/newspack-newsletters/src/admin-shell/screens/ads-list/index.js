@@ -16,7 +16,7 @@ import { useHeaderActions } from '../../header-actions-context';
 import usePersistedView from '../../hooks/use-persisted-view';
 import { fetchAllTerms } from '../../utils/terms';
 import useAdsData from './use-ads-data';
-import { getFields } from './fields';
+import { FIELD_IDS, getFields } from './fields';
 import { getActions } from './actions';
 import { getInitialView } from './initial-filters';
 import AdsQuickEditPanel from './quick-edit-panel';
@@ -30,10 +30,15 @@ const DEFAULT_VIEW = {
 	filters: [],
 	titleField: 'title',
 	fields: [ 'advertiser', 'ad_placement', 'status', 'start_date', 'expiry_date', 'impressions', 'clicks', 'price' ],
-	...getInitialView(),
 };
 
 const DEFAULT_LAYOUTS = { table: {} };
+
+const PERSIST_OPTIONS = {
+	fieldIds: FIELD_IDS,
+	layoutTypes: Object.keys( DEFAULT_LAYOUTS ),
+	urlPatch: getInitialView(),
+};
 
 // Suppress the built-in ViewConfig per-page control — the custom
 // `ItemsPerPage` renders in its place inside the View options popover.
@@ -69,7 +74,7 @@ function useFilterTerms() {
 }
 
 export default function AdsListScreen() {
-	const [ view, setView ] = usePersistedView( 'ads-list', DEFAULT_VIEW );
+	const [ view, setView ] = usePersistedView( 'ads-list', DEFAULT_VIEW, PERSIST_OPTIONS );
 	const [ quickEditItem, setQuickEditItem ] = useState( null );
 	const { data, paginationInfo, isLoading, hasResolved, hasLoadedOnce, trashCount, progress, refresh } = useAdsData( view );
 	const filterTerms = useFilterTerms();
