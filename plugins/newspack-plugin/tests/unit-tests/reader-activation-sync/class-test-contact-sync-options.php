@@ -156,7 +156,7 @@ class Test_Contact_Sync_Options extends WP_UnitTestCase {
 	}
 
 	/**
-	 * The two schemas distinguish three raw keys by case alone, so the
+	 * The two schemas distinguish four raw keys by case alone, so the
 	 * case-insensitive pass must never get to arbitrate them: a legacy token
 	 * has to keep resolving to the legacy field, not to the renamed
 	 * new-schema one in a different ESP column.
