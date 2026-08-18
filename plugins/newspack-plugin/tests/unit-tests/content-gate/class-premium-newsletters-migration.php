@@ -39,11 +39,27 @@ class Test_Premium_Newsletters_Migration extends \WP_UnitTestCase {
 	private $list_b;
 
 	/**
-	 * A published WooCommerce product post ID.
+	 * A published WooCommerce subscription product post ID.
+	 *
+	 * A subscription rather than a plain product because the payload builder now
+	 * routes a group's products by kind: the fixtures below were written when every
+	 * product became a subscription rule, and registering the mock as a subscription
+	 * is what keeps each of them exercising that rule.
 	 *
 	 * @var int
 	 */
 	private $product;
+
+	/**
+	 * The mock product database as it stood before this test, restored afterwards.
+	 *
+	 * The mock builder writes into a global keyed by product ID, and the
+	 * IDs here come from the post factory — so without this a fixture could land on
+	 * an ID another test class hardcodes, and outlive the test that registered it.
+	 *
+	 * @var array|null
+	 */
+	private $original_products_database;
 
 	/**
 	 * Load the mocks once for the class. Deferred to set_up_before_class() rather
@@ -57,6 +73,7 @@ class Test_Premium_Newsletters_Migration extends \WP_UnitTestCase {
 		parent::set_up_before_class();
 		require_once dirname( __DIR__, 2 ) . '/mocks/wp-cli-mocks.php';
 		require_once dirname( __DIR__, 2 ) . '/mocks/newsletters-namespaced-mocks.php';
+		require_once dirname( __DIR__, 2 ) . '/mocks/wc-mocks.php';
 	}
 
 	/**
@@ -75,7 +92,9 @@ class Test_Premium_Newsletters_Migration extends \WP_UnitTestCase {
 		register_post_type( Subscription_Lists::CPT, [ 'public' => false ] );
 		$this->list_a = self::factory()->post->create( [ 'post_type' => Subscription_Lists::CPT ] );
 		$this->list_b = self::factory()->post->create( [ 'post_type' => Subscription_Lists::CPT ] );
-		$this->product = self::factory()->post->create( [ 'post_type' => 'product' ] );
+		global $products_database;
+		$this->original_products_database = $products_database;
+		$this->product                    = $this->create_product( 'subscription' );
 		// phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- Raw argv, kept verbatim so tear_down() can restore it.
 		$this->original_argv = $_SERVER['argv'] ?? null;
 		\WP_CLI::reset();
@@ -86,6 +105,8 @@ class Test_Premium_Newsletters_Migration extends \WP_UnitTestCase {
 	 * put back the argument vector the bare-flag tests overwrite.
 	 */
 	public function tear_down() {
+		global $products_database;
+		$products_database = $this->original_products_database;
 		if ( null === $this->original_argv ) {
 			unset( $_SERVER['argv'] );
 		} else {
@@ -107,6 +128,42 @@ class Test_Premium_Newsletters_Migration extends \WP_UnitTestCase {
 		$reflected_method = new \ReflectionMethod( Premium_Newsletters_Migration::class, $method_name );
 		$reflected_method->setAccessible( true );
 		return $reflected_method->invoke( null, ...$arguments );
+	}
+
+	/**
+	 * Register a WooCommerce mock product for a post the factory already made.
+	 *
+	 * The migration asks wc_get_product() which rule can carry a product, and a post
+	 * the mock database has never heard of comes back as false — which classifies as
+	 * one-time. Registering the mock is what lets a fixture say which kind it is.
+	 *
+	 * @param int    $product_id The product or variation post ID.
+	 * @param string $type       The WooCommerce product type.
+	 *
+	 * @return int The product post ID, for chaining.
+	 */
+	private function register_product_type( int $product_id, string $type ): int {
+		\wc_create_mock_product(
+			[
+				'id'   => $product_id,
+				'type' => $type,
+			]
+		);
+		return $product_id;
+	}
+
+	/**
+	 * Create a product post of a given WooCommerce type.
+	 *
+	 * @param string $type      The WooCommerce product type.
+	 * @param string $post_type The WordPress post type, for variation fixtures.
+	 * @param array  $post_args Extra arguments for the post factory.
+	 *
+	 * @return int The product post ID.
+	 */
+	private function create_product( string $type, string $post_type = 'product', array $post_args = [] ): int {
+		$product_id = self::factory()->post->create( array_merge( [ 'post_type' => $post_type ], $post_args ) );
+		return $this->register_product_type( $product_id, $type );
 	}
 
 	/**
@@ -264,20 +321,25 @@ class Test_Premium_Newsletters_Migration extends \WP_UnitTestCase {
 	/**
 	 * Build a plan-group descriptor of the shape group_plans_by_lists() produces.
 	 *
-	 * @param string $access_method The WCM plan access method.
-	 * @param int[]  $product_ids   The plan's product IDs.
-	 * @param int[]  $list_ids      The lists the plan restricts.
-	 * @param string $name          The plan name.
+	 * @param string     $access_method     The WCM plan access method.
+	 * @param int[]      $product_ids       The plan's product IDs.
+	 * @param int[]      $list_ids          The lists the plan restricts.
+	 * @param string     $name              The plan name.
+	 * @param array|null $one_time_duration The plan's own access length, as
+	 *                                      derive_one_time_duration() reads it. Null
+	 *                                      stands for a plan whose access ends on a
+	 *                                      fixed calendar date.
 	 *
 	 * @return array
 	 */
-	private function make_payload_plan( string $access_method, array $product_ids = [], array $list_ids = [], string $name = 'Plan' ): array {
+	private function make_payload_plan( string $access_method, array $product_ids = [], array $list_ids = [], string $name = 'Plan', ?array $one_time_duration = null ): array {
 		return [
-			'pid'           => 0,
-			'name'          => $name,
-			'access_method' => $access_method,
-			'list_ids'      => $list_ids,
-			'product_ids'   => $product_ids,
+			'pid'               => 0,
+			'name'              => $name,
+			'access_method'     => $access_method,
+			'list_ids'          => $list_ids,
+			'product_ids'       => $product_ids,
+			'one_time_duration' => $one_time_duration,
 		];
 	}
 
@@ -336,6 +398,37 @@ class Test_Premium_Newsletters_Migration extends \WP_UnitTestCase {
 		$this->assertFalse( $payload['custom_access']['active'] );
 		$this->assertSame( [], $payload['custom_access']['access_rules'] );
 		$this->assertSame( 'Paid | Free', $payload['title'] );
+	}
+
+	/**
+	 * Both of the checks that would otherwise catch an unenforced paywall sit behind
+	 * the group requiring a purchase, which a mixed group does not — so the paid
+	 * plan's requirement is dropped with nothing said. Naming the plan is the only
+	 * signal the operator gets that lists someone was paying for stop being paid-only
+	 * at cutover.
+	 */
+	public function test_build_gate_payload_names_the_paid_plan_a_mixed_group_drops() {
+		$group = [
+			$this->make_payload_plan( 'purchase', [ $this->product ], [ $this->list_a ], 'Paid' ),
+			$this->make_payload_plan( 'signup', [], [ $this->list_a ], 'Free' ),
+		];
+
+		$payload = $this->invoke_private_static( 'build_gate_payload', [ $group ] );
+
+		$this->assertSame( [ 'Paid' ], $payload['dropped_paywalls'] );
+	}
+
+	/**
+	 * A group whose plans all require a purchase keeps its paywall, so there is
+	 * nothing to report. Firing here would warn on every ordinary paid gate.
+	 */
+	public function test_build_gate_payload_reports_no_dropped_paywall_for_a_purchase_group() {
+		$payload = $this->invoke_private_static(
+			'build_gate_payload',
+			[ [ $this->make_payload_plan( 'purchase', [ $this->product ], [ $this->list_a ], 'Paid' ) ] ]
+		);
+
+		$this->assertSame( [], $payload['dropped_paywalls'] );
 	}
 
 	/**
@@ -410,13 +503,8 @@ class Test_Premium_Newsletters_Migration extends \WP_UnitTestCase {
 	 * sibling variations, whom the plan never granted.
 	 */
 	public function test_build_gate_payload_keeps_a_variation_id_rather_than_its_parent() {
-		$parent    = self::factory()->post->create( [ 'post_type' => 'product' ] );
-		$variation = self::factory()->post->create(
-			[
-				'post_type'   => 'product_variation',
-				'post_parent' => $parent,
-			]
-		);
+		$parent    = $this->create_product( 'variable-subscription' );
+		$variation = $this->create_product( 'subscription_variation', 'product_variation', [ 'post_parent' => $parent ] );
 
 		$payload = $this->invoke_private_static(
 			'build_gate_payload',
@@ -435,7 +523,7 @@ class Test_Premium_Newsletters_Migration extends \WP_UnitTestCase {
 	 * problem while the variation's holders lost the list at cutover.
 	 */
 	public function test_build_gate_payload_keeps_a_variation_id_alongside_other_products() {
-		$variation = self::factory()->post->create( [ 'post_type' => 'product_variation' ] );
+		$variation = $this->create_product( 'subscription_variation', 'product_variation' );
 
 		$payload = $this->invoke_private_static(
 			'build_gate_payload',
@@ -470,6 +558,436 @@ class Test_Premium_Newsletters_Migration extends \WP_UnitTestCase {
 		);
 		$this->assertCount( 1, $issues );
 		$this->assertStringContainsString( 'no access rules', $issues[0] );
+	}
+
+	/**
+	 * A month, as the plan descriptors and the rule value both spell it.
+	 *
+	 * @param int    $value The duration amount.
+	 * @param string $unit  The duration unit.
+	 *
+	 * @return array A duration pair.
+	 */
+	private function duration( int $value, string $unit ): array {
+		return [
+			'duration_value' => $value,
+			'duration_unit'  => $unit,
+		];
+	}
+
+	/**
+	 * Build a duck-typed stand-in for a WC_Memberships_Membership_Plan.
+	 *
+	 * The derivation takes its plan untyped and calls four accessors, so the access
+	 * length can be exercised without WooCommerce Memberships.
+	 *
+	 * @param string $length_type       The plan's access length type.
+	 * @param bool   $has_access_length Whether the plan bounds its access at all.
+	 * @param int    $amount            The access length amount.
+	 * @param string $period            The access length period.
+	 *
+	 * @return object A plan-shaped object.
+	 */
+	private function make_access_length_plan( string $length_type, bool $has_access_length, int $amount = 0, string $period = '' ) {
+		return new class( $length_type, $has_access_length, $amount, $period ) {
+
+			/**
+			 * The access length type.
+			 *
+			 * @var string
+			 */
+			private $length_type;
+
+			/**
+			 * Whether the plan bounds its access.
+			 *
+			 * @var bool
+			 */
+			private $has_access_length;
+
+			/**
+			 * The access length amount.
+			 *
+			 * @var int
+			 */
+			private $amount;
+
+			/**
+			 * The access length period.
+			 *
+			 * @var string
+			 */
+			private $period;
+
+			/**
+			 * Constructor.
+			 *
+			 * @param string $length_type       The access length type.
+			 * @param bool   $has_access_length Whether the plan bounds its access.
+			 * @param int    $amount            The access length amount.
+			 * @param string $period            The access length period.
+			 */
+			public function __construct( string $length_type, bool $has_access_length, int $amount, string $period ) {
+				$this->length_type       = $length_type;
+				$this->has_access_length = $has_access_length;
+				$this->amount            = $amount;
+				$this->period            = $period;
+			}
+
+			/**
+			 * Return the access length type.
+			 *
+			 * @return string
+			 */
+			public function get_access_length_type() {
+				return $this->length_type;
+			}
+
+			/**
+			 * Return whether the plan bounds its access.
+			 *
+			 * @return bool
+			 */
+			public function has_access_length() {
+				return $this->has_access_length;
+			}
+
+			/**
+			 * Return the access length amount.
+			 *
+			 * @return int
+			 */
+			public function get_access_length_amount() {
+				return $this->amount;
+			}
+
+			/**
+			 * Return the access length period.
+			 *
+			 * @return string
+			 */
+			public function get_access_length_period() {
+				return $this->period;
+			}
+		};
+	}
+
+	/**
+	 * A plan granting on subscription products only needs the subscription rule and
+	 * nothing else. A second rule group would be OR'd in, so an unwanted one-time
+	 * group here would hand the lists to anyone who ever bought the product once.
+	 */
+	public function test_build_gate_payload_writes_only_a_subscription_group_for_subscription_products() {
+		$variable = $this->create_product( 'variable-subscription' );
+
+		$payload = $this->invoke_private_static(
+			'build_gate_payload',
+			[ [ $this->make_payload_plan( 'purchase', [ $this->product, $variable ], [ $this->list_a ] ) ] ]
+		);
+
+		$this->assertSame( [ $this->product, $variable ], $payload['subscription_ids'] );
+		$this->assertSame( [], $payload['one_time_ids'] );
+		$this->assertCount( 1, $payload['custom_access']['access_rules'] );
+		$this->assertSame(
+			[
+				[
+					'slug'  => 'subscription',
+					'value' => [ $this->product, $variable ],
+				],
+			],
+			$payload['custom_access']['access_rules'][0]
+		);
+	}
+
+	/**
+	 * A plan granting on a product bought once must migrate to the one-time rule,
+	 * carrying the plan's own access length. The subscription rule is the condition
+	 * such a buyer can never satisfy — it is what this whole split exists to stop
+	 * being written for them.
+	 */
+	public function test_build_gate_payload_writes_only_a_one_time_group_for_one_time_products() {
+		$one_time = $this->create_product( 'simple' );
+
+		$payload = $this->invoke_private_static(
+			'build_gate_payload',
+			[
+				[
+					$this->make_payload_plan( 'purchase', [ $one_time ], [ $this->list_a ], 'Prepaid', $this->duration( 12, 'months' ) ),
+				],
+			]
+		);
+
+		$this->assertSame( [], $payload['subscription_ids'] );
+		$this->assertSame( [ $one_time ], $payload['one_time_ids'] );
+		$this->assertSame(
+			[
+				[
+					[
+						'slug'  => 'one_time_purchase',
+						'value' => [
+							'product_ids'    => [ $one_time ],
+							'duration_value' => 12,
+							'duration_unit'  => 'months',
+						],
+					],
+				],
+			],
+			$payload['custom_access']['access_rules']
+		);
+	}
+
+	/**
+	 * The case the split exists for. A plan grants membership on any of its products,
+	 * so a plan holding both kinds must produce two rule groups: access rule groups
+	 * are OR'd while the rules inside one are AND'd, so flattening them into a single
+	 * group would demand a subscription AND a one-time purchase, and admit nobody.
+	 */
+	public function test_build_gate_payload_writes_two_rule_groups_when_a_plan_grants_on_both_kinds() {
+		$one_time = $this->create_product( 'simple' );
+
+		$payload = $this->invoke_private_static(
+			'build_gate_payload',
+			[
+				[
+					$this->make_payload_plan( 'purchase', [ $this->product, $one_time ], [ $this->list_a ], 'Premium', $this->duration( 90, 'days' ) ),
+				],
+			]
+		);
+
+		$access_rules = $payload['custom_access']['access_rules'];
+
+		$this->assertCount( 2, $access_rules );
+		$this->assertCount( 1, $access_rules[0], 'Rules within a group are AND-ed, so each kind gets a group of its own.' );
+		$this->assertCount( 1, $access_rules[1], 'Rules within a group are AND-ed, so each kind gets a group of its own.' );
+		$this->assertSame(
+			[
+				'slug'  => 'subscription',
+				'value' => [ $this->product ],
+			],
+			$access_rules[0][0]
+		);
+		$this->assertSame(
+			[
+				'slug'  => 'one_time_purchase',
+				'value' => [
+					'product_ids'    => [ $one_time ],
+					'duration_value' => 90,
+					'duration_unit'  => 'days',
+				],
+			],
+			$access_rules[1][0]
+		);
+	}
+
+	/**
+	 * With no duration there is nothing for the one-time rule to say, and a rule
+	 * missing its duration is not a stricter rule but an unreadable one. The payload
+	 * leaves the group out and reports the plan, which is what the command stops the
+	 * run over.
+	 */
+	public function test_build_gate_payload_writes_no_one_time_group_without_a_duration() {
+		$one_time = $this->create_product( 'simple' );
+
+		$payload = $this->invoke_private_static(
+			'build_gate_payload',
+			[ [ $this->make_payload_plan( 'purchase', [ $one_time ], [ $this->list_a ], 'Fixed end date' ) ] ]
+		);
+
+		$this->assertSame( [ $one_time ], $payload['one_time_ids'] );
+		$this->assertNull( $payload['one_time_duration'] );
+		$this->assertSame( [], $payload['custom_access']['access_rules'] );
+		$this->assertSame( [ 'Fixed end date' ], $payload['duration_plans'] );
+	}
+
+	/**
+	 * --one-time-duration exists for the plan whose access ends on a calendar date,
+	 * which has no duration to read. The operator's value must reach the rule, or the
+	 * flag is a no-op that only silences the error.
+	 */
+	public function test_build_gate_payload_lets_an_override_supply_a_missing_duration() {
+		$one_time = $this->create_product( 'simple' );
+
+		$payload = $this->invoke_private_static(
+			'build_gate_payload',
+			[
+				[ $this->make_payload_plan( 'purchase', [ $one_time ], [ $this->list_a ], 'Fixed end date' ) ],
+				$this->duration( 0, 'forever' ),
+			]
+		);
+
+		$this->assertSame( $this->duration( 0, 'forever' ), $payload['one_time_duration'] );
+		$this->assertSame(
+			[
+				'product_ids'    => [ $one_time ],
+				'duration_value' => 0,
+				'duration_unit'  => 'forever',
+			],
+			$payload['custom_access']['access_rules'][0][0]['value']
+		);
+	}
+
+	/**
+	 * Access that ends on a fixed calendar date is not a duration from the purchase:
+	 * the same product bought a year apart would grant a year of access or none. The
+	 * derivation refuses it rather than inventing a length, and the command stops.
+	 */
+	public function test_derive_one_time_duration_refuses_a_fixed_end_date() {
+		$plan = $this->make_access_length_plan( 'fixed', true, 6, 'months' );
+
+		$this->assertNull( $this->invoke_private_static( 'derive_one_time_duration', [ $plan ] ) );
+	}
+
+	/**
+	 * A plan that never expires grants forever, so the rule says so. Reading it as
+	 * "no length" and refusing the run would stop the most ordinary plan of all.
+	 */
+	public function test_derive_one_time_duration_reads_an_unlimited_plan_as_forever() {
+		$plan = $this->make_access_length_plan( 'relative', false );
+
+		$this->assertSame(
+			$this->duration( 0, 'forever' ),
+			$this->invoke_private_static( 'derive_one_time_duration', [ $plan ] )
+		);
+	}
+
+	/**
+	 * Days and months are the units the rule evaluates, so they carry across as they
+	 * are — no arithmetic to get wrong.
+	 */
+	public function test_derive_one_time_duration_keeps_days_and_months_unchanged() {
+		$this->assertSame(
+			$this->duration( 30, 'days' ),
+			$this->invoke_private_static( 'derive_one_time_duration', [ $this->make_access_length_plan( 'relative', true, 30, 'days' ) ] )
+		);
+		$this->assertSame(
+			$this->duration( 6, 'months' ),
+			$this->invoke_private_static( 'derive_one_time_duration', [ $this->make_access_length_plan( 'relative', true, 6, 'months' ) ] )
+		);
+	}
+
+	/**
+	 * WooCommerce Memberships offers weeks and the gate rule does not, so weeks are
+	 * converted rather than dropped. A week is exactly 7 days, so nothing is
+	 * approximated and no reader gets a shorter grant than the plan gave them.
+	 */
+	public function test_derive_one_time_duration_converts_weeks_to_days() {
+		$plan = $this->make_access_length_plan( 'relative', true, 3, 'weeks' );
+
+		$this->assertSame(
+			$this->duration( 21, 'days' ),
+			$this->invoke_private_static( 'derive_one_time_duration', [ $plan ] )
+		);
+	}
+
+	/**
+	 * Years convert the same way, at 12 months apiece. Storing the amount with an
+	 * unrecognised unit would write a rule the evaluator cannot read.
+	 */
+	public function test_derive_one_time_duration_converts_years_to_months() {
+		$plan = $this->make_access_length_plan( 'relative', true, 2, 'years' );
+
+		$this->assertSame(
+			$this->duration( 24, 'months' ),
+			$this->invoke_private_static( 'derive_one_time_duration', [ $plan ] )
+		);
+	}
+
+	/**
+	 * The three shapes the rule can store are the three the flag accepts.
+	 */
+	public function test_parse_one_time_duration_accepts_the_units_the_rule_evaluates() {
+		$this->assertSame( $this->duration( 0, 'forever' ), $this->invoke_private_static( 'parse_one_time_duration', [ 'forever' ] ) );
+		$this->assertSame( $this->duration( 90, 'days' ), $this->invoke_private_static( 'parse_one_time_duration', [ '90days' ] ) );
+		$this->assertSame( $this->duration( 12, 'months' ), $this->invoke_private_static( 'parse_one_time_duration', [ '12months' ] ) );
+	}
+
+	/**
+	 * Everything else is refused rather than approximated. "1year" and "abc" would
+	 * store a unit the evaluator does not recognise, and "0days" a rule that expires
+	 * the moment it is bought — either way a gate nobody can satisfy, written from a
+	 * flag the operator believed had worked.
+	 */
+	public function test_parse_one_time_duration_refuses_anything_it_cannot_store() {
+		$this->assertNull( $this->invoke_private_static( 'parse_one_time_duration', [ '1year' ] ) );
+		$this->assertNull( $this->invoke_private_static( 'parse_one_time_duration', [ '0days' ] ) );
+		$this->assertNull( $this->invoke_private_static( 'parse_one_time_duration', [ 'abc' ] ) );
+		$this->assertNull( $this->invoke_private_static( 'parse_one_time_duration', [ '' ] ) );
+	}
+
+	/**
+	 * The gate stores one duration for a group that may hold several plans.
+	 * WooCommerce Memberships grants access from any one of them, so the shortest
+	 * would take the list from readers the plans admitted — the longest wins, and the
+	 * choice is reported rather than made silently.
+	 */
+	public function test_resolve_group_duration_keeps_the_longest_and_says_so() {
+		$monthly = $this->create_product( 'simple' );
+		$yearly  = $this->create_product( 'simple' );
+
+		$resolved = $this->invoke_private_static(
+			'resolve_group_duration',
+			[
+				[
+					$this->make_payload_plan( 'purchase', [ $monthly ], [ $this->list_a ], 'Monthly', $this->duration( 1, 'months' ) ),
+					$this->make_payload_plan( 'purchase', [ $yearly ], [ $this->list_a ], 'Yearly', $this->duration( 24, 'months' ) ),
+				],
+				null,
+			]
+		);
+
+		$this->assertSame( $this->duration( 24, 'months' ), $resolved['duration'] );
+		$this->assertSame( [ 'Monthly', 'Yearly' ], $resolved['plans'] );
+		$this->assertStringContainsString( '1 months', $resolved['conflict'] );
+		$this->assertStringContainsString( 'keeps the longest (24 months)', $resolved['conflict'] );
+	}
+
+	/**
+	 * A plan that grants only on subscriptions has no say in how long a one-time
+	 * purchase lasts. Letting it vote would drag its null duration into the ballot
+	 * and stop a run that has no ambiguity in it at all.
+	 */
+	public function test_resolve_group_duration_ignores_a_plan_with_no_one_time_product() {
+		$one_time = $this->create_product( 'simple' );
+
+		$resolved = $this->invoke_private_static(
+			'resolve_group_duration',
+			[
+				[
+					$this->make_payload_plan( 'purchase', [ $this->product ], [ $this->list_a ], 'Subscribers' ),
+					$this->make_payload_plan( 'purchase', [ $one_time ], [ $this->list_a ], 'Prepaid', $this->duration( 90, 'days' ) ),
+				],
+				null,
+			]
+		);
+
+		$this->assertSame( [ 'Prepaid' ], $resolved['plans'] );
+		$this->assertSame( $this->duration( 90, 'days' ), $resolved['duration'] );
+		$this->assertNull( $resolved['conflict'] );
+	}
+
+	/**
+	 * One plan with no readable length makes the whole group unresolvable: the gate
+	 * holds a single duration, so picking the other plan's would grant this plan's
+	 * buyers a length nobody chose. The plan is named because the command stops the
+	 * run and the operator has to know which one to pass --one-time-duration for.
+	 */
+	public function test_resolve_group_duration_is_null_when_a_plan_has_no_readable_length() {
+		$fixed  = $this->create_product( 'simple' );
+		$prepay = $this->create_product( 'simple' );
+
+		$resolved = $this->invoke_private_static(
+			'resolve_group_duration',
+			[
+				[
+					$this->make_payload_plan( 'purchase', [ $prepay ], [ $this->list_a ], 'Prepaid', $this->duration( 90, 'days' ) ),
+					$this->make_payload_plan( 'purchase', [ $fixed ], [ $this->list_a ], 'Ends on a date' ),
+				],
+				null,
+			]
+		);
+
+		$this->assertNull( $resolved['duration'] );
+		$this->assertContains( 'Ends on a date', $resolved['plans'] );
 	}
 
 	/**
@@ -759,15 +1277,46 @@ class Test_Premium_Newsletters_Migration extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * A live run writes the derived value when it differs from what is stored.
+	 * A live run writes the derived value over a stored one when the operator asks
+	 * for it with --set-auto-signup. Without the flag the stored value is left alone
+	 * ({@see test_report_auto_signup_live_leaves_a_stored_setting_alone()}), so this
+	 * is the only path on which the write still has to work.
 	 */
 	public function test_report_auto_signup_live_writes_derived_value_when_it_differs() {
 		update_option( 'newspack_premium_newsletters_auto_signup', 0 );
 		$this->set_signup_modal_lists( [] ); // Derives to on.
 
-		$this->invoke_private_static( 'report_auto_signup', [ [ $this->list_a, $this->list_b ], false ] );
+		$this->invoke_private_static( 'report_auto_signup', [ [ $this->list_a, $this->list_b ], false, false, 0, true ] );
 
 		$this->assertTrue( (bool) get_option( 'newspack_premium_newsletters_auto_signup' ) );
+	}
+
+	/**
+	 * A stored setting is a choice someone made, and a stored "on" reads exactly like
+	 * the default. Overwriting it would silently undo a publisher who turned
+	 * auto-signup off — which, once the access check is live, subscribes their readers
+	 * to lists at the provider.
+	 */
+	public function test_report_auto_signup_live_leaves_a_stored_setting_alone() {
+		update_option( 'newspack_premium_newsletters_auto_signup', 0 );
+		$this->set_signup_modal_lists( [] ); // Derives to on, differing from the stored value.
+
+		$this->invoke_private_static( 'report_auto_signup', [ [ $this->list_a, $this->list_b ], false ] );
+
+		$this->assertFalse( (bool) get_option( 'newspack_premium_newsletters_auto_signup' ) );
+	}
+
+	/**
+	 * A site that never set the option has no choice to override, so the migration
+	 * writes it without ceremony — which is the zero-touch case the command exists for.
+	 */
+	public function test_report_auto_signup_live_writes_when_the_option_was_never_set() {
+		delete_option( 'newspack_premium_newsletters_auto_signup' );
+		$this->set_signup_modal_lists( [ $this->list_a, $this->list_b ] ); // Derives to off.
+
+		$this->invoke_private_static( 'report_auto_signup', [ [ $this->list_a, $this->list_b ], false ] );
+
+		$this->assertSame( '0', (string) get_option( 'newspack_premium_newsletters_auto_signup' ) );
 	}
 
 	/**
@@ -957,12 +1506,16 @@ class Test_Premium_Newsletters_Migration extends \WP_UnitTestCase {
 	 * migration altogether.
 	 */
 	public function test_report_auto_signup_full_live_run_still_writes() {
-		update_option( 'newspack_premium_newsletters_auto_signup', 0 );
-		$this->set_signup_modal_lists( [] );
+		// Deleted rather than set to a differing value: a stored value is left alone on
+		// its own account, which would pass this test for the wrong reason. Deriving to
+		// OFF then gives the run something to do — an absent option already reads as on,
+		// so deriving to on would take the "already on" branch and write nothing.
+		delete_option( 'newspack_premium_newsletters_auto_signup' );
+		$this->set_signup_modal_lists( [ $this->list_a ] );
 
 		$this->invoke_private_static( 'report_auto_signup', [ [ $this->list_a ], false, false ] );
 
-		$this->assertTrue( (bool) get_option( 'newspack_premium_newsletters_auto_signup' ) );
+		$this->assertSame( '0', (string) get_option( 'newspack_premium_newsletters_auto_signup' ) );
 	}
 
 	/**

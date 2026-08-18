@@ -77,6 +77,12 @@ class Premium_Newsletters_Migration {
 	 * [--plan=<id>]
 	 * : Only process the plan with this post ID. Useful for testing; never writes the site-wide auto-signup setting.
 	 *
+	 * [--one-time-duration=<duration>]
+	 * : How long access lasts after a one-time purchase. Accepts "forever", "<n>days" or "<n>months". Each plan's own access length is read by default, so this is only needed for a plan whose access ends on a fixed calendar date, which is not a duration from the purchase. Applies to every such plan in the run.
+	 *
+	 * [--set-auto-signup]
+	 * : Apply the derived auto-signup setting even though the site already has one set. Without this the command reports the difference and leaves the existing setting alone, because it is a publisher's choice rather than a migration artefact. A site that has never set it is written either way.
+	 *
 	 * [--yes]
 	 * : Answer yes to the pre-flight confirmation prompt shown when gates would be created alongside gates the same plans were migrated to individually. Required for non-interactive runs (cron, `ssh host "wp ..."`): with no terminal to answer the prompt, the command errors out rather than exiting silently mid-migration.
 	 *
@@ -85,6 +91,8 @@ class Premium_Newsletters_Migration {
 	 *     wp newspack migrate-premium-newsletters
 	 *     wp newspack migrate-premium-newsletters --live
 	 *     wp newspack migrate-premium-newsletters --plan=711923
+	 *     wp newspack migrate-premium-newsletters --one-time-duration=12months
+	 *     wp newspack migrate-premium-newsletters --live --set-auto-signup
 	 *
 	 * @param array $args       Positional args (unused).
 	 * @param array $assoc_args Named args.
@@ -94,12 +102,14 @@ class Premium_Newsletters_Migration {
 	public function migrate_premium_newsletters( $args, $assoc_args ) {
 		$dry_run = ! (bool) \WP_CLI\Utils\get_flag_value( $assoc_args, 'live', false );
 
-		// A bare --plan never reaches the validation below: WP-CLI warns and strips it,
-		// so the command sees no plan at all and would run against every plan on the
-		// site. The raw command line is the only place the mistake is still visible.
+		// A bare value flag never reaches the validation below: WP-CLI warns and strips
+		// it, so the command sees nothing at all — a bare --plan widens the run to every
+		// plan on the site, and a bare --one-time-duration stops it over a duration the
+		// operator did supply. The raw command line is the only place the mistake is
+		// still visible.
 		$bare_flags = self::get_valueless_value_flags();
 		if ( ! empty( $bare_flags ) ) {
-			WP_CLI::error( sprintf( 'The following flag(s) require a value but arrived without one: %s. WP-CLI strips a bare flag before the command runs, so the run would widen to every plan on the site — fix the invocation and re-run.', implode( ', ', $bare_flags ) ) );
+			WP_CLI::error( sprintf( 'The following flag(s) require a value but arrived without one: %s. WP-CLI strips a bare flag before the command runs, so the run would proceed as though it had never been passed — fix the invocation and re-run.', implode( ', ', $bare_flags ) ) );
 		}
 
 		// A mistyped --plan must never silently widen the run to every plan, so an
@@ -111,6 +121,15 @@ class Premium_Newsletters_Migration {
 				WP_CLI::error( sprintf( 'Invalid --plan value "%s". Pass a positive membership plan post ID.', $plan_arg ) );
 			}
 			$plan_id = (int) $plan_arg;
+		}
+
+		$duration_arg      = \WP_CLI\Utils\get_flag_value( $assoc_args, 'one-time-duration', null );
+		$duration_override = null;
+		if ( null !== $duration_arg ) {
+			$duration_override = self::parse_one_time_duration( $duration_arg );
+			if ( null === $duration_override ) {
+				WP_CLI::error( sprintf( 'Invalid --one-time-duration value "%s". Pass "forever", or a positive number followed by "days" or "months" — for example 90days or 12months.', $duration_arg ) );
+			}
 		}
 
 		if ( ! class_exists( 'Newspack\Content_Gate' ) ) {
@@ -193,7 +212,7 @@ class Premium_Newsletters_Migration {
 		// Payloads are built up front so every warning they carry is printed before the
 		// prompt below, and so the write loop has nothing left to decide. Building one
 		// reads the group and its product posts; it writes nothing.
-		$payloads = array_map( fn( $group ) => self::build_gate_payload( $group ), $plan_groups );
+		$payloads = array_map( fn( $group ) => self::build_gate_payload( $group, $duration_override ), $plan_groups );
 
 		$collisions = self::find_colliding_gate_titles( $plan_groups );
 		if ( ! empty( $collisions ) ) {
@@ -224,8 +243,25 @@ class Premium_Newsletters_Migration {
 			);
 		}
 
+		$needs_duration = [];
+		foreach ( $payloads as $payload ) {
+			if ( ! empty( $payload['one_time_ids'] ) && null === $payload['one_time_duration'] ) {
+				$needs_duration = array_merge( $needs_duration, $payload['duration_plans'] );
+			}
+		}
+		if ( ! empty( $needs_duration ) ) {
+			WP_CLI::error(
+				sprintf(
+					'Plan(s) %s grant access through a one-time product, but their access ends on a fixed calendar date rather than lasting a set time from the purchase — so there is no duration for the gate to carry. Pass --one-time-duration=forever, --one-time-duration=<n>days or --one-time-duration=<n>months and re-run. Nothing has been written.',
+					implode( ', ', array_map( fn( $name ) => sprintf( '"%s"', $name ), array_values( array_unique( $needs_duration ) ) ) )
+				)
+			);
+		}
+
 		foreach ( $payloads as $payload ) {
 			self::report_product_id_issues( $payload );
+			self::report_duration_conflict( $payload );
+			self::report_dropped_paywall( $payload );
 		}
 
 		// Regrouping can merge plans a previous run migrated separately — most likely
@@ -383,7 +419,8 @@ class Premium_Newsletters_Migration {
 			array_values( array_unique( $migrated_lists ) ),
 			$dry_run,
 			(bool) $plan_id,
-			self::count_incomplete_groups( $summary )
+			self::count_incomplete_groups( $summary ),
+			(bool) \WP_CLI\Utils\get_flag_value( $assoc_args, 'set-auto-signup', false )
 		);
 
 		WP_CLI::line( '' );
@@ -441,7 +478,7 @@ class Premium_Newsletters_Migration {
 		if ( null === $argv ) {
 			$argv = isset( $_SERVER['argv'] ) ? (array) $_SERVER['argv'] : []; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput
 		}
-		$value_flags = [ '--plan' ];
+		$value_flags = [ '--plan', '--one-time-duration' ];
 		$bare_flags  = [];
 		foreach ( $argv as $token ) {
 			if ( in_array( $token, $value_flags, true ) ) {
@@ -465,6 +502,34 @@ class Premium_Newsletters_Migration {
 	 */
 	private static function is_valid_plan_arg( $plan_arg ): bool {
 		return ctype_digit( (string) $plan_arg ) && (int) $plan_arg > 0;
+	}
+
+	/**
+	 * Read a --one-time-duration value into the pair the gate rule stores.
+	 *
+	 * Only the units the rule evaluates are accepted. Taking "1year" and silently
+	 * storing an unrecognised unit would write a rule that grants nobody access, so
+	 * an unusable value is refused rather than approximated.
+	 *
+	 * @param mixed $value The raw flag value.
+	 *
+	 * @return array{duration_value:int,duration_unit:string}|null Null when unusable.
+	 */
+	private static function parse_one_time_duration( $value ): ?array {
+		$value = trim( (string) $value );
+		if ( 'forever' === $value ) {
+			return [
+				'duration_value' => 0,
+				'duration_unit'  => 'forever',
+			];
+		}
+		if ( preg_match( '/^([1-9][0-9]*)\s*(days|months)$/', $value, $matches ) ) {
+			return [
+				'duration_value' => (int) $matches[1],
+				'duration_unit'  => $matches[2],
+			];
+		}
+		return null;
 	}
 
 	/**
@@ -680,6 +745,108 @@ class Premium_Newsletters_Migration {
 	}
 
 	/**
+	 * The one-time purchase duration a group's gate should carry, and the plans that
+	 * need one.
+	 *
+	 * Only plans that actually grant through a one-time product are consulted: a
+	 * subscription-only plan sharing the group has no say in how long a purchase
+	 * lasts, and letting it vote would refuse groups that have no ambiguity.
+	 *
+	 * Plans disagreeing on the length is resolved the way this command resolves every
+	 * other disagreement within a group — most permissive wins, because WooCommerce
+	 * Memberships grants access from any one plan and the gate has a single rule to
+	 * say it with. The caller reports the choice rather than making it silently.
+	 *
+	 * @param array[]    $group    Plan descriptors.
+	 * @param array|null $override Operator-supplied duration, or null to derive.
+	 *
+	 * @return array{duration:?array,plans:string[],conflict:?string} 'duration' is null
+	 *         when 'plans' is non-empty and no length could be derived: the caller stops
+	 *         the run over that.
+	 */
+	private static function resolve_group_duration( array $group, ?array $override ): array {
+		$plans     = [];
+		$durations = [];
+		foreach ( $group as $plan ) {
+			if ( 'purchase' !== $plan['access_method'] ) {
+				continue;
+			}
+			if ( empty( self::resolve_product_ids( [ $plan ] )['one_time_ids'] ) ) {
+				continue;
+			}
+			$plans[]     = $plan['name'];
+			$durations[] = $plan['one_time_duration'] ?? null;
+		}
+
+		if ( empty( $plans ) ) {
+			return [
+				'duration' => null,
+				'plans'    => [],
+				'conflict' => null,
+			];
+		}
+		if ( null !== $override ) {
+			return [
+				'duration' => $override,
+				'plans'    => $plans,
+				'conflict' => null,
+			];
+		}
+		if ( in_array( null, $durations, true ) ) {
+			return [
+				'duration' => null,
+				'plans'    => $plans,
+				'conflict' => null,
+			];
+		}
+
+		usort( $durations, fn( $a, $b ) => self::duration_rank( $b ) <=> self::duration_rank( $a ) );
+		$chosen   = $durations[0];
+		$distinct = array_unique( array_map( fn( $d ) => self::describe_duration( $d ), $durations ) );
+
+		return [
+			'duration' => $chosen,
+			'plans'    => $plans,
+			'conflict' => count( $distinct ) > 1
+				? sprintf( '%s, so the gate keeps the longest (%s)', implode( ' and ', $distinct ), self::describe_duration( $chosen ) )
+				: null,
+		];
+	}
+
+	/**
+	 * Order two durations by how much access they grant.
+	 *
+	 * Months are ranked at 30 days apiece. The comparison only ever picks between
+	 * durations, never computes an expiry, so the approximation cannot reach a reader:
+	 * the value the gate stores is the plan's own, untouched.
+	 *
+	 * @param array $duration A duration_value/duration_unit pair.
+	 *
+	 * @return int
+	 */
+	private static function duration_rank( array $duration ): int {
+		if ( 'forever' === $duration['duration_unit'] ) {
+			return PHP_INT_MAX;
+		}
+		return 'months' === $duration['duration_unit']
+			? (int) $duration['duration_value'] * 30
+			: (int) $duration['duration_value'];
+	}
+
+	/**
+	 * Render a duration for an operator.
+	 *
+	 * @param array $duration A duration_value/duration_unit pair.
+	 *
+	 * @return string
+	 */
+	private static function describe_duration( array $duration ): string {
+		return 'forever' === $duration['duration_unit']
+			? 'forever'
+			: sprintf( '%d %s', $duration['duration_value'], $duration['duration_unit'] );
+	}
+
+	/**
 	 * Build everything a plan group's gate needs, from the group alone.
 	 *
 	 * Reads only the group descriptors group_plans_by_lists() produced and the product
@@ -696,27 +863,41 @@ class Premium_Newsletters_Migration {
 	 *   signup plan to the registering one. Manual-only plans, the one shape that can
 	 *   hold a reader who never registered, never reach here: group_plans_by_lists()
 	 *   skips them. So requiring registration never restricts a reader the plan admitted.
-	 * - The paid access mode carries a subscription rule only when the group requires a
-	 *   purchase AND at least one product ID survives. An active mode with no rules asks
-	 *   for no purchase at all, so the empty shape is left empty deliberately for
-	 *   verify_migrated_gate() and compute_pre_write_issues() to flag, rather than
-	 *   papered over with a rule that would grant more than the plan did.
+	 * - The paid access mode carries a rule only when the group requires a purchase AND
+	 *   at least one product ID survives, and it carries one rule group per kind of
+	 *   product the plans grant on. An active mode with no rules asks for no purchase at
+	 *   all, so the empty shape is left empty deliberately for verify_migrated_gate() and
+	 *   compute_pre_write_issues() to flag, rather than papered over with a rule that
+	 *   would grant more than the plan did.
+	 * - A one-time rule needs a duration, so a group whose plans cannot supply one gets
+	 *   no rule while its one-time product IDs stay in the payload. That shape never
+	 *   reaches a write because migrate_premium_newsletters() refuses the run over it;
+	 *   a caller that skipped that pre-flight would write a paid gate the plan's
+	 *   one-time buyers cannot satisfy.
 	 *
-	 * @param array[] $group Plan descriptors from group_plans_by_lists(), each carrying
-	 *                       'pid', 'name', 'access_method', 'list_ids' and 'product_ids'.
+	 * @param array[]    $group             Plan descriptors from group_plans_by_lists(),
+	 *                                      each carrying 'pid', 'name', 'access_method',
+	 *                                      'list_ids', 'product_ids' and
+	 *                                      'one_time_duration'.
+	 * @param array|null $duration_override Operator-supplied one-time purchase duration,
+	 *                                      or null to read each plan's own access length.
 	 *
-	 * @return array The gate payload: 'title', 'list_ids', 'has_purchase', 'access_type',
+	 * @return array The gate payload: 'title', 'list_ids', 'has_purchase', 'dropped_paywalls',
+	 *               'access_type',
 	 *               'content_rules', 'content_rules_match', 'registration' and
 	 *               'custom_access' are what the create and update paths write;
-	 *               'product_ids', 'variation_ids' and 'dropped_product_ids' are what
-	 *               the pre-write check and the warnings report on.
+	 *               'product_ids', 'subscription_ids', 'one_time_ids',
+	 *               'one_time_duration', 'duration_plans', 'duration_conflict',
+	 *               'variation_ids' and 'dropped_product_ids' are what the pre-write
+	 *               check and the warnings report on.
 	 */
-	private static function build_gate_payload( array $group ): array {
+	private static function build_gate_payload( array $group, ?array $duration_override = null ): array {
 		$list_ids     = $group[0]['list_ids'] ?? [];
 		$has_purchase = self::group_requires_purchase( $group );
 
 		$products    = self::resolve_product_ids( $group );
 		$product_ids = $products['product_ids'];
+		$duration    = self::resolve_group_duration( $group, $duration_override );
 
 		$content_rules = [
 			[
@@ -725,21 +906,41 @@ class Premium_Newsletters_Migration {
 			],
 		];
 
-		$access_rules = $has_purchase && ! empty( $product_ids )
-			? [
-				[
+		// Two rule groups rather than one, when a plan grants on both kinds of product.
+		// Groups are OR'd and the rules inside one are AND'd, so a reader satisfies the
+		// gate by holding the subscription or by having bought the one-time product —
+		// which is what the plan granted. Flattening them into a single group would
+		// demand both and admit nobody.
+		$access_rules = [];
+		if ( $has_purchase ) {
+			if ( ! empty( $products['subscription_ids'] ) ) {
+				$access_rules[] = [
 					[
 						'slug'  => 'subscription',
-						'value' => $product_ids,
+						'value' => $products['subscription_ids'],
 					],
-				],
-			]
-			: [];
+				];
+			}
+			if ( ! empty( $products['one_time_ids'] ) && null !== $duration['duration'] ) {
+				$access_rules[] = [
+					[
+						'slug'  => 'one_time_purchase',
+						'value' => array_merge(
+							[ 'product_ids' => $products['one_time_ids'] ],
+							$duration['duration']
+						),
+					],
+				];
+			}
+		}
 
 		return [
 			'title'               => self::gate_title( $group ),
 			'list_ids'            => $list_ids,
 			'has_purchase'        => $has_purchase,
+			'dropped_paywalls'    => $has_purchase
+				? []
+				: array_column( array_filter( $group, fn( $plan ) => 'purchase' === $plan['access_method'] ), 'name' ),
 			'access_type'         => $has_purchase ? 'purchase' : 'signup',
 			'content_rules'       => $content_rules,
 			'content_rules_match' => 'any',
@@ -749,9 +950,123 @@ class Premium_Newsletters_Migration {
 				'access_rules' => $access_rules,
 			],
 			'product_ids'         => $product_ids,
+			'subscription_ids'    => $products['subscription_ids'],
+			'one_time_ids'        => $products['one_time_ids'],
+			'one_time_duration'   => $duration['duration'],
+			'duration_plans'      => $duration['plans'],
+			'duration_conflict'   => $duration['conflict'],
 			'variation_ids'       => $products['variations'],
 			'dropped_product_ids' => $products['dropped'],
 		];
+	}
+
+	/**
+	 * Whether a product grants access by subscription rather than by a single purchase.
+	 *
+	 * A membership plan grants on its products without caring which kind they are;
+	 * the two gate rules do. Routing a one-time product into the subscription rule
+	 * writes a condition its buyers can never satisfy, so the split has to happen
+	 * here rather than being assumed.
+	 *
+	 * WooCommerce Subscriptions is asked directly when it is loaded, because it is
+	 * the authority on its own product types and handles variations. The type check
+	 * is the fallback for a site whose plan products outlived the plugin: those
+	 * products read as simple, and a one-time rule over them at least grants the
+	 * readers who bought them, where a subscription rule would grant nobody.
+	 *
+	 * @param int $product_id Product or variation post ID.
+	 *
+	 * @return bool
+	 */
+	private static function is_subscription_product( int $product_id ): bool {
+		$product = \wc_get_product( $product_id );
+		if ( ! $product instanceof \WC_Product ) {
+			return false;
+		}
+		if ( class_exists( 'WC_Subscriptions_Product' ) ) {
+			return (bool) \WC_Subscriptions_Product::is_subscription( $product );
+		}
+		return $product->is_type( [ 'subscription', 'variable-subscription', 'subscription_variation' ] );
+	}
+
+	/**
+	 * Split validated product IDs by the gate rule that can carry them.
+	 *
+	 * @param int[] $product_ids Validated product or variation post IDs.
+	 *
+	 * @return array{subscription:int[],one_time:int[]} Each list keeps its input order.
+	 */
+	private static function classify_product_ids( array $product_ids ): array {
+		$subscription = [];
+		$one_time     = [];
+		foreach ( $product_ids as $product_id ) {
+			if ( self::is_subscription_product( (int) $product_id ) ) {
+				$subscription[] = (int) $product_id;
+			} else {
+				$one_time[] = (int) $product_id;
+			}
+		}
+		return [
+			'subscription' => $subscription,
+			'one_time'     => $one_time,
+		];
+	}
+
+	/**
+	 * Read a plan's own access length as a one-time purchase duration.
+	 *
+	 * The plan already records how long its access lasts, so the migration reads it
+	 * rather than asking an operator to restate it — and two plans with different
+	 * lengths stay different, which one command-line value could not express.
+	 *
+	 * The gate rule counts in days, months or forever, while WooCommerce Memberships
+	 * also offers weeks and years; those convert exactly (a week is 7 days, a year is
+	 * 12 months), so nothing is lost in the translation.
+	 *
+	 * A plan whose access ends on a fixed calendar date has no duration relative to
+	 * the purchase — the same product bought a year apart would grant a year of
+	 * access or none. That is the one shape the caller has to be told about rather
+	 * than migrate, hence null.
+	 *
+	 * @param \WC_Memberships_Membership_Plan $plan The plan.
+	 *
+	 * @return array{duration_value:int,duration_unit:string}|null Null when the plan's
+	 *                                                             access ends on a fixed date.
+	 */
+	private static function derive_one_time_duration( $plan ): ?array {
+		if ( 'fixed' === $plan->get_access_length_type() ) {
+			return null;
+		}
+		if ( ! $plan->has_access_length() ) {
+			return [
+				'duration_value' => 0,
+				'duration_unit'  => 'forever',
+			];
+		}
+		$amount = (int) $plan->get_access_length_amount();
+		switch ( $plan->get_access_length_period() ) {
+			case 'days':
+				return [
+					'duration_value' => $amount,
+					'duration_unit'  => 'days',
+				];
+			case 'weeks':
+				return [
+					'duration_value' => $amount * 7,
+					'duration_unit'  => 'days',
+				];
+			case 'months':
+				return [
+					'duration_value' => $amount,
+					'duration_unit'  => 'months',
+				];
+			case 'years':
+				return [
+					'duration_value' => $amount * 12,
+					'duration_unit'  => 'months',
+				];
+		}
+		return null;
 	}
 
 	/**
@@ -787,7 +1102,9 @@ class Premium_Newsletters_Migration {
 	 * @param array[] $group Plan descriptors, each carrying a 'product_ids' key.
 	 *
 	 * @return array 'product_ids' are the surviving IDs, in the order they appeared;
-	 *               'variations' is the subset of them that are product variations;
+	 *               'subscription_ids' and 'one_time_ids' partition them by the gate
+	 *               rule that can carry each; 'variations' is the subset of them that
+	 *               are product variations;
 	 *               'dropped' holds 'invalid' (did not normalize to a positive integer —
 	 *               a non-numeric meta value therefore appears as 0) and 'unresolvable'
 	 *               (no product post with that ID).
@@ -815,10 +1132,14 @@ class Premium_Newsletters_Migration {
 			$product_ids[] = $product_id;
 		}
 
+		$classified = self::classify_product_ids( $product_ids );
+
 		return [
-			'product_ids' => $product_ids,
-			'variations'  => $variations,
-			'dropped'     => [
+			'product_ids'      => $product_ids,
+			'subscription_ids' => $classified['subscription'],
+			'one_time_ids'     => $classified['one_time'],
+			'variations'       => $variations,
+			'dropped'          => [
 				'invalid'      => $invalid,
 				'unresolvable' => $unresolvable,
 			],
@@ -865,6 +1186,57 @@ class Premium_Newsletters_Migration {
 				)
 			);
 		}
+	}
+
+	/**
+	 * Warn when a group keeps the free-signup plan's terms and drops a paid plan's.
+	 *
+	 * Both of the checks that would otherwise catch an unenforced paywall sit behind
+	 * the group requiring a purchase, which a mixed group does not, so this is the
+	 * only place the operator hears about it. Keeping the most permissive requirement
+	 * is still the faithful migration ({@see group_requires_purchase()}) — the point
+	 * is that lists someone was paying for stop being paid-only at cutover, and that
+	 * is a decision to make deliberately.
+	 *
+	 * @param array $payload The gate payload.
+	 *
+	 * @return void
+	 */
+	private static function report_dropped_paywall( array $payload ): void {
+		if ( empty( $payload['dropped_paywalls'] ) ) {
+			return;
+		}
+		WP_CLI::warning(
+			sprintf(
+				'"%s": plan(s) %s require a purchase, but they restrict the same lists as a plan that grants on signup, so this gate asks only for registration. WooCommerce Memberships grants those lists to a holder of either plan, so keeping the purchase requirement would have taken them from the signup plan\'s members — but it does mean these lists stop being paid-only once WooCommerce Memberships is deactivated. Move the plans onto different lists if the paywall matters more.',
+				$payload['title'],
+				implode( ', ', array_map( fn( $name ) => sprintf( '"%s"', $name ), $payload['dropped_paywalls'] ) )
+			)
+		);
+	}
+
+	/**
+	 * Warn when a group's plans granted one-time access for different lengths.
+	 *
+	 * The gate stores one duration, so the command picks the longest and says so.
+	 * Staying silent would leave an operator to discover at cutover that a gate
+	 * grants longer than the plan they are reading it against.
+	 *
+	 * @param array $payload The gate payload.
+	 *
+	 * @return void
+	 */
+	private static function report_duration_conflict( array $payload ): void {
+		if ( empty( $payload['duration_conflict'] ) ) {
+			return;
+		}
+		WP_CLI::warning(
+			sprintf(
+				'"%s": its plans grant one-time access for different lengths — %s. WooCommerce Memberships grants access from any one of them, so the shortest would have taken the list from readers the plans admitted.',
+				$payload['title'],
+				$payload['duration_conflict']
+			)
+		);
 	}
 
 	/**
@@ -1392,7 +1764,7 @@ class Premium_Newsletters_Migration {
 				// empty product list falls through to "any active subscription", so it grants
 				// access instead of denying it. build_gate_payload() emits either [] or a rule
 				// with a non-empty value, so that shape cannot occur today — do not relax its
-				// `! empty( $product_ids )` guard without handling it here.
+				// per-kind `! empty()` guards without handling it here.
 				$issues[] = 'its paid access mode is active but has no access rules, so it asks for no purchase — any registered reader would keep the list';
 			}
 		}
@@ -1524,7 +1896,8 @@ class Premium_Newsletters_Migration {
 	 *                               reference. The caller refuses the run over these.
 	 *
 	 * @return array<string,array> Map of fingerprint => list of plan descriptors, each
-	 *                             [ 'pid', 'name', 'access_method', 'list_ids', 'product_ids' ].
+	 *                             [ 'pid', 'name', 'access_method', 'list_ids', 'product_ids',
+	 *                             'one_time_duration' ].
 	 */
 	private static function group_plans_by_lists( array $plan_ids, array &$skipped, array &$all_lists_plans ): array {
 		$plan_groups = [];
@@ -1576,11 +1949,12 @@ class Premium_Newsletters_Migration {
 
 			$fingerprint                   = self::compute_list_fingerprint( $list_ids );
 			$plan_groups[ $fingerprint ][] = [
-				'pid'           => $pid,
-				'name'          => $plan_name,
-				'access_method' => $access_method,
-				'list_ids'      => $list_ids,
-				'product_ids'   => 'purchase' === $access_method ? array_values( $plan->get_product_ids() ) : [],
+				'pid'               => $pid,
+				'name'              => $plan_name,
+				'access_method'     => $access_method,
+				'list_ids'          => $list_ids,
+				'product_ids'       => 'purchase' === $access_method ? array_values( $plan->get_product_ids() ) : [],
+				'one_time_duration' => 'purchase' === $access_method ? self::derive_one_time_duration( $plan ) : null,
 			];
 		}
 
@@ -1590,9 +1964,14 @@ class Premium_Newsletters_Migration {
 	/**
 	 * Derive, report, and (in live mode) write the site-wide auto-signup setting.
 	 *
-	 * The option is written rather than left alone because the whole point is a
-	 * zero-touch migration — but the transition is always printed, so a change to a
-	 * setting a publisher may have chosen is visible rather than silent.
+	 * A site that has never set the option is written without ceremony: there is no
+	 * choice to override, and a zero-touch migration is the whole point. A site that
+	 * has one set is left alone and told about the difference instead. The stored
+	 * value and the default are both readable as "on", so a run that overwrote them
+	 * alike would silently undo a publisher who had turned auto-signup off — and
+	 * turning it back on subscribes their readers to lists at the provider, which is
+	 * not something to do on an inference. --set-auto-signup is how an operator says
+	 * they mean it.
 	 *
 	 * A run in which any group failed to write, or was reported as a WARN row, takes
 	 * the same report-only path. The derivation is over the lists this run migrated,
@@ -1621,12 +2000,18 @@ class Premium_Newsletters_Migration {
 	 * @param bool  $plan_scoped       Whether the run was narrowed to a single plan with --plan.
 	 * @param int   $incomplete_groups How many groups failed to write or will not enforce
 	 *                                 ({@see count_incomplete_groups()}).
+	 * @param bool  $force             Whether --set-auto-signup was passed, allowing the
+	 *                                 run to overwrite a setting the site already has.
 	 *
 	 * @return void
 	 */
-	private static function report_auto_signup( array $list_ids, bool $dry_run, bool $plan_scoped = false, int $incomplete_groups = 0 ) {
+	private static function report_auto_signup( array $list_ids, bool $dry_run, bool $plan_scoped = false, int $incomplete_groups = 0, bool $force = false ) {
 		$derived = self::derive_auto_signup( $list_ids );
-		$current = (bool) \get_option( 'newspack_premium_newsletters_auto_signup', 1 );
+		// A sentinel default rather than 1: get_option() cannot otherwise tell a stored
+		// "on" from an absent option, and those two mean different things here.
+		$stored  = \get_option( 'newspack_premium_newsletters_auto_signup', null );
+		$is_set  = null !== $stored;
+		$current = $is_set ? (bool) $stored : true;
 
 		if ( ! empty( $derived['unresolved'] ) ) {
 			WP_CLI::warning(
@@ -1694,11 +2079,36 @@ class Premium_Newsletters_Migration {
 			);
 			return;
 		}
+		// Before the dry-run branch for the same reason as the two cases above: a dry
+		// run should predict the suppression rather than promise a write.
+		if ( $is_set && ! $force ) {
+			WP_CLI::warning(
+				sprintf(
+					'Auto-signup derives to %s from the lists this run migrated, but the site already has it set to %s — a setting someone chose, which this run has no way to tell from one it inherited. Leaving it alone: set it in Newsletters > Premium, or re-run with --set-auto-signup to apply the derived value.',
+					$derived_label,
+					$current_label
+				)
+			);
+			return;
+		}
 		if ( $dry_run ) {
-			WP_CLI::line( sprintf( 'Auto-signup would be set to %s (currently %s).', $derived_label, $current_label ) );
+			WP_CLI::line(
+				sprintf(
+					'Auto-signup would be set to %s (currently %s%s).',
+					$derived_label,
+					$current_label,
+					$is_set ? '' : ', never set'
+				)
+			);
 			return;
 		}
 		\update_option( 'newspack_premium_newsletters_auto_signup', $derived['value'] ? 1 : 0, false );
-		WP_CLI::line( sprintf( 'Auto-signup set to %s (was %s).', $derived_label, $current_label ) );
+		WP_CLI::line(
+			sprintf(
+				'Auto-signup set to %s (%s).',
+				$derived_label,
+				$is_set ? sprintf( 'was %s', $current_label ) : 'it had never been set'
+			)
+		);
 	}
 }
