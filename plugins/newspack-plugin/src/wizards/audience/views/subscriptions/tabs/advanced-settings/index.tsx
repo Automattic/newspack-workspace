@@ -1,5 +1,5 @@
 /**
- * The Subscriptions wizard's Settings tab: site-wide subscription settings.
+ * The Subscriptions wizard's Advanced Settings tab: site-wide subscription settings.
  */
 
 /**
@@ -22,7 +22,7 @@ import WizardSection from '../../../../../wizards-section';
 import { registerTab } from '../registry';
 import { WIZARD_ENDPOINT } from '../../constants';
 
-function Settings() {
+function AdvancedSettings() {
 	const [ inFlight, setInFlight ] = useState( false );
 	const [ saved, setSaved ] = useState( window.newspackAudienceSubscriptions.primary_product );
 	const [ draft, setDraft ] = useState( window.newspackAudienceSubscriptions.primary_product );
@@ -70,7 +70,7 @@ function Settings() {
 							'newspack-plugin'
 						) }
 					/>
-					<VStack spacing={ 4 }>
+					<VStack spacing={ 4 } alignment="top">
 						<SelectControl
 							label={ __( 'Primary Subscription Product', 'newspack-plugin' ) }
 							hideLabelFromVision
@@ -135,4 +135,4 @@ function Settings() {
 	);
 }
 
-registerTab( 'configuration', { render: () => <Settings /> } );
+registerTab( 'advanced-settings', { render: () => <AdvancedSettings /> } );

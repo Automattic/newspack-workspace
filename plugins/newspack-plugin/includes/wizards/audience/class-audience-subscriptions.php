@@ -59,14 +59,14 @@ class Audience_Subscriptions extends Wizard {
 		add_action( 'rest_api_init', [ $this, 'register_api_endpoints' ] );
 
 		self::register_tab(
-			'configuration',
+			'advanced-settings',
 			[
 				// Unescaped: the label is localized into a nested array, where
 				// wp_localize_script() doesn't decode entities, and React escapes
 				// it at render anyway. Escaping here would ship `&#8217;` to
 				// locales whose translation contains an apostrophe.
-				'label' => __( 'Settings', 'newspack-plugin' ),
-				'path'  => '/configuration',
+				'label' => __( 'Advanced Settings', 'newspack-plugin' ),
+				'path'  => '/advanced-settings',
 				'order' => 30,
 			]
 		);
