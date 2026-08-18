@@ -62,7 +62,7 @@ class Block_Visibility {
 		// editor) are covered by the `edit_post` check further down, which needs a post
 		// in scope — where none is set up, it fails closed. Re-adding a blanket REST
 		// exemption here would widen what is readable; the REST cases in
-		// tests/unit-tests/content-gate/class-block-visibility.php pin the behaviour.
+		// Newspack_Test_Block_Visibility pin the behaviour.
 		if ( is_admin() ) {
 			return $block_content;
 		}
