@@ -489,32 +489,46 @@ class Newspack_Test_Block_Visibility extends WP_UnitTestCase {
 	}
 
 	/**
-	 * An editor reading over REST still sees the gated block.
+	 * The real REST route withholds a gated block from anonymous and shows it to an editor.
 	 *
-	 * This is the authoring case the removed exemption existed for; it survives through the
-	 * `edit_post` check rather than through a blanket REST exemption.
-	 *
-	 * @runInSeparateProcess
-	 * @preserveGlobalState disabled
+	 * Dispatching the route rather than calling the filter directly exercises the
+	 * controller's own post setup, which the edit-capability bypass depends on via
+	 * get_the_ID(). It also covers excerpt.rendered, which reaches readers through a
+	 * different path than content.rendered and needs its own assertion.
 	 */
-	public function test_editor_still_sees_gated_block_over_rest() {
-		if ( ! defined( 'REST_REQUEST' ) ) {
-			define( 'REST_REQUEST', true );
-		}
-		$editor_id       = $this->factory->user->create( [ 'role' => 'editor' ] );
-		$post_id         = $this->factory->post->create();
-		$GLOBALS['post'] = get_post( $post_id );
+	public function test_rest_route_gates_content_and_excerpt_per_requester() {
+		do_action( 'rest_api_init' );
 
+		$editor_id = $this->factory->user->create( [ 'role' => 'editor' ] );
+		$gate      = '{"newspackAccessControlMode":"custom","newspackAccessControlRules":{"registration":{"active":true}},"newspackAccessControlVisibility":"visible"}';
+		$content   = '<!-- wp:paragraph --><p>PUBLICMARK</p><!-- /wp:paragraph -->'
+			. '<!-- wp:group ' . $gate . ' --><div class="wp-block-group">'
+			. '<!-- wp:paragraph --><p>RESTRICTEDMARK</p><!-- /wp:paragraph -->'
+			. '</div><!-- /wp:group -->';
+		$post_id = $this->factory->post->create(
+			[
+				'post_status'  => 'publish',
+				'post_author'  => $editor_id,
+				'post_content' => $content,
+				'post_excerpt' => '',
+			]
+		);
+
+		// Logged out: both fields withhold the gated text.
+		wp_set_current_user( 0 );
+		Block_Visibility::reset_cache_for_tests();
+		$anon = rest_do_request( new WP_REST_Request( 'GET', '/wp/v2/posts/' . $post_id ) )->get_data();
+
+		$this->assertStringNotContainsString( 'RESTRICTEDMARK', $anon['content']['rendered'], 'content.rendered must withhold the gated block from an anonymous caller.' );
+		$this->assertStringNotContainsString( 'RESTRICTEDMARK', $anon['excerpt']['rendered'], 'excerpt.rendered must withhold it too; it reaches readers by a different path.' );
+		$this->assertStringContainsString( 'PUBLICMARK', $anon['content']['rendered'], 'Ungated content is unaffected.' );
+
+		// The post's editor: the authoring case the removed REST exemption existed for.
 		wp_set_current_user( $editor_id );
 		Block_Visibility::reset_cache_for_tests();
+		$editor = rest_do_request( new WP_REST_Request( 'GET', '/wp/v2/posts/' . $post_id ) )->get_data();
 
-		$rules  = [ 'registration' => [ 'active' => true ] ];
-		$block  = $this->make_block_with_rules( 'core/group', $rules, 'visible' );
-		$result = Block_Visibility::filter_render_block( '<div>restricted</div>', $block );
-
-		$this->assertSame( '<div>restricted</div>', $result, 'Someone who can edit the post still sees its gated blocks while authoring over REST.' );
-
-		unset( $GLOBALS['post'] );
+		$this->assertStringContainsString( 'RESTRICTEDMARK', $editor['content']['rendered'], 'Someone who can edit the post still sees its gated blocks while authoring over REST.' );
 	}
 
 	/**
