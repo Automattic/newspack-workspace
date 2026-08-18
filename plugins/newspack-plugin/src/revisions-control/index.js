@@ -1,6 +1,6 @@
 /* globals jQuery, newspack_revisions_control */
 
-import './newspack-revisions.scss';
+import './style.scss';
 
 ( function ( $ ) {
 	if ( typeof wp.revisions.view.MetaTo !== 'undefined' ) {
@@ -83,7 +83,7 @@ import './newspack-revisions.scss';
 				t.getMessageSpan().html( labels.loading ).show();
 				toggleRevisionMajor( post_id, revision_id, function ( data ) {
 					t.getMessageSpan().html( labels.saved ).fadeOut( 1000 );
-					const response = jQuery.parseJSON( data );
+					const response = JSON.parse( data );
 					t.updateRevisionMajor( response.major );
 				} );
 			};

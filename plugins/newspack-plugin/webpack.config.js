@@ -73,6 +73,7 @@ const entry = {
 	'newspack-ui': resolveSource( 'src', 'newspack-ui', 'index' ),
 	bylines: resolveSource( 'src', 'bylines', 'index' ),
 	'nicename-change': resolveSource( 'src', 'nicename-change', 'index' ),
+	'revisions-control': resolveSource( 'src', 'revisions-control', 'index' ),
 	'collections-admin': resolveSource( 'src', 'collections', 'admin', 'index' ),
 	'collections-frontend': resolveSource( 'src', 'collections', 'frontend', 'index' ),
 	'group-subscription-admin': resolveSource( 'src', 'group-subscription', 'admin' ),
