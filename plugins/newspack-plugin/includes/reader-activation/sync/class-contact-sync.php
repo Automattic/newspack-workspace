@@ -232,7 +232,10 @@ class Contact_Sync extends Sync {
 		}
 
 		// Added logging here to more easily monitor integration sync data. Can be removed once integrations are released.
-		Logger::log( sprintf( 'Syncing contact %s for context "%s".', $contact['email'] ?? 'unknown', $context ) );
+		// The summary line names the reader, so it is gated at the same level as
+		// the payload itself rather than emitting an email address into the log
+		// once per contact at level 1.
+		Logger::log_payload( sprintf( 'Syncing contact %s for context "%s".', $contact['email'] ?? 'unknown', $context ) );
 		Logger::log_payload( $contact );
 
 		return self::push_to_integrations( $contact, $context, $existing_contact, $options );
@@ -364,7 +367,9 @@ class Contact_Sync extends Sync {
 			$integration_contact = self::prepare_contact_for_integration( $integration, $contact, $options );
 
 			// Added logging here to more easily monitor integration sync data. Can be removed once integrations are released.
-			Logger::log( sprintf( 'Syncing contact %s for integration %s with context "%s".', $integration_contact['email'] ?? 'unknown', $integration_id, $context ) );
+			// Email-free at level 1; the named line rides the payload threshold.
+			Logger::log( sprintf( 'Syncing contact for integration %s with context "%s".', $integration_id, $context ) );
+			Logger::log_payload( sprintf( 'Syncing contact %s for integration %s with context "%s".', $integration_contact['email'] ?? 'unknown', $integration_id, $context ) );
 			Logger::log_payload( $integration_contact );
 
 			$result = $integration->push_contact_data( $integration_contact, $context, $existing_contact, $options );
@@ -443,10 +448,17 @@ class Contact_Sync extends Sync {
 	 * not used. Transient errors from delete_contact() or the flag-mode push
 	 * are retried via RETRY_DELETION_HOOK with a payload keyed on email + mode
 	 * so a 5xx/429 doesn't strand the contact in undeleted state (a GDPR
-	 * exposure for "right to be forgotten" flows). flag_deletion_cleanup()
-	 * failures are log/alert-only and do not feed that retry loop; a
-	 * successful flag-mode retry re-runs cleanup so a completed list-removal
-	 * can't be silently reversed by the delayed upsert.
+	 * exposure for "right to be forgotten" flows).
+	 *
+	 * flag_deletion_cleanup() failures log and alert, AND feed the same retry
+	 * loop: a transient error there would otherwise leave the reader still
+	 * subscribed with nothing scheduled to try again. The retry is the
+	 * idempotent flag retry, which re-runs cleanup after its push, so a
+	 * completed list-removal can't be silently reversed by the delayed upsert
+	 * either. Only when the push ALSO failed is the cleanup error merely
+	 * classified rather than scheduled — the push failure has already
+	 * scheduled the same retry, and scheduling it twice would double the
+	 * traffic against a provider that is already struggling.
 	 *
 	 * @param string $email   Email of the deleted reader.
 	 * @param array  $contact Contact data to push in flag mode (email + metadata).
@@ -1173,7 +1185,7 @@ class Contact_Sync extends Sync {
 			'integration_id' => $integration_id,
 			'mode'           => $mode,
 			'email'          => $email,
-			'contact'        => $contact,
+			'contact'        => 'flag' === $mode ? self::trim_flag_retry_contact( $integration_id, $contact ) : $contact,
 			'context'        => $context,
 			'retry_count'    => $next_retry,
 			'max_retries'    => self::MAX_RETRIES,
@@ -1200,6 +1212,42 @@ class Contact_Sync extends Sync {
 			)
 		);
 		return $error_class;
+	}
+
+	/**
+	 * Reduce a flag-mode contact to what the retry actually has to deliver:
+	 * the email plus the two system deletion flags.
+	 *
+	 * The retry's job is landing `Account_Deleted` and `Membership_Status`.
+	 * Everything else in the prepared payload is the erased reader's profile
+	 * data, and Action Scheduler would hold it through up to five retries plus
+	 * the ~30-day completed-action retention — inside a right-to-be-forgotten
+	 * flow. Trimming changes nothing about the delivered signal.
+	 *
+	 * @param string $integration_id Integration the retry targets.
+	 * @param array  $contact        Prepared flag-mode contact.
+	 *
+	 * @return array Trimmed contact.
+	 */
+	private static function trim_flag_retry_contact( $integration_id, $contact ) {
+		if ( ! is_array( $contact ) ) {
+			return [];
+		}
+		$integration = Integrations::get_integration( $integration_id );
+		$prefix      = $integration ? $integration->get_metadata_prefix() : '';
+		$metadata    = isset( $contact['metadata'] ) && is_array( $contact['metadata'] ) ? $contact['metadata'] : [];
+
+		$kept = [];
+		foreach ( [ $prefix . 'Account_Deleted', $prefix . 'Membership_Status' ] as $flag_key ) {
+			if ( isset( $metadata[ $flag_key ] ) ) {
+				$kept[ $flag_key ] = $metadata[ $flag_key ];
+			}
+		}
+
+		return [
+			'email'    => $contact['email'] ?? '',
+			'metadata' => $kept,
+		];
 	}
 
 	/**

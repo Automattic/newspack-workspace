@@ -160,6 +160,21 @@ class Test_Grouped_Metadata extends WP_UnitTestCase {
 		}
 	}
 
+	/**
+	 * Both legacy classes declare the "Legacy" section, so on a WooCommerce
+	 * site the picker would otherwise render two adjacent panels with the same
+	 * title and no way to tell them apart.
+	 */
+	public function test_groups_sharing_a_section_label_are_merged() {
+		$sections = $this->get_section_names( Metadata::get_grouped_default_fields() );
+
+		$this->assertSame(
+			array_values( array_unique( $sections ) ),
+			$sections,
+			'No section label may appear on two groups.'
+		);
+	}
+
 	public function test_all_legacy_groups_render_last() {
 		$groups   = Metadata::get_grouped_default_fields();
 		$sections = $this->get_section_names( $groups );

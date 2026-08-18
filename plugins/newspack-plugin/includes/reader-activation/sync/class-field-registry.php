@@ -101,8 +101,13 @@ class Field_Registry {
 				$section   = $class::get_section_name();
 				$available = $class::is_available();
 				foreach ( $class::get_fields_config() as $raw_key => $config ) {
-					$id                     = $version . ':' . $raw_key;
+					$id = $version . ':' . $raw_key;
+					// Structural fields last: they are derived from where the
+					// definition lives, not authored, so a config key must never
+					// be able to overwrite an id, a version or the availability
+					// of the class that owns it.
 					$definitions[ $id ]     = array_merge(
+						$config,
 						[
 							'id'             => $id,
 							'version'        => $version,
@@ -112,8 +117,7 @@ class Field_Registry {
 							'available'      => $available,
 							'class'          => $class,
 							'dynamic_suffix' => ! empty( $config['dynamic_suffix'] ),
-						],
-						$config
+						]
 					);
 					$merged_map[ $raw_key ] = $config['name'];
 				}

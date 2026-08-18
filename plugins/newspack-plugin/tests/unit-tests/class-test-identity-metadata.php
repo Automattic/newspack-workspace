@@ -62,11 +62,13 @@ class Test_Identity_Metadata extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Test verified is false by default.
+	 * Verified is a deterministic string, not a PHP bool: providers serialize
+	 * a false differently, so the ESP column would otherwise disagree across
+	 * providers for the same reader.
 	 */
 	public function test_verified_false_by_default() {
 		$metadata = ( new Identity( self::$user_id ) )->get_metadata();
-		$this->assertFalse( $metadata['verified'] );
+		$this->assertSame( '0', $metadata['verified'] );
 	}
 
 	/**
@@ -75,7 +77,7 @@ class Test_Identity_Metadata extends WP_UnitTestCase {
 	public function test_verified_true_when_set() {
 		update_user_meta( self::$user_id, Reader_Activation::EMAIL_VERIFIED, true );
 		$metadata = ( new Identity( self::$user_id ) )->get_metadata();
-		$this->assertTrue( $metadata['verified'] );
+		$this->assertSame( '1', $metadata['verified'] );
 	}
 
 	/**

@@ -155,6 +155,23 @@ class Test_Contact_Sync_Options extends WP_UnitTestCase {
 		$this->assertSame( [ 'Content Access', 'Content Access Group' ], $resolved );
 	}
 
+	/**
+	 * The two schemas distinguish three raw keys by case alone, so the
+	 * case-insensitive pass must never get to arbitrate them: a legacy token
+	 * has to keep resolving to the legacy field, not to the renamed
+	 * new-schema one in a different ESP column.
+	 */
+	public function test_resolve_field_labels_prefers_exact_case_raw_keys() {
+		$this->assertSame( [ 'Payment Page' ], Metadata::resolve_field_labels( [ 'payment_page' ] ) );
+		$this->assertSame( [ 'Last Payment Page' ], Metadata::resolve_field_labels( [ 'Payment_Page' ] ) );
+
+		$this->assertSame( [ 'Last Payment Amount' ], Metadata::resolve_field_labels( [ 'last_payment_amount' ] ) );
+		$this->assertSame( [ 'Last Subscription Payment Amount' ], Metadata::resolve_field_labels( [ 'Last_Payment_Amount' ] ) );
+
+		$this->assertSame( [ 'Last Payment Date' ], Metadata::resolve_field_labels( [ 'last_payment_date' ] ) );
+		$this->assertSame( [ 'Last Subscription Payment Date' ], Metadata::resolve_field_labels( [ 'Last_Payment_Date' ] ) );
+	}
+
 	public function test_resolve_field_labels_dedupes_synonymous_tokens() {
 		// registration_page and current_page_url both map to 'Registration Page'.
 		$resolved = Metadata::resolve_field_labels( [ 'registration_page', 'current_page_url' ] );

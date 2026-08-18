@@ -145,6 +145,15 @@ abstract class Integration {
 	private static $prepare_contact_lookups = [];
 
 	/**
+	 * Integration id + stored entry pairs already reported as unresolvable by
+	 * the name-to-id migration this request. Keeps the warning at one per
+	 * option per request rather than one per read.
+	 *
+	 * @var array<string, bool>
+	 */
+	private static $logged_unresolved_entries = [];
+
+	/**
 	 * Constructor.
 	 *
 	 * @param string $id          The unique identifier for this integration.
@@ -1039,19 +1048,28 @@ abstract class Integration {
 			// "Registration Page"); resolve to all of them.
 			$definitions = Sync\Field_Registry::resolve_name( (string) $entry );
 			if ( empty( $definitions ) ) {
+				$has_unresolved = true;
 				// newspack_log (not Logger::log(), a no-op at the default log
 				// level) so the repeating unresolved migration is visible to
-				// Newspack Manager.
-				Logger::newspack_log(
-					'outgoing_fields_migration_unresolved',
-					sprintf( 'Outgoing fields migration: no definition found for "%s" in integration "%s".', $entry, $this->id ),
-					[
-						'integration_id' => $this->id,
-						'entry'          => (string) $entry,
-					],
-					'warning'
-				);
-				$has_unresolved = true;
+				// Newspack Manager — but once per option per request. This read
+				// runs once per contact plus once per push-capable integration
+				// in class scoping, and the condition (a name whose declaring
+				// plugin is deactivated) persists until someone fixes it, so
+				// logging per read would bury a site's other alerts under a
+				// backfill.
+				$seen_key = $this->id . '|' . $entry;
+				if ( ! isset( self::$logged_unresolved_entries[ $seen_key ] ) ) {
+					self::$logged_unresolved_entries[ $seen_key ] = true;
+					Logger::newspack_log(
+						'outgoing_fields_migration_unresolved',
+						sprintf( 'Outgoing fields migration: no definition found for "%s" in integration "%s".', $entry, $this->id ),
+						[
+							'integration_id' => $this->id,
+							'entry'          => (string) $entry,
+						],
+						'warning'
+					);
+				}
 			}
 			foreach ( $definitions as $definition ) {
 				$ids[] = $definition['id'];
@@ -1581,15 +1599,17 @@ abstract class Integration {
 	}
 
 	/**
-	 * Drop every memoized prepare_contact() lookup table.
+	 * Drop every memoized prepare_contact() lookup table, and the record of
+	 * which unresolvable stored names have already been reported.
 	 *
 	 * Called from Field_Registry::reset(), the one thing that can change what
-	 * a given id list resolves to.
+	 * a given id list — or a given stored name — resolves to.
 	 *
 	 * @return void
 	 */
 	public static function flush_prepare_contact_lookups() {
-		self::$prepare_contact_lookups = [];
+		self::$prepare_contact_lookups   = [];
+		self::$logged_unresolved_entries = [];
 	}
 
 	/**
@@ -1742,8 +1762,11 @@ abstract class Integration {
 		$migrated = 'sync_account_deletion' === $key
 			? true
 			: ( \wp_validate_boolean( $legacy_value ) && $this->supports_hard_delete() ? 'delete' : 'flag' );
-		// Persist directly to avoid re-running the migration on every read.
-		\update_option( $option_name, $migrated );
+		// Persist directly to avoid re-running the migration on every read, and
+		// out of the autoload cache like every other per-integration setting —
+		// this creates two options per push-capable integration on every legacy
+		// site, none of them needed on a normal request.
+		\update_option( $option_name, $migrated, false );
 		return $migrated;
 	}
 

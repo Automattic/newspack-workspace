@@ -1181,6 +1181,100 @@ class Test_Account_Deletion extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * The flag retry's job is delivering the two system deletion flags, so
+	 * that — plus the email — is all Action Scheduler is allowed to hold. The
+	 * erased reader's profile data would otherwise sit in the actions table
+	 * through five retries plus the completed-action retention window, inside
+	 * a right-to-be-forgotten flow.
+	 */
+	public function test_flag_retry_payload_is_trimmed_to_the_deletion_flags() {
+		if ( ! function_exists( 'as_schedule_single_action' ) ) {
+			$this->markTestSkipped( 'ActionScheduler not available.' );
+		}
+		\as_unschedule_all_actions( \Newspack\Reader_Activation\Contact_Sync::RETRY_DELETION_HOOK );
+
+		$this->reset_integrations();
+		$spy              = new \Deletion_Spy_Integration( 'spy-retry-trim', 'Spy Retry Trim' );
+		$spy->push_result = new \WP_Error( 'transient', 'ESP 429' );
+		Integrations::register( $spy );
+		$spy->update_settings_field_value( 'sync_account_deletion', true );
+		$spy->update_settings_field_value( 'account_deletion_handling', 'flag' );
+		Integrations::enable( 'spy-retry-trim' );
+
+		\Newspack\Reader_Activation\Contact_Sync::handle_account_deletion(
+			'reader@example.com',
+			[
+				'email'    => 'reader@example.com',
+				'metadata' => [
+					'first_name' => 'Pat',
+					'last_name'  => 'Reader',
+					'account'    => 42,
+				],
+			],
+			'TestContext'
+		);
+
+		$pending = \as_get_scheduled_actions(
+			[
+				'hook'   => \Newspack\Reader_Activation\Contact_Sync::RETRY_DELETION_HOOK,
+				'group'  => Integrations::get_action_group( 'spy-retry-trim' ),
+				'status' => \ActionScheduler_Store::STATUS_PENDING,
+			],
+			'ARRAY_A'
+		);
+		$this->assertNotEmpty( $pending );
+
+		$action_id = array_key_first( $pending );
+		$args      = \ActionScheduler::store()->fetch_action( $action_id )->get_args();
+		$contact   = $args[0]['contact'];
+
+		\as_unschedule_all_actions( \Newspack\Reader_Activation\Contact_Sync::RETRY_DELETION_HOOK );
+
+		$this->assertSame( 'reader@example.com', $contact['email'] );
+		$this->assertEqualsCanonicalizing(
+			[ 'NP_Account_Deleted', 'NP_Membership_Status' ],
+			array_keys( $contact['metadata'] ),
+			'The retry must carry the two system flags and nothing else.'
+		);
+	}
+
+	/**
+	 * A provider without list management (Campaign Monitor) has no lists to
+	 * clear, so its "not supported" answer is the cleanup already being done.
+	 * Returning the error instead would schedule five retries that can never
+	 * succeed and alert on every single reader deletion.
+	 */
+	public function test_esp_flag_cleanup_treats_unsupported_list_management_as_done() {
+		\Newspack_Newsletters_Contacts::reset_calls();
+		\Newspack_Newsletters_Contacts::$next_return = new \WP_Error(
+			'newspack_newsletters_not_supported',
+			'Not supported for this provider'
+		);
+
+		$result = ( new \Newspack\Reader_Activation\Integrations\ESP() )->flag_deletion_cleanup( 'reader@example.com' );
+
+		\Newspack_Newsletters_Contacts::reset_calls();
+
+		$this->assertTrue( $result );
+	}
+
+	/**
+	 * Every other provider error still surfaces, so a transient list-removal
+	 * failure keeps its retry.
+	 */
+	public function test_esp_flag_cleanup_surfaces_other_provider_errors() {
+		\Newspack_Newsletters_Contacts::reset_calls();
+		\Newspack_Newsletters_Contacts::$next_return = new \WP_Error( 'boom', 'ESP list removal failed' );
+
+		$result = ( new \Newspack\Reader_Activation\Integrations\ESP() )->flag_deletion_cleanup( 'reader@example.com' );
+
+		\Newspack_Newsletters_Contacts::reset_calls();
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'boom', $result->get_error_code() );
+	}
+
+	/**
 	 * The flag_deletion_cleanup() hook must still run even when the flag push
 	 * itself fails, so outreach stops regardless of whether the metadata push
 	 * succeeded.

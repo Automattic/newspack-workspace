@@ -32,7 +32,7 @@ class Identity extends Contact_Metadata {
 	 * @return string
 	 */
 	public static function get_section_name() {
-		return __( 'Identity', 'newspack' );
+		return __( 'Identity', 'newspack-plugin' );
 	}
 
 	/**
@@ -132,7 +132,11 @@ class Identity extends Contact_Metadata {
 			// Integer, matching the legacy twin's $customer->get_id().
 			'Account'    => (int) $this->user->ID,
 			'User_Role'  => ! empty( $roles ) ? reset( $roles ) : '',
-			'verified'   => (bool) Reader_Activation::is_reader_verified( $this->user ),
+			// '1'/'0' rather than a PHP bool: this is the only non-string value
+			// in the pipeline, and providers serialize a false differently
+			// (empty string, 0, or false) — the ESP column would then disagree
+			// across providers for the same reader.
+			'verified'   => Reader_Activation::is_reader_verified( $this->user ) ? '1' : '0',
 		];
 
 		// Omitted unless the reader actually signed in with a supported SSO

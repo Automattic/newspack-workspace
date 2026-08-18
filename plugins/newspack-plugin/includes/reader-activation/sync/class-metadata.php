@@ -88,8 +88,15 @@ class Metadata {
 	 * Get the metadata classes whose schema versions are actually in play
 	 * for outgoing sync.
 	 *
-	 * Scoped to the versions enabled across push-capable integrations, so an
-	 * unused version skips its (often WooCommerce-heavy) computation.
+	 * Scoped to the versions enabled across the integrations the push path
+	 * actually delivers to, so an unused version skips its (often
+	 * WooCommerce-heavy) computation. Matching the push path's own set
+	 * (`get_active_configured_integrations()`) matters: one `v2:` id on a
+	 * disabled integration would otherwise pull all five new-schema classes,
+	 * and with them two `wc_get_orders()` calls and a
+	 * `wcs_get_users_subscriptions()` per contact, for a payload nobody
+	 * receives.
+	 *
 	 * Version-neutral classes (Content Gate) are always included, in their
 	 * original merged-list position so key-collision precedence is unchanged.
 	 *
@@ -97,7 +104,7 @@ class Metadata {
 	 */
 	protected static function get_sync_metadata_classes() {
 		$versions = [];
-		foreach ( Integrations::get_available_integrations() as $integration ) {
+		foreach ( Integrations::get_active_configured_integrations() as $integration ) {
 			if ( ! $integration->supports_push() ) {
 				continue;
 			}
@@ -375,9 +382,10 @@ class Metadata {
 	 * Get the list of possible fields to be synced, grouped by section.
 	 *
 	 * Returns an array of groups, each with a 'section' label and 'fields' array.
-	 * Every class with a section name gets its own group — including the
-	 * legacy classes, which both declare "Legacy" — and filter-added fields
-	 * that belong to no class land in "Additional".
+	 * Every class with a section name gets its own group, and filter-added
+	 * fields that belong to no class land in "Additional". Adjacent groups
+	 * sharing a label are folded together, so the two legacy classes render
+	 * as one "Legacy" panel rather than two identically-titled ones.
 	 *
 	 * All-legacy groups (every field 'legacy' in the field registry) sort
 	 * last, checked via registry status rather than the section label so it
@@ -445,7 +453,7 @@ class Metadata {
 			];
 		}
 
-		$groups = array_merge( $primary_groups, $legacy_groups );
+		$groups = self::merge_adjacent_groups( array_merge( $primary_groups, $legacy_groups ) );
 
 		/**
 		 * Filters the list of possible metadata fields to be synced, grouped by section.
@@ -454,6 +462,31 @@ class Metadata {
 		 * @param string[] $available_fields Flat list of filtered available metadata field names.
 		 */
 		return \apply_filters( 'newspack_ras_grouped_metadata_fields', $groups, $available_fields );
+	}
+
+	/**
+	 * Fold neighbouring groups that carry the same section label into one.
+	 *
+	 * Both legacy classes declare the "Legacy" section, so a WooCommerce site
+	 * would otherwise render two adjacent panels with the same title and no
+	 * way to tell them apart. Only ADJACENT groups merge, so the sort order
+	 * (all-legacy groups last) still means what it says.
+	 *
+	 * @param array<int, array{section: string, fields: list<string>}> $groups Ordered groups.
+	 *
+	 * @return array<int, array{section: string, fields: list<string>}>
+	 */
+	private static function merge_adjacent_groups( array $groups ): array {
+		$merged = [];
+		foreach ( $groups as $group ) {
+			$last = count( $merged ) - 1;
+			if ( $last >= 0 && $merged[ $last ]['section'] === $group['section'] ) {
+				$merged[ $last ]['fields'] = array_values( array_unique( array_merge( $merged[ $last ]['fields'], $group['fields'] ) ) );
+				continue;
+			}
+			$merged[] = $group;
+		}
+		return $merged;
 	}
 
 	/**
@@ -528,18 +561,26 @@ class Metadata {
 	 *                            (`newspack_esp_sync_unavailable_field`).
 	 */
 	public static function resolve_field_labels( array $inputs ): array|\WP_Error {
-		$available_lookup = self::build_field_lookup( self::get_all_fields( true ) );
-		$all_lookup       = self::build_field_lookup( self::get_all_fields( false ) );
+		$available_fields = self::get_all_fields( true );
+		$all_fields       = self::get_all_fields( false );
+		$available_lookup = self::build_field_lookup( $available_fields );
+		$all_lookup       = self::build_field_lookup( $all_fields );
 
 		$labels = [];
 		foreach ( $inputs as $input ) {
-			$token = strtolower( trim( (string) $input ) );
+			$raw_key = trim( (string) $input );
+			$token   = strtolower( $raw_key );
 			if ( '' === $token ) {
 				continue;
 			}
 
-			if ( isset( $available_lookup[ $token ] ) ) {
-				$label = $available_lookup[ $token ];
+			// Exact-case raw key first. The two schemas' raw keys differ only in
+			// case for three fields (`payment_page` / `Payment_Page`, and the two
+			// payment amount/date keys), so the case-insensitive pass alone would
+			// resolve a legacy token to the renamed new-schema field — a
+			// different field, in a different ESP column.
+			$label = $available_fields[ $raw_key ] ?? $available_lookup[ $token ] ?? null;
+			if ( null !== $label ) {
 				if ( ! in_array( $label, $labels, true ) ) {
 					$labels[] = $label;
 				}
@@ -548,7 +589,7 @@ class Metadata {
 
 			// Known field, but its metadata class is not currently available. Give a
 			// targeted hint for the two common causes.
-			if ( isset( $all_lookup[ $token ] ) ) {
+			if ( isset( $all_fields[ $raw_key ] ) || isset( $all_lookup[ $token ] ) ) {
 				return new \WP_Error(
 					'newspack_esp_sync_unavailable_field',
 					sprintf(
@@ -575,6 +616,10 @@ class Metadata {
 	/**
 	 * Build a case-insensitive lookup of both raw keys and labels to their
 	 * canonical display label.
+	 *
+	 * The fallback pass, consulted only after an exact-case raw-key match
+	 * fails: lowercasing collapses raw keys the two schemas distinguish by
+	 * case, and last-write-wins hands those to the new schema.
 	 *
 	 * @param array $fields Map of raw_key => label.
 	 *

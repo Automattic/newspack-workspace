@@ -36,6 +36,9 @@ class Test_Sync_Metadata_Classes extends \WP_UnitTestCase {
 		$this->reset_integrations();
 		$this->integration = new Sample_Integration( 'scope-test', 'Scope Test' );
 		Integrations::register( $this->integration );
+		// Scoping follows the push path's own integration set, so the
+		// integration has to be enabled and set up to count at all.
+		Integrations::enable( 'scope-test' );
 		Field_Registry::reset();
 	}
 
@@ -43,6 +46,7 @@ class Test_Sync_Metadata_Classes extends \WP_UnitTestCase {
 	 * Tear down test environment.
 	 */
 	public function tear_down() {
+		Integrations::disable( 'scope-test' );
 		\delete_option( Integration::OUTGOING_FIELDS_OPTION_PREFIX . 'scope-test' );
 		Field_Registry::reset();
 		$this->reset_integrations();
@@ -135,6 +139,35 @@ class Test_Sync_Metadata_Classes extends \WP_UnitTestCase {
 		$this->integration->update_enabled_outgoing_fields( [] );
 
 		$classes = $this->get_sync_classes();
+
+		$this->assertSame( [ Contact_Metadata\Content_Gate::class ], $classes );
+	}
+
+	/**
+	 * An integration the push path will never deliver to must not drag its
+	 * schema version's classes into the computation. One `v2:` id brings all
+	 * five new-schema classes, and with them two `wc_get_orders()` calls and a
+	 * `wcs_get_users_subscriptions()` per contact — inside registration, login
+	 * and checkout requests.
+	 */
+	public function test_disabled_integration_does_not_widen_the_compute_set() {
+		$this->integration->update_enabled_outgoing_fields( [ 'v2:Registration_Date' ] );
+		Integrations::disable( 'scope-test' );
+
+		$this->assertSame( [ Contact_Metadata\Content_Gate::class ], $this->get_sync_classes() );
+	}
+
+	/**
+	 * Same for an enabled integration whose external prerequisites are not
+	 * configured yet: the push path skips it, so the compute path must too.
+	 */
+	public function test_unconfigured_integration_does_not_widen_the_compute_set() {
+		$this->integration->update_enabled_outgoing_fields( [ 'v2:Registration_Date' ] );
+		Sample_Integration::$is_set_up_value = false;
+
+		$classes = $this->get_sync_classes();
+
+		Sample_Integration::$is_set_up_value = true;
 
 		$this->assertSame( [ Contact_Metadata\Content_Gate::class ], $classes );
 	}

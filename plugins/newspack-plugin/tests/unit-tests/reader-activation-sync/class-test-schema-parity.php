@@ -264,9 +264,12 @@ class Test_Schema_Parity extends \WP_UnitTestCase {
 	public function test_shared_fields_produce_identical_payload_after_id_migration() {
 		$user_id = self::factory()->user->create(
 			[
-				'user_email' => 'shared-fields@example.com',
-				'first_name' => 'Pat',
-				'last_name'  => 'Reader',
+				'user_email'      => 'shared-fields@example.com',
+				'first_name'      => 'Pat',
+				'last_name'       => 'Reader',
+				// Pinned so Registration Date is a fixed value on both sides,
+				// not two readings of "now".
+				'user_registered' => '2024-01-15 10:00:00',
 			]
 		);
 
@@ -313,7 +316,12 @@ class Test_Schema_Parity extends \WP_UnitTestCase {
 	 * the omit-when-empty rule can never be mistaken for omit-always.
 	 */
 	public function test_shared_fields_still_carry_values_after_id_migration() {
-		$user_id = self::factory()->user->create( [ 'user_email' => 'sso-reader@example.com' ] );
+		$user_id = self::factory()->user->create(
+			[
+				'user_email'      => 'sso-reader@example.com',
+				'user_registered' => '2024-01-15 10:00:00',
+			]
+		);
 		\update_user_meta( $user_id, Reader_Activation::CONNECTED_ACCOUNT, 'google' );
 		\update_user_meta( $user_id, Reader_Activation::REGISTRATION_PAGE, 'https://example.com/newsletter' );
 
