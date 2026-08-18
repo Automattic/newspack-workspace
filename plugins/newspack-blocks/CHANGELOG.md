@@ -1,3 +1,31 @@
+## @automattic/newspack-blocks [4.30.1](https://github.com/Automattic/newspack-workspace/compare/newspack-blocks@4.30.0...newspack-blocks@4.30.1) (2026-08-17)
+
+
+### Dependencies
+
+* **newspack-components:** upgraded to 4.6.2
+
+# @automattic/newspack-blocks [4.30.0](https://github.com/Automattic/newspack-workspace/compare/newspack-blocks@4.29.2...newspack-blocks@4.30.0) (2026-08-17)
+
+
+### Bug Fixes
+
+* **blocks:** APCA contrast picker and derived accent-contrast color ([#730](https://github.com/Automattic/newspack-workspace/issues/730)) ([b05a658](https://github.com/Automattic/newspack-workspace/commit/b05a6588f4d9ebdeb3dbdbc17b5c06c901012ca7))
+* **newspack-blocks:** skip article-block image crops on wpcom uploads ([#576](https://github.com/Automattic/newspack-workspace/issues/576)) ([451272c](https://github.com/Automattic/newspack-workspace/commit/451272c3989cb3ed5f25daaa1e647e1b5dcbf453))
+
+
+### Features
+
+* **performance:** defer reader-facing JS assets (NPPM-3037) ([#722](https://github.com/Automattic/newspack-workspace/issues/722)) ([2855574](https://github.com/Automattic/newspack-workspace/commit/2855574099c4f416a984cda8565b269e5a9f0fb0))
+
+
+### Dependencies
+
+* **newspack-colors:** upgraded to 1.1.3
+* **newspack-icons:** upgraded to 1.1.1
+* **newspack-components:** upgraded to 4.6.1
+* **newspack-scripts:** upgraded to 5.11.0
+
 ## @automattic/newspack-blocks [4.29.2](https://github.com/Automattic/newspack-workspace/compare/newspack-blocks@4.29.1...newspack-blocks@4.29.2) (2026-08-07)
 
 
