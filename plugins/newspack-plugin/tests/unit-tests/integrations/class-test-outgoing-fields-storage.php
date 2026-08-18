@@ -142,8 +142,8 @@ class Test_Outgoing_Fields_Storage extends \WP_UnitTestCase {
 	 * A v2-origin site with legacy display-name storage migrates to v2 ids on
 	 * read — a name claimed by both schemas resolves to the v2 definition.
 	 *
-	 * 'Total Paid' is deliberately not used here: it no longer resolves onto
-	 * a v2 id at all — see Field_Registry's supersedes-without-equivalent
+	 * 'Total Paid' is deliberately not used here: it does not resolve onto a
+	 * v2 id at all — see Field_Registry's supersedes-without-equivalent
 	 * doctrine — so it would defeat the point this test is making.
 	 */
 	public function test_legacy_format_migrates_to_v2_ids_when_origin_is_v2() {
@@ -195,8 +195,8 @@ class Test_Outgoing_Fields_Storage extends \WP_UnitTestCase {
 
 	/**
 	 * Both versions of a changed-meaning field (legacy counts all payments;
-	 * v2 only the current subscription) can be enabled at once, since they no
-	 * longer share an ESP name — nothing is dropped or arbitrated.
+	 * v2 only the current subscription) can be enabled at once, since they do
+	 * not share an ESP name — nothing is dropped or arbitrated.
 	 */
 	public function test_both_versions_of_a_renamed_field_coexist() {
 		\update_option(
@@ -396,10 +396,9 @@ class Test_Outgoing_Fields_Storage extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * Registry miss with no legacy global option either: the full default
-	 * field set, keeping the pre-coexistence passthrough behavior. Before
-	 * per-integration selection existed, only the ESP had a defaults fallback,
-	 * so a third-party push integration silently synced no metadata at all.
+	 * Registry miss with no legacy global option either: falls back to the
+	 * full default field set, so a third-party push integration is never
+	 * left syncing no metadata at all.
 	 */
 	public function test_inheritance_without_esp_or_global_option_defaults_to_all_fields() {
 		\delete_option( Integration::OUTGOING_FIELDS_OPTION_PREFIX . 'storage-test' );

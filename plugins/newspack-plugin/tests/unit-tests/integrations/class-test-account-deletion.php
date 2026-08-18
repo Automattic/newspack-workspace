@@ -1142,8 +1142,7 @@ class Test_Account_Deletion extends \WP_UnitTestCase {
 
 	/**
 	 * End-to-end with the real ESP integration in flag mode: cleanup must
-	 * remove the reader from every ESP list, using the same reason string the
-	 * retired sync_esp_delete=false handler used to send.
+	 * remove the reader from every ESP list.
 	 */
 	public function test_handle_account_deletion_esp_flag_mode_removes_lists() {
 		\Newspack_Newsletters_Contacts::reset_calls();

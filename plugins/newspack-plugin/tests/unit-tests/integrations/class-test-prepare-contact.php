@@ -87,9 +87,9 @@ class Test_Prepare_Contact extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * The NPPD-2107 regression: a second integration with no Outbound
-	 * selection of its own must inherit and push only the ESP's selection,
-	 * not the full default set.
+	 * A second integration with no Outbound selection of its own must
+	 * inherit and push only the ESP's selection, not the full default set
+	 * (NPPD-2107).
 	 */
 	public function test_never_configured_integration_pushes_only_inherited_esp_fields() {
 
@@ -153,7 +153,7 @@ class Test_Prepare_Contact extends \WP_UnitTestCase {
 
 	/**
 	 * A raw key and the prefixed form of the same field resolve to one output
-	 * key; the later input wins, matching the pre-refactor normalization.
+	 * key; the later input wins.
 	 */
 	public function test_raw_and_prefixed_forms_of_same_field_collapse() {
 		$this->integration->update_enabled_outgoing_fields( [ 'v1:account' ] );
@@ -173,8 +173,8 @@ class Test_Prepare_Contact extends \WP_UnitTestCase {
 
 	/**
 	 * Dynamic-suffix fields (legacy UTM) only match keys that actually carry a
-	 * suffix, in both the raw and already-prefixed forms. The bare key is not a
-	 * syncable field and must be dropped, as it was before the refactor.
+	 * suffix, in both the raw and already-prefixed forms. The bare key is not
+	 * a syncable field and must be dropped.
 	 */
 	public function test_dynamic_suffix_fields_require_a_suffix() {
 		$this->integration->update_enabled_outgoing_fields( [ 'v1:signup_page_utm' ] );

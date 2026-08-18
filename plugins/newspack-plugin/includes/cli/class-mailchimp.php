@@ -450,10 +450,8 @@ class Mailchimp {
 	 * @return array
 	 */
 	private static function get_fields_to_check_for_duplicates() {
-		// get_all_fields() already applies `newspack_ras_metadata_keys` — with
-		// both of its documented arguments. Re-applying it here passed only
-		// one, so a publisher callback registered for two would hit an
-		// ArgumentCountError the moment this command ran.
+		// get_all_fields() already applies `newspack_ras_metadata_keys`; do
+		// not apply it again.
 		$fields = Metadata::get_all_fields();
 		$fields = array_map(
 			function( $key ) {

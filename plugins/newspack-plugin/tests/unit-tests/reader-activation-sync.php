@@ -47,7 +47,7 @@ class Newspack_Test_Reader_Activation_Sync extends WP_UnitTestCase {
 	/**
 	 * Run the full outgoing pipeline: raw-key normalization followed by the
 	 * ESP integration's id-resolving prepare_contact(), which is where
-	 * outgoing-field filtering and prefixing now happen.
+	 * outgoing-field filtering and prefixing happen.
 	 *
 	 * @param array $contact Contact data.
 	 * @return array Prepared contact data.
