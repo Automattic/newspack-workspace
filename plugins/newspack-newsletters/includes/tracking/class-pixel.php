@@ -333,7 +333,7 @@ final class Pixel {
 		}
 		foreach ( [ 'newspack_newsletters_tracking_pixel_log_file', 'newspack_newsletters_tracking_pixel_previous_log_file' ] as $option ) {
 			$log_file = \get_option( $option );
-			if ( $log_file && file_exists( $log_file ) ) {
+			if ( self::is_pixel_log_file( $log_file ) ) {
 				unlink( $log_file );
 			}
 			\delete_option( $option );
@@ -341,6 +341,28 @@ final class Pixel {
 		// phpcs:enable WordPressVIPMinimum.Functions.RestrictedFunctions.file_ops_unlink
 		\delete_option( 'newspack_newsletters_pixel_log_offset' );
 		\wp_clear_scheduled_hook( 'newspack_newsletters_tracking_pixel_process_log' );
+	}
+
+	/**
+	 * Whether a path is one of the pixel log files this class creates: a
+	 * tempnam file named newspack_newsletters_pixel_log_* inside the uploads
+	 * directory. The teardown paths come from options, and a corrupted option
+	 * must not turn disabling tracking into deleting an arbitrary file.
+	 *
+	 * @param mixed $path Path stored in the option.
+	 *
+	 * @return bool
+	 */
+	private static function is_pixel_log_file( $path ) {
+		if ( ! is_string( $path ) || '' === $path || ! file_exists( $path ) ) {
+			return false;
+		}
+		if ( 0 !== strpos( basename( $path ), 'newspack_newsletters_pixel_log_' ) ) {
+			return false;
+		}
+		$real_path = realpath( $path );
+		$uploads   = realpath( \wp_get_upload_dir()['basedir'] );
+		return $real_path && $uploads && 0 === strpos( $real_path, \trailingslashit( $uploads ) );
 	}
 
 	/**

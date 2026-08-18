@@ -529,4 +529,25 @@ class Newsletters_Tracking_Test extends WP_UnitTestCase {
 		$this->assertFalse( get_option( 'newspack_newsletters_tracking_pixel_log_file' ) );
 		$this->assertFalse( wp_next_scheduled( 'newspack_newsletters_tracking_pixel_process_log' ) );
 	}
+
+	/**
+	 * Teardown only deletes files that look like pixel logs: a corrupted option
+	 * must not turn disabling tracking into deleting an arbitrary path.
+	 */
+	public function test_teardown_ignores_non_log_paths_in_options() {
+		update_option( 'newspack_newsletters_use_tracking_pixel', 1 );
+
+		// phpcs:disable WordPressVIPMinimum.Functions.RestrictedFunctions
+		$unrelated = tempnam( sys_get_temp_dir(), 'unrelated_' );
+		update_option( 'newspack_newsletters_tracking_pixel_log_file', $unrelated );
+
+		update_option( 'newspack_newsletters_use_tracking_pixel', 0 );
+
+		$this->assertFileExists( $unrelated, 'A path that is not a pixel log must not be deleted.' );
+		$this->assertFalse( get_option( 'newspack_newsletters_tracking_pixel_log_file' ), 'The option is still cleared.' );
+
+		// Clean up.
+		unlink( $unrelated );
+		// phpcs:enable WordPressVIPMinimum.Functions.RestrictedFunctions
+	}
 }
