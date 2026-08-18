@@ -596,7 +596,7 @@ describe( 'ConfigureView per-direction sections', () => {
 		expect( onSave ).toHaveBeenCalledWith( 'esp', { outgoing_sync_enabled: false } );
 	} );
 
-	// The outbound picker now posts ids, not names: <OutboundFields> receives
+	// The outbound picker posts ids, not names: <OutboundFields> receives
 	// the settings payload's definitions/value_ids and routes its onChange
 	// back through the same handleFieldChange draft path every other field
 	// uses, so Save submits an ids array under the field's key.

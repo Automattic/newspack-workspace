@@ -23,7 +23,7 @@ const def = ( id, name, extra = {} ) => {
 
 const DEFS = [
 	// One field under two spellings: both schemas carry the ESP name "Account",
-	// which post-pivot can only mean a value-equivalent pair.
+	// which can only mean a value-equivalent pair.
 	def( 'v1:account', 'Account', { status: 'legacy' } ),
 	def( 'v2:Account', 'Account' ),
 	// Same-version siblings sharing one ESP name.
@@ -71,10 +71,9 @@ describe( 'buildFieldRows', () => {
 		expect( buildFieldRows( defs, [] ).find( r => r.name === 'Connected Account' ) ).toBeUndefined();
 	} );
 
-	// The rename that shrank the equivalence set from five pairs to four.
 	// Collapse keys on the shared ESP name alone, so giving the v2 twin its
-	// own name splits the former pair into two independently selectable rows:
-	// the legacy one a site may still be syncing, and the new one it can adopt
+	// own name splits the pair into two independently selectable rows: the
+	// legacy one a site may still be syncing, and the new one it can adopt
 	// alongside — they mean different things (erase-on-lapse vs lifetime).
 	it( 'uncollapses Total Paid, whose v2 twin took its own ESP name', () => {
 		const defs = [
@@ -112,8 +111,8 @@ describe( 'buildFieldRows', () => {
 		expect( buildFieldRows( DEFS, [ 'v1:registration_method' ] ).find( r => r.name === 'Registration Method' ).checked ).toBe( true );
 	} );
 
-	// The migration motion the pivot needs: every current field is offered
-	// everywhere, including on sites that only ever synced the legacy schema.
+	// Every current field is offered everywhere, including on sites that only
+	// ever synced the legacy schema.
 	it( 'lists non-legacy fields whether or not they are enabled', () => {
 		const rows = buildFieldRows( DEFS, [] );
 		expect( rows.find( r => r.name === 'Registration Strategy' ) ).toBeDefined();
@@ -247,8 +246,8 @@ describe( 'OutboundFields', () => {
 		expect( onChange ).toHaveBeenCalledWith( [ 'v2:Account' ] );
 	} );
 
-	// Regression guard for the dropped version picker: no field ever needs a
-	// version choice, so rows carry no per-field details control to open one.
+	// No field ever needs a version choice, so rows carry no per-field details
+	// control to open one.
 	it( 'renders no per-row details control', () => {
 		render( <OutboundFields field={ field } value={ [ 'v1:account' ] } onChange={ () => {} } /> );
 		expect( screen.queryByRole( 'button', { name: /field details/i } ) ).not.toBeInTheDocument();
