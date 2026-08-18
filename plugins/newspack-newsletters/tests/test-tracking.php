@@ -457,4 +457,33 @@ class Newsletters_Tracking_Test extends WP_UnitTestCase {
 		unlink( get_option( 'newspack_newsletters_tracking_pixel_log_file' ) );
 		// phpcs:enable WordPressVIPMinimum.Functions.RestrictedFunctions
 	}
+
+	/**
+	 * Test logs processing – a stale event must not abort the rest of the batch.
+	 */
+	public function test_process_logs_skips_mismatched_tracking_id() {
+		$stale_newsletter_id = $this->factory->post->create( [ 'post_type' => \Newspack_Newsletters::NEWSPACK_NEWSLETTERS_CPT ] );
+		$newsletter_id       = $this->factory->post->create( [ 'post_type' => \Newspack_Newsletters::NEWSPACK_NEWSLETTERS_CPT ] );
+		update_post_meta( $stale_newsletter_id, 'tracking_id', 'tracking_id_current' );
+		update_post_meta( $newsletter_id, 'tracking_id', 'tracking_id_2' );
+
+		// phpcs:disable WordPressVIPMinimum.Functions.RestrictedFunctions
+		// A stale event (old tracking ID) first, then valid events for another newsletter.
+		$log_file_path = tempnam( sys_get_temp_dir(), 'newspack_newsletters_pixel_log_' );
+		file_put_contents( $log_file_path, "$stale_newsletter_id|tracking_id_old|email_1@example.com" . PHP_EOL );
+		file_put_contents( $log_file_path, "$newsletter_id|tracking_id_2|email_2@example.com" . PHP_EOL, FILE_APPEND );
+		file_put_contents( $log_file_path, "$newsletter_id|tracking_id_2|email_3@example.com" . PHP_EOL, FILE_APPEND );
+		update_option( 'newspack_newsletters_tracking_pixel_log_file', $log_file_path );
+
+		Pixel::process_logs();
+
+		// The stale event is not counted.
+		$this->assertEmpty( get_post_meta( $stale_newsletter_id, 'tracking_pixel_seen', true ) );
+		// The events after it still are.
+		$this->assertEquals( 2, get_post_meta( $newsletter_id, 'tracking_pixel_seen', true ) );
+
+		// Clean up.
+		unlink( get_option( 'newspack_newsletters_tracking_pixel_log_file' ) );
+		// phpcs:enable WordPressVIPMinimum.Functions.RestrictedFunctions
+	}
 }

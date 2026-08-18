@@ -212,9 +212,10 @@ final class Pixel {
 
 			$newsletter_tracking_id = \get_post_meta( $newsletter_id, 'tracking_id', true );
 
-			// Bail if tracking ID mismatch.
+			// Skip mismatched events: one stale tracking ID must not drop the
+			// rest of the batch, whose lines are already consumed from the log.
 			if ( $newsletter_tracking_id !== $tracking_id ) {
-				return;
+				continue;
 			}
 
 			$pixel_seen = \get_post_meta( $newsletter_id, 'tracking_pixel_seen', true );
