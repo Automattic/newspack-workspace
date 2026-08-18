@@ -5,7 +5,7 @@
  * @package Creative_Commons_Sharing
  */
 
-// Load the composer autoloader.
+// Load the composer autoloader (provides the PHPUnit Polyfills required by the WP test suite).
 $rtt_autoload = __DIR__ . '/../vendor/autoload.php';
 if ( ! file_exists( $rtt_autoload ) ) {
 	fwrite( STDERR, "Composer autoloader not found. Run `composer install` before running the test suite.\n" ); // phpcs:ignore WordPressVIPMinimum.Functions.RestrictedFunctions.file_ops_fwrite

@@ -48,7 +48,7 @@ export default function EmptyState( { icon, title, description, ctaTitle, ctaHre
 
 	return (
 		<Grid className="newspack-newsletters-admin__empty-state" columns={ 4 } noMargin>
-			<VStack start={ 2 } end={ 4 } spacing={ 8 }>
+			<VStack data-start="2" data-end="4" spacing={ 8 }>
 				<SectionHeader icon={ icon } title={ title } description={ description } pageHeader noMargin />
 				<HStack justify="center">
 					<Button { ...buttonProps }>{ ctaTitle }</Button>
