@@ -143,4 +143,29 @@ grep -v '^export PATH=' "$WRAP" > "$unpinned"; chmod +x "$unpinned"
 ok "control: the same probe hijacks once the pin is removed" \
    "$(hijack_probe "$unpinned")" "hijacked"
 
+# --- the interpreter is resolved before the pin can run ---------------------
+# The pin governs every command the wrapper invokes, but not the interpreter the
+# kernel resolves from line 1. That is absolute today, so the caller's PATH is
+# never consulted for it; an env-resolved shebang would send the lookup through
+# the forwarded PATH while running as root, ahead of the pin. Nothing else holds
+# line 1 in place, so assert it by behaviour rather than by string match.
+printf '#!/bin/bash\ntouch "%s/BASH_HIJACKED"\nexit 0\n' "$FIX" > "$FIX/evil/bash"
+chmod +x "$FIX/evil/bash"
+
+bash_hijack_probe() {
+    rm -f "$FIX/BASH_HIJACKED"
+    PATH="$FIX/evil:$PATH" "$1" alias-add 127.0.0.999 >/dev/null 2>&1 || true
+    [ -e "$FIX/BASH_HIJACKED" ] && echo hijacked || echo clean
+}
+
+ok "a planted bash is not reached as the interpreter" "$(bash_hijack_probe "$WRAP")" "clean"
+
+# Same control logic as above: "clean" alone cannot distinguish an absolute
+# shebang from a probe that never fires, so run it against a copy that differs
+# only in line 1.
+envshebang="$FIX/envshebang"
+{ printf '#!/usr/bin/env bash\n'; tail -n +2 "$WRAP"; } > "$envshebang"; chmod +x "$envshebang"
+ok "control: the same probe hijacks with an env-resolved shebang" \
+   "$(bash_hijack_probe "$envshebang")" "hijacked"
+
 echo ""; echo "RESULT: $pass passed, $fail failed"; [ "$fail" -eq 0 ]
