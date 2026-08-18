@@ -151,6 +151,25 @@ class Newspack_Test_Nextdoor extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Abort at the redirect the OAuth callback ends in, and record where it went.
+	 *
+	 * The handler finishes with `exit`, so a test that let it get there would take the run
+	 * with it. Reaching the filter is also what says the handler ran to the end.
+	 *
+	 * @param string|null $redirect_to Set to the location the handler redirected to.
+	 * @return callable The filter, to remove once the test is done with it.
+	 */
+	private function capture_the_redirect( &$redirect_to ) {
+		$capture = function ( $location ) use ( &$redirect_to ) {
+			$redirect_to = $location;
+			throw new Exception( 'redirect_intercepted' );
+		};
+		add_filter( 'wp_redirect', $capture, 1 );
+
+		return $capture;
+	}
+
+	/**
 	 * Store a token that is nowhere near expiry, so nothing has to be renewed.
 	 */
 	private function connect_with_a_valid_token() {
@@ -865,6 +884,57 @@ class Newspack_Test_Nextdoor extends WP_UnitTestCase {
 		self::assertTrue( Auth::validate_token() );
 		self::assertSame( 'winner-access', Nextdoor::get_settings()['access_token'] );
 		self::assertEmpty( get_option( Auth::REFUSAL_OPTION ) );
+	}
+
+	/**
+	 * The hold-off is site-wide, so a request that lost the race must not leave a failure
+	 * behind for a connection it just found healthy. Only reachable when the winner's grant
+	 * carries no expiry, since that is what keeps later requests reading the hold-off.
+	 */
+	public function test_losing_a_refresh_race_does_not_hold_off_a_healthy_token() {
+		Nextdoor::update_settings(
+			[
+				'client_id'        => 'site-id',
+				'client_secret'    => 'site-secret',
+				'access_token'     => 'expired-access',
+				'refresh_token'    => 'superseded-refresh',
+				'token_expires_at' => time() - 10,
+			]
+		);
+
+		add_filter(
+			'pre_http_request',
+			function () {
+				Nextdoor::update_settings(
+					array_merge(
+						Nextdoor::get_settings(),
+						[
+							'access_token'     => 'winner-access',
+							'refresh_token'    => 'rotated-refresh',
+							// No expiry, so the grant stays due and the hold-off is read.
+							'token_expires_at' => time(),
+						]
+					)
+				);
+
+				return [
+					'headers'  => [],
+					'body'     => wp_json_encode( [ 'error' => 'invalid_grant' ] ),
+					'response' => [
+						'code'    => 400,
+						'message' => 'Bad Request',
+					],
+					'cookies'  => [],
+					'filename' => null,
+				];
+			}
+		);
+
+		self::assertTrue( Auth::validate_token() );
+		self::assertNotSame( Auth::REFRESH_HELD_FAILED, get_transient( Auth::REFRESH_COOLOFF_TRANSIENT ) );
+		// The next request reads the hold-off rather than spending its own refresh, so a
+		// failure recorded above would answer it with an outage that is not happening.
+		self::assertTrue( Auth::validate_token() );
 	}
 
 	/**
@@ -1723,12 +1793,19 @@ class Newspack_Test_Nextdoor extends WP_UnitTestCase {
 		$_GET['code']                    = 'auth-code';
 		$_GET['state']                   = $state;
 
+		$redirect_to = null;
+		$capture     = $this->capture_the_redirect( $redirect_to );
+
 		try {
 			Auth::handle_oauth_callback();
+			self::fail( 'The handler should have redirected.' );
 		} catch ( Exception $e ) {
-			// The handler ends in a redirect and never returns normally.
-			unset( $e );
+			self::assertStringContainsString( 'redirect_intercepted', $e->getMessage() );
+		} finally {
+			remove_filter( 'wp_redirect', $capture, 1 );
 		}
+
+		self::assertStringContainsString( 'oauth_success=1', (string) $redirect_to );
 
 		$settings = Nextdoor::get_settings();
 
@@ -1736,6 +1813,45 @@ class Newspack_Test_Nextdoor extends WP_UnitTestCase {
 		self::assertSame( '', $settings['page_id'] );
 		// The URL is still the publisher's own, so it stays to prefill the claim step.
 		self::assertSame( 'https://example.com', $settings['publication_url'] );
+
+		unset( $_GET['nextdoor_oauth_callback'], $_GET['code'], $_GET['state'] );
+	}
+
+	/**
+	 * Signing in again settles what a failed refresh could not, so the hold-off from that
+	 * attempt must not answer the reconnection the publisher was just asked to make.
+	 */
+	public function test_signing_in_again_clears_a_failed_refresh_hold_off() {
+		Nextdoor::update_settings(
+			[
+				'client_id'     => 'site-id',
+				'client_secret' => 'site-secret',
+			]
+		);
+
+		set_transient( Auth::REFRESH_COOLOFF_TRANSIENT, Auth::REFRESH_HELD_FAILED, MINUTE_IN_SECONDS );
+
+		// No expiry, so the new grant is due immediately and the stale hold-off would be read.
+		$this->http_body = wp_json_encode( [ 'access_token' => 'new-access' ] );
+		add_filter( 'pre_http_request', [ $this, 'stub_nextdoor_response' ], 10, 3 );
+
+		$_GET['nextdoor_oauth_callback'] = '1';
+		$_GET['code']                    = 'auth-code';
+		$_GET['state']                   = Auth::create_oauth_state();
+
+		$redirect_to = null;
+		$capture     = $this->capture_the_redirect( $redirect_to );
+
+		try {
+			Auth::handle_oauth_callback();
+			self::fail( 'The handler should have redirected.' );
+		} catch ( Exception $e ) {
+			self::assertStringContainsString( 'redirect_intercepted', $e->getMessage() );
+		} finally {
+			remove_filter( 'wp_redirect', $capture, 1 );
+		}
+
+		self::assertFalse( get_transient( Auth::REFRESH_COOLOFF_TRANSIENT ) );
 
 		unset( $_GET['nextdoor_oauth_callback'], $_GET['code'], $_GET['state'] );
 	}
@@ -1766,12 +1882,19 @@ class Newspack_Test_Nextdoor extends WP_UnitTestCase {
 		$_GET['code']                    = $code;
 		$_GET['state']                   = Auth::create_oauth_state();
 
+		$redirect_to = null;
+		$capture     = $this->capture_the_redirect( $redirect_to );
+
 		try {
 			Auth::handle_oauth_callback();
+			self::fail( 'The handler should have redirected.' );
 		} catch ( Exception $e ) {
-			// The handler ends in a redirect and never returns normally.
-			unset( $e );
+			self::assertStringContainsString( 'redirect_intercepted', $e->getMessage() );
+		} finally {
+			remove_filter( 'wp_redirect', $capture, 1 );
 		}
+
+		self::assertStringContainsString( 'oauth_success=1', (string) $redirect_to );
 
 		self::assertNotEmpty( $this->http_requests );
 		self::assertSame( $code, $this->http_requests[0]['args']['body']['code'] );
@@ -1813,11 +1936,19 @@ class Newspack_Test_Nextdoor extends WP_UnitTestCase {
 		$_GET['code']                    = 'auth-code';
 		$_GET['state']                   = Auth::create_oauth_state();
 
+		$redirect_to = null;
+		$capture     = $this->capture_the_redirect( $redirect_to );
+
 		try {
 			Auth::handle_oauth_callback();
+			self::fail( 'The handler should have redirected.' );
 		} catch ( Exception $e ) {
-			unset( $e );
+			self::assertStringContainsString( 'redirect_intercepted', $e->getMessage() );
+		} finally {
+			remove_filter( 'wp_redirect', $capture, 1 );
 		}
+
+		self::assertStringContainsString( 'oauth_success=1', (string) $redirect_to );
 
 		$settings = Nextdoor::get_settings();
 
