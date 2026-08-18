@@ -304,6 +304,18 @@ final class Newspack_Popups_Segmentation {
 		if ( ! self::is_newsletter_post( $post ) ) {
 			return $url;
 		}
+		// Mailchimp's own process_link() filter (priority 10) hands the whole URL
+		// back as a bare merge-tag placeholder for links like *|UNSUB|* and
+		// *|UPDATE_PROFILE|*, and is_first_party_url() reads a host-less string as
+		// first-party. Appending to one produces `*|UNSUB|*?np_seg_donor=...`, which the ESP
+		// expands into an unsubscribe URL that already carries its own query string
+		// — two `?`, a link that no longer works, and unsubscribe is required by law
+		// and by Mailchimp's terms. The anchored match only fires when the entire
+		// URL is a placeholder, so a real URL carrying a merge tag in a query value
+		// is still decorated.
+		if ( self::is_unsubstituted_merge_tag( $url ) ) {
+			return $url;
+		}
 		if ( ! self::is_first_party_url( $url ) ) {
 			return $url;
 		}
@@ -369,6 +381,18 @@ final class Newspack_Popups_Segmentation {
 			return $url;
 		}
 		if ( ! self::is_newsletter_post( $post ) ) {
+			return $url;
+		}
+		// Mailchimp's own process_link() filter (priority 10) hands the whole URL
+		// back as a bare merge-tag placeholder for links like *|UNSUB|* and
+		// *|UPDATE_PROFILE|*, and is_first_party_url() reads a host-less string as
+		// first-party. Appending to one produces `*|UNSUB|*?np_account=...`, which the ESP
+		// expands into an unsubscribe URL that already carries its own query string
+		// — two `?`, a link that no longer works, and unsubscribe is required by law
+		// and by Mailchimp's terms. The anchored match only fires when the entire
+		// URL is a placeholder, so a real URL carrying a merge tag in a query value
+		// is still decorated.
+		if ( self::is_unsubstituted_merge_tag( $url ) ) {
 			return $url;
 		}
 		if ( ! self::is_first_party_url( $url ) ) {

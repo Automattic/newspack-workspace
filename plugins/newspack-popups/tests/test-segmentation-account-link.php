@@ -216,4 +216,50 @@ class SegmentationAccountLinkTest extends WP_UnitTestCase {
 			Newspack_Popups_Segmentation::append_account_param( $url, $url, $this->make_newsletter() )
 		);
 	}
+
+	/**
+	 * Mailchimp's own process_link() filter hands the whole URL back as a bare
+	 * merge-tag placeholder for links like *|UNSUB|*. Those have no host, so
+	 * is_first_party_url() reads them as first-party — but decorating one yields
+	 * `*|UNSUB|*?np_account=...`, which the ESP expands into an unsubscribe URL
+	 * that already carries its own query string. Unsubscribe is required by law
+	 * and by Mailchimp's terms, so these links must pass through untouched.
+	 *
+	 * @param string $url Placeholder URL as the ESP filter hands it over.
+	 *
+	 * @dataProvider placeholder_url_provider
+	 */
+	public function test_skips_esp_placeholder_url( $url ) {
+		$this->assertSame(
+			$url,
+			Newspack_Popups_Segmentation::append_account_param( $url, $url, $this->make_newsletter() )
+		);
+	}
+
+	/**
+	 * Whole-URL merge-tag placeholders: the Mailchimp links that carry real
+	 * consequences, plus one shape per other supported ESP.
+	 *
+	 * @return array[]
+	 */
+	public function placeholder_url_provider() {
+		return [
+			'mailchimp unsubscribe'    => [ '*|UNSUB|*' ],
+			'mailchimp update profile' => [ '*|UPDATE_PROFILE|*' ],
+			'mailchimp forward'        => [ '*|FORWARD|*' ],
+			'constant contact'         => [ '[[UNSUBSCRIBE]]' ],
+			'active campaign'          => [ '%UNSUBSCRIBE%' ],
+			'campaign monitor'         => [ '[unsubscribe]' ],
+		];
+	}
+
+	/**
+	 * A real URL that merely carries a merge tag in a query value is still a real
+	 * URL. Only a whole-URL placeholder is skipped.
+	 */
+	public function test_still_decorates_url_carrying_a_merge_tag_value() {
+		$url    = home_url( '/some-article/?utm_content=*|CAMPAIGN_UID|*' );
+		$result = Newspack_Popups_Segmentation::append_account_param( $url, $url, $this->make_newsletter() );
+		$this->assertStringContainsString( 'np_account=*|NP_ACCOUNT|*', $result );
+	}
 }
