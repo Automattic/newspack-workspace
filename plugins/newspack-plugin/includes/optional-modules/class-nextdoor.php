@@ -309,6 +309,12 @@ class Nextdoor {
 	 * @return string Printable ASCII only.
 	 */
 	public static function sanitize_credential( $value ) {
+		// Read straight off the query string on the OAuth callback, which runs for anyone,
+		// so an array has to answer empty rather than warn on the cast.
+		if ( ! is_scalar( $value ) ) {
+			return '';
+		}
+
 		return preg_replace( '/[^\x21-\x7e]/', '', (string) $value );
 	}
 
