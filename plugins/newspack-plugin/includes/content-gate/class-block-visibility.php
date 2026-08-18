@@ -84,11 +84,23 @@ class Block_Visibility {
 	}
 
 	/**
-	 * Whether this render shows a block an anonymous reader would not see.
+	 * Whether this render differs from the one an anonymous reader would get.
+	 *
+	 * Compares the two hide-decisions rather than testing a single direction.
+	 * `visibility` is a two-way toggle, and is_hidden_for_user() inverts on it: with
+	 * `hidden`, a reader who matches the rules has the block withheld while anonymous
+	 * keeps it. That render varies per requester too, so a one-directional check
+	 * ("shows a block anonymous would not see") misses it and lets it be cached.
 	 *
 	 * Split out so the decision is testable without inspecting response headers:
 	 * batcache_cancel() and header() are both unobservable under PHPUnit, so a test
 	 * written against them asserts nothing.
+	 *
+	 * Assumes an anonymous render never varies from another anonymous render. The
+	 * `institution` rule contradicts that -- it sets supports_anonymous and evaluates
+	 * on IP or cookie, so two anonymous readers can legitimately differ and the first
+	 * one cached wins. That is pre-existing on the front-end path and unchanged here;
+	 * it is tracked separately rather than assumed away.
 	 *
 	 * @param array    $block   Parsed block.
 	 * @param int      $user_id Reader the response was rendered for.
@@ -96,11 +108,7 @@ class Block_Visibility {
 	 * @return bool
 	 */
 	public static function render_varies_from_anonymous( $block, $user_id, $post_id = null ) {
-		if ( empty( $user_id ) ) {
-			return false;
-		}
-		return ! self::is_hidden_for_user( $block, $user_id, $post_id )
-			&& self::is_hidden_for_user( $block, 0 );
+		return self::is_hidden_for_user( $block, $user_id, $post_id ) !== self::is_hidden_for_user( $block, 0 );
 	}
 
 	/**

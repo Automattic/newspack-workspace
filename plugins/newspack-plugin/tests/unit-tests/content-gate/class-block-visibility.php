@@ -453,6 +453,31 @@ class Newspack_Test_Block_Visibility extends WP_UnitTestCase {
 			Block_Visibility::render_varies_from_anonymous( $ungated, $editor_id, $post_id ),
 			'A block with no active rules is the same for everyone, privileged or not.'
 		);
+
+		// The other direction of the visibility toggle. A reader who matches the
+		// rules has a `hidden` block withheld while anonymous keeps it, so the
+		// render varies per requester just as much -- a check written as "shows a
+		// block anonymous would not see" returns false here and caches it.
+		$reader_id = $this->factory->user->create( [ 'role' => 'subscriber' ] );
+		$other_id  = $this->factory->post->create();
+		$inverted  = $this->make_block_with_rules( 'core/group', $rules, 'hidden' );
+
+		Block_Visibility::reset_cache_for_tests();
+		$this->assertTrue(
+			Block_Visibility::is_hidden_for_user( $inverted, $reader_id, $other_id ),
+			'Precondition: a matching reader has the hidden-mode block withheld.'
+		);
+		Block_Visibility::reset_cache_for_tests();
+		$this->assertFalse(
+			Block_Visibility::is_hidden_for_user( $inverted, 0, $other_id ),
+			'Precondition: an anonymous reader still sees it, so the two renders differ.'
+		);
+
+		Block_Visibility::reset_cache_for_tests();
+		$this->assertTrue(
+			Block_Visibility::render_varies_from_anonymous( $inverted, $reader_id, $other_id ),
+			'A hidden-mode block withheld from a matching reader varies from the anonymous render too.'
+		);
 	}
 
 	/**
