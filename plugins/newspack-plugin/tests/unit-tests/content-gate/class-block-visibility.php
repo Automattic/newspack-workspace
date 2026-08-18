@@ -821,4 +821,48 @@ class Newspack_Test_Block_Visibility extends WP_UnitTestCase {
 		$this->assertStringContainsString( 'KEEP', $out );
 		$this->assertNotEmpty( parse_blocks( $out ), 'Output is re-parseable.' );
 	}
+
+	/**
+	 * Gate mode: the active-gate check resolves a gate once per request, however
+	 * many blocks render against it.
+	 */
+	public function test_gate_mode_active_gate_check_does_not_refetch_per_render() {
+		$gate_id = $this->make_gate();
+		$fetches = 0;
+
+		// Content_Gate::get_gate() reads gate_priority exactly once per call, so this
+		// counts gate reconstructions. get_post_metadata fires ahead of the meta cache,
+		// so the count reflects calls rather than cache misses.
+		$counter = function ( $value, $object_id, $meta_key ) use ( &$fetches, $gate_id ) {
+			if ( 'gate_priority' === $meta_key && (int) $object_id === (int) $gate_id ) {
+				++$fetches;
+			}
+			return $value;
+		};
+		add_filter( 'get_post_metadata', $counter, 10, 3 );
+
+		wp_set_current_user( 0 );
+		Block_Visibility::reset_cache_for_tests();
+
+		$block = $this->make_block(
+			'core/group',
+			[
+				'newspackAccessControlMode'    => 'gate',
+				'newspackAccessControlGateIds' => [ $gate_id ],
+			]
+		);
+
+		Block_Visibility::filter_render_block( '<div>members</div>', $block );
+		$after_first = $fetches;
+		Block_Visibility::filter_render_block( '<div>members</div>', $block );
+		Block_Visibility::filter_render_block( '<div>members</div>', $block );
+
+		remove_filter( 'get_post_metadata', $counter, 10 );
+
+		$this->assertSame(
+			$after_first,
+			$fetches,
+			'Gate reconstructions must not grow with the number of block renders.'
+		);
+	}
 }

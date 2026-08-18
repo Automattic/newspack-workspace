@@ -404,11 +404,29 @@ class Block_Visibility {
 	private static $strip_cache = [];
 
 	/**
+	 * Per-request cache of has_active_gates() results, keyed by "{blog_id}:{md5(gate_ids)}".
+	 *
+	 * The blog id is in the key because gate ids are per-site post ids, so a
+	 * switch_to_blog() mid-request would otherwise answer for the wrong site.
+	 *
+	 * Not flushed when a gate is written. The only reader is the render path, which
+	 * returns early under is_admin(), and the gate-editing endpoints return gate data
+	 * rather than rendered post content -- so no request both writes a gate and renders
+	 * a block gated by it. A caller that breaks that assumption needs an invalidation
+	 * hook here, the way Content_Gate flushes its own cache on save_post and the
+	 * post-meta writes.
+	 *
+	 * @var bool[]
+	 */
+	private static $active_gates_cache = [];
+
+	/**
 	 * Reset the per-request caches. Used in unit tests only.
 	 */
 	public static function reset_cache_for_tests() {
-		self::$rules_match_cache = [];
-		self::$strip_cache       = [];
+		self::$rules_match_cache  = [];
+		self::$strip_cache        = [];
+		self::$active_gates_cache = [];
 	}
 
 	/**
@@ -451,13 +469,22 @@ class Block_Visibility {
 	 * @return bool
 	 */
 	private static function has_active_gates( $gate_ids ) {
+		$cache_key = get_current_blog_id() . ':' . md5( wp_json_encode( $gate_ids ) );
+		if ( isset( self::$active_gates_cache[ $cache_key ] ) ) {
+			return self::$active_gates_cache[ $cache_key ];
+		}
+
+		$has_active = false;
 		foreach ( $gate_ids as $gate_id ) {
 			$gate = Content_Gate::get_gate( $gate_id );
 			if ( ! \is_wp_error( $gate ) && 'publish' === $gate['status'] ) {
-				return true;
+				$has_active = true;
+				break;
 			}
 		}
-		return false;
+
+		self::$active_gates_cache[ $cache_key ] = $has_active;
+		return $has_active;
 	}
 
 	/**
