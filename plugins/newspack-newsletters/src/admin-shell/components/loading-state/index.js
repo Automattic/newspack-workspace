@@ -16,10 +16,9 @@ import { useEffect } from '@wordpress/element';
  * @return {JSX.Element} The rendered loading state.
  */
 export default function LoadingState( { label } ) {
-	// `speak()` owns the announcement rather than a `role="status"` here:
-	// a live region that mounts with its text already in place isn't
-	// announced at all by some screen readers and is announced twice by
-	// others once both are present.
+	// `speak()` owns this rather than a `role="status"`: a live region that
+	// mounts with its text already in place is unreliable, and carrying
+	// both makes some screen readers say it twice.
 	useEffect( () => {
 		speak( label, 'polite' );
 	}, [ label ] );

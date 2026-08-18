@@ -5,9 +5,9 @@
  * follows the user across browsers, matching classic Screen Options.
  *
  * Persisted: the presentation half of the view — layout type, sort,
- * visible fields (in their display order), density, column widths and
- * items per page. Not persisted: page, search and filters, which are a
- * query rather than a configuration.
+ * visible fields (in their display order and with their toggles),
+ * density, column widths and items per page. Not persisted: page,
+ * search and filters, which are a query rather than a configuration.
  *
  * Saves are debounced because column resizing streams changes, and
  * flushed on `pagehide` so navigating away right after a click can't
@@ -29,9 +29,8 @@ const DENSITIES = [ 'compact', 'balanced', 'comfortable' ];
 
 const SORT_DIRECTIONS = [ 'asc', 'desc' ];
 
-// DataViews renders these alongside the field checkboxes in View options,
-// so they have to persist with them. Mirrors
-// `Admin_Shell_Preferences::VISIBILITY_FLAGS`.
+// DataViews renders these in View options alongside the field
+// checkboxes. Mirrors `Admin_Shell_Preferences::VISIBILITY_FLAGS`.
 const VISIBILITY_FLAGS = [ 'showTitle', 'showMedia', 'showDescription' ];
 
 // Mirrors `Admin_Shell_Preferences::MAX_PREVIEW_SIZE`. The grid stores a
@@ -45,10 +44,8 @@ const isNonEmptyString = value => typeof value === 'string' && value.length > 0;
 // Mirrors `Admin_Shell_Preferences::ALIGNMENTS`.
 const ALIGNMENTS = [ 'start', 'center', 'end' ];
 
-// DataViews owns the shape of a column style, so pick the keys the server
-// stores rather than forwarding it whole: an unknown key or an unknown
-// alignment would fail schema validation, and a rejected save takes every
-// other appearance setting down with it.
+// Picked key by key rather than forwarded whole: DataViews owns this
+// shape, and one unknown key would fail validation for the whole payload.
 function toColumnStyles( styles ) {
 	const clean = {};
 	for ( const [ id, style ] of Object.entries( styles ) ) {
@@ -57,9 +54,7 @@ function toColumnStyles( styles ) {
 		}
 		const picked = {};
 		for ( const key of [ 'width', 'minWidth', 'maxWidth' ] ) {
-			// `Number.isFinite`, not `typeof`: NaN and Infinity serialise to
-			// `null`, which the schema rejects, and a rejected payload is
-			// re-sent on every later change.
+			// NaN and Infinity serialise to `null`, which the schema rejects.
 			if ( Number.isFinite( style[ key ] ) || isNonEmptyString( style[ key ] ) ) {
 				picked[ key ] = style[ key ];
 			}
@@ -77,9 +72,8 @@ function toColumnStyles( styles ) {
 // The server rejects a payload with nothing storable in it, so don't send one.
 const isSavable = payload => payload !== '{}';
 
-// DataViews rebuilds `layout.styles` as columns are resized, and key
-// order follows insertion — sort so an unchanged view can't serialise
-// differently and trigger a save on its own.
+// Key order follows insertion, so sort: an unchanged view must not
+// serialise differently and trigger a save on its own.
 function stableStringify( value ) {
 	if ( Array.isArray( value ) ) {
 		return `[${ value.map( stableStringify ).join( ',' ) }]`;
@@ -170,10 +164,8 @@ function toViewPatch( prefs, { perPageOptions, fieldIds, layoutTypes } ) {
 
 	const isKnownField = id => ! fieldIds || fieldIds.includes( id );
 
-	// The server validates a range, not a per-screen set — a stored
-	// value this screen doesn't offer (a legacy value, or one saved on a
-	// screen with different steps) would leave the control with nothing
-	// highlighted, so fall back to the default.
+	// A stored value this screen doesn't offer would leave the control
+	// with nothing highlighted, so fall back to the default.
 	if ( isValidPerPage( prefs.perPage ) && perPageOptions.includes( prefs.perPage ) ) {
 		patch.perPage = prefs.perPage;
 	}
@@ -188,10 +180,8 @@ function toViewPatch( prefs, { perPageOptions, fieldIds, layoutTypes } ) {
 
 	if ( Array.isArray( prefs.fields ) ) {
 		const fields = prefs.fields.filter( id => isNonEmptyString( id ) && isKnownField( id ) );
-		// An empty stored array means "hide every column" and is honoured.
-		// An array the filter emptied means every stored column has since
-		// been renamed or removed, so fall back to the screen's default
-		// rather than restoring a title-only list nobody asked for.
+		// An empty stored array means "hide every column". An array the
+		// filter emptied means those columns are gone, so use the default.
 		if ( fields.length > 0 || prefs.fields.length === 0 ) {
 			patch.fields = fields;
 		}
@@ -265,14 +255,10 @@ export default function usePersistedView(
 
 	const serialized = useMemo( () => stableStringify( toPrefs( view ) ), [ view ] );
 
-	// The mounted view is the baseline, so nothing is written until the
-	// user changes something. A legacy deep link therefore doesn't write
-	// on arrival, though its sort does ride along once the user changes
-	// anything else, since the payload is the whole presentation state.
+	// The mounted view is the baseline, so nothing is written on arrival.
+	// A legacy deep link's sort rides along on the first save after that.
 	const lastSavedRef = useRef( serialized );
 	const desiredRef = useRef( serialized );
-	// The write currently in flight, or null. Identity matters: each save
-	// clears it only if it is still the one in flight.
 	const inFlightRef = useRef( null );
 	const unloadingRef = useRef( false );
 	const flushRef = useRef( () => {} );
@@ -303,9 +289,7 @@ export default function usePersistedView(
 					if ( inFlightRef.current === inFlight ) {
 						inFlightRef.current = null;
 					}
-					// The page is going: a chained save would be cancelled
-					// with it, and a retry would re-send what we just
-					// superseded.
+					// The page is going: a chained save or retry goes with it.
 					if ( unloadingRef.current ) {
 						return;
 					}
@@ -325,19 +309,13 @@ export default function usePersistedView(
 			if ( payload === lastSavedRef.current || ! isSavable( payload ) ) {
 				return;
 			}
-			// The in-flight guard keeps debounced saves in order, and the
-			// chained save in `finally` picks up anything newer. On the way
-			// out that chain can't be relied on: the request in flight was
-			// started without `keepalive`, so it goes with the page.
 			if ( inFlightRef.current ) {
 				if ( ! keepalive ) {
 					return;
 				}
-				// Replace the write in flight rather than waiting on it. It
-				// was started without `keepalive`, so navigation is free to
-				// tear it down mid-request, and if it did survive it could
-				// land after this one and put back what this payload
-				// replaces. Re-sending the same payload is harmless.
+				// Replace the write in flight: it was started without
+				// `keepalive`, so navigation can tear it down, and if it did
+				// survive it could land after this one.
 				unloadingRef.current = true;
 				inFlightRef.current.controller?.abort();
 			}
@@ -356,8 +334,8 @@ export default function usePersistedView(
 
 	useEffect( () => {
 		const flushNow = () => flushRef.current( { keepalive: true } );
-		// A page restored from the back/forward cache goes on saving, and
-		// re-sends anything the freeze dropped.
+		// Restored from the back/forward cache: resume, and re-send
+		// anything the freeze dropped.
 		const resume = () => {
 			unloadingRef.current = false;
 			flushRef.current();

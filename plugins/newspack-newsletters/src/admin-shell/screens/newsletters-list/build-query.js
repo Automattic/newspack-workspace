@@ -32,16 +32,12 @@ const SORT_FIELD_TO_ORDERBY = {
 	author: 'author',
 };
 
-// `_fields` short-circuits `content.rendered` / `excerpt.rendered`, the
-// full `the_content` chain including synchronous oEmbed fetches.
-//
-// Leaving out `_links` is what keeps the list fast: it is the only way
-// to make `_embed` expand anything, and asking for it makes core build
-// every row's link set and compute target hints for its `self` link,
-// re-resolving the entire REST route map per row. Author and term names
-// come from dedicated fields instead — see `Newsletters_List_REST`.
-//
-// `categories`/`tags` are the raw ID arrays Quick Edit seeds from.
+// `_fields` short-circuits the `the_content` chain, and leaving out
+// `_links` is what keeps the list fast: it is the only way to make
+// `_embed` expand anything, and core answers it by re-resolving the REST
+// route map per row. Author and term names come from dedicated fields
+// instead — see `Newsletters_List_REST`. `categories`/`tags` are the raw
+// ID arrays Quick Edit seeds from.
 const BASE_FIELDS = [
 	'id',
 	'status',

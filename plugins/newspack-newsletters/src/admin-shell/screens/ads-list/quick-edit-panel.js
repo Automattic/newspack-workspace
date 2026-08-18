@@ -100,10 +100,9 @@ export default function AdsQuickEditPanel( { item, advertisers, placements, onCl
 			expiry_date: expiryDate,
 			price: price === '' ? 0 : Number( price ),
 		};
-		// Only send a taxonomy the user actually touched. Sending all three
-		// unconditionally would clear them whenever the seed came back
-		// empty, and an ad with no categories runs in every newsletter
-		// rather than none.
+		// Only what the user touched: sending all three would clear them
+		// whenever a seed came back empty, and an ad with no categories runs
+		// in every newsletter rather than none.
 		const data = { meta };
 		if ( advertisersDirty ) {
 			data.newspack_nl_advertiser = advertiserSelections.map( s => s.id );

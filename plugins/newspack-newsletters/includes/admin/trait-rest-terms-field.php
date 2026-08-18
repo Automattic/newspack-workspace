@@ -61,8 +61,8 @@ trait Rest_Terms_Field {
 				'get_callback' => [ static::class, 'rest_get_terms' ],
 				'schema'       => [
 					// Only the list screens and Quick Edit read this, and they
-					// all ask for `edit`. Keeping `view` would put every ad's
-					// targeting into anonymous responses.
+					// ask for `edit`. `view` would put every ad's targeting into
+					// anonymous responses.
 					'context'    => [ 'edit' ],
 					'type'       => 'object',
 					'readonly'   => true,

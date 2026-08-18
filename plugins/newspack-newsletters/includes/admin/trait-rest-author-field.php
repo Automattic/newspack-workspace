@@ -35,9 +35,9 @@ trait Rest_Author_Field {
 			[
 				'get_callback' => [ static::class, 'rest_get_author' ],
 				'schema'       => [
-					// Only the list screens read this, and they all ask for
-					// `edit`. Keeping `view` would ship it to anonymous reads
-					// of the public newsletters collection.
+					// Only the list screens read this, and they ask for `edit`.
+					// `view` would ship it to anonymous reads of the public
+					// newsletters collection.
 					'context'    => [ 'edit' ],
 					'type'       => [ 'object', 'null' ],
 					'readonly'   => true,

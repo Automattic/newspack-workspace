@@ -21,8 +21,7 @@ const saved = ( prefs, screen = 'newsletters-list' ) => ( {
 	path: PATH,
 	method: 'POST',
 	data: { screen, prefs },
-	// Every save carries one so a `pagehide` flush can cancel the write it
-	// supersedes.
+	// Carried so a `pagehide` flush can cancel the write it supersedes.
 	signal: expect.any( AbortSignal ),
 } );
 
@@ -274,8 +273,6 @@ describe( 'usePersistedView', () => {
 			expect( apiFetch ).toHaveBeenLastCalledWith( saved( { perPage: 20, type: 'table' } ) );
 		} );
 
-		// The request in flight was started without `keepalive`, so the
-		// browser cancels it on the way out and the chained save can't run.
 		it( 'flushes the newest value on pagehide even while a save is in flight', async () => {
 			const deferred = {};
 			apiFetch.mockImplementationOnce( () => new Promise( resolve => ( deferred.resolve = resolve ) ) );
@@ -299,9 +296,6 @@ describe( 'usePersistedView', () => {
 			expect( apiFetch ).toHaveBeenLastCalledWith( { ...saved( { perPage: 20, type: 'table' } ), keepalive: true } );
 		} );
 
-		// The request in flight was started without `keepalive`, so leaving
-		// it to finish is exactly the nondeterminism the flush exists to
-		// remove, even when it carries the value we want.
 		it( 'reissues an in-flight save with keepalive when the page goes away', async () => {
 			apiFetch.mockImplementationOnce( () => new Promise( () => {} ) );
 
@@ -335,8 +329,6 @@ describe( 'usePersistedView', () => {
 			expect( apiFetch ).toHaveBeenCalledWith( saved( { perPage: 25, type: 'table', layout: { styles: { status: { minWidth: 40 } } } } ) );
 		} );
 
-		// The server rejects the whole payload on an unknown key, which
-		// would take every other appearance setting down with it.
 		it( 'sends only the column-style keys the server stores', async () => {
 			const { result } = renderHook( () => usePersistedView( 'newsletters-list', DEFAULT_VIEW ) );
 

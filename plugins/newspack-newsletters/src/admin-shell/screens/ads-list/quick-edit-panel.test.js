@@ -161,10 +161,6 @@ describe( 'AdsQuickEditPanel taxonomy seeding', () => {
 		expect( screen.getByTestId( 'panel-dirty' ) ).toHaveTextContent( 'false' );
 	} );
 
-	// A save only carries the taxonomies the user touched. Sending all
-	// three every time would clear them whenever a seed came back empty,
-	// and an ad with no categories runs in every newsletter rather than
-	// none.
 	it( 'leaves the taxonomies out of a status-only save', async () => {
 		renderPanel( itemWithTerms() );
 		await screen.findByRole( 'radio', { name: 'Active' } );

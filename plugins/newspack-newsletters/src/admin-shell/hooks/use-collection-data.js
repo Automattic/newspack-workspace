@@ -101,9 +101,8 @@ export default function useCollectionData( { path, trashCountPath = null, mutati
 					return;
 				}
 
-				// DataViews' loading treatment is visual only, so a walk over
-				// several pages is silent to a screen reader. Announce both
-				// ends of it.
+				// DataViews' loading treatment is visual only, so a multi-page
+				// walk is otherwise silent to a screen reader.
 				speak( __( 'Loading all items. This may take a moment.', 'newspack-newsletters' ), 'polite' );
 
 				const maxPage = Math.min( pagination.totalPages, Math.ceil( FETCH_ALL_MAX_ITEMS / FETCH_ALL_CHUNK_SIZE ) );

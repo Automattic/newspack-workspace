@@ -23,8 +23,6 @@ describe( 'LoadingState', () => {
 		expect( speak ).toHaveBeenCalledWith( 'Fetching layouts…', 'polite' );
 	} );
 
-	// Two live regions carrying the same text means some screen readers
-	// say it twice, so `speak()` is the only announcement.
 	it( 'leaves the announcement to speak rather than a second live region', () => {
 		const { container } = render( <LoadingState label="Fetching ads…" /> );
 

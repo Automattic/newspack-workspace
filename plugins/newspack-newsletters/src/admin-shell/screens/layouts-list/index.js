@@ -74,9 +74,8 @@ const DATAVIEWS_CONFIG = { perPageSizes: [] };
 const PER_PAGE_OPTIONS = [ 12, 24, 48, 96, PER_PAGE_ALL ];
 
 // `mediaField` is grid-only: the table renders it in the primary column,
-// so leaving it set mounts a BlockPreview iframe in every row. Applied
-// to the restored view as well as to changes, since a stored `table`
-// arrives merged over a default that carries the grid's `preview`.
+// so leaving it set mounts a BlockPreview iframe per row. Applied to the
+// restored view too, which arrives merged over the grid default.
 const withLayoutMedia = view => {
 	if ( 'table' === view.type && view.mediaField ) {
 		return { ...view, mediaField: undefined };
