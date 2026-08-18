@@ -18,7 +18,6 @@ const PreviewSetting = ( { autosavePost, isSavingPost, postId, metaFields } ) =>
 	}
 
 	const previewQueryKeys = window.newspack_popups_data?.preview_query_keys || {};
-	const frontendUrl = window?.newspack_popups_data?.frontend_url || '/';
 	const abbreviatedKeys = {};
 	Object.keys( metaFields ).forEach( key => {
 		if ( previewQueryKeys.hasOwnProperty( key ) ) {
@@ -35,18 +34,16 @@ const PreviewSetting = ( { autosavePost, isSavingPost, postId, metaFields } ) =>
 	const isArchivePagesPrompt = metaFields.placement === 'archives';
 	const previewURL = window.newspack_popups_data[ isArchivePagesPrompt ? 'preview_archive' : 'preview_post' ] || '/';
 
-	const onWebPreviewLoad = iframeEl => {
-		if ( iframeEl ) {
-			[ ...iframeEl.contentWindow.document.querySelectorAll( 'a[href^="' + frontendUrl + '"]' ) ].forEach( anchor => {
-				anchor.setAttribute( 'href', addQueryArgs( anchor.getAttribute( 'href' ), query ) );
-			} );
-		}
-	};
-
+	// Links inside the preview keep their preview params, but the previewed
+	// document does that for itself — see propagatePreviewParams() in
+	// src/view/preview-links.js. The editor used to reach into the preview
+	// iframe and rewrite the links from out here, which WordPress 7.1 no longer
+	// permits: it serves the block editor with `Document-Isolation-Policy`,
+	// putting the editor in its own agent cluster and severing synchronous
+	// access to the frame even though it is same-origin.
 	return (
 		<WebPreview
 			url={ addQueryArgs( previewURL, query ) }
-			onLoad={ onWebPreviewLoad }
 			renderButton={ ( { showPreview } ) => (
 				<Button isPrimary isBusy={ isSavingPost } disabled={ isSavingPost } onClick={ () => autosavePost().then( showPreview ) }>
 					{ __( 'Preview', 'newspack-popups' ) }

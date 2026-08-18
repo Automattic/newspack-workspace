@@ -21,11 +21,15 @@ test("Donations",  {
   await page.goto("/support-our-publication/");
   await page.getByRole("button", { name: "Donate Now" }).click();
   await expect(
-    // Match just the amount and cadence: the summary's label prefix has varied
-    // across Newspack versions (e.g. "Donate:" then "Donate: Monthly:"), but the
-    // "$15.00 / month" part is stable and is the bit worth asserting.
-    getModalCheckout(page).locator('strong:has-text("$15.00 / month")')
-  ).toBeVisible();
+    // The order details table is the checkout's source of truth for what the
+    // reader will be charged. Assert on the cart item row, matching just the
+    // amount and cadence: the product label has varied across Newspack versions
+    // (e.g. "Donate:" then "Donate: Monthly"), but "$15.00 / month" is stable
+    // and is the bit worth asserting.
+    getModalCheckout(page).locator(
+      ".woocommerce-checkout-review-order-table .cart_item"
+    )
+  ).toContainText(/\$15\.00\s*\/\s*month/);
 
   await fillModalCheckoutBillingDetails(page, emailAddress);
   await fillStripeTestCard(page);

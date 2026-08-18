@@ -65,7 +65,7 @@ const ContextualPromptsSettings = ( { status, values, error, inFlight, onSetValu
 		return (
 			<WizardsTab>
 				<Grid columns={ 4 } noMargin>
-					<VStack start={ 2 } end={ 4 } spacing={ 8 }>
+					<VStack data-start="2" data-end="4" spacing={ 8 }>
 						{ errorNotice }
 						<SectionHeader
 							icon={ megaphone }
