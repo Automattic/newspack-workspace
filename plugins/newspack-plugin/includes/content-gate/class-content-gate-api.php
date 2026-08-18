@@ -69,8 +69,8 @@ class Content_Gate_API {
 		'custom_access'       => [
 			'type'       => 'object',
 			'properties' => [
-				'active'         => [ 'type' => 'boolean' ],
-				'metering'       => [
+				'active'                 => [ 'type' => 'boolean' ],
+				'metering'               => [
 					'type'       => 'object',
 					'properties' => [
 						'enabled' => [ 'type' => 'boolean' ],
@@ -78,11 +78,15 @@ class Content_Gate_API {
 						'period'  => [ 'type' => 'string' ],
 					],
 				],
-				'gate_layout_id' => [
+				'gate_layout_id'         => [
 					'type'     => 'integer',
 					'required' => false,
 				],
-				'access_rules'   => [
+				'payment_recovery_grace' => [
+					'type'     => 'boolean',
+					'required' => false,
+				],
+				'access_rules'           => [
 					'type'  => 'array',
 					'items' => [
 						'type'  => 'array',
@@ -90,7 +94,7 @@ class Content_Gate_API {
 							'type'       => 'object',
 							'properties' => [
 								'slug'  => [ 'type' => 'string' ],
-								'value' => [ 'type' => [ 'string', 'array' ] ],
+								'value' => [ 'type' => [ 'string', 'array', 'object' ] ],
 							],
 						],
 					],
@@ -182,6 +186,9 @@ class Content_Gate_API {
 		if ( isset( $custom_access['gate_layout_id'] ) ) {
 			$sanitized['gate_layout_id'] = absint( $custom_access['gate_layout_id'] );
 		}
+		if ( isset( $custom_access['payment_recovery_grace'] ) ) {
+			$sanitized['payment_recovery_grace'] = boolval( $custom_access['payment_recovery_grace'] );
+		}
 		return $sanitized;
 	}
 
@@ -198,7 +205,9 @@ class Content_Gate_API {
 			$sanitized['enabled'] = boolval( $metering['enabled'] );
 		}
 		if ( isset( $metering['count'] ) ) {
-			$sanitized['count'] = intval( $metering['count'] );
+			// Floor at 0: signed intval() would persist a negative count, which Metering reads
+			// back through absint() as a positive free-view allowance.
+			$sanitized['count'] = max( 0, intval( $metering['count'] ) );
 		}
 		if ( isset( $metering['period'] ) ) {
 			$sanitized['period'] = sanitize_text_field( $metering['period'] );
@@ -304,6 +313,13 @@ class Content_Gate_API {
 
 		$value = null;
 		$rule  = $rules[ $slug ];
+		// Rules with a composite value shape sanitize it themselves.
+		if ( ! empty( $rule['sanitize_callback'] ) && is_callable( $rule['sanitize_callback'] ) ) {
+			return [
+				'slug'  => $slug,
+				'value' => call_user_func( $rule['sanitize_callback'], $access_rule['value'] ?? null ),
+			];
+		}
 		if ( $rule['is_boolean'] ) {
 			$value = true; // Boolean rules are always true.
 		} elseif ( ! empty( $rule['options'] ) ) {
