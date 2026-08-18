@@ -159,13 +159,7 @@ export default function LayoutsListScreen() {
 		return baseView;
 	}, [ view, showSaved, couldRideAlong, isPrebuiltLoading, ridingAlong, firstPageSavedSlots, restrictedAuthorIds ] );
 
-	const {
-		data: savedData,
-		paginationInfo: savedPagination,
-		isLoading,
-		hasResolved: savedHasResolved,
-		progress,
-	} = useLayoutsData( savedView, mutationKey );
+	const { data: savedData, paginationInfo: savedPagination, isLoading, hasResolved: savedHasResolved } = useLayoutsData( savedView, mutationKey );
 
 	const filteredPrebuilts = showPrebuilts ? prebuiltData : [];
 	const filteredSaved = showSaved ? savedData : [];
@@ -178,7 +172,7 @@ export default function LayoutsListScreen() {
 		const elements = [ { value: PREBUILT_AUTHOR_VALUE, label: __( 'Newspack', 'newspack-newsletters' ) } ];
 		const seen = new Set();
 		savedData.forEach( item => {
-			const author = item?._embedded?.author?.[ 0 ];
+			const author = item?.newspack_newsletters_author;
 			const id = author?.id;
 			const name = author?.name;
 			if ( id && name && ! seen.has( id ) ) {
@@ -312,7 +306,6 @@ export default function LayoutsListScreen() {
 					<ItemsPerPage
 						value={ view.perPage }
 						options={ PER_PAGE_OPTIONS }
-						progress={ progress }
 						onChange={ perPage => setView( current => ( { ...current, perPage, page: 1 } ) ) }
 					/>
 				}

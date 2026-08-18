@@ -21,7 +21,7 @@ function asArray( value ) {
  * @param {string}                                    [options.defaultStatuses]    Comma-joined statuses to use when no status filter is active.
  * @param {string}                                    [options.statusFilterParam]  REST param to receive status-filter values. When omitted, `status` is used.
  * @param {string}                                    [options.defaultStatusParam] REST param to receive `defaultStatuses`. Defaults to `'status'`.
- * @param {Object}                                    [options.extraParams]        Fixed params merged into the result (e.g. `{ _embed: 'author,wp:term' }`).
+ * @param {Object}                                    [options.extraParams]        Fixed params merged into the result (e.g. `{ _fields: 'id,title' }`).
  * @param {boolean}                                   [options.supportsOffset]     When `true`, `view.offset` overrides `page` so callers can address mid-collection windows.
  * @param {Array<{ viewKey: string, param: string }>} [options.arrayParams]        Pass-through bindings for array-valued view fields (e.g. `view.author`).
  * @return {Object} Flat REST query params.

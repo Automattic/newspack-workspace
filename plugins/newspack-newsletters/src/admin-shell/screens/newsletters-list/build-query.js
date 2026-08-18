@@ -32,26 +32,40 @@ const SORT_FIELD_TO_ORDERBY = {
 	author: 'author',
 };
 
+// `_fields` short-circuits `content.rendered` / `excerpt.rendered`, the
+// full `the_content` chain including synchronous oEmbed fetches.
+//
+// Leaving out `_links` is what keeps the list fast: it is the only way
+// to make `_embed` expand anything, and asking for it makes core build
+// every row's link set and compute target hints for its `self` link,
+// re-resolving the entire REST route map per row. Author and term names
+// come from dedicated fields instead — see `Newsletters_List_REST`.
+//
+// `categories`/`tags` are the raw ID arrays Quick Edit seeds from.
+const BASE_FIELDS = [
+	'id',
+	'status',
+	'title',
+	'date',
+	'link',
+	'meta',
+	'categories',
+	'tags',
+	'newspack_newsletters_status',
+	'newspack_newsletters_author',
+];
+
 export function buildQueryParams( view = {} ) {
-	// Term embeds cost ~2 internal REST dispatches per row and only the
-	// (hidden-by-default) Categories/Tags columns read them.
+	// Only the (hidden-by-default) Categories/Tags columns read term names.
 	const visibleFields = Array.isArray( view.fields ) ? view.fields : null;
 	const needsTerms = ! visibleFields || visibleFields.includes( 'categories' ) || visibleFields.includes( 'tags' );
+	const fields = needsTerms ? [ ...BASE_FIELDS, 'newspack_newsletters_terms' ] : BASE_FIELDS;
 
 	return baseBuildQueryParams( view, {
 		fieldToQueryParam: FIELD_TO_QUERY_PARAM,
 		sortFieldToOrderby: SORT_FIELD_TO_ORDERBY,
 		defaultStatuses: DEFAULT_STATUSES,
-		// `_fields` short-circuits `content.rendered` / `excerpt.rendered`
-		// (the full `the_content` chain, incl. synchronous oEmbed fetches)
-		// and the unused editor REST fields — per-item cost the list never
-		// reads. `_links` must stay in the list: `_embed` only expands
-		// links that survive the `_fields` filter.
-		extraParams: {
-			_embed: needsTerms ? 'author,wp:term' : 'author',
-			// `categories`/`tags`: Quick Edit needs them when the embed is skipped.
-			_fields: 'id,status,title,date,link,meta,categories,tags,newspack_newsletters_status,_links',
-		},
+		extraParams: { _fields: fields.join( ',' ) },
 	} );
 }
 

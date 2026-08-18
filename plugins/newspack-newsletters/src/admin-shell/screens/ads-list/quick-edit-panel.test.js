@@ -132,3 +132,49 @@ describe( 'AdsQuickEditPanel status control', () => {
 		expect( screen.getByTestId( 'panel-dirty' ) ).toHaveTextContent( 'true' );
 	} );
 } );
+
+describe( 'AdsQuickEditPanel taxonomy seeding', () => {
+	beforeEach( () => {
+		apiFetch.mockReset();
+		apiFetch.mockResolvedValue( {} );
+	} );
+
+	const itemWithTerms = () => ( {
+		id: 42,
+		status: 'publish',
+		title: { raw: 'Summer sale' },
+		meta: {},
+		newspack_newsletters_terms: {
+			newspack_nl_advertiser: [ { id: 10, name: 'Acme' } ],
+			newspack_nl_ad_placement: [ { id: 20, name: 'Header' } ],
+			category: [],
+		},
+	} );
+
+	it( 'seeds the advertiser and placement pickers from the terms field', async () => {
+		const { container } = renderPanel( itemWithTerms() );
+		await screen.findByRole( 'radio', { name: 'Active' } );
+
+		const tokens = [ ...container.querySelectorAll( '.components-form-token-field__token-text' ) ].map( el => el.textContent );
+		expect( tokens.some( text => text.includes( 'Acme' ) ) ).toBe( true );
+		expect( tokens.some( text => text.includes( 'Header' ) ) ).toBe( true );
+		expect( screen.getByTestId( 'panel-dirty' ) ).toHaveTextContent( 'false' );
+	} );
+
+	// Every save sends all three taxonomies, so a picker that seeded empty
+	// would silently clear the ad's terms.
+	it( 'sends the existing term IDs back on a status-only save', async () => {
+		renderPanel( itemWithTerms() );
+		await screen.findByRole( 'radio', { name: 'Active' } );
+
+		fireEvent.click( screen.getByRole( 'radio', { name: 'Inactive' } ) );
+		fireEvent.click( screen.getByTestId( 'panel-save' ) );
+
+		await waitFor( () => expect( postCall() ).toBeDefined() );
+		expect( postCall().data ).toMatchObject( {
+			newspack_nl_advertiser: [ 10 ],
+			ad_placement: [ 20 ],
+			categories: [],
+		} );
+	} );
+} );

@@ -382,6 +382,80 @@ class Ads_List_REST_Test extends WP_UnitTestCase {
 	}
 
 	/**
+	 * The terms field is registered too. It exists so the list never has
+	 * to ask for `_links`, which is what makes core build a link set and
+	 * compute target hints for every row.
+	 */
+	public function test_terms_field_is_registered_on_ads_cpt() {
+		do_action( 'rest_api_init' );
+
+		global $wp_rest_additional_fields;
+
+		$cpt    = Ads::CPT;
+		$fields = isset( $wp_rest_additional_fields[ $cpt ] ) ? $wp_rest_additional_fields[ $cpt ] : [];
+
+		$this->assertArrayHasKey( 'newspack_newsletters_terms', $fields );
+		$this->assertIsCallable( $fields['newspack_newsletters_terms']['get_callback'] );
+	}
+
+	/**
+	 * Every taxonomy the ads list touches ships as `{ id, name }`: the
+	 * columns render the names, and Quick Edit seeds its pickers from
+	 * the IDs and sends all three back on every save.
+	 */
+	public function test_terms_field_covers_every_quick_edit_taxonomy() {
+		$post_id     = $this->make_ad();
+		$advertiser  = self::factory()->term->create(
+			[
+				'taxonomy' => 'newspack_nl_advertiser',
+				'name'     => 'Acme',
+			]
+		);
+		$placement   = self::factory()->term->create(
+			[
+				'taxonomy' => 'newspack_nl_ad_placement',
+				'name'     => 'Header',
+			]
+		);
+		$category_id = self::factory()->category->create( [ 'name' => 'Promotions' ] );
+
+		wp_set_post_terms( $post_id, [ $advertiser ], 'newspack_nl_advertiser' );
+		wp_set_post_terms( $post_id, [ $placement ], 'newspack_nl_ad_placement' );
+		wp_set_post_terms( $post_id, [ $category_id ], 'category' );
+
+		$terms = Ads_List_REST::get_terms_payload( $post_id, Ads_List_REST::LIST_TAXONOMIES );
+
+		$this->assertSame( [ 'newspack_nl_advertiser', 'newspack_nl_ad_placement', 'category' ], array_keys( $terms ) );
+		$this->assertSame(
+			[
+				[
+					'id'   => $advertiser,
+					'name' => 'Acme',
+				],
+			],
+			$terms['newspack_nl_advertiser'] 
+		);
+		$this->assertSame(
+			[
+				[
+					'id'   => $placement,
+					'name' => 'Header',
+				],
+			],
+			$terms['newspack_nl_ad_placement'] 
+		);
+		$this->assertSame(
+			[
+				[
+					'id'   => $category_id,
+					'name' => 'Promotions',
+				],
+			],
+			$terms['category'] 
+		);
+	}
+
+	/**
 	 * Helper: build a REST request with the given query params.
 	 *
 	 * @param array $params Query params keyed by name.

@@ -1,10 +1,11 @@
 /**
  * Shared term/taxonomy helpers for DataView screens.
  *
- * Reads `_embedded.wp:term`, paginates beyond the 100-item REST cap,
- * and round-trips `FormTokenField` tokens. `resolveTokens` preserves
- * existing selections' IDs across re-renders (see its comment for the
- * residual duplicate-name caveat on hierarchical taxonomies).
+ * Reads the `newspack_newsletters_terms` REST field, paginates beyond
+ * the 100-item REST cap, and round-trips `FormTokenField` tokens.
+ * `resolveTokens` preserves existing selections' IDs across re-renders
+ * (see its comment for the residual duplicate-name caveat on
+ * hierarchical taxonomies).
  */
 
 import apiFetch from '@wordpress/api-fetch';
@@ -40,15 +41,10 @@ export async function fetchAllTerms( basePath, { fields = [ 'id', 'name' ] } = {
 	return all;
 }
 
-// Keyed lookup — group order isn't guaranteed across post types.
+// Keyed by taxonomy slug — see `Rest_Terms_Field` for the payload shape.
 export const termsForTaxonomy = ( item, taxonomy ) => {
-	const groups = item?._embedded?.[ 'wp:term' ] || [];
-	for ( const group of groups ) {
-		if ( Array.isArray( group ) && group.length > 0 && group[ 0 ]?.taxonomy === taxonomy ) {
-			return group;
-		}
-	}
-	return [];
+	const terms = item?.newspack_newsletters_terms?.[ taxonomy ];
+	return Array.isArray( terms ) ? terms : [];
 };
 
 export const initialSelectionsForTaxonomy = ( item, taxonomy ) =>

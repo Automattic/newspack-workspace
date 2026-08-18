@@ -314,6 +314,87 @@ class Newsletters_List_REST_Test extends WP_UnitTestCase {
 	}
 
 	/**
+	 * The author and term fields are registered too. They exist so the
+	 * list never has to ask for `_links`, which is what makes core build
+	 * a link set and compute target hints for every row.
+	 */
+	public function test_author_and_term_fields_are_registered_on_newsletters_cpt() {
+		do_action( 'rest_api_init' );
+
+		global $wp_rest_additional_fields;
+
+		$cpt    = Newspack_Newsletters::NEWSPACK_NEWSLETTERS_CPT;
+		$fields = isset( $wp_rest_additional_fields[ $cpt ] ) ? $wp_rest_additional_fields[ $cpt ] : [];
+
+		foreach ( [ 'newspack_newsletters_author', 'newspack_newsletters_terms' ] as $field ) {
+			$this->assertArrayHasKey( $field, $fields );
+			$this->assertIsCallable( $fields[ $field ]['get_callback'] );
+		}
+	}
+
+	/**
+	 * The author field carries everything the Author column renders —
+	 * the display name and an avatar URL — so the column no longer needs
+	 * `_embed=author`.
+	 */
+	public function test_author_field_returns_display_name_and_avatar() {
+		$user_id = self::factory()->user->create(
+			[
+				'role'         => 'editor',
+				'display_name' => 'Ada Lovelace',
+			]
+		);
+		$post_id = $this->make_newsletter( [ 'post_author' => $user_id ] );
+
+		$author = Newsletters_List_REST::get_author_payload( $post_id );
+
+		$this->assertSame( $user_id, $author['id'] );
+		$this->assertSame( 'Ada Lovelace', $author['name'] );
+		$this->assertNotSame( '', $author['avatar'] );
+	}
+
+	/**
+	 * A post whose author no longer exists renders a blank cell rather
+	 * than tripping on a missing user.
+	 */
+	public function test_author_field_is_null_when_the_user_is_gone() {
+		$post_id = $this->make_newsletter( [ 'post_author' => 999999 ] );
+
+		$this->assertNull( Newsletters_List_REST::get_author_payload( $post_id ) );
+		$this->assertNull( Newsletters_List_REST::get_author_payload( 0 ) );
+	}
+
+	/**
+	 * The terms field returns `{ id, name }` per taxonomy: the columns
+	 * render the names, Quick Edit seeds its pickers from the IDs.
+	 */
+	public function test_terms_field_returns_names_per_taxonomy() {
+		$post_id = $this->make_newsletter();
+		// Hierarchical taxonomies take IDs — passing names casts them to 0.
+		$category_ids = [
+			self::factory()->category->create( [ 'name' => 'Weekly' ] ),
+			self::factory()->category->create( [ 'name' => 'Culture' ] ),
+		];
+		wp_set_post_terms( $post_id, $category_ids, 'category' );
+		wp_set_post_terms( $post_id, [ 'digest' ], 'post_tag' );
+
+		$terms = Newsletters_List_REST::get_terms_payload( $post_id, Newsletters_List_REST::LIST_TAXONOMIES );
+
+		$this->assertEqualSets( [ 'Weekly', 'Culture' ], wp_list_pluck( $terms['category'], 'name' ) );
+		$this->assertEqualSets( $category_ids, wp_list_pluck( $terms['category'], 'id' ) );
+		$this->assertSame( [ 'digest' ], wp_list_pluck( $terms['post_tag'], 'name' ) );
+
+		$empty = Newsletters_List_REST::get_terms_payload( $this->make_newsletter(), Newsletters_List_REST::LIST_TAXONOMIES );
+		$this->assertSame(
+			[
+				'category' => [],
+				'post_tag' => [],
+			],
+			$empty
+		);
+	}
+
+	/**
 	 * Helper: build a REST request with the given query params.
 	 *
 	 * @param array $params Query params keyed by name.

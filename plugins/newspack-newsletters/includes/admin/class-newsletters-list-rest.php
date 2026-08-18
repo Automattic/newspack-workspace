@@ -19,8 +19,15 @@ use WP_Post;
  * needs.
  */
 class Newsletters_List_REST {
+	use Rest_Author_Field;
 	use Rest_Status_Field;
+	use Rest_Terms_Field;
 	use Status_Filter_Builder;
+
+	/**
+	 * Taxonomies behind the Categories and Tags columns.
+	 */
+	const LIST_TAXONOMIES = [ 'category', 'post_tag' ];
 
 	const IS_PUBLIC_QUERY_PARAM = 'newspack_newsletters_is_public';
 	const SEND_LIST_QUERY_PARAM = 'newspack_newsletters_send_list_id';
@@ -427,6 +434,17 @@ class Newsletters_List_REST {
 					'type' => [ 'integer', 'null' ],
 				],
 			]
+		);
+
+		self::register_author_field(
+			Newspack_Newsletters::NEWSPACK_NEWSLETTERS_CPT,
+			'newspack_newsletters_author'
+		);
+
+		self::register_terms_field(
+			Newspack_Newsletters::NEWSPACK_NEWSLETTERS_CPT,
+			'newspack_newsletters_terms',
+			self::LIST_TAXONOMIES
 		);
 	}
 

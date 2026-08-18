@@ -3,7 +3,7 @@ import apiFetch from '@wordpress/api-fetch';
 
 import useCollectionData from './use-collection-data';
 import { notifyError, notifyInfo } from '../notices';
-import { FETCH_ALL_MAX_ITEMS } from '../utils/per-page';
+import { FETCH_ALL_CHUNK_SIZE, FETCH_ALL_MAX_ITEMS } from '../utils/per-page';
 
 jest.mock( '@wordpress/api-fetch', () => jest.fn() );
 jest.mock( '../notices', () => ( { notifyError: jest.fn(), notifyInfo: jest.fn() } ) );
@@ -30,7 +30,6 @@ describe( 'useCollectionData', () => {
 		await waitFor( () => expect( result.current.hasResolved ).toBe( true ) );
 		expect( result.current.data ).toHaveLength( 2 );
 		expect( result.current.paginationInfo ).toEqual( { totalItems: 60, totalPages: 3 } );
-		expect( result.current.progress ).toBeNull();
 		expect( apiFetch ).toHaveBeenCalledTimes( 1 );
 	} );
 
@@ -51,8 +50,6 @@ describe( 'useCollectionData', () => {
 			await waitFor( () => expect( result.current.isLoading ).toBe( false ) );
 			expect( result.current.data.map( item => item.id ) ).toEqual( [ 1, 2, 3, 4, 5 ] );
 			expect( result.current.paginationInfo ).toEqual( { totalItems: 5, totalPages: 1 } );
-			// Walk finished — progress resets so the control label recovers.
-			expect( result.current.progress ).toBeNull();
 			expect( apiFetch ).toHaveBeenCalledTimes( 3 );
 		} );
 
@@ -93,15 +90,15 @@ describe( 'useCollectionData', () => {
 		it( 'stops at the fetch-all cap and notifies the list was truncated', async () => {
 			apiFetch.mockImplementation( ( { path, parse } ) => {
 				const page = Number( ( path.match( /[?&]page=(\d+)/ ) || [] )[ 1 ] || 1 );
-				const items = Array.from( { length: 100 }, ( unused, i ) => ( { id: page * 100 + i } ) );
+				const items = Array.from( { length: FETCH_ALL_CHUNK_SIZE }, ( unused, i ) => ( { id: page * FETCH_ALL_CHUNK_SIZE + i } ) );
 				return Promise.resolve( parse === false ? makeResponse( items, { total: 50000, totalPages: 500 } ) : items );
 			} );
 
-			const { result } = renderHook( () => useCollectionData( { path: '/wp/v2/test?per_page=100&page=1', fetchAll: true } ) );
+			const { result } = renderHook( () => useCollectionData( { path: '/wp/v2/test?page=1', fetchAll: true } ) );
 
 			await waitFor( () => expect( result.current.isLoading ).toBe( false ) );
 			expect( result.current.data ).toHaveLength( FETCH_ALL_MAX_ITEMS );
-			expect( apiFetch ).toHaveBeenCalledTimes( FETCH_ALL_MAX_ITEMS / 100 );
+			expect( apiFetch ).toHaveBeenCalledTimes( FETCH_ALL_MAX_ITEMS / FETCH_ALL_CHUNK_SIZE );
 			expect( notifyInfo ).toHaveBeenCalledWith(
 				`Showing the first ${ FETCH_ALL_MAX_ITEMS.toLocaleString() } items. Use search or filters to narrow the list.`
 			);

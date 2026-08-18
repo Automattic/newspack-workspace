@@ -42,8 +42,11 @@ class Admin_Shell_Preferences {
 	const SCREEN_KEYS = [ 'newsletters-list', 'ads-list', 'advertisers-list', 'layouts-list' ];
 
 	/**
-	 * Client-side sentinel for "All" — the REST API caps `per_page` at
-	 * 100, so the client fetches in chunks and concatenates.
+	 * `PER_PAGE_ALL` is the client-side sentinel for "All", which fetches
+	 * the collection in chunks and concatenates. `PER_PAGE_MAX` is the
+	 * largest value the items-per-page controls offer, and so the largest
+	 * a stored preference may hold. It is deliberately not the ceiling
+	 * those collections accept — see `Admin_Shell_Collection_Params`.
 	 */
 	const PER_PAGE_ALL = -1;
 	const PER_PAGE_MAX = 100;
