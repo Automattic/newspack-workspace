@@ -196,12 +196,6 @@ body.newspack-newsletters-admin-screen--bundled {
 	}
 }
 
-// Centered over the admin content while an "All" fetch walks the
-// collection (portalled to body — inside the DataViews tree every
-// ancestor stack is a positioning context, which would pin it to the
-// actions row). `left` is set inline from #wpbody's box. The delayed
-// fade keeps fast walks from flashing the overlay in and out.
-
 body.newspack-newsletters-admin-screen .dataviews-view-table a:not(.newspack-newsletters-list__title) {
 	color: var(--wp-admin-theme-color);
 

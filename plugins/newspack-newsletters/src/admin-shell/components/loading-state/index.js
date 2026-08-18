@@ -6,7 +6,9 @@
  * has rendered, DataViews' own loading treatment takes over.
  */
 
+import { speak } from '@wordpress/a11y';
 import { Spinner, __experimentalText as Text, __experimentalVStack as VStack } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
+import { useEffect } from '@wordpress/element';
 
 /**
  * @param {Object} props
@@ -14,6 +16,12 @@ import { Spinner, __experimentalText as Text, __experimentalVStack as VStack } f
  * @return {JSX.Element} The rendered loading state.
  */
 export default function LoadingState( { label } ) {
+	// A live region that mounts with its text already in place isn't
+	// reliably announced, so say it directly.
+	useEffect( () => {
+		speak( label, 'polite' );
+	}, [ label ] );
+
 	return (
 		<VStack className="newspack-newsletters-admin__loading" alignment="center" spacing={ 3 } role="status">
 			<Spinner />

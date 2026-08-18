@@ -1,3 +1,4 @@
+import { speak } from '@wordpress/a11y';
 import apiFetch from '@wordpress/api-fetch';
 import { useCallback, useEffect, useState } from '@wordpress/element';
 import { __, sprintf } from '@wordpress/i18n';
@@ -99,6 +100,11 @@ export default function useCollectionData( { path, trashCountPath = null, mutati
 					return;
 				}
 
+				// DataViews' loading treatment is visual only, so a walk over
+				// several pages is silent to a screen reader. Announce both
+				// ends of it.
+				speak( __( 'Loading all items. This may take a moment.', 'newspack-newsletters' ), 'polite' );
+
 				const maxPage = Math.min( pagination.totalPages, Math.ceil( FETCH_ALL_MAX_ITEMS / FETCH_ALL_CHUNK_SIZE ) );
 
 				let endedEarly = false;
@@ -163,6 +169,7 @@ export default function useCollectionData( { path, trashCountPath = null, mutati
 				}
 
 				setData( all );
+				speak( __( 'Finished loading items.', 'newspack-newsletters' ), 'polite' );
 
 				if ( endedEarly ) {
 					setPaginationInfo( { totalItems: all.length, totalPages: 1 } );
