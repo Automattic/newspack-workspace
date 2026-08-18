@@ -376,7 +376,7 @@ class Premium_Newsletters_Migration {
 		);
 		// Said on every run, not just a warning tail: the operator whose run is clean is
 		// the one most likely to read the summary as "the gates are live now".
-		WP_CLI::line( 'These gates do not restrict anything yet: while WooCommerce Memberships is active, Content_Restriction_Control::is_post_restricted() hands the decision back to Memberships. They begin restricting when WooCommerce Memberships is deactivated, so check them before that, not after.' );
+		WP_CLI::line( "These gates do not restrict anything yet, and they do not change anyone's newsletter subscriptions: both the restriction filter and the premium newsletter access check stand down while WooCommerce Memberships is active. They take effect when WooCommerce Memberships is deactivated, so check them before that, not after." );
 		// Written but unenforceable is worse than not written at all — it looks
 		// migrated. Call it out after the success line so it is not lost in the table.
 		if ( $unenforceable ) {
