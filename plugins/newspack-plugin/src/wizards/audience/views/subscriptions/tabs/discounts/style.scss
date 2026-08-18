@@ -12,6 +12,15 @@
 		padding: 0 var(--newspack-wizard-section-space);
 	}
 
+	&__applies-to {
+		display: inline-block;
+	}
+
+	&__applies-to-excluded {
+		color: wp-colors.$gray-700;
+		display: block;
+	}
+
 	&__header-count {
 		color: wp-colors.$gray-700;
 		font-weight: normal;
@@ -57,8 +66,19 @@
 		}
 	}
 
+	.dataviews-title-field--clickable:focus:not(:focus-visible) {
+		box-shadow: none;
+		color: inherit;
+	}
+
 	&__preview-more td {
 		color: wp-colors.$gray-700;
 		font-style: italic;
+	}
+
+	&__settings {
+		h3 {
+			margin: 0;
+		}
 	}
 }

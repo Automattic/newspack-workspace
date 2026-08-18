@@ -8,22 +8,26 @@
  */
 import { __, _n, sprintf } from '@wordpress/i18n';
 import apiFetch from '@wordpress/api-fetch';
-import { useCallback, useEffect, useMemo, useState } from '@wordpress/element';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useState } from '@wordpress/element';
 import { useDispatch } from '@wordpress/data';
+import { dateI18n, getSettings as getDateSettings } from '@wordpress/date';
+import { decodeEntities } from '@wordpress/html-entities';
+import { addQueryArgs } from '@wordpress/url';
 import { filterSortAndPaginate } from '@wordpress/dataviews';
 import type { Action, Field, View } from '@wordpress/dataviews';
-import { notAllowed, percent, published } from '@wordpress/icons';
+import { drafts, percent, published } from '@wordpress/icons';
 // eslint-disable-next-line @wordpress/no-unsafe-wp-apis
-import { Icon, Spinner, __experimentalHStack as HStack, __experimentalVStack as VStack } from '@wordpress/components';
+import { Icon, __experimentalHStack as HStack, __experimentalVStack as VStack } from '@wordpress/components';
 
 /**
  * Internal dependencies.
  */
 import { Button, DataViews, Grid, Notice, SectionHeader } from '../../../../../../../packages/components/src';
 import { WIZARD_STORE_NAMESPACE } from '../../../../../../../packages/components/src/wizard/store';
+import { SEARCH_ENDPOINTS, WIZARD_ENDPOINT } from '../../constants';
 import { registerTab } from '../registry';
 import { DISCOUNTS_ENDPOINT } from './constants';
-import { DEFAULT_CURRENCY, discountLabel, targetingLabel } from './discount';
+import { DEFAULT_CURRENCY, discountLabel, excludedLabel, targetingBaseLabel, targetingLabel } from './discount';
 import DiscountEditor from './editor';
 import SettingsModal from './settings-modal';
 import type { DiscountRule, DiscountsPayload } from './types';
@@ -53,16 +57,34 @@ function SubscriberDiscounts() {
 	const [ editing, setEditing ] = useState< DiscountRule | null | undefined >( undefined );
 	const [ showSettings, setShowSettings ] = useState( false );
 	const [ error, setError ] = useState( '' );
-	const { setHeaderData } = useDispatch( WIZARD_STORE_NAMESPACE );
+	const { setHeaderData, startLoadingData, finishLoadingData } = useDispatch( WIZARD_STORE_NAMESPACE );
 
 	const reportFailure = ( apiError: { message?: string } ) =>
 		setError( apiError?.message || __( 'That change could not be saved.', 'newspack-plugin' ) );
 
-	useEffect( () => {
+	// The initial fetch rides the wizard's own loading treatment, so arriving on
+	// the tab shows one continuous loader rather than a second, different one.
+	// Layout effect: dispatched before paint, so the treatment carries over from
+	// the requirements check without a frame of content in between.
+	useLayoutEffect( () => {
+		startLoadingData();
 		apiFetch< DiscountsPayload >( { path: DISCOUNTS_ENDPOINT } )
 			.then( setPayload )
 			.catch( reportFailure )
-			.finally( () => setIsLoading( false ) );
+			.finally( () => {
+				setIsLoading( false );
+				finishLoadingData();
+			} );
+	}, [ startLoadingData, finishLoadingData ] );
+
+	const [ subscriptionOptions, setSubscriptionOptions ] = useState< { id: number; name: string }[] >( [] );
+
+	useEffect( () => {
+		apiFetch< { id: number; name: string }[] >( {
+			path: addQueryArgs( `${ WIZARD_ENDPOINT }/${ SEARCH_ENDPOINTS.subscriptions }`, { per_page: 100 } ),
+		} )
+			.then( items => setSubscriptionOptions( items || [] ) )
+			.catch( () => setSubscriptionOptions( [] ) );
 	}, [] );
 
 	const applyPayload = useCallback( ( next: DiscountsPayload ) => {
@@ -105,7 +127,10 @@ function SubscriberDiscounts() {
 				id: 'subscription',
 				label: __( 'Subscription', 'newspack-plugin' ),
 				enableHiding: false,
-				getValue: ( { item } ) =>
+				elements: subscriptionOptions.map( option => ( { value: option.id, label: decodeEntities( option.name ) } ) ),
+				filterBy: { operators: [ 'isAny' ] },
+				getValue: ( { item } ) => item.subscription_product_ids,
+				render: ( { item } ) =>
 					sprintf(
 						/* translators: %d: number of subscriptions whose subscribers get the discount. */
 						_n( '%d subscription', '%d subscriptions', item.subscription_product_ids.length, 'newspack-plugin' ),
@@ -115,10 +140,15 @@ function SubscriberDiscounts() {
 			{
 				id: 'status',
 				label: __( 'Status', 'newspack-plugin' ),
-				getValue: ( { item } ) => ( item.active ? __( 'Active', 'newspack-plugin' ) : __( 'Paused', 'newspack-plugin' ) ),
+				elements: [
+					{ value: 'active', label: __( 'Active', 'newspack-plugin' ) },
+					{ value: 'paused', label: __( 'Paused', 'newspack-plugin' ) },
+				],
+				filterBy: { operators: [ 'isAny' ] },
+				getValue: ( { item } ) => ( item.active ? 'active' : 'paused' ),
 				render: ( { item } ) => (
 					<span className="newspack-subscriber-discounts__status">
-						<Icon className="newspack-subscriber-discounts__status-icon" icon={ item.active ? published : notAllowed } size={ 24 } />
+						<Icon className="newspack-subscriber-discounts__status-icon" icon={ item.active ? published : drafts } size={ 24 } />
 						<span>{ item.active ? __( 'Active', 'newspack-plugin' ) : __( 'Paused', 'newspack-plugin' ) }</span>
 					</span>
 				),
@@ -132,14 +162,27 @@ function SubscriberDiscounts() {
 				id: 'applies_to',
 				label: __( 'Applies to', 'newspack-plugin' ),
 				getValue: ( { item } ) => targetingLabel( item ),
+				render: ( { item } ) => {
+					const excluded = excludedLabel( item );
+					if ( ! excluded ) {
+						return targetingBaseLabel( item );
+					}
+					return (
+						<span className="newspack-subscriber-discounts__applies-to">
+							{ targetingBaseLabel( item ) }
+							<span className="newspack-subscriber-discounts__applies-to-excluded">{ excluded }</span>
+						</span>
+					);
+				},
 			},
 			{
 				id: 'created_at',
 				label: __( 'Created', 'newspack-plugin' ),
 				getValue: ( { item } ) => item.created_at,
+				render: ( { item } ) => ( item.created_at ? dateI18n( getDateSettings().formats.date, item.created_at ) : '' ),
 			},
 		],
-		[ currency ]
+		[ currency, subscriptionOptions ]
 	);
 
 	const actions: Action< DiscountRule >[] = useMemo(
@@ -197,7 +240,7 @@ function SubscriberDiscounts() {
 
 	useEffect( () => {
 		if ( isLoading || ! hasRules ) {
-			setHeaderData( { actions: [] } );
+			setHeaderData( { sectionName: __( 'Subscriber Discounts', 'newspack-plugin' ), actions: [] } );
 			return;
 		}
 		setHeaderData( {
@@ -219,16 +262,6 @@ function SubscriberDiscounts() {
 			actions: [ { type: 'primary', label: __( 'Add Discount', 'newspack-plugin' ), action: () => setEditing( null ) } ],
 		} );
 	}, [ setHeaderData, isLoading, hasRules, total ] );
-
-	if ( isLoading ) {
-		return (
-			<div className="newspack-subscriber-discounts">
-				<div style={ { display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '48px' } }>
-					<Spinner />
-				</div>
-			</div>
-		);
-	}
 
 	return (
 		<div className="newspack-subscriber-discounts">
@@ -269,6 +302,7 @@ function SubscriberDiscounts() {
 					defaultLayouts={ { table: {} } }
 					isLoading={ isLoading }
 					getItemId={ ( item: DiscountRule ) => item.id }
+					onClickItem={ ( item: DiscountRule ) => setEditing( item ) }
 					search
 					header={
 						<Button variant="secondary" size="compact" onClick={ () => setShowSettings( true ) }>
@@ -289,4 +323,4 @@ function SubscriberDiscounts() {
 	);
 }
 
-registerTab( 'discounts', { render: () => <SubscriberDiscounts />, fullWidth: true } );
+registerTab( 'discounts', { render: () => <SubscriberDiscounts />, fullWidth: true, rendersLeafCrumb: true } );

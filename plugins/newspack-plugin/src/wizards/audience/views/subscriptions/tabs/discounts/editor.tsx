@@ -126,7 +126,7 @@ export default function DiscountEditor( { isOpen, rule, currency, onSaved, onClo
 				<Drawer.CloseIcon />
 			</Drawer.Header>
 			<Drawer.Content>
-				<VStack spacing={ 4 }>
+				<VStack spacing={ 6 }>
 					{ error && (
 						<Notice status="error" isDismissible={ false }>
 							{ error }
@@ -182,7 +182,7 @@ export default function DiscountEditor( { isOpen, rule, currency, onSaved, onClo
 							<thead>
 								<tr>
 									<th>{ __( 'Product', 'newspack-plugin' ) }</th>
-									<th>{ __( 'Subscriber price (this discount alone)', 'newspack-plugin' ) }</th>
+									<th>{ __( 'Price', 'newspack-plugin' ) }</th>
 								</tr>
 							</thead>
 							<tbody>

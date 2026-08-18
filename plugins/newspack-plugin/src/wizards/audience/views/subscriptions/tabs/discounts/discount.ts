@@ -95,40 +95,67 @@ export function discountLabel( rule: Pick< DiscountRule, 'discount_type' | 'amou
 		: formatCurrency( rule.amount, currency );
 }
 
+type TargetingFieldsOnly = Pick< DiscountRule, 'targeting' | 'product_ids' | 'category_ids' | 'excluded_product_ids' >;
+
+/**
+ * What a rule covers, before any exclusions.
+ *
+ * @param rule Rule.
+ */
+export function targetingBaseLabel( rule: TargetingFieldsOnly ): string {
+	if ( 'all' === rule.targeting ) {
+		return __( 'All products', 'newspack-plugin' );
+	}
+	if ( 'category' === rule.targeting ) {
+		const count = rule.category_ids.length;
+		return sprintf(
+			/* translators: %d: number of product categories. */
+			_n( '%d category', '%d categories', count, 'newspack-plugin' ),
+			count
+		);
+	}
+	const count = rule.product_ids.length;
+	return sprintf(
+		/* translators: %d: number of products. */
+		_n( '%d product', '%d products', count, 'newspack-plugin' ),
+		count
+	);
+}
+
+/**
+ * The rule's exclusions, or an empty string when there are none.
+ *
+ * Exclusions only ever apply to category and all-products rules; a hand-picked
+ * list is its own exclusion.
+ *
+ * @param rule Rule.
+ */
+export function excludedLabel( rule: TargetingFieldsOnly ): string {
+	const excluded = 'products' === rule.targeting ? 0 : rule.excluded_product_ids.length;
+	if ( ! excluded ) {
+		return '';
+	}
+	return sprintf(
+		/* translators: %d: number of excluded products. */
+		_n( '%d excluded', '%d excluded', excluded, 'newspack-plugin' ),
+		excluded
+	);
+}
+
 /**
  * What a rule covers, as shown in the list's "Applies to" column.
  *
  * @param rule Rule.
  */
-export function targetingLabel( rule: Pick< DiscountRule, 'targeting' | 'product_ids' | 'category_ids' | 'excluded_product_ids' > ): string {
-	let base;
-	if ( 'all' === rule.targeting ) {
-		base = __( 'All products', 'newspack-plugin' );
-	} else if ( 'category' === rule.targeting ) {
-		const count = rule.category_ids.length;
-		base = sprintf(
-			/* translators: %d: number of product categories. */
-			_n( '%d category', '%d categories', count, 'newspack-plugin' ),
-			count
-		);
-	} else {
-		const count = rule.product_ids.length;
-		base = sprintf(
-			/* translators: %d: number of products. */
-			_n( '%d product', '%d products', count, 'newspack-plugin' ),
-			count
-		);
-	}
-
-	// Exclusions only ever apply to category and all-products rules; a
-	// hand-picked list is its own exclusion.
-	const excluded = 'products' === rule.targeting ? 0 : rule.excluded_product_ids.length;
+export function targetingLabel( rule: TargetingFieldsOnly ): string {
+	const base = targetingBaseLabel( rule );
+	const excluded = excludedLabel( rule );
 	if ( ! excluded ) {
 		return base;
 	}
 	return sprintf(
-		/* translators: %1$s: what the rule covers, %2$d: number of excluded products. */
-		__( '%1$s · %2$d excluded', 'newspack-plugin' ),
+		/* translators: %1$s: what the rule covers, %2$s: the exclusions, e.g. "2 excluded". */
+		__( '%1$s · %2$s', 'newspack-plugin' ),
 		base,
 		excluded
 	);

@@ -65,9 +65,9 @@ class Audience_Subscriptions extends Wizard {
 				// wp_localize_script() doesn't decode entities, and React escapes
 				// it at render anyway. Escaping here would ship `&#8217;` to
 				// locales whose translation contains an apostrophe.
-				'label' => __( 'Configuration', 'newspack-plugin' ),
+				'label' => __( 'Settings', 'newspack-plugin' ),
 				'path'  => '/configuration',
-				'order' => 10,
+				'order' => 30,
 			]
 		);
 	}
