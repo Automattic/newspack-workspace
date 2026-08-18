@@ -80,6 +80,8 @@ assert_name "de mo" rejected "an embedded space is rejected"
 assert_name $'demo\tx' rejected "an embedded tab is rejected"
 assert_name $'demo\nx' rejected "an embedded newline is rejected, which the hosts marker relies on"
 assert_name "demo/1" rejected "a slash is rejected, since Docker rejects it in container names"
+assert_name ".." rejected "a bare traversal is rejected, as validate_name already rejects it"
+assert_name "a..b" rejected "an embedded traversal is rejected on both validators"
 assert_name "" rejected "an empty name is rejected"
 
 assert_path_name() {

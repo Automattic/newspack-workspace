@@ -30,8 +30,13 @@ validate_name() {
 # environment created under an older, laxer one — unmanageable and removable
 # only by hand.
 validate_env_name() {
-    if [[ ! "$1" =~ ^[a-zA-Z0-9._][a-zA-Z0-9._-]*$ ]]; then
-        echo "Error: invalid environment name '$1' (must not start with '-'; only alphanumeric, dots, hyphens, underscores allowed)"
+    # The `..` clause matches validate_name's. `n env destroy ..` would otherwise
+    # validate and reach `rm -rf "$NABSPATH/envs/.."`, i.e. the workspace root.
+    # POSIX rm refuses a trailing `.` or `..` component, so that is not a live
+    # escape today -- but the guard then lives in rm rather than here, and moves
+    # out from under us the moment a call site builds the path differently.
+    if [[ ! "$1" =~ ^[a-zA-Z0-9._][a-zA-Z0-9._-]*$ ]] || [[ "$1" == *..* ]]; then
+        echo "Error: invalid environment name '$1' (must not start with '-' or contain '..'; only alphanumeric, dots, hyphens, underscores allowed)"
         exit 1
     fi
 }
