@@ -1131,6 +1131,54 @@ class Test_Premium_Newsletters_Migration extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * Two plans overlapping on one list without matching on the rest become two
+	 * gates over that list. WooCommerce Memberships grants it to a holder of either
+	 * plan while gates resolve restrictive-wins, so the stricter gate would decide
+	 * and the other plan's readers would lose the list. Computable from the grouping,
+	 * so it is caught before any write.
+	 */
+	public function test_find_lists_shared_across_groups_fires_for_overlapping_groups() {
+		$plan_groups = [
+			'[a]'   => [ $this->make_payload_plan( 'purchase', [], [ $this->list_a ], 'Premium' ) ],
+			'[a,b]' => [ $this->make_payload_plan( 'signup', [], [ $this->list_a, $this->list_b ], 'Insider' ) ],
+		];
+
+		$this->assertSame(
+			[ $this->list_a => [ 'Premium', 'Insider' ] ],
+			$this->invoke_private_static( 'find_lists_shared_across_groups', [ $plan_groups ] )
+		);
+	}
+
+	/**
+	 * Groups restricting different lists are the ordinary multi-gate run. Refusing
+	 * one would block every site with more than one premium newsletter plan.
+	 */
+	public function test_find_lists_shared_across_groups_is_empty_for_disjoint_groups() {
+		$plan_groups = [
+			'[a]' => [ $this->make_payload_plan( 'purchase', [], [ $this->list_a ], 'Premium' ) ],
+			'[b]' => [ $this->make_payload_plan( 'signup', [], [ $this->list_b ], 'Insider' ) ],
+		];
+
+		$this->assertSame( [], $this->invoke_private_static( 'find_lists_shared_across_groups', [ $plan_groups ] ) );
+	}
+
+	/**
+	 * Plans inside one group restrict the same lists and share one gate by
+	 * construction, so their overlap is the grouping working rather than a conflict.
+	 * Counting per plan instead of per group would refuse every multi-plan group.
+	 */
+	public function test_find_lists_shared_across_groups_ignores_plans_within_one_group() {
+		$plan_groups = [
+			'[a]' => [
+				$this->make_payload_plan( 'purchase', [], [ $this->list_a ], 'Premium' ),
+				$this->make_payload_plan( 'signup', [], [ $this->list_a ], 'Insider' ),
+			],
+		];
+
+		$this->assertSame( [], $this->invoke_private_static( 'find_lists_shared_across_groups', [ $plan_groups ] ) );
+	}
+
+	/**
 	 * A published premium newsletter gate no group wrote is a gate no current plan
 	 * accounts for. It keeps restricting its lists, and the first restricting gate
 	 * wins — so it has to be named. Gates in the content bucket are somebody else's

@@ -159,11 +159,24 @@ class Premium_Newsletters_Migration {
 			$existing_gates[ trim( strtolower( $gate['title'] ) ) ] = $gate['id'];
 		}
 
-		$summary        = [];
-		$skipped        = [];
-		$migrated_lists = [];
+		$summary         = [];
+		$skipped         = [];
+		$migrated_lists  = [];
+		$all_lists_plans = [];
 
-		$plan_groups = self::group_plans_by_lists( $plan_ids, $skipped );
+		$plan_groups = self::group_plans_by_lists( $plan_ids, $skipped, $all_lists_plans );
+
+		// Refused rather than reported: a plan restricting every list has no faithful
+		// gate, and reporting it as skipped reads as "nothing to migrate here" when the
+		// truth is the opposite ({@see restricts_all_lists()}).
+		if ( ! empty( $all_lists_plans ) ) {
+			WP_CLI::error(
+				sprintf(
+					'Plan(s) %s restrict every newsletter list rather than named ones, and WooCommerce Memberships extends such a rule to lists created later. A gate names the lists it covers, so migrating one would under-restrict from the first list added after. Name the lists on those plan(s) and re-run. Nothing has been written.',
+					implode( ', ', array_map( fn( $name ) => sprintf( '"%s"', $name ), $all_lists_plans ) )
+				)
+			);
+		}
 
 		$group_count = count( $plan_groups );
 		if ( $group_count < ( $total - count( $skipped ) ) ) {
@@ -188,6 +201,25 @@ class Premium_Newsletters_Migration {
 				sprintf(
 					'Two or more plan groups resolve to the same gate title: %s. A gate is identified by its title, so the second group would replace the first group\'s content rules outright and leave that group\'s lists behind no gate at all. Rename one of the plans and re-run. Nothing has been written.',
 					implode( ', ', array_map( fn( $title ) => sprintf( '"%s"', $title ), $collisions ) )
+				)
+			);
+		}
+
+		$shared_lists = self::find_lists_shared_across_groups( $plan_groups );
+		if ( ! empty( $shared_lists ) ) {
+			$overlaps = [];
+			foreach ( $shared_lists as $list_id => $titles ) {
+				$overlaps[] = sprintf(
+					'"%s" (list %d), restricted by %s',
+					get_the_title( $list_id ),
+					$list_id,
+					implode( ' and ', array_map( fn( $title ) => sprintf( '"%s"', $title ), $titles ) )
+				);
+			}
+			WP_CLI::error(
+				sprintf(
+					'These list(s) would end up behind more than one gate: %s. WooCommerce Memberships grants such a list to a holder of either plan; gates resolve the other way, so the stricter gate would decide and readers holding only the other plan would lose the list. Make the overlapping plans restrict the same set of lists, or move the shared list onto one of them, and re-run. Nothing has been written.',
+					implode( '; ', $overlaps )
 				)
 			);
 		}
@@ -591,6 +623,34 @@ class Premium_Newsletters_Migration {
 	}
 
 	/**
+	 * Newsletter lists that more than one plan group restricts.
+	 *
+	 * Groups are keyed on the exact set of lists a plan restricts, so two plans that
+	 * overlap without matching become two gates over a shared list. The two access
+	 * models then disagree about that list: WooCommerce Memberships grants it to a
+	 * holder of either plan, while gates resolve restrictive-wins, so the stricter
+	 * gate decides and readers holding only the other plan lose it — and, once the
+	 * access check is live, are unsubscribed at the provider. Grouping is the last
+	 * point at which the two can still be compared with nothing written.
+	 *
+	 * @param array<string,array> $plan_groups Map of fingerprint => plan descriptors.
+	 *
+	 * @return array<int,string[]> Map of list post ID => gate titles restricting it,
+	 *                             for lists reached by more than one group.
+	 */
+	private static function find_lists_shared_across_groups( array $plan_groups ): array {
+		$groups_by_list = [];
+		foreach ( $plan_groups as $group ) {
+			// One entry per group rather than per plan: plans within a group share a
+			// gate by construction, so only a list reached from two groups is ambiguous.
+			foreach ( $group[0]['list_ids'] as $list_id ) {
+				$groups_by_list[ (int) $list_id ][] = self::gate_title( $group );
+			}
+		}
+		return array_filter( $groups_by_list, fn( $titles ) => count( $titles ) > 1 );
+	}
+
+	/**
 	 * The gates each about-to-be-created group would supersede.
 	 *
 	 * Only groups whose title matches no existing gate are considered: a group that
@@ -852,6 +912,29 @@ class Premium_Newsletters_Migration {
 			}
 		}
 		return array_values( array_unique( array_filter( $list_ids ) ) );
+	}
+
+	/**
+	 * Whether a plan restricts every newsletter list rather than named ones.
+	 *
+	 * WooCommerce Memberships spells "all lists" as a newsletter rule carrying no
+	 * object IDs, and applies it to every list of that post type — lists created
+	 * after the plan was written included. A gate names the lists it covers, so
+	 * there is no faithful snapshot of a rule whose membership keeps growing:
+	 * migrating one would quietly under-restrict from the first list added after.
+	 *
+	 * @param \WC_Memberships_Membership_Plan_Rule[] $wc_rules Array of WC Memberships rules.
+	 *
+	 * @return bool
+	 */
+	private static function restricts_all_lists( array $wc_rules ): bool {
+		$list_cpt = self::get_list_cpt();
+		foreach ( $wc_rules as $rule ) {
+			if ( $list_cpt === $rule->get_content_type_name() && ! $rule->has_objects() ) {
+				return true;
+			}
+		}
+		return false;
 	}
 
 	/**
@@ -1435,13 +1518,15 @@ class Premium_Newsletters_Migration {
 	 * newsletter list are collected into $skipped instead of grouped. Plans
 	 * restricting the same lists share a group, and therefore a single gate.
 	 *
-	 * @param int[] $plan_ids Plan post IDs.
-	 * @param array $skipped  Skipped-plan summary rows, appended to by reference.
+	 * @param int[] $plan_ids        Plan post IDs.
+	 * @param array $skipped         Skipped-plan summary rows, appended to by reference.
+	 * @param array $all_lists_plans Names of plans restricting every list, appended to by
+	 *                               reference. The caller refuses the run over these.
 	 *
 	 * @return array<string,array> Map of fingerprint => list of plan descriptors, each
 	 *                             [ 'pid', 'name', 'access_method', 'list_ids', 'product_ids' ].
 	 */
-	private static function group_plans_by_lists( array $plan_ids, array &$skipped ): array {
+	private static function group_plans_by_lists( array $plan_ids, array &$skipped, array &$all_lists_plans ): array {
 		$plan_groups = [];
 
 		foreach ( $plan_ids as $pid ) {
@@ -1463,10 +1548,18 @@ class Premium_Newsletters_Migration {
 
 			// Extracted before the manual-only skip rather than after it: a skipped plan's
 			// lists are exactly what the operator has to act on ({@see report_manual_only_plan()}).
-			$list_ids = self::extract_list_ids( $plan->get_content_restriction_rules() );
+			$rules    = $plan->get_content_restriction_rules();
+			$list_ids = self::extract_list_ids( $rules );
 
 			if ( 'manual-only' === $access_method ) {
 				$skipped[] = self::report_manual_only_plan( $plan_name, $list_ids );
+				continue;
+			}
+
+			// Checked after the manual-only skip, not before it: those plans write no
+			// gate, so an unbounded rule on one costs nothing.
+			if ( self::restricts_all_lists( $rules ) ) {
+				$all_lists_plans[] = $plan_name;
 				continue;
 			}
 
