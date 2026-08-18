@@ -70,7 +70,7 @@ function AdvancedSettings() {
 							'newspack-plugin'
 						) }
 					/>
-					<VStack spacing={ 4 } alignment="top">
+					<VStack spacing={ 4 } justify="flex-start">
 						<SelectControl
 							label={ __( 'Primary Subscription Product', 'newspack-plugin' ) }
 							hideLabelFromVision
