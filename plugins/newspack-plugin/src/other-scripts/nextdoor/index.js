@@ -99,12 +99,20 @@ const NextdoorPostSidebar = ( { postId, postStatus } ) => {
 	};
 
 	const callApi = async ( name, path, method, messages ) => {
+		// The answer describes the post the action fired on. Once the editor has moved on it
+		// belongs to neither the panel on screen nor the reader looking at it.
+		const isCurrent = () => postId === postIdRef.current;
+
 		try {
 			setAction( name );
 			setError( null );
 			setSuccess( null );
 
 			const response = await apiFetch( { path, method } );
+
+			if ( ! isCurrent() ) {
+				return;
+			}
 
 			if ( response.success ) {
 				setSuccess( response.message || messages.success );
@@ -113,11 +121,15 @@ const NextdoorPostSidebar = ( { postId, postStatus } ) => {
 				setError( response.message || messages.error );
 			}
 		} catch ( err ) {
-			setError( err.message || __( 'Failed to communicate with Nextdoor.', 'newspack-plugin' ) );
+			if ( isCurrent() ) {
+				setError( err.message || __( 'Failed to communicate with Nextdoor.', 'newspack-plugin' ) );
+			}
 		} finally {
-			setAction( null );
-			clearMessages();
-			restoreFocus();
+			if ( isCurrent() ) {
+				setAction( null );
+				clearMessages();
+				restoreFocus();
+			}
 		}
 	};
 
