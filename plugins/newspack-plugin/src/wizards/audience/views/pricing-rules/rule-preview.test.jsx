@@ -110,6 +110,13 @@ describe( 'RulePreview', () => {
 		expect( stats.compareDocumentPosition( table ) & Node.DOCUMENT_POSITION_FOLLOWING ).toBeTruthy();
 	} );
 
+	it( 'renders a capped total as a ceiling, since the engine counts the tail unchecked', async () => {
+		apiFetch.mockResolvedValue( response( { total_matching: 480, count_limited: true } ) );
+		render( <RulePreview body={ {} } hasPrice /> );
+		await settle();
+		expect( screen.getByText( 'Up to 480' ) ).toBeInTheDocument();
+	} );
+
 	it( 'renders the stats and table for a partial preview', async () => {
 		apiFetch.mockResolvedValue( response( { preview_limited: true, sample_count: 1, total_matching: 3 } ) );
 		render( <RulePreview body={ {} } hasPrice /> );

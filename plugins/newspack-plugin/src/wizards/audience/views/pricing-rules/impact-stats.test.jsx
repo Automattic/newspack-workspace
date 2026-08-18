@@ -78,6 +78,13 @@ describe( 'ImpactStats', () => {
 		expect( screen.getByText( '12+' ) ).toBeInTheDocument();
 	} );
 
+	it( 'renders a capped total as a ceiling when the route reports one', () => {
+		render( <ImpactStats totalMatching={ 500 } countLimited countBound="upper" audience={ audience( { count_limited: true } ) } /> );
+		expect( screen.getByText( 'Up to 500' ) ).toBeInTheDocument();
+		// The audience walk only ever omits, so its bound stays a floor.
+		expect( screen.getByText( '12+' ) ).toBeInTheDocument();
+	} );
+
 	it( 'ignores an unsupported audience', () => {
 		render( <ImpactStats totalMatching={ 36 } countLimited={ false } audience={ audience( { supported: false } ) } /> );
 		expect( screen.queryByText( 'Subscribers in scope' ) ).not.toBeInTheDocument();
