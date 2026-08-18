@@ -29,7 +29,6 @@ import { registerTab } from '../registry';
 import { DISCOUNTS_ENDPOINT } from './constants';
 import { DEFAULT_CURRENCY, discountLabel, excludedLabel, targetingBaseLabel, targetingLabel } from './discount';
 import DiscountEditor from './editor';
-import SettingsModal from './settings-modal';
 import type { DiscountRule, DiscountsPayload } from './types';
 
 import './style.scss';
@@ -55,7 +54,6 @@ function SubscriberDiscounts() {
 	const [ isLoading, setIsLoading ] = useState( true );
 	const [ view, setView ] = useState< View >( DEFAULT_VIEW );
 	const [ editing, setEditing ] = useState< DiscountRule | null | undefined >( undefined );
-	const [ showSettings, setShowSettings ] = useState( false );
 	const [ error, setError ] = useState( '' );
 	const { setHeaderData } = useDispatch( WIZARD_STORE_NAMESPACE );
 
@@ -84,7 +82,6 @@ function SubscriberDiscounts() {
 		setPayload( next );
 		setError( '' );
 		setEditing( undefined );
-		setShowSettings( false );
 	}, [] );
 
 	const setActive = useCallback( ( rule: DiscountRule, active: boolean ) => {
@@ -310,11 +307,6 @@ function SubscriberDiscounts() {
 					getItemId={ ( item: DiscountRule ) => item.id }
 					onClickItem={ ( item: DiscountRule ) => setEditing( item ) }
 					search
-					header={
-						<Button variant="secondary" size="compact" onClick={ () => setShowSettings( true ) }>
-							{ __( 'Settings', 'newspack-plugin' ) }
-						</Button>
-					}
 				/>
 			) }
 			<DiscountEditor
@@ -324,7 +316,6 @@ function SubscriberDiscounts() {
 				onSaved={ applyPayload }
 				onClose={ () => setEditing( undefined ) }
 			/>
-			{ showSettings && <SettingsModal settings={ payload.settings } onSaved={ applyPayload } onClose={ () => setShowSettings( false ) } /> }
 		</div>
 	);
 }
