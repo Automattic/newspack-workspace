@@ -31,7 +31,16 @@ set -euo pipefail
 # grep (/usr/bin) and sed (/usr/bin). Adding a call to anything outside these
 # directories means reconsidering this line, not widening it reflexively.
 #
-# bin/tests/test-newspack-manage-host-path.sh proves the pin holds.
+# Two things outside this line carry the same weight. Line 1 is an absolute
+# `#!/bin/bash` on purpose: `#!/usr/bin/env bash` would have env search the
+# caller's forwarded PATH for an interpreter, as root, before this line runs,
+# and no pin here could reach that. And the sudoers grant must name the copy
+# bin/setup-networking.sh installs at /usr/local/bin, which it chowns to
+# root:wheel -- granting a path inside a developer's checkout would let the
+# login user edit this file rather than having to hijack PATH at all.
+#
+# bin/tests/test-newspack-manage-host-path.sh proves the pin holds, and pins
+# the shebang behaviourally with its own hijack probe.
 export PATH=/usr/sbin:/usr/bin:/sbin:/bin
 
 usage() {
