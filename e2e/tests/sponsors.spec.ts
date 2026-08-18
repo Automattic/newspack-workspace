@@ -5,7 +5,12 @@ import {
   getEditorCanvas,
   openEditorSettingsPanel,
 } from "./utils-admin";
-import { goToUncached, randomString, trashListedItem } from "./utils";
+import {
+  getPublishedPermalink,
+  goToUncached,
+  randomString,
+  trashListedItem,
+} from "./utils";
 
 test(
   "Create a sponsor and label sponsored content",
@@ -67,13 +72,7 @@ test(
     await sponsorsPanel.getByRole("checkbox", { name: sponsorName }).check();
     await publish(/Post published/);
 
-    // Take the permalink from the publish snackbar. Scope to it: an unscoped
-    // "View Post" role lookup also matches admin chrome links that resolve to
-    // the same accessible name but point at the posts list.
-    const postUrl = await page
-      .getByTestId("snackbar")
-      .getByRole("link", { name: "View Post" })
-      .getAttribute("href");
+    const postUrl = await getPublishedPermalink(page, "View Post");
 
     /**
      * Verify the sponsorship is disclosed to readers. Check this signed out:

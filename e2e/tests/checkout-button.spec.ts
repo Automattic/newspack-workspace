@@ -4,6 +4,7 @@ import {
   fillModalCheckoutBillingDetails,
   fillStripeTestCard,
   getModalCheckout,
+  getPublishedPermalink,
   goToMyAccount,
   goToUncached,
   randomEmailAddress,
@@ -89,13 +90,7 @@ test("Add Checkout Button block to a page and buy the product", {
     page.getByTestId("snackbar").getByText("Page published.")
   ).toBeVisible();
 
-  // Take the permalink from the publish snackbar. Scope to it: an unscoped
-  // "View Page" role lookup also matches admin chrome links that resolve to the
-  // same accessible name but point at the pages list.
-  const pageUrl = await page
-    .getByTestId("snackbar")
-    .getByRole("link", { name: "View Page" })
-    .getAttribute("href");
+  const pageUrl = await getPublishedPermalink(page, "View Page");
 
   /**
    * Buy the product the way a reader would: signed out, from the front end.

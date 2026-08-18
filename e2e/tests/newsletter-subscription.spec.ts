@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { randomString } from "./utils";
+import { randomString, trashListedItem } from "./utils";
 import { logIn, getEditorCanvas } from "./utils-admin";
 
 test(
@@ -57,9 +57,6 @@ test(
      * the scope of a clean snapshot. This test verifies the block can be
      * inserted and the page persists.
      */
-    await page.goto(`/wp-admin/edit.php?post_type=page&s=${encodeURIComponent(pageTitle)}`);
-    const row = page.getByRole("row").filter({ hasText: pageTitle }).first();
-    await row.hover();
-    await row.getByRole("link", { name: "Trash" }).click();
+    await trashListedItem(page, "/wp-admin/edit.php?post_type=page", pageTitle);
   }
 );

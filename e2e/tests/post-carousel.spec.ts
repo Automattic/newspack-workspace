@@ -1,6 +1,10 @@
 import { test, expect } from "@playwright/test";
 import { logIn, getEditorCanvas } from "./utils-admin";
-import { randomString } from "./utils";
+import {
+    getPublishedPermalink,
+    randomString,
+    trashListedItem,
+} from "./utils";
 
 test("Post Carousel block renders and navigates", {
         tag: ['@vanilla', '@with-woo'],
@@ -39,11 +43,7 @@ test("Post Carousel block renders and navigates", {
     ).toBeVisible();
 
     // Get the published page URL from the snackbar.
-    const pageURL = await page
-        .getByTestId("snackbar")
-        .getByRole("link", { name: /view page/i })
-        .getAttribute("href");
-    expect(pageURL).toBeTruthy();
+    const pageURL = await getPublishedPermalink(page, /view page/i);
     await page.goto(pageURL);
 
     /**
@@ -101,8 +101,5 @@ test("Post Carousel block renders and navigates", {
     /**
      * Clean up: move the test page to trash via the pages list.
      */
-    await page.goto(`/wp-admin/edit.php?post_type=page&s=${encodeURIComponent(pageTitle)}`);
-    const row = page.getByRole("row").filter({ hasText: pageTitle }).first();
-    await row.hover();
-    await row.getByRole("link", { name: "Trash" }).click();
+    await trashListedItem(page, "/wp-admin/edit.php?post_type=page", pageTitle);
 });

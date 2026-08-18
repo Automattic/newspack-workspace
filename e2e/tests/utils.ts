@@ -60,9 +60,26 @@ export const trashListedItem = async (page, listUrl, title) => {
   const separator = listUrl.includes("?") ? "&" : "?";
   await page.goto(`${listUrl}${separator}s=${encodeURIComponent(title)}`);
   const row = page.getByRole("row").filter({ hasText: title }).first();
-  const trashUrl = await row.locator("a.submitdelete").first().getAttribute("href");
+  await expect(row).toBeVisible();
+  const trashLink = row.locator("a.submitdelete").first();
+  await expect(trashLink).toHaveAttribute("href", /.+/);
+  const trashUrl = await trashLink.getAttribute("href");
   await page.goto(trashUrl);
   await expect(page.getByRole("row").filter({ hasText: title })).toHaveCount(0);
+};
+
+// Read the just-published post/page permalink out of the publish snackbar.
+// Scope to the snackbar: an unscoped "View Page"/"View Post" role lookup also
+// matches admin chrome links that resolve to the same accessible name but point
+// at the list table. `linkName` is the snackbar link's accessible name.
+export const getPublishedPermalink = async (page, linkName) => {
+  const permalink = page
+    .getByTestId("snackbar")
+    .getByRole("link", { name: linkName });
+  // Assert the href before reading it, so a missing snackbar link fails here
+  // with the locator in the message rather than further down on a null URL.
+  await expect(permalink).toHaveAttribute("href", /.+/);
+  return await permalink.getAttribute("href");
 };
 
 // The modal checkout -- opened by the Donate block, the Checkout Button block

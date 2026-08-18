@@ -39,7 +39,9 @@ test("Donations",  {
   ).toBeVisible();
 
   await expect(page.getByRole("button", { name: "Close" })).toBeVisible();
-  await getModalCheckout(page).getByRole("button", { text: "Continue" }).click();
+  await getModalCheckout(page)
+    .getByRole("button", { name: "Continue" })
+    .click();
   await expect(page.getByRole("button", { name: "Close" })).not.toBeVisible();
 
   /**
