@@ -501,6 +501,22 @@ MIGRATE
             -e 's|SSLCertificateFile .*|SSLCertificateFile /etc/ssl/certs/${domain}.pem|' \
             -e 's|SSLCertificateKeyFile .*|SSLCertificateKeyFile /etc/ssl/certs/${domain}-key.pem|' \
             /etc/apache2/sites-available/000-default.conf"
+        # Provision Composer vendor/ for the migrated monorepo plugins and themes,
+        # so plugin activation doesn't fatal on a missing vendor/autoload.php (the
+        # foundation-smoke failure mode). Idempotent; skips projects whose vendor/
+        # is already present. On failure it warns (actionably) rather than tearing
+        # down an otherwise-usable env.
+        #
+        # Ahead of the WP-CLI calls below deliberately: every one of them boots
+        # WordPress and loads the active plugins, so on an env whose database
+        # already has a Newspack plugin active while its mounted vendor/ is missing,
+        # they fatal before provisioning would have run. That repairs itself on a
+        # second `n env up`, but only because the failures here are non-fatal --
+        # running first repairs such an env in one pass. This step needs no
+        # database, so nothing is lost by doing it earlier.
+        docker exec "$container_name" bash /var/scripts/ensure-vendor.sh || \
+            echo "Warning: vendor provisioning reported errors (see above); affected plugins may fatal on activation. Try 'n ci-build all'."
+
         # Auto-install WordPress if not already installed.
         echo "Waiting for WordPress setup..."
         for i in $(seq 1 20); do

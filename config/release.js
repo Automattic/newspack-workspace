@@ -16,8 +16,9 @@ module.exports = function releaseConfig( { name, phpFile, npmPublish = false } )
 		branches: [
 			'release',
 			{ name: 'alpha', prerelease: true },
-			{ name: 'hotfix/*', prerelease: '${name.replace(/\\//g, "-")}' },
-			{ name: 'epic/*', prerelease: '${name.replace(/\\//g, "-")}' },
+			// hotfix/* and epic/* branches no longer publish prerelease tags:
+			// CI's build-zips job already produces an installable zip for every
+			// commit, so the tags and their builds were redundant.
 		],
 		plugins: [
 			'@semantic-release/commit-analyzer',
@@ -60,7 +61,13 @@ module.exports = function releaseConfig( { name, phpFile, npmPublish = false } )
 					callback: 'npm run release:archive',
 				},
 			],
-			...gitCommitStep( [ phpFile, 'CHANGELOG.md' ] ),
+			// languages/** carries the translation files release.yml regenerates
+			// just before multi-semantic-release runs (see the "Regenerate
+			// translation files" step). gitCommitStep only returns a step on the
+			// stable release branch, so this commits on release alone; prerelease
+			// channels ship the same regenerated files in the zip, from the
+			// working tree, without committing them.
+			...gitCommitStep( [ phpFile, 'CHANGELOG.md', 'languages/**' ] ),
 		],
 	};
 };

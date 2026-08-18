@@ -18,7 +18,7 @@ import { contentLocked, emailPremium } from '../../../../../packages/icons';
 const ContentGatesOnboarding = ( { isNewsletter = false }: { isNewsletter?: boolean } ) => {
 	return (
 		<Grid columns={ 4 } noMargin>
-			<VStack start={ 2 } end={ 4 } spacing={ 8 }>
+			<VStack data-start="2" data-end="4" spacing={ 8 }>
 				<SectionHeader
 					icon={ isNewsletter ? emailPremium : contentLocked }
 					title={ sprintf(
