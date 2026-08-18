@@ -51,7 +51,7 @@ class Subscriber_Discounts_Admin {
 				// Not escaped: the label is localized into a nested array, where
 				// wp_localize_script() leaves entities encoded, so an escaped
 				// label would reach any apostrophe-bearing locale as `&#8217;`.
-				'label' => __( 'Subscriber discounts', 'newspack-plugin' ),
+				'label' => __( 'Subscriber Discounts', 'newspack-plugin' ),
 				'path'  => '/discounts',
 				'order' => self::TAB_ORDER,
 			]

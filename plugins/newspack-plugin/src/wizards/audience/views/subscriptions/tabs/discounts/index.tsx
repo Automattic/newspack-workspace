@@ -9,18 +9,18 @@
 import { __, _n, sprintf } from '@wordpress/i18n';
 import apiFetch from '@wordpress/api-fetch';
 import { useCallback, useEffect, useMemo, useState } from '@wordpress/element';
+import { useDispatch } from '@wordpress/data';
 import { filterSortAndPaginate } from '@wordpress/dataviews';
 import type { Action, Field, View } from '@wordpress/dataviews';
-import { percent } from '@wordpress/icons';
+import { notAllowed, percent, published } from '@wordpress/icons';
 // eslint-disable-next-line @wordpress/no-unsafe-wp-apis
-import { __experimentalHStack as HStack, __experimentalVStack as VStack } from '@wordpress/components';
+import { Icon, Spinner, __experimentalHStack as HStack, __experimentalVStack as VStack } from '@wordpress/components';
 
 /**
  * Internal dependencies.
  */
-import { Badge, Button, DataViews, Notice, SectionHeader } from '../../../../../../../packages/components/src';
-import WizardsTab from '../../../../../wizards-tab';
-import WizardSection from '../../../../../wizards-section';
+import { Button, DataViews, Grid, Notice, SectionHeader } from '../../../../../../../packages/components/src';
+import { WIZARD_STORE_NAMESPACE } from '../../../../../../../packages/components/src/wizard/store';
 import { registerTab } from '../registry';
 import { DISCOUNTS_ENDPOINT } from './constants';
 import { DEFAULT_CURRENCY, discountLabel, targetingLabel } from './discount';
@@ -53,6 +53,7 @@ function SubscriberDiscounts() {
 	const [ editing, setEditing ] = useState< DiscountRule | null | undefined >( undefined );
 	const [ showSettings, setShowSettings ] = useState( false );
 	const [ error, setError ] = useState( '' );
+	const { setHeaderData } = useDispatch( WIZARD_STORE_NAMESPACE );
 
 	const reportFailure = ( apiError: { message?: string } ) =>
 		setError( apiError?.message || __( 'That change could not be saved.', 'newspack-plugin' ) );
@@ -116,10 +117,10 @@ function SubscriberDiscounts() {
 				label: __( 'Status', 'newspack-plugin' ),
 				getValue: ( { item } ) => ( item.active ? __( 'Active', 'newspack-plugin' ) : __( 'Paused', 'newspack-plugin' ) ),
 				render: ( { item } ) => (
-					<Badge
-						level={ item.active ? 'success' : 'default' }
-						text={ item.active ? __( 'Active', 'newspack-plugin' ) : __( 'Paused', 'newspack-plugin' ) }
-					/>
+					<span className="newspack-subscriber-discounts__status">
+						<Icon className="newspack-subscriber-discounts__status-icon" icon={ item.active ? published : notAllowed } size={ 24 } />
+						<span>{ item.active ? __( 'Active', 'newspack-plugin' ) : __( 'Paused', 'newspack-plugin' ) }</span>
+					</span>
 				),
 			},
 			{
@@ -191,56 +192,101 @@ function SubscriberDiscounts() {
 	);
 
 	const hasRules = payload.rules.length > 0;
+	const showEmptyState = ! isLoading && ! hasRules;
+	const total = paginationInfo?.totalItems ?? 0;
 
-	return (
-		<WizardsTab title={ __( 'Subscriber discounts', 'newspack-plugin' ) }>
-			<WizardSection>
-				{ error && <Notice isError noticeText={ error } /> }
-				{ ! isLoading && ! hasRules ? (
-					<SectionHeader
-						centered
-						icon={ percent }
-						title={ __( 'Get started with subscriber discounts', 'newspack-plugin' ) }
-						description={ __(
-							'Offer subscribers a discount on your products. Create your first rule to choose which subscription gets what off which products.',
-							'newspack-plugin'
+	useEffect( () => {
+		if ( isLoading || ! hasRules ) {
+			setHeaderData( { actions: [] } );
+			return;
+		}
+		setHeaderData( {
+			sectionName: (
+				<>
+					{ __( 'Subscriber Discounts', 'newspack-plugin' ) }{ ' ' }
+					<span
+						className="newspack-subscriber-discounts__header-count"
+						aria-label={ sprintf(
+							/* translators: %d: number of discount rules listed. */
+							_n( '%d discount total', '%d discounts total', total, 'newspack-plugin' ),
+							total
 						) }
 					>
-						<Button variant="primary" onClick={ () => setEditing( null ) }>
-							{ __( 'Add discount', 'newspack-plugin' ) }
+						{ `(${ total.toLocaleString() })` }
+					</span>
+				</>
+			),
+			actions: [ { type: 'primary', label: __( 'Add Discount', 'newspack-plugin' ), action: () => setEditing( null ) } ],
+		} );
+	}, [ setHeaderData, isLoading, hasRules, total ] );
+
+	if ( isLoading ) {
+		return (
+			<div className="newspack-subscriber-discounts">
+				<div style={ { display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '48px' } }>
+					<Spinner />
+				</div>
+			</div>
+		);
+	}
+
+	return (
+		<div className="newspack-subscriber-discounts">
+			{ error && <Notice isError noticeText={ error } /> }
+			{ showEmptyState ? (
+				<div className="newspack-subscriber-discounts__empty">
+					<Grid className="newspack-empty-state" columns={ 4 } noMargin>
+						{ /* The Grid stylesheet matches start and end as DOM attributes, so they cannot be passed as typed props. */ }
+						<VStack { ...( { start: 2, end: 4 } as React.ComponentProps< 'div' > ) } spacing={ 8 }>
+							<SectionHeader
+								className="newspack-empty-state__header"
+								icon={ percent }
+								title={ __( 'Get started with subscriber discounts', 'newspack-plugin' ) }
+								description={ __(
+									'Offer subscribers a discount on your products. Create your first rule to choose which subscription gets what off which products.',
+									'newspack-plugin'
+								) }
+								heading={ 2 }
+								pageHeader
+								noMargin
+							/>
+							<HStack alignment="center" spacing={ 2 } wrap className="newspack-empty-state__actions">
+								<Button variant="primary" onClick={ () => setEditing( null ) }>
+									{ __( 'Add Discount', 'newspack-plugin' ) }
+								</Button>
+							</HStack>
+						</VStack>
+					</Grid>
+				</div>
+			) : (
+				<DataViews
+					data={ processedData }
+					fields={ fields }
+					view={ view }
+					onChangeView={ setView }
+					actions={ actions }
+					paginationInfo={ paginationInfo }
+					defaultLayouts={ { table: {} } }
+					isLoading={ isLoading }
+					getItemId={ ( item: DiscountRule ) => item.id }
+					search
+					header={
+						<Button variant="secondary" size="compact" onClick={ () => setShowSettings( true ) }>
+							{ __( 'Settings', 'newspack-plugin' ) }
 						</Button>
-					</SectionHeader>
-				) : (
-					<>
-						<div className="newspack-subscriber-discounts__actions">
-							<Button variant="secondary" onClick={ () => setShowSettings( true ) }>
-								{ __( 'Settings', 'newspack-plugin' ) }
-							</Button>
-							<Button variant="primary" onClick={ () => setEditing( null ) }>
-								{ __( 'Add discount', 'newspack-plugin' ) }
-							</Button>
-						</div>
-						<DataViews
-							data={ processedData }
-							fields={ fields }
-							view={ view }
-							onChangeView={ setView }
-							actions={ actions }
-							paginationInfo={ paginationInfo }
-							defaultLayouts={ { table: {} } }
-							isLoading={ isLoading }
-							getItemId={ ( item: DiscountRule ) => item.id }
-							search
-						/>
-					</>
-				) }
-			</WizardSection>
-			{ undefined !== editing && (
-				<DiscountEditor rule={ editing } currency={ currency } onSaved={ applyPayload } onClose={ () => setEditing( undefined ) } />
+					}
+				/>
 			) }
+			<DiscountEditor
+				isOpen={ undefined !== editing }
+				rule={ editing ?? null }
+				currency={ currency }
+				onSaved={ applyPayload }
+				onClose={ () => setEditing( undefined ) }
+			/>
 			{ showSettings && <SettingsModal settings={ payload.settings } onSaved={ applyPayload } onClose={ () => setShowSettings( false ) } /> }
-		</WizardsTab>
+		</div>
 	);
 }
 
-registerTab( 'discounts', { render: () => <SubscriberDiscounts /> } );
+registerTab( 'discounts', { render: () => <SubscriberDiscounts />, fullWidth: true } );

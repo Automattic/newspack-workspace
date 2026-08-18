@@ -57,4 +57,6 @@ export interface SubscriptionsTabComponent {
 	render: () => JSX.Element;
 	/** Label for the last breadcrumb. Defaults to the tab label. */
 	breadcrumbLabel?: string;
+	/** Render the tab full-width, without the wizard content column. */
+	fullWidth?: boolean;
 }

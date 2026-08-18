@@ -42,6 +42,7 @@ function AudienceSubscriptions( _props: Record< string, unknown >, ref: React.Fo
 					{ label: registered.breadcrumbLabel || tab.label },
 				],
 				render: registered.render,
+				fullWidth: registered.fullWidth,
 			};
 		} )
 		.filter( Boolean );

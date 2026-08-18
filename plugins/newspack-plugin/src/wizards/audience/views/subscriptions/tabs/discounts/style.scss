@@ -3,49 +3,62 @@
  */
 
 @use "~@wordpress/base-styles/colors" as wp-colors;
+@use "~@wordpress/base-styles/variables" as wp-vars;
 
 .newspack-subscriber-discounts {
-	&__actions {
-		display: flex;
-		gap: 8px;
-		justify-content: flex-end;
-		margin-bottom: 16px;
+	&__empty {
+		margin: 0 auto;
+		max-width: calc(var(--newspack-wizard-section-space) * 2 + var(--newspack-wizard-section-width));
+		padding: 0 var(--newspack-wizard-section-space);
 	}
 
-	// The editor's before/after price preview. Kept quiet: it sits under the
-	// amount field and is read while typing, so it should not compete with the
-	// form controls above it.
+	&__header-count {
+		color: wp-colors.$gray-700;
+		font-weight: normal;
+	}
+
+	&__status {
+		align-items: center;
+		display: inline-flex;
+		gap: wp-vars.$grid-unit-10;
+	}
+
+	&__status-icon {
+		fill: currentcolor;
+		flex-shrink: 0;
+		margin: -4px;
+	}
+
 	&__preview {
 		border-collapse: collapse;
 		width: 100%;
 
 		th,
 		td {
-			border-bottom: 1px solid wp-colors.$gray-200;
-			padding: 8px 0;
+			border-bottom: 1px solid wp-colors.$gray-100;
+			padding: wp-vars.$grid-unit-15 0;
 			text-align: left;
-			vertical-align: top;
 		}
 
 		th {
-			color: wp-colors.$gray-700;
-			font-size: 12px;
-			font-weight: 500;
+			color: wp-colors.$gray-900;
+			font-size: wp-vars.$font-size-x-small;
+			font-weight: wp-vars.$font-weight-medium;
 			text-transform: uppercase;
 		}
 
-		td:last-child {
-			text-align: right;
-			white-space: nowrap;
+		td:nth-child(2) {
+			color: wp-colors.$gray-700;
+			font-weight: normal;
 		}
 
 		del {
-			color: wp-colors.$gray-700;
 			margin-right: 4px;
 		}
+	}
 
-		tr:last-child td {
-			border-bottom: 0;
-		}
+	&__preview-more td {
+		color: wp-colors.$gray-700;
+		font-style: italic;
 	}
 }
