@@ -145,9 +145,11 @@ function render_callback( $attributes ) {
 	if ( ! Modal_Checkout::has_unsupported_payment_gateway() ) {
 		$hidden_fields .= $after_success_behavior ? '<input type="hidden" name="after_success_behavior" value="' . esc_attr( $after_success_behavior ) . '" />' : '';
 		$hidden_fields .= $after_success_button_label ? '<input type="hidden" name="after_success_button_label" value="' . esc_attr( $after_success_button_label ) . '" />' : '';
-		// The signature marks this destination as one the site stored, so an
-		// off-site one is honored while an arbitrary one from a URL is not.
-		$hidden_fields .= $after_success_url ? '<input type="hidden" name="after_success_url" value="' . esc_attr( $after_success_url ) . '" />' . Modal_Checkout::after_success_signature_input( $after_success_url ) : '';
+		$hidden_fields .= $after_success_url ? '<input type="hidden" name="after_success_url" value="' . esc_attr( $after_success_url ) . '" />' : '';
+		// Vouched for here because this is the last point the destination is known to come
+		// from the block's own settings rather than from the request.
+		$after_success_token = $after_success_url ? Modal_Checkout::get_after_success_token( $after_success_url ) : '';
+		$hidden_fields      .= $after_success_token ? '<input type="hidden" name="after_success_token" value="' . esc_attr( $after_success_token ) . '" />' : '';
 	}
 	// Always emit the coupon field (not gated on the gateway check): it is
 	// applied server-side for both the modal and the redirect checkout flows.
@@ -218,7 +220,7 @@ function render_callback( $attributes ) {
 	);
 	return sprintf(
 		'<div class="%1$s">%2$s</div>',
-		$container_classes,
+		esc_attr( $container_classes ),
 		$form
 	);
 }

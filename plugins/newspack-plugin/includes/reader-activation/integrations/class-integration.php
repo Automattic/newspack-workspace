@@ -278,16 +278,89 @@ abstract class Integration {
 	}
 
 	/**
+	 * Option prefix for the per-integration registration key seed.
+	 */
+	const REGISTRATION_SEED_OPTION_PREFIX = 'newspack_integration_registration_seed_';
+
+	/**
 	 * Generate the registration key for this integration.
 	 *
-	 * The default implementation uses HMAC-SHA256 with the site's auth salt.
-	 * Subclasses can override this to implement custom key schemes
-	 * (e.g., asymmetric key pairs, time-bounded tokens).
+	 * The default implementation uses HMAC-SHA256 of the integration ID and a
+	 * stored per-integration random seed with the site's auth salt. The seed
+	 * makes the key revocable on its own: if a scripted client starts hammering
+	 * the key, rotate_registration_key() invalidates it without rotating
+	 * AUTH_SALT (which would log out every user on the site). Subclasses can
+	 * override this to implement custom key schemes (e.g., asymmetric key
+	 * pairs, time-bounded tokens).
 	 *
 	 * @return string The registration key.
 	 */
 	public function get_registration_key(): string {
-		return hash_hmac( 'sha256', $this->id, \wp_salt( 'auth' ) );
+		return $this->get_default_registration_key();
+	}
+
+	/**
+	 * Create the registration key seed if it doesn't exist yet.
+	 *
+	 * Called when an integration is enabled, so the seed is in place before any
+	 * page can emit the key — which keeps the write off the render path and out
+	 * of concurrent first requests.
+	 *
+	 * @return void
+	 */
+	final public function ensure_registration_key_seed(): void {
+		// Autoloaded on purpose, unlike this class's other options: the key is
+		// read on nearly every frontend render, so a non-autoloaded seed would
+		// add a query to each one.
+		\add_option( self::REGISTRATION_SEED_OPTION_PREFIX . $this->id, \wp_generate_password( 32, false ), '', true );
+	}
+
+	/**
+	 * Get the stored registration key seed, generating it on first use.
+	 *
+	 * Normally seeded by ensure_registration_key_seed() at enable time; this
+	 * lazy path covers integrations enabled before the seed existed. The
+	 * pre-check isn't atomic with the write, so two uncached first requests can
+	 * both generate: the loser's page carries a key that stops validating once
+	 * its cache expires. Narrow, self-healing, and avoided entirely for
+	 * integrations enabled through Integrations::enable().
+	 *
+	 * @param bool $create Whether to create the seed when none is stored.
+	 *                     Pass false on read-only paths; returns '' instead.
+	 *
+	 * @return string The seed, or '' when none is stored and $create is false.
+	 */
+	private function get_registration_key_seed( bool $create = true ): string {
+		$option_name = self::REGISTRATION_SEED_OPTION_PREFIX . $this->id;
+		$seed        = \get_option( $option_name );
+		if ( ! is_string( $seed ) || '' === $seed ) {
+			if ( ! $create ) {
+				return '';
+			}
+			$this->ensure_registration_key_seed();
+			$seed = (string) \get_option( $option_name );
+		}
+		return $seed;
+	}
+
+	/**
+	 * Rotate the registration key by regenerating its stored seed.
+	 *
+	 * Invalidates the key on every page emitted so far — cached pages keep
+	 * submitting the old key until their cache expires, and those requests are
+	 * rejected. That is the point: this is the incident-response lever for a
+	 * key being abused by scripted clients.
+	 *
+	 * PHP-only for now: there is no CLI command or admin surface, so operators
+	 * reach it through `wp eval`. Anything that wires it to a request — an admin
+	 * button, a REST route — must gate it on a capability check and a nonce
+	 * first; this method performs neither.
+	 *
+	 * @return string The new registration key.
+	 */
+	final public function rotate_registration_key(): string {
+		\update_option( self::REGISTRATION_SEED_OPTION_PREFIX . $this->id, \wp_generate_password( 32, false ), true );
+		return $this->get_registration_key();
 	}
 
 	/**
@@ -311,7 +384,68 @@ abstract class Integration {
 	 * @return bool Whether the registration request is valid.
 	 */
 	public function validate_registration_request( string $key, $request ): bool {
-		return hash_equals( $this->get_registration_key(), $key );
+		$current = $this->get_registration_key();
+		if ( hash_equals( $current, $key ) ) {
+			return true;
+		}
+		// Only integrations still on the framework's own key scheme get the
+		// transition allowance. A subclass with a custom scheme (a time-bounded
+		// token, an asymmetric pair) that inherits or calls this validator would
+		// otherwise accept the framework's static HMAC alongside its own, which
+		// is a permanent bypass of whatever bound it was enforcing.
+		//
+		// Read-only: this runs on an unauthenticated path, and a custom-scheme
+		// integration should not have a seed written for a key it never emits.
+		// A default-scheme one always has one by now — get_registration_key()
+		// above created it if needed — so a missing seed is itself the answer.
+		$default = $this->get_default_registration_key( false );
+		if ( '' === $default || ! hash_equals( $default, $current ) ) {
+			return false;
+		}
+		return hash_equals( $this->get_legacy_registration_key(), $key );
+	}
+
+	/**
+	 * The framework's own registration key derivation, as get_registration_key()
+	 * computes it before any subclass override.
+	 *
+	 * @param bool $create_seed Whether to create the seed when none is stored.
+	 *                          Pass false on read-only paths; returns '' instead.
+	 *
+	 * @return string The default-scheme registration key, or '' when no seed
+	 *                exists and $create_seed is false.
+	 */
+	private function get_default_registration_key( bool $create_seed = true ): string {
+		$seed = $this->get_registration_key_seed( $create_seed );
+		if ( '' === $seed ) {
+			return '';
+		}
+		return hash_hmac( 'sha256', $this->id . '|' . $seed, \wp_salt( 'auth' ) );
+	}
+
+	/**
+	 * The pre-seed registration key, still accepted during the transition.
+	 *
+	 * Adding the seed to the HMAC input changes every integration's key once on
+	 * upgrade. Pages already in a CDN or page cache carry the old key until
+	 * their TTL expires, and the capture client treats an invalid key as
+	 * permanent for the pageview — so without this the submission is lost
+	 * rather than retried. This matters in production today: the ESP
+	 * integration emits the legacy key on released sites and validates through
+	 * this method. (newspack-manager's Fundraise Up handler emits it too, but
+	 * replaces validate_registration_request() wholesale — it authenticates on
+	 * verified supporter identifiers rather than the key — so it never reaches
+	 * this branch and the allowance does nothing for it.)
+	 *
+	 * @todo Remove this method and its branch in validate_registration_request()
+	 *       once the seeded key has been in production for a release cycle
+	 *       (target: the first stable release after 2026-09-01). Until then
+	 *       rotation narrows a key rather than fully revoking it.
+	 *
+	 * @return string The legacy registration key.
+	 */
+	private function get_legacy_registration_key(): string {
+		return hash_hmac( 'sha256', $this->id, \wp_salt( 'auth' ) );
 	}
 
 	/**
@@ -818,10 +952,54 @@ abstract class Integration {
 	/**
 	 * Get the enabled outgoing metadata fields for this integration.
 	 *
+	 * In legacy metadata mode an integration with no saved selection of its
+	 * own inherits the ESP integration's effective selection — the set the
+	 * legacy pipeline filters by — so pre-existing legacy sites keep syncing
+	 * exactly what they did before per-integration selection existed, and
+	 * the Outbound UI reflects what is actually pushed. An explicitly saved
+	 * selection (even an empty one) always wins (NPPD-2107).
+	 *
+	 * Two legacy-mode caveats, accepted for this transitional schema: the
+	 * legacy pipeline upstream-filters by the ESP selection, so an explicit
+	 * selection can only narrow that set (a field the ESP integration has
+	 * disabled never syncs even when enabled here); and once a selection is
+	 * saved, only deleting the integration's option restores inheritance.
+	 *
+	 * What gets inherited is overridable — see
+	 * get_inherited_legacy_outgoing_fields().
+	 *
 	 * @return string[] List of enabled field names.
 	 */
 	public function get_enabled_outgoing_fields() {
-		return array_values( \get_option( self::OUTGOING_FIELDS_OPTION_PREFIX . $this->id, [] ) );
+		$stored = \get_option( self::OUTGOING_FIELDS_OPTION_PREFIX . $this->id, null );
+		if ( null !== $stored && is_array( $stored ) ) {
+			return array_values( $stored );
+		}
+
+		if ( 'legacy' === Sync\Metadata::get_version() && 'esp' !== $this->get_id() ) {
+			return array_values( $this->get_inherited_legacy_outgoing_fields() );
+		}
+
+		return [];
+	}
+
+	/**
+	 * The selection this integration inherits in legacy mode when it has never
+	 * saved one of its own.
+	 *
+	 * Defaults to the ESP integration's effective selection — the set the legacy
+	 * metadata pipeline filters by — so an un-migrated site keeps its existing
+	 * payloads. Sync\Metadata::get_fields() is the single definition of that
+	 * set, including its registry-miss fallbacks.
+	 *
+	 * Override to inherit something else, or return an empty array to opt out of
+	 * inheritance entirely (an integration that does so pushes no metadata until
+	 * an Outbound selection is saved).
+	 *
+	 * @return string[] List of inherited field names.
+	 */
+	protected function get_inherited_legacy_outgoing_fields() {
+		return Sync\Metadata::get_fields();
 	}
 
 	/**
@@ -1074,19 +1252,23 @@ abstract class Integration {
 	 * Prepare contact data for this integration by filtering to enabled
 	 * outgoing fields and adding the metadata prefix.
 	 *
-	 * In legacy mode, metadata classes already return filtered and prefixed
-	 * data, so the contact is returned unchanged.
+	 * In legacy mode the metadata classes return data already filtered and
+	 * prefixed — but filtered by the ESP integration's own field config, so
+	 * only the `esp` integration takes it as-is. Every other integration
+	 * still applies its enabled-outgoing selection via
+	 * prepare_contact_legacy(); otherwise an integration with an empty
+	 * Outbound selection would receive (and push) the full default field set.
 	 *
 	 * @param array $contact Contact data with raw metadata keys.
 	 * @return array Contact data with filtered, prefixed metadata.
 	 */
 	public function prepare_contact( $contact ) {
-		if ( 'legacy' === Sync\Metadata::get_version() ) {
+		if ( empty( $contact['metadata'] ) ) {
 			return $contact;
 		}
 
-		if ( empty( $contact['metadata'] ) ) {
-			return $contact;
+		if ( 'legacy' === Sync\Metadata::get_version() ) {
+			return $this->prepare_contact_legacy( $contact );
 		}
 
 		$enabled_fields = $this->get_enabled_outgoing_fields();
@@ -1114,6 +1296,124 @@ abstract class Integration {
 
 		$contact['metadata'] = $prepared;
 		return $contact;
+	}
+
+	/**
+	 * Apply this integration's outgoing-field selection to legacy-pipeline data.
+	 *
+	 * Legacy metadata arrives already prefixed and filtered — by the ESP
+	 * integration's field config. The `esp` integration therefore takes it
+	 * unchanged, but any other integration must still narrow the set to its
+	 * own enabled outgoing fields: an explicitly saved empty Outbound
+	 * selection means no metadata fields, not all of them. An integration
+	 * that never saved a selection inherits the ESP integration's effective
+	 * selection via get_enabled_outgoing_fields(), preserving pre-existing
+	 * legacy behavior (NPPD-2107).
+	 *
+	 * Matching runs against whole keys rather than de-prefixed remainders, so a
+	 * key reshaped by the `newspack_ras_metadata_key` filter still matches (see
+	 * get_legacy_enabled_key_shapes()). Unprefixed sync-control keys
+	 * (Legacy_Metadata::SYNC_CONTROL_KEYS — `status`, `status_if_new`) always
+	 * pass through; any other unprefixed key is dropped, so future unprefixed
+	 * metadata cannot bypass the outbound selection filter.
+	 *
+	 * @param array $contact Contact data with prefixed legacy metadata.
+	 * @return array Contact data with metadata narrowed to enabled fields.
+	 */
+	private function prepare_contact_legacy( array $contact ): array {
+		if ( 'esp' === $this->get_id() ) {
+			return $contact;
+		}
+
+		[ $exact_keys, $utm_prefixes ] = $this->get_legacy_enabled_key_shapes();
+		$prepared                      = [];
+
+		foreach ( $contact['metadata'] as $key => $value ) {
+			if ( in_array( $key, Sync\Legacy_Metadata::SYNC_CONTROL_KEYS, true ) ) {
+				$prepared[ $key ] = $value;
+				continue;
+			}
+			if ( isset( $exact_keys[ $key ] ) ) {
+				$prepared[ $key ] = $value;
+				continue;
+			}
+			foreach ( $utm_prefixes as $utm_prefix ) {
+				// A UTM label only carries its own suffixed sub-keys, never a
+				// bare re-match of itself (that is the exact-key case above).
+				if ( 0 === strpos( $key, $utm_prefix ) && strlen( $key ) > strlen( $utm_prefix ) ) {
+					$prepared[ $key ] = $value;
+					break;
+				}
+			}
+		}
+
+		$contact['metadata'] = $prepared;
+		return $contact;
+	}
+
+	/**
+	 * Build the legacy-mode match shapes for this integration's enabled fields.
+	 *
+	 * Returns two sets of whole keys, both built with the legacy pipeline's own
+	 * prefix (Sync\Metadata::get_prefix() — the one the data actually carries,
+	 * not this integration's own, which may differ):
+	 *
+	 * - exact keys, matched by identity;
+	 * - UTM prefixes, matched by prefix with a non-empty remainder.
+	 *
+	 * Each enabled label contributes both the key Sync\Metadata::get_key()
+	 * produces (so a key reshaped by the `newspack_ras_metadata_key` filter
+	 * still matches) and the plain `prefix . label` shape (so a label absent
+	 * from the current key map still matches as it did before).
+	 *
+	 * Only the raw keys in Legacy_Metadata::UTM_RAW_KEYS get prefix-match
+	 * semantics. `newspack_ras_metadata_keys` lets any plugin register labels,
+	 * and a registered label ending in `': '` that happened to prefix another
+	 * label would otherwise carry that other field past the selection.
+	 *
+	 * @return array{0: array<string, true>, 1: string[]} Exact-key set and UTM prefixes.
+	 */
+	private function get_legacy_enabled_key_shapes(): array {
+		$enabled_fields = $this->get_enabled_outgoing_fields();
+		$prefix         = Sync\Metadata::get_prefix();
+		$keys_map       = Sync\Metadata::get_keys();
+		$exact_keys     = [];
+		$utm_prefixes   = [];
+
+		$utm_labels = [];
+		foreach ( Sync\Legacy_Metadata::UTM_RAW_KEYS as $utm_raw_key ) {
+			if ( isset( $keys_map[ $utm_raw_key ] ) ) {
+				$utm_labels[] = $keys_map[ $utm_raw_key ];
+			}
+		}
+
+		foreach ( $keys_map as $raw_key => $label ) {
+			if ( ! in_array( $label, $enabled_fields, true ) ) {
+				continue;
+			}
+			$filtered_key = Sync\Metadata::get_key( $raw_key );
+			if ( ! is_string( $filtered_key ) || '' === $filtered_key ) {
+				continue;
+			}
+			if ( in_array( $raw_key, Sync\Legacy_Metadata::UTM_RAW_KEYS, true ) ) {
+				$utm_prefixes[] = $filtered_key;
+			} else {
+				$exact_keys[ $filtered_key ] = true;
+			}
+		}
+
+		foreach ( $enabled_fields as $label ) {
+			if ( ! is_string( $label ) || '' === $label ) {
+				continue;
+			}
+			if ( in_array( $label, $utm_labels, true ) ) {
+				$utm_prefixes[] = $prefix . $label;
+			} else {
+				$exact_keys[ $prefix . $label ] = true;
+			}
+		}
+
+		return [ $exact_keys, array_values( array_unique( $utm_prefixes ) ) ];
 	}
 
 	/**

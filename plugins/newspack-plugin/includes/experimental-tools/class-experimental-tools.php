@@ -365,7 +365,7 @@ class Experimental_Tools {
 
 		foreach ( $fields as $key => $value ) {
 			if ( in_array( $key, $valid_keys, true ) ) {
-				$all_settings[ $slug ]['fields'][ $key ] = sanitize_textarea_field( $value );
+				$all_settings[ $slug ]['fields'][ $key ] = self::sanitize_field_value( $value );
 			}
 		}
 
@@ -378,6 +378,47 @@ class Experimental_Tools {
 		 * @param array  $fields Saved key-value pairs.
 		 */
 		do_action( 'newspack_experimental_tool_fields_saved', $slug, $all_settings[ $slug ]['fields'] );
+	}
+
+	/**
+	 * Sanitize a field value without destroying its placeholders.
+	 *
+	 * WordPress deletes a percent sign followed by two hex digits, reading it as a
+	 * URL-encoded octet. A field holding a template therefore loses any
+	 * placeholder whose name opens with two hex characters — %CACHE_KEY% is stored
+	 * as CHE_KEY% — and the tool that owns it has no way to tell, because the
+	 * saved-fields action carries the sanitized value. Hold the placeholders out
+	 * of the sanitizer and put them back.
+	 *
+	 * @param mixed $value The submitted value.
+	 * @return string The sanitized value.
+	 */
+	private static function sanitize_field_value( $value ) {
+		if ( ! is_scalar( $value ) ) {
+			return sanitize_textarea_field( $value );
+		}
+
+		// Random per call: the restore is a blind strtr, so a fixed token that the
+		// value itself contained would come back as a placeholder nobody wrote.
+		$prefix       = 'npeaPlaceholder' . wp_generate_password( 12, false );
+		$placeholders = [];
+
+		$held = preg_replace_callback(
+			'/%[A-Z][A-Z0-9_]*%/',
+			function ( $matches ) use ( &$placeholders, $prefix ) {
+				$token                  = $prefix . count( $placeholders );
+				$placeholders[ $token ] = $matches[0];
+				return $token;
+			},
+			(string) $value
+		);
+
+		// PCRE returns null on failure; sanitizing that would silently store ''.
+		if ( null === $held ) {
+			return sanitize_textarea_field( $value );
+		}
+
+		return strtr( sanitize_textarea_field( $held ), $placeholders );
 	}
 
 	/**

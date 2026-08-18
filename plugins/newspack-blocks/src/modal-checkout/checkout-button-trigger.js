@@ -145,9 +145,7 @@ export const PICKER_CONTEXT_FIELDS = [
 	'after_success_behavior',
 	'after_success_url',
 	'after_success_button_label',
-	// Authorizes an off-site after-success destination; without it the
-	// destination is dropped the moment the reader picks a variation.
-	'after_success_sig',
+	'after_success_token',
 	'gate_post_id',
 	'newspack_popup_id',
 	'prompt_title',

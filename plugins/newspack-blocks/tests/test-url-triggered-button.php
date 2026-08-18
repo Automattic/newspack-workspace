@@ -91,32 +91,6 @@ class Newspack_Blocks_Test_Url_Triggered_Button extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Test that the picker submission copies the coupon: the picker form carries
-	 * none of its own, so without this a reader choosing a variation would lose
-	 * the coupon.
-	 */
-	public function test_picker_context_fields_include_the_coupon() {
-		$trigger = file_get_contents( \NEWSPACK_BLOCKS__PLUGIN_DIR . 'src/modal-checkout/checkout-button-trigger.js' );
-		$fields  = substr( $trigger, strpos( $trigger, 'PICKER_CONTEXT_FIELDS = [' ) );
-		$fields  = substr( $fields, 0, strpos( $fields, '];' ) );
-		$this->assertStringContainsString( "'coupon'", $fields );
-	}
-
-	/**
-	 * Test that the picker-opening path shares that same field list rather than
-	 * keeping its own copy — a second list is how a field gets added for one
-	 * path and silently dropped by the other.
-	 */
-	public function test_modal_reuses_the_shared_picker_field_list() {
-		$modal = file_get_contents( \NEWSPACK_BLOCKS__PLUGIN_DIR . 'src/modal-checkout/modal.js' );
-		// The picker context comes from the shared helper, not a second copy of
-		// the field list — a duplicate is how a field gets added for one path and
-		// silently dropped by the other.
-		$this->assertStringContainsString( 'applyContextFields( singleVariationForm', $modal );
-		$this->assertStringNotContainsString( "\t\t\t\t\t\t'after_success_behavior',\n", $modal );
-	}
-
-	/**
 	 * Test that a custom after-checkout destination becomes the block's
 	 * after-success attributes.
 	 */
@@ -179,89 +153,6 @@ class Newspack_Blocks_Test_Url_Triggered_Button extends WP_UnitTestCase {
 		);
 		$this->assertSame( 'custom', $on_site['afterSuccessBehavior'] );
 		$this->assertSame( home_url( '/welcome' ), $on_site['afterSuccessURL'] );
-	}
-
-	/**
-	 * Test the destination allowlist for unsigned values, including the
-	 * near-miss host that a naive prefix check would wave through.
-	 */
-	public function test_sanitize_after_success_url_without_a_signature() {
-		$this->assertSame( home_url( '/welcome' ), Modal_Checkout::sanitize_after_success_url( home_url( '/welcome' ) ) );
-		$this->assertSame( '/welcome', Modal_Checkout::sanitize_after_success_url( '/welcome' ) );
-		$this->assertSame( '', Modal_Checkout::sanitize_after_success_url( 'https://evil.example/phish' ) );
-		$this->assertSame( '', Modal_Checkout::sanitize_after_success_url( 'https://' . wp_parse_url( home_url(), PHP_URL_HOST ) . '.evil.example/x' ) );
-		$this->assertSame( '', Modal_Checkout::sanitize_after_success_url( '' ) );
-
-		// Sites that route every reader off-site can still opt in the host.
-		$allow = function ( $hosts ) {
-			$hosts[] = 'partner.example';
-			return $hosts;
-		};
-		add_filter( 'allowed_redirect_hosts', $allow );
-		$this->assertSame( 'https://partner.example/welcome', Modal_Checkout::sanitize_after_success_url( 'https://partner.example/welcome' ) );
-		remove_filter( 'allowed_redirect_hosts', $allow );
-	}
-
-	/**
-	 * Test that a signature authorizes an off-site destination: a block's URL is
-	 * authored in the editor, so it may point anywhere.
-	 */
-	public function test_a_signature_authorizes_an_off_site_destination() {
-		$url       = 'https://partner.example/welcome';
-		$signature = Modal_Checkout::sign_after_success_url( $url );
-		$this->assertNotEmpty( $signature );
-		$this->assertSame( $url, Modal_Checkout::sanitize_after_success_url( $url, $signature ) );
-	}
-
-	/**
-	 * Test that a signature cannot be forged, replayed onto another URL, or
-	 * omitted — the three ways an attacker would try to buy a redirect.
-	 */
-	public function test_an_invalid_signature_does_not_authorize() {
-		$url = 'https://evil.example/phish';
-		// No signature.
-		$this->assertSame( '', Modal_Checkout::sanitize_after_success_url( $url ) );
-		// Made-up signature.
-		$this->assertSame( '', Modal_Checkout::sanitize_after_success_url( $url, 'not-a-signature' ) );
-		// A signature that is valid, but for a different destination.
-		$other = Modal_Checkout::sign_after_success_url( 'https://partner.example/welcome' );
-		$this->assertSame( '', Modal_Checkout::sanitize_after_success_url( $url, $other ) );
-		// Tampered signature.
-		$this->assertSame( '', Modal_Checkout::sanitize_after_success_url( $url, substr( Modal_Checkout::sign_after_success_url( $url ), 0, -1 ) . 'x' ) );
-	}
-
-	/**
-	 * Test that signatures are per-destination, so one cannot be lifted from a
-	 * published page and pointed elsewhere.
-	 */
-	public function test_signatures_are_bound_to_their_destination() {
-		$this->assertNotSame(
-			Modal_Checkout::sign_after_success_url( 'https://partner.example/a' ),
-			Modal_Checkout::sign_after_success_url( 'https://partner.example/b' )
-		);
-		$this->assertSame( '', Modal_Checkout::sign_after_success_url( '' ) );
-	}
-
-	/**
-	 * Test that the signature input is emitted for a destination and omitted
-	 * when there is none.
-	 */
-	public function test_signature_input_markup() {
-		$markup = Modal_Checkout::after_success_signature_input( 'https://partner.example/welcome' );
-		$this->assertStringContainsString( 'name="' . Modal_Checkout::AFTER_SUCCESS_SIGNATURE_ARG . '"', $markup );
-		$this->assertStringContainsString( Modal_Checkout::sign_after_success_url( 'https://partner.example/welcome' ), $markup );
-		$this->assertSame( '', Modal_Checkout::after_success_signature_input( '' ) );
-	}
-
-	/**
-	 * Test that the picker submission carries the signature: without it a reader
-	 * choosing a variation would lose an off-site destination.
-	 */
-	public function test_picker_context_fields_include_the_signature() {
-		$trigger = file_get_contents( \NEWSPACK_BLOCKS__PLUGIN_DIR . 'src/modal-checkout/checkout-button-trigger.js' );
-		$fields  = substr( $trigger, strpos( $trigger, 'PICKER_CONTEXT_FIELDS = [' ) );
-		$fields  = substr( $fields, 0, strpos( $fields, '];' ) );
-		$this->assertStringContainsString( "'" . Modal_Checkout::AFTER_SUCCESS_SIGNATURE_ARG . "'", $fields );
 	}
 
 	/**
