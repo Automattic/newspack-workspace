@@ -24,10 +24,11 @@ const isSunset = definition => 'legacy' === definition?.status;
 /**
  * Build UI rows from the merged definitions payload.
  *
- * One row per ESP field name, never a version choice: conflict groups are
- * empty by construction, so a name carrying both a v1 and v2 definition is
- * always a value-equivalent pair, collapsing to a single row under the
- * surviving (v2) identity.
+ * One row per ESP field name, never a version choice: a v2 field only keeps
+ * its v1 twin's ESP name when it is a declared value-equivalent pair (one
+ * that changed meaning is given its own name instead), so a name carrying
+ * both versions always collapses to a single row under the surviving (v2)
+ * identity.
  *
  * Every field lists on every site, legacy included — grouped under the
  * Legacy section and ordered last, so the direction of travel stays

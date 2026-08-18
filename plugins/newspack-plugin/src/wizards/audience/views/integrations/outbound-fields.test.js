@@ -52,17 +52,47 @@ describe( 'buildFieldRows', () => {
 		expect( toggleRow( [ 'v1:account' ], row, false ) ).toEqual( [] );
 	} );
 
+	// Connected Account is one of the four surviving equivalent pairs — both
+	// schemas still carry that ESP name. Total Paid deliberately is not: its
+	// v2 twin was renamed Lifetime Total Paid, which uncollapses it (below).
 	it( 'falls back to the v1 side of a pair while v2 is unavailable', () => {
-		const defs = [ def( 'v1:total_paid', 'Total Paid' ), def( 'v2:Total_Paid', 'Total Paid', { available: false } ) ];
-		const row = buildFieldRows( defs, [] ).find( r => r.name === 'Total Paid' );
+		const defs = [ def( 'v1:connected_account', 'Connected Account' ), def( 'v2:Connected_Account', 'Connected Account', { available: false } ) ];
+		const row = buildFieldRows( defs, [] ).find( r => r.name === 'Connected Account' );
 		expect( row ).toBeDefined();
 		expect( row.activeVersion ).toBe( 'v1' );
-		expect( row.ids ).toEqual( [ 'v1:total_paid' ] );
+		expect( row.ids ).toEqual( [ 'v1:connected_account' ] );
 	} );
 
 	it( 'hides a pair only when both versions are unavailable', () => {
-		const defs = [ def( 'v1:total_paid', 'Total Paid', { available: false } ), def( 'v2:Total_Paid', 'Total Paid', { available: false } ) ];
-		expect( buildFieldRows( defs, [] ).find( r => r.name === 'Total Paid' ) ).toBeUndefined();
+		const defs = [
+			def( 'v1:connected_account', 'Connected Account', { available: false } ),
+			def( 'v2:Connected_Account', 'Connected Account', { available: false } ),
+		];
+		expect( buildFieldRows( defs, [] ).find( r => r.name === 'Connected Account' ) ).toBeUndefined();
+	} );
+
+	// The rename that shrank the equivalence set from five pairs to four.
+	// Collapse keys on the shared ESP name alone, so giving the v2 twin its
+	// own name splits the former pair into two independently selectable rows:
+	// the legacy one a site may still be syncing, and the new one it can adopt
+	// alongside — they mean different things (erase-on-lapse vs lifetime).
+	it( 'uncollapses Total Paid, whose v2 twin took its own ESP name', () => {
+		const defs = [
+			def( 'v1:total_paid', 'Total Paid', { status: 'legacy', superseded_by: [ 'v2:Total_Paid' ] } ),
+			def( 'v2:Total_Paid', 'Lifetime Total Paid', { status: 'new', supersedes: 'v1:total_paid' } ),
+		];
+		const rows = buildFieldRows( defs, [] );
+		const legacy = rows.find( r => r.name === 'Total Paid' );
+		const renamed = rows.find( r => r.name === 'Lifetime Total Paid' );
+
+		expect( legacy.activeVersion ).toBe( 'v1' );
+		expect( legacy.ids ).toEqual( [ 'v1:total_paid' ] );
+		expect( renamed.activeVersion ).toBe( 'v2' );
+		expect( renamed.ids ).toEqual( [ 'v2:Total_Paid' ] );
+		// Independent: toggling one must never clear the other's id.
+		expect( toggleRow( [ 'v1:total_paid' ], renamed, true ) ).toEqual( [ 'v1:total_paid', 'v2:Total_Paid' ] );
+		expect( badgesForRow( renamed ).map( b => b.text ) ).toEqual( [ 'New' ] );
+		expect( legacy.supersededHint ).toBe( 'Lifetime Total Paid' );
 	} );
 
 	it( 'groups same-version raw keys sharing a name into one row', () => {
