@@ -197,7 +197,7 @@ class Starter_Content {
 		$file = wp_upload_bits(
 			'newspack-logomark.png',
 			null,
-			file_get_contents( NEWSPACK_ABSPATH . 'includes/raw_assets/images/newspack-logomark.png' )
+			file_get_contents( NEWSPACK_ABSPATH . 'includes/raw_assets/images/newspack-logomark.png' ) // phpcs:ignore WordPressVIPMinimum.Performance.FetchingRemoteData.FileGetContentsUnknown -- Reads a bundled plugin asset from the local filesystem.
 		);
 
 		if ( ! $file || empty( $file['file'] ) ) {

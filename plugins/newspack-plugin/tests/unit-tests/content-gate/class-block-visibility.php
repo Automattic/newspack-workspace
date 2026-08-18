@@ -483,6 +483,81 @@ class Newspack_Test_Block_Visibility extends WP_UnitTestCase {
 	}
 
 	/**
+	 * The hide-decision is callable directly with an explicit user, so the excerpt
+	 * path can ask what an anonymous reader would see without changing the current user.
+	 */
+	public function test_is_hidden_for_user_is_callable_with_an_explicit_user() {
+		$rules = [ 'registration' => [ 'active' => true ] ];
+		$block = $this->make_block_with_rules( 'core/group', $rules, 'visible' );
+
+		$this->assertTrue(
+			Block_Visibility::is_hidden_for_user( $block, 0 ),
+			'A registration-gated block is hidden from a logged-out reader.'
+		);
+		$this->assertFalse(
+			Block_Visibility::is_hidden_for_user( $block, $this->test_user_id ),
+			'The same block is visible to a reader who matches the rule.'
+		);
+	}
+
+	/**
+	 * The early-out's substring assumption holds for every gating shape.
+	 *
+	 * Sanitization returns early when the raw content does not contain the literal
+	 * 'newspackAccessControl'. That is a performance guard sitting on a security
+	 * boundary: if a gated block could ever serialize without the literal, the guard
+	 * would skip sanitization rather than merely skip work. This pins the assumption
+	 * instead of trusting it; removal itself is covered by the stripping tests above.
+	 */
+	public function test_gated_blocks_always_serialize_with_the_guard_literal() {
+		$registration = [
+			'registration' => [ 'active' => true ],
+		];
+		$custom_access = [
+			'custom_access' => [
+				'active'       => true,
+				'access_rules' => [ 'registration' ],
+			],
+		];
+
+		$shapes = [
+			'custom / registration' => [
+				'newspackAccessControlMode'       => 'custom',
+				'newspackAccessControlRules'      => $registration,
+				'newspackAccessControlVisibility' => 'visible',
+			],
+			'custom / access rules' => [
+				'newspackAccessControlMode'       => 'custom',
+				'newspackAccessControlRules'      => $custom_access,
+				'newspackAccessControlVisibility' => 'visible',
+			],
+			'gate mode'             => [
+				'newspackAccessControlMode'       => 'gate',
+				'newspackAccessControlGateIds'    => [ 123 ],
+				'newspackAccessControlVisibility' => 'visible',
+			],
+		];
+
+		foreach ( $shapes as $label => $attrs ) {
+			$block = [
+				'blockName'    => 'core/group',
+				'attrs'        => $attrs,
+				'innerBlocks'  => [],
+				'innerHTML'    => '<div class="wp-block-group">GUARDMARK</div>',
+				'innerContent' => [ '<div class="wp-block-group">GUARDMARK</div>' ],
+			];
+
+			$serialized = serialize_block( $block );
+
+			$this->assertStringContainsString(
+				'newspackAccessControl',
+				$serialized,
+				sprintf( 'A gated block must serialize with the literal the early-out searches for: %s', $label )
+			);
+		}
+	}
+
+	/**
 	 * Core/group block has both visibility attributes registered server-side.
 	 */
 	public function test_group_block_has_visibility_attribute_registered() {
@@ -524,6 +599,30 @@ class Newspack_Test_Block_Visibility extends WP_UnitTestCase {
 		Block_Visibility::evaluate_rules_for_user_public( $rules, $this->test_user_id );
 		// Callback fired only once despite two calls with identical rules + user.
 		$this->assertSame( 1, $call_count );
+	}
+
+	/**
+	 * The stripped-content memo does not survive a cache reset.
+	 *
+	 * The memo itself saves a parse/walk/serialize on repeat calls, which this suite
+	 * cannot observe: rules_match_cache already suppresses the rule callbacks a
+	 * counting test would measure, so such a test would pass with or without it. What
+	 * is observable, and what matters for test isolation, is that the memo clears.
+	 */
+	public function test_strip_memo_clears_on_reset() {
+		$content = '<!-- wp:group {"newspackAccessControlMode":"custom","newspackAccessControlRules":{"registration":{"active":true}},"newspackAccessControlVisibility":"visible"} -->'
+			. '<div class="wp-block-group"><!-- wp:paragraph --><p>MEMOMARK</p><!-- /wp:paragraph --></div>'
+			. '<!-- /wp:group -->';
+
+		wp_set_current_user( 0 );
+		Block_Visibility::reset_cache_for_tests();
+		$first = Block_Visibility::strip_blocks_hidden_from_public( $content );
+
+		Block_Visibility::reset_cache_for_tests();
+		$second = Block_Visibility::strip_blocks_hidden_from_public( $content );
+
+		$this->assertSame( $first, $second, 'A reset must not change what stripping produces.' );
+		$this->assertStringNotContainsString( 'MEMOMARK', $first, 'The gated block is withheld from the anonymous reader.' );
 	}
 
 	// -----------------------------------------------------------------------
@@ -737,5 +836,51 @@ class Newspack_Test_Block_Visibility extends WP_UnitTestCase {
 		wp_set_current_user( $this->test_user_id );
 		Block_Visibility::reset_cache_for_tests();
 		$this->assertSame( '<div>x</div>', Block_Visibility::filter_render_block( '<div>x</div>', $block ) );
+	}
+
+	// -----------------------------------------------------------------------
+	// strip_blocks_hidden_from_public() tests
+	// -----------------------------------------------------------------------
+
+	/**
+	 * Gated blocks are removed from content at any nesting depth, and ungated
+	 * siblings survive.
+	 */
+	public function test_strip_removes_gated_blocks_at_any_depth() {
+		$gate    = '{"newspackAccessControlMode":"custom","newspackAccessControlRules":{"registration":{"active":true}},"newspackAccessControlVisibility":"visible"}';
+		$gated   = '<!-- wp:group ' . $gate . ' --><div class="wp-block-group"><!-- wp:paragraph --><p>GATED</p><!-- /wp:paragraph --></div><!-- /wp:group -->';
+		$ungated = '<!-- wp:group --><div class="wp-block-group"><!-- wp:paragraph --><p>ORDINARY</p><!-- /wp:paragraph --></div><!-- /wp:group -->';
+		$plain   = '<!-- wp:paragraph --><p>PLAIN</p><!-- /wp:paragraph -->';
+
+		$top    = Block_Visibility::strip_blocks_hidden_from_public( $plain . $ungated . $gated );
+		$nested = Block_Visibility::strip_blocks_hidden_from_public(
+			$plain . '<!-- wp:columns --><div class="wp-block-columns"><!-- wp:column --><div class="wp-block-column">'
+			. $gated . '</div><!-- /wp:column --></div><!-- /wp:columns -->'
+		);
+
+		$this->assertStringNotContainsString( 'GATED', $top, 'A top-level gated block is removed.' );
+		$this->assertStringContainsString( 'PLAIN', $top, 'Ungated content survives.' );
+		$this->assertStringContainsString( 'ORDINARY', $top, 'An ungated group survives.' );
+		$this->assertStringNotContainsString( 'GATED', $nested, 'A gated block nested in columns is removed.' );
+		$this->assertStringContainsString( 'PLAIN', $nested, 'Ungated content survives the nested case.' );
+	}
+
+	/**
+	 * Removing a nested block keeps innerContent's null markers in step with
+	 * innerBlocks. serialize_block() consumes one innerBlocks entry per null, so a
+	 * mismatch throws from inside core rather than returning wrong output.
+	 */
+	public function test_strip_keeps_inner_content_markers_in_step() {
+		$gate  = '{"newspackAccessControlMode":"custom","newspackAccessControlRules":{"registration":{"active":true}},"newspackAccessControlVisibility":"visible"}';
+		$mixed = '<!-- wp:columns --><div class="wp-block-columns">'
+			. '<!-- wp:column --><div class="wp-block-column"><!-- wp:paragraph --><p>KEEP</p><!-- /wp:paragraph --></div><!-- /wp:column -->'
+			. '<!-- wp:column --><div class="wp-block-column"><!-- wp:group ' . $gate . ' --><div class="wp-block-group"><!-- wp:paragraph --><p>GATED</p><!-- /wp:paragraph --></div><!-- /wp:group --></div><!-- /wp:column -->'
+			. '</div><!-- /wp:columns -->';
+
+		$out = Block_Visibility::strip_blocks_hidden_from_public( $mixed );
+
+		$this->assertStringNotContainsString( 'GATED', $out );
+		$this->assertStringContainsString( 'KEEP', $out );
+		$this->assertNotEmpty( parse_blocks( $out ), 'Output is re-parseable.' );
 	}
 }

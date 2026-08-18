@@ -320,7 +320,7 @@ function newspack_blocks_render_block_author_profile( $attributes, $content, $bl
 		return '';
 	}
 
-	Newspack_Blocks::enqueue_view_assets( 'author-profile' );
+	Newspack_Blocks::enqueue_view_assets( 'author-profile', 'defer' );
 
 	// NESTED MODE: Determined by layoutVersion attribute, not theme type.
 	// Once a block is created in nested mode (layoutVersion 2), it stays nested.
