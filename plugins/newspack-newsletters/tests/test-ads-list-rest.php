@@ -1477,4 +1477,59 @@ class Ads_List_REST_Test extends WP_UnitTestCase {
 		$this->assertSame( '0', get_post_meta( $post_id, 'tracking_clicks', true ) );
 		$this->assertNotEmpty( get_post_meta( $post_id, 'tracking_impressions', false ) );
 	}
+
+	/**
+	 * Quick Edit seeds the advertiser, placement and category pickers off
+	 * this payload, so it has to survive a real dispatch with every
+	 * requested taxonomy present, and only in the `edit` context the list
+	 * asks for.
+	 */
+	public function test_the_terms_field_reaches_the_response_only_in_edit_context() {
+		global $wp_rest_server;
+		$wp_rest_server = new WP_REST_Server();
+		do_action( 'rest_api_init' );
+
+		wp_set_current_user( self::factory()->user->create( [ 'role' => 'administrator' ] ) );
+
+		$post_id    = self::factory()->post->create(
+			[
+				'post_type'   => Ads::CPT,
+				'post_status' => 'publish',
+				'post_title'  => 'Terms field ad',
+			]
+		);
+		$advertiser = self::factory()->term->create(
+			[
+				'taxonomy' => Ads::ADVERTISER_TAX,
+				'name'     => 'Acme',
+			]
+		);
+		wp_set_post_terms( $post_id, [ $advertiser ], Ads::ADVERTISER_TAX );
+
+		$route = '/wp/v2/' . Ads::CPT;
+
+		$edit = new WP_REST_Request( 'GET', $route );
+		$edit->set_param( 'context', 'edit' );
+		$terms = rest_do_request( $edit )->get_data()[0]['newspack_newsletters_terms'];
+
+		$this->assertSame(
+			[
+				[
+					'id'   => $advertiser,
+					'name' => 'Acme',
+				],
+			],
+			$terms[ Ads::ADVERTISER_TAX ]
+		);
+		// Every requested taxonomy is present, so Quick Edit never has to
+		// tell "no terms" apart from "taxonomy missing".
+		foreach ( Ads_List_REST::LIST_TAXONOMIES as $taxonomy ) {
+			$this->assertArrayHasKey( $taxonomy, $terms );
+		}
+
+		$view_item = rest_do_request( new WP_REST_Request( 'GET', $route ) )->get_data()[0];
+		$this->assertArrayNotHasKey( 'newspack_newsletters_terms', $view_item );
+
+		$wp_rest_server = null;
+	}
 }

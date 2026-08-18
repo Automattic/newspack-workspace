@@ -77,7 +77,8 @@ final class Newspack_Newsletters_Layouts {
 			'show_ui'      => true,
 			'show_in_menu' => false,
 			'show_in_rest' => true,
-			// `author` so `_embed` populates `_embedded.author[0]` for the list.
+			// `author` so the layout keeps a `post_author`, which both the
+			// list's author field and `get_layouts()` read.
 			'supports'     => [ 'editor', 'title', 'custom-fields', 'author' ],
 			'taxonomies'   => [],
 		];

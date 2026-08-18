@@ -80,4 +80,40 @@ class Layouts_List_REST_Test extends WP_UnitTestCase {
 		$this->assertNull( Layouts_List_REST::get_author_payload( $post_id ) );
 		$this->assertNull( Layouts_List_REST::get_author_payload( 0 ) );
 	}
+
+	/**
+	 * The field has to survive an actual dispatch, and only in the `edit`
+	 * context the list asks for.
+	 */
+	public function test_the_author_field_reaches_the_response_only_in_edit_context() {
+		$user_id = self::factory()->user->create(
+			[
+				'role'         => 'administrator',
+				'display_name' => 'Grace Hopper',
+			]
+		);
+		wp_set_current_user( $user_id );
+
+		// The CPT only registers for a user who can edit others' posts, so
+		// `init` in the bootstrap left it out.
+		Newspack_Newsletters_Layouts::register_layout_cpt();
+
+		global $wp_rest_server;
+		$wp_rest_server = new WP_REST_Server();
+		do_action( 'rest_api_init' );
+
+		$this->make_layout( [ 'post_author' => $user_id ] );
+
+		$route = '/wp/v2/' . Newspack_Newsletters_Layouts::NEWSPACK_NEWSLETTERS_LAYOUT_CPT;
+
+		$edit = new WP_REST_Request( 'GET', $route );
+		$edit->set_param( 'context', 'edit' );
+		$edit_item = rest_do_request( $edit )->get_data()[0];
+		$this->assertSame( 'Grace Hopper', $edit_item['newspack_newsletters_author']['name'] );
+
+		$view_item = rest_do_request( new WP_REST_Request( 'GET', $route ) )->get_data()[0];
+		$this->assertArrayNotHasKey( 'newspack_newsletters_author', $view_item );
+
+		$wp_rest_server = null;
+	}
 }

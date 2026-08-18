@@ -23,6 +23,13 @@ defined( 'ABSPATH' ) || exit;
  */
 trait Rest_Terms_Field {
 	/**
+	 * Taxonomies behind each registered field, keyed by field name.
+	 *
+	 * @var array<string, array<string>>
+	 */
+	private static $terms_field_taxonomies = [];
+
+	/**
 	 * Register a terms field on the given CPT.
 	 *
 	 * @param string        $cpt        CPT slug.
@@ -44,20 +51,37 @@ trait Rest_Terms_Field {
 			];
 		}
 
+		self::$terms_field_taxonomies[ $field_name ] = $taxonomies;
+
 		register_rest_field(
 			$cpt,
 			$field_name,
 			[
-				'get_callback' => static function ( $post_array ) use ( $taxonomies ) {
-					return self::get_terms_payload( isset( $post_array['id'] ) ? (int) $post_array['id'] : 0, $taxonomies );
-				},
+				'get_callback' => [ static::class, 'rest_get_terms' ],
 				'schema'       => [
-					'context'    => [ 'view', 'edit' ],
+					// Only the list screens and Quick Edit read this, and they
+					// all ask for `edit`. Keeping `view` would put every ad's
+					// targeting into anonymous responses.
+					'context'    => [ 'edit' ],
 					'type'       => 'object',
 					'readonly'   => true,
 					'properties' => $properties,
 				],
 			]
+		);
+	}
+
+	/**
+	 * `get_callback` adapter, matching `Rest_Status_Field`.
+	 *
+	 * @param array  $post_array Prepared post, as passed by the controller.
+	 * @param string $field_name Registered field name.
+	 * @return array<string, array<array{id: int, name: string}>>
+	 */
+	public static function rest_get_terms( $post_array, $field_name ): array {
+		return self::get_terms_payload(
+			isset( $post_array['id'] ) ? (int) $post_array['id'] : 0,
+			self::$terms_field_taxonomies[ $field_name ] ?? []
 		);
 	}
 

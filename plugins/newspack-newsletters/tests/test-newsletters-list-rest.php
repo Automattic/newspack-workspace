@@ -1467,4 +1467,156 @@ class Newsletters_List_REST_Test extends WP_UnitTestCase {
 		$this->assertContains( 'mine-list', array_column( $options['send_lists'], 'id' ) );
 		$this->assertContains( 'their-list', array_column( $options['send_lists'], 'id' ) );
 	}
+
+	/**
+	 * Helper: dispatch a collection request through the REST server.
+	 *
+	 * @param array $params Query params keyed by name.
+	 * @return array First item of the response body.
+	 */
+	private function dispatch_collection( $params = [] ) {
+		global $wp_rest_server;
+		$wp_rest_server = new WP_REST_Server();
+		do_action( 'rest_api_init' );
+
+		$response = rest_do_request( $this->rest_request( $params ) );
+		$this->assertSame( 200, $response->get_status(), 'Collection request failed: ' . wp_json_encode( $response->get_data() ) );
+		$data = $response->get_data();
+
+		return isset( $data[0] ) ? $data[0] : [];
+	}
+
+	/**
+	 * The fields have to survive an actual dispatch, not just be
+	 * registered: the list reads them off the response body.
+	 */
+	public function test_the_new_fields_reach_the_response_body() {
+		$user_id = self::factory()->user->create(
+			[
+				'role'         => 'editor',
+				'display_name' => 'Ada Lovelace',
+			]
+		);
+		wp_set_current_user( $user_id );
+
+		$post_id  = $this->make_newsletter( [ 'post_author' => $user_id ] );
+		$category = self::factory()->category->create( [ 'name' => 'Weekly' ] );
+		wp_set_post_terms( $post_id, [ $category ], 'category' );
+
+		$item = $this->dispatch_collection(
+			[
+				'context' => 'edit',
+				'status'  => 'draft',
+			]
+		);
+
+		$this->assertSame( 'Ada Lovelace', $item['newspack_newsletters_author']['name'] );
+		$this->assertSame(
+			[
+				[
+					'id'   => $category,
+					'name' => 'Weekly',
+				],
+			],
+			$item['newspack_newsletters_terms']['category']
+		);
+		$this->assertSame( [], $item['newspack_newsletters_terms']['post_tag'] );
+	}
+
+	/**
+	 * The newsletters CPT is public, so an anonymous caller can read the
+	 * collection. Only the list screens need these fields, and they all
+	 * ask for `edit`.
+	 */
+	public function test_the_new_fields_are_absent_from_an_anonymous_read() {
+		$this->make_newsletter(
+			[
+				'post_status' => 'publish',
+				'meta_input'  => [ 'is_public' => 1 ],
+			]
+		);
+		wp_set_current_user( 0 );
+
+		$item = $this->dispatch_collection();
+
+		$this->assertNotEmpty( $item );
+		$this->assertArrayNotHasKey( 'newspack_newsletters_author', $item );
+		$this->assertArrayNotHasKey( 'newspack_newsletters_terms', $item );
+	}
+
+	/**
+	 * `_fields` selection has to keep working, since that is what keeps
+	 * `content.rendered` out of the list's responses.
+	 */
+	public function test_the_new_fields_can_be_selected_with_fields() {
+		wp_set_current_user( self::factory()->user->create( [ 'role' => 'editor' ] ) );
+		$this->make_newsletter();
+
+		$item = $this->dispatch_collection(
+			[
+				'context' => 'edit',
+				'status'  => 'draft',
+				'_fields' => 'id,newspack_newsletters_author',
+			]
+		);
+
+		$this->assertArrayHasKey( 'newspack_newsletters_author', $item );
+		$this->assertArrayNotHasKey( 'content', $item );
+		$this->assertArrayNotHasKey( 'newspack_newsletters_terms', $item );
+	}
+
+	/**
+	 * The point of the fields is that they read primed caches. If either
+	 * ever went to the database per row, the query count would climb with
+	 * the number of rows.
+	 */
+	public function test_the_new_fields_do_not_query_per_row() {
+		$user_id = self::factory()->user->create( [ 'role' => 'editor' ] );
+		wp_set_current_user( $user_id );
+
+		$category = self::factory()->category->create( [ 'name' => 'Weekly' ] );
+		for ( $i = 0; $i < 20; $i++ ) {
+			$post_id = $this->make_newsletter( [ 'post_author' => $user_id ] );
+			wp_set_post_terms( $post_id, [ $category ], 'category' );
+			wp_set_post_terms( $post_id, [ 'digest' ], 'post_tag' );
+		}
+
+		$base = 'id,status,title,date';
+
+		$without = $this->count_queries_for_fields( $base );
+		$with    = $this->count_queries_for_fields( $base . ',newspack_newsletters_author,newspack_newsletters_terms' );
+
+		// Both fields read caches `WP_Query` primes for the page, so the
+		// cost is flat. Per-row lookups across 20 rows and two taxonomies
+		// would add dozens, not a handful.
+		$this->assertLessThanOrEqual(
+			$without + 4,
+			$with,
+			"Adding the fields took the query count from {$without} to {$with} over 20 rows."
+		);
+	}
+
+	/**
+	 * Helper: queries run by one collection dispatch for a `_fields` set.
+	 *
+	 * @param string $fields Comma-joined `_fields` value.
+	 * @return int Query count.
+	 */
+	private function count_queries_for_fields( $fields ) {
+		global $wpdb;
+
+		wp_cache_flush();
+		$before = $wpdb->num_queries;
+
+		$this->dispatch_collection(
+			[
+				'context'  => 'edit',
+				'status'   => 'draft',
+				'per_page' => 100,
+				'_fields'  => $fields,
+			]
+		);
+
+		return $wpdb->num_queries - $before;
+	}
 }

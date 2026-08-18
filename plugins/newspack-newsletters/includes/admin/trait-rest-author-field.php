@@ -33,11 +33,12 @@ trait Rest_Author_Field {
 			$cpt,
 			$field_name,
 			[
-				'get_callback' => static function ( $post_array ) {
-					return self::get_author_payload( isset( $post_array['id'] ) ? (int) $post_array['id'] : 0 );
-				},
+				'get_callback' => [ static::class, 'rest_get_author' ],
 				'schema'       => [
-					'context'    => [ 'view', 'edit' ],
+					// Only the list screens read this, and they all ask for
+					// `edit`. Keeping `view` would ship it to anonymous reads
+					// of the public newsletters collection.
+					'context'    => [ 'edit' ],
 					'type'       => [ 'object', 'null' ],
 					'readonly'   => true,
 					'properties' => [
@@ -48,6 +49,16 @@ trait Rest_Author_Field {
 				],
 			]
 		);
+	}
+
+	/**
+	 * `get_callback` adapter, matching `Rest_Status_Field`.
+	 *
+	 * @param array $post_array Prepared post, as passed by the controller.
+	 * @return array|null
+	 */
+	public static function rest_get_author( $post_array ): ?array {
+		return self::get_author_payload( isset( $post_array['id'] ) ? (int) $post_array['id'] : 0 );
 	}
 
 	/**
