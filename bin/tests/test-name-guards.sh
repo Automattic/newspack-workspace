@@ -185,6 +185,32 @@ done
 
 echo
 echo "no environment is created by any of the above:"
+# `--all` is the one other dash-leading token read from the name position, and
+# is_help_arg's comment states that it must still reach the up arm's own branch.
+# Exit status cannot tell the two apart -- a usage dump also exits 0 -- so this
+# asserts on the output: widening is_help_arg to `-*` would look like a
+# strengthening of the guard and silently turn `n env up --all` into usage.
+assert_up_all_is_not_help() {
+	local out status=0
+	out=$(PATH="$STUB:$PATH" NABSPATH="$SANDBOX" bash "$SCRIPT_DIR/../env.sh" up --all </dev/null 2>&1) || status=$?
+	if [[ "$status" -ne 0 ]]; then
+		echo "  FAIL: up --all reaches its own branch — want exit 0, got $status"
+		failures=$((failures + 1))
+	elif [[ "$out" == *"Usage: n env up"* ]]; then
+		echo "  FAIL: up --all reaches its own branch — it printed usage, so it was read as a help request"
+		failures=$((failures + 1))
+	elif [[ "$out" != *"started,"* ]]; then
+		echo "  FAIL: up --all reaches its own branch — no start summary in output: $out"
+		failures=$((failures + 1))
+	else
+		echo "  ok: up --all reaches its own branch rather than the help guard"
+	fi
+}
+
+echo ""
+echo "n env up --all is not a help request:"
+assert_up_all_is_not_help
+
 # The create arm must actually reach the stricter validator. Asserting
 # validate_new_env_name directly cannot see the call site, so reverting create to
 # the lax validator would leave every assertion above green.
