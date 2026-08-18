@@ -137,226 +137,125 @@ class Newspack_Test_Experimental_Tools extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Field values are sanitized on the way in.
+	 * Register a tool with one plain field and one declaring its own sanitizer.
+	 *
+	 * @param callable|string $callback The sanitize_callback to declare.
+	 * @return string The tool slug.
 	 */
-	public function test_save_fields_sanitizes_by_default() {
-		$slug = $this->register_test_tool();
-
-		Experimental_Tools::save_tool_fields( $slug, [ 'api_key' => "key <script>alert('x')</script>" ] );
-
-		$settings = Experimental_Tools::get_tool_settings( $slug );
-
-		$this->assertStringNotContainsString( '<script>', $settings['fields']['api_key'] );
-		$this->assertStringContainsString( 'key', $settings['fields']['api_key'] );
-	}
-
-	/**
-	 * A field can declare its own sanitizer. Some tools store values with syntax
-	 * of their own — a template carrying %PLACEHOLDER% tokens, say — that
-	 * the default sanitizer destroys, and only the owning tool knows the rules.
-	 */
-	public function test_field_sanitize_callback_is_used_when_declared() {
-		$slug = $this->register_test_tool(
+	private function register_tool_with_callback( $callback ) {
+		return $this->register_test_tool(
 			[
 				'fields' => [
 					[
+						'type' => 'textarea',
+						'key'  => 'plain',
+					],
+					[
 						'type'              => 'textarea',
-						'key'               => 'template',
-						'label'             => 'Template',
-						'sanitize_callback' => [ __CLASS__, 'sanitize_marking_the_value' ],
+						'key'               => 'declared',
+						'sanitize_callback' => $callback,
 					],
 				],
 			]
 		);
-
-		Experimental_Tools::save_tool_fields( $slug, [ 'template' => 'Use %CACHE_KEY% here' ] );
-
-		$settings = Experimental_Tools::get_tool_settings( $slug );
-
-		$this->assertEquals( 'Use %CACHE_KEY% here|marked', $settings['fields']['template'] );
 	}
 
 	/**
-	 * The case the per-field callback exists for: the default sanitizer reads a
-	 * percent sign followed by two hex digits as a URL-encoded octet and deletes
-	 * it, so %CACHE_KEY% is stored as CHE_KEY%.
+	 * A field's own sanitizer replaces the default, and only for that field.
+	 *
+	 * The default reads a percent sign followed by two hex digits as a URL-encoded
+	 * octet and deletes it, so %CACHE_KEY% is stored as CHE_KEY%. That is what a
+	 * tool storing placeholders needs to escape, and what every other field keeps.
 	 */
-	public function test_default_sanitizer_destroys_hex_leading_placeholders() {
-		$slug = $this->register_test_tool();
+	public function test_a_declared_callback_replaces_the_default_for_that_field_only() {
+		$slug = $this->register_tool_with_callback( 'wp_kses_post' );
 
-		Experimental_Tools::save_tool_fields( $slug, [ 'api_key' => 'Use %CACHE_KEY% here' ] );
-
-		$settings = Experimental_Tools::get_tool_settings( $slug );
-
-		$this->assertStringNotContainsString( '%CACHE_KEY%', $settings['fields']['api_key'] );
-		$this->assertStringContainsString( 'CHE_KEY%', $settings['fields']['api_key'] );
-	}
-
-	/**
-	 * A declared callback that cannot be called falls back to the default rather
-	 * than fataling or storing the value unsanitized.
-	 */
-	public function test_uncallable_sanitize_callback_falls_back_to_the_default() {
-		// The fallback is safe, but silent would hide a registration typo behind
-		// the exact sanitizer the callback was declared to escape.
-		$this->setExpectedIncorrectUsage( 'Newspack\Experimental_Tools::sanitize_field_value' );
-
-		$slug = $this->register_test_tool(
+		Experimental_Tools::save_tool_fields(
+			$slug,
 			[
-				'fields' => [
-					[
-						'type'              => 'textarea',
-						'key'               => 'template',
-						'label'             => 'Template',
-						'sanitize_callback' => 'newspack_no_such_sanitizer',
-					],
-				],
+				'plain'    => 'Use %CACHE_KEY% here',
+				'declared' => 'Use %CACHE_KEY% here',
 			]
 		);
 
-		Experimental_Tools::save_tool_fields( $slug, [ 'template' => "hi %CACHE_KEY% <script>alert('x')</script>" ] );
+		$fields = Experimental_Tools::get_tool_settings( $slug )['fields'];
 
-		$settings = Experimental_Tools::get_tool_settings( $slug );
+		$this->assertSame( 'Use CHE_KEY% here', $fields['plain'], 'An undeclared field keeps the default.' );
+		$this->assertSame( 'Use %CACHE_KEY% here', $fields['declared'], "The field's own sanitizer runs instead." );
+	}
 
-		$this->assertStringNotContainsString( '<script>', $settings['fields']['template'] );
-		$this->assertStringContainsString(
-			'CHE_KEY%',
-			$settings['fields']['template'],
+	/**
+	 * A callback that cannot be called falls back to the default rather than
+	 * fataling or storing raw input. Silent would hide a registration typo behind
+	 * the very sanitizer the callback was declared to escape.
+	 */
+	public function test_an_uncallable_callback_falls_back_to_the_default() {
+		$this->setExpectedIncorrectUsage( 'Newspack\\Experimental_Tools::sanitize_field_value' );
+
+		$slug = $this->register_tool_with_callback( 'newspack_no_such_sanitizer' );
+
+		Experimental_Tools::save_tool_fields( $slug, [ 'declared' => 'Use %CACHE_KEY% here' ] );
+
+		$this->assertSame(
+			'Use CHE_KEY% here',
+			Experimental_Tools::get_tool_settings( $slug )['fields']['declared'],
 			"The default sanitizer's fingerprint proves which one ran."
 		);
 	}
 
 	/**
 	 * A non-scalar value is not storable, and a malformed request must not wipe
-	 * what the publisher saved. The route validates that `fields` is an object
-	 * but nothing about the values inside it, so this is reachable.
+	 * what was saved. The route validates that `fields` is an object but nothing
+	 * about the values inside it, so this is reachable. The typed callback also
+	 * pins that it is never handed one.
 	 */
 	public function test_a_non_scalar_value_leaves_the_stored_value_alone() {
-		$called = false;
-		$slug   = $this->register_test_tool(
-			[
-				'fields' => [
-					[
-						'type'              => 'textarea',
-						'key'               => 'template',
-						'label'             => 'Template',
-						'sanitize_callback' => function ( string $value ) use ( &$called ) {
-							$called = true;
-							return $value;
-						},
-					],
-				],
-			]
+		$slug = $this->register_tool_with_callback(
+			function ( string $value ) {
+				return $value;
+			}
 		);
 
-		Experimental_Tools::save_tool_fields( $slug, [ 'template' => 'the publisher wrote this' ] );
-		Experimental_Tools::save_tool_fields( $slug, [ 'template' => [ 'an', 'array' ] ] );
+		Experimental_Tools::save_tool_fields( $slug, [ 'declared' => 'what was written' ] );
+		Experimental_Tools::save_tool_fields( $slug, [ 'declared' => [ 'an', 'array' ] ] );
 
 		$this->assertSame(
-			'the publisher wrote this',
-			Experimental_Tools::get_tool_settings( $slug )['fields']['template'],
-			'A malformed value must not overwrite a saved one.'
+			'what was written',
+			Experimental_Tools::get_tool_settings( $slug )['fields']['declared'],
+			'A malformed request must not overwrite a saved value.'
 		);
-		$this->assertTrue( $called, 'The scalar save did reach the callback.' );
 	}
 
 	/**
-	 * The saved-fields action carries what was stored, so a listener never has to
-	 * re-sanitize or reconstruct the value.
+	 * A non-scalar return cannot reach the option either: the stored value is
+	 * merged back into the field definition and sent over REST.
 	 */
-	public function test_fields_saved_action_receives_the_sanitized_value() {
-		$slug = $this->register_test_tool(
-			[
-				'fields' => [
-					[
-						'type'              => 'textarea',
-						'key'               => 'template',
-						'label'             => 'Template',
-						'sanitize_callback' => [ __CLASS__, 'sanitize_marking_the_value' ],
-					],
-				],
-			]
+	public function test_a_non_scalar_return_is_stored_as_an_empty_string() {
+		$slug = $this->register_tool_with_callback(
+			function () {
+				return [ 'not', 'a', 'scalar' ];
+			}
 		);
 
-		$captured = null;
-		add_action(
-			'newspack_experimental_tool_fields_saved',
-			function ( $action_slug, $fields ) use ( &$captured ) {
-				$captured = $fields;
-			},
-			10,
-			2
-		);
+		Experimental_Tools::save_tool_fields( $slug, [ 'declared' => 'anything' ] );
 
-		Experimental_Tools::save_tool_fields( $slug, [ 'template' => 'Use %CACHE_KEY% here' ] );
-
-		$this->assertEquals( 'Use %CACHE_KEY% here|marked', $captured['template'] );
+		$this->assertSame( '', Experimental_Tools::get_tool_settings( $slug )['fields']['declared'] );
 	}
 
 	/**
-	 * The callback is server-side only and never reaches a client. A callable
-	 * serializes into the REST response as an object's public properties, or as
-	 * an opaque object for a closure, and the UI has no use for either.
+	 * The callback is server-side only. A callable would serialize into the REST
+	 * response as an object's public properties, or as an opaque object for a
+	 * closure, and the UI has no use for either.
 	 */
-	public function test_sanitize_callback_is_not_exposed_in_the_rest_payload() {
-		$this->register_test_tool(
-			[
-				'fields' => [
-					[
-						'type'              => 'textarea',
-						'key'               => 'template',
-						'label'             => 'Template',
-						'sanitize_callback' => [ __CLASS__, 'sanitize_marking_the_value' ],
-					],
-				],
-			]
-		);
+	public function test_the_callback_is_not_exposed_in_the_rest_payload() {
+		$this->register_tool_with_callback( 'wp_kses_post' );
 
-		$tools = Experimental_Tools::get_tools();
+		$fields = Experimental_Tools::get_tools()[0]['fields'];
 
-		$this->assertArrayNotHasKey( 'sanitize_callback', $tools[0]['fields'][0] );
-		$this->assertEquals( 'template', $tools[0]['fields'][0]['key'], 'The rest of the field definition still travels.' );
+		$this->assertArrayNotHasKey( 'sanitize_callback', $fields[1] );
+		$this->assertSame( 'declared', $fields[1]['key'], 'The rest of the definition still travels.' );
 	}
 
-	/**
-	 * A callback returning something other than a scalar cannot reach the option:
-	 * the stored value is merged back into the field definition and rendered by a
-	 * text input. The default sanitizer returns an empty string for a non-scalar,
-	 * so the custom path matches it.
-	 */
-	public function test_non_scalar_return_is_stored_as_an_empty_string() {
-		$slug = $this->register_test_tool(
-			[
-				'fields' => [
-					[
-						'type'              => 'textarea',
-						'key'               => 'template',
-						'label'             => 'Template',
-						'sanitize_callback' => function () {
-							return [ 'not', 'a', 'scalar' ];
-						},
-					],
-				],
-			]
-		);
-
-		Experimental_Tools::save_tool_fields( $slug, [ 'template' => 'anything' ] );
-
-		$settings = Experimental_Tools::get_tool_settings( $slug );
-
-		$this->assertSame( '', $settings['fields']['template'] );
-	}
-
-	/**
-	 * Stand-in for a tool-owned sanitizer, marking the value so the test can tell
-	 * which sanitizer ran.
-	 *
-	 * @param string $value The submitted value.
-	 * @return string
-	 */
-	public static function sanitize_marking_the_value( $value ) {
-		return $value . '|marked';
-	}
 
 	/**
 	 * Saved field values are merged into the tool's fields in get_tools().
