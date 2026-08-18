@@ -144,6 +144,60 @@ class Newspack_Test_Institution_REST_Controller extends WP_UnitTestCase {
 	}
 
 	/**
+	 * The read-side meta guard is attached at registration.
+	 *
+	 * `show_in_rest => true` would drop it, leaving the route's controller as the
+	 * only thing between these three fields and an anonymous reader.
+	 */
+	public function test_meta_read_guard_is_wired_into_the_registration() {
+		$keys = get_registered_meta_keys( 'post', Institution::POST_TYPE );
+
+		foreach ( [ 'email_domain', 'ip_range', 'reader_data' ] as $suffix ) {
+			$key = Institution::META_PREFIX . $suffix;
+			$this->assertArrayHasKey( $key, $keys, "$key is registered." );
+			$this->assertIsArray(
+				$keys[ $key ]['show_in_rest'],
+				"$key must declare show_in_rest as an array; `true` drops the read guard."
+			);
+			$this->assertSame(
+				[ Institution::class, 'redact_meta_for_unauthorized' ],
+				$keys[ $key ]['show_in_rest']['prepare_callback'],
+				"$key must carry the read-side guard, which runs whichever controller serves the route."
+			);
+		}
+	}
+
+	/**
+	 * The guard withholds the value from a reader without RULES_CAPABILITY.
+	 *
+	 * Asserted directly because its purpose is to hold when the controller does not:
+	 * the route's gate depends on rest_controller_class surviving registration, and a
+	 * plugin rebuilding register_post_type_args drops it silently. Every other read
+	 * test in this class goes through the controller, so none of them would notice.
+	 */
+	public function test_meta_read_guard_withholds_without_the_rules_capability() {
+		wp_set_current_user( 0 );
+		$this->assertSame( '', Institution::redact_meta_for_unauthorized( 'example.org' ), 'Anonymous gets nothing.' );
+
+		wp_set_current_user( $this->subscriber_id );
+		$this->assertSame( '', Institution::redact_meta_for_unauthorized( 'example.org' ), 'A subscriber gets nothing.' );
+
+		wp_set_current_user( $this->editor_id );
+		$this->assertSame(
+			'',
+			Institution::redact_meta_for_unauthorized( 'example.org' ),
+			'An editor holds READ_CAPABILITY but not RULES_CAPABILITY, and the controller blanks meta for them too.'
+		);
+
+		wp_set_current_user( $this->admin_id );
+		$this->assertSame(
+			'example.org',
+			Institution::redact_meta_for_unauthorized( 'example.org' ),
+			'An administrator holds RULES_CAPABILITY and sees the stored value.'
+		);
+	}
+
+	/**
 	 * The route is served by this controller and not the default one.
 	 *
 	 * Without this, a class that fails to load leaves get_rest_controller()
