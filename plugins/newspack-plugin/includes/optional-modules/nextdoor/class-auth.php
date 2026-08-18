@@ -34,6 +34,16 @@ class Auth {
 	const REFUSAL_OPTION = 'newspack_nextdoor_refused_grant';
 
 	/**
+	 * Transient holding off the next refresh attempt, and how long it holds for.
+	 *
+	 * A grant Nextdoor states no expiry for is due on every request, and a refresh that
+	 * cannot be made to work costs the full timeout each time it is retried. Without a
+	 * pause between attempts either one prices every editor load at a blocking round trip.
+	 */
+	const REFRESH_COOLOFF_TRANSIENT = 'newspack_nextdoor_refresh_cooloff';
+	const REFRESH_COOLOFF_SECONDS   = 60;
+
+	/**
 	 * Initialise.
 	 */
 	public static function init() {
@@ -325,11 +335,21 @@ class Auth {
 	 * @return void
 	 */
 	public static function handle_oauth_callback() {
-		if ( ! isset( $_GET['nextdoor_oauth_callback'] ) || ! isset( $_GET['code'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		if ( ! isset( $_GET['nextdoor_oauth_callback'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
 			return;
 		}
 
-		$code  = sanitize_text_field( wp_unslash( $_GET['code'] ) ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		// Declining at Nextdoor returns an error and no code, so the publisher would otherwise
+		// land back on a closed card with nothing said. The state still has to be consumed.
+		$denied = ! isset( $_GET['code'] ) && isset( $_GET['error'] ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+
+		if ( ! isset( $_GET['code'] ) && ! $denied ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+			return;
+		}
+
+		// An authorization code is opaque and may carry a percent sequence, which
+		// `sanitize_text_field()` would drop, exchanging a credential that is quietly short.
+		$code  = isset( $_GET['code'] ) ? Nextdoor::sanitize_credential( wp_unslash( $_GET['code'] ) ) : ''; // phpcs:ignore WordPress.Security.NonceVerification.Recommended, WordPress.Security.ValidatedSanitizedInput.InputNotSanitized
 		$state = isset( $_GET['state'] ) ? sanitize_text_field( wp_unslash( $_GET['state'] ) ) : ''; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
 
 		$authorized = self::authorize_oauth_callback( $state );
@@ -341,6 +361,14 @@ class Auth {
 			}
 
 			self::redirect_with_error( $authorized->get_error_message() );
+		}
+
+		if ( $denied ) {
+			$description = isset( $_GET['error_description'] ) ? sanitize_text_field( wp_unslash( $_GET['error_description'] ) ) : ''; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+
+			self::redirect_with_error(
+				'' !== $description ? $description : __( 'Nextdoor did not authorize the connection. Please try connecting again.', 'newspack-plugin' )
+			);
 		}
 
 		$settings = Nextdoor::get_settings();
@@ -382,6 +410,51 @@ class Auth {
 	}
 
 	/**
+	 * Try to replace an access token Nextdoor rejected.
+	 *
+	 * A rejected access token is not a rejected grant: the refresh token is issued
+	 * separately and may still be honoured. Recording a refusal first would foreclose that,
+	 * because a recorded refusal stops any later refresh being attempted, leaving a full
+	 * re-authorisation as the only way back.
+	 *
+	 * @param string $token_used Access token the rejected request carried.
+	 * @return bool False only when there is nothing to renew with, which is the one case
+	 *              where the rejection is all the evidence there will be. A refresh that
+	 *              was attempted has already recorded whatever it proved.
+	 */
+	public static function renew_rejected_token( $token_used ) {
+		$settings = Nextdoor::get_settings();
+
+		// Another request already rotated it, so the rejection describes a token that is no
+		// longer the stored one.
+		if ( $settings['access_token'] !== $token_used ) {
+			return true;
+		}
+
+		if ( empty( $settings['refresh_token'] ) || empty( $settings['client_id'] ) || empty( $settings['client_secret'] ) ) {
+			return false;
+		}
+
+		// Held off since the last attempt, so this request learns nothing either way.
+		if ( get_transient( self::REFRESH_COOLOFF_TRANSIENT ) ) {
+			return true;
+		}
+
+		set_transient( self::REFRESH_COOLOFF_TRANSIENT, 1, self::REFRESH_COOLOFF_SECONDS );
+
+		// Called for what it settles rather than what it returns: a refused refresh records
+		// itself against the grant it used, and any other failure says nothing about the
+		// token, where recording a refusal the request cannot support is the worse mistake.
+		self::refresh_access_token(
+			$settings['client_id'],
+			$settings['client_secret'],
+			$settings['refresh_token']
+		);
+
+		return true;
+	}
+
+	/**
 	 * Record that Nextdoor refused the stored grant.
 	 *
 	 * Persisted, so the card the publisher is sent to reports what the request that
@@ -409,7 +482,7 @@ class Auth {
 		// Hashed so the option never holds a second copy of a token, and keyed on the
 		// credential so replacing it lapses the record by value rather than by every future
 		// write path remembering to clear it.
-		update_option( self::REFUSAL_OPTION, array_map( 'wp_hash', $expected ) );
+		update_option( self::REFUSAL_OPTION, array_map( 'wp_hash', $expected ), false );
 	}
 
 	/**
@@ -506,6 +579,14 @@ class Auth {
 		if ( ! self::needs_token_refresh() ) {
 			return true;
 		}
+
+		// Report what is stored rather than spending another blocking request: a grant with
+		// no stated expiry is due on every one, and an outage answers each at the timeout.
+		if ( get_transient( self::REFRESH_COOLOFF_TRANSIENT ) ) {
+			return self::has_usable_token();
+		}
+
+		set_transient( self::REFRESH_COOLOFF_TRANSIENT, 1, self::REFRESH_COOLOFF_SECONDS );
 
 		$refresh_response = self::refresh_access_token(
 			$settings['client_id'],

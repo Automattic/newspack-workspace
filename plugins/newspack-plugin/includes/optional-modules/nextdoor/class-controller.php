@@ -279,10 +279,19 @@ class Controller {
 			return $account_response;
 		}
 
-		// The client navigates to this, so refuse anything that is not a URL.
+		// The client navigates to this, so refuse anything that is not one to navigate to.
+		// `esc_url_raw()` only strips disallowed protocols: it passes a scheme-relative URL
+		// through untouched and allows `mailto:` and the rest of `wp_allowed_protocols()`.
 		$login_url = is_array( $account_response ) && ! empty( $account_response['login_url'] ) && is_string( $account_response['login_url'] )
 			? esc_url_raw( $account_response['login_url'] )
 			: '';
+
+		if ( '' !== $login_url && (
+			! in_array( (string) wp_parse_url( $login_url, PHP_URL_SCHEME ), [ 'http', 'https' ], true ) ||
+			empty( wp_parse_url( $login_url, PHP_URL_HOST ) )
+		) ) {
+			$login_url = '';
+		}
 
 		if ( empty( $login_url ) ) {
 			return new \WP_Error(
@@ -317,7 +326,9 @@ class Controller {
 			return $result;
 		}
 
-		if ( ! is_array( $result ) || empty( $result['page_id'] ) ) {
+		// Stored and echoed back, so an unexpected shape would be persisted into the settings
+		// option and rendered, the same reason the ingestion report is pinned.
+		if ( ! is_array( $result ) || empty( $result['page_id'] ) || ! is_scalar( $result['page_id'] ) ) {
 			return new \WP_Error(
 				'nextdoor_claim_page_failed',
 				__( 'Nextdoor did not return a page for this publication URL. Check the URL and try again.', 'newspack-plugin' ),
@@ -325,8 +336,10 @@ class Controller {
 			);
 		}
 
+		$page_id = (string) $result['page_id'];
+
 		$settings                    = Nextdoor::get_settings();
-		$settings['page_id']         = $result['page_id'];
+		$settings['page_id']         = $page_id;
 		$settings['publication_url'] = $publication_url;
 
 		Nextdoor::update_settings( $settings );
@@ -334,7 +347,7 @@ class Controller {
 		return rest_ensure_response(
 			[
 				'success' => true,
-				'page_id' => $result['page_id'],
+				'page_id' => $page_id,
 			]
 		);
 	}
@@ -605,9 +618,13 @@ class Controller {
 				$is_unreachable  = ! $needs_reconnect;
 
 				// Recorded, not just reported: the reconnect offered leads to the settings
-				// card, which would otherwise still show the connection as working.
+				// card, which would otherwise still show the connection as working. A refusal
+				// is consulted ahead of any refresh, so recording one before trying the refresh
+				// token would foreclose the only recovery short of re-authorising.
 				if ( $needs_reconnect ) {
-					Auth::record_token_refusal( [ 'access_token' => $token_used ] );
+					if ( ! Auth::renew_rejected_token( $token_used ) ) {
+						Auth::record_token_refusal( [ 'access_token' => $token_used ] );
+					}
 					// The recorder declines if another request rotated the token meanwhile.
 					$needs_reconnect = ! Auth::has_usable_token();
 					$is_unreachable  = ! $needs_reconnect;
