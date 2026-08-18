@@ -1,4 +1,4 @@
-import { render, screen, within } from '@testing-library/react';
+import { render, within } from '@testing-library/react';
 import { speak } from '@wordpress/a11y';
 
 import LoadingState from './index';
@@ -20,14 +20,15 @@ describe( 'LoadingState', () => {
 	it( 'announces itself politely', () => {
 		render( <LoadingState label="Fetching layouts…" /> );
 
-		expect( screen.getByRole( 'status' ) ).toHaveTextContent( 'Fetching layouts…' );
+		expect( speak ).toHaveBeenCalledWith( 'Fetching layouts…', 'polite' );
 	} );
 
-	// The region mounts with its text already in place, which screen
-	// readers don't reliably announce, so the label is spoken directly.
-	it( 'speaks the label rather than relying on the live region alone', () => {
-		render( <LoadingState label="Fetching ads…" /> );
+	// Two live regions carrying the same text means some screen readers
+	// say it twice, so `speak()` is the only announcement.
+	it( 'leaves the announcement to speak rather than a second live region', () => {
+		const { container } = render( <LoadingState label="Fetching ads…" /> );
 
-		expect( speak ).toHaveBeenCalledWith( 'Fetching ads…', 'polite' );
+		expect( within( container ).queryByRole( 'status' ) ).toBeNull();
+		expect( speak ).toHaveBeenCalledTimes( 1 );
 	} );
 } );

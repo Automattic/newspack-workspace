@@ -16,14 +16,16 @@ import { useEffect } from '@wordpress/element';
  * @return {JSX.Element} The rendered loading state.
  */
 export default function LoadingState( { label } ) {
-	// A live region that mounts with its text already in place isn't
-	// reliably announced, so say it directly.
+	// `speak()` owns the announcement rather than a `role="status"` here:
+	// a live region that mounts with its text already in place isn't
+	// announced at all by some screen readers and is announced twice by
+	// others once both are present.
 	useEffect( () => {
 		speak( label, 'polite' );
 	}, [ label ] );
 
 	return (
-		<VStack className="newspack-newsletters-admin__loading" alignment="center" spacing={ 3 } role="status">
+		<VStack className="newspack-newsletters-admin__loading" alignment="center" spacing={ 3 }>
 			<Spinner />
 			<Text as="p">{ label }</Text>
 		</VStack>

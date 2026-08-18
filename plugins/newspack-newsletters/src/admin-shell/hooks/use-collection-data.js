@@ -38,7 +38,8 @@ function isOutOfRangePageError( error ) {
  * trash sub-fetch — `hasResolved` flips solely on the main resolution.
  *
  * When `fetchAll` is set, the first response's `X-WP-TotalPages` drives
- * a walk over the remaining pages (the REST API caps `per_page` at 100).
+ * a walk over the remaining pages (these four collections cap `per_page`
+ * at `FETCH_ALL_CHUNK_SIZE`).
  * `data` commits once the walk finishes (or aborts), and `totalPages` is
  * clamped to 1 so the footer doesn't offer pagination. DataViews shows
  * the walk via its own loading state; there is no separate indicator.
@@ -169,7 +170,12 @@ export default function useCollectionData( { path, trashCountPath = null, mutati
 				}
 
 				setData( all );
-				speak( __( 'Finished loading items.', 'newspack-newsletters' ), 'polite' );
+				speak(
+					endedEarly
+						? __( 'Stopped loading items before the end of the list.', 'newspack-newsletters' )
+						: __( 'Finished loading items.', 'newspack-newsletters' ),
+					'polite'
+				);
 
 				if ( endedEarly ) {
 					setPaginationInfo( { totalItems: all.length, totalPages: 1 } );
