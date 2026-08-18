@@ -295,9 +295,8 @@ describe( 'segmentation API', () => {
 	} );
 
 	it( 'should let a carried segment win the priority match', () => {
-		// Nothing matches locally: `simple` holds a value no segment expects and
-		// `list__in` is unset. Stands in for a logged-out reader whose browsing
-		// data alone cannot satisfy, say, a donors segment.
+		// Nothing matches locally: `simple` holds a value no segment expects
+		// and `list__in` is unset.
 		ras.store.set( 'simple', 'initial-value' );
 		expect( getBestPrioritySegment( segments ) ).toBeNull();
 		expect( getBestPrioritySegment( segments, null, [ 'segment2' ] ) ).toBe( 'segment2' );
@@ -322,10 +321,9 @@ describe( 'segmentation API', () => {
 	} );
 
 	it( 'should keep carried segments out of the set persisted to reader data', () => {
-		// Carried IDs are forgeable and link-supplied. Persisting one would launder
-		// it into the snapshot the server trusts and feed it back out through the
-		// next newsletter. segment4 is carried but does not match locally, so it
-		// must be absent from what syncMatchedSegments writes.
+		// Carried IDs are forgeable, link-supplied input and must never be
+		// persisted: segment4 is carried but does not match locally, so it must
+		// be absent from what syncMatchedSegments writes.
 		window.sessionStorage.setItem( 'newspack-popups-carried-segments', 'segment4' );
 		ras.store.set( 'reader', { authenticated: true } );
 		ras.store.set( 'simple', 'simple-match' );

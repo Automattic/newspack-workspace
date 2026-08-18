@@ -358,12 +358,9 @@ class SegmentationNewsletterLinkTest extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Mailchimp's own process_link() filter hands the whole URL back as a bare
-	 * merge-tag placeholder for links like *|UNSUB|*. Those have no host, so
-	 * is_first_party_url() reads them as first-party — but decorating one yields
-	 * `*|UNSUB|*?np_seg_donor=...`, which the ESP expands into an unsubscribe URL
-	 * that already carries its own query string. Unsubscribe is required by law
-	 * and by Mailchimp's terms, so these links must pass through untouched.
+	 * A whole-URL merge-tag placeholder (e.g. Mailchimp's *|UNSUB|*) is host-less
+	 * and reads as first-party, but decorating it breaks the expanded link — and
+	 * unsubscribe links are required by law. They must pass through untouched.
 	 *
 	 * @param string $url Placeholder URL as the ESP filter hands it over.
 	 *

@@ -1,12 +1,9 @@
 <?php
 /**
  * Tests for the inbound account-param handler,
- * Newspack_Popups_Segmentation::handle_account_param().
- *
- * The param is always redirected away before any output. That is what keeps the
- * landing page a shared cacheable URL and what makes ActiveCampaign's `%TAG%`
- * syntax safe to emit at all (NPPM-3032), so the always-redirect property is
- * load-bearing, not incidental.
+ * Newspack_Popups_Segmentation::handle_account_param(). The param must always
+ * be redirected away before output: it keeps the landing page cacheable and is
+ * what makes ActiveCampaign's `%TAG%` syntax safe to emit (NPPM-3032).
  *
  * @package Newspack_Popups
  */
@@ -29,23 +26,17 @@ class SegmentationAccountArrivalTest extends WP_UnitTestCase {
 	private $segment_ids = [];
 
 	/**
-	 * Reflection onto the private, static get_carried_segments_cookie_options().
-	 * set_carried_segments_cookie()'s own setcookie() call is gated on
-	 * `! headers_sent()`, which is never true under PHPUnit, so this is the
-	 * only way any test here can reach the option values it would pass. (Same
-	 * pattern as test-overlay-sort.php.)
+	 * Reflection onto the private get_carried_segments_cookie_options():
+	 * setcookie() itself never runs under PHPUnit (headers already sent), so
+	 * this is the only way to reach the option values.
 	 *
 	 * @var ReflectionMethod
 	 */
 	private static $cookie_options_method;
 
 	/**
-	 * Reflection onto the private, static get_carried_segments_cookie_value().
-	 * Same rationale as $cookie_options_method above: it isolates the cookie
-	 * *value* PHP computes from the delivery mechanism (`setcookie()`) that
-	 * never runs under PHPUnit, so a test can prove the value itself is never
-	 * empty independent of whatever arrive() happens to observe via the
-	 * $_COOKIE mirror.
+	 * Reflection onto the private get_carried_segments_cookie_value(); same
+	 * rationale as $cookie_options_method.
 	 *
 	 * @var ReflectionMethod
 	 */
@@ -222,10 +213,8 @@ class SegmentationAccountArrivalTest extends WP_UnitTestCase {
 	}
 
 	/**
-	 * A snapshot can also name a segment that still exists but has since been
-	 * disabled. This exercises the `false` (active-only) argument to
-	 * get_segments() inside get_carried_segments_for_account() specifically —
-	 * a nonexistent ID alone can't distinguish that from no filtering at all.
+	 * A disabled segment's ID is dropped. Exercises the active-only argument
+	 * to get_segments(), which a nonexistent ID alone cannot distinguish.
 	 */
 	public function test_drops_disabled_segment_ids() {
 		\Newspack\Reader_Data::$matched_segments = [
@@ -236,9 +225,8 @@ class SegmentationAccountArrivalTest extends WP_UnitTestCase {
 	}
 
 	/**
-	 * An unsubstituted merge tag still gets redirected away. This is the whole
-	 * reason ActiveCampaign can be supported: a malformed percent-escape must
-	 * never survive into a rendered page.
+	 * An unsubstituted merge tag still gets redirected away — a malformed
+	 * percent-escape must never survive into a rendered page (NPPM-3032).
 	 *
 	 * @param string $value Raw param value as it arrives.
 	 *
@@ -290,12 +278,9 @@ class SegmentationAccountArrivalTest extends WP_UnitTestCase {
 	}
 
 	/**
-	 * An account with no snapshot resolves to no segments, which is an
-	 * explicit "matches nothing" assertion (see
-	 * set_carried_segments_cookie()'s docblock) — a cookie carrying the
-	 * CARRIED_SEGMENTS_NONE sentinel, not an absent one, and not an
-	 * empty-string one either: setcookie() would send an empty string as a
-	 * deletion, indistinguishable from no handoff ever having happened.
+	 * An account with no snapshot resolves to "matches nothing": the cookie
+	 * carries the CARRIED_SEGMENTS_NONE sentinel — never an empty string,
+	 * which setcookie() would send as a deletion.
 	 */
 	public function test_unknown_account_carries_nothing() {
 		$this->assertSame( '/p/?a=1', $this->arrive( '/p/?a=1&np_account=777' ) );
@@ -303,15 +288,9 @@ class SegmentationAccountArrivalTest extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Each arrival is authoritative: the view script deletes the cookie on
-	 * first read, but on an arrival where that script never runs (a page with
-	 * no prompts, JS disabled), a previous arrival's segments must not carry
-	 * into the next click. An arrival that resolves nothing must overwrite
-	 * the mirror with the CARRIED_SEGMENTS_NONE sentinel — the "matches
-	 * nothing" assertion — not leave the previous arrival's value in place.
-	 * It must not become an empty string either (setcookie() would send that
-	 * as a deletion) or be unset (indistinguishable from no handoff ever
-	 * having happened).
+	 * Each valid arrival is authoritative: one that resolves nothing must
+	 * overwrite a previous arrival's cookie with the CARRIED_SEGMENTS_NONE
+	 * sentinel, not leave the old value, empty the string, or unset it.
 	 */
 	public function test_overwrites_a_previous_cookie_when_nothing_resolves() {
 		\Newspack\Reader_Data::$matched_segments = [ 42 => [ $this->segment_ids['carried-one'] ] ];
@@ -324,13 +303,9 @@ class SegmentationAccountArrivalTest extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Unlike a valid ID that resolves to nothing (see
-	 * test_overwrites_a_previous_cookie_when_nothing_resolves() above), a
-	 * value that never passes the positive-integer gate makes no assertion
-	 * about the reader at all — e.g. an unsubstituted merge tag arriving from
-	 * a newsletter that already went out. It must leave an earlier arrival's
-	 * carried segments alone, even though the redirect itself still fires
-	 * unconditionally.
+	 * A value that never passes the positive-integer gate asserts nothing
+	 * about the reader, so an earlier arrival's carried segments stay put —
+	 * while the redirect still fires.
 	 *
 	 * @param string $value Raw param value as it arrives.
 	 *
@@ -357,11 +332,7 @@ class SegmentationAccountArrivalTest extends WP_UnitTestCase {
 	}
 
 	/**
-	 * No param, nothing to do — the overwhelmingly common request. Also
-	 * confirms an existing cookie is left alone: without the early return, a
-	 * param-less pageview would otherwise fall through to the
-	 * cookie-assertion path and overwrite a legitimately carried set with the
-	 * "matches nothing" sentinel.
+	 * No param: no redirect, and an existing cookie is left alone.
 	 */
 	public function test_ignores_request_without_the_param() {
 		$_COOKIE[ Newspack_Popups_Segmentation::CARRIED_SEGMENTS_COOKIE ] = $this->segment_ids['carried-one']; // phpcs:ignore WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___COOKIE
@@ -370,10 +341,8 @@ class SegmentationAccountArrivalTest extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Redirecting a POST would discard its body. Also confirms an existing
-	 * cookie is left alone: without the early return, a POST that happens to
-	 * carry np_account (e.g. a form submit on a page reached via a newsletter
-	 * link) would otherwise resolve and overwrite a legitimately carried set.
+	 * A POST is ignored (a redirect would discard its body) and an existing
+	 * cookie is left alone.
 	 */
 	public function test_ignores_non_get_requests() {
 		$_COOKIE[ Newspack_Popups_Segmentation::CARRIED_SEGMENTS_COOKIE ] = $this->segment_ids['carried-one']; // phpcs:ignore WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___COOKIE
@@ -382,12 +351,8 @@ class SegmentationAccountArrivalTest extends WP_UnitTestCase {
 	}
 
 	/**
-	 * The resolver is the seam the handler is built on; exercise it directly for
-	 * the degenerate inputs.
-	 *
-	 * The mock is seeded with a real, active segment ID under keys `0` and
-	 * `-1` so an empty result can only come from the $account_id < 1 guard,
-	 * not from the mock having nothing to return for those keys anyway.
+	 * Non-positive IDs are rejected by the resolver. The mock is seeded under
+	 * keys `0` and `-1`, so an empty result can only come from the guard.
 	 */
 	public function test_resolver_rejects_non_positive_ids() {
 		\Newspack\Reader_Data::$matched_segments = [
@@ -399,15 +364,9 @@ class SegmentationAccountArrivalTest extends WP_UnitTestCase {
 	}
 
 	/**
-	 * The cookie-options helper always returns one set of options, regardless
-	 * of the resolved value — keeping the value itself non-empty is
-	 * get_carried_segments_cookie_value()'s job, exercised separately below.
-	 * set_carried_segments_cookie()'s own setcookie() call never runs under
-	 * PHPUnit (headers_sent() is always true here), so no test that goes
-	 * through arrive() ever exercises the option values below — e.g. an
-	 * `httponly => true` typo would silently break the view script's
-	 * document.cookie read — and every other test here would still pass.
-	 * Exercise get_carried_segments_cookie_options() directly instead.
+	 * The cookie options must stay JS-readable, session-scoped, and site-wide.
+	 * Exercised via reflection because the setcookie() call never runs under
+	 * PHPUnit — an `httponly => true` typo would pass every other test.
 	 */
 	public function test_cookie_options_are_js_readable_session_scoped_and_site_wide() {
 		$options = $this->cookie_options();
@@ -418,15 +377,9 @@ class SegmentationAccountArrivalTest extends WP_UnitTestCase {
 	}
 
 	/**
-	 * The cookie value computed by get_carried_segments_cookie_value() must
-	 * never be an empty string: PHP's setcookie() sends a deletion whenever
-	 * the value is empty, no matter what `expires` is passed (see
-	 * get_carried_segments_cookie_options()'s docblock), so a real browser
-	 * would then never deliver the "matches nothing" assertion at all. This
-	 * is the defect two prior review passes missed — set_carried_segments_cookie()'s
-	 * own setcookie() call never runs under PHPUnit, so a test that only goes
-	 * through arrive() and inspects the $_COOKIE mirror could never observe
-	 * it; this test exercises the value-computation seam directly instead.
+	 * The cookie value is never an empty string: setcookie() sends a deletion
+	 * for an empty value regardless of `expires`, so the "matches nothing"
+	 * assertion would never reach a browser.
 	 */
 	public function test_cookie_value_for_no_segments_is_the_sentinel_not_empty() {
 		$value = $this->cookie_value( [] );

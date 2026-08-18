@@ -80,10 +80,9 @@ const match = segmentCriteria => {
 /**
  * Get the reader's highest-priority segment match, or the segment to preview.
  *
- * Carried segment IDs — resolved server-side from a newsletter click and handed
- * to this session, see carried-segments.js — count as matched in addition to
- * whatever the criteria match locally. They join the priority comparison because
- * prompt targeting is decided against the single winner, not the matched set.
+ * Carried segment IDs (see carried-segments.js) count as matched in addition
+ * to local criteria matches. They join this comparison because prompt
+ * targeting is decided against the single winner, not the matched set.
  *
  * @param {Object}      segments     Segments.
  * @param {string|null} viewAsString Optional, for testing. A query string with viewAs params for previewing a segment.
@@ -122,10 +121,9 @@ export const getBestPrioritySegment = ( segments, viewAsString = null, carriedId
  * serialization (so equal sets compare equal). Unlike getBestPrioritySegment,
  * this returns the full set, not just the highest-priority winner.
  *
- * Criteria matches only: segment IDs carried in from a newsletter click are
- * deliberately excluded, because this set is what syncMatchedSegments() persists
- * to reader data. A carried ID is forgeable and link-supplied; writing it to the
- * snapshot the server trusts would feed it back out through the next newsletter.
+ * Criteria matches only: carried segment IDs are excluded, because this set is
+ * what syncMatchedSegments() persists to reader data and a carried ID is
+ * forgeable, link-supplied input.
  *
  * @param {Object} segments Segments keyed by ID with { criteria, priority } values.
  *

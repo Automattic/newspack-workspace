@@ -15,16 +15,10 @@
 class MailchimpFieldTagNameTest extends WP_UnitTestCase {
 
 	/**
-	 * Seed the cached-data store for an audience's merge fields.
-	 *
-	 * The cached-data class serves from the option `newspack_nl_mailchimp_cache_<list_id>`
-	 * when it exists, so seeding it keeps the test off the network. The companion
-	 * `_date_` option is deliberately NOT seeded: is_cache_expired() returns false
-	 * for a missing date, so no background refresh is dispatched.
-	 *
-	 * Each test uses its own list ID because the cached-data class memoizes per
-	 * list ID in a static that outlives a single test — reusing one ID would serve
-	 * the first test's fields to every later test.
+	 * Seed the cached-data option for an audience's merge fields, keeping the
+	 * test off the network. The `_date_` option stays unseeded so no refresh is
+	 * dispatched, and each test uses its own list ID because the cached-data
+	 * class memoizes per list ID in a static that outlives a test.
 	 *
 	 * @param string $list_id      Audience ID, unique per test.
 	 * @param array  $merge_fields Merge fields as the Mailchimp API reports them.

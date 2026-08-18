@@ -106,19 +106,10 @@ final class Newspack_Newsletters_Active_Campaign extends \Newspack_Newsletters_S
 	 * Per-request memo of get_field_merge_tag_name() results, keyed by field
 	 * name, sitting in front of that method's transient cache.
 	 *
-	 * Static rather than an instance property: Newspack_Newsletters_Service_Provider::instance()
-	 * hands back a brand-new object on every call in a test environment (see
-	 * its IS_TEST_ENV escape hatch), so an instance property would not survive
-	 * from one instance() call to the next even within a single request/render.
-	 *
-	 * This is the memo half of the design; get_field_merge_tag_name()'s
-	 * transient is the other half. Link decoration runs once per link per
-	 * newsletter render, and the underlying fetch (get_all_contact_fields())
-	 * is a recursive, paginated API call, so whenever the transient layer
-	 * cannot return — a dead object-cache drop-in is a recurring failure mode
-	 * on this platform, and it makes get_transient() silently always miss —
-	 * this memo is what stops a 40-link newsletter from repeating that fetch
-	 * up to 40 times inside one render.
+	 * Static because instance() returns a new object per call in test
+	 * environments. Sits in front of the transient so a failing object cache
+	 * (get_transient() always missing) can't repeat the paginated field fetch
+	 * once per link within a render.
 	 *
 	 * @var array<string, string>
 	 */
@@ -2322,12 +2313,9 @@ final class Newspack_Newsletters_Active_Campaign extends \Newspack_Newsletters_S
 	 * value AC substitutes. A row with an empty perstag can never match: it
 	 * supplies no usable tag.
 	 *
-	 * Cached because the field list is an uncached, paginated fetch and link
-	 * decoration runs once per link per newsletter render. Misses are cached
-	 * briefly so a field created after the first lookup is picked up soon.
-	 * A static per-request memo sits in front of the transient — see
-	 * $field_merge_tag_name_memo — for when the transient layer itself can't
-	 * return.
+	 * Memoized per request and cached in a transient: the field list is an
+	 * uncached, paginated fetch and link decoration runs once per link per
+	 * render. Misses are cached briefly so a new field is picked up soon.
 	 *
 	 * @param string      $field_name Field title as synced (e.g. 'NP_Account').
 	 * @param string|null $list_id    Unused; ActiveCampaign fields are account-wide.
@@ -2353,11 +2341,8 @@ final class Newspack_Newsletters_Active_Campaign extends \Newspack_Newsletters_S
 
 		$fields = $this->get_all_contact_fields();
 		if ( is_wp_error( $fields ) || ! is_array( $fields ) ) {
-			// Deliberately not memoized: a transport failure or missing
-			// credentials can be transient within the same render (e.g. a
-			// slow upstream that succeeds on a later link's retry), so the
-			// next link for the same field should try again rather than be
-			// locked into '' for the rest of the request.
+			// Not memoized: a transport failure can clear up within the same
+			// render, so later links should retry rather than lock into ''.
 			return '';
 		}
 

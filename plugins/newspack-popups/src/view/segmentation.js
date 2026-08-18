@@ -24,18 +24,13 @@ export const handleSegmentation = prompts => {
 			return;
 		}
 		const segments = newspack_popups_view?.segments || {};
-		// Always consume the handoff, so the cookie is cleared even for a reader
-		// whose carried IDs are then discarded. A signed-in reader's local
-		// matching is live, so a snapshot from their last visit can only make it
-		// staler — and their own matched_segments write must stay criteria-only.
+		// Always consume the handoff so the cookie is cleared even when the IDs
+		// are then discarded: a signed-in reader's live matching wins over any
+		// carried snapshot.
 		const carriedIds = getCarriedSegmentIds( Object.keys( segments ) );
-		// Re-read the authenticated flag fresh each time this is called, rather
-		// than freezing it in a variable: RAS's setAuthenticated() can flip a
-		// reader to authenticated mid-page with no reload, and a delayed or
-		// scroll-triggered prompt's unhide() re-check (below) must see that
-		// change even though it runs long after this function returns. Reuses
-		// carriedIds itself rather than calling getCarriedSegmentIds() again —
-		// it already consumed the cookie, so a second call would find nothing.
+		// Re-read the authenticated flag on every call: RAS can authenticate a
+		// reader mid-page, and a delayed prompt's unhide() re-check must see it.
+		// Reuses carriedIds — the cookie is already consumed.
 		const getCarried = () => ( ras?.store?.get( 'reader' )?.authenticated ? [] : carriedIds );
 		const matchingSegment = getBestPrioritySegment( segments, null, getCarried() );
 		debug( 'matchingSegment', matchingSegment );

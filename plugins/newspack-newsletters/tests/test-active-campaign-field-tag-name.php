@@ -1,11 +1,8 @@
 <?php // phpcs:ignore WordPress.Files.FileName.InvalidClassFileName
 /**
  * Tests for resolving an ActiveCampaign custom field's perstag by field name.
- *
- * Newsletter links carry a merge tag for a synced field, and AC substitutes it
- * per recipient. The tag is the field's perstag, which AC generates from the
- * title and an AC admin may rename — so it has to be read back from the
- * account, never derived from the field name.
+ * The perstag is generated from the title and can be renamed by an AC admin,
+ * so it must be read back from the account, never derived.
  *
  * @package Newspack_Newsletters
  */
@@ -192,24 +189,11 @@ class ActiveCampaignFieldTagNameTest extends WP_UnitTestCase {
 	}
 
 	/**
-	 * A dead object-cache drop-in makes get_transient() silently miss every
-	 * time, whether or not set_transient() actually persisted anything — a
-	 * recurring failure mode on this platform. Without a per-request memo in
-	 * front of the transient, link decoration (which resolves the same field
-	 * once per link) would repeat the whole paginated fetch for every link in
-	 * the newsletter.
-	 *
-	 * Forces that failure mode directly via the `transient_{$transient}`
-	 * filter, which WordPress applies unconditionally to get_transient()'s
-	 * return value — unlike `pre_transient_{$transient}`, whose own default
-	 * is `false`, so a filter merely returning `false` there is a no-op and
-	 * would not actually force a miss against a value that was successfully
-	 * set.
-	 *
-	 * instance() hands back a brand-new object on every call in this test
-	 * environment (see its IS_TEST_ENV escape hatch), so resolving twice via
-	 * two separate instance() calls also proves the memo is static — an
-	 * instance property would not have survived between them.
+	 * With get_transient() forced to always miss (a dead object cache), the
+	 * per-request memo must still stop repeat fetches. Forced via the
+	 * `transient_{$transient}` filter, which applies unconditionally —
+	 * `pre_transient_` returning false is a no-op. Resolving through two
+	 * instance() calls also proves the memo is static.
 	 */
 	public function test_memoizes_within_a_request_when_transient_cannot_return() {
 		$this->remote_fields = [

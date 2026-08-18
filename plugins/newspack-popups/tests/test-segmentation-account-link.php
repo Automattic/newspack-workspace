@@ -94,15 +94,10 @@ class SegmentationAccountLinkTest extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Regression test for the REAL newspack_newsletters_process_link chain, not
-	 * a handler called standalone. append_donor_segment_param() is registered
-	 * first (see the constructor) and restores its own tag raw; if
-	 * append_account_param() ran that URL through add_query_arg(), WordPress's
-	 * urlencode_deep() would re-encode the donor handler's already-raw tag right
-	 * back into the unresolvable %2A%7C... form. Every other test in this file
-	 * calls a single handler directly, which cannot catch this — the corruption
-	 * only appears when both handlers actually run back-to-back through the
-	 * filter, which is exactly what this test does.
+	 * Runs the real newspack_newsletters_process_link chain: add_query_arg() in
+	 * the account handler would re-encode the donor handler's already-raw tag
+	 * into the unresolvable %2A%7C... form, which single-handler tests cannot
+	 * catch.
 	 */
 	public function test_real_filter_chain_keeps_both_tags_raw() {
 		update_option( 'newspack_popups_mc_donor_merge_field', 'HUB-MEMBER' );
@@ -218,12 +213,9 @@ class SegmentationAccountLinkTest extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Mailchimp's own process_link() filter hands the whole URL back as a bare
-	 * merge-tag placeholder for links like *|UNSUB|*. Those have no host, so
-	 * is_first_party_url() reads them as first-party — but decorating one yields
-	 * `*|UNSUB|*?np_account=...`, which the ESP expands into an unsubscribe URL
-	 * that already carries its own query string. Unsubscribe is required by law
-	 * and by Mailchimp's terms, so these links must pass through untouched.
+	 * A whole-URL merge-tag placeholder (e.g. Mailchimp's *|UNSUB|*) is host-less
+	 * and reads as first-party, but decorating it breaks the expanded link — and
+	 * unsubscribe links are required by law. They must pass through untouched.
 	 *
 	 * @param string $url Placeholder URL as the ESP filter hands it over.
 	 *

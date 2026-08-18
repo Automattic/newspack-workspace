@@ -37,12 +37,9 @@ describe( 'getCarriedSegmentIds', () => {
 	it( 'deletes the cookie so no later request carries it', () => {
 		setCookie( '11' );
 		getCarriedSegmentIds( [ '11' ] );
-		// jsdom's document.cookie is a simplified approximation of a real
-		// browser's cookie jar, so this alone cannot prove real-browser
-		// deletion — a browser only lets a `max-age=0` write remove a cookie
-		// whose Path (and Domain) match the original exactly. What makes this
-		// assertion meaningful is that setCookie() above and deleteCookie() in
-		// carried-segments.js both write `path=/`, satisfying that requirement.
+		// A browser only honors a `max-age=0` delete when the Path matches the
+		// original write; setCookie() here and deleteCookie() in the module both
+		// use `path=/`.
 		expect( document.cookie ).not.toContain( COOKIE );
 	} );
 
@@ -60,15 +57,8 @@ describe( 'getCarriedSegmentIds', () => {
 		expect( getCarriedSegmentIds( [ '5', '7' ] ) ).toEqual( [ '5', '7' ] );
 		expect( window.sessionStorage.getItem( SESSION_KEY ) ).toBe( '5,7' );
 
-		// Second arrival: a different account resolves to zero segments. PHP
-		// hands this off as the CARRIED_SEGMENTS_NONE sentinel — a session
-		// cookie, never a past-expiry deletion, and never an empty string
-		// either: PHP's setcookie() sends an empty value as a deletion
-		// regardless of the expiry passed, which a real browser would then
-		// never actually deliver. The sentinel is what makes this case
-		// distinguishable from "no handoff happened" and lets it override what
-		// an earlier arrival remembered. See
-		// Newspack_Popups_Segmentation::get_carried_segments_cookie_value().
+		// Second arrival resolves to zero segments: PHP hands off the
+		// CARRIED_SEGMENTS_NONE sentinel, which overrides the remembered set.
 		setCookie( CARRIED_SEGMENTS_NONE );
 		expect( getCarriedSegmentIds( [ '5', '7' ] ) ).toEqual( [] );
 		expect( window.sessionStorage.getItem( SESSION_KEY ) ).toBe( CARRIED_SEGMENTS_NONE );
@@ -107,11 +97,8 @@ describe( 'getCarriedSegmentIds', () => {
 	} );
 
 	it( 'decodes a percent-encoded cookie value as PHP setcookie() produces it', () => {
-		// PHP's setcookie() URL-encodes the value it writes, so a two-segment
-		// handoff of `5,7` arrives in document.cookie as `5%2C7`, not `5,7`.
-		// readCookie() must decodeURIComponent() the captured group, or every
-		// multi-segment reader silently loses their carried segments while
-		// single-segment readers (no comma to encode) keep working.
+		// PHP's setcookie() URL-encodes the value, so `5,7` arrives as `5%2C7`;
+		// without decodeURIComponent(), multi-segment readers lose their carry.
 		setCookie( '5%2C7' );
 		expect( getCarriedSegmentIds( [ '5', '7' ] ) ).toEqual( [ '5', '7' ] );
 	} );
