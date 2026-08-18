@@ -2,7 +2,6 @@
  * Ads list screen — React DataView replacing the classic ads CPT list.
  */
 
-import { __experimentalHStack as HStack, Spinner } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
 import { DataViews } from '@wordpress/dataviews/wp';
 import { useEffect, useMemo, useState } from '@wordpress/element';
 import { __ } from '@wordpress/i18n';
@@ -10,6 +9,7 @@ import { emailAd } from 'newspack-icons';
 
 import { getAdminUrl } from '../../admin-globals';
 import EmptyState from '../../components/empty-state';
+import LoadingState from '../../components/loading-state';
 import HeaderCount from '../../components/header-count';
 import ItemsPerPage from '../../components/items-per-page';
 import { useHeaderActions } from '../../header-actions-context';
@@ -76,7 +76,7 @@ function useFilterTerms() {
 export default function AdsListScreen() {
 	const [ view, setView ] = usePersistedView( 'ads-list', DEFAULT_VIEW, PERSIST_OPTIONS );
 	const [ quickEditItem, setQuickEditItem ] = useState( null );
-	const { data, paginationInfo, isLoading, hasResolved, hasLoadedOnce, trashCount, progress, refresh } = useAdsData( view );
+	const { data, paginationInfo, isLoading, hasResolved, hasLoadedOnce, trashCount, refresh } = useAdsData( view );
 	const filterTerms = useFilterTerms();
 
 	const addNewHref = `${ getAdminUrl() }post-new.php?post_type=${ ADS_CPT }`;
@@ -109,11 +109,7 @@ export default function AdsListScreen() {
 	);
 
 	if ( ! hasResolved ) {
-		return (
-			<HStack className="newspack-newsletters-admin__loading" justify="center">
-				<Spinner />
-			</HStack>
-		);
+		return <LoadingState label={ __( 'Fetching ads…', 'newspack-newsletters' ) } />;
 	}
 
 	if ( isStrictEmpty ) {
@@ -147,13 +143,7 @@ export default function AdsListScreen() {
 				getItemId={ item => String( item.id ) }
 				search
 				config={ DATAVIEWS_CONFIG }
-				header={
-					<ItemsPerPage
-						value={ view.perPage }
-						progress={ progress }
-						onChange={ perPage => setView( current => ( { ...current, perPage, page: 1 } ) ) }
-					/>
-				}
+				header={ <ItemsPerPage value={ view.perPage } onChange={ perPage => setView( current => ( { ...current, perPage, page: 1 } ) ) } /> }
 			/>
 			{ quickEditItem && (
 				<AdsQuickEditPanel

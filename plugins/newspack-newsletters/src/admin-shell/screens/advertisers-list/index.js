@@ -7,13 +7,13 @@
  * `useAllAdvertisers`).
  */
 
-import { __experimentalHStack as HStack, Spinner } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
 import { DataViews } from '@wordpress/dataviews/wp';
 import { useCallback, useMemo, useState } from '@wordpress/element';
 import { __ } from '@wordpress/i18n';
 import { store } from '@wordpress/icons';
 
 import EmptyState from '../../components/empty-state';
+import LoadingState from '../../components/loading-state';
 import HeaderCount from '../../components/header-count';
 import ItemsPerPage from '../../components/items-per-page';
 import { useHeaderActions } from '../../header-actions-context';
@@ -59,7 +59,7 @@ export default function AdvertisersListScreen() {
 	// created one appears immediately on the next modal open.
 	const [ mutationKey, setMutationKey ] = useState( 0 );
 
-	const { data, paginationInfo, isLoading, hasResolved, hasLoadedOnce, progress } = useAdvertisersData( view, mutationKey );
+	const { data, paginationInfo, isLoading, hasResolved, hasLoadedOnce } = useAdvertisersData( view, mutationKey );
 	const allAdvertisers = useAllAdvertisers( mutationKey );
 
 	// `setModalState` (a `useState` setter) is itself stable, but wrapping
@@ -95,11 +95,7 @@ export default function AdvertisersListScreen() {
 	);
 
 	if ( ! hasResolved ) {
-		return (
-			<HStack className="newspack-newsletters-admin__loading" justify="center">
-				<Spinner />
-			</HStack>
-		);
+		return <LoadingState label={ __( 'Fetching advertisers…', 'newspack-newsletters' ) } />;
 	}
 
 	return (
@@ -131,11 +127,7 @@ export default function AdvertisersListScreen() {
 					search
 					config={ DATAVIEWS_CONFIG }
 					header={
-						<ItemsPerPage
-							value={ view.perPage }
-							progress={ progress }
-							onChange={ perPage => setView( current => ( { ...current, perPage, page: 1 } ) ) }
-						/>
+						<ItemsPerPage value={ view.perPage } onChange={ perPage => setView( current => ( { ...current, perPage, page: 1 } ) ) } />
 					}
 				/>
 			) }

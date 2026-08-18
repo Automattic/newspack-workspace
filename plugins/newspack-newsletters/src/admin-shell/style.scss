@@ -139,6 +139,15 @@ body.newspack-newsletters-admin-screen--bundled {
 		display: flex;
 		justify-content: center;
 		min-height: 200px;
+
+		.components-spinner {
+			margin: 0;
+		}
+
+		p {
+			font-weight: wp-vars.$font-weight-medium;
+			margin: 0;
+		}
 	}
 
 	&__notices {
@@ -192,30 +201,6 @@ body.newspack-newsletters-admin-screen--bundled {
 // ancestor stack is a positioning context, which would pin it to the
 // actions row). `left` is set inline from #wpbody's box. The delayed
 // fade keeps fast walks from flashing the overlay in and out.
-.newspack-newsletters-fetch-all-progress {
-	animation: newspack-newsletters-fetch-all-progress-in 150ms ease-in-out 300ms both;
-	left: 50%;
-	pointer-events: none;
-	position: fixed;
-	top: 50%;
-	transform: translate(-50%, -50%);
-	z-index: 10;
-
-	.components-spinner {
-		margin: 0;
-	}
-}
-
-@keyframes newspack-newsletters-fetch-all-progress-in {
-	from {
-		opacity: 0;
-	}
-
-	to {
-		opacity: 1;
-	}
-}
-
 
 body.newspack-newsletters-admin-screen .dataviews-view-table a:not(.newspack-newsletters-list__title) {
 	color: var(--wp-admin-theme-color);

@@ -6,12 +6,9 @@
  */
 
 import { act, render, screen, waitFor } from '@testing-library/react';
-import { speak } from '@wordpress/a11y';
 
 import ItemsPerPage from './index';
 import { PER_PAGE_ALL } from '../../utils/per-page';
-
-jest.mock( '@wordpress/a11y', () => ( { speak: jest.fn() } ) );
 
 const openPopover = () => {
 	const popover = document.createElement( 'div' );
@@ -23,7 +20,6 @@ const openPopover = () => {
 
 describe( 'ItemsPerPage', () => {
 	beforeEach( () => {
-		speak.mockClear();
 		document.body.innerHTML = '';
 	} );
 
@@ -51,15 +47,9 @@ describe( 'ItemsPerPage', () => {
 		[ '10', '20', '50', '100' ].forEach( label => expect( screen.getByRole( 'radio', { name: label } ) ).toBeInTheDocument() );
 	} );
 
-	it( 'announces the start and end of a fetch-all walk, not each batch', () => {
-		const { rerender } = render( <ItemsPerPage value={ PER_PAGE_ALL } onChange={ jest.fn() } progress={ { loaded: 100, total: 1200 } } /> );
-		expect( speak ).toHaveBeenCalledTimes( 1 );
-
-		rerender( <ItemsPerPage value={ PER_PAGE_ALL } onChange={ jest.fn() } progress={ { loaded: 200, total: 1200 } } /> );
-		expect( speak ).toHaveBeenCalledTimes( 1 );
-		expect( screen.getByText( 'Loading 200 of 1,200…' ) ).toBeInTheDocument();
-
-		rerender( <ItemsPerPage value={ PER_PAGE_ALL } onChange={ jest.fn() } progress={ null } /> );
-		expect( speak ).toHaveBeenCalledTimes( 2 );
+	it( 'renders no loading indicator of its own', () => {
+		const { container } = render( <ItemsPerPage value={ PER_PAGE_ALL } onChange={ jest.fn() } /> );
+		expect( container ).toBeEmptyDOMElement();
+		expect( document.querySelector( '.newspack-newsletters-fetch-all-progress' ) ).toBeNull();
 	} );
 } );

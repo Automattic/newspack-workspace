@@ -6,13 +6,13 @@
 
 import { getBlockType, registerBlockType } from '@wordpress/blocks';
 import { registerCoreBlocks } from '@wordpress/block-library';
-import { Spinner } from '@wordpress/components';
 import { DataViews } from '@wordpress/dataviews/wp';
 import { useCallback, useEffect, useMemo, useState } from '@wordpress/element';
 import { __ } from '@wordpress/i18n';
 
 import { getAdminUrl } from '../../admin-globals';
 import HeaderCount from '../../components/header-count';
+import LoadingState from '../../components/loading-state';
 import ItemsPerPage from '../../components/items-per-page';
 import { useHeaderActions } from '../../header-actions-context';
 import usePersistedView from '../../hooks/use-persisted-view';
@@ -279,11 +279,7 @@ export default function LayoutsListScreen() {
 	}, [ hasResolvedOnce, isPrebuiltLoading, showSaved, savedHasResolved ] );
 
 	if ( ! hasResolvedOnce ) {
-		return (
-			<div className="newspack-newsletters-admin__loading">
-				<Spinner />
-			</div>
-		);
+		return <LoadingState label={ __( 'Fetching layouts…', 'newspack-newsletters' ) } />;
 	}
 
 	return (
