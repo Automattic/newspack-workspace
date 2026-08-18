@@ -19,7 +19,7 @@ use Sample_Integration;
  *
  * Seeding is what lets every runtime path stop asking which schema a site
  * came from: it materialises the site's current effective default selection
- * as stored ids, once, and retires the schema-origin marker on its way out.
+ * as stored ids, once.
  *
  * @group field-selection-seeding
  */
@@ -33,21 +33,12 @@ class Test_Field_Selection_Seeding extends \WP_UnitTestCase {
 	private const ESP_OPTION = Integration::OUTGOING_FIELDS_OPTION_PREFIX . Integration::ESP_INTEGRATION_ID;
 
 	/**
-	 * The retired schema-origin marker, spelled out because production code
-	 * no longer exposes a constant for it.
-	 *
-	 * @var string
-	 */
-	private const ORIGIN_MARKER = 'newspack_sync_schema_origin';
-
-	/**
 	 * Set up test environment.
 	 */
 	public function set_up() {
 		parent::set_up();
 		$this->reset_integrations();
 		\delete_option( self::ESP_OPTION );
-		\delete_option( self::ORIGIN_MARKER );
 		\delete_option( Metadata::FIELDS_OPTION );
 		\delete_option( 'newspack_setup_complete' );
 		Field_Registry::reset();
@@ -58,7 +49,6 @@ class Test_Field_Selection_Seeding extends \WP_UnitTestCase {
 	 */
 	public function tear_down() {
 		\delete_option( self::ESP_OPTION );
-		\delete_option( self::ORIGIN_MARKER );
 		\delete_option( Metadata::FIELDS_OPTION );
 		\delete_option( 'newspack_setup_complete' );
 		Sample_Integration::$is_set_up_value = true;
@@ -107,7 +97,7 @@ class Test_Field_Selection_Seeding extends \WP_UnitTestCase {
 	/**
 	 * Build the shape an in-place plugin update leaves behind: a real ESP
 	 * integration that is configured and syncing, no stored selection, no
-	 * legacy global option, no marker, no constants — and no activation hook
+	 * legacy global option, no constants — and no activation hook
 	 * ever having fired.
 	 *
 	 * The real ESP class is required rather than the sample: only it carries
@@ -150,7 +140,7 @@ class Test_Field_Selection_Seeding extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * A legacy site with no stored selection and no marker must seed its
+	 * A legacy site with no stored selection must seed its
 	 * legacy defaults, not the merged set — or its ESP would suddenly start
 	 * receiving the new schema's field names.
 	 */
@@ -164,10 +154,6 @@ class Test_Field_Selection_Seeding extends \WP_UnitTestCase {
 		$this->assertContains( 'v1:account', $ids );
 		$this->assertNotContains( 'v2:Account', $ids );
 		$this->assertAllIdsOnVersion( 'v1', $ids );
-		$this->assertFalse(
-			\get_option( self::ORIGIN_MARKER ),
-			'The marker must be deleted once seeding has consumed it.'
-		);
 	}
 
 	/**
@@ -187,24 +173,6 @@ class Test_Field_Selection_Seeding extends \WP_UnitTestCase {
 		$this->assertContains( 'v2:Account', $ids );
 		$this->assertNotContains( 'v1:account', $ids );
 		$this->assertAllIdsOnVersion( 'v2', $ids );
-		$this->assertFalse( \get_option( self::ORIGIN_MARKER ) );
-	}
-
-	/**
-	 * A recorded schema-origin marker outranks every detection heuristic
-	 * below it — here a configured ESP, which would otherwise say v1 — and is
-	 * deleted the moment it has been used.
-	 */
-	public function test_recorded_marker_wins_over_detection_then_is_deleted() {
-		\update_option( self::ORIGIN_MARKER, 'v2' );
-		$this->register_configured_esp();
-
-		Field_Registry::seed_default_field_selections();
-
-		$ids = \get_option( self::ESP_OPTION );
-		$this->assertContains( 'v2:Account', $ids );
-		$this->assertNotContains( 'v1:account', $ids );
-		$this->assertFalse( \get_option( self::ORIGIN_MARKER ) );
 	}
 
 	/**
@@ -220,10 +188,6 @@ class Test_Field_Selection_Seeding extends \WP_UnitTestCase {
 		Field_Registry::seed_default_field_selections();
 
 		$this->assertSame( [ 'v2:Registration_Date' ], \get_option( self::ESP_OPTION ) );
-		$this->assertFalse(
-			\get_option( self::ORIGIN_MARKER ),
-			'The marker is dead either way once a selection exists.'
-		);
 
 		\update_option( self::ESP_OPTION, [] );
 
@@ -233,9 +197,9 @@ class Test_Field_Selection_Seeding extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * Saving a bare display name resolves against the merged registry with no
-	 * schema-origin state anywhere: a shared name collapses onto the surviving
-	 * v2 id, a renamed legacy field keeps its own, and nothing writes a marker.
+	 * Saving a bare display name resolves against the merged registry: a
+	 * shared name collapses onto the surviving v2 id, and a renamed legacy
+	 * field keeps its own.
 	 */
 	public function test_bare_name_save_resolves_without_origin_state() {
 		$esp = new ESP();
@@ -247,7 +211,6 @@ class Test_Field_Selection_Seeding extends \WP_UnitTestCase {
 			[ 'v2:Account', 'v1:registration_method' ],
 			\get_option( self::ESP_OPTION )
 		);
-		$this->assertFalse( \get_option( self::ORIGIN_MARKER ), 'No code path records a marker any more.' );
 	}
 
 	/**
@@ -268,9 +231,6 @@ class Test_Field_Selection_Seeding extends \WP_UnitTestCase {
 			\get_option( self::ESP_OPTION ),
 			'The first read must have persisted the selection, not merely derived it.'
 		);
-
-		// Detection would now answer v2. A second read must not consult it.
-		\update_option( self::ORIGIN_MARKER, 'v2' );
 
 		$this->assertSame( $first, $esp->get_enabled_outgoing_field_ids() );
 		$this->assertSame( $first, \get_option( self::ESP_OPTION ) );
@@ -301,22 +261,6 @@ class Test_Field_Selection_Seeding extends \WP_UnitTestCase {
 		);
 
 		\delete_option( Integration::OUTGOING_FIELDS_OPTION_PREFIX . 'inheriting-test' );
-	}
-
-	/**
-	 * The lazy path retires the marker just as the activation path does — the
-	 * marker's whole purpose is spent the moment a selection is stored, and
-	 * leaving it behind would strand dead state on every upgraded site.
-	 */
-	public function test_lazy_seeding_deletes_the_origin_marker() {
-		$esp = $this->register_upgraded_legacy_esp();
-		\update_option( self::ORIGIN_MARKER, 'v2' );
-
-		$ids = $esp->get_enabled_outgoing_field_ids();
-
-		// The marker outranks the configured-ESP signal, so it decided this.
-		$this->assertContains( 'v2:Account', $ids );
-		$this->assertFalse( \get_option( self::ORIGIN_MARKER ) );
 	}
 
 	/**
