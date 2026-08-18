@@ -84,6 +84,16 @@ check "standalone repo runs its own test script" "yes" \
 check "standalone repo does not reach pnpm --filter" "" \
 	"$(grep 'pnpm --filter' "$WORK/calls.log" || true)"
 
+# 4. An unreachable MONOREPO_ROOT aborts rather than running the workspace install
+#    from wherever the shell happened to start. Reachable only because the root is
+#    overridable; the hardcoded value could only fail on a broken container mount.
+saved_root="$MONOREPO_ROOT"
+export MONOREPO_ROOT="$WORK/no-such-root"
+run_case "newspack-blocks"
+check "unreachable monorepo root exits non-zero" "1" "$(cat "$WORK/status")"
+check "unreachable monorepo root runs no package manager" "" "$(cat "$WORK/calls.log")"
+export MONOREPO_ROOT="$saved_root"
+
 if [[ $failures -gt 0 ]]; then
 	echo "$failures failure(s)"
 	exit 1

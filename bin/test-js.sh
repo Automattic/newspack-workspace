@@ -70,7 +70,10 @@ else
     # and pnpm --filter matches by package name, not directory.
     PKG=$(node -p "require('$PROJECT_DIR/package.json').name" 2>/dev/null)
     [ -z "$PKG" ] && PKG=$(basename "$PROJECT_DIR")
-    cd "$MONOREPO_ROOT"
+    # Guarded for the same reason find_project's status is propagated above: an
+    # unreachable root would otherwise leave the shell wherever it started and run
+    # `pnpm --filter` against that directory instead of the workspace.
+    cd "$MONOREPO_ROOT" || exit 1
     pnpm install
     pnpm --filter "$PKG" run test
 fi
