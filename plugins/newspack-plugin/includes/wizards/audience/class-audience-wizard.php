@@ -1130,15 +1130,19 @@ class Audience_Wizard extends Wizard {
 			return $disabled;
 		}
 		$params = $request->get_params();
-		foreach ( [ 'label_singular', 'label_plural' ] as $field ) {
+		foreach ( [
+			'label_singular' => 'singular',
+			'label_plural'   => 'plural',
+		] as $field => $variant ) {
 			if ( ! array_key_exists( $field, $params ) ) {
 				continue;
 			}
-			$value = trim( (string) $params[ $field ] );
+			$option_key = Group_Subscription::get_label_option_key( $variant );
+			$value      = trim( (string) $params[ $field ] );
 			if ( '' === $value ) {
-				delete_option( 'newspack_group_subscription_' . $field );
+				delete_option( $option_key );
 			} else {
-				update_option( 'newspack_group_subscription_' . $field, $value );
+				update_option( $option_key, $value );
 			}
 		}
 		return $this->api_get_group_labels();
