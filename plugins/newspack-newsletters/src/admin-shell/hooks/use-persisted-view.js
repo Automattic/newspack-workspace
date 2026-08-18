@@ -37,6 +37,35 @@ const isPreviewSize = value => Number.isInteger( value ) && value >= 0 && value 
 
 const isNonEmptyString = value => typeof value === 'string' && value.length > 0;
 
+// Mirrors `Admin_Shell_Preferences::ALIGNMENTS`.
+const ALIGNMENTS = [ 'start', 'center', 'end' ];
+
+// DataViews owns the shape of a column style, so pick the keys the server
+// stores rather than forwarding it whole: an unknown key or an unknown
+// alignment would fail schema validation, and a rejected save takes every
+// other appearance setting down with it.
+function toColumnStyles( styles ) {
+	const clean = {};
+	for ( const [ id, style ] of Object.entries( styles ) ) {
+		if ( ! style || typeof style !== 'object' ) {
+			continue;
+		}
+		const picked = {};
+		for ( const key of [ 'width', 'minWidth', 'maxWidth' ] ) {
+			if ( typeof style[ key ] === 'number' || isNonEmptyString( style[ key ] ) ) {
+				picked[ key ] = style[ key ];
+			}
+		}
+		if ( ALIGNMENTS.includes( style.align ) ) {
+			picked.align = style.align;
+		}
+		if ( Object.keys( picked ).length > 0 ) {
+			clean[ id ] = picked;
+		}
+	}
+	return clean;
+}
+
 // The server rejects a payload with nothing storable in it, so don't send one.
 const isSavable = payload => payload !== '{}';
 
@@ -92,8 +121,11 @@ function toPrefs( view = {} ) {
 		layout.previewSize = view.layout.previewSize;
 	}
 	const styles = view.layout?.styles;
-	if ( styles && typeof styles === 'object' && Object.keys( styles ).length > 0 ) {
-		layout.styles = styles;
+	if ( styles && typeof styles === 'object' ) {
+		const picked = toColumnStyles( styles );
+		if ( Object.keys( picked ).length > 0 ) {
+			layout.styles = picked;
+		}
 	}
 	if ( Object.keys( layout ).length > 0 ) {
 		prefs.layout = layout;
@@ -142,7 +174,14 @@ function toViewPatch( prefs, { perPageOptions, fieldIds, layoutTypes } ) {
 	}
 
 	if ( Array.isArray( prefs.fields ) ) {
-		patch.fields = prefs.fields.filter( id => isNonEmptyString( id ) && isKnownField( id ) );
+		const fields = prefs.fields.filter( id => isNonEmptyString( id ) && isKnownField( id ) );
+		// An empty stored array means "hide every column" and is honoured.
+		// An array the filter emptied means every stored column has since
+		// been renamed or removed, so fall back to the screen's default
+		// rather than restoring a title-only list nobody asked for.
+		if ( fields.length > 0 || prefs.fields.length === 0 ) {
+			patch.fields = fields;
+		}
 	}
 
 	if ( isNonEmptyString( prefs.sort?.field ) && isKnownField( prefs.sort.field ) ) {
@@ -186,18 +225,24 @@ function toViewPatch( prefs, { perPageOptions, fieldIds, layoutTypes } ) {
  * @param {Array<string>} [options.layoutTypes]    Layout types this screen offers.
  * @param {Object}        [options.urlPatch]       View patch seeded from the URL. Applied last, so a
  *                                                 forwarded legacy link still wins over saved preferences.
+ * @param {Function}      [options.normalize]      Reconciles the restored view with the screen's own rules. Runs on
+ *                                                 the merged view, so settings a stored layout type implies are
+ *                                                 applied at mount rather than only on the next change.
  * @return {[Object, Function]} `[ view, setView ]` pair.
  */
 export default function usePersistedView(
 	screenKey,
 	defaultView,
-	{ perPageOptions = DEFAULT_PER_PAGE_OPTIONS, fieldIds = null, layoutTypes = null, urlPatch = null } = {}
+	{ perPageOptions = DEFAULT_PER_PAGE_OPTIONS, fieldIds = null, layoutTypes = null, urlPatch = null, normalize = null } = {}
 ) {
-	const [ view, setView ] = useState( () => ( {
-		...defaultView,
-		...toViewPatch( getViewPrefs()[ screenKey ], { perPageOptions, fieldIds, layoutTypes } ),
-		...( urlPatch || {} ),
-	} ) );
+	const [ view, setView ] = useState( () => {
+		const merged = {
+			...defaultView,
+			...toViewPatch( getViewPrefs()[ screenKey ], { perPageOptions, fieldIds, layoutTypes } ),
+			...( urlPatch || {} ),
+		};
+		return normalize ? normalize( merged ) : merged;
+	} );
 
 	const serialized = useMemo( () => stableStringify( toPrefs( view ) ), [ view ] );
 
@@ -241,7 +286,14 @@ export default function usePersistedView(
 
 		flushRef.current = ( { keepalive = false } = {} ) => {
 			const payload = desiredRef.current;
-			if ( payload === lastSavedRef.current || inFlightRef.current || ! isSavable( payload ) ) {
+			if ( payload === lastSavedRef.current || ! isSavable( payload ) ) {
+				return;
+			}
+			// The in-flight guard keeps debounced saves in order. On the way
+			// out ordering no longer matters, and the request in flight was
+			// started without `keepalive`, so the browser is about to cancel
+			// it and the chained save can't be relied on.
+			if ( inFlightRef.current && ! keepalive ) {
 				return;
 			}
 			save( payload, { keepalive } );

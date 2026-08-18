@@ -73,11 +73,26 @@ const DEFAULT_LAYOUTS = {
 const DATAVIEWS_CONFIG = { perPageSizes: [] };
 const PER_PAGE_OPTIONS = [ 12, 24, 48, 96, PER_PAGE_ALL ];
 
+// `mediaField` is grid-only: the table renders it in the primary column,
+// so leaving it set mounts a BlockPreview iframe in every row. Applied
+// to the restored view as well as to changes, since a stored `table`
+// arrives merged over a default that carries the grid's `preview`.
+const withLayoutMedia = view => {
+	if ( 'table' === view.type && view.mediaField ) {
+		return { ...view, mediaField: undefined };
+	}
+	if ( 'grid' === view.type && ! view.mediaField ) {
+		return { ...view, mediaField: 'preview' };
+	}
+	return view;
+};
+
 const PERSIST_OPTIONS = {
 	perPageOptions: PER_PAGE_OPTIONS,
 	fieldIds: FIELD_IDS,
 	layoutTypes: Object.keys( DEFAULT_LAYOUTS ),
 	urlPatch: getInitialView(),
+	normalize: withLayoutMedia,
 };
 
 export default function LayoutsListScreen() {
@@ -211,17 +226,7 @@ export default function LayoutsListScreen() {
 		};
 	}, [ savedPagination, prebuiltCount, showSaved, authorShowPrebuilts, ridingAlong, firstPageSavedSlots, view.perPage, view.search, fetchingAll ] );
 
-	// `mediaField` is grid-only — in table mode the per-row iframe blows
-	// out row heights, so strip it on layout switches.
-	const onChangeView = useCallback( next => {
-		if ( next.type === 'table' ) {
-			setView( { ...next, mediaField: undefined } );
-		} else if ( next.type === 'grid' && ! next.mediaField ) {
-			setView( { ...next, mediaField: 'preview' } );
-		} else {
-			setView( next );
-		}
-	}, [] );
+	const onChangeView = useCallback( next => setView( withLayoutMedia( next ) ), [] );
 
 	const onMutated = useCallback( () => setMutationKey( key => key + 1 ), [] );
 

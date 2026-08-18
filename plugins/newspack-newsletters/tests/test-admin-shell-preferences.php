@@ -247,7 +247,6 @@ class Admin_Shell_Preferences_Test extends WP_UnitTestCase {
 			[ 'type' => 'carousel' ],
 			[ 'layout' => [ 'density' => 'roomy' ] ],
 			[ 'sort' => [ 'direction' => 'sideways' ] ],
-			[ 'layout' => [ 'styles' => [ 'status' => [ 'align' => 'middle' ] ] ] ],
 		];
 		foreach ( $invalid as $prefs ) {
 			$response = rest_do_request( $this->make_request( 'newsletters-list', $prefs ) );
@@ -335,5 +334,58 @@ class Admin_Shell_Preferences_Test extends WP_UnitTestCase {
 			],
 			Admin_Shell_Preferences::get_preferences()['newsletters-list']
 		);
+	}
+
+	/**
+	 * DataViews owns the shape of a column style, so an unfamiliar key or
+	 * alignment is sanitised away rather than failing the request. Schema
+	 * validation rejects the whole payload on the first unknown key, which
+	 * would take every other appearance setting down with it and leave no
+	 * trace anywhere.
+	 */
+	public function test_an_unfamiliar_column_style_does_not_reject_the_payload() {
+		$response = rest_do_request(
+			$this->make_request(
+				'newsletters-list',
+				[
+					'layout' => [
+						'density' => 'compact',
+						'styles'  => [
+							'status' => [
+								'width'     => '120px',
+								'align'     => 'middle',
+								'resizable' => true,
+							],
+						],
+					],
+				]
+			)
+		);
+
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame(
+			[
+				'density' => 'compact',
+				'styles'  => [ 'status' => [ 'width' => '120px' ] ],
+			],
+			Admin_Shell_Preferences::get_preferences()['newsletters-list']['layout']
+		);
+	}
+
+	/**
+	 * `usermeta` is network-global. Single-site installs keep the
+	 * unprefixed key so preferences saved before this survive.
+	 */
+	public function test_the_meta_key_is_scoped_per_site_only_on_multisite() {
+		global $wpdb;
+
+		$key = Admin_Shell_Preferences::get_user_meta_key( 'newsletters-list' );
+
+		if ( is_multisite() ) {
+			$this->assertStringStartsWith( $wpdb->get_blog_prefix() . Admin_Shell_Preferences::USER_META_KEY_PREFIX, $key );
+			return;
+		}
+
+		$this->assertSame( Admin_Shell_Preferences::USER_META_KEY_PREFIX . 'newsletters-list', $key );
 	}
 }

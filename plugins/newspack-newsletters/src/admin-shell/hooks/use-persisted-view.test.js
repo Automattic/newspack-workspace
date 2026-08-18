@@ -270,5 +270,82 @@ describe( 'usePersistedView', () => {
 
 			expect( apiFetch ).toHaveBeenLastCalledWith( saved( { perPage: 20, type: 'table' } ) );
 		} );
+
+		// The request in flight was started without `keepalive`, so the
+		// browser cancels it on the way out and the chained save can't run.
+		it( 'flushes the newest value on pagehide even while a save is in flight', async () => {
+			const deferred = {};
+			apiFetch.mockImplementationOnce( () => new Promise( resolve => ( deferred.resolve = resolve ) ) );
+			apiFetch.mockResolvedValue( {} );
+
+			const { result } = renderHook( () => usePersistedView( 'newsletters-list', DEFAULT_VIEW ) );
+
+			act( () => {
+				result.current[ 1 ]( current => ( { ...current, perPage: 50 } ) );
+			} );
+			await settle();
+			expect( apiFetch ).toHaveBeenLastCalledWith( saved( { perPage: 50, type: 'table' } ) );
+
+			act( () => {
+				result.current[ 1 ]( current => ( { ...current, perPage: 20 } ) );
+			} );
+			act( () => {
+				window.dispatchEvent( new window.Event( 'pagehide' ) );
+			} );
+
+			expect( apiFetch ).toHaveBeenLastCalledWith( { ...saved( { perPage: 20, type: 'table' } ), keepalive: true } );
+		} );
+
+		// The server rejects the whole payload on an unknown key, which
+		// would take every other appearance setting down with it.
+		it( 'sends only the column-style keys the server stores', async () => {
+			const { result } = renderHook( () => usePersistedView( 'newsletters-list', DEFAULT_VIEW ) );
+
+			act( () => {
+				result.current[ 1 ]( current => ( {
+					...current,
+					layout: { styles: { status: { width: '120px', minWidth: 40, align: 'center', resizable: true }, date: { align: 'diagonal' } } },
+				} ) );
+			} );
+			await settle();
+
+			expect( apiFetch ).toHaveBeenCalledWith(
+				saved( { perPage: 25, type: 'table', layout: { styles: { status: { width: '120px', minWidth: 40, align: 'center' } } } } )
+			);
+		} );
+	} );
+
+	describe( 'reconciling a restored view', () => {
+		it( 'applies the screen normalize to the restored view', () => {
+			window.newspackNewslettersAdmin = { viewPrefs: { 'layouts-list': { type: 'table' } } };
+			const normalize = view => ( 'table' === view.type ? { ...view, mediaField: undefined } : view );
+
+			const { result } = renderHook( () =>
+				usePersistedView(
+					'layouts-list',
+					{ type: 'grid', perPage: 24, mediaField: 'preview' },
+					{ perPageOptions: [ 24 ], layoutTypes: [ 'grid', 'table' ], normalize }
+				)
+			);
+
+			expect( result.current[ 0 ].type ).toBe( 'table' );
+			expect( result.current[ 0 ].mediaField ).toBeUndefined();
+		} );
+
+		it( 'falls back to the screen default when every stored column has been renamed', () => {
+			window.newspackNewslettersAdmin = { viewPrefs: { 'newsletters-list': { fields: [ 'legacy_one', 'legacy_two' ] } } };
+
+			const { result } = renderHook( () => usePersistedView( 'newsletters-list', { ...DEFAULT_VIEW, fields: FIELDS }, { fieldIds: FIELDS } ) );
+
+			expect( result.current[ 0 ].fields ).toEqual( FIELDS );
+		} );
+
+		it( 'still honours a stored empty field list', () => {
+			window.newspackNewslettersAdmin = { viewPrefs: { 'newsletters-list': { fields: [] } } };
+
+			const { result } = renderHook( () => usePersistedView( 'newsletters-list', { ...DEFAULT_VIEW, fields: FIELDS }, { fieldIds: FIELDS } ) );
+
+			expect( result.current[ 0 ].fields ).toEqual( [] );
+		} );
 	} );
 } );

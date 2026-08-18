@@ -119,17 +119,18 @@ class Admin_Shell_Preferences {
 	 * @return array
 	 */
 	private static function get_prefs_schema(): array {
+		// Sanitised rather than rejected: DataViews owns this shape, and
+		// schema validation fails the whole request on the first unknown
+		// key, so one added property would silently stop every appearance
+		// setting persisting. `sanitize_column_style()` allowlists the same
+		// four keys on write and on read.
 		$column_style = [
-			'type'                 => 'object',
-			'additionalProperties' => false,
-			'properties'           => [
+			'type'       => 'object',
+			'properties' => [
 				'width'    => [ 'type' => [ 'string', 'integer' ] ],
 				'minWidth' => [ 'type' => [ 'string', 'integer' ] ],
 				'maxWidth' => [ 'type' => [ 'string', 'integer' ] ],
-				'align'    => [
-					'type' => 'string',
-					'enum' => self::ALIGNMENTS,
-				],
+				'align'    => [ 'type' => 'string' ],
 			],
 		];
 
@@ -423,7 +424,15 @@ class Admin_Shell_Preferences {
 	 * @return string
 	 */
 	public static function get_user_meta_key( string $screen_key ): string {
-		return self::USER_META_KEY_PREFIX . $screen_key;
+		global $wpdb;
+
+		// `usermeta` is network-global, so on multisite a bare key would
+		// share one list configuration across every site in the network.
+		// Single-site installs keep the unprefixed key so preferences saved
+		// before this survive.
+		$prefix = is_multisite() ? $wpdb->get_blog_prefix() : '';
+
+		return $prefix . self::USER_META_KEY_PREFIX . $screen_key;
 	}
 
 	/**
