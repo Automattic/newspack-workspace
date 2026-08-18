@@ -431,8 +431,14 @@ case $1 in
         docker exec $DOCKER_IT $USER_COMMAND $TARGET_CONTAINER sh -c "$command"
         ;;
     test-js)
+        if [[ -n "$2" ]]; then
+            target_folder=$2
+        fi
         require_target_folder
-        docker exec $DOCKER_IT $USER_COMMAND $TARGET_CONTAINER sh -c "/var/scripts/test-js.sh $target_folder"
+        # Run the script directly (no `sh -c`) and quote the folder: it can now
+        # come from the command line, where an unquoted value would word-split
+        # or be read as shell syntax by the container.
+        docker exec $DOCKER_IT $USER_COMMAND $TARGET_CONTAINER /var/scripts/test-js.sh "$target_folder"
         ;;
     composer)
         require_target_folder
