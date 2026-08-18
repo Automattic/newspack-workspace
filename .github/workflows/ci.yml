@@ -530,12 +530,24 @@ jobs:
         # commit that carries any resulting fixes with it.
         env:
           SHELLCHECK_VERSION: v0.11.0
+          # sha256 of shellcheck-${SHELLCHECK_VERSION}.linux.x86_64.tar.xz. A
+          # release-asset URL keyed on a tag is not an immutable reference: tags
+          # move and assets can be replaced, and this binary then executes in a
+          # job that has the repository checked out. The project publishes no
+          # checksum file, so this records the artifact we verified; the same
+          # digest is pinned by selenium, mise, grafana/alloy and others.
+          # Bumping SHELLCHECK_VERSION means replacing this line too.
+          SHELLCHECK_SHA256: 8c3be12b05d5c177a04c29e3c78ce89ac86f1595681cab149b65b97c4e227198
         # Errors only. The tree carries 119 warning-level findings across 39
         # files, so a warning gate would fail on its first run; raising the floor
         # is a separate cleanup. -x follows sourced files, honouring the
         # `# shellcheck source=` directives already in the tree.
         run: |
-          curl -fsSL "https://github.com/koalaman/shellcheck/releases/download/${SHELLCHECK_VERSION}/shellcheck-${SHELLCHECK_VERSION}.linux.x86_64.tar.xz" | tar -xJ
+          # Downloaded to a file rather than piped into tar: a stream cannot be
+          # checked before it is extracted.
+          curl -fsSL -o shellcheck.tar.xz "https://github.com/koalaman/shellcheck/releases/download/${SHELLCHECK_VERSION}/shellcheck-${SHELLCHECK_VERSION}.linux.x86_64.tar.xz"
+          echo "${SHELLCHECK_SHA256}  shellcheck.tar.xz" | sha256sum -c -
+          tar -xJf shellcheck.tar.xz
           SHELLCHECK="$PWD/shellcheck-${SHELLCHECK_VERSION}/shellcheck"
           "$SHELLCHECK" --version | sed -n '2p'
 
