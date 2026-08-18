@@ -170,6 +170,9 @@ class Test_Contact_Sync_Options extends WP_UnitTestCase {
 
 		$this->assertSame( [ 'Last Payment Date' ], Metadata::resolve_field_labels( [ 'last_payment_date' ] ) );
 		$this->assertSame( [ 'Last Subscription Payment Date' ], Metadata::resolve_field_labels( [ 'Last_Payment_Date' ] ) );
+
+		$this->assertSame( [ 'Total Paid' ], Metadata::resolve_field_labels( [ 'total_paid' ] ) );
+		$this->assertSame( [ 'Lifetime Total Paid' ], Metadata::resolve_field_labels( [ 'Total_Paid' ] ) );
 	}
 
 	public function test_resolve_field_labels_dedupes_synonymous_tokens() {

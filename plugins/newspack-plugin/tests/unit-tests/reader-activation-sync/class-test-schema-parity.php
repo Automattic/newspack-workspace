@@ -313,6 +313,21 @@ class Test_Schema_Parity extends \WP_UnitTestCase {
 			array_keys( array_filter( $migrated_metadata, fn( $value ) => '' === $value ) ),
 			'A new-schema producer emitted an empty value the legacy pipeline never sent.'
 		);
+
+		// The same two values pin the WooCommerce-less case, which is additive
+		// rather than blanking. Identity and Registration read the WP_User and
+		// never the WC_Customer, while the legacy producer (Legacy_Basic)
+		// returns nothing at all without a customer. So a legacy site with no
+		// WooCommerce, whose v1 ids therefore emitted neither key, gains these
+		// two real values on migration — and still gains no blanks.
+		$this->assertSame(
+			[
+				'NP_Account'           => $user_id,
+				'NP_Registration Date' => \get_date_from_gmt( '2024-01-15 10:00:00', 'Y-m-d H:i:s' ),
+			],
+			array_intersect_key( $migrated_metadata, array_flip( [ 'NP_Account', 'NP_Registration Date' ] ) ),
+			'The user-derived v2 producers must emit real values, not blanks, on a site with no WooCommerce.'
+		);
 	}
 
 	/**

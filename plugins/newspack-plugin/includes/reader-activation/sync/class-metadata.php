@@ -575,10 +575,11 @@ class Metadata {
 			}
 
 			// Exact-case raw key first. The two schemas' raw keys differ only in
-			// case for three fields (`payment_page` / `Payment_Page`, and the two
-			// payment amount/date keys), so the case-insensitive pass alone would
-			// resolve a legacy token to the renamed new-schema field — a
-			// different field, in a different ESP column.
+			// case for four fields (`payment_page` / `Payment_Page`, the two
+			// payment amount/date keys, and `total_paid` / `Total_Paid`), so the
+			// case-insensitive pass alone would resolve a legacy token to the
+			// renamed new-schema field — a different field, in a different ESP
+			// column.
 			$label = $available_fields[ $raw_key ] ?? $available_lookup[ $token ] ?? null;
 			if ( null !== $label ) {
 				if ( ! in_array( $label, $labels, true ) ) {
