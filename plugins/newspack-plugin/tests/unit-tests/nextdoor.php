@@ -1610,9 +1610,28 @@ class Newspack_Test_Nextdoor extends WP_UnitTestCase {
 		);
 
 		self::assertTrue( Auth::renew_rejected_token( 'valid-access' ) );
-		self::assertNotSame( Auth::REFRESH_HELD_FAILED, get_transient( Auth::REFRESH_COOLOFF_TRANSIENT ) );
+		// Held rather than dropped: the next rejection reads this instead of spending its
+		// own blocking refresh, which is what the hold-off is for.
+		self::assertSame( Auth::REFRESH_HELD_OK, get_transient( Auth::REFRESH_COOLOFF_TRANSIENT ) );
 		self::assertEmpty( get_option( Auth::REFUSAL_OPTION ) );
 		self::assertTrue( Auth::has_usable_token() );
+	}
+
+	/**
+	 * A renewal inside the hold-off reads what the last one settled rather than spending
+	 * another blocking request, the same way a validation does.
+	 */
+	public function test_a_renewal_is_held_off_after_an_attempt() {
+		$this->connect_with_a_claimed_page();
+
+		$this->http_body = wp_json_encode( [ 'access_token' => 'renewed-access' ] );
+		add_filter( 'pre_http_request', [ $this, 'stub_nextdoor_response' ], 10, 3 );
+
+		self::assertTrue( Auth::renew_rejected_token( 'valid-access' ) );
+		self::assertCount( 1, $this->http_requests );
+
+		self::assertTrue( Auth::renew_rejected_token( 'renewed-access' ) );
+		self::assertCount( 1, $this->http_requests );
 	}
 
 	/**
