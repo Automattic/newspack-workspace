@@ -421,6 +421,41 @@ class Newspack_Test_Block_Visibility extends WP_UnitTestCase {
 	}
 
 	/**
+	 * A render that shows a gated block is marked as varying from anonymous.
+	 *
+	 * Once the REST exemption is gone the response depends on who asked for it, and
+	 * batcache skips a request only when it carries an X-WP-Nonce header or a
+	 * WordPress auth cookie. An application password sends neither, so a privileged
+	 * render would be stored and served to the next anonymous caller. This pins the
+	 * decision that cancels the store.
+	 */
+	public function test_privileged_render_varies_from_anonymous() {
+		$editor_id = $this->factory->user->create( [ 'role' => 'editor' ] );
+		$post_id   = $this->factory->post->create( [ 'post_author' => $editor_id ] );
+		$rules     = [ 'registration' => [ 'active' => true ] ];
+		$block     = $this->make_block_with_rules( 'core/group', $rules, 'visible' );
+
+		Block_Visibility::reset_cache_for_tests();
+		$this->assertTrue(
+			Block_Visibility::render_varies_from_anonymous( $block, $editor_id, $post_id ),
+			'An editor sees a block an anonymous reader does not, so the render must not be cached.'
+		);
+
+		Block_Visibility::reset_cache_for_tests();
+		$this->assertFalse(
+			Block_Visibility::render_varies_from_anonymous( $block, 0, $post_id ),
+			'A withheld render is identical for everyone and stays cacheable.'
+		);
+
+		Block_Visibility::reset_cache_for_tests();
+		$ungated = $this->make_block_with_rules( 'core/group', [], 'visible' );
+		$this->assertFalse(
+			Block_Visibility::render_varies_from_anonymous( $ungated, $editor_id, $post_id ),
+			'A block with no active rules is the same for everyone, privileged or not.'
+		);
+	}
+
+	/**
 	 * A REST request is not exempt from access control.
 	 *
 	 * Access rules are evaluated for REST reads on the same terms as the front end. The
