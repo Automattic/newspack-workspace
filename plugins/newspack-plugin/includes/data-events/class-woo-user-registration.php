@@ -37,6 +37,14 @@ final class Woo_User_Registration {
 		// is processing checkout?
 		add_action( 'woocommerce_checkout_process', [ __CLASS__, 'checkout_process' ] );
 
+		// The Store API checkout — the transport express wallets like Apple Pay and
+		// Google Pay submit through — never fires woocommerce_checkout_process. This
+		// action is that pipeline's equivalent signal: it fires once per checkout
+		// POST, before the account is created, while the cart is loaded for the
+		// metadata harvest. It also fires on the pay-for-existing-order route, where
+		// no account is ever created, so the flag set there is never consumed.
+		add_action( 'woocommerce_store_api_checkout_update_customer_from_request', [ __CLASS__, 'checkout_process' ], 10, 0 );
+
 		// created a user?
 		add_action( 'woocommerce_created_customer', [ __CLASS__, 'created_customer' ], 1 );
 
@@ -58,15 +66,20 @@ final class Woo_User_Registration {
 		 *
 		 * Here, we are going to read the same information from the cart and use it to send the metadata to Newspack on registration events.
 		 */
-		foreach ( \WC()->cart->get_cart() as $cart_item_key => $values ) {
-			if ( ! empty( $values['newspack_popup_id'] ) ) {
-				self::$metadata['newspack_popup_id'] = $values['newspack_popup_id'];
-			}
-			if ( ! empty( $values['prompt_title'] ) ) {
-				self::$metadata['prompt_title'] = $values['prompt_title'];
-			}
-			if ( ! empty( $values['referer'] ) ) {
-				self::$metadata['referer'] = $values['referer'];
+		// Cart presence is the calling pipeline's guarantee, not ours — without
+		// one there is simply no campaign metadata to harvest, and the flag
+		// below must still be set so the created account is announced.
+		if ( ! empty( \WC()->cart ) ) {
+			foreach ( \WC()->cart->get_cart() as $cart_item_key => $values ) {
+				if ( ! empty( $values['newspack_popup_id'] ) ) {
+					self::$metadata['newspack_popup_id'] = $values['newspack_popup_id'];
+				}
+				if ( ! empty( $values['prompt_title'] ) ) {
+					self::$metadata['prompt_title'] = $values['prompt_title'];
+				}
+				if ( ! empty( $values['referer'] ) ) {
+					self::$metadata['referer'] = $values['referer'];
+				}
 			}
 		}
 
