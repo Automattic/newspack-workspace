@@ -298,13 +298,30 @@ class Nextdoor {
 	}
 
 	/**
+	 * Keep a credential exactly as it was issued.
+	 *
+	 * `sanitize_text_field()` drops every `%` followed by two hex digits, so an opaque
+	 * credential carrying one is kept short and the only symptom is a sign-in that never
+	 * works. Nothing renders these as HTML, leaving only whitespace and control characters
+	 * to remove.
+	 *
+	 * @param mixed $value Submitted value.
+	 * @return string Printable ASCII only.
+	 */
+	public static function sanitize_credential( $value ) {
+		return preg_replace( '/[^\x21-\x7e]/', '', (string) $value );
+	}
+
+	/**
 	 * Update Nextdoor settings.
 	 *
 	 * @param array $settings Settings array.
 	 * @return bool
 	 */
 	public static function update_settings( $settings ) {
-		return update_option( self::SETTINGS_SLUG, self::strip_centralized_credentials( $settings ) );
+		// Holds the access, refresh and client secrets, and is read only in wp-admin, REST
+		// and the editor, so it stays out of the autoloaded blob every request pays for.
+		return update_option( self::SETTINGS_SLUG, self::strip_centralized_credentials( $settings ), false );
 	}
 
 	/**

@@ -96,16 +96,11 @@ class Nextdoor_Section extends Wizard_Section {
 	/**
 	 * Keep a credential exactly as the publisher pasted it.
 	 *
-	 * `sanitize_text_field()` drops every `%` followed by two hex digits, so a secret
-	 * carrying one is stored short and the only symptom is a sign-in that never works.
-	 * Nothing renders these as HTML, leaving only whitespace and control characters to
-	 * exclude.
-	 *
 	 * @param mixed $value Submitted value.
 	 * @return string Credential, stripped of anything unprintable.
 	 */
 	public function sanitize_credential( $value ) {
-		return preg_replace( '/[^\x21-\x7e]/', '', (string) $value );
+		return Nextdoor_Module::sanitize_credential( $value );
 	}
 
 	/**
@@ -214,11 +209,14 @@ class Nextdoor_Section extends Wizard_Section {
 		if ( Optional_Modules::is_optional_module_active( 'nextdoor' ) ) {
 			$nextdoor_settings = Nextdoor_Module::get_settings();
 
-			if ( null !== $client_id ) {
+			// Blank means no change, so a value that sanitises away cannot wipe a working
+			// credential. The form omits an untouched secret rather than sending the stored
+			// one back, and nothing on the screen would show that it had been replaced.
+			if ( null !== $client_id && '' !== $client_id ) {
 				$nextdoor_settings['client_id'] = $client_id;
 			}
 
-			if ( null !== $client_secret ) {
+			if ( null !== $client_secret && '' !== $client_secret ) {
 				$nextdoor_settings['client_secret'] = $client_secret;
 			}
 

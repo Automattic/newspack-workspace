@@ -356,6 +356,9 @@ export const NextdoorForm = ( {
 									value={ clientSecret }
 									onChange={ setClientSecret }
 									type="password"
+									// An offered password would be sent as a replacement secret, and an empty
+									// field is what keeps the stored one.
+									autoComplete="one-time-code"
 									// Dots stand in for the stored secret; the field stays empty, which is
 									// what tells the server to keep what it has.
 									placeholder={
