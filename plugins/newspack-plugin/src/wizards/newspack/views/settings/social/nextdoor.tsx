@@ -41,7 +41,8 @@ const readOAuthReturn = () => {
 
 // While the module is off the endpoint returns these as an empty JSON array, which is
 // truthy, so a real field rather than the object itself says the payload is populated.
-const hasConnectionStatus = ( data: NextdoorData ) => typeof data?.connection_status?.is_connected === 'boolean';
+const hasConnectionStatus = ( data: NextdoorData ): data is NextdoorData & { connection_status: NextdoorStatus } =>
+	typeof ( data?.connection_status as NextdoorStatus )?.is_connected === 'boolean';
 
 function Nextdoor() {
 	const [ settings, setSettings ] = useState< NextdoorSettings >( {
@@ -82,14 +83,10 @@ function Nextdoor() {
 		data: {
 			module_enabled_nextdoor: false,
 			is_connected: false,
-			connection_status: {
-				is_connected: false,
-				has_credentials: false,
-				has_centralized_credentials: false,
-				has_tokens: false,
-				has_page: false,
-				token_valid: false,
-			},
+			// The shape the endpoint sends while the module is off, and deliberately not a
+			// populated status: a synced-looking default latches the gate below on its own
+			// values, so the badge would read them before the server had answered.
+			connection_status: [],
 			settings: {
 				client_id: '',
 				publication_url: '',

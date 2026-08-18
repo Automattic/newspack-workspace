@@ -20,7 +20,11 @@ export interface NextdoorStatus {
 export interface NextdoorData {
 	module_enabled_nextdoor: boolean;
 	is_connected: boolean;
-	connection_status: NextdoorStatus;
+	/**
+	 * An empty array while the module is off, which is what the endpoint sends, and what
+	 * the card starts from so it can tell an unanswered request from a real status.
+	 */
+	connection_status: NextdoorStatus | [];
 	settings: NextdoorSettings;
 }
 

@@ -15,6 +15,9 @@ let mockIsFetching = false;
 // Assigned on every render of the mocked hook, so a save can push the new payload into
 // state the way the real hook does. Nothing re-renders otherwise.
 let pushApiData = () => {};
+// What the card hands the hook, which is also what it renders from until the request
+// comes back.
+let mockHookOptions;
 
 // A save mirrors its payload into `apiData`, which is what the real hook does and what
 // the card reads back to tell an enabled integration from a disabled one.
@@ -25,7 +28,8 @@ const mockApiFetchToggle = jest.fn( payload => {
 
 jest.mock( '../../../../hooks/use-wizard-api-fetch-toggle', () => {
 	const { useState } = require( '@wordpress/element' );
-	const useWizardApiFetchToggle = () => {
+	const useWizardApiFetchToggle = options => {
+		mockHookOptions = options;
 		const [ apiData, setApiData ] = useState( mockApiData );
 		pushApiData = setApiData;
 		return {
@@ -136,6 +140,15 @@ describe( 'Nextdoor card', () => {
 		render( <Nextdoor /> );
 
 		expect( screen.getByText( 'Enabled' ) ).toBeInTheDocument();
+	} );
+
+	it( 'starts from a status the server has not answered yet', () => {
+		render( <Nextdoor /> );
+
+		// A populated default would satisfy the sync gate on the first render and latch it
+		// on its own all-false values, so the badge would read them over the payload and
+		// show a connected integration as `Not connected` until the effect caught up.
+		expect( Array.isArray( mockHookOptions.data.connection_status ) ).toBe( true );
 	} );
 
 	it( 'does not read an unsynced status as a connection that needs renewing', () => {
