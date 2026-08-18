@@ -161,9 +161,11 @@ describe( 'AdsQuickEditPanel taxonomy seeding', () => {
 		expect( screen.getByTestId( 'panel-dirty' ) ).toHaveTextContent( 'false' );
 	} );
 
-	// Every save sends all three taxonomies, so a picker that seeded empty
-	// would silently clear the ad's terms.
-	it( 'sends the existing term IDs back on a status-only save', async () => {
+	// A save only carries the taxonomies the user touched. Sending all
+	// three every time would clear them whenever a seed came back empty,
+	// and an ad with no categories runs in every newsletter rather than
+	// none.
+	it( 'leaves the taxonomies out of a status-only save', async () => {
 		renderPanel( itemWithTerms() );
 		await screen.findByRole( 'radio', { name: 'Active' } );
 
@@ -171,10 +173,38 @@ describe( 'AdsQuickEditPanel taxonomy seeding', () => {
 		fireEvent.click( screen.getByTestId( 'panel-save' ) );
 
 		await waitFor( () => expect( postCall() ).toBeDefined() );
-		expect( postCall().data ).toMatchObject( {
-			newspack_nl_advertiser: [ 10 ],
-			ad_placement: [ 20 ],
-			categories: [],
-		} );
+		expect( postCall().data ).not.toHaveProperty( 'newspack_nl_advertiser' );
+		expect( postCall().data ).not.toHaveProperty( 'ad_placement' );
+		expect( postCall().data ).not.toHaveProperty( 'categories' );
+		expect( postCall().data ).toMatchObject( { status: 'draft' } );
+	} );
+
+	it( 'omits the taxonomies when the item arrives without the terms field', async () => {
+		const item = itemWithTerms();
+		delete item.newspack_newsletters_terms;
+		renderPanel( item );
+		await screen.findByRole( 'radio', { name: 'Active' } );
+
+		fireEvent.click( screen.getByRole( 'radio', { name: 'Inactive' } ) );
+		fireEvent.click( screen.getByTestId( 'panel-save' ) );
+
+		await waitFor( () => expect( postCall() ).toBeDefined() );
+		expect( postCall().data ).not.toHaveProperty( 'newspack_nl_advertiser' );
+		expect( postCall().data ).not.toHaveProperty( 'ad_placement' );
+		expect( postCall().data ).not.toHaveProperty( 'categories' );
+	} );
+
+	it( 'sends a taxonomy the user actually edited', async () => {
+		const { container } = renderPanel( itemWithTerms() );
+		await screen.findByRole( 'radio', { name: 'Active' } );
+
+		const removeAcme = [ ...container.querySelectorAll( '.components-form-token-field__remove-token' ) ][ 0 ];
+		fireEvent.click( removeAcme );
+		fireEvent.click( screen.getByTestId( 'panel-save' ) );
+
+		await waitFor( () => expect( postCall() ).toBeDefined() );
+		expect( postCall().data ).toMatchObject( { newspack_nl_advertiser: [] } );
+		expect( postCall().data ).not.toHaveProperty( 'ad_placement' );
+		expect( postCall().data ).not.toHaveProperty( 'categories' );
 	} );
 } );

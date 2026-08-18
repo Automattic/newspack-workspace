@@ -60,14 +60,18 @@ export default function AdsQuickEditPanel( { item, advertisers, placements, onCl
 	const [ price, setPrice ] = useState( initialPrice );
 	const [ isBusy, setIsBusy ] = useState( false );
 
+	const advertisersDirty = ! sortedIdsEqual( advertiserSelections, initialAdvertiserSelections );
+	const placementsDirty = ! sortedIdsEqual( placementSelections, initialPlacementSelections );
+	const categoriesDirty = ! sortedIdsEqual( categorySelections, initialCategorySelections );
+
 	const isDirty =
 		status !== initialStatus ||
 		startDate !== initialStartDate ||
 		expiryDate !== initialExpiryDate ||
 		price !== initialPrice ||
-		! sortedIdsEqual( advertiserSelections, initialAdvertiserSelections ) ||
-		! sortedIdsEqual( placementSelections, initialPlacementSelections ) ||
-		! sortedIdsEqual( categorySelections, initialCategorySelections );
+		advertisersDirty ||
+		placementsDirty ||
+		categoriesDirty;
 
 	const advertiserSuggestions = useMemo( () => advertisers.map( t => String( t.name ) ), [ advertisers ] );
 	const placementSuggestions = useMemo( () => placements.map( t => String( t.name ) ), [ placements ] );
@@ -96,12 +100,20 @@ export default function AdsQuickEditPanel( { item, advertisers, placements, onCl
 			expiry_date: expiryDate,
 			price: price === '' ? 0 : Number( price ),
 		};
-		const data = {
-			newspack_nl_advertiser: advertiserSelections.map( s => s.id ),
-			ad_placement: placementSelections.map( s => s.id ),
-			categories: categorySelections.map( s => s.id ),
-			meta,
-		};
+		// Only send a taxonomy the user actually touched. Sending all three
+		// unconditionally would clear them whenever the seed came back
+		// empty, and an ad with no categories runs in every newsletter
+		// rather than none.
+		const data = { meta };
+		if ( advertisersDirty ) {
+			data.newspack_nl_advertiser = advertiserSelections.map( s => s.id );
+		}
+		if ( placementsDirty ) {
+			data.ad_placement = placementSelections.map( s => s.id );
+		}
+		if ( categoriesDirty ) {
+			data.categories = categorySelections.map( s => s.id );
+		}
 		if ( status !== initialStatus ) {
 			data.status = status === 'active' ? 'publish' : 'draft';
 		}
