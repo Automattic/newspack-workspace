@@ -58,7 +58,6 @@ function Nextdoor() {
 		has_page: false,
 		token_valid: false,
 	} );
-	const [ hasSyncedStatus, setHasSyncedStatus ] = useState( false );
 	const [ error, setError ] = useState< string | null >( null );
 	const [ errorNonce, setErrorNonce ] = useState( 0 );
 	const [ oauthReturn ] = useState( readOAuthReturn );
@@ -111,7 +110,6 @@ function Nextdoor() {
 			return;
 		}
 		setStatus( apiData.connection_status );
-		setHasSyncedStatus( true );
 		setSettings( current => ( { ...current, ...apiData.settings } ) );
 	}, [ apiData ] );
 
@@ -172,9 +170,10 @@ function Nextdoor() {
 	const [ hasAutoOpened, setHasAutoOpened ] = useState( false );
 
 	const isEnabled = apiData.module_enabled_nextdoor;
-	// The badge follows `status`, but only once synced: its initial `false` is
-	// indistinguishable from a real "not connected" and would flash on every load.
-	const isConnected = hasSyncedStatus ? status.is_connected : apiData.is_connected;
+	// Read off the payload rather than the state mirrored from it, which is a render behind
+	// on the load the answer arrives in: reading that would report a connection by its
+	// defaults, which are indistinguishable from a real "not connected" and a lapsed token.
+	const connection = hasConnectionStatus( apiData ) ? apiData.connection_status : status;
 
 	// Only the OAuth redirect reopens the card: that user arrives on a fresh page load
 	// mid-setup, so their step would otherwise be invisible. A failure reopens it even when
@@ -183,12 +182,12 @@ function Nextdoor() {
 		if ( hasAutoOpened || isFetching || ! isEnabled ) {
 			return;
 		}
-		if ( ! oauthReturn.hasError && ( isConnected || ! oauthReturn.isReturn ) ) {
+		if ( ! oauthReturn.hasError && ( connection.is_connected || ! oauthReturn.isReturn ) ) {
 			return;
 		}
 		setHasAutoOpened( true );
 		setIsOpen( true );
-	}, [ hasAutoOpened, isFetching, isEnabled, isConnected, oauthReturn ] );
+	}, [ hasAutoOpened, isFetching, isEnabled, connection.is_connected, oauthReturn ] );
 
 	const badge = ( () => {
 		if ( errorMessage ) {
@@ -197,11 +196,10 @@ function Nextdoor() {
 		if ( ! isEnabled || ( isOpen && isEnabling ) ) {
 			return undefined;
 		}
-		if ( ! isConnected ) {
+		if ( ! connection.is_connected ) {
 			return { level: 'error' as const, text: __( 'Not connected', 'newspack-plugin' ) };
 		}
-		// Same sync gate: the initial `token_valid: false` is indistinguishable from expiry.
-		if ( hasSyncedStatus && ! status.token_valid ) {
+		if ( ! connection.token_valid ) {
 			return { level: 'error' as const, text: __( 'Reconnect needed', 'newspack-plugin' ) };
 		}
 		return { level: 'success' as const, text: __( 'Enabled', 'newspack-plugin' ) };

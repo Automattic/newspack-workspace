@@ -1,7 +1,7 @@
 /**
  * External dependencies
  */
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
 
 /**
  * Internal dependencies
@@ -142,24 +142,32 @@ describe( 'Nextdoor card', () => {
 		expect( screen.getByText( 'Enabled' ) ).toBeInTheDocument();
 	} );
 
-	it( 'starts from a status the server has not answered yet', () => {
+	it( 'starts from the shape the server sends while the integration is off', () => {
 		render( <Nextdoor /> );
 
-		// A populated default would satisfy the sync gate on the first render and latch it
-		// on its own all-false values, so the badge would read them over the payload and
-		// show a connected integration as `Not connected` until the effect caught up.
+		// The endpoint answers with an empty array until the module is on, and the card has
+		// to be able to tell that from a status, so its own starting point says the same.
 		expect( Array.isArray( mockHookOptions.data.connection_status ) ).toBe( true );
 	} );
 
-	it( 'does not read an unsynced status as a connection that needs renewing', () => {
-		// While the module is off the endpoint answers with an empty array, so nothing
-		// says whether the token is good. Its default `false` must not reach the badge.
-		mockApiData = data( { module_enabled_nextdoor: true, is_connected: true, connection_status: [] } );
-
+	it( 'reads a lapsed token off the answer as it arrives', async () => {
+		// The card starts from its own defaults and the answer lands a render later, so a
+		// badge reading state mirrored from that answer would call the connection healthy
+		// for a render before turning red.
 		render( <Nextdoor /> );
 
-		expect( screen.getByText( 'Enabled' ) ).toBeInTheDocument();
-		expect( screen.queryByText( 'Reconnect needed' ) ).not.toBeInTheDocument();
+		await act( async () => {
+			pushApiData(
+				data( {
+					module_enabled_nextdoor: true,
+					is_connected: true,
+					connection_status: { ...CONNECTED, token_valid: false },
+				} )
+			);
+		} );
+
+		expect( screen.getByText( 'Reconnect needed' ) ).toBeInTheDocument();
+		expect( screen.queryByText( 'Enabled' ) ).not.toBeInTheDocument();
 	} );
 
 	it( 'reports a failed request ahead of the connection state', () => {
