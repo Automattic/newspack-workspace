@@ -169,6 +169,37 @@ class Newspack_Test_Woo_User_Registration extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Each checkout signal harvests its own campaign metadata. The Store API
+	 * batch route serves up to 25 requests in one PHP process, so a second
+	 * checkout must not inherit the first one's attribution.
+	 *
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
+	 */
+	public function test_second_checkout_does_not_inherit_campaign_metadata() {
+		$this->stub_wc_with_cart(
+			[
+				'item1' => [
+					'newspack_popup_id' => 123,
+					'referer'           => '/donate/',
+				],
+			]
+		);
+		do_action( 'woocommerce_store_api_checkout_update_customer_from_request', null, new WP_REST_Request( 'POST', '/wc/store/v1/checkout' ) );
+		do_action( 'woocommerce_created_customer', self::factory()->user->create( [ 'user_email' => 'batch-first@example.test' ] ) );
+
+		// Second checkout in the same process, with nothing to harvest.
+		WC()->cart = new WC_Cart( [] );
+		do_action( 'woocommerce_store_api_checkout_update_customer_from_request', null, new WP_REST_Request( 'POST', '/wc/store/v1/checkout' ) );
+		do_action( 'woocommerce_created_customer', self::factory()->user->create( [ 'user_email' => 'batch-second@example.test' ] ) );
+
+		$this->assertCount( 2, $this->fired );
+		$this->assertArrayNotHasKey( 'newspack_popup_id', $this->fired[1]['metadata'], 'The second checkout should not inherit the first one\'s campaign attribution.' );
+		$this->assertArrayNotHasKey( 'referer', $this->fired[1]['metadata'] );
+		$this->assertSame( 123, $this->fired[0]['metadata']['newspack_popup_id'], 'The first checkout keeps its own attribution.' );
+	}
+
+	/**
 	 * Classic checkout keeps announcing (regression control).
 	 *
 	 * @runInSeparateProcess

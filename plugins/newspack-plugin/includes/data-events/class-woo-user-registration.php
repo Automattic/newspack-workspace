@@ -59,6 +59,11 @@ final class Woo_User_Registration {
 	 */
 	public static function checkout_process() {
 
+		// One signal, one checkout: the Store API's batch route serves several
+		// checkouts in a single PHP process, so metadata harvested for an
+		// earlier one must not be attributed to this reader.
+		self::$metadata = [];
+
 		/**
 		 * On Newspack\Donations::process_donation_request(), we add these values to the cart.
 		 *
