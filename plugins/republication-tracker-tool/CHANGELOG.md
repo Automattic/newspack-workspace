@@ -1,3 +1,10 @@
+## republication-tracker-tool [2.9.1](https://github.com/Automattic/newspack-workspace/compare/republication-tracker-tool@2.9.0...republication-tracker-tool@2.9.1) (2026-08-18)
+
+
+### Bug Fixes
+
+* **rtt:** filter bots and dedup repeat views in pixel counter ([#593](https://github.com/Automattic/newspack-workspace/issues/593)) ([2f1af3c](https://github.com/Automattic/newspack-workspace/commit/2f1af3cf7ce5047acec4eaf52fc79fde1d664eb2))
+
 # republication-tracker-tool [2.9.0](https://github.com/Automattic/newspack-workspace/compare/republication-tracker-tool@2.8.4...republication-tracker-tool@2.9.0) (2026-08-17)
 
 
