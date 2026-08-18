@@ -41,7 +41,7 @@ export interface OAuthResponse {
 }
 
 export interface ClaimPageResponse {
-	page_id?: number;
+	page_id?: string;
 	success?: boolean;
 }
 
