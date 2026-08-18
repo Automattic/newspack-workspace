@@ -15,6 +15,10 @@
 # as a single argv entry: interpolated unquoted into `sh -c`, a value carrying a
 # space or a `;` would word-split or be read as shell syntax there.
 #
+# Scope: this covers argument routing on the host only. The docker stub records
+# what it was handed and never runs it, so nothing here observes container-side
+# execution; the argv-entry assertion is what pins the quoting.
+#
 # Run: bash bin/tests/test-n-test-js-name-argument.sh
 
 set -uo pipefail # not -e: one case asserts a non-zero exit.
