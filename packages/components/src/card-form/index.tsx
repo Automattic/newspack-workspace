@@ -86,9 +86,10 @@ const CardForm = ( { title, description, badge, actions, isOpen = false, onReque
 		}
 		return () => {
 			const previous = previousActiveRef.current;
-			// A card opened without a trigger captured the body; focusing that on close would
+			// A card opened without a trigger captured the body, and one unmounted while open
+			// captured a node that has since left the document. Focusing either on close would
 			// send the reader to the top of the page.
-			if ( previous && previous !== previous.ownerDocument?.body ) {
+			if ( previous && previous.isConnected && previous !== previous.ownerDocument?.body ) {
 				previous.focus?.();
 			}
 		};
