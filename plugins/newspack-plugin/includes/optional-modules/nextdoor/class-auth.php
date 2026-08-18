@@ -425,7 +425,10 @@ class Auth {
 	/**
 	 * Hold off the next refresh attempt, recording what this one settled.
 	 *
-	 * @param bool $failed Whether the attempt came back an error.
+	 * @param bool $failed Whether the stored grant should be treated as failing until the
+	 *                       hold-off lapses. What the call concluded rather than what the
+	 *                       request answered: a refusal of a grant another request has since
+	 *                       replaced says nothing about what is stored now.
 	 * @return void
 	 */
 	private static function hold_off_refresh( $failed = false ) {
@@ -478,7 +481,12 @@ class Auth {
 			$settings['refresh_token']
 		);
 
-		self::hold_off_refresh( is_wp_error( $refresh_response ) );
+		// Recorded as what this call concluded rather than what the request answered, the
+		// same way the refusal above is. The hold-off is site-wide, so a refusal of a grant
+		// another request rotated meanwhile would answer a healthy connection with an outage.
+		$lost_the_race = Nextdoor::get_settings()['refresh_token'] !== $settings['refresh_token'];
+
+		self::hold_off_refresh( is_wp_error( $refresh_response ) && ! $lost_the_race );
 
 		return true;
 	}
