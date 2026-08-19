@@ -25,7 +25,7 @@ import ImpactEmpty, { type ImpactEmptyReason } from './impact-empty';
 import ImpactStats from './impact-stats';
 import ImpactTable from './impact-table';
 import { formatCount } from './impact-format';
-import { RULE_PREVIEW_API_PATH as PREVIEW_PATH, RULE_PREVIEW_SAMPLE_LIMIT } from './constants';
+import { RULE_PREVIEW_API_PATH as PREVIEW_PATH } from './constants';
 
 const DEBOUNCE_MS = 500;
 
@@ -113,7 +113,7 @@ export default function RulePreview( { body, hasPrice }: RulePreviewProps ) {
 				audience={ preview.audience }
 			/>
 			<ImpactTable baseline={ preview.sample } segmentGroups={ preview.segment_groups ?? [] } currency={ preview.currency } />
-			{ preview.preview_limited && preview.sample_count >= RULE_PREVIEW_SAMPLE_LIMIT && (
+			{ preview.preview_limited && (
 				<p className="newspack-pricing-rules__muted">
 					{ sprintf(
 						/* translators: %s: how many products the table lists. */
