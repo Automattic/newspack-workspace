@@ -52,6 +52,10 @@ class Newspack_Test_User_Row_Actions_Escaping extends WP_UnitTestCase {
 	 */
 	public function set_up() {
 		parent::set_up();
+		// Sample_Integration carries mutable statics; an earlier test leaving
+		// $can_sync_error_codes set makes can_sync() fail and the contact-sync
+		// row action absent, so this file would fail on its precondition.
+		\Sample_Integration::reset();
 		$this->original_request_uri = isset( $_SERVER['REQUEST_URI'] ) ? $_SERVER['REQUEST_URI'] : null; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput -- snapshot restored verbatim in tear_down().
 		add_filter( 'newspack_reader_activation_enabled', '__return_true' );
 		// The row actions render on wp-admin/users.php; get_admin_action_url()
@@ -62,7 +66,12 @@ class Newspack_Test_User_Row_Actions_Escaping extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Restore global state touched by these tests.
+	 * Restore the global state the framework does not.
+	 *
+	 * WP_UnitTestCase restores the hook registry from its backup and rolls
+	 * back the per-test DB transaction, so removing filters or deleting
+	 * options here would be a no-op. What survives both is the superglobal,
+	 * the current screen and the static integrations registry.
 	 */
 	public function tear_down() {
 		if ( null === $this->original_request_uri ) {
@@ -71,9 +80,6 @@ class Newspack_Test_User_Row_Actions_Escaping extends WP_UnitTestCase {
 			$_SERVER['REQUEST_URI'] = $this->original_request_uri;
 		}
 		set_current_screen( 'front' );
-		remove_filter( 'newspack_reader_activation_enabled', '__return_true' );
-		remove_filter( 'newspack_reader_activation_is_syncing_allowed', '__return_true' );
-		delete_option( Integrations::OPTION_NAME );
 		$this->reset_integrations();
 		Integrations::register_integrations();
 		parent::tear_down();
@@ -94,12 +100,13 @@ class Newspack_Test_User_Row_Actions_Escaping extends WP_UnitTestCase {
 	 * The magic-link "Send authentication link" row action must escape the URL.
 	 */
 	public function test_magic_link_row_action_escapes_request_uri() {
-		// register_reader() must run for a logged-out visitor; then act as the admin.
-		wp_set_current_user( 0 );
-		$reader_id = Reader_Activation::register_reader( 'reader-nppm3043@example.com', 'Reader NPPM3043' );
-		wp_set_current_user( $this->admin_id );
+		// can_magic_link() needs only reader activation plus is_user_reader(),
+		// which the np_reader meta satisfies. register_reader() would also pull
+		// welcome email, data events and ESP sync into a test about esc_url().
+		$reader_id = self::factory()->user->create();
+		update_user_meta( $reader_id, Reader_Activation::READER, true );
 		$reader = get_user_by( 'id', $reader_id );
-		$this->assertInstanceOf( \WP_User::class, $reader, 'Precondition: the reader account was created.' );
+		$this->assertTrue( Magic_Link::can_magic_link( $reader_id ), 'Precondition: the user qualifies for a magic link.' );
 
 		foreach ( $this->breakout_request_uris() as $label => $uri ) {
 			$_SERVER['REQUEST_URI'] = $uri;
@@ -136,9 +143,21 @@ class Newspack_Test_User_Row_Actions_Escaping extends WP_UnitTestCase {
 	 * filter that perturbs `<svg` but leaves the attribute-closing `"` intact,
 	 * and against breakout vectors that use no `<` (e.g. `" onmouseover=…`).
 	 *
+	 * The quote count alone would pass on an empty href, which is reachable:
+	 * both get_admin_action_url() implementations return '' when is_admin()
+	 * is false, while the row action is registered either way. So assert the
+	 * link is still populated and functional, not merely well-formed.
+	 *
 	 * @param string $anchor The rendered row-action anchor markup.
 	 */
 	private function assert_href_not_breakable( $anchor ) {
 		$this->assertSame( 2, substr_count( $anchor, '"' ), 'The row-action href must not be breakable out of: ' . $anchor );
+
+		preg_match( '/href="([^"]*)"/', $anchor, $matches );
+		$href = isset( $matches[1] ) ? $matches[1] : '';
+		$this->assertNotSame( '', $href, 'An empty href satisfies the quote count without proving anything: ' . $anchor );
+		$this->assertStringContainsString( 'uid=', $href, 'The escaped href must still carry the user id: ' . $anchor );
+		$this->assertStringContainsString( '_wpnonce=', $href, 'The escaped href must still carry the nonce: ' . $anchor );
+		$this->assertStringContainsString( '&#038;', $href, 'esc_url() must encode the query-arg separators: ' . $anchor );
 	}
 }
