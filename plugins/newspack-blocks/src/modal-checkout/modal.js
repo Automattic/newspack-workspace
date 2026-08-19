@@ -791,19 +791,24 @@ domReady( () => {
 			// became ready. Returning false keeps the URL params (see
 			// handleModalCheckoutUrlParams), so the retry — or a reload, if
 			// readiness never comes — still has them; a successful retry strips
-			// them here since the caller's pass is already over.
+			// them here since the caller's pass is already over. Waiting is the
+			// expected order on healthy loads, so nothing is logged unless
+			// readiness never arrives.
+			const readyWarningTimeout = setTimeout( () => {
+				// eslint-disable-next-line no-console
+				console.warn(
+					`Newspack modal checkout: the donate form matching ${ described } never finished initializing. The checkout was not triggered; the URL params were kept so a reload can retry.`
+				);
+			}, 5000 );
 			document.addEventListener(
 				TIERS_BASED_READY_EVENT,
 				() => {
+					clearTimeout( readyWarningTimeout );
 					if ( triggerDonationForm( layout, frequency, amount, other ) ) {
 						window.history.replaceState( null, null, window.location.pathname );
 					}
 				},
 				{ once: true }
-			);
-			// eslint-disable-next-line no-console
-			console.warn(
-				`Newspack modal checkout: the donate form matching ${ described } is still initializing — the trigger will retry when it is ready.`
 			);
 			return false;
 		}
