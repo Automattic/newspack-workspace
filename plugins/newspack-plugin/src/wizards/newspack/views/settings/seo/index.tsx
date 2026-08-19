@@ -128,7 +128,7 @@ function Seo() {
 					disabled={ isFetching }
 					toggleChecked={ data.under_construction }
 					title={ __( 'Under construction', 'newspack' ) }
-					toggleOnChange={ under_construction => setData( { ...data, under_construction } ) }
+					toggleOnChange={ ( under_construction: boolean ) => setData( { ...data, under_construction } ) }
 					description={ __( 'Discourage search engines from indexing this site.', 'newspack' ) }
 				/>
 			</WizardSection>
