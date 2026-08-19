@@ -1,40 +1,64 @@
 /**
  * WordPress dependencies
  */
-import { useState } from '@wordpress/element';
-import { Icon, chevronRight } from '@wordpress/icons';
+// eslint-disable-next-line @wordpress/no-unsafe-wp-apis
+import { __experimentalVStack as VStack, PanelBody } from '@wordpress/components';
+import { Children, Fragment, cloneElement } from '@wordpress/element';
 
 /**
  * External dependencies
  */
 import classNames from 'classnames';
-import type { ReactNode } from 'react';
+import type { ReactElement, ReactNode } from 'react';
 
 /**
  * Internal dependencies
  */
+import Divider from '../divider';
 import './style.scss';
 
-type AccordionProps = {
-	children: ReactNode;
-	title: ReactNode;
+type AccordionPanelProps = {
+	children?: ReactNode;
+	className?: string;
+	title?: string;
 	defaultOpen?: boolean;
 };
 
-const Accordion = ( { children, title, defaultOpen = false }: AccordionProps ) => {
-	const [ isOpen, setIsOpen ] = useState( defaultOpen );
+export const AccordionPanel = ( { children, className, title, defaultOpen = false }: AccordionPanelProps ) => (
+	<PanelBody className={ className } title={ title } initialOpen={ defaultOpen }>
+		{ children }
+	</PanelBody>
+);
+
+type AccordionProps = {
+	children?: ReactNode;
+	className?: string;
+	/** Render a lone panel open and untitled, with nothing to collapse against. */
+	hideSingleTitle?: boolean;
+	/** Vertical gap between panels, in 4px units. */
+	spacing?: number;
+};
+
+const Accordion = ( { children, className, hideSingleTitle = false, spacing = 6 }: AccordionProps ) => {
+	// Children are AccordionPanel elements; toArray drops nullish entries and keys the rest.
+	const panels = Children.toArray( children ) as ReactElement[];
+	// With nothing to collapse against, a lone panel can render open and untitled.
+	if ( hideSingleTitle && panels.length === 1 ) {
+		return (
+			<div className={ classNames( 'newspack-accordion', className ) }>
+				{ cloneElement( panels[ 0 ], { defaultOpen: true, title: undefined } ) }
+			</div>
+		);
+	}
 	return (
-		<details
-			className={ classNames( 'newspack-accordion', { 'newspack-accordion--is-open': isOpen } ) }
-			open={ isOpen }
-			onToggle={ e => setIsOpen( e.currentTarget.open ) }
-		>
-			<summary>
-				{ title }
-				<Icon className="newspack-accordion__icon" icon={ chevronRight } size={ 24 } />
-			</summary>
-			<div className="newspack-accordion__content">{ children }</div>
-		</details>
+		<VStack className={ classNames( 'newspack-accordion', className ) } spacing={ spacing }>
+			{ panels.map( ( panel, index ) => (
+				<Fragment key={ panel.key }>
+					{ panel }
+					{ index < panels.length - 1 && <Divider variant="secondary" marginBottom={ 0 } marginTop={ 0 } /> }
+				</Fragment>
+			) ) }
+		</VStack>
 	);
 };
 

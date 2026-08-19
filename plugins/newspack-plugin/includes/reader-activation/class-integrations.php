@@ -87,6 +87,7 @@ class Integrations {
 		require_once __DIR__ . '/integrations/class-integration.php';
 		require_once __DIR__ . '/integrations/class-contact-pull.php';
 		require_once __DIR__ . '/integrations/class-contact-cron.php';
+		require_once __DIR__ . '/integrations/class-form-capture.php';
 
 		add_action( 'init', [ __CLASS__, 'register_integrations' ], 5 );
 		add_action( 'init', [ __CLASS__, 'register_my_account_endpoints' ], 6 );
@@ -279,6 +280,7 @@ class Integrations {
 	public static function register_integrations() {
 		// Native integrations.
 		self::register( new Integrations\ESP() );
+		self::register( new Integrations\Form_Capture() );
 
 		// Hook for other plugins/code to register their integrations.
 		do_action( 'newspack_reader_activation_register_integrations' );
@@ -344,6 +346,11 @@ class Integrations {
 		}
 
 		$enabled[] = $integration_id;
+
+		// Put the registration key seed in place before any page can emit the
+		// key, so the write stays off the render path. Integrations enabled
+		// before this existed fall back to seeding on first read.
+		self::$integrations[ $integration_id ]->ensure_registration_key_seed();
 
 		return update_option( self::OPTION_NAME, $enabled );
 	}
@@ -479,14 +486,18 @@ class Integrations {
 				continue;
 			}
 			$result[ $id ] = [
-				'id'               => $id,
-				'name'             => $integration->get_name(),
-				'description'      => $integration->get_description(),
-				'enabled'          => self::is_enabled( $id ),
-				'is_set_up'        => $integration->is_set_up(),
-				'setup_url'        => $integration->get_setup_url(),
-				'settings'         => $integration->get_settings_config(),
-				'required_plugins' => $integration->get_required_plugins(),
+				'id'                       => $id,
+				'name'                     => $integration->get_name(),
+				'description'              => $integration->get_description(),
+				'enabled'                  => self::is_enabled( $id ),
+				'is_set_up'                => (bool) $integration->is_set_up(),
+				'is_connected'             => (bool) $integration->is_connected(),
+				'unsupported_reason'       => $integration->get_unsupported_reason(),
+				'unsupported_action_label' => $integration->get_unsupported_action_label(),
+				'provider'                 => $integration->get_provider_slug(),
+				'setup_url'                => $integration->get_setup_url(),
+				'settings'                 => $integration->get_settings_config(),
+				'required_plugins'         => $integration->get_required_plugins(),
 			];
 		}
 

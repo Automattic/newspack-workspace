@@ -67,14 +67,19 @@ export type CoreCardProps = {
 	footerStyle?: CSSProperties;
 	disabled?: boolean;
 	icon?: WpIcon | null;
+	/** A ready-made element rendered in the icon slot, as an alternative to `icon`. */
+	iconElement?: ReactNode;
 	iconBackgroundColor?: string | boolean;
 	isActive?: boolean;
 	isDraggable?: boolean;
 	isFirstTarget?: boolean;
 	isLastTarget?: boolean;
 	isNarrow?: boolean;
+	/** Renders the card as a chooser: chooser chrome plus hover/focus rings. Pair with `isActive`. */
+	isSelectable?: boolean;
 	isSmall?: boolean;
 	isMedium?: boolean;
+	isVertical?: boolean;
 	isWhite?: boolean;
 	dragIndex?: number | null;
 	onDragCallback?: ( fromIndex: number, toIndex: number ) => void;
@@ -88,7 +93,13 @@ export type CoreCardProps = {
 	title?: string;
 	size?: ComponentProps< typeof CardHeader >[ 'size' ];
 	isBorderless?: boolean;
-};
+	/** Forwarded to the underlying element; the button `type` when rendered as `as="button"`. */
+	type?: 'button' | 'submit' | 'reset';
+	/** Forwarded to the underlying element, for cards rendered as an interactive control. */
+	onClick?: React.MouseEventHandler;
+	role?: React.AriaRole;
+	tabIndex?: number;
+} & React.AriaAttributes;
 
 const CoreCard = ( {
 	actions,
@@ -104,13 +115,17 @@ const CoreCard = ( {
 	footerStyle,
 	disabled,
 	icon,
+	iconElement,
 	iconBackgroundColor,
 	isActive,
 	isDraggable,
 	isFirstTarget,
 	isLastTarget,
 	isNarrow,
+	isSelectable,
 	isSmall,
+	isVertical,
+	size,
 	dragIndex,
 	onDragCallback = () => {},
 	onToggle = () => {},
@@ -123,6 +138,8 @@ const CoreCard = ( {
 	...otherProps
 }: CoreCardProps ) => {
 	const hasActions = ( actions?.length ?? 0 ) > 0;
+	// `size` styles the body; a small card ignores it so it stays compact.
+	const bodySize = isSmall ? undefined : size;
 	const classes = classNames(
 		'newspack-card--core',
 		className,
@@ -131,7 +148,10 @@ const CoreCard = ( {
 		isDraggable && 'newspack-card--core__is-draggable',
 		isNarrow && 'newspack-card--core__is-narrow',
 		isSmall && 'newspack-card--core__is-small',
-		!! icon && 'newspack-card--core__has-icon',
+		isSelectable && 'newspack-card--core__is-selectable',
+		bodySize === 'large' && 'newspack-card--core__is-large',
+		isVertical && 'newspack-card--core__is-vertical',
+		!! ( icon || iconElement ) && 'newspack-card--core__has-icon',
 		!! iconBackgroundColor && 'newspack-card--core__has-icon-background-color',
 		isActive && 'newspack-card--core__is-active',
 		disabled && 'newspack-card--core__is-disabled',
@@ -139,7 +159,7 @@ const CoreCard = ( {
 		noMargin && 'newspack-card--core__no-margin',
 		hasGreyHeader && 'newspack-card--core__has-grey-header'
 	);
-	let sizeProps = isSmall ? ( 'small' as const ) : otherProps.size;
+	let sizeProps = isSmall ? ( 'small' as const ) : size;
 	let wrapperAs = as;
 	if ( buttonsCard || as === 'a' ) {
 		if ( ! isSmall ) {
@@ -175,8 +195,8 @@ const CoreCard = ( {
 		tone: headerAction?.tone || 'primary',
 	};
 	return (
-		<CardWrapper as={ wrapperAs } className={ classes } { ...otherProps }>
-			{ ( header || icon ) && (
+		<CardWrapper as={ wrapperAs } className={ classes } size={ bodySize } { ...otherProps }>
+			{ ( header || icon || iconElement ) && (
 				<CardHeader
 					className={ classNames(
 						'newspack-card--core__header',
@@ -210,10 +230,14 @@ const CoreCard = ( {
 							</div>
 						</div>
 					) }
-					{ icon && (
-						<div className="newspack-card--core__icon">
-							<Icon icon={ icon } height={ isSmall ? 24 : 48 } width={ isSmall ? 24 : 48 } />
-						</div>
+					{ iconElement ? (
+						<div className="newspack-card--core__icon-slot">{ iconElement }</div>
+					) : (
+						icon && (
+							<div className="newspack-card--core__icon">
+								<Icon icon={ icon } height={ isSmall ? 24 : 48 } width={ isSmall ? 24 : 48 } />
+							</div>
+						)
 					) }
 					{ hasActions && actionType === 'toggle' && (
 						<ToggleControl

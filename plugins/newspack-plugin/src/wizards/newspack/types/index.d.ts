@@ -90,7 +90,7 @@ declare global {
 			collections: WizardTab;
 			privacy: WizardTab;
 			// Present only when experimental tools are registered; consumers guard with `in` checks and optional chaining.
-			'experimental-tools': WizardTab & {
+			'experimental-tools'?: WizardTab & {
 				sections: {
 					tools: Tool[];
 				};

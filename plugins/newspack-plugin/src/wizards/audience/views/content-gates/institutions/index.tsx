@@ -6,7 +6,7 @@
  * WordPress dependencies
  */
 import { __ } from '@wordpress/i18n';
-import { useState, useEffect, useCallback, useMemo } from '@wordpress/element';
+import { useState, useEffect, useCallback, useMemo, useRef } from '@wordpress/element';
 import { useDispatch } from '@wordpress/data';
 import apiFetch from '@wordpress/api-fetch';
 import { filterSortAndPaginate } from '@wordpress/dataviews';
@@ -18,6 +18,7 @@ import { Button, Spinner } from '@wordpress/components';
  */
 import { DataViews, Router } from '../../../../../../packages/components/src';
 import { WIZARD_STORE_NAMESPACE } from '../../../../../../packages/components/src/wizard/store';
+import { AUDIENCE_CONTENT_GATES_WIZARD_SLUG } from '../consts';
 import InstitutionsOnboarding from './onboarding';
 
 const { useHistory } = Router;
@@ -45,16 +46,19 @@ const DEFAULT_VIEW: View = {
 
 export default function Institutions() {
 	const history = useHistory();
-	const { setHeaderData, addNotice } = useDispatch( WIZARD_STORE_NAMESPACE );
+	const { setHeaderData, addNotice, updateWizardSettings } = useDispatch( WIZARD_STORE_NAMESPACE );
 	const [ data, setData ] = useState< Institution[] >( [] );
 	const [ isLoading, setIsLoading ] = useState( true );
 	const [ view, setView ] = useState< View >( DEFAULT_VIEW );
+	// The last has_institutions value pushed to the gates screen, so a fetch
+	// that does not change it does not clone the whole wizard payload.
+	const lastHasInstitutions = useRef< boolean | undefined >( undefined );
 
 	useEffect( () => {
 		const actions: HeaderAction[] = [
 			{
 				type: 'secondary',
-				label: __( 'Back to Access control', 'newspack-plugin' ),
+				label: __( 'Back to Access Control', 'newspack-plugin' ),
 				icon: 'chevronLeft',
 				href: '#/content-gates',
 			},
@@ -62,12 +66,11 @@ export default function Institutions() {
 		if ( data.length !== 0 ) {
 			actions.push( {
 				type: 'primary',
-				label: __( 'Add new institution', 'newspack-plugin' ),
+				label: __( 'Add Institution', 'newspack-plugin' ),
 				href: '#/institutions/new',
 			} );
 		}
 		setHeaderData( {
-			sectionName: __( 'Institutions', 'newspack-plugin' ),
 			actions,
 		} );
 	}, [ setHeaderData, data, isLoading ] );
@@ -75,7 +78,23 @@ export default function Institutions() {
 	const fetchData = useCallback( () => {
 		setIsLoading( true );
 		apiFetch< Institution[] >( { path: `${ API_PATH }?per_page=100&context=edit&_embed=wp:featuredmedia` } )
-			.then( setData )
+			.then( institutions => {
+				setData( institutions );
+				// Keep the gates screen header in sync: it promotes the
+				// Institutions entry point out of the kebab menu when the site
+				// has at least one institution. Only write when the derived
+				// value actually changes, since UPDATE_WIZARD_SETTINGS clones
+				// the whole wizard payload and this runs on every list fetch.
+				const hasInstitutions = institutions.length > 0;
+				if ( hasInstitutions !== lastHasInstitutions.current ) {
+					lastHasInstitutions.current = hasInstitutions;
+					updateWizardSettings( {
+						slug: AUDIENCE_CONTENT_GATES_WIZARD_SLUG,
+						path: [ 'config', 'has_institutions' ],
+						value: hasInstitutions,
+					} );
+				}
+			} )
 			.catch( () => {
 				addNotice( {
 					message: __( 'Failed to load institutions. Please refresh the page.', 'newspack-plugin' ),
@@ -84,7 +103,7 @@ export default function Institutions() {
 				} );
 			} )
 			.finally( () => setIsLoading( false ) );
-	}, [ addNotice ] );
+	}, [ addNotice, updateWizardSettings ] );
 
 	useEffect( () => {
 		fetchData();
@@ -101,6 +120,17 @@ export default function Institutions() {
 					return url ? <img src={ url } alt={ item.title.raw } /> : null;
 				},
 				enableSorting: false,
+			},
+			{
+				id: 'id',
+				label: __( 'ID', 'newspack-plugin' ),
+				// The integer type gives numeric sorting; suppress its default filter so ID stays a
+				// searchable, sortable column without adding a lone numeric filter to the toolbar.
+				type: 'integer',
+				filterBy: false,
+				enableGlobalSearch: true,
+				getValue: ( { item }: { item: Institution } ) => item.id,
+				render: ( { item }: { item: Institution } ) => <code>{ item.id }</code>,
 			},
 			{
 				id: 'title',
@@ -166,7 +196,7 @@ export default function Institutions() {
 				id: 'copy-url',
 				label: __( 'Copy access page URL', 'newspack-plugin' ),
 				callback: ( items: Institution[] ) => {
-					const baseUrl = ( window as any ).newspackAudience?.institutional_access_url;
+					const baseUrl = window.newspackAudience?.institutional_access_url;
 					const url = baseUrl ? `${ baseUrl }/${ items[ 0 ].slug }/` : '';
 					if ( url ) {
 						navigator.clipboard.writeText( url ).then(

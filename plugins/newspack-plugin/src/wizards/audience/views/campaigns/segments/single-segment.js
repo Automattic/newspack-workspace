@@ -18,6 +18,14 @@ import ListsControl from '../../../components/lists-control';
 const { useHistory } = Router;
 const { SettingsCard, SettingsSection, MinMaxSetting } = Settings;
 
+/**
+ * Whether a criterion should render as a multi-select checkbox group: ESP
+ * fields marked "Multiple values" use the list__in / list__not_in matching
+ * functions and have a fixed set of options.
+ */
+export const isMultiSelectCriteria = criteria =>
+	[ 'list__in', 'list__not_in' ].includes( criteria?.matching_function ) && !! criteria?.options?.length;
+
 const DEFAULT_CONFIG = {
 	is_disabled: false,
 };
@@ -128,6 +136,26 @@ const SingleSegment = ( { segmentId, setSegments, wizardApiFetch } ) => {
 						onChangeMin={ min => update( { min } ) }
 						onChangeMax={ max => update( { max } ) }
 					/>
+				);
+			}
+			if ( isMultiSelectCriteria( criteria ) ) {
+				const selected = Array.isArray( value ) ? value : [];
+				// `register_segment_criteria` prepends an "Any" option (value '') for the
+				// single-select case; it is meaningless for a multi-select, so drop it.
+				const options = criteria.options.filter( option => '' !== option.value );
+				return (
+					<div data-testid={ `newspack-criteria-${ criteria.id }` }>
+						{ options.map( option => (
+							<CheckboxControl
+								key={ option.value }
+								label={ option.label }
+								checked={ selected.includes( option.value ) }
+								onChange={ isChecked =>
+									update( isChecked ? [ ...selected, option.value ] : selected.filter( v => v !== option.value ) )
+								}
+							/>
+						) ) }
+					</div>
 				);
 			}
 			if ( criteria.options?.length ) {

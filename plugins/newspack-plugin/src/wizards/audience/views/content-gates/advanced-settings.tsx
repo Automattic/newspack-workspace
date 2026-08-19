@@ -6,8 +6,9 @@
  * WordPress dependencies.
  */
 import { __ } from '@wordpress/i18n';
-import { ToggleControl, __experimentalHStack as HStack, __experimentalVStack as VStack } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
+import { SelectControl, ToggleControl, __experimentalHStack as HStack, __experimentalVStack as VStack } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
 import { useDispatch } from '@wordpress/data';
+import { decodeEntities } from '@wordpress/html-entities';
 import { useEffect, useRef, useState } from '@wordpress/element';
 
 /**
@@ -19,20 +20,16 @@ import { WIZARD_STORE_NAMESPACE } from '../../../../../packages/components/src/w
 import { useWizardApiFetch } from '../../../hooks/use-wizard-api-fetch';
 import { AUDIENCE_CONTENT_GATES_WIZARD_SLUG } from './consts';
 
-/**
- * Shape of the content-gates wizard store data consumed by this component.
- * `has_newsletters` is provided by the wizard endpoint alongside the gate settings.
- */
-type ContentGatesWizardData = {
-	config?: GateSettings & { has_newsletters?: boolean };
-};
+// Modes and their labels come from PHP, where the same list backs the REST
+// schema's enum and the storage sanitizer.
+const feedRestrictionModes = window.newspackAudienceContentGates?.feed_restriction_modes || [];
 
 const AdvancedSettings = ( { closeModal, showModal }: { closeModal: () => void; showModal: boolean } ) => {
 	const wizardData = useWizardData( AUDIENCE_CONTENT_GATES_WIZARD_SLUG ) as ContentGatesWizardData;
 	const initialConfig = {
 		...( wizardData?.config?.advanced_settings || {} ),
 	};
-	const { wizardApiFetch, isFetching, resetError, setError } = useWizardApiFetch( AUDIENCE_CONTENT_GATES_WIZARD_SLUG );
+	const { wizardApiFetch, isFetching, resetError } = useWizardApiFetch( AUDIENCE_CONTENT_GATES_WIZARD_SLUG );
 	const { addNotice, resetNotices, updateWizardSettings } = useDispatch( WIZARD_STORE_NAMESPACE );
 	const [ config, setConfig ] = useState< Partial< AdvancedSettingsConfig > >( initialConfig );
 
@@ -78,7 +75,11 @@ const AdvancedSettings = ( { closeModal, showModal }: { closeModal: () => void; 
 					} );
 				},
 				onError: ( fetchError: WpFetchError ) => {
-					setError( fetchError );
+					addNotice( {
+						message: decodeEntities( fetchError.message ),
+						type: 'error',
+						id: 'content-gates-advanced-settings-error',
+					} );
 				},
 				onFinally: () => {
 					closeModal();
@@ -90,14 +91,23 @@ const AdvancedSettings = ( { closeModal, showModal }: { closeModal: () => void; 
 	updateConfig.current = handleUpdateConfig;
 	return (
 		showModal && (
-			<Modal size="medium" title={ __( 'Advanced settings', 'newspack-plugin' ) } onRequestClose={ closeModal }>
+			<Modal size="medium" title={ __( 'Advanced Settings', 'newspack-plugin' ) } onRequestClose={ closeModal }>
 				<VStack>
 					<ToggleControl
 						label={ __( 'Restrict content in feeds', 'newspack-plugin' ) }
-						help={ __( 'Truncate restricted content in RSS feeds.', 'newspack-plugin' ) }
+						help={ __( 'Apply gate restrictions to articles in RSS feeds.', 'newspack-plugin' ) }
 						checked={ config?.restrict_feeds }
 						onChange={ value => setConfig( { ...config, restrict_feeds: value } ) }
 					/>
+					{ config?.restrict_feeds && feedRestrictionModes.length > 0 && (
+						<SelectControl
+							label={ __( 'Restricted articles in feeds', 'newspack-plugin' ) }
+							help={ __( 'The teaser is the same free preview readers see on the site.', 'newspack-plugin' ) }
+							value={ config?.feed_restriction_mode || feedRestrictionModes[ 0 ].value }
+							options={ feedRestrictionModes }
+							onChange={ ( value: string ) => setConfig( { ...config, feed_restriction_mode: value as FeedRestrictionMode } ) }
+						/>
+					) }
 					{ wizardData?.config?.has_newsletters && (
 						<ToggleControl
 							label={ __( 'Bypass restrictions for newsletter links', 'newspack-plugin' ) }

@@ -11,9 +11,17 @@ type HeaderAction = {
 	destructive?: boolean;
 	action?: () => void;
 	href?: string;
+	separator?: boolean;
 };
 
-type GateAccessRuleValue = string | string[] | boolean;
+// An entry in a section's kebab menu, or the header's secondary action. A
+// HeaderAction without the store-assigned `type`: either an `action` callback
+// or an `href` carries the behaviour.
+type SectionMenuItem = Omit< HeaderAction, 'type' >;
+
+// Single source of truth for the composite value shape lives with the control.
+type OneTimePurchaseRuleValue = import( '../../../../../content-gate/components/one-time-purchase-rule-control' ).OneTimePurchaseValue;
+type GateAccessRuleValue = string | string[] | boolean | OneTimePurchaseRuleValue;
 type AccessRule = {
 	name: string;
 	default: GateAccessRuleValue;
@@ -124,6 +132,8 @@ type CustomAccess = {
 	// (see edit/custom-access.tsx), and the server falls back to the gate ID.
 	gate_layout_id?: number;
 	access_rules: GateAccessRuleGroup[];
+	// Optional: gates saved before the setting existed lack the key; reads treat absence as ON.
+	payment_recovery_grace?: boolean;
 };
 
 // All fields are optional: the settings screens build these objects
@@ -153,8 +163,11 @@ type MeteringCountdownConfig = {
 	cta_product_id?: number;
 };
 
+type FeedRestrictionMode = 'truncate' | 'exclude';
+
 type AdvancedSettingsConfig = {
 	restrict_feeds: boolean;
+	feed_restriction_mode: FeedRestrictionMode;
 	newsletter_link_bypass_enabled: boolean;
 };
 
@@ -162,6 +175,9 @@ type GateSettings = {
 	content_gifting?: ContentGiftingConfig;
 	countdown_banner?: MeteringCountdownConfig;
 	advanced_settings?: AdvancedSettingsConfig;
+	has_institutions?: boolean;
+	// Capability flags the gates endpoint returns alongside the stored settings.
+	has_newsletters?: boolean;
 };
 
 type GateConfig = {
@@ -179,27 +195,12 @@ type ContentGatesWizardData = {
 	config?: GateSettings;
 };
 
+// A product the publisher can attach to a gate CTA. Localized by the Audience
+// wizard on `window.newspackAudience` (see wizards/types/window.d.ts).
 type PurchasableProductOption = {
 	label: string;
 	value: number;
 };
-
-/**
- * Data localized by the Audience wizard (`Audience_Wizard`) as
- * `newspackAudience`. Only the slice consumed by the content-gates screens is
- * typed here; the full window-level shape lives in wizards/types/window.d.ts.
- */
-declare const newspackAudience:
-	| {
-			available_products?: PurchasableProductOption[];
-			content_gifting?: {
-				has_metering?: boolean;
-				can_use_gifting?: {
-					errors?: Record< string, string[] >;
-				};
-			};
-	  }
-	| undefined;
 
 type Institution = {
 	id: number;

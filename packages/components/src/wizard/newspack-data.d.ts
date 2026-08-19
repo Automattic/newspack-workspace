@@ -41,4 +41,13 @@ declare const newspack_aux_data: {
 	site_title: string;
 	/** Whether the site is connected to the Newspack Manager. */
 	is_managed: boolean;
+	/** Site-wide gating notice shown across the wizards when access enforcement is inert. */
+	inert_gating?: {
+		show?: boolean;
+		message: string;
+		urls: {
+			accessControl: string;
+			audience: string;
+		};
+	};
 };

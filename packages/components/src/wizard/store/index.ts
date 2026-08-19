@@ -43,6 +43,8 @@ export interface WizardHeaderAction {
 	disabled?: boolean;
 	/** Whether the action is destructive. */
 	destructive?: boolean;
+	/** Start a new group in the "more" menu, rendering a divider before this action. */
+	separator?: boolean;
 }
 
 /**

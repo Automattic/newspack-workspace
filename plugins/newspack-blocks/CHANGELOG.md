@@ -1,3 +1,107 @@
+## @automattic/newspack-blocks [4.30.2](https://github.com/Automattic/newspack-workspace/compare/newspack-blocks@4.30.1...newspack-blocks@4.30.2) (2026-08-18)
+
+
+### Bug Fixes
+
+* **content-gate:** keep withheld blocks out of generated excerpts ([#832](https://github.com/Automattic/newspack-workspace/issues/832)) ([86eecfe](https://github.com/Automattic/newspack-workspace/commit/86eecfeef6eb07440afc8d5ffa239907cceb45a3))
+
+## @automattic/newspack-blocks [4.30.1](https://github.com/Automattic/newspack-workspace/compare/newspack-blocks@4.30.0...newspack-blocks@4.30.1) (2026-08-17)
+
+
+### Dependencies
+
+* **newspack-components:** upgraded to 4.6.2
+
+# @automattic/newspack-blocks [4.30.0](https://github.com/Automattic/newspack-workspace/compare/newspack-blocks@4.29.2...newspack-blocks@4.30.0) (2026-08-17)
+
+
+### Bug Fixes
+
+* **blocks:** APCA contrast picker and derived accent-contrast color ([#730](https://github.com/Automattic/newspack-workspace/issues/730)) ([b05a658](https://github.com/Automattic/newspack-workspace/commit/b05a6588f4d9ebdeb3dbdbc17b5c06c901012ca7))
+* **newspack-blocks:** skip article-block image crops on wpcom uploads ([#576](https://github.com/Automattic/newspack-workspace/issues/576)) ([451272c](https://github.com/Automattic/newspack-workspace/commit/451272c3989cb3ed5f25daaa1e647e1b5dcbf453))
+
+
+### Features
+
+* **performance:** defer reader-facing JS assets (NPPM-3037) ([#722](https://github.com/Automattic/newspack-workspace/issues/722)) ([2855574](https://github.com/Automattic/newspack-workspace/commit/2855574099c4f416a984cda8565b269e5a9f0fb0))
+
+
+### Dependencies
+
+* **newspack-colors:** upgraded to 1.1.3
+* **newspack-icons:** upgraded to 1.1.1
+* **newspack-components:** upgraded to 4.6.1
+* **newspack-scripts:** upgraded to 5.11.0
+
+## @automattic/newspack-blocks [4.29.2](https://github.com/Automattic/newspack-workspace/compare/newspack-blocks@4.29.1...newspack-blocks@4.29.2) (2026-08-07)
+
+
+### Bug Fixes
+
+* **blocks:** input validation hardening for author, iframe and checkout surfaces ([#782](https://github.com/Automattic/newspack-workspace/issues/782)) ([20230c1](https://github.com/Automattic/newspack-workspace/commit/20230c12471e327e8cbdf6d3ffe7d9823a28b00b))
+
+## @automattic/newspack-blocks [4.29.1](https://github.com/Automattic/newspack-workspace/compare/newspack-blocks@4.29.0...newspack-blocks@4.29.1) (2026-08-04)
+
+
+### Bug Fixes
+
+* **author-profile:** hide default avatars when the toggle is on ([#570](https://github.com/Automattic/newspack-workspace/issues/570)) ([4aba9cd](https://github.com/Automattic/newspack-workspace/commit/4aba9cd016d8b5645358640dd27f9ff9070239b1))
+
+# @automattic/newspack-blocks [4.29.0](https://github.com/Automattic/newspack-workspace/compare/newspack-blocks@4.28.0...newspack-blocks@4.29.0) (2026-08-03)
+
+
+### Bug Fixes
+
+* **checkout-button:** apply attached coupon through the variation picker ([#768](https://github.com/Automattic/newspack-workspace/issues/768)) ([ab60934](https://github.com/Automattic/newspack-workspace/commit/ab60934d72746a28196f59a043877a76f1168fa5))
+* **modal-checkout:** always show deal-accurate order details ([#453](https://github.com/Automattic/newspack-workspace/issues/453)) ([3bcfe53](https://github.com/Automattic/newspack-workspace/commit/3bcfe532b421905b8292bae901897bd785bbd18b))
+* **modal-checkout:** escape thank-you data-checkout, remove dead code ([#668](https://github.com/Automattic/newspack-workspace/issues/668)) ([1deb075](https://github.com/Automattic/newspack-workspace/commit/1deb0757842aea0f644a5946555f20015861d28e))
+* **subscription-tiers:** prevent switching to the current subscription ([#542](https://github.com/Automattic/newspack-workspace/issues/542)) ([89fca28](https://github.com/Automattic/newspack-workspace/commit/89fca283c72e621c0cbf2fc61f2b0599e9581442))
+
+
+### Features
+
+* **checkout-button:** auto-apply an attached coupon at checkout ([#446](https://github.com/Automattic/newspack-workspace/issues/446)) ([533fef9](https://github.com/Automattic/newspack-workspace/commit/533fef9c999285ed85c3e3ab32ffabdabe2642ad))
+
+
+### Dependencies
+
+* **newspack-colors:** upgraded to 1.1.1
+* **newspack-icons:** upgraded to 1.1.0
+* **newspack-components:** upgraded to 4.6.0
+* **newspack-scripts:** upgraded to 5.10.0
+
+# @automattic/newspack-blocks [4.28.0](https://github.com/Automattic/newspack-workspace/compare/newspack-blocks@4.27.1...newspack-blocks@4.28.0) (2026-07-20)
+
+
+### Bug Fixes
+
+* **checkout:** sync repeat trial pricing in modal checkout ([#264](https://github.com/Automattic/newspack-workspace/issues/264)) ([ce943c6](https://github.com/Automattic/newspack-workspace/commit/ce943c61d137f81326704deb7be0b73d82da3f17))
+
+
+### Features
+
+* add tag labels support to Content Loop block ([#2282](https://github.com/Automattic/newspack-workspace/issues/2282)) ([b5ef988](https://github.com/Automattic/newspack-workspace/commit/b5ef988bc2007bdc509ef872ffc54e6220216786))
+* **newsletters:** add redirect-to-URL option to subscription form ([#432](https://github.com/Automattic/newspack-workspace/issues/432)) ([5c56caa](https://github.com/Automattic/newspack-workspace/commit/5c56caa5c3e8dc93eb09548f45ffb93084ce42ee))
+
+
+### Dependencies
+
+* **newspack-components:** upgraded to 4.5.0
+
+## @automattic/newspack-blocks [4.27.1](https://github.com/Automattic/newspack-workspace/compare/newspack-blocks@4.27.0...newspack-blocks@4.27.1) (2026-07-14)
+
+
+### Bug Fixes
+
+* **blocks:** fix express checkout address validation in modal checkout ([#597](https://github.com/Automattic/newspack-workspace/issues/597)) ([09e001f](https://github.com/Automattic/newspack-workspace/commit/09e001fb8333ae9ab5f7d03c894e9bbeefe3144c))
+
+# @automattic/newspack-blocks [4.27.0](https://github.com/Automattic/newspack-workspace/compare/newspack-blocks@4.26.8...newspack-blocks@4.27.0) (2026-07-08)
+
+
+### Features
+
+* **gates:** capture gate id on landing-page conversions (NPPD-1887) ([#575](https://github.com/Automattic/newspack-workspace/issues/575)) ([20e84f8](https://github.com/Automattic/newspack-workspace/commit/20e84f87dc1be96b5575548593fd0f7e77da52e6))
+
 ## @automattic/newspack-blocks [4.26.8](https://github.com/Automattic/newspack-workspace/compare/newspack-blocks@4.26.7...newspack-blocks@4.26.8) (2026-07-02)
 
 

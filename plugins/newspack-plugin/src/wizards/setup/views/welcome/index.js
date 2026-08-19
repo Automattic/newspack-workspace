@@ -377,6 +377,6 @@ const Welcome = ( { buttonAction } ) => {
 	);
 };
 
-const WelcomeWizardScreen = withWizardScreen( Welcome );
+const WelcomeWizardScreen = withWizardScreen( Welcome, { hideHeader: true } );
 // eslint-disable-next-line react/display-name
 export default props => <WelcomeWizardScreen { ...omit( props, [ 'routes', 'headerText', 'buttonText' ] ) } />;

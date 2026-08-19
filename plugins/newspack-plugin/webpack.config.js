@@ -40,6 +40,7 @@ const entry = {
 	'reader-activation': resolveSource( 'src', 'reader-activation', 'index' ),
 	'reader-auth': resolveSource( 'src', 'reader-activation-auth', 'index' ),
 	'newsletters-signup': resolveSource( 'src', 'reader-activation-newsletters', 'index' ),
+	'form-capture': resolveSource( 'src', 'reader-activation-form-capture', 'index' ),
 	'reader-registration-block': resolveSource( 'src', 'blocks', 'reader-registration', 'view' ),
 	'correction-box-block': resolveSource( 'src', 'blocks', 'correction-box', 'index' ),
 	'correction-item-block': resolveSource( 'src', 'blocks', 'correction-item', 'index' ),
@@ -75,6 +76,7 @@ const entry = {
 	'collections-admin': resolveSource( 'src', 'collections', 'admin', 'index' ),
 	'collections-frontend': resolveSource( 'src', 'collections', 'frontend', 'index' ),
 	'group-subscription-admin': resolveSource( 'src', 'group-subscription', 'admin' ),
+	'csv-export': resolveSource( 'src', 'csv-export', 'index' ),
 };
 
 // Get files for other scripts.
@@ -96,9 +98,7 @@ webpackConfig.output.chunkFilename = '[name].[contenthash].js';
 // otherwise keep a bare, unversioned name and get served stale by CDNs/proxies
 // after a deploy (they're loaded by webpack's runtime, not wp_enqueue_style, so
 // they never pick up a ?ver). Hashing matches the JS chunks' cache-busting.
-const miniCssExtractPlugin = webpackConfig.plugins.find(
-	plugin => plugin.constructor && plugin.constructor.name === 'MiniCssExtractPlugin'
-);
+const miniCssExtractPlugin = webpackConfig.plugins.find( plugin => plugin.constructor && plugin.constructor.name === 'MiniCssExtractPlugin' );
 if ( miniCssExtractPlugin && miniCssExtractPlugin.options ) {
 	miniCssExtractPlugin.options.chunkFilename = '[name].[contenthash].css';
 }

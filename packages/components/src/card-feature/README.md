@@ -7,11 +7,15 @@ A card component for presenting a named feature or setting with a predictable, s
 - **Maximum 2 cards per row.** Use `<Grid columns={ 2 }>` — never 3 or more. Cards are designed to be read, not scanned, and 3+ columns makes them too narrow for the content.
 - The icon is always displayed on the **right-hand side**, aligned to the top of the content.
 
+## Accessibility
+
+Cards sit side by side, so a bare "Enable" names no feature out of context. The card appends `title` to the primary button's accessible name ("Enable Metered Countdown") and to the "More" menu ("More options for Metered Countdown"). The visible label leads, so voice control still matches on the word the user can see. Nothing to pass — this is automatic.
+
 ## States
 
 | State | Condition | Button | Dropdown | Badge |
 |---|---|---|---|---|
-| **Unmet requirements** | `requirements` is set | "Enable" — disabled (clickable if `requirementsActionable`) | Hidden | Error badge with `requirements` text |
+| **Unmet requirements** | `requirements` is set | "Enable" — disabled (clickable if `requirementsActionable`) | Shown if `enabled` and `requirementsActionable` (and `moreControls` provided); otherwise hidden | Error badge with `requirements` text |
 | **Disabled** | `!enabled`, no requirements | "Enable" | Hidden | None |
 | **Enabled** | `enabled`, no requirements | "Configure" | Shown if `moreControls` provided | Success badge ("Enabled") |
 
@@ -155,12 +159,12 @@ import { __ } from '@wordpress/i18n';
 | `icon` | `CardFeatureIcon` | — | Icon displayed on the right. See `CardFeatureIcon` below. |
 | `enabled` | `boolean` | `false` | Whether the feature is currently enabled |
 | `requirements` | `string` | — | When set, enters the unmet-requirements state; value is used as the error badge text |
-| `requirementsActionable` | `boolean` | `false` | When `requirements` is set, keep the primary button clickable so it can remediate the unmet requirement |
+| `requirementsActionable` | `boolean` | `false` | When `requirements` is set, keep the primary button clickable so it can remediate the unmet requirement, and keep the "More" dropdown visible on an enabled card (degraded but still operable) |
 | `enableLabel` | `string` | `"Enable"` | Primary button label when not enabled |
 | `configureLabel` | `string` | `"Configure"` | Primary button label when enabled |
 | `onEnable` | `() => void` | — | Called when the primary button is clicked and the feature is not enabled |
 | `onConfigure` | `() => void` | — | Called when the primary button is clicked and the feature is enabled |
-| `moreControls` | `MoreControl[]` | — | Items for the "More" dropdown, shown only when enabled |
+| `moreControls` | `MoreControl[]` | — | Items for the "More" dropdown. Shown when `enabled` and either there are no `requirements` or `requirementsActionable` is set |
 | `badgeText` | `string` | `"Enabled"` | Badge text shown when enabled |
 | `badgeLevel` | `BadgeLevel` | `"success"` | Badge level shown when enabled |
 | `className` | `string` | — | Additional class name applied to the card element |

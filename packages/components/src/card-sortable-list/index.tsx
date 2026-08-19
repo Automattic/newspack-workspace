@@ -34,7 +34,7 @@ type DraggableItemAction = {
 type DraggableItem = {
 	id: string | number;
 	title: string;
-	description?: string;
+	description?: React.ReactNode;
 	badgeLevel: 'default' | 'success' | 'info' | 'warning' | 'error';
 	badgeText: string;
 	toggleChecked?: boolean;

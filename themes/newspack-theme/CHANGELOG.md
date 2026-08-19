@@ -1,3 +1,49 @@
+## newspack-theme [2.25.1](https://github.com/Automattic/newspack-workspace/compare/newspack-theme@2.25.0...newspack-theme@2.25.1) (2026-08-17)
+
+
+### Bug Fixes
+
+* **ads:** remove colored gaps from empty Broadstreet ad slots ([#578](https://github.com/Automattic/newspack-workspace/issues/578)) ([c16c8fc](https://github.com/Automattic/newspack-workspace/commit/c16c8fcb2dbce437cc452be74d42514631b3fd6b))
+
+# newspack-theme [2.25.0](https://github.com/Automattic/newspack-workspace/compare/newspack-theme@2.24.1...newspack-theme@2.25.0) (2026-08-17)
+
+
+### Bug Fixes
+
+* align image captions with image ([#386](https://github.com/Automattic/newspack-workspace/issues/386)) ([807008f](https://github.com/Automattic/newspack-workspace/commit/807008f94b9061ab28eed810bbdec3a9e49d9129))
+
+
+### Features
+
+* **performance:** defer reader-facing JS assets (NPPM-3037) ([#722](https://github.com/Automattic/newspack-workspace/issues/722)) ([2855574](https://github.com/Automattic/newspack-workspace/commit/2855574099c4f416a984cda8565b269e5a9f0fb0))
+
+
+### Dependencies
+
+* **newspack-scripts:** upgraded to 5.11.0
+
+## newspack-theme [2.24.1](https://github.com/Automattic/newspack-workspace/compare/newspack-theme@2.24.0...newspack-theme@2.24.1) (2026-08-03)
+
+
+### Dependencies
+
+* **newspack-scripts:** upgraded to 5.10.0
+
+# newspack-theme [2.24.0](https://github.com/Automattic/newspack-workspace/compare/newspack-theme@2.23.7...newspack-theme@2.24.0) (2026-07-20)
+
+
+### Features
+
+* add support for tag labels ([#2613](https://github.com/Automattic/newspack-workspace/issues/2613)) ([c1b42c3](https://github.com/Automattic/newspack-workspace/commit/c1b42c3de09244aeeef4c8eb24a8167e5306c6d4))
+* **newspack-ui:** standardize snackbars + accessible notices ([#445](https://github.com/Automattic/newspack-workspace/issues/445)) ([0b8f39b](https://github.com/Automattic/newspack-workspace/commit/0b8f39beb69b52b944dc8ba889a1e4e90597f604))
+
+## newspack-theme [2.23.7](https://github.com/Automattic/newspack-workspace/compare/newspack-theme@2.23.6...newspack-theme@2.23.7) (2026-07-09)
+
+
+### Bug Fixes
+
+* **themes:** remove unintended highlight behind colored text ([#574](https://github.com/Automattic/newspack-workspace/issues/574)) ([d94254c](https://github.com/Automattic/newspack-workspace/commit/d94254c6427f689d70c140b710a017a102c07a8f))
+
 ## newspack-theme [2.23.6](https://github.com/Automattic/newspack-workspace/compare/newspack-theme@2.23.5...newspack-theme@2.23.6) (2026-06-29)
 
 

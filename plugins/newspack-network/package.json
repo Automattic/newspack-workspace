@@ -1,6 +1,6 @@
 {
 	"name": "newspack-network",
-	"version": "2.20.5",
+	"version": "2.22.0",
 	"description": "The Newspack Network plugin.",
 	"license": "GPL-2.0-or-later",
 	"repository": {
@@ -42,6 +42,9 @@
 		"*.{js,jsx,ts,tsx}": "npm run lint:js:staged",
 		"*.scss": "npm run lint:scss:staged",
 		"*.php": "npm run lint:php:staged"
+	},
+	"dependencies": {
+		"newspack-icons": "workspace:*"
 	},
 	"devDependencies": {
 		"clsx": "^2.1.0",

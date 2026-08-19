@@ -82,7 +82,7 @@ export default function GroupedSelectControl( {
 			help={ help }
 			className={ classnames( className, 'components-select-control' ) }
 		>
-			<div className="relative">
+			<div className="newspack-grouped-select-control__field">
 				<select
 					id={ id }
 					className="components-select-control__input"

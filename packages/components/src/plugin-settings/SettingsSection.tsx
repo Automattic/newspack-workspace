@@ -13,7 +13,7 @@ import { CheckboxControl } from '@wordpress/components';
 /**
  * Internal dependencies
  */
-import { ActionCard, Button, Grid, Notice, SelectControl, TextControl } from '../';
+import { ActionCard, Button, Grid, Notice, PageControl, SelectControl, TextControl } from '../';
 import './style.scss';
 
 /**
@@ -41,6 +41,10 @@ export interface PluginSettingField {
 	options?: { value: string; name?: string; label?: string }[] | null;
 	/** Whether multiple values can be selected. */
 	multiple?: boolean;
+	/** An explicit control override, independent of `type` (e.g. 'page' for a page picker). */
+	control?: string;
+	/** The saved page for a 'page' control, as `{ label, value }`. */
+	selected?: { label?: string; value?: string | number } | null;
 }
 
 export type PluginSettingsSectionProps = {
@@ -72,6 +76,10 @@ const isSelectControl = ( setting: PluginSettingField ) => {
 	return Array.isArray( setting.options ) && setting.options.length;
 };
 const getControlComponent = ( setting: PluginSettingField ): React.ElementType => {
+	// An explicit `control` overrides the control implied by the setting's data type.
+	if ( 'page' === setting.control ) {
+		return PageControl;
+	}
 	if ( isSelectControl( setting ) ) {
 		return SelectControl;
 	}
@@ -118,6 +126,8 @@ const SettingsSection = ( props: PluginSettingsSectionProps ) => {
 				label: option.name || option.label,
 			} ) ) || null,
 		value: setting.value,
+		// Only page controls consume `selected`; keep it off every other control's props.
+		selected: 'page' === setting.control ? setting.selected || null : null,
 		multiple: isSelectControl( setting ) && setting.multiple ? true : null,
 		checked: setting.type === 'boolean' ? !! setting.value : null,
 		onChange: ( value: unknown ) => {
@@ -156,7 +166,7 @@ const SettingsSection = ( props: PluginSettingsSectionProps ) => {
 							setSaveDisabled( true );
 						} }
 					>
-						{ __( 'Save Settings', 'newspack' ) }
+						{ __( 'Save Settings', 'newspack-plugin' ) }
 					</Button>
 				)
 			}

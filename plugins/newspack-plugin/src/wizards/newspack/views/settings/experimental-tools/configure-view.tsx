@@ -8,7 +8,7 @@
  */
 import { __, sprintf } from '@wordpress/i18n';
 import { useState, useEffect } from '@wordpress/element';
-import { TextareaControl, TextControl, SelectControl, ToggleControl, Spinner } from '@wordpress/components';
+import { TextareaControl, TextControl, SelectControl, ToggleControl, Spinner, Notice } from '@wordpress/components';
 import { Icon, chevronLeft, chevronDown, chevronUp } from '@wordpress/icons';
 import apiFetch from '@wordpress/api-fetch';
 
@@ -259,9 +259,15 @@ export default function ConfigureView( {
 		>
 			<div className="experimental-tools__configure-header">
 				<Button icon={ chevronLeft } label={ __( 'Back', 'newspack-plugin' ) } onClick={ onBack } isLink />
-				<h1>{ tool.label }</h1>
+				<h2 className="newspack-wizard__heading">{ tool.label }</h2>
 			</div>
 			<p className="newspack-wizard__sections__description">{ tool.description }</p>
+
+			{ tool.location_hint && (
+				<Notice status="info" isDismissible={ false } className="experimental-tools__location-hint">
+					{ tool.location_hint }
+				</Notice>
+			) }
 
 			<div className="experimental-tools__configure-fields">
 				{ editableFields.map( ( field: ToolField ) => (

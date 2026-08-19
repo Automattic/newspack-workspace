@@ -23,9 +23,7 @@ import classnames from 'classnames';
 type WizardSnackbarProps = {
 	/** The component children. */
 	children?: React.ReactNode;
-	/** The snackbar position. */
-	position?: string;
-	/** The snackbar type: 'info', 'success', 'warning', or 'error'. */
+	/** The notice severity: 'error' announces assertively, anything else politely. */
 	type?: string;
 	/** The actions to display in the snackbar. */
 	actions?: NonNullable< WizardNotice[ 'actions' ] >;
@@ -41,19 +39,21 @@ type WizardSnackbarProps = {
 
 /**
  * WizardSnackbar component.
+ *
+ * Wraps core's Snackbar with the wizard-store `onRemove` glue. Positioning and
+ * styling are neutral (bottom-centered via the snackbar list container). The
+ * notice `type` no longer drives any visual styling, but it still maps to the
+ * screen-reader announcement politeness: only `error` announces assertively,
+ * every other severity announces politely.
+ *
  * @param root0
  * @param root0.children
- * @param root0.position
  * @param root0.type
  * @param root0.actions
  */
-const WizardSnackbar = ( { children, position = 'bottom-left', type = 'info', actions = [], ...props }: WizardSnackbarProps ) => {
-	const className = classnames(
-		'newspack-wizard__snackbar',
-		props.className,
-		`newspack-wizard__snackbar--${ position }`,
-		`newspack-wizard__snackbar--${ type }`
-	);
+const WizardSnackbar = ( { children, type, actions = [], ...props }: WizardSnackbarProps ) => {
+	const className = classnames( 'newspack-wizard__snackbar', props.className );
+	const politeness = 'error' === type ? 'assertive' : 'polite';
 	const { removeNotice, resetNotices } = useDispatch( WIZARD_STORE_NAMESPACE );
 	const onRemove = () => {
 		if ( props.onRemove ) {
@@ -66,7 +66,13 @@ const WizardSnackbar = ( { children, position = 'bottom-left', type = 'info', ac
 		}
 	};
 	return (
-		<BaseComponent className={ className } { ...( props as Record< string, never > ) } onRemove={ onRemove } actions={ actions }>
+		<BaseComponent
+			{ ...( props as Record< string, never > ) }
+			className={ className }
+			politeness={ politeness }
+			onRemove={ onRemove }
+			actions={ actions }
+		>
 			{ children }
 		</BaseComponent>
 	);

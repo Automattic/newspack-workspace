@@ -1,3 +1,43 @@
+## newspack-story-budget [1.2.2](https://github.com/Automattic/newspack-workspace/compare/newspack-story-budget@1.2.1...newspack-story-budget@1.2.2) (2026-08-17)
+
+
+### Dependencies
+
+* **newspack-components:** upgraded to 4.6.2
+
+## newspack-story-budget [1.2.1](https://github.com/Automattic/newspack-workspace/compare/newspack-story-budget@1.2.0...newspack-story-budget@1.2.1) (2026-08-17)
+
+
+### Dependencies
+
+* **newspack-components:** upgraded to 4.6.1
+* **newspack-scripts:** upgraded to 5.11.0
+
+# newspack-story-budget [1.2.0](https://github.com/Automattic/newspack-workspace/compare/newspack-story-budget@1.1.0...newspack-story-budget@1.2.0) (2026-08-03)
+
+
+### Features
+
+* explicit breadcrumb API for Newspack admin headers ([#472](https://github.com/Automattic/newspack-workspace/issues/472)) ([7c43233](https://github.com/Automattic/newspack-workspace/commit/7c4323301f5323822937e93274c4fda4279a787f))
+
+
+### Dependencies
+
+* **newspack-components:** upgraded to 4.6.0
+* **newspack-scripts:** upgraded to 5.10.0
+
+# newspack-story-budget [1.1.0](https://github.com/Automattic/newspack-workspace/compare/newspack-story-budget@1.0.2...newspack-story-budget@1.1.0) (2026-07-20)
+
+
+### Features
+
+* **components:** standardize wp-admin snackbars, bottom-centered ([#447](https://github.com/Automattic/newspack-workspace/issues/447)) ([8c09d8b](https://github.com/Automattic/newspack-workspace/commit/8c09d8bc005d95032f04267b1bdd71df029708c5))
+
+
+### Dependencies
+
+* **newspack-components:** upgraded to 4.5.0
+
 ## newspack-story-budget [1.0.2](https://github.com/Automattic/newspack-workspace/compare/newspack-story-budget@1.0.1...newspack-story-budget@1.0.2) (2026-06-29)
 
 

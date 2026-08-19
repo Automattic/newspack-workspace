@@ -1,5 +1,3 @@
-/* global newspackAudience */
-
 /**
  * Metered Countdown settings page.
  */
@@ -37,7 +35,7 @@ const CountdownBannerSettings = () => {
 	const { addNotice, resetNotices, setHeaderData, updateWizardSettings } = useDispatch( WIZARD_STORE_NAMESPACE );
 	const { wizardApiFetch, errorMessage, resetError } = useWizardApiFetch( AUDIENCE_CONTENT_GATES_WIZARD_SLUG );
 	const [ config, setConfig ] = useState< GateSettings >( wizardData?.config || {} );
-	const availableProducts = newspackAudience?.available_products || [];
+	const availableProducts = window.newspackAudience?.available_products || [];
 	const isDirty = useMemo( () => {
 		return (
 			config?.countdown_banner &&
@@ -49,7 +47,7 @@ const CountdownBannerSettings = () => {
 	const { confirmDialog, requestConfirm } = useConfirmDialog( {
 		when: !! ( isDirty && ! isSaving.current ),
 		message: __( 'You have unsaved changes that will be lost. Discard changes?', 'newspack-plugin' ),
-		confirmButtonText: __( 'Discard changes', 'newspack-plugin' ),
+		confirmButtonText: __( 'Discard Changes', 'newspack-plugin' ),
 		isDestructive: true,
 		hideTitle: true,
 	} );
@@ -115,7 +113,6 @@ const CountdownBannerSettings = () => {
 					type: 'more',
 				},
 			],
-			sectionName: __( 'Metered countdown', 'newspack-plugin' ),
 		} );
 	}, [ config, isDirty, setHeaderData ] );
 

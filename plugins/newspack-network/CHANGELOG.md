@@ -1,3 +1,45 @@
+# newspack-network [2.22.0](https://github.com/Automattic/newspack-workspace/compare/newspack-network@2.21.2...newspack-network@2.22.0) (2026-08-17)
+
+
+### Features
+
+* **network:** distribute posts from the front-end admin bar ([#679](https://github.com/Automattic/newspack-workspace/issues/679)) ([1b95d41](https://github.com/Automattic/newspack-workspace/commit/1b95d41fca34eb506b8790ef0401e93e79ce61af))
+* **network:** product network ID assignment + verification CLI (NPPD-2057, [#636](https://github.com/Automattic/newspack-workspace/issues/636)) ([f07c970](https://github.com/Automattic/newspack-workspace/commit/f07c97022180030c88d1f02c276a9d07e2ac0dbc))
+
+
+### Dependencies
+
+* **newspack-icons:** upgraded to 1.1.1
+* **newspack-scripts:** upgraded to 5.11.0
+
+## newspack-network [2.21.2](https://github.com/Automattic/newspack-workspace/compare/newspack-network@2.21.1...newspack-network@2.21.2) (2026-08-03)
+
+
+### Dependencies
+
+* **newspack-scripts:** upgraded to 5.10.0
+
+## newspack-network [2.21.1](https://github.com/Automattic/newspack-workspace/compare/newspack-network@2.21.0...newspack-network@2.21.1) (2026-07-23)
+
+
+### Bug Fixes
+
+* **content-distribution:** don't mark failed dispatch as distributed ([#702](https://github.com/Automattic/newspack-workspace/issues/702)) ([c8792bb](https://github.com/Automattic/newspack-workspace/commit/c8792bb4f6983d8358f8b8dd23a31ba38edc9379))
+
+# newspack-network [2.21.0](https://github.com/Automattic/newspack-workspace/compare/newspack-network@2.20.6...newspack-network@2.21.0) (2026-07-20)
+
+
+### Features
+
+* **integrity-check:** add --fix flag to reconcile membership discrepancies ([#307](https://github.com/Automattic/newspack-workspace/issues/307), NPPM-386) ([e8d26af](https://github.com/Automattic/newspack-workspace/commit/e8d26af6e0aa3a4f26b289f92c7a2ec9392e7450))
+
+## newspack-network [2.20.6](https://github.com/Automattic/newspack-workspace/compare/newspack-network@2.20.5...newspack-network@2.20.6) (2026-07-13)
+
+
+### Bug Fixes
+
+* **network:** preserve block content in distributed posts ([#569](https://github.com/Automattic/newspack-workspace/issues/569)) ([d7e193e](https://github.com/Automattic/newspack-workspace/commit/d7e193edac7df0cc3454d53c5badb7244d18cd6c))
+
 ## newspack-network [2.20.5](https://github.com/Automattic/newspack-workspace/compare/newspack-network@2.20.4...newspack-network@2.20.5) (2026-06-29)
 
 

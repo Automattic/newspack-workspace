@@ -24,6 +24,8 @@ type CardProps = {
 	/** Forwarded to CoreCard when __experimentalCoreCard is set. */
 	actionType?: CoreCardProps[ 'actionType' ];
 	buttonsCard?: boolean;
+	/** Forwarded to CoreCard when __experimentalCoreCard is set. */
+	size?: CoreCardProps[ 'size' ];
 	headerActions?: boolean;
 	isNarrow?: boolean;
 	isMedium?: boolean;
@@ -55,6 +57,8 @@ class Card extends Component< CardProps > {
 			isSmall,
 			isWhite,
 			noBorder,
+			// Only honoured on the core-card branch below.
+			size,
 			__experimentalCoreCard,
 			__experimentalCoreProps = {
 				actionType: null, // chevron | toggle | button | link | none
@@ -80,7 +84,10 @@ class Card extends Component< CardProps > {
 				isSmall,
 				isWhite,
 				noBorder,
-				onClick,
+				size,
+				// A false onClick (from `onClick={ cond && handler }`) is normalized away
+				// so it never reaches CoreCard's handler-typed prop.
+				onClick: onClick || undefined,
 				id,
 				...otherProps,
 				...__experimentalCoreProps,
@@ -90,7 +97,6 @@ class Card extends Component< CardProps > {
 		const classes = classNames(
 			'newspack-card',
 			className,
-			buttonsCard && 'newspack-card__buttons-card',
 			headerActions && 'newspack-card__header-actions',
 			isMedium && 'newspack-card__is-medium',
 			isNarrow && 'newspack-card__is-narrow',

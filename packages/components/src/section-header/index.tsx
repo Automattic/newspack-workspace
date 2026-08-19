@@ -80,6 +80,8 @@ export interface SectionHeaderProps {
 	noMargin?: boolean;
 	/** Indicates if the header is used as a page header. */
 	pageHeader?: boolean;
+	/** Size variant. 'small' scales the title and icon down, independently of `pageHeader`. */
+	size?: 'default' | 'small';
 	/** The title of the section. */
 	title: string | ( () => React.ReactNode );
 	/** Optional ID for the header element. */
@@ -108,6 +110,7 @@ export interface SectionHeaderProps {
  * @param props.isWhite
  * @param props.noMargin
  * @param props.pageHeader
+ * @param props.size
  * @param props.title
  * @param props.id
  * @param props.menu
@@ -126,6 +129,7 @@ const SectionHeader = ( {
 	isWhite = false,
 	noMargin = false,
 	pageHeader = false,
+	size = 'default',
 	title,
 	id = null,
 	menu,
@@ -148,22 +152,35 @@ const SectionHeader = ( {
 		centered && 'newspack-section-header--is-centered',
 		isWhite && 'newspack-section-header--is-white',
 		noMargin && 'newspack-section-header--no-margin',
-		pageHeader && 'newspack-section-header--page-header'
+		pageHeader && 'newspack-section-header--page-header',
+		size === 'small' && 'newspack-section-header--small'
 	);
 
-	const HeadingTag = pageHeader ? 'h1' : ( `h${ heading }` as const );
+	// The breadcrumb `Page` owns the single page `<h1>`, so a `pageHeader` section
+	// is a secondary heading: its level follows `heading` (default 2). `pageHeader`
+	// controls only the enlarged, centered styling — not the tag. Pass `heading={ 1 }`
+	// on a headerless screen that needs the section header to be the page's h1.
+	const HeadingTag = `h${ heading }` as const;
 
 	let titleContent = null;
 
 	if ( typeof title === 'string' ) {
 		titleContent = (
 			<div className="newspack-section-header__title-container">
-				<HeadingTag>
+				<HeadingTag className="newspack-section-header__title">
 					{ title }
 					{ badges?.length
 						? badges.map( ( badge, i ) => <Badge key={ i } text={ badge.label } level={ badge.level || 'default' } /> )
 						: null }
 				</HeadingTag>
+				{ /* Secondary action before the overflow menu, so a promoted link reads as an action rather than sitting to the right of the kebab. */ }
+				{ secondaryAction && (
+					<div className="newspack-section-header__secondary-action">
+						<Button variant="link" href={ secondaryAction.href } onClick={ secondaryAction.action }>
+							{ secondaryAction.label }
+						</Button>
+					</div>
+				) }
 				{ !! menu?.length && (
 					<DropdownMenu className="newspack-section-header__menu" icon={ moreVertical } label={ __( 'More options', 'newspack-plugin' ) }>
 						{ () => (
@@ -187,17 +204,10 @@ const SectionHeader = ( {
 						) }
 					</DropdownMenu>
 				) }
-				{ secondaryAction && (
-					<div className="newspack-section-header__secondary-action">
-						<Button variant="link" href={ secondaryAction.href } onClick={ secondaryAction.action }>
-							{ secondaryAction.label }
-						</Button>
-					</div>
-				) }
 			</div>
 		);
 	} else if ( typeof title === 'function' ) {
-		titleContent = <HeadingTag>{ title() }</HeadingTag>;
+		titleContent = <HeadingTag className="newspack-section-header__title">{ title() }</HeadingTag>;
 	}
 
 	return (
@@ -214,7 +224,7 @@ const SectionHeader = ( {
 			<Grid columns={ 1 } gutter={ 8 } className={ classes }>
 				{ icon && (
 					<div className="newspack-section-header__icon">
-						<Icon icon={ icon } size={ 48 } />
+						<Icon icon={ icon } size={ size === 'small' ? 24 : 48 } />
 					</div>
 				) }
 				{ backNav ? (
