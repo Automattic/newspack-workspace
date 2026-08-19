@@ -350,7 +350,6 @@ class Subscribe_Block_Response_Test extends WP_UnitTestCase {
 
 		$expected = [
 			'email',
-			'message',
 			'metadata',
 			'newspack_newsletters_subscribe',
 			'newspack_newsletters_subscribed',

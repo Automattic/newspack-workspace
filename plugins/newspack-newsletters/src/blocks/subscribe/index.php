@@ -14,18 +14,21 @@ const FORM_ACTION = 'newspack_newsletters_subscribe';
 /**
  * Keys permitted in the block's JSON response.
  *
- * The subscribe handler assembles its response from the ESP's contact record,
- * so anything not named here would ship the provider's stored fields to the
- * caller. The consumer of record is `src/blocks/subscribe/view.js`: adding a key
- * here without a matching read there has no effect, and removing one breaks the
- * front end silently. Exception: `verified` and `verification_nonce` are read
- * there too, but produced elsewhere — newspack-plugin's
- * `\Newspack\Reader_Activation::get_verification_payload()` — and merged into
- * the result wholesale below, so a key added on that side needs a matching
- * read in view.js and an entry here before it can reach the front end.
+ * Governs the success branch only. That response is assembled from the ESP's
+ * contact record, so anything not named here would ship the provider's stored
+ * fields to the caller. The failure branch builds `compact( 'message' )` by hand
+ * below and never consults this list, which is why `message` is absent here: on
+ * the branch this list governs, the only thing that could supply it is the
+ * provider record it exists to bound, and view.js renders the block's own
+ * success message rather than the response's.
+ *
+ * Every entry is produced on that branch by this file, except `verified` and
+ * `verification_nonce`, which come from newspack-plugin's
+ * `\Newspack\Reader_Activation::get_verification_payload()` and are merged in
+ * wholesale — so a key added on that side needs an entry here before it can
+ * reach the caller.
  */
 const RESPONSE_KEYS = [
-	'message',
 	'newspack_newsletters_subscribed',
 	FORM_ACTION,
 	'metadata',
