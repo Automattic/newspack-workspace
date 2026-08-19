@@ -75,6 +75,8 @@ declare global {
 				title: string;
 			}>;
 			upgrade_subscription_url: string;
+			audience_management_enabled?: string;
+			audience_management_url?: string;
 		};
 		newspackAudienceIntegrations: {
 			integrations_settings_enabled: boolean;
@@ -91,7 +93,7 @@ declare global {
 			// Audience Management is a prerequisite for content gates. Only ever the
 			// string wp_localize_script() produced ('1' on, '' off) - nothing writes a
 			// real boolean back, so typing it wider would invite a `=== true` that can
-			// never hold. Read it via hasAudienceManagement() in content-gates/utils.
+			// never hold. Read it via hasAudienceManagement() in audience/components/audience-management-required.
 			//
 			// Optional because both keys are absent on a page whose localized config
 			// predates this feature, which the readers already handle: hasAudienceManagement()

@@ -21,7 +21,7 @@ import { render, screen } from '@testing-library/react';
 /**
  * Internal dependencies
  */
-import AudienceManagementRequired, { redirectWithoutAudienceManagement, requireAudienceManagement } from './audience-management-required';
+import AudienceManagementRequired, { redirectWithoutAudienceManagement, requireAudienceManagement } from '../../components/audience-management-required';
 
 // The real @wordpress/components cannot load in jsdom (its data-store side effects throw
 // at import), so pass through only what the prerequisite state renders. ExternalLink and
@@ -69,6 +69,8 @@ const setAudienceManagement = enabled => {
 
 const Section = () => <div>the real section</div>;
 
+const GATES_COPY = 'Access Control needs accounts, sign-in, and account emails. Audience Management provides them.';
+
 describe( 'requireAudienceManagement (NPPD-1846)', () => {
 	// '' is what wp_localize_script() sends for PHP false, and the absent key covers a
 	// site whose localized config predates this feature. Pinning the string rather than
@@ -80,7 +82,7 @@ describe( 'requireAudienceManagement (NPPD-1846)', () => {
 	] )( 'replaces the section with the prerequisite state when the flag is %s', ( _label, value ) => {
 		setAudienceManagement( value );
 
-		const Guarded = requireAudienceManagement( Section );
+		const Guarded = requireAudienceManagement( Section, { description: GATES_COPY } );
 		render( <Guarded /> );
 
 		expect( screen.getByText( PREREQUISITE_HEADING ) ).toBeInTheDocument();
@@ -92,7 +94,7 @@ describe( 'requireAudienceManagement (NPPD-1846)', () => {
 	it( 'renders the section untouched when Audience Management is on', () => {
 		setAudienceManagement( '1' );
 
-		const Guarded = requireAudienceManagement( Section );
+		const Guarded = requireAudienceManagement( Section, { description: GATES_COPY } );
 		render( <Guarded /> );
 
 		expect( screen.getByText( 'the real section' ) ).toBeInTheDocument();
@@ -103,33 +105,25 @@ describe( 'requireAudienceManagement (NPPD-1846)', () => {
 		setAudienceManagement( '1' );
 		const PropSpy = ( { label } ) => <div>{ label }</div>;
 
-		const Guarded = requireAudienceManagement( PropSpy );
+		const Guarded = requireAudienceManagement( PropSpy, { description: GATES_COPY } );
 		render( <Guarded label="forwarded" /> );
 
 		expect( screen.getByText( 'forwarded' ) ).toBeInTheDocument();
 	} );
 
-	it( 'uses newsletter-specific copy for the Premium Newsletters surface', () => {
+	// The copy belongs to the screen, not to this component: three surfaces now
+	// depend on Audience Management and a boolean per surface does not scale.
+	it( 'renders the copy the guarded screen supplied', () => {
 		setAudienceManagement( '' );
 
-		const Guarded = requireAudienceManagement( Section, { isNewsletter: true } );
+		const Guarded = requireAudienceManagement( Section, { description: 'Premium newsletters need accounts.' } );
 		render( <Guarded /> );
 
-		expect( screen.getByText( /Premium newsletters need accounts/ ) ).toBeInTheDocument();
-	} );
-
-	it( 'uses Access Control copy by default', () => {
-		setAudienceManagement( '' );
-
-		render( <AudienceManagementRequired /> );
-
-		expect( screen.getByText( /Access Control needs accounts/ ) ).toBeInTheDocument();
+		expect( screen.getByText( 'Premium newsletters need accounts.' ) ).toBeInTheDocument();
 	} );
 
 	it( 'omits the action rather than rendering a dead link when the URL is missing', () => {
-		window.newspackAudienceContentGates = { audience_management_enabled: '' };
-
-		render( <AudienceManagementRequired /> );
+		render( <AudienceManagementRequired description={ GATES_COPY } setupUrl="" /> );
 
 		expect( screen.getByText( PREREQUISITE_HEADING ) ).toBeInTheDocument();
 		expect( screen.queryByText( ACTION_LABEL ) ).not.toBeInTheDocument();

@@ -16,7 +16,7 @@ import { forwardRef } from '@wordpress/element';
  */
 import { Wizard, withWizard } from '../../../../../packages/components/src';
 import { WIZARD_STORE_NAMESPACE } from '../../../../../packages/components/src/wizard/store';
-import { redirectWithoutAudienceManagement, requireAudienceManagement } from './audience-management-required';
+import { redirectWithoutAudienceManagement, requireAudienceManagement } from '../../components/audience-management-required';
 import ContentGates from './content-gates';
 import Edit from './edit';
 import CountdownBanner from './edit/countdown-banner';
@@ -33,7 +33,9 @@ const ACCESS_CONTROL_INSTITUTIONS = [ ...ACCESS_CONTROL, { label: __( 'Instituti
 // renders. Only the landing route renders the prerequisite state; the rest redirect
 // to it, so the explanation lives in exactly one place.
 const GATES_ROUTE = '/content-gates';
-const GuardedContentGates = requireAudienceManagement( ContentGates );
+const GuardedContentGates = requireAudienceManagement( ContentGates, {
+	description: __( 'Access Control needs accounts, sign-in, and account emails. Audience Management provides them.', 'newspack-plugin' ),
+} );
 const GuardedEdit = redirectWithoutAudienceManagement( Edit, GATES_ROUTE );
 const GuardedCountdownBanner = redirectWithoutAudienceManagement( CountdownBanner, GATES_ROUTE );
 const GuardedContentGifting = redirectWithoutAudienceManagement( ContentGifting, GATES_ROUTE );

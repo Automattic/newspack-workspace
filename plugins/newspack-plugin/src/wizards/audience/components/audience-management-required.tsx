@@ -13,14 +13,32 @@ import { people } from '@wordpress/icons';
 /**
  * Internal dependencies
  */
-import { Button, Grid, SectionHeader } from '../../../../../packages/components/src';
-import Router from '../../../../../packages/components/src/proxied-imports/router';
-import { hasAudienceManagement } from './utils';
+import { Button, Grid, SectionHeader } from '../../../../packages/components/src';
+import Router from '../../../../packages/components/src/proxied-imports/router';
 
 const { Redirect } = Router;
 
-const AudienceManagementRequired = ( { isNewsletter = false }: { isNewsletter?: boolean } ) => {
-	const audienceManagementUrl = window.newspackAudienceContentGates?.audience_management_url || '';
+type AudienceManagementConfig = {
+	audience_management_enabled?: string | boolean;
+	audience_management_url?: string;
+};
+
+/**
+ * Whether Audience Management is enabled, read from a wizard's localized config.
+ *
+ * Every screen that depends on Audience Management localizes the two keys the
+ * `Audience_Management_Dependency` PHP trait supplies, so the bag it lives in is
+ * the caller's to name.
+ *
+ * `wp_localize_script()` stringifies the PHP boolean, so the value arrives as
+ * '1' when on and '' when off - which is why this is a truthiness check and not
+ * a comparison against `true`.
+ */
+export const hasAudienceManagement = ( config: AudienceManagementConfig | undefined = window.newspackAudienceContentGates ) =>
+	Boolean( config?.audience_management_enabled );
+
+const AudienceManagementRequired = ( { description, setupUrl = '' }: { description: string; setupUrl?: string } ) => {
+	const audienceManagementUrl = setupUrl;
 
 	return (
 		<Grid columns={ 4 } noMargin>
@@ -28,17 +46,7 @@ const AudienceManagementRequired = ( { isNewsletter = false }: { isNewsletter?: 
 				<SectionHeader
 					icon={ people }
 					title={ __( 'Set up Audience Management first', 'newspack-plugin' ) }
-					description={
-						isNewsletter
-							? __(
-									'Premium newsletters need accounts, sign-in, and account emails. Audience Management provides them.',
-									'newspack-plugin'
-							  )
-							: __(
-									'Access Control needs accounts, sign-in, and account emails. Audience Management provides them.',
-									'newspack-plugin'
-							  )
-					}
+					description={ description }
 					pageHeader
 					noMargin
 				/>
@@ -79,12 +87,13 @@ const AudienceManagementRequired = ( { isNewsletter = false }: { isNewsletter?: 
  * that changes identity between renders remounts the section subtree and discards
  * in-progress editor state.
  */
-export const requireAudienceManagement = < P extends object >(
-	Section: React.ComponentType< P >,
-	{ isNewsletter = false }: { isNewsletter?: boolean } = {}
-) => {
+export const requireAudienceManagement = < P extends object >( Section: React.ComponentType< P >, { description }: { description: string } ) => {
 	const Guarded = ( props: P ) =>
-		hasAudienceManagement() ? <Section { ...props } /> : <AudienceManagementRequired isNewsletter={ isNewsletter } />;
+		hasAudienceManagement() ? (
+			<Section { ...props } />
+		) : (
+			<AudienceManagementRequired description={ description } setupUrl={ window.newspackAudienceContentGates?.audience_management_url || '' } />
+		);
 	// Named so the guarded sections are distinguishable in React DevTools
 	// rather than all reading as `Anonymous`.
 	Guarded.displayName = `RequireAudienceManagement(${ Section.displayName || Section.name || 'Section' })`;

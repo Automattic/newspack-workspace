@@ -18,6 +18,8 @@ defined( 'ABSPATH' ) || exit;
  * being wired in here, so a tab can ship without touching the shell.
  */
 class Audience_Subscriptions extends Wizard {
+	use Wizards\Traits\Audience_Management_Dependency;
+
 	/**
 	 * Admin page slug.
 	 *
@@ -513,7 +515,7 @@ class Audience_Subscriptions extends Wizard {
 					Subscriptions_Tiers::get_tier_eligible_products()
 				),
 				'upgrade_subscription_url' => Subscriptions_Tiers::get_upgrade_subscription_url(),
-			]
+			] + $this->get_audience_management_script_data()
 		);
 	}
 }

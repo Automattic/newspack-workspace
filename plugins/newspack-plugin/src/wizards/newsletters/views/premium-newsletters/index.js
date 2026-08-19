@@ -19,9 +19,11 @@ import { WIZARD_STORE_NAMESPACE } from '../../../../../packages/components/src/w
 import { PREMIUM_NEWSLETTERS_WIZARD_SLUG, BASE_HEADER_TEXT } from './consts';
 import PremiumNewslettersList from './premium-newsletters-list';
 import Edit from '../../../audience/views/content-gates/edit';
-import { redirectWithoutAudienceManagement, requireAudienceManagement } from '../../../audience/views/content-gates/audience-management-required';
+import { redirectWithoutAudienceManagement, requireAudienceManagement } from '../../../audience/components/audience-management-required';
 
-const REQUIRES_AUDIENCE_MANAGEMENT = { isNewsletter: true };
+const REQUIRES_AUDIENCE_MANAGEMENT = {
+	description: __( 'Premium newsletters need accounts, sign-in, and account emails. Audience Management provides them.', 'newspack-plugin' ),
+};
 
 const ROOT = [ { label: __( 'Newsletters', 'newspack-plugin' ) } ];
 const PREMIUM_BREADCRUMBS = [ ...ROOT, { label: __( 'Premium', 'newspack-plugin' ) } ];
