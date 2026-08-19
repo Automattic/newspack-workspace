@@ -754,6 +754,23 @@ domReady( () => {
 		} );
 
 	/**
+	 * Query params a modal checkout URL trigger consumes (see
+	 * handleModalCheckoutUrlParams). Only these are stripped after a successful
+	 * trigger — unrelated params (UTMs, plain-permalink ids) and the hash
+	 * survive.
+	 */
+	const CHECKOUT_TRIGGER_PARAMS = [ 'checkout', 'type', 'layout', 'frequency', 'amount', 'other', 'product_id', 'variation_id' ];
+
+	/**
+	 * Remove the modal checkout trigger params from the address bar.
+	 */
+	const stripCheckoutUrlParams = () => {
+		const url = new URL( window.location.href );
+		CHECKOUT_TRIGGER_PARAMS.forEach( param => url.searchParams.delete( param ) );
+		window.history.replaceState( null, null, url.href );
+	};
+
+	/**
 	 * Handle donation form triggers.
 	 *
 	 * Resolution (which form, which tier) is delegated to resolveDonationTrigger,
@@ -805,7 +822,7 @@ domReady( () => {
 				() => {
 					clearTimeout( readyWarningTimeout );
 					if ( triggerDonationForm( layout, frequency, amount, other ) ) {
-						window.history.replaceState( null, null, window.location.pathname );
+						stripCheckoutUrlParams();
 					}
 				},
 				{ once: true }
@@ -926,10 +943,10 @@ domReady( () => {
 				triggerFormSubmit( form );
 			}
 		}
-		// Remove the URL params to prevent re-triggering, but only when the
+		// Remove the trigger params to prevent re-triggering, but only when the
 		// trigger succeeded.
 		if ( shouldStripParams ) {
-			window.history.replaceState( null, null, window.location.pathname );
+			stripCheckoutUrlParams();
 		}
 	};
 	handleModalCheckoutUrlParams();
