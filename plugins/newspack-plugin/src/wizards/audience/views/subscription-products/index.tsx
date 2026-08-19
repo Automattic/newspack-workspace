@@ -22,10 +22,13 @@ import SubscriptionProductsList from './list';
 import ProductEdit from './product-edit';
 import './style.scss';
 
+const ROOT = [ { label: __( 'Audience Management', 'newspack-plugin' ) } ];
+const PLANS = [ ...ROOT, { label: __( 'Plans', 'newspack-plugin' ) } ];
+const PLANS_TRAIL = [ ...ROOT, { label: __( 'Plans', 'newspack-plugin' ), url: '#/' } ];
+
 const AudienceSubscriptionProducts = ( props: object, ref: React.Ref< HTMLDivElement > ) => {
 	return (
 		<Wizard
-			headerText={ __( 'Audience Management / Plans', 'newspack-plugin' ) }
 			ref={ ref }
 			sections={ [
 				// Scope tabs. Each renders the same list, filtered to its scope (passed via
@@ -38,6 +41,7 @@ const AudienceSubscriptionProducts = ( props: object, ref: React.Ref< HTMLDivEle
 					render: SubscriptionProductsList,
 					props: { scope: 'subscriptions' },
 					exact: true,
+					breadcrumbs: PLANS,
 					fullWidth: true,
 				},
 				{
@@ -46,6 +50,7 @@ const AudienceSubscriptionProducts = ( props: object, ref: React.Ref< HTMLDivEle
 					render: SubscriptionProductsList,
 					props: { scope: 'donations' },
 					exact: true,
+					breadcrumbs: PLANS,
 					fullWidth: true,
 				},
 				{
@@ -54,6 +59,7 @@ const AudienceSubscriptionProducts = ( props: object, ref: React.Ref< HTMLDivEle
 					render: SubscriptionProductsList,
 					props: { scope: 'groups' },
 					exact: true,
+					breadcrumbs: PLANS,
 					fullWidth: true,
 				},
 				{
@@ -61,16 +67,16 @@ const AudienceSubscriptionProducts = ( props: object, ref: React.Ref< HTMLDivEle
 					render: ProductEdit,
 					isHidden: true,
 					exact: true,
+					breadcrumbs: PLANS_TRAIL,
 					backNav: '#/',
-					title: __( 'Add plan', 'newspack-plugin' ),
 				},
 				{
 					path: '/edit/:id',
 					render: ProductEdit,
 					isHidden: true,
 					exact: true,
+					breadcrumbs: PLANS_TRAIL,
 					backNav: '#/',
-					title: __( 'Edit plan', 'newspack-plugin' ),
 				},
 			] }
 		/>

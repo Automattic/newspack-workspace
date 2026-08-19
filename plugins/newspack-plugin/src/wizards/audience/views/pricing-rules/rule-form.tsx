@@ -8,7 +8,7 @@
  * WordPress dependencies
  */
 import { __ } from '@wordpress/i18n';
-import { useState, useEffect, useCallback, useMemo } from '@wordpress/element';
+import { useState, useEffect, useCallback, useMemo, useRef } from '@wordpress/element';
 import { useDispatch } from '@wordpress/data';
 import apiFetch from '@wordpress/api-fetch';
 import {
@@ -25,27 +25,52 @@ import { trash } from '@wordpress/icons';
 /**
  * Internal dependencies
  */
-import { Grid, SectionHeader, Divider } from '../../../../../packages/components/src';
+import { Grid, Router, SectionHeader, Divider, useConfirmDialog } from '../../../../../packages/components/src';
 import { WIZARD_STORE_NAMESPACE } from '../../../../../packages/components/src/wizard/store';
 import ScopeTargets from './scope-targets';
 import Conditions, { type ConditionsMap } from './conditions';
 import RulePreview from './rule-preview';
+import ReadonlyField from './readonly-field';
+import DateTimeField from './datetime-field';
 import { tsToLocalInput, localInputToTs } from './datetime';
-import { RECIPES, pathOptions, applyRecipeConditions, intentLabel, pathDescription, type PricingPath } from './recipes';
+import { RECIPES, applyRecipeConditions, isConditionVisible, isPricingPath, intentLabel, type PricingPath } from './recipes';
+import GoalCards from './goal-cards';
 import { RULES_API_PATH as API_PATH } from './constants';
 
-interface RuleFormProps {
-	isNew: boolean;
-	rule: PricingRuleRow | null;
-	vocab: PricingRulesResponse;
-	onDone: () => void;
-}
+const { useHistory, useLocation } = Router;
 
 interface StepRowState {
 	at: string;
 	calc_type: string;
 	value: string;
 	label: string;
+}
+
+const SCHEDULE_HELP_ID = 'newspack-pricing-rule-schedule__help';
+const COPY_NOTICE_ID = 'pricing-rule-copy';
+
+interface RuleFormProps {
+	isNew: boolean;
+	/** The goal chosen at #/new. Null when editing. */
+	initialPath?: PricingPath | null;
+	rule: PricingRuleRow | null;
+	vocab: PricingRulesResponse;
+	onDone: () => void;
+}
+
+/**
+ * Drop conditions the target goal cannot show. Without this a Custom detour leaves a
+ * named goal carrying a gate it never displays and the publisher cannot clear.
+ */
+function conditionsVisibleUnder( path: PricingPath, conditions: ConditionsMap, vocab: PricingRuleConditionVocab[] = [] ): ConditionsMap {
+	const next: ConditionsMap = {};
+	for ( const [ id, val ] of Object.entries( conditions ) ) {
+		const matcher = vocab.find( m => m.id === id );
+		if ( matcher && isConditionVisible( path, matcher.field_type ) ) {
+			next[ id ] = val;
+		}
+	}
+	return next;
 }
 
 /**
@@ -63,10 +88,71 @@ function seedConditions( raw: ConditionsMap | undefined ): ConditionsMap {
 	return seeded;
 }
 
-export default function RuleForm( { isNew, rule, vocab, onDone }: RuleFormProps ) {
-	const { setHeaderData, addNotice } = useDispatch( WIZARD_STORE_NAMESPACE );
+function CopyDealId( { dealKey }: { dealKey: string } ) {
+	const { addNotice, removeNotice } = useDispatch( WIZARD_STORE_NAMESPACE );
+	const buttonRef = useRef< HTMLButtonElement | null >( null );
 
-	const [ title, setTitle ] = useState( rule?.title ?? '' );
+	// navigator.clipboard is undefined outside a secure context, e.g. wp-admin over HTTP.
+	const legacyCopy = (): boolean => {
+		const doc = buttonRef.current?.ownerDocument ?? document;
+		const field = doc.createElement( 'textarea' );
+		field.value = dealKey;
+		field.setAttribute( 'readonly', '' );
+		field.style.cssText = 'position:fixed;top:0;left:0;opacity:0';
+		doc.body.appendChild( field );
+		field.select();
+		let copied = false;
+		try {
+			copied = doc.execCommand( 'copy' );
+		} catch {
+			copied = false;
+		}
+		field.remove();
+		// select() moved focus to the textarea, which no longer exists.
+		buttonRef.current?.focus();
+		return copied;
+	};
+
+	// Not useCopyToClipboard: it only exposes onSuccess, so failure cannot be reported.
+	const copy = async () => {
+		let copied = false;
+		try {
+			await navigator.clipboard.writeText( dealKey );
+			copied = true;
+		} catch {
+			copied = legacyCopy();
+		}
+		// Notices append without deduping, so a second copy would stack a toast sharing
+		// the first one's React key.
+		removeNotice( COPY_NOTICE_ID );
+		addNotice(
+			copied
+				? { id: COPY_NOTICE_ID, type: 'success', message: __( 'Deal ID copied to clipboard.', 'newspack-plugin' ) }
+				: { id: COPY_NOTICE_ID, type: 'error', message: __( 'Could not copy the Deal ID.', 'newspack-plugin' ) }
+		);
+	};
+
+	return (
+		<Button ref={ buttonRef } variant="secondary" onClick={ copy } aria-label={ __( 'Copy Deal ID', 'newspack-plugin' ) } __next40pxDefaultSize>
+			{ __( 'Copy', 'newspack-plugin' ) }
+		</Button>
+	);
+}
+
+export default function RuleForm( { isNew, initialPath = null, rule, vocab, onDone }: RuleFormProps ) {
+	const { setHeaderData, addNotice } = useDispatch( WIZARD_STORE_NAMESPACE );
+	const history = useHistory();
+	const { pathname } = useLocation();
+
+	const seedPath = isNew ? initialPath : null;
+	const seedTitle = seedPath && ! RECIPES[ seedPath ].isCustom ? intentLabel( seedPath ) : '';
+	const seedApplication = seedPath ? RECIPES[ seedPath ].application : null;
+	const seedCycleAnchor = seedPath ? RECIPES[ seedPath ].cycleAnchor : 'subscription_start';
+	const seedScope = seedPath && vocab.scopes.some( s => s.id === RECIPES[ seedPath ].defaultScope ) ? RECIPES[ seedPath ].defaultScope : null;
+
+	const [ title, setTitle ] = useState( rule?.title ?? seedTitle );
+	// The name follows the goal until the publisher types their own.
+	const [ titleIsAuto, setTitleIsAuto ] = useState( isNew && ! rule?.title );
 	const [ status, setStatus ] = useState< 'publish' | 'draft' >( rule?.status === 'publish' ? 'publish' : 'draft' );
 	const [ calcType, setCalcType ] = useState( rule?.simple?.calc_type ?? vocab.calc_types[ 0 ]?.value ?? 'fixed_price' );
 	const [ value, setValue ] = useState( String( rule?.simple?.value ?? '' ) );
@@ -91,59 +177,139 @@ export default function RuleForm( { isNew, rule, vocab, onDone }: RuleFormProps 
 			{ at: String( ( Number( prev[ prev.length - 1 ]?.at ) || prev.length ) + 1 ), calc_type: defaultCalc, value: '', label: '' },
 		] );
 	const removeStep = ( i: number ) => setSteps( prev => prev.filter( ( _, idx ) => idx !== i ) );
-	const [ scopeType, setScopeType ] = useState( rule?.scope_type ?? vocab.scopes[ 0 ]?.id ?? 'all_products' );
+	const [ scopeType, setScopeType ] = useState( rule?.scope_type ?? seedScope ?? vocab.scopes[ 0 ]?.id ?? 'all_products' );
 	const [ scopeIds, setScopeIds ] = useState< number[] >( rule?.scope_ids ?? [] );
 	const [ priority, setPriority ] = useState( String( rule?.priority ?? 100 ) );
 	// The rule schema leaves compose_mode open, and the select only offers the two
 	// modes below. Hold whatever the server sent so a value this UI doesn't know
 	// round-trips on save instead of being rewritten to 'min'.
 	const [ composeMode, setComposeMode ] = useState< PricingRuleRow[ 'compose_mode' ] >( rule?.compose_mode ?? 'min' );
-	const [ application, setApplication ] = useState( rule?.application === 'locked' ? 'locked' : 'current' );
-	const [ cycleAnchor, setCycleAnchor ] = useState< 'subscription_start' | 'rule_application' >(
-		rule?.cycle_anchor === 'rule_application' ? 'rule_application' : 'subscription_start'
-	);
+	const [ application, setApplication ] = useState( rule?.application === 'locked' ? 'locked' : seedApplication ?? 'current' );
+	const [ cycleAnchor, setCycleAnchor ] = useState( rule?.cycle_anchor === 'rule_application' ? 'rule_application' : seedCycleAnchor );
 	const [ publicize, setPublicize ] = useState( Boolean( rule?.publicize ) );
-	const [ path, setPath ] = useState< string >( rule?.intent ?? ( isNew ? '' : 'custom' ) );
 	const [ intentNote, setIntentNote ] = useState( rule?.intent_note ?? '' );
-	// On a new rule the goal cards collapse to the chosen one once picked; "picking" reopens the full list.
-	const [ picking, setPicking ] = useState( false );
-	// The deal name auto-fills from the goal until the publisher types their own.
-	const [ titleIsAuto, setTitleIsAuto ] = useState( isNew && ! rule?.title );
-	const recipe = path && path in RECIPES ? RECIPES[ path as PricingPath ] : null;
+	const [ path, setPath ] = useState< string >( rule?.intent || initialPath || ( isNew ? '' : 'custom' ) );
+	const needsGoal = isNew && ! path;
+	const recipe = Object.prototype.hasOwnProperty.call( RECIPES, path ) ? RECIPES[ path as PricingPath ] : null;
 
-	// Choosing a path applies its recipe: force the lifecycle matcher + application +
-	// default scope, and seed the name from the goal. Preserves segmentation; Custom
-	// presets nothing but its scope default.
-	const choosePath = ( next: string ) => {
+	/** Apply a goal's recipe to the fields that goal owns. Everything typed is left alone. */
+	const choosePath = ( next: PricingPath ) => {
 		setPath( next );
-		setPicking( false );
-		if ( ! ( next in RECIPES ) ) {
-			return;
+		// `replace`, so Back leaves the flow rather than stepping through goals.
+		if ( isNew ) {
+			history.replace( `/new/${ next }` );
 		}
-		const p = next as PricingPath;
-		setConditions( prev => applyRecipeConditions( p, prev ) );
-		const app = RECIPES[ p ].application;
-		if ( app ) {
-			setApplication( app );
+		const nextRecipe = RECIPES[ next ];
+		setConditions( prev => applyRecipeConditions( next, conditionsVisibleUnder( next, prev, vocab.conditions ) ) );
+		if ( nextRecipe.application ) {
+			setApplication( nextRecipe.application );
 		}
-		// Seed the cycle anchor from the recipe — retention rebases to first apply.
-		setCycleAnchor( RECIPES[ p ].cycleAnchor );
-		// Default the deal name to the goal until the publisher types their own.
+		setCycleAnchor( nextRecipe.cycleAnchor );
 		if ( titleIsAuto ) {
-			setTitle( 'custom' === p ? '' : intentLabel( p ) );
+			setTitle( nextRecipe.isCustom ? '' : intentLabel( next ) );
 		}
-		// Subscription presets target all subscriptions; Custom stays all products.
-		const wantScope = RECIPES[ p ].defaultScope;
-		if ( vocab.scopes.some( s => s.id === wantScope ) ) {
-			setScopeType( wantScope );
+		if ( vocab.scopes.some( s => s.id === nextRecipe.defaultScope ) ) {
+			setScopeType( nextRecipe.defaultScope );
 			setScopeIds( [] );
+		}
+		// Custom-only controls; a named goal would carry them hidden and unremovable.
+		if ( ! nextRecipe.isCustom ) {
+			setPriority( '100' );
+			setComposeMode( 'min' );
 		}
 	};
 
+	// A goal-less URL is canonicalised back to the goal on screen; clearing `path`
+	// instead would discard the recipe and everything typed.
+	useEffect( () => {
+		if ( ! isNew ) {
+			return;
+		}
+		if ( initialPath && initialPath !== path ) {
+			choosePath( initialPath );
+		} else if ( ! initialPath && path ) {
+			history.replace( `/new/${ path }` );
+		}
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [ initialPath ] );
+
 	const [ activeFrom, setActiveFrom ] = useState( tsToLocalInput( rule?.active_from ?? null ) );
 	const [ activeUntil, setActiveUntil ] = useState( tsToLocalInput( rule?.active_until ?? null ) );
-	const [ conditions, setConditions ] = useState< ConditionsMap >( () => seedConditions( rule?.conditions ) );
+	const [ conditions, setConditions ] = useState< ConditionsMap >( () =>
+		seedPath ? applyRecipeConditions( seedPath, {} ) : seedConditions( rule?.conditions )
+	);
 	const [ isSaving, setIsSaving ] = useState( false );
+	const [ dateModes, setDateModes ] = useState< Record< string, string > >( {} );
+
+	/**
+	 * What a switch to a named goal would discard. Priority, compose mode and the
+	 * date gates render only under Custom, so leaving Custom is the one switch that
+	 * loses anything. Boolean matchers are excluded: a named goal owning the
+	 * lifecycle gate is the point of picking one, not a side effect. A date gate
+	 * counts only in `custom` mode — new rules auto-apply the publish date, and
+	 * warning about a default nobody chose would put a dialog on every switch.
+	 */
+	const goalChangeLosses = useMemo( () => {
+		if ( ! recipe?.isCustom ) {
+			return [] as string[];
+		}
+		const lost: string[] = [];
+		if ( '100' !== priority ) {
+			lost.push( __( 'Priority', 'newspack-plugin' ) );
+		}
+		if ( 'min' !== composeMode ) {
+			lost.push( __( 'When multiple rules match', 'newspack-plugin' ) );
+		}
+		( vocab.conditions ?? [] ).forEach( matcher => {
+			if ( 'datetime' === matcher.field_type && 'custom' === dateModes[ matcher.id ] ) {
+				lost.push( matcher.label );
+			}
+		} );
+		return lost;
+	}, [ recipe, priority, composeMode, dateModes, vocab.conditions ] );
+
+	const { confirmDialog: goalDialog, requestConfirm: requestGoalChange } = useConfirmDialog( {
+		when: goalChangeLosses.length > 0,
+		title: __( 'Change goal?', 'newspack-plugin' ),
+		confirmButtonText: __( 'Change Goal', 'newspack-plugin' ),
+		message: (
+			<>
+				<p>
+					{ __(
+						'A named goal presets its own eligibility, price locking, products and cycle counting. These Custom settings do not carry over:',
+						'newspack-plugin'
+					) }
+				</p>
+				<ul>
+					{ goalChangeLosses.map( label => (
+						<li key={ label }>{ label }</li>
+					) ) }
+				</ul>
+				<p>
+					{ __(
+						'Your pricing, steps and dates stay as they are, and the name follows the goal until you write your own.',
+						'newspack-plugin'
+					) }
+				</p>
+			</>
+		),
+	} );
+
+	const requestGoal = ( next: PricingPath ) => {
+		if ( next === path ) {
+			return;
+		}
+		requestGoalChange( () => choosePath( next ) );
+	};
+
+	// A save can outlive the form; its callbacks must not then navigate.
+	const isMounted = useRef( true );
+	useEffect( () => {
+		isMounted.current = true;
+		return () => {
+			isMounted.current = false;
+		};
+	}, [] );
 
 	const previewBody = useMemo( () => {
 		const b: Record< string, unknown > = {
@@ -278,7 +444,9 @@ export default function RuleForm( { isNew, rule, vocab, onDone }: RuleFormProps 
 					type: 'success',
 					id: 'pricing-rule-saved',
 				} );
-				onDone();
+				if ( isMounted.current ) {
+					onDone();
+				}
 			} )
 			.catch( ( e: { message?: string } ) =>
 				addNotice( {
@@ -287,7 +455,11 @@ export default function RuleForm( { isNew, rule, vocab, onDone }: RuleFormProps 
 					id: 'pricing-rule-save-error',
 				} )
 			)
-			.finally( () => setIsSaving( false ) );
+			.finally( () => {
+				if ( isMounted.current ) {
+					setIsSaving( false );
+				}
+			} );
 	}, [
 		title,
 		status,
@@ -315,398 +487,368 @@ export default function RuleForm( { isNew, rule, vocab, onDone }: RuleFormProps 
 		onDone,
 	] );
 
-	// The create/save action is disabled until the form's hard requirements are met:
-	// a name and a chosen goal (mirrors the submit() guards).
-	const canSubmit = title.trim() !== '' && path !== '';
+	const canSubmit = title.trim() !== '' && ! needsGoal;
 	useEffect( () => {
 		setHeaderData( {
 			backNav: '#/',
+			sectionName: isNew ? __( 'Add Rule', 'newspack-plugin' ) : __( 'Edit Rule', 'newspack-plugin' ),
 			actions: [
 				{
 					type: 'primary',
-					label: isNew ? __( 'Create rule', 'newspack-plugin' ) : __( 'Save changes', 'newspack-plugin' ),
+					label: __( 'Save', 'newspack-plugin' ),
 					action: submit,
 					disabled: isSaving || ! canSubmit,
 				},
 			],
 		} );
-	}, [ setHeaderData, submit, isNew, isSaving, canSubmit ] );
+		// `pathname`: the wizard blanks the header on every route change, and the form
+		// outlives them, so each one has to republish it.
+	}, [ setHeaderData, submit, isNew, isSaving, canSubmit, pathname ] );
+
+	const goalDescription = [
+		__( 'The goal presets who qualifies, whether the price locks in at purchase, and which products the rule covers.', 'newspack-plugin' ),
+		! isNew && __( 'It is set when the rule is created; create a new rule to use a different one.', 'newspack-plugin' ),
+	]
+		.filter( Boolean )
+		.join( ' ' );
 
 	return (
 		<div className="newspack-pricing-rules__form">
-			<Grid columns={ 2 } gutter={ 32 }>
+			<div className="newspack-pricing-rules__goal-section">
+				<SectionHeader title={ __( 'Goal', 'newspack-plugin' ) } description={ goalDescription } noMargin />
+				<GoalCards selected={ isPricingPath( path ) ? path : null } onSelect={ requestGoal } disabled={ ! isNew || isSaving } />
+			</div>
+
+			<Divider alignment="full-width" variant="tertiary" />
+
+			<Grid columns={ 2 } gutter={ 32 } noMargin>
 				<SectionHeader
-					title={ __( 'What are you trying to do?', 'newspack-plugin' ) }
-					description={ __(
-						'Pick a goal. We preset the matching options and hide the rest; choose Custom for full control.',
-						'newspack-plugin'
-					) }
+					title={ __( 'Rule Details', 'newspack-plugin' ) }
+					description={ __( 'Its name and status, and which products it applies to.', 'newspack-plugin' ) }
+					noMargin
 				/>
-				<VStack spacing={ 4 }>
-					{ isNew && ( path === '' || picking ) && (
-						<div className="newspack-pricing-rules__goal-grid">
-							{ pathOptions().map( opt => {
-								const selected = path === opt.value;
-								return (
-									<button
-										key={ opt.value }
-										type="button"
-										className={ `newspack-pricing-rules__goal-card${ selected ? ' is-selected' : '' }` }
-										aria-pressed={ selected }
-										onClick={ () => choosePath( opt.value ) }
-									>
-										<span className="newspack-pricing-rules__goal-card-title">{ opt.label }</span>
-										<span className="newspack-pricing-rules__goal-card-desc">{ pathDescription( opt.value ) }</span>
-									</button>
-								);
-							} ) }
-						</div>
-					) }
-					{ isNew && path !== '' && ! picking && (
-						<div className="newspack-pricing-rules__goal-grid">
-							<div className="newspack-pricing-rules__goal-card is-selected">
-								<span className="newspack-pricing-rules__goal-card-title">{ intentLabel( path ) }</span>
-								<span className="newspack-pricing-rules__goal-card-desc">{ pathDescription( path as PricingPath ) }</span>
-							</div>
-							<Button variant="link" onClick={ () => setPicking( true ) }>
-								{ __( 'Change', 'newspack-plugin' ) }
-							</Button>
-						</div>
-					) }
-					{ ! isNew && (
-						<p className="description">
-							{ __( 'Goal:', 'newspack-plugin' ) } <strong>{ intentLabel( path ) }</strong>
-							<br />
-							{ __( 'Set when the rule was created — create a new rule to use a different goal.', 'newspack-plugin' ) }
-						</p>
-					) }
-					{ ! isNew && recipe && (
-						<p className="description" style={ { marginTop: 0 } }>
-							{ pathDescription( path as PricingPath ) }
-						</p>
-					) }
+				<VStack spacing={ 6 } className="newspack-pricing-rules__details">
 					{ recipe?.isCustom && (
 						<TextControl
 							label={ __( 'Goal note', 'newspack-plugin' ) }
-							help={ __( "Optional. Describe this deal's goal in your own words.", 'newspack-plugin' ) }
+							help={ __( "Optional. Describe this rule's goal in your own words.", 'newspack-plugin' ) }
 							value={ intentNote }
 							onChange={ setIntentNote }
 							__next40pxDefaultSize
 						/>
 					) }
+					<TextControl
+						label={ __( 'Name', 'newspack-plugin' ) }
+						value={ title }
+						onChange={ v => {
+							setTitle( v );
+							setTitleIsAuto( v.trim() === '' );
+						} }
+						__next40pxDefaultSize
+					/>
+					<SelectControl
+						label={ __( 'Status', 'newspack-plugin' ) }
+						value={ status }
+						options={ [
+							{ label: __( 'Published', 'newspack-plugin' ), value: 'publish' },
+							{ label: __( 'Draft', 'newspack-plugin' ), value: 'draft' },
+						] }
+						onChange={ setStatus }
+						__next40pxDefaultSize
+					/>
+					<SelectControl
+						label={ __( 'Applies to', 'newspack-plugin' ) }
+						help={ __( 'Which products this rule targets.', 'newspack-plugin' ) }
+						value={ scopeType }
+						options={ vocab.scopes.map( s => ( { label: s.label, value: s.id } ) ) }
+						onChange={ st => {
+							setScopeType( st );
+							// Category and product ids are different namespaces — clear on switch.
+							setScopeIds( [] );
+						} }
+						__next40pxDefaultSize
+					/>
+					<ScopeTargets scopeType={ scopeType } value={ scopeIds } onChange={ setScopeIds } />
+					{ ! isNew && rule && (
+						<ReadonlyField
+							id="newspack-pricing-rule-deal-id"
+							label={ __( 'Deal ID', 'newspack-plugin' ) }
+							help={ __( 'Use this ID to find the deal in your analytics. It never changes.', 'newspack-plugin' ) }
+							value={ rule.deal_key }
+							isMonospace
+						>
+							<CopyDealId dealKey={ rule.deal_key } />
+						</ReadonlyField>
+					) }
 				</VStack>
 			</Grid>
 
-			{ path !== '' && (
-				<>
-					<Grid columns={ 2 } gutter={ 32 }>
-						<SectionHeader
-							title={ __( 'Rule details', 'newspack-plugin' ) }
-							description={ __( 'Name, status, and which products it applies to.', 'newspack-plugin' ) }
+			<Divider alignment="full-width" variant="tertiary" />
+
+			<Grid columns={ 2 } gutter={ 32 } noMargin>
+				<SectionHeader
+					title={ __( 'Pricing Model', 'newspack-plugin' ) }
+					description={ __( 'How matching products are priced.', 'newspack-plugin' ) }
+					noMargin
+				/>
+				<VStack spacing={ 6 }>
+					{ isNew ? (
+						<SelectControl
+							label={ __( 'Pricing model', 'newspack-plugin' ) }
+							value={ strategyId }
+							options={ vocab.strategies.map( s => ( { label: s.label, value: s.id } ) ) }
+							onChange={ setStrategyId }
+							__next40pxDefaultSize
 						/>
-						<VStack spacing={ 4 }>
-							<TextControl
-								label={ __( 'Name', 'newspack-plugin' ) }
-								value={ title }
-								onChange={ v => {
-									setTitle( v );
-									setTitleIsAuto( false );
-								} }
-								__next40pxDefaultSize
-							/>
-							{ ! isNew && rule && (
-								<p className="description">
-									{ __( 'Deal ID:', 'newspack-plugin' ) } <code>{ rule.deal_key }</code>
-									<br />
-									{ __( 'Use this ID to find the deal in your analytics. It never changes.', 'newspack-plugin' ) }
-								</p>
-							) }
-							<SelectControl
-								label={ __( 'Status', 'newspack-plugin' ) }
-								value={ status }
-								options={ [
-									{ label: __( 'Published', 'newspack-plugin' ), value: 'publish' },
-									{ label: __( 'Draft', 'newspack-plugin' ), value: 'draft' },
-								] }
-								onChange={ setStatus }
-								__next40pxDefaultSize
-							/>
-							<SelectControl
-								label={ __( 'Applies to', 'newspack-plugin' ) }
-								help={ __( 'Which products this rule targets.', 'newspack-plugin' ) }
-								value={ scopeType }
-								options={ vocab.scopes.map( s => ( { label: s.label, value: s.id } ) ) }
-								onChange={ st => {
-									setScopeType( st );
-									// Category and product ids are different namespaces — clear on switch.
-									setScopeIds( [] );
-								} }
-								__next40pxDefaultSize
-							/>
-							<ScopeTargets scopeType={ scopeType } value={ scopeIds } onChange={ setScopeIds } />
-						</VStack>
-					</Grid>
+					) : (
+						<p className="description">
+							{ __( 'Pricing model:', 'newspack-plugin' ) }{ ' ' }
+							<strong>{ vocab.strategies.find( s => s.id === strategyId )?.label ?? strategyId }</strong>
+						</p>
+					) }
 
-					<Divider alignment="full-width" variant="tertiary" />
-
-					<Grid columns={ 2 } gutter={ 32 } noMargin>
-						<SectionHeader
-							title={ __( 'Pricing model', 'newspack-plugin' ) }
-							description={ __( 'How matching products are priced.', 'newspack-plugin' ) }
-						/>
-						<VStack spacing={ 4 }>
-							{ isNew ? (
-								<SelectControl
-									label={ __( 'Pricing model', 'newspack-plugin' ) }
-									value={ strategyId }
-									options={ vocab.strategies.map( s => ( { label: s.label, value: s.id } ) ) }
-									onChange={ setStrategyId }
-									__next40pxDefaultSize
-								/>
-							) : (
-								<p className="description">
-									{ __( 'Pricing model:', 'newspack-plugin' ) }{ ' ' }
-									<strong>{ vocab.strategies.find( s => s.id === strategyId )?.label ?? strategyId }</strong>
-								</p>
-							) }
-
-							{ isSchedule ? (
-								<VStack spacing={ 3 }>
-									<p className="description">
-										{ __(
-											'Each row sets the price from a given cycle onward, until a later row takes over. Cycle 1 is the initial purchase; cycle 2 is the first renewal.',
-											'newspack-plugin'
-										) }
-									</p>
-									{ steps.map( ( step, i ) => (
-										<HStack key={ i } alignment="flex-end" spacing={ 2 }>
-											<FlexBlock>
-												<TextControl
-													label={ __( 'From cycle #', 'newspack-plugin' ) }
-													hideLabelFromVision={ i > 0 }
-													type="number"
-													min={ 1 }
-													value={ step.at }
-													onChange={ v => updateStep( i, 'at', v ) }
-													__next40pxDefaultSize
-												/>
-											</FlexBlock>
-											<FlexBlock>
-												<SelectControl
-													label={ __( 'Pricing', 'newspack-plugin' ) }
-													hideLabelFromVision={ i > 0 }
-													value={ step.calc_type }
-													options={ vocab.calc_types.map( c => ( { label: c.label, value: c.value } ) ) }
-													onChange={ v => updateStep( i, 'calc_type', v ) }
-													__next40pxDefaultSize
-												/>
-											</FlexBlock>
-											<FlexBlock>
-												<TextControl
-													label={ __( 'Value', 'newspack-plugin' ) }
-													hideLabelFromVision={ i > 0 }
-													type="number"
-													value={ step.value }
-													onChange={ v => updateStep( i, 'value', v ) }
-													__next40pxDefaultSize
-												/>
-											</FlexBlock>
-											<FlexBlock>
-												<TextControl
-													label={ __( 'Name shown to reader', 'newspack-plugin' ) }
-													hideLabelFromVision={ i > 0 }
-													value={ step.label }
-													onChange={ v => updateStep( i, 'label', v ) }
-													__next40pxDefaultSize
-												/>
-											</FlexBlock>
-											<Button
-												icon={ trash }
-												isDestructive
-												variant="tertiary"
-												disabled={ steps.length <= 1 }
-												onClick={ () => removeStep( i ) }
-												label={ __( 'Remove step', 'newspack-plugin' ) }
-											/>
-										</HStack>
-									) ) }
-									<div>
-										<Button variant="secondary" onClick={ addStep }>
-											{ __( '+ Add row', 'newspack-plugin' ) }
-										</Button>
-									</div>
-								</VStack>
-							) : (
-								<>
-									<SelectControl
-										label={ __( 'Pricing', 'newspack-plugin' ) }
-										value={ calcType }
-										options={ vocab.calc_types.map( c => ( { label: c.label, value: c.value } ) ) }
-										onChange={ setCalcType }
-										__next40pxDefaultSize
-									/>
-									<TextControl
-										label={ __( 'Value', 'newspack-plugin' ) }
-										type="number"
-										value={ value }
-										onChange={ setValue }
-										__next40pxDefaultSize
-									/>
-									<TextControl
-										label={ __( 'Name shown to reader', 'newspack-plugin' ) }
-										help={ __( 'Optional. Shown to readers when "Show pricing details" is on.', 'newspack-plugin' ) }
-										value={ simpleLabel }
-										onChange={ setSimpleLabel }
-										__next40pxDefaultSize
-									/>
-									<TextControl
-										label={ __( 'Apply for first N cycles', 'newspack-plugin' ) }
-										help={ __(
-											'0 = unlimited (every cycle). For subscriptions only — covers the purchase plus the next N-1 renewals. No effect on one-time products.',
-											'newspack-plugin'
-										) }
-										type="number"
-										value={ cyclesLimit }
-										onChange={ setCyclesLimit }
-										__next40pxDefaultSize
-									/>
-								</>
-							) }
-						</VStack>
-					</Grid>
-
-					<Divider alignment="full-width" variant="tertiary" />
-
-					<Grid columns={ 2 } gutter={ 32 } noMargin>
-						<SectionHeader
-							title={ __( 'Scheduling & behavior', 'newspack-plugin' ) }
-							description={ __( 'When the rule is active, its priority, and how it composes with other rules.', 'newspack-plugin' ) }
-						/>
-						<VStack spacing={ 4 }>
-							{ recipe?.isCustom && (
-								<TextControl
-									label={ __( 'Priority', 'newspack-plugin' ) }
-									help={ __( 'Lower numbers are considered first when multiple rules match.', 'newspack-plugin' ) }
-									type="number"
-									value={ priority }
-									onChange={ setPriority }
-									__next40pxDefaultSize
-								/>
-							) }
-							{ recipe?.isCustom && (
-								<SelectControl
-									label={ __( 'When multiple rules match', 'newspack-plugin' ) }
-									value={ composeMode }
-									options={
-										[
-											{ label: __( 'Best price wins (default)', 'newspack-plugin' ), value: 'min' },
-											{ label: __( 'This rule only (stop checking others)', 'newspack-plugin' ), value: 'priority_exclusive' },
-										] as { label: string; value: PricingRuleRow[ 'compose_mode' ] }[]
-									}
-									onChange={ setComposeMode }
-									__next40pxDefaultSize
-								/>
-							) }
-							<TextControl
-								label={ __( 'Starts', 'newspack-plugin' ) }
-								help={ __( 'Optional. Times are in your local timezone. Empty = active immediately.', 'newspack-plugin' ) }
-								type="datetime-local"
-								value={ activeFrom }
-								onChange={ setActiveFrom }
-								__next40pxDefaultSize
-							/>
-							<TextControl
-								label={ __( 'Ends', 'newspack-plugin' ) }
-								help={ __( 'Optional. Times are in your local timezone. Empty = no end date.', 'newspack-plugin' ) }
-								type="datetime-local"
-								value={ activeUntil }
-								onChange={ setActiveUntil }
-								__next40pxDefaultSize
-							/>
-							{ recipe?.isCustom && (
-								<ToggleControl
-									label={ __( 'Lock pricing at purchase', 'newspack-plugin' ) }
-									help={ __(
-										'On: subscribers keep the price they bought at — the deal only applies to new sign-ups. Off: the deal applies to every matching subscriber at each renewal.',
-										'newspack-plugin'
-									) }
-									checked={ 'locked' === application }
-									onChange={ checked => setApplication( checked ? 'locked' : 'current' ) }
-									__nextHasNoMarginBottom
-								/>
-							) }
-							{ application === 'current' && hasCycleDimension && (
-								<SelectControl
-									label={ __( 'Count cycles from', 'newspack-plugin' ) }
-									value={ cycleAnchor }
-									options={ [
-										{
-											label: __( 'When this rule first applies to a subscriber', 'newspack-plugin' ),
-											value: 'rule_application',
-										},
-										{ label: __( 'Subscription start', 'newspack-plugin' ), value: 'subscription_start' },
-									] }
-									onChange={ setCycleAnchor }
-									help={ __(
-										'Anchors a stepped or cycle-limited schedule. “First applies” starts the schedule when the subscriber becomes eligible; “Subscription start” counts from their original signup.',
-										'newspack-plugin'
-									) }
-									__next40pxDefaultSize
-								/>
-							) }
-							<ToggleControl
-								label={ __( 'Show pricing details', 'newspack-plugin' ) }
-								help={ __(
-									'Tell readers about this rule wherever the product appears — its name and the regular-vs-adjusted comparison show on the product page, cart, and checkout. When off, the adjusted price applies silently.',
+					{ isSchedule ? (
+						<VStack spacing={ 3 }>
+							<p className="description">
+								{ __(
+									'Each row sets the price from a given cycle onward, until a later row takes over. Cycle 1 is the initial purchase; cycle 2 is the first renewal.',
 									'newspack-plugin'
 								) }
-								checked={ publicize }
-								onChange={ setPublicize }
-								__nextHasNoMarginBottom
-							/>
+							</p>
+							{ steps.map( ( step, i ) => (
+								<HStack key={ i } alignment="flex-end" spacing={ 2 }>
+									<FlexBlock>
+										<TextControl
+											label={ __( 'From cycle #', 'newspack-plugin' ) }
+											hideLabelFromVision={ i > 0 }
+											type="number"
+											min={ 1 }
+											value={ step.at }
+											onChange={ v => updateStep( i, 'at', v ) }
+											__next40pxDefaultSize
+										/>
+									</FlexBlock>
+									<FlexBlock>
+										<SelectControl
+											label={ __( 'Pricing', 'newspack-plugin' ) }
+											hideLabelFromVision={ i > 0 }
+											value={ step.calc_type }
+											options={ vocab.calc_types.map( c => ( { label: c.label, value: c.value } ) ) }
+											onChange={ v => updateStep( i, 'calc_type', v ) }
+											__next40pxDefaultSize
+										/>
+									</FlexBlock>
+									<FlexBlock>
+										<TextControl
+											label={ __( 'Value', 'newspack-plugin' ) }
+											hideLabelFromVision={ i > 0 }
+											type="number"
+											value={ step.value }
+											onChange={ v => updateStep( i, 'value', v ) }
+											__next40pxDefaultSize
+										/>
+									</FlexBlock>
+									<FlexBlock>
+										<TextControl
+											label={ __( 'Name shown to reader', 'newspack-plugin' ) }
+											hideLabelFromVision={ i > 0 }
+											value={ step.label }
+											onChange={ v => updateStep( i, 'label', v ) }
+											__next40pxDefaultSize
+										/>
+									</FlexBlock>
+									<Button
+										icon={ trash }
+										isDestructive
+										variant="tertiary"
+										disabled={ steps.length <= 1 }
+										onClick={ () => removeStep( i ) }
+										label={ __( 'Remove Step', 'newspack-plugin' ) }
+									/>
+								</HStack>
+							) ) }
+							<div>
+								<Button variant="secondary" onClick={ addStep }>
+									{ __( '+ Add Row', 'newspack-plugin' ) }
+								</Button>
+							</div>
 						</VStack>
-					</Grid>
+					) : (
+						<>
+							<SelectControl
+								label={ __( 'Pricing', 'newspack-plugin' ) }
+								value={ calcType }
+								options={ vocab.calc_types.map( c => ( { label: c.label, value: c.value } ) ) }
+								onChange={ setCalcType }
+								__next40pxDefaultSize
+							/>
+							<TextControl
+								label={ __( 'Value', 'newspack-plugin' ) }
+								type="number"
+								value={ value }
+								onChange={ setValue }
+								__next40pxDefaultSize
+							/>
+							<TextControl
+								label={ __( 'Name shown to reader', 'newspack-plugin' ) }
+								help={ __( 'Optional. Shown to readers when "Show pricing details" is on.', 'newspack-plugin' ) }
+								value={ simpleLabel }
+								onChange={ setSimpleLabel }
+								__next40pxDefaultSize
+							/>
+							<TextControl
+								label={ __( 'Apply for first N cycles', 'newspack-plugin' ) }
+								help={ __(
+									'0 = unlimited (every cycle). For subscriptions only — covers the purchase plus the next N-1 renewals. No effect on one-time products.',
+									'newspack-plugin'
+								) }
+								type="number"
+								value={ cyclesLimit }
+								onChange={ setCyclesLimit }
+								__next40pxDefaultSize
+							/>
+						</>
+					) }
+				</VStack>
+			</Grid>
 
-					<Divider alignment="full-width" variant="tertiary" />
+			<Divider alignment="full-width" variant="tertiary" />
 
-					<Grid columns={ 2 } gutter={ 32 } noMargin>
-						<SectionHeader
-							title={ __( 'Eligibility', 'newspack-plugin' ) }
-							description={ __(
-								'Gate whether this rule applies to a given purchase. All set conditions must pass; empty = no restrictions.',
+			<Grid columns={ 2 } gutter={ 32 } noMargin>
+				<SectionHeader
+					title={ __( 'Scheduling & Behavior', 'newspack-plugin' ) }
+					description={ __( 'When the rule is active, its priority, and how it composes with other rules.', 'newspack-plugin' ) }
+					noMargin
+				/>
+				<VStack spacing={ 6 }>
+					{ recipe?.isCustom && (
+						<TextControl
+							label={ __( 'Priority', 'newspack-plugin' ) }
+							help={ __( 'Lower numbers are considered first when multiple rules match.', 'newspack-plugin' ) }
+							type="number"
+							value={ priority }
+							onChange={ setPriority }
+							__next40pxDefaultSize
+						/>
+					) }
+					{ recipe?.isCustom && (
+						<SelectControl
+							label={ __( 'When multiple rules match', 'newspack-plugin' ) }
+							value={ composeMode }
+							options={
+								[
+									{ label: __( 'Best price wins (default)', 'newspack-plugin' ), value: 'min' },
+									{ label: __( 'This rule only (stop checking others)', 'newspack-plugin' ), value: 'priority_exclusive' },
+								] as { label: string; value: PricingRuleRow[ 'compose_mode' ] }[]
+							}
+							onChange={ setComposeMode }
+							__next40pxDefaultSize
+						/>
+					) }
+					<VStack spacing={ 2 }>
+						<Grid columns={ 2 } gutter={ 16 } noMargin>
+							<DateTimeField
+								id="newspack-pricing-rule-active-from"
+								label={ __( 'Starts', 'newspack-plugin' ) }
+								describedBy={ SCHEDULE_HELP_ID }
+								value={ activeFrom }
+								placeholder={ __( 'Active immediately', 'newspack-plugin' ) }
+								disabled={ isSaving }
+								onChange={ setActiveFrom }
+							/>
+							<DateTimeField
+								id="newspack-pricing-rule-active-until"
+								label={ __( 'Ends', 'newspack-plugin' ) }
+								describedBy={ SCHEDULE_HELP_ID }
+								value={ activeUntil }
+								placeholder={ __( 'No end date', 'newspack-plugin' ) }
+								disabled={ isSaving }
+								onChange={ setActiveUntil }
+							/>
+						</Grid>
+						<p className="newspack-pricing-rules__muted newspack-pricing-rules__muted--help" id={ SCHEDULE_HELP_ID }>
+							{ __( 'Times are in your local timezone.', 'newspack-plugin' ) }
+						</p>
+					</VStack>
+					{ recipe?.isCustom && (
+						<ToggleControl
+							label={ __( 'Lock pricing at purchase', 'newspack-plugin' ) }
+							help={ __(
+								'On: subscribers keep the price they bought at — the rule only applies to new sign-ups. Off: the rule applies to every matching subscriber at each renewal.',
 								'newspack-plugin'
 							) }
+							checked={ 'locked' === application }
+							onChange={ checked => setApplication( checked ? 'locked' : 'current' ) }
+							__nextHasNoMarginBottom
 						/>
-						<VStack spacing={ 4 }>
-							<Conditions
-								vocab={ vocab.conditions }
-								value={ conditions }
-								publishedAt={ rule?.published_at ?? null }
-								isNew={ isNew }
-								onChange={ setConditions }
-								path={ path }
-							/>
-						</VStack>
-					</Grid>
-
-					<Divider alignment="full-width" variant="tertiary" />
-
-					<div className="newspack-pricing-rules__preview-section">
-						<SectionHeader
-							title={ __( 'Impact preview', 'newspack-plugin' ) }
-							description={ __(
-								'How this rule prices products, composed with your other active rules. Updates as you edit.',
+					) }
+					{ application === 'current' && hasCycleDimension && (
+						<SelectControl
+							label={ __( 'Count cycles from', 'newspack-plugin' ) }
+							value={ cycleAnchor }
+							options={ [
+								{
+									label: __( 'When this rule first applies to a subscriber', 'newspack-plugin' ),
+									value: 'rule_application',
+								},
+								{ label: __( 'Subscription start', 'newspack-plugin' ), value: 'subscription_start' },
+							] }
+							onChange={ setCycleAnchor }
+							help={ __(
+								'Anchors a stepped or cycle-limited schedule. “First applies” starts the schedule when the subscriber becomes eligible; “Subscription start” counts from their original signup.',
 								'newspack-plugin'
 							) }
+							__next40pxDefaultSize
 						/>
-						{ ! isSchedule && String( value ).trim() === '' ? (
-							<p className="newspack-pricing-rules__muted">{ __( 'Enter a price to see the impact preview.', 'newspack-plugin' ) }</p>
-						) : (
-							<RulePreview body={ previewBody } />
+					) }
+					<ToggleControl
+						label={ __( 'Show pricing details', 'newspack-plugin' ) }
+						help={ __(
+							'Tell readers about this rule wherever the product appears — its name and the regular-vs-adjusted comparison show on the product page, cart, and checkout. When off, the adjusted price applies silently.',
+							'newspack-plugin'
 						) }
-					</div>
-				</>
-			) }
+						checked={ publicize }
+						onChange={ setPublicize }
+						__nextHasNoMarginBottom
+					/>
+				</VStack>
+			</Grid>
+
+			<Divider alignment="full-width" variant="tertiary" />
+
+			<Grid columns={ 2 } gutter={ 32 } noMargin>
+				<SectionHeader
+					title={ __( 'Eligibility', 'newspack-plugin' ) }
+					description={ __(
+						'Gate whether this rule applies to a given purchase. All set conditions must pass; empty = no restrictions.',
+						'newspack-plugin'
+					) }
+					noMargin
+				/>
+				<VStack spacing={ 6 }>
+					<Conditions
+						vocab={ vocab.conditions }
+						value={ conditions }
+						publishedAt={ rule?.published_at ?? null }
+						isNew={ isNew }
+						onChange={ setConditions }
+						onDateModeChange={ ( id, mode ) => setDateModes( prev => ( { ...prev, [ id ]: mode } ) ) }
+						path={ path }
+					/>
+				</VStack>
+			</Grid>
+
+			<Divider alignment="full-width" variant="tertiary" />
+
+			<div className="newspack-pricing-rules__preview-section">
+				<SectionHeader
+					title={ __( 'Impact Preview', 'newspack-plugin' ) }
+					description={ __( 'How this rule prices products, composed with your other active rules. Best price wins.', 'newspack-plugin' ) }
+					noMargin
+				/>
+				<RulePreview body={ previewBody } hasPrice={ isSchedule || String( value ).trim() !== '' } />
+			</div>
+			{ goalDialog }
 		</div>
 	);
 }

@@ -271,11 +271,11 @@ export default function ProductForm( {
 	useEffect( () => {
 		setHeaderData( {
 			backNav: '#/',
-			sectionName: isEdit ? __( 'Edit plan', 'newspack-plugin' ) : __( 'Add plan', 'newspack-plugin' ),
+			sectionName: isEdit ? __( 'Edit Plan', 'newspack-plugin' ) : __( 'Add Plan', 'newspack-plugin' ),
 			actions: [
 				{
 					type: 'primary',
-					label: isEdit ? __( 'Save changes', 'newspack-plugin' ) : __( 'Create plan', 'newspack-plugin' ),
+					label: isEdit ? __( 'Save', 'newspack-plugin' ) : __( 'Create Plan', 'newspack-plugin' ),
 					icon: null,
 					action: submit,
 					disabled: isSaving,
@@ -469,7 +469,7 @@ export default function ProductForm( {
 							) ) }
 							<div>
 								<Button variant="secondary" onClick={ addPlan }>
-									{ __( 'Add plan', 'newspack-plugin' ) }
+									{ __( 'Add Plan', 'newspack-plugin' ) }
 								</Button>
 							</div>
 						</>

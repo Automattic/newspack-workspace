@@ -2,7 +2,12 @@
 @use "~@wordpress/base-styles/colors" as wp-colors;
 @use "~@wordpress/base-styles/breakpoints" as wp-breakpoints;
 
-.newspack-wizard__header .newspack-section-header p {
+// Section-header descriptions are plain strings (SectionHeader renders them
+// inside a `<p>`, so markup there would be invalid nesting). Honour their line
+// breaks so a multi-line description — the profile's email + member-since —
+// reads as separate lines instead of running together.
+.newspack-wizard__header .newspack-section-header p,
+.newspack-wizard__section-header p {
 	white-space: pre-line !important;
 }
 
@@ -32,11 +37,6 @@
 	color: wp-colors.$gray-700;
 	font-size: wp-vars.$helptext-font-size;
 	line-height: wp-vars.$default-line-height;
-	font-weight: normal;
-}
-
-.newspack-subscribers__header-count {
-	color: wp-colors.$gray-700;
 	font-weight: normal;
 }
 
@@ -174,22 +174,22 @@
 	}
 }
 
-.newspack-subscribers__profile {
-	.components-notice__actions {
-		margin-top: wp-vars.$grid-unit-15;
-
-		.components-button {
-			height: wp-vars.$grid-unit-40;
-			line-height: 1;
-			margin-left: 0;
-			margin-right: 0;
-			padding: 0 wp-vars.$grid-unit-15;
-		}
-	}
-
+// The shared subscription card (components/SubscriptionCard.jsx). Scoped to the
+// card's own class rather than to a host screen, so it renders identically on the
+// person profile and inside the group-detail "View subscription" drawer.
+.newspack-subscribers__card {
 	.components-card__header,
 	.newspack-card--core__header {
 		padding: wp-vars.$grid-unit-20;
+	}
+	// The title is an h3 for heading-level order (the hosting section is an h2),
+	// so pin its type rather than inherit the browser's h3 default — the card
+	// heading should read at the card's own scale, not the document's.
+	.newspack-subscribers__card-title {
+		font-size: wp-vars.$default-font-size;
+		font-weight: wp-vars.$font-weight-medium;
+		line-height: wp-vars.$default-line-height;
+		margin: 0;
 	}
 	// The Dropdown wrapper ships as inline-block, whose line box is ~0.2px taller
 	// than the button; flex collapses it to the button's exact height. Pinning the
@@ -211,6 +211,7 @@
 	.newspack-subscribers__card-title-link.components-button.is-link {
 		color: inherit;
 		font: inherit;
+		height: auto;
 		text-decoration: none;
 
 		&:hover,
@@ -257,6 +258,20 @@
 }
 
 .newspack-subscribers__profile {
+	// The "could not load" / "not found" notices carry their retry and back links
+	// as notice actions; give them room and a consistent button metric.
+	.components-notice__actions {
+		margin-top: wp-vars.$grid-unit-15;
+
+		.components-button {
+			height: wp-vars.$grid-unit-40;
+			line-height: 1;
+			margin-left: 0;
+			margin-right: 0;
+			padding: 0 wp-vars.$grid-unit-15;
+		}
+	}
+
 	// Inline (non-full-width) DataViews inherit a -48px horizontal bleed from the
 	// wizard content style; cancel it so the member/invitation tables align with
 	// the rest of the section.
@@ -445,11 +460,13 @@
 }
 
 // Labeled label/value rows on the subscription and payment-method cards,
-// reusing the quick-edit drawer's label style.
+// reusing the quick-edit drawer's label style. Each row is a one-pair `dl` (see
+// CardRow), so the browser's default list margins are cleared here.
 .newspack-subscribers__card-row {
 	display: flex;
 	flex-direction: column;
 	gap: wp-vars.$grid-unit-05;
+	margin: 0;
 }
 
 .newspack-subscribers__card-label {
@@ -457,4 +474,8 @@
 	font-size: wp-vars.$font-size-x-small;
 	font-weight: wp-vars.$font-weight-medium;
 	text-transform: uppercase;
+}
+
+.newspack-subscribers__card-value {
+	margin: 0;
 }

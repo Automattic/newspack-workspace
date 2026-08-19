@@ -18,6 +18,8 @@ args.push( 'test-unit-js' );
 const JEST_CONFIG = {
 	rootDir: modules.rootDirectory,
 	setupFilesAfterEnv: [ path.resolve( __dirname, 'utils/jestSetup.js' ) ],
+	// TypeScript test files count too — the transform below already handles them,
+	// and matching only .js/.jsx silently collects nothing from a .ts test.
 	testMatch: [ '<rootDir>/**/*test.[jt]s?(x)' ],
 	// Skip compiled copies (packages compile src into dist/ and shared/) and
 	// PHP vendor trees; <rootDir> anchors keep plugin src/shared/ tests running.

@@ -8,15 +8,20 @@
  * Every column prices a NEW subscriber — the calculator projects with no
  * customer at acquisition intent — so a first-time-only/locked rule shows in
  * every segment column even though existing subscribers are excluded at
- * checkout. A caption spells this out whenever segment columns are present, so a
- * segment named for existing subscribers isn't misread as modeling their
- * lifecycle (NPPD-1853).
+ * checkout. A note below the table spells this out whenever segment columns are
+ * present, so a segment named for existing subscribers isn't misread as
+ * modeling their lifecycle (NPPD-1853).
  */
 
 /**
  * WordPress dependencies
  */
 import { __ } from '@wordpress/i18n';
+import { useState, useEffect, useMemo } from '@wordpress/element';
+// Not the Newspack wrapper: with-wizard-screen/style.scss gives `.newspack-dataviews`
+// a -48px page bleed that hangs this embedded table past the form column.
+import { DataViews, filterSortAndPaginate } from '@wordpress/dataviews';
+import type { Field, View } from '@wordpress/dataviews';
 
 /**
  * Internal dependencies
@@ -67,54 +72,110 @@ interface ImpactTableProps {
 
 export default function ImpactTable( { baseline, segmentGroups, currency }: ImpactTableProps ) {
 	const hasSegments = segmentGroups.length > 0;
-	const columns: PriceColumn[] = [
-		{
-			key: 'baseline',
-			label: hasSegments ? __( 'Everyone else', 'newspack-plugin' ) : __( 'Resulting price', 'newspack-plugin' ),
-			isSegment: false,
-			byId: indexById( baseline ),
-		},
-		...segmentGroups.map( group => ( {
-			key: `seg-${ group.segment_id }`,
-			label: group.segment_label,
-			isSegment: true,
-			byId: indexById( group.sample ),
-		} ) ),
-	];
+
+	const columns: PriceColumn[] = useMemo(
+		() => [
+			{
+				key: 'baseline',
+				label: hasSegments ? __( 'Everyone else', 'newspack-plugin' ) : __( 'Resulting price', 'newspack-plugin' ),
+				isSegment: false,
+				byId: indexById( baseline ),
+			},
+			...segmentGroups.map( group => ( {
+				key: `seg-${ group.segment_id }`,
+				label: group.segment_label,
+				isSegment: true,
+				byId: indexById( group.sample ),
+			} ) ),
+		],
+		[ baseline, segmentGroups, hasSegments ]
+	);
+
+	// Both rewrite view.fields, which is derived below and would snap back.
+	const fields: Field< CatalogImpactRow >[] = useMemo(
+		() => [
+			{
+				id: 'product',
+				label: __( 'Product', 'newspack-plugin' ),
+				enableHiding: false,
+				getValue: ( { item }: { item: CatalogImpactRow } ) => item.name,
+				render: ( { item }: { item: CatalogImpactRow } ) =>
+					item.edit_link ? <a href={ item.edit_link }>{ item.name }</a> : <span>{ item.name }</span>,
+			},
+			{
+				id: 'regular',
+				label: __( 'Regular', 'newspack-plugin' ),
+				enableHiding: false,
+				getValue: ( { item }: { item: CatalogImpactRow } ) => item.regular,
+				render: ( { item }: { item: CatalogImpactRow } ) => <>{ formatPrice( item.regular, currency ) }</>,
+			},
+			...columns.map( col => ( {
+				id: col.key,
+				label: col.label,
+				enableHiding: false,
+				// Stepped rules render one value per cycle, so there is no number to sort on.
+				enableSorting: false,
+				getValue: ( { item }: { item: CatalogImpactRow } ) => col.byId[ item.product_id ]?.adjusted ?? 0,
+				render: ( { item }: { item: CatalogImpactRow } ) => {
+					const cell = col.byId[ item.product_id ];
+					// A stepped cell marks each changed cycle itself, so the wrapper must not mark it again.
+					const isMarked = !! cell?.changed && cell.segments.length <= 1;
+					return (
+						<span className={ isMarked ? 'is-changed' : undefined }>
+							<ResultingCell row={ cell } currency={ currency } />
+						</span>
+					);
+				},
+			} ) ),
+		],
+		[ columns, currency ]
+	);
+
+	const fieldIds = useMemo( () => [ 'regular', ...columns.map( col => col.key ) ], [ columns ] );
+	const fieldIdsKey = fieldIds.join( '|' );
+
+	// The server already caps the sample, so show all of it rather than re-truncating.
+	const perPage = Math.max( baseline.length, 1 );
+
+	const [ view, setView ] = useState< View >( () => ( {
+		type: 'table',
+		page: 1,
+		perPage,
+		search: '',
+		filters: [],
+		layout: { density: 'compact', enableMoving: false },
+		titleField: 'product',
+		fields: fieldIds,
+	} ) );
+
+	// A segment column can appear or vanish while the publisher is editing.
+	useEffect( () => {
+		setView( prev => ( prev.fields?.join( '|' ) === fieldIdsKey && prev.perPage === perPage ? prev : { ...prev, fields: fieldIds, perPage } ) );
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [ fieldIdsKey, perPage ] );
+
+	const { data, paginationInfo } = useMemo( () => filterSortAndPaginate( baseline, view, fields ), [ baseline, view, fields ] );
 
 	return (
 		<>
-			<table className="newspack-pricing-rules__impact-table">
-				<caption className="screen-reader-text">{ __( 'Resulting prices by product and reader segment', 'newspack-plugin' ) }</caption>
-				<thead>
-					<tr>
-						<th scope="col">{ __( 'Product', 'newspack-plugin' ) }</th>
-						<th scope="col">{ __( 'Regular', 'newspack-plugin' ) }</th>
-						{ columns.map( col => (
-							<th scope="col" key={ col.key } className={ col.isSegment ? 'is-segment-col' : undefined }>
-								{ col.label }
-							</th>
-						) ) }
-					</tr>
-				</thead>
-				<tbody>
-					{ baseline.map( row => (
-						<tr key={ row.product_id }>
-							<td>{ row.edit_link ? <a href={ row.edit_link }>{ row.name }</a> : row.name }</td>
-							<td>{ formatPrice( row.regular, currency ) }</td>
-							{ columns.map( col => {
-								const cell = col.byId[ row.product_id ];
-								const cellClass = [ col.isSegment && 'is-segment-col', cell?.changed && 'is-changed' ].filter( Boolean ).join( ' ' );
-								return (
-									<td key={ col.key } className={ cellClass || undefined }>
-										<ResultingCell row={ cell } currency={ currency } />
-									</td>
-								);
-							} ) }
-						</tr>
-					) ) }
-				</tbody>
-			</table>
+			<div
+				className="newspack-pricing-rules__impact-table"
+				role="region"
+				aria-label={ __( 'Resulting prices by product and reader segment', 'newspack-plugin' ) }
+			>
+				<DataViews
+					data={ data }
+					fields={ fields }
+					view={ view }
+					onChangeView={ setView }
+					paginationInfo={ paginationInfo }
+					defaultLayouts={ { table: {} } }
+					getItemId={ ( item: CatalogImpactRow ) => String( item.product_id ) }
+					empty={ <p>{ __( 'No products to show.', 'newspack-plugin' ) }</p> }
+				>
+					<DataViews.Layout />
+				</DataViews>
+			</div>
 			{ hasSegments && (
 				<p className="newspack-pricing-rules__muted">
 					{ __(

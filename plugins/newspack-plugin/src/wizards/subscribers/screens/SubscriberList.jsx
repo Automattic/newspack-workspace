@@ -7,29 +7,31 @@
  * large reader bases. Each row's group memberships arrive embedded on the item
  * (item.groups), so the Status/Subscription/Group-role columns resolve without a
  * second lookup. Click targets follow the rule both tabs share: the row (and the
- * subscriber name in it) opens that person's user-edit screen, while a plan name
- * in the Subscription column opens that subscription. Both are the native admin
- * screens until the in-wizard person profile lands (NPPD-1753 PR 5).
+ * subscriber name in it) opens that person, while a plan name in the Subscription
+ * column opens that subscription. The person now resolves in-wizard to their
+ * profile; the plan name still opens the native subscription edit screen, since
+ * nothing in the wizard replaces it yet.
  */
 
 /**
  * WordPress dependencies.
  */
 import { useEffect, useMemo, useState } from '@wordpress/element';
-import { __, sprintf } from '@wordpress/i18n';
+import { __, _n, sprintf } from '@wordpress/i18n';
 import { useDispatch } from '@wordpress/data';
 import { __experimentalHStack as HStack, __experimentalVStack as VStack } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
 
 /**
  * Internal dependencies.
  */
-import { Badge, Button, DataViews, Notice, Waiting } from '../../../../packages/components/src';
+import { Badge, Button, DataViews, Notice, Router, Waiting } from '../../../../packages/components/src';
+import { formatCount } from '../../../../packages/components/src/breadcrumbs/format-count';
 import './style.scss';
 import { fmtRelative, fmtDate } from '../format';
 import { SHOW_AVATARS, useAvatars } from '../data/use-avatars';
 import { useSubscribers } from '../data/use-subscribers';
 import { WIZARD_STORE_NAMESPACE } from '../../../../packages/components/src/wizard/store';
-import { GROUP_LABEL, ROLE_LABELS } from '../labels';
+import { GROUP_LABEL, ROLE_LABELS, groupRoleLabel } from '../labels';
 import { SubscriptionLink } from '../links';
 import { STATUS_LABELS, STATUS_BADGE_LEVEL, displayStatuses, statusRank } from '../status';
 
@@ -78,6 +80,8 @@ const subscriberStatuses = ( item, groupEntries ) =>
 		item.status
 	);
 
+const { useHistory, useLocation } = Router;
+
 const DEFAULT_VIEW = {
 	type: 'table',
 	page: 1,
@@ -92,6 +96,8 @@ const DEFAULT_VIEW = {
 
 export default function SubscriberList() {
 	const [ view, setView ] = useState( DEFAULT_VIEW );
+	const history = useHistory();
+	const location = useLocation();
 
 	const { setHeaderData } = useDispatch( WIZARD_STORE_NAMESPACE );
 
@@ -114,16 +120,15 @@ export default function SubscriberList() {
 		return byId;
 	}, [ items, avatarsByEmail ] );
 
+	// Clicking a person opens their in-wizard profile. The current list route
+	// travels as `from` so the profile's back-nav and breadcrumb return here
+	// rather than guessing: HashRouter drops location.state on reload, so the
+	// origin has to survive in the URL.
 	const openSubscriber = item => {
-		if ( item?.editUrl ) {
-			window.location.href = item.editUrl;
+		if ( item?.id ) {
+			history.push( `/subscribers/${ item.id }?from=${ encodeURIComponent( `#${ location.pathname }` ) }` );
 		}
 	};
-	// A subscriber the current admin can't edit has no edit URL (get_edit_user_link()
-	// returns '' without the `edit_user` capability, which is reachable on
-	// multisite), so their row is not clickable rather than focusable-but-inert.
-	// Mirrors hasOwnerLink in GroupList.
-	const hasSubscriberLink = item => !! item?.editUrl;
 
 	const fields = useMemo(
 		() => [
@@ -203,8 +208,7 @@ export default function SubscriberList() {
 			},
 			{
 				id: 'groupRole',
-				// translators: %s: singular group label (publisher-customisable).
-				label: sprintf( __( '%s role', 'newspack-plugin' ), GROUP_LABEL ),
+				label: groupRoleLabel(),
 				// Hidden by default (not in DEFAULT_VIEW fields). Display-only until
 				// the endpoint gains a group-role filter (NPPD-2111). One line per
 				// group, plan-qualified only when the reader belongs to more than one.
@@ -313,19 +317,19 @@ export default function SubscriberList() {
 	// Surface the subscriber count in the header breadcrumb, e.g. "/ Subscribers (85)".
 	useEffect( () => {
 		setHeaderData( {
-			sectionName: (
-				<>
-					{ __( 'Subscribers', 'newspack-plugin' ) }{ ' ' }
-					<span
-						className="newspack-subscribers__header-count"
-						aria-label={ sprintf( __( '%s subscribers total', 'newspack-plugin' ), total.toLocaleString() ) }
-					>
-						{ `(${ total.toLocaleString() })` }
-					</span>
-				</>
-			),
+			sectionName: [
+				{
+					label: __( 'Subscribers', 'newspack-plugin' ),
+					count: subscribersLoading || error ? undefined : total,
+					countLabel: sprintf(
+						/* translators: %s: number of subscribers matching the current view. */
+						_n( '%s subscriber', '%s subscribers', total, 'newspack-plugin' ),
+						formatCount( total )
+					),
+				},
+			],
 		} );
-	}, [ setHeaderData, total ] );
+	}, [ setHeaderData, total, subscribersLoading, error ] );
 
 	if ( subscribersLoading ) {
 		return (
@@ -359,7 +363,6 @@ export default function SubscriberList() {
 				defaultLayouts={ { table: {} } }
 				getItemId={ item => item.id }
 				onClickItem={ openSubscriber }
-				isItemClickable={ hasSubscriberLink }
 				search
 			/>
 		</div>

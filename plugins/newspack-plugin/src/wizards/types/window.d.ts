@@ -72,7 +72,13 @@ declare global {
 			can_use_name_your_price: boolean;
 		};
 		newspackAudienceSubscriptions: {
+			tabs: Array<{
+				slug: string;
+				label: string;
+				path: string;
+			}>;
 			memberships_url: string;
+			memberships_active: boolean;
 			primary_product: string;
 			eligible_products: Array<{
 				id: string;
@@ -92,6 +98,16 @@ declare global {
 			presave_checks_enabled: boolean | string;
 			default_gate_status: GateStatus;
 			feed_restriction_modes?: { value: FeedRestrictionMode; label: string }[];
+			// Audience Management is a prerequisite for content gates. Only ever the
+			// string wp_localize_script() produced ('1' on, '' off) - nothing writes a
+			// real boolean back, so typing it wider would invite a `=== true` that can
+			// never hold. Read it via hasAudienceManagement() in content-gates/utils.
+			//
+			// Optional because both keys are absent on a page whose localized config
+			// predates this feature, which the readers already handle: hasAudienceManagement()
+			// fails closed through `?.`, and the prerequisite screen falls back to ''.
+			audience_management_enabled?: string;
+			audience_management_url?: string;
 		};
 	}
 }

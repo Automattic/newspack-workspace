@@ -197,6 +197,22 @@ h1 {
 	padding-right: 0;
 }
 
+// The inert-gating warning describes the state of the whole site rather than of the
+// section beneath it, so it spans the full width in every view and sits flush against
+// the header region above. Core's Notice ships margins meant for inline placement,
+// which would open a gap there and break the seam.
+.newspack-wizard__inert-gating-notice.components-notice {
+	border-radius: 0;
+	margin: 0;
+	width: 100%;
+}
+
+.newspack-wizard__load-error.components-notice {
+	border-radius: 0;
+	margin: 0;
+	width: 100%;
+}
+
 .newspack-wizard__sections {
 	margin: 0 auto;
 	padding: calc(var(--newspack-wizard-section-space) * 2) var(--newspack-wizard-section-space) 0;

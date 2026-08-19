@@ -19,7 +19,9 @@ type HeaderAction = {
 // or an `href` carries the behaviour.
 type SectionMenuItem = Omit< HeaderAction, 'type' >;
 
-type GateAccessRuleValue = string | string[] | boolean;
+// Single source of truth for the composite value shape lives with the control.
+type OneTimePurchaseRuleValue = import( '../../../../../content-gate/components/one-time-purchase-rule-control' ).OneTimePurchaseValue;
+type GateAccessRuleValue = string | string[] | boolean | OneTimePurchaseRuleValue;
 type AccessRule = {
 	name: string;
 	default: GateAccessRuleValue;

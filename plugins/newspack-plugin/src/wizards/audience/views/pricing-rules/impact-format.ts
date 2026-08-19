@@ -1,7 +1,7 @@
 /**
- * Shared price formatting for the impact previews (catalog-wide panel and the
- * per-rule editor preview). The contract's prices are plain numbers; currency
- * shaping is the client's job.
+ * Shared price and count formatting for the impact previews (catalog-wide panel
+ * and the per-rule editor preview). The contract's prices are plain numbers;
+ * currency shaping is the client's job.
  */
 
 /**
@@ -37,4 +37,17 @@ export function describeResulting( row: CatalogImpactRow, currency: PricingRules
 		return formatPrice( row.adjusted, currency );
 	}
 	return row.segments.map( seg => formatSegment( seg, currency ) ).join( ' · ' );
+}
+
+/**
+ * Group a count's digits. The externalized @wordpress/i18n has no numberFormat, and
+ * WordPress ships locales Intl rejects (pt_PT_ao90), hence the fall back.
+ */
+export function formatCount( value: number ): string {
+	const n = Number( value );
+	try {
+		return new Intl.NumberFormat( document.documentElement.lang || undefined ).format( n );
+	} catch {
+		return n.toLocaleString();
+	}
 }
