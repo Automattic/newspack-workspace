@@ -529,15 +529,36 @@ class Newspack_Newsletters_Subscription {
 			);
 
 			/**
+			 * Filters whether the ESP reported its full set of lists.
+			 *
+			 * A provider that serves sublists from its own cache returns a partial
+			 * set while that cache is still warming. Acting on a partial set is
+			 * destructive, so providers report it here and this method stands down.
+			 *
+			 * @param bool $is_complete Whether the list set is complete.
+			 */
+			$is_complete = (bool) apply_filters( 'newspack_newsletters_lists_are_complete', true );
+
+			/**
 			 * Remove from the local DB lists that no longer exist in the ESP.
 			 * This also cleans up the DB in case we accidentally created more than one list for the same ESP list.
+			 *
+			 * Skipped on a partial set: the collector deletes every stored remote
+			 * list absent from the payload, so a list the ESP simply could not
+			 * report yet would be deleted along with its local configuration.
 			 */
-			Subscription_Lists::garbage_collector( wp_list_pluck( $return_lists, 'db_id' ) );
+			if ( $is_complete ) {
+				Subscription_Lists::garbage_collector( wp_list_pluck( $return_lists, 'db_id' ) );
+			}
 
 			foreach ( Subscription_Lists::get_locals_for_current_provider() as $local_list ) {
 				$return_lists[] = $local_list->to_array();
 			}
-			set_transient( $cache_key, $return_lists, self::get_lists_cache_ttl() );
+			// Caching a partial set would keep serving it for the whole TTL, long
+			// after the provider's own cache has filled in.
+			if ( $is_complete ) {
+				set_transient( $cache_key, $return_lists, self::get_lists_cache_ttl() );
+			}
 			return $return_lists;
 		} catch ( \Exception $e ) {
 			return new WP_Error(

@@ -71,6 +71,16 @@ final class Newspack_Newsletters_Mailchimp_Cached_Data {
 	private static $memoized_data = [];
 
 	/**
+	 * Whether any audience's cached data was missing during this request.
+	 *
+	 * A miss means the data is being fetched in the background, not that the
+	 * audience has none, so anything built from it this request is partial.
+	 *
+	 * @var bool
+	 */
+	private static $has_cold_cache = false;
+
+	/**
 	 * Initializes this class
 	 */
 	public static function init() {
@@ -93,6 +103,22 @@ final class Newspack_Newsletters_Mailchimp_Cached_Data {
 		}
 
 		add_action( 'admin_notices', [ __CLASS__, 'maybe_show_error' ] );
+
+		add_filter( 'newspack_newsletters_lists_are_complete', [ __CLASS__, 'filter_lists_are_complete' ] );
+	}
+
+	/**
+	 * Reports the list set as partial when any audience was served from a cold cache.
+	 *
+	 * Groups and tags are read from this cache while building the list set, and a
+	 * cold read yields an empty array. Callers need to tell that apart from an
+	 * audience that genuinely has none.
+	 *
+	 * @param bool $is_complete Whether the list set is complete so far.
+	 * @return bool
+	 */
+	public static function filter_lists_are_complete( $is_complete ) {
+		return $is_complete && ! self::$has_cold_cache;
 	}
 
 	/**
@@ -413,6 +439,7 @@ final class Newspack_Newsletters_Mailchimp_Cached_Data {
 		}
 
 		Newspack_Newsletters_Logger::log( 'Mailchimp cache: No data found. Dispatching refresh' );
+		self::$has_cold_cache = true;
 		self::dispatch_refresh( $list_id );
 
 		return [];
