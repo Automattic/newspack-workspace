@@ -107,7 +107,7 @@ jobs:
             remote_tip=$(git rev-parse FETCH_HEAD 2>/dev/null) || remote_tip=''
           fi
           if [ -z "$remote_tip" ]; then
-            echo "::warning::Could not read the remote tip of $GITHUB_REF_NAME; treating this run as current."
+            echo "::warning::Could not read the remote tip of $GITHUB_REF_NAME, so the supersession check did not run. Continuing: if this push has been superseded, the dry-run below fails rather than skipping."
           elif [ "$remote_tip" != "$GITHUB_SHA" ]; then
             if git merge-base --is-ancestor "$GITHUB_SHA" "$remote_tip" &&
               ! git log -1 --format=%B "$remote_tip" | grep -qF '[skip ci]'; then
