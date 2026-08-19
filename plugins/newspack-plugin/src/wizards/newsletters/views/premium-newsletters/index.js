@@ -21,8 +21,13 @@ import PremiumNewslettersList from './premium-newsletters-list';
 import Edit from '../../../audience/views/content-gates/edit';
 import { redirectWithoutAudienceManagement, requireAudienceManagement } from '../../../audience/components/audience-management-required';
 
+// Premium Newsletters localizes into the content-gates bag, which it shares with
+// the Access Control screen.
+const getConfig = () => window.newspackAudienceContentGates;
+
 const REQUIRES_AUDIENCE_MANAGEMENT = {
 	description: __( 'Premium newsletters need accounts, sign-in, and account emails. Audience Management provides them.', 'newspack-plugin' ),
+	getConfig,
 };
 
 const ROOT = [ { label: __( 'Newsletters', 'newspack-plugin' ) } ];
@@ -33,7 +38,7 @@ const PREMIUM_BREADCRUMBS = [ ...ROOT, { label: __( 'Premium', 'newspack-plugin'
 // redirects to it.
 const GATES_ROUTE = '/content-gates';
 const GuardedPremiumNewslettersList = requireAudienceManagement( PremiumNewslettersList, REQUIRES_AUDIENCE_MANAGEMENT );
-const GuardedEdit = redirectWithoutAudienceManagement( Edit, GATES_ROUTE );
+const GuardedEdit = redirectWithoutAudienceManagement( Edit, GATES_ROUTE, getConfig );
 
 const PremiumNewsletters = ( props, ref ) => {
 	const { updateWizardSettings } = useDispatch( WIZARD_STORE_NAMESPACE );

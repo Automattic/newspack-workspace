@@ -33,14 +33,17 @@ const ACCESS_CONTROL_INSTITUTIONS = [ ...ACCESS_CONTROL, { label: __( 'Instituti
 // renders. Only the landing route renders the prerequisite state; the rest redirect
 // to it, so the explanation lives in exactly one place.
 const GATES_ROUTE = '/content-gates';
+const getConfig = () => window.newspackAudienceContentGates;
+
 const GuardedContentGates = requireAudienceManagement( ContentGates, {
 	description: __( 'Access Control needs accounts, sign-in, and account emails. Audience Management provides them.', 'newspack-plugin' ),
+	getConfig,
 } );
-const GuardedEdit = redirectWithoutAudienceManagement( Edit, GATES_ROUTE );
-const GuardedCountdownBanner = redirectWithoutAudienceManagement( CountdownBanner, GATES_ROUTE );
-const GuardedContentGifting = redirectWithoutAudienceManagement( ContentGifting, GATES_ROUTE );
-const GuardedInstitutions = redirectWithoutAudienceManagement( Institutions, GATES_ROUTE );
-const GuardedInstitutionEdit = redirectWithoutAudienceManagement( InstitutionEdit, GATES_ROUTE );
+const GuardedEdit = redirectWithoutAudienceManagement( Edit, GATES_ROUTE, getConfig );
+const GuardedCountdownBanner = redirectWithoutAudienceManagement( CountdownBanner, GATES_ROUTE, getConfig );
+const GuardedContentGifting = redirectWithoutAudienceManagement( ContentGifting, GATES_ROUTE, getConfig );
+const GuardedInstitutions = redirectWithoutAudienceManagement( Institutions, GATES_ROUTE, getConfig );
+const GuardedInstitutionEdit = redirectWithoutAudienceManagement( InstitutionEdit, GATES_ROUTE, getConfig );
 
 const AudienceContentGates = ( props, ref ) => {
 	const { updateWizardSettings } = useDispatch( WIZARD_STORE_NAMESPACE );

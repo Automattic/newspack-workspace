@@ -20,11 +20,16 @@ import AudienceSubscriptions from './index';
 
 const PREREQUISITE_HEADING = 'Set up Audience Management first';
 
+// The Wizard mock below renders whatever sections it is handed, so these tests pin
+// which sections reach it, not how routing resolves. Route enumeration is not
+// needed here the way it is for the gate editors: the screen replaces the whole
+// section list rather than guarding each renderer, and the one remaining section
+// is registered non-exact at '/', so no sub-route can slip past it.
+
 jest.mock( '@wordpress/components', () => {
 	const React = require( 'react' );
 	return {
 		__experimentalVStack: ( { children } ) => React.createElement( 'div', null, children ),
-		__experimentalHStack: ( { children } ) => React.createElement( 'div', null, children ),
 		ExternalLink: ( { children, href } ) => React.createElement( 'a', { href }, children ),
 	};
 } );
@@ -49,7 +54,12 @@ jest.mock( '../../../../../packages/components/src', () => {
 	};
 } );
 
-jest.mock( '../../../wizards-tab', () => ( { children } ) => children );
+jest.mock(
+	'../../../wizards-tab',
+	() =>
+		( { children } ) =>
+			children
+);
 
 // One registered tab, so a screen that did NOT stand down would render it and
 // the assertions below would fail for the right reason.

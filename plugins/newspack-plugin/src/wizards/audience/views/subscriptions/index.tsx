@@ -23,30 +23,48 @@ import type { SubscriptionsTab } from './types';
 
 const HEADER_TEXT = __( 'Audience Management / Subscriptions', 'newspack-plugin' );
 
+// Built at module scope: `Wizard` renders `section.render` as a component type, so
+// rebuilding it per render would remount the subtree and drop focus.
+const PREREQUISITE_SECTION = {
+	label: __( 'Subscriptions', 'newspack-plugin' ),
+	// `Wizard` registers section routes non-exact, so a bookmarked tab route lands
+	// here rather than on an empty Switch. That is what makes the stand-down
+	// deep-link safe without a per-route redirect.
+	path: '/',
+	breadcrumbs: [ { label: __( 'Audience Management', 'newspack-plugin' ) }, { label: __( 'Subscriptions', 'newspack-plugin' ) } ],
+	render: () => (
+		<AudienceManagementRequired
+			description={ __(
+				'The Subscriptions screen needs accounts, sign-in, and account emails. Audience Management provides them.',
+				'newspack-plugin'
+			) }
+			setupUrl={ window.newspackAudienceSubscriptions?.audience_management_url || '' }
+		/>
+	),
+};
+
 function AudienceSubscriptions( _props: Record< string, unknown >, ref: React.ForwardedRef< HTMLDivElement > ) {
-	const tabs: SubscriptionsTab[] = window.newspackAudienceSubscriptions.tabs || [];
+	const config = window.newspackAudienceSubscriptions;
 
 	// The whole screen stands down without Audience Management, rather than a tab
 	// at a time. Subscriber-only products and subscriber discounts are enforced
 	// only while it is on ({@see Newspack\Subscriber_Commerce::is_enforcement_active()}),
-	// and configuring either one here would do nothing. The Configuration tab
-	// would still work on its own, but this screen is one feature to a publisher,
-	// and a half-blocked one reads as broken rather than as a prerequisite.
-	const audienceManagement = window.newspackAudienceSubscriptions;
-	const prerequisiteSection = {
-		label: __( 'Subscriptions', 'newspack-plugin' ),
-		path: '/',
-		breadcrumbs: [ { label: __( 'Audience Management', 'newspack-plugin' ) }, { label: __( 'Subscriptions', 'newspack-plugin' ) } ],
-		render: () => (
-			<AudienceManagementRequired
-				description={ __(
-					'Subscriptions needs accounts, sign-in, and account emails. Audience Management provides them.',
-					'newspack-plugin'
-				) }
-				setupUrl={ audienceManagement?.audience_management_url || '' }
-			/>
-		),
-	};
+	// so configuring either one would do nothing.
+	//
+	// The Configuration tab is the accepted cost of that: its primary-tier setting
+	// still drives the front-end upgrade modal, which does not depend on Audience
+	// Management, so blocking the screen puts that setting out of reach too. One
+	// live tab beside two prerequisite notices reads as broken rather than as a
+	// dependency, so the screen is treated as one feature.
+	//
+	// Returning early rather than adding an arm to the ternary below keeps the tab
+	// lookup off the blocked path, and leaves that ternary's comment with the
+	// fallback it actually describes.
+	if ( ! hasAudienceManagement( config ) ) {
+		return <Wizard headerText={ HEADER_TEXT } sections={ [ PREREQUISITE_SECTION ] } requiredPlugins={ [ 'woocommerce' ] } ref={ ref } />;
+	}
+
+	const tabs: SubscriptionsTab[] = config.tabs || [];
 
 	const sections = tabs
 		.map( tab => {
@@ -76,9 +94,7 @@ function AudienceSubscriptions( _props: Record< string, unknown >, ref: React.Fo
 	// how a list ends up empty — so fall back to a single section carrying a
 	// notice. Routed through Wizard rather than returned on its own, it keeps the
 	// header, breadcrumbs and admin chrome, and the forwarded ref stays attached.
-	const displayedSections = ! hasAudienceManagement( audienceManagement )
-		? [ prerequisiteSection ]
-		: sections.length
+	const displayedSections = sections.length
 		? sections
 		: [
 				{

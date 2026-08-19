@@ -21,7 +21,7 @@ import { render, screen } from '@testing-library/react';
 /**
  * Internal dependencies
  */
-import AudienceManagementRequired, { redirectWithoutAudienceManagement, requireAudienceManagement } from '../../components/audience-management-required';
+import AudienceManagementRequired, { redirectWithoutAudienceManagement, requireAudienceManagement } from './audience-management-required';
 
 // The real @wordpress/components cannot load in jsdom (its data-store side effects throw
 // at import), so pass through only what the prerequisite state renders. ExternalLink and
@@ -34,7 +34,7 @@ jest.mock( '@wordpress/components', () => {
 	};
 } );
 
-jest.mock( '../../../../../packages/components/src', () => {
+jest.mock( '../../../../packages/components/src', () => {
 	const React = require( 'react' );
 	return {
 		Grid: ( { children } ) => React.createElement( 'div', null, children ),
@@ -46,7 +46,7 @@ jest.mock( '../../../../../packages/components/src', () => {
 	};
 } );
 
-jest.mock( '../../../../../packages/components/src/proxied-imports/router', () => {
+jest.mock( '../../../../packages/components/src/proxied-imports/router', () => {
 	const React = require( 'react' );
 	return {
 		__esModule: true,
@@ -69,6 +69,8 @@ const setAudienceManagement = enabled => {
 
 const Section = () => <div>the real section</div>;
 
+const getConfig = () => window.newspackAudienceContentGates;
+
 const GATES_COPY = 'Access Control needs accounts, sign-in, and account emails. Audience Management provides them.';
 
 describe( 'requireAudienceManagement (NPPD-1846)', () => {
@@ -82,7 +84,7 @@ describe( 'requireAudienceManagement (NPPD-1846)', () => {
 	] )( 'replaces the section with the prerequisite state when the flag is %s', ( _label, value ) => {
 		setAudienceManagement( value );
 
-		const Guarded = requireAudienceManagement( Section, { description: GATES_COPY } );
+		const Guarded = requireAudienceManagement( Section, { description: GATES_COPY, getConfig } );
 		render( <Guarded /> );
 
 		expect( screen.getByText( PREREQUISITE_HEADING ) ).toBeInTheDocument();
@@ -94,7 +96,7 @@ describe( 'requireAudienceManagement (NPPD-1846)', () => {
 	it( 'renders the section untouched when Audience Management is on', () => {
 		setAudienceManagement( '1' );
 
-		const Guarded = requireAudienceManagement( Section, { description: GATES_COPY } );
+		const Guarded = requireAudienceManagement( Section, { description: GATES_COPY, getConfig } );
 		render( <Guarded /> );
 
 		expect( screen.getByText( 'the real section' ) ).toBeInTheDocument();
@@ -105,7 +107,7 @@ describe( 'requireAudienceManagement (NPPD-1846)', () => {
 		setAudienceManagement( '1' );
 		const PropSpy = ( { label } ) => <div>{ label }</div>;
 
-		const Guarded = requireAudienceManagement( PropSpy, { description: GATES_COPY } );
+		const Guarded = requireAudienceManagement( PropSpy, { description: GATES_COPY, getConfig } );
 		render( <Guarded label="forwarded" /> );
 
 		expect( screen.getByText( 'forwarded' ) ).toBeInTheDocument();
@@ -116,7 +118,7 @@ describe( 'requireAudienceManagement (NPPD-1846)', () => {
 	it( 'renders the copy the guarded screen supplied', () => {
 		setAudienceManagement( '' );
 
-		const Guarded = requireAudienceManagement( Section, { description: 'Premium newsletters need accounts.' } );
+		const Guarded = requireAudienceManagement( Section, { description: 'Premium newsletters need accounts.', getConfig } );
 		render( <Guarded /> );
 
 		expect( screen.getByText( 'Premium newsletters need accounts.' ) ).toBeInTheDocument();
@@ -141,7 +143,7 @@ describe( 'redirectWithoutAudienceManagement (NPPD-1846)', () => {
 	] )( 'redirects to the landing route when the flag is %s', ( _label, value ) => {
 		setAudienceManagement( value );
 
-		const Guarded = redirectWithoutAudienceManagement( Section, '/content-gates' );
+		const Guarded = redirectWithoutAudienceManagement( Section, '/content-gates', getConfig );
 		render( <Guarded /> );
 
 		expect( screen.getByTestId( 'redirect' ) ).toHaveAttribute( 'data-to', '/content-gates' );
@@ -153,7 +155,7 @@ describe( 'redirectWithoutAudienceManagement (NPPD-1846)', () => {
 	it( 'renders the section untouched when Audience Management is on', () => {
 		setAudienceManagement( '1' );
 
-		const Guarded = redirectWithoutAudienceManagement( Section, '/content-gates' );
+		const Guarded = redirectWithoutAudienceManagement( Section, '/content-gates', getConfig );
 		render( <Guarded /> );
 
 		expect( screen.getByText( 'the real section' ) ).toBeInTheDocument();
@@ -169,8 +171,8 @@ describe( 'every gate-editing wizard section is guarded (NPPD-1846)', () => {
 	const path = require( 'path' );
 
 	const ROUTERS = [
-		[ 'Access Control', path.join( __dirname, 'index.js' ), 7 ],
-		[ 'Premium Newsletters', path.join( __dirname, '../../../newsletters/views/premium-newsletters/index.js' ), 2 ],
+		[ 'Access Control', path.join( __dirname, '../views/content-gates/index.js' ), 7 ],
+		[ 'Premium Newsletters', path.join( __dirname, '../../newsletters/views/premium-newsletters/index.js' ), 2 ],
 	];
 
 	it.each( ROUTERS )( '%s guards every section renderer', ( _name, routerPath, expectedSections ) => {

@@ -1,6 +1,12 @@
 /**
- * Audience Management prerequisite state, shown in place of a gate-editing screen
- * when Audience Management is not set up.
+ * Audience Management prerequisite state, shown in place of a screen that depends
+ * on it when it is not set up.
+ *
+ * Shared by every such screen — the two gate editors (Access Control, Premium
+ * Newsletters) and Subscriptions, whose dependency runs through
+ * `Subscriber_Commerce::is_enforcement_active()` rather than through gating. The
+ * copy, the setup destination and the config bag to read are all the caller's,
+ * so adding a fourth consumer needs no change here.
  */
 
 /**
@@ -18,8 +24,12 @@ import Router from '../../../../packages/components/src/proxied-imports/router';
 
 const { Redirect } = Router;
 
+// Access Control is where the prerequisite is documented for every surface, so it
+// is the default destination rather than a per-screen choice.
+const DEFAULT_LEARN_MORE_URL = 'https://help.newspack.com/access-control/';
+
 type AudienceManagementConfig = {
-	audience_management_enabled?: string | boolean;
+	audience_management_enabled?: string;
 	audience_management_url?: string;
 };
 
@@ -30,16 +40,26 @@ type AudienceManagementConfig = {
  * `Audience_Management_Dependency` PHP trait supplies, so the bag it lives in is
  * the caller's to name.
  *
+ * The config is required rather than defaulted. A default would fire on an
+ * explicitly passed `undefined` too, so a screen whose own bag failed to
+ * localize would silently read a different screen's answer and unblock itself —
+ * a fail-open hidden inside a guard.
+ *
  * `wp_localize_script()` stringifies the PHP boolean, so the value arrives as
  * '1' when on and '' when off - which is why this is a truthiness check and not
  * a comparison against `true`.
  */
-export const hasAudienceManagement = ( config: AudienceManagementConfig | undefined = window.newspackAudienceContentGates ) =>
-	Boolean( config?.audience_management_enabled );
+export const hasAudienceManagement = ( config: AudienceManagementConfig | undefined ) => Boolean( config?.audience_management_enabled );
 
-const AudienceManagementRequired = ( { description, setupUrl = '' }: { description: string; setupUrl?: string } ) => {
-	const audienceManagementUrl = setupUrl;
-
+const AudienceManagementRequired = ( {
+	description,
+	setupUrl = '',
+	learnMoreUrl = DEFAULT_LEARN_MORE_URL,
+}: {
+	description: string;
+	setupUrl?: string;
+	learnMoreUrl?: string;
+} ) => {
 	return (
 		<Grid columns={ 4 } noMargin>
 			<VStack data-start="2" data-end="4" spacing={ 8 }>
@@ -53,15 +73,12 @@ const AudienceManagementRequired = ( { description, setupUrl = '' }: { descripti
 				<VStack alignment="center" spacing={ 4 }>
 					{ /* Rendered only with a real destination: a primary CTA pointing at href=""
 					     reloads this same screen, which is worse than offering no button. */ }
-					{ audienceManagementUrl && (
-						<Button variant="primary" href={ audienceManagementUrl }>
+					{ setupUrl && (
+						<Button variant="primary" href={ setupUrl }>
 							{ __( 'Set up Audience Management', 'newspack-plugin' ) }
 						</Button>
 					) }
-					{ /* Points at the Access Control doc rather than the Audience Management one:
-					     the prerequisite is being added there, and that page is where the original
-					     support question started. */ }
-					<ExternalLink href="https://help.newspack.com/access-control/">{ __( 'Learn more', 'newspack-plugin' ) }</ExternalLink>
+					<ExternalLink href={ learnMoreUrl }>{ __( 'Learn more', 'newspack-plugin' ) }</ExternalLink>
 				</VStack>
 			</VStack>
 		</Grid>
@@ -87,13 +104,20 @@ const AudienceManagementRequired = ( { description, setupUrl = '' }: { descripti
  * that changes identity between renders remounts the section subtree and discards
  * in-progress editor state.
  */
-export const requireAudienceManagement = < P extends object >( Section: React.ComponentType< P >, { description }: { description: string } ) => {
-	const Guarded = ( props: P ) =>
-		hasAudienceManagement() ? (
+export const requireAudienceManagement = < P extends object >(
+	Section: React.ComponentType< P >,
+	{ description, getConfig }: { description: string; getConfig: () => AudienceManagementConfig | undefined }
+) => {
+	const Guarded = ( props: P ) => {
+		// Read at render, not at module scope: these wrappers are built while the
+		// bundle evaluates, before `wp_localize_script()` has necessarily run.
+		const config = getConfig();
+		return hasAudienceManagement( config ) ? (
 			<Section { ...props } />
 		) : (
-			<AudienceManagementRequired description={ description } setupUrl={ window.newspackAudienceContentGates?.audience_management_url || '' } />
+			<AudienceManagementRequired description={ description } setupUrl={ config?.audience_management_url || '' } />
 		);
+	};
 	// Named so the guarded sections are distinguishable in React DevTools
 	// rather than all reading as `Anonymous`.
 	Guarded.displayName = `RequireAudienceManagement(${ Section.displayName || Section.name || 'Section' })`;
@@ -110,8 +134,12 @@ export const requireAudienceManagement = < P extends object >( Section: React.Co
  *
  * Same module-scope requirement as `requireAudienceManagement()`.
  */
-export const redirectWithoutAudienceManagement = < P extends object >( Section: React.ComponentType< P >, redirectTo: string ) => {
-	const Guarded = ( props: P ) => ( hasAudienceManagement() ? <Section { ...props } /> : <Redirect to={ redirectTo } /> );
+export const redirectWithoutAudienceManagement = < P extends object >(
+	Section: React.ComponentType< P >,
+	redirectTo: string,
+	getConfig: () => AudienceManagementConfig | undefined
+) => {
+	const Guarded = ( props: P ) => ( hasAudienceManagement( getConfig() ) ? <Section { ...props } /> : <Redirect to={ redirectTo } /> );
 	Guarded.displayName = `RedirectWithoutAudienceManagement(${ Section.displayName || Section.name || 'Section' })`;
 	return Guarded;
 };
