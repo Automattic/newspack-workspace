@@ -27,6 +27,21 @@ apiFetch.use( ( options, next ) => {
 	return next( options );
 } );
 
+// A bare `Y-m-d` reaches `DatePicker` as a UTC instant, which renders — and
+// saves back — as the previous day wherever the UTC offset is negative. Both
+// supported WordPress versions get there, by different routes: 6.9 hands the
+// string to `new Date()`, where a date-only ISO string is UTC by spec while a
+// date-time one is local; 7.0 first tests it against `/Z|[+-]\d{2}(:?\d{2})?$/`
+// to decide whether it already carries an offset, and the `-DD` day component
+// matches. Appending a time component is what avoids both, so keep it even if
+// that regex is fixed upstream — 6.9 would still be wrong without it.
+//
+// Noon, not midnight: only Y/m/d is ever read back off this value, and midday
+// survives the zones where local midnight does not exist on DST-transition
+// days. `includes/admin/class-ads-list-rest.php` anchors these same dates the
+// same way.
+const toTimezonelessDateTime = value => ( value ? `${ String( value ).slice( 0, 10 ) }T12:00:00` : value );
+
 function AdEdit() {
 	const { status, isSaving, price, startDate, expiryDate, insertionStrategy, positionInContent, positionBlockCount } = useSelect( select => {
 		const { getEditedPostAttribute, isSavingPost } = select( 'core/editor' );
@@ -308,7 +323,7 @@ function AdEdit() {
 				/>
 				{ startDate ? (
 					<DatePicker
-						currentDate={ startDate }
+						currentDate={ toTimezonelessDateTime( startDate ) }
 						onChange={ next => editPost( { meta: { start_date: format( 'Y-m-d', next ) } } ) }
 						isInvalidDate={ date => ! isInTheFuture( date ) }
 					/>
@@ -331,7 +346,7 @@ function AdEdit() {
 				/>
 				{ expiryDate ? (
 					<DatePicker
-						currentDate={ expiryDate }
+						currentDate={ toTimezonelessDateTime( expiryDate ) }
 						onChange={ next => editPost( { meta: { expiry_date: format( 'Y-m-d', next ) } } ) }
 						isInvalidDate={ date => {
 							return startDate ? format( 'Y-m-d', date ) < startDate : ! isInTheFuture( date );
