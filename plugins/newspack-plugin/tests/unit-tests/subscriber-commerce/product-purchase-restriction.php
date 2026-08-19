@@ -483,6 +483,27 @@ class Test_Product_Purchase_Restriction extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * Hiding covers secondary listings — related products, cross-sells, cart
+	 * upsells — by design, so a publisher who wants it confined to the primary
+	 * catalog needs a way to say so.
+	 *
+	 * Purchase restriction is untouched by the filter: the point is a listing
+	 * that still shows the product, not one that sells it.
+	 */
+	public function test_a_filter_can_exempt_a_listing_from_hiding() {
+		update_option( Subscriber_Only_Products::SETTINGS_OPTION_NAME, [ 'hide_from_product_lists' => true ] );
+		$this->flush_caches();
+		add_filter( 'newspack_subscriber_only_hide_from_query', '__return_false' );
+
+		$query = $this->run_product_query();
+
+		$this->assertEmpty( $query->get( 'post__not_in' ) );
+		$this->assertFalse( Product_Purchase_Restriction::can_purchase( $this->restricted_product ) );
+
+		remove_filter( 'newspack_subscriber_only_hide_from_query', '__return_false' );
+	}
+
+	/**
 	 * A subscriber sees everything: hiding follows purchasability, so it must
 	 * not hide a product from the very readers it is sold to.
 	 */

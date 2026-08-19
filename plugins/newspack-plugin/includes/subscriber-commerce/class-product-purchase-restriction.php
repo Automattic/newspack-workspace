@@ -211,6 +211,11 @@ class Product_Purchase_Restriction {
 	 * would be incoherent. Singular queries are left alone so a direct link
 	 * still resolves.
 	 *
+	 * Secondary listings are in scope by the same reasoning: related products,
+	 * cross-sells and cart upsells all recommend something the reader cannot
+	 * buy. `newspack_subscriber_only_hide_from_query` is the escape hatch for a
+	 * publisher who wants hiding confined to the primary catalog.
+	 *
 	 * @param \WP_Query $query The query.
 	 */
 	public static function filter_product_query( $query ) {
@@ -228,6 +233,24 @@ class Product_Purchase_Restriction {
 		}
 		$settings = Subscriber_Only_Products::get_settings();
 		if ( empty( $settings['hide_from_product_lists'] ) ) {
+			return;
+		}
+
+		/**
+		 * Filters whether restricted products are hidden from a given product query.
+		 *
+		 * Every front-end product listing is covered by default, secondary ones
+		 * included. Return false to leave a listing alone — scoping hiding to the
+		 * primary catalog and leaving related products, cross-sells or cart
+		 * upsells untouched, for instance.
+		 *
+		 * Purchase restriction is unaffected either way: a product left visible
+		 * by this filter still cannot be bought.
+		 *
+		 * @param bool      $hide  Whether to hide restricted products from this query.
+		 * @param \WP_Query $query The query being filtered.
+		 */
+		if ( ! apply_filters( 'newspack_subscriber_only_hide_from_query', true, $query ) ) {
 			return;
 		}
 
