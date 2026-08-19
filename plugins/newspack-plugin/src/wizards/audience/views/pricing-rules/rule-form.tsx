@@ -578,7 +578,7 @@ export default function RuleForm( { isNew, initialPath = null, rule, vocab, onDo
 					<ToggleGroupControl
 						label={ __( 'Status', 'newspack-plugin' ) }
 						value={ status }
-						onChange={ v => setStatus( String( v ) ) }
+						onChange={ v => setStatus( v === 'publish' ? 'publish' : 'draft' ) }
 						isBlock
 						__next40pxDefaultSize
 						__nextHasNoMarginBottom
