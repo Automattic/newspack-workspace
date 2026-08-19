@@ -24,6 +24,7 @@ class Test_Content_Restriction_Control extends WP_UnitTestCase {
 			wp_delete_post( $gate['id'], true );
 		}
 		$this->reset_post_gates_cache();
+		remove_all_filters( 'newspack_reader_activation_enabled' );
 		wp_set_current_user( 0 );
 		parent::tear_down();
 	}
@@ -129,6 +130,30 @@ class Test_Content_Restriction_Control extends WP_UnitTestCase {
 		$this->assertFalse(
 			Content_Gate::post_has_restrictions( $exempt_post_id ),
 			'An exempt post has no restrictions.'
+		);
+	}
+
+	/**
+	 * Gating stands down when Audience Management is off: a post covered by a
+	 * stored gate reports no restrictions, so it is never advertised as gated
+	 * while Access Control enforces nothing. Pins parity with is_post_restricted().
+	 */
+	public function test_post_has_restrictions_stands_down_when_gating_inactive() {
+		$this->enable_gates_and_register();
+		$gated_post_id = self::factory()->post->create();
+		$this->create_regwall_gate_for_posts();
+
+		$this->assertTrue(
+			Content_Gate::post_has_restrictions( $gated_post_id ),
+			'Sanity: the gate covers the post while gating is active.'
+		);
+
+		// Audience Management off => gating is inactive.
+		add_filter( 'newspack_reader_activation_enabled', '__return_false' );
+
+		$this->assertFalse(
+			Content_Gate::post_has_restrictions( $gated_post_id ),
+			'With gating inactive, a gated post reports no restrictions.'
 		);
 	}
 

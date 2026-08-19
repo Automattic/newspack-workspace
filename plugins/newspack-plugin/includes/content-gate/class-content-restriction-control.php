@@ -89,16 +89,30 @@ class Content_Restriction_Control {
 		if ( Memberships::is_active() ) {
 			return $has_restrictions;
 		}
+
+		// Gating stands down rather than half-working ({@see Content_Gate::is_gating_active()}),
+		// so a post is not advertised as gated while Access Control enforces nothing. Mirrors
+		// the same stand-down in is_post_restricted().
+		if ( ! Content_Gate::is_gating_active() ) {
+			return $has_restrictions;
+		}
+
+		$post_id = $post_id ? $post_id : get_the_ID();
+
+		// An exempt post is never gated, regardless of an incoming value.
+		if ( $post_id && get_post_meta( $post_id, self::IS_EXEMPT_META_KEY, true ) ) {
+			return false;
+		}
+
+		// Pass through a restriction another callback already determined.
 		if ( $has_restrictions ) {
 			return $has_restrictions;
 		}
-		$post_id = $post_id ? $post_id : get_the_ID();
+
 		if ( ! $post_id ) {
 			return false;
 		}
-		if ( get_post_meta( $post_id, self::IS_EXEMPT_META_KEY, true ) ) {
-			return false;
-		}
+
 		return ! empty( self::get_post_gates( $post_id ) );
 	}
 
