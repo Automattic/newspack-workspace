@@ -297,15 +297,6 @@ class Test_Membership_Gates_Migration extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * Run a group through the three steps the write loop takes to reach its paid
-	 * access rules, so a test exercises the chain rather than one link of it.
-	 *
-	 * @param array[]    $group    Plan descriptors.
-	 * @param array|null $override An operator-supplied --one-time-duration value.
-	 *
-	 * @return array[] The access rule groups the gate would store.
-	 */
-	/**
 	 * A mixed group is registration-gated and writes no paid access rules, so a
 	 * purchase plan inside it has no one-time rule to give a duration to. Consulting
 	 * it anyway would stop the run over a rule that was never going to be written.
@@ -323,6 +314,15 @@ class Test_Membership_Gates_Migration extends \WP_UnitTestCase {
 		$this->assertNull( $result['duration'] );
 	}
 
+	/**
+	 * Run a group through the three steps the write loop takes to reach its paid
+	 * access rules, so a test exercises the chain rather than one link of it.
+	 *
+	 * @param array[]    $group    Plan descriptors.
+	 * @param array|null $override An operator-supplied --one-time-duration value.
+	 *
+	 * @return array[] The access rule groups the gate would store.
+	 */
 	private function build_group_access_rules( array $group, ?array $override = null ): array {
 		$products = $this->invoke_private_static( 'resolve_product_ids', [ $group ] );
 		$duration = $this->invoke_private_static( 'resolve_group_duration', [ $group, $override ] );
@@ -1564,4 +1564,34 @@ HTML;
 		$this->assertSame( [], $this->invoke_private_static( 'find_duplicate_gate_titles', [ $gates ] ) );
 	}
 
+	/**
+	 * Every dropped-product warning describes a paid access rule, and a mixed group
+	 * writes none. Telling an operator the gate would have granted access to every
+	 * subscriber describes a rule that was never written.
+	 */
+	public function test_report_dropped_product_ids_is_silent_for_a_gate_with_no_paid_rule() {
+		\WP_CLI::$warnings = [];
+
+		$this->invoke_private_static(
+			'report_dropped_product_ids',
+			[ 'Paid | Free', [ 'invalid' => [ 0 ] ], false ]
+		);
+
+		$this->assertSame( [], \WP_CLI::$warnings );
+	}
+
+	/**
+	 * The counterpart: the same dropped ID on a group that does write a rule still
+	 * warns, so the guard suppresses the false case rather than the warning itself.
+	 */
+	public function test_report_dropped_product_ids_still_warns_for_a_purchase_group() {
+		\WP_CLI::$warnings = [];
+
+		$this->invoke_private_static(
+			'report_dropped_product_ids',
+			[ 'Paid', [ 'invalid' => [ 0 ] ], true ]
+		);
+
+		$this->assertNotEmpty( \WP_CLI::$warnings );
+	}
 }

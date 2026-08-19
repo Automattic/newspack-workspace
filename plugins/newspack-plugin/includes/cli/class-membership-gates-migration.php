@@ -37,12 +37,21 @@ class Membership_Gates_Migration {
 	 *
 	 * For each gate (group of plans):
 	 * - Creates a new content gate (or updates an existing one matched by title).
-	 * - Sets content rules from the shared restriction rules.
+	 * - Sets content rules from the shared restriction rules, other than the ones
+	 *   selecting newsletter lists.
 	 * - Enables registration settings (always) and custom_access settings (only
 	 *   when every plan in the group requires a purchase — a group that also holds a
 	 *   signup plan is registration-gated, since either plan grants access in WCM).
 	 * - Copies block content from the first plan's np_memberships_gate post (falling
 	 *   back to the Primary gate) into the gate's registration / paid-access layouts.
+	 *
+	 * Newsletter list restrictions are not migrated here. A plan can restrict articles
+	 * and newsletter lists at once, and the two halves live in different gate buckets:
+	 * this command writes the article half, and `wp newspack
+	 * migrate-premium-newsletters` writes the list half. A plan that restricts only
+	 * lists is skipped with a row saying so, but a plan that restricts both migrates
+	 * here and reports as a plain success, so run both commands on any site whose
+	 * plans gate newsletters.
 	 *
 	 * Dry-run by default; pass --live to write.
 	 *
@@ -215,7 +224,7 @@ class Membership_Gates_Migration {
 			$gate_title                         = self::gate_title( $group );
 			$products_by_group[ $fingerprint ]  = self::resolve_product_ids( $group );
 			$durations_by_group[ $fingerprint ] = self::resolve_group_duration( $group, $duration_override );
-			self::report_dropped_product_ids( $gate_title, $products_by_group[ $fingerprint ]['dropped'] );
+			self::report_dropped_product_ids( $gate_title, $products_by_group[ $fingerprint ]['dropped'], self::group_requires_purchase( $group ) );
 			self::report_duration_conflict( $gate_title, $durations_by_group[ $fingerprint ]['conflict'] );
 		}
 
@@ -991,12 +1000,22 @@ class Membership_Gates_Migration {
 	 * written, and a group that loses every product is caught separately by
 	 * compute_pre_write_issues() and verify_migrated_gate().
 	 *
-	 * @param string $gate_title The gate title, for the message.
-	 * @param array  $dropped    The 'dropped' element of a resolve_product_ids() result.
+	 * Every one of them describes a paid access rule, so all are silent for a group
+	 * that writes none. A mixed group still collects product IDs, and warning that its
+	 * gate would have granted access to every subscriber describes a rule that was
+	 * never written.
+	 *
+	 * @param string $gate_title   The gate title, for the message.
+	 * @param array  $dropped      The 'dropped' element of a resolve_product_ids() result.
+	 * @param bool   $has_purchase Whether every plan behind this gate requires a purchase,
+	 *                             and therefore whether a paid access rule is written.
 	 *
 	 * @return void
 	 */
-	private static function report_dropped_product_ids( string $gate_title, array $dropped ): void {
+	private static function report_dropped_product_ids( string $gate_title, array $dropped, bool $has_purchase ): void {
+		if ( ! $has_purchase ) {
+			return;
+		}
 		if ( ! empty( $dropped['invalid'] ) ) {
 			WP_CLI::warning(
 				sprintf(
