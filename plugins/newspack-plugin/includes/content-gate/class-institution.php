@@ -42,7 +42,23 @@ class Institution {
 				self::POST_TYPE,
 				self::META_PREFIX . $key,
 				[
-					'show_in_rest'      => true,
+					// An array rather than `true` so a read-side guard can be attached.
+					// The route's own gate lives in Institution_REST_Controller, and rests
+					// entirely on rest_controller_class surviving registration: any plugin
+					// filtering register_post_type_args and rebuilding that array drops the
+					// key, core falls back to the default controller, and these three fields
+					// become publicly readable with nothing failing or logging. The opposite
+					// slip -- an absent controller class -- registers no route at all and
+					// breaks the Audience wizard loudly, so the dangerous direction is the
+					// quiet one. This closes it independently of which controller runs.
+					//
+					// auth_callback cannot serve here: WP_REST_Meta_Fields::get_value()
+					// performs no capability check on read, so it gates writes only.
+					// prepare_callback runs on every read, and a callback supplied here wins
+					// over core's default (get_registered_fields() array_merges ours second).
+					'show_in_rest'      => [
+						'prepare_callback' => [ __CLASS__, 'redact_meta_for_unauthorized' ],
+					],
 					'type'              => 'string',
 					'single'            => true,
 					'default'           => '',
@@ -50,6 +66,20 @@ class Institution {
 				]
 			);
 		}
+	}
+
+	/**
+	 * Withhold a stored institution meta value from a reader who may not see it.
+	 *
+	 * Mirrors Institution_REST_Controller::prepare_item_for_response(), which blanks
+	 * the whole `meta` object for anyone without RULES_CAPABILITY -- the same tier,
+	 * applied one layer down so it holds whichever controller serves the route.
+	 *
+	 * @param mixed $value Stored meta value.
+	 * @return mixed The value, or '' for a reader without the capability.
+	 */
+	public static function redact_meta_for_unauthorized( $value ) {
+		return \current_user_can( Institution_REST_Controller::RULES_CAPABILITY ) ? $value : '';
 	}
 
 	/**
@@ -74,17 +104,28 @@ class Institution {
 		\register_post_type(
 			self::POST_TYPE,
 			[
-				'label'        => __( 'Institutions', 'newspack-plugin' ),
-				'public'       => false,
-				'show_ui'      => false,
-				'show_in_menu' => false,
-				'show_in_rest' => true,
-				'supports'     => [ 'title', 'excerpt', 'thumbnail', 'custom-fields' ],
+				'label'                 => __( 'Institutions', 'newspack-plugin' ),
+				'public'                => false,
+				'show_ui'               => false,
+				'show_in_menu'          => false,
+				'show_in_rest'          => true,
+				'supports'              => [ 'title', 'excerpt', 'thumbnail', 'custom-fields' ],
 				/**
-				 * Institutions effectively grant access, so restrict all CRUD operations
-				 * (including via REST) to the `manage_options` user capability.
+				 * Institutions effectively grant access, so every write —
+				 * including via REST — is restricted to the `manage_options`
+				 * capability; every key in the map above resolves to it. Reads
+				 * are not covered here: core does not gate reads of a published
+				 * post through this map, so the REST read requirement is
+				 * enforced separately by Institution_REST_Controller (below),
+				 * which admits `edit_others_posts` in addition to
+				 * `manage_options`.
 				 */
-				'capabilities' => $capabilities,
+				'capabilities'          => $capabilities,
+				/**
+				 * Supplies the REST read gate the capability map above does not
+				 * provide; see the comment there.
+				 */
+				'rest_controller_class' => Institution_REST_Controller::class,
 			]
 		);
 	}
@@ -136,7 +177,7 @@ class Institution {
 			[
 				'post_type'      => self::POST_TYPE,
 				'post_status'    => 'publish',
-				'posts_per_page' => -1,
+				'posts_per_page' => -1, // phpcs:ignore WordPressVIPMinimum.Performance.NoPaging -- Institution CPT; config-scale.
 				'orderby'        => 'title',
 				'order'          => 'ASC',
 			]
@@ -165,6 +206,20 @@ class Institution {
 	}
 
 	/**
+	 * Whether any institution is configured.
+	 *
+	 * Callers that only need existence should use this rather than counting
+	 * get_cached_institutions(): the cache is returned verbatim from a
+	 * transient, whose value passes through the pre_transient/transient filters
+	 * and so is not guaranteed to be an array a caller can count().
+	 *
+	 * @return bool
+	 */
+	public static function has_institutions() {
+		return ! empty( self::get_cached_institutions() );
+	}
+
+	/**
 	 * Rebuild the institutions transient cache.
 	 *
 	 * @return array The rebuilt cache.
@@ -174,7 +229,7 @@ class Institution {
 			[
 				'post_type'      => self::POST_TYPE,
 				'post_status'    => 'publish',
-				'posts_per_page' => -1,
+				'posts_per_page' => -1, // phpcs:ignore WordPressVIPMinimum.Performance.NoPaging -- Institution CPT; config-scale.
 			]
 		);
 		$institutions = [];
