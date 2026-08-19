@@ -21,6 +21,14 @@ on:
         required: false
         default: ''
         type: string
+      ref:
+        description: >-
+          Commit SHA (or branch) to build and publish. Callers should pass the
+          exact commit the release produced -- see the checkout step. Defaults
+          to the caller's branch tip.
+        required: false
+        default: ''
+        type: string
       released-tags:
         description: >-
           Newline-separated `<pkg>@<version>` tags created by the release job
@@ -52,32 +60,58 @@ jobs:
   release-wporg:
     name: Deploy to WordPress.org
     runs-on: ubuntu-latest
+    # This job only reads the repository and pushes to SVN; it never writes to
+    # GitHub. A job-level grant can only narrow the caller's, so declaring it
+    # here keeps the caller's write-scoped GITHUB_TOKEN and mintable OIDC token
+    # out of the environment that runs third-party install lifecycle scripts.
+    permissions:
+      contents: read
+    # One deploy at a time per plugin, across all callers: the manual escape
+    # hatch exists to be run while a release-triggered deploy may still be in
+    # flight, and two jobs running `svn checkout` / `svn ci` against the same
+    # plugin would race.
+    concurrency:
+      group: wporg-${{ inputs.plugin-name }}
+      cancel-in-progress: false
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          # Check out the branch tip, NOT the default `github.sha`.
+          # Build the exact commit that was released, NOT the default
+          # `github.sha`.
           #
-          # `github.sha` is the commit that triggered the run. By the time this
-          # job runs, the release job has already pushed the version bump
-          # ("chore(release): sync package.json versions [skip ci]", see
-          # release.yml), so the trigger commit still carries the PREVIOUS
-          # version. Resolving the version from it deployed the last release
-          # over and over -- and passed silently, because that version was
-          # already published (the deploy script's already-exists short-circuit).
+          # `github.sha` is the commit that triggered the run, which never
+          # carries the released version: the bump is committed afterwards, by
+          # the release job's "Sync package.json versions" step. Resolving the
+          # version from it publishes the PREVIOUS release.
           #
-          # `needs: release` in the caller guarantees the bump is pushed before
-          # this checkout runs, so the branch tip is the released commit.
-          ref: ${{ github.ref_name }}
+          # A branch name is not enough either. `needs: release` guarantees the
+          # bump is pushed before this checkout, but the tip keeps moving --
+          # anything merged into `release` while the release job runs would be
+          # built and published under the released version number. So callers
+          # pass the SHA the release job ended on; the branch tip is only the
+          # fallback for a caller that has no SHA to give.
+          ref: ${{ inputs.ref != '' && inputs.ref || github.ref_name }}
       - name: Resolve released version
         # Read before the build: the gate below can then skip a no-op run
-        # without paying for install + build.
+        # without paying for install + build. `ubuntu-latest` ships node, so
+        # this does not need actions/setup-node.
+        #
+        # Assigned to a variable rather than inlined into `echo`, so a missing
+        # or unparseable package.json (a wrong plugin-path, a plugin move)
+        # fails here at the real cause instead of writing an empty version and
+        # surfacing one step later as a bogus "stale checkout" error.
         id: ver
-        run: echo "version=$(node -p "require('./${{ inputs.plugin-path }}/package.json').version")" >> "$GITHUB_OUTPUT"
+        env:
+          PLUGIN_PATH: ${{ inputs.plugin-path }}
+        run: |
+          set -euo pipefail
+          version=$(node -p "require('./$PLUGIN_PATH/package.json').version")
+          echo "version=$version" >> "$GITHUB_OUTPUT"
       - name: Check this plugin released in this run
-        # Guards against the class of failure described on the checkout above:
-        # a version resolved from the wrong commit. Given the release job's tag
-        # list, the resolved version must match the tag this run created.
+        # Second line of defence behind the pinned checkout above: given the
+        # release job's tag list, the resolved version must match the tag this
+        # run created.
         #   - no tag for this plugin  -> nothing released, skip cleanly.
         #   - tag at a different version -> the checkout is stale, fail loudly.
         #   - tag at the resolved version -> deploy.
@@ -87,9 +121,13 @@ jobs:
           REQUIRE_RELEASE: ${{ inputs.require-release }}
           PLUGIN_NAME: ${{ inputs.plugin-name }}
           VERSION: ${{ steps.ver.outputs.version }}
+          DEPLOY_REF: ${{ inputs.ref != '' && inputs.ref || github.ref_name }}
         run: |
           set -euo pipefail
           if [ "$REQUIRE_RELEASE" != "true" ]; then
+            if [ "$DEPLOY_REF" != "release" ]; then
+              echo "::warning::Deploying from '$DEPLOY_REF', not the release branch. Publishing $VERSION to wordpress.org from unreleased code."
+            fi
             echo "::notice::Manual deploy; publishing the resolved version $VERSION."
             echo "deploy=true" >> "$GITHUB_OUTPUT"
             exit 0
