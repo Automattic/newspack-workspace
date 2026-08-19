@@ -8,6 +8,7 @@
 defined( 'ABSPATH' ) || exit;
 
 use Newspack_Newsletters_Mailchimp_Api as Mailchimp;
+use Newspack\Newsletters\Subscription_Lists;
 
 /**
  * Mailchimp cached class data
@@ -576,7 +577,55 @@ final class Newspack_Newsletters_Mailchimp_Cached_Data {
 	}
 
 	/**
-	 * Handles the cron job and triggers the async requests to refresh the cache for all lists
+	 * Gets the IDs of the audiences this site actually uses.
+	 *
+	 * A Mailchimp account can hold far more audiences than a site sends to, and
+	 * refreshing all of them is what makes the cron expensive. An audience is
+	 * considered in use when it is behind a configured Subscription List (as the
+	 * audience itself, or as the parent of a group or tag), or when a newsletter
+	 * is set to send to it.
+	 *
+	 * Audiences left out are not broken: reads self-heal, because get_data()
+	 * dispatches a refresh when the cache is missing or stale.
+	 *
+	 * @return string[] The audience IDs.
+	 */
+	private static function get_audiences_in_use() {
+		global $wpdb;
+
+		$audience_ids = [];
+
+		foreach ( Subscription_Lists::get_configured_for_current_provider() as $list ) {
+			$audience_ids[] = $list->mailchimp_get_audience_id();
+		}
+
+		// Audiences a newsletter sends to, which are not necessarily Subscription Lists.
+		$send_list_ids = $wpdb->get_col( // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+			$wpdb->prepare(
+				"SELECT DISTINCT pm.meta_value
+				 FROM {$wpdb->postmeta} pm
+				 INNER JOIN {$wpdb->posts} p ON p.ID = pm.post_id
+				 WHERE pm.meta_key = 'send_list_id'
+				   AND pm.meta_value <> ''
+				   AND p.post_type = %s
+				   AND p.post_status NOT IN ( 'auto-draft', 'trash' )",
+				Newspack_Newsletters::NEWSPACK_NEWSLETTERS_CPT
+			)
+		);
+
+		$audience_ids = array_values( array_unique( array_filter( array_merge( $audience_ids, $send_list_ids ) ) ) );
+
+		/**
+		 * Filters the Mailchimp audiences the cron keeps warm. Useful on accounts with
+		 * a very large number of audiences, to pin an explicit set.
+		 *
+		 * @param string[] $audience_ids The IDs of the audiences considered in use.
+		 */
+		return apply_filters( 'newspack_newsletters_mailchimp_audiences_to_refresh', $audience_ids );
+	}
+
+	/**
+	 * Handles the cron job and triggers the async requests to refresh the cache for the lists in use
 	 *
 	 * @return void
 	 */
@@ -590,7 +639,12 @@ final class Newspack_Newsletters_Mailchimp_Cached_Data {
 			return;
 		}
 
+		$audiences_in_use = self::get_audiences_in_use();
+
 		foreach ( $lists as $list ) {
+			if ( ! in_array( $list['id'], $audiences_in_use, true ) ) {
+				continue;
+			}
 			Newspack_Newsletters_Logger::log( 'Mailchimp cache: Dispatching request to refresh cache for list ' . $list['id'] );
 			self::dispatch_refresh( $list['id'] );
 		}
