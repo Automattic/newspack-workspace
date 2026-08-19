@@ -1401,6 +1401,25 @@ class Test_Premium_Newsletters_Migration extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * A mixed group writes no paid access rules at all, so a purchase plan inside it
+	 * has no one-time rule to give a duration to. Consulting it anyway would stop the
+	 * run over a rule that was never going to be written. What the group actually
+	 * loses is reported by the dropped-paywall warning instead.
+	 */
+	public function test_resolve_group_duration_asks_nothing_of_a_group_that_writes_no_rules() {
+		$one_time = $this->create_product( 'simple' );
+		$group    = [
+			$this->make_payload_plan( 'purchase', [ $one_time ], [ $this->list_a ], 'Paid', null ),
+			$this->make_payload_plan( 'signup', [], [ $this->list_a ], 'Free' ),
+		];
+
+		$result = $this->invoke_private_static( 'resolve_group_duration', [ $group, null ] );
+
+		$this->assertSame( [], $result['plans'] );
+		$this->assertNull( $result['duration'] );
+	}
+
+	/**
 	 * All three product warnings describe a paid access rule, and a mixed group writes
 	 * none. Reporting that its gate "keeps variation ID(s)" describes a rule that was
 	 * never written; what the group actually lost is reported separately.
@@ -1562,6 +1581,43 @@ class Test_Premium_Newsletters_Migration extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * The branch that matters is the one PHPUnit could never reach before: STDIN is
+	 * never a terminal under test, so the prompt itself went unexercised while the
+	 * error path looked covered. With the terminal check passed in, a superseding
+	 * group under --live is pinned as reaching the prompt rather than the abort.
+	 */
+	public function test_confirm_or_error_prompts_when_stdin_is_a_terminal() {
+		\WP_CLI::$messages = [];
+
+		$this->invoke_private_static( 'confirm_or_error', [ 'Proceed?', [], true ] );
+
+		$this->assertContains( [ 'confirm', 'Proceed?' ], \WP_CLI::$messages );
+	}
+
+	/**
+	 * With nothing able to answer, WP_CLI::confirm() would take the default and stop
+	 * the run part-way through with no summary. Erroring up front says why.
+	 */
+	public function test_confirm_or_error_aborts_when_nothing_can_answer() {
+		$this->expectException( \WP_CLI_Mock_Exception::class );
+		$this->expectExceptionMessage( 'STDIN is not a terminal' );
+
+		$this->invoke_private_static( 'confirm_or_error', [ 'Proceed?', [], false ] );
+	}
+
+	/**
+	 * --yes answers the prompt up front, which is what makes a non-interactive run
+	 * possible at all.
+	 */
+	public function test_confirm_or_error_accepts_yes_without_a_terminal() {
+		\WP_CLI::$messages = [];
+
+		$this->invoke_private_static( 'confirm_or_error', [ 'Proceed?', [ 'yes' => true ], false ] );
+
+		$this->assertContains( [ 'confirm', 'Proceed?' ], \WP_CLI::$messages );
+	}
+
+	/**
 	 * A non-numeric --plan value aborts before any WooCommerce Memberships check is
 	 * reached, so it is reachable without that plugin present in this harness.
 	 */
@@ -1680,10 +1736,12 @@ class Test_Premium_Newsletters_Migration extends \WP_UnitTestCase {
 
 		$superseded = $this->invoke_private_static( 'find_superseded_gates', [ $group, 'plan a | plan b', $existing_gates ] );
 
+		// Keyed by the title as written, not the lower-cased lookup key: the operator is
+		// being sent to Newsletters > Premium to find these gates by name.
 		$this->assertSame(
 			[
-				'plan a' => 11,
-				'plan b' => 22,
+				'Plan A' => 11,
+				'Plan B' => 22,
 			],
 			$superseded
 		);
@@ -1697,18 +1755,6 @@ class Test_Premium_Newsletters_Migration extends \WP_UnitTestCase {
 		$group = [ $this->make_named_plan( 'Plan A' ) ];
 
 		$superseded = $this->invoke_private_static( 'find_superseded_gates', [ $group, 'plan a', [ 'plan a' => 11 ] ] );
-
-		$this->assertSame( [], $superseded );
-	}
-
-	/**
-	 * A null entry marks a title claimed by this run rather than a gate found on the
-	 * site, so there is no prior gate to retire.
-	 */
-	public function test_find_superseded_gates_ignores_titles_claimed_by_this_run() {
-		$group = [ $this->make_named_plan( 'Plan A' ), $this->make_named_plan( 'Plan B' ) ];
-
-		$superseded = $this->invoke_private_static( 'find_superseded_gates', [ $group, 'plan a | plan b', [ 'plan a' => null ] ] );
 
 		$this->assertSame( [], $superseded );
 	}
@@ -1747,8 +1793,8 @@ class Test_Premium_Newsletters_Migration extends \WP_UnitTestCase {
 		$this->assertSame(
 			[
 				'Plan A | Plan B' => [
-					'plan a' => 11,
-					'plan b' => 22,
+					'Plan A' => 11,
+					'Plan B' => 22,
 				],
 			],
 			$superseding

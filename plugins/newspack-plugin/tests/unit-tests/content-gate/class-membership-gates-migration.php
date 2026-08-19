@@ -30,6 +30,9 @@ namespace Newspack\Tests\Content_Gate;
 use Newspack\CLI\Membership_Gates_Migration;
 use Newspack\Newsletters\Subscription_Lists;
 
+// The trait has to be defined before the class that uses it. Production load order
+// comes from CLI\Initializer; a test requiring the class directly supplies it here.
+require_once dirname( __DIR__, 3 ) . '/includes/cli/trait-one-time-purchase-migration.php';
 require_once dirname( __DIR__, 3 ) . '/includes/cli/class-membership-gates-migration.php';
 
 /**
@@ -49,6 +52,7 @@ class Test_Membership_Gates_Migration extends \WP_UnitTestCase {
 		parent::set_up_before_class();
 		require_once dirname( __DIR__, 2 ) . '/mocks/wp-cli-mocks.php';
 		require_once dirname( __DIR__, 2 ) . '/mocks/newsletters-namespaced-mocks.php';
+		require_once dirname( __DIR__, 2 ) . '/mocks/wc-mocks.php';
 	}
 
 	/**
@@ -59,18 +63,35 @@ class Test_Membership_Gates_Migration extends \WP_UnitTestCase {
 	private $original_argv;
 
 	/**
-	 * Remember the argument vector the bare-flag tests overwrite.
+	 * The mock product database as it stood before this test, restored afterwards.
+	 *
+	 * The mock builder writes into a global keyed by product ID, and the IDs here come
+	 * from the post factory — so without this a fixture could land on an ID another
+	 * test class hardcodes, and outlive the test that registered it.
+	 *
+	 * @var array|null
+	 */
+	private $original_products_database;
+
+	/**
+	 * Remember the argument vector the bare-flag tests overwrite, and the mock product
+	 * database the product fixtures write into.
 	 */
 	public function set_up() {
 		parent::set_up();
+		global $products_database;
+		$this->original_products_database = $products_database;
 		// phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- Raw argv, kept verbatim so tear_down() can restore it.
 		$this->original_argv = $_SERVER['argv'] ?? null;
 	}
 
 	/**
-	 * Put the argument vector back so it cannot leak into another test class.
+	 * Put the argument vector and the mock product database back so neither can leak
+	 * into another test class.
 	 */
 	public function tear_down() {
+		global $products_database;
+		$products_database = $this->original_products_database;
 		if ( null === $this->original_argv ) {
 			unset( $_SERVER['argv'] );
 		} else {
@@ -201,6 +222,264 @@ class Test_Membership_Gates_Migration extends \WP_UnitTestCase {
 		$this->assertSame( [ 0, -7 ], $resolved['dropped']['invalid'] );
 		$this->assertSame( [ $deleted ], $resolved['dropped']['unresolvable'] );
 		$this->assertSame( [ $variation ], $resolved['dropped']['variations'] );
+	}
+
+	/**
+	 * Register a WooCommerce mock product for a post the factory already made.
+	 *
+	 * The migration asks wc_get_product() which rule can carry a product, and a post
+	 * the mock database has never heard of comes back as false — which classifies as
+	 * one-time. Registering the mock is what lets a fixture say which kind it is.
+	 *
+	 * @param int    $product_id The product post ID.
+	 * @param string $type       The WooCommerce product type.
+	 *
+	 * @return int The product post ID, for chaining.
+	 */
+	private function register_product_type( int $product_id, string $type ): int {
+		\wc_create_mock_product(
+			[
+				'id'   => $product_id,
+				'type' => $type,
+			]
+		);
+		return $product_id;
+	}
+
+	/**
+	 * Create a product post of a given WooCommerce type.
+	 *
+	 * @param string $type The WooCommerce product type.
+	 *
+	 * @return int The product post ID.
+	 */
+	private function create_product( string $type ): int {
+		return $this->register_product_type( self::factory()->post->create( [ 'post_type' => 'product' ] ), $type );
+	}
+
+	/**
+	 * A duration pair in the shape the one_time_purchase rule stores.
+	 *
+	 * @param int    $value The duration amount.
+	 * @param string $unit  The duration unit.
+	 *
+	 * @return array
+	 */
+	private function duration( int $value, string $unit ): array {
+		return [
+			'duration_value' => $value,
+			'duration_unit'  => $unit,
+		];
+	}
+
+	/**
+	 * Build a plan-group descriptor of the shape group_plans_by_fingerprint() produces.
+	 *
+	 * @param string     $access_method     The WCM plan access method.
+	 * @param int[]      $product_ids       The plan's product IDs.
+	 * @param string     $name              The plan name.
+	 * @param array|null $one_time_duration The plan's own access length, as
+	 *                                      derive_one_time_duration() reads it. Null
+	 *                                      stands for a plan whose access ends on a
+	 *                                      fixed calendar date.
+	 *
+	 * @return array
+	 */
+	private function make_product_plan( string $access_method, array $product_ids, string $name = 'Plan', ?array $one_time_duration = null ): array {
+		return [
+			'pid'               => 0,
+			'name'              => $name,
+			'access_method'     => $access_method,
+			'ac_rules'          => [],
+			'product_ids'       => $product_ids,
+			'one_time_duration' => $one_time_duration,
+		];
+	}
+
+	/**
+	 * Run a group through the three steps the write loop takes to reach its paid
+	 * access rules, so a test exercises the chain rather than one link of it.
+	 *
+	 * @param array[]    $group    Plan descriptors.
+	 * @param array|null $override An operator-supplied --one-time-duration value.
+	 *
+	 * @return array[] The access rule groups the gate would store.
+	 */
+	/**
+	 * A mixed group is registration-gated and writes no paid access rules, so a
+	 * purchase plan inside it has no one-time rule to give a duration to. Consulting
+	 * it anyway would stop the run over a rule that was never going to be written.
+	 */
+	public function test_resolve_group_duration_asks_nothing_of_a_group_that_writes_no_rules() {
+		$one_time = $this->create_product( 'simple' );
+		$group    = [
+			$this->make_product_plan( 'purchase', [ $one_time ], 'Paid', null ),
+			$this->make_product_plan( 'signup', [], 'Free' ),
+		];
+
+		$result = $this->invoke_private_static( 'resolve_group_duration', [ $group, null ] );
+
+		$this->assertSame( [], $result['plans'] );
+		$this->assertNull( $result['duration'] );
+	}
+
+	private function build_group_access_rules( array $group, ?array $override = null ): array {
+		$products = $this->invoke_private_static( 'resolve_product_ids', [ $group ] );
+		$duration = $this->invoke_private_static( 'resolve_group_duration', [ $group, $override ] );
+		return $this->invoke_private_static( 'build_access_rules', [ $products, $duration['duration'] ] );
+	}
+
+	/**
+	 * A plan granting on subscription products only needs the subscription rule and
+	 * nothing else. A second rule group would be OR'd in, so an unwanted one-time
+	 * group here would hand the content to anyone who ever bought the product once.
+	 */
+	public function test_build_access_rules_writes_only_a_subscription_group_for_subscription_products() {
+		$subscription = $this->create_product( 'subscription' );
+		$variable     = $this->create_product( 'variable-subscription' );
+
+		$access_rules = $this->build_group_access_rules(
+			[ $this->make_product_plan( 'purchase', [ $subscription, $variable ], 'Members' ) ]
+		);
+
+		$this->assertSame(
+			[
+				[
+					[
+						'slug'  => 'subscription',
+						'value' => [ $subscription, $variable ],
+					],
+				],
+			],
+			$access_rules
+		);
+	}
+
+	/**
+	 * A plan granting on a product bought once must migrate to the one-time rule,
+	 * carrying the plan's own access length. The subscription rule is the condition
+	 * such a buyer can never satisfy — it is what this whole split exists to stop
+	 * being written for them.
+	 */
+	public function test_build_access_rules_writes_only_a_one_time_group_for_one_time_products() {
+		$one_time = $this->create_product( 'simple' );
+
+		$access_rules = $this->build_group_access_rules(
+			[ $this->make_product_plan( 'purchase', [ $one_time ], 'Prepaid', $this->duration( 12, 'months' ) ) ]
+		);
+
+		$this->assertSame(
+			[
+				[
+					[
+						'slug'  => 'one_time_purchase',
+						'value' => [
+							'product_ids'    => [ $one_time ],
+							'duration_value' => 12,
+							'duration_unit'  => 'months',
+						],
+					],
+				],
+			],
+			$access_rules
+		);
+	}
+
+	/**
+	 * The case the split exists for. A plan grants membership on any of its products,
+	 * so a plan holding both kinds must produce two rule groups: access rule groups
+	 * are OR'd while the rules inside one are AND'd, so flattening them into a single
+	 * group would demand a subscription AND a one-time purchase, and admit nobody.
+	 */
+	public function test_build_access_rules_writes_two_rule_groups_when_a_plan_grants_on_both_kinds() {
+		$subscription = $this->create_product( 'subscription' );
+		$one_time     = $this->create_product( 'simple' );
+
+		$access_rules = $this->build_group_access_rules(
+			[ $this->make_product_plan( 'purchase', [ $subscription, $one_time ], 'Premium', $this->duration( 90, 'days' ) ) ]
+		);
+
+		$this->assertCount( 2, $access_rules );
+		$this->assertCount( 1, $access_rules[0], 'Rules within a group are AND-ed, so each kind gets a group of its own.' );
+		$this->assertCount( 1, $access_rules[1], 'Rules within a group are AND-ed, so each kind gets a group of its own.' );
+		$this->assertSame(
+			[
+				'slug'  => 'subscription',
+				'value' => [ $subscription ],
+			],
+			$access_rules[0][0]
+		);
+		$this->assertSame(
+			[
+				'slug'  => 'one_time_purchase',
+				'value' => [
+					'product_ids'    => [ $one_time ],
+					'duration_value' => 90,
+					'duration_unit'  => 'days',
+				],
+			],
+			$access_rules[1][0]
+		);
+	}
+
+	/**
+	 * With no duration there is nothing for the one-time rule to say, and a rule
+	 * missing its duration is not a stricter rule but an unreadable one. No group is
+	 * written, and the plan is named — which is what the command refuses the run over
+	 * before anything is written, rather than publishing a gate any registered reader
+	 * would pass.
+	 */
+	public function test_build_access_rules_writes_no_one_time_group_without_a_duration() {
+		$one_time = $this->create_product( 'simple' );
+		$group    = [ $this->make_product_plan( 'purchase', [ $one_time ], 'Ends on a date' ) ];
+
+		$duration = $this->invoke_private_static( 'resolve_group_duration', [ $group, null ] );
+
+		$this->assertSame( [], $this->build_group_access_rules( $group ) );
+		$this->assertNull( $duration['duration'] );
+		$this->assertSame( [ 'Ends on a date' ], $duration['plans'], 'The plan is named so the pre-flight refusal can say which one needs --one-time-duration.' );
+	}
+
+	/**
+	 * --one-time-duration exists for the plan whose access ends on a calendar date,
+	 * which has no duration to read. The operator's value must reach the rule, or the
+	 * flag is a no-op that only silences the error.
+	 */
+	public function test_build_access_rules_lets_an_override_supply_a_missing_duration() {
+		$one_time = $this->create_product( 'simple' );
+
+		$access_rules = $this->build_group_access_rules(
+			[ $this->make_product_plan( 'purchase', [ $one_time ], 'Ends on a date' ) ],
+			$this->duration( 0, 'forever' )
+		);
+
+		$this->assertSame(
+			[
+				'product_ids'    => [ $one_time ],
+				'duration_value' => 0,
+				'duration_unit'  => 'forever',
+			],
+			$access_rules[0][0]['value']
+		);
+	}
+
+	/**
+	 * The split is read off the product, not off the plan: a plan grants on its
+	 * products without recording which kind each one is, so resolve_product_ids() has
+	 * to partition them or the rule builder has nothing to go on.
+	 */
+	public function test_resolve_product_ids_splits_survivors_by_the_rule_that_can_carry_them() {
+		$subscription = $this->create_product( 'subscription' );
+		$one_time     = $this->create_product( 'simple' );
+
+		$resolved = $this->invoke_private_static(
+			'resolve_product_ids',
+			[ [ $this->make_product_plan( 'purchase', [ $subscription, $one_time ] ) ] ]
+		);
+
+		$this->assertSame( [ $subscription, $one_time ], $resolved['product_ids'] );
+		$this->assertSame( [ $subscription ], $resolved['subscription_ids'] );
+		$this->assertSame( [ $one_time ], $resolved['one_time_ids'] );
 	}
 
 	/**
@@ -960,10 +1239,12 @@ HTML;
 
 		$superseded = $this->invoke_private_static( 'find_superseded_gates', [ $group, 'plan a | plan b', $existing_gates ] );
 
+		// Keyed by the title as written, not the lower-cased lookup key: the operator is
+		// being sent to Newsletters > Premium to find these gates by name.
 		$this->assertSame(
 			[
-				'plan a' => 11,
-				'plan b' => 22,
+				'Plan A' => 11,
+				'Plan B' => 22,
 			],
 			$superseded
 		);
@@ -977,18 +1258,6 @@ HTML;
 		$group = [ $this->make_named_plan( 'Plan A' ) ];
 
 		$superseded = $this->invoke_private_static( 'find_superseded_gates', [ $group, 'plan a', [ 'plan a' => 11 ] ] );
-
-		$this->assertSame( [], $superseded );
-	}
-
-	/**
-	 * A null entry marks a title claimed by this run rather than a gate found on the
-	 * site, so there is no prior gate to retire.
-	 */
-	public function test_find_superseded_gates_ignores_titles_claimed_by_this_run() {
-		$group = [ $this->make_named_plan( 'Plan A' ), $this->make_named_plan( 'Plan B' ) ];
-
-		$superseded = $this->invoke_private_static( 'find_superseded_gates', [ $group, 'plan a | plan b', [ 'plan a' => null ] ] );
 
 		$this->assertSame( [], $superseded );
 	}
@@ -1027,8 +1296,8 @@ HTML;
 		$this->assertSame(
 			[
 				'Plan A | Plan B' => [
-					'plan a' => 11,
-					'plan b' => 22,
+					'Plan A' => 11,
+					'Plan B' => 22,
 				],
 			],
 			$superseding
@@ -1115,6 +1384,30 @@ HTML;
 	}
 
 	/**
+	 * A bare --one-time-duration is stripped the same way, and the run then stops over
+	 * a duration the operator did supply.
+	 */
+	public function test_get_valueless_value_flags_reports_a_bare_one_time_duration() {
+		$this->assertSame(
+			[ '--one-time-duration' ],
+			Membership_Gates_Migration::get_valueless_value_flags( [ 'wp', 'newspack', 'migrate-membership-gates', '--one-time-duration', '--live' ] )
+		);
+	}
+
+	/**
+	 * A duration the one_time_purchase rule cannot store must stop the run: writing an
+	 * unrecognised unit would leave a rule that grants nobody access.
+	 */
+	public function test_migrate_membership_gates_aborts_on_an_unusable_one_time_duration() {
+		$migration = new Membership_Gates_Migration();
+
+		$this->expectException( \WP_CLI_Mock_Exception::class );
+		$this->expectExceptionMessage( 'Invalid --one-time-duration value' );
+
+		$migration->migrate_membership_gates( [], [ 'one-time-duration' => '1year' ] );
+	}
+
+	/**
 	 * The guard has to be wired into the command, not merely available: a bare --plan
 	 * with --live would otherwise rewrite every gate on the site.
 	 */
@@ -1193,4 +1486,82 @@ HTML;
 	public function test_prompt_is_answerable_at_a_terminal() {
 		$this->assertFalse( $this->invoke_private_static( 'prompt_is_unanswerable', [ [], true ] ) );
 	}
+
+	/**
+	 * The branch that matters is the one PHPUnit could never reach before: STDIN is
+	 * never a terminal under test, so the prompt itself went unexercised while the
+	 * error path looked covered. With the terminal check passed in, a superseding
+	 * group under --live is pinned as reaching the prompt rather than the abort.
+	 */
+	public function test_confirm_or_error_prompts_when_stdin_is_a_terminal() {
+		\WP_CLI::$messages = [];
+
+		$this->invoke_private_static( 'confirm_or_error', [ 'Proceed?', [], true ] );
+
+		$this->assertContains( [ 'confirm', 'Proceed?' ], \WP_CLI::$messages );
+	}
+
+	/**
+	 * With nothing able to answer, WP_CLI::confirm() would take the default and stop
+	 * the run part-way through with no summary. Erroring up front says why.
+	 */
+	public function test_confirm_or_error_aborts_when_nothing_can_answer() {
+		$this->expectException( \WP_CLI_Mock_Exception::class );
+		$this->expectExceptionMessage( 'STDIN is not a terminal' );
+
+		$this->invoke_private_static( 'confirm_or_error', [ 'Proceed?', [], false ] );
+	}
+
+	/**
+	 * --yes answers the prompt up front, which is what makes a non-interactive run
+	 * possible at all.
+	 */
+	public function test_confirm_or_error_accepts_yes_without_a_terminal() {
+		\WP_CLI::$messages = [];
+
+		$this->invoke_private_static( 'confirm_or_error', [ 'Proceed?', [ 'yes' => true ], false ] );
+
+		$this->assertContains( [ 'confirm', 'Proceed?' ], \WP_CLI::$messages );
+	}
+
+
+	/**
+	 * Two published gates can be named alike by hand, and indexing them by title is
+	 * last-write-wins: the run would update one and leave the other restricting the
+	 * same content, with nothing in the output to show it.
+	 */
+	public function test_find_duplicate_gate_titles_fires_for_two_gates_sharing_a_title() {
+		$gates = [
+			[
+				'id'    => 11,
+				'title' => 'Members',
+			],
+			[
+				'id'    => 12,
+				'title' => 'members',
+			],
+		];
+
+		$this->assertSame( [ 'Members' ], $this->invoke_private_static( 'find_duplicate_gate_titles', [ $gates ] ) );
+	}
+
+	/**
+	 * Distinct titles are the ordinary case; firing here would refuse every site with
+	 * more than one content gate.
+	 */
+	public function test_find_duplicate_gate_titles_is_empty_for_distinct_titles() {
+		$gates = [
+			[
+				'id'    => 11,
+				'title' => 'Members',
+			],
+			[
+				'id'    => 12,
+				'title' => 'Insider',
+			],
+		];
+
+		$this->assertSame( [], $this->invoke_private_static( 'find_duplicate_gate_titles', [ $gates ] ) );
+	}
+
 }

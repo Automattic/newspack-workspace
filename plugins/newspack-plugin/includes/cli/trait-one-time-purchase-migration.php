@@ -74,6 +74,17 @@ trait One_Time_Purchase_Migration {
 	private static function resolve_group_duration( array $group, ?array $override ): array {
 		$plans     = [];
 		$durations = [];
+		// A group that does not require a purchase writes no paid access rules at all,
+		// so it has no one-time rule to give a duration to. Asking anyway makes a plan
+		// with no derivable duration stop a run over a rule that was never going to be
+		// written. What such a group loses is reported on its own terms instead.
+		if ( ! self::group_requires_purchase( $group ) ) {
+			return [
+				'duration' => null,
+				'plans'    => [],
+				'conflict' => null,
+			];
+		}
 		foreach ( $group as $plan ) {
 			if ( 'purchase' !== $plan['access_method'] ) {
 				continue;

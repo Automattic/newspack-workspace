@@ -307,7 +307,8 @@ class Premium_Newsletters_Migration {
 					'Create %d gate(s) that supersede the gates named above? Answering no stops the run before anything is written.',
 					count( $superseding )
 				),
-				$assoc_args
+				$assoc_args,
+				self::stdin_is_a_tty()
 			);
 		}
 
@@ -614,14 +615,19 @@ class Premium_Newsletters_Migration {
 	/**
 	 * Ask the operator to confirm, or hard-error when nothing can answer.
 	 *
-	 * @param string $question   The yes/no question.
-	 * @param array  $assoc_args The command's named args, passed through to WP-CLI so
-	 *                           --yes answers the prompt.
+	 * The terminal check is passed in rather than read here, so both branches can be
+	 * exercised. STDIN is never a terminal under PHPUnit, which would otherwise leave
+	 * the prompt itself untested.
+	 *
+	 * @param string $question       The yes/no question.
+	 * @param array  $assoc_args     The command's named args, passed through to WP-CLI
+	 *                               so --yes answers the prompt.
+	 * @param bool   $stdin_is_a_tty Whether STDIN is a terminal.
 	 *
 	 * @return void
 	 */
-	private static function confirm_or_error( string $question, array $assoc_args ) {
-		if ( self::prompt_is_unanswerable( $assoc_args, self::stdin_is_a_tty() ) ) {
+	private static function confirm_or_error( string $question, array $assoc_args, bool $stdin_is_a_tty ): void {
+		if ( self::prompt_is_unanswerable( $assoc_args, $stdin_is_a_tty ) ) {
 			WP_CLI::error(
 				sprintf(
 					'This run needs an answer to: "%s" — but STDIN is not a terminal, so the prompt would be answered for you and the command would stop without writing a summary. Re-run with --yes to answer yes up front, or run it from an interactive terminal.',
@@ -679,7 +685,7 @@ class Premium_Newsletters_Migration {
 	 * The mirror of {@see find_colliding_gate_titles()}, on the other side of the same
 	 * assumption. Gate identity here is the title, but nothing in Content_Gate enforces
 	 * one title per bucket, and two published gates are easy to name alike by hand in
-	 * Newsletters > Premium. Indexing them by title is last-write-wins, so the run
+	 * the editor. Indexing them by title is last-write-wins, so the run
 	 * would update whichever came back last and leave the other published and still
 	 * restricting the same lists. It is invisible to report_stale_gates() too, since
 	 * its title is one this run wrote.
@@ -969,7 +975,7 @@ class Premium_Newsletters_Migration {
 	 *
 	 * @return void
 	 */
-	private static function report_product_id_issues( array $payload ) {
+	private static function report_product_id_issues( array $payload ): void {
 		if ( empty( $payload['has_purchase'] ) ) {
 			return;
 		}
@@ -1172,9 +1178,6 @@ class Premium_Newsletters_Migration {
 	 * originals stay published and keep restricting the same lists. Naming them lets
 	 * the operator retire them.
 	 *
-	 * Entries whose value is null are skipped: those titles were claimed by this run
-	 * rather than found on the site, so there is no prior gate to supersede.
-	 *
 	 * @param array[] $group          Plan descriptors, each carrying a 'name' key.
 	 * @param string  $gate_key       The group's own lower-cased gate title.
 	 * @param array   $existing_gates Map of lower-cased gate title => gate ID.
@@ -1183,13 +1186,18 @@ class Premium_Newsletters_Migration {
 	 */
 	private static function find_superseded_gates( array $group, string $gate_key, array $existing_gates ): array {
 		$superseded = [];
+		$seen       = [];
 		foreach ( $group as $plan ) {
+			// Matched on the lower-cased title, but returned under the title as written:
+			// the operator is being asked to find these gates in Newsletters > Premium,
+			// where they carry their own casing.
 			$plan_key = trim( strtolower( $plan['name'] ) );
-			if ( $plan_key === $gate_key ) {
+			if ( $plan_key === $gate_key || isset( $seen[ $plan_key ] ) ) {
 				continue;
 			}
 			if ( isset( $existing_gates[ $plan_key ] ) ) {
-				$superseded[ $plan_key ] = $existing_gates[ $plan_key ];
+				$seen[ $plan_key ]           = true;
+				$superseded[ $plan['name'] ] = $existing_gates[ $plan_key ];
 			}
 		}
 		return $superseded;
@@ -1832,7 +1840,7 @@ class Premium_Newsletters_Migration {
 	 *
 	 * @return void
 	 */
-	private static function report_auto_signup( array $list_ids, bool $dry_run, bool $plan_scoped = false, int $incomplete_groups = 0, bool $force = false, bool $untouched_gates = false ) {
+	private static function report_auto_signup( array $list_ids, bool $dry_run, bool $plan_scoped = false, int $incomplete_groups = 0, bool $force = false, bool $untouched_gates = false ): void {
 		$derived = self::derive_auto_signup( $list_ids );
 		// A sentinel default rather than 1: get_option() cannot otherwise tell a stored
 		// "on" from an absent option, and those two mean different things here.
