@@ -469,7 +469,13 @@ class Block_Visibility {
 	 * @return bool
 	 */
 	private static function has_active_gates( $gate_ids ) {
-		$cache_key = get_current_blog_id() . ':' . md5( wp_json_encode( $gate_ids ) );
+		// Normalized because the answer does not depend on order or repetition, but the
+		// caller's list does: the ids arrive from a block attribute in editor order, and
+		// array_filter() preserves keys, so dropping a zero would otherwise encode as an
+		// object rather than a list and key differently again.
+		$ids = array_values( array_unique( array_map( 'intval', $gate_ids ) ) );
+		sort( $ids, SORT_NUMERIC );
+		$cache_key = get_current_blog_id() . ':' . implode( ',', $ids );
 		if ( isset( self::$active_gates_cache[ $cache_key ] ) ) {
 			return self::$active_gates_cache[ $cache_key ];
 		}

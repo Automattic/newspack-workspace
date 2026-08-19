@@ -865,4 +865,54 @@ class Newspack_Test_Block_Visibility extends WP_UnitTestCase {
 			'Gate reconstructions must not grow with the number of block renders.'
 		);
 	}
+
+	/**
+	 * Gate mode: the active-gate check keys on the gate set, not the order it is
+	 * written in.
+	 */
+	public function test_gate_mode_active_gate_check_ignores_gate_id_order() {
+		// Draft gates so has_active_gates() returns false and the rule evaluation
+		// never runs, leaving the active-gate check as the only gate reader.
+		$gate_a  = $this->make_gate( true, 'draft' );
+		$gate_b  = $this->make_gate( true, 'draft' );
+		$fetches = 0;
+
+		$counter = function ( $value, $object_id, $meta_key ) use ( &$fetches, $gate_a, $gate_b ) {
+			if ( 'gate_priority' === $meta_key && in_array( (int) $object_id, [ (int) $gate_a, (int) $gate_b ], true ) ) {
+				++$fetches;
+			}
+			return $value;
+		};
+		add_filter( 'get_post_metadata', $counter, 10, 3 );
+
+		wp_set_current_user( 0 );
+		Block_Visibility::reset_cache_for_tests();
+
+		$forward = $this->make_block(
+			'core/group',
+			[
+				'newspackAccessControlMode'    => 'gate',
+				'newspackAccessControlGateIds' => [ $gate_a, $gate_b ],
+			]
+		);
+		$reverse = $this->make_block(
+			'core/group',
+			[
+				'newspackAccessControlMode'    => 'gate',
+				'newspackAccessControlGateIds' => [ $gate_b, $gate_a ],
+			]
+		);
+
+		Block_Visibility::filter_render_block( '<div>members</div>', $forward );
+		$after_forward = $fetches;
+		Block_Visibility::filter_render_block( '<div>members</div>', $reverse );
+
+		remove_filter( 'get_post_metadata', $counter, 10 );
+
+		$this->assertSame(
+			$after_forward,
+			$fetches,
+			'The same gate set in a different order must reuse the cached result.'
+		);
+	}
 }
