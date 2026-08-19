@@ -36,7 +36,7 @@ import classnames from 'classnames';
  * @property {boolean}            [isWhite=false]    - Indicates if the header should use a white theme.
  * @property {boolean}            [noMargin=false]   - Indicates if the header should have no margin.
  * @property {boolean}            [pageHeader=false] - Indicates if the header is used as a page header.
- * @property {string}             [size='default']   - Size variant, either 'default' or 'small'. Scales the title, and the icon with it, independently of `pageHeader`.
+ * @property {string}             [size='default']   - Size variant: 'small', 'default', or 'hidden' to keep the title and description for screen readers only while the back nav stays visible.
  * @property {string}             title              - The title of the section.
  * @property {?string}            [id=null]          - Optional ID for the header element.
  * @property {?string|Function|*} [children=null]    - Optional children to display in the header.
@@ -85,7 +85,8 @@ const SectionHeader = ( {
 		isWhite && 'newspack-section-header--is-white',
 		noMargin && 'newspack-section-header--no-margin',
 		pageHeader && 'newspack-section-header--page-header',
-		size === 'small' && 'newspack-section-header--small'
+		size === 'small' && 'newspack-section-header--small',
+		size === 'hidden' && 'newspack-section-header--hidden'
 	);
 
 	// The breadcrumb `Page` owns the single page `<h1>`, so a `pageHeader` section
@@ -93,13 +94,16 @@ const SectionHeader = ( {
 	// controls only the enlarged, centered styling — not the tag. Pass `heading={ 1 }`
 	// on a headerless screen that needs the section header to be the page's h1.
 	const HeadingTag = `h${ heading }`;
+	// `hidden` keeps the heading in the accessibility tree while the page below
+	// supplies the visible hierarchy.
+	const srOnly = size === 'hidden' ? 'screen-reader-text' : undefined;
 
 	let titleContent = null;
 
 	if ( typeof title === 'string' ) {
 		titleContent = (
 			<div className="newspack-section-header__title-container">
-				<HeadingTag className="newspack-section-header__title">
+				<HeadingTag className={ classnames( 'newspack-section-header__title', srOnly ) }>
 					{ title }
 					{ badges?.length
 						? badges.map( ( badge, i ) => <Badge key={ i } text={ badge.label } level={ badge.level || 'default' } /> )
@@ -166,9 +170,9 @@ const SectionHeader = ( {
 				) : (
 					titleContent
 				) }
-				{ description && typeof description === 'string' && <p>{ description }</p> }
-				{ typeof description === 'function' && <p>{ description() }</p> }
-				{ description && typeof description !== 'string' && typeof description !== 'function' && <p>{ description }</p> }
+				{ description && typeof description === 'string' && <p className={ srOnly }>{ description }</p> }
+				{ typeof description === 'function' && <p className={ srOnly }>{ description() }</p> }
+				{ description && typeof description !== 'string' && typeof description !== 'function' && <p className={ srOnly }>{ description }</p> }
 				{ children && <div className="newspack-section-header__children">{ children }</div> }
 			</Grid>
 			{ primaryAction && (

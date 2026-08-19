@@ -196,6 +196,7 @@ class Content_Gate {
 		include __DIR__ . '/class-content-rules.php';
 		include __DIR__ . '/class-content-restriction-control.php';
 		include __DIR__ . '/class-block-patterns.php';
+		include __DIR__ . '/class-site-meter.php';
 		include __DIR__ . '/class-metering.php';
 		include __DIR__ . '/class-metering-countdown.php';
 		include __DIR__ . '/content-gifting/class-content-gifting.php';
@@ -208,6 +209,7 @@ class Content_Gate {
 		include __DIR__ . '/class-block-visibility.php';
 		include __DIR__ . '/class-gate-preview.php';
 
+		Site_Meter::init();
 		Content_Gate\Gate_Preview::init();
 	}
 
@@ -1683,6 +1685,7 @@ class Content_Gate {
 			'enabled' => false,
 			'count'   => 1,
 			'period'  => 'month',
+			'scope'   => Site_Meter::SCOPE_SITE,
 		];
 
 		return [
@@ -1752,6 +1755,7 @@ class Content_Gate {
 			'enabled' => false,
 			'count'   => 1,
 			'period'  => 'month',
+			'scope'   => Site_Meter::SCOPE_SITE,
 		];
 
 		return [

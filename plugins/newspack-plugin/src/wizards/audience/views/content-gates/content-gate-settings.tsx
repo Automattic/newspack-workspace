@@ -32,7 +32,9 @@ export default function ContentGateSettings( {
 	isNewsletter?: boolean;
 } ) {
 	const history = useHistory();
-	const { gates } = useWizardData( slug ) as { gates: Gate[] };
+	const wizardData = useWizardData( slug ) as ContentGatesWizardData;
+	const gates = ( wizardData?.gates || [] ) as Gate[];
+	const siteMeter = wizardData?.config?.site_meter;
 	const { wizardApiFetch, isFetching, resetError } = useWizardApiFetch( slug );
 	const { addNotice, resetNotices } = useDispatch( WIZARD_STORE_NAMESPACE );
 	const { confirmDialog: deleteDialog, requestConfirm: requestDelete } = useConfirmDialog( {
@@ -225,7 +227,7 @@ export default function ContentGateSettings( {
 			>
 				<CardBody>
 					<Grid className="newspack-content-gates__gate__settings" columns={ isNewsletter ? 2 : 3 } gutter={ 16 } borders noMargin>
-						{ getGateSummarySections( gate, isNewsletter ).map( section => (
+						{ getGateSummarySections( gate, isNewsletter, siteMeter ).map( section => (
 							<div key={ section.key }>
 								<h4>{ section.label }</h4>
 								{ section.content }

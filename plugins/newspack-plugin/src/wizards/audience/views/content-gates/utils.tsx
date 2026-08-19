@@ -1,7 +1,7 @@
 /**
  * WordPress dependencies.
  */
-import { __ } from '@wordpress/i18n';
+import { __, sprintf } from '@wordpress/i18n';
 import { addQueryArgs } from '@wordpress/url';
 
 /**
@@ -36,10 +36,41 @@ export function getEditGateLayoutUrl( gateId: number, gateMode: string ) {
  * is what those surfaces are gated on at render time - a section only meters while it
  * is active, has metering on, and allows a positive number of views.
  */
-export const isGateMetered = ( gate: Gate ) => {
-	const meters = ( section?: Registration | CustomAccess ) =>
-		Boolean( section?.active && section?.metering?.enabled && Number( section.metering.count ) > 0 );
-	return meters( gate.registration ) || meters( gate.custom_access );
+/**
+ * Resolve the free-view allowance one audience path grants.
+ *
+ * The count lives on the site meter unless the path opts out, so a stale count
+ * left on the gate must not be read while it is sharing.
+ *
+ * @param metering  The path's metering settings.
+ * @param siteCount The site meter count governing this path.
+ */
+export const getMeteringCount = ( metering?: Metering, siteCount?: number ) => {
+	if ( ! metering ) {
+		return 0;
+	}
+	if ( metering.scope === 'gate' ) {
+		return Number( metering.count ) || 0;
+	}
+	// Matches the server-side default until the wizard has loaded the config.
+	return Number( siteCount ?? 1 ) || 0;
+};
+
+export const isGateMetered = ( gate: Gate, siteMeter?: SiteMeterConfig ) => {
+	const meters = ( section?: Registration | CustomAccess, siteCount?: number ) =>
+		Boolean( section?.active && section?.metering?.enabled && getMeteringCount( section.metering, siteCount ) > 0 );
+	return meters( gate.registration, siteMeter?.anonymous_count ) || meters( gate.custom_access, siteMeter?.registered_count );
+};
+
+/**
+ * Whether any of a gate's audience paths keeps its own allowance.
+ *
+ * @param gate The gate.
+ */
+export const hasOwnMeter = ( gate: Gate ) => {
+	const optsOut = ( section?: Registration | CustomAccess ) =>
+		Boolean( section?.active && section?.metering?.enabled && section.metering.scope === 'gate' );
+	return optsOut( gate.registration ) || optsOut( gate.custom_access );
 };
 
 export const getGateStatus = ( status: GateStatus ) => {
@@ -48,4 +79,25 @@ export const getGateStatus = ( status: GateStatus ) => {
 
 export const getGateStatusBadgeLevel = ( status: GateStatus ) => {
 	return status === 'publish' ? 'success' : 'default';
+};
+
+/**
+ * Describe the shared allowance, for the Metering card and the Metering page header.
+ *
+ * @param siteMeter The site meter, once the wizard has loaded it.
+ */
+export const getMeteringDescription = ( siteMeter?: SiteMeterConfig ) => {
+	if ( ! siteMeter ) {
+		return __( 'Set how many articles readers can view for free before a gate applies.', 'newspack-plugin' );
+	}
+	return sprintf(
+		// translators: 1: free views for signed-out readers, 2: free views for signed-in readers, 3: how often the allowance resets, e.g. "monthly".
+		__(
+			'Free views reset %3$s: %1$d for signed-out readers, %2$d for signed-in. Every gate shares this allowance unless it keeps its own.',
+			'newspack-plugin'
+		),
+		siteMeter.anonymous_count,
+		siteMeter.registered_count,
+		siteMeter.period === 'week' ? __( 'weekly', 'newspack-plugin' ) : __( 'monthly', 'newspack-plugin' )
+	);
 };

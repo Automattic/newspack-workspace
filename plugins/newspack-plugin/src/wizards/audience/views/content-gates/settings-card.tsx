@@ -21,11 +21,15 @@ type SettingsCardProps = {
 	enabled?: boolean;
 	href?: string;
 	requirements?: string;
+	/** Omit for a setting that is always on and only ever configured, such as metering. */
 	toggleEnabled?: () => void;
+	badgeText?: string;
+	badgeLevel?: 'default' | 'info' | 'success' | 'warning' | 'error';
 };
 
-const SettingsCard = ( { title, description, enabled, requirements, toggleEnabled = () => {}, href = '' }: SettingsCardProps ) => {
+const SettingsCard = ( { title, description, enabled, requirements, toggleEnabled, href = '', badgeText, badgeLevel }: SettingsCardProps ) => {
 	const history = useHistory();
+	const configure = () => history.push( href );
 
 	return (
 		<CardFeature
@@ -33,14 +37,23 @@ const SettingsCard = ( { title, description, enabled, requirements, toggleEnable
 			description={ description }
 			enabled={ enabled }
 			requirements={ requirements }
-			onEnable={ toggleEnabled }
-			onConfigure={ () => history.push( href ) }
-			moreControls={ [
-				{
-					title: __( 'Disable', 'newspack-plugin' ),
-					onClick: toggleEnabled,
-				},
-			] }
+			// Without a toggle there is nothing to enable, so both button states
+			// lead to the same settings page.
+			enableLabel={ toggleEnabled ? undefined : __( 'Configure', 'newspack-plugin' ) }
+			onEnable={ toggleEnabled || configure }
+			onConfigure={ configure }
+			badgeText={ badgeText }
+			badgeLevel={ badgeLevel }
+			moreControls={
+				toggleEnabled
+					? [
+							{
+								title: __( 'Disable', 'newspack-plugin' ),
+								onClick: toggleEnabled,
+							},
+					  ]
+					: undefined
+			}
 		/>
 	);
 };

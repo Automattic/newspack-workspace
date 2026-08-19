@@ -12,6 +12,7 @@ import { __, _n, sprintf } from '@wordpress/i18n';
  * Internal dependencies.
  */
 import ContentRuleControl from './edit/content-rule-control';
+import { getMeteringCount } from './utils';
 import { normalizeOneTimePurchaseValue } from '../../../../content-gate/components/one-time-purchase-rule-control';
 
 const availableAccessRules = window.newspackAudienceContentGates.available_access_rules || {};
@@ -79,12 +80,45 @@ export type GateSummarySection = {
 };
 
 /**
+ * Summarise one audience path's allowance, naming the site meter when the count
+ * is shared. Without that, several gates showing the same number read as several
+ * separate allowances, which is the confusion the shared meter exists to remove.
+ *
+ * @param metering   The path's metering settings.
+ * @param siteCount  The site meter count governing this path.
+ * @param sitePeriod The site meter reset period.
+ */
+const formatMetering = ( metering: Metering, siteCount?: number, sitePeriod?: Metering[ 'period' ] ) => {
+	const isSiteScoped = metering.scope !== 'gate';
+	const count = getMeteringCount( metering, siteCount );
+	const period = isSiteScoped ? sitePeriod ?? 'month' : metering.period;
+	const allowance = sprintf(
+		// translators: 1: metering count, 2: metering period
+		_n( '%1$d free view per %2$s', '%1$d free views per %2$s', count, 'newspack-plugin' ),
+		count,
+		period
+	);
+	return isSiteScoped
+		? sprintf(
+				// translators: %s is the allowance, e.g. "3 free views per month".
+				__( '%s (site meter)', 'newspack-plugin' ),
+				allowance
+		  )
+		: sprintf(
+				// translators: %s is the allowance, e.g. "3 free views per month".
+				__( '%s (this gate only)', 'newspack-plugin' ),
+				allowance
+		  );
+};
+
+/**
  * Build the Content rules / Registered access / Paid access sections for a gate.
  *
  * @param gate         The gate (live edit state or a saved gate).
  * @param isNewsletter Whether this is a premium-newsletter gate (hides registration).
+ * @param siteMeter    The shared allowance, so a summary can name where its count comes from.
  */
-export const getGateSummarySections = ( gate: Gate, isNewsletter = false ): GateSummarySection[] => {
+export const getGateSummarySections = ( gate: Gate, isNewsletter = false, siteMeter?: SiteMeterConfig ): GateSummarySection[] => {
 	const sections: GateSummarySection[] = [];
 
 	sections.push( {
@@ -104,7 +138,9 @@ export const getGateSummarySections = ( gate: Gate, isNewsletter = false ): Gate
 					/>
 				) )
 			) : (
-				<p>{ __( 'N/A', 'newspack-plugin' ) }</p>
+				<p>
+					<strong>{ __( 'N/A', 'newspack-plugin' ) }</strong>
+				</p>
 			),
 	} );
 
@@ -123,27 +159,28 @@ export const getGateSummarySections = ( gate: Gate, isNewsletter = false ): Gate
 					{ gate.registration?.active && gate.registration.metering.enabled && (
 						<p>
 							<strong>{ __( 'Metered:', 'newspack-plugin' ) } </strong>{ ' ' }
-							{ sprintf(
-								// translators: 1: metering count, 2: metering period
-								__( '%1$d free views per %2$s', 'newspack-plugin' ),
-								gate.registration.metering.count,
-								gate.registration.metering.period
-							) }
+							{ formatMetering( gate.registration.metering, siteMeter?.anonymous_count, siteMeter?.period ) }
 						</p>
 					) }
-					{ ! gate.registration?.active && <p>{ __( 'N/A', 'newspack-plugin' ) }</p> }
+					{ ! gate.registration?.active && (
+						<p>
+							<strong>{ __( 'N/A', 'newspack-plugin' ) }</strong>
+						</p>
+					) }
 				</>
 			),
 		} );
 	}
+
+	const showsAccessRules = Boolean( gate.custom_access?.active && gate.custom_access.access_rules.length > 0 );
+	const showsPaidMetering = Boolean( gate.custom_access?.active && gate.custom_access.metering.enabled );
 
 	sections.push( {
 		key: 'custom_access',
 		label: __( 'Paid Access', 'newspack-plugin' ),
 		content: (
 			<>
-				{ gate.custom_access?.active &&
-					gate.custom_access.access_rules.length > 0 &&
+				{ showsAccessRules &&
 					gate.custom_access.access_rules.map( ( ruleGroup, groupIndex ) =>
 						ruleGroup.map( rule =>
 							availableAccessRules[ rule.slug ]?.name ? (
@@ -153,18 +190,18 @@ export const getGateSummarySections = ( gate: Gate, isNewsletter = false ): Gate
 							) : null
 						)
 					) }
-				{ gate.custom_access?.active && gate.custom_access.metering.enabled && (
+				{ showsPaidMetering && (
 					<p>
 						<strong>{ __( 'Metered:', 'newspack-plugin' ) } </strong>{ ' ' }
-						{ sprintf(
-							// translators: 1: metering count, 2: metering period
-							__( '%1$d free views per %2$s', 'newspack-plugin' ),
-							gate.custom_access.metering.count,
-							gate.custom_access.metering.period
-						) }
+						{ formatMetering( gate.custom_access.metering, siteMeter?.registered_count, siteMeter?.period ) }
 					</p>
 				) }
-				{ ( ! gate.custom_access?.active || gate.custom_access.access_rules?.length === 0 ) && <p>{ __( 'N/A', 'newspack-plugin' ) }</p> }
+				{ /* Only when the column has nothing else: N/A beside a metering line reads as a contradiction. */ }
+				{ ! showsAccessRules && ! showsPaidMetering && (
+					<p>
+						<strong>{ __( 'N/A', 'newspack-plugin' ) }</strong>
+					</p>
+				) }
 			</>
 		),
 	} );

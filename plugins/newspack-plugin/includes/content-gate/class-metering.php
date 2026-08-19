@@ -170,10 +170,43 @@ class Metering {
 		}
 
 		$registration = Content_Gate::get_registration_settings( $gate_id );
+		return self::resolve_settings( $registration['active'], $registration['metering'], 'anonymous_count' );
+	}
+
+	/**
+	 * Resolve one audience path's metering settings against its scope.
+	 *
+	 * Enablement always comes from the gate, so a hard wall and a metered gate can
+	 * coexist against the same pool. The allowance comes from the site meter unless
+	 * the path opts out.
+	 *
+	 * @param bool   $active         Whether the audience path is active on the gate.
+	 * @param array  $metering       The path's stored metering settings.
+	 * @param string $site_count_key Which site meter count governs this path.
+	 *
+	 * @return array{enabled: bool, count: int, period: string} Metering settings.
+	 */
+	private static function resolve_settings( $active, $metering, $site_count_key ) {
+		if ( ! $active ) {
+			return [
+				'enabled' => false,
+				'count'   => 0,
+				'period'  => 'month',
+			];
+		}
+		$enabled = (bool) $metering['enabled'];
+		if ( Site_Meter::SCOPE_SITE === Site_Meter::sanitize_scope( $metering['scope'] ?? null ) ) {
+			$site = Site_Meter::get_settings();
+			return [
+				'enabled' => $enabled,
+				'count'   => absint( $site[ $site_count_key ] ),
+				'period'  => $site['period'],
+			];
+		}
 		return [
-			'enabled' => $registration['active'] && $registration['metering']['enabled'],
-			'count'   => $registration['active'] ? absint( $registration['metering']['count'] ) : 0,
-			'period'  => $registration['active'] ? $registration['metering']['period'] : 'month',
+			'enabled' => $enabled,
+			'count'   => absint( $metering['count'] ),
+			'period'  => $metering['period'],
 		];
 	}
 
@@ -196,11 +229,33 @@ class Metering {
 		}
 
 		$custom_access = Content_Gate::get_custom_access_settings( $gate_id );
-		return [
-			'enabled' => $custom_access['active'] && $custom_access['metering']['enabled'],
-			'count'   => $custom_access['active'] ? absint( $custom_access['metering']['count'] ) : 0,
-			'period'  => $custom_access['active'] ? $custom_access['metering']['period'] : 'month',
-		];
+		return self::resolve_settings( $custom_access['active'], $custom_access['metering'], 'registered_count' );
+	}
+
+	/**
+	 * Get the counter key for the reader the given settings govern.
+	 *
+	 * Counters keyed by gate gave a reader crossing sections a fresh allowance per
+	 * gate. A shared scope collapses them onto one key so the allowance, and the
+	 * countdown that reports it, hold across the whole site.
+	 *
+	 * Legacy Woo Memberships gates keep their per-gate key: they predate the scope
+	 * setting and read both meters from the shared `metering` meta.
+	 *
+	 * @param int  $gate_id      Gate ID.
+	 * @param bool $is_logged_in Whether to evaluate for a logged-in reader.
+	 *
+	 * @return string Counter key: the shared key, or the gate ID.
+	 */
+	public static function get_meter_key( $gate_id, $is_logged_in ) {
+		if ( Memberships::is_active() ) {
+			return (string) $gate_id;
+		}
+		$settings = self::is_gated_by_registration( $gate_id, $is_logged_in )
+			? Content_Gate::get_registration_settings( $gate_id )
+			: Content_Gate::get_custom_access_settings( $gate_id );
+		$scope = Site_Meter::sanitize_scope( $settings['metering']['scope'] ?? null );
+		return Site_Meter::SCOPE_SITE === $scope ? Site_Meter::METER_KEY : (string) $gate_id;
 	}
 
 	/**
@@ -322,6 +377,7 @@ class Metering {
 				'count'              => $settings['count'],
 				'period'             => $settings['period'],
 				'gate_id'            => $gate_post_id,
+				'meter_key'          => self::get_meter_key( $gate_post_id, false ),
 				'post_id'            => get_the_ID(),
 				'article_view'       => self::$article_view,
 				'excerpt'            => apply_filters( 'newspack_gate_content', Content_Gate::get_restricted_post_excerpt( get_post() ) ),
@@ -495,7 +551,7 @@ class Metering {
 			return self::$logged_in_metering_cache[ $post_id ];
 		}
 
-		$user_meta_key = self::METERING_META_KEY . '_' . $gate_post_id;
+		$user_meta_key = self::METERING_META_KEY . '_' . self::get_meter_key( $gate_post_id, true );
 
 		$updated_user_data  = false;
 		$user_metering_data = \get_user_meta( get_current_user_id(), $user_meta_key, true );
@@ -614,7 +670,7 @@ class Metering {
 		}
 
 		$gate_post_id  = Content_Gate::get_gate_post_id();
-		$meta_key      = self::METERING_META_KEY . '_' . $gate_post_id;
+		$meta_key      = self::METERING_META_KEY . '_' . self::get_meter_key( $gate_post_id, true );
 		$metering_data = \get_user_meta( get_current_user_id(), $meta_key, true );
 		if ( ! is_array( $metering_data ) || ! isset( $metering_data['content'] ) ) {
 			return 0;

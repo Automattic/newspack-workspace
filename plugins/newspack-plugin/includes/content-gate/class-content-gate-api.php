@@ -212,6 +212,9 @@ class Content_Gate_API {
 		if ( isset( $metering['period'] ) ) {
 			$sanitized['period'] = sanitize_text_field( $metering['period'] );
 		}
+		if ( isset( $metering['scope'] ) ) {
+			$sanitized['scope'] = Site_Meter::sanitize_scope( $metering['scope'] );
+		}
 		return $sanitized;
 	}
 

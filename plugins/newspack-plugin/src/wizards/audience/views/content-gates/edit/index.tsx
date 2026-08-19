@@ -94,7 +94,8 @@ const Edit = ( { match, updateGatesData, slug = AUDIENCE_CONTENT_GATES_WIZARD_SL
 	const { id: _id, type } = match.params;
 	const id = _id ? parseInt( _id ) : 0;
 	// Undefined until the wizard store resolves the gates request.
-	const { gates } = useWizardData( slug ) as ContentGatesWizardData;
+	const { gates, config } = useWizardData( slug ) as ContentGatesWizardData;
+	const siteMeter = config?.site_meter;
 	const { wizardApiFetch, isFetching, errorMessage, resetError } = useWizardApiFetch( slug );
 	const { addNotice, resetNotices, setHeaderData } = useDispatch( WIZARD_STORE_NAMESPACE );
 	const [ gate, setGate ] = useState< Gate >( ( gates && gates.find( g => g.id === id ) ) || DEFAULT_GATE ); // eslint-disable-line @typescript-eslint/no-unused-vars
@@ -532,7 +533,8 @@ const Edit = ( { match, updateGatesData, slug = AUDIENCE_CONTENT_GATES_WIZARD_SL
 					isSaving={ isFetching }
 					summary={ getGateSummarySections(
 						{ ...gate, content_rules: contentRules, registration, custom_access: customAccess },
-						isNewsletter
+						isNewsletter,
+						siteMeter
 					) }
 					onCancel={ () => setShowSavePanel( false ) }
 					onConfirm={ handleSaveConfirm }
@@ -692,7 +694,12 @@ const Edit = ( { match, updateGatesData, slug = AUDIENCE_CONTENT_GATES_WIZARD_SL
 							isActive={ registration?.active }
 							onEnable={ () => setRegistration( { ...registration, active: ! registration.active } ) }
 						>
-							<Registration registration={ registration } onChange={ setRegistration } isNewsletter={ isNewsletter } />
+							<Registration
+								registration={ registration }
+								onChange={ setRegistration }
+								isNewsletter={ isNewsletter }
+								siteMeter={ siteMeter }
+							/>
 						</CardSettingsGroup>
 					) }
 					<CardSettingsGroup
@@ -713,7 +720,12 @@ const Edit = ( { match, updateGatesData, slug = AUDIENCE_CONTENT_GATES_WIZARD_SL
 						isActive={ customAccess?.active }
 						onEnable={ () => setCustomAccess( { ...customAccess, active: ! customAccess.active } ) }
 					>
-						<CustomAccess customAccess={ customAccess } onChange={ setCustomAccess } isNewsletter={ isNewsletter } />
+						<CustomAccess
+							customAccess={ customAccess }
+							onChange={ setCustomAccess }
+							isNewsletter={ isNewsletter }
+							siteMeter={ siteMeter }
+						/>
 					</CardSettingsGroup>
 				</VStack>
 			</Grid>

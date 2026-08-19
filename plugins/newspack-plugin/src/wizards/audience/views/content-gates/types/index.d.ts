@@ -44,9 +44,19 @@ type ContentRule = {
 	value: GateContentRuleValue;
 };
 
+type MeteringScope = 'site' | 'gate';
+
 type Metering = {
 	enabled: boolean;
 	count: number;
+	period: 'week' | 'month';
+	// Optional: gates saved before the setting existed lack the key; reads treat absence as the site meter.
+	scope?: MeteringScope;
+};
+
+type SiteMeterConfig = {
+	anonymous_count: number;
+	registered_count: number;
 	period: 'week' | 'month';
 };
 
@@ -154,7 +164,9 @@ type ContentGiftingConfig = {
 };
 
 type MeteringCountdownConfig = {
-	enabled?: boolean;
+	// The REST layer sanitizes this to an int, so reads must not assume a boolean
+	// and writes should stay int-shaped to keep dirty checks honest.
+	enabled?: boolean | number;
 	style?: string;
 	cta_label?: string;
 	button_label?: string;
@@ -172,6 +184,7 @@ type AdvancedSettingsConfig = {
 };
 
 type GateSettings = {
+	site_meter?: SiteMeterConfig;
 	content_gifting?: ContentGiftingConfig;
 	countdown_banner?: MeteringCountdownConfig;
 	advanced_settings?: AdvancedSettingsConfig;

@@ -10,6 +10,7 @@ namespace Newspack\Tests\Content_Gate;
 use Newspack\Content_Gate;
 use Newspack\Metering;
 use Newspack\Reader_Activation;
+use Newspack\Site_Meter;
 
 /**
  * Tests for the Metering class.
@@ -71,6 +72,8 @@ class Test_Metering extends \WP_UnitTestCase {
 	 *     @type bool   $metering_enabled     Whether metering is enabled.
 	 *     @type int    $metering_count       Number of metered views allowed.
 	 *     @type string $metering_period      Metering period (day, week, month).
+	 *     @type string $metering_scope       Whether the allowance comes from the site
+	 *                                        meter ('site') or the gate ('gate').
 	 * }
 	 * @return int Gate ID.
 	 */
@@ -80,6 +83,9 @@ class Test_Metering extends \WP_UnitTestCase {
 			'metering_enabled'     => true,
 			'metering_count'       => 3,
 			'metering_period'      => 'month',
+			// These cases assert on the count each gate carries, so they opt out of the
+			// shared site meter. The shared path has its own test class.
+			'metering_scope'       => Site_Meter::SCOPE_GATE,
 		];
 		$args = wp_parse_args( $args, $defaults );
 
@@ -98,30 +104,55 @@ class Test_Metering extends \WP_UnitTestCase {
 						'value' => [ 'post' ],
 					],
 				],
-				'registration'  => $args['registration'] ?? [
-					'active'               => true,
-					'metering'             => [
-						'enabled' => $args['metering_enabled'],
-						'count'   => $args['metering_count'],
-						'period'  => $args['metering_period'],
+				'registration'  => isset( $args['registration'] )
+					? $this->with_metering_scope( $args['registration'], $args['metering_scope'] )
+					: [
+						'active'               => true,
+						'metering'             => [
+							'enabled' => $args['metering_enabled'],
+							'count'   => $args['metering_count'],
+							'period'  => $args['metering_period'],
+							'scope'   => $args['metering_scope'],
+						],
+						'require_verification' => $args['require_verification'],
+						'gate_id'              => 0,
 					],
-					'require_verification' => $args['require_verification'],
-					'gate_id'              => 0,
-				],
-				'custom_access' => $args['custom_access'] ?? [
-					'active'       => true,
-					'metering'     => [
-						'enabled' => $args['metering_enabled'],
-						'count'   => $args['metering_count'],
-						'period'  => $args['metering_period'],
+				'custom_access' => isset( $args['custom_access'] )
+					? $this->with_metering_scope( $args['custom_access'], $args['metering_scope'] )
+					: [
+						'active'       => true,
+						'metering'     => [
+							'enabled' => $args['metering_enabled'],
+							'count'   => $args['metering_count'],
+							'period'  => $args['metering_period'],
+							'scope'   => $args['metering_scope'],
+						],
+						'gate_id'      => 0,
+						'access_rules' => [],
 					],
-					'gate_id'      => 0,
-					'access_rules' => [],
-				],
 			]
 		);
 
 		return $gate_id;
+	}
+
+	/**
+	 * Stamp a metering scope onto an audience path that does not name one.
+	 *
+	 * Tests that hand-build a path assert on the count they wrote there, so they need
+	 * that count to be the one in force. Without a scope the gate would fall through
+	 * to the site meter and every such assertion would read the site's default.
+	 *
+	 * @param array  $section Registration or custom access settings.
+	 * @param string $scope   Scope to apply when the section does not set one.
+	 *
+	 * @return array The settings, with a metering scope.
+	 */
+	private function with_metering_scope( $section, $scope ) {
+		if ( isset( $section['metering'] ) && is_array( $section['metering'] ) && ! isset( $section['metering']['scope'] ) ) {
+			$section['metering']['scope'] = $scope;
+		}
+		return $section;
 	}
 
 	/**

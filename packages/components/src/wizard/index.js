@@ -163,8 +163,18 @@ const Wizard = (
 	const isQuietLoading = useSelect( select => select( WIZARD_STORE_NAMESPACE ).isQuietLoading() );
 	const headerData = useSelect( select => select( WIZARD_STORE_NAMESPACE ).getHeaderData() );
 	const notices = useSelect( select => select( WIZARD_STORE_NAMESPACE ).getNotices() );
-	const { actions, backNav, badges, sectionDescription, sectionMenu, sectionName, sectionTitle, sectionPrimaryAction, sectionSecondaryAction } =
-		headerData;
+	const {
+		actions,
+		backNav,
+		badges,
+		sectionDescription,
+		sectionMenu,
+		sectionName,
+		sectionSize,
+		sectionTitle,
+		sectionPrimaryAction,
+		sectionSecondaryAction,
+	} = headerData;
 
 	const mainActions = actions?.filter( action => action.type === 'primary' || action.type === 'secondary' );
 	const moreActions = actions?.filter( action => action.type === 'more' );
@@ -254,6 +264,7 @@ const Wizard = (
 												primaryAction={ sectionPrimaryAction || section.primaryAction }
 												secondaryAction={ sectionSecondaryAction || section.secondaryAction }
 												heading={ 2 }
+												size={ sectionSize || section.size }
 												noMargin
 											/>
 										) }

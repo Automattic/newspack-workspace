@@ -23,8 +23,21 @@ import ContentGateSettings from './content-gate-settings';
 import AdvancedSettings from './advanced-settings';
 import SettingsCard from './settings-card';
 import { AUDIENCE_CONTENT_GATES_WIZARD_SLUG } from './consts';
-import { isGateMetered } from './utils';
+import { getMeteringDescription, isGateMetered } from './utils';
 import './style.scss';
+
+/**
+ * Describe what the site meter is currently doing, for the Metering card badge.
+ *
+ * @param hasMetering  Whether any gate meters against the site allowance.
+ * @param hasCountdown Whether the countdown banner is showing.
+ */
+function getMeteringBadge( hasMetering: boolean, hasCountdown: boolean ) {
+	if ( ! hasMetering ) {
+		return __( 'Not in use', 'newspack-plugin' );
+	}
+	return hasCountdown ? __( 'In use, with countdown', 'newspack-plugin' ) : __( 'In use', 'newspack-plugin' );
+}
 
 const ContentGates = ( { updateGatesData }: { updateGatesData: ( gates: Gate[] ) => void } ) => {
 	const wizardData = useWizardData( AUDIENCE_CONTENT_GATES_WIZARD_SLUG ) as WizardData;
@@ -35,7 +48,8 @@ const ContentGates = ( { updateGatesData }: { updateGatesData: ( gates: Gate[] )
 	const ref = useRef( null );
 	const gates = ( wizardData?.gates || [] ) as Gate[];
 	const config = ( wizardData?.config || {} ) as GateSettings;
-	const hasMetering = gates.some( isGateMetered );
+	const siteMeter = config.site_meter;
+	const hasMetering = gates.some( gate => isGateMetered( gate, siteMeter ) );
 	const hasInstitutions = !! config.has_institutions;
 
 	useEffect( () => {
@@ -85,39 +99,6 @@ const ContentGates = ( { updateGatesData }: { updateGatesData: ( gates: Gate[] )
 		} );
 	}, [ isFetching, gates, hasInstitutions ] );
 
-	const toggleCountdownBanner = useRef< () => void >();
-	const handleToggleCountdownBanner = () => {
-		resetError();
-		resetNotices();
-		wizardApiFetch(
-			{
-				path: '/newspack/v1/wizard/newspack-audience-access-control/countdown-banner',
-				method: 'POST',
-				quiet: true,
-				data: { enabled: config.countdown_banner?.enabled ? 0 : 1 },
-			},
-			{
-				onSuccess( data: MeteringCountdownConfig ) {
-					updateWizardSettings( {
-						slug: AUDIENCE_CONTENT_GATES_WIZARD_SLUG,
-						path: [ 'config' ],
-						value: { ...wizardData?.config, countdown_banner: data },
-					} );
-					addNotice( {
-						message: sprintf(
-							// translators: %s is the status of the countdown banner.
-							__( 'Metered countdown %s.', 'newspack-plugin' ),
-							config.countdown_banner?.enabled ? __( 'disabled', 'newspack-plugin' ) : __( 'enabled', 'newspack-plugin' )
-						),
-						type: 'success',
-						id: 'countdown-banner-config-updated',
-						actions: [ { label: __( 'Undo', 'newspack-plugin' ), onClick: () => toggleCountdownBanner.current?.() } ],
-					} );
-				},
-			}
-		);
-	};
-	toggleCountdownBanner.current = handleToggleCountdownBanner;
 	const toggleContentGifting = useRef< () => void >();
 	const handleToggleContentGifting = () => {
 		resetError();
@@ -179,18 +160,17 @@ const ContentGates = ( { updateGatesData }: { updateGatesData: ( gates: Gate[] )
 					return <ContentGateSettings key={ gate.id } gate={ gate } updateGatesData={ updateGatesData } />;
 				} ) }
 			</VStack>
-			<Divider alignment="full-width" />
+			<Divider alignment="full-width" variant="tertiary" />
 			<Grid className="newspack-content-gates__other-settings" columns={ 2 } gutter={ 32 }>
 				<SettingsCard
-					title={ __( 'Metered Countdown', 'newspack-plugin' ) }
-					description={ __(
-						'Show a countdown banner letting readers know how many free views they have left before content is restricted.',
-						'newspack-plugin'
-					) }
-					enabled={ !! config.countdown_banner?.enabled }
-					requirements={ ! hasMetering ? __( 'Requires Metering', 'newspack-plugin' ) : undefined }
-					toggleEnabled={ toggleCountdownBanner.current }
-					href={ '/settings/countdown-banner' }
+					title={ __( 'Metering', 'newspack-plugin' ) }
+					description={ getMeteringDescription( siteMeter ) }
+					// Always on: there is nothing to enable here, so the card is only ever
+					// configured and the badge carries whether any gate is drawing on it.
+					enabled
+					badgeText={ getMeteringBadge( hasMetering, !! config.countdown_banner?.enabled ) }
+					badgeLevel={ hasMetering ? 'success' : 'error' }
+					href={ '/settings/metering' }
 				/>
 				<SettingsCard
 					title={ __( 'Content Gifting', 'newspack-plugin' ) }

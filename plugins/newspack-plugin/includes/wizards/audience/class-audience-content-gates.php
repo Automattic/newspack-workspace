@@ -250,6 +250,27 @@ class Audience_Content_Gates extends Wizard {
 
 		register_rest_route(
 			NEWSPACK_API_NAMESPACE,
+			'/wizard/' . $this->slug . '/site-meter',
+			[
+				'methods'             => 'POST',
+				'callback'            => [ $this, 'update_site_meter' ],
+				'permission_callback' => [ $this, 'api_permissions_check' ],
+				'args'                => [
+					'anonymous_count'  => [
+						'type' => 'integer',
+					],
+					'registered_count' => [
+						'type' => 'integer',
+					],
+					'period'           => [
+						'type' => 'string',
+					],
+				],
+			]
+		);
+
+		register_rest_route(
+			NEWSPACK_API_NAMESPACE,
 			'/wizard/' . $this->slug . '/countdown-banner',
 			[
 				'methods'             => 'POST',
@@ -410,6 +431,7 @@ class Audience_Content_Gates extends Wizard {
 		$config = [
 			'gates'  => Content_Gate::get_gates(),
 			'config' => [
+				'site_meter'        => Site_Meter::get_settings(),
 				'countdown_banner'  => Metering_Countdown::get_settings(),
 				'content_gifting'   => Content_Gifting::get_settings(),
 				'advanced_settings' => $advanced_settings_response,
@@ -512,6 +534,25 @@ class Audience_Content_Gates extends Wizard {
 	public function update_countdown_banner( $request ) {
 		$args = $request->get_params();
 		return rest_ensure_response( Metering_Countdown::update_settings( $args ) );
+	}
+
+	/**
+	 * Update the site meter settings.
+	 *
+	 * @param \WP_REST_Request $request The request object.
+	 *
+	 * @return \WP_REST_Response|\WP_Error
+	 */
+	public function update_site_meter( $request ) {
+		return rest_ensure_response(
+			Site_Meter::update_settings(
+				[
+					'anonymous_count'  => $request->get_param( 'anonymous_count' ),
+					'registered_count' => $request->get_param( 'registered_count' ),
+					'period'           => $request->get_param( 'period' ),
+				]
+			)
+		);
 	}
 
 	/**
