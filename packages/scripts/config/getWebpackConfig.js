@@ -3,9 +3,25 @@ require( '@wordpress/browserslist-config' );
 const DependencyExtractionWebpackPlugin = require( '@wordpress/dependency-extraction-webpack-plugin' );
 const defaultConfig = require( '@wordpress/scripts/config/webpack.config' );
 
-// @wordpress packages that WP does NOT expose as runtime globals and that
-// `@wordpress/admin-ui`/`@wordpress/ui` depend on, so they must be bundled.
-const FORCE_BUNDLE = new Set( [ '@wordpress/theme', '@wordpress/style-runtime' ] );
+// @wordpress packages to bundle rather than externalize to a `wp-*` script
+// handle. Core registers no `wp-ui`, `wp-admin-ui` or `wp-style-runtime`
+// handle (checked on 7.0 and 7.1, with and without the Gutenberg plugin), so
+// externalizing them puts a dependency on the bundle nothing can satisfy - and
+// that failure is silent: `wp_enqueue_script()` drops the whole bundle, the
+// stylesheet still loads, and the screen renders empty with nothing in the
+// console. Newer @wordpress/dependency-extraction-webpack-plugin releases already
+// bundle `ui` and `admin-ui` internally; listing them here keeps that behaviour
+// stable for a consumer whose lockfile resolves an older release. `theme` is
+// kept for the same reason even though core does register `wp-theme`.
+const FORCE_BUNDLE = new Set( [ '@wordpress/ui', '@wordpress/admin-ui', '@wordpress/theme', '@wordpress/style-runtime' ] );
+
+// `newspack-icons` publishes raw JSX under `src/` with no compile step, so every
+// consumer has to transpile it. @wordpress/scripts' babel-loader excludes
+// node_modules wholesale, which is why each consumer grew its own carve-out.
+// Centralised here so they don't have to, and matched by pattern rather than by
+// resolved path: npm nests a second copy under `newspack-components` whenever the
+// pinned versions differ, and a path-prefix `include` silently misses it.
+const ICONS_MODULE = /node_modules[\\/]newspack-icons[\\/]/;
 
 module.exports = ( ...args ) => {
 	let config = { ...defaultConfig };
@@ -37,6 +53,35 @@ module.exports = ( ...args ) => {
 				},
 			} )
 		);
+
+	// Transpile newspack-icons wherever it resolves, including nested copies.
+	// The loader and preset are `require.resolve`d from this package, the way
+	// @wordpress/scripts resolves its own babel rule, so they come from
+	// newspack-scripts' dependency tree rather than the consumer's - a bare
+	// name would fail under a layout that doesn't hoist them (pnpm) and could
+	// pick a different version. The preset is the one the rest of the build
+	// uses (see ./babel.config.js), so icons get the same transform as source.
+	// Rebuilt rather than pushed: `config` is a shallow copy of the module-level
+	// defaultConfig, so mutating its rules array would stack a duplicate rule on
+	// every call in the same process.
+	config.module = {
+		...config.module,
+		rules: [
+			...config.module.rules,
+			{
+				test: /\.jsx?$/,
+				include: ICONS_MODULE,
+				use: {
+					loader: require.resolve( 'babel-loader' ),
+					options: {
+						babelrc: false,
+						configFile: false,
+						presets: [ require.resolve( '@wordpress/babel-preset-default' ) ],
+					},
+				},
+			},
+		],
+	};
 
 	return config;
 };
