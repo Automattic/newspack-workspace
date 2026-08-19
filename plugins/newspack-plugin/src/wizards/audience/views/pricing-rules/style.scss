@@ -1,54 +1,24 @@
 @use "~@wordpress/base-styles/colors" as wp-colors;
+@use "~@wordpress/base-styles/variables" as wp-vars;
+@use "~@wordpress/base-styles/breakpoints" as wp-breakpoints;
 
 .newspack-pricing-rules {
 	&__muted {
+		margin: 0;
 		color: wp-colors.$gray-700;
 	}
 
-	// Goal picker: a single-column stack of selectable cards (title + description),
-	// shown in place of the goal dropdown when creating a rule.
-	&__goal-grid {
-		display: grid;
-		grid-template-columns: 1fr;
-		gap: 12px;
+	&__details {
+		align-self: start;
 	}
 
-	&__goal-card {
+	&__goal-section {
 		display: flex;
 		flex-direction: column;
-		gap: 4px;
-		padding: 16px;
-		text-align: left;
-		background: wp-colors.$white;
-		border: 1px solid wp-colors.$gray-300;
-		border-radius: 4px;
-		cursor: pointer;
-		transition: border-color 0.1s ease, box-shadow 0.1s ease;
-
-		&:hover {
-			border-color: wp-colors.$gray-600;
-		}
-
-		&.is-selected {
-			border-color: var(--wp-admin-theme-color, #{wp-colors.$gray-900});
-			box-shadow: inset 0 0 0 1px var(--wp-admin-theme-color, #{wp-colors.$gray-900});
-		}
+		gap: wp-vars.$grid-unit-30;
+		margin: 0 0 wp-vars.$grid-unit-40;
 	}
 
-	&__goal-card-title {
-		font-weight: 600;
-	}
-
-	&__goal-card-desc {
-		color: wp-colors.$gray-700;
-		font-size: 13px;
-		line-height: 1.5;
-	}
-
-	// Catalog impact panel sits above the full-width DataViews. Padded 24px to
-	// align its content with the DataViews controls below; margin-bottom leaves
-	// a clean gap after the Newspack DataViews wrapper's full-width
-	// margin-top: -16px pull-up resolves.
 	&__impact {
 		margin-bottom: 48px;
 		padding: 0 48px;
@@ -77,8 +47,6 @@
 			border-bottom: 1px solid wp-colors.$gray-300;
 		}
 
-		// Flush the outer columns with the 24px panel padding so the table aligns
-		// with the headline and the DataViews controls.
 		th:first-child,
 		td:first-child {
 			padding-left: 0;
@@ -109,11 +77,6 @@
 			opacity: 0.6;
 		}
 
-		// Draw the eye to the targeted-segment price columns: a faint tint of the
-		// same hue as the changed-cell highlight marks the whole column, mirroring
-		// how the sole "Resulting price" column reads as highlighted with no segment.
-		// A changed cell within the column still gets the solid highlight below
-		// (defined after this rule, so equal-specificity source order wins).
 		.newspack-pricing-rules__impact-table .is-segment-col {
 			background: rgba(wp-colors.$alert-yellow, 0.12);
 		}
@@ -122,5 +85,40 @@
 			background: wp-colors.$alert-yellow;
 			font-weight: 600;
 		}
+	}
+}
+
+.newspack-pricing-rules__goals {
+	.components-card {
+		flex: 1 1 0;
+
+		&[aria-disabled="true"] {
+			pointer-events: none;
+
+			&:not(.newspack-card--core__is-active) {
+				background: var(--wpds-color-background-surface-neutral-weak, #{wp-colors.$gray-100});
+
+				h3 {
+					color: wp-colors.$gray-700;
+				}
+
+				.newspack-card--core__icon {
+					background: var(--wpds-color-background-interactive-neutral-strong-disabled, #{wp-colors.$gray-200});
+
+					svg {
+						fill: wp-colors.$gray-700;
+					}
+				}
+			}
+		}
+	}
+
+	.newspack-card--core__header-content span {
+		text-wrap: balance;
+		transition: color 125ms ease-in-out;
+	}
+
+	@media ( max-width: wp-breakpoints.$break-small - 1px ) {
+		flex-direction: column;
 	}
 }

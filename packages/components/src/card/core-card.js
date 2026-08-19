@@ -41,7 +41,15 @@ const CoreCard = ( {
 	isFirstTarget,
 	isLastTarget,
 	isNarrow,
+	/**
+	 * Renders the card as a chooser: strips the button chrome an `as="button"` card
+	 * inherits, and adds the hover and focus rings. Pair with `isActive` for the
+	 * chosen one. Unlike `buttonsCard` this leaves `as` alone, so the consumer keeps
+	 * the element and the ARIA it needs (`radio`, `option`, …).
+	 */
+	isSelectable,
 	isSmall,
+	isVertical,
 	dragIndex,
 	onDragCallback = () => {},
 	onToggle = () => {},
@@ -61,6 +69,8 @@ const CoreCard = ( {
 		isDraggable && 'newspack-card--core__is-draggable',
 		isNarrow && 'newspack-card--core__is-narrow',
 		isSmall && 'newspack-card--core__is-small',
+		isSelectable && 'newspack-card--core__is-selectable',
+		isVertical && 'newspack-card--core__is-vertical',
 		( icon || iconElement ) && 'newspack-card--core__has-icon',
 		iconBackgroundColor && 'newspack-card--core__has-icon-background-color',
 		isActive && 'newspack-card--core__is-active',
