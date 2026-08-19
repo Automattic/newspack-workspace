@@ -159,12 +159,29 @@ class TestDynamicGallery extends \WP_UnitTestCase {
 	public function test_preserves_links_and_lightbox() {
 		$this->requires_dynamic_galleries();
 
-		$linked = $this->flatten( $this->dynamic_gallery( [ 'linkTo' => 'media' ] ) );
-		$this->assertSame( 3, substr_count( $linked, '<a href=' ), 'Linked galleries must keep their anchors.' );
+		$first = $this->attachment_ids[0];
+
+		$media = $this->flatten( $this->dynamic_gallery( [ 'linkTo' => 'media' ] ) );
+		$this->assertSame( 3, substr_count( $media, '<a href=' ), 'Linked galleries must keep their anchors.' );
+		$this->assertStringContainsString( 'href="' . esc_url( wp_get_attachment_url( $first ) ) . '"', $media, 'media must link to the file.' );
+
+		$attachment = $this->flatten( $this->dynamic_gallery( [ 'linkTo' => 'attachment' ] ) );
+		$this->assertStringContainsString( 'href="' . esc_url( get_attachment_link( $first ) ) . '"', $attachment, 'attachment must link to the attachment page.' );
+
+		$blank = $this->flatten(
+			$this->dynamic_gallery(
+				[
+					'linkTo'     => 'media',
+					'linkTarget' => '_blank',
+				] 
+			) 
+		);
+		$this->assertStringContainsString( 'target="_blank"', $blank );
+		$this->assertStringContainsString( 'rel="noopener"', $blank );
 
 		$lightbox = $this->flatten( $this->dynamic_gallery( [ 'linkTo' => 'lightbox' ] ) );
 		$this->assertStringNotContainsString( '"linkDestination":"lightbox"', $lightbox, 'lightbox is not a linkDestination value.' );
-		$this->assertStringContainsString( 'lightbox', $lightbox );
+		$this->assertStringContainsString( '"lightbox":{"enabled":true}', $lightbox, 'The lightbox must be switched on, not merely mentioned.' );
 	}
 
 	/**
@@ -262,5 +279,66 @@ class TestDynamicGallery extends \WP_UnitTestCase {
 		Blocks::reset_block_processors( 'core/separator' );
 
 		$this->assertSame( 4242, $seen );
+	}
+
+	/**
+	 * A cropped gallery keeps its ratio on the node.
+	 *
+	 * The image block's save() derives the inline style from the aspectRatio and
+	 * scale attributes, so the two have to travel together or the block fails
+	 * validation. Assert both, so they cannot come apart again.
+	 */
+	public function test_preserves_aspect_ratio() {
+		$this->requires_dynamic_galleries();
+
+		$output = $this->flatten( $this->dynamic_gallery( [ 'aspectRatio' => '16/9' ] ) );
+
+		$this->assertStringContainsString( '"aspectRatio":"16/9"', $output, 'The ratio must reach the image block attributes.' );
+		$this->assertStringContainsString( '"scale":"cover"', $output, 'scale travels with aspectRatio.' );
+		$this->assertSame( 3, substr_count( $output, 'style="aspect-ratio:16/9;object-fit:cover"' ), 'Every image needs the persisted style.' );
+	}
+
+	/**
+	 * An "auto" ratio adds nothing, which is what core saves for an uncropped gallery.
+	 */
+	public function test_auto_aspect_ratio_adds_nothing() {
+		$this->requires_dynamic_galleries();
+
+		$output = $this->flatten( $this->dynamic_gallery( [ 'aspectRatio' => 'auto' ] ) );
+
+		$this->assertStringNotContainsString( 'aspect-ratio:', $output );
+		$this->assertStringNotContainsString( '"scale"', $output );
+	}
+
+	/**
+	 * The recursion reaches a nested Jetpack gallery.
+	 *
+	 * This is the part of the change that reaches sites before they update to 7.1,
+	 * so unlike the gallery tests it has to run on every WordPress version.
+	 */
+	public function test_recursion_reaches_a_nested_jetpack_gallery() {
+		$markup = '<!-- wp:group --><div class="wp-block-group">'
+			. '<!-- wp:jetpack/tiled-gallery {"ids":[11,22,33]} --><div class="wp-block-jetpack-tiled-gallery"></div><!-- /wp:jetpack/tiled-gallery -->'
+			. '</div><!-- /wp:group -->';
+
+		$blocks = parse_blocks( $markup );
+		$output = serialize_blocks( [ Blocks::process_outgoing_block( $blocks[0], $this->post_id ) ] );
+
+		$this->assertStringNotContainsString( '"ids"', $output, 'Origin attachment IDs are meaningless on a node.' );
+		$this->assertStringContainsString( 'wp:jetpack/tiled-gallery', $output, 'The block itself must survive.' );
+	}
+
+	/**
+	 * Recursion must return one block per block, or the parent's innerContent
+	 * placeholders stop lining up with its inner blocks.
+	 */
+	public function test_recursion_preserves_block_structure() {
+		$markup = '<!-- wp:group --><div class="wp-block-group">'
+			. '<!-- wp:paragraph --><p>One</p><!-- /wp:paragraph -->'
+			. '<!-- wp:paragraph --><p>Two</p><!-- /wp:paragraph -->'
+			. '</div><!-- /wp:group -->';
+
+		$blocks = parse_blocks( $markup );
+		$this->assertSame( $markup, serialize_blocks( [ Blocks::process_outgoing_block( $blocks[0], $this->post_id ) ] ) );
 	}
 }

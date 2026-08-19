@@ -67,6 +67,9 @@ class Blocks {
 	 * similar container is processed too. Without this, a gallery only gets
 	 * handled when it sits at the top level of the post.
 	 *
+	 * Processors must return one block per block. Returning a different count would
+	 * desynchronise the parent's `innerContent` null placeholders.
+	 *
 	 * @param array $block   The block to process.
 	 * @param int   $post_id The ID of the post being distributed.
 	 *
@@ -180,13 +183,17 @@ class Blocks {
 			return $block;
 		}
 
-		// Dynamic galleries arrived with the WordPress 7.1 gallery block. Leave the
-		// block untouched on older versions, where nothing can resolve it anyway.
+		// Dynamic galleries arrived with the WordPress 7.1 gallery block. Reaching
+		// here without those functions means 7.1-authored content on an older core:
+		// a downgrade, an import or a migration. Nothing can resolve the images, but
+		// shipping the instruction would let the node resolve it against its own
+		// attachments, so strip it and let the gallery arrive empty.
 		if (
 			! function_exists( 'block_core_gallery_resolve_dynamic_source' ) ||
 			! function_exists( 'block_core_gallery_dynamic_image_link_attributes' )
 		) {
-			return $block;
+			Debugger::log( 'Dynamic gallery found on a WordPress older than 7.1, flattening to an empty gallery.' );
+			return self::flatten_gallery( $block, [] );
 		}
 
 		if ( ! $post_id ) {
@@ -292,7 +299,9 @@ class Blocks {
 	 * @return array|null The image block, or null when no markup could be built.
 	 */
 	private static function build_gallery_image_block( $attachment_id, $attributes ) {
-		$size_slug = $attributes['sizeSlug'] ?? 'large';
+		$size_slug    = $attributes['sizeSlug'] ?? 'large';
+		$aspect_ratio = $attributes['aspectRatio'] ?? 'auto';
+		$has_ratio    = $aspect_ratio && 'auto' !== $aspect_ratio;
 
 		$url = wp_get_attachment_image_url( $attachment_id, $size_slug );
 		if ( ! $url ) {
@@ -307,6 +316,15 @@ class Blocks {
 			block_core_gallery_dynamic_image_link_attributes( $attachment_id, $attributes )
 		);
 
+		// The image block's save() derives the inline style from these two attributes,
+		// so they have to travel together. Attributes without the style, or the style
+		// without the attributes, puts save() out of step with the stored markup and
+		// the block fails validation on the node.
+		if ( $has_ratio ) {
+			$image_attributes['aspectRatio'] = $aspect_ratio;
+			$image_attributes['scale']       = 'cover';
+		}
+
 		// Build the `<img>` the way the image block *saves* it, not the way core
 		// renders it. `wp_get_attachment_image()` adds width, height, srcset, sizes,
 		// loading and decoding, which the block's `save()` never emits, so persisting
@@ -314,10 +332,13 @@ class Blocks {
 		// Those attributes are added at render time on the node, as they are for any
 		// other distributed image.
 		$image_markup = sprintf(
-			'<img src="%1$s" alt="%2$s" class="wp-image-%3$d"/>',
+			'<img src="%1$s" alt="%2$s" class="wp-image-%3$d"%4$s/>',
 			esc_url( $url ),
 			esc_attr( (string) get_post_meta( $attachment_id, '_wp_attachment_image_alt', true ) ),
-			(int) $attachment_id
+			(int) $attachment_id,
+			$has_ratio
+				? ' style="' . esc_attr( safecss_filter_attr( sprintf( 'aspect-ratio:%s;object-fit:cover;', $aspect_ratio ) ) ) . '"'
+				: ''
 		);
 
 		if ( ! empty( $image_attributes['href'] ) ) {
@@ -370,8 +391,15 @@ class Blocks {
 
 		$previous                            = \WP_Block_Supports::$block_to_render;
 		\WP_Block_Supports::$block_to_render = $block;
-		$attributes                          = get_block_wrapper_attributes( [ 'class' => $classes ] );
-		\WP_Block_Supports::$block_to_render = $previous;
+
+		try {
+			$attributes = get_block_wrapper_attributes( [ 'class' => $classes ] );
+		} finally {
+			// Block supports call third-party callbacks, so restore the static even if
+			// one of them throws. Distribution runs a queue with no catch of its own,
+			// and leaving this set would outlive the block being processed.
+			\WP_Block_Supports::$block_to_render = $previous;
+		}
 
 		return $attributes ? $attributes : sprintf( 'class="%s"', esc_attr( $classes ) );
 	}
