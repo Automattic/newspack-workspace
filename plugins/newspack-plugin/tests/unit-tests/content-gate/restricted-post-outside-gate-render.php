@@ -535,6 +535,50 @@ class Test_Restricted_Post_Outside_Gate_Render extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * A filter above the gate's own cannot rebuild the excerpt from the body.
+	 *
+	 * The gate answers at priority 10 and anything above it can discard that
+	 * answer. Two plugins here did exactly that and had to be taught the teaser;
+	 * third-party and custom code cannot be taught.
+	 */
+	public function test_a_later_filter_cannot_rebuild_the_excerpt_from_the_body() {
+		$post_id = $this->create_restricted_post( [ 'short' => true ] );
+		$rogue   = function () use ( $post_id ) {
+			return get_post( $post_id )->post_content;
+		};
+
+		add_filter( 'get_the_excerpt', $rogue, 11 );
+		try {
+			$excerpt = get_the_excerpt( $post_id );
+		} finally {
+			remove_filter( 'get_the_excerpt', $rogue, 11 );
+		}
+
+		$this->assertStringNotContainsString( self::PAID_MARKER, $excerpt );
+	}
+
+	/**
+	 * That last word is not a veto: a filter above the gate may still shorten the
+	 * excerpt, which is what the listing blocks do with their own length setting.
+	 */
+	public function test_a_later_filter_may_still_shorten_the_excerpt() {
+		$post_id  = $this->create_restricted_post();
+		$shortened = self::FREE_MARKER . ' opening line.';
+		$shorten  = function () use ( $shortened ) {
+			return $shortened;
+		};
+
+		add_filter( 'get_the_excerpt', $shorten, 11 );
+		try {
+			$excerpt = get_the_excerpt( $post_id );
+		} finally {
+			remove_filter( 'get_the_excerpt', $shorten, 11 );
+		}
+
+		$this->assertSame( $shortened, $excerpt, "A shorter excerpt drawn from the teaser is the consumer's to choose." );
+	}
+
+	/**
 	 * The pages a reader needs in order to resolve a gate are never withheld,
 	 * wherever they are rendered. Gating My Account hides the sign-in form the
 	 * gate is asking the reader to use.

@@ -31,6 +31,96 @@ class Content_Gate_Excerpt {
 			Logger::log( 'Could not remove core wp_trim_excerpt filter; excerpts are trimmed twice.', 'CONTENT-GATE-EXCERPT' );
 		}
 		add_filter( 'get_the_excerpt', [ __CLASS__, 'filter_get_the_excerpt' ], 10, 2 );
+		add_filter( 'get_the_excerpt', [ __CLASS__, 'enforce_withheld_excerpt' ], PHP_INT_MAX, 2 );
+	}
+
+	/**
+	 * Last word on a withheld post's excerpt.
+	 *
+	 * The filter above answers at priority 10, and anything above that can discard
+	 * the answer and rebuild from `post_content` — which is how the paid body
+	 * reached listing cards in the first place. Two plugins in this repository did
+	 * exactly that and had to be taught the teaser one at a time; a third-party or
+	 * custom-code filter cannot be taught at all.
+	 *
+	 * So the excerpt is checked rather than trusted. The teaser is the most a
+	 * withheld post may show, so an excerpt no longer than the teaser cannot say
+	 * more than the article page does — every rebuild starts at the body's opening,
+	 * which is the teaser's opening. One that runs longer reached past the teaser
+	 * and is replaced with the priority-10 answer.
+	 *
+	 * A consumer's own trimming therefore survives, whatever length and whatever
+	 * "read more" string it appends; its access to the body does not. What this
+	 * does not catch is an excerpt built from the middle of a body and kept under
+	 * the teaser's length, which nothing in this repository does — the priority-10
+	 * filter and the consumers themselves remain the mechanism, and this is the
+	 * net beneath them.
+	 *
+	 * @param string   $text The excerpt the chain has produced.
+	 * @param \WP_Post $post The post.
+	 * @return string
+	 */
+	public static function enforce_withheld_excerpt( $text, $post = null ) {
+		$resolved = $post instanceof \WP_Post ? $post : get_post( $post );
+		if ( ! $resolved instanceof \WP_Post ) {
+			return $text;
+		}
+		if ( ! Content_Gate::should_withhold_content( $resolved->ID ) ) {
+			return $text;
+		}
+
+		// A hand-written excerpt is the author's own words, and the priority-10
+		// filter passes it through. It is not drawn from the teaser, so it would
+		// fail the containment test below.
+		if ( '' !== trim( (string) $resolved->post_excerpt ) ) {
+			return $text;
+		}
+
+		$produced = self::comparable_text( $text );
+		if ( '' === $produced ) {
+			return $text;
+		}
+		$teaser = self::comparable_text( Content_Gate::get_withheld_teaser( $resolved->ID ) );
+		if ( false !== strpos( $teaser, $produced ) ) {
+			return $text;
+		}
+		if ( self::word_count( $produced ) <= self::word_count( $teaser ) ) {
+			return $text;
+		}
+
+		return self::filter_get_the_excerpt( '', $resolved );
+	}
+
+	/**
+	 * Count the words in already-normalized text.
+	 *
+	 * Not str_word_count(), which is byte-oriented and undercounts every language
+	 * this runs in other than English.
+	 *
+	 * @param string $text Normalized text.
+	 * @return int
+	 */
+	private static function word_count( $text ) {
+		return '' === $text ? 0 : count( preg_split( '/\s+/u', $text ) );
+	}
+
+	/**
+	 * Reduce an excerpt to the form the length and containment tests compare.
+	 *
+	 * Markup, entities and whitespace all vary with how a consumer assembled the
+	 * excerpt without telling us anything about where the words came from. The
+	 * trailing "read more" string goes too: core appends it to a trimmed excerpt,
+	 * and it is by definition not part of the teaser.
+	 *
+	 * @param string $text Excerpt text.
+	 * @return string
+	 */
+	private static function comparable_text( $text ) {
+		/** This filter is documented in wp-includes/formatting.php */
+		$excerpt_more = apply_filters( 'excerpt_more', ' [&hellip;]' );
+		$text         = str_replace( wp_strip_all_tags( $excerpt_more ), '', wp_strip_all_tags( (string) $text ) );
+		$text         = html_entity_decode( $text, ENT_QUOTES, get_bloginfo( 'charset' ) );
+		return trim( preg_replace( '/\s+/u', ' ', $text ) );
 	}
 
 	/**
