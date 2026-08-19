@@ -1,3 +1,10 @@
+## newspack [6.48.5](https://github.com/Automattic/newspack-workspace/compare/newspack@6.48.4...newspack@6.48.5) (2026-08-19)
+
+
+### Bug Fixes
+
+* **content-gate:** restrict who can read institution records ([#860](https://github.com/Automattic/newspack-workspace/issues/860)) ([570654b](https://github.com/Automattic/newspack-workspace/commit/570654bc7514a5b38b81aa8547e9738ccd8332e2))
+
 ## newspack [6.48.4](https://github.com/Automattic/newspack-workspace/compare/newspack@6.48.3...newspack@6.48.4) (2026-08-18)
 
 
