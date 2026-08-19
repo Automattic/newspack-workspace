@@ -71,6 +71,14 @@ class InDesign_Exporter {
 	 * Initialize the module.
 	 */
 	public static function init() {
+		// The Header platform setting was removed (#806) and nothing reads its
+		// option anymore, but stored rows were autoloaded. Clear any that
+		// remain; get_option() resolves from the alloptions/notoptions cache,
+		// so this costs a write only on the one request that still finds a row.
+		if ( false !== get_option( 'newspack_indesign_export_platform' ) ) {
+			delete_option( 'newspack_indesign_export_platform' );
+		}
+
 		if ( ! self::is_feature_enabled() ) {
 			return;
 		}

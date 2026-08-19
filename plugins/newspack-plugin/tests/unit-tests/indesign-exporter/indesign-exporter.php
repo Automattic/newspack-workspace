@@ -8,6 +8,11 @@
 use Newspack\Optional_Modules\InDesign_Export\InDesign_Converter;
 use Newspack\Optional_Modules\InDesign_Exporter;
 
+// The byline tests set $GLOBALS['_test_cap_coauthors'], which only takes effect
+// through the get_coauthors() mock. Required here so this file does not depend
+// on a sibling test file loading the mock first.
+require_once __DIR__ . '/../../mocks/co-authors-plus-mocks.php';
+
 /**
  * Tests the InDesign Exporter functionality.
  */
@@ -30,6 +35,9 @@ class Newspack_Test_InDesign_Exporter extends WP_UnitTestCase {
 
 		delete_option( InDesign_Exporter::POST_TYPES_OPTION );
 		delete_option( InDesign_Exporter::EXCLUDE_CAPTIONS_OPTION );
+		// Legacy option removed with the Header platform setting; the cleanup
+		// test writes it, and no constant can name it anymore.
+		delete_option( 'newspack_indesign_export_platform' );
 
 		foreach ( self::TEST_POST_TYPES as $post_type ) {
 			if ( post_type_exists( $post_type ) ) {
@@ -1112,23 +1120,30 @@ class Newspack_Test_InDesign_Exporter extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Test that a comparison written with bare angle brackets is escaped.
+	 * Test that bare angle brackets in body copy pass through unescaped.
 	 *
-	 * Generic copy like "a < b" carries no markup intent but still hits the
-	 * Tagged Text grammar.
+	 * Escaping applies to entity-encoded brackets: get_transformed_text() runs
+	 * over content already carrying the converter's own tags, so a bare bracket
+	 * cannot be escaped without breaking them. Stored bare brackets are rare —
+	 * the editor saves a literal < as &lt; (though not >), and kses rewrites a
+	 * loose "< " to "&lt; " for authors without unfiltered_html — so this pins
+	 * the floor: raw brackets survive as-is.
 	 */
-	public function test_escapes_bare_angle_brackets_in_body_content() {
+	public function test_bare_angle_brackets_in_body_content_pass_through() {
+		// Admins bypass kses, so the brackets reach the database bare.
+		wp_set_current_user( $this->factory->user->create( [ 'role' => 'administrator' ] ) );
+
 		$post_id = $this->factory->post->create(
 			[
 				'post_title'   => 'Test Post',
-				'post_content' => '<p>The rule is a &lt; b and c &gt; d.</p>',
+				'post_content' => '<p>The rule is a < b and c > d.</p>',
 			]
 		);
 
 		$converter = new InDesign_Converter();
 		$content   = $converter->convert_post( $post_id );
 
-		$this->assertStringContainsString( 'The rule is a \\< b and c \\> d.', $content );
+		$this->assertStringContainsString( '<pstyle:text>The rule is a < b and c > d.', $content );
 	}
 
 	/**
@@ -1179,18 +1194,18 @@ class Newspack_Test_InDesign_Exporter extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Test that angle brackets in photo captions and credits are escaped.
+	 * Test that bracket entities in photo captions and credits are escaped.
+	 *
+	 * Captions are rich text, and the editor stores a literal bracket typed by
+	 * an author as an entity; credits are plain text, and bare brackets there
+	 * are encoded before the same escape.
 	 */
 	public function test_escapes_angle_brackets_in_caption_and_credit() {
-		// See test_escapes_angle_brackets_in_title(): without unfiltered_html the
-		// caption's brackets would be kses-stripped before the converter sees them.
-		wp_set_current_user( $this->factory->user->create( [ 'role' => 'administrator' ] ) );
-
 		$image_id = $this->factory->attachment->create();
 		wp_update_post(
 			[
 				'ID'           => $image_id,
-				'post_excerpt' => 'Caption with <angle> brackets',
+				'post_excerpt' => 'Caption with &lt;angle&gt; brackets',
 			]
 		);
 		update_post_meta( $image_id, '_media_credit', 'Credit &lt;tag&gt;' );
@@ -1256,5 +1271,139 @@ class Newspack_Test_InDesign_Exporter extends WP_UnitTestCase {
 		$this->assertStringNotContainsString( '\\<cTypeface:', $content );
 		$this->assertStringNotContainsString( '\\<0x2014', $content );
 		$this->assertStringNotContainsString( '\\<ASCII-WIN\\>', $content );
+	}
+
+	/**
+	 * Test that markup in a rich-text caption converts instead of escaping.
+	 *
+	 * Captions are rich text — the caption toolbar offers links, bold, and
+	 * italics, stored as inline HTML in the figcaption. Escaping those tags
+	 * would place them in InDesign as literal printed text; converting them
+	 * the way body content is converted keeps the caption readable and keeps
+	 * italics as a character style.
+	 */
+	public function test_converts_rich_caption_markup_instead_of_escaping_it() {
+		$image_id = $this->factory->attachment->create();
+		$post_id  = $this->factory->post->create(
+			[
+				'post_title'   => 'Test Post',
+				'post_content' => '<!-- wp:image {"id":' . $image_id . '} --><figure class="wp-block-image"><img src="http://localhost/wp-content/uploads/2025/01/image.jpg" /><figcaption class="wp-element-caption">Photo by <a href="https://example.com">Jane Doe</a> for <em>The Record</em>.</figcaption></figure><!-- /wp:image -->',
+			]
+		);
+
+		$converter = new InDesign_Converter();
+		$content   = $converter->convert_post( $post_id );
+
+		$this->assertStringContainsString( '<pstyle:PhotoCaption>Photo by Jane Doe for <cTypeface:Italic>The Record<cTypeface:>.', $content );
+		$this->assertStringNotContainsString( '\\<a', $content );
+		$this->assertStringNotContainsString( '\\<em\\>', $content );
+	}
+
+	/**
+	 * Test that the uppercase bracket entities are escaped too.
+	 *
+	 * &LT; and &GT; are valid HTML5 spellings of the same brackets, and
+	 * html_entity_decode() resolves them just like the lowercase forms.
+	 */
+	public function test_escapes_uppercase_angle_bracket_entities() {
+		$post_id = $this->factory->post->create(
+			[
+				'post_title'   => 'Test Post',
+				'post_content' => '<p>Use &LT;div&GT; tags for layout.</p>',
+			]
+		);
+
+		$converter = new InDesign_Converter();
+		$content   = $converter->convert_post( $post_id );
+
+		$this->assertStringContainsString( '<pstyle:text>Use \\<div\\> tags for layout.', $content );
+		$this->assertStringNotContainsString( '<div>', $content );
+	}
+
+	/**
+	 * Test that &Lt;/&Gt; stay out of the bracket escaping.
+	 *
+	 * Unlike &LT;/&GT;, the mixed-case forms are different characters entirely
+	 * (much-less-than and much-greater-than). Whether they decode depends on
+	 * the PHP version's HTML5 entity table — 8.4 resolves them to the
+	 * characters, 8.3 leaves the entity text — but neither may come out as a
+	 * bracket, escaped or bare.
+	 */
+	public function test_preserves_much_less_than_entities() {
+		$post_id = $this->factory->post->create(
+			[
+				'post_title'   => 'Test Post',
+				'post_content' => '<p>Bounds &Lt;x&Gt; hold.</p>',
+			]
+		);
+
+		$converter = new InDesign_Converter();
+		$content   = $converter->convert_post( $post_id );
+
+		$this->assertThat(
+			$content,
+			$this->logicalOr(
+				$this->stringContains( 'Bounds <0x226A>x<0x226B> hold.' ),
+				$this->stringContains( 'Bounds &Lt;x&Gt; hold.' )
+			)
+		);
+		$this->assertStringNotContainsString( '\\<x', $content );
+	}
+
+	/**
+	 * Test that a backslash written as an entity is escaped.
+	 *
+	 * &#92; and &#x5C; decode to a bare backslash — the Tagged Text escape
+	 * character — so leaving one unescaped makes InDesign absorb whatever
+	 * character follows it. (The named form &bsol; behaves the same on PHP
+	 * versions whose entity table includes it.)
+	 */
+	public function test_escapes_entity_encoded_backslashes() {
+		$post_id = $this->factory->post->create(
+			[
+				'post_title'   => 'Test Post',
+				'post_content' => '<p>Open C:&#92;Users or &#x5C; alone.</p>',
+			]
+		);
+
+		$converter = new InDesign_Converter();
+		$content   = $converter->convert_post( $post_id );
+
+		$this->assertStringContainsString( 'Open C:\\\\Users or \\\\ alone.', $content );
+	}
+
+	/**
+	 * Test that an entity backslash next to a bracket entity stays escaped text.
+	 *
+	 * The pair &#92;&lt; must come out as an escaped backslash followed by an
+	 * escaped bracket; an unescaped backslash here would turn the bracket that
+	 * follows into a live tag opener.
+	 */
+	public function test_escapes_entity_backslash_composed_with_bracket_entity() {
+		$post_id = $this->factory->post->create(
+			[
+				'post_title'   => 'Test Post',
+				'post_content' => '<p>See &#92;&lt;dir&gt; for details.</p>',
+			]
+		);
+
+		$converter = new InDesign_Converter();
+		$content   = $converter->convert_post( $post_id );
+
+		$this->assertStringContainsString( 'See \\\\\<dir\\> for details.', $content );
+	}
+
+	/**
+	 * Test that init() clears the legacy platform option row.
+	 *
+	 * The Header platform setting is gone and nothing reads the option, but
+	 * stored rows were autoloaded, so init() deletes any that remain.
+	 */
+	public function test_init_deletes_legacy_platform_option() {
+		add_option( 'newspack_indesign_export_platform', 'mac' );
+
+		InDesign_Exporter::init();
+
+		$this->assertFalse( get_option( 'newspack_indesign_export_platform' ) );
 	}
 }

@@ -476,14 +476,16 @@ class InDesign_Converter {
 	/**
 	 * Convert a plain-text field for InDesign.
 	 *
-	 * Every character in these fields — titles, subtitles, bylines, captions,
-	 * credits — is content, so an angle bracket in one is text rather than a tag
+	 * Every character in these fields — titles, subtitles, bylines, credits —
+	 * is content, so an angle bracket in one is text rather than a tag
 	 * delimiter. Encoding those brackets routes them through the same escaping
 	 * get_transformed_text() applies to bracket entities in the body.
 	 *
 	 * Use this instead of get_transformed_text() wherever the whole string is
 	 * known to be content. get_transformed_text() also runs over strings that
-	 * already carry the converter's own tags, where a bare bracket is markup.
+	 * already carry the converter's own tags, where a bare bracket is markup;
+	 * fields stored as HTML (image captions) go through
+	 * get_transformed_rich_text() instead.
 	 *
 	 * @param string $text Text to convert.
 	 *
@@ -491,6 +493,25 @@ class InDesign_Converter {
 	 */
 	private function get_transformed_plain_text( $text ) {
 		return $this->get_transformed_text( str_replace( [ '<', '>' ], [ '&lt;', '&gt;' ], $text ) );
+	}
+
+	/**
+	 * Convert a rich-text field for InDesign.
+	 *
+	 * Image captions are stored as HTML: the caption toolbar offers links,
+	 * bold, and italics, and the editor saves a literal bracket an author
+	 * types as an entity. A bare bracket here is markup, exactly as in body
+	 * content — escaping it would place the tag in InDesign as literal
+	 * printed text — so convert it the way the body is converted (formatting
+	 * to character styles, other tags to their text). Entity-encoded brackets
+	 * are content and still come out escaped.
+	 *
+	 * @param string $text Text to convert.
+	 *
+	 * @return string Converted text.
+	 */
+	private function get_transformed_rich_text( $text ) {
+		return trim( $this->get_transformed_text( $this->convert_html_to_indesign( $text ) ) );
 	}
 
 	/**
@@ -524,21 +545,27 @@ class InDesign_Converter {
 
 		$text = str_replace( array_keys( $conversions ), array_values( $conversions ), $text );
 
-		// Escape literal backslashes before the escapes below introduce any, so
-		// those aren't escaped a second time. The converter emits no backslash of
-		// its own, so every backslash reaching this point is content.
-		$text = str_replace( '\\', '\\\\', $text );
-
 		// Angle brackets written as entities are content, not tag delimiters.
 		// Shield them from the decode below — which would hand InDesign a bare
 		// bracket to read as the start or end of a tag — then resolve them to
-		// escaped literals. Covers the named and numeric forms of both brackets.
-		$text = preg_replace( '/&(lt|gt|#0*6[02]|#[xX]0*3[cCeE]);/', '&amp;$1;', $text );
+		// escaped literals. Covers the numeric forms and the named forms in both
+		// letter cases that mean a plain bracket: &LT;/&GT; are valid spellings
+		// of the same characters, while &Lt;/&Gt; are much-less/greater-than and
+		// must stay out. The resolutions after the decode also catch a named
+		// form the running PHP version's entity table leaves undecoded.
+		$text = preg_replace( '/&(lt|LT|gt|GT|#0*6[02]|#[xX]0*3[cCeE]);/', '&amp;$1;', $text );
 
 		$text = html_entity_decode( $text, ENT_QUOTES | ENT_HTML5, 'UTF-8' );
 
-		$text = preg_replace( '/&(?:lt|#0*60|#[xX]0*3[cC]);/', '\\\\<', $text );
-		$text = preg_replace( '/&(?:gt|#0*62|#[xX]0*3[eE]);/', '\\\\>', $text );
+		// Escape backslashes after the decode, so ones written as entities
+		// (&#92;, &#x5C;) are covered too — a bare backslash is the Tagged Text
+		// escape character and absorbs whatever follows it. This runs before
+		// the resolutions below introduce the converter's own escapes; nothing
+		// upstream emits a backslash, so every one here is content.
+		$text = str_replace( '\\', '\\\\', $text );
+
+		$text = preg_replace( '/&(?:lt|LT|#0*60|#[xX]0*3[cC]);/', '\\\\<', $text );
+		$text = preg_replace( '/&(?:gt|GT|#0*62|#[xX]0*3[eE]);/', '\\\\>', $text );
 
 		// Convert remaining HTML entities.
 		$text = str_replace(
@@ -671,7 +698,7 @@ class InDesign_Converter {
 
 			$tag_content .= self::EOL;
 			if ( $caption ) {
-				$tag_content .= '<pstyle:PhotoCaption>' . $this->get_transformed_plain_text( $caption ) . self::EOL;
+				$tag_content .= '<pstyle:PhotoCaption>' . $this->get_transformed_rich_text( $caption ) . self::EOL;
 			}
 			if ( $credit ) {
 				$tag_content .= '<pstyle:PhotoCredit>' . $this->get_transformed_plain_text( $credit ) . self::EOL;
