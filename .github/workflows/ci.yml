@@ -345,14 +345,30 @@ jobs:
           fi
       - name: Install WordPress test suite
         if: steps.check.outputs.has_tests == 'true'
+        # Every download here talks to wordpress.org, and none of them had a time
+        # limit. A stalled connection therefore held the step open until the six-hour
+        # job limit killed it, and the run reported a red PHPUnit that had never
+        # executed a test. The cap turns that into a failure within minutes, and the
+        # retries below let an ordinary blip recover on its own.
+        timeout-minutes: 10
         run: |
+          set -eo pipefail
           # svn isn't on ubuntu-latest runners by default; the WP develop
           # repo's phpunit test library is published over svn.
           sudo apt-get update -qq
           sudo apt-get install -y -qq subversion
           # Download WP core and test library.
           mkdir -p "$WP_TESTS_DIR"
-          WP_TESTS_TAG=$(curl -s "https://api.wordpress.org/core/version-check/1.7/" | jq -r '.offers[0].version')
+          WP_TESTS_TAG=$(curl --fail --silent --show-error --location \
+            --retry 3 --retry-delay 5 --max-time 30 \
+            "https://api.wordpress.org/core/version-check/1.7/" | jq -r '.offers[0].version')
+
+          # An empty version builds URLs that 404 or hang, and the failure then lands
+          # somewhere that reads like a test problem. Say what actually went wrong.
+          if [ -z "$WP_TESTS_TAG" ] || [ "$WP_TESTS_TAG" = "null" ]; then
+            echo "Could not resolve the current WordPress version from api.wordpress.org." >&2
+            exit 1
+          fi
 
           # The tarball's top-level directory is "wordpress/". Extract to
           # $WP_CORE_DIR's parent and strip that prefix so files land at
@@ -360,11 +376,29 @@ jobs:
           # $WP_CORE_DIR happens to be /tmp/wordpress.
           rm -rf "$WP_CORE_DIR"
           mkdir -p "$WP_CORE_DIR"
-          curl -s "https://wordpress.org/wordpress-$WP_TESTS_TAG.tar.gz" \
+          curl --fail --silent --show-error --location \
+            --retry 3 --retry-delay 5 --max-time 180 \
+            "https://wordpress.org/wordpress-$WP_TESTS_TAG.tar.gz" \
             | tar xz --strip-components=1 -C "$WP_CORE_DIR"
 
-          svn co --quiet "https://develop.svn.wordpress.org/tags/$WP_TESTS_TAG/tests/phpunit/includes/" "$WP_TESTS_DIR/includes"
-          svn co --quiet "https://develop.svn.wordpress.org/tags/$WP_TESTS_TAG/tests/phpunit/data/" "$WP_TESTS_DIR/data"
+          # svn applies no timeout of its own, so a stalled server holds the connection
+          # open indefinitely. http-timeout bounds each attempt, and a partial checkout
+          # is discarded so the next attempt starts clean.
+          svn_checkout() {
+            for attempt in 1 2 3; do
+              if svn co --quiet --non-interactive \
+                --config-option "servers:global:http-timeout=60" \
+                "$1" "$2"; then
+                return 0
+              fi
+              echo "svn checkout of $1 failed (attempt $attempt of 3); retrying." >&2
+              rm -rf "$2"
+              sleep 5
+            done
+            return 1
+          }
+          svn_checkout "https://develop.svn.wordpress.org/tags/$WP_TESTS_TAG/tests/phpunit/includes/" "$WP_TESTS_DIR/includes"
+          svn_checkout "https://develop.svn.wordpress.org/tags/$WP_TESTS_TAG/tests/phpunit/data/" "$WP_TESTS_DIR/data"
 
           # Write wp-tests-config.php.
           cat > "$WP_TESTS_DIR/wp-tests-config.php" << 'WPCFG'
