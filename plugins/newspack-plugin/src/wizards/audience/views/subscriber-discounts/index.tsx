@@ -1,14 +1,23 @@
 /**
- * The Subscriptions wizard's Subscriber discounts tab: rules giving a
- * subscription's subscribers money off store products.
+ * The Audience Management / Pricing Rules page: rules giving a subscription's
+ * subscribers money off store products.
+ *
+ * This page occupies the same admin slug, menu label and routes as the Pricing
+ * Rules manager for the standalone dynamic-pricing engine, and PHP registers
+ * exactly one of the two — the engine's when its plugin is active, this one
+ * otherwise. Publishers therefore see a single Pricing Rules screen whose URL
+ * survives installing the engine later; the stored rules are ported by
+ * `wp newspack migrate-discounts` at that point.
  */
+
+import '../../../../shared/js/public-path';
 
 /**
  * WordPress dependencies.
  */
 import { __, _n, sprintf } from '@wordpress/i18n';
 import apiFetch from '@wordpress/api-fetch';
-import { useCallback, useEffect, useMemo, useState } from '@wordpress/element';
+import { forwardRef, useCallback, useEffect, useMemo, useState } from '@wordpress/element';
 import { filterSortAndPaginate } from '@wordpress/dataviews';
 import type { Action, Field, View } from '@wordpress/dataviews';
 import { percent } from '@wordpress/icons';
@@ -18,10 +27,7 @@ import { __experimentalHStack as HStack, __experimentalVStack as VStack } from '
 /**
  * Internal dependencies.
  */
-import { Badge, Button, DataViews, Notice, SectionHeader } from '../../../../../../../packages/components/src';
-import WizardsTab from '../../../../../wizards-tab';
-import WizardSection from '../../../../../wizards-section';
-import { registerTab } from '../registry';
+import { Badge, Button, DataViews, Notice, SectionHeader, Wizard, withWizard } from '../../../../../packages/components/src';
 import { DISCOUNTS_ENDPOINT } from './constants';
 import { DEFAULT_CURRENCY, discountLabel, targetingLabel } from './discount';
 import DiscountEditor from './editor';
@@ -45,7 +51,7 @@ const DEFAULT_VIEW: View = {
 function SubscriberDiscounts() {
 	const [ payload, setPayload ] = useState< DiscountsPayload >( {
 		rules: [],
-		settings: { overlap: 'best', apply_on_sale: false, apply_at_checkout: false },
+		settings: { apply_on_sale: false, apply_at_checkout: false },
 		currency: DEFAULT_CURRENCY,
 	} );
 	const [ isLoading, setIsLoading ] = useState( true );
@@ -162,7 +168,7 @@ function SubscriberDiscounts() {
 				// readers are charged, so it is confirmed rather than one-click.
 				RenderModal: ( { items, closeModal }: { items: DiscountRule[]; closeModal?: () => void } ) => (
 					<VStack spacing={ 4 }>
-						<p>{ __( 'This discount will stop applying immediately. This cannot be undone.', 'newspack-plugin' ) }</p>
+						<p>{ __( 'This rule will stop applying immediately. This cannot be undone.', 'newspack-plugin' ) }</p>
 						<HStack spacing={ 2 } justify="flex-end">
 							<Button variant="secondary" onClick={ closeModal }>
 								{ __( 'Cancel', 'newspack-plugin' ) }
@@ -193,54 +199,62 @@ function SubscriberDiscounts() {
 	const hasRules = payload.rules.length > 0;
 
 	return (
-		<WizardsTab title={ __( 'Subscriber discounts', 'newspack-plugin' ) }>
-			<WizardSection>
-				{ error && <Notice isError noticeText={ error } /> }
-				{ ! isLoading && ! hasRules ? (
-					<SectionHeader
-						centered
-						icon={ percent }
-						title={ __( 'Get started with subscriber discounts', 'newspack-plugin' ) }
-						description={ __(
-							'Offer subscribers a discount on your products. Create your first rule to choose which subscription gets what off which products.',
-							'newspack-plugin'
-						) }
-					>
-						<Button variant="primary" onClick={ () => setEditing( null ) }>
-							{ __( 'Add discount', 'newspack-plugin' ) }
+		<>
+			{ error && <Notice isError noticeText={ error } /> }
+			{ ! isLoading && ! hasRules ? (
+				<SectionHeader
+					centered
+					icon={ percent }
+					title={ __( 'Get started with pricing rules', 'newspack-plugin' ) }
+					description={ __(
+						'Give subscribers a lower price on your products. Create your first rule to choose which subscription gets what off which products.',
+						'newspack-plugin'
+					) }
+				>
+					<Button variant="primary" onClick={ () => setEditing( null ) }>
+						{ __( 'Add rule', 'newspack-plugin' ) }
+					</Button>
+				</SectionHeader>
+			) : (
+				<>
+					<div className="newspack-subscriber-discounts__actions">
+						<Button variant="secondary" onClick={ () => setShowSettings( true ) }>
+							{ __( 'Settings', 'newspack-plugin' ) }
 						</Button>
-					</SectionHeader>
-				) : (
-					<>
-						<div className="newspack-subscriber-discounts__actions">
-							<Button variant="secondary" onClick={ () => setShowSettings( true ) }>
-								{ __( 'Settings', 'newspack-plugin' ) }
-							</Button>
-							<Button variant="primary" onClick={ () => setEditing( null ) }>
-								{ __( 'Add discount', 'newspack-plugin' ) }
-							</Button>
-						</div>
-						<DataViews
-							data={ processedData }
-							fields={ fields }
-							view={ view }
-							onChangeView={ setView }
-							actions={ actions }
-							paginationInfo={ paginationInfo }
-							defaultLayouts={ { table: {} } }
-							isLoading={ isLoading }
-							getItemId={ ( item: DiscountRule ) => item.id }
-							search
-						/>
-					</>
-				) }
-			</WizardSection>
+						<Button variant="primary" onClick={ () => setEditing( null ) }>
+							{ __( 'Add rule', 'newspack-plugin' ) }
+						</Button>
+					</div>
+					<DataViews
+						data={ processedData }
+						fields={ fields }
+						view={ view }
+						onChangeView={ setView }
+						actions={ actions }
+						paginationInfo={ paginationInfo }
+						defaultLayouts={ { table: {} } }
+						isLoading={ isLoading }
+						getItemId={ ( item: DiscountRule ) => item.id }
+						search
+					/>
+				</>
+			) }
 			{ undefined !== editing && (
 				<DiscountEditor rule={ editing } currency={ currency } onSaved={ applyPayload } onClose={ () => setEditing( undefined ) } />
 			) }
 			{ showSettings && <SettingsModal settings={ payload.settings } onSaved={ applyPayload } onClose={ () => setShowSettings( false ) } /> }
-		</WizardsTab>
+		</>
 	);
 }
 
-registerTab( 'discounts', { render: () => <SubscriberDiscounts /> } );
+const AudiencePricingRules = ( _props: Record< string, unknown >, ref: React.ForwardedRef< HTMLDivElement > ) => (
+	<Wizard
+		title={ __( 'Pricing Rules', 'newspack-plugin' ) }
+		headerText={ __( 'Audience Management / Pricing Rules', 'newspack-plugin' ) }
+		ref={ ref }
+		fixedHeader
+		sections={ [ { path: '/', render: SubscriberDiscounts, exact: true, fullWidth: true } ] }
+	/>
+);
+
+export default withWizard( forwardRef( AudiencePricingRules ) );

@@ -28,14 +28,14 @@ import {
 /**
  * Internal dependencies.
  */
-import { Button } from '../../../../../../../packages/components/src';
-import SearchTokenField from '../../components/search-token-field';
-import TargetingFields from '../../components/targeting-fields';
-import { SEARCH_ENDPOINTS, WIZARD_ENDPOINT } from '../../constants';
+import { Button } from '../../../../../packages/components/src';
+import SearchTokenField from '../subscriptions/components/search-token-field';
+import TargetingFields from '../subscriptions/components/targeting-fields';
+import { SEARCH_ENDPOINTS, WIZARD_ENDPOINT } from '../subscriptions/constants';
 import { DISCOUNTS_ENDPOINT, PREVIEW_LIMIT } from './constants';
 import { formatCurrency, isValidRule, subscriberPrice } from './discount';
 import type { DiscountCurrency, DiscountRule, DiscountsPayload } from './types';
-import type { ProductSearchItem } from '../../types';
+import type { ProductSearchItem } from '../subscriptions/types';
 
 const EMPTY_RULE: Omit< DiscountRule, 'id' | 'created_at' > = {
 	subscription_product_ids: [],
@@ -97,9 +97,7 @@ export default function DiscountEditor( { rule, currency, onSaved, onClose }: Ed
 			data: draft,
 		} )
 			.then( onSaved )
-			.catch( ( apiError: { message?: string } ) =>
-				setError( apiError?.message || __( 'The discount could not be saved.', 'newspack-plugin' ) )
-			)
+			.catch( ( apiError: { message?: string } ) => setError( apiError?.message || __( 'The rule could not be saved.', 'newspack-plugin' ) ) )
 			.finally( () => setInFlight( false ) );
 	};
 
@@ -109,7 +107,7 @@ export default function DiscountEditor( { rule, currency, onSaved, onClose }: Ed
 
 	return (
 		<Modal
-			title={ rule ? __( 'Edit discount', 'newspack-plugin' ) : __( 'Add discount', 'newspack-plugin' ) }
+			title={ rule ? __( 'Edit rule', 'newspack-plugin' ) : __( 'Add rule', 'newspack-plugin' ) }
 			onRequestClose={ onClose }
 			className="newspack-subscriber-discounts__editor"
 		>
@@ -135,7 +133,7 @@ export default function DiscountEditor( { rule, currency, onSaved, onClose }: Ed
 						excluded_product_ids: draft.excluded_product_ids ?? [],
 					} }
 					onChange={ partial => update( partial ) }
-					appliesHelp={ __( 'Choose which products this discount applies to.', 'newspack-plugin' ) }
+					appliesHelp={ __( 'Choose which products this rule applies to.', 'newspack-plugin' ) }
 					disabled={ inFlight }
 				/>
 				<ToggleGroupControl
@@ -169,7 +167,7 @@ export default function DiscountEditor( { rule, currency, onSaved, onClose }: Ed
 						<thead>
 							<tr>
 								<th>{ __( 'Product', 'newspack-plugin' ) }</th>
-								<th>{ __( 'Subscriber price (this discount alone)', 'newspack-plugin' ) }</th>
+								<th>{ __( 'Subscriber price (this rule alone)', 'newspack-plugin' ) }</th>
 							</tr>
 						</thead>
 						<tbody>

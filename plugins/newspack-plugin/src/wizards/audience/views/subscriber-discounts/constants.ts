@@ -5,7 +5,7 @@
 /**
  * Internal dependencies.
  */
-import { WIZARD_ENDPOINT } from '../../constants';
+import { WIZARD_ENDPOINT } from '../subscriptions/constants';
 
 /** Rules and settings for this tab. */
 export const DISCOUNTS_ENDPOINT = `${ WIZARD_ENDPOINT }/discounts`;

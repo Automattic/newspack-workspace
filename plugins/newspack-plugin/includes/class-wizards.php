@@ -92,10 +92,14 @@ class Wizards {
 		if ( defined( 'NEWSPACK_PLANS_UI' ) && NEWSPACK_PLANS_UI && ( class_exists( 'WC_Subscriptions' ) || function_exists( 'wcs_get_subscriptions' ) ) ) {
 			self::$wizards['audience-subscription-products'] = new Audience_Subscription_Products();
 		}
-		// Pricing Rules manager, available when the dynamic-pricing engine
-		// plugin is active (it owns the rules REST API).
+		// Pricing Rules. One slug, two possible managers: the dynamic-pricing
+		// engine's page where its plugin is active (it owns the rules REST API),
+		// otherwise subscriber discounts. Never both — a publisher sees one
+		// Pricing Rules screen, and its URL survives the engine arriving later.
 		if ( Dynamic_Pricing_Bridges::is_engine_active() ) {
 			self::$wizards['audience-pricing-rules'] = new Audience_Pricing_Rules();
+		} elseif ( Subscriber_Commerce::is_admin_available() ) {
+			self::$wizards['audience-pricing-rules'] = new Audience_Subscriber_Discounts();
 		}
 	}
 

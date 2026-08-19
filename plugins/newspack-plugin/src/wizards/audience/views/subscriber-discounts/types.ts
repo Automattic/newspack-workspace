@@ -5,7 +5,7 @@
 /**
  * Internal dependencies.
  */
-import type { BaseRule } from '../../types';
+import type { BaseRule } from '../subscriptions/types';
 
 /** A subscriber discount rule. */
 export interface DiscountRule extends BaseRule {
@@ -13,9 +13,8 @@ export interface DiscountRule extends BaseRule {
 	amount: number;
 }
 
-/** Global settings governing how discounts combine. */
+/** Global settings governing when discounts apply. */
 export interface DiscountSettings {
-	overlap: 'best' | 'combine';
 	apply_on_sale: boolean;
 	apply_at_checkout: boolean;
 }

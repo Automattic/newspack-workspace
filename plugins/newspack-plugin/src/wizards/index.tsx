@@ -60,9 +60,19 @@ const components: Record< string, any > = {
 		label: __( 'Plans', 'newspack-plugin' ),
 		component: lazy( () => import( /* webpackChunkName: "audience-wizards" */ './audience/views/subscription-products' ) ),
 	},
+	/**
+	 * One slug, two possible managers. The standalone dynamic-pricing engine owns
+	 * this screen wherever its plugin is active; otherwise subscriber discounts
+	 * serve it. PHP registers only one of the two pages, and tells us which here,
+	 * so the publisher's URL and menu entry survive the engine arriving later.
+	 */
 	'newspack-audience-pricing-rules': {
 		label: __( 'Pricing Rules', 'newspack-plugin' ),
-		component: lazy( () => import( /* webpackChunkName: "audience-wizards" */ './audience/views/pricing-rules' ) ),
+		component: lazy( () =>
+			window.newspackPricingRules?.engine
+				? import( /* webpackChunkName: "audience-wizards" */ './audience/views/pricing-rules' )
+				: import( /* webpackChunkName: "audience-wizards" */ './audience/views/subscriber-discounts' )
+		),
 	},
 	'newspack-premium-newsletters': {
 		label: __( 'Premium newsletters', 'newspack-plugin' ),

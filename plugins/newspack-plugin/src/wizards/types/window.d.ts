@@ -79,6 +79,12 @@ declare global {
 		newspackAudienceIntegrations: {
 			integrations_settings_enabled: boolean;
 		};
+		// Which manager owns the Pricing Rules screen: the standalone
+		// dynamic-pricing engine, or subscriber discounts. Optional because only
+		// the Pricing Rules page localizes it.
+		newspackPricingRules?: {
+			engine: boolean;
+		};
 		newspackAudienceContentGates: {
 			api: string;
 			available_access_rules: AccessRules;

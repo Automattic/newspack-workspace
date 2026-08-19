@@ -237,8 +237,7 @@ class Test_Discounts_Migration extends \WP_UnitTestCase {
 	/**
 	 * Migrations get re-run — a first pass, a fix, a second pass. Rules carry an
 	 * id derived from their source rule so a re-run updates them in place; minting
-	 * a fresh id each time would duplicate every rule, and under the "combine"
-	 * overlap setting that would compound what readers are discounted.
+	 * a fresh id each time would duplicate every rule.
 	 */
 	public function test_rerunning_updates_rules_in_place() {
 		delete_option( Subscriber_Discounts::OPTION_NAME );

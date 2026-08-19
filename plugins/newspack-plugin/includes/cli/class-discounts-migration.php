@@ -144,7 +144,7 @@ class Discounts_Migration {
 			WP_CLI::warning( 'Skipped rules need a decision before the site is flipped — see the table above.' );
 		}
 
-		self::report_settings_parity( $dry_run, count( $mapped['rules'] ) );
+		self::report_settings_parity( $dry_run, count( $mapped['rules'] ), $memberships_rules );
 	}
 
 	/**
@@ -155,10 +155,11 @@ class Discounts_Migration {
 	 * defaults are inverted relative to Memberships — so a site flipped without
 	 * looking at them would quietly charge subscribers more than it used to.
 	 *
-	 * @param bool $dry_run    Whether this is a dry run.
-	 * @param int  $rule_count How many rules were mapped.
+	 * @param bool  $dry_run           Whether this is a dry run.
+	 * @param int   $rule_count        How many rules were mapped.
+	 * @param array $memberships_rules Raw `wc_memberships_rules` option value.
 	 */
-	private static function report_settings_parity( $dry_run, $rule_count ) {
+	private static function report_settings_parity( $dry_run, $rule_count, $memberships_rules ) {
 		if ( ! $rule_count ) {
 			return;
 		}
@@ -198,18 +199,217 @@ class Discounts_Migration {
 			}
 		}
 
-		// Cumulative stacking is filter-only in Memberships (default: on), so
-		// there is no stored value to read — a publisher's override is invisible
-		// from here and the call has to be made by a human.
-		$overlap = Subscriber_Discounts::get_settings()['overlap'];
-		WP_CLI::line( sprintf( 'Overlapping discounts: currently "%s".', $overlap ) );
-		if ( 'best' === $overlap ) {
-			WP_CLI::warning(
-				'Memberships combines overlapping discounts by default; this site is set to apply only the best one. ' .
-				'If any two migrated rules can cover the same product, subscribers will now save less than they did — ' .
-				'check the rules above and switch the setting to "Combine discounts" if so.'
+		self::report_stacking_impact( $memberships_rules );
+	}
+
+	/**
+	 * Report readers whose price rises because overlapping discounts stop
+	 * accumulating.
+	 *
+	 * Memberships applies every matching rule in sequence when a reader holds
+	 * several plans; Access Control applies the single best one. That only costs
+	 * a reader money where they actually hold two plans whose rules cover the
+	 * same product, so this counts affected readers rather than warning whenever
+	 * two rules merely look like they could overlap — a warning nobody can act
+	 * on, since Memberships' stacking switch is a code filter with no stored
+	 * value to read.
+	 *
+	 * @param array $memberships_rules Raw `wc_memberships_rules` option value.
+	 */
+	private static function report_stacking_impact( $memberships_rules ) {
+		$rules_by_plan = [];
+		foreach ( $memberships_rules as $memberships_rule ) {
+			if ( ! is_array( $memberships_rule ) || 'purchasing_discount' !== ( $memberships_rule['rule_type'] ?? '' ) ) {
+				continue;
+			}
+			if ( 'yes' !== ( $memberships_rule['active'] ?? 'no' ) ) {
+				continue;
+			}
+			$rules_by_plan[ (int) ( $memberships_rule['membership_plan_id'] ?? 0 ) ][] = $memberships_rule;
+		}
+		if ( count( $rules_by_plan ) < 2 ) {
+			WP_CLI::line( 'Overlapping discounts: nothing to reconcile — fewer than two plans carry an active discount rule.' );
+			return;
+		}
+
+		$affected_readers = self::readers_losing_stacked_discounts( $rules_by_plan );
+		if ( empty( $affected_readers ) ) {
+			WP_CLI::line( 'Overlapping discounts: no reader holds two plans whose discounts cover the same product, so no price changes.' );
+			return;
+		}
+
+		WP_CLI::warning(
+			sprintf(
+				'Overlapping discounts: %d reader/product pair(s) stack today and will cost more after the flip. ' .
+				'Memberships compounds overlapping discounts; Access Control applies the single best one. Agree this with the publisher before flipping.',
+				count( $affected_readers )
+			)
+		);
+		foreach ( array_slice( $affected_readers, 0, 10 ) as $affected_reader ) {
+			WP_CLI::line(
+				sprintf(
+					'  reader %1$d, product %2$d "%3$s": pays %4$s today, %5$s after.',
+					$affected_reader['user_id'],
+					$affected_reader['product_id'],
+					$affected_reader['product_name'],
+					wp_strip_all_tags( wc_price( $affected_reader['stacked_price'] ) ),
+					wp_strip_all_tags( wc_price( $affected_reader['best_price'] ) )
+				)
 			);
 		}
+		if ( count( $affected_readers ) > 10 ) {
+			WP_CLI::line( sprintf( '  ... and %d more.', count( $affected_readers ) - 10 ) );
+		}
+	}
+
+	/**
+	 * Reader/product pairs that pay more once overlapping discounts stop
+	 * accumulating.
+	 *
+	 * @param array $rules_by_plan Active purchasing-discount rules keyed by plan id.
+	 * @return array[]
+	 */
+	private static function readers_losing_stacked_discounts( $rules_by_plan ) {
+		global $wpdb;
+
+		// Expand every rule to the products it covers, so two rules are compared
+		// on the product a reader actually buys rather than on their targeting —
+		// one may name a category where the other names a product.
+		$rules_by_plan_product = [];
+		foreach ( $rules_by_plan as $plan_id => $plan_rules ) {
+			foreach ( $plan_rules as $plan_rule ) {
+				foreach ( self::products_covered_by( $plan_rule ) as $product_id ) {
+					$rules_by_plan_product[ $plan_id ][ $product_id ] = $plan_rule;
+				}
+			}
+		}
+		if ( count( $rules_by_plan_product ) < 2 ) {
+			return [];
+		}
+
+		$plan_id_list = implode( ',', array_map( 'intval', array_keys( $rules_by_plan_product ) ) );
+		// Direct and uncached on purpose: a one-shot migration report, run by hand
+		// once per site, over a membership set no WordPress API groups this way.
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		$active_members = $wpdb->get_results(
+			// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- plan ids are cast to int above.
+			"SELECT post_author AS user_id, GROUP_CONCAT( DISTINCT post_parent ) AS plan_ids
+			 FROM {$wpdb->posts}
+			 WHERE post_type = 'wc_user_membership'
+			   AND post_status IN ( 'wcm-active', 'wcm-complimentary', 'wcm-free_trial' )
+			   AND post_parent IN ( {$plan_id_list} )
+			 GROUP BY post_author
+			 HAVING COUNT( DISTINCT post_parent ) > 1"
+			// phpcs:enable
+		);
+
+		$affected = [];
+		foreach ( $active_members as $active_member ) {
+			$rules_by_product = [];
+			foreach ( array_map( 'intval', explode( ',', (string) $active_member->plan_ids ) ) as $held_plan_id ) {
+				foreach ( $rules_by_plan_product[ $held_plan_id ] ?? [] as $product_id => $plan_rule ) {
+					$rules_by_product[ $product_id ][] = $plan_rule;
+				}
+			}
+			foreach ( $rules_by_product as $product_id => $product_rules ) {
+				if ( count( $product_rules ) < 2 ) {
+					continue;
+				}
+				$product = wc_get_product( $product_id );
+				if ( ! $product ) {
+					continue;
+				}
+				$base_price = (float) $product->get_regular_price();
+				if ( $base_price <= 0 ) {
+					continue;
+				}
+
+				$stacked_price = $base_price;
+				$best_price    = $base_price;
+				foreach ( $product_rules as $product_rule ) {
+					$compounded_price = self::memberships_discounted_price( $stacked_price, $product_rule );
+					if ( $compounded_price < $stacked_price ) {
+						$stacked_price = $compounded_price;
+					}
+					$standalone_price = self::memberships_discounted_price( $base_price, $product_rule );
+					if ( $standalone_price < $best_price ) {
+						$best_price = $standalone_price;
+					}
+				}
+
+				if ( round( $best_price, 2 ) > round( $stacked_price, 2 ) ) {
+					$affected[] = [
+						'user_id'       => (int) $active_member->user_id,
+						'product_id'    => (int) $product_id,
+						'product_name'  => $product->get_name(),
+						'stacked_price' => round( $stacked_price, 2 ),
+						'best_price'    => round( $best_price, 2 ),
+					];
+				}
+			}
+		}
+
+		return $affected;
+	}
+
+	/**
+	 * Products a Memberships rule covers.
+	 *
+	 * A rule with no targets covers the whole catalog. Enumerating that would be
+	 * unbounded, so it reports nothing: a catalog-wide rule is reported by the
+	 * rule listing above, and the comparison here is about the specific products
+	 * two rules share.
+	 *
+	 * Category expansion is capped at 500 products. A site whose discounted
+	 * category is larger than that gets an undercount rather than a slow command;
+	 * the cap has never been approached on a site carrying discount rules.
+	 *
+	 * @param array $memberships_rule One `wc_memberships_rules` entry.
+	 * @return int[]
+	 */
+	private static function products_covered_by( $memberships_rule ) {
+		$object_ids = array_map( 'intval', (array) ( $memberships_rule['object_ids'] ?? [] ) );
+		if ( empty( $object_ids ) ) {
+			return [];
+		}
+		if ( 'taxonomy' !== ( $memberships_rule['content_type'] ?? '' ) ) {
+			return $object_ids;
+		}
+
+		return array_map(
+			'intval',
+			get_posts(
+				[
+					'post_type'      => [ 'product', 'product_variation' ],
+					'post_status'    => 'publish',
+					// phpcs:ignore WordPress.WP.PostsPerPage.posts_per_page_posts_per_page -- bounded, one-shot CLI report; see the cap note above.
+					'posts_per_page' => 500,
+					'fields'         => 'ids',
+					'tax_query'      => [ // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_tax_query
+						[
+							'taxonomy' => (string) ( $memberships_rule['content_type_name'] ?? 'product_cat' ),
+							'field'    => 'term_id',
+							'terms'    => $object_ids,
+						],
+					],
+				]
+			)
+		);
+	}
+
+	/**
+	 * Memberships' own discount arithmetic, for the before/after comparison.
+	 *
+	 * @param float $price            Price to discount.
+	 * @param array $memberships_rule One `wc_memberships_rules` entry.
+	 * @return float
+	 */
+	private static function memberships_discounted_price( $price, $memberships_rule ) {
+		$amount = (float) ( $memberships_rule['discount_amount'] ?? 0 );
+		$price  = 'percentage' === ( $memberships_rule['discount_type'] ?? '' )
+			? $price * ( 100 - $amount ) / 100
+			: $price - $amount;
+		return max( $price, 0 );
 	}
 
 	/**
@@ -306,8 +506,7 @@ class Discounts_Migration {
 				'_source_plan_id'          => $plan_id,
 				// Derived from the source rule so a re-run updates the same rule
 				// in place. Without it every run would mint a new id and
-				// duplicate the whole rule set — which under the "combine"
-				// overlap setting would compound the discount readers get.
+				// duplicate the whole rule set.
 				'id'                       => self::migrated_rule_id( $source_id ),
 				'subscription_product_ids' => $subscription_product_ids,
 				'targeting'                => $targeting,

@@ -1,11 +1,14 @@
 <?php
 /**
- * Audience Pricing Rules Wizard.
+ * Audience Pricing Rules Wizard, backed by subscriber discounts.
  *
- * Page shell for the DataViews-based pricing-rules manager. The rule CRUD REST
- * is owned by the standalone woocommerce-dynamic-pricing plugin
- * (wc-dynamic-pricing/v1/rules); this wizard only registers the admin page and
- * mounts the React app, which consumes that REST via @wordpress/api-fetch.
+ * Deliberately shares the admin slug, menu label and routes of
+ * Audience_Pricing_Rules, which fronts the standalone dynamic-pricing engine.
+ * Wizards registers exactly one of the two — the engine's page wherever its
+ * plugin is active, this one otherwise — so a publisher only ever sees a single
+ * Pricing Rules screen, and installing the engine later keeps their URL,
+ * bookmarks and documentation working. The stored rules are ported at that
+ * point by `wp newspack migrate-discounts`.
  *
  * @package Newspack
  */
@@ -15,9 +18,9 @@ namespace Newspack;
 defined( 'ABSPATH' ) || exit;
 
 /**
- * Audience Pricing Rules Wizard.
+ * Pricing Rules page served by subscriber discounts.
  */
-class Audience_Pricing_Rules extends Wizard {
+class Audience_Subscriber_Discounts extends Wizard {
 	/**
 	 * Admin page slug. Must match the React page map key in src/wizards/index.tsx.
 	 *
@@ -65,9 +68,8 @@ class Audience_Pricing_Rules extends Wizard {
 	}
 
 	/**
-	 * Enqueue scripts and styles. The app needs no page config: currency + vocab
-	 * come from the rules REST (paths in src/wizards/audience/views/pricing-rules/constants.ts),
-	 * and the page only registers when the engine is active.
+	 * Enqueue scripts and styles, telling the page map which manager owns this
+	 * screen. Rules and currency come from the REST payload.
 	 */
 	public function enqueue_scripts_and_styles() {
 		if ( ! $this->is_wizard_page() ) {
@@ -75,13 +77,10 @@ class Audience_Pricing_Rules extends Wizard {
 		}
 		parent::enqueue_scripts_and_styles();
 		wp_enqueue_script( 'newspack-wizards' );
-		// Which manager owns this slug: Wizards registers either this page or
-		// Audience_Subscriber_Discounts, never both, and the React page map picks
-		// its app from this flag.
 		wp_localize_script(
 			'newspack-wizards',
 			'newspackPricingRules',
-			[ 'engine' => true ]
+			[ 'engine' => false ]
 		);
 	}
 }

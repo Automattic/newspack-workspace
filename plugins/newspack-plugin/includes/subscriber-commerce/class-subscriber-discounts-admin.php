@@ -1,7 +1,10 @@
 <?php
 /**
- * Admin surface for subscriber discounts: the Subscriptions wizard tab and the
- * endpoints behind it.
+ * REST endpoints behind the Pricing Rules page.
+ *
+ * The routes sit under the Subscriptions wizard's namespace because they share
+ * its product-search endpoint and rule vocabulary; the screen they serve is
+ * Audience_Subscriber_Discounts.
  *
  * @package Newspack
  */
@@ -16,46 +19,11 @@ defined( 'ABSPATH' ) || exit;
 class Subscriber_Discounts_Admin {
 
 	/**
-	 * The wizard tab this feature owns.
-	 */
-	const TAB_SLUG = 'discounts';
-
-	/**
-	 * Where this tab sits among the wizard's tabs.
-	 */
-	const TAB_ORDER = 20;
-
-	/**
-	 * Hook up the tab and the endpoints.
+	 * Hook up the endpoints. The screen itself is the Pricing Rules page —
+	 * see Audience_Subscriber_Discounts.
 	 */
 	public static function init() {
-		add_action( 'init', [ __CLASS__, 'register_tab' ] );
 		add_action( 'rest_api_init', [ __CLASS__, 'register_api_endpoints' ] );
-	}
-
-	/**
-	 * Add the tab to the Subscriptions wizard.
-	 *
-	 * Gated on the admin being available rather than on enforcement being
-	 * active: a publisher migrating off WooCommerce Memberships configures their
-	 * discounts while Memberships still owns the front end, and deactivates it
-	 * afterwards.
-	 */
-	public static function register_tab() {
-		if ( ! Subscriber_Commerce::is_admin_available() ) {
-			return;
-		}
-		Audience_Subscriptions::register_tab(
-			self::TAB_SLUG,
-			[
-				// Not escaped: the label is localized into a nested array, where
-				// wp_localize_script() leaves entities encoded, so an escaped
-				// label would reach any apostrophe-bearing locale as `&#8217;`.
-				'label' => __( 'Subscriber discounts', 'newspack-plugin' ),
-				'path'  => '/discounts',
-				'order' => self::TAB_ORDER,
-			]
-		);
 	}
 
 	/**
@@ -93,11 +61,6 @@ class Subscriber_Discounts_Admin {
 				'callback'            => [ __CLASS__, 'api_save_settings' ],
 				'permission_callback' => [ __CLASS__, 'api_permissions_check' ],
 				'args'                => [
-					'overlap'           => [
-						'type'              => 'string',
-						'enum'              => [ 'best', 'combine' ],
-						'sanitize_callback' => 'sanitize_key',
-					],
 					'apply_on_sale'     => [
 						'type' => 'boolean',
 					],
@@ -242,7 +205,7 @@ class Subscriber_Discounts_Admin {
 	 */
 	public static function api_save_settings( $request ) {
 		$settings = [];
-		foreach ( [ 'overlap', 'apply_on_sale', 'apply_at_checkout' ] as $setting ) {
+		foreach ( [ 'apply_on_sale', 'apply_at_checkout' ] as $setting ) {
 			if ( null !== $request->get_param( $setting ) ) {
 				$settings[ $setting ] = $request->get_param( $setting );
 			}

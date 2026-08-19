@@ -242,14 +242,14 @@ class Newspack_Test_Subscriber_Discounts_Storage extends WP_UnitTestCase {
 	public function test_settings_defaults_and_merge_on_save() {
 		$default_settings = Subscriber_Discounts::get_settings();
 
-		$this->assertSame( 'best', $default_settings['overlap'], 'Overlapping rules apply the single best discount by default.' );
 		$this->assertFalse( $default_settings['apply_on_sale'], 'Products already on sale are left alone by default.' );
+		$this->assertFalse( $default_settings['apply_at_checkout'], 'A subscription in the cart does not discount the rest of the order by default.' );
 
 		Subscriber_Discounts::save_settings( [ 'apply_on_sale' => true ] );
 
 		$merged_settings = Subscriber_Discounts::get_settings();
 		$this->assertTrue( $merged_settings['apply_on_sale'], 'The saved setting persists.' );
-		$this->assertSame( 'best', $merged_settings['overlap'], 'Untouched settings keep their value.' );
+		$this->assertFalse( $merged_settings['apply_at_checkout'], 'Untouched settings keep their value.' );
 	}
 
 	/**
@@ -290,13 +290,13 @@ class Newspack_Test_Subscriber_Discounts_Storage extends WP_UnitTestCase {
 	}
 
 	/**
-	 * When several rules cover the same product, the `overlap` setting decides
-	 * the outcome. 'best' takes the single largest reduction; 'combine' applies
-	 * them one after another. Getting this wrong either short-changes readers or
-	 * gives away more margin than the publisher agreed to, so both directions
-	 * are pinned here.
+	 * When several rules cover the same product only the largest reduction
+	 * applies, and every rule is measured against the catalog price rather than
+	 * against what a previous rule left behind. WooCommerce Memberships instead
+	 * compounds them, so this is the one place where a migrated site's prices
+	 * deliberately differ — pinned here in both directions.
 	 */
-	public function test_combined_price_respects_overlap_setting() {
+	public function test_combined_price_takes_the_single_best_discount() {
 		$ten_percent_off = [
 			'discount_type' => 'percent',
 			'amount'        => 10,
@@ -306,70 +306,39 @@ class Newspack_Test_Subscriber_Discounts_Storage extends WP_UnitTestCase {
 			'amount'        => 5,
 		];
 
+		$best_price = Subscriber_Discounts::combined_price( 100.0, [ $ten_percent_off, $five_pounds_off ] );
+
 		$this->assertSame(
 			90.0,
-			Subscriber_Discounts::combined_price( 100.0, [ $ten_percent_off, $five_pounds_off ], [ 'overlap' => 'best' ] ),
-			'Best-only takes the larger reduction (10% off 100 beats £5 off), not the first or last rule.'
+			$best_price,
+			'The larger reduction wins (10% off 100 beats £5 off), not the first or last rule.'
 		);
-
-		$this->assertSame(
+		$this->assertNotSame(
 			85.0,
-			Subscriber_Discounts::combined_price( 100.0, [ $ten_percent_off, $five_pounds_off ], [ 'overlap' => 'combine' ] ),
-			'Combining applies each rule to the running price: 100 → 90 → 85.'
+			$best_price,
+			'Overlapping rules must not accumulate — 100 → 90 → 85 is Memberships behaviour, not ours.'
+		);
+		$this->assertSame(
+			90.0,
+			Subscriber_Discounts::combined_price( 100.0, [ $five_pounds_off, $ten_percent_off ] ),
+			'The order rules happen to be stored in cannot change what a reader pays.'
 		);
 	}
 
 	/**
-	 * Combining percentages with fixed amounts is order-dependent if applied in
-	 * whatever order the rules happen to be stored in (£200 less 20% less £10 is
-	 * £150; less £10 less 20% is £152). Rules are therefore combined in a fixed
-	 * order — every percentage first, then every fixed amount — so the price a
-	 * reader sees depends only on which rules match, never on the order they
-	 * were created in.
-	 */
-	public function test_combined_price_uses_a_canonical_order() {
-		$rules = [
-			[
-				'discount_type' => 'percent',
-				'amount'        => 20,
-			],
-			[
-				'discount_type' => 'fixed',
-				'amount'        => 10,
-			],
-		];
-
-		$this->assertSame(
-			150.0,
-			Subscriber_Discounts::combined_price( 200.0, $rules, [ 'overlap' => 'combine' ] ),
-			'Percentages apply before fixed amounts: 200 → 160 → 150.'
-		);
-		$this->assertSame(
-			150.0,
-			Subscriber_Discounts::combined_price( 200.0, array_reverse( $rules ), [ 'overlap' => 'combine' ] ),
-			'Storing the same two rules the other way round must not change what the reader pays.'
-		);
-	}
-
-	/**
-	 * Combining can never drive a price below zero, however many rules pile up.
+	 * A discount larger than the product's price settles at zero rather than
+	 * going negative.
 	 */
 	public function test_combined_price_floors_at_zero() {
-		$rules = [
-			[
-				'discount_type' => 'fixed',
-				'amount'        => 30,
-			],
-			[
-				'discount_type' => 'fixed',
-				'amount'        => 30,
-			],
+		$sixty_pounds_off = [
+			'discount_type' => 'fixed',
+			'amount'        => 60,
 		];
 
 		$this->assertSame(
 			0.0,
-			Subscriber_Discounts::combined_price( 50.0, $rules, [ 'overlap' => 'combine' ] ),
-			'Two £30 discounts on a £50 product settle at zero, not -£10.'
+			Subscriber_Discounts::combined_price( 50.0, [ $sixty_pounds_off ] ),
+			'£60 off a £50 product is free, not -£10.'
 		);
 	}
 
@@ -379,7 +348,7 @@ class Newspack_Test_Subscriber_Discounts_Storage extends WP_UnitTestCase {
 	 */
 	public function test_combined_price_returns_null_when_no_rule_applies() {
 		$this->assertNull(
-			Subscriber_Discounts::combined_price( 100.0, [], [ 'overlap' => 'best' ] ),
+			Subscriber_Discounts::combined_price( 100.0, [] ),
 			'An empty rule set leaves the price untouched.'
 		);
 	}
