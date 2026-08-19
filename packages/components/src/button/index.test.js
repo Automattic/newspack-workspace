@@ -5,6 +5,11 @@ import { act, render, screen } from '@testing-library/react';
 import { MemoryRouter, useHistory } from 'react-router-dom';
 
 /**
+ * WordPress dependencies.
+ */
+import { createRef } from '@wordpress/element';
+
+/**
  * Internal dependencies.
  */
 import Button from './';
@@ -139,5 +144,42 @@ describe( 'Button with a javascript: href alone', () => {
 	it( 'leaves an ordinary href alone', () => {
 		render( <Button href="/wp-admin/admin.php?page=next">Save</Button> );
 		expect( link() ).toHaveAttribute( 'href', '/wp-admin/admin.php?page=next' );
+	} );
+} );
+
+// `loading` is this component's own prop name; the core Button expresses the same
+// state as `isBusy`. Passing `loading` straight through lands it on the DOM node,
+// which React rejects with an unknown-prop warning.
+describe( 'Button loading prop', () => {
+	const button = () => screen.getByRole( 'button', { name: 'Save' } );
+
+	it( 'renders the core busy state without putting `loading` on the DOM node', () => {
+		const error = jest.spyOn( console, 'error' ).mockImplementation( () => {} );
+		render( <Button loading>Save</Button> );
+
+		expect( button() ).toHaveClass( 'is-busy' );
+		expect( button() ).not.toHaveAttribute( 'loading' );
+		expect( error ).not.toHaveBeenCalled();
+		error.mockRestore();
+	} );
+
+	it( 'leaves the button idle without the prop', () => {
+		render( <Button>Save</Button> );
+
+		expect( button() ).not.toHaveClass( 'is-busy' );
+	} );
+} );
+
+// A ref on a plain function component is dropped with a warning, so the wizard
+// screens that measure or focus a button need it forwarded to the DOM node.
+describe( 'Button ref', () => {
+	it( 'forwards the ref to the rendered button', () => {
+		const error = jest.spyOn( console, 'error' ).mockImplementation( () => {} );
+		const ref = createRef();
+		render( <Button ref={ ref }>Save</Button> );
+
+		expect( ref.current ).toBe( screen.getByRole( 'button', { name: 'Save' } ) );
+		expect( error ).not.toHaveBeenCalled();
+		error.mockRestore();
 	} );
 } );
