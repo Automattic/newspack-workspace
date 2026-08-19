@@ -14,29 +14,24 @@ export function formatPrice( amount: number, currency: PricingRulesCurrency ): s
 }
 
 /**
- * One cycle's contribution to the resulting-price phrasing: cycle 1 is the bare
- * price; later cycles read "then $X from cycle N".
+ * The cycle marker leads so prices land at the same offset on every row and can be
+ * read down the column.
  */
 export function formatSegment( seg: ImpactSegment, currency: PricingRulesCurrency ): string {
-	return seg.from_cycle === 1
-		? formatPrice( seg.amount, currency )
-		: sprintf(
-				/* translators: 1: a formatted price, 2: a billing cycle number. */
-				__( 'then %1$s from cycle %2$d', 'newspack-plugin' ),
-				formatPrice( seg.amount, currency ),
-				seg.from_cycle
-		  );
+	return sprintf(
+		/* translators: 1: a billing cycle number, 2: a formatted price. The "c" prefix is short for cycle. */
+		__( 'c%1$d %2$s', 'newspack-plugin' ),
+		seg.from_cycle,
+		formatPrice( seg.amount, currency )
+	);
 }
 
 /**
- * The resulting-price cell as a single string: flat rules show the adjusted price;
- * scheduled rules join each cycle with ` · `.
+ * The legend for the `c1`/`c2` markers a stepped rule puts on its prices. Shared
+ * so the editor's section header and the catalog panel cannot drift apart.
  */
-export function describeResulting( row: CatalogImpactRow, currency: PricingRulesCurrency ): string {
-	if ( row.segments.length <= 1 ) {
-		return formatPrice( row.adjusted, currency );
-	}
-	return row.segments.map( seg => formatSegment( seg, currency ) ).join( ' · ' );
+export function cycleMarkerNote(): string {
+	return __( 'Each price is marked with the billing cycle it starts from: c1 is the initial purchase, c2 the first renewal.', 'newspack-plugin' );
 }
 
 /**

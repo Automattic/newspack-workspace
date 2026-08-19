@@ -16,11 +16,10 @@ import {
 	TextControl,
 	SelectControl,
 	ToggleControl,
-	FlexBlock,
 	__experimentalVStack as VStack, // eslint-disable-line @wordpress/no-unsafe-wp-apis
-	__experimentalHStack as HStack, // eslint-disable-line @wordpress/no-unsafe-wp-apis
+	__experimentalToggleGroupControl as ToggleGroupControl, // eslint-disable-line @wordpress/no-unsafe-wp-apis
+	__experimentalToggleGroupControlOption as ToggleGroupControlOption, // eslint-disable-line @wordpress/no-unsafe-wp-apis
 } from '@wordpress/components';
-import { trash } from '@wordpress/icons';
 
 /**
  * Internal dependencies
@@ -29,21 +28,52 @@ import { Grid, Router, SectionHeader, Divider, useConfirmDialog } from '../../..
 import { WIZARD_STORE_NAMESPACE } from '../../../../../packages/components/src/wizard/store';
 import ScopeTargets from './scope-targets';
 import Conditions, { type ConditionsMap } from './conditions';
+import SchedulePrices from './schedule-prices';
 import RulePreview from './rule-preview';
 import ReadonlyField from './readonly-field';
 import DateTimeField from './datetime-field';
 import { tsToLocalInput, localInputToTs } from './datetime';
 import { RECIPES, applyRecipeConditions, isConditionVisible, isPricingPath, intentLabel, type PricingPath } from './recipes';
 import GoalCards from './goal-cards';
+import { calcTypeHelp, valueLabel, valueHelp } from './calc-copy';
+import { cycleMarkerNote } from './impact-format';
+import { byCycle } from './schedule-format';
 import { RULES_API_PATH as API_PATH } from './constants';
 
 const { useHistory, useLocation } = Router;
 
-interface StepRowState {
-	at: string;
-	calc_type: string;
-	value: string;
-	label: string;
+function publicizeHelp( publicize: boolean ): string {
+	return publicize
+		? __( "The rule's name and the regular-vs-adjusted comparison appear on the product page, cart, and checkout.", 'newspack-plugin' )
+		: __( 'The adjusted price applies with no explanation to the reader.', 'newspack-plugin' );
+}
+
+/**
+ * Both strings repeat that the choice is permanent: help is a single prop, so the
+ * warning has to sit under whichever model is selected.
+ */
+function strategyHelp( id: string, fallback: string ): string {
+	if ( 'simple_price' === id ) {
+		return __( 'One price for matching products. Fixed once the rule is created.', 'newspack-plugin' );
+	}
+	if ( 'stepped_by_cycle' === id ) {
+		return __( 'Different prices for the purchase and renewals. Fixed once the rule is created.', 'newspack-plugin' );
+	}
+	return fallback;
+}
+
+/**
+ * The server's labels carry a description too long for a toggle, so the toggle
+ * shows the name alone and the description moves into strategyHelp.
+ */
+function strategyShortLabel( id: string, fallback: string ): string {
+	if ( 'simple_price' === id ) {
+		return __( 'Flat Adjustment', 'newspack-plugin' );
+	}
+	if ( 'stepped_by_cycle' === id ) {
+		return __( 'Price Schedule', 'newspack-plugin' );
+	}
+	return fallback;
 }
 
 const SCHEDULE_HELP_ID = 'newspack-pricing-rule-schedule__help';
@@ -159,24 +189,24 @@ export default function RuleForm( { isNew, initialPath = null, rule, vocab, onDo
 	const [ cyclesLimit, setCyclesLimit ] = useState( String( rule?.simple?.cycles_limit ?? 0 ) );
 	const [ simpleLabel, setSimpleLabel ] = useState( rule?.simple?.label ?? '' );
 	const [ strategyId, setStrategyId ] = useState( rule?.strategy_id ?? vocab.strategies[ 0 ]?.id ?? 'simple_price' );
-	const defaultCalc = vocab.calc_types[ 0 ]?.value ?? 'fixed_price';
-	const [ steps, setSteps ] = useState< StepRowState[] >(
-		rule?.steps?.length
-			? rule.steps.map( s => ( { at: String( s.at ), calc_type: s.calc_type, value: String( s.value ), label: s.label } ) )
-			: [ { at: '1', calc_type: defaultCalc, value: '', label: '' } ]
+	// Ordered on the way in, so what the table ranges, the preview asks about and the
+	// save posts are one and the same list even before anything is touched.
+	const [ steps, setSteps ] = useState< SchedulePriceInput[] >( () =>
+		( rule?.steps ?? [] )
+			.map( s => ( { at: String( s.at ), calc_type: s.calc_type, value: String( s.value ), label: s.label ?? '' } ) )
+			.sort( byCycle )
 	);
 	const isSchedule = strategyId === 'stepped_by_cycle';
+	// The subscriptions bootstrap registers the schedule strategy, so a site without
+	// WooCommerce Subscriptions has one model and nothing to choose.
+	const hasModelChoice = vocab.strategies.length > 1;
 	// A stepped schedule, or a flat rule capped to N cycles, has a cycle dimension —
 	// the only case where the cycle anchor is consequential.
 	const hasCycleDimension = isSchedule || ( ! isSchedule && Number( cyclesLimit ) > 0 );
-	const updateStep = ( i: number, key: keyof StepRowState, val: string ) =>
-		setSteps( prev => prev.map( ( s, idx ) => ( idx === i ? { ...s, [ key ]: val } : s ) ) );
-	const addStep = () =>
-		setSteps( prev => [
-			...prev,
-			{ at: String( ( Number( prev[ prev.length - 1 ]?.at ) || prev.length ) + 1 ), calc_type: defaultCalc, value: '', label: '' },
-		] );
-	const removeStep = ( i: number ) => setSteps( prev => prev.filter( ( _, idx ) => idx !== i ) );
+	// Markers only render when a projection spans cycles, which a one-price
+	// schedule never does; the composed preview covers other rules' cycles itself.
+	const hasCycleMarkers = isSchedule ? steps.length > 1 : Number( cyclesLimit ) > 0;
+	const hasPrice = isSchedule ? steps.length > 0 : String( value ).trim() !== '';
 	const [ scopeType, setScopeType ] = useState( rule?.scope_type ?? seedScope ?? vocab.scopes[ 0 ]?.id ?? 'all_products' );
 	const [ scopeIds, setScopeIds ] = useState< number[] >( rule?.scope_ids ?? [] );
 	const [ priority, setPriority ] = useState( String( rule?.priority ?? 100 ) );
@@ -325,9 +355,7 @@ export default function RuleForm( { isNew, initialPath = null, rule, vocab, onDo
 		};
 		if ( isSchedule ) {
 			b.strategy_id = 'stepped_by_cycle';
-			b.steps = steps
-				.filter( s => String( s.value ).trim() !== '' )
-				.map( s => ( { at: Number( s.at ) || 1, calc_type: s.calc_type, value: Number( s.value ) || 0, label: s.label } ) );
+			b.steps = steps.map( s => ( { at: Number( s.at ) || 1, calc_type: s.calc_type, value: Number( s.value ) || 0, label: s.label } ) );
 		} else {
 			b.strategy_id = 'simple_price';
 			b.simple = {
@@ -366,7 +394,7 @@ export default function RuleForm( { isNew, initialPath = null, rule, vocab, onDo
 			return;
 		}
 		// A blank flat value is "not set" — distinct from a deliberate 0. The
-		// schedule model already drops empty steps and refuses to save with none;
+		// schedule model rejects a price with no value and refuses to save with none;
 		// mirror that here instead of silently coercing blank to $0 (NPPD-1854). A
 		// typed 0 is still allowed (an intentional free price).
 		if ( ! isSchedule && String( value ).trim() === '' ) {
@@ -395,6 +423,14 @@ export default function RuleForm( { isNew, initialPath = null, rule, vocab, onDo
 			} );
 			return;
 		}
+		if ( isSchedule && ! steps.length ) {
+			addNotice( {
+				message: __( 'Add at least one price.', 'newspack-plugin' ),
+				type: 'error',
+				id: 'pricing-rule-steps',
+			} );
+			return;
+		}
 		setIsSaving( true );
 		const body: Record< string, unknown > = {
 			title,
@@ -413,20 +449,13 @@ export default function RuleForm( { isNew, initialPath = null, rule, vocab, onDo
 			conditions,
 		};
 		if ( isSchedule ) {
-			const cleanSteps = steps
-				.filter( s => String( s.value ).trim() !== '' )
-				.map( s => ( { at: Number( s.at ) || 1, calc_type: s.calc_type, value: Number( s.value ) || 0, label: s.label } ) );
-			if ( ! cleanSteps.length ) {
-				addNotice( {
-					message: __( 'Add at least one schedule step with a value.', 'newspack-plugin' ),
-					type: 'error',
-					id: 'pricing-rule-steps',
-				} );
-				setIsSaving( false );
-				return;
-			}
 			body.strategy_id = 'stepped_by_cycle';
-			body.steps = cleanSteps;
+			body.steps = steps.map( s => ( {
+				at: Number( s.at ) || 1,
+				calc_type: s.calc_type,
+				value: Number( s.value ) || 0,
+				label: s.label,
+			} ) );
 		} else {
 			body.strategy_id = 'simple_price';
 			body.simple = {
@@ -546,16 +575,17 @@ export default function RuleForm( { isNew, initialPath = null, rule, vocab, onDo
 						} }
 						__next40pxDefaultSize
 					/>
-					<SelectControl
+					<ToggleGroupControl
 						label={ __( 'Status', 'newspack-plugin' ) }
 						value={ status }
-						options={ [
-							{ label: __( 'Published', 'newspack-plugin' ), value: 'publish' },
-							{ label: __( 'Draft', 'newspack-plugin' ), value: 'draft' },
-						] }
-						onChange={ setStatus }
+						onChange={ v => setStatus( v === 'publish' ? 'publish' : 'draft' ) }
+						isBlock
 						__next40pxDefaultSize
-					/>
+						__nextHasNoMarginBottom
+					>
+						<ToggleGroupControlOption value="publish" label={ __( 'Published', 'newspack-plugin' ) } />
+						<ToggleGroupControlOption value="draft" label={ __( 'Draft', 'newspack-plugin' ) } />
+					</ToggleGroupControl>
 					<SelectControl
 						label={ __( 'Applies to', 'newspack-plugin' ) }
 						help={ __( 'Which products this rule targets.', 'newspack-plugin' ) }
@@ -587,128 +617,23 @@ export default function RuleForm( { isNew, initialPath = null, rule, vocab, onDo
 
 			<Grid columns={ 2 } gutter={ 32 } noMargin>
 				<SectionHeader
-					title={ __( 'Pricing Model', 'newspack-plugin' ) }
-					description={ __( 'How matching products are priced.', 'newspack-plugin' ) }
+					title={ __( 'Eligibility', 'newspack-plugin' ) }
+					description={ __(
+						'Gate whether this rule applies to a given purchase. All set conditions must pass; empty = no restrictions.',
+						'newspack-plugin'
+					) }
 					noMargin
 				/>
 				<VStack spacing={ 6 }>
-					{ isNew ? (
-						<SelectControl
-							label={ __( 'Pricing model', 'newspack-plugin' ) }
-							value={ strategyId }
-							options={ vocab.strategies.map( s => ( { label: s.label, value: s.id } ) ) }
-							onChange={ setStrategyId }
-							__next40pxDefaultSize
-						/>
-					) : (
-						<p className="description">
-							{ __( 'Pricing model:', 'newspack-plugin' ) }{ ' ' }
-							<strong>{ vocab.strategies.find( s => s.id === strategyId )?.label ?? strategyId }</strong>
-						</p>
-					) }
-
-					{ isSchedule ? (
-						<VStack spacing={ 3 }>
-							<p className="description">
-								{ __(
-									'Each row sets the price from a given cycle onward, until a later row takes over. Cycle 1 is the initial purchase; cycle 2 is the first renewal.',
-									'newspack-plugin'
-								) }
-							</p>
-							{ steps.map( ( step, i ) => (
-								<HStack key={ i } alignment="flex-end" spacing={ 2 }>
-									<FlexBlock>
-										<TextControl
-											label={ __( 'From cycle #', 'newspack-plugin' ) }
-											hideLabelFromVision={ i > 0 }
-											type="number"
-											min={ 1 }
-											value={ step.at }
-											onChange={ v => updateStep( i, 'at', v ) }
-											__next40pxDefaultSize
-										/>
-									</FlexBlock>
-									<FlexBlock>
-										<SelectControl
-											label={ __( 'Pricing', 'newspack-plugin' ) }
-											hideLabelFromVision={ i > 0 }
-											value={ step.calc_type }
-											options={ vocab.calc_types.map( c => ( { label: c.label, value: c.value } ) ) }
-											onChange={ v => updateStep( i, 'calc_type', v ) }
-											__next40pxDefaultSize
-										/>
-									</FlexBlock>
-									<FlexBlock>
-										<TextControl
-											label={ __( 'Value', 'newspack-plugin' ) }
-											hideLabelFromVision={ i > 0 }
-											type="number"
-											value={ step.value }
-											onChange={ v => updateStep( i, 'value', v ) }
-											__next40pxDefaultSize
-										/>
-									</FlexBlock>
-									<FlexBlock>
-										<TextControl
-											label={ __( 'Name shown to reader', 'newspack-plugin' ) }
-											hideLabelFromVision={ i > 0 }
-											value={ step.label }
-											onChange={ v => updateStep( i, 'label', v ) }
-											__next40pxDefaultSize
-										/>
-									</FlexBlock>
-									<Button
-										icon={ trash }
-										isDestructive
-										variant="tertiary"
-										disabled={ steps.length <= 1 }
-										onClick={ () => removeStep( i ) }
-										label={ __( 'Remove Step', 'newspack-plugin' ) }
-									/>
-								</HStack>
-							) ) }
-							<div>
-								<Button variant="secondary" onClick={ addStep }>
-									{ __( '+ Add Row', 'newspack-plugin' ) }
-								</Button>
-							</div>
-						</VStack>
-					) : (
-						<>
-							<SelectControl
-								label={ __( 'Pricing', 'newspack-plugin' ) }
-								value={ calcType }
-								options={ vocab.calc_types.map( c => ( { label: c.label, value: c.value } ) ) }
-								onChange={ setCalcType }
-								__next40pxDefaultSize
-							/>
-							<TextControl
-								label={ __( 'Value', 'newspack-plugin' ) }
-								type="number"
-								value={ value }
-								onChange={ setValue }
-								__next40pxDefaultSize
-							/>
-							<TextControl
-								label={ __( 'Name shown to reader', 'newspack-plugin' ) }
-								help={ __( 'Optional. Shown to readers when "Show pricing details" is on.', 'newspack-plugin' ) }
-								value={ simpleLabel }
-								onChange={ setSimpleLabel }
-								__next40pxDefaultSize
-							/>
-							<TextControl
-								label={ __( 'Apply for first N cycles', 'newspack-plugin' ) }
-								help={ __(
-									'0 = unlimited (every cycle). For subscriptions only — covers the purchase plus the next N-1 renewals. No effect on one-time products.',
-									'newspack-plugin'
-								) }
-								type="number"
-								value={ cyclesLimit }
-								onChange={ setCyclesLimit }
-								__next40pxDefaultSize
-							/>
-						</>
-					) }
+					<Conditions
+						vocab={ vocab.conditions }
+						value={ conditions }
+						publishedAt={ rule?.published_at ?? null }
+						isNew={ isNew }
+						onChange={ setConditions }
+						onDateModeChange={ ( id, mode ) => setDateModes( prev => ( { ...prev, [ id ]: mode } ) ) }
+						path={ path }
+					/>
 				</VStack>
 			</Grid>
 
@@ -770,84 +695,172 @@ export default function RuleForm( { isNew, initialPath = null, rule, vocab, onDo
 							{ __( 'Times are in your local timezone.', 'newspack-plugin' ) }
 						</p>
 					</VStack>
-					{ recipe?.isCustom && (
-						<ToggleControl
-							label={ __( 'Lock pricing at purchase', 'newspack-plugin' ) }
-							help={ __(
-								'On: subscribers keep the price they bought at — the rule only applies to new sign-ups. Off: the rule applies to every matching subscriber at each renewal.',
-								'newspack-plugin'
-							) }
-							checked={ 'locked' === application }
-							onChange={ checked => setApplication( checked ? 'locked' : 'current' ) }
-							__nextHasNoMarginBottom
-						/>
-					) }
-					{ application === 'current' && hasCycleDimension && (
-						<SelectControl
-							label={ __( 'Count cycles from', 'newspack-plugin' ) }
-							value={ cycleAnchor }
-							options={ [
-								{
-									label: __( 'When this rule first applies to a subscriber', 'newspack-plugin' ),
-									value: 'rule_application',
-								},
-								{ label: __( 'Subscription start', 'newspack-plugin' ), value: 'subscription_start' },
-							] }
-							onChange={ setCycleAnchor }
-							help={ __(
-								'Anchors a stepped or cycle-limited schedule. “First applies” starts the schedule when the subscriber becomes eligible; “Subscription start” counts from their original signup.',
-								'newspack-plugin'
-							) }
-							__next40pxDefaultSize
-						/>
-					) }
-					<ToggleControl
-						label={ __( 'Show pricing details', 'newspack-plugin' ) }
-						help={ __(
-							'Tell readers about this rule wherever the product appears — its name and the regular-vs-adjusted comparison show on the product page, cart, and checkout. When off, the adjusted price applies silently.',
+				</VStack>
+			</Grid>
+
+			<Divider alignment="full-width" variant="tertiary" />
+
+			<VStack spacing={ 6 }>
+				<Grid columns={ 2 } gutter={ 32 } noMargin>
+					<SectionHeader
+						title={ __( 'Pricing', 'newspack-plugin' ) }
+						description={ __(
+							'What matching products cost under this rule, how long that price holds, and whether readers are told why.',
 							'newspack-plugin'
 						) }
-						checked={ publicize }
-						onChange={ setPublicize }
-						__nextHasNoMarginBottom
+						noMargin
 					/>
-				</VStack>
-			</Grid>
+					<VStack spacing={ 6 }>
+						{ hasModelChoice && (
+							<ToggleGroupControl
+								label={ __( 'Pricing model', 'newspack-plugin' ) }
+								help={ strategyHelp( strategyId, vocab.strategies.find( s => s.id === strategyId )?.label ?? '' ) }
+								value={ strategyId }
+								onChange={ v => {
+									// The server keeps the saved strategy on update; do not let the form drift from it.
+									if ( isNew ) {
+										setStrategyId( String( v ) );
+									}
+								} }
+								isBlock
+								__next40pxDefaultSize
+								__nextHasNoMarginBottom
+							>
+								{ vocab.strategies.map( s => (
+									<ToggleGroupControlOption
+										key={ s.id }
+										value={ s.id }
+										label={ strategyShortLabel( s.id, s.label ) }
+										disabled={ ! isNew }
+									/>
+								) ) }
+							</ToggleGroupControl>
+						) }
 
-			<Divider alignment="full-width" variant="tertiary" />
+						<ToggleGroupControl
+							label={ __( 'Pricing details', 'newspack-plugin' ) }
+							help={ publicizeHelp( publicize ) }
+							value={ publicize ? 'shown' : 'hidden' }
+							onChange={ v => setPublicize( 'shown' === v ) }
+							isBlock
+							__next40pxDefaultSize
+							__nextHasNoMarginBottom
+						>
+							<ToggleGroupControlOption value="shown" label={ __( 'Shown', 'newspack-plugin' ) } />
+							<ToggleGroupControlOption value="hidden" label={ __( 'Hidden', 'newspack-plugin' ) } />
+						</ToggleGroupControl>
 
-			<Grid columns={ 2 } gutter={ 32 } noMargin>
-				<SectionHeader
-					title={ __( 'Eligibility', 'newspack-plugin' ) }
-					description={ __(
-						'Gate whether this rule applies to a given purchase. All set conditions must pass; empty = no restrictions.',
-						'newspack-plugin'
-					) }
-					noMargin
-				/>
-				<VStack spacing={ 6 }>
-					<Conditions
-						vocab={ vocab.conditions }
-						value={ conditions }
-						publishedAt={ rule?.published_at ?? null }
-						isNew={ isNew }
-						onChange={ setConditions }
-						onDateModeChange={ ( id, mode ) => setDateModes( prev => ( { ...prev, [ id ]: mode } ) ) }
-						path={ path }
+						{ ! isSchedule && (
+							<>
+								<SelectControl
+									label={ __( 'Calculation', 'newspack-plugin' ) }
+									help={ calcTypeHelp( calcType, vocab.calc_types.find( c => c.value === calcType )?.label ?? '' ) }
+									value={ calcType }
+									// A saved rule can name a calculation the vocabulary no longer
+									// offers; listing it keeps the control showing what the rule is.
+									options={ [
+										...vocab.calc_types.map( c => ( { label: c.label, value: c.value } ) ),
+										...( calcType && ! vocab.calc_types.some( c => c.value === calcType )
+											? [ { label: calcType, value: calcType } ]
+											: [] ),
+									] }
+									onChange={ setCalcType }
+									__next40pxDefaultSize
+								/>
+								<TextControl
+									label={ valueLabel( calcType, vocab.currency.symbol ) }
+									help={ valueHelp( calcType ) }
+									type="number"
+									value={ value }
+									onChange={ setValue }
+									__next40pxDefaultSize
+								/>
+								{ publicize && (
+									<TextControl
+										label={ __( 'Name shown to reader', 'newspack-plugin' ) }
+										help={ __( 'Optional. Shown on the product page, cart, and checkout.', 'newspack-plugin' ) }
+										value={ simpleLabel }
+										onChange={ setSimpleLabel }
+										__next40pxDefaultSize
+									/>
+								) }
+								<TextControl
+									label={ __( 'Apply for first N cycles', 'newspack-plugin' ) }
+									help={ __(
+										'0 = unlimited (every cycle). For subscriptions only — covers the purchase plus the next N-1 renewals. No effect on one-time products.',
+										'newspack-plugin'
+									) }
+									type="number"
+									value={ cyclesLimit }
+									onChange={ setCyclesLimit }
+									__next40pxDefaultSize
+								/>
+							</>
+						) }
+						{ recipe?.isCustom && (
+							<ToggleControl
+								label={ __( 'Lock pricing at purchase', 'newspack-plugin' ) }
+								help={ __(
+									'On: subscribers keep the price they bought at — the rule only applies to new sign-ups. Off: the rule applies to every matching subscriber at each renewal.',
+									'newspack-plugin'
+								) }
+								checked={ 'locked' === application }
+								onChange={ checked => setApplication( checked ? 'locked' : 'current' ) }
+								__nextHasNoMarginBottom
+							/>
+						) }
+						{ application === 'current' && hasCycleDimension && (
+							<SelectControl
+								label={ __( 'Count cycles from', 'newspack-plugin' ) }
+								value={ cycleAnchor }
+								options={ [
+									{
+										label: __( 'When this rule first applies to a subscriber', 'newspack-plugin' ),
+										value: 'rule_application',
+									},
+									{ label: __( 'Subscription start', 'newspack-plugin' ), value: 'subscription_start' },
+								] }
+								onChange={ setCycleAnchor }
+								help={ __(
+									'Anchors a stepped or cycle-limited schedule. “First applies” starts the schedule when the subscriber becomes eligible; “Subscription start” counts from their original signup.',
+									'newspack-plugin'
+								) }
+								__next40pxDefaultSize
+							/>
+						) }
+					</VStack>
+				</Grid>
+				{ isSchedule && (
+					<SchedulePrices
+						steps={ steps }
+						onChange={ setSteps }
+						publicize={ publicize }
+						calcTypes={ vocab.calc_types }
+						currency={ vocab.currency }
 					/>
-				</VStack>
-			</Grid>
+				) }
+			</VStack>
 
-			<Divider alignment="full-width" variant="tertiary" />
+			{ hasPrice && (
+				<>
+					<Divider alignment="full-width" variant="tertiary" />
 
-			<div className="newspack-pricing-rules__preview-section">
-				<SectionHeader
-					title={ __( 'Impact Preview', 'newspack-plugin' ) }
-					description={ __( 'How this rule prices products, composed with your other active rules. Best price wins.', 'newspack-plugin' ) }
-					noMargin
-				/>
-				<RulePreview body={ previewBody } hasPrice={ isSchedule || String( value ).trim() !== '' } />
-			</div>
+					<div>
+						<VStack spacing={ 0 }>
+							<SectionHeader
+								title={ __( 'Impact Preview', 'newspack-plugin' ) }
+								description={ __(
+									'What a reader would actually pay, with your other active rules taken into account. Where several rules match, the lowest price wins.',
+									'newspack-plugin'
+								) }
+								noMargin
+							/>
+							{ hasCycleMarkers && <p className="newspack-pricing-rules__muted">{ cycleMarkerNote() }</p> }
+						</VStack>
+						<RulePreview body={ previewBody } showCycleNote={ ! hasCycleMarkers } />
+					</div>
+				</>
+			) }
 			{ goalDialog }
 		</div>
 	);

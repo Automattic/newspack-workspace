@@ -1,23 +1,22 @@
 /**
- * The impact table shared by the editor preview and the catalog panel: one row
- * per product, one resulting-price column per reader segment. The first price
- * column is the "Everyone else" baseline (no segment / not-logged-in); each
- * segment the preview computed adds a column, so prices compare side by side.
- * Flat rules show a bare price; stepped rules join cycles with ` · `.
+ * The impact table shared by the editor preview and the catalog panel.
  *
  * Every column prices a NEW subscriber — the calculator projects with no
  * customer at acquisition intent — so a first-time-only/locked rule shows in
  * every segment column even though existing subscribers are excluded at
- * checkout. A note below the table spells this out whenever segment columns are
- * present, so a segment named for existing subscribers isn't misread as
- * modeling their lifecycle (NPPD-1853).
+ * checkout. The note below the table spells this out whenever segment columns
+ * are present (NPPD-1853).
  */
 
 /**
  * WordPress dependencies
  */
 import { __ } from '@wordpress/i18n';
-import { useState, useEffect, useMemo } from '@wordpress/element';
+import { useState, useMemo, useId } from '@wordpress/element';
+import {
+	Button,
+	__experimentalHStack as HStack, // eslint-disable-line @wordpress/no-unsafe-wp-apis
+} from '@wordpress/components';
 // Not the Newspack wrapper: with-wizard-screen/style.scss gives `.newspack-dataviews`
 // a -48px page bleed that hangs this embedded table past the form column.
 import { DataViews, filterSortAndPaginate } from '@wordpress/dataviews';
@@ -26,7 +25,11 @@ import type { Field, View } from '@wordpress/dataviews';
 /**
  * Internal dependencies
  */
-import { formatPrice, formatSegment } from './impact-format';
+import { TableCard } from '../../../../../packages/components/src';
+import { cycleMarkerNote, formatPrice, formatSegment } from './impact-format';
+
+/** Rows shown before the publisher asks for the rest. */
+const ROW_LIMIT = 10;
 
 interface PriceColumn {
 	key: string;
@@ -35,7 +38,6 @@ interface PriceColumn {
 	byId: Record< number, CatalogImpactRow >;
 }
 
-/** Index a sample's rows by product id for per-column lookup. */
 function indexById( rows: CatalogImpactRow[] ): Record< number, CatalogImpactRow > {
 	const map: Record< number, CatalogImpactRow > = {};
 	for ( const row of rows ) {
@@ -44,7 +46,6 @@ function indexById( rows: CatalogImpactRow[] ): Record< number, CatalogImpactRow
 	return map;
 }
 
-/** One product's resulting price in one column: bare, stepped, or — when absent. */
 function ResultingCell( { row, currency }: { row?: CatalogImpactRow; currency: PricingRulesCurrency } ) {
 	if ( ! row ) {
 		return <span className="newspack-pricing-rules__muted">—</span>;
@@ -56,7 +57,7 @@ function ResultingCell( { row, currency }: { row?: CatalogImpactRow; currency: P
 		<>
 			{ row.segments.map( ( seg, i ) => (
 				<span key={ i } className={ seg.changed ? 'is-changed' : undefined }>
-					{ i > 0 ? ' · ' : '' }
+					{ i > 0 ? ' → ' : '' }
 					{ formatSegment( seg, currency ) }
 				</span>
 			) ) }
@@ -68,10 +69,15 @@ interface ImpactTableProps {
 	baseline: CatalogImpactRow[];
 	segmentGroups: SegmentImpactGroup[];
 	currency: PricingRulesCurrency;
+	// The editor carries this note in its section header instead, where it can
+	// appear before the preview has loaded.
+	showCycleNote?: boolean;
 }
 
-export default function ImpactTable( { baseline, segmentGroups, currency }: ImpactTableProps ) {
+export default function ImpactTable( { baseline, segmentGroups, currency, showCycleNote = true }: ImpactTableProps ) {
 	const hasSegments = segmentGroups.length > 0;
+	const [ expanded, setExpanded ] = useState( false );
+	const tableId = useId();
 
 	const columns: PriceColumn[] = useMemo(
 		() => [
@@ -131,16 +137,16 @@ export default function ImpactTable( { baseline, segmentGroups, currency }: Impa
 		[ columns, currency ]
 	);
 
-	const fieldIds = useMemo( () => [ 'regular', ...columns.map( col => col.key ) ], [ columns ] );
-	const fieldIdsKey = fieldIds.join( '|' );
+	const hasCycles = useMemo( () => columns.some( col => Object.values( col.byId ).some( row => row.segments.length > 1 ) ), [ columns ] );
 
-	// The server already caps the sample, so show all of it rather than re-truncating.
+	const fieldIds = useMemo( () => [ 'regular', ...columns.map( col => col.key ) ], [ columns ] );
+
+	// DataViews' own pagination is off; the See More slice is what shortens the table.
 	const perPage = Math.max( baseline.length, 1 );
 
 	const [ view, setView ] = useState< View >( () => ( {
 		type: 'table',
 		page: 1,
-		perPage,
 		search: '',
 		filters: [],
 		layout: { density: 'compact', enableMoving: false },
@@ -148,34 +154,66 @@ export default function ImpactTable( { baseline, segmentGroups, currency }: Impa
 		fields: fieldIds,
 	} ) );
 
-	// A segment column can appear or vanish while the publisher is editing.
-	useEffect( () => {
-		setView( prev => ( prev.fields?.join( '|' ) === fieldIdsKey && prev.perPage === perPage ? prev : { ...prev, fields: fieldIds, perPage } ) );
-		// eslint-disable-next-line react-hooks/exhaustive-deps
-	}, [ fieldIdsKey, perPage ] );
+	// perPage and the segment columns follow the data; in view state, an effect
+	// would land them a paint late.
+	const tableView = useMemo( () => ( { ...view, perPage, fields: fieldIds } ), [ view, perPage, fieldIds ] );
 
-	const { data, paginationInfo } = useMemo( () => filterSortAndPaginate( baseline, view, fields ), [ baseline, view, fields ] );
+	const { data: sorted, paginationInfo } = useMemo( () => filterSortAndPaginate( baseline, tableView, fields ), [ baseline, tableView, fields ] );
+
+	// A different product set re-collapses the table; keyed on ids alone so a
+	// refetch repricing the same products keeps the expansion. During render, so
+	// a wider sample never paints expanded first.
+	const sampleKey = useMemo( () => baseline.map( row => row.product_id ).join( ',' ), [ baseline ] );
+	const [ lastSample, setLastSample ] = useState( sampleKey );
+	if ( lastSample !== sampleKey ) {
+		setLastSample( sampleKey );
+		setExpanded( false );
+	}
+
+	// Sliced after the sort, so collapsing keeps the current top rows.
+	const collapsible = sorted.length > ROW_LIMIT;
+	const data = collapsible && ! expanded ? sorted.slice( 0, ROW_LIMIT ) : sorted;
 
 	return (
 		<>
-			<div
-				className="newspack-pricing-rules__impact-table"
-				role="region"
-				aria-label={ __( 'Resulting prices by product and reader segment', 'newspack-plugin' ) }
+			<TableCard
+				after={
+					collapsible ? (
+						<HStack justify="flex-start">
+							<Button
+								className="newspack-pricing-rules__see-more"
+								variant="link"
+								aria-expanded={ expanded }
+								aria-controls={ tableId }
+								onClick={ () => setExpanded( ! expanded ) }
+							>
+								{ expanded ? __( 'See Less', 'newspack-plugin' ) : __( 'See More', 'newspack-plugin' ) }
+							</Button>
+						</HStack>
+					) : undefined
+				}
 			>
-				<DataViews
-					data={ data }
-					fields={ fields }
-					view={ view }
-					onChangeView={ setView }
-					paginationInfo={ paginationInfo }
-					defaultLayouts={ { table: {} } }
-					getItemId={ ( item: CatalogImpactRow ) => String( item.product_id ) }
-					empty={ <p>{ __( 'No products to show.', 'newspack-plugin' ) }</p> }
+				<div
+					id={ tableId }
+					className="newspack-pricing-rules__impact-table"
+					role="region"
+					aria-label={ __( 'Resulting prices by product and reader segment', 'newspack-plugin' ) }
 				>
-					<DataViews.Layout />
-				</DataViews>
-			</div>
+					<DataViews
+						data={ data }
+						fields={ fields }
+						view={ tableView }
+						onChangeView={ setView }
+						paginationInfo={ paginationInfo }
+						defaultLayouts={ { table: {} } }
+						getItemId={ ( item: CatalogImpactRow ) => String( item.product_id ) }
+						empty={ <p className="newspack-pricing-rules__muted">{ __( 'No products to show.', 'newspack-plugin' ) }</p> }
+					>
+						<DataViews.Layout />
+					</DataViews>
+				</div>
+			</TableCard>
+			{ showCycleNote && hasCycles && <p className="newspack-pricing-rules__muted">{ cycleMarkerNote() }</p> }
 			{ hasSegments && (
 				<p className="newspack-pricing-rules__muted">
 					{ __(

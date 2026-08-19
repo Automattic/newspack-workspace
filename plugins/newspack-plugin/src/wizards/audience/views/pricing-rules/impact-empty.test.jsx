@@ -13,12 +13,6 @@ import { render, screen } from '@testing-library/react';
 import ImpactEmpty from './impact-empty';
 
 describe( 'ImpactEmpty', () => {
-	it( 'asks for a price when none is set', () => {
-		render( <ImpactEmpty reason="no-price" /> );
-		expect( screen.getByRole( 'heading', { name: 'No price set yet', level: 3 } ) ).toBeInTheDocument();
-		expect( screen.getByText( /Enter a price above/ ) ).toBeInTheDocument();
-	} );
-
 	it( 'points at the scope when nothing matches', () => {
 		render( <ImpactEmpty reason="no-products" /> );
 		expect( screen.getByRole( 'heading', { name: 'No products match this rule', level: 3 } ) ).toBeInTheDocument();

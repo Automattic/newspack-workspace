@@ -6,7 +6,7 @@
 /**
  * External dependencies
  */
-import { render, screen, fireEvent, act } from '@testing-library/react';
+import { render, screen, fireEvent, act, within } from '@testing-library/react';
 
 /**
  * WordPress dependencies
@@ -141,7 +141,9 @@ async function renderSavedRule( rule ) {
 }
 
 const field = label => screen.getByLabelText( label );
-const goal = label => screen.getByRole( 'radio', { name: new RegExp( label ) } );
+// Scoped: the status and pricing-details toggles are radios too.
+const goals = () => within( screen.getByRole( 'radiogroup', { name: 'Rule goal' } ) );
+const goal = label => goals().getByRole( 'radio', { name: new RegExp( label ) } );
 const appliesTo = () => [ ...document.querySelectorAll( 'select' ) ].find( s => [ ...s.options ].some( o => o.value === 'all_subscriptions' ) );
 const startsToggle = () => screen.getByRole( 'button', { name: /^Starts:/ } );
 
@@ -189,14 +191,14 @@ describe( 'choosing the goal from the form', () => {
 	it( 'keeps everything typed and re-seeds only what the goal owns', async () => {
 		await renderForm( 'custom' );
 		fireEvent.change( field( 'Name' ), { target: { value: 'Loyalty deal' } } );
-		fireEvent.change( field( 'Value' ), { target: { value: '12.5' } } );
+		fireEvent.change( field( /^Value/ ), { target: { value: '12.5' } } );
 		const starts = pickStartDate();
 		expect( appliesTo().value ).toBe( 'all_products' );
 
 		await changeGoalTo( 'Retention' );
 
 		expect( field( 'Name' ) ).toHaveValue( 'Loyalty deal' );
-		expect( field( 'Value' ) ).toHaveValue( 12.5 );
+		expect( field( /^Value/ ) ).toHaveValue( 12.5 );
 		expect( startsToggle().textContent ).toBe( starts );
 		expect( appliesTo().value ).toBe( 'all_subscriptions' );
 	} );
@@ -255,7 +257,7 @@ describe( 'choosing the goal from the form', () => {
 		[ 'winback', { lapsed_subscriber: true }, 'all_subscriptions', 'locked', 'subscription_start' ],
 	] )( 'applies the %s recipe on a cold load of its URL', async ( intent, conditions, scopeType, application, cycleAnchor ) => {
 		await renderForm( intent );
-		fireEvent.change( field( 'Value' ), { target: { value: '5' } } );
+		fireEvent.change( field( /^Value/ ), { target: { value: '5' } } );
 
 		const body = await save();
 		expect( body.intent ).toBe( intent );
@@ -272,7 +274,7 @@ describe( 'choosing the goal from the form', () => {
 
 	it( 'adopts a goal changed in the URL from outside the form', async () => {
 		const { rerender } = await renderForm( 'retention' );
-		fireEvent.change( field( 'Value' ), { target: { value: '5' } } );
+		fireEvent.change( field( /^Value/ ), { target: { value: '5' } } );
 
 		await act( async () => {
 			rerender( createElement( RuleForm, { isNew: true, initialPath: 'save', rule: null, vocab: VOCAB, onDone: jest.fn() } ) );
@@ -286,7 +288,7 @@ describe( 'choosing the goal from the form', () => {
 
 	it( 'puts a goal-less URL back on the goal it is holding', async () => {
 		const { rerender } = await renderForm( 'retention' );
-		fireEvent.change( field( 'Value' ), { target: { value: '5' } } );
+		fireEvent.change( field( /^Value/ ), { target: { value: '5' } } );
 
 		await act( async () => {
 			rerender( createElement( RuleForm, { isNew: true, initialPath: null, rule: null, vocab: VOCAB, onDone: jest.fn() } ) );
@@ -306,7 +308,7 @@ describe( 'choosing the goal from the form', () => {
 	it( 'drops a condition the new goal cannot show, and keeps the one it can', async () => {
 		await renderForm( 'custom' );
 		fireEvent.change( field( 'Name' ), { target: { value: 'Loyalty deal' } } );
-		fireEvent.change( field( 'Value' ), { target: { value: '5' } } );
+		fireEvent.change( field( /^Value/ ), { target: { value: '5' } } );
 		await act( async () => {
 			fireEvent.click( screen.getByRole( 'button', { name: 'Set Reader segment' } ) );
 		} );
@@ -318,14 +320,14 @@ describe( 'choosing the goal from the form', () => {
 
 	it( 'renders the picker with nothing chosen on a new rule', async () => {
 		await renderForm( null );
-		expect( screen.getAllByRole( 'radio' ) ).toHaveLength( 5 );
-		expect( screen.queryByRole( 'radio', { checked: true } ) ).toBeNull();
+		expect( goals().getAllByRole( 'radio' ) ).toHaveLength( 5 );
+		expect( goals().queryByRole( 'radio', { checked: true } ) ).toBeNull();
 	} );
 
 	it( 'refuses to save a rule with no goal', async () => {
 		await renderForm( null );
 		fireEvent.change( field( 'Name' ), { target: { value: 'Loyalty deal' } } );
-		fireEvent.change( field( 'Value' ), { target: { value: '5' } } );
+		fireEvent.change( field( /^Value/ ), { target: { value: '5' } } );
 
 		await act( async () => {
 			headerData.actions[ 0 ].action();
@@ -338,7 +340,7 @@ describe( 'choosing the goal from the form', () => {
 	describe( 'warning before Custom settings are discarded', () => {
 		it( 'switches straight away when Custom is holding nothing that would be lost', async () => {
 			await renderForm( 'custom' );
-			fireEvent.change( field( 'Value' ), { target: { value: '5' } } );
+			fireEvent.change( field( /^Value/ ), { target: { value: '5' } } );
 
 			await act( async () => {
 				fireEvent.click( goal( 'Win-Back' ) );
@@ -417,7 +419,7 @@ describe( 'choosing the goal from the form', () => {
 		it( 'resets the Custom-only priority and compose mode once confirmed', async () => {
 			await renderForm( 'custom' );
 			fireEvent.change( field( 'Name' ), { target: { value: 'Loyalty deal' } } );
-			fireEvent.change( field( 'Value' ), { target: { value: '5' } } );
+			fireEvent.change( field( /^Value/ ), { target: { value: '5' } } );
 			fireEvent.change( field( 'Priority' ), { target: { value: '5' } } );
 			fireEvent.change( field( 'When multiple rules match' ), { target: { value: 'priority_exclusive' } } );
 
@@ -441,22 +443,24 @@ describe( 'choosing the goal from the form', () => {
 		it( 'shows the whole set with the chosen goal checked and every card disabled', async () => {
 			await renderSavedRule( savedRule( 'retention' ) );
 
-			expect( screen.getAllByRole( 'radio' ) ).toHaveLength( 5 );
-			expect( screen.getByRole( 'radio', { checked: true } ) ).toHaveAccessibleName( /^Retention/ );
-			screen.getAllByRole( 'radio' ).forEach( radio => {
-				expect( radio ).toHaveAttribute( 'aria-disabled', 'true' );
-			} );
+			expect( goals().getAllByRole( 'radio' ) ).toHaveLength( 5 );
+			expect( goals().getByRole( 'radio', { checked: true } ) ).toHaveAccessibleName( /^Retention/ );
+			goals()
+				.getAllByRole( 'radio' )
+				.forEach( radio => {
+					expect( radio ).toHaveAttribute( 'aria-disabled', 'true' );
+				} );
 		} );
 
 		it( 'refuses to change the goal', async () => {
 			await renderSavedRule( savedRule( 'retention' ) );
 
 			await act( async () => {
-				fireEvent.click( screen.getByRole( 'radio', { name: /Win-Back/ } ) );
+				fireEvent.click( goals().getByRole( 'radio', { name: /Win-Back/ } ) );
 			} );
 
 			expect( screen.queryByRole( 'dialog' ) ).toBeNull();
-			expect( screen.getByRole( 'radio', { checked: true } ) ).toHaveAccessibleName( /^Retention/ );
+			expect( goals().getByRole( 'radio', { checked: true } ) ).toHaveAccessibleName( /^Retention/ );
 		} );
 
 		it( 'falls back to Custom when the rule has no goal', async () => {
@@ -464,7 +468,7 @@ describe( 'choosing the goal from the form', () => {
 			rule.id = 4;
 			await renderSavedRule( rule );
 
-			expect( screen.getByRole( 'radio', { checked: true } ) ).toHaveAccessibleName( /^Custom/ );
+			expect( goals().getByRole( 'radio', { checked: true } ) ).toHaveAccessibleName( /^Custom/ );
 			expect( field( 'Priority' ) ).toBeInTheDocument();
 		} );
 
@@ -473,7 +477,7 @@ describe( 'choosing the goal from the form', () => {
 			rule.id = 5;
 			await renderSavedRule( rule );
 
-			expect( screen.getByRole( 'radio', { checked: true } ) ).toHaveAccessibleName( /^Custom/ );
+			expect( goals().getByRole( 'radio', { checked: true } ) ).toHaveAccessibleName( /^Custom/ );
 			expect( field( 'Priority' ) ).toBeInTheDocument();
 			expect( ( await save() ).intent ).toBe( 'custom' );
 		} );
