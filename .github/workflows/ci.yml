@@ -350,6 +350,11 @@ jobs:
           fi
       - name: Install WordPress test suite
         if: steps.check.outputs.has_tests == 'true'
+        # Below the job budget on purpose. A transfer slow enough to keep
+        # retrying but never trip the speed limit can burn --max-time on every
+        # attempt, and hitting the job timeout instead reports as a cancelled
+        # job that names no step. Failing here names this step.
+        timeout-minutes: 15
         run: |
           # Every fetch below is a stall risk, and an unguarded one used to wedge
           # here with no output naming the URL it was on. curl aborts a transfer
@@ -359,7 +364,7 @@ jobs:
             curl --fail --location --silent --show-error \
               --connect-timeout 15 --max-time 300 \
               --speed-limit 1024 --speed-time 30 \
-              --retry 5 --retry-delay 5 --retry-all-errors "$@"
+              --retry 5 --retry-delay 5 --retry-max-time 300 --retry-all-errors "$@"
           }
 
           mkdir -p "$WP_TESTS_DIR"
