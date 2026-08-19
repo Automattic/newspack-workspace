@@ -429,9 +429,16 @@ class Outgoing_Post {
 		// this window from outliving it. The try/finally is for the same reason: a
 		// throwing filter must not leave gating switched off for the rest of the
 		// request.
+		//
+		// Block-level visibility is suspended for the same reason, and it matters
+		// which entry point ran: it stands down on its own in the editor and over
+		// REST, so without this a post distributed from WP-CLI reached the node
+		// stripped of its access-controlled blocks while the same post distributed
+		// from the editor reached it whole.
 		$suspend_gating = class_exists( '\Newspack\Content_Gate' ) && method_exists( '\Newspack\Content_Gate', 'flush_withhold_cache' );
 		if ( $suspend_gating ) {
 			add_filter( 'newspack_content_gate_restrict_post', '__return_false', PHP_INT_MAX );
+			add_filter( 'newspack_content_gate_apply_block_visibility', '__return_false', PHP_INT_MAX );
 			\Newspack\Content_Gate::flush_withhold_cache();
 		}
 		try {
@@ -440,6 +447,7 @@ class Outgoing_Post {
 		} finally {
 			if ( $suspend_gating ) {
 				remove_filter( 'newspack_content_gate_restrict_post', '__return_false', PHP_INT_MAX );
+				remove_filter( 'newspack_content_gate_apply_block_visibility', '__return_false', PHP_INT_MAX );
 				\Newspack\Content_Gate::flush_withhold_cache();
 			}
 			add_filter( 'the_content', [ $wp_embed, 'autoembed' ], 8 );

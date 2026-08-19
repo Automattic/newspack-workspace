@@ -279,8 +279,10 @@ trait Content_Gate_Layout {
 			$style = self::get_layout_meta_default( 'style' );
 		}
 
-		// Use <!--more--> as threshold if it exists.
-		if ( $use_more_tag && strpos( $content, '<!--more-->' ) ) {
+		// Use <!--more--> as threshold if it exists. Compared against false rather
+		// than tested for truth: a post that opens with the tag puts it at offset 0,
+		// and "0" is what an author means by "no free preview".
+		if ( $use_more_tag && false !== strpos( $content, '<!--more-->' ) ) {
 			$content = apply_filters( 'newspack_gate_content', explode( '<!--more-->', $content )[0] );
 		} else {
 			if ( 0 === $count ) {

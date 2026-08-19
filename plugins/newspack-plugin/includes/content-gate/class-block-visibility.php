@@ -53,10 +53,31 @@ class Block_Visibility {
 			return $block_content;
 		}
 
-		// Bypass access control in admin screens and REST requests (block renderer,
-		// preview, query-loop rendering inside the editor) so blocks are never hidden
-		// from editors during content authoring.
-		if ( is_admin() || ( defined( 'REST_REQUEST' ) && REST_REQUEST ) ) {
+		/**
+		 * Filters whether block visibility applies to this render at all.
+		 *
+		 * For code that renders a post for something other than a reader — content
+		 * distribution building a payload for a node site, an export — where the
+		 * whole post is wanted and the receiving end does its own gating.
+		 *
+		 * @param bool  $apply Whether to withhold blocks hidden from this reader.
+		 * @param array $block Parsed block.
+		 */
+		if ( ! apply_filters( 'newspack_content_gate_apply_block_visibility', true, $block ) ) {
+			return $block_content;
+		}
+
+		// Bypass access control while a post is being authored (the block renderer,
+		// the editor preview, query-loop rendering inside the editor) so blocks are
+		// never hidden from the person editing them.
+		//
+		// Gated on the reader being able to edit at all. REST_REQUEST on its own is
+		// also true for unauthenticated reads of /wp/v2/posts, where the bypass
+		// returned members-only blocks in `content.rendered` to anyone who asked.
+		if (
+			( is_admin() || ( defined( 'REST_REQUEST' ) && REST_REQUEST ) )
+			&& current_user_can( 'edit_posts' )
+		) {
 			return $block_content;
 		}
 
@@ -106,8 +127,8 @@ class Block_Visibility {
 		// Lives in this shared predicate rather than in filter_render_block() so the
 		// excerpt path answers the same way: with Reader Activation off, an excerpt
 		// must not withhold a block the page around it renders in full.
-		// filter_render_block()'s admin and REST bypass still returns before reaching
-		// here, so editor and REST renders don't pay for the option read.
+		// filter_render_block()'s authoring bypass still returns before reaching here,
+		// so a render for someone editing the post doesn't pay for the option read.
 		if ( ! Reader_Activation::is_enabled() ) {
 			return false;
 		}

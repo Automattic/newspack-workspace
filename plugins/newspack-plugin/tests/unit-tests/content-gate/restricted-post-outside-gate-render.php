@@ -309,6 +309,28 @@ class Test_Restricted_Post_Outside_Gate_Render extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * A `<!--more-->` tag at the very top of a post leaves no free preview.
+	 *
+	 * The tag is the author's own mark for where the free part ends, and at the
+	 * top of the body that means "none of it" -- not the paragraph count that
+	 * applies to a post carrying no tag at all.
+	 */
+	public function test_a_more_tag_at_the_top_leaves_no_free_preview() {
+		$post_id = $this->factory->post->create(
+			[
+				'post_status'  => 'publish',
+				'post_content' => '<!--more-->'
+					. '<!-- wp:paragraph --><p>' . self::PAID_MARKER . '</p><!-- /wp:paragraph -->',
+			]
+		);
+
+		$teaser = Content_Gate::get_withheld_teaser( $post_id );
+
+		$this->assertStringNotContainsString( self::PAID_MARKER, $teaser );
+		$this->assertSame( '', trim( wp_strip_all_tags( $teaser ) ) );
+	}
+
+	/**
 	 * The pages a reader needs in order to resolve a gate are never withheld,
 	 * wherever they are rendered. Gating My Account hides the sign-in form the
 	 * gate is asking the reader to use.
