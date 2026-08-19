@@ -335,7 +335,7 @@ class Content_Gate {
 			return;
 		}
 		// Never on Accessibility Statement page.
-		if ( $post->ID === get_theme_mod( 'accessibility_statement_page_id' ) ) {
+		if ( $post->ID === Accessibility_Statement_Page::get_page_id() ) {
 			return;
 		}
 

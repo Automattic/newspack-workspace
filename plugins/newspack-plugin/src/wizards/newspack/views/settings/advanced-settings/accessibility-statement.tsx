@@ -8,6 +8,7 @@
 import { __ } from '@wordpress/i18n';
 import { useEffect, useState } from '@wordpress/element';
 import { ExternalLink } from '@wordpress/components';
+import { speak } from '@wordpress/a11y';
 import { Button, Card, Notice, SectionHeader } from '../../../../../../packages/components/src';
 import { useWizardApiFetch } from '../../../../hooks/use-wizard-api-fetch';
 
@@ -16,83 +17,93 @@ interface AccessibilityStatementProps {
 }
 
 type PageData = {
-	editUrl: string;
+	editUrl: string | null;
 	status: string;
-	pageUrl: string;
+	pageUrl: string | false;
+	title: string;
 };
 
+/**
+ * Where no page exists, the server says whether the site has never created one
+ * ( 'none' ) or created one that has since gone ( 'missing' ).
+ */
+type PageResponse = PageData | { status: 'none' | 'missing' };
+
+const isPage = ( response: PageResponse ): response is PageData =>
+	Boolean( response?.status ) && response.status !== 'none' && response.status !== 'missing';
+
 export default function AccessibilityStatement( { isFetching }: AccessibilityStatementProps ) {
-	const { wizardApiFetch } = useWizardApiFetch( 'newspack-settings/advanced-settings/accessibility-statement' );
+	const { wizardApiFetch, errorMessage, resetError } = useWizardApiFetch( 'newspack-settings/advanced-settings/accessibility-statement' );
 	const [ localIsFetching, setLocalIsFetching ] = useState( false );
 	const [ localPageData, setLocalPageData ] = useState< PageData | null >( null );
+	const [ isPageMissing, setIsPageMissing ] = useState( false );
 
-	// Function to fetch fresh data
-	const fetchFreshData = () => {
-		setLocalIsFetching( true );
-		wizardApiFetch(
-			{
-				path: `/newspack/v1/wizard/newspack-settings/accessibility-statement`,
-				method: 'GET',
-			},
-			{
-				onSuccess: response => {
-					if ( response && response.editUrl && response.status && response.status !== 'trash' ) {
-						setLocalPageData( response );
-					} else {
-						setLocalPageData( null );
-					}
-					setLocalIsFetching( false );
-				},
-				onError: () => {
-					setLocalPageData( null );
-					setLocalIsFetching( false );
-				},
-			}
-		);
+	const applyResponse = ( response: PageResponse, announce = false ) => {
+		// A retry that succeeds must clear the notice the failure left behind.
+		resetError();
+		if ( isPage( response ) ) {
+			setLocalPageData( response );
+			setIsPageMissing( false );
+		} else {
+			setLocalPageData( null );
+			setIsPageMissing( response?.status === 'missing' );
+		}
+		setLocalIsFetching( false );
+		if ( announce ) {
+			speak( __( 'Accessibility statement page created.', 'newspack-plugin' ) );
+		}
 	};
 
-	// Only fetch on mount
+	const handleError = ( error: { message?: string } ) => {
+		setLocalPageData( null );
+		setIsPageMissing( false );
+		setLocalIsFetching( false );
+		// The notice is a plain div, so nothing else announces the failure.
+		speak( error?.message ?? __( 'Something went wrong.', 'newspack-plugin' ), 'assertive' );
+	};
+
 	useEffect( () => {
-		if ( ! localPageData ) {
-			fetchFreshData();
-		}
+		setLocalIsFetching( true );
+		wizardApiFetch< PageResponse >(
+			{
+				path: '/newspack/v1/wizard/newspack-settings/accessibility-statement',
+				method: 'GET',
+			},
+			{ onSuccess: applyResponse, onError: handleError }
+		).catch( () => {} );
 	}, [] );
 
 	const createPage = () => {
 		setLocalIsFetching( true );
-		wizardApiFetch(
+		wizardApiFetch< PageResponse >(
 			{
 				path: '/newspack/v1/wizard/newspack-settings/accessibility-statement',
 				method: 'POST',
-				data: {
-					force_create: 'true', // Force creation of a new page
-				},
+				// The POST answers with the page, so it can refresh the cached
+				// GET rather than leaving a stale "no page" behind it.
+				updateCacheMethods: [ 'GET' ],
 			},
 			{
-				onSuccess: response => {
-					if ( response && response.editUrl && response.status ) {
-						setLocalPageData( response );
-					} else {
-						setLocalPageData( null );
-					}
-					fetchFreshData();
-				},
-				onError: () => {
-					setLocalPageData( null );
-					setLocalIsFetching( false );
-				},
+				onSuccess: response => applyResponse( response, true ),
+				onError: handleError,
 			}
-		);
+		).catch( () => {} );
 	};
 
 	const getStatusMessage = () => {
+		if ( errorMessage ) {
+			return { type: 'error', message: errorMessage };
+		}
+
 		if ( ! localPageData ) {
 			return {
 				type: 'warning',
-				message: __(
-					'Your accessibility statement page has been moved to trash or deleted. Click "Create Page" to create a new one.',
-					'newspack-plugin'
-				),
+				message: isPageMissing
+					? __(
+							'Your accessibility statement page has been moved to trash or deleted. Click "Create Page" to create a new one.',
+							'newspack-plugin'
+					  )
+					: __( 'You do not have an accessibility statement page yet. Click "Create Page" to add one.', 'newspack-plugin' ),
 			};
 		}
 
@@ -102,21 +113,11 @@ export default function AccessibilityStatement( { isFetching }: AccessibilitySta
 					type: 'success',
 					message: __( 'Your accessibility statement page is published.', 'newspack-plugin' ),
 				};
-			case 'draft':
-			case 'pending':
-				return {
-					type: 'warning',
-					message: __(
-						'Your accessibility statement page is not yet published. Please review and make edits before publishing.',
-						'newspack-plugin'
-					),
-				};
-			case 'trash':
 			default:
 				return {
 					type: 'warning',
 					message: __(
-						'Your accessibility statement page has been moved to trash. Click "Create Page" to create a new one.',
+						'Your accessibility statement page is not yet published. Please review and make edits before publishing.',
 						'newspack-plugin'
 					),
 				};
@@ -131,13 +132,27 @@ export default function AccessibilityStatement( { isFetching }: AccessibilitySta
 		switch ( localPageData.status ) {
 			case 'publish':
 				return __( 'Edit Page', 'newspack-plugin' );
-			case 'draft':
-			case 'pending':
-				return __( 'Edit and Publish Page', 'newspack-plugin' );
-			case 'trash':
 			default:
-				return __( 'Create Page', 'newspack-plugin' );
+				return __( 'Edit and Publish Page', 'newspack-plugin' );
 		}
+	};
+
+	// A page the user cannot edit has no edit URL, and Create would only hand
+	// back the page they already cannot open.
+	const renderAction = () => {
+		if ( localPageData ) {
+			return localPageData.editUrl ? (
+				<Button variant="secondary" isSmall href={ localPageData.editUrl }>
+					{ getButtonText() }
+				</Button>
+			) : null;
+		}
+
+		return (
+			<Button variant="secondary" isSmall onClick={ createPage } disabled={ isFetching || localIsFetching }>
+				{ getButtonText() }
+			</Button>
+		);
 	};
 
 	const statusInfo = getStatusMessage();
@@ -153,18 +168,15 @@ export default function AccessibilityStatement( { isFetching }: AccessibilitySta
 						'newspack-plugin'
 					) }
 				/>
-				{ localPageData && localPageData.status !== 'trash' ? (
-					<Button variant="secondary" isSmall href={ localPageData.editUrl }>
-						{ getButtonText() }
-					</Button>
-				) : (
-					<Button variant="secondary" isSmall onClick={ createPage } disabled={ isFetching || localIsFetching }>
-						{ getButtonText() }
-					</Button>
-				) }
+				{ renderAction() }
 			</Card>
 
-			<Notice isSuccess={ statusInfo.type === 'success' } isWarning={ statusInfo.type === 'warning' } noticeText={ statusInfo.message } />
+			<Notice
+				isError={ statusInfo.type === 'error' }
+				isSuccess={ statusInfo.type === 'success' }
+				isWarning={ statusInfo.type === 'warning' }
+				noticeText={ statusInfo.message }
+			/>
 
 			<p>
 				{ __(
