@@ -125,10 +125,20 @@ jobs:
         run: |
           set -euo pipefail
           if [ "$REQUIRE_RELEASE" != "true" ]; then
-            if [ "$DEPLOY_REF" != "release" ]; then
-              echo "::warning::Deploying from '$DEPLOY_REF', not the release branch. Publishing $VERSION to wordpress.org from unreleased code."
+            # What the annotation is guarding is whether the commit being
+            # published is on the release branch -- not what the ref was
+            # called. An exact SHA is the most precise input there is, so
+            # comparing the ref string to "release" would warn on the safest
+            # case and stay quiet on a moving branch tip. Ask git instead.
+            release_head=$(git rev-parse --verify --quiet refs/remotes/origin/release || true)
+            sha=$(git rev-parse --short HEAD)
+            if [ -z "$release_head" ]; then
+              echo "::warning::Manual deploy; could not resolve origin/release to check '$DEPLOY_REF' against. Publishing $VERSION from $sha."
+            elif git merge-base --is-ancestor HEAD "$release_head"; then
+              echo "::notice::Manual deploy; publishing $VERSION from $sha, a commit on the release branch."
+            else
+              echo "::warning::Manual deploy; '$DEPLOY_REF' ($sha) is not on the release branch. Publishing $VERSION to wordpress.org from code that was never released."
             fi
-            echo "::notice::Manual deploy; publishing the resolved version $VERSION."
             echo "deploy=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
