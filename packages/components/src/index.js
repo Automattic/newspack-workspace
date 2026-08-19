@@ -46,10 +46,12 @@ export { default as StepsList } from './steps-list';
 export { default as StepsListItem } from './steps-list-item';
 export { default as StyleCard } from './style-card';
 export { default as TabbedNavigation } from './tabbed-navigation';
+export { default as TableCard } from './table-card';
 export { default as TextControl } from './text-control';
 export { default as Waiting } from './waiting';
 export { default as WebPreview } from './web-preview';
 export { default as Wizard } from './wizard';
+export { WizardBanner } from './wizard';
 export { default as withWizard } from './with-wizard';
 export { default as withWizardScreen } from './with-wizard-screen';
 
