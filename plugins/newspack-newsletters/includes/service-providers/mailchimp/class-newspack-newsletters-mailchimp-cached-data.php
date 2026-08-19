@@ -440,9 +440,34 @@ final class Newspack_Newsletters_Mailchimp_Cached_Data {
 
 		Newspack_Newsletters_Logger::log( 'Mailchimp cache: No data found. Dispatching refresh' );
 		self::$has_cold_cache = true;
+		self::forget_missing_option( self::get_cache_key( $list_id ) );
 		self::dispatch_refresh( $list_id );
 
 		return [];
+	}
+
+	/**
+	 * Forgets that an option was missing.
+	 *
+	 * WordPress records a missing option in the `notoptions` cache and answers
+	 * later reads from that record without querying the database. The refresh
+	 * dispatched just above writes this option moments later from its own
+	 * request, so keeping the record hides that write: with a persistent object
+	 * cache it outlives the request, every later read is told the option is still
+	 * missing, and the data never appears.
+	 *
+	 * Clearing it here, in the same request that recorded it, also keeps that
+	 * request from writing the record back when it reads its next missing option.
+	 *
+	 * @param string $option The option name.
+	 * @return void
+	 */
+	private static function forget_missing_option( $option ) {
+		$notoptions = wp_cache_get( 'notoptions', 'options' );
+		if ( is_array( $notoptions ) && isset( $notoptions[ $option ] ) ) {
+			unset( $notoptions[ $option ] );
+			wp_cache_set( 'notoptions', $notoptions, 'options' );
+		}
 	}
 
 	/**
