@@ -5,7 +5,7 @@
 /**
  * Internal dependencies.
  */
-import { discountLabel, formatCurrency, isValidRule, subscriberPrice, targetingLabel } from './discount';
+import { discountLabel, formatCurrency, isValidRule, subscriberPrice, subscriptionsLabel, targetingLabel } from './discount';
 
 const GBP = {
 	code: 'GBP',
@@ -56,6 +56,27 @@ describe( 'discountLabel', () => {
 	it( 'shows a percentage as a percentage and an amount as money', () => {
 		expect( discountLabel( { discount_type: 'percent', amount: 15 }, GBP ) ).toBe( '15%' );
 		expect( discountLabel( { discount_type: 'fixed', amount: 51 }, GBP ) ).toBe( '£51.00' );
+	} );
+} );
+
+describe( 'subscriptionsLabel', () => {
+	const options = [
+		{ id: 10, name: 'Digital Monthly' },
+		{ id: 11, name: 'Print &amp; Digital' },
+	];
+
+	it( 'names the subscriptions, decoded, in rule order', () => {
+		expect( subscriptionsLabel( [ 10 ], options ) ).toBe( 'Digital Monthly' );
+		expect( subscriptionsLabel( [ 11, 10 ], options ) ).toBe( 'Print & Digital, Digital Monthly' );
+	} );
+
+	it( 'falls back to a count when no name is known', () => {
+		expect( subscriptionsLabel( [ 99 ], options ) ).toBe( '1 subscription' );
+		expect( subscriptionsLabel( [ 98, 99 ], [] ) ).toBe( '2 subscriptions' );
+	} );
+
+	it( 'counts the ids it cannot name alongside the ones it can', () => {
+		expect( subscriptionsLabel( [ 10, 98, 99 ], options ) ).toBe( 'Digital Monthly + 2 more' );
 	} );
 } );
 

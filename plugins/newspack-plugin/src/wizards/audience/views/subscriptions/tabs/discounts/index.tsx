@@ -27,7 +27,7 @@ import { WIZARD_STORE_NAMESPACE } from '../../../../../../../packages/components
 import { SEARCH_ENDPOINTS, WIZARD_ENDPOINT } from '../../constants';
 import { registerTab } from '../registry';
 import { DISCOUNTS_ENDPOINT } from './constants';
-import { DEFAULT_CURRENCY, discountLabel, excludedLabel, targetingBaseLabel, targetingLabel } from './discount';
+import { DEFAULT_CURRENCY, discountLabel, excludedLabel, subscriptionsLabel, targetingBaseLabel, targetingLabel } from './discount';
 import DiscountEditor from './editor';
 import SettingsModal from './settings-modal';
 import type { DiscountRule, DiscountsPayload } from './types';
@@ -123,12 +123,7 @@ function SubscriberDiscounts() {
 				elements: subscriptionOptions.map( option => ( { value: option.id, label: decodeEntities( option.name ) } ) ),
 				filterBy: { operators: [ 'isAny' ] },
 				getValue: ( { item } ) => item.subscription_product_ids,
-				render: ( { item } ) =>
-					sprintf(
-						/* translators: %d: number of subscriptions whose subscribers get the discount. */
-						_n( '%d subscription', '%d subscriptions', item.subscription_product_ids.length, 'newspack-plugin' ),
-						item.subscription_product_ids.length
-					),
+				render: ( { item } ) => subscriptionsLabel( item.subscription_product_ids, subscriptionOptions ),
 			},
 			{
 				id: 'status',

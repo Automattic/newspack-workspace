@@ -13,6 +13,7 @@
  * WordPress dependencies.
  */
 import { __, _n, sprintf } from '@wordpress/i18n';
+import { decodeEntities } from '@wordpress/html-entities';
 
 /**
  * Internal dependencies.
@@ -93,6 +94,38 @@ export function discountLabel( rule: Pick< DiscountRule, 'discount_type' | 'amou
 				String( rule.amount )
 		  )
 		: formatCurrency( rule.amount, currency );
+}
+
+/**
+ * The rule's audience, as shown in the list's Subscription column.
+ *
+ * Names the subscriptions where the options list can resolve them; ids it
+ * cannot resolve (a deleted product, or a site with more subscriptions than
+ * one options page) fall back to a count so the cell never goes blank.
+ *
+ * @param ids     The rule's subscription product ids.
+ * @param options Known subscription products.
+ */
+export function subscriptionsLabel( ids: number[], options: { id: number; name: string }[] ): string {
+	const names = ids.map( id => options.find( option => option.id === id )?.name ).filter( ( name ): name is string => !! name );
+	if ( ! names.length ) {
+		return sprintf(
+			/* translators: %d: number of subscriptions whose subscribers get the discount. */
+			_n( '%d subscription', '%d subscriptions', ids.length, 'newspack-plugin' ),
+			ids.length
+		);
+	}
+	const listed = names.map( decodeEntities ).join( ', ' );
+	const unresolved = ids.length - names.length;
+	if ( unresolved > 0 ) {
+		return sprintf(
+			/* translators: %1$s: subscription names, %2$d: number of further subscriptions the rule also covers. */
+			_n( '%1$s + %2$d more', '%1$s + %2$d more', unresolved, 'newspack-plugin' ),
+			listed,
+			unresolved
+		);
+	}
+	return listed;
 }
 
 type TargetingFieldsOnly = Pick< DiscountRule, 'targeting' | 'product_ids' | 'category_ids' | 'excluded_product_ids' >;
