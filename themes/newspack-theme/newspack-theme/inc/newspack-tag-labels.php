@@ -147,6 +147,7 @@ function newspack_tag_labels_styles() {
 		.tag-labels .tag-label.flag,
 		amp-script .tag-labels .tag-label.flag,
 		.wpnbha .tag-labels a.flag,
+		.wpnbpc .tag-labels a.flag,
 		.featured-image-behind .tag-labels a.flag {
 			background: <?php echo esc_attr( $flag_color ); ?>;
 			color: <?php echo esc_attr( $flag_color_contrast ); ?>;

@@ -235,9 +235,8 @@ describe( 'CatalogImpact', () => {
 		} );
 	} );
 
-	// The engine echoes the cap it applied; the client's constant is only a fallback.
-	it( 'says the table is a sample against the cap the engine reports', async () => {
-		apiFetch.mockResolvedValue( detail( { preview_limited: true, sample_count: 3, sample_limit: 3 } ) );
+	it( 'says the table is a sample when the engine reports a partial preview', async () => {
+		apiFetch.mockResolvedValue( detail( { preview_limited: true, sample_count: 3 } ) );
 		render( <CatalogImpact stats={ stats() } /> );
 
 		await act( async () => {
@@ -247,9 +246,8 @@ describe( 'CatalogImpact', () => {
 		expect( screen.getByText( 'Showing a sample of 3 products.' ) ).toBeInTheDocument();
 	} );
 
-	// The engine flags a preview as limited when it merely skipped an unpriceable product.
-	it( 'says nothing about sampling when the table never reached the cap', async () => {
-		apiFetch.mockResolvedValue( detail( { preview_limited: true, sample_count: 3, sample_limit: 50 } ) );
+	it( 'says nothing about sampling when the whole set is shown', async () => {
+		apiFetch.mockResolvedValue( detail( { preview_limited: false, sample_count: 3 } ) );
 		render( <CatalogImpact stats={ stats() } /> );
 
 		await act( async () => {

@@ -99,7 +99,13 @@ export default function RulePreview( { body, showCycleNote }: RulePreviewProps )
 
 	return (
 		<div className={ `newspack-pricing-rules__preview${ isLoading ? ' is-loading' : '' }` }>
-			<ImpactStats totalMatching={ preview.total_matching } countLimited={ preview.count_limited } audience={ preview.audience } />
+			{ /* impact_preview() documents a capped total as an upper bound, not a floor. */ }
+			<ImpactStats
+				totalMatching={ preview.total_matching }
+				countLimited={ preview.count_limited }
+				countBound="upper"
+				audience={ preview.audience }
+			/>
 			<ImpactTable
 				baseline={ preview.sample }
 				segmentGroups={ preview.segment_groups ?? [] }

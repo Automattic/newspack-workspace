@@ -32,17 +32,17 @@ if ( true === get_theme_mod( 'post_excerpt_instead_of_subtitle', false ) ) {
 	if ( ! is_page() ) :
 		if ( ! empty( $native_sponsors ) ) {
 			newspack_sponsor_label( $native_sponsors, null, true );
-			if ( $tag_labels ) {
-				newspack_display_tag_labels( $tag_labels );
-			}
 			if ( $display_sponsors_and_categories ) {
 				newspack_categories();
 			}
-		} else {
 			if ( $tag_labels ) {
 				newspack_display_tag_labels( $tag_labels );
 			}
+		} else {
 			newspack_categories();
+			if ( $tag_labels ) {
+				newspack_display_tag_labels( $tag_labels );
+			}
 		}
 	endif;
 	?>
