@@ -245,6 +245,132 @@ class API {
 	}
 
 	/**
+	 * Remove block custom CSS from post content.
+	 *
+	 * Core has `wp_strip_custom_css_from_blocks()`, but only since WordPress 7.0,
+	 * and guarding on its existence would gate on feature availability rather than
+	 * on safety: content stored on an older site keeps the attribute, and it starts
+	 * rendering the day that site upgrades. Stripping it ourselves closes that
+	 * window and keeps one code path under test. Matches core's output where no
+	 * block carries custom CSS, including the untouched-bytes case; once something
+	 * is stripped this re-serializes the document while core splices only the
+	 * attribute it changed, so siblings written in non-canonical form normalize.
+	 *
+	 * @param string $content Post content.
+	 *
+	 * @return string The content with any block custom CSS removed.
+	 */
+	private static function strip_block_custom_css( string $content ): string {
+		if ( ! has_blocks( $content ) ) {
+			return $content;
+		}
+
+		$removed = false;
+		$blocks  = self::remove_custom_css_attribute( parse_blocks( $content ), $removed );
+
+		// Return the original bytes when there was nothing to strip. This is for the
+		// payload copy stored alongside the post: get_post_content() re-serializes
+		// block content on its way to post_content regardless, but the stored
+		// payload keeps whatever we hand it, so normalizing here would rewrite the
+		// sender's markup in the one place it survives verbatim.
+		if ( ! $removed ) {
+			return $content;
+		}
+
+		return serialize_blocks( $blocks );
+	}
+
+	/**
+	 * Recursively drop the `style.css` attribute from parsed blocks.
+	 *
+	 * @param array $blocks  Parsed blocks.
+	 * @param bool  $removed Set to true when any custom CSS was found and removed.
+	 *
+	 * @return array The blocks, without custom CSS.
+	 */
+	private static function remove_custom_css_attribute( array $blocks, bool &$removed ): array {
+		foreach ( $blocks as $index => $block ) {
+			if ( isset( $block['attrs']['style']['css'] ) ) {
+				unset( $blocks[ $index ]['attrs']['style']['css'] );
+				$removed = true;
+
+				// Match core: an emptied style attribute is removed, not left behind.
+				if ( empty( $blocks[ $index ]['attrs']['style'] ) ) {
+					unset( $blocks[ $index ]['attrs']['style'] );
+				}
+			}
+
+			if ( ! empty( $block['innerBlocks'] ) ) {
+				$blocks[ $index ]['innerBlocks'] = self::remove_custom_css_attribute( $block['innerBlocks'], $removed );
+			}
+		}
+
+		return $blocks;
+	}
+
+	/**
+	 * Hold caller-supplied content to the caller's own capabilities.
+	 *
+	 * This route's payload is composed in the browser rather than by a peer site,
+	 * and Incoming_Post::insert() stores content with kses disabled, which is only
+	 * defensible for trusted-node content. So content is filtered here, against the
+	 * requesting user's own capabilities.
+	 *
+	 * Scoped deliberately to this route. Distribution between sites arrives as a
+	 * Data Event carrying network credentials and never passes through here, so
+	 * it keeps storing content verbatim — see test_event_path_content_is_not_filtered.
+	 *
+	 * Covers both content sinks core guards on a normal save: HTML through kses,
+	 * and block custom CSS. Deliberately applies those directly rather than running
+	 * the `content_save_pre` chain: a security guard should not depend on global
+	 * filter registration, which any plugin can clear with kses_remove_filters().
+	 *
+	 * @param mixed $payload The incoming payload.
+	 *
+	 * @return mixed The payload, with content filtered where the caller requires it.
+	 */
+	private static function filter_incoming_content( mixed $payload ): mixed {
+		if ( ! is_array( $payload ) || empty( $payload['post_data'] ) || ! is_array( $payload['post_data'] ) ) {
+			return $payload;
+		}
+
+		// Checked separately because core gates them separately: it registers the
+		// custom-CSS strip for callers without edit_css and kses for callers without
+		// unfiltered_html. Both meta caps resolve to the same primitive by default,
+		// but map_meta_cap is a filter and a plugin can diverge them, so mirroring
+		// core's two gates keeps this correct either way.
+		$strip_css   = ! current_user_can( 'edit_css' );
+		$filter_html = ! current_user_can( 'unfiltered_html' );
+
+		if ( ! $strip_css && ! $filter_html ) {
+			return $payload;
+		}
+
+		// Both fields can reach post_content: get_post_content() returns 'content'
+		// unless 'raw_content' carries blocks, in which case that is what is stored.
+		foreach ( [ 'content', 'raw_content' ] as $field ) {
+			if ( ! isset( $payload['post_data'][ $field ] ) || ! is_string( $payload['post_data'][ $field ] ) ) {
+				continue;
+			}
+
+			$value = $payload['post_data'][ $field ];
+
+			// Core's order: the custom-CSS strip runs at priority 8, kses at 10.
+			if ( $strip_css ) {
+				$value = self::strip_block_custom_css( $value );
+			}
+
+			if ( $filter_html ) {
+				$value = wp_kses_post( $value );
+			}
+
+			$payload['post_data'][ $field ] = $value;
+		}
+
+		return $payload;
+	}
+
+	/**
 	 * Insert a post given an Outgoing_Post payload.
 	 *
 	 * @param WP_REST_Request $request The REST request object.
@@ -252,7 +378,7 @@ class API {
 	 * @return WP_REST_Response|WP_Error The REST response or error.
 	 */
 	public static function insert_post( $request ): WP_REST_Response|WP_Error {
-		$payload = $request->get_param( 'payload' );
+		$payload = self::filter_incoming_content( $request->get_param( 'payload' ) );
 
 		try {
 			$incoming_post = new Incoming_Post( $payload );
