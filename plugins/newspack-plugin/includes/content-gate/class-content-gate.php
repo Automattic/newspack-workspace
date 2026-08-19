@@ -200,6 +200,14 @@ class Content_Gate {
 		add_filter( 'newspack_popups_assess_has_disabled_popups', [ __CLASS__, 'disable_popups' ] );
 		add_filter( 'newspack_reader_activity_article_view', [ __CLASS__, 'suppress_article_view_activity' ], 100 );
 
+		// Apple News fetches an exporter to build the article it pushes. That is not a
+		// page for a reader, and the automatic path runs from a scheduled event with
+		// no user — the state withholding answers "withhold" in, which would publish
+		// the teaser to Apple News as the article. The plugin offers no matching
+		// "export finished", so the suspension holds for the remainder of a request
+		// that does nothing else.
+		add_action( 'apple_news_do_fetch_exporter', [ __CLASS__, 'suspend_withholding_for_export' ] );
+
 		add_action( 'the_post', [ __CLASS__, 'restrict_post' ], 10, 2 );
 		add_filter( 'the_content', [ __CLASS__, 'replace_restricted_content' ], self::RESTRICTION_PRIORITY );
 		add_filter( 'the_content', [ __CLASS__, 'handle_restricted_content' ], PHP_INT_MAX );
@@ -496,7 +504,8 @@ class Content_Gate {
 	 * That write is bounded by the memo (once per post per reader per request)
 	 * and by Metering's own queried-object test.
 	 *
-	 * @param int $post_id Post ID.
+	 * @param int|string $post_id Post ID. Coerced, so a stringy ID from a filter or
+	 *                            a template is accepted.
 	 *
 	 * @return bool
 	 */
@@ -565,7 +574,10 @@ class Content_Gate {
 	 *
 	 * Covers rendering, not excerpts: {@see Block_Visibility::strip_blocks_hidden_from_public()}
 	 * evaluates against the anonymous reader unconditionally, so an excerpt built
-	 * inside this window still has blocks hidden from the public removed.
+	 * inside this window still has blocks hidden from the public removed. Nor does
+	 * it unstage a gate {@see self::restrict_post()} already staged for the queried
+	 * article, which {@see self::replace_restricted_content()} consults first —
+	 * unreachable from the callers below, which all run outside a page render.
 	 *
 	 * @param callable $callback Work to run with restrictions suspended.
 	 *
@@ -597,6 +609,18 @@ class Content_Gate {
 				self::flush_withhold_cache();
 			}
 		}
+	}
+
+	/**
+	 * Stop withholding for the rest of this request.
+	 *
+	 * For an export that has a defined start and no defined end. Where the work is
+	 * bounded, {@see self::without_reader_restrictions()} is the one to use.
+	 */
+	public static function suspend_withholding_for_export() {
+		add_filter( 'newspack_content_gate_restrict_post', '__return_false', PHP_INT_MAX );
+		add_filter( 'newspack_content_gate_apply_block_visibility', '__return_false', PHP_INT_MAX );
+		self::flush_withhold_cache();
 	}
 
 	/**
@@ -656,7 +680,9 @@ class Content_Gate {
 	 * it. {@see self::without_reader_restrictions()} is what does that; call this
 	 * directly only to build a window that helper does not cover. Also the release
 	 * valve for a long-running loop, where the rendered teasers would otherwise
-	 * accumulate for the life of the process.
+	 * accumulate for the life of the process — the teasers and verdicts only:
+	 * Block_Visibility keeps its own content-keyed cache of stripped bodies, which
+	 * this does not reach.
 	 */
 	public static function flush_withhold_cache() {
 		self::$withhold_decisions = [];
@@ -678,7 +704,7 @@ class Content_Gate {
 	 *
 	 * Deliberately not listed: the `institution` rule's IP branch. It grants only
 	 * to a reader who is logged in or already carries the IP cookie
-	 * ({@see Content_Gate\Institution::user_matches_institution()}), both of which
+	 * ({@see Institution::user_matches_institution()}), both of which
 	 * are covered above, so there is no cookieless IP grant to detect.
 	 *
 	 * The narrower question of whether a *feed* varies is
@@ -790,6 +816,10 @@ class Content_Gate {
 	 * IDs its scripts bind to, across a listing. The RSS path withholds the same
 	 * way ({@see Content_Gate_Advanced_Settings::restrict_feed_content()}).
 	 *
+	 * Answers '' for a post the reader may read: there is no teaser for an article
+	 * nothing is withholding. Callers ask {@see self::should_withhold_content()}
+	 * first; this makes that ordering safe rather than assumed.
+	 *
 	 * Building it is expensive — the whole body goes through the block pipeline so
 	 * the first few paragraphs can be sliced off it — and one archive render asks
 	 * for the same post's teaser from the content filter, the excerpt filter and a
@@ -801,7 +831,8 @@ class Content_Gate {
 	 * loop straight back onto this same post. The empty placeholder is what that
 	 * re-entry is handed.
 	 *
-	 * @param int $post_id Post ID.
+	 * @param int|string $post_id Post ID. Coerced, so a stringy ID from a filter or
+	 *                            a template is accepted.
 	 *
 	 * @return string
 	 */
@@ -817,11 +848,15 @@ class Content_Gate {
 		}
 		self::$withheld_teasers[ $memo_key ] = '';
 
-		// Resolve the restriction before reading the layout. The gate layout for a
-		// post and reader is recorded as a side effect of that lookup, and
-		// get_gate_layout_id() answers false without it — which would fall back to
-		// the default paragraph count and hand out a preview the article withholds.
-		self::is_post_restricted( $post_id );
+		// Resolve the restriction first, for two reasons. It is the precondition —
+		// there is no teaser for a post the reader may read, and answering with a
+		// truncated body would be worse than answering with nothing. And the gate
+		// layout for a post and reader is recorded as a side effect of this lookup:
+		// get_gate_layout_id() answers false without it, which falls back to the
+		// default paragraph count and hands out a preview the article withholds.
+		if ( ! self::is_post_restricted( $post_id ) ) {
+			return '';
+		}
 
 		// Strip before building, not after. The teaser comes back as rendered HTML
 		// with no block delimiters left, so a strip applied to it is a silent no-op
