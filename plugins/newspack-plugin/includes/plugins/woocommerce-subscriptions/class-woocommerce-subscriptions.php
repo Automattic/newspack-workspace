@@ -20,10 +20,23 @@ class WooCommerce_Subscriptions {
 	const REACTIVATED_FOR_SWITCH_META = '_newspack_switch_reactivated_subscriptions';
 
 	/**
+	 * Option recording which WooCommerce Subscriptions product-type settings
+	 * Newspack turned on, as a list of the option names written.
+	 *
+	 * Write provenance, not a gate: once the WooCommerce row exists,
+	 * `maybe_enable_legacy_product_types()` never reconsiders it anyway. This
+	 * exists so the write is answerable afterwards — which sites Newspack
+	 * touched, and which of the two rows it created — so that a corrective
+	 * release could reverse only those and leave a publisher's own choice alone.
+	 */
+	const PRODUCT_TYPES_ENABLED_OPTION = 'newspack_subscriptions_enabled_product_types';
+
+	/**
 	 * Initialize hooks and filters.
 	 */
 	public static function init() {
 		add_action( 'plugins_loaded', [ __CLASS__, 'woocommerce_subscriptions_integration_init' ] );
+		add_action( 'admin_init', [ __CLASS__, 'maybe_enable_legacy_product_types' ] );
 		add_filter( 'woocommerce_subscriptions_product_limited_for_user', [ __CLASS__, 'maybe_limit_subscription_product_for_user' ], 10, 3 );
 		add_filter( 'woocommerce_subscriptions_product_trial_length', [ __CLASS__, 'limit_free_trials_to_one_per_user' ], 10, 2 );
 		add_filter( 'wcs_get_users_subscriptions', [ __CLASS__, 'filter_subscriptions_for_account_page' ], 10, 1 );
@@ -670,10 +683,6 @@ class WooCommerce_Subscriptions {
 		Subscriptions_Meta::init();
 		Subscriptions_Confirmation::init();
 		Card_Expiry_Warning::init();
-
-		if ( self::is_active() ) {
-			self::maybe_enable_legacy_product_types();
-		}
 	}
 
 	/**
@@ -685,25 +694,58 @@ class WooCommerce_Subscriptions {
 	 * writes them directly — so on an unconfigured site a publisher cannot create
 	 * or switch to a product type our own wizard produces.
 	 *
-	 * Only an option that has never been written is touched. `get_option()` returns
-	 * `false` when no row exists but `'no'` once anything has saved it, and
-	 * WooCommerce's settings screen writes `'no'` when the box is unticked — so an
-	 * absent row is the only safe signal that the publisher has no preference. That
-	 * also makes this self-limiting: after the first write the row exists, so the
-	 * check never passes again and an unticked box stays unticked.
+	 * Runs on `admin_init`, matching how the plugin writes other third-party
+	 * options (`Parsely::migrate_meta_type()`, `WooCommerce_Email_Style_Sync`,
+	 * `Emails_Section`): an authenticated admin pageload, never an anonymous
+	 * front-end hit, a REST probe or cron. Nothing is lost by waiting — a
+	 * Subscriptions upgrade happens through an admin action, so `admin_init`
+	 * fires in the same session, and the product-type dropdown this unblocks is
+	 * itself only reachable in wp-admin. It also makes the opt-out filter usable
+	 * from a theme's `functions.php`, which a `plugins_loaded` call would not.
+	 *
+	 * @return void
+	 */
+	public static function maybe_enable_legacy_product_types() {
+		if ( ! self::is_active() ) {
+			return;
+		}
+		self::enable_legacy_product_types();
+	}
+
+	/**
+	 * Write the product-type settings, for options that have never been written.
+	 *
+	 * Only an option whose row is absent is touched. Anything that has saved the
+	 * setting leaves a `'no'`, including WooCommerce's own settings screen when the
+	 * box is unticked, so an absent row is the only signal that the publisher has no
+	 * preference. That makes this self-limiting: after the first write the row
+	 * exists, so the check never passes again and an unticked box stays unticked.
+	 *
+	 * Known limitation, accepted deliberately: `WC_Admin_Settings::save_fields()`
+	 * writes every field in a section on any save of that tab, not only the fields
+	 * the publisher touched. A site that reached 9.0 and then saved WooCommerce →
+	 * Settings → Subscriptions for an unrelated reason therefore has `'no'` rows
+	 * nobody chose, and this permanently no-ops for it. Widening the test to treat
+	 * `'no'` as fair game would forfeit the one thing that makes writing another
+	 * plugin's setting safe — so those sites are left to the settings screen.
 	 *
 	 * Deliberately not gated on the Subscriptions version. Writing the option before
 	 * a site reaches 9.0 is the point — the new default then never applies.
+	 *
+	 * @return void
 	 */
-	public static function maybe_enable_legacy_product_types() {
+	public static function enable_legacy_product_types() {
 		/**
 		 * Filters whether Newspack enables the legacy subscription product types.
 		 *
-		 * Returning false leaves the WooCommerce settings untouched.
+		 * Returning false leaves the WooCommerce settings untouched. Because the
+		 * write runs on `admin_init` and happens at most once per option, the
+		 * filter must be added before then — a plugin, mu-plugin or a theme's
+		 * `functions.php` all work; it cannot be used to undo a write already made.
 		 *
 		 * @param bool $enable Whether to enable the legacy subscription product types.
 		 */
-		if ( ! apply_filters( 'newspack_enable_legacy_subscription_product_types', true ) ) {
+		if ( ! apply_filters( 'newspack_subscriptions_enable_legacy_product_types', true ) ) {
 			return;
 		}
 
@@ -712,11 +754,36 @@ class WooCommerce_Subscriptions {
 			'woocommerce_subscriptions_enable_variable_subscription',
 		];
 
+		// A sentinel default rather than a `false ===` test: `get_option()` returns
+		// the default only when the row is absent, so this stays correct even for
+		// an option stored as `false` or an empty string.
+		$absent  = new \stdClass();
+		$written = [];
 		foreach ( $options as $option ) {
-			if ( false === get_option( $option ) ) {
-				update_option( $option, 'yes' );
+			if ( $absent === get_option( $option, $absent ) ) {
+				$written[] = $option;
 			}
 		}
+
+		if ( empty( $written ) ) {
+			return;
+		}
+
+		foreach ( $written as $option ) {
+			update_option( $option, 'yes' );
+		}
+
+		update_option(
+			self::PRODUCT_TYPES_ENABLED_OPTION,
+			array_values( array_unique( array_merge( (array) get_option( self::PRODUCT_TYPES_ENABLED_OPTION, [] ), $written ) ) )
+		);
+
+		Logger::newspack_log(
+			'newspack_subscriptions_product_types_enabled',
+			'Enabled WooCommerce Subscriptions product types that had never been configured.',
+			[ 'data' => [ 'options' => $written ] ],
+			'info'
+		);
 	}
 
 	/**
