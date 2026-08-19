@@ -89,7 +89,7 @@ final class Newspack_Newsletters_Mailchimp_Cached_Data {
 		add_filter( 'cron_schedules', [ __CLASS__, 'add_cron_interval' ] ); // phpcs:ignore
 
 		if ( ! wp_next_scheduled( self::CRON_HOOK ) ) {
-			wp_schedule_event( time(), 'every_10_minutes', self::CRON_HOOK );
+			wp_schedule_event( time(), 'every_30_minutes', self::CRON_HOOK );
 		}
 
 		add_action( 'admin_notices', [ __CLASS__, 'maybe_show_error' ] );
@@ -103,9 +103,9 @@ final class Newspack_Newsletters_Mailchimp_Cached_Data {
 	 * @return array
 	 */
 	public static function add_cron_interval( $schedules ) {
-		$schedules['every_10_minutes'] = [
-			'interval' => 10 * MINUTE_IN_SECONDS,
-			'display'  => __( 'Every ten minutes', 'newspack_newsletters' ),
+		$schedules['every_30_minutes'] = [
+			'interval' => 30 * MINUTE_IN_SECONDS,
+			'display'  => __( 'Every thirty minutes', 'newspack_newsletters' ),
 		];
 		return $schedules;
 	}
