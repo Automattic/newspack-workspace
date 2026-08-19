@@ -27,14 +27,11 @@ export function formatSegment( seg: ImpactSegment, currency: PricingRulesCurrenc
 }
 
 /**
- * The resulting-price cell as a single string: flat rules show the adjusted price;
- * scheduled rules chain each cycle with ` → `.
+ * The legend for the `c1`/`c2` markers a stepped rule puts on its prices. Shared
+ * so the editor's section header and the catalog panel cannot drift apart.
  */
-export function describeResulting( row: CatalogImpactRow, currency: PricingRulesCurrency ): string {
-	if ( row.segments.length <= 1 ) {
-		return formatPrice( row.adjusted, currency );
-	}
-	return row.segments.map( seg => formatSegment( seg, currency ) ).join( ' → ' );
+export function cycleMarkerNote(): string {
+	return __( 'Each price is marked with the billing cycle it starts from: c1 is the initial purchase, c2 the first renewal.', 'newspack-plugin' );
 }
 
 /**
