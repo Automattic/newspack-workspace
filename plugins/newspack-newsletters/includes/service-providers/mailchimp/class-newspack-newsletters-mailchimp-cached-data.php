@@ -259,6 +259,7 @@ final class Newspack_Newsletters_Mailchimp_Cached_Data {
 		update_option( self::get_cache_date_key( $list_id ), time(), false ); // auto-load false.
 		self::$memoized_data[ $list_id ] = $data;
 		self::clear_errors( $list_id );
+		Newspack_Newsletters_Subscription::clear_lists_cache();
 		Newspack_Newsletters_Logger::log( 'Mailchimp cache: Cache for list ' . $list_id . ' updated' );
 	}
 
