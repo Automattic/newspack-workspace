@@ -47,14 +47,24 @@ class Subscriber_Commerce {
 	/**
 	 * Whether subscriber-commerce rules are enforced at all.
 	 *
+	 * Two things stand enforcement down, and the admin stays reachable through
+	 * both so a publisher can keep authoring rules:
+	 *
 	 * While WooCommerce Memberships is active it owns purchase restriction and
 	 * member discounts, and enforcing ours on top would double-apply on a site
-	 * mid-migration — so every subscriber-commerce feature stands down.
+	 * mid-migration.
+	 *
+	 * Without Audience Management there is nowhere to send a reader who is
+	 * refused. Registration, sign-in, account emails and My Account all belong
+	 * to it, so a blocked purchase would leave the reader at a notice naming a
+	 * subscription they have no way to buy. Content gates go inert in the same
+	 * state ({@see Content_Gate::is_gating_active()}), and subscriber-commerce
+	 * matches them rather than half-working alongside.
 	 *
 	 * @return bool
 	 */
 	public static function is_enforcement_active(): bool {
-		$active = self::is_admin_available() && ! Memberships::is_active();
+		$active = self::is_admin_available() && Reader_Activation::is_enabled() && ! Memberships::is_active();
 
 		/**
 		 * Filters whether subscriber-commerce rules (subscriber-only products,
