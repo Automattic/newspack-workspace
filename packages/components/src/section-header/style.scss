@@ -45,6 +45,9 @@
 	}
 
 	&__back-nav {
+		@media (max-width: 1279px) {
+			display: none;
+		}
 		@media (min-width: 1280px) {
 			left: 0;
 			position: absolute;
@@ -108,9 +111,6 @@
 		margin: 0 !important;
 
 		.newspack-section-header__back-nav {
-			@media (max-width: 1279px) {
-				display: none;
-			}
 			@media (min-width: 1280px) {
 				transform: translate(calc(-100% - 8px), calc(-50% + 12px));
 			}
