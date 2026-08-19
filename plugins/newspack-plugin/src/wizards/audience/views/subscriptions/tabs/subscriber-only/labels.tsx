@@ -49,7 +49,7 @@ export function scopeLabel( restriction: Restriction, nameOf: ( id: number ) => 
 	}
 	return sprintf(
 		/* translators: %s: comma-separated product category names. */
-		__( '%s category', 'newspack-plugin' ),
+		_n( '%s category', '%s categories', names.length, 'newspack-plugin' ),
 		names.join( ', ' )
 	);
 }

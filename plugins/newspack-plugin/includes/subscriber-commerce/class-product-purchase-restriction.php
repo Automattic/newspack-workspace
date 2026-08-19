@@ -25,7 +25,8 @@ defined( 'ABSPATH' ) || exit;
 class Product_Purchase_Restriction {
 
 	/**
-	 * Whether the reader may purchase a product, keyed by "{product_id}_{user_id}".
+	 * Whether the reader may purchase a product, keyed by
+	 * "{product_id}_{user_id}_{payment-recovery grace}".
 	 * WooCommerce asks several times per product per request (list loop, single
 	 * product template, cart validation), so the decision is memoized.
 	 *
@@ -120,8 +121,20 @@ class Product_Purchase_Restriction {
 			return true;
 		}
 
-		$user_id   = null === $user_id ? get_current_user_id() : (int) $user_id;
-		$cache_key = $product_id . '_' . $user_id;
+		$user_id = null === $user_id ? get_current_user_id() : (int) $user_id;
+		// The verdict rests on Subscriber_Eligibility::user_has(), which reads
+		// `payment_recovery_grace` from the ambient evaluation context that
+		// with_evaluation_context() swaps around each gate. Key on it for the same
+		// reason that layer does, so a verdict reached inside one gate's context
+		// is never served to a caller outside it.
+		$cache_key = implode(
+			'_',
+			[
+				$product_id,
+				$user_id,
+				Access_Rules::get_evaluation_context( 'payment_recovery_grace', true ) ? 'grace' : 'strict',
+			]
+		);
 		if ( ! isset( self::$purchase_verdicts[ $cache_key ] ) ) {
 			self::$purchase_verdicts[ $cache_key ] = self::evaluate_purchase( $product, $user_id );
 		}
@@ -220,6 +233,21 @@ class Product_Purchase_Restriction {
 
 		$hidden = self::get_hidden_product_ids();
 		if ( empty( $hidden ) ) {
+			return;
+		}
+
+		// WordPress drops `post__not_in` entirely once `post__in` is set, so a
+		// curated listing — a hand-picked Products block, a Product Collection with
+		// chosen products — has to be narrowed instead of excluded from, or it
+		// would keep showing what every other listing hides.
+		$included = array_filter( array_map( 'absint', (array) $query->get( 'post__in' ) ) );
+		if ( ! empty( $included ) ) {
+			$remaining = array_values( array_diff( $included, $hidden ) );
+			// An empty `post__in` reads as "no constraint" and would list the whole
+			// catalog. Post ID 0 exists for no post, so asking for it is how a
+			// listing whose every pick is hidden comes back empty.
+			// phpcs:ignore WordPressVIPMinimum.Hooks.PreGetPosts.PreGetPosts -- Deliberately covers secondary product listings too; see the doc block.
+			$query->set( 'post__in', empty( $remaining ) ? [ 0 ] : $remaining );
 			return;
 		}
 
@@ -347,11 +375,20 @@ class Product_Purchase_Restriction {
 	 * @return string The block content, with the notice appended when the reader can't purchase.
 	 */
 	public static function filter_add_to_cart_block( $block_content, $block, $instance = null ) {
-		// Only the single-product add-to-cart blocks. The product list's button is
-		// left alone: lists stay as WooCommerce renders them, exactly as for a
-		// product that's out of stock.
+		// Only the single-product add-to-cart blocks. WooCommerce's own lists use a
+		// different block (`woocommerce/product-button`), which is left alone so
+		// lists render exactly as they do for a product that's out of stock.
 		$add_to_cart_blocks = [ 'woocommerce/add-to-cart-form', 'woocommerce/add-to-cart-with-options' ];
 		if ( ! in_array( $block['blockName'] ?? '', $add_to_cart_blocks, true ) ) {
+			return $block_content;
+		}
+
+		// A product's own page, which is the whole surface the classic path covers
+		// too. Nothing stops a custom listing from putting one of those blocks on
+		// every card, and the notice would then repeat down the page; pinning both
+		// paths to the same surface keeps that out without resting on which block
+		// WooCommerce happens to use in its own list templates.
+		if ( ! is_singular( 'product' ) ) {
 			return $block_content;
 		}
 
@@ -406,12 +443,14 @@ class Product_Purchase_Restriction {
 		if ( isset( self::$rendered_notices[ $product_id ] ) ) {
 			return '';
 		}
-		self::$rendered_notices[ $product_id ] = true;
 
 		$message = self::get_restricted_message( $product );
 		if ( ! $message ) {
 			return '';
 		}
+		// Marked only once something is actually emitted, so a filter that blanks
+		// the message on one path doesn't suppress the other path's notice too.
+		self::$rendered_notices[ $product_id ] = true;
 
 		return sprintf(
 			'<div class="woocommerce-info newspack-subscriber-only-notice">%s</div>',
@@ -477,9 +516,13 @@ class Product_Purchase_Restriction {
 				if ( ! $subscription || ! self::can_purchase( $subscription ) ) {
 					continue;
 				}
+				// The product's own permalink, not the post's: a subscription
+				// variation can be named by a rule, and its post permalink points at
+				// a page nobody can buy from, where WC_Product_Variation resolves to
+				// the parent URL carrying the variation's attributes.
 				$links[ $subscription_id ] = sprintf(
 					'<a href="%s">%s</a>',
-					esc_url( (string) get_permalink( $subscription_id ) ),
+					esc_url( (string) $subscription->get_permalink() ),
 					esc_html( $subscription->get_name() )
 				);
 			}

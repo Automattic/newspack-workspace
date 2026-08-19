@@ -447,6 +447,19 @@ class WC_Product {
 	public function get_parent_id() {
 		return $this->data['parent_id'] ?? 0;
 	}
+	/**
+	 * WC_Product_Variation resolves its permalink through the parent, whose page
+	 * is the only one a reader can buy from — the variation post has none. Code
+	 * that links a product goes through here rather than get_permalink( $id ),
+	 * so the mock has to model that or a test would see a URL production never
+	 * emits.
+	 *
+	 * @return string
+	 */
+	public function get_permalink() {
+		$parent_id = $this->get_parent_id();
+		return get_permalink( $parent_id ? $parent_id : $this->get_id() );
+	}
 	public function get_children() {
 		return $this->data['children'] ?? [];
 	}

@@ -18,6 +18,9 @@ import { WIZARD_ENDPOINT } from '../../constants';
 
 type NameMap = Record< number, string >;
 
+/** The search endpoints cap `per_page` at 100, so larger ID sets go in batches. */
+const BATCH_SIZE = 100;
+
 /**
  * Look up names for a set of IDs on one of the wizard's search endpoints.
  *
@@ -36,16 +39,30 @@ export function useNames( endpoint: string, ids: number[] ): NameMap {
 			return;
 		}
 		let cancelled = false;
-		apiFetch< { id: number; name: string }[] >( {
-			path: addQueryArgs( `${ WIZARD_ENDPOINT }/${ endpoint }`, { include: key, per_page: 100 } ),
-		} )
-			.then( items => {
+		// One request per batch rather than one truncated request: an ID the
+		// endpoint never returns renders as a blank name, so silently dropping the
+		// overflow would leave the list lying about what a rule covers.
+		const batches: string[][] = [];
+		const uniqueIds = key.split( ',' );
+		for ( let index = 0; index < uniqueIds.length; index += BATCH_SIZE ) {
+			batches.push( uniqueIds.slice( index, index + BATCH_SIZE ) );
+		}
+		Promise.all(
+			batches.map( batch =>
+				apiFetch< { id: number; name: string }[] >( {
+					path: addQueryArgs( `${ WIZARD_ENDPOINT }/${ endpoint }`, { include: batch.join( ',' ), per_page: BATCH_SIZE } ),
+				} )
+			)
+		)
+			.then( responses => {
 				if ( cancelled ) {
 					return;
 				}
 				const map: NameMap = {};
-				( items || [] ).forEach( item => {
-					map[ item.id ] = decodeEntities( item.name );
+				responses.forEach( items => {
+					( items || [] ).forEach( item => {
+						map[ item.id ] = decodeEntities( item.name );
+					} );
 				} );
 				setNames( map );
 			} )

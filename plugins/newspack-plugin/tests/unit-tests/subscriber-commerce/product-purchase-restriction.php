@@ -369,6 +369,69 @@ class Test_Product_Purchase_Restriction extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * The subscription picker offers variations of a variable subscription, so a
+	 * rule can name one. A variation post has no page a reader can buy from, so
+	 * the notice has to link the parent instead.
+	 */
+	public function test_notice_links_a_subscription_variation_through_its_parent() {
+		$variable_subscription = $this->create_product();
+		$variation             = $this->create_product( $variable_subscription->get_id() );
+		$this->set_rules(
+			[
+				[
+					'id'                       => 'rule',
+					'subscription_product_ids' => [ $variation->get_id() ],
+					'targeting'                => 'products',
+					'product_ids'              => [ $this->restricted_product->get_id() ],
+					'active'                   => true,
+				],
+			]
+		);
+
+		$message = Product_Purchase_Restriction::get_restricted_message( $this->restricted_product );
+
+		$this->assertStringContainsString( get_permalink( $variable_subscription->get_id() ), $message );
+		$this->assertStringNotContainsString( get_permalink( $variation->get_id() ), $message );
+	}
+
+	/**
+	 * On a block theme the notice rides the add-to-cart block, because
+	 * `woocommerce_single_product_summary` never fires.
+	 */
+	public function test_add_to_cart_block_carries_the_notice_on_the_product_page() {
+		$this->go_to( get_permalink( $this->restricted_product->get_id() ) );
+
+		$this->assertStringContainsString(
+			'newspack-subscriber-only-notice',
+			Product_Purchase_Restriction::filter_add_to_cart_block( 'cart', $this->add_to_cart_block() )
+		);
+	}
+
+	/**
+	 * Anywhere else it stays out. Nothing stops a custom listing from putting a
+	 * single-product add-to-cart block on every card, and the notice would then
+	 * repeat down the page — so the block path covers the same surface as the
+	 * classic one and no more.
+	 */
+	public function test_add_to_cart_block_carries_no_notice_off_the_product_page() {
+		$this->go_to( home_url( '/' ) );
+
+		$this->assertSame( 'cart', Product_Purchase_Restriction::filter_add_to_cart_block( 'cart', $this->add_to_cart_block() ) );
+	}
+
+	/**
+	 * A parsed add-to-cart block naming the restricted product.
+	 *
+	 * @return array
+	 */
+	private function add_to_cart_block() {
+		return [
+			'blockName' => 'woocommerce/add-to-cart-form',
+			'attrs'     => [ 'productId' => $this->restricted_product->get_id() ],
+		];
+	}
+
+	/**
 	 * Hiding is off by default: the parity feature blocks purchasing and leaves
 	 * the product listed.
 	 */
@@ -389,6 +452,34 @@ class Test_Product_Purchase_Restriction extends \WP_UnitTestCase {
 
 		$this->assertContains( $this->restricted_product->get_id(), (array) $query->get( 'post__not_in' ) );
 		$this->assertNotContains( $this->open_product->get_id(), (array) $query->get( 'post__not_in' ) );
+	}
+
+	/**
+	 * A curated listing — a hand-picked Products block, a Product Collection
+	 * with chosen products — passes `post__in`, and WordPress then ignores
+	 * `post__not_in` entirely. Hiding has to narrow the picks instead, or that
+	 * one listing keeps showing what every other listing hides.
+	 */
+	public function test_hiding_narrows_a_curated_listing() {
+		update_option( Subscriber_Only_Products::SETTINGS_OPTION_NAME, [ 'hide_from_product_lists' => true ] );
+		$this->flush_caches();
+
+		$query = $this->run_product_query( [ $this->restricted_product->get_id(), $this->open_product->get_id() ] );
+
+		$this->assertSame( [ $this->open_product->get_id() ], (array) $query->get( 'post__in' ) );
+	}
+
+	/**
+	 * When every pick is hidden the listing comes back empty. An emptied
+	 * `post__in` would read as "no constraint" and list the whole catalog.
+	 */
+	public function test_hiding_every_curated_pick_empties_the_listing() {
+		update_option( Subscriber_Only_Products::SETTINGS_OPTION_NAME, [ 'hide_from_product_lists' => true ] );
+		$this->flush_caches();
+
+		$query = $this->run_product_query( [ $this->restricted_product->get_id() ] );
+
+		$this->assertSame( [ 0 ], (array) $query->get( 'post__in' ) );
 	}
 
 	/**
@@ -461,11 +552,16 @@ class Test_Product_Purchase_Restriction extends \WP_UnitTestCase {
 	/**
 	 * Run a product listing query through the hiding filter.
 	 *
+	 * @param int[] $post__in Products a curated listing picked out, if any.
+	 *
 	 * @return \WP_Query
 	 */
-	private function run_product_query() {
+	private function run_product_query( $post__in = [] ) {
 		$query             = new \WP_Query();
 		$query->query_vars = [ 'post_type' => 'product' ];
+		if ( ! empty( $post__in ) ) {
+			$query->query_vars['post__in'] = $post__in;
+		}
 		Product_Purchase_Restriction::filter_product_query( $query );
 		return $query;
 	}

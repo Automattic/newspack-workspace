@@ -143,9 +143,11 @@ class Subscriber_Only_Products_API {
 				'enum'    => [ Product_Targeting::TARGETING_PRODUCTS, Product_Targeting::TARGETING_CATEGORY, Product_Targeting::TARGETING_ALL ],
 				'default' => Product_Targeting::TARGETING_PRODUCTS,
 			],
+			// Deliberately undefaulted, so an absent `active` reaches
+			// sanitize_base_rule() as absent and lands on its fail-safe: a partial
+			// payload leaves the rule paused rather than silently gating purchases.
 			'active'                   => [
-				'type'    => 'boolean',
-				'default' => true,
+				'type' => 'boolean',
 			],
 		];
 	}
