@@ -837,6 +837,15 @@ domReady( () => {
 		} else {
 			resolution.amountInput.checked = true;
 		}
+		// requestSubmit runs the form's constraint validation (e.g. the untiered
+		// amount input's `min`), and a refused submit would otherwise still be
+		// reported as success — stripping the URL params of a link that did
+		// nothing. Check first so failures stay visible and retryable.
+		if ( ! form.checkValidity() ) {
+			// eslint-disable-next-line no-console
+			console.warn( `Newspack modal checkout: the donate form rejected the values for ${ described }. The checkout was not triggered.` );
+			return false;
+		}
 		triggerFormSubmit( form );
 		return true;
 	};
