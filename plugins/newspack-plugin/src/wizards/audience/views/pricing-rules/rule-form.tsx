@@ -30,6 +30,8 @@ import { WIZARD_STORE_NAMESPACE } from '../../../../../packages/components/src/w
 import ScopeTargets from './scope-targets';
 import Conditions, { type ConditionsMap } from './conditions';
 import RulePreview from './rule-preview';
+import ReadonlyField from './readonly-field';
+import DateTimeField from './datetime-field';
 import { tsToLocalInput, localInputToTs } from './datetime';
 import { RECIPES, applyRecipeConditions, isConditionVisible, isPricingPath, intentLabel, type PricingPath } from './recipes';
 import GoalCards from './goal-cards';
@@ -43,6 +45,9 @@ interface StepRowState {
 	value: string;
 	label: string;
 }
+
+const SCHEDULE_HELP_ID = 'newspack-pricing-rule-schedule__help';
+const COPY_NOTICE_ID = 'pricing-rule-copy';
 
 interface RuleFormProps {
 	isNew: boolean;
@@ -81,6 +86,57 @@ function seedConditions( raw: ConditionsMap | undefined ): ConditionsMap {
 		seeded[ id ] = Array.isArray( val ) ? val.map( Number ).filter( n => ! Number.isNaN( n ) ) : val;
 	}
 	return seeded;
+}
+
+function CopyDealId( { dealKey }: { dealKey: string } ) {
+	const { addNotice, removeNotice } = useDispatch( WIZARD_STORE_NAMESPACE );
+	const buttonRef = useRef< HTMLButtonElement | null >( null );
+
+	// navigator.clipboard is undefined outside a secure context, e.g. wp-admin over HTTP.
+	const legacyCopy = (): boolean => {
+		const doc = buttonRef.current?.ownerDocument ?? document;
+		const field = doc.createElement( 'textarea' );
+		field.value = dealKey;
+		field.setAttribute( 'readonly', '' );
+		field.style.cssText = 'position:fixed;top:0;left:0;opacity:0';
+		doc.body.appendChild( field );
+		field.select();
+		let copied = false;
+		try {
+			copied = doc.execCommand( 'copy' );
+		} catch {
+			copied = false;
+		}
+		field.remove();
+		// select() moved focus to the textarea, which no longer exists.
+		buttonRef.current?.focus();
+		return copied;
+	};
+
+	// Not useCopyToClipboard: it only exposes onSuccess, so failure cannot be reported.
+	const copy = async () => {
+		let copied = false;
+		try {
+			await navigator.clipboard.writeText( dealKey );
+			copied = true;
+		} catch {
+			copied = legacyCopy();
+		}
+		// Notices append without deduping, so a second copy would stack a toast sharing
+		// the first one's React key.
+		removeNotice( COPY_NOTICE_ID );
+		addNotice(
+			copied
+				? { id: COPY_NOTICE_ID, type: 'success', message: __( 'Deal ID copied to clipboard.', 'newspack-plugin' ) }
+				: { id: COPY_NOTICE_ID, type: 'error', message: __( 'Could not copy the Deal ID.', 'newspack-plugin' ) }
+		);
+	};
+
+	return (
+		<Button ref={ buttonRef } variant="secondary" onClick={ copy } aria-label={ __( 'Copy Deal ID', 'newspack-plugin' ) } __next40pxDefaultSize>
+			{ __( 'Copy', 'newspack-plugin' ) }
+		</Button>
+	);
 }
 
 export default function RuleForm( { isNew, initialPath = null, rule, vocab, onDone }: RuleFormProps ) {
@@ -472,7 +528,7 @@ export default function RuleForm( { isNew, initialPath = null, rule, vocab, onDo
 					{ recipe?.isCustom && (
 						<TextControl
 							label={ __( 'Goal note', 'newspack-plugin' ) }
-							help={ __( "Optional. Describe this deal's goal in your own words.", 'newspack-plugin' ) }
+							help={ __( "Optional. Describe this rule's goal in your own words.", 'newspack-plugin' ) }
 							value={ intentNote }
 							onChange={ setIntentNote }
 							__next40pxDefaultSize
@@ -487,13 +543,6 @@ export default function RuleForm( { isNew, initialPath = null, rule, vocab, onDo
 						} }
 						__next40pxDefaultSize
 					/>
-					{ ! isNew && rule && (
-						<p className="description">
-							{ __( 'Deal ID:', 'newspack-plugin' ) } <code>{ rule.deal_key }</code>
-							<br />
-							{ __( 'Use this ID to find the deal in your analytics. It never changes.', 'newspack-plugin' ) }
-						</p>
-					) }
 					<SelectControl
 						label={ __( 'Status', 'newspack-plugin' ) }
 						value={ status }
@@ -517,6 +566,17 @@ export default function RuleForm( { isNew, initialPath = null, rule, vocab, onDo
 						__next40pxDefaultSize
 					/>
 					<ScopeTargets scopeType={ scopeType } value={ scopeIds } onChange={ setScopeIds } />
+					{ ! isNew && rule && (
+						<ReadonlyField
+							id="newspack-pricing-rule-deal-id"
+							label={ __( 'Deal ID', 'newspack-plugin' ) }
+							help={ __( 'Use this ID to find the deal in your analytics. It never changes.', 'newspack-plugin' ) }
+							value={ rule.deal_key }
+							isMonospace
+						>
+							<CopyDealId dealKey={ rule.deal_key } />
+						</ReadonlyField>
+					) }
 				</VStack>
 			</Grid>
 
@@ -680,27 +740,36 @@ export default function RuleForm( { isNew, initialPath = null, rule, vocab, onDo
 							__next40pxDefaultSize
 						/>
 					) }
-					<TextControl
-						label={ __( 'Starts', 'newspack-plugin' ) }
-						help={ __( 'Optional. Times are in your local timezone. Empty = active immediately.', 'newspack-plugin' ) }
-						type="datetime-local"
-						value={ activeFrom }
-						onChange={ setActiveFrom }
-						__next40pxDefaultSize
-					/>
-					<TextControl
-						label={ __( 'Ends', 'newspack-plugin' ) }
-						help={ __( 'Optional. Times are in your local timezone. Empty = no end date.', 'newspack-plugin' ) }
-						type="datetime-local"
-						value={ activeUntil }
-						onChange={ setActiveUntil }
-						__next40pxDefaultSize
-					/>
+					<VStack spacing={ 2 }>
+						<Grid columns={ 2 } gutter={ 16 } noMargin>
+							<DateTimeField
+								id="newspack-pricing-rule-active-from"
+								label={ __( 'Starts', 'newspack-plugin' ) }
+								describedBy={ SCHEDULE_HELP_ID }
+								value={ activeFrom }
+								placeholder={ __( 'Active immediately', 'newspack-plugin' ) }
+								disabled={ isSaving }
+								onChange={ setActiveFrom }
+							/>
+							<DateTimeField
+								id="newspack-pricing-rule-active-until"
+								label={ __( 'Ends', 'newspack-plugin' ) }
+								describedBy={ SCHEDULE_HELP_ID }
+								value={ activeUntil }
+								placeholder={ __( 'No end date', 'newspack-plugin' ) }
+								disabled={ isSaving }
+								onChange={ setActiveUntil }
+							/>
+						</Grid>
+						<p className="newspack-pricing-rules__muted newspack-pricing-rules__muted--help" id={ SCHEDULE_HELP_ID }>
+							{ __( 'Times are in your local timezone.', 'newspack-plugin' ) }
+						</p>
+					</VStack>
 					{ recipe?.isCustom && (
 						<ToggleControl
 							label={ __( 'Lock pricing at purchase', 'newspack-plugin' ) }
 							help={ __(
-								'On: subscribers keep the price they bought at — the deal only applies to new sign-ups. Off: the deal applies to every matching subscriber at each renewal.',
+								'On: subscribers keep the price they bought at — the rule only applies to new sign-ups. Off: the rule applies to every matching subscriber at each renewal.',
 								'newspack-plugin'
 							) }
 							checked={ 'locked' === application }
@@ -769,17 +838,10 @@ export default function RuleForm( { isNew, initialPath = null, rule, vocab, onDo
 			<div className="newspack-pricing-rules__preview-section">
 				<SectionHeader
 					title={ __( 'Impact Preview', 'newspack-plugin' ) }
-					description={ __(
-						'How this rule prices products, composed with your other active rules. Updates as you edit.',
-						'newspack-plugin'
-					) }
+					description={ __( 'How this rule prices products, composed with your other active rules. Best price wins.', 'newspack-plugin' ) }
 					noMargin
 				/>
-				{ ! isSchedule && String( value ).trim() === '' ? (
-					<p className="newspack-pricing-rules__muted">{ __( 'Enter a price to see the impact preview.', 'newspack-plugin' ) }</p>
-				) : (
-					<RulePreview body={ previewBody } />
-				) }
+				<RulePreview body={ previewBody } hasPrice={ isSchedule || String( value ).trim() !== '' } />
 			</div>
 			{ goalDialog }
 		</div>

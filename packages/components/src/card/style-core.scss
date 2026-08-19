@@ -353,6 +353,10 @@
 			.newspack-card--core__is-small & {
 				padding: 16px;
 			}
+
+			.newspack-card--core__is-large & {
+				padding: wp-vars.$grid-unit-60;
+			}
 			.newspack-card--core__no-margin & {
 				padding: 0;
 			}

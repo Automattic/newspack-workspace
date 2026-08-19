@@ -50,6 +50,7 @@ const CoreCard = ( {
 	isSelectable,
 	isSmall,
 	isVertical,
+	size,
 	dragIndex,
 	onDragCallback = () => {},
 	onToggle = () => {},
@@ -61,6 +62,7 @@ const CoreCard = ( {
 	hasHeaderBorder = true,
 	...otherProps
 } ) => {
+	const bodySize = isSmall ? undefined : size;
 	const classes = classNames(
 		'newspack-card--core',
 		className,
@@ -70,6 +72,7 @@ const CoreCard = ( {
 		isNarrow && 'newspack-card--core__is-narrow',
 		isSmall && 'newspack-card--core__is-small',
 		isSelectable && 'newspack-card--core__is-selectable',
+		bodySize === 'large' && 'newspack-card--core__is-large',
 		isVertical && 'newspack-card--core__is-vertical',
 		( icon || iconElement ) && 'newspack-card--core__has-icon',
 		iconBackgroundColor && 'newspack-card--core__has-icon-background-color',
@@ -79,7 +82,7 @@ const CoreCard = ( {
 		noMargin && 'newspack-card--core__no-margin',
 		hasGreyHeader && 'newspack-card--core__has-grey-header'
 	);
-	let sizeProps = isSmall ? 'small' : otherProps.size;
+	let sizeProps = isSmall ? 'small' : size;
 	if ( buttonsCard || as === 'a' ) {
 		if ( ! isSmall ) {
 			sizeProps = 'large';
@@ -97,7 +100,7 @@ const CoreCard = ( {
 	const hasInteractiveHeaderChildren = actionType === 'toggle' || !! headerAction || actions?.length > 0 || isDraggable;
 	const headerIsButton = !! onHeaderClick && ! hasInteractiveHeaderChildren;
 	return (
-		<CardWrapper as={ as } className={ classes } { ...otherProps }>
+		<CardWrapper as={ as } className={ classes } size={ bodySize } { ...otherProps }>
 			{ ( header || icon || iconElement ) && (
 				<CardHeader
 					as={ headerIsButton ? 'button' : undefined }
