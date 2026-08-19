@@ -143,7 +143,6 @@ class Test_Group_Subscription_Invite extends WP_UnitTestCase {
 
 		$_GET['action']       = Group_Subscription_Invite::LINK_QUERY_ARG;
 		$_GET['subscription'] = (string) $subscription->get_id();
-		$_GET['manager']      = (string) $owner_id;
 		$_GET['key']          = $invite['key'];
 
 		$log_events = $this->capture_link_invite_log_events();
@@ -158,6 +157,51 @@ class Test_Group_Subscription_Invite extends WP_UnitTestCase {
 			$subscription->get_id(),
 			Group_Subscription::get_group_subscriptions_for_user( $non_reader_id, true ),
 			'The non-reader should not have been added to the group.'
+		);
+	}
+
+	/**
+	 * The compat promise of the subscription-wide invite link: a URL already sitting in a reader's
+	 * inbox still carries `manager=`, and pointing at a user who no longer manages the group -- or
+	 * never did -- must not stop the click from working.
+	 */
+	public function test_legacy_manager_url_still_joins_the_group() {
+		$owner_id     = $this->create_user( true );
+		$subscription = wcs_create_subscription(
+			[
+				'customer_id'    => $owner_id,
+				'status'         => 'active',
+				'billing_period' => 'month',
+			]
+		);
+		$subscription->update_meta_data( Group_Subscription_Settings::GROUP_SUBSCRIPTION_META_PREFIX . 'enabled', 'yes' );
+		// The pre-change storage shape, minted by the owner (still a manager, so still live).
+		$subscription->update_meta_data(
+			Group_Subscription_Invite::LINK_META,
+			[
+				$owner_id => [
+					'key'        => 'legacykey',
+					'created_at' => 1000,
+				],
+			]
+		);
+		$subscription->save();
+
+		$reader_id = $this->create_user( true );
+		wp_set_current_user( $reader_id );
+
+		$_GET['action']       = Group_Subscription_Invite::LINK_QUERY_ARG;
+		$_GET['subscription'] = (string) $subscription->get_id();
+		$_GET['manager']      = '999999';
+		$_GET['key']          = 'legacykey';
+
+		$log_events = $this->capture_link_invite_log_events();
+
+		$this->assertEmpty( $log_events, 'A legacy invite-link URL should be accepted without an error event.' );
+		$this->assertContains(
+			$subscription->get_id(),
+			Group_Subscription::get_group_subscriptions_for_user( $reader_id, true ),
+			'The reader should have joined the group via their existing manager-scoped URL.'
 		);
 	}
 

@@ -1258,11 +1258,11 @@ class Test_Group_Subscriptions extends \WP_UnitTestCase {
 		$owner_id  = $this->create_reader_user();
 		$group_sub = $this->create_group_subscription( $owner_id );
 
-		$this->assertNull( Group_Subscription_Invite::get_link_invite( $group_sub, $owner_id ) );
+		$this->assertNull( Group_Subscription_Invite::get_link_invite( $group_sub ) );
 	}
 
 	/**
-	 * Test get_link_invite() returns the stored entry for a user.
+	 * Test get_link_invite() returns the stored entry.
 	 */
 	public function test_get_link_invite_returns_stored_entry() {
 		$owner_id  = $this->create_reader_user();
@@ -1271,46 +1271,55 @@ class Test_Group_Subscriptions extends \WP_UnitTestCase {
 		$entry = [
 			'key'        => 'abc123',
 			'created_at' => time(),
+			'created_by' => $owner_id,
 		];
-		$group_sub->update_meta_data( Group_Subscription_Invite::LINK_META, [ $owner_id => $entry ] );
+		$group_sub->update_meta_data( Group_Subscription_Invite::LINK_META, $entry );
 		$group_sub->save();
 
-		$result = Group_Subscription_Invite::get_link_invite( $group_sub, $owner_id );
-		$this->assertEquals( $entry, $result );
+		$this->assertEquals( $entry, Group_Subscription_Invite::get_link_invite( $group_sub ) );
 	}
 
 	/**
-	 * Test get_link_invite() returns null for a different user.
+	 * A subscription still carrying the legacy per-manager meta shape resolves to the
+	 * oldest of those entries, so every manager is shown one link rather than their own.
 	 */
-	public function test_get_link_invite_returns_null_for_other_user() {
-		$owner_id  = $this->create_reader_user();
-		$other_id  = $this->create_reader_user();
-		$group_sub = $this->create_group_subscription( $owner_id );
+	public function test_get_link_invite_resolves_legacy_per_manager_shape() {
+		$owner_id   = $this->create_reader_user();
+		$manager_id = $this->create_reader_user();
+		$group_sub  = $this->create_group_subscription( $owner_id );
 
 		$group_sub->update_meta_data(
 			Group_Subscription_Invite::LINK_META,
 			[
-				$owner_id => [
-					'key'        => 'key',
-					'created_at' => time(),
+				$manager_id => [
+					'key'        => 'newer-key',
+					'created_at' => 2000,
+				],
+				$owner_id   => [
+					'key'        => 'oldest-key',
+					'created_at' => 1000,
 				],
 			]
 		);
 		$group_sub->save();
 
-		$this->assertNull( Group_Subscription_Invite::get_link_invite( $group_sub, $other_id ) );
+		$resolved = Group_Subscription_Invite::get_link_invite( $group_sub );
+		$this->assertEquals( 'oldest-key', $resolved['key'] );
+		// Normalised to the current shape, so callers see one entry shape either way.
+		$this->assertEquals( $owner_id, $resolved['created_by'] );
 	}
 
 	/**
-	 * Test get_link_invite_url() builds the expected URL.
+	 * The URL identifies the link by subscription and key alone. The manager segment is what tied
+	 * a link's lifetime to one user.
 	 */
 	public function test_get_link_invite_url_format() {
-		$url = Group_Subscription_Invite::get_link_invite_url( 42, 7, 'thekey' );
+		$url = Group_Subscription_Invite::get_link_invite_url( 42, 'thekey' );
 
 		$this->assertStringContainsString( 'action=' . Group_Subscription_Invite::LINK_QUERY_ARG, $url );
 		$this->assertStringContainsString( 'subscription=42', $url );
-		$this->assertStringContainsString( 'manager=7', $url );
 		$this->assertStringContainsString( 'key=thekey', $url );
+		$this->assertStringNotContainsString( 'manager=', $url );
 	}
 
 	/**
@@ -1328,9 +1337,10 @@ class Test_Group_Subscriptions extends \WP_UnitTestCase {
 		$this->assertArrayHasKey( 'url', $result );
 		$this->assertArrayHasKey( 'key', $result );
 
-		// Verify it's persisted.
-		$stored = Group_Subscription_Invite::get_link_invite( $group_sub, $owner_id );
+		// Verify it's persisted, and readable by any manager rather than only its author.
+		$stored = Group_Subscription_Invite::get_link_invite( $group_sub );
 		$this->assertEquals( $result['key'], $stored['key'] );
+		$this->assertEquals( $owner_id, $stored['created_by'] );
 	}
 
 	/**
@@ -1359,7 +1369,7 @@ class Test_Group_Subscriptions extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * Test generate_link_invite() replaces an existing entry for the same user.
+	 * Test generate_link_invite() replaces the existing entry.
 	 */
 	public function test_generate_link_invite_replaces_existing() {
 		$owner_id  = $this->create_reader_user();
@@ -1372,8 +1382,9 @@ class Test_Group_Subscriptions extends \WP_UnitTestCase {
 
 		$this->assertNotEquals( $first['key'], $second['key'] );
 
-		$stored = Group_Subscription_Invite::get_link_invite( $group_sub, $owner_id );
+		$stored = Group_Subscription_Invite::get_link_invite( $group_sub );
 		$this->assertEquals( $second['key'], $stored['key'] );
+		$this->assertWPError( Group_Subscription_Invite::validate_link_invite( $group_sub, $first['key'] ) );
 	}
 
 	/**
@@ -1389,8 +1400,8 @@ class Test_Group_Subscriptions extends \WP_UnitTestCase {
 		$result = Group_Subscription_Invite::delete_link_invite( $group_sub, $owner_id );
 		$this->assertTrue( $result );
 
-		$stored = Group_Subscription_Invite::get_link_invite( $group_sub, $owner_id );
-		$this->assertNull( $stored );
+		// Re-read, so this proves the row left the database rather than the in-memory meta cache.
+		$this->assertNull( Group_Subscription_Invite::get_link_invite( wcs_get_subscription( $group_sub->get_id() ) ) );
 	}
 
 	/**
@@ -1419,8 +1430,8 @@ class Test_Group_Subscriptions extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * Test delete_link_invite() short-circuits to true without writing meta when
-	 * no entry exists for the user.
+	 * Test delete_link_invite() is idempotent: disabling a link that was never created reports
+	 * success and leaves no meta behind.
 	 */
 	public function test_delete_link_invite_no_op_for_missing_entry() {
 		$owner_id  = $this->create_reader_user();
@@ -1444,15 +1455,108 @@ class Test_Group_Subscriptions extends \WP_UnitTestCase {
 		wp_set_current_user( $owner_id );
 		$invite = Group_Subscription_Invite::generate_link_invite( $group_sub, $owner_id );
 
-		$result = Group_Subscription_Invite::validate_link_invite( $group_sub, $owner_id, $invite['key'] );
+		$result = Group_Subscription_Invite::validate_link_invite( $group_sub, $invite['key'] );
 		$this->assertTrue( $result );
+	}
+
+	/**
+	 * Links minted under the legacy per-manager shape were already sent to readers, so every one
+	 * of those keys keeps working, including a manager's whose entry is not the resolved one.
+	 */
+	public function test_validate_link_invite_accepts_legacy_per_manager_keys() {
+		$owner_id   = $this->create_reader_user();
+		$manager_id = $this->create_reader_user();
+		$group_sub  = $this->create_group_subscription( $owner_id );
+
+		$group_sub->update_meta_data(
+			Group_Subscription_Invite::LINK_META,
+			[
+				$owner_id   => [
+					'key'        => 'owner-key',
+					'created_at' => 1000,
+				],
+				$manager_id => [
+					'key'        => 'manager-key',
+					'created_at' => 2000,
+				],
+			]
+		);
+		$group_sub->save();
+
+		$this->assertTrue( Group_Subscription_Invite::validate_link_invite( $group_sub, 'owner-key' ) );
+		$this->assertTrue( Group_Subscription_Invite::validate_link_invite( $group_sub, 'manager-key' ) );
+
+		// Disabling the link takes every legacy key with it, and the row really leaves the database.
+		Group_Subscription_Invite::delete_link_invite( $group_sub, $owner_id );
+		$refetched = wcs_get_subscription( $group_sub->get_id() );
+		$this->assertWPError( Group_Subscription_Invite::validate_link_invite( $refetched, 'owner-key' ) );
+		$this->assertWPError( Group_Subscription_Invite::validate_link_invite( $refetched, 'manager-key' ) );
+	}
+
+	/**
+	 * A legacy key minted by someone who no longer manages the group still works. That is the
+	 * ticket's case seen from the storage side: readers hold the URL, and who issued it stopped
+	 * mattering the moment the link became the subscription's rather than the manager's.
+	 */
+	public function test_validate_link_invite_accepts_legacy_key_of_a_departed_manager() {
+		$owner_id    = $this->create_reader_user();
+		$departed_id = $this->create_reader_user();
+		$group_sub   = $this->create_group_subscription( $owner_id );
+
+		// $departed_id holds no manager meta, so they do not manage this group.
+		$group_sub->update_meta_data(
+			Group_Subscription_Invite::LINK_META,
+			[
+				$departed_id => [
+					'key'        => 'departed-key',
+					'created_at' => 1000,
+				],
+				$owner_id    => [
+					'key'        => 'owner-key',
+					'created_at' => 2000,
+				],
+			]
+		);
+		$group_sub->save();
+
+		$this->assertFalse( Group_Subscription::user_is_manager( $departed_id, $group_sub ) );
+		$this->assertTrue( Group_Subscription_Invite::validate_link_invite( $group_sub, 'departed-key' ) );
+		$this->assertTrue( Group_Subscription_Invite::validate_link_invite( $group_sub, 'owner-key' ) );
+	}
+
+	/**
+	 * A keyless URL must never be accepted, from either direction -- hash_equals( '', '' ) is true.
+	 * The two guards are redundant by design, so this pins the behaviour rather than either guard.
+	 */
+	public function test_validate_link_invite_rejects_empty_key() {
+		$owner_id  = $this->create_reader_user();
+		$group_sub = $this->create_group_subscription( $owner_id );
+
+		wp_set_current_user( $owner_id );
+		Group_Subscription_Invite::generate_link_invite( $group_sub, $owner_id );
+
+		// A real link exists, so this exercises the supplied-key guard.
+		$this->assertWPError( Group_Subscription_Invite::validate_link_invite( $group_sub, '' ) );
+
+		// An empty stored key yields no usable entry, so it can't be matched by any URL.
+		$group_sub->update_meta_data(
+			Group_Subscription_Invite::LINK_META,
+			[
+				'key'        => '',
+				'created_at' => time(),
+				'created_by' => $owner_id,
+			]
+		);
+		$group_sub->save();
+		$this->assertWPError( Group_Subscription_Invite::validate_link_invite( $group_sub, '' ) );
+		$this->assertNull( Group_Subscription_Invite::get_link_invite( $group_sub ) );
 	}
 
 	/**
 	 * Test validate_link_invite() rejects an unknown subscription.
 	 */
 	public function test_validate_link_invite_unknown_subscription() {
-		$result = Group_Subscription_Invite::validate_link_invite( 99999, 1, 'key' );
+		$result = Group_Subscription_Invite::validate_link_invite( 99999, 'key' );
 		$this->assertWPError( $result );
 	}
 
@@ -1463,18 +1567,18 @@ class Test_Group_Subscriptions extends \WP_UnitTestCase {
 		$owner_id = $this->create_reader_user();
 		$regular  = $this->create_regular_subscription( $owner_id );
 
-		$result = Group_Subscription_Invite::validate_link_invite( $regular, $owner_id, 'key' );
+		$result = Group_Subscription_Invite::validate_link_invite( $regular, 'key' );
 		$this->assertWPError( $result );
 	}
 
 	/**
-	 * Test validate_link_invite() rejects when no entry exists for the user.
+	 * Test validate_link_invite() rejects when the subscription has no invite link.
 	 */
 	public function test_validate_link_invite_no_entry() {
 		$owner_id  = $this->create_reader_user();
 		$group_sub = $this->create_group_subscription( $owner_id );
 
-		$result = Group_Subscription_Invite::validate_link_invite( $group_sub, $owner_id, 'key' );
+		$result = Group_Subscription_Invite::validate_link_invite( $group_sub, 'key' );
 		$this->assertWPError( $result );
 	}
 
@@ -1488,35 +1592,32 @@ class Test_Group_Subscriptions extends \WP_UnitTestCase {
 		wp_set_current_user( $owner_id );
 		Group_Subscription_Invite::generate_link_invite( $group_sub, $owner_id );
 
-		$result = Group_Subscription_Invite::validate_link_invite( $group_sub, $owner_id, 'wrong-key' );
+		$result = Group_Subscription_Invite::validate_link_invite( $group_sub, 'wrong-key' );
 		$this->assertWPError( $result );
 	}
 
 	/**
-	 * Test validate_link_invite() rejects when the manager is no longer a manager.
+	 * The whole point of a subscription-wide invite link: a link minted by one manager keeps
+	 * working after that manager is gone, instead of dying with their manager status.
 	 */
-	public function test_validate_link_invite_manager_no_longer_manager() {
+	public function test_validate_link_invite_survives_manager_change() {
 		$owner_id  = $this->create_reader_user();
 		$group_sub = $this->create_group_subscription( $owner_id );
 
 		wp_set_current_user( $owner_id );
 		$invite = Group_Subscription_Invite::generate_link_invite( $group_sub, $owner_id );
 
-		// Use a filter to simulate the user no longer being a manager.
-		$callback = function ( $is_manager, $user_id ) use ( $owner_id ) {
-			if ( (int) $user_id === (int) $owner_id ) {
-				return false;
-			}
-			return $is_manager;
+		// Simulate the minting manager no longer managing this subscription.
+		$not_a_manager_anymore = function ( $is_manager, $user_id ) use ( $owner_id ) {
+			return (int) $user_id === (int) $owner_id ? false : $is_manager;
 		};
-		add_filter( 'newspack_group_subscription_user_is_manager', $callback, 10, 2 );
+		add_filter( 'newspack_group_subscription_user_is_manager', $not_a_manager_anymore, 10, 2 );
 
-		$result = Group_Subscription_Invite::validate_link_invite( $group_sub, $owner_id, $invite['key'] );
+		$result = Group_Subscription_Invite::validate_link_invite( $group_sub, $invite['key'] );
 
-		remove_filter( 'newspack_group_subscription_user_is_manager', $callback, 10 );
+		remove_filter( 'newspack_group_subscription_user_is_manager', $not_a_manager_anymore, 10 );
 
-		$this->assertWPError( $result );
-		$this->assertEquals( 'newspack_group_subscription_link_invite_not_manager', $result->get_error_code() );
+		$this->assertTrue( $result );
 	}
 
 	/**
@@ -1699,7 +1800,7 @@ class Test_Group_Subscriptions extends \WP_UnitTestCase {
 		// Cancel the subscription after the invite was generated.
 		$group_sub->data['status'] = 'cancelled';
 
-		$result = Group_Subscription_Invite::validate_link_invite( $group_sub, $owner_id, $invite['key'] );
+		$result = Group_Subscription_Invite::validate_link_invite( $group_sub, $invite['key'] );
 		$this->assertWPError( $result );
 		$this->assertEquals(
 			'newspack_group_subscription_link_invite_invalid_subscription',
