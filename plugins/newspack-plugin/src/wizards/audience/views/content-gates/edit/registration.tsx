@@ -13,7 +13,7 @@ import Metering from './metering';
 
 interface RegistrationProps {
 	registration: Registration;
-	onChange: ( registration: Partial< Registration > ) => void;
+	onChange: ( registration: Registration ) => void;
 	cardProps?: Partial< React.ComponentPropsWithoutRef< typeof ActionCard > >;
 	isNewsletter?: boolean;
 }

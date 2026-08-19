@@ -169,6 +169,7 @@ One repository, so a cross-plugin change is one branch and one PR. Before changi
 ## Pull requests
 
 - **Squash merge** (`gh pr merge --squash`). The exception is branch promotions between `main`, `alpha` and `release`, which use merge commits to preserve history.
+- **`hotfix/*` and `epic/*` branches don't release.** They remain valid branch names, but pushes to them no longer publish prerelease tags or builds; releases come only from `release` (stable) and `alpha`. To test a branch on a site, use the installable zip CI's `build-zips` job attaches to every commit.
 - **Never push or merge unless asked.**
 - **One Copilot pass per PR**, requested when the PR opens. After addressing its feedback do not re-request it; the next review should be a human's.
 

@@ -10,6 +10,7 @@ overrides:
   prettier: npm:wp-prettier@^3.0.3
   react: 18.3.1
   react-dom: 18.3.1
+  '@wordpress/stylelint-config>@wordpress/theme': ^0.16.0
 
 patchedDependencies:
   multi-semantic-release:
@@ -297,10 +298,10 @@ importers:
         version: 4.48.0(wp-prettier@3.0.3)
       '@wordpress/scripts':
         specifier: ^30.26.0
-        version: 30.27.0(@playwright/test@1.59.1)(@types/eslint@9.6.1)(@types/node@25.6.0)(babel-plugin-macros@3.1.0)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(stylelint-scss@6.14.0(stylelint@16.26.1(typescript@5.9.3)))(type-fest@4.41.0)(typescript@5.9.3)
+        version: 30.27.0(@playwright/test@1.59.1)(@types/eslint@9.6.1)(@types/node@25.6.0)(@types/react@18.3.31)(babel-plugin-macros@3.1.0)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(stylelint-scss@6.14.0(stylelint@16.26.1(typescript@5.9.3)))(type-fest@4.41.0)(typescript@5.9.3)
       '@wordpress/stylelint-config':
         specifier: ^23.40.0
-        version: 23.40.0(postcss@8.5.15)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(stylelint-scss@6.14.0(stylelint@16.26.1(typescript@5.9.3)))(stylelint@16.26.1(typescript@5.9.3))
+        version: 23.40.0(@types/react@18.3.31)(postcss@8.5.15)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(stylelint-scss@6.14.0(stylelint@16.26.1(typescript@5.9.3)))(stylelint@16.26.1(typescript@5.9.3))
       autoprefixer:
         specifier: ^10.4.21
         version: 10.5.0(postcss@8.5.15)
@@ -4043,6 +4044,10 @@ packages:
     resolution: {integrity: sha512-frzAg1rsn8X0KNgrxxLxszLvWCKY0Nk2e8j8Mjm2pI2URmS8Et7NefuXP3JnHBD4U1L1Ug9yKO/FA65ojQ7CEA==, tarball: https://registry.npmjs.org/@wordpress/style-runtime/-/style-runtime-0.4.0.tgz}
     engines: {node: '>=20.10.0', npm: '>=10.2.3'}
 
+  '@wordpress/style-runtime@0.4.1':
+    resolution: {integrity: sha512-guZ0p9a5ZQyyCFPwVqDkhDNVXdXAhIqNkPGSNIGguEtt3OtSOskEMwYJHyXZYX8nlbH0FyKflGJhE4G6QlIWlw==, tarball: https://registry.npmjs.org/@wordpress/style-runtime/-/style-runtime-0.4.1.tgz}
+    engines: {node: '>=20.10.0', npm: '>=10.2.3'}
+
   '@wordpress/style-runtime@0.5.0':
     resolution: {integrity: sha512-hrXvdDUJpOzT1KIomgtysysgbc5bkkwAuJyEUAXiOCgVBXBeMkZlgfN19W0PuNY51j53K7VQ42txfayxgVmfgA==, tarball: https://registry.npmjs.org/@wordpress/style-runtime/-/style-runtime-0.5.0.tgz}
     engines: {node: '>=20.10.0', npm: '>=10.2.3'}
@@ -4058,8 +4063,8 @@ packages:
     resolution: {integrity: sha512-nkDL58Xzl4UoDAhlHJu3pkpHljQiw88hKNJZBUr6DsBIIRhWR4wLE0aiCW7oeGwZLYaFC0Stxv1QpDQ2oSS48A==}
     engines: {node: '>=18.12.0', npm: '>=8.19.2'}
 
-  '@wordpress/theme@0.15.0':
-    resolution: {integrity: sha512-qoozJ4YEPb0LvTBnTMj8a7kPlQtT2LeGL7b/vKJkvnB9dIEUOED5c0rpeRZJoK9b77fpUH5GwYzPE3IWiQ6l2w==}
+  '@wordpress/theme@0.15.1':
+    resolution: {integrity: sha512-0SqH40Sd4pKH8YkDjQ4JM2NJzdhliO19QTPHAOAGA+tXuh+YwHOwFxX8Mg0v/vvI4XJD11zuiKGr+grBI7icTQ==, tarball: https://registry.npmjs.org/@wordpress/theme/-/theme-0.15.1.tgz}
     engines: {node: '>=18.12.0', npm: '>=8.19.2'}
     peerDependencies:
       react: 18.3.1
@@ -17459,7 +17464,7 @@ snapshots:
     transitivePeerDependencies:
       - '@types/react'
 
-  '@wordpress/scripts@30.27.0(@playwright/test@1.59.1)(@types/eslint@9.6.1)(@types/node@25.6.0)(babel-plugin-macros@3.1.0)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(stylelint-scss@6.14.0(stylelint@16.26.1(typescript@5.9.3)))(type-fest@4.41.0)(typescript@5.9.3)':
+  '@wordpress/scripts@30.27.0(@playwright/test@1.59.1)(@types/eslint@9.6.1)(@types/node@25.6.0)(@types/react@18.3.31)(babel-plugin-macros@3.1.0)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(stylelint-scss@6.14.0(stylelint@16.26.1(typescript@5.9.3)))(type-fest@4.41.0)(typescript@5.9.3)':
     dependencies:
       '@babel/core': 7.25.7
       '@playwright/test': 1.59.1
@@ -17474,7 +17479,7 @@ snapshots:
       '@wordpress/npm-package-json-lint-config': 5.44.0(npm-package-json-lint@6.4.0(typescript@5.9.3))
       '@wordpress/postcss-plugins-preset': 5.44.0(postcss@8.5.15)
       '@wordpress/prettier-config': 4.48.0(wp-prettier@3.0.3)
-      '@wordpress/stylelint-config': 23.40.0(postcss@8.5.15)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(stylelint-scss@6.14.0(stylelint@16.26.1(typescript@5.9.3)))(stylelint@16.26.1(typescript@5.9.3))
+      '@wordpress/stylelint-config': 23.40.0(@types/react@18.3.31)(postcss@8.5.15)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(stylelint-scss@6.14.0(stylelint@16.26.1(typescript@5.9.3)))(stylelint@16.26.1(typescript@5.9.3))
       adm-zip: 0.5.17
       babel-jest: 29.7.0(@babel/core@7.25.7)
       babel-loader: 9.2.1(@babel/core@7.25.7)(webpack@5.106.2)
@@ -17528,6 +17533,7 @@ snapshots:
       - '@swc/core'
       - '@types/eslint'
       - '@types/node'
+      - '@types/react'
       - '@types/webpack'
       - '@webpack-cli/generators'
       - babel-plugin-macros
@@ -17552,6 +17558,7 @@ snapshots:
       - typescript
       - uglify-js
       - utf-8-validate
+      - vite
       - webpack-hot-middleware
       - webpack-plugin-serve
 
@@ -17586,20 +17593,25 @@ snapshots:
 
   '@wordpress/style-runtime@0.4.0': {}
 
+  '@wordpress/style-runtime@0.4.1': {}
+
   '@wordpress/style-runtime@0.5.0': {}
 
-  '@wordpress/stylelint-config@23.40.0(postcss@8.5.15)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(stylelint-scss@6.14.0(stylelint@16.26.1(typescript@5.9.3)))(stylelint@16.26.1(typescript@5.9.3))':
+  '@wordpress/stylelint-config@23.40.0(@types/react@18.3.31)(postcss@8.5.15)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(stylelint-scss@6.14.0(stylelint@16.26.1(typescript@5.9.3)))(stylelint@16.26.1(typescript@5.9.3))':
     dependencies:
       '@stylistic/stylelint-plugin': 3.1.3(stylelint@16.26.1(typescript@5.9.3))
-      '@wordpress/theme': 0.15.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(stylelint@16.26.1(typescript@5.9.3))
+      '@wordpress/theme': 0.16.0(@types/react@18.3.31)(postcss@8.5.15)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(stylelint@16.26.1(typescript@5.9.3))
       stylelint: 16.26.1(typescript@5.9.3)
       stylelint-config-recommended: 14.0.1(stylelint@16.26.1(typescript@5.9.3))
       stylelint-config-recommended-scss: 14.1.0(postcss@8.5.15)(stylelint@16.26.1(typescript@5.9.3))
       stylelint-scss: 6.14.0(stylelint@16.26.1(typescript@5.9.3))
     transitivePeerDependencies:
+      - '@types/react'
+      - esbuild
       - postcss
       - react
       - react-dom
+      - vite
 
   '@wordpress/sync@1.48.0':
     dependencies:
@@ -17613,11 +17625,12 @@ snapshots:
       y-protocols: 1.0.7(yjs@13.6.29)
       yjs: 13.6.29
 
-  '@wordpress/theme@0.15.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(stylelint@16.26.1(typescript@5.9.3))':
+  '@wordpress/theme@0.15.1(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(stylelint@16.26.1(typescript@5.9.3))':
     dependencies:
+      '@types/react': 18.3.31
       '@wordpress/element': 8.1.0
       '@wordpress/private-apis': 1.49.0
-      '@wordpress/style-runtime': 0.4.0
+      '@wordpress/style-runtime': 0.4.1
       colorjs.io: 0.6.1
       memize: 2.1.1
       react: 18.3.1
@@ -17653,7 +17666,7 @@ snapshots:
       '@wordpress/primitives': 4.49.0(@types/react@18.3.31)(react@18.3.1)
       '@wordpress/private-apis': 1.49.0
       '@wordpress/style-runtime': 0.4.0
-      '@wordpress/theme': 0.15.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(stylelint@16.26.1(typescript@5.9.3))
+      '@wordpress/theme': 0.15.1(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(stylelint@16.26.1(typescript@5.9.3))
       clsx: 2.1.1
       react: 18.3.1
       react-dom: 18.3.1(react@18.3.1)
