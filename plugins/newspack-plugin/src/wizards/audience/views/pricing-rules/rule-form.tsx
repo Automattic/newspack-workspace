@@ -153,7 +153,7 @@ export default function RuleForm( { isNew, initialPath = null, rule, vocab, onDo
 	const [ title, setTitle ] = useState( rule?.title ?? seedTitle );
 	// The name follows the goal until the publisher types their own.
 	const [ titleIsAuto, setTitleIsAuto ] = useState( isNew && ! rule?.title );
-	const [ status, setStatus ] = useState( rule?.status === 'publish' ? 'publish' : 'draft' );
+	const [ status, setStatus ] = useState< 'publish' | 'draft' >( rule?.status === 'publish' ? 'publish' : 'draft' );
 	const [ calcType, setCalcType ] = useState( rule?.simple?.calc_type ?? vocab.calc_types[ 0 ]?.value ?? 'fixed_price' );
 	const [ value, setValue ] = useState( String( rule?.simple?.value ?? '' ) );
 	const [ cyclesLimit, setCyclesLimit ] = useState( String( rule?.simple?.cycles_limit ?? 0 ) );
@@ -180,7 +180,10 @@ export default function RuleForm( { isNew, initialPath = null, rule, vocab, onDo
 	const [ scopeType, setScopeType ] = useState( rule?.scope_type ?? seedScope ?? vocab.scopes[ 0 ]?.id ?? 'all_products' );
 	const [ scopeIds, setScopeIds ] = useState< number[] >( rule?.scope_ids ?? [] );
 	const [ priority, setPriority ] = useState( String( rule?.priority ?? 100 ) );
-	const [ composeMode, setComposeMode ] = useState( rule?.compose_mode ?? 'min' );
+	// The rule schema leaves compose_mode open, and the select only offers the two
+	// modes below. Hold whatever the server sent so a value this UI doesn't know
+	// round-trips on save instead of being rewritten to 'min'.
+	const [ composeMode, setComposeMode ] = useState< PricingRuleRow[ 'compose_mode' ] >( rule?.compose_mode ?? 'min' );
 	const [ application, setApplication ] = useState( rule?.application === 'locked' ? 'locked' : seedApplication ?? 'current' );
 	const [ cycleAnchor, setCycleAnchor ] = useState( rule?.cycle_anchor === 'rule_application' ? 'rule_application' : seedCycleAnchor );
 	const [ publicize, setPublicize ] = useState( Boolean( rule?.publicize ) );
@@ -732,10 +735,12 @@ export default function RuleForm( { isNew, initialPath = null, rule, vocab, onDo
 						<SelectControl
 							label={ __( 'When multiple rules match', 'newspack-plugin' ) }
 							value={ composeMode }
-							options={ [
-								{ label: __( 'Best price wins (default)', 'newspack-plugin' ), value: 'min' },
-								{ label: __( 'This rule only (stop checking others)', 'newspack-plugin' ), value: 'priority_exclusive' },
-							] }
+							options={
+								[
+									{ label: __( 'Best price wins (default)', 'newspack-plugin' ), value: 'min' },
+									{ label: __( 'This rule only (stop checking others)', 'newspack-plugin' ), value: 'priority_exclusive' },
+								] as { label: string; value: PricingRuleRow[ 'compose_mode' ] }[]
+							}
 							onChange={ setComposeMode }
 							__next40pxDefaultSize
 						/>

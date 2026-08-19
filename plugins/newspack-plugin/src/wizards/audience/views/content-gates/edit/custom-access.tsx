@@ -22,7 +22,7 @@ function hasSubscriptionRule( accessRules: GateAccessRuleGroup[] ) {
 
 interface CustomAccessProps {
 	customAccess: CustomAccess;
-	onChange: ( customAccess: Partial< CustomAccess > ) => void;
+	onChange: ( customAccess: CustomAccess ) => void;
 	isNewsletter?: boolean;
 }
 
