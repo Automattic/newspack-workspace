@@ -80,6 +80,44 @@ jobs:
       - name: Plan release (does any package need a release?)
         id: plan
         run: |
+          # A push that a newer push has already replaced must not fail. Push
+          # twice in quick succession -- base-refreshing a hotfix branch minutes
+          # apart does it -- and the older run still holds the older SHA, so
+          # multi-semantic-release below refuses from a stale checkout and exits
+          # non-zero with "The local branch <branch> is behind the remote one".
+          # cancel-in-progress stays false on purpose (an in-flight real release
+          # must never be interrupted), so the check has to live inside the job.
+          #
+          # "The tip moved" is not on its own a reason to skip: this workflow
+          # only runs on branches that publish (the list lives in
+          # config/release.js), so a skip nothing else covers loses a release
+          # silently. Only skip when the
+          # newer commit will get a run of its own, which needs two things to
+          # hold. It must be a descendant of this SHA -- a force-push that
+          # rewound the branch leaves this run as the only one that ever saw
+          # these commits. And it must not be a [skip ci] commit -- that is how
+          # semantic-release pushes its own version bump, and it starts no run,
+          # so whatever this run was handed would never be released. Either way
+          # the old behaviour stands: the dry-run below fails, which is the loud
+          # signal a missed release needs.
+          fetched=true
+          git fetch --quiet --no-tags origin "+refs/heads/$GITHUB_REF_NAME" || fetched=false
+          remote_tip=''
+          if [ "$fetched" = true ]; then
+            remote_tip=$(git rev-parse FETCH_HEAD 2>/dev/null) || remote_tip=''
+          fi
+          if [ -z "$remote_tip" ]; then
+            echo "::warning::Could not read the remote tip of $GITHUB_REF_NAME; treating this run as current."
+          elif [ "$remote_tip" != "$GITHUB_SHA" ]; then
+            if git merge-base --is-ancestor "$GITHUB_SHA" "$remote_tip" &&
+              ! git log -1 --format=%B "$remote_tip" | grep -qF '[skip ci]'; then
+              echo "::notice::$GITHUB_SHA is no longer the tip of $GITHUB_REF_NAME (now $remote_tip); the newer push has a run of its own, so this one has nothing to do."
+              echo "release_needed=false" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+            echo "::warning::$GITHUB_SHA is behind $GITHUB_REF_NAME (now $remote_tip), but the newer commit is a rewind or a [skip ci] commit that starts no run. Continuing, so a release this run cannot publish fails loudly."
+          fi
+
           # Fail loud on any pipeline/log/grep error: a false "no release" here
           # would silently skip a real release, the one outcome we must avoid.
           set +e
