@@ -61,9 +61,7 @@ function SubscriberDiscounts() {
 	const [ error, setError ] = useState( '' );
 	const { setHeaderData } = useDispatch( WIZARD_STORE_NAMESPACE );
 
-	// The editor is routed rather than held in state, so a rule is addressable:
-	// `#/discounts/new` and `#/discounts/edit/:id` deep-link straight into the
-	// drawer, and survive a move to another engine's routed editor.
+	// The editor is routed rather than held in state so rules stay addressable.
 	const history = useHistory();
 	const { pathname } = useLocation();
 	const { url: baseUrl } = useRouteMatch();
@@ -132,8 +130,6 @@ function SubscriberDiscounts() {
 	);
 	const isEditorOpen = !! newMatch || !! editingRule;
 
-	// A deep link to a rule that no longer exists lands back on the list with an
-	// explanation, rather than opening an editor for nothing.
 	useEffect( () => {
 		if ( ! isLoading && editingId && ! editingRule ) {
 			setError( __( 'That discount could not be found.', 'newspack-plugin' ) );
