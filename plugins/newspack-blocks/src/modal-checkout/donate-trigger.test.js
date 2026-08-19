@@ -2,7 +2,7 @@
  * Tests for the donate URL trigger resolution helpers.
  */
 
-import { resolveDonationTrigger, validateDonationTriggerParams, TIERS_BASED_READY_EVENT } from './donate-trigger';
+import { resolveDonationTrigger, validateDonationTriggerParams, TIERS_BASED_READY_EVENT, TIERS_BASED_READY_ATTRIBUTE } from './donate-trigger';
 
 /**
  * Build a tiers-based Donate block markup string, mirroring
@@ -21,7 +21,7 @@ const tieredBlock = ( {
 	amounts = { month: [ 7, 15, 30 ], year: [ 84, 180, 360 ] },
 	ready = true,
 } = {} ) => {
-	const readyAttr = ready ? ' data-tiers-based-ready' : '';
+	const readyAttr = ready ? ` ${ TIERS_BASED_READY_ATTRIBUTE }` : '';
 	const tabs =
 		frequencies.length > 1
 			? `<div class="wpbnbd__tiers__selection">${ frequencies
@@ -161,7 +161,8 @@ describe( 'resolveDonationTrigger — tiered layout', () => {
 		// What the tiers-based view does when it initializes (see view.ts):
 		// stamp the container, then announce readiness so waiting triggers retry.
 		expect( TIERS_BASED_READY_EVENT ).toBe( 'newspack-tiers-based-ready' );
-		root.querySelector( '.wpbnbd--tiers-based' ).setAttribute( 'data-tiers-based-ready', '' );
+		expect( TIERS_BASED_READY_ATTRIBUTE ).toBe( 'data-tiers-based-ready' );
+		root.querySelector( '.wpbnbd--tiers-based' ).setAttribute( TIERS_BASED_READY_ATTRIBUTE, '' );
 		const retried = resolveDonationTrigger( root, { layout: 'tiered', frequency: 'year', amount: '180' } );
 		expect( retried.status ).toBe( 'tiered' );
 	} );

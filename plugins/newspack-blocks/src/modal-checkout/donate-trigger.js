@@ -31,6 +31,15 @@ export const VALID_FREQUENCIES = [ 'once', 'month', 'year' ];
 export const TIERS_BASED_READY_EVENT = 'newspack-tiers-based-ready';
 
 /**
+ * Attribute the tiers-based view script stamps on its container when it
+ * initializes — the other half of the readiness handshake announced by
+ * TIERS_BASED_READY_EVENT. The resolver reads it; view.ts writes it.
+ *
+ * @type {string}
+ */
+export const TIERS_BASED_READY_ATTRIBUTE = 'data-tiers-based-ready';
+
+/**
  * Validate donate URL trigger parameters.
  *
  * The values are interpolated into attribute selectors, so anything outside
@@ -103,7 +112,7 @@ export function resolveDonationTrigger( root, { layout, frequency, amount } ) {
 			if ( ! frequencyButton && ! form.querySelector( `input[name="donation_frequency"][value="${ frequency }"]` ) ) {
 				continue;
 			}
-			if ( ! tiersContainer.hasAttribute( 'data-tiers-based-ready' ) ) {
+			if ( ! tiersContainer.hasAttribute( TIERS_BASED_READY_ATTRIBUTE ) ) {
 				// Remember the first not-ready match but keep scanning: a later,
 				// already-initialized block that satisfies the trigger beats waiting
 				// on one that may never become ready (the view script bails without
