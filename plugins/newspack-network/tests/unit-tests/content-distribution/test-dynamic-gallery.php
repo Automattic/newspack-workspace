@@ -132,8 +132,8 @@ class TestDynamicGallery extends \WP_UnitTestCase {
 				[
 					'columns'   => 3,
 					'imageCrop' => false,
-				] 
-			) 
+				]
+			)
 		);
 
 		$this->assertStringContainsString( 'columns-3', $output, 'The column count must survive.' );
