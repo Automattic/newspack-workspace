@@ -153,11 +153,12 @@ class Blocks {
 	 * an ordinary gallery is saved in, which already distributes correctly.
 	 *
 	 * The image and wrapper construction mirrors core's own dynamic render
-	 * (`block_core_gallery_render_dynamic_image()` and the `dynamicContent` branch
-	 * of `block_core_gallery_render()`), reusing core's helpers so links, captions,
-	 * aspect ratio and responsive markup match what the origin renders. Blocks are
-	 * built as arrays and left for `serialize_blocks()` to encode, so attribute
-	 * values never pass through a hand-written block-comment delimiter.
+	 * (the `dynamicContent` branch of `block_core_gallery_render()`), reusing core's
+	 * link helper so links, the lightbox and captions match what the origin shows.
+	 * The markup itself is the shape the blocks *save* in, not the shape core
+	 * renders, since a node stores it and its editor validates it against `save()`.
+	 * Blocks are built as arrays and left for `serialize_blocks()` to encode, so
+	 * attribute values never pass through a hand-written block-comment delimiter.
 	 *
 	 * Two caveats worth knowing:
 	 *
@@ -291,32 +292,33 @@ class Blocks {
 	 * @return array|null The image block, or null when no markup could be built.
 	 */
 	private static function build_gallery_image_block( $attachment_id, $attributes ) {
-		$size_slug    = $attributes['sizeSlug'] ?? 'large';
-		$aspect_ratio = $attributes['aspectRatio'] ?? 'auto';
+		$size_slug = $attributes['sizeSlug'] ?? 'large';
 
-		$img_attr = [ 'class' => 'wp-image-' . $attachment_id ];
-		if ( $aspect_ratio && 'auto' !== $aspect_ratio ) {
-			$img_attr['style'] = safecss_filter_attr( sprintf( 'aspect-ratio:%s;object-fit:cover;', $aspect_ratio ) );
-		}
-
-		$image_markup = wp_get_attachment_image( $attachment_id, $size_slug, false, $img_attr );
-		if ( ! $image_markup ) {
+		$url = wp_get_attachment_image_url( $attachment_id, $size_slug );
+		if ( ! $url ) {
 			return null;
 		}
 
 		$image_attributes = array_merge(
 			[
-				'id'       => $attachment_id,
-				'data-id'  => (string) $attachment_id,
+				'id'       => (int) $attachment_id,
 				'sizeSlug' => $size_slug,
 			],
 			block_core_gallery_dynamic_image_link_attributes( $attachment_id, $attributes )
 		);
 
-		if ( $aspect_ratio && 'auto' !== $aspect_ratio ) {
-			$image_attributes['aspectRatio'] = $aspect_ratio;
-			$image_attributes['scale']       = 'cover';
-		}
+		// Build the `<img>` the way the image block *saves* it, not the way core
+		// renders it. `wp_get_attachment_image()` adds width, height, srcset, sizes,
+		// loading and decoding, which the block's `save()` never emits, so persisting
+		// them makes the block fail validation the moment an editor opens the post.
+		// Those attributes are added at render time on the node, as they are for any
+		// other distributed image.
+		$image_markup = sprintf(
+			'<img src="%1$s" alt="%2$s" class="wp-image-%3$d"/>',
+			esc_url( $url ),
+			esc_attr( (string) get_post_meta( $attachment_id, '_wp_attachment_image_alt', true ) ),
+			(int) $attachment_id
+		);
 
 		if ( ! empty( $image_attributes['href'] ) ) {
 			$image_markup = sprintf(
