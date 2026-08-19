@@ -1,3 +1,10 @@
+## newspack-icons [1.1.1](https://github.com/Automattic/newspack-workspace/compare/newspack-icons@1.1.0...newspack-icons@1.1.1) (2026-08-17)
+
+
+### Dependencies
+
+* **newspack-scripts:** upgraded to 5.11.0
+
 # newspack-icons [1.1.0](https://github.com/Automattic/newspack-workspace/compare/newspack-icons@1.0.8...newspack-icons@1.1.0) (2026-08-03)
 
 

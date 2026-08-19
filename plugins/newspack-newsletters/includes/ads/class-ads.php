@@ -375,6 +375,32 @@ final class Ads {
 	}
 
 	/**
+	 * Format a date-only ad meta value for display.
+	 *
+	 * `start_date`/`expiry_date` are whole calendar days: `is_ad_active()`
+	 * compares them as `Y-m-d` strings against the newsletter's own date, so
+	 * they carry neither a time nor a timezone. Anchoring at midnight in the
+	 * site timezone is what keeps the rendered day equal to the stored one —
+	 * `strtotime( 'Y-m-d' )` resolves against PHP's default zone (UTC under
+	 * WordPress) and `wp_date()` then converts into the site zone, which moved
+	 * the date a day earlier on every site at a negative UTC offset.
+	 *
+	 * @param mixed $value Raw meta value.
+	 * @return string Localized date, or '' when the value is empty or invalid.
+	 */
+	public static function format_ad_date( $value ) {
+		$value = self::sanitize_ad_date( $value );
+		if ( '' === $value ) {
+			return '';
+		}
+		$date = date_create_immutable( $value . ' 00:00:00', wp_timezone() );
+		if ( false === $date ) {
+			return '';
+		}
+		return wp_date( __( 'F j, Y' ), $date->getTimestamp() );
+	}
+
+	/**
 	 * Count only ads (self::CPT) tagged with each advertiser term, across
 	 * the same statuses the Ads list shows. Registered as the taxonomy's
 	 * `update_count_callback` so newsletter posts tagged with an advertiser
@@ -592,7 +618,7 @@ final class Ads {
 		$all_ads = get_posts(
 			[
 				'post_type'      => self::CPT,
-				'posts_per_page' => -1,
+				'posts_per_page' => -1, // phpcs:ignore WordPressVIPMinimum.Performance.NoPaging -- Newsletter ads CPT; config-scale.
 			]
 		);
 		$ads     = [];
@@ -740,19 +766,11 @@ final class Ads {
 	 */
 	public static function custom_column( $column_name, $post_id ) {
 		if ( 'start_date' === $column_name ) {
-			$start_date = get_post_meta( $post_id, 'start_date', true );
-			if ( ! empty( $start_date ) ) {
-				echo esc_html( wp_date( __( 'F j, Y' ), strtotime( $start_date ) ) );
-			} else {
-				echo '—';
-			}
+			$start_date = self::format_ad_date( get_post_meta( $post_id, 'start_date', true ) );
+			echo '' === $start_date ? '—' : esc_html( $start_date );
 		} elseif ( 'expiry_date' === $column_name ) {
-			$expiry_date = get_post_meta( $post_id, 'expiry_date', true );
-			if ( ! empty( $expiry_date ) ) {
-				echo esc_html( wp_date( __( 'F j, Y' ), strtotime( $expiry_date ) ) );
-			} else {
-				echo '—';
-			}
+			$expiry_date = self::format_ad_date( get_post_meta( $post_id, 'expiry_date', true ) );
+			echo '' === $expiry_date ? '—' : esc_html( $expiry_date );
 		} elseif ( 'price' === $column_name ) {
 			$price = get_post_meta( $post_id, 'price', true );
 			if ( ! empty( $price ) ) {
