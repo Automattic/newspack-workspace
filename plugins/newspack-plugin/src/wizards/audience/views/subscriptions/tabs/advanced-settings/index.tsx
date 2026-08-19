@@ -1,6 +1,5 @@
 /**
- * The Subscriptions wizard's Advanced Settings tab: site-wide subscription
- * settings.
+ * The Subscriptions wizard's Advanced Settings tab: site-wide subscription settings.
  */
 
 /**
@@ -10,90 +9,42 @@ import { sprintf, __ } from '@wordpress/i18n';
 import apiFetch from '@wordpress/api-fetch';
 import { useEffect, useState } from '@wordpress/element';
 import { useDispatch } from '@wordpress/data';
-import {
-	ExternalLink,
-	RadioControl,
-	SelectControl,
-	ToggleControl,
-	// eslint-disable-next-line @wordpress/no-unsafe-wp-apis
-	__experimentalHStack as HStack,
-	// eslint-disable-next-line @wordpress/no-unsafe-wp-apis
-	__experimentalVStack as VStack,
-} from '@wordpress/components';
+// eslint-disable-next-line @wordpress/no-unsafe-wp-apis
+import { ExternalLink, SelectControl, __experimentalHStack as HStack, __experimentalVStack as VStack } from '@wordpress/components';
 
 /**
  * Internal dependencies.
  */
-import { Button, Card, Divider, Grid, Notice, SectionHeader, useUnsavedChangesDialog } from '../../../../../../../packages/components/src';
+import { Button, Card, Grid, Notice, SectionHeader } from '../../../../../../../packages/components/src';
 import { WIZARD_STORE_NAMESPACE } from '../../../../../../../packages/components/src/wizard/store';
 import WizardsTab from '../../../../../wizards-tab';
 import WizardSection from '../../../../../wizards-section';
 import { registerTab } from '../registry';
 import { WIZARD_ENDPOINT } from '../../constants';
 
-import './style.scss';
-import { DISCOUNTS_ENDPOINT, DISCOUNT_SETTINGS_ENDPOINT } from '../discounts/constants';
-import type { DiscountSettings, DiscountsPayload } from '../discounts/types';
-
 function AdvancedSettings() {
-	const [ isLoading, setIsLoading ] = useState( true );
 	const [ inFlight, setInFlight ] = useState( false );
-	const [ error, setError ] = useState( '' );
-	const [ productSaved, setProductSaved ] = useState( window.newspackAudienceSubscriptions.primary_product );
-	const [ productDraft, setProductDraft ] = useState( window.newspackAudienceSubscriptions.primary_product );
-	const [ settingsSaved, setSettingsSaved ] = useState< DiscountSettings | null >( null );
-	const [ settingsDraft, setSettingsDraft ] = useState< DiscountSettings | null >( null );
+	const [ saved, setSaved ] = useState( window.newspackAudienceSubscriptions.primary_product );
+	const [ draft, setDraft ] = useState( window.newspackAudienceSubscriptions.primary_product );
 	const { setHeaderData } = useDispatch( WIZARD_STORE_NAMESPACE );
 
-	useEffect( () => {
-		apiFetch< DiscountsPayload >( { path: DISCOUNTS_ENDPOINT } )
-			.then( payload => {
-				setSettingsSaved( payload.settings );
-				setSettingsDraft( payload.settings );
-			} )
-			.catch( ( apiError: { message?: string } ) =>
-				setError( apiError?.message || __( 'These settings could not be loaded.', 'newspack-plugin' ) )
-			)
-			.finally( () => setIsLoading( false ) );
-	}, [] );
-
-	const isDirty = productDraft !== productSaved || JSON.stringify( settingsDraft ) !== JSON.stringify( settingsSaved );
-	const { confirmDialog: navBlockDialog } = useUnsavedChangesDialog( { when: isDirty && ! inFlight } );
+	const isDirty = draft !== saved;
 
 	useEffect( () => {
 		const save = () => {
 			setInFlight( true );
-			setError( '' );
-			const jobs = [];
-			if ( productDraft !== productSaved ) {
-				jobs.push(
-					apiFetch( {
-						path: `${ WIZARD_ENDPOINT }/primary-product`,
-						method: 'POST',
-						data: { primary_product: productDraft },
-					} ).then( () => {
-						setProductSaved( productDraft );
-						window.newspackAudienceSubscriptions.primary_product = productDraft;
-					} )
-				);
-			}
-			if ( settingsDraft && JSON.stringify( settingsDraft ) !== JSON.stringify( settingsSaved ) ) {
-				jobs.push(
-					apiFetch< DiscountsPayload >( {
-						path: DISCOUNT_SETTINGS_ENDPOINT,
-						method: 'POST',
-						data: settingsDraft,
-					} ).then( next => {
-						setSettingsSaved( next.settings );
-						setSettingsDraft( next.settings );
-					} )
-				);
-			}
-			Promise.all( jobs )
-				.catch( ( apiError: { message?: string } ) =>
-					setError( apiError?.message || __( 'These settings could not be saved.', 'newspack-plugin' ) )
-				)
-				.finally( () => setInFlight( false ) );
+			apiFetch( {
+				path: `${ WIZARD_ENDPOINT }/primary-product`,
+				method: 'POST',
+				data: { primary_product: draft },
+			} )
+				.then( () => {
+					setSaved( draft );
+					window.newspackAudienceSubscriptions.primary_product = draft;
+				} )
+				.finally( () => {
+					setInFlight( false );
+				} );
 		};
 		setHeaderData( {
 			actions: [
@@ -101,16 +52,15 @@ function AdvancedSettings() {
 					type: 'primary',
 					label: __( 'Save', 'newspack-plugin' ),
 					action: save,
-					disabled: isLoading || ! isDirty || inFlight,
+					disabled: ! isDirty || inFlight,
 				},
 			],
 		} );
-	}, [ setHeaderData, isLoading, productDraft, productSaved, settingsDraft, settingsSaved, isDirty, inFlight ] );
+	}, [ setHeaderData, draft, isDirty, inFlight ] );
 
 	return (
-		<WizardsTab className="newspack-advanced-settings">
+		<WizardsTab>
 			<WizardSection>
-				{ error && <Notice isError noticeText={ error } /> }
 				<Grid columns={ 2 } gutter={ 32 }>
 					<SectionHeader
 						heading={ 2 }
@@ -134,13 +84,13 @@ function AdvancedSettings() {
 									label: product.title,
 								} ) ),
 							] }
-							value={ productDraft }
-							onChange={ setProductDraft }
+							value={ draft }
+							onChange={ setDraft }
 							disabled={ inFlight }
 							__next40pxDefaultSize
 							__nextHasNoMarginBottom
 						/>
-						{ productSaved && (
+						{ saved && (
 							<Notice isDismissible={ false }>
 								{ __( 'Share the following URL to trigger the subscription upgrade:', 'newspack-plugin' ) }{ ' ' }
 								<a href={ window.newspackAudienceSubscriptions.upgrade_subscription_url } target="_blank" rel="noreferrer noopener">
@@ -148,20 +98,20 @@ function AdvancedSettings() {
 								</a>
 							</Notice>
 						) }
-						{ productDraft ? (
+						{ draft ? (
 							<HStack>
 								<p>
-									<Button variant="link" disabled={ inFlight } onClick={ () => setProductDraft( '' ) }>
+									<Button variant="link" disabled={ inFlight } onClick={ () => setDraft( '' ) }>
 										{ __( 'Reset primary product', 'newspack-plugin' ) }
 									</Button>
 								</p>
 								<p>
-									<ExternalLink href={ `/wp-admin/post.php?post=${ productDraft }&action=edit` }>
+									<ExternalLink href={ `/wp-admin/post.php?post=${ draft }&action=edit` }>
 										{ sprintf(
 											/* translators: %s: product title */
 											__( 'Edit %s', 'newspack-plugin' ),
 											window.newspackAudienceSubscriptions.eligible_products.find(
-												product => parseInt( product.id ) === parseInt( productDraft )
+												product => parseInt( product.id ) === parseInt( draft )
 											)?.title || __( 'the product', 'newspack-plugin' )
 										) }
 									</ExternalLink>
@@ -170,61 +120,6 @@ function AdvancedSettings() {
 						) : null }
 					</VStack>
 				</Grid>
-				{ settingsDraft && (
-					<>
-						<Divider alignment="full-width" variant="tertiary" />
-						<Grid columns={ 2 } gutter={ 32 }>
-							<SectionHeader
-								heading={ 2 }
-								title={ __( 'Discounts', 'newspack-plugin' ) }
-								description={ __( 'How subscriber discounts behave across your store.', 'newspack-plugin' ) }
-							/>
-							<VStack spacing={ 6 } justify="flex-start">
-								<VStack spacing={ 4 }>
-									<h3>{ __( 'Combining Discounts', 'newspack-plugin' ) }</h3>
-									<RadioControl
-										label={ __( 'Overlapping discounts', 'newspack-plugin' ) }
-										hideLabelFromVision
-										help={ __(
-											'What happens when more than one subscriber discount applies to the same product.',
-											'newspack-plugin'
-										) }
-										selected={ settingsDraft.overlap }
-										onChange={ ( value: string ) =>
-											setSettingsDraft( { ...settingsDraft, overlap: value as DiscountSettings[ 'overlap' ] } )
-										}
-										options={ [
-											{ value: 'best', label: __( 'Apply the best discount only', 'newspack-plugin' ) },
-											{ value: 'combine', label: __( 'Combine discounts', 'newspack-plugin' ) },
-										] }
-									/>
-									<ToggleControl
-										label={ __( 'Apply on top of sale prices', 'newspack-plugin' ) }
-										help={ __( 'Subscribers get their discount even on products that are already on sale.', 'newspack-plugin' ) }
-										checked={ settingsDraft.apply_on_sale }
-										onChange={ value => setSettingsDraft( { ...settingsDraft, apply_on_sale: value } ) }
-										disabled={ inFlight }
-										__nextHasNoMarginBottom
-									/>
-								</VStack>
-								<VStack spacing={ 4 }>
-									<h3>{ __( 'Timing', 'newspack-plugin' ) }</h3>
-									<ToggleControl
-										label={ __( 'Apply discounts at checkout', 'newspack-plugin' ) }
-										help={ __(
-											'Give readers their subscriber prices as soon as a subscription is in their cart, before they have completed the purchase.',
-											'newspack-plugin'
-										) }
-										checked={ settingsDraft.apply_at_checkout }
-										onChange={ value => setSettingsDraft( { ...settingsDraft, apply_at_checkout: value } ) }
-										disabled={ inFlight }
-										__nextHasNoMarginBottom
-									/>
-								</VStack>
-							</VStack>
-						</Grid>
-					</>
-				) }
 				{ /* Only meaningful while Memberships is still installed; a migrated site has no such screen. */ }
 				{ window.newspackAudienceSubscriptions.memberships_active && (
 					<Card>
@@ -236,7 +131,6 @@ function AdvancedSettings() {
 					</Card>
 				) }
 			</WizardSection>
-			{ navBlockDialog }
 		</WizardsTab>
 	);
 }
