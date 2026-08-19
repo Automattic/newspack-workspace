@@ -1,4 +1,4 @@
-<?php // phpcs:ignore WordPress.Files.FileName
+<?php
 /**
  * Test-only exception used to intercept the subscribe block's redirect branch.
  *
@@ -15,7 +15,7 @@
  * branch relies on, this one fires deterministically regardless of whether
  * headers have already been sent in this process.
  */
-class Subscribe_Block_Redirect_Interrupt extends Exception {
+class Newspack_Newsletters_Subscribe_Block_Redirect_Interrupt extends Exception {
 	/**
 	 * The location argument the `wp_redirect` filter was called with.
 	 *

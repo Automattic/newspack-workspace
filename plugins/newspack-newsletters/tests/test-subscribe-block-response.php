@@ -15,6 +15,7 @@ use function Newspack_Newsletters\Blocks\Subscribe\send_form_response;
  */
 class Subscribe_Block_Response_Test extends WP_UnitTestCase {
 
+
 	/**
 	 * Saved $_SERVER['HTTP_ACCEPT'], restored in tear_down.
 	 *
@@ -85,6 +86,7 @@ class Subscribe_Block_Response_Test extends WP_UnitTestCase {
 	private function capture_response( $data ) {
 		add_filter( 'wp_doing_ajax', '__return_true' );
 		add_filter( 'wp_die_ajax_handler', array( $this, 'get_wp_die_handler' ) );
+
 		ob_start();
 		try {
 			send_form_response( $data );
@@ -192,7 +194,27 @@ class Subscribe_Block_Response_Test extends WP_UnitTestCase {
 	}
 
 	/**
-	 * The error branch returns a reader-facing message and nothing else. The
+	 * A null `metadata` is normalized to an empty array, not shipped as null.
+	 *
+	 * The guard has to be array_key_exists() rather than isset(), which is false
+	 * for null -- and `"metadata": null` is the one shape the normalization exists
+	 * to prevent. Not reachable through the handler today, since the locally-built
+	 * array is always assigned, so this pins the branch rather than a live path.
+	 */
+	public function test_null_metadata_is_normalized_to_an_empty_array() {
+		$response = $this->capture_response(
+			[
+				'newspack_newsletters_subscribe' => '1',
+				'metadata'                       => null,
+			]
+		);
+
+		$this->assertArrayHasKey( 'metadata', $response );
+		$this->assertSame( [], $response['metadata'], 'A null metadata must normalize to an empty array.' );
+	}
+
+	/**
+	 * The failure branch returns the reader-facing message and nothing else. The
 	 * WP_Error's own data can carry the provider's raw response.
 	 */
 	public function test_error_branch_returns_message_only() {
@@ -348,6 +370,43 @@ class Subscribe_Block_Response_Test extends WP_UnitTestCase {
 			]
 		);
 
+		// The constants themselves, not just the response. array_intersect_key only
+		// ever removes keys, so a widened allowlist is invisible in the response
+		// unless the fixture happens to offer that key for the filter to preserve --
+		// adding 'language' here passed every assertion below before this check
+		// existed.
+		$response_keys = \Newspack_Newsletters\Blocks\Subscribe\RESPONSE_KEYS;
+		sort( $response_keys );
+		$this->assertSame(
+			[
+				'email',
+				'metadata',
+				'newspack_newsletters_subscribe',
+				'newspack_newsletters_subscribed',
+				'registered',
+				'verification_nonce',
+				'verified',
+			],
+			$response_keys,
+			'RESPONSE_KEYS itself must not gain an entry without this test being updated.'
+		);
+
+		$metadata_keys = \Newspack_Newsletters\Blocks\Subscribe\METADATA_KEYS;
+		sort( $metadata_keys );
+		$this->assertSame(
+			[
+				'current_page_url',
+				'gate_post_id',
+				'newsletters_subscription_method',
+				'newspack_popup_id',
+				'registered',
+				'registration_method',
+				'status',
+			],
+			$metadata_keys,
+			'METADATA_KEYS itself must not gain an entry without this test being updated.'
+		);
+
 		$expected = [
 			'email',
 			'metadata',
@@ -396,7 +455,7 @@ class Subscribe_Block_Response_Test extends WP_UnitTestCase {
 	 * there later — e.g. an undefined-array-key read while building
 	 * `$args_to_remove` — and this test is the only one that exercises that
 	 * branch, so such a regression would otherwise sit behind a green run
-	 * indefinitely. Catching only Subscribe_Block_Redirect_Interrupt closes
+	 * indefinitely. Catching only Newspack_Newsletters_Subscribe_Block_Redirect_Interrupt closes
 	 * that gap: nothing else thrown in the branch is this exception type, so
 	 * it propagates and fails the test instead of being absorbed here.
 	 */
@@ -405,7 +464,7 @@ class Subscribe_Block_Response_Test extends WP_UnitTestCase {
 		$_SERVER['REQUEST_METHOD'] = 'GET';
 
 		$intercept = function ( $location ) {
-			$interrupt           = new Subscribe_Block_Redirect_Interrupt( 'Intercepted for testing; not a real error.' );
+			$interrupt           = new Newspack_Newsletters_Subscribe_Block_Redirect_Interrupt( 'Intercepted for testing; not a real error.' );
 			$interrupt->location = $location;
 			throw $interrupt;
 		};
@@ -414,16 +473,24 @@ class Subscribe_Block_Response_Test extends WP_UnitTestCase {
 		ob_start();
 		try {
 			send_form_response( [ 'merge_fields' => [ 'FNAME' => 'Ada' ] ] );
-			$this->fail( 'Expected the wp_redirect filter to interrupt send_form_response().' );
-		} catch ( Subscribe_Block_Redirect_Interrupt $e ) {
+		} catch ( Newspack_Newsletters_Subscribe_Block_Redirect_Interrupt $e ) {
 			$location = $e->location;
 		} finally {
-			// In finally: $this->fail() above throws past the catch block, and without
-			// this here that throw would skip ob_get_clean() and leak the buffer into
-			// whatever the test runner captures next.
+			// In finally, not after the try/catch: anything besides the interrupt
+			// thrown by send_form_response() (a TypeError from a future signature
+			// change, say) must still close this buffer and drop the filter, or the
+			// buffer leaks into whatever the test runner captures next and the filter
+			// stays installed for the rest of the run.
 			remove_filter( 'wp_redirect', $intercept );
 			$output = ob_get_clean();
 		}
+
+		// No fail() after the call: the interrupt is thrown from the `wp_redirect`
+		// filter, before wp_redirect() reaches header(), and the only way past it is
+		// send_form_response()'s own `exit` -- which would end the test process
+		// rather than reach an assertion. $location staying unset is what a missed
+		// interrupt would look like, and the assertion below catches that.
+		$location = $location ?? '';
 
 		$this->assertSame( '', trim( $output ), 'The redirect branch must not emit a response body.' );
 		$this->assertStringContainsString( 'newspack_newsletters_subscribed=1', $location, 'The redirect must report a successful subscription.' );

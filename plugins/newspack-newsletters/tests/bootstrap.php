@@ -66,7 +66,7 @@ require_once 'trait-wc-memberships-setup.php';
 require_once 'mocks/class-mailchimp-mock.php';
 
 // Exception used to intercept the subscribe block's redirect branch in tests.
-require_once 'mocks/class-subscribe-block-redirect-interrupt.php';
+require_once 'mocks/class-newspack-newsletters-subscribe-block-redirect-interrupt.php';
 
 // WC Memberships mock.
 require_once 'mocks/wc-memberships.php';
