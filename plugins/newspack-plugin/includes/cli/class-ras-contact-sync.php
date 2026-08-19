@@ -15,6 +15,7 @@ use Newspack\Reader_Activation\Integrations;
 use Newspack\Reader_Activation\Integrations\Contact_Pull;
 use Newspack\Reader_Activation\Integrations\ESP;
 use Newspack\Reader_Activation\Sync\Metadata;
+use Newspack\Reader_Activation\Sync\Contact_Metadata\Content_Gate as Content_Gate_Metadata;
 use Newspack_Subscription_Migrations\CSV_Importers\CSV_Importer;
 use Newspack_Subscription_Migrations\Stripe_Sync;
 
@@ -583,6 +584,11 @@ class RAS_Contact_Sync {
 		if ( function_exists( '\WP_CLI\Utils\wp_clear_object_cache' ) ) {
 			\WP_CLI\Utils\wp_clear_object_cache();
 		}
+		// Static memos the object cache flush cannot reach: the published gate
+		// list, and the per-reader subscriptions the Content Access source
+		// labels are derived from. Both are request-scoped by design and would
+		// otherwise speak for readers processed batches ago.
+		Content_Gate_Metadata::reset_cache();
 		$seconds = self::consume_pause_seconds();
 		if ( $seconds > 0 ) {
 			sleep( $seconds );
