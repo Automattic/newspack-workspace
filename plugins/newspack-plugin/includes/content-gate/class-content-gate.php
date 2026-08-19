@@ -537,11 +537,11 @@ class Content_Gate {
 	private static int $unrestricted_depth = 0;
 
 	/**
-	 * Nesting depth of {@see self::without_content_substitution()}.
+	 * Whether an export has suspended withholding for the rest of the request.
 	 *
-	 * @var int
+	 * @var bool
 	 */
-	private static int $substitution_depth = 0;
+	private static bool $export_suspended = false;
 
 	/**
 	 * Hooks {@see self::without_reader_restrictions()} registered, so it removes
@@ -551,13 +551,6 @@ class Content_Gate {
 	 */
 	private static array $unrestricted_hooks = [];
 
-	/**
-	 * Which of the two content filters {@see self::without_content_substitution()}
-	 * removed, so it restores what was there rather than what it expects.
-	 *
-	 * @var array<string, bool>
-	 */
-	private static array $substitution_restore = [];
 
 	/**
 	 * Render a post as something other than a reader.
@@ -603,6 +596,11 @@ class Content_Gate {
 			--self::$unrestricted_depth;
 			if ( 0 === self::$unrestricted_depth ) {
 				foreach ( self::$unrestricted_hooks as $hook ) {
+					// An export that started inside this window has no end of its own to
+					// wait for, so closing this one must not close that one too.
+					if ( self::$export_suspended ) {
+						continue;
+					}
 					remove_filter( $hook, '__return_false', PHP_INT_MAX );
 				}
 				self::$unrestricted_hooks = [];
@@ -618,56 +616,13 @@ class Content_Gate {
 	 * bounded, {@see self::without_reader_restrictions()} is the one to use.
 	 */
 	public static function suspend_withholding_for_export() {
+		if ( self::$export_suspended ) {
+			return;
+		}
+		self::$export_suspended = true;
 		add_filter( 'newspack_content_gate_restrict_post', '__return_false', PHP_INT_MAX );
 		add_filter( 'newspack_content_gate_apply_block_visibility', '__return_false', PHP_INT_MAX );
 		self::flush_withhold_cache();
-	}
-
-	/**
-	 * Run work with the body substitution suspended.
-	 *
-	 * {@see self::replace_restricted_content()} answers for whichever post the loop
-	 * has set up, because `the_content` carries no post of its own. Code that runs
-	 * that filter over content it already holds — the excerpt path, which hands
-	 * core a post's own teaser to trim — must not have it answered for a different
-	 * article: the reader gets that article's teaser, and its gate, inside a card.
-	 *
-	 * Nests, because the content it suspends for can itself render a listing that
-	 * asks for an excerpt. Restores only the callbacks it actually removed, so a
-	 * site that deliberately unhooked one does not get it back.
-	 *
-	 * @param callable $callback Work to run with the substitution suspended.
-	 *
-	 * @return mixed Whatever the callback returns.
-	 */
-	public static function without_content_substitution( callable $callback ) {
-		if ( 0 === self::$substitution_depth ) {
-			self::$substitution_restore = [
-				'replace' => self::RESTRICTION_PRIORITY === has_filter( 'the_content', [ __CLASS__, 'replace_restricted_content' ] ),
-				'handle'  => PHP_INT_MAX === has_filter( 'the_content', [ __CLASS__, 'handle_restricted_content' ] ),
-			];
-			if ( self::$substitution_restore['replace'] ) {
-				remove_filter( 'the_content', [ __CLASS__, 'replace_restricted_content' ], self::RESTRICTION_PRIORITY );
-			}
-			if ( self::$substitution_restore['handle'] ) {
-				remove_filter( 'the_content', [ __CLASS__, 'handle_restricted_content' ], PHP_INT_MAX );
-			}
-		}
-		++self::$substitution_depth;
-		try {
-			return $callback();
-		} finally {
-			--self::$substitution_depth;
-			if ( 0 === self::$substitution_depth ) {
-				if ( ! empty( self::$substitution_restore['replace'] ) ) {
-					add_filter( 'the_content', [ __CLASS__, 'replace_restricted_content' ], self::RESTRICTION_PRIORITY );
-				}
-				if ( ! empty( self::$substitution_restore['handle'] ) ) {
-					add_filter( 'the_content', [ __CLASS__, 'handle_restricted_content' ], PHP_INT_MAX );
-				}
-				self::$substitution_restore = [];
-			}
-		}
 	}
 
 	/**
@@ -846,8 +801,6 @@ class Content_Gate {
 		if ( ! $post instanceof \WP_Post ) {
 			return '';
 		}
-		self::$withheld_teasers[ $memo_key ] = '';
-
 		// Resolve the restriction first, for two reasons. It is the precondition —
 		// there is no teaser for a post the reader may read, and answering with a
 		// truncated body would be worse than answering with nothing. And the gate
@@ -857,6 +810,7 @@ class Content_Gate {
 		if ( ! self::is_post_restricted( $post_id ) ) {
 			return '';
 		}
+		self::$withheld_teasers[ $memo_key ] = '';
 
 		// Strip before building, not after. The teaser comes back as rendered HTML
 		// with no block delimiters left, so a strip applied to it is a silent no-op

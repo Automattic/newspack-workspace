@@ -128,6 +128,12 @@ class Test_Restricted_Post_Outside_Gate_Render extends \WP_UnitTestCase {
 	 * @return int
 	 */
 	private function create_restricted_post( $args = [] ) {
+		if ( ! empty( $args['short'] ) ) {
+			unset( $args['short'] );
+			$args['post_content'] = '<!-- wp:paragraph --><p>' . self::FREE_MARKER . ' one.</p><!-- /wp:paragraph -->'
+				. '<!-- wp:paragraph --><p>Second free line.</p><!-- /wp:paragraph -->'
+				. '<!-- wp:paragraph --><p>' . self::PAID_MARKER . ' here.</p><!-- /wp:paragraph -->';
+		}
 		return $this->factory->post->create(
 			array_merge(
 				[
@@ -438,6 +444,94 @@ class Test_Restricted_Post_Outside_Gate_Render extends \WP_UnitTestCase {
 
 		$this->assertTrue( $varies_on_gift_link, 'A gift key grants access before its cookie exists.' );
 		$this->assertTrue( $varies_on_newsletter, 'The newsletter fallback writes its cookie on `wp`, after caching is wired up.' );
+	}
+
+	/**
+	 * Building one post's excerpt must not un-gate the posts a listing inside its
+	 * body renders.
+	 *
+	 * Core builds an excerpt by running the body back through `the_content`, and a
+	 * listing block in that body runs its own loop. Fixing the excerpt's own
+	 * post-scoping by suspending the gate outright would take those with it.
+	 *
+	 * Core strips dynamic blocks before rendering an excerpt, so this needs a site
+	 * that allow-lists one — `excerpt_allowed_blocks` is how that is done, and it
+	 * is what this test stands in for.
+	 */
+	public function test_an_excerpt_does_not_ungate_a_listing_inside_the_body() {
+		$allow_the_loop_block = function ( $blocks ) {
+			$blocks[] = 'newspack-tests/gated-loop';
+			return $blocks;
+		};
+		add_filter( 'excerpt_allowed_blocks', $allow_the_loop_block );
+		$gated_id = $this->create_restricted_post( [ 'short' => true ] );
+		register_block_type(
+			'newspack-tests/gated-loop',
+			[
+				'render_callback' => function () use ( $gated_id ) {
+					$loop     = new \WP_Query(
+						[
+							'post_type' => 'post',
+							'post__in'  => [ $gated_id ],
+						]
+					);
+					$rendered = '';
+					while ( $loop->have_posts() ) {
+						$loop->the_post();
+						$rendered .= apply_filters( 'the_content', get_the_content() );
+					}
+					wp_reset_postdata();
+					return $rendered;
+				},
+			]
+		);
+		$host_id = $this->factory->post->create(
+			[
+				'post_type'    => 'page',
+				'post_status'  => 'publish',
+				'post_excerpt' => '',
+				'post_content' => '<!-- wp:paragraph --><p>HOSTBODY</p><!-- /wp:paragraph -->'
+					. '<!-- wp:newspack-tests/gated-loop /-->',
+			]
+		);
+		$this->go_to( home_url( '/' ) );
+
+		$excerpt = get_the_excerpt( $host_id );
+
+		unregister_block_type( 'newspack-tests/gated-loop' );
+		remove_filter( 'excerpt_allowed_blocks', $allow_the_loop_block );
+
+		$this->assertStringContainsString( 'HOSTBODY', $excerpt, 'The host page still supplies its own excerpt.' );
+		$this->assertStringNotContainsString( self::PAID_MARKER, $excerpt, 'A gated post rendered while building this excerpt stays gated.' );
+	}
+
+	/**
+	 * The teaser is in hand for the filters that run between the substitution and
+	 * the gate append, not only in the final output.
+	 *
+	 * Third-party integrations gate their own embeds on `the_content` at a high
+	 * priority. Handing them the body and correcting it afterwards would leave
+	 * those embeds ungated on a restricted post.
+	 */
+	public function test_filters_after_the_substitution_are_handed_the_teaser() {
+		$post_id = $this->create_restricted_post();
+		$this->go_to( home_url( '/' ) );
+
+		$seen = null;
+		$spy  = function ( $content ) use ( &$seen ) {
+			$seen = $content;
+			return $content;
+		};
+		add_filter( 'the_content', $spy, 99999 );
+		try {
+			$this->render_in_secondary_loop( $post_id );
+		} finally {
+			remove_filter( 'the_content', $spy, 99999 );
+		}
+
+		$this->assertNotNull( $seen, 'The spy ran.' );
+		$this->assertStringNotContainsString( self::PAID_MARKER, $seen, 'A later filter is handed the teaser, not the body.' );
+		$this->assertStringContainsString( self::FREE_MARKER, $seen );
 	}
 
 	/**

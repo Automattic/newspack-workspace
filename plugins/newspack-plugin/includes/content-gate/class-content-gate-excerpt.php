@@ -43,17 +43,26 @@ class Content_Gate_Excerpt {
 	public static function filter_get_the_excerpt( $text, $post = null ) {
 		$resolved = $post instanceof \WP_Post ? $post : get_post( $post );
 
-		// Every branch below ends in wp_trim_excerpt(), which applies 'the_content',
-		// where the gate substitutes by the global post rather than by the post this
-		// filter was asked about. On a gated article, an excerpt requested for any
-		// other post would come back as the article's teaser with its gate appended —
-		// the registration form and its element IDs, repeated in a card. Suspended for
-		// the whole method so the excerpt answers for $resolved alone.
-		return Content_Gate::without_content_substitution(
-			function () use ( $text, $post, $resolved ) {
-				return self::build_excerpt( $text, $post, $resolved );
+		// Every branch below ends in wp_trim_excerpt(), which applies 'the_content' —
+		// where the gate answers for whichever post the loop has set up, not for the
+		// post this filter was asked about. On a gated article, an excerpt requested
+		// for any other post would come back as the article's teaser.
+		//
+		// So point the loop at this post for the duration. Suspending the gate instead
+		// would fix the same symptom by un-gating everything: a listing block inside
+		// this body runs 'the_content' over its own posts, and those would come back
+		// whole.
+		$previous_post   = $GLOBALS['post'] ?? null;
+		$GLOBALS['post'] = $resolved; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
+		try {
+			return self::build_excerpt( $text, $post, $resolved );
+		} finally {
+			if ( null === $previous_post ) {
+				unset( $GLOBALS['post'] );
+			} else {
+				$GLOBALS['post'] = $previous_post; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
 			}
-		);
+		}
 	}
 
 	/**
