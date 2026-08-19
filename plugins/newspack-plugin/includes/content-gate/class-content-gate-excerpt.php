@@ -52,12 +52,18 @@ class Content_Gate_Excerpt {
 			return $text;
 		}
 
+		// A post restricted wholesale by a gate rule carries no markup saying so, so
+		// block-level visibility alone cannot see it and core rebuilds the excerpt
+		// from the paid body. On an article with a short lede, the first 55 words
+		// reach copy the reader has not paid for.
+		$is_withheld = Content_Gate::should_withhold_content( $resolved->ID );
+
 		// Core returns a non-empty $text untouched; the branches below deliberately
 		// do not. Confine that difference to posts that actually use the gate, so on
 		// every other post -- including every post on a site with gates switched off,
 		// where this filter still replaces core's -- an excerpt supplied by a filter
 		// below priority 10 survives exactly as it would without Newspack installed.
-		if ( ! Block_Visibility::has_access_control( (string) $resolved->post_content ) ) {
+		if ( ! $is_withheld && ! Block_Visibility::has_access_control( (string) $resolved->post_content ) ) {
 			return wp_trim_excerpt( $text, $post );
 		}
 
@@ -83,6 +89,29 @@ class Content_Gate_Excerpt {
 		// to the author's excerpt, which is the conservative way to lose.
 		if ( '' !== trim( (string) $resolved->post_excerpt ) ) {
 			return wp_trim_excerpt( $resolved->post_excerpt, $sanitized );
+		}
+
+		// A withheld post hands core the gate teaser instead of its body: the same
+		// free opening the article page shows a non-member, so the excerpt can never
+		// say more than the article does. Built below the manual-excerpt branch
+		// because building it runs the whole body through the block pipeline, and an
+		// author's own excerpt would discard the result.
+		if ( $is_withheld ) {
+			$sanitized->post_content = Content_Gate::get_withheld_teaser( $resolved->ID );
+
+			// wp_trim_excerpt() applies 'the_content', where the gate substitutes by
+			// the global post rather than by the post this filter was asked about. The
+			// content in hand is already that post's teaser, so let core trim it
+			// without the substitution answering for whichever article the loop
+			// happens to be on.
+			remove_filter( 'the_content', [ Content_Gate::class, 'replace_restricted_content' ], Content_Gate::RESTRICTION_PRIORITY );
+			remove_filter( 'the_content', [ Content_Gate::class, 'handle_restricted_content' ], PHP_INT_MAX );
+			try {
+				return wp_trim_excerpt( '', $sanitized );
+			} finally {
+				add_filter( 'the_content', [ Content_Gate::class, 'replace_restricted_content' ], Content_Gate::RESTRICTION_PRIORITY );
+				add_filter( 'the_content', [ Content_Gate::class, 'handle_restricted_content' ], PHP_INT_MAX );
+			}
 		}
 
 		// Pass an empty $text so core rebuilds from the sanitized post.

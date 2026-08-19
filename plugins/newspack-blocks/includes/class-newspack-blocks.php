@@ -1225,6 +1225,33 @@ class Newspack_Blocks {
 	}
 
 	/**
+	 * The teaser Newspack's content gate shows in place of a withheld post's body,
+	 * or null when the post is not withheld.
+	 *
+	 * Every call into the gate is behind the same guard: these blocks ship
+	 * independently of newspack-plugin, so a site can run a version that predates
+	 * the API. Anything short of the whole API answers "not withheld".
+	 *
+	 * @param \WP_Post|null $post The post being rendered.
+	 *
+	 * @return string|null
+	 */
+	private static function get_content_gate_teaser( $post ) {
+		if (
+			! $post instanceof \WP_Post
+			|| ! class_exists( '\Newspack\Content_Gate' )
+			|| ! method_exists( '\Newspack\Content_Gate', 'should_withhold_content' )
+			|| ! method_exists( '\Newspack\Content_Gate', 'get_withheld_teaser' )
+		) {
+			return null;
+		}
+		if ( ! \Newspack\Content_Gate::should_withhold_content( $post->ID ) ) {
+			return null;
+		}
+		return \Newspack\Content_Gate::get_withheld_teaser( $post->ID );
+	}
+
+	/**
 	 * Filter for excerpt length.
 	 *
 	 * @param array $attributes The block's attributes.
@@ -1240,8 +1267,13 @@ class Newspack_Blocks {
 				$excerpt      = $post->post_excerpt;
 				$allowed_tags = '<em>,<i>,<strong>,<b>,<u>,<ul>,<ol>,<li>,<h1>,<h2>,<h3>,<h4>,<h5>,<h6>,<img>,<a>,<p>';
 			} else {
-				// If we don't, built an excerpt but allow no tags.
-				$excerpt      = $post->post_content;
+				// If we don't, build an excerpt but allow no tags — from the content
+				// gate's teaser when the reader has no access to the body. This closure
+				// runs after the gate's own excerpt filter and rebuilds from
+				// post_content regardless of what that produced, so without reading the
+				// teaser here the card publishes what the article page withholds.
+				$gate_teaser  = self::get_content_gate_teaser( $post );
+				$excerpt      = null === $gate_teaser ? $post->post_content : $gate_teaser;
 				$allowed_tags = '';
 			}
 

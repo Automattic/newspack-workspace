@@ -462,4 +462,68 @@ class HomepagePostsBlockTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 
 		unset( $GLOBALS['post'] );
 	}
+
+	/**
+	 * A post the content gate withholds contributes its teaser to the card, not
+	 * its body.
+	 *
+	 * This block builds excerpts itself, on a filter that runs after the gate's
+	 * own and rebuilds from post_content regardless of what that produced. So the
+	 * gate closing the leak on every other surface is not enough here.
+	 */
+	public function test_filter_excerpt_uses_the_gate_teaser_for_a_withheld_post() {
+		$excerpt = $this->render_withheld_excerpt( '' );
+
+		self::assertStringNotContainsString( 'PAIDMARK', $excerpt, 'A withheld post must not have its body rebuilt into the card excerpt.' );
+		self::assertStringContainsString( 'FREEMARK', $excerpt, 'The teaser is still shown.' );
+	}
+
+	/**
+	 * A hand-written excerpt is the author's own teaser, so it outranks the gate's.
+	 */
+	public function test_filter_excerpt_keeps_a_manual_excerpt_on_a_withheld_post() {
+		$excerpt = $this->render_withheld_excerpt( 'Hand written.' );
+
+		self::assertStringContainsString( 'Hand written.', $excerpt );
+		self::assertStringNotContainsString( 'PAIDMARK', $excerpt );
+	}
+
+	/**
+	 * Render one withheld post's card excerpt through the block's own filter.
+	 *
+	 * @param string $post_excerpt Hand-written excerpt, or '' for none.
+	 *
+	 * @return string The rendered excerpt.
+	 */
+	private function render_withheld_excerpt( $post_excerpt ) {
+		if ( ! property_exists( '\\Newspack\\Content_Gate', 'withheld_post_ids' ) ) {
+			$this->markTestSkipped( 'Real \\Newspack\\Content_Gate present; stub-based wiring test skipped.' );
+		}
+
+		$post_id = self::factory()->post->create(
+			[
+				'post_status'  => 'publish',
+				'post_excerpt' => $post_excerpt,
+				'post_content' => '<!-- wp:paragraph --><p>PAIDMARK</p><!-- /wp:paragraph -->',
+			]
+		);
+		\Newspack\Content_Gate::$withheld_post_ids = [ $post_id ];
+		\Newspack\Content_Gate::$teaser            = '<p>FREEMARK</p>';
+
+		$GLOBALS['post'] = get_post( $post_id );
+		setup_postdata( $GLOBALS['post'] );
+
+		Newspack_Blocks::filter_excerpt(
+			[
+				'excerptLength' => 999,
+				'showExcerpt'   => true,
+			]
+		);
+		$excerpt = get_the_excerpt( $post_id );
+		Newspack_Blocks::remove_excerpt_filter();
+		\Newspack\Content_Gate::reset_for_tests();
+		unset( $GLOBALS['post'] );
+
+		return $excerpt;
+	}
 }

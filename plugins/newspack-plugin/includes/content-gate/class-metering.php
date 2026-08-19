@@ -32,7 +32,7 @@ class Metering {
 	 * Initialize hooks.
 	 */
 	public static function init() {
-		add_filter( 'newspack_content_gate_restrict_post', [ __CLASS__, 'restrict_post' ] );
+		add_filter( 'newspack_content_gate_restrict_post', [ __CLASS__, 'restrict_post' ], 10, 2 );
 		add_action( 'enqueue_block_editor_assets', [ __CLASS__, 'enqueue_block_editor_assets' ], 11 ); // Render after gate layout editor.
 		add_action( 'init', [ __CLASS__, 'register_meta' ] );
 		add_action( 'wp_footer', [ __CLASS__, 'enqueue_scripts' ] );
@@ -43,12 +43,30 @@ class Metering {
 	/**
 	 * Whether to restrict the post.
 	 *
-	 * @param bool $restrict Whether to restrict the post.
+	 * A metered view spends the reader's allowance on the article they opened, so
+	 * it unlocks that article and nothing else. Every other restricted post that
+	 * shares the page — a Query Loop, a listing block — is asked about by ID and
+	 * stays restricted. Without the queried-object test the whole page would open
+	 * on one metered read, since the predicates below answer for whichever post
+	 * the loop has set up rather than for the one being asked about.
+	 *
+	 * @param bool     $restrict Whether to restrict the post.
+	 * @param int|null $post_id  Post being asked about. Null when the caller has
+	 *                           no post in hand, which keeps the current post's
+	 *                           allowance as the answer.
 	 *
 	 * @return bool
 	 */
-	public static function restrict_post( $restrict ) {
-		if ( $restrict && self::is_metering() ) {
+	public static function restrict_post( $restrict, $post_id = null ) {
+		// is_singular() first: on an archive get_queried_object_id() answers with a
+		// term ID, and on an author archive a user ID. Those sequences are
+		// independent of post IDs, so a bare comparison treats a listed post whose ID
+		// happens to match the queried term as the article being read — and unlocks
+		// its paid body in the listing.
+		if ( null !== $post_id && ( ! is_singular() || (int) $post_id !== (int) get_queried_object_id() ) ) {
+			return $restrict;
+		}
+		if ( $restrict && self::is_metering( $post_id ) ) {
 			return false;
 		}
 		return $restrict;
@@ -545,9 +563,13 @@ class Metering {
 	 * Whether the content should be allowed to render. If it's frontend metered,
 	 * it will be handled by the frontend metering strategy.
 	 *
+	 * @param int|null $post_id Post the allowance is being spent on. Defaults to
+	 *                          the current post, which is only the same thing
+	 *                          while the loop sits on the article being read.
+	 *
 	 * @return bool
 	 */
-	public static function is_metering() {
+	public static function is_metering( $post_id = null ) {
 		/**
 		 * Short-circuit the metering check. Anything other than null
 		 * will prevent the metering logic from running.
@@ -566,7 +588,7 @@ class Metering {
 			return false;
 		}
 
-		return self::is_frontend_metering() || self::is_logged_in_metering_allowed();
+		return self::is_frontend_metering() || self::is_logged_in_metering_allowed( $post_id );
 	}
 
 	/**

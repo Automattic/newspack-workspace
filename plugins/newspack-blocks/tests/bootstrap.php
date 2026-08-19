@@ -59,6 +59,7 @@ if ( ! $autoloader_loaded ) {
  */
 require_once __DIR__ . '/class-newspack-tag-labels-stub.php';
 require_once __DIR__ . '/class-newspack-block-visibility-stub.php';
+require_once __DIR__ . '/class-newspack-content-gate-stub.php';
 
 // Start up the WP testing environment.
 require $newspack_blocks_tests_dir . '/includes/bootstrap.php';

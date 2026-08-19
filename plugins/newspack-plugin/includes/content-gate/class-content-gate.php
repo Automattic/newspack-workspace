@@ -92,6 +92,36 @@ class Content_Gate {
 	private static array $restricted_content = [];
 
 	/**
+	 * Teaser rendered in place of a restricted post's body on surfaces other than
+	 * its own gate render, keyed by "<post id>_<user id>" — the gate layout, and
+	 * so the teaser's length, is resolved per post and reader.
+	 *
+	 * Separate from $restricted_content, which holds the staged gate render for
+	 * the queried post: an entry here carries no gate HTML, and the presence of an
+	 * entry there is what {@see self::handle_restricted_content()} reads as "a
+	 * gate is owed on this pass".
+	 *
+	 * @var array<string, string>
+	 */
+	private static array $withheld_teasers = [];
+
+	/**
+	 * Memoized {@see self::should_withhold_content()} verdicts, keyed by
+	 * "<post id>_<user id>". Reader-specific, so the user is part of the key.
+	 *
+	 * @var array<string, bool>
+	 */
+	private static array $withhold_decisions = [];
+
+	/**
+	 * Post IDs {@see self::is_restriction_exempt_post()} never gates, resolved
+	 * once per request. Null until first resolved.
+	 *
+	 * @var int[]|null
+	 */
+	private static $exempt_page_ids = null;
+
+	/**
 	 * Post ID whose teaser has been substituted into an in-flight 'the_content'
 	 * pass and whose gate is still to be appended, keyed by that pass's nesting
 	 * depth.
@@ -420,11 +450,239 @@ class Content_Gate {
 		unset( self::$pending_gates[ $depth ] );
 
 		if ( ! isset( self::$restricted_content[ $post_id ] ) ) {
-			return $content;
+			// No gate was staged for this post, which means it is not the article
+			// being read. It can still be one the reader has no access to: a Query
+			// Loop, a listing block or a related-posts widget runs this same chain
+			// over posts that were never staged, and handing them back the body
+			// publishes it.
+			if ( ! self::should_withhold_content( $post_id ) ) {
+				return $content;
+			}
+			// Claim the pass, the same way the staged branch below does, so
+			// handle_restricted_content() can tell "the substitution ran" from "a
+			// callback removed this filter". No gate is owed either way: a listing
+			// repeats the teaser, never the gate.
+			self::$pending_gates[ $depth ] = $post_id;
+			return self::get_withheld_teaser( $post_id );
 		}
 
 		self::$pending_gates[ $depth ] = $post_id;
 		return self::$restricted_content[ $post_id ]['teaser'];
+	}
+
+	/**
+	 * Whether a post's content must be withheld from the current reader on a
+	 * surface other than the article's own gate render.
+	 *
+	 * {@see self::restrict_post()} stages the gate for the queried singular post
+	 * alone, so every other surface reads `post_content` unmediated. This is the
+	 * predicate those surfaces ask instead, and it answers for a post appearing
+	 * anywhere rather than for the page being viewed.
+	 *
+	 * Authoring is covered without naming any admin or REST surface here: a
+	 * reader who can edit the post is never restricted in the first place (see
+	 * Content_Restriction_Control::is_post_restricted()), so the editor and the
+	 * block renderer keep showing the whole body. That is a weaker guarantee than
+	 * restrict_post()'s outright `is_admin()` bail — deliberately, because the
+	 * same admin-side excerpt shown to a reader who cannot edit the post should
+	 * withhold exactly as the front end does.
+	 *
+	 * Public because newspack-blocks asks it too: Homepage Posts builds its own
+	 * excerpts on a later filter, so the leak cannot be closed from here alone.
+	 * Renaming or narrowing this reopens it in a separately-versioned plugin.
+	 *
+	 * Not free of side effects, despite the name: the filter below reaches
+	 * Metering, which records a metered view against the article being read.
+	 * That write is bounded by the memo (once per post per reader per request)
+	 * and by Metering's own queried-object test.
+	 *
+	 * @param int $post_id Post ID.
+	 *
+	 * @return bool
+	 */
+	public static function should_withhold_content( $post_id ): bool {
+		$post_id = (int) $post_id;
+		if ( ! $post_id ) {
+			return false;
+		}
+
+		// Memoized per reader as well as per post: the verdict is reader-specific,
+		// and a single archive render asks it two or three times per post (the
+		// content filter, the excerpt filter, and the listing block's own excerpt
+		// closure). Each miss costs a user_can() fan-out through every registered
+		// `user_has_cap` filter.
+		$memo_key = $post_id . '_' . get_current_user_id();
+		if ( isset( self::$withhold_decisions[ $memo_key ] ) ) {
+			return self::$withhold_decisions[ $memo_key ];
+		}
+
+		self::$withhold_decisions[ $memo_key ] = self::evaluate_withholding( $post_id );
+		return self::$withhold_decisions[ $memo_key ];
+	}
+
+	/**
+	 * Discard the memoized withholding verdicts and teasers.
+	 *
+	 * The verdicts are memoized for the whole request, which assumes the inputs
+	 * hold still — so a caller that deliberately changes them, by filtering
+	 * `newspack_content_gate_restrict_post` for a stretch of work, has to flush on
+	 * both sides of that window or the memo answers with the verdict from before
+	 * it. {@see \Newspack_Network\Content_Distribution\Outgoing_Post} is the
+	 * in-tree case. Also the release valve for a long-running loop, where the
+	 * rendered teasers would otherwise accumulate for the life of the process.
+	 */
+	public static function flush_withhold_cache() {
+		self::$withhold_decisions = [];
+		self::$withheld_teasers   = [];
+	}
+
+	/**
+	 * Whether this request carries a gate bypass that other readers do not, so
+	 * anything rendered for it must not be cached and served to them.
+	 *
+	 * Cookie presence is enough: an invalid cookie grants nothing, but treating
+	 * it as a grant costs only a cache miss, where the reverse costs a leak.
+	 *
+	 * This does not make the remaining output identical for every reader. The
+	 * `institution` access rule also evaluates for anonymous visitors and can key
+	 * off the request IP with no cookie to detect, exactly as
+	 * {@see Block_Visibility::strip_blocks_hidden_from_public()} documents for
+	 * block-level visibility.
+	 *
+	 * @return bool
+	 */
+	public static function response_varies_by_reader(): bool {
+		if ( is_user_logged_in() ) {
+			return true;
+		}
+		$bypass_cookies = [
+			Newsletters_Access::COOKIE_NAME,
+			Newsletters_Access::SINGLE_POST_COOKIE_NAME,
+			Content_Gate\IP_Access_Rule::COOKIE_NAME,
+			Content_Gifting::COOKIE_NAME,
+		];
+		// phpcs:ignore WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___COOKIE
+		return ! empty( array_intersect( $bypass_cookies, array_keys( $_COOKIE ) ) );
+	}
+
+	/**
+	 * Decide the withholding verdict {@see self::should_withhold_content()} memoizes.
+	 *
+	 * @param int $post_id Post ID.
+	 *
+	 * @return bool
+	 */
+	private static function evaluate_withholding( $post_id ): bool {
+		// Feeds carry their own restriction mode, including one that deliberately
+		// leaves items whole. {@see Content_Gate_Advanced_Settings} owns them.
+		if ( is_feed() ) {
+			return false;
+		}
+		// Woo Memberships owns restriction wholesale while it is active.
+		if ( Memberships::is_active() ) {
+			return false;
+		}
+		if ( self::is_restriction_exempt_post( $post_id ) ) {
+			return false;
+		}
+		if ( ! self::is_post_restricted( $post_id ) ) {
+			return false;
+		}
+		/** This filter is documented in includes/content-gate/class-content-gate.php */
+		return (bool) apply_filters( 'newspack_content_gate_restrict_post', true, $post_id );
+	}
+
+	/**
+	 * Whether a post must never be gated, wherever it is rendered.
+	 *
+	 * Two kinds of page: the ones a reader is owed regardless of access (privacy
+	 * policy, store terms, accessibility statement), and the ones a reader has to
+	 * be able to reach in order to gain access at all (My Account, cart,
+	 * checkout). Gating the second kind locks readers out of the very flow the
+	 * gate is asking them to complete.
+	 *
+	 * {@see self::restrict_post()} excludes the same pages, but through
+	 * page-context conditionals that answer only for the page being viewed. These
+	 * read the post itself, so the exclusion also holds for a post appearing in
+	 * someone else's listing.
+	 *
+	 * @param int $post_id Post ID.
+	 *
+	 * @return bool
+	 */
+	private static function is_restriction_exempt_post( $post_id ): bool {
+		if ( null === self::$exempt_page_ids ) {
+			$exempt_page_ids = [
+				(int) get_option( 'wp_page_for_privacy_policy' ),
+				(int) get_theme_mod( 'accessibility_statement_page_id' ),
+			];
+			foreach ( [ 'myaccount', 'cart', 'checkout', 'terms' ] as $wc_page ) {
+				// WooCommerce's own accessors are preferred: they apply the filters a
+				// site uses to relocate these pages, and the terms page has a second
+				// one of its own that restrict_post() honours. The option read behind
+				// them is the same value, and answers when WooCommerce is not loaded.
+				if ( 'terms' === $wc_page && function_exists( 'wc_terms_and_conditions_page_id' ) ) {
+					$exempt_page_ids[] = (int) wc_terms_and_conditions_page_id();
+					continue;
+				}
+				$exempt_page_ids[] = function_exists( 'wc_get_page_id' )
+					? (int) wc_get_page_id( $wc_page )
+					: (int) get_option( 'woocommerce_' . $wc_page . '_page_id' );
+			}
+			// wc_get_page_id() answers -1 for an unset page; array_filter drops that
+			// along with the 0s, so an unconfigured page never matches a real post.
+			self::$exempt_page_ids = array_values( array_filter( $exempt_page_ids, fn( $id ) => $id > 0 ) );
+		}
+		return in_array( (int) $post_id, self::$exempt_page_ids, true );
+	}
+
+	/**
+	 * The teaser that stands in for a restricted post's body away from its own
+	 * article page: the same free opening that page shows, and nothing else.
+	 *
+	 * The gate is deliberately left out. It belongs to the article — repeating its
+	 * layout once per card would duplicate the registration form, and the element
+	 * IDs its scripts bind to, across a listing. The RSS path withholds the same
+	 * way ({@see Content_Gate_Advanced_Settings::restrict_feed_content()}).
+	 *
+	 * Building it is expensive — the whole body goes through the block pipeline so
+	 * the first few paragraphs can be sliced off it — and one archive render asks
+	 * for the same post's teaser from the content filter, the excerpt filter and a
+	 * listing block's own excerpt closure. Hence the memo, and hence this being
+	 * public: a per-call-site teaser would pay that cost three times over.
+	 *
+	 * The memo slot is claimed before the teaser renders: building it runs the
+	 * body through the block pipeline, so a listing block inside that body can
+	 * loop straight back onto this same post. The empty placeholder is what that
+	 * re-entry is handed.
+	 *
+	 * @param int $post_id Post ID.
+	 *
+	 * @return string
+	 */
+	public static function get_withheld_teaser( $post_id ): string {
+		$post_id  = (int) $post_id;
+		$memo_key = $post_id . '_' . get_current_user_id();
+		if ( array_key_exists( $memo_key, self::$withheld_teasers ) ) {
+			return self::$withheld_teasers[ $memo_key ];
+		}
+		$post = get_post( $post_id );
+		if ( ! $post instanceof \WP_Post ) {
+			return '';
+		}
+		self::$withheld_teasers[ $memo_key ] = '';
+
+		// Strip before building, not after. The teaser comes back as rendered HTML
+		// with no block delimiters left, so a strip applied to it is a silent no-op
+		// — and a post gated wholesale can still carry blocks hidden from the public
+		// inside its free opening. The block pipeline drops those too while
+		// rendering, but not in the admin or over REST, where Block_Visibility
+		// stands down so authoring surfaces stay whole.
+		$readable               = clone $post;
+		$readable->post_content = Block_Visibility::strip_blocks_hidden_from_public( $post->post_content );
+
+		self::$withheld_teasers[ $memo_key ] = self::get_restricted_post_excerpt_for_gate( $readable, self::get_gate_layout_id( $post_id ) );
+		return self::$withheld_teasers[ $memo_key ];
 	}
 
 	/**
@@ -463,6 +721,13 @@ class Content_Gate {
 		}
 
 		if ( ! isset( self::$restricted_content[ $post_id ] ) ) {
+			// Same backstop as below, for a post withheld outside its own gate render:
+			// no substitution was registered for this pass, so the body in hand is the
+			// unrestricted one. A listing is defended against a removed filter exactly
+			// as the article page is — the leak reads the same either way.
+			if ( null === $substituted_id && self::should_withhold_content( $post_id ) ) {
+				return self::get_withheld_teaser( $post_id );
+			}
 			return $content;
 		}
 

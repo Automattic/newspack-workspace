@@ -21,6 +21,13 @@ class Content_Gifting {
 	const QUERY_ARG = 'content_key';
 
 	/**
+	 * Cookie carrying a gift key, which grants access to one post for one reader.
+	 *
+	 * @var string
+	 */
+	const COOKIE_NAME = 'wp_newspack_content_key';
+
+	/**
 	 * The action for the content key generation.
 	 *
 	 * @var string
@@ -161,14 +168,14 @@ class Content_Gifting {
 	 * @return bool
 	 */
 	public static function is_gifted_post( $post_id = null, $key = null ) {
-		if ( ! $key && ! isset( $_GET[ self::QUERY_ARG ] ) && ! isset( $_COOKIE['wp_newspack_content_key'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		if ( ! $key && ! isset( $_GET[ self::QUERY_ARG ] ) && ! isset( $_COOKIE[ self::COOKIE_NAME ] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
 			return false;
 		}
 
 		if ( isset( $_GET[ self::QUERY_ARG ] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
 			$key = sanitize_text_field( $_GET[ self::QUERY_ARG ] ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
-		} elseif ( isset( $_COOKIE['wp_newspack_content_key'] ) ) {
-			$key = sanitize_text_field( $_COOKIE['wp_newspack_content_key'] ); // phpcs:ignore WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___COOKIE
+		} elseif ( isset( $_COOKIE[ self::COOKIE_NAME ] ) ) {
+			$key = sanitize_text_field( $_COOKIE[ self::COOKIE_NAME ] ); // phpcs:ignore WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___COOKIE
 		}
 		if ( ! $key ) {
 			return false;

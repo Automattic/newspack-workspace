@@ -169,6 +169,33 @@ function get_data_from_blocks( $blocks, $source ) {
 }
 
 /**
+ * The teaser Newspack's content gate shows in place of a withheld post's body,
+ * or null when the post is not withheld.
+ *
+ * Every call into the gate is behind the same guard: this plugin ships
+ * independently of newspack-plugin, so a site can run a version that predates
+ * the API. Anything short of the whole API answers "not withheld".
+ *
+ * @param \WP_Post|null $post The post being rendered.
+ *
+ * @return string|null
+ */
+function get_content_gate_teaser( $post ) {
+	if (
+		! $post instanceof \WP_Post
+		|| ! class_exists( '\Newspack\Content_Gate' )
+		|| ! method_exists( '\Newspack\Content_Gate', 'should_withhold_content' )
+		|| ! method_exists( '\Newspack\Content_Gate', 'get_withheld_teaser' )
+	) {
+		return null;
+	}
+	if ( ! \Newspack\Content_Gate::should_withhold_content( $post->ID ) ) {
+		return null;
+	}
+	return \Newspack\Content_Gate::get_withheld_teaser( $post->ID );
+}
+
+/**
  * Modified excerpt generator that allows some HTML.
  * Will use the excerpt if it exists, otherwise will generate from post content.
  *
@@ -205,7 +232,12 @@ function get_listing_excerpt( $post, $excerpt_length = null ) {
 	}
 
 	// Recreate logic from wp_trim_excerpt (https://developer.wordpress.org/reference/functions/wp_trim_excerpt/).
-	$excerpt = $post->post_content;
+	// The content gate's teaser stands in for the body of a post the reader has no
+	// access to. This excerpt is built here rather than through get_the_excerpt(),
+	// so the gate's own filter never sees it and the paid body would otherwise
+	// reach the card.
+	$excerpt = get_content_gate_teaser( $post );
+	$excerpt = null === $excerpt ? $post->post_content : $excerpt;
 	$excerpt = strip_shortcodes( $excerpt );
 	// Strip blocks the content gate withholds from the public before
 	// excerpt_remove_blocks() flattens the block structure.
