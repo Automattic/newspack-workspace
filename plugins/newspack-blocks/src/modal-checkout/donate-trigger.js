@@ -5,6 +5,7 @@
  * performs the clicks/submission described by the returned resolution.
  */
 
+import { FREQUENCY_SLUGS } from '../blocks/donate/frequency-slugs';
 import { TIERS_BASED_READY_ATTRIBUTE } from '../shared/js/tiers-based-ready';
 
 /**
@@ -15,11 +16,11 @@ import { TIERS_BASED_READY_ATTRIBUTE } from '../shared/js/tiers-based-ready';
 export const VALID_LAYOUTS = [ 'tiered', 'frequency', 'untiered' ];
 
 /**
- * Donation frequency slugs. Mirrors FREQUENCY_SLUGS in src/blocks/donate/consts.ts.
+ * Donation frequency slugs a trigger can request.
  *
  * @type {string[]}
  */
-export const VALID_FREQUENCIES = [ 'once', 'month', 'year' ];
+export const VALID_FREQUENCIES = FREQUENCY_SLUGS;
 
 /**
  * Validate donate URL trigger parameters.
