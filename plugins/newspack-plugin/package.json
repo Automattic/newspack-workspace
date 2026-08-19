@@ -1,6 +1,6 @@
 {
 	"name": "newspack",
-	"version": "6.48.4",
+	"version": "6.48.5",
 	"description": "The Newspack plugin. https://newspack.com",
 	"bugs": {
 		"url": "https://github.com/Automattic/newspack-plugin/issues"
@@ -27,7 +27,8 @@
 		"lint:scss:staged": "newspack-scripts wp-scripts lint-style --customSyntax postcss-scss",
 		"format:scss": "newspack-scripts wp-scripts lint-style '**/{src,includes}/**/*.scss' --customSyntax postcss-scss --fix",
 		"release": "npm run build && npm run semantic-release",
-		"release:archive": "rm -rf release && mkdir -p release && rsync -r . ./release/newspack-plugin --exclude-from='./.distignore' && cd release && zip -r newspack-plugin.zip newspack-plugin"
+		"release:archive": "rm -rf release && mkdir -p release && rsync -r . ./release/newspack-plugin --exclude-from='./.distignore' && cd release && zip -r newspack-plugin.zip newspack-plugin",
+		"typescript:check": "newspack-scripts typescript-check"
 	},
 	"browserslist": [
 		"extends @wordpress/browserslist-config"
@@ -38,6 +39,7 @@
 		"*.php": "npm run lint:php:staged"
 	},
 	"dependencies": {
+		"@wordpress/ui": "^0.16.0",
 		"classnames": "^2.5.1",
 		"colord": "^2.9.3",
 		"deep-map-keys": "^2.0.1",
