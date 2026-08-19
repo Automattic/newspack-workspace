@@ -24,6 +24,7 @@ import { Icon, __experimentalHStack as HStack, __experimentalVStack as VStack } 
  */
 import { Button, DataViews, Grid, Notice, SectionHeader, Waiting } from '../../../../../../../packages/components/src';
 import { WIZARD_STORE_NAMESPACE } from '../../../../../../../packages/components/src/wizard/store';
+import Router from '../../../../../../../packages/components/src/proxied-imports/router';
 import { SEARCH_ENDPOINTS, WIZARD_ENDPOINT } from '../../constants';
 import { registerTab } from '../registry';
 import { DISCOUNTS_ENDPOINT } from './constants';
@@ -33,6 +34,8 @@ import SettingsModal from './settings-modal';
 import type { DiscountRule, DiscountsPayload } from './types';
 
 import './style.scss';
+
+const { useHistory, useLocation, useRouteMatch } = Router;
 
 const DEFAULT_VIEW: View = {
 	type: 'table',
@@ -54,10 +57,19 @@ function SubscriberDiscounts() {
 	} );
 	const [ isLoading, setIsLoading ] = useState( true );
 	const [ view, setView ] = useState< View >( DEFAULT_VIEW );
-	const [ editing, setEditing ] = useState< DiscountRule | null | undefined >( undefined );
 	const [ showSettings, setShowSettings ] = useState( false );
 	const [ error, setError ] = useState( '' );
 	const { setHeaderData } = useDispatch( WIZARD_STORE_NAMESPACE );
+
+	// The editor is routed rather than held in state, so a rule is addressable:
+	// `#/discounts/new` and `#/discounts/edit/:id` deep-link straight into the
+	// drawer, and survive a move to another engine's routed editor.
+	const history = useHistory();
+	const { pathname } = useLocation();
+	const { url: baseUrl } = useRouteMatch();
+	const newMatch = useRouteMatch( `${ baseUrl }/new` );
+	const editMatch = useRouteMatch< { id: string } >( `${ baseUrl }/edit/:id` );
+	const closeEditor = useCallback( () => history.push( baseUrl ), [ history, baseUrl ] );
 
 	const reportFailure = ( apiError: { message?: string } ) =>
 		setError( apiError?.message || __( 'That change could not be saved.', 'newspack-plugin' ) );
@@ -83,7 +95,6 @@ function SubscriberDiscounts() {
 	const applyPayload = useCallback( ( next: DiscountsPayload ) => {
 		setPayload( next );
 		setError( '' );
-		setEditing( undefined );
 		setShowSettings( false );
 	}, [] );
 
@@ -113,6 +124,22 @@ function SubscriberDiscounts() {
 	}, [] );
 
 	const { currency } = payload;
+
+	const editingId = editMatch?.params.id;
+	const editingRule = useMemo(
+		() => ( editingId ? payload.rules.find( rule => rule.id === editingId ) ?? null : null ),
+		[ editingId, payload.rules ]
+	);
+	const isEditorOpen = !! newMatch || !! editingRule;
+
+	// A deep link to a rule that no longer exists lands back on the list with an
+	// explanation, rather than opening an editor for nothing.
+	useEffect( () => {
+		if ( ! isLoading && editingId && ! editingRule ) {
+			setError( __( 'That discount could not be found.', 'newspack-plugin' ) );
+			history.replace( baseUrl );
+		}
+	}, [ isLoading, editingId, editingRule, history, baseUrl ] );
 
 	const fields: Field< DiscountRule >[] = useMemo(
 		() => [
@@ -179,7 +206,7 @@ function SubscriberDiscounts() {
 				id: 'edit',
 				label: __( 'Edit', 'newspack-plugin' ),
 				isPrimary: true,
-				callback: ( [ item ]: DiscountRule[] ) => setEditing( item ),
+				callback: ( [ item ]: DiscountRule[] ) => history.push( `${ baseUrl }/edit/${ item.id }` ),
 			},
 			{
 				id: 'toggle-active',
@@ -214,7 +241,7 @@ function SubscriberDiscounts() {
 				),
 			},
 		],
-		[ setActive, deleteRule ]
+		[ setActive, deleteRule, history, baseUrl ]
 	);
 
 	const { data: processedData, paginationInfo } = useMemo(
@@ -247,9 +274,11 @@ function SubscriberDiscounts() {
 					</span>
 				</>
 			),
-			actions: [ { type: 'primary', label: __( 'Add Discount', 'newspack-plugin' ), action: () => setEditing( null ) } ],
+			actions: [ { type: 'primary', label: __( 'Add Discount', 'newspack-plugin' ), action: () => history.push( `${ baseUrl }/new` ) } ],
 		} );
-	}, [ setHeaderData, isLoading, hasRules, total ] );
+		// `pathname` re-asserts the header after the wizard's ResetHeaderData
+		// clears it on every route change, drawer routes included.
+	}, [ setHeaderData, isLoading, hasRules, total, history, baseUrl, pathname ] );
 
 	if ( isLoading ) {
 		return (
@@ -285,7 +314,7 @@ function SubscriberDiscounts() {
 								noMargin
 							/>
 							<HStack alignment="center" spacing={ 2 } wrap className="newspack-empty-state__actions">
-								<Button variant="primary" onClick={ () => setEditing( null ) }>
+								<Button variant="primary" onClick={ () => history.push( `${ baseUrl }/new` ) }>
 									{ __( 'Add Discount', 'newspack-plugin' ) }
 								</Button>
 							</HStack>
@@ -303,7 +332,7 @@ function SubscriberDiscounts() {
 					defaultLayouts={ { table: {} } }
 					isLoading={ isLoading }
 					getItemId={ ( item: DiscountRule ) => item.id }
-					onClickItem={ ( item: DiscountRule ) => setEditing( item ) }
+					onClickItem={ ( item: DiscountRule ) => history.push( `${ baseUrl }/edit/${ item.id }` ) }
 					search
 					header={
 						<Button variant="secondary" size="compact" onClick={ () => setShowSettings( true ) }>
@@ -313,11 +342,14 @@ function SubscriberDiscounts() {
 				/>
 			) }
 			<DiscountEditor
-				isOpen={ undefined !== editing }
-				rule={ editing ?? null }
+				isOpen={ isEditorOpen }
+				rule={ editingRule }
 				currency={ currency }
-				onSaved={ applyPayload }
-				onClose={ () => setEditing( undefined ) }
+				onSaved={ next => {
+					applyPayload( next );
+					closeEditor();
+				} }
+				onClose={ closeEditor }
 			/>
 			{ showSettings && <SettingsModal settings={ payload.settings } onSaved={ applyPayload } onClose={ () => setShowSettings( false ) } /> }
 		</div>
