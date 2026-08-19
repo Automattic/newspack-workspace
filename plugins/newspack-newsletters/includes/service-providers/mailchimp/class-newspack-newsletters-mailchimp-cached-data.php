@@ -17,10 +17,14 @@ use Newspack_Newsletters_Mailchimp_Api as Mailchimp;
  * The purpose of this class is to implement a non-obstrusive cache, in which refreshing the cache will happen in the background in async requests
  * and will never keep the user waiting.
  *
- * The cache is stored in an option, and will be considered expired after 20 minutes. Every time we retrieve the cache, we check its age,
+ * The cache is stored in an option, and will be considered expired after 40 minutes. Every time we retrieve the cache, we check its age,
  * if it's expired, we trigger an async request to refresh it.
  *
- * Also, as a redundant strategy, we have a CRON job that will trigger the async requests to refresh the cache for all lists every 10 minutes.
+ * Also, as a redundant strategy, we have a CRON job that will trigger the async requests to refresh the cache for all lists every 30 minutes.
+ *
+ * Those two numbers belong together: the expiry (CACHE_EXPIRATION) is deliberately longer than the cron interval (CRON_SCHEDULE), so a list
+ * is refreshed in the background before it can expire and the read path stays on the cache. Shortening the expiry below the cron interval
+ * would make every read of an expired list dispatch its own async refresh, one per audience.
  *
  * If the cache refresh fails, we will store the error in a separate option, and will only surface it to the user after 20 minutes.
  * In every admin page we will display a generic Warning message, telling the user to go to Newsletters > Settings to see the errors.
@@ -64,6 +68,17 @@ final class Newspack_Newsletters_Mailchimp_Cached_Data {
 	const CRON_SCHEDULE = 'every_30_minutes';
 
 	/**
+	 * How long a list's cached data is considered fresh
+	 *
+	 * Kept above CRON_SCHEDULE's interval so the cron refreshes a list before it can
+	 * expire. If this drops below the cron interval, every read of an expired list
+	 * dispatches its own async refresh, which is the load this cache exists to avoid.
+	 *
+	 * @var int
+	 */
+	const CACHE_EXPIRATION = 40 * MINUTE_IN_SECONDS;
+
+	/**
 	 * We store errors when an API request fails, but we will only surface these errors to the user after this time
 	 *
 	 * @var int
@@ -97,10 +112,32 @@ final class Newspack_Newsletters_Mailchimp_Cached_Data {
 
 		$scheduled_event = wp_get_scheduled_event( self::CRON_HOOK );
 
-		// Sites scheduled under a previous recurrence keep it until the event is cleared, so compare before scheduling.
-		if ( ! $scheduled_event || self::CRON_SCHEDULE !== $scheduled_event->schedule ) {
+		/*
+		 * Count every instance of the hook, not just the one wp_get_scheduled_event() reports.
+		 * It returns only the earliest occurrence, so a second event would sit behind a
+		 * correct-looking one indefinitely. Reading the array adds no query: the cron option is
+		 * autoloaded, and wp_get_scheduled_event() has just read the same value.
+		 */
+		$instances = 0;
+		foreach ( (array) _get_cron_array() as $hooks ) {
+			if ( isset( $hooks[ self::CRON_HOOK ] ) ) {
+				$instances += count( $hooks[ self::CRON_HOOK ] );
+			}
+		}
+
+		/*
+		 * Sites scheduled under a previous recurrence keep it until the event is cleared, so compare
+		 * before scheduling. Clearing and scheduling is not atomic either, so two concurrent requests
+		 * can leave a duplicate behind. Rescheduling whenever more than one instance exists makes that
+		 * self-correcting on the next request, which does not depend on a persistent object cache
+		 * being present.
+		 */
+		if ( ! $scheduled_event || self::CRON_SCHEDULE !== $scheduled_event->schedule || $instances > 1 ) {
+			// Keep the pending run time so migrating sites do not all fire a refresh at once.
+			$next_run = $scheduled_event ? $scheduled_event->timestamp : time() + 30 * MINUTE_IN_SECONDS;
+
 			wp_clear_scheduled_hook( self::CRON_HOOK );
-			wp_schedule_event( time(), self::CRON_SCHEDULE, self::CRON_HOOK );
+			wp_schedule_event( $next_run, self::CRON_SCHEDULE, self::CRON_HOOK );
 		}
 
 		add_action( 'admin_notices', [ __CLASS__, 'maybe_show_error' ] );
@@ -255,7 +292,7 @@ final class Newspack_Newsletters_Mailchimp_Cached_Data {
 	 */
 	private static function is_cache_expired( $list_id = 'lists' ) {
 		$cache_date = get_option( self::get_cache_date_key( $list_id ) );
-		return $cache_date && ( time() - $cache_date ) > 20 * MINUTE_IN_SECONDS;
+		return $cache_date && ( time() - $cache_date ) > self::CACHE_EXPIRATION;
 	}
 
 	/**
