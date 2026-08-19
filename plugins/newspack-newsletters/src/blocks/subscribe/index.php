@@ -27,6 +27,11 @@ const FORM_ACTION = 'newspack_newsletters_subscribe';
  * `\Newspack\Reader_Activation::get_verification_payload()` and are merged in
  * wholesale — so a key added on that side needs an entry here before it can
  * reach the caller.
+ *
+ * `src/blocks/subscribe/view.js` is the consumer, and removing an entry it reads
+ * breaks the front end silently. A key it does *not* read is not thereby safe to
+ * add: what this list manages is what leaves the server, not what the front end
+ * happens to use.
  */
 const RESPONSE_KEYS = [
 	'newspack_newsletters_subscribed',
@@ -43,8 +48,17 @@ const RESPONSE_KEYS = [
  *
  * Bounded for the same reason as RESPONSE_KEYS: allowlisting `metadata` as a
  * whole would leave the response closed at the top level and open one level
- * down. `gate_post_id` is never set by this block — it originates in
- * newspack-plugin's content gate — but view.js reads it defensively.
+ * down.
+ *
+ * This list is what the block itself may emit, not what view.js reads — the two
+ * differ, and applying the narrower rule would wrongly delete entries.
+ * `current_page_url` and `status` are built here (see the $metadata literal
+ * below) and read by no front-end code. `gate_post_id` is the reverse: nothing
+ * here ever sets it, because $metadata is built from a literal that omits it.
+ * newspack-plugin's content gate does produce the value — `src/content-gate/
+ * gate.js` adds it as a hidden input to every form inside a gate — but this
+ * handler never copies that input into $metadata, so view.js's read of it
+ * (`view.js:161`) is defensive rather than live.
  */
 const METADATA_KEYS = [
 	'current_page_url',
@@ -470,7 +484,10 @@ function send_form_response( $data ) {
 		} else {
 			$data['newspack_newsletters_subscribed'] = 1;
 			$data                                    = array_intersect_key( $data, array_flip( RESPONSE_KEYS ) );
-			if ( isset( $data['metadata'] ) ) {
+			// array_key_exists() rather than isset(): isset() is false for null, so a
+			// `metadata` of null would skip this branch and ship as `"metadata": null`
+			// -- the exact shape the normalization below exists to prevent.
+			if ( array_key_exists( 'metadata', $data ) ) {
 				// `metadata` is itself an allowlisted key, so a non-array value under it
 				// would otherwise skip this nested filter and reach the caller as-is.
 				// Normalizing to an empty array keeps the shape stable for view.js, which
