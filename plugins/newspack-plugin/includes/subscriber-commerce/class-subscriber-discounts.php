@@ -3,9 +3,9 @@
  * Subscriber discounts — the rule store.
  *
  * A subscriber discount says "subscribers of subscription X get $/% off store
- * products Y". This class owns the rules and the settings that govern how they
- * combine, plus the discount arithmetic every other surface shares (the price
- * filters, the admin preview, the migration report).
+ * products Y". This class owns the rules and the global settings, plus the
+ * discount arithmetic every other surface shares (the price filters, the admin
+ * preview, the migration report).
  *
  * @package Newspack
  */
@@ -37,15 +37,9 @@ class Subscriber_Discounts {
 	/**
 	 * Default global settings.
 	 *
-	 * `overlap` is 'best' rather than WooCommerce Memberships' cumulative
-	 * behaviour: over-discounting is the costlier mistake for a publisher, and
-	 * migrated sites that relied on stacking are switched to 'combine'
-	 * deliberately during migration.
-	 *
 	 * @var array
 	 */
 	const DEFAULT_SETTINGS = [
-		'overlap'           => 'best',
 		'apply_on_sale'     => false,
 		// Whether a subscription sitting in the cart already counts, so a reader
 		// buying a subscription and a discounted product together sees the
@@ -206,7 +200,6 @@ class Subscriber_Discounts {
 		$settings = array_merge( self::DEFAULT_SETTINGS, $stored_settings );
 
 		return [
-			'overlap'           => in_array( $settings['overlap'], [ 'best', 'combine' ], true ) ? $settings['overlap'] : 'best',
 			'apply_on_sale'     => (bool) $settings['apply_on_sale'],
 			'apply_at_checkout' => (bool) $settings['apply_at_checkout'],
 		];
@@ -273,60 +266,33 @@ class Subscriber_Discounts {
 	 * The price a subscriber pays once every rule that covers a product has been
 	 * taken into account.
 	 *
-	 * With the default 'best' overlap the single largest reduction wins. With
-	 * 'combine' the reductions are applied in a canonical order — every
-	 * percentage first, then every fixed amount — rather than in whatever order
-	 * the rules happen to be stored. Mixing the two types is otherwise
-	 * order-dependent (£200 less 20% less £10 is £150, but less £10 less 20% is
-	 * £152), which would make a reader's price depend on the order the publisher
-	 * happened to create their rules in.
+	 * Overlapping rules never accumulate: the single largest reduction wins, and
+	 * each rule is measured against the catalog price rather than against
+	 * whatever a previous rule left behind. Cumulative stacking is deliberately
+	 * absent — it is WooCommerce Memberships' default only because the off
+	 * switch is a code filter with no settings screen, it compounds rather than
+	 * adds (two 20% rules take 36% off, not 40%), and the Pricing Rules engine
+	 * this feature is designed to hand over to cannot express it either.
 	 *
 	 * @param float $base_price Price before any discount.
 	 * @param array $rules      Rules that cover the product.
-	 * @param array $settings   Discount settings; only `overlap` is read.
 	 * @return float|null Null when no rule lowers the price.
 	 */
-	public static function combined_price( $base_price, $rules, $settings = [] ) {
+	public static function combined_price( $base_price, $rules ) {
 		$base_price = (float) $base_price;
 		if ( empty( $rules ) || $base_price <= 0 ) {
 			return null;
 		}
 
-		if ( 'combine' !== ( $settings['overlap'] ?? 'best' ) ) {
-			$best_price = null;
-			foreach ( $rules as $rule ) {
-				$candidate_price = self::discounted_price( $base_price, $rule );
-				if ( null !== $candidate_price && ( null === $best_price || $candidate_price < $best_price ) ) {
-					$best_price = $candidate_price;
-				}
-			}
-			return $best_price;
-		}
-
-		$percentage_rules = array_filter(
-			$rules,
-			function ( $rule ) {
-				return 'percent' === ( $rule['discount_type'] ?? '' );
-			}
-		);
-		$fixed_rules      = array_filter(
-			$rules,
-			function ( $rule ) {
-				return 'percent' !== ( $rule['discount_type'] ?? '' );
-			}
-		);
-
-		$running_price = $base_price;
-		foreach ( array_merge( $percentage_rules, $fixed_rules ) as $rule ) {
-			// A rule that cannot lower the running price is skipped rather than
-			// aborting the combination — a later rule may still reduce it.
-			$reduced_price = self::discounted_price( $running_price, $rule );
-			if ( null !== $reduced_price ) {
-				$running_price = $reduced_price;
+		$best_price = null;
+		foreach ( $rules as $rule ) {
+			$candidate_price = self::discounted_price( $base_price, $rule );
+			if ( null !== $candidate_price && ( null === $best_price || $candidate_price < $best_price ) ) {
+				$best_price = $candidate_price;
 			}
 		}
 
-		return $running_price < $base_price ? $running_price : null;
+		return $best_price;
 	}
 
 	/**

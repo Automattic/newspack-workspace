@@ -93,11 +93,6 @@ class Subscriber_Discounts_Admin {
 				'callback'            => [ __CLASS__, 'api_save_settings' ],
 				'permission_callback' => [ __CLASS__, 'api_permissions_check' ],
 				'args'                => [
-					'overlap'           => [
-						'type'              => 'string',
-						'enum'              => [ 'best', 'combine' ],
-						'sanitize_callback' => 'sanitize_key',
-					],
 					'apply_on_sale'     => [
 						'type' => 'boolean',
 					],
@@ -242,7 +237,7 @@ class Subscriber_Discounts_Admin {
 	 */
 	public static function api_save_settings( $request ) {
 		$settings = [];
-		foreach ( [ 'overlap', 'apply_on_sale', 'apply_at_checkout' ] as $setting ) {
+		foreach ( [ 'apply_on_sale', 'apply_at_checkout' ] as $setting ) {
 			if ( null !== $request->get_param( $setting ) ) {
 				$settings[ $setting ] = $request->get_param( $setting );
 			}

@@ -15,7 +15,6 @@ export interface DiscountRule extends BaseRule {
 
 /** Global settings governing how discounts combine. */
 export interface DiscountSettings {
-	overlap: 'best' | 'combine';
 	apply_on_sale: boolean;
 	apply_at_checkout: boolean;
 }

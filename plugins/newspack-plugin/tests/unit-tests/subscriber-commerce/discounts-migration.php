@@ -23,6 +23,77 @@ use Newspack\Subscriber_Discounts;
 class Test_Discounts_Migration extends \WP_UnitTestCase {
 
 	/**
+	 * Load the WooCommerce mocks the stacking report reads products through.
+	 */
+	public static function setUpBeforeClass(): void {
+		parent::setUpBeforeClass();
+		require_once dirname( __DIR__, 2 ) . '/mocks/wc-mocks.php';
+	}
+
+	/**
+	 * Discard the mock product registry between assertions.
+	 */
+	public function tear_down() {
+		global $products_database;
+		$products_database = []; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
+		parent::tear_down();
+	}
+
+	/**
+	 * A product with a regular price, registered so wc_get_product() finds it.
+	 *
+	 * @param float $regular_price Regular price.
+	 * @return int Product post id.
+	 */
+	private function create_priced_product( $regular_price ) {
+		register_post_type( 'product', [ 'public' => true ] );
+		$product_id = $this->factory->post->create( [ 'post_type' => 'product' ] );
+
+		global $products_database;
+		$products_database[ $product_id ] = new \WC_Product( // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
+			[
+				'id'            => $product_id,
+				'name'          => 'Annual pass',
+				'regular_price' => $regular_price,
+			]
+		);
+
+		return $product_id;
+	}
+
+	/**
+	 * Give a reader an active membership of each of the given plans.
+	 *
+	 * @param int   $user_id  Reader.
+	 * @param int[] $plan_ids Plans they hold.
+	 */
+	private function grant_memberships( $user_id, $plan_ids ) {
+		foreach ( $plan_ids as $plan_id ) {
+			$this->factory->post->create(
+				[
+					'post_type'   => 'wc_user_membership',
+					'post_status' => 'wcm-active',
+					'post_author' => $user_id,
+					'post_parent' => $plan_id,
+				]
+			);
+		}
+	}
+
+	/**
+	 * The private reader/product comparison, which is where the report's
+	 * numbers come from.
+	 *
+	 * @param array $rules_by_plan Active purchasing-discount rules keyed by plan id.
+	 * @return array[]
+	 */
+	private function readers_losing_stacked_discounts( $rules_by_plan ) {
+		$readers_losing_stacked_discounts_method = new \ReflectionMethod( Discounts_Migration::class, 'readers_losing_stacked_discounts' );
+		$readers_losing_stacked_discounts_method->setAccessible( true );
+		return $readers_losing_stacked_discounts_method->invoke( null, $rules_by_plan );
+	}
+
+	/**
 	 * Resolve every plan to the same two subscription products.
 	 *
 	 * @return callable
@@ -53,6 +124,25 @@ class Test_Discounts_Migration extends \WP_UnitTestCase {
 				'active'             => 'yes',
 			],
 			$overrides
+		);
+	}
+
+	/**
+	 * A plan's rule taking a percentage off one product.
+	 *
+	 * @param int    $plan_id    Membership plan.
+	 * @param int    $product_id Discounted product.
+	 * @param string $percentage Percentage off.
+	 * @return array
+	 */
+	private function percentage_rule( $plan_id, $product_id, $percentage ) {
+		return $this->memberships_rule(
+			[
+				'membership_plan_id' => $plan_id,
+				'object_ids'         => [ $product_id ],
+				'discount_type'      => 'percentage',
+				'discount_amount'    => $percentage,
+			]
 		);
 	}
 
@@ -237,8 +327,7 @@ class Test_Discounts_Migration extends \WP_UnitTestCase {
 	/**
 	 * Migrations get re-run — a first pass, a fix, a second pass. Rules carry an
 	 * id derived from their source rule so a re-run updates them in place; minting
-	 * a fresh id each time would duplicate every rule, and under the "combine"
-	 * overlap setting that would compound what readers are discounted.
+	 * a fresh id each time would duplicate every rule.
 	 */
 	public function test_rerunning_updates_rules_in_place() {
 		delete_option( Subscriber_Discounts::OPTION_NAME );
@@ -271,5 +360,34 @@ class Test_Discounts_Migration extends \WP_UnitTestCase {
 
 		$this->assertNotWPError( $saved, 'A mapped rule must be storable as-is.' );
 		$this->assertCount( 1, Subscriber_Discounts::get_rules(), 'The migrated rule is persisted.' );
+	}
+
+	/**
+	 * The report exists to price one thing: a reader holding two plans whose
+	 * discounts hit the same product. Memberships compounds them, Access
+	 * Control applies the better one alone, so that reader starts paying more.
+	 * 20% then 20% off 100 is 64 under Memberships and 80 after the flip.
+	 *
+	 * Overlapping rules alone are not the finding — most sites carrying two
+	 * discount plans have nobody in both, and a reader in one plan pays the
+	 * same either way. Only the reader in both is reported.
+	 */
+	public function test_a_reader_holding_two_discounting_plans_pays_more_after_the_flip() {
+		$product_id = $this->create_priced_product( 100.00 );
+		$reader_id  = $this->factory->user->create();
+		$this->grant_memberships( $reader_id, [ 500, 600 ] );
+		$this->grant_memberships( $this->factory->user->create(), [ 500 ] );
+
+		$affected_readers = $this->readers_losing_stacked_discounts(
+			[
+				500 => [ $this->percentage_rule( 500, $product_id, '20' ) ],
+				600 => [ $this->percentage_rule( 600, $product_id, '20' ) ],
+			]
+		);
+
+		$this->assertCount( 1, $affected_readers, 'Only the reader holding both plans is reported, and once, for the shared product.' );
+		$this->assertSame( $reader_id, $affected_readers[0]['user_id'], 'The affected reader is named, so the publisher can be shown who.' );
+		$this->assertEquals( 64.0, $affected_readers[0]['stacked_price'], 'Memberships compounds the two rules rather than adding them.' );
+		$this->assertEquals( 80.0, $affected_readers[0]['best_price'], 'Access Control applies the single best rule.' );
 	}
 }

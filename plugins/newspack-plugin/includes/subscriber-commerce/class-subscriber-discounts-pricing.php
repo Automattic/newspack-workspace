@@ -255,7 +255,7 @@ class Subscriber_Discounts_Pricing {
 		// every logged-in reader an entry in a transient WooCommerce accumulates
 		// rather than evicts; entitlement collapses all non-subscribers onto one.
 		// Full rule content, since editing an amount changes prices without
-		// changing which rules apply, plus the settings that combine them.
+		// changing which rules apply, plus the settings that gate them.
 		$hash['newspack_subscriber_discounts'] = md5(
 			(string) wp_json_encode( [ self::qualifying_rules_for_reader( get_current_user_id() ), Subscriber_Discounts::get_settings() ] )
 		);
@@ -301,7 +301,7 @@ class Subscriber_Discounts_Pricing {
 			return null;
 		}
 
-		return Subscriber_Discounts::combined_price( (float) $base_price, $rules, $settings );
+		return Subscriber_Discounts::combined_price( (float) $base_price, $rules );
 	}
 
 	/**

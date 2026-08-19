@@ -1,6 +1,6 @@
 /**
- * Global subscriber-discount settings: how overlapping discounts combine, and
- * whether they apply to products already on sale.
+ * Global subscriber-discount settings: whether discounts apply to products
+ * already on sale, and when they start counting.
  */
 
 /**
@@ -11,7 +11,6 @@ import apiFetch from '@wordpress/api-fetch';
 import { useState } from '@wordpress/element';
 import {
 	Modal,
-	RadioControl,
 	ToggleControl,
 	// eslint-disable-next-line @wordpress/no-unsafe-wp-apis
 	__experimentalHStack as HStack,
@@ -62,17 +61,7 @@ export default function SettingsModal( { settings, onSaved, onClose }: SettingsM
 			<VStack spacing={ 6 }>
 				{ error && <Notice isError noticeText={ error } /> }
 				<VStack spacing={ 4 }>
-					<h3>{ __( 'Combining Discounts', 'newspack-plugin' ) }</h3>
-					<RadioControl
-						label={ __( 'Overlapping discounts', 'newspack-plugin' ) }
-						help={ __( 'What happens when more than one discount applies to the same product.', 'newspack-plugin' ) }
-						selected={ draft.overlap }
-						onChange={ ( value: string ) => setDraft( { ...draft, overlap: value as DiscountSettings[ 'overlap' ] } ) }
-						options={ [
-							{ value: 'best', label: __( 'Apply the best discount only', 'newspack-plugin' ) },
-							{ value: 'combine', label: __( 'Combine discounts', 'newspack-plugin' ) },
-						] }
-					/>
+					<h3>{ __( 'Sale Prices', 'newspack-plugin' ) }</h3>
 					<ToggleControl
 						label={ __( 'Apply on top of sale prices', 'newspack-plugin' ) }
 						help={ __( 'Subscribers get their discount even on products that are already on sale.', 'newspack-plugin' ) }
