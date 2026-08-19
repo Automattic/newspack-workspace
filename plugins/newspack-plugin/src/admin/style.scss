@@ -211,6 +211,12 @@ h1 {
 	width: 100%;
 }
 
+.newspack-wizard__load-error.components-notice {
+	border-radius: 0;
+	margin: 0;
+	width: 100%;
+}
+
 .newspack-wizard__sections {
 	margin: 0 auto;
 	padding: calc(var(--newspack-wizard-section-space) * 2) var(--newspack-wizard-section-space) 0;
