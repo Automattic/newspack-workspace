@@ -59,10 +59,11 @@ export function validateDonationTriggerParams( layout, frequency, amount ) {
  * The first form in DOM order that can fully satisfy the trigger wins; forms
  * that cannot are skipped untouched. Tiered forms are matched against the
  * server-rendered tier markup (`data-frequency-slug`/`data-amount` spans), so
- * no tab needs to be clicked to find out whether the amount exists — and a
- * tiered block whose view script has not initialized yet (no
- * `data-tiers-based-ready` on the container) is reported as `not-ready`
- * instead of resolved, since clicking its tabs or tiers would do nothing.
+ * no tab needs to be clicked to find out whether the amount exists. A tiered
+ * block whose view script has not initialized yet (no `data-tiers-based-ready`
+ * on the container) cannot be acted on — clicking its tabs or tiers would do
+ * nothing — so the scan continues past it; `not-ready` (carrying the first
+ * such form) is returned only when no initialized form matched.
  *
  * @param {Document|HTMLElement} root             The DOM root to search.
  * @param {Object}               params           Trigger parameters.
@@ -81,6 +82,7 @@ export function resolveDonationTrigger( root, { layout, frequency, amount } ) {
 	if ( ! validateDonationTriggerParams( layout, frequency, amount ) ) {
 		return { status: 'invalid-params' };
 	}
+	let notReadyForm = null;
 	for ( const form of root.querySelectorAll( '.wpbnbd.wpbnbd--platform-wc form' ) ) {
 		const tiersContainer = form.closest( '.wpbnbd--tiers-based' );
 		if ( layout === 'tiered' ) {
@@ -102,7 +104,14 @@ export function resolveDonationTrigger( root, { layout, frequency, amount } ) {
 				continue;
 			}
 			if ( ! tiersContainer.hasAttribute( 'data-tiers-based-ready' ) ) {
-				return { status: 'not-ready', form };
+				// Remember the first not-ready match but keep scanning: a later,
+				// already-initialized block that satisfies the trigger beats waiting
+				// on one that may never become ready (the view script bails without
+				// stamping readiness on config or markup failures).
+				if ( ! notReadyForm ) {
+					notReadyForm = form;
+				}
+				continue;
 			}
 			return { status: 'tiered', form, frequencyButton, tierIndex };
 		}
@@ -121,6 +130,9 @@ export function resolveDonationTrigger( root, { layout, frequency, amount } ) {
 			continue;
 		}
 		return { status: layout, form, frequencyInput, amountInput };
+	}
+	if ( notReadyForm ) {
+		return { status: 'not-ready', form: notReadyForm };
 	}
 	return { status: 'no-match' };
 }

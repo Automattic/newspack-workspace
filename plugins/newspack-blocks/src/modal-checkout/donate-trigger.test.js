@@ -141,6 +141,20 @@ describe( 'resolveDonationTrigger — tiered layout', () => {
 		expect( resolution.form ).toBe( root.querySelector( 'form' ) );
 	} );
 
+	it( 'prefers a later initialized block over an earlier one that never initialized', () => {
+		const root = render( tieredBlock( { ready: false } ) + tieredBlock() );
+		const resolution = resolveDonationTrigger( root, { layout: 'tiered', frequency: 'year', amount: '180' } );
+		expect( resolution.status ).toBe( 'tiered' );
+		expect( resolution.form ).toBe( root.querySelectorAll( 'form' )[ 1 ] );
+	} );
+
+	it( 'reports not-ready, carrying the first such form, only when no initialized block matches', () => {
+		const root = render( tieredBlock( { ready: false } ) + tieredBlock( { ready: false } ) );
+		const resolution = resolveDonationTrigger( root, { layout: 'tiered', frequency: 'year', amount: '180' } );
+		expect( resolution.status ).toBe( 'not-ready' );
+		expect( resolution.form ).toBe( root.querySelectorAll( 'form' )[ 0 ] );
+	} );
+
 	it( 'resolves after the tiers view marks the block ready, matching the ready-event contract', () => {
 		const root = render( tieredBlock( { ready: false } ) );
 		expect( resolveDonationTrigger( root, { layout: 'tiered', frequency: 'year', amount: '180' } ).status ).toBe( 'not-ready' );
