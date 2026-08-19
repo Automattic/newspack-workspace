@@ -7,8 +7,16 @@ import classnames from 'classnames';
  * WordPress dependencies.
  */
 // Notice is aliased: `Notice` below is Newspack's own, which this file also uses.
-// eslint-disable-next-line @wordpress/no-unsafe-wp-apis
-import { DropdownMenu, MenuGroup, MenuItem, Notice as CoreNotice, SlotFillProvider, createSlotFill, __experimentalVStack as VStack } from '@wordpress/components';
+import {
+	DropdownMenu,
+	MenuGroup,
+	MenuItem,
+	Notice as CoreNotice,
+	SlotFillProvider,
+	createSlotFill,
+	// eslint-disable-next-line @wordpress/no-unsafe-wp-apis
+	__experimentalVStack as VStack,
+} from '@wordpress/components';
 import { useDispatch, useSelect } from '@wordpress/data';
 import { cloneElement, createInterpolateElement, isValidElement, useEffect, useState, forwardRef } from '@wordpress/element';
 import { __ } from '@wordpress/i18n';
