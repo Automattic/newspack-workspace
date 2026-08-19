@@ -57,6 +57,13 @@ final class Newspack_Newsletters_Mailchimp_Cached_Data {
 	const CRON_HOOK = 'newspack_nl_mailchimp_refresh_cache';
 
 	/**
+	 * The recurrence used to schedule the cache refresh cron event
+	 *
+	 * @var string
+	 */
+	const CRON_SCHEDULE = 'every_30_minutes';
+
+	/**
 	 * We store errors when an API request fails, but we will only surface these errors to the user after this time
 	 *
 	 * @var int
@@ -88,8 +95,12 @@ final class Newspack_Newsletters_Mailchimp_Cached_Data {
 		add_action( self::CRON_HOOK, [ __CLASS__, 'handle_cron' ] );
 		add_filter( 'cron_schedules', [ __CLASS__, 'add_cron_interval' ] ); // phpcs:ignore
 
-		if ( ! wp_next_scheduled( self::CRON_HOOK ) ) {
-			wp_schedule_event( time(), 'every_30_minutes', self::CRON_HOOK );
+		$scheduled_event = wp_get_scheduled_event( self::CRON_HOOK );
+
+		// Sites scheduled under a previous recurrence keep it until the event is cleared, so compare before scheduling.
+		if ( ! $scheduled_event || self::CRON_SCHEDULE !== $scheduled_event->schedule ) {
+			wp_clear_scheduled_hook( self::CRON_HOOK );
+			wp_schedule_event( time(), self::CRON_SCHEDULE, self::CRON_HOOK );
 		}
 
 		add_action( 'admin_notices', [ __CLASS__, 'maybe_show_error' ] );
@@ -103,7 +114,7 @@ final class Newspack_Newsletters_Mailchimp_Cached_Data {
 	 * @return array
 	 */
 	public static function add_cron_interval( $schedules ) {
-		$schedules['every_30_minutes'] = [
+		$schedules[ self::CRON_SCHEDULE ] = [
 			'interval' => 30 * MINUTE_IN_SECONDS,
 			'display'  => __( 'Every thirty minutes', 'newspack_newsletters' ),
 		];
