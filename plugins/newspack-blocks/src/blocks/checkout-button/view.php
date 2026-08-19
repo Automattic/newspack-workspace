@@ -81,7 +81,7 @@ function render_callback( $attributes ) {
 		? $attributes['product']
 		: $product_id;
 	\Newspack_Blocks\Modal_Checkout::enqueue_modal( $modal_product_id );
-	\Newspack_Blocks::enqueue_view_assets( 'checkout-button' );
+	\Newspack_Blocks::enqueue_view_assets( 'checkout-button', 'defer' );
 
 	$background_color           = $attributes['backgroundColor'] ?? '';
 	$text_color                 = $attributes['textColor'] ?? '';
@@ -146,6 +146,10 @@ function render_callback( $attributes ) {
 		$hidden_fields .= $after_success_behavior ? '<input type="hidden" name="after_success_behavior" value="' . esc_attr( $after_success_behavior ) . '" />' : '';
 		$hidden_fields .= $after_success_button_label ? '<input type="hidden" name="after_success_button_label" value="' . esc_attr( $after_success_button_label ) . '" />' : '';
 		$hidden_fields .= $after_success_url ? '<input type="hidden" name="after_success_url" value="' . esc_attr( $after_success_url ) . '" />' : '';
+		// Vouched for here because this is the last point the destination is known to come
+		// from the block's own settings rather than from the request.
+		$after_success_token = $after_success_url ? Modal_Checkout::get_after_success_token( $after_success_url ) : '';
+		$hidden_fields      .= $after_success_token ? '<input type="hidden" name="after_success_token" value="' . esc_attr( $after_success_token ) . '" />' : '';
 	}
 	// Always emit the coupon field (not gated on the gateway check): it is
 	// applied server-side for both the modal and the redirect checkout flows.
