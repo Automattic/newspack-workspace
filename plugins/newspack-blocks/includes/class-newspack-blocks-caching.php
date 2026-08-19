@@ -48,28 +48,12 @@ class Newspack_Blocks_Caching {
 	/**
 	 * Initialize block caching if needed.
 	 *
-	 * Cached markup is keyed by block attributes and position, with no reader
-	 * dimension, so anything a block renders differently per reader gets served
-	 * across readers — and a listing block does render differently per reader,
-	 * withholding the body of posts the reader has no access to. So the cache is
-	 * confined to readers who see the same thing as each other: logged out, and
-	 * holding none of the bypasses the content gate grants individually (a gift
-	 * link, a newsletter link, an institutional grant). Logged-in readers lose
-	 * little — page caching already skips them, so their requests reach PHP
-	 * either way.
-	 *
-	 * One reader-varying case remains open, the same one block-level visibility
-	 * has always carried: an institutional grant resolved from the request IP
-	 * leaves no cookie to detect, so an institutional visitor can still prime
-	 * these blocks for everyone. See Newspack\Block_Visibility.
+	 * Logged-out readers only. The rest of the per-reader question is asked at
+	 * render time in should_cache_block(), because this runs on `init` and some
+	 * grants are not yet visible then.
 	 */
 	public static function setup_block_caching() {
-		$varies_by_reader = class_exists( '\Newspack\Content_Gate' )
-			&& method_exists( '\Newspack\Content_Gate', 'response_varies_by_reader' )
-			? \Newspack\Content_Gate::response_varies_by_reader()
-			: is_user_logged_in();
-
-		if ( ! $varies_by_reader ) {
+		if ( ! is_user_logged_in() ) {
 			add_action( 'template_redirect', [ __CLASS__, 'check_all_blocks_cache_status' ] );
 			add_filter( 'pre_render_block', [ __CLASS__, 'maybe_serve_cached_block' ], 10, 2 );
 			add_filter( 'render_block', [ __CLASS__, 'maybe_cache_block' ], 9999, 2 );
@@ -160,7 +144,27 @@ class Newspack_Blocks_Caching {
 	 * @return bool True if block should be cached. False otherwise.
 	 */
 	protected static function should_cache_block( $block_data ) {
-		return in_array( $block_data['blockName'], self::get_cacheable_blocks_names(), true );
+		if ( ! in_array( $block_data['blockName'], self::get_cacheable_blocks_names(), true ) ) {
+			return false;
+		}
+
+		// Cached markup is keyed by block attributes and position, with no reader
+		// dimension, so anything a block renders differently per reader would be
+		// served across readers — and a listing block does render differently per
+		// reader, withholding the body of posts the reader has no access to. Readers
+		// holding a bypass of their own therefore neither read nor write the cache.
+		//
+		// Asked here rather than at hook-registration time because a newsletter link
+		// writes its bypass cookie on `wp`, after the hooks are installed.
+		if (
+			class_exists( '\Newspack\Content_Gate' )
+			&& method_exists( '\Newspack\Content_Gate', 'response_varies_by_reader' )
+			&& \Newspack\Content_Gate::response_varies_by_reader()
+		) {
+			return false;
+		}
+
+		return true;
 	}
 
 	/**

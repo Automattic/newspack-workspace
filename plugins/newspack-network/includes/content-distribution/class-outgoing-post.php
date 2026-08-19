@@ -305,6 +305,30 @@ class Outgoing_Post {
 	 * @return array|WP_Error The post payload or WP_Error if the post is invalid.
 	 */
 	public function get_payload( $status_on_publish = 'draft' ) {
+		// Newspack's content gate withholds a restricted post's body from readers on
+		// every surface that runs `the_content`. Distribution is not a reader: a node
+		// site has to receive the article whole, and gates its own copy. The window
+		// covers the whole payload because more than one field is built that way —
+		// the body, and the media list, which would otherwise carry only the
+		// attachments that appear above the gate.
+		if ( class_exists( '\Newspack\Content_Gate' ) && method_exists( '\Newspack\Content_Gate', 'without_reader_restrictions' ) ) {
+			return \Newspack\Content_Gate::without_reader_restrictions(
+				function () use ( $status_on_publish ) {
+					return $this->build_payload( $status_on_publish );
+				}
+			);
+		}
+		return $this->build_payload( $status_on_publish );
+	}
+
+	/**
+	 * Assemble the payload {@see self::get_payload()} returns.
+	 *
+	 * @param string $status_on_publish The post status when creating the post.
+	 *
+	 * @return array|WP_Error The post payload or WP_Error if the post is invalid.
+	 */
+	protected function build_payload( $status_on_publish = 'draft' ) {
 		$post_author = self::get_outgoing_wp_user_author( $this->post->post_author );
 
 		$payload = [
@@ -419,37 +443,10 @@ class Outgoing_Post {
 		 * Remove autoembed filter so that actual URL will be pushed and not the generated markup.
 		 */
 		remove_filter( 'the_content', [ $wp_embed, 'autoembed' ], 8 );
-		// Newspack's content gate withholds a restricted post's body from readers on
-		// every surface that runs this filter. Distribution is not a reader: a node
-		// site has to receive the article whole, and gates its own copy. Without this
-		// the node silently stores the teaser as the article.
-		//
-		// The gate memoizes its verdict for the request, so the flush on each side is
-		// what makes the filter reach it — and what stops a verdict reached inside
-		// this window from outliving it. The try/finally is for the same reason: a
-		// throwing filter must not leave gating switched off for the rest of the
-		// request.
-		//
-		// Block-level visibility is suspended for the same reason, and it matters
-		// which entry point ran: it stands down on its own in the editor and over
-		// REST, so without this a post distributed from WP-CLI reached the node
-		// stripped of its access-controlled blocks while the same post distributed
-		// from the editor reached it whole.
-		$suspend_gating = class_exists( '\Newspack\Content_Gate' ) && method_exists( '\Newspack\Content_Gate', 'flush_withhold_cache' );
-		if ( $suspend_gating ) {
-			add_filter( 'newspack_content_gate_restrict_post', '__return_false', PHP_INT_MAX );
-			add_filter( 'newspack_content_gate_apply_block_visibility', '__return_false', PHP_INT_MAX );
-			\Newspack\Content_Gate::flush_withhold_cache();
-		}
 		try {
 			// Filter documented in WordPress core.
 			$post_content = apply_filters( 'the_content', $this->get_raw_post_content() );
 		} finally {
-			if ( $suspend_gating ) {
-				remove_filter( 'newspack_content_gate_restrict_post', '__return_false', PHP_INT_MAX );
-				remove_filter( 'newspack_content_gate_apply_block_visibility', '__return_false', PHP_INT_MAX );
-				\Newspack\Content_Gate::flush_withhold_cache();
-			}
 			add_filter( 'the_content', [ $wp_embed, 'autoembed' ], 8 );
 		}
 		return $post_content;

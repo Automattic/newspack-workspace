@@ -43,6 +43,29 @@ class Content_Gate_Excerpt {
 	public static function filter_get_the_excerpt( $text, $post = null ) {
 		$resolved = $post instanceof \WP_Post ? $post : get_post( $post );
 
+		// Every branch below ends in wp_trim_excerpt(), which applies 'the_content',
+		// where the gate substitutes by the global post rather than by the post this
+		// filter was asked about. On a gated article, an excerpt requested for any
+		// other post would come back as the article's teaser with its gate appended —
+		// the registration form and its element IDs, repeated in a card. Suspended for
+		// the whole method so the excerpt answers for $resolved alone.
+		return Content_Gate::without_content_substitution(
+			function () use ( $text, $post, $resolved ) {
+				return self::build_excerpt( $text, $post, $resolved );
+			}
+		);
+	}
+
+	/**
+	 * Build the excerpt, with the gate's content substitution already suspended.
+	 *
+	 * @param string            $text     The post excerpt, empty when auto-generating.
+	 * @param \WP_Post|int|null $post     The value this filter was passed.
+	 * @param \WP_Post|null     $resolved The post $post resolves to, or null.
+	 * @return string
+	 */
+	private static function build_excerpt( $text, $post, $resolved ) {
+
 		// Handing an unresolvable value to core would not fail -- wp_trim_excerpt()
 		// calls get_the_content( '', false, null ), which falls back to $GLOBALS['post']
 		// and builds an excerpt from whatever the loop has set up, unsanitized. A filter
@@ -98,20 +121,6 @@ class Content_Gate_Excerpt {
 		// author's own excerpt would discard the result.
 		if ( $is_withheld ) {
 			$sanitized->post_content = Content_Gate::get_withheld_teaser( $resolved->ID );
-
-			// wp_trim_excerpt() applies 'the_content', where the gate substitutes by
-			// the global post rather than by the post this filter was asked about. The
-			// content in hand is already that post's teaser, so let core trim it
-			// without the substitution answering for whichever article the loop
-			// happens to be on.
-			remove_filter( 'the_content', [ Content_Gate::class, 'replace_restricted_content' ], Content_Gate::RESTRICTION_PRIORITY );
-			remove_filter( 'the_content', [ Content_Gate::class, 'handle_restricted_content' ], PHP_INT_MAX );
-			try {
-				return wp_trim_excerpt( '', $sanitized );
-			} finally {
-				add_filter( 'the_content', [ Content_Gate::class, 'replace_restricted_content' ], Content_Gate::RESTRICTION_PRIORITY );
-				add_filter( 'the_content', [ Content_Gate::class, 'handle_restricted_content' ], PHP_INT_MAX );
-			}
 		}
 
 		// Pass an empty $text so core rebuilds from the sanitized post.

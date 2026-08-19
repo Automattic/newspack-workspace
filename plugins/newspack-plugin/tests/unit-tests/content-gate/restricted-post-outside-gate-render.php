@@ -13,6 +13,7 @@
 namespace Newspack\Tests\Content_Gate;
 
 use Newspack\Content_Gate;
+use Newspack\Content_Gifting;
 use Newspack\Tests\Content_Gate\Traits\Trait_Restriction_Cache_Test;
 
 /**
@@ -316,6 +317,9 @@ class Test_Restricted_Post_Outside_Gate_Render extends \WP_UnitTestCase {
 	 * applies to a post carrying no tag at all.
 	 */
 	public function test_a_more_tag_at_the_top_leaves_no_free_preview() {
+		// The threshold is a layout setting, so the layout has to carry it rather
+		// than the assertion resting on what an unwritten meta key reads as.
+		update_post_meta( $this->gate_layout_id, 'use_more_tag', true );
 		$post_id = $this->factory->post->create(
 			[
 				'post_status'  => 'publish',
@@ -328,6 +332,112 @@ class Test_Restricted_Post_Outside_Gate_Render extends \WP_UnitTestCase {
 
 		$this->assertStringNotContainsString( self::PAID_MARKER, $teaser );
 		$this->assertSame( '', trim( wp_strip_all_tags( $teaser ) ) );
+	}
+
+	/**
+	 * Work that renders a post for something other than a reader gets the whole
+	 * post, and the memo does not carry either verdict out of that window.
+	 *
+	 * The memo is what makes this need a helper: a verdict reached before the
+	 * window would otherwise still answer inside it, and one reached inside it
+	 * would outlive it.
+	 */
+	public function test_a_non_reader_render_gets_the_whole_post() {
+		$post_id = $this->create_restricted_post();
+		$this->go_to( home_url( '/' ) );
+
+		$this->assertTrue( Content_Gate::should_withhold_content( $post_id ), 'Withheld before the window, and memoized.' );
+
+		$inside = Content_Gate::without_reader_restrictions(
+			function () use ( $post_id ) {
+				return [
+					'withheld' => Content_Gate::should_withhold_content( $post_id ),
+					'nested'   => Content_Gate::without_reader_restrictions(
+						function () use ( $post_id ) {
+							return Content_Gate::should_withhold_content( $post_id );
+						}
+					),
+				];
+			}
+		);
+
+		$this->assertFalse( $inside['withheld'], 'The window reaches the memoized verdict.' );
+		$this->assertFalse( $inside['nested'], 'Nesting does not end the window early.' );
+		$this->assertTrue( Content_Gate::should_withhold_content( $post_id ), 'The window does not outlive itself.' );
+	}
+
+	/**
+	 * An excerpt answers for the post it was asked about, not for whichever post
+	 * the loop is on.
+	 *
+	 * Core builds an excerpt by running the body through `the_content`, and the
+	 * gate substitutes there by the global post. Without the suspension a card
+	 * beside a gated article shows that article's teaser under its own headline.
+	 */
+	public function test_an_excerpt_answers_for_its_own_post() {
+		$restricted_id = $this->create_restricted_post();
+		$other_id      = $this->factory->post->create(
+			[
+				'post_type'    => 'page',
+				'post_status'  => 'publish',
+				'post_excerpt' => '',
+				'post_content' => '<!-- wp:paragraph --><p>OTHERBODY</p><!-- /wp:paragraph -->',
+			]
+		);
+
+		// A loop sitting on the gated article, as a sidebar or related-posts list
+		// would find it.
+		$this->go_to( get_permalink( $restricted_id ) );
+		$GLOBALS['post'] = get_post( $restricted_id );
+		setup_postdata( $GLOBALS['post'] );
+
+		$excerpt = get_the_excerpt( $other_id );
+
+		unset( $GLOBALS['post'] );
+		wp_reset_postdata();
+
+		$this->assertStringContainsString( 'OTHERBODY', $excerpt, 'The excerpt is built from the post it was asked about.' );
+		$this->assertStringNotContainsString( self::FREE_MARKER, $excerpt, "A neighbouring article's teaser must not stand in for it." );
+	}
+
+	/**
+	 * The body stays withheld even if the substitution filter never runs.
+	 *
+	 * A plugin that removes the filter would otherwise publish the full body: the
+	 * chain is handed the unrestricted post, and nothing else in it withholds.
+	 */
+	public function test_a_removed_substitution_filter_still_withholds() {
+		$post_id = $this->create_restricted_post();
+		$this->go_to( home_url( '/' ) );
+
+		remove_filter( 'the_content', [ Content_Gate::class, 'replace_restricted_content' ], Content_Gate::RESTRICTION_PRIORITY );
+		try {
+			$rendered = $this->render_in_secondary_loop( $post_id );
+		} finally {
+			add_filter( 'the_content', [ Content_Gate::class, 'replace_restricted_content' ], Content_Gate::RESTRICTION_PRIORITY );
+		}
+
+		$this->assertStringNotContainsString( self::PAID_MARKER, $rendered );
+	}
+
+	/**
+	 * A reader arriving on a gift link varies from every other anonymous reader
+	 * before any cookie exists, so shared caches must treat them as their own.
+	 */
+	public function test_a_url_bypass_marks_the_response_as_reader_varying() {
+		wp_set_current_user( 0 );
+		$this->assertFalse( Content_Gate::response_varies_by_reader(), 'A plain anonymous request is shareable.' );
+
+		$_GET[ Content_Gifting::QUERY_ARG ] = 'a-gift-key';
+		$varies_on_gift_link                = Content_Gate::response_varies_by_reader();
+		unset( $_GET[ Content_Gifting::QUERY_ARG ] );
+
+		$_GET['utm_medium']       = 'email';
+		$varies_on_newsletter     = Content_Gate::response_varies_by_reader();
+		unset( $_GET['utm_medium'] );
+
+		$this->assertTrue( $varies_on_gift_link, 'A gift key grants access before its cookie exists.' );
+		$this->assertTrue( $varies_on_newsletter, 'The newsletter fallback writes its cookie on `wp`, after caching is wired up.' );
 	}
 
 	/**

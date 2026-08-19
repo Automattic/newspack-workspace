@@ -186,6 +186,11 @@ class Content_Gate_Advanced_Settings {
 	 * an invalid cookie is not a leak, but it costs nothing to treat it as one,
 	 * and verifying would cost an HMAC.
 	 *
+	 * Narrower than {@see Content_Gate::response_varies_by_reader()}, deliberately:
+	 * feed membership is decided through `newspack_is_post_restricted`, which
+	 * content gifting does not filter, so a gift key changes nothing about which
+	 * items a feed carries.
+	 *
 	 * @return bool
 	 */
 	public static function feed_response_varies_by_reader(): bool {

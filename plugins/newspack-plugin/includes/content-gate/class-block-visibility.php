@@ -54,16 +54,19 @@ class Block_Visibility {
 		}
 
 		/**
-		 * Filters whether block visibility applies to this render at all.
+		 * Filters whether block visibility applies to this render.
 		 *
 		 * For code that renders a post for something other than a reader — content
 		 * distribution building a payload for a node site, an export — where the
-		 * whole post is wanted and the receiving end does its own gating.
+		 * whole post is wanted and the receiving end does its own gating. Governs
+		 * this render only: the excerpt path reaches
+		 * {@see self::strip_blocks_hidden_from_public()}, which withholds regardless.
 		 *
-		 * @param bool  $apply Whether to withhold blocks hidden from this reader.
-		 * @param array $block Parsed block.
+		 * @param bool     $apply   Whether to withhold blocks hidden from this reader.
+		 * @param array    $block   Parsed block.
+		 * @param int|false $post_id Post being rendered, or false outside a loop.
 		 */
-		if ( ! apply_filters( 'newspack_content_gate_apply_block_visibility', true, $block ) ) {
+		if ( ! apply_filters( 'newspack_content_gate_apply_block_visibility', true, $block, get_the_ID() ) ) {
 			return $block_content;
 		}
 

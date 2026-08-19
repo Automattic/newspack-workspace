@@ -521,15 +521,142 @@ class Content_Gate {
 	}
 
 	/**
+	 * Nesting depth of {@see self::without_reader_restrictions()}.
+	 *
+	 * @var int
+	 */
+	private static int $unrestricted_depth = 0;
+
+	/**
+	 * Nesting depth of {@see self::without_content_substitution()}.
+	 *
+	 * @var int
+	 */
+	private static int $substitution_depth = 0;
+
+	/**
+	 * Hooks {@see self::without_reader_restrictions()} registered, so it removes
+	 * only its own and leaves a site's identical callback in place.
+	 *
+	 * @var string[]
+	 */
+	private static array $unrestricted_hooks = [];
+
+	/**
+	 * Which of the two content filters {@see self::without_content_substitution()}
+	 * removed, so it restores what was there rather than what it expects.
+	 *
+	 * @var array<string, bool>
+	 */
+	private static array $substitution_restore = [];
+
+	/**
+	 * Render a post as something other than a reader.
+	 *
+	 * For work that runs `the_content` over a post to build something that is not
+	 * a page for the reader in front of it — a distribution payload for a node
+	 * site, an editorial metric, an export. Withholding there is not a smaller
+	 * page, it is wrong data: the node stores a teaser as the article, the metric
+	 * counts the images in a teaser and writes that number to post meta.
+	 *
+	 * Suspends post-level withholding and block-level visibility together, and
+	 * flushes the verdict memo on both sides so a verdict reached before the
+	 * window does not answer inside it, or the reverse. Nests safely.
+	 *
+	 * Covers rendering, not excerpts: {@see Block_Visibility::strip_blocks_hidden_from_public()}
+	 * evaluates against the anonymous reader unconditionally, so an excerpt built
+	 * inside this window still has blocks hidden from the public removed.
+	 *
+	 * @param callable $callback Work to run with restrictions suspended.
+	 *
+	 * @return mixed Whatever the callback returns.
+	 */
+	public static function without_reader_restrictions( callable $callback ) {
+		$suspended_hooks = [ 'newspack_content_gate_restrict_post', 'newspack_content_gate_apply_block_visibility' ];
+		if ( 0 === self::$unrestricted_depth ) {
+			foreach ( $suspended_hooks as $hook ) {
+				// Skip a hook a site already answers false at this priority for its
+				// own reasons, so the restore below cannot take that answer away.
+				if ( PHP_INT_MAX !== has_filter( $hook, '__return_false' ) ) {
+					add_filter( $hook, '__return_false', PHP_INT_MAX );
+					self::$unrestricted_hooks[] = $hook;
+				}
+			}
+			self::flush_withhold_cache();
+		}
+		++self::$unrestricted_depth;
+		try {
+			return $callback();
+		} finally {
+			--self::$unrestricted_depth;
+			if ( 0 === self::$unrestricted_depth ) {
+				foreach ( self::$unrestricted_hooks as $hook ) {
+					remove_filter( $hook, '__return_false', PHP_INT_MAX );
+				}
+				self::$unrestricted_hooks = [];
+				self::flush_withhold_cache();
+			}
+		}
+	}
+
+	/**
+	 * Run work with the body substitution suspended.
+	 *
+	 * {@see self::replace_restricted_content()} answers for whichever post the loop
+	 * has set up, because `the_content` carries no post of its own. Code that runs
+	 * that filter over content it already holds — the excerpt path, which hands
+	 * core a post's own teaser to trim — must not have it answered for a different
+	 * article: the reader gets that article's teaser, and its gate, inside a card.
+	 *
+	 * Nests, because the content it suspends for can itself render a listing that
+	 * asks for an excerpt. Restores only the callbacks it actually removed, so a
+	 * site that deliberately unhooked one does not get it back.
+	 *
+	 * @param callable $callback Work to run with the substitution suspended.
+	 *
+	 * @return mixed Whatever the callback returns.
+	 */
+	public static function without_content_substitution( callable $callback ) {
+		if ( 0 === self::$substitution_depth ) {
+			self::$substitution_restore = [
+				'replace' => self::RESTRICTION_PRIORITY === has_filter( 'the_content', [ __CLASS__, 'replace_restricted_content' ] ),
+				'handle'  => PHP_INT_MAX === has_filter( 'the_content', [ __CLASS__, 'handle_restricted_content' ] ),
+			];
+			if ( self::$substitution_restore['replace'] ) {
+				remove_filter( 'the_content', [ __CLASS__, 'replace_restricted_content' ], self::RESTRICTION_PRIORITY );
+			}
+			if ( self::$substitution_restore['handle'] ) {
+				remove_filter( 'the_content', [ __CLASS__, 'handle_restricted_content' ], PHP_INT_MAX );
+			}
+		}
+		++self::$substitution_depth;
+		try {
+			return $callback();
+		} finally {
+			--self::$substitution_depth;
+			if ( 0 === self::$substitution_depth ) {
+				if ( ! empty( self::$substitution_restore['replace'] ) ) {
+					add_filter( 'the_content', [ __CLASS__, 'replace_restricted_content' ], self::RESTRICTION_PRIORITY );
+				}
+				if ( ! empty( self::$substitution_restore['handle'] ) ) {
+					add_filter( 'the_content', [ __CLASS__, 'handle_restricted_content' ], PHP_INT_MAX );
+				}
+				self::$substitution_restore = [];
+			}
+		}
+	}
+
+	/**
 	 * Discard the memoized withholding verdicts and teasers.
 	 *
 	 * The verdicts are memoized for the whole request, which assumes the inputs
 	 * hold still — so a caller that deliberately changes them, by filtering
 	 * `newspack_content_gate_restrict_post` for a stretch of work, has to flush on
 	 * both sides of that window or the memo answers with the verdict from before
-	 * it. {@see \Newspack_Network\Content_Distribution\Outgoing_Post} is the
-	 * in-tree case. Also the release valve for a long-running loop, where the
-	 * rendered teasers would otherwise accumulate for the life of the process.
+	 * it. {@see self::without_reader_restrictions()} is what does that; call this
+	 * directly only to build a window that helper does not cover. Also the release
+	 * valve for a long-running loop, where the rendered teasers would otherwise
+	 * accumulate for the life of the process.
 	 */
 	public static function flush_withhold_cache() {
 		self::$withhold_decisions = [];
@@ -540,14 +667,24 @@ class Content_Gate {
 	 * Whether this request carries a gate bypass that other readers do not, so
 	 * anything rendered for it must not be cached and served to them.
 	 *
-	 * Cookie presence is enough: an invalid cookie grants nothing, but treating
-	 * it as a grant costs only a cache miss, where the reverse costs a leak.
+	 * Presence is enough: an invalid key grants nothing, but treating it as a
+	 * grant costs only a cache miss, where the reverse costs a leak.
 	 *
-	 * This does not make the remaining output identical for every reader. The
-	 * `institution` access rule also evaluates for anonymous visitors and can key
-	 * off the request IP with no cookie to detect, exactly as
-	 * {@see Block_Visibility::strip_blocks_hidden_from_public()} documents for
-	 * block-level visibility.
+	 * The URL markers are not redundant with the cookies. A gift link grants
+	 * access from its query argument on the first request, before any cookie
+	 * exists ({@see Content_Gifting::is_gifted_post()}), and the newsletter
+	 * fallback writes its cookie on `wp` — after `init`, and so after anything
+	 * that asks this question at hook-registration time.
+	 *
+	 * Deliberately not listed: the `institution` rule's IP branch. It grants only
+	 * to a reader who is logged in or already carries the IP cookie
+	 * ({@see Content_Gate\Institution::user_matches_institution()}), both of which
+	 * are covered above, so there is no cookieless IP grant to detect.
+	 *
+	 * The narrower question of whether a *feed* varies is
+	 * {@see Content_Gate_Advanced_Settings::feed_response_varies_by_reader()},
+	 * which omits the gift cookie because feed membership is decided through
+	 * `newspack_is_post_restricted`, which content gifting does not filter.
 	 *
 	 * @return bool
 	 */
@@ -562,7 +699,15 @@ class Content_Gate {
 			Content_Gifting::COOKIE_NAME,
 		];
 		// phpcs:ignore WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___COOKIE
-		return ! empty( array_intersect( $bypass_cookies, array_keys( $_COOKIE ) ) );
+		if ( ! empty( array_intersect( $bypass_cookies, array_keys( $_COOKIE ) ) ) ) {
+			return true;
+		}
+		// phpcs:disable WordPress.Security.NonceVerification.Recommended -- presence-only check on a public URL, not an action.
+		if ( isset( $_GET[ Content_Gifting::QUERY_ARG ] ) ) {
+			return true;
+		}
+		return 'email' === sanitize_text_field( wp_unslash( $_GET['utm_medium'] ?? '' ) );
+		// phpcs:enable WordPress.Security.NonceVerification.Recommended
 	}
 
 	/**
@@ -671,6 +816,12 @@ class Content_Gate {
 			return '';
 		}
 		self::$withheld_teasers[ $memo_key ] = '';
+
+		// Resolve the restriction before reading the layout. The gate layout for a
+		// post and reader is recorded as a side effect of that lookup, and
+		// get_gate_layout_id() answers false without it — which would fall back to
+		// the default paragraph count and hand out a preview the article withholds.
+		self::is_post_restricted( $post_id );
 
 		// Strip before building, not after. The teaser comes back as rendered HTML
 		// with no block delimiters left, so a strip applied to it is a silent no-op

@@ -584,7 +584,16 @@ class Fields {
 		if ( ! $story->is_valid() ) {
 			return 0;
 		}
-		$rendered_post_content = \apply_filters( 'the_content', \get_post_field( 'post_content', $post_id ) );
+		// An editorial metric, not a page for a reader — and it is written to post
+		// meta, so a count taken from a gated post's teaser would outlive the request
+		// that took it. `save_post` runs this with no user for cron, WP-CLI and
+		// importers, which is exactly when the content gate would withhold.
+		$render = function () use ( $post_id ) {
+			return \apply_filters( 'the_content', \get_post_field( 'post_content', $post_id ) );
+		};
+		$rendered_post_content = class_exists( '\Newspack\Content_Gate' ) && method_exists( '\Newspack\Content_Gate', 'without_reader_restrictions' )
+			? \Newspack\Content_Gate::without_reader_restrictions( $render )
+			: $render();
 		return substr_count( $rendered_post_content, '<img ' );
 	}
 

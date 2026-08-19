@@ -265,8 +265,12 @@ trait Content_Gate_Layout {
 
 		// Get settings from layout post, or use defaults if post doesn't exist.
 		if ( $gate_layout_post ) {
-			$style        = \get_post_meta( $gate_layout_id, 'style', true );
+			$style = \get_post_meta( $gate_layout_id, 'style', true );
+			// An unwritten meta key reads as '', and treating that as "off" would drop
+			// the author's own mark for where the free part ends. The paragraph count
+			// and the style below both fall back for the same reason.
 			$use_more_tag = \get_post_meta( $gate_layout_id, 'use_more_tag', true );
+			$use_more_tag = '' === $use_more_tag ? self::get_layout_meta_default( 'use_more_tag' ) : $use_more_tag;
 			$count        = self::get_visible_paragraphs( $gate_layout_id );
 		} else {
 			$style        = '';
