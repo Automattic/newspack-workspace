@@ -49,7 +49,11 @@ export function validateDonationTriggerParams( layout, frequency, amount ) {
  * Resolve which donate form a URL trigger should act on, and how.
  *
  * The first form in DOM order that can fully satisfy the trigger wins; forms
- * that cannot are skipped untouched. Tiered forms are matched against the
+ * that cannot are skipped untouched. (Before this resolver existed, the last
+ * match won for the frequency/untiered layouts, so on a page with several
+ * matching Donate blocks a published link may now act on a different block
+ * than it used to — and land on that block's own after-success settings.)
+ * Tiered forms are matched against the
  * server-rendered tier markup (`data-frequency-slug`/`data-amount` spans), so
  * no tab needs to be clicked to find out whether the amount exists. A tiered
  * block whose view script has not initialized yet (no `data-tiers-based-ready`
