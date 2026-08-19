@@ -24,6 +24,12 @@ name: Retarget stacked PRs
 # the squash-merge strategy keeps the merge commit out of main's history
 # anyway. The merge is best-effort – on conflict the child keeps its retarget
 # and gets a comment asking for a manual merge.
+#
+# Promotion PRs between the long-lived branches (main/alpha/release) are
+# excluded: their head branch is permanent, never pruned, and the PRs that
+# target it are not stacked on it. Without the guard, merging a main → alpha
+# promotion makes every open main-based PR look like a stacked child of main
+# and retargets it to alpha (#709 did exactly that to 30 PRs).
 
 on:
   pull_request:
@@ -41,7 +47,10 @@ concurrency:
 jobs:
   retarget:
     name: Retarget PRs stacked on the merged branch
-    if: github.event.pull_request.merged == true && github.event.pull_request.head.repo.full_name == github.repository
+    if: >-
+      github.event.pull_request.merged == true &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      !contains(fromJSON('["main", "alpha", "release"]'), github.event.pull_request.head.ref)
     runs-on: ubuntu-latest
     env:
       GH_TOKEN: ${{ secrets.GH_TOKEN }}
