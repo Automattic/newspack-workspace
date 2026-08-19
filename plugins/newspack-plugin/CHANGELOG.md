@@ -1,3 +1,10 @@
+## newspack [6.48.9](https://github.com/Automattic/newspack-workspace/compare/newspack@6.48.8...newspack@6.48.9) (2026-08-19)
+
+
+### Bug Fixes
+
+* **reader-activation:** escape the row-action URLs in the users list ([#873](https://github.com/Automattic/newspack-workspace/issues/873)) ([816fc2b](https://github.com/Automattic/newspack-workspace/commit/816fc2bdf7bb0e442ddbc19d240d9fe63f41e9bc))
+
 ## newspack [6.48.8](https://github.com/Automattic/newspack-workspace/compare/newspack@6.48.7...newspack@6.48.8) (2026-08-19)
 
 
