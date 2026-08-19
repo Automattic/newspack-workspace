@@ -331,6 +331,119 @@ class Newspack_Test_Institution_REST_Controller extends WP_UnitTestCase {
 	 * prepare_item_for_response() could be dropped for this route, and every
 	 * other test in this file would stay green.
 	 */
+	/**
+	 * A filter cannot re-add the stored fields after the strip.
+	 *
+	 * The strip resists this only because it runs after the parent's
+	 * `rest_prepare_np_institution` filters, and nothing else pins that ordering --
+	 * swapping the two statements in prepare_item_for_response() leaves every other
+	 * test in this file green.
+	 */
+	public function test_a_filter_cannot_re_add_the_stored_fields() {
+		$filter = function ( $response ) {
+			$data         = $response->get_data();
+			$data['meta'] = [ Institution::META_PREFIX . 'ip_range' => 'READDED' ];
+			$response->set_data( $data );
+			return $response;
+		};
+		add_filter( 'rest_prepare_' . Institution::POST_TYPE, $filter );
+
+		try {
+			wp_set_current_user( $this->editor_id );
+			$response = rest_do_request( new WP_REST_Request( 'GET', $this->route . '/' . $this->institution_id ) );
+			$this->assertSame( 200, $response->get_status() );
+			$this->assert_meta_withheld( $response->get_data()['meta'] );
+
+			// The control: the filter really did run, so the assertion above is not
+			// passing because nothing happened.
+			wp_set_current_user( $this->admin_id );
+			$admin = rest_do_request( new WP_REST_Request( 'GET', $this->route . '/' . $this->institution_id ) );
+			$this->assertSame(
+				'READDED',
+				$admin->get_data()['meta'][ Institution::META_PREFIX . 'ip_range' ],
+				'Precondition: the filter reaches the response for a caller who may see meta.'
+			);
+		} finally {
+			remove_filter( 'rest_prepare_' . Institution::POST_TYPE, $filter );
+		}
+	}
+
+	/**
+	 * A filter returning a bare array does not take the route down.
+	 *
+	 * The parent's last statement is `apply_filters( "rest_prepare_{$post_type}", ... )`
+	 * and a filter may return anything; core allows for that, which is why
+	 * prepare_response_for_collection() carries its own instanceof guard. Without
+	 * normalising, get_data() on an array is a fatal -- and the strip never runs, so
+	 * the failure is not merely noisy.
+	 */
+	public function test_a_filter_returning_an_array_does_not_break_the_route() {
+		$filter = function () {
+			return [
+				'id'   => 1,
+				'meta' => [ Institution::META_PREFIX . 'ip_range' => 'LEAKED' ],
+			];
+		};
+		add_filter( 'rest_prepare_' . Institution::POST_TYPE, $filter );
+
+		try {
+			wp_set_current_user( $this->editor_id );
+			$response = rest_do_request( new WP_REST_Request( 'GET', $this->route . '/' . $this->institution_id ) );
+
+			$this->assertSame( 200, $response->get_status(), 'The route survives a filter returning a bare array.' );
+			$this->assert_meta_withheld( $response->get_data()['meta'] );
+		} finally {
+			remove_filter( 'rest_prepare_' . Institution::POST_TYPE, $filter );
+		}
+	}
+
+	/**
+	 * The read tier cannot enumerate drafts.
+	 *
+	 * Refused by core's sanitize_post_statuses(), which gates non-public statuses on
+	 * this post type's edit_posts -- not by anything in this class. Since
+	 * get_items_permissions_check() is replaced wholesale, that is an inherited
+	 * dependency rather than a stated guarantee, and pinning it here means a later
+	 * get_collection_params() override cannot open draft enumeration unnoticed.
+	 */
+	public function test_read_capability_cannot_enumerate_drafts() {
+		$draft_id = $this->factory->post->create(
+			[
+				'post_type'   => Institution::POST_TYPE,
+				'post_status' => 'draft',
+				'post_title'  => 'Draft institution',
+			]
+		);
+
+		wp_set_current_user( $this->editor_id );
+
+		// The status is asserted as "not a success" rather than a specific code:
+		// core refuses this at parameter sanitisation, so it is a 400 rather than a
+		// 403, and pinning that number would couple this to core's choice of error
+		// rather than to the guarantee.
+		foreach ( [ 'draft', 'private', 'any' ] as $status ) {
+			$request = new WP_REST_Request( 'GET', $this->route );
+			$request->set_param( 'status', $status );
+			$response = rest_do_request( $request );
+
+			$this->assertGreaterThanOrEqual(
+				400,
+				$response->get_status(),
+				"An editor must not enumerate institutions with status=$status."
+			);
+		}
+
+		// And the draft stays out of the default collection, which is the guarantee
+		// the status refusal exists to protect.
+		$response = rest_do_request( new WP_REST_Request( 'GET', $this->route ) );
+		$this->assertSame( 200, $response->get_status() );
+		$ids = wp_list_pluck( $response->get_data(), 'id' );
+		$this->assertNotContains( $draft_id, $ids, 'A draft institution must not reach the read tier.' );
+	}
+
+	/**
+	 * An editor reads the item successfully but sees no stored fields.
+	 */
 	public function test_editor_item_read_returns_200_without_the_rules() {
 		wp_set_current_user( $this->editor_id );
 		$response = rest_do_request( new WP_REST_Request( 'GET', $this->route . '/' . $this->institution_id ) );

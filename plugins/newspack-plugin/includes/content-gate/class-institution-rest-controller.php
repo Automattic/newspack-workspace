@@ -172,12 +172,22 @@ class Institution_REST_Controller extends \WP_REST_Posts_Controller {
 	 * @return \WP_REST_Response
 	 */
 	public function prepare_item_for_response( $item, $request ) {
-		$response = parent::prepare_item_for_response( $item, $request );
+		// The parent returns whatever `rest_prepare_np_institution` last returned, and
+		// a filter may hand back an array or a WP_Error -- core allows for that, which
+		// is why prepare_response_for_collection() carries its own instanceof guard.
+		// Without normalising here, get_data() below is a fatal rather than a strip.
+		$response = \rest_ensure_response( parent::prepare_item_for_response( $item, $request ) );
+		if ( \is_wp_error( $response ) ) {
+			return $response;
+		}
 
 		if ( \current_user_can( self::RULES_CAPABILITY ) ) {
 			return $response;
 		}
 
+		// Deliberately after the parent call, so the strip runs on whatever the
+		// rest_prepare_np_institution filters left behind. Reordering these two would
+		// let a third-party filter re-add the fields this method exists to withhold.
 		$data = $response->get_data();
 		if ( isset( $data['meta'] ) ) {
 			$data['meta'] = (object) [];
