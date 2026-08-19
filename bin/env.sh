@@ -323,7 +323,7 @@ networks:
 YAML
         echo "Created $compose_file (db: $db_name, domain: $domain, ip: $ip)"
         # Check networking prerequisites (macOS only — Linux routes all 127.x.x.x by default).
-        if [[ "$(uname)" == "Darwin" ]] && ! ifconfig lo0 2>/dev/null | grep -q "$ip"; then
+        if [[ "$(uname)" == "Darwin" ]] && ! lo0_alias_exists "$ip"; then
             if command -v newspack-manage-host >/dev/null 2>&1; then
                 sudo newspack-manage-host alias-add "$ip"
             else
@@ -440,7 +440,7 @@ MIGRATE
         # Re-read domain after potential migration.
         domain=$(domain_for_env "$compose_file")
         # Ensure loopback alias exists (macOS only — Linux routes all 127.x.x.x by default).
-        if [[ "$(uname)" == "Darwin" && -n "$ip" && "$ip" != "127.0.0.1" ]] && ! ifconfig lo0 | grep -q "$ip"; then
+        if [[ "$(uname)" == "Darwin" && -n "$ip" && "$ip" != "127.0.0.1" ]] && ! lo0_alias_exists "$ip"; then
             if command -v newspack-manage-host >/dev/null 2>&1; then
                 sudo newspack-manage-host alias-add "$ip"
             else
