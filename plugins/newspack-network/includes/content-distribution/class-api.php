@@ -245,6 +245,149 @@ class API {
 	}
 
 	/**
+	 * Remove block custom CSS from post content.
+	 *
+	 * Core has `wp_strip_custom_css_from_blocks()`, but only since WordPress 7.0,
+	 * and guarding on its existence would gate on feature availability rather than
+	 * on safety: content stored on an older site keeps the attribute, and it starts
+	 * rendering the day that site upgrades. Stripping it ourselves closes that
+	 * window and keeps one code path under test. Matches core's output where no
+	 * block carries custom CSS, including the untouched-bytes case; once something
+	 * is stripped this re-serializes the document while core splices only the
+	 * attribute it changed, so siblings written in non-canonical form normalize.
+	 *
+	 * @param string $content Post content.
+	 *
+	 * @return string The content with any block custom CSS removed.
+	 */
+	private static function strip_block_custom_css( string $content ): string {
+		// Deliberately not gated on has_blocks(). That tests for the exact literal
+		// '<!-- wp:', while WP_Block_Parser accepts extra whitespace or a newline
+		// after the opener, so a guard here skips content the parser still reads as
+		// a block — and the kses pass that follows then normalizes the delimiter
+		// back to canonical form with the attribute intact. Core carries the same
+		// guard; this is the one place we deliberately differ from it. The $removed
+		// check below already returns the original bytes when nothing was stripped,
+		// so the guard bought nothing.
+		$removed = false;
+		$blocks  = self::remove_custom_css_attribute( parse_blocks( $content ), $removed );
+
+		// Return the original bytes when there was nothing to strip, so this does not
+		// needlessly re-serialize markup it had no reason to touch. Note the stored
+		// payload is the FILTERED copy, not the sender's original — see the note on
+		// filter_incoming_content(), which that safety depends on.
+		if ( ! $removed ) {
+			return $content;
+		}
+
+		return serialize_blocks( $blocks );
+	}
+
+	/**
+	 * Recursively drop the `style.css` attribute from parsed blocks.
+	 *
+	 * @param array $blocks  Parsed blocks.
+	 * @param bool  $removed Set to true when any custom CSS was found and removed.
+	 *
+	 * @return array The blocks, without custom CSS.
+	 */
+	private static function remove_custom_css_attribute( array $blocks, bool &$removed ): array {
+		foreach ( $blocks as $index => $block ) {
+			if ( isset( $block['attrs']['style']['css'] ) ) {
+				unset( $blocks[ $index ]['attrs']['style']['css'] );
+				$removed = true;
+
+				// Match core: an emptied style attribute is removed, not left behind.
+				if ( empty( $blocks[ $index ]['attrs']['style'] ) ) {
+					unset( $blocks[ $index ]['attrs']['style'] );
+				}
+			}
+
+			if ( ! empty( $block['innerBlocks'] ) ) {
+				$blocks[ $index ]['innerBlocks'] = self::remove_custom_css_attribute( $block['innerBlocks'], $removed );
+			}
+		}
+
+		return $blocks;
+	}
+
+	/**
+	 * Hold caller-supplied content to the caller's own capabilities.
+	 *
+	 * This route's payload is composed in the browser rather than by a peer site,
+	 * and Incoming_Post::insert() stores content with kses disabled, which is only
+	 * defensible for trusted-node content. So content is filtered here, against the
+	 * requesting user's own capabilities.
+	 *
+	 * Scoped deliberately to this route. Distribution between sites arrives as a
+	 * Data Event carrying network credentials and never passes through here, so
+	 * it keeps storing content verbatim — see test_event_path_content_is_not_filtered.
+	 *
+	 * Covers the two things core cleans on `content_save_pre` for such a caller:
+	 * HTML through kses, and block custom CSS. Those are applied directly rather
+	 * than by running the chain, so this guard does not depend on global filter
+	 * registration. That reasoning covers `content` and `raw_content` only —
+	 * `title` and `excerpt` are left to core's own `title_save_pre` and
+	 * `excerpt_save_pre`, which this path never removes, so they do still depend
+	 * on it.
+	 *
+	 * Load-bearing: this mutates the payload BEFORE Incoming_Post is constructed,
+	 * so the copy persisted to PAYLOAD_META is the filtered one. Re-linking an
+	 * unlinked post replays that stored payload through insert() with
+	 * `content_save_pre` still removed and no route filtering, so persisting a
+	 * pristine payload here would reopen the hole through that path.
+	 *
+	 * The cost of that choice, on legitimate content: the filtered copy is also the
+	 * merge base `get_payload_from_partial()` merges later updates over, so where a
+	 * low-privilege caller degrades content, subsequent partial updates re-apply the
+	 * degraded copy. Only a full re-distribution from the origin heals it.
+	 *
+	 * @param mixed $payload The incoming payload.
+	 *
+	 * @return mixed The payload, with content filtered where the caller requires it.
+	 */
+	private static function filter_incoming_content( mixed $payload ): mixed {
+		if ( ! is_array( $payload ) || empty( $payload['post_data'] ) || ! is_array( $payload['post_data'] ) ) {
+			return $payload;
+		}
+
+		// Checked separately because core gates them separately: it registers the
+		// custom-CSS strip for callers without edit_css and kses for callers without
+		// unfiltered_html. Both meta caps resolve to the same primitive by default,
+		// but map_meta_cap is a filter and a plugin can diverge them, so mirroring
+		// core's two gates keeps this correct either way.
+		$strip_css   = ! current_user_can( 'edit_css' );
+		$filter_html = ! current_user_can( 'unfiltered_html' );
+
+		if ( ! $strip_css && ! $filter_html ) {
+			return $payload;
+		}
+
+		// Both fields can reach post_content: get_post_content() returns 'content'
+		// unless 'raw_content' carries blocks, in which case that is what is stored.
+		foreach ( [ 'content', 'raw_content' ] as $field ) {
+			if ( ! isset( $payload['post_data'][ $field ] ) || ! is_string( $payload['post_data'][ $field ] ) ) {
+				continue;
+			}
+
+			$value = $payload['post_data'][ $field ];
+
+			// Core's order: the custom-CSS strip runs at priority 8, kses at 10.
+			if ( $strip_css ) {
+				$value = self::strip_block_custom_css( $value );
+			}
+
+			if ( $filter_html ) {
+				$value = wp_kses_post( $value );
+			}
+
+			$payload['post_data'][ $field ] = $value;
+		}
+
+		return $payload;
+	}
+
+	/**
 	 * Insert a post given an Outgoing_Post payload.
 	 *
 	 * @param WP_REST_Request $request The REST request object.
@@ -252,7 +395,7 @@ class API {
 	 * @return WP_REST_Response|WP_Error The REST response or error.
 	 */
 	public static function insert_post( $request ): WP_REST_Response|WP_Error {
-		$payload = $request->get_param( 'payload' );
+		$payload = self::filter_incoming_content( $request->get_param( 'payload' ) );
 
 		try {
 			$incoming_post = new Incoming_Post( $payload );

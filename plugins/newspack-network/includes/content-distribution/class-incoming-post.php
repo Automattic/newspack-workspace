@@ -773,17 +773,46 @@ class Incoming_Post {
 			 */
 			do_action( 'newspack_network_incoming_post_before_save', $post_data, $this->post, $this->get_original_site_url() );
 
-			// Remove filters that may alter content updates.
+			// Remove filters that may alter content updates. Captured and restored
+			// below: the removal is global, so leaving it in place would silently
+			// disable kses for every later post save in the same request.
+			// Copy the callbacks array, not the WP_Hook object: remove_all_filters()
+			// empties that same object, so holding the object would restore nothing.
+			$content_save_pre_filters = isset( $GLOBALS['wp_filter']['content_save_pre'] )
+				? $GLOBALS['wp_filter']['content_save_pre']->callbacks
+				: null;
 			remove_all_filters( 'content_save_pre' );
 
 			// wp_insert_post()/wp_update_post() expect slashed data and unslash it
 			// internally. Serialized block markup carries literal backslashes in
 			// attribute JSON escapes (backslash-u003c for `<` etc.), which an
 			// unslashed insert would strip, corrupting block attributes.
-			if ( $this->ID ) {
-				$post_id = wp_update_post( wp_slash( $postarr ), true );
-			} else {
-				$post_id = wp_insert_post( wp_slash( $postarr ), true );
+			try {
+				if ( $this->ID ) {
+					$post_id = wp_update_post( wp_slash( $postarr ), true );
+				} else {
+					$post_id = wp_insert_post( wp_slash( $postarr ), true );
+				}
+			} finally {
+				// A throwing callback on wp_insert_post_data or save_post would
+				// otherwise leave content unfiltered for the rest of the request,
+				// for every later save, not just this one. One deliberate effect:
+				// the attachment insert in upload_thumbnail() below now runs with
+				// the filters back, so its EXIF-derived post_content is cleaned the
+				// way a normal media upload would be.
+				if ( is_array( $content_save_pre_filters ) ) {
+					foreach ( $content_save_pre_filters as $priority => $callbacks ) {
+						foreach ( $callbacks as $callback ) {
+							// Reconcile rather than overwrite. A callback inside the try may
+							// have removed one of these on purpose — core does exactly that
+							// when the current user is switched to one holding
+							// unfiltered_html — and re-adding it blindly would undo that.
+							if ( false === has_filter( 'content_save_pre', $callback['function'] ) ) {
+								add_filter( 'content_save_pre', $callback['function'], $priority, $callback['accepted_args'] );
+							}
+						}
+					}
+				}
 			}
 
 			if ( is_wp_error( $post_id ) ) {
