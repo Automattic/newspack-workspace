@@ -46,7 +46,6 @@ describe( 'formatPrice', () => {
 const payload = ( over = {} ) => ( {
 	preview_limited: true,
 	sample_count: 50,
-	sample_limit: 50,
 	...over,
 } );
 
@@ -55,17 +54,17 @@ describe( 'sampleNote', () => {
 		expect( sampleNote( payload() ) ).toBe( 'Showing a sample of 50 products.' );
 	} );
 
-	it( 'stays quiet when the sample fell short of the cap', () => {
-		expect( sampleNote( payload( { sample_count: 9 } ) ) ).toBeNull();
+	it( 'captions a short sample too, since the engine only flags a cut walk', () => {
+		expect( sampleNote( payload( { sample_count: 9 } ) ) ).toBe( 'Showing a sample of 9 products.' );
 	} );
 
 	it( 'stays quiet when the engine did not cap', () => {
 		expect( sampleNote( payload( { preview_limited: false } ) ) ).toBeNull();
 	} );
 
-	it( 'compares counts numerically when the engine sends them as strings', () => {
-		expect( sampleNote( payload( { sample_count: '9', sample_limit: '50' } ) ) ).toBeNull();
-		expect( sampleNote( payload( { sample_count: '50', sample_limit: '50' } ) ) ).toBe( 'Showing a sample of 50 products.' );
+	it( 'reads a count the engine sent as a string', () => {
+		expect( sampleNote( payload( { sample_count: '1' } ) ) ).toBe( 'Showing a sample of 1 product.' );
+		expect( sampleNote( payload( { sample_count: '50' } ) ) ).toBe( 'Showing a sample of 50 products.' );
 	} );
 
 	it( 'stays quiet when a count is missing', () => {

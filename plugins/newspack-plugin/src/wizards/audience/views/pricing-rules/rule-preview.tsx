@@ -99,9 +99,11 @@ export default function RulePreview( { body, showCycleNote }: RulePreviewProps )
 
 	return (
 		<div className={ `newspack-pricing-rules__preview${ isLoading ? ' is-loading' : '' }` }>
+			{ /* impact_preview() documents a capped total as an upper bound, not a floor. */ }
 			<ImpactStats
 				totalMatching={ preview.total_matching }
 				countLimited={ preview.count_limited }
+				countBound="upper"
 				productsDescription={ __( 'This rule would price these products', 'newspack-plugin' ) }
 				audience={ preview.audience }
 			/>

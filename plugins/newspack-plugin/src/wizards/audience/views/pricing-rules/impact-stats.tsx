@@ -20,13 +20,18 @@ interface ImpactStatsProps {
 	countLimited: boolean;
 	// What the product count means differs by screen, so its caller supplies the line.
 	productsDescription: string;
+	// The engine's two routes cap in opposite directions: the catalog union stops
+	// early and under-counts, while impact_preview() counts its unwalked tail
+	// unchecked, so a capped per-rule total is a ceiling. The consumer declares
+	// which one its route documents.
+	countBound?: 'lower' | 'upper';
 	audience?: RuleAudienceData;
 	onViewProducts?: () => void;
 }
 
 type Figure = Pick< StatTileProps, 'value' | 'valueLabel' >;
 
-const bounded = ( value: EngineCount, limited: boolean ): Figure => {
+const bounded = ( value: EngineCount, limited: boolean, bound: 'lower' | 'upper' = 'lower' ): Figure => {
 	const count = finiteNumber( value );
 	if ( null === count ) {
 		// Distinct from the locked rule's silence: there the figure does not apply,
@@ -36,6 +41,15 @@ const bounded = ( value: EngineCount, limited: boolean ): Figure => {
 	const formatted = formatCount( count );
 	if ( ! limited ) {
 		return { value: formatted };
+	}
+	if ( 'upper' === bound ) {
+		return {
+			value: sprintf(
+				/* translators: %s: a formatted count acting as an upper bound, e.g. "500". */
+				__( 'Up to %s', 'newspack-plugin' ),
+				formatted
+			),
+		};
 	}
 	return {
 		value: sprintf(
@@ -51,7 +65,14 @@ const bounded = ( value: EngineCount, limited: boolean ): Figure => {
 	};
 };
 
-export default function ImpactStats( { totalMatching, countLimited, productsDescription, audience, onViewProducts }: ImpactStatsProps ) {
+export default function ImpactStats( {
+	totalMatching,
+	countLimited,
+	countBound = 'lower',
+	productsDescription,
+	audience,
+	onViewProducts,
+}: ImpactStatsProps ) {
 	const scope = audience?.supported ? audience : null;
 	const isLocked = 'locked' === scope?.application;
 	const lockedNote = __( 'Applies to new sign-ups only', 'newspack-plugin' );
@@ -61,13 +82,14 @@ export default function ImpactStats( { totalMatching, countLimited, productsDesc
 		{
 			id: 'products',
 			label: __( 'Products affected', 'newspack-plugin' ),
-			...bounded( totalMatching, countLimited ),
+			...bounded( totalMatching, countLimited, countBound ),
 			description: productsDescription,
 			actionLabel: __( 'View Affected Products', 'newspack-plugin' ),
 			onAction: onViewProducts,
 		},
 	];
 
+	// The audience walk only ever omits, so its bound is a floor whatever the route.
 	if ( scope ) {
 		tiles.push(
 			{

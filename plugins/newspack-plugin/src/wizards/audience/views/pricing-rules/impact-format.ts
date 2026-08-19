@@ -12,7 +12,6 @@ import { __, _n, sprintf } from '@wordpress/i18n';
  * Internal dependencies
  */
 import { formatCount } from '../../../../../packages/components/src/breadcrumbs/format-count';
-import { IMPACT_SAMPLE_LIMIT } from './constants';
 
 // Re-exported, not reimplemented: only this helper normalises the locales
 // WordPress ships that Intl rejects.
@@ -62,17 +61,12 @@ export function cycleMarkerNote(): string {
 }
 
 /**
- * The caption for a table the engine capped, or null when it did not. The cap comes
- * from the payload because the engine's two entry points default differently, and
- * `preview_limited` alone cannot tell a capped sample from one that skipped a
- * product it could not price.
+ * The caption for a table the engine capped, or null when it did not. The engine
+ * subtracts the products it skipped from the total, so its own flag settles it.
  */
 export function sampleNote( payload: CatalogImpactResponse ): string | null {
-	// As strings, `'9' < '50'` compares lexicographically and would announce a cap
-	// the engine never applied.
 	const shown = finiteNumber( payload.sample_count );
-	const cap = finiteNumber( payload.sample_limit ?? IMPACT_SAMPLE_LIMIT );
-	if ( ! payload.preview_limited || null === shown || null === cap || shown < cap ) {
+	if ( ! payload.preview_limited || null === shown ) {
 		return null;
 	}
 	return sprintf(
