@@ -13,6 +13,10 @@
 import { _n, sprintf } from '@wordpress/i18n';
 import { useState, useEffect, useRef } from '@wordpress/element';
 import apiFetch from '@wordpress/api-fetch';
+import {
+	Spinner,
+	__experimentalVStack as VStack, // eslint-disable-line @wordpress/no-unsafe-wp-apis
+} from '@wordpress/components';
 
 /**
  * Internal dependencies
@@ -77,7 +81,11 @@ export default function RulePreview( { body, hasPrice }: RulePreviewProps ) {
 	}, [ bodyKey, hasPrice ] );
 
 	if ( hasPrice && ! data && ! hasResolved ) {
-		return null;
+		return (
+			<VStack className="newspack-pricing-rules__preview-loading" alignment="center" justify="center">
+				<Spinner />
+			</VStack>
+		);
 	}
 
 	let reason: ImpactEmptyReason | null = null;
