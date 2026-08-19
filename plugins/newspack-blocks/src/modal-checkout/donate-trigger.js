@@ -5,6 +5,8 @@
  * performs the clicks/submission described by the returned resolution.
  */
 
+import { TIERS_BASED_READY_ATTRIBUTE } from '../shared/js/tiers-based-ready';
+
 /**
  * Layouts a donate URL trigger can request.
  *
@@ -18,26 +20,6 @@ export const VALID_LAYOUTS = [ 'tiered', 'frequency', 'untiered' ];
  * @type {string[]}
  */
 export const VALID_FREQUENCIES = [ 'once', 'month', 'year' ];
-
-/**
- * Bubbling event the tiers-based view script dispatches on its container once
- * its listeners are attached (right after it sets `data-tiers-based-ready`).
- * A trigger that resolved a block as `not-ready` listens for this to retry —
- * the tiersBased and modal bundles load async in either order, so the trigger
- * can run first.
- *
- * @type {string}
- */
-export const TIERS_BASED_READY_EVENT = 'newspack-tiers-based-ready';
-
-/**
- * Attribute the tiers-based view script stamps on its container when it
- * initializes — the other half of the readiness handshake announced by
- * TIERS_BASED_READY_EVENT. The resolver reads it; view.ts writes it.
- *
- * @type {string}
- */
-export const TIERS_BASED_READY_ATTRIBUTE = 'data-tiers-based-ready';
 
 /**
  * Validate donate URL trigger parameters.

@@ -2,7 +2,8 @@
  * Tests for the donate URL trigger resolution helpers.
  */
 
-import { resolveDonationTrigger, validateDonationTriggerParams, TIERS_BASED_READY_EVENT, TIERS_BASED_READY_ATTRIBUTE } from './donate-trigger';
+import { resolveDonationTrigger, validateDonationTriggerParams } from './donate-trigger';
+import { TIERS_BASED_READY_EVENT, TIERS_BASED_READY_ATTRIBUTE } from '../shared/js/tiers-based-ready';
 
 /**
  * Build a tiers-based Donate block markup string, mirroring

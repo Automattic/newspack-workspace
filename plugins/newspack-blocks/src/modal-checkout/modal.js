@@ -25,7 +25,8 @@ import {
 	getFormattedAmount,
 } from './utils';
 import { resolveCheckoutButtonForm, readCheckoutData, applyContextFields } from './checkout-button-trigger';
-import { resolveDonationTrigger, TIERS_BASED_READY_EVENT } from './donate-trigger';
+import { resolveDonationTrigger } from './donate-trigger';
+import { TIERS_BASED_READY_EVENT } from '../shared/js/tiers-based-ready';
 import { applyCtaAttribution } from '../shared/js/cta-attribution';
 
 const CLASS_PREFIX = newspackBlocksModal.newspack_class_prefix;

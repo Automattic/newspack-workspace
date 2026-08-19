@@ -1,6 +1,6 @@
 import { setupSlider } from './slider';
 import { parseTiersBasedConfig } from './utils';
-import { TIERS_BASED_READY_EVENT, TIERS_BASED_READY_ATTRIBUTE } from '../../../modal-checkout/donate-trigger';
+import { TIERS_BASED_READY_EVENT, TIERS_BASED_READY_ATTRIBUTE } from '../../../shared/js/tiers-based-ready';
 
 const BUTTON_ACTIVE_CLASSNAME = 'wpbnbd__button--active';
 
