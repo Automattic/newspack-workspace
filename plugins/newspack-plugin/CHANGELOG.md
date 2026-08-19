@@ -1,3 +1,10 @@
+## newspack [6.48.8](https://github.com/Automattic/newspack-workspace/compare/newspack@6.48.7...newspack@6.48.8) (2026-08-19)
+
+
+### Bug Fixes
+
+* **content-gate:** enforce block visibility on REST reads ([#813](https://github.com/Automattic/newspack-workspace/issues/813)) ([3dfb94b](https://github.com/Automattic/newspack-workspace/commit/3dfb94b2e4b31ba91c8f6200be3a4508086b99a1))
+
 ## newspack [6.48.7](https://github.com/Automattic/newspack-workspace/compare/newspack@6.48.6...newspack@6.48.7) (2026-08-19)
 
 
