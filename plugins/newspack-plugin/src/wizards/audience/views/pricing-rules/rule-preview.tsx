@@ -1,10 +1,7 @@
 /**
- * Per-rule impact preview for the editor: the headline stats, then the composed
- * price-by-cycle table (with unsaved-edit highlighting). Debounce-POSTs the
- * in-progress rule body to the plugin's preview route; mirrors the native
- * plugin's impact metabox. Stands down to an empty card when there is no price
- * yet, nothing matches, or no preview can be had, and to nothing at all until
- * the first request settles.
+ * Per-rule impact preview for the editor. Debounce-POSTs the in-progress rule
+ * body to the plugin's preview route; spins until the first request settles and
+ * stands down to an empty card when nothing matches or no preview can be had.
  */
 
 /**
@@ -31,10 +28,12 @@ const DEBOUNCE_MS = 500;
 
 interface RulePreviewProps {
 	body: Record< string, unknown >;
-	hasPrice: boolean;
+	// Off while the form's section header carries the legend; on so the table can
+	// explain markers composed in by other active rules.
+	showCycleNote: boolean;
 }
 
-export default function RulePreview( { body, hasPrice }: RulePreviewProps ) {
+export default function RulePreview( { body, showCycleNote }: RulePreviewProps ) {
 	const [ data, setData ] = useState< RulePreviewResponse | null >( null );
 	const [ hasResolved, setHasResolved ] = useState( false );
 	const [ isLoading, setIsLoading ] = useState( false );
@@ -42,10 +41,6 @@ export default function RulePreview( { body, hasPrice }: RulePreviewProps ) {
 	const bodyKey = JSON.stringify( body );
 
 	useEffect( () => {
-		// A blank price is sent as 0, so fetching now would preview a $0 rule.
-		if ( ! hasPrice ) {
-			return;
-		}
 		if ( timer.current ) {
 			clearTimeout( timer.current );
 		}
@@ -76,11 +71,10 @@ export default function RulePreview( { body, hasPrice }: RulePreviewProps ) {
 				clearTimeout( timer.current );
 			}
 		};
-		// Typing 0 leaves bodyKey identical, so hasPrice is what re-runs the effect.
 		// eslint-disable-next-line react-hooks/exhaustive-deps
-	}, [ bodyKey, hasPrice ] );
+	}, [ bodyKey ] );
 
-	if ( hasPrice && ! data && ! hasResolved ) {
+	if ( ! data && ! hasResolved ) {
 		return (
 			<VStack className="newspack-pricing-rules__preview-loading" alignment="center" justify="center">
 				<Spinner />
@@ -89,9 +83,7 @@ export default function RulePreview( { body, hasPrice }: RulePreviewProps ) {
 	}
 
 	let reason: ImpactEmptyReason | null = null;
-	if ( ! hasPrice ) {
-		reason = 'no-price';
-	} else if ( ! data?.supported ) {
+	if ( ! data?.supported ) {
 		reason = 'unsupported';
 	} else if ( data.total_matching === 0 || ! data.sample?.length ) {
 		reason = 'no-products';
@@ -112,7 +104,12 @@ export default function RulePreview( { body, hasPrice }: RulePreviewProps ) {
 				countBound="upper"
 				audience={ preview.audience }
 			/>
-			<ImpactTable baseline={ preview.sample } segmentGroups={ preview.segment_groups ?? [] } currency={ preview.currency } />
+			<ImpactTable
+				baseline={ preview.sample }
+				segmentGroups={ preview.segment_groups ?? [] }
+				currency={ preview.currency }
+				showCycleNote={ showCycleNote }
+			/>
 			{ preview.preview_limited && (
 				<p className="newspack-pricing-rules__muted">
 					{ sprintf(
