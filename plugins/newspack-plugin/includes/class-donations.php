@@ -376,7 +376,7 @@ class Donations {
 			[
 				'post_type'      => 'product',
 				'post_status'    => 'any',
-				'posts_per_page' => -1,
+				'posts_per_page' => -1, // phpcs:ignore WordPressVIPMinimum.Performance.NoPaging -- Donation-flagged products only; small meta-filtered set.
 				'fields'         => 'ids',
 				'meta_query'     => [ // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query
 					[
@@ -426,7 +426,7 @@ class Donations {
 	public static function get_order_donation_product_id( $order_id ) {
 		$donation_products = array_merge( self::get_donation_product_child_products_ids(), self::get_flagged_donation_product_ids() );
 		if ( empty( array_filter( $donation_products ) ) ) {
-			return;
+			return false;
 		}
 		$order          = new \WC_Order( $order_id );
 		$order_items    = $order->get_items();
@@ -933,10 +933,25 @@ class Donations {
 		if ( $is_modal_checkout ) {
 			$query_args['modal_checkout'] = 1;
 		}
-		foreach ( [ 'after_success_behavior', 'after_success_button_label', 'after_success_url' ] as $attribute_name ) {
-			$value = filter_input( INPUT_GET, $attribute_name, FILTER_SANITIZE_FULL_SPECIAL_CHARS );
+		// Matched by prefix rather than listed by name. Every `after_success_*` param has to
+		// arrive together: `after_success_token` vouches for the destination in
+		// `after_success_url`, so a param left behind here means a publisher-configured
+		// destination arrives unvouched and is refused as if a link had supplied it. A list
+		// would need editing again the next time one of these is renamed.
+		// Mirrors the same prefix match in `Newspack_Blocks\Modal_Checkout`.
+		// Only the keys are used here; each value is read again below with the filter that
+		// suits it.
+		$request_params = filter_input_array( INPUT_GET, FILTER_SANITIZE_FULL_SPECIAL_CHARS ) ?? [];
+		foreach ( array_keys( (array) $request_params ) as $attribute_name ) {
+			if ( 0 !== strpos( $attribute_name, 'after_success' ) ) {
+				continue;
+			}
+			// The destination is a URL, not display text: HTML-encoding it here would turn
+			// `&` into `&amp;` in the value itself.
+			$filter = 'after_success_url' === $attribute_name ? FILTER_SANITIZE_URL : FILTER_SANITIZE_FULL_SPECIAL_CHARS;
+			$value  = filter_input( INPUT_GET, $attribute_name, $filter );
 			if ( ! empty( $value ) ) {
-				$query_args[ $attribute_name ] = $value;
+				$query_args[ sanitize_key( $attribute_name ) ] = $value;
 			}
 		}
 
