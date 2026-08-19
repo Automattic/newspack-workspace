@@ -252,11 +252,11 @@ const Donation = () => {
 						/>
 						<VStack spacing={ 6 }>
 							{ 'publish' === wizardData.donation_page.status ? (
-								<CoreNotice status="success" isDismissible={ false } style={ { margin: 0 } }>
+								<CoreNotice status="success" isDismissible={ false }>
 									{ __( 'Your donations landing page is published.', 'newspack-plugin' ) }
 								</CoreNotice>
 							) : (
-								<CoreNotice status="warning" isDismissible={ false } style={ { margin: 0 } }>
+								<CoreNotice status="warning" isDismissible={ false }>
 									{ __( 'Your donations landing page is not yet published.', 'newspack-plugin' ) }
 								</CoreNotice>
 							) }

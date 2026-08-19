@@ -42,7 +42,7 @@ function EndpointActions( {
 				<Popover
 					position={ 'bottom left' }
 					onFocusOutside={ () => setPopoverVisible( false ) }
-					onKeyDown={ ( event: KeyboardEvent ) => ESCAPE === event.keyCode && setPopoverVisible( false ) }
+					onKeyDown={ event => ESCAPE === event.keyCode && setPopoverVisible( false ) }
 				>
 					<MenuItem onClick={ () => setPopoverVisible( false ) } className="screen-reader-text">
 						{ __( 'Close Endpoint Actions', 'newspack-plugin' ) }

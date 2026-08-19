@@ -14,8 +14,11 @@ defined( 'ABSPATH' ) || exit;
 /**
  * Trait Audience_Management_Dependency
  *
- * Audience Management is a hard prerequisite for the wizards that surface the
- * content gate editor (Audience Access Control and Premium Newsletters).
+ * Audience Management is a hard prerequisite for the wizards that depend on it:
+ * the two that surface the content gate editor (Audience Access Control and
+ * Premium Newsletters), and Subscriptions, whose subscriber-commerce features
+ * are enforced only while it is on
+ * ({@see \Newspack\Subscriber_Commerce::is_enforcement_active()}).
  * Everything a gate hands the reader off to is gated on it: reader
  * registration, magic link login, account emails, session hydration and My
  * Account. A gate enforced without Audience Management locks readers out and
@@ -27,8 +30,8 @@ defined( 'ABSPATH' ) || exit;
  * other half of that — it keeps the publisher from authoring new gating that
  * would do nothing, and points them at the setting that makes it work.
  *
- * Shared by both surfaces so the dependency cannot be enforced on one and
- * forgotten on the other.
+ * Shared by every such surface so the dependency cannot be enforced on one and
+ * forgotten on the next.
  */
 trait Audience_Management_Dependency {
 	/**
