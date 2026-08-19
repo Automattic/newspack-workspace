@@ -96,9 +96,9 @@ class InDesign_Converter {
 	 *
 	 *     @type bool   $include_subtitle Whether to include the post subtitle. Default true.
 	 *     @type bool   $include_byline   Whether to include the byline. Default true.
-	 *     @type bool   $include_captions Whether to append photo captions. Photo credits are
-	 *                                    a separate attribution field and are always exported.
-	 *                                    Default true.
+	 *     @type bool   $include_captions Whether to append the photo captions and credits
+	 *                                    section at the end of the export. One flag covers
+	 *                                    both fields (NPPM-3098). Default true.
 	 * }
 	 * @return string|false InDesign Tagged Text content, or false on failure.
 	 */
@@ -635,14 +635,22 @@ class InDesign_Converter {
 	 *
 	 * @param \WP_Post $post    Post object.
 	 * @param array    $options Conversion options. Honors 'include_captions' (default
-	 *                          true); credits are always emitted regardless.
+	 *                          true); when false the whole captions-and-credits
+	 *                          section is omitted.
 	 *
 	 * @return string Photo credit and caption tags.
 	 */
 	private function process_post_images( $post, $options = [] ) {
 		$include_captions = ! isset( $options['include_captions'] ) || $options['include_captions'];
-		$images           = [];
-		$inline_captions  = [];
+
+		// One toggle covers the whole section: publishers who exclude captions
+		// want the credits appended with them gone too (NPPM-3098).
+		if ( ! $include_captions ) {
+			return '';
+		}
+
+		$images          = [];
+		$inline_captions = [];
 
 		$featured_image_id = get_post_thumbnail_id( $post->ID );
 		if ( $featured_image_id ) {
@@ -689,7 +697,7 @@ class InDesign_Converter {
 				continue;
 			}
 
-			$caption = $include_captions ? ( $inline_captions[ $image_id ] ?? wp_get_attachment_caption( $image_id ) ) : '';
+			$caption = $inline_captions[ $image_id ] ?? wp_get_attachment_caption( $image_id );
 			$credit  = get_post_meta( $image_id, '_media_credit', true ) ?? '';
 
 			if ( ! $caption && ! $credit ) {

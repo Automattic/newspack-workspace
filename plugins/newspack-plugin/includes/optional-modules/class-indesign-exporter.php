@@ -38,9 +38,11 @@ class InDesign_Exporter {
 	public const POST_TYPES_DEFAULT = [ 'post' ];
 
 	/**
-	 * Option name storing whether photo captions are excluded from exports.
+	 * Option name storing whether photo captions and credits are excluded from
+	 * exports.
 	 *
-	 * Photo credits are a separate attribution field and are always exported.
+	 * One setting covers both fields: they are appended together as the
+	 * export's photo-information section (NPPM-3098).
 	 *
 	 * @var string
 	 */
@@ -456,7 +458,7 @@ class InDesign_Exporter {
 	}
 
 	/**
-	 * Whether photo captions should be excluded from exports.
+	 * Whether photo captions and credits should be excluded from exports.
 	 *
 	 * Photo credits are a separate attribution field and are always exported.
 	 *

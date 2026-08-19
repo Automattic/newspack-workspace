@@ -139,14 +139,14 @@ function Print() {
 						) }
 					</WizardSection>
 					<WizardSection
-						title={ __( 'Photo captions', 'newspack-plugin' ) }
+						title={ __( 'Photo captions and credits', 'newspack-plugin' ) }
 						description={ __(
-							'Photo captions are appended to the end of each export. Enable this to leave them out — photo credits are still included.',
+							'Photo captions and credits are appended to the end of each export. Enable this to leave them out.',
 							'newspack-plugin'
 						) }
 					>
 						<CheckboxControl
-							label={ __( 'Exclude photo captions', 'newspack-plugin' ) }
+							label={ __( 'Exclude photo captions and credits', 'newspack-plugin' ) }
 							checked={ apiData.indesign_exclude_captions }
 							disabled={ isFetching }
 							onChange={ ( checked: boolean ) => save( { indesign_exclude_captions: checked } ) }

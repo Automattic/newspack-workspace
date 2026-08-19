@@ -887,10 +887,14 @@ class Newspack_Test_InDesign_Exporter extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Test that photo captions are dropped when include_captions is false, while
-	 * photo credits — a separate attribution field — are still exported.
+	 * Test that photo captions and credits are dropped when include_captions is
+	 * false.
+	 *
+	 * One toggle covers the whole photo-information section: captions and
+	 * credits are appended together, and excluding them means neither is wanted
+	 * in the layout (NPPM-3098).
 	 */
-	public function test_convert_post_excludes_captions_when_disabled() {
+	public function test_convert_post_excludes_captions_and_credits_when_disabled() {
 		$image_id = $this->factory->attachment->create();
 		wp_update_post(
 			[
@@ -912,7 +916,8 @@ class Newspack_Test_InDesign_Exporter extends WP_UnitTestCase {
 
 		$this->assertStringNotContainsString( '<pstyle:PhotoCaption>', $content );
 		$this->assertStringNotContainsString( 'Image Caption', $content );
-		$this->assertStringContainsString( '<pstyle:PhotoCredit>Image Credit', $content );
+		$this->assertStringNotContainsString( '<pstyle:PhotoCredit>', $content );
+		$this->assertStringNotContainsString( 'Image Credit', $content );
 	}
 
 	/**
