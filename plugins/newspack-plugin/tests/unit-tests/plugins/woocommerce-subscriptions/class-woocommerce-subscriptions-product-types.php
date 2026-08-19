@@ -172,7 +172,7 @@ class Newspack_Test_WooCommerce_Subscriptions_Product_Types extends WP_UnitTestC
 		$this->assertSame( 'newspack_subscriptions_product_types_enabled', $logged[0][0] );
 		$this->assertSame(
 			[ 'woocommerce_subscriptions_enable_variable_subscription' ],
-			$logged[0][1]['data']['data']['options'],
+			$logged[0][1]['data']['options'],
 			'The log entry should name the options written.'
 		);
 	}

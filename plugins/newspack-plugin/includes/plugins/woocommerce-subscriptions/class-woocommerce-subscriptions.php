@@ -696,12 +696,17 @@ class WooCommerce_Subscriptions {
 	 *
 	 * Runs on `admin_init`, matching how the plugin writes other third-party
 	 * options (`Parsely::migrate_meta_type()`, `WooCommerce_Email_Style_Sync`,
-	 * `Emails_Section`): an authenticated admin pageload, never an anonymous
-	 * front-end hit, a REST probe or cron. Nothing is lost by waiting — a
-	 * Subscriptions upgrade happens through an admin action, so `admin_init`
-	 * fires in the same session, and the product-type dropdown this unblocks is
-	 * itself only reachable in wp-admin. It also makes the opt-out filter usable
-	 * from a theme's `functions.php`, which a `plugins_loaded` call would not.
+	 * `Emails_Section`), which keeps it off ordinary front-end pageloads, REST
+	 * requests and cron. It is not an authentication guarantee: `admin-ajax.php`
+	 * fires `admin_init` too, so a `wp_ajax_nopriv_*` action reaches this
+	 * unauthenticated. That is harmless here — the write is one-shot and the same
+	 * either way — but the hook is a narrower surface, not a logged-in one.
+	 *
+	 * Nothing is lost by waiting — a Subscriptions upgrade happens through an
+	 * admin action, so `admin_init` fires in the same session, and the
+	 * product-type dropdown this unblocks is itself only reachable in wp-admin.
+	 * It also makes the opt-out filter usable from a theme's `functions.php`,
+	 * which a `plugins_loaded` call would not.
 	 *
 	 * @return void
 	 */
@@ -781,7 +786,7 @@ class WooCommerce_Subscriptions {
 		Logger::newspack_log(
 			'newspack_subscriptions_product_types_enabled',
 			'Enabled WooCommerce Subscriptions product types that had never been configured.',
-			[ 'data' => [ 'options' => $written ] ],
+			[ 'options' => $written ],
 			'info'
 		);
 	}
