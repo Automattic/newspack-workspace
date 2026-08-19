@@ -482,9 +482,19 @@ class Content_Gate {
 	 * Register the REST response filter for every post type exposed in REST.
 	 *
 	 * The `rest_prepare_{$post_type}` hook fires from WP_REST_Posts_Controller.
-	 * A post type declaring its own rest_controller_class never fires it; none
-	 * do in this workspace, and the boundary is documented rather than
-	 * assumed away.
+	 * A post type declaring its own rest_controller_class never fires it, so the
+	 * filter registered here is inert for such a type.
+	 *
+	 * `np_institution` is the one instance (Institution::register_post_type(),
+	 * `rest_controller_class => Institution_REST_Controller`). Nothing is lost:
+	 * it is `public => false` and its route is gated to an editing capability, so
+	 * there is no reader entitlement for this filter to evaluate. Registering an
+	 * inert filter for it costs nothing, which is why the loop stays a plain
+	 * `show_in_rest` sweep rather than growing an exclusion list.
+	 *
+	 * A post type that both declares its own controller *and* serves reader-facing
+	 * content would be a real gap. None does today; the check is to compare
+	 * `rest_controller_class` registrations against this filter's coverage.
 	 */
 	public static function register_rest_filters() {
 		foreach ( get_post_types( [ 'show_in_rest' => true ], 'names' ) as $post_type ) {
@@ -609,6 +619,15 @@ class Content_Gate {
 		// WP_REST_Server::serve_request(), after dispatch, so adding it while
 		// items are prepared is in time and covers collections, where per-item
 		// response headers are discarded.
+		//
+		// Deliberately not removed, unlike the metering short-circuit above. It has
+		// to outlive this callback to be read at serve_request() time, so there is
+		// no scope to restore it to. The cost is that an in-process dispatch during
+		// a front-end render (the co-authors-plus / newspack-network / community
+		// cases named on get_restriction_for_post()) leaves the flag set for the
+		// rest of that request. That only ever suppresses caching of a response
+		// this filter has already judged reader-dependent, so erring on the side of
+		// leaving it set is the safe direction.
 		add_filter( 'rest_send_nocache_headers', '__return_true' );
 
 		if ( null === $restriction ) {
