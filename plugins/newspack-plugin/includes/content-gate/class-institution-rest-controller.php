@@ -29,12 +29,15 @@ class Institution_REST_Controller extends \WP_REST_Posts_Controller {
 	const READ_CAPABILITY = 'edit_others_posts';
 
 	/**
-	 * Capability required to write to institutions, matching the post type's
-	 * capability map in class-institution.php (every write capability there
-	 * resolves to this one). Not consulted directly by the write gate below —
-	 * that defers to the parent's own resolution of the map. Also the
-	 * capability that gates the stored access-rule fields in read responses;
-	 * see prepare_item_for_response() below.
+	 * Capability that admits the stored access-rule fields. It decides two things:
+	 * who passes the read gate alongside READ_CAPABILITY, and who sees `meta` in a
+	 * read response rather than an empty object — see check_read_capability() and
+	 * prepare_item_for_response() below.
+	 *
+	 * It is not the write gate. Writes take their value from the post type's
+	 * capability map in class-institution.php, which the parent resolves itself;
+	 * every write capability there happens to resolve to this same string, which is
+	 * why the two are easy to conflate. Changing this constant re-tiers reads only.
 	 *
 	 * @var string
 	 */

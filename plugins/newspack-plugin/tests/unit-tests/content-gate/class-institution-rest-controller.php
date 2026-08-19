@@ -245,9 +245,8 @@ class Newspack_Test_Institution_REST_Controller extends WP_UnitTestCase {
 	 * Every logged-in WordPress role, Subscriber included, holds the primitive
 	 * 'read' capability, so this — not the logged-out tests above — is what
 	 * proves the gate checks READ_CAPABILITY specifically rather than merely
-	 * "is someone logged in". Mutation #1 in the report shows this directly:
-	 * lowering READ_CAPABILITY to 'read' leaves the logged-out tests green but
-	 * turns this one red.
+	 * "is someone logged in": lowering READ_CAPABILITY to 'read' leaves the
+	 * logged-out tests green but turns this one red.
 	 */
 	public function test_subscriber_collection_read_is_refused() {
 		$response = $this->read_collection( $this->subscriber_id, 'view' );
