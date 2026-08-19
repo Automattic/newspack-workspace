@@ -49,6 +49,7 @@ import {
 	PluginToggle,
 	ProgressBar,
 	SelectControl,
+	TableCard,
 	TextControl,
 	Divider,
 	Drawer,
@@ -385,6 +386,40 @@ class ComponentsDemo extends Component {
 								</Drawer.Content>
 								<Drawer.Footer>{ this.drawerActions( drawerActionCount ) }</Drawer.Footer>
 							</Drawer.Root>
+						</Card>
+						<Card>
+							<h2>{ __( 'Table card', 'newspack-plugin' ) }</h2>
+							<TableCard
+								title={ __( 'Price Schedule', 'newspack-plugin' ) }
+								titleId="components-demo-table-card-title"
+								actions={
+									<Button variant="secondary" size="compact">
+										{ __( 'Add Price', 'newspack-plugin' ) }
+									</Button>
+								}
+							>
+								<div role="region" aria-labelledby="components-demo-table-card-title">
+									{ /* Real tables supply the 24px card-padding alignment from their stylesheet. */ }
+									<table style={ { borderCollapse: 'collapse', width: '100%' } }>
+										<thead>
+											<tr>
+												<th style={ { padding: '8px 24px', textAlign: 'left' } }>{ __( 'Cycles', 'newspack-plugin' ) }</th>
+												<th style={ { padding: '8px 24px', textAlign: 'left' } }>{ __( 'Price', 'newspack-plugin' ) }</th>
+											</tr>
+										</thead>
+										<tbody>
+											<tr>
+												<td style={ { padding: '8px 24px' } }>1 → 3</td>
+												<td style={ { padding: '8px 24px' } }>$3.00</td>
+											</tr>
+											<tr>
+												<td style={ { padding: '8px 24px' } }>4 onward</td>
+												<td style={ { padding: '8px 24px' } }>$6.00</td>
+											</tr>
+										</tbody>
+									</table>
+								</div>
+							</TableCard>
 						</Card>
 						<Card>
 							<h2>{ __( 'Notice', 'newspack-plugin' ) }</h2>

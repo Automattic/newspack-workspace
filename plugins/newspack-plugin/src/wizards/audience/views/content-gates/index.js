@@ -16,7 +16,7 @@ import { forwardRef } from '@wordpress/element';
  */
 import { Wizard, withWizard } from '../../../../../packages/components/src';
 import { WIZARD_STORE_NAMESPACE } from '../../../../../packages/components/src/wizard/store';
-import { redirectWithoutAudienceManagement, requireAudienceManagement } from './audience-management-required';
+import { redirectWithoutAudienceManagement, requireAudienceManagement } from '../../components/audience-management-required';
 import ContentGates from './content-gates';
 import Edit from './edit';
 import CountdownBanner from './edit/countdown-banner';
@@ -33,12 +33,17 @@ const ACCESS_CONTROL_INSTITUTIONS = [ ...ACCESS_CONTROL, { label: __( 'Instituti
 // renders. Only the landing route renders the prerequisite state; the rest redirect
 // to it, so the explanation lives in exactly one place.
 const GATES_ROUTE = '/content-gates';
-const GuardedContentGates = requireAudienceManagement( ContentGates );
-const GuardedEdit = redirectWithoutAudienceManagement( Edit, GATES_ROUTE );
-const GuardedCountdownBanner = redirectWithoutAudienceManagement( CountdownBanner, GATES_ROUTE );
-const GuardedContentGifting = redirectWithoutAudienceManagement( ContentGifting, GATES_ROUTE );
-const GuardedInstitutions = redirectWithoutAudienceManagement( Institutions, GATES_ROUTE );
-const GuardedInstitutionEdit = redirectWithoutAudienceManagement( InstitutionEdit, GATES_ROUTE );
+const getConfig = () => window.newspackAudienceContentGates;
+
+const GuardedContentGates = requireAudienceManagement( ContentGates, {
+	description: __( 'Access Control needs accounts, sign-in, and account emails. Audience Management provides them.', 'newspack-plugin' ),
+	getConfig,
+} );
+const GuardedEdit = redirectWithoutAudienceManagement( Edit, GATES_ROUTE, getConfig );
+const GuardedCountdownBanner = redirectWithoutAudienceManagement( CountdownBanner, GATES_ROUTE, getConfig );
+const GuardedContentGifting = redirectWithoutAudienceManagement( ContentGifting, GATES_ROUTE, getConfig );
+const GuardedInstitutions = redirectWithoutAudienceManagement( Institutions, GATES_ROUTE, getConfig );
+const GuardedInstitutionEdit = redirectWithoutAudienceManagement( InstitutionEdit, GATES_ROUTE, getConfig );
 
 const AudienceContentGates = ( props, ref ) => {
 	const { updateWizardSettings } = useDispatch( WIZARD_STORE_NAMESPACE );
@@ -112,7 +117,6 @@ const AudienceContentGates = ( props, ref ) => {
 					isHidden: true,
 					exact: true,
 					backNav: '#/institutions',
-					title: __( 'Add Institution', 'newspack-plugin' ),
 					breadcrumbs: ACCESS_CONTROL_INSTITUTIONS,
 				},
 				{
@@ -121,7 +125,6 @@ const AudienceContentGates = ( props, ref ) => {
 					isHidden: true,
 					exact: true,
 					backNav: '#/institutions',
-					title: __( 'Edit Institution', 'newspack-plugin' ),
 					breadcrumbs: ACCESS_CONTROL_INSTITUTIONS,
 				},
 			] }
