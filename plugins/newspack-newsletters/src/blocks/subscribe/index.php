@@ -12,6 +12,65 @@ defined( 'ABSPATH' ) || exit;
 const FORM_ACTION = 'newspack_newsletters_subscribe';
 
 /**
+ * Keys permitted in the block's JSON response.
+ *
+ * Governs the success branch only. That response is assembled from the ESP's
+ * contact record, so anything not named here would ship the provider's stored
+ * fields to the caller. The failure branch builds `compact( 'message' )` by hand
+ * below and never consults this list, which is why `message` is absent here: on
+ * the branch this list governs, the only thing that could supply it is the
+ * provider record it exists to bound, and view.js renders the block's own
+ * success message rather than the response's.
+ *
+ * Every entry is produced on that branch by this file, except `verified` and
+ * `verification_nonce`, which come from newspack-plugin's
+ * `\Newspack\Reader_Activation::get_verification_payload()` and are merged in
+ * wholesale — so a key added on that side needs an entry here before it can
+ * reach the caller.
+ *
+ * `src/blocks/subscribe/view.js` is the consumer, and removing an entry it reads
+ * breaks the front end silently. A key it does *not* read is not thereby safe to
+ * add: what this list manages is what leaves the server, not what the front end
+ * happens to use.
+ */
+const RESPONSE_KEYS = [
+	'newspack_newsletters_subscribed',
+	FORM_ACTION,
+	'metadata',
+	'registered',
+	'verified',
+	'verification_nonce',
+	'email',
+];
+
+/**
+ * Keys permitted inside the response's `metadata` member.
+ *
+ * Bounded for the same reason as RESPONSE_KEYS: allowlisting `metadata` as a
+ * whole would leave the response closed at the top level and open one level
+ * down.
+ *
+ * This list is what the block itself may emit, not what view.js reads — the two
+ * differ, and applying the narrower rule would wrongly delete entries.
+ * `current_page_url` and `status` are built here (see the $metadata literal
+ * below) and read by no front-end code. `gate_post_id` is the reverse: nothing
+ * here ever sets it, because $metadata is built from a literal that omits it.
+ * newspack-plugin's content gate does produce the value — `src/content-gate/
+ * gate.js` adds it as a hidden input to every form inside a gate — but this
+ * handler never copies that input into $metadata, so view.js's read of it
+ * (`view.js:161`) is defensive rather than live.
+ */
+const METADATA_KEYS = [
+	'current_page_url',
+	'newspack_popup_id',
+	'newsletters_subscription_method',
+	'status',
+	'registration_method',
+	'registered',
+	'gate_post_id',
+];
+
+/**
  * Register block from metadata.
  */
 function register_block() {
@@ -414,11 +473,28 @@ function send_form_response( $data ) {
 	$is_error = \is_wp_error( $data );
 	if ( \wp_is_json_request() ) {
 		if ( $is_error ) {
+			// Only the reader-facing message. The WP_Error's own data can carry the
+			// provider's raw response, and view.js reads nothing but `message` and
+			// the HTTP status on this branch. That also drops get_error_code() from
+			// what a caller can see; view.js doesn't read that either, so this is
+			// deliberate, not an oversight.
 			$message = $data->get_error_message();
-			\wp_send_json( compact( 'message', 'data' ), 400 );
+			\wp_send_json( compact( 'message' ), 400 );
 			exit;
 		} else {
 			$data['newspack_newsletters_subscribed'] = 1;
+			$data                                    = array_intersect_key( $data, array_flip( RESPONSE_KEYS ) );
+			// array_key_exists() rather than isset(): isset() is false for null, so a
+			// `metadata` of null would skip this branch and ship as `"metadata": null`
+			// -- the exact shape the normalization below exists to prevent.
+			if ( array_key_exists( 'metadata', $data ) ) {
+				// `metadata` is itself an allowlisted key, so a non-array value under it
+				// would otherwise skip this nested filter and reach the caller as-is.
+				// Normalizing to an empty array keeps the shape stable for view.js, which
+				// reads `metadata` on every response, rather than passing through
+				// whatever shape happened to arrive.
+				$data['metadata'] = is_array( $data['metadata'] ) ? array_intersect_key( $data['metadata'], array_flip( METADATA_KEYS ) ) : [];
+			}
 			\wp_send_json( $data, 200 );
 			exit;
 		}

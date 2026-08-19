@@ -152,9 +152,17 @@ final class GA4_Custom_Dimensions {
 	/**
 	 * Priority-ordered list of custom dimensions Newspack provisions.
 	 * Each entry: parameter name => display name.
+	 *
+	 * `access_source` is appended conditionally rather than listed inline: it
+	 * only fires on sites running Access Control, and GA4 caps event-scoped
+	 * custom dimensions at 50 – a publisher has already hit that ceiling, so a
+	 * dimension that never fires must not spend a slot. Appending (rather than
+	 * inserting) keeps the existing entries' priority order intact.
+	 *
+	 * @return array<string,string>
 	 */
 	public static function get_dimensions() {
-		return [
+		$dimensions = [
 			'gate_post_id'                => 'Gate Post ID',
 			'is_reader'                   => 'Is Reader',
 			'action_type'                 => 'Action Type',
@@ -192,6 +200,12 @@ final class GA4_Custom_Dimensions {
 			'categories'                  => 'Categories',
 			'author'                      => 'Author',
 		];
+
+		if ( Content_Gate::is_newspack_feature_enabled() ) {
+			$dimensions['access_source'] = 'Access Source';
+		}
+
+		return $dimensions;
 	}
 
 	/**

@@ -373,6 +373,23 @@ class Metering {
 	}
 
 	/**
+	 * Whether a gate offers metering to a reader class, without consuming a view.
+	 *
+	 * `is_logged_in_metering_allowed()` answers a different question — has this
+	 * reader still got an allowance left — and records the view as a side effect.
+	 * Analytics code must never call it; this is the read-only alternative.
+	 *
+	 * @param int       $gate_id      Gate post ID.
+	 * @param bool|null $is_logged_in Reader class. Defaults to the current reader.
+	 * @return bool
+	 */
+	public static function offers_metering( $gate_id, $is_logged_in = null ) {
+		$is_logged_in = null === $is_logged_in ? \is_user_logged_in() : (bool) $is_logged_in;
+		$settings     = self::get_effective_settings( $gate_id, $is_logged_in );
+		return ! empty( $settings['enabled'] ) && 0 < $settings['count'];
+	}
+
+	/**
 	 * Whether the post has metering enabled.
 	 *
 	 * @param int|null $post_id Post ID. Default is the current post.
