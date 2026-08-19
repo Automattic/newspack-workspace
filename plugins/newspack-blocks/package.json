@@ -1,6 +1,6 @@
 {
 	"name": "@automattic/newspack-blocks",
-	"version": "4.29.2",
+	"version": "4.30.2",
 	"author": "Automattic",
 	"description": "=== Newspack Blocks === Contributors: (this should be a list of wordpress.org userid's) Donate link: https://example.com/ Tags: comments, spam Requires at least: 4.5 Tested up to: 5.1.1 Stable tag: 0.1.0 License: GPLv2 or later License URI: https://www.gnu.org/licenses/gpl-2.0.html",
 	"repository": {
@@ -33,7 +33,8 @@
 		"format:scss": "newspack-scripts wp-scripts lint-style '**/{src,includes}/**/*.scss' --customSyntax postcss-scss --fix",
 		"i18n": "NODE_ENV=production npm run build; bash ./bin/update-translations.sh",
 		"release": "npm run build && npm run semantic-release",
-		"release:archive": "rm -rf release && mkdir -p release && rsync -r . ./release/newspack-blocks --exclude-from='./.distignore' && cd release && zip -r newspack-blocks.zip newspack-blocks"
+		"release:archive": "rm -rf release && mkdir -p release && rsync -r . ./release/newspack-blocks --exclude-from='./.distignore' && cd release && zip -r newspack-blocks.zip newspack-blocks",
+		"typescript:check": "newspack-scripts typescript-check"
 	},
 	"lint-staged": {
 		"*.{js,jsx,ts,tsx}": "npm run lint:js:staged",

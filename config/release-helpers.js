@@ -17,12 +17,12 @@ function isReleaseBranch() {
  *
  * Version and changelog stamps are authored on a single channel. The `release`
  * branch is the source of truth for CHANGELOG.md and the committed version
- * headers; prerelease channels (`alpha`, `hotfix/*`, `epic/*`) still compute
- * their version and build their zip/tag from the working-tree bump, but they do
- * NOT commit it back to the branch. This buys two things:
+ * headers; the `alpha` prerelease channel still computes its version and builds
+ * its zip/tag from the working-tree bump, but it does NOT commit it back to the
+ * branch. This buys two things:
  *
  *   1. The committed CHANGELOG.md only ever contains stable release sections —
- *      no `-alpha.N` / hotfix prerelease entries leak in as cross-channel noise.
+ *      no `-alpha.N` prerelease entries leak in as cross-channel noise.
  *      Individual `fix:` / `feat:` commits are not lost: they roll up into the
  *      next stable version's notes when promoted to `release`.
  *   2. Only one branch ever edits the version-stamp lines, so syncing `release`

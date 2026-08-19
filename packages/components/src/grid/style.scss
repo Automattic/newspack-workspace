@@ -83,11 +83,13 @@
 		&__columns-4 {
 			grid-template-columns: repeat(2, 1fr);
 
-			> [start] {
+			> [start],
+			> [data-start] {
 				grid-column-start: 1;
 			}
 
-			> [end] {
+			> [end],
+			> [data-end] {
 				grid-column-end: -1;
 			}
 		}
@@ -108,11 +110,26 @@
 		&__columns-4 {
 			grid-template-columns: repeat(4, 1fr);
 
-			> [start="2"] {
+			// Positioning is keyed off `data-` attributes because the emotion-styled
+			// components in newer `@wordpress/components` filter props through
+			// `@emotion/is-prop-valid` before they reach the DOM. Its allowlist
+			// carries `start` (a real attribute, on `<ol>`) but not `end`, so a
+			// `VStack` asking for `end` silently lost its `grid-column-end` and
+			// collapsed to one column (NEWS-2866). `data-` attributes are never
+			// filtered, so they hold whatever component renders them.
+			//
+			// This is a component-level filter, not a WordPress-wide one: a plain
+			// `<div start="2" end="4">` still emits both attributes. The bare
+			// selectors below are kept for those plain children — they do NOT
+			// rescue an emotion-styled consumer still passing `end`, which never
+			// reaches the DOM to be matched.
+			> [start="2"],
+			> [data-start="2"] {
 				grid-column-start: 2;
 			}
 
-			> [end="4"] {
+			> [end="4"],
+			> [data-end="4"] {
 				grid-column-end: 4;
 			}
 		}

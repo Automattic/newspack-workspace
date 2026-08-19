@@ -114,6 +114,33 @@ class ModelTest extends WP_UnitTestCase {
 	}
 
 	/**
+	 * A caller-supplied unique id must be escaped where it is built into the
+	 * container div id, so it cannot break out of the id attribute.
+	 */
+	public function test_ad_unit_code_escapes_container_id() {
+		$payload = "a' onmouseover='alert(document.domain)";
+		$code    = GAM_Model::get_ad_unit_code(
+			[
+				'code'  => 'test-ad-code',
+				'sizes' => [],
+			],
+			$payload
+		);
+		// The reflected value must survive (not be silently dropped) but must not
+		// break out of the single-quoted id attribute.
+		self::assertStringContainsString(
+			'alert(document.domain)',
+			$code,
+			'The id value should be preserved, only escaped.'
+		);
+		self::assertStringNotContainsString(
+			"' onmouseover='",
+			$code,
+			'The id must not break out of the attribute: ' . $code
+		);
+	}
+
+	/**
 	 * Ad units getter.
 	 */
 	public function test_ad_units_getter() {

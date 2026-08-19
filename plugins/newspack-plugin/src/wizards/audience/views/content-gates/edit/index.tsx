@@ -93,7 +93,8 @@ const Edit = ( { match, updateGatesData, slug = AUDIENCE_CONTENT_GATES_WIZARD_SL
 	const history = useHistory();
 	const { id: _id, type } = match.params;
 	const id = _id ? parseInt( _id ) : 0;
-	const { gates = null as unknown as Gate[] } = useWizardData( slug ) as WizardData;
+	// Undefined until the wizard store resolves the gates request.
+	const { gates } = useWizardData( slug ) as ContentGatesWizardData;
 	const { wizardApiFetch, isFetching, errorMessage, resetError } = useWizardApiFetch( slug );
 	const { addNotice, resetNotices, setHeaderData } = useDispatch( WIZARD_STORE_NAMESPACE );
 	const [ gate, setGate ] = useState< Gate >( ( gates && gates.find( g => g.id === id ) ) || DEFAULT_GATE ); // eslint-disable-line @typescript-eslint/no-unused-vars
@@ -114,7 +115,7 @@ const Edit = ( { match, updateGatesData, slug = AUDIENCE_CONTENT_GATES_WIZARD_SL
 	);
 	const isNew = _id === 'new' || ! id;
 	const isSaving = useRef( false );
-	const gatesRef = useRef< Gate[] >( gates );
+	const gatesRef = useRef< Gate[] >( gates ?? [] );
 	const savedCustomRules = useRef< GateContentRule[] >( gate.content_rules );
 
 	useEffect( () => {
@@ -417,7 +418,7 @@ const Edit = ( { match, updateGatesData, slug = AUDIENCE_CONTENT_GATES_WIZARD_SL
 
 	// Set header actions.
 	useEffect( () => {
-		const actions = [
+		const actions: HeaderAction[] = [
 			{
 				type: 'primary',
 				label: __( 'Save', 'newspack-plugin' ),

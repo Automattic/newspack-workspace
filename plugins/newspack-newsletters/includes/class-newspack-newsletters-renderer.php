@@ -898,6 +898,123 @@ final class Newspack_Newsletters_Renderer {
 	}
 
 	/**
+	 * Get a button's width as a column percentage, or null when it sets none.
+	 *
+	 * Buttons carry their width in one of two shapes. Newsletters authored before
+	 * WordPress 7.1 store a bare `width` attribute; WordPress 7.1 moved
+	 * `core/button` to the `dimensions` block support, so the editor rewrites the
+	 * markup under `style.dimensions.width` the first time a newsletter is
+	 * re-saved. Both forms can coexist in the same newsletter, so every width read
+	 * goes through here (NEWS-2852).
+	 *
+	 * The legacy attribute is preferred when it yields a usable width, but an
+	 * unusable one falls through to the `dimensions` value rather than discarding
+	 * it — partially-migrated content is exactly what this helper exists to
+	 * survive.
+	 *
+	 * A width is usable only if it resolves to a percentage above 0 and at most
+	 * 100. Absolute
+	 * units have no meaning as an MJML column share, and a column outside that
+	 * range disturbs the rest of its row; either way the button falls back to the
+	 * default share, which is what a width-less button gets.
+	 *
+	 * Safe to call with either raw parsed-block attributes or the output of
+	 * `process_attributes()`, which touches neither width key.
+	 *
+	 * @param array $attrs A core/button block's attributes.
+	 * @return float|null Width as a percentage, or null when unset or unusable.
+	 */
+	private static function get_button_width( array $attrs ): ?float {
+		$candidates = [];
+
+		if ( isset( $attrs['width'] ) && is_scalar( $attrs['width'] ) ) {
+			$candidates[] = (string) $attrs['width'];
+		}
+		if ( isset( $attrs['style']['dimensions']['width'] ) && is_scalar( $attrs['style']['dimensions']['width'] ) ) {
+			$candidates[] = self::resolve_dimension_preset( (string) $attrs['style']['dimensions']['width'] );
+		}
+
+		foreach ( $candidates as $candidate ) {
+			if ( ! preg_match( '/^\s*(\d+(?:\.\d+)?)\s*%?\s*$/', $candidate, $matches ) ) {
+				continue;
+			}
+			$percentage = (float) $matches[1];
+			if ( $percentage > 0 && $percentage <= 100 ) {
+				return $percentage;
+			}
+		}
+
+		return null;
+	}
+
+	/**
+	 * Resolve a `dimensions.width` preset reference to its literal size.
+	 *
+	 * WordPress stores a chosen preset as `var:preset|dimension|<slug>` rather than
+	 * a size. On the web an unresolved reference still renders, because the style
+	 * engine falls back to the `--wp--preset--dimension--<slug>` custom property
+	 * that theme.json emits. Email clients do not support custom properties, so the
+	 * reference has to be resolved here or the width is simply lost — which is why
+	 * this looks harder for the preset than core does.
+	 *
+	 * Core's own lookup (`render_block_core_button()`) reads only the
+	 * `blocks.core/button` node. That is enough for core because of the
+	 * custom-property fallback; it isn't enough for us, so this also reads the
+	 * root `dimensions.dimensionSizes` group and includes the `blocks` origin.
+	 * Slugs are compared exactly, as core compares them: the editor writes the
+	 * slug verbatim into the reference, and `_wp_to_kebab_case()` is applied only
+	 * when core builds the CSS custom-property name, never to the stored value.
+	 *
+	 * @param string $width The raw `style.dimensions.width` value.
+	 * @return string The resolved width, or the input unchanged when it isn't a
+	 *                preset reference or names an unknown preset.
+	 */
+	private static function resolve_dimension_preset( string $width ): string {
+		$prefix = 'var:preset|dimension|';
+		if ( ! str_starts_with( $width, $prefix ) ) {
+			return $width;
+		}
+		$slug = substr( $width, strlen( $prefix ) );
+
+		// Read the settings once and index into them. `wp_get_global_settings()`
+		// returns the *whole* settings array when the requested path is absent, so
+		// asking it for a path and testing `is_array()` on the result never fails —
+		// it just hands back a different array to walk.
+		$settings = wp_get_global_settings();
+		$groups   = [];
+		if ( isset( $settings['blocks']['core/button']['dimensions']['dimensionSizes'] ) ) {
+			$groups[] = $settings['blocks']['core/button']['dimensions']['dimensionSizes'];
+		}
+		if ( isset( $settings['dimensions']['dimensionSizes'] ) ) {
+			$groups[] = $settings['dimensions']['dimensionSizes'];
+		}
+
+		foreach ( $groups as $presets ) {
+			if ( ! is_array( $presets ) ) {
+				continue;
+			}
+			// Origin priority, most specific first.
+			foreach ( [ 'custom', 'theme', 'blocks', 'default' ] as $origin ) {
+				if ( empty( $presets[ $origin ] ) || ! is_array( $presets[ $origin ] ) ) {
+					continue;
+				}
+				foreach ( $presets[ $origin ] as $preset ) {
+					if ( ! is_array( $preset ) || ! isset( $preset['slug'] ) || ! is_scalar( $preset['slug'] ) ) {
+						continue;
+					}
+					if ( (string) $preset['slug'] !== $slug ) {
+						continue;
+					}
+					$size = $preset['size'] ?? null;
+					return is_scalar( $size ) ? (string) $size : $width;
+				}
+			}
+		}
+
+		return $width;
+	}
+
+	/**
 	 * Convert a Gutenberg block to an MJML component.
 	 * MJML component will be put in an mj-column in an mj-section for consistent layout,
 	 * unless it's a group or a columns block.
@@ -1212,8 +1329,9 @@ final class Newspack_Newsletters_Renderer {
 				$total_defined_width = array_reduce(
 					$inner_blocks,
 					function ( $acc, $block ) {
-						if ( isset( $block['attrs']['width'] ) ) {
-							$acc += intval( $block['attrs']['width'] );
+						$width = self::get_button_width( $block['attrs'] ?? [] );
+						if ( null !== $width ) {
+							$acc += $width;
 						}
 						return $acc;
 					},
@@ -1225,7 +1343,7 @@ final class Newspack_Newsletters_Renderer {
 					array_filter(
 						$inner_blocks,
 						function ( $block ) {
-							return empty( $block['attrs']['width'] );
+							return null === self::get_button_width( $block['attrs'] ?? [] );
 						}
 					)
 				);
@@ -1320,10 +1438,16 @@ final class Newspack_Newsletters_Renderer {
 						$button_attrs['css-class'] = $attrs['className'];
 					}
 
+					// NOTE: the width below goes on $default_button_attrs, which is what
+					// the emit at the end of this case actually serializes. The
+					// $button_attrs built just above is dead (pre-existing) — if that
+					// is ever cleaned up, move this width with it or buttons silently
+					// lose their width again.
 					$column_attrs['css-class'] = 'mj-column-has-width';
 					$column_width              = $default_width;
-					if ( ! empty( $attrs['width'] ) ) {
-						$column_width                  = $attrs['width'];
+					$button_width              = self::get_button_width( $attrs );
+					if ( null !== $button_width ) {
+						$column_width                  = $button_width;
 						$default_button_attrs['width'] = '100%'; // Buttons with defined width should fill their column.
 					}
 					$column_attrs['width'] = $column_width . '%';
