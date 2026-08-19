@@ -22,7 +22,7 @@ import ImpactEmpty, { type ImpactEmptyReason } from './impact-empty';
 import ImpactStats from './impact-stats';
 import ImpactTable from './impact-table';
 import { formatCount } from './impact-format';
-import { RULE_PREVIEW_API_PATH as PREVIEW_PATH, RULE_PREVIEW_SAMPLE_LIMIT } from './constants';
+import { RULE_PREVIEW_API_PATH as PREVIEW_PATH } from './constants';
 
 const DEBOUNCE_MS = 500;
 
@@ -97,14 +97,20 @@ export default function RulePreview( { body, showCycleNote }: RulePreviewProps )
 
 	return (
 		<div className={ `newspack-pricing-rules__preview${ isLoading ? ' is-loading' : '' }` }>
-			<ImpactStats totalMatching={ preview.total_matching } countLimited={ preview.count_limited } audience={ preview.audience } />
+			{ /* impact_preview() documents a capped total as an upper bound, not a floor. */ }
+			<ImpactStats
+				totalMatching={ preview.total_matching }
+				countLimited={ preview.count_limited }
+				countBound="upper"
+				audience={ preview.audience }
+			/>
 			<ImpactTable
 				baseline={ preview.sample }
 				segmentGroups={ preview.segment_groups ?? [] }
 				currency={ preview.currency }
 				showCycleNote={ showCycleNote }
 			/>
-			{ preview.preview_limited && preview.sample_count >= RULE_PREVIEW_SAMPLE_LIMIT && (
+			{ preview.preview_limited && (
 				<p className="newspack-pricing-rules__muted">
 					{ sprintf(
 						/* translators: %s: how many products the table lists. */

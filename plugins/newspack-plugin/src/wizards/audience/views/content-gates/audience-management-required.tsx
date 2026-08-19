@@ -24,7 +24,7 @@ const AudienceManagementRequired = ( { isNewsletter = false }: { isNewsletter?: 
 
 	return (
 		<Grid columns={ 4 } noMargin>
-			<VStack start={ 2 } end={ 4 } spacing={ 8 }>
+			<VStack data-start="2" data-end="4" spacing={ 8 }>
 				<SectionHeader
 					icon={ people }
 					title={ __( 'Set up Audience Management first', 'newspack-plugin' ) }
