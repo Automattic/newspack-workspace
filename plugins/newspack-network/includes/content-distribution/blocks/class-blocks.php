@@ -7,6 +7,8 @@
 
 namespace Newspack_Network\Content_Distribution;
 
+use Newspack_Network\Debugger;
+
 /**
  * Blocks class.
  */
@@ -148,9 +150,24 @@ class Blocks {
 	 * unrelated image, or nothing at all, with no error either way.
 	 *
 	 * Resolving the images here, on the origin, leaves the block in the same shape
-	 * an ordinary gallery is saved in, which already distributes correctly. The
-	 * node's copy stops following new attachments, which matches how every other
-	 * edit reaches a node: on the next sync.
+	 * an ordinary gallery is saved in, which already distributes correctly.
+	 *
+	 * The image and wrapper construction mirrors core's own dynamic render
+	 * (`block_core_gallery_render_dynamic_image()` and the `dynamicContent` branch
+	 * of `block_core_gallery_render()`), reusing core's helpers so links, captions,
+	 * aspect ratio and responsive markup match what the origin renders. Blocks are
+	 * built as arrays and left for `serialize_blocks()` to encode, so attribute
+	 * values never pass through a hand-written block-comment delimiter.
+	 *
+	 * Two caveats worth knowing:
+	 *
+	 * - The node's copy is static. Attaching a new image on the origin does not by
+	 *   itself resync the post, so the node updates on the next save of the post,
+	 *   not on the upload.
+	 * - When nothing resolves, the block is flattened to an empty gallery rather
+	 *   than shipped as-is. Passing the dynamic instruction through would let the
+	 *   node resolve it against its own attachments, which is the bug this exists
+	 *   to prevent.
 	 *
 	 * @param array $block   The block to process.
 	 * @param int   $post_id The ID of the post being distributed.
@@ -162,71 +179,198 @@ class Blocks {
 			return $block;
 		}
 
-		// Dynamic galleries arrived in WordPress 7.1. Leave the block alone on older versions.
-		if ( ! function_exists( 'block_core_gallery_resolve_dynamic_source' ) ) {
+		// Dynamic galleries arrived with the WordPress 7.1 gallery block. Leave the
+		// block untouched on older versions, where nothing can resolve it anyway.
+		if (
+			! function_exists( 'block_core_gallery_resolve_dynamic_source' ) ||
+			! function_exists( 'block_core_gallery_dynamic_image_link_attributes' )
+		) {
 			return $block;
 		}
 
-		$post_id = $post_id ? $post_id : get_the_ID();
 		if ( ! $post_id ) {
-			return $block;
+			Debugger::log( 'Dynamic gallery: no post ID given, flattening to an empty gallery.' );
+			return self::flatten_gallery( $block, [] );
 		}
 
 		$attachment_ids = block_core_gallery_resolve_dynamic_source(
 			$block['attrs']['dynamicContent'],
 			new \WP_Block( $block, [ 'postId' => $post_id ] )
 		);
+
 		if ( empty( $attachment_ids ) ) {
-			return $block;
+			Debugger::log( sprintf( 'Dynamic gallery on post %d resolved no images.', $post_id ) );
+			return self::flatten_gallery( $block, [] );
 		}
 
-		$size_slug = $block['attrs']['sizeSlug'] ?? 'large';
-		$link_to   = $block['attrs']['linkTo'] ?? 'none';
+		// The source query only fetched IDs, which skips WP_Query's cache priming,
+		// and each image below reads the attachment post and its meta. Warm both in
+		// one pair of queries rather than paying two per attachment.
+		if ( count( $attachment_ids ) > 1 ) {
+			_prime_post_caches( $attachment_ids, false, true );
+		}
 
-		$images = [];
+		// Distribute origin URLs rather than the origin's image CDN, matching every
+		// other media URL this plugin puts on the wire.
+		add_filter( 'jetpack_photon_override_image_downsize', '__return_true' );
+
+		$image_blocks = [];
 		foreach ( $attachment_ids as $attachment_id ) {
-			$url = wp_get_attachment_image_url( $attachment_id, $size_slug );
-			if ( ! $url ) {
-				continue;
+			$image_block = self::build_gallery_image_block( $attachment_id, $block['attrs'] );
+			if ( $image_block ) {
+				$image_blocks[] = $image_block;
 			}
-			$images[] = sprintf(
-				"<!-- wp:image %1\$s -->\n<figure class=\"wp-block-image size-%2\$s\"><img src=\"%3\$s\" alt=\"%4\$s\" class=\"wp-image-%5\$d\"/></figure>\n<!-- /wp:image -->",
-				wp_json_encode(
-					[
-						'id'              => (int) $attachment_id,
-						'sizeSlug'        => $size_slug,
-						'linkDestination' => $link_to,
-					]
-				),
-				esc_attr( $size_slug ),
-				esc_url( $url ),
-				esc_attr( (string) get_post_meta( $attachment_id, '_wp_attachment_image_alt', true ) ),
-				(int) $attachment_id
-			);
 		}
 
-		if ( empty( $images ) ) {
-			return $block;
+		remove_filter( 'jetpack_photon_override_image_downsize', '__return_true' );
+
+		if ( empty( $image_blocks ) ) {
+			Debugger::log( sprintf( 'Dynamic gallery on post %d resolved %d images, none of which produced markup.', $post_id, count( $attachment_ids ) ) );
 		}
 
+		return self::flatten_gallery( $block, $image_blocks );
+	}
+
+	/**
+	 * Build the flattened gallery block around a list of image blocks.
+	 *
+	 * Mirrors the wrapper core builds for a dynamic gallery: the gallery-specific
+	 * classes from `save.js`, plus the block-support classes and styles (align,
+	 * colors, border, spacing, anchor) that a static gallery carries in its saved
+	 * markup. Layout classes are deliberately left out, since the layout render
+	 * filter adds those on the node exactly as it does on the origin.
+	 *
+	 * @param array $block        The original dynamic gallery block.
+	 * @param array $image_blocks The image blocks to nest, possibly empty.
+	 *
+	 * @return array The flattened gallery block.
+	 */
+	private static function flatten_gallery( $block, $image_blocks ) {
 		$attrs = $block['attrs'];
 		unset( $attrs['dynamicContent'] );
 
-		// Keep the gallery's own wrapper so its classes and layout survive.
-		$figure_open = '<figure class="wp-block-gallery has-nested-images columns-default is-cropped">';
-		if ( ! empty( $block['innerHTML'] ) && preg_match( '/<figure[^>]*>/', $block['innerHTML'], $matches ) ) {
-			$figure_open = $matches[0];
+		$classes  = 'wp-block-gallery has-nested-images';
+		$classes .= isset( $attrs['columns'] ) ? ' columns-' . (int) $attrs['columns'] : ' columns-default';
+		if ( $attrs['imageCrop'] ?? true ) {
+			$classes .= ' is-cropped';
 		}
 
-		$markup = sprintf(
-			"<!-- wp:gallery %1\$s -->\n%2\$s\n%3\$s\n</figure>\n<!-- /wp:gallery -->",
-			wp_json_encode( (object) $attrs ),
-			$figure_open,
-			implode( "\n", $images )
+		$wrapper = self::get_block_wrapper_attributes( $block, $classes );
+
+		// In dynamic mode `save.js` persists at most the gallery caption, so the
+		// block's own inner HTML is that `<figcaption>` or nothing. Core appends it
+		// after the images, and drops it when there are no images to caption.
+		$caption = $image_blocks ? trim( $block['innerHTML'] ?? '' ) : '';
+
+		$opening       = sprintf( '<figure %s>', $wrapper );
+		$closing       = $caption . '</figure>';
+		$inner_content = array_merge(
+			[ $opening ],
+			array_fill( 0, count( $image_blocks ), null ),
+			[ $closing ]
 		);
 
-		$parsed = parse_blocks( $markup );
+		return [
+			'blockName'    => 'core/gallery',
+			'attrs'        => $attrs,
+			'innerBlocks'  => $image_blocks,
+			'innerHTML'    => $opening . $closing,
+			'innerContent' => $inner_content,
+		];
+	}
 
-		return $parsed[0] ?? $block;
+	/**
+	 * Build a single `core/image` block for a resolved gallery image.
+	 *
+	 * Deliberately mirrors `block_core_gallery_render_dynamic_image()`, stopping
+	 * short of rendering so the block can be nested instead.
+	 *
+	 * @param int   $attachment_id The image attachment ID.
+	 * @param array $attributes    The gallery block attributes.
+	 *
+	 * @return array|null The image block, or null when no markup could be built.
+	 */
+	private static function build_gallery_image_block( $attachment_id, $attributes ) {
+		$size_slug    = $attributes['sizeSlug'] ?? 'large';
+		$aspect_ratio = $attributes['aspectRatio'] ?? 'auto';
+
+		$img_attr = [ 'class' => 'wp-image-' . $attachment_id ];
+		if ( $aspect_ratio && 'auto' !== $aspect_ratio ) {
+			$img_attr['style'] = safecss_filter_attr( sprintf( 'aspect-ratio:%s;object-fit:cover;', $aspect_ratio ) );
+		}
+
+		$image_markup = wp_get_attachment_image( $attachment_id, $size_slug, false, $img_attr );
+		if ( ! $image_markup ) {
+			return null;
+		}
+
+		$image_attributes = array_merge(
+			[
+				'id'       => $attachment_id,
+				'data-id'  => (string) $attachment_id,
+				'sizeSlug' => $size_slug,
+			],
+			block_core_gallery_dynamic_image_link_attributes( $attachment_id, $attributes )
+		);
+
+		if ( $aspect_ratio && 'auto' !== $aspect_ratio ) {
+			$image_attributes['aspectRatio'] = $aspect_ratio;
+			$image_attributes['scale']       = 'cover';
+		}
+
+		if ( ! empty( $image_attributes['href'] ) ) {
+			$image_markup = sprintf(
+				'<a href="%1$s"%2$s%3$s>%4$s</a>',
+				esc_url( $image_attributes['href'] ),
+				isset( $image_attributes['linkTarget'] ) ? ' target="' . esc_attr( $image_attributes['linkTarget'] ) . '"' : '',
+				isset( $image_attributes['rel'] ) ? ' rel="' . esc_attr( $image_attributes['rel'] ) . '"' : '',
+				$image_markup
+			);
+		}
+
+		$attachment = get_post( $attachment_id );
+		$caption    = $attachment ? $attachment->post_excerpt : '';
+		if ( '' !== $caption ) {
+			$image_markup .= sprintf( '<figcaption class="wp-element-caption">%s</figcaption>', wp_kses_post( $caption ) );
+		}
+
+		$figure = sprintf(
+			'<figure class="wp-block-image size-%1$s">%2$s</figure>',
+			esc_attr( $size_slug ),
+			$image_markup
+		);
+
+		return [
+			'blockName'    => 'core/image',
+			'attrs'        => $image_attributes,
+			'innerBlocks'  => [],
+			'innerHTML'    => $figure,
+			'innerContent' => [ $figure ],
+		];
+	}
+
+	/**
+	 * Get the block-support wrapper attributes for a block outside of a render.
+	 *
+	 * `get_block_wrapper_attributes()` reads the block being rendered from
+	 * `WP_Block_Supports`, which is only set during a render. Distribution runs
+	 * outside one, so point it at this block and put back whatever was there.
+	 *
+	 * @param array  $block   The block whose supports should be applied.
+	 * @param string $classes Additional classes for the wrapper.
+	 *
+	 * @return string The wrapper attributes.
+	 */
+	private static function get_block_wrapper_attributes( $block, $classes ) {
+		if ( ! class_exists( '\WP_Block_Supports' ) || ! function_exists( 'get_block_wrapper_attributes' ) ) {
+			return sprintf( 'class="%s"', esc_attr( $classes ) );
+		}
+
+		$previous                            = \WP_Block_Supports::$block_to_render;
+		\WP_Block_Supports::$block_to_render = $block;
+		$attributes                          = get_block_wrapper_attributes( [ 'class' => $classes ] );
+		\WP_Block_Supports::$block_to_render = $previous;
+
+		return $attributes ? $attributes : sprintf( 'class="%s"', esc_attr( $classes ) );
 	}
 }
