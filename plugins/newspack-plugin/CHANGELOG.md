@@ -1,3 +1,10 @@
+## newspack [6.48.12](https://github.com/Automattic/newspack-workspace/compare/newspack@6.48.11...newspack@6.48.12) (2026-08-20)
+
+
+### Bug Fixes
+
+* **reader-activation:** clear stuck auth-form loading spinner ([#929](https://github.com/Automattic/newspack-workspace/issues/929)) ([ad31481](https://github.com/Automattic/newspack-workspace/commit/ad31481b1476628a47fe9f3e2a765ea4f76146f2))
+
 ## newspack [6.48.11](https://github.com/Automattic/newspack-workspace/compare/newspack@6.48.10...newspack@6.48.11) (2026-08-20)
 
 
