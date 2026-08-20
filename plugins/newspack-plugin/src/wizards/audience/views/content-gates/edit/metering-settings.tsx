@@ -25,7 +25,7 @@ import { useWizardData } from '../../../../../../packages/components/src/wizard/
 import { WIZARD_STORE_NAMESPACE } from '../../../../../../packages/components/src/wizard/store';
 import { useWizardApiFetch } from '../../../../hooks/use-wizard-api-fetch';
 import { AUDIENCE_CONTENT_GATES_WIZARD_SLUG } from '../consts';
-import { getMeteringDescription, hasOwnMeter, isGateMetered } from '../utils';
+import { hasOwnMeter, hasSharedMeteredPath, isGateMetered } from '../utils';
 import CountdownBanner from './countdown-banner';
 
 const { useHistory } = Router;
@@ -67,19 +67,20 @@ const MeteringSettings = () => {
 	} );
 
 	const gates = wizardData?.gates || [];
-	// Gates that opted out are not governed by this page. Saying so here is the
-	// only place a publisher can find out why a section still counts separately.
 	const gatesWithOwnMeter = gates.filter( hasOwnMeter );
-	const hasMetering = gates.some( gate => isGateMetered( gate, savedSiteMeter ) );
+	const hasMetering = gates.some( gate => isGateMetered( gate, siteMeter ) );
+	// Layout wording is written once at creation and never rewritten from here. Judged
+	// per path: a gate with one path pinned and one sharing still quotes the shared number.
+	const gatesQuotingTheAllowance = gates.filter( gate => hasSharedMeteredPath( gate, savedSiteMeter ) );
 
 	const handleSave = async () => {
 		isSaving.current = true;
 		resetError();
 		resetNotices();
 
-		// Only the dirty half is written, so saving a banner tweak cannot clobber a
-		// meter that changed underneath this page.
+		// Only the dirty half is written, so saving one cannot clobber the other.
 		const nextConfig: GateSettings = { ...wizardData?.config };
+		let anyWritten = false;
 		try {
 			if ( siteMeterDirty ) {
 				nextConfig.site_meter = await wizardApiFetch( {
@@ -88,6 +89,7 @@ const MeteringSettings = () => {
 					quiet: true,
 					data: siteMeter,
 				} );
+				anyWritten = true;
 			}
 			if ( countdownDirty ) {
 				nextConfig.countdown_banner = await wizardApiFetch( {
@@ -96,10 +98,19 @@ const MeteringSettings = () => {
 					data: countdown,
 					quiet: true,
 				} );
+				anyWritten = true;
 			}
 		} catch {
-			// The error notice comes from the errorMessage effect. Stay on the page so
-			// the unsaved values are still there to retry with.
+			// Separate requests, so one can land before the other fails. Leaving out what
+			// did land would show it as unsaved and let a discard imply it never changed.
+			if ( anyWritten ) {
+				updateWizardSettings( {
+					slug: AUDIENCE_CONTENT_GATES_WIZARD_SLUG,
+					path: [ 'config' ],
+					value: nextConfig,
+				} );
+			}
+			// The error notice comes from the errorMessage effect.
 			isSaving.current = false;
 			return;
 		}
@@ -123,7 +134,6 @@ const MeteringSettings = () => {
 			backNav: '#/content-gates',
 			sectionTitle: __( 'Metering', 'newspack-plugin' ),
 			sectionSize: 'hidden',
-			sectionDescription: getMeteringDescription( savedSiteMeter ),
 			actions: [
 				{
 					label: __( 'Save', 'newspack-plugin' ),
@@ -133,18 +143,35 @@ const MeteringSettings = () => {
 				},
 			],
 		} );
-	}, [ siteMeter, countdown, isDirty, savedSiteMeter, setHeaderData ] );
+	}, [ siteMeter, countdown, isDirty, setHeaderData ] );
 
+	// Compared by value: saving deep-clones the whole config, so the half that did not
+	// change still arrives as a fresh object, and reacting to that identity would
+	// overwrite the edits a failed save left on screen.
+	const appliedSiteMeter = useRef< string | null >( null );
 	useEffect( () => {
-		if ( savedSiteMeter ) {
-			setSiteMeter( savedSiteMeter );
+		if ( ! savedSiteMeter ) {
+			return;
 		}
+		const applied = JSON.stringify( savedSiteMeter );
+		if ( appliedSiteMeter.current === applied ) {
+			return;
+		}
+		appliedSiteMeter.current = applied;
+		setSiteMeter( savedSiteMeter );
 	}, [ savedSiteMeter ] );
 
+	const appliedCountdown = useRef< string | null >( null );
 	useEffect( () => {
-		if ( savedCountdown ) {
-			setCountdown( savedCountdown );
+		if ( ! savedCountdown ) {
+			return;
 		}
+		const applied = JSON.stringify( savedCountdown );
+		if ( appliedCountdown.current === applied ) {
+			return;
+		}
+		appliedCountdown.current = applied;
+		setCountdown( savedCountdown );
 	}, [ savedCountdown ] );
 
 	useEffect( () => {
@@ -163,7 +190,7 @@ const MeteringSettings = () => {
 	return (
 		<div className="newspack-content-gate__edit">
 			{ confirmDialog }
-			<Grid columns={ 2 } gutter={ 32 } noMargin>
+			<Grid columns={ 2 } noMargin>
 				<VStack spacing={ 6 } justify="flex-start">
 					<SectionHeader
 						heading={ 2 }
@@ -178,8 +205,8 @@ const MeteringSettings = () => {
 							{ sprintf(
 								// translators: %1$d is a number of gates, %2$s is a comma-separated list of gate names.
 								_n(
-									'%1$d gate keeps its own allowance and ignores these settings: %2$s',
-									'%1$d gates keep their own allowance and ignore these settings: %2$s',
+									'%1$d gate ignores these settings for at least one audience: %2$s',
+									'%1$d gates ignore these settings for at least one audience: %2$s',
 									gatesWithOwnMeter.length,
 									'newspack-plugin'
 								),
@@ -188,11 +215,26 @@ const MeteringSettings = () => {
 							) }
 						</Notice>
 					) }
+					{ siteMeterDirty && gatesQuotingTheAllowance.length > 0 && (
+						<Notice status="info" isDismissible={ false }>
+							{ sprintf(
+								// translators: %1$d is a number of gates, %2$s is a comma-separated list of gate names.
+								_n(
+									'Saving does not rewrite gate wording. Check %1$d gate layout if it names a number of free views: %2$s',
+									'Saving does not rewrite gate wording. Check %1$d gate layouts if they name a number of free views: %2$s',
+									gatesQuotingTheAllowance.length,
+									'newspack-plugin'
+								),
+								gatesQuotingTheAllowance.length,
+								gatesQuotingTheAllowance.map( gate => gate.title ).join( ', ' )
+							) }
+						</Notice>
+					) }
 				</VStack>
 				<VStack spacing={ 6 } justify="flex-start">
 					<NumberControl
 						label={ __( 'Signed-out readers', 'newspack-plugin' ) }
-						help={ __( 'Free views before a registration wall appears.', 'newspack-plugin' ) }
+						help={ __( 'Free views before a gate applies.', 'newspack-plugin' ) }
 						min={ 0 }
 						value={ siteMeter.anonymous_count }
 						onChange={ setCount( 'anonymous_count' ) }
@@ -220,7 +262,15 @@ const MeteringSettings = () => {
 				</VStack>
 			</Grid>
 			<Divider alignment="full-width" variant="tertiary" />
-			<CountdownBanner countdown={ countdown } onChange={ setCountdown } hasMetering={ hasMetering } />
+			<CountdownBanner
+				countdown={ countdown }
+				onChange={ setCountdown }
+				hasMetering={ hasMetering }
+				meterCount={ siteMeter.registered_count || siteMeter.anonymous_count }
+				meterPeriod={ siteMeter.period }
+				meterAudience={ siteMeter.registered_count ? 'registered' : 'anonymous' }
+				otherAudienceMeters={ Boolean( siteMeter.registered_count && siteMeter.anonymous_count ) }
+			/>
 		</div>
 	);
 };

@@ -13,7 +13,7 @@ import classnames from 'classnames';
 /**
  * WordPress dependencies.
  */
-import { __ } from '@wordpress/i18n';
+import { __, _n, sprintf } from '@wordpress/i18n';
 import {
 	BaseControl,
 	Notice,
@@ -35,18 +35,80 @@ interface CountdownBannerProps {
 	onChange: ( countdown: MeteringCountdownConfig ) => void;
 	/** Whether any gate currently meters, so the banner has something to count down. */
 	hasMetering: boolean;
+	/** The allowance the banner counts down, as currently edited. */
+	meterCount: number;
+	/** The reset period the allowance runs on, as currently edited. */
+	meterPeriod: SiteMeterConfig[ 'period' ];
+	/** Which readers the previewed allowance belongs to. */
+	meterAudience: 'anonymous' | 'registered';
+	/** Whether the audience not previewed also gets free views, and so also sees the banner. */
+	otherAudienceMeters: boolean;
 }
 
-export default function CountdownBanner( { countdown, onChange, hasMetering }: CountdownBannerProps ) {
+/**
+ * The line the banner shows a reader, with one view already spent.
+ *
+ * Built from the allowance being edited on this page rather than a fixed example, so
+ * the preview cannot promise a different number from the controls beside it.
+ *
+ * @param count  The allowance.
+ * @param period The reset period it runs on.
+ */
+const getCountdownLabel = ( count: number, period: SiteMeterConfig[ 'period' ] ) => {
+	if ( period === 'week' ) {
+		return sprintf(
+			// translators: %d is the number of free articles the allowance grants.
+			_n( '1/%d free article this week', '1/%d free articles this week', count, 'newspack-plugin' ),
+			count
+		);
+	}
+	return sprintf(
+		// translators: %d is the number of free articles the allowance grants.
+		_n( '1/%d free article this month', '1/%d free articles this month', count, 'newspack-plugin' ),
+		count
+	);
+};
+
+/**
+ * What the preview stands in for, and what the other audience sees.
+ *
+ * The banner shows one reader one number, so the preview has to pick an audience. It
+ * previews whichever one these settings actually grant views to, and speaks only for
+ * these settings: a gate keeping its own allowance can still meter the other audience,
+ * and the Free Views section above names those gates.
+ *
+ * @param audience            The audience being previewed.
+ * @param otherAudienceMeters Whether the other audience also gets free views.
+ */
+const getPreviewHelp = ( audience: 'anonymous' | 'registered', otherAudienceMeters: boolean ) => {
+	if ( audience === 'registered' ) {
+		return otherAudienceMeters
+			? __(
+					'Shown as a signed-in reader sees it. Signed-out readers get the same banner counting down their own allowance.',
+					'newspack-plugin'
+			  )
+			: __( 'Shown as a signed-in reader sees it. These settings give signed-out readers no free views.', 'newspack-plugin' );
+	}
+	return __( 'Shown as a signed-out reader sees it. These settings give signed-in readers no free views.', 'newspack-plugin' );
+};
+
+export default function CountdownBanner( {
+	countdown,
+	onChange,
+	hasMetering,
+	meterCount,
+	meterPeriod,
+	meterAudience,
+	otherAudienceMeters,
+}: CountdownBannerProps ) {
 	const availableProducts = window.newspackAudience?.available_products || [];
 	const update = ( value: Partial< MeteringCountdownConfig > ) => onChange( { ...countdown, ...value } );
-	// The REST layer sanitizes this setting to an int, so a bare `enabled && ...`
-	// guard would render a literal 0 when the banner is off.
+	// Sanitized to an int by REST, so a bare `enabled && ...` would render a literal 0.
 	const isEnabled = !! countdown.enabled;
 
 	return (
 		<>
-			<Grid columns={ 2 } gutter={ 32 }>
+			<Grid columns={ 2 } noMargin>
 				<VStack spacing={ 6 } justify="flex-start">
 					<SectionHeader
 						heading={ 2 }
@@ -147,16 +209,19 @@ export default function CountdownBanner( { countdown, onChange, hasMetering }: C
 				className={ classnames( 'newspack-countdown-banner__preview', {
 					'newspack-countdown-banner__preview--disabled': ! isEnabled,
 				} ) }
-				style={ { gridColumn: '1 / -1' } }
 			>
-				<BaseControl id="newspack-countdown-banner-cta-preview" label={ __( 'Preview', 'newspack-plugin' ) }>
+				<BaseControl
+					id="newspack-countdown-banner-cta-preview"
+					label={ __( 'Preview', 'newspack-plugin' ) }
+					help={ getPreviewHelp( meterAudience, otherAudienceMeters ) }
+				>
 					<div className="newspack-countdown-banner__cta-preview" inert="true">
 						<div className="newspack-ui">
 							<div className={ `banner newspack-countdown-banner__cta is-style-${ countdown.style || 'light' }` }>
 								<div className="wrapper newspack-countdown-banner__cta__content">
 									<div className="newspack-countdown-banner__cta__content__wrapper">
 										<span className="newspack-countdown-banner__cta__content__countdown newspack-ui__font--s">
-											<strong>{ __( '1/10 free articles this month', 'newspack-plugin' ) }</strong>
+											<strong>{ getCountdownLabel( meterCount, meterPeriod ) }</strong>
 										</span>
 										<span className="newspack-countdown-banner__cta__content__message newspack-ui__font--xs">
 											{ countdown.cta_label || __( 'Subscribe now and get unlimited access.', 'newspack-plugin' ) }{ ' ' }

@@ -151,6 +151,6 @@ describe( 'Metering scope', () => {
 	it( "warns against a site allowance of 0 without blaming the gate's own count", () => {
 		render( <MeteringHarness initialMetering={ { enabled: true, count: 5, period: 'month' } } siteCount={ 0 } sitePeriod="month" /> );
 
-		expect( screen.getByText( /The site meter grants 0 free views/, { ignore: IGNORE_SPOKEN } ) ).toBeInTheDocument();
+		expect( screen.getByText( /The site meter grants these readers 0 free views/, { ignore: IGNORE_SPOKEN } ) ).toBeInTheDocument();
 	} );
 } );

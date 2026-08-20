@@ -70,9 +70,18 @@ describe( 'isGateMetered with a shared site meter', () => {
 	} );
 
 	it( 'is false when the site meter grants the audience 0 free views', () => {
-		const gate = buildGate( { custom_access: { active: true, metering: { enabled: true, count: 9, period: 'month' } } } );
+		const gate = buildGate( {
+			registration: { active: true, metering: { enabled: false, count: 0, period: 'month' } },
+			custom_access: { active: true, metering: { enabled: true, count: 9, period: 'month' } },
+		} );
 
 		expect( isGateMetered( gate, siteMeter ) ).toBe( false );
+	} );
+
+	it( 'meters signed-out readers through the paywall when there is no registration wall', () => {
+		const gate = buildGate( { custom_access: { active: true, metering: { enabled: true, count: 9, period: 'month' } } } );
+
+		expect( isGateMetered( gate, siteMeter ) ).toBe( true );
 	} );
 
 	it( 'keeps reading the gate when it opted out of the site meter', () => {

@@ -28,15 +28,6 @@ export function getEditGateLayoutUrl( gateId: number, gateMode: string ) {
 }
 
 /**
- * Whether a gate actually meters, i.e. it grants at least one free view.
- *
- * Metering switched on with 0 free views gates every reader on their first view, so
- * nothing downstream of metering (the countdown banner, content gifting) has anything
- * to count. This mirrors `Newspack\Metering::is_gate_metered()` on the PHP side, which
- * is what those surfaces are gated on at render time - a section only meters while it
- * is active, has metering on, and allows a positive number of views.
- */
-/**
  * Resolve the free-view allowance one audience path grants.
  *
  * The count lives on the site meter unless the path opts out, so a stale count
@@ -56,14 +47,31 @@ export const getMeteringCount = ( metering?: Metering, siteCount?: number ) => {
 	return Number( siteCount ?? 1 ) || 0;
 };
 
+/**
+ * Whether a gate actually meters, i.e. it grants at least one free view.
+ *
+ * Metering switched on with 0 free views gates every reader on their first view, so
+ * nothing downstream of metering (the countdown banner, content gifting) has anything
+ * to count. This mirrors `Newspack\Metering::is_gate_metered()` on the PHP side, which
+ * is what those surfaces are gated on at render time - a section only meters while it
+ * is active, has metering on, and allows a positive number of views.
+ */
 export const isGateMetered = ( gate: Gate, siteMeter?: SiteMeterConfig ) => {
 	const meters = ( section?: Registration | CustomAccess, siteCount?: number ) =>
 		Boolean( section?.active && section?.metering?.enabled && getMeteringCount( section.metering, siteCount ) > 0 );
-	return meters( gate.registration, siteMeter?.anonymous_count ) || meters( gate.custom_access, siteMeter?.registered_count );
+	// Signed-out readers fall through to the paywall when there is no registration wall.
+	const signedOutPath = gate.registration?.active ? gate.registration : gate.custom_access;
+	return meters( signedOutPath, siteMeter?.anonymous_count ) || meters( gate.custom_access, siteMeter?.registered_count );
 };
 
 /**
  * Whether any of a gate's audience paths keeps its own allowance.
+ *
+ * Scope is stored per audience path, and adoption stamps only the paths that disagree
+ * with the shared allowance, so a gate can hold one of each. This answers "any path
+ * opted out", which is the question for warning that a gate is not wholly governed by
+ * the Metering page. It is not the complement of `hasSharedMeteredPath()`: a mixed gate
+ * satisfies both.
  *
  * @param gate The gate.
  */
@@ -71,6 +79,25 @@ export const hasOwnMeter = ( gate: Gate ) => {
 	const optsOut = ( section?: Registration | CustomAccess ) =>
 		Boolean( section?.active && section?.metering?.enabled && section.metering.scope === 'gate' );
 	return optsOut( gate.registration ) || optsOut( gate.custom_access );
+};
+
+/**
+ * Whether any of a gate's audience paths still draws on the shared allowance.
+ *
+ * The question the Metering page needs before warning that changing the allowance
+ * leaves gate wording behind: a gate with one path pinned and one path sharing still
+ * quotes the shared number somewhere.
+ *
+ * @param gate      The gate.
+ * @param siteMeter The site meter, once the wizard has loaded it.
+ */
+export const hasSharedMeteredPath = ( gate: Gate, siteMeter?: SiteMeterConfig ) => {
+	const shares = ( section: Registration | CustomAccess | undefined, siteCount?: number ) =>
+		Boolean(
+			section?.active && section?.metering?.enabled && section.metering.scope !== 'gate' && getMeteringCount( section.metering, siteCount ) > 0
+		);
+	const signedOutPath = gate.registration?.active ? gate.registration : gate.custom_access;
+	return shares( signedOutPath, siteMeter?.anonymous_count ) || shares( gate.custom_access, siteMeter?.registered_count );
 };
 
 export const getGateStatus = ( status: GateStatus ) => {

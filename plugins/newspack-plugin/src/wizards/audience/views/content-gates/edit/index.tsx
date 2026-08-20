@@ -725,6 +725,7 @@ const Edit = ( { match, updateGatesData, slug = AUDIENCE_CONTENT_GATES_WIZARD_SL
 							onChange={ setCustomAccess }
 							isNewsletter={ isNewsletter }
 							siteMeter={ siteMeter }
+							governsSignedOut={ ! registration.active }
 						/>
 					</CardSettingsGroup>
 				</VStack>

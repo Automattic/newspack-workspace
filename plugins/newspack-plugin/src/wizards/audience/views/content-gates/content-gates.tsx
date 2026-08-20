@@ -165,11 +165,10 @@ const ContentGates = ( { updateGatesData }: { updateGatesData: ( gates: Gate[] )
 				<SettingsCard
 					title={ __( 'Metering', 'newspack-plugin' ) }
 					description={ getMeteringDescription( siteMeter ) }
-					// Always on: there is nothing to enable here, so the card is only ever
-					// configured and the badge carries whether any gate is drawing on it.
+					// Always on: nothing to enable, so the badge carries whether a gate draws on it.
 					enabled
 					badgeText={ getMeteringBadge( hasMetering, !! config.countdown_banner?.enabled ) }
-					badgeLevel={ hasMetering ? 'success' : 'error' }
+					badgeLevel={ hasMetering ? 'success' : 'default' }
 					href={ '/settings/metering' }
 				/>
 				<SettingsCard

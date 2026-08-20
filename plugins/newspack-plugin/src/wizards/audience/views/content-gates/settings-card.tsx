@@ -37,8 +37,7 @@ const SettingsCard = ( { title, description, enabled, requirements, toggleEnable
 			description={ description }
 			enabled={ enabled }
 			requirements={ requirements }
-			// Without a toggle there is nothing to enable, so both button states
-			// lead to the same settings page.
+			// Nothing to enable without a toggle, so both states lead to the same page.
 			enableLabel={ toggleEnabled ? undefined : __( 'Configure', 'newspack-plugin' ) }
 			onEnable={ toggleEnabled || configure }
 			onConfigure={ configure }

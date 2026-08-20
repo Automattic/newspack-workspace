@@ -76,8 +76,7 @@ const AudienceContentGates = ( props, ref ) => {
 					breadcrumbs: ACCESS_CONTROL,
 				},
 				{
-					// No `title`/`description`: the breadcrumb already names the page, and each
-					// section carries its own heading, so the wizard header only repeated them.
+					// No `title`/`description`: the breadcrumb and section headings already carry them.
 					path: '/settings/metering',
 					render: GuardedMeteringSettings,
 					isHidden: true,

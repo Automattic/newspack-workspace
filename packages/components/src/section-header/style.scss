@@ -2,6 +2,7 @@
  * Section Header
  */
 
+@use "~@wordpress/base-styles/breakpoints" as wp-breakpoints;
 @use "~@wordpress/base-styles/colors" as wp-colors;
 @use "~@wordpress/base-styles/variables" as wp-vars;
 @use "~@wordpress/base-styles/mixins" as wp-mixins;
@@ -19,11 +20,9 @@
 		&:not(:first-child) {
 			margin-top: 48px;
 		}
-		&:has(> .newspack-section-header--no-margin) {
-			margin-top: 0;
-		}
+		&:has(> .newspack-section-header--no-margin),
 		&:has(> .newspack-section-header--hidden) {
-			margin: 0 !important;
+			margin-top: 0;
 		}
 		&.newspack-section-header--has-primary-action {
 			display: flex;
@@ -35,7 +34,7 @@
 			}
 		}
 		&.newspack-section-header--has-back-nav {
-			@media (min-width: 782px) {
+			@include wp-mixins.break-wide {
 				.newspack-section-header__title-container,
 				p {
 					max-width: calc(50% - 16px);
@@ -45,10 +44,10 @@
 	}
 
 	&__back-nav {
-		@media (max-width: 1279px) {
+		@media (max-width: #{wp-breakpoints.$break-wide - 1px}) {
 			display: none;
 		}
-		@media (min-width: 1280px) {
+		@include wp-mixins.break-wide {
 			left: 0;
 			position: absolute;
 			top: 50%;
@@ -108,10 +107,12 @@
 	}
 
 	&#{&}--hidden {
-		margin: 0 !important;
+		.newspack-section-header__hidden-text {
+			display: none;
+		}
 
 		.newspack-section-header__back-nav {
-			@media (min-width: 1280px) {
+			@include wp-mixins.break-wide {
 				transform: translate(calc(-100% - 8px), calc(-50% + 12px));
 			}
 		}

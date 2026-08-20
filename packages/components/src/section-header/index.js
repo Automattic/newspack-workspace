@@ -36,7 +36,7 @@ import classnames from 'classnames';
  * @property {boolean}            [isWhite=false]    - Indicates if the header should use a white theme.
  * @property {boolean}            [noMargin=false]   - Indicates if the header should have no margin.
  * @property {boolean}            [pageHeader=false] - Indicates if the header is used as a page header.
- * @property {string}             [size='default']   - Size variant: 'small', 'default', or 'hidden' to keep the title and description for screen readers only while the back nav stays visible.
+ * @property {string}             [size='default']   - Size variant: 'small', 'default', or 'hidden' to drop the title and description while the back nav stays visible.
  * @property {string}             title              - The title of the section.
  * @property {?string}            [id=null]          - Optional ID for the header element.
  * @property {?string|Function|*} [children=null]    - Optional children to display in the header.
@@ -94,16 +94,15 @@ const SectionHeader = ( {
 	// controls only the enlarged, centered styling — not the tag. Pass `heading={ 1 }`
 	// on a headerless screen that needs the section header to be the page's h1.
 	const HeadingTag = `h${ heading }`;
-	// `hidden` keeps the heading in the accessibility tree while the page below
-	// supplies the visible hierarchy.
-	const srOnly = size === 'hidden' ? 'screen-reader-text' : undefined;
+	// `hidden` drops the title rather than announcing a level no reader can see.
+	const hiddenText = size === 'hidden' ? 'newspack-section-header__hidden-text' : undefined;
 
 	let titleContent = null;
 
 	if ( typeof title === 'string' ) {
 		titleContent = (
 			<div className="newspack-section-header__title-container">
-				<HeadingTag className={ classnames( 'newspack-section-header__title', srOnly ) }>
+				<HeadingTag className={ classnames( 'newspack-section-header__title', hiddenText ) }>
 					{ title }
 					{ badges?.length
 						? badges.map( ( badge, i ) => <Badge key={ i } text={ badge.label } level={ badge.level || 'default' } /> )
@@ -138,7 +137,7 @@ const SectionHeader = ( {
 			</div>
 		);
 	} else if ( typeof title === 'function' ) {
-		titleContent = <HeadingTag className="newspack-section-header__title">{ title() }</HeadingTag>;
+		titleContent = <HeadingTag className={ classnames( 'newspack-section-header__title', hiddenText ) }>{ title() }</HeadingTag>;
 	}
 
 	return (
@@ -170,9 +169,11 @@ const SectionHeader = ( {
 				) : (
 					titleContent
 				) }
-				{ description && typeof description === 'string' && <p className={ srOnly }>{ description }</p> }
-				{ typeof description === 'function' && <p className={ srOnly }>{ description() }</p> }
-				{ description && typeof description !== 'string' && typeof description !== 'function' && <p className={ srOnly }>{ description }</p> }
+				{ description && typeof description === 'string' && <p className={ hiddenText }>{ description }</p> }
+				{ typeof description === 'function' && <p className={ hiddenText }>{ description() }</p> }
+				{ description && typeof description !== 'string' && typeof description !== 'function' && (
+					<p className={ hiddenText }>{ description }</p>
+				) }
 				{ children && <div className="newspack-section-header__children">{ children }</div> }
 			</Grid>
 			{ primaryAction && (

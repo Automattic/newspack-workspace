@@ -2,7 +2,6 @@
  * WordPress dependencies.
  */
 import {
-	ExternalLink,
 	Notice,
 	__experimentalNumberControl as NumberControl, // eslint-disable-line @wordpress/no-unsafe-wp-apis
 	__experimentalToggleGroupControl as ToggleGroupControl, // eslint-disable-line @wordpress/no-unsafe-wp-apis
@@ -22,6 +21,12 @@ interface MeteringProps {
 	/** The site meter allowance governing this audience path, when one is loaded. */
 	siteCount?: number;
 	sitePeriod?: Metering[ 'period' ];
+	/**
+	 * The signed-out allowance, set only when this path governs signed-out readers as
+	 * well as signed-in ones. A gate stores one count per path, so opting such a path
+	 * out collapses two shared allowances into one.
+	 */
+	signedOutSiteCount?: number;
 }
 
 /**
@@ -51,13 +56,15 @@ function getSiteMeterSummary( count: number, period: Metering[ 'period' ] ) {
 	);
 }
 
-export default function Metering( { description, metering, onChange, siteCount, sitePeriod }: MeteringProps ) {
+export default function Metering( { description, metering, onChange, siteCount, sitePeriod, signedOutSiteCount }: MeteringProps ) {
 	const count = typeof metering.count === 'number' ? metering.count : parseInt( String( metering.count ), 10 );
 	// Gates saved before the site meter existed carry no scope, and share by default.
 	const scope: MeteringScope = metering.scope === 'gate' ? 'gate' : 'site';
 	const isSiteScoped = scope === 'site';
 	const effectiveCount = isSiteScoped ? siteCount : count;
 	const isCountZero = typeof effectiveCount === 'number' && ! isNaN( effectiveCount ) && effectiveCount === 0;
+	// One path, two audiences, two allowances: whichever the gate keeps, the other changes.
+	const servesTwoAllowances = typeof signedOutSiteCount === 'number' && typeof siteCount === 'number' && signedOutSiteCount !== siteCount;
 
 	return (
 		<>
@@ -73,7 +80,7 @@ export default function Metering( { description, metering, onChange, siteCount, 
 						<Notice status="warning" isDismissible={ false }>
 							{ isSiteScoped
 								? __(
-										'The site meter grants 0 free views, so no reader gets a free view and content is gated for everyone, the same as turning Metering off. Raise the site meter, or give this gate its own allowance.',
+										'The site meter grants these readers 0 free views, so they are gated on their first view, the same as turning Metering off. Raise the site meter, or give this gate its own allowance.',
 										'newspack-plugin'
 								  )
 								: __(
@@ -82,23 +89,47 @@ export default function Metering( { description, metering, onChange, siteCount, 
 								  ) }
 						</Notice>
 					) }
+					{ isSiteScoped && servesTwoAllowances && (
+						<Notice status="info" isDismissible={ false }>
+							{ sprintf(
+								// translators: %1$d is the signed-out allowance, %2$d the signed-in allowance.
+								__(
+									'With no registration wall, this meters signed-out readers too: %1$d free views site-wide, against %2$d for signed-in readers. A gate keeps one allowance, so opting out gives both the lower number.',
+									'newspack-plugin'
+								),
+								signedOutSiteCount,
+								siteCount
+							) }
+						</Notice>
+					) }
 					<ToggleGroupControl
 						label={ __( 'Meter', 'newspack-plugin' ) }
 						help={
-							isSiteScoped && typeof siteCount === 'number' && sitePeriod ? (
-								<>
-									{ getSiteMeterSummary( siteCount, sitePeriod ) }{ ' ' }
-									{ /* A new tab, so opening the site meter cannot discard unsaved gate edits. */ }
-									<ExternalLink href={ `${ window.location.pathname }${ window.location.search }#/settings/metering` }>
-										{ __( 'Edit site meter', 'newspack-plugin' ) }
-									</ExternalLink>
-								</>
-							) : (
-								__( 'Whether this gate draws on the site-wide allowance or keeps its own.', 'newspack-plugin' )
-							)
+							isSiteScoped && typeof siteCount === 'number' && sitePeriod
+								? getSiteMeterSummary( siteCount, sitePeriod )
+								: __( 'Whether this gate draws on the site-wide allowance or keeps its own.', 'newspack-plugin' )
 						}
 						value={ scope }
-						onChange={ v => onChange( { ...metering, scope: v as MeteringScope } ) }
+						onChange={ v => {
+							// Coerced, not cast: undefined is dropped by REST and refilled from the
+							// stored value, leaving a pinned gate pinned while this renders "Site-wide".
+							const nextScope: MeteringScope = 'gate' === v ? 'gate' : 'site';
+							// Carry the shared allowance across, so opting out means "stop sharing this"
+							// rather than silently dropping to whatever count the gate last stored.
+							if ( 'gate' === nextScope && isSiteScoped ) {
+								// The lower of the two: one count cannot preserve both, and the larger
+								// would widen the signed-out allowance rather than narrow a signed-in one.
+								const carried = servesTwoAllowances ? Math.min( siteCount as number, signedOutSiteCount as number ) : siteCount;
+								onChange( {
+									...metering,
+									scope: nextScope,
+									count: typeof carried === 'number' ? carried : metering.count,
+									period: sitePeriod ?? metering.period,
+								} );
+								return;
+							}
+							onChange( { ...metering, scope: nextScope } );
+						} }
 						isBlock
 						__next40pxDefaultSize
 					>
@@ -112,9 +143,8 @@ export default function Metering( { description, metering, onChange, siteCount, 
 								help={ __( 'Free views before the gate appears.', 'newspack-plugin' ) }
 								min={ 0 }
 								value={ count }
-								// Floor and round here rather than relying on `min`/`step`, which the control only
-								// enforces when it commits (blur/Enter): a raw keystroke would otherwise put a
-								// negative or fractional count into gate state.
+								// `min`/`step` are only enforced on commit, so a raw keystroke would otherwise
+								// put a negative or fractional count into gate state.
 								onChange={ v => onChange( { ...metering, count: Math.max( 0, Math.round( Number( v ) || 0 ) ) } ) }
 								__next40pxDefaultSize
 							/>

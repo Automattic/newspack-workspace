@@ -92,11 +92,12 @@ const formatMetering = ( metering: Metering, siteCount?: number, sitePeriod?: Me
 	const isSiteScoped = metering.scope !== 'gate';
 	const count = getMeteringCount( metering, siteCount );
 	const period = isSiteScoped ? sitePeriod ?? 'month' : metering.period;
+	const periodLabel = period === 'week' ? __( 'week', 'newspack-plugin' ) : __( 'month', 'newspack-plugin' );
 	const allowance = sprintf(
 		// translators: 1: metering count, 2: metering period
 		_n( '%1$d free view per %2$s', '%1$d free views per %2$s', count, 'newspack-plugin' ),
 		count,
-		period
+		periodLabel
 	);
 	return isSiteScoped
 		? sprintf(

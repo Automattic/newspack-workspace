@@ -93,8 +93,9 @@ const AudienceManagementRequired = ( {
  * the prerequisite state. Every other section redirects to it via
  * `redirectWithoutAudienceManagement()` rather than rendering its own copy, because
  * the Wizard draws `section.title` and `section.description` above the section
- * component: on `#/settings/countdown-banner` that produced the settings page header,
- * implying the feature was configurable, stacked directly on top of this one.
+ * component: on a route that sets them, such as `#/settings/content-gifting`, that
+ * produces the settings page header, implying the feature was configurable, stacked
+ * directly on top of this one.
  *
  * Safe to short-circuit the whole section: the Wizard resets header data on every
  * route change, so no stale header action survives into the blocked state.
