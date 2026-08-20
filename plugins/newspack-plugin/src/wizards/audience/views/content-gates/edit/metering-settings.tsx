@@ -115,7 +115,6 @@ const MeteringSettings = () => {
 			return;
 		}
 
-		isSaving.current = false;
 		updateWizardSettings( {
 			slug: AUDIENCE_CONTENT_GATES_WIZARD_SLUG,
 			path: [ 'config' ],
@@ -127,13 +126,13 @@ const MeteringSettings = () => {
 			id: 'metering-config-updated',
 		} );
 		history.push( '/content-gates' );
+		// After the redirect: clearing it first lets the unsaved-changes guard catch a
+		// save that succeeded and offer to discard changes already written.
+		isSaving.current = false;
 	};
 
 	useEffect( () => {
 		setHeaderData( {
-			backNav: '#/content-gates',
-			sectionTitle: __( 'Metering', 'newspack-plugin' ),
-			sectionSize: 'hidden',
 			actions: [
 				{
 					label: __( 'Save', 'newspack-plugin' ),

@@ -76,11 +76,13 @@ const AudienceContentGates = ( props, ref ) => {
 					breadcrumbs: ACCESS_CONTROL,
 				},
 				{
-					// No `title`/`description`: the breadcrumb and section headings already carry them.
 					path: '/settings/metering',
 					render: GuardedMeteringSettings,
 					isHidden: true,
 					exact: true,
+					backNav: '#/content-gates',
+					title: __( 'Metering', 'newspack-plugin' ),
+					size: 'hidden',
 					breadcrumbs: [ ...ACCESS_CONTROL, { label: __( 'Metering', 'newspack-plugin' ) } ],
 				},
 				{
