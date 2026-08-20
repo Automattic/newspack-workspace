@@ -610,6 +610,18 @@ class Contact_Sync extends Sync {
 						);
 					}
 				}
+
+				// List cleanup is independent of whether the flag metadata push
+				// landed: the reader must stop receiving outreach either way.
+				// No retry scheduling here — parity with the legacy deletion
+				// path this replaces; retry hardening is tracked separately.
+				$cleanup_result = $integration->flag_deletion_cleanup( $email );
+				if ( \is_wp_error( $cleanup_result ) ) {
+					$errors[] = sprintf( '[%s] %s', $integration_id, $cleanup_result->get_error_message() );
+					static::log( sprintf( 'Flag-deletion cleanup failed for integration "%s" of %s: %s', $integration_id, $email, $cleanup_result->get_error_message() ) );
+				} else {
+					static::log( sprintf( 'Flag-deletion cleanup succeeded for integration "%s" of %s.', $integration_id, $email ) );
+				}
 			} else {
 				static::log( sprintf( 'Unknown handling mode "%s" for integration "%s"; skipping.', $mode, $integration_id ) );
 			}

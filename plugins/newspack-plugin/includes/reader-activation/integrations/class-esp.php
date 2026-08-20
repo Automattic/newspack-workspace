@@ -22,6 +22,15 @@ defined( 'ABSPATH' ) || exit;
  * Generic integration for ESPs using Newspack Newsletters plugin.
  */
 class ESP extends Integration {
+
+	/**
+	 * Newspack Newsletters' code for "this provider has no list management".
+	 * Campaign Monitor is the current example.
+	 *
+	 * @var string
+	 */
+	const LIST_MANAGEMENT_UNSUPPORTED_ERROR_CODE = 'newspack_newsletters_not_supported';
+
 	/**
 	 * Constructor.
 	 */
@@ -476,6 +485,42 @@ class ESP extends Integration {
 			return $can_sync;
 		}
 		return \Newspack_Newsletters_Contacts::delete( $email, 'RAS Reader deleted' );
+	}
+
+	/**
+	 * Remove the deleted reader from every ESP list when flagged instead of
+	 * hard-deleted.
+	 *
+	 * For legacy `sync_esp_delete=false` sites, this keeps the contact record
+	 * (carrying the Account_Deleted / Membership_Status flags from the
+	 * flag-mode metadata push) but stops further outreach by clearing all
+	 * list membership.
+	 *
+	 * A provider without list management (Campaign Monitor) has no lists to
+	 * clear, so its "not supported" answer is success, not failure — returning
+	 * the error would schedule five retries that can never succeed and alert
+	 * on every reader deletion.
+	 *
+	 * @param string $email Email address of the deleted reader.
+	 *
+	 * @return true|false|\WP_Error True or false on success — update_lists()
+	 *                              returns false when there was nothing to
+	 *                              do — WP_Error on failure. The caller only
+	 *                              checks is_wp_error(), so anything else is
+	 *                              treated as success.
+	 */
+	public function flag_deletion_cleanup( $email ) {
+		if ( ! class_exists( 'Newspack_Newsletters_Contacts' ) ) {
+			return new \WP_Error(
+				'newspack_newsletters_contacts_not_found',
+				__( 'Newspack Newsletters is not available.', 'newspack-plugin' )
+			);
+		}
+		$result = \Newspack_Newsletters_Contacts::update_lists( $email, [], 'Reader account deleted' );
+		if ( \is_wp_error( $result ) && self::LIST_MANAGEMENT_UNSUPPORTED_ERROR_CODE === $result->get_error_code() ) {
+			return true;
+		}
+		return $result;
 	}
 
 	/**

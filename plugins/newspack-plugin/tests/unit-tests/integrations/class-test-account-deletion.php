@@ -896,4 +896,194 @@ class Test_Account_Deletion extends \WP_UnitTestCase {
 		);
 		$this->assertEmpty( $pending, 'Aborted retry chain must not schedule a further retry.' );
 	}
+
+	/**
+	 * Flag mode must call the integration's flag_deletion_cleanup() hook
+	 * exactly once with the deleted reader's email, so integrations that
+	 * maintain list/audience subscriptions (e.g. the ESP) can stop outreach
+	 * while keeping the flagged contact record.
+	 */
+	public function test_handle_account_deletion_flag_mode_calls_cleanup_hook() {
+		$this->reset_integrations();
+		$spy = new \Deletion_Spy_Integration( 'spy-cleanup-flag', 'Spy Cleanup Flag' );
+		Integrations::register( $spy );
+		$spy->update_settings_field_value( 'sync_account_deletion', true );
+		$spy->update_settings_field_value( 'account_deletion_handling', 'flag' );
+		Integrations::enable( 'spy-cleanup-flag' );
+
+		\Newspack\Reader_Activation\Contact_Sync::handle_account_deletion(
+			'reader@example.com',
+			[
+				'email'    => 'reader@example.com',
+				'metadata' => [],
+			],
+			'TestContext'
+		);
+
+		$this->assertCount( 1, $spy->cleanup_calls, 'flag_deletion_cleanup() must be called exactly once in flag mode.' );
+		$this->assertSame( 'reader@example.com', $spy->cleanup_calls[0]['email'] );
+	}
+
+	/**
+	 * Delete mode must NOT call flag_deletion_cleanup(): hard deletion via
+	 * delete_contact() already removes the contact outright, so there is
+	 * nothing left for the flag-only cleanup hook to do.
+	 */
+	public function test_handle_account_deletion_delete_mode_does_not_call_cleanup_hook() {
+		$this->reset_integrations();
+		$spy = new \Deletion_Spy_Integration( 'spy-cleanup-delete', 'Spy Cleanup Delete' );
+		Integrations::register( $spy );
+		$spy->update_settings_field_value( 'sync_account_deletion', true );
+		$spy->update_settings_field_value( 'account_deletion_handling', 'delete' );
+		Integrations::enable( 'spy-cleanup-delete' );
+
+		\Newspack\Reader_Activation\Contact_Sync::handle_account_deletion(
+			'reader@example.com',
+			[
+				'email'    => 'reader@example.com',
+				'metadata' => [],
+			],
+			'TestContext'
+		);
+
+		$this->assertCount( 1, $spy->delete_calls );
+		$this->assertCount( 0, $spy->cleanup_calls, 'flag_deletion_cleanup() must not be called in delete mode.' );
+	}
+
+	/**
+	 * End-to-end with the real ESP integration in flag mode: cleanup must
+	 * remove the reader from every ESP list.
+	 */
+	public function test_handle_account_deletion_esp_flag_mode_removes_lists() {
+		\Newspack_Newsletters_Contacts::reset_calls();
+		$this->reset_integrations();
+
+		$esp = new \Newspack\Reader_Activation\Integrations\ESP();
+		Integrations::register( $esp );
+		\update_option( Integrations::OPTION_NAME, [ 'esp' ] );
+		\update_option( 'newspack_integration_settings_esp_mailchimp_audience_id', 'list-abc' );
+		$esp->update_settings_field_value( 'sync_account_deletion', true );
+		$esp->update_settings_field_value( 'account_deletion_handling', 'flag' );
+
+		\Newspack\Reader_Activation\Contact_Sync::handle_account_deletion(
+			'reader@example.com',
+			[
+				'email'    => 'reader@example.com',
+				'metadata' => [],
+			],
+			'TestContext'
+		);
+
+		$this->assertCount(
+			1,
+			\Newspack_Newsletters_Contacts::$add_and_remove_lists_calls,
+			'ESP flag mode must call update_lists() once via flag_deletion_cleanup().'
+		);
+		$call = \Newspack_Newsletters_Contacts::$add_and_remove_lists_calls[0];
+		$this->assertSame( 'reader@example.com', $call['email'] );
+		$this->assertSame( [], $call['lists'] );
+		$this->assertSame( 'Reader account deleted', $call['context'] );
+
+		\delete_option( Integrations::OPTION_NAME );
+		\delete_option( 'newspack_integration_settings_esp_mailchimp_audience_id' );
+		\Newspack_Newsletters_Contacts::reset_calls();
+	}
+
+	/**
+	 * A provider without list management (Campaign Monitor) has no lists to
+	 * clear, so its "not supported" answer is the cleanup already being done.
+	 * Returning the error instead would schedule five retries that can never
+	 * succeed and alert on every single reader deletion.
+	 */
+	public function test_esp_flag_cleanup_treats_unsupported_list_management_as_done() {
+		\Newspack_Newsletters_Contacts::reset_calls();
+		\Newspack_Newsletters_Contacts::$next_return = new \WP_Error(
+			'newspack_newsletters_not_supported',
+			'Not supported for this provider'
+		);
+
+		$result = ( new \Newspack\Reader_Activation\Integrations\ESP() )->flag_deletion_cleanup( 'reader@example.com' );
+
+		\Newspack_Newsletters_Contacts::reset_calls();
+
+		$this->assertTrue( $result );
+	}
+
+	/**
+	 * Every other provider error still surfaces, so a transient list-removal
+	 * failure keeps its retry.
+	 */
+	public function test_esp_flag_cleanup_surfaces_other_provider_errors() {
+		\Newspack_Newsletters_Contacts::reset_calls();
+		\Newspack_Newsletters_Contacts::$next_return = new \WP_Error( 'boom', 'ESP list removal failed' );
+
+		$result = ( new \Newspack\Reader_Activation\Integrations\ESP() )->flag_deletion_cleanup( 'reader@example.com' );
+
+		\Newspack_Newsletters_Contacts::reset_calls();
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'boom', $result->get_error_code() );
+	}
+
+	/**
+	 * The flag_deletion_cleanup() hook must still run even when the flag push
+	 * itself fails, so outreach stops regardless of whether the metadata push
+	 * succeeded.
+	 */
+	public function test_handle_account_deletion_flag_push_failure_still_runs_cleanup() {
+		$this->reset_integrations();
+		$spy              = new \Deletion_Spy_Integration( 'spy-cleanup-despite-push-fail', 'Spy Cleanup Despite Push Fail' );
+		$spy->push_result = new \WP_Error( 'boom', 'ESP rejected push' );
+		Integrations::register( $spy );
+		$spy->update_settings_field_value( 'sync_account_deletion', true );
+		$spy->update_settings_field_value( 'account_deletion_handling', 'flag' );
+		Integrations::enable( 'spy-cleanup-despite-push-fail' );
+
+		\Newspack\Reader_Activation\Contact_Sync::handle_account_deletion(
+			'reader@example.com',
+			[
+				'email'    => 'reader@example.com',
+				'metadata' => [],
+			],
+			'TestContext'
+		);
+
+		$this->assertCount( 1, $spy->push_calls, 'Flag push must still be attempted even though it will fail.' );
+		$this->assertCount( 1, $spy->cleanup_calls, 'Cleanup must still run even though the flag push failed.' );
+		$this->assertSame( 'reader@example.com', $spy->cleanup_calls[0]['email'] );
+	}
+
+	/**
+	 * A flag_deletion_cleanup() failure must not roll back the already-landed
+	 * flag push; it surfaces through the same aggregated WP_Error contract a
+	 * push failure would.
+	 */
+	public function test_handle_account_deletion_cleanup_failure_does_not_block_flag_push() {
+		$this->reset_integrations();
+		$spy                 = new \Deletion_Spy_Integration( 'spy-cleanup-fail', 'Spy Cleanup Fail' );
+		$spy->cleanup_result = new \WP_Error( 'boom', 'ESP list removal failed' );
+		Integrations::register( $spy );
+		$spy->update_settings_field_value( 'sync_account_deletion', true );
+		$spy->update_settings_field_value( 'account_deletion_handling', 'flag' );
+		Integrations::enable( 'spy-cleanup-fail' );
+
+		$result = \Newspack\Reader_Activation\Contact_Sync::handle_account_deletion(
+			'reader@example.com',
+			[
+				'email'    => 'reader@example.com',
+				'metadata' => [],
+			],
+			'TestContext'
+		);
+
+		// The flag push itself succeeded (spy's default push_result is true) and
+		// must not be skipped or rolled back because cleanup will fail.
+		$this->assertCount( 1, $spy->push_calls, 'Flag push must still happen even though cleanup will fail.' );
+		$this->assertCount( 1, $spy->cleanup_calls, 'Cleanup must still be attempted.' );
+
+		// Error-return contract: handle_account_deletion() aggregates every
+		// per-integration error (push or cleanup) into one WP_Error.
+		$this->assertWPError( $result, 'Cleanup failure must surface via the same error-return contract as a push failure.' );
+		$this->assertStringContainsString( 'ESP list removal failed', $result->get_error_message() );
+	}
 }
