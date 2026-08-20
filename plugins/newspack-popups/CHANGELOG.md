@@ -1,3 +1,10 @@
+## newspack-popups [3.16.5](https://github.com/Automattic/newspack-workspace/compare/newspack-popups@3.16.4...newspack-popups@3.16.5) (2026-08-20)
+
+
+### Dependencies
+
+* **newspack-components:** upgraded to 4.6.3
+
 ## newspack-popups [3.16.4](https://github.com/Automattic/newspack-workspace/compare/newspack-popups@3.16.3...newspack-popups@3.16.4) (2026-08-18)
 
 

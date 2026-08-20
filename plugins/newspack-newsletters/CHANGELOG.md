@@ -1,3 +1,10 @@
+## newspack-newsletters [3.39.5](https://github.com/Automattic/newspack-workspace/compare/newspack-newsletters@3.39.4...newspack-newsletters@3.39.5) (2026-08-20)
+
+
+### Dependencies
+
+* **newspack-components:** upgraded to 4.6.3
+
 ## newspack-newsletters [3.39.4](https://github.com/Automattic/newspack-workspace/compare/newspack-newsletters@3.39.3...newspack-newsletters@3.39.4) (2026-08-19)
 
 
