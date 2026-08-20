@@ -136,6 +136,7 @@ export default function CountdownBanner( {
 						<ToggleGroupControlOption label={ __( 'Disabled', 'newspack-plugin' ) } value="disabled" />
 					</ToggleGroupControl>
 					<fieldset className="newspack-countdown-banner__fields" disabled={ ! isEnabled }>
+						<legend className="screen-reader-text">{ __( 'Countdown banner settings', 'newspack-plugin' ) }</legend>
 						<VStack spacing={ 6 } justify="flex-start">
 							<TextControl
 								label={ __( 'Message', 'newspack-plugin' ) }
