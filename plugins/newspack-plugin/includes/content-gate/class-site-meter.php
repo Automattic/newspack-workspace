@@ -467,10 +467,9 @@ class Site_Meter {
 	 *
 	 * Mirrors how the allowance is resolved at runtime. Signed-out readers are governed
 	 * by the registration wall when it is active and fall through to the paywall when it
-	 * is not. Signed-in readers are governed by the paywall, except on a wall requiring a
-	 * verification they have not completed, which holds them at the registration wall
-	 * while they still draw the signed-in allowance: that path therefore has to agree
-	 * with the paywall before the two can share one count.
+	 * is not. Signed-in readers are governed by the paywall, including on a wall
+	 * requiring a verification they have not completed: that reader is held, not
+	 * metered, so the wall imposes no signed-in allowance to reconcile.
 	 *
 	 * Only paths that actually meter are returned: a disabled meter imposes no allowance,
 	 * so it cannot conflict with another gate's.
@@ -522,6 +521,12 @@ class Site_Meter {
 	 * keys rather than one: with no registration wall the paywall governs signed-out
 	 * readers as well as signed-in ones.
 	 *
+	 * A wall requiring verification holds an unverified signed-in reader, but never
+	 * meters them: `Metering::is_logged_in_metering_allowed()` bails on that state
+	 * before it reads a counter, so the wall's signed-in allowance is not served to
+	 * anyone. Giving it a vote made a wall that agrees with its own paywall read as a
+	 * site-wide conflict, and adoption answers that by pinning every gate, once.
+	 *
 	 * @param int $gate_id Gate ID.
 	 *
 	 * @return array{registration: string[], custom_access: string[]} Count keys per path.
@@ -541,9 +546,6 @@ class Site_Meter {
 
 		if ( $paths['custom_access']['active'] ) {
 			$audiences['custom_access'][] = 'registered_count';
-		}
-		if ( $paths['registration']['active'] && ! empty( $paths['registration']['require_verification'] ) ) {
-			$audiences['registration'][] = 'registered_count';
 		}
 
 		return $audiences;

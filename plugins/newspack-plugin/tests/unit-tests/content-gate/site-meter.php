@@ -945,56 +945,6 @@ class Test_Site_Meter extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * A signed-in reader who has not verified is held at the registration wall while
-	 * still drawing the signed-in allowance, so that wall has to agree with the paywall
-	 * before the two can share one count.
-	 */
-	public function test_a_verification_wall_that_disagrees_with_its_paywall_is_a_conflict() {
-		$gate_id = Content_Gate::create_gate( [ 'title' => 'Verified Wall' ] );
-		$this->gate_ids[] = $gate_id;
-		Content_Gate::update_gate_settings(
-			$gate_id,
-			[
-				'title'         => 'Verified Wall',
-				'status'        => 'publish',
-				'priority'      => 0,
-				'content_rules' => [
-					[
-						'slug'  => 'post_types',
-						'value' => [ 'post' ],
-					],
-				],
-				'registration'  => [
-					'active'               => true,
-					'require_verification' => true,
-					'metering'             => [
-						'enabled' => true,
-						'count'   => 3,
-						'period'  => 'month',
-					],
-				],
-				'custom_access' => [
-					'active'       => true,
-					'metering'     => [
-						'enabled' => true,
-						'count'   => 5,
-						'period'  => 'month',
-					],
-					'access_rules' => [],
-				],
-			]
-		);
-
-		Site_Meter::maybe_adopt_gate_settings();
-
-		$this->assertSame(
-			Site_Meter::SCOPE_GATE,
-			Site_Meter::sanitize_scope( Content_Gate::get_registration_settings( $gate_id )['metering']['scope'] ?? null ),
-			'An unverified signed-in reader must not have their allowance changed'
-		);
-	}
-
-	/**
 	 * The site meter holds only weekly and monthly, so a gate resetting daily cannot be
 	 * folded into it without quietly changing when its readers get their views back.
 	 */
@@ -1245,5 +1195,55 @@ class Test_Site_Meter extends \WP_UnitTestCase {
 		$this->assertSame( 6, $site_meter['anonymous_count'], 'The payload carries the allowance adoption resolved' );
 		$this->assertSame( 6, $site_meter['registered_count'], 'The payload carries the allowance adoption resolved' );
 		$this->assertSame( 'week', $site_meter['period'], 'The payload carries the period adoption resolved' );
+	}
+
+	/**
+	 * A wall requiring verification holds an unverified signed-in reader without ever
+	 * metering them, so it imposes no signed-in allowance. Counting one made a gate that
+	 * agrees with itself read as a site-wide conflict, and adoption answers a conflict by
+	 * pinning every gate on the site, once and for good.
+	 */
+	public function test_a_verification_wall_does_not_conflict_with_its_own_paywall() {
+		$gate_id = Content_Gate::create_gate( [ 'title' => 'Verified wall and paywall' ] );
+		$this->gate_ids[] = $gate_id;
+		Content_Gate::update_gate_settings(
+			$gate_id,
+			[
+				'title'         => 'Verified wall and paywall',
+				'status'        => 'publish',
+				'priority'      => 0,
+				'content_rules' => [
+					[
+						'slug'  => 'post_types',
+						'value' => [ 'post' ],
+					],
+				],
+				'registration'  => [
+					'active'               => true,
+					'require_verification' => true,
+					'metering'             => [
+						'enabled' => true,
+						'count'   => 3,
+						'period'  => 'month',
+					],
+				],
+				'custom_access' => [
+					'active'       => true,
+					'metering'     => [
+						'enabled' => true,
+						'count'   => 5,
+						'period'  => 'month',
+					],
+					'access_rules' => [],
+				],
+			]
+		);
+
+		Site_Meter::maybe_adopt_gate_settings();
+
+		$settings = Site_Meter::get_settings();
+		$this->assertSame( 3, $settings['anonymous_count'], 'The wall is what signed-out readers meet, so it sets their allowance' );
+		$this->assertSame( 5, $settings['registered_count'], 'The paywall alone sets the signed-in allowance' );
+		$this->assertSame( Site_Meter::get_shared_meter_key(), Metering::get_meter_key( $gate_id, true ), 'The gate keeps sharing rather than being pinned' );
 	}
 }
