@@ -218,14 +218,13 @@ const MeteringSettings = () => {
 					{ siteMeterDirty && gatesQuotingTheAllowance.length > 0 && (
 						<Notice status="info" isDismissible={ false }>
 							{ sprintf(
-								// translators: %1$d is a number of gates, %2$s is a comma-separated list of gate names.
+								// translators: %s is a comma-separated list of gate names.
 								_n(
-									'Saving does not rewrite gate wording. Check %1$d gate layout if it names a number of free views: %2$s',
-									'Saving does not rewrite gate wording. Check %1$d gate layouts if they name a number of free views: %2$s',
+									'Gates keep the wording they were created with. Check the layout for %s if it promises readers a number of free articles.',
+									'Gates keep the wording they were created with. Check the layouts for %s if they promise readers a number of free articles.',
 									gatesQuotingTheAllowance.length,
 									'newspack-plugin'
 								),
-								gatesQuotingTheAllowance.length,
 								gatesQuotingTheAllowance.map( gate => gate.title ).join( ', ' )
 							) }
 						</Notice>
