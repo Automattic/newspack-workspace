@@ -7,14 +7,24 @@ export const randomString = (length = 8) =>
 
 export const randomEmailAddress = () => `test-${randomString()}@example.com`;
 
+// The /_email sendbox is gated behind a per-run shared secret (see e2e-plugin.php
+// and e2e-setup.sh); requests without a matching `secret` get a 403. The secret is
+// forwarded from the environment, falling back to the committed local-dev default
+// that e2e-setup.sh also uses for local targets, so zero-config local runs work.
+const emailSendboxSecret = (): string =>
+  process.env.E2E_EMAIL_SENDBOX_SECRET || "newspack-e2e-local";
+
 // Open an email in the dev "Email Sendbox" (/_email) by its subject + recipient.
 // Emails are saved asynchronously and the sendbox is a static page, so we reload
 // until the message shows up instead of trusting a single load (otherwise a
 // message that arrives after the page render is never seen).
 export const openEmail = async (page, subjectPrefix, emailAddress) => {
   const emailLink = page.getByText(`${subjectPrefix} (${emailAddress}`);
+  const secret = encodeURIComponent(emailSendboxSecret());
   await expect(async () => {
-    await page.goto(`/_email?cachebust=${emailAddress}-${Date.now()}`);
+    await page.goto(
+      `/_email?secret=${secret}&cachebust=${emailAddress}-${Date.now()}`
+    );
     await expect(emailLink).toBeVisible({ timeout: 1000 });
   }).toPass({ timeout: 30000 });
   await emailLink.click();

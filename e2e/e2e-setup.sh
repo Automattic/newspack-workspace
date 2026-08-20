@@ -121,6 +121,42 @@ wp --skip-plugins --skip-themes config set NEWSPACK_IS_E2E true --raw
 # Note: this flag is slated for removal upstream.
 wp --skip-plugins --skip-themes config set NEWSPACK_EMAIL_CHANGE_ENABLED true --raw
 
+# Email sendbox secret gate. The /_email sendbox in e2e-plugin.php dumps every
+# captured outgoing email (reader password-reset / verification links included),
+# so the plugin fails closed (403) unless NEWSPACK_E2E_SENDBOX_SECRET is set and
+# the request presents a matching `secret`. We provision that constant here.
+#
+# Host-awareness mirrors isLocalTarget() in tests/site-setup.ts: a target is
+# "local" when its host is localhost / 127.x / *.test / *.local. Local targets are
+# not internet-reachable, so a convenient committed default is acceptable when no
+# secret is supplied. For ANY non-local (staging/remote) target we refuse to fall
+# back to that public default: a strong E2E_EMAIL_SENDBOX_SECRET must be provided,
+# or we hard-error here rather than serve the sendbox with a guessable secret on an
+# internet-reachable host.
+SENDBOX_HOST="${SITE_URL#*://}"   # strip scheme
+SENDBOX_HOST="${SENDBOX_HOST%%/*}"  # strip path
+SENDBOX_HOST="${SENDBOX_HOST%%:*}"  # strip port
+case "$SENDBOX_HOST" in
+  localhost|127.*|*.test|*.local)
+    SENDBOX_IS_LOCAL=true
+    ;;
+  *)
+    SENDBOX_IS_LOCAL=false
+    ;;
+esac
+if [ -n "${E2E_EMAIL_SENDBOX_SECRET:-}" ]; then
+  SENDBOX_SECRET="$E2E_EMAIL_SENDBOX_SECRET"
+elif [ "$SENDBOX_IS_LOCAL" = true ]; then
+  SENDBOX_SECRET="newspack-e2e-local"
+else
+  echo "ERROR: E2E_EMAIL_SENDBOX_SECRET must be set for the non-local target '$SITE_URL'." >&2
+  echo "       The /_email sendbox exposes captured reader emails; refusing to enable it" >&2
+  echo "       with the public default secret on an internet-reachable host. Set a strong" >&2
+  echo "       E2E_EMAIL_SENDBOX_SECRET (forwarded by the suite) and re-run." >&2
+  exit 1
+fi
+wp --skip-plugins --skip-themes config set NEWSPACK_E2E_SENDBOX_SECRET "$SENDBOX_SECRET"
+
 wp --skip-themes option update timezone_string 'America/New_York'
 
 # Sync the e2e helper plugin from the repo copy so the running plugin always

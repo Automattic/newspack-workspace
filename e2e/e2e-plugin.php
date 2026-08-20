@@ -17,16 +17,16 @@ defined( 'ABSPATH' ) || exit;
 /*
  * Refuse to do anything unless the site was provisioned as an e2e target.
  *
- * Everything below is destructive outside a throwaway site: /_email publishes
- * every captured message — password-reset and magic links included — to
- * unauthenticated visitors, pre_wp_mail swallows all outgoing mail while
- * reporting success, and the logout endpoint answers without a nonce. Those are
- * the behaviours the suite needs, so the safeguard is refusing to run anywhere
- * else rather than softening them.
+ * Everything below is unsafe outside a throwaway site: /_email exposes every
+ * captured message — password-reset and magic links included — pre_wp_mail
+ * swallows all outgoing mail while reporting success, and the logout endpoint
+ * answers without a nonce. Two safeguards keep that contained: this constant
+ * gate makes a stray copy onto any other site inert, and /_email additionally
+ * requires the per-run NEWSPACK_E2E_SENDBOX_SECRET, so an e2e host that is
+ * internet-reachable (staging) still won't hand its captured mail to anyone.
  *
- * e2e-setup.sh writes this constant to wp-config.php before it installs and
- * activates this plugin, so a correctly provisioned site always has it and a
- * stray copy onto any other site is inert.
+ * e2e-setup.sh writes both constants to wp-config.php before it installs and
+ * activates this plugin, so a correctly provisioned site always has them.
  */
 if ( ! defined( 'NEWSPACK_IS_E2E' ) || ! NEWSPACK_IS_E2E ) {
 	return;
@@ -116,6 +116,23 @@ add_action(
 	function () {
 		// phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- Compared against a literal prefix and never output; a sanitizer would alter the string being matched.
 		if ( isset( $_SERVER['REQUEST_URI'] ) && str_starts_with( wp_unslash( $_SERVER['REQUEST_URI'] ), '/_email' ) ) {
+			// The sendbox dumps every captured outgoing email — including reader
+			// password-reset and account-verification links — so it must never be
+			// served to an unauthenticated visitor. Gate it behind a per-run shared
+			// secret that provisioning writes to the NEWSPACK_E2E_SENDBOX_SECRET
+			// constant, and fail closed (403) — before emitting any email content —
+			// whenever that constant is unset/empty or the request does not present
+			// a matching `secret` query arg. hash_equals keeps the compare
+			// timing-safe.
+			$configured_secret = defined( 'NEWSPACK_E2E_SENDBOX_SECRET' ) ? (string) constant( 'NEWSPACK_E2E_SENDBOX_SECRET' ) : '';
+			// phpcs:ignore WordPress.Security.NonceVerification.Recommended, WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- Read-only, secret-gated endpoint so a nonce doesn't apply; the value is compared via hash_equals against a configured secret and never output, and sanitizing would alter the string being matched.
+			$provided_secret = isset( $_GET['secret'] ) ? (string) wp_unslash( $_GET['secret'] ) : '';
+			if ( '' === $configured_secret || ! hash_equals( $configured_secret, $provided_secret ) ) {
+				status_header( 403 );
+				header( 'Content-Type: text/plain' );
+				echo 'Forbidden';
+				exit;
+			}
 			header( 'Content-Type: text/html' );
 			?>
 			<html><head><title>Email Sendbox</title></head><body>
