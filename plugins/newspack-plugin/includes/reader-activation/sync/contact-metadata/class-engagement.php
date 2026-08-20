@@ -53,11 +53,11 @@ class Engagement extends Contact_Metadata {
 			'Last_Active'          => 'Last Active',
 			'Paywall_Hits'         => 'Paywall Hits',
 			'Favorite_Categories'  => 'Favorite Categories',
-			'Payment_Page'         => 'Last Payment Page',
+			'Last_Payment_Page'    => 'Last Payment Page',
 			'Payment_UTM_Source'   => 'Payment UTM Source',
 			'Payment_UTM_Medium'   => 'Payment UTM Medium',
 			'Payment_UTM_Campaign' => 'Payment UTM Campaign',
-			'Total_Paid'           => 'Lifetime Total Paid',
+			'Lifetime_Total_Paid'  => 'Lifetime Total Paid',
 		];
 	}
 
@@ -95,7 +95,7 @@ class Engagement extends Contact_Metadata {
 			// Placeholder name pending naming review (NPPD-2067). Distinct from
 			// the legacy field, which follows the reader's current
 			// subscription/donation rather than the latest completed order.
-			'Payment_Page'         => [
+			'Last_Payment_Page'    => [
 				'name'        => 'Last Payment Page',
 				'description' => __( 'URL of the checkout page from the reader\'s most recent completed order, of any product type. Unlike the legacy Payment Page, which follows the reader\'s current subscription or last one-time donation, this can diverge for recurring subscribers and one-time non-donation purchasers.', 'newspack-plugin' ),
 				'example'     => 'https://example.com/support-us',
@@ -126,7 +126,7 @@ class Engagement extends Contact_Metadata {
 			// Placeholder name pending naming review (NPPD-2067). Distinct from
 			// the legacy field, which blanks when the reader has no current
 			// subscription or donation; this one never does.
-			'Total_Paid'           => [
+			'Lifetime_Total_Paid'  => [
 				'name'        => 'Lifetime Total Paid',
 				'description' => __( 'Lifetime total paid across all purchases; unlike the legacy Total Paid, never blanked when no current subscription or donation exists', 'newspack-plugin' ),
 				'example'     => '120',
@@ -153,7 +153,7 @@ class Engagement extends Contact_Metadata {
 			'Last_Active'          => $this->format_reader_data_timestamp( 'last_active' ),
 			'Paywall_Hits'         => $this->get_reader_data_int( 'paywall_hits' ),
 			'Favorite_Categories'  => $this->get_favorite_categories(),
-			'Payment_Page'         => $this->get_payment_page( $order ),
+			'Last_Payment_Page'    => $this->get_payment_page( $order ),
 			'Payment_UTM_Source'   => $this->get_order_utm( $order, 'source' ),
 			'Payment_UTM_Medium'   => $this->get_order_utm( $order, 'medium' ),
 			'Payment_UTM_Campaign' => $this->get_order_utm( $order, 'campaign' ),
@@ -166,7 +166,7 @@ class Engagement extends Contact_Metadata {
 		// legacy field, this always reports the customer's lifetime spend
 		// rather than blanking when there is no current-product order.
 		if ( $this->customer ) {
-			$metadata['Total_Paid'] = $this->customer->get_total_spent();
+			$metadata['Lifetime_Total_Paid'] = $this->customer->get_total_spent();
 		}
 
 		return $metadata;

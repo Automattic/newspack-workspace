@@ -631,15 +631,15 @@ class Test_Prepare_Contact extends \WP_UnitTestCase {
 	public function test_both_versions_of_a_renamed_field_reach_the_provider() {
 		\update_option(
 			Integration::OUTGOING_FIELDS_OPTION_PREFIX . 'prepare-test',
-			[ 'v1:last_payment_amount', 'v2:Last_Payment_Amount' ]
+			[ 'v1:last_payment_amount', 'v2:Last_Subscription_Payment_Amount' ]
 		);
 
 		$result = $this->integration->prepare_contact(
 			[
 				'email'    => 'test@example.com',
 				'metadata' => [
-					'last_payment_amount' => '120.00',
-					'Last_Payment_Amount' => '15.00',
+					'last_payment_amount'              => '120.00',
+					'Last_Subscription_Payment_Amount' => '15.00',
 				],
 			]
 		);

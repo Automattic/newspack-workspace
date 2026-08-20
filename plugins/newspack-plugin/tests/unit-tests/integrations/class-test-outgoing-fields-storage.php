@@ -201,11 +201,11 @@ class Test_Outgoing_Fields_Storage extends \WP_UnitTestCase {
 	public function test_both_versions_of_a_renamed_field_coexist() {
 		\update_option(
 			Integration::OUTGOING_FIELDS_OPTION_PREFIX . 'storage-test',
-			[ 'v1:last_payment_amount', 'v2:Last_Payment_Amount' ]
+			[ 'v1:last_payment_amount', 'v2:Last_Subscription_Payment_Amount' ]
 		);
 
 		$this->assertEqualsCanonicalizing(
-			[ 'v1:last_payment_amount', 'v2:Last_Payment_Amount' ],
+			[ 'v1:last_payment_amount', 'v2:Last_Subscription_Payment_Amount' ],
 			$this->integration->get_enabled_outgoing_field_ids()
 		);
 		$this->assertEqualsCanonicalizing(
@@ -409,7 +409,7 @@ class Test_Outgoing_Fields_Storage extends \WP_UnitTestCase {
 		$this->assertNotEmpty( $ids, 'A never-configured integration must not fail closed to an empty selection.' );
 		// Scoped to the derived version (see test_derived_defaults_are_scoped_to_one_version).
 		$this->assertContains( 'v2:Account', $ids );
-		$this->assertContains( 'v2:Total_Paid', $ids );
+		$this->assertContains( 'v2:Lifetime_Total_Paid', $ids );
 		$this->assertNull(
 			\get_option( Integration::OUTGOING_FIELDS_OPTION_PREFIX . 'storage-test', null ),
 			'The defaults fallback must not persist, so it keeps tracking availability changes.'
@@ -513,5 +513,43 @@ class Test_Outgoing_Fields_Storage extends \WP_UnitTestCase {
 		);
 
 		$this->assertSame( [ 'NP_Account' => 42 ], $prepared['metadata'] );
+	}
+
+	/**
+	 * A stored id that predates a raw-key rename (Field_Registry::
+	 * LEGACY_ID_REMAP) still resolves to its field and still syncs it, under
+	 * the id's current spelling. The read remaps in memory only — no
+	 * write-back for a plain id-shaped entry, per get_enabled_outgoing_field_ids()
+	 * — and an explicit save normalizes the stored option to the current id.
+	 */
+	public function test_stored_legacy_id_still_resolves_and_a_save_rewrites_it() {
+		\update_option(
+			Integration::OUTGOING_FIELDS_OPTION_PREFIX . 'storage-test',
+			[ 'v2:Total_Paid' ]
+		);
+
+		// Resolves to the field's current id.
+		$this->assertSame( [ 'v2:Lifetime_Total_Paid' ], $this->integration->get_enabled_outgoing_field_ids() );
+		// The read alone must not force a write-back.
+		$this->assertSame(
+			[ 'v2:Total_Paid' ],
+			\get_option( Integration::OUTGOING_FIELDS_OPTION_PREFIX . 'storage-test' )
+		);
+
+		// Still syncs the field, under its current raw key.
+		$prepared = $this->integration->prepare_contact(
+			[
+				'email'    => 'reader@example.com',
+				'metadata' => [ 'Lifetime_Total_Paid' => '120.00' ],
+			]
+		);
+		$this->assertSame( [ 'NP_Lifetime Total Paid' => '120.00' ], $prepared['metadata'] );
+
+		// An explicit save normalizes the stored option to the current id.
+		$this->integration->update_enabled_outgoing_fields( [ 'v2:Total_Paid' ] );
+		$this->assertSame(
+			[ 'v2:Lifetime_Total_Paid' ],
+			\get_option( Integration::OUTGOING_FIELDS_OPTION_PREFIX . 'storage-test' )
+		);
 	}
 }

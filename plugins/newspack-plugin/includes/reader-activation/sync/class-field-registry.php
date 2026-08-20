@@ -22,6 +22,25 @@ class Field_Registry {
 	const VERSION_NEUTRAL = 'neutral';
 
 	/**
+	 * Retired field ids, mapped to the id they were renamed to.
+	 *
+	 * The four v2 fields whose raw key once differed from its legacy twin by
+	 * case alone (and so carried a different label under a colliding key)
+	 * were given their own distinct raw keys. A site may still hold one of
+	 * the old ids in a stored outgoing-field selection — seeded before the
+	 * rename, or saved explicitly by id — so reads and saves resolve it
+	 * through this map rather than losing the field. See remap_legacy_id().
+	 *
+	 * @var array<string, string>
+	 */
+	const LEGACY_ID_REMAP = [
+		'v2:Payment_Page'        => 'v2:Last_Payment_Page',
+		'v2:Total_Paid'          => 'v2:Lifetime_Total_Paid',
+		'v2:Last_Payment_Amount' => 'v2:Last_Subscription_Payment_Amount',
+		'v2:Last_Payment_Date'   => 'v2:Last_Subscription_Payment_Date',
+	];
+
+	/**
 	 * Cached definitions, keyed by id.
 	 *
 	 * @var array|null
@@ -209,6 +228,19 @@ class Field_Registry {
 			}
 		}
 		return false;
+	}
+
+	/**
+	 * Resolve a stored field id that predates a raw-key rename onto the id it
+	 * is now stored under. An id outside LEGACY_ID_REMAP passes through
+	 * unchanged, including ids that were never valid.
+	 *
+	 * @param string $id Stored field id.
+	 *
+	 * @return string Current field id.
+	 */
+	public static function remap_legacy_id( $id ) {
+		return self::LEGACY_ID_REMAP[ $id ] ?? $id;
 	}
 
 	/**
