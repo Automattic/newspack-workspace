@@ -21,6 +21,12 @@
 # precisely when it is needed most.
 
 INTERVAL="${MEMCACHED_WATCHDOG_INTERVAL:-30}"
+if ! [[ "$INTERVAL" =~ ^[0-9]+$ ]] || [ "$INTERVAL" -lt 1 ]; then
+	# Without `set -e` a non-numeric interval would fail every sleep instantly
+	# and spin the loop at full CPU for the container's whole life.
+	echo "[watchdog-memcached] MEMCACHED_WATCHDOG_INTERVAL='$INTERVAL' is not a positive integer; falling back to 30 seconds."
+	INTERVAL=30
+fi
 
 while true; do
 	sleep "$INTERVAL"
@@ -36,5 +42,10 @@ while true; do
 	# container pids recycle fast enough that signalling it could hit an unrelated
 	# process. The start wrapper unlinks a stale pid file before forking.
 	pkill -x memcached >/dev/null 2>&1
+
+	# Give the old process a moment to release 11211, so the restart below has a
+	# port to bind to. Losing the race only costs one cycle, but the wait is free.
+	sleep 1
+
 	/etc/init.d/memcached start >/dev/null 2>&1 || true
 done

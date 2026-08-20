@@ -463,7 +463,15 @@ MIGRATE
                     inserted = 1
                 }
             ' "$compose_file" > "${compose_file}.tmp" && mv "${compose_file}.tmp" "$compose_file"
-            echo "Migrated $env_name: added memcached healthcheck"
+            # awk's insertion flag is invisible to the shell, so re-read the file:
+            # a compose file without the anchor line passes through unchanged, and
+            # reporting a migration that did not happen would send whoever debugs
+            # a stale env looking in the wrong place.
+            if grep -q 'healthcheck:' "$compose_file"; then
+                echo "Migrated $env_name: added memcached healthcheck"
+            else
+                echo "Warning: could not add the memcached healthcheck to $compose_file (no extra_hosts anchor). Recreate the env to pick it up." >&2
+            fi
         fi
         # Re-read domain after potential migration.
         domain=$(domain_for_env "$compose_file")

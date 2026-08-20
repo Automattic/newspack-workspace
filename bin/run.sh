@@ -72,7 +72,6 @@ chown memcache:memcache /var/run/memcached || true
 /etc/init.d/memcached start
 
 # Supervise it -- see the script for why nothing else does.
-chmod +x /var/scripts/watchdog-memcached.sh || true
 /var/scripts/watchdog-memcached.sh &
 
 # Run apache in the foreground so the container keeps running
