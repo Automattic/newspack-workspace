@@ -62,6 +62,10 @@ class Content_Gate_API {
 						'enabled' => [ 'type' => 'boolean' ],
 						'count'   => [ 'type' => 'integer' ],
 						'period'  => [ 'type' => 'string' ],
+						'scope'   => [
+							'type' => 'string',
+							'enum' => [ 'site', 'gate' ],
+						],
 					],
 				],
 			],
@@ -76,6 +80,10 @@ class Content_Gate_API {
 						'enabled' => [ 'type' => 'boolean' ],
 						'count'   => [ 'type' => 'integer' ],
 						'period'  => [ 'type' => 'string' ],
+						'scope'   => [
+							'type' => 'string',
+							'enum' => [ 'site', 'gate' ],
+						],
 					],
 				],
 				'gate_layout_id'         => [
