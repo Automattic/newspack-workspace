@@ -83,8 +83,8 @@ class Test_Metering extends \WP_UnitTestCase {
 			'metering_enabled'     => true,
 			'metering_count'       => 3,
 			'metering_period'      => 'month',
-			// These cases assert on the count each gate carries, so they opt out of the
-			// shared site meter. The shared path has its own test class.
+			// These assert on each gate's own count, so they opt out. The shared path has
+			// its own test class.
 			'metering_scope'       => Site_Meter::SCOPE_GATE,
 		];
 		$args = wp_parse_args( $args, $defaults );
@@ -957,10 +957,10 @@ class Test_Metering extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * Each audience is judged on its own settings: a count belonging to a section whose
-	 * metering is switched off must not rescue another section that meters 0 views.
+	 * A count belonging to a section whose metering is switched off must not rescue
+	 * another section that meters 0 views.
 	 */
-	public function test_metering_is_judged_per_audience() {
+	public function test_a_disabled_sections_count_does_not_rescue_another() {
 		$gate_id = $this->create_gate_with_settings(
 			[
 				// Anonymous readers: a leftover count, but metering switched off.
