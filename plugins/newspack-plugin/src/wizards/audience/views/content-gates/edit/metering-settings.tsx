@@ -186,6 +186,13 @@ const MeteringSettings = () => {
 	const setCount = ( key: 'anonymous_count' | 'registered_count' ) => ( value: string | number | undefined ) =>
 		setSiteMeter( { ...siteMeter, [ key ]: Math.max( 0, Math.round( Number( value ) || 0 ) ) } );
 
+	// The gate editor says this where a gate's own count is 0. Typed here it decides the
+	// same thing for every gate sharing the allowance, so it has to be said here too.
+	const audiencesWithoutFreeViews = [
+		siteMeter.anonymous_count === 0 ? __( 'Signed-out readers', 'newspack-plugin' ) : null,
+		siteMeter.registered_count === 0 ? __( 'Signed-in readers', 'newspack-plugin' ) : null,
+	].filter( Boolean );
+
 	return (
 		<div className="newspack-content-gate__edit">
 			{ confirmDialog }
@@ -211,6 +218,18 @@ const MeteringSettings = () => {
 								),
 								gatesWithOwnMeter.length,
 								gatesWithOwnMeter.map( gate => gate.title ).join( ', ' )
+							) }
+						</Notice>
+					) }
+					{ gates.length > 0 && audiencesWithoutFreeViews.length > 0 && (
+						<Notice status="warning" isDismissible={ false }>
+							{ sprintf(
+								// translators: %s is a list of reader audiences, e.g. "Signed-out readers, Signed-in readers".
+								__(
+									'%s get 0 free views, so every gate sharing this allowance gates them on their first view, the same as turning metering off.',
+									'newspack-plugin'
+								),
+								audiencesWithoutFreeViews.join( ', ' )
 							) }
 						</Notice>
 					) }
