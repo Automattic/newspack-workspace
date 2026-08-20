@@ -1106,7 +1106,9 @@ final class Magic_Link {
 	 * @param string $action  Which admin action get the URL for.
 	 * @param int    $user_id User to get the URL for.
 	 *
-	 * @return string Admin URL to perform an admin action.
+	 * @return string Admin URL to perform an admin action. Built from the current
+	 *                request, so callers must escape it with esc_url() when
+	 *                rendering it into markup.
 	 */
 	private static function get_admin_action_url( $action, $user_id ) {
 		if ( ! \is_admin() ) {
@@ -1139,7 +1141,7 @@ final class Magic_Link {
 		}
 		if ( self::can_magic_link( $user->ID ) && \current_user_can( 'edit_user', $user->ID ) ) {
 			$url                                 = self::get_admin_action_url( 'send', $user->ID );
-			$actions['newspack-magic-link-send'] = '<a href="' . $url . '">' . \esc_html__( 'Send authentication link', 'newspack-plugin' ) . '</a>';
+			$actions['newspack-magic-link-send'] = '<a href="' . \esc_url( $url ) . '">' . \esc_html__( 'Send authentication link', 'newspack-plugin' ) . '</a>';
 		}
 		return $actions;
 	}

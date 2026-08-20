@@ -38,7 +38,7 @@ export default function Metering( { description, metering, onChange }: MeteringP
 						<Notice
 							isWarning
 							noticeText={ __(
-								'Metering is enabled but the number of views is set to 0. Content will be gated for all readers.',
+								'Free views is set to 0, so no reader gets a free view and content is gated for everyone — the same behavior as turning Metering off. Set 1 or more free views to meter access.',
 								'newspack-plugin'
 							) }
 						/>
@@ -46,9 +46,12 @@ export default function Metering( { description, metering, onChange }: MeteringP
 					<NumberControl
 						label={ __( 'Free views', 'newspack-plugin' ) }
 						help={ __( 'Free views before the gate appears.', 'newspack-plugin' ) }
-						min={ 1 }
+						min={ 0 }
 						value={ count }
-						onChange={ v => onChange( { ...metering, count: v !== undefined ? Number( v ) : 0 } ) }
+						// Floor and round here rather than relying on `min`/`step`, which the control only
+						// enforces when it commits (blur/Enter): a raw keystroke would otherwise put a
+						// negative or fractional count into gate state.
+						onChange={ v => onChange( { ...metering, count: Math.max( 0, Math.round( Number( v ) || 0 ) ) } ) }
 						__next40pxDefaultSize
 					/>
 					<ToggleGroupControl
