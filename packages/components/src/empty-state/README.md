@@ -73,7 +73,10 @@ choices rather than one action can drop a stack of cards in instead of
 `EmptyState.Actions`. Pass elements: `Root`'s stack keeps a lone string but drops
 one sitting beside an element, so wrap loose text in a `<p>`. The `Grid` margin
 reset reaches direct children only, so a `<p>` inside a slot keeps the browser's
-default block margin and you zero it where you use it.
+default block margin and you zero it where you use it. The component resets
+margins on the two elements it renders itself and stops there: a blanket reset on
+slot content would silently flatten a consumer's own stack of cards or prose, and
+the gaps this component owns all come from its stacks anyway.
 
 ## Consumers own their wrappers
 
