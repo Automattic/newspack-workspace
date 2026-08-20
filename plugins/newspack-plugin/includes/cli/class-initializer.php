@@ -128,6 +128,11 @@ class Initializer {
 			WP_CLI::add_command( 'newspack migrate-membership-gates', [ 'Newspack\CLI\Membership_Gates_Migration', 'migrate_membership_gates' ] );
 		}
 
+		// Registered whether or not WooCommerce Memberships is active, unlike the
+		// commands above: it reads `_wc_memberships_force_public`, ordinary postmeta
+		// that outlives the plugin, and already-flipped sites are the ones needing it.
+		WP_CLI::add_command( 'newspack migrate-post-exemptions', [ 'Newspack\CLI\Membership_Gates_Migration', 'migrate_post_exemptions' ] );
+
 		Optional_Modules::register_commands();
 	}
 }
