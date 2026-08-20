@@ -4,7 +4,7 @@
 
 @use "~@wordpress/base-styles/colors" as wp-colors;
 @use "~@wordpress/base-styles/variables" as wp-vars;
-@use "../../../colors/colors.module" as colors;
+@use "../../../colors/colors.module" as np-colors;
 
 .newspack-card--core,
 .newspack-wizard .newspack-card--core {
