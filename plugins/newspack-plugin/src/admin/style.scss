@@ -3,7 +3,7 @@
 
 $wizard-column-width: calc(calc(var(--newspack-wizard-section-space) * 2) + var(--newspack-wizard-section-width));
 
-%wizard-column {
+@mixin wizard-column {
 	margin: 0 auto;
 	max-width: $wizard-column-width;
 	padding: 0 var(--newspack-wizard-section-space);
@@ -270,11 +270,11 @@ h1 {
 }
 
 .newspack-wizard__column {
-	@extend %wizard-column;
+	@include wizard-column;
 }
 
 .newspack-dashboard__section {
-	@extend %wizard-column;
+	@include wizard-column;
 
 	> h3 {
 		font-size: 1.25rem;
