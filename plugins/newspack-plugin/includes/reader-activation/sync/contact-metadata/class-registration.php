@@ -95,14 +95,26 @@ class Registration extends Contact_Metadata {
 			return [];
 		}
 
-		return [
-			'Registration_Date'         => $this->format_date( $this->user->user_registered ),
-			'Registration_Page'         => (string) \get_user_meta( $this->user->ID, Reader_Activation::REGISTRATION_PAGE, true ),
+		$metadata = [
+			// Equivalence-flagged to legacy registration_date: this converts the
+			// same UTC value via get_date_from_gmt(), not format_date() (which
+			// uses gmdate() and would diverge from the v1 twin on non-UTC sites).
+			'Registration_Date'         => $this->user->user_registered ? \get_date_from_gmt( $this->user->user_registered, self::DATE_FORMAT ) : '',
 			'Registration_Strategy'     => (string) \get_user_meta( $this->user->ID, Reader_Activation::REGISTRATION_METHOD, true ),
 			'Registration_UTM_Source'   => $this->get_registration_utm( 'utm_source' ),
 			'Registration_UTM_Medium'   => $this->get_registration_utm( 'utm_medium' ),
 			'Registration_UTM_Campaign' => $this->get_registration_utm( 'utm_campaign' ),
 		];
+
+		// Value-equivalent to legacy registration_page, which the enrichment
+		// only wrote when the meta was non-empty; an empty string here would
+		// blank a live merge field at any provider that overwrites on blank.
+		$registration_page = (string) \get_user_meta( $this->user->ID, Reader_Activation::REGISTRATION_PAGE, true );
+		if ( '' !== $registration_page ) {
+			$metadata['Registration_Page'] = $registration_page;
+		}
+
+		return $metadata;
 	}
 
 	/**
