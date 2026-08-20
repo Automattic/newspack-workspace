@@ -35,6 +35,23 @@ jobs:
   release:
     name: Release
     runs-on: ubuntu-latest
+    # Dependent jobs must tell "released" from "ran and released nothing".
+    # post-release.sh identifies what the release came from via `git log --skip
+    # 1`, assuming an automated release commit at the tip. A no-release run
+    # creates none, so that read lands a commit early, and a stale `Merge ...
+    # alpha` sitting there sends it down the path that force-pushes alpha.
+    outputs:
+      release_needed: ${{ steps.plan.outputs.release_needed }}
+      # Newline-separated `<pkg>@<version>` tags created by this run. Narrows
+      # release_needed above from "this run released something" to "this run
+      # released THIS plugin", which is what the WP.org deploy jobs gate on.
+      # See the "Collect released tags" step.
+      released-tags: ${{ steps.released.outputs.tags }}
+      # The commit this job left the branch on -- the one carrying the released
+      # versions. The WP.org deploy jobs build that exact commit rather than the
+      # branch tip, which keeps moving. See the "Sync package.json versions"
+      # step and the checkout in _release-wporg.yml.
+      released-sha: ${{ steps.sync.outputs.sha }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -70,8 +87,12 @@ jobs:
           # would silently skip a real release, the one outcome we must avoid.
           set +e
           pnpm exec multi-semantic-release --dry-run --sequential-init 2>&1 | tee msr-dryrun.log
-          dryrun_status=${PIPESTATUS[0]}
-          tee_status=${PIPESTATUS[1]}
+          # Copy the whole array in one go: PIPESTATUS is rebuilt after every
+          # command, and an assignment is a command, so reading [1] on the line
+          # after reading [0] returns empty and the tee check below never fires.
+          pipe_status=("${PIPESTATUS[@]}")
+          dryrun_status=${pipe_status[0]}
+          tee_status=${pipe_status[1]}
           set -e
           if [ "$dryrun_status" -ne 0 ]; then
             echo "multi-semantic-release dry-run failed (exit $dryrun_status)"
@@ -90,11 +111,34 @@ jobs:
           # X" for an existing package, but "There is no previous release, the
           # next release version is X" for a package's first-ever release --
           # missing the latter would silently skip that release.
-          grep -qi 'the next release version is' msr-dryrun.log
-          grep_status=$?
+          # `|| grep_status=$?` rather than a bare call: under `set -e` a bare grep
+          # that matches nothing exits 1 and kills the script, so the "no release
+          # needed" branch below is never reached. Exit 2 (a real grep error) still
+          # falls through to the failure branch.
+          grep_status=0
+          grep -qi 'the next release version is' msr-dryrun.log || grep_status=$?
           if [ "$grep_status" -eq 0 ]; then
             echo "release_needed=true" >> "$GITHUB_OUTPUT"
           elif [ "$grep_status" -eq 1 ]; then
+            # Absence of the version phrase is weak evidence on its own: a
+            # wording change upstream would read as "nothing to release" and
+            # silently skip a real one. Require multi-semantic-release's own
+            # zero-count line to corroborate before trusting the skip.
+            zero_status=0
+            # msr logs `Released 0 of 18 packages` when nothing is due and `Released 1
+            # of 18 packages` when something is, so the count is real corroboration.
+            # Matched loosely so a cosmetic reformat cannot redden a no-op push.
+            grep -qiE 'released +0 +of +[0-9]+ +packages?' msr-dryrun.log || zero_status=$?
+            if [ "$zero_status" -eq 1 ]; then
+              echo "Neither a release version nor a zero-release marker found; the dry-run output may have changed."
+              # Whole log: this fires when the shape is unknown, and a tail of a
+              # multi-package run shows only the last package. `|| true` so exit 1 wins.
+              cat msr-dryrun.log || true
+              exit 1
+            elif [ "$zero_status" -ne 0 ]; then
+              echo "Failed to scan the dry-run log for the zero-release marker (grep exit $zero_status)"
+              exit "$zero_status"
+            fi
             echo "release_needed=false" >> "$GITHUB_OUTPUT"
             echo "No package requires a release; skipping build and release."
           else
@@ -144,6 +188,43 @@ jobs:
           # auth 401s. Set it to the same secret so npm actually authenticates.
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
           NODE_OPTIONS: --max-old-space-size=12288
+      # Which packages actually published, as `<pkg>@<version>` tags. Same
+      # before/after tag diff notify-release.sh uses for its Slack summary,
+      # surfaced as a job output so the WP.org deploy jobs can gate on it:
+      # without it they cannot tell a plugin that had no release from one whose
+      # deploy silently resolved a stale version. Always runs, so a skipped
+      # release yields an empty list rather than a missing output.
+      #
+      # Every command here must fail loudly. An empty list is meaningful -- the
+      # deploy jobs read it as "this plugin had no release" and skip -- so a
+      # swallowed error would silently skip every WP.org deploy of a real
+      # release, which is the exact failure this gating exists to prevent.
+      # Hence no `|| true`, pipefail on, and both sides materialised as files
+      # rather than process substitutions (whose exit status bash discards).
+      #
+      # `--merged HEAD` restricts the diff to tags on this branch's history, so
+      # it measures what this run created rather than what appeared. The
+      # concurrency group is per-ref, so an alpha release runs alongside a
+      # stable one by design and tags into the same namespace, and
+      # semantic-release fetches tags on every invocation -- an alpha tag
+      # pushed while the release step ran would otherwise land in this list.
+      # The deploy gate would then find a tag for the plugin but no match at
+      # the stable version, and fail the run as a stale checkout, minutes after
+      # npm and GitHub had already published.
+      - name: Collect released tags
+        id: released
+        run: |
+          set -euo pipefail
+          sort "$RUNNER_TEMP/tags-before.txt" > "$RUNNER_TEMP/tags-before-sorted.txt"
+          git tag --merged HEAD | sort > "$RUNNER_TEMP/tags-after-sorted.txt"
+          new_tags=$(comm -13 "$RUNNER_TEMP/tags-before-sorted.txt" "$RUNNER_TEMP/tags-after-sorted.txt")
+          echo "Tags created by this run:"
+          echo "${new_tags:-(none)}"
+          {
+            echo 'tags<<RELEASED_TAGS_EOF'
+            echo "$new_tags"
+            echo 'RELEASED_TAGS_EOF'
+          } >> "$GITHUB_OUTPUT"
       # package.json is deliberately excluded from the @semantic-release/git
       # prepare commit: that keeps multi-semantic-release's concretized
       # workspace:* deps off the branch (they'd break the next
@@ -164,6 +245,7 @@ jobs:
       # colliding on version headers. The prerelease zip is built from the
       # working tree regardless, so nothing downstream needs this commit.
       - name: Sync package.json versions
+        id: sync
         if: ${{ github.ref_name == 'release' }}
         run: |
           node .github/scripts/finalize-package-versions.cjs
@@ -174,6 +256,12 @@ jobs:
             git pull --rebase origin "${GITHUB_REF_NAME}"
             git push origin "HEAD:${GITHUB_REF_NAME}"
           }
+          # Published after the push, so it names a commit that exists on the
+          # remote for the deploy jobs to check out. Pinning them to this SHA is
+          # what makes the deployed tree exactly the released one: the branch tip
+          # can move underneath them, and a version-only check cannot see that,
+          # since a code-only commit leaves every version untouched.
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
       # Post a release-success summary to Slack: stable releases (release branch)
       # go to the a8c workspace, alpha releases to the Newspack workspace. Only
@@ -199,7 +287,7 @@ jobs:
   # the default branch. Only runs on the release branch (not alpha/hotfix/epic).
   post-release:
     name: Post-release branch sync
-    if: github.ref == 'refs/heads/release'
+    if: github.ref == 'refs/heads/release' && needs.release.outputs.release_needed == 'true'
     needs: release
     runs-on: ubuntu-latest
     steps:
@@ -220,36 +308,45 @@ jobs:
   # WP.org deploys are plugin-specific and only run on the release branch.
   release-wporg-newsletters:
     name: WP.org / newspack-newsletters
-    if: github.ref == 'refs/heads/release'
+    if: github.ref == 'refs/heads/release' && needs.release.outputs.release_needed == 'true'
     needs: release
     uses: ./.github/workflows/_release-wporg.yml
     with:
       plugin-name: newspack-newsletters
       plugin-path: plugins/newspack-newsletters
+      ref: ${{ needs.release.outputs.released-sha }}
+      released-tags: ${{ needs.release.outputs.released-tags }}
+      require-release: true
     secrets:
       WP_ORG_USERNAME: ${{ secrets.WP_ORG_USERNAME }}
       WP_ORG_PASSWORD: ${{ secrets.WP_ORG_PASSWORD }}
 
   release-wporg-scaip:
     name: WP.org / super-cool-ad-inserter
-    if: github.ref == 'refs/heads/release'
+    if: github.ref == 'refs/heads/release' && needs.release.outputs.release_needed == 'true'
     needs: release
     uses: ./.github/workflows/_release-wporg.yml
     with:
       plugin-name: super-cool-ad-inserter
       plugin-path: plugins/super-cool-ad-inserter
+      ref: ${{ needs.release.outputs.released-sha }}
+      released-tags: ${{ needs.release.outputs.released-tags }}
+      require-release: true
     secrets:
       WP_ORG_USERNAME: ${{ secrets.WP_ORG_USERNAME }}
       WP_ORG_PASSWORD: ${{ secrets.WP_ORG_PASSWORD }}
 
   release-wporg-rtt:
     name: WP.org / republication-tracker-tool
-    if: github.ref == 'refs/heads/release'
+    if: github.ref == 'refs/heads/release' && needs.release.outputs.release_needed == 'true'
     needs: release
     uses: ./.github/workflows/_release-wporg.yml
     with:
       plugin-name: republication-tracker-tool
       plugin-path: plugins/republication-tracker-tool
+      ref: ${{ needs.release.outputs.released-sha }}
+      released-tags: ${{ needs.release.outputs.released-tags }}
+      require-release: true
     secrets:
       WP_ORG_USERNAME: ${{ secrets.WP_ORG_USERNAME }}
       WP_ORG_PASSWORD: ${{ secrets.WP_ORG_PASSWORD }}
