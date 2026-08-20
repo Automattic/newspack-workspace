@@ -53,11 +53,11 @@ class Engagement extends Contact_Metadata {
 			'Last_Active'          => 'Last Active',
 			'Paywall_Hits'         => 'Paywall Hits',
 			'Favorite_Categories'  => 'Favorite Categories',
-			'Payment_Page'         => 'Payment Page',
+			'Last_Payment_Page'    => 'Last Payment Page',
 			'Payment_UTM_Source'   => 'Payment UTM Source',
 			'Payment_UTM_Medium'   => 'Payment UTM Medium',
 			'Payment_UTM_Campaign' => 'Payment UTM Campaign',
-			'Total_Paid'           => 'Total Paid',
+			'Lifetime_Total_Paid'  => 'Lifetime Total Paid',
 		];
 	}
 
@@ -73,17 +73,28 @@ class Engagement extends Contact_Metadata {
 
 		$order = $this->get_latest_order();
 
-		return [
+		$metadata = [
 			'First_Visit_Date'     => $this->format_reader_data_timestamp( 'first_visit_date' ),
 			'Last_Active'          => $this->format_reader_data_timestamp( 'last_active' ),
 			'Paywall_Hits'         => $this->get_reader_data_int( 'paywall_hits' ),
 			'Favorite_Categories'  => $this->get_favorite_categories(),
-			'Payment_Page'         => $this->get_payment_page( $order ),
+			'Last_Payment_Page'    => $this->get_payment_page( $order ),
 			'Payment_UTM_Source'   => $this->get_order_utm( $order, 'source' ),
 			'Payment_UTM_Medium'   => $this->get_order_utm( $order, 'medium' ),
 			'Payment_UTM_Campaign' => $this->get_order_utm( $order, 'campaign' ),
-			'Total_Paid'           => $this->customer ? $this->customer->get_total_spent() : '',
 		];
+
+		// Emitting an empty string for a reader with no customer record would
+		// blank a live merge field the legacy pipeline never touched — legacy
+		// total_paid only exists at all when there is a WooCommerce customer to
+		// read it from (Legacy_Basic returns nothing without one). Unlike the
+		// legacy field, this always reports the customer's lifetime spend
+		// rather than blanking when there is no current-product order.
+		if ( $this->customer ) {
+			$metadata['Lifetime_Total_Paid'] = $this->customer->get_total_spent();
+		}
+
+		return $metadata;
 	}
 
 	/**

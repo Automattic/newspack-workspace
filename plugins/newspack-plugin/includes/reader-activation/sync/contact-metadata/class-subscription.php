@@ -65,19 +65,19 @@ class Subscription extends Contact_Metadata {
 	 */
 	public static function get_fields() {
 		return [
-			'Subscriber_Status'                      => 'Subscriber Status',
-			'Active_Subscription_Count'              => 'Active Subscription Count',
-			'Current_Subscription_Start_Date'        => 'Current Subscription Start Date',
-			'Current_Subscription_End_Date'          => 'Current Subscription End Date',
-			'Subscription_Cancellation_Reason'       => 'Subscription Cancellation Reason',
-			'Current_Subscription_Billing_Cycle'     => 'Current Subscription Billing Cycle',
-			'Current_Subscription_Recurring_Payment' => 'Current Subscription Recurring Payment',
-			'Current_Subscription_Next_Payment_Date' => 'Current Subscription Next Payment Date',
-			'Current_Subscription_Product_Name'      => 'Current Subscription Product Name',
-			'Previous_Subscription_Product'          => 'Previous Subscription Product',
-			'Current_Subscription_Coupon_Code'       => 'Current Subscription Coupon Code',
-			'Last_Payment_Amount'                    => 'Last Payment Amount',
-			'Last_Payment_Date'                      => 'Last Payment Date',
+			'Subscriber_Status'                     => 'Subscriber Status',
+			'Active_Subscription_Count'             => 'Active Subscription Count',
+			'Subscription_Start_Date'               => 'Subscription Start Date',
+			'Subscription_End_Date'                 => 'Subscription End Date',
+			'Last_Subscription_Cancellation_Reason' => 'Last Subscription Cancellation Reason',
+			'Subscription_Billing_Cycle'            => 'Subscription Billing Cycle',
+			'Subscription_Recurring_Payment'        => 'Subscription Recurring Payment',
+			'Subscription_Next_Payment_Date'        => 'Subscription Next Payment Date',
+			'Subscription_Product_Name'             => 'Subscription Product Name',
+			'Previous_Subscription_Product'         => 'Previous Subscription Product',
+			'Subscription_Coupon_Code'              => 'Subscription Coupon Code',
+			'Last_Subscription_Payment_Amount'      => 'Last Subscription Payment Amount',
+			'Last_Subscription_Payment_Date'        => 'Last Subscription Payment Date',
 		];
 	}
 
@@ -92,19 +92,19 @@ class Subscription extends Contact_Metadata {
 		}
 
 		return [
-			'Subscriber_Status'                      => $this->get_subscriber_status(),
-			'Active_Subscription_Count'              => $this->get_active_subscription_count(),
-			'Current_Subscription_Start_Date'        => $this->get_current_subscription_start_date(),
-			'Current_Subscription_End_Date'          => $this->get_current_subscription_end_date(),
-			'Subscription_Cancellation_Reason'       => $this->get_subscription_cancellation_reason(),
-			'Current_Subscription_Billing_Cycle'     => $this->get_current_subscription_billing_cycle(),
-			'Current_Subscription_Recurring_Payment' => $this->get_current_subscription_recurring_payment(),
-			'Current_Subscription_Next_Payment_Date' => $this->get_current_subscription_next_payment_date(),
-			'Current_Subscription_Product_Name'      => $this->get_current_subscription_product_name(),
-			'Previous_Subscription_Product'          => $this->get_previous_subscription_product(),
-			'Current_Subscription_Coupon_Code'       => $this->get_current_subscription_coupon_code(),
-			'Last_Payment_Amount'                    => $this->get_last_payment_amount(),
-			'Last_Payment_Date'                      => $this->get_last_payment_date(),
+			'Subscriber_Status'                     => $this->get_subscriber_status(),
+			'Active_Subscription_Count'             => $this->get_active_subscription_count(),
+			'Subscription_Start_Date'               => $this->get_current_subscription_start_date(),
+			'Subscription_End_Date'                 => $this->get_current_subscription_end_date(),
+			'Last_Subscription_Cancellation_Reason' => $this->get_subscription_cancellation_reason(),
+			'Subscription_Billing_Cycle'            => $this->get_current_subscription_billing_cycle(),
+			'Subscription_Recurring_Payment'        => $this->get_current_subscription_recurring_payment(),
+			'Subscription_Next_Payment_Date'        => $this->get_current_subscription_next_payment_date(),
+			'Subscription_Product_Name'             => $this->get_current_subscription_product_name(),
+			'Previous_Subscription_Product'         => $this->get_previous_subscription_product(),
+			'Subscription_Coupon_Code'              => $this->get_current_subscription_coupon_code(),
+			'Last_Subscription_Payment_Amount'      => $this->get_last_payment_amount(),
+			'Last_Subscription_Payment_Date'        => $this->get_last_payment_date(),
 		];
 	}
 
