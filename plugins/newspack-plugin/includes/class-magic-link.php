@@ -421,9 +421,18 @@ final class Magic_Link {
 	 * base cannot downgrade an https link.
 	 *
 	 * @param string $url Candidate base URL.
-	 * @return string A same-origin base, or home_url() when $url is off-origin or empty.
+	 * @return string An absolute same-origin base, or home_url() when $url is off-origin or empty.
 	 */
 	private static function restrict_redirect_to_origin( $url ) {
+		// A non-string base (a wp_parse_url() array reaching a caller with
+		// neither a redirect_url nor a Referer) would fatal inside
+		// wp_validate_redirect()'s trim(). Normalising here rather than at each
+		// entry point is what makes the fail-closed guarantee above uniform:
+		// both builders funnel through this helper, only one used to guard.
+		if ( ! \is_string( $url ) ) {
+			$url = '';
+		}
+
 		if ( empty( $url ) ) {
 			return \home_url();
 		}
@@ -446,18 +455,54 @@ final class Magic_Link {
 			return \home_url();
 		}
 
+		$home = \wp_parse_url( \home_url() );
+
 		// A host-less result is a same-site path; wp_validate_redirect has already
 		// rejected the protocol-relative and backslash shapes that only look
-		// path-like.
-		if ( empty( $target['host'] ) ) {
-			return $candidate;
+		// path-like. Anything carrying a host has to match ours exactly.
+		if ( ! empty( $target['host'] )
+			&& self::url_origin( $target, $home['scheme'] ) !== self::url_origin( $home, $home['scheme'] ) ) {
+			return \home_url();
 		}
 
-		$home          = \wp_parse_url( \home_url() );
-		$target_origin = \strtolower( $target['scheme'] ?? $home['scheme'] ) . '://' . \strtolower( $target['host'] ) . ( isset( $target['port'] ) ? ':' . $target['port'] : '' );
-		$home_origin   = \strtolower( $home['scheme'] ) . '://' . \strtolower( $home['host'] ) . ( isset( $home['port'] ) ? ':' . $home['port'] : '' );
+		// Rebuild from the path onward instead of returning the candidate as it
+		// arrived. Three things fall out of that: the result is absolute, which
+		// matters because this value is emailed and a relative URL has nothing
+		// to resolve against in a mail client; any user:pass segment is dropped,
+		// which the origin comparison reads past; and the port is spelled the
+		// way home_url() spells it.
+		$path = isset( $target['path'] ) ? $target['path'] : '';
+		if ( isset( $target['query'] ) ) {
+			$path .= '?' . $target['query'];
+		}
+		if ( isset( $target['fragment'] ) ) {
+			$path .= '#' . $target['fragment'];
+		}
 
-		return ( $target_origin === $home_origin ) ? $candidate : \home_url();
+		return \home_url( $path );
+	}
+
+	/**
+	 * Build a comparable scheme://host:port origin from wp_parse_url() parts.
+	 *
+	 * A URL that spells out its scheme's default port is the same origin as one
+	 * that omits it, so `https://example.org:443` must not compare unequal to
+	 * `https://example.org` and send a legitimate destination to the home page.
+	 *
+	 * @param array  $parts          Output of wp_parse_url().
+	 * @param string $default_scheme Scheme to assume when the URL omits one.
+	 * @return string Normalised origin.
+	 */
+	private static function url_origin( $parts, $default_scheme ) {
+		$scheme = \strtolower( isset( $parts['scheme'] ) ? $parts['scheme'] : $default_scheme );
+		$host   = \strtolower( isset( $parts['host'] ) ? $parts['host'] : '' );
+		$port   = isset( $parts['port'] ) ? (int) $parts['port'] : null;
+
+		if ( ( 'http' === $scheme && 80 === $port ) || ( 'https' === $scheme && 443 === $port ) ) {
+			$port = null;
+		}
+
+		return $scheme . '://' . $host . ( null !== $port ? ':' . $port : '' );
 	}
 
 	/**
@@ -501,7 +546,11 @@ final class Magic_Link {
 	 * Generate a magic link.
 	 *
 	 * @param \WP_User $user User to generate the magic link for.
-	 * @param string   $url  Destination url. Default is home_url().
+	 * @param string   $url  Destination url. Default is home_url(). Must be
+	 *                       same-origin; an off-origin value is silently replaced
+	 *                       by home_url(). A cross-domain destination is still
+	 *                       supported after sign-in, as a `redirect` query
+	 *                       parameter inside the same-site link.
 	 *
 	 * @return string|\WP_Error Magic link url or WP_Error if token generation failed.
 	 */
@@ -526,19 +575,15 @@ final class Magic_Link {
 	 * Send magic link email to reader.
 	 *
 	 * @param \WP_User $user        User to send the magic link to.
-	 * @param string   $redirect_to Which page to redirect the reader after authenticating.
+	 * @param string   $redirect_to Which page to redirect the reader after
+	 *                              authenticating. Must be same-origin; an
+	 *                              off-origin value is silently replaced by
+	 *                              home_url().
 	 * @param boolean  $use_otp     Whether to attempt the use of OTP.
 	 *
 	 * @return bool|\WP_Error Whether the email was sent or WP_Error if sending failed.
 	 */
 	public static function send_email( $user, $redirect_to = '', $use_otp = true ) {
-		// Guard against a non-string redirect (e.g. a wp_parse_url() array passed
-		// through from a caller when neither a redirect_url nor a Referer is
-		// available). add_query_arg() would otherwise run strstr() on the array
-		// and fatal with a TypeError.
-		if ( ! \is_string( $redirect_to ) ) {
-			$redirect_to = '';
-		}
 		// Send reminder to non-reader accounts to use standard WP login.
 		if ( ! Reader_Activation::is_user_reader( $user ) ) {
 			return Reader_Activation::send_non_reader_login_reminder( $user );

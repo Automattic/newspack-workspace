@@ -410,11 +410,16 @@ class Newspack_Test_Magic_Link extends WP_UnitTestCase {
 			// input).
 			'scheme mismatch'     => [ self::scheme_mismatch_base() ],
 			'protocol-relative'   => [ '//attacker.example/harvest' ],
+			// This row and 'bare authority' below both parse to an empty host, so
+			// core rejects them before the origin check ever runs and they would
+			// pass without this fix. They are kept because they document the
+			// shapes core normalises, not because they cover the origin logic.
 			'backslash authority' => [ 'https:\\\\attacker.example' ],
 			'schemeful host-less' => [ 'mailto:reader@example.com' ],
 			'userinfo confusion'  => [ 'https://example.org@attacker.example/x' ],
 			'suffix host'         => [ 'https://example.org.attacker.example/' ],
 			'bare authority'      => [ '://attacker.example' ], // Core normalises to a relative path.
+			'port mismatch'       => [ self::port_mismatch_base() ],
 		];
 	}
 
@@ -427,6 +432,17 @@ class Newspack_Test_Magic_Link extends WP_UnitTestCase {
 	 *
 	 * @return string Same host and port as home_url(), opposite scheme.
 	 */
+	private static function port_mismatch_base() {
+		$home = wp_parse_url( home_url() );
+		$port = isset( $home['port'] ) ? (int) $home['port'] + 1 : 8080;
+		return $home['scheme'] . '://' . $home['host'] . ':' . $port . '/x';
+	}
+
+	/**
+	 * Build an off-origin base that mismatches home_url() by port only.
+	 *
+	 * @return string Same scheme and host as home_url(), a port it does not use.
+	 */
 	private static function scheme_mismatch_base() {
 		$home            = wp_parse_url( home_url() );
 		$mismatched_home = 'https' === $home['scheme'] ? 'http' : 'https';
@@ -434,21 +450,48 @@ class Newspack_Test_Magic_Link extends WP_UnitTestCase {
 	}
 
 	/**
-	 * A same-origin or same-site base is preserved unchanged.
+	 * A same-origin base keeps its path, and always comes back absolute.
 	 */
 	public function test_generate_url_preserves_same_origin_base() {
-		$user = get_user_by( 'id', self::$user_id );
+		$user     = get_user_by( 'id', self::$user_id );
+		$home     = wp_parse_url( home_url() );
+		$expected = home_url( '/premium/' );
 
-		$same_origin = Magic_Link::generate_url( $user, 'http://example.org/premium/' );
-		$this->assertStringStartsWith( 'http://example.org/premium/', $same_origin, 'Same-origin base preserved.' );
+		// Built from home_url() rather than spelled out, so the row keeps testing
+		// a same-origin base if WP_TESTS_DOMAIN or its scheme ever changes.
+		$same_origin = Magic_Link::generate_url( $user, $expected );
+		$this->assertStringStartsWith( $expected, $same_origin, 'Same-origin base preserved.' );
 
 		// Reset rate-limiting state between calls: generate_token() rejects a
 		// second token for the same user within RATE_INTERVAL (60s), which two
 		// calls in the same test would otherwise always collide with.
 		delete_user_meta( self::$user_id, Magic_Link::TOKENS_META );
 
+		// A relative base resolves against home_url() instead of passing through.
+		// The link is emailed, and a relative URL has nothing to resolve against
+		// in a mail client.
 		$relative = Magic_Link::generate_url( $user, '/premium/' );
-		$this->assertStringStartsWith( '/premium/', $relative, 'Relative path preserved.' );
+		$this->assertStringStartsWith( $expected, $relative, 'Relative base resolved to an absolute link.' );
+
+		delete_user_meta( self::$user_id, Magic_Link::TOKENS_META );
+
+		// Credentials sit outside scheme/host/port, so the origin comparison reads
+		// straight past them; they have to be dropped deliberately.
+		$authority = $home['scheme'] . '://reader:hunter2@' . $home['host'] .
+			( isset( $home['port'] ) ? ':' . $home['port'] : '' ) . '/premium/';
+		$stripped  = Magic_Link::generate_url( $user, $authority );
+		$this->assertStringStartsWith( $expected, $stripped, 'Same-origin base with credentials preserved.' );
+		$this->assertStringNotContainsString( 'hunter2', $stripped, 'Credentials dropped from the link.' );
+
+		// Spelling out the scheme's default port names the same origin as omitting
+		// it. Only meaningful when the test site itself runs on the default port.
+		if ( ! isset( $home['port'] ) ) {
+			delete_user_meta( self::$user_id, Magic_Link::TOKENS_META );
+			$default_port = $home['scheme'] . '://' . $home['host'] .
+				( 'https' === $home['scheme'] ? ':443' : ':80' ) . '/premium/';
+			$normalised   = Magic_Link::generate_url( $user, $default_port );
+			$this->assertStringStartsWith( $expected, $normalised, 'Default port is the same origin.' );
+		}
 	}
 
 	/**
