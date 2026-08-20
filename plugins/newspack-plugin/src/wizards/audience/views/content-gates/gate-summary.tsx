@@ -87,18 +87,33 @@ export type GateSummarySection = {
  * @param metering   The path's metering settings.
  * @param siteCount  The site meter count governing this path.
  * @param sitePeriod The site meter reset period.
+ * @param hasRegwall Whether the gate offers registration before this path. Without
+ *                   one, running out of free views is the end of the road, so the
+ *                   summary says so rather than leaving the publisher to infer it.
  */
-const formatMetering = ( metering: Metering, siteCount?: number, sitePeriod?: Metering[ 'period' ] ) => {
+const formatMetering = ( metering: Metering, siteCount?: number, sitePeriod?: Metering[ 'period' ], hasRegwall = true ) => {
 	const isSiteScoped = metering.scope !== 'gate';
 	const count = getMeteringCount( metering, siteCount );
 	const period = isSiteScoped ? sitePeriod ?? 'month' : metering.period;
 	const periodLabel = period === 'week' ? __( 'week', 'newspack-plugin' ) : __( 'month', 'newspack-plugin' );
-	const allowance = sprintf(
-		// translators: 1: metering count, 2: metering period
-		_n( '%1$d free view per %2$s', '%1$d free views per %2$s', count, 'newspack-plugin' ),
-		count,
-		periodLabel
-	);
+	const allowance = hasRegwall
+		? sprintf(
+				// translators: 1: metering count, 2: metering period
+				_n( '%1$d free view per %2$s', '%1$d free views per %2$s', count, 'newspack-plugin' ),
+				count,
+				periodLabel
+		  )
+		: sprintf(
+				// translators: 1: metering count, 2: metering period
+				_n(
+					'%1$d free view per %2$s before content is restricted',
+					'%1$d free views per %2$s before content is restricted',
+					count,
+					'newspack-plugin'
+				),
+				count,
+				periodLabel
+		  );
 	return isSiteScoped
 		? sprintf(
 				// translators: %s is the allowance, e.g. "3 free views per month".
@@ -175,6 +190,7 @@ export const getGateSummarySections = ( gate: Gate, isNewsletter = false, siteMe
 
 	const showsAccessRules = Boolean( gate.custom_access?.active && gate.custom_access.access_rules.length > 0 );
 	const showsPaidMetering = Boolean( gate.custom_access?.active && gate.custom_access.metering.enabled );
+	const hasRegwall = Boolean( ! isNewsletter && gate.registration?.active );
 
 	sections.push( {
 		key: 'custom_access',
@@ -194,7 +210,7 @@ export const getGateSummarySections = ( gate: Gate, isNewsletter = false, siteMe
 				{ showsPaidMetering && (
 					<p>
 						<strong>{ __( 'Metered:', 'newspack-plugin' ) } </strong>{ ' ' }
-						{ formatMetering( gate.custom_access.metering, siteMeter?.registered_count, siteMeter?.period ) }
+						{ formatMetering( gate.custom_access.metering, siteMeter?.registered_count, siteMeter?.period, hasRegwall ) }
 					</p>
 				) }
 				{ /* Only when the column has nothing else: N/A beside a metering line reads as a contradiction. */ }
