@@ -250,6 +250,44 @@ class Content_Gate {
 	}
 
 	/**
+	 * Whether gating actually enforces anything for readers right now.
+	 *
+	 * The predicate reader-facing enforcement asks, so that "gating is off" means
+	 * the same thing across the surfaces that share both conditions. Surfaces that
+	 * answer the question for themselves drift, which is what this exists to stop.
+	 *
+	 * ONE DELIBERATE EXCEPTION: {@see Block_Visibility::filter_render_block()} uses
+	 * `Reader_Activation::is_enabled()` alone, not this. Block visibility predates
+	 * the feature constant and is independent of it — the class registers
+	 * unconditionally, its editor panel loads without the constant, and in `custom`
+	 * mode a block needs no gate at all. ANDing the constant in there would unhide
+	 * blocks on sites that never enabled content gates. Don't "fix" it to call this
+	 * method; the asymmetry is the point.
+	 *
+	 * Two conditions, either of which stands gating down:
+	 *
+	 * - The feature constant. Access Control is only on where someone put it.
+	 * - Audience Management (NPPD-1846). Everything a gate hands the reader off
+	 *   to — registration, magic-link sign-in, account emails, session
+	 *   hydration, My Account — is gated on it, so a gate enforced without it
+	 *   locks readers out with no way in. Gates stay configured and go inert
+	 *   instead, which is what lets Audience Management be switched off without
+	 *   stranding a live restriction nobody can reach the screens to lift.
+	 *
+	 * Deliberately NOT the predicate for admin surfaces. The Access Control
+	 * screens stay registered on {@see self::is_newspack_feature_enabled()}
+	 * alone, so the dependency is explained rather than hidden: a publisher
+	 * whose gates are inert can still open the screen and read why. When the
+	 * feature constant retires, the two converge on the reader side and the
+	 * admin side keeps its own predicate.
+	 *
+	 * @return bool
+	 */
+	public static function is_gating_active(): bool {
+		return self::is_newspack_feature_enabled() && Reader_Activation::is_enabled();
+	}
+
+	/**
 	 * Restrict the post.
 	 *
 	 * @param \WP_Post  $post Post object.
@@ -322,6 +360,8 @@ class Content_Gate {
 		self::$is_gated          = true;
 		self::$is_content_locked = true;
 
+		$gate_html = self::get_inline_gate_html();
+
 		// Mark before rendering: the renders below run the post content and the
 		// gate layout through the block pipeline, and any block that runs a
 		// secondary loop ends it with wp_reset_postdata(), which re-fires
@@ -329,8 +369,7 @@ class Content_Gate {
 		// already be set by then, or this method re-enters itself unboundedly.
 		self::mark_gate_as_rendered();
 
-		$content   = self::get_restricted_post_excerpt( $post );
-		$gate_html = self::get_inline_gate_html();
+		$content = self::get_restricted_post_excerpt( $post );
 
 		// Note that this does not feed the 'the_content' chain: core generates the
 		// post's page data before firing 'the_post', so the chain is handed the
@@ -662,7 +701,12 @@ class Content_Gate {
 		// with the flag off the exempt key is absent from the REST schema, so the panel
 		// must not render a toggle that could not persist. In practice get_gates() is
 		// already empty when the flag is off, but gating both on the flag keeps them aligned.
-		if ( ! self::is_newspack_feature_enabled() ) {
+		// Gating rather than the flag alone: with Audience Management off no gate
+		// applies to any reader, so this panel would name gates that are doing nothing
+		// and offer an exemption toggle that suppresses nothing. Mirrors the block
+		// visibility panel. The exempt post meta stays registered either way, so a
+		// post's exemption survives the toggle exactly as block attributes do.
+		if ( ! self::is_gating_active() ) {
 			return;
 		}
 		if ( ! in_array( get_post_type(), array_column( Content_Restriction_Control::get_available_post_types(), 'value' ), true ) ) {
@@ -934,8 +978,6 @@ class Content_Gate {
 	 */
 	public static function post_has_restrictions( $post_id = null ) {
 		$post_id = $post_id ? $post_id : get_the_ID();
-
-		// TODO: Content Gate content rules check.
 
 		/**
 		 * Filters whether the post has restrictions.

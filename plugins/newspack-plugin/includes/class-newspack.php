@@ -154,6 +154,15 @@ final class Newspack {
 		include_once NEWSPACK_ABSPATH . 'includes/class-cta-intent-classifier.php';
 		include_once NEWSPACK_ABSPATH . 'includes/content-gate/trait-content-gate-layout.php';
 		include_once NEWSPACK_ABSPATH . 'includes/content-gate/class-content-gate.php';
+		include_once NEWSPACK_ABSPATH . 'includes/content-gate/class-inert-gating-notice.php';
+
+		// Shared infrastructure for rules that tie store products to subscriptions.
+		include_once NEWSPACK_ABSPATH . 'includes/subscriber-commerce/class-subscriber-commerce.php';
+		include_once NEWSPACK_ABSPATH . 'includes/subscriber-commerce/class-product-targeting.php';
+		include_once NEWSPACK_ABSPATH . 'includes/subscriber-commerce/class-subscriber-eligibility.php';
+		include_once NEWSPACK_ABSPATH . 'includes/subscriber-commerce/class-subscriber-only-products.php';
+		include_once NEWSPACK_ABSPATH . 'includes/subscriber-commerce/class-product-purchase-restriction.php';
+		include_once NEWSPACK_ABSPATH . 'includes/subscriber-commerce/class-subscriber-only-products-api.php';
 
 		include_once NEWSPACK_ABSPATH . 'includes/starter_content/class-starter-content-provider.php';
 		include_once NEWSPACK_ABSPATH . 'includes/starter_content/class-starter-content-generated.php';
@@ -167,6 +176,7 @@ final class Newspack {
 
 		include_once NEWSPACK_ABSPATH . 'includes/wizards/traits/trait-wizards-admin-header.php';
 		include_once NEWSPACK_ABSPATH . 'includes/wizards/traits/trait-content-gate-preferences.php';
+		include_once NEWSPACK_ABSPATH . 'includes/wizards/traits/trait-audience-management-dependency.php';
 
 		// Newspack Wizards and Sections.
 		include_once NEWSPACK_ABSPATH . 'includes/wizards/newspack/class-newspack-dashboard.php';

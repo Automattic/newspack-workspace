@@ -1,5 +1,3 @@
-/* global newspackAudience */
-
 /**
  * Content Gifting settings page.
  */
@@ -43,13 +41,13 @@ const { useHistory } = Router;
 
 const ContentGiftingSettings = () => {
 	const history = useHistory();
-	const wizardData = useWizardData( AUDIENCE_CONTENT_GATES_WIZARD_SLUG ) as WizardData;
+	const wizardData = useWizardData( AUDIENCE_CONTENT_GATES_WIZARD_SLUG ) as ContentGatesWizardData;
 	const { addNotice, resetNotices, setHeaderData, updateWizardSettings } = useDispatch( WIZARD_STORE_NAMESPACE );
 	const { wizardApiFetch, errorMessage, resetError } = useWizardApiFetch( AUDIENCE_CONTENT_GATES_WIZARD_SLUG );
 	const [ config, setConfig ] = useState< GateSettings >( wizardData?.config || {} );
-	const availableProducts = newspackAudience?.available_products || [];
-	const hasMetering = newspackAudience?.content_gifting?.has_metering;
-	const giftingErrors = Object.values( newspackAudience?.content_gifting?.can_use_gifting?.errors || {} ).flat() as string[];
+	const availableProducts = window.newspackAudience?.available_products || [];
+	const hasMetering = window.newspackAudience?.content_gifting?.has_metering;
+	const giftingErrors = Object.values( window.newspackAudience?.content_gifting?.can_use_gifting?.errors || {} ).flat();
 	const isDirty = useMemo( () => {
 		return (
 			config?.content_gifting &&
@@ -61,7 +59,7 @@ const ContentGiftingSettings = () => {
 	const { confirmDialog, requestConfirm } = useConfirmDialog( {
 		when: !! ( isDirty && ! isSaving.current ),
 		message: __( 'You have unsaved changes that will be lost. Discard changes?', 'newspack-plugin' ),
-		confirmButtonText: __( 'Discard changes', 'newspack-plugin' ),
+		confirmButtonText: __( 'Discard Changes', 'newspack-plugin' ),
 		isDestructive: true,
 		hideTitle: true,
 	} );
@@ -157,7 +155,7 @@ const ContentGiftingSettings = () => {
 						min={ 1 }
 						max={ 20 }
 						value={ config?.content_gifting?.limit || 10 }
-						onChange={ ( value: number ) => setConfig( { ...config, content_gifting: { ...config?.content_gifting, limit: value } } ) }
+						onChange={ ( value?: number ) => setConfig( { ...config, content_gifting: { ...config?.content_gifting, limit: value } } ) }
 						__next40pxDefaultSize
 					/>
 					<SelectControl
@@ -178,7 +176,7 @@ const ContentGiftingSettings = () => {
 						min={ 1 }
 						max={ 60 }
 						value={ config?.content_gifting?.expiration_time || 5 }
-						onChange={ ( value: number ) =>
+						onChange={ ( value?: number ) =>
 							setConfig( { ...config, content_gifting: { ...config?.content_gifting, expiration_time: value } } )
 						}
 						__next40pxDefaultSize
@@ -225,7 +223,7 @@ const ContentGiftingSettings = () => {
 					<ToggleGroupControl
 						label={ __( 'Style', 'newspack-plugin' ) }
 						value={ config?.content_gifting?.style || 'light' }
-						onChange={ ( value: string ) => setConfig( { ...config, content_gifting: { ...config?.content_gifting, style: value } } ) }
+						onChange={ value => setConfig( { ...config, content_gifting: { ...config?.content_gifting, style: value as string } } ) }
 						isBlock
 						__next40pxDefaultSize
 					>
@@ -239,7 +237,7 @@ const ContentGiftingSettings = () => {
 							'newspack-plugin'
 						) }
 						value={ config?.content_gifting?.cta_type || 'product' }
-						onChange={ ( value: string ) => setConfig( { ...config, content_gifting: { ...config?.content_gifting, cta_type: value } } ) }
+						onChange={ value => setConfig( { ...config, content_gifting: { ...config?.content_gifting, cta_type: value as string } } ) }
 						isBlock
 						__next40pxDefaultSize
 					>

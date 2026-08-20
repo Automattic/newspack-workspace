@@ -16,7 +16,10 @@ use Newspack\Reader_Activation\Integrations;
 
 require_once dirname( __DIR__, 3 ) . '/includes/cli/class-ras-contact-sync.php';
 require_once dirname( __DIR__ ) . '/integrations/class-failing-sample-integration.php';
-require_once dirname( __DIR__, 2 ) . '/mocks/wp-cli-mock.php';
+
+// Shared WP_CLI mock: sync_contacts() logs progress via WP_CLI::log(), which is
+// not loaded under PHPUnit.
+require_once dirname( __DIR__, 2 ) . '/mocks/wp-cli-mocks.php';
 
 /**
  * Results tally of the batch sync driver.

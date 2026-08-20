@@ -33,7 +33,11 @@ class Initializer {
 		include_once NEWSPACK_ABSPATH . 'includes/cli/class-teams-for-memberships-diagnostics.php';
 		include_once NEWSPACK_ABSPATH . 'includes/cli/class-export.php';
 		include_once NEWSPACK_ABSPATH . 'includes/cli/class-teams-migration.php';
+		include_once NEWSPACK_ABSPATH . 'includes/cli/class-institutions-migration.php';
+		include_once NEWSPACK_ABSPATH . 'includes/cli/trait-one-time-purchase-migration.php';
 		include_once NEWSPACK_ABSPATH . 'includes/cli/class-membership-gates-migration.php';
+		include_once NEWSPACK_ABSPATH . 'includes/cli/class-premium-newsletters-migration.php';
+		include_once NEWSPACK_ABSPATH . 'includes/cli/class-fix-memberships.php';
 	}
 
 	/**
@@ -89,6 +93,7 @@ class Initializer {
 		WP_CLI::add_command( 'newspack backfill-non-editing-contributors', [ 'Newspack\CLI\Co_Authors_Plus', 'backfill_non_editing_contributor' ] );
 		WP_CLI::add_command( 'newspack migrate-expired-subscriptions', [ 'Newspack\CLI\WooCommerce_Subscriptions', 'migrate_expired_subscriptions' ] );
 		WP_CLI::add_command( 'newspack card-expiry-warning-backfill', [ 'Newspack\CLI\WooCommerce_Subscriptions', 'card_expiry_warning_backfill' ] );
+		WP_CLI::add_command( 'newspack audit-subscription-products', [ 'Newspack\CLI\WooCommerce_Subscriptions', 'audit_subscription_products' ] );
 		WP_CLI::add_command( 'newspack ga4-dimensions', 'Newspack\CLI\GA4_Dimensions' );
 		WP_CLI::add_command( 'newspack export-subscriptions', [ 'Newspack\CLI\Export', 'export_subscriptions' ] );
 		WP_CLI::add_command( 'newspack export-users', [ 'Newspack\CLI\Export', 'export_users' ] );
@@ -110,6 +115,7 @@ class Initializer {
 			WP_CLI::add_command( 'newspack migrate-team-products', [ 'Newspack\CLI\Teams_Migration', 'migrate_team_products' ] );
 			WP_CLI::add_command( 'newspack migrate-manual-members', [ 'Newspack\CLI\Teams_Migration', 'migrate_manual_members' ] );
 			WP_CLI::add_command( 'newspack backfill-team-managers', [ 'Newspack\CLI\Teams_Migration', 'backfill_team_managers' ] );
+			WP_CLI::add_command( 'newspack migrate-institutions', [ 'Newspack\CLI\Institutions_Migration', 'migrate_institutions' ] );
 			// The standalone `migrate-memberships` drop-in registers the same command
 			// name with the opposite, write-by-default flag convention. Registration is
 			// last-wins with no error, so the warning is hooked here — at registration
@@ -126,6 +132,15 @@ class Initializer {
 				);
 			}
 			WP_CLI::add_command( 'newspack migrate-membership-gates', [ 'Newspack\CLI\Membership_Gates_Migration', 'migrate_membership_gates' ] );
+			WP_CLI::add_command( 'newspack migrate-premium-newsletters', [ 'Newspack\CLI\Premium_Newsletters_Migration', 'migrate_premium_newsletters' ] );
+		}
+
+		// Only register the fix-memberships command when WC Memberships is active.
+		if ( function_exists( 'wc_memberships' ) ) {
+			WP_CLI::add_command(
+				'newspack fix-memberships',
+				[ 'Newspack\CLI\Fix_Memberships', 'run' ]
+			);
 		}
 
 		Optional_Modules::register_commands();

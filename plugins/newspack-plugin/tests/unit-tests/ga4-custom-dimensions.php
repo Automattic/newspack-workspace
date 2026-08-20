@@ -55,6 +55,7 @@ class Newspack_Test_GA4_Custom_Dimensions extends WP_UnitTestCase {
 
 		delete_option( GA4_Custom_Dimensions::PROVISIONED_OPTION );
 		delete_option( self::SK_SETTINGS_OPTION );
+		delete_transient( GA4_Custom_Dimensions::SCHEMA_TRANSIENT );
 		wp_clear_scheduled_hook( GA4_Custom_Dimensions::PROVISION_ACTION );
 
 		// The OAuth proxy constants persist across tests; define them once. The
@@ -194,8 +195,9 @@ class Newspack_Test_GA4_Custom_Dimensions extends WP_UnitTestCase {
 	 * @param string $property_id          GA4 property ID.
 	 * @param array  $existing_param_names  Parameter names already present.
 	 * @param int    $create_status         HTTP status to return from create POSTs.
+	 * @param string $create_error_message  Error message returned with a non-2xx $create_status.
 	 */
-	private function mock_admin_api( $property_id, array $existing_param_names, $create_status = 200 ) {
+	private function mock_admin_api( $property_id, array $existing_param_names, $create_status = 200, $create_error_message = 'Request had insufficient authentication scopes.' ) {
 		$existing = array_map(
 			function ( $name ) use ( $property_id ) {
 				return [
@@ -207,11 +209,11 @@ class Newspack_Test_GA4_Custom_Dimensions extends WP_UnitTestCase {
 			},
 			$existing_param_names
 		);
-		$this->http_routes[ "properties/$property_id/customDimensions" ] = function ( $url, $args ) use ( $existing, $create_status ) {
+		$this->http_routes[ "properties/$property_id/customDimensions" ] = function ( $url, $args ) use ( $existing, $create_status, $create_error_message ) {
 			$method = isset( $args['method'] ) ? strtoupper( $args['method'] ) : 'GET';
 			if ( 'POST' === $method ) {
 				if ( $create_status < 200 || $create_status >= 300 ) {
-					return $this->json_response( $create_status, [ 'error' => [ 'message' => 'Request had insufficient authentication scopes.' ] ] );
+					return $this->json_response( $create_status, [ 'error' => [ 'message' => $create_error_message ] ] );
 				}
 				$payload = json_decode( $args['body'], true );
 				return $this->json_response(
@@ -240,6 +242,21 @@ class Newspack_Test_GA4_Custom_Dimensions extends WP_UnitTestCase {
 	}
 
 	/**
+	 * The matched-segment dimension must be provisioned, so segment reach is
+	 * reportable in GA4 without a publisher hand-creating the dimension.
+	 *
+	 * The parameter holds a single segment ID per event, not a list: a list
+	 * would need a regex filter per segment to keep one ID from matching inside
+	 * another, and its distinct values would be segment combinations, which
+	 * pass GA4's high-cardinality threshold and collapse into `(other)`.
+	 */
+	public function test_provisions_matched_segment_dimension() {
+		$dimensions = GA4_Custom_Dimensions::get_dimensions();
+		$this->assertArrayHasKey( 'segment_id', $dimensions, 'The matched-segment dimension must be provisioned.' );
+		$this->assertSame( 'Matched Segment', $dimensions['segment_id'] );
+	}
+
+	/**
 	 * Connecting / changing the GA4 property schedules background provisioning,
 	 * and the scheduler de-duplicates redundant requests.
 	 */
@@ -259,13 +276,28 @@ class Newspack_Test_GA4_Custom_Dimensions extends WP_UnitTestCase {
 			GA4_Custom_Dimensions::PROVISIONED_OPTION,
 			[
 				'property_id' => 'P1',
+				'schema'      => GA4_Custom_Dimensions::schema_fingerprint(),
 				'created'     => [],
 			]
 		);
 		GA4_Custom_Dimensions::on_sitekit_settings_updated( [ 'propertyID' => 'P0' ], [ 'propertyID' => 'P1' ] );
 		$this->assertFalse( wp_next_scheduled( GA4_Custom_Dimensions::PROVISION_ACTION ), 'An already-provisioned property is not rescheduled.' );
 
+		// A property provisioned against an older dimension list is rescheduled: GA4
+		// does not backfill a dimension created later.
+		update_option(
+			GA4_Custom_Dimensions::PROVISIONED_OPTION,
+			[
+				'property_id' => 'P1',
+				'schema'      => 'an-older-dimension-list',
+				'created'     => [],
+			]
+		);
+		GA4_Custom_Dimensions::on_sitekit_settings_updated( [ 'propertyID' => 'P0' ], [ 'propertyID' => 'P1' ] );
+		$this->assertNotFalse( wp_next_scheduled( GA4_Custom_Dimensions::PROVISION_ACTION ), 'A changed dimension list reschedules provisioning.' );
+
 		// A genuine property change schedules provisioning.
+		wp_clear_scheduled_hook( GA4_Custom_Dimensions::PROVISION_ACTION );
 		GA4_Custom_Dimensions::on_sitekit_settings_updated( [ 'propertyID' => 'P1' ], [ 'propertyID' => 'P2' ] );
 		$this->assertNotFalse( wp_next_scheduled( GA4_Custom_Dimensions::PROVISION_ACTION ), 'Changing the property schedules provisioning.' );
 
@@ -277,6 +309,75 @@ class Newspack_Test_GA4_Custom_Dimensions extends WP_UnitTestCase {
 		// A non-array option value is tolerated without scheduling or warnings.
 		GA4_Custom_Dimensions::on_sitekit_settings_added( self::SK_SETTINGS_OPTION, 'not-an-array' );
 		$this->assertFalse( wp_next_scheduled( GA4_Custom_Dimensions::PROVISION_ACTION ), 'A non-array settings value does not schedule provisioning.' );
+	}
+
+	/**
+	 * A dimension added to Newspack's list after a site was provisioned
+	 * schedules an immediate run on the next recheck instead of waiting for
+	 * the monthly recheck: GA4 dimensions are not retroactive, so events sent
+	 * before the dimension exists never become queryable.
+	 */
+	public function test_new_dimension_schedules_provisioning_on_provisioned_sites() {
+		$this->connect_property( 'PROP-GROW' );
+
+		// A summary written before the dimension list was recorded counts as
+		// grown, so pre-existing provisioned sites converge on first recheck.
+		update_option(
+			GA4_Custom_Dimensions::PROVISIONED_OPTION,
+			[
+				'property_id' => 'PROP-GROW',
+				'created'     => [],
+			]
+		);
+		GA4_Custom_Dimensions::maybe_schedule_recheck();
+		$this->assertNotFalse( wp_next_scheduled( GA4_Custom_Dimensions::PROVISION_ACTION ), 'A summary without a recorded dimension list schedules provisioning.' );
+
+		// An up-to-date recorded list does not reschedule.
+		wp_clear_scheduled_hook( GA4_Custom_Dimensions::PROVISION_ACTION );
+		update_option(
+			GA4_Custom_Dimensions::PROVISIONED_OPTION,
+			[
+				'property_id' => 'PROP-GROW',
+				'dimensions'  => array_keys( GA4_Custom_Dimensions::get_dimensions() ),
+				'created'     => [],
+			]
+		);
+		GA4_Custom_Dimensions::maybe_schedule_recheck();
+		$this->assertFalse( wp_next_scheduled( GA4_Custom_Dimensions::PROVISION_ACTION ), 'An up-to-date dimension list does not reschedule.' );
+
+		// A recorded list missing a current dimension reschedules.
+		$known = array_keys( GA4_Custom_Dimensions::get_dimensions() );
+		array_pop( $known );
+		update_option(
+			GA4_Custom_Dimensions::PROVISIONED_OPTION,
+			[
+				'property_id' => 'PROP-GROW',
+				'dimensions'  => $known,
+				'created'     => [],
+			]
+		);
+		GA4_Custom_Dimensions::maybe_schedule_recheck();
+		$this->assertNotFalse( wp_next_scheduled( GA4_Custom_Dimensions::PROVISION_ACTION ), 'A grown dimension list schedules provisioning.' );
+
+		// A never-provisioned site is left to the property-connection path.
+		wp_clear_scheduled_hook( GA4_Custom_Dimensions::PROVISION_ACTION );
+		delete_option( GA4_Custom_Dimensions::PROVISIONED_OPTION );
+		GA4_Custom_Dimensions::maybe_schedule_recheck();
+		$this->assertFalse( wp_next_scheduled( GA4_Custom_Dimensions::PROVISION_ACTION ), 'A never-provisioned site is not scheduled by the recheck path.' );
+	}
+
+	/**
+	 * The provisioning summary records the dimension list the run knew about,
+	 * which is what makes a later addition detectable.
+	 */
+	public function test_provision_records_the_dimension_list_in_the_summary() {
+		$this->connect_property( 'PROP-LIST' );
+		$this->configure_newspack_oauth( true );
+		$this->mock_admin_api( 'PROP-LIST', [] );
+
+		$summary = GA4_Custom_Dimensions::provision();
+		$this->assertIsArray( $summary );
+		$this->assertSame( array_keys( GA4_Custom_Dimensions::get_dimensions() ), $summary['dimensions'] );
 	}
 
 	/**
@@ -349,6 +450,7 @@ class Newspack_Test_GA4_Custom_Dimensions extends WP_UnitTestCase {
 		$summary = GA4_Custom_Dimensions::provision();
 		$this->assertIsArray( $summary );
 		$this->assertSame( 'newspack', $summary['auth_source'] );
+		$this->assertSame( GA4_Custom_Dimensions::schema_fingerprint(), $summary['schema'], 'The run records the dimension list it provisioned.' );
 		$this->assertSame( [], $summary['created'], 'Nothing is created when every dimension already exists.' );
 		$this->assertCount( count( GA4_Custom_Dimensions::get_dimensions() ), $summary['skipped_exists'] );
 		$this->assertSame( 0, $this->count_requests( 'properties/PROP-IDEM/customDimensions', 'POST' ), 'No create requests are made.' );
@@ -411,6 +513,127 @@ class Newspack_Test_GA4_Custom_Dimensions extends WP_UnitTestCase {
 		$this->assertContains( 'author', $summary['skipped_exists'], "'author' already exists on the property." );
 		$this->assertContains( 'author', $summary['created'], "The previous run's created list is carried forward for the same property." );
 		$this->assertCount( count( GA4_Custom_Dimensions::get_dimensions() ), $summary['created'] );
+	}
+
+	/**
+	 * A run with transient create failures (5xx) must not record the schema
+	 * fingerprint, so the daily-throttled recheck path reschedules provisioning
+	 * instead of treating the property as current.
+	 */
+	public function test_transient_failure_is_rescheduled_by_recheck() {
+		if ( ! function_exists( 'as_schedule_recurring_action' ) ) {
+			$this->markTestSkipped( 'ActionScheduler not available.' );
+		}
+
+		$this->connect_property( 'PROP-PARTIAL' );
+		$this->configure_newspack_oauth( true );
+		// Every create fails with a server error.
+		$this->mock_admin_api( 'PROP-PARTIAL', [], 500, 'Internal error encountered.' );
+
+		$summary = GA4_Custom_Dimensions::provision();
+		$this->assertIsArray( $summary );
+		$this->assertNotEmpty( $summary['errors'], 'The run recorded create failures.' );
+		$this->assertNull( $summary['schema'], 'A transiently failed run does not record the schema fingerprint.' );
+
+		GA4_Custom_Dimensions::maybe_schedule_recheck();
+		$this->assertNotFalse( wp_next_scheduled( GA4_Custom_Dimensions::PROVISION_ACTION ), 'A transiently failed run is rescheduled by the recheck.' );
+	}
+
+	/**
+	 * A 403 auth failure aborts the create loop after one POST (a broken
+	 * connection costs one API call per attempt) but leaves the schema
+	 * unrecorded, so the daily recheck keeps probing and a repaired Google
+	 * connection self-heals within a day.
+	 */
+	public function test_auth_failure_aborts_and_is_rescheduled_by_recheck() {
+		if ( ! function_exists( 'as_schedule_recurring_action' ) ) {
+			$this->markTestSkipped( 'ActionScheduler not available.' );
+		}
+
+		$this->connect_property( 'PROP-PERM' );
+		$this->configure_newspack_oauth( true );
+		$this->mock_admin_api( 'PROP-PERM', [], 403 );
+
+		$summary = GA4_Custom_Dimensions::provision();
+		$this->assertIsArray( $summary );
+		$this->assertCount( 1, $summary['errors'], 'The loop stops at the first auth failure.' );
+		$this->assertSame( 1, $this->count_requests( 'properties/PROP-PERM/customDimensions', 'POST' ), 'No further creates are attempted.' );
+		$this->assertNull( $summary['schema'], 'An auth-failed run does not record the schema fingerprint.' );
+
+		wp_clear_scheduled_hook( GA4_Custom_Dimensions::PROVISION_ACTION );
+		delete_transient( GA4_Custom_Dimensions::SCHEMA_TRANSIENT );
+		GA4_Custom_Dimensions::maybe_schedule_recheck();
+		$this->assertNotFalse( wp_next_scheduled( GA4_Custom_Dimensions::PROVISION_ACTION ), 'An auth-failed run is rescheduled by the recheck.' );
+	}
+
+	/**
+	 * A quota-exhausted create proves the remaining creates would fail the same
+	 * way, so the loop aborts after the first failed POST. The dimension cap is
+	 * permanent: the fingerprint is recorded and the daily recheck stops
+	 * retrying – the monthly recheck remains the self-heal path.
+	 */
+	public function test_quota_error_aborts_the_create_loop() {
+		$this->connect_property( 'PROP-QUOTA' );
+		$this->configure_newspack_oauth( true );
+		$this->mock_admin_api( 'PROP-QUOTA', [], 429, 'Quota exhausted for CustomDimensions on the property.' );
+
+		$summary = GA4_Custom_Dimensions::provision();
+		$this->assertCount( 1, $summary['errors'], 'The loop stops at the first quota failure.' );
+		$this->assertSame( 1, $this->count_requests( 'properties/PROP-QUOTA/customDimensions', 'POST' ), 'No further creates are attempted.' );
+		$this->assertSame( GA4_Custom_Dimensions::schema_fingerprint(), $summary['schema'], 'Quota exhaustion is permanent; daily retries stop.' );
+
+		wp_clear_scheduled_hook( GA4_Custom_Dimensions::PROVISION_ACTION );
+		delete_transient( GA4_Custom_Dimensions::SCHEMA_TRANSIENT );
+		GA4_Custom_Dimensions::maybe_schedule_recheck();
+		$this->assertFalse( wp_next_scheduled( GA4_Custom_Dimensions::PROVISION_ACTION ), 'A capped property is not retried daily.' );
+	}
+
+	/**
+	 * A 429 whose quota wording names a rate window is a transient burst, not
+	 * the dimension cap: the loop aborts (every remaining create sits inside
+	 * the same window) but the schema stays unrecorded, so the daily recheck
+	 * reschedules provisioning.
+	 */
+	public function test_rate_limited_run_is_rescheduled_by_recheck() {
+		if ( ! function_exists( 'as_schedule_recurring_action' ) ) {
+			$this->markTestSkipped( 'ActionScheduler not available.' );
+		}
+
+		$this->connect_property( 'PROP-RATE' );
+		$this->configure_newspack_oauth( true );
+		$this->mock_admin_api( 'PROP-RATE', [], 429, "Quota exceeded for quota metric 'Requests' and limit 'Requests per minute' of service 'analyticsadmin.googleapis.com'." );
+
+		$summary = GA4_Custom_Dimensions::provision();
+		$this->assertCount( 1, $summary['errors'], 'The loop stops at the first rate-limited create.' );
+		$this->assertSame( 1, $this->count_requests( 'properties/PROP-RATE/customDimensions', 'POST' ), 'No further creates are attempted inside the window.' );
+		$this->assertNull( $summary['schema'], 'A rate-limited run does not record the schema fingerprint.' );
+
+		GA4_Custom_Dimensions::maybe_schedule_recheck();
+		$this->assertNotFalse( wp_next_scheduled( GA4_Custom_Dimensions::PROVISION_ACTION ), 'A rate-limited run is rescheduled by the recheck.' );
+	}
+
+	/**
+	 * A clean run records the schema fingerprint, so the recheck path does not
+	 * reschedule provisioning.
+	 */
+	public function test_clean_run_is_not_rescheduled_by_recheck() {
+		if ( ! function_exists( 'as_schedule_recurring_action' ) ) {
+			$this->markTestSkipped( 'ActionScheduler not available.' );
+		}
+
+		$this->connect_property( 'PROP-OK' );
+		$this->configure_newspack_oauth( true );
+		$this->mock_admin_api( 'PROP-OK', [] );
+
+		$summary = GA4_Custom_Dimensions::provision();
+		$this->assertIsArray( $summary );
+		$this->assertSame( [], $summary['errors'] );
+		$this->assertSame( GA4_Custom_Dimensions::schema_fingerprint(), $summary['schema'] );
+
+		wp_clear_scheduled_hook( GA4_Custom_Dimensions::PROVISION_ACTION );
+		delete_transient( GA4_Custom_Dimensions::SCHEMA_TRANSIENT );
+		GA4_Custom_Dimensions::maybe_schedule_recheck();
+		$this->assertFalse( wp_next_scheduled( GA4_Custom_Dimensions::PROVISION_ACTION ), 'A clean run is not rescheduled by the recheck.' );
 	}
 
 	/**

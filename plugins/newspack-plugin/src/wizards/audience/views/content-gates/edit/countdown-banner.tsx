@@ -1,5 +1,3 @@
-/* global newspackAudience */
-
 /**
  * Metered Countdown settings page.
  */
@@ -33,11 +31,11 @@ const { useHistory } = Router;
 
 const CountdownBannerSettings = () => {
 	const history = useHistory();
-	const wizardData = useWizardData( AUDIENCE_CONTENT_GATES_WIZARD_SLUG ) as WizardData;
+	const wizardData = useWizardData( AUDIENCE_CONTENT_GATES_WIZARD_SLUG ) as ContentGatesWizardData;
 	const { addNotice, resetNotices, setHeaderData, updateWizardSettings } = useDispatch( WIZARD_STORE_NAMESPACE );
 	const { wizardApiFetch, errorMessage, resetError } = useWizardApiFetch( AUDIENCE_CONTENT_GATES_WIZARD_SLUG );
 	const [ config, setConfig ] = useState< GateSettings >( wizardData?.config || {} );
-	const availableProducts = newspackAudience?.available_products || [];
+	const availableProducts = window.newspackAudience?.available_products || [];
 	const isDirty = useMemo( () => {
 		return (
 			config?.countdown_banner &&
@@ -49,7 +47,7 @@ const CountdownBannerSettings = () => {
 	const { confirmDialog, requestConfirm } = useConfirmDialog( {
 		when: !! ( isDirty && ! isSaving.current ),
 		message: __( 'You have unsaved changes that will be lost. Discard changes?', 'newspack-plugin' ),
-		confirmButtonText: __( 'Discard changes', 'newspack-plugin' ),
+		confirmButtonText: __( 'Discard Changes', 'newspack-plugin' ),
 		isDestructive: true,
 		hideTitle: true,
 	} );
@@ -161,7 +159,7 @@ const CountdownBannerSettings = () => {
 					<ToggleGroupControl
 						label={ __( 'Style', 'newspack-plugin' ) }
 						value={ config?.countdown_banner?.style || 'light' }
-						onChange={ ( value: string ) => setConfig( { ...config, countdown_banner: { ...config?.countdown_banner, style: value } } ) }
+						onChange={ value => setConfig( { ...config, countdown_banner: { ...config?.countdown_banner, style: value as string } } ) }
 						isBlock
 						__next40pxDefaultSize
 					>
@@ -175,9 +173,7 @@ const CountdownBannerSettings = () => {
 							'newspack-plugin'
 						) }
 						value={ config?.countdown_banner?.cta_type || 'product' }
-						onChange={ ( value: string ) =>
-							setConfig( { ...config, countdown_banner: { ...config?.countdown_banner, cta_type: value } } )
-						}
+						onChange={ value => setConfig( { ...config, countdown_banner: { ...config?.countdown_banner, cta_type: value as string } } ) }
 						isBlock
 						__next40pxDefaultSize
 					>

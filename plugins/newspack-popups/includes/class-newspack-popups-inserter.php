@@ -1110,6 +1110,9 @@ final class Newspack_Popups_Inserter {
 			$script_data = [
 				'debug'                => self::should_log_debug_info(),
 				'has_disabled_prompts' => is_singular() && ! empty( get_post_meta( get_the_ID(), 'newspack_popups_has_disabled_popups', true ) ) && ! Newspack_Popups::is_preview_request(),
+				// Namespaces the view script's browser storage per site, so sites
+				// sharing an origin (subdirectory multisite) cannot mix state.
+				'site_id'              => \get_current_blog_id(),
 			];
 
 			if ( Newspack_Popups::$segmentation_enabled ) {
@@ -1132,6 +1135,28 @@ final class Newspack_Popups_Inserter {
 			$donor_landing_page = Newspack_Popups_Settings::donor_landing_page();
 			if ( ! empty( $donor_landing_page ) ) {
 				$script_data['donor_landing_page'] = $donor_landing_page;
+			}
+
+			// Variant suppression is entirely client-side, and this whole block sits
+			// inside the non-AMP branch, so AMP requests get no A/B config at all.
+			// That is correct only because AMP prompt display is currently disabled:
+			// if it is ever restored, every arm of a test would render un-suppressed
+			// unless suppression is reimplemented for that path.
+			$ab_tests = Newspack_Popups_AB_Tests::get_tests_config();
+			if ( ! empty( $ab_tests ) ) {
+				$script_data['ab_tests']   = $ab_tests;
+				$script_data['cid_cookie'] = defined( 'NEWSPACK_CLIENT_ID_COOKIE_NAME' ) ? NEWSPACK_CLIENT_ID_COOKIE_NAME : 'newspack-cid';
+				$ab_buckets                = Newspack_Popups_AB_Tests::get_logged_in_buckets( $ab_tests );
+				if ( ! empty( $ab_buckets ) ) {
+					$script_data['ab_buckets'] = $ab_buckets;
+				}
+				// Variant preview (view_as=ab_variant:x) is echoed server-side via the
+				// admin-gated View_As spec rather than parsed from the URL in JS, so a
+				// non-privileged visitor cannot self-select an arm (and pollute GA).
+				$view_as_spec = Newspack_Popups_View_As::parse_view_as();
+				if ( ! empty( $view_as_spec['ab_variant'] ) && in_array( $view_as_spec['ab_variant'], Newspack_Popups_AB_Tests::VALID_VARIANTS, true ) ) {
+					$script_data['ab_view_as'] = $view_as_spec['ab_variant'];
+				}
 			}
 
 			$script_data = array_merge( $script_data, self::get_view_script_preview_data() );
