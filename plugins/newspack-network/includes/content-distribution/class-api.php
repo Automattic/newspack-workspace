@@ -323,19 +323,25 @@ class API {
 	 * Data Event carrying network credentials and never passes through here, so
 	 * it keeps storing content verbatim — see test_event_path_content_is_not_filtered.
 	 *
-	 * Covers the two things core cleans on `content_save_pre` for such a caller:
-	 * HTML through kses, and block custom CSS. Those are applied directly rather
-	 * than by running the chain, so this guard does not depend on global filter
-	 * registration. That reasoning covers `content` and `raw_content` only —
-	 * `title` and `excerpt` are left to core's own `title_save_pre` and
-	 * `excerpt_save_pre`, which this path never removes, so they do still depend
-	 * on it.
+	 * Applies what core would clean for such a caller, directly rather than by
+	 * running the filter chain, so this does not depend on global filter
+	 * registration: block custom CSS and kses over `content`/`raw_content`, and
+	 * kses over `title` and `excerpt` in core's own two contexts. (Core also puts
+	 * wp_filter_global_styles_post on `content_save_pre`; it acts only on
+	 * global-styles JSON, which a distributed post never carries.)
+	 *
+	 * Title and excerpt are filtered twice — here, and again by core's
+	 * `title_save_pre`/`excerpt_save_pre`, which this route never removes. Both
+	 * passes are idempotent, so the stored value is the same either way. The
+	 * reason to filter them here at all is the persisted payload, below.
 	 *
 	 * Load-bearing: this mutates the payload BEFORE Incoming_Post is constructed,
 	 * so the copy persisted to PAYLOAD_META is the filtered one. Re-linking an
-	 * unlinked post replays that stored payload through insert() with
-	 * `content_save_pre` still removed and no route filtering, so persisting a
-	 * pristine payload here would reopen the hole through that path.
+	 * unlinked post replays that stored payload through insert(), with
+	 * `content_save_pre` still removed and no route filtering — and a caller
+	 * holding unfiltered_html at that moment has no title or excerpt filters of
+	 * their own either. Persisting a pristine payload would reopen the hole
+	 * through that path, for every field.
 	 *
 	 * The cost of that choice, on legitimate content: the filtered copy is also the
 	 * merge base `get_payload_from_partial()` merges later updates over, so where a
@@ -382,6 +388,24 @@ class API {
 			}
 
 			$payload['post_data'][ $field ] = $value;
+		}
+
+		// Mirrors core's other two kses registrations for this caller:
+		// title_save_pre => wp_filter_kses, which scopes the tag set by context,
+		// and excerpt_save_pre => wp_filter_post_kses. Custom CSS is deliberately
+		// not stripped here — neither field is block content, and core does not
+		// strip it there either.
+		if ( $filter_html ) {
+			foreach ( [
+				'title'   => 'title_save_pre',
+				'excerpt' => 'post',
+			] as $field => $context ) {
+				if ( ! isset( $payload['post_data'][ $field ] ) || ! is_string( $payload['post_data'][ $field ] ) ) {
+					continue;
+				}
+
+				$payload['post_data'][ $field ] = wp_kses( $payload['post_data'][ $field ], $context );
+			}
 		}
 
 		return $payload;

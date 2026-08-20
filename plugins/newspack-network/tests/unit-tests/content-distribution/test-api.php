@@ -755,4 +755,113 @@ class TestApi extends \WP_UnitTestCase {
 			$this->assertStringNotContainsString( '"css"', $content, "Custom CSS must be stripped despite the delimiter form ($label)." );
 		}
 	}
+
+	/**
+	 * Build an /insert request whose payload carries the given post_data overrides.
+	 *
+	 * @param array $overrides post_data fields to set.
+	 *
+	 * @return WP_REST_Request
+	 */
+	private function make_insert_request_with( array $overrides ) {
+		$payload = get_sample_payload( 'https://origin.test', get_bloginfo( 'url' ) );
+
+		$payload['post_data']['thumbnail_url'] = ''; // Avoid a sideload attempt in tests.
+		$payload['post_data']                  = array_merge( $payload['post_data'], $overrides );
+
+		$request = new WP_REST_Request( 'POST', '/newspack-network/v1/content-distribution/insert' );
+		$request->set_header( 'Content-Type', 'application/json' );
+		$request->set_body( wp_json_encode( [ 'payload' => $payload ] ) );
+
+		return $request;
+	}
+
+	/**
+	 * Re-linking must not write a title or excerpt the caller could not have saved.
+	 *
+	 * Core cleans title and excerpt on the way in, so the insert itself is safe
+	 * even without this fix. The exposure is the replay: re-linking an unlinked
+	 * post feeds the stored payload back through insert(), and a caller holding
+	 * unfiltered_html at that moment has no filters of their own. Unless the
+	 * payload was filtered before it was persisted, that replay writes the
+	 * original markup.
+	 *
+	 * @group content-distribution-api
+	 */
+	public function test_relinking_does_not_restore_an_unfiltered_title_or_excerpt() {
+		wp_set_current_user( $this->factory->user->create( [ 'role' => 'author' ] ) );
+		kses_init();
+
+		$request = $this->make_insert_request_with(
+			[
+				'title'   => '<script>alert(1)</script>Headline',
+				'excerpt' => '<script>alert(2)</script>Standfirst',
+			]
+		);
+
+		$response = rest_get_server()->dispatch( $request );
+		$this->assertSame( 200, $response->get_status(), 'The insert request should succeed.' );
+		$post_id = $response->get_data()['post_id'];
+
+		$this->assertStringNotContainsString(
+			'<script>',
+			get_post_field( 'post_title', $post_id ),
+			'Precondition: core cleans the title on the way in.'
+		);
+
+		// An editor re-links the post. They hold unfiltered_html, so nothing of
+		// core's is registered to clean the payload on the way back through.
+		wp_set_current_user( $this->factory->user->create( [ 'role' => 'administrator' ] ) );
+		kses_init();
+
+		( new Incoming_Post( $post_id ) )->set_unlinked( false );
+
+		$this->assertStringNotContainsString(
+			'<script>',
+			get_post_field( 'post_title', $post_id ),
+			'Re-linking must not restore the unfiltered title.'
+		);
+		$this->assertStringNotContainsString(
+			'<script>',
+			get_post_field( 'post_excerpt', $post_id ),
+			'Re-linking must not restore the unfiltered excerpt.'
+		);
+	}
+
+	/**
+	 * Filtering the title must cost nothing on ordinary headlines.
+	 *
+	 * This pass runs on top of core's own title_save_pre rather than instead of
+	 * it, and the copy it writes becomes the merge base later partial updates are
+	 * applied over. So anything it degrades would compound across every update.
+	 * Each case must come out exactly as core alone would have stored it.
+	 *
+	 * @group content-distribution-api
+	 */
+	public function test_filtering_leaves_an_ordinary_headline_untouched() {
+		wp_set_current_user( $this->factory->user->create( [ 'role' => 'author' ] ) );
+		kses_init();
+
+		$headlines = [
+			'ampersand'     => 'Fire & Rain',
+			'entity'        => 'Fire &amp; Rain',
+			'curly quotes'  => "The \u{201C}Big\u{201D} Story",
+			'apostrophe'    => "Council\u{2019}s vote",
+			'em dash'       => "Budget \u{2014} at last",
+			'non-ascii'     => "Se\u{00F1}or caf\u{00E9}",
+			'inline markup' => 'Council <b>votes</b> [Update]',
+			'percent'       => 'Up 50% in Q3',
+		];
+
+		foreach ( $headlines as $label => $headline ) {
+			$response = rest_get_server()->dispatch( $this->make_insert_request_with( [ 'title' => $headline ] ) );
+			$this->assertSame( 200, $response->get_status(), "The insert request should succeed ($label)." );
+
+			$this->assertSame(
+				wp_kses( $headline, 'title_save_pre' ),
+				get_post_field( 'post_title', $response->get_data()['post_id'] ),
+				"The stored title must match what core alone would have stored ($label)."
+			);
+		}
+	}
 }
