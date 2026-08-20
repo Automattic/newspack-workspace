@@ -629,8 +629,7 @@ class Content_Gifting {
 		}
 
 		$restriction_instance = \wc_memberships()->get_restrictions_instance()->get_posts_restrictions_instance();
-		\remove_action( 'wp', spl_object_hash( $restriction_instance ) . 'handle_restriction_modes', 9 );
-		\remove_action( 'wp', spl_object_hash( $restriction_instance ) . 'handle_restriction_modes' ); // For compatibility with Woo Memberships < 1.27.2.
+		Memberships::remove_posts_restriction_handler( $restriction_instance );
 		\add_filter( 'wc_memberships_restrictable_comment_types', '__return_empty_array' );
 		\add_filter( 'newspack_can_render_overlay_gate', '__return_false' );
 	}
