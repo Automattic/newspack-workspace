@@ -18,7 +18,7 @@ export type EmptyStateHeaderProps = {
 	description?: React.ReactNode;
 	/** Defaults to 3 when the root is small, 2 otherwise. */
 	heading?: 1 | 2 | 3 | 4 | 5 | 6;
-	/** Merged onto `.newspack-section-header__container`, where `SectionHeader` puts its own `className`. */
+	/** Merged onto `newspack-empty-state__header`. */
 	className?: string;
 };
 

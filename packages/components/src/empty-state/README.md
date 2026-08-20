@@ -155,6 +155,8 @@ decisions at once is usually a sign the screen needs an onboarding view instead.
 
 ## Outside the Root
 
-`EmptyState.Header` and `EmptyState.Actions` read Root's context and throw
-"EmptyState subcomponents must be rendered inside EmptyState.Root." when
-rendered anywhere else.
+`EmptyState.Header` and `EmptyState.Actions` both throw "EmptyState
+subcomponents must be rendered inside EmptyState.Root." when rendered anywhere
+else, in development only. In production `Header` falls back to the default
+size and `Actions` renders as it would inside a Root, so a misplaced part never
+blanks an admin screen.
