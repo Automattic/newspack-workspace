@@ -312,6 +312,41 @@ class API {
 	}
 
 	/**
+	 * Hold the caller-supplied post type to the network's allowlist.
+	 *
+	 * `post_type` comes from the payload and reaches wp_insert_post() unchecked,
+	 * and wp_insert_post() does no post-type authorization of its own. Filtering
+	 * the content does not cover this: types like `wp_template`, `wp_navigation`
+	 * and `wp_global_styles` change how the site renders rather than carrying
+	 * article content, so a clean payload is still the wrong thing to create.
+	 *
+	 * Outgoing_Post::__construct() already refuses anything outside this list, so
+	 * this is the same rule applied to the receiving end. Scoped to this route:
+	 * distribution over Data Events does not pass through here.
+	 *
+	 * @param mixed $payload The incoming payload.
+	 *
+	 * @return WP_Error|null An error to return to the caller, or null to proceed.
+	 */
+	private static function check_incoming_post_type( mixed $payload ): ?WP_Error {
+		if ( ! is_array( $payload ) || ! isset( $payload['post_data']['post_type'] ) ) {
+			return null;
+		}
+
+		$post_type = $payload['post_data']['post_type'];
+		if ( ! is_string( $post_type ) || in_array( $post_type, Content_Distribution_Class::get_distributed_post_types(), true ) ) {
+			return null;
+		}
+
+		return new WP_Error(
+			'invalid_post_type',
+			/* translators: unsupported post type for content distribution */
+			sprintf( __( 'Post type %s is not supported as a distributed incoming post.', 'newspack-network' ), $post_type ),
+			[ 'status' => 400 ]
+		);
+	}
+
+	/**
 	 * Hold caller-supplied content to the caller's own capabilities.
 	 *
 	 * This route's payload is composed in the browser rather than by a peer site,
@@ -427,7 +462,14 @@ class API {
 	 * @return WP_REST_Response|WP_Error The REST response or error.
 	 */
 	public static function insert_post( $request ): WP_REST_Response|WP_Error {
-		$payload = self::filter_incoming_content( $request->get_param( 'payload' ) );
+		$payload = $request->get_param( 'payload' );
+
+		$post_type_error = self::check_incoming_post_type( $payload );
+		if ( $post_type_error ) {
+			return $post_type_error;
+		}
+
+		$payload = self::filter_incoming_content( $payload );
 
 		try {
 			$incoming_post = new Incoming_Post( $payload );

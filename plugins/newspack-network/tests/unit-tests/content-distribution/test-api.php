@@ -899,4 +899,74 @@ class TestApi extends \WP_UnitTestCase {
 			);
 		}
 	}
+
+	/**
+	 * The route must refuse a post type the network does not distribute.
+	 *
+	 * The payload's post_type reaches wp_insert_post() unchecked, and that
+	 * function does no post-type authorization. Types like wp_template and
+	 * wp_navigation change how the site renders, so filtering their content
+	 * is not enough.
+	 *
+	 * @group content-distribution-api
+	 */
+	public function test_insert_refuses_a_post_type_outside_the_allowlist() {
+		wp_set_current_user( $this->factory->user->create( [ 'role' => 'author' ] ) );
+		kses_init();
+
+		foreach ( [ 'wp_template', 'wp_navigation', 'wp_global_styles' ] as $post_type ) {
+			$response = rest_get_server()->dispatch(
+				$this->make_insert_request_with( [ 'post_type' => $post_type ] )
+			);
+
+			$this->assertSame( 400, $response->get_status(), "The route must refuse $post_type." );
+			$this->assertSame(
+				'invalid_post_type',
+				$response->as_error()->get_error_code(),
+				"Refusing $post_type must report why, not fail incidentally."
+			);
+			$this->assertSame(
+				0,
+				count(
+					get_posts(
+						[
+							'post_type'   => $post_type,
+							'post_status' => 'any',
+						] 
+					) 
+				),
+				"Nothing of type $post_type may be created."
+			);
+		}
+	}
+
+	/**
+	 * The allowlist must not cost the types the network does distribute.
+	 *
+	 * The list is filterable, so this asserts against whatever the install
+	 * allows rather than a hard-coded set.
+	 *
+	 * @group content-distribution-api
+	 */
+	public function test_insert_still_accepts_a_distributed_post_type() {
+		wp_set_current_user( $this->factory->user->create( [ 'role' => 'author' ] ) );
+		kses_init();
+
+		foreach ( Content_Distribution_Class::get_distributed_post_types() as $post_type ) {
+			if ( ! post_type_exists( $post_type ) ) {
+				continue;
+			}
+
+			$response = rest_get_server()->dispatch(
+				$this->make_insert_request_with( [ 'post_type' => $post_type ] )
+			);
+
+			$this->assertSame( 200, $response->get_status(), "A distributed type must still insert ($post_type)." );
+			$this->assertSame(
+				$post_type,
+				get_post_field( 'post_type', $response->get_data()['post_id'] ),
+				"The post must be created as $post_type."
+			);
+		}
+	}
 }
