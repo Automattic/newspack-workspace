@@ -101,6 +101,13 @@ window.newspackRAS.push( function ( readerActivation ) {
 				if ( ! FORM_ALLOWED_ACTIONS.includes( action ) ) {
 					action = 'signin';
 				}
+				// Moving to any form step ends the previous step's in-flight request, so clear the
+				// submit button's loading spinner here. This is the single owner for the transition
+				// case (signin -> pwd/otp, -> success, back button): startLoginFlow() adds the class,
+				// every step change removes it. Same-state errors clear it in endLoginFlow() instead.
+				submitButtons.forEach( button => {
+					button.classList.remove( 'newspack-ui__button--loading' );
+				} );
 				// Signin and success steps should clear any modal errors or messages.
 				if ( 'signin' === action || 'success' === action ) {
 					form.setMessageContent();
@@ -277,6 +284,11 @@ window.newspackRAS.push( function ( readerActivation ) {
 				container.removeAttribute( 'data-form-status' );
 				submitButtons.forEach( button => {
 					button.disabled = true;
+					// This flow owns the submit button's loading state end to end. The modal-submit
+					// handler in newspack-ui/js/modals.js also adds this class, but only for forms
+					// inside a modal; adding it here covers the inline auth form (e.g. /my-account) too,
+					// and pairs with the removal at every re-enable site below.
+					button.classList.add( 'newspack-ui__button--loading' );
 				} );
 				form.setMessageContent();
 				form.style.opacity = 0.5;
@@ -289,22 +301,20 @@ window.newspackRAS.push( function ( readerActivation ) {
 				if ( container.config?.closeOnSuccess ) {
 					form.style.opacity = 1;
 				}
-				if ( message ) {
-					const messageNode = document.createElement( 'p' );
-					messageNode.innerHTML = message;
-
-					if ( status !== 200 ) {
-						form.isVerifying = false;
+				if ( status !== 200 ) {
+					// Any non-success outcome must re-enable the submit button and clear its loading
+					// spinner so the reader can retry — including the null-message network/parse
+					// failures from the fetch .catch() paths, which would otherwise leave the button
+					// stuck spinning. Show an inline error only when we actually have a message.
+					form.isVerifying = false;
+					if ( message ) {
 						form.setMessageContent( message, true );
 						messageContentElement.querySelectorAll( '[data-set-action]' ).forEach( setActionListener );
-						submitButtons.forEach( button => {
-							button.disabled = false;
-							// Clear the loading class in lockstep with the disabled attribute. It's added
-							// by the modal-submit handler in newspack-ui/js/modals.js (which assumes a page
-							// navigation); this flow is AJAX, so the button would otherwise stay spinning.
-							button.classList.remove( 'newspack-ui__button--loading' );
-						} );
 					}
+					submitButtons.forEach( button => {
+						button.disabled = false;
+						button.classList.remove( 'newspack-ui__button--loading' );
+					} );
 				}
 				if ( status === 200 ) {
 					if ( data?.email ) {
@@ -555,6 +565,8 @@ window.newspackRAS.push( function ( readerActivation ) {
 											if ( data.action === 'otp' || data.action === 'pwd' ) {
 												form.style.opacity = 1;
 											}
+											// The spinner is already cleared by setFormAction() above; just
+											// re-enable the button for the new step.
 											submitButtons.forEach( button => {
 												button.disabled = false;
 											} );
