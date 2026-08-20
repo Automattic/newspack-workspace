@@ -419,22 +419,32 @@ class Metadata {
 	 * Get the list of possible fields to be synced, grouped by section.
 	 *
 	 * Returns an array of groups, each with a 'section' label and 'fields' array.
-	 * Only includes classes with a section name. Each class's fields are resolved
-	 * from the filtered map by its own raw keys, not by label text — labels can
-	 * collide across schemas (legacy `account` and new `Account` are both
-	 * "Account"), so matching by label would keep a class alive on a sibling
-	 * class's field. Fields added by the `newspack_ras_metadata_keys` filter that
-	 * don't belong to any class are collected in an "Additional" group.
+	 * Every class with a section name gets its own group, and filter-added
+	 * fields that belong to no class land in "Additional". Adjacent groups
+	 * sharing a label are folded together, so the two legacy classes render
+	 * as one "Legacy" panel rather than two identically-titled ones.
+	 *
+	 * All-legacy groups (every field 'legacy' in its class's own field config)
+	 * sort last, checked via that status rather than the section label so it
+	 * survives label translation or renaming.
+	 *
+	 * Each class's fields are resolved from the filtered map by its own raw
+	 * keys, not by label text — labels can collide across schemas (legacy
+	 * `account` and new `Account` are both "Account"), so matching by label
+	 * would keep a class alive on a sibling class's field.
 	 *
 	 * @return array<int, array{section: string, fields: list<string>}> List of
 	 *   groups, each with a non-empty section label and an ordered list of field
-	 *   names. May be filtered by `newspack_ras_grouped_metadata_fields`.
+	 *   names, all-legacy groups sorted last. May be filtered by
+	 *   `newspack_ras_grouped_metadata_fields`.
 	 */
 	public static function get_grouped_default_fields(): array {
 		$classes          = self::get_metadata_classes();
 		$label_map        = self::get_all_fields( true );
 		$available_fields = array_values( array_unique( array_values( $label_map ) ) );
-		$groups           = [];
+		$status_by_class  = self::get_status_by_class_and_raw_key();
+		$primary_groups   = [];
+		$legacy_groups    = [];
 		$grouped_fields   = [];
 
 		foreach ( $classes as $class ) {
@@ -444,10 +454,14 @@ class Metadata {
 					continue;
 				}
 
-				$fields = [];
+				$fields     = [];
+				$all_legacy = true;
 				foreach ( array_keys( $class::get_fields() ) as $raw_key ) {
 					if ( isset( $label_map[ $raw_key ] ) ) {
 						$fields[] = $label_map[ $raw_key ];
+						if ( 'legacy' !== ( $status_by_class[ $class ][ $raw_key ] ?? null ) ) {
+							$all_legacy = false;
+						}
 					}
 				}
 				$fields = array_values( array_unique( $fields ) );
@@ -456,21 +470,28 @@ class Metadata {
 					continue;
 				}
 
-				$groups[]       = [
+				$group = [
 					'section' => $section,
 					'fields'  => $fields,
 				];
+				if ( $all_legacy ) {
+					$legacy_groups[] = $group;
+				} else {
+					$primary_groups[] = $group;
+				}
 				$grouped_fields = array_merge( $grouped_fields, $fields );
 			}
 		}
 
 		$ungrouped_fields = array_values( array_diff( $available_fields, array_unique( $grouped_fields ) ) );
 		if ( ! empty( $ungrouped_fields ) ) {
-			$groups[] = [
+			$primary_groups[] = [
 				'section' => __( 'Additional', 'newspack-plugin' ),
 				'fields'  => $ungrouped_fields,
 			];
 		}
+
+		$groups = self::merge_adjacent_groups( array_merge( $primary_groups, $legacy_groups ) );
 
 		/**
 		 * Filters the list of possible metadata fields to be synced, grouped by section.
@@ -479,6 +500,49 @@ class Metadata {
 		 * @param string[] $available_fields Flat list of filtered available metadata field names.
 		 */
 		return \apply_filters( 'newspack_ras_grouped_metadata_fields', $groups, $available_fields );
+	}
+
+	/**
+	 * Fold neighbouring groups that carry the same section label into one.
+	 *
+	 * Both legacy classes declare the "Legacy" section, so a WooCommerce site
+	 * would otherwise render two adjacent panels with the same title and no
+	 * way to tell them apart. Only ADJACENT groups merge, so the sort order
+	 * (all-legacy groups last) still means what it says.
+	 *
+	 * @param array<int, array{section: string, fields: list<string>}> $groups Ordered groups.
+	 *
+	 * @return array<int, array{section: string, fields: list<string>}>
+	 */
+	private static function merge_adjacent_groups( array $groups ): array {
+		$merged = [];
+		foreach ( $groups as $group ) {
+			$last = count( $merged ) - 1;
+			if ( $last >= 0 && $merged[ $last ]['section'] === $group['section'] ) {
+				$merged[ $last ]['fields'] = array_values( array_unique( array_merge( $merged[ $last ]['fields'], $group['fields'] ) ) );
+				continue;
+			}
+			$merged[] = $group;
+		}
+		return $merged;
+	}
+
+	/**
+	 * Map of metadata class => raw key => field status, from each class's
+	 * own config. Backs the all-legacy group check in
+	 * get_grouped_default_fields(), so legacy-ness survives section-label
+	 * translation or renaming.
+	 *
+	 * @return array<string, array<string, string|null>>
+	 */
+	private static function get_status_by_class_and_raw_key() {
+		$map = [];
+		foreach ( self::get_metadata_classes() as $class ) {
+			foreach ( $class::get_fields_config() as $raw_key => $config ) {
+				$map[ $class ][ $raw_key ] = $config['status'] ?? null;
+			}
+		}
+		return $map;
 	}
 
 	/**

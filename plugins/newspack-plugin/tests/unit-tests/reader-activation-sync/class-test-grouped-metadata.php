@@ -139,4 +139,47 @@ class Test_Grouped_Metadata extends WP_UnitTestCase {
 
 		$this->assertSame( $replacement, Metadata::get_grouped_default_fields() );
 	}
+
+	public function test_legacy_fields_are_grouped_under_legacy_section() {
+		$groups = Metadata::get_grouped_default_fields();
+		$legacy = $this->find_group( $groups, 'Legacy' );
+
+		$this->assertNotNull( $legacy, 'Legacy_Basic fields should form a Legacy group.' );
+		$this->assertContains( 'Account', $legacy['fields'], 'Legacy_Basic fields belong in the Legacy section.' );
+
+		$additional = $this->find_group( $groups, 'Additional' );
+		if ( null !== $additional ) {
+			$this->assertNotContains( 'Account', $additional['fields'], 'Legacy fields must not fall into Additional any more.' );
+		}
+	}
+
+	/**
+	 * Both legacy classes declare the "Legacy" section, so on a WooCommerce
+	 * site the picker would otherwise render two adjacent panels with the same
+	 * title and no way to tell them apart.
+	 */
+	public function test_groups_sharing_a_section_label_are_merged() {
+		$sections = $this->get_section_names( Metadata::get_grouped_default_fields() );
+
+		$this->assertSame(
+			array_values( array_unique( $sections ) ),
+			$sections,
+			'No section label may appear on two groups.'
+		);
+	}
+
+	public function test_all_legacy_groups_render_last() {
+		$groups   = Metadata::get_grouped_default_fields();
+		$sections = $this->get_section_names( $groups );
+
+		$first_legacy_index = array_search( 'Legacy', $sections, true );
+		$this->assertNotFalse( $first_legacy_index, 'Expected a Legacy section to be present.' );
+
+		// Every group from the first Legacy group onward must also be Legacy:
+		// nothing (including Additional) is allowed to sort after it.
+		$section_count = count( $sections );
+		for ( $i = $first_legacy_index; $i < $section_count; $i++ ) {
+			$this->assertSame( 'Legacy', $sections[ $i ], 'Legacy groups must be the last groups in the list.' );
+		}
+	}
 }
