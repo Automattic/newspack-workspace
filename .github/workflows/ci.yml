@@ -292,13 +292,35 @@ jobs:
       - name: Install WordPress test suite
         if: steps.check.outputs.has_tests == 'true'
         run: |
+          # Without pipefail, a `curl | tar` pipeline reports only tar's status.
+          # A failed download then surfaces as tar's bare "exit code 2" — the
+          # symptom of a corrupt archive — and the step blames the extraction for
+          # a network problem it never saw.
+          set -o pipefail
+
           # svn isn't on ubuntu-latest runners by default; the WP develop
           # repo's phpunit test library is published over svn.
           sudo apt-get update -qq
           sudo apt-get install -y -qq subversion
-          # Download WP core and test library.
+          # Download WP core and test library. -f so an HTTP error is an error
+          # rather than a body, and --retry so a single dropped connection to
+          # wordpress.org doesn't fail a matrix leg that has nothing to do with
+          # the PR under test.
           mkdir -p "$WP_TESTS_DIR"
-          WP_TESTS_TAG=$(curl -s "https://api.wordpress.org/core/version-check/1.7/" | jq -r '.offers[0].version')
+          WP_TESTS_TAG=$(curl -sSfL --retry 5 --retry-delay 2 --retry-all-errors \
+            "https://api.wordpress.org/core/version-check/1.7/" | jq -r '.offers[0].version')
+
+          # jq prints "null" for a missing key and nothing at all for an empty
+          # body, and both flow on as if they were a version. The URLs built from
+          # them 404, tar chokes on the HTML error page, and the step dies naming
+          # neither the tag nor the API that produced it.
+          case "$WP_TESTS_TAG" in
+            [0-9]*.[0-9]*) ;;
+            *)
+              echo "::error::api.wordpress.org returned no usable version (got '$WP_TESTS_TAG')."
+              exit 1
+              ;;
+          esac
 
           # The tarball's top-level directory is "wordpress/". Extract to
           # $WP_CORE_DIR's parent and strip that prefix so files land at
@@ -306,7 +328,8 @@ jobs:
           # $WP_CORE_DIR happens to be /tmp/wordpress.
           rm -rf "$WP_CORE_DIR"
           mkdir -p "$WP_CORE_DIR"
-          curl -s "https://wordpress.org/wordpress-$WP_TESTS_TAG.tar.gz" \
+          curl -sSfL --retry 5 --retry-delay 2 --retry-all-errors \
+            "https://wordpress.org/wordpress-$WP_TESTS_TAG.tar.gz" \
             | tar xz --strip-components=1 -C "$WP_CORE_DIR"
 
           svn co --quiet "https://develop.svn.wordpress.org/tags/$WP_TESTS_TAG/tests/phpunit/includes/" "$WP_TESTS_DIR/includes"
