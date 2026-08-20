@@ -472,6 +472,95 @@ class Test_Outgoing_Fields_Storage extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * The outgoing-fields settings entry carries the id-space payload the
+	 * per-field UI consumes, alongside the legacy name-space keys external
+	 * consumers still read.
+	 */
+	public function test_settings_config_carries_definitions_and_value_ids() {
+		\update_option( Integration::OUTGOING_FIELDS_OPTION_PREFIX . 'storage-test', [ 'v1:account' ] );
+
+		$outgoing = null;
+		foreach ( $this->integration->get_settings_config() as $field ) {
+			if ( 'outgoing_metadata_fields' === $field['key'] ) {
+				$outgoing = $field;
+			}
+		}
+
+		$this->assertNotNull( $outgoing );
+		$this->assertSame( [ 'v1:account' ], $outgoing['value_ids'] );
+		$this->assertNotEmpty( $outgoing['definitions'] );
+		$this->assertContains( 'v2:Registration_Strategy', array_column( $outgoing['definitions'], 'id' ), 'Definitions must include every schema version.' );
+		// Legacy keys stay for external consumers.
+		$this->assertArrayHasKey( 'options', $outgoing );
+		$this->assertArrayHasKey( 'grouped_options', $outgoing );
+	}
+
+	/**
+	 * The filter_enabled_outgoing_fields() method must operate in id-space: an
+	 * enabled id of either schema version matches its raw key.
+	 */
+	public function test_filter_enabled_outgoing_fields_covers_both_schema_versions() {
+		\update_option(
+			Integration::OUTGOING_FIELDS_OPTION_PREFIX . 'storage-test',
+			[ 'v1:account', 'v2:Registration_Strategy' ]
+		);
+
+		$filtered = $this->integration->filter_enabled_outgoing_fields( [ 'account', 'Registration_Strategy', 'registration_date' ] );
+
+		$this->assertSame( 'Account', $filtered['account'] );
+		$this->assertSame( 'Registration Strategy', $filtered['Registration_Strategy'], 'Enabled ids of either version must match their raw keys.' );
+		$this->assertArrayNotHasKey( 'registration_date', $filtered, 'Non-enabled keys must not match.' );
+	}
+
+	/**
+	 * The filter_enabled_outgoing_fields() method must cover neutral ids (filter-added fields)
+	 * end to end: resolving neutral ids to their raw keys and names.
+	 */
+	public function test_filter_enabled_outgoing_fields_covers_neutral_ids() {
+		// Register a custom filter-added field as neutral.
+		$callback = function ( $keys ) {
+			$keys['custom_extra'] = 'Custom Extra';
+			return $keys;
+		};
+		\add_filter( 'newspack_ras_metadata_keys', $callback );
+		Field_Registry::reset();
+
+		// Store v1 and neutral ids in the integration's option.
+		\update_option(
+			Integration::OUTGOING_FIELDS_OPTION_PREFIX . 'storage-test',
+			[ 'v1:account', 'neutral:custom_extra' ]
+		);
+
+		$filtered = $this->integration->filter_enabled_outgoing_fields( [ 'account', 'custom_extra', 'registration_date' ] );
+
+		$this->assertSame( 'Account', $filtered['account'] );
+		$this->assertSame( 'Custom Extra', $filtered['custom_extra'], 'Enabled neutral ids must match their raw keys.' );
+		$this->assertArrayNotHasKey( 'registration_date', $filtered, 'Non-enabled keys must not match.' );
+
+		// Clean up: remove filter and reset registry.
+		\remove_filter( 'newspack_ras_metadata_keys', $callback );
+		Field_Registry::reset();
+	}
+
+	/**
+	 * The get_enabled_outgoing_fields_keys() method must cover enabled ids of
+	 * either schema version, raw and prefixed.
+	 */
+	public function test_enabled_outgoing_fields_keys_cover_both_schema_versions() {
+		\update_option(
+			Integration::OUTGOING_FIELDS_OPTION_PREFIX . 'storage-test',
+			[ 'v1:account', 'v2:Registration_Strategy' ]
+		);
+
+		$raw = $this->integration->get_enabled_outgoing_fields_keys();
+		$this->assertContains( 'account', $raw );
+		$this->assertContains( 'Registration_Strategy', $raw );
+
+		$prefixed = $this->integration->get_enabled_outgoing_fields_keys( true );
+		$this->assertContains( $this->integration->get_metadata_prefix() . 'Registration Strategy', $prefixed );
+	}
+
+	/**
 	 * Ids are stored exactly as submitted, on every path: a stored id is the
 	 * publisher's field, and both members of a value-equivalent pair produce
 	 * the same payload, so there is nothing to gain by rewriting one.

@@ -1,0 +1,209 @@
+/**
+ * WordPress dependencies
+ */
+import { __, sprintf } from '@wordpress/i18n';
+import { CheckboxControl } from '@wordpress/components';
+import { useMemo } from '@wordpress/element';
+
+/**
+ * Internal dependencies
+ */
+import { Accordion, AccordionPanel, Badge, Grid } from '../../../../../packages/components/src';
+
+const VERSIONS = [ 'v1', 'v2', 'neutral' ];
+
+/**
+ * Whether a definition is on its way out — the single input to both sunset
+ * visibility and sunset-last ordering; no site-level schema is consulted.
+ *
+ * @param {Object} definition A definition from the settings payload.
+ * @return {boolean} True for legacy definitions.
+ */
+const isSunset = definition => 'legacy' === definition?.status;
+
+/**
+ * Build UI rows from the merged definitions payload.
+ *
+ * One row per ESP field name, never a version choice: a v2 field only keeps
+ * its v1 twin's ESP name when it is a declared value-equivalent pair (one
+ * that changed meaning is given its own name instead), so a name carrying
+ * both versions always collapses to a single row under the surviving (v2)
+ * identity.
+ *
+ * Every field lists on every site, legacy included — grouped under the
+ * Legacy section and ordered last, so the direction of travel stays
+ * visible. Only unavailable definitions are hidden.
+ *
+ * @param {Object[]} definitions Definitions from the settings payload.
+ * @param {string[]} enabledIds  Enabled field ids.
+ * @return {Object[]} Ordered row objects.
+ */
+export const buildFieldRows = ( definitions, enabledIds ) => {
+	const enabled = new Set( enabledIds || [] );
+	const byName = new Map();
+	( definitions || [] ).forEach( d => {
+		if ( ! byName.has( d.name ) ) {
+			byName.set( d.name, { v1: [], v2: [], neutral: [] } );
+		}
+		byName.get( d.name )[ d.version ]?.push( d );
+	} );
+
+	const rows = [];
+	byName.forEach( ( candidates, name ) => {
+		const present = VERSIONS.filter( v => candidates[ v ].length );
+		const collapsed = candidates.v1.length > 0 && candidates.v2.length > 0;
+		const enabledVersion = VERSIONS.find( v => candidates[ v ].some( d => enabled.has( d.id ) ) );
+		const hasAvailable = v => candidates[ v ].some( d => d.available );
+		// A collapsed pair renders under v2, falling back to v1 only while v2
+		// is unavailable — deliberately overriding an enabled v1 id, since a
+		// pre-upgrade selection still means the same field.
+		let activeVersion = enabledVersion || present[ 0 ];
+		if ( collapsed ) {
+			activeVersion = hasAvailable( 'v2' ) || ! hasAvailable( 'v1' ) ? 'v2' : 'v1';
+		}
+		const active = candidates[ activeVersion ];
+		if ( ! active.length || ! active.some( d => d.available ) ) {
+			return;
+		}
+		const checked = Boolean( enabledVersion );
+		const activeDefinition = active[ 0 ];
+		const supersededByDef = ( activeDefinition.superseded_by || [] ).map( id => ( definitions || [] ).find( d => d.id === id ) ).find( Boolean );
+		rows.push( {
+			key: activeDefinition.id,
+			name,
+			section: activeDefinition.section || __( 'Additional', 'newspack-plugin' ),
+			activeVersion,
+			activeDefinition,
+			ids: active.map( d => d.id ),
+			// Every version's ids, so unchecking a collapsed pair clears the
+			// legacy side too.
+			allIds: VERSIONS.flatMap( v => candidates[ v ].map( d => d.id ) ),
+			checked,
+			supersededHint: supersededByDef ? supersededByDef.name : null,
+		} );
+	} );
+	// Sunset-last, scoped to each section: rows a site should adopt come
+	// first, legacy ones sink to the bottom. Sorting on first-appearance
+	// index preserves section order; a stable sort preserves tie order.
+	const sectionOrder = new Map();
+	rows.forEach( row => {
+		if ( ! sectionOrder.has( row.section ) ) {
+			sectionOrder.set( row.section, sectionOrder.size );
+		}
+	} );
+	rows.sort(
+		( a, b ) =>
+			sectionOrder.get( a.section ) - sectionOrder.get( b.section ) ||
+			Number( isSunset( a.activeDefinition ) ) - Number( isSunset( b.activeDefinition ) )
+	);
+	return rows;
+};
+
+/**
+ * Group visible rows by section, preserving row order within each section.
+ *
+ * Sections made entirely of legacy-status rows sort after every other
+ * section (keyed on each row's `status`, not the section's translated
+ * label). Relative order is otherwise unchanged from first appearance.
+ *
+ * @param {Object[]} rows Rows from buildFieldRows.
+ * @return {{section: string, rows: Object[]}[]} Ordered section groups.
+ */
+export const visibleSections = rows => {
+	const sections = [];
+	const index = new Map();
+	( rows || [] ).forEach( row => {
+		if ( ! index.has( row.section ) ) {
+			index.set( row.section, sections.length );
+			sections.push( { section: row.section, rows: [] } );
+		}
+		sections[ index.get( row.section ) ].rows.push( row );
+	} );
+	const isLegacySection = section => section.rows.every( row => isSunset( row.activeDefinition ) );
+	return [ ...sections.filter( section => ! isLegacySection( section ) ), ...sections.filter( isLegacySection ) ];
+};
+
+/**
+ * Toggle a row on (enable all active-version ids) or off (remove every
+ * candidate id of every version).
+ *
+ * @param {string[]} enabledIds Current enabled ids.
+ * @param {Object}   row        Row from buildFieldRows.
+ * @param {boolean}  checked    Next checked state.
+ * @return {string[]} Next enabled ids.
+ */
+export const toggleRow = ( enabledIds, row, checked ) => {
+	const without = ( enabledIds || [] ).filter( id => ! row.allIds.includes( id ) );
+	return checked ? [ ...without, ...row.ids ] : without;
+};
+
+/**
+ * Badges for a row, read off the active definition's status. Legacy fields
+ * carry no badge — they're surfaced by sorting into their own Legacy
+ * section instead. Everything else is unbadged.
+ *
+ * @param {Object} row Row from buildFieldRows.
+ * @return {{text: string, level: string}[]} Badge descriptors.
+ */
+export const badgesForRow = row => {
+	const status = row.activeDefinition.status;
+	if ( 'new' === status || 'updated' === status ) {
+		return [ { text: __( 'New', 'newspack-plugin' ), level: 'success' } ];
+	}
+	return [];
+};
+
+/**
+ * The per-field Outbound selection list: one row per ESP field name with an
+ * inline description and badges; posts ids via onChange.
+ *
+ * @param {Object}   props          Component props.
+ * @param {Object}   props.field    The outgoing_metadata_fields settings payload entry.
+ * @param {string[]} props.value    Current enabled ids (draft or saved).
+ * @param {Function} props.onChange Receives the next ids array.
+ */
+const OutboundFields = ( { field, value, onChange } ) => {
+	const enabledIds = Array.isArray( value ) ? value : field.value_ids || [];
+	const rows = useMemo( () => buildFieldRows( field.definitions, enabledIds ), [ field.definitions, enabledIds ] );
+	const sections = useMemo( () => visibleSections( rows ), [ rows ] );
+	return (
+		<Accordion hideSingleTitle>
+			{ sections.map( ( { section, rows: sectionRows }, index ) => (
+				<AccordionPanel key={ section } title={ section } defaultOpen={ index === 0 }>
+					<Grid columns={ 1 } rowGap={ 8 } noMargin>
+						{ sectionRows.map( row => (
+							<div className="newspack-outbound-field-row" key={ row.key }>
+								<CheckboxControl
+									className="newspack-outbound-field-row__checkbox"
+									label={ row.name }
+									help={
+										[
+											row.activeDefinition.description,
+											row.supersededHint &&
+												sprintf(
+													/* translators: %s: name of the replacing field. */
+													__( 'Superseded by %s.', 'newspack-plugin' ),
+													row.supersededHint
+												),
+										]
+											.filter( Boolean )
+											.join( ' — ' ) || undefined
+									}
+									checked={ row.checked }
+									onChange={ checked => onChange( toggleRow( enabledIds, row, checked ) ) }
+								/>
+								<span className="newspack-outbound-field-row__badges">
+									{ badgesForRow( row ).map( badge => (
+										<Badge key={ badge.text } text={ badge.text } level={ badge.level } />
+									) ) }
+								</span>
+							</div>
+						) ) }
+					</Grid>
+				</AccordionPanel>
+			) ) }
+		</Accordion>
+	);
+};
+
+export default OutboundFields;

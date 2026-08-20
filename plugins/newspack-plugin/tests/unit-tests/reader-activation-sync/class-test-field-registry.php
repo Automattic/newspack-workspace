@@ -283,6 +283,48 @@ class Test_Field_Registry extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * The settings serialization carries everything the per-field UI renders,
+	 * for every version, and nothing internal (no class references).
+	 */
+	public function test_definitions_for_settings_shape() {
+		$rows  = Field_Registry::get_definitions_for_settings();
+		$by_id = array_column( $rows, null, 'id' );
+
+		$this->assertArrayHasKey( 'v1:account', $by_id );
+		$this->assertArrayHasKey( 'v2:Registration_Strategy', $by_id );
+
+		$row = $by_id['v2:Registration_Strategy'];
+		$this->assertSame( 'Registration Strategy', $row['name'] );
+		$this->assertSame( 'v2', $row['version'] );
+		$this->assertSame( 'Registration_Strategy', $row['raw_key'] );
+		$this->assertSame( 'new', $row['status'] );
+		$this->assertSame( 'v1:registration_method', $row['supersedes'] );
+		$this->assertNotEmpty( $row['description'] );
+		$this->assertNotEmpty( $row['example'] );
+		$this->assertIsBool( $row['available'] );
+		$this->assertIsBool( $row['dynamic_suffix'] );
+		$this->assertIsArray( $row['superseded_by'] );
+		$this->assertArrayNotHasKey( 'class', $row );
+
+		// No conflict or equivalence flags: the UI has no version choice to
+		// offer, and reads a collapsed pair off the pair itself.
+		$this->assertArrayNotHasKey( 'in_conflict_group', $row );
+		$this->assertArrayNotHasKey( 'equivalent', $row );
+
+		// Superseded side of a rename carries the reverse link.
+		$this->assertContains( 'v2:Registration_Strategy', $by_id['v1:registration_method']['superseded_by'] );
+
+		// `status` is what the badges and sunset rule key on: new/updated badge
+		// New (legacy is unbadged — it sorts into its own Legacy-last section
+		// instead), and a field with no declared status is a safe 'existing'.
+		$this->assertSame( 'legacy', $by_id['v1:account']['status'] );
+		foreach ( $rows as $r ) {
+			$this->assertContains( $r['status'], [ 'new', 'updated', 'legacy', 'existing' ] );
+			$this->assertIsString( $r['section'] );
+		}
+	}
+
+	/**
 	 * Every renamed v2 field (supersedes a v1 field under a DIFFERENT ESP
 	 * name) must carry a badge-worthy status, so the UI shows it as New.
 	 */

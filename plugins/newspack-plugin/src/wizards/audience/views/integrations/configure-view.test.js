@@ -48,6 +48,10 @@ jest.mock( '@wordpress/components', () => ( {
 jest.mock( '../../../../../packages/components/src', () => ( {
 	Accordion: ( { children } ) => children,
 	AccordionPanel: ( { children } ) => children,
+	// Outbound rows render one per Legacy/New badge; the fixtures below are all
+	// unbadged 'existing' fields, so this only guards a future badged fixture
+	// from rendering `undefined`.
+	Badge: ( { text } ) => <span>{ text }</span>,
 	Button: ( { children } ) => children,
 	// Section dividers pass alignment="full-width"; the divider under a section
 	// toggle does not, so the stub tags them apart for the tests that assert on
@@ -512,6 +516,23 @@ describe( 'ConfigureView per-direction sections', () => {
 		useUnsavedChangesDialog.mockReturnValue( { confirmDialog: null, requestConfirm: jest.fn() } );
 	} );
 
+	// DEFS-style outbound definition builder (mirrors outbound-fields.test.js)
+	// so this suite's outbound fixtures carry the same id-space shape the real
+	// settings payload does. Only the properties buildFieldRows/toggleRow/
+	// badgesForRow actually read are set; the rest default to values that keep
+	// every row a plain, single-version, uncollapsed, non-badged row unless a
+	// test opts into something else via `extra`.
+	const outboundDef = ( id, name, extra = {} ) => ( {
+		id,
+		version: id.split( ':' )[ 0 ],
+		name,
+		section: 'Basic',
+		available: true,
+		status: 'existing',
+		superseded_by: [],
+		...extra,
+	} );
+
 	// A bidirectional integration as the capability-aware backend declares it:
 	// each direction carries its enable toggle alongside its metadata field.
 	const bidirectionalIntegration = () => ( {
@@ -524,8 +545,9 @@ describe( 'ConfigureView per-direction sections', () => {
 					key: 'outgoing_metadata_fields',
 					type: 'metadata',
 					label: 'Outgoing metadata fields',
+					definitions: [ outboundDef( 'v1:full_name', 'Full Name' ), outboundDef( 'v1:signup_date', 'Signup Date' ) ],
+					value_ids: [ 'v1:full_name' ],
 					value: [ 'Full Name' ],
-					grouped_options: [ { section: 'Basic', fields: [ 'Full Name', 'Signup Date' ] } ],
 				},
 				{ key: 'incoming_sync_enabled', type: 'checkbox', label: 'Enable inbound sync', value: true },
 				{
@@ -572,6 +594,49 @@ describe( 'ConfigureView per-direction sections', () => {
 		// The field selection is not part of the payload: pausing must not
 		// rewrite (or clear) the stored outgoing_metadata_fields option.
 		expect( onSave ).toHaveBeenCalledWith( 'esp', { outgoing_sync_enabled: false } );
+	} );
+
+	// The outbound picker posts ids, not names: <OutboundFields> receives
+	// the settings payload's definitions/value_ids and routes its onChange
+	// back through the same handleFieldChange draft path every other field
+	// uses, so Save submits an ids array under the field's key.
+	it( 'posts ids for the outbound field selection', async () => {
+		const onSave = jest.fn( () => Promise.resolve() );
+		const integrations = {
+			esp: {
+				...INTEGRATION,
+				settings: [
+					{
+						key: 'outgoing_metadata_fields',
+						type: 'metadata',
+						label: 'Outgoing metadata fields',
+						definitions: [ outboundDef( 'v1:account', 'Account' ) ],
+						value_ids: [],
+					},
+				],
+			},
+		};
+		renderConfigureView( { integrations, onSave } );
+
+		fireEvent.click( screen.getByRole( 'checkbox', { name: /^Account/ } ) );
+		await act( async () => {
+			getLatestSaveAction()();
+		} );
+		expect( onSave ).toHaveBeenCalledWith( 'esp', { outgoing_metadata_fields: [ 'v1:account' ] } );
+	} );
+
+	// value_ids (ids) is the outbound field's saved-state counterpart to the
+	// draft's ids array; comparing against the legacy `value` (names) instead
+	// would read every touch — even a net-zero one — as permanently dirty,
+	// since a names array and an ids array can never share elements.
+	it( 'disarms the guard when an outbound selection is toggled back to its saved state', () => {
+		renderConfigureView( { integrations: bidirectionalIntegration() } );
+
+		fireEvent.click( screen.getByLabelText( 'Signup Date' ) );
+		expect( useUnsavedChangesDialog ).toHaveBeenLastCalledWith( { when: true } );
+
+		fireEvent.click( screen.getByLabelText( 'Signup Date' ) );
+		expect( useUnsavedChangesDialog ).toHaveBeenLastCalledWith( { when: false } );
 	} );
 
 	it( 'restores the inbound selection after toggling the direction off and back on', () => {

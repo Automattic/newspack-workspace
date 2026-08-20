@@ -9,9 +9,10 @@ import { useEffect, useMemo, useRef, useState } from '@wordpress/element';
 /**
  * Internal dependencies
  */
-import { Accordion, AccordionPanel, Divider, Grid, SectionHeader, useUnsavedChangesDialog } from '../../../../../packages/components/src';
+import { Divider, Grid, SectionHeader, useUnsavedChangesDialog } from '../../../../../packages/components/src';
 import { WIZARD_STORE_NAMESPACE } from '../../../../../packages/components/src/wizard/store';
 import WizardsTab from '../../../wizards-tab';
+import OutboundFields from './outbound-fields';
 import { SettingsField } from './settings-field';
 
 import './configure-view.scss';
@@ -202,7 +203,14 @@ const ConfigureViewInner = ( { integrations, loading, inFlightChanges, saving, o
 		}
 		return keys.some( key => {
 			const field = integration.settings.find( f => f.key === key );
-			return ! field || ! valuesMatch( field.value, draft[ key ] );
+			if ( ! field ) {
+				return true;
+			}
+			// The outbound picker's draft is an ids array; value_ids is its
+			// saved-state counterpart. The legacy `value` (names) would never
+			// equal an ids array, reading every touch as permanently dirty.
+			const savedValue = Array.isArray( field.value_ids ) ? field.value_ids : field.value;
+			return ! valuesMatch( savedValue, draft[ key ] );
 		} );
 	}, [ draft, integration?.settings ] );
 	const integrationSaving = saving[ integrationId ];
@@ -389,12 +397,6 @@ const ConfigureViewInner = ( { integrations, loading, inFlightChanges, saving, o
 		return field.value;
 	};
 
-	const handleCheckboxListChange = ( fieldKey, currentValue, optionName, checked ) => {
-		const selected = Array.isArray( currentValue ) ? currentValue : [];
-		const newValue = checked ? [ ...selected, optionName ] : selected.filter( f => f !== optionName );
-		handleFieldChange( fieldKey, newValue );
-	};
-
 	const fieldIsVisible = field => {
 		if ( ! field.condition || typeof field.condition !== 'object' ) {
 			return true;
@@ -547,33 +549,11 @@ const ConfigureViewInner = ( { integrations, loading, inFlightChanges, saving, o
 										/>
 									) ) }
 								{ outboundEnabled && outboundField && (
-									<Accordion hideSingleTitle>
-										{ ( outboundField.grouped_options || [] ).map( ( group, index ) => {
-											const currentValue = getFieldValue( outboundField );
-											const selected = Array.isArray( currentValue ) ? currentValue : [];
-											return (
-												<AccordionPanel
-													key={ `${ index }-${ group.section }` }
-													title={ group.section }
-													defaultOpen={ index === 0 }
-												>
-													<Grid columns={ 1 } rowGap={ 8 } noMargin>
-														{ group.fields.map( fieldName => (
-															<CheckboxControl
-																className="newspack-checkbox-control"
-																key={ fieldName }
-																label={ fieldName }
-																checked={ selected.includes( fieldName ) }
-																onChange={ checked =>
-																	handleCheckboxListChange( outboundField.key, currentValue, fieldName, checked )
-																}
-															/>
-														) ) }
-													</Grid>
-												</AccordionPanel>
-											);
-										} ) }
-									</Accordion>
+									<OutboundFields
+										field={ outboundField }
+										value={ outboundField.key in draft ? draft[ outboundField.key ] : outboundField.value_ids }
+										onChange={ ids => handleFieldChange( outboundField.key, ids ) }
+									/>
 								) }
 							</Grid>
 						</Grid>

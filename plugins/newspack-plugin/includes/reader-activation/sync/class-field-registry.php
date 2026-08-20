@@ -380,6 +380,44 @@ class Field_Registry {
 	}
 
 	/**
+	 * Serialize every definition for the integrations settings payload.
+	 *
+	 * Flat list, all schema versions: the per-field UI derives rows and
+	 * visibility client-side, so it needs both sides of every rename. No
+	 * pairing flag is serialized, because none is needed: a pair that still
+	 * shares one ESP `name` collapses to one row on that name alone, and a v2
+	 * field given its own name (Lifetime Total Paid) is a separate field to a
+	 * publisher and lists as its own row. `supersedes`/`superseded_by` carry
+	 * the authored link for the "Superseded by" hint on those split rows.
+	 *
+	 * `status` drives the New badge ('new'/'updated' only), the sunset rule
+	 * (a legacy field lists only while enabled), and whether a `section`
+	 * sorts last (once every field in it is legacy).
+	 *
+	 * @return array[] List of definition arrays (see the settings REST contract).
+	 */
+	public static function get_definitions_for_settings() {
+		$rows = [];
+		foreach ( self::get_definitions() as $id => $definition ) {
+			$rows[] = [
+				'id'             => $id,
+				'version'        => $definition['version'],
+				'raw_key'        => $definition['raw_key'],
+				'name'           => $definition['name'],
+				'section'        => (string) ( $definition['section'] ?? '' ),
+				'available'      => (bool) $definition['available'],
+				'dynamic_suffix' => (bool) $definition['dynamic_suffix'],
+				'description'    => (string) ( $definition['description'] ?? '' ),
+				'example'        => (string) ( $definition['example'] ?? '' ),
+				'status'         => in_array( $definition['status'] ?? '', [ 'new', 'updated', 'legacy' ], true ) ? $definition['status'] : 'existing',
+				'supersedes'     => $definition['supersedes'] ?? null,
+				'superseded_by'  => array_values( $definition['superseded_by'] ?? [] ),
+			];
+		}
+		return $rows;
+	}
+
+	/**
 	 * Raw keys an id accepts as input aliases, from across its equivalent pair.
 	 *
 	 * Bidirectional, because stored ids are never rewritten: a site can be
