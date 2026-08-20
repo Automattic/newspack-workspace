@@ -334,14 +334,21 @@ class API {
 		}
 
 		$post_type = $payload['post_data']['post_type'];
-		if ( ! is_string( $post_type ) || in_array( $post_type, Content_Distribution_Class::get_distributed_post_types(), true ) ) {
+
+		// Only a string on the list gets through. A non-string is refused rather
+		// than passed along: it cannot be on the list, and letting it reach
+		// wp_insert_post() defers the same problem to a worse place.
+		if ( is_string( $post_type ) && in_array( $post_type, Content_Distribution_Class::get_distributed_post_types(), true ) ) {
 			return null;
 		}
 
 		return new WP_Error(
 			'invalid_post_type',
-			/* translators: unsupported post type for content distribution */
-			sprintf( __( 'Post type %s is not supported as a distributed incoming post.', 'newspack-network' ), $post_type ),
+			sprintf(
+				/* translators: unsupported post type for content distribution */
+				__( 'Post type %s is not supported as a distributed incoming post.', 'newspack-network' ),
+				is_string( $post_type ) ? $post_type : gettype( $post_type )
+			),
 			[ 'status' => 400 ]
 		);
 	}
@@ -422,8 +429,9 @@ class API {
 			if ( $filter_html ) {
 				// A wp_global_styles post carries theme JSON in post_content, and
 				// kses does not clean the CSS inside it — wp_filter_global_styles_post
-				// does. This route does not restrict post_type, so a caller can send
-				// that JSON here. The function slash-wraps its own output; this input
+				// does. This runs on content regardless of post type, so the same JSON
+				// sent as the body of an allowed type is cleaned too. The function
+				// slash-wraps its own output; this input
 				// is unslashed until wp_slash( $postarr ), so unwrap it back. It is a
 				// passthrough for anything that is not global-styles JSON.
 				$value = wp_unslash( wp_filter_global_styles_post( wp_slash( $value ) ) );

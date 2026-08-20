@@ -323,9 +323,10 @@ class TestApi extends \WP_UnitTestCase {
 	/**
 	 * A wp_global_styles post keeps its theme customization in post_content as
 	 * JSON, and the CSS inside it is cleaned by wp_filter_global_styles_post,
-	 * not by kses. Core runs that filter for a caller without unfiltered_html;
-	 * since this route puts no allowlist on post_type, the same JSON can arrive
-	 * here, so the filter has to run here too.
+	 * not by kses. Core runs that filter for a caller without unfiltered_html.
+	 * The post-type allowlist does not cover this: the same JSON sent as the
+	 * body of an allowed type still needs the filter, so it runs on content
+	 * regardless of type.
 	 *
 	 * @group content-distribution-api
 	 */
@@ -936,6 +937,41 @@ class TestApi extends \WP_UnitTestCase {
 					) 
 				),
 				"Nothing of type $post_type may be created."
+			);
+		}
+	}
+
+	/**
+	 * A post type that is not a string must be refused, not waved through.
+	 *
+	 * The allowlist can only match strings, so a guard that skips non-strings
+	 * lets malformed input past the check entirely and defers the problem to
+	 * wp_insert_post().
+	 *
+	 * @group content-distribution-api
+	 */
+	public function test_insert_refuses_a_non_string_post_type() {
+		wp_set_current_user( $this->factory->user->create( [ 'role' => 'author' ] ) );
+		kses_init();
+
+		// null is absent rather than invalid: it fails isset(), so the payload is
+		// treated as not carrying a post type at all and wp_insert_post() applies
+		// its own default of 'post', which is on the list.
+		foreach ( [
+			'array' => [ 'post' ],
+			'int'   => 5,
+			'bool'  => true,
+			'float' => 1.5,
+		] as $label => $post_type ) {
+			$response = rest_get_server()->dispatch(
+				$this->make_insert_request_with( [ 'post_type' => $post_type ] )
+			);
+
+			$this->assertSame( 400, $response->get_status(), "A $label post_type must be refused." );
+			$this->assertSame(
+				'invalid_post_type',
+				$response->as_error()->get_error_code(),
+				"A $label post_type must be refused by the allowlist, not incidentally."
 			);
 		}
 	}
