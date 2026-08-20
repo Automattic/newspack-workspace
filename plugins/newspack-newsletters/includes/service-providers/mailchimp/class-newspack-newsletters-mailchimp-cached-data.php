@@ -64,6 +64,20 @@ final class Newspack_Newsletters_Mailchimp_Cached_Data {
 	const SURFACE_ERRORS_AFTER = 20 * HOUR_IN_SECONDS;
 
 	/**
+	 * Prefix of the option that holds the refresh lock for a given list
+	 *
+	 * @var string
+	 */
+	const LOCK_KEY_PREFIX = 'newspack_nl_mailchimp_refresh_lock_';
+
+	/**
+	 * Time in seconds a refresh lock is honored before we consider it stale and allow a new refresh
+	 *
+	 * @var int
+	 */
+	const LOCK_MAX_TIME = 120;
+
+	/**
 	 * Memoized data to be served across the same request
 	 *
 	 * @var array
@@ -431,6 +445,11 @@ final class Newspack_Newsletters_Mailchimp_Cached_Data {
 			return;
 		}
 
+		if ( ! self::lock_refresh( $list_id ) ) {
+			Newspack_Newsletters_Logger::log( 'Mailchimp cache: Refresh already in progress for list ' . $list_id );
+			return;
+		}
+
 		if ( ! function_exists( 'wp_create_nonce' ) ) {
 			require_once ABSPATH . WPINC . '/pluggable.php';
 		}
@@ -476,6 +495,8 @@ final class Newspack_Newsletters_Mailchimp_Cached_Data {
 			self::refresh_cached_data( $list_id );
 		} catch ( Exception $e ) {
 			Newspack_Newsletters_Logger::log( 'Mailchimp cache: Error refreshing cache: ' . $e->getMessage() );
+		} finally {
+			self::unlock_refresh( $list_id );
 		}
 		die;
 	}
@@ -543,6 +564,63 @@ final class Newspack_Newsletters_Mailchimp_Cached_Data {
 			Newspack_Newsletters_Logger::log( 'Mailchimp cache: Dispatching request to refresh cache for list ' . $list['id'] );
 			self::dispatch_refresh( $list['id'] );
 		}
+	}
+
+	/**
+	 * Gets the refresh lock option name for a given list
+	 *
+	 * @param string $list_id The List ID.
+	 * @return string The lock option name
+	 */
+	private static function get_lock_key( $list_id ) {
+		return self::LOCK_KEY_PREFIX . $list_id;
+	}
+
+	/**
+	 * Acquires the refresh lock for a given list, so we don't dispatch concurrent refreshes for the same list
+	 *
+	 * @param string $list_id The List ID.
+	 * @return boolean Whether the lock was acquired.
+	 */
+	private static function lock_refresh( $list_id ) {
+		if ( self::is_refresh_locked( $list_id ) ) {
+			return false;
+		}
+
+		update_option( self::get_lock_key( $list_id ), time(), false ); // auto-load false.
+		return true;
+	}
+
+	/**
+	 * Releases the refresh lock for a given list
+	 *
+	 * @param string $list_id The List ID.
+	 * @return void
+	 */
+	private static function unlock_refresh( $list_id ) {
+		delete_option( self::get_lock_key( $list_id ) );
+		Newspack_Newsletters_Logger::log( 'Mailchimp cache: Refresh lock released for list ' . $list_id );
+	}
+
+	/**
+	 * Checks whether a refresh is already in progress for a given list
+	 *
+	 * A lock older than self::LOCK_MAX_TIME is considered stale and is discarded.
+	 *
+	 * @param string $list_id The List ID.
+	 * @return boolean
+	 */
+	private static function is_refresh_locked( $list_id ) {
+		$lock = get_option( self::get_lock_key( $list_id ) );
+		if ( ! $lock ) {
+			return false;
+		}
+		if ( time() - $lock > self::LOCK_MAX_TIME ) {
+			Newspack_Newsletters_Logger::log( 'Mailchimp cache: Refresh lock expired. Unlocking.' );
+			delete_option( self::get_lock_key( $list_id ) );
+			return false;
+		}
+		return true;
 	}
 
 	/**
