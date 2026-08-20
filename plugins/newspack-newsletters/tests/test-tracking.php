@@ -457,4 +457,97 @@ class Newsletters_Tracking_Test extends WP_UnitTestCase {
 		unlink( get_option( 'newspack_newsletters_tracking_pixel_log_file' ) );
 		// phpcs:enable WordPressVIPMinimum.Functions.RestrictedFunctions
 	}
+
+	/**
+	 * Test logs processing – a stale event must not abort the rest of the batch.
+	 */
+	public function test_process_logs_skips_mismatched_tracking_id() {
+		$stale_newsletter_id = $this->factory->post->create( [ 'post_type' => \Newspack_Newsletters::NEWSPACK_NEWSLETTERS_CPT ] );
+		$newsletter_id       = $this->factory->post->create( [ 'post_type' => \Newspack_Newsletters::NEWSPACK_NEWSLETTERS_CPT ] );
+		update_post_meta( $stale_newsletter_id, 'tracking_id', 'tracking_id_current' );
+		update_post_meta( $newsletter_id, 'tracking_id', 'tracking_id_2' );
+
+		// phpcs:disable WordPressVIPMinimum.Functions.RestrictedFunctions
+		// A stale event (old tracking ID) first, then valid events for another newsletter.
+		$log_file_path = tempnam( sys_get_temp_dir(), 'newspack_newsletters_pixel_log_' );
+		file_put_contents( $log_file_path, "$stale_newsletter_id|tracking_id_old|email_1@example.com" . PHP_EOL );
+		file_put_contents( $log_file_path, "$newsletter_id|tracking_id_2|email_2@example.com" . PHP_EOL, FILE_APPEND );
+		file_put_contents( $log_file_path, "$newsletter_id|tracking_id_2|email_3@example.com" . PHP_EOL, FILE_APPEND );
+		update_option( 'newspack_newsletters_tracking_pixel_log_file', $log_file_path );
+
+		Pixel::process_logs();
+
+		// The stale event is not counted.
+		$this->assertEmpty( get_post_meta( $stale_newsletter_id, 'tracking_pixel_seen', true ) );
+		// The events after it still are.
+		$this->assertEquals( 2, get_post_meta( $newsletter_id, 'tracking_pixel_seen', true ) );
+
+		// Clean up.
+		unlink( get_option( 'newspack_newsletters_tracking_pixel_log_file' ) );
+		// phpcs:enable WordPressVIPMinimum.Functions.RestrictedFunctions
+	}
+
+	/**
+	 * Scheduling the log processing event respects the tracking setting.
+	 */
+	public function test_schedule_log_processing_respects_tracking_setting() {
+		wp_clear_scheduled_hook( 'newspack_newsletters_tracking_pixel_process_log' );
+
+		update_option( 'newspack_newsletters_use_tracking_pixel', 0 );
+		Pixel::schedule_log_processing();
+		$this->assertFalse(
+			wp_next_scheduled( 'newspack_newsletters_tracking_pixel_process_log' ),
+			'No log processing should be scheduled while pixel tracking is off.'
+		);
+
+		update_option( 'newspack_newsletters_use_tracking_pixel', 1 );
+		Pixel::schedule_log_processing();
+		$this->assertNotFalse(
+			wp_next_scheduled( 'newspack_newsletters_tracking_pixel_process_log' ),
+			'Log processing should be scheduled while pixel tracking is on.'
+		);
+
+		// Clean up.
+		wp_clear_scheduled_hook( 'newspack_newsletters_tracking_pixel_process_log' );
+	}
+
+	/**
+	 * Turning pixel tracking off removes the standalone pixel file, its logs and
+	 * the scheduled processing, so nothing keeps logging into a file nothing reads.
+	 */
+	public function test_disabling_pixel_tracking_tears_down_pixel_machinery() {
+		update_option( 'newspack_newsletters_use_tracking_pixel', 1 );
+		Pixel::process_logs(); // Bootstraps the standalone pixel file and log file.
+
+		$pixel_file = WP_CONTENT_DIR . '/np-newsletters-pixel.php';
+		$this->assertFileExists( $pixel_file );
+		$this->assertNotEmpty( get_option( 'newspack_newsletters_tracking_pixel_log_file' ) );
+
+		update_option( 'newspack_newsletters_use_tracking_pixel', 0 );
+
+		$this->assertFileDoesNotExist( $pixel_file );
+		$this->assertFalse( get_option( 'newspack_newsletters_tracking_pixel_log_file' ) );
+		$this->assertFalse( wp_next_scheduled( 'newspack_newsletters_tracking_pixel_process_log' ) );
+	}
+
+	/**
+	 * Teardown only deletes files that look like pixel logs: a corrupted option
+	 * must not turn disabling tracking into deleting an arbitrary path.
+	 */
+	public function test_teardown_ignores_non_log_paths_in_options() {
+		update_option( 'newspack_newsletters_use_tracking_pixel', 1 );
+
+		// phpcs:disable WordPressVIPMinimum.Functions.RestrictedFunctions
+		$unrelated = tempnam( sys_get_temp_dir(), 'unrelated_' );
+		update_option( 'newspack_newsletters_tracking_pixel_log_file', $unrelated );
+
+		update_option( 'newspack_newsletters_use_tracking_pixel', 0 );
+
+		$this->assertFileExists( $unrelated, 'A path that is not a pixel log must not be deleted.' );
+		$this->assertFalse( get_option( 'newspack_newsletters_tracking_pixel_log_file' ), 'The option is still cleared.' );
+
+		// Clean up.
+		unlink( $unrelated );
+		// phpcs:enable WordPressVIPMinimum.Functions.RestrictedFunctions
+	}
 }

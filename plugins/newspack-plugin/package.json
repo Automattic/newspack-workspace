@@ -1,6 +1,6 @@
 {
 	"name": "newspack",
-	"version": "6.48.5",
+	"version": "6.48.10",
 	"description": "The Newspack plugin. https://newspack.com",
 	"bugs": {
 		"url": "https://github.com/Automattic/newspack-plugin/issues"
@@ -39,6 +39,7 @@
 		"*.php": "npm run lint:php:staged"
 	},
 	"dependencies": {
+		"@wordpress/ui": "^0.16.0",
 		"classnames": "^2.5.1",
 		"colord": "^2.9.3",
 		"deep-map-keys": "^2.0.1",

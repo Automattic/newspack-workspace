@@ -1,0 +1,102 @@
+@use "~@wordpress/base-styles/variables" as wp-vars;
+@use "~@wordpress/base-styles/colors" as wp-colors;
+@use "~@wordpress/base-styles/breakpoints" as wp-breakpoints;
+
+// Secondary lines in a list row: the "+N more products" and "N excluded"
+// suffixes, and the placeholder when a rule names nothing.
+.newspack-subscriber-only__muted {
+	color: wp-colors.$gray-700;
+	font-size: 12px;
+}
+
+// Rule editor: a right-edge slide-in panel rather than a centered modal, so the
+// list stays visible while a rule is edited.
+.newspack-subscriptions-drawer__overlay {
+	align-items: stretch;
+	justify-content: flex-end;
+	padding: 0;
+}
+
+.components-modal__frame.newspack-subscriptions-drawer {
+	animation: 0.2s ease-out forwards newspack-subscriptions-drawer-slide-in;
+	border-radius: 0;
+	box-shadow: -1px 0 16px rgb( 0 0 0 / 8% );
+	display: flex;
+	flex-direction: column;
+	height: 100vh;
+	margin: 0;
+	max-height: 100vh;
+	width: 380px;
+
+	@media ( max-width: wp-breakpoints.$break-small ) {
+		width: 100vw;
+	}
+
+	// Drop the modal's built-in content padding so the content and footer below
+	// own the spacing, and let the inner wrappers flex so the content area
+	// scrolls within the full height.
+	.components-modal__content {
+		display: flex;
+		flex-direction: column;
+		padding: 0;
+	}
+
+	.components-modal__children-container {
+		display: flex;
+		flex: 1 1 auto;
+		flex-direction: column;
+		min-height: 0;
+	}
+}
+
+.newspack-subscriptions-drawer__content {
+	flex: 1 1 auto;
+	overflow-y: auto;
+	padding: wp-vars.$grid-unit-30;
+}
+
+.newspack-subscriptions-drawer__footer {
+	border-top: 1px solid wp-colors.$gray-300;
+	flex: 0 0 auto;
+	padding: wp-vars.$grid-unit-20 wp-vars.$grid-unit-30;
+}
+
+@keyframes newspack-subscriptions-drawer-slide-in {
+	from {
+		transform: translateX( 100% );
+	}
+
+	to {
+		transform: translateX( 0 );
+	}
+}
+
+@keyframes newspack-subscriptions-drawer-slide-out {
+	from {
+		transform: translateX( 0 );
+	}
+
+	to {
+		transform: translateX( 100% );
+	}
+}
+
+// Mirror the slide-in on close. @wp/components' Modal adds `is-animating-out`
+// and keeps the panel mounted until an animationend fires, so animating the
+// frame is enough. Suppress the overlay's default fade so the motion stays a
+// slide.
+.components-modal__screen-overlay.newspack-subscriptions-drawer__overlay.is-animating-out {
+	animation: none;
+}
+
+.components-modal__screen-overlay.newspack-subscriptions-drawer__overlay.is-animating-out .components-modal__frame {
+	animation: 0.2s ease-in forwards newspack-subscriptions-drawer-slide-out;
+}
+
+@media ( prefers-reduced-motion: reduce ) {
+	.newspack-subscriptions-drawer__overlay,
+	.components-modal__frame.newspack-subscriptions-drawer,
+	.components-modal__screen-overlay.newspack-subscriptions-drawer__overlay.is-animating-out .components-modal__frame {
+		animation: none;
+	}
+}
