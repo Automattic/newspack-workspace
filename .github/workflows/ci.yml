@@ -379,6 +379,18 @@ jobs:
           fi
           echo "WordPress $WP_TESTS_TAG"
 
+          # The two sources tag releases differently: wordpress.org names its
+          # core tarball with the version as published ("7.1"), while
+          # wordpress-develop tags are always three-part ("7.1.0"). They agree
+          # once a patch ships, so the develop tag 404s only between an x.y.0
+          # release and its first patch -- a window this job would otherwise
+          # spend entirely red. Derive the tag rather than sharing the variable.
+          WP_DEVELOP_TAG="$WP_TESTS_TAG"
+          case "$WP_DEVELOP_TAG" in
+            *.*.*) ;;
+            *) WP_DEVELOP_TAG="$WP_DEVELOP_TAG.0" ;;
+          esac
+
           # The tarball's top-level directory is "wordpress/". Extract to
           # $WP_CORE_DIR's parent and strip that prefix so files land at
           # $WP_CORE_DIR directly. Avoids the "mv: same file" failure when
@@ -397,10 +409,10 @@ jobs:
           # guarded fetch replaces both checkouts and the apt install.
           echo "Fetching the phpunit test library..."
           rm -rf "$WP_TESTS_DIR/includes" "$WP_TESTS_DIR/data"
-          fetch "https://github.com/WordPress/wordpress-develop/archive/refs/tags/$WP_TESTS_TAG.tar.gz" \
+          fetch "https://github.com/WordPress/wordpress-develop/archive/refs/tags/$WP_DEVELOP_TAG.tar.gz" \
             | tar xz --strip-components=3 -C "$WP_TESTS_DIR" \
-                "wordpress-develop-$WP_TESTS_TAG/tests/phpunit/includes" \
-                "wordpress-develop-$WP_TESTS_TAG/tests/phpunit/data"
+                "wordpress-develop-$WP_DEVELOP_TAG/tests/phpunit/includes" \
+                "wordpress-develop-$WP_DEVELOP_TAG/tests/phpunit/data"
           # A silently-empty test library fails later as a cryptic "class
           # WP_UnitTestCase not found", so assert the bootstrap actually landed.
           if [ ! -f "$WP_TESTS_DIR/includes/bootstrap.php" ]; then
