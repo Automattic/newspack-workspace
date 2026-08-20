@@ -1,7 +1,7 @@
 @use "~@wordpress/base-styles/colors" as wp-colors;
 @use "~@wordpress/base-styles/mixins" as wp-mixins;
 @use "~@wordpress/base-styles/variables" as wp-vars;
-@use "../../../colors/colors.module" as colors;
+@use "../../../colors/colors.module" as np-colors;
 
 .newspack-empty-state {
 	&__stack {
@@ -15,7 +15,7 @@
 	}
 
 	&__icon {
-		background-color: colors.$primary-000;
+		background-color: np-colors.$primary-000;
 		border-radius: 100%;
 		display: grid;
 		height: wp-vars.$grid-unit-50 * 2;
@@ -23,7 +23,7 @@
 		width: wp-vars.$grid-unit-50 * 2;
 
 		svg {
-			fill: colors.$primary-600;
+			fill: np-colors.$primary-600;
 		}
 	}
 
