@@ -6,9 +6,11 @@ icon, a title, a short description, and usually one call to action.
 The API is compound: an `EmptyState.Root` and one subcomponent per slot. The
 parts hang off one exported object, as `Drawer`'s do.
 
-Root brings the layout its consumers used to hand-write, including the `start`
-and `end` attributes the `Grid` stylesheet matches on. It brings no stylesheet
-of its own.
+Root brings the layout its consumers used to hand-write, including the
+`data-start` and `data-end` attributes the `Grid` stylesheet matches on. The
+parts are composed from `Stack`, so every gap belongs to a stack rather than to
+a margin, and the component's own stylesheet covers only the icon disc and the
+type of the title and description.
 
 ## Importing
 
@@ -18,9 +20,17 @@ The package barrel and the component's own entry point both work:
 // The barrel.
 import { EmptyState } from 'newspack-components';
 
-// The component on its own.
+// The component on its own, from newspack-plugin.
 import EmptyState from '../../packages/components/src/empty-state';
 ```
+
+The by-path form above is newspack-plugin's, which compiles the monorepo source
+directly. newspack-newsletters resolves `newspack-components` to the built
+`dist/esm/index.js`, so its only per-component route is
+`newspack-components/dist/esm/empty-state`, which reaches past the package's
+public surface: `main` is the only declared entry and there is no `exports` map
+to make that path supported. Importing per component holds for one of the two
+consumers until the package declares one.
 
 Take the barrel where the bundle already pulls the package in wholesale, as the
 newsletters admin shell does. Import by path where a bundle should stay narrow:
@@ -61,7 +71,9 @@ Every slot except `Root` is optional, and anything else you pass to `Root`
 becomes a sibling of the header at the same 8-unit gap. A screen that offers
 choices rather than one action can drop a stack of cards in instead of
 `EmptyState.Actions`. Pass elements: `Root`'s stack keeps a lone string but drops
-one sitting beside an element, so wrap loose text in a `<p>`.
+one sitting beside an element, so wrap loose text in a `<p>`. The `Grid` margin
+reset reaches direct children only, so a `<p>` inside a slot keeps the browser's
+default block margin and you zero it where you use it.
 
 ## Consumers own their wrappers
 
@@ -108,16 +120,18 @@ With a children slot there is no pair to check. A button that navigates takes
 | `size` | `'default'` \| `'small'` | `'default'` | Read by `EmptyState.Header`. `small` suits an empty state standing in for a panel inside a card. |
 
 The grid always carries `newspack-empty-state`, and `className` lands there
-rather than on a wrapper, because consumers key off both. With no stylesheet in
-the component, that class is the whole styling surface of the spine.
+rather than on a wrapper, because consumers key off both. Inside it, the stack
+carries `newspack-empty-state__stack`, sits in columns two to four, and is
+capped at `--wpds-dimension-surface-width-lg` so it cannot sprawl in a wider
+container.
 
 ## `EmptyState.Header`
 
 | Prop | Type | Default | Description |
 |------|------|---------|-------------|
-| `className` | `string` | — | Merged onto `.newspack-section-header__container`, alongside `newspack-empty-state__header`. |
+| `className` | `string` | — | Merged onto `newspack-empty-state__header`. |
 | `description` | `React.ReactNode` | — | One or two sentences on what would fill the screen. |
-| `heading` | `number` | `3` when small, `2` otherwise | HTML heading level. |
+| `heading` | `1`–`6` | `3` when small, `2` otherwise | HTML heading level. |
 | `icon` | `JSX.Element` | — | From `@wordpress/icons` or `newspack-icons`. |
 | `title` | `string` | — | **Required.** |
 
@@ -132,7 +146,7 @@ needs this to be its `h1` passes `heading={ 1 }`.
 | `children` | `React.ReactNode` | — | Usually one primary button. |
 | `className` | `string` | — | Merged onto the stack. |
 | `orientation` | `'row'` \| `'column'` | `'row'` | `column` stacks the actions, for a button above a link or an explanatory note. |
-| `spacing` | `number` | `2` | Gap between actions, on the `@wordpress/components` spacing scale. |
+| `gap` | `GapSize` | `'sm'` | Gap between actions, on the design-system scale (`xs` to `3xl`). |
 
 A centred stack, carrying `newspack-empty-state__actions`. A row wraps rather
 than overflowing, since the empty state only gets half the grid on a wide screen.

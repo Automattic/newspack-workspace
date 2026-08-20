@@ -21,16 +21,26 @@ describe( 'EmptyState.Root', () => {
 		expect( grid ).toHaveClass( 'newspack-grid--no-margin' );
 	} );
 
-	// grid/style.scss matches on these as plain attributes, so they are a contract.
-	it( 'gives the inner stack the start and end attributes the Grid stylesheet matches on', () => {
+	// grid/style.scss matches on these attributes, so they are a contract.
+	it( 'gives the inner stack the data attributes the Grid stylesheet matches on', () => {
 		const { container } = render(
 			<EmptyState.Root>
 				<p>body</p>
 			</EmptyState.Root>
 		);
 		const stack = container.querySelector( '.newspack-empty-state' ).firstElementChild;
-		expect( stack ).toHaveAttribute( 'start', '2' );
-		expect( stack ).toHaveAttribute( 'end', '4' );
+		expect( stack ).toHaveAttribute( 'data-start', '2' );
+		expect( stack ).toHaveAttribute( 'data-end', '4' );
+	} );
+
+	// The width cap hangs off this class, so losing it silently widens the block.
+	it( 'carries the stack class hook', () => {
+		const { container } = render(
+			<EmptyState.Root>
+				<p>body</p>
+			</EmptyState.Root>
+		);
+		expect( container.querySelector( '.newspack-empty-state' ).firstElementChild ).toHaveClass( 'newspack-empty-state__stack' );
 	} );
 
 	// Consumers key `:has()` selectors off this class, so losing it changes their
@@ -57,15 +67,46 @@ describe( 'EmptyState.Root', () => {
 } );
 
 describe( 'EmptyState.Header', () => {
-	it( 'renders a page-header section header with no margin', () => {
+	it( 'renders the title and description in the header', () => {
 		const { container } = render(
 			<EmptyState.Root>
 				<EmptyState.Header title="Get started with newsletters" description="Compose and send." />
 			</EmptyState.Root>
 		);
-		expect( container.querySelector( '.newspack-section-header--page-header' ) ).toBeInTheDocument();
-		expect( container.querySelector( '.newspack-section-header--no-margin' ) ).toBeInTheDocument();
-		expect( screen.getByText( 'Compose and send.' ) ).toBeInTheDocument();
+		expect( container.querySelector( '.newspack-empty-state__title' ) ).toHaveTextContent( 'Get started with newsletters' );
+		expect( container.querySelector( '.newspack-empty-state__description' ) ).toHaveTextContent( 'Compose and send.' );
+	} );
+
+	// Spacing comes from the stacks, so a margin creeping back onto the heading or
+	// paragraph would silently widen every gap.
+	it( 'spaces the header from its stacks rather than from margins', () => {
+		const { container } = render(
+			<EmptyState.Root>
+				<EmptyState.Header title="Get started with newsletters" description="Compose and send." />
+			</EmptyState.Root>
+		);
+		const header = container.querySelector( '.newspack-empty-state__header' );
+		expect( header ).toHaveStyle( { flexDirection: 'column', alignItems: 'center' } );
+		expect( header.firstElementChild ).toHaveStyle( { flexDirection: 'column', alignItems: 'center' } );
+	} );
+
+	it( 'wraps the icon in the disc', () => {
+		const { container } = render(
+			<EmptyState.Root>
+				<EmptyState.Header title="Get started with newsletters" icon={ <svg /> } />
+			</EmptyState.Root>
+		);
+		expect( container.querySelector( '.newspack-empty-state__icon svg' ) ).toBeInTheDocument();
+	} );
+
+	it( 'omits the description and the icon when they are not given', () => {
+		const { container } = render(
+			<EmptyState.Root>
+				<EmptyState.Header title="Get started with newsletters" />
+			</EmptyState.Root>
+		);
+		expect( container.querySelector( '.newspack-empty-state__description' ) ).not.toBeInTheDocument();
+		expect( container.querySelector( '.newspack-empty-state__icon' ) ).not.toBeInTheDocument();
 	} );
 
 	it( 'renders an h2 at the default size', () => {
@@ -75,16 +116,16 @@ describe( 'EmptyState.Header', () => {
 			</EmptyState.Root>
 		);
 		expect( screen.getByRole( 'heading', { level: 2, name: 'Get started with newsletters' } ) ).toBeInTheDocument();
-		expect( container.querySelector( '.newspack-section-header--small' ) ).not.toBeInTheDocument();
+		expect( container.querySelector( '.newspack-empty-state__header--small' ) ).not.toBeInTheDocument();
 	} );
 
-	it( 'drops to an h3 and the small section header when the root is small', () => {
+	it( 'drops to an h3 and the small modifier when the root is small', () => {
 		const { container } = render(
 			<EmptyState.Root size="small">
 				<EmptyState.Header title="No products match this rule" />
 			</EmptyState.Root>
 		);
-		expect( container.querySelector( '.newspack-section-header--small' ) ).toBeInTheDocument();
+		expect( container.querySelector( '.newspack-empty-state__header--small' ) ).toBeInTheDocument();
 		expect( screen.getByRole( 'heading', { level: 3, name: 'No products match this rule' } ) ).toBeInTheDocument();
 	} );
 
@@ -146,12 +187,12 @@ describe( 'EmptyState.Actions', () => {
 		const actions = container.querySelector( '.newspack-empty-state__actions' );
 		expect( actions ).toBeInTheDocument();
 		expect( actions ).toHaveStyle( { flexDirection: 'column' } );
-		// VStack's own default is `stretch`, so without alignment="center" the buttons
+		// A stack's own default is `stretch`, so without align="center" the buttons
 		// would go full-bleed while flexDirection stayed correct.
 		expect( actions ).toHaveStyle( { alignItems: 'center' } );
 	} );
 
-	it( 'throws outside Root', () => {
+	it( 'throws outside Root in development', () => {
 		const consoleError = jest.spyOn( console, 'error' ).mockImplementation( () => {} );
 		try {
 			expect( () => render( <EmptyState.Actions>x</EmptyState.Actions> ) ).toThrow(
@@ -159,6 +200,19 @@ describe( 'EmptyState.Actions', () => {
 			);
 		} finally {
 			consoleError.mockRestore();
+		}
+	} );
+
+	// Actions reads nothing from context, so the invariant is a development aid. A
+	// stray one must not blank an admin screen in production over a layout hint.
+	it( 'renders outside Root in production', () => {
+		const previous = process.env.NODE_ENV;
+		process.env.NODE_ENV = 'production';
+		try {
+			const { container } = render( <EmptyState.Actions>x</EmptyState.Actions> );
+			expect( container.querySelector( '.newspack-empty-state__actions' ) ).toBeInTheDocument();
+		} finally {
+			process.env.NODE_ENV = previous;
 		}
 	} );
 } );

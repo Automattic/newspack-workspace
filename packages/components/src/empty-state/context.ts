@@ -21,3 +21,17 @@ export const useEmptyStateContext = (): EmptyStateContextValue => {
 	}
 	return context;
 };
+
+/**
+ * Assert placement inside a `Root` without depending on the value.
+ *
+ * For subcomponents that read nothing from context. Development throws so the
+ * mistake surfaces while it is cheap; production returns, because a stray
+ * subcomponent should not blank an admin screen over a layout hint.
+ */
+export const useEmptyStateInvariant = (): void => {
+	const context = useContext( EmptyStateContext );
+	if ( ! context && process.env.NODE_ENV !== 'production' ) {
+		throw new Error( 'EmptyState subcomponents must be rendered inside EmptyState.Root.' );
+	}
+};

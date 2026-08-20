@@ -1,7 +1,7 @@
 /**
  * WordPress dependencies.
  */
-import { __experimentalHStack as HStack, __experimentalVStack as VStack } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
+import { Stack } from '@wordpress/ui';
 
 /**
  * External dependencies.
@@ -11,19 +11,24 @@ import classnames from 'classnames';
 /**
  * Internal dependencies.
  */
-import { useEmptyStateContext } from './context';
+import { useEmptyStateInvariant } from './context';
 import type { EmptyStateActionsProps } from './types';
 
-const Actions = ( { orientation = 'row', spacing = 2, className, children }: EmptyStateActionsProps ) => {
-	// Read for the invariant alone: actions outside a Root would lose the spine.
-	useEmptyStateContext();
+const Actions = ( { orientation = 'row', gap = 'sm', className, children }: EmptyStateActionsProps ) => {
+	useEmptyStateInvariant();
 
 	const isColumn = orientation === 'column';
-	const Stack = isColumn ? VStack : HStack;
 
 	// Rows wrap: the empty state only gets half the grid above 1054px.
 	return (
-		<Stack alignment="center" spacing={ spacing } wrap={ ! isColumn } className={ classnames( 'newspack-empty-state__actions', className ) }>
+		<Stack
+			direction={ isColumn ? 'column' : 'row' }
+			align="center"
+			justify="center"
+			gap={ gap }
+			wrap={ isColumn ? undefined : 'wrap' }
+			className={ classnames( 'newspack-empty-state__actions', className ) }
+		>
 			{ children }
 		</Stack>
 	);

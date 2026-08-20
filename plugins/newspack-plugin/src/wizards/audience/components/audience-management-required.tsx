@@ -63,12 +63,8 @@ const AudienceManagementRequired = ( {
 } ) => {
 	return (
 		<EmptyState.Root>
-			<EmptyState.Header
-				icon={ people }
-				title={ __( 'Set up Audience Management first', 'newspack-plugin' ) }
-				description={ description }
-			/>
-			<EmptyState.Actions orientation="column" spacing={ 4 }>
+			<EmptyState.Header icon={ people } title={ __( 'Set up Audience Management first', 'newspack-plugin' ) } description={ description } />
+			<EmptyState.Actions orientation="column" gap="lg">
 				{ /* Rendered only with a real destination: a primary CTA pointing at href=""
 				     reloads this same screen, which is worse than offering no button. */ }
 				{ setupUrl && (

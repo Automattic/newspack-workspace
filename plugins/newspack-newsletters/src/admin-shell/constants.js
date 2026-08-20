@@ -20,7 +20,7 @@ export const EMPTY_STATE_CLASS = 'newspack-newsletters-admin__empty-state';
  * Standalone hides the shell header that carries the page `<h1>`, so the empty state
  * has to be it. Bundled mode gets its `<h1>` from `Page`, outside that hidden subtree.
  *
- * @return {number} 1 when standalone, 2 when bundled.
+ * @return {1|2} 1 when standalone, 2 when bundled.
  */
 export function getEmptyStateHeading() {
 	return isBundledMode() ? 2 : 1;
