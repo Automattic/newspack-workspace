@@ -549,7 +549,7 @@ class Audience_Content_Gates extends Wizard {
 	 *
 	 * @return \WP_REST_Response|\WP_Error
 	 */
-	public function update_site_meter( $request ) {
+	public function update_site_meter( \WP_REST_Request $request ): \WP_REST_Response|\WP_Error {
 		// Only what the request actually sent: forwarding an absent count as null would
 		// sanitize to zero and silently close the allowance site-wide.
 		$settings = array_intersect_key( $request->get_params(), Site_Meter::get_default_settings() );

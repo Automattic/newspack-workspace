@@ -88,7 +88,7 @@ class Site_Meter {
 	/**
 	 * Get all settings with their default values.
 	 *
-	 * @return array Default site meter settings.
+	 * @return array{anonymous_count: int, registered_count: int, period: string} Default site meter settings.
 	 */
 	public static function get_default_settings(): array {
 		return [
@@ -101,7 +101,7 @@ class Site_Meter {
 	/**
 	 * Get the site meter settings.
 	 *
-	 * @return array Site meter settings.
+	 * @return array{anonymous_count: int, registered_count: int, period: string} Site meter settings.
 	 */
 	public static function get_settings(): array {
 		$settings = self::get_default_settings();
@@ -175,7 +175,7 @@ class Site_Meter {
 	 *
 	 * @param array $settings New settings, keyed as in get_default_settings().
 	 *
-	 * @return array|\WP_Error Updated settings, or an error if a write fails.
+	 * @return array{anonymous_count: int, registered_count: int, period: string}|\WP_Error Updated settings, or an error if a write fails.
 	 */
 	public static function update_settings( array $settings ): array|\WP_Error {
 		$current = self::get_settings();
