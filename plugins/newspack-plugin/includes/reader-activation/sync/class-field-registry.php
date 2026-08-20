@@ -24,20 +24,33 @@ class Field_Registry {
 	/**
 	 * Retired field ids, mapped to the id they were renamed to.
 	 *
-	 * The four v2 fields whose raw key once differed from its legacy twin by
-	 * case alone (and so carried a different label under a colliding key)
-	 * were given their own distinct raw keys. A site may still hold one of
-	 * the old ids in a stored outgoing-field selection — seeded before the
-	 * rename, or saved explicitly by id — so reads and saves resolve it
-	 * through this map rather than losing the field. See remap_legacy_id().
+	 * Two kinds of rename land here. Four v2 fields whose raw key once
+	 * differed from its legacy twin by case alone (and so carried a
+	 * different label under a colliding key) were given their own distinct
+	 * raw keys. The Subscription family's remaining v2 fields were then
+	 * renamed onto the bare "Subscription" scheme (NPPD-2067): the
+	 * "Current_" prefix dropped, except the one field that would otherwise
+	 * collide with its legacy twin's own name, which took "Last_" instead.
+	 * A site may still hold one of the old ids in a stored outgoing-field
+	 * selection — seeded before the rename, or saved explicitly by id — so
+	 * reads and saves resolve it through this map rather than losing the
+	 * field. See remap_legacy_id().
 	 *
 	 * @var array<string, string>
 	 */
 	const LEGACY_ID_REMAP = [
-		'v2:Payment_Page'        => 'v2:Last_Payment_Page',
-		'v2:Total_Paid'          => 'v2:Lifetime_Total_Paid',
-		'v2:Last_Payment_Amount' => 'v2:Last_Subscription_Payment_Amount',
-		'v2:Last_Payment_Date'   => 'v2:Last_Subscription_Payment_Date',
+		'v2:Payment_Page'                           => 'v2:Last_Payment_Page',
+		'v2:Total_Paid'                             => 'v2:Lifetime_Total_Paid',
+		'v2:Last_Payment_Amount'                    => 'v2:Last_Subscription_Payment_Amount',
+		'v2:Last_Payment_Date'                      => 'v2:Last_Subscription_Payment_Date',
+		'v2:Current_Subscription_Start_Date'        => 'v2:Subscription_Start_Date',
+		'v2:Current_Subscription_End_Date'          => 'v2:Subscription_End_Date',
+		'v2:Current_Subscription_Billing_Cycle'     => 'v2:Subscription_Billing_Cycle',
+		'v2:Current_Subscription_Recurring_Payment' => 'v2:Subscription_Recurring_Payment',
+		'v2:Current_Subscription_Next_Payment_Date' => 'v2:Subscription_Next_Payment_Date',
+		'v2:Current_Subscription_Product_Name'      => 'v2:Subscription_Product_Name',
+		'v2:Current_Subscription_Coupon_Code'       => 'v2:Subscription_Coupon_Code',
+		'v2:Subscription_Cancellation_Reason'       => 'v2:Last_Subscription_Cancellation_Reason',
 	];
 
 	/**

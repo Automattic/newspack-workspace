@@ -551,5 +551,31 @@ class Test_Outgoing_Fields_Storage extends \WP_UnitTestCase {
 			[ 'v2:Lifetime_Total_Paid' ],
 			\get_option( Integration::OUTGOING_FIELDS_OPTION_PREFIX . 'storage-test' )
 		);
+
+		// The same holds for a remap entry from the bare-Subscription rename
+		// (NPPD-2067), including the label change that comes with this one:
+		// the legacy twin already owns "Subscription Cancellation Reason", so
+		// the current id resolves under "Last Subscription Cancellation
+		// Reason" instead.
+		\update_option(
+			Integration::OUTGOING_FIELDS_OPTION_PREFIX . 'storage-test',
+			[ 'v2:Subscription_Cancellation_Reason' ]
+		);
+		$this->assertSame(
+			[ 'v2:Last_Subscription_Cancellation_Reason' ],
+			$this->integration->get_enabled_outgoing_field_ids()
+		);
+		$prepared = $this->integration->prepare_contact(
+			[
+				'email'    => 'reader@example.com',
+				'metadata' => [ 'Last_Subscription_Cancellation_Reason' => 'user-canceled' ],
+			]
+		);
+		$this->assertSame( [ 'NP_Last Subscription Cancellation Reason' => 'user-canceled' ], $prepared['metadata'] );
+		$this->integration->update_enabled_outgoing_fields( [ 'v2:Subscription_Cancellation_Reason' ] );
+		$this->assertSame(
+			[ 'v2:Last_Subscription_Cancellation_Reason' ],
+			\get_option( Integration::OUTGOING_FIELDS_OPTION_PREFIX . 'storage-test' )
+		);
 	}
 }
