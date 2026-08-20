@@ -34,15 +34,19 @@ describe( 'every screen empty state carries the shell contract', () => {
 
 	const screensDir = path.join( __dirname, 'screens' );
 
-	// Every .js under the screen, not just index.js: these screens already split fields
-	// and actions into siblings, and a screen that nests its empty state a directory down
-	// would otherwise slip past the scan and out of the count below.
+	// Every source file under the screen, not just index.js: these screens already split
+	// fields and actions into siblings, and a screen that nests its empty state a directory
+	// down, or writes it in TypeScript, would otherwise slip past the scan and out of the
+	// count below. Comments come out so a contract can only be met by code, never by prose
+	// describing it.
+	const stripComments = source => source.replace( /\/\*[\s\S]*?\*\//g, '' ).replace( /^\s*\/\/.*$/gm, '' );
+
 	const readScreen = name => {
 		const dir = path.join( screensDir, name );
 		return fs
 			.readdirSync( dir, { recursive: true } )
-			.filter( file => file.endsWith( '.js' ) && ! file.endsWith( '.test.js' ) )
-			.map( file => fs.readFileSync( path.join( dir, file ), 'utf8' ) )
+			.filter( file => /\.(?:js|jsx|ts|tsx)$/.test( file ) && ! /\.test\.(?:js|jsx|ts|tsx)$/.test( file ) )
+			.map( file => stripComments( fs.readFileSync( path.join( dir, file ), 'utf8' ) ) )
 			.join( '\n' );
 	};
 
@@ -64,6 +68,15 @@ describe( 'every screen empty state carries the shell contract', () => {
 
 	it.each( sources )( '%s sets the heading level from the shell', ( _name, source ) => {
 		expect( source ).toContain( 'heading={ getEmptyStateHeading() }' );
+	} );
+
+	// The trash term defaults to inert, so a screen that holds a count but never passes it
+	// shows onboarding over a list whose every item is in the trash.
+	it.each( sources )( '%s passes any trash count it holds into the strict-empty rule', ( _name, source ) => {
+		if ( ! source.includes( 'trashCount' ) ) {
+			return;
+		}
+		expect( source ).toMatch( /isStrictlyEmpty\( \{[^}]*\btrashCount\b/ );
 	} );
 
 	it( 'keeps the class in sync with the stylesheet selectors', () => {
