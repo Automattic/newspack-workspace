@@ -1,3 +1,59 @@
+## newspack [6.48.12](https://github.com/Automattic/newspack-workspace/compare/newspack@6.48.11...newspack@6.48.12) (2026-08-20)
+
+
+### Bug Fixes
+
+* **reader-activation:** clear stuck auth-form loading spinner ([#929](https://github.com/Automattic/newspack-workspace/issues/929)) ([ad31481](https://github.com/Automattic/newspack-workspace/commit/ad31481b1476628a47fe9f3e2a765ea4f76146f2))
+
+## newspack [6.48.11](https://github.com/Automattic/newspack-workspace/compare/newspack@6.48.10...newspack@6.48.11) (2026-08-20)
+
+
+### Bug Fixes
+
+* **memberships:** restore membership paywall content ([#931](https://github.com/Automattic/newspack-workspace/issues/931)) ([#932](https://github.com/Automattic/newspack-workspace/issues/932)) ([13cde5a](https://github.com/Automattic/newspack-workspace/commit/13cde5ae2a50c60d6bceda6ce79ce43c1d7e6e59))
+
+## newspack [6.48.10](https://github.com/Automattic/newspack-workspace/compare/newspack@6.48.9...newspack@6.48.10) (2026-08-20)
+
+
+### Bug Fixes
+
+* **reader-activation:** keep the magic-link base on the site origin ([#866](https://github.com/Automattic/newspack-workspace/issues/866)) ([c2129c1](https://github.com/Automattic/newspack-workspace/commit/c2129c176309df083a9cf18407ecef6a6da3860c))
+
+## newspack [6.48.9](https://github.com/Automattic/newspack-workspace/compare/newspack@6.48.8...newspack@6.48.9) (2026-08-19)
+
+
+### Bug Fixes
+
+* **reader-activation:** escape the row-action URLs in the users list ([#873](https://github.com/Automattic/newspack-workspace/issues/873)) ([816fc2b](https://github.com/Automattic/newspack-workspace/commit/816fc2bdf7bb0e442ddbc19d240d9fe63f41e9bc))
+
+## newspack [6.48.8](https://github.com/Automattic/newspack-workspace/compare/newspack@6.48.7...newspack@6.48.8) (2026-08-19)
+
+
+### Bug Fixes
+
+* **content-gate:** enforce block visibility on REST reads ([#813](https://github.com/Automattic/newspack-workspace/issues/813)) ([3dfb94b](https://github.com/Automattic/newspack-workspace/commit/3dfb94b2e4b31ba91c8f6200be3a4508086b99a1))
+
+## newspack [6.48.7](https://github.com/Automattic/newspack-workspace/compare/newspack@6.48.6...newspack@6.48.7) (2026-08-19)
+
+
+### Bug Fixes
+
+* **subscriptions:** enable legacy subscription product types once ([#819](https://github.com/Automattic/newspack-workspace/issues/819)) ([7d9e6c4](https://github.com/Automattic/newspack-workspace/commit/7d9e6c4b148db93a21d54a774081345127acba2b))
+
+## newspack [6.48.6](https://github.com/Automattic/newspack-workspace/compare/newspack@6.48.5...newspack@6.48.6) (2026-08-19)
+
+
+### Bug Fixes
+
+* **reader-activation:** keep the initial list size from reverting to 2 ([#849](https://github.com/Automattic/newspack-workspace/issues/849)) ([24d8d43](https://github.com/Automattic/newspack-workspace/commit/24d8d4389c54f2e95860581226c8a57062eff5e8))
+
+## newspack [6.48.5](https://github.com/Automattic/newspack-workspace/compare/newspack@6.48.4...newspack@6.48.5) (2026-08-19)
+
+
+### Bug Fixes
+
+* **content-gate:** restrict who can read institution records ([#860](https://github.com/Automattic/newspack-workspace/issues/860)) ([570654b](https://github.com/Automattic/newspack-workspace/commit/570654bc7514a5b38b81aa8547e9738ccd8332e2))
+
 ## newspack [6.48.4](https://github.com/Automattic/newspack-workspace/compare/newspack@6.48.3...newspack@6.48.4) (2026-08-18)
 
 
