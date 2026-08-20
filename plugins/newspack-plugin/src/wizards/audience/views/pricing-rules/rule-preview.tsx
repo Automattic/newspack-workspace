@@ -1,50 +1,41 @@
 /**
- * Per-rule impact preview for the editor — the composed price-by-cycle table
- * (with unsaved-edit highlighting) plus the eligible-audience line. Debounce-POSTs
- * the in-progress rule body to the plugin's preview route; mirrors the native
- * plugin's impact metabox. Renders nothing until a supported payload arrives.
+ * Per-rule impact preview for the editor. Debounce-POSTs the in-progress rule
+ * body to the plugin's preview route; spins until the first request settles and
+ * stands down to an empty card when nothing matches or no preview can be had.
  */
 
 /**
  * WordPress dependencies
  */
-import { __, sprintf } from '@wordpress/i18n';
+import { _n, sprintf } from '@wordpress/i18n';
 import { useState, useEffect, useRef } from '@wordpress/element';
 import apiFetch from '@wordpress/api-fetch';
+import {
+	Spinner,
+	__experimentalVStack as VStack, // eslint-disable-line @wordpress/no-unsafe-wp-apis
+} from '@wordpress/components';
 
 /**
  * Internal dependencies
  */
+import ImpactEmpty, { type ImpactEmptyReason } from './impact-empty';
+import ImpactStats from './impact-stats';
 import ImpactTable from './impact-table';
+import { formatCount } from './impact-format';
 import { RULE_PREVIEW_API_PATH as PREVIEW_PATH } from './constants';
 
 const DEBOUNCE_MS = 500;
 
-function AudienceLine( { audience }: { audience: RuleAudienceData } ) {
-	const total = audience.count_limited ? `${ audience.total }+` : `${ audience.total }`;
-	const message =
-		'locked' === audience.application
-			? sprintf(
-					/* translators: %s: number of existing subscribers in scope. */
-					__( 'Existing subscribers in scope: %s — none repriced (applies to new sign-ups only).', 'newspack-plugin' ),
-					total
-			  )
-			: sprintf(
-					/* translators: 1: total subscribers, 2: count eligible at renewal, 3: count protected. */
-					__( 'Existing subscribers in scope: %1$s — %2$s eligible at renewal · %3$s protected.', 'newspack-plugin' ),
-					total,
-					String( audience.caught ),
-					String( audience.protected )
-			  );
-	return <p className="newspack-pricing-rules__audience">{ message }</p>;
-}
-
 interface RulePreviewProps {
 	body: Record< string, unknown >;
+	// Off while the form's section header carries the legend; on so the table can
+	// explain markers composed in by other active rules.
+	showCycleNote: boolean;
 }
 
-export default function RulePreview( { body }: RulePreviewProps ) {
+export default function RulePreview( { body, showCycleNote }: RulePreviewProps ) {
 	const [ data, setData ] = useState< RulePreviewResponse | null >( null );
+	const [ hasResolved, setHasResolved ] = useState( false );
 	const [ isLoading, setIsLoading ] = useState( false );
 	const timer = useRef< ReturnType< typeof setTimeout > | undefined >( undefined );
 	const bodyKey = JSON.stringify( body );
@@ -69,6 +60,7 @@ export default function RulePreview( { body }: RulePreviewProps ) {
 				} )
 				.finally( () => {
 					if ( ! cancelled ) {
+						setHasResolved( true );
 						setIsLoading( false );
 					}
 				} );
@@ -82,35 +74,51 @@ export default function RulePreview( { body }: RulePreviewProps ) {
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [ bodyKey ] );
 
-	if ( ! data?.supported ) {
-		return null;
+	if ( ! data && ! hasResolved ) {
+		return (
+			<VStack className="newspack-pricing-rules__preview-loading" alignment="center" justify="center">
+				<Spinner />
+			</VStack>
+		);
 	}
 
-	const { currency } = data;
+	let reason: ImpactEmptyReason | null = null;
+	if ( ! data?.supported ) {
+		reason = 'unsupported';
+	} else if ( data.total_matching === 0 || ! data.sample?.length ) {
+		reason = 'no-products';
+	}
+
+	if ( reason ) {
+		return <ImpactEmpty reason={ reason } />;
+	}
+
+	const preview = data as RulePreviewResponse;
 
 	return (
 		<div className={ `newspack-pricing-rules__preview${ isLoading ? ' is-loading' : '' }` }>
-			{ data.total_matching > 0 ? (
-				<>
-					<p className="newspack-pricing-rules__muted">
-						{ data.preview_limited
-							? sprintf(
-									/* translators: 1: sample size, 2: total affected products. */
-									__(
-										'Resulting prices for a sample of %1$d of %2$d affected products (best price wins; updates as you edit).',
-										'newspack-plugin'
-									),
-									data.sample_count,
-									data.total_matching
-							  )
-							: __( 'Resulting prices across affected products (best price wins; updates as you edit).', 'newspack-plugin' ) }
-					</p>
-					<ImpactTable baseline={ data.sample } segmentGroups={ data.segment_groups ?? [] } currency={ currency } />
-				</>
-			) : (
-				<p className="newspack-pricing-rules__muted">{ __( 'This rule does not affect any products yet.', 'newspack-plugin' ) }</p>
+			{ /* impact_preview() documents a capped total as an upper bound, not a floor. */ }
+			<ImpactStats
+				totalMatching={ preview.total_matching }
+				countLimited={ preview.count_limited }
+				countBound="upper"
+				audience={ preview.audience }
+			/>
+			<ImpactTable
+				baseline={ preview.sample }
+				segmentGroups={ preview.segment_groups ?? [] }
+				currency={ preview.currency }
+				showCycleNote={ showCycleNote }
+			/>
+			{ preview.preview_limited && (
+				<p className="newspack-pricing-rules__muted">
+					{ sprintf(
+						/* translators: %s: how many products the table lists. */
+						_n( 'Showing a sample of %s product.', 'Showing a sample of %s products.', preview.sample_count, 'newspack-plugin' ),
+						formatCount( preview.sample_count )
+					) }
+				</p>
 			) }
-			{ data.audience?.supported && <AudienceLine audience={ data.audience } /> }
 		</div>
 	);
 }

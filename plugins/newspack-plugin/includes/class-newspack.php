@@ -159,6 +159,9 @@ final class Newspack {
 		include_once NEWSPACK_ABSPATH . 'includes/subscriber-commerce/class-subscriber-commerce.php';
 		include_once NEWSPACK_ABSPATH . 'includes/subscriber-commerce/class-product-targeting.php';
 		include_once NEWSPACK_ABSPATH . 'includes/subscriber-commerce/class-subscriber-eligibility.php';
+		include_once NEWSPACK_ABSPATH . 'includes/subscriber-commerce/class-subscriber-only-products.php';
+		include_once NEWSPACK_ABSPATH . 'includes/subscriber-commerce/class-product-purchase-restriction.php';
+		include_once NEWSPACK_ABSPATH . 'includes/subscriber-commerce/class-subscriber-only-products-api.php';
 
 		include_once NEWSPACK_ABSPATH . 'includes/starter_content/class-starter-content-provider.php';
 		include_once NEWSPACK_ABSPATH . 'includes/starter_content/class-starter-content-generated.php';
