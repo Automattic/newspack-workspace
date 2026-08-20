@@ -20,9 +20,11 @@
 		&:not(:first-child) {
 			margin-top: 48px;
 		}
-		&:has(> .newspack-section-header--no-margin),
-		&:has(> .newspack-section-header--hidden) {
+		&:has(> .newspack-section-header--no-margin) {
 			margin-top: 0;
+		}
+		&:has(> .newspack-section-header--hidden) {
+			margin-block: 0;
 		}
 		&.newspack-section-header--has-primary-action {
 			display: flex;
