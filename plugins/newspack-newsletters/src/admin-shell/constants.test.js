@@ -34,12 +34,13 @@ describe( 'every screen empty state carries the shell contract', () => {
 
 	const screensDir = path.join( __dirname, 'screens' );
 
-	// Every .js in the directory, not just index.js: these screens already split fields
-	// and actions into siblings, so an extracted empty state would slip past.
+	// Every .js under the screen, not just index.js: these screens already split fields
+	// and actions into siblings, and a screen that nests its empty state a directory down
+	// would otherwise slip past the scan and out of the count below.
 	const readScreen = name => {
 		const dir = path.join( screensDir, name );
 		return fs
-			.readdirSync( dir )
+			.readdirSync( dir, { recursive: true } )
 			.filter( file => file.endsWith( '.js' ) && ! file.endsWith( '.test.js' ) )
 			.map( file => fs.readFileSync( path.join( dir, file ), 'utf8' ) )
 			.join( '\n' );
