@@ -20,12 +20,25 @@ class Test_Subscriptions_Columns_Escaping extends WP_UnitTestCase {
 	 * @return int Post ID.
 	 */
 	private function make_subscription( $payload ) {
-		$post_id = self::factory()->post->create(
+		$post_id = self::factory()->post->create( [ 'post_type' => Subscriptions_DB::POST_TYPE_SLUG ] );
+
+		// wp_filter_post_kses runs for any user without unfiltered_html, on create
+		// and update alike, and strips this payload to an empty string. A title
+		// written as the default user therefore never reaches get_title(), and the
+		// subscription column's assertion passes on the adjacent escaped
+		// get_user_name() instead of on the title. Writing it as an administrator
+		// (who holds unfiltered_html on single site, which is how these run) puts
+		// the payload where the column can render it, so the escaping under test
+		// is what has to neutralise it.
+		$previous = get_current_user_id();
+		wp_set_current_user( self::factory()->user->create( [ 'role' => 'administrator' ] ) );
+		wp_update_post(
 			[
-				'post_type'  => Subscriptions_DB::POST_TYPE_SLUG,
+				'ID'         => $post_id,
 				'post_title' => $payload, // Read back by get_title().
 			]
 		);
+		wp_set_current_user( $previous );
 		update_post_meta( $post_id, 'user_name', $payload );
 		update_post_meta( $post_id, 'formatted_total', $payload );
 		update_post_meta( $post_id, 'payment_method_title', $payload );
