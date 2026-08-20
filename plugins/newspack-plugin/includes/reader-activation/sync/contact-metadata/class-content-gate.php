@@ -10,7 +10,7 @@ namespace Newspack\Reader_Activation\Sync\Contact_Metadata;
 use Newspack\Reader_Activation\Sync\Contact_Metadata;
 use Newspack\Reader_Activation\Sync\Legacy_Metadata;
 use Newspack\Reader_Activation\Sync\Metadata;
-use Newspack\Access_Rules;
+use Newspack\Access_Attribution;
 use Newspack\Content_Gate as Content_Gate_CPT;
 use Newspack\Group_Subscription;
 use Newspack\Institution;
@@ -32,9 +32,19 @@ class Content_Gate extends Contact_Metadata {
 
 	/**
 	 * Reset the cached custom access gates.
+	 *
+	 * Also clears the attribution memo of readers' owned subscriptions. A sync
+	 * run is one PHP process spanning many readers, and a subscription that
+	 * activates between two syncs in that process would otherwise be missed —
+	 * degrading the source label from the product's name to a bare
+	 * `subscription`.
+	 *
+	 * Called at every batch boundary of the bulk contact loops, alongside the
+	 * object cache flush — see RAS_Contact_Sync::batch_boundary_pause().
 	 */
 	public static function reset_cache() {
 		self::$custom_access_gates_cache = null;
+		Access_Attribution::reset_memo();
 	}
 
 	/**
@@ -184,6 +194,9 @@ class Content_Gate extends Contact_Metadata {
 	/**
 	 * Map an access rule slug and value to source labels.
 	 *
+	 * The mapping itself lives in `Access_Attribution`, shared with the GA4
+	 * layer so both consumers attribute a passing rule to the same source.
+	 *
 	 * @param string $slug    Rule slug.
 	 * @param mixed  $value   Rule value.
 	 * @param int    $user_id User ID.
@@ -192,57 +205,7 @@ class Content_Gate extends Contact_Metadata {
 	 * @return array Source labels.
 	 */
 	private static function get_source_labels( $slug, $value, $user_id, $context = [] ) {
-		switch ( $slug ) {
-			case 'subscription':
-				if ( ! is_array( $value ) || ! function_exists( 'wc_get_product' ) ) {
-					return [ 'subscription' ];
-				}
-				// These re-run the rule callback to work out *which* subscription
-				// granted access, so they must see the same gate settings the rule
-				// itself was evaluated under. Called bare they would fall back to
-				// the callback's own defaults — notably grace-ON — and attribute
-				// access to an in-recovery subscription on a gate whose publisher
-				// turned payment-recovery grace off.
-				return Access_Rules::with_evaluation_context(
-					$context,
-					function () use ( $value, $user_id ) {
-						// Determine ownership first so an owner of a sub matching an
-						// "any subscription" rule (empty $value) isn't mislabeled as
-						// `group` by the non-strict check below.
-						if ( Access_Rules::has_active_subscription( $user_id, $value, true ) ) {
-							$names = [];
-							foreach ( $value as $product_id ) {
-								if ( Access_Rules::has_active_subscription( $user_id, [ $product_id ], true ) ) {
-									$product = wc_get_product( $product_id );
-									if ( $product ) {
-										$names[] = html_entity_decode( (string) $product->get_name(), ENT_QUOTES | ENT_HTML5, 'UTF-8' );
-									}
-								}
-							}
-							return ! empty( $names ) ? $names : [ 'subscription' ];
-						}
-						// Not an owner — check group subscription membership.
-						if ( Access_Rules::has_active_subscription( $user_id, $value ) ) {
-							return [ 'group' ];
-						}
-						// They might still have access via the
-						// `newspack_access_rules_has_active_subscription` filter hook.
-						return [ 'subscription' ];
-					}
-				);
-
-			case 'email_domain':
-				return [ 'domain' ];
-
-			case 'institution':
-				return [ 'institution' ];
-
-			case 'reader_data':
-				return [ 'reader_data' ];
-
-			default:
-				return [];
-		}
+		return Access_Attribution::get_source_labels( $slug, $value, $user_id, $context );
 	}
 
 	/**

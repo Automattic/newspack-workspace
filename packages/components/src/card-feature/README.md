@@ -7,6 +7,10 @@ A card component for presenting a named feature or setting with a predictable, s
 - **Maximum 2 cards per row.** Use `<Grid columns={ 2 }>` — never 3 or more. Cards are designed to be read, not scanned, and 3+ columns makes them too narrow for the content.
 - The icon is always displayed on the **right-hand side**, aligned to the top of the content.
 
+## Accessibility
+
+Cards sit side by side, so a bare "Enable" names no feature out of context. The card appends `title` to the primary button's accessible name ("Enable Metered Countdown") and to the "More" menu ("More options for Metered Countdown"). The visible label leads, so voice control still matches on the word the user can see. Nothing to pass — this is automatic.
+
 ## States
 
 | State | Condition | Button | Dropdown | Badge |
