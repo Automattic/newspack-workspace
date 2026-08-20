@@ -1176,6 +1176,28 @@ class Test_Site_Meter extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * Adoption seeds the allowance from the gates, so a caller reaching the route before
+	 * any admin pageload would have its setting reverted by the adoption run that follows.
+	 */
+	public function test_a_site_meter_write_before_adoption_is_not_reverted_by_it() {
+		wp_set_current_user( $this->factory->user->create( [ 'role' => 'administrator' ] ) );
+		$metering = [
+			'enabled' => true,
+			'count'   => 4,
+			'period'  => 'month',
+		];
+		$this->create_gate( $metering, $metering, Site_Meter::SCOPE_GATE );
+		$this->assertFalse( Site_Meter::has_adopted(), 'The write below has to land before adoption for this to mean anything' );
+
+		$response = rest_get_server()->dispatch( $this->wizard_request( 'POST', '/site-meter', [ 'anonymous_count' => 9 ] ) );
+		$this->assertSame( 200, $response->get_status() );
+
+		Site_Meter::maybe_adopt_gate_settings();
+
+		$this->assertSame( 9, Site_Meter::get_setting( 'anonymous_count' ), 'The allowance the caller set still stands' );
+	}
+
+	/**
 	 * A negative count reads back through absint() as a positive allowance, so the
 	 * schema refuses it rather than letting it reach the option.
 	 */

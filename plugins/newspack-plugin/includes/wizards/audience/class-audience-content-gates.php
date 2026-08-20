@@ -550,6 +550,10 @@ class Audience_Content_Gates extends Wizard {
 	 * @return \WP_REST_Response|\WP_Error
 	 */
 	public function update_site_meter( \WP_REST_Request $request ): \WP_REST_Response|\WP_Error {
+		// Before the write, not after: adoption seeds the allowance from the gates, so a
+		// caller reaching this route before any admin pageload would otherwise have its
+		// setting reverted by the adoption run that follows it.
+		Site_Meter::maybe_adopt_gate_settings();
 		// Only what the request actually sent: forwarding an absent count as null would
 		// sanitize to zero and silently close the allowance site-wide.
 		$settings = array_intersect_key( $request->get_params(), Site_Meter::get_default_settings() );
