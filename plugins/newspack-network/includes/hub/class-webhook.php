@@ -97,11 +97,55 @@ class Webhook {
 		Debugger::log( 'Successfully verified data' );
 		Debugger::log( $verified_data );
 
+		// Claim this delivery's nonce before processing. The claim holds the
+		// delivery as pending until processing completes, so each delivery is
+		// handled at most once no matter how many times, or how close together,
+		// its copies arrive.
+		$claim = Used_Nonces::claim( $nonce );
+		if ( Used_Nonces::STATUS_COMPLETED === $claim ) {
+			// Already processed to completion. Acknowledge so the Node stops
+			// retrying, but do not run the event a second time.
+			Debugger::log( 'Webhook nonce already completed; acknowledging without reprocessing.' );
+			return new WP_REST_Response( 'success' );
+		}
+		if ( Used_Nonces::CLAIMED !== $claim ) {
+			// Pending (an attempt to process this delivery is on record with no
+			// outcome yet), or no state could be recorded at all. Either way, ask
+			// the Node to retry rather than process a delivery that may also be
+			// handled elsewhere.
+			Debugger::log( 'Webhook delivery not claimable (' . ( $claim ?? 'no recorded state' ) . '); requesting retry.' );
+			return new WP_REST_Response( array( 'error' => 'Could not record delivery.' ), 500 );
+		}
+
 		$incoming_event_class = 'Newspack_Network\\Incoming_Events\\' . $incoming_events[ $action ];
 
-		$incoming_event = new $incoming_event_class( $site, $verified_data, $timestamp );
+		// The claim is held while the event is processed. Processing that does not
+		// complete releases it and returns a 5xx, so the Node's retry can reprocess
+		// rather than the failure being acknowledged silently: a throw is caught
+		// below, and a failed Event Log write is caught by the `false` return. A
+		// delivery already in the Event Log (`null`) is a no-op whose handlers do
+		// not re-run — the pipeline's existing at-most-once behaviour — and is
+		// acknowledged as success.
+		try {
+			$incoming_event = new $incoming_event_class( $site, $verified_data, $timestamp );
+			$persisted      = $incoming_event->process_in_hub();
+		} catch ( \Throwable $e ) {
+			Used_Nonces::release( $nonce );
+			Debugger::log( 'Webhook processing threw; released nonce for retry: ' . $e->getMessage() );
+			return new WP_REST_Response( array( 'error' => 'Could not process delivery.' ), 500 );
+		}
 
-		$incoming_event->process_in_hub();
+		if ( false === $persisted ) {
+			Used_Nonces::release( $nonce );
+			Debugger::log( 'Webhook delivery could not be recorded; released nonce for retry.' );
+			return new WP_REST_Response( array( 'error' => 'Could not record delivery.' ), 500 );
+		}
+
+		// Mark the delivery completed. Best-effort: processing has already
+		// succeeded, so the delivery is acknowledged either way. A claim whose
+		// completion could not be written stays pending, and a later arrival of
+		// the delivery draws a retryable error rather than being reprocessed.
+		Used_Nonces::complete( $nonce );
 
 		return new WP_REST_Response( 'success' );
 	}
