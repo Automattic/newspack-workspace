@@ -810,6 +810,19 @@ class Incoming_Post {
 							// dropped. It also could not do what it was meant to — the hook
 							// is already empty by this point, so a filter removed deliberately
 							// inside the try is indistinguishable from the ones removed above.
+							//
+							// Known limit: the snapshot belongs to whoever was current when
+							// it was taken. If a callback inside the try switched the current
+							// user to one holding unfiltered_html, core's kses_init on
+							// set_current_user drops kses, and this puts it back — leaving
+							// that user over-filtered for the rest of the request. It does not
+							// self-heal, because kses_init only removes filters, so a later
+							// switch back to the same user changes nothing. Left as is:
+							// nothing in this plugin switches users during a save, and
+							// over-filtering is the safe direction. Reconciling would mean
+							// re-running kses_init and wp_custom_css_kses_init after the
+							// restore, which would also discard any unrelated
+							// content_save_pre callback another plugin added inside the try.
 							add_filter( 'content_save_pre', $callback['function'], $priority, $callback['accepted_args'] );
 						}
 					}
