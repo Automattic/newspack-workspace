@@ -11,13 +11,22 @@
 /**
  * WordPress dependencies.
  */
-import { __, sprintf } from '@wordpress/i18n';
+import { __ } from '@wordpress/i18n';
 import { Flex, FlexBlock, FormTokenField as CoreFormTokenField, SelectControl, TextControl } from '@wordpress/components';
+import type { TokenItem } from '@wordpress/components/build-types/form-token-field/types.d.ts';
 
 /**
  * Internal dependencies.
  */
-import { getAccessRuleTokenFieldMessages } from '../access-rule-options';
+import {
+	formatAccessRuleOptionLabel,
+	getAccessRuleOptionTokens,
+	getAccessRuleTokenFieldMessages,
+	getMissingOptionLabel,
+	isAccessRuleOptionInput,
+	resolveAccessRuleOptionTokens,
+	type AccessRuleOption,
+} from '../access-rule-options';
 
 const DURATION_UNITS = [ 'days', 'months', 'forever' ] as const;
 
@@ -33,8 +42,6 @@ export type OneTimePurchaseValue = {
 	duration_value: number;
 	duration_unit: OneTimePurchaseDurationUnit;
 };
-
-type RuleOption = { value: string | number; label: string };
 
 /**
  * Normalize any stored rule value (including legacy/empty shapes) to the
@@ -52,59 +59,6 @@ export function normalizeOneTimePurchaseValue( value: unknown ): OneTimePurchase
 	};
 }
 
-/**
- * FormTokenField identifies a token by its display string, so two products
- * sharing a name would be indistinguishable — selecting one token would select
- * every ID carrying that name. Build a bijection between product IDs and token
- * strings instead, appending the ID to any name that isn't unique. A stored ID
- * absent from the options list (a variation, or a deleted product) keeps a
- * `#<id>` token so editing the field doesn't silently drop it.
- *
- * Uniqueness is enforced against every token handed out, not just against names
- * that repeat: a product named `Annual Pass (#60)` or `#123` would otherwise
- * collide with a token generated for another product and steal its ID.
- */
-export function getProductTokens( options: RuleOption[], productIds: Array< string | number > ) {
-	const nameCounts = new Map< string, number >();
-	options.forEach( option => nameCounts.set( option.label, ( nameCounts.get( option.label ) ?? 0 ) + 1 ) );
-
-	const tokenByValue = new Map< string, string >();
-	const valueByToken = new Map< string, string | number >();
-	/**
-	 * Claim the first free token for a product: its preferred string, then the
-	 * ID-disambiguated one, then that plus a counter for the pathological case
-	 * where a product is literally named like a token we already handed out.
-	 */
-	const addToken = ( value: string | number, preferred: string, disambiguated: string ) => {
-		let token = preferred;
-		let attempt = 1;
-		while ( valueByToken.has( token ) ) {
-			token = 1 === attempt ? disambiguated : `${ disambiguated } (${ attempt })`;
-			attempt++;
-		}
-		tokenByValue.set( String( value ), token );
-		valueByToken.set( token, value );
-	};
-
-	options.forEach( option => {
-		const disambiguated = sprintf(
-			// translators: 1: product name, 2: product ID.
-			__( '%1$s (#%2$s)', 'newspack-plugin' ),
-			option.label,
-			String( option.value )
-		);
-		const isAmbiguous = 1 < ( nameCounts.get( option.label ) ?? 0 );
-		addToken( option.value, isAmbiguous ? disambiguated : option.label, disambiguated );
-	} );
-	productIds.forEach( productId => {
-		if ( ! tokenByValue.has( String( productId ) ) ) {
-			addToken( productId, `#${ productId }`, `#${ productId }` );
-		}
-	} );
-
-	return { tokenByValue, valueByToken };
-}
-
 export default function OneTimePurchaseRuleControl( {
 	value,
 	onChange,
@@ -114,15 +68,13 @@ export default function OneTimePurchaseRuleControl( {
 }: {
 	value: unknown;
 	onChange: ( value: OneTimePurchaseValue ) => void;
-	options: RuleOption[];
+	options: AccessRuleOption[];
 	productsLabel?: string;
 	// eslint-disable-next-line @typescript-eslint/no-explicit-any
 	TokenField?: React.ComponentType< any >;
 } ) {
 	const currentValue = normalizeOneTimePurchaseValue( value );
 	const isFiniteDuration = 'days' === currentValue.duration_unit || 'months' === currentValue.duration_unit;
-	const { tokenByValue, valueByToken } = getProductTokens( options, currentValue.product_ids );
-	const selectedTokens = currentValue.product_ids.map( productId => tokenByValue.get( String( productId ) ) as string );
 
 	let durationHelp: string = __( 'How long a purchase grants access, counted from the order date.', 'newspack-plugin' );
 	if ( 'forever' === currentValue.duration_unit ) {
@@ -135,24 +87,24 @@ export default function OneTimePurchaseRuleControl( {
 		<>
 			<TokenField
 				label={ productsLabel }
-				value={ selectedTokens }
-				suggestions={ options.map( option => tokenByValue.get( String( option.value ) ) as string ) }
-				onChange={ ( tokens: ( string | { value: string } )[] ) => {
+				value={ getAccessRuleOptionTokens( options, currentValue.product_ids, getMissingOptionLabel( 'one_time_purchase' ) ) }
+				suggestions={ options.map( formatAccessRuleOptionLabel ) }
+				onChange={ ( tokens: ( string | TokenItem )[] ) =>
 					onChange( {
 						...currentValue,
-						product_ids: tokens
-							.map( token => valueByToken.get( typeof token === 'string' ? token : token.value ) )
-							.filter( ( productId ): productId is string | number => undefined !== productId ),
-					} );
-				} }
+						product_ids: resolveAccessRuleOptionTokens( tokens, options, currentValue.product_ids ),
+					} )
+				}
 				// FormTokenField accepts free-typed tokens by default, and one that
 				// isn't a known product would map to nothing and silently vanish on
 				// the next render. Reject it at entry instead — and since a rejection
 				// renders nothing, say what the field wants in the announcement, and
 				// let Enter commit the highlighted suggestion so typing a product name
 				// selects it rather than being rejected.
-				__experimentalValidateInput={ ( token: string ) => valueByToken.has( token ) }
-				messages={ getAccessRuleTokenFieldMessages( __( 'Not a selectable product. Pick one from the list.', 'newspack-plugin' ) ) }
+				__experimentalValidateInput={ ( input: string ) => isAccessRuleOptionInput( input, options ) }
+				messages={ getAccessRuleTokenFieldMessages(
+					__( 'Not a selectable product. Pick one from the list, or type its ID.', 'newspack-plugin' )
+				) }
 				__experimentalAutoSelectFirstMatch
 				__experimentalExpandOnFocus
 				__next40pxDefaultSize
