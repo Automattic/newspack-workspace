@@ -146,9 +146,16 @@ const ContentGiftingSettings = () => {
 		<div className="newspack-content-gate__edit">
 			{ confirmDialog }
 			{ giftingErrors.length > 0 && <Notice noticeText={ giftingErrors.join( ', ' ) } isError /> }
-			<Grid columns={ 2 } gutter={ 32 }>
-				<SectionHeader heading={ 2 } title={ __( 'General settings', 'newspack-plugin' ) } />
-				<VStack spacing={ 4 }>
+			<Grid columns={ 2 } gutter={ 32 } noMargin>
+				<SectionHeader
+					heading={ 2 }
+					title={ __( 'General Settings', 'newspack-plugin' ) }
+					description={ __(
+						'Let members gift articles to non-subscribers. Recipients can read the full content without needing to subscribe.',
+						'newspack-plugin'
+					) }
+				/>
+				<VStack spacing={ 6 }>
 					<RangeControl
 						label={ __( 'Gifting limit', 'newspack-plugin' ) }
 						help={ __( 'Maximum number of articles that can be gifted per user for the configured interval.', 'newspack-plugin' ) }
@@ -196,82 +203,84 @@ const ContentGiftingSettings = () => {
 					/>
 				</VStack>
 			</Grid>
-			<Divider alignment="full-width" />
-			<Grid columns={ 2 } gutter={ 32 }>
-				<SectionHeader heading={ 2 } title={ __( 'Recipient banner', 'newspack-plugin' ) } />
-				<VStack spacing={ 4 }>
-					<TextControl
-						label={ __( 'Message', 'newspack-plugin' ) }
-						help={ __( 'Text displayed in the banner shown to recipients of gifted articles.', 'newspack-plugin' ) }
-						value={ config?.content_gifting?.cta_label || '' }
-						onChange={ ( value: string ) =>
-							setConfig( { ...config, content_gifting: { ...config?.content_gifting, cta_label: value } } )
-						}
-						withMargin={ false }
-						__next40pxDefaultSize
-					/>
-					<TextControl
-						label={ __( 'Subscribe button label', 'newspack-plugin' ) }
-						help={ __( 'Text displayed on the subscribe button in the banner.', 'newspack-plugin' ) }
-						value={ config?.content_gifting?.button_label || '' }
-						onChange={ ( value: string ) =>
-							setConfig( { ...config, content_gifting: { ...config?.content_gifting, button_label: value } } )
-						}
-						withMargin={ false }
-						__next40pxDefaultSize
-					/>
-					<ToggleGroupControl
-						label={ __( 'Style', 'newspack-plugin' ) }
-						value={ config?.content_gifting?.style || 'light' }
-						onChange={ value => setConfig( { ...config, content_gifting: { ...config?.content_gifting, style: value as string } } ) }
-						isBlock
-						__next40pxDefaultSize
-					>
-						<ToggleGroupControlOption label={ __( 'Light', 'newspack-plugin' ) } value="light" />
-						<ToggleGroupControlOption label={ __( 'Dark', 'newspack-plugin' ) } value="dark" />
-					</ToggleGroupControl>
-					<ToggleGroupControl
-						label={ __( 'Subscribe button action', 'newspack-plugin' ) }
-						help={ __(
-							'Whether the subscribe button should start a product checkout or redirect to a landing page.',
-							'newspack-plugin'
-						) }
-						value={ config?.content_gifting?.cta_type || 'product' }
-						onChange={ value => setConfig( { ...config, content_gifting: { ...config?.content_gifting, cta_type: value as string } } ) }
-						isBlock
-						__next40pxDefaultSize
-					>
-						<ToggleGroupControlOption label={ __( 'Product', 'newspack-plugin' ) } value="product" />
-						<ToggleGroupControlOption label={ __( 'Landing page', 'newspack-plugin' ) } value="url" />
-					</ToggleGroupControl>
-					{ config?.content_gifting?.cta_type === 'product' && (
-						<SelectControl
-							label={ __( 'Subscribe button product', 'newspack-plugin' ) }
-							help={ __( 'Product linked to the subscribe button.', 'newspack-plugin' ) }
-							options={ [ { label: __( 'Select a product', 'newspack-plugin' ), value: 0, disabled: true }, ...availableProducts ] }
-							value={ config?.content_gifting?.cta_product_id || 0 }
-							suggestions={ availableProducts.map( o => o.label ) }
-							onChange={ ( value: number ) =>
-								setConfig( { ...config, content_gifting: { ...config?.content_gifting, cta_product_id: value } } )
-							}
-							__next40pxDefaultSize
-						/>
-					) }
-					{ config?.content_gifting?.cta_type === 'url' && (
+			<Divider alignment="full-width" variant="tertiary" />
+			<VStack spacing={ 6 }>
+				<Grid columns={ 2 } gutter={ 32 } noMargin>
+					<SectionHeader heading={ 2 } title={ __( 'Recipient Banner', 'newspack-plugin' ) } />
+					<VStack spacing={ 6 }>
 						<TextControl
-							label={ __( 'Subscribe button URL', 'newspack-plugin' ) }
-							help={ __( 'URL for the landing page to redirect to.', 'newspack-plugin' ) }
-							value={ config?.content_gifting?.cta_url || '' }
+							label={ __( 'Message', 'newspack-plugin' ) }
+							help={ __( 'Text displayed in the banner shown to recipients of gifted articles.', 'newspack-plugin' ) }
+							value={ config?.content_gifting?.cta_label || '' }
 							onChange={ ( value: string ) =>
-								setConfig( { ...config, content_gifting: { ...config?.content_gifting, cta_url: value } } )
+								setConfig( { ...config, content_gifting: { ...config?.content_gifting, cta_label: value } } )
 							}
 							withMargin={ false }
 							__next40pxDefaultSize
 						/>
-					) }
-				</VStack>
-			</Grid>
-			<div style={ { gridColumn: '1 / -1' } }>
+						<TextControl
+							label={ __( 'Subscribe button label', 'newspack-plugin' ) }
+							help={ __( 'Text displayed on the subscribe button in the banner.', 'newspack-plugin' ) }
+							value={ config?.content_gifting?.button_label || '' }
+							onChange={ ( value: string ) =>
+								setConfig( { ...config, content_gifting: { ...config?.content_gifting, button_label: value } } )
+							}
+							withMargin={ false }
+							__next40pxDefaultSize
+						/>
+						<ToggleGroupControl
+							label={ __( 'Style', 'newspack-plugin' ) }
+							value={ config?.content_gifting?.style || 'light' }
+							onChange={ value => setConfig( { ...config, content_gifting: { ...config?.content_gifting, style: value as string } } ) }
+							isBlock
+							__next40pxDefaultSize
+						>
+							<ToggleGroupControlOption label={ __( 'Light', 'newspack-plugin' ) } value="light" />
+							<ToggleGroupControlOption label={ __( 'Dark', 'newspack-plugin' ) } value="dark" />
+						</ToggleGroupControl>
+						<ToggleGroupControl
+							label={ __( 'Subscribe button action', 'newspack-plugin' ) }
+							help={ __(
+								'Whether the subscribe button should start a product checkout or redirect to a landing page.',
+								'newspack-plugin'
+							) }
+							value={ config?.content_gifting?.cta_type || 'product' }
+							onChange={ value =>
+								setConfig( { ...config, content_gifting: { ...config?.content_gifting, cta_type: value as string } } )
+							}
+							isBlock
+							__next40pxDefaultSize
+						>
+							<ToggleGroupControlOption label={ __( 'Product', 'newspack-plugin' ) } value="product" />
+							<ToggleGroupControlOption label={ __( 'Landing page', 'newspack-plugin' ) } value="url" />
+						</ToggleGroupControl>
+						{ config?.content_gifting?.cta_type === 'product' && (
+							<SelectControl
+								label={ __( 'Subscribe button product', 'newspack-plugin' ) }
+								help={ __( 'Product linked to the subscribe button.', 'newspack-plugin' ) }
+								options={ [ { label: __( 'Select a product', 'newspack-plugin' ), value: 0, disabled: true }, ...availableProducts ] }
+								value={ config?.content_gifting?.cta_product_id || 0 }
+								suggestions={ availableProducts.map( o => o.label ) }
+								onChange={ ( value: number ) =>
+									setConfig( { ...config, content_gifting: { ...config?.content_gifting, cta_product_id: value } } )
+								}
+								__next40pxDefaultSize
+							/>
+						) }
+						{ config?.content_gifting?.cta_type === 'url' && (
+							<TextControl
+								label={ __( 'Subscribe button URL', 'newspack-plugin' ) }
+								help={ __( 'URL for the landing page to redirect to.', 'newspack-plugin' ) }
+								value={ config?.content_gifting?.cta_url || '' }
+								onChange={ ( value: string ) =>
+									setConfig( { ...config, content_gifting: { ...config?.content_gifting, cta_url: value } } )
+								}
+								withMargin={ false }
+								__next40pxDefaultSize
+							/>
+						) }
+					</VStack>
+				</Grid>
 				<BaseControl id="newspack-content-gifting-cta-preview" label={ __( 'Preview', 'newspack-plugin' ) }>
 					<div className="newspack-content-gifting__cta-preview" inert="true">
 						<div className="newspack-ui">
@@ -308,7 +317,7 @@ const ContentGiftingSettings = () => {
 						</div>
 					</div>
 				</BaseControl>
-			</div>
+			</VStack>
 		</div>
 	);
 };

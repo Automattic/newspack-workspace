@@ -90,11 +90,8 @@ const AudienceContentGates = ( props, ref ) => {
 					exact: true,
 					backNav: '#/content-gates',
 					title: __( 'Content Gifting', 'newspack-plugin' ),
+					size: 'hidden',
 					breadcrumbs: [ ...ACCESS_CONTROL, { label: __( 'Content Gifting', 'newspack-plugin' ) } ],
-					description: __(
-						'Let members gift articles to non-subscribers. Recipients can read the full content without needing to subscribe.',
-						'newspack-plugin'
-					),
 				},
 				{
 					path: '/institutions',
