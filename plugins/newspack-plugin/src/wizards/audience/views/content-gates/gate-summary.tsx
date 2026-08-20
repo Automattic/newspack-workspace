@@ -84,36 +84,58 @@ export type GateSummarySection = {
  * is shared. Without that, several gates showing the same number read as several
  * separate allowances, which is the confusion the shared meter exists to remove.
  *
- * @param metering   The path's metering settings.
- * @param siteCount  The site meter count governing this path.
- * @param sitePeriod The site meter reset period.
- * @param hasRegwall Whether the gate offers registration before this path. Without
- *                   one, running out of free views is the end of the road, so the
- *                   summary says so rather than leaving the publisher to infer it.
+ * @param metering       The path's metering settings.
+ * @param siteCount      The site meter count governing this path.
+ * @param sitePeriod     The site meter reset period.
+ * @param hasRegwall     Whether the gate offers registration before this path. Without
+ *                       one, running out of free views is the end of the road, so the
+ *                       summary says so rather than leaving the publisher to infer it.
+ * @param signedOutCount The site meter count for signed-out readers. Only relevant
+ *                       without a registration wall, where this path governs them too
+ *                       and the two audiences draw on different allowances.
  */
-const formatMetering = ( metering: Metering, siteCount?: number, sitePeriod?: Metering[ 'period' ], hasRegwall = true ) => {
+const formatMetering = ( metering: Metering, siteCount?: number, sitePeriod?: Metering[ 'period' ], hasRegwall = true, signedOutCount?: number ) => {
 	const isSiteScoped = metering.scope !== 'gate';
 	const count = getMeteringCount( metering, siteCount );
 	const period = isSiteScoped ? sitePeriod ?? 'month' : metering.period;
 	const periodLabel = period === 'week' ? __( 'week', 'newspack-plugin' ) : __( 'month', 'newspack-plugin' );
-	const allowance = hasRegwall
-		? sprintf(
-				// translators: 1: metering count, 2: metering period
-				_n( '%1$d free view per %2$s', '%1$d free views per %2$s', count, 'newspack-plugin' ),
+	// A gate keeping its own allowance stores one count for both audiences.
+	const anonymousCount = isSiteScoped ? signedOutCount : count;
+	const servesTwoAllowances = ! hasRegwall && typeof anonymousCount === 'number' && anonymousCount !== count;
+	let allowance;
+	if ( hasRegwall ) {
+		allowance = sprintf(
+			// translators: 1: metering count, 2: metering period
+			_n( '%1$d free view per %2$s', '%1$d free views per %2$s', count, 'newspack-plugin' ),
+			count,
+			periodLabel
+		);
+	} else if ( servesTwoAllowances ) {
+		allowance = sprintf(
+			// translators: 1: free views for signed-out readers, 2: metering period, 3: free views for signed-in readers
+			_n(
+				'%1$d free view per %2$s for signed-out readers, %3$d for signed-in, before content is restricted',
+				'%1$d free views per %2$s for signed-out readers, %3$d for signed-in, before content is restricted',
+				anonymousCount as number,
+				'newspack-plugin'
+			),
+			anonymousCount as number,
+			periodLabel,
+			count
+		);
+	} else {
+		allowance = sprintf(
+			// translators: 1: metering count, 2: metering period
+			_n(
+				'%1$d free view per %2$s before content is restricted',
+				'%1$d free views per %2$s before content is restricted',
 				count,
-				periodLabel
-		  )
-		: sprintf(
-				// translators: 1: metering count, 2: metering period
-				_n(
-					'%1$d free view per %2$s before content is restricted',
-					'%1$d free views per %2$s before content is restricted',
-					count,
-					'newspack-plugin'
-				),
-				count,
-				periodLabel
-		  );
+				'newspack-plugin'
+			),
+			count,
+			periodLabel
+		);
+	}
 	return isSiteScoped
 		? sprintf(
 				// translators: %s is the allowance, e.g. "3 free views per month".
@@ -210,7 +232,13 @@ export const getGateSummarySections = ( gate: Gate, isNewsletter = false, siteMe
 				{ showsPaidMetering && (
 					<p>
 						<strong>{ __( 'Metered:', 'newspack-plugin' ) } </strong>{ ' ' }
-						{ formatMetering( gate.custom_access.metering, siteMeter?.registered_count, siteMeter?.period, hasRegwall ) }
+						{ formatMetering(
+							gate.custom_access.metering,
+							siteMeter?.registered_count,
+							siteMeter?.period,
+							hasRegwall,
+							siteMeter?.anonymous_count
+						) }
 					</p>
 				) }
 				{ /* Only when the column has nothing else: N/A beside a metering line reads as a contradiction. */ }
