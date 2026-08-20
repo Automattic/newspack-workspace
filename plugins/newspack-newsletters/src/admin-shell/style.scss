@@ -37,14 +37,6 @@ body.newspack-newsletters-admin-screen {
 	.notice-info {
 		box-shadow: 0 0 0 1px wp-colors.$gray-300;
 	}
-
-	.newspack-section-header.newspack-section-header--page-header .newspack-section-header__icon {
-		background-color: np-colors.$primary-000;
-
-		svg {
-			fill: np-colors.$primary-600;
-		}
-	}
 }
 
 body.newspack-newsletters-admin-screen--bundled {

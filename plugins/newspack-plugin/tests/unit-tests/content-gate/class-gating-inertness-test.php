@@ -25,6 +25,16 @@
  * flag-independent and ANDing the feature constant in would unhide blocks on
  * sites that never enabled content gates. See `Block_Visibility::filter_render_block()`.
  *
+ * The premium newsletter paths carry a second off-switch on top of it:
+ * `Premium_Newsletters::is_access_control_active()` also stands down while Woo
+ * Memberships is active, because access still belongs to Memberships until a site
+ * cuts over and the restriction filter returns its input unchanged until then.
+ * That direction is not covered here. Making `Memberships::is_active()` true needs
+ * a global `WC_Memberships` class and `wc_memberships()` function, and once
+ * defined they hold for the rest of the run, so every `class_exists()` guard in
+ * the suite would silently take the Memberships path. It is verified against real
+ * Woo Memberships instead.
+ *
  * Every case here is mutation-tested: removing its guard must fail it. A case that
  * passes either way is worse than no case.
  *
