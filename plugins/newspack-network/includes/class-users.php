@@ -57,7 +57,10 @@ class Users {
 			if ( $remote_site ) {
 				return sprintf(
 					'<a href="%swp-admin/user-edit.php?user_id=%d">%s</a>',
-					trailingslashit( esc_url( $remote_site ) ),
+					// Escape last. esc_url() returns '' for a value it rejects, and
+					// trailingslashit( '' ) is '/', which would point the link at the
+					// hub's own user-edit screen rather than leaving the href empty.
+					esc_url( trailingslashit( $remote_site ) ),
 					$remote_id,
 					sprintf( '%s (#%d)', esc_html( $remote_site ), $remote_id )
 				);
