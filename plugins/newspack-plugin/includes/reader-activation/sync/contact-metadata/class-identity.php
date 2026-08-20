@@ -123,7 +123,7 @@ class Identity extends Contact_Metadata {
 
 		// Omitted unless the reader actually signed in with a supported SSO
 		// provider, mirroring the legacy enrichment
-		// (Legacy_Metadata::add_registration_data()). An empty string here
+		// (Metadata::add_registration_data_raw()). An empty string here
 		// would blank a live merge field at any provider that overwrites on
 		// blank.
 		$connected_account = $this->get_connected_account();

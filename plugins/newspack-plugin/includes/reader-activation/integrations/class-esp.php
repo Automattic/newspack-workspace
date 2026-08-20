@@ -345,8 +345,12 @@ class ESP extends Integration {
 	/**
 	 * Get the enabled outgoing metadata fields for the ESP integration.
 	 *
-	 * Overrides the parent to provide lazy migration from the legacy global
-	 * option (Metadata::FIELDS_OPTION) to the per-integration option.
+	 * Overrides the parent to lazily migrate the legacy global option
+	 * (Metadata::FIELDS_OPTION) into the per-integration option. Copied
+	 * verbatim, not through update_enabled_outgoing_fields(): validating
+	 * here would permanently drop any currently-unavailable name (e.g.
+	 * payment fields while WooCommerce is inactive) from the publisher's
+	 * selection.
 	 *
 	 * @return string[] List of enabled field names.
 	 */
@@ -359,11 +363,15 @@ class ESP extends Integration {
 		// Migrate from legacy global option.
 		$legacy = \get_option( Sync\Metadata::FIELDS_OPTION, null );
 		if ( null !== $legacy && is_array( $legacy ) ) {
-			$this->update_enabled_outgoing_fields( $legacy );
-			return $legacy;
+			\update_option(
+				self::OUTGOING_FIELDS_OPTION_PREFIX . $this->id,
+				array_values( array_unique( array_map( 'strval', $legacy ) ) ),
+				false
+			);
+			return array_values( array_unique( array_map( 'strval', $legacy ) ) );
 		}
 
-		return Sync\Metadata::get_default_fields();
+		return Sync\Metadata::get_default_enabled_fields();
 	}
 
 	/**

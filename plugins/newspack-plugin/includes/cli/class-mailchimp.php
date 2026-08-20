@@ -10,7 +10,6 @@ namespace Newspack\CLI;
 use WP_CLI;
 use Newspack\Reader_Activation;
 use Newspack\Reader_Activation\Sync\Metadata;
-use Newspack\Reader_Activation\Sync\Legacy_Metadata;
 use Newspack\Mailchimp_API;
 
 defined( 'ABSPATH' ) || exit;
@@ -45,8 +44,8 @@ class Mailchimp {
 				function( $acc, $field_slug ) use ( $prefix, $all_fields ) {
 					if ( ! empty( $all_fields[ $field_slug ] ) ) {
 						$acc[] = trim( $prefix . $all_fields[ $field_slug ] );
-					} elseif ( ! empty( Legacy_Metadata::get_utm_key( $field_slug ) ) && ( ! $prefix || 0 === strpos( Legacy_Metadata::get_utm_key( $field_slug ), $prefix ) ) ) {
-						$acc[] = trim( $prefix . str_replace( Metadata::PREFIX, '', Legacy_Metadata::get_utm_key( $field_slug ) ) );
+					} elseif ( ! empty( Metadata::get_utm_key( $field_slug ) ) && ( ! $prefix || 0 === strpos( Metadata::get_utm_key( $field_slug ), $prefix ) ) ) {
+						$acc[] = trim( $prefix . str_replace( Metadata::PREFIX, '', Metadata::get_utm_key( $field_slug ) ) );
 					} else {
 						\WP_CLI::warning( sprintf( 'Field %s not recognized.', $field_slug ) );
 					}
@@ -133,8 +132,8 @@ class Mailchimp {
 			function( $acc, $field_slug ) use ( $prefix, $all_fields ) {
 				if ( ! empty( $all_fields[ $field_slug ] ) ) {
 					$acc[] = trim( $prefix . $all_fields[ $field_slug ] );
-				} elseif ( ! empty( Legacy_Metadata::get_utm_key( $field_slug ) ) && ( ! $prefix || 0 === strpos( Legacy_Metadata::get_utm_key( $field_slug ), $prefix ) ) ) {
-					$acc[] = trim( $prefix . str_replace( Metadata::PREFIX, '', Legacy_Metadata::get_utm_key( $field_slug ) ) );
+				} elseif ( ! empty( Metadata::get_utm_key( $field_slug ) ) && ( ! $prefix || 0 === strpos( Metadata::get_utm_key( $field_slug ), $prefix ) ) ) {
+					$acc[] = trim( $prefix . str_replace( Metadata::PREFIX, '', Metadata::get_utm_key( $field_slug ) ) );
 				} else {
 					\WP_CLI::warning( sprintf( 'Field %s not recognized.', $field_slug ) );
 				}
@@ -451,12 +450,9 @@ class Mailchimp {
 	 * @return array
 	 */
 	private static function get_fields_to_check_for_duplicates() {
-		/**
-		 * Apply the filters that allow other plugins to add their own fields.
-		 *
-		 * This filter is documented in Newspack\Reader_Activation\Sync\Metadata::get_keys().
-		 */
-		$fields = \apply_filters( 'newspack_ras_metadata_keys', Metadata::get_all_fields() );
+		// get_all_fields() already applies `newspack_ras_metadata_keys`; do
+		// not apply it again.
+		$fields = Metadata::get_all_fields();
 		$fields = array_map(
 			function( $key ) {
 				return Metadata::get_key( $key );

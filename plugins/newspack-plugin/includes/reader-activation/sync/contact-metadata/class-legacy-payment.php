@@ -9,7 +9,6 @@ namespace Newspack\Reader_Activation\Sync\Contact_Metadata;
 
 use Newspack\Donations;
 use Newspack\Reader_Activation\Sync\Contact_Metadata;
-use Newspack\Reader_Activation\Sync\Legacy_Metadata;
 
 defined( 'ABSPATH' ) || exit;
 
@@ -33,7 +32,7 @@ class Legacy_Payment extends Contact_Metadata {
 	 * @return string
 	 */
 	public static function get_section_name() {
-		return ''; // Legacy fields are not separated into sections.
+		return __( 'Legacy', 'newspack-plugin' );
 	}
 
 	/**
@@ -42,7 +41,21 @@ class Legacy_Payment extends Contact_Metadata {
 	 * @return array
 	 */
 	public static function get_fields() {
-		return Legacy_Metadata::get_payment_fields();
+		return [
+			'membership_status'   => 'Membership Status',
+			'payment_page'        => 'Payment Page',
+			'payment_page_utm'    => 'Payment UTM: ',
+			'sub_start_date'      => 'Current Subscription Start Date',
+			'sub_end_date'        => 'Current Subscription End Date',
+			'cancellation_reason' => 'Subscription Cancellation Reason',
+			'billing_cycle'       => 'Billing Cycle',
+			'recurring_payment'   => 'Recurring Payment',
+			'last_payment_date'   => 'Last Payment Date',
+			'last_payment_amount' => 'Last Payment Amount',
+			'product_name'        => 'Product Name',
+			'next_payment_date'   => 'Next Payment Date',
+			'total_paid'          => 'Total Paid',
+		];
 	}
 
 	/**

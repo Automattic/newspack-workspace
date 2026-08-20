@@ -230,12 +230,6 @@ class Contact_Sync extends Sync {
 			}
 		}
 
-		// Added logging here to more easily monitor integration sync data. Can be removed once integrations are released.
-		if ( 'legacy' !== Metadata::get_version() ) {
-			Logger::log( sprintf( 'Syncing contact %s for context "%s".', $contact['email'] ?? 'unknown', $context ) );
-			Logger::log( $contact );
-		}
-
 		return self::push_to_integrations( $contact, $context, $existing_contact, $options );
 	}
 
@@ -294,7 +288,8 @@ class Contact_Sync extends Sync {
 				}
 				// UTM-style labels end in ": " and match any suffixed key (e.g. "Signup UTM: source").
 				// This trailing-": " shape is the contract defined by the UTM labels in
-				// Legacy_Metadata::get_basic_fields() ("Signup UTM: ", "Payment UTM: ").
+				// Legacy_Basic::get_fields() ("Signup UTM: ") and
+				// Legacy_Payment::get_fields() ("Payment UTM: ").
 				if ( ': ' === substr( $label, -2 ) && 0 === strpos( $remainder, $label ) ) {
 					$filtered[ $key ] = $value;
 					break;
@@ -362,12 +357,6 @@ class Contact_Sync extends Sync {
 			}
 
 			$integration_contact = self::prepare_contact_for_integration( $integration, $contact, $options );
-
-			// Added logging here to more easily monitor integration sync data. Can be removed once integrations are released.
-			if ( 'legacy' !== Metadata::get_version() ) {
-				Logger::log( sprintf( 'Syncing contact %s for integration %s with context "%s".', $integration_contact['email'] ?? 'unknown', $integration_id, $context ) );
-				Logger::log( $integration_contact );
-			}
 
 			$result = $integration->push_contact_data( $integration_contact, $context, $existing_contact, $options );
 			if ( \is_wp_error( $result ) ) {
@@ -899,9 +888,11 @@ class Contact_Sync extends Sync {
 
 		static::log( sprintf( 'Executing retry %d/%d for integration "%s" sync of user %d (%s).', $retry_count, self::MAX_RETRIES, $integration_id, $user_id, $contact['email'] ?? 'unknown' ) );
 
+		// get_contact_data() already normalizes the contact; normalizing again
+		// here would fire `newspack_esp_sync_normalize_contact` a second time
+		// per retry, double-applying any non-idempotent publisher callback.
 		/** This filter is documented in includes/reader-activation/sync/class-contact-sync.php */
 		$contact = \apply_filters( 'newspack_esp_sync_contact', $contact, $context );
-		$contact = Sync\Metadata::normalize_contact_data( $contact );
 
 		// Reconstruct existing_contact for email-change retries so integrations
 		// can upsert against the previous email address.

@@ -8,8 +8,6 @@
 namespace Newspack\Reader_Activation\Sync\Contact_Metadata;
 
 use Newspack\Reader_Activation\Sync\Contact_Metadata;
-use Newspack\Reader_Activation\Sync\Legacy_Metadata;
-use Newspack\Reader_Activation\Sync\Metadata;
 use Newspack\Access_Attribution;
 use Newspack\Content_Gate as Content_Gate_CPT;
 use Newspack\Group_Subscription;
@@ -101,7 +99,10 @@ class Content_Gate extends Contact_Metadata {
 	}
 
 	/**
-	 * Get the metadata for the given user, customer or order.
+	 * Get the metadata for the given user, customer or order, as raw keys.
+	 *
+	 * Filtering and prefixing are the integration's responsibility
+	 * (prepare_contact).
 	 *
 	 * @return array
 	 */
@@ -130,15 +131,6 @@ class Content_Gate extends Contact_Metadata {
 				'Content_Access_Source' => implode( ', ', self::collect_labels( $evaluations, $user_id, [ self::class, 'get_source_labels' ] ) ),
 				'Content_Access_Group'  => implode( ', ', self::collect_labels( $evaluations, $user_id, [ self::class, 'get_group_labels' ] ) ),
 			];
-		}
-
-		// In legacy mode the main sync path does not run a normalize step on
-		// the merged contact, so each metadata class must return keys in the
-		// prefixed shape (matching Legacy_Basic / Legacy_Payment). Without this,
-		// raw Content_Access keys are silently dropped at the ESP push.
-		if ( 'legacy' === Metadata::get_version() ) {
-			$normalized = Legacy_Metadata::normalize_contact_data( [ 'metadata' => $metadata ] );
-			return $normalized['metadata'] ?? [];
 		}
 
 		return $metadata;

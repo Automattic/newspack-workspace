@@ -14,7 +14,6 @@ use Newspack\Reader_Activation;
 use Newspack\Reader_Activation\Contact_Sync;
 use Newspack\Reader_Activation\Integrations;
 use Newspack\Reader_Activation\Sync\Metadata;
-use Newspack\Reader_Activation\Sync\Legacy_Metadata;
 use Newspack\Reader_Activation\Sync\Contact_Metadata\Content_Gate as Content_Gate_Metadata;
 
 require_once __DIR__ . '/../../mocks/newsletters-mocks.php';
@@ -26,13 +25,6 @@ require_once __DIR__ . '/../integrations/class-failing-sample-integration.php';
  * @group Contact_Sync_Options
  */
 class Test_Contact_Sync_Options extends WP_UnitTestCase {
-
-	/**
-	 * Schema version restored in tear_down().
-	 *
-	 * @var string
-	 */
-	private static $original_version;
 
 	/**
 	 * Verified reader user ID.
@@ -62,14 +54,12 @@ class Test_Contact_Sync_Options extends WP_UnitTestCase {
 		if ( ! defined( 'NEWSPACK_FORCE_ALLOW_ESP_SYNC' ) ) {
 			define( 'NEWSPACK_FORCE_ALLOW_ESP_SYNC', true );
 		}
-		self::$original_version = Metadata::$version;
 	}
 
 	public function set_up() {
 		parent::set_up();
 		Content_Gate_Metadata::reset_cache();
 		Newspack_Newsletters_Contacts::reset_calls();
-		Metadata::$version = 'legacy';
 
 		$this->user_id = $this->factory->user->create(
 			[
@@ -85,7 +75,6 @@ class Test_Contact_Sync_Options extends WP_UnitTestCase {
 	}
 
 	public function tear_down() {
-		Metadata::$version = self::$original_version;
 		Content_Gate_Metadata::reset_cache();
 		Failing_Sample_Integration::reset();
 		if ( function_exists( 'as_unschedule_all_actions' ) ) {
@@ -163,6 +152,31 @@ class Test_Contact_Sync_Options extends WP_UnitTestCase {
 		$this->assertSame( [ 'Content Access', 'Content Access Group' ], $resolved );
 	}
 
+	/**
+	 * The two schemas no longer distinguish any raw key by case alone while
+	 * assigning it a different label — the four v2 fields that once did
+	 * (Payment_Page, Total_Paid, Last_Payment_Amount, Last_Payment_Date) were
+	 * given their own distinct raw keys. The remaining case-only pairs are
+	 * the value-equivalent ones (e.g. `account` / `Account`), which share a
+	 * label, so exact-case vs case-insensitive resolution can't diverge for
+	 * them. This exercises the exact-case-first lookup that guards against a
+	 * future field reintroducing the collision, using each renamed field's
+	 * legacy and current-schema raw keys.
+	 */
+	public function test_resolve_field_labels_prefers_exact_case_raw_keys() {
+		$this->assertSame( [ 'Payment Page' ], Metadata::resolve_field_labels( [ 'payment_page' ] ) );
+		$this->assertSame( [ 'Last Payment Page' ], Metadata::resolve_field_labels( [ 'Last_Payment_Page' ] ) );
+
+		$this->assertSame( [ 'Last Payment Amount' ], Metadata::resolve_field_labels( [ 'last_payment_amount' ] ) );
+		$this->assertSame( [ 'Last Subscription Payment Amount' ], Metadata::resolve_field_labels( [ 'Last_Subscription_Payment_Amount' ] ) );
+
+		$this->assertSame( [ 'Last Payment Date' ], Metadata::resolve_field_labels( [ 'last_payment_date' ] ) );
+		$this->assertSame( [ 'Last Subscription Payment Date' ], Metadata::resolve_field_labels( [ 'Last_Subscription_Payment_Date' ] ) );
+
+		$this->assertSame( [ 'Total Paid' ], Metadata::resolve_field_labels( [ 'total_paid' ] ) );
+		$this->assertSame( [ 'Lifetime Total Paid' ], Metadata::resolve_field_labels( [ 'Lifetime_Total_Paid' ] ) );
+	}
+
 	public function test_resolve_field_labels_dedupes_synonymous_tokens() {
 		// registration_page and current_page_url both map to 'Registration Page'.
 		$resolved = Metadata::resolve_field_labels( [ 'registration_page', 'current_page_url' ] );
@@ -181,9 +195,13 @@ class Test_Contact_Sync_Options extends WP_UnitTestCase {
 		// filter leaves it present in get_all_fields( false ) but absent from ( true ),
 		// the exact shape a feature-flag/plugin-gated field takes. In CI every real
 		// field is available, so relying on one would leave this branch untested.
+		//
+		// Both raw keys have to go: the map is merged across schema versions, and
+		// the legacy `account` and the new `Account` carry the same label, so
+		// leaving either behind keeps the label resolvable.
 		$drop_from_available = function ( $keys, $only_available ) {
 			if ( $only_available ) {
-				unset( $keys['account'] );
+				unset( $keys['account'], $keys['Account'] );
 			}
 			return $keys;
 		};
@@ -206,9 +224,10 @@ class Test_Contact_Sync_Options extends WP_UnitTestCase {
 
 		$contact = Metadata::get_contact_with_metadata( $this->user_id, $this->content_access_labels );
 
-		$this->assertArrayHasKey( 'NP_Content Access', $contact['metadata'] );
+		// Computation always yields raw keys; prefixing is prepare_contact()'s job.
+		$this->assertArrayHasKey( 'Content_Access', $contact['metadata'] );
 		$this->assertArrayNotHasKey(
-			'NP_Account',
+			'account',
 			$contact['metadata'],
 			'Legacy_Basic must be skipped when only Content Access fields are requested.'
 		);
@@ -222,26 +241,31 @@ class Test_Contact_Sync_Options extends WP_UnitTestCase {
 		$contact = Metadata::get_contact_with_metadata( $this->user_id, [ 'Total Paid' ] );
 
 		$this->assertArrayHasKey(
-			'NP_Account',
+			'account',
 			$contact['metadata'],
 			'Requesting a payment field must still run Legacy_Basic (which computes all legacy fields).'
 		);
 		$this->assertArrayNotHasKey(
-			'NP_Content Access',
+			'Content_Access',
 			$contact['metadata'],
 			'Content_Gate must be skipped when only a payment field is requested.'
 		);
 	}
 
-	public function test_compute_v1_returns_raw_content_access_keys_only() {
-		Metadata::$version = '1.0';
+	/**
+	 * Field scoping resolves requested labels against the merged field map,
+	 * so only the classes that own them run — whichever schema those classes
+	 * belong to. Every other class is skipped, legacy and new alike.
+	 */
+	public function test_compute_returns_requested_content_access_fields_only() {
 		Content_Gate_Metadata::reset_cache();
 		$this->create_custom_access_gate( $this->passing_email_domain_rules() );
 
 		$contact = Metadata::get_contact_with_metadata( $this->user_id, $this->content_access_labels );
 
-		$this->assertArrayHasKey( 'Content_Access', $contact['metadata'], 'v1 mode returns raw (unprefixed) keys.' );
-		$this->assertArrayNotHasKey( 'Registration_Date', $contact['metadata'], 'Non-requested classes must be skipped in v1 mode.' );
+		$this->assertArrayHasKey( 'Content_Access', $contact['metadata'], 'Computation returns raw (unprefixed) keys.' );
+		$this->assertArrayNotHasKey( 'Registration_Date', $contact['metadata'], 'Non-requested new-schema classes must be skipped.' );
+		$this->assertArrayNotHasKey( 'account', $contact['metadata'], 'Non-requested legacy classes must be skipped.' );
 	}
 
 	public function test_prepare_contact_for_integration_keeps_only_requested_fields() {

@@ -8,7 +8,6 @@
 namespace Newspack\Reader_Activation\Sync\Contact_Metadata;
 
 use Newspack\Reader_Activation\Sync\Contact_Metadata;
-use Newspack\Reader_Activation\Sync\Legacy_Metadata;
 use Newspack\Reader_Activation\Sync\WooCommerce;
 
 defined( 'ABSPATH' ) || exit;
@@ -33,7 +32,7 @@ class Legacy_Basic extends Contact_Metadata {
 	 * @return string
 	 */
 	public static function get_section_name() {
-		return ''; // Legacy fields are not separated into sections.
+		return __( 'Legacy', 'newspack-plugin' );
 	}
 
 	/**
@@ -42,7 +41,17 @@ class Legacy_Basic extends Contact_Metadata {
 	 * @return array
 	 */
 	public static function get_fields() {
-		return Legacy_Metadata::get_basic_fields();
+		return [
+			'account'              => 'Account',
+			'registration_date'    => 'Registration Date',
+			'connected_account'    => 'Connected Account',
+			'signup_page_utm'      => 'Signup UTM: ',
+			'newsletter_selection' => 'Newsletter Selection',
+			'referer'              => 'Referrer Path',
+			'registration_page'    => 'Registration Page',
+			'current_page_url'     => 'Registration Page',
+			'registration_method'  => 'Registration Method',
+		];
 	}
 
 	/**
@@ -93,10 +102,10 @@ class Legacy_Basic extends Contact_Metadata {
 	}
 
 	/**
-	 * Get the metadata for the given user, customer or order.
+	 * Get the metadata for the given user, customer or order, as raw keys.
 	 *
-	 * Delegates to the legacy WooCommerce and normalization logic to build
-	 * the full set of legacy metadata fields.
+	 * Enrichment, filtering and prefixing happen centrally afterwards, in
+	 * normalize_contact_data() and the integration's prepare_contact().
 	 *
 	 * @return array
 	 */
@@ -110,8 +119,8 @@ class Legacy_Basic extends Contact_Metadata {
 			return [];
 		}
 
-		$contact = Legacy_Metadata::normalize_contact_data( $contact );
-
+		// Enrichment (add_registration_data_raw/add_utm_data_raw) happens
+		// centrally in Metadata::get_contact_with_metadata(); redundant here.
 		return $contact['metadata'] ?? [];
 	}
 }

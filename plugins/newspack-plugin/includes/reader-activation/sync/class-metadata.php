@@ -8,6 +8,8 @@
 namespace Newspack\Reader_Activation\Sync;
 
 use Newspack\Donations;
+use Newspack\Logger;
+use Newspack\Reader_Activation;
 use Newspack\Reader_Activation\Integrations;
 
 defined( 'ABSPATH' ) || exit;
@@ -22,13 +24,6 @@ class Metadata {
 	const PREFIX_OPTION = '_newspack_metadata_prefix';
 
 	/**
-	 * The schema version for the metadata. Legacy is the default and fallsback to how things were before Newspack Integrations.
-	 *
-	 * @var string
-	 */
-	public static $version = 'legacy';
-
-	/**
 	 * The option name for choosing which metadata fields to sync.
 	 *
 	 * @var string
@@ -36,32 +31,50 @@ class Metadata {
 	const FIELDS_OPTION = '_newspack_metadata_fields';
 
 	/**
+	 * Metadata keys that carry sync-control semantics rather than field data.
+	 * They pass through syncing unprefixed and are never subject to outbound
+	 * field selection.
+	 *
+	 * @var string[]
+	 */
+	const SYNC_CONTROL_KEYS = [ 'status', 'status_if_new' ];
+
+	/**
+	 * Raw keys whose fields are emitted as a family of suffixed sub-keys
+	 * (`<raw_key>_source`, `<raw_key>_medium`, …) rather than a single key.
+	 * Only these keys get suffix-match semantics; every other field matches
+	 * exactly, so a label that happens to prefix another can never carry that
+	 * other field past the selection.
+	 *
+	 * The same fields carry `dynamic_suffix` in their class's
+	 * get_fields_config(); this constant is the raw-key form the helpers here
+	 * (get_utm_key()) work in.
+	 *
+	 * @var string[]
+	 */
+	const UTM_RAW_KEYS = [ 'signup_page_utm', 'payment_page_utm' ];
+
+	/**
 	 * Get the metadata classes to be used for syncing contact metadata to the ESP.
 	 *
-	 * These are the metadata classes that will be used to build the full set of contact metadata fields.
+	 * All schema versions' classes are always registered; per-integration
+	 * enabled fields decide what actually syncs.
 	 *
 	 * @return array List of metadata classes.
 	 */
 	protected static function get_metadata_classes() {
-		if ( 'legacy' === self::get_version() ) {
-			$classes = [
-				'Legacy_Basic',
-				'Legacy_Payment',
-				'Content_Gate',
-			];
-		} else {
-			$classes = [
-				'Identity',
-				'Registration',
-				'Engagement',
-				'Subscription',
-				'Donation',
-				'Content_Gate',
-			];
-		}
+		$classes = [
+			'Legacy_Basic',
+			'Legacy_Payment',
+			'Identity',
+			'Registration',
+			'Engagement',
+			'Subscription',
+			'Donation',
+			'Content_Gate',
+		];
 
 		$classnames = [];
-
 		foreach ( $classes as $class ) {
 			$classname = __NAMESPACE__ . '\\Contact_Metadata\\' . $class;
 			if ( class_exists( $classname ) ) {
@@ -69,24 +82,6 @@ class Metadata {
 			}
 		}
 		return $classnames;
-	}
-
-	/**
-	 * Get the current metadata schema version.
-	 *
-	 * @return string
-	 */
-	public static function get_version() {
-		if ( defined( 'NEWSPACK_SYNC_METADATA_VERSION' ) ) {
-			return NEWSPACK_SYNC_METADATA_VERSION;
-		}
-
-		// boolean version of the feature flag.
-		if ( defined( 'NEWSPACK_SYNC_METADATA_VERSION_1' ) && NEWSPACK_SYNC_METADATA_VERSION_1 ) {
-			return '1.0';
-		}
-
-		return self::$version;
 	}
 
 	/**
@@ -105,14 +100,10 @@ class Metadata {
 	 * This method is deprecated. Now, each integration has its own metadata prefix, which can be retrieved with Integration::get_metadata_prefix().
 	 * As a fallback, this method returns the metadata prefix for the ESP Integration.
 	 *
-	 * One sanctioned remaining caller: de-prefixing legacy-pipeline data
-	 * (Integration::prepare_contact_legacy()). That data carries the prefix this
-	 * method resolves — including the `newspack_ras_metadata_prefix` filter and
-	 * the pre-init PREFIX_OPTION fallback, neither of which
-	 * Integration::get_metadata_prefix() applies — so that path must keep
-	 * calling this rather than the per-integration accessor. A de-prefix miss
-	 * there drops metadata silently, so removing this method needs that caller
-	 * migrated first.
+	 * It resolves more than the per-integration accessor does — the
+	 * `newspack_ras_metadata_prefix` filter and the pre-init PREFIX_OPTION
+	 * fallback — so a caller that needs the site-wide prefix rather than one
+	 * integration's must keep using this.
 	 *
 	 * @deprecated Use Integration::get_metadata_prefix() instead.
 	 *
@@ -166,14 +157,128 @@ class Metadata {
 	}
 
 	/**
-	 * Get payment-related metadata fields.
+	 * Get the default outgoing-field selection for a site that never saved one.
+	 *
+	 * Scoped to the schema era the site comes from, derived fresh on every
+	 * read and never persisted: a wrong guess can't be frozen, and fields
+	 * whose class becomes available later (e.g. WooCommerce activated) join
+	 * on the next read. The full catalog stays get_default_fields() — this
+	 * is only the effective default *selection*.
+	 *
+	 * @return string[] List of field names.
+	 */
+	public static function get_default_enabled_fields() {
+		$era     = self::detect_default_schema_era();
+		$catalog = self::get_keys();
+		$names   = [];
+
+		$era_classes = 'v1' === $era
+			? [ Contact_Metadata\Legacy_Basic::class, Contact_Metadata\Legacy_Payment::class ]
+			: [ Contact_Metadata\Identity::class, Contact_Metadata\Registration::class, Contact_Metadata\Engagement::class, Contact_Metadata\Subscription::class, Contact_Metadata\Donation::class ];
+		$era_classes[] = Contact_Metadata\Content_Gate::class;
+
+		$class_raw_keys = [];
+		foreach ( $era_classes as $class ) {
+			if ( ! class_exists( $class ) || ! $class::is_available() ) {
+				continue;
+			}
+			foreach ( array_keys( $class::get_fields() ) as $raw_key ) {
+				$class_raw_keys[ $raw_key ] = true;
+				if ( isset( $catalog[ $raw_key ] ) ) {
+					$names[] = $catalog[ $raw_key ];
+				}
+			}
+		}
+
+		// Filter-added extras (raw keys belonging to no era class) are the
+		// site's own custom fields: era-neutral, so always part of defaults.
+		$all_class_raw_keys = [];
+		foreach ( self::get_metadata_classes() as $class ) {
+			foreach ( array_keys( $class::get_fields() ) as $raw_key ) {
+				$all_class_raw_keys[ $raw_key ] = true;
+			}
+		}
+		foreach ( $catalog as $raw_key => $name ) {
+			if ( ! isset( $all_class_raw_keys[ $raw_key ] ) ) {
+				$names[] = $name;
+			}
+		}
+
+		return array_values( array_unique( $names ) );
+	}
+
+	/**
+	 * Which schema era supplies a never-configured site's default selection.
+	 *
+	 * Evidence order: dev/QA constant override; the legacy global fields
+	 * option (predates per-integration selection); a set-up ESP with no
+	 * stored selection (a legacy site on dynamic defaults, not a fresh
+	 * install). Anything else is a fresh install on the new schema.
+	 *
+	 * @return string 'v1' or 'v2'.
+	 */
+	private static function detect_default_schema_era() {
+		if ( defined( 'NEWSPACK_SYNC_METADATA_VERSION' ) ) {
+			return 'legacy' === NEWSPACK_SYNC_METADATA_VERSION ? 'v1' : 'v2';
+		}
+		if ( defined( 'NEWSPACK_SYNC_METADATA_VERSION_1' ) && NEWSPACK_SYNC_METADATA_VERSION_1 ) {
+			return 'v2';
+		}
+		if ( false !== \get_option( self::FIELDS_OPTION, false ) ) {
+			return 'v1';
+		}
+		$esp = Integrations::get_integration( 'esp' );
+		if ( ! $esp && class_exists( \Newspack\Reader_Activation\Integrations\ESP::class ) ) {
+			$esp = new \Newspack\Reader_Activation\Integrations\ESP();
+		}
+		if ( $esp && $esp->is_set_up() ) {
+			return 'v1';
+		}
+		return 'v2';
+	}
+
+	/**
+	 * Get payment-related metadata fields (v1 map).
+	 *
+	 * Used by the WooCommerce sync class when clearing payment fields.
 	 *
 	 * @return array List of fields.
 	 */
 	public static function get_payment_fields() {
-		// Not sure yet if this method will be useful in the new schema, so keeping it here for now.
-		// It's used in the Woocommerce class when we want to clear payment fields, so we might still need to have a list of "Woocommerce related fields".
-		return Legacy_Metadata::get_payment_fields();
+		return Contact_Metadata\Legacy_Payment::get_fields();
+	}
+
+	/**
+	 * Get the UTM key from a raw or prefixed key.
+	 *
+	 * Validates the UTM family against the fields enabled for the ESP
+	 * integration and returns the prefixed, suffixed ESP name (e.g.
+	 * "NP_Signup UTM: source"), or false.
+	 *
+	 * Only the legacy schema declares these dynamic-suffix fields; the new
+	 * schema splits them into discrete source/medium/campaign fields.
+	 *
+	 * @param string $key Key to check.
+	 *
+	 * @return string|false
+	 */
+	public static function get_utm_key( $key ) {
+		$utm_keys = self::UTM_RAW_KEYS;
+		$raw_keys = self::get_raw_keys();
+		foreach ( $utm_keys as $utm_key ) {
+			if ( ! in_array( $utm_key, $raw_keys, true ) ) {
+				continue;
+			}
+			$prefixed_key = self::get_key( $utm_key );
+			if ( 0 === strpos( $key, $utm_key ) ) {
+				$suffix = str_replace( $utm_key . '_', '', $key );
+				return ! empty( trim( $suffix ) ) && $suffix !== $key ? $prefixed_key . $suffix : false;
+			}
+			if ( 0 === strpos( $key, $prefixed_key ) && $key !== $prefixed_key ) {
+				return $key;
+			}
+		}
+		return false;
 	}
 
 	/**
@@ -183,11 +288,10 @@ class Metadata {
 	 * As a fallback, this method returns the fields enabled for the ESP Integration.
 	 *
 	 * This is the single definition of "the ESP's effective selection" — the set
-	 * the legacy metadata pipeline filters by. Integration::get_enabled_outgoing_fields()
-	 * calls it for legacy-mode inheritance, so the registry-miss chain below
-	 * lives here rather than being restated per caller. It mirrors
-	 * Esp::get_enabled_outgoing_fields() minus that method's lazy-migration
-	 * write, which stays on the ESP integration itself.
+	 * every other integration inherits until it saves one of its own (see
+	 * Integration::get_inherited_outgoing_fields()). The registry-miss chain
+	 * below mirrors Esp::get_enabled_outgoing_fields() minus that method's
+	 * lazy-migration write, which stays on the ESP integration itself.
 	 *
 	 * @deprecated Use Integration::get_enabled_outgoing_fields() instead.
 	 * @return string[] List of fields to be synced.
@@ -200,15 +304,15 @@ class Metadata {
 
 		// Registry miss (pre-init, or a directly constructed integration —
 		// integrations register on init priority 5). Fall back to the legacy
-		// global option and then the full default set, rather than failing
-		// closed to an empty selection, which would strip every field where the
-		// pre-selection behavior was full passthrough.
+		// global option and then the era-scoped default selection, rather than
+		// failing closed to an empty selection, which would strip every field
+		// where the pre-selection behavior was full passthrough.
 		$legacy = \get_option( self::FIELDS_OPTION, null );
 		if ( null !== $legacy && is_array( $legacy ) ) {
 			return array_values( $legacy );
 		}
 
-		return self::get_default_fields();
+		return self::get_default_enabled_fields();
 	}
 
 	/**
@@ -315,10 +419,12 @@ class Metadata {
 	 * Get the list of possible fields to be synced, grouped by section.
 	 *
 	 * Returns an array of groups, each with a 'section' label and 'fields' array.
-	 * Only includes non-legacy classes with a section name. Fields are intersected
-	 * with the filtered available fields list so extensions using the
-	 * `newspack_ras_metadata_keys` filter are respected. Fields added by the filter
-	 * that don't belong to any class are collected in an "Additional" group.
+	 * Only includes classes with a section name. Each class's fields are resolved
+	 * from the filtered map by its own raw keys, not by label text — labels can
+	 * collide across schemas (legacy `account` and new `Account` are both
+	 * "Account"), so matching by label would keep a class alive on a sibling
+	 * class's field. Fields added by the `newspack_ras_metadata_keys` filter that
+	 * don't belong to any class are collected in an "Additional" group.
 	 *
 	 * @return array<int, array{section: string, fields: list<string>}> List of
 	 *   groups, each with a non-empty section label and an ordered list of field
@@ -326,7 +432,8 @@ class Metadata {
 	 */
 	public static function get_grouped_default_fields(): array {
 		$classes          = self::get_metadata_classes();
-		$available_fields = array_values( array_unique( array_values( self::get_all_fields( true ) ) ) );
+		$label_map        = self::get_all_fields( true );
+		$available_fields = array_values( array_unique( array_values( $label_map ) ) );
 		$groups           = [];
 		$grouped_fields   = [];
 
@@ -337,8 +444,13 @@ class Metadata {
 					continue;
 				}
 
-				$fields = array_values( array_unique( array_values( $class::get_fields() ) ) );
-				$fields = array_values( array_intersect( $fields, $available_fields ) );
+				$fields = [];
+				foreach ( array_keys( $class::get_fields() ) as $raw_key ) {
+					if ( isset( $label_map[ $raw_key ] ) ) {
+						$fields[] = $label_map[ $raw_key ];
+					}
+				}
+				$fields = array_values( array_unique( $fields ) );
 
 				if ( empty( $fields ) ) {
 					continue;
@@ -370,7 +482,10 @@ class Metadata {
 	}
 
 	/**
-	 * Get all metadata fields
+	 * Get all metadata fields.
+	 *
+	 * The merged, all-versions raw_key => label map — a plain superset, since
+	 * both schemas' raw keys and ESP names are distinct.
 	 *
 	 * @param boolean $only_available Whether to return only available fields or all fields.
 	 * @return array List of fields.
@@ -413,18 +528,30 @@ class Metadata {
 	 *                            (`newspack_esp_sync_unavailable_field`).
 	 */
 	public static function resolve_field_labels( array $inputs ): array|\WP_Error {
-		$available_lookup = self::build_field_lookup( self::get_all_fields( true ) );
-		$all_lookup       = self::build_field_lookup( self::get_all_fields( false ) );
+		$available_fields = self::get_all_fields( true );
+		$all_fields       = self::get_all_fields( false );
+		$available_lookup = self::build_field_lookup( $available_fields );
+		$all_lookup       = self::build_field_lookup( $all_fields );
 
 		$labels = [];
 		foreach ( $inputs as $input ) {
-			$token = strtolower( trim( (string) $input ) );
+			$raw_key = trim( (string) $input );
+			$token   = strtolower( $raw_key );
 			if ( '' === $token ) {
 				continue;
 			}
 
-			if ( isset( $available_lookup[ $token ] ) ) {
-				$label = $available_lookup[ $token ];
+			// Exact-case raw key first. No raw key differs from another only by
+			// case while carrying a different label anymore — the four v2 fields
+			// that once did (payment page, total paid, and the two subscription
+			// payment fields) now have their own distinct raw keys. The only
+			// remaining case-only pairs are the value-equivalent ones (e.g.
+			// `account` / `Account`), which share one label, so a case-insensitive
+			// match can't land on the wrong field there. Kept as a cheap guard
+			// against a future field reintroducing a same-case, different-label
+			// collision.
+			$label = $available_fields[ $raw_key ] ?? $available_lookup[ $token ] ?? null;
+			if ( null !== $label ) {
 				if ( ! in_array( $label, $labels, true ) ) {
 					$labels[] = $label;
 				}
@@ -433,7 +560,7 @@ class Metadata {
 
 			// Known field, but its metadata class is not currently available. Give a
 			// targeted hint for the two common causes.
-			if ( isset( $all_lookup[ $token ] ) ) {
+			if ( isset( $all_fields[ $raw_key ] ) || isset( $all_lookup[ $token ] ) ) {
 				return new \WP_Error(
 					'newspack_esp_sync_unavailable_field',
 					sprintf(
@@ -460,6 +587,10 @@ class Metadata {
 	/**
 	 * Build a case-insensitive lookup of both raw keys and labels to their
 	 * canonical display label.
+	 *
+	 * The fallback pass, consulted only after an exact-case raw-key match
+	 * fails: lowercasing collapses raw keys the two schemas distinguish by
+	 * case, and last-write-wins hands those to the new schema.
 	 *
 	 * @param array $fields Map of raw_key => label.
 	 *
@@ -520,7 +651,7 @@ class Metadata {
 			$contact['name'] = $name;
 		}
 
-		return $contact;
+		return self::normalize_contact_data( $contact );
 	}
 
 	/**
@@ -539,7 +670,7 @@ class Metadata {
 	 */
 	private static function class_handles_any_field( $class, array $fields ): bool {
 		if ( Contact_Metadata\Legacy_Basic::class === $class ) {
-			$class_raw_keys = array_keys( Legacy_Metadata::get_all_fields() );
+			$class_raw_keys = array_keys( array_merge( Contact_Metadata\Legacy_Basic::get_fields(), Contact_Metadata\Legacy_Payment::get_fields() ) );
 		} else {
 			$class_raw_keys = array_keys( $class::get_fields() );
 		}
@@ -595,21 +726,117 @@ class Metadata {
 	}
 
 	/**
-	 * Normalizes contact metadata keys before syncing to ESP.
+	 * Add user's registration-related data to the given metadata, as raw keys.
+	 *
+	 * Values are looked up from user meta when absent, never overwritten, and
+	 * no prefixing or filtering is performed here.
+	 *
+	 * @param array $metadata Metadata to add to.
+	 *
+	 * @return array Metadata with registration data added.
+	 */
+	public static function add_registration_data_raw( $metadata ) {
+		$user = self::has_key( 'account', $metadata ) ? \get_user_by( 'id', self::get_key_value( 'account', $metadata ) ) : false;
+		if ( ! $user ) {
+			return $metadata;
+		}
+
+		$registration_method = self::has_key( 'registration_method', $metadata ) ? self::get_key_value( 'registration_method', $metadata ) : \get_user_meta( $user->ID, Reader_Activation::REGISTRATION_METHOD, true );
+		if ( ! empty( $registration_method ) ) {
+			$metadata['registration_method'] = $registration_method;
+		}
+
+		$registration_page = self::has_key( 'registration_page', $metadata ) ? self::get_key_value( 'registration_page', $metadata ) : \get_user_meta( $user->ID, Reader_Activation::REGISTRATION_PAGE, true );
+		if ( ! empty( $registration_page ) ) {
+			$metadata['registration_page'] = $registration_page;
+		}
+
+		$connected_account = self::has_key( 'connected_account', $metadata ) ? self::get_key_value( 'connected_account', $metadata ) : \get_user_meta( $user->ID, Reader_Activation::CONNECTED_ACCOUNT, true );
+		if ( ! empty( $connected_account ) && in_array( $connected_account, Reader_Activation::SSO_REGISTRATION_METHODS, true ) ) {
+			$metadata['connected_account'] = $connected_account;
+		} elseif ( ! empty( $registration_method ) && in_array( $registration_method, Reader_Activation::SSO_REGISTRATION_METHODS, true ) ) {
+			$metadata['connected_account'] = $registration_method;
+		}
+
+		return $metadata;
+	}
+
+	/**
+	 * Expand UTM parameters from page URLs into raw suffixed keys.
+	 *
+	 * Emits keys like `signup_page_utm_source` / `payment_page_utm_campaign`
+	 * instead of prefixed ESP names. Existing values are never overwritten.
+	 *
+	 * @param array $metadata Metadata to add to.
+	 *
+	 * @return array Metadata with UTM fields added.
+	 */
+	public static function add_utm_data_raw( $metadata ) {
+		$has_page = self::has_key( 'current_page_url', $metadata ) || self::has_key( 'registration_page', $metadata ) || self::has_key( 'payment_page', $metadata );
+		if ( ! $has_page ) {
+			return $metadata;
+		}
+
+		$payment_page = self::has_key( 'payment_page', $metadata ) ? self::get_key_value( 'payment_page', $metadata ) : false;
+		if ( ! empty( $payment_page ) ) {
+			$raw_url = $payment_page;
+		} elseif ( self::has_key( 'current_page_url', $metadata ) ) {
+			$raw_url = self::get_key_value( 'current_page_url', $metadata );
+		} else {
+			$raw_url = self::get_key_value( 'registration_page', $metadata );
+		}
+
+		$parsed_url = \wp_parse_url( $raw_url );
+		if ( empty( $parsed_url['query'] ) ) {
+			return $metadata;
+		}
+
+		$utm_key_prefix = ! empty( $payment_page ) ? 'payment_page_utm' : 'signup_page_utm';
+		$params         = [];
+		\wp_parse_str( $parsed_url['query'], $params );
+		foreach ( $params as $param => $value ) {
+			$param = \sanitize_text_field( $param );
+			if ( 'utm' !== substr( $param, 0, 3 ) ) {
+				continue;
+			}
+			$key = $utm_key_prefix . '_' . str_replace( 'utm_', '', $param );
+			if ( empty( $metadata[ $key ] ) ) {
+				$metadata[ $key ] = $value;
+			}
+		}
+
+		return $metadata;
+	}
+
+	/**
+	 * Normalizes contact metadata before syncing: raw-key enrichment only.
+	 *
+	 * Filtering and prefixing happen per integration in
+	 * Integration::prepare_contact().
 	 *
 	 * @param array $contact Contact data.
 	 * @return array Normalized contact data.
 	 */
 	public static function normalize_contact_data( $contact ) {
-		if ( 'legacy' === self::get_version() ) {
-			return Legacy_Metadata::normalize_contact_data( $contact );
-		}
-
 		if ( ! isset( $contact['metadata'] ) ) {
 			$contact['metadata'] = [];
 		}
+		$contact['metadata'] = self::add_registration_data_raw( $contact['metadata'] );
+		$contact['metadata'] = self::add_utm_data_raw( $contact['metadata'] );
 
-		// TODO: Do something new.
-		return $contact;
+		Logger::log( 'Normalizing contact data for reader ESP sync:' );
+		Logger::log( $contact );
+
+		/**
+		 * Filters the normalized contact data before syncing to the ESP.
+		 *
+		 * Metadata is raw-keyed here (e.g. `account`) — prefixing happens later
+		 * in Integration::prepare_contact(). Raw keys added here sync only if
+		 * registered and enabled for the integration; already-prefixed keys
+		 * pass through unless tied to a disabled registered field.
+		 *
+		 * @param array $contact Contact data.
+		 */
+		return apply_filters( 'newspack_esp_sync_normalize_contact', $contact );
 	}
 }

@@ -1,6 +1,7 @@
 <?php // phpcs:disable Squiz.Commenting.FunctionComment.Missing, Squiz.Commenting.ClassComment.Missing, Squiz.Commenting.VariableComment.Missing, Squiz.Commenting.FileComment.Missing
 /**
- * Tests legacy-mode outbound field filtering in Integration::prepare_contact (NPPD-2107).
+ * Tests outbound field filtering of legacy-schema metadata in
+ * Integration::prepare_contact (NPPD-2107).
  *
  * @package Newspack\Tests
  */
@@ -10,10 +11,12 @@ use Newspack\Reader_Activation\Integrations;
 use Newspack\Reader_Activation\Sync\Metadata;
 
 require_once __DIR__ . '/class-failing-sample-integration.php';
+require_once __DIR__ . '/../../mocks/newsletters-mocks.php';
 
 /**
- * Legacy-mode prepare_contact(): non-ESP integrations must apply their own
- * outbound selection; the esp integration keeps the pre-filtered data.
+ * Legacy-schema field names through prepare_contact(): every integration
+ * applies its own outbound selection, and one that never saved a selection
+ * inherits the ESP's.
  *
  * @group Integration_Outbound_Filter
  */
@@ -23,10 +26,6 @@ class Test_Integration_Outbound_Legacy extends WP_UnitTestCase {
 
 	public function set_up() {
 		parent::set_up();
-		// Metadata::$version defaults to 'legacy'; assert it so a future
-		// default flip fails loudly here instead of silently changing what
-		// these tests exercise.
-		$this->assertSame( 'legacy', Metadata::get_version() );
 		// Deterministic registry — built-ins only (incl. the esp integration
 		// the inheritance tests rely on) — regardless of suite order.
 		$this->reset_integrations();
@@ -37,6 +36,9 @@ class Test_Integration_Outbound_Legacy extends WP_UnitTestCase {
 
 	public function tear_down() {
 		Failing_Sample_Integration::reset();
+		delete_option( Integration::OUTGOING_FIELDS_OPTION_PREFIX . 'outbound_mock' );
+		delete_option( Integration::OUTGOING_FIELDS_OPTION_PREFIX . 'esp' );
+		delete_option( Metadata::FIELDS_OPTION );
 		$this->reset_integrations();
 		Integrations::register_integrations();
 		parent::tear_down();
@@ -54,8 +56,8 @@ class Test_Integration_Outbound_Legacy extends WP_UnitTestCase {
 	}
 
 	/**
-	 * A legacy-pipeline contact: prefixed metadata plus unprefixed
-	 * sync-control keys, as emitted by the legacy metadata classes.
+	 * A contact carrying legacy-schema metadata in already-prefixed form,
+	 * plus unprefixed sync-control keys.
 	 *
 	 * @return array
 	 */
@@ -89,9 +91,26 @@ class Test_Integration_Outbound_Legacy extends WP_UnitTestCase {
 	}
 
 	/**
+	 * The `esp` integration is not exempt: an explicitly saved empty selection
+	 * means no metadata fields there either.
+	 */
+	public function test_esp_integration_is_not_exempt_from_filtering() {
+		$esp_like = new Failing_Sample_Integration( 'esp', 'ESP-ish' );
+		$esp_like->update_enabled_outgoing_fields( [] );
+
+		$prepared = $esp_like->prepare_contact( $this->legacy_contact() );
+
+		$this->assertSame(
+			[ 'status_if_new' => 'transactional' ],
+			$prepared['metadata'],
+			'Filtering is unconditional, including for the esp integration.'
+		);
+	}
+
+	/**
 	 * An integration that never saved an outbound selection inherits the ESP
-	 * integration's effective selection in legacy mode, preserving what
-	 * pre-existing legacy sites sync (and what the Outbound UI shows).
+	 * integration's effective selection, preserving what pre-existing sites
+	 * sync (and what the Outbound UI shows).
 	 */
 	public function test_unsaved_selection_inherits_esp_selection() {
 		$esp = Integrations::get_integration( 'esp' );
@@ -134,8 +153,8 @@ class Test_Integration_Outbound_Legacy extends WP_UnitTestCase {
 
 	/**
 	 * Only the known sync-control keys pass through unprefixed; any other
-	 * unprefixed key is dropped so it cannot bypass the outbound selection
-	 * filter.
+	 * unprefixed key that no metadata class declares is dropped, so it cannot
+	 * bypass the outbound selection filter.
 	 */
 	public function test_unknown_unprefixed_keys_are_dropped() {
 		$this->integration->update_enabled_outgoing_fields( [ 'Membership Status' ] );
@@ -151,7 +170,7 @@ class Test_Integration_Outbound_Legacy extends WP_UnitTestCase {
 				'status_if_new'        => 'transactional',
 			],
 			$prepared['metadata'],
-			'Unprefixed keys outside SYNC_CONTROL_KEYS are dropped.'
+			'Unregistered unprefixed keys outside SYNC_CONTROL_KEYS are dropped.'
 		);
 	}
 
@@ -178,12 +197,14 @@ class Test_Integration_Outbound_Legacy extends WP_UnitTestCase {
 	}
 
 	/**
-	 * With no ESP integration and no legacy global option, the fallback is
-	 * the full default field set — the pre-selection passthrough behavior.
+	 * With no ESP integration and no legacy global option, the fallback is the
+	 * era-scoped default selection. A site whose ESP is configured came from
+	 * the legacy schema, so its legacy payload passes through intact.
 	 */
-	public function test_esp_registry_miss_without_global_option_keeps_defaults() {
+	public function test_esp_registry_miss_on_a_legacy_era_site_keeps_the_payload() {
 		$this->reset_integrations();
 		delete_option( Metadata::FIELDS_OPTION );
+		( new Integrations\ESP() )->update_settings_field_value( 'mailchimp_audience_id', '123' );
 
 		$contact  = $this->legacy_contact();
 		$prepared = $this->integration->prepare_contact( $contact );
@@ -191,7 +212,24 @@ class Test_Integration_Outbound_Legacy extends WP_UnitTestCase {
 		$this->assertSame(
 			$contact['metadata'],
 			$prepared['metadata'],
-			'Default-fields fallback keeps the full legacy payload intact.'
+			'The v1 era default selection keeps the full legacy payload intact.'
+		);
+	}
+
+	/**
+	 * The same fallback on a fresh install resolves to the new schema, whose
+	 * selection has no legacy names in it.
+	 */
+	public function test_esp_registry_miss_on_a_fresh_install_drops_legacy_fields() {
+		$this->reset_integrations();
+		delete_option( Metadata::FIELDS_OPTION );
+
+		$prepared = $this->integration->prepare_contact( $this->legacy_contact() );
+
+		$this->assertSame(
+			[ 'status_if_new' => 'transactional' ],
+			$prepared['metadata'],
+			'The v2 era default selection enables no legacy field names.'
 		);
 	}
 
@@ -212,38 +250,10 @@ class Test_Integration_Outbound_Legacy extends WP_UnitTestCase {
 	}
 
 	/**
-	 * The de-prefixing in prepare_contact_legacy() must use the legacy
-	 * pipeline's prefix, not this integration's own. Every other case here runs
-	 * with the mock's prefix implicitly equal to the ESP's `NP_`, which would
-	 * keep passing if that choice were ever "simplified" to the per-integration
-	 * accessor — while dropping every field on a site whose non-ESP integration
-	 * carries a custom prefix (the newspack-manager ActiveCampaign case).
-	 */
-	public function test_custom_integration_prefix_does_not_affect_legacy_matching() {
-		$this->integration->update_metadata_prefix( 'AC_' );
-		$this->assertSame( 'AC_', $this->integration->get_metadata_prefix() );
-		$this->assertSame( 'NP_', Metadata::get_prefix(), 'The legacy pipeline prefix stays NP_.' );
-
-		$this->integration->update_enabled_outgoing_fields( [ 'Membership Status', 'Signup UTM: ' ] );
-
-		$prepared = $this->integration->prepare_contact( $this->legacy_contact() );
-
-		$this->assertSame(
-			[
-				'NP_Membership Status'  => 'Monthly Donor',
-				'NP_Signup UTM: source' => 'newsletter',
-				'status_if_new'         => 'transactional',
-			],
-			$prepared['metadata'],
-			'Legacy data keeps matching by the pipeline prefix when the integration has its own.'
-		);
-	}
-
-	/**
 	 * `newspack_ras_metadata_keys` lets any plugin register labels, so a
 	 * registered label ending in `: ` could prefix another label and carry that
 	 * other field past the selection. Only the pipeline's own UTM keys get
-	 * prefix-match semantics.
+	 * suffix-match semantics.
 	 */
 	public function test_registered_label_ending_in_colon_space_does_not_prefix_match() {
 		$add_labels = function ( $keys ) {
@@ -274,7 +284,7 @@ class Test_Integration_Outbound_Legacy extends WP_UnitTestCase {
 	}
 
 	/**
-	 * The pipeline's UTM labels keep their prefix-match semantics: sub-keys are
+	 * The pipeline's UTM labels keep their suffix-match semantics: sub-keys are
 	 * how those fields are emitted in the first place.
 	 */
 	public function test_utm_label_still_matches_its_suffixed_sub_keys() {
@@ -296,88 +306,8 @@ class Test_Integration_Outbound_Legacy extends WP_UnitTestCase {
 		);
 	}
 
-	/**
-	 * `newspack_ras_metadata_key` reshapes the full prefixed key. Under
-	 * inheritance — the no-regression path, where the payload is supposed to be
-	 * unchanged — such keys must still match rather than being dropped wholesale.
-	 */
-	public function test_renamed_keys_survive_under_inheritance() {
-		$rename = function ( $key, $prefix, $name ) {
-			return 'CUSTOM_' . $name;
-		};
-		add_filter( 'newspack_ras_metadata_key', $rename, 10, 3 );
-
-		try {
-			$esp = Integrations::get_integration( 'esp' );
-			$esp->update_enabled_outgoing_fields( [ 'Membership Status', 'Signup UTM: ' ] );
-
-			$contact = [
-				'email'    => 'reader@example.com',
-				'metadata' => [
-					'CUSTOM_Membership Status'  => 'Monthly Donor',
-					'CUSTOM_Signup UTM: source' => 'newsletter',
-					'status_if_new'             => 'transactional',
-				],
-			];
-
-			$prepared = $this->integration->prepare_contact( $contact );
-
-			$this->assertSame(
-				$contact['metadata'],
-				$prepared['metadata'],
-				'Keys renamed by newspack_ras_metadata_key still match the inherited selection.'
-			);
-		} finally {
-			remove_filter( 'newspack_ras_metadata_key', $rename, 10 );
-		}
-	}
-
-	public function test_esp_integration_keeps_legacy_data_unchanged() {
-		$esp_like = new Failing_Sample_Integration( 'esp', 'ESP-ish' );
-		$contact  = $this->legacy_contact();
-
-		$this->assertSame(
-			$contact,
-			$esp_like->prepare_contact( $contact ),
-			'The esp integration takes legacy data as-is: the legacy pipeline already filtered by its config.'
-		);
-	}
-
 	public function test_contact_without_metadata_is_untouched() {
 		$contact = [ 'email' => 'reader@example.com' ];
 		$this->assertSame( $contact, $this->integration->prepare_contact( $contact ) );
-	}
-
-	/**
-	 * Inheritance is legacy-only. In v1 mode an unsaved selection still means
-	 * "no fields": inheriting there would push every default field for an
-	 * integration whose Outbound panel is empty.
-	 */
-	public function test_v1_mode_unsaved_selection_returns_empty() {
-		$reflection = new \ReflectionClass( Metadata::class );
-		$property   = $reflection->getProperty( 'version' );
-		$property->setAccessible( true );
-		$original_version = $property->getValue();
-		$property->setValue( null, '1.0' );
-
-		try {
-			$esp = Integrations::get_integration( 'esp' );
-			$esp->update_enabled_outgoing_fields( [ 'Membership Status' ] );
-
-			$this->assertSame(
-				[],
-				$this->integration->get_enabled_outgoing_fields(),
-				'An unsaved selection inherits nothing outside legacy mode.'
-			);
-
-			$prepared = $this->integration->prepare_contact( $this->legacy_contact() );
-			$this->assertSame(
-				[],
-				$prepared['metadata'],
-				'With no enabled fields, v1 prepare_contact() keeps no metadata.'
-			);
-		} finally {
-			$property->setValue( null, $original_version );
-		}
 	}
 }
