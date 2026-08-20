@@ -128,4 +128,55 @@ class Test_Event_Log_List_Table_Escaping extends WP_UnitTestCase {
 		$this->assertStringNotContainsString( '<img src=x', $out );
 		$this->assertStringContainsString( '&lt;img src=x onerror=NPPM3042&gt;', $out );
 	}
+
+	/**
+	 * The inline/collapsed threshold measures the raw JSON, not the escaped
+	 * string.
+	 *
+	 * Escaping turns each quote into six bytes, so a payload comfortably under
+	 * the limit can cross it on punctuation alone and render collapsed when it
+	 * should render inline. The two preconditions below are the point of the
+	 * test: they assert the fixture actually straddles the boundary, so the
+	 * assertion cannot quietly stop meaning anything if the limit moves.
+	 */
+	public function test_threshold_measures_unescaped_json() {
+		$data = [
+			'action'   => 'subscription_changed',
+			'status'   => 'active',
+			'node'     => 'example',
+			'user'     => 'reader',
+			'plan'     => 'monthly',
+			'ref'      => 'abc123',
+			'currency' => 'usd',
+			'gateway'  => 'stripe',
+		];
+		$json = wp_json_encode( $data, JSON_PRETTY_PRINT );
+
+		$this->assertLessThan( 300, strlen( $json ), 'Precondition: the raw JSON is under the limit.' );
+		$this->assertGreaterThan( 300, strlen( esc_html( $json ) ), 'Precondition: escaping pushes it over.' );
+
+		$out = ( new Event_Log_List_Table() )->column_default( $this->make_item( 's', 'n', 'a', $data ), 'data' );
+
+		$this->assertStringContainsString( '<pre><code>', $out, 'Payload under the limit rendered collapsed.' );
+		$this->assertStringNotContainsString( '<textarea', $out, 'Payload under the limit rendered collapsed.' );
+	}
+
+	/**
+	 * The collapsed branch must survive a clipboard round-trip.
+	 *
+	 * The clipboard script in js/event-log.js reads the textarea's .value and
+	 * copies it verbatim. The browser decodes entities on the way out, so the
+	 * escaper has to encode the ampersand of an existing entity, or the copied
+	 * text differs from the data.
+	 */
+	public function test_textarea_round_trips_entities() {
+		$note = str_repeat( 'A', 320 ) . ' &amp; more';
+		$out  = ( new Event_Log_List_Table() )->column_default(
+			$this->make_item( 's', 'n', 'a', [ 'note' => $note ] ),
+			'data'
+		);
+
+		$this->assertStringContainsString( '<textarea', $out, 'Precondition: the payload took the collapsed branch.' );
+		$this->assertStringContainsString( '&amp;amp;', $out, 'The ampersand was not encoded, so the clipboard copy alters the data.' );
+	}
 }
