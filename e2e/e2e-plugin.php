@@ -126,7 +126,7 @@ add_action(
 			// timing-safe.
 			$configured_secret = defined( 'NEWSPACK_E2E_SENDBOX_SECRET' ) ? (string) constant( 'NEWSPACK_E2E_SENDBOX_SECRET' ) : '';
 			// phpcs:ignore WordPress.Security.NonceVerification.Recommended, WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- Read-only, secret-gated endpoint so a nonce doesn't apply; the value is compared via hash_equals against a configured secret and never output, and sanitizing would alter the string being matched.
-			$provided_secret = isset( $_GET['secret'] ) ? (string) wp_unslash( $_GET['secret'] ) : '';
+			$provided_secret = isset( $_GET['secret'] ) && is_string( $_GET['secret'] ) ? (string) wp_unslash( $_GET['secret'] ) : '';
 			if ( '' === $configured_secret || ! hash_equals( $configured_secret, $provided_secret ) ) {
 				status_header( 403 );
 				header( 'Content-Type: text/plain' );
