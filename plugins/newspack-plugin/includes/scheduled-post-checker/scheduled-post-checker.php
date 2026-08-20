@@ -71,7 +71,8 @@ function nspc_run_check() {
 			'post_status'    => 'future',
 			'post_type'      => nspc_get_post_types(),
 			'fields'         => 'ids',
-			'posts_per_page' => -1,
+			// Rescue a backlog in one run rather than the get_posts() default of 5.
+			'posts_per_page' => 100,
 			'date_query'     => [
 				[
 					'before'    => $time,
