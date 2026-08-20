@@ -136,7 +136,7 @@ export default function Prerequisite( { config, getSharedProps, inFlight, prereq
 		</>
 	);
 
-	let status = __( 'Pending', 'newspack-plugin' );
+	let status: string = __( 'Pending', 'newspack-plugin' );
 	if ( isValid ) {
 		status = __( 'Ready', 'newspack-plugin' );
 	}

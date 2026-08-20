@@ -11,6 +11,17 @@
 
 The Newspack monorepo. All product [plugins](plugins), [themes](themes), and shared [packages](packages) live here. It also ships a Docker-based local development environment, so the dependencies needed to run the projects and their tests live inside the container, independent of your local machine.
 
+## Download and Install
+
+**This is a development repository.** If you are looking to download and install Newspack plugins or themes on your WordPress site, you need the **built packages**, not the source code in this repository.
+
+Built packages are available in two places:
+
+- **[Newspack Download Center](https://newspack.com/download-center/)** — Easy links to the latest stable releases
+- **[GitHub Releases](https://github.com/Automattic/newspack-workspace/releases)** — All releases, including pre-releases and historical versions
+
+Download the `.zip` file for the plugin or theme you want, then install it on your WordPress site via the WordPress admin interface (Plugins → Add New → Upload Plugin, or Appearance → Themes → Add New → Upload Theme).
+
 ## Getting started
 
 ### Clone this repository

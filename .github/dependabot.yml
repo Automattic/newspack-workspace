@@ -22,19 +22,6 @@ updates:
       interval: "weekly"
     labels:
       - "dependencies"
-    ignore:
-      # VIPCS 3.1.0 makes `posts_per_page => -1` a hard error, which the
-      # monorepo does not yet satisfy, so every vipwpcs constraint stays on
-      # 3.0.x until that audit lands (NPPM-3055). The pin alone is not enough:
-      # Dependabot also opens "permit the latest version" PRs that rewrite the
-      # constraint itself, and one of those reverted this pin and turned every
-      # PHP-linted PR red. Every composer ecosystem below repeats this entry,
-      # because auto-merge.yml lands a green minor Dependabot PR without
-      # review. Drop them all as part of the audit.
-      - dependency-name: "automattic/vipwpcs"
-        update-types:
-          - "version-update:semver-minor"
-          - "version-update:semver-major"
 
   # GitHub Actions.
   - package-ecosystem: "github-actions"
@@ -51,45 +38,21 @@ updates:
       interval: "weekly"
     labels:
       - "dependencies"
-    ignore:
-      # See the root composer ecosystem above (NPPM-3055).
-      - dependency-name: "automattic/vipwpcs"
-        update-types:
-          - "version-update:semver-minor"
-          - "version-update:semver-major"
   - package-ecosystem: "composer"
     directory: "plugins/newspack-ads"
     schedule:
       interval: "weekly"
     labels:
       - "dependencies"
-    ignore:
-      # See the root composer ecosystem above (NPPM-3055).
-      - dependency-name: "automattic/vipwpcs"
-        update-types:
-          - "version-update:semver-minor"
-          - "version-update:semver-major"
   - package-ecosystem: "composer"
     directory: "plugins/newspack-newsletters"
     schedule:
       interval: "weekly"
     labels:
       - "dependencies"
-    ignore:
-      # See the root composer ecosystem above (NPPM-3055).
-      - dependency-name: "automattic/vipwpcs"
-        update-types:
-          - "version-update:semver-minor"
-          - "version-update:semver-major"
   - package-ecosystem: "composer"
     directory: "plugins/newspack-popups"
     schedule:
       interval: "weekly"
     labels:
       - "dependencies"
-    ignore:
-      # See the root composer ecosystem above (NPPM-3055).
-      - dependency-name: "automattic/vipwpcs"
-        update-types:
-          - "version-update:semver-minor"
-          - "version-update:semver-major"

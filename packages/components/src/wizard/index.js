@@ -6,9 +6,10 @@ import classnames from 'classnames';
 /**
  * WordPress dependencies.
  */
-import { DropdownMenu, MenuGroup, MenuItem } from '@wordpress/components';
+// Notice is aliased: `Notice` below is Newspack's own, which this file also uses.
+import { DropdownMenu, MenuGroup, MenuItem, Notice as CoreNotice, SlotFillProvider, createSlotFill } from '@wordpress/components';
 import { useDispatch, useSelect } from '@wordpress/data';
-import { cloneElement, isValidElement, useEffect, useState, forwardRef } from '@wordpress/element';
+import { cloneElement, createInterpolateElement, isValidElement, useEffect, useState, forwardRef } from '@wordpress/element';
 import { __ } from '@wordpress/i18n';
 import { category, chevronLeft, moreVertical } from '@wordpress/icons';
 
@@ -25,6 +26,14 @@ import WizardError from './components/WizardError';
 registerStore();
 
 /**
+ * Renders a view's page-level banner outside the padded content column, so it sits
+ * flush beneath the header rather than indented within the section it describes.
+ */
+const { Slot: WizardBannerSlot, Fill: WizardBanner } = createSlotFill( 'NewspackWizardBanner' );
+
+export { WizardBanner };
+
+/**
  * Icon registry for resolving icon name strings passed through the data store.
  * React elements from @wordpress/icons can't cross webpack entry point boundaries
  * because each bundle has its own copy of the icon primitives.
@@ -38,6 +47,34 @@ const resolveIcon = icon => {
 };
 
 const { HashRouter, Redirect, Route, Switch, useLocation } = Router;
+
+/**
+ * Interpolate a translated message's named tags, falling back to plain text.
+ *
+ * The message is translated, so its tags are site-controlled: any .mo file under
+ * wp-content/languages/plugins, any GlotPress export, or any `gettext`-filter
+ * plugin can supply one. `createInterpolateElement` throws on an unbalanced
+ * closing tag whose name is in the conversion map - verified against core's own
+ * element.js, which is what runs here since the bundle externalizes wp-element.
+ * Nothing above this renders an error boundary, so an uncaught throw would blank
+ * the whole wizard, including the screen the inert-gating notice links to as the
+ * fix. Degraded copy is recoverable; a blank screen is not.
+ *
+ * The other malformed cases already degrade on their own and are left alone: an
+ * unclosed opener drops that tag and renders the rest as text, and a tag not in
+ * the map renders literally.
+ *
+ * @param {string} message    Translated message carrying named tags.
+ * @param {Object} conversion Conversion map for createInterpolateElement.
+ * @return {JSX.Element|string} The interpolated message, or the message with its tags stripped.
+ */
+const interpolateOrPlainText = ( message, conversion ) => {
+	try {
+		return createInterpolateElement( message, conversion );
+	} catch {
+		return message.replace( /<\/?[a-zA-Z][a-zA-Z0-9]*\s*\/?>/g, '' );
+	}
+};
 
 /**
  * Reset the header data when a new section is rendered.
@@ -87,7 +124,7 @@ const WizardHeaderRegion = ( { hideHeader, headerText, sections, sectionName, su
 
 /**
  * @typedef  {Object}     WizardProps
- * @property {string}     headerText                The header text.
+ * @property {string}     [headerText]              Fallback heading, used only when no section declares breadcrumbs.
  * @property {string}     [subHeaderText]           The sub-header text, optional.
  * @property {string}     [apiSlug]                 The API slug, optional.
  * @property {string}     [className]               CSS classes, optional.
@@ -161,6 +198,26 @@ const Wizard = (
 		</TabbedNavigation>
 	);
 
+	// Rendered here rather than as a core admin notice, which wizards strip at
+	// priority -9999. Sits as the first child of .newspack-wizard__main so it lands
+	// flush beneath the header region and spans the full width in every view: this
+	// describes the state of the whole site, not of the section below it, so it reads
+	// as page chrome rather than as content.
+	const inertGating = window.newspack_aux_data?.inert_gating;
+	const inertGatingNotice = inertGating?.show && (
+		<CoreNotice status="warning" isDismissible={ false } className="newspack-wizard__inert-gating-notice">
+			{ /* The conversion map takes childless elements and fills them from the
+			     translated string, so jsx-a11y can't see the content they end up with. */ }
+			{ interpolateOrPlainText( inertGating.message, {
+				/* eslint-disable jsx-a11y/anchor-has-content */
+				accessControl: <a href={ inertGating.urls.accessControl } />,
+				audience: <a href={ inertGating.urls.audience } />,
+				/* eslint-enable jsx-a11y/anchor-has-content */
+				strong: <strong />,
+			} ) }
+		</CoreNotice>
+	);
+
 	const content = (
 		<>
 			<HandoffMessage />
@@ -168,6 +225,8 @@ const Wizard = (
 			{ sections.length > 1 && <ResetHeaderData /> }
 
 			<div className="newspack-wizard__main">
+				{ inertGatingNotice }
+				<WizardBannerSlot bubblesVirtually />
 				<Switch>
 					{ routedSections.map( ( section, index ) => {
 						const SectionComponent = section.render;
@@ -271,38 +330,40 @@ const Wizard = (
 		) : undefined;
 
 	return (
-		<div ref={ ref }>
-			<div
-				className={ classnames( isLoading ? 'newspack-wizard__is-loading' : 'newspack-wizard__is-loaded', {
-					'newspack-wizard__is-loading-quiet': isQuietLoading,
-				} ) }
-			>
-				<HashRouter hashType="slash">
-					{ newspack_aux_data.is_debug_mode && <Notice debugMode /> }
-					<WizardHeaderRegion
-						hideHeader={ hideHeader }
-						headerText={ headerText }
-						sections={ routedSections }
-						sectionName={ sectionName }
-						subTitle={ subHeaderText }
-						actions={ headerActions }
-						tabbedNavigation={ tabbedNavigation }
-					>
-						{ content }
-					</WizardHeaderRegion>
-				</HashRouter>
-				{ notices?.length > 0 && (
-					<div className="newspack-wizard__snackbar-list">
-						{ notices.map( ( notice, index ) => (
-							<WizardSnackbar key={ notice.id || index } id={ notice.id } type={ notice.type } actions={ notice.actions }>
-								{ notice.message }
-							</WizardSnackbar>
-						) ) }
-					</div>
-				) }
+		<SlotFillProvider>
+			<div ref={ ref }>
+				<div
+					className={ classnames( isLoading ? 'newspack-wizard__is-loading' : 'newspack-wizard__is-loaded', {
+						'newspack-wizard__is-loading-quiet': isQuietLoading,
+					} ) }
+				>
+					<HashRouter hashType="slash">
+						{ newspack_aux_data.is_debug_mode && <Notice debugMode /> }
+						<WizardHeaderRegion
+							hideHeader={ hideHeader }
+							headerText={ headerText }
+							sections={ routedSections }
+							sectionName={ sectionName }
+							subTitle={ subHeaderText }
+							actions={ headerActions }
+							tabbedNavigation={ tabbedNavigation }
+						>
+							{ content }
+						</WizardHeaderRegion>
+					</HashRouter>
+					{ notices?.length > 0 && (
+						<div className="newspack-wizard__snackbar-list">
+							{ notices.map( ( notice, index ) => (
+								<WizardSnackbar key={ notice.id || index } id={ notice.id } type={ notice.type } actions={ notice.actions }>
+									{ notice.message }
+								</WizardSnackbar>
+							) ) }
+						</div>
+					) }
+				</div>
+				{ ! isLoading && <Footer simple={ hasSimpleFooter } /> }
 			</div>
-			{ ! isLoading && <Footer simple={ hasSimpleFooter } /> }
-		</div>
+		</SlotFillProvider>
 	);
 };
 

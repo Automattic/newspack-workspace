@@ -1055,7 +1055,8 @@ class Group_Subscription_Settings {
 
 	/**
 	 * Apply the group subscription filter to a set of query args by mutating
-	 * post__in / post__not_in. Shared by the HPOS and CPT filter callbacks.
+	 * post__in / post__not_in. Shared by the HPOS and CPT filter callbacks,
+	 * and by the subscriptions CSV exporter (Subscriptions_CSV_Exporter).
 	 *
 	 * @param array  $args      The query args (HPOS) or query vars (CPT).
 	 * @param string $filter    Either 'group' or 'non-group'.
@@ -1063,7 +1064,7 @@ class Group_Subscription_Settings {
 	 *
 	 * @return array The mutated args.
 	 */
-	private static function apply_group_filter( $args, $filter, $group_ids ) {
+	public static function apply_group_filter( $args, $filter, $group_ids ) {
 		if ( 'group' === $filter ) {
 			if ( empty( $group_ids ) ) {
 				$args['post__in'] = [ 0 ];
@@ -1092,26 +1093,18 @@ class Group_Subscription_Settings {
 			return;
 		}
 		// Group name is unused (no settings_fields() form); registers sanitize_callback via update_option().
-		\register_setting(
-			'newspack_group_subscription',
-			'newspack_group_subscription_label_singular',
-			[
-				'type'              => 'string',
-				'sanitize_callback' => 'sanitize_text_field',
-				'default'           => '',
-				'show_in_rest'      => false,
-			]
-		);
-		\register_setting(
-			'newspack_group_subscription',
-			'newspack_group_subscription_label_plural',
-			[
-				'type'              => 'string',
-				'sanitize_callback' => 'sanitize_text_field',
-				'default'           => '',
-				'show_in_rest'      => false,
-			]
-		);
+		foreach ( [ 'singular', 'plural' ] as $variant ) {
+			\register_setting(
+				'newspack_group_subscription',
+				Group_Subscription::get_label_option_key( $variant ),
+				[
+					'type'              => 'string',
+					'sanitize_callback' => 'sanitize_text_field',
+					'default'           => '',
+					'show_in_rest'      => false,
+				]
+			);
+		}
 	}
 }
 Group_Subscription_Settings::init();

@@ -1,3 +1,31 @@
+## newspack-network [2.22.1](https://github.com/Automattic/newspack-workspace/compare/newspack-network@2.22.0...newspack-network@2.22.1) (2026-08-19)
+
+
+### Bug Fixes
+
+* **network:** distribute dynamic galleries as resolved images ([#918](https://github.com/Automattic/newspack-workspace/issues/918)) ([0e1d1a1](https://github.com/Automattic/newspack-workspace/commit/0e1d1a149e48ba2f6425477eea41164fc6b195d7))
+
+# newspack-network [2.22.0](https://github.com/Automattic/newspack-workspace/compare/newspack-network@2.21.2...newspack-network@2.22.0) (2026-08-17)
+
+
+### Features
+
+* **network:** distribute posts from the front-end admin bar ([#679](https://github.com/Automattic/newspack-workspace/issues/679)) ([1b95d41](https://github.com/Automattic/newspack-workspace/commit/1b95d41fca34eb506b8790ef0401e93e79ce61af))
+* **network:** product network ID assignment + verification CLI (NPPD-2057, [#636](https://github.com/Automattic/newspack-workspace/issues/636)) ([f07c970](https://github.com/Automattic/newspack-workspace/commit/f07c97022180030c88d1f02c276a9d07e2ac0dbc))
+
+
+### Dependencies
+
+* **newspack-icons:** upgraded to 1.1.1
+* **newspack-scripts:** upgraded to 5.11.0
+
+## newspack-network [2.21.2](https://github.com/Automattic/newspack-workspace/compare/newspack-network@2.21.1...newspack-network@2.21.2) (2026-08-03)
+
+
+### Dependencies
+
+* **newspack-scripts:** upgraded to 5.10.0
+
 ## newspack-network [2.21.1](https://github.com/Automattic/newspack-workspace/compare/newspack-network@2.21.0...newspack-network@2.21.1) (2026-07-23)
 
 

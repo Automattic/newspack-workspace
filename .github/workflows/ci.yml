@@ -13,6 +13,11 @@ concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
+# Jobs here build and test code that arrives from a pull request. None of them
+# write to the repository, and the repo-wide default for GITHUB_TOKEN is write.
+permissions:
+  contents: read
+
 env:
   # Pinned via package.json's packageManager field; this is just a fallback.
   PNPM_VERSION: 10.33.0
@@ -42,9 +47,11 @@ jobs:
           node-version-file: '.nvmrc'
       - id: detect
         name: Compute package matrices
+        env:
+          EVENT_BASE_REF: ${{ github.event.pull_request.base.sha || github.event.before }}
         run: |
           set -euo pipefail
-          BASE_REF="${{ github.event.pull_request.base.sha || github.event.before }}"
+          BASE_REF="$EVENT_BASE_REF"
           if [ -z "$BASE_REF" ] || [ "$BASE_REF" = "0000000000000000000000000000000000000000" ]; then
             BASE_REF=$(git merge-base HEAD origin/main || echo HEAD~1)
           fi
@@ -88,8 +95,25 @@ jobs:
           # would let a newly-added <file> be linted by the pre-commit hook and
           # by nothing here, which is the exact gap this job closes.
           # `|| true` because grep exits 1 when the subtraction is empty.
-          NW_PATHS=$(sed -n 's|.*<file>\([^<]*\)</file>.*|\1|p' phpcs.xml \
-            | grep -vxE 'plugins|themes|packages' | tr '\n' ' ' | sed 's/ *$//' || true)
+          NW_LINES=$(sed -n 's|.*<file>\([^<]*\)</file>.*|\1|p' phpcs.xml \
+            | grep -vxE 'plugins|themes|packages' || true)
+          # phpcs.xml comes from the PR, and these paths are word-split into a shell
+          # command in the php-lint-non-workspace job, so keep them to plain relative
+          # paths. Validated one <file> value per line, before joining: a value
+          # containing a space would otherwise split into two words that each pass and
+          # neither of which is the declared path. Fail loudly, since a rejected path
+          # would go unlinted behind a green check. The match rejects, in order: a `..`
+          # component, so a path cannot walk outside the checkout; any character
+          # outside the allowed set, which includes whitespace and the glob characters;
+          # and a leading character that would make the path arrive as an option flag
+          # (`-i`), which phpcs accepts and then lints nothing.
+          if [ -n "$NW_LINES" ] && printf '%s\n' "$NW_LINES" | grep -E '\.\.|[^A-Za-z0-9._/-]|^[^A-Za-z0-9._]' >/dev/null; then
+            echo "Rejected phpcs.xml <file> path(s):"
+            printf '%s\n' "$NW_LINES"
+            exit 1
+          fi
+          NW_PATHS=$(printf '%s\n' "$NW_LINES" | tr '\n' ' ' | sed 's/ *$//')
+
           NW_CHANGED=false
           if [ -n "$NW_PATHS" ]; then
             NW_REGEX="^($(printf '%s' "$NW_PATHS" | tr ' ' '|'))/.*\.php$|^phpcs\.xml$"
@@ -108,6 +132,21 @@ jobs:
             echo "php-matrix={\"include\":[]}" >> "$GITHUB_OUTPUT"
             echo "any=$ROOT_DEPS_CHANGED" >> "$GITHUB_OUTPUT"
             exit 0
+          fi
+
+          # Package names come from PR-controlled package.json files and end up in
+          # shell steps downstream, so hold them to npm's own naming rules before
+          # they reach a matrix. Fail loudly rather than dropping the offender: a
+          # silently skipped package is a green check over unlinted code.
+          # The second pattern rejects `..`, which the first one allows: pnpm reads a
+          # trailing `...` as graph-selector syntax, so `foo...` would silently filter
+          # to a different set of packages than the one that changed.
+          INVALID=$( { printf '%s\n' "$CHANGED" | grep -vE '^(@[a-z0-9][a-z0-9._-]*/)?[a-z0-9][a-z0-9._-]*$' || true;
+                       printf '%s\n' "$CHANGED" | grep -E '\.\.' || true; } | sort -u )
+          if [ -n "$INVALID" ]; then
+            echo "Rejected package name(s):"
+            printf '%s\n' "$INVALID"
+            exit 1
           fi
 
           JS_INCLUDE=$(printf '%s\n' "$CHANGED" | jq -R -s -c 'split("\n") | map(select(length>0)) | map({package: .})')
@@ -155,6 +194,11 @@ jobs:
     strategy:
       fail-fast: false
       matrix: ${{ fromJson(needs.changed-packages.outputs.js-matrix) }}
+    # The package name originates in a PR-controlled package.json. Pass it through
+    # the environment and quote it in the shell rather than interpolating it into
+    # the script, where `${{ }}` substitution happens before the shell parses.
+    env:
+      PKG: ${{ matrix.package }}
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4.3.0
@@ -168,16 +212,18 @@ jobs:
       # --if-present skips packages whose package.json doesn't define the
        # script (e.g. newspack-colors has no lint:js, newspack-scripts has no
        # build). Without it pnpm exits non-zero on a missing script.
-      - run: pnpm --filter "${{ matrix.package }}" run --if-present lint:js
+      - run: pnpm --filter "$PKG" run --if-present lint:js
+        continue-on-error: false
+      - run: pnpm --filter "$PKG" run --if-present lint:scss
         continue-on-error: false
       # Type gate: the build strips types via Babel without checking them and
       # ESLint is not type-aware, so this is the only step that catches type
       # errors. Packages opt in by defining the script (tsc --noEmit against
       # the package's own tsconfig).
-      - run: pnpm --filter "${{ matrix.package }}" run --if-present typescript:check
+      - run: pnpm --filter "$PKG" run --if-present typescript:check
         continue-on-error: false
-      - run: pnpm --filter "${{ matrix.package }}" run --if-present build
-      - run: pnpm --filter "${{ matrix.package }}" run --if-present test
+      - run: pnpm --filter "$PKG" run --if-present build
+      - run: pnpm --filter "$PKG" run --if-present test
         continue-on-error: false
 
   # ----------------------------------------------------------------------------
@@ -191,6 +237,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix: ${{ fromJson(needs.changed-packages.outputs.php-matrix) }}
+    env:
+      PKG: ${{ matrix.package }}
     steps:
       - uses: actions/checkout@v4
       - uses: shivammathur/setup-php@7c071dfe9dc99bdf297fa79cb49ea005b9fcadbc # 2.37.1
@@ -208,7 +256,7 @@ jobs:
         run: composer install --no-interaction --no-progress --prefer-dist
       - name: phpcs
         run: |
-          dir=$(pnpm --silent --filter "${{ matrix.package }}" exec pwd)
+          dir=$(pnpm --silent --filter "$PKG" exec pwd)
           composer phpcs -- "$dir"
 
   # ----------------------------------------------------------------------------
@@ -233,7 +281,12 @@ jobs:
       - name: composer install (root)
         run: composer install --no-interaction --no-progress --prefer-dist
       - name: phpcs
-        run: composer phpcs -- ${{ needs.changed-packages.outputs.nw-paths }}
+        # Unquoted on purpose: the value is a space-separated path list that must
+        # split into separate arguments. Shell parameter expansion does not re-run
+        # command substitution, and the paths are validated in changed-packages.
+        env:
+          NW_PATHS: ${{ needs.changed-packages.outputs.nw-paths }}
+        run: composer phpcs -- $NW_PATHS
 
   php-test:
     name: PHPUnit / ${{ matrix.package }}
@@ -259,6 +312,7 @@ jobs:
     env:
       WP_TESTS_DIR: /tmp/wordpress-tests-lib
       WP_CORE_DIR: /tmp/wordpress
+      PKG: ${{ matrix.package }}
     steps:
       - uses: actions/checkout@v4
       - uses: shivammathur/setup-php@7c071dfe9dc99bdf297fa79cb49ea005b9fcadbc # 2.37.1
@@ -276,14 +330,16 @@ jobs:
       - name: Resolve package directory
         id: pkg
         run: |
-          dir=$(pnpm --silent --filter "${{ matrix.package }}" exec pwd)
+          dir=$(pnpm --silent --filter "$PKG" exec pwd)
           echo "dir=$dir" >> "$GITHUB_OUTPUT"
           name=$(basename "$dir")
           echo "name=$name" >> "$GITHUB_OUTPUT"
       - name: Check for phpunit config
         id: check
+        env:
+          PKG_DIR: ${{ steps.pkg.outputs.dir }}
         run: |
-          dir="${{ steps.pkg.outputs.dir }}"
+          dir="$PKG_DIR"
           if [ -f "$dir/phpunit.xml" ] || [ -f "$dir/phpunit.xml.dist" ]; then
             echo "has_tests=true" >> "$GITHUB_OUTPUT"
           else
@@ -333,15 +389,19 @@ jobs:
         run: composer install --no-interaction --no-progress --prefer-dist
       - name: composer install (package)
         if: steps.check.outputs.has_tests == 'true'
+        env:
+          PKG_DIR: ${{ steps.pkg.outputs.dir }}
         run: |
-          dir="${{ steps.pkg.outputs.dir }}"
+          dir="$PKG_DIR"
           if [ -f "$dir/composer.json" ]; then
             cd "$dir" && composer install --no-interaction --no-progress --prefer-dist
           fi
       - name: PHPUnit
         if: steps.check.outputs.has_tests == 'true'
+        env:
+          PKG_DIR: ${{ steps.pkg.outputs.dir }}
         run: |
-          dir="${{ steps.pkg.outputs.dir }}"
+          dir="$PKG_DIR"
           config=""
           [ -f "$dir/phpunit.xml" ] && config="$dir/phpunit.xml"
           [ -f "$dir/phpunit.xml.dist" ] && config="$dir/phpunit.xml.dist"
@@ -363,6 +423,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix: ${{ fromJson(needs.changed-packages.outputs.js-matrix) }}
+    env:
+      PKG: ${{ matrix.package }}
     steps:
       - uses: actions/checkout@v4
       - uses: shivammathur/setup-php@v2
@@ -380,22 +442,28 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - name: Resolve package directory
         id: pkg
-        run: echo "dir=$(pnpm --silent --filter '${{ matrix.package }}' exec pwd)" >> "$GITHUB_OUTPUT"
+        run: |
+          dir=$(pnpm --silent --filter "$PKG" exec pwd)
+          echo "dir=$dir" >> "$GITHUB_OUTPUT"
       - name: Build assets
-        run: pnpm --filter "${{ matrix.package }}" run --if-present build
+        run: pnpm --filter "$PKG" run --if-present build
       # The distributable ZIP includes vendor/ (see each plugin's .distignore),
       # so production composer deps must be present before archiving.
       - name: Install production composer deps
+        env:
+          PKG_DIR: ${{ steps.pkg.outputs.dir }}
         run: |
-          dir="${{ steps.pkg.outputs.dir }}"
+          dir="$PKG_DIR"
           if [ -f "$dir/composer.json" ]; then
             composer install -d "$dir" --no-interaction --no-progress --prefer-dist --no-dev
           fi
       - name: Archive distributable
+        env:
+          PKG_DIR: ${{ steps.pkg.outputs.dir }}
         run: |
-          dir="${{ steps.pkg.outputs.dir }}"
+          dir="$PKG_DIR"
           rm -rf "$dir/release"
-          pnpm --filter "${{ matrix.package }}" run --if-present release:archive
+          pnpm --filter "$PKG" run --if-present release:archive
           mkdir -p "$GITHUB_WORKSPACE/branch-zips"
           if compgen -G "$dir/release/*.zip" > /dev/null; then
             cp "$dir"/release/*.zip "$GITHUB_WORKSPACE/branch-zips/"
@@ -463,13 +531,19 @@ jobs:
     name: CI OK
     # `install` is in the needs list so a `--frozen-lockfile` failure on a
     # root-deps-only PR (empty js/php matrices) is treated as a CI failure
-    # rather than masked by the skipped matrix jobs.
-    needs: [install, js, php-lint, php-lint-non-workspace, php-test, build-zips, bundle-zips, shell-tests]
+    # rather than masked by the skipped matrix jobs. `changed-packages` is in it
+    # for the same reason: when its validation rejects a package name or path it
+    # exits 1, every dependent job is then *skipped* rather than failed, and a
+    # skip does not count as a failure here — so without this the fail-closed
+    # check would report green to branch protection.
+    needs: [changed-packages, install, js, php-lint, php-lint-non-workspace, php-test, build-zips, bundle-zips, shell-tests]
     if: always()
     runs-on: ubuntu-latest
     steps:
-      - run: |
-          if [ "${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') }}" = "true" ]; then
+      - env:
+          ANY_FAILED: ${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') }}
+        run: |
+          if [ "$ANY_FAILED" = "true" ]; then
             echo "One or more jobs failed or were cancelled."
             exit 1
           fi

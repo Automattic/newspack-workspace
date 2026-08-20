@@ -13,7 +13,7 @@
 		"woocommerce/action-scheduler": "^3.9"
 	},
 	"require-dev": {
-		"automattic/vipwpcs": "~3.0.1",
+		"automattic/vipwpcs": "^3.0",
 		"wp-coding-standards/wpcs": "^3.0",
 		"dealerdirect/phpcodesniffer-composer-installer": "*",
 		"phpcompatibility/phpcompatibility-wp": "*",
@@ -25,6 +25,11 @@
 	"autoload": {
 		"classmap": [
 			"includes"
+		],
+		"exclude-from-classmap": [
+			"includes/export/class-csv-batch-exporter.php",
+			"includes/export/class-subscriptions-csv-exporter.php",
+			"includes/export/class-users-csv-exporter.php"
 		]
 	},
 	"scripts": {

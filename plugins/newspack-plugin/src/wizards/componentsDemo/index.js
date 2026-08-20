@@ -13,6 +13,7 @@ import {
 	CardBody,
 	CardDivider,
 	CardMedia,
+	CheckboxControl,
 	ExternalLink,
 	ToggleControl,
 	__experimentalVStack as VStack, // eslint-disable-line @wordpress/no-unsafe-wp-apis
@@ -48,8 +49,10 @@ import {
 	PluginToggle,
 	ProgressBar,
 	SelectControl,
+	TableCard,
 	TextControl,
 	Divider,
+	Drawer,
 	Waiting,
 	WebPreview,
 } from '../../../packages/components/src';
@@ -72,6 +75,10 @@ class ComponentsDemo extends Component {
 			selectValue3: '',
 			selectValues: [],
 			modalShown: false,
+			drawerShown: false,
+			drawerActionCount: 2,
+			drawerSize: 'medium',
+			drawerIsDirty: false,
 			color1: '#003da5',
 			draggableList: [
 				{ id: 1, title: 'Draggable Item 1' },
@@ -89,6 +96,48 @@ class ComponentsDemo extends Component {
 		this.dragWrapperRef = createRef();
 	}
 
+	drawerActions( count ) {
+		const close = () => this.setState( { drawerShown: false } );
+		const save = (
+			<Drawer.Action
+				key="save"
+				variant="primary"
+				/* translators: extended name for the Save action. Must contain "Save" as translated below. */
+				ariaLabel={ __( 'Save the drawer demo', 'newspack-plugin' ) }
+				onClick={ close }
+			>
+				{ __( 'Save', 'newspack-plugin' ) }
+			</Drawer.Action>
+		);
+		const cancel = (
+			<Drawer.Action
+				key="cancel"
+				variant="secondary"
+				/* translators: extended name for the Cancel action. Must contain "Cancel" as translated below. */
+				ariaLabel={ __( 'Cancel the drawer demo', 'newspack-plugin' ) }
+				closes
+			>
+				{ __( 'Cancel', 'newspack-plugin' ) }
+			</Drawer.Action>
+		);
+		const reset = (
+			<Drawer.Action
+				key="reset"
+				variant="tertiary"
+				isDestructive
+				/* translators: extended name for the Reset action. Must contain "Reset" as translated below. */
+				ariaLabel={ __( 'Reset the drawer demo', 'newspack-plugin' ) }
+				closes
+			>
+				{ __( 'Reset', 'newspack-plugin' ) }
+			</Drawer.Action>
+		);
+		if ( 1 === count ) {
+			return [ save ];
+		}
+		return 2 === count ? [ cancel, save ] : [ save, cancel, reset ];
+	}
+
 	/**
 	 * Render the example stub.
 	 */
@@ -102,6 +151,10 @@ class ComponentsDemo extends Component {
 			selectValue2,
 			selectValue3,
 			modalShown,
+			drawerShown,
+			drawerActionCount,
+			drawerSize,
+			drawerIsDirty,
 			actionCardToggleChecked,
 			color1,
 		} = this.state;
@@ -267,6 +320,106 @@ class ComponentsDemo extends Component {
 									</HStack>
 								</Modal>
 							) }
+						</Card>
+						<Card>
+							<h2>{ __( 'Drawer', 'newspack-plugin' ) }</h2>
+							<VStack spacing={ 4 }>
+								<Grid columns={ 2 } gutter={ 16 } noMargin>
+									<SelectControl
+										label={ __( 'Footer actions', 'newspack-plugin' ) }
+										value={ String( drawerActionCount ) }
+										options={ [
+											{ label: '1', value: '1' },
+											{ label: '2', value: '2' },
+											{ label: '3', value: '3' },
+										] }
+										onChange={ value => this.setState( { drawerActionCount: parseInt( value, 10 ) } ) }
+									/>
+									<SelectControl
+										label={ __( 'Size', 'newspack-plugin' ) }
+										value={ drawerSize }
+										options={ [
+											{ label: __( 'Small', 'newspack-plugin' ), value: 'small' },
+											{ label: __( 'Medium', 'newspack-plugin' ), value: 'medium' },
+											{ label: __( 'Large', 'newspack-plugin' ), value: 'large' },
+											{ label: __( 'X-Large', 'newspack-plugin' ), value: 'x-large' },
+											{ label: __( 'Full', 'newspack-plugin' ), value: 'full' },
+										] }
+										onChange={ value => this.setState( { drawerSize: value } ) }
+									/>
+								</Grid>
+								<CheckboxControl
+									label={ __( 'Unsaved changes (confirm before closing)', 'newspack-plugin' ) }
+									checked={ drawerIsDirty }
+									onChange={ value => this.setState( { drawerIsDirty: value } ) }
+								/>
+								<HStack justify="flex-start">
+									<Button isPrimary onClick={ () => this.setState( { drawerShown: true } ) }>
+										{ __( 'Open drawer', 'newspack-plugin' ) }
+									</Button>
+								</HStack>
+							</VStack>
+							<Drawer.Root
+								isOpen={ drawerShown }
+								size={ drawerSize }
+								isDirty={ drawerIsDirty }
+								onRequestClose={ () => this.setState( { drawerShown: false } ) }
+							>
+								<Drawer.Header>
+									<Icon className="newspack-drawer__icon" icon={ settings } size={ 24 } />
+									<Drawer.Title>{ __( 'Drawer title', 'newspack-plugin' ) }</Drawer.Title>
+									<Drawer.CloseIcon />
+								</Drawer.Header>
+								<Drawer.Content>
+									<p>
+										{ __(
+											'A drawer is a modal: the page behind it is inert, and clicking the scrim closes it. Each Drawer.Content is a section, and a Drawer.Divider draws a full-width rule between two of them.',
+											'newspack-plugin'
+										) }
+									</p>
+								</Drawer.Content>
+								<Drawer.Divider />
+								<Drawer.Content padding={ 0 }>
+									<p style={ { margin: 0, padding: '16px 24px' } }>
+										{ __( 'This section is flush (padding 0) and brings its own spacing.', 'newspack-plugin' ) }
+									</p>
+								</Drawer.Content>
+								<Drawer.Footer>{ this.drawerActions( drawerActionCount ) }</Drawer.Footer>
+							</Drawer.Root>
+						</Card>
+						<Card>
+							<h2>{ __( 'Table card', 'newspack-plugin' ) }</h2>
+							<TableCard
+								title={ __( 'Price Schedule', 'newspack-plugin' ) }
+								titleId="components-demo-table-card-title"
+								actions={
+									<Button variant="secondary" size="compact">
+										{ __( 'Add Price', 'newspack-plugin' ) }
+									</Button>
+								}
+							>
+								<div role="region" aria-labelledby="components-demo-table-card-title">
+									{ /* Real tables supply the 24px card-padding alignment from their stylesheet. */ }
+									<table style={ { borderCollapse: 'collapse', width: '100%' } }>
+										<thead>
+											<tr>
+												<th style={ { padding: '8px 24px', textAlign: 'left' } }>{ __( 'Cycles', 'newspack-plugin' ) }</th>
+												<th style={ { padding: '8px 24px', textAlign: 'left' } }>{ __( 'Price', 'newspack-plugin' ) }</th>
+											</tr>
+										</thead>
+										<tbody>
+											<tr>
+												<td style={ { padding: '8px 24px' } }>1 → 3</td>
+												<td style={ { padding: '8px 24px' } }>$3.00</td>
+											</tr>
+											<tr>
+												<td style={ { padding: '8px 24px' } }>4 onward</td>
+												<td style={ { padding: '8px 24px' } }>$6.00</td>
+											</tr>
+										</tbody>
+									</table>
+								</div>
+							</TableCard>
 						</Card>
 						<Card>
 							<h2>{ __( 'Notice', 'newspack-plugin' ) }</h2>
