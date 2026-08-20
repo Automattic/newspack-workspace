@@ -1,3 +1,17 @@
+## newspack [6.48.11](https://github.com/Automattic/newspack-workspace/compare/newspack@6.48.10...newspack@6.48.11) (2026-08-20)
+
+
+### Bug Fixes
+
+* **memberships:** restore membership paywall content ([#931](https://github.com/Automattic/newspack-workspace/issues/931)) ([#932](https://github.com/Automattic/newspack-workspace/issues/932)) ([13cde5a](https://github.com/Automattic/newspack-workspace/commit/13cde5ae2a50c60d6bceda6ce79ce43c1d7e6e59))
+
+## newspack [6.48.10](https://github.com/Automattic/newspack-workspace/compare/newspack@6.48.9...newspack@6.48.10) (2026-08-20)
+
+
+### Bug Fixes
+
+* **reader-activation:** keep the magic-link base on the site origin ([#866](https://github.com/Automattic/newspack-workspace/issues/866)) ([c2129c1](https://github.com/Automattic/newspack-workspace/commit/c2129c176309df083a9cf18407ecef6a6da3860c))
+
 ## newspack [6.48.9](https://github.com/Automattic/newspack-workspace/compare/newspack@6.48.8...newspack@6.48.9) (2026-08-19)
 
 
