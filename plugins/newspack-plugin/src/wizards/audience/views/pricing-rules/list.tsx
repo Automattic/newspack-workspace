@@ -86,8 +86,10 @@ export default function PricingRulesList() {
 
 	const isReady = hasResolved && statsResolved;
 	// Raw payload, not the filtered view: a search that matches nothing keeps the
-	// DataViews treatment rather than claiming the site has no rules.
-	const isEmpty = isReady && ! hasError && data.length === 0;
+	// DataViews treatment rather than claiming the site has no rules. `isLoading`
+	// as well as `isReady`, so a refetch cannot answer "does this site have rules"
+	// from a payload that is already being replaced.
+	const isEmpty = isReady && ! isLoading && ! hasError && data.length === 0;
 
 	useEffect( () => {
 		setHeaderData( {
