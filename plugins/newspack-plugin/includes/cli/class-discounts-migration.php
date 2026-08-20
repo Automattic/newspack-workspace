@@ -42,6 +42,12 @@ class Discounts_Migration {
 	const EXCLUDE_ON_SALE_OPTION = 'wc_memberships_exclude_on_sale_products_from_member_discounts';
 
 	/**
+	 * Memberships' upsell switch: whether a membership in the cart discounts the
+	 * rest of that same order.
+	 */
+	const APPLY_WHEN_PURCHASING_OPTION = 'wc_memberships_apply_member_discounts_when_purchasing_membership';
+
+	/**
 	 * The only product taxonomy a subscriber discount can target.
 	 */
 	const SUPPORTED_TAXONOMY = 'product_cat';
@@ -167,11 +173,28 @@ class Discounts_Migration {
 		WP_CLI::line( '' );
 		WP_CLI::line( '=== STORE-LEVEL SETTINGS ===' );
 
-		// Memberships stores whether to *exclude* on-sale products and defaults
-		// to 'no' — i.e. it discounts them. Subscriber discounts default to not
-		// discounting them, so this has to be carried across explicitly.
+		// Memberships stores whether to *exclude* on-sale products, so its value
+		// inverts into ours. Both plugins discount on-sale products when nobody
+		// has touched the setting, so this only differs on a store that turned
+		// the exclusion on.
 		$memberships_excludes_on_sale = 'yes' === get_option( self::EXCLUDE_ON_SALE_OPTION, 'no' );
 		$apply_on_sale                = ! $memberships_excludes_on_sale;
+
+		// Memberships' upsell switch maps across directly; both default to off.
+		$apply_at_checkout = 'yes' === get_option( self::APPLY_WHEN_PURCHASING_OPTION, 'no' );
+
+		WP_CLI::line(
+			sprintf(
+				'On-sale products: Memberships %s them.',
+				$memberships_excludes_on_sale ? 'excludes' : 'discounts'
+			)
+		);
+		WP_CLI::line(
+			sprintf(
+				'Membership in the cart: Memberships %s the rest of that order.',
+				$apply_at_checkout ? 'discounts' : 'does not discount'
+			)
+		);
 
 		// Only carried on the first run: rules update in place on a re-run, so
 		// overwriting here would silently revert a setting a publisher changed
@@ -179,23 +202,23 @@ class Discounts_Migration {
 		$settings_already_stored = false !== get_option( Subscriber_Discounts::SETTINGS_OPTION_NAME, false );
 
 		if ( $settings_already_stored ) {
-			WP_CLI::line(
-				sprintf(
-					'On-sale products: Memberships %s them; this site already has its own setting, left as is.',
-					$memberships_excludes_on_sale ? 'excludes' : 'discounts'
-				)
-			);
+			WP_CLI::line( 'This site already has its own discount settings; both left as they are.' );
 		} else {
 			WP_CLI::line(
 				sprintf(
-					'On-sale products: Memberships %s them. %s "Apply on top of sale prices" %s.',
-					$memberships_excludes_on_sale ? 'excludes' : 'discounts',
+					'%1$s "Apply on top of sale prices" %2$s and "Apply discounts at checkout" %3$s.',
 					$dry_run ? 'Would set' : 'Set',
-					$apply_on_sale ? 'on' : 'off'
+					$apply_on_sale ? 'on' : 'off',
+					$apply_at_checkout ? 'on' : 'off'
 				)
 			);
 			if ( ! $dry_run ) {
-				Subscriber_Discounts::save_settings( [ 'apply_on_sale' => $apply_on_sale ] );
+				Subscriber_Discounts::save_settings(
+					[
+						'apply_on_sale'     => $apply_on_sale,
+						'apply_at_checkout' => $apply_at_checkout,
+					]
+				);
 			}
 		}
 

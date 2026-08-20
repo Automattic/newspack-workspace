@@ -52,7 +52,7 @@ const DEFAULT_VIEW: View = {
 function SubscriberDiscounts() {
 	const [ payload, setPayload ] = useState< DiscountsPayload >( {
 		rules: [],
-		settings: { apply_on_sale: false, apply_at_checkout: false },
+		settings: { apply_on_sale: true, apply_at_checkout: false },
 		currency: DEFAULT_CURRENCY,
 	} );
 	const [ isLoading, setIsLoading ] = useState( true );

@@ -28,6 +28,7 @@ class Test_Discounts_Migration extends \WP_UnitTestCase {
 	public static function setUpBeforeClass(): void {
 		parent::setUpBeforeClass();
 		require_once dirname( __DIR__, 2 ) . '/mocks/wc-mocks.php';
+		require_once dirname( __DIR__, 2 ) . '/mocks/wp-cli-mocks.php';
 	}
 
 	/**
@@ -78,6 +79,16 @@ class Test_Discounts_Migration extends \WP_UnitTestCase {
 				]
 			);
 		}
+	}
+
+	/**
+	 * Run the store-level settings port against whatever options are set.
+	 */
+	private function report_settings_parity() {
+		\WP_CLI::reset();
+		$report_settings_parity_method = new \ReflectionMethod( Discounts_Migration::class, 'report_settings_parity' );
+		$report_settings_parity_method->setAccessible( true );
+		$report_settings_parity_method->invoke( null, false, 1, [] );
 	}
 
 	/**
@@ -389,5 +400,38 @@ class Test_Discounts_Migration extends \WP_UnitTestCase {
 		$this->assertSame( $reader_id, $affected_readers[0]['user_id'], 'The affected reader is named, so the publisher can be shown who.' );
 		$this->assertEquals( 64.0, $affected_readers[0]['stacked_price'], 'Memberships compounds the two rules rather than adding them.' );
 		$this->assertEquals( 80.0, $affected_readers[0]['best_price'], 'Access Control applies the single best rule.' );
+	}
+
+	/**
+	 * Both of Memberships' store-level discount settings have to survive the
+	 * flip. The on-sale one inverts on the way across — Memberships stores an
+	 * *exclusion* — and the upsell one maps directly. A site that turned either
+	 * on and lost it would quietly charge its subscribers differently.
+	 */
+	public function test_store_level_settings_carry_across_from_memberships() {
+		delete_option( Subscriber_Discounts::SETTINGS_OPTION_NAME );
+		update_option( Discounts_Migration::EXCLUDE_ON_SALE_OPTION, 'yes' );
+		update_option( Discounts_Migration::APPLY_WHEN_PURCHASING_OPTION, 'yes' );
+
+		$this->report_settings_parity();
+
+		$settings = Subscriber_Discounts::get_settings();
+		$this->assertFalse( $settings['apply_on_sale'], 'Memberships excluding on-sale products means ours must not apply to them.' );
+		$this->assertTrue( $settings['apply_at_checkout'], 'A site using the upsell keeps it.' );
+	}
+
+	/**
+	 * A re-run must not revert a setting the publisher changed after migrating.
+	 */
+	public function test_stored_settings_are_left_alone_on_a_re_run() {
+		Subscriber_Discounts::save_settings( [ 'apply_at_checkout' => true ] );
+		update_option( Discounts_Migration::APPLY_WHEN_PURCHASING_OPTION, 'no' );
+
+		$this->report_settings_parity();
+
+		$this->assertTrue(
+			Subscriber_Discounts::get_settings()['apply_at_checkout'],
+			'A publisher-set value survives a second migration run.'
+		);
 	}
 }

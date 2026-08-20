@@ -40,10 +40,14 @@ class Subscriber_Discounts {
 	 * @var array
 	 */
 	const DEFAULT_SETTINGS = [
-		'apply_on_sale'     => false,
+		// Matches WooCommerce Memberships, whose own switch is an *exclusion*
+		// defaulting to off — so a store that has never touched the setting
+		// discounts products that are already on sale. Defaulting the other way
+		// would make a new site quietly stingier than the plugin it replaces.
+		'apply_on_sale'     => true,
 		// Whether a subscription sitting in the cart already counts, so a reader
 		// buying a subscription and a discounted product together sees the
-		// subscriber price before they have checked out.
+		// subscriber price before they have checked out. Off in Memberships too.
 		'apply_at_checkout' => false,
 	];
 

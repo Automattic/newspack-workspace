@@ -242,13 +242,13 @@ class Newspack_Test_Subscriber_Discounts_Storage extends WP_UnitTestCase {
 	public function test_settings_defaults_and_merge_on_save() {
 		$default_settings = Subscriber_Discounts::get_settings();
 
-		$this->assertFalse( $default_settings['apply_on_sale'], 'Products already on sale are left alone by default.' );
+		$this->assertTrue( $default_settings['apply_on_sale'], 'Products already on sale are discounted by default, as they are in Memberships.' );
 		$this->assertFalse( $default_settings['apply_at_checkout'], 'A subscription in the cart does not discount the rest of the order by default.' );
 
-		Subscriber_Discounts::save_settings( [ 'apply_on_sale' => true ] );
+		Subscriber_Discounts::save_settings( [ 'apply_on_sale' => false ] );
 
 		$merged_settings = Subscriber_Discounts::get_settings();
-		$this->assertTrue( $merged_settings['apply_on_sale'], 'The saved setting persists.' );
+		$this->assertFalse( $merged_settings['apply_on_sale'], 'The saved setting persists.' );
 		$this->assertFalse( $merged_settings['apply_at_checkout'], 'Untouched settings keep their value.' );
 	}
 

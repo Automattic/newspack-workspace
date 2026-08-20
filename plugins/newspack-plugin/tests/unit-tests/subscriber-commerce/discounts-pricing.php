@@ -234,11 +234,12 @@ class Test_Subscriber_Discounts_Pricing extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * By default a product already on sale is left at its sale price, so a
-	 * promotion and a subscriber discount cannot silently compound. Turning the
-	 * setting on opts into exactly that.
+	 * By default a subscriber discount stacks on top of a sale price, matching
+	 * Memberships. Turning the setting off leaves a product that is already on
+	 * sale at its sale price, so a promotion and a subscriber discount cannot
+	 * compound.
 	 */
-	public function test_on_sale_products_are_skipped_unless_the_setting_allows_them() {
+	public function test_on_sale_products_are_discounted_unless_the_setting_forbids_it() {
 		$discounted_book = $this->create_product( 100.0, 80.0 );
 		Subscriber_Discounts::save_rule(
 			[
@@ -251,18 +252,18 @@ class Test_Subscriber_Discounts_Pricing extends \WP_UnitTestCase {
 		);
 		$this->flush_caches();
 
-		$this->assertNull(
-			Subscriber_Discounts_Pricing::get_subscriber_price( 80.0, $discounted_book, $this->subscriber_id ),
-			'A product already on sale is not discounted again by default.'
-		);
-
-		Subscriber_Discounts::save_settings( [ 'apply_on_sale' => true ] );
-		$this->flush_caches();
-
 		$this->assertSame(
 			72.0,
 			Subscriber_Discounts_Pricing::get_subscriber_price( 80.0, $discounted_book, $this->subscriber_id ),
-			'With the setting on, the subscriber discount applies on top of the sale price.'
+			'By default the subscriber discount applies on top of the sale price.'
+		);
+
+		Subscriber_Discounts::save_settings( [ 'apply_on_sale' => false ] );
+		$this->flush_caches();
+
+		$this->assertNull(
+			Subscriber_Discounts_Pricing::get_subscriber_price( 80.0, $discounted_book, $this->subscriber_id ),
+			'With the setting off, a product already on sale is left at its sale price.'
 		);
 	}
 
