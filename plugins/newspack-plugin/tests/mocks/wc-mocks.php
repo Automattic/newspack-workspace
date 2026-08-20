@@ -189,9 +189,15 @@ class WC_DateTime extends DateTime {
 class WC_Customer {
 	public $data = [];
 	public function __construct( $user_id ) {
+		// Real WC_Customer is backed by the WP user, and its date_created IS
+		// that user's user_registered. Deriving it here rather than stamping
+		// "now" keeps the two readings of a reader's registration date (the
+		// legacy pipeline reads the customer, the new one reads the user)
+		// from disagreeing by a second at a boundary.
+		$user = get_userdata( $user_id );
 		$this->data = [
 			'user_id'      => $user_id,
-			'date_created' => gmdate( 'Y-m-d H:i:s' ),
+			'date_created' => $user && ! empty( $user->user_registered ) ? $user->user_registered : gmdate( 'Y-m-d H:i:s' ),
 		];
 	}
 	public function get_id() {
