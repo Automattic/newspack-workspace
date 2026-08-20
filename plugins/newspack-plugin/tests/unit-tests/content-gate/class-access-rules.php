@@ -97,6 +97,29 @@ class Newspack_Test_Access_Rules extends WP_UnitTestCase {
 	}
 
 	/**
+	 * A `$product_ids` value that isn't an array is configuration nobody can
+	 * interpret — a free-text string saved before rule values were validated. It
+	 * must deny rather than fall through to "any subscription qualifies", which is
+	 * what an empty value legitimately means. `'0'` and `0` are included because
+	 * an `empty()` guard would wave them through.
+	 */
+	public function test_has_active_subscription_fails_closed_for_a_malformed_product_filter() {
+		$this->create_subscription();
+
+		$this->assertTrue(
+			Access_Rules::has_active_subscription( self::$owner_user_id, [] ),
+			'Premise: with no product filter, this reader\'s active subscription qualifies.'
+		);
+
+		foreach ( [ 'Premium Membership', '0', 0 ] as $malformed_product_ids ) {
+			$this->assertFalse(
+				Access_Rules::has_active_subscription( self::$owner_user_id, $malformed_product_ids ),
+				'A non-array product filter must deny even a reader who has an active subscription.'
+			);
+		}
+	}
+
+	/**
 	 * Helper to create a test subscription.
 	 *
 	 * @param array $args Subscription arguments.

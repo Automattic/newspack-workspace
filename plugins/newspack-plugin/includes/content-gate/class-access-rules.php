@@ -120,6 +120,25 @@ class Access_Rules {
 	}
 
 	/**
+	 * Whether a stored rule value is malformed configuration rather than the
+	 * absence of a constraint.
+	 *
+	 * Only `null`, `''` and `[]` mean "not configured". Every other non-array
+	 * shape is a value nobody can interpret, and a rule callback must fail closed
+	 * on it rather than read it as "no constraint". That deliberately includes the
+	 * falsy scalars `0`, `'0'`, `0.0` and `false`, which an `empty()` check would
+	 * wave through — a legacy free-text rule holding `0` is still a value an
+	 * operator typed, not an unconfigured rule.
+	 *
+	 * @param mixed $value The stored rule value.
+	 *
+	 * @return bool
+	 */
+	public static function is_malformed_rule_value( $value ) {
+		return ! is_array( $value ) && null !== $value && '' !== $value;
+	}
+
+	/**
 	 * Get all registered rules.
 	 *
 	 * @return array The registered rules.
@@ -497,9 +516,9 @@ class Access_Rules {
 	 * The `newspack_access_rules_has_active_subscription` filter is applied to every
 	 * well-formed evaluation and its return value is the final result, so a third-party
 	 * filter callback can grant access even when `$strict` is true. The one exception
-	 * is a populated non-array `$product_ids`: malformed configuration fails closed
-	 * before the filter runs, so a filter cannot grant access based on a value nobody
-	 * can interpret. Filter authors should opt in to the 4th `$strict`
+	 * is a malformed `$product_ids`: malformed configuration fails closed before the
+	 * filter runs, so a filter cannot grant access based on a value nobody can
+	 * interpret. Filter authors should opt in to the 4th `$strict`
 	 * arg (`accepted_args` >= 4) and respect it — e.g., short-circuit and return
 	 * `$has_subscription` unchanged when `$strict` is true and the access claim isn't
 	 * strictly an owned subscription. Otherwise callers using `$strict` to distinguish
@@ -509,15 +528,15 @@ class Access_Rules {
 	 * @param int   $user_id     User ID.
 	 * @param mixed $product_ids Required product IDs — an array when well-formed
 	 *                           (empty means any subscription qualifies); any other
-	 *                           populated shape is treated as malformed and fails closed.
+	 *                           shape is treated as malformed and fails closed.
 	 * @param bool  $strict      If true, only consider active subscriptions owned by $user_id (ignore group subscription memberships).
 	 * @return bool
 	 */
 	public static function has_active_subscription( $user_id, $product_ids, $strict = false ) {
-		// A populated value of the wrong shape (e.g. a free-text string saved
-		// before values were validated) is malformed configuration, not the
-		// absence of a constraint — fail closed, mirroring Institution::evaluate().
-		if ( ! empty( $product_ids ) && ! is_array( $product_ids ) ) {
+		// A value of the wrong shape (e.g. a free-text string saved before values
+		// were validated) is malformed configuration, not the absence of a
+		// constraint — fail closed, mirroring Institution::evaluate().
+		if ( self::is_malformed_rule_value( $product_ids ) ) {
 			return false;
 		}
 

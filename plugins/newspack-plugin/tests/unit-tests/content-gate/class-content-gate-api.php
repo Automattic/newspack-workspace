@@ -190,8 +190,9 @@ class Newspack_Test_Content_Gate_API extends WP_UnitTestCase {
 
 	/**
 	 * An invalid value fails the whole save — sanitize_gate() propagates the
-	 * error instead of silently dropping the rule, which would loosen the AND
-	 * group (or empty the rule set entirely, granting access).
+	 * error instead of silently dropping the rule. The group's other rule is
+	 * valid, and saving it on its own would drop a condition from an AND group
+	 * and loosen the gate.
 	 */
 	public function test_invalid_access_rule_value_fails_the_gate_save() {
 		$sanitized_gate = Content_Gate_API::sanitize_gate(
@@ -201,6 +202,10 @@ class Newspack_Test_Content_Gate_API extends WP_UnitTestCase {
 					'active'       => true,
 					'access_rules' => [
 						[
+							[
+								'slug'  => 'email_domain',
+								'value' => 'example.com',
+							],
 							[
 								'slug'  => 'institution',
 								'value' => 'Springfield University',
@@ -212,6 +217,75 @@ class Newspack_Test_Content_Gate_API extends WP_UnitTestCase {
 		);
 		$this->assertWPError( $sanitized_gate );
 		$this->assertSame( 'invalid_access_rule_value', $sanitized_gate->get_error_code() );
+	}
+
+	/**
+	 * An options-backed value whose elements all sanitize away must not save as an
+	 * empty list — that reads as "no constraint" and grants access. Element values
+	 * that are merely falsy (`0`, `'0'`) are legitimate option values and survive.
+	 */
+	public function test_options_backed_values_that_sanitize_away_are_rejected() {
+		$values_that_sanitize_away = [
+			'an empty string' => [ '' ],
+			'a nested array'  => [ [ 'Springfield University' ] ],
+			'boolean false'   => [ false ],
+		];
+		foreach ( $values_that_sanitize_away as $description => $value ) {
+			$sanitized = Content_Gate_API::sanitize_access_rule(
+				[
+					'slug'  => 'institution',
+					'value' => $value,
+				]
+			);
+			$this->assertWPError( $sanitized, "A populated value made only of {$description} must be rejected." );
+			$this->assertSame( 'invalid_access_rule_value', $sanitized->get_error_code() );
+		}
+
+		$sanitized = Content_Gate_API::sanitize_access_rule(
+			[
+				'slug'  => 'institution',
+				'value' => [ '0', 0 ],
+			]
+		);
+		$this->assertSame( [ 0, 0 ], $sanitized['value'], 'A zero option value is a value, not an absent one.' );
+	}
+
+	/**
+	 * `has_options` is the discriminator both pickers branch on, so it has to
+	 * survive the trip to the client — where the PHP callables must not.
+	 */
+	public function test_has_options_reaches_the_client_payload() {
+		$client_rules = Access_Rules::get_access_rules_for_client();
+
+		foreach ( $client_rules as $slug => $rule ) {
+			$this->assertArrayHasKey( 'has_options', $rule, "The '{$slug}' rule must tell the client whether it is options-backed." );
+			$this->assertArrayNotHasKey( 'callback', $rule, "The '{$slug}' rule must not ship its PHP callback to the client." );
+		}
+		$this->assertTrue( $client_rules['institution']['has_options'] );
+		$this->assertFalse( $client_rules['email_domain']['has_options'] );
+	}
+
+	/**
+	 * Dropping unknown rules is safe until nothing is left: an empty rule set
+	 * grants access to everyone, so that save fails instead.
+	 */
+	public function test_gate_save_fails_when_dropping_unknown_rules_leaves_nothing() {
+		$sanitized_gate = Content_Gate_API::sanitize_gate(
+			[
+				'custom_access' => [
+					'access_rules' => [
+						[
+							[
+								'slug'  => 'rule_from_deactivated_integration',
+								'value' => [ 42 ],
+							],
+						],
+					],
+				],
+			]
+		);
+		$this->assertWPError( $sanitized_gate );
+		$this->assertSame( 'invalid_access_rules', $sanitized_gate->get_error_code() );
 	}
 
 	/**

@@ -226,22 +226,22 @@ class Institution {
 	 *
 	 * @param int   $user_id         User ID.
 	 * @param mixed $institution_ids Selected institution IDs — an array of post IDs
-	 *                               when well-formed; any other populated shape is
-	 *                               treated as malformed and fails closed.
+	 *                               when well-formed; any other shape is treated as
+	 *                               malformed and fails closed.
 	 *
 	 * @return bool Whether the user matches any institution.
 	 */
 	public static function evaluate( $user_id, $institution_ids ) {
+		// A value of the wrong shape (e.g. a free-text string saved before values
+		// were validated) is malformed configuration, not the absence of a
+		// constraint — fail closed rather than grant access.
+		if ( Access_Rules::is_malformed_rule_value( $institution_ids ) ) {
+			return false;
+		}
+
 		// An empty value means the rule imposes no constraint.
 		if ( empty( $institution_ids ) ) {
 			return true;
-		}
-
-		// A populated value of the wrong shape (e.g. a free-text string saved
-		// before values were validated) is malformed configuration, not the
-		// absence of a constraint — fail closed rather than grant access.
-		if ( ! is_array( $institution_ids ) ) {
-			return false;
 		}
 
 		$institutions = self::get_cached_institutions();

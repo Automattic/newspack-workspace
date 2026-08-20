@@ -267,7 +267,8 @@ class Content_Gate_API {
 	 * @param array $rules The access rules.
 	 *
 	 * @return array|\WP_Error The sanitized access rules in grouped format, or an
-	 *                         error when a rule holds an invalid value.
+	 *                         error when a rule holds an invalid value, or when
+	 *                         dropping unknown rules would leave no rules at all.
 	 */
 	public static function sanitize_access_rules_grouped( $rules ) {
 		if ( empty( $rules ) ) {
@@ -279,14 +280,30 @@ class Content_Gate_API {
 
 		// Sanitize each group.
 		$sanitized_groups = [];
+		$dropped_any_rule = false;
 		foreach ( $rules as $group ) {
 			$sanitized_group = self::sanitize_access_rules_group( $group );
 			if ( is_wp_error( $sanitized_group ) ) {
 				return $sanitized_group;
 			}
+			if ( is_array( $group ) && count( $sanitized_group ) < count( $group ) ) {
+				$dropped_any_rule = true;
+			}
 			if ( ! empty( $sanitized_group ) ) {
 				$sanitized_groups[] = $sanitized_group;
 			}
+		}
+
+		// Dropping unknown rules can empty a group, and an emptied group is skipped.
+		// Losing one group among several only tightens the gate, since groups are
+		// OR-ed — but losing every group leaves `access_rules => []`, which grants
+		// access to everyone. Fail the save rather than silently open the gate.
+		if ( $dropped_any_rule && empty( $sanitized_groups ) ) {
+			return new \WP_Error(
+				'invalid_access_rules',
+				__( 'None of this gate’s access rules are available right now, so saving it would grant access to everyone. Restore the integration that provides them, or turn off custom access for this gate.', 'newspack-plugin' ),
+				[ 'status' => 400 ]
+			);
 		}
 
 		return $sanitized_groups;
@@ -298,11 +315,12 @@ class Content_Gate_API {
 	 * A rule with an unknown slug is dropped — a gate may hold rules from a since-
 	 * deactivated integration, and those must not brick the save. Dropping it doesn't
 	 * change effective behavior, because `Access_Rules::evaluate_rule()` already
-	 * returns true for an unregistered slug. An *invalid value* on a known rule fails
-	 * the whole save instead: silently dropping that rule would flip its group from
-	 * failing closed at evaluate time to granting access (or empty the rule set,
-	 * which grants access outright), so the error must reach the caller for the
-	 * operator to fix the value.
+	 * returns true for an unregistered slug. The exception is a save where nothing
+	 * survives across every group, which leaves an empty rule set that grants access
+	 * outright; `sanitize_access_rules_grouped()` fails that save. An *invalid value*
+	 * on a known rule fails the whole save instead: silently dropping that rule would
+	 * flip its group from failing closed at evaluate time to granting access, so the
+	 * error must reach the caller for the operator to fix the value.
 	 *
 	 * @param array $group The group of access rules.
 	 *
@@ -363,40 +381,34 @@ class Content_Gate_API {
 			// (no institutions yet, no subscription products) still takes array
 			// values only. Free text saved here would evaluate as malformed.
 			if ( ! is_array( $access_rule['value'] ?? null ) ) {
-				return new \WP_Error(
-					'invalid_access_rule_value',
-					sprintf(
-						// translators: %s is the access rule name.
-						__( 'Invalid value for the "%s" access rule.', 'newspack-plugin' ),
-						$rule['name']
-					),
-					[ 'status' => 400 ]
-				);
+				return self::invalid_access_rule_value_error( $rule );
 			}
-			$value = array_values(
-				array_filter(
-					array_map(
-						function( $value ) {
-							return is_numeric( $value ) ? intval( $value ) : sanitize_text_field( $value );
-						},
-						$access_rule['value']
-					)
-				)
-			);
+			// Sanitize element by element rather than filtering the mapped list.
+			// `array_filter()` with no callback drops every falsy element, so an
+			// option value of `0` or `'0'` would vanish, and so would a nested
+			// array that `sanitize_text_field()` had already flattened to ''. A
+			// populated selection that sanitizes down to an empty list saves as
+			// "no constraint", which grants access — so reject it instead.
+			$value = [];
+			foreach ( $access_rule['value'] as $option_value ) {
+				if ( ! is_scalar( $option_value ) ) {
+					return self::invalid_access_rule_value_error( $rule );
+				}
+				$sanitized_option_value = is_numeric( $option_value ) ? intval( $option_value ) : sanitize_text_field( $option_value );
+				if ( '' === $sanitized_option_value ) {
+					continue;
+				}
+				$value[] = $sanitized_option_value;
+			}
+			if ( ! empty( $access_rule['value'] ) && empty( $value ) ) {
+				return self::invalid_access_rule_value_error( $rule );
+			}
 		} else {
 			// The mirror shape check: `sanitize_text_field()` silently collapses an
 			// array to '', and free-text rules read '' as "no constraint" — so a
 			// populated non-scalar value would grant access to everyone.
 			if ( ! is_scalar( $access_rule['value'] ?? '' ) ) {
-				return new \WP_Error(
-					'invalid_access_rule_value',
-					sprintf(
-						// translators: %s is the access rule name.
-						__( 'Invalid value for the "%s" access rule.', 'newspack-plugin' ),
-						$rule['name']
-					),
-					[ 'status' => 400 ]
-				);
+				return self::invalid_access_rule_value_error( $rule );
 			}
 			$value = sanitize_text_field( $access_rule['value'] ?? '' );
 		}
@@ -405,6 +417,26 @@ class Content_Gate_API {
 			'slug'  => $slug,
 			'value' => $value,
 		];
+	}
+
+	/**
+	 * The error returned when a rule's value can't be sanitized into the shape its
+	 * registration declares.
+	 *
+	 * @param array $rule The registered rule.
+	 *
+	 * @return \WP_Error
+	 */
+	private static function invalid_access_rule_value_error( $rule ) {
+		return new \WP_Error(
+			'invalid_access_rule_value',
+			sprintf(
+				// translators: %s is the access rule name.
+				__( 'Invalid value for the "%s" access rule.', 'newspack-plugin' ),
+				$rule['name']
+			),
+			[ 'status' => 400 ]
+		);
 	}
 
 	/**

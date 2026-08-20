@@ -469,6 +469,8 @@ class Newspack_Test_Institution extends WP_UnitTestCase {
 		$this->assertTrue( Institution::evaluate( $reader_id, '' ), 'An empty string means no constraint.' );
 
 		$this->assertFalse( Institution::evaluate( $reader_id, 'Springfield University' ), 'A populated non-array value must not grant access.' );
+		$this->assertFalse( Institution::evaluate( $reader_id, '0' ), 'A falsy string is still a value someone typed.' );
+		$this->assertFalse( Institution::evaluate( $reader_id, 0 ), 'A falsy number is still a value someone typed.' );
 	}
 
 	/**
