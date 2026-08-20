@@ -7,14 +7,13 @@
  * WordPress dependencies
  */
 import { __ } from '@wordpress/i18n';
-import { __experimentalVStack as VStack } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
 import { box, info } from '@wordpress/icons';
 import { Card } from '@wordpress/ui';
 
 /**
  * Internal dependencies
  */
-import { Grid, SectionHeader } from '../../../../../packages/components/src';
+import EmptyState from '../../../../../packages/components/src/empty-state';
 
 export type ImpactEmptyReason = 'no-products' | 'unsupported';
 
@@ -36,11 +35,9 @@ export default function ImpactEmpty( { reason }: { reason: ImpactEmptyReason } )
 	return (
 		<Card.Root className="newspack-pricing-rules__empty">
 			<Card.Content>
-				<Grid columns={ 4 } noMargin>
-					<VStack start={ 2 } end={ 4 } spacing={ 8 }>
-						<SectionHeader icon={ icon } title={ title } description={ body } pageHeader size="small" noMargin heading={ 3 } />
-					</VStack>
-				</Grid>
+				<EmptyState.Root size="small">
+					<EmptyState.Header icon={ icon } title={ title } description={ body } />
+				</EmptyState.Root>
 			</Card.Content>
 		</Card.Root>
 	);
