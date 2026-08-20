@@ -59,7 +59,7 @@
 	&__empty {
 		margin-top: wp-vars.$grid-unit-30;
 
-		.newspack-empty-state__header {
+		&-header {
 			margin: 0 auto;
 			max-width: 48ch;
 		}

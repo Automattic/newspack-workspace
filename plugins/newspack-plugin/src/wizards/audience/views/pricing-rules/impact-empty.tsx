@@ -36,7 +36,7 @@ export default function ImpactEmpty( { reason }: { reason: ImpactEmptyReason } )
 		<Card.Root className="newspack-pricing-rules__empty">
 			<Card.Content>
 				<EmptyState.Root size="small">
-					<EmptyState.Header icon={ icon } title={ title } description={ body } />
+					<EmptyState.Header icon={ icon } title={ title } description={ body } className="newspack-pricing-rules__empty-header" />
 				</EmptyState.Root>
 			</Card.Content>
 		</Card.Root>
