@@ -6,13 +6,13 @@
 
 import { getBlockType, registerBlockType } from '@wordpress/blocks';
 import { registerCoreBlocks } from '@wordpress/block-library';
-import { Spinner } from '@wordpress/components';
 import { DataViews } from '@wordpress/dataviews/wp';
 import { useCallback, useEffect, useMemo, useState } from '@wordpress/element';
 import { __ } from '@wordpress/i18n';
 
 import { getAdminUrl } from '../../admin-globals';
 import HeaderCount from '../../components/header-count';
+import LoadingState from '../../components/loading-state';
 import ItemsPerPage from '../../components/items-per-page';
 import { useHeaderActions } from '../../header-actions-context';
 import usePersistedView from '../../hooks/use-persisted-view';
@@ -21,7 +21,7 @@ import { isFetchAllPerPage, PER_PAGE_ALL } from '../../utils/per-page';
 import { LAYOUT_CPT_SLUG } from '../../../utils/consts';
 import useLayoutsData from './use-layouts-data';
 import usePrebuiltLayouts from './use-prebuilt-layouts';
-import { getFields, PREBUILT_AUTHOR_VALUE } from './fields';
+import { FIELD_IDS, getFields, PREBUILT_AUTHOR_VALUE } from './fields';
 import { getActions, renameLayout } from './actions';
 import { getInitialView } from './initial-filters';
 
@@ -59,7 +59,6 @@ const DEFAULT_VIEW = {
 	titleField: 'title',
 	mediaField: 'preview',
 	fields: [ 'author' ],
-	...getInitialView(),
 };
 
 const DEFAULT_LAYOUTS = {
@@ -74,12 +73,33 @@ const DEFAULT_LAYOUTS = {
 const DATAVIEWS_CONFIG = { perPageSizes: [] };
 const PER_PAGE_OPTIONS = [ 12, 24, 48, 96, PER_PAGE_ALL ];
 
+// `mediaField` is grid-only: the table renders it in the primary column,
+// so leaving it set mounts a BlockPreview iframe per row. Applied to the
+// restored view too, which arrives merged over the grid default.
+const withLayoutMedia = view => {
+	if ( 'table' === view.type && view.mediaField ) {
+		return { ...view, mediaField: undefined };
+	}
+	if ( 'grid' === view.type && ! view.mediaField ) {
+		return { ...view, mediaField: 'preview' };
+	}
+	return view;
+};
+
+const PERSIST_OPTIONS = {
+	perPageOptions: PER_PAGE_OPTIONS,
+	fieldIds: FIELD_IDS,
+	layoutTypes: Object.keys( DEFAULT_LAYOUTS ),
+	urlPatch: getInitialView(),
+	normalize: withLayoutMedia,
+};
+
 export default function LayoutsListScreen() {
 	useEffect( () => {
 		ensureCoreBlocksRegistered();
 	}, [] );
 
-	const [ view, setView ] = usePersistedView( 'layouts-list', DEFAULT_VIEW, PER_PAGE_OPTIONS );
+	const [ view, setView ] = usePersistedView( 'layouts-list', DEFAULT_VIEW, PERSIST_OPTIONS );
 	const [ renamingId, setRenamingId ] = useState( null );
 	// Bumping this forces every write path to refetch the saved data.
 	const [ mutationKey, setMutationKey ] = useState( 0 );
@@ -153,13 +173,7 @@ export default function LayoutsListScreen() {
 		return baseView;
 	}, [ view, showSaved, couldRideAlong, isPrebuiltLoading, ridingAlong, firstPageSavedSlots, restrictedAuthorIds ] );
 
-	const {
-		data: savedData,
-		paginationInfo: savedPagination,
-		isLoading,
-		hasResolved: savedHasResolved,
-		progress,
-	} = useLayoutsData( savedView, mutationKey );
+	const { data: savedData, paginationInfo: savedPagination, isLoading, hasResolved: savedHasResolved } = useLayoutsData( savedView, mutationKey );
 
 	const filteredPrebuilts = showPrebuilts ? prebuiltData : [];
 	const filteredSaved = showSaved ? savedData : [];
@@ -172,7 +186,7 @@ export default function LayoutsListScreen() {
 		const elements = [ { value: PREBUILT_AUTHOR_VALUE, label: __( 'Newspack', 'newspack-newsletters' ) } ];
 		const seen = new Set();
 		savedData.forEach( item => {
-			const author = item?._embedded?.author?.[ 0 ];
+			const author = item?.newspack_newsletters_author;
 			const id = author?.id;
 			const name = author?.name;
 			if ( id && name && ! seen.has( id ) ) {
@@ -211,17 +225,7 @@ export default function LayoutsListScreen() {
 		};
 	}, [ savedPagination, prebuiltCount, showSaved, authorShowPrebuilts, ridingAlong, firstPageSavedSlots, view.perPage, view.search, fetchingAll ] );
 
-	// `mediaField` is grid-only — in table mode the per-row iframe blows
-	// out row heights, so strip it on layout switches.
-	const onChangeView = useCallback( next => {
-		if ( next.type === 'table' ) {
-			setView( { ...next, mediaField: undefined } );
-		} else if ( next.type === 'grid' && ! next.mediaField ) {
-			setView( { ...next, mediaField: 'preview' } );
-		} else {
-			setView( next );
-		}
-	}, [] );
+	const onChangeView = useCallback( next => setView( withLayoutMedia( next ) ), [] );
 
 	const onMutated = useCallback( () => setMutationKey( key => key + 1 ), [] );
 
@@ -279,11 +283,7 @@ export default function LayoutsListScreen() {
 	}, [ hasResolvedOnce, isPrebuiltLoading, showSaved, savedHasResolved ] );
 
 	if ( ! hasResolvedOnce ) {
-		return (
-			<div className="newspack-newsletters-admin__loading">
-				<Spinner />
-			</div>
-		);
+		return <LoadingState label={ __( 'Fetching layouts…', 'newspack-newsletters' ) } />;
 	}
 
 	return (
@@ -306,7 +306,6 @@ export default function LayoutsListScreen() {
 					<ItemsPerPage
 						value={ view.perPage }
 						options={ PER_PAGE_OPTIONS }
-						progress={ progress }
 						onChange={ perPage => setView( current => ( { ...current, perPage, page: 1 } ) ) }
 					/>
 				}

@@ -132,3 +132,75 @@ describe( 'AdsQuickEditPanel status control', () => {
 		expect( screen.getByTestId( 'panel-dirty' ) ).toHaveTextContent( 'true' );
 	} );
 } );
+
+describe( 'AdsQuickEditPanel taxonomy seeding', () => {
+	beforeEach( () => {
+		apiFetch.mockReset();
+		apiFetch.mockResolvedValue( {} );
+	} );
+
+	const itemWithTerms = () => ( {
+		id: 42,
+		status: 'publish',
+		title: { raw: 'Summer sale' },
+		meta: {},
+		newspack_newsletters_terms: {
+			newspack_nl_advertiser: [ { id: 10, name: 'Acme' } ],
+			newspack_nl_ad_placement: [ { id: 20, name: 'Header' } ],
+			category: [],
+		},
+	} );
+
+	it( 'seeds the advertiser and placement pickers from the terms field', async () => {
+		const { container } = renderPanel( itemWithTerms() );
+		await screen.findByRole( 'radio', { name: 'Active' } );
+
+		const tokens = [ ...container.querySelectorAll( '.components-form-token-field__token-text' ) ].map( el => el.textContent );
+		expect( tokens.some( text => text.includes( 'Acme' ) ) ).toBe( true );
+		expect( tokens.some( text => text.includes( 'Header' ) ) ).toBe( true );
+		expect( screen.getByTestId( 'panel-dirty' ) ).toHaveTextContent( 'false' );
+	} );
+
+	it( 'leaves the taxonomies out of a status-only save', async () => {
+		renderPanel( itemWithTerms() );
+		await screen.findByRole( 'radio', { name: 'Active' } );
+
+		fireEvent.click( screen.getByRole( 'radio', { name: 'Inactive' } ) );
+		fireEvent.click( screen.getByTestId( 'panel-save' ) );
+
+		await waitFor( () => expect( postCall() ).toBeDefined() );
+		expect( postCall().data ).not.toHaveProperty( 'newspack_nl_advertiser' );
+		expect( postCall().data ).not.toHaveProperty( 'ad_placement' );
+		expect( postCall().data ).not.toHaveProperty( 'categories' );
+		expect( postCall().data ).toMatchObject( { status: 'draft' } );
+	} );
+
+	it( 'omits the taxonomies when the item arrives without the terms field', async () => {
+		const item = itemWithTerms();
+		delete item.newspack_newsletters_terms;
+		renderPanel( item );
+		await screen.findByRole( 'radio', { name: 'Active' } );
+
+		fireEvent.click( screen.getByRole( 'radio', { name: 'Inactive' } ) );
+		fireEvent.click( screen.getByTestId( 'panel-save' ) );
+
+		await waitFor( () => expect( postCall() ).toBeDefined() );
+		expect( postCall().data ).not.toHaveProperty( 'newspack_nl_advertiser' );
+		expect( postCall().data ).not.toHaveProperty( 'ad_placement' );
+		expect( postCall().data ).not.toHaveProperty( 'categories' );
+	} );
+
+	it( 'sends a taxonomy the user actually edited', async () => {
+		const { container } = renderPanel( itemWithTerms() );
+		await screen.findByRole( 'radio', { name: 'Active' } );
+
+		const removeAcme = [ ...container.querySelectorAll( '.components-form-token-field__remove-token' ) ][ 0 ];
+		fireEvent.click( removeAcme );
+		fireEvent.click( screen.getByTestId( 'panel-save' ) );
+
+		await waitFor( () => expect( postCall() ).toBeDefined() );
+		expect( postCall().data ).toMatchObject( { newspack_nl_advertiser: [] } );
+		expect( postCall().data ).not.toHaveProperty( 'ad_placement' );
+		expect( postCall().data ).not.toHaveProperty( 'categories' );
+	} );
+} );

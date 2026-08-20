@@ -15,7 +15,7 @@ import { envelope } from '@wordpress/icons';
 import QuickEditPanel from '../../components/quick-edit-panel';
 import { getNewsletterVisibilityDescriptions } from '../../../utils/service-provider';
 import { notifyError, notifySuccess } from '../../notices';
-import { fetchAllTerms, initialSelectionsForTaxonomy, resolveTokens, selectionsFromIds, sortedIdsEqual, unresolvedIds } from '../../utils/terms';
+import { fetchAllTerms, resolveTokens, selectionsFromIds, sortedIdsEqual, unresolvedIds } from '../../utils/terms';
 
 const POSTS_PATH = '/wp/v2/newspack_nl_cpt';
 
@@ -46,15 +46,10 @@ function useQuickEditOptions() {
 export default function NewslettersQuickEditPanel( { item, onClose, onSaved } ) {
 	const { categories, tags } = useQuickEditOptions();
 
-	// Terms are only embedded when a taxonomy column is visible.
-	const initialCategorySelections = useMemo( () => {
-		const embedded = initialSelectionsForTaxonomy( item, 'category' );
-		return embedded.length ? embedded : selectionsFromIds( item?.categories, categories );
-	}, [ item, categories ] );
-	const initialTagSelections = useMemo( () => {
-		const embedded = initialSelectionsForTaxonomy( item, 'post_tag' );
-		return embedded.length ? embedded : selectionsFromIds( item?.tags, tags );
-	}, [ item, tags ] );
+	// The row carries term IDs; the option lists that resolve them to
+	// names arrive asynchronously.
+	const initialCategorySelections = useMemo( () => selectionsFromIds( item?.categories, categories ), [ item, categories ] );
+	const initialTagSelections = useMemo( () => selectionsFromIds( item?.tags, tags ), [ item, tags ] );
 	// Unresolvable terms can't be shown or removed, so they ride along on save.
 	const unresolvedCategoryIds = useMemo( () => unresolvedIds( item?.categories, initialCategorySelections ), [ item, initialCategorySelections ] );
 	const unresolvedTagIds = useMemo( () => unresolvedIds( item?.tags, initialTagSelections ), [ item, initialTagSelections ] );

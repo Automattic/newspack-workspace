@@ -19,12 +19,10 @@ function buildPath( view ) {
 		// `offset` overrides `page` so page 1 can reserve slots for prebuilts.
 		supportsOffset: true,
 		// `content.raw` (not `.rendered`) — previews parse blocks client-side,
-		// so skip the whole `the_content` chain. Term embeds aren't consumed.
-		// `_links` stays in the list — `_embed` only expands links that
-		// survive the `_fields` filter.
+		// so skip the whole `the_content` chain. No `_links` either: see
+		// the newsletters-list note for what it costs.
 		extraParams: {
-			_embed: 'author',
-			_fields: 'id,status,title,date,modified,author,content.raw,meta,_links',
+			_fields: 'id,status,title,date,modified,author,content.raw,meta,newspack_newsletters_author',
 		},
 		arrayParams: [ { viewKey: 'author', param: 'author' } ],
 	} );

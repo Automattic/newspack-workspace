@@ -382,6 +382,80 @@ class Ads_List_REST_Test extends WP_UnitTestCase {
 	}
 
 	/**
+	 * The terms field is registered too. It exists so the list never has
+	 * to ask for `_links`, which is what makes core build a link set and
+	 * compute target hints for every row.
+	 */
+	public function test_terms_field_is_registered_on_ads_cpt() {
+		do_action( 'rest_api_init' );
+
+		global $wp_rest_additional_fields;
+
+		$cpt    = Ads::CPT;
+		$fields = isset( $wp_rest_additional_fields[ $cpt ] ) ? $wp_rest_additional_fields[ $cpt ] : [];
+
+		$this->assertArrayHasKey( 'newspack_newsletters_terms', $fields );
+		$this->assertIsCallable( $fields['newspack_newsletters_terms']['get_callback'] );
+	}
+
+	/**
+	 * Every taxonomy the ads list touches ships as `{ id, name }`: the
+	 * columns render the names, and Quick Edit seeds its pickers from
+	 * the IDs and sends all three back on every save.
+	 */
+	public function test_terms_field_covers_every_quick_edit_taxonomy() {
+		$post_id     = $this->make_ad();
+		$advertiser  = self::factory()->term->create(
+			[
+				'taxonomy' => 'newspack_nl_advertiser',
+				'name'     => 'Acme',
+			]
+		);
+		$placement   = self::factory()->term->create(
+			[
+				'taxonomy' => 'newspack_nl_ad_placement',
+				'name'     => 'Header',
+			]
+		);
+		$category_id = self::factory()->category->create( [ 'name' => 'Promotions' ] );
+
+		wp_set_post_terms( $post_id, [ $advertiser ], 'newspack_nl_advertiser' );
+		wp_set_post_terms( $post_id, [ $placement ], 'newspack_nl_ad_placement' );
+		wp_set_post_terms( $post_id, [ $category_id ], 'category' );
+
+		$terms = Ads_List_REST::get_terms_payload( $post_id, Ads_List_REST::LIST_TAXONOMIES );
+
+		$this->assertSame( [ 'newspack_nl_advertiser', 'newspack_nl_ad_placement', 'category' ], array_keys( $terms ) );
+		$this->assertSame(
+			[
+				[
+					'id'   => $advertiser,
+					'name' => 'Acme',
+				],
+			],
+			$terms['newspack_nl_advertiser'] 
+		);
+		$this->assertSame(
+			[
+				[
+					'id'   => $placement,
+					'name' => 'Header',
+				],
+			],
+			$terms['newspack_nl_ad_placement'] 
+		);
+		$this->assertSame(
+			[
+				[
+					'id'   => $category_id,
+					'name' => 'Promotions',
+				],
+			],
+			$terms['category'] 
+		);
+	}
+
+	/**
 	 * Helper: build a REST request with the given query params.
 	 *
 	 * @param array $params Query params keyed by name.
@@ -1402,5 +1476,60 @@ class Ads_List_REST_Test extends WP_UnitTestCase {
 		$this->assertSame( '0', get_post_meta( $post_id, 'tracking_impressions', true ) );
 		$this->assertSame( '0', get_post_meta( $post_id, 'tracking_clicks', true ) );
 		$this->assertNotEmpty( get_post_meta( $post_id, 'tracking_impressions', false ) );
+	}
+
+	/**
+	 * Quick Edit seeds the advertiser, placement and category pickers off
+	 * this payload, so it has to survive a real dispatch with every
+	 * requested taxonomy present, and only in the `edit` context the list
+	 * asks for.
+	 */
+	public function test_the_terms_field_reaches_the_response_only_in_edit_context() {
+		global $wp_rest_server;
+		$wp_rest_server = new WP_REST_Server();
+		do_action( 'rest_api_init' );
+
+		wp_set_current_user( self::factory()->user->create( [ 'role' => 'administrator' ] ) );
+
+		$post_id    = self::factory()->post->create(
+			[
+				'post_type'   => Ads::CPT,
+				'post_status' => 'publish',
+				'post_title'  => 'Terms field ad',
+			]
+		);
+		$advertiser = self::factory()->term->create(
+			[
+				'taxonomy' => Ads::ADVERTISER_TAX,
+				'name'     => 'Acme',
+			]
+		);
+		wp_set_post_terms( $post_id, [ $advertiser ], Ads::ADVERTISER_TAX );
+
+		$route = '/wp/v2/' . Ads::CPT;
+
+		$edit = new WP_REST_Request( 'GET', $route );
+		$edit->set_param( 'context', 'edit' );
+		$terms = rest_do_request( $edit )->get_data()[0]['newspack_newsletters_terms'];
+
+		$this->assertSame(
+			[
+				[
+					'id'   => $advertiser,
+					'name' => 'Acme',
+				],
+			],
+			$terms[ Ads::ADVERTISER_TAX ]
+		);
+		// Every requested taxonomy is present, so Quick Edit never has to
+		// tell "no terms" apart from "taxonomy missing".
+		foreach ( Ads_List_REST::LIST_TAXONOMIES as $taxonomy ) {
+			$this->assertArrayHasKey( $taxonomy, $terms );
+		}
+
+		$view_item = rest_do_request( new WP_REST_Request( 'GET', $route ) )->get_data()[0];
+		$this->assertArrayNotHasKey( 'newspack_newsletters_terms', $view_item );
+
+		$wp_rest_server = null;
 	}
 }

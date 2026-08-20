@@ -7,13 +7,13 @@
  * `useAllAdvertisers`).
  */
 
-import { __experimentalHStack as HStack, Spinner } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
 import { DataViews } from '@wordpress/dataviews/wp';
 import { useCallback, useMemo, useState } from '@wordpress/element';
 import { __ } from '@wordpress/i18n';
 import { store } from '@wordpress/icons';
 
 import EmptyState from '../../components/empty-state';
+import LoadingState from '../../components/loading-state';
 import HeaderCount from '../../components/header-count';
 import ItemsPerPage from '../../components/items-per-page';
 import { useHeaderActions } from '../../header-actions-context';
@@ -22,7 +22,7 @@ import AdvertiserModal from './modal';
 import useAdvertisersData from './use-advertisers-data';
 import useAllAdvertisers from './use-all-advertisers';
 import { getInitialView } from './initial-filters';
-import { getFields } from './fields';
+import { FIELD_IDS, getFields } from './fields';
 import { getActions } from './actions';
 
 const DEFAULT_VIEW = {
@@ -34,17 +34,22 @@ const DEFAULT_VIEW = {
 	filters: [],
 	titleField: 'name',
 	fields: [ 'description', 'slug', 'count' ],
-	...getInitialView(),
 };
 
 const DEFAULT_LAYOUTS = { table: {} };
+
+const PERSIST_OPTIONS = {
+	fieldIds: FIELD_IDS,
+	layoutTypes: Object.keys( DEFAULT_LAYOUTS ),
+	urlPatch: getInitialView(),
+};
 
 // Suppress the built-in ViewConfig per-page control — the custom
 // `ItemsPerPage` renders in its place inside the View options popover.
 const DATAVIEWS_CONFIG = { perPageSizes: [] };
 
 export default function AdvertisersListScreen() {
-	const [ view, setView ] = usePersistedView( 'advertisers-list', DEFAULT_VIEW );
+	const [ view, setView ] = usePersistedView( 'advertisers-list', DEFAULT_VIEW, PERSIST_OPTIONS );
 	const [ modalState, setModalState ] = useState( null ); // null | { mode: 'add' | 'edit', advertiser?: Object }
 	// Single mutation trigger shared by every write path (Modal save,
 	// per-row Delete, bulk Delete). Bumping it refetches both the
@@ -54,7 +59,7 @@ export default function AdvertisersListScreen() {
 	// created one appears immediately on the next modal open.
 	const [ mutationKey, setMutationKey ] = useState( 0 );
 
-	const { data, paginationInfo, isLoading, hasResolved, hasLoadedOnce, progress } = useAdvertisersData( view, mutationKey );
+	const { data, paginationInfo, isLoading, hasResolved, hasLoadedOnce } = useAdvertisersData( view, mutationKey );
 	const allAdvertisers = useAllAdvertisers( mutationKey );
 
 	// `setModalState` (a `useState` setter) is itself stable, but wrapping
@@ -90,11 +95,7 @@ export default function AdvertisersListScreen() {
 	);
 
 	if ( ! hasResolved ) {
-		return (
-			<HStack className="newspack-newsletters-admin__loading" justify="center">
-				<Spinner />
-			</HStack>
-		);
+		return <LoadingState label={ __( 'Fetching advertisers…', 'newspack-newsletters' ) } />;
 	}
 
 	return (
@@ -126,11 +127,7 @@ export default function AdvertisersListScreen() {
 					search
 					config={ DATAVIEWS_CONFIG }
 					header={
-						<ItemsPerPage
-							value={ view.perPage }
-							progress={ progress }
-							onChange={ perPage => setView( current => ( { ...current, perPage, page: 1 } ) ) }
-						/>
+						<ItemsPerPage value={ view.perPage } onChange={ perPage => setView( current => ( { ...current, perPage, page: 1 } ) ) } />
 					}
 				/>
 			) }

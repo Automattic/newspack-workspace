@@ -8,22 +8,19 @@
  * sentinel would render as "-1". DataViews offers no slot inside the
  * popover, so this component portals a look-alike ToggleGroupControl
  * into the popover when it opens (anchored on the same class names the
- * package styles against). This component itself is mounted in the
- * DataViews `header` slot; while a fetch-all walk runs it overlays a
- * centered spinner + progress message on the list (the popover is
- * closed during a walk, and the header offers no room for it).
+ * package styles against). It is mounted in the DataViews `header` slot.
+ *
+ * Loading is left entirely to DataViews, which pulses the list and sets
+ * `aria-busy` while a fetch is in flight. A second, custom indicator on
+ * top of that read as two competing animations.
  */
 
-import { speak } from '@wordpress/a11y';
 import {
-	Spinner,
-	__experimentalText as Text, // eslint-disable-line @wordpress/no-unsafe-wp-apis
 	__experimentalToggleGroupControl as ToggleGroupControl, // eslint-disable-line @wordpress/no-unsafe-wp-apis
 	__experimentalToggleGroupControlOption as ToggleGroupControlOption, // eslint-disable-line @wordpress/no-unsafe-wp-apis
-	__experimentalVStack as VStack, // eslint-disable-line @wordpress/no-unsafe-wp-apis
 } from '@wordpress/components';
-import { createPortal, useEffect, useRef, useState } from '@wordpress/element';
-import { __, sprintf } from '@wordpress/i18n';
+import { createPortal, useEffect, useState } from '@wordpress/element';
+import { __ } from '@wordpress/i18n';
 
 import { DEFAULT_PER_PAGE_OPTIONS, PER_PAGE_ALL } from '../../utils/per-page';
 
@@ -75,58 +72,15 @@ function usePopoverSlot() {
 
 /**
  * @param {Object}        props
- * @param {number}        props.value      Current `view.perPage`.
- * @param {Function}      props.onChange   Receives the new perPage value.
- * @param {Array<number>} [props.options]  Selectable values; `PER_PAGE_ALL` renders as "All".
- * @param {Object|null}   [props.progress] Fetch-all progress (`{ loaded, total }`) or null.
+ * @param {number}        props.value     Current `view.perPage`.
+ * @param {Function}      props.onChange  Receives the new perPage value.
+ * @param {Array<number>} [props.options] Selectable values; `PER_PAGE_ALL` renders as "All".
  */
-export default function ItemsPerPage( { value, onChange, options = DEFAULT_PER_PAGE_OPTIONS, progress = null } ) {
+export default function ItemsPerPage( { value, onChange, options = DEFAULT_PER_PAGE_OPTIONS } ) {
 	const slot = usePopoverSlot();
-	const isLoadingAll = !! progress;
-
-	// The visible message updates once per batch — up to ~100 times on a
-	// full walk — so it is not a live region. Announce the two moments
-	// that matter instead.
-	const wasLoadingAllRef = useRef( false );
-	useEffect( () => {
-		if ( isLoadingAll === wasLoadingAllRef.current ) {
-			return;
-		}
-		wasLoadingAllRef.current = isLoadingAll;
-		speak(
-			isLoadingAll
-				? __( 'Loading all items. This may take a moment.', 'newspack-newsletters' )
-				: __( 'Finished loading items.', 'newspack-newsletters' ),
-			'polite'
-		);
-	}, [ isLoadingAll ] );
-
-	// Center on the admin content area, not the viewport — otherwise the
-	// admin menu skews the overlay off-center.
-	const wpbodyRect = progress ? document.getElementById( 'wpbody' )?.getBoundingClientRect() : null;
 
 	return (
 		<>
-			{ progress &&
-				createPortal(
-					<VStack
-						className="newspack-newsletters-fetch-all-progress"
-						spacing={ 3 }
-						alignment="center"
-						style={ wpbodyRect ? { left: wpbodyRect.left + wpbodyRect.width / 2 } : undefined }
-					>
-						<Spinner />
-						<Text weight={ 600 }>
-							{ sprintf(
-								/* translators: 1: number of items loaded so far, 2: total number of items. */
-								__( 'Loading %1$s of %2$s…', 'newspack-newsletters' ),
-								progress.loaded.toLocaleString(),
-								progress.total.toLocaleString()
-							) }
-						</Text>
-					</VStack>,
-					document.body
-				) }
 			{ slot &&
 				createPortal(
 					<ToggleGroupControl

@@ -2,7 +2,6 @@
  * Newsletters list screen — React DataView replacing the classic CPT list.
  */
 
-import { __experimentalHStack as HStack, Spinner } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
 import { DataViews } from '@wordpress/dataviews/wp';
 import { useMemo, useState } from '@wordpress/element';
 import { __ } from '@wordpress/i18n';
@@ -10,18 +9,18 @@ import { envelope } from '@wordpress/icons';
 
 import { getAdminUrl, getCptSlug } from '../../admin-globals';
 import EmptyState from '../../components/empty-state';
+import LoadingState from '../../components/loading-state';
 import HeaderCount from '../../components/header-count';
 import ItemsPerPage from '../../components/items-per-page';
 import { useHeaderActions } from '../../header-actions-context';
 import usePersistedView from '../../hooks/use-persisted-view';
 import useNewslettersData from './use-newsletters-data';
 import useFilterElements from './use-filter-elements';
-import { getFields } from './fields';
+import { FIELD_IDS, getFields } from './fields';
 import { getActions } from './actions';
 import { getInitialView } from './initial-filters';
 import NewslettersQuickEditPanel from './quick-edit-panel';
 
-// URL-seeded patch last so forwarded-from-legacy values override defaults.
 const DEFAULT_VIEW = {
 	type: 'table',
 	page: 1,
@@ -31,19 +30,26 @@ const DEFAULT_VIEW = {
 	filters: [],
 	titleField: 'title',
 	fields: [ 'status', 'date', 'send_date', 'send_list', 'author', 'public_page' ],
-	...getInitialView(),
 };
 
 const DEFAULT_LAYOUTS = { table: {} };
+
+// `urlPatch` is read at module scope so a forwarded legacy link seeds
+// the view once, rather than being re-applied on every re-render.
+const PERSIST_OPTIONS = {
+	fieldIds: FIELD_IDS,
+	layoutTypes: Object.keys( DEFAULT_LAYOUTS ),
+	urlPatch: getInitialView(),
+};
 
 // Suppress the built-in ViewConfig per-page control — the custom
 // `ItemsPerPage` renders in its place inside the View options popover.
 const DATAVIEWS_CONFIG = { perPageSizes: [] };
 
 export default function NewslettersListScreen() {
-	const [ view, setView ] = usePersistedView( 'newsletters-list', DEFAULT_VIEW );
+	const [ view, setView ] = usePersistedView( 'newsletters-list', DEFAULT_VIEW, PERSIST_OPTIONS );
 	const [ quickEditItem, setQuickEditItem ] = useState( null );
-	const { data, paginationInfo, isLoading, hasResolved, hasLoadedOnce, trashCount, progress, refresh } = useNewslettersData( view );
+	const { data, paginationInfo, isLoading, hasResolved, hasLoadedOnce, trashCount, refresh } = useNewslettersData( view );
 	const filterElements = useFilterElements();
 
 	const addNewHref = `${ getAdminUrl() }post-new.php?post_type=${ getCptSlug() }`;
@@ -76,11 +82,7 @@ export default function NewslettersListScreen() {
 	);
 
 	if ( ! hasResolved ) {
-		return (
-			<HStack className="newspack-newsletters-admin__loading" justify="center">
-				<Spinner />
-			</HStack>
-		);
+		return <LoadingState label={ __( 'Fetching newsletters…', 'newspack-newsletters' ) } />;
 	}
 
 	if ( isStrictEmpty ) {
@@ -111,13 +113,7 @@ export default function NewslettersListScreen() {
 				getItemId={ item => String( item.id ) }
 				search
 				config={ DATAVIEWS_CONFIG }
-				header={
-					<ItemsPerPage
-						value={ view.perPage }
-						progress={ progress }
-						onChange={ perPage => setView( current => ( { ...current, perPage, page: 1 } ) ) }
-					/>
-				}
+				header={ <ItemsPerPage value={ view.perPage } onChange={ perPage => setView( current => ( { ...current, perPage, page: 1 } ) ) } /> }
 			/>
 			{ quickEditItem && (
 				<NewslettersQuickEditPanel

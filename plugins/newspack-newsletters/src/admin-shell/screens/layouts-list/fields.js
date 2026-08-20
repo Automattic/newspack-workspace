@@ -131,13 +131,12 @@ export function getFields( { renamingId = null, onRenameCommit, onRenameCancel, 
 	};
 
 	const renderAuthor = ( { item } ) => {
-		const author = item?._embedded?.author?.[ 0 ];
+		const author = item?.newspack_newsletters_author;
 		if ( ! author ) {
 			return null;
 		}
 		const isPrebuilt = !! item?.is_prebuilt;
-		// Prefer the 48px source so the 16px display stays crisp on hi-DPI screens.
-		const avatarUrl = ! isPrebuilt && ( author.avatar_urls?.[ 48 ] || author.avatar_urls?.[ 24 ] );
+		const avatarUrl = ! isPrebuilt && author.avatar;
 		return (
 			<span className="newspack-newsletters-list__author">
 				{ avatarUrl ? (
@@ -156,7 +155,8 @@ export function getFields( { renamingId = null, onRenameCommit, onRenameCancel, 
 		id: 'author',
 		label: __( 'Author', 'newspack-newsletters' ),
 		enableSorting: false,
-		getValue: ( { item } ) => ( item?.is_prebuilt ? PREBUILT_AUTHOR_VALUE : String( item?._embedded?.author?.[ 0 ]?.id ?? item?.author ?? '' ) ),
+		getValue: ( { item } ) =>
+			item?.is_prebuilt ? PREBUILT_AUTHOR_VALUE : String( item?.newspack_newsletters_author?.id ?? item?.author ?? '' ),
 		render: renderAuthor,
 	};
 
@@ -245,3 +245,5 @@ function PreviewCard( { item } ) {
 		</LazyPreview>
 	);
 }
+
+export const FIELD_IDS = getFields().map( field => field.id );

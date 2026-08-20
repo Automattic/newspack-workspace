@@ -314,6 +314,87 @@ class Newsletters_List_REST_Test extends WP_UnitTestCase {
 	}
 
 	/**
+	 * The author and term fields are registered too. They exist so the
+	 * list never has to ask for `_links`, which is what makes core build
+	 * a link set and compute target hints for every row.
+	 */
+	public function test_author_and_term_fields_are_registered_on_newsletters_cpt() {
+		do_action( 'rest_api_init' );
+
+		global $wp_rest_additional_fields;
+
+		$cpt    = Newspack_Newsletters::NEWSPACK_NEWSLETTERS_CPT;
+		$fields = isset( $wp_rest_additional_fields[ $cpt ] ) ? $wp_rest_additional_fields[ $cpt ] : [];
+
+		foreach ( [ 'newspack_newsletters_author', 'newspack_newsletters_terms' ] as $field ) {
+			$this->assertArrayHasKey( $field, $fields );
+			$this->assertIsCallable( $fields[ $field ]['get_callback'] );
+		}
+	}
+
+	/**
+	 * The author field carries everything the Author column renders —
+	 * the display name and an avatar URL — so the column no longer needs
+	 * `_embed=author`.
+	 */
+	public function test_author_field_returns_display_name_and_avatar() {
+		$user_id = self::factory()->user->create(
+			[
+				'role'         => 'editor',
+				'display_name' => 'Ada Lovelace',
+			]
+		);
+		$post_id = $this->make_newsletter( [ 'post_author' => $user_id ] );
+
+		$author = Newsletters_List_REST::get_author_payload( $post_id );
+
+		$this->assertSame( $user_id, $author['id'] );
+		$this->assertSame( 'Ada Lovelace', $author['name'] );
+		$this->assertNotSame( '', $author['avatar'] );
+	}
+
+	/**
+	 * A post whose author no longer exists renders a blank cell rather
+	 * than tripping on a missing user.
+	 */
+	public function test_author_field_is_null_when_the_user_is_gone() {
+		$post_id = $this->make_newsletter( [ 'post_author' => 999999 ] );
+
+		$this->assertNull( Newsletters_List_REST::get_author_payload( $post_id ) );
+		$this->assertNull( Newsletters_List_REST::get_author_payload( 0 ) );
+	}
+
+	/**
+	 * The terms field returns `{ id, name }` per taxonomy: the columns
+	 * render the names, Quick Edit seeds its pickers from the IDs.
+	 */
+	public function test_terms_field_returns_names_per_taxonomy() {
+		$post_id = $this->make_newsletter();
+		// Hierarchical taxonomies take IDs — passing names casts them to 0.
+		$category_ids = [
+			self::factory()->category->create( [ 'name' => 'Weekly' ] ),
+			self::factory()->category->create( [ 'name' => 'Culture' ] ),
+		];
+		wp_set_post_terms( $post_id, $category_ids, 'category' );
+		wp_set_post_terms( $post_id, [ 'digest' ], 'post_tag' );
+
+		$terms = Newsletters_List_REST::get_terms_payload( $post_id, Newsletters_List_REST::LIST_TAXONOMIES );
+
+		$this->assertEqualSets( [ 'Weekly', 'Culture' ], wp_list_pluck( $terms['category'], 'name' ) );
+		$this->assertEqualSets( $category_ids, wp_list_pluck( $terms['category'], 'id' ) );
+		$this->assertSame( [ 'digest' ], wp_list_pluck( $terms['post_tag'], 'name' ) );
+
+		$empty = Newsletters_List_REST::get_terms_payload( $this->make_newsletter(), Newsletters_List_REST::LIST_TAXONOMIES );
+		$this->assertSame(
+			[
+				'category' => [],
+				'post_tag' => [],
+			],
+			$empty
+		);
+	}
+
+	/**
 	 * Helper: build a REST request with the given query params.
 	 *
 	 * @param array $params Query params keyed by name.
@@ -1385,5 +1466,157 @@ class Newsletters_List_REST_Test extends WP_UnitTestCase {
 		$this->assertContains( $their_cat, array_column( $options['categories'], 'id' ) );
 		$this->assertContains( 'mine-list', array_column( $options['send_lists'], 'id' ) );
 		$this->assertContains( 'their-list', array_column( $options['send_lists'], 'id' ) );
+	}
+
+	/**
+	 * Helper: dispatch a collection request through the REST server.
+	 *
+	 * @param array $params Query params keyed by name.
+	 * @return array First item of the response body.
+	 */
+	private function dispatch_collection( $params = [] ) {
+		global $wp_rest_server;
+		$wp_rest_server = new WP_REST_Server();
+		do_action( 'rest_api_init' );
+
+		$response = rest_do_request( $this->rest_request( $params ) );
+		$this->assertSame( 200, $response->get_status(), 'Collection request failed: ' . wp_json_encode( $response->get_data() ) );
+		$data = $response->get_data();
+
+		return isset( $data[0] ) ? $data[0] : [];
+	}
+
+	/**
+	 * The fields have to survive an actual dispatch, not just be
+	 * registered: the list reads them off the response body.
+	 */
+	public function test_the_new_fields_reach_the_response_body() {
+		$user_id = self::factory()->user->create(
+			[
+				'role'         => 'editor',
+				'display_name' => 'Ada Lovelace',
+			]
+		);
+		wp_set_current_user( $user_id );
+
+		$post_id  = $this->make_newsletter( [ 'post_author' => $user_id ] );
+		$category = self::factory()->category->create( [ 'name' => 'Weekly' ] );
+		wp_set_post_terms( $post_id, [ $category ], 'category' );
+
+		$item = $this->dispatch_collection(
+			[
+				'context' => 'edit',
+				'status'  => 'draft',
+			]
+		);
+
+		$this->assertSame( 'Ada Lovelace', $item['newspack_newsletters_author']['name'] );
+		$this->assertSame(
+			[
+				[
+					'id'   => $category,
+					'name' => 'Weekly',
+				],
+			],
+			$item['newspack_newsletters_terms']['category']
+		);
+		$this->assertSame( [], $item['newspack_newsletters_terms']['post_tag'] );
+	}
+
+	/**
+	 * The newsletters CPT is public, so an anonymous caller can read the
+	 * collection. Only the list screens need these fields, and they all
+	 * ask for `edit`.
+	 */
+	public function test_the_new_fields_are_absent_from_an_anonymous_read() {
+		$this->make_newsletter(
+			[
+				'post_status' => 'publish',
+				'meta_input'  => [ 'is_public' => 1 ],
+			]
+		);
+		wp_set_current_user( 0 );
+
+		$item = $this->dispatch_collection();
+
+		$this->assertNotEmpty( $item );
+		$this->assertArrayNotHasKey( 'newspack_newsletters_author', $item );
+		$this->assertArrayNotHasKey( 'newspack_newsletters_terms', $item );
+	}
+
+	/**
+	 * `_fields` selection has to keep working, since that is what keeps
+	 * `content.rendered` out of the list's responses.
+	 */
+	public function test_the_new_fields_can_be_selected_with_fields() {
+		wp_set_current_user( self::factory()->user->create( [ 'role' => 'editor' ] ) );
+		$this->make_newsletter();
+
+		$item = $this->dispatch_collection(
+			[
+				'context' => 'edit',
+				'status'  => 'draft',
+				'_fields' => 'id,newspack_newsletters_author',
+			]
+		);
+
+		$this->assertArrayHasKey( 'newspack_newsletters_author', $item );
+		$this->assertArrayNotHasKey( 'content', $item );
+		$this->assertArrayNotHasKey( 'newspack_newsletters_terms', $item );
+	}
+
+	/**
+	 * The point of the fields is that they read primed caches. If either
+	 * ever went to the database per row, the query count would climb with
+	 * the number of rows.
+	 */
+	public function test_the_new_fields_do_not_query_per_row() {
+		$user_id = self::factory()->user->create( [ 'role' => 'editor' ] );
+		wp_set_current_user( $user_id );
+
+		$category = self::factory()->category->create( [ 'name' => 'Weekly' ] );
+		for ( $i = 0; $i < 20; $i++ ) {
+			$post_id = $this->make_newsletter( [ 'post_author' => $user_id ] );
+			wp_set_post_terms( $post_id, [ $category ], 'category' );
+			wp_set_post_terms( $post_id, [ 'digest' ], 'post_tag' );
+		}
+
+		$base = 'id,status,title,date';
+
+		$without = $this->count_queries_for_fields( $base );
+		$with    = $this->count_queries_for_fields( $base . ',newspack_newsletters_author,newspack_newsletters_terms' );
+
+		// Both fields read caches `WP_Query` primes for the page, so the
+		// cost is flat. Per-row lookups across 20 rows and two taxonomies
+		// would add dozens, not a handful.
+		$this->assertLessThanOrEqual(
+			$without + 4,
+			$with,
+			"Adding the fields took the query count from {$without} to {$with} over 20 rows."
+		);
+	}
+
+	/**
+	 * Helper: queries run by one collection dispatch for a `_fields` set.
+	 *
+	 * @param string $fields Comma-joined `_fields` value.
+	 * @return int Query count.
+	 */
+	private function count_queries_for_fields( $fields ) {
+		global $wpdb;
+
+		wp_cache_flush();
+		$before = $wpdb->num_queries;
+
+		$this->dispatch_collection(
+			[
+				'context'  => 'edit',
+				'status'   => 'draft',
+				'per_page' => 100,
+				'_fields'  => $fields,
+			]
+		);
+
+		return $wpdb->num_queries - $before;
 	}
 }
