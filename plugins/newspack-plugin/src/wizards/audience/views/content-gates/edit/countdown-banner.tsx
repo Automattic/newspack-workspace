@@ -107,7 +107,7 @@ export default function CountdownBanner( {
 	const isEnabled = !! countdown.enabled;
 
 	return (
-		<>
+		<VStack spacing={ 6 }>
 			<Grid columns={ 2 } noMargin>
 				<VStack spacing={ 6 } justify="flex-start">
 					<SectionHeader
@@ -246,6 +246,6 @@ export default function CountdownBanner( {
 					</div>
 				</BaseControl>
 			</div>
-		</>
+		</VStack>
 	);
 }
