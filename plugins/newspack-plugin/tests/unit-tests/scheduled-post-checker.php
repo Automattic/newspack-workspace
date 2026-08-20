@@ -18,7 +18,16 @@ class Scheduled_Post_Checker_Test extends WP_UnitTestCase {
 	private $registered_cpts = [];
 
 	/**
-	 * Unregister any CPTs a test registered so they don't leak into the next one.
+	 * Filters added during a test, as [ hook, callback ] pairs, removed on tear
+	 * down. Keeping the callback is what makes an anonymous one removable.
+	 *
+	 * @var array[]
+	 */
+	private $added_filters = [];
+
+	/**
+	 * Undo anything a test registered so it can't leak into the next one — test
+	 * order isn't guaranteed.
 	 */
 	public function tear_down() {
 		foreach ( $this->registered_cpts as $cpt ) {
@@ -26,8 +35,24 @@ class Scheduled_Post_Checker_Test extends WP_UnitTestCase {
 				unregister_post_type( $cpt );
 			}
 		}
+		foreach ( $this->added_filters as [ $hook, $callback ] ) {
+			remove_filter( $hook, $callback );
+		}
 		$this->registered_cpts = [];
+		$this->added_filters   = [];
 		parent::tear_down();
+	}
+
+	/**
+	 * Add a filter that tear_down() will remove — even an anonymous callback,
+	 * which remove_filter() otherwise can't target once its reference is lost.
+	 *
+	 * @param string   $hook     Filter hook.
+	 * @param callable $callback Callback.
+	 */
+	private function add_cleanup_filter( $hook, $callback ) {
+		add_filter( $hook, $callback );
+		$this->added_filters[] = [ $hook, $callback ];
 	}
 
 	/**
@@ -106,13 +131,14 @@ class Scheduled_Post_Checker_Test extends WP_UnitTestCase {
 		$this->assertNotContains( 'nspc_unrelated', \Newspack\Scheduled_Post_Checker\nspc_get_post_types(), 'Unlisted hidden types are not rescued by default.' );
 
 		// ...but the filter lets a plugin opt one in.
-		$filter = function ( $types ) {
-			$types[] = 'nspc_unrelated';
-			return $types;
-		};
-		add_filter( 'newspack_scheduled_post_checker_post_types', $filter );
+		$this->add_cleanup_filter(
+			'newspack_scheduled_post_checker_post_types',
+			function ( $types ) {
+				$types[] = 'nspc_unrelated';
+				return $types;
+			}
+		);
 		$this->assertContains( 'nspc_unrelated', \Newspack\Scheduled_Post_Checker\nspc_get_post_types(), 'The filter can register a schedulable type.' );
-		remove_filter( 'newspack_scheduled_post_checker_post_types', $filter );
 	}
 
 	/**
@@ -121,7 +147,7 @@ class Scheduled_Post_Checker_Test extends WP_UnitTestCase {
 	 */
 	public function test_rescues_missed_schedule_in_hidden_cpt() {
 		$this->register_test_cpt( 'nspc_hidden' );
-		add_filter(
+		$this->add_cleanup_filter(
 			'newspack_scheduled_post_checker_post_types',
 			function ( $types ) {
 				$types[] = 'nspc_hidden';
