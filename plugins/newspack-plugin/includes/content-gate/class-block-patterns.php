@@ -114,20 +114,44 @@ class Block_Patterns {
 	 */
 	public static function get_metering_settings( $pattern_context ) {
 		$count  = 4;
-		$period = __( 'month', 'newspack-plugin' );
+		$period = self::get_period_label( 'month' );
 		if ( ! empty( $pattern_context['custom_access_settings']['metering'] ) ) {
-			$metering = $pattern_context['custom_access_settings']['metering'];
+			// Resolved, not stored: a gate on the shared allowance ignores its own count,
+			// and this copy is baked into the layout post.
+			$metering = \Newspack\Metering::resolve_path_settings( $pattern_context['custom_access_settings'], true );
 			if ( ! empty( $metering['count'] ) ) {
 				$count = absint( $metering['count'] );
 			}
 			if ( ! empty( $metering['period'] ) ) {
-				$period = sanitize_text_field( $metering['period'] );
+				$period = self::get_period_label( $metering['period'] );
 			}
 		}
 		return [
 			'count'  => $count,
 			'period' => $period,
 		];
+	}
+
+	/**
+	 * The reader-facing label for a metering reset period.
+	 *
+	 * The patterns print this straight into gate copy, so the fallback and the resolved
+	 * value have to come from the same place. Translating only the fallback localises
+	 * the inserter preview and leaves the layout a reader actually sees in English.
+	 *
+	 * @param string $period Period slug, as stored on the gate.
+	 *
+	 * @return string Translated label.
+	 */
+	private static function get_period_label( string $period ): string {
+		switch ( $period ) {
+			case 'day':
+				return __( 'day', 'newspack-plugin' );
+			case 'week':
+				return __( 'week', 'newspack-plugin' );
+			default:
+				return __( 'month', 'newspack-plugin' );
+		}
 	}
 
 	/**

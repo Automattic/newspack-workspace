@@ -257,13 +257,16 @@ class Audience_Content_Gates extends Wizard {
 				'permission_callback' => [ $this, 'api_permissions_check' ],
 				'args'                => [
 					'anonymous_count'  => [
-						'type' => 'integer',
+						'type'    => 'integer',
+						'minimum' => 0,
 					],
 					'registered_count' => [
-						'type' => 'integer',
+						'type'    => 'integer',
+						'minimum' => 0,
 					],
 					'period'           => [
 						'type' => 'string',
+						'enum' => [ 'week', 'month' ],
 					],
 				],
 			]
@@ -427,6 +430,9 @@ class Audience_Content_Gates extends Wizard {
 	 * @return \WP_REST_Response
 	 */
 	public function get_config() {
+		// REST never fires `admin_init`, so a client reading the config before any
+		// wp-admin pageload would be told gates share an allowance not yet being served.
+		Site_Meter::maybe_adopt_gate_settings();
 		$advanced_settings_response = $this->prepare_advanced_settings_response( Content_Gate_Advanced_Settings::get_settings() );
 		$config = [
 			'gates'  => Content_Gate::get_gates(),
@@ -544,15 +550,10 @@ class Audience_Content_Gates extends Wizard {
 	 * @return \WP_REST_Response|\WP_Error
 	 */
 	public function update_site_meter( $request ) {
-		return rest_ensure_response(
-			Site_Meter::update_settings(
-				[
-					'anonymous_count'  => $request->get_param( 'anonymous_count' ),
-					'registered_count' => $request->get_param( 'registered_count' ),
-					'period'           => $request->get_param( 'period' ),
-				]
-			)
-		);
+		// Only what the request actually sent: forwarding an absent count as null would
+		// sanitize to zero and silently close the allowance site-wide.
+		$settings = array_intersect_key( $request->get_params(), Site_Meter::get_default_settings() );
+		return rest_ensure_response( Site_Meter::update_settings( $settings ) );
 	}
 
 	/**
