@@ -78,6 +78,7 @@ When building a screen, use the **spacing scale** (8px unit: 16, 24, 32, 48, 64)
 - **`Grid`** – Use for laying out several items in columns (e.g. multiple controls or cards). Default gap is 32px; use `columns` and `gutter` modifiers (8, 16, 24, 32) when you need tighter or looser spacing. For a single row or a simple vertical stack, prefer **VStack** (or HStack) in new code; Grid is still used that way in many places and is fine to leave as-is until we refactor.
 - **`Divider`** – Use between logical sections (e.g. between ActionCards) to separate content without another card. Margins are 32px (64px at larger breakpoints) so spacing stays consistent with the rest of the layout.
 - **`SectionHeader`** – Use to start a new section; pair with a short description so the section’s goal is clear. Top margin (64px) and bottom (32px) create clear separation from previous content and the section body.
+- **`EmptyState`** – Use when a list has nothing in it yet, or an onboarding view stands in for a feature that is not set up. Compound: `EmptyState.Root` wraps `EmptyState.Header` and `EmptyState.Actions`. Render it only when the *unfiltered* collection is empty, so a search matching nothing keeps the DataViews "no results" treatment. See [src/empty-state/README.md](src/empty-state/README.md).
 - **`BoxContrast`** – High-contrast content box for emphasis.
 
 ### Form Components
