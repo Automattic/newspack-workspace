@@ -144,14 +144,11 @@ class Block_Patterns {
 	 * @return string Translated label.
 	 */
 	private static function get_period_label( string $period ): string {
-		switch ( $period ) {
-			case 'day':
-				return __( 'day', 'newspack-plugin' );
-			case 'week':
-				return __( 'week', 'newspack-plugin' );
-			default:
-				return __( 'month', 'newspack-plugin' );
-		}
+		return match ( $period ) {
+			'day'   => __( 'day', 'newspack-plugin' ),
+			'week'  => __( 'week', 'newspack-plugin' ),
+			default => __( 'month', 'newspack-plugin' ),
+		};
 	}
 
 	/**
