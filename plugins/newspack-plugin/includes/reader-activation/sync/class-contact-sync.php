@@ -569,10 +569,16 @@ class Contact_Sync extends Sync {
 				$prefix              = $integration->get_metadata_prefix();
 				$integration_contact['metadata'] = $integration_contact['metadata'] ?? [];
 				$integration_contact['metadata'][ $prefix . 'Account_Deleted' ] = $flag_contact['metadata']['account_deleted'];
-				// Re-inject the membership status as a system-level deletion signal too.
-				// `membership_status` isn't a v1 outgoing field, so prepare_contact drops
-				// it; add it back under the prefixed key so the historical 'user-deleted'
-				// value always reaches the ESP regardless of outgoing-fields config.
+				// Re-inject the membership status too: it's a system-level deletion
+				// signal that must reach the ESP regardless of outgoing-fields
+				// config, same as Account_Deleted. But unlike Account_Deleted,
+				// `membership_status` is itself a registered catalog field
+				// ('Membership Status', declared by Legacy_Payment) — so on
+				// legacy-era sites where it's selected, prepare_contact() may
+				// already have emitted it under that spelling. Both can land in
+				// the payload (`NP_Membership Status` alongside this re-injection's
+				// `NP_Membership_Status`) — accepted duplication, since the signal
+				// must never depend on selection state.
 				$integration_contact['metadata'][ $prefix . 'Membership_Status' ] = $flag_contact['metadata']['membership_status'];
 
 				$result = $integration->push_contact_data( $integration_contact, $context );
