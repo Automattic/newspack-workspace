@@ -1132,4 +1132,96 @@ class Test_Site_Meter extends \WP_UnitTestCase {
 		$this->assertWPError( Site_Meter::get_setting( 'nope' ) );
 		$this->assertWPError( Site_Meter::sanitize_setting( 'nope', 1 ) );
 	}
+
+	/**
+	 * Build a request against one of the Access Control wizard routes.
+	 *
+	 * @param string $method Request method.
+	 * @param string $route  Route below the wizard namespace, or an empty string for the config route.
+	 * @param array  $body   JSON body, for a write.
+	 *
+	 * @return \WP_REST_Request
+	 */
+	private function wizard_request( $method, $route = '', $body = null ) {
+		$request = new \WP_REST_Request( $method, '/' . NEWSPACK_API_NAMESPACE . '/wizard/newspack-audience-access-control' . $route );
+		if ( null !== $body ) {
+			$request->set_header( 'content-type', 'application/json' );
+			$request->set_body( wp_json_encode( $body ) );
+		}
+		return $request;
+	}
+
+	/**
+	 * The Metering page saves the half a publisher changed, so the endpoint writes only
+	 * the settings a request carries. Writing the full set would let a request that
+	 * omits a count reset it, and the count it resets is a site-wide allowance.
+	 */
+	public function test_the_site_meter_endpoint_writes_only_the_settings_it_was_sent() {
+		wp_set_current_user( $this->factory->user->create( [ 'role' => 'administrator' ] ) );
+		Site_Meter::update_settings(
+			[
+				'anonymous_count'  => 4,
+				'registered_count' => 7,
+				'period'           => 'month',
+			]
+		);
+
+		$response = rest_get_server()->dispatch( $this->wizard_request( 'POST', '/site-meter', [ 'period' => 'week' ] ) );
+
+		$this->assertSame( 200, $response->get_status() );
+		$settings = Site_Meter::get_settings();
+		$this->assertSame( 'week', $settings['period'], 'The setting the request carried is written' );
+		$this->assertSame( 4, $settings['anonymous_count'], 'A count the request omitted is left alone' );
+		$this->assertSame( 7, $settings['registered_count'], 'A count the request omitted is left alone' );
+	}
+
+	/**
+	 * A negative count reads back through absint() as a positive allowance, so the
+	 * schema refuses it rather than letting it reach the option.
+	 */
+	public function test_the_site_meter_endpoint_rejects_a_negative_count() {
+		wp_set_current_user( $this->factory->user->create( [ 'role' => 'administrator' ] ) );
+		Site_Meter::update_settings( [ 'anonymous_count' => 4 ] );
+
+		$response = rest_get_server()->dispatch( $this->wizard_request( 'POST', '/site-meter', [ 'anonymous_count' => -1 ] ) );
+
+		$this->assertSame( 400, $response->get_status() );
+		$this->assertSame( 4, Site_Meter::get_setting( 'anonymous_count' ), 'The rejected request leaves the allowance where it was' );
+	}
+
+	/**
+	 * The allowance governs every gate on the site, so writing it is an administrator's
+	 * job like the rest of the wizard.
+	 */
+	public function test_the_site_meter_endpoint_requires_permissions() {
+		wp_set_current_user( 0 );
+
+		$response = rest_get_server()->dispatch( $this->wizard_request( 'POST', '/site-meter', [ 'anonymous_count' => 9 ] ) );
+
+		$this->assertSame( 403, $response->get_status() );
+	}
+
+	/**
+	 * REST never fires `admin_init`, so a wizard that loads before any wp-admin pageload
+	 * would otherwise be told gates share an allowance the site has not seeded yet.
+	 */
+	public function test_reading_the_wizard_config_adopts_the_existing_configuration() {
+		wp_set_current_user( $this->factory->user->create( [ 'role' => 'administrator' ] ) );
+		$metering = [
+			'enabled' => true,
+			'count'   => 6,
+			'period'  => 'week',
+		];
+		$this->create_gate( $metering, $metering, Site_Meter::SCOPE_GATE );
+		$this->assertFalse( Site_Meter::has_adopted(), 'The assertions below are only meaningful before adoption has run' );
+
+		$response = rest_get_server()->dispatch( $this->wizard_request( 'GET' ) );
+
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertTrue( Site_Meter::has_adopted(), 'Reading the config runs the one-time adoption' );
+		$site_meter = $response->get_data()['config']['site_meter'];
+		$this->assertSame( 6, $site_meter['anonymous_count'], 'The payload carries the allowance adoption resolved' );
+		$this->assertSame( 6, $site_meter['registered_count'], 'The payload carries the allowance adoption resolved' );
+		$this->assertSame( 'week', $site_meter['period'], 'The payload carries the period adoption resolved' );
+	}
 }
