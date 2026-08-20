@@ -443,6 +443,37 @@ class TestApi extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * A callback registered at more than one priority must come back at all of them.
+	 *
+	 * This pins the bug in a has_filter() guard: has_filter() reports only the
+	 * first priority a callback sits at, so a presence check restores one
+	 * registration and silently drops the rest.
+	 *
+	 * @group content-distribution-api
+	 */
+	public function test_insert_restores_a_callback_registered_at_several_priorities() {
+		wp_set_current_user( $this->factory->user->create( [ 'role' => 'author' ] ) );
+		kses_init();
+
+		// strval() returns the content unchanged, so this measures the restore
+		// without altering what gets stored.
+		add_filter( 'content_save_pre', 'strval', 3, 1 );
+		add_filter( 'content_save_pre', 'strval', 30, 1 );
+
+		$this->insert_and_get_content( $this->make_insert_request( 'safe content' ) );
+
+		$callbacks = $GLOBALS['wp_filter']['content_save_pre']->callbacks;
+
+		// Read the priority buckets directly. has_filter() would answer 3 for both
+		// assertions and pass even with the priority-30 registration gone.
+		$this->assertArrayHasKey( 'strval', $callbacks[3] ?? [], 'The lower-priority registration must be restored.' );
+		$this->assertArrayHasKey( 'strval', $callbacks[30] ?? [], 'The higher-priority registration must be restored too.' );
+
+		remove_filter( 'content_save_pre', 'strval', 3 );
+		remove_filter( 'content_save_pre', 'strval', 30 );
+	}
+
+	/**
 	 * The cost of filtering, pinned deliberately rather than left to be
 	 * discovered. An author pulling a story that carries a Custom HTML block
 	 * gets the block's body dropped, because `iframe` is not in the kses

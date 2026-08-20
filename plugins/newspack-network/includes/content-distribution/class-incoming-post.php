@@ -803,13 +803,14 @@ class Incoming_Post {
 				if ( is_array( $content_save_pre_filters ) ) {
 					foreach ( $content_save_pre_filters as $priority => $callbacks ) {
 						foreach ( $callbacks as $callback ) {
-							// Reconcile rather than overwrite. A callback inside the try may
-							// have removed one of these on purpose — core does exactly that
-							// when the current user is switched to one holding
-							// unfiltered_html — and re-adding it blindly would undo that.
-							if ( false === has_filter( 'content_save_pre', $callback['function'] ) ) {
-								add_filter( 'content_save_pre', $callback['function'], $priority, $callback['accepted_args'] );
-							}
+							// Restores the snapshot exactly, including a callback registered
+							// at more than one priority. A has_filter() guard was tried here
+							// and reverted: has_filter() reports only the first priority a
+							// callback sits at, so the second registration was silently
+							// dropped. It also could not do what it was meant to — the hook
+							// is already empty by this point, so a filter removed deliberately
+							// inside the try is indistinguishable from the ones removed above.
+							add_filter( 'content_save_pre', $callback['function'], $priority, $callback['accepted_args'] );
 						}
 					}
 				}
