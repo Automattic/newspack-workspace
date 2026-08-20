@@ -229,18 +229,21 @@ class Metering {
 				'period'  => 'month',
 			];
 		}
+		// A path that does not meter grants no free views, so it reports none. Callers
+		// read `count` to decide what a reader still gets, and a stale or shared number
+		// behind `enabled => false` reads as an allowance the gate never serves.
 		$enabled = (bool) $metering['enabled'];
 		if ( Site_Meter::SCOPE_SITE === Site_Meter::sanitize_scope( $metering['scope'] ?? null ) && Site_Meter::has_adopted() ) {
 			$site = Site_Meter::get_settings();
 			return [
 				'enabled' => $enabled,
-				'count'   => absint( $site[ $site_count_key ] ),
+				'count'   => $enabled ? absint( $site[ $site_count_key ] ) : 0,
 				'period'  => $site['period'],
 			];
 		}
 		return [
 			'enabled' => $enabled,
-			'count'   => absint( $metering['count'] ),
+			'count'   => $enabled ? absint( $metering['count'] ) : 0,
 			'period'  => $metering['period'],
 		];
 	}
@@ -339,7 +342,7 @@ class Metering {
 	 *
 	 * @return bool Whether the registration wall governs the reader.
 	 */
-	private static function is_gated_by_registration( $gate_id, $is_logged_in, bool $for_current_reader = true ) {
+	private static function is_gated_by_registration( $gate_id, $is_logged_in, bool $for_current_reader = true ): bool {
 		$registration = Content_Gate::get_registration_settings( $gate_id );
 		if ( ! $registration['active'] ) {
 			return false;
@@ -396,7 +399,7 @@ class Metering {
 	 *
 	 * @return array{enabled: bool, count: int, period: string} Metering settings.
 	 */
-	private static function get_effective_settings( $gate_id, $is_logged_in, bool $for_current_reader = true ) {
+	private static function get_effective_settings( $gate_id, $is_logged_in, bool $for_current_reader = true ): array {
 		if ( Memberships::is_active() ) {
 			return $is_logged_in ? self::get_registered_settings( $gate_id ) : self::get_anonymous_settings( $gate_id );
 		}
