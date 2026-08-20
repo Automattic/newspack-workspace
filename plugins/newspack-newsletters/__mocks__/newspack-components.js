@@ -41,7 +41,7 @@ const createStub = () => {
 	} );
 };
 
-const exports = new Map();
+const stubs = new Map();
 
 module.exports = new Proxy(
 	{},
@@ -53,10 +53,10 @@ module.exports = new Proxy(
 			if ( prop === '__esModule' ) {
 				return true;
 			}
-			if ( ! exports.has( prop ) ) {
-				exports.set( prop, createStub() );
+			if ( ! stubs.has( prop ) ) {
+				stubs.set( prop, createStub() );
 			}
-			return exports.get( prop );
+			return stubs.get( prop );
 		},
 	}
 );
