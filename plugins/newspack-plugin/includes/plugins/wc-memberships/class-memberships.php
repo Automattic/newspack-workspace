@@ -504,9 +504,19 @@ class Memberships {
 
 		// Remove the default restriction handler from 'SkyVerge\WooCommerce\Memberships\Restrictions\Posts::restrict_post'.
 		$restriction_instance = \wc_memberships()->get_restrictions_instance()->get_posts_restrictions_instance();
-		\remove_action( 'wp', spl_object_hash( $restriction_instance ) . 'handle_restriction_modes', 9 );
-		\remove_action( 'wp', spl_object_hash( $restriction_instance ) . 'handle_restriction_modes' ); // For compatibility with Woo Memberships < 1.27.2.
+		self::remove_posts_restriction_handler( $restriction_instance );
 		\add_filter( 'wc_memberships_restrictable_comment_types', '__return_empty_array' );
+	}
+
+	/**
+	 * Remove WooCommerce Memberships' default posts restriction handler.
+	 *
+	 * @param object $restriction_instance WooCommerce Memberships posts restriction instance.
+	 */
+	public static function remove_posts_restriction_handler( $restriction_instance ) {
+		$callback = [ $restriction_instance, 'handle_restriction_modes' ];
+		\remove_action( 'wp', $callback, 9 );
+		\remove_action( 'wp', $callback ); // For compatibility with Woo Memberships < 1.27.2.
 	}
 
 	/**
