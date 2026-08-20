@@ -77,8 +77,8 @@ describe( 'buildFieldRows', () => {
 	// alongside — they mean different things (erase-on-lapse vs lifetime).
 	it( 'uncollapses Total Paid, whose v2 twin took its own ESP name', () => {
 		const defs = [
-			def( 'v1:total_paid', 'Total Paid', { status: 'legacy', superseded_by: [ 'v2:Total_Paid' ] } ),
-			def( 'v2:Total_Paid', 'Lifetime Total Paid', { status: 'new', supersedes: 'v1:total_paid' } ),
+			def( 'v1:total_paid', 'Total Paid', { status: 'legacy', superseded_by: [ 'v2:Lifetime_Total_Paid' ] } ),
+			def( 'v2:Lifetime_Total_Paid', 'Lifetime Total Paid', { status: 'new', supersedes: 'v1:total_paid' } ),
 		];
 		const rows = buildFieldRows( defs, [] );
 		const legacy = rows.find( r => r.name === 'Total Paid' );
@@ -87,9 +87,9 @@ describe( 'buildFieldRows', () => {
 		expect( legacy.activeVersion ).toBe( 'v1' );
 		expect( legacy.ids ).toEqual( [ 'v1:total_paid' ] );
 		expect( renamed.activeVersion ).toBe( 'v2' );
-		expect( renamed.ids ).toEqual( [ 'v2:Total_Paid' ] );
+		expect( renamed.ids ).toEqual( [ 'v2:Lifetime_Total_Paid' ] );
 		// Independent: toggling one must never clear the other's id.
-		expect( toggleRow( [ 'v1:total_paid' ], renamed, true ) ).toEqual( [ 'v1:total_paid', 'v2:Total_Paid' ] );
+		expect( toggleRow( [ 'v1:total_paid' ], renamed, true ) ).toEqual( [ 'v1:total_paid', 'v2:Lifetime_Total_Paid' ] );
 		expect( badgesForRow( renamed ).map( b => b.text ) ).toEqual( [ 'New' ] );
 		expect( legacy.supersededHint ).toBe( 'Lifetime Total Paid' );
 	} );
@@ -197,15 +197,16 @@ describe( 'badgesForRow', () => {
 	} );
 
 	// A renamed field (own v2 ESP name, `supersedes` a v1 field, status
-	// 'updated') mirrors the real Payment_Page -> Last Payment Page rename:
-	// distinct names keep it a non-collapsed row, and its badge comes from
-	// the full buildFieldRows -> badgesForRow pipeline, not a bare object.
+	// 'updated') mirrors the real Last_Payment_Page rename (Payment Page ->
+	// Last Payment Page): distinct names keep it a non-collapsed row, and its
+	// badge comes from the full buildFieldRows -> badgesForRow pipeline, not
+	// a bare object.
 	it( 'badges a renamed field New via the full row pipeline', () => {
 		const defs = [
-			def( 'v1:payment_page', 'Payment Page', { status: 'legacy', superseded_by: [ 'v2:Payment_Page' ] } ),
-			def( 'v2:Payment_Page', 'Last Payment Page', { status: 'updated', supersedes: 'v1:payment_page' } ),
+			def( 'v1:payment_page', 'Payment Page', { status: 'legacy', superseded_by: [ 'v2:Last_Payment_Page' ] } ),
+			def( 'v2:Last_Payment_Page', 'Last Payment Page', { status: 'updated', supersedes: 'v1:payment_page' } ),
 		];
-		const row = buildFieldRows( defs, [ 'v2:Payment_Page' ] ).find( r => r.name === 'Last Payment Page' );
+		const row = buildFieldRows( defs, [ 'v2:Last_Payment_Page' ] ).find( r => r.name === 'Last Payment Page' );
 		expect( badgeText( row ) ).toEqual( [ 'New' ] );
 	} );
 
