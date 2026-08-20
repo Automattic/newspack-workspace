@@ -1,3 +1,10 @@
+## newspack [6.48.14](https://github.com/Automattic/newspack-workspace/compare/newspack@6.48.13...newspack@6.48.14) (2026-08-20)
+
+
+### Bug Fixes
+
+* **scheduled-posts:** rescue scheduled posts in non-public CPTs ([#936](https://github.com/Automattic/newspack-workspace/issues/936)) ([b6a9f8e](https://github.com/Automattic/newspack-workspace/commit/b6a9f8e265c56716eb0a30b406046ee68fdd37ed))
+
 ## newspack [6.48.13](https://github.com/Automattic/newspack-workspace/compare/newspack@6.48.12...newspack@6.48.13) (2026-08-20)
 
 
