@@ -731,6 +731,25 @@ class Metering {
 	}
 
 	/**
+	 * The reader-facing label for a metering reset period.
+	 *
+	 * Every surface that prints a period to a reader shares this, so the layout copy,
+	 * the countdown banner and its preview cannot disagree. Interpolating the stored
+	 * slug instead leaves the sentence in English whatever the site's locale.
+	 *
+	 * @param string $period Period slug, as stored on the gate.
+	 *
+	 * @return string Translated label.
+	 */
+	public static function get_period_label( string $period ): string {
+		return match ( $period ) {
+			'day'   => __( 'day', 'newspack-plugin' ),
+			'week'  => __( 'week', 'newspack-plugin' ),
+			default => __( 'month', 'newspack-plugin' ),
+		};
+	}
+
+	/**
 	 * Get the metering period for the current reader on a post.
 	 *
 	 * Resolves against the settings that govern the current reader, so the result is

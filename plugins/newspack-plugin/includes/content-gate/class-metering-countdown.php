@@ -249,7 +249,7 @@ class Metering_Countdown {
 											__( '<span class="newspack-countdown-banner__views">%1$d</span>/<span class="newspack-countdown-banner__total_views">%2$d</span> free articles this %3$s', 'newspack-plugin' ),
 											$views,
 											$total_views,
-											Metering::get_metering_period()
+											Metering::get_period_label( Metering::get_metering_period() )
 										),
 										$views,
 										$total_views,
