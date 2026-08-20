@@ -41,7 +41,6 @@ class Nextdoor_Section extends Wizard_Section {
 	 * @return void
 	 */
 	public function register_rest_routes() {
-		// Nextdoor module toggle endpoint.
 		register_rest_route(
 			NEWSPACK_API_NAMESPACE,
 			'/wizard/' . $this->wizard_slug . '/social/nextdoor',
@@ -59,28 +58,74 @@ class Nextdoor_Section extends Wizard_Section {
 				'methods'             => WP_REST_Server::EDITABLE,
 				'callback'            => [ $this, 'api_update_nextdoor_settings' ],
 				'permission_callback' => [ $this, 'api_permissions_check' ],
+				// Declaring a `sanitize_callback` stops WordPress installing its default
+				// validator, so every arg below names `rest_validate_request_arg`.
 				'args'                => [
+					// An omitted `module_enabled_nextdoor` means "no change". The card POSTs only the
+					// fields it touches, so a `default` here would deactivate the module on every save.
 					'module_enabled_nextdoor' => [
 						'required'          => false,
+						'type'              => 'boolean',
 						'sanitize_callback' => 'rest_sanitize_boolean',
+						'validate_callback' => 'rest_validate_request_arg',
 					],
 					'client_id'               => [
 						'required'          => false,
 						'type'              => 'string',
-						'sanitize_callback' => 'sanitize_text_field',
+						'sanitize_callback' => [ $this, 'sanitize_credential' ],
+						'validate_callback' => 'rest_validate_request_arg',
 					],
 					'client_secret'           => [
 						'required'          => false,
 						'type'              => 'string',
-						'sanitize_callback' => 'sanitize_text_field',
+						'sanitize_callback' => [ $this, 'sanitize_credential' ],
+						'validate_callback' => 'rest_validate_request_arg',
 					],
 					'allowed_roles'           => [
-						'required' => false,
-						'type'     => 'array',
+						'required'          => false,
+						'type'              => 'array',
+						'items'             => [ 'type' => 'string' ],
+						'sanitize_callback' => [ $this, 'sanitize_allowed_roles' ],
+						'validate_callback' => 'rest_validate_request_arg',
 					],
 				],
 			]
 		);
+	}
+
+	/**
+	 * Keep a credential exactly as the publisher pasted it.
+	 *
+	 * @param mixed $value Submitted value.
+	 * @return string Credential, stripped of anything unprintable.
+	 */
+	public function sanitize_credential( $value ) {
+		return Nextdoor_Module::sanitize_credential( $value );
+	}
+
+	/**
+	 * Restrict the submitted roles to the roles registered on this site.
+	 *
+	 * `rest_is_array()` accepts a comma-separated scalar, so the schema alone would let one
+	 * through to be stored as an empty list, emptying the roles behind the publisher's back.
+	 *
+	 * @param mixed $value Submitted value.
+	 * @return string[]|WP_Error Role names, re-indexed, or an error if not a list.
+	 */
+	public function sanitize_allowed_roles( $value ) {
+		if ( ! is_array( $value ) ) {
+			return new WP_Error(
+				'newspack_nextdoor_invalid_allowed_roles',
+				__( 'Publishing roles must be submitted as a list.', 'newspack-plugin' ),
+				[ 'status' => 400 ]
+			);
+		}
+
+		$submitted = array_filter( $value, 'is_string' );
+		// The offered roles, so the endpoint cannot grant what the picker withholds.
+		$roles = wp_list_pluck( Nextdoor_Module::get_available_roles(), 'value' );
+
+		return array_values( array_unique( array_intersect( $submitted, $roles ) ) );
 	}
 
 	/**
@@ -105,12 +150,12 @@ class Nextdoor_Section extends Wizard_Section {
 				'has_centralized_credentials' => $has_centralized_credentials,
 				'has_tokens'                  => ! empty( $settings['access_token'] ),
 				'has_page'                    => ! empty( $settings['page_id'] ),
-				'token_valid'                 => Auth::validate_token(),
+				// Read off the stored token: refreshing here would make every settings load wait on Nextdoor.
+				'token_valid'                 => Auth::has_usable_token(),
 			];
 
 			$settings = [
 				'client_id'       => $settings['client_id'] ?? '',
-				'client_secret'   => $settings['client_secret'] ?? '',
 				'publication_url' => $settings['publication_url'] ?? '',
 				'allowed_roles'   => $settings['allowed_roles'] ?? [],
 			];
@@ -130,7 +175,7 @@ class Nextdoor_Section extends Wizard_Section {
 	 * Update Nextdoor settings via API.
 	 *
 	 * @param WP_REST_Request $request Request object.
-	 * @return WP_REST_Response
+	 * @return WP_REST_Response|WP_Error
 	 */
 	public function api_update_nextdoor_settings( $request ) {
 		$module_enabled = $request->get_param( 'module_enabled_nextdoor' );
@@ -140,28 +185,38 @@ class Nextdoor_Section extends Wizard_Section {
 
 		if ( null !== $module_enabled ) {
 			if ( $module_enabled ) {
-				$module_settings = Optional_Modules::activate_optional_module( 'nextdoor' );
+				Optional_Modules::activate_optional_module( 'nextdoor' );
 			} else {
-				$module_settings = Optional_Modules::deactivate_optional_module( 'nextdoor' );
+				Optional_Modules::deactivate_optional_module( 'nextdoor' );
 			}
-	
-			if ( ! $module_settings ) {
+
+			// The activate/deactivate helpers answer from memory, so they report what was asked
+			// for whether or not the write landed. Only a fresh read can tell.
+			if ( Optional_Modules::is_optional_module_active( 'nextdoor' ) !== (bool) $module_enabled ) {
 				return new WP_Error(
 					'newspack_nextdoor_module_update_failed',
 					__( 'Failed to update Nextdoor module settings.', 'newspack-plugin' ),
 					[ 'status' => 500 ]
 				);
 			}
+
+			// Nothing reconciles the capability once the module is off, so revoke on the way out.
+			if ( ! $module_enabled ) {
+				Nextdoor_Module::remove_nextdoor_capability();
+			}
 		}
 
 		if ( Optional_Modules::is_optional_module_active( 'nextdoor' ) ) {
 			$nextdoor_settings = Nextdoor_Module::get_settings();
 
-			if ( null !== $client_id ) {
+			// Blank means no change, so a value that sanitises away cannot wipe a working
+			// credential. The form omits an untouched secret rather than sending the stored
+			// one back, and nothing on the screen would show that it had been replaced.
+			if ( null !== $client_id && '' !== $client_id ) {
 				$nextdoor_settings['client_id'] = $client_id;
 			}
 
-			if ( null !== $client_secret ) {
+			if ( null !== $client_secret && '' !== $client_secret ) {
 				$nextdoor_settings['client_secret'] = $client_secret;
 			}
 
@@ -170,6 +225,10 @@ class Nextdoor_Section extends Wizard_Section {
 			}
 
 			Nextdoor_Module::update_settings( $nextdoor_settings );
+
+			// `admin_init` never fires on a REST request, so reconcile here rather than on the
+			// next wp-admin page load.
+			Nextdoor_Module::add_nextdoor_capability();
 		}
 
 		return $this->api_get_nextdoor_settings();

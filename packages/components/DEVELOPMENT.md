@@ -98,6 +98,8 @@ When building a screen, use the **spacing scale** (8px unit: 16, 24, 32, 48, 64)
 ### Content Components
 
 - **`ActionCard`** – Use when one concept (e.g. a feature or setting) can be toggled on/off and may have extra content below. Internal padding (24px default; 16px/8px for isMedium/isSmall) and 24px between regions keep hierarchy clear; expandable content uses 24px top padding and 24px between siblings.
+- **`CardForm`** – Use when a setting needs a form that opens on request rather than one that sits open: a title, a status `Badge`, a description and a caller-supplied action, with the form itself disclosed below. Handles focus on open and close and scopes its Escape listener to its own body. The toggle belongs to the caller, so `aria-expanded` does too. See [card-form/README.md](src/card-form/README.md).
+- **`Badge`** – Short status label. Renders the `text` prop, not children.
 - **`Notice`** – Use for outcome feedback (success/error/warning) or short contextual messages. Vertical margin is 32px so notices don’t collide with cards; keep one primary message per area when possible.
 - **`Waiting`** – Loading state indicator.
 - **`ProgressBar`** – Progress indicator.

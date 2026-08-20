@@ -102,7 +102,8 @@ Omit `badge` (or pass `undefined`) to show no badge at all.
 ## Accessibility
 
 - The body is rendered as a `role="region"` labelled by the title, so assistive tech announces it as a named region when focus enters.
-- On open, focus moves to the first focusable element in the body (or to the region itself if none exist). On close, focus is restored to whatever was focused before opening — typically the trigger button.
+- On open, focus moves to the first focusable element in the body (or to the region itself if none exist). On close, focus is restored to whatever was focused before opening — typically the trigger button. A card opened programmatically rather than by a trigger captures the document body instead, and the restore is skipped, so it does not send the reader to the top of the page. If your card can open itself, plan where focus should land on close.
+- The toggle that opens the card belongs to the caller, so `aria-expanded` does too. Set it on that control.
 - The Escape listener is scoped to the open form's body, so multiple open cards do not all close on a single keypress. If an inner control needs to consume Escape (for example, to close its own menu), call `event.preventDefault()` and CardForm will ignore it.
 
 

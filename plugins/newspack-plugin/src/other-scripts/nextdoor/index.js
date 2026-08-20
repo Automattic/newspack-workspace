@@ -6,7 +6,7 @@
  * WordPress dependencies
  */
 import { __ } from '@wordpress/i18n';
-import { useState, useEffect } from '@wordpress/element';
+import { useState, useEffect, useRef } from '@wordpress/element';
 import { useSelect } from '@wordpress/data';
 import { Button, Spinner, Notice, Panel, PanelBody, PanelHeader, Flex, FlexItem, SVG } from '@wordpress/components';
 import { PluginSidebar } from '@wordpress/editor';
@@ -39,11 +39,45 @@ const NextdoorPostSidebar = ( { postId, postStatus } ) => {
 	const [ nextdoorStatus, setNextdoorStatus ] = useState( null );
 	const [ error, setError ] = useState( null );
 	const [ success, setSuccess ] = useState( null );
+	// Whether anything has ever arrived, as against whether a request is in flight. Only
+	// the first tells us the panel has nothing to show yet.
+	const [ hasLoaded, setHasLoaded ] = useState( false );
+	// Distinct from `isLoading`, which any refresh sets: only a retry should say so on the
+	// button the publisher pressed, or announce it.
+	const [ isRetrying, setIsRetrying ] = useState( false );
+	const contentRef = useRef( null );
+	// Each status request takes a number, so a slow answer arriving after a newer one can
+	// be told apart and dropped rather than overwriting it.
+	const requestRef = useRef( 0 );
+	// Which post the panel is on now, readable from a call bound to an earlier render.
+	const postIdRef = useRef( postId );
+	postIdRef.current = postId;
+	// Each action takes a number, so a slow one finishing after a newer one started can be
+	// told apart and leave the busy state to whichever action owns it now.
+	const actionRef = useRef( 0 );
 
-	/**
-	 * Fetch Nextdoor status for the current post
-	 */
+	// A successful action replaces the control that was pressed, dropping keyboard position
+	// to the top of the document. Only called for something the publisher initiated: on an
+	// ordinary load focus belongs on the canvas.
+	const restoreFocus = () => {
+		window.requestAnimationFrame( () => {
+			const content = contentRef.current;
+			if ( content && content.ownerDocument.activeElement === content.ownerDocument.body ) {
+				content.focus();
+			}
+		} );
+	};
+
 	const fetchStatus = async () => {
+		// `callApi()` signs off with a refresh bound to the render its action fired in. Once
+		// the editor has moved on, taking a number would make that stale answer the current one.
+		if ( postId !== postIdRef.current ) {
+			return;
+		}
+
+		const request = ++requestRef.current;
+		const isCurrent = () => request === requestRef.current;
+
 		try {
 			setIsLoading( true );
 			setError( null );
@@ -52,21 +86,38 @@ const NextdoorPostSidebar = ( { postId, postStatus } ) => {
 				path: `/newspack/v1/nextdoor/post-status/${ postId }`,
 			} );
 
-			setNextdoorStatus( response );
+			if ( isCurrent() ) {
+				setNextdoorStatus( response );
+			}
 		} catch ( fetchError ) {
-			setError( fetchError.message || __( 'Failed to load Nextdoor status.', 'newspack-plugin' ) );
+			if ( isCurrent() ) {
+				setError( fetchError.message || __( 'Failed to load Nextdoor status.', 'newspack-plugin' ) );
+			}
 		} finally {
-			setIsLoading( false );
+			if ( isCurrent() ) {
+				setIsLoading( false );
+				setHasLoaded( true );
+			}
 		}
 	};
 
-	const callApi = async ( path, method, messages ) => {
+	const callApi = async ( name, path, method, messages ) => {
+		// The answer describes the post the action fired on. Once the editor has moved on it
+		// belongs to neither the panel on screen nor the reader looking at it.
+		const isCurrent = () => postId === postIdRef.current;
+		const request = ++actionRef.current;
+		const ownsAction = () => request === actionRef.current;
+
 		try {
-			setAction( method );
+			setAction( name );
 			setError( null );
 			setSuccess( null );
 
 			const response = await apiFetch( { path, method } );
+
+			if ( ! isCurrent() ) {
+				return;
+			}
 
 			if ( response.success ) {
 				setSuccess( response.message || messages.success );
@@ -75,46 +126,63 @@ const NextdoorPostSidebar = ( { postId, postStatus } ) => {
 				setError( response.message || messages.error );
 			}
 		} catch ( err ) {
-			setError( err.message || __( 'Failed to communicate with Nextdoor.', 'newspack-plugin' ) );
+			if ( isCurrent() ) {
+				setError( err.message || __( 'Failed to communicate with Nextdoor.', 'newspack-plugin' ) );
+			}
 		} finally {
-			setAction( null );
-			clearMessages();
+			// Released whether or not the editor moved on, since nothing else clears it and a
+			// request that kept it would wedge the buttons as busy. Only by the action that
+			// still owns it, so an older one finishing cannot free a newer one's controls and
+			// invite a second press while that request is still out.
+			if ( ownsAction() ) {
+				setAction( null );
+			}
+
+			if ( isCurrent() ) {
+				clearMessages();
+				restoreFocus();
+			}
 		}
 	};
 
-	/**
-	 * Handle publishing post to Nextdoor
-	 */
+	// The Retry buttons live inside the notices they refresh, so a successful retry
+	// unmounts the control that was pressed.
+	const retryStatus = async () => {
+		// `Notice` gives its actions no disabled state, so the guard lives here: repeated
+		// presses would stack 30-second requests and land an older failure on a newer success.
+		if ( isLoading ) {
+			return;
+		}
+		setIsRetrying( true );
+		try {
+			await fetchStatus();
+		} finally {
+			setIsRetrying( false );
+		}
+		restoreFocus();
+	};
+
 	const handlePublish = () => {
-		callApi( `/newspack/v1/nextdoor/publish-post/${ postId }`, 'POST', {
+		callApi( 'publish', `/newspack/v1/nextdoor/publish-post/${ postId }`, 'POST', {
 			success: __( 'Published to Nextdoor.', 'newspack-plugin' ),
 			error: __( 'Failed to publish.', 'newspack-plugin' ),
 		} );
 	};
 
-	/**
-	 * Handle updating post on Nextdoor
-	 */
 	const handleUpdate = () => {
-		callApi( `/newspack/v1/nextdoor/update-post/${ postId }`, 'PUT', {
+		callApi( 'update', `/newspack/v1/nextdoor/update-post/${ postId }`, 'PUT', {
 			success: __( 'Update sent to Nextdoor.', 'newspack-plugin' ),
 			error: __( 'Failed to update.', 'newspack-plugin' ),
 		} );
 	};
 
-	/**
-	 * Handle deleting post from Nextdoor
-	 */
 	const handleDelete = () => {
-		callApi( `/newspack/v1/nextdoor/delete-post/${ postId }`, 'DELETE', {
+		callApi( 'delete', `/newspack/v1/nextdoor/delete-post/${ postId }`, 'DELETE', {
 			success: __( 'Post removed from Nextdoor.', 'newspack-plugin' ),
 			error: __( 'Failed to remove post.', 'newspack-plugin' ),
 		} );
 	};
 
-	/**
-	 * Clear messages after a delay
-	 */
 	const clearMessages = () => {
 		setTimeout( () => {
 			setError( null );
@@ -122,9 +190,6 @@ const NextdoorPostSidebar = ( { postId, postStatus } ) => {
 		}, 5000 );
 	};
 
-	/**
-	 * Format date for display
-	 */
 	const formatDate = dateString => {
 		if ( ! dateString ) {
 			return '';
@@ -133,18 +198,22 @@ const NextdoorPostSidebar = ( { postId, postStatus } ) => {
 		return dateI18n( dateFormat, dateString );
 	};
 
-	// Load status on mount and when post ID changes
 	useEffect( () => {
 		if ( postId ) {
+			// The answer on screen describes the previous post while the actions below it
+			// already target the new one, so both it and the notices go before the request.
+			setNextdoorStatus( null );
+			setHasLoaded( false );
+			setSuccess( null );
+			setError( null );
 			fetchStatus();
 		}
 	}, [ postId ] );
 
-	/**
-	 * Render the main content
-	 */
 	const renderContent = () => {
-		if ( isLoading ) {
+		// Only the first load blanks the panel. Later requests keep it mounted, so the
+		// control the publisher pressed re-renders in place rather than taking focus with it.
+		if ( isLoading && ! hasLoaded ) {
 			return (
 				<Flex justify="center" className="nextdoor-sidebar__loading">
 					<FlexItem>
@@ -157,7 +226,28 @@ const NextdoorPostSidebar = ( { postId, postStatus } ) => {
 			);
 		}
 
-		if ( ! nextdoorStatus?.can_publish ) {
+		// No response means the fetch failed, which the error notice explains. Reading
+		// `can_publish` off a missing response would report that as a permissions problem.
+		if ( ! nextdoorStatus ) {
+			return (
+				<Notice
+					status="error"
+					isDismissible={ false }
+					spokenMessage={
+						isRetrying
+							? __( 'Retrying the Nextdoor status request.', 'newspack-plugin' )
+							: error || __( 'Failed to load Nextdoor status.', 'newspack-plugin' )
+					}
+					actions={ [
+						{ label: isRetrying ? __( 'Retrying…', 'newspack-plugin' ) : __( 'Retry', 'newspack-plugin' ), onClick: retryStatus },
+					] }
+				>
+					{ error || __( 'Failed to load Nextdoor status.', 'newspack-plugin' ) }
+				</Notice>
+			);
+		}
+
+		if ( ! nextdoorStatus.can_publish ) {
 			return (
 				<Notice status="warning" isDismissible={ false }>
 					{ __( 'You do not have permission to publish to Nextdoor. Please contact the site administrator.', 'newspack-plugin' ) }
@@ -175,6 +265,65 @@ const NextdoorPostSidebar = ( { postId, postStatus } ) => {
 
 		return (
 			<>
+				{ nextdoorStatus.needs_reconnect && (
+					<Notice
+						status="error"
+						isDismissible={ false }
+						actions={
+							nextdoorStatus.can_reconnect
+								? [
+										{
+											label: __( 'Reconnect Nextdoor', 'newspack-plugin' ),
+											url: 'admin.php?page=newspack-settings#social',
+										},
+								  ]
+								: []
+						}
+					>
+						{ nextdoorStatus.can_reconnect
+							? __( 'Sharing to Nextdoor is unavailable until you reconnect.', 'newspack-plugin' )
+							: __( 'Sharing to Nextdoor is unavailable until the site administrator reconnects it.', 'newspack-plugin' ) }
+					</Notice>
+				) }
+
+				{ nextdoorStatus.needs_setup && (
+					<Notice
+						status="warning"
+						isDismissible={ false }
+						actions={
+							nextdoorStatus.can_reconnect
+								? [
+										{
+											label: __( 'Set Up Nextdoor', 'newspack-plugin' ),
+											url: 'admin.php?page=newspack-settings#social',
+										},
+								  ]
+								: []
+						}
+					>
+						{ nextdoorStatus.can_reconnect
+							? __( 'Sharing to Nextdoor is unavailable until setup is finished.', 'newspack-plugin' )
+							: __( 'Sharing to Nextdoor is unavailable until the site administrator finishes setup.', 'newspack-plugin' ) }
+					</Notice>
+				) }
+
+				{ nextdoorStatus.is_unreachable && (
+					<Notice
+						status="warning"
+						isDismissible={ false }
+						spokenMessage={
+							isRetrying
+								? __( 'Retrying the Nextdoor status request.', 'newspack-plugin' )
+								: __( 'Nextdoor could not be reached, so the sharing status is unavailable.', 'newspack-plugin' )
+						}
+						actions={ [
+							{ label: isRetrying ? __( 'Retrying…', 'newspack-plugin' ) : __( 'Retry', 'newspack-plugin' ), onClick: retryStatus },
+						] }
+					>
+						{ __( 'Nextdoor could not be reached, so the sharing status is unavailable. Please try again shortly.', 'newspack-plugin' ) }
+					</Notice>
+				) }
+
 				{ error && (
 					<Notice status="error" isDismissible={ false }>
 						{ error }
@@ -187,11 +336,11 @@ const NextdoorPostSidebar = ( { postId, postStatus } ) => {
 					</Notice>
 				) }
 
-				{ nextdoorStatus?.is_shared ? (
+				{ nextdoorStatus.is_shared ? (
 					<Panel>
 						<PanelHeader>
 							<p className="nextdoor-sidebar__status-header">
-								{ __( 'Status:', 'newspack-plugin' ) } { nextdoorStatus.ingestion_status }
+								{ __( 'Status:', 'newspack-plugin' ) } { nextdoorStatus.ingestion_status || __( 'Unavailable', 'newspack-plugin' ) }
 							</p>
 						</PanelHeader>
 						<PanelBody>
@@ -241,8 +390,11 @@ const NextdoorPostSidebar = ( { postId, postStatus } ) => {
 										variant="primary"
 										onClick={ handleUpdate }
 										isBusy={ 'update' === action }
-										disabled={ 'update' === action || 'delete' === action }
-										size="small"
+										disabled={
+											'update' === action || 'delete' === action || nextdoorStatus.needs_reconnect || nextdoorStatus.needs_setup
+										}
+										accessibleWhenDisabled
+										size="compact"
 									>
 										{ 'update' === action ? __( 'Updating…', 'newspack-plugin' ) : __( 'Update', 'newspack-plugin' ) }
 									</Button>
@@ -251,8 +403,11 @@ const NextdoorPostSidebar = ( { postId, postStatus } ) => {
 										isDestructive
 										onClick={ handleDelete }
 										isBusy={ 'delete' === action }
-										disabled={ 'update' === action || 'delete' === action }
-										size="small"
+										disabled={
+											'update' === action || 'delete' === action || nextdoorStatus.needs_reconnect || nextdoorStatus.needs_setup
+										}
+										accessibleWhenDisabled
+										size="compact"
 									>
 										{ 'delete' === action ? __( 'Removing…', 'newspack-plugin' ) : __( 'Remove', 'newspack-plugin' ) }
 									</Button>
@@ -266,7 +421,13 @@ const NextdoorPostSidebar = ( { postId, postStatus } ) => {
 							<p className="nextdoor-sidebar__description">
 								{ __( 'Share this post to your Nextdoor community to engage local readers.', 'newspack-plugin' ) }
 							</p>
-							<Button variant="primary" onClick={ handlePublish } isBusy={ 'publish' === action } disabled={ 'publish' === action }>
+							<Button
+								variant="primary"
+								onClick={ handlePublish }
+								isBusy={ 'publish' === action }
+								disabled={ 'publish' === action || nextdoorStatus.needs_reconnect || nextdoorStatus.needs_setup }
+								accessibleWhenDisabled
+							>
 								{ 'publish' === action ? __( 'Publishing…', 'newspack-plugin' ) : __( 'Publish on Nextdoor', 'newspack-plugin' ) }
 							</Button>
 						</PanelBody>
@@ -278,19 +439,20 @@ const NextdoorPostSidebar = ( { postId, postStatus } ) => {
 
 	return (
 		<PluginSidebar name="nextdoor-publish" title={ __( 'Nextdoor', 'newspack-plugin' ) } icon={ nextdoorIcon } className="nextdoor-post-plugin">
-			{ renderContent() }
+			{ /* Focusable so keyboard position can be returned here when an action removes the control that held it. */ }
+			<div ref={ contentRef } tabIndex={ -1 }>
+				{ renderContent() }
+			</div>
 		</PluginSidebar>
 	);
 };
 
-// Nextdoor Icon.
 const nextdoorIcon = (
 	<SVG xmlns="http://www.w3.org/2000/svg" enable-background="new 0 0 24 24" viewBox="0 0 24 24" id="nextdoor">
 		<polygon points="19.879 21.5 19.879 11.703 22.039 13.014 24 9.821 12.001 2.5 7.88 5.017 7.88 2.5 4.122 2.5 4.122 7.305 0 9.821 1.962 13.014 4.123 11.703 4.123 21.5" />
 	</SVG>
 );
 
-// Plugin wrapper.
 const NextdoorPostSidebarPlugin = () => {
 	const { postId, postStatus } = useSelect( select => {
 		const { getCurrentPostId, getCurrentPostAttribute } = select( 'core/editor' );
@@ -303,7 +465,6 @@ const NextdoorPostSidebarPlugin = () => {
 	return <NextdoorPostSidebar postId={ postId } postStatus={ postStatus } />;
 };
 
-// Register the plugin.
 registerPlugin( 'newspack-nextdoor-post-plugin', {
 	render: NextdoorPostSidebarPlugin,
 	icon: nextdoorIcon,

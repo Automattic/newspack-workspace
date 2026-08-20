@@ -5,32 +5,33 @@
 /**
  * WordPress dependencies
  */
-import { __ } from '@wordpress/i18n';
+import { __experimentalVStack as VStack } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
 
 /**
  * Internal dependencies
  */
-import XPixel from './x-pixel';
+import { SocialCardsProvider } from './context';
+import Publicize from './publicize';
 import MetaPixel from './meta-pixel';
+import XPixel from './x-pixel';
 import Nextdoor from './nextdoor';
 
 /**
- * Internal dependencies
+ * Styles
  */
-import Section from '../../../../wizards-section';
-import Publicize from './publicize';
+import './style.scss';
 
 function Social() {
 	return (
-		<div className="newspack-wizard__sections">
-			<h2 className="newspack-wizard__heading">{ __( 'Social', 'newspack-plugin' ) }</h2>
-
-			<Section>
-				<Publicize />
-				<MetaPixel />
-				<XPixel />
-				<Nextdoor />
-			</Section>
+		<div className="newspack-wizard__sections newspack-wizard__sections--narrow newspack-social-settings">
+			<SocialCardsProvider>
+				<VStack spacing={ 4 }>
+					<Publicize />
+					<MetaPixel />
+					<XPixel />
+					<Nextdoor />
+				</VStack>
+			</SocialCardsProvider>
 		</div>
 	);
 }

@@ -58,6 +58,95 @@ import {
 	WebPreview,
 } from '../../../packages/components/src';
 import * as newspackIcons from '../../../packages/icons';
+import { SocialCardsProvider } from '../newspack/views/settings/social/context';
+import { NextdoorForm } from '../newspack/views/settings/social/nextdoor/form';
+import '../newspack/views/settings/social/style.scss';
+
+// The demo page does not localise the settings wizard data the Nextdoor flow
+// reads, so stand in for it without clobbering the real thing.
+window.newspackSettings = window.newspackSettings || {};
+window.newspackSettings.social = window.newspackSettings.social || {};
+window.newspackSettings.social.nextdoor = window.newspackSettings.social.nextdoor || {
+	country_options: [
+		{ label: 'United States', value: 'US' },
+		{ label: 'Canada', value: 'CA' },
+		{ label: 'Australia', value: 'AU' },
+	],
+	default_country: 'US',
+	site_url: 'https://example.com',
+	available_roles: [
+		{ label: 'Administrator', value: 'administrator' },
+		{ label: 'Editor', value: 'editor' },
+		{ label: 'Author', value: 'author' },
+		{ label: 'Contributor', value: 'contributor' },
+	],
+	redirect_uri: 'https://example.com/wp-admin/admin.php?page=newspack-settings&nextdoor_oauth_callback=1',
+};
+
+const NEXTDOOR_STATUS = {
+	is_connected: false,
+	has_credentials: false,
+	has_centralized_credentials: false,
+	has_tokens: false,
+	has_page: false,
+	token_valid: false,
+};
+
+const NEXTDOOR_CLAIMED = {
+	...NEXTDOOR_STATUS,
+	is_connected: true,
+	has_credentials: true,
+	has_tokens: true,
+	has_page: true,
+	token_valid: true,
+};
+
+const NEXTDOOR_SETTINGS = { client_id: '', publication_url: '', allowed_roles: [] };
+
+// Connect and Claim Page navigate away in the real flow. Rejecting keeps the
+// demo on the page: the form catches, so each card stays on its own state.
+const nextdoorDemoAction = () => Promise.reject( new Error( 'Demo only.' ) );
+
+const NEXTDOOR_STATES = [
+	{
+		title: __( 'Nothing set up yet', 'newspack-plugin' ),
+		description: __( 'Credentials and account are one action. Claiming the page waits until Nextdoor has authorised.', 'newspack-plugin' ),
+		status: NEXTDOOR_STATUS,
+	},
+	{
+		title: __( 'Credentials saved', 'newspack-plugin' ),
+		description: __( 'Same screen on a return visit: the secret reads as stored, and leaving it blank keeps it.', 'newspack-plugin' ),
+		status: { ...NEXTDOOR_STATUS, has_credentials: true },
+	},
+	{
+		title: __( 'Account connected', 'newspack-plugin' ),
+		description: __(
+			'Back from Nextdoor with the page still to claim, so the publishing roles are visible but not yet selectable.',
+			'newspack-plugin'
+		),
+		status: { ...NEXTDOOR_STATUS, has_credentials: true, has_tokens: true, token_valid: true },
+	},
+	{
+		title: __( 'Fully connected', 'newspack-plugin' ),
+		description: __(
+			'The everyday view: the publication page and the roles allowed to publish, with the badge reading Enabled.',
+			'newspack-plugin'
+		),
+		status: NEXTDOOR_CLAIMED,
+		settings: { ...NEXTDOOR_SETTINGS, allowed_roles: [ 'administrator' ] },
+		badge: { level: 'success', text: __( 'Enabled', 'newspack-plugin' ) },
+	},
+	{
+		title: __( 'Sign-in expired', 'newspack-plugin' ),
+		description: __(
+			'Everything is still set up, but the sign-in has lapsed, so the form asks for it again, with the badge reading Reconnect needed. Cancel goes back to the publication page and roles.',
+			'newspack-plugin'
+		),
+		status: { ...NEXTDOOR_CLAIMED, token_valid: false },
+		settings: { ...NEXTDOOR_SETTINGS, allowed_roles: [ 'administrator' ] },
+		badge: { level: 'error', text: __( 'Reconnect needed', 'newspack-plugin' ) },
+	},
+];
 
 class ComponentsDemo extends Component {
 	/**
@@ -1250,6 +1339,38 @@ class ComponentsDemo extends Component {
 									/>
 								) ) }
 							</VStack>
+						</Card>
+						<Card>
+							<h2>{ __( 'Nextdoor integration', 'newspack-plugin' ) }</h2>
+							<p>
+								{ __(
+									'Every state of Newspack > Settings > Social > Nextdoor, pinned open so the layout can be reviewed without a Nextdoor account. One form covers setup and everyday use, so these are the same screen at five points. It is the real form, so it cannot drift from what a publisher sees. The primary buttons are inert here.',
+									'newspack-plugin'
+								) }
+							</p>
+							<SocialCardsProvider>
+								<VStack spacing={ 2 }>
+									{ NEXTDOOR_STATES.map( state => (
+										<CardForm
+											key={ state.title }
+											title={ state.title }
+											description={ state.description }
+											badge={ state.badge }
+											isOpen
+										>
+											<NextdoorForm
+												settings={ state.settings || NEXTDOOR_SETTINGS }
+												status={ state.status }
+												error={ null }
+												updateSettings={ nextdoorDemoAction }
+												startOAuthFlow={ nextdoorDemoAction }
+												claimPage={ nextdoorDemoAction }
+												setError={ () => {} }
+											/>
+										</CardForm>
+									) ) }
+								</VStack>
+							</SocialCardsProvider>
 						</Card>
 						<Card>
 							<h2>{ __( 'Newspack Icons', 'newspack-plugin' ) }</h2>

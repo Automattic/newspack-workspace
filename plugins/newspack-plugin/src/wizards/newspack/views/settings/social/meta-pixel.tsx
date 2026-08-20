@@ -7,56 +7,50 @@
  */
 import { __ } from '@wordpress/i18n';
 import { createInterpolateElement } from '@wordpress/element';
+import { ExternalLink } from '@wordpress/components';
 
 /**
  * Internal dependencies
  */
 import { PAGE_NAMESPACE } from '../constants';
-import { TextControl } from '../../../../../../packages/components/src';
-import WizardsToggleHeaderCard from '../../../../wizards-toggle-header-card';
+import PixelCard from './pixel-card';
 
-const MetaPixel = () => {
-	return (
-		<WizardsToggleHeaderCard< PixelData >
-			title={ __( 'Meta Pixel', 'newspack-plugin' ) }
-			namespace={ `${ PAGE_NAMESPACE }/social/pixels/meta` }
-			description={ __( 'Add the Meta pixel (formerly known as Facebook pixel) to your site.', 'newspack-plugin' ) }
-			path="/newspack/v1/wizard/newspack-settings/social/meta_pixel"
-			defaultValue={ {
-				active: false,
-				pixel_id: '',
-			} }
-			fieldValidationMap={ [
-				[
-					'pixel_id',
-					{
-						callback: 'isIntegerId',
-					},
-				],
-			] }
-			renderProp={ ( { settingsUpdates, setSettingsUpdates, isFetching } ) => (
-				<TextControl
-					value={ settingsUpdates?.pixel_id ?? '' }
-					label={ __( 'Pixel ID', 'newspack-plugin' ) }
-					onChange={ ( pixel_id: string ) => setSettingsUpdates( { ...settingsUpdates, pixel_id } ) }
-					help={ createInterpolateElement(
-						__(
-							'The Meta Pixel ID. You only need to add the number, not the full code. Example: 123456789123456789. You can get this information <linkToFb>here</linkToFb>.',
-							'newspack-plugin'
-						),
-						{
-							linkToFb: (
-								/* eslint-disable-next-line jsx-a11y/anchor-has-content */
-								<a href="https://www.facebook.com/ads/manager/pixel/facebook_pixel" target="_blank" rel="noopener noreferrer" />
-							),
-						}
-					) }
-					disabled={ isFetching }
-					autoComplete="one-time-code"
-				/>
-			) }
-		/>
-	);
+const validate = ( value: string ) => {
+	const trimmed = value.trim();
+	if ( trimmed === '' ) {
+		return __( 'Enter your Meta pixel ID.', 'newspack-plugin' );
+	}
+	if ( ! /^[0-9]+$/.test( trimmed ) ) {
+		return __( 'The Meta pixel ID is numbers only.', 'newspack-plugin' );
+	}
+	if ( trimmed === '0' ) {
+		return __( 'That is not a valid Meta pixel ID.', 'newspack-plugin' );
+	}
+	return null;
 };
+
+const MetaPixel = () => (
+	<PixelCard
+		title={ __( 'Meta Pixel', 'newspack-plugin' ) }
+		description={ __( 'Add the Meta pixel to your site to measure the results of Facebook and Instagram ad campaigns.', 'newspack-plugin' ) }
+		namespace={ `${ PAGE_NAMESPACE }/social/pixels/meta` }
+		path="/newspack/v1/wizard/newspack-settings/social/meta_pixel"
+		validate={ validate }
+		renderHelp={ () =>
+			createInterpolateElement(
+				__(
+					'The Meta Pixel ID. You only need to add the number, not the full code. Example: 123456789123456789. You can get this information <linkToFb>here</linkToFb>.',
+					'newspack-plugin'
+				),
+				{
+					linkToFb: (
+						// createInterpolateElement replaces the child with the tagged text.
+						<ExternalLink href="https://www.facebook.com/ads/manager/pixel/facebook_pixel">{ '' }</ExternalLink>
+					),
+				}
+			)
+		}
+	/>
+);
 
 export default MetaPixel;

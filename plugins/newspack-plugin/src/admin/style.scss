@@ -12,6 +12,7 @@ $wizard-column-width: calc(calc(var(--newspack-wizard-section-space) * 2) + var(
 :root {
 	/* Sections */
 	--newspack-wizard-section-width: 1006px;
+	--newspack-wizard-section-width-narrow: 632px;
 	--newspack-wizard-section-space: 24px;
 	--newspack-wizard-section-child-space: 16px;
 
@@ -232,6 +233,11 @@ h1 {
 		color: wp-colors.$gray-700;
 		margin-bottom: 2rem;
 	}
+}
+
+.newspack-wizard__sections--narrow,
+.newspack-wizard__content--narrow {
+	max-width: calc(calc(var(--newspack-wizard-section-space) * 2) + var(--newspack-wizard-section-width-narrow));
 }
 
 .newspack-wizard__content > .newspack-wizard__section-header:not(:first-child) {

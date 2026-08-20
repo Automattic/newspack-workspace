@@ -184,7 +184,11 @@ class AdvertisingWizard extends Component {
 						<Route
 							path="/placements"
 							render={ () => (
-								<Placements headerText={ __( 'Advertising / Display Ads', 'newspack-plugin' ) } tabbedNavigation={ tabs } />
+								<Placements
+									headerText={ __( 'Advertising / Display Ads', 'newspack-plugin' ) }
+									tabbedNavigation={ tabs }
+									className="newspack-wizard__content--narrow"
+								/>
 							) }
 						/>
 						<Route

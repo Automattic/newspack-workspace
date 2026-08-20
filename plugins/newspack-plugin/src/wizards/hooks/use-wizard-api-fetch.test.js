@@ -3,10 +3,22 @@
 /**
  * External dependencies
  */
-import { render, screen, act } from '@testing-library/react';
+import { render, screen, act, waitFor } from '@testing-library/react';
 
 // Mock-prefixed names so Jest's hoisted jest.mock can close over them.
-const mockUpdateWizardSettings = jest.fn();
+// The dispatcher stands in for the store: it writes to `mockWizardData` at the
+// path it is given, which is what makes the cache observable to a later mount.
+const mockUpdateWizardSettings = jest.fn( ( { path, value } ) => {
+	if ( ! Array.isArray( path ) ) {
+		return;
+	}
+	let node = mockWizardData;
+	path.slice( 0, -1 ).forEach( key => {
+		node[ key ] = node[ key ] ?? {};
+		node = node[ key ];
+	} );
+	node[ path[ path.length - 1 ] ] = value;
+} );
 const mockWizardApiFetch = jest.fn();
 let mockWizardData = {};
 
@@ -24,16 +36,36 @@ jest.mock( '../../../packages/components/src/wizard/store', () => ( {
 	WIZARD_STORE_NAMESPACE: 'newspack/wizards',
 } ) );
 
+// The toggle hook takes one spinner from the component barrel; importing the
+// real barrel boots @wordpress/components stores the mocked data module can't serve.
+jest.mock( '../../../packages/components/src', () => ( {
+	Waiting: () => null,
+} ) );
+
 /**
  * Internal dependencies
  */
 import { useWizardApiFetch } from './use-wizard-api-fetch';
+import useWizardApiFetchToggle from './use-wizard-api-fetch-toggle';
 
 // Capture the hook's latest return value so tests can drive it and read state.
 let hook;
 function HookProbe() {
 	hook = useWizardApiFetch( 'test-slug' );
 	return hook.errorMessage ? <div data-testid="error">{ hook.errorMessage }</div> : null;
+}
+
+const TOGGLE_PATH = '/newspack/v1/wizard/test-toggle';
+
+let toggle;
+function ToggleProbe() {
+	toggle = useWizardApiFetchToggle( {
+		path: TOGGLE_PATH,
+		apiNamespace: 'test-toggle',
+		data: { label: 'initial' },
+		description: 'Toggle description',
+	} );
+	return <div data-testid="label">{ toggle.apiData.label }</div>;
 }
 
 // Writes into the store's `error` path — the sync that produced the NPPM-2733 loop.
@@ -47,6 +79,7 @@ describe( 'useWizardApiFetch', () => {
 		mockWizardApiFetch.mockReset();
 		mockWizardData = {};
 		hook = undefined;
+		toggle = undefined;
 	} );
 
 	it( 'does not write an error into the shared wizard store on mount (NPPM-2733)', () => {
@@ -101,5 +134,27 @@ describe( 'useWizardApiFetch', () => {
 		// Changing the slug must clear the stale error.
 		rerender( <SlugProbe slug="slug-b" /> );
 		expect( screen.queryByTestId( 'error' ) ).toBeNull();
+	} );
+
+	it( 'mirrors a POST response into the GET cache, so a remount is served the saved payload', async () => {
+		// A POST is never cached under its own method, so without
+		// `updateCacheMethods: [ 'GET' ]` the next mount is served — and a later
+		// save writes back — the stale first-load snapshot.
+		mockWizardApiFetch.mockImplementation( ( { method } ) => Promise.resolve( { label: method === 'POST' ? 'saved' : 'stored' } ) );
+
+		const first = render( <ToggleProbe /> );
+		await waitFor( () => expect( screen.getByTestId( 'label' ).textContent ).toBe( 'stored' ) );
+
+		await act( async () => {
+			await toggle.apiFetchToggle( { label: 'saved' }, true );
+		} );
+		expect( screen.getByTestId( 'label' ).textContent ).toBe( 'saved' );
+
+		first.unmount();
+		mockWizardApiFetch.mockClear();
+
+		render( <ToggleProbe /> );
+		await waitFor( () => expect( screen.getByTestId( 'label' ).textContent ).toBe( 'saved' ) );
+		expect( mockWizardApiFetch ).not.toHaveBeenCalled();
 	} );
 } );

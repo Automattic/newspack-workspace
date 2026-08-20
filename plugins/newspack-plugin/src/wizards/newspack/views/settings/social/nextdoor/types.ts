@@ -4,7 +4,6 @@
 
 export interface NextdoorSettings {
 	client_id: string;
-	client_secret: string;
 	publication_url: string;
 	allowed_roles: string[];
 }
@@ -21,8 +20,24 @@ export interface NextdoorStatus {
 export interface NextdoorData {
 	module_enabled_nextdoor: boolean;
 	is_connected: boolean;
-	connection_status: NextdoorStatus;
+	/**
+	 * An empty array while the module is off, which is what the endpoint sends, and what
+	 * the card starts from so it can tell an unanswered request from a real status.
+	 */
+	connection_status: NextdoorStatus | [];
 	settings: NextdoorSettings;
+}
+
+/**
+ * The endpoint's write shape: a flat partial of the settings it accepts, plus
+ * the module flag. It is deliberately not a `Partial< NextdoorData >` — the
+ * server takes these fields at the top level and ignores the read-only ones.
+ */
+export interface NextdoorUpdatePayload {
+	module_enabled_nextdoor?: boolean;
+	client_id?: string;
+	client_secret?: string;
+	allowed_roles?: string[];
 }
 
 export interface OAuthResponse {
@@ -30,26 +45,17 @@ export interface OAuthResponse {
 }
 
 export interface ClaimPageResponse {
-	page_id?: number;
+	page_id?: string;
 	success?: boolean;
 }
 
-export interface OnboardingProps {
+export interface NextdoorFormProps {
 	settings: NextdoorSettings;
 	status: NextdoorStatus;
 	error: string | null;
-	updateSettings: ( settings: Partial< NextdoorSettings > ) => Promise< NextdoorSettings >;
+	updateSettings: ( payload: NextdoorUpdatePayload ) => Promise< void >;
 	startOAuthFlow: ( email: string, country: string ) => Promise< OAuthResponse >;
 	claimPage: ( publicationUrl: string, test?: boolean ) => Promise< ClaimPageResponse >;
 	setError: ( error: string | null ) => void;
-	disconnect: () => Promise< void >;
-}
-
-export interface SettingsProps {
-	settings: NextdoorSettings;
-	status: NextdoorStatus;
-	error: string | null;
-	updateSettings: ( settings: Partial< NextdoorSettings > ) => Promise< NextdoorSettings >;
-	setError: ( error: string | null ) => void;
-	disconnect: () => Promise< void >;
+	renderSecondaryActions?: () => React.ReactNode;
 }

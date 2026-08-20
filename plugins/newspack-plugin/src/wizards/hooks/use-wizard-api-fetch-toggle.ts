@@ -12,8 +12,12 @@ import { useWizardApiFetch } from './use-wizard-api-fetch';
 
 /**
  * Hook to perform toggle operations using the Wizard API.
+ *
+ * `T` is the shape the endpoint reads back; `P` is the shape it accepts on a
+ * write. They coincide for endpoints that round-trip their own payload, which
+ * is why `P` defaults to `Partial< T >`.
  */
-function useWizardApiFetchToggle< T >( {
+function useWizardApiFetchToggle< T, P = Partial< T > >( {
 	path,
 	apiNamespace,
 	refreshOn = [],
@@ -30,28 +34,27 @@ function useWizardApiFetchToggle< T >( {
 
 	const [ actionText, setActionText ] = useState< React.ReactNode >( null );
 
-	const { wizardApiFetch, isFetching, errorMessage } = useWizardApiFetch( apiNamespace );
+	const { wizardApiFetch, isFetching, errorMessage, resetError } = useWizardApiFetch( apiNamespace );
 
-	/**
-	 * Perform `GET` request on initial load.
-	 */
 	useEffect( () => {
-		apiFetchToggle();
+		// The rejection is already surfaced through `errorMessage`; swallowing it here
+		// keeps a failed first load from raising an unhandled rejection.
+		apiFetchToggle().catch( () => {} );
 	}, [] );
 
 	/**
 	 * Toggle function for the Wizard API fetch.
 	 *
-	 * `dataToSend` is a `Partial< T >` so callers can send only the writable
-	 * fields and omit server-derived, read-only ones. The fetched response
-	 * (always the full `T`) is what gets written back into state.
+	 * `dataToSend` is a `P` so callers can send only the writable fields and omit
+	 * server-derived, read-only ones. The fetched response (always the full `T`)
+	 * is what gets written back into state.
 	 *
 	 * @param dataToSend Data to send to endpoint.
 	 * @param isToggleOn If set method will default to POST, otherwise GET.
 	 * @return The request promise, so callers can react to failures. Rejects
 	 *         with the API error (already surfaced via `errorMessage`).
 	 */
-	function apiFetchToggle( dataToSend?: Partial< T >, isToggleOn?: boolean ) {
+	function apiFetchToggle( dataToSend?: P, isToggleOn?: boolean ) {
 		const method = typeof isToggleOn === 'boolean' && isToggleOn ? 'POST' : 'GET';
 
 		const options: ApiFetchOptions = {
@@ -62,10 +65,8 @@ function useWizardApiFetchToggle< T >( {
 			options.data = dataToSend;
 		}
 		if ( method === 'POST' ) {
-			// Mirror a successful save into the store's GET cache. The mount
-			// GET is served from that cache, so without this a remount (e.g.
-			// revisiting a settings tab) would show — and a later save could
-			// write back — the stale first-load snapshot.
+			// The mount GET is served from the store's cache, so without mirroring the save
+			// into it a remount would show, and a later save write back, a stale snapshot.
 			options.updateCacheMethods = [ 'GET' ];
 		}
 		return wizardApiFetch< T >( options, {
@@ -87,6 +88,7 @@ function useWizardApiFetchToggle< T >( {
 		description: isFetching ? __( 'Loading…', 'newspack-plugin' ) : description,
 		errorMessage,
 		isFetching,
+		resetError,
 	};
 }
 
