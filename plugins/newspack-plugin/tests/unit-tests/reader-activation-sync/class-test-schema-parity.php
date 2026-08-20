@@ -221,9 +221,9 @@ class Test_Schema_Parity extends \WP_UnitTestCase {
 	 * site's stored display names migrate onto.
 	 *
 	 * Total Paid is deliberately not among them: v1's total_paid blanks when
-	 * the reader has no current-product order and v2's Total_Paid never does,
-	 * so the two have different semantics and v2's member was renamed
-	 * ("Lifetime Total Paid") instead of declared equivalent. See
+	 * the reader has no current-product order and v2's Lifetime_Total_Paid
+	 * never does, so the two have different semantics and v2's member was
+	 * renamed ("Lifetime Total Paid") instead of declared equivalent. See
 	 * test_total_paid_and_lifetime_total_paid_coexist() below.
 	 *
 	 * @var array<string, string[]>
@@ -333,9 +333,9 @@ class Test_Schema_Parity extends \WP_UnitTestCase {
 	/**
 	 * Total Paid is not a value-equivalent pair: v1's total_paid blanks
 	 * whenever the reader has no current-product order (erase-on-lapse
-	 * behavior legacy segments may rely on), while v2's Total_Paid — renamed
-	 * "Lifetime Total Paid" so it stops claiming the same ESP name — always
-	 * reports the customer's lifetime spend. Enabling both ids at once
+	 * behavior legacy segments may rely on), while v2's Lifetime_Total_Paid —
+	 * renamed "Lifetime Total Paid" so it stops claiming the same ESP name —
+	 * always reports the customer's lifetime spend. Enabling both ids at once
 	 * (explicit ids can store both members of a pair; see
 	 * Integration::update_enabled_outgoing_fields()) must therefore emit both
 	 * values side by side, each keeping its own semantics, rather than one
@@ -350,10 +350,10 @@ class Test_Schema_Parity extends \WP_UnitTestCase {
 		);
 		// Lifetime spend is on record, but there is no current-product order
 		// (no subscription, no donation) — the condition that blanks v1's
-		// total_paid while leaving v2's Total_Paid untouched.
+		// total_paid while leaving v2's Lifetime_Total_Paid untouched.
 		\update_user_meta( $user_id, 'wc_total_spent', '50.00' );
 
-		$this->store_selection( [ 'v1:total_paid', 'v2:Total_Paid' ] );
+		$this->store_selection( [ 'v1:total_paid', 'v2:Lifetime_Total_Paid' ] );
 		$payload = $this->build_payload( $user_id );
 
 		// v1 semantics: blanked because there is no current-product order.

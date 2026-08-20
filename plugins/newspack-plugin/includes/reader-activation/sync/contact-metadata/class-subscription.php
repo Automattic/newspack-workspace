@@ -76,8 +76,8 @@ class Subscription extends Contact_Metadata {
 			'Current_Subscription_Product_Name'      => 'Current Subscription Product Name',
 			'Previous_Subscription_Product'          => 'Previous Subscription Product',
 			'Current_Subscription_Coupon_Code'       => 'Current Subscription Coupon Code',
-			'Last_Payment_Amount'                    => 'Last Subscription Payment Amount',
-			'Last_Payment_Date'                      => 'Last Subscription Payment Date',
+			'Last_Subscription_Payment_Amount'       => 'Last Subscription Payment Amount',
+			'Last_Subscription_Payment_Date'         => 'Last Subscription Payment Date',
 		];
 	}
 
@@ -172,7 +172,7 @@ class Subscription extends Contact_Metadata {
 			// Placeholder name pending naming review (NPPD-2067). Distinct from
 			// the legacy field, which covers payment on any product; this one is
 			// scoped to the reader's current non-donation subscription.
-			'Last_Payment_Amount'                    => [
+			'Last_Subscription_Payment_Amount'       => [
 				'name'        => 'Last Subscription Payment Amount',
 				'description' => __( 'Amount of the most recent payment on the reader\'s current non-donation subscription. Unlike the legacy Last Payment Amount, one-time purchases and donations are excluded.', 'newspack-plugin' ),
 				'example'     => '15',
@@ -180,8 +180,8 @@ class Subscription extends Contact_Metadata {
 				'supersedes'  => 'v1:last_payment_amount',
 			],
 			// Placeholder name pending naming review (NPPD-2067). See the note on
-			// Last_Payment_Amount above.
-			'Last_Payment_Date'                      => [
+			// Last_Subscription_Payment_Amount above.
+			'Last_Subscription_Payment_Date'         => [
 				'name'        => 'Last Subscription Payment Date',
 				'description' => __( 'Date of the most recent payment on the reader\'s current non-donation subscription (YYYY-MM-DD HH:MM:SS). Unlike the legacy Last Payment Date, one-time purchases and donations are excluded.', 'newspack-plugin' ),
 				'example'     => '2022-09-19 00:00:00',
@@ -213,8 +213,8 @@ class Subscription extends Contact_Metadata {
 			'Current_Subscription_Product_Name'      => $this->get_current_subscription_product_name(),
 			'Previous_Subscription_Product'          => $this->get_previous_subscription_product(),
 			'Current_Subscription_Coupon_Code'       => $this->get_current_subscription_coupon_code(),
-			'Last_Payment_Amount'                    => $this->get_last_payment_amount(),
-			'Last_Payment_Date'                      => $this->get_last_payment_date(),
+			'Last_Subscription_Payment_Amount'       => $this->get_last_payment_amount(),
+			'Last_Subscription_Payment_Date'         => $this->get_last_payment_date(),
 		];
 	}
 

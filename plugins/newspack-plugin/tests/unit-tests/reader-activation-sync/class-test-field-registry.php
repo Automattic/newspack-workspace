@@ -39,18 +39,19 @@ class Test_Field_Registry extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * Definitions are keyed by a `{version}:{raw_key}` id. The id is the raw
-	 * key's version-qualified spelling and is independent of the ESP name, so
-	 * a v2 field that was renamed to stop colliding with its legacy
-	 * counterpart keeps its id and changes only its `name`.
+	 * Definitions are keyed by a `{version}:{raw_key}` id — the raw key's
+	 * version-qualified spelling, independent of the ESP name. A v2 field
+	 * that was renamed to stop colliding with its legacy counterpart carries
+	 * its own distinct raw key, so its id and its `name` both differ from
+	 * the legacy definition's.
 	 */
 	public function test_ids_are_version_qualified() {
 		$defs = Field_Registry::get_definitions();
 		$this->assertArrayHasKey( 'v1:last_payment_amount', $defs );
-		$this->assertArrayHasKey( 'v2:Last_Payment_Amount', $defs );
+		$this->assertArrayHasKey( 'v2:Last_Subscription_Payment_Amount', $defs );
 		$this->assertSame( 'v1', $defs['v1:last_payment_amount']['version'] );
 		$this->assertSame( 'Last Payment Amount', $defs['v1:last_payment_amount']['name'] );
-		$this->assertSame( 'Last Subscription Payment Amount', $defs['v2:Last_Payment_Amount']['name'] );
+		$this->assertSame( 'Last Subscription Payment Amount', $defs['v2:Last_Subscription_Payment_Amount']['name'] );
 	}
 
 	/**
@@ -358,7 +359,7 @@ class Test_Field_Registry extends \WP_UnitTestCase {
 		$this->assertSame( [ 'account' ], Field_Registry::get_equivalent_input_raw_keys( 'v2:Account' ) );
 		$this->assertSame( [ 'Account' ], Field_Registry::get_equivalent_input_raw_keys( 'v1:account' ) );
 
-		$this->assertSame( [], Field_Registry::get_equivalent_input_raw_keys( 'v2:Last_Payment_Amount' ) );
+		$this->assertSame( [], Field_Registry::get_equivalent_input_raw_keys( 'v2:Last_Subscription_Payment_Amount' ) );
 		$this->assertSame( [], Field_Registry::get_equivalent_input_raw_keys( 'v1:last_payment_amount' ) );
 	}
 

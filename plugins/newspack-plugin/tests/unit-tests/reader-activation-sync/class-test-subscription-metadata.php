@@ -103,8 +103,8 @@ class Test_Subscription_Metadata extends WP_UnitTestCase {
 		$this->assertArrayHasKey( 'Current_Subscription_Product_Name', $fields );
 		$this->assertArrayHasKey( 'Previous_Subscription_Product', $fields );
 		$this->assertArrayHasKey( 'Current_Subscription_Coupon_Code', $fields );
-		$this->assertArrayHasKey( 'Last_Payment_Amount', $fields );
-		$this->assertArrayHasKey( 'Last_Payment_Date', $fields );
+		$this->assertArrayHasKey( 'Last_Subscription_Payment_Amount', $fields );
+		$this->assertArrayHasKey( 'Last_Subscription_Payment_Date', $fields );
 		$this->assertCount( 13, $fields );
 	}
 
@@ -375,8 +375,8 @@ class Test_Subscription_Metadata extends WP_UnitTestCase {
 		);
 		$this->create_subscription( [ 'orders' => [ $order ] ] );
 		$metadata = ( new Subscription( self::$user_id ) )->get_metadata();
-		$this->assertSame( '15.00', $metadata['Last_Payment_Amount'] );
-		$this->assertSame( '2025-05-20 10:00:00', $metadata['Last_Payment_Date'] );
+		$this->assertSame( '15.00', $metadata['Last_Subscription_Payment_Amount'] );
+		$this->assertSame( '2025-05-20 10:00:00', $metadata['Last_Subscription_Payment_Date'] );
 	}
 
 	public function test_last_payment_excludes_failed_orders() {
@@ -395,7 +395,7 @@ class Test_Subscription_Metadata extends WP_UnitTestCase {
 		);
 		$this->create_subscription( [ 'orders' => [ $good_order, $failed_order ] ] );
 		$metadata = ( new Subscription( self::$user_id ) )->get_metadata();
-		$this->assertSame( '10.00', $metadata['Last_Payment_Amount'] );
+		$this->assertSame( '10.00', $metadata['Last_Subscription_Payment_Amount'] );
 	}
 
 	public function test_previous_product_from_switch_order() {

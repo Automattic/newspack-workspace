@@ -1005,8 +1005,12 @@ abstract class Integration {
 	 * version-qualified field ids and writes the option back — skipped when
 	 * any stored name fails to resolve, so migration can retry on a later
 	 * read instead of permanently losing that entry. Ids themselves are never
-	 * rewritten: a stored id is the publisher's field, and both members of a
-	 * value-equivalent pair produce the same payload.
+	 * rewritten to a different field: a stored id is the publisher's field,
+	 * and both members of a value-equivalent pair produce the same payload.
+	 * The one exception is a retired id from a raw-key rename (see
+	 * Field_Registry::LEGACY_ID_REMAP), which is resolved to its current id —
+	 * still the same field, just spelled as it is stored today — without a
+	 * write-back unless a name migration is writing the option back anyway.
 	 *
 	 * An integration that never saved a selection inherits one — see
 	 * get_inherited_outgoing_field_ids(). An explicitly saved selection
@@ -1034,14 +1038,14 @@ abstract class Integration {
 			}
 		}
 		if ( ! $needs_migration ) {
-			return array_values( $stored );
+			return array_values( array_unique( array_map( [ Sync\Field_Registry::class, 'remap_legacy_id' ], $stored ) ) );
 		}
 
 		$ids            = [];
 		$has_unresolved = false;
 		foreach ( $stored as $entry ) {
 			if ( Sync\Field_Registry::is_field_id( $entry ) ) {
-				$ids[] = $entry;
+				$ids[] = Sync\Field_Registry::remap_legacy_id( $entry );
 				continue;
 			}
 			// A display name may be shared by several raw keys (legacy
@@ -1256,7 +1260,10 @@ abstract class Integration {
 	 *
 	 * Ids are stored verbatim, with no version validation: any mix of v1 and
 	 * v2 ids is storable, and both versions of a renamed field can be enabled
-	 * at once.
+	 * at once. A retired id from a raw-key rename (Field_Registry::
+	 * LEGACY_ID_REMAP) is normalized to its current id first, so a save never
+	 * re-persists a stale id even if one was carried in from a stored
+	 * selection.
 	 *
 	 * Explicit ids can therefore store both members of a pair, unlike
 	 * a name save; when that happens and both raw keys share one ESP name,
@@ -1273,6 +1280,7 @@ abstract class Integration {
 		foreach ( (array) $fields as $entry ) {
 			$entry = (string) $entry;
 			if ( Sync\Field_Registry::is_field_id( $entry ) ) {
+				$entry       = Sync\Field_Registry::remap_legacy_id( $entry );
 				$definitions = array_filter( [ Sync\Field_Registry::get_definition( $entry ) ] );
 			} else {
 				$definitions = Sync\Field_Registry::resolve_name( $entry );

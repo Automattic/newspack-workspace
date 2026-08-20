@@ -156,23 +156,28 @@ class Test_Contact_Sync_Options extends WP_UnitTestCase {
 	}
 
 	/**
-	 * The two schemas distinguish four raw keys by case alone, so the
-	 * case-insensitive pass must never get to arbitrate them: a legacy token
-	 * has to keep resolving to the legacy field, not to the renamed
-	 * new-schema one in a different ESP column.
+	 * The two schemas no longer distinguish any raw key by case alone while
+	 * assigning it a different label — the four v2 fields that once did
+	 * (Payment_Page, Total_Paid, Last_Payment_Amount, Last_Payment_Date) were
+	 * given their own distinct raw keys. The remaining case-only pairs are
+	 * the value-equivalent ones (e.g. `account` / `Account`), which share a
+	 * label, so exact-case vs case-insensitive resolution can't diverge for
+	 * them. This exercises the exact-case-first lookup that guards against a
+	 * future field reintroducing the collision, using each renamed field's
+	 * legacy and current-schema raw keys.
 	 */
 	public function test_resolve_field_labels_prefers_exact_case_raw_keys() {
 		$this->assertSame( [ 'Payment Page' ], Metadata::resolve_field_labels( [ 'payment_page' ] ) );
-		$this->assertSame( [ 'Last Payment Page' ], Metadata::resolve_field_labels( [ 'Payment_Page' ] ) );
+		$this->assertSame( [ 'Last Payment Page' ], Metadata::resolve_field_labels( [ 'Last_Payment_Page' ] ) );
 
 		$this->assertSame( [ 'Last Payment Amount' ], Metadata::resolve_field_labels( [ 'last_payment_amount' ] ) );
-		$this->assertSame( [ 'Last Subscription Payment Amount' ], Metadata::resolve_field_labels( [ 'Last_Payment_Amount' ] ) );
+		$this->assertSame( [ 'Last Subscription Payment Amount' ], Metadata::resolve_field_labels( [ 'Last_Subscription_Payment_Amount' ] ) );
 
 		$this->assertSame( [ 'Last Payment Date' ], Metadata::resolve_field_labels( [ 'last_payment_date' ] ) );
-		$this->assertSame( [ 'Last Subscription Payment Date' ], Metadata::resolve_field_labels( [ 'Last_Payment_Date' ] ) );
+		$this->assertSame( [ 'Last Subscription Payment Date' ], Metadata::resolve_field_labels( [ 'Last_Subscription_Payment_Date' ] ) );
 
 		$this->assertSame( [ 'Total Paid' ], Metadata::resolve_field_labels( [ 'total_paid' ] ) );
-		$this->assertSame( [ 'Lifetime Total Paid' ], Metadata::resolve_field_labels( [ 'Total_Paid' ] ) );
+		$this->assertSame( [ 'Lifetime Total Paid' ], Metadata::resolve_field_labels( [ 'Lifetime_Total_Paid' ] ) );
 	}
 
 	public function test_resolve_field_labels_dedupes_synonymous_tokens() {
