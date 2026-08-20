@@ -40,7 +40,9 @@ describe( 'EmptyState.Root', () => {
 				<p>body</p>
 			</EmptyState.Root>
 		);
-		expect( container.querySelector( '.newspack-empty-state' ).firstElementChild ).toHaveClass( 'newspack-empty-state__stack' );
+		const stack = container.querySelector( '.newspack-empty-state' ).firstElementChild;
+		expect( stack ).toHaveClass( 'newspack-empty-state__stack' );
+		expect( stack ).toHaveStyle( { gap: 'var(--wpds-dimension-gap-2xl, 32px)' } );
 	} );
 
 	// Consumers key `:has()` selectors off this class, so losing it changes their
@@ -86,8 +88,12 @@ describe( 'EmptyState.Header', () => {
 			</EmptyState.Root>
 		);
 		const header = container.querySelector( '.newspack-empty-state__header' );
-		expect( header ).toHaveStyle( { flexDirection: 'column', alignItems: 'center' } );
-		expect( header.firstElementChild ).toHaveStyle( { flexDirection: 'column', alignItems: 'center' } );
+		expect( header ).toHaveStyle( { flexDirection: 'column', alignItems: 'center', gap: 'var(--wpds-dimension-gap-sm, 8px)' } );
+		expect( header.firstElementChild ).toHaveStyle( {
+			flexDirection: 'column',
+			alignItems: 'center',
+			gap: 'var(--wpds-dimension-gap-lg, 16px)',
+		} );
 	} );
 
 	it( 'wraps the icon in the disc', () => {
@@ -109,24 +115,29 @@ describe( 'EmptyState.Header', () => {
 		expect( container.querySelector( '.newspack-empty-state__icon' ) ).not.toBeInTheDocument();
 	} );
 
-	it( 'renders an h2 at the default size', () => {
+	it( 'renders an h2 and a 48px icon at the default size', () => {
 		const { container } = render(
 			<EmptyState.Root>
-				<EmptyState.Header title="Get started with newsletters" />
+				<EmptyState.Header title="Get started with newsletters" icon={ <svg /> } />
 			</EmptyState.Root>
 		);
 		expect( screen.getByRole( 'heading', { level: 2, name: 'Get started with newsletters' } ) ).toBeInTheDocument();
 		expect( container.querySelector( '.newspack-empty-state__header--small' ) ).not.toBeInTheDocument();
+		expect( container.querySelector( '.newspack-empty-state__icon svg' ) ).toHaveAttribute( 'width', '48' );
 	} );
 
-	it( 'drops to an h3 and the small modifier when the root is small', () => {
+	it( 'drops to an h3, the small modifier and a 24px icon when the root is small', () => {
 		const { container } = render(
 			<EmptyState.Root size="small">
-				<EmptyState.Header title="No products match this rule" />
+				<EmptyState.Header title="No products match this rule" icon={ <svg /> } />
 			</EmptyState.Root>
 		);
 		expect( container.querySelector( '.newspack-empty-state__header--small' ) ).toBeInTheDocument();
 		expect( screen.getByRole( 'heading', { level: 3, name: 'No products match this rule' } ) ).toBeInTheDocument();
+		expect( container.querySelector( '.newspack-empty-state__icon svg' ) ).toHaveAttribute( 'width', '24' );
+		expect( container.querySelector( '.newspack-empty-state__header' ).firstElementChild ).toHaveStyle( {
+			gap: 'var(--wpds-dimension-gap-md, 12px)',
+		} );
 	} );
 
 	it( 'lets heading override the level the size implies', () => {
@@ -149,7 +160,7 @@ describe( 'EmptyState.Header', () => {
 		expect( header ).toHaveClass( 'consumer-header' );
 	} );
 
-	it( 'throws outside Root', () => {
+	it( 'throws outside Root in development', () => {
 		const consoleError = jest.spyOn( console, 'error' ).mockImplementation( () => {} );
 		try {
 			expect( () => render( <EmptyState.Header title="Orphan" /> ) ).toThrow(
@@ -157,6 +168,21 @@ describe( 'EmptyState.Header', () => {
 			);
 		} finally {
 			consoleError.mockRestore();
+		}
+	} );
+
+	// Header is the visible half, so a misplaced one blanking an admin screen costs more
+	// than the default size it falls back to.
+	it( 'falls back to the default size outside Root in production', () => {
+		const previous = process.env.NODE_ENV;
+		process.env.NODE_ENV = 'production';
+		try {
+			const { container } = render( <EmptyState.Header title="Orphan" icon={ <svg /> } /> );
+			expect( screen.getByRole( 'heading', { level: 2, name: 'Orphan' } ) ).toBeInTheDocument();
+			expect( container.querySelector( '.newspack-empty-state__header--small' ) ).not.toBeInTheDocument();
+			expect( container.querySelector( '.newspack-empty-state__icon svg' ) ).toHaveAttribute( 'width', '48' );
+		} finally {
+			process.env.NODE_ENV = previous;
 		}
 	} );
 } );
@@ -171,7 +197,10 @@ describe( 'EmptyState.Actions', () => {
 			</EmptyState.Root>
 		);
 		expect( container.querySelector( '.newspack-empty-state__actions' ) ).toBeInTheDocument();
-		expect( container.querySelector( '.newspack-empty-state__actions' ) ).toHaveStyle( { justifyContent: 'center' } );
+		expect( container.querySelector( '.newspack-empty-state__actions' ) ).toHaveStyle( {
+			justifyContent: 'center',
+			gap: 'var(--wpds-dimension-gap-sm, 8px)',
+		} );
 		expect( screen.getByRole( 'button', { name: 'Add Newsletter' } ) ).toBeInTheDocument();
 	} );
 
