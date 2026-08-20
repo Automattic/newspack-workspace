@@ -505,6 +505,7 @@ final class Newspack_Newsletters_Mailchimp_Cached_Data {
 
 			// Update the cache.
 			self::update_cache( $list_id, $list_data );
+			Newspack_Newsletters_Subscription::clear_lists_cache();
 
 			return $list_data;
 		} catch ( Exception $e ) {
