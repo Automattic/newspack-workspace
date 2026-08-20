@@ -43,8 +43,11 @@ export const getMeteringCount = ( metering?: Metering, siteCount?: number ) => {
 	if ( metering.scope === 'gate' ) {
 		return Number( metering.count ) || 0;
 	}
-	// Matches the server-side default until the wizard has loaded the config.
-	return Number( siteCount ?? 1 ) || 0;
+	// No allowance rather than a guessed one: the summaries print this number and the
+	// metered/not-metered helpers read it, so inventing a default states an allowance
+	// the site may not grant. A wizard whose config carries no site meter, such as
+	// Premium Newsletters, only ever asks about gates keeping their own.
+	return Number( siteCount ?? 0 ) || 0;
 };
 
 /**
@@ -98,6 +101,21 @@ export const hasSharedMeteredPath = ( gate: Gate, siteMeter?: SiteMeterConfig ) 
 		);
 	const signedOutPath = gate.registration?.active ? gate.registration : gate.custom_access;
 	return shares( signedOutPath, siteMeter?.anonymous_count ) || shares( gate.custom_access, siteMeter?.registered_count );
+};
+
+/**
+ * Whether a gate draws on the shared allowance at all, whatever that allowance is.
+ *
+ * Deliberately blind to the count, which is what separates it from
+ * `hasSharedMeteredPath()`: the Metering page needs this to warn that an allowance of
+ * 0 gates readers immediately, and at 0 the count test that helper applies is false.
+ *
+ * @param gate The gate.
+ */
+export const sharesTheSiteMeter = ( gate: Gate ) => {
+	const shares = ( section?: Registration | CustomAccess ) =>
+		Boolean( section?.active && section?.metering?.enabled && section.metering.scope !== 'gate' );
+	return shares( gate.registration ) || shares( gate.custom_access );
 };
 
 export const getGateStatus = ( status: GateStatus ) => {

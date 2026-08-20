@@ -25,7 +25,7 @@ import { useWizardData } from '../../../../../../packages/components/src/wizard/
 import { WIZARD_STORE_NAMESPACE } from '../../../../../../packages/components/src/wizard/store';
 import { useWizardApiFetch } from '../../../../hooks/use-wizard-api-fetch';
 import { AUDIENCE_CONTENT_GATES_WIZARD_SLUG } from '../consts';
-import { hasOwnMeter, hasSharedMeteredPath, isGateMetered } from '../utils';
+import { hasOwnMeter, hasSharedMeteredPath, isGateMetered, sharesTheSiteMeter } from '../utils';
 import CountdownBanner from './countdown-banner';
 
 const { useHistory } = Router;
@@ -72,6 +72,7 @@ const MeteringSettings = () => {
 	// Layout wording is written once at creation and never rewritten from here. Judged
 	// per path: a gate with one path pinned and one sharing still quotes the shared number.
 	const gatesQuotingTheAllowance = gates.filter( gate => hasSharedMeteredPath( gate, savedSiteMeter ) );
+	const gatesSharingTheAllowance = gates.filter( sharesTheSiteMeter );
 
 	const handleSave = async () => {
 		isSaving.current = true;
@@ -221,7 +222,7 @@ const MeteringSettings = () => {
 							) }
 						</Notice>
 					) }
-					{ gates.length > 0 && audiencesWithoutFreeViews.length > 0 && (
+					{ gatesSharingTheAllowance.length > 0 && audiencesWithoutFreeViews.length > 0 && (
 						<Notice status="warning" isDismissible={ false }>
 							{ sprintf(
 								// translators: %s is a list of reader audiences, e.g. "Signed-out readers, Signed-in readers".
