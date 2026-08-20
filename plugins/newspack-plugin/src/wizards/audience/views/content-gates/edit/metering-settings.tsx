@@ -189,10 +189,25 @@ const MeteringSettings = () => {
 
 	// The gate editor says this where a gate's own count is 0. Typed here it decides the
 	// same thing for every gate sharing the allowance, so it has to be said here too.
-	const audiencesWithoutFreeViews = [
-		siteMeter.anonymous_count === 0 ? __( 'Signed-out readers', 'newspack-plugin' ) : null,
-		siteMeter.registered_count === 0 ? __( 'Signed-in readers', 'newspack-plugin' ) : null,
-	].filter( Boolean );
+	const noneSignedOut = siteMeter.anonymous_count === 0;
+	const noneSignedIn = siteMeter.registered_count === 0;
+	let noFreeViewsWarning = null;
+	if ( noneSignedOut && noneSignedIn ) {
+		noFreeViewsWarning = __(
+			'No reader gets a free view, so every gate sharing this allowance gates everyone on their first view, the same as turning metering off.',
+			'newspack-plugin'
+		);
+	} else if ( noneSignedOut ) {
+		noFreeViewsWarning = __(
+			'Signed-out readers get 0 free views, so every gate sharing this allowance gates them on their first view, the same as turning metering off.',
+			'newspack-plugin'
+		);
+	} else if ( noneSignedIn ) {
+		noFreeViewsWarning = __(
+			'Signed-in readers get 0 free views, so every gate sharing this allowance gates them on their first view, the same as turning metering off.',
+			'newspack-plugin'
+		);
+	}
 
 	return (
 		<div className="newspack-content-gate__edit">
@@ -222,16 +237,9 @@ const MeteringSettings = () => {
 							) }
 						</Notice>
 					) }
-					{ gatesSharingTheAllowance.length > 0 && audiencesWithoutFreeViews.length > 0 && (
+					{ gatesSharingTheAllowance.length > 0 && noFreeViewsWarning && (
 						<Notice status="warning" isDismissible={ false }>
-							{ sprintf(
-								// translators: %s is a list of reader audiences, e.g. "Signed-out readers, Signed-in readers".
-								__(
-									'%s get 0 free views, so every gate sharing this allowance gates them on their first view, the same as turning metering off.',
-									'newspack-plugin'
-								),
-								audiencesWithoutFreeViews.join( ', ' )
-							) }
+							{ noFreeViewsWarning }
 						</Notice>
 					) }
 					{ siteMeterDirty && gatesQuotingTheAllowance.length > 0 && (
