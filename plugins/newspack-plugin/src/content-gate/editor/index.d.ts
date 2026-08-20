@@ -7,12 +7,6 @@ type BlockSettings = {
 	attributes: Record< string, unknown >;
 	name: string;
 };
-type DynamicOptionItem = {
-	id: string | number;
-	title: {
-		raw: string;
-	};
-};
 type AccessRuleOption = {
 	value: string | number;
 	label: string;

@@ -17,6 +17,7 @@ import {
 	formatAccessRuleOptionLabel,
 	formatMissingAccessRuleOptionLabel,
 	getMissingOptionLabel,
+	type AccessRuleOption,
 } from '../../../../content-gate/access-rule-options';
 import { normalizeOneTimePurchaseValue } from '../../../../content-gate/components/one-time-purchase-rule-control';
 
@@ -25,10 +26,18 @@ const availableAccessRules = window.newspackAudienceContentGates.available_acces
 const noOp = () => {};
 
 /**
- * Map option values to labels, falling back to the raw value.
+ * Name each stored value alongside the ID it stores — the same identification the
+ * pickers give, so a gate reads the same way wherever it is inspected. Names repeat
+ * across product and institution tiers, and a value the option list cannot describe is
+ * named rather than printed bare.
  */
-const getOptionLabels = ( values: Array< string | number >, options: { value: string | number; label: string }[] = [] ) =>
-	values.map( value => options.find( option => String( option.value ) === String( value ) )?.label ?? String( value ) ).join( ', ' );
+const formatAccessRuleOptionValues = ( values: Array< string | number >, options: AccessRuleOption[] = [], slug: string ) =>
+	values
+		.map( value => {
+			const option = findAccessRuleOption( options, value );
+			return option ? formatAccessRuleOptionLabel( option ) : formatMissingAccessRuleOptionLabel( value, getMissingOptionLabel( slug ) );
+		} )
+		.join( ', ' );
 
 /**
  * Human-readable summary for an access rule value.
@@ -37,7 +46,7 @@ const formatAccessRuleValue = ( rule: GateAccessRule ): string => {
 	const config = availableAccessRules[ rule.slug ];
 	if ( 'one_time_purchase' === rule.slug ) {
 		const { product_ids: productIds, duration_value: durationValue, duration_unit: durationUnit } = normalizeOneTimePurchaseValue( rule.value );
-		const products = getOptionLabels( productIds, config?.options );
+		const products = formatAccessRuleOptionValues( productIds, config?.options, rule.slug );
 		if ( 'forever' === durationUnit ) {
 			return sprintf(
 				// translators: %s: list of product names.
@@ -68,16 +77,7 @@ const formatAccessRuleValue = ( rule: GateAccessRule ): string => {
 		);
 	}
 	if ( Array.isArray( rule.value ) && config?.options ) {
-		// Names repeat across product and institution tiers, so each value is named
-		// alongside the ID it stores — the same identification the pickers give.
-		return rule.value
-			.map( value => {
-				const option = findAccessRuleOption( config.options ?? [], value );
-				return option
-					? formatAccessRuleOptionLabel( option )
-					: formatMissingAccessRuleOptionLabel( value, getMissingOptionLabel( rule.slug ) );
-			} )
-			.join( ', ' );
+		return formatAccessRuleOptionValues( rule.value, config.options, rule.slug );
 	}
 	// Boolean rules carry no displayable value (mirrors the pre-formatter
 	// rendering, where React printed nothing for a boolean child).

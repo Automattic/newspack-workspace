@@ -6,7 +6,9 @@ import {
 	formatAccessRuleOptionLabel,
 	formatMissingAccessRuleOptionLabel,
 	getAccessRuleOptionTokens,
+	getAccessRuleTokenFieldMessages,
 	getMissingOptionLabel,
+	hasUnlistedAccessRuleValues,
 	isAccessRuleOptionInput,
 	resolveAccessRuleOptionTokens,
 } from './access-rule-options';
@@ -37,14 +39,17 @@ describe( 'formatAccessRuleOptionLabel', () => {
 } );
 
 describe( 'getMissingOptionLabel', () => {
+	// "not listed" rather than "deleted": an option list holds parent products and
+	// published institutions, while evaluation also resolves variation IDs, so a value
+	// missing from the list is often still granting access.
 	it( 'names the right kind of thing per rule', () => {
-		expect( getMissingOptionLabel( 'subscription' ) ).toBe( '(product unavailable)' );
-		expect( getMissingOptionLabel( 'institution' ) ).toBe( '(institution unavailable)' );
-		expect( getMissingOptionLabel( 'gate' ) ).toBe( '(gate unavailable)' );
+		expect( getMissingOptionLabel( 'subscription' ) ).toBe( '(product not listed)' );
+		expect( getMissingOptionLabel( 'institution' ) ).toBe( '(institution not listed)' );
+		expect( getMissingOptionLabel( 'gate' ) ).toBe( '(gate not listed)' );
 	} );
 
-	it( 'falls back to the product wording for an unknown rule', () => {
-		expect( getMissingOptionLabel( 'something-else' ) ).toBe( '(product unavailable)' );
+	it( 'falls back to slug-agnostic wording, since rules can be registered by anyone', () => {
+		expect( getMissingOptionLabel( 'something-else' ) ).toBe( '(not listed)' );
 	} );
 } );
 
@@ -73,7 +78,7 @@ describe( 'getAccessRuleOptionTokens', () => {
 		// so the publisher has to be able to see that the rule holds it.
 		expect( getAccessRuleOptionTokens( OPTIONS, [ 188250, 999999 ], MISSING_PRODUCT ) ).toEqual( [
 			'Annual (#188250)',
-			'(product unavailable) (#999999)',
+			'(product not listed) (#999999)',
 		] );
 	} );
 
@@ -134,5 +139,26 @@ describe( 'isAccessRuleOptionInput', () => {
 		expect( isAccessRuleOptionInput( 'Annual (#188250)', OPTIONS ) ).toBe( true );
 		expect( isAccessRuleOptionInput( '188250', OPTIONS ) ).toBe( true );
 		expect( isAccessRuleOptionInput( 'Annual', OPTIONS ) ).toBe( false );
+	} );
+} );
+
+describe( 'hasUnlistedAccessRuleValues', () => {
+	it( 'reports whether the rule holds a value no option describes', () => {
+		expect( hasUnlistedAccessRuleValues( OPTIONS, [ 188250, 300000 ] ) ).toBe( false );
+		// A subscription variation ID, for instance: not in the option list, still granting.
+		expect( hasUnlistedAccessRuleValues( OPTIONS, [ 188250, 999999 ] ) ).toBe( true );
+		expect( hasUnlistedAccessRuleValues( OPTIONS, 'not-an-array' ) ).toBe( false );
+	} );
+} );
+
+describe( 'getAccessRuleTokenFieldMessages', () => {
+	it( 'carries every key FormTokenField reads, since it takes the object whole', () => {
+		// Omitting one drops that announcement rather than falling back to the default.
+		expect( Object.keys( getAccessRuleTokenFieldMessages() ).sort() ).toEqual( [ '__experimentalInvalid', 'added', 'remove', 'removed' ] );
+	} );
+
+	it( 'says what the field wants instead of the default "Invalid item"', () => {
+		expect( getAccessRuleTokenFieldMessages().__experimentalInvalid ).toMatch( /type its ID/ );
+		expect( getAccessRuleTokenFieldMessages( 'Pick a gate.' ).__experimentalInvalid ).toBe( 'Pick a gate.' );
 	} );
 } );

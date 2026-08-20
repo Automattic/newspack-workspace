@@ -21,6 +21,10 @@ if ( ! select( WIZARD_STORE_NAMESPACE ) ) {
 	registerWizardStore();
 }
 
+// FormTokenField scrolls the auto-selected suggestion into view, which jsdom has no
+// implementation for.
+Element.prototype.scrollIntoView = jest.fn();
+
 /**
  * Three subscription products sharing a display name, plus one that doesn't. This is the
  * shape that made the picker ambiguous: on real sites the same name is reused across
@@ -86,7 +90,28 @@ describe( 'AccessRuleControl option picker', () => {
 		expect( suggestions ).toEqual( [ 'Annual (#205482)' ] );
 	} );
 
-	it( 'shows a stored product whose option is gone, and keeps it through an unrelated edit', () => {
+	it( 'selects the highlighted suggestion when a product name is typed and Enter pressed', () => {
+		// A typed name is not a token — tokens carry the ID — so without an auto-selected
+		// first match Enter falls through to the input validator, which rejects it and
+		// renders nothing. From the keyboard the field appeared to do nothing at all.
+		const onChange = jest.fn();
+		renderControl( {
+			options: DUPLICATE_NAME_PRODUCTS,
+			value: [],
+			onChange,
+		} );
+
+		const input = screen.getByRole( 'combobox' );
+		fireEvent.focus( input );
+		fireEvent.change( input, { target: { value: 'Monthly' } } );
+		fireEvent.keyDown( input, { keyCode: 13 } );
+
+		expect( onChange ).toHaveBeenCalledWith( [ 300000 ] );
+	} );
+
+	it( 'shows a stored product no option describes, cautions about it, and keeps it through an unrelated edit', () => {
+		// An option list holds parent products only, so a variation ID is not in it and
+		// is still granting access. The token must not read as safe to delete.
 		const onChange = jest.fn();
 		renderControl( {
 			options: DUPLICATE_NAME_PRODUCTS,
@@ -94,7 +119,8 @@ describe( 'AccessRuleControl option picker', () => {
 			onChange,
 		} );
 
-		expect( screen.getByText( '(product unavailable) (#999999)' ) ).toBeInTheDocument();
+		expect( screen.getByText( '(product not listed) (#999999)' ) ).toBeInTheDocument();
+		expect( screen.getByText( /still checked when access is evaluated/ ) ).toBeInTheDocument();
 
 		const token = screen.getByText( 'Annual (#188250)' ).closest( '.components-form-token-field__token' );
 		fireEvent.click( within( token ).getByRole( 'button' ) );

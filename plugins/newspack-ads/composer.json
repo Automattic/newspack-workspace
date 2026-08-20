@@ -4,7 +4,7 @@
 	"type": "wordpress-plugin",
 	"require-dev": {
 		"composer/installers": "~2.1",
-		"automattic/vipwpcs": "^3.0",
+		"automattic/vipwpcs": "~3.0.1",
 		"wp-coding-standards/wpcs": "^3.0",
 		"dealerdirect/phpcodesniffer-composer-installer": "*",
 		"phpcompatibility/phpcompatibility-wp": "*",

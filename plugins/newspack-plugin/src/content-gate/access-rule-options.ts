@@ -35,14 +35,30 @@ export type AccessRuleOption = { value: string | number; label: string };
 const TOKEN_ID_PATTERN = /\(#([^)]+)\)\s*$/;
 
 /**
- * Stand-in name for a stored value the option list can no longer describe. Keyed by rule
- * slug so the wording names the right kind of thing.
+ * Stand-in name for a stored value the option list does not contain. Keyed by rule slug
+ * so the wording names the right kind of thing.
+ *
+ * The wording says "not listed", not "deleted" or "unavailable", because the two are not
+ * the same and only one of them is safe to remove. An option list holds parent products
+ * and published institutions, while evaluation resolves more than that — an "Active
+ * subscription" rule matches a variation ID, and a one-time purchase matches the
+ * `_variation_id` on an order item. Such an ID grants access every day while never
+ * appearing in the list, so a publisher must not read it as dead configuration: removing
+ * it widens the gate, and removing a rule's last value widens it further, since an empty
+ * value list applies no filter at all.
  */
 const MISSING_OPTION_LABELS: Record< string, () => string > = {
-	subscription: () => __( '(product unavailable)', 'newspack-plugin' ),
-	institution: () => __( '(institution unavailable)', 'newspack-plugin' ),
-	gate: () => __( '(gate unavailable)', 'newspack-plugin' ),
+	subscription: () => __( '(product not listed)', 'newspack-plugin' ),
+	one_time_purchase: () => __( '(product not listed)', 'newspack-plugin' ),
+	institution: () => __( '(institution not listed)', 'newspack-plugin' ),
+	gate: () => __( '(gate not listed)', 'newspack-plugin' ),
 };
+
+/**
+ * Wording for a rule this module knows nothing about. `Access_Rules::register_rule()` is
+ * public, so an options-backed rule may come from anywhere and need not hold products.
+ */
+const DEFAULT_MISSING_OPTION_LABEL = () => __( '(not listed)', 'newspack-plugin' );
 
 /**
  * The stand-in name to use for a rule's unresolvable values.
@@ -52,7 +68,7 @@ const MISSING_OPTION_LABELS: Record< string, () => string > = {
  * @return The stand-in name.
  */
 export function getMissingOptionLabel( slug: string ): string {
-	return ( MISSING_OPTION_LABELS[ slug ] ?? MISSING_OPTION_LABELS.subscription )();
+	return ( MISSING_OPTION_LABELS[ slug ] ?? DEFAULT_MISSING_OPTION_LABEL )();
 }
 
 /**
@@ -126,18 +142,17 @@ export function getAccessRuleOptionTokens( options: AccessRuleOption[], value: u
  * @param tokens  The tokens from the field.
  * @param options The available rule options.
  * @param stored  The values currently stored on the rule. IDs among these resolve even
- *                when no option matches them, so a value whose product has since been
- *                deleted is preserved rather than silently dropped.
+ *                when no option matches them, so a value the option list cannot describe
+ *                is preserved rather than silently dropped.
  *
  * @return The selected option values, deduplicated, in token order.
  */
 export function resolveAccessRuleOptionTokens(
 	tokens: ( string | TokenItem )[],
 	options: AccessRuleOption[],
-	stored: unknown = []
+	stored: readonly ( string | number )[] = []
 ): ( string | number )[] {
 	const byLabel = new Map( options.map( option => [ formatAccessRuleOptionLabel( option ), option.value ] ) );
-	const storedValues = Array.isArray( stored ) ? stored : [];
 	const resolved: ( string | number )[] = [];
 
 	for ( const token of tokens ) {
@@ -150,7 +165,7 @@ export function resolveAccessRuleOptionTokens(
 		let value = byLabel.get( raw );
 		if ( undefined === value ) {
 			const id = ( String( raw ).match( TOKEN_ID_PATTERN )?.[ 1 ] ?? String( raw ) ).trim();
-			value = findAccessRuleOption( options, id )?.value ?? storedValues.find( v => String( v ) === id );
+			value = findAccessRuleOption( options, id )?.value ?? stored.find( v => String( v ) === id );
 		}
 		if ( undefined !== value && ! resolved.some( v => String( v ) === String( value ) ) ) {
 			resolved.push( value );
@@ -163,8 +178,12 @@ export function resolveAccessRuleOptionTokens(
 /**
  * Whether an input typed into the field names a selectable option.
  *
- * Used as `FormTokenField`'s input validator so free text is rejected inline instead of
- * becoming a token that silently disappears on the next render.
+ * Used as `FormTokenField`'s input validator, which drops anything it rejects rather than
+ * letting it become a token that silently disappears on the next render. The field
+ * announces the rejection to assistive technology and renders nothing, so pair it with
+ * `getAccessRuleTokenFieldMessages()` — its wording is the only account of what happened
+ * — and with `__experimentalAutoSelectFirstMatch`, which commits the highlighted
+ * suggestion so typing a name and pressing Enter selects rather than being rejected.
  *
  * @param input   The typed input.
  * @param options The available rule options.
@@ -173,4 +192,49 @@ export function resolveAccessRuleOptionTokens(
  */
 export function isAccessRuleOptionInput( input: string, options: AccessRuleOption[] ): boolean {
 	return resolveAccessRuleOptionTokens( [ input ], options ).length > 0;
+}
+
+/**
+ * `FormTokenField`'s announcement strings.
+ *
+ * The component takes `messages` as a whole object with no per-key merge, so the three
+ * generic strings have to be repeated to override the fourth. The default for that
+ * fourth one is "Invalid item", which says nothing about what the field accepts.
+ *
+ * @param invalid Wording for a rejected input. Defaults to the option-picker phrasing.
+ *
+ * @return The messages for `FormTokenField`.
+ */
+export function getAccessRuleTokenFieldMessages( invalid?: string ) {
+	return {
+		added: __( 'Item added.', 'newspack-plugin' ),
+		removed: __( 'Item removed.', 'newspack-plugin' ),
+		remove: __( 'Remove item', 'newspack-plugin' ),
+		__experimentalInvalid: invalid ?? __( 'Not a selectable option. Pick one from the list, or type its ID.', 'newspack-plugin' ),
+	};
+}
+
+/**
+ * Whether a rule holds values that no option describes.
+ *
+ * @param options The available rule options.
+ * @param value   The selected option values.
+ *
+ * @return Whether any stored value is absent from the option list.
+ */
+export function hasUnlistedAccessRuleValues( options: AccessRuleOption[], value: unknown ): boolean {
+	return Array.isArray( value ) && value.some( stored => ! findAccessRuleOption( options, stored ) );
+}
+
+/**
+ * Caution shown alongside a picker holding values no option describes, so the reading
+ * that the token invites — stale entry, safe to delete — does not go unchallenged.
+ *
+ * @return The caution text.
+ */
+export function getUnlistedAccessRuleValuesNotice(): string {
+	return __(
+		'Entries marked “not listed” are not in this list — a product variation, or an item that was deleted or unpublished. They are still checked when access is evaluated, so removing one widens who this gate lets in.',
+		'newspack-plugin'
+	);
 }

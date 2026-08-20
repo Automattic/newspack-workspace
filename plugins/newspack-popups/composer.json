@@ -3,7 +3,7 @@
 	"description": "AMP-compatible popup notifications.",
 	"type": "wordpress-plugin",
 	"require-dev": {
-		"automattic/vipwpcs": "^3.0",
+		"automattic/vipwpcs": "~3.0.1",
 		"wp-coding-standards/wpcs": "^3.0",
 		"phpcompatibility/phpcompatibility-wp": "^2.1",
 		"composer/installers": "^2.0",

@@ -14,6 +14,11 @@
 import { __, sprintf } from '@wordpress/i18n';
 import { Flex, FlexBlock, FormTokenField as CoreFormTokenField, SelectControl, TextControl } from '@wordpress/components';
 
+/**
+ * Internal dependencies.
+ */
+import { getAccessRuleTokenFieldMessages } from '../access-rule-options';
+
 const DURATION_UNITS = [ 'days', 'months', 'forever' ] as const;
 
 /**
@@ -142,8 +147,13 @@ export default function OneTimePurchaseRuleControl( {
 				} }
 				// FormTokenField accepts free-typed tokens by default, and one that
 				// isn't a known product would map to nothing and silently vanish on
-				// the next render. Reject it at entry instead.
+				// the next render. Reject it at entry instead — and since a rejection
+				// renders nothing, say what the field wants in the announcement, and
+				// let Enter commit the highlighted suggestion so typing a product name
+				// selects it rather than being rejected.
 				__experimentalValidateInput={ ( token: string ) => valueByToken.has( token ) }
+				messages={ getAccessRuleTokenFieldMessages( __( 'Not a selectable product. Pick one from the list.', 'newspack-plugin' ) ) }
+				__experimentalAutoSelectFirstMatch
 				__experimentalExpandOnFocus
 				__next40pxDefaultSize
 				__nextHasNoMarginBottom
