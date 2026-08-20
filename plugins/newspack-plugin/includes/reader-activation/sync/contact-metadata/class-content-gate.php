@@ -79,6 +79,28 @@ class Content_Gate extends Contact_Metadata {
 	}
 
 	/**
+	 * Per-field configuration for the fields handled by this class.
+	 *
+	 * @return array
+	 */
+	public static function get_fields_config() {
+		return [
+			'Content_Access'        => [
+				'name'   => 'Content Access',
+				'status' => 'new',
+			],
+			'Content_Access_Source' => [
+				'name'   => 'Content Access Source',
+				'status' => 'new',
+			],
+			'Content_Access_Group'  => [
+				'name'   => 'Content Access Group',
+				'status' => 'new',
+			],
+		];
+	}
+
+	/**
 	 * Get the metadata for the given user, customer or order.
 	 *
 	 * @return array

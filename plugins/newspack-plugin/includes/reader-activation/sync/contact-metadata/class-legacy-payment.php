@@ -46,6 +46,69 @@ class Legacy_Payment extends Contact_Metadata {
 	}
 
 	/**
+	 * Per-field configuration for the fields handled by this class.
+	 *
+	 * @return array
+	 */
+	public static function get_fields_config() {
+		return [
+			'membership_status'   => [
+				'name'   => 'Membership Status',
+				'status' => 'legacy',
+			],
+			'payment_page'        => [
+				'name'   => 'Payment Page',
+				'status' => 'legacy',
+			],
+			'payment_page_utm'    => [
+				'name'           => 'Payment UTM: ',
+				'status'         => 'legacy',
+				'dynamic_suffix' => true,
+			],
+			'sub_start_date'      => [
+				'name'   => 'Current Subscription Start Date',
+				'status' => 'legacy',
+			],
+			'sub_end_date'        => [
+				'name'   => 'Current Subscription End Date',
+				'status' => 'legacy',
+			],
+			'cancellation_reason' => [
+				'name'   => 'Subscription Cancellation Reason',
+				'status' => 'legacy',
+			],
+			'billing_cycle'       => [
+				'name'   => 'Billing Cycle',
+				'status' => 'legacy',
+			],
+			'recurring_payment'   => [
+				'name'   => 'Recurring Payment',
+				'status' => 'legacy',
+			],
+			'last_payment_date'   => [
+				'name'   => 'Last Payment Date',
+				'status' => 'legacy',
+			],
+			'last_payment_amount' => [
+				'name'   => 'Last Payment Amount',
+				'status' => 'legacy',
+			],
+			'product_name'        => [
+				'name'   => 'Product Name',
+				'status' => 'legacy',
+			],
+			'next_payment_date'   => [
+				'name'   => 'Next Payment Date',
+				'status' => 'legacy',
+			],
+			'total_paid'          => [
+				'name'   => 'Total Paid',
+				'status' => 'legacy',
+			],
+		];
+	}
+
+	/**
 	 * Get the metadata for the given user, customer or order.
 	 *
 	 * This method intentionally returns an empty array. Legacy_Basic already

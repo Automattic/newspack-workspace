@@ -82,6 +82,68 @@ class Subscription extends Contact_Metadata {
 	}
 
 	/**
+	 * Per-field configuration for the fields handled by this class.
+	 *
+	 * @return array
+	 */
+	public static function get_fields_config() {
+		return [
+			'Subscriber_Status'                     => [
+				'name'   => 'Subscriber Status',
+				'status' => 'existing',
+			],
+			'Active_Subscription_Count'             => [
+				'name'   => 'Active Subscription Count',
+				'status' => 'new',
+			],
+			'Subscription_Start_Date'               => [
+				'name'   => 'Subscription Start Date',
+				'status' => 'updated',
+			],
+			'Subscription_End_Date'                 => [
+				'name'   => 'Subscription End Date',
+				'status' => 'updated',
+			],
+			'Last_Subscription_Cancellation_Reason' => [
+				'name'   => 'Last Subscription Cancellation Reason',
+				'status' => 'updated',
+			],
+			'Subscription_Billing_Cycle'            => [
+				'name'   => 'Subscription Billing Cycle',
+				'status' => 'updated',
+			],
+			'Subscription_Recurring_Payment'        => [
+				'name'   => 'Subscription Recurring Payment',
+				'status' => 'updated',
+			],
+			'Subscription_Next_Payment_Date'        => [
+				'name'   => 'Subscription Next Payment Date',
+				'status' => 'updated',
+			],
+			'Subscription_Product_Name'             => [
+				'name'   => 'Subscription Product Name',
+				'status' => 'updated',
+			],
+			'Previous_Subscription_Product'         => [
+				'name'   => 'Previous Subscription Product',
+				'status' => 'existing',
+			],
+			'Subscription_Coupon_Code'              => [
+				'name'   => 'Subscription Coupon Code',
+				'status' => 'existing',
+			],
+			'Last_Subscription_Payment_Amount'      => [
+				'name'   => 'Last Subscription Payment Amount',
+				'status' => 'updated',
+			],
+			'Last_Subscription_Payment_Date'        => [
+				'name'   => 'Last Subscription Payment Date',
+				'status' => 'updated',
+			],
+		];
+	}
+
+	/**
 	 * Get the metadata for the given user, customer or order.
 	 *
 	 * @return array

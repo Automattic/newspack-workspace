@@ -53,6 +53,44 @@ class Identity extends Contact_Metadata {
 	}
 
 	/**
+	 * Per-field configuration for the fields handled by this class.
+	 *
+	 * @return array
+	 */
+	public static function get_fields_config() {
+		return [
+			'first_name'        => [
+				'name'   => 'First name',
+				'status' => 'existing',
+			],
+			'last_name'         => [
+				'name'   => 'Last name',
+				'status' => 'existing',
+			],
+			'email'             => [
+				'name'   => 'Email',
+				'status' => 'existing',
+			],
+			'Account'           => [
+				'name'   => 'Account',
+				'status' => 'existing',
+			],
+			'User_Role'         => [
+				'name'   => 'User Role',
+				'status' => 'new',
+			],
+			'verified'          => [
+				'name'   => 'Verified',
+				'status' => 'new',
+			],
+			'Connected_Account' => [
+				'name'   => 'Connected Account',
+				'status' => 'existing',
+			],
+		];
+	}
+
+	/**
 	 * Get the metadata for the given user, customer or order.
 	 *
 	 * @return array

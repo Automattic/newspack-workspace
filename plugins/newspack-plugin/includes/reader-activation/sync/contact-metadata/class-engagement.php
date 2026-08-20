@@ -62,6 +62,52 @@ class Engagement extends Contact_Metadata {
 	}
 
 	/**
+	 * Per-field configuration for the fields handled by this class.
+	 *
+	 * @return array
+	 */
+	public static function get_fields_config() {
+		return [
+			'First_Visit_Date'     => [
+				'name'   => 'First Visit Date',
+				'status' => 'new',
+			],
+			'Last_Active'          => [
+				'name'   => 'Last Active',
+				'status' => 'new',
+			],
+			'Paywall_Hits'         => [
+				'name'   => 'Paywall Hits',
+				'status' => 'new',
+			],
+			'Favorite_Categories'  => [
+				'name'   => 'Favorite Categories',
+				'status' => 'new',
+			],
+			'Last_Payment_Page'    => [
+				'name'   => 'Last Payment Page',
+				'status' => 'updated',
+			],
+			'Payment_UTM_Source'   => [
+				'name'   => 'Payment UTM Source',
+				'status' => 'updated',
+			],
+			'Payment_UTM_Medium'   => [
+				'name'   => 'Payment UTM Medium',
+				'status' => 'updated',
+			],
+			'Payment_UTM_Campaign' => [
+				'name'   => 'Payment UTM Campaign',
+				'status' => 'updated',
+			],
+			'Lifetime_Total_Paid'  => [
+				'name'   => 'Lifetime Total Paid',
+				'status' => 'updated',
+			],
+		];
+	}
+
+	/**
 	 * Get the metadata for the given user, customer or order.
 	 *
 	 * @return array

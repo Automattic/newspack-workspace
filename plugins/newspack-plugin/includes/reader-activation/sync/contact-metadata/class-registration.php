@@ -52,6 +52,40 @@ class Registration extends Contact_Metadata {
 	}
 
 	/**
+	 * Per-field configuration for the fields handled by this class.
+	 *
+	 * @return array
+	 */
+	public static function get_fields_config() {
+		return [
+			'Registration_Date'         => [
+				'name'   => 'Registration Date',
+				'status' => 'existing',
+			],
+			'Registration_Page'         => [
+				'name'   => 'Registration Page',
+				'status' => 'updated',
+			],
+			'Registration_Strategy'     => [
+				'name'   => 'Registration Strategy',
+				'status' => 'new',
+			],
+			'Registration_UTM_Source'   => [
+				'name'   => 'Registration UTM Source',
+				'status' => 'updated',
+			],
+			'Registration_UTM_Medium'   => [
+				'name'   => 'Registration UTM Medium',
+				'status' => 'updated',
+			],
+			'Registration_UTM_Campaign' => [
+				'name'   => 'Registration UTM Campaign',
+				'status' => 'updated',
+			],
+		];
+	}
+
+	/**
 	 * Get the metadata for the given user, customer or order.
 	 *
 	 * @return array

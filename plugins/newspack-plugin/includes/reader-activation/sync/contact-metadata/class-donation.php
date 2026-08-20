@@ -66,6 +66,64 @@ class Donation extends Subscription {
 	}
 
 	/**
+	 * Per-field configuration for the fields handled by this class.
+	 *
+	 * @return array
+	 */
+	public static function get_fields_config() {
+		return [
+			'Donor_Status'                  => [
+				'name'   => 'Donor Status',
+				'status' => 'existing',
+			],
+			'Active_Donation_Count'         => [
+				'name'   => 'Active Donation Count',
+				'status' => 'new',
+			],
+			'Current_Donation_Start_Date'   => [
+				'name'   => 'Current Donation Start Date',
+				'status' => 'existing',
+			],
+			'Current_Donation_End_Date'     => [
+				'name'   => 'Current Donation End Date',
+				'status' => 'existing',
+			],
+			'Current_Donation_Cycle'        => [
+				'name'   => 'Current Donation Cycle',
+				'status' => 'existing',
+			],
+			'Current_Recurring_Donation'    => [
+				'name'   => 'Current Recurring Donation',
+				'status' => 'existing',
+			],
+			'Next_Donation_Date'            => [
+				'name'   => 'Next Donation Date',
+				'status' => 'existing',
+			],
+			'Current_Donation_Product_Name' => [
+				'name'   => 'Current Donation Product Name',
+				'status' => 'existing',
+			],
+			'Previous_Donation_Product'     => [
+				'name'   => 'Previous Donation Product',
+				'status' => 'existing',
+			],
+			'Previous_Donation_Amount'      => [
+				'name'   => 'Previous Donation Amount',
+				'status' => 'existing',
+			],
+			'Last_Donation_Amount'          => [
+				'name'   => 'Last Donation Amount',
+				'status' => 'existing',
+			],
+			'Last_Donation_Date'            => [
+				'name'   => 'Last Donation Date',
+				'status' => 'existing',
+			],
+		];
+	}
+
+	/**
 	 * Get the metadata for the given user, customer or order.
 	 *
 	 * @return array
