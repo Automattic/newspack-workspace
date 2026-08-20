@@ -48,15 +48,9 @@ class Orders extends Woo {
 
 		switch ( $column ) {
 			case 'order':
-				$output = sprintf(
-					'<a href="%s" target="_blank">%s</a> for %s on <a href="%s" target="_blank">%s</a>',
-					$item->get_edit_link(),
-					$item->get_title(),
-					$item->get_user_name(),
-					$item->get_node_url(),
-					$item->get_node_url()
-				);
-				echo $output; // phpcs:ignore
+				self::print_link( $item->get_edit_link(), $item->get_title() );
+				printf( ' for %s on ', esc_html( $item->get_user_name() ) );
+				self::print_link( $item->get_node_url(), $item->get_node_url() );
 				break;
 			case 'status':
 				?>

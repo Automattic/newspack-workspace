@@ -113,24 +113,6 @@ class Subscriptions extends Woo {
 	}
 
 	/**
-	 * Echo an anchor with an escaped href and escaped text. Both arguments are
-	 * node-supplied and treated as untrusted.
-	 *
-	 * @param string $url    The href.
-	 * @param string $text   The link text.
-	 * @param string $target The link target attribute.
-	 * @return void
-	 */
-	private static function print_link( $url, $text, $target = '_blank' ) {
-		printf(
-			'<a href="%s" target="%s">%s</a>',
-			esc_url( $url ),
-			esc_attr( $target ),
-			esc_html( $text )
-		);
-	}
-
-	/**
 	 * Add sortable columns.
 	 *
 	 * @param array $columns Columns.
