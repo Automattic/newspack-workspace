@@ -616,6 +616,11 @@ if ( ! class_exists( 'WC_Subscriptions_Cart' ) ) {
 }
 
 /**
+ * The post statuses `WC_Product_Query` searches when a query passes no `status`.
+ */
+const WC_PRODUCT_QUERY_DEFAULT_STATUSES = [ 'draft', 'pending', 'private', 'publish' ];
+
+/**
  * Register a mock product in the global products database.
  *
  * @param array $data Product data including 'id', 'type', 'name', 'status', 'price', 'children'.
@@ -636,6 +641,12 @@ function wc_create_mock_product( $data = [] ) {
  * WooCommerce's ordering, which none of the callers depend on. Any other filtering
  * argument is fatal rather than ignored: this mock is defined unconditionally, so a
  * caller silently getting an unfiltered result is a test that passes for the wrong reason.
+ *
+ * Omitting `status` is not "no status filter": `WC_Product_Query` defaults it to draft,
+ * pending, private and publish, and callers rely on that default — the access-rule
+ * subscription picker lists a drafted product deliberately, because readers still hold
+ * subscriptions to it. Applying the same default here is what lets a test tell that
+ * behaviour apart from a mock that never filtered.
  *
  * Arguments real WooCommerce discards are the exception — neither a `WC_Product_Query`
  * default var nor a mapped meta key, so ignoring one is what production does too.
@@ -659,7 +670,7 @@ function wc_get_products( $args = [] ) {
 		);
 	}
 	$types    = isset( $args['type'] ) ? (array) $args['type'] : [];
-	$statuses = isset( $args['status'] ) ? (array) $args['status'] : [];
+	$statuses = isset( $args['status'] ) ? (array) $args['status'] : WC_PRODUCT_QUERY_DEFAULT_STATUSES;
 	$products = array_values(
 		array_filter(
 			$products_database,
@@ -667,7 +678,7 @@ function wc_get_products( $args = [] ) {
 				if ( ! empty( $types ) && ! $product->is_type( $types ) ) {
 					return false;
 				}
-				return empty( $statuses ) || in_array( $product->get_status(), $statuses, true );
+				return in_array( $product->get_status(), $statuses, true );
 			}
 		)
 	);

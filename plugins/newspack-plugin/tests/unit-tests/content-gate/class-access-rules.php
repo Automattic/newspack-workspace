@@ -83,6 +83,9 @@ class Newspack_Test_Access_Rules extends WP_UnitTestCase {
 		$subscriptions_database = [];
 		$products_database      = [];
 
+		// The subscription options are memoized per request, and a test run is one request.
+		Access_Rules::flush_subscription_products_options_memo();
+
 		// Create test users.
 		self::$owner_user_id      = $this->factory->user->create( [ 'role' => 'subscriber' ] );
 		self::$member_user_id     = $this->factory->user->create( [ 'role' => 'subscriber' ] );
@@ -892,6 +895,77 @@ class Newspack_Test_Access_Rules extends WP_UnitTestCase {
 			],
 			$options_by_value,
 			'A variation titled like its parent should take its attribute summary where it has one.'
+		);
+	}
+
+	/**
+	 * A drafted subscription product stays selectable, because unpublishing a product does
+	 * not end the subscriptions bought through it: the rule matches the order's line item,
+	 * which still names the product. Dropping it from the options would leave the readers
+	 * still paying for that product ungateable.
+	 *
+	 * `wc_get_products()` gives this for free — its default status set is draft, pending,
+	 * private and publish — so the point of the assertion is that the picker does not
+	 * narrow it back to published, the way the institution options deliberately do.
+	 *
+	 * @group Access_Rules
+	 */
+	public function test_get_subscription_products_options_includes_unpublished_products() {
+		wc_create_mock_product(
+			[
+				'id'     => 930,
+				'type'   => 'subscription',
+				'name'   => 'Retired tier',
+				'status' => 'draft',
+			]
+		);
+		wc_create_mock_product(
+			[
+				'id'     => 931,
+				'type'   => 'subscription',
+				'name'   => 'Deleted tier',
+				'status' => 'trash',
+			]
+		);
+
+		$values = array_column( Access_Rules::get_subscription_products_options(), 'value' );
+
+		$this->assertSame( [ 930 ], $values, 'A draft subscription should be listed; a trashed one should not.' );
+	}
+
+	/**
+	 * The options are built once per request. Saving a gate resolves every rule's options
+	 * callback once per rule in the payload, so without the memo a six-rule gate ran the
+	 * full-catalog product query and its variation query six times over.
+	 *
+	 * @group Access_Rules
+	 */
+	public function test_get_subscription_products_options_is_memoized_per_request() {
+		wc_create_mock_product(
+			[
+				'id'   => 940,
+				'type' => 'subscription',
+				'name' => 'Supporter',
+			]
+		);
+		$first = Access_Rules::get_subscription_products_options();
+
+		wc_create_mock_product(
+			[
+				'id'   => 941,
+				'type' => 'subscription',
+				'name' => 'Patron',
+			]
+		);
+
+		$this->assertSame( $first, Access_Rules::get_subscription_products_options(), 'A second call within the request should reuse the built options.' );
+
+		Access_Rules::flush_subscription_products_options_memo();
+
+		$this->assertSame(
+			[ 940, 941 ],
+			array_column( Access_Rules::get_subscription_products_options(), 'value' ),
+			'Flushing the memo should rebuild the options.'
 		);
 	}
 }

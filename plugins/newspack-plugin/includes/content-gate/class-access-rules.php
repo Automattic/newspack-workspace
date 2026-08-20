@@ -51,6 +51,17 @@ class Access_Rules {
 	private static $evaluation_context = [];
 
 	/**
+	 * Request-scoped memo for the subscription product options.
+	 *
+	 * `sanitize_access_rule()` resolves every registered rule's options callback once per
+	 * rule in a gate's payload, so saving a six-rule gate would otherwise run the
+	 * full-catalog product query and its variation query six times over.
+	 *
+	 * @var array|null
+	 */
+	private static $subscription_products_options = null;
+
+	/**
 	 * Initialize hooks.
 	 */
 	public static function init() {
@@ -472,14 +483,21 @@ class Access_Rules {
 	 * subscription to a product the publisher has since drafted still evaluates: the line
 	 * item is what the rule matches, and it does not stop existing when the product is
 	 * unpublished. Hiding those products would make the readers still paying for them
-	 * ungateable.
+	 * ungateable. Variations narrow that set to publish and private, which is not a
+	 * different policy but the same one: WooCommerce reads a variable product's children
+	 * as `post_status IN ( 'publish', 'private' )`, so draft is not a state its own admin
+	 * produces for a variation, and nothing can have been bought in it.
 	 *
-	 * The list is unbounded and rebuilt per call. See NPPD-2138 for memoizing it — gate
-	 * saves rebuild it once per rule.
+	 * The result is memoized per request. The list itself is still unbounded and is
+	 * serialized into every editor payload; NPPD-2132 replaces it with a searchable
+	 * picker, which is what removes that cost rather than deferring it.
 	 *
 	 * @return array Array of [ 'label' => string, 'value' => int ].
 	 */
 	public static function get_subscription_products_options() {
+		if ( null !== self::$subscription_products_options ) {
+			return self::$subscription_products_options;
+		}
 		if ( ! function_exists( 'wc_get_products' ) ) {
 			return [];
 		}
@@ -503,7 +521,19 @@ class Access_Rules {
 				];
 			}
 		}
+		self::$subscription_products_options = $options;
 		return $options;
+	}
+
+	/**
+	 * Flush the request-scoped subscription product options memo.
+	 *
+	 * Primarily for tests; in production the memo is per-request by nature.
+	 *
+	 * @return void
+	 */
+	public static function flush_subscription_products_options_memo() {
+		self::$subscription_products_options = null;
 	}
 
 	/**
@@ -516,9 +546,10 @@ class Access_Rules {
 	 * and this runs on every admin page load that localises the access rules, including
 	 * every block editor load.
 	 *
-	 * Private variations are included alongside published ones: a reader can hold an active
-	 * subscription to a tier the publisher has since hidden, and the rule still has to be
-	 * able to name it.
+	 * Publish and private is the whole set WooCommerce itself reads a variable product's
+	 * children as, so it is every variation that can exist for a publisher to have sold.
+	 * Private earns its place: a reader can hold an active subscription to a tier the
+	 * publisher has since hidden, and the rule still has to be able to name it.
 	 *
 	 * @param \WC_Product[] $products The subscription products to collect variations for.
 	 *
@@ -539,7 +570,7 @@ class Access_Rules {
 				'post_type'              => 'product_variation',
 				'post_parent__in'        => $parent_ids,
 				'post_status'            => [ 'publish', 'private' ],
-				'posts_per_page'         => -1,
+				'posts_per_page'         => -1, // phpcs:ignore WordPressVIPMinimum.Performance.NoPaging -- Variations of the subscription products already fetched; config-scale.
 				'orderby'                => [
 					'menu_order' => 'ASC',
 					'ID'         => 'ASC',
@@ -571,6 +602,9 @@ class Access_Rules {
 	 *
 	 * Labels need not be unique: the pickers render every option as `<name> (#<id>)` and
 	 * resolve a token by the ID it carries, so two options sharing a name stay distinct.
+	 * That ` (#<id>)` suffix is a parsing contract and stays fixed, but the separator
+	 * joining a name to its attributes carries no such role, so it is translatable —
+	 * WooCommerce makes its own equivalent filterable for the same reason.
 	 *
 	 * @param string   $parent_name The variable subscription parent's name.
 	 * @param \WP_Post $variation   The variation post.
@@ -582,7 +616,15 @@ class Access_Rules {
 		if ( $label !== $parent_name ) {
 			return $label;
 		}
-		return '' !== $variation->post_excerpt ? sprintf( '%s - %s', $label, $variation->post_excerpt ) : $label;
+		if ( '' === $variation->post_excerpt ) {
+			return $label;
+		}
+		return sprintf(
+			/* translators: 1: variable subscription name, e.g. "Membership". 2: the variation's attribute summary, e.g. "Term: Annual". */
+			__( '%1$s - %2$s', 'newspack-plugin' ),
+			$label,
+			$variation->post_excerpt
+		);
 	}
 
 	/**

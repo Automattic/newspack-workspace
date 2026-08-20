@@ -39,6 +39,9 @@ export type AccessRuleOption = { value: string | number; label: string };
  * rest not existing. This raises the cap far enough that browsing works at realistic list
  * sizes while still bounding the DOM — the suggestion list is not virtualised, so it
  * renders one node per suggestion. Past it, an option is reached by typing its name or ID.
+ *
+ * This moves the cliff rather than removing it. NPPD-2132 removes it, by making the picker
+ * query the server as the publisher types instead of rendering a whole list up front.
  */
 export const MAX_OPTION_SUGGESTIONS = 500;
 
