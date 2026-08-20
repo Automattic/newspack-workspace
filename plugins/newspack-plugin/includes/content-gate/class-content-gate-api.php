@@ -224,9 +224,8 @@ class Content_Gate_API {
 			$sanitized['count'] = max( 0, intval( $metering['count'] ) );
 		}
 		if ( isset( $metering['period'] ) ) {
-			// Only these three have an expiration; anything else would never reset a counter,
-			// and one unrepresentable period is enough to push site meter adoption into its
-			// conflict branch and pin every gate to its own allowance.
+			// Only these three have an expiration, and one period the site meter cannot hold
+			// pushes adoption into its conflict branch, pinning every gate on the site.
 			$period              = sanitize_text_field( $metering['period'] );
 			$sanitized['period'] = in_array( $period, [ 'day', 'week', 'month' ], true ) ? $period : 'month';
 		}

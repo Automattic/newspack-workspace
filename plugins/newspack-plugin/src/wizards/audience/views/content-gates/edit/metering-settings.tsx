@@ -127,8 +127,8 @@ const MeteringSettings = () => {
 			id: 'metering-config-updated',
 		} );
 		history.push( '/content-gates' );
-		// After the redirect: clearing it first lets the unsaved-changes guard catch a
-		// save that succeeded and offer to discard changes already written.
+		// After the redirect: clearing it first lets the unsaved-changes guard catch a save
+		// that succeeded.
 		isSaving.current = false;
 	};
 
@@ -187,8 +187,6 @@ const MeteringSettings = () => {
 	const setCount = ( key: 'anonymous_count' | 'registered_count' ) => ( value: string | number | undefined ) =>
 		setSiteMeter( { ...siteMeter, [ key ]: Math.max( 0, Math.round( Number( value ) || 0 ) ) } );
 
-	// The gate editor says this where a gate's own count is 0. Typed here it decides the
-	// same thing for every gate sharing the allowance, so it has to be said here too.
 	const noneSignedOut = siteMeter.anonymous_count === 0;
 	const noneSignedIn = siteMeter.registered_count === 0;
 	let noFreeViewsWarning = null;

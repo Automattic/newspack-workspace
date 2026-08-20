@@ -44,9 +44,7 @@ export const getMeteringCount = ( metering?: Metering, siteCount?: number ) => {
 		return Number( metering.count ) || 0;
 	}
 	// No allowance rather than a guessed one: the summaries print this number and the
-	// metered/not-metered helpers read it, so inventing a default states an allowance
-	// the site may not grant. A wizard whose config carries no site meter, such as
-	// Premium Newsletters, only ever asks about gates keeping their own.
+	// metered/not-metered helpers read it, so a default states an allowance nobody grants.
 	return Number( siteCount ?? 0 ) || 0;
 };
 

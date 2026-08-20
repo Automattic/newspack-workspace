@@ -229,9 +229,8 @@ class Metering {
 				'period'  => 'month',
 			];
 		}
-		// A path that does not meter grants no free views, so it reports none. Callers
-		// read `count` to decide what a reader still gets, and a stale or shared number
-		// behind `enabled => false` reads as an allowance the gate never serves.
+		// Callers read `count` to decide what a reader still gets, so a path that does not
+		// meter reports no allowance rather than a stale or shared one.
 		$enabled = (bool) $metering['enabled'];
 		if ( Site_Meter::SCOPE_SITE === Site_Meter::sanitize_scope( $metering['scope'] ?? null ) && Site_Meter::has_adopted() ) {
 			$site = Site_Meter::get_settings();
