@@ -366,18 +366,19 @@ class ESP extends Integration {
 	public function get_enabled_outgoing_fields() {
 		$fields = \get_option( self::OUTGOING_FIELDS_OPTION_PREFIX . $this->id, null );
 		if ( null !== $fields && is_array( $fields ) ) {
-			return $fields;
+			return array_values( $fields );
 		}
 
 		// Migrate from legacy global option.
 		$legacy = \get_option( Sync\Metadata::FIELDS_OPTION, null );
 		if ( null !== $legacy && is_array( $legacy ) ) {
+			$migrated_fields = array_values( array_unique( array_map( 'strval', $legacy ) ) );
 			\update_option(
 				self::OUTGOING_FIELDS_OPTION_PREFIX . $this->id,
-				array_values( array_unique( array_map( 'strval', $legacy ) ) ),
+				$migrated_fields,
 				false
 			);
-			return array_values( array_unique( array_map( 'strval', $legacy ) ) );
+			return $migrated_fields;
 		}
 
 		return Sync\Metadata::get_default_enabled_fields();

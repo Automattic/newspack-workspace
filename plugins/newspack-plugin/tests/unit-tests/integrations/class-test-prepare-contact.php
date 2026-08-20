@@ -450,30 +450,29 @@ class Test_Prepare_Contact extends \WP_UnitTestCase {
 	 * registered-but-disabled field is dropped.
 	 */
 	public function test_already_prefixed_keys_follow_catalog_contract() {
-		// Write the enabled-fields option directly, bypassing the
-		// update_enabled_outgoing_fields() intersect filter, to simulate a stale
-		// saved field name that is no longer in the live keys map — the
-		// integration ends up with nothing enabled.
-		\update_option( 'newspack_integration_outgoing_fields_prepare-test', [ 'Stale Field' ] );
+		// Enable a real field via the normal API. The unknown-name input below
+		// is deliberately NOT this field, so its pass-through can only be
+		// explained by the catalog check, not by an enabled-name match.
+		$this->integration->update_enabled_outgoing_fields( [ 'Account' ] );
 
 		$keys_map = Metadata::get_keys();
-		$this->assertNotContains( 'Stale Field', $keys_map, 'Sanity: stale field must not be in the live keys map.' );
+		$this->assertNotContains( 'Made Up Field', $keys_map, 'Sanity: the made-up name must not be in the live keys map.' );
 
-		// Pick a registered, non-dynamic field name — not enabled here, since
-		// the stored selection resolves to nothing.
+		// Pick a registered, non-dynamic field name other than the one just
+		// enabled, so it exercises the registered-but-disabled path.
 		$registered_name = null;
 		foreach ( Metadata::get_all_fields() as $name ) {
-			if ( ': ' !== substr( $name, -2 ) ) {
+			if ( 'Account' !== $name && ': ' !== substr( $name, -2 ) ) {
 				$registered_name = $name;
 				break;
 			}
 		}
-		$this->assertNotNull( $registered_name, 'Sanity: a non-dynamic field exists.' );
+		$this->assertNotNull( $registered_name, 'Sanity: a second non-dynamic field exists.' );
 
 		$contact = [
 			'email'    => 'test@example.com',
 			'metadata' => [
-				'NP_Stale Field'         => 'leftover_value',
+				'NP_Made Up Field'       => 'passthrough_value',
 				'NP_' . $registered_name => 'disabled_value',
 			],
 		];
@@ -481,8 +480,8 @@ class Test_Prepare_Contact extends \WP_UnitTestCase {
 		$result = $this->integration->prepare_contact( $contact );
 
 		$this->assertSame(
-			'leftover_value',
-			$result['metadata']['NP_Stale Field'] ?? null,
+			'passthrough_value',
+			$result['metadata']['NP_Made Up Field'] ?? null,
 			'A prefixed key unknown to the catalog passes through.'
 		);
 		$this->assertArrayNotHasKey(

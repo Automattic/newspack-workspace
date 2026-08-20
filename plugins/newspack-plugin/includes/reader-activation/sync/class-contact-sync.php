@@ -251,11 +251,11 @@ class Contact_Sync extends Sync {
 	 * When `$options['fields']` is set: the reader `name` is dropped (so a
 	 * field-scoped backfill can't rewrite reader names — ESPs only set first/last
 	 * name when a name is present), and metadata is filtered to just the requested
-	 * labels. Filtering runs after `prepare_contact()` so keys are already prefixed
-	 * in both metadata modes; a key is kept when its de-prefixed remainder equals a
-	 * requested label, or begins with a requested label ending in `': '` (the UTM
-	 * label shape, e.g. `Signup UTM: source`). Everything else — including
-	 * `status` / `status_if_new` — is dropped.
+	 * labels. Filtering runs after `prepare_contact()`, so keys already arrive
+	 * prefixed; a key is kept when its de-prefixed remainder equals a requested
+	 * label, or begins with a requested label ending in `': '` (the UTM label
+	 * shape, e.g. `Signup UTM: source`). Everything else — including `status` /
+	 * `status_if_new` — is dropped.
 	 *
 	 * @param \Newspack\Reader_Activation\Integration $integration The target integration.
 	 * @param array                                   $contact     The contact data.
@@ -900,9 +900,13 @@ class Contact_Sync extends Sync {
 
 		static::log( sprintf( 'Executing retry %d/%d for integration "%s" sync of user %d (%s).', $retry_count, self::MAX_RETRIES, $integration_id, $user_id, $contact['email'] ?? 'unknown' ) );
 
-		// get_contact_data() already normalizes the contact; normalizing again
-		// here would fire `newspack_esp_sync_normalize_contact` a second time
-		// per retry, double-applying any non-idempotent publisher callback.
+		// get_contact_data() already normalizes the contact when WooCommerce is
+		// active, via get_contact_with_metadata(); normalizing again here would
+		// fire `newspack_esp_sync_normalize_contact` a second time per retry,
+		// double-applying any non-idempotent publisher callback. Without
+		// WooCommerce, get_contact_data() early-returns before that call, so
+		// the filter never fires here — but enrichment is a no-op on that path
+		// too, since metadata is empty regardless.
 		/** This filter is documented in includes/reader-activation/sync/class-contact-sync.php */
 		$contact = \apply_filters( 'newspack_esp_sync_contact', $contact, $context );
 

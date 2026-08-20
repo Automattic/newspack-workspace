@@ -177,13 +177,11 @@ class Metadata {
 			: [ Contact_Metadata\Identity::class, Contact_Metadata\Registration::class, Contact_Metadata\Engagement::class, Contact_Metadata\Subscription::class, Contact_Metadata\Donation::class ];
 		$era_classes[] = Contact_Metadata\Content_Gate::class;
 
-		$class_raw_keys = [];
 		foreach ( $era_classes as $class ) {
 			if ( ! class_exists( $class ) || ! $class::is_available() ) {
 				continue;
 			}
 			foreach ( array_keys( $class::get_fields() ) as $raw_key ) {
-				$class_raw_keys[ $raw_key ] = true;
 				if ( isset( $catalog[ $raw_key ] ) ) {
 					$names[] = $catalog[ $raw_key ];
 				}
@@ -358,20 +356,6 @@ class Metadata {
 	public static function get_raw_keys() {
 		$esp_integration = Integrations::get_integration( 'esp' );
 		return $esp_integration ? $esp_integration->get_enabled_outgoing_fields_keys() : [];
-	}
-
-	/**
-	 * Get the "prefixed" metadata keys. Only return fields selected to sync.
-	 *
-	 * This method is deprecated. Now, each integration has its own set of enabled fields.
-	 * As a fallback, this method delegates to the ESP Integration.
-	 *
-	 * @deprecated Use Integration::get_enabled_outgoing_fields_keys() instead.
-	 * @return string[] List of prefixed metadata keys.
-	 */
-	public static function get_prefixed_keys() {
-		$esp_integration = Integrations::get_integration( 'esp' );
-		return $esp_integration ? $esp_integration->get_enabled_outgoing_fields_keys( true ) : [];
 	}
 
 	/**
@@ -572,16 +556,14 @@ class Metadata {
 		return \apply_filters( 'newspack_ras_metadata_keys', $keys, $only_available );
 	}
 
-
-
 	/**
 	 * Resolve a list of user-supplied field tokens (raw keys or display labels,
 	 * any case) to their canonical display labels.
 	 *
 	 * The label is the canonical unit for field scoping because the final ESP
-	 * key is always `prefix + label` in both metadata modes, and because
-	 * synonymous raw keys (e.g. `registration_page` / `current_page_url`) share
-	 * one label — resolving to labels dedupes them.
+	 * key is always `prefix + label`, and because synonymous raw keys (e.g.
+	 * `registration_page` / `current_page_url`) share one label — resolving to
+	 * labels dedupes them.
 	 *
 	 * @param string[] $inputs Field tokens to resolve.
 	 *
@@ -680,8 +662,12 @@ class Metadata {
 	 *                                                                    restrict computation to. When provided,
 	 *                                                                    metadata classes whose fields don't
 	 *                                                                    intersect the list are skipped (avoiding
-	 *                                                                    their queries). `null` computes every
-	 *                                                                    available field (existing behavior).
+	 *                                                                    their queries). `null` derives the
+	 *                                                                    scoping list from push-enabled
+	 *                                                                    integrations' selections (see
+	 *                                                                    get_push_enabled_fields_union()),
+	 *                                                                    computing everything only when no
+	 *                                                                    integrations are registered.
 	 *
 	 * @return array Contact array with 'email' and 'metadata' keys.
 	 */
@@ -733,6 +719,11 @@ class Metadata {
 	 * the integrations registry is empty (pre-init callers compute
 	 * everything); an empty union from all-empty selections legitimately
 	 * computes nothing, since nothing would be pushed.
+	 *
+	 * Reading selections through the integration getters can fire the ESP's
+	 * one-time lazy migration of the legacy global option — a deliberate,
+	 * idempotent write that any read of the ESP's selection performs, not
+	 * something this helper adds.
 	 *
 	 * @return string[]|null
 	 */

@@ -1010,8 +1010,8 @@ class Test_Account_Deletion extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * Every other provider error still surfaces, so a transient list-removal
-	 * failure keeps its retry.
+	 * Every other provider error surfaces to the caller as a WP_Error; this
+	 * cleanup path does not schedule a retry.
 	 */
 	public function test_esp_flag_cleanup_surfaces_other_provider_errors() {
 		\Newspack_Newsletters_Contacts::reset_calls();

@@ -259,11 +259,15 @@ class Test_Schema_Parity extends \WP_UnitTestCase {
 	/**
 	 * The load-bearing parity guarantee, at value level rather than key level.
 	 *
-	 * A migrated legacy site's stored display names resolve onto the new
-	 * schema's ids for every shared field, so the new schema's classes start
-	 * producing values the legacy pipeline used to produce. Those values must
-	 * be identical — including which keys are present at all, since a key the
-	 * legacy pipeline omitted arrives at the provider as an empty string and
+	 * SHARED_FIELD_NAMES['v1'] and ['v2'] are the identical name list — display
+	 * names are the storage unit for both schemas now, so there is no distinct
+	 * v1-only or v2-only spelling to compare across. Building the payload off
+	 * that one selection twice therefore only proves the build is
+	 * deterministic; the real guarantee is carried by the pinned value and
+	 * key-absence assertions below, which require the new schema's producer
+	 * classes to reproduce the legacy pipeline's exact value semantics —
+	 * including which keys are present at all, since a key the legacy
+	 * pipeline omitted arrives at the provider as an empty string and
 	 * Mailchimp writes blanks straight over live merge-field data.
 	 *
 	 * This reader is the divergence case: no SSO connection and no recorded
@@ -296,7 +300,7 @@ class Test_Schema_Parity extends \WP_UnitTestCase {
 		$this->assertSame(
 			$legacy_metadata,
 			$migrated_metadata,
-			'Migrating a shared field to its new-schema id must not change a single value, or its type.'
+			'Building the identical field-name selection twice must yield the identical payload; the pinned assertions below carry the actual legacy-value-semantics guarantee.'
 		);
 
 		// Non-vacuous: the shared fields this reader does have must be there.
@@ -366,8 +370,12 @@ class Test_Schema_Parity extends \WP_UnitTestCase {
 
 	/**
 	 * The mirror case: a reader who does have an SSO connection and a recorded
-	 * registration page must still get both values on either set of ids, so
-	 * the omit-when-empty rule can never be mistaken for omit-always.
+	 * registration page. Both rounds below enable the identical name set (see
+	 * test_shared_fields_produce_identical_payload_after_id_migration()), so
+	 * this again only confirms deterministic output; what matters is that the
+	 * pinned values asserted below show Connected Account and Registration
+	 * Page still carrying real values here, so the omit-when-empty rule the
+	 * divergence-case test pins can never be mistaken for omit-always.
 	 */
 	public function test_shared_fields_still_carry_values_after_id_migration() {
 		$user_id = self::factory()->user->create(
