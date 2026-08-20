@@ -28,11 +28,7 @@ import AudienceManagementRequired, { redirectWithoutAudienceManagement, requireA
 // Button must survive as real anchors for the href assertions to mean anything.
 jest.mock( '@wordpress/components', () => {
 	const React = require( 'react' );
-	// Both stacks are needed: Root uses VStack, Actions picks between the two. Omitting
-	// either fails as "Element type is invalid", which reads as a broken component.
 	return {
-		__experimentalHStack: ( { children } ) => React.createElement( 'div', null, children ),
-		__experimentalVStack: ( { children } ) => React.createElement( 'div', null, children ),
 		ExternalLink: ( { children, href } ) => React.createElement( 'a', { href }, children ),
 	};
 } );
