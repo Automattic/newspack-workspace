@@ -59,12 +59,8 @@
 	&__empty {
 		margin-top: wp-vars.$grid-unit-30;
 
-		.newspack-section-header__container {
-			display: flex;
-			justify-content: center;
-		}
-
-		.newspack-section-header {
+		&-header {
+			margin: 0 auto;
 			max-width: 48ch;
 		}
 	}

@@ -4,7 +4,7 @@
 
 @use "sass:color";
 @use "~@wordpress/base-styles/colors" as wp-colors;
-@use "../../../colors/colors.module" as colors;
+@use "../../../colors/colors.module" as np-colors;
 
 .newspack-notice {
 	align-items: center;
@@ -23,7 +23,7 @@
 	}
 
 	&__is-debug {
-		background: colors.$primary-600;
+		background: np-colors.$primary-600;
 		border-radius: 50%;
 		bottom: 16px;
 		box-shadow: 0 0 8px 4px rgba(black, 0.08);
@@ -63,7 +63,7 @@
 	}
 
 	&__is-help {
-		background: colors.$primary-050;
+		background: np-colors.$primary-050;
 
 		> svg {
 			fill: var(--wp-admin-theme-color);
