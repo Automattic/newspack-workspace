@@ -325,10 +325,10 @@ class API {
 	 *
 	 * Applies what core would clean for such a caller, directly rather than by
 	 * running the filter chain, so this does not depend on global filter
-	 * registration: block custom CSS and kses over `content`/`raw_content`, and
-	 * kses over `title` and `excerpt` in core's own two contexts. (Core also puts
-	 * wp_filter_global_styles_post on `content_save_pre`; it acts only on
-	 * global-styles JSON, which a distributed post never carries.)
+	 * registration. Over `content`/`raw_content` that is core's whole
+	 * `content_save_pre` set for this caller: the block custom-CSS strip (8), the
+	 * global-styles sanitizer (9), and kses (10). Over `title` and `excerpt` it is
+	 * kses in core's own two contexts.
 	 *
 	 * Title and excerpt are filtered twice — here, and again by core's
 	 * `title_save_pre`/`excerpt_save_pre`, which this route never removes. Both
@@ -378,12 +378,20 @@ class API {
 
 			$value = $payload['post_data'][ $field ];
 
-			// Core's order: the custom-CSS strip runs at priority 8, kses at 10.
+			// Core's content_save_pre order for such a caller: custom-CSS strip
+			// at 8, the global-styles sanitizer at 9, kses at 10.
 			if ( $strip_css ) {
 				$value = self::strip_block_custom_css( $value );
 			}
 
 			if ( $filter_html ) {
+				// A wp_global_styles post carries theme JSON in post_content, and
+				// kses does not clean the CSS inside it — wp_filter_global_styles_post
+				// does. This route does not restrict post_type, so a caller can send
+				// that JSON here. The function slash-wraps its own output; this input
+				// is unslashed until wp_slash( $postarr ), so unwrap it back. It is a
+				// passthrough for anything that is not global-styles JSON.
+				$value = wp_unslash( wp_filter_global_styles_post( wp_slash( $value ) ) );
 				$value = wp_kses_post( $value );
 			}
 

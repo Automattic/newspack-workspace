@@ -321,6 +321,41 @@ class TestApi extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * A wp_global_styles post keeps its theme customization in post_content as
+	 * JSON, and the CSS inside it is cleaned by wp_filter_global_styles_post,
+	 * not by kses. Core runs that filter for a caller without unfiltered_html;
+	 * since this route puts no allowlist on post_type, the same JSON can arrive
+	 * here, so the filter has to run here too.
+	 *
+	 * @group content-distribution-api
+	 */
+	public function test_insert_sanitizes_global_styles_json_for_author() {
+		wp_set_current_user( $this->factory->user->create( [ 'role' => 'author' ] ) );
+		kses_init();
+
+		$theme_json = wp_json_encode(
+			[
+				'isGlobalStylesUserThemeJSON' => true,
+				'version'                     => 2,
+				'styles'                      => [ 'css' => 'body{display:none}' ],
+			]
+		);
+
+		$content = $this->insert_and_get_content( $this->make_insert_request( $theme_json ) );
+
+		$this->assertStringNotContainsString(
+			'display:none',
+			$content,
+			'The unsafe CSS carried in the theme JSON must be removed on the way in.'
+		);
+		$this->assertStringNotContainsString(
+			'"css"',
+			$content,
+			'wp_filter_global_styles_post drops the css property, which kses would have left in place.'
+		);
+	}
+
+	/**
 	 * An editor holds 'unfiltered_html', so their content is stored as-is.
 	 * This is what keeps Story Budget pulls working for editors and above.
 	 */
