@@ -626,6 +626,10 @@ class Metadata {
 		$classes      = self::get_metadata_classes();
 		$metadata     = [];
 
+		if ( null === $fields ) {
+			$fields = self::get_push_enabled_fields_union();
+		}
+
 		foreach ( $classes as $class ) {
 			if ( ! $class::is_available() ) {
 				continue;
@@ -652,6 +656,35 @@ class Metadata {
 		}
 
 		return self::normalize_contact_data( $contact );
+	}
+
+	/**
+	 * The union of enabled outgoing field names across every push-enabled
+	 * active integration — the compute-scoping list for a full sync.
+	 *
+	 * Scoped per class via class_handles_any_field(), this skips the
+	 * (often WooCommerce-heavy) classes of a schema no integration pushes:
+	 * a legacy site's selection holds no v2-only names, so the five new
+	 * classes — and their order/subscription queries — never run. Null when
+	 * the integrations registry is empty (pre-init callers compute
+	 * everything); an empty union from all-empty selections legitimately
+	 * computes nothing, since nothing would be pushed.
+	 *
+	 * @return string[]|null
+	 */
+	private static function get_push_enabled_fields_union() {
+		$integrations = Integrations::get_active_configured_integrations();
+		if ( empty( $integrations ) ) {
+			return null;
+		}
+		$union = [];
+		foreach ( $integrations as $integration ) {
+			if ( ! $integration->is_push_enabled() ) {
+				continue;
+			}
+			$union = array_merge( $union, $integration->get_enabled_outgoing_fields() );
+		}
+		return array_values( array_unique( $union ) );
 	}
 
 	/**
