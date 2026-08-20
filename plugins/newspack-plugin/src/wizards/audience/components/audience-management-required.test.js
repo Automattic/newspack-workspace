@@ -33,8 +33,8 @@ jest.mock( '@wordpress/components', () => {
 	};
 } );
 
-// The heading and description come from the real EmptyState, which reaches Grid and
-// SectionHeader by path rather than through this barrel, so neither is stubbed here.
+// The heading and description come from the real EmptyState, which reaches Grid by path
+// rather than through this barrel, so Grid is not stubbed here.
 jest.mock( '../../../../packages/components/src', () => {
 	const React = require( 'react' );
 	return {
