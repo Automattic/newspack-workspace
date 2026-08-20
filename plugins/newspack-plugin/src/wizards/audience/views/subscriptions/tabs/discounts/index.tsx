@@ -153,14 +153,14 @@ function SubscriberDiscounts() {
 				label: __( 'Status', 'newspack-plugin' ),
 				elements: [
 					{ value: 'active', label: __( 'Active', 'newspack-plugin' ) },
-					{ value: 'paused', label: __( 'Paused', 'newspack-plugin' ) },
+					{ value: 'inactive', label: __( 'Inactive', 'newspack-plugin' ) },
 				],
 				filterBy: { operators: [ 'isAny' ] },
-				getValue: ( { item } ) => ( item.active ? 'active' : 'paused' ),
+				getValue: ( { item } ) => ( item.active ? 'active' : 'inactive' ),
 				render: ( { item } ) => (
 					<span className="newspack-subscriber-discounts__status">
 						<Icon className="newspack-subscriber-discounts__status-icon" icon={ item.active ? published : drafts } size={ 24 } />
-						<span>{ item.active ? __( 'Active', 'newspack-plugin' ) : __( 'Paused', 'newspack-plugin' ) }</span>
+						<span>{ item.active ? __( 'Active', 'newspack-plugin' ) : __( 'Inactive', 'newspack-plugin' ) }</span>
 					</span>
 				),
 			},
@@ -206,7 +206,8 @@ function SubscriberDiscounts() {
 			},
 			{
 				id: 'toggle-active',
-				label: __( 'Pause or resume', 'newspack-plugin' ),
+				label: ( [ item ]: DiscountRule[] ) =>
+					item?.active ? __( 'Set to inactive', 'newspack-plugin' ) : __( 'Set to active', 'newspack-plugin' ),
 				callback: ( [ item ]: DiscountRule[] ) => setActive( item, ! item.active ),
 			},
 			{

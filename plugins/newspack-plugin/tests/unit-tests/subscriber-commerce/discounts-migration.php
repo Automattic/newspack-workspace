@@ -266,9 +266,12 @@ class Test_Discounts_Migration extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * Products flagged in Memberships as never discounted are carried onto the
-	 * rules that would otherwise sweep them up. A hand-picked product list needs
-	 * no exclusions — the publisher chose exactly those products.
+	 * Products flagged in Memberships as never discounted stay undiscounted.
+	 *
+	 * Memberships applies that flag before any rule matches, so it beats a rule
+	 * that names the product outright. A subscriber discount has nowhere to put
+	 * an exclusion on a hand-picked product list, so the flagged product comes
+	 * off the list instead.
 	 */
 	public function test_globally_excluded_products_become_rule_exclusions() {
 		$excluded_product_ids = [ 999 ];
@@ -289,11 +292,19 @@ class Test_Discounts_Migration extends \WP_UnitTestCase {
 		$this->assertSame( [ 999 ], $category_rule['excluded_product_ids'], 'A category rule inherits the excluded products.' );
 
 		$product_rule = Discounts_Migration::map_rules(
-			[ $this->memberships_rule() ],
+			[ $this->memberships_rule( [ 'object_ids' => [ 101, 999 ] ] ) ],
 			$this->plan_granted_by_two_subscriptions(),
 			$excluded_product_ids
 		)['rules'][0];
-		$this->assertSame( [], $product_rule['excluded_product_ids'], 'A hand-picked product list needs no exclusions.' );
+		$this->assertSame( [], $product_rule['excluded_product_ids'], 'A hand-picked product list carries no exclusions; the store would drop them.' );
+		$this->assertSame( [ 101 ], $product_rule['product_ids'], 'The flagged product is dropped from the list rather than silently discounted.' );
+
+		$skipped = Discounts_Migration::map_rules(
+			[ $this->memberships_rule( [ 'object_ids' => [ 999 ] ] ) ],
+			$this->plan_granted_by_two_subscriptions(),
+			$excluded_product_ids
+		)['skipped'];
+		$this->assertCount( 1, $skipped, 'A rule left with no products at all is reported rather than saved as a rule that discounts nothing.' );
 	}
 
 	/**

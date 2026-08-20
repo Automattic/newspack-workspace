@@ -89,6 +89,7 @@ class Test_Subscriber_Discounts_Pricing extends \WP_UnitTestCase {
 	 */
 	public function tear_down() {
 		$this->set_cart_contents( [] );
+		$this->clear_rest_route();
 		remove_filter( 'newspack_access_rules_has_active_subscription', [ $this, 'grant_subscription_to_subscriber' ], 10 );
 		$this->flush_caches();
 		global $products_database;
@@ -122,6 +123,26 @@ class Test_Subscriber_Discounts_Pricing extends \WP_UnitTestCase {
 				return $product_ids;
 			}
 		);
+		$this->flush_caches();
+	}
+
+	/**
+	 * Make the request look like a REST call to a given route.
+	 *
+	 * @param string $route Route, leading slash included.
+	 */
+	private function set_rest_route( $route ) {
+		add_filter( 'wp_is_rest_endpoint', '__return_true' );
+		$GLOBALS['wp']->query_vars['rest_route'] = $route;
+		$this->flush_caches();
+	}
+
+	/**
+	 * Stop the request looking like a REST call.
+	 */
+	private function clear_rest_route() {
+		remove_all_filters( 'wp_is_rest_endpoint' );
+		unset( $GLOBALS['wp']->query_vars['rest_route'] );
 		$this->flush_caches();
 	}
 
@@ -403,11 +424,42 @@ class Test_Subscriber_Discounts_Pricing extends \WP_UnitTestCase {
 			Subscriber_Discounts_Pricing::get_subscriber_price( 120.0, $granting_subscription, $this->non_subscriber_id ),
 			'The subscription in the cart is not discounted by the rule it grants.'
 		);
+		$this->assertNull(
+			Subscriber_Discounts_Pricing::get_subscriber_price( 120.0, $granting_subscription, $this->subscriber_id ),
+			'Nor is it for a reader who already holds it — otherwise a whole-catalogue rule cuts its own renewal price.'
+		);
 		$this->assertSame(
 			90.0,
 			Subscriber_Discounts_Pricing::get_subscriber_price( 100.0, $this->book, $this->non_subscriber_id ),
 			'Everything else the rule covers still is.'
 		);
+	}
+
+	/**
+	 * Prices are not adjusted on the REST routes that read a price in order to
+	 * manage it.
+	 *
+	 * A REST request is neither an admin screen nor AJAX, so nothing above
+	 * catches it. The discount editor's own product search reports the price a
+	 * rule is composed over, and would otherwise report one this rule had
+	 * already discounted — the editor's preview then discounts it twice. The
+	 * storefront's Store API is the opposite case and must keep discounting.
+	 */
+	public function test_prices_are_not_adjusted_on_management_rest_routes() {
+		$this->add_book_discount();
+
+		$this->set_rest_route( '/' . NEWSPACK_API_NAMESPACE . '/wizard/newspack-audience/products-search' );
+		$price_in_the_discount_editor = Subscriber_Discounts_Pricing::get_subscriber_price( 100.0, $this->book, $this->subscriber_id );
+
+		$this->set_rest_route( '/wc/v3/products/' . $this->book->get_id() );
+		$price_in_the_woocommerce_api = Subscriber_Discounts_Pricing::get_subscriber_price( 100.0, $this->book, $this->subscriber_id );
+
+		$this->set_rest_route( '/wc/store/v1/products/' . $this->book->get_id() );
+		$price_in_the_store_api = Subscriber_Discounts_Pricing::get_subscriber_price( 100.0, $this->book, $this->subscriber_id );
+
+		$this->assertNull( $price_in_the_discount_editor, 'The discount editor is shown the price a rule discounts from, not the discounted one.' );
+		$this->assertNull( $price_in_the_woocommerce_api, 'WooCommerce\'s management API reports the stored price, which is what it writes back.' );
+		$this->assertSame( 90.0, $price_in_the_store_api, 'The storefront\'s own API reports what the reader is charged.' );
 	}
 
 	/**

@@ -100,8 +100,17 @@ class Discounts_Migration {
 				'result'    => $dry_run ? 'would create' : 'created',
 			];
 
-			if ( ! $dry_run ) {
-				unset( $rule['_source_rule_id'], $rule['_source_plan_id'] );
+			unset( $rule['_source_rule_id'], $rule['_source_plan_id'] );
+
+			if ( $dry_run ) {
+				// Run the store's own validation without persisting, so a rule
+				// the store would reject is named in the preview rather than
+				// only on the live run.
+				$validated = Subscriber_Discounts::sanitize_rule( $rule );
+				if ( is_wp_error( $validated ) ) {
+					$row['result'] = 'would fail: ' . $validated->get_error_message();
+				}
+			} else {
 				$saved = Subscriber_Discounts::save_rule( $rule );
 				if ( is_wp_error( $saved ) ) {
 					$row['result'] = 'ERROR: ' . $saved->get_error_message();
@@ -131,7 +140,7 @@ class Discounts_Migration {
 			array_filter(
 				$summary,
 				function ( $row ) {
-					return 0 === strpos( $row['result'], 'ERROR' );
+					return 0 === strpos( $row['result'], 'ERROR' ) || 0 === strpos( $row['result'], 'would fail' );
 				}
 			)
 		);
@@ -255,9 +264,14 @@ class Discounts_Migration {
 			return;
 		}
 
+		// Printed on screen, not just in the comments above: the comparison only
+		// sees products it can enumerate, so the number below is a floor.
+		$coverage_caveat = 'Overlapping discounts are compared per product, so this count is a floor: catalog-wide rules, categories past the first 500 products, and variable parents priced only through their variations are not counted.';
+
 		$affected_readers = self::readers_losing_stacked_discounts( $rules_by_plan );
 		if ( empty( $affected_readers ) ) {
 			WP_CLI::line( 'Overlapping discounts: no reader holds two plans whose discounts cover the same product, so no price changes.' );
+			WP_CLI::line( $coverage_caveat );
 			return;
 		}
 
@@ -283,6 +297,7 @@ class Discounts_Migration {
 		if ( count( $affected_readers ) > 10 ) {
 			WP_CLI::line( sprintf( '  ... and %d more.', count( $affected_readers ) - 10 ) );
 		}
+		WP_CLI::line( $coverage_caveat );
 	}
 
 	/**
@@ -524,6 +539,23 @@ class Discounts_Migration {
 				continue;
 			}
 
+			// Memberships applies the per-product exclusion flag before any rule
+			// matches, so a flagged product is undiscounted even where a rule
+			// names it outright. A subscriber discount carries exclusions on the
+			// rule and drops them for a hand-picked product list, so for that
+			// targeting the flagged products come off the list instead.
+			$product_ids = Product_Targeting::TARGETING_PRODUCTS === $targeting
+				? array_values( array_diff( $object_ids, $excluded_product_ids ) )
+				: [];
+			if ( Product_Targeting::TARGETING_PRODUCTS === $targeting && empty( $product_ids ) ) {
+				$skipped[] = [
+					'source' => $source_id,
+					'plan'   => $plan_id,
+					'reason' => 'Every product this rule names is flagged in Memberships as never discounted, so the rule discounts nothing.',
+				];
+				continue;
+			}
+
 			$rules[] = [
 				'_source_rule_id'          => $source_id,
 				'_source_plan_id'          => $plan_id,
@@ -533,11 +565,10 @@ class Discounts_Migration {
 				'id'                       => self::migrated_rule_id( $source_id ),
 				'subscription_product_ids' => $subscription_product_ids,
 				'targeting'                => $targeting,
-				'product_ids'              => Product_Targeting::TARGETING_PRODUCTS === $targeting ? $object_ids : [],
+				'product_ids'              => $product_ids,
 				'category_ids'             => Product_Targeting::TARGETING_CATEGORY === $targeting ? $object_ids : [],
-				// Memberships excludes products from discounts with a per-product
-				// flag; subscriber discounts carry exclusions on the rule, so the
-				// flagged products are attached to every rule that could reach them.
+				// A category or catalog-wide rule carries the flagged products as
+				// rule exclusions; see the note above for the hand-picked case.
 				'excluded_product_ids'     => Product_Targeting::TARGETING_PRODUCTS === $targeting ? [] : $excluded_product_ids,
 				'discount_type'            => 'percentage' === ( $memberships_rule['discount_type'] ?? '' ) ? 'percent' : 'fixed',
 				'amount'                   => $amount,

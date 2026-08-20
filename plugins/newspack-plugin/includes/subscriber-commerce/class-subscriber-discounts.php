@@ -52,15 +52,59 @@ class Subscriber_Discounts {
 	];
 
 	/**
+	 * Memoized rules for this request, or null when nothing is memoized.
+	 *
+	 * @var array[]|null
+	 */
+	private static $rules_memo = null;
+
+	/**
+	 * Memoized settings for this request, or null when nothing is memoized.
+	 *
+	 * @var array|null
+	 */
+	private static $settings_memo = null;
+
+	/**
+	 * Discard the memos whenever either option is written, including by a
+	 * caller that goes straight to the options API.
+	 */
+	public static function init() {
+		foreach ( [ 'added_option', 'updated_option', 'deleted_option' ] as $option_write_hook ) {
+			add_action( $option_write_hook, [ __CLASS__, 'flush_cache_for_option' ] );
+		}
+	}
+
+	/**
+	 * Flush the memos when the written option is one of this class's.
+	 *
+	 * @param string $option Option that was written.
+	 */
+	public static function flush_cache_for_option( $option ) {
+		if ( in_array( $option, [ self::OPTION_NAME, self::SETTINGS_OPTION_NAME ], true ) ) {
+			self::flush_dependent_caches();
+		}
+	}
+
+	/**
 	 * Every stored rule, newest first.
+	 *
+	 * Memoized: the price filters read this once per product on a shop archive,
+	 * and the map-and-sort below is otherwise redone every time.
 	 *
 	 * @return array[]
 	 */
 	public static function get_rules() {
+		if ( null !== self::$rules_memo ) {
+			return self::$rules_memo;
+		}
+
 		$stored_rules = get_option( self::OPTION_NAME, [] );
 		if ( ! is_array( $stored_rules ) ) {
+			self::$rules_memo = [];
 			return [];
 		}
+
 		$rules = array_values( array_map( [ __CLASS__, 'fill_defaults' ], array_filter( $stored_rules, 'is_array' ) ) );
 		usort(
 			$rules,
@@ -68,6 +112,9 @@ class Subscriber_Discounts {
 				return strcmp( (string) $b['created_at'], (string) $a['created_at'] );
 			}
 		);
+
+		self::$rules_memo = $rules;
+
 		return $rules;
 	}
 
@@ -144,6 +191,8 @@ class Subscriber_Discounts {
 	 * previous configuration.
 	 */
 	private static function flush_dependent_caches() {
+		self::$rules_memo    = null;
+		self::$settings_memo = null;
 		Subscriber_Discounts_Pricing::flush_cache();
 		Product_Targeting::flush_cache();
 	}
@@ -194,19 +243,28 @@ class Subscriber_Discounts {
 	/**
 	 * Global settings, with defaults filled in.
 	 *
+	 * Memoized for the same reason as the rules: the price path asks for these
+	 * several times per product.
+	 *
 	 * @return array
 	 */
 	public static function get_settings() {
+		if ( null !== self::$settings_memo ) {
+			return self::$settings_memo;
+		}
+
 		$stored_settings = get_option( self::SETTINGS_OPTION_NAME, [] );
 		if ( ! is_array( $stored_settings ) ) {
 			$stored_settings = [];
 		}
 		$settings = array_merge( self::DEFAULT_SETTINGS, $stored_settings );
 
-		return [
+		self::$settings_memo = [
 			'apply_on_sale'     => (bool) $settings['apply_on_sale'],
 			'apply_at_checkout' => (bool) $settings['apply_at_checkout'],
 		];
+
+		return self::$settings_memo;
 	}
 
 	/**
@@ -255,9 +313,11 @@ class Subscriber_Discounts {
 		$discounted_price = max( 0, $discounted_price );
 
 		// Match WooCommerce's own rounding so a discounted price can never render
-		// with more precision than the store's currency format.
+		// with more precision than the store's currency format, and so anything
+		// recomputing the same percentage through WooCommerce's helpers lands on
+		// the same cent. WooCommerce rounds half away from zero.
 		$decimals         = function_exists( 'wc_get_price_decimals' ) ? wc_get_price_decimals() : 2;
-		$discounted_price = round( $discounted_price, $decimals, PHP_ROUND_HALF_DOWN );
+		$discounted_price = round( $discounted_price, $decimals, PHP_ROUND_HALF_UP );
 
 		if ( $discounted_price >= $base_price ) {
 			return null;
@@ -439,3 +499,5 @@ class Subscriber_Discounts {
 		);
 	}
 }
+
+Subscriber_Discounts::init();

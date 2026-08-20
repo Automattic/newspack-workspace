@@ -37,6 +37,14 @@ class Subscriber_Discounts_Pricing {
 	private static $rules_for_product = [];
 
 	/**
+	 * The base price each variation was last discounted from, keyed by
+	 * variation id, so the sale-price filter discounts the same figure.
+	 *
+	 * @var array
+	 */
+	private static $variation_price_base = [];
+
+	/**
 	 * Register the price filters once plugins and the cart session are loaded.
 	 */
 	public static function init() {
@@ -112,7 +120,74 @@ class Subscriber_Discounts_Pricing {
 				return false;
 			}
 		}
+		if ( self::is_management_rest_request() ) {
+			return false;
+		}
 		return true;
+	}
+
+	/**
+	 * Whether the current request is a REST call to a management route.
+	 *
+	 * A REST request is neither `is_admin()` nor AJAX, so the checks above see
+	 * nothing. The storefront's own Store API must keep discounting, but the
+	 * routes that read a price in order to edit it — or to preview what a
+	 * discount would do to it — must not: a shop manager who also holds a
+	 * qualifying subscription would otherwise edit against, and save back,
+	 * their own subscriber price.
+	 *
+	 * The route is read at price time rather than at registration, since
+	 * `wp_loaded` runs before WordPress has resolved one.
+	 *
+	 * @return bool
+	 */
+	private static function is_management_rest_request() {
+		$is_rest_request = function_exists( 'wp_is_rest_endpoint' )
+			? wp_is_rest_endpoint()
+			: ( defined( 'REST_REQUEST' ) && REST_REQUEST );
+		if ( ! $is_rest_request ) {
+			return false;
+		}
+
+		$route = isset( $GLOBALS['wp']->query_vars['rest_route'] ) ? (string) $GLOBALS['wp']->query_vars['rest_route'] : '';
+		if ( '' === $route ) {
+			return false;
+		}
+		$route = '/' . ltrim( $route, '/' );
+
+		/**
+		 * Filters the REST routes that read prices for management rather than
+		 * for the storefront. Each entry is matched against the start of the
+		 * route, which always begins with a slash.
+		 *
+		 * `wc/store/*` is deliberately absent: that is the storefront's own
+		 * API, and it must report the price the reader is charged.
+		 *
+		 * @param string[] $management_route_prefixes Route prefixes.
+		 */
+		$management_route_prefixes = (array) apply_filters(
+			'newspack_subscriber_discounts_management_rest_routes',
+			[
+				// WooCommerce's management API, plus the admin's own analytics.
+				'/wc/v1/',
+				'/wc/v2/',
+				'/wc/v3/',
+				'/wc-admin/',
+				'/wc-analytics/',
+				// Product routes behind the block-based product editor.
+				'/wp/v2/product',
+				// This feature's own editor, whose preview composes a discount
+				// over the price these endpoints report.
+				'/' . NEWSPACK_API_NAMESPACE . '/wizard/',
+			]
+		);
+
+		foreach ( $management_route_prefixes as $management_route_prefix ) {
+			if ( 0 === strpos( $route, (string) $management_route_prefix ) ) {
+				return true;
+			}
+		}
+		return false;
 	}
 
 	/**
@@ -133,7 +208,8 @@ class Subscriber_Discounts_Pricing {
 	 * Discard the memoized per-product lookups.
 	 */
 	public static function flush_cache() {
-		self::$rules_for_product = [];
+		self::$rules_for_product    = [];
+		self::$variation_price_base = [];
 	}
 
 	/**
@@ -191,6 +267,11 @@ class Subscriber_Discounts_Pricing {
 	 * @return string|float
 	 */
 	public static function filter_variation_prices( $price, $variation, $product ) { // phpcs:ignore Generic.CodeAnalysis.UnusedFunctionParameter.FoundAfterLastUsed
+		// Remembered for the sale-price filter, which WooCommerce calls for the
+		// same variation immediately afterwards. Both must discount the same
+		// base or the two arrays disagree and the strike-through is dropped.
+		self::$variation_price_base[ (int) $variation->get_id() ] = $price;
+
 		$subscriber_price = self::get_subscriber_price( $price, $variation );
 		return null === $subscriber_price ? $price : $subscriber_price;
 	}
@@ -209,12 +290,16 @@ class Subscriber_Discounts_Pricing {
 	 * @return string|float
 	 */
 	public static function filter_variation_sale_prices( $sale_price, $variation, $product ) { // phpcs:ignore Generic.CodeAnalysis.UnusedFunctionParameter.FoundAfterLastUsed
-		// The edit-context price is the same base WooCommerce hands
-		// `filter_variation_prices`. Reading the view-context price instead
-		// would diverge whenever another extension filters it, and WooCommerce
-		// discards a variation sale price that doesn't match the variation
-		// price exactly — silently dropping the strike-through.
-		$subscriber_price = self::get_subscriber_price( $variation->get_price( 'edit' ), $variation );
+		// The base the price filter just discounted, which is the edit-context
+		// price plus whatever another pricing extension made of it. Falling
+		// back to the raw edit-context price covers the case where the price
+		// filter is not registered. WooCommerce drops a variation sale price
+		// that doesn't match the variation price exactly, so a base that
+		// differs by a cent silently costs the strike-through.
+		$variation_id = (int) $variation->get_id();
+		$base_price   = self::$variation_price_base[ $variation_id ] ?? $variation->get_price( 'edit' );
+
+		$subscriber_price = self::get_subscriber_price( $base_price, $variation );
 		return null === $subscriber_price ? $sale_price : $subscriber_price;
 	}
 
@@ -226,6 +311,9 @@ class Subscriber_Discounts_Pricing {
 	 * @return bool
 	 */
 	public static function filter_is_on_sale( $on_sale, $product ) {
+		if ( self::is_suspended() ) {
+			return $on_sale;
+		}
 		if ( $on_sale ) {
 			return true;
 		}
@@ -244,7 +332,10 @@ class Subscriber_Discounts_Pricing {
 	 * @return array
 	 */
 	public static function filter_variation_prices_hash( $hash, $product ) {
-		if ( self::is_suspended() ) {
+		// Left untouched wherever prices are not adjusted, so a request that
+		// reports list prices cannot store them under a subscriber's key and
+		// hand that reader undiscounted prices on the storefront afterwards.
+		if ( self::is_suspended() || ! self::should_adjust_prices_in_context() ) {
 			return $hash;
 		}
 		// Keyed on the reader's entitlement across the whole active rule set,
@@ -310,9 +401,12 @@ class Subscriber_Discounts_Pricing {
 	 * Normally that means holding one of the subscriptions the rule names. With
 	 * "apply at checkout" on, having one in the cart is enough — so a reader
 	 * buying a subscription and a discounted product together sees the
-	 * subscriber price before they have finished checking out. The subscription
-	 * itself is never discounted by its own rule: the reader is not a subscriber
-	 * of it yet, and discounting the thing that grants the discount is a loop.
+	 * subscriber price before they have finished checking out.
+	 *
+	 * A rule never discounts the subscription that grants it, whether the reader
+	 * holds that subscription or has it in the cart: discounting the thing that
+	 * grants the discount is circular, and it would otherwise quietly cut the
+	 * renewal price of every subscription a whole-catalogue rule reaches.
 	 *
 	 * @param int         $user_id Reader.
 	 * @param array       $rule    Rule being considered.
@@ -320,13 +414,13 @@ class Subscriber_Discounts_Pricing {
 	 * @return bool
 	 */
 	private static function reader_qualifies( $user_id, $rule, $product ) {
+		if ( self::product_is_one_of( $product, $rule['subscription_product_ids'] ) ) {
+			return false;
+		}
 		if ( Subscriber_Eligibility::user_has( $user_id, $rule['subscription_product_ids'] ) ) {
 			return true;
 		}
 		if ( empty( Subscriber_Discounts::get_settings()['apply_at_checkout'] ) ) {
-			return false;
-		}
-		if ( self::product_is_one_of( $product, $rule['subscription_product_ids'] ) ) {
 			return false;
 		}
 		return self::cart_contains_any( $rule['subscription_product_ids'] );
