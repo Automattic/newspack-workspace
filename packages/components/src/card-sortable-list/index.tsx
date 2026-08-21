@@ -7,11 +7,13 @@
  */
 import { Disabled, Draggable, __experimentalVStack as VStack } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
 import { useEffect, useLayoutEffect, useRef, useState } from '@wordpress/element';
+import { Badge } from '@wordpress/ui';
 
 /**
  * Internal dependencies
  */
-import { Badge, Card } from '../';
+import { Card } from '../';
+import type { BadgeIntent } from '../types';
 import './style.scss';
 
 /**
@@ -34,8 +36,8 @@ type DraggableItem = {
 	id: string | number;
 	title: string;
 	description?: React.ReactNode;
-	badgeLevel: 'default' | 'success' | 'info' | 'warning' | 'error';
-	badgeText: string;
+	badgeIntent?: BadgeIntent;
+	badgeText?: string;
 	toggleChecked?: boolean;
 	onToggleChange?: () => void;
 	actions?: DraggableItemAction[];
@@ -402,7 +404,7 @@ const CardSortableList = ( {
 												<>
 													<h3>
 														{ item.title }
-														<Badge level={ item.badgeLevel } text={ item.badgeText } />
+														{ item.badgeText && <Badge intent={ item.badgeIntent }>{ item.badgeText }</Badge> }
 													</h3>
 													{ item.description && <p>{ item.description }</p> }
 												</>

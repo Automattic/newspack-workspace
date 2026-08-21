@@ -9,6 +9,7 @@ import { Draggable, ExternalLink, ToggleControl } from '@wordpress/components';
 import { useEffect, useState } from '@wordpress/element';
 import { __ } from '@wordpress/i18n';
 import { Icon, check, chevronDown, chevronUp, dragHandle } from '@wordpress/icons';
+import { Badge } from '@wordpress/ui';
 
 /**
  * Internal dependencies
@@ -29,7 +30,7 @@ import classnames from 'classnames';
  */
 const ActionCard = ( {
 	badge,
-	badgeLevel,
+	badgeIntent,
 	className,
 	checkbox,
 	children,
@@ -166,14 +167,11 @@ const ActionCard = ( {
 								) }
 								{ ! titleLink && ! expandable && title }
 							</span>
-							{ badges?.length &&
+							{ badges?.length > 0 &&
 								badges.map( ( badgeText, i ) => (
-									<span
-										key={ `badge-${ i }` }
-										className={ `newspack-action-card__badge newspack-action-card__badge-level-${ badgeLevel }` }
-									>
+									<Badge key={ `badge-${ i }` } intent={ badgeIntent ?? 'none' }>
 										{ badgeText }
-									</span>
+									</Badge>
 								) ) }
 						</HeadingTag>
 						{ description && (

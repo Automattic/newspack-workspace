@@ -1,3 +1,5 @@
+import type { BadgeIntent } from '../types';
+
 export interface ActionCardProps {
 	id?: string | number;
 	title?: string | React.ReactNode;
@@ -5,8 +7,9 @@ export interface ActionCardProps {
 	href?: string;
 	description?: string | React.ReactNode;
 	actionText?: React.ReactNode | string | null;
-	badge?: string;
-	badgeLevel?: 'success' | 'info' | 'warning' | 'error';
+	badge?: string | string[];
+	/** Applied to every badge when `badge` is an array. */
+	badgeIntent?: BadgeIntent;
 	className?: string;
 	indent?: string;
 	notification?: string | Error | null;

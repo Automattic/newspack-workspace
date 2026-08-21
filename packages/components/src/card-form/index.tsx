@@ -17,12 +17,13 @@ import classnames from 'classnames';
 import { useEffect, useRef, createElement } from '@wordpress/element';
 import { useInstanceId } from '@wordpress/compose';
 import { __experimentalHStack as HStack, __experimentalVStack as VStack } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
+import { Badge } from '@wordpress/ui';
 
 /**
  * Internal dependencies
  */
-import Badge, { BadgeLevel } from '../badge';
 import Card from '../card';
+import type { BadgeIntent } from '../types';
 import './style.scss';
 
 type HeadingLevel = 1 | 2 | 3 | 4 | 5 | 6;
@@ -32,7 +33,7 @@ type CardFormProps = {
 	description?: string;
 	badge?: {
 		text: string;
-		level?: BadgeLevel;
+		intent?: BadgeIntent;
 	};
 	/** JSX rendered in the header action area (buttons, etc.). */
 	actions?: React.ReactNode;
@@ -109,7 +110,7 @@ const CardForm = ( { title, description, badge, actions, isOpen = false, onReque
 							{ description && <p className="newspack-card-form__description">{ description }</p> }
 						</VStack>
 						<HStack spacing={ 2 } expanded={ false }>
-							{ badge && <Badge text={ badge.text } level={ badge.level ?? 'success' } /> }
+							{ badge && <Badge intent={ badge.intent ?? 'stable' }>{ badge.text }</Badge> }
 							{ actions }
 						</HStack>
 					</HStack>
