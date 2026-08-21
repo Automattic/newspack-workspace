@@ -194,7 +194,7 @@ const BudgetRows = ( { allowEdit, budgetStatus, isSearching } ) => {
 					<ActionCard
 						key={ budget.id }
 						className="newspack-story-budget__budget"
-						badge={ budget.story_count ?? 0 }
+						badge={ budget.story_count ? String( budget.story_count ) : undefined }
 						title={
 							<>
 								<div className="newspack-story-budget__budget-title">
