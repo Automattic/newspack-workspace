@@ -8,6 +8,7 @@ import { getPendingCheckout } from '../reader-activation/checkout';
 import { openNewslettersSignupModal } from '../reader-activation-newsletters/newsletters-modal';
 import { openVerificationModal } from './verification-modal';
 import { maybeConfirmRegistration } from './confirmation-modal';
+import { getBackTarget } from './auth-form-helpers';
 
 import './google-oauth';
 import './otp-input';
@@ -193,7 +194,7 @@ window.newspackRAS.push( function ( readerActivation ) {
 						}
 					}
 					form.setMessageContent();
-					container.setFormAction( 'signin', true );
+					container.setFormAction( getBackTarget( formAction, container.readerHasPassword ), true );
 				} );
 			} );
 
@@ -561,6 +562,13 @@ window.newspackRAS.push( function ( readerActivation ) {
 											readerActivation.setReaderEmail( body.get( 'npe' ) );
 										}
 										if ( data.action ) {
+											// A `signin` response of 'pwd' means the reader has a password; 'otp' means
+											// they don't. Remember it so "Go Back" from the code step can return them to
+											// the password step (NPPM-3054). Other transitions (resend, verify) don't set
+											// data.action here, so the flag survives them.
+											if ( 'pwd' === data.action || 'otp' === data.action ) {
+												container.readerHasPassword = 'pwd' === data.action;
+											}
 											container.setFormAction( data.action, true );
 											if ( data.action === 'otp' ) {
 												readerActivation.setOTPTimer();
