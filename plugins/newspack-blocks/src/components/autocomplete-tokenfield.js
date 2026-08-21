@@ -55,7 +55,9 @@ class AutocompleteTokenField extends Component {
 
 					this.setState( { validValues, loading: false } );
 				} )
-				.catch( () => {
+				.catch( error => {
+					// eslint-disable-next-line no-console
+					console.error( 'Newspack Blocks: could not load the titles for the saved selection.', error );
 					// Without labels the field would render no tokens, and the next
 					// selection would then write back a list missing every saved ID.
 					const { validValues } = this.state;
