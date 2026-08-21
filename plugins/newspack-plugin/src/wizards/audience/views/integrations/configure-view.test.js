@@ -481,6 +481,40 @@ describe( 'incoming-field operators', () => {
 	} );
 } );
 
+describe( 'incoming-field operator labels', () => {
+	beforeEach( () => {
+		mockSetHeaderData.mockClear();
+		useUnsavedChangesDialog.mockClear();
+		useUnsavedChangesDialog.mockReturnValue( { confirmDialog: null, requestConfirm: jest.fn() } );
+	} );
+
+	// The operator selects hide their labels, so nothing on screen changes if they
+	// go back to sharing one name. Only an assertion catches that.
+	it( 'names each enabled operator select after its own field', () => {
+		renderConfigureView( {
+			integrations: {
+				esp: {
+					...INTEGRATION,
+					settings: [
+						{
+							key: 'incoming_metadata_fields',
+							type: 'metadata',
+							label: 'Inbound',
+							value: { VIP: 'default', DONOR: 'default' },
+							options: [
+								{ value: 'VIP', label: 'VIP', value_type: 'string', matching_function: 'default', has_options: true },
+								{ value: 'DONOR', label: 'Donor', value_type: 'string', matching_function: 'default', has_options: true },
+							],
+						},
+					],
+				},
+			},
+		} );
+		expect( screen.getByLabelText( 'Segment VIP as' ) ).toBeTruthy();
+		expect( screen.getByLabelText( 'Segment Donor as' ) ).toBeTruthy();
+	} );
+} );
+
 describe( 'incoming-field operator reconciliation on save', () => {
 	beforeEach( () => {
 		mockSetHeaderData.mockClear();
