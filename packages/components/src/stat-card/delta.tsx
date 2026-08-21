@@ -22,7 +22,7 @@ const glyphs: Record< StatCardDeltaDirection, string > = {
 
 const tones: StatCardDeltaTone[] = [ 'positive', 'negative', 'neutral' ];
 
-const Delta = ( { direction, tone = 'neutral', directionLabel, className, children }: StatCardDeltaProps ) => {
+const Delta = ( { direction, tone = 'neutral', directionLabel, label, className, children }: StatCardDeltaProps ) => {
 	useStatCardContext();
 
 	useEffect( () => {
@@ -50,14 +50,27 @@ const Delta = ( { direction, tone = 'neutral', directionLabel, className, childr
 	// an empty label is a missing one.
 	const spoken = directionLabel || directions[ direction ];
 
+	const classes = classnames(
+		'newspack-stat-card__delta',
+		'neutral' !== tone && tones.includes( tone ) && `newspack-stat-card__delta--${ tone }`,
+		className
+	);
+
+	// `label` names the whole delta, so the change it restates is hidden with the arrow.
+	if ( label ) {
+		return (
+			<span className={ classes }>
+				<span aria-hidden="true">
+					{ glyph }
+					{ children }
+				</span>
+				<span className="screen-reader-text">{ label }</span>
+			</span>
+		);
+	}
+
 	return (
-		<span
-			className={ classnames(
-				'newspack-stat-card__delta',
-				'neutral' !== tone && tones.includes( tone ) && `newspack-stat-card__delta--${ tone }`,
-				className
-			) }
-		>
+		<span className={ classes }>
 			{ /* The arrow is hidden and its meaning given as text, since a bare glyph announces inconsistently. */ }
 			{ glyph && <span aria-hidden="true">{ glyph }</span> }
 			{ spoken && <span className="screen-reader-text">{ spoken }</span> }

@@ -202,6 +202,7 @@ one, the figure renders on its own with no extra wrapper.
 | `className` | `string` | — | Merged onto the delta. |
 | `direction` | `'up'` \| `'down'` | — | **Required.** Which arrow to show. |
 | `directionLabel` | `string` | "Up" or "Down" | Spoken in place of the direction. |
+| `label` | `string` | — | Spoken in place of the whole delta. Wins over `directionLabel`. |
 | `tone` | `'positive'` \| `'negative'` \| `'neutral'` | `'neutral'` | Which colour to use. |
 
 ```jsx
@@ -219,6 +220,33 @@ one that knows what the figure means, decides which of them applies.
 The arrow is `aria-hidden` and its meaning supplied as text, so the delta reads
 as "Up 2%" rather than as a glyph. That also means the direction survives for
 anyone who cannot use the colour, which the colour alone would not.
+
+The tone does not survive it. "Up 2%" reads the same whether the rise is good
+news or bad, because that difference lives only in the colour. Where it matters,
+put it in words: `label` replaces the whole spoken delta, and the arrow and the
+change are hidden behind it.
+
+```jsx
+<StatCard.Delta
+	direction="up"
+	tone="negative"
+	label={ sprintf(
+		// translators: %s is the change, e.g. "2%".
+		__( '%s more refunds than last month', 'newspack-plugin' ),
+		'2%'
+	) }
+>
+	2%
+</StatCard.Delta>
+```
+
+`label` is also the way out of the default's word order. "Up 2%" is the arrow's
+text followed by the children, which the markup fixes: a language that wants the
+figure inside the phrase, or the direction after it, cannot get there by swapping
+one word with `directionLabel`. One translatable sentence can.
+
+A direction outside `up` and `down` shows no arrow and says nothing, rather than
+naming the opposite one, and warns outside production.
 
 ## `StatCard.Secondary`
 

@@ -50,6 +50,8 @@ export type StatCardDeltaProps = {
 	tone?: StatCardDeltaTone;
 	/** Spoken in place of "Up" or "Down". */
 	directionLabel?: string;
+	/** Spoken in place of the whole delta, arrow and change together. Wins over `directionLabel`. */
+	label?: string;
 	className?: string;
 	children?: React.ReactNode;
 };

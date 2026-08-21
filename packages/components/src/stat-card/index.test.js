@@ -372,6 +372,20 @@ describe( 'StatCard.Delta', () => {
 		expect( screen.getByText( 'Up' ) ).toHaveClass( 'screen-reader-text' );
 	} );
 
+	// Word order and valence both live in the caller's sentence, not in DOM order.
+	it( 'lets label name the whole delta and hides what it restates', () => {
+		const { container } = render(
+			<StatCard.Root>
+				<StatCard.Delta direction="up" tone="negative" label="2% more refunds than last month">
+					2%
+				</StatCard.Delta>
+			</StatCard.Root>
+		);
+		expect( container.querySelector( '[aria-hidden="true"]' ) ).toHaveTextContent( '↑2%' );
+		expect( screen.getByText( '2% more refunds than last month' ) ).toHaveClass( 'screen-reader-text' );
+		expect( screen.queryByText( 'Up' ) ).not.toBeInTheDocument();
+	} );
+
 	it( 'sits in a row beside the figure when passed as a Value suffix', () => {
 		const { container } = render(
 			<StatCard.Root>
