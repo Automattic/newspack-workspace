@@ -37,7 +37,6 @@ jest.mock( '../../../../../packages/components/src', () => {
 				</>
 			);
 		},
-		Badge: () => null,
 		WizardBanner: ( { children } ) => <>{ children }</>,
 		Router: { useHistory: () => history },
 	};

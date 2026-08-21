@@ -10,11 +10,12 @@ import { useState, useEffect, useCallback, useMemo, Fragment } from '@wordpress/
 import { filterSortAndPaginate } from '@wordpress/dataviews';
 import type { Action, Field, View } from '@wordpress/dataviews';
 import { Button, __experimentalHStack as HStack } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
+import { Badge } from '@wordpress/ui';
 
 /**
  * Internal dependencies.
  */
-import { Badge, DataViews, Notice, utils } from '../../../../../../packages/components/src';
+import { DataViews, Notice, utils } from '../../../../../../packages/components/src';
 import WizardsPluginCard from '../../../../wizards-plugin-card';
 import { useWizardApiFetch } from '../../../../hooks/use-wizard-api-fetch';
 import EmailPreview from './email-preview';
@@ -310,10 +311,9 @@ const Emails = () => {
 				render: ( { item }: { item: EmailItem } ) => {
 					const isEnabled = item.status === 'publish';
 					return (
-						<Badge
-							level={ isEnabled ? 'success' : 'default' }
-							text={ isEnabled ? __( 'Enabled', 'newspack-plugin' ) : __( 'Disabled', 'newspack-plugin' ) }
-						/>
+						<Badge intent={ isEnabled ? 'stable' : 'draft' }>
+							{ isEnabled ? __( 'Enabled', 'newspack-plugin' ) : __( 'Disabled', 'newspack-plugin' ) }
+						</Badge>
 					);
 				},
 				elements: [

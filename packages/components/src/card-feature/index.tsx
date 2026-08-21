@@ -11,14 +11,13 @@ import { createElement, isValidElement } from '@wordpress/element';
 import { useInstanceId } from '@wordpress/compose';
 import { DropdownMenu } from '@wordpress/components';
 import { moreVertical } from '@wordpress/icons';
-import { Card, Stack } from '@wordpress/ui';
+import { Badge, Card, Stack } from '@wordpress/ui';
 
 /**
  * Internal dependencies
  */
-import Badge, { type BadgeLevel } from '../badge';
 import Button from '../button';
-import type { HeadingLevel } from '../types';
+import type { BadgeIntent, CardBadge, HeadingLevel } from '../types';
 import './style.scss';
 
 type CardFeatureIcon = {
@@ -82,10 +81,8 @@ type CardFeatureProps = {
 	onConfigure?: () => void;
 	/** Controls rendered inside the "More" dropdown, shown when enabled — including the unmet-requirements state when `requirementsActionable`. */
 	moreControls?: MoreControl[];
-	/** Badge text shown when enabled. Ignored while `requirements` is set, which takes the badge. Default: "Enabled". */
-	badgeText?: string;
-	/** Badge level shown when enabled. Ignored while `requirements` is set, which forces an error badge. Default: "success". */
-	badgeLevel?: BadgeLevel;
+	/** Badge shown when enabled. Ignored while `requirements` is set, which takes the badge. Defaults to "Enabled" at the "stable" intent. */
+	badge?: CardBadge;
 	className?: string;
 };
 
@@ -110,8 +107,7 @@ const CardFeature = ( {
 	onEnable,
 	onConfigure,
 	moreControls,
-	badgeText,
-	badgeLevel = 'success',
+	badge: badgeProp,
 	className,
 }: CardFeatureProps ) => {
 	const instanceId = useInstanceId( CardFeature, 'newspack-card-feature' );
@@ -122,11 +118,11 @@ const CardFeature = ( {
 		'newspack-card-feature--muted': isMuted,
 	} );
 
-	let badge: { text: string; level: BadgeLevel } | undefined;
+	let badge: { label: string; intent: BadgeIntent } | undefined;
 	if ( requirements ) {
-		badge = { text: requirements, level: 'error' };
+		badge = { label: requirements, intent: 'high' };
 	} else if ( enabled ) {
-		badge = { text: badgeText ?? __( 'Enabled', 'newspack-plugin' ), level: badgeLevel };
+		badge = { label: badgeProp?.label ?? __( 'Enabled', 'newspack-plugin' ), intent: badgeProp?.intent ?? 'stable' };
 	}
 
 	const isConfigureState = enabled && ! requirements;
@@ -213,7 +209,11 @@ const CardFeature = ( {
 							/>
 						) }
 					</Stack>
-					{ badge && <Badge id={ describedById } text={ badge.text } level={ badge.level } /> }
+					{ badge && (
+						<Badge id={ describedById } className="newspack-card-feature__badge" intent={ badge.intent }>
+							{ badge.label }
+						</Badge>
+					) }
 				</Stack>
 			</Card.Content>
 		</Card.Root>
