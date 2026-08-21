@@ -80,10 +80,13 @@ body.newspack-has-countdown-banner {
 // have today.
 body.newspack-is-gifted-post:has(.newspack-content-gifting__cta),
 body.newspack-has-countdown-banner:has(.newspack-countdown-banner__cta:not(.newspack-countdown-banner__cta--hidden)) {
-	// `.bsa-ad-type-sneaker` is Broadstreet's slide-in/sticky footer unit. Both
-	// containers carry an inline `display` set by the ad provider's own script,
-	// so `!important` is what actually wins here.
-	.bsa-ad-type-sneaker,
+	// Broadstreet's slide-in ("sneaker") unit. Its street.js moves the rendered
+	// bar out of the `.bsa-ad-type-sneaker` container it was authored in and
+	// reparents it to `body`, under a random id, so the only stable hook is the
+	// `.bs-sneaker-container` it wraps. Both this and our own sticky container
+	// carry an inline `display` set by the ad provider's own script, so
+	// `!important` is what actually wins here.
+	div:has(> .bs-sneaker-container),
 	.newspack_global_ad.sticky {
 		display: none !important;
 	}
