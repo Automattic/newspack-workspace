@@ -977,6 +977,53 @@ class TestApi extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * A partial update must not be able to change an existing post's type.
+	 *
+	 * The merge in get_payload_from_partial() applies the incoming post_data over
+	 * the stored payload, and array_merge lets an explicit null overwrite. Left
+	 * unchecked, that null reaches wp_insert_post(), which falls back to its own
+	 * default and converts a page into a post while returning 200.
+	 *
+	 * @group content-distribution-api
+	 */
+	public function test_partial_update_cannot_null_out_an_existing_post_type() {
+		wp_set_current_user( $this->factory->user->create( [ 'role' => 'author' ] ) );
+		kses_init();
+
+		$created = rest_get_server()->dispatch(
+			$this->make_insert_request_with(
+				[
+					'post_type' => 'page',
+					'title'     => 'A page',
+				] 
+			)
+		);
+		$this->assertSame( 200, $created->get_status(), 'Precondition: a page inserts cleanly.' );
+		$post_id = $created->get_data()['post_id'];
+		$this->assertSame( 'page', get_post_field( 'post_type', $post_id ), 'Precondition: it is stored as a page.' );
+
+		$payload              = get_sample_payload( 'https://origin.test', get_bloginfo( 'url' ) );
+		$payload['partial']   = true;
+		$payload['post_data'] = [
+			'post_type' => null,
+			'title'     => 'Updated',
+		];
+
+		$request = new WP_REST_Request( 'POST', '/newspack-network/v1/content-distribution/insert' );
+		$request->set_header( 'Content-Type', 'application/json' );
+		$request->set_body( wp_json_encode( [ 'payload' => $payload ] ) );
+
+		$response = rest_get_server()->dispatch( $request );
+
+		$this->assertSame( 400, $response->get_status(), 'An explicit null post type must be refused.' );
+		$this->assertSame(
+			'page',
+			get_post_field( 'post_type', $post_id ),
+			'The stored post must still be a page.'
+		);
+	}
+
+	/**
 	 * The allowlist must not cost the types the network does distribute.
 	 *
 	 * The list is filterable, so this asserts against whatever the install

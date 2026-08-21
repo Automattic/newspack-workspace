@@ -329,7 +329,17 @@ class API {
 	 * @return WP_Error|null An error to return to the caller, or null to proceed.
 	 */
 	private static function check_incoming_post_type( mixed $payload ): ?WP_Error {
-		if ( ! is_array( $payload ) || ! isset( $payload['post_data']['post_type'] ) ) {
+		if ( ! is_array( $payload ) || ! isset( $payload['post_data'] ) || ! is_array( $payload['post_data'] ) ) {
+			return null;
+		}
+
+		// array_key_exists rather than isset, so an explicit null is judged rather
+		// than read as absent. The two are not equivalent on a partial payload:
+		// get_payload_from_partial() array_merges this over the stored payload, so a
+		// null overwrites the stored type and wp_insert_post() falls back to its own
+		// default. That silently turns an existing page into a post. A genuinely
+		// omitted key still passes, which is what a partial payload relies on.
+		if ( ! array_key_exists( 'post_type', $payload['post_data'] ) ) {
 			return null;
 		}
 
