@@ -371,6 +371,9 @@ final class Newspack {
 	 */
 	public function activation_hook() {
 		set_transient( NEWSPACK_ACTIVATION_TRANSIENT, 1, 30 );
+		// Freeze a fresh install's metadata-schema era before any ESP setup can
+		// blur the evidence; a no-op for sites that completed setup earlier.
+		Reader_Activation\Sync\Metadata::stamp_schema_origin_on_activation();
 		/**
 		 * Fires on the newspack plugin activation hook
 		 */

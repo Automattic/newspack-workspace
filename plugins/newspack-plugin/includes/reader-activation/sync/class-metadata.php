@@ -31,6 +31,17 @@ class Metadata {
 	const FIELDS_OPTION = '_newspack_metadata_fields';
 
 	/**
+	 * The option persisting which schema era supplies this site's default
+	 * outgoing-field selection ('v1' or 'v2'). Stamped once — at activation
+	 * for fresh installs, else on first read from era evidence — so the era
+	 * can't flip when unrelated configuration (e.g. the ESP's master list)
+	 * changes later, and so an operator can inspect or correct it.
+	 *
+	 * @var string
+	 */
+	const SCHEMA_ORIGIN_OPTION = 'newspack_sync_schema_origin';
+
+	/**
 	 * Metadata keys that carry sync-control semantics rather than field data.
 	 * They pass through syncing unprefixed and are never subject to outbound
 	 * field selection.
@@ -100,10 +111,11 @@ class Metadata {
 	 * This method is deprecated. Now, each integration has its own metadata prefix, which can be retrieved with Integration::get_metadata_prefix().
 	 * As a fallback, this method returns the metadata prefix for the ESP Integration.
 	 *
-	 * It resolves more than the per-integration accessor does — the
-	 * `newspack_ras_metadata_prefix` filter and the pre-init PREFIX_OPTION
-	 * fallback — so a caller that needs the site-wide prefix rather than one
-	 * integration's must keep using this.
+	 * Beyond the ESP accessor, this also resolves the pre-init PREFIX_OPTION
+	 * fallback — so a caller that needs the site-wide prefix before
+	 * integrations register must keep using this. The ESP's own accessor
+	 * applies the `newspack_ras_metadata_prefix` filter too, keeping the
+	 * push and audit paths on the same prefix.
 	 *
 	 * @deprecated Use Integration::get_metadata_prefix() instead.
 	 *
@@ -159,16 +171,16 @@ class Metadata {
 	/**
 	 * Get the default outgoing-field selection for a site that never saved one.
 	 *
-	 * Scoped to the schema era the site comes from, derived fresh on every
-	 * read and never persisted: a wrong guess can't be frozen, and fields
-	 * whose class becomes available later (e.g. WooCommerce activated) join
-	 * on the next read. The full catalog stays get_default_fields() — this
-	 * is only the effective default *selection*.
+	 * Scoped to the schema era the site comes from (get_schema_origin(),
+	 * stamped once and stored). The selection itself is still derived fresh
+	 * on every read, so fields whose class becomes available later (e.g.
+	 * WooCommerce activated) join on the next read. The full catalog stays
+	 * get_default_fields() — this is only the effective default *selection*.
 	 *
 	 * @return string[] List of field names.
 	 */
 	public static function get_default_enabled_fields() {
-		$era     = self::detect_default_schema_era();
+		$era     = self::get_schema_origin();
 		$catalog = self::get_keys();
 		$names   = [];
 
@@ -208,20 +220,47 @@ class Metadata {
 	/**
 	 * Which schema era supplies a never-configured site's default selection.
 	 *
-	 * Evidence order: dev/QA constant override; the legacy global fields
-	 * option (predates per-integration selection); a set-up ESP with no
-	 * stored selection (a legacy site on dynamic defaults, not a fresh
-	 * install). Anything else is a fresh install on the new schema.
+	 * Resolution order: dev/QA constant override (never persisted); the stored
+	 * SCHEMA_ORIGIN_OPTION stamp; a one-time derivation from era evidence,
+	 * persisted so the answer can't change when unrelated configuration does.
+	 * Deriving per read looked self-healing but meant a site's payload shape
+	 * followed its ESP setup state: configuring or unconfiguring the ESP could
+	 * silently flip every push between schemas, with no record of when and no
+	 * setting to correct it.
 	 *
 	 * @return string 'v1' or 'v2'.
 	 */
-	private static function detect_default_schema_era() {
+	public static function get_schema_origin() {
 		if ( defined( 'NEWSPACK_SYNC_METADATA_VERSION' ) ) {
 			return 'legacy' === NEWSPACK_SYNC_METADATA_VERSION ? 'v1' : 'v2';
 		}
 		if ( defined( 'NEWSPACK_SYNC_METADATA_VERSION_1' ) && NEWSPACK_SYNC_METADATA_VERSION_1 ) {
 			return 'v2';
 		}
+		$stored = \get_option( self::SCHEMA_ORIGIN_OPTION, false );
+		if ( in_array( $stored, [ 'v1', 'v2' ], true ) ) {
+			return $stored;
+		}
+		$era = self::derive_schema_origin();
+		\update_option( self::SCHEMA_ORIGIN_OPTION, $era, true );
+		return $era;
+	}
+
+	/**
+	 * Derive the schema origin from era evidence, for the one-time stamp.
+	 *
+	 * Evidence of a legacy site, in order: the legacy global fields option
+	 * (predates per-integration selection); a set-up ESP (a legacy site on
+	 * dynamic defaults, not a fresh install); any other configured
+	 * push-capable integration — e.g. a manager-supplied CRM or newsletter
+	 * integration on a site that never configured the core ESP, whose field
+	 * names the ESP-only check would flip on upgrade. All evidence is
+	 * option-backed, so it survives plugin deactivation windows. Anything
+	 * else is a fresh install on the new schema.
+	 *
+	 * @return string 'v1' or 'v2'.
+	 */
+	private static function derive_schema_origin() {
 		if ( false !== \get_option( self::FIELDS_OPTION, false ) ) {
 			return 'v1';
 		}
@@ -232,7 +271,33 @@ class Metadata {
 		if ( $esp && $esp->is_set_up() ) {
 			return 'v1';
 		}
+		foreach ( Integrations::get_active_configured_integrations() as $id => $integration ) {
+			if ( 'esp' !== $id && $integration->supports_push() ) {
+				return 'v1';
+			}
+		}
 		return 'v2';
+	}
+
+	/**
+	 * Stamp the schema origin at plugin activation, for fresh installs only.
+	 *
+	 * A fresh install must freeze 'v2' before the publisher configures an
+	 * ESP — otherwise the first defaults read can land after ESP setup and
+	 * stamp the legacy era onto a brand-new site. Sites that completed setup
+	 * under an earlier version skip the stamp here (activation also fires on
+	 * reactivation, where sibling plugins may be mid-toggle and the evidence
+	 * incomplete) and stamp on first read instead, where the option-backed
+	 * evidence is judged whole.
+	 */
+	public static function stamp_schema_origin_on_activation() {
+		if ( false !== \get_option( self::SCHEMA_ORIGIN_OPTION, false ) ) {
+			return;
+		}
+		if ( defined( 'NEWSPACK_SETUP_COMPLETE' ) && false !== \get_option( NEWSPACK_SETUP_COMPLETE, false ) ) {
+			return;
+		}
+		\update_option( self::SCHEMA_ORIGIN_OPTION, self::derive_schema_origin(), true );
 	}
 
 	/**
@@ -408,7 +473,10 @@ class Metadata {
 	 * section name gets its own group, and filter-added fields that belong to
 	 * no class land in "Additional". Adjacent groups sharing a label are
 	 * folded together, so the two legacy classes render as one "Legacy" panel
-	 * rather than two identically-titled ones.
+	 * rather than two identically-titled ones. A field name appearing in more
+	 * than one group renders only in the first — value-equivalent pair names
+	 * live in their modern group rather than repeating in Legacy, so one
+	 * stored selection entry never renders as two checkboxes.
 	 *
 	 * All-legacy groups (every field 'legacy' in its class's own field config)
 	 * sort last, checked via that status rather than the section label so it
@@ -496,7 +564,7 @@ class Metadata {
 			];
 		}
 
-		$groups = self::merge_adjacent_groups( array_merge( $primary_groups, $legacy_groups ) );
+		$groups = self::dedupe_group_fields( self::merge_adjacent_groups( array_merge( $primary_groups, $legacy_groups ) ) );
 
 		/**
 		 * Filters the list of possible metadata fields to be synced, grouped by section.
@@ -562,6 +630,46 @@ class Metadata {
 	}
 
 	/**
+	 * Drop repeat appearances of a field name across groups, keeping the first.
+	 *
+	 * Value-equivalent pair names ('Account', 'Connected Account',
+	 * 'Registration Date', 'Registration Page') are declared by a class in
+	 * each schema, so they would render twice — once in their modern group
+	 * and once in the Legacy panel — as two checkboxes bound to one stored
+	 * selection entry, each with its own help text. One field, one control:
+	 * the first appearance stays (the modern one, since all-legacy groups
+	 * sort last), and a group left with no fields is dropped.
+	 *
+	 * @param array<int, array{section: string, fields: list<string>, field_details?: array}> $groups Ordered groups.
+	 *
+	 * @return array<int, array{section: string, fields: list<string>, field_details?: array}>
+	 */
+	private static function dedupe_group_fields( array $groups ): array {
+		$seen    = [];
+		$deduped = [];
+		foreach ( $groups as $group ) {
+			$fields = [];
+			foreach ( $group['fields'] as $field ) {
+				if ( isset( $seen[ $field ] ) ) {
+					unset( $group['field_details'][ $field ] );
+					continue;
+				}
+				$seen[ $field ] = true;
+				$fields[]       = $field;
+			}
+			if ( empty( $fields ) ) {
+				continue;
+			}
+			$group['fields'] = $fields;
+			if ( isset( $group['field_details'] ) && empty( $group['field_details'] ) ) {
+				unset( $group['field_details'] );
+			}
+			$deduped[] = $group;
+		}
+		return $deduped;
+	}
+
+	/**
 	 * Map of metadata class => raw key => field status, from each class's
 	 * own config. Backs the all-legacy group check in
 	 * get_grouped_default_fields(), so legacy-ness survives section-label
@@ -580,6 +688,31 @@ class Metadata {
 	}
 
 	/**
+	 * Memo for get_all_fields(), keyed by variant — 'all', or 'available'
+	 * plus the currently-available class list, so a mid-process availability
+	 * change (a plugin activating, content gating toggling on) computes a
+	 * fresh entry rather than serving a stale one.
+	 *
+	 * The merged catalog is read several times per pushed contact (compute
+	 * scoping, prepare_contact() per integration), and each rebuild re-fires
+	 * the public `newspack_ras_metadata_keys` filter — a per-sync hot path
+	 * on bulk backfills. The availability probe kept in the key is cheap
+	 * (class_exists plus option reads); the eight-class merge and the filter
+	 * dispatch are what this memo avoids.
+	 *
+	 * @var array<string, array>
+	 */
+	private static $all_fields_cache = [];
+
+	/**
+	 * Flush the catalog memo — for tests that register catalog filters
+	 * mid-process, where the hooks change but statics survive.
+	 */
+	public static function flush_fields_cache() {
+		self::$all_fields_cache = [];
+	}
+
+	/**
 	 * Get all metadata fields.
 	 *
 	 * The merged, all-versions raw_key => label map — a plain superset, since
@@ -590,12 +723,26 @@ class Metadata {
 	 */
 	public static function get_all_fields( $only_available = false ) {
 		$classes = self::get_metadata_classes();
-		$keys    = [];
+		if ( $only_available ) {
+			$classes   = array_values(
+				array_filter(
+					$classes,
+					static function ( $class ) {
+						return $class::is_available();
+					}
+				)
+			);
+			$cache_key = 'available:' . implode( ',', $classes );
+		} else {
+			$cache_key = 'all';
+		}
+		if ( isset( self::$all_fields_cache[ $cache_key ] ) ) {
+			return self::$all_fields_cache[ $cache_key ];
+		}
+		$keys = [];
 		foreach ( $classes as $class ) {
-			if ( ! $only_available || $class::is_available() ) {
-				$fields = $class::get_fields();
-				$keys = array_merge( $keys, $fields );
-			}
+			$fields = $class::get_fields();
+			$keys   = array_merge( $keys, $fields );
 		}
 		/**
 		 * Filters the list of key/value pairs for metadata fields to be synced to the connected ESP.
@@ -603,7 +750,8 @@ class Metadata {
 		 * @param array $keys The list of key/value pairs for metadata fields to be synced to the connected ESP.
 		 * @param boolean $only_available Whether the list of fields is filtered to only available fields or not.
 		 */
-		return \apply_filters( 'newspack_ras_metadata_keys', $keys, $only_available );
+		self::$all_fields_cache[ $cache_key ] = \apply_filters( 'newspack_ras_metadata_keys', $keys, $only_available );
+		return self::$all_fields_cache[ $cache_key ];
 	}
 
 	/**
@@ -730,11 +878,9 @@ class Metadata {
 			$fields = self::get_push_enabled_fields_union();
 		}
 
+		$computing_classes = self::get_computing_classes( $fields );
 		foreach ( $classes as $class ) {
-			if ( ! $class::is_available() ) {
-				continue;
-			}
-			if ( is_array( $fields ) && ! self::class_handles_any_field( $class, $fields ) ) {
+			if ( ! in_array( $class, $computing_classes, true ) ) {
 				continue;
 			}
 			$instance = new $class( $user_customer_or_order );
@@ -762,13 +908,15 @@ class Metadata {
 	 * The union of enabled outgoing field names across every push-enabled
 	 * active integration — the compute-scoping list for a full sync.
 	 *
-	 * Scoped per class via class_handles_any_field(), this skips the
-	 * (often WooCommerce-heavy) classes of a schema no integration pushes:
-	 * a legacy site's selection holds no v2-only names, so the five new
-	 * classes — and their order/subscription queries — never run. Null when
-	 * the integrations registry is empty (pre-init callers compute
-	 * everything); an empty union from all-empty selections legitimately
-	 * computes nothing, since nothing would be pushed.
+	 * Scoped per class via get_computing_classes(), this skips the (often
+	 * WooCommerce-heavy) classes no requested label is claimed from: on a
+	 * new-schema site Legacy_Basic never runs, and on a legacy site the
+	 * Engagement/Subscription/Donation classes — and their
+	 * order/subscription queries — never run (the cheap Identity and
+	 * Registration classes do run there, claiming the value-equivalent pair
+	 * labels). Null when the integrations registry is empty (pre-init
+	 * callers compute everything); an empty union from all-empty selections
+	 * legitimately computes nothing, since nothing would be pushed.
 	 *
 	 * Reading selections through the integration getters can fire the ESP's
 	 * one-time lazy migration of the legacy global option — a deliberate,
@@ -793,40 +941,76 @@ class Metadata {
 	}
 
 	/**
-	 * Whether a metadata class computes any of the requested field labels.
+	 * The metadata classes to run for a requested field-label list.
+	 *
+	 * Each requested label is claimed by the first producing class in claim
+	 * order — the non-legacy classes ahead of the legacy pair — and a class
+	 * runs only when it claims at least one label. Both members of a
+	 * value-equivalent pair (legacy `account`, new `Account`) produce the
+	 * same value by contract, so the claim order routes pair labels to the
+	 * modern producer and Legacy_Basic runs only for labels nothing else
+	 * computes. Without the claiming, the pair names — present in both eras'
+	 * default selections — kept Legacy_Basic running on every new-schema
+	 * site, re-adding its WooCommerce order work and its first/last-name
+	 * user-meta writes on paths that never needed them.
 	 *
 	 * Special case: `Legacy_Basic::get_metadata()` populates ALL legacy fields —
 	 * both its own basic fields and the payment/LTV fields declared by
-	 * `Legacy_Payment` (which computes nothing itself). So `Legacy_Basic` must be
-	 * matched against the full legacy field set, or requesting a payment field
-	 * would silently skip the only class that produces its value.
+	 * `Legacy_Payment` (which computes nothing itself, and so never runs
+	 * here). So `Legacy_Basic` claims across the full legacy field set, or
+	 * requesting a payment field would silently skip the only class that
+	 * produces its value.
 	 *
-	 * @param string   $class  Fully-qualified metadata class name.
-	 * @param string[] $fields Requested field labels.
+	 * Labels resolve through the same filtered map (`get_all_fields()`) that
+	 * resolve_field_labels() and the CLI pre-flight use, so a site that
+	 * renames a label via the `newspack_ras_metadata_keys` filter stays
+	 * consistent across resolution and this compute-side scoping.
 	 *
-	 * @return bool
+	 * @param string[]|null $fields Requested field labels, or null to run
+	 *                              every available class (pre-init callers).
+	 *
+	 * @return string[] Fully-qualified class names, in registration order.
 	 */
-	private static function class_handles_any_field( $class, array $fields ): bool {
-		if ( Contact_Metadata\Legacy_Basic::class === $class ) {
-			$class_raw_keys = array_keys( array_merge( Contact_Metadata\Legacy_Basic::get_fields(), Contact_Metadata\Legacy_Payment::get_fields() ) );
-		} else {
-			$class_raw_keys = array_keys( $class::get_fields() );
+	private static function get_computing_classes( $fields ): array {
+		$available = [];
+		foreach ( self::get_metadata_classes() as $class ) {
+			if ( $class::is_available() ) {
+				$available[] = $class;
+			}
+		}
+		if ( ! is_array( $fields ) ) {
+			return $available;
 		}
 
-		// Resolve the class's raw keys to their canonical labels through the same
-		// filtered map (`get_all_fields()`) that resolve_field_labels() and the CLI
-		// pre-flight use, so a site that renames a label via the
-		// `newspack_ras_metadata_keys` filter stays consistent across resolution and
-		// this compute-side skip check.
-		$label_map    = self::get_all_fields();
-		$class_labels = [];
-		foreach ( $class_raw_keys as $raw_key ) {
-			if ( isset( $label_map[ $raw_key ] ) ) {
-				$class_labels[] = $label_map[ $raw_key ];
+		$legacy_classes = [ Contact_Metadata\Legacy_Basic::class, Contact_Metadata\Legacy_Payment::class ];
+		$claim_order    = array_merge( array_diff( $available, $legacy_classes ), array_intersect( $available, $legacy_classes ) );
+		$label_map      = self::get_all_fields();
+		$unclaimed      = $fields;
+		$computing      = [];
+
+		foreach ( $claim_order as $class ) {
+			if ( Contact_Metadata\Legacy_Payment::class === $class ) {
+				continue;
+			}
+			if ( Contact_Metadata\Legacy_Basic::class === $class ) {
+				$class_raw_keys = array_keys( array_merge( Contact_Metadata\Legacy_Basic::get_fields(), Contact_Metadata\Legacy_Payment::get_fields() ) );
+			} else {
+				$class_raw_keys = array_keys( $class::get_fields() );
+			}
+			$class_labels = [];
+			foreach ( $class_raw_keys as $raw_key ) {
+				if ( isset( $label_map[ $raw_key ] ) ) {
+					$class_labels[] = $label_map[ $raw_key ];
+				}
+			}
+			$claimed = array_intersect( $unclaimed, $class_labels );
+			if ( ! empty( $claimed ) ) {
+				$computing[] = $class;
+				$unclaimed   = array_diff( $unclaimed, $claimed );
 			}
 		}
 
-		return ! empty( array_intersect( $fields, $class_labels ) );
+		return $computing;
 	}
 
 	/**

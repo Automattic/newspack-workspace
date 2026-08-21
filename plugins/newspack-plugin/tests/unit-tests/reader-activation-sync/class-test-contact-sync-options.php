@@ -75,6 +75,7 @@ class Test_Contact_Sync_Options extends WP_UnitTestCase {
 	}
 
 	public function tear_down() {
+		Metadata::flush_fields_cache();
 		Content_Gate_Metadata::reset_cache();
 		Failing_Sample_Integration::reset();
 		if ( function_exists( 'as_unschedule_all_actions' ) ) {

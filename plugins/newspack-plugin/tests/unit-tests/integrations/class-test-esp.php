@@ -40,6 +40,7 @@ class Test_ESP extends \WP_UnitTestCase {
 	 * Cleanup state set up by individual tests so failures don't leak across cases.
 	 */
 	public function tear_down() {
+		\Newspack\Reader_Activation\Sync\Metadata::flush_fields_cache();
 		\Newspack_Newsletters_Contacts::reset_calls();
 		\Newspack_Newsletters::$is_service_provider_configured = true;
 		remove_all_filters( 'newspack_ras_metadata_keys' );

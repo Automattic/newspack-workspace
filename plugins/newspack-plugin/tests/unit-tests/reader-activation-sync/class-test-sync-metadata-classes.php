@@ -110,19 +110,37 @@ class Test_Sync_Metadata_Classes extends WP_UnitTestCase {
 
 	/**
 	 * 'Account' is a value-equivalent pair name declared by both Legacy_Basic
-	 * (v1) and Identity (v2). Selecting it alone must run both owning
-	 * classes in full — class-level scoping, not per-field — while still
-	 * leaving every other v2 class (which doesn't declare 'Account') skipped.
+	 * (v1) and Identity (v2). The two produce the same value by contract, so
+	 * selecting it alone runs only the modern owner — Legacy_Basic stays
+	 * skipped, keeping its WooCommerce order work and first/last-name
+	 * user-meta writes off sites that need nothing legacy-only. Scoping is
+	 * still class-level: Identity computes its whole field set.
 	 */
-	public function test_pair_name_alone_computes_both_eras_owning_classes() {
+	public function test_pair_name_alone_computes_only_the_modern_owner() {
 		$this->integration->update_enabled_outgoing_fields( [ 'Account' ] );
 
 		$contact = Metadata::get_contact_with_metadata( $this->user_id );
 
-		$this->assertArrayHasKey( 'account', $contact['metadata'], 'Legacy_Basic (the v1 owner of Account) must run.' );
-		$this->assertArrayHasKey( 'Account', $contact['metadata'], 'Identity (the v2 owner of Account) must run.' );
+		$this->assertArrayHasKey( 'Account', $contact['metadata'], 'Identity (the modern owner of Account) must run.' );
 		$this->assertArrayHasKey( 'first_name', $contact['metadata'], 'Identity computes its whole field set, not just the shared name.' );
+		$this->assertArrayNotHasKey( 'account', $contact['metadata'], 'Legacy_Basic must not run: the pair label is claimed by its modern owner.' );
 		$this->assertArrayNotHasKey( 'Registration_Strategy', $contact['metadata'], "Registration doesn't own Account and must stay skipped." );
+	}
+
+	/**
+	 * A selection mixing a pair name with a legacy-only name runs the modern
+	 * owner for the pair and Legacy_Basic for the label nothing else
+	 * computes — each label claimed once, no class kept alive by a label
+	 * another class already covers.
+	 */
+	public function test_mixed_selection_claims_each_label_once() {
+		$this->integration->update_enabled_outgoing_fields( [ 'Account', 'Newsletter Selection' ] );
+
+		$contact = Metadata::get_contact_with_metadata( $this->user_id );
+
+		$this->assertArrayHasKey( 'Account', $contact['metadata'], 'Identity must run for the pair label.' );
+		$this->assertArrayHasKey( 'account', $contact['metadata'], 'Legacy_Basic must run for the legacy-only label.' );
+		$this->assertArrayNotHasKey( 'First_Visit_Date', $contact['metadata'], 'Engagement claims nothing and must stay skipped.' );
 	}
 
 	/**

@@ -17,6 +17,7 @@ class Test_Grouped_Metadata extends WP_UnitTestCase {
 	public function tear_down() {
 		remove_all_filters( 'newspack_ras_metadata_keys' );
 		remove_all_filters( 'newspack_ras_grouped_metadata_fields' );
+		Metadata::flush_fields_cache();
 		parent::tear_down();
 	}
 
@@ -145,11 +146,35 @@ class Test_Grouped_Metadata extends WP_UnitTestCase {
 		$legacy = $this->find_group( $groups, 'Legacy' );
 
 		$this->assertNotNull( $legacy, 'Legacy_Basic fields should form a Legacy group.' );
-		$this->assertContains( 'Account', $legacy['fields'], 'Legacy_Basic fields belong in the Legacy section.' );
+		$this->assertContains( 'Newsletter Selection', $legacy['fields'], 'Legacy-only fields belong in the Legacy section.' );
 
 		$additional = $this->find_group( $groups, 'Additional' );
 		if ( null !== $additional ) {
-			$this->assertNotContains( 'Account', $additional['fields'], 'Legacy fields must not fall into Additional any more.' );
+			$this->assertNotContains( 'Newsletter Selection', $additional['fields'], 'Legacy fields must not fall into Additional any more.' );
+		}
+	}
+
+	/**
+	 * Value-equivalent pair names render exactly once, in their modern group,
+	 * so one stored selection entry never shows as two checkboxes.
+	 */
+	public function test_pair_names_render_once_in_their_modern_groups() {
+		$groups = Metadata::get_grouped_default_fields();
+		$pairs  = [
+			'Account'           => 'Identity',
+			'Connected Account' => 'Identity',
+			'Registration Date' => 'Registration',
+			'Registration Page' => 'Registration',
+		];
+		foreach ( $pairs as $name => $home_section ) {
+			$appearances = 0;
+			foreach ( $groups as $group ) {
+				if ( in_array( $name, $group['fields'], true ) ) {
+					$appearances++;
+					$this->assertSame( $home_section, $group['section'], sprintf( '%s must render in its modern group.', $name ) );
+				}
+			}
+			$this->assertSame( 1, $appearances, sprintf( '%s must render exactly once.', $name ) );
 		}
 	}
 
@@ -201,10 +226,10 @@ class Test_Grouped_Metadata extends WP_UnitTestCase {
 
 		$this->assertNotNull( $legacy, 'Legacy group should be present.' );
 		$this->assertArrayHasKey( 'field_details', $legacy, 'Legacy group should carry field_details.' );
-		$this->assertArrayHasKey( 'Account', $legacy['field_details'] );
-		$this->assertSame( 'legacy', $legacy['field_details']['Account']['status'] );
-		$this->assertIsString( $legacy['field_details']['Account']['description'] );
-		$this->assertNotEmpty( $legacy['field_details']['Account']['description'] );
+		$this->assertArrayHasKey( 'Newsletter Selection', $legacy['field_details'] );
+		$this->assertSame( 'legacy', $legacy['field_details']['Newsletter Selection']['status'] );
+		$this->assertIsString( $legacy['field_details']['Newsletter Selection']['description'] );
+		$this->assertNotEmpty( $legacy['field_details']['Newsletter Selection']['description'] );
 	}
 
 	/**
@@ -226,20 +251,23 @@ class Test_Grouped_Metadata extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Legacy_Basic declares 'registration_page' before 'current_page_url',
-	 * and both display as "Registration Page" — the first raw key's details
-	 * must win rather than being overwritten by the second.
+	 * "Registration Page" is declared by classes in both schemas (legacy
+	 * `registration_page`/`current_page_url` and the new schema's
+	 * `Registration_Page`). Cross-group dedupe keeps only the first
+	 * appearance — the Registration group's — so the label renders once,
+	 * carrying the modern class's details.
 	 */
-	public function test_field_details_first_raw_key_wins_a_shared_label() {
-		$groups = Metadata::get_grouped_default_fields();
-		$legacy = $this->find_group( $groups, 'Legacy' );
+	public function test_shared_label_renders_once_with_the_modern_details() {
+		$groups       = Metadata::get_grouped_default_fields();
+		$registration = $this->find_group( $groups, 'Registration' );
+		$legacy       = $this->find_group( $groups, 'Legacy' );
 
-		$this->assertArrayHasKey( 'Registration Page', $legacy['field_details'] );
-		$this->assertSame(
-			'URL of the page where the reader registered.',
-			$legacy['field_details']['Registration Page']['description'],
-			'registration_page is declared first, so its description should win over current_page_url.'
-		);
+		$this->assertNotNull( $registration, 'Registration group should be present.' );
+		$this->assertContains( 'Registration Page', $registration['fields'] );
+		$this->assertSame( 'updated', $registration['field_details']['Registration Page']['status'] );
+		$this->assertNotNull( $legacy, 'Legacy group should be present.' );
+		$this->assertNotContains( 'Registration Page', $legacy['fields'], 'A label rendered in a modern group must not repeat in Legacy.' );
+		$this->assertArrayNotHasKey( 'Registration Page', $legacy['field_details'] ?? [], 'Nor may its details linger there.' );
 	}
 
 	/**

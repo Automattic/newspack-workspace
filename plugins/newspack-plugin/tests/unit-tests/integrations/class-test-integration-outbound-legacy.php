@@ -35,6 +35,7 @@ class Test_Integration_Outbound_Legacy extends WP_UnitTestCase {
 	}
 
 	public function tear_down() {
+		Metadata::flush_fields_cache();
 		Failing_Sample_Integration::reset();
 		delete_option( Integration::OUTGOING_FIELDS_OPTION_PREFIX . 'outbound_mock' );
 		delete_option( Integration::OUTGOING_FIELDS_OPTION_PREFIX . 'esp' );
