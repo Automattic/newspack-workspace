@@ -13,7 +13,7 @@ import { Badge } from '@wordpress/ui';
  * Internal dependencies
  */
 import { Card } from '../';
-import type { BadgeIntent } from '../types';
+import type { CardBadge } from '../types';
 import './style.scss';
 
 /**
@@ -36,7 +36,7 @@ type DraggableItem = {
 	id: string | number;
 	title: string;
 	description?: React.ReactNode;
-	badge?: { label: string; intent?: BadgeIntent };
+	badge?: CardBadge;
 	toggleChecked?: boolean;
 	onToggleChange?: () => void;
 	actions?: DraggableItemAction[];

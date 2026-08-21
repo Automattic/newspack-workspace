@@ -17,7 +17,7 @@ import { Badge, Card, Stack } from '@wordpress/ui';
  * Internal dependencies
  */
 import Button from '../button';
-import type { BadgeIntent, HeadingLevel } from '../types';
+import type { BadgeIntent, CardBadge, HeadingLevel } from '../types';
 import './style.scss';
 
 type CardFeatureIcon = {
@@ -82,7 +82,7 @@ type CardFeatureProps = {
 	/** Controls rendered inside the "More" dropdown, shown when enabled — including the unmet-requirements state when `requirementsActionable`. */
 	moreControls?: MoreControl[];
 	/** Badge shown when enabled. Ignored while `requirements` is set, which takes the badge. Defaults to "Enabled" at the "stable" intent. */
-	badge?: { label?: string; intent?: BadgeIntent };
+	badge?: CardBadge;
 	className?: string;
 };
 

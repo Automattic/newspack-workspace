@@ -23,16 +23,13 @@ import { Badge } from '@wordpress/ui';
  * Internal dependencies
  */
 import Card from '../card';
-import type { BadgeIntent, HeadingLevel } from '../types';
+import type { CardBadge, HeadingLevel } from '../types';
 import './style.scss';
 
 type CardFormProps = {
 	title: string;
 	description?: string;
-	badge?: {
-		label: string;
-		intent?: BadgeIntent;
-	};
+	badge?: CardBadge;
 	/** JSX rendered in the header action area (buttons, etc.). */
 	actions?: React.ReactNode;
 	/** When true, children are shown and the header border is removed. */
