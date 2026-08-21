@@ -373,7 +373,9 @@ final class Modal_Checkout {
 	 * @return int
 	 */
 	public static function get_requested_quantity() {
-		$quantity = isset( $_REQUEST['quantity'] ) ? absint( wp_unslash( $_REQUEST['quantity'] ) ) : 1; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		// intval(), not absint(): absint() takes the absolute value, so a negative
+		// request (e.g. ?quantity=-5) would floor at 5 instead of 1.
+		$quantity = isset( $_REQUEST['quantity'] ) ? intval( wp_unslash( $_REQUEST['quantity'] ) ) : 1; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
 		return max( 1, $quantity );
 	}
 

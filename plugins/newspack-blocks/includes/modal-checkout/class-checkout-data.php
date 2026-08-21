@@ -385,7 +385,10 @@ final class Checkout_Data {
 		} else {
 			// An order's amount is a line subtotal already scaled by quantity; a
 			// product's or cart item's is a per-unit price, so scale it here instead.
-			$line_amount              = $source instanceof \WC_Order ? $amount : $amount * $quantity;
+			// Skip the multiply entirely at quantity 1 (the overwhelming majority of
+			// calls): it keeps every pre-existing single-seat path byte-identical, and
+			// avoids a TypeError from `'' * 1` for a product with no price set.
+			$line_amount              = ( $source instanceof \WC_Order || 1 === $quantity ) ? $amount : (float) $amount * $quantity;
 			$data['amount']           = $line_amount;
 			$data['quantity']         = $quantity;
 			$data['price_summary']    = self::get_price_summary( $name, $line_amount, $recurrence, $variation_id ? $variation_id : $product_id, $quantity );

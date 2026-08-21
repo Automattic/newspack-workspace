@@ -427,18 +427,34 @@ class Newspack_Blocks_Modal_Checkout_Data_Test extends WP_UnitTestCase_Blocks {
 		$cart = $this->make_cart( [ 'product_id' => 77, 'variation_id' => 0, 'quantity' => 4, 'data' => $this->make_product( 77, 10 ) ] );
 		$data = Checkout_Data::get_checkout_data( $cart );
 		$this->assertSame( 4, $data['quantity'] );
-		$this->assertSame( 40.0, (float) $data['amount'] );
+		$this->assertSame( 40.0, $data['amount'] );
 	}
 
 	/**
 	 * A cart item missing `quantity` (version skew, or a non-WooCommerce caller)
-	 * must not fatal, and behaves as a single seat.
+	 * must not fatal, and behaves as a single seat. At quantity 1 the multiply is
+	 * skipped entirely, so `amount` stays byte-identical to the pre-quantity
+	 * behavior (the raw string `get_price()` returns) rather than becoming a float.
 	 */
 	public function test_cart_checkout_data_defaults_missing_quantity_to_one() {
 		$cart = $this->make_cart( [ 'product_id' => 78, 'variation_id' => 0, 'data' => $this->make_product( 78, 10 ) ] );
 		$data = Checkout_Data::get_checkout_data( $cart );
 		$this->assertSame( 1, $data['quantity'] );
-		$this->assertSame( 10.0, (float) $data['amount'] );
+		$this->assertSame( '10', $data['amount'] );
+	}
+
+	/**
+	 * A product with no price set (`get_price()` returns '', e.g. a blank `_price`
+	 * meta) must not fatal when a quantity above one multiplies it. PHP 8 throws a
+	 * TypeError on `'' * int`; the multiply must coerce to float first so a
+	 * Checkout Button, metering countdown, or gifting CTA pointing at such a
+	 * product doesn't white-screen.
+	 */
+	public function test_cart_checkout_data_handles_empty_price_with_quantity() {
+		$cart = $this->make_cart( [ 'product_id' => 81, 'variation_id' => 0, 'quantity' => 3, 'data' => $this->make_product( 81, '' ) ] );
+		$data = Checkout_Data::get_checkout_data( $cart );
+		$this->assertSame( 3, $data['quantity'] );
+		$this->assertSame( 0.0, $data['amount'] );
 	}
 
 	/**
@@ -466,7 +482,7 @@ class Newspack_Blocks_Modal_Checkout_Data_Test extends WP_UnitTestCase_Blocks {
 		$data = Checkout_Data::get_checkout_data( $product );
 
 		$this->assertSame( 1, $data['quantity'] );
-		$this->assertEquals( 10, $data['amount'] );
+		$this->assertSame( '10', $data['amount'] );
 	}
 
 	/**

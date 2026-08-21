@@ -360,6 +360,20 @@ class ModalCheckoutTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 	}
 
 	/**
+	 * A negative quantity floors at one. Must use (int), not absint(): absint()
+	 * takes the absolute value, so ?quantity=-5 would otherwise become 5 instead
+	 * of flooring at 1 like any other out-of-range request.
+	 */
+	public function test_requested_quantity_floors_negative_at_one() {
+		$_GET['quantity']     = '-5';
+		$_REQUEST['quantity'] = '-5';
+
+		$this->assertSame( 1, \Newspack_Blocks\Modal_Checkout::get_requested_quantity() );
+
+		unset( $_GET['quantity'], $_REQUEST['quantity'] );
+	}
+
+	/**
 	 * Set serialized checkout data in the request.
 	 *
 	 * @param string $post_data Serialized checkout data.
