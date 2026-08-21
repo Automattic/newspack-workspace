@@ -575,4 +575,113 @@ class Test_Group_Subscription_Settings extends WP_UnitTestCase {
 
 		$this->assertFalse( get_transient( Group_Subscription_Settings::GROUP_SUBSCRIPTION_IDS_TRANSIENT ), 'The cache must be refreshed when inherited group status turns off.' );
 	}
+
+	/*
+	 * --- pricing mode and seat bounds ---
+	 */
+
+	/**
+	 * With no pricing meta set, a product defaults to flat (per-team) pricing
+	 * with a one-seat minimum and no maximum.
+	 */
+	public function test_product_settings_default_to_per_team() {
+		$product = wc_create_mock_product(
+			[
+				'id'   => 901,
+				'type' => 'subscription',
+			]
+		);
+
+		$settings = Group_Subscription_Settings::get_product_settings( $product );
+
+		$this->assertSame( Group_Subscription_Settings::PRICING_MODE_PER_TEAM, $settings['pricing_mode'] );
+		$this->assertSame( 1, $settings['min_seats'] );
+		$this->assertSame( 0, $settings['max_seats'] );
+	}
+
+	/**
+	 * Product-level pricing mode and seat bound meta are read into settings, and
+	 * is_per_seat() reports true once both 'enabled' and 'per_seat' are set.
+	 */
+	public function test_product_settings_read_per_seat_meta() {
+		$prefix  = Group_Subscription_Settings::GROUP_SUBSCRIPTION_META_PREFIX;
+		$product = wc_create_mock_product(
+			[
+				'id'   => 902,
+				'type' => 'subscription',
+				'meta' => [
+					$prefix . 'enabled'      => 'yes',
+					$prefix . 'pricing_mode' => 'per_seat',
+					$prefix . 'min_seats'    => '3',
+					$prefix . 'max_seats'    => '10',
+				],
+			]
+		);
+
+		$settings = Group_Subscription_Settings::get_product_settings( $product );
+
+		$this->assertSame( 'per_seat', $settings['pricing_mode'] );
+		$this->assertSame( 3, $settings['min_seats'] );
+		$this->assertSame( 10, $settings['max_seats'] );
+		$this->assertTrue( Group_Subscription_Settings::is_per_seat( $product ) );
+	}
+
+	/**
+	 * A per-seat subscription's capacity is derived from the line item quantity,
+	 * not from the (ignored) product limit meta.
+	 */
+	public function test_per_seat_subscription_capacity_is_line_item_quantity() {
+		$subscription = $this->make_subscription_with_product(
+			[
+				'enabled'      => 'yes',
+				'pricing_mode' => 'per_seat',
+				'limit'        => '50', // Ignored in per-seat mode.
+			],
+			[],
+			[
+				'items' => [
+					new WC_Order_Item_Product(
+						[
+							'id'         => 9031,
+							'product_id' => 123,
+							'quantity'   => 6,
+						]
+					),
+				],
+			]
+		);
+
+		$settings = Group_Subscription_Settings::get_subscription_settings( $subscription );
+
+		$this->assertSame( 6, $settings['limit'], 'Per-seat limit should equal the purchased seat count (the line item quantity).' );
+		$this->assertSame( 6, Group_Subscription::get_member_capacity( $subscription ), 'Per-seat member capacity should equal the line item quantity.' );
+		$this->assertSame( 'per_seat', $settings['pricing_mode'] );
+	}
+
+	/**
+	 * A per-seat subscription ignores an explicit subscription-level limit meta
+	 * override; the line item quantity is the sole source of truth for capacity.
+	 */
+	public function test_per_seat_subscription_ignores_limit_meta_override() {
+		$subscription = $this->make_subscription_with_product(
+			[
+				'enabled'      => 'yes',
+				'pricing_mode' => 'per_seat',
+			],
+			[ 'limit' => 9 ],
+			[
+				'items' => [
+					new WC_Order_Item_Product(
+						[
+							'id'         => 9041,
+							'product_id' => 123,
+							'quantity'   => 2,
+						]
+					),
+				],
+			]
+		);
+
+		$this->assertSame( 2, Group_Subscription::get_member_capacity( $subscription ), 'Per-seat capacity should ignore the subscription limit meta override and use the line item quantity instead.' );
+	}
 }

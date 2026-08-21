@@ -14,12 +14,23 @@ defined( 'ABSPATH' ) || exit;
  */
 class Group_Subscription_Settings {
 	/**
+	 * Pricing modes. Per team is the flat price the feature shipped with; per seat
+	 * bills the product price multiplied by the purchased seat count (the line-item
+	 * quantity), mirroring Teams for WooCommerce Memberships' per-member pricing.
+	 */
+	const PRICING_MODE_PER_TEAM = 'per_team';
+	const PRICING_MODE_PER_SEAT = 'per_seat';
+
+	/**
 	 * Default group subscription settings.
 	 */
 	const DEFAULT_SETTINGS = [
-		'enabled' => false,
-		'limit'   => 0,
-		'name'    => '',
+		'enabled'      => false,
+		'limit'        => 0,
+		'name'         => '',
+		'pricing_mode' => self::PRICING_MODE_PER_TEAM,
+		'min_seats'    => 1,
+		'max_seats'    => 0,
 	];
 
 	/**
@@ -286,6 +297,13 @@ class Group_Subscription_Settings {
 		$settings['enabled'] = '' !== $enabled_meta ? \wc_string_to_bool( $enabled_meta ) : $settings['enabled']; // Empty string means the meta is unset; any other value, including 'no' or false, is a real override.
 		$settings['limit']   = '' !== $limit_meta ? (int) $limit_meta : $settings['limit']; // Empty string means the meta is unset; any other value, including '0', is a real override.
 
+		$mode_meta                = $product->get_meta( self::GROUP_SUBSCRIPTION_META_PREFIX . 'pricing_mode', true );
+		$min_meta                 = $product->get_meta( self::GROUP_SUBSCRIPTION_META_PREFIX . 'min_seats', true );
+		$max_meta                 = $product->get_meta( self::GROUP_SUBSCRIPTION_META_PREFIX . 'max_seats', true );
+		$settings['pricing_mode'] = self::PRICING_MODE_PER_SEAT === $mode_meta ? self::PRICING_MODE_PER_SEAT : self::PRICING_MODE_PER_TEAM;
+		$settings['min_seats']    = '' !== $min_meta ? max( 1, absint( $min_meta ) ) : $settings['min_seats'];
+		$settings['max_seats']    = '' !== $max_meta ? absint( $max_meta ) : $settings['max_seats'];
+
 		/**
 		 * Filter the group subscription settings for a product.
 		 *
@@ -294,7 +312,9 @@ class Group_Subscription_Settings {
 		 */
 		$settings = apply_filters( 'newspack_group_subscription_product_settings', $settings, $product );
 
-		$settings['limit'] = self::normalize_limit( $settings['limit'] ?? 0 );
+		$settings['limit'] = self::PRICING_MODE_PER_SEAT === $settings['pricing_mode']
+			? max( 1, (int) ( $settings['limit'] ?? 0 ) ) // Seats bought is exact capacity; a one-seat group is the owner alone.
+			: self::normalize_limit( $settings['limit'] ?? 0 );
 		return $settings;
 	}
 
@@ -318,6 +338,15 @@ class Group_Subscription_Settings {
 		$name_meta           = $subscription->get_meta( self::GROUP_SUBSCRIPTION_META_PREFIX . 'name', true );
 		$settings['enabled'] = '' !== $enabled_meta ? \wc_string_to_bool( $enabled_meta ) : $settings['enabled']; // Empty string means the meta is unset; any other value, including 'no' or false, is a real override.
 		$settings['limit']   = '' !== $limit_meta ? (int) $limit_meta : $settings['limit']; // Empty string means the meta is unset; any other value, including '0', is a real override.
+
+		// The subscription-level limit override above is a flat-mode concept; in per-seat
+		// mode the purchased seat count (the line item quantity) is the sole source of
+		// truth for capacity, so it replaces whatever the override just computed.
+		if ( self::PRICING_MODE_PER_SEAT === $settings['pricing_mode'] ) {
+			$seat_item         = self::get_seat_line_item( $subscription );
+			$settings['limit'] = $seat_item ? (int) $seat_item->get_quantity() : 0;
+		}
+
 		if ( $name_meta ) {
 			$settings['name'] = $name_meta;
 		} else {
@@ -333,8 +362,43 @@ class Group_Subscription_Settings {
 		 */
 		$settings = apply_filters( 'newspack_group_subscription_settings', $settings, $subscription );
 
-		$settings['limit'] = self::normalize_limit( $settings['limit'] ?? 0 );
+		$settings['limit'] = self::PRICING_MODE_PER_SEAT === $settings['pricing_mode']
+			? max( 1, (int) ( $settings['limit'] ?? 0 ) ) // Seats bought is exact capacity; a one-seat group is the owner alone.
+			: self::normalize_limit( $settings['limit'] ?? 0 );
 		return $settings;
+	}
+
+	/**
+	 * The line item whose quantity is the purchased seat count. Newspack's checkout
+	 * always produces single-item subscriptions, so this is the first product line.
+	 *
+	 * @param \WC_Subscription|int $subscription The subscription object or ID.
+	 *
+	 * @return \WC_Order_Item_Product|null
+	 */
+	public static function get_seat_line_item( $subscription ) {
+		$subscription = WooCommerce_Subscriptions::sanitize_subscription( $subscription );
+		if ( ! $subscription ) {
+			return null;
+		}
+		foreach ( $subscription->get_items() as $item ) {
+			return $item;
+		}
+		return null;
+	}
+
+	/**
+	 * Whether a product or subscription bills per seat.
+	 *
+	 * @param \WC_Product|\WC_Subscription|int $object Product, subscription, or product ID.
+	 *
+	 * @return bool
+	 */
+	public static function is_per_seat( $object ) {
+		$settings = is_a( $object, 'WC_Subscription' )
+			? self::get_subscription_settings( $object )
+			: self::get_product_settings( $object );
+		return ! empty( $settings['enabled'] ) && self::PRICING_MODE_PER_SEAT === $settings['pricing_mode'];
 	}
 
 	/**
