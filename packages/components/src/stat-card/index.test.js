@@ -487,6 +487,33 @@ describe( 'StatCard.Delta', () => {
 		expect( screen.queryByText( 'Up' ) ).not.toBeInTheDocument();
 	} );
 
+	// The whole-delta sentence outranks the one-word swap, which only prose said until now.
+	it( 'lets label win over directionLabel', () => {
+		render(
+			<StatCard.Root>
+				<StatCard.Delta direction="up" label="2% more refunds than last month" directionLabel="Increased by">
+					2%
+				</StatCard.Delta>
+			</StatCard.Root>
+		);
+		expect( screen.getByText( '2% more refunds than last month' ) ).toHaveAttribute( 'data-visually-hidden' );
+		expect( screen.queryByText( 'Increased by' ) ).not.toBeInTheDocument();
+		expect( screen.queryByText( 'Up' ) ).not.toBeInTheDocument();
+	} );
+
+	// Falling back past a blank label should land on the caller's word, not the built-in one.
+	it( 'falls back from a blank label to directionLabel rather than the default', () => {
+		render(
+			<StatCard.Root>
+				<StatCard.Delta direction="up" label="   " directionLabel="Increased by">
+					2%
+				</StatCard.Delta>
+			</StatCard.Root>
+		);
+		expect( screen.getByText( 'Increased by' ) ).toHaveAttribute( 'data-visually-hidden' );
+		expect( screen.queryByText( 'Up' ) ).not.toBeInTheDocument();
+	} );
+
 	// A blank sentence would hide the arrow and the change behind nothing at all.
 	it( 'keeps the arrow and the change when label is only whitespace', () => {
 		const { container } = render(
