@@ -16,4 +16,12 @@ describe( 'getBackTarget', () => {
 	it( 'defaults to the email step when password state is unknown', () => {
 		expect( getBackTarget( 'otp', undefined ) ).toBe( 'signin' );
 	} );
+
+	it( 'returns to the email step from the email step itself', () => {
+		expect( getBackTarget( 'signin', true ) ).toBe( 'signin' );
+	} );
+
+	it( 'returns to the email step from the success step', () => {
+		expect( getBackTarget( 'success', true ) ).toBe( 'signin' );
+	} );
 } );

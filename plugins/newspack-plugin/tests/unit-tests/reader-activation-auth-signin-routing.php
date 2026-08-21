@@ -141,11 +141,13 @@ class Newspack_Test_RA_Auth_Signin_Routing extends WP_Ajax_UnitTestCase {
 	 * A reader without a password and no active token is sent a code and routed to OTP.
 	 */
 	public function test_passwordless_reader_without_token_sends_code() {
-		$this->make_reader( 'fresh-otp@test.com', false );
+		$user_id = $this->make_reader( 'fresh-otp@test.com', false );
+		$this->assertSame( 0, $this->token_count( $user_id ), 'Reader should start with no tokens.' );
 
 		$response = $this->submit_signin( 'fresh-otp@test.com' );
 
 		$this->assertSame( 'otp', $response['data']['action'] ?? null );
+		$this->assertSame( 1, $this->token_count( $user_id ), 'A fresh code should be generated and sent.' );
 	}
 
 	/**
