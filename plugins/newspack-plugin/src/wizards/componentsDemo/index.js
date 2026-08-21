@@ -36,6 +36,7 @@ import {
 	CardFeature,
 	CardForm,
 	CardSettingsGroup,
+	CollapsibleGroup,
 	ColorPicker,
 	EmptyState,
 	Footer,
@@ -387,6 +388,38 @@ class ComponentsDemo extends Component {
 								</Drawer.Content>
 								<Drawer.Footer>{ this.drawerActions( drawerActionCount ) }</Drawer.Footer>
 							</Drawer.Root>
+						</Card>
+						<Card>
+							<h2>{ __( 'CollapsibleGroup', 'newspack-plugin' ) }</h2>
+							<p>
+								{ __(
+									'A stack of independently collapsible items, separated by dividers and sitting flush with the surrounding column. A collapsed item stays reachable by the browser find-in-page, which expands it to reveal the match.',
+									'newspack-plugin'
+								) }
+							</p>
+							<CollapsibleGroup titleLevel={ 3 }>
+								<CollapsibleGroup.Item title={ __( 'Contact fields', 'newspack-plugin' ) } defaultOpen>
+									<p>{ __( 'An item set to defaultOpen starts expanded.', 'newspack-plugin' ) }</p>
+								</CollapsibleGroup.Item>
+								<CollapsibleGroup.Item title={ __( 'Tags and segments', 'newspack-plugin' ) }>
+									<p>{ __( 'Items are independent: opening one does not close the others.', 'newspack-plugin' ) }</p>
+								</CollapsibleGroup.Item>
+								<CollapsibleGroup.Item title={ __( 'Sync options', 'newspack-plugin' ) }>
+									<p>{ __( 'A divider separates each item from the next, but never trails the last one.', 'newspack-plugin' ) }</p>
+								</CollapsibleGroup.Item>
+							</CollapsibleGroup>
+							<h3>{ __( 'Single item', 'newspack-plugin' ) }</h3>
+							<p>
+								{ __(
+									'With nothing to collapse against, hideSingleTitle renders a lone item open and drops its title.',
+									'newspack-plugin'
+								) }
+							</p>
+							<CollapsibleGroup hideSingleTitle>
+								<CollapsibleGroup.Item title={ __( 'Contact fields', 'newspack-plugin' ) }>
+									<p>{ __( 'This content is always visible.', 'newspack-plugin' ) }</p>
+								</CollapsibleGroup.Item>
+							</CollapsibleGroup>
 						</Card>
 						<Card>
 							<h2>{ __( 'Table card', 'newspack-plugin' ) }</h2>

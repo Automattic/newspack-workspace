@@ -1,4 +1,3 @@
-export { default as Accordion, AccordionPanel } from './accordion';
 export { default as ActionCard } from './action-card';
 export { default as AutocompleteTokenField } from './autocomplete-tokenfield';
 export { default as AutocompleteWithSuggestions } from './autocomplete-with-suggestions';
@@ -14,6 +13,7 @@ export { default as CardSettingsGroup } from './card-settings-group';
 export { default as CardSortableList } from './card-sortable-list';
 export { default as IntegrationIcon } from './integration-icon';
 export { default as CategoryAutocomplete } from './category-autocomplete';
+export { default as CollapsibleGroup } from './collapsible-group';
 export { default as ColorPicker } from './color-picker';
 export { default as ConfirmDialog } from './confirm-dialog';
 export { default as CustomSelectControl } from './custom-select-control';
