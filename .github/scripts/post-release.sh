@@ -168,14 +168,22 @@ attribute_conflicts() {
 # author check would still read as the bot and close the very PR a person had
 # just finished. Anything unresolvable (a missing head, an API error) skips the
 # PR: leaving a stale escalation open costs noise, closing a live one costs work.
+#
+# Cross-repository heads are excluded first, because neither of the other two
+# tests authenticates anything. This repo is public and takes PRs from forks; a
+# fork names its own head branch and writes its own commit identity, so a fork
+# PR can present both the escalation branch prefix and the bot's committer email
+# and have this job comment on and close it. Escalation branches are always
+# pushed to this repo, so nothing real is lost by ignoring the rest.
 supersede_escalations() {
   local target="$1" new_url="$2" bot_identity="$3"
   local new_number="${2##*/}"
   local prs n head_sha committer
   prs=$(TARGET="$target" PREFIX="$ESCALATION_BRANCH_PREFIX" \
     gh pr list --base "$target" --state open --limit 100 \
-      --json number,headRefName \
+      --json number,headRefName,isCrossRepository \
       --jq '.[]
+            | select(.isCrossRepository | not)
             | select(.headRefName | startswith(env.PREFIX + "/" + env.TARGET + "-"))
             | .number' 2>/dev/null) || prs=""
   for n in $prs; do
