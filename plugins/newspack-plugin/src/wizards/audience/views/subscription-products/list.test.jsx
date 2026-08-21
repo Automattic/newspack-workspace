@@ -29,7 +29,6 @@ jest.mock( '../../../../../packages/components/src', () => {
 	const history = { push: jest.fn() };
 	return {
 		DataViews: () => null,
-		Badge: () => null,
 		WizardBanner: ( { children } ) => <>{ children }</>,
 		Router: { useHistory: () => history },
 	};
