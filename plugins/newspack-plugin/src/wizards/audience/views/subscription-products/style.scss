@@ -57,6 +57,8 @@
 	}
 
 	&__policy-chip {
+		display: inline-flex;
+		align-items: center;
 		text-decoration: none;
 
 		&:hover .newspack-subscription-products__policy-chip-badge,

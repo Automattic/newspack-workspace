@@ -171,7 +171,7 @@ export default function PricingRulesList() {
 				label: __( 'Active window', 'newspack-plugin' ),
 				getValue: ( { item } ) => item.active_state,
 				render: ( { item } ) => (
-					<Badge intent={ ACTIVE_STATE_INTENT[ item.active_state ] }>
+					<Badge intent={ ACTIVE_STATE_INTENT[ item.active_state ] ?? 'none' }>
 						{ ACTIVE_STATE_LABEL[ item.active_state ] ?? item.active_state }
 					</Badge>
 				),
