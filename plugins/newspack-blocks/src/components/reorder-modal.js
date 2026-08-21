@@ -352,7 +352,7 @@ const ReorderModal = ( { title, ids, fetchItems, onSave, onClose } ) => {
 								</Button>
 								<Button
 									variant="primary"
-									disabled={ ! isDirty || hasFetchError }
+									disabled={ ! isDirty }
 									accessibleWhenDisabled
 									onClick={ () => onSave( items.map( item => item.id ) ) }
 								>
