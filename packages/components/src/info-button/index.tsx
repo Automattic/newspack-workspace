@@ -6,6 +6,7 @@ import classnames from 'classnames';
 /**
  * WordPress dependencies.
  */
+import { forwardRef } from '@wordpress/element';
 import { __ } from '@wordpress/i18n';
 import { Icon, info } from '@wordpress/icons';
 import { Popover, VisuallyHidden } from '@wordpress/ui';
@@ -15,27 +16,29 @@ import { Popover, VisuallyHidden } from '@wordpress/ui';
  */
 import './style.scss';
 
-type InfoButtonProps = {
+type InfoButtonProps = React.ComponentPropsWithoutRef< 'button' > & {
 	description?: string;
-	className?: string;
 	triggerLabel?: string;
-	[ key: string ]: unknown;
 };
 
 /**
  * Uses `Popover` rather than `Tooltip`: a tooltip never opens from a touch
  * pointer, and its popup is not exposed to assistive technology.
  */
-const InfoButton = ( { description, className, triggerLabel, ...rest }: InfoButtonProps ) => {
+const InfoButton = forwardRef< HTMLButtonElement, InfoButtonProps >( function InfoButton(
+	{ description, className, triggerLabel, 'aria-label': ariaLabel, ...rest },
+	ref
+) {
 	if ( ! description ) {
 		return null;
 	}
 
-	const name = triggerLabel || __( 'More information', 'newspack-plugin' );
+	const name = triggerLabel || ariaLabel || __( 'More information', 'newspack-plugin' );
 
 	return (
 		<Popover.Root>
 			<Popover.Trigger
+				ref={ ref }
 				openOnHover
 				delay={ 200 }
 				closeDelay={ 200 }
@@ -56,6 +59,6 @@ const InfoButton = ( { description, className, triggerLabel, ...rest }: InfoButt
 			</Popover.Popup>
 		</Popover.Root>
 	);
-};
+} );
 
 export default InfoButton;
