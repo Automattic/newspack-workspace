@@ -550,11 +550,30 @@ class WC_Product {
 	public function get_regular_price() {
 		return $this->data['regular_price'] ?? ( $this->meta['_regular_price'] ?? 0 );
 	}
+	/**
+	 * Price reads apply their WooCommerce filters, as WC_Data::get_prop() does
+	 * in `view` context. Without this, code that filters a price and code that
+	 * reads one can disagree with no test able to see it.
+	 */
 	public function get_price() {
-		return $this->data['price'] ?? ( $this->meta['_price'] ?? $this->get_regular_price() );
+		$price = $this->data['price'] ?? ( $this->meta['_price'] ?? $this->get_regular_price() );
+		return apply_filters( 'woocommerce_product_get_price', $price, $this );
 	}
 	public function set_price( $price ) {
 		$this->data['price'] = $price;
+	}
+	public function get_sale_price() {
+		$sale_price = $this->data['sale_price'] ?? ( $this->meta['_sale_price'] ?? '' );
+		return apply_filters( 'woocommerce_product_get_sale_price', $sale_price, $this );
+	}
+	/**
+	 * Mirrors WC_Product::is_on_sale() — a sale price is set and undercuts the
+	 * regular price.
+	 */
+	public function is_on_sale() {
+		$sale_price = $this->get_sale_price();
+		$on_sale    = '' !== (string) $sale_price && (float) $this->get_regular_price() > (float) $sale_price;
+		return apply_filters( 'woocommerce_product_is_on_sale', $on_sale, $this );
 	}
 	public function get_meta( $key, $single = true ) {
 		return $this->meta[ $key ] ?? '';
