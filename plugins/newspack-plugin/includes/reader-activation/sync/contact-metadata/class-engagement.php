@@ -69,40 +69,49 @@ class Engagement extends Contact_Metadata {
 	public static function get_fields_config() {
 		return [
 			'First_Visit_Date'     => [
-				'name'   => 'First Visit Date',
-				'status' => 'new',
+				'name'        => 'First Visit Date',
+				'description' => __( 'Date of the reader\'s very first visit to the site, regardless of whether or when they registered (MM/DD/YYYY).', 'newspack-plugin' ),
+				'status'      => 'new',
 			],
 			'Last_Active'          => [
-				'name'   => 'Last Active',
-				'status' => 'new',
+				'name'        => 'Last Active',
+				'description' => __( 'Date reader was last seen on site', 'newspack-plugin' ),
+				'status'      => 'new',
 			],
 			'Paywall_Hits'         => [
-				'name'   => 'Paywall Hits',
-				'status' => 'new',
+				'name'        => 'Paywall Hits',
+				'description' => __( 'Number of times reader has reached a metered paywall', 'newspack-plugin' ),
+				'status'      => 'new',
 			],
 			'Favorite_Categories'  => [
-				'name'   => 'Favorite Categories',
-				'status' => 'new',
+				'name'        => 'Favorite Categories',
+				'description' => __( 'Comma-separated list of the reader\'s most-engaged content categories, ordered by frequency', 'newspack-plugin' ),
+				'status'      => 'new',
 			],
 			'Last_Payment_Page'    => [
-				'name'   => 'Last Payment Page',
-				'status' => 'updated',
+				'name'        => 'Last Payment Page',
+				'description' => __( 'URL of the checkout page from the reader\'s most recent completed order, of any product type. Unlike the legacy Payment Page, which follows the reader\'s current subscription or last one-time donation, this can diverge for recurring subscribers and one-time non-donation purchasers.', 'newspack-plugin' ),
+				'status'      => 'updated',
 			],
 			'Payment_UTM_Source'   => [
-				'name'   => 'Payment UTM Source',
-				'status' => 'updated',
+				'name'        => 'Payment UTM Source',
+				'description' => __( 'UTM source on payment page if present. Values come from the reader\'s most recent completed order, which for recurring donors is a renewal that may lack the original campaign parameters.', 'newspack-plugin' ),
+				'status'      => 'updated',
 			],
 			'Payment_UTM_Medium'   => [
-				'name'   => 'Payment UTM Medium',
-				'status' => 'updated',
+				'name'        => 'Payment UTM Medium',
+				'description' => __( 'UTM medium on payment page if present. Values come from the reader\'s most recent completed order, which for recurring donors is a renewal that may lack the original campaign parameters.', 'newspack-plugin' ),
+				'status'      => 'updated',
 			],
 			'Payment_UTM_Campaign' => [
-				'name'   => 'Payment UTM Campaign',
-				'status' => 'updated',
+				'name'        => 'Payment UTM Campaign',
+				'description' => __( 'UTM campaign on payment page if present. Values come from the reader\'s most recent completed order, which for recurring donors is a renewal that may lack the original campaign parameters.', 'newspack-plugin' ),
+				'status'      => 'updated',
 			],
 			'Lifetime_Total_Paid'  => [
-				'name'   => 'Lifetime Total Paid',
-				'status' => 'updated',
+				'name'        => 'Lifetime Total Paid',
+				'description' => __( 'Lifetime total paid across all purchases; unlike the legacy Total Paid, never blanked when no current subscription or donation exists', 'newspack-plugin' ),
+				'status'      => 'updated',
 			],
 		];
 	}

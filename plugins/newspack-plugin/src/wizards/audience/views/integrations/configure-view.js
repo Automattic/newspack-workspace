@@ -9,7 +9,7 @@ import { useEffect, useMemo, useRef, useState } from '@wordpress/element';
 /**
  * Internal dependencies
  */
-import { Accordion, AccordionPanel, Divider, Grid, SectionHeader, useUnsavedChangesDialog } from '../../../../../packages/components/src';
+import { Accordion, AccordionPanel, Badge, Divider, Grid, SectionHeader, useUnsavedChangesDialog } from '../../../../../packages/components/src';
 import { WIZARD_STORE_NAMESPACE } from '../../../../../packages/components/src/wizard/store';
 import WizardsTab from '../../../wizards-tab';
 import { SettingsField } from './settings-field';
@@ -558,17 +558,33 @@ const ConfigureViewInner = ( { integrations, loading, inFlightChanges, saving, o
 													defaultOpen={ index === 0 }
 												>
 													<Grid columns={ 1 } rowGap={ 8 } noMargin>
-														{ group.fields.map( fieldName => (
-															<CheckboxControl
-																className="newspack-checkbox-control"
-																key={ fieldName }
-																label={ fieldName }
-																checked={ selected.includes( fieldName ) }
-																onChange={ checked =>
-																	handleCheckboxListChange( outboundField.key, currentValue, fieldName, checked )
-																}
-															/>
-														) ) }
+														{ group.fields.map( fieldName => {
+															const details = group.field_details?.[ fieldName ];
+															const isNew = 'new' === details?.status || 'updated' === details?.status;
+															return (
+																<div className="newspack-outbound-field-row" key={ fieldName }>
+																	<CheckboxControl
+																		className="newspack-outbound-field-row__checkbox"
+																		label={ fieldName }
+																		help={ details?.description || undefined }
+																		checked={ selected.includes( fieldName ) }
+																		onChange={ checked =>
+																			handleCheckboxListChange(
+																				outboundField.key,
+																				currentValue,
+																				fieldName,
+																				checked
+																			)
+																		}
+																	/>
+																	{ isNew && (
+																		<span className="newspack-outbound-field-row__badges">
+																			<Badge text={ __( 'New', 'newspack-plugin' ) } level="success" />
+																		</span>
+																	) }
+																</div>
+															);
+														} ) }
 													</Grid>
 												</AccordionPanel>
 											);

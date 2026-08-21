@@ -59,28 +59,34 @@ class Registration extends Contact_Metadata {
 	public static function get_fields_config() {
 		return [
 			'Registration_Date'         => [
-				'name'   => 'Registration Date',
-				'status' => 'existing',
+				'name'        => 'Registration Date',
+				'description' => __( 'Date reader created their account (MM/DD/YYYY)', 'newspack-plugin' ),
+				'status'      => 'existing',
 			],
 			'Registration_Page'         => [
-				'name'   => 'Registration Page',
-				'status' => 'updated',
+				'name'        => 'Registration Page',
+				'description' => __( 'URL of the page where reader registered', 'newspack-plugin' ),
+				'status'      => 'updated',
 			],
 			'Registration_Strategy'     => [
-				'name'   => 'Registration Strategy',
-				'status' => 'new',
+				'name'        => 'Registration Strategy',
+				'description' => __( 'How the reader registered. One of: registration-wall, newsletter, checkout, popup, manual', 'newspack-plugin' ),
+				'status'      => 'new',
 			],
 			'Registration_UTM_Source'   => [
-				'name'   => 'Registration UTM Source',
-				'status' => 'updated',
+				'name'        => 'Registration UTM Source',
+				'description' => __( 'UTM source present at time of registration', 'newspack-plugin' ),
+				'status'      => 'updated',
 			],
 			'Registration_UTM_Medium'   => [
-				'name'   => 'Registration UTM Medium',
-				'status' => 'updated',
+				'name'        => 'Registration UTM Medium',
+				'description' => __( 'UTM medium present at time of registration', 'newspack-plugin' ),
+				'status'      => 'updated',
 			],
 			'Registration_UTM_Campaign' => [
-				'name'   => 'Registration UTM Campaign',
-				'status' => 'updated',
+				'name'        => 'Registration UTM Campaign',
+				'description' => __( 'UTM campaign present at time of registration', 'newspack-plugin' ),
+				'status'      => 'updated',
 			],
 		];
 	}

@@ -84,16 +84,19 @@ class Content_Gate extends Contact_Metadata {
 	public static function get_fields_config() {
 		return [
 			'Content_Access'        => [
-				'name'   => 'Content Access',
-				'status' => 'new',
+				'name'        => 'Content Access',
+				'description' => __( 'Whether the reader currently has access to gated content', 'newspack-plugin' ),
+				'status'      => 'new',
 			],
 			'Content_Access_Source' => [
-				'name'   => 'Content Access Source',
-				'status' => 'new',
+				'name'        => 'Content Access Source',
+				'description' => __( 'The specific entity granting access. Value based on subscription product name OR "group" OR "institution"', 'newspack-plugin' ),
+				'status'      => 'new',
 			],
 			'Content_Access_Group'  => [
-				'name'   => 'Content Access Group',
-				'status' => 'new',
+				'name'        => 'Content Access Group',
+				'description' => __( 'Name of the reader group or institution granting content access, when access is granted via a group subscription or institution rule', 'newspack-plugin' ),
+				'status'      => 'new',
 			],
 		];
 	}

@@ -18,14 +18,18 @@ jest.mock( '@wordpress/data', () => ( {
 // Cover everything SettingsField imports so a future select/oauth/textarea fixture renders a stub, not `undefined`.
 jest.mock( '@wordpress/components', () => ( {
 	// Real inputs (not null stubs) so the per-direction section tests can assert
-	// on picker visibility and drive the enable toggles.
-	CheckboxControl: ( { label, checked, onChange } ) => (
-		<input
-			type="checkbox"
-			aria-label={ typeof label === 'string' ? label : undefined }
-			checked={ !! checked }
-			onChange={ e => onChange( e.target.checked ) }
-		/>
+	// on picker visibility and drive the enable toggles. `help` renders as a
+	// sibling node (as the real control does) so tests can assert on it.
+	CheckboxControl: ( { label, help, checked, onChange } ) => (
+		<>
+			<input
+				type="checkbox"
+				aria-label={ typeof label === 'string' ? label : undefined }
+				checked={ !! checked }
+				onChange={ e => onChange( e.target.checked ) }
+			/>
+			{ help && <span>{ help }</span> }
+		</>
 	),
 	ToggleControl: ( { label, checked, onChange } ) => (
 		<input
@@ -48,6 +52,7 @@ jest.mock( '@wordpress/components', () => ( {
 jest.mock( '../../../../../packages/components/src', () => ( {
 	Accordion: ( { children } ) => children,
 	AccordionPanel: ( { children } ) => children,
+	Badge: ( { text } ) => <span data-testid="badge">{ text }</span>,
 	Button: ( { children } ) => children,
 	// Section dividers pass alignment="full-width"; the divider under a section
 	// toggle does not, so the stub tags them apart for the tests that assert on
@@ -717,5 +722,77 @@ describe( 'ConfigureView per-direction sections', () => {
 		expect( screen.getByLabelText( 'Enable outbound sync' ).checked ).toBe( true );
 		expect( screen.queryByLabelText( 'How to sync deletion' ) ).toBeNull();
 		expect( screen.queryAllByTestId( 'toggle-divider' ) ).toHaveLength( 0 );
+	} );
+} );
+
+describe( 'ConfigureView outbound field details', () => {
+	beforeEach( () => {
+		mockSetHeaderData.mockClear();
+		useUnsavedChangesDialog.mockClear();
+		useUnsavedChangesDialog.mockReturnValue( { confirmDialog: null, requestConfirm: jest.fn() } );
+	} );
+
+	// No toggle fields, matching a payload predating outgoing_sync_enabled: the
+	// picker still renders unconditionally (see the "payload lacking the toggle
+	// fields" case above), which keeps this fixture minimal.
+	const withFieldDetails = () => ( {
+		esp: {
+			...INTEGRATION,
+			settings: [
+				{
+					key: 'outgoing_metadata_fields',
+					type: 'metadata',
+					label: 'Outgoing metadata fields',
+					value: [],
+					grouped_options: [
+						{
+							section: 'Identity',
+							fields: [ 'User Role', 'First name', 'Undetailed Field' ],
+							field_details: {
+								'User Role': { status: 'new', description: 'WordPress role of the reader.' },
+								'First name': { status: 'existing', description: "Reader's first name." },
+							},
+						},
+						{
+							section: 'Legacy',
+							fields: [ 'Account' ],
+							field_details: {
+								Account: { status: 'legacy', description: 'WordPress user account ID.' },
+							},
+						},
+					],
+				},
+			],
+		},
+	} );
+
+	it( "renders a field's description as CheckboxControl help text", () => {
+		renderConfigureView( { integrations: withFieldDetails() } );
+		expect( screen.getByText( 'WordPress role of the reader.' ) ).toBeInTheDocument();
+		expect( screen.getByText( "Reader's first name." ) ).toBeInTheDocument();
+	} );
+
+	it( 'renders a New badge only for a new-status field', () => {
+		renderConfigureView( { integrations: withFieldDetails() } );
+		const badges = screen.getAllByTestId( 'badge' );
+		expect( badges ).toHaveLength( 1 );
+		expect( badges[ 0 ] ).toHaveTextContent( 'New' );
+		// The badge sits on User Role's row, not First name's.
+		expect( screen.getByLabelText( 'User Role' ).parentElement ).toContainElement( badges[ 0 ] );
+	} );
+
+	it( 'renders no badge for existing or legacy fields', () => {
+		renderConfigureView( { integrations: withFieldDetails() } );
+		expect( screen.getByLabelText( 'First name' ) ).toBeInTheDocument();
+		expect( screen.getByLabelText( 'Account' ) ).toBeInTheDocument();
+		// Only User Role (status 'new') gets a badge; existing/legacy get none.
+		expect( screen.getAllByTestId( 'badge' ) ).toHaveLength( 1 );
+	} );
+
+	it( 'renders a field with no field_details entry with no help text and no badge', () => {
+		renderConfigureView( { integrations: withFieldDetails() } );
+		const checkbox = screen.getByLabelText( 'Undetailed Field' );
+		expect( checkbox ).toBeInTheDocument();
+		expect( checkbox.parentElement.querySelector( '[data-testid="badge"]' ) ).toBeNull();
 	} );
 } );

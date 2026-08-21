@@ -60,32 +60,39 @@ class Identity extends Contact_Metadata {
 	public static function get_fields_config() {
 		return [
 			'first_name'        => [
-				'name'   => 'First name',
-				'status' => 'existing',
+				'name'        => 'First name',
+				'description' => __( 'Reader\'s first name', 'newspack-plugin' ),
+				'status'      => 'existing',
 			],
 			'last_name'         => [
-				'name'   => 'Last name',
-				'status' => 'existing',
+				'name'        => 'Last name',
+				'description' => __( 'Reader\'s last name', 'newspack-plugin' ),
+				'status'      => 'existing',
 			],
 			'email'             => [
-				'name'   => 'Email',
-				'status' => 'existing',
+				'name'        => 'Email',
+				'description' => __( 'Reader\'s email address', 'newspack-plugin' ),
+				'status'      => 'existing',
 			],
 			'Account'           => [
-				'name'   => 'Account',
-				'status' => 'existing',
+				'name'        => 'Account',
+				'description' => __( 'WordPress user account ID of the reader', 'newspack-plugin' ),
+				'status'      => 'existing',
 			],
 			'User_Role'         => [
-				'name'   => 'User Role',
-				'status' => 'new',
+				'name'        => 'User Role',
+				'description' => __( 'WordPress role. One of: subscriber, contributor, admin, etc.', 'newspack-plugin' ),
+				'status'      => 'new',
 			],
 			'verified'          => [
-				'name'   => 'Verified',
-				'status' => 'new',
+				'name'        => 'Verified',
+				'description' => __( 'Whether the reader has verified their account via email link', 'newspack-plugin' ),
+				'status'      => 'new',
 			],
 			'Connected_Account' => [
-				'name'   => 'Connected Account',
-				'status' => 'existing',
+				'name'        => 'Connected Account',
+				'description' => __( 'SSO service used to register, if applicable (e.g. google, apple)', 'newspack-plugin' ),
+				'status'      => 'existing',
 			],
 		];
 	}

@@ -73,52 +73,64 @@ class Donation extends Subscription {
 	public static function get_fields_config() {
 		return [
 			'Donor_Status'                  => [
-				'name'   => 'Donor Status',
-				'status' => 'existing',
+				'name'        => 'Donor Status',
+				'description' => __( 'Summarized donor label. One of: Monthly Donor, Yearly Donor, Ex-Monthly Donor, Ex-Yearly Donor, Donor (one-time/no active recurring)', 'newspack-plugin' ),
+				'status'      => 'existing',
 			],
 			'Active_Donation_Count'         => [
-				'name'   => 'Active Donation Count',
-				'status' => 'new',
+				'name'        => 'Active Donation Count',
+				'description' => __( 'Number of currently active recurring donations the reader holds', 'newspack-plugin' ),
+				'status'      => 'new',
 			],
 			'Current_Donation_Start_Date'   => [
-				'name'   => 'Current Donation Start Date',
-				'status' => 'existing',
+				'name'        => 'Current Donation Start Date',
+				'description' => __( 'Start date of the most recent active recurring donation (MM/DD/YYYY)', 'newspack-plugin' ),
+				'status'      => 'existing',
 			],
 			'Current_Donation_End_Date'     => [
-				'name'   => 'Current Donation End Date',
-				'status' => 'existing',
+				'name'        => 'Current Donation End Date',
+				'description' => __( 'End date of the most recent recurring donation, if there is one (MM/DD/YYYY)', 'newspack-plugin' ),
+				'status'      => 'existing',
 			],
 			'Current_Donation_Cycle'        => [
-				'name'   => 'Current Donation Cycle',
-				'status' => 'existing',
+				'name'        => 'Current Donation Cycle',
+				'description' => __( 'Donation frequency. One of: month, year', 'newspack-plugin' ),
+				'status'      => 'existing',
 			],
 			'Current_Recurring_Donation'    => [
-				'name'   => 'Current Recurring Donation',
-				'status' => 'existing',
+				'name'        => 'Current Recurring Donation',
+				'description' => __( 'Amount of the active recurring donation', 'newspack-plugin' ),
+				'status'      => 'existing',
 			],
 			'Next_Donation_Date'            => [
-				'name'   => 'Next Donation Date',
-				'status' => 'existing',
+				'name'        => 'Next Donation Date',
+				'description' => __( 'Date of next scheduled recurring donation (MM/DD/YYYY)', 'newspack-plugin' ),
+				'status'      => 'existing',
 			],
 			'Current_Donation_Product_Name' => [
-				'name'   => 'Current Donation Product Name',
-				'status' => 'existing',
+				'name'        => 'Current Donation Product Name',
+				'description' => __( 'Name of the donation product', 'newspack-plugin' ),
+				'status'      => 'existing',
 			],
 			'Previous_Donation_Product'     => [
-				'name'   => 'Previous Donation Product',
-				'status' => 'existing',
+				'name'        => 'Previous Donation Product',
+				'description' => __( 'Donation product the reader contributed to before switching', 'newspack-plugin' ),
+				'status'      => 'existing',
 			],
 			'Previous_Donation_Amount'      => [
-				'name'   => 'Previous Donation Amount',
-				'status' => 'existing',
+				'name'        => 'Previous Donation Amount',
+				'description' => __( 'Donation amount before the reader switched to a new level', 'newspack-plugin' ),
+				'status'      => 'existing',
 			],
 			'Last_Donation_Amount'          => [
-				'name'   => 'Last Donation Amount',
-				'status' => 'existing',
+				'name'        => 'Last Donation Amount',
+				'description' => __( 'Amount of the most recent donation', 'newspack-plugin' ),
+				'status'      => 'existing',
 			],
 			'Last_Donation_Date'            => [
-				'name'   => 'Last Donation Date',
-				'status' => 'existing',
+				'name'        => 'Last Donation Date',
+				'description' => __( 'Date of most recent donation (MM/DD/YYYY)', 'newspack-plugin' ),
+				'status'      => 'existing',
 			],
 		];
 	}

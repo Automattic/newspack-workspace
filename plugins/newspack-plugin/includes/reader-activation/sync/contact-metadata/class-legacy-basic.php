@@ -62,41 +62,50 @@ class Legacy_Basic extends Contact_Metadata {
 	public static function get_fields_config() {
 		return [
 			'account'              => [
-				'name'   => 'Account',
-				'status' => 'legacy',
+				'name'        => 'Account',
+				'description' => __( 'WordPress user account ID of the reader.', 'newspack-plugin' ),
+				'status'      => 'legacy',
 			],
 			'registration_date'    => [
-				'name'   => 'Registration Date',
-				'status' => 'legacy',
+				'name'        => 'Registration Date',
+				'description' => __( 'Date the reader created their account.', 'newspack-plugin' ),
+				'status'      => 'legacy',
 			],
 			'connected_account'    => [
-				'name'   => 'Connected Account',
-				'status' => 'legacy',
+				'name'        => 'Connected Account',
+				'description' => __( 'SSO service used to register, if applicable (e.g. google, apple).', 'newspack-plugin' ),
+				'status'      => 'legacy',
 			],
 			'signup_page_utm'      => [
 				'name'           => 'Signup UTM: ',
+				'description'    => __( 'UTM parameters present on the signup page, synced as one field per parameter.', 'newspack-plugin' ),
 				'status'         => 'legacy',
 				'dynamic_suffix' => true,
 			],
 			'newsletter_selection' => [
-				'name'   => 'Newsletter Selection',
-				'status' => 'legacy',
+				'name'        => 'Newsletter Selection',
+				'description' => __( 'Comma-separated list of the newsletter lists the reader is subscribed to.', 'newspack-plugin' ),
+				'status'      => 'legacy',
 			],
 			'referer'              => [
-				'name'   => 'Referrer Path',
-				'status' => 'legacy',
+				'name'        => 'Referrer Path',
+				'description' => __( 'Referring page URL captured when the reader submitted a signup or donation form.', 'newspack-plugin' ),
+				'status'      => 'legacy',
 			],
 			'registration_page'    => [
-				'name'   => 'Registration Page',
-				'status' => 'legacy',
+				'name'        => 'Registration Page',
+				'description' => __( 'URL of the page where the reader registered.', 'newspack-plugin' ),
+				'status'      => 'legacy',
 			],
 			'current_page_url'     => [
-				'name'   => 'Registration Page',
-				'status' => 'legacy',
+				'name'        => 'Registration Page',
+				'description' => __( 'URL of the page the reader was on when they registered; an alternate source for the same value as Registration Page.', 'newspack-plugin' ),
+				'status'      => 'legacy',
 			],
 			'registration_method'  => [
-				'name'   => 'Registration Method',
-				'status' => 'legacy',
+				'name'        => 'Registration Method',
+				'description' => __( 'How the reader registered (e.g. registration wall, newsletter, checkout, popup, manual, or an SSO provider).', 'newspack-plugin' ),
+				'status'      => 'legacy',
 			],
 		];
 	}

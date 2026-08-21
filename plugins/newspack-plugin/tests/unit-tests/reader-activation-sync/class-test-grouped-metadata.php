@@ -182,4 +182,108 @@ class Test_Grouped_Metadata extends WP_UnitTestCase {
 			$this->assertSame( 'Legacy', $sections[ $i ], 'Legacy groups must be the last groups in the list.' );
 		}
 	}
+
+	public function test_field_details_carries_status_and_description_for_a_new_field() {
+		$groups   = Metadata::get_grouped_default_fields();
+		$identity = $this->find_group( $groups, 'Identity' );
+
+		$this->assertNotNull( $identity, 'Identity group should be present.' );
+		$this->assertArrayHasKey( 'field_details', $identity, 'Identity group should carry field_details.' );
+		$this->assertArrayHasKey( 'User Role', $identity['field_details'] );
+		$this->assertSame( 'new', $identity['field_details']['User Role']['status'] );
+		$this->assertIsString( $identity['field_details']['User Role']['description'] );
+		$this->assertNotEmpty( $identity['field_details']['User Role']['description'] );
+	}
+
+	public function test_field_details_carries_status_and_description_for_a_legacy_field() {
+		$groups = Metadata::get_grouped_default_fields();
+		$legacy = $this->find_group( $groups, 'Legacy' );
+
+		$this->assertNotNull( $legacy, 'Legacy group should be present.' );
+		$this->assertArrayHasKey( 'field_details', $legacy, 'Legacy group should carry field_details.' );
+		$this->assertArrayHasKey( 'Account', $legacy['field_details'] );
+		$this->assertSame( 'legacy', $legacy['field_details']['Account']['status'] );
+		$this->assertIsString( $legacy['field_details']['Account']['description'] );
+		$this->assertNotEmpty( $legacy['field_details']['Account']['description'] );
+	}
+
+	/**
+	 * The field_details key is an additive sibling of 'fields', which must
+	 * keep its original shape: a flat, sequentially-indexed list of
+	 * display-name strings, not a map or a list of objects.
+	 */
+	public function test_fields_array_shape_is_unchanged_by_field_details() {
+		$groups   = Metadata::get_grouped_default_fields();
+		$identity = $this->find_group( $groups, 'Identity' );
+
+		$this->assertIsArray( $identity['fields'] );
+		$this->assertContains( 'User Role', $identity['fields'] );
+		foreach ( $identity['fields'] as $field ) {
+			$this->assertIsString( $field, 'fields must remain a flat list of display-name strings.' );
+		}
+		// A list, not a map: sequential integer keys starting at 0.
+		$this->assertSame( array_values( $identity['fields'] ), $identity['fields'] );
+	}
+
+	/**
+	 * Legacy_Basic declares 'registration_page' before 'current_page_url',
+	 * and both display as "Registration Page" — the first raw key's details
+	 * must win rather than being overwritten by the second.
+	 */
+	public function test_field_details_first_raw_key_wins_a_shared_label() {
+		$groups = Metadata::get_grouped_default_fields();
+		$legacy = $this->find_group( $groups, 'Legacy' );
+
+		$this->assertArrayHasKey( 'Registration Page', $legacy['field_details'] );
+		$this->assertSame(
+			'URL of the page where the reader registered.',
+			$legacy['field_details']['Registration Page']['description'],
+			'registration_page is declared first, so its description should win over current_page_url.'
+		);
+	}
+
+	/**
+	 * The field_details map must be resolved by each class's raw key, not by
+	 * the (possibly renamed) label, so a site-renamed label still finds its
+	 * config entry.
+	 */
+	public function test_field_details_resolves_by_raw_key_through_a_renamed_label() {
+		add_filter(
+			'newspack_ras_metadata_keys',
+			function ( $keys ) {
+				$keys['User_Role'] = 'Reader Role';
+				return $keys;
+			}
+		);
+
+		$groups   = Metadata::get_grouped_default_fields();
+		$identity = $this->find_group( $groups, 'Identity' );
+
+		$this->assertContains( 'Reader Role', $identity['fields'] );
+		$this->assertArrayNotHasKey( 'User Role', $identity['field_details'], 'The pre-rename label must not linger in field_details.' );
+		$this->assertArrayHasKey( 'Reader Role', $identity['field_details'] );
+		$this->assertSame( 'new', $identity['field_details']['Reader Role']['status'] );
+	}
+
+	/**
+	 * A filter-added field belongs to no metadata class, so there is no
+	 * config to draw status/description from — field_details must be
+	 * omitted entirely for that group rather than present-but-empty.
+	 */
+	public function test_additional_group_has_no_field_details_for_orphan_fields() {
+		add_filter(
+			'newspack_ras_metadata_keys',
+			function ( $keys ) {
+				$keys['custom_orphan'] = 'Custom Orphan Label';
+				return $keys;
+			}
+		);
+
+		$groups     = Metadata::get_grouped_default_fields();
+		$additional = $this->find_group( $groups, 'Additional' );
+
+		$this->assertNotNull( $additional );
+		$this->assertContains( 'Custom Orphan Label', $additional['fields'] );
+		$this->assertArrayNotHasKey( 'field_details', $additional );
+	}
 }

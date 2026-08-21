@@ -402,25 +402,31 @@ class Metadata {
 	/**
 	 * Get the list of possible fields to be synced, grouped by section.
 	 *
-	 * Returns an array of groups, each with a 'section' label and 'fields' array.
-	 * Every class with a section name gets its own group, and filter-added
-	 * fields that belong to no class land in "Additional". Adjacent groups
-	 * sharing a label are folded together, so the two legacy classes render
-	 * as one "Legacy" panel rather than two identically-titled ones.
+	 * Returns an array of groups, each with a 'section' label and 'fields'
+	 * array, plus a 'field_details' map (display name => status/description)
+	 * for whichever fields in the group have that data. Every class with a
+	 * section name gets its own group, and filter-added fields that belong to
+	 * no class land in "Additional". Adjacent groups sharing a label are
+	 * folded together, so the two legacy classes render as one "Legacy" panel
+	 * rather than two identically-titled ones.
 	 *
 	 * All-legacy groups (every field 'legacy' in its class's own field config)
 	 * sort last, checked via that status rather than the section label so it
 	 * survives label translation or renaming.
 	 *
-	 * Each class's fields are resolved from the filtered map by its own raw
-	 * keys, not by label text — labels can collide across schemas (legacy
-	 * `account` and new `Account` are both "Account"), so matching by label
-	 * would keep a class alive on a sibling class's field.
+	 * Each class's fields — and field_details — are resolved from the
+	 * filtered map by its own raw keys, not by label text — labels can
+	 * collide across schemas (legacy `account` and new `Account` are both
+	 * "Account"), so matching by label would keep a class alive on a sibling
+	 * class's field. When two raw keys in the same class share one label
+	 * (legacy `registration_page` / `current_page_url` are both "Registration
+	 * Page"), the first raw key encountered supplies that label's
+	 * field_details.
 	 *
-	 * @return array<int, array{section: string, fields: list<string>}> List of
-	 *   groups, each with a non-empty section label and an ordered list of field
-	 *   names, all-legacy groups sorted last. May be filtered by
-	 *   `newspack_ras_grouped_metadata_fields`.
+	 * @return array<int, array{section: string, fields: list<string>, field_details?: array<string, array{status?: string, description?: string}>}>
+	 *   List of groups, each with a non-empty section label and an ordered
+	 *   list of field names, all-legacy groups sorted last. May be filtered
+	 *   by `newspack_ras_grouped_metadata_fields`.
 	 */
 	public static function get_grouped_default_fields(): array {
 		$classes          = self::get_metadata_classes();
@@ -438,13 +444,25 @@ class Metadata {
 					continue;
 				}
 
-				$fields     = [];
-				$all_legacy = true;
+				$field_config  = $class::get_fields_config();
+				$fields        = [];
+				$field_details = [];
+				$all_legacy    = true;
 				foreach ( array_keys( $class::get_fields() ) as $raw_key ) {
-					if ( isset( $label_map[ $raw_key ] ) ) {
-						$fields[] = $label_map[ $raw_key ];
-						if ( 'legacy' !== ( $status_by_class[ $class ][ $raw_key ] ?? null ) ) {
-							$all_legacy = false;
+					if ( ! isset( $label_map[ $raw_key ] ) ) {
+						continue;
+					}
+					$label    = $label_map[ $raw_key ];
+					$fields[] = $label;
+					if ( 'legacy' !== ( $status_by_class[ $class ][ $raw_key ] ?? null ) ) {
+						$all_legacy = false;
+					}
+					// First raw key to reach a shared label wins its details (see
+					// the docblock note on registration_page/current_page_url).
+					if ( ! isset( $field_details[ $label ] ) ) {
+						$details = self::build_field_details( $field_config[ $raw_key ] ?? [] );
+						if ( ! empty( $details ) ) {
+							$field_details[ $label ] = $details;
 						}
 					}
 				}
@@ -458,6 +476,9 @@ class Metadata {
 					'section' => $section,
 					'fields'  => $fields,
 				];
+				if ( ! empty( $field_details ) ) {
+					$group['field_details'] = $field_details;
+				}
 				if ( $all_legacy ) {
 					$legacy_groups[] = $group;
 				} else {
@@ -480,10 +501,34 @@ class Metadata {
 		/**
 		 * Filters the list of possible metadata fields to be synced, grouped by section.
 		 *
-		 * @param array[]  $groups           Array of [ 'section' => string, 'fields' => string[] ].
+		 * @param array[]  $groups           Array of [ 'section' => string, 'fields' => string[], 'field_details' => array ].
 		 * @param string[] $available_fields Flat list of filtered available metadata field names.
 		 */
 		return \apply_filters( 'newspack_ras_grouped_metadata_fields', $groups, $available_fields );
+	}
+
+	/**
+	 * Build the { status, description } detail pair for one field's config
+	 * entry, as found in a class's get_fields_config().
+	 *
+	 * The description key is omitted rather than set to an empty string when
+	 * the field declares none, so the frontend can treat "no description" as
+	 * a simple absent-key check.
+	 *
+	 * @param array $config One field's entry from get_fields_config(), or [].
+	 *
+	 * @return array{status?: string, description?: string} Empty when the
+	 *   config carries neither a status nor a description.
+	 */
+	private static function build_field_details( array $config ): array {
+		$details = [];
+		if ( isset( $config['status'] ) ) {
+			$details['status'] = $config['status'];
+		}
+		if ( ! empty( $config['description'] ) ) {
+			$details['description'] = $config['description'];
+		}
+		return $details;
 	}
 
 	/**
@@ -494,9 +539,9 @@ class Metadata {
 	 * way to tell them apart. Only ADJACENT groups merge, so the sort order
 	 * (all-legacy groups last) still means what it says.
 	 *
-	 * @param array<int, array{section: string, fields: list<string>}> $groups Ordered groups.
+	 * @param array<int, array{section: string, fields: list<string>, field_details?: array}> $groups Ordered groups.
 	 *
-	 * @return array<int, array{section: string, fields: list<string>}>
+	 * @return array<int, array{section: string, fields: list<string>, field_details?: array}>
 	 */
 	private static function merge_adjacent_groups( array $groups ): array {
 		$merged = [];
@@ -504,6 +549,11 @@ class Metadata {
 			$last = count( $merged ) - 1;
 			if ( $last >= 0 && $merged[ $last ]['section'] === $group['section'] ) {
 				$merged[ $last ]['fields'] = array_values( array_unique( array_merge( $merged[ $last ]['fields'], $group['fields'] ) ) );
+				if ( ! empty( $group['field_details'] ) ) {
+					// `+` keeps the earlier group's entry on a label collision,
+					// the same first-wins rule used within a single group.
+					$merged[ $last ]['field_details'] = ( $merged[ $last ]['field_details'] ?? [] ) + $group['field_details'];
+				}
 				continue;
 			}
 			$merged[] = $group;
