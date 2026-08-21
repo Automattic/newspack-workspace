@@ -37,7 +37,8 @@ interface ScopeSource {
 	savedPath: ( ids: number[] ) => string;
 }
 
-const SOURCES: Record< string, ScopeSource > = {
+// Exported for tests — the path builders are the behavior worth locking.
+export const SOURCES: Record< string, ScopeSource > = {
 	product_ids: {
 		label: __( 'Products', 'newspack-plugin' ),
 		placeholder: __( 'Search products and variations…', 'newspack-plugin' ),
@@ -75,10 +76,21 @@ export default function ScopeTargets( { scopeType, value, onChange }: ScopeTarge
 			label: decodeEntities( item.name ?? item.title?.rendered ?? `#${ item.id }` ),
 		} ) );
 
-	const fetchSuggestions = ( search: string ) => apiFetch< PickerEntity[] >( { path: source.suggestionsPath( search ) } ).then( toOptions );
+	// Both fetches always resolve: AutocompleteTokenField does not catch
+	// rejections, so a failing route (e.g. an engine build without
+	// /wc-dynamic-pricing/v1/products) would strand the field in its loading
+	// state. An empty list degrades to bare-id tokens instead.
+	const fetchSuggestions = ( search: string ) =>
+		apiFetch< PickerEntity[] >( { path: source.suggestionsPath( search ) } )
+			.then( toOptions )
+			.catch( () => [] );
 
 	const fetchSavedInfo = ( ids: number[] ) =>
-		ids.length ? apiFetch< PickerEntity[] >( { path: source.savedPath( ids ) } ).then( toOptions ) : Promise.resolve( [] );
+		ids.length
+			? apiFetch< PickerEntity[] >( { path: source.savedPath( ids ) } )
+					.then( toOptions )
+					.catch( () => [] )
+			: Promise.resolve( [] );
 
 	return (
 		<AutocompleteTokenField
