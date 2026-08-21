@@ -372,7 +372,7 @@ const ReorderModal = ( { title, ids, fetchItems, onSave, onClose } ) => {
 					onConfirm={ onClose }
 					onCancel={ () => setIsConfirmingDiscard( false ) }
 				>
-					{ __( 'Discard the new order?', 'newspack-blocks' ) }
+					{ __( 'The order you set will be lost.', 'newspack-blocks' ) }
 				</ConfirmDialog>
 			) }
 		</>

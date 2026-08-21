@@ -66,6 +66,8 @@ const titles = () => Array.from( document.querySelectorAll( '.newspack-blocks-re
 
 const overlay = () => document.querySelector( '.components-modal__screen-overlay' );
 
+const discardPrompt = () => screen.queryByRole( 'dialog', { name: 'Discard the new order?' } );
+
 // jsdom has no `PointerEvent`, and `fireEvent.pointerDown` would fall back to a
 // plain `Event` and drop `button`.
 const press = ( from, to, button = 0 ) => {
@@ -204,14 +206,14 @@ describe( 'ReorderModal', () => {
 		const { onClose } = renderModal();
 		fireEvent.click( await screen.findByRole( 'button', { name: 'Cancel' } ) );
 		expect( onClose ).toHaveBeenCalled();
-		expect( screen.queryByText( 'Discard the new order?' ) ).not.toBeInTheDocument();
+		expect( discardPrompt() ).not.toBeInTheDocument();
 	} );
 
 	it( 'asks before discarding and holds the modal open until answered', async () => {
 		const { onSave, onClose } = renderModal();
 		fireEvent.click( await screen.findByLabelText( 'Move Up: Gamma' ) );
 		fireEvent.click( screen.getByRole( 'button', { name: 'Cancel' } ) );
-		expect( screen.getByText( 'Discard the new order?' ) ).toBeInTheDocument();
+		expect( discardPrompt() ).toBeInTheDocument();
 		expect( onClose ).not.toHaveBeenCalled();
 		expect( onSave ).not.toHaveBeenCalled();
 	} );
@@ -222,7 +224,7 @@ describe( 'ReorderModal', () => {
 		const { onClose } = renderModal();
 		fireEvent.click( await screen.findByLabelText( 'Move Up: Gamma' ) );
 		fireEvent.keyDown( document.activeElement, { key: 'Escape' } );
-		expect( screen.getByText( 'Discard the new order?' ) ).toBeInTheDocument();
+		expect( discardPrompt() ).toBeInTheDocument();
 		expect( onClose ).not.toHaveBeenCalled();
 	} );
 
@@ -231,14 +233,14 @@ describe( 'ReorderModal', () => {
 		await screen.findByText( 'Alpha' );
 		fireEvent.keyDown( screen.getByRole( 'dialog' ), { key: 'Escape' } );
 		expect( onClose ).toHaveBeenCalled();
-		expect( screen.queryByText( 'Discard the new order?' ) ).not.toBeInTheDocument();
+		expect( discardPrompt() ).not.toBeInTheDocument();
 	} );
 
 	it( 'asks before discarding when the header close button dismisses the modal', async () => {
 		const { onClose } = renderModal();
 		fireEvent.click( await screen.findByLabelText( 'Move Up: Gamma' ) );
 		fireEvent.click( screen.getByRole( 'button', { name: 'Close' } ) );
-		expect( screen.getByText( 'Discard the new order?' ) ).toBeInTheDocument();
+		expect( discardPrompt() ).toBeInTheDocument();
 		expect( onClose ).not.toHaveBeenCalled();
 	} );
 
@@ -253,7 +255,7 @@ describe( 'ReorderModal', () => {
 		const { onClose } = renderModal();
 		fireEvent.click( await screen.findByLabelText( 'Move Up: Gamma' ) );
 		press( overlay(), overlay() );
-		expect( screen.getByText( 'Discard the new order?' ) ).toBeInTheDocument();
+		expect( discardPrompt() ).toBeInTheDocument();
 		expect( onClose ).not.toHaveBeenCalled();
 	} );
 
@@ -262,7 +264,7 @@ describe( 'ReorderModal', () => {
 		await screen.findByText( 'Alpha' );
 		press( document.querySelector( '.newspack-blocks-reorder-modal__item' ), overlay() );
 		expect( onClose ).not.toHaveBeenCalled();
-		expect( screen.queryByText( 'Discard the new order?' ) ).not.toBeInTheDocument();
+		expect( discardPrompt() ).not.toBeInTheDocument();
 	} );
 
 	it( 'ignores a secondary-button press on the overlay', async () => {
@@ -272,12 +274,22 @@ describe( 'ReorderModal', () => {
 		expect( onClose ).not.toHaveBeenCalled();
 	} );
 
+	// `ConfirmDialog` announces `contentLabel` as the dialog's name and hides its
+	// header, so repeating it in the body would have it read out twice.
+	it( 'states the consequence in the discard prompt rather than repeating its name', async () => {
+		renderModal();
+		fireEvent.click( await screen.findByLabelText( 'Move Up: Gamma' ) );
+		fireEvent.click( screen.getByRole( 'button', { name: 'Cancel' } ) );
+		expect( discardPrompt() ).toHaveTextContent( 'The order you set will be lost.' );
+		expect( discardPrompt() ).not.toHaveTextContent( 'Discard the new order?' );
+	} );
+
 	it( 'keeps the reordered list when the discard is dismissed', async () => {
 		const { onSave, onClose } = renderModal();
 		fireEvent.click( await screen.findByLabelText( 'Move Up: Gamma' ) );
 		fireEvent.click( screen.getByRole( 'button', { name: 'Cancel' } ) );
 		fireEvent.click( screen.getByRole( 'button', { name: 'Keep editing' } ) );
-		expect( screen.queryByText( 'Discard the new order?' ) ).not.toBeInTheDocument();
+		expect( discardPrompt() ).not.toBeInTheDocument();
 		expect( titles() ).toEqual( [ 'Alpha', 'Gamma', 'Beta' ] );
 		expect( onClose ).not.toHaveBeenCalled();
 		expect( onSave ).not.toHaveBeenCalled();
