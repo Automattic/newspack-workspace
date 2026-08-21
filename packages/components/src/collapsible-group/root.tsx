@@ -14,8 +14,11 @@ import classNames from 'classnames';
  */
 import Divider from '../divider';
 import { TitleLevelContext, useTitleLevel } from './context';
-import type { CollapsibleGroupItemProps, CollapsibleGroupProps } from './types';
+import type { CollapsibleGroupItemProps, CollapsibleGroupProps, HeadingLevel } from './types';
 import './style.scss';
+
+const clampTitleLevel = ( level: unknown ): HeadingLevel | undefined =>
+	Number.isFinite( level ) ? ( Math.min( 6, Math.max( 1, Math.round( level as number ) ) ) as HeadingLevel ) : undefined;
 
 const Root = ( { children, className, gap = 'xl', hideSingleTitle = false, titleLevel }: CollapsibleGroupProps ) => {
 	const inheritedTitleLevel = useTitleLevel();
@@ -35,7 +38,7 @@ const Root = ( { children, className, gap = 'xl', hideSingleTitle = false, title
 			</Stack>
 		);
 
-	return <TitleLevelContext.Provider value={ titleLevel ?? inheritedTitleLevel }>{ content }</TitleLevelContext.Provider>;
+	return <TitleLevelContext.Provider value={ clampTitleLevel( titleLevel ) ?? inheritedTitleLevel }>{ content }</TitleLevelContext.Provider>;
 };
 
 export default Root;

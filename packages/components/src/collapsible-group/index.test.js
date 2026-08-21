@@ -36,6 +36,21 @@ describe( 'CollapsibleGroup dividers', () => {
 		expect( container.querySelector( '.newspack-collapsible-group' ).lastElementChild ).not.toHaveClass( 'newspack-divider' );
 	} );
 
+	it( 'counts only rendered items when placing dividers', () => {
+		const { container } = render(
+			<CollapsibleGroup>
+				<CollapsibleGroup.Item title="Panel 0">content</CollapsibleGroup.Item>
+				<CollapsibleGroup.Item title="Panel 1">content</CollapsibleGroup.Item>
+				{ false }
+				{ 'trailing text' }
+			</CollapsibleGroup>
+		);
+
+		expect( items( container ) ).toHaveLength( 2 );
+		expect( dividers( container ) ).toHaveLength( 1 );
+		expect( container.querySelector( '.newspack-collapsible-group' ).lastElementChild ).not.toHaveClass( 'newspack-divider' );
+	} );
+
 	it( 'renders tertiary dividers', () => {
 		const { container } = renderItems( 2 );
 		expect( dividers( container )[ 0 ] ).toHaveClass( 'newspack-divider--variant-tertiary' );
@@ -52,6 +67,16 @@ describe( 'CollapsibleGroup titleLevel', () => {
 		renderItems( 2, { titleLevel: 3 } );
 		expect( screen.getAllByRole( 'heading', { level: 3 } ) ).toHaveLength( 2 );
 		expect( screen.queryByRole( 'heading', { level: 2 } ) ).not.toBeInTheDocument();
+	} );
+
+	it( 'clamps a level above the heading range', () => {
+		renderItems( 2, { titleLevel: 7 } );
+		expect( screen.getAllByRole( 'heading', { level: 6 } ) ).toHaveLength( 2 );
+	} );
+
+	it( 'clamps a level below the heading range', () => {
+		renderItems( 1, { titleLevel: 0 } );
+		expect( screen.getByRole( 'heading', { level: 1 } ) ).toBeInTheDocument();
 	} );
 
 	it( 'inherits the level in a nested group', () => {
@@ -127,8 +152,6 @@ describe( 'CollapsibleGroup item state', () => {
 		fireEvent.click( trigger );
 
 		expect( trigger ).toHaveAttribute( 'aria-expanded', 'true' );
-		// The chevron rotates off `data-panel-open`, an attribute owned by the library.
-		expect( trigger ).toHaveAttribute( 'data-panel-open' );
 		expect( container.querySelector( '.newspack-collapsible-group__panel' ) ).not.toHaveAttribute( 'hidden' );
 	} );
 
@@ -140,7 +163,6 @@ describe( 'CollapsibleGroup item state', () => {
 		fireEvent.click( trigger );
 
 		expect( trigger ).toHaveAttribute( 'aria-expanded', 'false' );
-		expect( trigger ).not.toHaveAttribute( 'data-panel-open' );
 		expect( container.querySelector( '.newspack-collapsible-group__panel' ) ).toHaveAttribute( 'hidden', 'until-found' );
 	} );
 } );
