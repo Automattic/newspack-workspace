@@ -23,9 +23,8 @@ import { __experimentalHStack as HStack, __experimentalVStack as VStack } from '
  */
 import Badge, { BadgeLevel } from '../badge';
 import Card from '../card';
+import type { HeadingLevel } from '../types';
 import './style.scss';
-
-type HeadingLevel = 1 | 2 | 3 | 4 | 5 | 6;
 
 type CardFormProps = {
 	title: string;

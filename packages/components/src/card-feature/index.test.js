@@ -29,16 +29,16 @@ describe( 'CardFeature', () => {
 	} );
 
 	describe( 'structure', () => {
-		it( 'renders the title as a level-2 heading and the description alongside it', () => {
+		it( 'renders the title as a level-3 heading and the description alongside it', () => {
 			render( <CardFeature title="Content gifting" description="Let subscribers share gated articles." /> );
-			expect( screen.getByRole( 'heading', { level: 2 } ) ).toHaveTextContent( 'Content gifting' );
+			expect( screen.getByRole( 'heading', { level: 3 } ) ).toHaveTextContent( 'Content gifting' );
 			expect( screen.getByText( 'Let subscribers share gated articles.' ) ).toBeInTheDocument();
 		} );
 
 		it( 'renders the title at the requested heading level', () => {
-			render( <CardFeature title="Content gifting" titleLevel={ 3 } /> );
-			expect( screen.getByRole( 'heading', { level: 3 } ) ).toHaveTextContent( 'Content gifting' );
-			expect( screen.queryByRole( 'heading', { level: 2 } ) ).not.toBeInTheDocument();
+			render( <CardFeature title="Content gifting" headingLevel={ 4 } /> );
+			expect( screen.getByRole( 'heading', { level: 4 } ) ).toHaveTextContent( 'Content gifting' );
+			expect( screen.queryByRole( 'heading', { level: 3 } ) ).not.toBeInTheDocument();
 		} );
 
 		it( 'omits the description paragraph when none is passed', () => {
@@ -51,7 +51,7 @@ describe( 'CardFeature', () => {
 			const card = container.querySelector( '.newspack-card-feature' );
 			const actions = container.querySelector( '.newspack-card-feature__actions' );
 			expect( actions.parentElement ).toBe( card );
-			expect( actions ).not.toContainElement( screen.getByRole( 'heading', { level: 2 } ) );
+			expect( actions ).not.toContainElement( screen.getByRole( 'heading', { level: 3 } ) );
 			expect( actions ).toContainElement( primaryButton() );
 		} );
 	} );

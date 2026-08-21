@@ -18,6 +18,7 @@ import { Card, Stack } from '@wordpress/ui';
  */
 import Badge, { type BadgeLevel } from '../badge';
 import Button from '../button';
+import type { HeadingLevel } from '../types';
 import './style.scss';
 
 type CardFeatureIcon = {
@@ -35,8 +36,6 @@ type CardFeatureIcon = {
 	radius?: 'small' | 'full';
 };
 
-type HeadingLevel = 1 | 2 | 3 | 4 | 5 | 6;
-
 type MoreControl = {
 	title: string;
 	onClick: () => void;
@@ -45,8 +44,8 @@ type MoreControl = {
 
 type CardFeatureProps = {
 	title: string;
-	/** Heading level for the title: 3 under a `SectionHeader`, 2 directly under a page's h1. Practical range is 2-6. */
-	titleLevel?: HeadingLevel;
+	/** Heading level for the title. Defaults to 3, which sits under a `SectionHeader` or a `WizardsTab` heading. */
+	headingLevel?: HeadingLevel;
 	description?: string;
 	/** Icon shown beside the title: a descriptor (coloured badge) or a ready element rendered as-is. */
 	icon?: CardFeatureIcon | React.ReactElement;
@@ -99,7 +98,7 @@ type CardFeatureProps = {
  */
 const CardFeature = ( {
 	title,
-	titleLevel = 2,
+	headingLevel = 3,
 	description,
 	icon,
 	enabled = false,
@@ -180,7 +179,7 @@ const CardFeature = ( {
 			<Card.Header>
 				<Stack direction="row" align="start" gap="lg">
 					<Stack className="newspack-card-feature__content" direction="column" gap="sm">
-						{ createElement( `h${ titleLevel }`, { className: 'newspack-card-feature__title' }, title ) }
+						{ createElement( `h${ headingLevel }`, { className: 'newspack-card-feature__title' }, title ) }
 						{ description && <p className="newspack-card-feature__description">{ description }</p> }
 					</Stack>
 					{ renderedIcon }

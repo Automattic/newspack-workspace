@@ -185,7 +185,7 @@ import { __ } from '@wordpress/i18n';
 | Prop | Type | Default | Description |
 |---|---|---|---|
 | `title` | `string` | — | Card heading (**required**) |
-| `titleLevel` | `2`–`6` | `2` | Heading level for the title. Use `3` under a `SectionHeader`, which is itself an h2; use `2` when the cards sit directly under a page's h1 |
+| `headingLevel` | `2`–`6` | `3` | Heading level for the title. The default sits under a `SectionHeader` or a `WizardsTab` heading, both of which are h2. Raise it when the cards sit under a deeper section label |
 | `description` | `string` | — | Supporting text below the title |
 | `icon` | `CardFeatureIcon \| ReactElement` | — | Icon displayed on the right. A descriptor gets the 40 × 40 container; a ready element renders as-is. See `CardFeatureIcon` below. |
 | `enabled` | `boolean` | `false` | Whether the feature is currently enabled |
