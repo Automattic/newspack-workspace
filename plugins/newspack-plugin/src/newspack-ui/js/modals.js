@@ -78,7 +78,11 @@ domReady( function () {
 		} );
 
 		// Form-submit modals: show a spinner on the submit button while the form
-		// navigates away. No need to remove the class — page reloads. Covers both
+		// navigates away. For forms that reload the page this is the whole story —
+		// the class is gone after the reload. Forms that intercept submit and stay
+		// on the page (e.g. the reader auth form) must clear the class themselves;
+		// the auth form does this in reader-activation-auth/auth-form.js, where it
+		// also adds the class for its inline (non-modal) instances. Covers both
 		// shapes: form IS the modal content, or form lives inside a content section.
 		const modalForm = modal.querySelector( 'form.newspack-ui__modal__content, .newspack-ui__modal__content form' );
 		if ( modalForm ) {

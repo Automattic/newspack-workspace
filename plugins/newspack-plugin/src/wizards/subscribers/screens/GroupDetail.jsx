@@ -29,18 +29,19 @@ import {
 	Snackbar,
 	__experimentalHStack as HStack, // eslint-disable-line @wordpress/no-unsafe-wp-apis
 } from '@wordpress/components';
+import { Badge } from '@wordpress/ui';
 
 /**
  * Internal dependencies.
  */
-import { Badge, Button, DataViews, Divider, Notice, Router, Waiting } from '../../../../packages/components/src';
+import { Button, DataViews, Divider, Notice, Router, Waiting } from '../../../../packages/components/src';
 import './style.scss';
 import { WIZARD_STORE_NAMESPACE } from '../../../../packages/components/src/wizard/store';
 import { useGroup, useGroupActions } from '../data/use-group';
 import { SHOW_AVATARS, useAvatars } from '../data/use-avatars';
 import { fmtDate } from '../format';
 import { GROUP_LABEL, GROUP_LABEL_PLURAL, ROLE_LABELS, ROLE_RANK } from '../labels';
-import { STATUS_LABELS, STATUS_BADGE_LEVEL } from '../status';
+import { STATUS_LABELS, STATUS_BADGE_INTENT } from '../status';
 import { seatCountText, seatsRemaining } from '../flows/capacity';
 
 import AddMembersFlow from '../flows/AddMembersFlow';
@@ -168,7 +169,7 @@ function GroupDetailView() {
 			sectionTitle: () => (
 				<>
 					<span>{ withOwner( group.plan ) }</span>
-					<Badge text={ STATUS_LABELS[ group.status ] } level={ STATUS_BADGE_LEVEL[ group.status ] } />
+					<Badge intent={ STATUS_BADGE_INTENT[ group.status ] }>{ STATUS_LABELS[ group.status ] }</Badge>
 				</>
 			),
 			actions: [
@@ -217,7 +218,7 @@ function GroupDetailView() {
 					'member' === item.role ? (
 						<span>{ ROLE_LABELS.member }</span>
 					) : (
-						<Badge level={ 'owner' === item.role ? 'success' : 'info' } text={ ROLE_LABELS[ item.role ] } />
+						<Badge intent={ 'owner' === item.role ? 'stable' : 'informational' }>{ ROLE_LABELS[ item.role ] }</Badge>
 					),
 				enableSorting: true,
 			},
@@ -304,9 +305,9 @@ function GroupDetailView() {
 				getValue: ( { item } ) => item.status,
 				render: ( { item } ) =>
 					'expired' === item.status ? (
-						<Badge level="error" text={ __( 'Expired', 'newspack-plugin' ) } />
+						<Badge intent="high">{ __( 'Expired', 'newspack-plugin' ) }</Badge>
 					) : (
-						<Badge level="warning" text={ __( 'Pending', 'newspack-plugin' ) } />
+						<Badge intent="medium">{ __( 'Pending', 'newspack-plugin' ) }</Badge>
 					),
 				enableSorting: false,
 			},

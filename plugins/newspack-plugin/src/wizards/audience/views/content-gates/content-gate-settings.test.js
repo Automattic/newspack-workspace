@@ -58,7 +58,6 @@ jest.mock( '@wordpress/components', () => {
 jest.mock( '../../../../../packages/components/src', () => {
 	const React = require( 'react' );
 	return {
-		Badge: ( { text } ) => React.createElement( 'span', null, text ),
 		Grid: ( { children } ) => React.createElement( 'div', null, children ),
 		Card: ( { children, __experimentalCoreProps } ) =>
 			React.createElement(
@@ -87,7 +86,7 @@ jest.mock( './edit/content-rule-control', () => ( { __esModule: true, default: (
 jest.mock( './utils', () => ( {
 	getEditGateLayoutUrl: () => '#',
 	getGateStatus: () => 'Active',
-	getGateStatusBadgeLevel: () => 'success',
+	getGateStatusBadgeIntent: () => 'stable',
 } ) );
 
 describe( 'ContentGateSettings per-gate actions', () => {

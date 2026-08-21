@@ -1,3 +1,10 @@
+## newspack-network [2.22.1](https://github.com/Automattic/newspack-workspace/compare/newspack-network@2.22.0...newspack-network@2.22.1) (2026-08-19)
+
+
+### Bug Fixes
+
+* **network:** distribute dynamic galleries as resolved images ([#918](https://github.com/Automattic/newspack-workspace/issues/918)) ([0e1d1a1](https://github.com/Automattic/newspack-workspace/commit/0e1d1a149e48ba2f6425477eea41164fc6b195d7))
+
 # newspack-network [2.22.0](https://github.com/Automattic/newspack-workspace/compare/newspack-network@2.21.2...newspack-network@2.22.0) (2026-08-17)
 
 

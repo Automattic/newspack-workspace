@@ -21,18 +21,19 @@ import { __, sprintf } from '@wordpress/i18n';
 import { useDispatch } from '@wordpress/data';
 import { filterSortAndPaginate } from '@wordpress/dataviews';
 import { __experimentalHStack as HStack } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
+import { Badge } from '@wordpress/ui';
 
 /**
  * Internal dependencies.
  */
-import { Badge, Button, DataViews, Notice, Router, Waiting } from '../../../../packages/components/src';
+import { Button, DataViews, Notice, Router, Waiting } from '../../../../packages/components/src';
 import { fmtDate } from '../format';
 import './style.scss';
 import { SHOW_AVATARS, useAvatars } from '../data/use-avatars';
 import { useGroups } from '../data/use-groups';
 import { WIZARD_STORE_NAMESPACE } from '../../../../packages/components/src/wizard/store';
-import { STATUS_LABELS, STATUS_BADGE_LEVEL } from '../status';
-import { GROUP_LABEL_PLURAL } from '../labels';
+import { STATUS_LABELS, STATUS_BADGE_INTENT } from '../status';
+import { GROUP_LABEL_PLURAL, groupCountLabel, groupLoadFailedLabel } from '../labels';
 import { SubscriptionLink } from '../links';
 
 const { useHistory } = Router;
@@ -115,14 +116,11 @@ export default function GroupList() {
 							<HStack spacing={ 2 } justify="flex-start" alignment="center" expanded={ false }>
 								{ item.owner ? <span>{ item.owner.name }</span> : <span>—</span> }
 								{ item.seatRequest && (
-									<Badge
-										level="warning"
-										text={
-											item.seatRequest.status === 'awaiting-payment'
-												? __( 'Awaiting payment', 'newspack-plugin' )
-												: __( 'Seat increase requested', 'newspack-plugin' )
-										}
-									/>
+									<Badge intent="medium">
+										{ item.seatRequest.status === 'awaiting-payment'
+											? __( 'Awaiting payment', 'newspack-plugin' )
+											: __( 'Seat increase requested', 'newspack-plugin' ) }
+									</Badge>
 								) }
 							</HStack>
 							<div className="newspack-subscribers__email">{ item.owner?.email }</div>
@@ -175,7 +173,7 @@ export default function GroupList() {
 				elements: Object.entries( STATUS_LABELS ).map( ( [ value, label ] ) => ( { value, label } ) ),
 				filterBy: { operators: [ 'isAny' ] },
 				getValue: ( { item } ) => item.status,
-				render: ( { item } ) => <Badge level={ STATUS_BADGE_LEVEL[ item.status ] } text={ STATUS_LABELS[ item.status ] } />,
+				render: ( { item } ) => <Badge intent={ STATUS_BADGE_INTENT[ item.status ] }>{ STATUS_LABELS[ item.status ] }</Badge>,
 			},
 			{
 				id: 'createdAt',
@@ -221,19 +219,15 @@ export default function GroupList() {
 	// Surface the group count in the header breadcrumb, e.g. "/ Groups (14)".
 	useEffect( () => {
 		setHeaderData( {
-			sectionName: (
-				<>
-					{ GROUP_LABEL_PLURAL }{ ' ' }
-					<span
-						className="newspack-subscribers__header-count"
-						aria-label={ sprintf( __( '%1$s %2$s total', 'newspack-plugin' ), total.toLocaleString(), GROUP_LABEL_PLURAL ) }
-					>
-						{ `(${ total.toLocaleString() })` }
-					</span>
-				</>
-			),
+			sectionName: [
+				{
+					label: GROUP_LABEL_PLURAL,
+					count: groupsLoading || error ? undefined : total,
+					countLabel: groupCountLabel( total ),
+				},
+			],
 		} );
-	}, [ setHeaderData, total ] );
+	}, [ setHeaderData, total, groupsLoading, error ] );
 
 	if ( groupsLoading ) {
 		return (
@@ -247,7 +241,7 @@ export default function GroupList() {
 	// a retry.
 	if ( error ) {
 		return (
-			<Notice isError noticeText={ sprintf( __( 'Could not load %1$s: %2$s', 'newspack-plugin' ), GROUP_LABEL_PLURAL, error ) }>
+			<Notice isError noticeText={ groupLoadFailedLabel( error ) }>
 				<Button variant="link" onClick={ reload }>
 					{ __( 'Retry', 'newspack-plugin' ) }
 				</Button>

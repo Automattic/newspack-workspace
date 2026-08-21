@@ -85,7 +85,6 @@ jest.mock( '../../../../../../packages/components/src', () => {
 		return null;
 	}
 	return {
-		Badge: ( { text } ) => <span>{ text }</span>,
 		DataViews: ( { data, fields, actions, view, onChangeView, header } ) => {
 			mockCapturedActions = actions || [];
 			mockCapturedView = view;

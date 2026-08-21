@@ -1,22 +1,22 @@
-@use '../../../colors/colors.module.scss' as colors;
+@use "../../../colors/colors.module" as np-colors;
 
 /**
  * Newspack Icon
  */
 
 .newspack-icon {
-	background: colors.$primary-600;
+	background: np-colors.$primary-600;
 	fill: white;
 	padding: 12px;
 
 	&--white {
 		background: white;
-		fill: colors.$primary-600;
+		fill: np-colors.$primary-600;
 	}
 
 	&--simple {
 		background: none;
-		fill: colors.$primary-600;
+		fill: np-colors.$primary-600;
 		padding: 0;
 	}
 

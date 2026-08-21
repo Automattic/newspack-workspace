@@ -11,12 +11,16 @@ import { dateI18n, getSettings } from '@wordpress/date';
 
 export const API_BASE = '/newspack/v1/wizard/newspack-audience-integrations/settings';
 
+/** @type {Record< string, { label: string, intent: import('../../../../../packages/components/src/types').BadgeIntent } >} */
 export const STATUS_MAP = {
-	complete: { label: __( 'Complete', 'newspack-plugin' ), level: 'success' },
-	failed: { label: __( 'Failed', 'newspack-plugin' ), level: 'error' },
-	pending: { label: __( 'Pending', 'newspack-plugin' ), level: 'info' },
-	'in-progress': { label: __( 'In progress', 'newspack-plugin' ), level: 'info' },
-	canceled: { label: __( 'Canceled', 'newspack-plugin' ), level: 'warning' },
+	complete: { label: __( 'Complete', 'newspack-plugin' ), intent: 'stable' },
+	failed: { label: __( 'Failed', 'newspack-plugin' ), intent: 'high' },
+	pending: { label: __( 'Pending', 'newspack-plugin' ), intent: 'low' },
+	'in-progress': { label: __( 'In progress', 'newspack-plugin' ), intent: 'informational' },
+	// A cancelled job is a deliberate stop, not a failure, so it must not share `failed`'s
+	// intent: the column offers them as separate filters and they have to read apart. The
+	// design system files terminal, non-actionable states like this under `none`.
+	canceled: { label: __( 'Canceled', 'newspack-plugin' ), intent: 'none' },
 };
 
 export function formatTimestamp( gmt ) {

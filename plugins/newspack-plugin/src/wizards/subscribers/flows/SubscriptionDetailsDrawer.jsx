@@ -21,14 +21,15 @@
 import { __, sprintf } from '@wordpress/i18n';
 import { Modal, __experimentalHStack as HStack, __experimentalVStack as VStack } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
 import { close } from '@wordpress/icons';
+import { Badge } from '@wordpress/ui';
 
 /**
  * Internal dependencies.
  */
-import { Badge, Button, Divider } from '../../../../packages/components/src';
+import { Button, Divider } from '../../../../packages/components/src';
 import { CardRow } from '../components/SubscriptionCard';
 import { billingText, fmtDate, orDash, scheduleRow } from '../format';
-import { STATUS_LABELS, STATUS_BADGE_LEVEL } from '../status';
+import { STATUS_LABELS, STATUS_BADGE_INTENT } from '../status';
 import { seatCountText } from './capacity';
 
 export default function SubscriptionDetailsDrawer( { group, onViewOwner, onClose } ) {
@@ -66,7 +67,7 @@ export default function SubscriptionDetailsDrawer( { group, onViewOwner, onClose
 			<div className="newspack-subscribers__sub-detail-content">
 				<VStack spacing={ 4 }>
 					<CardRow label={ __( 'Status', 'newspack-plugin' ) }>
-						<Badge level={ STATUS_BADGE_LEVEL[ group.status ] } text={ STATUS_LABELS[ group.status ] } />
+						<Badge intent={ STATUS_BADGE_INTENT[ group.status ] }>{ STATUS_LABELS[ group.status ] }</Badge>
 					</CardRow>
 					<CardRow label={ __( 'Owner', 'newspack-plugin' ) }>
 						{ group.owner?.name ? (

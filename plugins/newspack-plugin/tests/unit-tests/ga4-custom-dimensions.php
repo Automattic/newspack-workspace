@@ -242,6 +242,21 @@ class Newspack_Test_GA4_Custom_Dimensions extends WP_UnitTestCase {
 	}
 
 	/**
+	 * The matched-segment dimension must be provisioned, so segment reach is
+	 * reportable in GA4 without a publisher hand-creating the dimension.
+	 *
+	 * The parameter holds a single segment ID per event, not a list: a list
+	 * would need a regex filter per segment to keep one ID from matching inside
+	 * another, and its distinct values would be segment combinations, which
+	 * pass GA4's high-cardinality threshold and collapse into `(other)`.
+	 */
+	public function test_provisions_matched_segment_dimension() {
+		$dimensions = GA4_Custom_Dimensions::get_dimensions();
+		$this->assertArrayHasKey( 'segment_id', $dimensions, 'The matched-segment dimension must be provisioned.' );
+		$this->assertSame( 'Matched Segment', $dimensions['segment_id'] );
+	}
+
+	/**
 	 * Connecting / changing the GA4 property schedules background provisioning,
 	 * and the scheduler de-duplicates redundant requests.
 	 */
@@ -294,6 +309,75 @@ class Newspack_Test_GA4_Custom_Dimensions extends WP_UnitTestCase {
 		// A non-array option value is tolerated without scheduling or warnings.
 		GA4_Custom_Dimensions::on_sitekit_settings_added( self::SK_SETTINGS_OPTION, 'not-an-array' );
 		$this->assertFalse( wp_next_scheduled( GA4_Custom_Dimensions::PROVISION_ACTION ), 'A non-array settings value does not schedule provisioning.' );
+	}
+
+	/**
+	 * A dimension added to Newspack's list after a site was provisioned
+	 * schedules an immediate run on the next recheck instead of waiting for
+	 * the monthly recheck: GA4 dimensions are not retroactive, so events sent
+	 * before the dimension exists never become queryable.
+	 */
+	public function test_new_dimension_schedules_provisioning_on_provisioned_sites() {
+		$this->connect_property( 'PROP-GROW' );
+
+		// A summary written before the dimension list was recorded counts as
+		// grown, so pre-existing provisioned sites converge on first recheck.
+		update_option(
+			GA4_Custom_Dimensions::PROVISIONED_OPTION,
+			[
+				'property_id' => 'PROP-GROW',
+				'created'     => [],
+			]
+		);
+		GA4_Custom_Dimensions::maybe_schedule_recheck();
+		$this->assertNotFalse( wp_next_scheduled( GA4_Custom_Dimensions::PROVISION_ACTION ), 'A summary without a recorded dimension list schedules provisioning.' );
+
+		// An up-to-date recorded list does not reschedule.
+		wp_clear_scheduled_hook( GA4_Custom_Dimensions::PROVISION_ACTION );
+		update_option(
+			GA4_Custom_Dimensions::PROVISIONED_OPTION,
+			[
+				'property_id' => 'PROP-GROW',
+				'dimensions'  => array_keys( GA4_Custom_Dimensions::get_dimensions() ),
+				'created'     => [],
+			]
+		);
+		GA4_Custom_Dimensions::maybe_schedule_recheck();
+		$this->assertFalse( wp_next_scheduled( GA4_Custom_Dimensions::PROVISION_ACTION ), 'An up-to-date dimension list does not reschedule.' );
+
+		// A recorded list missing a current dimension reschedules.
+		$known = array_keys( GA4_Custom_Dimensions::get_dimensions() );
+		array_pop( $known );
+		update_option(
+			GA4_Custom_Dimensions::PROVISIONED_OPTION,
+			[
+				'property_id' => 'PROP-GROW',
+				'dimensions'  => $known,
+				'created'     => [],
+			]
+		);
+		GA4_Custom_Dimensions::maybe_schedule_recheck();
+		$this->assertNotFalse( wp_next_scheduled( GA4_Custom_Dimensions::PROVISION_ACTION ), 'A grown dimension list schedules provisioning.' );
+
+		// A never-provisioned site is left to the property-connection path.
+		wp_clear_scheduled_hook( GA4_Custom_Dimensions::PROVISION_ACTION );
+		delete_option( GA4_Custom_Dimensions::PROVISIONED_OPTION );
+		GA4_Custom_Dimensions::maybe_schedule_recheck();
+		$this->assertFalse( wp_next_scheduled( GA4_Custom_Dimensions::PROVISION_ACTION ), 'A never-provisioned site is not scheduled by the recheck path.' );
+	}
+
+	/**
+	 * The provisioning summary records the dimension list the run knew about,
+	 * which is what makes a later addition detectable.
+	 */
+	public function test_provision_records_the_dimension_list_in_the_summary() {
+		$this->connect_property( 'PROP-LIST' );
+		$this->configure_newspack_oauth( true );
+		$this->mock_admin_api( 'PROP-LIST', [] );
+
+		$summary = GA4_Custom_Dimensions::provision();
+		$this->assertIsArray( $summary );
+		$this->assertSame( array_keys( GA4_Custom_Dimensions::get_dimensions() ), $summary['dimensions'] );
 	}
 
 	/**
