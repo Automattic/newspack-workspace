@@ -1,7 +1,7 @@
 /**
  * External dependencies
  */
-import { fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 
 /**
  * Internal dependencies
@@ -121,5 +121,53 @@ describe( 'SpecificPostsControl', () => {
 		await screen.findByLabelText( 'Move Up: Beta' );
 
 		expect( fetchSavedInfo ).toHaveBeenCalledTimes( 1 );
+	} );
+
+	describe( 'when a request fails', () => {
+		let errorSpy;
+
+		beforeEach( () => {
+			errorSpy = jest.spyOn( console, 'error' ).mockImplementation( () => {} );
+		} );
+
+		afterEach( () => {
+			errorSpy.mockRestore();
+		} );
+
+		it( 'asks again rather than sharing the failure', async () => {
+			const fetchSavedInfo = jest.fn().mockRejectedValueOnce( new Error( 'unreachable' ) ).mockResolvedValue( ITEMS );
+			render( <SpecificPostsControl postIds={ [ 11, 22 ] } onChange={ noop } fetchSuggestions={ noop } fetchSavedInfo={ fetchSavedInfo } /> );
+
+			// The token field falls back to the IDs, which is where the failure lands.
+			await screen.findByText( '11' );
+
+			fireEvent.click( screen.getByRole( 'button', { name: 'Reorder Content' } ) );
+			expect( await screen.findByLabelText( 'Move Up: Beta' ) ).toBeInTheDocument();
+			expect( fetchSavedInfo ).toHaveBeenCalledTimes( 2 );
+		} );
+
+		it( 'leaves a newer request in place when an older one fails late', async () => {
+			let failFirst;
+			const first = new Promise( ( resolve, reject ) => {
+				failFirst = reject;
+			} );
+			const fetchSavedInfo = jest.fn().mockReturnValueOnce( first ).mockResolvedValue( ITEMS );
+			const props = { onChange: noop, fetchSuggestions: noop, fetchSavedInfo };
+			const { rerender } = render( <SpecificPostsControl postIds={ [ 11 ] } { ...props } /> );
+
+			rerender( <SpecificPostsControl postIds={ [ 11, 22 ] } { ...props } /> );
+			fireEvent.click( screen.getByRole( 'button', { name: 'Reorder Content' } ) );
+			await screen.findByLabelText( 'Move Up: Beta' );
+
+			await act( async () => {
+				failFirst( new Error( 'too late' ) );
+			} );
+
+			fireEvent.click( screen.getByRole( 'button', { name: 'Cancel' } ) );
+			fireEvent.click( screen.getByRole( 'button', { name: 'Reorder Content' } ) );
+			await screen.findByLabelText( 'Move Up: Beta' );
+
+			expect( fetchSavedInfo ).toHaveBeenCalledTimes( 2 );
+		} );
 	} );
 } );
