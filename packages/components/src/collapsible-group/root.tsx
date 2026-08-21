@@ -23,22 +23,20 @@ const clampTitleLevel = ( level: unknown ): HeadingLevel | undefined =>
 const Root = ( { children, className, gap = 'xl', hideSingleTitle = false, titleLevel }: CollapsibleGroupProps ) => {
 	const inheritedTitleLevel = useTitleLevel();
 	const items = Children.toArray( children ).filter( isValidElement ) as React.ReactElement< CollapsibleGroupItemProps >[];
+	const hideTitle = hideSingleTitle && items.length === 1;
 
-	const content =
-		hideSingleTitle && items.length === 1 ? (
-			<div className={ classNames( 'newspack-collapsible-group', className ) }>{ cloneElement( items[ 0 ], { title: undefined } ) }</div>
-		) : (
+	return (
+		<TitleLevelContext.Provider value={ clampTitleLevel( titleLevel ) ?? inheritedTitleLevel }>
 			<Stack className={ classNames( 'newspack-collapsible-group', className ) } direction="column" gap={ gap }>
 				{ items.map( ( item, index ) => (
 					<Fragment key={ item.key }>
-						{ item }
+						{ hideTitle ? cloneElement( item, { title: undefined } ) : item }
 						{ index < items.length - 1 && <Divider variant="tertiary" marginBottom={ 0 } marginTop={ 0 } /> }
 					</Fragment>
 				) ) }
 			</Stack>
-		);
-
-	return <TitleLevelContext.Provider value={ clampTitleLevel( titleLevel ) ?? inheritedTitleLevel }>{ content }</TitleLevelContext.Provider>;
+		</TitleLevelContext.Provider>
+	);
 };
 
 export default Root;
