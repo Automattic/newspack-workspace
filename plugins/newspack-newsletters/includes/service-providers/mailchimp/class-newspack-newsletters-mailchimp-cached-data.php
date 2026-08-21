@@ -8,6 +8,7 @@
 defined( 'ABSPATH' ) || exit;
 
 use Newspack_Newsletters_Mailchimp_Api as Mailchimp;
+use Newspack\Newsletters\Subscription_Lists;
 
 /**
  * Mailchimp cached class data
@@ -62,6 +63,13 @@ final class Newspack_Newsletters_Mailchimp_Cached_Data {
 	 * @var int
 	 */
 	const SURFACE_ERRORS_AFTER = 20 * HOUR_IN_SECONDS;
+
+	/**
+	 * How often the cron refreshes an audience that is not offered for subscription
+	 *
+	 * @var int
+	 */
+	const INACTIVE_REFRESH_INTERVAL = DAY_IN_SECONDS;
 
 	/**
 	 * Memoized data to be served across the same request
@@ -245,6 +253,24 @@ final class Newspack_Newsletters_Mailchimp_Cached_Data {
 	private static function is_cache_expired( $list_id = 'lists' ) {
 		$cache_date = get_option( self::get_cache_date_key( $list_id ) );
 		return $cache_date && ( time() - $cache_date ) > 20 * MINUTE_IN_SECONDS;
+	}
+
+	/**
+	 * Checks whether the cached data for a given list is older than a given age
+	 *
+	 * Unlike self::is_cache_expired(), a list that was never cached counts as older
+	 * than any age, so the cron can warm it for the first time.
+	 *
+	 * @param string $list_id The List ID.
+	 * @param int    $max_age The age, in seconds.
+	 * @return boolean
+	 */
+	private static function is_cache_older_than( $list_id, $max_age ) {
+		$cache_date = get_option( self::get_cache_date_key( $list_id ) );
+		if ( ! $cache_date ) {
+			return true;
+		}
+		return ( time() - $cache_date ) > $max_age;
 	}
 
 	/**
@@ -539,10 +565,57 @@ final class Newspack_Newsletters_Mailchimp_Cached_Data {
 			return;
 		}
 
+		$active_audience_ids = self::get_active_audience_ids();
+
 		foreach ( $lists as $list ) {
-			Newspack_Newsletters_Logger::log( 'Mailchimp cache: Dispatching request to refresh cache for list ' . $list['id'] );
-			self::dispatch_refresh( $list['id'] );
+			$list_id = (string) $list['id'];
+
+			// Audiences the site does not offer for subscription are refreshed once a day.
+			if (
+				! in_array( $list_id, $active_audience_ids, true )
+				&& ! self::is_cache_older_than( $list_id, self::INACTIVE_REFRESH_INTERVAL )
+			) {
+				Newspack_Newsletters_Logger::log( 'Mailchimp cache: Skipping refresh for inactive list ' . $list_id );
+				continue;
+			}
+
+			Newspack_Newsletters_Logger::log( 'Mailchimp cache: Dispatching request to refresh cache for list ' . $list_id );
+			self::dispatch_refresh( $list_id );
 		}
+	}
+
+	/**
+	 * Gets the IDs of the audiences the site offers for subscription
+	 *
+	 * An audience counts as active when it is offered for subscription itself, or
+	 * when any of its groups or tags is.
+	 *
+	 * @return string[] The audience IDs.
+	 */
+	private static function get_active_audience_ids() {
+		if ( ! class_exists( 'Newspack\Newsletters\Subscription_Lists' ) ) {
+			return [];
+		}
+
+		$audience_ids = [];
+		foreach ( Subscription_Lists::get_configured_for_provider( 'mailchimp' ) as $list ) {
+			if ( ! $list->is_active() ) {
+				continue;
+			}
+			$audience_id = $list->mailchimp_get_audience_id();
+			if ( $audience_id ) {
+				$audience_ids[] = (string) $audience_id;
+			}
+		}
+
+		/**
+		 * Filters the audiences the cron keeps warm.
+		 *
+		 * @param string[] $audience_ids IDs of the audiences offered for subscription.
+		 */
+		$audience_ids = apply_filters( 'newspack_newsletters_mailchimp_active_audiences', array_values( array_unique( $audience_ids ) ) );
+
+		return array_map( 'strval', $audience_ids );
 	}
 
 	/**
