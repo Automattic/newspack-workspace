@@ -442,9 +442,8 @@ class TestApi extends \WP_UnitTestCase {
 
 		$this->insert_and_get_content( $this->make_insert_request( 'safe content' ) );
 
-		// Assert the priority, not just presence: the restore loop's whole job is
-		// reproducing priority and accepted_args, and a presence-only check passes
-		// even if everything came back at priority 10.
+		// Assert the priority, not just presence: a presence-only check passes even
+		// if everything came back at priority 10.
 		$this->assertSame(
 			10,
 			has_filter( 'content_save_pre', 'wp_filter_post_kses' ),
@@ -455,6 +454,15 @@ class TestApi extends \WP_UnitTestCase {
 			has_filter( 'content_save_pre', 'wp_filter_global_styles_post' ),
 			'The insert must restore the other content_save_pre callbacks too, not just kses.'
 		);
+		// accepted_args is restored too, and nothing else here would notice: a loop
+		// that passed a literal 1 would satisfy every assertion above, then break any
+		// callback registered with more than one argument for the rest of the request.
+		$this->assertSame(
+			1,
+			$GLOBALS['wp_filter']['content_save_pre']->callbacks[10]['wp_filter_post_kses']['accepted_args'],
+			'The restore must reproduce accepted_args, not just the priority.'
+		);
+
 		if ( function_exists( 'wp_strip_custom_css_from_blocks' ) ) {
 			$this->assertSame(
 				8,
@@ -954,9 +962,10 @@ class TestApi extends \WP_UnitTestCase {
 		wp_set_current_user( $this->factory->user->create( [ 'role' => 'author' ] ) );
 		kses_init();
 
-		// null is absent rather than invalid: it fails isset(), so the payload is
-		// treated as not carrying a post type at all and wp_insert_post() applies
-		// its own default of 'post', which is on the list.
+		// null is not in this set because it is judged, not skipped: the guard uses
+		// array_key_exists, so a present key is checked whatever its value. The
+		// sibling test below covers it. Only a genuinely omitted key passes, which
+		// is what a partial payload relies on.
 		foreach ( [
 			'array' => [ 'post' ],
 			'int'   => 5,
@@ -1010,6 +1019,55 @@ class TestApi extends \WP_UnitTestCase {
 				"A $label post_data must be refused by name, not by an incidental failure."
 			);
 		}
+	}
+
+	/**
+	 * A partial update that omits post_type must still be accepted.
+	 *
+	 * This is the branch the guard exists to leave alone. A partial payload
+	 * legitimately carries only the fields it is changing, so an absent post_type
+	 * has to pass and the stored type has to survive the merge. It is the path most
+	 * likely to break a site that works today, and the one a rejection guard is
+	 * most likely to catch by accident.
+	 *
+	 * @group content-distribution-api
+	 */
+	public function test_partial_update_that_omits_post_type_is_accepted() {
+		wp_set_current_user( $this->factory->user->create( [ 'role' => 'author' ] ) );
+		kses_init();
+
+		$created = rest_get_server()->dispatch(
+			$this->make_insert_request_with(
+				[
+					'post_type' => 'page',
+					'title'     => 'A page',
+				]
+			)
+		);
+		$this->assertSame( 200, $created->get_status(), 'Precondition: a page inserts cleanly.' );
+		$post_id = $created->get_data()['post_id'];
+
+		$payload              = get_sample_payload( 'https://origin.test', get_bloginfo( 'url' ) );
+		$payload['partial']   = true;
+		$payload['post_data'] = [ 'title' => 'Updated by a partial that carries no post type' ];
+
+		$request = new WP_REST_Request( 'POST', '/newspack-network/v1/content-distribution/insert' );
+		$request->set_header( 'Content-Type', 'application/json' );
+		$request->set_body( wp_json_encode( [ 'payload' => $payload ] ) );
+
+		$response = rest_get_server()->dispatch( $request );
+
+		$this->assertSame( 200, $response->get_status(), 'A partial that omits post_type must be accepted.' );
+		$this->assertSame(
+			'page',
+			get_post_field( 'post_type', $post_id ),
+			'The stored post type must survive a partial update that does not carry one.'
+		);
+		$this->assertSame(
+			'Updated by a partial that carries no post type',
+			get_post_field( 'post_title', $post_id ),
+			'The partial must still apply the field it did carry.'
+		);
 	}
 
 	/**

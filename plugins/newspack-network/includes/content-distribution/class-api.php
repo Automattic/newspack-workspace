@@ -389,10 +389,17 @@ class API {
 	 *
 	 * Applies what core would clean for such a caller, directly rather than by
 	 * running the filter chain, so this does not depend on global filter
-	 * registration. Over `content`/`raw_content` that is core's whole
+	 * registration. Over `content`/`raw_content` that is core's capability-gated
 	 * `content_save_pre` set for this caller: the block custom-CSS strip (8), the
 	 * global-styles sanitizer (9), and kses (10). Over `title` and `excerpt` it is
 	 * kses in core's own two contexts.
+	 *
+	 * Deliberately not reproduced: `convert_invalid_entities` (10) and `balanceTags`
+	 * (50). Both are ungated, so they are not part of holding a caller to their own
+	 * capabilities, and `remove_all_filters()` dropped them for every caller before
+	 * this change too. The cost is that content stored through this route is less
+	 * normalized than the same content saved in the editor, on a site with
+	 * `use_balanceTags` enabled.
 	 *
 	 * Title and excerpt are filtered twice — here, and again by core's
 	 * `title_save_pre`/`excerpt_save_pre`, which this route never removes. Both
