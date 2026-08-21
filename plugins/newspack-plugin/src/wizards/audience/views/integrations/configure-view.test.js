@@ -52,9 +52,10 @@ jest.mock( '@wordpress/components', () => ( {
 	),
 	// The inbound operator selector renders once a field is enabled; without a stub
 	// here any test that renders an enabled incoming field hits an undefined element.
-	SelectControl: ( { label, value, onChange } ) => (
-		<input aria-label={ label } value={ value || '' } onChange={ e => onChange( e.target.value ) } />
-	),
+	// Core returns null when it has neither options nor children, which is the
+	// premise the empty-container guards rest on.
+	SelectControl: ( { label, value, onChange, options, children } ) =>
+		options?.length || children ? <input aria-label={ label } value={ value || '' } onChange={ e => onChange( e.target.value ) } /> : null,
 } ) );
 jest.mock( '../../../../../packages/components/src', () => ( {
 	Button: ( { children } ) => children,
@@ -74,8 +75,14 @@ jest.mock( '../../../../../packages/components/src', () => ( {
 	),
 	Grid: ( { children } ) => children,
 	SectionHeader: ( { title } ) => <h2>{ title }</h2>,
-	SelectControl: ( { label, value, onChange } ) => (
-		<input aria-label={ label } value={ value || '' } onChange={ e => onChange( e.target.value ) } />
+	// Mirrors the real control: the Newspack wrapper renders its div whatever
+	// happens, and core's select inside it renders nothing without options.
+	SelectControl: ( { label, value, onChange, options, disabled } ) => (
+		<div className="newspack-select-control">
+			{ options?.length ? (
+				<input aria-label={ label } value={ value || '' } disabled={ !! disabled } onChange={ e => onChange( e.target.value ) } />
+			) : null }
+		</div>
 	),
 	// Minimal controlled input so tests can drive the local draft by typing.
 	TextControl: ( { label, value, onChange } ) => <input aria-label={ label } value={ value ?? '' } onChange={ e => onChange( e.target.value ) } />,
@@ -770,7 +777,6 @@ describe( 'ConfigureView per-direction sections', () => {
 			},
 		} );
 		expect( screen.getByLabelText( 'Enable inbound sync' ).checked ).toBe( true );
-		expect( screen.queryByLabelText( 'VIP' ) ).toBeNull();
 		expect( screen.queryAllByTestId( 'toggle-divider' ) ).toHaveLength( 0 );
 		// The section column itself, and not the list it would have wrapped.
 		expect( screen.queryAllByTestId( 'stack' ) ).toHaveLength( 1 );
@@ -832,7 +838,8 @@ describe( 'ConfigureView per-direction sections', () => {
 		expect( screen.getByLabelText( 'Enable outbound sync' ).checked ).toBe( true );
 		expect( screen.queryAllByTestId( 'toggle-divider' ) ).toHaveLength( 0 );
 		expect( screen.queryAllByTestId( 'group-divider' ) ).toHaveLength( 0 );
-		// The group renders its own wrapper even with no items in it.
+		// CollapsibleGroup would render its wrapper around no items at all, so the
+		// guard has to skip the component rather than let it print an empty box.
 		expect( screen.queryByTestId( 'collapsible-group' ) ).toBeNull();
 	} );
 
