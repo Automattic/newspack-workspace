@@ -7,6 +7,10 @@ A card component for presenting a named feature or setting with a predictable, s
 - **Maximum 2 cards per row.** Use `<Grid columns={ 2 }>` — never 3 or more. Cards are designed to be read, not scanned, and 3+ columns makes them too narrow for the content.
 - The icon is always displayed on the **right-hand side**, aligned to the top of the content.
 
+## Accessibility
+
+Cards sit side by side, so a bare "Enable" names no feature out of context. The card appends `title` to the primary button's accessible name ("Enable Metered Countdown") and to the "More" menu ("More options for Metered Countdown"). The visible label leads, so voice control still matches on the word the user can see. Nothing to pass — this is automatic.
+
 ## States
 
 | State | Condition | Button | Dropdown | Badge |
@@ -176,12 +180,22 @@ import { __ } from '@wordpress/i18n';
 />
 ```
 
+## What the layout rests on
+
+The card is built on `Card.Root`, `Card.Header` and `Card.Content` from `@wordpress/ui`. Three things about that pairing decide how it renders.
+
+**Cards in a row bottom-align their action rows.** `Card.Root` is `display: flex; flex-direction: column`, and `.newspack-card-feature__actions` takes `margin-top: auto`. Two cards with descriptions of different lengths still put their buttons on one baseline. No test covers this, because jsdom computes no layout. If a library update drops the column direction, the cards stop aligning and nothing fails.
+
+**The action row sits in `Card.Content`, which the library documents as the main content area.** The description sits in `Card.Header`, so the two are inverted. The gap between them lands at zero while `--wpds-dimension-gap-xl` and `--wpds-dimension-padding-2xl` are both 24px, and `margin-top: auto` is unlayered, so it wins over the library's layered rule either way. Move the action row when the library ships a `Card.Footer`.
+
+**The title keeps its own type size.** `Card.Title` renders at `heading-lg`, which is 15px, and this title is 20px. It uses `heading-x-large()` from `@wordpress/base-styles` instead. Switch to `<Card.Title render={ createElement( 'h3' ) }>` if the two sizes ever agree.
+
 ## Props
 
 | Prop | Type | Default | Description |
 |---|---|---|---|
 | `title` | `string` | — | Card heading (**required**) |
-| `titleLevel` | `2`–`6` | `2` | Heading level for the title. Use `3` under a `SectionHeader`, which is itself an h2; use `2` when the cards sit directly under a page's h1 |
+| `headingLevel` | `2`–`6` | `3` | Heading level for the title. The default sits under a `SectionHeader` or a `WizardsTab` heading, both of which are h2. Raise it when the cards sit under a deeper section label |
 | `description` | `string` | — | Supporting text below the title |
 | `icon` | `CardFeatureIcon \| ReactElement` | — | Icon displayed on the right. A descriptor gets the 40 × 40 container; a ready element renders as-is. See `CardFeatureIcon` below. |
 | `enabled` | `boolean` | `false` | Whether the feature is currently enabled |

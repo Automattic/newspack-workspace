@@ -4,39 +4,86 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 
 /**
+ * WordPress dependencies.
+ */
+import { _x } from '@wordpress/i18n';
+
+/**
  * Internal dependencies.
  */
-import CardFeature from './';
+import CardFeature from './index';
+
+// The spy lives in the factory: @wordpress/components calls _x while it loads,
+// before a module-scope const would be initialized.
+jest.mock( '@wordpress/i18n', () => {
+	const actual = jest.requireActual( '@wordpress/i18n' );
+	return { ...actual, _x: jest.fn( text => text ) };
+} );
 
 const primaryButton = () => screen.getByRole( 'button', { name: /Enable|Configure/ } );
-const moreMenu = () => screen.queryByRole( 'button', { name: 'More' } );
+const moreMenu = () => screen.queryByRole( 'button', { name: /^More options for/ } );
 
 describe( 'CardFeature', () => {
+	beforeEach( () => {
+		_x.mockClear();
+	} );
+
 	describe( 'structure', () => {
-		it( 'renders the title as a level-2 heading and the description alongside it', () => {
+		it( 'renders the title as a level-3 heading and the description alongside it', () => {
 			render( <CardFeature title="Content gifting" description="Let subscribers share gated articles." /> );
-			expect( screen.getByRole( 'heading', { level: 2 } ) ).toHaveTextContent( 'Content gifting' );
+			expect( screen.getByRole( 'heading', { level: 3 } ) ).toHaveTextContent( 'Content gifting' );
 			expect( screen.getByText( 'Let subscribers share gated articles.' ) ).toBeInTheDocument();
 		} );
 
 		it( 'renders the title at the requested heading level', () => {
-			render( <CardFeature title="Content gifting" titleLevel={ 3 } /> );
-			expect( screen.getByRole( 'heading', { level: 3 } ) ).toHaveTextContent( 'Content gifting' );
-			expect( screen.queryByRole( 'heading', { level: 2 } ) ).not.toBeInTheDocument();
+			render( <CardFeature title="Content gifting" headingLevel={ 4 } /> );
+			expect( screen.getByRole( 'heading', { level: 4 } ) ).toHaveTextContent( 'Content gifting' );
+			expect( screen.queryByRole( 'heading', { level: 3 } ) ).not.toBeInTheDocument();
 		} );
 
 		it( 'omits the description paragraph when none is passed', () => {
 			const { container } = render( <CardFeature title="Content gifting" /> );
 			expect( container.querySelector( '.newspack-card-feature__description' ) ).toBeNull();
 		} );
+	} );
 
-		it( 'keeps the action row a sibling of the header rather than nesting it', () => {
-			const { container } = render( <CardFeature title="Content gifting" /> );
-			const card = container.querySelector( '.newspack-card-feature' );
-			const actions = container.querySelector( '.newspack-card-feature__actions' );
-			expect( actions.parentElement ).toBe( card );
-			expect( actions ).not.toContainElement( screen.getByRole( 'heading', { level: 2 } ) );
-			expect( actions ).toContainElement( primaryButton() );
+	describe( 'accessible names', () => {
+		it( 'names the feature in the primary button, keeping the visible label first', () => {
+			render( <CardFeature title="Metered Countdown" /> );
+			const button = screen.getByRole( 'button', { name: 'Enable Metered Countdown' } );
+			expect( button ).toHaveTextContent( 'Enable' );
+			expect( button.getAttribute( 'aria-label' ).startsWith( button.textContent ) ).toBe( true );
+		} );
+
+		it( 'carries a custom label into the accessible name', () => {
+			render( <CardFeature title="Subscription retention" enableLabel="Change" /> );
+			expect( screen.getByRole( 'button', { name: 'Change Subscription retention' } ) ).toHaveTextContent( 'Change' );
+		} );
+
+		it( 'names the feature in the configure state too', () => {
+			render( <CardFeature title="Content Gifting" enabled /> );
+			expect( screen.getByRole( 'button', { name: 'Configure Content Gifting' } ) ).toBeInTheDocument();
+		} );
+
+		it( 'names the feature in the More menu', () => {
+			render( <CardFeature title="Content Gifting" enabled moreControls={ [ { title: 'Disable', onClick: () => {} } ] } /> );
+			expect( screen.getByRole( 'button', { name: 'More options for Content Gifting' } ) ).toBeInTheDocument();
+		} );
+
+		it( 'gives the accessible-name order its own catalogue entry', () => {
+			render( <CardFeature title="Metered Countdown" /> );
+			expect( _x ).toHaveBeenCalledWith( '%1$s %2$s', 'accessible button name: visible action label, then feature name', 'newspack-plugin' );
+		} );
+
+		it( 'distinguishes two cards that share a button label', () => {
+			render(
+				<>
+					<CardFeature title="Metered Countdown" />
+					<CardFeature title="Content Gifting" />
+				</>
+			);
+			expect( screen.getByRole( 'button', { name: 'Enable Metered Countdown' } ) ).toBeInTheDocument();
+			expect( screen.getByRole( 'button', { name: 'Enable Content Gifting' } ) ).toBeInTheDocument();
 		} );
 	} );
 
@@ -114,9 +161,9 @@ describe( 'CardFeature', () => {
 
 		it( 'accepts custom labels for both states', () => {
 			const { rerender } = render( <CardFeature title="Apple News" enableLabel="Connect" configureLabel="Manage connection" /> );
-			expect( screen.getByRole( 'button', { name: 'Connect' } ) ).toBeInTheDocument();
+			expect( screen.getByRole( 'button', { name: 'Connect Apple News' } ) ).toBeInTheDocument();
 			rerender( <CardFeature title="Apple News" enabled enableLabel="Connect" configureLabel="Manage connection" /> );
-			expect( screen.getByRole( 'button', { name: 'Manage connection' } ) ).toBeInTheDocument();
+			expect( screen.getByRole( 'button', { name: 'Manage connection Apple News' } ) ).toBeInTheDocument();
 		} );
 	} );
 

@@ -7,5 +7,6 @@
 
 // Feature tab registrations.
 import './configuration';
+import './subscriber-only';
 
 export { getTab, registerTab } from './registry';

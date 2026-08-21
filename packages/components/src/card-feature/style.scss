@@ -11,6 +11,11 @@
 
 	&__actions {
 		margin-top: auto;
+
+		.newspack-card-feature__badge {
+			flex-shrink: 1;
+			min-width: 0;
+		}
 	}
 
 	&__content {

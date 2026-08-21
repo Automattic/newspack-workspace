@@ -6,7 +6,7 @@ import classnames from 'classnames';
 /**
  * WordPress dependencies
  */
-import { __ } from '@wordpress/i18n';
+import { __, _x, sprintf } from '@wordpress/i18n';
 import { createElement, isValidElement } from '@wordpress/element';
 import { useInstanceId } from '@wordpress/compose';
 import { DropdownMenu } from '@wordpress/components';
@@ -17,7 +17,7 @@ import { Badge, Card, Stack } from '@wordpress/ui';
  * Internal dependencies
  */
 import Button from '../button';
-import type { BadgeIntent } from '../types';
+import type { BadgeIntent, HeadingLevel } from '../types';
 import './style.scss';
 
 type CardFeatureIcon = {
@@ -35,8 +35,6 @@ type CardFeatureIcon = {
 	radius?: 'small' | 'full';
 };
 
-type HeadingLevel = 1 | 2 | 3 | 4 | 5 | 6;
-
 type MoreControl = {
 	title: string;
 	onClick: () => void;
@@ -45,8 +43,8 @@ type MoreControl = {
 
 type CardFeatureProps = {
 	title: string;
-	/** Heading level for the title: 3 under a `SectionHeader`, 2 directly under a page's h1. Practical range is 2-6. */
-	titleLevel?: HeadingLevel;
+	/** Heading level for the title. Defaults to 3, which sits under a `SectionHeader` or a `WizardsTab` heading. */
+	headingLevel?: HeadingLevel;
 	description?: string;
 	/** Icon shown beside the title: a descriptor (coloured badge) or a ready element rendered as-is. */
 	icon?: CardFeatureIcon | React.ReactElement;
@@ -99,7 +97,7 @@ type CardFeatureProps = {
  */
 const CardFeature = ( {
 	title,
-	titleLevel = 2,
+	headingLevel = 3,
 	description,
 	icon,
 	enabled = false,
@@ -132,6 +130,12 @@ const CardFeature = ( {
 
 	const isConfigureState = enabled && ! requirements;
 	const buttonLabel = isConfigureState ? configureLabel ?? __( 'Configure', 'newspack-plugin' ) : enableLabel ?? __( 'Enable', 'newspack-plugin' );
+	const buttonAccessibleLabel = sprintf(
+		// translators: %1$s: the button's visible action label, e.g. "Enable". %2$s: the feature's name. The visible label must stay first (WCAG 2.5.3).
+		_x( '%1$s %2$s', 'accessible button name: visible action label, then feature name', 'newspack-plugin' ),
+		buttonLabel,
+		title
+	);
 	const showMoreControls = enabled && !! moreControls?.length && ( ! requirements || requirementsActionable );
 
 	const handleButtonClick = () => {
@@ -174,19 +178,20 @@ const CardFeature = ( {
 			<Card.Header>
 				<Stack direction="row" align="start" gap="lg">
 					<Stack className="newspack-card-feature__content" direction="column" gap="sm">
-						{ createElement( `h${ titleLevel }`, { className: 'newspack-card-feature__title' }, title ) }
+						{ createElement( `h${ headingLevel }`, { className: 'newspack-card-feature__title' }, title ) }
 						{ description && <p className="newspack-card-feature__description">{ description }</p> }
 					</Stack>
 					{ renderedIcon }
 				</Stack>
 			</Card.Header>
 			<Card.Content className="newspack-card-feature__actions">
-				<Stack direction="row" align="center" justify="space-between" gap="sm">
+				<Stack direction="row" align="center" justify="space-between" gap="sm" wrap="wrap">
 					<Stack direction="row" align="center" gap="sm">
 						<Button
 							variant={ isConfigureState ? 'tertiary' : 'secondary' }
 							accessibleWhenDisabled
 							aria-describedby={ describedById }
+							aria-label={ buttonAccessibleLabel }
 							disabled={ ( isMuted && ! requirementsActionable ) || busy }
 							isBusy={ busy }
 							onClick={ handleButtonClick }
@@ -197,14 +202,18 @@ const CardFeature = ( {
 						{ showMoreControls && (
 							<DropdownMenu
 								icon={ moreVertical }
-								label={ __( 'More', 'newspack-plugin' ) }
+								label={ sprintf(
+									// translators: %s: the feature's name.
+									__( 'More options for %s', 'newspack-plugin' ),
+									title
+								) }
 								controls={ moreControls }
 								toggleProps={ { size: 'compact' } }
 							/>
 						) }
 					</Stack>
 					{ badge && (
-						<Badge id={ describedById } intent={ badge.intent }>
+						<Badge id={ describedById } className="newspack-card-feature__badge" intent={ badge.intent }>
 							{ badge.text }
 						</Badge>
 					) }

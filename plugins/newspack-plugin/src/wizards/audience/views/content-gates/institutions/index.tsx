@@ -25,6 +25,11 @@ const { useHistory } = Router;
 
 const API_PATH = '/wp/v2/np_institution';
 
+// The bundled @wordpress/dataviews types (v10) predate `isDestructive`,
+// which the WP-core-provided runtime DataViews does support — extend the
+// Action type locally so destructive styling can be declared.
+type InstitutionAction = Action< Institution > & { isDestructive?: boolean };
+
 const DEFAULT_VIEW: View = {
 	type: 'table',
 	page: 1,
@@ -177,7 +182,7 @@ export default function Institutions() {
 		[]
 	);
 
-	const actions: Action< Institution >[] = useMemo(
+	const actions: InstitutionAction[] = useMemo(
 		() => [
 			{
 				id: 'edit',
@@ -191,7 +196,7 @@ export default function Institutions() {
 				id: 'copy-url',
 				label: __( 'Copy access page URL', 'newspack-plugin' ),
 				callback: ( items: Institution[] ) => {
-					const baseUrl = ( window as any ).newspackAudience?.institutional_access_url;
+					const baseUrl = window.newspackAudience?.institutional_access_url;
 					const url = baseUrl ? `${ baseUrl }/${ items[ 0 ].slug }/` : '';
 					if ( url ) {
 						navigator.clipboard.writeText( url ).then(
@@ -217,7 +222,7 @@ export default function Institutions() {
 				id: 'delete',
 				label: __( 'Delete', 'newspack-plugin' ),
 				isDestructive: true,
-				RenderModal: ( { items, closeModal }: { items: Institution[]; closeModal: () => void } ) => {
+				RenderModal: ( { items, closeModal }: { items: Institution[]; closeModal?: () => void } ) => {
 					const item = items[ 0 ];
 					const [ isDeleting, setIsDeleting ] = useState( false );
 					return (
@@ -237,11 +242,11 @@ export default function Institutions() {
 										apiFetch( { path: `${ API_PATH }/${ item.id }?force=true`, method: 'DELETE' } )
 											.then( () => {
 												fetchData();
-												closeModal();
+												closeModal?.();
 											} )
 											.catch( () => {
 												setIsDeleting( false );
-												closeModal();
+												closeModal?.();
 												addNotice( {
 													message: __( 'Failed to delete institution. Please try again.', 'newspack-plugin' ),
 													type: 'error',
