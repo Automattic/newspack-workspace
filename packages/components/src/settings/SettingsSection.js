@@ -16,11 +16,15 @@ const SettingSection = ( { title, description, children } ) => (
 			{ description && (
 				<InfoButton
 					description={ description }
-					triggerLabel={ sprintf(
-						// translators: %s is the name of the setting being explained.
-						__( 'More information about %s', 'newspack-plugin' ),
-						title
-					) }
+					triggerLabel={
+						typeof title === 'string'
+							? sprintf(
+									// translators: %s is the name of the setting being explained.
+									__( 'More information about %s', 'newspack-plugin' ),
+									title
+							  )
+							: __( 'More information', 'newspack-plugin' )
+					}
 				/>
 			) }
 		</div>
