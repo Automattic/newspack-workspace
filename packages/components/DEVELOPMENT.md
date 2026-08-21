@@ -131,7 +131,7 @@ When building a screen, use the **spacing scale** (8px unit: 16, 24, 32, 48, 64)
 ### Utility Components
 
 - **`GlobalNotices`** - Global notice system component
-- **`InfoButton`** - Info button with tooltip
+- **`InfoButton`** - Reveals supplementary context from a `description` prop. Anything a reader needs in order to use a control belongs in visible help text instead
 - **`Modal`** - Modal dialog component
 - **`NewspackIcon`** - Newspack icon wrapper component
 - **`Popover`** - Popover component
@@ -205,6 +205,24 @@ import { Button, Card, Notice } from '../../../../../packages/components/src';
 // ❌ WRONG – Don't import all
 import * as Components from '../../../../../packages/components/src';
 ```
+
+**Reach past the barrel from inside the package.** `src/index.js` imports
+`src/style.scss`, which redefines `--wp-admin-theme-color` and its variants on
+`:root`. Any module that pulls in the barrel carries those global overrides into
+whatever bundle it lands in, which is wrong for an editor or front-end bundle.
+Import each component from its own directory instead:
+
+```jsx
+// ✅ CORRECT – within packages/components
+import Grid from '../grid';
+import InfoButton from '../info-button';
+
+// ❌ WRONG – drags the package's :root overrides along
+import { Grid, InfoButton } from '../';
+```
+
+Most of the package still reaches the barrel. Treat this as the bar for new and
+edited modules rather than a description of how things stand.
 
 ### Router Import Pattern
 
