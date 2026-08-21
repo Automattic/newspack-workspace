@@ -18,7 +18,13 @@ import type { StatCardRootProps } from './types';
 import './style.scss';
 
 const Root = forwardRef< HTMLDivElement, StatCardRootProps >( function Root( { heading = 3, labels, className, children, ...props }, ref ) {
-	const context = useMemo( () => ( { heading, labels: resolveStatCardLabels( labels ) } ), [ heading, labels ] );
+	// Keyed on the strings rather than the object: a caller writing `labels` inline
+	// hands over a fresh object each render, which would defeat the memo entirely.
+	const { notApplicable, up, down } = labels ?? {};
+	const context = useMemo(
+		() => ( { heading, labels: resolveStatCardLabels( { notApplicable, up, down } ) } ),
+		[ heading, notApplicable, up, down ]
+	);
 
 	return (
 		<StatCardContext.Provider value={ context }>
