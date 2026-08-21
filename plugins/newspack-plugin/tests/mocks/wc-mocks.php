@@ -989,6 +989,13 @@ function wc_create_order( $data ) {
 function wc_get_checkout_url() {
 	return 'https://example.com/checkout';
 }
+function wc_get_page_permalink( $page ) {
+	return 'https://example.com/' . $page;
+}
+function wc_get_endpoint_url( $endpoint, $value = '', $permalink = '' ) {
+	$permalink = $permalink ? $permalink : 'https://example.com/';
+	return \trailingslashit( $permalink ) . $endpoint . ( $value ? '/' . $value : '' );
+}
 function wcs_is_subscription( $order ) {
 	global $subscriptions_database;
 	// Mirror real WooCommerce Subscriptions: only an actual WC_Subscription object
