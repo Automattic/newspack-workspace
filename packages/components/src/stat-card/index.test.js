@@ -210,6 +210,17 @@ describe( 'StatCard.Value', () => {
 		expect( screen.getByText( 'Not applicable' ) ).toHaveClass( 'screen-reader-text' );
 	} );
 
+	// A field that reports "no data" as an empty string would otherwise leave a blank hero.
+	it( 'treats an empty value as no figure', () => {
+		render(
+			<StatCard.Root>
+				<StatCard.Value value="" />
+			</StatCard.Root>
+		);
+		expect( screen.getByText( STAT_CARD_NULL_GLYPH ) ).toHaveAttribute( 'aria-hidden', 'true' );
+		expect( screen.getByText( 'Not applicable' ) ).toHaveClass( 'screen-reader-text' );
+	} );
+
 	it( 'does not expose the glyph as an image', () => {
 		render(
 			<StatCard.Root>
@@ -244,6 +255,17 @@ describe( 'StatCard.Value', () => {
 		render(
 			<StatCard.Root>
 				<StatCard.Value value={ null } valueLabel="" />
+			</StatCard.Root>
+		);
+		expect( screen.getByText( STAT_CARD_NULL_GLYPH ) ).toHaveAttribute( 'aria-hidden', 'true' );
+		expect( screen.getByText( 'Not applicable' ) ).toHaveClass( 'screen-reader-text' );
+	} );
+
+	// Whitespace is truthy, so an unguarded label would hide the figure and name it nothing.
+	it( 'falls back to the default name when valueLabel is only whitespace', () => {
+		render(
+			<StatCard.Root>
+				<StatCard.Value value={ null } valueLabel="   " />
 			</StatCard.Root>
 		);
 		expect( screen.getByText( STAT_CARD_NULL_GLYPH ) ).toHaveAttribute( 'aria-hidden', 'true' );

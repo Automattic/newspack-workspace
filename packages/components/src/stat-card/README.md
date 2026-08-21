@@ -67,8 +67,12 @@ the screen that knows what the figure means; the component only sizes it.
 
 The one thing it does own is the absence of a figure. Pass `value={ null }` and
 it renders the null glyph, standing in for "there is no number here" as opposed
-to a zero that genuinely is one. `undefined` takes the same path, so
-`value={ data?.count }` is safe before the data arrives.
+to a zero that genuinely is one. `undefined` and an empty string take the same
+path, so `value={ data?.count }` is safe before the data arrives, and a field
+that reports "no data" as `""` gets the glyph rather than a blank hero.
+
+A zero is a figure and renders as one. That distinction is the whole reason the
+glyph exists, so nothing in the component may treat `0` as missing.
 
 ## Scale and the container query
 
@@ -118,8 +122,9 @@ NVDA and VoiceOver announce "graphic" for what is a typographic placeholder.
 Hiding the glyph and supplying real text avoids both.
 
 The null glyph gets "Not applicable" by default. Pass `valueLabel` to say
-something more specific, e.g. why the figure is missing. An empty `valueLabel`
-falls back to that default rather than leaving the glyph unnamed.
+something more specific, e.g. why the figure is missing. An empty or blank
+`valueLabel` falls back to that default rather than hiding the figure behind a
+name that says nothing.
 
 ## Anatomy, not policy
 
@@ -187,7 +192,7 @@ A column that takes the free space. Put `StatCard.Value` in it, plus a
 |------|------|---------|-------------|
 | `className` | `string` | — | Merged onto the value. |
 | `suffix` | `React.ReactNode` | — | Rendered in a row beside the figure, e.g. a `StatCard.Delta`. |
-| `value` | `string` \| `number` \| `null` \| `undefined` | — | **Required.** Pre-formatted. `null` and `undefined` render the null glyph. |
+| `value` | `string` \| `number` \| `null` \| `undefined` | — | **Required.** Pre-formatted. `null`, `undefined` and `""` render the null glyph. |
 | `valueLabel` | `string` | "Not applicable" when null | Spoken instead of the visible value. |
 | `variant` | `'figure'` \| `'text'` | `'figure'` | `text` drops the hero scale for a phrase. |
 
