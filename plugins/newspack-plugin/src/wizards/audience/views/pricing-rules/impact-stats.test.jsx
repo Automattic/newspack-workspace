@@ -5,7 +5,7 @@
 /**
  * External dependencies
  */
-import { render, screen, within } from '@testing-library/react';
+import { render, screen, within, fireEvent } from '@testing-library/react';
 
 /**
  * Internal dependencies
@@ -27,7 +27,7 @@ const labels = () => [ 'Products affected', 'Subscribers in scope', 'Eligible at
 const stats = props => <ImpactStats productsDescription="Rules currently price these products" { ...props } />;
 
 // Keyed to the label, so a value stays bound to its own tile however the grid is ordered.
-const tileFor = label => screen.getByText( label ).closest( '.newspack-pricing-rules__tile' );
+const tileFor = label => screen.getByText( label ).closest( '.newspack-stat-card' );
 
 describe( 'ImpactStats', () => {
 	afterEach( () => {
@@ -49,8 +49,8 @@ describe( 'ImpactStats', () => {
 
 	it( 'marks a capped product count as a lower bound', () => {
 		render( stats( { totalMatching: 500, countLimited: true } ) );
-		expect( screen.getByText( '500+' ) ).toBeInTheDocument();
-		expect( screen.getByText( 'At least 500' ) ).toHaveClass( 'screen-reader-text' );
+		expect( screen.getByText( '500+' ) ).toHaveAttribute( 'aria-hidden', 'true' );
+		expect( screen.getByText( 'At least 500' ) ).toBeInTheDocument();
 	} );
 
 	// Grid ships no `columns-1` rule; one tile goes full width off the base `1fr`.
@@ -61,7 +61,7 @@ describe( 'ImpactStats', () => {
 		expect( screen.queryByText( 'Subscribers in scope' ) ).not.toBeInTheDocument();
 		expect( screen.queryByText( 'Eligible at renewal' ) ).not.toBeInTheDocument();
 		expect( screen.queryByText( 'Protected' ) ).not.toBeInTheDocument();
-		expect( container.querySelectorAll( '.newspack-pricing-rules__tile' ) ).toHaveLength( 1 );
+		expect( container.querySelectorAll( '.newspack-stat-card' ) ).toHaveLength( 1 );
 		expect( container.querySelector( '.newspack-pricing-rules__stats' ) ).toHaveClass( 'newspack-grid__columns-1' );
 	} );
 
@@ -74,6 +74,35 @@ describe( 'ImpactStats', () => {
 		expect( within( tileFor( 'Eligible at renewal' ) ).getByText( '8' ) ).toBeInTheDocument();
 		expect( within( tileFor( 'Protected' ) ).getByText( '4' ) ).toBeInTheDocument();
 		expect( container.querySelector( '.newspack-pricing-rules__stats' ) ).toHaveClass( 'newspack-grid__columns-4' );
+	} );
+
+	// catalog-impact.tsx carries a screen-reader-only h2 purely so this level is not skipped.
+	it( 'renders each label as a level-three heading', () => {
+		render( stats( { totalMatching: 36, countLimited: false, audience: audience() } ) );
+
+		labels().forEach( label => expect( screen.getByRole( 'heading', { name: label, level: 3 } ) ).toBeInTheDocument() );
+	} );
+
+	it( 'hides the em-dash and speaks its meaning instead', () => {
+		render( stats( { totalMatching: 36, countLimited: false, audience: audience( { application: 'locked' } ) } ) );
+
+		const tile = within( tileFor( 'Protected' ) );
+		expect( tile.getByText( '—' ) ).toHaveAttribute( 'aria-hidden', 'true' );
+		expect( tile.getByText( 'Not applicable' ) ).toBeInTheDocument();
+	} );
+
+	it( 'runs the products action from its button', () => {
+		const onViewProducts = jest.fn();
+		render( stats( { totalMatching: 36, countLimited: false, onViewProducts } ) );
+
+		fireEvent.click( screen.getByRole( 'button', { name: 'View Affected Products' } ) );
+		expect( onViewProducts ).toHaveBeenCalledTimes( 1 );
+	} );
+
+	it( 'omits the reason line unless the rule is locked', () => {
+		render( stats( { totalMatching: 36, countLimited: false, audience: audience() } ) );
+
+		expect( screen.queryByText( 'Applies to new sign-ups only' ) ).not.toBeInTheDocument();
 	} );
 
 	it( 'hangs the products action off its own tile and no other', () => {

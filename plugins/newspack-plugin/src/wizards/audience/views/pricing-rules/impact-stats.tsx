@@ -7,12 +7,12 @@
  * WordPress dependencies
  */
 import { __, _x, sprintf } from '@wordpress/i18n';
+import { Button } from '@wordpress/components';
 
 /**
  * Internal dependencies
  */
-import { Grid } from '../../../../../packages/components/src';
-import StatTile, { type StatTileProps } from './stat-tile';
+import { Grid, StatCard } from '../../../../../packages/components/src';
 import { formatCount, finiteNumber } from './impact-format';
 
 interface ImpactStatsProps {
@@ -29,7 +29,20 @@ interface ImpactStatsProps {
 	onViewProducts?: () => void;
 }
 
-type Figure = Pick< StatTileProps, 'value' | 'valueLabel' >;
+interface Tile {
+	id: string;
+	label: string;
+	// Pre-formatted by the caller. Null renders the null glyph.
+	value: string | null;
+	// Spoken instead of the visible value, whose meaning may rest on punctuation.
+	valueLabel?: string;
+	description: string;
+	secondary?: string;
+	actionLabel?: string;
+	onAction?: () => void;
+}
+
+type Figure = Pick< Tile, 'value' | 'valueLabel' >;
 
 const bounded = ( value: EngineCount, limited: boolean, bound: 'lower' | 'upper' = 'lower' ): Figure => {
 	const count = finiteNumber( value );
@@ -78,7 +91,7 @@ export default function ImpactStats( {
 	const lockedNote = __( 'Applies to new sign-ups only', 'newspack-plugin' );
 
 	// Keyed on an untranslated id, so no locale can collide two tiles.
-	const tiles: ( StatTileProps & { id: string } )[] = [
+	const tiles: Tile[] = [
 		{
 			id: 'products',
 			label: __( 'Products affected', 'newspack-plugin' ),
@@ -119,8 +132,23 @@ export default function ImpactStats( {
 
 	return (
 		<Grid className="newspack-pricing-rules__stats" columns={ tiles.length } gutter={ 16 } noMargin>
-			{ tiles.map( ( { id, ...tile } ) => (
-				<StatTile key={ id } { ...tile } />
+			{ tiles.map( ( { id, label, value, valueLabel, description, secondary, actionLabel, onAction } ) => (
+				<StatCard.Root key={ id }>
+					<StatCard.Label>{ label }</StatCard.Label>
+					<StatCard.Body>
+						<StatCard.Value value={ value } valueLabel={ valueLabel } />
+						{ secondary && <StatCard.Secondary>{ secondary }</StatCard.Secondary> }
+					</StatCard.Body>
+					<StatCard.Footer>
+						{ description }
+						{ actionLabel && onAction && (
+							// Opens a modal, so a button styled as a link rather than an anchor.
+							<Button variant="link" className="newspack-stat-card__action" onClick={ onAction }>
+								{ actionLabel }
+							</Button>
+						) }
+					</StatCard.Footer>
+				</StatCard.Root>
 			) ) }
 		</Grid>
 	);
