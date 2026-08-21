@@ -329,8 +329,20 @@ class API {
 	 * @return WP_Error|null An error to return to the caller, or null to proceed.
 	 */
 	private static function check_incoming_post_type( mixed $payload ): ?WP_Error {
-		if ( ! is_array( $payload ) || ! isset( $payload['post_data'] ) || ! is_array( $payload['post_data'] ) ) {
+		if ( ! is_array( $payload ) || ! isset( $payload['post_data'] ) ) {
 			return null;
+		}
+
+		// A present-but-not-array post_data is refused rather than passed along.
+		// get_payload_error() only tests it for emptiness, and insert() then indexes
+		// it, which is an uncaught TypeError on PHP 8. Returning early here would
+		// read as validation while letting that through.
+		if ( ! is_array( $payload['post_data'] ) ) {
+			return new WP_Error(
+				'invalid_post_data',
+				__( 'The payload post data must be an object.', 'newspack-network' ),
+				[ 'status' => 400 ]
+			);
 		}
 
 		// array_key_exists rather than isset, so an explicit null is judged rather

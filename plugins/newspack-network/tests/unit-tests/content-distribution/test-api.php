@@ -977,6 +977,42 @@ class TestApi extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * A post_data that is present but not an object must be refused.
+	 *
+	 * Nothing downstream validates its shape: get_payload_error() tests only that
+	 * it is non-empty, and insert() then indexes it, which is an uncaught
+	 * TypeError on PHP 8 rather than a handled error response.
+	 *
+	 * @group content-distribution-api
+	 */
+	public function test_insert_refuses_a_post_data_that_is_not_an_object() {
+		wp_set_current_user( $this->factory->user->create( [ 'role' => 'author' ] ) );
+		kses_init();
+
+		foreach ( [
+			'string' => 'not-an-object',
+			'int'    => 7,
+			'bool'   => true,
+		] as $label => $post_data ) {
+			$payload              = get_sample_payload( 'https://origin.test', get_bloginfo( 'url' ) );
+			$payload['post_data'] = $post_data;
+
+			$request = new WP_REST_Request( 'POST', '/newspack-network/v1/content-distribution/insert' );
+			$request->set_header( 'Content-Type', 'application/json' );
+			$request->set_body( wp_json_encode( [ 'payload' => $payload ] ) );
+
+			$response = rest_get_server()->dispatch( $request );
+
+			$this->assertSame( 400, $response->get_status(), "A $label post_data must be refused." );
+			$this->assertSame(
+				'invalid_post_data',
+				$response->as_error()->get_error_code(),
+				"A $label post_data must be refused by name, not by an incidental failure."
+			);
+		}
+	}
+
+	/**
 	 * A partial update must not be able to change an existing post's type.
 	 *
 	 * The merge in get_payload_from_partial() applies the incoming post_data over
