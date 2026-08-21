@@ -276,8 +276,19 @@ is one sentence rather than three stacked lines; elements pass through
 untouched, which is how an action lands under the text.
 
 An element ends the run, so a description with inline markup in the middle of it
-would be split across several blocks. Wrap that description yourself and it
-passes through as one:
+would be split across several blocks. A Fragment does not: `createInterpolateElement`
+returns one, and the sentence inside it stays part of the run, styled like any
+other description.
+
+```jsx
+<StatCard.Footer>
+	{ createInterpolateElement( __( 'Applies to <b>12</b> products.', 'newspack-plugin' ), {
+		b: <strong />,
+	} ) }
+</StatCard.Footer>
+```
+
+Anything else you want kept together, wrap yourself and it passes through as one:
 
 ```jsx
 <StatCard.Footer>

@@ -1,7 +1,7 @@
 /**
  * WordPress dependencies.
  */
-import { Children, isValidElement } from '@wordpress/element';
+import { Children, Fragment, isValidElement } from '@wordpress/element';
 import { Stack } from '@wordpress/ui';
 
 /**
@@ -33,7 +33,10 @@ const asParts = ( children: React.ReactNode ) => {
 	};
 
 	Children.toArray( children ).forEach( child => {
-		if ( isValidElement( child ) ) {
+		// A Fragment is part of the run, not a block of its own:
+		// `createInterpolateElement` returns one, and the sentence it holds
+		// belongs in the description wrapper like any other text.
+		if ( isValidElement( child ) && Fragment !== child.type ) {
 			flushText();
 			parts.push( child );
 		} else {

@@ -4,6 +4,11 @@
 import { render, screen } from '@testing-library/react';
 
 /**
+ * WordPress dependencies
+ */
+import { createInterpolateElement } from '@wordpress/element';
+
+/**
  * Internal dependencies
  */
 import StatCard, { STAT_CARD_NULL_GLYPH } from '.';
@@ -543,6 +548,19 @@ describe( 'StatCard.Footer', () => {
 			</StatCard.Root>
 		);
 		expect( container.querySelector( '.newspack-stat-card__description' ) ).not.toBeInTheDocument();
+	} );
+
+	// `createInterpolateElement` returns a Fragment, which has to stay part of the run.
+	it( 'keeps an interpolated sentence in the description styling', () => {
+		const { container } = render(
+			<StatCard.Root>
+				<StatCard.Footer>{ createInterpolateElement( 'Applies to <b>12</b> products.', { b: <strong /> } ) }</StatCard.Footer>
+			</StatCard.Root>
+		);
+		const descriptions = container.querySelectorAll( '.newspack-stat-card__description' );
+		expect( descriptions ).toHaveLength( 1 );
+		expect( descriptions[ 0 ] ).toHaveTextContent( 'Applies to 12 products.' );
+		expect( descriptions[ 0 ].querySelector( 'strong' ) ).toBeInTheDocument();
 	} );
 
 	// The documented escape hatch: inline markup would otherwise split into a block per child.
