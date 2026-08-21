@@ -358,6 +358,23 @@ describe( 'ReorderModal drag and drop', () => {
 		expect( titles() ).toEqual( [ 'Alpha', 'Beta', 'Gamma' ] );
 	} );
 
+	it( 'reorders as a row is dragged down past the rows below it', async () => {
+		renderModal();
+		await screen.findByText( 'Alpha' );
+		const dt = dataTransfer();
+		fireEvent.dragStart( rows()[ 0 ], { dataTransfer: dt } );
+		fireEvent.dragOver( rows()[ 1 ], { dataTransfer: dt } );
+		expect( titles() ).toEqual( [ 'Beta', 'Alpha', 'Gamma' ] );
+
+		// The dragged row now sits under the cursor, so the next `dragover` reaches
+		// it rather than the row it swapped with: it has to leave the order alone.
+		fireEvent.dragOver( rows()[ 1 ], { dataTransfer: dt } );
+		expect( titles() ).toEqual( [ 'Beta', 'Alpha', 'Gamma' ] );
+
+		fireEvent.dragOver( rows()[ 2 ], { dataTransfer: dt } );
+		expect( titles() ).toEqual( [ 'Beta', 'Gamma', 'Alpha' ] );
+	} );
+
 	// `dragstart` fires at the draggable row even when the gesture began on a
 	// chevron inside it, so the guard keys off where the pointer went down.
 	it( 'does not start a drag that began on a chevron', async () => {
