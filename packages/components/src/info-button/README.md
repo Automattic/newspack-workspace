@@ -13,6 +13,17 @@ import { InfoButton } from 'newspack-components';
 The component imports its own stylesheet, so the barrel ships the CSS with it.
 There is nothing separate to import.
 
+It carries no inline margin, so the row it sits in owns the spacing beside it.
+In a flex or grid row that is the row's own `gap`; anywhere else the caller sets
+it.
+
+Vertically it is a 24px control, `$button-size-small`, and it makes no assumption
+about the line it lands on. Beside text on a shorter line it grows the row unless
+the row pulls it back, which is the host's call rather than the component's: a row
+that is happy at 24px needs nothing. `StatCard.Label` and `SettingsSection` both
+trim it to the 20px line their text sits on, so a label carrying one stays level
+with a label without.
+
 ## What belongs in it
 
 **Supplementary context only.** Anything a reader needs in order to use the

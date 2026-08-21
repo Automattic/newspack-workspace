@@ -108,15 +108,15 @@ function SubscriberOnlyProducts() {
 				label: __( 'Status', 'newspack-plugin' ),
 				elements: [
 					{ value: 'active', label: __( 'Active', 'newspack-plugin' ) },
-					{ value: 'paused', label: __( 'Paused', 'newspack-plugin' ) },
+					{ value: 'inactive', label: __( 'Inactive', 'newspack-plugin' ) },
 				],
 				filterBy: { operators: [ 'isAny' as const ] },
-				getValue: ( { item }: { item: Restriction } ) => ( item.active ? 'active' : 'paused' ),
+				getValue: ( { item }: { item: Restriction } ) => ( item.active ? 'active' : 'inactive' ),
 				render: ( { item }: { item: Restriction } ) =>
 					item.active ? (
 						<Badge intent="stable">{ __( 'Active', 'newspack-plugin' ) }</Badge>
 					) : (
-						<Badge intent="medium">{ __( 'Paused', 'newspack-plugin' ) }</Badge>
+						<Badge intent="medium">{ __( 'Inactive', 'newspack-plugin' ) }</Badge>
 					),
 			},
 			{
@@ -139,7 +139,8 @@ function SubscriberOnlyProducts() {
 			},
 			{
 				id: 'toggle',
-				label: ( items: Restriction[] ) => ( items[ 0 ]?.active ? __( 'Pause', 'newspack-plugin' ) : __( 'Resume', 'newspack-plugin' ) ),
+				label: ( items: Restriction[] ) =>
+					items[ 0 ]?.active ? __( 'Set to inactive', 'newspack-plugin' ) : __( 'Set to active', 'newspack-plugin' ),
 				callback: ( items: Restriction[] ) => setActive( items[ 0 ], ! items[ 0 ].active ),
 			},
 			{

@@ -36,6 +36,7 @@ class Initializer {
 		include_once NEWSPACK_ABSPATH . 'includes/cli/class-institutions-migration.php';
 		include_once NEWSPACK_ABSPATH . 'includes/cli/trait-one-time-purchase-migration.php';
 		include_once NEWSPACK_ABSPATH . 'includes/cli/class-membership-gates-migration.php';
+		include_once NEWSPACK_ABSPATH . 'includes/cli/class-discounts-migration.php';
 		include_once NEWSPACK_ABSPATH . 'includes/cli/class-premium-newsletters-migration.php';
 		include_once NEWSPACK_ABSPATH . 'includes/cli/class-fix-memberships.php';
 	}
@@ -114,6 +115,7 @@ class Initializer {
 			WP_CLI::add_command( 'newspack migrate-teams', [ 'Newspack\CLI\Teams_Migration', 'migrate_teams' ] );
 			WP_CLI::add_command( 'newspack migrate-team-products', [ 'Newspack\CLI\Teams_Migration', 'migrate_team_products' ] );
 			WP_CLI::add_command( 'newspack migrate-manual-members', [ 'Newspack\CLI\Teams_Migration', 'migrate_manual_members' ] );
+			WP_CLI::add_command( 'newspack migrate-discounts', [ 'Newspack\CLI\Discounts_Migration', 'migrate_discounts' ] );
 			WP_CLI::add_command( 'newspack backfill-team-managers', [ 'Newspack\CLI\Teams_Migration', 'backfill_team_managers' ] );
 			WP_CLI::add_command( 'newspack migrate-institutions', [ 'Newspack\CLI\Institutions_Migration', 'migrate_institutions' ] );
 			// The standalone `migrate-memberships` drop-in registers the same command
