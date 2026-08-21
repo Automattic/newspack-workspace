@@ -61,6 +61,10 @@ export const SettingsField = ( { field, value, onChange } ) => {
 	);
 
 	switch ( type ) {
+		// Unreachable while the early return above stands. Kept because these fields
+		// carry OAuth tokens: falling through to `default` would print them in a text input.
+		case 'hidden':
+			return null;
 		case 'oauth': {
 			const isConnected = !! value;
 			const oauthUrl = field.oauth_url || '';
