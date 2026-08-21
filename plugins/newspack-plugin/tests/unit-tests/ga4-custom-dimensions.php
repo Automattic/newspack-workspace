@@ -22,7 +22,7 @@ class Newspack_Test_GA4_Custom_Dimensions extends WP_UnitTestCase {
 	const SK_SETTINGS_OPTION = 'googlesitekit_analytics-4_settings';
 
 	/**
-	 * Dimensions only a reader-revenue site can populate.
+	 * Mirrors the production group, so a change to it must be made here too.
 	 */
 	const READER_REVENUE_DIMENSIONS = [
 		'is_subscriber',
@@ -35,7 +35,7 @@ class Newspack_Test_GA4_Custom_Dimensions extends WP_UnitTestCase {
 	];
 
 	/**
-	 * Dimensions only an access-control site can populate.
+	 * Mirrors the production group, so a change to it must be made here too.
 	 */
 	const ACCESS_CONTROL_DIMENSIONS = [
 		'gate_post_id',
@@ -282,9 +282,7 @@ class Newspack_Test_GA4_Custom_Dimensions extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Dimensions that only a reader-revenue site can populate must not spend a
-	 * slot on a site that sells nothing. GA4 caps event-scoped custom dimensions
-	 * at 50 and never back-fills, so a dimension no event carries is pure waste.
+	 * A site that sells nothing must not spend slots on commerce parameters.
 	 */
 	public function test_reader_revenue_dimensions_are_omitted_without_reader_revenue() {
 		add_filter( 'newspack_ga4_dimensions_reader_revenue_enabled', '__return_false' );
@@ -306,9 +304,7 @@ class Newspack_Test_GA4_Custom_Dimensions extends WP_UnitTestCase {
 	}
 
 	/**
-	 * The gate dimensions are emitted only by `gate.js`, which enqueues solely on
-	 * a restricted post carrying a published gate. A site running no access
-	 * control cannot populate them at all.
+	 * The gate parameters need a rendered gate, which needs access control.
 	 */
 	public function test_gate_dimensions_are_omitted_without_access_control() {
 		add_filter( 'newspack_ga4_dimensions_access_control_enabled', '__return_false' );
@@ -319,10 +315,8 @@ class Newspack_Test_GA4_Custom_Dimensions extends WP_UnitTestCase {
 	}
 
 	/**
-	 * The gated groups the tests assert on must stay in step with the ones the
-	 * code actually drops, so adding a parameter to a group is a deliberate act
-	 * rather than a silent loss of coverage. The lists are spelled out above
-	 * rather than derived, so this is the one place they are compared.
+	 * The lists above are spelled out rather than derived, so that a test can
+	 * fail rather than silently follow the code. This is where they are compared.
 	 */
 	public function test_gated_groups_match_the_production_constants() {
 		$this->assertSame( self::ACCESS_CONTROL_DIMENSIONS, GA4_Custom_Dimensions::ACCESS_CONTROL_DIMENSIONS, 'The access-control group changed; update the test list deliberately.' );
@@ -330,15 +324,11 @@ class Newspack_Test_GA4_Custom_Dimensions extends WP_UnitTestCase {
 	}
 
 	/**
-	 * `access_source` is emitted by GoogleSiteKit under
-	 * `Content_Gate::is_gating_active()`, which is narrower than what makes the
-	 * gate parameters fire -- WooCommerce Memberships alone is enough for a gate,
-	 * but not for `access_source`. Provisioning it with the rest of the gate group
-	 * would hand a Memberships-only site a dimension nothing can populate, which
-	 * is the waste this whole class exists to avoid.
+	 * Memberships alone is enough for a gate, but not for `access_source`, so it
+	 * must not ride along with the gate group.
 	 *
-	 * Runs isolated because NEWSPACK_CONTENT_GATES is a constant a dozen sibling
-	 * suites define, and once defined it cannot be unset.
+	 * Isolated because NEWSPACK_CONTENT_GATES is a constant a dozen sibling suites
+	 * define, and once defined it cannot be unset.
 	 *
 	 * @runInSeparateProcess
 	 * @preserveGlobalState disabled
@@ -357,9 +347,8 @@ class Newspack_Test_GA4_Custom_Dimensions extends WP_UnitTestCase {
 	}
 
 	/**
-	 * The predicates themselves -- not just the filter plumbing -- must read a
-	 * bare site correctly. This environment loads neither WooCommerce nor
-	 * WooCommerce Memberships and defines no gating constant.
+	 * The predicates themselves, not just the filter plumbing. This environment
+	 * loads no WooCommerce, no Memberships, and defines no gating constant.
 	 *
 	 * @runInSeparateProcess
 	 * @preserveGlobalState disabled
@@ -370,8 +359,7 @@ class Newspack_Test_GA4_Custom_Dimensions extends WP_UnitTestCase {
 	}
 
 	/**
-	 * And are provisioned once the site does run access control. `access_source`
-	 * is checked separately -- it follows its own, stricter emitter.
+	 * And are provisioned once it does. `access_source` is checked separately.
 	 */
 	public function test_gate_dimensions_are_provisioned_with_access_control() {
 		add_filter( 'newspack_ga4_dimensions_access_control_enabled', '__return_true' );
@@ -382,9 +370,7 @@ class Newspack_Test_GA4_Custom_Dimensions extends WP_UnitTestCase {
 	}
 
 	/**
-	 * `price` has no emitter on any site: the modal-checkout GA4 whitelist
-	 * (`analytics/ga4/utils/index.js`) admits `amount`, and `ga4/opened.js` folds
-	 * `price` into it before send. Provisioning it burns a slot on every property.
+	 * `price` has no emitter on any site: the modal checkout sends `amount`.
 	 */
 	public function test_unemitted_price_dimension_is_never_provisioned() {
 		add_filter( 'newspack_ga4_dimensions_reader_revenue_enabled', '__return_true' );
@@ -393,8 +379,7 @@ class Newspack_Test_GA4_Custom_Dimensions extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Feature gating must not touch dimensions that any site can populate --
-	 * campaigns, segments, newsletters and the always-on page context.
+	 * Gating must not touch parameters any site can populate.
 	 */
 	public function test_feature_independent_dimensions_survive_both_features_off() {
 		add_filter( 'newspack_ga4_dimensions_reader_revenue_enabled', '__return_false' );
@@ -425,9 +410,8 @@ class Newspack_Test_GA4_Custom_Dimensions extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Turning a feature on after provisioning must provision its dimensions
-	 * without waiting for the monthly recheck: GA4 dimensions are not
-	 * retroactive, so events sent before one exists are never queryable.
+	 * Enabling a feature must provision its parameters without waiting for the
+	 * monthly recheck; GA4 never back-fills.
 	 */
 	public function test_enabling_a_feature_schedules_provisioning_for_its_dimensions() {
 		$this->connect_property( 'PROP-FEATURE' );
@@ -444,8 +428,7 @@ class Newspack_Test_GA4_Custom_Dimensions extends WP_UnitTestCase {
 				'created'     => [],
 			]
 		);
-		// Connecting the property queues its own first-time run; this test is
-		// about the recheck path, so start from a clean queue.
+		// Connecting the property queues its own run; this is about the recheck.
 		wp_clear_scheduled_hook( GA4_Custom_Dimensions::PROVISION_ACTION );
 		GA4_Custom_Dimensions::maybe_schedule_recheck();
 		$this->assertFalse( wp_next_scheduled( GA4_Custom_Dimensions::PROVISION_ACTION ), 'A site whose features are unchanged is not rescheduled.' );
