@@ -17,7 +17,7 @@ export const STATUS_MAP = {
 	failed: { label: __( 'Failed', 'newspack-plugin' ), intent: 'high' },
 	pending: { label: __( 'Pending', 'newspack-plugin' ), intent: 'low' },
 	'in-progress': { label: __( 'In progress', 'newspack-plugin' ), intent: 'informational' },
-	canceled: { label: __( 'Canceled', 'newspack-plugin' ), intent: 'medium' },
+	canceled: { label: __( 'Canceled', 'newspack-plugin' ), intent: 'high' },
 };
 
 export function formatTimestamp( gmt ) {
