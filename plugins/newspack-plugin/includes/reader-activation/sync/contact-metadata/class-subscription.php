@@ -55,7 +55,7 @@ class Subscription extends Contact_Metadata {
 	 * @return string
 	 */
 	public static function get_section_name() {
-		return __( 'Subscription', 'newspack' );
+		return __( 'Subscription', 'newspack-plugin' );
 	}
 
 	/**

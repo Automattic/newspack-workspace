@@ -32,7 +32,7 @@ class Registration extends Contact_Metadata {
 	 * @return string
 	 */
 	public static function get_section_name() {
-		return __( 'Registration', 'newspack' );
+		return __( 'Registration', 'newspack-plugin' );
 	}
 
 	/**

@@ -40,7 +40,7 @@ class Donation extends Subscription {
 	 * @return string
 	 */
 	public static function get_section_name() {
-		return __( 'Donation', 'newspack' );
+		return __( 'Donation', 'newspack-plugin' );
 	}
 
 	/**

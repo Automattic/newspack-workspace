@@ -39,7 +39,7 @@ class Engagement extends Contact_Metadata {
 	 * @return string
 	 */
 	public static function get_section_name() {
-		return __( 'Engagement', 'newspack' );
+		return __( 'Engagement', 'newspack-plugin' );
 	}
 
 	/**

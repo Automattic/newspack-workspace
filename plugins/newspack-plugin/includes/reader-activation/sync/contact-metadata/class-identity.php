@@ -32,7 +32,7 @@ class Identity extends Contact_Metadata {
 	 * @return string
 	 */
 	public static function get_section_name() {
-		return __( 'Identity', 'newspack' );
+		return __( 'Identity', 'newspack-plugin' );
 	}
 
 	/**
