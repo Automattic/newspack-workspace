@@ -1,7 +1,7 @@
 /**
  * WordPress dependencies
  */
-import { __ } from '@wordpress/i18n';
+import { __, sprintf } from '@wordpress/i18n';
 import { CheckboxControl, SelectControl, ToggleControl } from '@wordpress/components';
 import { useDispatch } from '@wordpress/data';
 import { useEffect, useMemo, useRef, useState } from '@wordpress/element';
@@ -510,7 +510,11 @@ const ConfigureViewInner = ( { integrations, loading, inFlightChanges, saving, o
 													{ checked && (
 														<SelectControl
 															className="newspack-configure-view__inbound-operator"
-															label={ __( 'Segment as', 'newspack-plugin' ) }
+															label={ sprintf(
+																/* translators: %s: name of the metadata field being segmented on. */
+																__( 'Segment %s as', 'newspack-plugin' ),
+																optionLabel
+															) }
 															hideLabelFromVision
 															value={ selectedOperator }
 															options={ operatorOptions }
