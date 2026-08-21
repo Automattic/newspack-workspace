@@ -39,11 +39,16 @@ const Delta = ( { direction, tone = 'neutral', directionLabel, className, childr
 		}
 	}, [ direction, tone ] );
 
-	const spoken =
-		directionLabel ??
-		( 'up' === direction
-			? _x( 'Up', 'a statistic that has increased', 'newspack-plugin' )
-			: _x( 'Down', 'a statistic that has decreased', 'newspack-plugin' ) );
+	const directions: Record< StatCardDeltaDirection, string > = {
+		up: _x( 'Up', 'a statistic that has increased', 'newspack-plugin' ),
+		down: _x( 'Down', 'a statistic that has decreased', 'newspack-plugin' ),
+	};
+
+	const glyph = glyphs[ direction ];
+	// Keyed on the same direction as the arrow, so a direction with no arrow is
+	// left unspoken rather than announced as the opposite one. `||` not `??`:
+	// an empty label is a missing one.
+	const spoken = directionLabel || directions[ direction ];
 
 	return (
 		<span
@@ -54,8 +59,8 @@ const Delta = ( { direction, tone = 'neutral', directionLabel, className, childr
 			) }
 		>
 			{ /* The arrow is hidden and its meaning given as text, since a bare glyph announces inconsistently. */ }
-			<span aria-hidden="true">{ glyphs[ direction ] }</span>
-			<span className="screen-reader-text">{ spoken }</span>
+			{ glyph && <span aria-hidden="true">{ glyph }</span> }
+			{ spoken && <span className="screen-reader-text">{ spoken }</span> }
 			{ children }
 		</span>
 	);

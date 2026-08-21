@@ -345,6 +345,33 @@ describe( 'StatCard.Delta', () => {
 		expect( screen.queryByText( 'Up' ) ).not.toBeInTheDocument();
 	} );
 
+	// No arrow and the word "Down" would be worse than saying nothing at all.
+	it( 'leaves an unrecognised direction unspoken', () => {
+		const consoleWarn = jest.spyOn( console, 'warn' ).mockImplementation( () => {} );
+		const { container } = render(
+			<StatCard.Root>
+				<StatCard.Delta direction="sideways">2%</StatCard.Delta>
+			</StatCard.Root>
+		);
+		expect( container.querySelector( '[aria-hidden="true"]' ) ).not.toBeInTheDocument();
+		expect( container.querySelector( '.screen-reader-text' ) ).not.toBeInTheDocument();
+		expect( screen.getByText( '2%' ) ).toBeInTheDocument();
+		expect( consoleWarn ).toHaveBeenCalled();
+		consoleWarn.mockRestore();
+	} );
+
+	// A label mapped from an empty field must not leave the arrow unnamed.
+	it( 'falls back to the spoken direction when directionLabel is empty', () => {
+		render(
+			<StatCard.Root>
+				<StatCard.Delta direction="up" directionLabel="">
+					2%
+				</StatCard.Delta>
+			</StatCard.Root>
+		);
+		expect( screen.getByText( 'Up' ) ).toHaveClass( 'screen-reader-text' );
+	} );
+
 	it( 'sits in a row beside the figure when passed as a Value suffix', () => {
 		const { container } = render(
 			<StatCard.Root>
