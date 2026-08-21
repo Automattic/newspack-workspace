@@ -30,7 +30,7 @@ type CardFormProps = {
 	title: string;
 	description?: string;
 	badge?: {
-		text: string;
+		label: string;
 		intent?: BadgeIntent;
 	};
 	/** JSX rendered in the header action area (buttons, etc.). */
@@ -108,7 +108,7 @@ const CardForm = ( { title, description, badge, actions, isOpen = false, onReque
 							{ description && <p className="newspack-card-form__description">{ description }</p> }
 						</VStack>
 						<HStack spacing={ 2 } expanded={ false }>
-							{ badge && <Badge intent={ badge.intent ?? 'stable' }>{ badge.text }</Badge> }
+							{ badge && <Badge intent={ badge.intent ?? 'stable' }>{ badge.label }</Badge> }
 							{ actions }
 						</HStack>
 					</HStack>

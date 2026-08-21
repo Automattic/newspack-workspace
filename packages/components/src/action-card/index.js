@@ -29,8 +29,7 @@ import classnames from 'classnames';
  * @return {JSX.Element} ActionCard component.
  */
 const ActionCard = ( {
-	badge,
-	badgeIntent,
+	badges,
 	className,
 	checkbox,
 	children,
@@ -125,7 +124,6 @@ const ActionCard = ( {
 	const togglePositionClass = togglePosition === 'trailing' ? 'is-toggle-trailing' : 'is-toggle-leading';
 	const hasInternalLink = href && href.indexOf( 'http' ) !== 0;
 	const isDisplayingSecondaryAction = secondaryActionText && onSecondaryActionClick;
-	const badges = ! Array.isArray( badge ) && badge ? [ badge ] : badge;
 	const HeadingTag = `h${ heading }`;
 
 	const cardContent = (
@@ -168,9 +166,9 @@ const ActionCard = ( {
 								{ ! titleLink && ! expandable && title }
 							</span>
 							{ badges?.length > 0 &&
-								badges.map( ( badgeText, i ) => (
-									<Badge key={ `badge-${ i }` } intent={ badgeIntent ?? 'none' }>
-										{ badgeText }
+								badges.map( ( { label, intent }, i ) => (
+									<Badge key={ `badge-${ i }` } intent={ intent ?? 'none' }>
+										{ label }
 									</Badge>
 								) ) }
 						</HeadingTag>

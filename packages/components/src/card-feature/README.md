@@ -142,7 +142,7 @@ import { __ } from '@wordpress/i18n';
 
 ## With a custom badge
 
-Override `badgeText` and `badgeIntent` to change the badge shown when the feature is enabled. See [`BadgeIntent`](../types.ts) for the available intents.
+Override `badge` to change the badge shown when the feature is enabled. See [`BadgeIntent`](../types.ts) for the available intents.
 
 ```tsx
 import { __ } from '@wordpress/i18n';
@@ -151,8 +151,7 @@ import { __ } from '@wordpress/i18n';
 	title={ __( 'Stripe', 'newspack-plugin' ) }
 	description={ __( 'Accept payments via Stripe.', 'newspack-plugin' ) }
 	enabled={ isEnabled }
-	badgeText={ __( 'Live mode', 'newspack-plugin' ) }
-	badgeIntent="informational"
+	badge={ { label: __( 'Live mode', 'newspack-plugin' ), intent: 'informational' } }
 	onEnable={ handleEnable }
 	onConfigure={ () => history.push( '/settings/stripe' ) }
 	moreControls={ [ { title: __( 'Disable', 'newspack-plugin' ), onClick: handleDisable } ] }
@@ -206,8 +205,7 @@ The card is built on `Card.Root`, `Card.Header` and `Card.Content` from `@wordpr
 | `onEnable` | `() => void` | — | Called when the primary button is clicked while it reads "Enable". That covers the not-enabled case and the enabled-with-unmet-requirements case, where the feature is on but the requirement is what the button acts on |
 | `onConfigure` | `() => void` | — | Called when the primary button is clicked while it reads "Configure", which is the enabled state with no unmet requirements |
 | `moreControls` | `MoreControl[]` | — | Items for the "More" dropdown. Shown when `enabled` and either there are no `requirements` or `requirementsActionable` is set |
-| `badgeText` | `string` | `"Enabled"` | Badge text shown when enabled. Ignored while `requirements` is set, which takes the badge |
-| `badgeIntent` | `BadgeIntent` | `"stable"` | Badge intent shown when enabled. Ignored while `requirements` is set, which forces a high-intent badge |
+| `badge` | `{ label?: string; intent?: BadgeIntent }` | `{ label: "Enabled", intent: "stable" }` | Badge shown when enabled. Ignored while `requirements` is set, which takes the badge |
 | `busy` | `boolean` | `false` | Shows the primary button as busy and blocks it while an action is in flight |
 | `className` | `string` | — | Additional class name applied to the card element |
 

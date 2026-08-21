@@ -39,8 +39,7 @@ const ContentGatesPriority = ( {
 			sortedGates.map( gate => ( {
 				id: gate.id,
 				title: gate.title,
-				badgeIntent: getGateStatusBadgeIntent( gate.status ),
-				badgeText: getGateStatus( gate.status ) as string,
+				badge: { label: getGateStatus( gate.status ), intent: getGateStatusBadgeIntent( gate.status ) },
 			} ) ),
 		[ sortedGates ]
 	);

@@ -7,9 +7,7 @@ export interface ActionCardProps {
 	href?: string;
 	description?: string | React.ReactNode;
 	actionText?: React.ReactNode | string | null;
-	badge?: string | string[];
-	/** Applied to every badge when `badge` is an array. */
-	badgeIntent?: BadgeIntent;
+	badges?: { label: string; intent?: BadgeIntent }[];
 	className?: string;
 	indent?: string;
 	notification?: string | Error | null;

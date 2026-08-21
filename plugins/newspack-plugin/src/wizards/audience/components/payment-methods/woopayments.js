@@ -76,8 +76,7 @@ export const PaymentGateway = ( { gateway } ) => {
 				changeHandler( 'enabled', ! gateway.enabled );
 				onSave();
 			} }
-			badge={ getConnectionStatus() }
-			badgeIntent={ getBadgeIntent() }
+			badges={ [ { label: getConnectionStatus(), intent: getBadgeIntent() } ] }
 			actionContent={
 				// eslint-disable-next-line no-nested-ternary
 				! gateway?.enabled || isLoading || isQuietLoading ? null : isConnected ? (

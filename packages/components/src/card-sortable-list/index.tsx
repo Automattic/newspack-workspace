@@ -36,8 +36,7 @@ type DraggableItem = {
 	id: string | number;
 	title: string;
 	description?: React.ReactNode;
-	badgeIntent?: BadgeIntent;
-	badgeText?: string;
+	badge?: { label: string; intent?: BadgeIntent };
 	toggleChecked?: boolean;
 	onToggleChange?: () => void;
 	actions?: DraggableItemAction[];
@@ -404,7 +403,7 @@ const CardSortableList = ( {
 												<>
 													<h3>
 														{ item.title }
-														{ item.badgeText && <Badge intent={ item.badgeIntent }>{ item.badgeText }</Badge> }
+														{ item.badge && <Badge intent={ item.badge.intent }>{ item.badge.label }</Badge> }
 													</h3>
 													{ item.description && <p>{ item.description }</p> }
 												</>

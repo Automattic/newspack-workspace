@@ -9,8 +9,8 @@ import { render, screen } from '@testing-library/react';
 import CardSortableList from './';
 
 const items = [
-	{ id: 1, title: 'Homepage', badgeIntent: 'stable', badgeText: 'Active' },
-	{ id: 2, title: 'About', badgeIntent: 'draft', badgeText: 'Draft' },
+	{ id: 1, title: 'Homepage', badge: { label: 'Active', intent: 'stable' } },
+	{ id: 2, title: 'About', badge: { label: 'Draft', intent: 'draft' } },
 ];
 
 describe( 'CardSortableList', () => {

@@ -79,8 +79,7 @@ export const Stripe = ( { stripe } ) => {
 				changeHandler( 'enabled', ! stripe.enabled );
 				onSave();
 			} }
-			badge={ getConnectionStatus() }
-			badgeIntent={ getBadgeIntent() }
+			badges={ [ { label: getConnectionStatus(), intent: getBadgeIntent() } ] }
 			actionContent={
 				// eslint-disable-next-line no-nested-ternary
 				! stripe?.enabled || isLoading || isQuietLoading ? null : isConnectedOauth ? (

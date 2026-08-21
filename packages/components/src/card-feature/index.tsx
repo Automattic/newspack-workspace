@@ -81,10 +81,8 @@ type CardFeatureProps = {
 	onConfigure?: () => void;
 	/** Controls rendered inside the "More" dropdown, shown when enabled — including the unmet-requirements state when `requirementsActionable`. */
 	moreControls?: MoreControl[];
-	/** Badge text shown when enabled. Ignored while `requirements` is set, which takes the badge. Default: "Enabled". */
-	badgeText?: string;
-	/** Badge intent shown when enabled. Ignored while `requirements` is set, which forces a "high" badge. Default: "stable". */
-	badgeIntent?: BadgeIntent;
+	/** Badge shown when enabled. Ignored while `requirements` is set, which takes the badge. Defaults to "Enabled" at the "stable" intent. */
+	badge?: { label?: string; intent?: BadgeIntent };
 	className?: string;
 };
 
@@ -109,8 +107,7 @@ const CardFeature = ( {
 	onEnable,
 	onConfigure,
 	moreControls,
-	badgeText,
-	badgeIntent = 'stable',
+	badge: badgeProp,
 	className,
 }: CardFeatureProps ) => {
 	const instanceId = useInstanceId( CardFeature, 'newspack-card-feature' );
@@ -121,11 +118,11 @@ const CardFeature = ( {
 		'newspack-card-feature--muted': isMuted,
 	} );
 
-	let badge: { text: string; intent: BadgeIntent } | undefined;
+	let badge: { label: string; intent: BadgeIntent } | undefined;
 	if ( requirements ) {
-		badge = { text: requirements, intent: 'high' };
+		badge = { label: requirements, intent: 'high' };
 	} else if ( enabled ) {
-		badge = { text: badgeText ?? __( 'Enabled', 'newspack-plugin' ), intent: badgeIntent };
+		badge = { label: badgeProp?.label ?? __( 'Enabled', 'newspack-plugin' ), intent: badgeProp?.intent ?? 'stable' };
 	}
 
 	const isConfigureState = enabled && ! requirements;
@@ -214,7 +211,7 @@ const CardFeature = ( {
 					</Stack>
 					{ badge && (
 						<Badge id={ describedById } className="newspack-card-feature__badge" intent={ badge.intent }>
-							{ badge.text }
+							{ badge.label }
 						</Badge>
 					) }
 				</Stack>

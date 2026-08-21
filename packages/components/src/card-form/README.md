@@ -33,7 +33,7 @@ const handleClose = () => setIsOpen( false );
 <CardForm
 	title={ __( 'Above Header', 'newspack-plugin' ) }
 	description={ __( 'Displays an ad above the site header.', 'newspack-plugin' ) }
-	badge={ isEnabled ? { intent: 'stable', text: __( 'Enabled', 'newspack-plugin' ) } : undefined }
+	badge={ isEnabled ? { intent: 'stable', label: __( 'Enabled', 'newspack-plugin' ) } : undefined }
 	actions={
 		isEnabled ? (
 			<Button variant="tertiary" size="compact" onClick={ () => isOpen ? handleClose() : setIsOpen( true ) }>
@@ -64,7 +64,7 @@ Omitting `intent` defaults to `stable`, because a `CardForm` badge marks a featu
 ```tsx
 <CardForm
 	title={ __( 'Above Header', 'newspack-plugin' ) }
-	badge={ { intent: 'medium', text: __( 'Missing ad unit', 'newspack-plugin' ) } }
+	badge={ { intent: 'medium', label: __( 'Missing ad unit', 'newspack-plugin' ) } }
 	actions={ <Button variant="tertiary" size="compact">{ __( 'Edit', 'newspack-plugin' ) }</Button> }
 	isOpen={ false }
 />
@@ -93,7 +93,7 @@ Omit `badge` (or pass `undefined`) to show no badge at all.
 |---|---|---|---|
 | `title` | `string` | — | Card heading (**required**) |
 | `description` | `string` | — | Supporting text below the title |
-| `badge` | `{ text: string; intent?: BadgeIntent }` | — | Badge shown next to the actions slot. Omit or pass `undefined` to hide. |
+| `badge` | `{ label: string; intent?: BadgeIntent }` | — | Badge shown next to the actions slot. Omit or pass `undefined` to hide. |
 | `actions` | `React.ReactNode` | — | JSX rendered in the header action area (buttons, dropdowns, etc.) |
 | `isOpen` | `boolean` | `false` | When `true`, renders `children` in the card body and removes the header border |
 | `onRequestClose` | `() => void` | — | Called when the user presses Escape while focus is inside the open form |

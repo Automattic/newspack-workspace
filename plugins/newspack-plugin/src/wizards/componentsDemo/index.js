@@ -602,7 +602,7 @@ class ComponentsDemo extends Component {
 							toggleChecked={ actionCardToggleChecked }
 						/>
 						<ActionCard
-							badge={ __( 'Premium', 'newspack-plugin' ) }
+							badges={ [ { label: __( 'Premium', 'newspack-plugin' ) } ] }
 							title={ __( 'Example Ten', 'newspack-plugin' ) }
 							description={ __( 'An example of an action card with a badge.', 'newspack-plugin' ) }
 							actionText={ __( 'Install', 'newspack-plugin' ) }
@@ -638,7 +638,10 @@ class ComponentsDemo extends Component {
 							checkbox="checked"
 						/>
 						<ActionCard
-							badge={ [ __( 'Premium', 'newspack-plugin' ), __( 'Archived', 'newspack-plugin' ) ] }
+							badges={ [
+								{ label: __( 'Premium', 'newspack-plugin' ), intent: 'informational' },
+								{ label: __( 'Archived', 'newspack-plugin' ), intent: 'draft' },
+							] }
 							title={ __( 'Example Fourteen', 'newspack-plugin' ) }
 							description={ __( 'An example of an action card with two badges.', 'newspack-plugin' ) }
 							actionText={ __( 'Install', 'newspack-plugin' ) }
@@ -647,8 +650,7 @@ class ComponentsDemo extends Component {
 							} }
 						/>
 						<ActionCard
-							badge={ __( 'It works', 'newspack-plugin' ) }
-							badgeIntent="stable"
+							badges={ [ { label: __( 'It works', 'newspack-plugin' ), intent: 'stable' } ] }
 							title={ __( 'Example Fifteen', 'newspack-plugin' ) }
 							description={ __( 'An example of an action card with a success badge.', 'newspack-plugin' ) }
 							actionText={ __( 'Install', 'newspack-plugin' ) }
@@ -657,8 +659,7 @@ class ComponentsDemo extends Component {
 							} }
 						/>
 						<ActionCard
-							badge={ __( 'Uh oh', 'newspack-plugin' ) }
-							badgeIntent="medium"
+							badges={ [ { label: __( 'Uh oh', 'newspack-plugin' ), intent: 'medium' } ] }
 							title={ __( 'Example Sixteen', 'newspack-plugin' ) }
 							description={ __( 'An example of an action card with a warning badge.', 'newspack-plugin' ) }
 							actionText={ __( 'Install', 'newspack-plugin' ) }
@@ -667,8 +668,7 @@ class ComponentsDemo extends Component {
 							} }
 						/>
 						<ActionCard
-							badge={ __( 'Oh no', 'newspack-plugin' ) }
-							badgeIntent="high"
+							badges={ [ { label: __( 'Oh no', 'newspack-plugin' ), intent: 'high' } ] }
 							title={ __( 'Example Seventeen', 'newspack-plugin' ) }
 							description={ __( 'An example of an action card with an error badge.', 'newspack-plugin' ) }
 							actionText={ __( 'Install', 'newspack-plugin' ) }
@@ -677,8 +677,7 @@ class ComponentsDemo extends Component {
 							} }
 						/>
 						<ActionCard
-							badge={ __( 'Brand awareness', 'newspack-plugin' ) }
-							badgeIntent="informational"
+							badges={ [ { label: __( 'Brand awareness', 'newspack-plugin' ), intent: 'informational' } ] }
 							title={ __( 'Example Eighteen', 'newspack-plugin' ) }
 							description={ __( 'An example of an action card with an informational badge.', 'newspack-plugin' ) }
 							actionText={ __( 'Install', 'newspack-plugin' ) }
@@ -1192,8 +1191,7 @@ class ComponentsDemo extends Component {
 									title={ __( 'Stripe', 'newspack-plugin' ) }
 									description={ __( 'Accept payments via Stripe.', 'newspack-plugin' ) }
 									enabled={ true }
-									badgeText={ __( 'Live mode', 'newspack-plugin' ) }
-									badgeIntent="informational"
+									badge={ { label: __( 'Live mode', 'newspack-plugin' ), intent: 'informational' } }
 									onEnable={ () => {} }
 									onConfigure={ () => {} }
 									moreControls={ [ { title: __( 'Disable', 'newspack-plugin' ), onClick: () => {} } ] }
@@ -1229,7 +1227,7 @@ class ComponentsDemo extends Component {
 								<CardForm
 									title={ __( 'Above Header', 'newspack-plugin' ) }
 									description={ __( 'Displays an ad above the site header.', 'newspack-plugin' ) }
-									badge={ this.state.cardFormEnabled ? { intent: 'stable', text: __( 'Enabled', 'newspack-plugin' ) } : undefined }
+									badge={ this.state.cardFormEnabled ? { intent: 'stable', label: __( 'Enabled', 'newspack-plugin' ) } : undefined }
 									actions={
 										this.state.cardFormEnabled ? (
 											<Button
@@ -1285,7 +1283,7 @@ class ComponentsDemo extends Component {
 											__( 'Badge intent: %s', 'newspack-plugin' ),
 											intent
 										) }
-										badge={ { intent, text: intent.charAt( 0 ).toUpperCase() + intent.slice( 1 ) } }
+										badge={ { intent, label: intent.charAt( 0 ).toUpperCase() + intent.slice( 1 ) } }
 										actions={
 											<Button variant="tertiary" size="compact">
 												{ __( 'Edit', 'newspack-plugin' ) }
