@@ -6,7 +6,7 @@ import classnames from 'classnames';
 /**
  * WordPress dependencies
  */
-import { __ } from '@wordpress/i18n';
+import { __, _x, sprintf } from '@wordpress/i18n';
 import { createElement, isValidElement } from '@wordpress/element';
 import { useInstanceId } from '@wordpress/compose';
 import { DropdownMenu } from '@wordpress/components';
@@ -132,6 +132,12 @@ const CardFeature = ( {
 
 	const isConfigureState = enabled && ! requirements;
 	const buttonLabel = isConfigureState ? configureLabel ?? __( 'Configure', 'newspack-plugin' ) : enableLabel ?? __( 'Enable', 'newspack-plugin' );
+	const buttonAccessibleLabel = sprintf(
+		// translators: %1$s: the button's visible action label, e.g. "Enable". %2$s: the feature's name. The visible label must stay first (WCAG 2.5.3).
+		_x( '%1$s %2$s', 'accessible button name: visible action label, then feature name', 'newspack-plugin' ),
+		buttonLabel,
+		title
+	);
 	const showMoreControls = enabled && !! moreControls?.length && ( ! requirements || requirementsActionable );
 
 	const handleButtonClick = () => {
@@ -187,6 +193,7 @@ const CardFeature = ( {
 							variant={ isConfigureState ? 'tertiary' : 'secondary' }
 							accessibleWhenDisabled
 							aria-describedby={ describedById }
+							aria-label={ buttonAccessibleLabel }
 							disabled={ ( isMuted && ! requirementsActionable ) || busy }
 							isBusy={ busy }
 							onClick={ handleButtonClick }
@@ -197,7 +204,11 @@ const CardFeature = ( {
 						{ showMoreControls && (
 							<DropdownMenu
 								icon={ moreVertical }
-								label={ __( 'More', 'newspack-plugin' ) }
+								label={ sprintf(
+									// translators: %s: the feature's name.
+									__( 'More options for %s', 'newspack-plugin' ),
+									title
+								) }
 								controls={ moreControls }
 								toggleProps={ { size: 'compact' } }
 							/>

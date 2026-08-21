@@ -214,6 +214,8 @@ jobs:
        # build). Without it pnpm exits non-zero on a missing script.
       - run: pnpm --filter "$PKG" run --if-present lint:js
         continue-on-error: false
+      - run: pnpm --filter "$PKG" run --if-present lint:scss
+        continue-on-error: false
       # Type gate: the build strips types via Babel without checking them and
       # ESLint is not type-aware, so this is the only step that catches type
       # errors. Packages opt in by defining the script (tsc --noEmit against

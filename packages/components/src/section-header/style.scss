@@ -5,7 +5,6 @@
 @use "~@wordpress/base-styles/colors" as wp-colors;
 @use "~@wordpress/base-styles/variables" as wp-vars;
 @use "~@wordpress/base-styles/mixins" as wp-mixins;
-@use "../../../colors/colors.module" as colors;
 
 .newspack-section-header {
 	flex: 1;
@@ -95,6 +94,31 @@
 		@include wp-mixins.heading-x-large();
 	}
 
+	&#{&}--small {
+		.newspack-section-header__title {
+			@include wp-mixins.heading-large();
+		}
+	}
+
+	&__icon {
+		background-color: var(--wp-admin-theme-color-lighter-10);
+		border-radius: 100%;
+		display: grid;
+		height: 80px;
+		margin-bottom: 8px !important;
+		width: 80px;
+		place-items: center;
+		svg {
+			fill: var(--wp-admin-theme-color);
+		}
+	}
+
+	&#{&}--small .newspack-section-header__icon {
+		height: wp-vars.$grid-unit-50;
+		margin-bottom: wp-vars.$grid-unit-05 !important;
+		width: wp-vars.$grid-unit-50;
+	}
+
 	&__title-container {
 		align-items: center;
 		display: flex;
@@ -153,18 +177,6 @@
 		> h6,
 		> p {
 			text-align: center;
-		}
-		.newspack-section-header__icon {
-			background-color: var(--wp-admin-theme-color-lighter-10);
-			border-radius: 100%;
-			display: grid;
-			height: 80px;
-			margin-bottom: 8px !important;
-			width: 80px;
-			place-items: center;
-			svg {
-				fill: var(--wp-admin-theme-color);
-			}
 		}
 	}
 }

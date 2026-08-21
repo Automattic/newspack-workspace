@@ -2,7 +2,7 @@
  * Tabbed Navigation
  */
 
-@use "../../../colors/colors.module" as colors;
+@use "../../../colors/colors.module" as np-colors;
 @use "~@wordpress/base-styles/colors" as wp-colors;
 @use "~@wordpress/base-styles/variables" as wp-vars;
 
@@ -18,7 +18,7 @@
 	width: 100%;
 
 	/* stylelint-disable-next-line plugin-wpds/no-setting-wpds-custom-properties -- deliberate Newspack brand override of the indicator token. */
-	--wpds-color-stroke-interactive-neutral-strong: #{colors.$primary-600};
+	--wpds-color-stroke-interactive-neutral-strong: #{np-colors.$primary-600};
 
 	a[role="tab"] {
 		text-decoration: none;
@@ -96,7 +96,7 @@
 		}
 
 		&[aria-current="page"] {
-			box-shadow: inset 0 calc( var( --wpds-border-width-focus, #{wp-vars.$border-width-focus-fallback} ) * -1 ) 0 var( --wpds-color-stroke-interactive-neutral-strong, #{colors.$primary-600} );
+			box-shadow: inset 0 calc( var( --wpds-border-width-focus, #{wp-vars.$border-width-focus-fallback} ) * -1 ) 0 var( --wpds-color-stroke-interactive-neutral-strong, #{np-colors.$primary-600} );
 		}
 	}
 }

@@ -3,10 +3,10 @@
  */
 
 @use "~@wordpress/base-styles/colors" as wp-colors;
-@use "../../../colors/colors.module" as colors;
+@use "../../../colors/colors.module" as np-colors;
 
 $badge-colors: (
-	"info": colors.$primary-600,
+	"info": np-colors.$primary-600,
 	"warning": wp-colors.$alert-yellow,
 	"error": wp-colors.$alert-red,
 	"success": wp-colors.$alert-green,
