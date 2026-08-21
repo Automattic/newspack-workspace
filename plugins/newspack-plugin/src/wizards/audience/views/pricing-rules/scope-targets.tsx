@@ -1,8 +1,11 @@
 /**
  * Scope target picker — selects WHICH products or categories a rule targets, for
- * the scope types that require ids. Reads generic lists from core WP REST
- * (/wp/v2/product, /wp/v2/product_cat); the rule still owns and persists the
- * resulting scope_ids. Scope types without targets (all_products /
+ * the scope types that require ids. Products come from the engine's own route
+ * (/wc-dynamic-pricing/v1/products) because it serves parents AND variations —
+ * labeled "Parent — attributes" and grouped under their parent — so a rule can
+ * target an individual variation; core WP REST does not expose variations.
+ * Categories read core WP REST (/wp/v2/product_cat). The rule still owns and
+ * persists the resulting scope_ids. Scope types without targets (all_products /
  * all_subscriptions) render nothing.
  */
 
@@ -19,28 +22,38 @@ import { decodeEntities } from '@wordpress/html-entities';
  */
 import { AutocompleteTokenField } from '../../../../../packages/components/src';
 
-// A WP REST item is either a post (products: title.rendered) or a term
-// (categories: name) — accept both shapes.
-interface WpEntity {
+// An item is an engine product ({ id, name }), a WP post (title.rendered), or a
+// WP term (name) — accept all three shapes.
+interface PickerEntity {
 	id: number;
 	name?: string;
 	title?: { rendered?: string };
 }
 
-// Scope type → the core WP REST base whose entities it targets.
-const REST_BASE: Record< string, string > = {
-	product_ids: 'product',
-	category: 'product_cat',
-};
+interface ScopeSource {
+	label: string;
+	placeholder: string;
+	suggestionsPath: ( search: string ) => string;
+	savedPath: ( ids: number[] ) => string;
+}
 
-const FIELD_LABELS: Record< string, { label: string; placeholder: string } > = {
+const SOURCES: Record< string, ScopeSource > = {
 	product_ids: {
 		label: __( 'Products', 'newspack-plugin' ),
-		placeholder: __( 'Search products…', 'newspack-plugin' ),
+		placeholder: __( 'Search products and variations…', 'newspack-plugin' ),
+		suggestionsPath: search => addQueryArgs( '/wc-dynamic-pricing/v1/products', { search, per_page: 20 } ),
+		savedPath: ids => addQueryArgs( '/wc-dynamic-pricing/v1/products', { include: ids.join( ',' ) } ),
 	},
 	category: {
 		label: __( 'Product categories', 'newspack-plugin' ),
 		placeholder: __( 'Search categories…', 'newspack-plugin' ),
+		suggestionsPath: search => addQueryArgs( '/wp/v2/product_cat', { search, per_page: 20, _fields: 'id,name' } ),
+		savedPath: ids =>
+			addQueryArgs( '/wp/v2/product_cat', {
+				include: ids.join( ',' ),
+				per_page: Math.min( ids.length, 100 ),
+				_fields: 'id,name',
+			} ),
 	},
 };
 
@@ -51,47 +64,32 @@ interface ScopeTargetsProps {
 }
 
 export default function ScopeTargets( { scopeType, value, onChange }: ScopeTargetsProps ) {
-	const base = REST_BASE[ scopeType ];
-	if ( ! base ) {
+	const source = SOURCES[ scopeType ];
+	if ( ! source ) {
 		return null;
 	}
 
-	const toOptions = ( items: WpEntity[] ) =>
+	const toOptions = ( items: PickerEntity[] ) =>
 		items.map( item => ( {
 			value: item.id,
 			label: decodeEntities( item.name ?? item.title?.rendered ?? `#${ item.id }` ),
 		} ) );
 
-	// `_fields=id,name,title` is safe for both endpoints — each omits the field it
-	// doesn't have, so the same request shape serves products and categories.
-	const fetchSuggestions = ( search: string ) =>
-		apiFetch< WpEntity[] >( {
-			path: addQueryArgs( `/wp/v2/${ base }`, { search, per_page: 20, _fields: 'id,name,title' } ),
-		} ).then( toOptions );
+	const fetchSuggestions = ( search: string ) => apiFetch< PickerEntity[] >( { path: source.suggestionsPath( search ) } ).then( toOptions );
 
 	const fetchSavedInfo = ( ids: number[] ) =>
-		ids.length
-			? apiFetch< WpEntity[] >( {
-					path: addQueryArgs( `/wp/v2/${ base }`, {
-						include: ids.join( ',' ),
-						per_page: Math.min( ids.length, 100 ),
-						_fields: 'id,name,title',
-					} ),
-			  } ).then( toOptions )
-			: Promise.resolve( [] );
-
-	const { label, placeholder } = FIELD_LABELS[ scopeType ];
+		ids.length ? apiFetch< PickerEntity[] >( { path: source.savedPath( ids ) } ).then( toOptions ) : Promise.resolve( [] );
 
 	return (
 		<AutocompleteTokenField
-			// Remount when the scope type changes so saved-info fetch re-runs for the new base.
+			// Remount when the scope type changes so saved-info fetch re-runs for the new source.
 			key={ scopeType }
 			tokens={ value }
 			onChange={ onChange }
 			fetchSuggestions={ fetchSuggestions }
 			fetchSavedInfo={ fetchSavedInfo }
-			label={ label }
-			placeholder={ placeholder }
+			label={ source.label }
+			placeholder={ source.placeholder }
 			__next40pxDefaultSize
 		/>
 	);
