@@ -94,7 +94,7 @@ The line height is unitless on purpose: the font size is fluid, so a fixed
 value from the base-styles pairs would drift out of proportion as the figure
 shrinks.
 
-That query is why the parts throw outside a `Root`: a `StatCard.Value` rendered
+That query is why the parts insist on a `Root`: a `StatCard.Value` rendered
 loose would size against whichever container it happened to land in, which fails
 quietly and looks like a styling bug.
 
@@ -362,5 +362,11 @@ import { STAT_CARD_NULL_GLYPH } from 'newspack-components';
 
 ## Outside the Root
 
-Every subcomponent reads Root's context and throws "StatCard subcomponents must
-be rendered inside StatCard.Root." when rendered anywhere else.
+Every subcomponent reads Root's context. Outside one it throws "StatCard
+subcomponents must be rendered inside StatCard.Root.", which is what surfaces the
+mistake in development and in tests.
+
+A production build warns and falls back to the default context instead. Nothing
+in this package or in `newspack-plugin` puts an error boundary above these cards,
+so throwing there would blank an admin screen; a figure sized against the wrong
+container is the smaller failure of the two.

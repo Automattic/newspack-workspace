@@ -712,3 +712,28 @@ describe( 'StatCard leaf slots', () => {
 		expect( ref.current ).toBe( container.querySelector( '.newspack-stat-card__value' ) );
 	} );
 } );
+
+describe( 'StatCard outside Root', () => {
+	// Nothing above these cards catches an error, so a mistake in a branch only
+	// some sites reach must not blank the whole screen.
+	it( 'falls back to the default context in production rather than throwing', () => {
+		const consoleWarn = jest.spyOn( console, 'warn' ).mockImplementation( () => {} );
+		const previous = process.env.NODE_ENV;
+		process.env.NODE_ENV = 'production';
+
+		try {
+			render(
+				<>
+					<StatCard.Label>Reach</StatCard.Label>
+					<StatCard.Value value="1,284" />
+				</>
+			);
+			expect( screen.getByRole( 'heading', { level: 3 } ) ).toHaveTextContent( 'Reach' );
+			expect( screen.getByText( '1,284' ) ).toBeInTheDocument();
+			expect( consoleWarn ).toHaveBeenCalledWith( 'StatCard subcomponents must be rendered inside StatCard.Root.' );
+		} finally {
+			process.env.NODE_ENV = previous;
+			consoleWarn.mockRestore();
+		}
+	} );
+} );
