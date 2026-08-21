@@ -365,6 +365,19 @@ final class Modal_Checkout {
 	}
 
 	/**
+	 * Seats (line-item quantity) requested for the modal checkout. Reads $_GET and
+	 * $_POST so the initial request and the in-modal quantity form share one rule.
+	 * Anything missing or below one means one: a quantity is only ever raised by an
+	 * explicit, valid request.
+	 *
+	 * @return int
+	 */
+	public static function get_requested_quantity() {
+		$quantity = isset( $_REQUEST['quantity'] ) ? absint( wp_unslash( $_REQUEST['quantity'] ) ) : 1; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		return max( 1, $quantity );
+	}
+
+	/**
 	 * Process checkout request for modal.
 	 */
 	public static function process_checkout_request() {
@@ -456,7 +469,7 @@ final class Modal_Checkout {
 		$cart_item_data = apply_filters( 'newspack_blocks_modal_checkout_cart_item_data', $cart_item_data );
 
 		\WC()->cart->empty_cart();
-		$cart_item_key = \WC()->cart->add_to_cart( $product_id, 1, 0, [], $cart_item_data );
+		$cart_item_key = \WC()->cart->add_to_cart( $product_id, self::get_requested_quantity(), 0, [], $cart_item_data );
 
 		// Auto-apply a coupon attached to the Checkout Button block, if present and
 		// valid. Read with a sanitizing filter (satisfies input-sanitization
@@ -691,10 +704,15 @@ final class Modal_Checkout {
 
 		$cart_item_data = self::amend_cart_item_data( [ 'referer' => wp_get_referer() ] );
 
+		$quantity = 1;
 		foreach ( \WC()->cart->get_cart() as $cart_item_key => $cart_item ) { // phpcs:ignore VariableAnalysis.CodeAnalysis.VariableAnalysis.UnusedVariable
 			if ( $cart_item['product_id'] !== (int) $product_id && $cart_item['variation_id'] !== (int) $product_id ) {
 				continue;
 			}
+
+			// Re-adding the item for the adjusted price must not silently drop the
+			// seats already in the cart.
+			$quantity = max( 1, (int) $cart_item['quantity'] );
 
 			$cart_item_data['nyp'] = $price;
 			$cart_item_data['base_price'] = isset( $cart_item['base_price'] ) ? $cart_item['base_price'] : $cart_item['nyp'];
@@ -717,7 +735,7 @@ final class Modal_Checkout {
 		$coupons = \WC()->cart->get_applied_coupons();
 
 		\WC()->cart->empty_cart();
-		$cart_item_key = \WC()->cart->add_to_cart( $product_id, 1, 0, [], $cart_item_data );
+		$cart_item_key = \WC()->cart->add_to_cart( $product_id, $quantity, 0, [], $cart_item_data );
 
 		// A rejected add (e.g. an add-to-cart guard) must not report success: surface
 		// the error notice the cart queued for it instead of a thank-you message.
@@ -2423,7 +2441,9 @@ final class Modal_Checkout {
 			return;
 		}
 		$cart = \WC()->cart;
-		if ( 1 !== $cart->get_cart_contents_count() ) {
+		// Line-item count, not get_cart_contents_count(): that sums quantities, which
+		// would hide this order-summary data carrier for any multi-seat purchase.
+		if ( 1 !== count( $cart->get_cart() ) ) {
 			return;
 		}
 		$cart_item_key = array_key_first( $cart->get_cart() );
@@ -2461,7 +2481,9 @@ final class Modal_Checkout {
 		}
 
 		$cart = \WC()->cart;
-		if ( 1 !== $cart->get_cart_contents_count() ) {
+		// Line-item count, not get_cart_contents_count(): that sums quantities, which
+		// would hide this order-summary data carrier for any multi-seat purchase.
+		if ( 1 !== count( $cart->get_cart() ) ) {
 			return;
 		}
 		$class_prefix = self::get_class_prefix();

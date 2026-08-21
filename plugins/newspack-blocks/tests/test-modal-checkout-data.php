@@ -169,14 +169,23 @@ if ( ! class_exists( 'WC_Order_Item_Product' ) ) {
 		private $subtotal;
 
 		/**
+		 * Line-item quantity.
+		 *
+		 * @var int
+		 */
+		private $quantity;
+
+		/**
 		 * Constructor.
 		 *
 		 * @param int    $product_id Product ID.
 		 * @param string $subtotal   Line subtotal.
+		 * @param int    $quantity   Line-item quantity.
 		 */
-		public function __construct( $product_id, $subtotal = '25' ) {
+		public function __construct( $product_id, $subtotal = '25', $quantity = 1 ) {
 			$this->product_id = $product_id;
 			$this->subtotal   = $subtotal;
+			$this->quantity   = $quantity;
 		}
 
 		public function get_product_id() {
@@ -189,6 +198,93 @@ if ( ! class_exists( 'WC_Order_Item_Product' ) ) {
 
 		public function get_subtotal() {
 			return $this->subtotal;
+		}
+
+		public function get_quantity() {
+			return $this->quantity;
+		}
+	}
+}
+
+if ( ! class_exists( 'WC_Cart' ) ) {
+	/**
+	 * Minimal WooCommerce cart stub whose get_cart() returns pre-set line items.
+	 */
+	class WC_Cart {
+		/**
+		 * Cart items, keyed by cart item key.
+		 *
+		 * @var array
+		 */
+		private $items;
+
+		/**
+		 * Constructor.
+		 *
+		 * @param array $items Cart items, keyed by cart item key.
+		 */
+		public function __construct( $items ) {
+			$this->items = $items;
+		}
+
+		/**
+		 * Get cart items.
+		 *
+		 * @return array
+		 */
+		public function get_cart() {
+			return $this->items;
+		}
+	}
+}
+
+if ( ! class_exists( 'WC_Subscriptions_Product' ) ) {
+	/**
+	 * Minimal WC_Subscriptions_Product stub exposing only what get_price_summary() reads.
+	 */
+	class WC_Subscriptions_Product {
+		/**
+		 * Billing interval.
+		 *
+		 * @param WC_Product $product Product.
+		 * @return int
+		 */
+		public static function get_interval( $product ) {
+			unset( $product );
+			return 1;
+		}
+
+		/**
+		 * Trial length.
+		 *
+		 * @param WC_Product $product Product.
+		 * @return int
+		 */
+		public static function get_trial_length( $product ) {
+			unset( $product );
+			return 0;
+		}
+
+		/**
+		 * Trial period.
+		 *
+		 * @param WC_Product $product Product.
+		 * @return string
+		 */
+		public static function get_trial_period( $product ) {
+			unset( $product );
+			return '';
+		}
+
+		/**
+		 * Sign-up fee, read from a test-controlled global so a single test can set it.
+		 *
+		 * @param WC_Product $product Product.
+		 * @return float
+		 */
+		public static function get_sign_up_fee( $product ) {
+			unset( $product );
+			return $GLOBALS['newspack_blocks_test_sign_up_fee'] ?? 0;
 		}
 	}
 }
@@ -294,8 +390,117 @@ class Newspack_Blocks_Modal_Checkout_Data_Test extends WP_UnitTestCase_Blocks {
 	 * Clean up product fixtures.
 	 */
 	public function tear_down() {
-		unset( $GLOBALS['newspack_blocks_test_products'] );
+		unset(
+			$GLOBALS['newspack_blocks_test_products'],
+			$GLOBALS['newspack_blocks_test_sign_up_fee'],
+			$GLOBALS['newspack_blocks_test_last_wcs_price_string_args']
+		);
 		parent::tear_down();
+	}
+
+	/**
+	 * Build a minimal WC_Cart stub whose get_cart() returns a single, given item.
+	 *
+	 * @param array $cart_item Cart item array (product_id, variation_id, quantity, data, ...).
+	 * @return WC_Cart
+	 */
+	private function make_cart( $cart_item ) {
+		return new WC_Cart( [ 'cart_item_key' => $cart_item ] );
+	}
+
+	/**
+	 * Build a simple WC_Product stub for cart/order quantity fixtures.
+	 *
+	 * @param int    $id    Product ID.
+	 * @param string $price Product price.
+	 * @return WC_Product
+	 */
+	private function make_product( $id, $price ) {
+		return new WC_Product( $id, 'simple', [], (string) $price, 'Product ' . $id );
+	}
+
+	/**
+	 * A cart line item's quantity flows into `quantity`, and the per-unit price is
+	 * multiplied into `amount` — a cart's price is per unit, unlike an order's.
+	 */
+	public function test_cart_checkout_data_includes_quantity_and_multiplied_amount() {
+		$cart = $this->make_cart( [ 'product_id' => 77, 'variation_id' => 0, 'quantity' => 4, 'data' => $this->make_product( 77, 10 ) ] );
+		$data = Checkout_Data::get_checkout_data( $cart );
+		$this->assertSame( 4, $data['quantity'] );
+		$this->assertSame( 40.0, (float) $data['amount'] );
+	}
+
+	/**
+	 * A cart item missing `quantity` (version skew, or a non-WooCommerce caller)
+	 * must not fatal, and behaves as a single seat.
+	 */
+	public function test_cart_checkout_data_defaults_missing_quantity_to_one() {
+		$cart = $this->make_cart( [ 'product_id' => 78, 'variation_id' => 0, 'data' => $this->make_product( 78, 10 ) ] );
+		$data = Checkout_Data::get_checkout_data( $cart );
+		$this->assertSame( 1, $data['quantity'] );
+		$this->assertSame( 10.0, (float) $data['amount'] );
+	}
+
+	/**
+	 * An order line item's `get_subtotal()` already reflects quantity, so it must
+	 * not be multiplied again — only `quantity` itself is surfaced.
+	 */
+	public function test_order_checkout_data_does_not_double_multiply_amount() {
+		$GLOBALS['newspack_blocks_test_products'] = [
+			79 => new WC_Product( 79, 'simple', [], '10', 'Product 79' ),
+		];
+		$order = new WC_Order( [ new WC_Order_Item_Product( 79, '40', 4 ) ], 950 );
+
+		$data = Checkout_Data::get_checkout_data( $order );
+
+		$this->assertSame( 4, $data['quantity'] );
+		$this->assertSame( '40', $data['amount'], 'The order subtotal already reflects quantity and must not be multiplied again.' );
+	}
+
+	/**
+	 * A bare product source (no cart or order) is always a single seat.
+	 */
+	public function test_product_checkout_data_quantity_defaults_to_one() {
+		$product = new WC_Product( 80, 'simple', [], '10', 'Product 80' );
+
+		$data = Checkout_Data::get_checkout_data( $product );
+
+		$this->assertSame( 1, $data['quantity'] );
+		$this->assertSame( '10', $data['amount'] );
+	}
+
+	/**
+	 * The subscription sign-up fee is charged per seat by WCS, so get_price_summary()
+	 * must multiply it by quantity before handing it to wcs_price_string().
+	 */
+	public function test_price_summary_multiplies_signup_fee_by_quantity() {
+		$GLOBALS['newspack_blocks_test_sign_up_fee'] = 5;
+		$GLOBALS['newspack_blocks_test_products']    = [
+			321 => new WC_Product( 321, 'subscription', [], '10', 'Supporter' ),
+		];
+
+		Checkout_Data::get_price_summary( 'Supporter', 10, 'month', 321, 3 );
+
+		$this->assertSame(
+			15.0,
+			$GLOBALS['newspack_blocks_test_last_wcs_price_string_args']['initial_amount'],
+			'The sign-up fee should be multiplied by quantity, since WCS charges it per seat.'
+		);
+	}
+
+	/**
+	 * The default quantity of 1 leaves the sign-up fee unchanged, so existing
+	 * (pre-quantity) callers of get_price_summary() see no behavior change.
+	 */
+	public function test_price_summary_defaults_to_unmultiplied_signup_fee() {
+		$GLOBALS['newspack_blocks_test_sign_up_fee'] = 5;
+		$GLOBALS['newspack_blocks_test_products']    = [
+			322 => new WC_Product( 322, 'subscription', [], '10', 'Supporter' ),
+		];
+
+		Checkout_Data::get_price_summary( 'Supporter', 10, 'month', 322 );
+
+		$this->assertSame( 5.0, $GLOBALS['newspack_blocks_test_last_wcs_price_string_args']['initial_amount'] );
 	}
 
 	/**

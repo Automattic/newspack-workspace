@@ -309,8 +309,54 @@ class ModalCheckoutTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 		}
 		remove_all_filters( 'woocommerce_cart_item_removed_message' );
 		remove_all_filters( 'newspack_blocks_donate_billing_fields_keys' );
-		unset( $_POST['billing_email'], $_POST['post_data'], $_REQUEST['modal_checkout'], $_REQUEST['post_data'], $_SERVER['HTTP_REFERER'] );
+		unset(
+			$_POST['billing_email'],
+			$_POST['post_data'],
+			$_POST['quantity'],
+			$_GET['quantity'],
+			$_REQUEST['modal_checkout'],
+			$_REQUEST['post_data'],
+			$_REQUEST['quantity'],
+			$_SERVER['HTTP_REFERER']
+		);
 		parent::tear_down();
+	}
+
+	/**
+	 * Absent quantity defaults to one seat.
+	 */
+	public function test_requested_quantity_defaults_to_one() {
+		unset( $_GET['quantity'], $_REQUEST['quantity'] );
+		$this->assertSame( 1, \Newspack_Blocks\Modal_Checkout::get_requested_quantity() );
+	}
+
+	/**
+	 * Zero (or any value below one) floors at one; a valid quantity passes through.
+	 */
+	public function test_requested_quantity_floors_at_one() {
+		$_GET['quantity']     = '0';
+		$_REQUEST['quantity'] = '0';
+		$this->assertSame( 1, \Newspack_Blocks\Modal_Checkout::get_requested_quantity() );
+
+		$_GET['quantity']     = '7';
+		$_REQUEST['quantity'] = '7';
+		$this->assertSame( 7, \Newspack_Blocks\Modal_Checkout::get_requested_quantity() );
+
+		unset( $_GET['quantity'], $_REQUEST['quantity'] );
+	}
+
+	/**
+	 * The in-modal quantity form posts rather than gets; get_requested_quantity()
+	 * must honor it too, since it reads $_REQUEST rather than $_GET alone.
+	 */
+	public function test_requested_quantity_reads_post_for_in_modal_form() {
+		unset( $_GET['quantity'] );
+		$_POST['quantity']    = '3';
+		$_REQUEST['quantity'] = '3';
+
+		$this->assertSame( 3, \Newspack_Blocks\Modal_Checkout::get_requested_quantity() );
+
+		unset( $_POST['quantity'], $_REQUEST['quantity'] );
 	}
 
 	/**
