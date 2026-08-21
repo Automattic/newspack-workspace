@@ -45,6 +45,7 @@
 		"extends @wordpress/browserslist-config"
 	],
 	"dependencies": {
+		"@wordpress/ui": "^0.16.0",
 		"classnames": "^2.5.1",
 		"lodash": "^4.17.21",
 		"newspack-colors": "workspace:*",
