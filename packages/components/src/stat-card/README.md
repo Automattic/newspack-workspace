@@ -108,9 +108,10 @@ across that row.
 It also makes the card a containing block for `position: absolute` and
 `position: fixed` descendants, and `Card.Root` clips its overflow. Anything
 positioned that renders inline inside the card, such as a popover on a control
-in `suffix`, is therefore trapped by the card unless it portals out. The
-tooltips and popovers in `@wordpress/components` portal by default, so this
-mostly matters if a consumer registers its own `Popover.Slot` inside a card.
+in `suffix`, is therefore trapped by the card unless it portals out.
+`InfoButton` portals to the shared overlay slot and the tooltips and popovers in
+`@wordpress/components` portal by default, so this mostly matters if a consumer
+registers its own `Popover.Slot` inside a card.
 
 For a hero that is a phrase rather than a number ("0 of 17", "No conversions"),
 pass `variant="text"`. It keeps the slot and drops the display scale, which
@@ -235,17 +236,31 @@ container query.
 | `suffix` | `React.ReactNode` | — | Rendered beside the heading, e.g. an info button. |
 
 `suffix` sits next to the heading rather than inside it, so a control there stays
-out of the document outline and off the heading's accessible name.
+out of the document outline and off the heading's accessible name. Supplementary
+context belongs in an `InfoButton`, which already carries the popup, the touch
+behaviour and the accessible name; the slot itself takes anything.
 
-An icon button in that slot keeps the label row's height without being asked to.
-The card trims the 2px a 24px control otherwise adds to a 20px line, scoped to
-the slot rather than to a class each call site has to remember:
+A control in that slot keeps the label row's height without being asked to. The
+card trims the 2px a 24px control otherwise adds to a 20px line, and it does so
+for whatever sits in the slot rather than for one class each call site has to
+remember:
 
 ```jsx
-<StatCard.Label suffix={ <Button icon={ info } size="small" label={ … } /> }>
+<StatCard.Label
+	suffix={
+		<InfoButton
+			description={ __( 'Averaged across the timeframe.', 'newspack-plugin' ) }
+			triggerLabel={ __( 'More information about Average order value', 'newspack-plugin' ) }
+		/>
+	}
+>
 	{ __( 'Average order value', 'newspack-plugin' ) }
 </StatCard.Label>
 ```
+
+The trim is that one figure rather than a measurement, so a control taller than
+24px still grows the row. A row of cards keeps its figures level while the slot
+holds a small control, which is what it is for.
 
 A level outside 2–6 falls back to `3` and warns outside production, rather than
 rendering an element that is not a heading at all.
