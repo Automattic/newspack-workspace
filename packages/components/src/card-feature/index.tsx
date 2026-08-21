@@ -186,7 +186,7 @@ const CardFeature = ( {
 				</Stack>
 			</Card.Header>
 			<Card.Content className="newspack-card-feature__actions">
-				<Stack direction="row" align="center" justify="space-between" gap="sm">
+				<Stack direction="row" align="center" justify="space-between" gap="sm" wrap="wrap">
 					<Stack direction="row" align="center" gap="sm">
 						<Button
 							variant={ isConfigureState ? 'tertiary' : 'secondary' }
