@@ -84,12 +84,12 @@ class Donation extends Subscription {
 			],
 			'Current_Donation_Start_Date'   => [
 				'name'        => 'Current Donation Start Date',
-				'description' => __( 'Start date of the most recent active recurring donation (MM/DD/YYYY)', 'newspack-plugin' ),
+				'description' => __( 'Start date of the most recent active recurring donation (YYYY-MM-DD HH:MM:SS)', 'newspack-plugin' ),
 				'status'      => 'existing',
 			],
 			'Current_Donation_End_Date'     => [
 				'name'        => 'Current Donation End Date',
-				'description' => __( 'End date of the most recent recurring donation, if there is one (MM/DD/YYYY)', 'newspack-plugin' ),
+				'description' => __( 'End date of the most recent recurring donation, if there is one (YYYY-MM-DD HH:MM:SS)', 'newspack-plugin' ),
 				'status'      => 'existing',
 			],
 			'Current_Donation_Cycle'        => [
@@ -104,7 +104,7 @@ class Donation extends Subscription {
 			],
 			'Next_Donation_Date'            => [
 				'name'        => 'Next Donation Date',
-				'description' => __( 'Date of next scheduled recurring donation (MM/DD/YYYY)', 'newspack-plugin' ),
+				'description' => __( 'Date of next scheduled recurring donation (YYYY-MM-DD HH:MM:SS)', 'newspack-plugin' ),
 				'status'      => 'existing',
 			],
 			'Current_Donation_Product_Name' => [
@@ -129,7 +129,7 @@ class Donation extends Subscription {
 			],
 			'Last_Donation_Date'            => [
 				'name'        => 'Last Donation Date',
-				'description' => __( 'Date of most recent donation (MM/DD/YYYY)', 'newspack-plugin' ),
+				'description' => __( 'Date of most recent donation (YYYY-MM-DD HH:MM:SS)', 'newspack-plugin' ),
 				'status'      => 'existing',
 			],
 		];

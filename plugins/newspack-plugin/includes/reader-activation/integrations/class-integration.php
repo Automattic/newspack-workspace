@@ -618,7 +618,10 @@ abstract class Integration {
 	 *
 	 * @param string $email Email address of the deleted reader.
 	 *
-	 * @return true|\WP_Error True on success (or nothing to do), WP_Error on failure.
+	 * @return bool|\WP_Error WP_Error on failure; any other value is treated
+	 *                        as success by the caller, so an override may
+	 *                        return false for "nothing to do" (the ESP
+	 *                        integration does).
 	 */
 	public function flag_deletion_cleanup( $email ) {
 		return true;

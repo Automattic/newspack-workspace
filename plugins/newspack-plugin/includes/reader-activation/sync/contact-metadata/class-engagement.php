@@ -70,7 +70,7 @@ class Engagement extends Contact_Metadata {
 		return [
 			'First_Visit_Date'     => [
 				'name'        => 'First Visit Date',
-				'description' => __( 'Date of the reader\'s very first visit to the site, regardless of whether or when they registered (MM/DD/YYYY).', 'newspack-plugin' ),
+				'description' => __( 'Date of the reader\'s very first visit to the site, regardless of whether or when they registered (YYYY-MM-DD HH:MM:SS).', 'newspack-plugin' ),
 				'status'      => 'new',
 			],
 			'Last_Active'          => [

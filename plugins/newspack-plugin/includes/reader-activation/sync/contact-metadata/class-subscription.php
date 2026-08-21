@@ -125,7 +125,7 @@ class Subscription extends Contact_Metadata {
 			],
 			'Subscription_Next_Payment_Date'        => [
 				'name'        => 'Subscription Next Payment Date',
-				'description' => __( 'Date of next scheduled subscription payment (MM/DD/YYYY)', 'newspack-plugin' ),
+				'description' => __( 'Date of next scheduled subscription payment (YYYY-MM-DD HH:MM:SS)', 'newspack-plugin' ),
 				'status'      => 'updated',
 			],
 			'Subscription_Product_Name'             => [

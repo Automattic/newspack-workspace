@@ -60,7 +60,7 @@ class Registration extends Contact_Metadata {
 		return [
 			'Registration_Date'         => [
 				'name'        => 'Registration Date',
-				'description' => __( 'Date reader created their account (MM/DD/YYYY)', 'newspack-plugin' ),
+				'description' => __( 'Date reader created their account (YYYY-MM-DD HH:MM:SS)', 'newspack-plugin' ),
 				'status'      => 'existing',
 			],
 			'Registration_Page'         => [
@@ -70,7 +70,7 @@ class Registration extends Contact_Metadata {
 			],
 			'Registration_Strategy'     => [
 				'name'        => 'Registration Strategy',
-				'description' => __( 'How the reader registered. One of: registration-wall, newsletter, checkout, popup, manual', 'newspack-plugin' ),
+				'description' => __( 'How the reader registered. One of: registration-wall, newsletter, checkout, popup, manual, or an SSO provider (e.g. google, apple)', 'newspack-plugin' ),
 				'status'      => 'new',
 			],
 			'Registration_UTM_Source'   => [
