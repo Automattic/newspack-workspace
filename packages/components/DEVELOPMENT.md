@@ -592,6 +592,7 @@ Newspack components use SCSS with BEM-ish naming conventions and a consistent sp
 - **Elements**: Use `__` for elements that are part of a larger block-level component (e.g. `.newspack-card__header-content`)
 - **WordPress colors:** Use WordPress design system colors (see [Colors Development Guide](../colors/DEVELOPMENT.md))
 - **Custom styles:** Component-specific styles live in `packages/components/src/{component}/style.scss`
+- **Shared values:** Reach for a `@wordpress/base-styles` variable first. Where the scale has no counterpart, the value goes in `packages/components/src/_variables.scss` and is used by name, rather than written as a literal in one component's stylesheet
 
 ### Spacing scale (design system)
 
