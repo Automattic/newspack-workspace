@@ -30,6 +30,46 @@ final class GA4_Custom_Dimensions {
 	const RECHECK_GROUP      = 'newspack';
 
 	/**
+	 * Parameters only a site running access control can populate. Every one of
+	 * them originates with a rendered gate: `src/content-gate/gate.js` enqueues
+	 * only when {@see Content_Gate::get_frontend_script_conditions()} passes – a
+	 * singular, restricted post carrying a published gate – and the handful of
+	 * other dispatchers that carry `gate_post_id` (the auth form, the reader
+	 * registration block, the modal checkout) receive it from that same gate.
+	 * With no access control there is no gate, so no event carries them.
+	 *
+	 * `access_source` is deliberately NOT in this group. It is emitted server
+	 * side by {@see GoogleSiteKit::add_ga_custom_parameters()} under
+	 * `Content_Gate::is_gating_active()`, which is stricter than what makes a
+	 * gate render – see `get_dimensions()`.
+	 */
+	const ACCESS_CONTROL_DIMENSIONS = [
+		'gate_post_id',
+		'gate_has_donation_block',
+		'gate_has_registration_block',
+		'gate_has_checkout_button',
+		'gate_has_registration_link',
+		'gate_has_signin_link',
+	];
+
+	/**
+	 * Parameters only a site running reader revenue can populate. `is_subscriber`
+	 * and `is_donor` are sourced from Reader Data, which fills them from
+	 * WooCommerce subscriptions and donation orders; the checkout and donation
+	 * parameters are emitted by the modal checkout and the Donate block, both of
+	 * which need the WooCommerce suite to render at all.
+	 */
+	const READER_REVENUE_DIMENSIONS = [
+		'is_subscriber',
+		'is_donor',
+		'product_id',
+		'product_type',
+		'recurrence',
+		'donation_frequency',
+		'donation_amount',
+	];
+
+	/**
 	 * Register hooks.
 	 */
 	public static function init() {
@@ -194,14 +234,69 @@ final class GA4_Custom_Dimensions {
 	}
 
 	/**
+	 * Whether this site runs access control, and so can render a gate and
+	 * populate the gate parameters. Covers both routes a gate can come from, the
+	 * way `Content_Gate::get_gate_post_id()` does: WooCommerce Memberships when
+	 * it is active, the first-party feature otherwise.
+	 *
+	 * @return bool
+	 */
+	public static function is_access_control_enabled(): bool {
+		$is_enabled = Content_Gate::is_newspack_feature_enabled() || Memberships::is_active();
+
+		/**
+		 * Filters whether GA4 custom dimensions specific to access control are
+		 * provisioned. Lets a site opt in or out when the automatic detection
+		 * reads its setup wrongly.
+		 *
+		 * @param bool $is_enabled Whether the site runs access control.
+		 */
+		return (bool) apply_filters( 'newspack_ga4_dimensions_access_control_enabled', $is_enabled );
+	}
+
+	/**
+	 * Whether this site runs reader revenue, and so can populate the commerce
+	 * parameters.
+	 *
+	 * Deliberately not `Donations::is_platform_wc()`: the platform option
+	 * defaults to `wc` and is therefore true on sites that never touched reader
+	 * revenue. Equally deliberately not `Reader_Activation::is_woocommerce_active()`,
+	 * which additionally requires WooCommerce Subscriptions – the modal checkout
+	 * sends `product_id`, `product_type` and `recurrence` on one-time purchases
+	 * too, so keying on Subscriptions would silently cost those sites their
+	 * checkout reporting. WooCommerce itself is the floor every emitter in
+	 * {@see self::READER_REVENUE_DIMENSIONS} actually stands on.
+	 *
+	 * @return bool
+	 */
+	public static function is_reader_revenue_enabled(): bool {
+		$is_enabled = class_exists( 'WooCommerce' );
+
+		/**
+		 * Filters whether GA4 custom dimensions specific to reader revenue are
+		 * provisioned. Lets a site opt in or out when the automatic detection
+		 * reads its setup wrongly.
+		 *
+		 * @param bool $is_enabled Whether the site runs reader revenue.
+		 */
+		return (bool) apply_filters( 'newspack_ga4_dimensions_reader_revenue_enabled', $is_enabled );
+	}
+
+	/**
 	 * Priority-ordered list of custom dimensions Newspack provisions.
 	 * Each entry: parameter name => display name.
 	 *
-	 * `access_source` is appended conditionally rather than listed inline: it
-	 * only fires on sites running Access Control, and GA4 caps event-scoped
-	 * custom dimensions at 50 – a publisher has already hit that ceiling, so a
-	 * dimension that never fires must not spend a slot. Appending (rather than
-	 * inserting) keeps the existing entries' priority order intact.
+	 * GA4 caps event-scoped custom dimensions at 50 per property and never
+	 * back-fills them, so a dimension that no event on this site can carry is
+	 * pure waste – and publishers have hit that ceiling. Parameters belonging to
+	 * a feature the site does not run are therefore dropped rather than listed
+	 * unconditionally. Turning the feature on later grows this list, which
+	 * `maybe_schedule_provisioning_for_new_dimensions()` detects and provisions
+	 * on the next admin request rather than at the monthly recheck.
+	 *
+	 * Dropping is by key from the ordered list, so the priority order of what
+	 * remains is unchanged; `access_source` stays appended, keeping its position
+	 * at the end.
 	 *
 	 * @return array<string,string>
 	 */
@@ -236,7 +331,10 @@ final class GA4_Custom_Dimensions {
 			'product_id'                  => 'Product ID',
 			'product_type'                => 'Product Type',
 			'recurrence'                  => 'Recurrence',
-			'price'                       => 'Price',
+			// `price` is deliberately absent: no event carries it. The modal
+			// checkout's GA4 payload whitelist (analytics/ga4/utils/index.js)
+			// admits `amount`, and analytics/ga4/opened.js folds `price` into it
+			// before sending, so provisioning `price` only spent a slot.
 			'donation_frequency'          => 'Donation Frequency',
 			'donation_amount'             => 'Donation Amount',
 			'registration_method'         => 'Registration Method',
@@ -246,7 +344,25 @@ final class GA4_Custom_Dimensions {
 			'segment_id'                  => 'Matched Segment',
 		];
 
-		if ( Content_Gate::is_newspack_feature_enabled() ) {
+		// Each predicate is read once. Both are filterable, and a filter that is
+		// not a pure function would otherwise be able to return a list that
+		// contradicts itself – which then gets fingerprinted and persisted.
+		$has_access_control = self::is_access_control_enabled();
+		$has_reader_revenue = self::is_reader_revenue_enabled();
+
+		if ( ! $has_access_control ) {
+			$dimensions = array_diff_key( $dimensions, array_flip( self::ACCESS_CONTROL_DIMENSIONS ) );
+		}
+
+		if ( ! $has_reader_revenue ) {
+			$dimensions = array_diff_key( $dimensions, array_flip( self::READER_REVENUE_DIMENSIONS ) );
+		}
+
+		// Not $has_access_control: a gate renders on WooCommerce Memberships alone,
+		// but GoogleSiteKit only sends access_source under is_gating_active(), which
+		// also requires the first-party feature and Reader Activation. Provisioning
+		// it any wider hands the site a dimension nothing populates.
+		if ( Content_Gate::is_gating_active() ) {
 			$dimensions['access_source'] = 'Access Source';
 		}
 
@@ -258,10 +374,18 @@ final class GA4_Custom_Dimensions {
 	 * provisioning run so a later addition to the list can be told apart from a
 	 * property that is already fully provisioned.
 	 *
+	 * Accepts an already-resolved list so a caller that acts on one snapshot can
+	 * fingerprint that same snapshot. `get_dimensions()` runs publisher filters,
+	 * so re-deriving it here could fingerprint a list the caller never used.
+	 *
+	 * @param array<string,string>|null $dimensions Resolved dimension list, or null to resolve now.
 	 * @return string
 	 */
-	public static function schema_fingerprint() {
-		return md5( (string) wp_json_encode( array_keys( self::get_dimensions() ) ) );
+	public static function schema_fingerprint( $dimensions = null ) {
+		if ( null === $dimensions ) {
+			$dimensions = self::get_dimensions();
+		}
+		return md5( (string) wp_json_encode( array_keys( $dimensions ) ) );
 	}
 
 	/**
@@ -467,9 +591,14 @@ final class GA4_Custom_Dimensions {
 			return new \WP_Error( 'newspack_ga4_dimensions', 'No GA4 property ID configured.' );
 		}
 
+		// One snapshot for the whole run: the create loop, the fingerprint and the
+		// recorded list must all describe the same list, or the summary claims a
+		// schema that was never provisioned and every later run sees it as stale.
+		$dimensions = self::get_dimensions();
+
 		$used_source = null;
 		$result      = self::with_admin_client(
-			function ( $client, $source ) use ( $property_id, &$used_source ) {
+			function ( $client, $source ) use ( $property_id, $dimensions, &$used_source ) {
 				$used_source = $source;
 				try {
 					$existing = $client->list_custom_dimensions( $property_id );
@@ -490,7 +619,7 @@ final class GA4_Custom_Dimensions {
 				$errors              = [];
 				$has_transient_error = false;
 
-				foreach ( self::get_dimensions() as $parameter_name => $display_name ) {
+				foreach ( $dimensions as $parameter_name => $display_name ) {
 					if ( isset( $existing_params[ $parameter_name ] ) ) {
 						$skipped_exists[] = $parameter_name;
 						continue;
@@ -536,12 +665,12 @@ final class GA4_Custom_Dimensions {
 			// repairs the Google connection. Permanent failures (the dimension
 			// cap, validation) record the fingerprint anyway – no retry can fix
 			// them; the monthly recheck is the self-heal path.
-			'schema'         => $has_transient_error ? null : self::schema_fingerprint(),
+			'schema'         => $has_transient_error ? null : self::schema_fingerprint( $dimensions ),
 			'auth_source'    => $used_source,
 			'timestamp'      => time(),
 			// The list this run knew about, so a later addition to
 			// get_dimensions() is detectable and can provision immediately.
-			'dimensions'     => array_keys( self::get_dimensions() ),
+			'dimensions'     => array_keys( $dimensions ),
 			'created'        => $created,
 			'skipped_exists' => $skipped_exists,
 			'errors'         => $errors,

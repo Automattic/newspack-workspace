@@ -17,10 +17,15 @@ class Newspack_Test_GoogleSiteKit_Dimensions extends WP_UnitTestCase {
 
 	/**
 	 * The always-on dimensions are unaffected by the feature flag.
+	 *
+	 * `is_reader` and `logged_in` are feature-independent: both ride gtag's
+	 * `config` call on every event, whatever the site runs. Reader-revenue and
+	 * access-control parameters are deliberately not stand-ins here -- they have
+	 * their own conditional coverage in the ga4-custom-dimensions suite.
 	 */
 	public function test_core_dimensions_are_always_provisioned() {
 		$dimensions = GA4_Custom_Dimensions::get_dimensions();
-		$this->assertArrayHasKey( 'is_subscriber', $dimensions );
+		$this->assertArrayHasKey( 'is_reader', $dimensions );
 		$this->assertArrayHasKey( 'logged_in', $dimensions );
 	}
 
@@ -68,6 +73,6 @@ class Newspack_Test_GoogleSiteKit_Dimensions extends WP_UnitTestCase {
 		$dimensions = GA4_Custom_Dimensions::get_dimensions();
 
 		$this->assertArrayNotHasKey( 'access_source', $dimensions );
-		$this->assertArrayHasKey( 'is_subscriber', $dimensions, 'The always-on dimensions stay put.' );
+		$this->assertArrayHasKey( 'is_reader', $dimensions, 'The always-on dimensions stay put.' );
 	}
 }
