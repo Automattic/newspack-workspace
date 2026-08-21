@@ -411,6 +411,21 @@ describe( 'StatCard.Delta', () => {
 	} );
 
 	// A label mapped from an empty field must not leave the arrow unnamed.
+	// The caller chose the words, so a missing arrow must not silence them.
+	it( 'speaks a directionLabel where there is no arrow to name', () => {
+		const consoleWarn = jest.spyOn( console, 'warn' ).mockImplementation( () => {} );
+		const { container } = render(
+			<StatCard.Root>
+				<StatCard.Delta direction="sideways" directionLabel="Increased by">
+					2%
+				</StatCard.Delta>
+			</StatCard.Root>
+		);
+		expect( container.querySelector( '[aria-hidden="true"]' ) ).not.toBeInTheDocument();
+		expect( screen.getByText( 'Increased by' ) ).toHaveAttribute( 'data-visually-hidden' );
+		consoleWarn.mockRestore();
+	} );
+
 	it( 'falls back to the spoken direction when directionLabel is empty', () => {
 		render(
 			<StatCard.Root>

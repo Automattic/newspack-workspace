@@ -46,8 +46,10 @@ const Delta = ( { direction, tone = 'neutral', directionLabel, label, className,
 	};
 
 	const glyph = glyphs[ direction ];
-	// Trimmed, and `||` not `??`: a blank label is a missing one, and a delta
-	// that announces whitespace contributes less than one that says nothing.
+	// Trimmed, and `||` not `??`: a blank label is a missing one. The fallback
+	// is keyed on the arrow's own direction, so an unrecognised one goes
+	// unspoken rather than announced as its opposite; words the caller wrote
+	// are honoured either way.
 	const named = label?.trim();
 	const spoken = directionLabel?.trim() || directions[ direction ];
 

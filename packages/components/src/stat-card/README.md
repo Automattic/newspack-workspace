@@ -271,8 +271,10 @@ text followed by the children, which the markup fixes: a language that wants the
 figure inside the phrase, or the direction after it, cannot get there by swapping
 one word with `directionLabel`. One translatable sentence can.
 
-A direction outside `up` and `down` shows no arrow and says nothing, rather than
-naming the opposite one, and warns outside production.
+A direction outside `up` and `down` shows no arrow and warns outside production.
+With nothing else to go on it says nothing, rather than naming the opposite
+direction. A `directionLabel` or a `label` is still spoken, because the caller
+chose those words.
 
 ## `StatCard.Secondary`
 
