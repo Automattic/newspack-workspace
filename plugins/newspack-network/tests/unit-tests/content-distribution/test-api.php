@@ -1071,12 +1071,49 @@ class TestApi extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * A partial update must not be able to change an existing post's type.
+	 * A full payload must carry a post type.
+	 *
+	 * The omission is allowed only for a partial update. On a full payload the
+	 * value reaches use_block_editor_for_post_type() inside insert() before
+	 * anything validates it, so without this the caller gets a PHP warning
+	 * instead of this route's 400.
+	 *
+	 * @group content-distribution-api
+	 */
+	public function test_insert_refuses_a_full_payload_with_no_post_type() {
+		wp_set_current_user( $this->factory->user->create( [ 'role' => 'author' ] ) );
+		kses_init();
+
+		$payload = get_sample_payload( 'https://origin.test', get_bloginfo( 'url' ) );
+		$payload['post_data']['thumbnail_url'] = '';
+		unset( $payload['post_data']['post_type'] );
+
+		$request = new WP_REST_Request( 'POST', '/newspack-network/v1/content-distribution/insert' );
+		$request->set_header( 'Content-Type', 'application/json' );
+		$request->set_body( wp_json_encode( [ 'payload' => $payload ] ) );
+
+		$response = rest_get_server()->dispatch( $request );
+
+		$this->assertSame( 400, $response->get_status(), 'A full payload with no post type must be refused.' );
+		$this->assertSame(
+			'invalid_post_type',
+			$response->as_error()->get_error_code(),
+			'It must be refused by this route, not by an incidental failure downstream.'
+		);
+	}
+
+	/**
+	 * A partial update must not be able to null out an existing post's type.
 	 *
 	 * The merge in get_payload_from_partial() applies the incoming post_data over
 	 * the stored payload, and array_merge lets an explicit null overwrite. Left
 	 * unchecked, that null reaches wp_insert_post(), which falls back to its own
 	 * default and converts a page into a post while returning 200.
+	 *
+	 * Scoped to null deliberately. A partial carrying a different but allowed type
+	 * still changes the stored type, because this guard tests membership of the
+	 * list rather than agreement with the post being updated. Closing that needs
+	 * the resolved post, which the route does not have — tracked on NPPM-3189.
 	 *
 	 * @group content-distribution-api
 	 */

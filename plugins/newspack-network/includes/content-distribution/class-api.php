@@ -349,10 +349,23 @@ class API {
 		// than read as absent. The two are not equivalent on a partial payload:
 		// get_payload_from_partial() array_merges this over the stored payload, so a
 		// null overwrites the stored type and wp_insert_post() falls back to its own
-		// default. That silently turns an existing page into a post. A genuinely
-		// omitted key still passes, which is what a partial payload relies on.
+		// default. That silently turns an existing page into a post.
+		//
+		// A genuinely omitted key passes only on a partial payload, which is the one
+		// shape that legitimately carries just the fields it is changing. On a full
+		// payload the field is required: insert() hands it to
+		// use_block_editor_for_post_type() before anything else validates it, so the
+		// omission surfaces as a PHP warning rather than as this route's 400.
 		if ( ! array_key_exists( 'post_type', $payload['post_data'] ) ) {
-			return null;
+			if ( ! empty( $payload['partial'] ) ) {
+				return null;
+			}
+
+			return new WP_Error(
+				'invalid_post_type',
+				__( 'The payload must carry a post type unless it is a partial update.', 'newspack-network' ),
+				[ 'status' => 400 ]
+			);
 		}
 
 		$post_type = $payload['post_data']['post_type'];
