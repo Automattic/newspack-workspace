@@ -466,7 +466,7 @@ class Newspack_Blocks_Modal_Checkout_Data_Test extends WP_UnitTestCase_Blocks {
 		$data = Checkout_Data::get_checkout_data( $product );
 
 		$this->assertSame( 1, $data['quantity'] );
-		$this->assertSame( '10', $data['amount'] );
+		$this->assertEquals( 10, $data['amount'] );
 	}
 
 	/**
@@ -481,8 +481,8 @@ class Newspack_Blocks_Modal_Checkout_Data_Test extends WP_UnitTestCase_Blocks {
 
 		Checkout_Data::get_price_summary( 'Supporter', 10, 'month', 321, 3 );
 
-		$this->assertSame(
-			15.0,
+		$this->assertEquals(
+			15,
 			$GLOBALS['newspack_blocks_test_last_wcs_price_string_args']['initial_amount'],
 			'The sign-up fee should be multiplied by quantity, since WCS charges it per seat.'
 		);
@@ -500,7 +500,7 @@ class Newspack_Blocks_Modal_Checkout_Data_Test extends WP_UnitTestCase_Blocks {
 
 		Checkout_Data::get_price_summary( 'Supporter', 10, 'month', 322 );
 
-		$this->assertSame( 5.0, $GLOBALS['newspack_blocks_test_last_wcs_price_string_args']['initial_amount'] );
+		$this->assertEquals( 5, $GLOBALS['newspack_blocks_test_last_wcs_price_string_args']['initial_amount'] );
 	}
 
 	/**
