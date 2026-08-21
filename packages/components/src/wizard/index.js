@@ -7,9 +7,9 @@ import classnames from 'classnames';
  * WordPress dependencies.
  */
 // Notice is aliased: `Notice` below is Newspack's own, which this file also uses.
-import { DropdownMenu, MenuGroup, MenuItem, Notice as CoreNotice } from '@wordpress/components';
+import { DropdownMenu, MenuGroup, MenuItem, Notice as CoreNotice, SlotFillProvider, createSlotFill } from '@wordpress/components';
 import { useDispatch, useSelect } from '@wordpress/data';
-import { cloneElement, createInterpolateElement, isValidElement, useEffect, useState, forwardRef } from '@wordpress/element';
+import { cloneElement, createInterpolateElement, isValidElement, useEffect, useRef, useState, forwardRef } from '@wordpress/element';
 import { __ } from '@wordpress/i18n';
 import { category, chevronLeft, moreVertical } from '@wordpress/icons';
 
@@ -24,6 +24,14 @@ import WizardSnackbar from './components/WizardSnackbar';
 import WizardError from './components/WizardError';
 
 registerStore();
+
+/**
+ * Renders a view's page-level banner outside the padded content column, so it sits
+ * flush beneath the header rather than indented within the section it describes.
+ */
+const { Slot: WizardBannerSlot, Fill: WizardBanner } = createSlotFill( 'NewspackWizardBanner' );
+
+export { WizardBanner };
 
 /**
  * Icon registry for resolving icon name strings passed through the data store.
@@ -116,7 +124,7 @@ const WizardHeaderRegion = ( { hideHeader, headerText, sections, sectionName, su
 
 /**
  * @typedef  {Object}     WizardProps
- * @property {string}     headerText                The header text.
+ * @property {string}     [headerText]              Fallback heading, used only when no section declares breadcrumbs.
  * @property {string}     [subHeaderText]           The sub-header text, optional.
  * @property {string}     [apiSlug]                 The API slug, optional.
  * @property {string}     [className]               CSS classes, optional.
@@ -155,6 +163,7 @@ const Wizard = (
 	const isQuietLoading = useSelect( select => select( WIZARD_STORE_NAMESPACE ).isQuietLoading() );
 	const headerData = useSelect( select => select( WIZARD_STORE_NAMESPACE ).getHeaderData() );
 	const notices = useSelect( select => select( WIZARD_STORE_NAMESPACE ).getNotices() );
+	const { invalidateResolution } = useDispatch( WIZARD_STORE_NAMESPACE );
 	const { actions, backNav, badges, sectionDescription, sectionMenu, sectionName, sectionTitle, sectionPrimaryAction, sectionSecondaryAction } =
 		headerData;
 
@@ -168,14 +177,36 @@ const Wizard = (
 	let displayedSections = sections.filter( section => ! section.isHidden );
 
 	const [ pluginRequirementsSatisfied, setPluginRequirementsSatisfied ] = useState( requiredPlugins.length === 0 );
+
+	// The data fetch above runs once per mount, while the required plugins are
+	// still missing — endpoints that need them answer empty or error outright,
+	// and either way the resolver records that as the answer. So the installer
+	// has to trigger a refetch, or the section mounts against it and renders
+	// nothing until the user saves. Requirements already met on mount are left
+	// alone: that fetch saw the real site, and refetching would cost every such
+	// wizard a second request on every load.
+	const requirementsWereUnmet = useRef( false );
+	const onPluginStatus = ( { complete } ) => {
+		// Leave the installer first: whatever happens to the refetch, the user
+		// should not be stranded on a required-plugins screen for a plugin they
+		// just installed.
+		setPluginRequirementsSatisfied( complete );
+		if ( ! complete ) {
+			requirementsWereUnmet.current = true;
+		} else if ( requirementsWereUnmet.current ) {
+			requirementsWereUnmet.current = false;
+			if ( apiSlug && isInitialFetchTriggered ) {
+				invalidateResolution( 'getWizardAPIData', [ apiSlug ] );
+			}
+		}
+	};
+
 	if ( ! pluginRequirementsSatisfied ) {
 		headerText = requiredPlugins.length > 1 ? __( 'Required plugins', 'newspack-plugin' ) : __( 'Required plugin', 'newspack-plugin' );
 		displayedSections = [
 			{
 				path: '/',
-				render: () => (
-					<PluginInstaller plugins={ requiredPlugins } onStatus={ ( { complete } ) => setPluginRequirementsSatisfied( complete ) } />
-				),
+				render: () => <PluginInstaller plugins={ requiredPlugins } onStatus={ onPluginStatus } />,
 			},
 		];
 	}
@@ -218,6 +249,7 @@ const Wizard = (
 
 			<div className="newspack-wizard__main">
 				{ inertGatingNotice }
+				<WizardBannerSlot bubblesVirtually />
 				<Switch>
 					{ routedSections.map( ( section, index ) => {
 						const SectionComponent = section.render;
@@ -321,38 +353,40 @@ const Wizard = (
 		) : undefined;
 
 	return (
-		<div ref={ ref }>
-			<div
-				className={ classnames( isLoading ? 'newspack-wizard__is-loading' : 'newspack-wizard__is-loaded', {
-					'newspack-wizard__is-loading-quiet': isQuietLoading,
-				} ) }
-			>
-				<HashRouter hashType="slash">
-					{ newspack_aux_data.is_debug_mode && <Notice debugMode /> }
-					<WizardHeaderRegion
-						hideHeader={ hideHeader }
-						headerText={ headerText }
-						sections={ routedSections }
-						sectionName={ sectionName }
-						subTitle={ subHeaderText }
-						actions={ headerActions }
-						tabbedNavigation={ tabbedNavigation }
-					>
-						{ content }
-					</WizardHeaderRegion>
-				</HashRouter>
-				{ notices?.length > 0 && (
-					<div className="newspack-wizard__snackbar-list">
-						{ notices.map( ( notice, index ) => (
-							<WizardSnackbar key={ notice.id || index } id={ notice.id } type={ notice.type } actions={ notice.actions }>
-								{ notice.message }
-							</WizardSnackbar>
-						) ) }
-					</div>
-				) }
+		<SlotFillProvider>
+			<div ref={ ref }>
+				<div
+					className={ classnames( isLoading ? 'newspack-wizard__is-loading' : 'newspack-wizard__is-loaded', {
+						'newspack-wizard__is-loading-quiet': isQuietLoading,
+					} ) }
+				>
+					<HashRouter hashType="slash">
+						{ newspack_aux_data.is_debug_mode && <Notice debugMode /> }
+						<WizardHeaderRegion
+							hideHeader={ hideHeader }
+							headerText={ headerText }
+							sections={ routedSections }
+							sectionName={ sectionName }
+							subTitle={ subHeaderText }
+							actions={ headerActions }
+							tabbedNavigation={ tabbedNavigation }
+						>
+							{ content }
+						</WizardHeaderRegion>
+					</HashRouter>
+					{ notices?.length > 0 && (
+						<div className="newspack-wizard__snackbar-list">
+							{ notices.map( ( notice, index ) => (
+								<WizardSnackbar key={ notice.id || index } id={ notice.id } type={ notice.type } actions={ notice.actions }>
+									{ notice.message }
+								</WizardSnackbar>
+							) ) }
+						</div>
+					) }
+				</div>
+				{ ! isLoading && <Footer simple={ hasSimpleFooter } /> }
 			</div>
-			{ ! isLoading && <Footer simple={ hasSimpleFooter } /> }
-		</div>
+		</SlotFillProvider>
 	);
 };
 

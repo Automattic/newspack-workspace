@@ -20,8 +20,9 @@ module.exports = {
 	branches: [
 		'release',
 		{ name: 'alpha', prerelease: true },
-		{ name: 'hotfix/*', prerelease: '${name.replace(/\\//g, "-")}' },
-		{ name: 'epic/*', prerelease: '${name.replace(/\\//g, "-")}' },
+		// hotfix/* and epic/* branches no longer publish prerelease tags:
+		// CI's build-zips job already produces an installable zip for every
+		// commit, so the tags and their builds were redundant.
 	],
 	plugins: [
 		'@semantic-release/commit-analyzer',

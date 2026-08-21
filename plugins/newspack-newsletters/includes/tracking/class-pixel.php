@@ -44,6 +44,12 @@ final class Pixel {
 		\add_action( 'wp', [ __CLASS__, 'schedule_log_processing' ] );
 		\add_action( 'newspack_newsletters_tracking_pixel_process_log', [ __CLASS__, 'process_logs' ] );
 		\add_filter( 'newspack_newsletters_tracking_pixel_url', [ __CLASS__, 'log_pixel_url' ], 10, 4 );
+
+		// When pixel tracking is turned off, tear the pixel machinery down:
+		// the standalone pixel file keeps logging opens from previously sent
+		// emails, and with scheduling gated nothing would ever drain that log.
+		\add_action( 'add_option_newspack_newsletters_use_tracking_pixel', [ __CLASS__, 'maybe_teardown_pixel' ] );
+		\add_action( 'update_option_newspack_newsletters_use_tracking_pixel', [ __CLASS__, 'maybe_teardown_pixel' ] );
 	}
 
 	/**
@@ -212,9 +218,10 @@ final class Pixel {
 
 			$newsletter_tracking_id = \get_post_meta( $newsletter_id, 'tracking_id', true );
 
-			// Bail if tracking ID mismatch.
+			// Skip mismatched events: one stale tracking ID must not drop the
+			// rest of the batch, whose lines are already consumed from the log.
 			if ( $newsletter_tracking_id !== $tracking_id ) {
-				return;
+				continue;
 			}
 
 			$pixel_seen = \get_post_meta( $newsletter_id, 'tracking_pixel_seen', true );
@@ -295,11 +302,67 @@ final class Pixel {
 
 	/**
 	 * Schedule log processing.
+	 *
+	 * No-op while pixel tracking is off, so disabled sites don't keep a
+	 * minutely cron event alive for logs that are discarded anyway.
 	 */
 	public static function schedule_log_processing() {
+		if ( ! Admin::is_tracking_pixel_enabled() ) {
+			return;
+		}
 		if ( ! \wp_next_scheduled( 'newspack_newsletters_tracking_pixel_process_log' ) ) {
 			\wp_schedule_single_event( time() + 60, 'newspack_newsletters_tracking_pixel_process_log' );
 		}
+	}
+
+	/**
+	 * Remove the standalone pixel file, its logs and the scheduled processing
+	 * when pixel tracking is turned off. Historical emails keep requesting the
+	 * pixel; without the file those hits 404 instead of filling a log nothing
+	 * reads. Re-enabling self-heals: the next processing run recreates the
+	 * files via rotate_log_file().
+	 */
+	public static function maybe_teardown_pixel() {
+		if ( Admin::is_tracking_pixel_enabled() ) {
+			return;
+		}
+		// phpcs:disable WordPressVIPMinimum.Functions.RestrictedFunctions.file_ops_unlink
+		$pixel_file = WP_CONTENT_DIR . '/np-newsletters-pixel.php';
+		if ( file_exists( $pixel_file ) ) {
+			unlink( $pixel_file );
+		}
+		foreach ( [ 'newspack_newsletters_tracking_pixel_log_file', 'newspack_newsletters_tracking_pixel_previous_log_file' ] as $option ) {
+			$log_file = \get_option( $option );
+			if ( self::is_pixel_log_file( $log_file ) ) {
+				unlink( $log_file );
+			}
+			\delete_option( $option );
+		}
+		// phpcs:enable WordPressVIPMinimum.Functions.RestrictedFunctions.file_ops_unlink
+		\delete_option( 'newspack_newsletters_pixel_log_offset' );
+		\wp_clear_scheduled_hook( 'newspack_newsletters_tracking_pixel_process_log' );
+	}
+
+	/**
+	 * Whether a path is one of the pixel log files this class creates: a
+	 * tempnam file named newspack_newsletters_pixel_log_* inside the uploads
+	 * directory. The teardown paths come from options, and a corrupted option
+	 * must not turn disabling tracking into deleting an arbitrary file.
+	 *
+	 * @param mixed $path Path stored in the option.
+	 *
+	 * @return bool
+	 */
+	private static function is_pixel_log_file( $path ) {
+		if ( ! is_string( $path ) || '' === $path || ! file_exists( $path ) ) {
+			return false;
+		}
+		if ( 0 !== strpos( basename( $path ), 'newspack_newsletters_pixel_log_' ) ) {
+			return false;
+		}
+		$real_path = realpath( $path );
+		$uploads   = realpath( \wp_get_upload_dir()['basedir'] );
+		return $real_path && $uploads && 0 === strpos( $real_path, \trailingslashit( $uploads ) );
 	}
 
 	/**
