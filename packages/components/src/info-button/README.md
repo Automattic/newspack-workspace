@@ -17,11 +17,12 @@ It carries no inline margin, so the row it sits in owns the spacing beside it.
 In a flex or grid row that is the row's own `gap`; anywhere else the caller sets
 it.
 
-Vertically it trims itself to a 20px line, `$font-line-height-small`, which is
-what `@wordpress/base-styles` pairs with both 13px and 15px text. A 24px control
-would otherwise add 4px to that line, so a label with one of these would sit
-lower than a label without. Beside text on a different line height the trim is
-off by the difference, so give the row a 20px line.
+Vertically it is a 24px control, `$button-size-small`, and it makes no assumption
+about the line it lands on. Beside text on a shorter line it grows the row unless
+the row pulls it back, which is the host's call rather than the component's: a row
+that is happy at 24px needs nothing. `StatCard.Label` and `SettingsSection` both
+trim it to the 20px line their text sits on, so a label carrying one stays level
+with a label without.
 
 ## What belongs in it
 

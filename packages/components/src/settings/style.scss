@@ -33,6 +33,10 @@
 				span {
 					line-height: wp-vars.$font-line-height-small;
 				}
+
+				.newspack-info-button {
+					margin-block: calc((#{wp-vars.$font-line-height-small} - #{wp-vars.$button-size-small}) / 2);
+				}
 			}
 			&__content {
 				> div,

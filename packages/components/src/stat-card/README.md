@@ -240,9 +240,10 @@ out of the document outline and off the heading's accessible name. Supplementary
 context belongs in an `InfoButton`, which already carries the popup, the touch
 behaviour and the accessible name; the slot itself takes anything.
 
-An `InfoButton` keeps the label row's height without being asked to: it trims
-itself to the 20px line `heading-large()` gives the heading, so a card carrying
-one and a card without still have their figures level.
+The card pulls an `InfoButton` in that slot back to the 20px line
+`heading-large()` gives the heading, so a card carrying one and a card without
+still have their figures level. The button makes no assumption about its host, so
+the trim lives here rather than on it.
 
 ```jsx
 <StatCard.Label
