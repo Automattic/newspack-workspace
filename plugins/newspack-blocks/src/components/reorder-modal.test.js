@@ -6,7 +6,7 @@ import { createEvent, fireEvent, render, screen } from '@testing-library/react';
 /**
  * Internal dependencies
  */
-import ReorderModal, { moveItem } from './reorder-modal';
+import ReorderModal, { findOverlay, moveItem } from './reorder-modal';
 
 describe( 'moveItem', () => {
 	it( 'moves an item down', () => {
@@ -402,5 +402,32 @@ describe( 'ReorderModal when the titles cannot be loaded', () => {
 
 		fireEvent.click( screen.getByRole( 'button', { name: 'Cancel' } ) );
 		expect( onClose ).toHaveBeenCalled();
+	} );
+} );
+
+describe( 'findOverlay', () => {
+	const markup = html => {
+		const root = document.createElement( 'div' );
+		root.innerHTML = html;
+		return root;
+	};
+
+	it( 'takes the node itself when it is the overlay', () => {
+		const overlayNode = markup( '<div class="components-modal__screen-overlay"></div>' ).firstChild;
+		expect( findOverlay( overlayNode ) ).toBe( overlayNode );
+	} );
+
+	it( 'finds the overlay from a node inside it', () => {
+		const root = markup( '<div class="components-modal__screen-overlay"><div class="components-modal__frame"></div></div>' );
+		expect( findOverlay( root.querySelector( '.components-modal__frame' ) ) ).toBe( root.firstChild );
+	} );
+
+	it( 'finds the overlay from a node wrapping it', () => {
+		const root = markup( '<div class="components-modal__screen-overlay"></div>' );
+		expect( findOverlay( root ) ).toBe( root.firstChild );
+	} );
+
+	it( 'reports nothing rather than guessing', () => {
+		expect( findOverlay( null ) ).toBe( null );
 	} );
 } );

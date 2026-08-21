@@ -8,7 +8,7 @@ import classnames from 'classnames';
  */
 import { __, sprintf } from '@wordpress/i18n';
 import { speak } from '@wordpress/a11y';
-import { useEffect, useRef, useState } from '@wordpress/element';
+import { useCallback, useEffect, useRef, useState } from '@wordpress/element';
 import {
 	Button,
 	Modal,
@@ -33,6 +33,17 @@ export const moveItem = ( items, from, to ) => {
 	next.splice( to, 0, moved );
 	return next;
 };
+
+const OVERLAY_SELECTOR = '.components-modal__screen-overlay';
+
+// The overlay carries the dismissal handling and the drop target, and `Modal`
+// forwards its ref to it today. Deriving it from whatever node arrives keeps
+// both working if core ever forwards that ref somewhere else.
+export const findOverlay = node =>
+	node?.closest?.( OVERLAY_SELECTOR ) ||
+	node?.querySelector?.( OVERLAY_SELECTOR ) ||
+	node?.ownerDocument?.querySelector( OVERLAY_SELECTOR ) ||
+	null;
 
 // Disabled controls stay focusable here, so they report `aria-disabled` rather
 // than the native attribute.
@@ -61,6 +72,9 @@ const ReorderModal = ( { title, ids, fetchItems, onSave, onClose } ) => {
 	const closeRef = useRef( null );
 	const preDragItems = useRef( null );
 	const dragBlocked = useRef( false );
+	const captureOverlay = useCallback( node => {
+		overlayRef.current = findOverlay( node );
+	}, [] );
 
 	// The order the modal opened with. Snapshotted so a change to `ids` from
 	// elsewhere in the editor cannot desynchronise it from `items`.
@@ -221,7 +235,7 @@ const ReorderModal = ( { title, ids, fetchItems, onSave, onClose } ) => {
 	return (
 		<>
 			<Modal
-				ref={ overlayRef }
+				ref={ captureOverlay }
 				title={ title }
 				onRequestClose={ requestClose }
 				onKeyDown={ handleKeyDown }
