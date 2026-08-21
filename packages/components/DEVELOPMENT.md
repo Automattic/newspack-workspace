@@ -80,6 +80,7 @@ When building a screen, use the **spacing scale** (8px unit: 16, 24, 32, 48, 64)
 - **`EmptyState`** – Use when a list has nothing in it yet, or an onboarding view stands in for a feature that is not set up. Compound: `EmptyState.Root` wraps `EmptyState.Header` and `EmptyState.Actions`. Render it only when the *unfiltered* collection is empty, so a search matching nothing keeps the DataViews "no results" treatment. See [src/empty-state/README.md](src/empty-state/README.md).
 - **`Grid`** – Use for laying out several items in columns (e.g. multiple controls or cards). Default gap is 32px; use `columns` and `gutter` modifiers (8, 16, 24, 32) when you need tighter or looser spacing. For a single row or a simple vertical stack, prefer **VStack** (or HStack) in new code; Grid is still used that way in many places and is fine to leave as-is until we refactor.
 - **`SectionHeader`** – Use to start a new section; pair with a short description so the section’s goal is clear. Top margin (64px) and bottom (32px) create clear separation from previous content and the section body.
+- **`StatCard`** – Use for a single headline figure with a label above it and a description below. Compound: `StatCard.Root` wraps `Label`, `Body` (holding `Value` and an optional `Secondary`) and `Footer`, with `Delta` riding in the `Value`'s `suffix` for a change beside the figure. Format the figure yourself and pass a string; a `null`, `undefined` or blank `value` gets the shared null glyph rather than a misleading zero. The figure is sized by a container query, so give the cards a definite width (a Grid track, a `flex: 1` item) and equal widths across a row to keep one type scale. See [src/stat-card/README.md](src/stat-card/README.md).
 
 ### Form Components
 
@@ -610,6 +611,7 @@ Newspack components use SCSS with BEM-ish naming conventions and a consistent sp
 - **Elements**: Use `__` for elements that are part of a larger block-level component (e.g. `.newspack-card__header-content`)
 - **WordPress colors:** Use WordPress design system colors (see [Colors Development Guide](../colors/DEVELOPMENT.md))
 - **Custom styles:** Component-specific styles live in `packages/components/src/{component}/style.scss`
+- **Shared values:** Reach for a `@wordpress/base-styles` variable first. Where the scale has no counterpart, the value goes in `packages/components/src/_variables.scss` and is used by name, rather than written as a literal in one component's stylesheet
 
 ### Spacing scale (design system)
 
