@@ -9,6 +9,8 @@ import { CheckboxControl, ExternalLink, TextareaControl } from '@wordpress/compo
  */
 import { Button, Grid, SelectControl, TextControl } from '../../../../../packages/components/src';
 
+import './settings-field.scss';
+
 /**
  * Whether a field declaration produces any rendered output.
  *
@@ -97,7 +99,7 @@ export const SettingsField = ( { field, value, onChange } ) => {
 				typeof option === 'string' ? { value: option, label: option } : { value: option.value, label: option.label || option.value }
 			);
 			return (
-				<div key={ key }>
+				<div key={ key } className="newspack-settings-field__metadata">
 					<h3>{ label }</h3>
 					<Grid columns={ 3 } rowGap={ 16 }>
 						{ normalizedOptions.map( ( { value: optionValue, label: optionLabel } ) => (
