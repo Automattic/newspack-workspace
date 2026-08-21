@@ -394,6 +394,20 @@ describe( 'StatCard.Delta', () => {
 		expect( container.querySelector( '.newspack-stat-card__delta' ) ).toHaveClass( 'newspack-stat-card__delta--negative' );
 	} );
 
+	// Three sources compose here: the base class, the tone modifier and the consumer's.
+	it( 'merges className onto the delta alongside the tone', () => {
+		const { container } = render(
+			<StatCard.Root>
+				<StatCard.Delta direction="down" tone="negative" className="custom-delta">
+					2%
+				</StatCard.Delta>
+			</StatCard.Root>
+		);
+		const delta = container.querySelector( '.newspack-stat-card__delta' );
+		expect( delta ).toHaveClass( 'newspack-stat-card__delta--negative' );
+		expect( delta ).toHaveClass( 'custom-delta' );
+	} );
+
 	it( 'lets directionLabel replace the spoken direction', () => {
 		render(
 			<StatCard.Root>
