@@ -36,12 +36,14 @@ import {
 	CardFeature,
 	CardForm,
 	CardSettingsGroup,
+	CollapsibleGroup,
 	ColorPicker,
 	EmptyState,
 	Footer,
 	Grid,
 	Handoff,
 	ImageUpload,
+	InfoButton,
 	Modal,
 	Notice,
 	Page,
@@ -50,6 +52,7 @@ import {
 	PluginToggle,
 	ProgressBar,
 	SelectControl,
+	StatCard,
 	TableCard,
 	TextControl,
 	Divider,
@@ -387,6 +390,105 @@ class ComponentsDemo extends Component {
 								</Drawer.Content>
 								<Drawer.Footer>{ this.drawerActions( drawerActionCount ) }</Drawer.Footer>
 							</Drawer.Root>
+						</Card>
+						<Card>
+							<h2>{ __( 'StatCard', 'newspack-plugin' ) }</h2>
+							<Grid columns={ 4 } gutter={ 16 } noMargin>
+								<StatCard.Root>
+									<StatCard.Label>{ __( 'Subscribers reached', 'newspack-plugin' ) }</StatCard.Label>
+									<StatCard.Body>
+										<StatCard.Value
+											value="1,284"
+											suffix={
+												<StatCard.Delta direction="up" tone="positive">
+													2%
+												</StatCard.Delta>
+											}
+										/>
+										<StatCard.Secondary>{ __( 'Up from 1,190 last month', 'newspack-plugin' ) }</StatCard.Secondary>
+									</StatCard.Body>
+									<StatCard.Footer>{ __( 'Readers who received at least one campaign.', 'newspack-plugin' ) }</StatCard.Footer>
+								</StatCard.Root>
+								<StatCard.Root>
+									<StatCard.Label
+										suffix={
+											<InfoButton
+												description={ __( 'Averaged across the timeframe.', 'newspack-plugin' ) }
+												triggerLabel={ __( 'More information about Average order value', 'newspack-plugin' ) }
+											/>
+										}
+									>
+										{ __( 'Average order value', 'newspack-plugin' ) }
+									</StatCard.Label>
+									<StatCard.Body>
+										<StatCard.Value
+											value="$1.2M"
+											valueLabel={ __( '1.2 million dollars', 'newspack-plugin' ) }
+											suffix={
+												<StatCard.Delta direction="down" tone="negative">
+													4%
+												</StatCard.Delta>
+											}
+										/>
+									</StatCard.Body>
+									<StatCard.Footer>
+										{ __( 'Products this rule applies to.', 'newspack-plugin' ) }
+										<Button isLink className="newspack-stat-card__action" onClick={ () => console.log( 'StatCard action' ) }>
+											{ __( 'See the products', 'newspack-plugin' ) }
+										</Button>
+									</StatCard.Footer>
+								</StatCard.Root>
+								<StatCard.Root>
+									<StatCard.Label>{ __( 'Refund rate', 'newspack-plugin' ) }</StatCard.Label>
+									<StatCard.Body>
+										<StatCard.Value value={ null } />
+									</StatCard.Body>
+									<StatCard.Footer>
+										{ __( 'The null glyph, named "Not applicable" to screen readers.', 'newspack-plugin' ) }
+									</StatCard.Footer>
+								</StatCard.Root>
+								<StatCard.Root>
+									<StatCard.Label>{ __( 'Paywall conversions', 'newspack-plugin' ) }</StatCard.Label>
+									<StatCard.Body>
+										<StatCard.Value value={ __( '0 of 17', 'newspack-plugin' ) } variant="text" />
+									</StatCard.Body>
+									<StatCard.Footer>
+										{ __( 'A phrase rather than a number, so it drops the hero scale.', 'newspack-plugin' ) }
+									</StatCard.Footer>
+								</StatCard.Root>
+							</Grid>
+						</Card>
+						<Card>
+							<h2>{ __( 'CollapsibleGroup', 'newspack-plugin' ) }</h2>
+							<p>
+								{ __(
+									'A stack of independently collapsible items, separated by dividers and sitting flush with the surrounding column. A collapsed item stays reachable by the browser find-in-page, which expands it to reveal the match.',
+									'newspack-plugin'
+								) }
+							</p>
+							<CollapsibleGroup titleLevel={ 3 }>
+								<CollapsibleGroup.Item title={ __( 'Contact fields', 'newspack-plugin' ) } defaultOpen>
+									<p>{ __( 'An item set to defaultOpen starts expanded.', 'newspack-plugin' ) }</p>
+								</CollapsibleGroup.Item>
+								<CollapsibleGroup.Item title={ __( 'Tags and segments', 'newspack-plugin' ) }>
+									<p>{ __( 'Items are independent: opening one does not close the others.', 'newspack-plugin' ) }</p>
+								</CollapsibleGroup.Item>
+								<CollapsibleGroup.Item title={ __( 'Sync options', 'newspack-plugin' ) }>
+									<p>{ __( 'A divider separates each item from the next, but never trails the last one.', 'newspack-plugin' ) }</p>
+								</CollapsibleGroup.Item>
+							</CollapsibleGroup>
+							<h3>{ __( 'Single item', 'newspack-plugin' ) }</h3>
+							<p>
+								{ __(
+									'With nothing to collapse against, hideSingleTitle renders a lone item open and drops its title.',
+									'newspack-plugin'
+								) }
+							</p>
+							<CollapsibleGroup hideSingleTitle>
+								<CollapsibleGroup.Item title={ __( 'Contact fields', 'newspack-plugin' ) }>
+									<p>{ __( 'This content is always visible.', 'newspack-plugin' ) }</p>
+								</CollapsibleGroup.Item>
+							</CollapsibleGroup>
 						</Card>
 						<Card>
 							<h2>{ __( 'Table card', 'newspack-plugin' ) }</h2>
@@ -1071,6 +1173,7 @@ class ComponentsDemo extends Component {
 							<h3>{ __( 'States', 'newspack-plugin' ) }</h3>
 							<Grid columns={ 2 } gutter={ 16 }>
 								<CardFeature
+									headingLevel={ 4 }
 									title={ __( 'Metered countdown', 'newspack-plugin' ) }
 									description={ __(
 										'Show a countdown banner letting readers know how many free views they have left.',
@@ -1081,6 +1184,7 @@ class ComponentsDemo extends Component {
 									onConfigure={ () => {} }
 								/>
 								<CardFeature
+									headingLevel={ 4 }
 									title={ __( 'Metered countdown', 'newspack-plugin' ) }
 									description={ __(
 										'Show a countdown banner letting readers know how many free views they have left.',
@@ -1095,6 +1199,7 @@ class ComponentsDemo extends Component {
 							<h3>{ __( 'Interactive toggle', 'newspack-plugin' ) }</h3>
 							<Grid columns={ 2 } gutter={ 16 }>
 								<CardFeature
+									headingLevel={ 4 }
 									title={ __( 'Metered countdown', 'newspack-plugin' ) }
 									description={ __(
 										'Show a countdown banner letting readers know how many free views they have left.',
@@ -1111,6 +1216,7 @@ class ComponentsDemo extends Component {
 							<h3>{ __( 'With a custom icon', 'newspack-plugin' ) }</h3>
 							<Grid columns={ 2 } gutter={ 16 }>
 								<CardFeature
+									headingLevel={ 4 }
 									title={ __( 'Content gifting', 'newspack-plugin' ) }
 									description={ __( 'Let subscribers share gated articles with non-subscribers.', 'newspack-plugin' ) }
 									icon={ { node: <Icon icon={ settings } />, fill: '#757575', backgroundColor: '#f0f0f0' } }
@@ -1119,6 +1225,7 @@ class ComponentsDemo extends Component {
 									onConfigure={ () => {} }
 								/>
 								<CardFeature
+									headingLevel={ 4 }
 									title={ __( 'Content gifting', 'newspack-plugin' ) }
 									description={ __( 'Let subscribers share gated articles with non-subscribers.', 'newspack-plugin' ) }
 									icon={ { node: <Icon icon={ settings } />, fill: '#003da5', backgroundColor: '#dfe7f4', radius: 'full' } }
@@ -1131,6 +1238,7 @@ class ComponentsDemo extends Component {
 							<h3>{ __( 'With custom button labels', 'newspack-plugin' ) }</h3>
 							<Grid columns={ 2 } gutter={ 16 }>
 								<CardFeature
+									headingLevel={ 4 }
 									title={ __( 'Apple News', 'newspack-plugin' ) }
 									description={ __( 'Automatically publish articles to Apple News.', 'newspack-plugin' ) }
 									enabled={ this.state.cardFeatureCustomEnabled }
@@ -1149,6 +1257,7 @@ class ComponentsDemo extends Component {
 							<h3>{ __( 'With a custom badge', 'newspack-plugin' ) }</h3>
 							<Grid columns={ 2 } gutter={ 16 }>
 								<CardFeature
+									headingLevel={ 4 }
 									title={ __( 'Stripe', 'newspack-plugin' ) }
 									description={ __( 'Accept payments via Stripe.', 'newspack-plugin' ) }
 									enabled={ true }
@@ -1162,6 +1271,7 @@ class ComponentsDemo extends Component {
 							<h3>{ __( 'With multiple dropdown controls', 'newspack-plugin' ) }</h3>
 							<Grid columns={ 2 } gutter={ 16 }>
 								<CardFeature
+									headingLevel={ 4 }
 									title={ __( 'Newsletters', 'newspack-plugin' ) }
 									description={ __( 'Send newsletters directly from the WordPress editor.', 'newspack-plugin' ) }
 									enabled={ true }

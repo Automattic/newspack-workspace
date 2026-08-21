@@ -3,6 +3,7 @@
  */
 
 @use "../../../colors/colors.module" as np-colors;
+@use "../mixins" as mixins;
 @use "~@wordpress/base-styles/colors" as wp-colors;
 @use "~@wordpress/base-styles/variables" as wp-vars;
 
@@ -53,6 +54,7 @@
 
 		&[data-disabled],
 		&[aria-disabled="true"] {
+			/* stylelint-disable-next-line plugin-wpds/no-unknown-ds-tokens -- the plugin's token list lags the prebuilt design-tokens.css names. */
 			color: var( --wpds-color-foreground-interactive-neutral-disabled, #{wp-colors.$gray-600} );
 			pointer-events: none;
 		}
@@ -91,7 +93,7 @@
 		}
 
 		&:focus-visible {
-			outline: var( --wpds-border-width-focus, var( --wp-admin-border-width-focus, #{wp-vars.$border-width-focus-fallback} ) ) solid var( --wpds-color-stroke-focus, var( --wp-admin-theme-color ) );
+			@include mixins.wpds-focus-ring;
 			outline-offset: calc( var( --wpds-dimension-padding-md, #{wp-vars.$grid-unit-15} ) * -1 );
 		}
 
