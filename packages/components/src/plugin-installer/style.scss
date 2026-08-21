@@ -35,16 +35,8 @@
 	}
 
 	&.newspack-plugin-installer__status-active {
-		box-shadow: inset 4px 0 0 wp-colors.$alert-green;
-
-		.newspack-plugin-installer__checkbox {
-			background: wp-colors.$alert-green;
-			box-shadow: none;
-		}
-
-		svg {
-			fill: white;
-		}
+		/* stylelint-disable-next-line plugin-wpds/no-unknown-ds-tokens -- the plugin's token list lags the prebuilt design-tokens.css names. */
+		box-shadow: inset 4px 0 0 var( --wpds-color-stroke-surface-success-strong, #{wp-colors.$alert-green} );
 	}
 
 	&.newspack-plugin-installer__status-error {
