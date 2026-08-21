@@ -216,14 +216,12 @@ container query.
 `suffix` sits next to the heading rather than inside it, so a control there stays
 out of the document outline and off the heading's accessible name.
 
-An icon button in that slot keeps the label row's height by taking the
-`newspack-stat-card__label-action` class, which trims the 2px a 24px control
-otherwise adds to a 20px line:
+An icon button in that slot keeps the label row's height without being asked to.
+The card trims the 2px a 24px control otherwise adds to a 20px line, scoped to
+the slot rather than to a class each call site has to remember:
 
 ```jsx
-<StatCard.Label
-	suffix={ <Button icon={ info } size="small" className="newspack-stat-card__label-action" label={ … } /> }
->
+<StatCard.Label suffix={ <Button icon={ info } size="small" label={ … } /> }>
 	{ __( 'Average order value', 'newspack-plugin' ) }
 </StatCard.Label>
 ```

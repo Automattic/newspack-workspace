@@ -25,8 +25,7 @@ $stat-card-min-height: wp-vars.$grid-unit * 21;
 		flex: 1;
 	}
 
-	&__label-action,
-	&__label-action.components-button {
+	&__label .components-button {
 		margin: calc((#{wp-vars.$font-line-height-small} - #{wp-vars.$button-size-small}) / 2) 0;
 	}
 
