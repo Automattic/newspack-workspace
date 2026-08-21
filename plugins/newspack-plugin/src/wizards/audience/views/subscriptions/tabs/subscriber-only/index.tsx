@@ -13,11 +13,12 @@ import { useMemo, useState } from '@wordpress/element';
 import { filterSortAndPaginate } from '@wordpress/dataviews';
 // eslint-disable-next-line @wordpress/no-unsafe-wp-apis
 import { __experimentalHStack as HStack, CheckboxControl } from '@wordpress/components';
+import { Badge } from '@wordpress/ui';
 
 /**
  * Internal dependencies.
  */
-import { Badge, Button, DataViews, Modal, Notice, SectionHeader, Waiting } from '../../../../../../../packages/components/src';
+import { Button, DataViews, Modal, Notice, SectionHeader, Waiting } from '../../../../../../../packages/components/src';
 import type { Action, Field, View } from '../../../../../../../packages/components/src/dataviews';
 import WizardsTab from '../../../../../wizards-tab';
 import WizardSection from '../../../../../wizards-section';
@@ -113,9 +114,9 @@ function SubscriberOnlyProducts() {
 				getValue: ( { item }: { item: Restriction } ) => ( item.active ? 'active' : 'paused' ),
 				render: ( { item }: { item: Restriction } ) =>
 					item.active ? (
-						<Badge level="success" text={ __( 'Active', 'newspack-plugin' ) } />
+						<Badge intent="stable">{ __( 'Active', 'newspack-plugin' ) }</Badge>
 					) : (
-						<Badge level="warning" text={ __( 'Paused', 'newspack-plugin' ) } />
+						<Badge intent="medium">{ __( 'Paused', 'newspack-plugin' ) }</Badge>
 					),
 			},
 			{
