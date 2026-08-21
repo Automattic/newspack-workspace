@@ -356,6 +356,12 @@ Anything else you want kept together, wrap yourself and it passes through as one
 </StatCard.Footer>
 ```
 
+That rule keys on the wrapper rather than on what it holds, so a Fragment is
+folded into the run whatever is inside it. A group of non-text content, two
+buttons say, needs a real element around it in the same way: inside a Fragment
+both would land in the description `<p>` and take its quiet 12px type, and
+anything rendering a `<div>` there would trip React's nesting warning as well.
+
 An action keeps the description's type scale by taking the
 `newspack-stat-card__action` class:
 
