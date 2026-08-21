@@ -559,12 +559,7 @@ const ConfigureViewInner = ( { integrations, loading, inFlightChanges, saving, o
 										/>
 									) ) }
 								{ outboundEnabled && outboundGroups.length > 0 && visibleOutboundSettingsFields.length > 0 && (
-									<Divider
-										className="newspack-configure-view__group-divider"
-										variant="tertiary"
-										marginTop={ 0 }
-										marginBottom={ 0 }
-									/>
+									<Divider data-testid="group-divider" variant="tertiary" marginTop={ 0 } marginBottom={ 0 } />
 								) }
 								{ outboundEnabled && outboundGroups.length > 0 && (
 									<CollapsibleGroup hideSingleTitle titleLevel={ 3 }>

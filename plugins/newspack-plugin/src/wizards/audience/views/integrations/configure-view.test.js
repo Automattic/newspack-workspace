@@ -67,15 +67,11 @@ jest.mock( '../../../../../packages/components/src', () => ( {
 	} ),
 	// The view's three dividers differ only by props, so the stub tags them apart
 	// and a test can assert on the one it means rather than on a spanning count.
-	Divider: ( { alignment, className } ) => {
-		let testId = 'toggle-divider';
-		if ( 'full-width' === alignment ) {
-			testId = 'section-divider';
-		} else if ( className && className.includes( 'group-divider' ) ) {
-			testId = 'group-divider';
-		}
-		return <hr data-testid={ testId } />;
-	},
+	// Divider forwards anything undocumented to its `hr`, so the group divider
+	// names itself and the other two are told apart by alignment.
+	Divider: ( { alignment, ...props } ) => (
+		<hr data-testid={ props[ 'data-testid' ] || ( 'full-width' === alignment ? 'section-divider' : 'toggle-divider' ) } />
+	),
 	Grid: ( { children } ) => children,
 	SectionHeader: ( { title } ) => <h2>{ title }</h2>,
 	SelectControl: ( { label, value, onChange } ) => (
