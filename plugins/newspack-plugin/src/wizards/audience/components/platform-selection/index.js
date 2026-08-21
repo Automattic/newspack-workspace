@@ -177,7 +177,7 @@ const PlatformSelection = ( { onComplete, onCancel, config, saveConfig, inFlight
 								title={ option.title }
 								description={ option.description }
 								badge={ isSelected ? __( 'Selected', 'newspack-plugin' ) : undefined }
-								badgeLevel={ isSelected ? 'success' : undefined }
+								badgeIntent={ isSelected ? 'stable' : undefined }
 								actionText={ __( 'Select', 'newspack-plugin' ) }
 								onClick={ () => choose( option.value ) }
 							/>

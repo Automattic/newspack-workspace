@@ -17,11 +17,12 @@ import {
 	__experimentalVStack as VStack, // eslint-disable-line @wordpress/no-unsafe-wp-apis
 	__experimentalHStack as HStack, // eslint-disable-line @wordpress/no-unsafe-wp-apis
 } from '@wordpress/components';
+import { Badge } from '@wordpress/ui';
 
 /**
  * Internal dependencies
  */
-import { DataViews, Badge, Router } from '../../../../../packages/components/src';
+import { DataViews, Router } from '../../../../../packages/components/src';
 import { WIZARD_STORE_NAMESPACE } from '../../../../../packages/components/src/wizard/store';
 import CatalogImpact from './catalog-impact';
 import { intentLabel } from './recipes';
@@ -42,7 +43,7 @@ const DEFAULT_VIEW: View = {
 	titleField: 'title',
 };
 
-const ACTIVE_STATE_LEVEL = { active: 'success', scheduled: 'info', ended: 'default' } as const;
+const ACTIVE_STATE_INTENT = { active: 'stable', scheduled: 'informational', ended: 'none' } as const;
 
 const ACTIVE_STATE_LABEL: Record< PricingRuleRow[ 'active_state' ], string > = {
 	active: __( 'Active', 'newspack-plugin' ),
@@ -163,7 +164,7 @@ export default function PricingRulesList() {
 				id: 'status',
 				label: __( 'Status', 'newspack-plugin' ),
 				getValue: ( { item } ) => item.status,
-				render: ( { item } ) => <Badge level={ item.status === 'publish' ? 'success' : 'default' } text={ item.status_label } />,
+				render: ( { item } ) => <Badge intent={ item.status === 'publish' ? 'stable' : 'draft' }>{ item.status_label }</Badge>,
 				elements: statusElements,
 				filterBy: { operators: [ 'is' ] },
 			},
@@ -172,7 +173,9 @@ export default function PricingRulesList() {
 				label: __( 'Active window', 'newspack-plugin' ),
 				getValue: ( { item } ) => item.active_state,
 				render: ( { item } ) => (
-					<Badge level={ ACTIVE_STATE_LEVEL[ item.active_state ] } text={ ACTIVE_STATE_LABEL[ item.active_state ] ?? item.active_state } />
+					<Badge intent={ ACTIVE_STATE_INTENT[ item.active_state ] }>
+						{ ACTIVE_STATE_LABEL[ item.active_state ] ?? item.active_state }
+					</Badge>
 				),
 				enableSorting: false,
 			},

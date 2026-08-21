@@ -26,11 +26,12 @@ import {
 	__experimentalVStack as VStack, // eslint-disable-line @wordpress/no-unsafe-wp-apis
 	__experimentalHStack as HStack, // eslint-disable-line @wordpress/no-unsafe-wp-apis
 } from '@wordpress/components';
+import { Badge } from '@wordpress/ui';
 
 /**
  * Internal dependencies
  */
-import { Badge, Grid, SectionHeader, Divider, useUnsavedChangesDialog } from '../../../../../packages/components/src';
+import { Grid, SectionHeader, Divider, useUnsavedChangesDialog } from '../../../../../packages/components/src';
 import { WIZARD_STORE_NAMESPACE } from '../../../../../packages/components/src/wizard/store';
 import { PolicyChips, EffectivePrice } from './policy-cells';
 
@@ -591,7 +592,9 @@ export default function ProductForm( {
 									<span className="newspack-subscription-products__modal-label">{ __( 'Unlocks', 'newspack-plugin' ) }</span>
 									<div className="newspack-subscription-products__unlocks">
 										{ initial.unlocks.map( gate => (
-											<Badge key={ gate.id } level="default" text={ gate.title } />
+											<Badge key={ gate.id } intent="none">
+												{ gate.title }
+											</Badge>
 										) ) }
 									</div>
 								</div>

@@ -50,17 +50,17 @@ export const Stripe = ( { stripe } ) => {
 		}
 		return __( 'Connected', 'newspack-plugin' );
 	};
-	const getBadgeLevel = () => {
+	const getBadgeIntent = () => {
 		if ( ! stripe?.enabled || isLoading || isQuietLoading ) {
-			return 'info';
+			return 'informational';
 		}
 		if ( ! isConnectedApi ) {
-			return 'error';
+			return 'high';
 		}
 		if ( ! isConnectedOauth ) {
-			return 'warning';
+			return 'medium';
 		}
-		return 'success';
+		return 'stable';
 	};
 
 	return (
@@ -80,7 +80,7 @@ export const Stripe = ( { stripe } ) => {
 				onSave();
 			} }
 			badge={ getConnectionStatus() }
-			badgeLevel={ getBadgeLevel() }
+			badgeIntent={ getBadgeIntent() }
 			actionContent={
 				// eslint-disable-next-line no-nested-ternary
 				! stripe?.enabled || isLoading || isQuietLoading ? null : isConnectedOauth ? (
