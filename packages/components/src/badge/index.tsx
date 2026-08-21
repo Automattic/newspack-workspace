@@ -13,7 +13,7 @@ export type BadgeLevel = 'default' | 'info' | 'success' | 'warning' | 'error';
 type BadgeProps = {
 	text: string;
 	level?: BadgeLevel;
-} & Omit< React.ComponentPropsWithoutRef< 'span' >, 'children' >;
+} & Omit< React.ComponentPropsWithoutRef< 'span' >, 'children' | 'dangerouslySetInnerHTML' >;
 
 /**
  * Badge component
