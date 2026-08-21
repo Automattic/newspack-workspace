@@ -952,10 +952,11 @@ describe( 'ConfigureView outbound field details', () => {
 					grouped_options: [
 						{
 							section: 'Identity',
-							fields: [ 'User Role', 'First name', 'Undetailed Field' ],
+							fields: [ 'User Role', 'First name', 'Membership Tier', 'Undetailed Field' ],
 							field_details: {
 								'User Role': { status: 'new', description: 'WordPress role of the reader.' },
 								'First name': { status: 'existing', description: "Reader's first name." },
+								'Membership Tier': { status: 'updated', description: 'Current membership tier of the reader.' },
 							},
 						},
 						{
@@ -977,21 +978,26 @@ describe( 'ConfigureView outbound field details', () => {
 		expect( screen.getByText( "Reader's first name." ) ).toBeInTheDocument();
 	} );
 
-	it( 'renders a New badge only for a new-status field', () => {
+	it( 'renders a New badge for new and updated fields', () => {
 		renderConfigureView( { integrations: withFieldDetails() } );
 		const badges = screen.getAllByTestId( 'badge' );
-		expect( badges ).toHaveLength( 1 );
-		expect( badges[ 0 ] ).toHaveTextContent( 'New' );
-		// The badge sits on User Role's row, not First name's.
+		expect( badges ).toHaveLength( 2 );
+		badges.forEach( badge => expect( badge ).toHaveTextContent( 'New' ) );
+		// The badges sit on User Role's and Membership Tier's rows, not First name's.
 		expect( screen.getByLabelText( 'User Role' ).parentElement ).toContainElement( badges[ 0 ] );
+		expect( screen.getByLabelText( 'Membership Tier' ).parentElement ).toContainElement( badges[ 1 ] );
 	} );
 
 	it( 'renders no badge for existing or legacy fields', () => {
 		renderConfigureView( { integrations: withFieldDetails() } );
-		expect( screen.getByLabelText( 'First name' ) ).toBeInTheDocument();
-		expect( screen.getByLabelText( 'Account' ) ).toBeInTheDocument();
-		// Only User Role (status 'new') gets a badge; existing/legacy get none.
-		expect( screen.getAllByTestId( 'badge' ) ).toHaveLength( 1 );
+		// Only User Role ('new') and Membership Tier ('updated') get badges;
+		// existing/legacy rows get none.
+		expect( screen.getAllByTestId( 'badge' ) ).toHaveLength( 2 );
+		for ( const label of [ 'First name', 'Account' ] ) {
+			const checkbox = screen.getByLabelText( label );
+			expect( checkbox ).toBeInTheDocument();
+			expect( checkbox.parentElement.querySelector( '[data-testid="badge"]' ) ).toBeNull();
+		}
 	} );
 
 	it( 'renders a field with no field_details entry with no help text and no badge', () => {
