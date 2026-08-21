@@ -25,10 +25,6 @@ $stat-card-min-height: wp-vars.$grid-unit * 21;
 		flex: 1;
 	}
 
-	&__label > :not(#{&}__label-text) {
-		margin-block: calc((#{wp-vars.$font-line-height-small} - #{wp-vars.$button-size-small}) / 2);
-	}
-
 	&__label-text {
 		@include wp-mixins.heading-large();
 		color: wp-colors.$gray-900;

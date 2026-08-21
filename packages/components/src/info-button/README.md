@@ -13,8 +13,15 @@ import { InfoButton } from 'newspack-components';
 The component imports its own stylesheet, so the barrel ships the CSS with it.
 There is nothing separate to import.
 
-It carries no outer margin, so the row it sits in owns the spacing beside it. In
-a flex or grid row that is the row's own `gap`; anywhere else the caller sets it.
+It carries no inline margin, so the row it sits in owns the spacing beside it.
+In a flex or grid row that is the row's own `gap`; anywhere else the caller sets
+it.
+
+Vertically it trims itself to a 20px line, `$font-line-height-small`, which is
+what `@wordpress/base-styles` pairs with both 13px and 15px text. A 24px control
+would otherwise add 4px to that line, so a label with one of these would sit
+lower than a label without. Beside text on a different line height the trim is
+off by the difference, so give the row a 20px line.
 
 ## What belongs in it
 

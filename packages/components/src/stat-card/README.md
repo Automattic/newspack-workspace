@@ -240,10 +240,9 @@ out of the document outline and off the heading's accessible name. Supplementary
 context belongs in an `InfoButton`, which already carries the popup, the touch
 behaviour and the accessible name; the slot itself takes anything.
 
-A control in that slot keeps the label row's height without being asked to. The
-card trims the 2px a 24px control otherwise adds to a 20px line, and it does so
-for whatever sits in the slot rather than for one class each call site has to
-remember:
+An `InfoButton` keeps the label row's height without being asked to: it trims
+itself to the 20px line `heading-large()` gives the heading, so a card carrying
+one and a card without still have their figures level.
 
 ```jsx
 <StatCard.Label
@@ -258,9 +257,8 @@ remember:
 </StatCard.Label>
 ```
 
-The trim is that one figure rather than a measurement, so a control taller than
-24px still grows the row. A row of cards keeps its figures level while the slot
-holds a small control, which is what it is for.
+Any other control in that slot has to hold the 20px line itself, or it grows the
+row and drops that card's figure below the rest.
 
 A level outside 2–6 falls back to `3` and warns outside production, rather than
 rendering an element that is not a heading at all.

@@ -12,7 +12,7 @@ import InfoButton from '../info-button';
 
 const SettingSection = ( { title, description, children } ) => (
 	<Grid columns={ 1 } gutter={ 8 } className="newspack-settings__section">
-		<Stack direction="row" align="center" gap="xs" className="newspack-settings__section__title">
+		<Stack direction="row" align="flex-start" gap="xs" className="newspack-settings__section__title">
 			<span>{ title }</span>
 			{ description && (
 				<InfoButton
