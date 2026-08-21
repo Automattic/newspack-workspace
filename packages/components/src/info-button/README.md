@@ -24,12 +24,13 @@ to understanding an element should not be hidden.
 
 | Prop | Type | Default | Description |
 |------|------|---------|-------------|
-| `description` | `string` | — | **Required.** The context to reveal. Renders nothing when empty. |
+| `description` | `string` | — | The context to reveal. The whole component renders nothing without it. |
 | `className` | `string` | — | Additional CSS class on the trigger. |
 | `triggerLabel` | `string` | `'More information'` | Accessible name for the trigger. |
 
 Unrecognised props pass through to the trigger, so `id`, `data-*` and event
-handlers all land on the button.
+handlers all land on the button, and a `ref` reaches the button itself. An
+`aria-label` names the popup as well as the trigger, so the two never disagree.
 
 ## Name each one for its setting
 
@@ -49,6 +50,13 @@ them apart.
 />
 ```
 
+**Pass it in the calling plugin's own text domain.** The samples here say
+`newspack-plugin` because that catalogue picks the package's strings up through
+the symlink at `plugins/newspack-plugin/packages/components`. Everywhere else
+the package resolves through `node_modules`, which `make-pot` skips, so a
+`newspack-plugin`-domained string passed in from another plugin ships
+untranslated.
+
 ## Built on Popover, not Tooltip
 
 It looks like a tooltip and is not one. `@wordpress/ui` documents its `Tooltip`
@@ -63,8 +71,9 @@ The consequences, all of which a tooltip would lose:
   overshooting the 24px trigger does not dismiss it instantly.
 - A tap opens it on a touch device.
 - Escape closes it and returns focus to the trigger.
-- The context is linked with `aria-describedby` rather than becoming the
-  button's accessible name, so the trigger keeps a short name of its own.
+- The popup carries the context on its own `aria-describedby` rather than
+  folding it into the button's accessible name, so the trigger keeps a short
+  name of its own.
 
 `Popover.Popup` is rendered with `variant="unstyled"`, which skips the design
 system's own light card surface so the stylesheet can reproduce a tooltip's
@@ -74,7 +83,8 @@ motion layer ships with the default surface.
 ## Accessibility
 
 The trigger is a native `<button>` with no action of its own. Activating it
-opens the popup; nothing else happens.
+opens the popup and moves focus into it, so the description is the next thing a
+keyboard user reaches.
 
 The popup is a `role="dialog"` named by a visually hidden `Popover.Title`. The
 title repeats the trigger's name, which is what the design system's own infotip
