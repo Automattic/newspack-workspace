@@ -65,10 +65,28 @@ class QueryControls extends Component {
 				postType,
 			} ),
 		} ).then( function ( posts ) {
-			return posts.map( post => ( {
+			const allPosts = posts.map( post => ( {
 				value: post.id,
 				label: decodeEntities( post.title.rendered ) || __( '(no title)', 'newspack-blocks' ),
 			} ) );
+			// An ID the endpoint did not return still needs an entry, or the token
+			// field drops it from the block on the next edit. The ID goes in the
+			// label because labels are matched back to IDs, and a shared label
+			// would collapse two items onto one.
+			postIDs.forEach( postID => {
+				const id = parseInt( postID );
+				if ( ! allPosts.find( post => post.value === id ) ) {
+					allPosts.push( {
+						value: id,
+						label: sprintf(
+							/* translators: %d: numeric ID of content that could not be found. */
+							__( 'Unavailable content (%d)', 'newspack-blocks' ),
+							id
+						),
+					} );
+				}
+			} );
+			return allPosts;
 		} );
 	};
 
