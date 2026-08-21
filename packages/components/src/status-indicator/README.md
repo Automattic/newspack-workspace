@@ -69,3 +69,8 @@ to the visible footprint with a negative margin, which is what makes the 8px gap
 measure 8px between the glyph and the label rather than 12px. An icon that fills
 its viewBox would be cropped by 4px a side; the statuses all come from
 `@wordpress/icons`, which does not.
+
+The margin is derived rather than written as `-4px`, so it follows the two
+values it depends on: `calc((#{wp-vars.$grid-unit-20} - #{wp-vars.$icon-size}) / 2)`,
+the glyph's footprint minus the box it sits in, halved for one side. Sass folds
+it to a literal at build time, so nothing is paid for at runtime.
