@@ -292,7 +292,9 @@ export default function SubscriptionProductsList( { scope = 'subscriptions' }: {
 				label: __( 'Availability', 'newspack-plugin' ),
 				getValue: ( { item } ) => item.availability,
 				render: ( { item } ) => {
-					// Availability is a configuration fact, not a problem, so Private is not a warning.
+					// Availability is a configuration fact, not a problem, so Private is not a
+					// warning. The design system maps Private to informational, but `free` already
+					// holds that intent in this column, so Private takes `draft` to stay distinct.
 					const intents = { free: 'informational', private: 'draft', public: 'none' } as const;
 					return <Badge intent={ intents[ item.availability ] }>{ item.availability_label }</Badge>;
 				},
