@@ -29,7 +29,7 @@ export type {
 	StatCardValueVariant,
 } from './types';
 
-// A namespace object, not this package's usual flat exports. See the README.
+// Compound components here export one namespace object, as Drawer does.
 export const StatCard = {
 	Root,
 	Label,

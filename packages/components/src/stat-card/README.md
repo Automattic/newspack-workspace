@@ -4,9 +4,9 @@ One figure presented as a scorecard: what it is, the number itself, and what the
 number counts. Cards sit in a row, so they share a type scale and a null
 treatment rather than each screen inventing its own.
 
-The API is compound: a `StatCard.Root` and one subcomponent per slot. The parts
-hang off one exported object rather than this package's usual flat exports,
-which keeps a six-part component to one name on the barrel.
+The API is compound: a `StatCard.Root` and one subcomponent per slot. As `Drawer`
+does, the parts hang off one exported object, which keeps a seven-part component
+to one name on the barrel.
 
 ## Importing
 
@@ -30,7 +30,12 @@ consumer opting into non-default theme settings, a different corner radius say,
 would see the two diverge.
 
 The figure is unaffected either way: the card declares the Newspack accent on
-itself rather than relying on the package's global remap.
+itself rather than relying on the package's global remap. It declares the darker
+and lighter steps with it, which its own rules never touch, so that a control in
+a slot, a button in `suffix` or in `Footer`, takes the same accent as the figure
+for its fill, its hover and its focus ring. Through the barrel those values are
+already global and the block changes nothing; it earns its keep on the
+deep-import route the rest of this package recommends.
 
 The exported prop types travel with neither route. The barrel is a `.js` file so
 it cannot re-export types, and the package ships no declarations (it compiles
@@ -128,6 +133,15 @@ The null glyph gets "Not applicable" by default. Pass `valueLabel` to say
 something more specific, e.g. why the figure is missing. An empty or blank
 `valueLabel` falls back to that default rather than hiding the figure behind a
 name that says nothing.
+
+### Outside `newspack-plugin`
+
+The spoken defaults, "Not applicable", "Up" and "Down", carry the
+`newspack-plugin` text domain, as every string in this package does. WordPress
+resolves JS translations per script handle, so a bundle registered against
+another domain never loads them and they read in English. A consumer outside
+`newspack-plugin`, Insights in `newspack-manager` for one, should pass
+`valueLabel`, `directionLabel` or `label` from its own domain.
 
 ## Anatomy, not policy
 
