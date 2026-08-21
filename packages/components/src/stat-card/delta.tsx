@@ -2,7 +2,6 @@
  * WordPress dependencies.
  */
 import { forwardRef, useEffect } from '@wordpress/element';
-import { _x } from '@wordpress/i18n';
 import { VisuallyHidden } from '@wordpress/ui';
 
 /**
@@ -27,7 +26,7 @@ const Delta = forwardRef< HTMLSpanElement, StatCardDeltaProps >( function Delta(
 	{ direction, tone = 'neutral', directionLabel, label, className, children, ...props },
 	ref
 ) {
-	useStatCardContext();
+	const { labels } = useStatCardContext();
 
 	useEffect( () => {
 		if ( 'production' === process.env.NODE_ENV ) {
@@ -44,8 +43,8 @@ const Delta = forwardRef< HTMLSpanElement, StatCardDeltaProps >( function Delta(
 	}, [ direction, tone ] );
 
 	const directions: Record< StatCardDeltaDirection, string > = {
-		up: _x( 'Up', 'a statistic that has increased', 'newspack-plugin' ),
-		down: _x( 'Down', 'a statistic that has decreased', 'newspack-plugin' ),
+		up: labels.up,
+		down: labels.down,
 	};
 
 	const glyph = glyphs[ direction ];

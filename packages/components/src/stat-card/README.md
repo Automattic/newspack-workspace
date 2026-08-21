@@ -130,19 +130,37 @@ naming a generic element, so the label needs a role to survive, and `img` makes
 NVDA and VoiceOver announce "graphic" for what is a typographic placeholder.
 Hiding the glyph and supplying real text avoids both.
 
-The null glyph gets "Not applicable" by default. Pass `valueLabel` to say
-something more specific, e.g. why the figure is missing. An empty or blank
-`valueLabel` falls back to that default rather than hiding the figure behind a
-name that says nothing.
+The null glyph gets "Not applicable" by default, or whatever `labels` on the
+`Root` puts in its place. Pass `valueLabel` to say something more specific, e.g.
+why the figure is missing. An empty or blank `valueLabel` falls back to that
+default rather than hiding the figure behind a name that says nothing.
 
 ### Outside `newspack-plugin`
 
 The spoken defaults, "Not applicable", "Up" and "Down", carry the
 `newspack-plugin` text domain, as every string in this package does. WordPress
 resolves JS translations per script handle, so a bundle registered against
-another domain never loads them and they read in English. A consumer outside
-`newspack-plugin`, Insights in `newspack-manager` for one, should pass
-`valueLabel`, `directionLabel` or `label` from its own domain.
+another domain never loads them and they read in English.
+
+`labels` on `StatCard.Root` replaces all three at once, from whichever domain the
+consumer is registered under:
+
+```jsx
+<StatCard.Root
+	labels={ {
+		notApplicable: __( 'Not applicable', 'newspack-manager' ),
+		up: __( 'Up', 'newspack-manager' ),
+		down: __( 'Down', 'newspack-manager' ),
+	} }
+>
+```
+
+A wrapper component that renders the `Root`, which is how both adopters use this,
+sets it once and every card underneath is right. `valueLabel`, `directionLabel`
+and `label` are unchanged: they remain the per-instance override for one figure
+or one change that needs saying differently, and they still win. A blank entry in
+`labels` falls back to the built-in default, so a translation that came back
+empty cannot leave the glyph or the arrow unnamed.
 
 ## Anatomy, not policy
 
@@ -181,6 +199,7 @@ wrapping the figure in an element the body layout would then have to carry.
 | `children` | `React.ReactNode` | — | The slots. |
 | `className` | `string` | — | Merged onto the card, alongside `newspack-stat-card`. |
 | `heading` | `2`–`6` | `3` | Heading level for `StatCard.Label`, passed through context. |
+| `labels` | `{ notApplicable, up, down }` | The built-in strings | Spoken defaults for every card underneath. See [Outside `newspack-plugin`](#outside-newspack-plugin). |
 
 Renders `Card.Root` / `Card.Content` from `@wordpress/ui`, and owns the
 container query.

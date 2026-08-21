@@ -2,7 +2,6 @@
  * WordPress dependencies.
  */
 import { forwardRef, useEffect } from '@wordpress/element';
-import { _x } from '@wordpress/i18n';
 import { Stack, VisuallyHidden } from '@wordpress/ui';
 
 /**
@@ -23,9 +22,7 @@ const Value = forwardRef< HTMLSpanElement, StatCardValueProps >( function Value(
 	{ value, valueLabel, variant = 'figure', suffix, className, ...props },
 	ref
 ) {
-	// The hero scale is a container query on the root, so a value rendered loose
-	// would size against whichever container it landed in.
-	useStatCardContext();
+	const { labels } = useStatCardContext();
 
 	useEffect( () => {
 		if ( 'production' === process.env.NODE_ENV || variants.includes( variant ) ) {
@@ -40,7 +37,7 @@ const Value = forwardRef< HTMLSpanElement, StatCardValueProps >( function Value(
 	const isNull = null === value || undefined === value || ( 'string' === typeof value && '' === value.trim() );
 	const shown = isNull ? STAT_CARD_NULL_GLYPH : value;
 	// Trimmed, and `||` not `??`: a blank label is a missing one, and the glyph must never be left unnamed.
-	const spoken = valueLabel?.trim() || ( isNull ? _x( 'Not applicable', 'a statistic with no number to show', 'newspack-plugin' ) : undefined );
+	const spoken = valueLabel?.trim() || ( isNull ? labels.notApplicable : undefined );
 
 	const figure = (
 		<span

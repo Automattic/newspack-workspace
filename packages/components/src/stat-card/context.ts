@@ -2,19 +2,28 @@
  * WordPress dependencies.
  */
 import { createContext, useContext, useEffect } from '@wordpress/element';
+import { _x } from '@wordpress/i18n';
 
 /**
  * Internal dependencies.
  */
-import type { StatCardHeadingLevel } from './types';
+import type { StatCardHeadingLevel, StatCardLabels } from './types';
 
 type StatCardContextValue = {
 	heading: StatCardHeadingLevel;
+	labels: StatCardLabels;
 };
 
 const ORPHAN_MESSAGE = 'StatCard subcomponents must be rendered inside StatCard.Root.';
 
-const ORPHAN_FALLBACK: StatCardContextValue = { heading: 3 };
+// Resolved per call rather than once at module load, so a locale switched after
+// the bundle evaluates still reaches the defaults. A blank override is a missing
+// one: the glyph and the arrow must never be left announcing nothing.
+export const resolveStatCardLabels = ( labels?: Partial< StatCardLabels > ): StatCardLabels => ( {
+	notApplicable: labels?.notApplicable?.trim() || _x( 'Not applicable', 'a statistic with no number to show', 'newspack-plugin' ),
+	up: labels?.up?.trim() || _x( 'Up', 'a statistic that has increased', 'newspack-plugin' ),
+	down: labels?.down?.trim() || _x( 'Down', 'a statistic that has decreased', 'newspack-plugin' ),
+} );
 
 export const StatCardContext = createContext< StatCardContextValue | null >( null );
 
@@ -37,7 +46,7 @@ export const useStatCardContext = (): StatCardContextValue => {
 		if ( 'production' !== process.env.NODE_ENV ) {
 			throw new Error( ORPHAN_MESSAGE );
 		}
-		return ORPHAN_FALLBACK;
+		return { heading: 3, labels: resolveStatCardLabels() };
 	}
 
 	return context;

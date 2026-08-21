@@ -9,9 +9,21 @@ type DivProps = Omit< React.ComponentPropsWithoutRef< 'div' >, 'children' >;
 
 type SpanProps = Omit< React.ComponentPropsWithoutRef< 'span' >, 'children' >;
 
+/** The strings the card speaks for itself, when the caller has supplied none of its own. */
+export type StatCardLabels = {
+	/** Names the null glyph. */
+	notApplicable: string;
+	/** Spoken for an up arrow. */
+	up: string;
+	/** Spoken for a down arrow. */
+	down: string;
+};
+
 export type StatCardRootProps = DivProps & {
 	/** Heading level for `StatCard.Label`, read through context. */
 	heading?: StatCardHeadingLevel;
+	/** Replaces the spoken defaults for every card underneath, e.g. from a consumer's own text domain. */
+	labels?: Partial< StatCardLabels >;
 	/** Merged onto the card, which is the element the hero scale queries. */
 	className?: string;
 	children?: React.ReactNode;

@@ -737,3 +737,55 @@ describe( 'StatCard outside Root', () => {
 		}
 	} );
 } );
+
+describe( 'StatCard spoken labels', () => {
+	// A bundle registered against another text domain never loads this package's strings.
+	it( 'lets Root replace the name of the null glyph', () => {
+		render(
+			<StatCard.Root labels={ { notApplicable: 'Sans objet' } }>
+				<StatCard.Value value={ null } />
+			</StatCard.Root>
+		);
+		expect( screen.getByText( 'Sans objet' ) ).toHaveAttribute( 'data-visually-hidden' );
+		expect( screen.queryByText( 'Not applicable' ) ).not.toBeInTheDocument();
+	} );
+
+	it( 'lets Root replace the spoken directions', () => {
+		render(
+			<StatCard.Root labels={ { up: 'En hausse', down: 'En baisse' } }>
+				<StatCard.Delta direction="up">2%</StatCard.Delta>
+				<StatCard.Delta direction="down">4%</StatCard.Delta>
+			</StatCard.Root>
+		);
+		expect( screen.getByText( 'En hausse' ) ).toHaveAttribute( 'data-visually-hidden' );
+		expect( screen.getByText( 'En baisse' ) ).toHaveAttribute( 'data-visually-hidden' );
+	} );
+
+	// The per-instance props were always the override, and stay it.
+	it( 'lets valueLabel and directionLabel win over Root labels', () => {
+		render(
+			<StatCard.Root labels={ { notApplicable: 'Sans objet', up: 'En hausse' } }>
+				<StatCard.Value value={ null } valueLabel="Pas encore mesuré" />
+				<StatCard.Delta direction="up" directionLabel="Progression de">
+					2%
+				</StatCard.Delta>
+			</StatCard.Root>
+		);
+		expect( screen.getByText( 'Pas encore mesuré' ) ).toHaveAttribute( 'data-visually-hidden' );
+		expect( screen.getByText( 'Progression de' ) ).toHaveAttribute( 'data-visually-hidden' );
+		expect( screen.queryByText( 'Sans objet' ) ).not.toBeInTheDocument();
+		expect( screen.queryByText( 'En hausse' ) ).not.toBeInTheDocument();
+	} );
+
+	// A translation that came back empty must not leave the glyph or the arrow unnamed.
+	it( 'falls back to the built-in default for a blank Root label', () => {
+		render(
+			<StatCard.Root labels={ { notApplicable: '   ', up: '' } }>
+				<StatCard.Value value={ null } />
+				<StatCard.Delta direction="up">2%</StatCard.Delta>
+			</StatCard.Root>
+		);
+		expect( screen.getByText( 'Not applicable' ) ).toHaveAttribute( 'data-visually-hidden' );
+		expect( screen.getByText( 'Up' ) ).toHaveAttribute( 'data-visually-hidden' );
+	} );
+} );

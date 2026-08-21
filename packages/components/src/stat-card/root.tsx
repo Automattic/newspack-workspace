@@ -13,12 +13,12 @@ import classnames from 'classnames';
 /**
  * Internal dependencies.
  */
-import { StatCardContext } from './context';
+import { resolveStatCardLabels, StatCardContext } from './context';
 import type { StatCardRootProps } from './types';
 import './style.scss';
 
-const Root = forwardRef< HTMLDivElement, StatCardRootProps >( function Root( { heading = 3, className, children, ...props }, ref ) {
-	const context = useMemo( () => ( { heading } ), [ heading ] );
+const Root = forwardRef< HTMLDivElement, StatCardRootProps >( function Root( { heading = 3, labels, className, children, ...props }, ref ) {
+	const context = useMemo( () => ( { heading, labels: resolveStatCardLabels( labels ) } ), [ heading, labels ] );
 
 	return (
 		<StatCardContext.Provider value={ context }>

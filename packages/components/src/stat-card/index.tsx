@@ -22,6 +22,7 @@ export type {
 	StatCardFooterProps,
 	StatCardHeadingLevel,
 	StatCardLabelProps,
+	StatCardLabels,
 	StatCardRootProps,
 	StatCardSecondaryProps,
 	StatCardValue,
