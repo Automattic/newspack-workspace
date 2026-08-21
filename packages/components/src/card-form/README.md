@@ -59,6 +59,8 @@ const handleClose = () => setIsOpen( false );
 
 The `badge` prop accepts any `BadgeIntent`. Use `medium` or `high` to communicate a degraded state.
 
+Omitting `intent` defaults to `stable`, because a `CardForm` badge marks a feature that is switched on. That differs from `ActionCard` and `SectionHeader`, whose badges are free-form labels and so default to `none`.
+
 ```tsx
 <CardForm
 	title={ __( 'Above Header', 'newspack-plugin' ) }
