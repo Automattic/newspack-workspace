@@ -69,6 +69,7 @@ export type StatCardDeltaProps = SpanProps & {
 	/** Spoken in place of the whole delta, arrow and change together. Wins over `directionLabel`. */
 	label?: string;
 	className?: string;
+	/** The change, pre-formatted. Must be non-interactive: `label` hides it from assistive technology. */
 	children?: React.ReactNode;
 };
 

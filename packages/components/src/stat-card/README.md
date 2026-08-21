@@ -192,6 +192,27 @@ and `data-*` all land on the DOM node:
 That is what lets a wrapper hang the unabbreviated amount off a `$1.2M` without
 wrapping the figure in an element the body layout would then have to carry.
 
+## Class names
+
+The component emits these, so a stylesheet can hook onto any of them:
+
+| Class | Element |
+|-------|---------|
+| `newspack-stat-card` | The card |
+| `newspack-stat-card__content` | The content column |
+| `newspack-stat-card__label` | The label row |
+| `newspack-stat-card__label-text` | The heading inside that row |
+| `newspack-stat-card__body` | The body column |
+| `newspack-stat-card__figure` | The row the figure shares with a `Value` `suffix`, present only when there is one |
+| `newspack-stat-card__value` | The figure |
+| `newspack-stat-card__delta` | The delta |
+| `newspack-stat-card__secondary` | The secondary line |
+| `newspack-stat-card__footer` | The footer column |
+| `newspack-stat-card__description` | Each paragraph of the description |
+
+`newspack-stat-card__action` is the one exception, and it runs the other way: the card
+carries the rule but never applies the class, so an action in `Footer` takes it by hand.
+
 ## `StatCard.Root`
 
 | Prop | Type | Default | Description |
@@ -256,7 +277,7 @@ one, the figure renders on its own with no extra wrapper.
 
 | Prop | Type | Default | Description |
 |------|------|---------|-------------|
-| `children` | `React.ReactNode` | — | The change, pre-formatted. |
+| `children` | `React.ReactNode` | — | The change, pre-formatted. Must be non-interactive. |
 | `className` | `string` | — | Merged onto the delta. |
 | `direction` | `'up'` \| `'down'` | — | **Required.** Which arrow to show. |
 | `directionLabel` | `string` | Root's `up` or `down` | Spoken in place of the direction. |
@@ -283,6 +304,10 @@ The tone does not survive it. "Up 2%" reads the same whether the rise is good
 news or bad, because that difference lives only in the colour. Where it matters,
 put it in words: `label` replaces the whole spoken delta, and the arrow and the
 change are hidden behind it.
+
+That hiding is why the children must be text rather than a control. Anything
+focusable there would still take tab focus while being hidden from the
+accessibility tree, which is a state a screen-reader user cannot make sense of.
 
 ```jsx
 <StatCard.Delta
