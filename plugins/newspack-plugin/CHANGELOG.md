@@ -1,3 +1,31 @@
+## newspack [6.48.14](https://github.com/Automattic/newspack-workspace/compare/newspack@6.48.13...newspack@6.48.14) (2026-08-20)
+
+
+### Bug Fixes
+
+* **scheduled-posts:** rescue scheduled posts in non-public CPTs ([#936](https://github.com/Automattic/newspack-workspace/issues/936)) ([b6a9f8e](https://github.com/Automattic/newspack-workspace/commit/b6a9f8e265c56716eb0a30b406046ee68fdd37ed))
+
+## newspack [6.48.13](https://github.com/Automattic/newspack-workspace/compare/newspack@6.48.12...newspack@6.48.13) (2026-08-20)
+
+
+### Dependencies
+
+* **newspack-components:** upgraded to 4.6.3
+
+## newspack [6.48.12](https://github.com/Automattic/newspack-workspace/compare/newspack@6.48.11...newspack@6.48.12) (2026-08-20)
+
+
+### Bug Fixes
+
+* **reader-activation:** clear stuck auth-form loading spinner ([#929](https://github.com/Automattic/newspack-workspace/issues/929)) ([ad31481](https://github.com/Automattic/newspack-workspace/commit/ad31481b1476628a47fe9f3e2a765ea4f76146f2))
+
+## newspack [6.48.11](https://github.com/Automattic/newspack-workspace/compare/newspack@6.48.10...newspack@6.48.11) (2026-08-20)
+
+
+### Bug Fixes
+
+* **memberships:** restore membership paywall content ([#931](https://github.com/Automattic/newspack-workspace/issues/931)) ([#932](https://github.com/Automattic/newspack-workspace/issues/932)) ([13cde5a](https://github.com/Automattic/newspack-workspace/commit/13cde5ae2a50c60d6bceda6ce79ce43c1d7e6e59))
+
 ## newspack [6.48.10](https://github.com/Automattic/newspack-workspace/compare/newspack@6.48.9...newspack@6.48.10) (2026-08-20)
 
 

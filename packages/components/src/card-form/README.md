@@ -95,7 +95,7 @@ Omit `badge` (or pass `undefined`) to show no badge at all.
 | `actions` | `React.ReactNode` | — | JSX rendered in the header action area (buttons, dropdowns, etc.) |
 | `isOpen` | `boolean` | `false` | When `true`, renders `children` in the card body and removes the header border |
 | `onRequestClose` | `() => void` | — | Called when the user presses Escape while focus is inside the open form |
-| `titleLevel` | `1 \| 2 \| 3 \| 4 \| 5 \| 6` | `3` | Heading level rendered for `title`. Pick the level that fits the surrounding document outline. |
+| `titleLevel` | `2 \| 3 \| 4 \| 5 \| 6` | `3` | Heading level rendered for `title`. Pick the level that fits the surrounding document outline. |
 | `className` | `string` | — | Additional class name applied to the card element |
 | `children` | `React.ReactNode` | — | Form content rendered inside the card body when `isOpen` is `true` |
 
