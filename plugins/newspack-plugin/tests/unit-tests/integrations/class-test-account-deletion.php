@@ -359,6 +359,91 @@ class Test_Account_Deletion extends \WP_UnitTestCase {
 			$pushed['metadata'][ $prefix . 'Membership_Status' ],
 			'Flag mode must re-inject membership_status=user-deleted under the prefixed key.'
 		);
+		// A deletion upsert must never attach the master list: the dispatcher
+		// passes skip_lists so the flag push cannot (re)subscribe — or
+		// first-create — the deleted reader on it.
+		$this->assertTrue(
+			(bool) ( $spy->push_calls[0]['options']['skip_lists'] ?? false ),
+			'Flag-mode pushes must carry skip_lists.'
+		);
+	}
+
+	/**
+	 * Flag mode's contract is push-then-cleanup, and the cleanup is the half
+	 * that stops outreach to the deleted reader. An integration inheriting
+	 * the base no-op cleanup cannot honor that, so the dispatcher must skip
+	 * its flag push entirely rather than leave the reader flagged but still
+	 * reachable at the provider.
+	 */
+	public function test_handle_account_deletion_skips_flag_mode_without_cleanup_override() {
+		$this->reset_integrations();
+		$no_cleanup = new class( 'no-cleanup', 'No Cleanup' ) extends \Newspack\Reader_Activation\Integration {
+			/**
+			 * Captured push_contact_data() calls.
+			 *
+			 * @var array
+			 */
+			public $push_calls = [];
+
+			/**
+			 * Register settings fields (test implementation).
+			 */
+			public function register_settings_fields() {
+				return [];
+			}
+
+			/**
+			 * The integration's external prerequisites are configured.
+			 *
+			 * @return bool
+			 */
+			public function is_set_up() {
+				return true;
+			}
+
+			/**
+			 * Whether contacts can be synced.
+			 *
+			 * @param bool $return_errors Whether to return a WP_Error object.
+			 * @return bool|\WP_Error
+			 */
+			public function can_sync( $return_errors = false ) {
+				return $return_errors ? new \WP_Error() : true;
+			}
+
+			/**
+			 * Push contact data (records the call).
+			 *
+			 * @param array      $contact          The contact data.
+			 * @param string     $context          The sync context.
+			 * @param array|null $existing_contact Existing contact data if available.
+			 * @param array      $options          Sync options.
+			 * @return true
+			 */
+			public function push_contact_data( $contact, $context = '', $existing_contact = null, $options = [] ) {
+				$this->push_calls[] = [
+					'contact' => $contact,
+					'options' => $options,
+				];
+				return true;
+			}
+		};
+		Integrations::register( $no_cleanup );
+		$no_cleanup->update_settings_field_value( 'sync_account_deletion', true );
+		$no_cleanup->update_settings_field_value( 'account_deletion_handling', 'flag' );
+		Integrations::enable( 'no-cleanup' );
+
+		$result = \Newspack\Reader_Activation\Contact_Sync::handle_account_deletion(
+			'reader@example.com',
+			[
+				'email'    => 'reader@example.com',
+				'metadata' => [],
+			],
+			'TestContext'
+		);
+
+		$this->assertNotWPError( $result, 'Skipping an incapable integration is not an error.' );
+		$this->assertCount( 0, $no_cleanup->push_calls, 'An integration inheriting the base no-op cleanup must not receive the flag push.' );
 	}
 
 	/**

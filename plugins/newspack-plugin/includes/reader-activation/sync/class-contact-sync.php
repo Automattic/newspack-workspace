@@ -424,7 +424,10 @@ class Contact_Sync extends Sync {
 	 * - sync_account_deletion=false → skip this integration entirely.
 	 * - sync_account_deletion=true + handling='delete' → call $integration->delete_contact($email).
 	 * - sync_account_deletion=true + handling='flag' → push the contact with the
-	 *   `account_deleted` metadata field set to an ISO8601 timestamp.
+	 *   `account_deleted` metadata field set to an ISO8601 timestamp. The push
+	 *   carries `skip_lists` (a deletion must never attach the master list) and
+	 *   runs only for integrations that implement flag_deletion_cleanup() —
+	 *   the base no-op cannot stop outreach, so those integrations are skipped.
 	 *
 	 * The WP user no longer exists by the time this runs, so the standard
 	 * push_to_integrations() retry path (which keys retries on user_id) is
@@ -557,6 +560,17 @@ class Contact_Sync extends Sync {
 					}
 				}
 			} elseif ( 'flag' === $mode ) {
+				// Flag mode's contract is a two-step: push the deletion signal,
+				// then flag_deletion_cleanup() stops list/audience outreach. An
+				// integration inheriting the base no-op cleanup cannot complete
+				// the second step, so pushing would leave the deleted reader
+				// reachable at the provider (and an upsert may even create the
+				// contact there). Skip those entirely — the pre-unification
+				// behavior for integrations without deletion support.
+				if ( ! self::implements_flag_deletion_cleanup( $integration ) ) {
+					static::log( sprintf( 'Integration "%s" implements no flag-deletion cleanup; skipping flag-mode deletion sync of %s.', $integration_id, $email ) );
+					continue;
+				}
 				// Push through the integration's normal pipeline so prepare_contact applies metadata
 				// prefixing and outgoing-field filtering to publisher-configured metadata. Then
 				// re-inject the account_deleted signal: it's a system-level signal that must
@@ -581,7 +595,12 @@ class Contact_Sync extends Sync {
 				// must never depend on selection state.
 				$integration_contact['metadata'][ $prefix . 'Membership_Status' ] = $flag_contact['metadata']['membership_status'];
 
-				$result = $integration->push_contact_data( $integration_contact, $context );
+				// skip_lists: a deletion upsert must never attach the master list,
+				// re-adding — or first-creating — the deleted reader on it. The
+				// deletion-signal metadata needs no list membership, and the
+				// un-retried cleanup below stays a best-effort extra rather than
+				// the only thing standing between a deleted reader and a list.
+				$result = $integration->push_contact_data( $integration_contact, $context, null, [ 'skip_lists' => true ] );
 				if ( \is_wp_error( $result ) ) {
 					$errors[] = sprintf( '[%s] %s', $integration_id, $result->get_error_message() );
 					static::log( sprintf( 'Flag-push failed for integration "%s" of %s: %s', $integration_id, $email, $result->get_error_message() ) );
@@ -637,6 +656,23 @@ class Contact_Sync extends Sync {
 			return new \WP_Error( 'newspack_esp_delete_failed', implode( '; ', $errors ) );
 		}
 		return true;
+	}
+
+	/**
+	 * Whether an integration provides its own flag_deletion_cleanup(),
+	 * rather than inheriting the base no-op.
+	 *
+	 * Flag-mode deletion is gated on this: the cleanup is the half of the
+	 * contract that stops outreach to the deleted reader, and an integration
+	 * lands in flag mode precisely because it cannot hard-delete — so one
+	 * that also cannot clean up must not receive the flag push at all.
+	 *
+	 * @param Integration $integration The integration instance.
+	 *
+	 * @return bool
+	 */
+	private static function implements_flag_deletion_cleanup( Integration $integration ) {
+		return Integration::class !== ( new \ReflectionMethod( $integration, 'flag_deletion_cleanup' ) )->getDeclaringClass()->getName();
 	}
 
 	/**
@@ -1211,7 +1247,9 @@ class Contact_Sync extends Sync {
 		if ( 'delete' === $mode ) {
 			$result = $integration->delete_contact( $email );
 		} elseif ( 'flag' === $mode ) {
-			$result = $integration->push_contact_data( $contact, $context );
+			// Same skip_lists as the original flag push: the retried payload
+			// must not attach the master list either.
+			$result = $integration->push_contact_data( $contact, $context, null, [ 'skip_lists' => true ] );
 		} else {
 			Logger::log( sprintf( 'Unknown deletion retry mode "%s" for integration "%s".', $mode, $integration_id ), 'NEWSPACK-SYNC', 'error' );
 			return;

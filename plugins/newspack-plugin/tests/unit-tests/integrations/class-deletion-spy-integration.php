@@ -110,13 +110,15 @@ class Deletion_Spy_Integration extends Integration {
 	 * @param array      $contact          The contact data.
 	 * @param string     $context          The sync context.
 	 * @param array|null $existing_contact Existing contact data if available.
+	 * @param array      $options          Sync options (e.g. skip_lists).
 	 * @return true
 	 */
-	public function push_contact_data( $contact, $context = '', $existing_contact = null ) {
+	public function push_contact_data( $contact, $context = '', $existing_contact = null, $options = [] ) {
 		$this->push_calls[] = [
 			'contact'          => $contact,
 			'context'          => $context,
 			'existing_contact' => $existing_contact,
+			'options'          => $options,
 		];
 		return $this->push_result;
 	}
