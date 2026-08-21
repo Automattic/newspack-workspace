@@ -76,7 +76,8 @@ const Delta = ( { direction, tone = 'neutral', directionLabel, label, className,
 		<span className={ classes }>
 			{ /* The arrow is hidden and its meaning given as text, since a bare glyph announces inconsistently. */ }
 			{ glyph && <span aria-hidden="true">{ glyph }</span> }
-			{ spoken && <VisuallyHidden render={ <span /> }>{ spoken }</VisuallyHidden> }
+			{ /* The trailing space separates the direction from the change in the raw text, not only in the layout. */ }
+			{ spoken && <VisuallyHidden render={ <span /> }>{ `${ spoken } ` }</VisuallyHidden> }
 			{ children }
 		</span>
 	);

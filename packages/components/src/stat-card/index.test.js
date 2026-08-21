@@ -358,6 +358,17 @@ describe( 'StatCard.Delta', () => {
 		expect( screen.getByText( '2%' ) ).toBeInTheDocument();
 	} );
 
+	// Hiding the span forms a box that speech linearises; braille and raw text get no such boundary.
+	it( 'separates the spoken direction from the change in the raw text', () => {
+		const { container } = render(
+			<StatCard.Root>
+				<StatCard.Delta direction="up">2%</StatCard.Delta>
+			</StatCard.Root>
+		);
+		expect( container.querySelector( '[data-visually-hidden]' ).textContent ).toBe( 'Up ' );
+		expect( container.querySelector( '.newspack-stat-card__delta' ).textContent ).toBe( '↑Up 2%' );
+	} );
+
 	it( 'points the arrow down without changing the colour', () => {
 		const { container } = render(
 			<StatCard.Root>
