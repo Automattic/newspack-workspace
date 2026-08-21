@@ -13,6 +13,9 @@ import { InfoButton } from 'newspack-components';
 The component imports its own stylesheet, so the barrel ships the CSS with it.
 There is nothing separate to import.
 
+It carries no outer margin, so the row it sits in owns the spacing beside it. In
+a flex or grid row that is the row's own `gap`; anywhere else the caller sets it.
+
 ## What belongs in it
 
 **Supplementary context only.** Anything a reader needs in order to use the
