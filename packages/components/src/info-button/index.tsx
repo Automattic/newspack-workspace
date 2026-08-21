@@ -9,7 +9,7 @@ import classnames from 'classnames';
 import { forwardRef } from '@wordpress/element';
 import { __ } from '@wordpress/i18n';
 import { Icon, info } from '@wordpress/icons';
-import { Popover, VisuallyHidden } from '@wordpress/ui';
+import { getWpCompatOverlaySlot, Popover, VisuallyHidden } from '@wordpress/ui';
 
 /**
  * Internal dependencies.
@@ -51,7 +51,7 @@ const InfoButton = forwardRef< HTMLButtonElement, InfoButtonProps >( function In
 			<Popover.Popup
 				variant="unstyled"
 				className="newspack-info-button__popup"
-				portal={ <Popover.Portal className="newspack-info-button__portal" /> }
+				portal={ <Popover.Portal className="newspack-info-button__portal" container={ getWpCompatOverlaySlot() } /> }
 				positioner={ <Popover.Positioner className="newspack-info-button__positioner" side="top" sideOffset={ 4 } /> }
 			>
 				<VisuallyHidden render={ <Popover.Title /> }>{ name }</VisuallyHidden>
