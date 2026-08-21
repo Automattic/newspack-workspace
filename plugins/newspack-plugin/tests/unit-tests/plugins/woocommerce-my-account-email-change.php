@@ -37,12 +37,14 @@ class Newspack_Test_WooCommerce_My_Account_Email_Change extends WP_UnitTestCase 
 	/**
 	 * Issue a token set for the test reader.
 	 *
+	 * @param string $new_email The address the request is for.
+	 *
 	 * @return array The stored token set.
 	 */
-	private function issue_tokens() {
+	private function issue_tokens( $new_email = 'new@example.com' ) {
 		$method = new ReflectionMethod( WooCommerce_My_Account::class, 'create_email_change_tokens' );
 		$method->setAccessible( true );
-		return $method->invoke( null, $this->user_id );
+		return $method->invoke( null, $this->user_id, $new_email );
 	}
 
 	/**
@@ -53,8 +55,27 @@ class Newspack_Test_WooCommerce_My_Account_Email_Change extends WP_UnitTestCase 
 	 * @return array The stored token set.
 	 */
 	private function start_email_change( $new_email = 'new@example.com' ) {
+		$tokens = $this->issue_tokens( $new_email );
 		\update_user_meta( $this->user_id, WooCommerce_My_Account::PENDING_EMAIL_CHANGE_META, $new_email );
-		return $this->issue_tokens();
+		return $tokens;
+	}
+
+	/**
+	 * The address currently on the account.
+	 *
+	 * @return string
+	 */
+	private function account_email() {
+		\clean_user_cache( $this->user_id );
+		return \get_userdata( $this->user_id )->user_email;
+	}
+
+	/**
+	 * Assert that no pending request remains on the account.
+	 */
+	private function assertNoPendingRequest() {
+		$this->assertSame( '', \get_user_meta( $this->user_id, WooCommerce_My_Account::PENDING_EMAIL_CHANGE_META, true ), 'The pending address should be cleared.' );
+		$this->assertSame( '', \get_user_meta( $this->user_id, WooCommerce_My_Account::PENDING_EMAIL_CHANGE_TOKENS_META, true ), 'The tokens should be cleared.' );
 	}
 
 	/**
@@ -159,5 +180,109 @@ class Newspack_Test_WooCommerce_My_Account_Email_Change extends WP_UnitTestCase 
 	public function test_link_carries_the_token_verbatim() {
 		$url = WooCommerce_My_Account::get_email_change_url( WooCommerce_My_Account::VERIFY_EMAIL_CHANGE_PARAM, 'abc123' );
 		$this->assertStringContainsString( WooCommerce_My_Account::VERIFY_EMAIL_CHANGE_PARAM . '=abc123', $url );
+	}
+
+	/**
+	 * The verification token applies the requested address and settles the request.
+	 */
+	public function test_verifying_applies_the_requested_address() {
+		$tokens = $this->start_email_change( 'confirmed@example.com' );
+
+		$this->assertTrue( WooCommerce_My_Account::verify_email_change( $this->user_id, $tokens['verify'] ) );
+		$this->assertSame( 'confirmed@example.com', $this->account_email() );
+		$this->assertNoPendingRequest();
+	}
+
+	/**
+	 * The cancellation token does not complete the change.
+	 */
+	public function test_cancellation_token_cannot_verify() {
+		$tokens = $this->start_email_change( 'confirmed@example.com' );
+
+		$result = WooCommerce_My_Account::verify_email_change( $this->user_id, $tokens['cancel'] );
+		$this->assertWPError( $result );
+		$this->assertSame( 'reader@example.com', $this->account_email(), 'The account address should be untouched.' );
+		$this->assertSame( 'confirmed@example.com', WooCommerce_My_Account::get_pending_email_change( $this->user_id ), 'A rejected attempt should leave the request standing.' );
+	}
+
+	/**
+	 * The verification token does not cancel the change.
+	 */
+	public function test_verification_token_cannot_cancel() {
+		$tokens = $this->start_email_change();
+
+		$this->assertWPError( WooCommerce_My_Account::cancel_email_change( $this->user_id, $tokens['verify'] ) );
+		$this->assertSame( 'new@example.com', WooCommerce_My_Account::get_pending_email_change( $this->user_id ) );
+	}
+
+	/**
+	 * A token that has expired no longer completes the change.
+	 */
+	public function test_expired_token_cannot_verify() {
+		$tokens            = $this->start_email_change();
+		$tokens['expires'] = time() - HOUR_IN_SECONDS;
+		\update_user_meta( $this->user_id, WooCommerce_My_Account::PENDING_EMAIL_CHANGE_TOKENS_META, $tokens );
+
+		$this->assertWPError( WooCommerce_My_Account::verify_email_change( $this->user_id, $tokens['verify'] ) );
+		$this->assertSame( 'reader@example.com', $this->account_email() );
+	}
+
+	/**
+	 * A verification token works once.
+	 */
+	public function test_verification_token_cannot_be_replayed() {
+		$tokens = $this->start_email_change( 'confirmed@example.com' );
+		WooCommerce_My_Account::verify_email_change( $this->user_id, $tokens['verify'] );
+
+		$this->assertWPError( WooCommerce_My_Account::verify_email_change( $this->user_id, $tokens['verify'] ) );
+		$this->assertSame( 'confirmed@example.com', $this->account_email(), 'The replay should not change the address again.' );
+	}
+
+	/**
+	 * A cancellation token works once.
+	 */
+	public function test_cancellation_token_cannot_be_replayed() {
+		$tokens = $this->start_email_change();
+		$this->assertTrue( WooCommerce_My_Account::cancel_email_change( $this->user_id, $tokens['cancel'] ) );
+
+		$this->assertWPError( WooCommerce_My_Account::cancel_email_change( $this->user_id, $tokens['cancel'] ) );
+	}
+
+	/**
+	 * Cancelling settles the request and leaves the account address alone.
+	 */
+	public function test_cancelling_leaves_the_account_address() {
+		$tokens = $this->start_email_change();
+
+		$this->assertTrue( WooCommerce_My_Account::cancel_email_change( $this->user_id, $tokens['cancel'] ) );
+		$this->assertSame( 'reader@example.com', $this->account_email() );
+		$this->assertNoPendingRequest();
+	}
+
+	/**
+	 * A token settles the address it was issued for, not whichever address was
+	 * recorded last. Two overlapping requests can otherwise leave one request's
+	 * token paired with the other's address.
+	 */
+	public function test_token_settles_the_address_it_was_issued_for() {
+		$first = $this->issue_tokens( 'first@example.com' );
+		\update_user_meta( $this->user_id, WooCommerce_My_Account::PENDING_EMAIL_CHANGE_META, 'second@example.com' );
+
+		$this->assertTrue( WooCommerce_My_Account::verify_email_change( $this->user_id, $first['verify'] ) );
+		$this->assertSame( 'first@example.com', $this->account_email() );
+	}
+
+	/**
+	 * A request that cannot be stored is reported rather than half-started.
+	 */
+	public function test_unstorable_request_is_reported() {
+		$fail = function () {
+			return false;
+		};
+		\add_filter( 'update_user_metadata', $fail, 10, 1 );
+		$tokens = $this->issue_tokens();
+		\remove_filter( 'update_user_metadata', $fail, 10 );
+
+		$this->assertSame( [], $tokens, 'A request that could not be stored should not hand back usable tokens.' );
 	}
 }
