@@ -6,6 +6,7 @@
  * WordPress dependencies.
  */
 import { __ } from '@wordpress/i18n';
+import { caution, drafts, notAllowed, published } from '@wordpress/icons';
 
 export const STATUS_LABELS = {
 	active: __( 'Active', 'newspack-plugin' ),
@@ -14,6 +15,19 @@ export const STATUS_LABELS = {
 	cancelled: __( 'Cancelled', 'newspack-plugin' ),
 };
 
+// Glyphs for the list Status columns. A Status column offers its statuses as
+// separate filters, so no two of them may share a glyph.
+export const STATUS_ICONS = {
+	active: published,
+	pending: drafts,
+	// On hold is usually a payment that needs attention, not a terminal state,
+	// so it takes the caution glyph and cancelled takes the closed one.
+	'on-hold': caution,
+	cancelled: notAllowed,
+};
+
+// The profile card and the person header still badge a single status, where an
+// attention marker is what a badge is for.
 /** @type {Record< string, import('../../../packages/components/src/types').BadgeIntent >} */
 export const STATUS_BADGE_INTENT = {
 	active: 'stable',
