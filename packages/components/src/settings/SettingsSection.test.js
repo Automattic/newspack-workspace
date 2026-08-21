@@ -24,6 +24,15 @@ describe( 'SettingsSection', () => {
 		expect( screen.getByText( DESCRIPTION ) ).toBeInTheDocument();
 	} );
 
+	it( 'falls back to a plain trigger name when the title is not a string', () => {
+		render(
+			<SettingsSection title={ <em>Articles read</em> } description={ DESCRIPTION }>
+				<input />
+			</SettingsSection>
+		);
+		expect( screen.getByRole( 'button', { name: 'More information' } ) ).toBeInTheDocument();
+	} );
+
 	it( 'renders no info trigger without a description', () => {
 		render(
 			<SettingsSection title="Articles read">

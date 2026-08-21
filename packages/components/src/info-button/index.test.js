@@ -28,6 +28,18 @@ describe( 'InfoButton', () => {
 		expect( screen.queryByRole( 'button', { name: DESCRIPTION } ) ).not.toBeInTheDocument();
 	} );
 
+	it( 'renders nothing at all without a description', () => {
+		const { container } = render( <InfoButton /> );
+		expect( screen.queryByRole( 'button' ) ).not.toBeInTheDocument();
+		expect( container.firstChild ).toBeNull();
+	} );
+
+	it( 'treats an empty description as nothing to explain', () => {
+		const { container } = render( <InfoButton description="" /> );
+		expect( screen.queryByRole( 'button' ) ).not.toBeInTheDocument();
+		expect( container.firstChild ).toBeNull();
+	} );
+
 	it( 'lets a consumer name the trigger for its own context', () => {
 		render( <InfoButton description={ DESCRIPTION } triggerLabel="More information about Articles read" /> );
 		expect( getTrigger( 'More information about Articles read' ) ).toBeInTheDocument();
