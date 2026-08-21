@@ -34,7 +34,7 @@ class Group_Subscription_Seats {
 		\add_filter( 'woocommerce_quantity_input_args', [ __CLASS__, 'quantity_input_args' ], 10, 2 );
 		// The stock quantity-input template only turns `product_name` into a
 		// screen-reader-only label, so sighted readers see no field description.
-		// This prints a visible one, tied to the fixed input_id set below.
+		// This prints a visible one, tied to the input_id quantity_input_args() sets.
 		\add_action( 'woocommerce_before_add_to_cart_quantity', [ __CLASS__, 'render_quantity_label' ] );
 
 		// Both registrations, for the same reason Subscriptions_Tiers documents: the
@@ -138,20 +138,31 @@ class Group_Subscription_Seats {
 	/**
 	 * Constrain WooCommerce's quantity input to a per-seat product's bounds.
 	 *
+	 * Scoped to the single-product page: `woocommerce_quantity_input_args` also
+	 * fires for every row of the cart table (`cart/cart.php`), which renders one
+	 * quantity input per cart item on a single page. Applying the same bounds
+	 * and a stable input_id there would collide across rows (duplicate DOM ids)
+	 * and would block the cart's own "set quantity to 0 to remove the item"
+	 * convention, since it isn't this product's add-to-cart form.
+	 *
 	 * @param array       $args    Quantity input args.
 	 * @param \WC_Product $product Product.
 	 *
 	 * @return array The filtered quantity input args.
 	 */
 	public static function quantity_input_args( $args, $product ) {
+		if ( ! is_product() ) {
+			return $args;
+		}
 		$field = self::get_field_args( $product );
 		if ( ! $field ) {
 			return $args;
 		}
-		// A fixed ID so render_quantity_label()'s <label for="..."> always points
-		// at this input. Safe because a per-seat single-product add-to-cart form
-		// renders only one quantity field.
-		$args['input_id']     = 'quantity';
+		// A stable, product-specific ID so render_quantity_label()'s
+		// <label for="..."> always points at this exact input, without colliding
+		// with another per-seat product's quantity field also rendered on the
+		// same page (e.g. a grouped product's per-child quantity inputs).
+		$args['input_id']     = self::get_quantity_input_id( $product );
 		$args['min_value']    = $field['min'];
 		$args['max_value']    = $field['max'] > 0 ? $field['max'] : '';
 		$args['step']         = 1;
@@ -171,9 +182,26 @@ class Group_Subscription_Seats {
 			return;
 		}
 		printf(
-			'<label class="newspack-group-subscription__seats-label" for="quantity">%s</label>',
+			'<label class="newspack-group-subscription__seats-label" for="%1$s">%2$s</label>',
+			esc_attr( self::get_quantity_input_id( $product ) ),
 			esc_html( $field['label'] )
 		);
+	}
+
+	/**
+	 * Build the quantity input's DOM id for a per-seat product.
+	 *
+	 * Shared by quantity_input_args() (which sets it) and render_quantity_label()
+	 * (which points its <label for="..."> at it), so the two can never drift out
+	 * of sync. Keyed by product ID so multiple per-seat quantity fields on one
+	 * page — however unlikely in practice — never collide.
+	 *
+	 * @param \WC_Product $product Product.
+	 *
+	 * @return string
+	 */
+	private static function get_quantity_input_id( $product ) {
+		return 'newspack-group-subscription-seats-quantity-' . ( $product ? (int) $product->get_id() : 0 );
 	}
 
 	/**
@@ -248,6 +276,13 @@ class Group_Subscription_Seats {
 	 */
 	public static function validate_cart_update( $passed, $cart_item_key, $values, $quantity ) {
 		if ( ! $passed ) {
+			return $passed;
+		}
+		// A posted quantity of 0 is WooCommerce's signal to remove the cart item
+		// entirely (see WC_Cart::set_quantity()), not a request for a 0-seat
+		// group. Enforcing the seat minimum against it would trap the reader:
+		// they could never get below the minimum to remove the item this way.
+		if ( 0 === (int) $quantity ) {
 			return $passed;
 		}
 		$product_id = ! empty( $values['variation_id'] ) ? $values['variation_id'] : $values['product_id'];

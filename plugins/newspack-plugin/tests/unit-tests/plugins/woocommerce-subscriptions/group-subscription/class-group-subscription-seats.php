@@ -27,25 +27,28 @@ class Test_Group_Subscription_Seats extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Set up: reset the products database and recorded notices, and enable the
-	 * content-gates feature flag the class's init() checks.
+	 * Set up: reset the products database, recorded notices, and the
+	 * is_product() mock, and enable the content-gates feature flag the class's
+	 * init() checks.
 	 */
 	public function set_up() {
 		parent::set_up();
 		global $products_database;
 		$products_database = [];
 		wc_mocks_reset_notices();
+		wc_mocks_set_is_product( false );
 		if ( ! defined( 'NEWSPACK_CONTENT_GATES' ) ) {
 			define( 'NEWSPACK_CONTENT_GATES', true );
 		}
 	}
 
 	/**
-	 * Tear down: reset the products database.
+	 * Tear down: reset the products database and the is_product() mock.
 	 */
 	public function tear_down() {
 		global $products_database;
 		$products_database = [];
+		wc_mocks_set_is_product( false );
 		parent::tear_down();
 	}
 
@@ -181,16 +184,34 @@ class Test_Group_Subscription_Seats extends WP_UnitTestCase {
 	}
 
 	/**
+	 * A posted quantity of 0 is WooCommerce's "remove this item" signal, not a
+	 * request for a 0-seat group, so it must never be blocked by the seat
+	 * minimum — otherwise a reader could never remove a per-seat item from the
+	 * cart via the quantity field.
+	 */
+	public function test_update_cart_validation_allows_zero_quantity_removal() {
+		global $wc_mock_notices;
+		$this->make_per_seat_product( 923, 2, 5 );
+
+		$this->assertTrue( Group_Subscription_Seats::validate_cart_update( true, 'key', [ 'product_id' => 923 ], 0 ) );
+		$this->assertEmpty( $wc_mock_notices );
+	}
+
+	/**
 	 * Constrains min/max/step to the product's bounds and clamps a below-minimum
-	 * input value up to the minimum, but leaves flat products' args untouched.
+	 * input value up to the minimum, sets a product-specific input_id, but
+	 * leaves flat products' args untouched.
 	 */
 	public function test_quantity_input_args_constrains_bounds() {
+		wc_mocks_set_is_product( true );
+
 		$product = $this->make_per_seat_product( 920, 2, 5 );
 		$args    = Group_Subscription_Seats::quantity_input_args( [ 'input_value' => 1 ], $product );
 		$this->assertSame( 2, $args['min_value'] );
 		$this->assertSame( 5, $args['max_value'] );
 		$this->assertSame( 1, $args['step'] );
 		$this->assertSame( 2, $args['input_value'], 'A below-minimum input value should be clamped up to the minimum.' );
+		$this->assertSame( 'newspack-group-subscription-seats-quantity-920', $args['input_id'], 'The input id should be scoped to the product so multiple per-seat quantity fields on one page cannot collide.' );
 
 		$unlimited      = $this->make_per_seat_product( 921, 1, 0 );
 		$unlimited_args = Group_Subscription_Seats::quantity_input_args( [], $unlimited );
@@ -202,5 +223,24 @@ class Test_Group_Subscription_Seats extends WP_UnitTestCase {
 			'max_value' => 99,
 		];
 		$this->assertSame( $original_args, Group_Subscription_Seats::quantity_input_args( $original_args, $flat ) );
+	}
+
+	/**
+	 * Outside the single-product page — the cart table, for instance, which
+	 * renders one quantity input per cart row on one page — the filter must
+	 * leave WooCommerce's own args untouched. Overriding them there would
+	 * collide input ids across rows and would defeat the cart's "set quantity
+	 * to 0 to remove the item" convention (see the two seat-bound overrides,
+	 * `min_value` in particular).
+	 */
+	public function test_quantity_input_args_ignored_outside_product_page() {
+		wc_mocks_set_is_product( false );
+
+		$product       = $this->make_per_seat_product( 924, 2, 5 );
+		$original_args = [
+			'min_value' => 0,
+			'max_value' => 10,
+		];
+		$this->assertSame( $original_args, Group_Subscription_Seats::quantity_input_args( $original_args, $product ) );
 	}
 }

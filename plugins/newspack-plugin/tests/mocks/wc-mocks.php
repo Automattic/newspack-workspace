@@ -238,6 +238,10 @@ $wc_mock_notices = [];
 // Mock registry: product_id => array of grouped-parent product IDs (NPPM-2926).
 global $wcs_grouped_parents;
 $wcs_grouped_parents = [];
+// Whether the current mock "request" is on a single-product page. Real
+// WooCommerce derives is_product() from WP_Query; standing up a full product
+// page query per test is overkill, so tests toggle this flag directly instead.
+$wc_mock_is_product = false;
 
 /**
  * Reset the order-item lookup table.
@@ -264,6 +268,31 @@ function wc_mocks_reset_order_items() {
 function wc_mocks_reset_notices() {
 	global $wc_mock_notices;
 	$wc_mock_notices = [];
+}
+
+/**
+ * Mock of WooCommerce's is_product() conditional tag.
+ *
+ * Defined unconditionally like wc_add_notice() above, so any
+ * function_exists( 'is_product' ) or direct call in production code executes
+ * against this mock for the whole suite. Reads the flag tests set via
+ * wc_mocks_set_is_product(); defaults to false (not a product page).
+ *
+ * @return bool
+ */
+function is_product() {
+	global $wc_mock_is_product;
+	return ! empty( $wc_mock_is_product );
+}
+
+/**
+ * Toggle the is_product() mock for the current test.
+ *
+ * @param bool $is_product Whether the mock "request" is on a single-product page.
+ */
+function wc_mocks_set_is_product( $is_product ) {
+	global $wc_mock_is_product;
+	$wc_mock_is_product = $is_product;
 }
 
 /**
