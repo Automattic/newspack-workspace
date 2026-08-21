@@ -933,8 +933,8 @@ class TestApi extends \WP_UnitTestCase {
 						[
 							'post_type'   => $post_type,
 							'post_status' => 'any',
-						] 
-					) 
+						]
+					)
 				),
 				"Nothing of type $post_type may be created."
 			);
@@ -995,7 +995,7 @@ class TestApi extends \WP_UnitTestCase {
 				[
 					'post_type' => 'page',
 					'title'     => 'A page',
-				] 
+				]
 			)
 		);
 		$this->assertSame( 200, $created->get_status(), 'Precondition: a page inserts cleanly.' );
