@@ -46,10 +46,10 @@ const Delta = ( { direction, tone = 'neutral', directionLabel, label, className,
 	};
 
 	const glyph = glyphs[ direction ];
-	// Keyed on the same direction as the arrow, so a direction with no arrow is
-	// left unspoken rather than announced as the opposite one. `||` not `??`:
-	// an empty label is a missing one.
-	const spoken = directionLabel || directions[ direction ];
+	// Trimmed, and `||` not `??`: a blank label is a missing one, and a delta
+	// that announces whitespace contributes less than one that says nothing.
+	const named = label?.trim();
+	const spoken = directionLabel?.trim() || directions[ direction ];
 
 	const classes = classnames(
 		'newspack-stat-card__delta',
@@ -58,14 +58,14 @@ const Delta = ( { direction, tone = 'neutral', directionLabel, label, className,
 	);
 
 	// `label` names the whole delta, so the change it restates is hidden with the arrow.
-	if ( label ) {
+	if ( named ) {
 		return (
 			<span className={ classes }>
 				<span aria-hidden="true">
 					{ glyph }
 					{ children }
 				</span>
-				<VisuallyHidden render={ <span /> }>{ label }</VisuallyHidden>
+				<VisuallyHidden render={ <span /> }>{ named }</VisuallyHidden>
 			</span>
 		);
 	}

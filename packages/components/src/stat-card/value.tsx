@@ -32,9 +32,9 @@ const Value = ( { value, valueLabel, variant = 'figure', suffix, className }: St
 		console.warn( `StatCard.Value: unknown variant "${ variant }", falling back to figure. Use one of ${ variants.join( ', ' ) }.` );
 	}, [ variant ] );
 
-	// An empty string is a missing figure too, and a blank hero would read as one
+	// A blank string is a missing figure too, and an empty hero would read as one
 	// that never loaded. A zero is a figure, so it stays out of this.
-	const isNull = null === value || undefined === value || '' === value;
+	const isNull = null === value || undefined === value || ( 'string' === typeof value && '' === value.trim() );
 	const shown = isNull ? STAT_CARD_NULL_GLYPH : value;
 	// Trimmed, and `||` not `??`: a blank label is a missing one, and the glyph must never be left unnamed.
 	const spoken = valueLabel?.trim() || ( isNull ? _x( 'Not applicable', 'a statistic with no number to show', 'newspack-plugin' ) : undefined );

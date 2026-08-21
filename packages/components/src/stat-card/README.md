@@ -72,9 +72,10 @@ the screen that knows what the figure means; the component only sizes it.
 
 The one thing it does own is the absence of a figure. Pass `value={ null }` and
 it renders the null glyph, standing in for "there is no number here" as opposed
-to a zero that genuinely is one. `undefined` and an empty string take the same
+to a zero that genuinely is one. `undefined` and a blank string take the same
 path, so `value={ data?.count }` is safe before the data arrives, and a field
-that reports "no data" as `""` gets the glyph rather than a blank hero.
+that reports "no data" as `""`, or as a padded sentinel, gets the glyph rather
+than an empty hero.
 
 A zero is a figure and renders as one. That distinction is the whole reason the
 glyph exists, so nothing in the component may treat `0` as missing.
@@ -209,7 +210,7 @@ A column that takes the free space. Put `StatCard.Value` in it, plus a
 |------|------|---------|-------------|
 | `className` | `string` | — | Merged onto the value. |
 | `suffix` | `React.ReactNode` | — | Rendered in a row beside the figure, e.g. a `StatCard.Delta`. |
-| `value` | `string` \| `number` \| `null` \| `undefined` | — | **Required.** Pre-formatted. `null`, `undefined` and `""` render the null glyph. |
+| `value` | `string` \| `number` \| `null` \| `undefined` | — | **Required.** Pre-formatted. `null`, `undefined` and a blank string render the null glyph. |
 | `valueLabel` | `string` | "Not applicable" when null | Spoken instead of the visible value. |
 | `variant` | `'figure'` \| `'text'` | `'figure'` | `text` drops the hero scale for a phrase. |
 
@@ -261,6 +262,9 @@ change are hidden behind it.
 	2%
 </StatCard.Delta>
 ```
+
+A blank `label` or `directionLabel` counts as none, and falls back the way an
+empty one does, so a delta is never left announcing whitespace.
 
 `label` is also the way out of the default's word order. "Up 2%" is the arrow's
 text followed by the children, which the markup fixes: a language that wants the

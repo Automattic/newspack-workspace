@@ -238,6 +238,17 @@ describe( 'StatCard.Value', () => {
 		expect( screen.getByText( 'Not applicable' ) ).toHaveAttribute( 'data-visually-hidden' );
 	} );
 
+	// A no-data sentinel padded by the field it came from is still no data.
+	it( 'treats a whitespace-only value as no figure', () => {
+		render(
+			<StatCard.Root>
+				<StatCard.Value value="   " />
+			</StatCard.Root>
+		);
+		expect( screen.getByText( STAT_CARD_NULL_GLYPH ) ).toHaveAttribute( 'aria-hidden', 'true' );
+		expect( screen.getByText( 'Not applicable' ) ).toHaveAttribute( 'data-visually-hidden' );
+	} );
+
 	it( 'does not expose the glyph as an image', () => {
 		render(
 			<StatCard.Root>
@@ -411,6 +422,17 @@ describe( 'StatCard.Delta', () => {
 		expect( screen.getByText( 'Up' ) ).toHaveAttribute( 'data-visually-hidden' );
 	} );
 
+	it( 'falls back to the spoken direction when directionLabel is only whitespace', () => {
+		render(
+			<StatCard.Root>
+				<StatCard.Delta direction="up" directionLabel="   ">
+					2%
+				</StatCard.Delta>
+			</StatCard.Root>
+		);
+		expect( screen.getByText( 'Up' ) ).toHaveAttribute( 'data-visually-hidden' );
+	} );
+
 	// Word order and valence both live in the caller's sentence, not in DOM order.
 	it( 'lets label name the whole delta and hides what it restates', () => {
 		const { container } = render(
@@ -423,6 +445,20 @@ describe( 'StatCard.Delta', () => {
 		expect( container.querySelector( '[aria-hidden="true"]' ) ).toHaveTextContent( '↑2%' );
 		expect( screen.getByText( '2% more refunds than last month' ) ).toHaveAttribute( 'data-visually-hidden' );
 		expect( screen.queryByText( 'Up' ) ).not.toBeInTheDocument();
+	} );
+
+	// A blank sentence would hide the arrow and the change behind nothing at all.
+	it( 'keeps the arrow and the change when label is only whitespace', () => {
+		const { container } = render(
+			<StatCard.Root>
+				<StatCard.Delta direction="up" label="   ">
+					2%
+				</StatCard.Delta>
+			</StatCard.Root>
+		);
+		expect( container.querySelector( '[aria-hidden="true"]' ) ).toHaveTextContent( '↑' );
+		expect( screen.getByText( 'Up' ) ).toHaveAttribute( 'data-visually-hidden' );
+		expect( screen.getByText( '2%' ) ).toBeInTheDocument();
 	} );
 
 	it( 'sits in a row beside the figure when passed as a Value suffix', () => {

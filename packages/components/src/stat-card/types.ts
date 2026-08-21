@@ -2,7 +2,7 @@ export type StatCardHeadingLevel = 2 | 3 | 4 | 5 | 6;
 
 export type StatCardValueVariant = 'figure' | 'text';
 
-/** Pre-formatted by the caller. Null, undefined and an empty string all render the null glyph. */
+/** Pre-formatted by the caller. Null, undefined and a blank string all render the null glyph. */
 export type StatCardValue = string | number | null | undefined;
 
 export type StatCardRootProps = Omit< React.ComponentPropsWithoutRef< 'div' >, 'children' > & {
