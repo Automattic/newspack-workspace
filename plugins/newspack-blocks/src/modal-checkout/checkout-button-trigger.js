@@ -150,6 +150,7 @@ export const PICKER_CONTEXT_FIELDS = [
 	'newspack_popup_id',
 	'prompt_title',
 	'coupon',
+	'quantity',
 ];
 
 /**

@@ -95,6 +95,7 @@ function render_callback( $attributes ) {
 	$after_success_button_label = $attributes['afterSuccessButtonLabel'] ?? '';
 	$after_success_url          = $attributes['afterSuccessURL'] ?? '';
 	$coupon                     = $attributes['coupon'] ?? '';
+	$quantity                   = absint( $attributes['quantity'] ?? 0 );
 	$is_variable                = $attributes['is_variable'];
 
 	if ( $is_variable && $variation_id ) {
@@ -156,6 +157,11 @@ function render_callback( $attributes ) {
 	// Strict check so a coupon code of "0" is still emitted.
 	if ( '' !== $coupon ) {
 		$hidden_fields .= '<input type="hidden" name="coupon" value="' . esc_attr( $coupon ) . '" />';
+	}
+	// Only emitted above 1: the server already defaults to a single seat, and a
+	// reader-editable field inside the modal wins over this default anyway.
+	if ( $quantity > 1 ) {
+		$hidden_fields .= '<input type="hidden" name="quantity" value="' . esc_attr( $quantity ) . '" />';
 	}
 
 	ob_start();

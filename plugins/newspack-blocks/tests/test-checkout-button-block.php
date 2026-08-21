@@ -200,6 +200,23 @@ class CheckoutButtonBlockTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 	}
 
 	/**
+	 * A `quantity` attribute above 1 should render a hidden quantity field.
+	 */
+	public function test_quantity_attribute_emits_hidden_field() {
+		$output = $this->render( [ 'quantity' => 5 ] );
+		$this->assertStringContainsString( '<input type="hidden" name="quantity" value="5" />', $output );
+	}
+
+	/**
+	 * A `quantity` attribute of 1, or no quantity attribute at all, should
+	 * render no quantity field — the server already defaults to 1.
+	 */
+	public function test_quantity_below_two_emits_no_field() {
+		$this->assertStringNotContainsString( 'name="quantity"', $this->render( [ 'quantity' => 1 ] ) );
+		$this->assertStringNotContainsString( 'name="quantity"', $this->render() );
+	}
+
+	/**
 	 * The field must be registered under the 'product' object type.
 	 *
 	 * That string is what WooCommerce's products controller resolves to, since

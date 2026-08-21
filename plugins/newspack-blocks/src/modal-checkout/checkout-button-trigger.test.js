@@ -371,6 +371,14 @@ describe( 'applyContextFields', () => {
 		expect( form.querySelector( 'input[name="prompt_title"]' ) ).toBeNull();
 	} );
 
+	it( 'stamps the quantity', () => {
+		const form = picker();
+
+		applyContextFields( form, { quantity: 3 } );
+
+		expect( form.querySelector( 'input[name="quantity"]' ).value ).toBe( '3' );
+	} );
+
 	it( 'leaves the picker’s own fields alone', () => {
 		const form = render(
 			'<form id="picker"><input type="hidden" name="newspack_checkout" value="1"><input type="radio" name="product_id" value="9"></form>'
@@ -402,6 +410,7 @@ describe( 'PICKER_CONTEXT_FIELDS', () => {
 				'newspack_popup_id',
 				'prompt_title',
 				'coupon',
+				'quantity',
 			] )
 		);
 	} );

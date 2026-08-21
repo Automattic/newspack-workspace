@@ -207,7 +207,7 @@ function ProductControl( props ) {
 
 function CheckoutButtonEdit( props ) {
 	const { attributes, setAttributes, className } = props;
-	const { placeholder, style, text, product, price, variation, width, coupon } = attributes;
+	const { placeholder, style, text, product, price, variation, width, coupon, quantity } = attributes;
 
 	const [ productData, setProductData ] = useState( {} );
 	const [ variations, setVariations ] = useState( [] );
@@ -312,7 +312,7 @@ function CheckoutButtonEdit( props ) {
 					<ProductControl
 						value={ product }
 						price={ price }
-						onChange={ value => setAttributes( { product: value, variation: '', price: '' } ) }
+						onChange={ value => setAttributes( { product: value, variation: '', price: '', quantity: undefined } ) }
 						onProduct={ handleProduct }
 					>
 						{ productData?.variations?.length > 0 && (
@@ -324,6 +324,7 @@ function CheckoutButtonEdit( props ) {
 										setAttributes( {
 											variation: value ? '' : variations[ 0 ].id.toString(),
 											price: '',
+											quantity: undefined,
 										} )
 									}
 								/>
@@ -340,7 +341,7 @@ function CheckoutButtonEdit( props ) {
 												value: item.id,
 											} ) ),
 										] }
-										onChange={ value => setAttributes( { variation: value.toString(), price: '' } ) }
+										onChange={ value => setAttributes( { variation: value.toString(), price: '', quantity: undefined } ) }
 									/>
 								) : (
 									<Spinner />
@@ -410,6 +411,22 @@ function CheckoutButtonEdit( props ) {
 						/>
 					</PanelBody>
 				) }
+				<PanelBody title={ __( 'Seats', 'newspack-blocks' ) } initialOpen={ false }>
+					<p>
+						{ __(
+							'Optional. Pre-fill the number of seats for products sold per seat. Readers can change it before paying.',
+							'newspack-blocks'
+						) }
+					</p>
+					<TextControl
+						type="number"
+						label={ __( 'Default seats', 'newspack-blocks' ) }
+						value={ quantity || '' }
+						min={ 1 }
+						onChange={ value => setAttributes( { quantity: value ? parseInt( value, 10 ) : undefined } ) }
+						__next40pxDefaultSize
+					/>
+				</PanelBody>
 			</InspectorControls>
 		</>
 	);
