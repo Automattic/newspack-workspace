@@ -684,4 +684,27 @@ class Test_Group_Subscription_Settings extends WP_UnitTestCase {
 
 		$this->assertSame( 2, Group_Subscription::get_member_capacity( $subscription ), 'Per-seat capacity should ignore the subscription limit meta override and use the line item quantity instead.' );
 	}
+
+	/*
+	 * --- product editor pricing options ---
+	 */
+
+	/**
+	 * The product editor's pricing options include the mode select (with a
+	 * per-seat choice) and the seat-bound number fields, and the existing
+	 * member-limit field is scoped to per-team mode.
+	 */
+	public function test_pricing_options_include_mode_and_seat_bounds() {
+		if ( ! defined( 'NEWSPACK_CONTENT_GATES' ) ) {
+			define( 'NEWSPACK_CONTENT_GATES', true );
+		}
+
+		$options = Group_Subscription_Settings::add_custom_product_pricing_options( [] );
+
+		$this->assertSame( 'select', $options['newspack_group_subscription_pricing_mode']['type'] );
+		$this->assertArrayHasKey( 'per_seat', $options['newspack_group_subscription_pricing_mode']['options'] );
+		$this->assertSame( 'number', $options['newspack_group_subscription_min_seats']['type'] );
+		$this->assertStringContainsString( 'show_if_newspack_group_subscription_per_seat', $options['newspack_group_subscription_max_seats']['wrapper_class'] );
+		$this->assertStringContainsString( 'show_if_newspack_group_subscription_per_team', $options['newspack_group_subscription_limit']['wrapper_class'] );
+	}
 }

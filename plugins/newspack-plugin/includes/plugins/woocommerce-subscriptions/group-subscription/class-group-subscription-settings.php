@@ -191,9 +191,51 @@ class Group_Subscription_Settings {
 		if ( ! Content_Gate::is_newspack_feature_enabled() ) {
 			return $custom_product_pricing_options;
 		}
+		$custom_product_pricing_options['newspack_group_subscription_pricing_mode'] = [
+			'id'            => self::GROUP_SUBSCRIPTION_META_PREFIX . 'pricing_mode',
+			'wrapper_class' => 'show_if_newspack_group_subscription_enabled',
+			'label'         => __( 'Group subscription pricing', 'newspack-plugin' ),
+			'desc_tip'      => true,
+			'description'   => __( 'Per group charges the subscription price once for the whole group. Per seat charges the subscription price for every seat the buyer chooses.', 'newspack-plugin' ),
+			'default'       => self::DEFAULT_SETTINGS['pricing_mode'],
+			'product_types' => [ 'subscription', 'subscription_variation' ],
+			'type'          => 'select',
+			'options'       => [
+				self::PRICING_MODE_PER_TEAM => __( 'Per group (flat price)', 'newspack-plugin' ),
+				self::PRICING_MODE_PER_SEAT => __( 'Per seat', 'newspack-plugin' ),
+			],
+		];
+		$custom_product_pricing_options['newspack_group_subscription_min_seats'] = [
+			'id'                => self::GROUP_SUBSCRIPTION_META_PREFIX . 'min_seats',
+			'wrapper_class'     => 'show_if_newspack_group_subscription_enabled show_if_newspack_group_subscription_per_seat',
+			'label'             => __( 'Minimum seats (including owner)', 'newspack-plugin' ),
+			'desc_tip'          => true,
+			'description'       => __( 'The fewest seats a buyer can purchase. The subscription price is charged per seat.', 'newspack-plugin' ),
+			'default'           => self::DEFAULT_SETTINGS['min_seats'],
+			'product_types'     => [ 'subscription', 'subscription_variation' ],
+			'type'              => 'number',
+			'custom_attributes' => [
+				'step' => 1,
+				'min'  => 1,
+			],
+		];
+		$custom_product_pricing_options['newspack_group_subscription_max_seats'] = [
+			'id'                => self::GROUP_SUBSCRIPTION_META_PREFIX . 'max_seats',
+			'wrapper_class'     => 'show_if_newspack_group_subscription_enabled show_if_newspack_group_subscription_per_seat',
+			'label'             => __( 'Maximum seats (including owner)', 'newspack-plugin' ),
+			'desc_tip'          => true,
+			'description'       => __( 'The most seats a buyer can purchase. Set to 0 for no maximum.', 'newspack-plugin' ),
+			'default'           => self::DEFAULT_SETTINGS['max_seats'],
+			'product_types'     => [ 'subscription', 'subscription_variation' ],
+			'type'              => 'number',
+			'custom_attributes' => [
+				'step' => 1,
+				'min'  => 0,
+			],
+		];
 		$custom_product_pricing_options['newspack_group_subscription_limit'] = [
 			'id'                => self::GROUP_SUBSCRIPTION_META_PREFIX . 'limit',
-			'wrapper_class'     => 'show_if_newspack_group_subscription_enabled',
+			'wrapper_class'     => 'show_if_newspack_group_subscription_enabled show_if_newspack_group_subscription_per_team',
 			'label'             => __( 'Group subscription member limit (including owner)', 'newspack-plugin' ),
 			'desc_tip'          => true,
 			'description'       => __( 'Set the maximum number of members, including the owner. The minimum is 2, so there is always room for one member besides the owner. Set to 0 to allow an unlimited number of group members.', 'newspack-plugin' ),
