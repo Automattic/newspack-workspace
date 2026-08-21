@@ -397,7 +397,7 @@ class ComponentsDemo extends Component {
 											value="1,284"
 											suffix={
 												<StatCard.Delta direction="up" tone="positive">
-													{ __( '2%', 'newspack-plugin' ) }
+													2%
 												</StatCard.Delta>
 											}
 										/>
@@ -424,7 +424,7 @@ class ComponentsDemo extends Component {
 											valueLabel={ __( '1.2 million dollars', 'newspack-plugin' ) }
 											suffix={
 												<StatCard.Delta direction="down" tone="negative">
-													{ __( '4%', 'newspack-plugin' ) }
+													4%
 												</StatCard.Delta>
 											}
 										/>
