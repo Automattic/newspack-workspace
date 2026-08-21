@@ -219,7 +219,6 @@ supersede_escalations() {
 escalate_conflict() {
   local target="$1" saved="$2" conflicts="$3"
   local url="" marker_files="" body="" branch="" bot_identity="" err_file=""
-  branch="$ESCALATION_BRANCH_PREFIX/${target}-$(date -u +%Y%m%d-%H%M%S)"
 
   # Staging is what resolves the unmerged index entries, since git refuses to
   # commit while any path is still unmerged, and it puts the markers in the tree
@@ -256,6 +255,12 @@ escalate_conflict() {
   # supersede check can never drift out of step with the identity `Configure
   # git` sets in release.yml.
   bot_identity=$(git log -1 --format='%ce') || bot_identity=""
+  # Named after the commit as well as the clock. The timestamp alone resolves to
+  # one second, and two escalations for the same target inside that second
+  # produce the same branch name — the second push is then rejected as a
+  # non-fast-forward and that escalation is lost, having already reported the
+  # conflict. The commit SHA makes the name unique whatever the clock says.
+  branch="$ESCALATION_BRANCH_PREFIX/${target}-$(date -u +%Y%m%d-%H%M%S)-$(git rev-parse --short HEAD)"
 
   # --cached, not HEAD: searching a rev prefixes every result with "HEAD:",
   # which the PR body then presents as paths that don't exist. The index is
