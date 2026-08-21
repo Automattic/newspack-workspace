@@ -7,13 +7,15 @@
 	background: none;
 	border: none;
 	border-radius: var(--wpds-border-radius-sm, #{wp-vars.$radius-small});
-	color: wp-colors.$gray-900;
+	color: inherit;
 	cursor: var(--wpds-cursor-control, pointer);
 	display: inline-flex;
 	flex: 0 0 auto;
 	height: wp-vars.$button-size-small;
 	justify-content: center;
+	margin-left: var(--wpds-dimension-gap-xs, #{wp-vars.$grid-unit-05});
 	padding: 0;
+	vertical-align: middle;
 	width: wp-vars.$button-size-small;
 
 	svg {
