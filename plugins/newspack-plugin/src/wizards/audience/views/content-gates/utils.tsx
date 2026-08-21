@@ -28,21 +28,6 @@ export function getEditGateLayoutUrl( gateId: number, gateMode: string ) {
 }
 
 /**
- * Whether Audience Management is set up, i.e. whether the gate-editing screens
- * may be used at all.
- *
- * Audience Management is a hard prerequisite for content gating - see the
- * `Audience_Management_Dependency` PHP trait for why. The `requireAudienceManagement`
- * router wrapper is the caller; the rule lives here so the wire format below is
- * encoded in exactly one place.
- *
- * `wp_localize_script()` stringifies the PHP boolean, so the value arrives as
- * '1' when on and '' when off - which is why this is a truthiness check and not
- * a comparison against `true`.
- */
-export const hasAudienceManagement = () => Boolean( window.newspackAudienceContentGates?.audience_management_enabled );
-
-/**
  * Whether a gate actually meters, i.e. it grants at least one free view.
  *
  * Metering switched on with 0 free views gates every reader on their first view, so

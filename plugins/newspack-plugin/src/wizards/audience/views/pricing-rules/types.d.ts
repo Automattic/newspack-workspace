@@ -17,6 +17,17 @@ interface PricingRuleStep {
 	label: string;
 }
 
+/**
+ * A schedule price as the form holds it. Numbers stay strings until save, so a
+ * half-typed field is not coerced under the publisher.
+ */
+interface SchedulePriceInput {
+	at: string;
+	calc_type: string;
+	value: string;
+	label: string;
+}
+
 interface PricingRuleRow {
 	id: number;
 	deal_key: string;
@@ -59,6 +70,12 @@ interface PricingRulesVocabItem {
 	requires_value?: boolean;
 }
 
+/** Keyed on `value`, not `id`, which is what the calculation controls bind to. */
+interface PricingRulesCalcType {
+	value: string;
+	label: string;
+}
+
 interface PricingRuleConditionVocab {
 	id: string;
 	field_type: 'boolean' | 'datetime' | 'select' | string;
@@ -73,7 +90,7 @@ interface PricingRulesResponse {
 	currency: PricingRulesCurrency;
 	strategies: PricingRulesVocabItem[];
 	scopes: PricingRulesVocabItem[];
-	calc_types: { value: string; label: string }[];
+	calc_types: PricingRulesCalcType[];
 	conditions: PricingRuleConditionVocab[];
 }
 

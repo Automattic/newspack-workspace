@@ -5,10 +5,10 @@
  * `newspack_newsletters_ad_status` so the column matches the filter.
  */
 
-import { Icon } from '@wordpress/components';
+import { Icon, Tooltip } from '@wordpress/components';
 import { __, sprintf } from '@wordpress/i18n';
 import { drafts, notAllowed, published, scheduled, trash } from '@wordpress/icons';
-import { dateI18n, getSettings as getDateSettings } from '@wordpress/date';
+import { dateI18n, getSettings as getDateSettings, gmdateI18n } from '@wordpress/date';
 
 import { getAdminUrl } from '../../admin-globals';
 import { formatPostDate } from '../../utils/format-date';
@@ -23,24 +23,50 @@ const STATUS_KIND_ICONS = {
 	trash,
 };
 
-const formatTimestampAsDate = timestamp => {
-	if ( ! timestamp ) {
-		return '';
+// Ad windows are whole calendar days: the meta is `Y-m-d`, and `is_ad_active()`
+// compares it as a string against the newsletter's own date, so none of these
+// values carries a time.
+//
+// Keep the publisher's configured pattern, which is what supplies locale
+// ordering (`j. F Y` on a German site). Fall back only when that pattern also
+// carries a time — `date_format` is allowed to, and then the anchor below
+// would surface as a meaningless clock reading, e.g. "8:00 am" on an EDT site.
+const TIME_FORMAT_TOKENS = /[aABgGhHisuvcrTeIOPZ]/;
+const adDateFormat = () => {
+	const configured = getDateSettings().formats?.date;
+	if ( configured && ! TIME_FORMAT_TOKENS.test( configured.replace( /\\./g, '' ) ) ) {
+		return configured;
 	}
-	const settings = getDateSettings();
-	const format = settings.formats?.date || 'M j, Y';
-	return dateI18n( format, timestamp * 1000 );
+	/* translators: PHP date format for an ad's start/expiration day. Date tokens only — these values have no time. */
+	return __( 'F j, Y', 'newspack-newsletters' );
 };
+
+// One hint per column: each says the thing relevant to its own date, so the
+// inclusivity falls out of the wording rather than needing its own sentence.
+const startDateHint = () => __( 'Runs from this day, in the site timezone.', 'newspack-newsletters' );
+const expiryDateHint = () => __( 'Runs through the end of this day, in the site timezone.', 'newspack-newsletters' );
+
+// The REST status payload sends `starts_at`/`expires_at` in two shapes that
+// need opposite handling, so keep them as separate named formatters rather
+// than one function that guesses.
+//
+// A day anchor stands for a calendar day off the `Y-m-d` meta, pinned at noon
+// UTC by the REST layer: format it in UTC, because site time moves it to the
+// next day once the offset reaches +12.
+const formatDayAnchor = timestamp => ( timestamp ? gmdateI18n( adDateFormat(), timestamp * 1000 ) : '' );
+
+// An instant is a real moment — `post_date_gmt`, the auto-publish time of a
+// `future` post: format it in site time, the day the scheduler shows. In UTC an
+// ad publishing at 21:00 in New York would be dated the following day.
+const formatInstant = timestamp => ( timestamp ? dateI18n( adDateFormat(), timestamp * 1000 ) : '' );
 
 const formatDate = value => {
 	if ( ! value ) {
 		return '';
 	}
-	const settings = getDateSettings();
-	const format = settings.formats?.date || 'M j, Y';
-	// Tolerate ISO datetime meta; noon UTC keeps the parsed day timezone-safe.
+	// Tolerate a legacy ISO datetime meta value by keeping only the date.
 	const ymd = String( value ).slice( 0, 10 );
-	return dateI18n( format, `${ ymd }T12:00:00Z` );
+	return gmdateI18n( adDateFormat(), `${ ymd }T00:00:00Z` );
 };
 
 const editUrl = item => `${ getAdminUrl() }post.php?post=${ item.id }&action=edit`;
@@ -65,16 +91,20 @@ const renderStatus = ( { item } ) => {
 
 	let label;
 	if ( 'expired' === kind && status.expires_at ) {
+		// `expires_at` is only ever set from the date meta, so always an anchor.
 		label = sprintf(
 			/* translators: %s: formatted expiry date */
 			__( 'Expired %s', 'newspack-newsletters' ),
-			formatTimestampAsDate( status.expires_at )
+			formatDayAnchor( status.expires_at )
 		);
 	} else if ( 'scheduled' === kind && status.starts_at ) {
+		// Scheduled has two sources: a `future` post reports its publish instant,
+		// while a published ad with a future start date reports a day anchor.
+		const formatStart = 'future' === item?.status ? formatInstant : formatDayAnchor;
 		label = sprintf(
 			/* translators: %s: formatted start date */
 			__( 'Starts %s', 'newspack-newsletters' ),
-			formatTimestampAsDate( status.starts_at )
+			formatStart( status.starts_at )
 		);
 	} else {
 		label = statusKindLabel( kind );
@@ -98,8 +128,20 @@ const renderTerms =
 			.join( ', ' );
 	};
 
-const renderStartDate = ( { item } ) => formatDate( item?.meta?.start_date );
-const renderExpiryDate = ( { item } ) => formatDate( item?.meta?.expiry_date );
+const renderAdDate = ( value, hint ) => {
+	const formatted = formatDate( value );
+	if ( ! formatted ) {
+		return '';
+	}
+	return (
+		<Tooltip text={ hint }>
+			<span>{ formatted }</span>
+		</Tooltip>
+	);
+};
+
+const renderStartDate = ( { item } ) => renderAdDate( item?.meta?.start_date, startDateHint() );
+const renderExpiryDate = ( { item } ) => renderAdDate( item?.meta?.expiry_date, expiryDateHint() );
 
 const renderImpressions = ( { item } ) => String( item?.meta?.tracking_impressions ?? 0 );
 const renderClicks = ( { item } ) => String( item?.meta?.tracking_clicks ?? 0 );
