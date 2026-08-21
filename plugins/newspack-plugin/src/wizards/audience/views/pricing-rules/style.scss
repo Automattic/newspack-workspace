@@ -1,107 +1,170 @@
 @use "~@wordpress/base-styles/colors" as wp-colors;
+@use "~@wordpress/base-styles/variables" as wp-vars;
+@use "~@wordpress/base-styles/mixins" as wp-mixins;
+@use "~@wordpress/base-styles/breakpoints" as wp-breakpoints;
 
 .newspack-pricing-rules {
 	&__muted {
+		margin: 0;
 		color: wp-colors.$gray-700;
+
+		&--help {
+			font-size: wp-vars.$helptext-font-size;
+		}
 	}
 
-	// Goal picker: a single-column stack of selectable cards (title + description),
-	// shown in place of the goal dropdown when creating a rule.
-	&__goal-grid {
-		display: grid;
-		grid-template-columns: 1fr;
-		gap: 12px;
+	&__details {
+		align-self: start;
 	}
 
-	&__goal-card {
+	&__goal-section {
 		display: flex;
 		flex-direction: column;
-		gap: 4px;
-		padding: 16px;
-		text-align: left;
-		background: wp-colors.$white;
-		border: 1px solid wp-colors.$gray-300;
-		border-radius: 4px;
-		cursor: pointer;
-		transition: border-color 0.1s ease, box-shadow 0.1s ease;
+		gap: wp-vars.$grid-unit-30;
+		margin: 0 0 wp-vars.$grid-unit-40;
+	}
 
-		&:hover {
-			border-color: wp-colors.$gray-600;
+	&__readonly-value .components-input-control__container {
+		background: wp-colors.$gray-100;
+	}
+
+	&__readonly.is-monospace input[readonly] {
+		font-family: wp-vars.$font-family-mono;
+	}
+
+	&__datetime {
+		width: 100%;
+
+		> button {
+			justify-content: flex-start;
+			width: 100%;
 		}
-
-		&.is-selected {
-			border-color: var(--wp-admin-theme-color, #{wp-colors.$gray-900});
-			box-shadow: inset 0 0 0 1px var(--wp-admin-theme-color, #{wp-colors.$gray-900});
-		}
 	}
 
-	&__goal-card-title {
-		font-weight: 600;
-	}
-
-	&__goal-card-desc {
-		color: wp-colors.$gray-700;
-		font-size: 13px;
-		line-height: 1.5;
-	}
-
-	// Catalog impact panel sits above the full-width DataViews. Padded 24px to
-	// align its content with the DataViews controls below; margin-bottom leaves
-	// a clean gap after the Newspack DataViews wrapper's full-width
-	// margin-top: -16px pull-up resolves.
 	&__impact {
-		margin-bottom: 48px;
-		padding: 0 48px;
+		margin-bottom: wp-vars.$grid-unit-60;
+		padding: 0 wp-vars.$grid-unit-60;
+
+		> p {
+			margin-top: wp-vars.$grid-unit-15;
+		}
 
 		&--loading {
 			display: flex;
 			justify-content: center;
-			padding: 24px;
+			padding: wp-vars.$grid-unit-30;
 		}
+	}
+
+	&__empty {
+		margin-top: wp-vars.$grid-unit-30;
+
+		&-header {
+			margin: 0 auto;
+			max-width: 48ch;
+		}
+	}
+
+	&__schedule-empty {
+		padding: wp-vars.$grid-unit-40 wp-vars.$grid-unit-30;
 	}
 
 	&__impact-title {
-		margin: 0 0 4px;
+		margin: 0 0 wp-vars.$grid-unit-05;
 		font-size: 16px;
 	}
 
-	&__impact-table {
-		width: 100%;
-		border-collapse: collapse;
-		margin-top: 12px;
+	&__stats {
+		margin-bottom: wp-vars.$grid-unit-30;
+		margin-top: wp-vars.$grid-unit-30;
 
-		th,
-		td {
-			padding: 8px 12px;
-			text-align: left;
-			border-bottom: 1px solid wp-colors.$gray-300;
-		}
-
-		// Flush the outer columns with the 24px panel padding so the table aligns
-		// with the headline and the DataViews controls.
-		th:first-child,
-		td:first-child {
-			padding-left: 0;
-		}
-
-		th:last-child,
-		td:last-child {
-			padding-right: 0;
-		}
-
-		th {
-			font-weight: 600;
+		.newspack-pricing-rules__muted {
+			margin-top: wp-vars.$grid-unit-10;
 		}
 	}
 
-	&__audience {
-		margin: 8px 0 0;
+	&__stat-value {
+		@include wp-mixins.heading-2x-large();
+		margin-bottom: wp-vars.$grid-unit-05;
+	}
+
+	&__stat-label {
 		color: wp-colors.$gray-700;
-		font-style: italic;
 	}
 
-	&__preview-section {
-		padding: 0 0 16px;
+	&__stat-note {
+		color: wp-colors.$gray-700;
+		font-size: wp-vars.$helptext-font-size;
+	}
+
+	&__impact-table,
+	&__schedule-table {
+		.dataviews-view-table tr {
+			th:first-child,
+			td:first-child {
+				padding-left: wp-vars.$grid-unit-30;
+
+				.dataviews-view-table-header-button {
+					margin-left: 0;
+				}
+			}
+
+			th:last-child,
+			td:last-child {
+				padding-right: wp-vars.$grid-unit-30;
+			}
+		}
+
+		.dataviews-no-results {
+			padding-bottom: wp-vars.$grid-unit-30;
+			padding-top: wp-vars.$grid-unit-30;
+		}
+	}
+
+	&__schedule-table {
+		.dataviews-view-table colgroup col:not(.dataviews-view-table__col-actions) {
+			width: auto;
+		}
+
+		.dataviews-view-table tr .dataviews-item-actions .components-button {
+			opacity: 1;
+
+			&:last-of-type {
+				color: wp-colors.$alert-red;
+			}
+		}
+
+		.dataviews-view-table__actions-column .dataviews-view-table-header {
+			position: absolute;
+			overflow: hidden;
+			clip-path: inset(50%);
+			width: 1px;
+			height: 1px;
+			white-space: nowrap;
+		}
+
+		.dataviews-title-field button.components-button.is-link {
+			color: var(--wp-admin-theme-color);
+
+			&:hover,
+			&:focus-visible {
+				text-decoration: underline;
+			}
+		}
+	}
+
+	&__field--error {
+		.components-base-control__help {
+			color: wp-colors.$alert-red;
+		}
+	}
+
+	&__see-more {
+		min-height: wp-vars.$grid-unit-30;
+	}
+
+	&__preview-loading {
+		min-height: 200px;
 	}
 
 	&__preview {
@@ -109,18 +172,55 @@
 			opacity: 0.6;
 		}
 
-		// Draw the eye to the targeted-segment price columns: a faint tint of the
-		// same hue as the changed-cell highlight marks the whole column, mirroring
-		// how the sole "Resulting price" column reads as highlighted with no segment.
-		// A changed cell within the column still gets the solid highlight below
-		// (defined after this rule, so equal-specificity source order wins).
-		.newspack-pricing-rules__impact-table .is-segment-col {
+		> p {
+			margin-top: wp-vars.$grid-unit-15;
+		}
+
+		col[class*="__col-seg-"] {
 			background: rgba(wp-colors.$alert-yellow, 0.12);
 		}
 
-		.newspack-pricing-rules__impact-table .is-changed {
+		.is-changed {
 			background: wp-colors.$alert-yellow;
+			border-radius: wp-vars.$radius-small;
+			color: wp-colors.$gray-900;
 			font-weight: 600;
+			padding: 0 wp-vars.$grid-unit-05;
 		}
+	}
+}
+
+.newspack-pricing-rules__goals {
+	.components-card {
+		flex: 1 1 0;
+
+		&[aria-disabled="true"] {
+			pointer-events: none;
+
+			&:not(.newspack-card--core__is-active) {
+				background: var(--wpds-color-background-surface-neutral-weak, #{wp-colors.$gray-100});
+
+				h3 {
+					color: wp-colors.$gray-700;
+				}
+
+				.newspack-card--core__icon {
+					background: var(--wpds-color-background-interactive-neutral-strong-disabled, #{wp-colors.$gray-200});
+
+					svg {
+						fill: wp-colors.$gray-700;
+					}
+				}
+			}
+		}
+	}
+
+	.newspack-card--core__header-content span {
+		text-wrap: balance;
+		transition: color 125ms ease-in-out;
+	}
+
+	@media ( max-width: wp-breakpoints.$break-small - 1px ) {
+		flex-direction: column;
 	}
 }
