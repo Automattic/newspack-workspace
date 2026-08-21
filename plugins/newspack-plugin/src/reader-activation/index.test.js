@@ -1,4 +1,14 @@
-import { store, dispatchActivity, getActivities, getUniqueActivitiesBy, setReaderEmail, setAuthenticated, getReader, register } from './index';
+import {
+	store,
+	dispatchActivity,
+	getActivities,
+	getUniqueActivitiesBy,
+	setReaderEmail,
+	setAuthenticated,
+	getReader,
+	register,
+	setReferrer,
+} from './index';
 import { on, off } from './events';
 
 describe( 'newspackReaderActivation', () => {
@@ -643,5 +653,104 @@ describe( 'register() transport options', () => {
 		expect( getReader().email ).not.toBe( 'limited@example.com' );
 		const failed = getActivities( 'reader_registration_failed' ).filter( a => a.data.email === 'limited@example.com' );
 		expect( failed ).toHaveLength( 1 );
+	} );
+} );
+
+/**
+ * A prerendered page is one the reader has not seen yet, so nothing it does may
+ * count as reader activity until the reader navigates to it (NPPM-3134).
+ *
+ * jsdom implements neither `document.prerendering` nor the `prerenderingchange`
+ * event, so both are simulated here.
+ */
+describe( 'dispatchActivity during prerender', () => {
+	function setPrerendering( prerendering ) {
+		Object.defineProperty( document, 'prerendering', {
+			value: prerendering,
+			configurable: true,
+			writable: true,
+		} );
+	}
+
+	function activate() {
+		document.prerendering = false;
+		document.dispatchEvent( new Event( 'prerenderingchange' ) );
+	}
+
+	// A prior describe block's afterEach deletes window.newspack_reader_data, so
+	// restore it here — store.add()'s bare reference throws a ReferenceError without it.
+	beforeEach( () => {
+		global.newspack_reader_data = {};
+	} );
+
+	afterEach( () => {
+		delete document.prerendering;
+		delete global.newspack_reader_data;
+	} );
+
+	it( 'should not record an activity while the document is prerendering', () => {
+		setPrerendering( true );
+		dispatchActivity( 'test-prerender-deferred', { test: 'test' } );
+		expect( getActivities( 'test-prerender-deferred' ) ).toEqual( [] );
+	} );
+
+	it( 'should not emit an activity event while the document is prerendering', () => {
+		setPrerendering( true );
+		const callback = jest.fn();
+		on( 'activity', callback );
+		dispatchActivity( 'test-prerender-no-emit', { test: 'test' } );
+		off( 'activity', callback );
+		expect( callback ).not.toHaveBeenCalled();
+	} );
+
+	it( 'should record the activity once the prerendered document is activated', () => {
+		setPrerendering( true );
+		dispatchActivity( 'test-prerender-activated', { test: 'test' } );
+		activate();
+		expect( getActivities( 'test-prerender-activated' ) ).toHaveLength( 1 );
+	} );
+
+	it( 'should record an explicit timestamp rather than the activation time', () => {
+		setPrerendering( true );
+		dispatchActivity( 'test-prerender-timestamp', { test: 'test' }, 1234567890 );
+		activate();
+		expect( getActivities( 'test-prerender-timestamp' )[ 0 ].timestamp ).toBe( 1234567890 );
+	} );
+
+	it( 'should record immediately when the document is not prerendering', () => {
+		setPrerendering( false );
+		dispatchActivity( 'test-prerender-inactive', { test: 'test' } );
+		expect( getActivities( 'test-prerender-inactive' ) ).toHaveLength( 1 );
+	} );
+} );
+
+/**
+ * The stored referrer records where the reader entered the site from. A prerender
+ * of a same-site link resolves to an empty referrer, so recording it eagerly wipes
+ * a genuine external referrer for a page the reader never opened (NPPM-3134).
+ */
+describe( 'setReferrer during prerender', () => {
+	beforeEach( () => {
+		global.newspack_reader_data = {};
+		store.set( 'referrer', 'facebook.com' );
+	} );
+
+	afterEach( () => {
+		delete document.prerendering;
+		delete global.newspack_reader_data;
+	} );
+
+	it( 'should not overwrite the stored referrer while the document is prerendering', () => {
+		Object.defineProperty( document, 'prerendering', { value: true, configurable: true, writable: true } );
+		setReferrer();
+		expect( store.get( 'referrer' ) ).toBe( 'facebook.com' );
+	} );
+
+	it( 'should overwrite the stored referrer once the prerendered document is activated', () => {
+		Object.defineProperty( document, 'prerendering', { value: true, configurable: true, writable: true } );
+		setReferrer();
+		document.prerendering = false;
+		document.dispatchEvent( new Event( 'prerenderingchange' ) );
+		expect( store.get( 'referrer' ) ).toBe( '' );
 	} );
 } );

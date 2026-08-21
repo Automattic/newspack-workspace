@@ -14,6 +14,7 @@ import setupEngagement from './engagement.js';
 import initSubscriptionTiersForm from './subscription-tiers-form.js';
 import { openAuthModal as _openAuthModal } from '../reader-activation-auth/auth-modal.js';
 import { getApiNonce, hydrateSession } from './session.js';
+import { whenActivated } from './prerender.js';
 
 /**
  * Reader Activation Library.
@@ -37,9 +38,15 @@ export { store };
  * @return {Object} Activity.
  */
 export function dispatchActivity( action, data, timestamp = 0 ) {
-	const activity = { action, data, timestamp: timestamp || Date.now() };
-	store.add( 'activity', activity );
-	emit( EVENTS.activity, activity );
+	// Stamp the time up front so a deferred activity keeps an explicitly passed
+	// timestamp. Without one it takes the activation time, which is when the
+	// reader actually saw the page.
+	const activity = { action, data, timestamp };
+	whenActivated( () => {
+		activity.timestamp = activity.timestamp || Date.now();
+		store.add( 'activity', activity );
+		emit( EVENTS.activity, activity );
+	} );
 	return activity;
 }
 
@@ -358,19 +365,27 @@ function pushActivities() {
 
 /**
  * Store the referrer.
+ *
+ * Exported only so that deferral can be unit-tested; it is not part of the
+ * public readerActivation API and is not attached to
+ * window.newspackReaderActivation. Do not depend on it from other bundles.
+ *
+ * @access private
  */
-function setReferrer() {
-	const normalize = hostname =>
-		hostname
-			.trim()
-			.toLowerCase()
-			.replace( /^www\./, '' );
-	const referrer = document.referrer ? normalize( new URL( document.referrer ).hostname ) : '';
-	if ( referrer && referrer !== normalize( window.location.hostname ) ) {
-		store.set( 'referrer', referrer );
-	} else {
-		store.set( 'referrer', '' );
-	}
+export function setReferrer() {
+	whenActivated( () => {
+		const normalize = hostname =>
+			hostname
+				.trim()
+				.toLowerCase()
+				.replace( /^www\./, '' );
+		const referrer = document.referrer ? normalize( new URL( document.referrer ).hostname ) : '';
+		if ( referrer && referrer !== normalize( window.location.hostname ) ) {
+			store.set( 'referrer', referrer );
+		} else {
+			store.set( 'referrer', '' );
+		}
+	} );
 }
 
 /**
