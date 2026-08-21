@@ -41,6 +41,11 @@ LATEST_VERSION_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "release
 # forward unchanged — so it cannot distinguish a bot escalation from a finished
 # one. A branch name survives amends.
 ESCALATION_BRANCH_PREFIX="post-release/conflicts"
+# Branch stem for the other escalation: a merge that succeeded and could not be
+# published. Separate from the conflicts prefix because the two carry different
+# trees and ask the reviewer for different work — resolve markers there, approve
+# and merge here.
+SYNC_BRANCH_PREFIX="sync/release-to"
 
 # Restore workspace:* for any internal monorepo dep
 # (newspack-{scripts,components,colors,icons}) in every plugin/theme
@@ -154,13 +159,16 @@ attribute_conflicts() {
   done <<< "$files"
 }
 
-# Close open escalation PRs for $1 that nobody has started resolving, pointing
-# them at the new one ($2 = its URL). $3 is this run's own bot identity, used to
-# tell an untouched escalation from one someone is working on. Each release
-# produces a *different* conflict set rather than re-presenting one unresolved
-# conflict, so a stale escalation PR describes a merge that no longer exists.
-# Once a human has pushed a resolution commit the PR is theirs, and closing it
-# would discard their work.
+# Close open bot-opened PRs whose head branch starts with $1 and whose base is
+# $2, pointing them at the new one ($3 = its URL). $4 is this run's own bot
+# identity, used to tell an untouched PR from one someone is working on. $5 is
+# the sentence explaining why the old one is obsolete, which differs by kind.
+#
+# Shared by both escalation paths. Each release produces a *different* conflict
+# set rather than re-presenting one unresolved conflict, and each rejected push
+# carries a different commit range, so in both cases a stale PR describes work
+# that no longer exists. Once a human has pushed to it the PR is theirs, and
+# closing it would discard their work.
 #
 # The test is the head commit's **committer**, not its author. The resolution
 # recipe in the PR body ends in `git commit --amend --no-edit`, and amending
@@ -175,16 +183,16 @@ attribute_conflicts() {
 # PR can present both the escalation branch prefix and the bot's committer email
 # and have this job comment on and close it. Escalation branches are always
 # pushed to this repo, so nothing real is lost by ignoring the rest.
-supersede_escalations() {
-  local target="$1" new_url="$2" bot_identity="$3"
-  local new_number="${2##*/}"
+supersede_bot_prs() {
+  local stem="$1" target="$2" new_url="$3" bot_identity="$4" reason="$5"
+  local new_number="${3##*/}"
   local prs n head_sha committer
-  prs=$(TARGET="$target" PREFIX="$ESCALATION_BRANCH_PREFIX" \
+  prs=$(STEM="$stem" \
     gh pr list --base "$target" --state open --limit 100 \
       --json number,headRefName,isCrossRepository \
       --jq '.[]
             | select(.isCrossRepository | not)
-            | select(.headRefName | startswith(env.PREFIX + "/" + env.TARGET + "-"))
+            | select(.headRefName | startswith(env.STEM))
             | .number' 2>/dev/null) || prs=""
   for n in $prs; do
     [ "$n" = "$new_number" ] && continue
@@ -196,11 +204,11 @@ supersede_escalations() {
     if [ -z "$committer" ] || [ "$committer" != "$bot_identity" ]; then
       continue
     fi
-    gh pr comment "$n" --body "Superseded by $new_url. Each release conflicts on a different set of files, so this one describes a merge that no longer exists." > /dev/null 2>&1 || true
+    gh pr comment "$n" --body "Superseded by $new_url. $reason" > /dev/null 2>&1 || true
     if gh pr close "$n" > /dev/null 2>&1; then
-      echo "[post-release] Superseded escalation PR #$n."
+      echo "[post-release] Superseded PR #$n."
     else
-      echo "[post-release] Could not close superseded escalation PR #$n."
+      echo "[post-release] Could not close superseded PR #$n."
     fi
   done
 }
@@ -325,9 +333,90 @@ EOF
 
   if [ -n "$url" ]; then
     echo "[post-release] Opened escalation PR $url for $target." >&2
-    supersede_escalations "$target" "$url" "$bot_identity" >&2
+    supersede_bot_prs "$ESCALATION_BRANCH_PREFIX/$target-" "$target" "$url" "$bot_identity" \
+      "Each release conflicts on a different set of files, so this one describes a merge that no longer exists." >&2
   else
     echo "[post-release] Conflict pushed to $branch, but no PR was opened." >&2
+  fi
+
+  git reset --hard "$saved" >&2 || true
+  printf '%s' "$url"
+}
+
+# Turn a rejected push into a mergeable PR instead of ending the run.
+#
+# Why: when the push fails the merge has already succeeded, so the work exists —
+# but only in the runner's workspace, and it dies with it. `set -euo pipefail`
+# ends the script at the failed push, before notify_slack, so the failure
+# reaches nobody at all; it shows only as a red job on a workflow whose reds
+# have been routine. Five consecutive releases failed this way in August 2026
+# and the default branch fell fifteen commits behind before anyone noticed.
+#
+# Unlike the conflict path, the tree here is finished: no markers, nothing to
+# resolve. The PR is mergeable as-is and its CI is real signal rather than red
+# by construction, so it is opened ready rather than draft.
+#
+# $1 = target branch. $2 = the commit to restore the local branch to. $3 = the
+# rejected push output, for the PR body. Prints the PR URL on stdout, empty if
+# escalation could not complete; everything else goes to stderr.
+#
+# Always returns 0 and always leaves the tree clean on $2, for the same reason
+# the conflict path does: this is the already-failed path, and a hiccup here
+# must not preempt the Slack alert or strand the rest of the run.
+escalate_push_rejection() {
+  local target="$1" saved="$2" push_output="$3"
+  local url="" body="" branch="" bot_identity="" err_file="" range="" count=""
+
+  bot_identity=$(git log -1 --format='%ce') || bot_identity=""
+  branch="$SYNC_BRANCH_PREFIX-${target}-$(date -u +%Y%m%d-%H%M%S)-$(git rev-parse --short HEAD)"
+  count=$(git rev-list --count "$saved..HEAD" 2>/dev/null) || count="?"
+  range="$(git rev-parse --short "$saved")..$(git rev-parse --short HEAD)"
+
+  # Never quote a remote URL's credentials back into a public PR body. Nothing
+  # in a scope rejection carries one today, but this text is machine-generated
+  # from a stream that can contain a remote URL, and the PR body is the point
+  # where it would become public.
+  push_output=$(printf '%s' "$push_output" | sed -E 's#(https?://)[^/[:space:]@]+@#\1***@#g')
+
+  if ! git push origin "HEAD:refs/heads/$branch" >&2; then
+    echo "[post-release] Could not push $branch either; skipping escalation." >&2
+    git reset --hard "$saved" >&2 || true
+    return 0
+  fi
+
+  body=$(cat <<EOF
+The post-release sync merged \`release\` into \`$target\` cleanly, but could not push it. The finished merge is here instead.
+
+- Release: \`$LATEST_VERSION_TAG\`
+- Commits: $count ($range)
+- Build: ${GITHUB_SERVER_URL:-https://github.com}/${GITHUB_REPOSITORY:-}/actions/runs/${GITHUB_RUN_ID:-}
+
+Nothing needs resolving — this is the same tree the sync built. Review and **merge it, and do not squash**. \`$target\` has to genuinely contain \`release\`, or the next release reproduces this.
+
+What the push said:
+
+\`\`\`
+$push_output
+\`\`\`
+EOF
+)
+
+  err_file=$(mktemp 2>/dev/null) || err_file=""
+  url=$(gh pr create --base "$target" --head "$branch" \
+    --title "Post-release sync: release into $target" \
+    --body "$body" 2>"${err_file:-/dev/null}") || url=""
+  url=$(printf '%s\n' "$url" | grep -m1 '^https://' || true)
+  if [ -z "$url" ] && [ -n "$err_file" ]; then
+    echo "[post-release] gh pr create failed: $(tr '\n' ' ' < "$err_file")" >&2
+  fi
+  [ -n "$err_file" ] && rm -f "$err_file"
+
+  if [ -n "$url" ]; then
+    echo "[post-release] Opened sync PR $url for $target." >&2
+    supersede_bot_prs "$SYNC_BRANCH_PREFIX-$target-" "$target" "$url" "$bot_identity" \
+      "Each rejected push carries a different commit range, so this one describes a merge that no longer exists." >&2
+  else
+    echo "[post-release] Merge pushed to $branch, but no PR was opened." >&2
   fi
 
   git reset --hard "$saved" >&2 || true
@@ -339,12 +428,17 @@ EOF
 # rows (see attribute_conflicts); when present the files are named in the message
 # — with the incoming PR/author — so readers can tell what needs reconciling and
 # who to ping without opening the build log.
-# $3 (optional) is the escalation PR URL from escalate_conflict; when present it
-# is linked last, so the alert routes straight to where the fix goes.
+# $3 (optional) is the escalation PR URL; when present it is linked last, so the
+# alert routes straight to where the fix goes.
+# $4 (optional) is the kind of failure — "merge" (the default) or "push". They
+# need different words: a rejected push means the merge succeeded and only
+# publishing it failed, and telling a reader the merge failed would send them
+# looking for a conflict that does not exist.
 notify_slack() {
   local target="$1"
   local conflicts="${2:-}"
   local pr_url="${3:-}"
+  local kind="${4:-merge}"
   if [ -z "${SLACK_CHANNEL_ID:-}" ] || [ -z "${SLACK_AUTH_TOKEN:-}" ]; then
     echo "[post-release] Missing Slack channel ID and/or token. Cannot notify."
     return
@@ -364,7 +458,7 @@ notify_slack() {
   # only sees *exported* vars; forwarding it explicitly (like TARGET/CONFLICTS)
   # decouples delivery from how the workflow happens to set it. The GITHUB_* vars
   # node reads are always exported by the Actions runtime, so they stay ambient.
-  payload=$(TARGET="$target" CONFLICTS="$conflicts" PR_URL="$pr_url" SLACK_CHANNEL_ID="$SLACK_CHANNEL_ID" node -e '
+  payload=$(TARGET="$target" CONFLICTS="$conflicts" PR_URL="$pr_url" KIND="$kind" SLACK_CHANNEL_ID="$SLACK_CHANNEL_ID" node -e '
     const MAX_FILES = 10;
     const MAX_TEXT = 2900;
     const items = (process.env.CONFLICTS || "")
@@ -375,7 +469,10 @@ notify_slack() {
         const [file, pr, author] = line.split("\t");
         return { file, pr: pr || "", author: author || "" };
       });
-    const header = `⚠️ Post-release merge to \`${process.env.TARGET}\` failed for: \`${process.env.GITHUB_REPOSITORY}\`.`;
+    const what = process.env.KIND === "push"
+      ? `push to \`${process.env.TARGET}\` was rejected`
+      : `merge to \`${process.env.TARGET}\` failed`;
+    const header = `⚠️ Post-release ${what} for: \`${process.env.GITHUB_REPOSITORY}\`.`;
     const runUrl = `${process.env.GITHUB_SERVER_URL}/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID}`;
     // The PR link rides in the footer, not the body: the trim below only ever
     // slices body, so the two links a reader needs can never be cut.
@@ -420,9 +517,10 @@ notify_slack() {
     # hand-rolled alert (fixed text, no variable conflict list → no JSON-escaping
     # hazard) so the team is still notified the merge failed.
     echo "[post-release] Slack payload build failed; sending minimal fallback alert."
-    local fallback_pr=""
+    local fallback_pr="" fallback_what="merge to \`$target\` failed"
     [ -n "$pr_url" ] && fallback_pr=" Resolution PR: $pr_url"
-    payload="{\"channel\":\"$SLACK_CHANNEL_ID\",\"blocks\":[{\"type\":\"section\",\"text\":{\"type\":\"mrkdwn\",\"text\":\"⚠️ Post-release merge to \`$target\` failed for: \`$GITHUB_REPOSITORY\`. Check <$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID|the build> for details.$fallback_pr\"}}]}"
+    [ "$kind" = "push" ] && fallback_what="push to \`$target\` was rejected"
+    payload="{\"channel\":\"$SLACK_CHANNEL_ID\",\"blocks\":[{\"type\":\"section\",\"text\":{\"type\":\"mrkdwn\",\"text\":\"⚠️ Post-release $fallback_what for: \`$GITHUB_REPOSITORY\`. Check <$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID|the build> for details.$fallback_pr\"}}]}"
   }
   if [ -z "$payload" ]; then
     echo "[post-release] Empty Slack payload; skipping notification."
@@ -481,7 +579,15 @@ git checkout "$DEFAULT_BRANCH"
 saved=$(git rev-parse HEAD)
 if git merge --no-ff release -m "chore(release): merge in release $LATEST_VERSION_TAG"; then
   restore_workspace_deps_and_commit "$DEFAULT_BRANCH"
-  git push origin "$DEFAULT_BRANCH"
+  # Captured rather than left to `set -e`, which would end the run here with the
+  # finished merge existing only in this workspace and nothing said to anyone.
+  if ! push_output=$(git push origin "$DEFAULT_BRANCH" 2>&1); then
+    echo "[post-release] Push to $DEFAULT_BRANCH was rejected."
+    printf '%s\n' "$push_output" >&2
+    pr_url=$(escalate_push_rejection "$DEFAULT_BRANCH" "$saved" "$push_output")
+    notify_slack "$DEFAULT_BRANCH" "" "$pr_url" push
+    sync_failed=1
+  fi
 else
   # Capture the conflicting paths while the index still has unmerged entries;
   # the escalation commit below stages them and clears that state.
