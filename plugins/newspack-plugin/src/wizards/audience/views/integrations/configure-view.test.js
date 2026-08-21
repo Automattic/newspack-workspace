@@ -15,9 +15,15 @@ jest.mock( '@wordpress/data', () => ( {
 	useDispatch: () => ( { setHeaderData: mockSetHeaderData } ),
 } ) );
 // An empty column is a real element costing a real gap, so the stub keeps it
-// queryable for the tests that assert none is left behind.
+// queryable for the tests that assert none is left behind. It also echoes the
+// layout props back: `direction` and `gap` are the only things carrying the
+// column rhythm now that the controls supply no margins of their own.
 jest.mock( '@wordpress/ui', () => ( {
-	Stack: ( { children } ) => <div data-testid="stack">{ children }</div>,
+	Stack: ( { children, direction, gap } ) => (
+		<div data-testid="stack" data-direction={ direction } data-gap={ gap }>
+			{ children }
+		</div>
+	),
 } ) );
 // Stub the components barrel: with @wordpress/data mocked, the real barrel eagerly loads @wordpress/rich-text, whose module-load combineReducers() call throws.
 // Cover everything SettingsField imports so a future select/oauth/textarea fixture renders a stub, not `undefined`.
@@ -865,5 +871,19 @@ describe( 'ConfigureView per-direction sections', () => {
 		} );
 		expect( screen.getByText( 'Settings' ) ).toBeTruthy();
 		expect( screen.getByLabelText( 'Audience' ) ).toBeTruthy();
+	} );
+
+	// Nothing else supplies the vertical rhythm: the package's grid reset is gone
+	// and the controls no longer carry margins, so a wrong prop here is invisible.
+	it( 'stacks every section column and picker list vertically at its own gap', () => {
+		renderConfigureView( { integrations: bidirectionalIntegration() } );
+		const stacks = screen.getAllByTestId( 'stack' ).map( el => [ el.dataset.direction, el.dataset.gap ] );
+		expect( stacks ).toEqual( [
+			[ 'column', 'xl' ],
+			[ 'column', 'xl' ],
+			[ 'column', 'sm' ],
+			[ 'column', 'xl' ],
+			[ 'column', 'sm' ],
+		] );
 	} );
 } );
