@@ -1,7 +1,6 @@
 /**
  * Shared price and count formatting for the impact previews (catalog-wide panel
- * and the per-rule editor preview). The contract's prices are plain numbers;
- * currency shaping is the client's job.
+ * and the per-rule editor preview). Currency shaping is the client's job.
  */
 
 /**
@@ -18,8 +17,26 @@ import { formatCount } from '../../../../../packages/components/src/breadcrumbs/
 // WordPress ships that Intl rejects.
 export { formatCount };
 
-export function formatPrice( amount: number, currency: PricingRulesCurrency ): string {
-	return currency.symbol + amount.toFixed( currency.decimals );
+export const EM_DASH = '—';
+
+/**
+ * The engine is a separate plugin, so its numbers arrive as `json_encode` made
+ * them: an int, a `$wpdb` string, or null. Anything else is refused rather than
+ * coerced, because `Number()` turns `false` and `[]` into a confident zero.
+ */
+export function finiteNumber( value: unknown ): number | null {
+	if ( 'number' !== typeof value && ( 'string' !== typeof value || '' === value.trim() ) ) {
+		return null;
+	}
+	const count = Number( value );
+	return Number.isFinite( count ) ? count : null;
+}
+
+// `toFixed` throws rather than degrading, and the wizard has no error boundary,
+// so an unexpected shape costs one cell instead of the whole page.
+export function formatPrice( amount: EngineCount, currency: PricingRulesCurrency ): string {
+	const value = finiteNumber( amount );
+	return null === value ? EM_DASH : currency.symbol + value.toFixed( currency.decimals );
 }
 
 /**
@@ -48,12 +65,13 @@ export function cycleMarkerNote(): string {
  * subtracts the products it skipped from the total, so its own flag settles it.
  */
 export function sampleNote( payload: CatalogImpactResponse ): string | null {
-	if ( ! payload.preview_limited ) {
+	const shown = finiteNumber( payload.sample_count );
+	if ( ! payload.preview_limited || null === shown ) {
 		return null;
 	}
 	return sprintf(
 		/* translators: %s: how many products the table lists. */
-		_n( 'Showing a sample of %s product.', 'Showing a sample of %s products.', payload.sample_count, 'newspack-plugin' ),
-		formatCount( payload.sample_count )
+		_n( 'Showing a sample of %s product.', 'Showing a sample of %s products.', shown, 'newspack-plugin' ),
+		formatCount( shown )
 	);
 }

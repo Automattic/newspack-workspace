@@ -27,7 +27,9 @@ jest.mock( './impact-table', () => ( { baseline, framed, collapsible } ) => (
 	</div>
 ) );
 
-jest.mock( './impact-empty', () => ( { reason } ) => <div data-testid="impact-empty" data-reason={ reason } /> );
+jest.mock( './impact-empty', () => ( { reason, headingLevel } ) => (
+	<div data-testid="impact-empty" data-reason={ reason } data-heading-level={ String( headingLevel ) } />
+) );
 
 const CURRENCY = { code: 'USD', symbol: '$', decimals: 2 };
 
@@ -216,7 +218,7 @@ describe( 'CatalogImpact', () => {
 		expect( screen.getByTestId( 'impact-empty' ) ).toHaveAttribute( 'data-reason', 'no-products' );
 	} );
 
-	it( 'names the card and announces the modal load for assistive technology', async () => {
+	it( 'names the heading and announces the modal load for assistive technology', async () => {
 		let land;
 		apiFetch.mockReturnValue(
 			new Promise( resolve => {
@@ -225,7 +227,7 @@ describe( 'CatalogImpact', () => {
 		);
 		render( <CatalogImpact stats={ stats() } /> );
 
-		expect( screen.getByRole( 'heading', { name: 'Catalog impact', level: 3 } ) ).toBeInTheDocument();
+		expect( screen.getByRole( 'heading', { name: 'Catalog impact', level: 2 } ) ).toBeInTheDocument();
 
 		openModal();
 		expect( screen.getByRole( 'status' ) ).toHaveTextContent( 'Loading the affected products' );
@@ -257,10 +259,56 @@ describe( 'CatalogImpact', () => {
 		expect( screen.queryByText( /Showing a sample of/ ) ).not.toBeInTheDocument();
 	} );
 
+	it( 'places the trigger inside the affected-products tile', () => {
+		const { container } = render( <CatalogImpact stats={ stats() } /> );
+
+		const section = container.querySelector( '.newspack-pricing-rules__impact' );
+		const button = screen.getByRole( 'button', { name: 'View Affected Products' } );
+		const tile = screen.getByText( 'Products affected' ).closest( '.newspack-pricing-rules__tile' );
+
+		expect( section.tagName ).toBe( 'SECTION' );
+		expect( button.tagName ).toBe( 'BUTTON' );
+		expect( tile.contains( button ) ).toBe( true );
+	} );
+
+	it( 'hangs the trigger off the description rather than the number', () => {
+		render( <CatalogImpact stats={ stats() } /> );
+
+		const footer = screen.getByText( 'Rules currently price these products' ).parentElement;
+
+		expect( footer ).toHaveClass( 'newspack-pricing-rules__tile-footer' );
+		expect( footer.contains( screen.getByRole( 'button', { name: 'View Affected Products' } ) ) ).toBe( true );
+	} );
+
+	it( 'names the section with the heading it already carries', () => {
+		render( <CatalogImpact stats={ stats() } /> );
+
+		expect( screen.getByRole( 'region', { name: 'Catalog impact' } ) ).toBeInTheDocument();
+	} );
+
 	it( 'withholds the table button and explains itself when nothing is affected', () => {
 		render( <CatalogImpact stats={ stats( { total_matching: 0 } ) } /> );
 
 		expect( screen.queryByRole( 'button', { name: 'View Affected Products' } ) ).not.toBeInTheDocument();
 		expect( screen.getByText( 'No active pricing rules are affecting products yet.' ) ).toBeInTheDocument();
+	} );
+
+	it( 'keeps the table on offer and claims nothing when the count is missing', () => {
+		render( <CatalogImpact stats={ stats( { total_matching: undefined } ) } /> );
+
+		expect( screen.getByRole( 'button', { name: 'View Affected Products' } ) ).toBeInTheDocument();
+		expect( screen.queryByText( 'No active pricing rules are affecting products yet.' ) ).not.toBeInTheDocument();
+		expect( screen.getByText( '—' ) ).toBeInTheDocument();
+	} );
+
+	it( 'drops the empty state a level inside the modal', async () => {
+		apiFetch.mockResolvedValue( detail( { sample: [] } ) );
+		render( <CatalogImpact stats={ stats() } /> );
+
+		await act( async () => {
+			openModal();
+		} );
+
+		expect( screen.getByTestId( 'impact-empty' ) ).toHaveAttribute( 'data-heading-level', '2' );
 	} );
 } );

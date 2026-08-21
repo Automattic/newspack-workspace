@@ -8,15 +8,14 @@
  */
 import { __ } from '@wordpress/i18n';
 import { useState, useCallback, useRef } from '@wordpress/element';
+import { useInstanceId } from '@wordpress/compose';
 import apiFetch from '@wordpress/api-fetch';
 import { addQueryArgs } from '@wordpress/url';
 import {
-	Button,
 	Modal,
 	Spinner,
 	__experimentalVStack as VStack, // eslint-disable-line @wordpress/no-unsafe-wp-apis
 } from '@wordpress/components';
-import { Card } from '@wordpress/ui';
 
 /**
  * Internal dependencies
@@ -24,7 +23,7 @@ import { Card } from '@wordpress/ui';
 import ImpactEmpty, { type ImpactEmptyReason } from './impact-empty';
 import ImpactStats from './impact-stats';
 import ImpactTable from './impact-table';
-import { sampleNote } from './impact-format';
+import { sampleNote, finiteNumber } from './impact-format';
 import { IMPACT_PREVIEW_API_PATH as API_PATH, IMPACT_SAMPLE_LIMIT } from './constants';
 
 interface CatalogImpactProps {
@@ -32,6 +31,7 @@ interface CatalogImpactProps {
 }
 
 export default function CatalogImpact( { stats }: CatalogImpactProps ) {
+	const headingId = useInstanceId( CatalogImpact, 'newspack-pricing-rules-impact-heading' );
 	const [ isOpen, setIsOpen ] = useState( false );
 	const [ detail, setDetail ] = useState< CatalogImpactResponse | null >( null );
 	const [ hasError, setHasError ] = useState( false );
@@ -78,50 +78,54 @@ export default function CatalogImpact( { stats }: CatalogImpactProps ) {
 		}
 	}
 	const note = detail ? sampleNote( detail ) : null;
+	// The table loads its own sample, so only a confirmed zero withdraws it.
+	const affected = finiteNumber( stats.total_matching );
+	const hasAffectedProducts = 0 !== affected;
 
 	return (
-		<Card.Root className="newspack-pricing-rules__impact">
-			<Card.Content>
-				<h3 className="screen-reader-text">{ __( 'Catalog impact', 'newspack-plugin' ) }</h3>
-				<ImpactStats totalMatching={ stats.total_matching } countLimited={ stats.count_limited } audience={ stats.audience } />
-				{ stats.total_matching === 0 ? (
-					<p className="newspack-pricing-rules__muted">
-						{ __( 'No active pricing rules are affecting products yet.', 'newspack-plugin' ) }
-					</p>
-				) : (
-					<Button variant="secondary" onClick={ open }>
-						{ __( 'View Affected Products', 'newspack-plugin' ) }
-					</Button>
-				) }
-				{ isOpen && (
-					<Modal title={ __( 'Affected Products', 'newspack-plugin' ) } size="large" onRequestClose={ () => setIsOpen( false ) }>
-						{ hasError && (
-							<p className="newspack-pricing-rules__muted" role="alert">
-								{ __( 'Could not load the affected products. Please try again.', 'newspack-plugin' ) }
-							</p>
-						) }
-						{ ! hasError && ! detail && (
-							<VStack className="newspack-pricing-rules__modal-loading" alignment="center" justify="center" role="status">
-								<Spinner />
-								<span className="screen-reader-text">{ __( 'Loading the affected products…', 'newspack-plugin' ) }</span>
-							</VStack>
-						) }
-						{ ! hasError && emptyReason && <ImpactEmpty reason={ emptyReason } /> }
-						{ ! hasError && detail && ! emptyReason && (
-							<>
-								{ note && <p className="newspack-pricing-rules__muted">{ note }</p> }
-								<ImpactTable
-									baseline={ detail.sample }
-									segmentGroups={ detail.segment_groups ?? [] }
-									currency={ detail.currency }
-									framed={ false }
-									collapsible={ false }
-								/>
-							</>
-						) }
-					</Modal>
-				) }
-			</Card.Content>
-		</Card.Root>
+		<section className="newspack-pricing-rules__impact" aria-labelledby={ headingId }>
+			{ /* The route renders no section title, so this is the first heading below the breadcrumb h1. */ }
+			<h2 id={ headingId } className="screen-reader-text">
+				{ __( 'Catalog impact', 'newspack-plugin' ) }
+			</h2>
+			<ImpactStats
+				totalMatching={ stats.total_matching }
+				countLimited={ stats.count_limited }
+				productsDescription={ __( 'Rules currently price these products', 'newspack-plugin' ) }
+				audience={ stats.audience }
+				onViewProducts={ hasAffectedProducts ? open : undefined }
+			/>
+			{ 0 === affected && (
+				<p className="newspack-pricing-rules__muted">{ __( 'No active pricing rules are affecting products yet.', 'newspack-plugin' ) }</p>
+			) }
+			{ isOpen && (
+				<Modal title={ __( 'Affected Products', 'newspack-plugin' ) } size="large" onRequestClose={ () => setIsOpen( false ) }>
+					{ hasError && (
+						<p className="newspack-pricing-rules__muted" role="alert">
+							{ __( 'Could not load the affected products. Please try again.', 'newspack-plugin' ) }
+						</p>
+					) }
+					{ ! hasError && ! detail && (
+						<VStack className="newspack-pricing-rules__modal-loading" alignment="center" justify="center" role="status">
+							<Spinner />
+							<span className="screen-reader-text">{ __( 'Loading the affected products…', 'newspack-plugin' ) }</span>
+						</VStack>
+					) }
+					{ ! hasError && emptyReason && <ImpactEmpty reason={ emptyReason } headingLevel={ 2 } /> }
+					{ ! hasError && detail && ! emptyReason && (
+						<>
+							{ note && <p className="newspack-pricing-rules__muted">{ note }</p> }
+							<ImpactTable
+								baseline={ detail.sample }
+								segmentGroups={ detail.segment_groups ?? [] }
+								currency={ detail.currency }
+								framed={ false }
+								collapsible={ false }
+							/>
+						</>
+					) }
+				</Modal>
+			) }
+		</section>
 	);
 }

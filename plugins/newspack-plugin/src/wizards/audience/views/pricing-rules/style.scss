@@ -42,11 +42,13 @@
 	}
 
 	&__impact {
-		margin: wp-vars.$grid-unit-60 wp-vars.$grid-unit-60 0;
-
-		p {
-			margin-top: wp-vars.$grid-unit-15;
-		}
+		align-items: start;
+		display: flex;
+		flex-direction: column;
+		gap: wp-vars.$grid-unit-30;
+		margin: wp-vars.$grid-unit-60 wp-vars.$grid-unit-30 0;
+		max-width: calc(calc(var(--newspack-wizard-section-space) * 2) + var(--newspack-wizard-section-width));
+		padding: 0 var(--newspack-wizard-section-space);
 	}
 
 	&__empty {
@@ -63,26 +65,59 @@
 	}
 
 	&__stats {
-		margin-bottom: wp-vars.$grid-unit-30;
-		margin-top: wp-vars.$grid-unit-30;
-
-		.newspack-pricing-rules__muted {
-			margin-top: wp-vars.$grid-unit-10;
-		}
+		width: 100%;
 	}
 
-	&__stat-value {
-		@include wp-mixins.heading-2x-large();
-		margin-bottom: wp-vars.$grid-unit-05;
+	&__tile {
+		container-type: inline-size;
+		min-height: wp-vars.$grid-unit * 21;
 	}
 
-	&__stat-label {
-		color: wp-colors.$gray-700;
+	&__tile-content {
+		display: flex;
+		flex: 1;
+		flex-direction: column;
 	}
 
-	&__stat-note {
+	&__tile-label {
+		@include wp-mixins.heading-large();
+		color: wp-colors.$gray-900;
+		margin: 0;
+	}
+
+	&__tile-body {
+		display: flex;
+		flex: 1;
+		flex-direction: column;
+		gap: wp-vars.$grid-unit;
+		padding-top: wp-vars.$grid-unit;
+	}
+
+	&__tile-footer {
+		align-items: flex-start;
+		display: flex;
+		flex-direction: column;
+	}
+
+	&__tile-action {
+		font-size: wp-vars.$helptext-font-size;
+		line-height: inherit;
+	}
+
+	&__tile-value {
+		color: var(--wp-admin-theme-color);
+		font-size: 44px;
+		font-size: min(44px, 14cqi);
+		font-variant-numeric: tabular-nums;
+		font-weight: wp-vars.$font-weight-medium;
+		line-height: 1;
+	}
+
+	&__tile-secondary,
+	&__tile-description {
 		color: wp-colors.$gray-700;
 		font-size: wp-vars.$helptext-font-size;
+		text-wrap: balance;
 	}
 
 	&__impact-table {
@@ -188,12 +223,13 @@
 	}
 
 	&__preview {
+		display: flex;
+		flex-direction: column;
+		gap: wp-vars.$grid-unit-30;
+		margin-top: wp-vars.$grid-unit-30;
+
 		&.is-loading {
 			opacity: 0.6;
-		}
-
-		> p {
-			margin-top: wp-vars.$grid-unit-15;
 		}
 
 		col[class*="__col-seg-"] {

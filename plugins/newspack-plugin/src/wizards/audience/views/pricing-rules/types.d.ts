@@ -135,11 +135,14 @@ interface CatalogImpactResponse {
 	audience?: RuleAudienceData;
 }
 
+/** Normalise with `finiteNumber` before doing arithmetic on one. */
+type EngineCount = number | string | null;
+
 interface RuleAudienceData {
 	supported: boolean;
-	total: number;
-	caught: number;
-	protected: number;
+	total: EngineCount;
+	caught: EngineCount;
+	protected: EngineCount;
 	count_limited: boolean;
 	application: 'current' | 'locked' | string;
 }

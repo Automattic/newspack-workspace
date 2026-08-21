@@ -23,4 +23,9 @@ describe( 'ImpactEmpty', () => {
 		render( <ImpactEmpty reason="unsupported" /> );
 		expect( screen.getByRole( 'heading', { name: 'Preview unavailable', level: 3 } ) ).toBeInTheDocument();
 	} );
+
+	it( 'takes the heading level its caller asks for', () => {
+		render( <ImpactEmpty reason="no-products" headingLevel={ 2 } /> );
+		expect( screen.getByRole( 'heading', { name: 'No products match this rule', level: 2 } ) ).toBeInTheDocument();
+	} );
 } );
