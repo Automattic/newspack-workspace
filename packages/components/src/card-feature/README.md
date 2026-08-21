@@ -11,11 +11,11 @@ A card component for presenting a named feature or setting with a predictable, s
 
 | State | Condition | Button | Dropdown | Badge |
 |---|---|---|---|---|
-| **Unmet requirements** | `requirements` is set | "Enable" — blocked but still focusable, and described by the badge (clickable if `requirementsActionable`) | Shown if `enabled` and `requirementsActionable` (and `moreControls` provided); otherwise hidden | Error badge with `requirements` text |
+| **Unmet requirements** | `requirements` is set | "Enable" — blocked but still focusable, and described by the badge (clickable if `requirementsActionable`) | Shown if `enabled` and `requirementsActionable` (and `moreControls` provided); otherwise hidden | High-intent badge with `requirements` text |
 | **Disabled** | `!enabled`, no requirements | "Enable" | Hidden | None |
-| **Enabled** | `enabled`, no requirements | "Configure" | Shown if `moreControls` provided | Success badge ("Enabled") |
+| **Enabled** | `enabled`, no requirements | "Configure" | Shown if `moreControls` provided | Stable-intent badge ("Enabled") |
 
-When `requirements` is set the title drops to the muted text colour. The description already uses that colour in every state, so the unmet-requirements state is signalled by the title colour plus the error badge.
+When `requirements` is set the title drops to the muted text colour. The description already uses that colour in every state, so the unmet-requirements state is signalled by the title colour plus the high-intent badge.
 
 ## Basic usage
 
@@ -36,9 +36,9 @@ import { __ } from '@wordpress/i18n';
 
 ## With unmet requirements
 
-When `requirements` is set, an error badge displays the string and the title drops to the muted text colour. By default the requirement is treated as locked: the button is blocked and the "More" dropdown is hidden, so `onEnable` and `moreControls` have nothing to act on. `onConfigure` is unreachable whenever `requirements` is set at all, locked or not, because the button only reads "Configure" when there is no outstanding requirement.
+When `requirements` is set, a high-intent badge displays the string and the title drops to the muted text colour. By default the requirement is treated as locked: the button is blocked and the "More" dropdown is hidden, so `onEnable` and `moreControls` have nothing to act on. `onConfigure` is unreachable whenever `requirements` is set at all, locked or not, because the button only reads "Configure" when there is no outstanding requirement.
 
-A blocked button keeps its place in the tab order and is described by the error badge, so a keyboard or screen-reader user reaches it and hears why it will not act. Don't wrap it in your own `disabled` handling, which would undo that.
+A blocked button keeps its place in the tab order and is described by the high-intent badge, so a keyboard or screen-reader user reaches it and hears why it will not act. Don't wrap it in your own `disabled` handling, which would undo that.
 
 ```tsx
 import { __ } from '@wordpress/i18n';
@@ -138,7 +138,7 @@ import { __ } from '@wordpress/i18n';
 
 ## With a custom badge
 
-Override `badgeText` and `badgeLevel` to change the badge shown when the feature is enabled. Available levels: `default`, `info`, `success`, `warning`, `error`.
+Override `badgeText` and `badgeIntent` to change the badge shown when the feature is enabled. See [`BadgeIntent`](../types.ts) for the available intents.
 
 ```tsx
 import { __ } from '@wordpress/i18n';
@@ -148,7 +148,7 @@ import { __ } from '@wordpress/i18n';
 	description={ __( 'Accept payments via Stripe.', 'newspack-plugin' ) }
 	enabled={ isEnabled }
 	badgeText={ __( 'Live mode', 'newspack-plugin' ) }
-	badgeLevel="info"
+	badgeIntent="informational"
 	onEnable={ handleEnable }
 	onConfigure={ () => history.push( '/settings/stripe' ) }
 	moreControls={ [ { title: __( 'Disable', 'newspack-plugin' ), onClick: handleDisable } ] }
@@ -185,7 +185,7 @@ import { __ } from '@wordpress/i18n';
 | `description` | `string` | — | Supporting text below the title |
 | `icon` | `CardFeatureIcon \| ReactElement` | — | Icon displayed on the right. A descriptor gets the 40 × 40 container; a ready element renders as-is. See `CardFeatureIcon` below. |
 | `enabled` | `boolean` | `false` | Whether the feature is currently enabled |
-| `requirements` | `string` | — | When set, enters the unmet-requirements state. The value is the error badge text and the primary button's accessible description, so write it to read sensibly after the button's label |
+| `requirements` | `string` | — | When set, enters the unmet-requirements state. The value is the high-intent badge text and the primary button's accessible description, so write it to read sensibly after the button's label |
 | `requirementsActionable` | `boolean` | `false` | When `requirements` is set, keep the primary button clickable so it can remediate the unmet requirement, and keep the "More" dropdown visible on an enabled card (degraded but still operable) |
 | `enableLabel` | `string` | `"Enable"` | Label for the primary button in its "Enable" states: not enabled, or enabled with an unmet requirement |
 | `configureLabel` | `string` | `"Configure"` | Label for the primary button in its "Configure" state: enabled, with no unmet requirement |
@@ -193,7 +193,7 @@ import { __ } from '@wordpress/i18n';
 | `onConfigure` | `() => void` | — | Called when the primary button is clicked while it reads "Configure", which is the enabled state with no unmet requirements |
 | `moreControls` | `MoreControl[]` | — | Items for the "More" dropdown. Shown when `enabled` and either there are no `requirements` or `requirementsActionable` is set |
 | `badgeText` | `string` | `"Enabled"` | Badge text shown when enabled. Ignored while `requirements` is set, which takes the badge |
-| `badgeLevel` | `BadgeLevel` | `"success"` | Badge level shown when enabled. Ignored while `requirements` is set, which forces an error badge |
+| `badgeIntent` | `BadgeIntent` | `"stable"` | Badge intent shown when enabled. Ignored while `requirements` is set, which forces a high-intent badge |
 | `busy` | `boolean` | `false` | Shows the primary button as busy and blocks it while an action is in flight |
 | `className` | `string` | — | Additional class name applied to the card element |
 

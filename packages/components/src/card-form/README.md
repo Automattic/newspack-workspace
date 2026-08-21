@@ -33,7 +33,7 @@ const handleClose = () => setIsOpen( false );
 <CardForm
 	title={ __( 'Above Header', 'newspack-plugin' ) }
 	description={ __( 'Displays an ad above the site header.', 'newspack-plugin' ) }
-	badge={ isEnabled ? { level: 'success', text: __( 'Enabled', 'newspack-plugin' ) } : undefined }
+	badge={ isEnabled ? { intent: 'stable', text: __( 'Enabled', 'newspack-plugin' ) } : undefined }
 	actions={
 		isEnabled ? (
 			<Button variant="tertiary" size="compact" onClick={ () => isOpen ? handleClose() : setIsOpen( true ) }>
@@ -55,14 +55,14 @@ const handleClose = () => setIsOpen( false );
 </CardForm>
 ```
 
-## With a custom badge level
+## With a custom badge intent
 
-The `badge` prop accepts any `BadgeLevel`. Use `warning` or `error` to communicate a degraded state.
+The `badge` prop accepts any `BadgeIntent`. Use `medium` or `high` to communicate a degraded state.
 
 ```tsx
 <CardForm
 	title={ __( 'Above Header', 'newspack-plugin' ) }
-	badge={ { level: 'warning', text: __( 'Missing ad unit', 'newspack-plugin' ) } }
+	badge={ { intent: 'medium', text: __( 'Missing ad unit', 'newspack-plugin' ) } }
 	actions={ <Button variant="tertiary" size="compact">{ __( 'Edit', 'newspack-plugin' ) }</Button> }
 	isOpen={ false }
 />
@@ -91,7 +91,7 @@ Omit `badge` (or pass `undefined`) to show no badge at all.
 |---|---|---|---|
 | `title` | `string` | — | Card heading (**required**) |
 | `description` | `string` | — | Supporting text below the title |
-| `badge` | `{ text: string; level?: BadgeLevel }` | — | Badge shown next to the actions slot. Omit or pass `undefined` to hide. |
+| `badge` | `{ text: string; intent?: BadgeIntent }` | — | Badge shown next to the actions slot. Omit or pass `undefined` to hide. |
 | `actions` | `React.ReactNode` | — | JSX rendered in the header action area (buttons, dropdowns, etc.) |
 | `isOpen` | `boolean` | `false` | When `true`, renders `children` in the card body and removes the header border |
 | `onRequestClose` | `() => void` | — | Called when the user presses Escape while focus is inside the open form |
@@ -106,8 +106,6 @@ Omit `badge` (or pass `undefined`) to show no badge at all.
 - The Escape listener is scoped to the open form's body, so multiple open cards do not all close on a single keypress. If an inner control needs to consume Escape (for example, to close its own menu), call `event.preventDefault()` and CardForm will ignore it.
 
 
-### `BadgeLevel`
+### `BadgeIntent`
 
-```ts
-type BadgeLevel = 'default' | 'info' | 'success' | 'warning' | 'error';
-```
+Defined in [`src/types.ts`](../types.ts), which derives the union from the `@wordpress/ui` `Badge` component so the values track the library instead of a copy kept here.
