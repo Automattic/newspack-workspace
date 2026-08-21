@@ -126,9 +126,13 @@ interface CatalogImpactResponse {
 	count_limited: boolean;
 	preview_limited: boolean;
 	sample_count: number;
+	// The cap the engine applied; omitted rather than guessed when it had none.
+	sample_limit?: number;
 	currency: PricingRulesCurrency;
 	sample: CatalogImpactRow[];
 	segment_groups?: SegmentImpactGroup[];
+	// Absent unless the engine's subscriptions layer is present.
+	audience?: RuleAudienceData;
 }
 
 interface RuleAudienceData {
@@ -140,10 +144,4 @@ interface RuleAudienceData {
 	application: 'current' | 'locked' | string;
 }
 
-interface RuleAudienceResponse {
-	audience?: RuleAudienceData;
-}
-
-interface RulePreviewResponse extends CatalogImpactResponse {
-	audience?: RuleAudienceData;
-}
+type RulePreviewResponse = CatalogImpactResponse;

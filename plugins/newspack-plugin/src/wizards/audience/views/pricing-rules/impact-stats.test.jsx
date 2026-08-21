@@ -66,10 +66,16 @@ describe( 'ImpactStats', () => {
 		expect( screen.getByText( /new sign-ups only/ ) ).toBeInTheDocument();
 	} );
 
-	it( 'marks a capped count as a lower bound, and only that count', () => {
+	it( 'leaves the product count exact when only the audience is capped', () => {
 		render( <ImpactStats totalMatching={ 500 } countLimited={ false } audience={ audience( { count_limited: true } ) } /> );
 		expect( screen.getByText( '500' ) ).toBeInTheDocument();
 		expect( screen.getByText( '12+' ) ).toBeInTheDocument();
+	} );
+
+	it( 'bounds the renewal split when the audience is capped', () => {
+		render( <ImpactStats totalMatching={ 500 } countLimited={ false } audience={ audience( { count_limited: true } ) } /> );
+		expect( screen.getByText( '8+' ) ).toBeInTheDocument();
+		expect( screen.getByText( '4+ protected' ) ).toBeInTheDocument();
 	} );
 
 	it( 'marks both counts as lower bounds when both are capped', () => {

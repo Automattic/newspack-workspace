@@ -7,7 +7,16 @@
 /**
  * WordPress dependencies
  */
-import { __, sprintf } from '@wordpress/i18n';
+import { __, _n, sprintf } from '@wordpress/i18n';
+
+/**
+ * Internal dependencies
+ */
+import { formatCount } from '../../../../../packages/components/src/breadcrumbs/format-count';
+
+// Re-exported, not reimplemented: only this helper normalises the locales
+// WordPress ships that Intl rejects.
+export { formatCount };
 
 export function formatPrice( amount: number, currency: PricingRulesCurrency ): string {
 	return currency.symbol + amount.toFixed( currency.decimals );
@@ -35,14 +44,16 @@ export function cycleMarkerNote(): string {
 }
 
 /**
- * Group a count's digits. The externalized @wordpress/i18n has no numberFormat, and
- * WordPress ships locales Intl rejects (pt_PT_ao90), hence the fall back.
+ * The caption for a table the engine capped, or null when it did not. The engine
+ * subtracts the products it skipped from the total, so its own flag settles it.
  */
-export function formatCount( value: number ): string {
-	const n = Number( value );
-	try {
-		return new Intl.NumberFormat( document.documentElement.lang || undefined ).format( n );
-	} catch {
-		return n.toLocaleString();
+export function sampleNote( payload: CatalogImpactResponse ): string | null {
+	if ( ! payload.preview_limited ) {
+		return null;
 	}
+	return sprintf(
+		/* translators: %s: how many products the table lists. */
+		_n( 'Showing a sample of %s product.', 'Showing a sample of %s products.', payload.sample_count, 'newspack-plugin' ),
+		formatCount( payload.sample_count )
+	);
 }
