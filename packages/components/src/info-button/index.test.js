@@ -1,7 +1,12 @@
 /**
  * External dependencies.
  */
-import { fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
+
+/**
+ * WordPress dependencies.
+ */
+import { createRef } from '@wordpress/element';
 
 /**
  * Internal dependencies.
@@ -13,6 +18,10 @@ const DESCRIPTION = 'Number of articles read in the last 30 day period.';
 const getTrigger = ( name = 'More information' ) => screen.getByRole( 'button', { name } );
 
 describe( 'InfoButton', () => {
+	afterEach( () => {
+		jest.useRealTimers();
+	} );
+
 	it( 'names the trigger briefly rather than with the whole description', () => {
 		render( <InfoButton description={ DESCRIPTION } /> );
 		expect( getTrigger() ).toBeInTheDocument();
@@ -40,6 +49,38 @@ describe( 'InfoButton', () => {
 		fireEvent.click( getTrigger() );
 		expect( screen.getByText( DESCRIPTION ) ).toBeInTheDocument();
 		expect( getTrigger() ).toHaveAttribute( 'aria-expanded', 'true' );
+	} );
+
+	it( 'reveals the description on hover, once the pointer has rested', () => {
+		jest.useFakeTimers();
+		render( <InfoButton description={ DESCRIPTION } /> );
+		const trigger = getTrigger();
+
+		fireEvent.mouseEnter( trigger );
+		fireEvent.mouseMove( trigger );
+		expect( screen.queryByText( DESCRIPTION ) ).not.toBeInTheDocument();
+
+		act( () => jest.advanceTimersByTime( 200 ) );
+
+		expect( screen.getByText( DESCRIPTION ) ).toBeInTheDocument();
+	} );
+
+	it( 'holds the description open long enough to overshoot the trigger', () => {
+		jest.useFakeTimers();
+		render( <InfoButton description={ DESCRIPTION } /> );
+		const trigger = getTrigger();
+
+		fireEvent.mouseEnter( trigger );
+		fireEvent.mouseMove( trigger );
+		act( () => jest.advanceTimersByTime( 200 ) );
+		expect( screen.getByText( DESCRIPTION ) ).toBeInTheDocument();
+
+		fireEvent.mouseLeave( trigger );
+		expect( screen.getByText( DESCRIPTION ) ).toBeInTheDocument();
+
+		act( () => jest.advanceTimersByTime( 200 ) );
+
+		expect( screen.queryByText( DESCRIPTION ) ).not.toBeInTheDocument();
 	} );
 
 	it( 'uses a native button, so Enter and Space activate it', () => {
@@ -76,7 +117,7 @@ describe( 'InfoButton', () => {
 		expect( document.querySelector( `[aria-describedby="${ paragraph.id }"]` ) ).toBeInTheDocument();
 	} );
 
-	it( 'caps the popup width through its own portal and positioner classes', () => {
+	it( 'renders through its own portal and positioner', () => {
 		render( <InfoButton description={ DESCRIPTION } /> );
 		fireEvent.click( getTrigger() );
 		const paragraph = screen.getByText( DESCRIPTION );
@@ -94,5 +135,17 @@ describe( 'InfoButton', () => {
 	it( 'keeps its own class alongside a consumer className', () => {
 		render( <InfoButton description={ DESCRIPTION } className="custom-class" /> );
 		expect( getTrigger() ).toHaveClass( 'newspack-info-button', 'custom-class' );
+	} );
+
+	it( 'hands a consumer ref the trigger itself', () => {
+		const ref = createRef();
+		render( <InfoButton description={ DESCRIPTION } ref={ ref } /> );
+		expect( ref.current ).toBe( getTrigger() );
+	} );
+
+	it( 'names the trigger and the popup alike when given an aria-label', () => {
+		render( <InfoButton description={ DESCRIPTION } aria-label="More information about Articles read" /> );
+		fireEvent.click( getTrigger( 'More information about Articles read' ) );
+		expect( screen.getByRole( 'dialog', { name: 'More information about Articles read' } ) ).toBeInTheDocument();
 	} );
 } );
