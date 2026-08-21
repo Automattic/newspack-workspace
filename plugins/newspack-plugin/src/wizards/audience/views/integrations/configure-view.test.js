@@ -851,4 +851,19 @@ describe( 'ConfigureView per-direction sections', () => {
 		expect( screen.queryByText( 'Settings' ) ).toBeNull();
 		expect( screen.queryByLabelText( 'Audience' ) ).toBeNull();
 	} );
+
+	// A master list the ESP failed to return is the one setting the Enable flow
+	// tells publishers to come here and fill, so it has to survive an empty list.
+	it( 'keeps a required field and its section when the list comes back empty', () => {
+		renderConfigureView( {
+			integrations: {
+				esp: {
+					...INTEGRATION,
+					settings: [ { key: 'mailchimp_audience_id', type: 'select', label: 'Audience', value: '', required: true, options: [] } ],
+				},
+			},
+		} );
+		expect( screen.getByText( 'Settings' ) ).toBeTruthy();
+		expect( screen.getByLabelText( 'Audience' ) ).toBeTruthy();
+	} );
 } );

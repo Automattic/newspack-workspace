@@ -11,14 +11,20 @@ import { SettingsField, settingsFieldRenders } from './settings-field';
 jest.mock( '../../../../../packages/components/src', () => ( {
 	Button: ( { children } ) => children,
 	Grid: ( { children } ) => children,
-	SelectControl: ( { label, options } ) => (
-		<select aria-label={ label }>
-			{ options.map( ( { value, label: optionLabel } ) => (
-				<option key={ value } value={ value }>
-					{ optionLabel }
-				</option>
-			) ) }
-		</select>
+	// Mirrors the real control: the Newspack wrapper renders its div whatever
+	// happens, and core's select inside it renders nothing without options.
+	SelectControl: ( { label, options, disabled } ) => (
+		<div className="newspack-select-control">
+			{ options.length ? (
+				<select aria-label={ label } disabled={ !! disabled }>
+					{ options.map( ( { value, label: optionLabel } ) => (
+						<option key={ value } value={ value }>
+							{ optionLabel }
+						</option>
+					) ) }
+				</select>
+			) : null }
+		</div>
 	),
 	TextControl: ( { label, value } ) => <input aria-label={ label } value={ value } readOnly />,
 } ) );
@@ -41,6 +47,10 @@ describe( 'settingsFieldRenders', () => {
 		} );
 	} );
 
+	it( 'reports output for a required select with no options', () => {
+		expect( settingsFieldRenders( { type: 'select', required: true, options: [] } ) ).toBe( true );
+	} );
+
 	it( 'reports output for every other field type', () => {
 		[ 'text', 'password', 'number', 'textarea', 'checkbox', 'oauth' ].forEach( type => {
 			expect( settingsFieldRenders( { type } ) ).toBe( true );
@@ -61,6 +71,14 @@ describe( 'SettingsField', () => {
 	it( 'renders the select once it has options', () => {
 		renderField( { key: 'audience', type: 'select', label: 'Audience', options: [ { value: 'a', label: 'Readers' } ] } );
 		expect( screen.getByLabelText( 'Audience' ) ).toBeTruthy();
+	} );
+
+	// Dropping the field would hide the only setting the Enable modal tells
+	// publishers to open the settings view and complete.
+	it( 'keeps a required select on screen, disabled, when its options failed to load', () => {
+		renderField( { key: 'audience', type: 'select', label: 'Audience', required: true, options: [] } );
+		expect( screen.getByLabelText( 'Audience' ).disabled ).toBe( true );
+		expect( screen.getByRole( 'option' ).textContent ).toBe( 'No options available' );
 	} );
 
 	it( 'renders nothing for a hidden field', () => {

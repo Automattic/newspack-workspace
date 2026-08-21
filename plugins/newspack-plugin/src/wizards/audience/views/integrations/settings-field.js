@@ -12,6 +12,10 @@ import { Button, Grid, SelectControl, TextControl } from '../../../../../package
 /**
  * Whether a field declaration produces any rendered output.
  *
+ * Option-driven types are judged on `options` alone. The outbound metadata
+ * field keeps its data in `grouped_options`, and the configure view extracts
+ * it before any field reaches here.
+ *
  * @param {Object} field Field declaration.
  * @return {boolean} True when `SettingsField` renders something for the field.
  */
@@ -20,6 +24,9 @@ export const settingsFieldRenders = field => {
 		case 'hidden':
 			return false;
 		case 'select':
+			// A required list stays on screen with nothing to pick: the Enable flow sends
+			// publishers here to complete it, and a missing section reads as a configured one.
+			return !! field.required || ( field.options || [] ).length > 0;
 		case 'metadata':
 			return ( field.options || [] ).length > 0;
 		default:
@@ -108,22 +115,30 @@ export const SettingsField = ( { field, value, onChange } ) => {
 		}
 		case 'checkbox':
 			return <CheckboxControl key={ key } label={ label } help={ help } checked={ !! value } onChange={ onChange } __nextHasNoMarginBottom />;
-		case 'select':
+		case 'select': {
+			const selectOptions = options || [];
+			const hasOptions = selectOptions.length > 0;
 			return (
 				<SelectControl
 					key={ key }
 					label={ label }
-					help={ help }
-					value={ value }
-					options={ options.map( opt => ( {
-						label: opt.label,
-						value: opt.value,
-					} ) ) }
+					help={ hasOptions ? help : __( 'No options are available. Check the connection to this integration.', 'newspack-plugin' ) }
+					value={ hasOptions ? value : '' }
+					options={
+						hasOptions
+							? selectOptions.map( opt => ( {
+									label: opt.label,
+									value: opt.value,
+							  } ) )
+							: [ { label: __( 'No options available', 'newspack-plugin' ), value: '' } ]
+					}
 					onChange={ onChange }
+					disabled={ ! hasOptions }
 					__next40pxDefaultSize
 					__nextHasNoMarginBottom
 				/>
 			);
+		}
 		case 'textarea':
 			return (
 				<TextareaControl
