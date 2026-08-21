@@ -41,9 +41,6 @@ LATEST_VERSION_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "release
 # forward unchanged — so it cannot distinguish a bot escalation from a finished
 # one. A branch name survives amends.
 ESCALATION_BRANCH_PREFIX="post-release/conflicts"
-# The identity `Configure git` in release.yml gives this job. A PR whose head
-# commit is still authored by it is one nobody has started resolving.
-BOT_EMAIL="newspack-release-bot@users.noreply.github.com"
 
 # Restore workspace:* for any internal monorepo dep
 # (newspack-{scripts,components,colors,icons}) in every plugin/theme
@@ -64,8 +61,12 @@ BOT_EMAIL="newspack-release-bot@users.noreply.github.com"
 # release.yml — the alpha branch tip is then a chore[skip ci], same as today,
 # and the team's normal promotion merge commit later (without [skip ci]) is
 # what fires release.yml.
-restore_workspace_deps_and_commit() {
-  local branch="$1"
+#
+# Split in two: stage_workspace_deps_restore does the rewrite and staging,
+# restore_workspace_deps_and_commit wraps it in a commit. The escalation path
+# needs the staging without the commit, because its branch has to carry exactly
+# one commit for the `git commit --amend --no-edit` in the PR body to work.
+stage_workspace_deps_restore() {
   node -e '
     const fs = require("fs"), path = require("path");
     const WS_PACKAGES = ["newspack-scripts", "newspack-components", "newspack-colors", "newspack-icons"];
@@ -104,6 +105,11 @@ restore_workspace_deps_and_commit() {
   ' | while IFS= read -r -d "" f; do
     git add -- "$f"
   done
+}
+
+restore_workspace_deps_and_commit() {
+  local branch="$1"
+  stage_workspace_deps_restore
   if [ -n "$(git status --porcelain)" ]; then
     git commit -m "chore(release): restore workspace:* deps after release [skip ci]"
     echo "[post-release] Restored workspace:* deps on $branch."
@@ -149,24 +155,39 @@ attribute_conflicts() {
 }
 
 # Close open escalation PRs for $1 that nobody has started resolving, pointing
-# them at the new one ($2 = its URL). Each release produces a *different*
-# conflict set rather than re-presenting one unresolved conflict, so a stale
-# escalation PR describes a merge that no longer exists. Only bot-tipped PRs are
-# closed: once a human has pushed a resolution commit, the PR is theirs and
-# closing it would discard their work.
+# them at the new one ($2 = its URL). $3 is this run's own bot identity, used to
+# tell an untouched escalation from one someone is working on. Each release
+# produces a *different* conflict set rather than re-presenting one unresolved
+# conflict, so a stale escalation PR describes a merge that no longer exists.
+# Once a human has pushed a resolution commit the PR is theirs, and closing it
+# would discard their work.
+#
+# The test is the head commit's **committer**, not its author. The resolution
+# recipe in the PR body ends in `git commit --amend --no-edit`, and amending
+# rewrites the committer while carrying the original author forward — so an
+# author check would still read as the bot and close the very PR a person had
+# just finished. Anything unresolvable (a missing head, an API error) skips the
+# PR: leaving a stale escalation open costs noise, closing a live one costs work.
 supersede_escalations() {
-  local target="$1" new_url="$2"
+  local target="$1" new_url="$2" bot_identity="$3"
   local new_number="${2##*/}"
-  local prs n
-  prs=$(TARGET="$target" BOT_EMAIL="$BOT_EMAIL" PREFIX="$ESCALATION_BRANCH_PREFIX" \
+  local prs n head_sha committer
+  prs=$(TARGET="$target" PREFIX="$ESCALATION_BRANCH_PREFIX" \
     gh pr list --base "$target" --state open --limit 100 \
-      --json number,headRefName,commits \
+      --json number,headRefName \
       --jq '.[]
             | select(.headRefName | startswith(env.PREFIX + "/" + env.TARGET + "-"))
-            | select((.commits[-1].authors[0].email // "") == env.BOT_EMAIL)
             | .number' 2>/dev/null) || prs=""
   for n in $prs; do
     [ "$n" = "$new_number" ] && continue
+    head_sha=$(gh pr view "$n" --json headRefOid --jq '.headRefOid' 2>/dev/null) || head_sha=""
+    [ -z "$head_sha" ] && continue
+    # {owner}/{repo} is resolved by gh from the checkout's remote, so this needs
+    # no GITHUB_REPOSITORY.
+    committer=$(gh api "repos/{owner}/{repo}/commits/$head_sha" --jq '.commit.committer.email' 2>/dev/null) || committer=""
+    if [ -z "$committer" ] || [ "$committer" != "$bot_identity" ]; then
+      continue
+    fi
     gh pr comment "$n" --body "Superseded by $new_url. Each release conflicts on a different set of files, so this one describes a merge that no longer exists." > /dev/null 2>&1 || true
     if gh pr close "$n" > /dev/null 2>&1; then
       echo "[post-release] Superseded escalation PR #$n."
@@ -188,30 +209,53 @@ supersede_escalations() {
 # back-merge.
 #
 # $1 = target branch. $2 = the commit to restore the local branch to when done,
-# captured before the merge. Prints the PR URL on stdout, empty if escalation
-# could not complete; everything else goes to stderr so it cannot contaminate
-# that value.
+# captured before the merge. $3 = the newline-separated conflicting paths the
+# caller captured. Prints the PR URL on stdout, empty if escalation could not
+# complete; everything else goes to stderr so it cannot contaminate that value.
 #
 # Always returns 0 and always leaves the tree clean on $2: this runs on the
 # already-failed path, and an escalation hiccup must not preempt the Slack alert
 # or strand the second sync target.
 escalate_conflict() {
-  local target="$1" saved="$2"
-  local url="" marker_files="" body="" branch=""
+  local target="$1" saved="$2" conflicts="$3"
+  local url="" marker_files="" body="" branch="" bot_identity="" err_file=""
   branch="$ESCALATION_BRANCH_PREFIX/${target}-$(date -u +%Y%m%d-%H%M%S)"
 
-  # Staging is what resolves the unmerged index entries — git refuses to commit
-  # while any path is still unmerged — so the markers land in the tree verbatim,
-  # which is the point. `-u` and not `-A`: -A would also sweep in any untracked
-  # file sitting in the workspace, and the `git reset --hard` below then deletes
-  # it, so an unrelated stray file would be both published on the escalation
-  # branch and destroyed locally.
-  if ! git add -u >&2 || ! git commit -q -m "chore(release): merge in release $LATEST_VERSION_TAG" >&2; then
+  # Staging is what resolves the unmerged index entries, since git refuses to
+  # commit while any path is still unmerged, and it puts the markers in the tree
+  # verbatim, which is the point. Scoped to the conflicting paths rather than
+  # `-u` or `-A`: either of those would also sweep up unrelated work sitting in
+  # the workspace, and the `git reset --hard` below then destroys it locally
+  # after publishing it on the escalation branch. `-A` within the pathspec so a
+  # modify/delete conflict resolved as a deletion still stages.
+  if ! printf '%s\n' "$conflicts" | git add -A --pathspec-from-file=- >&2; then
+    echo "[post-release] Could not stage the conflicted paths; skipping escalation." >&2
+    git merge --abort > /dev/null 2>&1 || true
+    git reset --hard "$saved" >&2 || true
+    return 0
+  fi
+
+  # Fold the workspace:* restore into this same commit. Every other merge in
+  # this script pairs one with the other, and a back-merge that skips it carries
+  # the release's concretized internal versions into the target, where
+  # `pnpm install --frozen-lockfile` rejects them. It has to be *this* commit,
+  # not a second one, because the PR body's `git commit --amend --no-edit`
+  # only reaches the tip. Guarded: a package.json that is itself conflicted
+  # won't parse, and that must not preempt the alert.
+  if ! stage_workspace_deps_restore >&2; then
+    echo "[post-release] Could not restore workspace:* on the escalation branch; the resolver has to run it." >&2
+  fi
+
+  if ! git commit -q -m "chore(release): merge in release $LATEST_VERSION_TAG" >&2; then
     echo "[post-release] Could not commit the conflicted tree; skipping escalation." >&2
     git merge --abort > /dev/null 2>&1 || true
     git reset --hard "$saved" >&2 || true
     return 0
   fi
+  # Taken from the commit this run just made rather than hardcoded, so the
+  # supersede check can never drift out of step with the identity `Configure
+  # git` sets in release.yml.
+  bot_identity=$(git log -1 --format='%ce') || bot_identity=""
 
   # --cached, not HEAD: searching a rev prefixes every result with "HEAD:",
   # which the PR body then presents as paths that don't exist. The index is
@@ -237,7 +281,7 @@ To resolve:
 \`\`\`
 gh pr checkout $branch
 # resolve the conflict markers
-git add -A
+git add -u
 git commit --amend --no-edit
 git push --force-with-lease
 \`\`\`
@@ -252,22 +296,23 @@ ${marker_files:-(none — the conflict is structural, e.g. delete/modify)}
 EOF
 )
 
+  # stderr goes to a file, never into $url. gh writes advisory lines there on a
+  # *successful* create (an untracked file left in the tree draws "uncommitted
+  # changes"), and folding them in would leave the URL behind a warning, fail
+  # the prefix match below, and report a PR that exists as missing.
+  err_file=$(mktemp 2>/dev/null) || err_file=""
   url=$(gh pr create --draft --base "$target" --head "$branch" \
     --title "Post-release sync conflict: release into $target" \
-    --body "$body" 2>&1) || url=""
-  # gh writes diagnostics to the same stream on failure, so accept only
-  # something that is actually a URL.
-  case "$url" in
-    https://*) ;;
-    *)
-      [ -n "$url" ] && echo "[post-release] gh pr create failed: $url" >&2
-      url=""
-      ;;
-  esac
+    --body "$body" 2>"${err_file:-/dev/null}") || url=""
+  url=$(printf '%s\n' "$url" | grep -m1 '^https://' || true)
+  if [ -z "$url" ] && [ -n "$err_file" ]; then
+    echo "[post-release] gh pr create failed: $(tr '\n' ' ' < "$err_file")" >&2
+  fi
+  [ -n "$err_file" ] && rm -f "$err_file"
 
   if [ -n "$url" ]; then
     echo "[post-release] Opened escalation PR $url for $target." >&2
-    supersede_escalations "$target" "$url" >&2
+    supersede_escalations "$target" "$url" "$bot_identity" >&2
   else
     echo "[post-release] Conflict pushed to $branch, but no PR was opened." >&2
   fi
@@ -412,7 +457,7 @@ else
     # change the merge base and blame the wrong commits.
     attributed=$(attribute_conflicts "$conflicts")
     echo "[post-release] Post-release merge to alpha failed."
-    pr_url=$(escalate_conflict alpha "$saved")
+    pr_url=$(escalate_conflict alpha "$saved" "$conflicts")
     notify_slack alpha "$attributed" "$pr_url"
     sync_failed=1
   fi
@@ -433,7 +478,7 @@ else
   # See the alpha branch above: attribution must precede the escalation commit.
   attributed=$(attribute_conflicts "$conflicts")
   echo "[post-release] Post-release merge to $DEFAULT_BRANCH failed."
-  pr_url=$(escalate_conflict "$DEFAULT_BRANCH" "$saved")
+  pr_url=$(escalate_conflict "$DEFAULT_BRANCH" "$saved" "$conflicts")
   notify_slack "$DEFAULT_BRANCH" "$attributed" "$pr_url"
   sync_failed=1
 fi
