@@ -13,16 +13,15 @@ export type BadgeLevel = 'default' | 'info' | 'success' | 'warning' | 'error';
 type BadgeProps = {
 	text: string;
 	level?: BadgeLevel;
-	id?: string;
-};
+} & Omit< React.ComponentPropsWithoutRef< 'span' >, 'children' >;
 
 /**
  * Badge component
  */
-const Badge = ( { text, level = 'default', id }: BadgeProps ) => {
-	const classes = classnames( 'newspack-badge', `is-${ level }` );
+const Badge = ( { text, level = 'default', className, ...props }: BadgeProps ) => {
+	const classes = classnames( 'newspack-badge', `is-${ level }`, className );
 	return (
-		<span className={ classes } id={ id }>
+		<span { ...props } className={ classes }>
 			{ text }
 		</span>
 	);
