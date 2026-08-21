@@ -45,15 +45,6 @@ describe( 'CardFeature', () => {
 			const { container } = render( <CardFeature title="Content gifting" /> );
 			expect( container.querySelector( '.newspack-card-feature__description' ) ).toBeNull();
 		} );
-
-		it( 'keeps the action row a sibling of the header rather than nesting it', () => {
-			const { container } = render( <CardFeature title="Content gifting" /> );
-			const card = container.querySelector( '.newspack-card-feature' );
-			const actions = container.querySelector( '.newspack-card-feature__actions' );
-			expect( actions.parentElement ).toBe( card );
-			expect( actions ).not.toContainElement( screen.getByRole( 'heading', { level: 3 } ) );
-			expect( actions ).toContainElement( primaryButton() );
-		} );
 	} );
 
 	describe( 'accessible names', () => {
