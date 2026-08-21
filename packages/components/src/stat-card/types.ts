@@ -5,7 +5,11 @@ export type StatCardValueVariant = 'figure' | 'text';
 /** Pre-formatted by the caller. Null, undefined and a blank string all render the null glyph. */
 export type StatCardValue = string | number | null | undefined;
 
-export type StatCardRootProps = Omit< React.ComponentPropsWithoutRef< 'div' >, 'children' > & {
+type DivProps = Omit< React.ComponentPropsWithoutRef< 'div' >, 'children' >;
+
+type SpanProps = Omit< React.ComponentPropsWithoutRef< 'span' >, 'children' >;
+
+export type StatCardRootProps = DivProps & {
 	/** Heading level for `StatCard.Label`, read through context. */
 	heading?: StatCardHeadingLevel;
 	/** Merged onto the card, which is the element the hero scale queries. */
@@ -13,7 +17,7 @@ export type StatCardRootProps = Omit< React.ComponentPropsWithoutRef< 'div' >, '
 	children?: React.ReactNode;
 };
 
-export type StatCardLabelProps = {
+export type StatCardLabelProps = DivProps & {
 	/** Rendered beside the heading rather than inside it, so a control here stays out of the document outline. */
 	suffix?: React.ReactNode;
 	/** Overrides the level set on `StatCard.Root`. */
@@ -23,12 +27,12 @@ export type StatCardLabelProps = {
 	children?: React.ReactNode;
 };
 
-export type StatCardBodyProps = {
+export type StatCardBodyProps = DivProps & {
 	className?: string;
 	children?: React.ReactNode;
 };
 
-export type StatCardValueProps = {
+export type StatCardValueProps = SpanProps & {
 	value: StatCardValue;
 	/** Spoken instead of the visible value, whose meaning may rest on punctuation. */
 	valueLabel?: string;
@@ -43,7 +47,7 @@ export type StatCardDeltaDirection = 'up' | 'down';
 
 export type StatCardDeltaTone = 'positive' | 'negative' | 'neutral';
 
-export type StatCardDeltaProps = {
+export type StatCardDeltaProps = SpanProps & {
 	/** Which arrow to show. Says nothing about whether the change is good. */
 	direction: StatCardDeltaDirection;
 	/** Which colour to use. The caller decides, because a rise is not always good news. */
@@ -56,12 +60,12 @@ export type StatCardDeltaProps = {
 	children?: React.ReactNode;
 };
 
-export type StatCardSecondaryProps = {
+export type StatCardSecondaryProps = DivProps & {
 	className?: string;
 	children?: React.ReactNode;
 };
 
-export type StatCardFooterProps = {
+export type StatCardFooterProps = DivProps & {
 	className?: string;
 	children?: React.ReactNode;
 };

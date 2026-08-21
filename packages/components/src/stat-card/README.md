@@ -155,6 +155,25 @@ zero-fallback heroes. None of that belongs here; a rule about a Google Analytics
 property is not a rule about a card. `MetricCard` composes the slots and keeps
 its own props.
 
+## Refs and pass-through props
+
+Every part forwards a ref to the element it renders and passes any prop its own
+table does not name straight through to that element, so `id`, `style`, `title`
+and `data-*` all land on the DOM node:
+
+| Part | The element it renders |
+|------|------------------------|
+| `Root` | The card |
+| `Label` | The label row, not the heading |
+| `Body` | The body column |
+| `Value` | The figure, not the row it shares with a `suffix` |
+| `Delta` | The delta |
+| `Secondary` | The secondary line |
+| `Footer` | The footer column |
+
+That is what lets a wrapper hang the unabbreviated amount off a `$1.2M` without
+wrapping the figure in an element the body layout would then have to carry.
+
 ## `StatCard.Root`
 
 | Prop | Type | Default | Description |
@@ -164,8 +183,7 @@ its own props.
 | `heading` | `2`–`6` | `3` | Heading level for `StatCard.Label`, passed through context. |
 
 Renders `Card.Root` / `Card.Content` from `@wordpress/ui`, and owns the
-container query. Forwards a ref to the card element, and passes any other props
-(`id`, `style`, `data-*`) through to it, so a wrapper can reach the DOM node.
+container query.
 
 ## `StatCard.Label`
 

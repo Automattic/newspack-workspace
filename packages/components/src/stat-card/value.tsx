@@ -1,7 +1,7 @@
 /**
  * WordPress dependencies.
  */
-import { useEffect } from '@wordpress/element';
+import { forwardRef, useEffect } from '@wordpress/element';
 import { _x } from '@wordpress/i18n';
 import { Stack, VisuallyHidden } from '@wordpress/ui';
 
@@ -19,7 +19,10 @@ import type { StatCardValueProps, StatCardValueVariant } from './types';
 
 const variants: StatCardValueVariant[] = [ 'figure', 'text' ];
 
-const Value = ( { value, valueLabel, variant = 'figure', suffix, className }: StatCardValueProps ) => {
+const Value = forwardRef< HTMLSpanElement, StatCardValueProps >( function Value(
+	{ value, valueLabel, variant = 'figure', suffix, className, ...props },
+	ref
+) {
 	// The hero scale is a container query on the root, so a value rendered loose
 	// would size against whichever container it landed in.
 	useStatCardContext();
@@ -40,7 +43,11 @@ const Value = ( { value, valueLabel, variant = 'figure', suffix, className }: St
 	const spoken = valueLabel?.trim() || ( isNull ? _x( 'Not applicable', 'a statistic with no number to show', 'newspack-plugin' ) : undefined );
 
 	const figure = (
-		<span className={ classnames( 'newspack-stat-card__value', 'text' === variant && 'newspack-stat-card__value--text', className ) }>
+		<span
+			ref={ ref }
+			className={ classnames( 'newspack-stat-card__value', 'text' === variant && 'newspack-stat-card__value--text', className ) }
+			{ ...props }
+		>
 			{ spoken ? (
 				<>
 					{ /* Hidden, not labelled: ARIA forbids naming a generic element, and `role="img"` announces a graphic. */ }
@@ -63,6 +70,6 @@ const Value = ( { value, valueLabel, variant = 'figure', suffix, className }: St
 			{ suffix }
 		</Stack>
 	);
-};
+} );
 
 export default Value;

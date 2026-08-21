@@ -1,7 +1,7 @@
 /**
  * WordPress dependencies.
  */
-import { useEffect } from '@wordpress/element';
+import { forwardRef, useEffect } from '@wordpress/element';
 import { _x } from '@wordpress/i18n';
 import { VisuallyHidden } from '@wordpress/ui';
 
@@ -23,7 +23,10 @@ const glyphs: Record< StatCardDeltaDirection, string > = {
 
 const tones: StatCardDeltaTone[] = [ 'positive', 'negative', 'neutral' ];
 
-const Delta = ( { direction, tone = 'neutral', directionLabel, label, className, children }: StatCardDeltaProps ) => {
+const Delta = forwardRef< HTMLSpanElement, StatCardDeltaProps >( function Delta(
+	{ direction, tone = 'neutral', directionLabel, label, className, children, ...props },
+	ref
+) {
 	useStatCardContext();
 
 	useEffect( () => {
@@ -59,28 +62,28 @@ const Delta = ( { direction, tone = 'neutral', directionLabel, label, className,
 		className
 	);
 
-	// `label` names the whole delta, so the change it restates is hidden with the arrow.
-	if ( named ) {
-		return (
-			<span className={ classes }>
-				<span aria-hidden="true">
-					{ glyph }
-					{ children }
-				</span>
-				<VisuallyHidden render={ <span /> }>{ named }</VisuallyHidden>
-			</span>
-		);
-	}
-
 	return (
-		<span className={ classes }>
-			{ /* The arrow is hidden and its meaning given as text, since a bare glyph announces inconsistently. */ }
-			{ glyph && <span aria-hidden="true">{ glyph }</span> }
-			{ /* The trailing space separates the direction from the change in the raw text, not only in the layout. */ }
-			{ spoken && <VisuallyHidden render={ <span /> }>{ `${ spoken } ` }</VisuallyHidden> }
-			{ children }
+		<span ref={ ref } className={ classes } { ...props }>
+			{ named ? (
+				<>
+					{ /* `label` names the whole delta, so the change it restates is hidden with the arrow. */ }
+					<span aria-hidden="true">
+						{ glyph }
+						{ children }
+					</span>
+					<VisuallyHidden render={ <span /> }>{ named }</VisuallyHidden>
+				</>
+			) : (
+				<>
+					{ /* The arrow is hidden and its meaning given as text, since a bare glyph announces inconsistently. */ }
+					{ glyph && <span aria-hidden="true">{ glyph }</span> }
+					{ /* The trailing space separates the direction from the change in the raw text, not only in the layout. */ }
+					{ spoken && <VisuallyHidden render={ <span /> }>{ `${ spoken } ` }</VisuallyHidden> }
+					{ children }
+				</>
+			) }
 		</span>
 	);
-};
+} );
 
 export default Delta;

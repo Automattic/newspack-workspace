@@ -1,6 +1,7 @@
 /**
  * WordPress dependencies.
  */
+import { forwardRef } from '@wordpress/element';
 import { Stack } from '@wordpress/ui';
 
 /**
@@ -14,14 +15,14 @@ import classnames from 'classnames';
 import { useStatCardContext } from './context';
 import type { StatCardBodyProps } from './types';
 
-const Body = ( { className, children }: StatCardBodyProps ) => {
+const Body = forwardRef< HTMLDivElement, StatCardBodyProps >( function Body( { className, children, ...props }, ref ) {
 	useStatCardContext();
 
 	return (
-		<Stack direction="column" gap="xs" className={ classnames( 'newspack-stat-card__body', className ) }>
+		<Stack ref={ ref } direction="column" gap="xs" className={ classnames( 'newspack-stat-card__body', className ) } { ...props }>
 			{ children }
 		</Stack>
 	);
-};
+} );
 
 export default Body;

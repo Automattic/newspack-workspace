@@ -1,4 +1,9 @@
 /**
+ * WordPress dependencies.
+ */
+import { forwardRef } from '@wordpress/element';
+
+/**
  * External dependencies.
  */
 import classnames from 'classnames';
@@ -9,10 +14,14 @@ import classnames from 'classnames';
 import { useStatCardContext } from './context';
 import type { StatCardSecondaryProps } from './types';
 
-const Secondary = ( { className, children }: StatCardSecondaryProps ) => {
+const Secondary = forwardRef< HTMLDivElement, StatCardSecondaryProps >( function Secondary( { className, children, ...props }, ref ) {
 	useStatCardContext();
 
-	return <div className={ classnames( 'newspack-stat-card__secondary', className ) }>{ children }</div>;
-};
+	return (
+		<div ref={ ref } className={ classnames( 'newspack-stat-card__secondary', className ) } { ...props }>
+			{ children }
+		</div>
+	);
+} );
 
 export default Secondary;

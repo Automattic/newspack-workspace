@@ -1,7 +1,7 @@
 /**
  * WordPress dependencies.
  */
-import { Children, Fragment, isValidElement } from '@wordpress/element';
+import { Children, forwardRef, Fragment, isValidElement } from '@wordpress/element';
 import { Stack } from '@wordpress/ui';
 
 /**
@@ -48,14 +48,21 @@ const asParts = ( children: React.ReactNode ) => {
 	return parts;
 };
 
-const Footer = ( { className, children }: StatCardFooterProps ) => {
+const Footer = forwardRef< HTMLDivElement, StatCardFooterProps >( function Footer( { className, children, ...props }, ref ) {
 	useStatCardContext();
 
 	return (
-		<Stack direction="column" align="flex-start" gap="xs" className={ classnames( 'newspack-stat-card__footer', className ) }>
+		<Stack
+			ref={ ref }
+			direction="column"
+			align="flex-start"
+			gap="xs"
+			className={ classnames( 'newspack-stat-card__footer', className ) }
+			{ ...props }
+		>
 			{ asParts( children ) }
 		</Stack>
 	);
-};
+} );
 
 export default Footer;

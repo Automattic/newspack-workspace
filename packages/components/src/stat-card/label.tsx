@@ -1,7 +1,7 @@
 /**
  * WordPress dependencies.
  */
-import { useEffect } from '@wordpress/element';
+import { forwardRef, useEffect } from '@wordpress/element';
 import { Stack } from '@wordpress/ui';
 
 /**
@@ -23,7 +23,7 @@ const headings = {
 	6: 'h6',
 } as const;
 
-const Label = ( { suffix, heading, className, children }: StatCardLabelProps ) => {
+const Label = forwardRef< HTMLDivElement, StatCardLabelProps >( function Label( { suffix, heading, className, children, ...props }, ref ) {
 	const context = useStatCardContext();
 	const level = ( heading ?? context.heading ) as StatCardHeadingLevel;
 	// Consumers are largely untyped JS, where an out-of-range level would
@@ -43,11 +43,19 @@ const Label = ( { suffix, heading, className, children }: StatCardLabelProps ) =
 	}, [ level ] );
 
 	return (
-		<Stack direction="row" align="flex-start" justify="space-between" gap="sm" className={ classnames( 'newspack-stat-card__label', className ) }>
+		<Stack
+			ref={ ref }
+			direction="row"
+			align="flex-start"
+			justify="space-between"
+			gap="sm"
+			className={ classnames( 'newspack-stat-card__label', className ) }
+			{ ...props }
+		>
 			<Heading className="newspack-stat-card__label-text">{ children }</Heading>
 			{ suffix }
 		</Stack>
 	);
-};
+} );
 
 export default Label;

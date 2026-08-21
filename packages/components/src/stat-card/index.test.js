@@ -671,3 +671,44 @@ describe( 'StatCard.Footer', () => {
 		renderOrphan( <StatCard.Footer>Orphan</StatCard.Footer> );
 	} );
 } );
+
+describe( 'StatCard leaf slots', () => {
+	const leaves = [
+		[ 'Label', props => <StatCard.Label { ...props }>Reach</StatCard.Label>, '.newspack-stat-card__label' ],
+		[ 'Body', props => <StatCard.Body { ...props } />, '.newspack-stat-card__body' ],
+		[ 'Value', props => <StatCard.Value value="1,284" { ...props } />, '.newspack-stat-card__value' ],
+		[
+			'Delta',
+			props => (
+				<StatCard.Delta direction="up" { ...props }>
+					2%
+				</StatCard.Delta>
+			),
+			'.newspack-stat-card__delta',
+		],
+		[ 'Secondary', props => <StatCard.Secondary { ...props } />, '.newspack-stat-card__secondary' ],
+		[ 'Footer', props => <StatCard.Footer { ...props }>Note</StatCard.Footer>, '.newspack-stat-card__footer' ],
+	];
+
+	// Insights hangs a full amount off an abbreviated figure, which has nowhere
+	// else to go without adding an element the body layout would have to carry.
+	it.each( leaves )( '%s forwards a ref and passes other props through', ( name, renderLeaf, selector ) => {
+		const ref = { current: null };
+		const { container } = render( <StatCard.Root>{ renderLeaf( { ref, title: 'hint', 'data-testid': 'leaf' } ) }</StatCard.Root> );
+		const element = container.querySelector( selector );
+		expect( ref.current ).toBe( element );
+		expect( element ).toHaveAttribute( 'title', 'hint' );
+		expect( element ).toHaveAttribute( 'data-testid', 'leaf' );
+	} );
+
+	// The figure is what a wrapper needs to reach, not the row it may share.
+	it( 'puts a Value ref on the figure rather than the row it shares with a suffix', () => {
+		const ref = { current: null };
+		const { container } = render(
+			<StatCard.Root>
+				<StatCard.Value ref={ ref } value="1,284" suffix={ <StatCard.Delta direction="up">2%</StatCard.Delta> } />
+			</StatCard.Root>
+		);
+		expect( ref.current ).toBe( container.querySelector( '.newspack-stat-card__value' ) );
+	} );
+} );
