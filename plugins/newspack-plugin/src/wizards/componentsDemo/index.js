@@ -36,7 +36,9 @@ import {
 	CardFeature,
 	CardForm,
 	CardSettingsGroup,
+	CollapsibleGroup,
 	ColorPicker,
+	EmptyState,
 	Footer,
 	Grid,
 	Handoff,
@@ -49,6 +51,7 @@ import {
 	PluginToggle,
 	ProgressBar,
 	SelectControl,
+	TableCard,
 	TextControl,
 	Divider,
 	Drawer,
@@ -385,6 +388,103 @@ class ComponentsDemo extends Component {
 								</Drawer.Content>
 								<Drawer.Footer>{ this.drawerActions( drawerActionCount ) }</Drawer.Footer>
 							</Drawer.Root>
+						</Card>
+						<Card>
+							<h2>{ __( 'CollapsibleGroup', 'newspack-plugin' ) }</h2>
+							<p>
+								{ __(
+									'A stack of independently collapsible items, separated by dividers and sitting flush with the surrounding column. A collapsed item stays reachable by the browser find-in-page, which expands it to reveal the match.',
+									'newspack-plugin'
+								) }
+							</p>
+							<CollapsibleGroup titleLevel={ 3 }>
+								<CollapsibleGroup.Item title={ __( 'Contact fields', 'newspack-plugin' ) } defaultOpen>
+									<p>{ __( 'An item set to defaultOpen starts expanded.', 'newspack-plugin' ) }</p>
+								</CollapsibleGroup.Item>
+								<CollapsibleGroup.Item title={ __( 'Tags and segments', 'newspack-plugin' ) }>
+									<p>{ __( 'Items are independent: opening one does not close the others.', 'newspack-plugin' ) }</p>
+								</CollapsibleGroup.Item>
+								<CollapsibleGroup.Item title={ __( 'Sync options', 'newspack-plugin' ) }>
+									<p>{ __( 'A divider separates each item from the next, but never trails the last one.', 'newspack-plugin' ) }</p>
+								</CollapsibleGroup.Item>
+							</CollapsibleGroup>
+							<h3>{ __( 'Single item', 'newspack-plugin' ) }</h3>
+							<p>
+								{ __(
+									'With nothing to collapse against, hideSingleTitle renders a lone item open and drops its title.',
+									'newspack-plugin'
+								) }
+							</p>
+							<CollapsibleGroup hideSingleTitle>
+								<CollapsibleGroup.Item title={ __( 'Contact fields', 'newspack-plugin' ) }>
+									<p>{ __( 'This content is always visible.', 'newspack-plugin' ) }</p>
+								</CollapsibleGroup.Item>
+							</CollapsibleGroup>
+						</Card>
+						<Card>
+							<h2>{ __( 'Table card', 'newspack-plugin' ) }</h2>
+							<TableCard
+								title={ __( 'Price Schedule', 'newspack-plugin' ) }
+								titleId="components-demo-table-card-title"
+								actions={
+									<Button variant="secondary" size="compact">
+										{ __( 'Add Price', 'newspack-plugin' ) }
+									</Button>
+								}
+							>
+								<div role="region" aria-labelledby="components-demo-table-card-title">
+									{ /* Real tables supply the 24px card-padding alignment from their stylesheet. */ }
+									<table style={ { borderCollapse: 'collapse', width: '100%' } }>
+										<thead>
+											<tr>
+												<th style={ { padding: '8px 24px', textAlign: 'left' } }>{ __( 'Cycles', 'newspack-plugin' ) }</th>
+												<th style={ { padding: '8px 24px', textAlign: 'left' } }>{ __( 'Price', 'newspack-plugin' ) }</th>
+											</tr>
+										</thead>
+										<tbody>
+											<tr>
+												<td style={ { padding: '8px 24px' } }>1 → 3</td>
+												<td style={ { padding: '8px 24px' } }>$3.00</td>
+											</tr>
+											<tr>
+												<td style={ { padding: '8px 24px' } }>4 onward</td>
+												<td style={ { padding: '8px 24px' } }>$6.00</td>
+											</tr>
+										</tbody>
+									</table>
+								</div>
+							</TableCard>
+						</Card>
+						<Card>
+							<h2>{ __( 'Empty state', 'newspack-plugin' ) }</h2>
+							<EmptyState.Root>
+								<EmptyState.Header
+									icon={ postList }
+									title={ __( 'Get started with posts', 'newspack-plugin' ) }
+									description={ __( 'Nothing here yet. Once you publish, your posts show up in this list.', 'newspack-plugin' ) }
+									heading={ 3 }
+								/>
+								<EmptyState.Actions>
+									<Button variant="primary">{ __( 'Add Post', 'newspack-plugin' ) }</Button>
+								</EmptyState.Actions>
+							</EmptyState.Root>
+						</Card>
+						<Card>
+							<h2>{ __( 'Empty state (small, stacked actions)', 'newspack-plugin' ) }</h2>
+							<EmptyState.Root size="small">
+								<EmptyState.Header
+									icon={ postList }
+									title={ __( 'Nothing to show yet', 'newspack-plugin' ) }
+									description={ __(
+										'The small size suits an empty state standing in for a panel inside a card.',
+										'newspack-plugin'
+									) }
+								/>
+								<EmptyState.Actions orientation="column">
+									<Button variant="primary">{ __( 'Add Post', 'newspack-plugin' ) }</Button>
+									<p style={ { margin: 0 } }>{ __( 'A note under the action.', 'newspack-plugin' ) }</p>
+								</EmptyState.Actions>
+							</EmptyState.Root>
 						</Card>
 						<Card>
 							<h2>{ __( 'Notice', 'newspack-plugin' ) }</h2>

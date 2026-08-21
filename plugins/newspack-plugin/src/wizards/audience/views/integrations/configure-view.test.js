@@ -46,9 +46,12 @@ jest.mock( '@wordpress/components', () => ( {
 	),
 } ) );
 jest.mock( '../../../../../packages/components/src', () => ( {
-	Accordion: ( { children } ) => children,
-	AccordionPanel: ( { children } ) => children,
 	Button: ( { children } ) => children,
+	// Flattening only matches the real component while every fixture has one group,
+	// which the call site renders untitled and permanently open. A second group would
+	// render collapsed and out of the tab order, so a multi-group fixture needs a stub
+	// that collapses too.
+	CollapsibleGroup: Object.assign( ( { children } ) => children, { Item: ( { children } ) => children } ),
 	// Section dividers pass alignment="full-width"; the divider under a section
 	// toggle does not, so the stub tags them apart for the tests that assert on
 	// whether a toggle divider has anything to divide.
