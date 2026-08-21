@@ -525,6 +525,25 @@ class ESP extends Integration {
 	}
 
 	/**
+	 * Get the metadata prefix for the ESP integration.
+	 *
+	 * Applies the site-wide `newspack_ras_metadata_prefix` filter on top of
+	 * the per-integration option, preserving the pre-unification push
+	 * behavior: the legacy pipeline built every outgoing ESP key through
+	 * Metadata::get_prefix(), which runs this filter, so a site customizing
+	 * its prefix by code snippet (no stored option) must keep pushing under
+	 * the filtered prefix. The CLI duplicates audit resolves through the
+	 * same filter, so audit and push agree on live key names. Scoped to the
+	 * ESP: other integrations' prefixes never passed the filter.
+	 *
+	 * @return string The metadata prefix.
+	 */
+	public function get_metadata_prefix() {
+		/** This filter is documented in includes/reader-activation/sync/class-metadata.php */
+		return \apply_filters( 'newspack_ras_metadata_prefix', parent::get_metadata_prefix() );
+	}
+
+	/**
 	 * Pull contact data from the ESP for a given user.
 	 *
 	 * @param int $user_id WordPress user ID.
