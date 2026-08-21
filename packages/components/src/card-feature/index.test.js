@@ -127,6 +127,24 @@ describe( 'CardFeature', () => {
 			expect( onConfigure ).not.toHaveBeenCalled();
 		} );
 
+		it( 'keeps the button live on an actionable requirement before the feature is on, which is how Activate reaches the user', () => {
+			const onEnable = jest.fn();
+			render(
+				<CardFeature
+					title="Mailchimp"
+					requirements="Requires WooCommerce"
+					requirementsActionable
+					enableLabel="Activate"
+					onEnable={ onEnable }
+				/>
+			);
+			const button = screen.getByRole( 'button', { name: 'Activate Mailchimp' } );
+			expect( button ).not.toHaveAttribute( 'aria-disabled' );
+			fireEvent.click( button );
+			expect( onEnable ).toHaveBeenCalledTimes( 1 );
+			expect( screen.getByText( 'Requires WooCommerce' ) ).toBeInTheDocument();
+		} );
+
 		it( 'does not fire when a requirement is not actionable, but stays reachable', () => {
 			const onEnable = jest.fn();
 			render( <CardFeature title="Content gifting" requirements="Managed by site configuration" onEnable={ onEnable } /> );
