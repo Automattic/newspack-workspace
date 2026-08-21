@@ -114,7 +114,10 @@ would otherwise wrap a sentence across three lines.
 
 A visible figure whose meaning rests on punctuation or a glyph needs saying
 differently out loud. `valueLabel` replaces the spoken text: the visible span
-goes `aria-hidden`, and the label follows in `.screen-reader-text`.
+goes `aria-hidden`, and the label follows in a `VisuallyHidden` from
+`@wordpress/ui`, which brings its own CSS. The card asks nothing of the host
+page for that, where wp-admin's `.screen-reader-text` would have made every
+consumer's stylesheet part of the contract.
 
 This is deliberately not `role="img"` with an `aria-label`. ARIA prohibits
 naming a generic element, so the label needs a role to survive, and `img` makes

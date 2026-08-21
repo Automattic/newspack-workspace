@@ -3,7 +3,7 @@
  */
 import { useEffect } from '@wordpress/element';
 import { _x } from '@wordpress/i18n';
-import { Stack } from '@wordpress/ui';
+import { Stack, VisuallyHidden } from '@wordpress/ui';
 
 /**
  * External dependencies.
@@ -45,7 +45,7 @@ const Value = ( { value, valueLabel, variant = 'figure', suffix, className }: St
 				<>
 					{ /* Hidden, not labelled: ARIA forbids naming a generic element, and `role="img"` announces a graphic. */ }
 					<span aria-hidden="true">{ shown }</span>
-					<span className="screen-reader-text">{ spoken }</span>
+					<VisuallyHidden render={ <span /> }>{ spoken }</VisuallyHidden>
 				</>
 			) : (
 				shown

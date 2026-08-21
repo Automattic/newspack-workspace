@@ -3,6 +3,7 @@
  */
 import { useEffect } from '@wordpress/element';
 import { _x } from '@wordpress/i18n';
+import { VisuallyHidden } from '@wordpress/ui';
 
 /**
  * External dependencies.
@@ -64,7 +65,7 @@ const Delta = ( { direction, tone = 'neutral', directionLabel, label, className,
 					{ glyph }
 					{ children }
 				</span>
-				<span className="screen-reader-text">{ label }</span>
+				<VisuallyHidden render={ <span /> }>{ label }</VisuallyHidden>
 			</span>
 		);
 	}
@@ -73,7 +74,7 @@ const Delta = ( { direction, tone = 'neutral', directionLabel, label, className,
 		<span className={ classes }>
 			{ /* The arrow is hidden and its meaning given as text, since a bare glyph announces inconsistently. */ }
 			{ glyph && <span aria-hidden="true">{ glyph }</span> }
-			{ spoken && <span className="screen-reader-text">{ spoken }</span> }
+			{ spoken && <VisuallyHidden render={ <span /> }>{ spoken }</VisuallyHidden> }
 			{ children }
 		</span>
 	);

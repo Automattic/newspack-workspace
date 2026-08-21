@@ -181,7 +181,7 @@ describe( 'StatCard.Value', () => {
 			</StatCard.Root>
 		);
 		expect( screen.getByText( '1,284' ) ).toBeInTheDocument();
-		expect( container.querySelector( '.screen-reader-text' ) ).not.toBeInTheDocument();
+		expect( container.querySelector( '[data-visually-hidden]' ) ).not.toBeInTheDocument();
 		expect( container.querySelector( '[aria-hidden="true"]' ) ).not.toBeInTheDocument();
 	} );
 
@@ -201,7 +201,7 @@ describe( 'StatCard.Value', () => {
 			</StatCard.Root>
 		);
 		expect( screen.getByText( STAT_CARD_NULL_GLYPH ) ).toHaveAttribute( 'aria-hidden', 'true' );
-		expect( screen.getByText( 'Not applicable' ) ).toHaveClass( 'screen-reader-text' );
+		expect( screen.getByText( 'Not applicable' ) ).toHaveAttribute( 'data-visually-hidden' );
 	} );
 
 	// `value={ data?.count }` before the data arrives must not read as a zero.
@@ -212,7 +212,7 @@ describe( 'StatCard.Value', () => {
 			</StatCard.Root>
 		);
 		expect( screen.getByText( STAT_CARD_NULL_GLYPH ) ).toHaveAttribute( 'aria-hidden', 'true' );
-		expect( screen.getByText( 'Not applicable' ) ).toHaveClass( 'screen-reader-text' );
+		expect( screen.getByText( 'Not applicable' ) ).toHaveAttribute( 'data-visually-hidden' );
 	} );
 
 	// A field that reports "no data" as an empty string would otherwise leave a blank hero.
@@ -223,7 +223,7 @@ describe( 'StatCard.Value', () => {
 			</StatCard.Root>
 		);
 		expect( screen.getByText( STAT_CARD_NULL_GLYPH ) ).toHaveAttribute( 'aria-hidden', 'true' );
-		expect( screen.getByText( 'Not applicable' ) ).toHaveClass( 'screen-reader-text' );
+		expect( screen.getByText( 'Not applicable' ) ).toHaveAttribute( 'data-visually-hidden' );
 	} );
 
 	it( 'does not expose the glyph as an image', () => {
@@ -242,7 +242,7 @@ describe( 'StatCard.Value', () => {
 			</StatCard.Root>
 		);
 		expect( screen.getByText( '$1.2M' ) ).toHaveAttribute( 'aria-hidden', 'true' );
-		expect( screen.getByText( '1.2 million dollars' ) ).toHaveClass( 'screen-reader-text' );
+		expect( screen.getByText( '1.2 million dollars' ) ).toHaveAttribute( 'data-visually-hidden' );
 	} );
 
 	it( 'lets valueLabel replace the default name of the null glyph', () => {
@@ -251,7 +251,7 @@ describe( 'StatCard.Value', () => {
 				<StatCard.Value value={ null } valueLabel="No conversions in this timeframe" />
 			</StatCard.Root>
 		);
-		expect( screen.getByText( 'No conversions in this timeframe' ) ).toHaveClass( 'screen-reader-text' );
+		expect( screen.getByText( 'No conversions in this timeframe' ) ).toHaveAttribute( 'data-visually-hidden' );
 		expect( screen.queryByText( 'Not applicable' ) ).not.toBeInTheDocument();
 	} );
 
@@ -263,7 +263,7 @@ describe( 'StatCard.Value', () => {
 			</StatCard.Root>
 		);
 		expect( screen.getByText( STAT_CARD_NULL_GLYPH ) ).toHaveAttribute( 'aria-hidden', 'true' );
-		expect( screen.getByText( 'Not applicable' ) ).toHaveClass( 'screen-reader-text' );
+		expect( screen.getByText( 'Not applicable' ) ).toHaveAttribute( 'data-visually-hidden' );
 	} );
 
 	// Whitespace is truthy, so an unguarded label would hide the figure and name it nothing.
@@ -274,7 +274,7 @@ describe( 'StatCard.Value', () => {
 			</StatCard.Root>
 		);
 		expect( screen.getByText( STAT_CARD_NULL_GLYPH ) ).toHaveAttribute( 'aria-hidden', 'true' );
-		expect( screen.getByText( 'Not applicable' ) ).toHaveClass( 'screen-reader-text' );
+		expect( screen.getByText( 'Not applicable' ) ).toHaveAttribute( 'data-visually-hidden' );
 	} );
 
 	it( 'drops the hero scale for a text variant', () => {
@@ -294,7 +294,7 @@ describe( 'StatCard.Value', () => {
 		);
 		expect( container.querySelector( '.newspack-stat-card__value' ) ).toHaveClass( 'newspack-stat-card__value--text' );
 		expect( screen.getByText( STAT_CARD_NULL_GLYPH ) ).toHaveAttribute( 'aria-hidden', 'true' );
-		expect( screen.getByText( 'Not applicable' ) ).toHaveClass( 'screen-reader-text' );
+		expect( screen.getByText( 'Not applicable' ) ).toHaveAttribute( 'data-visually-hidden' );
 	} );
 
 	it( 'warns on an unknown variant and keeps the hero scale', () => {
@@ -331,7 +331,7 @@ describe( 'StatCard.Delta', () => {
 			</StatCard.Root>
 		);
 		expect( container.querySelector( '[aria-hidden="true"]' ) ).toHaveTextContent( '↑' );
-		expect( screen.getByText( 'Up' ) ).toHaveClass( 'screen-reader-text' );
+		expect( screen.getByText( 'Up' ) ).toHaveAttribute( 'data-visually-hidden' );
 		expect( screen.getByText( '2%' ) ).toBeInTheDocument();
 	} );
 
@@ -342,7 +342,7 @@ describe( 'StatCard.Delta', () => {
 			</StatCard.Root>
 		);
 		expect( container.querySelector( '[aria-hidden="true"]' ) ).toHaveTextContent( '↓' );
-		expect( screen.getByText( 'Down' ) ).toHaveClass( 'screen-reader-text' );
+		expect( screen.getByText( 'Down' ) ).toHaveAttribute( 'data-visually-hidden' );
 		const delta = container.querySelector( '.newspack-stat-card__delta' );
 		expect( delta ).not.toHaveClass( 'newspack-stat-card__delta--negative' );
 		expect( delta ).not.toHaveClass( 'newspack-stat-card__delta--positive' );
@@ -368,7 +368,7 @@ describe( 'StatCard.Delta', () => {
 				</StatCard.Delta>
 			</StatCard.Root>
 		);
-		expect( screen.getByText( 'Increased by' ) ).toHaveClass( 'screen-reader-text' );
+		expect( screen.getByText( 'Increased by' ) ).toHaveAttribute( 'data-visually-hidden' );
 		expect( screen.queryByText( 'Up' ) ).not.toBeInTheDocument();
 	} );
 
@@ -381,7 +381,7 @@ describe( 'StatCard.Delta', () => {
 			</StatCard.Root>
 		);
 		expect( container.querySelector( '[aria-hidden="true"]' ) ).not.toBeInTheDocument();
-		expect( container.querySelector( '.screen-reader-text' ) ).not.toBeInTheDocument();
+		expect( container.querySelector( '[data-visually-hidden]' ) ).not.toBeInTheDocument();
 		expect( screen.getByText( '2%' ) ).toBeInTheDocument();
 		expect( consoleWarn ).toHaveBeenCalled();
 		consoleWarn.mockRestore();
@@ -396,7 +396,7 @@ describe( 'StatCard.Delta', () => {
 				</StatCard.Delta>
 			</StatCard.Root>
 		);
-		expect( screen.getByText( 'Up' ) ).toHaveClass( 'screen-reader-text' );
+		expect( screen.getByText( 'Up' ) ).toHaveAttribute( 'data-visually-hidden' );
 	} );
 
 	// Word order and valence both live in the caller's sentence, not in DOM order.
@@ -409,7 +409,7 @@ describe( 'StatCard.Delta', () => {
 			</StatCard.Root>
 		);
 		expect( container.querySelector( '[aria-hidden="true"]' ) ).toHaveTextContent( '↑2%' );
-		expect( screen.getByText( '2% more refunds than last month' ) ).toHaveClass( 'screen-reader-text' );
+		expect( screen.getByText( '2% more refunds than last month' ) ).toHaveAttribute( 'data-visually-hidden' );
 		expect( screen.queryByText( 'Up' ) ).not.toBeInTheDocument();
 	} );
 
