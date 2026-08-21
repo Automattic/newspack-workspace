@@ -2,6 +2,7 @@
  * WordPress dependencies.
  */
 import { __, sprintf } from '@wordpress/i18n';
+import { Stack } from '@wordpress/ui';
 
 /**
  * Internal dependencies.
@@ -11,7 +12,7 @@ import InfoButton from '../info-button';
 
 const SettingSection = ( { title, description, children } ) => (
 	<Grid columns={ 1 } gutter={ 8 } className="newspack-settings__section">
-		<div className="newspack-settings__section__title">
+		<Stack direction="row" align="flex-start" gap="xs" className="newspack-settings__section__title">
 			<span>{ title }</span>
 			{ description && (
 				<InfoButton
@@ -27,7 +28,7 @@ const SettingSection = ( { title, description, children } ) => (
 					}
 				/>
 			) }
-		</div>
+		</Stack>
 		<div className="newspack-settings__section__content">{ children }</div>
 	</Grid>
 );
