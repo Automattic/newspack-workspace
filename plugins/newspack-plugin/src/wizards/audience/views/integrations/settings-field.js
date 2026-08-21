@@ -2,21 +2,41 @@
  * WordPress dependencies.
  */
 import { __ } from '@wordpress/i18n';
-import { CheckboxControl, ExternalLink, TextareaControl } from '@wordpress/components';
+import { CheckboxControl, ExternalLink, SelectControl, TextareaControl } from '@wordpress/components';
 
 /**
  * Internal dependencies.
  */
-import { Button, Grid, SelectControl, TextControl } from '../../../../../packages/components/src';
+import { Button, Grid, TextControl } from '../../../../../packages/components/src';
 
 import './settings-field.scss';
 
 /**
+ * Whether a value counts as unset.
+ *
+ * @param {*} value Value to test.
+ * @return {boolean} True when the value is absent or the empty string.
+ */
+export const isEmptyValue = value => value === undefined || value === null || value === '';
+
+/**
+ * Whether a select field offers an option that can actually be chosen.
+ *
+ * The ESP list call prepends a `None` entry to every successful response, so a
+ * connected account with no audiences still arrives with one option. Counting
+ * options would read that as a working list.
+ *
+ * @param {Object} field Field declaration.
+ * @return {boolean} True when at least one option carries a non-empty value.
+ */
+export const hasSelectableOption = field => ( field.options || [] ).some( option => ! isEmptyValue( option.value ) );
+
+/**
  * Whether a field declaration produces any rendered output.
  *
- * Option-driven types are judged on `options` alone. The outbound metadata
- * field keeps its data in `grouped_options`, and the configure view extracts
- * it before any field reaches here.
+ * The metadata field is judged on `options`; the outbound one also carries
+ * `grouped_options`, and the configure view extracts it before any field
+ * reaches here.
  *
  * @param {Object} field Field declaration.
  * @return {boolean} True when `SettingsField` renders something for the field.
@@ -26,9 +46,10 @@ export const settingsFieldRenders = field => {
 		case 'hidden':
 			return false;
 		case 'select':
-			// A required list stays on screen with nothing to pick: the Enable flow sends
-			// publishers here to complete it, and a missing section reads as a configured one.
-			return !! field.required || ( field.options || [] ).length > 0;
+			// A list with nothing to pick stays on screen when it is required or already
+			// set: the Enable flow sends publishers here to complete it, and a missing
+			// section reads as a configured one.
+			return !! field.required || ! isEmptyValue( field.value ) || hasSelectableOption( field );
 		case 'metadata':
 			return ( field.options || [] ).length > 0;
 		default:
@@ -122,24 +143,35 @@ export const SettingsField = ( { field, value, onChange } ) => {
 		case 'checkbox':
 			return <CheckboxControl key={ key } label={ label } help={ help } checked={ !! value } onChange={ onChange } __nextHasNoMarginBottom />;
 		case 'select': {
-			const selectOptions = options || [];
-			const hasOptions = selectOptions.length > 0;
+			const selectable = hasSelectableOption( field );
 			return (
 				<SelectControl
 					key={ key }
+					className={ selectable ? undefined : 'newspack-settings-field__empty-select' }
 					label={ label }
-					help={ hasOptions ? help : __( 'No options are available. Check the connection to this integration.', 'newspack-plugin' ) }
-					value={ hasOptions ? value : '' }
+					help={
+						selectable ? (
+							help
+						) : (
+							<>
+								{ help } { __( 'No options are available. Check the connection to this integration.', 'newspack-plugin' ) }
+							</>
+						)
+					}
+					value={ selectable ? value : '' }
 					options={
-						hasOptions
-							? selectOptions.map( opt => ( {
+						selectable
+							? ( options || [] ).map( opt => ( {
 									label: opt.label,
 									value: opt.value,
 							  } ) )
 							: [ { label: __( 'No options available', 'newspack-plugin' ), value: '' } ]
 					}
-					onChange={ onChange }
-					disabled={ ! hasOptions }
+					// aria-disabled rather than disabled: a disabled select is unfocusable, so
+					// keyboard users would never reach the field the Enable flow sent them to,
+					// nor the help text explaining why it is empty.
+					aria-disabled={ ! selectable }
+					onChange={ selectable ? onChange : () => {} }
 					__next40pxDefaultSize
 					__nextHasNoMarginBottom
 				/>
