@@ -70,12 +70,15 @@ body.newspack-has-countdown-banner {
 // third-party plugins are out of that filter's reach, so hide them here for as
 // long as the banner is on screen.
 //
-// The countdown banner is printed hidden and revealed by content-banner.js once
-// the reader's view count resolves, hence the `:has()` test for the visible
-// state: keying off the body class alone would pull the ad on pages where the
-// banner never appears. The gifting CTA has no such hidden state. Browsers
-// without `:has()` support drop the rule and keep the overlap they have today.
-body.newspack-is-gifted-post,
+// Both halves test for the banner element rather than the body class alone,
+// because either class can be on the page without a banner under it. The
+// countdown banner is printed hidden and revealed by content-banner.js once the
+// reader's view count resolves; `newspack-is-gifted-post` is set for any gifted
+// post, while `Content_Gifting_CTA::print_cta()` also requires the post to be
+// restricted, so a reader who already has access gets the class and no banner.
+// Browsers without `:has()` support drop the rule and keep the overlap they
+// have today.
+body.newspack-is-gifted-post:has(.newspack-content-gifting__cta),
 body.newspack-has-countdown-banner:has(.newspack-countdown-banner__cta:not(.newspack-countdown-banner__cta--hidden)) {
 	// `.bsa-ad-type-sneaker` is Broadstreet's slide-in/sticky footer unit. Both
 	// containers carry an inline `display` set by the ad provider's own script,
@@ -100,6 +103,11 @@ body.newspack-has-countdown-banner:has(.newspack-countdown-banner__cta:not(.news
 
 		&--hidden {
 			opacity: 0;
+			// The banner keeps its full-width fixed footprint while invisible, so
+			// without this it swallows clicks aimed at whatever sits under it —
+			// including the sticky footer ad this file deliberately leaves visible
+			// in that state.
+			pointer-events: none;
 		}
 
 		&__content {
