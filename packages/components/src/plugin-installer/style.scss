@@ -35,17 +35,16 @@
 	}
 
 	&.newspack-plugin-installer__status-active {
-		/* stylelint-disable-next-line plugin-wpds/no-unknown-ds-tokens -- the plugin's token list lags the prebuilt design-tokens.css names. */
-		box-shadow: inset 4px 0 0 var( --wpds-color-stroke-surface-success-strong, #{wp-colors.$alert-green} );
+		box-shadow: inset 4px 0 0 var( --wpds-color-stroke-surface-success-strong, #008030 );
 	}
 
 	&.newspack-plugin-installer__status-error {
-		box-shadow: inset 4px 0 0 wp-colors.$alert-red;
+		box-shadow: inset 4px 0 0 var( --wpds-color-stroke-surface-error-strong, #{wp-colors.$alert-red} );
 	}
 
 	&.newspack-plugin-installer__status-installing,
 	&.newspack-plugin-installer__status-none {
-		box-shadow: inset 4px 0 0 wp-colors.$gray-100;
+		box-shadow: inset 4px 0 0 var( --wpds-color-stroke-surface-neutral-weak, #{wp-colors.$gray-100} );
 	}
 
 	// Is Small
