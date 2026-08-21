@@ -403,7 +403,9 @@ const CardSortableList = ( {
 												<>
 													<h3>
 														{ item.title }
-														{ item.badge && <Badge intent={ item.badge.intent }>{ item.badge.label }</Badge> }
+														{ item.badge?.label && (
+															<Badge intent={ item.badge.intent ?? 'none' }>{ item.badge.label }</Badge>
+														) }
 													</h3>
 													{ item.description && <p>{ item.description }</p> }
 												</>

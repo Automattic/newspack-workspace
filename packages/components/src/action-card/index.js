@@ -78,6 +78,11 @@ const ActionCard = ( {
 	dragWrapperRef,
 	onDragCallback,
 } ) => {
+	// A badge with no label paints an empty pill, since the library Badge styles its
+	// wrapper rather than its text. Callers derive labels from data that can be absent
+	// (a gateway with no connection status, an unmapped placement), so drop those here
+	// rather than asking every caller to guard its own array.
+	const visibleBadges = ( badges || [] ).filter( badge => badge?.label );
 	const [ expanded, setExpanded ] = useState( Boolean( isExpanded ) );
 	const [ dragging, setDragging ] = useState( false );
 	const [ targetIndex, setTargetIndex ] = useState( null );
@@ -165,12 +170,11 @@ const ActionCard = ( {
 								) }
 								{ ! titleLink && ! expandable && title }
 							</span>
-							{ badges?.length > 0 &&
-								badges.map( ( { label, intent }, i ) => (
-									<Badge key={ `badge-${ i }` } intent={ intent ?? 'none' }>
-										{ label }
-									</Badge>
-								) ) }
+							{ visibleBadges.map( ( { label, intent }, i ) => (
+								<Badge key={ `badge-${ i }` } intent={ intent ?? 'none' }>
+									{ label }
+								</Badge>
+							) ) }
 						</HeadingTag>
 						{ description && (
 							<p>

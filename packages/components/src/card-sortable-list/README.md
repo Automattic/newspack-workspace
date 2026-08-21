@@ -16,7 +16,7 @@ A drag-and-drop sortable list of cards. Each item displays a title and a status 
 |-------|------|-------------|
 | `id` | `string` \| `number` | Unique identifier for the item. Used as the React `key`. |
 | `title` | `string` | Label rendered in the card header. |
-| `badge` | `{ label: string; intent?: BadgeIntent }` | Status badge for the row. Omit it to render no badge. See [`BadgeIntent`](../types.ts) for the available intents. |
+| `badge` | `{ label: string; intent?: BadgeIntent }` | Status badge for the row. Omit it, or leave `label` empty, to render no badge. `intent` defaults to `none`. See [`BadgeIntent`](../types.ts) for the available intents. |
 
 ## Usage
 

@@ -111,7 +111,7 @@ const SectionHeader = ( {
 			<div className="newspack-section-header__title-container">
 				<HeadingTag className="newspack-section-header__title">
 					{ title }
-					{ badges?.length ? badges.map( renderBadge ) : null }
+					{ ( badges || [] ).filter( badge => badge?.label ).map( renderBadge ) }
 				</HeadingTag>
 				{ /* Secondary action before the overflow menu, so a promoted link reads as an action rather than sitting to the right of the kebab. */ }
 				{ secondaryAction && (

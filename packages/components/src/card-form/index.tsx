@@ -108,7 +108,7 @@ const CardForm = ( { title, description, badge, actions, isOpen = false, onReque
 							{ description && <p className="newspack-card-form__description">{ description }</p> }
 						</VStack>
 						<HStack spacing={ 2 } expanded={ false }>
-							{ badge && <Badge intent={ badge.intent ?? 'stable' }>{ badge.label }</Badge> }
+							{ badge?.label && <Badge intent={ badge.intent ?? 'stable' }>{ badge.label }</Badge> }
 							{ actions }
 						</HStack>
 					</HStack>
