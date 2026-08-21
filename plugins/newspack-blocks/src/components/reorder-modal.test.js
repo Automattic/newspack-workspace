@@ -4,9 +4,20 @@
 import { createEvent, fireEvent, render, screen } from '@testing-library/react';
 
 /**
+ * WordPress dependencies
+ */
+import { speak } from '@wordpress/a11y';
+
+/**
  * Internal dependencies
  */
 import ReorderModal, { findOverlay, moveItem } from './reorder-modal';
+
+jest.mock( '@wordpress/a11y', () => ( { speak: jest.fn() } ) );
+
+beforeEach( () => {
+	speak.mockClear();
+} );
 
 describe( 'moveItem', () => {
 	it( 'moves an item down', () => {
@@ -141,6 +152,20 @@ describe( 'ReorderModal', () => {
 		fireEvent.click( await screen.findByLabelText( 'Move Up: Beta' ) );
 		expect( screen.getByLabelText( 'Move Up: Beta' ) ).toHaveAttribute( 'aria-disabled', 'true' );
 		expect( document.activeElement ).toBe( screen.getByLabelText( 'Move Down: Beta' ) );
+	} );
+
+	it( 'names the loading state and announces the list once it arrives', async () => {
+		renderModal();
+		expect( screen.getByText( 'Loading content…' ) ).toBeInTheDocument();
+		await screen.findByText( 'Alpha' );
+		expect( screen.queryByText( 'Loading content…' ) ).not.toBeInTheDocument();
+		expect( speak ).toHaveBeenCalledWith( '3 items ready to reorder.' );
+	} );
+
+	it( 'names the row it moved, not just the position', async () => {
+		renderModal();
+		fireEvent.click( await screen.findByLabelText( 'Move Up: Gamma' ) );
+		expect( speak ).toHaveBeenCalledWith( 'Gamma moved to position 2 of 3.' );
 	} );
 
 	it( 'saves the reordered IDs', async () => {

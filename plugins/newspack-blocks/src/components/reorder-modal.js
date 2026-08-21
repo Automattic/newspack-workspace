@@ -6,7 +6,7 @@ import classnames from 'classnames';
 /**
  * WordPress dependencies
  */
-import { __, sprintf } from '@wordpress/i18n';
+import { __, _n, sprintf } from '@wordpress/i18n';
 import { speak } from '@wordpress/a11y';
 import { useCallback, useEffect, useRef, useState } from '@wordpress/element';
 import {
@@ -96,7 +96,15 @@ const ReorderModal = ( { title, ids, fetchItems, onSave, onClose } ) => {
 				results.forEach( ( { value, label } ) => {
 					labels[ value ] = label;
 				} );
-				setItems( withLabels( labels ) );
+				const loaded = withLabels( labels );
+				setItems( loaded );
+				speak(
+					sprintf(
+						/* translators: %d: number of items in the list. */
+						_n( '%d item ready to reorder.', '%d items ready to reorder.', loaded.length, 'newspack-blocks' ),
+						loaded.length
+					)
+				);
 			} )
 			.catch( error => {
 				// eslint-disable-next-line no-console
@@ -143,8 +151,9 @@ const ReorderModal = ( { title, ids, fetchItems, onSave, onClose } ) => {
 		setItems( next );
 		speak(
 			sprintf(
-				/* translators: 1: new position of the moved item. 2: total number of items. */
-				__( 'Moved to position %1$d of %2$d.', 'newspack-blocks' ),
+				/* translators: 1: title of the moved item. 2: its new position. 3: total number of items. */
+				__( '%1$s moved to position %2$d of %3$d.', 'newspack-blocks' ),
+				items[ from ].label,
 				to + 1,
 				items.length
 			)
@@ -250,6 +259,7 @@ const ReorderModal = ( { title, ids, fetchItems, onSave, onClose } ) => {
 					{ ! items && (
 						<div className="newspack-blocks-reorder-modal__loading">
 							<Spinner />
+							<span className="screen-reader-text">{ __( 'Loading content…', 'newspack-blocks' ) }</span>
 						</div>
 					) }
 					{ items && hasFetchError && (
