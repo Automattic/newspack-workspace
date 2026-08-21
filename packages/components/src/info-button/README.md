@@ -17,8 +17,9 @@ There is nothing separate to import.
 
 **Supplementary context only.** Anything a reader needs in order to use the
 control belongs in visible help text beside it, not behind an affordance they
-have to find first. The design system makes the same point: content that matters
-to understanding an element should not be hidden.
+have to find first. The design system stops short of this: it only rules out
+hiding an important description behind a *tooltip*, and offers a popover as the
+alternative when space is tight. The stricter line is ours, not the library's.
 
 ## Props
 
@@ -74,6 +75,13 @@ The consequences, all of which a tooltip would lose:
 - The popup carries the context on its own `aria-describedby` rather than
   folding it into the button's accessible name, so the trigger keeps a short
   name of its own.
+
+The library marks `Popover` "use with caution" next to `@wordpress/components`,
+pending a review of overlay compatibility. The portal answers that by opting into
+the shared overlay slot, a body-level container the library reserves above the
+older z-index map, so the popup clears a core popover instead of tying with it.
+Outside a WordPress screen the slot is absent and the stylesheet's own z-index
+applies.
 
 `Popover.Popup` is rendered with `variant="unstyled"`, which skips the design
 system's own light card surface so the stylesheet can reproduce a tooltip's

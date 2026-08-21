@@ -221,6 +221,9 @@ import InfoButton from '../info-button';
 import { Grid, InfoButton } from '../';
 ```
 
+Most of the package still reaches the barrel. Treat this as the bar for new and
+edited modules rather than a description of how things stand.
+
 ### Router Import Pattern
 
 **Always use the proxied router** - Never import `react-router-dom` directly in source code:
