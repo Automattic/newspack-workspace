@@ -36,18 +36,6 @@
 		font-weight: normal;
 	}
 
-	&__status {
-		align-items: center;
-		display: inline-flex;
-		gap: wp-vars.$grid-unit-10;
-	}
-
-	&__status-icon {
-		fill: currentcolor;
-		flex-shrink: 0;
-		margin: -4px;
-	}
-
 	&__preview {
 		border-collapse: collapse;
 		width: 100%;
