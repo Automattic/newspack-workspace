@@ -194,6 +194,18 @@ describe( 'StatCard.Value', () => {
 		expect( container.querySelector( '.newspack-stat-card__value' ) ).toHaveClass( 'consumer-value' );
 	} );
 
+	// The glyph exists to tell a missing figure from a zero, so a zero has to survive it.
+	it( 'renders a zero as the figure it is', () => {
+		const { container } = render(
+			<StatCard.Root>
+				<StatCard.Value value={ 0 } />
+			</StatCard.Root>
+		);
+		expect( screen.getByText( '0' ) ).toBeInTheDocument();
+		expect( screen.queryByText( STAT_CARD_NULL_GLYPH ) ).not.toBeInTheDocument();
+		expect( container.querySelector( '[data-visually-hidden]' ) ).not.toBeInTheDocument();
+	} );
+
 	it( 'renders the null glyph with an accessible name for a null value', () => {
 		render(
 			<StatCard.Root>
