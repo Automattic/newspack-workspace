@@ -17,7 +17,7 @@ import apiFetch from '@wordpress/api-fetch';
 /**
  * Internal dependencies
  */
-import SubscriptionProductsList from './list';
+import SubscriptionProductsList, { AVAILABILITY_INTENT } from './list';
 
 jest.mock( '@wordpress/api-fetch', () => jest.fn() );
 
@@ -153,5 +153,23 @@ describe( 'the Plans list header count', () => {
 		expect( publishedSection().label ).toBe( 'Subscriptions' );
 		expect( document.querySelector( '.components-notice.is-error' ) ).toHaveTextContent( 'Could not load subscription products.' );
 		expect( screen.getByRole( 'button', { name: 'Retry' } ) ).toBeInTheDocument();
+	} );
+} );
+
+describe( 'AVAILABILITY_INTENT', () => {
+	it( 'covers every availability tier the endpoint can report', () => {
+		expect( Object.keys( AVAILABILITY_INTENT ).sort() ).toEqual( [ 'free', 'private', 'public' ] );
+	} );
+
+	it( 'keeps Public quiet and gives Private and Free their own colour', () => {
+		// Public is the normal state, so it stays neutral. The other two have to read
+		// apart from it and from each other at a glance, which a second neutral would not.
+		expect( AVAILABILITY_INTENT.public ).toBe( 'none' );
+		const intents = Object.values( AVAILABILITY_INTENT );
+		expect( new Set( intents ).size ).toBe( intents.length );
+	} );
+
+	it( 'reads Private as context rather than a problem', () => {
+		expect( AVAILABILITY_INTENT.private ).toBe( 'informational' );
 	} );
 } );

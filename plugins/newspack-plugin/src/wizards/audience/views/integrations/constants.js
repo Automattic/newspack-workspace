@@ -17,7 +17,10 @@ export const STATUS_MAP = {
 	failed: { label: __( 'Failed', 'newspack-plugin' ), intent: 'high' },
 	pending: { label: __( 'Pending', 'newspack-plugin' ), intent: 'low' },
 	'in-progress': { label: __( 'In progress', 'newspack-plugin' ), intent: 'informational' },
-	canceled: { label: __( 'Canceled', 'newspack-plugin' ), intent: 'high' },
+	// A cancelled job is a deliberate stop, not a failure, so it must not share `failed`'s
+	// intent: the column offers them as separate filters and they have to read apart. The
+	// design system files terminal, non-actionable states like this under `none`.
+	canceled: { label: __( 'Canceled', 'newspack-plugin' ), intent: 'none' },
 };
 
 export function formatTimestamp( gmt ) {

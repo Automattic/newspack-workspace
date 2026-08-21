@@ -52,6 +52,11 @@ const inScope = ( item: SubscriptionProduct, scope: Scope ): boolean => {
 	return scope === 'donations' ? item.is_donation : ! item.is_donation;
 };
 
+// Availability is a configuration fact, not a problem, so Private is not a warning. Private
+// takes the `informational` the design system documents for it; Free takes `low` ("worth
+// noticing") so the three stay distinct. Public is the default state and stays quiet.
+export const AVAILABILITY_INTENT = { free: 'low', private: 'informational', public: 'none' } as const;
+
 // Breadcrumb leaf per scope. Kept in step with the tab labels in index.tsx.
 const SCOPE_LABELS: Record< Scope, string > = {
 	subscriptions: __( 'Subscriptions', 'newspack-plugin' ),
@@ -291,13 +296,7 @@ export default function SubscriptionProductsList( { scope = 'subscriptions' }: {
 				id: 'availability',
 				label: __( 'Availability', 'newspack-plugin' ),
 				getValue: ( { item } ) => item.availability,
-				render: ( { item } ) => {
-					// Availability is a configuration fact, not a problem, so Private is not a
-					// warning. The design system maps Private to informational, but `free` already
-					// holds that intent in this column, so Private takes `draft` to stay distinct.
-					const intents = { free: 'informational', private: 'draft', public: 'none' } as const;
-					return <Badge intent={ intents[ item.availability ] }>{ item.availability_label }</Badge>;
-				},
+				render: ( { item } ) => <Badge intent={ AVAILABILITY_INTENT[ item.availability ] ?? 'none' }>{ item.availability_label }</Badge>,
 				elements: [
 					{ value: 'public', label: __( 'Public', 'newspack-plugin' ) },
 					{ value: 'private', label: __( 'Private', 'newspack-plugin' ) },

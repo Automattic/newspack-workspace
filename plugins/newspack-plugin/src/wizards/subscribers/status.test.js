@@ -1,7 +1,7 @@
 /**
  * Internal dependencies
  */
-import { displayStatuses, STATUS_LABELS } from './status';
+import { displayStatuses, STATUS_BADGE_INTENT, STATUS_LABELS } from './status';
 
 // The status-reduction rule these assertions pin is documented on the PHP side,
 // in Subscribers_Wizard::reduced_status(); the endpoint's `status` filter
@@ -40,5 +40,28 @@ describe( 'displayStatuses', () => {
 		// label for it — an unlabeled badge renders empty.
 		expect( Object.keys( STATUS_LABELS ) ).toEqual( [ 'active', 'pending', 'on-hold', 'cancelled' ] );
 		Object.values( STATUS_LABELS ).forEach( label => expect( label ).toBeTruthy() );
+	} );
+} );
+
+describe( 'STATUS_BADGE_INTENT', () => {
+	it( 'gives every labelled status an intent', () => {
+		expect( Object.keys( STATUS_BADGE_INTENT ) ).toEqual( Object.keys( STATUS_LABELS ) );
+	} );
+
+	it( 'reads pending as queued work rather than an idle state', () => {
+		// `low` is the design system's "worth noticing, non-urgent"; `informational`
+		// would read as settled context, which a payment still to clear is not.
+		expect( STATUS_BADGE_INTENT.pending ).toBe( 'low' );
+	} );
+
+	it( 'separates a live subscription from one needing attention and one gone', () => {
+		expect( STATUS_BADGE_INTENT.active ).toBe( 'stable' );
+		expect( STATUS_BADGE_INTENT[ 'on-hold' ] ).toBe( 'medium' );
+		expect( STATUS_BADGE_INTENT.cancelled ).toBe( 'high' );
+	} );
+
+	it( 'gives no two statuses the same intent', () => {
+		const intents = Object.values( STATUS_BADGE_INTENT );
+		expect( new Set( intents ).size ).toBe( intents.length );
 	} );
 } );
