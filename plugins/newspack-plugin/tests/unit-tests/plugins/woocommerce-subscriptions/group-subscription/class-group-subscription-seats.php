@@ -330,6 +330,44 @@ class Test_Group_Subscription_Seats extends WP_UnitTestCase {
 	}
 
 	/**
+	 * A per-seat product is switchable whatever WooCommerce Subscriptions' own
+	 * product-type rule says: changing seats is a quantity switch, and WCS counts
+	 * only variable and grouped products as switchable, so a simple per-seat plan
+	 * would otherwise have a "Change seats" button that goes nowhere.
+	 */
+	public function test_per_seat_product_is_switchable() {
+		$per_seat = $this->make_per_seat_product( 937, 2, 5 );
+
+		$this->assertTrue( Group_Subscription_Seats::allow_per_seat_switching( false, $per_seat ) );
+	}
+
+	/**
+	 * WooCommerce Subscriptions resolves a variation to its parent before
+	 * filtering and passes the variation alongside, and per-seat meta lives on
+	 * the variation for a tiered plan.
+	 */
+	public function test_per_seat_variation_is_switchable() {
+		$parent    = wc_create_mock_product( [ 'id' => 938 ] );
+		$variation = $this->make_per_seat_product( 939, 2, 5 );
+
+		$this->assertTrue( Group_Subscription_Seats::allow_per_seat_switching( false, $parent, $variation ) );
+	}
+
+	/**
+	 * Every other product keeps whatever WooCommerce Subscriptions decided, in
+	 * both directions: this answers for per-seat plans alone.
+	 */
+	public function test_switchability_of_other_products_is_untouched() {
+		$flat  = $this->make_flat_product( 940 );
+		$plain = wc_create_mock_product( [ 'id' => 941 ] );
+
+		$this->assertFalse( Group_Subscription_Seats::allow_per_seat_switching( false, $flat ) );
+		$this->assertFalse( Group_Subscription_Seats::allow_per_seat_switching( false, $plain ) );
+		$this->assertFalse( Group_Subscription_Seats::allow_per_seat_switching( false, null ) );
+		$this->assertTrue( Group_Subscription_Seats::allow_per_seat_switching( true, $flat ) );
+	}
+
+	/**
 	 * Outside the single-product page — the cart table, for instance, which
 	 * renders one quantity input per cart row on one page — the filter must
 	 * leave WooCommerce's own args untouched. Overriding them there would

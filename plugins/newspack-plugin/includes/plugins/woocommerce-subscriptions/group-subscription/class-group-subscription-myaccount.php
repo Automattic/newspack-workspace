@@ -312,6 +312,11 @@ class Group_Subscription_MyAccount {
 	 * subscription is still active. A flat-priced group sells no seats at all, and
 	 * a subscription with no line item has nothing for the switch to rewrite.
 	 *
+	 * The last word belongs to WooCommerce Subscriptions, which refuses a switch
+	 * for reasons this class knows nothing about — a payment gateway that cannot
+	 * change the billed amount, a subscription with no parent order. A "Change
+	 * seats" button it would refuse is a button that goes nowhere.
+	 *
 	 * @param int|\WC_Subscription $subscription Subscription or ID.
 	 * @param int                  $user_id      User ID to check.
 	 *
@@ -332,7 +337,35 @@ class Group_Subscription_MyAccount {
 		if ( ! Group_Subscription_Settings::is_per_seat( $subscription ) ) {
 			return false;
 		}
-		return (bool) Group_Subscription_Settings::get_seat_line_item( $subscription );
+		$seat_item = Group_Subscription_Settings::get_seat_line_item( $subscription );
+		if ( ! $seat_item ) {
+			return false;
+		}
+		return self::is_item_switchable( $seat_item, $subscription, $user_id );
+	}
+
+	/**
+	 * Whether WooCommerce Subscriptions would let this user switch this line item.
+	 *
+	 * `can_item_be_switched_by_user()` is the same test WooCommerce Subscriptions
+	 * applies to its own switch link, so asking it is what keeps our link and
+	 * theirs in agreement. Older releases without it fall back to the product-type
+	 * gate that decides most of its answer.
+	 *
+	 * @param \WC_Order_Item_Product $item         The subscription's seat line item.
+	 * @param \WC_Subscription       $subscription The subscription.
+	 * @param int                    $user_id      User the switch would belong to.
+	 *
+	 * @return bool
+	 */
+	private static function is_item_switchable( $item, $subscription, $user_id ): bool {
+		if ( method_exists( '\WC_Subscriptions_Switcher', 'can_item_be_switched_by_user' ) ) {
+			return (bool) \WC_Subscriptions_Switcher::can_item_be_switched_by_user( $item, $subscription, $user_id );
+		}
+		if ( function_exists( 'wcs_is_product_switchable_type' ) ) {
+			return (bool) wcs_is_product_switchable_type( wcs_get_canonical_product_id( $item ) );
+		}
+		return true;
 	}
 
 	/**

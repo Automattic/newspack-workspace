@@ -59,6 +59,48 @@ class Group_Subscription_Seats {
 		// Seats bought mid-cycle have to be paid for from the day they are added,
 		// which is WooCommerce Subscriptions' recurring-price proration.
 		\add_filter( 'pre_option_woocommerce_subscriptions_apportion_recurring_price', [ __CLASS__, 'force_recurring_proration' ] );
+
+		// A seat change is a WooCommerce Subscriptions quantity switch, and WCS
+		// only counts variable and grouped products as switchable. Without this a
+		// simple per-seat product could never change its seat count.
+		\add_filter( 'wcs_is_product_switchable', [ __CLASS__, 'allow_per_seat_switching' ], 10, 3 );
+	}
+
+	/**
+	 * Let WooCommerce Subscriptions switch a per-seat product whatever its type.
+	 *
+	 * Changing seats is a quantity switch on the plan the reader already has, and
+	 * WooCommerce Subscriptions runs the whole machinery for it — the proration
+	 * calculator, the switch order, `complete_subscription_switches()` — off one
+	 * gate: `wcs_is_product_switchable_type()`. That gate answers by product type
+	 * and the store's own switching setting, so a simple subscription sold per
+	 * seat is refused, its switch link goes nowhere, and the seat count can never
+	 * change. Saying yes here is the whole fix: nothing else in the switch flow
+	 * treats a simple product differently, and a quantity-only switch is already
+	 * a switch WooCommerce Subscriptions accepts.
+	 *
+	 * Scoped to per-seat products, so every other product — and the publisher's
+	 * switching setting for it — is left exactly as WooCommerce Subscriptions
+	 * decided, in both directions.
+	 *
+	 * @param bool             $is_switchable Whether WooCommerce Subscriptions considers the product switchable.
+	 * @param \WC_Product|null $product       The product, or its parent when a variation was passed in.
+	 * @param \WC_Product|null $variation     The variation, when one was passed in.
+	 *
+	 * @return bool Whether the product is switchable.
+	 */
+	public static function allow_per_seat_switching( $is_switchable, $product, $variation = null ) {
+		if ( $is_switchable ) {
+			return $is_switchable;
+		}
+		// WooCommerce Subscriptions resolves a variation to its parent before
+		// filtering and hands the variation over separately, and per-seat meta
+		// lives on the variation for a tiered plan.
+		$subject = $variation ? $variation : $product;
+		if ( ! $subject ) {
+			return $is_switchable;
+		}
+		return Group_Subscription_Settings::is_per_seat( $subject ) ? true : $is_switchable;
 	}
 
 	/**

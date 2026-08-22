@@ -172,6 +172,9 @@ class Subscriptions_Tiers {
 				continue;
 			}
 			$product = wc_get_product( $switch_data['item']['product_id'] );
+			// Reset per iteration: a product that resolves to no parent must not
+			// inherit the previous link's modal.
+			$parent_product  = null;
 			$parent_products = \WC_Subscriptions_Product::get_visible_grouped_parent_product_ids( $product );
 			if ( ! empty( $parent_products ) ) {
 				$parent_product = wc_get_product( reset( $parent_products ) );
@@ -179,11 +182,18 @@ class Subscriptions_Tiers {
 				$parent_product = $product;
 			} elseif ( $product->get_parent_id() ) {
 				$parent_product = wc_get_product( $product->get_parent_id() );
+			} elseif ( 'subscription' === $product->get_type() ) {
+				// A simple subscription stands alone — it is the only tier it offers,
+				// and render_form() renders a single-tier form for it. Reaching here
+				// means something declared it switchable (a per-seat group plan does),
+				// so it gets the same modal every other switch link gets.
+				$parent_product = $product;
 			}
 			if ( ! $parent_product ) {
 				continue;
 			}
 			$label = __( 'Change subscription', 'newspack-plugin' );
+			$title = null; // Reset per iteration, so a donation's title cannot carry to the next link.
 			if ( Donations::is_donation_product( $parent_product->get_id() ) ) {
 				$title = __( 'Edit donation', 'newspack-plugin' );
 				$label = __( 'Confirm donation', 'newspack-plugin' );

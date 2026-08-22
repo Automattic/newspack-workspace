@@ -84,9 +84,10 @@ class Test_Group_Subscription_MyAccount extends WP_UnitTestCase {
 	 * Tear down: reset globals and subscriptions DB.
 	 */
 	public function tear_down() {
-		global $subscriptions_database, $products_database;
-		$subscriptions_database = [];
-		$products_database      = [];
+		global $subscriptions_database, $products_database, $wcs_mock_item_switchable;
+		$subscriptions_database   = [];
+		$products_database        = [];
+		$wcs_mock_item_switchable = null;
 
 		unset( $GLOBALS['newspack_test_is_account_page'] );
 
@@ -830,6 +831,22 @@ class Test_Group_Subscription_MyAccount extends WP_UnitTestCase {
 	public function test_can_change_seats_false_without_seat_line_item() {
 		$owner_id = $this->create_reader_user();
 		$sub      = $this->create_priced_group_subscription( $owner_id, Group_Subscription_Settings::PRICING_MODE_PER_SEAT, false );
+
+		$this->assertFalse( Group_Subscription_MyAccount::can_change_seats( $sub, $owner_id ) );
+	}
+
+	/**
+	 * WooCommerce Subscriptions has the last word. When it would refuse the
+	 * switch — switching turned off, a gateway that can't change the billed
+	 * amount — the button must not be offered, because it could only lead to a
+	 * dead end.
+	 */
+	public function test_can_change_seats_false_when_wcs_refuses_the_switch() {
+		global $wcs_mock_item_switchable;
+		$owner_id = $this->create_reader_user();
+		$sub      = $this->create_priced_group_subscription( $owner_id, Group_Subscription_Settings::PRICING_MODE_PER_SEAT );
+
+		$wcs_mock_item_switchable = false;
 
 		$this->assertFalse( Group_Subscription_MyAccount::can_change_seats( $sub, $owner_id ) );
 	}
