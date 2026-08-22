@@ -118,16 +118,15 @@ class Newsletters_List_REST {
 	 */
 	public static function align_status_filter_with_scheduled_meta( $args, $request ) {
 		$values = self::parse_status_values( $request->get_param( 'status' ) );
-		// A legacy `auto-draft` selection resolves to the Draft bucket, as the
-		// list's own deep links do. Left as-is it would match no bucket, and the
-		// query would run unfiltered against `post_status = auto-draft`.
-		if ( in_array( 'auto-draft', $values, true ) ) {
-			$values   = array_diff( $values, [ 'auto-draft' ] );
-			$values[] = 'draft';
-			$values   = array_values( array_unique( $values ) );
-		}
 		if ( empty( $values ) ) {
 			return $args;
+		}
+		$values = array_values( array_diff( $values, [ 'auto-draft' ] ) );
+		if ( empty( $values ) ) {
+			// Asked for auto-drafts and nothing else, so answer with nothing.
+			// Returning here instead would leave the posts controller's
+			// `post_status = auto-draft` running with no bucket clause.
+			return self::install_bucket_filter( $args, [ '1 = 0' ], '_newspack_nl_bucket_token' );
 		}
 
 		$wants_sent      = ! empty( array_intersect( $values, [ 'publish', 'private' ] ) );
@@ -146,10 +145,7 @@ class Newsletters_List_REST {
 		if ( $wants_scheduled ) {
 			$widened[] = 'future';
 		}
-		$widened = array_values( array_unique( $widened ) );
-		if ( $widened !== $values ) {
-			$args['post_status'] = $widened;
-		}
+		$args['post_status'] = array_values( array_unique( $widened ) );
 
 		global $wpdb;
 		$bucket_clauses = [];
