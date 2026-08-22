@@ -33,7 +33,17 @@ test_standalone_repo() {
         echo "No package.json in $dir; nothing to test" >&2
         return 0
     fi
-    if ! grep -q '"test"[[:space:]]*:' "$dir/package.json" 2>/dev/null; then
+    # Read scripts.test through node rather than grepping the file: a *dependency*
+    # named "test" matches the same `"test":` shape and would send us on to
+    # `run test`, which then fails with "Missing script". Failing to read the file
+    # at all is kept distinct from finding no script — an unreadable package.json
+    # reported as "nothing to test" would skip a repo's whole suite and still exit 0.
+    local has_test
+    if ! has_test=$(node -p "require('$dir/package.json').scripts?.test ?? ''" 2>/dev/null); then
+        echo "Could not read $(basename "$dir")/package.json" >&2
+        return 1
+    fi
+    if [ -z "$has_test" ]; then
         echo "No \"test\" script in $(basename "$dir")/package.json; nothing to test" >&2
         return 0
     fi
