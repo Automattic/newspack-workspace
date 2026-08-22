@@ -484,10 +484,13 @@ import { domReady, onCheckoutPlaceOrderProcessing } from './utils';
 				/**
 				 * Handle quantity form submission.
 				 *
-				 * The server empties the cart and re-adds the product at the new quantity,
-				 * so the order review has to be refreshed either way: on success it shows
-				 * the new total, and on a rejected quantity it must not keep showing a
-				 * total the cart never accepted.
+				 * On success the order review is refreshed to show the new total, and the
+				 * `#modal-checkout-product-details` data carrier is rewritten from the
+				 * response — `update_checkout` only replaces the review-order table and
+				 * payment box, and the carrier sits outside both.
+				 *
+				 * On failure the server has already put the original line item back, so
+				 * the review still matches the cart and must be left alone.
 				 *
 				 * @param {Event} ev
 				 */
@@ -519,11 +522,14 @@ import { domReady, onCheckoutPlaceOrderProcessing } from './utils';
 							);
 							if ( success ) {
 								$quantity.find( 'h3, input[name="quantity"]' ).removeClass( 'newspack-ui__field-error' );
+								if ( res.checkout_data ) {
+									$( '#modal-checkout-product-details' ).attr( 'data-checkout', JSON.stringify( res.checkout_data ) );
+								}
+								$( document.body ).trigger( 'update_checkout', { update_shipping_method: false } );
 							} else {
 								input.focus();
 								$quantity.find( 'h3, input[name="quantity"]' ).addClass( 'newspack-ui__field-error' );
 							}
-							$( document.body ).trigger( 'update_checkout', { update_shipping_method: false } );
 						},
 						complete: () => {
 							unblockForm( $quantity );

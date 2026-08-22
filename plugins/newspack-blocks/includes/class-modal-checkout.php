@@ -799,6 +799,94 @@ final class Modal_Checkout {
 	}
 
 	/**
+	 * Re-add the cart's product at a new quantity, preserving the line item's data.
+	 *
+	 * WC_Cart offers no "change this quantity and re-run the add-to-cart guards"
+	 * path, so the item is emptied and re-added. That makes the rejected case
+	 * dangerous: an add_to_cart() a guard turned down would leave the cart empty,
+	 * and WooCommerce answers update_order_review on an empty cart by replacing
+	 * the whole checkout form with a "your session has expired" notice
+	 * (WC_AJAX::update_order_review_expired()). So a rejection puts the reader's
+	 * original line item back before it reports anything.
+	 *
+	 * Separate from the AJAX handler so it can be tested: filter_input( INPUT_POST )
+	 * reads the real request body, which a PHPUnit process does not have.
+	 *
+	 * @param int $product_id Product ID of the cart's line item.
+	 * @param int $quantity   Requested quantity.
+	 *
+	 * @return string|\WP_Error New cart item key, or a WP_Error carrying the message to show the reader.
+	 */
+	public static function update_cart_quantity( $product_id, $quantity ) {
+		$cart           = \WC()->cart;
+		$cart_item_data = self::amend_cart_item_data( [ 'referer' => wp_get_referer() ] );
+
+		$original_quantity = 0;
+		foreach ( $cart->get_cart() as $cart_item ) {
+			if ( (int) $cart_item['product_id'] !== (int) $product_id && (int) $cart_item['variation_id'] !== (int) $product_id ) {
+				continue;
+			}
+			$original_quantity = max( 1, (int) $cart_item['quantity'] );
+			foreach ( self::PRESERVED_CART_ITEM_KEYS as $key ) {
+				if ( isset( $cart_item[ $key ] ) ) {
+					$cart_item_data[ $key ] = $cart_item[ $key ];
+				}
+			}
+		}
+
+		// Nothing to change, and emptying the cart for a product that was never in
+		// it would destroy whatever the reader is actually buying.
+		if ( ! $original_quantity ) {
+			return new \WP_Error(
+				'newspack_blocks_quantity_not_in_cart',
+				__( 'This product is not in the cart.', 'newspack-blocks' )
+			);
+		}
+
+		$coupons = $cart->get_applied_coupons();
+
+		$cart->empty_cart();
+		$cart_item_key = $cart->add_to_cart( $product_id, $quantity, 0, [], $cart_item_data );
+
+		if ( ! $cart_item_key ) {
+			// Read the rejection before restoring, so the restore's own notices
+			// cannot be mistaken for it.
+			$error_notices = \wc_get_notices( 'error' );
+			\wc_clear_notices();
+			$cart->add_to_cart( $product_id, $original_quantity, 0, [], $cart_item_data );
+			self::reapply_coupons( $coupons );
+
+			// The consumer appends this message as an HTML string, and unlike
+			// template-rendered notices it never passes through kses on output — so
+			// filter any third-party notice content here.
+			return new \WP_Error(
+				'newspack_blocks_quantity_rejected',
+				! empty( $error_notices[0]['notice'] )
+					? wp_kses_post( $error_notices[0]['notice'] )
+					: __( 'This product could not be added to the cart.', 'newspack-blocks' )
+			);
+		}
+
+		self::reapply_coupons( $coupons );
+
+		return $cart_item_key;
+	}
+
+	/**
+	 * Re-apply coupons to the cart after it has been emptied and rebuilt.
+	 *
+	 * @param string[] $coupons Coupon codes.
+	 */
+	private static function reapply_coupons( $coupons ) {
+		if ( empty( $coupons ) ) {
+			return;
+		}
+		foreach ( $coupons as $coupon ) {
+			\WC()->cart->apply_coupon( $coupon );
+		}
+	}
+
+	/**
 	 * Process an in-modal quantity change: re-add the cart's single product at
 	 * the requested quantity.
 	 */
@@ -824,53 +912,28 @@ final class Modal_Checkout {
 		}
 
 		// The real bounds check belongs to whoever hooked the field filter, and it
-		// runs inside add_to_cart() below. This only keeps a 0 or negative from
-		// reaching the cart as a silent item removal.
+		// runs inside add_to_cart(). This only keeps a 0 or negative from reaching
+		// the cart as a silent item removal.
 		$quantity = max( 1, (int) $quantity );
 
-		$cart_item_data = self::amend_cart_item_data( [ 'referer' => wp_get_referer() ] );
+		$result = self::update_cart_quantity( (int) $product_id, $quantity );
 
-		foreach ( \WC()->cart->get_cart() as $cart_item ) {
-			if ( (int) $cart_item['product_id'] !== (int) $product_id && (int) $cart_item['variation_id'] !== (int) $product_id ) {
-				continue;
-			}
-			foreach ( self::PRESERVED_CART_ITEM_KEYS as $key ) {
-				if ( isset( $cart_item[ $key ] ) ) {
-					$cart_item_data[ $key ] = $cart_item[ $key ];
-				}
-			}
-		}
-
-		$coupons = \WC()->cart->get_applied_coupons();
-
-		\WC()->cart->empty_cart();
-		$cart_item_key = \WC()->cart->add_to_cart( $product_id, $quantity, 0, [], $cart_item_data );
-
-		// A rejected add (e.g. a seat-bounds guard) must not report success: surface
-		// the error notice the cart queued for it instead. The consumer appends this
-		// message as an HTML string, and unlike template-rendered notices it never
-		// passes through kses on output — so filter any third-party notice content here.
-		if ( ! $cart_item_key ) {
-			$error_notices = \wc_get_notices( 'error' );
-			\wc_clear_notices();
-			wp_send_json_error(
-				[
-					'message' => ! empty( $error_notices[0]['notice'] )
-						? wp_kses_post( $error_notices[0]['notice'] )
-						: __( 'This product could not be added to the cart.', 'newspack-blocks' ),
-				]
-			);
+		if ( is_wp_error( $result ) ) {
+			wp_send_json_error( [ 'message' => $result->get_error_message() ] );
 
 			wp_die();
 		}
 
-		if ( ! empty( $coupons ) ) {
-			foreach ( $coupons as $coupon ) {
-				\WC()->cart->apply_coupon( $coupon );
-			}
-		}
-
-		wp_send_json_success( [ 'message' => __( 'Seats updated.', 'newspack-blocks' ) ] );
+		wp_send_json_success(
+			[
+				'message'       => __( 'Seats updated.', 'newspack-blocks' ),
+				// update_order_review only returns the review-order table and payment-box
+				// fragments, so the #modal-checkout-product-details data carrier — which
+				// sits outside the checkout form and feeds the GA4 events — would keep
+				// reporting the page-load quantity. Hand the JS a fresh payload for it.
+				'checkout_data' => Checkout_Data::get_checkout_data( \WC()->cart ),
+			]
+		);
 
 		wp_die();
 	}
@@ -2690,10 +2753,11 @@ final class Modal_Checkout {
 		$quantity     = max( 1, (int) $cart_item['quantity'] );
 		?>
 		<form class="modal_checkout_quantity">
-			<h3><?php echo esc_html( $args['label'] ); ?></h3>
+			<?php // A single line item per modal, so one fixed input id cannot collide. ?>
+			<h3><label for="modal_checkout_quantity"><?php echo esc_html( $args['label'] ); ?></label></h3>
 			<input type="hidden" name="product_id" value="<?php echo esc_attr( $product->get_id() ); ?>" />
 			<p class="input-quantity">
-				<input type="number" name="quantity" step="1" min="<?php echo esc_attr( $args['min'] ); ?>" <?php echo $args['max'] > 0 ? 'max="' . esc_attr( $args['max'] ) . '"' : ''; ?> value="<?php echo esc_attr( $quantity ); ?>" onwheel="return false" />
+				<input type="number" id="modal_checkout_quantity" name="quantity" step="1" min="<?php echo esc_attr( $args['min'] ); ?>" <?php echo $args['max'] > 0 ? 'max="' . esc_attr( $args['max'] ) . '"' : ''; ?> value="<?php echo esc_attr( $quantity ); ?>" onwheel="return false" />
 				<button type="submit" class="<?php echo esc_attr( "{$class_prefix}__button {$class_prefix}__button--outline" ); ?>"><?php esc_html_e( 'Update', 'newspack-blocks' ); ?></button>
 			</p>
 			<p class="result <?php echo esc_attr( "{$class_prefix}__helper-text" ); ?>"><?php echo esc_html( $args['help'] ); ?></p>

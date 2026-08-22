@@ -213,6 +213,32 @@ if ( ! function_exists( 'wc_clear_notices' ) ) {
 	}
 }
 
+if ( ! function_exists( 'wc_get_notices' ) ) {
+	/**
+	 * Mock WooCommerce notice reading: return the recorded notices of one type in
+	 * WooCommerce's own shape, where each entry carries a `notice` key.
+	 *
+	 * @param string $notice_type Notice type.
+	 *
+	 * @return array
+	 */
+	function wc_get_notices( $notice_type = '' ) { // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedFunctionFound -- Mock WooCommerce global.
+		global $newspack_blocks_test_notices;
+		$notices = is_array( $newspack_blocks_test_notices ) ? $newspack_blocks_test_notices : [];
+		$matched = [];
+		foreach ( $notices as $notice ) {
+			if ( $notice_type && $notice['type'] !== $notice_type ) {
+				continue;
+			}
+			$matched[] = [
+				'notice' => $notice['message'],
+				'data'   => [],
+			];
+		}
+		return $matched;
+	}
+}
+
 if ( ! class_exists( 'WC_Coupon' ) ) {
 	/**
 	 * Minimal WooCommerce coupon stub carrying its code.
@@ -275,6 +301,136 @@ if ( ! class_exists( 'WC_Discounts' ) ) {
 				return true;
 			}
 			return new WP_Error( 'invalid_coupon', 'Invalid coupon.' );
+		}
+	}
+}
+
+// `WC_Cart` and `WC_Product` are stubbed by tests/test-modal-checkout-data.php,
+// which PHPUnit loads first (it sorts ahead of this file). Guarding the subclass
+// on the parent's existence keeps this file from fataling at load time if that
+// ever stops being true; the tests that need it skip instead.
+if ( class_exists( 'WC_Cart' ) && ! class_exists( 'Newspack_Blocks_Test_Mutable_Cart' ) ) {
+	/**
+	 * A cart double that actually mutates, for the empty-and-re-add round trip
+	 * Modal_Checkout::update_cart_quantity() performs. Extends the WC_Cart stub so
+	 * Checkout_Data::get_checkout_data()'s `instanceof \WC_Cart` branch is reached.
+	 */
+	class Newspack_Blocks_Test_Mutable_Cart extends WC_Cart {
+		/**
+		 * Cart contents, keyed by cart item key.
+		 *
+		 * @var array
+		 */
+		public $contents = [];
+
+		/**
+		 * Applied coupon codes.
+		 *
+		 * @var string[]
+		 */
+		public $applied = [];
+
+		/**
+		 * Quantities add_to_cart() should reject, as an add-to-cart guard would.
+		 *
+		 * @var int[]
+		 */
+		public $rejected_quantities = [];
+
+		/**
+		 * Counter behind the generated cart item keys.
+		 *
+		 * @var int
+		 */
+		private $key_count = 0;
+
+		/**
+		 * Constructor.
+		 *
+		 * @param array $contents Initial cart contents, keyed by cart item key.
+		 */
+		public function __construct( $contents = [] ) {
+			parent::__construct( $contents );
+			$this->contents = $contents;
+		}
+
+		/**
+		 * Get the cart contents.
+		 *
+		 * @return array
+		 */
+		public function get_cart() {
+			return $this->contents;
+		}
+
+		/**
+		 * Get a single cart item.
+		 *
+		 * @param string $key Cart item key.
+		 *
+		 * @return array|false
+		 */
+		public function get_cart_item( $key ) {
+			return isset( $this->contents[ $key ] ) ? $this->contents[ $key ] : false;
+		}
+
+		/**
+		 * Empty the cart.
+		 */
+		public function empty_cart() {
+			$this->contents = [];
+		}
+
+		/**
+		 * Add an item, or reject it the way a guard-thrown exception makes
+		 * WC_Cart::add_to_cart() do: queue an error notice and return false.
+		 *
+		 * @param int   $product_id     Product ID.
+		 * @param int   $quantity       Quantity.
+		 * @param int   $variation_id   Variation ID.
+		 * @param array $variation      Variation attributes.
+		 * @param array $cart_item_data Cart item data.
+		 *
+		 * @return string|false Cart item key, or false when rejected.
+		 */
+		public function add_to_cart( $product_id, $quantity = 1, $variation_id = 0, $variation = [], $cart_item_data = [] ) {
+			unset( $variation );
+			if ( in_array( (int) $quantity, $this->rejected_quantities, true ) ) {
+				wc_add_notice( 'Choose at least 2 seats.', 'error' );
+				return false;
+			}
+			$key                    = 'item_' . ++$this->key_count;
+			$this->contents[ $key ] = array_merge(
+				$cart_item_data,
+				[
+					'product_id'   => (int) $product_id,
+					'variation_id' => (int) $variation_id,
+					'quantity'     => (int) $quantity,
+					'data'         => new WC_Product( (int) $product_id, 'simple', [], '10', 'Product ' . (int) $product_id ),
+				]
+			);
+			return $key;
+		}
+
+		/**
+		 * Get the applied coupon codes.
+		 *
+		 * @return string[]
+		 */
+		public function get_applied_coupons() {
+			return $this->applied;
+		}
+
+		/**
+		 * Apply a coupon.
+		 *
+		 * @param string $code Coupon code.
+		 *
+		 * @return bool
+		 */
+		public function apply_coupon( $code ) {
+			$this->applied[] = $code;
+			return true;
 		}
 	}
 }
@@ -1378,6 +1534,23 @@ class ModalCheckoutTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 	}
 
 	/**
+	 * The label is associated with the input, not just placed near it: a screen
+	 * reader landing on the number field must hear what the number means.
+	 */
+	public function test_quantity_form_label_is_associated_with_the_input() {
+		$this->set_modal_checkout_request();
+		$this->set_mock_single_item_cart( 920, 2 );
+		$this->set_quantity_field_args( $this->get_quantity_field_args_fixture() );
+
+		ob_start();
+		\Newspack_Blocks\Modal_Checkout::render_quantity_form();
+		$output = ob_get_clean();
+
+		$this->assertStringContainsString( '<label for="modal_checkout_quantity">Number of team seats</label>', $output );
+		$this->assertStringContainsString( 'id="modal_checkout_quantity"', $output );
+	}
+
+	/**
 	 * An unlimited maximum omits the max attribute rather than emitting max="0".
 	 */
 	public function test_quantity_form_omits_max_when_unlimited() {
@@ -1457,5 +1630,107 @@ class ModalCheckoutTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 			],
 			$received
 		);
+	}
+
+	/**
+	 * Set WC()->cart to a mutable cart double holding one line item.
+	 *
+	 * @param int   $product_id Product ID of the line item.
+	 * @param int   $quantity   Quantity of the line item.
+	 * @param array $extra      Extra cart item data (e.g. preserved keys).
+	 *
+	 * @return Newspack_Blocks_Test_Mutable_Cart
+	 */
+	private function set_mutable_cart( $product_id = 920, $quantity = 2, $extra = [] ) {
+		if ( ! class_exists( 'Newspack_Blocks_Test_Mutable_Cart' ) ) {
+			$this->markTestSkipped( 'Requires the WC_Cart stub from test-modal-checkout-data.php.' );
+		}
+		$cart = new Newspack_Blocks_Test_Mutable_Cart(
+			[
+				'existing' => array_merge(
+					$extra,
+					[
+						'product_id'   => $product_id,
+						'variation_id' => 0,
+						'quantity'     => $quantity,
+						'data'         => new WC_Product( $product_id, 'simple', [], '10', 'Product ' . $product_id ),
+					]
+				),
+			]
+		);
+		WC()->cart = $cart;
+		return $cart;
+	}
+
+	/**
+	 * The happy path: the line item comes back at the new quantity, the data the
+	 * original add attached survives the round trip, and coupons are re-applied.
+	 */
+	public function test_update_cart_quantity_re_adds_at_the_new_quantity() {
+		$cart          = $this->set_mutable_cart( 920, 2, [ 'gate_post_id' => 55 ] );
+		$cart->applied = [ 'summer25' ];
+
+		$result = \Newspack_Blocks\Modal_Checkout::update_cart_quantity( 920, 5 );
+
+		$this->assertIsString( $result );
+		$this->assertCount( 1, $cart->get_cart() );
+		$item = reset( $cart->contents );
+		$this->assertSame( 5, $item['quantity'] );
+		$this->assertSame( 55, $item['gate_post_id'] );
+		$this->assertSame( [ 'summer25', 'summer25' ], $cart->applied, 'The saved coupon should be re-applied to the rebuilt cart.' );
+	}
+
+	/**
+	 * A rejected re-add must not leave the cart empty. WooCommerce answers
+	 * update_order_review on an empty cart by replacing the whole checkout form
+	 * with a session-expired notice, so the reader's original line item has to go
+	 * back before the rejection is reported.
+	 */
+	public function test_update_cart_quantity_restores_the_original_item_when_rejected() {
+		$cart                      = $this->set_mutable_cart( 920, 2, [ 'gate_post_id' => 55 ] );
+		$cart->applied             = [ 'summer25' ];
+		$cart->rejected_quantities = [ 99 ];
+
+		$result = \Newspack_Blocks\Modal_Checkout::update_cart_quantity( 920, 99 );
+
+		$this->assertInstanceOf( 'WP_Error', $result );
+		$this->assertSame( 'Choose at least 2 seats.', $result->get_error_message(), 'The cart\'s own rejection notice should be surfaced.' );
+		$this->assertCount( 1, $cart->get_cart(), 'The cart must not be left empty.' );
+		$item = reset( $cart->contents );
+		$this->assertSame( 2, $item['quantity'], 'The original quantity should be restored.' );
+		$this->assertSame( 55, $item['gate_post_id'], 'The restored item should keep its preserved data.' );
+		$this->assertSame( [ 'summer25', 'summer25' ], $cart->applied, 'Coupons should survive a rejected change.' );
+	}
+
+	/**
+	 * A product that is not in the cart is not a quantity change: emptying the
+	 * cart for it would destroy whatever the reader is actually buying.
+	 */
+	public function test_update_cart_quantity_bails_when_the_product_is_not_in_the_cart() {
+		$cart = $this->set_mutable_cart( 920, 2 );
+
+		$result = \Newspack_Blocks\Modal_Checkout::update_cart_quantity( 999, 5 );
+
+		$this->assertInstanceOf( 'WP_Error', $result );
+		$this->assertSame( 'newspack_blocks_quantity_not_in_cart', $result->get_error_code() );
+		$this->assertCount( 1, $cart->get_cart() );
+		$item = reset( $cart->contents );
+		$this->assertSame( 920, $item['product_id'], 'The untouched cart should still hold the original product.' );
+		$this->assertSame( 2, $item['quantity'] );
+	}
+
+	/**
+	 * The payload the AJAX handler returns alongside its message reports the new
+	 * seat count. `update_checkout` replaces only the review-order table and the
+	 * payment box, so `#modal-checkout-product-details` — which carries this data
+	 * to the GA4 events — has to be rewritten from the response instead.
+	 */
+	public function test_update_cart_quantity_payload_reports_the_new_quantity() {
+		$cart = $this->set_mutable_cart( 920, 2 );
+
+		\Newspack_Blocks\Modal_Checkout::update_cart_quantity( 920, 5 );
+		$data = \Newspack_Blocks\Modal_Checkout\Checkout_Data::get_checkout_data( $cart );
+
+		$this->assertSame( 5, $data['quantity'] );
 	}
 }
