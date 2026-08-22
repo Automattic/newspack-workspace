@@ -548,6 +548,28 @@ class Test_Group_Subscription_Seats extends WP_UnitTestCase {
 	}
 
 	/**
+	 * On a WooCommerce settings screen the option has to read back exactly what
+	 * the publisher stored: the form saves whatever it was rendered with, so an
+	 * answer there would rewrite a store-wide billing setting behind their back.
+	 * The modal checkout's admin-ajax requests are admin requests too, and those
+	 * are real switches, so they still get an answer.
+	 */
+	public function test_proration_untouched_on_admin_screens() {
+		$subscription = $this->make_per_seat_subscription( 941, [ 'quantity' => 3 ] );
+		wp_set_current_user( $subscription->get_user_id() );
+		$_REQUEST['switch-subscription'] = 941;
+
+		set_current_screen( 'dashboard' );
+		$this->assertFalse( Group_Subscription_Seats::force_recurring_proration( false ) );
+
+		add_filter( 'wp_doing_ajax', '__return_true' );
+		$this->assertSame( 'yes', Group_Subscription_Seats::force_recurring_proration( false ) );
+		remove_filter( 'wp_doing_ajax', '__return_true' );
+
+		set_current_screen( 'front' );
+	}
+
+	/**
 	 * A switch of a flat (per-team) subscription keeps whatever the publisher
 	 * configured: its price does not move with the number of people.
 	 */

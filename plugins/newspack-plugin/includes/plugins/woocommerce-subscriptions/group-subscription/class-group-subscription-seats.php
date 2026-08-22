@@ -389,6 +389,13 @@ class Group_Subscription_Seats {
 	 * @return mixed 'yes' for a per-seat group switch, otherwise the value unchanged.
 	 */
 	public static function force_recurring_proration( $value ) {
+		// WooCommerce's settings screen renders this option into the form and saves
+		// back whatever it rendered, so answering there would quietly rewrite the
+		// publisher's own setting. A switch is priced on the front end — including
+		// the modal checkout's admin-ajax requests, which is why those are let past.
+		if ( is_admin() && ! wp_doing_ajax() ) {
+			return $value;
+		}
 		// Two ways to recognise the same switch, because it is priced in two passes.
 		// The add-to-cart request still carries `switch-subscription`; by the time the
 		// checkout totals are recalculated those request parameters are long gone and
