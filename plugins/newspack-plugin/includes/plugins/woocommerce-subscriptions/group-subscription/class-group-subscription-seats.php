@@ -138,11 +138,30 @@ class Group_Subscription_Seats {
 	 * Shared by every checkout context — the product page, the modal, the tier
 	 * picker — so the label and bounds cannot drift between them.
 	 *
+	 * The feature check belongs here rather than only in `init()`. Turning the
+	 * feature off unregisters every hook this class owns, including the guards
+	 * that enforce the bounds, but the tier picker calls this method directly
+	 * (see `Subscriptions_Tiers::render_form()`) and per-seat meta persists on the
+	 * product. Without the check, a site with the feature turned off would still
+	 * render a seats field whose bounds nothing enforces and whose count nothing
+	 * clamps. Answering null takes the field away everywhere at once, since
+	 * `modal_quantity_field()`, `quantity_input_args()`, `render_quantity_label()`
+	 * and `available_variation_args()` all read it.
+	 *
+	 * `Group_Subscription_Settings::is_per_seat()` is deliberately left alone: it
+	 * is the plain fact of how a product is configured, and a group's capacity is
+	 * read from the stored pricing mode rather than through it, so an early return
+	 * there would not make a flag-off site any more consistent — it would only put
+	 * two different answers to "is this per seat?" in the same codebase.
+	 *
 	 * @param \WC_Product|int $product Product object or ID.
 	 *
 	 * @return array{label:string,min:int,max:int,help:string}|null Field args, or null when the product is not per seat.
 	 */
 	public static function get_field_args( $product ) {
+		if ( ! Content_Gate::is_newspack_feature_enabled() ) {
+			return null;
+		}
 		if ( ! Group_Subscription_Settings::is_per_seat( $product ) ) {
 			return null;
 		}

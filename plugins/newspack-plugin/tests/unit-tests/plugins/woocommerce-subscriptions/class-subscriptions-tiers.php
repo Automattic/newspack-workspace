@@ -33,6 +33,11 @@ class Newspack_Test_Subscriptions_Tiers extends WP_UnitTestCase {
 			$_REQUEST['price'],
 			$_REQUEST['quantity']
 		);
+		// Group subscriptions are part of the content-gates feature, and the seats
+		// field the picker renders is only offered when it is on.
+		if ( ! defined( 'NEWSPACK_CONTENT_GATES' ) ) {
+			define( 'NEWSPACK_CONTENT_GATES', true );
+		}
 	}
 
 	/**
