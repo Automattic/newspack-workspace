@@ -214,19 +214,27 @@ class Group_Subscription_Seats {
 	}
 
 	/**
-	 * Hold the modal checkout to one item for anything not sold per seat.
+	 * Hold the modal checkout to a seat count the product can actually be sold at.
 	 *
 	 * A quantity in the modal checkout means seats, and only a per-seat product
-	 * has any. Without this, a request carrying a seat count — a group owner
-	 * switching from a per-seat tier to a flat one, or a crafted URL — would buy
-	 * that many of a product whose price covers the whole group, billing the flat
-	 * price N times. The bounds guards can't catch it: they only ever run against
-	 * a per-seat product's own minimum and maximum.
+	 * has any. Anything else is bought exactly once: without that, a request
+	 * carrying a seat count — a group owner switching from a per-seat tier to a
+	 * flat one, or a crafted URL — would buy that many of a product whose price
+	 * covers the whole group, billing the flat price N times. The bounds guards
+	 * can't catch it: they only ever run against a per-seat product's own
+	 * minimum and maximum.
+	 *
+	 * A per-seat product is held to those bounds in both directions. The modal
+	 * checkout has no seat count of its own to send, so a Checkout Button block
+	 * with no default seats asks for one — and one seat on a plan that sells no
+	 * fewer than two is a quantity the guards refuse, leaving the reader on an
+	 * empty cart with no seats control to correct it. The publisher's minimum is
+	 * the shared control's default everywhere else; it is the default here too.
 	 *
 	 * @param int $quantity   Requested quantity, at least 1.
 	 * @param int $product_id Product the quantity is for (variation preferred).
 	 *
-	 * @return int The requested quantity for a per-seat product, 1 otherwise.
+	 * @return int A seat count within the product's bounds, or 1 for anything not sold per seat.
 	 */
 	public static function clamp_modal_quantity( $quantity, $product_id ) {
 		if ( ! function_exists( 'wc_get_product' ) ) {
@@ -238,7 +246,9 @@ class Group_Subscription_Seats {
 		if ( ! $product || ! Group_Subscription_Settings::is_per_seat( $product ) ) {
 			return 1;
 		}
-		return $quantity;
+		$bounds   = self::get_bounds( $product );
+		$quantity = max( (int) $quantity, $bounds['min'] );
+		return $bounds['max'] > 0 ? min( $quantity, $bounds['max'] ) : $quantity;
 	}
 
 	/**

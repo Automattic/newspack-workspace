@@ -389,10 +389,11 @@ final class Modal_Checkout {
 	}
 
 	/**
-	 * Seats (line-item quantity) requested for the modal checkout. Reads $_GET and
-	 * $_POST so the initial request and the in-modal quantity form share one rule.
-	 * Anything missing or below one means one: a quantity is only ever raised by an
-	 * explicit, valid request.
+	 * Seats (line-item quantity) requested when the modal checkout is opened.
+	 * Reads $_GET and $_POST, since a Checkout Button sends its default seats as a
+	 * query argument and the tier picker posts them as a form field. A missing or
+	 * malformed value means one, which clamp_quantity() then hands to whichever
+	 * plugin owns the product's quantity rules.
 	 *
 	 * @param int $product_id Product the quantity is for (variation preferred), 0 when unknown.
 	 *
@@ -411,8 +412,9 @@ final class Modal_Checkout {
 	 * The modal checkout knows nothing about what a given product may be sold in
 	 * multiples of; the plugin that turned the quantity field on for it does. This
 	 * is the one place a requested quantity becomes the quantity actually added to
-	 * the cart, so both the initial request and the in-modal quantity form pass
-	 * through it.
+	 * the cart, so every path shares one rule: the initial request via
+	 * get_requested_quantity(), and the in-modal seats form via
+	 * update_cart_quantity().
 	 *
 	 * @param int $quantity   Requested quantity.
 	 * @param int $product_id Product the quantity is for (variation preferred), 0 when unknown.
@@ -424,10 +426,11 @@ final class Modal_Checkout {
 		/**
 		 * Filters the line-item quantity the modal checkout will use for a product.
 		 *
-		 * A plugin that owns a product's quantity rules may clamp it — returning 1
-		 * for a product that must never be bought in multiples, for instance. Runs
-		 * after the floor of one, so a callback only ever sees a valid quantity, and
-		 * its own return is floored again.
+		 * A plugin that owns a product's quantity rules may move it in either
+		 * direction — returning 1 for a product that must never be bought in
+		 * multiples, or raising it to a minimum the product is never sold below.
+		 * Runs after the floor of one, so a callback only ever sees a valid
+		 * quantity, and its own return is floored again.
 		 *
 		 * @param int $quantity   Requested quantity, at least 1.
 		 * @param int $product_id Product the quantity is for (variation preferred), 0 when unknown.

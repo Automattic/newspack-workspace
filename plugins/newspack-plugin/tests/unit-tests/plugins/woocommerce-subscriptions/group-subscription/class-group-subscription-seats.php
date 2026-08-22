@@ -807,4 +807,23 @@ class Test_Group_Subscription_Seats extends WP_UnitTestCase {
 			'A per-seat product that is not a switch at all should not be mistaken for one.'
 		);
 	}
+
+	/**
+	 * The modal checkout carries no seat count of its own, so a Checkout Button on
+	 * a per-seat plan asks for one. That has to become the plan's minimum, not one:
+	 * a quantity of one on a plan that sells no fewer than two seats is refused by
+	 * the guards, and the reader lands on an empty cart with nothing to fix.
+	 */
+	public function test_modal_quantity_is_raised_to_the_minimum() {
+		$this->make_per_seat_product( 950, 2, 10 );
+
+		$this->assertSame( 2, Group_Subscription_Seats::clamp_modal_quantity( 1, 950 ) );
+		$this->assertSame( 2, Group_Subscription_Seats::clamp_modal_quantity( 0, 950 ) );
+		$this->assertSame( 4, Group_Subscription_Seats::clamp_modal_quantity( 4, 950 ) );
+		$this->assertSame( 10, Group_Subscription_Seats::clamp_modal_quantity( 25, 950 ), 'A request above the maximum is still clamped down to it.' );
+
+		$this->make_per_seat_product( 951, 3, 0 );
+		$this->assertSame( 3, Group_Subscription_Seats::clamp_modal_quantity( 1, 951 ) );
+		$this->assertSame( 25, Group_Subscription_Seats::clamp_modal_quantity( 25, 951 ), 'An unlimited maximum leaves a large request alone.' );
+	}
 }
