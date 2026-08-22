@@ -32,4 +32,4 @@ export type StatusName = keyof typeof STATUS_GLYPHS;
 
 export const statusGlyph = ( status: StatusName ) => STATUS_GLYPHS[ status ];
 
-export const STATUS_NAMES = Object.keys( STATUS_GLYPHS ) as StatusName[];
+export const STATUS_NAMES = Object.freeze( Object.keys( STATUS_GLYPHS ) as StatusName[] );

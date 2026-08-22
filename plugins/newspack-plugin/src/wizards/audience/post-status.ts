@@ -9,7 +9,7 @@
 /**
  * Internal dependencies.
  */
-import type { StatusName } from '../../../packages/components/src/status-indicator/statuses';
+import type { StatusName } from '../../../packages/components/src/status-indicator';
 
 const POST_STATUSES = {
 	publish: 'active',

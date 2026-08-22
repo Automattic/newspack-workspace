@@ -14,7 +14,7 @@ export const STATUS_LABELS = {
 	cancelled: __( 'Cancelled', 'newspack-plugin' ),
 };
 
-/** @type {Record< string, import('../../../packages/components/src/status-indicator/statuses').StatusName >} */
+/** @type {Record< string, import('../../../packages/components/src/status-indicator').StatusName >} */
 export const STATUS_INDICATORS = {
 	active: 'active',
 	pending: 'pending',

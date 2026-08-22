@@ -43,7 +43,7 @@ export { default as SectionHeader } from './section-header';
 export { default as SelectControl } from './select-control';
 export { default as Settings } from './settings';
 export { default as StatCard, STAT_CARD_NULL_GLYPH } from './stat-card';
-export { default as StatusIndicator, statusGlyph, STATUS_NAMES } from './status-indicator';
+export { default as StatusIndicator } from './status-indicator';
 export { default as StepsList } from './steps-list';
 export { default as StepsListItem } from './steps-list-item';
 export { default as StyleCard } from './style-card';

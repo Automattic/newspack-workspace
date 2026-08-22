@@ -17,7 +17,7 @@ import type { StatusName } from './statuses';
 // derived from the component to track the library instead of a copy kept here.
 // `icon` is optional there, and indexing an optional property widens the union
 // with `undefined`, so NonNullable is what keeps the glyph required here.
-export type StatusIcon = NonNullable< ComponentProps< typeof Icon >[ 'icon' ] >;
+type StatusIcon = NonNullable< ComponentProps< typeof Icon >[ 'icon' ] >;
 
 interface StatusIndicatorBaseProps extends Omit< ComponentProps< 'div' >, 'children' > {
 	/** The status label. @wordpress/primitives forces `aria-hidden` on the glyph, so this is the whole accessible name. */

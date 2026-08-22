@@ -16,7 +16,7 @@ export const API_BASE = '/newspack/v1/wizard/newspack-audience-integrations/sett
 // design system files terminal, non-actionable states under `none`.
 //
 // `canceled` is Action Scheduler's own spelling, so it stays as the library writes it.
-/** @type {Record< string, { label: string, status: import('../../../../../packages/components/src/status-indicator/statuses').StatusName, intent: import('../../../../../packages/components/src/types').BadgeIntent } >} */
+/** @type {Record< string, { label: string, status: import('../../../../../packages/components/src/status-indicator').StatusName, intent: import('../../../../../packages/components/src/types').BadgeIntent } >} */
 export const STATUS_MAP = {
 	complete: { label: __( 'Complete', 'newspack-plugin' ), status: 'done', intent: 'stable' },
 	failed: { label: __( 'Failed', 'newspack-plugin' ), status: 'error', intent: 'high' },

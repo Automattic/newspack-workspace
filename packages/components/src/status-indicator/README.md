@@ -15,6 +15,11 @@ import { StatusIndicator } from 'newspack-components';
 
 // The component on its own.
 import StatusIndicator from '../../packages/components/src/status-indicator';
+
+// The vocabulary, for a column's own test. Deliberately not on the barrel: that
+// entry also pulls `Page`'s `:root` token block and the wizards store into
+// whichever bundle asks for it.
+import { statusGlyph, STATUS_NAMES } from '../../packages/components/src/status-indicator';
 ```
 
 ## Usage
