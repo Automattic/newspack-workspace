@@ -43,7 +43,7 @@ class Test_Group_Subscription_Seats extends WP_UnitTestCase {
 		wc_mocks_set_is_product( false );
 		Group_Subscription::reset_cache();
 		wp_set_current_user( 0 );
-		unset( $_REQUEST['switch-subscription'] );
+		unset( $_REQUEST['switch-subscription'], $_REQUEST['product_id'], $_REQUEST['variation_id'], $_REQUEST['add-to-cart'] );
 		if ( ! defined( 'NEWSPACK_CONTENT_GATES' ) ) {
 			define( 'NEWSPACK_CONTENT_GATES', true );
 		}
@@ -51,7 +51,9 @@ class Test_Group_Subscription_Seats extends WP_UnitTestCase {
 
 	/**
 	 * Tear down: reset everything set_up() does, so no test's switch request,
-	 * current user or cached membership can leak into the next.
+	 * current user or cached membership can leak into the next. The admin screen
+	 * is reset here rather than at the end of the one test that sets it, so a
+	 * failure part-way through cannot leave is_admin() true for everything after.
 	 */
 	public function tear_down() {
 		global $products_database, $subscriptions_database;
@@ -60,7 +62,8 @@ class Test_Group_Subscription_Seats extends WP_UnitTestCase {
 		wc_mocks_set_is_product( false );
 		Group_Subscription::reset_cache();
 		wp_set_current_user( 0 );
-		unset( $_REQUEST['switch-subscription'] );
+		unset( $_REQUEST['switch-subscription'], $_REQUEST['product_id'], $_REQUEST['variation_id'], $_REQUEST['add-to-cart'] );
+		set_current_screen( 'front' );
 		parent::tear_down();
 	}
 
@@ -121,7 +124,7 @@ class Test_Group_Subscription_Seats extends WP_UnitTestCase {
 	 *
 	 * @return WC_Subscription
 	 */
-	private function make_per_seat_subscription( $id, $args = [] ) {
+	private function make_group_subscription( $id, $args = [] ) {
 		$args = array_merge(
 			[
 				'quantity'        => 1,
@@ -411,7 +414,7 @@ class Test_Group_Subscription_Seats extends WP_UnitTestCase {
 	 * invitation holds nothing, so it does not count.
 	 */
 	public function test_occupancy_counts_owner_members_and_pending_invites() {
-		$subscription = $this->make_per_seat_subscription(
+		$subscription = $this->make_group_subscription(
 			931,
 			[
 				'quantity'        => 5,
@@ -430,7 +433,7 @@ class Test_Group_Subscription_Seats extends WP_UnitTestCase {
 	 * members or pending invitations with nowhere to sit.
 	 */
 	public function test_switch_below_occupancy_is_rejected() {
-		$subscription = $this->make_per_seat_subscription(
+		$subscription = $this->make_group_subscription(
 			932,
 			[
 				'quantity' => 5,
@@ -448,10 +451,11 @@ class Test_Group_Subscription_Seats extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Buying exactly as many seats as are occupied is fine — nobody loses a seat.
+	 * Buying exactly as many seats as are occupied is fine — nobody loses a seat —
+	 * and so is buying more, which is the ordinary way a group grows.
 	 */
 	public function test_switch_at_or_above_occupancy_passes() {
-		$subscription = $this->make_per_seat_subscription(
+		$subscription = $this->make_group_subscription(
 			933,
 			[
 				'quantity' => 5,
@@ -460,8 +464,34 @@ class Test_Group_Subscription_Seats extends WP_UnitTestCase {
 		);
 		wp_set_current_user( $subscription->get_user_id() );
 		$_REQUEST['switch-subscription'] = 933;
+		$product_id                      = $this->product_id_for( $subscription );
 
-		$this->assertSame( [], Group_Subscription_Seats::guard_add_cart_item_data( [], $this->product_id_for( $subscription ), 0, 2 ) );
+		$this->assertSame( [], Group_Subscription_Seats::guard_add_cart_item_data( [], $product_id, 0, 2 ), 'Exactly at occupancy.' );
+		$this->assertSame( [], Group_Subscription_Seats::guard_add_cart_item_data( [], $product_id, 0, 9 ), 'Well above occupancy.' );
+	}
+
+	/**
+	 * A group moving off a flat plan onto a per-seat one is bound by occupancy
+	 * just the same. Pricing mode is a property of the product, so a variable
+	 * subscription can offer both a flat and a per-seat variation and a reader
+	 * can switch between them — and it is the plan being switched TO that
+	 * decides whether seats are what capacity is counted in.
+	 */
+	public function test_flat_to_per_seat_switch_below_occupancy_is_rejected() {
+		$flat = $this->make_group_subscription(
+			942,
+			[
+				'members'  => 3,
+				'per_seat' => false,
+			]
+		);
+		$this->make_per_seat_product( 9420, 1, 0 );
+		wp_set_current_user( $flat->get_user_id() );
+		$_REQUEST['switch-subscription'] = 942;
+
+		$this->expectException( \Exception::class );
+		$this->expectExceptionMessage( '4 seats in use' );
+		Group_Subscription_Seats::guard_add_cart_item_data( [], 9420, 0, 2 );
 	}
 
 	/**
@@ -471,7 +501,7 @@ class Test_Group_Subscription_Seats extends WP_UnitTestCase {
 	 * no part in.
 	 */
 	public function test_switch_occupancy_ignores_another_readers_subscription() {
-		$subscription = $this->make_per_seat_subscription(
+		$subscription = $this->make_group_subscription(
 			934,
 			[
 				'quantity' => 5,
@@ -489,7 +519,7 @@ class Test_Group_Subscription_Seats extends WP_UnitTestCase {
 	 * of a single seat still passes.
 	 */
 	public function test_first_purchase_is_not_measured_against_occupancy() {
-		$subscription = $this->make_per_seat_subscription(
+		$subscription = $this->make_group_subscription(
 			935,
 			[
 				'quantity' => 5,
@@ -508,7 +538,7 @@ class Test_Group_Subscription_Seats extends WP_UnitTestCase {
 	 */
 	public function test_cart_update_below_occupancy_is_rejected() {
 		global $wc_mock_notices;
-		$subscription = $this->make_per_seat_subscription(
+		$subscription = $this->make_group_subscription(
 			940,
 			[
 				'quantity' => 5,
@@ -533,17 +563,48 @@ class Test_Group_Subscription_Seats extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Proration is forced on while the request is switching a per-seat group, and
-	 * left to the publisher's own setting once it is not.
+	 * Proration is forced on while the request is switching onto a per-seat plan,
+	 * and left to the publisher's own setting once it is not.
 	 */
 	public function test_proration_forced_on_for_per_seat_switch() {
-		$subscription = $this->make_per_seat_subscription( 936, [ 'quantity' => 3 ] );
+		$subscription = $this->make_group_subscription( 936, [ 'quantity' => 3 ] );
 		wp_set_current_user( $subscription->get_user_id() );
 		$_REQUEST['switch-subscription'] = 936;
+		$_REQUEST['product_id']          = $this->product_id_for( $subscription );
 
 		$this->assertSame( 'yes', Group_Subscription_Seats::force_recurring_proration( false ) );
 
 		unset( $_REQUEST['switch-subscription'] );
+		$this->assertFalse( Group_Subscription_Seats::force_recurring_proration( false ) );
+	}
+
+	/**
+	 * A flat group switching onto a per-seat plan is buying seats, and every one
+	 * of them has to be paid for from the day of the switch. What it is leaving
+	 * behind does not come into it.
+	 */
+	public function test_proration_forced_on_for_flat_to_per_seat_switch() {
+		$flat = $this->make_group_subscription( 943, [ 'per_seat' => false ] );
+		$this->make_per_seat_product( 9430, 1, 0 );
+		wp_set_current_user( $flat->get_user_id() );
+		$_REQUEST['switch-subscription'] = 943;
+		$_REQUEST['product_id']          = 9430;
+
+		$this->assertSame( 'yes', Group_Subscription_Seats::force_recurring_proration( false ) );
+	}
+
+	/**
+	 * A per-seat group switching onto a flat plan is buying one price for the
+	 * whole group, so there are no seats to prorate and the publisher's setting
+	 * stands.
+	 */
+	public function test_proration_untouched_for_per_seat_to_flat_switch() {
+		$per_seat = $this->make_group_subscription( 944, [ 'quantity' => 5 ] );
+		$this->make_flat_product( 9440 );
+		wp_set_current_user( $per_seat->get_user_id() );
+		$_REQUEST['switch-subscription'] = 944;
+		$_REQUEST['product_id']          = 9440;
+
 		$this->assertFalse( Group_Subscription_Seats::force_recurring_proration( false ) );
 	}
 
@@ -555,9 +616,10 @@ class Test_Group_Subscription_Seats extends WP_UnitTestCase {
 	 * are real switches, so they still get an answer.
 	 */
 	public function test_proration_untouched_on_admin_screens() {
-		$subscription = $this->make_per_seat_subscription( 941, [ 'quantity' => 3 ] );
+		$subscription = $this->make_group_subscription( 941, [ 'quantity' => 3 ] );
 		wp_set_current_user( $subscription->get_user_id() );
 		$_REQUEST['switch-subscription'] = 941;
+		$_REQUEST['product_id']          = $this->product_id_for( $subscription );
 
 		set_current_screen( 'dashboard' );
 		$this->assertFalse( Group_Subscription_Seats::force_recurring_proration( false ) );
@@ -565,56 +627,53 @@ class Test_Group_Subscription_Seats extends WP_UnitTestCase {
 		add_filter( 'wp_doing_ajax', '__return_true' );
 		$this->assertSame( 'yes', Group_Subscription_Seats::force_recurring_proration( false ) );
 		remove_filter( 'wp_doing_ajax', '__return_true' );
-
-		set_current_screen( 'front' );
-	}
-
-	/**
-	 * A switch of a flat (per-team) subscription keeps whatever the publisher
-	 * configured: its price does not move with the number of people.
-	 */
-	public function test_proration_untouched_for_flat_switch() {
-		$subscription = $this->make_per_seat_subscription(
-			937,
-			[
-				'quantity' => 1,
-				'per_seat' => false,
-			]
-		);
-		wp_set_current_user( $subscription->get_user_id() );
-		$_REQUEST['switch-subscription'] = 937;
-
-		$this->assertFalse( Group_Subscription_Seats::force_recurring_proration( false ) );
 	}
 
 	/**
 	 * By the time the checkout totals are calculated the switch request params
-	 * are gone, and the switch is only recorded on the cart item — which is what
-	 * must still identify a per-seat switch then.
+	 * are gone: the cart item records that this is a switch, and its own product
+	 * says whether what is being bought is seats.
 	 */
 	public function test_cart_switch_detection_reads_the_cart_item() {
-		$per_seat = $this->make_per_seat_subscription( 938, [ 'quantity' => 3 ] );
-		$flat     = $this->make_per_seat_subscription(
-			939,
-			[
-				'quantity' => 1,
-				'per_seat' => false,
-			]
-		);
+		$this->make_per_seat_product( 945, 1, 0 );
+		$this->make_flat_product( 946 );
 
 		$this->assertTrue(
 			Group_Subscription_Seats::cart_has_per_seat_switch(
-				[ 'key' => [ 'subscription_switch' => [ 'subscription_id' => $per_seat->get_id() ] ] ]
+				[
+					'key' => [
+						'product_id'          => 945,
+						'subscription_switch' => [ 'subscription_id' => 938 ],
+					],
+				]
 			)
+		);
+		$this->assertTrue(
+			Group_Subscription_Seats::cart_has_per_seat_switch(
+				[
+					'key' => [
+						'product_id'          => 946,
+						'variation_id'        => 945,
+						'subscription_switch' => [ 'subscription_id' => 938 ],
+					],
+				]
+			),
+			'A variation is what carries the pricing mode, so it wins over its parent.'
 		);
 		$this->assertFalse(
 			Group_Subscription_Seats::cart_has_per_seat_switch(
-				[ 'key' => [ 'subscription_switch' => [ 'subscription_id' => $flat->get_id() ] ] ]
-			)
+				[
+					'key' => [
+						'product_id'          => 946,
+						'subscription_switch' => [ 'subscription_id' => 939 ],
+					],
+				]
+			),
+			'A switch onto a flat plan buys no seats.'
 		);
 		$this->assertFalse(
-			Group_Subscription_Seats::cart_has_per_seat_switch( [ 'key' => [ 'product_id' => 1 ] ] ),
-			'A cart item that is not a switch at all should not be mistaken for one.'
+			Group_Subscription_Seats::cart_has_per_seat_switch( [ 'key' => [ 'product_id' => 945 ] ] ),
+			'A per-seat product that is not a switch at all should not be mistaken for one.'
 		);
 	}
 }

@@ -348,8 +348,10 @@ class Group_Subscription_Seats {
 		$product_id = ! empty( $values['variation_id'] ) ? $values['variation_id'] : $values['product_id'];
 		// Editing the seat count on the cart page is a plain cart update: the switch
 		// it belongs to is recorded on the cart item, not in the request, so it has
-		// to be handed over or the occupancy rule would not apply here at all.
-		$error = self::get_quantity_error( $product_id, $quantity, $values['subscription_switch']['subscription_id'] ?? 0 );
+		// to be handed over or the occupancy rule would not apply here at all. The
+		// cart item is also the whole answer — an item that records no switch is not
+		// one, whatever else the request happens to be carrying.
+		$error = self::get_quantity_error( $product_id, $quantity, (int) ( $values['subscription_switch']['subscription_id'] ?? 0 ) );
 		if ( null === $error ) {
 			return true;
 		}
@@ -381,12 +383,17 @@ class Group_Subscription_Seats {
 	 * WooCommerce Subscriptions only charges for the rest of the cycle when the
 	 * store's "prorate recurring price" setting is on. A publisher who leaves it
 	 * off — the default — would give away the remainder of the cycle on every seat
-	 * increase, so it is turned on for per-seat group switches alone. Every other
-	 * switch keeps the publisher's own setting.
+	 * increase, so it is turned on for switches that land on a per-seat plan alone.
+	 * Every other switch keeps the publisher's own setting.
+	 *
+	 * What decides it is the plan being switched TO, never the one being left. A
+	 * flat group moving onto a per-seat plan is buying seats and owes for them;
+	 * a per-seat group moving onto a flat plan is buying one price for the whole
+	 * group, and has no seats to prorate.
 	 *
 	 * @param mixed $value The pre-option value: false unless something has already answered.
 	 *
-	 * @return mixed 'yes' for a per-seat group switch, otherwise the value unchanged.
+	 * @return mixed 'yes' for a switch onto a per-seat plan, otherwise the value unchanged.
 	 */
 	public static function force_recurring_proration( $value ) {
 		// WooCommerce's settings screen renders this option into the form and saves
@@ -397,20 +404,24 @@ class Group_Subscription_Seats {
 			return $value;
 		}
 		// Two ways to recognise the same switch, because it is priced in two passes.
-		// The add-to-cart request still carries `switch-subscription`; by the time the
-		// checkout totals are recalculated those request parameters are long gone and
-		// the only remaining record of the switch is on the cart item.
-		if ( self::get_per_seat_switch_subscription() || self::cart_has_per_seat_switch( self::get_cart_items() ) ) {
+		// The add-to-cart request still carries `switch-subscription` and the product
+		// it is buying; by the time the checkout totals are recalculated those request
+		// parameters are long gone and the cart item is the only record of either.
+		if ( self::get_owned_switch_subscription() && Group_Subscription_Settings::is_per_seat( self::get_requested_product_id() ) ) {
+			return 'yes';
+		}
+		if ( self::cart_has_per_seat_switch( self::get_cart_items() ) ) {
 			return 'yes';
 		}
 		return $value;
 	}
 
 	/**
-	 * Whether a cart holds a switch of a per-seat group subscription.
+	 * Whether a cart holds a switch onto a per-seat plan.
 	 *
-	 * Takes the cart contents rather than reading them, so the rule can be
-	 * exercised without a WooCommerce session.
+	 * The switch is what the cart item records; whether seats are being bought is
+	 * what its own product says. Takes the cart contents rather than reading them,
+	 * so the rule can be exercised without a WooCommerce session.
 	 *
 	 * @param array $cart_items Cart contents, in the shape `WC_Cart::get_cart()` returns.
 	 *
@@ -418,12 +429,11 @@ class Group_Subscription_Seats {
 	 */
 	public static function cart_has_per_seat_switch( $cart_items ) {
 		foreach ( $cart_items as $cart_item ) {
-			$subscription_id = $cart_item['subscription_switch']['subscription_id'] ?? 0;
-			if ( ! $subscription_id ) {
+			if ( empty( $cart_item['subscription_switch']['subscription_id'] ) ) {
 				continue;
 			}
-			$subscription = WooCommerce_Subscriptions::sanitize_subscription( $subscription_id );
-			if ( $subscription && Group_Subscription_Settings::is_per_seat( $subscription ) ) {
+			$product_id = ! empty( $cart_item['variation_id'] ) ? $cart_item['variation_id'] : ( $cart_item['product_id'] ?? 0 );
+			if ( $product_id && Group_Subscription_Settings::is_per_seat( $product_id ) ) {
 				return true;
 			}
 		}
@@ -446,24 +456,26 @@ class Group_Subscription_Seats {
 	}
 
 	/**
-	 * Get the per-seat subscription being switched, if any.
+	 * Get the subscription the requester is switching, if it is their own.
 	 *
-	 * Reads the switch request by default, and takes a subscription ID instead for
-	 * the places where the request no longer carries one. Either way only the
-	 * requester's own subscription counts: a seat count means nothing against a
-	 * group somebody else owns, and answering for one would let a crafted request
-	 * read back how many people are in it.
+	 * Says nothing about how either side of the switch is priced — that is the
+	 * target product's business, and callers decide it for themselves. What this
+	 * settles is ownership: a seat count means nothing against a group somebody
+	 * else owns, and answering for one would let a crafted request read back how
+	 * many people are in it.
 	 *
-	 * @param int $subscription_id A subscription ID to resolve instead of the request's.
+	 * @param int|null $subscription_id A subscription ID to resolve instead of the request's.
+	 *                                  Null reads the request; 0 means there is no switch,
+	 *                                  which is not the same thing.
 	 *
 	 * @return \WC_Subscription|null The subscription being switched, or null.
 	 */
-	private static function get_per_seat_switch_subscription( $subscription_id = 0 ) {
-		$subscription_id = absint( $subscription_id );
-		if ( ! $subscription_id ) {
+	private static function get_owned_switch_subscription( $subscription_id = null ) {
+		if ( null === $subscription_id ) {
 			// phpcs:ignore WordPress.Security.NonceVerification.Recommended
 			$subscription_id = isset( $_REQUEST['switch-subscription'] ) ? absint( wp_unslash( $_REQUEST['switch-subscription'] ) ) : 0;
 		}
+		$subscription_id = absint( $subscription_id );
 		if ( ! $subscription_id || ! is_user_logged_in() ) {
 			return null;
 		}
@@ -471,7 +483,28 @@ class Group_Subscription_Seats {
 		if ( ! $subscription || (int) $subscription->get_user_id() !== get_current_user_id() ) {
 			return null;
 		}
-		return Group_Subscription_Settings::is_per_seat( $subscription ) ? $subscription : null;
+		return $subscription;
+	}
+
+	/**
+	 * Get the product a request is buying, variation first.
+	 *
+	 * WooCommerce's own add-to-cart form posts `add-to-cart` (plus `variation_id`
+	 * for a variable product) and the modal checkout posts `product_id`, so all
+	 * three are worth reading. Zero when the request is not buying anything, which
+	 * is every request that is only recalculating what is already in the cart.
+	 *
+	 * @return int Product or variation ID.
+	 */
+	private static function get_requested_product_id() {
+		foreach ( [ 'variation_id', 'product_id', 'add-to-cart' ] as $key ) {
+			// phpcs:ignore WordPress.Security.NonceVerification.Recommended
+			$product_id = isset( $_REQUEST[ $key ] ) ? absint( wp_unslash( $_REQUEST[ $key ] ) ) : 0;
+			if ( $product_id ) {
+				return $product_id;
+			}
+		}
+		return 0;
 	}
 
 	/**
@@ -481,13 +514,17 @@ class Group_Subscription_Seats {
 	 * enter these guards at all — or when the quantity fits the product's bounds
 	 * and the group it is for.
 	 *
+	 * The product here is the one being bought, so a group switching onto a
+	 * per-seat plan is measured against its seats whatever plan it is leaving.
+	 *
 	 * @param \WC_Product|int $product                Product object or ID.
 	 * @param int             $quantity               Requested quantity.
-	 * @param int             $switch_subscription_id Subscription being switched, when the request does not name one.
+	 * @param int|null        $switch_subscription_id Subscription being switched. Null reads
+	 *                                                the request; 0 means no switch at all.
 	 *
 	 * @return string|null The error message, or null.
 	 */
-	private static function get_quantity_error( $product, $quantity, $switch_subscription_id = 0 ) {
+	private static function get_quantity_error( $product, $quantity, $switch_subscription_id = null ) {
 		if ( ! Group_Subscription_Settings::is_per_seat( $product ) ) {
 			return null;
 		}
@@ -499,7 +536,7 @@ class Group_Subscription_Seats {
 		// are what capacity is measured in, so a seat taken away from a member or a
 		// pending invitation leaves the group over its own limit. Nobody can be
 		// removed on their behalf here, so the reader is asked to do it first.
-		$subscription = self::get_per_seat_switch_subscription( $switch_subscription_id );
+		$subscription = self::get_owned_switch_subscription( $switch_subscription_id );
 		if ( $subscription ) {
 			$occupancy = self::get_occupancy( $subscription );
 			if ( (int) $quantity < $occupancy ) {
