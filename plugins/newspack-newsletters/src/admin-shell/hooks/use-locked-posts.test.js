@@ -176,13 +176,43 @@ describe( 'useLockedPosts', () => {
 		expect( window.jQuery.count( 'heartbeat-tick' ) ).toBe( 1 );
 	} );
 
-	it( 'throttles forced connects across a burst of id changes', () => {
-		const { rerender } = renderHook( ( { ids } ) => useLockedPosts( ids ), { initialProps: { ids: [ 7 ] } } );
-		expect( connectNow ).toHaveBeenCalledTimes( 1 );
+	describe( 'forced connects', () => {
+		beforeEach( () => jest.useFakeTimers() );
+		afterEach( () => jest.useRealTimers() );
 
-		rerender( { ids: [ 8 ] } );
-		rerender( { ids: [ 9 ] } );
+		it( 'collapses a burst of id changes into one', () => {
+			const { rerender } = renderHook( ( { ids } ) => useLockedPosts( ids ), { initialProps: { ids: [ 7 ] } } );
+			expect( connectNow ).toHaveBeenCalledTimes( 1 );
 
-		expect( connectNow ).toHaveBeenCalledTimes( 1 );
+			rerender( { ids: [ 8 ] } );
+			rerender( { ids: [ 9 ] } );
+
+			expect( connectNow ).toHaveBeenCalledTimes( 1 );
+		} );
+
+		// Dropping the trailing connect would leave the rows actually on
+		// screen unchecked until the next ordinary beat, up to 120s later.
+		it( 'still checks the set left on screen once the window closes', () => {
+			const { rerender } = renderHook( ( { ids } ) => useLockedPosts( ids ), { initialProps: { ids: [ 7 ] } } );
+			rerender( { ids: [ 8 ] } );
+			expect( connectNow ).toHaveBeenCalledTimes( 1 );
+
+			act( () => jest.advanceTimersByTime( 2000 ) );
+
+			expect( connectNow ).toHaveBeenCalledTimes( 2 );
+			const data = {};
+			act( () => window.jQuery.trigger( 'heartbeat-send', data ) );
+			expect( data[ 'wp-check-locked-posts' ] ).toEqual( [ 'post-8' ] );
+		} );
+
+		it( 'drops a pending connect when the hook unmounts', () => {
+			const { rerender, unmount } = renderHook( ( { ids } ) => useLockedPosts( ids ), { initialProps: { ids: [ 7 ] } } );
+			rerender( { ids: [ 8 ] } );
+			unmount();
+
+			act( () => jest.advanceTimersByTime( 2000 ) );
+
+			expect( connectNow ).toHaveBeenCalledTimes( 1 );
+		} );
 	} );
 } );

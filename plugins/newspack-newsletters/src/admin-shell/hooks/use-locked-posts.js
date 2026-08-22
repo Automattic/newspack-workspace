@@ -84,14 +84,24 @@ export default function useLockedPosts( ids = [] ) {
 
 		jQuery( document ).on( `${ SEND_EVENT }.${ NAMESPACE }`, onSend ).on( `${ TICK_EVENT }.${ NAMESPACE }`, onTick );
 
-		// Don't make the first paint wait out the 60s interval.
-		const now = Date.now();
-		if ( now - lastConnect.current >= CONNECT_THROTTLE_MS ) {
-			lastConnect.current = now;
+		// Don't make the first paint wait out the 60s interval. A burst of list
+		// mutations collapses into one tick, but the set left on screen still
+		// gets its own once the window closes: dropping the trailing connect
+		// would leave those rows unchecked until the next ordinary beat.
+		const connect = () => {
+			lastConnect.current = Date.now();
 			heartbeat.connectNow();
+		};
+		const wait = CONNECT_THROTTLE_MS - ( Date.now() - lastConnect.current );
+		let deferred;
+		if ( wait <= 0 ) {
+			connect();
+		} else {
+			deferred = setTimeout( connect, wait );
 		}
 
 		return () => {
+			clearTimeout( deferred );
 			jQuery( document ).off( `${ SEND_EVENT }.${ NAMESPACE }`, onSend ).off( `${ TICK_EVENT }.${ NAMESPACE }`, onTick );
 		};
 	}, [ idsKey ] );
