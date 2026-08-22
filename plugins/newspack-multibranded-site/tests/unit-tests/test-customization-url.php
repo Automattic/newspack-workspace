@@ -17,8 +17,10 @@ class TestUrlCustomization extends WP_UnitTestCase {
 	 * Clean up the conflicting taxonomy after each test so it never leaks.
 	 */
 	public function tearDown(): void {
-		if ( taxonomy_exists( 'test_product_brand' ) ) {
-			unregister_taxonomy( 'test_product_brand' );
+		foreach ( [ 'test_product_brand', 'test_other_tax' ] as $fixture_taxonomy ) {
+			if ( taxonomy_exists( $fixture_taxonomy ) ) {
+				unregister_taxonomy( $fixture_taxonomy );
+			}
 		}
 		parent::tearDown();
 	}
@@ -69,7 +71,14 @@ class TestUrlCustomization extends WP_UnitTestCase {
 		// taxonomy's query var to the slug.
 		global $wp;
 		$wp->matched_query = 'test_product_brand=' . $brand->slug;
-		$wp->query_vars    = [ 'test_product_brand' => $brand->slug ];
+		// `paged` rides along to prove the resolver clears only the conflicting
+		// var. A blanket loop over $wp->query_vars would satisfy every other
+		// assertion here while silently dropping pagination and any other var
+		// WordPress had already parsed.
+		$wp->query_vars = [
+			'test_product_brand' => $brand->slug,
+			'paged'              => 2,
+		];
 
 		// Run parse_request — this should detect the conflict and re-route.
 		Newspack_Multibranded_Site\Customizations\Url::parse_request( $wp );
@@ -77,6 +86,7 @@ class TestUrlCustomization extends WP_UnitTestCase {
 		$this->assertArrayHasKey( Taxonomy::SLUG, $wp->query_vars, 'Brand query var should be set.' );
 		$this->assertSame( $brand->slug, $wp->query_vars[ Taxonomy::SLUG ] );
 		$this->assertArrayNotHasKey( 'test_product_brand', $wp->query_vars, 'Conflicting query var should be removed.' );
+		$this->assertSame( 2, $wp->query_vars['paged'], 'Unrelated query vars must survive the re-route.' );
 	}
 
 	/**
@@ -108,20 +118,35 @@ class TestUrlCustomization extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Tests that parse_request is a no-op when no other taxonomy with the
-	 * "brand" rewrite slug is registered (the common case).
+	 * Tests that a taxonomy which captured the request but rewrites under some
+	 * other slug is left alone. Only a collision on /brand/ should reroute.
 	 */
-	public function test_parse_request_no_op_without_conflict() {
+	public function test_parse_request_ignores_taxonomy_rewriting_under_another_slug() {
+		register_taxonomy(
+			'test_other_tax',
+			'post',
+			[
+				'public'    => true,
+				'rewrite'   => [ 'slug' => 'topic' ],
+				'query_var' => 'test_other_tax',
+			]
+		);
+
+		// Give the brand the same slug the other taxonomy captured, so the
+		// rewrite-slug check is the only thing keeping the resolver out. Without
+		// it, every public taxonomy with a query var becomes a brand conflict.
+		$brand = $this->factory->term->create_and_get( [ 'taxonomy' => Taxonomy::SLUG ] );
+
 		$this->set_permalink_structure( '/%postname%/' );
 
 		global $wp;
-		$wp->matched_query = 'pagename=about';
-		$wp->query_vars    = [ 'pagename' => 'about' ];
+		$wp->matched_query = 'test_other_tax=' . $brand->slug;
+		$wp->query_vars    = [ 'test_other_tax' => $brand->slug ];
 
 		Newspack_Multibranded_Site\Customizations\Url::parse_request( $wp );
 
-		$this->assertArrayNotHasKey( Taxonomy::SLUG, $wp->query_vars, 'Brand var should not be set without a conflict.' );
-		$this->assertSame( 'about', $wp->query_vars['pagename'], 'Existing query vars should be untouched.' );
+		$this->assertArrayNotHasKey( Taxonomy::SLUG, $wp->query_vars, 'Only a /brand/ collision should reroute.' );
+		$this->assertSame( $brand->slug, $wp->query_vars['test_other_tax'], 'The other taxonomy query var should be untouched.' );
 	}
 
 	/**
