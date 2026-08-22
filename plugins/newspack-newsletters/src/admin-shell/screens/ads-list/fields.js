@@ -7,7 +7,6 @@
 
 import { Tooltip } from '@wordpress/components';
 import { __, sprintf } from '@wordpress/i18n';
-import { drafts, notAllowed, published, scheduled, trash } from '@wordpress/icons';
 import { dateI18n, getSettings as getDateSettings, gmdateI18n } from '@wordpress/date';
 
 import { StatusIndicator } from 'newspack-components';
@@ -17,12 +16,12 @@ import { formatPostDate } from '../../utils/format-date';
 import { termsForTaxonomy } from '../../utils/terms';
 import { statusKindLabel, STATUS_KIND_LABELS } from './status-label';
 
-const STATUS_KIND_ICONS = {
-	active: published,
-	scheduled,
-	expired: notAllowed,
-	draft: drafts,
-	trash,
+export const STATUS_KIND_STATUSES = {
+	active: 'active',
+	scheduled: 'scheduled',
+	expired: 'ended',
+	draft: 'draft',
+	trash: 'trash',
 };
 
 // Ad windows are whole calendar days: the meta is `Y-m-d`, and `is_ad_active()`
@@ -89,7 +88,7 @@ const renderTitle = ( { item } ) => {
 const renderStatus = ( { item } ) => {
 	const status = item?.newspack_newsletters_ad_status || {};
 	const kind = status.kind || 'draft';
-	const icon = STATUS_KIND_ICONS[ kind ] || STATUS_KIND_ICONS.draft;
+	const statusName = STATUS_KIND_STATUSES[ kind ] || STATUS_KIND_STATUSES.draft;
 
 	let label;
 	if ( 'expired' === kind && status.expires_at ) {
@@ -112,7 +111,7 @@ const renderStatus = ( { item } ) => {
 		label = statusKindLabel( kind );
 	}
 
-	return <StatusIndicator icon={ icon }>{ label }</StatusIndicator>;
+	return <StatusIndicator status={ statusName }>{ label }</StatusIndicator>;
 };
 
 const renderTerms =
