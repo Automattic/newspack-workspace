@@ -13,7 +13,8 @@ const TICK_EVENT = 'heartbeat-tick';
 const NAMESPACE = 'newspack-newsletters-locks';
 
 // Collapses a burst of list mutations (a settled search, rapid filter
-// changes) into one forced tick without delaying ordinary navigation.
+// changes) into one forced tick. A change landing inside the window is
+// deferred to its end rather than dropped.
 const CONNECT_THROTTLE_MS = 2000;
 
 // The fields the list renders. A tick repeating them is not a change, and

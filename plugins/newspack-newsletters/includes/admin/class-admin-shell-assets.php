@@ -28,15 +28,12 @@ class Admin_Shell_Assets {
 	/**
 	 * Enqueue the shared admin-shell bundle on registered admin pages.
 	 *
-	 * Pages contribute script/style deps via `get_admin_shell_script_deps()`
-	 * and `get_admin_shell_style_deps()`, and sibling enqueues via
-	 * `enqueue_extras()`.
-	 *
-	 * A page's script deps are optional enhancements, so unregistered handles
-	 * are filtered out first. `WP_Dependencies::all_deps()` drops a handle
-	 * outright when one of its deps is missing, which on a site that
-	 * deregisters `heartbeat` would cost the whole screen rather than the one
-	 * feature that wanted it.
+	 * Pages contribute style deps via `get_admin_shell_style_deps()`
+	 * and sibling enqueues via `enqueue_extras()`. Anything a page merely
+	 * enhances the screen with belongs in `enqueue_extras()`, not in the
+	 * bundle's deps: `WP_Dependencies::all_deps()` drops a handle outright
+	 * when one of its deps is unregistered, so an optional dep a site has
+	 * removed would cost the whole screen.
 	 */
 	public static function enqueue() {
 		$current_page = Admin_Shell::get_current_page();
@@ -44,14 +41,12 @@ class Admin_Shell_Assets {
 			return;
 		}
 
-		$script_deps = Asset_Loader::registered_scripts( $current_page->get_admin_shell_script_deps() );
-
 		$asset = Asset_Loader::enqueue_bundle(
 			self::SCRIPT_HANDLE,
 			'admin-shell',
 			NEWSPACK_NEWSLETTERS_PLUGIN_FILE . 'dist',
 			plugins_url( '../../dist', __FILE__ ),
-			$script_deps,
+			[],
 			$current_page->get_admin_shell_style_deps()
 		);
 		if ( ! $asset ) {

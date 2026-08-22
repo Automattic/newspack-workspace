@@ -145,24 +145,14 @@ abstract class Admin_Page {
 	 * Extra CSS deps for the admin-shell bundle — the only way to force
 	 * load order relative to `admin-shell.css`.
 	 *
+	 * Return only handles the page genuinely needs ordered before its own
+	 * stylesheet. `WP_Dependencies::all_deps()` drops a handle whose dep is
+	 * unregistered, so an optional handle listed here costs the whole
+	 * stylesheet; enqueue those in `enqueue_extras()` instead.
+	 *
 	 * @return string[]
 	 */
 	public function get_admin_shell_style_deps(): array {
-		return [];
-	}
-
-	/**
-	 * Optional script deps for the admin-shell bundle — guarantees a core
-	 * script has executed before the bundle mounts.
-	 *
-	 * These are enhancements, not requirements: handles no longer registered
-	 * on a given site are dropped before enqueue, so the screen still renders
-	 * without whatever they enabled. Anything the screen cannot render without
-	 * belongs in the bundle's own `asset.php` deps instead.
-	 *
-	 * @return string[]
-	 */
-	public function get_admin_shell_script_deps(): array {
 		return [];
 	}
 

@@ -216,45 +216,6 @@ class Asset_Loader_Test extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Optional deps are filtered to what the site actually has.
-	 */
-	public function test_registered_scripts_keeps_only_registered_handles() {
-		wp_register_script( 'present-handle', 'https://example.test/present.js', [], '1', true );
-
-		$this->assertSame(
-			[ 'present-handle' ],
-			Asset_Loader::registered_scripts( [ 'present-handle', 'absent-handle' ] )
-		);
-	}
-
-	/**
-	 * REGRESSION: why `registered_scripts()` exists. `WP_Dependencies`
-	 * drops a handle from `to_do` when any of its deps is unregistered,
-	 * so an optional dep a site has deregistered would take the whole
-	 * bundle (and its localised data) off the page rather than the one
-	 * feature that wanted it.
-	 */
-	public function test_unregistered_dep_suppresses_the_whole_bundle() {
-		// WP 6.9.1 flags this as incorrect usage, but only with debugging on.
-		$this->setExpectedIncorrectUsage( 'WP_Scripts::add' );
-		$this->write_asset_file( 'my-bundle', [] );
-		$this->touch_bundle_file( 'my-bundle', 'js' );
-
-		Asset_Loader::enqueue_bundle(
-			'my-prefix-my-bundle',
-			'my-bundle',
-			$this->build_dir,
-			'https://example.test/dist',
-			[ 'never-registered' ]
-		);
-
-		$scripts = wp_scripts();
-		$scripts->all_deps( $scripts->queue );
-
-		$this->assertNotContains( 'my-prefix-my-bundle', $scripts->to_do );
-	}
-
-	/**
 	 * Caller-supplied script deps merge with the asset.php's; CSS gets
 	 * the explicit style deps. Duplicates collapse via array_unique so
 	 * `wp-element` doesn't appear twice.
