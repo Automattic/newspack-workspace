@@ -444,6 +444,64 @@ class Group_Subscription_Settings {
 	}
 
 	/**
+	 * Change a per-seat group's seat count without charging for it.
+	 *
+	 * The owner-facing way to buy or drop seats is the WooCommerce Subscriptions
+	 * switch, which prices the change and takes payment. This is the support-side
+	 * correction for the times that is the wrong answer -- a goodwill seat, a
+	 * miscounted order -- so it rescales the existing line item in place on the
+	 * same subscription rather than raising an order. It keeps the floor the
+	 * switch guard applies: seats can never fall below the people already in them.
+	 *
+	 * @param \WC_Subscription|int $subscription The subscription object or ID.
+	 * @param int                  $seats        The new seat count, including the owner.
+	 *
+	 * @return true|\WP_Error True on success, WP_Error when the change is refused.
+	 */
+	public static function set_seat_quantity( $subscription, $seats ) {
+		$subscription = WooCommerce_Subscriptions::sanitize_subscription( $subscription );
+		$item         = $subscription ? self::get_seat_line_item( $subscription ) : null;
+		if ( ! $item ) {
+			return new \WP_Error(
+				Group_Subscription_Seats::ERROR_CODE,
+				__( 'Subscription line item not found.', 'newspack-plugin' ),
+				[ 'status' => 400 ]
+			);
+		}
+		// A group is never smaller than its owner, so a zero or negative count is a
+		// one-seat group rather than an error.
+		$seats     = max( 1, (int) $seats );
+		$occupancy = Group_Subscription_Seats::get_occupancy( $subscription );
+		if ( $seats < $occupancy ) {
+			return new \WP_Error(
+				Group_Subscription_Seats::ERROR_CODE,
+				sprintf(
+					/* translators: %d: seats in use. */
+					__( '%d seats are in use; remove members or invitations first.', 'newspack-plugin' ),
+					$occupancy
+				),
+				[ 'status' => 400 ]
+			);
+		}
+		// Rescale from the current unit price rather than the product's, so a
+		// discounted or manually-edited line keeps the price the customer agreed to.
+		$old_quantity  = max( 1, (int) $item->get_quantity() );
+		$unit_subtotal = (float) $item->get_subtotal() / $old_quantity;
+		$unit_total    = (float) $item->get_total() / $old_quantity;
+		$item->set_quantity( $seats );
+		$item->set_subtotal( $unit_subtotal * $seats );
+		$item->set_total( $unit_total * $seats );
+		$item->save();
+		// WC_Abstract_Order::calculate_totals() rolls the line items up into the
+		// subscription total. Guarded because the subscription can be any object
+		// WCS hands back, and older versions did not always expose it.
+		if ( method_exists( $subscription, 'calculate_totals' ) ) {
+			$subscription->calculate_totals();
+		}
+		return true;
+	}
+
+	/**
 	 * Update group subscription settings for a subscription.
 	 *
 	 * @param WC_Subscription|int $subscription The subscription object or ID.
@@ -631,7 +689,6 @@ class Group_Subscription_Settings {
 		?>
 		<div class="newspack-group-subscription__container<?php echo $is_at_limit ? ' is-at-limit' : ''; ?>" data-subscription-id="<?php echo \esc_attr( $subscription->get_id() ); ?>" data-member-limit="<?php echo \esc_attr( null === $seat_limit ? '' : (string) $seat_limit ); ?>" data-spots-offset="<?php echo \esc_attr( (string) $spots_offset ); ?>">
 			<input type="hidden" name="<?php echo \esc_attr( self::GROUP_SUBSCRIPTION_META_PREFIX . 'enabled_baseline' ); ?>" value="<?php echo \esc_attr( \wc_bool_to_string( $settings['enabled'] ) ); ?>" />
-			<input type="hidden" name="<?php echo \esc_attr( self::GROUP_SUBSCRIPTION_META_PREFIX . 'limit_baseline' ); ?>" value="<?php echo \esc_attr( (int) $settings['limit'] ); ?>" />
 			<input type="hidden" name="<?php echo \esc_attr( self::GROUP_SUBSCRIPTION_META_PREFIX . 'name_baseline' ); ?>" value="<?php echo \esc_attr( $settings['name'] ); ?>" />
 			<div class="newspack-group-subscription__settings">
 				<h3><?php \esc_html_e( 'Settings', 'newspack-plugin' ); ?></h3>
@@ -676,13 +733,43 @@ class Group_Subscription_Settings {
 				</div>
 				<div class="form-row">
 					<?php
-					$pricing_options = self::add_custom_product_pricing_options( [] );
-					foreach ( $pricing_options as $option_key => $option_config ) {
-						if ( $option_key === 'newspack_group_subscription_limit' ) {
-							$option_config['value'] = $settings['limit'];
-							\woocommerce_wp_text_input( $option_config );
-							break;
+					if ( self::is_per_seat( $subscription ) ) {
+						// Capacity in per-seat mode is the purchased seat count, so there is no
+						// limit to override: the admin edits the seat count itself, and the save
+						// handler rescales the line item. The min is only a hint for the browser;
+						// set_seat_quantity() is what actually refuses a cut below occupancy.
+						$occupied_seats = Group_Subscription_Seats::get_occupancy( $subscription );
+						\woocommerce_wp_text_input(
+							[
+								'id'                => self::GROUP_SUBSCRIPTION_META_PREFIX . 'seats',
+								'name'              => self::GROUP_SUBSCRIPTION_META_PREFIX . 'seats',
+								'label'             => __( 'Seats (including owner)', 'newspack-plugin' ),
+								'desc_tip'          => true,
+								'description'       => __( 'The number of seats this group has bought. Changing it here resizes the subscription without charging or refunding the customer.', 'newspack-plugin' ),
+								'value'             => (int) $settings['limit'],
+								'type'              => 'number',
+								'wrapper_class'     => 'show_if_newspack_group_subscription_enabled',
+								'custom_attributes' => [
+									'step' => 1,
+									'min'  => max( 1, $occupied_seats ),
+								],
+							]
+						);
+						?>
+						<input type="hidden" name="<?php echo \esc_attr( self::GROUP_SUBSCRIPTION_META_PREFIX . 'seats_baseline' ); ?>" value="<?php echo \esc_attr( (int) $settings['limit'] ); ?>" />
+						<?php
+					} else {
+						$pricing_options = self::add_custom_product_pricing_options( [] );
+						foreach ( $pricing_options as $option_key => $option_config ) {
+							if ( $option_key === 'newspack_group_subscription_limit' ) {
+								$option_config['value'] = $settings['limit'];
+								\woocommerce_wp_text_input( $option_config );
+								break;
+							}
 						}
+						?>
+						<input type="hidden" name="<?php echo \esc_attr( self::GROUP_SUBSCRIPTION_META_PREFIX . 'limit_baseline' ); ?>" value="<?php echo \esc_attr( (int) $settings['limit'] ); ?>" />
+						<?php
 					}
 					?>
 				</div>
@@ -833,6 +920,24 @@ class Group_Subscription_Settings {
 
 		if ( ! empty( $changed ) ) {
 			self::update_subscription_settings( $subscription, $changed );
+		}
+
+		// A per-seat group renders the seat count in place of the limit field, and its
+		// capacity lives on the line item rather than in meta, so an edit here rescales
+		// the subscription instead of writing an override. Same baseline rule as the
+		// settings above: a field the admin never touched is not a change.
+		if ( isset( $_POST[ $prefix . 'seats' ], $_POST[ $prefix . 'seats_baseline' ] ) ) {
+			$submitted_seats = absint( wp_unslash( $_POST[ $prefix . 'seats' ] ) );
+			$baseline_seats  = absint( wp_unslash( $_POST[ $prefix . 'seats_baseline' ] ) );
+			if ( $submitted_seats !== $baseline_seats ) {
+				$seat_result = self::set_seat_quantity( $subscription, $submitted_seats );
+				// WooCommerce collects meta-box errors here and prints them on the next
+				// screen load; without it a refused change would just spring back with no
+				// explanation. Guarded because this class also runs outside wp-admin.
+				if ( is_wp_error( $seat_result ) && class_exists( '\WC_Admin_Meta_Boxes' ) ) {
+					\WC_Admin_Meta_Boxes::add_error( $seat_result->get_error_message() );
+				}
+			}
 		}
 
 		// Effective group status can flip via inherited product settings without a meta write; refresh the cached ID set when it changed.

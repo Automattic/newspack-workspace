@@ -296,6 +296,35 @@ function wc_mocks_set_is_product( $is_product ) {
 }
 
 /**
+ * Recording mock of WooCommerce's admin meta-box error bag, the channel a save
+ * handler uses to tell the admin why their edit did not take. Errors land on
+ * the $wc_mock_meta_box_errors global so tests can assert them.
+ *
+ * Defined unconditionally, so any class_exists( 'WC_Admin_Meta_Boxes' ) gate in
+ * production code executes against this mock for the whole suite; a test
+ * asserting on it should call wc_mocks_reset_meta_box_errors() from set_up().
+ */
+class WC_Admin_Meta_Boxes {
+	/**
+	 * Record an error for display on the next admin screen.
+	 *
+	 * @param string $text Error message.
+	 */
+	public static function add_error( $text ) {
+		global $wc_mock_meta_box_errors;
+		$wc_mock_meta_box_errors[] = $text;
+	}
+}
+
+/**
+ * Reset the errors recorded by the WC_Admin_Meta_Boxes mock.
+ */
+function wc_mocks_reset_meta_box_errors() {
+	global $wc_mock_meta_box_errors;
+	$wc_mock_meta_box_errors = [];
+}
+
+/**
  * Stand-in for WooCommerce's WC_Data_Exception, thrown by data setters that
  * reject their input.
  */
