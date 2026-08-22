@@ -366,6 +366,8 @@ domReady( () => {
 					// Fill in the hidden params in the variation modal. The picker is
 					// shared by every button for this product and is never reset, so
 					// this overwrites the previous open's context rather than adding to it.
+					// The shared PICKER_CONTEXT_FIELDS list carries `after_success_token`, so
+					// the signed destination propagates through the picker with everything else.
 					applyContextFields( singleVariationForm, checkoutData );
 
 					// Append the product data hidden inputs.

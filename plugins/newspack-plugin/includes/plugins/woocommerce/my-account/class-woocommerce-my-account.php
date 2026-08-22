@@ -734,10 +734,7 @@ class WooCommerce_My_Account {
 		}
 
 		// If the reader has intentionally saved a display name we consider generic, mark it as such.
-		if (
-			Reader_Activation::generate_user_nicename( $email ) === $display_name || // New generated construction (URL-sanitized version of the email address minus domain).
-			Reader_Activation::strip_email_domain( $email ) === $display_name // Legacy generated construction (just the email address minus domain).
-		) {
+		if ( Reader_Activation::is_display_name_derived_from_email( $display_name, $email ) ) {
 			\update_user_meta( $user_id, Reader_Activation::READER_SAVED_GENERIC_DISPLAY_NAME, 1 );
 		}
 	}

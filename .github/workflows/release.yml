@@ -5,8 +5,6 @@ on:
     branches:
       - release
       - alpha
-      - 'hotfix/**'
-      - 'epic/**'
 
 concurrency:
   group: release-${{ github.ref }}
@@ -20,6 +18,15 @@ permissions:
 
 env:
   PNPM_VERSION: 10.33.0
+  # Pinned WP-CLI for the translation-file regeneration step: make-pot and
+  # make-json output (including the md5-suffixed JSON translation filenames)
+  # varies across i18n-command versions, so an unpinned binary could silently
+  # rename generated files between releases. Keep in sync with i18n.yml.
+  WP_CLI_VERSION: 2.12.0
+  # sha512 of wp-cli-2.12.0.phar, pinned rather than fetched alongside the
+  # download: the upstream .sha512 asset sits in the same replaceable release, so
+  # fetching it proves only that two files agree. Keep in sync with i18n.yml.
+  WP_CLI_SHA512: be928f6b8ca1e8dfb9d2f4b75a13aa4aee0896f8a9a0a1c45cd5d2c98605e6172e6d014dda2e27f88c98befc16c040cbb2bd1bfa121510ea5cdf5f6a30fe8832
   # Every commit this workflow makes is automation-generated: the
   # @semantic-release/git prepare commit, the package.json version sync, and
   # the post-release branch-sync work (merge commits + the "restore
@@ -35,6 +42,23 @@ jobs:
   release:
     name: Release
     runs-on: ubuntu-latest
+    # Dependent jobs must tell "released" from "ran and released nothing".
+    # post-release.sh identifies what the release came from via `git log --skip
+    # 1`, assuming an automated release commit at the tip. A no-release run
+    # creates none, so that read lands a commit early, and a stale `Merge ...
+    # alpha` sitting there sends it down the path that force-pushes alpha.
+    outputs:
+      release_needed: ${{ steps.plan.outputs.release_needed }}
+      # Newline-separated `<pkg>@<version>` tags created by this run. Narrows
+      # release_needed above from "this run released something" to "this run
+      # released THIS plugin", which is what the WP.org deploy jobs gate on.
+      # See the "Collect released tags" step.
+      released-tags: ${{ steps.released.outputs.tags }}
+      # The commit this job left the branch on -- the one carrying the released
+      # versions. The WP.org deploy jobs build that exact commit rather than the
+      # branch tip, which keeps moving. See the "Sync package.json versions"
+      # step and the checkout in _release-wporg.yml.
+      released-sha: ${{ steps.sync.outputs.sha }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -70,8 +94,12 @@ jobs:
           # would silently skip a real release, the one outcome we must avoid.
           set +e
           pnpm exec multi-semantic-release --dry-run --sequential-init 2>&1 | tee msr-dryrun.log
-          dryrun_status=${PIPESTATUS[0]}
-          tee_status=${PIPESTATUS[1]}
+          # Copy the whole array in one go: PIPESTATUS is rebuilt after every
+          # command, and an assignment is a command, so reading [1] on the line
+          # after reading [0] returns empty and the tee check below never fires.
+          pipe_status=("${PIPESTATUS[@]}")
+          dryrun_status=${pipe_status[0]}
+          tee_status=${pipe_status[1]}
           set -e
           if [ "$dryrun_status" -ne 0 ]; then
             echo "multi-semantic-release dry-run failed (exit $dryrun_status)"
@@ -90,11 +118,34 @@ jobs:
           # X" for an existing package, but "There is no previous release, the
           # next release version is X" for a package's first-ever release --
           # missing the latter would silently skip that release.
-          grep -qi 'the next release version is' msr-dryrun.log
-          grep_status=$?
+          # `|| grep_status=$?` rather than a bare call: under `set -e` a bare grep
+          # that matches nothing exits 1 and kills the script, so the "no release
+          # needed" branch below is never reached. Exit 2 (a real grep error) still
+          # falls through to the failure branch.
+          grep_status=0
+          grep -qi 'the next release version is' msr-dryrun.log || grep_status=$?
           if [ "$grep_status" -eq 0 ]; then
             echo "release_needed=true" >> "$GITHUB_OUTPUT"
           elif [ "$grep_status" -eq 1 ]; then
+            # Absence of the version phrase is weak evidence on its own: a
+            # wording change upstream would read as "nothing to release" and
+            # silently skip a real one. Require multi-semantic-release's own
+            # zero-count line to corroborate before trusting the skip.
+            zero_status=0
+            # msr logs `Released 0 of 18 packages` when nothing is due and `Released 1
+            # of 18 packages` when something is, so the count is real corroboration.
+            # Matched loosely so a cosmetic reformat cannot redden a no-op push.
+            grep -qiE 'released +0 +of +[0-9]+ +packages?' msr-dryrun.log || zero_status=$?
+            if [ "$zero_status" -eq 1 ]; then
+              echo "Neither a release version nor a zero-release marker found; the dry-run output may have changed."
+              # Whole log: this fires when the shape is unknown, and a tail of a
+              # multi-package run shows only the last package. `|| true` so exit 1 wins.
+              cat msr-dryrun.log || true
+              exit 1
+            elif [ "$zero_status" -ne 0 ]; then
+              echo "Failed to scan the dry-run log for the zero-release marker (grep exit $zero_status)"
+              exit "$zero_status"
+            fi
             echo "release_needed=false" >> "$GITHUB_OUTPUT"
             echo "No package requires a release; skipping build and release."
           else
@@ -116,6 +167,40 @@ jobs:
       - name: Build all
         if: steps.plan.outputs.release_needed == 'true'
         run: pnpm run build
+      # continue-on-error: this only enables translation regeneration, which is
+      # non-blocking by design, so an apt or release-asset blip must not take a
+      # product release with it. The script exits 2 when its tools are missing,
+      # degrading down the same path as a failed unit.
+      - name: Install WP-CLI and gettext
+        if: steps.plan.outputs.release_needed == 'true'
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP"
+          curl -fsSL --retry 3 -O \
+            "https://github.com/wp-cli/wp-cli/releases/download/v${WP_CLI_VERSION}/wp-cli-${WP_CLI_VERSION}.phar"
+          # Digest line built here: the published .sha512 asset is a bare digest
+          # with no filename, which sha512sum -c rejects as improperly formatted.
+          printf '%s  wp-cli-%s.phar\n' "$WP_CLI_SHA512" "$WP_CLI_VERSION" | sha512sum -c -
+          chmod +x "wp-cli-${WP_CLI_VERSION}.phar"
+          sudo mv "wp-cli-${WP_CLI_VERSION}.phar" /usr/local/bin/wp
+          wp --version
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq gettext
+      # After "Build all" because make-pot scans the built bundles, and before
+      # multi-semantic-release, which commits languages/** for each package it
+      # releases. release:archive zips the working tree, so every channel's zip
+      # carries fresh templates even where nothing is committed, and post-release
+      # syncs the release commits back to main.
+      #
+      # No --strict: a failing unit is restored to its committed template and
+      # reported rather than blocking an otherwise-good release. Dispatch the
+      # i18n workflow to regenerate outside a release.
+      - name: Regenerate translation files
+        id: i18n
+        if: steps.plan.outputs.release_needed == 'true'
+        continue-on-error: true
+        run: ./.github/scripts/update-translations.sh
       # Install each plugin's production PHP dependencies so release:archive
       # bundles vendor/ into the release zips. Without this the published zips
       # are missing composer dependencies (e.g. newspack-ads' googleads lib).
@@ -144,6 +229,43 @@ jobs:
           # auth 401s. Set it to the same secret so npm actually authenticates.
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
           NODE_OPTIONS: --max-old-space-size=12288
+      # Which packages actually published, as `<pkg>@<version>` tags. Same
+      # before/after tag diff notify-release.sh uses for its Slack summary,
+      # surfaced as a job output so the WP.org deploy jobs can gate on it:
+      # without it they cannot tell a plugin that had no release from one whose
+      # deploy silently resolved a stale version. Always runs, so a skipped
+      # release yields an empty list rather than a missing output.
+      #
+      # Every command here must fail loudly. An empty list is meaningful -- the
+      # deploy jobs read it as "this plugin had no release" and skip -- so a
+      # swallowed error would silently skip every WP.org deploy of a real
+      # release, which is the exact failure this gating exists to prevent.
+      # Hence no `|| true`, pipefail on, and both sides materialised as files
+      # rather than process substitutions (whose exit status bash discards).
+      #
+      # `--merged HEAD` restricts the diff to tags on this branch's history, so
+      # it measures what this run created rather than what appeared. The
+      # concurrency group is per-ref, so an alpha release runs alongside a
+      # stable one by design and tags into the same namespace, and
+      # semantic-release fetches tags on every invocation -- an alpha tag
+      # pushed while the release step ran would otherwise land in this list.
+      # The deploy gate would then find a tag for the plugin but no match at
+      # the stable version, and fail the run as a stale checkout, minutes after
+      # npm and GitHub had already published.
+      - name: Collect released tags
+        id: released
+        run: |
+          set -euo pipefail
+          sort "$RUNNER_TEMP/tags-before.txt" > "$RUNNER_TEMP/tags-before-sorted.txt"
+          git tag --merged HEAD | sort > "$RUNNER_TEMP/tags-after-sorted.txt"
+          new_tags=$(comm -13 "$RUNNER_TEMP/tags-before-sorted.txt" "$RUNNER_TEMP/tags-after-sorted.txt")
+          echo "Tags created by this run:"
+          echo "${new_tags:-(none)}"
+          {
+            echo 'tags<<RELEASED_TAGS_EOF'
+            echo "$new_tags"
+            echo 'RELEASED_TAGS_EOF'
+          } >> "$GITHUB_OUTPUT"
       # package.json is deliberately excluded from the @semantic-release/git
       # prepare commit: that keeps multi-semantic-release's concretized
       # workspace:* deps off the branch (they'd break the next
@@ -156,28 +278,70 @@ jobs:
       # ancestry check is unaffected by the extra commit.
       #
       # Runs only on the `release` branch. Version/changelog stamps are authored
-      # on a single channel (see config/release-helpers.js): prerelease channels
-      # (alpha, hotfix/*, epic/*) build their zip/tag from the working-tree bump
-      # but never commit it, so only `release` ever edits the version-stamp
-      # lines. That keeps the committed CHANGELOG free of prerelease noise and
-      # stops post-release.sh's release -> alpha / default-branch sync from
-      # colliding on version headers. The prerelease zip is built from the
-      # working tree regardless, so nothing downstream needs this commit.
+      # on a single channel (see config/release-helpers.js): the alpha prerelease
+      # channel builds its zip/tag from the working-tree bump but never commits
+      # it, so only `release` ever edits the version-stamp lines. That keeps the
+      # committed CHANGELOG free of prerelease noise and stops post-release.sh's
+      # release -> alpha / default-branch sync from colliding on version headers.
+      # The prerelease zip is built from the working tree regardless, so nothing
+      # downstream needs this commit.
+      # Whatever is still uncommitted here has already served its purpose: the
+      # zips were built from the working tree above. On the release branch that
+      # is the units that did not release, since gitCommitStep committed the
+      # ones that did; on prerelease channels it is everything, because
+      # gitCommitStep returns no step there at all. Either way it goes nowhere
+      # from this point, so drop it and let the steps below start from a clean
+      # tree, since `git pull --rebase` refuses to run on a dirty one.
+      #
+      # The pathspecs need the trailing /* : a glob pathspec has to match the
+      # full file path, so 'plugins/*/languages' alone matches nothing at all
+      # and every command here silently becomes a no-op. The * crosses
+      # directory separators, which is what reaches the classic theme's nested
+      # themes/newspack-theme/newspack-theme/languages/. The final check is a
+      # gate rather than a print, so a future edit that breaks the pathspecs
+      # fails here instead of passing quietly.
+      # continue-on-error: this runs after multi-semantic-release has published,
+      # so a failure here would red-flag a shipped release and skip post-release
+      # (which resets alpha and syncs main). A dirty tree breaks nothing anyway:
+      # the version sync below rebases with autostash.
+      - name: Discard uncommitted translation output
+        if: steps.plan.outputs.release_needed == 'true'
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          git checkout -- 'plugins/*/languages/*' 'themes/*/languages/*' 2> /dev/null || true
+          git clean -fdq -- 'plugins/*/languages/*' 'themes/*/languages/*'
+          leftover=$(git status --porcelain -- 'plugins/*/languages/*' 'themes/*/languages/*')
+          if [ -n "$leftover" ]; then
+            echo "::warning title=i18n::Translation files still uncommitted after cleanup"
+            printf '%s\n' "$leftover"
+            exit 1
+          fi
+
       - name: Sync package.json versions
+        id: sync
         if: ${{ github.ref_name == 'release' }}
         run: |
           node .github/scripts/finalize-package-versions.cjs
           # The release is already published by this point, so the branch must not
           # be left without the synced version. If a concurrent push to the same
           # ref rejects ours, rebase the sync commit on top and retry.
+          # autoStash as a backstop: the discard step above should have left the
+          # tree clean, and this recovery path runs after packages are published,
+          # so it must not be the thing that fails.
           git push origin "HEAD:${GITHUB_REF_NAME}" || {
-            git pull --rebase origin "${GITHUB_REF_NAME}"
+            git -c rebase.autoStash=true pull --rebase origin "${GITHUB_REF_NAME}"
             git push origin "HEAD:${GITHUB_REF_NAME}"
           }
+          # Published after the push, so it names a commit that exists on the
+          # remote for the deploy jobs to check out. Pinning them to this SHA is
+          # what makes the deployed tree exactly the released one: the branch tip
+          # can move underneath them, and a version-only check cannot see that,
+          # since a code-only commit leaves every version untouched.
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
       # Post a release-success summary to Slack: stable releases (release branch)
-      # go to the a8c workspace, alpha releases to the Newspack workspace. Only
-      # these two branches notify; hotfix/* and epic/* publish silently.
+      # go to the a8c workspace, alpha releases to the Newspack workspace.
       # Only the workspace for this branch's release type gets its token, so an
       # alpha run never sees the a8c token and vice versa (the empty fallback is
       # fine: the script skips when its token/channel is unset). continue-on-error
@@ -193,13 +357,17 @@ jobs:
           SLACK_A8C_RELEASE_CHANNEL_ID: ${{ secrets.SLACK_A8C_RELEASE_CHANNEL_ID }}
           SLACK_NEWSPACK_RELEASE_CHANNEL_ID: ${{ secrets.SLACK_NEWSPACK_RELEASE_CHANNEL_ID }}
           SLACK_SUPPORT_TEAM_SUBTEAM_ID: ${{ github.ref_name == 'release' && secrets.SLACK_SUPPORT_TEAM_SUBTEAM_ID || '' }}
+          # The script writes I18N_FAILED_UNITS only at the end of a normal run,
+          # so a step that died earlier leaves it empty. The outcome fallback
+          # keeps a whole-step failure from passing as a clean release.
+          I18N_FAILED_UNITS: ${{ steps.i18n.outcome == 'failure' && 'regeneration step failed, see the job log' || env.I18N_FAILED_UNITS }}
         run: ./.github/scripts/notify-release.sh
 
   # Branch maintenance after a stable release: reset alpha and sync release into
-  # the default branch. Only runs on the release branch (not alpha/hotfix/epic).
+  # the default branch. Only runs on the release branch (not alpha).
   post-release:
     name: Post-release branch sync
-    if: github.ref == 'refs/heads/release'
+    if: github.ref == 'refs/heads/release' && needs.release.outputs.release_needed == 'true'
     needs: release
     runs-on: ubuntu-latest
     steps:
@@ -220,36 +388,45 @@ jobs:
   # WP.org deploys are plugin-specific and only run on the release branch.
   release-wporg-newsletters:
     name: WP.org / newspack-newsletters
-    if: github.ref == 'refs/heads/release'
+    if: github.ref == 'refs/heads/release' && needs.release.outputs.release_needed == 'true'
     needs: release
     uses: ./.github/workflows/_release-wporg.yml
     with:
       plugin-name: newspack-newsletters
       plugin-path: plugins/newspack-newsletters
+      ref: ${{ needs.release.outputs.released-sha }}
+      released-tags: ${{ needs.release.outputs.released-tags }}
+      require-release: true
     secrets:
       WP_ORG_USERNAME: ${{ secrets.WP_ORG_USERNAME }}
       WP_ORG_PASSWORD: ${{ secrets.WP_ORG_PASSWORD }}
 
   release-wporg-scaip:
     name: WP.org / super-cool-ad-inserter
-    if: github.ref == 'refs/heads/release'
+    if: github.ref == 'refs/heads/release' && needs.release.outputs.release_needed == 'true'
     needs: release
     uses: ./.github/workflows/_release-wporg.yml
     with:
       plugin-name: super-cool-ad-inserter
       plugin-path: plugins/super-cool-ad-inserter
+      ref: ${{ needs.release.outputs.released-sha }}
+      released-tags: ${{ needs.release.outputs.released-tags }}
+      require-release: true
     secrets:
       WP_ORG_USERNAME: ${{ secrets.WP_ORG_USERNAME }}
       WP_ORG_PASSWORD: ${{ secrets.WP_ORG_PASSWORD }}
 
   release-wporg-rtt:
     name: WP.org / republication-tracker-tool
-    if: github.ref == 'refs/heads/release'
+    if: github.ref == 'refs/heads/release' && needs.release.outputs.release_needed == 'true'
     needs: release
     uses: ./.github/workflows/_release-wporg.yml
     with:
       plugin-name: republication-tracker-tool
       plugin-path: plugins/republication-tracker-tool
+      ref: ${{ needs.release.outputs.released-sha }}
+      released-tags: ${{ needs.release.outputs.released-tags }}
+      require-release: true
     secrets:
       WP_ORG_USERNAME: ${{ secrets.WP_ORG_USERNAME }}
       WP_ORG_PASSWORD: ${{ secrets.WP_ORG_PASSWORD }}

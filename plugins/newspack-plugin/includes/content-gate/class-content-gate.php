@@ -191,6 +191,7 @@ class Content_Gate {
 
 		include __DIR__ . '/class-content-gate-api.php';
 		include __DIR__ . '/class-content-gate-advanced-settings.php';
+		include __DIR__ . '/class-content-gate-excerpt.php';
 		include __DIR__ . '/class-access-rules.php';
 		include __DIR__ . '/class-content-rules.php';
 		include __DIR__ . '/class-content-restriction-control.php';
@@ -199,6 +200,7 @@ class Content_Gate {
 		include __DIR__ . '/class-metering-countdown.php';
 		include __DIR__ . '/content-gifting/class-content-gifting.php';
 		include __DIR__ . '/class-ip-access-rule.php';
+		include __DIR__ . '/class-institution-rest-controller.php';
 		include __DIR__ . '/class-institution.php';
 		include __DIR__ . '/class-newsletters-access.php';
 		include __DIR__ . '/class-user-gate-access.php';
@@ -245,6 +247,44 @@ class Content_Gate {
 			$enabled = defined( 'NEWSPACK_CONTENT_GATES' ) && NEWSPACK_CONTENT_GATES;
 		}
 		return $enabled;
+	}
+
+	/**
+	 * Whether gating actually enforces anything for readers right now.
+	 *
+	 * The predicate reader-facing enforcement asks, so that "gating is off" means
+	 * the same thing across the surfaces that share both conditions. Surfaces that
+	 * answer the question for themselves drift, which is what this exists to stop.
+	 *
+	 * ONE DELIBERATE EXCEPTION: {@see Block_Visibility::filter_render_block()} uses
+	 * `Reader_Activation::is_enabled()` alone, not this. Block visibility predates
+	 * the feature constant and is independent of it — the class registers
+	 * unconditionally, its editor panel loads without the constant, and in `custom`
+	 * mode a block needs no gate at all. ANDing the constant in there would unhide
+	 * blocks on sites that never enabled content gates. Don't "fix" it to call this
+	 * method; the asymmetry is the point.
+	 *
+	 * Two conditions, either of which stands gating down:
+	 *
+	 * - The feature constant. Access Control is only on where someone put it.
+	 * - Audience Management (NPPD-1846). Everything a gate hands the reader off
+	 *   to — registration, magic-link sign-in, account emails, session
+	 *   hydration, My Account — is gated on it, so a gate enforced without it
+	 *   locks readers out with no way in. Gates stay configured and go inert
+	 *   instead, which is what lets Audience Management be switched off without
+	 *   stranding a live restriction nobody can reach the screens to lift.
+	 *
+	 * Deliberately NOT the predicate for admin surfaces. The Access Control
+	 * screens stay registered on {@see self::is_newspack_feature_enabled()}
+	 * alone, so the dependency is explained rather than hidden: a publisher
+	 * whose gates are inert can still open the screen and read why. When the
+	 * feature constant retires, the two converge on the reader side and the
+	 * admin side keeps its own predicate.
+	 *
+	 * @return bool
+	 */
+	public static function is_gating_active(): bool {
+		return self::is_newspack_feature_enabled() && Reader_Activation::is_enabled();
 	}
 
 	/**
@@ -320,8 +360,16 @@ class Content_Gate {
 		self::$is_gated          = true;
 		self::$is_content_locked = true;
 
-		$content   = self::get_restricted_post_excerpt( $post );
 		$gate_html = self::get_inline_gate_html();
+
+		// Mark before rendering: the renders below run the post content and the
+		// gate layout through the block pipeline, and any block that runs a
+		// secondary loop ends it with wp_reset_postdata(), which re-fires
+		// `the_post` for the main post. The has_rendered() guard above must
+		// already be set by then, or this method re-enters itself unboundedly.
+		self::mark_gate_as_rendered();
+
+		$content = self::get_restricted_post_excerpt( $post );
 
 		// Note that this does not feed the 'the_content' chain: core generates the
 		// post's page data before firing 'the_post', so the chain is handed the
@@ -337,8 +385,6 @@ class Content_Gate {
 			'teaser' => $content,
 			'gate'   => $gate_html,
 		];
-
-		self::mark_gate_as_rendered();
 	}
 
 	/**
@@ -655,7 +701,12 @@ class Content_Gate {
 		// with the flag off the exempt key is absent from the REST schema, so the panel
 		// must not render a toggle that could not persist. In practice get_gates() is
 		// already empty when the flag is off, but gating both on the flag keeps them aligned.
-		if ( ! self::is_newspack_feature_enabled() ) {
+		// Gating rather than the flag alone: with Audience Management off no gate
+		// applies to any reader, so this panel would name gates that are doing nothing
+		// and offer an exemption toggle that suppresses nothing. Mirrors the block
+		// visibility panel. The exempt post meta stays registered either way, so a
+		// post's exemption survives the toggle exactly as block attributes do.
+		if ( ! self::is_gating_active() ) {
 			return;
 		}
 		if ( ! in_array( get_post_type(), array_column( Content_Restriction_Control::get_available_post_types(), 'value' ), true ) ) {
@@ -711,17 +762,45 @@ class Content_Gate {
 	}
 
 	/**
+	 * Whether the gate's front-end script should load on this request, and why.
+	 *
+	 * The decision lives here, not just its payload, so it can be asserted without
+	 * building assets: the script also has to load on a gate preview where no gate
+	 * renders — archives, home, search — so the previewed params survive a click
+	 * through one of those pages. Gate them out and the preview ends silently at
+	 * the first non-singular view, which is not what the pre-7.1 editor-side
+	 * handler did: it re-ran on every navigation inside the preview frame.
+	 * Returning both inputs alongside the verdict saves the caller recomputing them.
+	 *
+	 * @return array{enqueue: bool, renders_gate: bool, is_preview: bool}
+	 */
+	public static function get_frontend_script_conditions() {
+		// is_singular() first, matching enqueue_content_banner_assets(): during a
+		// preview on an archive, has_gate() would otherwise scan the gate list and have
+		// the result thrown away by the very next operand.
+		$renders_gate = is_singular() && self::has_gate() && self::is_post_restricted();
+		$is_preview   = Content_Gate\Gate_Preview::is_preview_request();
+		return [
+			'enqueue'      => $renders_gate || $is_preview,
+			'renders_gate' => $renders_gate,
+			'is_preview'   => $is_preview,
+		];
+	}
+
+	/**
 	 * Enqueue frontend scripts and styles for gated content.
 	 */
 	public static function enqueue_scripts() {
 		self::enqueue_content_banner_assets();
 
-		if ( ! self::has_gate() ) {
+		$context      = self::get_frontend_script_conditions();
+		$renders_gate = $context['renders_gate'];
+		$is_preview   = $context['is_preview'];
+
+		if ( ! $context['enqueue'] ) {
 			return;
 		}
-		if ( ! is_singular() || ! self::is_post_restricted() ) {
-			return;
-		}
+
 		$handle = 'newspack-content-gate';
 		\wp_enqueue_script(
 			$handle,
@@ -731,19 +810,55 @@ class Content_Gate {
 			true
 		);
 		\wp_script_add_data( $handle, 'async', true );
-		\wp_localize_script(
-			$handle,
-			'newspack_content_gate',
-			[
-				'metadata' => self::get_gate_metadata(),
-			]
-		);
+		\wp_localize_script( $handle, 'newspack_content_gate', self::get_frontend_script_data( $renders_gate, $is_preview ) );
+
+		// Only a rendering gate needs the styles.
+		if ( ! $renders_gate ) {
+			return;
+		}
 		\wp_enqueue_style(
 			$handle,
 			Newspack::plugin_url() . '/dist/content-gate.css',
 			[],
 			filemtime( dirname( NEWSPACK_PLUGIN_FILE ) . '/dist/content-gate.css' )
 		);
+	}
+
+	/**
+	 * Data localized to the front-end gate script.
+	 *
+	 * Split out from enqueue_scripts() so the payload is assertable without
+	 * touching the filesystem for asset versions. Whether the script loads at all
+	 * is decided in get_frontend_script_conditions().
+	 *
+	 * The two keys are independently optional: gate.js reads `metadata`, and
+	 * preview-links.js reads `preview_param_names`. A preview on a view where no
+	 * gate renders carries only the second.
+	 *
+	 * @param bool $renders_gate Whether a gate renders on this request.
+	 * @param bool $is_preview   Whether this is a gate preview request.
+	 * @return array{metadata?: array, preview_param_names?: string[]}
+	 */
+	public static function get_frontend_script_data( $renders_gate, $is_preview ) {
+		$script_data = [];
+
+		if ( $renders_gate ) {
+			$script_data['metadata'] = self::get_gate_metadata();
+		}
+
+		// On a gate preview the previewed document carries its own preview params
+		// onto same-origin links, so the preview survives navigation. It needs the
+		// param list to know which of its query params those are. Gate_Preview's
+		// own check already requires the preview capability, so this does not ship
+		// to ordinary readers.
+		if ( $is_preview ) {
+			$script_data['preview_param_names'] = array_merge(
+				[ Content_Gate\Gate_Preview::PREVIEW_QUERY_PARAM ],
+				array_values( Content_Gate\Gate_Preview::PREVIEW_QUERY_KEYS )
+			);
+		}
+
+		return $script_data;
 	}
 
 	/**
@@ -834,14 +949,21 @@ class Content_Gate {
 	}
 
 	/**
-	 * Public method for marking the gate as rendered.
+	 * Public method for marking the gate render as claimed.
+	 *
+	 * Every render path sets this BEFORE producing output, so the flag acts as
+	 * a once-per-request re-entrancy lock, not a signal that gate markup
+	 * already exists.
 	 */
 	public static function mark_gate_as_rendered() {
 		self::$gate_rendered = true;
 	}
 
 	/**
-	 * Whether the gate has rendered.
+	 * Whether a gate render has been claimed for this request.
+	 *
+	 * True from the moment a render path commits to rendering (see
+	 * mark_gate_as_rendered()), which may be before any markup is output.
 	 */
 	public static function has_rendered() {
 		return self::$gate_rendered;
@@ -856,8 +978,6 @@ class Content_Gate {
 	 */
 	public static function post_has_restrictions( $post_id = null ) {
 		$post_id = $post_id ? $post_id : get_the_ID();
-
-		// TODO: Content Gate content rules check.
 
 		/**
 		 * Filters whether the post has restrictions.

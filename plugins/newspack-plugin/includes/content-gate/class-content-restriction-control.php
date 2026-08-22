@@ -55,12 +55,65 @@ class Content_Restriction_Control {
 	const IS_EXEMPT_META_KEY = 'newspack_content_restriction_is_exempt';
 
 	/**
+	 * Post meta key WooCommerce Memberships uses to force a post public.
+	 *
+	 * @var string
+	 */
+	const WC_FORCE_PUBLIC_META_KEY = '_wc_memberships_force_public';
+
+	/**
 	 * Initialize hooks and filters.
 	 */
 	public static function init() {
 		add_action( 'init', [ __CLASS__, 'register_meta' ] );
 		add_action( 'init', [ __CLASS__, 'register_meta_guards' ] );
 		add_filter( 'newspack_is_post_restricted', [ __CLASS__, 'is_post_restricted' ], 10, 2 );
+		add_filter( 'newspack_post_has_restrictions', [ __CLASS__, 'post_has_restrictions' ], 10, 2 );
+		// Priority 20 so the fallback wins over the meta key's registered default.
+		add_filter( 'default_post_metadata', [ __CLASS__, 'filter_default_exemption_meta' ], 20, 4 );
+	}
+
+	/**
+	 * Whether the post is covered by content gating rules, regardless of the
+	 * current user's own access. The user-agnostic counterpart of
+	 * is_post_restricted(), consumed e.g. by integrations that must advertise
+	 * a post as gated (Google Extended Access' isAccessibleForFree schema).
+	 *
+	 * @param bool $has_restrictions Whether the post has restrictions.
+	 * @param int  $post_id          Post ID.
+	 *
+	 * @return bool
+	 */
+	public static function post_has_restrictions( $has_restrictions, $post_id = null ) {
+		// Don't apply our restriction strategy if Woo Memberships is active.
+		if ( Memberships::is_active() ) {
+			return $has_restrictions;
+		}
+
+		// Gating stands down rather than half-working ({@see Content_Gate::is_gating_active()}),
+		// so a post is not advertised as gated while Access Control enforces nothing. Mirrors
+		// the same stand-down in is_post_restricted().
+		if ( ! Content_Gate::is_gating_active() ) {
+			return $has_restrictions;
+		}
+
+		$post_id = $post_id ? $post_id : get_the_ID();
+
+		// An exempt post is never gated, regardless of an incoming value.
+		if ( $post_id && get_post_meta( $post_id, self::IS_EXEMPT_META_KEY, true ) ) {
+			return false;
+		}
+
+		// Pass through a restriction another callback already determined.
+		if ( $has_restrictions ) {
+			return $has_restrictions;
+		}
+
+		if ( ! $post_id ) {
+			return false;
+		}
+
+		return ! empty( self::get_post_gates( $post_id ) );
 	}
 
 	/**
@@ -334,6 +387,21 @@ class Content_Restriction_Control {
 			return $is_post_restricted;
 		}
 
+		// Gating stands down rather than half-working ({@see Content_Gate::is_gating_active()}).
+		//
+		// Passes the incoming value through rather than returning false, so this decides
+		// only whether *our* gates restrict and never overrides a verdict another
+		// callback already reached. At this position the two are equivalent — the
+		// Memberships early return above has already fired, and the only other callbacks
+		// either lower the value (`Newsletters_Access::filter_post_restricted`, a bypass)
+		// or run later and win regardless (`Gate_Preview::filter_is_post_restricted` at
+		// PHP_INT_MAX, which still forces a preview restricted so a publisher can see the
+		// gate they are editing). Pass-through is the safer default to keep as new
+		// callbacks are added.
+		if ( ! Content_Gate::is_gating_active() ) {
+			return $is_post_restricted;
+		}
+
 		// Return early if this post is exempt from access control restrictions.
 		if ( $post_id && get_post_meta( $post_id, self::IS_EXEMPT_META_KEY, true ) ) {
 			return false;
@@ -346,13 +414,17 @@ class Content_Restriction_Control {
 
 		$user_id = $user_id ?? get_current_user_id();
 
-		// Don't restrict this post for users who can edit it.
-		if ( ! empty( $post_id ) && user_can( $user_id, 'edit_post', $post_id ) ) {
+		// If no gates apply to this post, nothing can restrict it. Checked before
+		// the capability check below: user_can() fans out to other plugins'
+		// user_has_cap filters and can be expensive, and an empty gate set returns
+		// false regardless of the user's caps, so the outcome is identical either way.
+		$post_gates = self::get_post_gates( $post_id );
+		if ( empty( $post_gates ) ) {
 			return false;
 		}
 
-		$post_gates = self::get_post_gates( $post_id );
-		if ( empty( $post_gates ) ) {
+		// Don't restrict this post for users who can edit it.
+		if ( ! empty( $post_id ) && user_can( $user_id, 'edit_post', $post_id ) ) {
 			return false;
 		}
 
@@ -484,6 +556,98 @@ class Content_Restriction_Control {
 	}
 
 	/**
+	 * Treat a post WooCommerce Memberships forced public as exempt from access control,
+	 * when no exemption of our own is recorded for it.
+	 *
+	 * Keeps posts a publisher exempted under Memberships readable once a migrated
+	 * site's gates start enforcing. An exemption recorded here wins for as long as it
+	 * is recorded, including a falsy one -- which is why this answers the default
+	 * rather than the read: the default is only consulted when no row exists.
+	 *
+	 * Answers keyed reads only, so a whole-object meta read will not carry the key.
+	 *
+	 * @param mixed  $value    Default value to return.
+	 * @param int    $post_id  Post ID.
+	 * @param string $meta_key Meta key being read.
+	 * @param bool   $single   Whether a single value was requested.
+	 *
+	 * @return mixed
+	 */
+	public static function filter_default_exemption_meta( $value, $post_id, $meta_key, $single ) {
+		if ( self::IS_EXEMPT_META_KEY !== $meta_key || ! Content_Gate::is_newspack_feature_enabled() ) {
+			return $value;
+		}
+
+		// Matches core's own default-metadata guard.
+		if ( wp_installing() ) {
+			return $value;
+		}
+
+		// Memberships stores 'yes' or 'no', and 'no' is a truthy string.
+		if ( 'yes' !== get_post_meta( $post_id, self::WC_FORCE_PUBLIC_META_KEY, true ) ) {
+			return $value;
+		}
+
+		// Only where the exemption is registered, so an inferred one always has a
+		// toggle to see it and the save guards behind it.
+		if ( ! registered_meta_key_exists( 'post', self::IS_EXEMPT_META_KEY, get_post_type( $post_id ) ) ) {
+			return $value;
+		}
+
+		/**
+		 * Filters whether a Memberships force-public flag stands in for a missing
+		 * exemption. Turning it off re-gates every post whose exemption was only
+		 * inferred, so record those exemptions first.
+		 *
+		 * @param bool $respect Whether to honor the Memberships flag. Default true.
+		 * @param int  $post_id Post ID.
+		 */
+		if ( ! apply_filters( 'newspack_content_gate_respect_memberships_force_public', true, $post_id ) ) {
+			return $value;
+		}
+
+		return $single ? true : [ true ];
+	}
+
+	/**
+	 * Drop an exemption the editor is only echoing back at us.
+	 *
+	 * The block editor reads every meta value from REST and returns the whole set
+	 * whenever any one of them is edited, so without this a value this class
+	 * synthesized would be saved as a real row by nothing more than opening a post
+	 * and saving it. That row would then outlive the Memberships flag it came from
+	 * and ignore the opt-out filter, quietly making the exemption permanent.
+	 *
+	 * An explicit falsy value is left alone: that one is a decision, and recording
+	 * it is what makes turning the toggle off stick. A post being created has no
+	 * ID yet and nothing to inherit from, so it is skipped.
+	 *
+	 * @param stdClass|WP_Error $prepared_post Prepared post object (returned unchanged).
+	 * @param WP_REST_Request   $request       Incoming request.
+	 * @return stdClass|WP_Error
+	 */
+	public static function strip_inherited_exempt_meta( $prepared_post, $request ) {
+		$meta = $request['meta'];
+		if ( ! is_array( $meta ) || empty( $meta[ self::IS_EXEMPT_META_KEY ] ) ) {
+			return $prepared_post;
+		}
+
+		$post_id = isset( $prepared_post->ID ) ? (int) $prepared_post->ID : 0;
+		if ( ! $post_id || metadata_exists( 'post', $post_id, self::IS_EXEMPT_META_KEY ) ) {
+			return $prepared_post;
+		}
+
+		// Ask the fallback itself, so the two can't drift apart.
+		if ( true !== self::filter_default_exemption_meta( false, $post_id, self::IS_EXEMPT_META_KEY, true ) ) {
+			return $prepared_post;
+		}
+
+		unset( $meta[ self::IS_EXEMPT_META_KEY ] );
+		$request['meta'] = $meta;
+		return $prepared_post;
+	}
+
+	/**
 	 * Register post meta for the exemption flag.
 	 */
 	public static function register_meta() {
@@ -508,16 +672,18 @@ class Content_Restriction_Control {
 	}
 
 	/**
-	 * Register the REST guard that strips the exemption meta from unauthorized
-	 * saves. Registered unconditionally — independent of whether the meta itself
-	 * is registered — so its lifetime never depends on when the content-gate
-	 * feature flag resolves. It is a harmless no-op when the key is absent from
-	 * the request.
+	 * Register the REST guards that keep the exemption meta out of saves that
+	 * should not carry it: one for a user who cannot toggle it, one for a value
+	 * this class inferred rather than a person choosing it. Registered
+	 * unconditionally — independent of whether the meta itself is registered —
+	 * so their lifetime never depends on when the content-gate feature flag
+	 * resolves. Both are harmless no-ops when the key is absent from the request.
 	 */
 	public static function register_meta_guards() {
 		$post_types = array_column( (array) self::get_available_post_types(), 'value' );
 		foreach ( $post_types as $post_type ) {
 			\add_filter( "rest_pre_insert_{$post_type}", [ __CLASS__, 'strip_unauthorized_exempt_meta' ], 10, 2 );
+			\add_filter( "rest_pre_insert_{$post_type}", [ __CLASS__, 'strip_inherited_exempt_meta' ], 10, 2 );
 		}
 	}
 

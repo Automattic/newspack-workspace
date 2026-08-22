@@ -1059,4 +1059,89 @@ Error message(s) received:
 			}
 		);
 	}
+
+	/**
+	 * Call get_send_lists() and normalize any provider-specific failure into a
+	 * WP_Error.
+	 *
+	 * Providers do not share an error convention: ActiveCampaign returns a
+	 * WP_Error, while Mailchimp throws (from validate() and the cached-data
+	 * accessors). Normalizing here is what lets get_send_lists_with_fallback()
+	 * reason about failure without knowing which provider it is wrapping.
+	 *
+	 * @param array $args     Args for get_send_lists(). See Send_Lists::get_default_args().
+	 * @param bool  $to_array Whether to return arrays instead of Send_List objects.
+	 * @return array|WP_Error
+	 */
+	private function fetch_send_lists( $args, $to_array = false ) {
+		try {
+			return $this->get_send_lists( $args, $to_array );
+		} catch ( Throwable $e ) {
+			return new WP_Error( 'newspack_newsletters_send_lists_fetch_failed', $e->getMessage() );
+		}
+	}
+
+	/**
+	 * Fetch send lists, falling back to a wider fetch when a targeted lookup
+	 * cannot resolve a stored id that belongs to a previously-connected ESP.
+	 *
+	 * A stale id surfaces differently per provider: ActiveCampaign passes 'ids'
+	 * upstream and returns a WP_Error, while Mailchimp and Constant Contact
+	 * fetch everything and filter in PHP, so an unknown id is simply absent
+	 * from the result. Both shapes — error and empty — are therefore treated as
+	 * "this id did not resolve".
+	 *
+	 * The retry widens in two stages so a stale sublist id does not drag the
+	 * result across every parent list: first drop 'ids' but keep 'parent_id'
+	 * (the parent is a scope, not the suspect value), and only drop 'parent_id'
+	 * as well if that still resolves nothing. A wider fetch that succeeds
+	 * proves the ESP is reachable and the stored id is the problem, so its
+	 * result is returned and the editor can prompt for a new selection. If
+	 * every attempt fails, the ESP is genuinely unreachable and the WP_Error is
+	 * returned for the caller to surface (e.g. as the editor's retry notice).
+	 *
+	 * Send-time validation deliberately does NOT use this method: it must fail
+	 * closed on an unresolvable id rather than widen. See the guards in each
+	 * provider's sync()/send path.
+	 *
+	 * @param array $args     Args for get_send_lists(). See Send_Lists::get_default_args().
+	 * @param bool  $to_array Whether to return arrays instead of Send_List objects.
+	 * @return array|WP_Error
+	 */
+	public function get_send_lists_with_fallback( $args, $to_array = false ) {
+		$result = $this->fetch_send_lists( $args, $to_array );
+
+		// Nothing was targeted, so there is no stale id to recover from.
+		if ( empty( $args['ids'] ) && empty( $args['parent_id'] ) ) {
+			return $result;
+		}
+
+		// The targeted lookup resolved something, so the stored id is valid.
+		if ( ! is_wp_error( $result ) && ! empty( $result ) ) {
+			return $result;
+		}
+
+		// Widen to the parent scope first, keeping sublists tied to their list.
+		if ( ! empty( $args['ids'] ) && ! empty( $args['parent_id'] ) ) {
+			$scoped_args = $args;
+			unset( $scoped_args['ids'] );
+			$scoped = $this->fetch_send_lists( $scoped_args, $to_array );
+			if ( ! is_wp_error( $scoped ) && ! empty( $scoped ) ) {
+				return $scoped;
+			}
+		}
+
+		// Widen fully — the stored parent id may be stale too.
+		$untargeted_args = $args;
+		unset( $untargeted_args['ids'], $untargeted_args['parent_id'] );
+		$untargeted = $this->fetch_send_lists( $untargeted_args, $to_array );
+
+		// Every attempt failed: report the original failure, which describes
+		// the lookup the caller actually asked for.
+		if ( is_wp_error( $untargeted ) ) {
+			return is_wp_error( $result ) ? $result : $untargeted;
+		}
+
+		return $untargeted;
+	}
 }

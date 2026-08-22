@@ -12,7 +12,7 @@ function Publicize() {
 	return (
 		<WizardsPluginCard
 			title={ __( 'Publicize', 'newspack-plugin' ) }
-			badge={ __( 'Jetpack', 'newspack-plugin' ) }
+			badges={ [ { label: __( 'Jetpack', 'newspack-plugin' ) } ] }
 			slug="jetpack"
 			description={ __(
 				"Publicize makes it easy to share your site's posts on several social media networks automatically when you publish a new post.",

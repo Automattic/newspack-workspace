@@ -2,14 +2,14 @@
 # This file is distributed under the same license as the Newspack Sponsors plugin.
 msgid ""
 msgstr ""
-"Project-Id-Version: Newspack Sponsors 2.2.0\n"
+"Project-Id-Version: Newspack Sponsors 2.2.1\n"
 "Report-Msgid-Bugs-To: https://wordpress.org/support/plugin/newspack-sponsors\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-02-03T18:36:57+00:00\n"
+"POT-Creation-Date: 2026-08-11T17:40:44+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: newspack-sponsors\n"
@@ -35,168 +35,168 @@ msgstr ""
 msgid "Automattic"
 msgstr ""
 
-#: includes/class-core.php:124
+#: includes/class-core.php:143
 msgctxt "post type general name"
 msgid "Sponsors"
 msgstr ""
 
-#: includes/class-core.php:125
+#: includes/class-core.php:144
 msgctxt "post type singular name"
 msgid "Sponsor"
 msgstr ""
 
-#: includes/class-core.php:126
+#: includes/class-core.php:145
 msgctxt "admin menu"
 msgid "Sponsors"
 msgstr ""
 
-#: includes/class-core.php:127
+#: includes/class-core.php:146
 msgctxt "add new on admin bar"
 msgid "Sponsor"
 msgstr ""
 
-#: includes/class-core.php:128
+#: includes/class-core.php:147
 msgctxt "popup"
 msgid "Add New"
 msgstr ""
 
-#: includes/class-core.php:129
-#: includes/class-core.php:327
+#: includes/class-core.php:148
+#: includes/class-core.php:346
 msgid "Add New Sponsor"
 msgstr ""
 
-#: includes/class-core.php:130
+#: includes/class-core.php:149
 msgid "New Sponsor"
 msgstr ""
 
-#: includes/class-core.php:131
-#: includes/class-core.php:324
+#: includes/class-core.php:150
+#: includes/class-core.php:343
 msgid "Edit Sponsor"
 msgstr ""
 
-#: includes/class-core.php:132
-#: includes/class-core.php:325
+#: includes/class-core.php:151
+#: includes/class-core.php:344
 msgid "View Sponsor"
 msgstr ""
 
-#: includes/class-core.php:133
+#: includes/class-core.php:152
 msgid "All Sponsors"
 msgstr ""
 
-#: includes/class-core.php:134
-#: includes/class-core.php:320
+#: includes/class-core.php:153
+#: includes/class-core.php:339
 msgid "Search Sponsors"
 msgstr ""
 
-#: includes/class-core.php:135
+#: includes/class-core.php:154
 msgid "Parent Sponsors:"
 msgstr ""
 
-#: includes/class-core.php:136
-#: includes/class-core.php:329
+#: includes/class-core.php:155
+#: includes/class-core.php:348
 msgid "No sponsors found."
 msgstr ""
 
-#: includes/class-core.php:137
+#: includes/class-core.php:156
 msgid "No sponsors found in Trash."
 msgstr ""
 
-#: includes/class-core.php:138
+#: includes/class-core.php:157
 msgid "Sponsor Logo"
 msgstr ""
 
-#: includes/class-core.php:139
+#: includes/class-core.php:158
 msgid "Set sponsor logo"
 msgstr ""
 
-#: includes/class-core.php:140
+#: includes/class-core.php:159
 msgid "Remove sponsor logo"
 msgstr ""
 
-#: includes/class-core.php:141
+#: includes/class-core.php:160
 msgid "Use as sponsor logo"
 msgstr ""
 
-#: includes/class-core.php:166
+#: includes/class-core.php:185
 msgid "A URL to link to when displaying this sponsor’s info."
 msgstr ""
 
-#: includes/class-core.php:181
+#: includes/class-core.php:200
 msgid "(Optional) Text shown in category flag. This text will override site-wide default settings."
 msgstr ""
 
-#: includes/class-core.php:196
+#: includes/class-core.php:215
 msgid "(Optional) Text shown to explain sponsorship by this sponsor."
 msgstr ""
 
-#: includes/class-core.php:211
+#: includes/class-core.php:230
 msgid "(Optional) Text shown in lieu of a byline on sponsored posts. This is combined with the Sponsor Name to form a full byline."
 msgstr ""
 
-#: includes/class-core.php:225
+#: includes/class-core.php:244
 msgid "Scope of sponsorship this sponsor offers (native content vs. underwritten)."
 msgstr ""
 
-#: includes/class-core.php:239
+#: includes/class-core.php:258
 #: dist/editor.js:1
 #: src/editor/sidebar/index.js:98
 msgid "Display the sponsor only in the byline, or both the sponsor and post author."
 msgstr ""
 
-#: includes/class-core.php:254
+#: includes/class-core.php:273
 msgid "Display the sponsor only, or display categories alongside the sponsor."
 msgstr ""
 
-#: includes/class-core.php:269
+#: includes/class-core.php:288
 msgid "Display the underwriter blurb in standard or simple-text format."
 msgstr ""
 
-#: includes/class-core.php:284
+#: includes/class-core.php:303
 msgid "Display the underwriter blurb at the top or bottom of the post."
 msgstr ""
 
-#: includes/class-core.php:300
+#: includes/class-core.php:319
 msgid "If this value is true, this sponsor will not be shown on single posts unless directly assigned to a post. It will still appear on category/tag archive pages, if applicable."
 msgstr ""
 
-#: includes/class-core.php:318
-#: includes/class-core.php:319
-#: includes/class-core.php:321
-#: includes/class-core.php:334
-#: includes/class-core.php:335
-#: includes/class-core.php:336
+#: includes/class-core.php:337
+#: includes/class-core.php:338
+#: includes/class-core.php:340
+#: includes/class-core.php:353
+#: includes/class-core.php:354
+#: includes/class-core.php:355
 msgid "Sponsors"
 msgstr ""
 
-#: includes/class-core.php:322
+#: includes/class-core.php:341
 msgid "Parent Sponsor"
 msgstr ""
 
-#: includes/class-core.php:323
+#: includes/class-core.php:342
 msgid "Parent Sponsor:"
 msgstr ""
 
-#: includes/class-core.php:326
+#: includes/class-core.php:345
 msgid "Update Sponsor"
 msgstr ""
 
-#: includes/class-core.php:328
+#: includes/class-core.php:347
 msgid "New Sponsor Name"
 msgstr ""
 
-#: includes/class-core.php:330
+#: includes/class-core.php:349
 msgid "No sponsors"
 msgstr ""
 
-#: includes/class-core.php:331
+#: includes/class-core.php:350
 msgid "Sponsors list navigation"
 msgstr ""
 
-#: includes/class-core.php:332
+#: includes/class-core.php:351
 msgid "Sponsors list"
 msgstr ""
 
-#: includes/class-core.php:333
+#: includes/class-core.php:352
 msgid "&larr; Back to Sponsors"
 msgstr ""
 

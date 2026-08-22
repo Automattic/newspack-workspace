@@ -140,6 +140,8 @@ class Perfmatters {
 			'plugins/jetpack/_inc/blocks/swiper.css', // Jetpack's Swiper CSS.
 			'plugins/the-events-calendar', // The Events Calendar.
 			'plugins/events-calendar-pro', // The Events Calendar Pro.
+			'plugins/complianz-gdpr', // Complianz plugin CSS; substring also matches the premium plugin dir (NPPM-3052).
+			'uploads/complianz', // Complianz generated cookie-banner CSS (NPPM-3052).
 			'/themes/newspack-', // Any Newspack theme stylesheet.
 			'cache/perfmatters', // Perfmatters' cache.
 			'wp-includes',

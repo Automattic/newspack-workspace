@@ -37,14 +37,6 @@ body.newspack-newsletters-admin-screen {
 	.notice-info {
 		box-shadow: 0 0 0 1px wp-colors.$gray-300;
 	}
-
-	.newspack-section-header.newspack-section-header--page-header .newspack-section-header__icon {
-		background-color: np-colors.$primary-000;
-
-		svg {
-			fill: np-colors.$primary-600;
-		}
-	}
 }
 
 body.newspack-newsletters-admin-screen--bundled {
@@ -241,18 +233,6 @@ body.newspack-newsletters-admin-screen .dataviews-filters__visibility-toggle[ari
 }
 
 .newspack-newsletters-list {
-	&__status,
-	&__visibility {
-		align-items: center;
-		display: inline-flex;
-		gap: wp-vars.$grid-unit-10;
-	}
-
-	&__status-icon,
-	&__visibility-icon {
-		@include inline-icon;
-	}
-
 	&__title-cell,
 	&__locked {
 		min-width: 0;
@@ -425,9 +405,7 @@ body.newspack-newsletters-admin-screen .dataviews-filters__visibility-toggle[ari
 
 // Trim the WP icon's 4px viewBox padding to its visible 16px footprint.
 .dataviews-view-table {
-	.newspack-newsletters-user-row__icon,
-	.newspack-newsletters-list__status-icon,
-	.newspack-newsletters-list__visibility-icon {
+	.newspack-newsletters-user-row__icon {
 		margin: -4px;
 	}
 

@@ -466,9 +466,15 @@ final class Reader_Activation {
 
 		$value = \get_option( self::OPTIONS_PREFIX . $name, $config[ $name ] );
 
-		// Use default value type for casting bool option value.
+		/*
+		 * Cast to the default value's type. Options come back from the database as
+		 * strings, but out of a warm object cache as the type they were written with,
+		 * so a setting's type would otherwise vary with cache state.
+		 */
 		if ( is_bool( $config[ $name ] ) ) {
 			$value = (bool) $value;
+		} elseif ( is_int( $config[ $name ] ) ) {
+			$value = (int) $value;
 		}
 		return apply_filters( 'newspack_reader_activation_setting', $value, $name );
 	}
@@ -883,11 +889,16 @@ final class Reader_Activation {
 	 * @return bool True if reader activation is enabled.
 	 */
 	public static function is_enabled() {
-		if ( defined( 'IS_TEST_ENV' ) && IS_TEST_ENV ) {
-			return true;
-		}
-
-		$is_enabled = (bool) \get_option( self::OPTIONS_PREFIX . 'enabled', false );
+		// The test environment defaults to enabled, because the great majority of the
+		// suite assumes reader activation is on and predates this option being
+		// meaningful in tests. The default is applied *before* the filter rather than
+		// instead of it, so a test that needs the disabled path can reach it — without
+		// this, `add_filter( 'newspack_reader_activation_enabled', '__return_false' )`
+		// was silently inert and any behaviour behind "reader activation off" was
+		// untestable.
+		$is_enabled = defined( 'IS_TEST_ENV' ) && IS_TEST_ENV
+			? true
+			: (bool) \get_option( self::OPTIONS_PREFIX . 'enabled', false );
 
 		/**
 		 * Filters whether reader activation is enabled.
@@ -2581,9 +2592,17 @@ final class Reader_Activation {
 			}
 
 			// Don't send OTP email for newsletter signup, or if the reader has a password set.
-			if ( self::is_reader_without_password( $existing_user ) &&
-				( ! isset( $metadata['registration_method'] ) || false === strpos( $metadata['registration_method'], 'newsletters-subscription' ) )
-			) {
+			$should_send_magic_link = self::is_reader_without_password( $existing_user ) &&
+				( ! isset( $metadata['registration_method'] ) || false === strpos( $metadata['registration_method'], 'newsletters-subscription' ) );
+			/**
+			 * Filters whether to send a magic link to an existing reader attempting to register again.
+			 *
+			 * @param bool     $should_send_magic_link Whether to send the magic link email.
+			 * @param \WP_User $existing_user          The existing reader account.
+			 * @param array    $metadata               Registration metadata.
+			 */
+			$should_send_magic_link = \apply_filters( 'newspack_reader_activation_send_magic_link_on_reregistration', $should_send_magic_link, $existing_user, $metadata );
+			if ( $should_send_magic_link ) {
 				Logger::log( "User with $email already exists. Sending magic link." );
 				$redirect = isset( $metadata['current_page_url'] ) ? $metadata['current_page_url'] : '';
 				Magic_Link::send_email( $existing_user, $redirect );
@@ -2864,15 +2883,31 @@ final class Reader_Activation {
 			return true;
 		}
 
-		// If we generated the display name from the user's email address, treat it as generic.
-		if (
-			self::generate_user_nicename( $user->data->user_email ) === $user->data->display_name || // New generated construction (URL-sanitized version of the email address minus domain).
-			self::strip_email_domain( $user->data->user_email ) === $user->data->display_name // Legacy generated construction (just the email address minus domain).
-		) {
-			return true;
-		}
+		return self::is_display_name_derived_from_email( $user->data->display_name, $user->data->user_email );
+	}
 
-		return false;
+	/**
+	 * Whether a display name is one this plugin would have generated from an email address.
+	 *
+	 * The comparison alone, with none of the "should we treat it as generic?"
+	 * short-circuits: callers apply the ones their question needs.
+	 * reader_has_generic_display_name() adds the opt-out constant and the
+	 * reader's own saved-name meta; a caller deciding what to put on the wire
+	 * wants the meta but not the constant.
+	 *
+	 * @param string $display_name Display name to check.
+	 * @param string $email        Email address to compare against.
+	 *
+	 * @return bool True if the display name matches either generated construction.
+	 */
+	public static function is_display_name_derived_from_email( string $display_name, string $email ): bool {
+		// '' rather than empty(): a reader at 0@example.com whose display name
+		// is "0" is derived, and empty() would call it not-derived.
+		if ( '' === $display_name || '' === $email ) {
+			return false;
+		}
+		return self::generate_user_nicename( $email ) === $display_name // Current construction (URL-sanitized version of the email address minus domain).
+			|| self::strip_email_domain( $email ) === $display_name;   // Legacy construction (just the email address minus domain).
 	}
 
 	/**

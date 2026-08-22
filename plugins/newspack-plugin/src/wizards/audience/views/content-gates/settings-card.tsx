@@ -29,6 +29,7 @@ const SettingsCard = ( { title, description, enabled, requirements, toggleEnable
 
 	return (
 		<CardFeature
+			headingLevel={ 3 }
 			title={ title }
 			description={ description }
 			enabled={ enabled }
