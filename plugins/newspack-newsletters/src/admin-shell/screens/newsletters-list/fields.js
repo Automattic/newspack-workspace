@@ -10,6 +10,8 @@ import { __, sprintf } from '@wordpress/i18n';
 import { commentAuthorAvatar, drafts, envelope, globe, published, scheduled, trash } from '@wordpress/icons';
 import { dateI18n, getSettings as getDateSettings } from '@wordpress/date';
 
+import { StatusIndicator } from 'newspack-components';
+
 import { getAdminUrl } from '../../admin-globals';
 import { isManualProvider } from '../../../utils/service-provider';
 import { formatPostDate } from '../../utils/format-date';
@@ -79,12 +81,7 @@ const renderStatus = ( { item } ) => {
 		label = statusKindLabel( kind );
 	}
 
-	return (
-		<span className="newspack-newsletters-list__status">
-			<Icon className="newspack-newsletters-list__status-icon" icon={ icon } size={ 24 } />
-			<span>{ label }</span>
-		</span>
-	);
+	return <StatusIndicator icon={ icon }>{ label }</StatusIndicator>;
 };
 
 const renderSendDate = ( { item } ) => {
@@ -138,16 +135,15 @@ const renderPublicPage = ( { item } ) => {
 	// cmd/middle-click; mirrors the `view-public-page` action's gate.
 	const publicUrl = isPublic && 'publish' === item?.status && item?.link ? item.link : null;
 	return (
-		<span className="newspack-newsletters-list__visibility">
-			<Icon className="newspack-newsletters-list__visibility-icon" icon={ icon } size={ 24 } />
+		<StatusIndicator icon={ icon }>
 			{ publicUrl ? (
 				<ExternalLink href={ publicUrl } onClickCapture={ event => event.stopPropagation() }>
 					{ label }
 				</ExternalLink>
 			) : (
-				<span>{ label }</span>
+				label
 			) }
-		</span>
+		</StatusIndicator>
 	);
 };
 
