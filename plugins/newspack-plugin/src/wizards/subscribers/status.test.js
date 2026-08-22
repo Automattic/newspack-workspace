@@ -50,9 +50,8 @@ describe( 'STATUS_INDICATORS', () => {
 		Object.values( STATUS_INDICATORS ).forEach( name => expect( name ).toBeTruthy() );
 	} );
 
-	// The list Status columns offer these as separate filters, so two statuses
-	// drawing the same mark leaves the reader unable to tell apart the results of
-	// two different filters. Two names can share a glyph, so this asserts glyphs.
+	// Offered as separate filters, so two drawing the same mark leaves the reader
+	// unable to tell apart the results of two of them.
 	it( 'gives no two statuses the same mark', () => {
 		const glyphs = Object.values( STATUS_INDICATORS ).map( statusGlyph );
 		expect( new Set( glyphs ).size ).toBe( glyphs.length );

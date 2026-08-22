@@ -1,11 +1,9 @@
 /**
- * The shared status name for each WordPress post status the Audience lists surface
- * in a Status column.
+ * The shared status name for each WordPress post status the Audience lists surface.
  *
- * Anything outside the set is treated as a draft, which is how an unrecognised
- * status is treated everywhere else. Pricing rules reads its statuses from a plugin
- * outside this repo and builds its filter elements from the rows themselves, so an
- * unrecognised status can reach a column and draw the draft mark alongside Draft.
+ * Pricing rules reads its statuses from a plugin outside this repo and builds its
+ * filter elements from the rows themselves, so an unrecognised status can reach a
+ * column and draw the draft mark alongside Draft.
  */
 
 /**

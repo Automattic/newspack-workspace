@@ -34,8 +34,6 @@ describe( 'StatusIndicator', () => {
 		expect( named.querySelector( 'svg' ).innerHTML ).toBe( given.querySelector( 'svg' ).innerHTML );
 	} );
 
-	// Availability and Visibility are classifications rather than lifecycle
-	// states, so they stay off the vocabulary and pass their own glyph.
 	it( 'draws the glyph it is given when there is no name for it', () => {
 		const { container: free } = render( <StatusIndicator icon={ gift }>Free</StatusIndicator> );
 		const { container: active } = render( <StatusIndicator icon={ published }>Active</StatusIndicator> );
@@ -59,9 +57,8 @@ describe( 'statusGlyph', () => {
 		STATUS_NAMES.forEach( name => expect( statusGlyph( name ) ).toBeTruthy() );
 	} );
 
-	// Two names may share a glyph where they read differently at the call site but
-	// mean the same to a reader. Pinning exactly which pairs do is what lets a
-	// column assert its own distinctness: any pair not listed here reads apart.
+	// Pinning the complete list is what lets a column assert its own distinctness:
+	// any pair not named here reads apart.
 	it( 'shares a mark only where two names mean the same to a reader', () => {
 		const byGlyph = new Map();
 		STATUS_NAMES.forEach( name => byGlyph.set( statusGlyph( name ), [ ...( byGlyph.get( statusGlyph( name ) ) || [] ), name ] ) );

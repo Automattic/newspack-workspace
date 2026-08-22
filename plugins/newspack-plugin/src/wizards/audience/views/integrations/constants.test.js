@@ -20,7 +20,6 @@ describe( 'STATUS_MAP', () => {
 		Object.values( STATUS_MAP ).forEach( ( { status } ) => expect( status ).toBeTruthy() );
 	} );
 
-	// Two vocabulary names can share a glyph, so the rule is asserted on the marks.
 	it( 'gives no two statuses the same mark', () => {
 		const glyphs = Object.values( STATUS_MAP ).map( ( { status } ) => statusGlyph( status ) );
 		expect( new Set( glyphs ).size ).toBe( glyphs.length );

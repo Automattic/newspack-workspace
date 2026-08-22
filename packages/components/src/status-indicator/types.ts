@@ -24,9 +24,5 @@ interface StatusIndicatorBaseProps extends Omit< ComponentProps< 'div' >, 'child
 	children: ReactNode;
 }
 
-/**
- * Name a status and the component draws it, or pass a glyph for the states the
- * vocabulary does not cover. Availability and Visibility are classifications
- * rather than lifecycle states, so they take `icon`.
- */
+/** `icon` is the escape hatch for fields that classify rather than track a lifecycle. */
 export type StatusIndicatorProps = StatusIndicatorBaseProps & ( { status: StatusName; icon?: never } | { status?: never; icon: StatusIcon } );

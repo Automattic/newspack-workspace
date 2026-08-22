@@ -11,15 +11,11 @@ import { dateI18n, getSettings } from '@wordpress/date';
 
 export const API_BASE = '/newspack/v1/wizard/newspack-audience-integrations/settings';
 
-// `status` renders the log's Status column; `intent` badges the single status in
-// the detail modal, where one marker is what a badge is for. Both carry the same
-// constraint: a cancelled job is a deliberate stop, not a failure, so it must not
-// share `failed`'s treatment. The column offers them as separate filters and they
-// have to read apart. The design system files terminal, non-actionable states
-// like this under `none`.
+// A cancelled job is a deliberate stop, not a failure, so it must not share
+// `failed`'s treatment in either the column or the detail modal's badge. The
+// design system files terminal, non-actionable states under `none`.
 //
-// The `canceled` key is Action Scheduler's own spelling, so it stays as the
-// library writes it.
+// `canceled` is Action Scheduler's own spelling, so it stays as the library writes it.
 /** @type {Record< string, { label: string, status: import('../../../../../packages/components/src/status-indicator/statuses').StatusName, intent: import('../../../../../packages/components/src/types').BadgeIntent } >} */
 export const STATUS_MAP = {
 	complete: { label: __( 'Complete', 'newspack-plugin' ), status: 'done', intent: 'stable' },

@@ -14,14 +14,11 @@ export const STATUS_LABELS = {
 	cancelled: __( 'Cancelled', 'newspack-plugin' ),
 };
 
-// The shared status name for each subscription status. A Status column offers
-// its statuses as separate filters, so no two of them may draw the same mark.
 /** @type {Record< string, import('../../../packages/components/src/status-indicator/statuses').StatusName >} */
 export const STATUS_INDICATORS = {
 	active: 'active',
 	pending: 'pending',
-	// On hold is usually a payment that needs attention, not a terminal state,
-	// so it reads as attention and cancelled reads as a deliberate stop.
+	// On hold is usually a payment needing attention, not a terminal state.
 	'on-hold': 'attention',
 	cancelled: 'cancelled',
 };

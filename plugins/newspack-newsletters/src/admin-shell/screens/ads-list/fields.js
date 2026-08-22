@@ -16,8 +16,6 @@ import { formatPostDate } from '../../utils/format-date';
 import { termsForTaxonomy } from '../../utils/terms';
 import { statusKindLabel, STATUS_KIND_LABELS } from './status-label';
 
-// The shared status name per kind. A Status column offers its kinds as separate
-// filters, so no two of them may draw the same mark.
 export const STATUS_KIND_STATUSES = {
 	active: 'active',
 	scheduled: 'scheduled',

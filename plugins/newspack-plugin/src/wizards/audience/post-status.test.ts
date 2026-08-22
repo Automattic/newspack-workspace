@@ -4,12 +4,8 @@
 import { postStatus } from './post-status';
 import { statusGlyph } from '../../../packages/components/src/status-indicator';
 
-/**
- * Pricing rules, Plans and Emails offer these statuses as separate filters, so two
- * of them drawing the same mark leaves the reader unable to tell apart the results
- * of two different filters. Two vocabulary names can share a glyph, so the rule is
- * asserted on the glyphs rather than on the names.
- */
+// These statuses are offered as separate filters, so two drawing the same mark
+// leaves the reader unable to tell apart the results of two of them.
 describe( 'postStatus', () => {
 	const STATUSES = [ 'publish', 'future', 'draft', 'pending', 'private', 'trash' ];
 
@@ -28,8 +24,7 @@ describe( 'postStatus', () => {
 		expect( postStatus( 'trash' ) ).toBe( 'trash' );
 	} );
 
-	// The one place the distinctness rule is knowingly relaxed: an unrecognised
-	// status draws the draft mark, alongside Draft itself.
+	// The one place the rule is knowingly relaxed.
 	it( 'falls back to draft for a status it does not know', () => {
 		expect( postStatus( 'wc-on-hold' ) ).toBe( 'draft' );
 		expect( postStatus( '' ) ).toBe( 'draft' );
