@@ -225,6 +225,10 @@ body.newspack-newsletters-admin-screen .dataviews-filters__visibility-toggle[ari
 	display: none;
 }
 
+.newspack-newsletters-admin .dataviews-filters-toggle__count {
+	display: none;
+}
+
 // Muted item count portalled next to the breadcrumbs page title.
 .newspack-newsletters-header-count {
 	color: wp-colors.$gray-700;
