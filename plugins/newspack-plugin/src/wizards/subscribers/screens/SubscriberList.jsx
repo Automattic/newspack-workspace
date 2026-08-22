@@ -34,7 +34,7 @@ import { useSubscribers } from '../data/use-subscribers';
 import { WIZARD_STORE_NAMESPACE } from '../../../../packages/components/src/wizard/store';
 import { GROUP_LABEL, ROLE_LABELS, groupRoleLabel } from '../labels';
 import { SubscriptionLink } from '../links';
-import { STATUS_ICONS, STATUS_LABELS, displayStatuses, statusRank } from '../status';
+import { STATUS_INDICATORS, STATUS_LABELS, displayStatuses, statusRank } from '../status';
 
 // A subscriber's group memberships, in the shape the column helpers expect
 // ([{ group, role }]). The endpoint embeds them flat on the item as
@@ -177,7 +177,7 @@ export default function SubscriberList() {
 				render: ( { item } ) => (
 					<Stack direction="column" align="flex-start" gap="sm">
 						{ subscriberStatuses( item, groupEntriesOf( item ) ).map( status => (
-							<StatusIndicator key={ status } icon={ STATUS_ICONS[ status ] }>
+							<StatusIndicator key={ status } status={ STATUS_INDICATORS[ status ] }>
 								{ STATUS_LABELS[ status ] }
 							</StatusIndicator>
 						) ) }

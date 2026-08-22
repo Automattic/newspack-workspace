@@ -8,7 +8,6 @@ import apiFetch from '@wordpress/api-fetch';
 import { addQueryArgs } from '@wordpress/url';
 import { Spinner } from '@wordpress/components';
 import { DataViews as WPDataViews } from '@wordpress/dataviews';
-import { notAllowed } from '@wordpress/icons';
 
 /**
  * Internal dependencies
@@ -133,8 +132,8 @@ export const LogsView = ( { integrations, match } ) => {
 				id: 'status',
 				label: __( 'Status', 'newspack-plugin' ),
 				render: ( { item } ) => {
-					const mapped = STATUS_MAP[ item.status ] || { label: item.status, icon: notAllowed };
-					return <StatusIndicator icon={ mapped.icon }>{ mapped.label }</StatusIndicator>;
+					const mapped = STATUS_MAP[ item.status ] || { label: item.status, status: 'cancelled' };
+					return <StatusIndicator status={ mapped.status }>{ mapped.label }</StatusIndicator>;
 				},
 				enableSorting: true,
 				elements: [

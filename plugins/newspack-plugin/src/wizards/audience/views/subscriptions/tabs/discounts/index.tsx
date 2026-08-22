@@ -15,7 +15,7 @@ import { decodeEntities } from '@wordpress/html-entities';
 import { addQueryArgs } from '@wordpress/url';
 import { filterSortAndPaginate } from '@wordpress/dataviews';
 import type { Action, Field, View } from '@wordpress/dataviews';
-import { drafts, percent, published } from '@wordpress/icons';
+import { percent } from '@wordpress/icons';
 // eslint-disable-next-line @wordpress/no-unsafe-wp-apis
 import { __experimentalHStack as HStack, __experimentalVStack as VStack } from '@wordpress/components';
 
@@ -158,7 +158,7 @@ function SubscriberDiscounts() {
 				filterBy: { operators: [ 'isAny' ] },
 				getValue: ( { item } ) => ( item.active ? 'active' : 'inactive' ),
 				render: ( { item } ) => (
-					<StatusIndicator icon={ item.active ? published : drafts }>
+					<StatusIndicator status={ item.active ? 'active' : 'draft' }>
 						{ item.active ? __( 'Active', 'newspack-plugin' ) : __( 'Inactive', 'newspack-plugin' ) }
 					</StatusIndicator>
 				),

@@ -26,7 +26,7 @@ import { Badge } from '@wordpress/ui';
 import { DataViews, Router, StatusIndicator, WizardBanner } from '../../../../../packages/components/src';
 import { formatCount } from '../../../../../packages/components/src/breadcrumbs/format-count';
 import { WIZARD_STORE_NAMESPACE } from '../../../../../packages/components/src/wizard/store';
-import { postStatusIcon } from '../../status-icons';
+import { postStatus } from '../../post-status';
 import { PolicyChips, EffectivePrice } from './policy-cells';
 
 const { useHistory } = Router;
@@ -333,7 +333,7 @@ export default function SubscriptionProductsList( { scope = 'subscriptions' }: {
 				id: 'status',
 				label: __( 'Status', 'newspack-plugin' ),
 				getValue: ( { item } ) => item.status,
-				render: ( { item } ) => <StatusIndicator icon={ postStatusIcon( item.status ) }>{ item.status_label }</StatusIndicator>,
+				render: ( { item } ) => <StatusIndicator status={ postStatus( item.status ) }>{ item.status_label }</StatusIndicator>,
 				elements: statusElements,
 				filterBy: { operators: [ 'is' ] },
 			},
