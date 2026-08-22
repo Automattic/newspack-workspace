@@ -45,6 +45,10 @@ class Group_Subscription_Seats {
 		\add_filter( 'woocommerce_add_to_cart_validation', [ __CLASS__, 'validate_add_to_cart' ], 10, 4 );
 		\add_filter( 'woocommerce_add_cart_item_data', [ __CLASS__, 'guard_add_cart_item_data' ], 9, 4 );
 		\add_filter( 'woocommerce_update_cart_validation', [ __CLASS__, 'validate_cart_update' ], 10, 4 );
+
+		// The modal checkout has no quantity field of its own. This turns one on for
+		// per-seat products; newspack-blocks owns the markup and the AJAX round trip.
+		\add_filter( 'newspack_blocks_modal_checkout_quantity_field', [ __CLASS__, 'modal_quantity_field' ], 10, 2 );
 	}
 
 	/**
@@ -133,6 +137,24 @@ class Group_Subscription_Seats {
 			);
 		}
 		return true;
+	}
+
+	/**
+	 * Turn on the modal checkout's quantity field for a per-seat product.
+	 *
+	 * The modal is single-quantity unless this filter returns field args, so a
+	 * flat (per-team) product — or any product this class knows nothing about —
+	 * must get the incoming value back untouched, in case another consumer of
+	 * the filter has already answered for it.
+	 *
+	 * @param null|array      $args    Field args from an earlier callback, or null.
+	 * @param \WC_Product|int $product The product in the cart.
+	 *
+	 * @return null|array The seat field args, or the unchanged incoming value.
+	 */
+	public static function modal_quantity_field( $args, $product ) {
+		$field = self::get_field_args( $product );
+		return $field ? $field : $args;
 	}
 
 	/**

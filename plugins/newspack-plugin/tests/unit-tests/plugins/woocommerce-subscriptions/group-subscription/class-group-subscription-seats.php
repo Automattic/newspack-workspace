@@ -243,4 +243,31 @@ class Test_Group_Subscription_Seats extends WP_UnitTestCase {
 		];
 		$this->assertSame( $original_args, Group_Subscription_Seats::quantity_input_args( $original_args, $product ) );
 	}
+
+	/**
+	 * The modal checkout's quantity-field filter turns the in-modal seats form
+	 * on for a per-seat product, with the same args every other seat field uses.
+	 */
+	public function test_modal_quantity_field_returns_field_args_for_per_seat_product() {
+		$product = $this->make_per_seat_product( 926, 3, 8 );
+
+		$args = Group_Subscription_Seats::modal_quantity_field( null, $product );
+
+		$this->assertSame( Group_Subscription_Seats::get_field_args( $product ), $args );
+		$this->assertSame( 3, $args['min'] );
+		$this->assertSame( 8, $args['max'] );
+	}
+
+	/**
+	 * A flat (per-team) product leaves the incoming value alone, so the modal
+	 * stays single-quantity and another consumer's args are not clobbered.
+	 */
+	public function test_modal_quantity_field_passes_through_for_flat_product() {
+		$product = $this->make_flat_product( 927 );
+
+		$this->assertNull( Group_Subscription_Seats::modal_quantity_field( null, $product ) );
+
+		$other = [ 'label' => 'Licenses' ];
+		$this->assertSame( $other, Group_Subscription_Seats::modal_quantity_field( $other, $product ) );
+	}
 }
