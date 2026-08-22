@@ -18,7 +18,7 @@ export const API_BASE = '/newspack/v1/wizard/newspack-audience-integrations/sett
 // share `failed`'s treatment. The column offers them as separate filters and they
 // have to read apart. The design system files terminal, non-actionable states
 // like this under `none`.
-/** @type {Record< string, { label: string, icon: unknown, intent: import('../../../../../packages/components/src/types').BadgeIntent } >} */
+/** @type {Record< string, { label: string, icon: import('../../../../../packages/components/src/status-indicator/types').StatusIndicatorProps[ 'icon' ], intent: import('../../../../../packages/components/src/types').BadgeIntent } >} */
 export const STATUS_MAP = {
 	complete: { label: __( 'Complete', 'newspack-plugin' ), icon: published, intent: 'stable' },
 	failed: { label: __( 'Failed', 'newspack-plugin' ), icon: error, intent: 'high' },
