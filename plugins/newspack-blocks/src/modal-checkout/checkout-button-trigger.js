@@ -154,6 +154,24 @@ export const PICKER_CONTEXT_FIELDS = [
 ];
 
 /**
+ * Whether the form already offers this field as a control the reader can use.
+ *
+ * Context fields are carried as hidden inputs, but a picker can render one of
+ * the same names as a real control — the per-seat group plans' seats field is
+ * `quantity`. That control is the reader's, not the block's: it must never be
+ * removed, and a hidden input of the same name alongside it would submit a
+ * second, competing value.
+ *
+ * @param {HTMLFormElement} form The form to inspect.
+ * @param {string}          name The field name.
+ *
+ * @return {boolean} True when a non-hidden input of that name exists.
+ */
+function hasVisibleField( form, name ) {
+	return !! form.querySelector( `input[name="${ name }"]:not([type="hidden"])` );
+}
+
+/**
  * Stamp context fields onto a picker form from the button that opened it.
  *
  * Authoritative, unlike copyContextFields(): the picker is rendered once per
@@ -175,8 +193,14 @@ export function applyContextFields( targetForm, data, fields = PICKER_CONTEXT_FI
 	}
 	const doc = targetForm.ownerDocument;
 	fields.forEach( name => {
-		// Drop whatever a previous open left behind before writing this one's value.
-		targetForm.querySelectorAll( `input[name="${ name }"]` ).forEach( input => input.remove() );
+		// Drop whatever a previous open left behind before writing this one's value
+		// — but only the hidden inputs this function stamps. A visible control of
+		// the same name is the picker's own, and removing it takes the field away
+		// from the reader.
+		targetForm.querySelectorAll( `input[type="hidden"][name="${ name }"]` ).forEach( input => input.remove() );
+		if ( hasVisibleField( targetForm, name ) ) {
+			return;
+		}
 		const raw = data[ name ];
 		const value = raw === undefined || raw === null ? '' : String( raw );
 		if ( ! value ) {
@@ -211,6 +235,8 @@ export function copyContextFields( sourceForm, targetForm, fields = PICKER_CONTE
 	const doc = targetForm.ownerDocument;
 	const sourceData = new FormData( sourceForm );
 	fields.forEach( name => {
+		// A field the picker already carries wins, whether that is a value left by
+		// an earlier copy or a control the reader fills in themselves.
 		if ( targetForm.querySelector( `input[name="${ name }"]` ) ) {
 			return;
 		}

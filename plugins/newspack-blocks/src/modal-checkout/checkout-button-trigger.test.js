@@ -314,6 +314,19 @@ describe( 'copyContextFields', () => {
 
 	// The picker form replaces the button's own form, so a coupon attached to the
 	// Checkout Button block is only auto-applied if it is carried across.
+	it( 'leaves the picker’s own seats field to the reader', () => {
+		const root = render(
+			`<form id="src"><input type="hidden" name="quantity" value="3"></form>
+			<form id="dst"><input type="number" name="quantity" id="group_seats" value="2"></form>`
+		);
+
+		copyContextFields( root.querySelector( '#src' ), root.querySelector( '#dst' ) );
+
+		const inputs = root.querySelectorAll( '#dst input[name="quantity"]' );
+		expect( inputs ).toHaveLength( 1 );
+		expect( inputs[ 0 ].id ).toBe( 'group_seats' );
+	} );
+
 	it( 'copies the auto-applied coupon to the picker form', () => {
 		const root = render( '<form id="src"><input type="hidden" name="coupon" value="MEMBER10"></form><form id="dst"></form>' );
 
@@ -377,6 +390,34 @@ describe( 'applyContextFields', () => {
 		applyContextFields( form, { quantity: 3 } );
 
 		expect( form.querySelector( 'input[name="quantity"]' ).value ).toBe( '3' );
+	} );
+
+	it( 'leaves the picker’s own seats field in place and does not shadow it', () => {
+		// Per-seat group plans render a visible number input named `quantity`, the
+		// same name the block stamps its own quantity into. Removing it leaves the
+		// reader with no way to choose seats at all.
+		const form = render( '<form id="picker"><input type="number" name="quantity" id="group_seats" min="2" value="2"></form>' ).querySelector(
+			'#picker'
+		);
+
+		applyContextFields( form, { quantity: 3 } );
+
+		const inputs = form.querySelectorAll( 'input[name="quantity"]' );
+		expect( inputs ).toHaveLength( 1 );
+		expect( inputs[ 0 ].id ).toBe( 'group_seats' );
+		expect( inputs[ 0 ].value ).toBe( '2' );
+	} );
+
+	it( 'clears its own stale hidden field without touching a visible one', () => {
+		const form = picker();
+
+		applyContextFields( form, { quantity: 3 } );
+		form.insertAdjacentHTML( 'beforeend', '<input type="number" name="quantity" id="group_seats" value="4">' );
+		applyContextFields( form, { quantity: 5 } );
+
+		const inputs = form.querySelectorAll( 'input[name="quantity"]' );
+		expect( inputs ).toHaveLength( 1 );
+		expect( inputs[ 0 ].id ).toBe( 'group_seats' );
 	} );
 
 	it( 'leaves the picker’s own fields alone', () => {
