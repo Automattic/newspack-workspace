@@ -1,6 +1,5 @@
 @use "~@wordpress/base-styles/colors" as wp-colors;
 @use "~@wordpress/base-styles/variables" as wp-vars;
-@use "~@wordpress/base-styles/mixins" as wp-mixins;
 @use "~@wordpress/base-styles/breakpoints" as wp-breakpoints;
 
 .newspack-pricing-rules {
@@ -66,58 +65,6 @@
 
 	&__stats {
 		width: 100%;
-	}
-
-	&__tile {
-		container-type: inline-size;
-		min-height: wp-vars.$grid-unit * 21;
-	}
-
-	&__tile-content {
-		display: flex;
-		flex: 1;
-		flex-direction: column;
-	}
-
-	&__tile-label {
-		@include wp-mixins.heading-large();
-		color: wp-colors.$gray-900;
-		margin: 0;
-	}
-
-	&__tile-body {
-		display: flex;
-		flex: 1;
-		flex-direction: column;
-		gap: wp-vars.$grid-unit;
-		padding-top: wp-vars.$grid-unit;
-	}
-
-	&__tile-footer {
-		align-items: flex-start;
-		display: flex;
-		flex-direction: column;
-	}
-
-	&__tile-action {
-		font-size: wp-vars.$helptext-font-size;
-		line-height: inherit;
-	}
-
-	&__tile-value {
-		color: var(--wp-admin-theme-color);
-		font-size: 44px;
-		font-size: min(44px, 14cqi);
-		font-variant-numeric: tabular-nums;
-		font-weight: wp-vars.$font-weight-medium;
-		line-height: 1;
-	}
-
-	&__tile-secondary,
-	&__tile-description {
-		color: wp-colors.$gray-700;
-		font-size: wp-vars.$helptext-font-size;
-		text-wrap: balance;
 	}
 
 	&__impact-table {
