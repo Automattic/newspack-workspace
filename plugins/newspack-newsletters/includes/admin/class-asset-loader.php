@@ -16,6 +16,28 @@ defined( 'ABSPATH' ) || exit;
  */
 class Asset_Loader {
 	/**
+	 * Keep only the script handles actually registered on this site.
+	 *
+	 * For optional deps. `WP_Dependencies::all_deps()` drops a handle
+	 * outright when one of its deps is missing, so passing an enhancement
+	 * a site has deregistered (`heartbeat` is the common one) would cost
+	 * the whole bundle rather than the feature that wanted it.
+	 *
+	 * @param string[] $handles Candidate script handles.
+	 * @return string[] Those that are registered.
+	 */
+	public static function registered_scripts( array $handles ): array {
+		return array_values(
+			array_filter(
+				$handles,
+				function ( $handle ) {
+					return wp_script_is( $handle, 'registered' );
+				}
+			)
+		);
+	}
+
+	/**
 	 * Read `<build_dir>/<basename>.asset.php` and enqueue the matching
 	 * `<basename>.js` + `<basename>.css` under the given handle.
 	 *

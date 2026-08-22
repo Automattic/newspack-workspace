@@ -152,8 +152,13 @@ abstract class Admin_Page {
 	}
 
 	/**
-	 * Extra script deps for the admin-shell bundle — guarantees a core
+	 * Optional script deps for the admin-shell bundle — guarantees a core
 	 * script has executed before the bundle mounts.
+	 *
+	 * These are enhancements, not requirements: handles no longer registered
+	 * on a given site are dropped before enqueue, so the screen still renders
+	 * without whatever they enabled. Anything the screen cannot render without
+	 * belongs in the bundle's own `asset.php` deps instead.
 	 *
 	 * @return string[]
 	 */

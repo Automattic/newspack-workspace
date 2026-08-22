@@ -74,7 +74,8 @@ class Newsletters_List_Page extends Hidden_React_List_Page {
 
 	/**
 	 * Post locks are exposed over Heartbeat only (`wp_check_locked_posts()`),
-	 * so the list can flag newsletters someone else is editing.
+	 * so the list can flag newsletters someone else is editing. Optional: a
+	 * site that deregisters `heartbeat` loses the indicator, not the screen.
 	 *
 	 * @return string[]
 	 */
