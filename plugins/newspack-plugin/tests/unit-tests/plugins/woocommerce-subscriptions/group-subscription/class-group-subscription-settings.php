@@ -352,14 +352,18 @@ class Test_Group_Subscription_Settings extends WP_UnitTestCase {
 	 * @param array           $post         POST fields (the save nonce is added automatically).
 	 */
 	private function run_meta_box_save( $subscription, array $post ) {
-		// phpcs:disable WordPress.Security.NonceVerification.Missing -- Test helper seeds $_POST to exercise save_group_subscription_meta(), which verifies the nonce itself.
+		// phpcs:disable WordPress.Security.NonceVerification.Missing -- Test helper seeds $_POST to exercise the save handlers, which verify the nonce themselves.
 		$prev_post = $_POST;
 		$_POST     = array_merge(
 			[ 'woocommerce_meta_nonce' => wp_create_nonce( 'woocommerce_save_data' ) ],
 			$post
 		);
 		// phpcs:enable WordPress.Security.NonceVerification.Missing
-		Group_Subscription_Settings::save_group_subscription_meta( $subscription->get_id(), $subscription );
+		// Fire the hook rather than calling one handler, because the save is split
+		// across two priorities and the split is the point (see
+		// save_group_subscription_seats()). Anything a test registers on the hook to
+		// stand in for WooCommerce then runs in its real relative order.
+		do_action( 'woocommerce_process_shop_order_meta', $subscription->get_id(), $subscription );
 		$_POST = $prev_post;
 	}
 
@@ -1024,5 +1028,92 @@ class Test_Group_Subscription_Settings extends WP_UnitTestCase {
 		global $wc_mock_meta_box_errors;
 		$this->assertCount( 1, $wc_mock_meta_box_errors, 'The admin is shown one error.' );
 		$this->assertStringContainsString( '4', $wc_mock_meta_box_errors[0], 'The error names the seats in use.' );
+	}
+
+	/**
+	 * The seat save must be registered at priority 20 on
+	 * woocommerce_process_shop_order_meta. WooCommerce writes the order line items
+	 * from the POST at priority 10, so a rescale at 10 is silently reverted --
+	 * Newspack registers at plugin load and WooCommerce during init, so at equal
+	 * priority Newspack always runs first. This asserts the number, not just that
+	 * the callback is hooked, because the number is the whole fix.
+	 */
+	public function test_seat_save_is_registered_after_woocommerce_line_items() {
+		$this->assertSame(
+			20,
+			has_action( 'woocommerce_process_shop_order_meta', [ Group_Subscription_Settings::class, 'save_group_subscription_seats' ] ),
+			'The seat save must run after WooCommerce writes the line items at priority 10.'
+		);
+		$this->assertSame(
+			10,
+			has_action( 'woocommerce_process_shop_order_meta', [ Group_Subscription_Settings::class, 'save_group_subscription_meta' ] ),
+			'The settings save stays at 10; only the seat rescale moved.'
+		);
+	}
+
+	/**
+	 * End-to-end guard for the ordering: with a stand-in for WooCommerce's own
+	 * line-items save hooked at priority 10, a seat change still sticks. Fail this
+	 * and an admin's edit reverts on screen with no error shown.
+	 */
+	public function test_seat_save_survives_the_woocommerce_line_items_save() {
+		$subscription = $this->make_per_seat_subscription(
+			950,
+			[
+				'quantity' => 4,
+				'subtotal' => 40,
+				'total'    => 40,
+			]
+		);
+		$prefix = Group_Subscription_Settings::GROUP_SUBSCRIPTION_META_PREFIX;
+
+		// What wc_save_order_items() does: reload the item and set quantity, subtotal
+		// and total from the POST the edit screen always carries, whether or not the
+		// admin opened the line items panel.
+		$restore_posted_line_item = function () use ( $subscription ) {
+			$item = Group_Subscription_Settings::get_seat_line_item( $subscription );
+			$item->set_quantity( 4 );
+			$item->set_subtotal( 40 );
+			$item->set_total( 40 );
+			$item->save();
+		};
+		add_action( 'woocommerce_process_shop_order_meta', $restore_posted_line_item, 10 );
+
+		$this->run_meta_box_save(
+			$subscription,
+			[
+				$prefix . 'enabled'          => 'yes',
+				$prefix . 'enabled_baseline' => 'yes',
+				$prefix . 'seats'            => '7',
+				$prefix . 'seats_baseline'   => '4',
+			]
+		);
+
+		remove_action( 'woocommerce_process_shop_order_meta', $restore_posted_line_item, 10 );
+
+		$item = Group_Subscription_Settings::get_seat_line_item( $subscription );
+		$this->assertSame( 7, $item->get_quantity(), 'The seat change must outlive WooCommerce line-items save.' );
+		$this->assertSame( 70.0, (float) $item->get_subtotal(), 'The rescaled price must outlive it too.' );
+	}
+
+	/**
+	 * A price that does not divide evenly across the old seat count is stored at the
+	 * store's own precision, not at PHP float precision.
+	 */
+	public function test_set_seat_quantity_rounds_to_store_precision() {
+		$subscription = $this->make_per_seat_subscription(
+			951,
+			[
+				'quantity' => 3,
+				'subtotal' => 40,
+				'total'    => 40,
+			]
+		);
+
+		$this->assertTrue( Group_Subscription_Settings::set_seat_quantity( $subscription, 4 ) );
+
+		$item = Group_Subscription_Settings::get_seat_line_item( $subscription );
+		$this->assertSame( 53.33, (float) $item->get_subtotal(), 'Rescaled money is rounded, not left at 53.333333333333336.' );
+		$this->assertSame( 53.33, (float) $item->get_total() );
 	}
 }

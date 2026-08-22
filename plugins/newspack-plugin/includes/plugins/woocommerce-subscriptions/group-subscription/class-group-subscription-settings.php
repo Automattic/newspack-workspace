@@ -55,6 +55,8 @@ class Group_Subscription_Settings {
 		\add_action( 'admin_enqueue_scripts', [ __CLASS__, 'admin_enqueue_scripts' ] );
 		\add_action( 'add_meta_boxes', [ __CLASS__, 'add_group_subscription_meta_box' ], 26, 2 );
 		\add_action( 'woocommerce_process_shop_order_meta', [ __CLASS__, 'save_group_subscription_meta' ], 10, 2 );
+		// Priority 20 is load-bearing: see save_group_subscription_seats().
+		\add_action( 'woocommerce_process_shop_order_meta', [ __CLASS__, 'save_group_subscription_seats' ], 20, 2 );
 		\add_action( 'wp_ajax_newspack_group_subscription_search_users', [ __CLASS__, 'ajax_search_users' ] );
 
 		// Customize subscription column in admin list table for group subscriptions.
@@ -468,8 +470,10 @@ class Group_Subscription_Settings {
 				[ 'status' => 400 ]
 			);
 		}
-		// A group is never smaller than its owner, so a zero or negative count is a
-		// one-seat group rather than an error.
+		// A group is never smaller than its owner, so anything below one seat is a
+		// one-seat group rather than an error. The meta box can only ever submit a
+		// non-negative number (its save handler runs the value through absint), so
+		// this floor is for direct callers.
 		$seats     = max( 1, (int) $seats );
 		$occupancy = Group_Subscription_Seats::get_occupancy( $subscription );
 		if ( $seats < $occupancy ) {
@@ -488,9 +492,13 @@ class Group_Subscription_Settings {
 		$old_quantity  = max( 1, (int) $item->get_quantity() );
 		$unit_subtotal = (float) $item->get_subtotal() / $old_quantity;
 		$unit_total    = (float) $item->get_total() / $old_quantity;
+		// Round the rescaled totals -- not the unit price -- to the store's own
+		// precision, so a line that does not divide evenly (40 over 3 seats) stores
+		// 53.33 rather than 53.333333333333336.
+		$decimals = function_exists( 'wc_get_price_decimals' ) ? \wc_get_price_decimals() : 2;
 		$item->set_quantity( $seats );
-		$item->set_subtotal( $unit_subtotal * $seats );
-		$item->set_total( $unit_total * $seats );
+		$item->set_subtotal( round( $unit_subtotal * $seats, $decimals ) );
+		$item->set_total( round( $unit_total * $seats, $decimals ) );
 		$item->save();
 		// WC_Abstract_Order::calculate_totals() rolls the line items up into the
 		// subscription total. Guarded because the subscription can be any object
@@ -922,24 +930,6 @@ class Group_Subscription_Settings {
 			self::update_subscription_settings( $subscription, $changed );
 		}
 
-		// A per-seat group renders the seat count in place of the limit field, and its
-		// capacity lives on the line item rather than in meta, so an edit here rescales
-		// the subscription instead of writing an override. Same baseline rule as the
-		// settings above: a field the admin never touched is not a change.
-		if ( isset( $_POST[ $prefix . 'seats' ], $_POST[ $prefix . 'seats_baseline' ] ) ) {
-			$submitted_seats = absint( wp_unslash( $_POST[ $prefix . 'seats' ] ) );
-			$baseline_seats  = absint( wp_unslash( $_POST[ $prefix . 'seats_baseline' ] ) );
-			if ( $submitted_seats !== $baseline_seats ) {
-				$seat_result = self::set_seat_quantity( $subscription, $submitted_seats );
-				// WooCommerce collects meta-box errors here and prints them on the next
-				// screen load; without it a refused change would just spring back with no
-				// explanation. Guarded because this class also runs outside wp-admin.
-				if ( is_wp_error( $seat_result ) && class_exists( '\WC_Admin_Meta_Boxes' ) ) {
-					\WC_Admin_Meta_Boxes::add_error( $seat_result->get_error_message() );
-				}
-			}
-		}
-
 		// Effective group status can flip via inherited product settings without a meta write; refresh the cached ID set when it changed.
 		// On the Add-subscription screen the product line item may not be linked yet, so this read can resolve the un-inherited
 		// default and leave the cached ID set briefly stale. That is harmless: it only drives the admin list-table group filter and
@@ -949,6 +939,65 @@ class Group_Subscription_Settings {
 			if ( $baseline_enabled !== self::get_subscription_settings( $subscription )['enabled'] ) {
 				self::clear_group_subscription_ids_cache();
 			}
+		}
+	}
+
+	/**
+	 * Apply an admin seat-count change from the meta box.
+	 *
+	 * Deliberately a separate callback at priority 20, not part of
+	 * save_group_subscription_meta() at 10. WooCommerce saves the order line items
+	 * on this very hook at priority 10 (`WC_Meta_Box_Order_Items::save`, registered
+	 * by `Automattic\WooCommerce\Internal\Admin\Orders\Edit::add_save_meta_boxes()`),
+	 * and `wc_save_order_items()` rewrites every item's quantity, subtotal and total
+	 * from the POST. The subscription edit screen submits those fields on every save
+	 * whether or not the admin ever opened the line items panel, and WooCommerce
+	 * Subscriptions does not unhook that callback. Newspack registers at plugin-load
+	 * time and WooCommerce during `init`, so at equal priority Newspack always runs
+	 * first -- a rescale done at 10 would be reverted by WooCommerce moments later,
+	 * with no error and the old seat count back on screen.
+	 *
+	 * 20 puts the rescale after that save and still ahead of
+	 * `WC_Meta_Box_Order_Downloads::save` (30) and `WC_Meta_Box_Order_Data::save`
+	 * (40), so anything reading the subscription total sees the new one. Do not
+	 * lower this priority.
+	 *
+	 * @param int              $subscription_id Subscription ID.
+	 * @param \WC_Subscription $subscription    Optional. Subscription object. Default null - will be loaded from the ID.
+	 */
+	public static function save_group_subscription_seats( $subscription_id, $subscription = null ) {
+		if ( ! function_exists( 'wcs_is_subscription' ) || ! function_exists( 'wcs_get_subscription' ) || ! function_exists( 'wc_clean' ) || ! \wcs_is_subscription( $subscription_id ) ) {
+			return;
+		}
+
+		// Same nonce as the settings save: both handle one submit of the same screen.
+		// See: WCS_Meta_Box_Subscription_Data::save().
+		if ( empty( $_POST['woocommerce_meta_nonce'] ) || ! \wp_verify_nonce( \wc_clean( \wp_unslash( $_POST['woocommerce_meta_nonce'] ) ), 'woocommerce_save_data' ) ) { // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized
+			return;
+		}
+
+		$prefix = self::GROUP_SUBSCRIPTION_META_PREFIX;
+
+		// A per-seat group renders the seat count in place of the limit field, and its
+		// capacity lives on the line item rather than in meta, so an edit rescales the
+		// subscription instead of writing an override. Same baseline rule as the
+		// settings: a field the admin never touched is not a change.
+		if ( ! isset( $_POST[ $prefix . 'seats' ], $_POST[ $prefix . 'seats_baseline' ] ) ) {
+			return;
+		}
+		$submitted_seats = absint( wp_unslash( $_POST[ $prefix . 'seats' ] ) );
+		$baseline_seats  = absint( wp_unslash( $_POST[ $prefix . 'seats_baseline' ] ) );
+		if ( $submitted_seats === $baseline_seats ) {
+			return;
+		}
+
+		$subscription = is_a( $subscription, 'WC_Subscription' ) ? $subscription : \wcs_get_subscription( $subscription_id );
+		$seat_result  = self::set_seat_quantity( $subscription, $submitted_seats );
+		// WooCommerce collects meta-box errors here and prints them on the next screen
+		// load; without it a refused change would just spring back with no explanation.
+		// Guarded because this class also runs outside wp-admin.
+		if ( is_wp_error( $seat_result ) && class_exists( '\WC_Admin_Meta_Boxes' ) ) {
+			\WC_Admin_Meta_Boxes::add_error( $seat_result->get_error_message() );
 		}
 	}
 
