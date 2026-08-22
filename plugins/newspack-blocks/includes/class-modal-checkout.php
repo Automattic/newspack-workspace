@@ -49,6 +49,27 @@ final class Modal_Checkout {
 	];
 
 	/**
+	 * Cart item keys the in-modal quantity form carries over when it re-adds the
+	 * product at a new quantity.
+	 *
+	 * WC_Cart has no "change this line item's quantity, keep everything else"
+	 * path that also re-runs the add-to-cart guards, so the item is emptied and
+	 * re-added. Anything the original add attached to the item — the name-your-
+	 * price amount, and the prompt/gate attribution the Data Events layer reads
+	 * back out at checkout — would be lost without this.
+	 *
+	 * @var string[]
+	 */
+	const PRESERVED_CART_ITEM_KEYS = [
+		'nyp',
+		'base_price',
+		'referer',
+		'gate_post_id',
+		'newspack_popup_id',
+		'prompt_title',
+	];
+
+	/**
 	 * Whether the modal checkout has been enqueued.
 	 *
 	 * @var boolean
@@ -187,6 +208,7 @@ final class Modal_Checkout {
 		add_filter( 'option_woocommerce_subscriptions_order_button_text', [ __CLASS__, 'order_button_text' ], 5 );
 		add_action( 'woocommerce_before_checkout_form', [ __CLASS__, 'render_before_checkout_form' ] );
 		add_action( 'woocommerce_before_checkout_form', [ __CLASS__, 'render_name_your_price_form' ], 11 );
+		add_action( 'woocommerce_before_checkout_form', [ __CLASS__, 'render_quantity_form' ], 12 );
 		add_action( 'woocommerce_checkout_before_customer_details', [ __CLASS__, 'render_before_customer_details' ] );
 		add_filter( 'woocommerce_enable_order_notes_field', [ __CLASS__, 'enable_order_notes_field' ] );
 		add_action( 'woocommerce_checkout_process', [ __CLASS__, 'wcsg_apply_gift_subscription' ] );
@@ -196,6 +218,8 @@ final class Modal_Checkout {
 		add_action( 'default_option_woocommerce_default_customer_address', [ __CLASS__, 'ensure_base_default_customer_address' ] );
 		add_action( 'wp_ajax_process_name_your_price_request', [ __CLASS__, 'process_name_your_price_request' ] );
 		add_action( 'wp_ajax_nopriv_process_name_your_price_request', [ __CLASS__, 'process_name_your_price_request' ] );
+		add_action( 'wp_ajax_process_quantity_request', [ __CLASS__, 'process_quantity_request' ] );
+		add_action( 'wp_ajax_nopriv_process_quantity_request', [ __CLASS__, 'process_quantity_request' ] );
 		add_filter( 'option_woocommerce_woocommerce_payments_settings', [ __CLASS__, 'filter_woocommerce_payments_settings' ] );
 		add_action( 'init', [ __CLASS__, 'unhook_woocommerce_payments_update_billing_fields' ] );
 		add_action( 'init', [ __CLASS__, 'unhook_woocommerce_payments_express_checkout_buttons' ], 20 );
@@ -775,6 +799,83 @@ final class Modal_Checkout {
 	}
 
 	/**
+	 * Process an in-modal quantity change: re-add the cart's single product at
+	 * the requested quantity.
+	 */
+	public static function process_quantity_request() {
+		if ( ! defined( 'DOING_AJAX' ) ) {
+			return;
+		}
+
+		if ( ! function_exists( 'WC' ) || ! \WC()->cart ) {
+			return;
+		}
+
+		check_ajax_referer( 'newspack_checkout_quantity' );
+
+		$product_id = filter_input( INPUT_POST, 'product_id', FILTER_SANITIZE_NUMBER_INT );
+		$quantity   = filter_input( INPUT_POST, 'quantity', FILTER_SANITIZE_NUMBER_INT );
+
+		// A missing quantity is a malformed request. "0" is a real value the floor
+		// below handles, so it must not be mistaken for an absent one: filter_input()
+		// returns a string when the field is present, and null when it is not.
+		if ( ! $product_id || ! is_string( $quantity ) || '' === $quantity ) {
+			return;
+		}
+
+		// The real bounds check belongs to whoever hooked the field filter, and it
+		// runs inside add_to_cart() below. This only keeps a 0 or negative from
+		// reaching the cart as a silent item removal.
+		$quantity = max( 1, (int) $quantity );
+
+		$cart_item_data = self::amend_cart_item_data( [ 'referer' => wp_get_referer() ] );
+
+		foreach ( \WC()->cart->get_cart() as $cart_item ) {
+			if ( (int) $cart_item['product_id'] !== (int) $product_id && (int) $cart_item['variation_id'] !== (int) $product_id ) {
+				continue;
+			}
+			foreach ( self::PRESERVED_CART_ITEM_KEYS as $key ) {
+				if ( isset( $cart_item[ $key ] ) ) {
+					$cart_item_data[ $key ] = $cart_item[ $key ];
+				}
+			}
+		}
+
+		$coupons = \WC()->cart->get_applied_coupons();
+
+		\WC()->cart->empty_cart();
+		$cart_item_key = \WC()->cart->add_to_cart( $product_id, $quantity, 0, [], $cart_item_data );
+
+		// A rejected add (e.g. a seat-bounds guard) must not report success: surface
+		// the error notice the cart queued for it instead. The consumer appends this
+		// message as an HTML string, and unlike template-rendered notices it never
+		// passes through kses on output — so filter any third-party notice content here.
+		if ( ! $cart_item_key ) {
+			$error_notices = \wc_get_notices( 'error' );
+			\wc_clear_notices();
+			wp_send_json_error(
+				[
+					'message' => ! empty( $error_notices[0]['notice'] )
+						? wp_kses_post( $error_notices[0]['notice'] )
+						: __( 'This product could not be added to the cart.', 'newspack-blocks' ),
+				]
+			);
+
+			wp_die();
+		}
+
+		if ( ! empty( $coupons ) ) {
+			foreach ( $coupons as $coupon ) {
+				\WC()->cart->apply_coupon( $coupon );
+			}
+		}
+
+		wp_send_json_success( [ 'message' => __( 'Seats updated.', 'newspack-blocks' ) ] );
+
+		wp_die();
+	}
+
+	/**
 	 * Render the markup necessary for the modal checkout.
 	 */
 	public static function render_modal_markup() {
@@ -937,6 +1038,7 @@ final class Modal_Checkout {
 			[
 				'ajax_url'              => admin_url( 'admin-ajax.php' ),
 				'nyp_nonce'             => wp_create_nonce( 'newspack_checkout_name_your_price' ),
+				'quantity_nonce'        => wp_create_nonce( 'newspack_checkout_quantity' ),
 				'checkout_nonce'        => wp_create_nonce( 'newspack_modal_checkout_nonce' ),
 				'newspack_class_prefix' => self::get_class_prefix(),
 				'is_checkout_complete'  => function_exists( 'is_order_received_page' ) && is_order_received_page(),
@@ -2524,6 +2626,78 @@ final class Modal_Checkout {
 				// phpcs:enable
 				?>
 			</div>
+		<?php
+	}
+
+	/**
+	 * Render the in-modal quantity form, when a plugin has asked for one.
+	 *
+	 * The modal is single-quantity by default, and stays that way unless a
+	 * consumer of the field filter below returns arguments for this product.
+	 * Nothing here knows what the quantity means — the label and bounds all come
+	 * from the filter.
+	 */
+	public static function render_quantity_form() {
+		if ( ! self::is_modal_checkout() || ! function_exists( 'WC' ) || ! \WC()->cart ) {
+			return;
+		}
+
+		// Donation carts have their own amount controls; a quantity field on top of
+		// them would be a second, conflicting way to change what the reader pays.
+		$is_donation = method_exists( 'Newspack\Donations', 'is_donation_cart' ) && \Newspack\Donations::is_donation_cart();
+		if ( $is_donation ) {
+			return;
+		}
+
+		$cart = \WC()->cart;
+		// Line-item count, not get_cart_contents_count(): the latter sums quantities,
+		// so a multi-seat purchase would fail this guard and hide its own field.
+		if ( 1 !== count( $cart->get_cart() ) ) {
+			return;
+		}
+		$cart_item_key = array_key_first( $cart->get_cart() );
+		$cart_item     = $cart->get_cart_item( $cart_item_key );
+		$product       = isset( $cart_item['data'] ) ? $cart_item['data'] : null;
+		// The filter's consumers are handed this product to decide on, so bail
+		// rather than pass them something they cannot ask anything of.
+		if ( ! $product || ! method_exists( $product, 'get_id' ) ) {
+			return;
+		}
+
+		/**
+		 * Lets a plugin turn on a quantity field for this purchase. Null keeps the
+		 * modal single-quantity. Array keys: label, min, max (0 = none), help.
+		 *
+		 * @param null|array  $args      Field arguments or null.
+		 * @param \WC_Product $product   The product in the cart.
+		 * @param array       $cart_item The cart item.
+		 */
+		$args = apply_filters( 'newspack_blocks_modal_checkout_quantity_field', null, $product, $cart_item );
+		if ( empty( $args ) ) {
+			return;
+		}
+		$args = wp_parse_args(
+			$args,
+			[
+				'label' => '',
+				'min'   => 1,
+				'max'   => 0,
+				'help'  => '',
+			]
+		);
+
+		$class_prefix = self::get_class_prefix();
+		$quantity     = max( 1, (int) $cart_item['quantity'] );
+		?>
+		<form class="modal_checkout_quantity">
+			<h3><?php echo esc_html( $args['label'] ); ?></h3>
+			<input type="hidden" name="product_id" value="<?php echo esc_attr( $product->get_id() ); ?>" />
+			<p class="input-quantity">
+				<input type="number" name="quantity" step="1" min="<?php echo esc_attr( $args['min'] ); ?>" <?php echo $args['max'] > 0 ? 'max="' . esc_attr( $args['max'] ) . '"' : ''; ?> value="<?php echo esc_attr( $quantity ); ?>" onwheel="return false" />
+				<button type="submit" class="<?php echo esc_attr( "{$class_prefix}__button {$class_prefix}__button--outline" ); ?>"><?php esc_html_e( 'Update', 'newspack-blocks' ); ?></button>
+			</p>
+			<p class="result <?php echo esc_attr( "{$class_prefix}__helper-text" ); ?>"><?php echo esc_html( $args['help'] ); ?></p>
+		</form>
 		<?php
 	}
 

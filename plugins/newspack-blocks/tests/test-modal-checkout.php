@@ -309,6 +309,7 @@ class ModalCheckoutTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 		}
 		remove_all_filters( 'woocommerce_cart_item_removed_message' );
 		remove_all_filters( 'newspack_blocks_donate_billing_fields_keys' );
+		remove_all_filters( 'newspack_blocks_modal_checkout_quantity_field' );
 		unset(
 			$_POST['billing_email'],
 			$_POST['post_data'],
@@ -1233,5 +1234,228 @@ class ModalCheckoutTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 		WC()->cart = null;
 
 		$this->assertFalse( \Newspack_Blocks\Modal_Checkout::should_hide_coupon_form() );
+	}
+
+	/**
+	 * Set WC()->cart to a cart double holding a single line item, as the modal
+	 * checkout always does.
+	 *
+	 * @param int $product_id Product ID of the line item.
+	 * @param int $quantity   Quantity of the line item.
+	 */
+	private function set_mock_single_item_cart( $product_id = 920, $quantity = 2 ) {
+		$product = new class( $product_id ) {
+			/**
+			 * Product ID.
+			 *
+			 * @var int
+			 */
+			private $id;
+
+			/**
+			 * Constructor.
+			 *
+			 * @param int $id Product ID.
+			 */
+			public function __construct( $id ) {
+				$this->id = $id;
+			}
+
+			/**
+			 * Get the product ID.
+			 *
+			 * @return int
+			 */
+			public function get_id() {
+				return $this->id;
+			}
+
+			/**
+			 * Whether the product exists.
+			 *
+			 * @return bool
+			 */
+			public function exists() {
+				return true;
+			}
+		};
+
+		$cart_item = [
+			'product_id'   => $product_id,
+			'variation_id' => 0,
+			'quantity'     => $quantity,
+			'data'         => $product,
+		];
+
+		WC()->cart = new class( $cart_item ) {
+			/**
+			 * Cart contents, keyed by cart item key.
+			 *
+			 * @var array
+			 */
+			private $contents;
+
+			/**
+			 * Constructor.
+			 *
+			 * @param array $cart_item The single cart item.
+			 */
+			public function __construct( $cart_item ) {
+				$this->contents = [ 'abc123' => $cart_item ];
+			}
+
+			/**
+			 * Get the cart contents.
+			 *
+			 * @return array
+			 */
+			public function get_cart() {
+				return $this->contents;
+			}
+
+			/**
+			 * Get a single cart item.
+			 *
+			 * @param string $key Cart item key.
+			 *
+			 * @return array|false
+			 */
+			public function get_cart_item( $key ) {
+				return isset( $this->contents[ $key ] ) ? $this->contents[ $key ] : false;
+			}
+		};
+	}
+
+	/**
+	 * Hook the quantity field filter, returning the given args.
+	 *
+	 * @param array $args Field args to return.
+	 */
+	private function set_quantity_field_args( $args ) {
+		add_filter(
+			'newspack_blocks_modal_checkout_quantity_field',
+			function () use ( $args ) {
+				return $args;
+			}
+		);
+	}
+
+	/**
+	 * Field args a per-seat product's filter callback would return.
+	 *
+	 * @return array
+	 */
+	private function get_quantity_field_args_fixture() {
+		return [
+			'label' => 'Number of team seats',
+			'min'   => 2,
+			'max'   => 10,
+			'help'  => 'Seats include the team owner.',
+		];
+	}
+
+	/**
+	 * A filter returning field args renders the quantity form, seeded with the
+	 * quantity already in the cart.
+	 */
+	public function test_quantity_form_renders_when_filter_returns_args() {
+		$this->set_modal_checkout_request();
+		$this->set_mock_single_item_cart( 920, 2 );
+		$this->set_quantity_field_args( $this->get_quantity_field_args_fixture() );
+
+		ob_start();
+		\Newspack_Blocks\Modal_Checkout::render_quantity_form();
+		$output = ob_get_clean();
+
+		$this->assertStringContainsString( 'form class="modal_checkout_quantity"', $output );
+		$this->assertStringContainsString( 'name="quantity"', $output );
+		$this->assertStringContainsString( 'value="2"', $output );
+		$this->assertStringContainsString( 'min="2"', $output );
+		$this->assertStringContainsString( 'max="10"', $output );
+		$this->assertStringContainsString( 'Number of team seats', $output );
+		$this->assertStringContainsString( 'Seats include the team owner.', $output );
+		$this->assertStringContainsString( 'name="product_id" value="920"', $output );
+	}
+
+	/**
+	 * An unlimited maximum omits the max attribute rather than emitting max="0".
+	 */
+	public function test_quantity_form_omits_max_when_unlimited() {
+		$this->set_modal_checkout_request();
+		$this->set_mock_single_item_cart( 920, 3 );
+		$args        = $this->get_quantity_field_args_fixture();
+		$args['max'] = 0;
+		$this->set_quantity_field_args( $args );
+
+		ob_start();
+		\Newspack_Blocks\Modal_Checkout::render_quantity_form();
+		$output = ob_get_clean();
+
+		$this->assertStringContainsString( 'form class="modal_checkout_quantity"', $output );
+		$this->assertStringNotContainsString( 'max=', $output );
+	}
+
+	/**
+	 * Without a filter enabling it, the form is not rendered at all: the modal
+	 * stays single-quantity for every product that has no opinion about seats.
+	 */
+	public function test_quantity_form_renders_nothing_without_filter() {
+		$this->set_modal_checkout_request();
+		$this->set_mock_single_item_cart( 920, 2 );
+
+		ob_start();
+		\Newspack_Blocks\Modal_Checkout::render_quantity_form();
+		$output = ob_get_clean();
+
+		$this->assertSame( '', $output );
+	}
+
+	/**
+	 * Outside modal checkout the form never renders, even with the filter on.
+	 */
+	public function test_quantity_form_renders_nothing_outside_modal_checkout() {
+		$this->set_mock_single_item_cart( 920, 2 );
+		$this->set_quantity_field_args( $this->get_quantity_field_args_fixture() );
+
+		ob_start();
+		\Newspack_Blocks\Modal_Checkout::render_quantity_form();
+		$output = ob_get_clean();
+
+		$this->assertSame( '', $output );
+	}
+
+	/**
+	 * The filter receives the cart's product and cart item, so a consumer can
+	 * decide per product whether the field applies.
+	 */
+	public function test_quantity_form_filter_receives_product_and_cart_item() {
+		$this->set_modal_checkout_request();
+		$this->set_mock_single_item_cart( 920, 2 );
+
+		$received = [];
+		add_filter(
+			'newspack_blocks_modal_checkout_quantity_field',
+			function ( $args, $product, $cart_item ) use ( &$received ) {
+				$received = [
+					'product_id' => $product->get_id(),
+					'quantity'   => $cart_item['quantity'],
+				];
+				return $args;
+			},
+			10,
+			3
+		);
+
+		ob_start();
+		\Newspack_Blocks\Modal_Checkout::render_quantity_form();
+		ob_get_clean();
+
+		$this->assertSame(
+			[
+				'product_id' => 920,
+				'quantity'   => 2,
+			],
+			$received
+		);
 	}
 }

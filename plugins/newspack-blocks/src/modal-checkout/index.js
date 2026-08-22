@@ -94,6 +94,7 @@ import { domReady, onCheckoutPlaceOrderProcessing } from './utils';
 
 				const $coupon = $( 'form.modal_checkout_coupon' );
 				const $nyp = $( 'form.modal_checkout_nyp' );
+				const $quantity = $( 'form.modal_checkout_quantity' );
 				const $checkout_continue = $( '#checkout_continue' );
 				const $customer_details = $( '#customer_details' );
 				const $after_customer_details = $( '#after_customer_details' );
@@ -481,6 +482,61 @@ import { domReady, onCheckoutPlaceOrderProcessing } from './utils';
 				}
 
 				/**
+				 * Handle quantity form submission.
+				 *
+				 * The server empties the cart and re-adds the product at the new quantity,
+				 * so the order review has to be refreshed either way: on success it shows
+				 * the new total, and on a rejected quantity it must not keep showing a
+				 * total the cart never accepted.
+				 *
+				 * @param {Event} ev
+				 */
+				function handleQuantityFormSubmit( ev ) {
+					ev.preventDefault();
+					const blocked = blockForm( $quantity );
+					if ( ! blocked ) {
+						return false;
+					}
+					const input = $quantity.find( 'input[name="quantity"]' );
+					input.attr( 'disabled', true );
+					const data = {
+						_ajax_nonce: newspackBlocksModalCheckout.quantity_nonce,
+						action: 'process_quantity_request',
+						quantity: input.val(),
+						product_id: $quantity.find( 'input[name="product_id"]' ).val(),
+					};
+					$.ajax( {
+						type: 'POST',
+						url: newspackBlocksModalCheckout.ajax_url,
+						data,
+						success: ( { success, data: res } ) => {
+							clearNotices();
+							$quantity.find( '.result' ).remove();
+							$quantity.append(
+								`<p class="result ${ CLASS_PREFIX }__helper-text ${ ! success ? CLASS_PREFIX + '__inline-error' : '' }">` +
+									res.message +
+									'</p>'
+							);
+							if ( success ) {
+								$quantity.find( 'h3, input[name="quantity"]' ).removeClass( 'newspack-ui__field-error' );
+							} else {
+								input.focus();
+								$quantity.find( 'h3, input[name="quantity"]' ).addClass( 'newspack-ui__field-error' );
+							}
+							$( document.body ).trigger( 'update_checkout', { update_shipping_method: false } );
+						},
+						complete: () => {
+							unblockForm( $quantity );
+							input.attr( 'disabled', false );
+							input.focus();
+						},
+					} );
+				}
+				if ( $quantity.length ) {
+					$quantity.on( 'submit', handleQuantityFormSubmit );
+				}
+
+				/**
 				 * Handle form 1st step submission.
 				 *
 				 * @param {Event} ev
@@ -514,6 +570,9 @@ import { domReady, onCheckoutPlaceOrderProcessing } from './utils';
 						}
 						if ( $nyp.length ) {
 							$nyp.hide();
+						}
+						if ( $quantity.length ) {
+							$quantity.hide();
 						}
 						$customer_details.show();
 						$after_customer_details.hide();
@@ -549,6 +608,9 @@ import { domReady, onCheckoutPlaceOrderProcessing } from './utils';
 						}
 						if ( $nyp.length ) {
 							$nyp.show();
+						}
+						if ( $quantity.length ) {
+							$quantity.show();
 						}
 						$customer_details.hide();
 						$after_customer_details.show();
