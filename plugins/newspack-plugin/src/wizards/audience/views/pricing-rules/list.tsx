@@ -51,7 +51,7 @@ const DEFAULT_VIEW: View = {
 // hold the whole screen behind the spinner indefinitely.
 const STATS_GATE_TIMEOUT_MS = 8000;
 
-const ACTIVE_STATE_STATUS = { active: 'active', scheduled: 'scheduled', ended: 'ended' } as const;
+export const ACTIVE_STATE_STATUS = { active: 'active', scheduled: 'scheduled', ended: 'ended' } as const;
 
 const ACTIVE_STATE_LABEL: Record< PricingRuleRow[ 'active_state' ], string > = {
 	active: __( 'Active', 'newspack-plugin' ),

@@ -2,6 +2,7 @@
  * Internal dependencies
  */
 import { displayStatuses, STATUS_BADGE_INTENT, STATUS_INDICATORS, STATUS_LABELS } from './status';
+import { postStatus } from '../audience/post-status';
 import { statusGlyph } from '../../../packages/components/src/status-indicator';
 
 // The status-reduction rule these assertions pin is documented on the PHP side,
@@ -61,6 +62,13 @@ describe( 'STATUS_INDICATORS', () => {
 		expect( STATUS_INDICATORS.active ).toBe( 'active' );
 		expect( STATUS_INDICATORS[ 'on-hold' ] ).toBe( 'attention' );
 		expect( STATUS_INDICATORS.cancelled ).toBe( 'cancelled' );
+	} );
+
+	// The vocabulary guarantees one name draws one mark. It cannot guarantee two
+	// wizards reach for the same name for the same word, and Pending is the pair
+	// that has drifted apart before.
+	it( 'names Pending the way the Audience lists do', () => {
+		expect( STATUS_INDICATORS.pending ).toBe( postStatus( 'pending' ) );
 	} );
 } );
 

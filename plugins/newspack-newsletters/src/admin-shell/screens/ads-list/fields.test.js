@@ -14,6 +14,7 @@ import { render, screen } from '@testing-library/react';
 import { setSettings } from '@wordpress/date';
 
 import { getFields, STATUS_KIND_STATUSES } from './fields';
+import { statusGlyph } from 'newspack-components/src/status-indicator';
 
 const L10N = {
 	locale: 'en_US',
@@ -181,23 +182,17 @@ describe( 'Ads list status column dates', () => {
 	} );
 } );
 
-// `newspack-components` is stubbed for these tests, so the glyphs are unreachable
-// and the rule is asserted on names. `packages/components` pins the only two pairs
-// that share a mark, so a column keeps the rule by using at most one half of a pair.
+// The `newspack-components` stub only intercepts the bare package specifier, so the
+// vocabulary itself is still reachable and the rule can be asserted on marks rather
+// than on a copy of the pair list kept here.
 describe( 'STATUS_KIND_STATUSES', () => {
-	const SHARED_MARKS = [
-		[ 'active', 'done' ],
-		[ 'cancelled', 'ended' ],
-	];
-
 	it( 'names every kind the list can report', () => {
 		expect( STATUS_KIND_STATUSES ).toEqual( { active: 'active', scheduled: 'scheduled', expired: 'ended', draft: 'draft', trash: 'trash' } );
 	} );
 
 	it( 'gives no two kinds the same mark', () => {
-		const names = Object.values( STATUS_KIND_STATUSES );
-		expect( new Set( names ).size ).toBe( names.length );
-		SHARED_MARKS.forEach( pair => expect( pair.filter( name => names.includes( name ) ).length ).toBeLessThan( 2 ) );
+		const glyphs = Object.values( STATUS_KIND_STATUSES ).map( name => statusGlyph( name ) );
+		expect( new Set( glyphs ).size ).toBe( glyphs.length );
 	} );
 
 	it( 'reads an expired ad as its window closing, not a deliberate stop', () => {
