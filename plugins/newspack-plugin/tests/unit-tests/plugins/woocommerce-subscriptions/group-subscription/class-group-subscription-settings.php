@@ -1097,6 +1097,77 @@ class Test_Group_Subscription_Settings extends WP_UnitTestCase {
 	}
 
 	/**
+	 * When the admin edits the line items table and the seats field in one submit,
+	 * the rescale must start from what WooCommerce just wrote, not from the copy of
+	 * the item this callback happens to hold.
+	 *
+	 * The fixture makes the two disagree on purpose: the in-memory item says 2 seats
+	 * at 30 (unit 15) while the POST says 4 at 40 (unit 10). Seven seats is 70 off the
+	 * posted base and 105 off the stale one, so the assertion can only pass one way.
+	 */
+	public function test_seat_save_rebases_on_the_posted_line_item() {
+		$subscription = $this->make_per_seat_subscription(
+			952,
+			[
+				'quantity' => 2,
+				'subtotal' => 30,
+				'total'    => 30,
+			]
+		);
+		$prefix  = Group_Subscription_Settings::GROUP_SUBSCRIPTION_META_PREFIX;
+		$item_id = Group_Subscription_Settings::get_seat_line_item( $subscription )->get_id();
+
+		$this->run_meta_box_save(
+			$subscription,
+			[
+				$prefix . 'enabled'          => 'yes',
+				$prefix . 'enabled_baseline' => 'yes',
+				$prefix . 'seats'            => '7',
+				$prefix . 'seats_baseline'   => '4',
+				// The keys wc_save_order_items() reads, as the items table submits them.
+				'order_item_qty'             => [ $item_id => '4' ],
+				'line_subtotal'              => [ $item_id => '40' ],
+				'line_total'                 => [ $item_id => '40' ],
+			]
+		);
+
+		$item = Group_Subscription_Settings::get_seat_line_item( $subscription );
+		$this->assertSame( 7, $item->get_quantity() );
+		$this->assertSame( 70.0, (float) $item->get_subtotal(), 'The unit price must come from the POST (10), not the stale object (15).' );
+		$this->assertSame( 70.0, (float) $item->get_total(), 'The unit price must come from the POST (10), not the stale object (15).' );
+	}
+
+	/**
+	 * Outside the order items editor nothing posts those fields, and the object stays
+	 * the base -- there being nothing fresher to use.
+	 */
+	public function test_seat_save_falls_back_to_the_object_without_posted_line_item() {
+		$subscription = $this->make_per_seat_subscription(
+			953,
+			[
+				'quantity' => 2,
+				'subtotal' => 30,
+				'total'    => 30,
+			]
+		);
+		$prefix = Group_Subscription_Settings::GROUP_SUBSCRIPTION_META_PREFIX;
+
+		$this->run_meta_box_save(
+			$subscription,
+			[
+				$prefix . 'enabled'          => 'yes',
+				$prefix . 'enabled_baseline' => 'yes',
+				$prefix . 'seats'            => '4',
+				$prefix . 'seats_baseline'   => '2',
+			]
+		);
+
+		$item = Group_Subscription_Settings::get_seat_line_item( $subscription );
+		$this->assertSame( 4, $item->get_quantity() );
+		$this->assertSame( 60.0, (float) $item->get_subtotal(), 'The object unit price (15) applies when the POST carries no line item.' );
+	}
+
+	/**
 	 * A price that does not divide evenly across the old seat count is stored at the
 	 * store's own precision, not at PHP float precision.
 	 */

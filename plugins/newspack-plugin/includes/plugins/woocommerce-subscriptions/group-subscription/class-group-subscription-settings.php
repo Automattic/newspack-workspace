@@ -962,6 +962,10 @@ class Group_Subscription_Settings {
 	 * (40), so anything reading the subscription total sees the new one. Do not
 	 * lower this priority.
 	 *
+	 * Running second means the line item we hold may be a handle taken before
+	 * WooCommerce wrote to it, so the rescale is re-based on the POST first --
+	 * see sync_seat_line_item_from_post().
+	 *
 	 * @param int              $subscription_id Subscription ID.
 	 * @param \WC_Subscription $subscription    Optional. Subscription object. Default null - will be loaded from the ID.
 	 */
@@ -992,13 +996,57 @@ class Group_Subscription_Settings {
 		}
 
 		$subscription = is_a( $subscription, 'WC_Subscription' ) ? $subscription : \wcs_get_subscription( $subscription_id );
-		$seat_result  = self::set_seat_quantity( $subscription, $submitted_seats );
+		self::sync_seat_line_item_from_post( $subscription );
+		$seat_result = self::set_seat_quantity( $subscription, $submitted_seats );
 		// WooCommerce collects meta-box errors here and prints them on the next screen
 		// load; without it a refused change would just spring back with no explanation.
 		// Guarded because this class also runs outside wp-admin.
 		if ( is_wp_error( $seat_result ) && class_exists( '\WC_Admin_Meta_Boxes' ) ) {
 			\WC_Admin_Meta_Boxes::add_error( $seat_result->get_error_message() );
 		}
+	}
+
+	/**
+	 * Re-base the seat line item on what WooCommerce just wrote from this same POST.
+	 *
+	 * The rescale divides the line's existing money by its existing quantity to get a
+	 * unit price, so the numbers it starts from have to be the current ones. Running
+	 * at priority 20 means `wc_save_order_items()` has already written the line item
+	 * at priority 10, but it did so through its own freshly loaded copy: the handle
+	 * this callback holds can still carry the values from before that write. Dividing
+	 * stale money by a stale quantity yields the wrong unit price, and the seat count
+	 * would come out right at the wrong price -- the failure is silent, because
+	 * nothing about the result looks malformed.
+	 *
+	 * So the POST is the base, not the object. These are the same three keys
+	 * `wc_save_order_items()` reads (`wc-admin-functions.php`), and the values go to
+	 * the same setters WooCommerce hands them to, raw: `set_subtotal()`/`set_total()`
+	 * run `wc_format_decimal()` themselves, which is what parses the localised price
+	 * the items table submits ("1.234,56"). Parsing it a second way here would be a
+	 * second chance to disagree with WooCommerce.
+	 *
+	 * Fields absent -- any context that is not the order items editor, including the
+	 * tests -- leaves the object as the base, which is then the freshest thing there is.
+	 *
+	 * @param \WC_Subscription $subscription The subscription being saved.
+	 */
+	private static function sync_seat_line_item_from_post( $subscription ) {
+		$item    = self::get_seat_line_item( $subscription );
+		$item_id = $item ? (int) $item->get_id() : 0;
+		if ( ! $item_id ) {
+			return;
+		}
+		// phpcs:disable WordPress.Security.NonceVerification.Missing -- The only caller verifies woocommerce_meta_nonce before reaching here.
+		if ( isset( $_POST['order_item_qty'][ $item_id ] ) ) {
+			$item->set_quantity( sanitize_text_field( wp_unslash( $_POST['order_item_qty'][ $item_id ] ) ) );
+		}
+		if ( isset( $_POST['line_subtotal'][ $item_id ] ) ) {
+			$item->set_subtotal( sanitize_text_field( wp_unslash( $_POST['line_subtotal'][ $item_id ] ) ) );
+		}
+		if ( isset( $_POST['line_total'][ $item_id ] ) ) {
+			$item->set_total( sanitize_text_field( wp_unslash( $_POST['line_total'][ $item_id ] ) ) );
+		}
+		// phpcs:enable WordPress.Security.NonceVerification.Missing
 	}
 
 	/**
