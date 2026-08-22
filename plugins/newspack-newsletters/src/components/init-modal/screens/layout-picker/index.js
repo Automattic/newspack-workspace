@@ -59,7 +59,7 @@ function renderAuthor( { item } ) {
 	if ( ! author ) {
 		return null;
 	}
-	return <UserRow { ...avatarPropsFromAuthor( author ) } label={ author.name || '' } />;
+	return <UserRow { ...avatarPropsFromAuthor( author ) } label={ author.name || '' } className="newspack-newsletters-layouts-picker__author" />;
 }
 
 function PreviewCard( { item } ) {

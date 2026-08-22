@@ -1,6 +1,8 @@
 import { Icon } from '@wordpress/components';
 import { commentAuthorAvatar } from '@wordpress/icons';
 
+import './style.scss';
+
 /**
  * Avatar and name on one line, with a fallback icon when there is no
  * avatar. Shared by the Author columns, the newsletters list's
@@ -15,13 +17,13 @@ import { commentAuthorAvatar } from '@wordpress/icons';
  */
 export default function UserRow( { avatarUrl, avatarSrcSet, label, icon = commentAuthorAvatar, className = '' } ) {
 	return (
-		<span className={ `newspack-newsletters-list__user ${ className }`.trim() }>
+		<span className={ `newspack-newsletters-user-row ${ className }`.trim() }>
 			{ avatarUrl ? (
-				<span className="newspack-newsletters-list__user-avatar">
+				<span className="newspack-newsletters-user-row__avatar">
 					<img src={ avatarUrl } srcSet={ avatarSrcSet } width={ 16 } height={ 16 } alt="" />
 				</span>
 			) : (
-				<Icon className="newspack-newsletters-list__user-icon" icon={ icon } size={ 24 } />
+				<Icon className="newspack-newsletters-user-row__icon" icon={ icon } size={ 24 } />
 			) }
 			<span>{ label }</span>
 		</span>
