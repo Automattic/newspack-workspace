@@ -45,8 +45,7 @@ const getTitle = item => item?.title?.raw ?? item?.title?.rendered ?? '';
 
 const renderTitle = ( { item } ) => {
 	const raw = getTitle( item );
-	// New newsletters carry WordPress's "Auto Draft" placeholder title; show a friendly label instead.
-	const title = ! raw || 'auto-draft' === item?.status ? __( '(no subject)', 'newspack-newsletters' ) : raw;
+	const title = raw || __( '(no subject)', 'newspack-newsletters' );
 	return (
 		<a className="newspack-newsletters-list__title" href={ editUrl( item ) } onClickCapture={ event => event.stopPropagation() }>
 			<strong>{ title }</strong>
@@ -167,7 +166,7 @@ export function getFields( { authors = [], categories = [], tags = [], sendLists
 				{ value: 'publish,private', label: statusLabels.sent },
 				{ value: 'future', label: statusLabels.scheduled },
 				// Match `get_status_for_post`'s draft fallthrough.
-				{ value: 'draft,pending,auto-draft', label: statusLabels.draft },
+				{ value: 'draft,pending', label: statusLabels.draft },
 				{ value: 'trash', label: statusLabels.trash },
 			],
 			filterBy: { operators: [ 'isAny' ], isPrimary: true },

@@ -117,8 +117,7 @@ export function getFields( { renamingId = null, onRenameCommit, onRenameCancel, 
 			return <RenamingTitle item={ item } onCommit={ next => onRenameCommit?.( item, next ) } onCancel={ () => onRenameCancel?.() } />;
 		}
 		const raw = getRawTitle( item );
-		// Auto-drafts carry WordPress's "Auto Draft" placeholder; show a friendly title instead.
-		const label = ! raw || 'auto-draft' === item?.status ? __( '(no title)', 'newspack-newsletters' ) : raw;
+		const label = raw || __( '(no title)', 'newspack-newsletters' );
 		// Prebuilts aren't editable; only user-owned layouts link to the editor.
 		if ( item?.is_prebuilt ) {
 			return <strong>{ label }</strong>;

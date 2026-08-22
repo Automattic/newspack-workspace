@@ -26,6 +26,16 @@ final class Ads {
 	const ADVERTISER_TAX = 'newspack_nl_advertiser';
 
 	/**
+	 * Statuses an advertiser's term count covers. Must stay equal to the union
+	 * of the non-trash `post_status` sets in `Ads_List_REST::filter_rest_query`,
+	 * or the count disagrees with the list it describes. Bump the recount
+	 * sentinel in `maybe_recount_advertiser_terms` whenever this changes.
+	 *
+	 * @var string[]
+	 */
+	const COUNTED_STATUSES = [ 'publish', 'private', 'future', 'draft', 'pending' ];
+
+	/**
 	 * Ads already inserted in the newsletter.
 	 *
 	 * @var array[] Ad ids mapped by newsletter id.
@@ -413,8 +423,6 @@ final class Ads {
 		global $wpdb;
 
 		$taxonomy_name = is_object( $taxonomy ) ? $taxonomy->name : $taxonomy;
-		// Include auto-draft to match the Ads list's draft bucket.
-		$statuses = [ 'publish', 'private', 'future', 'draft', 'pending', 'auto-draft' ];
 
 		foreach ( $terms as $tt_id ) {
 			$tt_id = (int) $tt_id;
@@ -424,15 +432,14 @@ final class Ads {
 					INNER JOIN {$wpdb->posts} p ON p.ID = tr.object_id
 					WHERE tr.term_taxonomy_id = %d
 					AND p.post_type = %s
-					AND p.post_status IN ( %s, %s, %s, %s, %s, %s )",
+					AND p.post_status IN ( %s, %s, %s, %s, %s )",
 					$tt_id,
 					self::CPT,
-					$statuses[0],
-					$statuses[1],
-					$statuses[2],
-					$statuses[3],
-					$statuses[4],
-					$statuses[5]
+					self::COUNTED_STATUSES[0],
+					self::COUNTED_STATUSES[1],
+					self::COUNTED_STATUSES[2],
+					self::COUNTED_STATUSES[3],
+					self::COUNTED_STATUSES[4]
 				)
 			);
 
@@ -445,14 +452,23 @@ final class Ads {
 	/**
 	 * One-time recount of existing advertiser terms so counts predating
 	 * the custom count callback refresh without waiting for the next edit.
-	 * Bump the sentinel whenever the counted statuses change so already
-	 * recounted sites pick up the new semantics (v3: added auto-draft).
 	 */
 	public static function maybe_recount_advertiser_terms() {
-		$option = 'newspack_nl_advertiser_count_recounted_v3';
+		$option = 'newspack_nl_advertiser_count_recounted_v4';
 		if ( get_option( $option ) ) {
 			return;
 		}
+		// `admin_init` also fires on admin-ajax.php, including for logged-out
+		// requests, so gate on the taxonomy's own management capability.
+		$taxonomy = get_taxonomy( self::ADVERTISER_TAX );
+		if ( ! $taxonomy || ! current_user_can( $taxonomy->cap->manage_terms ) ) {
+			return;
+		}
+		// Claim before the work. The recount is one `COUNT(*)` plus one `UPDATE`
+		// per term, so a concurrent burst would otherwise run it once each, and a
+		// pass that times out would re-arm it on every later request.
+		update_option( $option, 1 );
+		delete_option( 'newspack_nl_advertiser_count_recounted_v3' );
 
 		$term_ids = get_terms(
 			[
@@ -461,13 +477,10 @@ final class Ads {
 				'fields'     => 'tt_ids',
 			]
 		);
-		if ( is_wp_error( $term_ids ) ) {
+		if ( is_wp_error( $term_ids ) || empty( $term_ids ) ) {
 			return;
 		}
-		if ( ! empty( $term_ids ) ) {
-			wp_update_term_count_now( $term_ids, self::ADVERTISER_TAX );
-		}
-		update_option( $option, 1 );
+		wp_update_term_count_now( $term_ids, self::ADVERTISER_TAX );
 	}
 
 	/**
