@@ -434,7 +434,8 @@ final class Ads {
 		}
 		// `admin_init` also fires on admin-ajax.php, including for logged-out
 		// requests, so gate on the taxonomy's own management capability.
-		if ( ! current_user_can( 'manage_categories' ) ) {
+		$taxonomy = get_taxonomy( self::ADVERTISER_TAX );
+		if ( ! $taxonomy || ! current_user_can( $taxonomy->cap->manage_terms ) ) {
 			return;
 		}
 		// Claim before the work. The recount is one `COUNT(*)` plus one `UPDATE`
