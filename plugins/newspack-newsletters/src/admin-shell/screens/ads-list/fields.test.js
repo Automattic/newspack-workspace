@@ -125,10 +125,12 @@ describe( 'Ads list date columns', () => {
 describe( 'Ads list status column dates', () => {
 	afterEach( () => configureSite( 0 ) );
 
+	// `newspack-components` is stubbed for these tests, so read the label off the
+	// StatusIndicator's props rather than rendering it.
 	const statusLabel = ( status, postStatus = 'publish' ) =>
 		fieldById( 'status' ).render( {
 			item: { id: 1, meta: {}, status: postStatus, newspack_newsletters_ad_status: status },
-		} ).props.children[ 1 ].props.children;
+		} ).props.children;
 
 	it( 'drops the clock time when the site date format carries one', () => {
 		configureSite( -4, 'F j, Y, g:i a' );

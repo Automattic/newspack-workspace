@@ -5,10 +5,12 @@
  * `newspack_newsletters_ad_status` so the column matches the filter.
  */
 
-import { Icon, Tooltip } from '@wordpress/components';
+import { Tooltip } from '@wordpress/components';
 import { __, sprintf } from '@wordpress/i18n';
 import { drafts, notAllowed, published, scheduled, trash } from '@wordpress/icons';
 import { dateI18n, getSettings as getDateSettings, gmdateI18n } from '@wordpress/date';
+
+import { StatusIndicator } from 'newspack-components';
 
 import { getAdminUrl } from '../../admin-globals';
 import { formatPostDate } from '../../utils/format-date';
@@ -110,12 +112,7 @@ const renderStatus = ( { item } ) => {
 		label = statusKindLabel( kind );
 	}
 
-	return (
-		<span className="newspack-newsletters-list__status">
-			<Icon className="newspack-newsletters-list__status-icon" icon={ icon } size={ 24 } />
-			<span>{ label }</span>
-		</span>
-	);
+	return <StatusIndicator icon={ icon }>{ label }</StatusIndicator>;
 };
 
 const renderTerms =

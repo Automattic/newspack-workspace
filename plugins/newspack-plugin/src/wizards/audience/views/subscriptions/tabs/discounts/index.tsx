@@ -17,12 +17,12 @@ import { filterSortAndPaginate } from '@wordpress/dataviews';
 import type { Action, Field, View } from '@wordpress/dataviews';
 import { drafts, percent, published } from '@wordpress/icons';
 // eslint-disable-next-line @wordpress/no-unsafe-wp-apis
-import { Icon, __experimentalHStack as HStack, __experimentalVStack as VStack } from '@wordpress/components';
+import { __experimentalHStack as HStack, __experimentalVStack as VStack } from '@wordpress/components';
 
 /**
  * Internal dependencies.
  */
-import { Button, DataViews, Grid, Notice, SectionHeader, Waiting } from '../../../../../../../packages/components/src';
+import { Button, DataViews, Grid, Notice, SectionHeader, StatusIndicator, Waiting } from '../../../../../../../packages/components/src';
 import { WIZARD_STORE_NAMESPACE } from '../../../../../../../packages/components/src/wizard/store';
 import Router from '../../../../../../../packages/components/src/proxied-imports/router';
 import { SEARCH_ENDPOINTS, WIZARD_ENDPOINT } from '../../constants';
@@ -158,10 +158,9 @@ function SubscriberDiscounts() {
 				filterBy: { operators: [ 'isAny' ] },
 				getValue: ( { item } ) => ( item.active ? 'active' : 'inactive' ),
 				render: ( { item } ) => (
-					<span className="newspack-subscriber-discounts__status">
-						<Icon className="newspack-subscriber-discounts__status-icon" icon={ item.active ? published : drafts } size={ 24 } />
-						<span>{ item.active ? __( 'Active', 'newspack-plugin' ) : __( 'Inactive', 'newspack-plugin' ) }</span>
-					</span>
+					<StatusIndicator icon={ item.active ? published : drafts }>
+						{ item.active ? __( 'Active', 'newspack-plugin' ) : __( 'Inactive', 'newspack-plugin' ) }
+					</StatusIndicator>
 				),
 			},
 			{
