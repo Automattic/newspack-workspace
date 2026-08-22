@@ -1,4 +1,0 @@
-Temporary. Exists only to put newspack-plugin in this PR's package matrix so the
-PHPUnit job runs and exercises the rewritten "Install WordPress test suite" step.
-A ci.yml-only diff detects no packages, so the job is otherwise skipped entirely.
-Reverted before merge.
