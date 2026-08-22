@@ -54,6 +54,57 @@ class Bulk_Actions_Test extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Making a page public can promote the post to `publish`, so it needs
+	 * publish_post. An author who can edit their own unpublished newsletter but
+	 * cannot publish must be skipped: the meta stays as it was and the count is
+	 * zero. The non-public direction is unaffected, and is covered below.
+	 */
+	public function test_bulk_handler_requires_publish_capability_to_make_public() {
+		$contributor = self::factory()->user->create( [ 'role' => 'contributor' ] );
+		$newsletter  = self::factory()->post->create(
+			[
+				'post_type'   => \Newspack_Newsletters::NEWSPACK_NEWSLETTERS_CPT,
+				'post_status' => 'private',
+				'post_author' => $contributor,
+			]
+		);
+		update_post_meta( $newsletter, 'is_public', false );
+		wp_set_current_user( $contributor );
+
+		$this->assertTrue( current_user_can( 'edit_post', $newsletter ), 'Precondition: the author can edit their own newsletter.' );
+		$this->assertFalse( current_user_can( 'publish_post', $newsletter ), 'Precondition: the author cannot publish it.' );
+
+		$redirect = Newspack_Newsletters_Bulk_Actions::bulk_action_handler( 'http://example.test/', 'newsletters_public', [ $newsletter ] );
+
+		$this->assertFalse( (bool) get_post_meta( $newsletter, 'is_public', true ), 'is_public must stay false without publish_post.' );
+		$this->assertStringContainsString( 'newsletters_public_count=0', urldecode( $redirect ), 'A skipped newsletter must not be counted.' );
+	}
+
+	/**
+	 * The non-public direction de-escalates, so edit_post is enough: an author
+	 * without publish_post can still turn their own newsletter page off.
+	 */
+	public function test_bulk_handler_non_public_direction_needs_only_edit() {
+		$contributor = self::factory()->user->create( [ 'role' => 'contributor' ] );
+		$newsletter  = self::factory()->post->create(
+			[
+				'post_type'   => \Newspack_Newsletters::NEWSPACK_NEWSLETTERS_CPT,
+				'post_status' => 'private',
+				'post_author' => $contributor,
+			]
+		);
+		update_post_meta( $newsletter, 'is_public', true );
+		wp_set_current_user( $contributor );
+
+		$this->assertFalse( current_user_can( 'publish_post', $newsletter ), 'Precondition: the author cannot publish it.' );
+
+		$redirect = Newspack_Newsletters_Bulk_Actions::bulk_action_handler( 'http://example.test/', 'newsletters_non_public', [ $newsletter ] );
+
+		$this->assertFalse( (bool) get_post_meta( $newsletter, 'is_public', true ), 'The de-escalating direction must still apply.' );
+		$this->assertStringContainsString( 'newsletters_non_public_count=1', urldecode( $redirect ), 'The de-escalating direction must be counted.' );
+	}
+
+	/**
 	 * A user who can edit the newsletter updates it, and the count reflects it.
 	 */
 	public function test_bulk_handler_updates_newsletters_the_user_can_edit() {

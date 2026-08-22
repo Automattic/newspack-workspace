@@ -80,11 +80,14 @@ class Newspack_Newsletters_Quick_Edit {
 		) {
 			return;
 		}
-		update_post_meta(
-			$post_id,
-			'is_public',
-			isset( $_POST['switch_public_page'] ) && sanitize_text_field( $_POST['switch_public_page'] )
-		);
+		$is_public = isset( $_POST['switch_public_page'] ) && sanitize_text_field( $_POST['switch_public_page'] );
+		// Same reason as Newspack_Newsletters_Bulk_Actions::set_public_status(): making
+		// the page public can promote the post to `publish`, so the escalating
+		// direction needs publish_post rather than edit_post.
+		if ( $is_public && ! current_user_can( 'publish_post', $post_id ) ) {
+			return;
+		}
+		update_post_meta( $post_id, 'is_public', $is_public );
 	}
 }
 

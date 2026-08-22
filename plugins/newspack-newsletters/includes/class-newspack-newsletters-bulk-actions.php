@@ -92,6 +92,14 @@ class Newspack_Newsletters_Bulk_Actions {
 			if ( ! current_user_can( 'edit_post', $post_id ) ) {
 				continue;
 			}
+			// Making the page public can promote the post to `publish`: the active
+			// ESP's updated_post_meta() handler moves it when is_public flips true.
+			// That is the same escalation as publishing any other content, so it needs
+			// publish_post. edit_post alone is satisfied by an author's own unpublished
+			// post. The non-public direction de-escalates and stays on edit_post.
+			if ( $is_public && ! current_user_can( 'publish_post', $post_id ) ) {
+				continue;
+			}
 			update_post_meta( $post_id, 'is_public', (bool) $is_public );
 			$updated++;
 		}
