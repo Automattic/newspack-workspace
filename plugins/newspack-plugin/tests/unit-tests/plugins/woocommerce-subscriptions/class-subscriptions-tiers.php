@@ -5,6 +5,7 @@
  * @package Newspack\Tests
  */
 
+use Newspack\Group_Subscription_Settings;
 use Newspack\Subscriptions_Tiers;
 
 require_once __DIR__ . '/../../../mocks/wc-mocks.php';
@@ -601,9 +602,9 @@ class Newspack_Test_Subscriptions_Tiers extends WP_UnitTestCase {
 
 	/**
 	 * Without a submitted quantity there is no deliberate seat change: the modal
-	 * has no quantity input and its checkout path hardcodes an add of one, so a
-	 * multi-seat line item must not make the guard bail on the quantity check
-	 * and skip the same-product comparison.
+	 * submits the line item's own quantity on every switch, so a request that
+	 * omits it never came from the modal, and a multi-seat line item must not make
+	 * the guard bail on the quantity check and skip the same-product comparison.
 	 */
 	public function test_prevent_switch_blocks_multi_seat_line_item_without_submitted_quantity() {
 		$user_id = self::factory()->user->create();
@@ -750,5 +751,203 @@ class Newspack_Test_Subscriptions_Tiers extends WP_UnitTestCase {
 			9,
 			has_filter( 'woocommerce_add_cart_item_data', [ Subscriptions_Tiers::class, 'prevent_switch_to_same_subscription_cart_item_data' ] )
 		);
+	}
+
+	/**
+	 * Build a monthly subscription tier product registered in the mock products
+	 * database.
+	 *
+	 * @param int   $id   Product ID.
+	 * @param array $meta Extra product meta, merged over the billing period meta.
+	 *
+	 * @return \WC_Product
+	 */
+	private function make_tier_product( $id, $meta = [] ) {
+		return wc_create_mock_product(
+			[
+				'id'    => $id,
+				'type'  => 'subscription',
+				'name'  => 'Tier ' . $id,
+				'price' => 10,
+				'meta'  => array_merge(
+					[
+						'_subscription_period'          => 'month',
+						'_subscription_period_interval' => 1,
+					],
+					$meta
+				),
+			]
+		);
+	}
+
+	/**
+	 * Product meta that turns a product into a per-seat group subscription.
+	 *
+	 * @param int $min Minimum seats.
+	 * @param int $max Maximum seats (0 = unlimited).
+	 *
+	 * @return array Meta keyed by the group subscription meta keys.
+	 */
+	private function per_seat_meta( $min, $max ) {
+		$prefix = Group_Subscription_Settings::GROUP_SUBSCRIPTION_META_PREFIX;
+		return [
+			$prefix . 'enabled'      => 'yes',
+			$prefix . 'pricing_mode' => Group_Subscription_Settings::PRICING_MODE_PER_SEAT,
+			$prefix . 'min_seats'    => $min,
+			$prefix . 'max_seats'    => $max,
+		];
+	}
+
+	/**
+	 * Build the switch data the modal is rendered with: an owned subscription
+	 * holding the given products, and the line item being switched.
+	 *
+	 * @param int   $user_id     Owner user ID.
+	 * @param array $product_ids Product IDs the subscription holds.
+	 * @param int   $switched_id Product ID of the line item being switched.
+	 * @param int   $quantity    Seats on the switched line item.
+	 *
+	 * @return array Switch data: `item_id`, `item` and `subscription`.
+	 */
+	private function make_switch_data( $user_id, $product_ids, $switched_id, $quantity ) {
+		$items    = [];
+		$switched = null;
+		foreach ( array_values( $product_ids ) as $index => $product_id ) {
+			$item = new WC_Order_Item_Product(
+				[
+					'id'           => 554 + $index,
+					'product_id'   => $product_id,
+					'variation_id' => 0,
+					'subtotal'     => 10,
+					'total'        => 10,
+					'quantity'     => $product_id === $switched_id ? $quantity : 1,
+				]
+			);
+			$items[] = $item;
+			if ( $product_id === $switched_id ) {
+				$switched = $item;
+			}
+		}
+		$subscription = wcs_create_subscription(
+			[
+				'customer_id' => $user_id,
+				'status'      => 'active',
+				'products'    => $product_ids,
+				'items'       => $items,
+			]
+		);
+		return [
+			'item_id'      => $switched->get_id(),
+			'item'         => $switched,
+			'subscription' => $subscription,
+		];
+	}
+
+	/**
+	 * Render the tiers form and return its markup.
+	 *
+	 * @param \WC_Product $product     Product the form is rendered for.
+	 * @param array|null  $switch_data Switch data, or null for a plain purchase.
+	 *
+	 * @return string The rendered form markup.
+	 */
+	private function render_tier_form( $product, $switch_data = null ) {
+		ob_start();
+		Subscriptions_Tiers::render_form( $product, null, null, $switch_data );
+		return ob_get_clean();
+	}
+
+	/**
+	 * Every switch carries the seats the reader already pays for. The modal
+	 * checkout adds the chosen product at a quantity of one, so without this a
+	 * tier change on a four-seat line item would rewrite it to a single seat.
+	 */
+	public function test_switch_form_carries_current_quantity_as_hidden_input() {
+		$user_id = self::factory()->user->create();
+		wp_set_current_user( $user_id );
+		$product     = $this->make_tier_product( 301 );
+		$switch_data = $this->make_switch_data( $user_id, [ 301 ], 301, 4 );
+
+		$html = $this->render_tier_form( $product, $switch_data );
+
+		$this->assertStringContainsString( '<input type="hidden" name="quantity" value="4">', $html );
+	}
+
+	/**
+	 * A purchase that isn't a switch and isn't per seat has no quantity to carry,
+	 * so no quantity is submitted at all and the checkout keeps its default of one.
+	 */
+	public function test_form_without_switch_has_no_quantity_input() {
+		$product = $this->make_tier_product( 302 );
+
+		$html = $this->render_tier_form( $product );
+
+		$this->assertStringNotContainsString( 'name="quantity"', $html );
+	}
+
+	/**
+	 * A per-seat product gets a seats field, defaulting to the product's minimum.
+	 */
+	public function test_per_seat_form_renders_seats_input() {
+		$product = $this->make_tier_product( 303, $this->per_seat_meta( 2, 0 ) );
+
+		$html = $this->render_tier_form( $product );
+
+		$this->assertStringContainsString( 'name="quantity"', $html );
+		$this->assertStringContainsString( 'id="group_seats"', $html );
+		$this->assertStringContainsString( 'min="2"', $html );
+		$this->assertStringContainsString( 'value="2"', $html ); // Defaults to the minimum.
+		$this->assertStringContainsString( '<label for="group_seats">', $html );
+		// An unlimited product has no ceiling to enforce in the browser.
+		$this->assertStringNotContainsString( 'max=', $html );
+	}
+
+	/**
+	 * On a switch the seats field starts at the seats the reader already has, and
+	 * carries that same value as the original the front-end guard compares
+	 * against — so leaving it alone is still a no-op. A capped product also
+	 * publishes its ceiling.
+	 */
+	public function test_per_seat_switch_form_prefills_line_quantity() {
+		$user_id = self::factory()->user->create();
+		wp_set_current_user( $user_id );
+		$product     = $this->make_tier_product( 304, $this->per_seat_meta( 2, 10 ) );
+		$switch_data = $this->make_switch_data( $user_id, [ 304 ], 304, 5 );
+
+		$html = $this->render_tier_form( $product, $switch_data );
+
+		$this->assertStringContainsString( 'id="group_seats"', $html );
+		$this->assertStringContainsString( 'value="5"', $html );
+		$this->assertStringContainsString( 'data-original-value="5"', $html );
+		$this->assertStringContainsString( 'max="10"', $html );
+		// The seats field submits the quantity, so no hidden input duplicates it.
+		$this->assertStringNotContainsString( 'type="hidden" name="quantity"', $html );
+	}
+
+	/**
+	 * The seat bounds come from the line item being switched, not from whichever
+	 * tier wears the "Current" badge. A reader holding two tiers in one
+	 * subscription is badged on the first one found, but it is the switched line
+	 * item's product that decides whether seats are being bought at all.
+	 */
+	public function test_seats_field_follows_the_switched_line_item() {
+		$user_id = self::factory()->user->create();
+		wp_set_current_user( $user_id );
+		$this->make_tier_product( 305 ); // Flat: matched as the "current" tier first.
+		$this->make_tier_product( 306, $this->per_seat_meta( 2, 0 ) );
+		$grouped = wc_create_mock_product(
+			[
+				'id'       => 300,
+				'type'     => 'grouped',
+				'name'     => 'Tiers',
+				'children' => [ 305, 306 ],
+			]
+		);
+		$switch_data = $this->make_switch_data( $user_id, [ 305, 306 ], 306, 3 );
+
+		$html = $this->render_tier_form( $grouped, $switch_data );
+
+		$this->assertStringContainsString( 'id="group_seats"', $html );
+		$this->assertStringContainsString( 'value="3"', $html );
 	}
 }

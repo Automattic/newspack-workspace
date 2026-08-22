@@ -107,14 +107,18 @@ export default function init() {
 						isFormValid = true;
 					}
 				} else {
+					// Buying more or fewer seats on the tier the reader already has is a
+					// real change, so it can't count as re-selecting the same plan. An
+					// empty field is not a change: like the amount above, it would only be
+					// rejected server-side.
+					const seats = form.querySelector( '#group_seats' );
+					const seatsValue = seats ? parseInt( seats.value, 10 ) : NaN;
+					const seatsChanged =
+						! Number.isNaN( seatsValue ) && !! seats.dataset.originalValue && seatsValue !== parseInt( seats.dataset.originalValue, 10 );
 					const selected = form.querySelector( '.current input[type="radio"]:checked' );
-					if ( selected ) {
-						form.querySelector( 'button[type="submit"]' ).disabled = true;
-						isFormValid = false;
-					} else {
-						form.querySelector( 'button[type="submit"]' ).disabled = false;
-						isFormValid = true;
-					}
+					const isNoOp = !! selected && ! seatsChanged;
+					form.querySelector( 'button[type="submit"]' ).disabled = isNoOp;
+					isFormValid = ! isNoOp;
 				}
 			};
 

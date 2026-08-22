@@ -679,6 +679,23 @@ class Subscriptions_Tiers {
 			$selected_product = $tiers[ $current_frequency ][0];
 		}
 
+		// The seats the reader already pays for. Every switch has to carry it: the
+		// modal checkout adds the new product at a quantity of one, so a tier change
+		// on a multi-seat line item would silently rewrite it down to a single seat.
+		$line_quantity = $switch_data ? max( 1, (int) $switch_data['item']->get_quantity() ) : null;
+
+		// On a switch the seat bounds belong to the plan the reader is switching
+		// away from — the line item's own product — so a per-seat owner always gets
+		// the field, even when that tier is no longer among the ones on offer.
+		// Otherwise the tier that starts out selected decides. Either way this is a
+		// concrete product: get_tiers_by_frequency() expands a variable subscription
+		// into its variations, which is where per-seat meta lives for those.
+		$seats_product = $switch_data ? $switch_data['item']->get_product() : null;
+		if ( ! $seats_product ) {
+			$seats_product = $current_product ? $current_product : $selected_product;
+		}
+		$seats_field = $seats_product ? Group_Subscription_Seats::get_field_args( $seats_product ) : null;
+
 		$default_title        = $switch_data ? __( 'Change Subscription', 'newspack-plugin' ) : __( 'Complete your transaction', 'newspack-plugin' );
 		$default_button_label = $switch_data ? __( 'Change Subscription', 'newspack-plugin' ) : __( 'Purchase', 'newspack-plugin' );
 
@@ -748,6 +765,19 @@ class Subscriptions_Tiers {
 			<?php if ( ! empty( $switch_data ) ) : ?>
 				<input type="hidden" name="switch-subscription" value="<?php echo esc_attr( $switch_data['subscription']->get_id() ); ?>">
 				<input type="hidden" name="item" value="<?php echo absint( $switch_data['item_id'] ); ?>">
+			<?php endif; ?>
+			<?php if ( $seats_field ) : ?>
+				<p class="newspack__subscription-tiers__seats">
+					<label for="group_seats"><?php echo esc_html( $seats_field['label'] ); ?></label>
+					<input type="number" name="quantity" id="group_seats" step="1" min="<?php echo esc_attr( $seats_field['min'] ); ?>"<?php echo $seats_field['max'] > 0 ? ' max="' . esc_attr( $seats_field['max'] ) . '"' : ''; ?> value="<?php echo esc_attr( $line_quantity ? $line_quantity : $seats_field['min'] ); ?>" data-original-value="<?php echo esc_attr( $line_quantity ? $line_quantity : '' ); ?>">
+					<span class="newspack-ui__helper-text"><?php echo esc_html( $seats_field['help'] ); ?></span>
+				</p>
+				<?php
+			elseif ( $line_quantity ) :
+				// No seats field to submit the count, so carry the seats the reader already
+				// pays for; without it the switched line item would be written at one seat.
+				?>
+				<input type="hidden" name="quantity" value="<?php echo esc_attr( $line_quantity ); ?>">
 			<?php endif; ?>
 
 			<button type="submit" class="newspack-ui__button newspack-ui__button--primary newspack-ui__button--wide"><?php echo esc_html( $button_label ); ?></button>
@@ -1034,11 +1064,11 @@ class Subscriptions_Tiers {
 
 		// WCS treats a switch as identical only when product, variation *and* quantity
 		// all match, so a deliberate quantity change on the same plan is a legitimate
-		// switch. Only an explicitly submitted quantity counts as deliberate: the
-		// tiers modal has no quantity input and its checkout path hardcodes an add of
-		// one, so comparing that fixed value against a multi-seat line item would
-		// bail out here and skip the product and amount checks below for exactly the
-		// crafted-request and no-JavaScript cases this backstop exists for.
+		// switch. Only an explicitly submitted quantity counts as deliberate: the tiers
+		// modal submits the line item's own quantity on every switch, so a request
+		// without one never came from it, and treating that absence as a change would
+		// skip the product and amount checks below for exactly the crafted-request and
+		// no-JavaScript cases this backstop exists for.
 		$line_quantity = max( 1, (int) $line_item->get_quantity() );
 		if ( isset( $_REQUEST['quantity'] ) && absint( wp_unslash( $_REQUEST['quantity'] ) ) !== $line_quantity ) {
 			return null;

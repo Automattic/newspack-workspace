@@ -533,6 +533,17 @@ class WC_Product {
 	public function get_name() {
 		return $this->data['name'] ?? '';
 	}
+	/**
+	 * WC_Product::get_title() is the post title, which for a product is its name.
+	 * Rendering code reaches for the title rather than the name, so the mock has
+	 * to answer both or a rendered card would fatal where production works.
+	 */
+	public function get_title() {
+		return $this->get_name();
+	}
+	public function get_description() {
+		return $this->data['description'] ?? '';
+	}
 	public function get_status() {
 		return $this->data['status'] ?? 'publish';
 	}
@@ -1462,6 +1473,47 @@ function wcs_get_subscriptions_for_product( $product_ids, $fields = 'ids', $args
 		}
 	}
 	return $subscriptions;
+}
+/**
+ * Whether a user holds a subscription, optionally to a given product and in a
+ * given set of statuses. Mirrors the real helper closely enough for the
+ * `function_exists()` gates production code puts in front of it, which is what
+ * decides whether a WCS-dependent code path runs at all.
+ *
+ * @param int             $user_id    User ID.
+ * @param int|string      $product_id Optional product the subscription must hold.
+ * @param string|string[] $status     Optional status or statuses; 'any' matches all.
+ *
+ * @return bool
+ */
+function wcs_user_has_subscription( $user_id = 0, $product_id = '', $status = 'any' ) {
+	foreach ( wcs_get_users_subscriptions( (int) $user_id ) as $subscription ) {
+		if ( $product_id && ! $subscription->has_product( (int) $product_id ) ) {
+			continue;
+		}
+		if ( 'any' !== $status && ! $subscription->has_status( $status ) ) {
+			continue;
+		}
+		return true;
+	}
+	return false;
+}
+/**
+ * Build a recurring price string. Real WCS returns localized markup; the mock
+ * returns a plain, assertable equivalent from the same argument keys.
+ *
+ * @param array $args Price string args: recurring_amount, subscription_period,
+ *                    subscription_interval.
+ *
+ * @return string
+ */
+function wcs_price_string( $args = [] ) {
+	$amount   = isset( $args['recurring_amount'] ) ? (string) $args['recurring_amount'] : '';
+	$period   = ! empty( $args['subscription_period'] ) ? $args['subscription_period'] : 'month';
+	$interval = max( 1, (int) ( $args['subscription_interval'] ?? 1 ) );
+	return 1 === $interval
+		? sprintf( '%s / %s', $amount, $period )
+		: sprintf( '%s every %d %ss', $amount, $interval, $period );
 }
 function wcs_get_canonical_product_id( $item ) {
 	if ( is_object( $item ) && method_exists( $item, 'get_product_id' ) ) {
