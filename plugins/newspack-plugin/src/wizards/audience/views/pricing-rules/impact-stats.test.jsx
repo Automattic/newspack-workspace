@@ -50,7 +50,7 @@ describe( 'ImpactStats', () => {
 	it( 'marks a capped product count as a lower bound', () => {
 		render( stats( { totalMatching: 500, countLimited: true } ) );
 		expect( screen.getByText( '500+' ) ).toHaveAttribute( 'aria-hidden', 'true' );
-		expect( screen.getByText( 'At least 500' ) ).toBeInTheDocument();
+		expect( screen.getByText( 'At least 500' ) ).toHaveAttribute( 'data-visually-hidden' );
 	} );
 
 	// Grid ships no `columns-1` rule; one tile goes full width off the base `1fr`.
@@ -88,7 +88,7 @@ describe( 'ImpactStats', () => {
 
 		const tile = within( tileFor( 'Protected' ) );
 		expect( tile.getByText( '—' ) ).toHaveAttribute( 'aria-hidden', 'true' );
-		expect( tile.getByText( 'Not applicable' ) ).toBeInTheDocument();
+		expect( tile.getByText( 'Not applicable' ) ).toHaveAttribute( 'data-visually-hidden' );
 	} );
 
 	it( 'runs the products action from its button', () => {
