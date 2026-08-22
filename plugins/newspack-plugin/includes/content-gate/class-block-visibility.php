@@ -404,7 +404,14 @@ class Block_Visibility {
 	private static $strip_cache = [];
 
 	/**
-	 * Per-request cache of has_active_gates() results, keyed by "{blog_id}:{md5(gate_ids)}".
+	 * Per-request cache of has_active_gates() results, keyed by
+	 * "{blog_id}:{sorted, de-duplicated gate ids}".
+	 *
+	 * "Cache" here is a static array that lives for one request and is gone when the
+	 * request ends -- the same sense the other two caches in this class use. This
+	 * class writes nothing that outlives a request: no wp_cache_*, no transient, no
+	 * option. So a stale entry cannot reach a later request, and the invalidation
+	 * question below is only about the one it was written in.
 	 *
 	 * The blog id is in the key because gate ids are per-site post ids, so a
 	 * switch_to_blog() mid-request would otherwise answer for the wrong site.
