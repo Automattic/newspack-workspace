@@ -141,6 +141,23 @@ class Subscriptions_Tiers {
 	}
 
 	/**
+	 * Register a switch modal for a subscription line item.
+	 *
+	 * WooCommerce Subscriptions' own switch links fire
+	 * `woocommerce_subscriptions_switch_link_text`, so they get a modal for free
+	 * via `cache_switch_subscription_link_data()`. A screen that prints its own
+	 * switch link — the group page's "Change seats" — never fires that filter, so
+	 * it calls this to record the same entry the footer reads.
+	 *
+	 * @param int                    $item_id      The ID of the item.
+	 * @param \WC_Order_Item_Product $item         The order line item data.
+	 * @param \WC_Subscription       $subscription The subscription.
+	 */
+	public static function register_switch_modal( $item_id, $item, $subscription ) {
+		self::cache_switch_subscription_link_data( '', $item_id, $item, $subscription );
+	}
+
+	/**
 	 * Print modals for switch subscription links rendered in the page.
 	 */
 	public static function print_switch_subscription_link_modal() {

@@ -304,6 +304,38 @@ class Group_Subscription_MyAccount {
 	}
 
 	/**
+	 * Whether a user may change the number of seats on a group subscription.
+	 *
+	 * A seat change rides WooCommerce Subscriptions' native switch, which rewrites
+	 * the subscription's own line item and bills the difference — so it belongs to
+	 * the owner who pays for it, never to a manager, and only while the
+	 * subscription is still active. A flat-priced group sells no seats at all, and
+	 * a subscription with no line item has nothing for the switch to rewrite.
+	 *
+	 * @param int|\WC_Subscription $subscription Subscription or ID.
+	 * @param int                  $user_id      User ID to check.
+	 *
+	 * @return bool
+	 */
+	public static function can_change_seats( $subscription, $user_id ): bool {
+		$subscription = WooCommerce_Subscriptions::sanitize_subscription( $subscription );
+		if ( ! $subscription instanceof \WC_Subscription ) {
+			return false;
+		}
+		$user_id = (int) $user_id;
+		if ( ! $user_id || $user_id !== (int) $subscription->get_user_id() ) {
+			return false;
+		}
+		if ( ! self::is_subscription_active( $subscription ) ) {
+			return false;
+		}
+		if ( ! Group_Subscription_Settings::is_per_seat( $subscription ) ) {
+			return false;
+		}
+		return (bool) Group_Subscription_Settings::get_seat_line_item( $subscription );
+	}
+
+	/**
 	 * Verify the subscription accepts manager changes, redirecting with an error on failure.
 	 *
 	 * @param int    $subscription_id Subscription ID.

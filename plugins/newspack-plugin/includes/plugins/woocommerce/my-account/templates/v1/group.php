@@ -16,6 +16,7 @@ use Newspack\Group_Subscription;
 use Newspack\Group_Subscription_MyAccount;
 use Newspack\Group_Subscription_Settings;
 use Newspack\Newspack_UI_Icons;
+use Newspack\Subscriptions_Tiers;
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
@@ -81,6 +82,28 @@ if ( in_array( $subscription_status, [ 'cancelled', 'expired' ], true ) ) {
 					<a href="<?php echo esc_url( wc_get_endpoint_url( 'view-subscription', $subscription->get_id(), wc_get_page_permalink( 'myaccount' ) ) ); ?>" class="newspack-ui__button newspack-ui__button--secondary">
 						<?php esc_html_e( 'View subscription', 'newspack-plugin' ); ?>
 					</a>
+					<?php
+					$seat_item = Group_Subscription_MyAccount::can_change_seats( $subscription, $user_id )
+						? Group_Subscription_Settings::get_seat_line_item( $subscription )
+						: null;
+					if ( $seat_item ) :
+						// Only line items registered here get a modal printed on wp_footer, so
+						// register before the link that opens it. The href is the no-JS
+						// fallback; switch-subscription.js intercepts the click and opens the
+						// modal keyed by this subscription's ID.
+						Subscriptions_Tiers::register_switch_modal( $seat_item->get_id(), $seat_item, $subscription );
+						$change_seats_url = add_query_arg(
+							[
+								'switch-subscription' => $subscription->get_id(),
+								'item'                => $seat_item->get_id(),
+							],
+							wc_get_page_permalink( 'myaccount' )
+						);
+						?>
+						<a href="<?php echo esc_url( $change_seats_url ); ?>" class="wcs-switch-link newspack-ui__button newspack-ui__button--secondary">
+							<?php esc_html_e( 'Change seats', 'newspack-plugin' ); ?>
+						</a>
+					<?php endif; ?>
 				<?php endif; ?>
 				<?php if ( $is_active && ! $is_completely_empty ) : ?>
 					<div class="newspack-ui__dropdown newspack-my-account__subscription--actions-dropdown">

@@ -1023,4 +1023,42 @@ class Newspack_Test_Subscriptions_Tiers extends WP_UnitTestCase {
 		// The reader's real seat count is still what "unchanged" means.
 		$this->assertStringContainsString( 'data-original-value="9"', $html );
 	}
+
+	/**
+	 * Screens that print their own switch link never fire WooCommerce
+	 * Subscriptions' switch-link filter, so they register the modal themselves.
+	 * Once registered, the footer prints a modal bound to that subscription — the
+	 * hook the group page's "Change seats" link opens.
+	 */
+	public function test_register_switch_modal_prints_a_modal_for_the_subscription() {
+		global $wcs_grouped_parents;
+		$user_id = self::factory()->user->create();
+		wp_set_current_user( $user_id );
+		$this->make_tier_product( 320, $this->per_seat_meta( 2, 10 ) );
+		wc_create_mock_product(
+			[
+				'id'       => 321,
+				'type'     => 'grouped',
+				'name'     => 'Tiers',
+				'children' => [ 320 ],
+			]
+		);
+		// The footer resolves the line item's product to its grouped parent before
+		// rendering; without a parent there is no tier list to render.
+		$wcs_grouped_parents = [ 320 => [ 321 ] ];
+		$switch_data         = $this->make_switch_data( $user_id, [ 320 ], 320, 4 );
+
+		Subscriptions_Tiers::register_switch_modal( $switch_data['item_id'], $switch_data['item'], $switch_data['subscription'] );
+
+		ob_start();
+		Subscriptions_Tiers::print_switch_subscription_link_modal();
+		$html = ob_get_clean();
+
+		$wcs_grouped_parents = [];
+
+		$this->assertStringContainsString( 'data-subscription-id="' . $switch_data['subscription']->get_id() . '"', $html );
+		// The modal carries the switch params the checkout needs, at the seats already paid for.
+		$this->assertStringContainsString( '<input type="hidden" name="item" value="' . $switch_data['item_id'] . '">', $html );
+		$this->assertStringContainsString( 'id="group_seats" step="1" min="2" max="10" value="4"', $html );
+	}
 }
