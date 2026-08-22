@@ -2,6 +2,7 @@
  * Internal dependencies
  */
 import { displayStatuses, STATUS_BADGE_INTENT, STATUS_ICONS, STATUS_LABELS } from './status';
+import { postStatusIcon } from '../audience/status-icons';
 
 // The status-reduction rule these assertions pin is documented on the PHP side,
 // in Subscribers_Wizard::reduced_status(); the endpoint's `status` filter
@@ -60,6 +61,13 @@ describe( 'STATUS_ICONS', () => {
 	it( 'separates a live subscription from one needing attention and one gone', () => {
 		expect( STATUS_ICONS.active ).not.toBe( STATUS_ICONS[ 'on-hold' ] );
 		expect( STATUS_ICONS[ 'on-hold' ] ).not.toBe( STATUS_ICONS.cancelled );
+	} );
+
+	// The distinctness rule is per column, so nothing else stops one word from
+	// picking up two marks across the admin. Pending did, until this pinned it.
+	// Drop this once the glyph vocabulary moves into the shared component.
+	it( 'draws Pending the way the Audience lists draw it', () => {
+		expect( STATUS_ICONS.pending ).toBe( postStatusIcon( 'pending' ) );
 	} );
 } );
 

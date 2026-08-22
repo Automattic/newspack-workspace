@@ -6,7 +6,7 @@
  * WordPress dependencies.
  */
 import { __ } from '@wordpress/i18n';
-import { caution, drafts, notAllowed, published } from '@wordpress/icons';
+import { caution, notAllowed, pending, published } from '@wordpress/icons';
 
 export const STATUS_LABELS = {
 	active: __( 'Active', 'newspack-plugin' ),
@@ -19,7 +19,7 @@ export const STATUS_LABELS = {
 // separate filters, so no two of them may share a glyph.
 export const STATUS_ICONS = {
 	active: published,
-	pending: drafts,
+	pending,
 	// On hold is usually a payment that needs attention, not a terminal state,
 	// so it takes the caution glyph and cancelled takes the closed one.
 	'on-hold': caution,
