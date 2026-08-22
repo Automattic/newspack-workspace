@@ -132,7 +132,8 @@ export const LogsView = ( { integrations, match } ) => {
 				id: 'status',
 				label: __( 'Status', 'newspack-plugin' ),
 				render: ( { item } ) => {
-					const mapped = STATUS_MAP[ item.status ] || { label: item.status, status: 'cancelled' };
+					// A status Action Scheduler grows later is one to look at, not a deliberate stop.
+					const mapped = STATUS_MAP[ item.status ] || { label: item.status, status: 'attention' };
 					return <StatusIndicator status={ mapped.status }>{ mapped.label }</StatusIndicator>;
 				},
 				enableSorting: true,
