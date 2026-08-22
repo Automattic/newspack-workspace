@@ -89,6 +89,13 @@ class Newspack_Newsletters_Bulk_Actions {
 			if ( \Newspack_Newsletters::NEWSPACK_NEWSLETTERS_CPT !== get_post_type( $post_id ) ) {
 				continue;
 			}
+			// The bulk actions render on the Trash view too. The service provider only
+			// moves posts whose status it controls (publish/private), so writing the
+			// meta on a trashed newsletter changes nothing now, still counts toward the
+			// notice, and takes effect silently if the newsletter is later restored.
+			if ( 'trash' === get_post_status( $post_id ) ) {
+				continue;
+			}
 			if ( ! current_user_can( 'edit_post', $post_id ) ) {
 				continue;
 			}
