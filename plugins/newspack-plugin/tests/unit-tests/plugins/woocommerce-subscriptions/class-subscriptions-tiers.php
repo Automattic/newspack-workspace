@@ -886,20 +886,24 @@ class Newspack_Test_Subscriptions_Tiers extends WP_UnitTestCase {
 	}
 
 	/**
-	 * A per-seat product gets a seats field, defaulting to the product's minimum.
+	 * A per-seat product gets a seats field, defaulting to the product's minimum
+	 * and visible from the start because the tier that sells seats is the one
+	 * selected.
 	 */
 	public function test_per_seat_form_renders_seats_input() {
 		$product = $this->make_tier_product( 303, $this->per_seat_meta( 2, 0 ) );
 
 		$html = $this->render_tier_form( $product );
 
-		$this->assertStringContainsString( 'name="quantity"', $html );
-		$this->assertStringContainsString( 'id="group_seats"', $html );
-		$this->assertStringContainsString( 'min="2"', $html );
-		$this->assertStringContainsString( 'value="2"', $html ); // Defaults to the minimum.
+		// Defaults to the minimum. Asserted as one attribute cluster so the values
+		// are pinned to the seats input rather than to anything else on the form.
+		$this->assertStringContainsString( 'name="quantity" id="group_seats" step="1" min="2" value="2"', $html );
 		$this->assertStringContainsString( '<label for="group_seats">', $html );
-		// An unlimited product has no ceiling to enforce in the browser.
-		$this->assertStringNotContainsString( 'max=', $html );
+		$this->assertStringContainsString( '<p class="newspack__subscription-tiers__seats">', $html );
+		// An unlimited product has no ceiling to enforce in the browser: the cluster
+		// above runs straight from min to value, with no max attribute between them.
+		$this->assertStringContainsString( 'data-seats-max=""', $html );
+		$this->assertStringNotContainsString( 'disabled', $html );
 	}
 
 	/**
@@ -916,19 +920,69 @@ class Newspack_Test_Subscriptions_Tiers extends WP_UnitTestCase {
 
 		$html = $this->render_tier_form( $product, $switch_data );
 
-		$this->assertStringContainsString( 'id="group_seats"', $html );
-		$this->assertStringContainsString( 'value="5"', $html );
+		$this->assertStringContainsString( 'id="group_seats" step="1" min="2" max="10" value="5"', $html );
 		$this->assertStringContainsString( 'data-original-value="5"', $html );
-		$this->assertStringContainsString( 'max="10"', $html );
 		// The seats field submits the quantity, so no hidden input duplicates it.
 		$this->assertStringNotContainsString( 'type="hidden" name="quantity"', $html );
 	}
 
 	/**
-	 * The seat bounds come from the line item being switched, not from whichever
-	 * tier wears the "Current" badge. A reader holding two tiers in one
-	 * subscription is badged on the first one found, but it is the switched line
-	 * item's product that decides whether seats are being bought at all.
+	 * Each tier publishes its own seat bounds on its radio, so the single seats
+	 * field can follow whichever tier is checked. A flat tier publishes none,
+	 * which is what tells the field to hide and stop submitting.
+	 */
+	public function test_tier_cards_carry_their_own_seat_bounds() {
+		$this->make_tier_product( 307, $this->per_seat_meta( 2, 10 ) );
+		$this->make_tier_product( 308, $this->per_seat_meta( 5, 0 ) );
+		$this->make_tier_product( 309 );
+		$grouped = wc_create_mock_product(
+			[
+				'id'       => 310,
+				'type'     => 'grouped',
+				'name'     => 'Tiers',
+				'children' => [ 307, 308, 309 ],
+			]
+		);
+
+		$html = $this->render_tier_form( $grouped );
+
+		$this->assertStringContainsString( 'value="307" data-per-seat="1" data-seats-min="2" data-seats-max="10" checked', $html );
+		// No ceiling: the max attribute is present but empty, so the JS reads it as unlimited.
+		$this->assertStringContainsString( 'value="308" data-per-seat="1" data-seats-min="5" data-seats-max=""', $html );
+		// The flat tier publishes no bounds at all.
+		$this->assertStringContainsString( 'value="309" >', $html );
+	}
+
+	/**
+	 * With a flat tier selected the seats field is rendered but hidden and
+	 * disabled: a disabled input submits nothing, so the flat tier is bought once
+	 * rather than once per seat. Choosing the per-seat tier brings the field back
+	 * without a round trip.
+	 */
+	public function test_seats_field_is_hidden_when_the_selected_tier_is_flat() {
+		$this->make_tier_product( 311 ); // Flat, and first — so it starts out selected.
+		$this->make_tier_product( 312, $this->per_seat_meta( 3, 0 ) );
+		$grouped = wc_create_mock_product(
+			[
+				'id'       => 313,
+				'type'     => 'grouped',
+				'name'     => 'Tiers',
+				'children' => [ 311, 312 ],
+			]
+		);
+
+		$html = $this->render_tier_form( $grouped );
+
+		$this->assertStringContainsString( '<p class="newspack__subscription-tiers__seats" hidden>', $html );
+		$this->assertStringContainsString( 'data-original-value="" disabled>', $html );
+	}
+
+	/**
+	 * The seat count comes from the line item being switched, not from whichever
+	 * tier wears the "Current" badge: a reader holding two tiers in one
+	 * subscription is badged on the first one found. Visibility still follows the
+	 * selected tier, so a flat badge leaves the field hidden until the reader
+	 * picks the per-seat tier.
 	 */
 	public function test_seats_field_follows_the_switched_line_item() {
 		$user_id = self::factory()->user->create();
@@ -947,7 +1001,26 @@ class Newspack_Test_Subscriptions_Tiers extends WP_UnitTestCase {
 
 		$html = $this->render_tier_form( $grouped, $switch_data );
 
-		$this->assertStringContainsString( 'id="group_seats"', $html );
-		$this->assertStringContainsString( 'value="3"', $html );
+		$this->assertStringContainsString( 'id="group_seats" step="1" min="2" value="3"', $html );
+		$this->assertStringContainsString( 'data-original-value="3" disabled>', $html );
+		$this->assertStringContainsString( '<p class="newspack__subscription-tiers__seats" hidden>', $html );
+	}
+
+	/**
+	 * A seat count the newly chosen tier cannot sell is pulled into its bounds
+	 * before the field is ever shown, rather than being submitted and rejected at
+	 * the far end.
+	 */
+	public function test_seats_value_is_clamped_to_the_selected_tier_bounds() {
+		$user_id = self::factory()->user->create();
+		wp_set_current_user( $user_id );
+		$product     = $this->make_tier_product( 314, $this->per_seat_meta( 2, 4 ) );
+		$switch_data = $this->make_switch_data( $user_id, [ 314 ], 314, 9 );
+
+		$html = $this->render_tier_form( $product, $switch_data );
+
+		$this->assertStringContainsString( 'min="2" max="4" value="4"', $html );
+		// The reader's real seat count is still what "unchanged" means.
+		$this->assertStringContainsString( 'data-original-value="9"', $html );
 	}
 }

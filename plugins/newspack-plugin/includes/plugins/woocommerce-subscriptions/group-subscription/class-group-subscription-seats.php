@@ -49,6 +49,10 @@ class Group_Subscription_Seats {
 		// The modal checkout has no quantity field of its own. This turns one on for
 		// per-seat products; newspack-blocks owns the markup and the AJAX round trip.
 		\add_filter( 'newspack_blocks_modal_checkout_quantity_field', [ __CLASS__, 'modal_quantity_field' ], 10, 2 );
+
+		// Seats are the only reason the modal checkout carries a quantity at all, so
+		// anything that isn't sold per seat is bought exactly once.
+		\add_filter( 'newspack_blocks_modal_checkout_quantity', [ __CLASS__, 'clamp_modal_quantity' ], 10, 2 );
 	}
 
 	/**
@@ -155,6 +159,34 @@ class Group_Subscription_Seats {
 	public static function modal_quantity_field( $args, $product ) {
 		$field = self::get_field_args( $product );
 		return $field ? $field : $args;
+	}
+
+	/**
+	 * Hold the modal checkout to one item for anything not sold per seat.
+	 *
+	 * A quantity in the modal checkout means seats, and only a per-seat product
+	 * has any. Without this, a request carrying a seat count — a group owner
+	 * switching from a per-seat tier to a flat one, or a crafted URL — would buy
+	 * that many of a product whose price covers the whole group, billing the flat
+	 * price N times. The bounds guards can't catch it: they only ever run against
+	 * a per-seat product's own minimum and maximum.
+	 *
+	 * @param int $quantity   Requested quantity, at least 1.
+	 * @param int $product_id Product the quantity is for (variation preferred).
+	 *
+	 * @return int The requested quantity for a per-seat product, 1 otherwise.
+	 */
+	public static function clamp_modal_quantity( $quantity, $product_id ) {
+		if ( ! function_exists( 'wc_get_product' ) ) {
+			return $quantity;
+		}
+		// A product that can't be resolved can't be shown to sell seats, so it is
+		// treated like any other single-item purchase.
+		$product = \wc_get_product( $product_id );
+		if ( ! $product || ! Group_Subscription_Settings::is_per_seat( $product ) ) {
+			return 1;
+		}
+		return $quantity;
 	}
 
 	/**

@@ -1733,4 +1733,72 @@ class ModalCheckoutTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 
 		$this->assertSame( 5, $data['quantity'] );
 	}
+
+	/**
+	 * The modal checkout doesn't know which products may be sold in multiples, so
+	 * a requested quantity is offered to whoever does — with the product it is for
+	 * — and their answer is the one used.
+	 */
+	public function test_requested_quantity_is_filtered_with_the_product() {
+		$_GET['quantity']     = '5';
+		$_REQUEST['quantity'] = '5';
+		$seen                 = [];
+
+		$filter = function ( $quantity, $product_id ) use ( &$seen ) {
+			$seen[] = [ $quantity, $product_id ];
+			return 920 === $product_id ? $quantity : 1;
+		};
+		add_filter( 'newspack_blocks_modal_checkout_quantity', $filter, 10, 2 );
+
+		$this->assertSame( 5, \Newspack_Blocks\Modal_Checkout::get_requested_quantity( 920 ) );
+		$this->assertSame( 1, \Newspack_Blocks\Modal_Checkout::get_requested_quantity( 921 ) );
+		$this->assertSame(
+			[ [ 5, 920 ], [ 5, 921 ] ],
+			$seen,
+			'The callback should see the floored request and the product it is for.'
+		);
+
+		remove_filter( 'newspack_blocks_modal_checkout_quantity', $filter, 10 );
+		unset( $_GET['quantity'], $_REQUEST['quantity'] );
+	}
+
+	/**
+	 * A callback cannot push the quantity below one: the floor is re-applied to
+	 * whatever it returns, so a stray 0 can't reach the cart as a silent removal.
+	 */
+	public function test_filtered_quantity_is_floored_at_one() {
+		$_GET['quantity']     = '4';
+		$_REQUEST['quantity'] = '4';
+
+		$filter = function () {
+			return 0;
+		};
+		add_filter( 'newspack_blocks_modal_checkout_quantity', $filter );
+
+		$this->assertSame( 1, \Newspack_Blocks\Modal_Checkout::get_requested_quantity( 920 ) );
+
+		remove_filter( 'newspack_blocks_modal_checkout_quantity', $filter );
+		unset( $_GET['quantity'], $_REQUEST['quantity'] );
+	}
+
+	/**
+	 * The in-modal quantity form runs through the same clamp as the initial add,
+	 * so a product that may not be sold in multiples cannot be raised past one
+	 * from inside the modal either.
+	 */
+	public function test_update_cart_quantity_respects_the_filter() {
+		$cart = $this->set_mutable_cart( 920, 1 );
+
+		$filter = function () {
+			return 1;
+		};
+		add_filter( 'newspack_blocks_modal_checkout_quantity', $filter );
+
+		\Newspack_Blocks\Modal_Checkout::update_cart_quantity( 920, 5 );
+
+		$item = reset( $cart->contents );
+		$this->assertSame( 1, $item['quantity'], 'The clamped quantity should be the one added.' );
+
+		remove_filter( 'newspack_blocks_modal_checkout_quantity', $filter );
+	}
 }

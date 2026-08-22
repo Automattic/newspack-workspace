@@ -394,13 +394,45 @@ final class Modal_Checkout {
 	 * Anything missing or below one means one: a quantity is only ever raised by an
 	 * explicit, valid request.
 	 *
+	 * @param int $product_id Product the quantity is for (variation preferred), 0 when unknown.
+	 *
 	 * @return int
 	 */
-	public static function get_requested_quantity() {
+	public static function get_requested_quantity( $product_id = 0 ) {
 		// intval(), not absint(): absint() takes the absolute value, so a negative
 		// request (e.g. ?quantity=-5) would floor at 5 instead of 1.
 		$quantity = isset( $_REQUEST['quantity'] ) ? intval( wp_unslash( $_REQUEST['quantity'] ) ) : 1; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
-		return max( 1, $quantity );
+		return self::clamp_quantity( $quantity, $product_id );
+	}
+
+	/**
+	 * Floor a quantity at one and let the product's owner clamp it further.
+	 *
+	 * The modal checkout knows nothing about what a given product may be sold in
+	 * multiples of; the plugin that turned the quantity field on for it does. This
+	 * is the one place a requested quantity becomes the quantity actually added to
+	 * the cart, so both the initial request and the in-modal quantity form pass
+	 * through it.
+	 *
+	 * @param int $quantity   Requested quantity.
+	 * @param int $product_id Product the quantity is for (variation preferred), 0 when unknown.
+	 *
+	 * @return int
+	 */
+	private static function clamp_quantity( $quantity, $product_id ) {
+		$quantity = max( 1, (int) $quantity );
+		/**
+		 * Filters the line-item quantity the modal checkout will use for a product.
+		 *
+		 * A plugin that owns a product's quantity rules may clamp it — returning 1
+		 * for a product that must never be bought in multiples, for instance. Runs
+		 * after the floor of one, so a callback only ever sees a valid quantity, and
+		 * its own return is floored again.
+		 *
+		 * @param int $quantity   Requested quantity, at least 1.
+		 * @param int $product_id Product the quantity is for (variation preferred), 0 when unknown.
+		 */
+		return max( 1, (int) apply_filters( 'newspack_blocks_modal_checkout_quantity', $quantity, (int) $product_id ) );
 	}
 
 	/**
@@ -495,7 +527,7 @@ final class Modal_Checkout {
 		$cart_item_data = apply_filters( 'newspack_blocks_modal_checkout_cart_item_data', $cart_item_data );
 
 		\WC()->cart->empty_cart();
-		$cart_item_key = \WC()->cart->add_to_cart( $product_id, self::get_requested_quantity(), 0, [], $cart_item_data );
+		$cart_item_key = \WC()->cart->add_to_cart( $product_id, self::get_requested_quantity( $product_id ), 0, [], $cart_item_data );
 
 		// Auto-apply a coupon attached to the Checkout Button block, if present and
 		// valid. Read with a sanitizing filter (satisfies input-sanitization
@@ -818,6 +850,9 @@ final class Modal_Checkout {
 	 * @return string|\WP_Error New cart item key, or a WP_Error carrying the message to show the reader.
 	 */
 	public static function update_cart_quantity( $product_id, $quantity ) {
+		// Same clamp the initial add goes through, so a product that may not be sold
+		// in multiples cannot be raised past one from inside the modal either.
+		$quantity       = self::clamp_quantity( $quantity, $product_id );
 		$cart           = \WC()->cart;
 		$cart_item_data = self::amend_cart_item_data( [ 'referer' => wp_get_referer() ] );
 

@@ -270,4 +270,37 @@ class Test_Group_Subscription_Seats extends WP_UnitTestCase {
 		$other = [ 'label' => 'Licenses' ];
 		$this->assertSame( $other, Group_Subscription_Seats::modal_quantity_field( $other, $product ) );
 	}
+
+	/**
+	 * A per-seat product keeps the seat count it was asked for: seats are exactly
+	 * what the modal checkout's quantity means.
+	 */
+	public function test_clamp_modal_quantity_keeps_per_seat_quantity() {
+		$this->make_per_seat_product( 928, 2, 0 );
+
+		$this->assertSame( 5, Group_Subscription_Seats::clamp_modal_quantity( 5, 928 ) );
+	}
+
+	/**
+	 * A flat (per-team) product is bought exactly once, whatever the request
+	 * asked for. Its price covers the whole group, so honoring a seat count would
+	 * bill that price per seat — the case a group owner hits by switching from a
+	 * per-seat tier to a flat one, carrying their seats with them.
+	 */
+	public function test_clamp_modal_quantity_holds_flat_product_at_one() {
+		$this->make_flat_product( 929 );
+
+		$this->assertSame( 1, Group_Subscription_Seats::clamp_modal_quantity( 5, 929 ) );
+	}
+
+	/**
+	 * A product with no group settings at all, and a product ID that resolves to
+	 * nothing, are both single-item purchases: only a per-seat product has seats.
+	 */
+	public function test_clamp_modal_quantity_holds_non_group_products_at_one() {
+		wc_create_mock_product( [ 'id' => 930 ] );
+
+		$this->assertSame( 1, Group_Subscription_Seats::clamp_modal_quantity( 4, 930 ) );
+		$this->assertSame( 1, Group_Subscription_Seats::clamp_modal_quantity( 4, 999 ) );
+	}
 }

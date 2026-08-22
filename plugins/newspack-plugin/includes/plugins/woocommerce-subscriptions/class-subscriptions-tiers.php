@@ -509,12 +509,17 @@ class Subscriptions_Tiers {
 		$should_render_description = ! defined( 'NEWSPACK_DISABLE_SUBSCRIPTION_DESCRIPTION' ) || ! NEWSPACK_DISABLE_SUBSCRIPTION_DESCRIPTION;
 		$description               = $product->get_description();
 
+		// Each tier carries its own seat bounds so the form's single seats field can
+		// follow whichever one is checked. A tier with no attributes here sells no
+		// seats, which is what tells the field to hide and stop submitting.
+		$seats = Group_Subscription_Seats::get_field_args( $product );
+
 		?>
 		<label class="newspack-ui__input-card <?php echo $current ? esc_attr( 'current' ) : ''; ?>">
 			<?php if ( $current ) : ?>
 				<span class="newspack-ui__badge newspack-ui__badge--primary"><?php _e( 'Current', 'newspack-plugin' ); ?></span>
 			<?php endif; ?>
-			<input type="radio" name="product_id" value="<?php echo esc_attr( $product->get_id() ); ?>" <?php echo esc_attr( $selected ? 'checked' : '' ); ?>>
+			<input type="radio" name="product_id" value="<?php echo esc_attr( $product->get_id() ); ?>"<?php echo $seats ? ' data-per-seat="1" data-seats-min="' . esc_attr( $seats['min'] ) . '" data-seats-max="' . esc_attr( $seats['max'] > 0 ? $seats['max'] : '' ) . '"' : ''; ?> <?php echo esc_attr( $selected ? 'checked' : '' ); ?>>
 			<strong><?php echo esc_html( self::get_product_title( $product, $show_variation_attributes ) ); ?></strong>
 			<?php if ( $should_render_description && $description ) : ?>
 				<span class="newspack-ui__helper-text"><?php echo $description; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?></span>
@@ -684,17 +689,43 @@ class Subscriptions_Tiers {
 		// on a multi-seat line item would silently rewrite it down to a single seat.
 		$line_quantity = $switch_data ? max( 1, (int) $switch_data['item']->get_quantity() ) : null;
 
-		// On a switch the seat bounds belong to the plan the reader is switching
-		// away from — the line item's own product — so a per-seat owner always gets
-		// the field, even when that tier is no longer among the ones on offer.
-		// Otherwise the tier that starts out selected decides. Either way this is a
-		// concrete product: get_tiers_by_frequency() expands a variable subscription
-		// into its variations, which is where per-seat meta lives for those.
-		$seats_product = $switch_data ? $switch_data['item']->get_product() : null;
-		if ( ! $seats_product ) {
-			$seats_product = $current_product ? $current_product : $selected_product;
+		// Seat bounds belong to the tier being bought, not to the reader's current
+		// one: two per-seat tiers can sell different minimums, and a flat tier sells
+		// no seats at all. Each card publishes its own bounds (see
+		// render_product_card()) and the field below follows whichever tier is
+		// checked. Every product here is concrete — get_tiers_by_frequency() expands
+		// a variable subscription into its variations, which is where per-seat meta
+		// lives for those.
+		$line_product   = $switch_data ? $switch_data['item']->get_product() : null;
+		$line_seats     = $line_product ? Group_Subscription_Seats::get_field_args( $line_product ) : null;
+		$selected_seats = $selected_product ? Group_Subscription_Seats::get_field_args( $selected_product ) : null;
+
+		// The field is rendered whenever any offered tier sells seats, and hidden
+		// (and disabled, so it submits nothing) while a flat tier is selected — that
+		// way picking a per-seat tier brings it back without a round trip.
+		$seats_field = $selected_seats;
+		if ( ! $seats_field ) {
+			foreach ( $tiers as $tier_products ) {
+				foreach ( $tier_products as $tier_product ) {
+					$seats_field = Group_Subscription_Seats::get_field_args( $tier_product );
+					if ( $seats_field ) {
+						break 2;
+					}
+				}
+			}
 		}
-		$seats_field = $seats_product ? Group_Subscription_Seats::get_field_args( $seats_product ) : null;
+
+		// Start from the seats the reader already pays for when that line sells
+		// seats, otherwise from the tier's own minimum — then hold it inside the
+		// selected tier's bounds, which a differently-priced tier may narrow.
+		$seats_original = $line_seats && $line_quantity ? $line_quantity : '';
+		$seats_value    = null;
+		if ( $seats_field ) {
+			$seats_value = max( $seats_field['min'], (int) ( $seats_original ? $seats_original : $seats_field['min'] ) );
+			if ( $seats_field['max'] > 0 ) {
+				$seats_value = min( $seats_field['max'], $seats_value );
+			}
+		}
 
 		$default_title        = $switch_data ? __( 'Change Subscription', 'newspack-plugin' ) : __( 'Complete your transaction', 'newspack-plugin' );
 		$default_button_label = $switch_data ? __( 'Change Subscription', 'newspack-plugin' ) : __( 'Purchase', 'newspack-plugin' );
@@ -767,9 +798,9 @@ class Subscriptions_Tiers {
 				<input type="hidden" name="item" value="<?php echo absint( $switch_data['item_id'] ); ?>">
 			<?php endif; ?>
 			<?php if ( $seats_field ) : ?>
-				<p class="newspack__subscription-tiers__seats">
+				<p class="newspack__subscription-tiers__seats"<?php echo $selected_seats ? '' : ' hidden'; ?>>
 					<label for="group_seats"><?php echo esc_html( $seats_field['label'] ); ?></label>
-					<input type="number" name="quantity" id="group_seats" step="1" min="<?php echo esc_attr( $seats_field['min'] ); ?>"<?php echo $seats_field['max'] > 0 ? ' max="' . esc_attr( $seats_field['max'] ) . '"' : ''; ?> value="<?php echo esc_attr( $line_quantity ? $line_quantity : $seats_field['min'] ); ?>" data-original-value="<?php echo esc_attr( $line_quantity ? $line_quantity : '' ); ?>">
+					<input type="number" name="quantity" id="group_seats" step="1" min="<?php echo esc_attr( $seats_field['min'] ); ?>"<?php echo $seats_field['max'] > 0 ? ' max="' . esc_attr( $seats_field['max'] ) . '"' : ''; ?> value="<?php echo esc_attr( $seats_value ); ?>" data-original-value="<?php echo esc_attr( $seats_original ); ?>"<?php echo $selected_seats ? '' : ' disabled'; ?>>
 					<span class="newspack-ui__helper-text"><?php echo esc_html( $seats_field['help'] ); ?></span>
 				</p>
 				<?php
@@ -1065,10 +1096,10 @@ class Subscriptions_Tiers {
 		// WCS treats a switch as identical only when product, variation *and* quantity
 		// all match, so a deliberate quantity change on the same plan is a legitimate
 		// switch. Only an explicitly submitted quantity counts as deliberate: the tiers
-		// modal submits the line item's own quantity on every switch, so a request
-		// without one never came from it, and treating that absence as a change would
-		// skip the product and amount checks below for exactly the crafted-request and
-		// no-JavaScript cases this backstop exists for.
+		// modal always submits one when the target tier can carry seats, so an absent
+		// quantity is not a seat change, and reading it as one would skip the product
+		// and amount checks below for exactly the crafted-request and no-JavaScript
+		// cases this backstop exists for.
 		$line_quantity = max( 1, (int) $line_item->get_quantity() );
 		if ( isset( $_REQUEST['quantity'] ) && absint( wp_unslash( $_REQUEST['quantity'] ) ) !== $line_quantity ) {
 			return null;

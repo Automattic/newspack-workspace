@@ -62,6 +62,50 @@ export default function init() {
 
 			let isFormValid = false;
 
+			// Seat bounds belong to the tier being bought, and each tier's radio
+			// publishes its own. The single seats field follows whichever one is
+			// checked: shown and bounded for a per-seat tier, hidden and disabled
+			// otherwise — and a disabled input submits nothing, so a flat tier sends no
+			// seat count at all. Without that, its price would be billed per seat.
+			const seatsField = form.querySelector( '.newspack__subscription-tiers__seats' );
+			const seatsInput = form.querySelector( '#group_seats' );
+			let seatsTierId = null;
+			const syncSeatsToTier = () => {
+				if ( ! seatsField || ! seatsInput ) {
+					return;
+				}
+				const tier = form.querySelector( 'input[name="product_id"]:checked' );
+				const tierChanged = ( tier?.value || '' ) !== seatsTierId;
+				seatsTierId = tier?.value || '';
+				if ( ! tier?.dataset.perSeat ) {
+					seatsField.hidden = true;
+					seatsInput.disabled = true;
+					return;
+				}
+				seatsField.hidden = false;
+				seatsInput.disabled = false;
+				const min = parseInt( tier.dataset.seatsMin, 10 ) || 1;
+				const max = parseInt( tier.dataset.seatsMax, 10 ) || 0;
+				seatsInput.min = min;
+				if ( max > 0 ) {
+					seatsInput.max = max;
+				} else {
+					seatsInput.removeAttribute( 'max' );
+				}
+				// Only a tier change may rewrite the value: clamping on every keystroke
+				// would fight the reader as they type. A count the newly chosen tier
+				// can't sell would otherwise only be rejected server-side.
+				const value = parseInt( seatsInput.value, 10 );
+				if ( ! tierChanged || Number.isNaN( value ) ) {
+					return;
+				}
+				if ( value < min ) {
+					seatsInput.value = min;
+				} else if ( max > 0 && value > max ) {
+					seatsInput.value = max;
+				}
+			};
+
 			const attachInputListeners = () => {
 				const inputs = form.querySelectorAll( 'input[type="radio"], input[type="number"], select' );
 				inputs.forEach( input => {
@@ -107,11 +151,12 @@ export default function init() {
 						isFormValid = true;
 					}
 				} else {
+					syncSeatsToTier();
 					// Buying more or fewer seats on the tier the reader already has is a
-					// real change, so it can't count as re-selecting the same plan. An
-					// empty field is not a change: like the amount above, it would only be
-					// rejected server-side.
-					const seats = form.querySelector( '#group_seats' );
+					// real change, so it can't count as re-selecting the same plan. A
+					// disabled or empty field is not a change: like the amount above, it
+					// would only be rejected server-side.
+					const seats = seatsInput && ! seatsInput.disabled ? seatsInput : null;
 					const seatsValue = seats ? parseInt( seats.value, 10 ) : NaN;
 					const seatsChanged =
 						! Number.isNaN( seatsValue ) && !! seats.dataset.originalValue && seatsValue !== parseInt( seats.dataset.originalValue, 10 );
