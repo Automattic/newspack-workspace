@@ -274,7 +274,7 @@ describe( 'CatalogImpact', () => {
 	it( 'hangs the trigger off the description rather than the number', () => {
 		render( <CatalogImpact stats={ stats() } /> );
 
-		const footer = screen.getByText( 'Rules currently price these products' ).parentElement;
+		const footer = screen.getByText( 'Rules currently price these products.' ).parentElement;
 
 		expect( footer ).toHaveClass( 'newspack-stat-card__footer' );
 		expect( footer.contains( screen.getByRole( 'button', { name: 'View Affected Products' } ) ) ).toBe( true );

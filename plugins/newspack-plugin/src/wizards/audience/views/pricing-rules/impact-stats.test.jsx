@@ -24,7 +24,7 @@ const audience = ( over = {} ) => ( {
 
 const labels = () => [ 'Products affected', 'Subscribers in scope', 'Eligible at renewal', 'Protected' ];
 
-const stats = props => <ImpactStats productsDescription="Rules currently price these products" { ...props } />;
+const stats = props => <ImpactStats productsDescription="Rules currently price these products." { ...props } />;
 
 // Keyed to the label, so a value stays bound to its own tile however the grid is ordered.
 const tileFor = label => screen.getByText( label ).closest( '.newspack-stat-card' );
@@ -102,7 +102,7 @@ describe( 'ImpactStats', () => {
 	it( 'omits the reason line unless the rule is locked', () => {
 		render( stats( { totalMatching: 36, countLimited: false, audience: audience() } ) );
 
-		expect( screen.queryByText( 'Applies to new sign-ups only' ) ).not.toBeInTheDocument();
+		expect( screen.queryByText( 'Applies to new sign-ups only.' ) ).not.toBeInTheDocument();
 	} );
 
 	// The reason is a quiet line beside the description, not part of the headline.
@@ -110,7 +110,7 @@ describe( 'ImpactStats', () => {
 		render( stats( { totalMatching: 36, countLimited: false, audience: audience( { application: 'locked' } ) } ) );
 
 		const tile = tileFor( 'Protected' );
-		const note = within( tile ).getByText( 'Applies to new sign-ups only' );
+		const note = within( tile ).getByText( 'Applies to new sign-ups only.' );
 		expect( note ).toHaveClass( 'newspack-stat-card__description' );
 		expect( note.closest( '.newspack-stat-card__footer' ) ).toBeInTheDocument();
 		expect( tile.querySelector( '.newspack-stat-card__secondary' ) ).not.toBeInTheDocument();
@@ -168,7 +168,7 @@ describe( 'ImpactStats', () => {
 
 		labels().forEach( label => expect( screen.getByText( label ) ).toBeInTheDocument() );
 		expect( screen.getAllByText( 'Not applicable' ) ).toHaveLength( 2 );
-		expect( screen.getAllByText( 'Applies to new sign-ups only' ) ).toHaveLength( 2 );
+		expect( screen.getAllByText( 'Applies to new sign-ups only.' ) ).toHaveLength( 2 );
 		expect( screen.queryByText( '8' ) ).not.toBeInTheDocument();
 	} );
 

@@ -88,7 +88,7 @@ export default function ImpactStats( {
 }: ImpactStatsProps ) {
 	const scope = audience?.supported ? audience : null;
 	const isLocked = 'locked' === scope?.application;
-	const lockedNote = __( 'Applies to new sign-ups only', 'newspack-plugin' );
+	const lockedNote = __( 'Applies to new sign-ups only.', 'newspack-plugin' );
 
 	// Keyed on an untranslated id, so no locale can collide two tiles.
 	const tiles: Tile[] = [
@@ -109,7 +109,7 @@ export default function ImpactStats( {
 				id: 'scope',
 				label: __( 'Subscribers in scope', 'newspack-plugin' ),
 				...bounded( scope.total, scope.count_limited ),
-				description: __( 'Renewing subscriptions on those products', 'newspack-plugin' ),
+				description: __( 'Renewing subscriptions on those products.', 'newspack-plugin' ),
 			},
 			// The engine truncates oldest-first and the oldest are the ones a cohort
 			// gate protects, so a capped split under-reports who is repriced.
@@ -117,14 +117,14 @@ export default function ImpactStats( {
 				id: 'caught',
 				label: __( 'Eligible at renewal', 'newspack-plugin' ),
 				...( isLocked ? { value: null } : bounded( scope.caught, scope.count_limited ) ),
-				description: __( 'Repriced at their next renewal', 'newspack-plugin' ),
+				description: __( 'Repriced at their next renewal.', 'newspack-plugin' ),
 				note: isLocked ? lockedNote : undefined,
 			},
 			{
 				id: 'protected',
 				label: _x( 'Protected', 'subscribers who keep their original price', 'newspack-plugin' ),
 				...( isLocked ? { value: null } : bounded( scope.protected, scope.count_limited ) ),
-				description: __( 'Keep the price they signed up at', 'newspack-plugin' ),
+				description: __( 'Keep the price they signed up at.', 'newspack-plugin' ),
 				note: isLocked ? lockedNote : undefined,
 			}
 		);
