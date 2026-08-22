@@ -13,7 +13,7 @@
 import { render, screen } from '@testing-library/react';
 import { setSettings } from '@wordpress/date';
 
-import { getFields } from './fields';
+import { getFields, STATUS_KIND_STATUSES } from './fields';
 
 const L10N = {
 	locale: 'en_US',
@@ -178,5 +178,39 @@ describe( 'Ads list status column dates', () => {
 		const label = statusLabel( { kind: 'expired', expires_at: Date.UTC( 2026, 7, 4, 12 ) / 1000 } );
 
 		expect( label ).toBe( 'Expired August 4, 2026' );
+	} );
+} );
+
+/**
+ * The Status column offers its kinds as separate filters, so two of them drawing
+ * the same mark leaves the reader unable to tell apart the results of two
+ * different filters.
+ *
+ * The glyph behind each name is pinned in `packages/components`, which also pins
+ * the only two pairs that share one: `active`/`done` and `cancelled`/`ended`. A
+ * column keeps the rule by using distinct names and at most one half of a pair,
+ * which is what this asserts. It cannot read the glyphs directly, because
+ * `newspack-components` is stubbed for these tests.
+ */
+describe( 'STATUS_KIND_STATUSES', () => {
+	const SHARED_MARKS = [
+		[ 'active', 'done' ],
+		[ 'cancelled', 'ended' ],
+	];
+
+	it( 'names every kind the list can report', () => {
+		expect( STATUS_KIND_STATUSES ).toEqual( { active: 'active', scheduled: 'scheduled', expired: 'ended', draft: 'draft', trash: 'trash' } );
+	} );
+
+	it( 'gives no two kinds the same mark', () => {
+		const names = Object.values( STATUS_KIND_STATUSES );
+		expect( new Set( names ).size ).toBe( names.length );
+		SHARED_MARKS.forEach( pair => expect( pair.filter( name => names.includes( name ) ).length ).toBeLessThan( 2 ) );
+	} );
+
+	// An ad whose window closed was not cancelled, which is the distinction
+	// `ended` carries over `cancelled`.
+	it( 'reads an expired ad as its window closing, not a deliberate stop', () => {
+		expect( STATUS_KIND_STATUSES.expired ).toBe( 'ended' );
 	} );
 } );

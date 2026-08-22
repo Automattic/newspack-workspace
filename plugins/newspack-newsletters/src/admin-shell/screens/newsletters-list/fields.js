@@ -7,7 +7,7 @@
 
 import { ExternalLink, Icon } from '@wordpress/components';
 import { __, sprintf } from '@wordpress/i18n';
-import { commentAuthorAvatar, drafts, envelope, globe, published, scheduled, trash } from '@wordpress/icons';
+import { commentAuthorAvatar, envelope, globe } from '@wordpress/icons';
 import { dateI18n, getSettings as getDateSettings } from '@wordpress/date';
 
 import { StatusIndicator } from 'newspack-components';
@@ -18,11 +18,13 @@ import { formatPostDate } from '../../utils/format-date';
 import { termsForTaxonomy } from '../../utils/terms';
 import { statusKindLabel, STATUS_KIND_LABELS } from './status-label';
 
-const STATUS_KIND_ICONS = {
-	sent: published,
-	scheduled,
-	draft: drafts,
-	trash,
+// The shared status name per kind. A Status column offers its kinds as separate
+// filters, so no two of them may draw the same mark.
+export const STATUS_KIND_STATUSES = {
+	sent: 'done',
+	scheduled: 'scheduled',
+	draft: 'draft',
+	trash: 'trash',
 };
 
 const formatDate = timestamp => {
@@ -57,7 +59,7 @@ const renderTitle = ( { item } ) => {
 const renderStatus = ( { item } ) => {
 	const status = item?.newspack_newsletters_status || {};
 	const kind = status.kind || 'draft';
-	const icon = STATUS_KIND_ICONS[ kind ] || STATUS_KIND_ICONS.draft;
+	const statusName = STATUS_KIND_STATUSES[ kind ] || STATUS_KIND_STATUSES.draft;
 
 	let label;
 	if ( 'sent' === kind && status.sent_at ) {
@@ -81,7 +83,7 @@ const renderStatus = ( { item } ) => {
 		label = statusKindLabel( kind );
 	}
 
-	return <StatusIndicator icon={ icon }>{ label }</StatusIndicator>;
+	return <StatusIndicator status={ statusName }>{ label }</StatusIndicator>;
 };
 
 const renderSendDate = ( { item } ) => {
