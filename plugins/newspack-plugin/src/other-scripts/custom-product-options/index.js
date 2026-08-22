@@ -52,6 +52,10 @@
 			$checkbox.show();
 			if ( $checkbox.is( ':checked' ) ) {
 				$fields.show();
+				// Same reason as showOrHidePricingOptions(): the blanket .show() above
+				// reveals the per-team and per-seat rows together, so the pricing mode
+				// has to pick one again.
+				showOrHidePerSeatOptions( '#woocommerce-product-data' );
 			} else {
 				$fields.hide();
 			}
