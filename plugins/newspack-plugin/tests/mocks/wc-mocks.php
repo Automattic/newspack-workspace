@@ -547,9 +547,6 @@ class WC_Product {
 	public function get_children() {
 		return $this->data['children'] ?? [];
 	}
-	public function get_status() {
-		return $this->data['status'] ?? 'publish';
-	}
 	public function get_regular_price() {
 		return $this->data['regular_price'] ?? ( $this->meta['_regular_price'] ?? 0 );
 	}
@@ -1710,33 +1707,6 @@ if ( ! function_exists( 'get_woocommerce_currency' ) ) {
 	function get_woocommerce_currency() {
 		return 'USD';
 	}
-}
-/**
- * Minimal WC_Product_Query stand-in: filters $products_database on `type` and `status`.
- *
- * The `status` default reproduces WC_Product_Query's own default
- * ( draft, pending, private, publish ), which is what a caller that omits `status`
- * actually gets — the property the CLI's SELECTABLE_PRODUCT_STATUSES constant claims to
- * mirror. `limit` is accepted and ignored (fixtures are small).
- *
- * @param array $args Query args.
- * @return WC_Product[] The matching products.
- */
-function wc_get_products( $args = [] ) {
-	global $products_database;
-	$types    = isset( $args['type'] ) ? (array) $args['type'] : null;
-	$statuses = isset( $args['status'] ) ? (array) $args['status'] : [ 'draft', 'pending', 'private', 'publish' ];
-	$matches  = [];
-	foreach ( $products_database as $product ) {
-		if ( null !== $types && ! in_array( $product->get_type(), $types, true ) ) {
-			continue;
-		}
-		if ( ! in_array( $product->get_status(), $statuses, true ) ) {
-			continue;
-		}
-		$matches[] = $product;
-	}
-	return $matches;
 }
 /**
  * Minimal stand-in for WooCommerce's admin field renderer. Only enough markup to let a metabox

@@ -53,7 +53,7 @@ export default function AccessRuleControl( { slug, value, onChange }: GateRuleCo
 					__experimentalExpandOnFocus
 					__next40pxDefaultSize
 				/>
-				<UnlistedValuesNotice options={ options } value={ selected } />
+				<UnlistedValuesNotice slug={ slug } options={ options } value={ selected } />
 			</>
 		);
 	}

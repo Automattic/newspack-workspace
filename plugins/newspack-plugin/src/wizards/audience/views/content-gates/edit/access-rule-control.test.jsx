@@ -8,9 +8,6 @@ import { render, screen, fireEvent, waitFor, within, act } from '@testing-librar
  */
 import apiFetch from '@wordpress/api-fetch';
 import { select } from '@wordpress/data';
-import apiFetch from '@wordpress/api-fetch';
-
-jest.mock( '@wordpress/api-fetch', () => jest.fn() );
 
 /**
  * Internal dependencies
@@ -52,15 +49,6 @@ const renderControl = ( { slug = 'subscription', name = 'Active subscription', o
 	};
 	return render( <AccessRuleControl slug={ slug } value={ value } onChange={ onChange } /> );
 };
-
-/**
- * More institutions than the REST API's own `per_page` ceiling of 100, which is the size
- * the list used to be silently cut to.
- */
-const MANY_INSTITUTIONS = Array.from( { length: 105 }, ( _, i ) => ( {
-	id: i + 1,
-	title: { raw: `Institution ${ i + 1 }` },
-} ) );
 
 describe( 'AccessRuleControl option picker', () => {
 	it( 'labels each selected option with its ID so same-named products are distinguishable', () => {

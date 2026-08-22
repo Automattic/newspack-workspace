@@ -24,6 +24,28 @@ class Access_Rules {
 	private static $rules = [];
 
 	/**
+	 * Request-scoped memo for the subscription product options.
+	 *
+	 * Building the list costs a full-catalog product query plus a variation query, and
+	 * `get_access_rules()` resolves every registered rule's options callback on every
+	 * call. It is public and several admin screens localize it, so a request that reaches
+	 * it more than once pays that cost once.
+	 *
+	 * @var array|null
+	 */
+	private static $subscription_products_options = null;
+
+	/**
+	 * Request-scoped memo for the one-time purchase product options.
+	 *
+	 * Same reasoning as {@see self::$subscription_products_options}, over a shop's whole
+	 * simple/variable catalog.
+	 *
+	 * @var array|null
+	 */
+	private static $one_time_purchase_products_options = null;
+
+	/**
 	 * Valid duration units for the one-time purchase rule.
 	 *
 	 * @var array
@@ -49,17 +71,6 @@ class Access_Rules {
 	 * @var array
 	 */
 	private static $evaluation_context = [];
-
-	/**
-	 * Request-scoped memo for the subscription product options.
-	 *
-	 * `sanitize_access_rule()` resolves every registered rule's options callback once per
-	 * rule in a gate's payload, so saving a six-rule gate would otherwise run the
-	 * full-catalog product query and its variation query six times over.
-	 *
-	 * @var array|null
-	 */
-	private static $subscription_products_options = null;
 
 	/**
 	 * Initialize hooks.
@@ -526,14 +537,17 @@ class Access_Rules {
 	}
 
 	/**
-	 * Flush the request-scoped subscription product options memo.
+	 * Flush the request-scoped product options memos.
 	 *
-	 * Primarily for tests; in production the memo is per-request by nature.
+	 * For tests; in production the memos are per-request by nature. A PHPUnit run is one
+	 * request for the whole suite, so `Newspack_Request_Memo_Reset` calls this before
+	 * every test to put the request boundary back where the memos assume it is.
 	 *
 	 * @return void
 	 */
-	public static function flush_subscription_products_options_memo() {
-		self::$subscription_products_options = null;
+	public static function flush_product_options_memos() {
+		self::$subscription_products_options      = null;
+		self::$one_time_purchase_products_options = null;
 	}
 
 	/**
@@ -591,14 +605,20 @@ class Access_Rules {
 	 * Build the option label for a subscription variation.
 	 *
 	 * WooCommerce generates a variation's title as "Parent - Attribute" and names it that
-	 * way throughout its own admin, so that title is the label wherever it is usable. But it
-	 * drops the attribute suffix when the parent carries three or more attributes, or two or
-	 * more where an attribute name is multi-word — leaving the variation titled exactly like
-	 * its parent. Recover the attributes from the summary in that case, so the variation
-	 * still reads as the tier it is rather than as a second copy of its parent. The summary
-	 * spells out attribute names where the generated title omits them ("Term: Annual" rather
-	 * than "Annual"); matching the generated style would mean hydrating the variation, which
-	 * costs more than the fallback is worth.
+	 * way throughout its own admin, so that title is the label wherever it is usable. It is
+	 * usable when it still opens with the parent's current name and adds something to it.
+	 * Two things break that. WooCommerce drops the attribute suffix when the parent carries
+	 * three or more attributes, or two or more where an attribute name is multi-word,
+	 * leaving the variation titled exactly like its parent. And the title is generated at
+	 * the variation's last save: `WC_Product_Variable_Data_Store_CPT::sync_variation_names()`
+	 * rewrites it when the parent is renamed through the CRUD path, but an importer or a
+	 * direct `wp_update_post()` leaves it on the old name.
+	 *
+	 * Either way the title stops telling a publisher which tier they are picking, so
+	 * recover the attributes from the summary and pair them with the parent's current name.
+	 * The summary spells out attribute names where the generated title omits them
+	 * ("Term: Annual" rather than "Annual"); matching the generated style would mean
+	 * hydrating the variation, which costs more than the fallback is worth.
 	 *
 	 * Labels need not be unique: the pickers render every option as `<name> (#<id>)` and
 	 * resolve a token by the ID it carries, so two options sharing a name stay distinct.
@@ -612,17 +632,15 @@ class Access_Rules {
 	 * @return string The option label.
 	 */
 	private static function get_variation_option_label( string $parent_name, \WP_Post $variation ): string {
-		$label = $variation->post_title;
-		if ( $label !== $parent_name ) {
-			return $label;
-		}
-		if ( '' === $variation->post_excerpt ) {
-			return $label;
+		$title             = $variation->post_title;
+		$names_this_parent = str_starts_with( $title, $parent_name ) && strlen( $title ) > strlen( $parent_name );
+		if ( $names_this_parent || '' === $variation->post_excerpt ) {
+			return $title;
 		}
 		return sprintf(
 			/* translators: 1: variable subscription name, e.g. "Membership". 2: the variation's attribute summary, e.g. "Term: Annual". */
 			__( '%1$s - %2$s', 'newspack-plugin' ),
-			$label,
+			$parent_name,
 			$variation->post_excerpt
 		);
 	}
@@ -705,18 +723,13 @@ class Access_Rules {
 	 * @return array Product options as label/value pairs.
 	 */
 	public static function get_one_time_purchase_products_options() {
-		// Request-scoped memo: the full-catalog query would otherwise run once per
-		// rule sanitized on a gate save (Content_Gate_API resolves all rule options
-		// for each rule in the payload).
-		//
 		// TODO (NPPD-2132): unlike the subscription and institution options (also
 		// full dumps, but inherently small), a shop's simple/variable catalog can be
 		// large, and this list is serialized into every block-editor payload. Move to
 		// a bounded/REST-searchable product picker; the memo only helps within a
 		// single request.
-		static $options = null;
-		if ( null !== $options ) {
-			return $options;
+		if ( null !== self::$one_time_purchase_products_options ) {
+			return self::$one_time_purchase_products_options;
 		}
 		if ( ! function_exists( 'wc_get_products' ) ) {
 			return [];
@@ -734,6 +747,7 @@ class Access_Rules {
 				'value' => $product->get_id(),
 			];
 		}
+		self::$one_time_purchase_products_options = $options;
 		return $options;
 	}
 

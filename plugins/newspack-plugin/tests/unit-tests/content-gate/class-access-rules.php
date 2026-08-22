@@ -8,6 +8,7 @@
 use Newspack\Access_Rules;
 use Newspack\Block_Visibility;
 use Newspack\Content_Gate;
+use Newspack\Content_Gate_API;
 use Newspack\Content_Restriction_Control;
 use Newspack\Group_Subscription;
 use Newspack\Reader_Activation;
@@ -82,9 +83,6 @@ class Newspack_Test_Access_Rules extends WP_UnitTestCase {
 		global $subscriptions_database, $products_database;
 		$subscriptions_database = [];
 		$products_database      = [];
-
-		// The subscription options are memoized per request, and a test run is one request.
-		Access_Rules::flush_subscription_products_options_memo();
 
 		// Create test users.
 		self::$owner_user_id      = $this->factory->user->create( [ 'role' => 'subscriber' ] );
@@ -934,9 +932,10 @@ class Newspack_Test_Access_Rules extends WP_UnitTestCase {
 	}
 
 	/**
-	 * The options are built once per request. Saving a gate resolves every rule's options
-	 * callback once per rule in the payload, so without the memo a six-rule gate ran the
-	 * full-catalog product query and its variation query six times over.
+	 * The options are built once per request. `get_access_rules()` resolves every registered
+	 * rule's options callback on every call, and more than one admin screen localizes it, so
+	 * without the memo a request reaching it twice runs the full-catalog product query and
+	 * its variation query twice.
 	 *
 	 * @group Access_Rules
 	 */
@@ -960,12 +959,114 @@ class Newspack_Test_Access_Rules extends WP_UnitTestCase {
 
 		$this->assertSame( $first, Access_Rules::get_subscription_products_options(), 'A second call within the request should reuse the built options.' );
 
-		Access_Rules::flush_subscription_products_options_memo();
+		Access_Rules::flush_product_options_memos();
 
 		$this->assertSame(
 			[ 940, 941 ],
 			array_column( Access_Rules::get_subscription_products_options(), 'value' ),
 			'Flushing the memo should rebuild the options.'
+		);
+	}
+
+	/**
+	 * WooCommerce rewrites a variation's title when its parent is renamed through the CRUD
+	 * path, but an importer or a direct `wp_update_post()` does not, leaving the title on
+	 * the old name. The label then names a product the publisher can no longer find — and
+	 * where the parent has three or more attributes, the stale title is the parent's old
+	 * name alone, which is the indistinguishable-siblings defect all over again.
+	 *
+	 * @group Access_Rules
+	 */
+	public function test_get_subscription_products_options_names_variations_of_a_renamed_parent() {
+		wc_create_mock_product(
+			[
+				'id'   => 925,
+				'type' => 'variable-subscription',
+				'name' => 'Membership',
+			]
+		);
+		// Titles generated while the parent was still called "Supporter".
+		$monthly_variation_id = $this->create_variation_post( 925, 'Supporter', 'Term: Monthly' );
+		$annual_variation_id  = $this->create_variation_post( 925, 'Supporter - Annual', 'Term: Annual' );
+
+		$options_by_value = array_column( Access_Rules::get_subscription_products_options(), 'label', 'value' );
+
+		$this->assertSame(
+			[
+				925                   => 'Membership',
+				$monthly_variation_id => 'Membership - Term: Monthly',
+				$annual_variation_id  => 'Membership - Term: Annual',
+			],
+			$options_by_value,
+			'A stale title should give way to the parent\'s current name and the variation\'s attributes.'
+		);
+	}
+
+	/**
+	 * The point of listing variations: selecting one narrows the rule to that tier, while
+	 * selecting the parent still admits every tier under it.
+	 *
+	 * `WC_Subscription::has_product()` matches a line item on its `variation_id` as well as
+	 * its `product_id`, so this is the evaluation the options exist to make configurable.
+	 *
+	 * @group Access_Rules
+	 */
+	public function test_a_variation_rule_admits_only_that_variation() {
+		$annual_variation_id  = 9501;
+		$monthly_variation_id = 9502;
+		$this->create_subscription(
+			[
+				// No `products` shorthand: the line item is what carries the parent/variation
+				// split this test is about.
+				'products' => [],
+				'items'    => [
+					new WC_Order_Item_Product(
+						[
+							'product_id'   => self::$product_id,
+							'variation_id' => $annual_variation_id,
+						]
+					),
+				],
+			]
+		);
+
+		$this->assertTrue(
+			Access_Rules::has_active_subscription( self::$owner_user_id, [ $annual_variation_id ] ),
+			'A rule naming the purchased variation should grant access.'
+		);
+		$this->assertFalse(
+			Access_Rules::has_active_subscription( self::$owner_user_id, [ $monthly_variation_id ] ),
+			'A rule naming a sibling variation should not.'
+		);
+		$this->assertTrue(
+			Access_Rules::has_active_subscription( self::$owner_user_id, [ self::$product_id ] ),
+			'A rule naming the parent should still admit any of its variations.'
+		);
+	}
+
+	/**
+	 * Sanitizing a gate's rules reads the registered rules, not the resolved ones, so it
+	 * neither runs a rule's options query nor depends on what that query returns. An empty
+	 * catalog used to make the subscription rule read as though it had no options, sending
+	 * its ID list down the plain-string branch.
+	 *
+	 * @group Access_Rules
+	 */
+	public function test_sanitize_access_rule_keeps_product_ids_with_an_empty_catalog() {
+		$sanitized_rule = Content_Gate_API::sanitize_access_rule(
+			[
+				'slug'  => 'subscription',
+				'value' => [ '188250', 9501 ],
+			]
+		);
+
+		$this->assertSame(
+			[
+				'slug'  => 'subscription',
+				'value' => [ 188250, 9501 ],
+			],
+			$sanitized_rule,
+			'A subscription rule\'s IDs should survive sanitizing whether or not the shop has products.'
 		);
 	}
 }

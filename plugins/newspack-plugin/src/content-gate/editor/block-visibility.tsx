@@ -238,7 +238,7 @@ const AccessRuleValueControl = ( {
 					__next40pxDefaultSize
 					__nextHasNoMarginBottom
 				/>
-				<UnlistedValuesNotice options={ options } value={ selected } />
+				<UnlistedValuesNotice slug={ slug } options={ options } value={ selected } />
 			</>
 		);
 	} else {
