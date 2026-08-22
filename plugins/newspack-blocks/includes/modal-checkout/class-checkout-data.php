@@ -390,7 +390,14 @@ final class Checkout_Data {
 			// avoids a TypeError from `'' * 1` for a product with no price set.
 			$line_amount              = ( $source instanceof \WC_Order || 1 === $quantity ) ? $amount : (float) $amount * $quantity;
 			$data['amount']           = $line_amount;
-			$data['quantity']         = $quantity;
+			// Only a cart or order line item has a real seat count to report. For a
+			// bare product source, the block's hidden field (or a reader's later
+			// in-modal edit) is the source of truth: omitting the key here — instead
+			// of hardcoding 1 — keeps getCheckoutData()'s JSON-wins merge in utils.js
+			// from overwriting that real value with a stale default.
+			if ( $source instanceof \WC_Cart || $source instanceof \WC_Order ) {
+				$data['quantity'] = $quantity;
+			}
 			$data['price_summary']    = self::get_price_summary( $name, $line_amount, $recurrence, $variation_id ? $variation_id : $product_id, $quantity );
 			$data['summary_template'] = self::get_price_summary( $name, '{{PRICE}}', $recurrence, $variation_id ? $variation_id : $product_id, $quantity );
 			$data['recurrence']       = $recurrence;

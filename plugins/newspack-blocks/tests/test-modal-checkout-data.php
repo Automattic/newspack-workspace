@@ -474,14 +474,19 @@ class Newspack_Blocks_Modal_Checkout_Data_Test extends WP_UnitTestCase_Blocks {
 	}
 
 	/**
-	 * A bare product source (no cart or order) is always a single seat.
+	 * A bare product source (no cart or order) carries no `quantity` at all.
+	 * Only a cart or order line item has a real seat count to report; for a
+	 * bare product, the block's hidden field (or a reader's later in-modal
+	 * edit) is the source of truth, and `data-checkout` has nothing to say
+	 * about it. Emitting a hardcoded `quantity: 1` here would let it
+	 * overwrite that real value when `getCheckoutData()` merges the two.
 	 */
-	public function test_product_checkout_data_quantity_defaults_to_one() {
+	public function test_product_checkout_data_omits_quantity() {
 		$product = new WC_Product( 80, 'simple', [], '10', 'Product 80' );
 
 		$data = Checkout_Data::get_checkout_data( $product );
 
-		$this->assertSame( 1, $data['quantity'] );
+		$this->assertArrayNotHasKey( 'quantity', $data );
 		$this->assertSame( '10', $data['amount'] );
 	}
 
