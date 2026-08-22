@@ -235,6 +235,8 @@ class Asset_Loader_Test extends WP_UnitTestCase {
 	 * feature that wanted it.
 	 */
 	public function test_unregistered_dep_suppresses_the_whole_bundle() {
+		// WP 6.9.1 flags this as incorrect usage, but only with debugging on.
+		$this->setExpectedIncorrectUsage( 'WP_Scripts::add' );
 		$this->write_asset_file( 'my-bundle', [] );
 		$this->touch_bundle_file( 'my-bundle', 'js' );
 
