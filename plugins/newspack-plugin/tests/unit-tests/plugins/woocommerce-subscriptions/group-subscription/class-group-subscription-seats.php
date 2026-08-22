@@ -6,6 +6,8 @@
  * @group WooCommerce_Subscriptions_Integration
  */
 
+use Newspack\Group_Subscription;
+use Newspack\Group_Subscription_Invite;
 use Newspack\Group_Subscription_Seats;
 use Newspack\Group_Subscription_Settings;
 
@@ -27,28 +29,38 @@ class Test_Group_Subscription_Seats extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Set up: reset the products database, recorded notices, and the
-	 * is_product() mock, and enable the content-gates feature flag the class's
+	 * Set up: reset the products and subscriptions databases, recorded notices,
+	 * the is_product() mock, the group member cache, the current user and the
+	 * switch request, and enable the content-gates feature flag the class's
 	 * init() checks.
 	 */
 	public function set_up() {
 		parent::set_up();
-		global $products_database;
-		$products_database = [];
+		global $products_database, $subscriptions_database;
+		$products_database      = [];
+		$subscriptions_database = [];
 		wc_mocks_reset_notices();
 		wc_mocks_set_is_product( false );
+		Group_Subscription::reset_cache();
+		wp_set_current_user( 0 );
+		unset( $_REQUEST['switch-subscription'] );
 		if ( ! defined( 'NEWSPACK_CONTENT_GATES' ) ) {
 			define( 'NEWSPACK_CONTENT_GATES', true );
 		}
 	}
 
 	/**
-	 * Tear down: reset the products database and the is_product() mock.
+	 * Tear down: reset everything set_up() does, so no test's switch request,
+	 * current user or cached membership can leak into the next.
 	 */
 	public function tear_down() {
-		global $products_database;
-		$products_database = [];
+		global $products_database, $subscriptions_database;
+		$products_database      = [];
+		$subscriptions_database = [];
 		wc_mocks_set_is_product( false );
+		Group_Subscription::reset_cache();
+		wp_set_current_user( 0 );
+		unset( $_REQUEST['switch-subscription'] );
 		parent::tear_down();
 	}
 
@@ -91,6 +103,95 @@ class Test_Group_Subscription_Seats extends WP_UnitTestCase {
 				],
 			]
 		);
+	}
+
+	/**
+	 * Build a group subscription owned by a fresh user, with its own product, a
+	 * seat line item, members and invitations.
+	 *
+	 * The product carries the pricing mode, so a per-seat subscription is one
+	 * whose product is per seat — the same resolution `is_per_seat()` performs.
+	 *
+	 * @param int   $id   Subscription ID. The product gets this ID plus 1000, keeping
+	 *                    it clear of the standalone product IDs the other tests use.
+	 * @param array $args Fixture options: `quantity` (seats bought), `members`
+	 *                    (how many member users to add besides the owner),
+	 *                    `pending_invites` and `expired_invites` (how many of each),
+	 *                    `per_seat` (false for a flat product), `min_seats`/`max_seats`.
+	 *
+	 * @return WC_Subscription
+	 */
+	private function make_per_seat_subscription( $id, $args = [] ) {
+		$args = array_merge(
+			[
+				'quantity'        => 1,
+				'members'         => 0,
+				'pending_invites' => 0,
+				'expired_invites' => 0,
+				'per_seat'        => true,
+				'min_seats'       => 1,
+				'max_seats'       => 0,
+			],
+			$args
+		);
+
+		$product_id = $id + 1000;
+		if ( $args['per_seat'] ) {
+			$this->make_per_seat_product( $product_id, $args['min_seats'], $args['max_seats'] );
+		} else {
+			$this->make_flat_product( $product_id );
+		}
+
+		$invites = [];
+		for ( $i = 0; $i < $args['pending_invites']; $i++ ) {
+			$invites[ 'pending-' . $i ] = [
+				'email'      => 'pending-' . $i . '@example.com',
+				'expiration' => time() + HOUR_IN_SECONDS,
+			];
+		}
+		for ( $i = 0; $i < $args['expired_invites']; $i++ ) {
+			$invites[ 'expired-' . $i ] = [
+				'email'      => 'expired-' . $i . '@example.com',
+				'expiration' => time() - HOUR_IN_SECONDS,
+			];
+		}
+
+		$subscription = wcs_create_subscription(
+			[
+				'id'          => $id,
+				'customer_id' => self::factory()->user->create(),
+				'status'      => 'active',
+				'meta'        => [ Group_Subscription_Invite::META => $invites ],
+			]
+		);
+		$subscription->add_item(
+			new WC_Order_Item_Product(
+				[
+					'product_id' => $product_id,
+					'quantity'   => $args['quantity'],
+				]
+			)
+		);
+
+		for ( $i = 0; $i < $args['members']; $i++ ) {
+			add_user_meta( self::factory()->user->create(), Group_Subscription::GROUP_SUBSCRIPTION_USER_META_KEY, $id );
+		}
+		Group_Subscription::reset_cache();
+
+		return $subscription;
+	}
+
+	/**
+	 * The product ID behind a subscription's seat line item — what a switch request
+	 * for that subscription would be adding to the cart.
+	 *
+	 * @param WC_Subscription $subscription The subscription.
+	 *
+	 * @return int
+	 */
+	private function product_id_for( $subscription ) {
+		$item = Group_Subscription_Settings::get_seat_line_item( $subscription );
+		return $item ? $item->get_product_id() : 0;
 	}
 
 	/**
@@ -302,5 +403,196 @@ class Test_Group_Subscription_Seats extends WP_UnitTestCase {
 
 		$this->assertSame( 1, Group_Subscription_Seats::clamp_modal_quantity( 4, 930 ) );
 		$this->assertSame( 1, Group_Subscription_Seats::clamp_modal_quantity( 4, 999 ) );
+	}
+
+	/**
+	 * Occupancy is everyone a seat is already committed to: the owner, the
+	 * members, and the invitations still waiting to be accepted. An expired
+	 * invitation holds nothing, so it does not count.
+	 */
+	public function test_occupancy_counts_owner_members_and_pending_invites() {
+		$subscription = $this->make_per_seat_subscription(
+			931,
+			[
+				'quantity'        => 5,
+				'members'         => 2,
+				'pending_invites' => 1,
+				'expired_invites' => 3,
+			]
+		);
+
+		$this->assertSame( 4, Group_Subscription_Seats::get_occupancy( $subscription ), 'Owner + 2 members + 1 pending invite.' );
+	}
+
+	/**
+	 * A switch cannot cut a group's seats below the people already in it: the
+	 * seat count is the capacity, so shrinking past occupancy would leave
+	 * members or pending invitations with nowhere to sit.
+	 */
+	public function test_switch_below_occupancy_is_rejected() {
+		$subscription = $this->make_per_seat_subscription(
+			932,
+			[
+				'quantity' => 5,
+				'members'  => 2,
+			]
+		);
+		wp_set_current_user( $subscription->get_user_id() );
+		$_REQUEST['switch-subscription'] = 932;
+
+		// The message pins the rejection to occupancy: a quantity of 2 clears the
+		// product's own bounds, so only the 3 people in the group can block it.
+		$this->expectException( \Exception::class );
+		$this->expectExceptionMessage( '3 seats in use' );
+		Group_Subscription_Seats::guard_add_cart_item_data( [], $this->product_id_for( $subscription ), 0, 2 );
+	}
+
+	/**
+	 * Buying exactly as many seats as are occupied is fine — nobody loses a seat.
+	 */
+	public function test_switch_at_or_above_occupancy_passes() {
+		$subscription = $this->make_per_seat_subscription(
+			933,
+			[
+				'quantity' => 5,
+				'members'  => 1,
+			]
+		);
+		wp_set_current_user( $subscription->get_user_id() );
+		$_REQUEST['switch-subscription'] = 933;
+
+		$this->assertSame( [], Group_Subscription_Seats::guard_add_cart_item_data( [], $this->product_id_for( $subscription ), 0, 2 ) );
+	}
+
+	/**
+	 * Occupancy is only ever read from the requester's own group. A crafted
+	 * request naming somebody else's subscription is ignored, so it can neither
+	 * block their purchase nor report how many people are in a group they have
+	 * no part in.
+	 */
+	public function test_switch_occupancy_ignores_another_readers_subscription() {
+		$subscription = $this->make_per_seat_subscription(
+			934,
+			[
+				'quantity' => 5,
+				'members'  => 3,
+			]
+		);
+		wp_set_current_user( self::factory()->user->create() );
+		$_REQUEST['switch-subscription'] = 934;
+
+		$this->assertSame( [], Group_Subscription_Seats::guard_add_cart_item_data( [], $this->product_id_for( $subscription ), 0, 1 ) );
+	}
+
+	/**
+	 * Without a switch request there is no group to measure, so a first purchase
+	 * of a single seat still passes.
+	 */
+	public function test_first_purchase_is_not_measured_against_occupancy() {
+		$subscription = $this->make_per_seat_subscription(
+			935,
+			[
+				'quantity' => 5,
+				'members'  => 3,
+			]
+		);
+
+		$this->assertSame( [], Group_Subscription_Seats::guard_add_cart_item_data( [], $this->product_id_for( $subscription ), 0, 1 ) );
+	}
+
+	/**
+	 * Editing the seat count on the cart page is bound by occupancy too. Nothing
+	 * in that request says it is a switch — the cart item is what remembers —
+	 * so without reading it a reader could walk back to the cart and cut the
+	 * seats they were just stopped from cutting.
+	 */
+	public function test_cart_update_below_occupancy_is_rejected() {
+		global $wc_mock_notices;
+		$subscription = $this->make_per_seat_subscription(
+			940,
+			[
+				'quantity' => 5,
+				'members'  => 2,
+			]
+		);
+		wp_set_current_user( $subscription->get_user_id() );
+		$values = [
+			'product_id'          => $this->product_id_for( $subscription ),
+			'subscription_switch' => [ 'subscription_id' => 940 ],
+		];
+
+		$this->assertFalse( Group_Subscription_Seats::validate_cart_update( true, 'key', $values, 2 ) );
+		$this->assertStringContainsString( '3 seats in use', $wc_mock_notices[0]['notice'] );
+
+		wc_mocks_reset_notices();
+		$this->assertTrue(
+			Group_Subscription_Seats::validate_cart_update( true, 'key', $values, 3 ),
+			'Keeping a seat for everyone already in the group is allowed.'
+		);
+		$this->assertEmpty( $wc_mock_notices );
+	}
+
+	/**
+	 * Proration is forced on while the request is switching a per-seat group, and
+	 * left to the publisher's own setting once it is not.
+	 */
+	public function test_proration_forced_on_for_per_seat_switch() {
+		$subscription = $this->make_per_seat_subscription( 936, [ 'quantity' => 3 ] );
+		wp_set_current_user( $subscription->get_user_id() );
+		$_REQUEST['switch-subscription'] = 936;
+
+		$this->assertSame( 'yes', Group_Subscription_Seats::force_recurring_proration( false ) );
+
+		unset( $_REQUEST['switch-subscription'] );
+		$this->assertFalse( Group_Subscription_Seats::force_recurring_proration( false ) );
+	}
+
+	/**
+	 * A switch of a flat (per-team) subscription keeps whatever the publisher
+	 * configured: its price does not move with the number of people.
+	 */
+	public function test_proration_untouched_for_flat_switch() {
+		$subscription = $this->make_per_seat_subscription(
+			937,
+			[
+				'quantity' => 1,
+				'per_seat' => false,
+			]
+		);
+		wp_set_current_user( $subscription->get_user_id() );
+		$_REQUEST['switch-subscription'] = 937;
+
+		$this->assertFalse( Group_Subscription_Seats::force_recurring_proration( false ) );
+	}
+
+	/**
+	 * By the time the checkout totals are calculated the switch request params
+	 * are gone, and the switch is only recorded on the cart item — which is what
+	 * must still identify a per-seat switch then.
+	 */
+	public function test_cart_switch_detection_reads_the_cart_item() {
+		$per_seat = $this->make_per_seat_subscription( 938, [ 'quantity' => 3 ] );
+		$flat     = $this->make_per_seat_subscription(
+			939,
+			[
+				'quantity' => 1,
+				'per_seat' => false,
+			]
+		);
+
+		$this->assertTrue(
+			Group_Subscription_Seats::cart_has_per_seat_switch(
+				[ 'key' => [ 'subscription_switch' => [ 'subscription_id' => $per_seat->get_id() ] ] ]
+			)
+		);
+		$this->assertFalse(
+			Group_Subscription_Seats::cart_has_per_seat_switch(
+				[ 'key' => [ 'subscription_switch' => [ 'subscription_id' => $flat->get_id() ] ] ]
+			)
+		);
+		$this->assertFalse(
+			Group_Subscription_Seats::cart_has_per_seat_switch( [ 'key' => [ 'product_id' => 1 ] ] ),
+			'A cart item that is not a switch at all should not be mistaken for one.'
+		);
 	}
 }

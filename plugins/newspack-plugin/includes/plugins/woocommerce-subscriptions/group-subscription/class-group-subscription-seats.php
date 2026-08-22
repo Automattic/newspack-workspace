@@ -3,9 +3,11 @@
  * Group subscription seats: the reader-facing seat count for per-seat groups.
  *
  * A seat is the WooCommerce line-item quantity, so WooCommerce Subscriptions bills
- * price x seats and prorates seat changes itself. This class owns what WooCommerce
- * cannot know: the publisher's seat bounds, the shared field label, and the guards
- * that keep a reader from adding a seat count outside those bounds at checkout.
+ * price x seats and works out the proration of a seat change itself. This class owns
+ * what WooCommerce cannot know: the publisher's seat bounds, the shared field label,
+ * the guards that keep a reader from buying a seat count outside those bounds or
+ * below the number of people already in their group, and the one WooCommerce
+ * Subscriptions setting a seat change cannot do without.
  *
  * @package Newspack
  */
@@ -53,6 +55,10 @@ class Group_Subscription_Seats {
 		// Seats are the only reason the modal checkout carries a quantity at all, so
 		// anything that isn't sold per seat is bought exactly once.
 		\add_filter( 'newspack_blocks_modal_checkout_quantity', [ __CLASS__, 'clamp_modal_quantity' ], 10, 2 );
+
+		// Seats bought mid-cycle have to be paid for from the day they are added,
+		// which is WooCommerce Subscriptions' recurring-price proration.
+		\add_filter( 'pre_option_woocommerce_subscriptions_apportion_recurring_price', [ __CLASS__, 'force_recurring_proration' ] );
 	}
 
 	/**
@@ -340,7 +346,10 @@ class Group_Subscription_Seats {
 			return $passed;
 		}
 		$product_id = ! empty( $values['variation_id'] ) ? $values['variation_id'] : $values['product_id'];
-		$error      = self::get_quantity_error( $product_id, $quantity );
+		// Editing the seat count on the cart page is a plain cart update: the switch
+		// it belongs to is recorded on the cart item, not in the request, so it has
+		// to be handed over or the occupancy rule would not apply here at all.
+		$error = self::get_quantity_error( $product_id, $quantity, $values['subscription_switch']['subscription_id'] ?? 0 );
 		if ( null === $error ) {
 			return true;
 		}
@@ -349,22 +358,153 @@ class Group_Subscription_Seats {
 	}
 
 	/**
+	 * Count the seats a group has already committed.
+	 *
+	 * Everyone in the group — the owner included — occupies a seat, and so does
+	 * every invitation still waiting to be accepted: the seat is being held for
+	 * whoever it was sent to. An expired invitation holds nothing.
+	 *
+	 * @param \WC_Subscription|int $subscription Subscription object or ID.
+	 *
+	 * @return int The number of occupied seats.
+	 */
+	public static function get_occupancy( $subscription ): int {
+		return Group_Subscription::get_member_count( $subscription )
+			+ count( Group_Subscription_Invite::get_invites( $subscription, false ) );
+	}
+
+	/**
+	 * Force WooCommerce Subscriptions' recurring-price proration on for a per-seat
+	 * group switch.
+	 *
+	 * A seat added mid-cycle has to be paid for from the day it is added, and
+	 * WooCommerce Subscriptions only charges for the rest of the cycle when the
+	 * store's "prorate recurring price" setting is on. A publisher who leaves it
+	 * off — the default — would give away the remainder of the cycle on every seat
+	 * increase, so it is turned on for per-seat group switches alone. Every other
+	 * switch keeps the publisher's own setting.
+	 *
+	 * @param mixed $value The pre-option value: false unless something has already answered.
+	 *
+	 * @return mixed 'yes' for a per-seat group switch, otherwise the value unchanged.
+	 */
+	public static function force_recurring_proration( $value ) {
+		// Two ways to recognise the same switch, because it is priced in two passes.
+		// The add-to-cart request still carries `switch-subscription`; by the time the
+		// checkout totals are recalculated those request parameters are long gone and
+		// the only remaining record of the switch is on the cart item.
+		if ( self::get_per_seat_switch_subscription() || self::cart_has_per_seat_switch( self::get_cart_items() ) ) {
+			return 'yes';
+		}
+		return $value;
+	}
+
+	/**
+	 * Whether a cart holds a switch of a per-seat group subscription.
+	 *
+	 * Takes the cart contents rather than reading them, so the rule can be
+	 * exercised without a WooCommerce session.
+	 *
+	 * @param array $cart_items Cart contents, in the shape `WC_Cart::get_cart()` returns.
+	 *
+	 * @return bool
+	 */
+	public static function cart_has_per_seat_switch( $cart_items ) {
+		foreach ( $cart_items as $cart_item ) {
+			$subscription_id = $cart_item['subscription_switch']['subscription_id'] ?? 0;
+			if ( ! $subscription_id ) {
+				continue;
+			}
+			$subscription = WooCommerce_Subscriptions::sanitize_subscription( $subscription_id );
+			if ( $subscription && Group_Subscription_Settings::is_per_seat( $subscription ) ) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/**
+	 * Get the current cart's contents.
+	 *
+	 * There is no cart on an admin, cron or REST request, so an empty one stands
+	 * in for "nothing to look at".
+	 *
+	 * @return array Cart contents.
+	 */
+	private static function get_cart_items() {
+		if ( ! function_exists( 'WC' ) || ! \WC() || ! \WC()->cart ) {
+			return [];
+		}
+		return \WC()->cart->get_cart();
+	}
+
+	/**
+	 * Get the per-seat subscription being switched, if any.
+	 *
+	 * Reads the switch request by default, and takes a subscription ID instead for
+	 * the places where the request no longer carries one. Either way only the
+	 * requester's own subscription counts: a seat count means nothing against a
+	 * group somebody else owns, and answering for one would let a crafted request
+	 * read back how many people are in it.
+	 *
+	 * @param int $subscription_id A subscription ID to resolve instead of the request's.
+	 *
+	 * @return \WC_Subscription|null The subscription being switched, or null.
+	 */
+	private static function get_per_seat_switch_subscription( $subscription_id = 0 ) {
+		$subscription_id = absint( $subscription_id );
+		if ( ! $subscription_id ) {
+			// phpcs:ignore WordPress.Security.NonceVerification.Recommended
+			$subscription_id = isset( $_REQUEST['switch-subscription'] ) ? absint( wp_unslash( $_REQUEST['switch-subscription'] ) ) : 0;
+		}
+		if ( ! $subscription_id || ! is_user_logged_in() ) {
+			return null;
+		}
+		$subscription = WooCommerce_Subscriptions::sanitize_subscription( $subscription_id );
+		if ( ! $subscription || (int) $subscription->get_user_id() !== get_current_user_id() ) {
+			return null;
+		}
+		return Group_Subscription_Settings::is_per_seat( $subscription ) ? $subscription : null;
+	}
+
+	/**
 	 * Get the blocking error message for a seat quantity.
 	 *
 	 * Null when the product is not per seat — flat (`per_team`) products never
-	 * enter these guards at all — or when the quantity fits the product's bounds.
+	 * enter these guards at all — or when the quantity fits the product's bounds
+	 * and the group it is for.
 	 *
-	 * @param \WC_Product|int $product  Product object or ID.
-	 * @param int             $quantity Requested quantity.
+	 * @param \WC_Product|int $product                Product object or ID.
+	 * @param int             $quantity               Requested quantity.
+	 * @param int             $switch_subscription_id Subscription being switched, when the request does not name one.
 	 *
 	 * @return string|null The error message, or null.
 	 */
-	private static function get_quantity_error( $product, $quantity ) {
+	private static function get_quantity_error( $product, $quantity, $switch_subscription_id = 0 ) {
 		if ( ! Group_Subscription_Settings::is_per_seat( $product ) ) {
 			return null;
 		}
 		$result = self::validate_quantity( $product, $quantity );
-		return is_wp_error( $result ) ? $result->get_error_message() : null;
+		if ( is_wp_error( $result ) ) {
+			return $result->get_error_message();
+		}
+		// Shrinking a group is fine, but not below the people already in it: seats
+		// are what capacity is measured in, so a seat taken away from a member or a
+		// pending invitation leaves the group over its own limit. Nobody can be
+		// removed on their behalf here, so the reader is asked to do it first.
+		$subscription = self::get_per_seat_switch_subscription( $switch_subscription_id );
+		if ( $subscription ) {
+			$occupancy = self::get_occupancy( $subscription );
+			if ( (int) $quantity < $occupancy ) {
+				return sprintf(
+					/* translators: 1: lowercase singular group label, 2: number of occupied seats. */
+					__( 'This %1$s has %2$d seats in use. Remove members or cancel invitations before reducing seats below that.', 'newspack-plugin' ),
+					Group_Subscription::get_label_lower( 'singular' ),
+					$occupancy
+				);
+			}
+		}
+		return null;
 	}
 }
 Group_Subscription_Seats::init();
