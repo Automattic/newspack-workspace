@@ -227,13 +227,29 @@ class Newspack_Test_IP_Access_Rule extends WP_UnitTestCase {
 	/**
 	 * Provide the shared client/server validation cases.
 	 *
+	 * Throws rather than returning an empty set: PHPUnit reports a provider with
+	 * no cases as a skipped test and exits 0, so a missing file or a JSON typo
+	 * would silently disarm this half of the parity guard while the jest half
+	 * still fails — making a shared problem look client-only.
+	 *
+	 * @throws RuntimeException If the fixture is unreadable, empty, or has duplicate labels.
+	 *
 	 * @return array[] Keyed by case label: [ entry, is_valid ].
 	 */
 	public function shared_validation_case_provider() {
 		$fixture_path = dirname( __DIR__, 2 ) . '/fixtures/ip-range-validation-cases.json';
-		$fixture      = json_decode( file_get_contents( $fixture_path ), true ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents, WordPressVIPMinimum.Performance.FetchingRemoteData.FileGetContentsUnknown -- Local test fixture.
-		$cases        = [];
+		$fixture_json = file_exists( $fixture_path ) ? file_get_contents( $fixture_path ) : ''; // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents, WordPressVIPMinimum.Performance.FetchingRemoteData.FileGetContentsUnknown -- Local test fixture.
+		$fixture      = json_decode( $fixture_json, true );
+		if ( empty( $fixture['cases'] ) ) {
+			throw new RuntimeException( sprintf( 'Shared validation fixture %s is missing, unreadable, or has no cases.', esc_html( $fixture_path ) ) );
+		}
+		$cases = [];
 		foreach ( $fixture['cases'] as $case ) {
+			// Cases are keyed by label here but not in jest, so a duplicate would
+			// drop a case from this suite only.
+			if ( isset( $cases[ $case['label'] ] ) ) {
+				throw new RuntimeException( sprintf( 'Duplicate case label %s in the shared validation fixture.', esc_html( wp_json_encode( $case['label'] ) ) ) );
+			}
 			$cases[ $case['label'] ] = [ $case['entry'], $case['valid'] ];
 		}
 		return $cases;

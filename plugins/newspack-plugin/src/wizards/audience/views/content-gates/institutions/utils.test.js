@@ -100,6 +100,18 @@ describe( 'analyzeIpRangeEntries: confusable characters', () => {
 		expect( analyzeIpRangeEntries( '10.0.0​.1' ).confusableCharacters ).toEqual( [ 'zero-width-space' ] );
 	} );
 
+	it( 'names the hyphen look-alikes that arrive from Word, PDFs, CJK input methods and Windows text files', () => {
+		expect( analyzeIpRangeEntries( '192.168.1.1‐192.168.1.9' ).confusableCharacters ).toEqual( [ 'hyphen' ] );
+		expect( analyzeIpRangeEntries( '192.168.1.1‑192.168.1.9' ).confusableCharacters ).toEqual( [ 'non-breaking-hyphen' ] );
+		expect( analyzeIpRangeEntries( '192.168.1.1‒192.168.1.9' ).confusableCharacters ).toEqual( [ 'figure-dash' ] );
+		expect( analyzeIpRangeEntries( '192.168.1.1－192.168.1.9' ).confusableCharacters ).toEqual( [ 'fullwidth-hyphen-minus' ] );
+		expect( analyzeIpRangeEntries( '﻿10.0.0.5' ).confusableCharacters ).toEqual( [ 'byte-order-mark' ] );
+	} );
+
+	it( 'names every confusable character in an entry, not just the first', () => {
+		expect( analyzeIpRangeEntries( '192.168.1.1 – 192.168.1.9' ).confusableCharacters ).toEqual( [ 'en-dash', 'narrow-no-break-space' ] );
+	} );
+
 	it( 'reports each character once across a list', () => {
 		expect( analyzeIpRangeEntries( '10.0.0.1 – 10.0.0.9, 192.168.0.1 – 192.168.0.9' ).confusableCharacters ).toEqual( [ 'en-dash' ] );
 	} );
@@ -110,21 +122,30 @@ describe( 'analyzeIpRangeEntries: confusable characters', () => {
 	} );
 } );
 
-describe( 'analyzeIpRangeEntries: over-broad ranges', () => {
+describe( 'analyzeIpRangeEntries: over-broad entries', () => {
 	it( 'flags a dash range wider than a /16', () => {
 		// One wrong digit in the end address: ~1.6 billion addresses.
 		expect( analyzeIpRangeEntries( '203.0.113.0-243.0.113.255' ).overBroad ).toEqual( [ '203.0.113.0-243.0.113.255' ] );
 		expect( analyzeIpRangeEntries( '0.0.0.0-255.255.255.255' ).overBroad ).toEqual( [ '0.0.0.0-255.255.255.255' ] );
 	} );
 
-	it( 'leaves plausible ranges alone, including a full /16', () => {
-		expect( analyzeIpRangeEntries( '203.0.113.0-203.0.113.255' ).overBroad ).toEqual( [] );
-		expect( analyzeIpRangeEntries( '10.0.0.0-10.0.255.255' ).overBroad ).toEqual( [] );
+	it( 'flags a CIDR block wider than a /16, where one wrong mask digit is the same mistake', () => {
+		expect( analyzeIpRangeEntries( '0.0.0.0/0' ).overBroad ).toEqual( [ '0.0.0.0/0' ] );
+		expect( analyzeIpRangeEntries( '10.0.0.0/8' ).overBroad ).toEqual( [ '10.0.0.0/8' ] );
+		expect( analyzeIpRangeEntries( '10.0.0.0/15' ).overBroad ).toEqual( [ '10.0.0.0/15' ] );
 	} );
 
-	it( 'does not warn about CIDR blocks or invalid ranges', () => {
-		expect( analyzeIpRangeEntries( '0.0.0.0/0' ).overBroad ).toEqual( [] );
+	it( 'leaves plausible entries alone, including a full /16 written either way', () => {
+		expect( analyzeIpRangeEntries( '203.0.113.0-203.0.113.255' ).overBroad ).toEqual( [] );
+		expect( analyzeIpRangeEntries( '10.0.0.0-10.0.255.255' ).overBroad ).toEqual( [] );
+		expect( analyzeIpRangeEntries( '10.0.0.0/16' ).overBroad ).toEqual( [] );
+		expect( analyzeIpRangeEntries( '198.51.100.0/24' ).overBroad ).toEqual( [] );
+		expect( analyzeIpRangeEntries( '203.0.113.5' ).overBroad ).toEqual( [] );
+	} );
+
+	it( 'does not warn about invalid entries, which never grant access anyway', () => {
 		expect( analyzeIpRangeEntries( '255.255.255.255-0.0.0.0' ).overBroad ).toEqual( [] );
+		expect( analyzeIpRangeEntries( '10.0.0.0/33' ).overBroad ).toEqual( [] );
 	} );
 
 	it( 'is independent of the invalid-entry list', () => {

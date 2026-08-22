@@ -38,6 +38,12 @@
 		{ "label": "trailing non-breaking space", "entry": "1.2.3.4 ", "valid": false },
 		{ "label": "leading non-breaking space", "entry": " 10.0.0.5", "valid": false },
 		{ "label": "trailing ideographic space", "entry": "10.0.0.1　", "valid": false },
-		{ "label": "zero-width space inside the address", "entry": "10.0.0​.1", "valid": false }
+		{ "label": "zero-width space inside the address", "entry": "10.0.0​.1", "valid": false },
+		{ "label": "Unicode hyphen instead of a hyphen-minus", "entry": "192.168.1.1‐192.168.1.9", "valid": false },
+		{ "label": "non-breaking hyphen instead of a hyphen-minus", "entry": "192.168.1.1‑192.168.1.9", "valid": false },
+		{ "label": "figure dash instead of a hyphen-minus", "entry": "192.168.1.1‒192.168.1.9", "valid": false },
+		{ "label": "fullwidth hyphen-minus instead of a hyphen-minus", "entry": "192.168.1.1－192.168.1.9", "valid": false },
+		{ "label": "narrow no-break space around the dash", "entry": "192.168.1.1 - 192.168.1.9", "valid": false },
+		{ "label": "leading byte order mark", "entry": "﻿10.0.0.5", "valid": false }
 	]
 }

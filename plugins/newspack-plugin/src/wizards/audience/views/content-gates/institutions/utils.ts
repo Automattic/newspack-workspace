@@ -16,26 +16,34 @@ const IPV4_OCTET = '(25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])';
 const IPV4_REGEX = new RegExp( `^${ IPV4_OCTET }(\\.${ IPV4_OCTET }){3}$` );
 
 /**
- * Dash ranges wider than a /16 are more likely a typo than an institution's
- * real allocation: a single wrong digit in the end address (`10.0.1.0-110.0.1.255`)
- * silently authorizes millions of addresses, which is a revenue leak nobody notices.
+ * Entries covering more addresses than a /16 are more likely a typo than an
+ * institution's real allocation: one wrong digit in a dash range's end address
+ * (`10.0.1.0-110.0.1.255`), or a `/8` typed where `/28` was meant, silently
+ * authorizes millions of addresses, which is a revenue leak nobody notices.
  */
-export const OVER_BROAD_RANGE_SIZE = 65535;
+export const OVER_BROAD_RANGE_SIZE = 65536;
 
 /**
- * Characters that look like a hyphen or a space but aren't, keyed by a stable
- * identifier the UI maps to a translated label. Word, Google Docs and Outlook
- * autocorrect ` - ` into an en dash, so these arrive by copy-paste far more
- * often than they are typed.
+ * Characters that look like a hyphen, a space, or nothing at all but aren't,
+ * keyed by a stable identifier the UI maps to a translated label. Word, Google
+ * Docs and Outlook autocorrect ` - ` into an en dash, Word's Ctrl+Shift+hyphen
+ * produces a non-breaking hyphen, CJK input methods produce the fullwidth and
+ * ideographic variants, and Windows text files carry a byte order mark — so
+ * these arrive by copy-paste far more often than they are typed.
  */
 export const CONFUSABLE_CHARACTERS = {
+	hyphen: '\u2010',
+	'non-breaking-hyphen': '\u2011',
+	'figure-dash': '\u2012',
 	'en-dash': '\u2013',
 	'em-dash': '\u2014',
 	'minus-sign': '\u2212',
+	'fullwidth-hyphen-minus': '\uff0d',
 	'non-breaking-space': '\u00a0',
 	'narrow-no-break-space': '\u202f',
 	'ideographic-space': '\u3000',
 	'zero-width-space': '\u200b',
+	'byte-order-mark': '\ufeff',
 } as const;
 
 export type ConfusableCharacterKey = keyof typeof CONFUSABLE_CHARACTERS;
@@ -45,7 +53,7 @@ export type IpRangeAnalysis = {
 	invalid: string[];
 	/** Confusable characters found in invalid entries that would otherwise be valid. */
 	confusableCharacters: ConfusableCharacterKey[];
-	/** Valid dash ranges wide enough to be worth a second look. */
+	/** Valid entries wide enough to be worth a second look. */
 	overBroad: string[];
 };
 
@@ -108,8 +116,8 @@ function isValidEntry( token: string ): boolean {
  */
 function replaceConfusableCharacters( token: string ): string {
 	return token
-		.replace( /[\u2013\u2014\u2212]/g, '-' )
-		.replace( /\u200b/g, '' )
+		.replace( /[\u2010\u2011\u2012\u2013\u2014\u2212\uff0d]/g, '-' )
+		.replace( /[\u200b\ufeff]/g, '' )
 		.replace( /[\u00a0\u202f\u3000]/g, ' ' );
 }
 
@@ -131,21 +139,35 @@ function getConfusableCharacterKeys( token: string ): ConfusableCharacterKey[] {
 }
 
 /**
- * Whether a valid dash range spans an implausibly large number of addresses.
+ * How many addresses a valid entry covers.
+ *
+ * @param token A valid entry: a CIDR block, a dash range, or a single address.
+ * @return The number of addresses the entry authorizes.
  */
-function isOverBroadRange( token: string ): boolean {
-	if ( token.includes( '/' ) || ! token.includes( '-' ) || ! isValidEntry( token ) ) {
-		return false;
+function getAddressCount( token: string ): number {
+	if ( token.includes( '/' ) ) {
+		const [ , bits ] = splitOnce( token, '/' ).map( phpTrim );
+		return 2 ** ( 32 - Number( bits ) );
 	}
-	const [ start, end ] = splitOnce( token, '-' ).map( phpTrim );
-	return ipv4ToNumber( end ) - ipv4ToNumber( start ) > OVER_BROAD_RANGE_SIZE;
+	if ( token.includes( '-' ) ) {
+		const [ start, end ] = splitOnce( token, '-' ).map( phpTrim );
+		return ipv4ToNumber( end ) - ipv4ToNumber( start ) + 1;
+	}
+	return 1;
+}
+
+/**
+ * Whether a valid entry covers an implausibly large number of addresses.
+ */
+function isOverBroadEntry( token: string ): boolean {
+	return isValidEntry( token ) && getAddressCount( token ) > OVER_BROAD_RANGE_SIZE;
 }
 
 /**
  * Inspect a comma-separated IP list for entries worth warning the admin about.
  *
  * @param raw The raw comma-separated input value.
- * @return The invalid entries, the confusable characters behind them, and any over-broad ranges.
+ * @return The invalid entries, the confusable characters behind them, and any over-broad entries.
  */
 export function analyzeIpRangeEntries( raw: string ): IpRangeAnalysis {
 	const tokens = raw
@@ -157,6 +179,6 @@ export function analyzeIpRangeEntries( raw: string ): IpRangeAnalysis {
 	return {
 		invalid,
 		confusableCharacters,
-		overBroad: tokens.filter( isOverBroadRange ),
+		overBroad: tokens.filter( isOverBroadEntry ),
 	};
 }

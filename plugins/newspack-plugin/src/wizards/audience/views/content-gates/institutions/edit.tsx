@@ -27,7 +27,7 @@ import {
 	useConfirmDialog,
 } from '../../../../../../packages/components/src';
 import { analyzeIpRangeEntries, EMPTY_IP_RANGE_ANALYSIS, OVER_BROAD_RANGE_SIZE } from './utils';
-import type { ConfusableCharacterKey } from './utils';
+import type { ConfusableCharacterKey, IpRangeAnalysis } from './utils';
 import { WIZARD_STORE_NAMESPACE } from '../../../../../../packages/components/src/wizard/store';
 
 const { useHistory } = Router;
@@ -64,12 +64,20 @@ function formatEntryList( entries: string[] ): string {
  */
 function getConfusableCharacterLabel( key: ConfusableCharacterKey ): string {
 	switch ( key ) {
+		case 'hyphen':
+			return __( 'Unicode hyphen (‐)', 'newspack-plugin' );
+		case 'non-breaking-hyphen':
+			return __( 'non-breaking hyphen (‑)', 'newspack-plugin' );
+		case 'figure-dash':
+			return __( 'figure dash (‒)', 'newspack-plugin' );
 		case 'en-dash':
 			return __( 'en dash (–)', 'newspack-plugin' );
 		case 'em-dash':
 			return __( 'em dash (—)', 'newspack-plugin' );
 		case 'minus-sign':
 			return __( 'minus sign (−)', 'newspack-plugin' );
+		case 'fullwidth-hyphen-minus':
+			return __( 'fullwidth hyphen (－)', 'newspack-plugin' );
 		case 'non-breaking-space':
 			return __( 'non-breaking space', 'newspack-plugin' );
 		case 'narrow-no-break-space':
@@ -78,7 +86,73 @@ function getConfusableCharacterLabel( key: ConfusableCharacterKey ): string {
 			return __( 'ideographic space', 'newspack-plugin' );
 		case 'zero-width-space':
 			return __( 'zero-width space', 'newspack-plugin' );
+		case 'byte-order-mark':
+			return __( 'byte order mark', 'newspack-plugin' );
 	}
+}
+
+/**
+ * Warnings to show for an analyzed IP range value, in order of severity.
+ *
+ * Shared by the inline notices under the field and by the snackbar raised on
+ * save, so an admin who pastes a list and clicks Save without ever leaving the
+ * field still gets the same message.
+ *
+ * @param analysis The result of analyzing the field value.
+ * @return One sentence per warning class that applies; empty when the value is clean.
+ */
+function getIpRangeWarnings( analysis: IpRangeAnalysis ): string[] {
+	const { invalid, confusableCharacters, overBroad } = analysis;
+	const warnings: string[] = [];
+	if ( invalid.length > 0 ) {
+		warnings.push(
+			sprintf(
+				/* translators: %1$s: comma-separated list of invalid IP entries. %2$s: single IP example. %3$s: CIDR block example. %4$s: IP range example. */
+				_n(
+					'This entry is invalid and will never grant access: %1$s. Use a single IPv4 address (e.g. %2$s), a CIDR block (e.g. %3$s), or an IP range from lowest to highest (e.g. %4$s).',
+					'These entries are invalid and will never grant access: %1$s. Use a single IPv4 address (e.g. %2$s), a CIDR block (e.g. %3$s), or an IP range from lowest to highest (e.g. %4$s).',
+					invalid.length,
+					'newspack-plugin'
+				),
+				formatEntryList( invalid ),
+				'203.0.113.5',
+				'198.51.100.0/24',
+				'203.0.113.0-203.0.113.255'
+			)
+		);
+	}
+	if ( confusableCharacters.length > 0 ) {
+		// Phrased without a count: the list names characters while the sentence is
+		// about entries, and one entry can carry several of them.
+		warnings.push(
+			sprintf(
+				/* translators: %s: comma-separated list of character names, e.g. "en dash (–)". */
+				__(
+					'One or more entries contain characters that look standard but are not: %s. Retype them using a plain hyphen (-) and regular spaces.',
+					'newspack-plugin'
+				),
+				confusableCharacters.map( getConfusableCharacterLabel ).join( ', ' )
+			)
+		);
+	}
+	if ( overBroad.length > 0 ) {
+		warnings.push(
+			sprintf(
+				/* translators: %1$s: comma-separated list of unusually wide IP entries. %2$s: formatted number of addresses. */
+				_n(
+					'This entry covers more than %2$s addresses: %1$s. Check the end address or CIDR mask — an over-broad entry grants access far beyond the institution.',
+					'These entries each cover more than %2$s addresses: %1$s. Check the end addresses or CIDR masks — an over-broad entry grants access far beyond the institution.',
+					overBroad.length,
+					'newspack-plugin'
+				),
+				formatEntryList( overBroad ),
+				// The number sits inside a translated sentence, so format it in the
+				// admin's locale rather than whatever the browser happens to be set to.
+				new Intl.NumberFormat( document.documentElement.lang || undefined ).format( OVER_BROAD_RANGE_SIZE )
+			)
+		);
+	}
+	return warnings;
 }
 
 const EMPTY_INSTITUTION: Omit< Institution, 'id' > = {
@@ -195,6 +269,11 @@ export default function InstitutionEdit( { match }: { match: { params: { id?: st
 	const handleSave = useCallback( () => {
 		setIsSaving( true );
 		startLoadingData( { isQuietLoading: true } );
+		// Saving unmounts this view, taking the inline notices with it — and the
+		// common path is a paste followed straight by Save. Re-analyze the value
+		// being saved and hand any warnings to the wizard snackbar, which outlives
+		// the navigation. The save itself is never blocked.
+		const warningsOnSave = getIpRangeWarnings( analyzeIpRangeEntries( institution.meta?.np_institution_ip_range || '' ) );
 		const payload = {
 			title: institution.title.raw,
 			excerpt: institution.excerpt.raw,
@@ -209,6 +288,17 @@ export default function InstitutionEdit( { match }: { match: { params: { id?: st
 		request
 			.then( () => {
 				setIsDirty( false );
+				if ( warningsOnSave.length > 0 ) {
+					addNotice( {
+						message: sprintf(
+							/* translators: %s: one or more sentences describing what is wrong with the saved IP range. */
+							__( 'Institution saved, but its IP range needs attention. %s', 'newspack-plugin' ),
+							warningsOnSave.join( ' ' )
+						),
+						type: 'warning',
+						id: 'institution-ip-range-warning',
+					} );
+				}
 				history.push( '/institutions' );
 			} )
 			.catch( () => {
@@ -299,7 +389,7 @@ export default function InstitutionEdit( { match }: { match: { params: { id?: st
 	const description = institution.excerpt.raw;
 	const meta = institution.meta || EMPTY_INSTITUTION.meta;
 	const { np_institution_email_domain: emailDomain, np_institution_ip_range: ipRange, np_institution_reader_data: readerData } = meta;
-	const { invalid: invalidIpEntries, confusableCharacters, overBroad: overBroadIpRanges } = ipRangeAnalysis;
+	const ipRangeWarnings = getIpRangeWarnings( ipRangeAnalysis );
 
 	return (
 		<div className="newspack-institution__edit">
@@ -389,61 +479,15 @@ export default function InstitutionEdit( { match }: { match: { params: { id?: st
 								onBlur={ ( event: React.FocusEvent< HTMLInputElement > ) =>
 									setIpRangeAnalysis( analyzeIpRangeEntries( event.target.value ) )
 								}
-								placeholder="192.168.1.0/24, 203.0.113.0-203.0.113.255, 10.0.0.5"
+								placeholder="198.51.100.0/24, 203.0.113.0-203.0.113.255, 203.0.113.5"
 								aria-describedby={ IP_RANGE_MESSAGES_ID }
-								aria-invalid={ invalidIpEntries.length > 0 }
+								aria-invalid={ ipRangeAnalysis.invalid.length > 0 }
 							/>
 							{ /* Always rendered so it is an established live region by the time a warning appears. */ }
 							<div id={ IP_RANGE_MESSAGES_ID } role="status">
-								{ invalidIpEntries.length > 0 && (
-									<Notice
-										isWarning
-										noticeText={ sprintf(
-											/* translators: %1$s: comma-separated list of invalid IP entries. %2$s: single IP example. %3$s: CIDR block example. %4$s: IP range example. */
-											_n(
-												'This entry is invalid and will never grant access: %1$s. Use a single IPv4 address (e.g. %2$s), a CIDR block (e.g. %3$s), or an IP range from lowest to highest (e.g. %4$s).',
-												'These entries are invalid and will never grant access: %1$s. Use a single IPv4 address (e.g. %2$s), a CIDR block (e.g. %3$s), or an IP range from lowest to highest (e.g. %4$s).',
-												invalidIpEntries.length,
-												'newspack-plugin'
-											),
-											formatEntryList( invalidIpEntries ),
-											'10.0.0.5',
-											'192.168.1.0/24',
-											'203.0.113.0-203.0.113.255'
-										) }
-									/>
-								) }
-								{ confusableCharacters.length > 0 && (
-									<Notice
-										isWarning
-										noticeText={ sprintf(
-											/* translators: %s: comma-separated list of character names, e.g. "en dash (–)". */
-											_n(
-												'An entry contains a %s, which looks like a standard character but is not. Retype it using a plain hyphen (-) and regular spaces.',
-												'Entries contain characters that look standard but are not: %s. Retype them using a plain hyphen (-) and regular spaces.',
-												confusableCharacters.length,
-												'newspack-plugin'
-											),
-											confusableCharacters.map( getConfusableCharacterLabel ).join( ', ' )
-										) }
-									/>
-								) }
-								{ overBroadIpRanges.length > 0 && (
-									<Notice
-										isWarning
-										noticeText={ sprintf(
-											/* translators: %1$s: comma-separated list of unusually wide IP ranges. %2$s: formatted number of addresses. */
-											_n(
-												'This range covers more than %2$s addresses: %1$s. Check the end address — an over-broad range grants access far beyond the institution.',
-												'These ranges cover more than %2$s addresses each: %1$s. Check the end addresses — an over-broad range grants access far beyond the institution.',
-												overBroadIpRanges.length,
-												'newspack-plugin'
-											),
-											formatEntryList( overBroadIpRanges ),
-											new Intl.NumberFormat().format( OVER_BROAD_RANGE_SIZE + 1 )
-										) }
-									/>
-								) }
+								{ ipRangeWarnings.map( warning => (
+									<Notice key={ warning } isWarning noticeText={ warning } />
+								) ) }
 							</div>
 						</CardBody>
 					</CardSettingsGroup>
