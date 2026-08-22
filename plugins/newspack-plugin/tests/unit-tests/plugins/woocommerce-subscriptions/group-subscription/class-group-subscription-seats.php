@@ -826,4 +826,59 @@ class Test_Group_Subscription_Seats extends WP_UnitTestCase {
 		$this->assertSame( 3, Group_Subscription_Seats::clamp_modal_quantity( 1, 951 ) );
 		$this->assertSame( 25, Group_Subscription_Seats::clamp_modal_quantity( 25, 951 ), 'An unlimited maximum leaves a large request alone.' );
 	}
+
+	/**
+	 * WooCommerce Subscriptions re-adds a subscription's own line items to the cart
+	 * at their stored quantity to take a renewal, resubscribe or initial payment.
+	 * The reader is choosing nothing there, so the seat guards must not refuse it:
+	 * a group that bought ten seats before the publisher lowered the maximum to
+	 * five would otherwise be unable to pay for the plan it already has.
+	 */
+	public function test_wcs_payment_carts_bypass_the_seat_guards() {
+		global $wc_mock_notices;
+		$this->make_per_seat_product( 952, 2, 5 );
+
+		foreach ( [ 'subscription_renewal', 'subscription_resubscribe', 'subscription_initial_payment' ] as $key ) {
+			$cart_item_data = [ $key => [ 'subscription_id' => 123 ] ];
+			$this->assertTrue(
+				Group_Subscription_Seats::validate_add_to_cart( true, 952, 10, 0, [], $cart_item_data ),
+				sprintf( 'A %s cart item should pass validation at its stored quantity.', $key )
+			);
+			$this->assertSame(
+				$cart_item_data,
+				Group_Subscription_Seats::guard_add_cart_item_data( $cart_item_data, 952, 0, 10 ),
+				sprintf( 'A %s cart item should not be thrown out of WC_Cart::add_to_cart().', $key )
+			);
+		}
+		$this->assertEmpty( $wc_mock_notices );
+	}
+
+	/**
+	 * The same exemption for a flat group plan bought before per-seat pricing
+	 * existed: its line item can carry a quantity above one, and that is the
+	 * quantity WooCommerce Subscriptions re-adds to take the payment.
+	 */
+	public function test_wcs_payment_cart_keeps_a_legacy_flat_group_quantity() {
+		global $wc_mock_notices;
+		$this->make_flat_product( 953 );
+		$cart_item_data = [ 'subscription_renewal' => [ 'subscription_id' => 124 ] ];
+
+		$this->assertTrue( Group_Subscription_Seats::validate_add_to_cart( true, 953, 3, 0, [], $cart_item_data ) );
+		$this->assertSame( $cart_item_data, Group_Subscription_Seats::guard_add_cart_item_data( $cart_item_data, 953, 0, 3 ) );
+		$this->assertEmpty( $wc_mock_notices );
+	}
+
+	/**
+	 * The exemption is for what WooCommerce Subscriptions re-adds, not for anything
+	 * that happens to carry cart item data: an ordinary add is still held to the
+	 * publisher's bounds.
+	 */
+	public function test_a_plain_add_is_still_held_to_the_bounds() {
+		global $wc_mock_notices;
+		$this->make_per_seat_product( 954, 2, 5 );
+
+		$this->assertFalse( Group_Subscription_Seats::validate_add_to_cart( true, 954, 10, 0, [], [ 'referer' => 'https://example.com' ] ) );
+		$this->assertNotEmpty( $wc_mock_notices );
+		$this->assertSame( 'error', $wc_mock_notices[0]['type'] );
+	}
 }

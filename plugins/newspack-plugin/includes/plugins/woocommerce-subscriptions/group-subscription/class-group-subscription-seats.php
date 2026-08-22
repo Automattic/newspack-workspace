@@ -48,7 +48,7 @@ class Group_Subscription_Seats {
 		// AJAX, Store API), but not `WC_Cart::add_to_cart()` itself, which the group
 		// subscription modal checkout calls directly. The cart-item-data filter runs
 		// inside `add_to_cart()` on every path, so it backstops the direct-call route.
-		\add_filter( 'woocommerce_add_to_cart_validation', [ __CLASS__, 'validate_add_to_cart' ], 10, 4 );
+		\add_filter( 'woocommerce_add_to_cart_validation', [ __CLASS__, 'validate_add_to_cart' ], 10, 6 );
 		\add_filter( 'woocommerce_add_cart_item_data', [ __CLASS__, 'guard_add_cart_item_data' ], 9, 4 );
 		\add_filter( 'woocommerce_update_cart_validation', [ __CLASS__, 'validate_cart_update' ], 10, 4 );
 
@@ -376,18 +376,26 @@ class Group_Subscription_Seats {
 	 * Applied by WooCommerce's own request handlers (form handler, AJAX, Store
 	 * API) before an item reaches the cart.
 	 *
-	 * @param bool $passed       Whether the item passed validation so far.
-	 * @param int  $product_id   Product being added.
-	 * @param int  $quantity     Requested quantity.
-	 * @param int  $variation_id Variation being added, if any.
+	 * The last two arguments are not always there: WooCommerce's own add-to-cart
+	 * form handler applies the filter with five, and its AJAX handler with three.
+	 * The callers that do send cart item data are the ones that matter here —
+	 * WooCommerce Subscriptions' payment carts and WooCommerce's own session
+	 * restore — so the filter is registered for six and the rest default.
+	 *
+	 * @param bool  $passed         Whether the item passed validation so far.
+	 * @param int   $product_id     Product being added.
+	 * @param int   $quantity       Requested quantity.
+	 * @param int   $variation_id   Variation being added, if any.
+	 * @param array $variations     Variation attributes, if any.
+	 * @param array $cart_item_data Cart item data, when the caller has any.
 	 *
 	 * @return bool Whether the item passed validation.
 	 */
-	public static function validate_add_to_cart( $passed, $product_id, $quantity, $variation_id = 0 ) {
+	public static function validate_add_to_cart( $passed, $product_id, $quantity, $variation_id = 0, $variations = [], $cart_item_data = [] ) {
 		if ( ! $passed ) {
 			return $passed;
 		}
-		$error = self::get_quantity_error( $variation_id ? $variation_id : $product_id, $quantity );
+		$error = self::get_quantity_error( $variation_id ? $variation_id : $product_id, $quantity, null, $cart_item_data );
 		if ( null === $error ) {
 			return true;
 		}
@@ -421,11 +429,44 @@ class Group_Subscription_Seats {
 			// clean cart error. validate_add_to_cart() covers the Store API path.
 			return $cart_item_data;
 		}
-		$error = self::get_quantity_error( $variation_id ? $variation_id : $product_id, $quantity );
+		$error = self::get_quantity_error( $variation_id ? $variation_id : $product_id, $quantity, null, $cart_item_data );
 		if ( null !== $error ) {
 			throw new \Exception( esc_html( $error ) );
 		}
 		return $cart_item_data;
+	}
+
+	/**
+	 * Whether a cart item is one WooCommerce Subscriptions is re-adding to take a
+	 * payment for a subscription the reader already has.
+	 *
+	 * `WCS_Cart_Renewal::setup_cart()` puts the subscription's own line items back
+	 * in the cart at their stored quantity — for a manual renewal, for paying a
+	 * failed renewal, for a resubscribe, or for the initial payment on a pending
+	 * subscription — and that runs the add-to-cart guards. The seat bounds are a
+	 * rule about what a reader may choose to buy, and none of these is a choice:
+	 * a group that bought ten seats before the publisher lowered the maximum to
+	 * five would otherwise be locked out of paying for the plan it already has,
+	 * and a flat group plan bought at a quantity above one before per-seat pricing
+	 * existed would trip the single-subscription guard.
+	 *
+	 * Each of the three carries its own key, taken from the `$cart_item_key`
+	 * property of the WooCommerce Subscriptions class that sets it.
+	 *
+	 * @param array $cart_item_data Cart item data.
+	 *
+	 * @return bool
+	 */
+	private static function is_wcs_payment_cart_item( $cart_item_data ) {
+		if ( ! is_array( $cart_item_data ) ) {
+			return false;
+		}
+		foreach ( [ 'subscription_renewal', 'subscription_resubscribe', 'subscription_initial_payment' ] as $key ) {
+			if ( ! empty( $cart_item_data[ $key ] ) ) {
+				return true;
+			}
+		}
+		return false;
 	}
 
 	/**
@@ -627,10 +668,17 @@ class Group_Subscription_Seats {
 	 * @param int             $quantity               Requested quantity.
 	 * @param int|null        $switch_subscription_id Subscription being switched. Null reads
 	 *                                                the request; 0 means no switch at all.
+	 * @param array           $cart_item_data         Cart item data, when the caller has any.
 	 *
 	 * @return string|null The error message, or null.
 	 */
-	private static function get_quantity_error( $product, $quantity, $switch_subscription_id = null ) {
+	private static function get_quantity_error( $product, $quantity, $switch_subscription_id = null, $cart_item_data = [] ) {
+		// Nothing here is a rule about a subscription the reader already owns, so a
+		// cart WooCommerce Subscriptions is filling in order to take payment for one
+		// is left alone entirely.
+		if ( self::is_wcs_payment_cart_item( $cart_item_data ) ) {
+			return null;
+		}
 		if ( ! Group_Subscription_Settings::is_per_seat( $product ) ) {
 			// One flat plan is the whole group. Buying several of it would bill the
 			// group price over and over for capacity the plan's own limit already
