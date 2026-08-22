@@ -28,9 +28,10 @@ describe( 'StatusIndicator', () => {
 		expect( container.querySelector( '.newspack-status-indicator__icon' ) ).toBeInTheDocument();
 	} );
 
-	// A Status column offers its statuses as separate filters, so two of them
-	// rendering the same glyph would make two different states read alike.
-	it( 'draws a different glyph per status', () => {
+	// The rule that no two statuses in one column share a glyph is pinned in the
+	// status-map suites, where a collision could actually appear. All this checks
+	// is that the prop reaches the SVG, so a map holding distinct glyphs draws them.
+	it( 'draws the glyph it is given rather than a fixed one', () => {
 		const { container: active } = render( <StatusIndicator icon={ published }>Active</StatusIndicator> );
 		const { container: inactive } = render( <StatusIndicator icon={ drafts }>Inactive</StatusIndicator> );
 		expect( active.querySelector( 'svg' ).innerHTML ).not.toBe( inactive.querySelector( 'svg' ).innerHTML );

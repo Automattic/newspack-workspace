@@ -43,7 +43,7 @@ In a field definition:
 | Prop | Type | Required | Description |
 | --- | --- | --- | --- |
 | `icon` | `Icon`'s `icon` prop | yes | The status glyph, from `@wordpress/icons`. |
-| `children` | `ReactNode` | no | The status label. |
+| `children` | `ReactNode` | yes | The status label. `@wordpress/primitives` forces `aria-hidden` on the glyph, so this is the whole accessible name. |
 
 Anything else is spread onto the wrapper, a `Stack` from `@wordpress/ui`, which
 takes the props of a `div`.
@@ -74,3 +74,8 @@ The margin is derived rather than written as `-4px`, so it follows the two
 values it depends on: `calc((#{wp-vars.$grid-unit-20} - #{wp-vars.$icon-size}) / 2)`,
 the glyph's footprint minus the box it sits in, halved for one side. Sass folds
 it to a literal at build time, so nothing is paid for at runtime.
+
+The box it sits in is the `size={ 24 }` the component passes to `Icon`, which is
+`$icon-size`. The two are written in different files, so anything that changes
+the rendered size has to change the token the margin reads, or the trim stops
+matching the padding it is there to remove.
