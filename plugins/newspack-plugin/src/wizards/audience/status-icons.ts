@@ -21,5 +21,3 @@ const POST_STATUS_ICONS = {
 } as const;
 
 export const postStatusIcon = ( status: string ) => POST_STATUS_ICONS[ status as keyof typeof POST_STATUS_ICONS ] ?? drafts;
-
-export default POST_STATUS_ICONS;
