@@ -21,11 +21,13 @@ jest.mock( '@wordpress/api-fetch', () => jest.fn() );
 
 jest.mock( '../../../../packages/components/src/wizard/store', () => ( { WIZARD_STORE_NAMESPACE: 'test/group-list-labels' } ) );
 
+// The list reads the router at module scope, so the proxy has to answer here too.
 jest.mock( '../../../../packages/components/src', () => ( {
 	DataViews: () => null,
 	Button: () => null,
 	Notice: () => null,
 	Waiting: () => null,
+	Router: { useHistory: () => ( { push: jest.fn() } ), useLocation: () => ( { pathname: '/' } ) },
 } ) );
 
 jest.mock( '../data/use-avatars', () => ( { SHOW_AVATARS: false, useAvatars: () => ( { avatars: {}, loading: false } ) } ) );
