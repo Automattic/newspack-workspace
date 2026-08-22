@@ -34,6 +34,10 @@ class Group_Subscription_Seats {
 			return;
 		}
 		\add_filter( 'woocommerce_quantity_input_args', [ __CLASS__, 'quantity_input_args' ], 10, 2 );
+		// WooCommerce's variation script rebuilds the quantity input from the
+		// chosen variation's own data, which would otherwise throw away the bounds
+		// quantity_input_args() set for the parent.
+		\add_filter( 'woocommerce_available_variation', [ __CLASS__, 'available_variation_args' ], 10, 3 );
 		// The stock quantity-input template only turns `product_name` into a
 		// screen-reader-only label, so sighted readers see no field description.
 		// This prints a visible one, tied to the input_id quantity_input_args() sets.
@@ -258,6 +262,12 @@ class Group_Subscription_Seats {
 		}
 		$field = self::get_field_args( $product );
 		if ( ! $field ) {
+			// A flat group plan's price covers the whole group and its capacity is
+			// the publisher's own limit, so there is exactly one of it to buy.
+			if ( self::is_flat_group( $product ) ) {
+				$args['max_value']   = 1;
+				$args['input_value'] = 1;
+			}
 			return $args;
 		}
 		// A stable, product-specific ID so render_quantity_label()'s
@@ -271,6 +281,50 @@ class Group_Subscription_Seats {
 		$args['input_value']  = max( (int) ( $args['input_value'] ?? $field['min'] ), $field['min'] );
 		$args['product_name'] = $field['label']; // Feeds the template's screen-reader-only label.
 		return $args;
+	}
+
+	/**
+	 * Publish a variation's seat bounds to WooCommerce's variation script.
+	 *
+	 * The bounds `quantity_input_args()` sets are rendered once, for the parent
+	 * product. Choosing a variation makes WooCommerce's own script rewrite the
+	 * quantity input from `min_qty`/`max_qty` in the variation's data, which
+	 * would drop the publisher's bounds the moment a reader picks a tier — and
+	 * would let a flat tier be bought several times over. Each variation
+	 * therefore carries its own answer.
+	 *
+	 * @param array       $data      The variation data WooCommerce hands the script.
+	 * @param \WC_Product $product   The parent variable product.
+	 * @param \WC_Product $variation The variation.
+	 *
+	 * @return array The variation data.
+	 */
+	public static function available_variation_args( $data, $product, $variation ) {
+		$field = self::get_field_args( $variation );
+		if ( $field ) {
+			$data['min_qty'] = $field['min'];
+			$data['max_qty'] = $field['max'] > 0 ? $field['max'] : '';
+		} elseif ( self::is_flat_group( $variation ) ) {
+			$data['max_qty'] = 1;
+		}
+		return $data;
+	}
+
+	/**
+	 * Whether a product is a group product sold at one flat price for the group.
+	 *
+	 * The counterpart to `Group_Subscription_Settings::is_per_seat()`: a group
+	 * product that is not sold per seat is sold as a single subscription, however
+	 * many people it covers.
+	 *
+	 * @param \WC_Product|int $product Product object or ID.
+	 *
+	 * @return bool
+	 */
+	private static function is_flat_group( $product ) {
+		$settings = Group_Subscription_Settings::get_product_settings( $product );
+		return ! empty( $settings['enabled'] )
+			&& Group_Subscription_Settings::PRICING_MODE_PER_TEAM === $settings['pricing_mode'];
 	}
 
 	/**
@@ -552,9 +606,9 @@ class Group_Subscription_Seats {
 	/**
 	 * Get the blocking error message for a seat quantity.
 	 *
-	 * Null when the product is not per seat — flat (`per_team`) products never
-	 * enter these guards at all — or when the quantity fits the product's bounds
-	 * and the group it is for.
+	 * Null when the product has nothing to do with groups, or when the quantity
+	 * fits the product's bounds and the group it is for. A flat group product has
+	 * no seats to bound, but exactly one of it can be bought.
 	 *
 	 * The product here is the one being bought, so a group switching onto a
 	 * per-seat plan is measured against its seats whatever plan it is leaving.
@@ -568,6 +622,17 @@ class Group_Subscription_Seats {
 	 */
 	private static function get_quantity_error( $product, $quantity, $switch_subscription_id = null ) {
 		if ( ! Group_Subscription_Settings::is_per_seat( $product ) ) {
+			// One flat plan is the whole group. Buying several of it would bill the
+			// group price over and over for capacity the plan's own limit already
+			// covers — the product page's quantity field is the way in, since the
+			// modal checkout is held to one item by clamp_modal_quantity().
+			if ( self::is_flat_group( $product ) && (int) $quantity > 1 ) {
+				return sprintf(
+					/* translators: %s: lowercase singular group label (e.g. "group", "team"). */
+					__( 'This %s plan is sold as a single subscription.', 'newspack-plugin' ),
+					Group_Subscription::get_label_lower( 'singular' )
+				);
+			}
 			return null;
 		}
 		$result = self::validate_quantity( $product, $quantity );

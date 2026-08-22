@@ -304,7 +304,7 @@ class Test_Group_Subscription_Seats extends WP_UnitTestCase {
 	/**
 	 * Constrains min/max/step to the product's bounds and clamps a below-minimum
 	 * input value up to the minimum, sets a product-specific input_id, but
-	 * leaves flat products' args untouched.
+	 * leaves a product with no group settings untouched.
 	 */
 	public function test_quantity_input_args_constrains_bounds() {
 		wc_mocks_set_is_product( true );
@@ -321,12 +321,75 @@ class Test_Group_Subscription_Seats extends WP_UnitTestCase {
 		$unlimited_args = Group_Subscription_Seats::quantity_input_args( [], $unlimited );
 		$this->assertSame( '', $unlimited_args['max_value'], 'A max of 0 (unlimited) should not set a max_value.' );
 
-		$flat          = $this->make_flat_product( 922 );
+		$plain         = wc_create_mock_product( [ 'id' => 922 ] );
 		$original_args = [
 			'min_value' => 1,
 			'max_value' => 99,
 		];
-		$this->assertSame( $original_args, Group_Subscription_Seats::quantity_input_args( $original_args, $flat ) );
+		$this->assertSame( $original_args, Group_Subscription_Seats::quantity_input_args( $original_args, $plain ) );
+	}
+
+	/**
+	 * A flat group plan's quantity input is pinned to one on the product page.
+	 * Its price covers the whole group, so there is no second one to buy — and
+	 * without a maximum the reader can put five of them in the cart.
+	 */
+	public function test_quantity_input_args_pins_flat_group_to_one() {
+		wc_mocks_set_is_product( true );
+
+		$flat = $this->make_flat_product( 931 );
+		$args = Group_Subscription_Seats::quantity_input_args(
+			[
+				'min_value'   => 1,
+				'max_value'   => 99,
+				'input_value' => 3,
+			],
+			$flat
+		);
+
+		$this->assertSame( 1, $args['max_value'] );
+		$this->assertSame( 1, $args['input_value'] );
+	}
+
+	/**
+	 * WooCommerce's variation script rebuilds the quantity input from the chosen
+	 * variation's own data, so each variation has to publish its own bounds: the
+	 * seat minimum and maximum for a per-seat tier, a maximum of one for a flat
+	 * tier, and nothing at all for a variation that is not a group product.
+	 */
+	public function test_available_variation_args_publish_per_variation_bounds() {
+		$parent = wc_create_mock_product( [ 'id' => 932 ] );
+
+		$bounded = Group_Subscription_Seats::available_variation_args(
+			[
+				'min_qty' => 1,
+				'max_qty' => '',
+			],
+			$parent,
+			$this->make_per_seat_product( 933, 2, 6 )
+		);
+		$this->assertSame( 2, $bounded['min_qty'] );
+		$this->assertSame( 6, $bounded['max_qty'] );
+
+		$unlimited = Group_Subscription_Seats::available_variation_args( [], $parent, $this->make_per_seat_product( 934, 3, 0 ) );
+		$this->assertSame( 3, $unlimited['min_qty'] );
+		$this->assertSame( '', $unlimited['max_qty'], 'A max of 0 (unlimited) should leave the input without a maximum.' );
+
+		$flat = Group_Subscription_Seats::available_variation_args(
+			[
+				'min_qty' => 1,
+				'max_qty' => 99,
+			],
+			$parent,
+			$this->make_flat_product( 935 )
+		);
+		$this->assertSame( 1, $flat['max_qty'] );
+
+		$untouched = [
+			'min_qty' => 1,
+			'max_qty' => 99,
+		];
+		$this->assertSame( $untouched, Group_Subscription_Seats::available_variation_args( $untouched, $parent, wc_create_mock_product( [ 'id' => 936 ] ) ) );
 	}
 
 	/**
@@ -365,6 +428,36 @@ class Test_Group_Subscription_Seats extends WP_UnitTestCase {
 		$this->assertFalse( Group_Subscription_Seats::allow_per_seat_switching( false, $plain ) );
 		$this->assertFalse( Group_Subscription_Seats::allow_per_seat_switching( false, null ) );
 		$this->assertTrue( Group_Subscription_Seats::allow_per_seat_switching( true, $flat ) );
+	}
+
+	/**
+	 * A flat group plan is bought once. Its price covers the whole group and its
+	 * capacity is the publisher's own limit, so several of it in the cart would
+	 * bill the group price over and over for capacity already paid for.
+	 */
+	public function test_flat_group_product_cannot_be_bought_more_than_once() {
+		global $wc_mock_notices;
+		$this->make_flat_product( 942 );
+
+		$this->assertTrue( Group_Subscription_Seats::validate_add_to_cart( true, 942, 1 ) );
+		$this->assertEmpty( $wc_mock_notices );
+
+		$this->assertFalse( Group_Subscription_Seats::validate_add_to_cart( true, 942, 5 ) );
+		$this->assertNotEmpty( $wc_mock_notices );
+		$this->assertSame( 'error', $wc_mock_notices[0]['type'] );
+	}
+
+	/**
+	 * The same guard on the direct-call path — and only for group products: a
+	 * product with no group settings is an ordinary purchase at any quantity.
+	 */
+	public function test_flat_quantity_guard_applies_only_to_group_products() {
+		wc_create_mock_product( [ 'id' => 943 ] );
+		$this->assertSame( [], Group_Subscription_Seats::guard_add_cart_item_data( [], 943, 0, 5 ) );
+
+		$this->make_flat_product( 944 );
+		$this->expectException( \Exception::class );
+		Group_Subscription_Seats::guard_add_cart_item_data( [], 944, 0, 2 );
 	}
 
 	/**
