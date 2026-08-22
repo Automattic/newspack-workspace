@@ -11,6 +11,7 @@ import { drafts, envelope, globe, published, scheduled, trash } from '@wordpress
 import { dateI18n, getSettings as getDateSettings } from '@wordpress/date';
 
 import UserRow, { avatarPropsFromAuthor } from '../../../components/user-row';
+import { useLockedPost } from '../../hooks/use-locked-posts';
 import { getAdminUrl } from '../../admin-globals';
 import { isManualProvider } from '../../../utils/service-provider';
 import { formatPostDate } from '../../utils/format-date';
@@ -53,24 +54,25 @@ const renderLock = lock => (
 	/>
 );
 
-const renderTitle =
-	( locks = {} ) =>
-	( { item } ) => {
-		const raw = getTitle( item );
-		// New newsletters carry WordPress's "Auto Draft" placeholder title; show a friendly label instead.
-		const title = ! raw || 'auto-draft' === item?.status ? __( '(no subject)', 'newspack-newsletters' ) : raw;
-		const lock = locks[ item?.id ];
-		// DataViews lays the title cell out as a nowrap flex row, so the lock
-		// line needs its own column wrapper to sit under the subject.
-		return (
-			<VStack className="newspack-newsletters-list__title-cell" spacing={ 1 }>
-				<a className="newspack-newsletters-list__title" href={ editUrl( item ) } onClickCapture={ event => event.stopPropagation() }>
-					<strong>{ title }</strong>
-				</a>
-				{ lock && renderLock( lock ) }
-			</VStack>
-		);
-	};
+// A component, not a render callback: it reads the lock for its own row from
+// context, so a lock change re-renders the affected cells instead of rebuilding
+// the field definitions DataViews uses as each cell's element type.
+const TitleCell = ( { item } ) => {
+	const raw = getTitle( item );
+	// New newsletters carry WordPress's "Auto Draft" placeholder title; show a friendly label instead.
+	const title = ! raw || 'auto-draft' === item?.status ? __( '(no subject)', 'newspack-newsletters' ) : raw;
+	const lock = useLockedPost( item?.id );
+	// DataViews lays the title cell out as a nowrap flex row, so the lock
+	// line needs its own column wrapper to sit under the subject.
+	return (
+		<VStack className="newspack-newsletters-list__title-cell" spacing={ 1 }>
+			<a className="newspack-newsletters-list__title" href={ editUrl( item ) } onClickCapture={ event => event.stopPropagation() }>
+				<strong>{ title }</strong>
+			</a>
+			{ lock && renderLock( lock ) }
+		</VStack>
+	);
+};
 
 const renderStatus = ( { item } ) => {
 	const status = item?.newspack_newsletters_status || {};
@@ -161,7 +163,7 @@ const renderPublicPage = ( { item } ) => {
 
 const renderDate = ( { item } ) => formatPostDate( item );
 
-export function getFields( { authors = [], categories = [], tags = [], sendLists = [] } = {}, locks = {} ) {
+export function getFields( { authors = [], categories = [], tags = [], sendLists = [] } = {} ) {
 	const statusLabels = STATUS_KIND_LABELS();
 
 	return [
@@ -170,7 +172,7 @@ export function getFields( { authors = [], categories = [], tags = [], sendLists
 			label: __( 'Subject', 'newspack-newsletters' ),
 			enableGlobalSearch: true,
 			getValue: ( { item } ) => getTitle( item ),
-			render: renderTitle( locks ),
+			render: TitleCell,
 		},
 		{
 			id: 'status',

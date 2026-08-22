@@ -11,9 +11,11 @@ function createJQuery() {
 			handlers[ name ].push( { event, handler } );
 			return api;
 		},
-		off: event => {
+		// Mirrors jQuery: without a handler the namespace is cleared wholesale,
+		// with one only that binding goes.
+		off: ( event, handler ) => {
 			const [ name ] = event.split( '.' );
-			handlers[ name ] = ( handlers[ name ] || [] ).filter( entry => entry.event !== event );
+			handlers[ name ] = ( handlers[ name ] || [] ).filter( entry => entry.event !== event || ( handler && entry.handler !== handler ) );
 			return api;
 		},
 	};
@@ -105,5 +107,82 @@ describe( 'useLockedPosts', () => {
 		delete window.wp.heartbeat;
 		const { result } = renderHook( () => useLockedPosts( [ 7 ] ) );
 		expect( result.current ).toEqual( {} );
+	} );
+
+	// Paging and filtering swap the id list under a mounted hook; a stale
+	// closure or a leaked handler would only show up here.
+	it( 'rebinds a single handler when the id list changes', () => {
+		const { rerender } = renderHook( ( { ids } ) => useLockedPosts( ids ), { initialProps: { ids: [ 7, 9 ] } } );
+
+		rerender( { ids: [ 11 ] } );
+
+		expect( window.jQuery.count( 'heartbeat-send' ) ).toBe( 1 );
+		const data = {};
+		act( () => window.jQuery.trigger( 'heartbeat-send', data ) );
+		expect( data[ 'wp-check-locked-posts' ] ).toEqual( [ 'post-11' ] );
+	} );
+
+	it( 'drops reported locks when the id list empties', () => {
+		const { result, rerender } = renderHook( ( { ids } ) => useLockedPosts( ids ), { initialProps: { ids: [ 7 ] } } );
+
+		act( () => window.jQuery.trigger( 'heartbeat-tick', { 'wp-check-locked-posts': LOCK } ) );
+		expect( result.current[ 7 ] ).toBeDefined();
+
+		rerender( { ids: [] } );
+
+		expect( result.current ).toEqual( {} );
+		expect( window.jQuery.count( 'heartbeat-send' ) ).toBe( 0 );
+	} );
+
+	// A new object every beat would re-render the whole list.
+	it( 'keeps the same map when a tick repeats the current locks', () => {
+		const { result } = renderHook( () => useLockedPosts( [ 7 ] ) );
+
+		act( () => window.jQuery.trigger( 'heartbeat-tick', { 'wp-check-locked-posts': LOCK } ) );
+		const first = result.current;
+
+		// Same values, fresh objects — exactly what the next tick sends.
+		act( () => window.jQuery.trigger( 'heartbeat-tick', { 'wp-check-locked-posts': JSON.parse( JSON.stringify( LOCK ) ) } ) );
+
+		expect( result.current ).toBe( first );
+	} );
+
+	it( 'replaces the map when a lock changes hands', () => {
+		const { result } = renderHook( () => useLockedPosts( [ 7 ] ) );
+
+		act( () => window.jQuery.trigger( 'heartbeat-tick', { 'wp-check-locked-posts': LOCK } ) );
+		const first = result.current;
+
+		act( () =>
+			window.jQuery.trigger( 'heartbeat-tick', {
+				'wp-check-locked-posts': { 'post-7': { name: 'Bob', text: 'Bob is currently editing' } },
+			} )
+		);
+
+		expect( result.current ).not.toBe( first );
+		expect( result.current[ 7 ].text ).toBe( 'Bob is currently editing' );
+	} );
+
+	// The teardown is namespaced, so it must also be handler-scoped: a
+	// namespace-wide off() would deafen a second consumer on unmount.
+	it( 'leaves a second consumer bound when the first unmounts', () => {
+		const { unmount } = renderHook( () => useLockedPosts( [ 7 ] ) );
+		renderHook( () => useLockedPosts( [ 9 ] ) );
+		expect( window.jQuery.count( 'heartbeat-send' ) ).toBe( 2 );
+
+		unmount();
+
+		expect( window.jQuery.count( 'heartbeat-send' ) ).toBe( 1 );
+		expect( window.jQuery.count( 'heartbeat-tick' ) ).toBe( 1 );
+	} );
+
+	it( 'throttles forced connects across a burst of id changes', () => {
+		const { rerender } = renderHook( ( { ids } ) => useLockedPosts( ids ), { initialProps: { ids: [ 7 ] } } );
+		expect( connectNow ).toHaveBeenCalledTimes( 1 );
+
+		rerender( { ids: [ 8 ] } );
+		rerender( { ids: [ 9 ] } );
+
+		expect( connectNow ).toHaveBeenCalledTimes( 1 );
 	} );
 } );
