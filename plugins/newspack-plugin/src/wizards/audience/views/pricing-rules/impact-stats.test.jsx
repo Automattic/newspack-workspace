@@ -105,6 +105,17 @@ describe( 'ImpactStats', () => {
 		expect( screen.queryByText( 'Applies to new sign-ups only' ) ).not.toBeInTheDocument();
 	} );
 
+	// The reason is a quiet line beside the description, not part of the headline.
+	it( 'puts the locked reason in the footer at the description scale', () => {
+		render( stats( { totalMatching: 36, countLimited: false, audience: audience( { application: 'locked' } ) } ) );
+
+		const tile = tileFor( 'Protected' );
+		const note = within( tile ).getByText( 'Applies to new sign-ups only' );
+		expect( note ).toHaveClass( 'newspack-stat-card__description' );
+		expect( note.closest( '.newspack-stat-card__footer' ) ).toBeInTheDocument();
+		expect( tile.querySelector( '.newspack-stat-card__secondary' ) ).not.toBeInTheDocument();
+	} );
+
 	it( 'hangs the products action off its own tile and no other', () => {
 		render( stats( { totalMatching: 36, countLimited: false, audience: audience(), onViewProducts: jest.fn() } ) );
 

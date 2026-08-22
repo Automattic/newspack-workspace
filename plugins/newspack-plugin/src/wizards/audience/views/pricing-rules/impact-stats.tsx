@@ -37,7 +37,7 @@ interface Tile {
 	// Spoken instead of the visible value, whose meaning may rest on punctuation.
 	valueLabel?: string;
 	description: string;
-	secondary?: string;
+	note?: string;
 	actionLabel?: string;
 	onAction?: () => void;
 }
@@ -118,28 +118,29 @@ export default function ImpactStats( {
 				label: __( 'Eligible at renewal', 'newspack-plugin' ),
 				...( isLocked ? { value: null } : bounded( scope.caught, scope.count_limited ) ),
 				description: __( 'Repriced at their next renewal', 'newspack-plugin' ),
-				secondary: isLocked ? lockedNote : undefined,
+				note: isLocked ? lockedNote : undefined,
 			},
 			{
 				id: 'protected',
 				label: _x( 'Protected', 'subscribers who keep their original price', 'newspack-plugin' ),
 				...( isLocked ? { value: null } : bounded( scope.protected, scope.count_limited ) ),
 				description: __( 'Keep the price they signed up at', 'newspack-plugin' ),
-				secondary: isLocked ? lockedNote : undefined,
+				note: isLocked ? lockedNote : undefined,
 			}
 		);
 	}
 
 	return (
 		<Grid className="newspack-pricing-rules__stats" columns={ tiles.length } gutter={ 16 } noMargin>
-			{ tiles.map( ( { id, label, value, valueLabel, description, secondary, actionLabel, onAction } ) => (
+			{ tiles.map( ( { id, label, value, valueLabel, description, note, actionLabel, onAction } ) => (
 				<StatCard.Root key={ id }>
 					<StatCard.Label>{ label }</StatCard.Label>
 					<StatCard.Body>
 						<StatCard.Value value={ value } valueLabel={ valueLabel } />
-						{ secondary && <StatCard.Secondary>{ secondary }</StatCard.Secondary> }
 					</StatCard.Body>
 					<StatCard.Footer>
+						{ /* Its own element, or Footer would fold the reason and the description into one sentence. */ }
+						{ note && <p className="newspack-stat-card__description">{ note }</p> }
 						{ description }
 						{ actionLabel && onAction && (
 							// Opens a modal, so a button styled as a link rather than an anchor.
