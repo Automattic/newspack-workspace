@@ -833,7 +833,12 @@ class Subscriptions_Tiers {
 				<?php
 			elseif ( $line_quantity ) :
 				// No seats field to submit the count, so carry the seats the reader already
-				// pays for; without it the switched line item would be written at one seat.
+				// pays for. This branch only runs when none of the offered tiers sells
+				// seats, and on a site with group subscriptions turned on the modal
+				// checkout's clamp holds such a tier to one item regardless — so what it
+				// really covers is the site that has the feature off, where no seats field
+				// is rendered and no clamp is registered, and the existing quantity would
+				// otherwise be rewritten down to one.
 				?>
 				<input type="hidden" name="quantity" value="<?php echo esc_attr( $line_quantity ); ?>">
 			<?php endif; ?>
