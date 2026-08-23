@@ -12,6 +12,18 @@
 class Bulk_Actions_Test extends WP_UnitTestCase {
 
 	/**
+	 * Register the newsletter CPT. Not redundant: the WP test suite does not register
+	 * it, and without it `map_meta_cap()` cannot resolve `edit_post` for this post type
+	 * -- every capability assertion here then trips an incorrect-usage notice. A full
+	 * suite run hides that, because another test file registers the CPT first, so this
+	 * only shows up when the class runs on its own.
+	 */
+	public function set_up() {
+		parent::set_up();
+		\Newspack_Newsletters::register_cpt();
+	}
+
+	/**
 	 * Create a newsletter owned by the given user.
 	 *
 	 * @param int    $author Author user ID.
