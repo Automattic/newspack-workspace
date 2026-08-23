@@ -714,6 +714,41 @@ class Test_Membership_Gates_Migration extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * A plan with no content restriction rules maps to no AC rules, which is what
+	 * group_plans_by_fingerprint() reads to skip the plan instead of publishing an
+	 * inert gate.
+	 */
+	public function test_map_rules_to_ac_format_maps_an_empty_rule_set_to_no_rules() {
+		$this->assertSame( [], $this->invoke_private_static( 'map_rules_to_ac_format', [ [] ] ) );
+	}
+
+	/**
+	 * Two rules naming the same whole post type collapse into a single 'post_types'
+	 * entry carrying one slug, rather than repeating it.
+	 */
+	public function test_map_rules_to_ac_format_dedupes_identical_whole_post_type_rules() {
+		$mapped_rules = $this->invoke_private_static(
+			'map_rules_to_ac_format',
+			[
+				[
+					$this->make_rule( 'post_type', 'post', [] ),
+					$this->make_rule( 'post_type', 'post', [] ),
+				],
+			]
+		);
+
+		$this->assertSame(
+			[
+				[
+					'slug'  => 'post_types',
+					'value' => [ 'post' ],
+				],
+			],
+			$mapped_rules
+		);
+	}
+
+	/**
 	 * Rules with an empty content-type name are dropped entirely.
 	 */
 	public function test_map_rules_to_ac_format_skips_rules_with_empty_content_type() {
@@ -930,6 +965,33 @@ HTML;
 		$this->assertCount( 1, $issues );
 		$this->assertStringContainsString( '1 of its 2 content rules do not resolve', $issues[0] );
 		$this->assertStringContainsString( 'post', $issues[0], 'The dead slug is named so the operator knows what is left ungated.' );
+	}
+
+	/**
+	 * Rules with an empty value are dropped by get_gate_content_rules(), so a gate
+	 * written with two rules can evaluate as having one. The verification reads the written meta,
+	 * not the evaluated rules, so the dropped slug is named rather than the gate
+	 * passing as clean while the content that rule covered stays readable.
+	 */
+	public function test_verify_migrated_gate_flags_a_written_rule_that_selects_no_content() {
+		$gate_id = $this->create_enforceable_gate(
+			[
+				[
+					'slug'  => 'post_types',
+					'value' => [ 'post' ],
+				],
+				[
+					'slug'  => 'category',
+					'value' => [],
+				],
+			]
+		);
+
+		$issues = $this->invoke_private_static( 'verify_migrated_gate', [ $gate_id ] );
+
+		$this->assertCount( 1, $issues );
+		$this->assertStringContainsString( '1 of its 2 content rules select no content', $issues[0] );
+		$this->assertStringContainsString( 'category', $issues[0] );
 	}
 
 	/**
@@ -1243,6 +1305,61 @@ HTML;
 
 		$this->assertCount( 1, $issues );
 		$this->assertStringContainsString( 'no access rules', $issues[0] );
+	}
+
+	/**
+	 * A WC rule naming a taxonomy with no terms maps to a rule with an empty value,
+	 * which Content_Rules::get_gate_content_rules() drops at read time — so it gates
+	 * nothing while still being counted in the summary. The dry run says so before the
+	 * operator commits to --live, in both shapes: on its own the gate would cover no
+	 * content at all, and alongside a rule that does resolve it is a partial leak.
+	 */
+	public function test_compute_pre_write_issues_flags_rules_that_select_no_content() {
+		$layouts = [
+			'registration'  => '',
+			'custom_access' => null,
+		];
+
+		$whole_taxonomy_only = $this->invoke_private_static(
+			'map_rules_to_ac_format',
+			[ [ $this->make_rule( 'taxonomy', 'category', [] ) ] ]
+		);
+		$this->assertSame(
+			[
+				[
+					'slug'  => 'category',
+					'value' => [],
+				],
+			],
+			$whole_taxonomy_only,
+			'A term-less taxonomy rule still maps to a rule the evaluator will never see.'
+		);
+
+		$issues = $this->invoke_private_static(
+			'compute_pre_write_issues',
+			[ $whole_taxonomy_only, false, $layouts, [] ]
+		);
+		$this->assertCount( 1, $issues );
+		$this->assertStringContainsString( 'none of its content rules select any content', $issues[0] );
+		$this->assertStringContainsString( 'category', $issues[0] );
+
+		$mixed = $this->invoke_private_static(
+			'map_rules_to_ac_format',
+			[
+				[
+					$this->make_rule( 'taxonomy', 'category', [] ),
+					$this->make_rule( 'post_type', 'post', [] ),
+				],
+			]
+		);
+
+		$issues = $this->invoke_private_static(
+			'compute_pre_write_issues',
+			[ $mixed, false, $layouts, [] ]
+		);
+		$this->assertCount( 1, $issues );
+		$this->assertStringContainsString( '1 of its 2 content rules select no content', $issues[0] );
+		$this->assertStringContainsString( 'category', $issues[0], 'The dropped slug is named so the operator knows what stays ungated.' );
 	}
 
 	/**

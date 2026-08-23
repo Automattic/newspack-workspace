@@ -684,30 +684,37 @@ class Membership_Gates_Migration {
 				fn( $slug ) => ! self::is_content_rule_slug_resolvable( $slug )
 			)
 		);
-		if ( empty( $content_rules ) ) {
-			// get_gate_content_rules() drops empty-value rules, so a gate can be written
-			// with rules and still evaluate as having none — say which of the two it is,
-			// because the summary's Content Rules column reports the pre-write count.
-			$written_rules = \get_post_meta( $gate_id, 'content_rules', true );
-			$issues[]      = empty( $written_rules )
-				? 'it has no content rules'
-				: 'none of its content rules select any content';
-		} elseif ( count( $unresolvable ) === count( $content_rules ) ) {
-			$issues[] = sprintf(
-				'none of its content rules resolve to a post type or taxonomy the evaluator can match (%s)',
-				implode( ', ', $unresolvable )
-			);
-		} elseif ( ! empty( $unresolvable ) ) {
-			// A partially dead rule set is a partial leak, not a clean gate: the rules
-			// combine with 'any', so the content selected by the unresolvable rules is
-			// left ungated while the rest is covered. A plan restricting all posts plus a
-			// category is exactly this shape, and it is a common way plans are configured.
-			$issues[] = sprintf(
-				'%d of its %d content rules do not resolve to a post type or taxonomy the evaluator can match (%s), so the content they select stays ungated',
-				count( $unresolvable ),
-				count( $content_rules ),
-				implode( ', ', $unresolvable )
-			);
+
+		// A gate can be written with rules and still evaluate as having fewer, or none
+		// — say so and name the slugs, because the summary's Content Rules column
+		// reports the pre-write count.
+		$written_rules = \get_post_meta( $gate_id, 'content_rules', true );
+		$written_rules = is_array( $written_rules ) ? $written_rules : [];
+		$valueless     = self::describe_valueless_rules( $written_rules );
+		if ( empty( $written_rules ) ) {
+			$issues[] = 'it has no content rules';
+		} elseif ( null !== $valueless ) {
+			$issues[] = $valueless;
+		}
+
+		if ( ! empty( $unresolvable ) ) {
+			if ( count( $unresolvable ) === count( $content_rules ) ) {
+				$issues[] = sprintf(
+					'none of its content rules resolve to a post type or taxonomy the evaluator can match (%s)',
+					implode( ', ', $unresolvable )
+				);
+			} else {
+				// A partially dead rule set is a partial leak, not a clean gate: the rules
+				// combine with 'any', so the content selected by the unresolvable rules is
+				// left ungated while the rest is covered. A plan restricting all posts plus a
+				// category is exactly this shape, and it is a common way plans are configured.
+				$issues[] = sprintf(
+					'%d of its %d content rules do not resolve to a post type or taxonomy the evaluator can match (%s), so the content they select stays ungated',
+					count( $unresolvable ),
+					count( $content_rules ),
+					implode( ', ', $unresolvable )
+				);
+			}
 		}
 
 		// A gate with neither mode active is skipped outright; an active mode with no
@@ -775,6 +782,14 @@ class Membership_Gates_Migration {
 	private static function compute_pre_write_issues( array $ac_rules, bool $has_purchase, array $layouts, array $merged_product_ids ): array {
 		$issues = [];
 
+		// Mirror the empty-value check from verify_migrated_gate(): a rule the read
+		// path drops selects nothing, so the operator sees it before committing to
+		// --live rather than in the post-write verification.
+		$valueless = self::describe_valueless_rules( $ac_rules );
+		if ( null !== $valueless ) {
+			$issues[] = $valueless;
+		}
+
 		// Mirror the unresolvable-slug check from verify_migrated_gate(): slugs the
 		// evaluator cannot resolve map to no content, so those rules leave their
 		// content ungated after cutover.
@@ -816,6 +831,46 @@ class Membership_Gates_Migration {
 		}
 
 		return $issues;
+	}
+
+	/**
+	 * Report content rules that select no content because their value is empty.
+	 *
+	 * Content_Rules::get_gate_content_rules() drops every rule with an empty value
+	 * before the evaluator sees it. A WC rule naming a taxonomy but no terms maps to
+	 * exactly that shape — slug = the taxonomy, value = [] — so it is written, counted
+	 * in the summary's Content Rules column, and then silently ignored at read time.
+	 * Naming the slugs pre-cutover is what turns that into a visible warning.
+	 *
+	 * @param array[] $rules AC-format content rules: [ [ 'slug' => string, 'value' => string[] ], ... ].
+	 *
+	 * @return string|null A human-readable problem, or null when every rule has a value.
+	 */
+	private static function describe_valueless_rules( array $rules ): ?string {
+		$valueless = array_values(
+			array_column(
+				array_filter( $rules, fn( $rule ) => empty( $rule['value'] ) ),
+				'slug'
+			)
+		);
+		if ( empty( $valueless ) ) {
+			return null;
+		}
+		if ( count( $valueless ) === count( $rules ) ) {
+			return sprintf(
+				'none of its content rules select any content (%s)',
+				implode( ', ', $valueless )
+			);
+		}
+		// A partially dropped rule set is a partial leak: the surviving rules still
+		// gate their content, while whatever the dropped ones were meant to cover
+		// stays readable.
+		return sprintf(
+			'%d of its %d content rules select no content (%s), so the content they were meant to cover stays ungated',
+			count( $valueless ),
+			count( $rules ),
+			implode( ', ', $valueless )
+		);
 	}
 
 	/**
@@ -1358,6 +1413,8 @@ class Membership_Gates_Migration {
 
 			$object_ids = array_map( 'strval', array_values( $rule->get_object_ids() ) );
 
+			// WC's content type is one of exactly two values, 'post_type' or 'taxonomy',
+			// so everything that is not the taxonomy branch is a post-type rule.
 			if ( 'taxonomy' === $rule->get_content_type() ) {
 				// Taxonomy rules key under the taxonomy slug; the value is the term IDs.
 				$slug  = $content_type_name;
