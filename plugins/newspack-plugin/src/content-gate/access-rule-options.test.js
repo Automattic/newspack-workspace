@@ -120,7 +120,16 @@ describe( 'resolveAccessRuleOptionTokens', () => {
 		expect( resolveAccessRuleOptionTokens( tokens, OPTIONS, [ 188250, 999999 ] ) ).toEqual( [ 188250, 999999 ] );
 	} );
 
-	it( 'does not invent a value that was neither an option nor already stored', () => {
+	it( 'accepts a bare ID no option describes, so a removed variation can be typed back', () => {
+		// Evaluation resolves more than the option list holds: an "Active subscription"
+		// rule matches a variation ID. Rejecting it would make the caution's advice
+		// impossible to act on.
+		expect( resolveAccessRuleOptionTokens( [ '999999' ], OPTIONS ) ).toEqual( [ 999999 ] );
+	} );
+
+	it( 'does not invent a value from a full token that was neither an option nor stored', () => {
+		// Only a bare ID adds an unlisted value. A `<name> (#<id>)` token resolves from
+		// the rule's own values, so pasting one from elsewhere adds nothing.
 		const token = formatMissingAccessRuleOptionLabel( 999999, MISSING_PRODUCT );
 		expect( resolveAccessRuleOptionTokens( [ token ], OPTIONS, [ 188250 ] ) ).toEqual( [] );
 	} );
@@ -135,9 +144,12 @@ describe( 'resolveAccessRuleOptionTokens', () => {
 } );
 
 describe( 'isAccessRuleOptionInput', () => {
-	it( 'accepts a full token and a bare ID, and rejects free text', () => {
+	it( 'accepts a full token and any bare ID, and rejects free text', () => {
 		expect( isAccessRuleOptionInput( 'Annual (#188250)', OPTIONS ) ).toBe( true );
 		expect( isAccessRuleOptionInput( '188250', OPTIONS ) ).toBe( true );
+		// The message says "type its ID", and the IDs the caution points publishers at
+		// are precisely the ones no option describes.
+		expect( isAccessRuleOptionInput( '999999', OPTIONS ) ).toBe( true );
 		expect( isAccessRuleOptionInput( 'Annual', OPTIONS ) ).toBe( false );
 	} );
 } );

@@ -12,9 +12,10 @@
 	.components-form-token-field .components-form-token-field__help {
 		margin-top: wp-vars.$grid-unit-10;
 	}
-	// Caution under a picker holding IDs the option list cannot describe. Gutenberg's
+	// Caution under a picker holding IDs the option list cannot describe, and the note
+	// shown when the option list could not be refreshed. Gutenberg's
 	// `.block-editor-block-inspector p` rule zeroes the margin, so restore it here.
-	&__notice {
+	.newspack-access-rule-values-notice {
 		color: wp-colors.$gray-700;
 		font-size: wp-vars.$helptext-font-size;
 		margin: wp-vars.$grid-unit-10 0 0;

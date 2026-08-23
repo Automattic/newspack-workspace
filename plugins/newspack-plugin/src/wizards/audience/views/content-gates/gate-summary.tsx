@@ -41,12 +41,18 @@ const formatAccessRuleOptionValues = ( values: Array< string | number >, options
 
 /**
  * Human-readable summary for an access rule value.
+ *
+ * @param rule          The rule to summarise.
+ * @param optionsBySlug The options to name the rule's values with, from
+ *                      `useAccessRuleOptions()`. Falls back to the list localised with
+ *                      the page for a rule the caller did not supply.
  */
-const formatAccessRuleValue = ( rule: GateAccessRule ): string => {
+const formatAccessRuleValue = ( rule: GateAccessRule, optionsBySlug: Record< string, AccessRuleOption[] > ): string => {
 	const config = availableAccessRules[ rule.slug ];
+	const options = optionsBySlug[ rule.slug ] ?? config?.options;
 	if ( 'one_time_purchase' === rule.slug ) {
 		const { product_ids: productIds, duration_value: durationValue, duration_unit: durationUnit } = normalizeOneTimePurchaseValue( rule.value );
-		const products = formatAccessRuleOptionValues( productIds, config?.options, rule.slug );
+		const products = formatAccessRuleOptionValues( productIds, options, rule.slug );
 		if ( 'forever' === durationUnit ) {
 			return sprintf(
 				// translators: %s: list of product names.
@@ -76,8 +82,8 @@ const formatAccessRuleValue = ( rule: GateAccessRule ): string => {
 			products
 		);
 	}
-	if ( Array.isArray( rule.value ) && config?.options ) {
-		return formatAccessRuleOptionValues( rule.value, config.options, rule.slug );
+	if ( Array.isArray( rule.value ) && options ) {
+		return formatAccessRuleOptionValues( rule.value, options, rule.slug );
 	}
 	// Boolean rules carry no displayable value (mirrors the pre-formatter
 	// rendering, where React printed nothing for a boolean child).
@@ -96,10 +102,19 @@ export type GateSummarySection = {
 /**
  * Build the Content rules / Registered access / Paid access sections for a gate.
  *
- * @param gate         The gate (live edit state or a saved gate).
- * @param isNewsletter Whether this is a premium-newsletter gate (hides registration).
+ * @param gate          The gate (live edit state or a saved gate).
+ * @param isNewsletter  Whether this is a premium-newsletter gate (hides registration).
+ * @param optionsBySlug The options to name each rule's values with, from
+ *                      `useAccessRuleOptions()`. The list localised with the page goes
+ *                      stale while the app is open — institutions are created and
+ *                      deleted in it — and a summary built from it would call an
+ *                      institution added a moment ago "not listed".
  */
-export const getGateSummarySections = ( gate: Gate, isNewsletter = false ): GateSummarySection[] => {
+export const getGateSummarySections = (
+	gate: Gate,
+	isNewsletter = false,
+	optionsBySlug: Record< string, AccessRuleOption[] > = {}
+): GateSummarySection[] => {
 	const sections: GateSummarySection[] = [];
 
 	sections.push( {
@@ -163,7 +178,7 @@ export const getGateSummarySections = ( gate: Gate, isNewsletter = false ): Gate
 						ruleGroup.map( rule =>
 							availableAccessRules[ rule.slug ]?.name ? (
 								<p key={ `${ groupIndex }-${ rule.slug }` }>
-									<strong>{ availableAccessRules[ rule.slug ].name }:</strong> { formatAccessRuleValue( rule ) }
+									<strong>{ availableAccessRules[ rule.slug ].name }:</strong> { formatAccessRuleValue( rule, optionsBySlug ) }
 								</p>
 							) : null
 						)

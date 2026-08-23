@@ -35,6 +35,11 @@ export type AccessRuleOption = { value: string | number; label: string };
 const TOKEN_ID_PATTERN = /\(#([^)]+)\)\s*$/;
 
 /**
+ * An input that is nothing but an ID, e.g. `188251`.
+ */
+const BARE_ID_PATTERN = /^\d+$/;
+
+/**
  * Stand-in name for a stored value the option list does not contain. Keyed by rule slug
  * so the wording names the right kind of thing.
  *
@@ -136,14 +141,18 @@ export function getAccessRuleOptionTokens( options: AccessRuleOption[], value: u
  * Resolve tokens coming back from `FormTokenField` to option values.
  *
  * A token matches its option by the ID it carries, so options sharing a name stay
- * distinct. A token typed or pasted as a bare product ID resolves too, which is how the
- * field supports adding by ID.
+ * distinct. A token typed or pasted as a bare ID resolves too, whether or not an option
+ * describes it: evaluation resolves more than the option list holds — an "Active
+ * subscription" rule matches a variation ID, a one-time purchase the `_variation_id` on
+ * an order item — so a publisher who removes such a token can type it back in.
  *
  * @param tokens  The tokens from the field.
  * @param options The available rule options.
  * @param stored  The values currently stored on the rule. IDs among these resolve even
  *                when no option matches them, so a value the option list cannot describe
- *                is preserved rather than silently dropped.
+ *                is preserved rather than silently dropped. A full `<name> (#<id>)` token
+ *                for an unknown ID resolves only from here, so a rule's own tokens
+ *                survive a round trip without a pasted one inventing a value.
  *
  * @return The selected option values, deduplicated, in token order.
  */
@@ -164,8 +173,12 @@ export function resolveAccessRuleOptionTokens(
 		// looks like an ID suffix, and the exact label is unambiguous where it applies.
 		let value = byLabel.get( raw );
 		if ( undefined === value ) {
-			const id = ( String( raw ).match( TOKEN_ID_PATTERN )?.[ 1 ] ?? String( raw ) ).trim();
+			const trimmed = String( raw ).trim();
+			const id = ( trimmed.match( TOKEN_ID_PATTERN )?.[ 1 ] ?? trimmed ).trim();
 			value = findAccessRuleOption( options, id )?.value ?? stored.find( v => String( v ) === id );
+			if ( undefined === value && BARE_ID_PATTERN.test( trimmed ) ) {
+				value = Number( trimmed );
+			}
 		}
 		if ( undefined !== value && ! resolved.some( v => String( v ) === String( value ) ) ) {
 			resolved.push( value );
@@ -176,7 +189,8 @@ export function resolveAccessRuleOptionTokens(
 }
 
 /**
- * Whether an input typed into the field names a selectable option.
+ * Whether an input typed into the field resolves to a value: an option's full token, or
+ * a bare ID, which need not be one the option list describes.
  *
  * Used as `FormTokenField`'s input validator, which drops anything it rejects rather than
  * letting it become a token that silently disappears on the next render. The field
@@ -184,6 +198,11 @@ export function resolveAccessRuleOptionTokens(
  * `getAccessRuleTokenFieldMessages()` — its wording is the only account of what happened
  * — and with `__experimentalAutoSelectFirstMatch`, which commits the highlighted
  * suggestion so typing a name and pressing Enter selects rather than being rejected.
+ *
+ * This only guards the one-token-at-a-time path. Input carrying a separator — pasted, or
+ * typed with a comma — reaches the field's `addNewTokens`, which never consults the
+ * validator, so pasting `Annual, Monthly` still makes tokens that resolve to nothing and
+ * disappear on the next render, unannounced. Pasted IDs come through intact.
  *
  * @param input   The typed input.
  * @param options The available rule options.
@@ -212,6 +231,19 @@ export function getAccessRuleTokenFieldMessages( invalid?: string ) {
 		remove: __( 'Remove item', 'newspack-plugin' ),
 		__experimentalInvalid: invalid ?? __( 'Not a selectable option. Pick one from the list, or type its ID.', 'newspack-plugin' ),
 	};
+}
+
+/**
+ * Notice for a rule whose fetched options could not be loaded.
+ *
+ * The picker falls back to the list localised with the page, which was complete when the
+ * page loaded and is the better fallback — but it may no longer name every item, and a
+ * publisher editing against it should be told so rather than left to assume otherwise.
+ *
+ * @return The notice text.
+ */
+export function getAccessRuleOptionsFetchFailedNotice(): string {
+	return __( 'Failed to load options. The list may be outdated.', 'newspack-plugin' );
 }
 
 /**

@@ -33,8 +33,8 @@ const gateWith = ( ...rules ) => ( {
 	custom_access: { active: true, access_rules: [ rules ], metering: { enabled: false } },
 } );
 
-const renderPaidAccess = gate => {
-	const section = getGateSummarySections( gate ).find( s => 'custom_access' === s.key );
+const renderPaidAccess = ( gate, optionsBySlug ) => {
+	const section = getGateSummarySections( gate, false, optionsBySlug ).find( s => 'custom_access' === s.key );
 	render( <div>{ section.content }</div> );
 };
 
@@ -65,6 +65,17 @@ describe( 'gate summary, Paid access', () => {
 		renderPaidAccess( gateWith( { slug: 'one_time_purchase', value: { product_ids: [ 42 ], duration_value: 30, duration_unit: 'days' } } ) );
 
 		expect( screen.getByText( 'Founder’s Club (#42) (30 days from purchase)' ) ).toBeInTheDocument();
+	} );
+
+	it( 'prefers the options it is handed over the ones localised with the page', () => {
+		// Institutions are created and deleted in the same app, so a summary built from
+		// the page-load snapshot would call one added a moment ago "not listed" — the
+		// wording that tells a publisher a value may be safe to remove.
+		renderPaidAccess( gateWith( { slug: 'subscription', value: [ 700001 ] } ), {
+			subscription: [ { value: 700001, label: 'Added just now' } ],
+		} );
+
+		expect( screen.getByText( 'Added just now (#700001)' ) ).toBeInTheDocument();
 	} );
 
 	it( 'names a value no option describes rather than printing it bare', () => {

@@ -109,12 +109,14 @@ describe( 'block visibility panel, access rule picker', () => {
 		renderSubscriptionRule( [ 188250, 999999 ] );
 
 		expect( screen.getByText( '(product not listed) (#999999)' ) ).toBeInTheDocument();
-		expect( screen.getByText( /still checked when access is evaluated/ ) ).toBeInTheDocument();
+		// By role, not by text: the caution is also spoken, and `speak()` leaves a copy
+		// of it in its live region for the rest of the suite.
+		expect( screen.getByRole( 'note' ) ).toHaveTextContent( /still checked when access is evaluated/ );
 	} );
 
 	it( 'gives no caution when every value resolves', () => {
 		renderSubscriptionRule( [ 188250 ] );
 
-		expect( screen.queryByText( /still checked when access is evaluated/ ) ).not.toBeInTheDocument();
+		expect( screen.queryByRole( 'note' ) ).not.toBeInTheDocument();
 	} );
 } );

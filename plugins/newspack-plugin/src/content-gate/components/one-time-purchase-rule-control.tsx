@@ -27,6 +27,7 @@ import {
 	resolveAccessRuleOptionTokens,
 	type AccessRuleOption,
 } from '../access-rule-options';
+import UnlistedValuesNotice from './unlisted-values-notice';
 
 const DURATION_UNITS = [ 'days', 'months', 'forever' ] as const;
 
@@ -110,6 +111,7 @@ export default function OneTimePurchaseRuleControl( {
 				__next40pxDefaultSize
 				__nextHasNoMarginBottom
 			/>
+			<UnlistedValuesNotice options={ options } value={ currentValue.product_ids } />
 			<Flex align="flex-start" gap={ 2 } style={ { marginTop: '8px' } }>
 				<FlexBlock>
 					<SelectControl

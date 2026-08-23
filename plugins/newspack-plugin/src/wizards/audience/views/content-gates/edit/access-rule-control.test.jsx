@@ -120,7 +120,9 @@ describe( 'AccessRuleControl option picker', () => {
 		} );
 
 		expect( screen.getByText( '(product not listed) (#999999)' ) ).toBeInTheDocument();
-		expect( screen.getByText( /still checked when access is evaluated/ ) ).toBeInTheDocument();
+		// By role, not by text: the caution is also spoken, and `speak()` leaves a copy of
+		// it in its live region for the rest of the suite.
+		expect( screen.getByRole( 'note' ) ).toHaveTextContent( /still checked when access is evaluated/ );
 
 		const token = screen.getByText( 'Annual (#188250)' ).closest( '.components-form-token-field__token' );
 		fireEvent.click( within( token ).getByRole( 'button' ) );

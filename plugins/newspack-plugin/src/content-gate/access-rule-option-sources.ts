@@ -38,6 +38,17 @@ const ACCESS_RULE_OPTION_SOURCES: Record< string, () => Promise< AccessRuleOptio
 };
 
 /**
+ * Requests still in flight, keyed by rule slug.
+ *
+ * A screen mounts many things that need the same list at once — a picker per active
+ * rule, a summary card per gate — and each asks on mount. Sharing the pending request
+ * makes that one round trip. The entry is dropped as soon as it settles rather than
+ * cached, because institutions are created and deleted in the same single-page app, so a
+ * later mount has to see a list that reflects those edits.
+ */
+const inFlightRequests = new Map< string, Promise< AccessRuleOption[] > >();
+
+/**
  * The option source for a rule, if its options are fetched.
  *
  * @param slug The rule slug.
@@ -45,5 +56,17 @@ const ACCESS_RULE_OPTION_SOURCES: Record< string, () => Promise< AccessRuleOptio
  * @return The source, or undefined when the rule's options are localised.
  */
 export function getAccessRuleOptionSource( slug: string ): ( () => Promise< AccessRuleOption[] > ) | undefined {
-	return ACCESS_RULE_OPTION_SOURCES[ slug ];
+	const source = ACCESS_RULE_OPTION_SOURCES[ slug ];
+	if ( ! source ) {
+		return undefined;
+	}
+	return () => {
+		const pending = inFlightRequests.get( slug );
+		if ( pending ) {
+			return pending;
+		}
+		const request = source().finally( () => inFlightRequests.delete( slug ) );
+		inFlightRequests.set( slug, request );
+		return request;
+	};
 }

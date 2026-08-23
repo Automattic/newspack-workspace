@@ -28,14 +28,14 @@ import {
 	formatAccessRuleOptionLabel,
 	getAccessRuleOptionTokens,
 	getAccessRuleTokenFieldMessages,
+	getAccessRuleOptionsFetchFailedNotice,
 	getMissingOptionLabel,
-	getUnlistedAccessRuleValuesNotice,
-	hasUnlistedAccessRuleValues,
 	isAccessRuleOptionInput,
 	resolveAccessRuleOptionTokens,
 } from '../access-rule-options';
 import { getAccessRuleOptionSource } from '../access-rule-option-sources';
 import OneTimePurchaseRuleControl from '../components/one-time-purchase-rule-control';
+import UnlistedValuesNotice from '../components/unlisted-values-notice';
 
 /**
  * Target block types that receive access control attributes.
@@ -178,6 +178,7 @@ const AccessRuleValueControl = ( {
 	const staticOptions: AccessRuleOption[] = config.options ?? [];
 
 	const [ options, setOptions ] = useState< AccessRuleOption[] >( staticOptions );
+	const [ didFetchFail, setDidFetchFail ] = useState( false );
 
 	useEffect( () => {
 		const source = getAccessRuleOptionSource( slug );
@@ -187,11 +188,22 @@ const AccessRuleValueControl = ( {
 		let cancelled = false;
 		source()
 			.then( fetched => {
-				if ( ! cancelled ) {
+				if ( cancelled ) {
+					return;
+				}
+				// Keep the localised list when the response is empty. A filtered query or
+				// a narrowed collection would otherwise leave the rule with no options at
+				// all, which drops the picker to the free-text control below — and that
+				// writes a string over the rule's stored IDs.
+				if ( fetched.length > 0 ) {
 					setOptions( fetched );
 				}
 			} )
-			.catch( () => {} );
+			.catch( () => {
+				if ( ! cancelled ) {
+					setDidFetchFail( true );
+				}
+			} );
 		return () => {
 			cancelled = true;
 		};
@@ -217,9 +229,8 @@ const AccessRuleValueControl = ( {
 					__next40pxDefaultSize
 					__nextHasNoMarginBottom
 				/>
-				{ hasUnlistedAccessRuleValues( options, selected ) && (
-					<p className="newspack-access-control-block-visibility-panel__notice">{ getUnlistedAccessRuleValuesNotice() }</p>
-				) }
+				<UnlistedValuesNotice options={ options } value={ selected } />
+				{ didFetchFail && <p className="newspack-access-rule-values-notice">{ getAccessRuleOptionsFetchFailedNotice() }</p> }
 			</>
 		);
 	}

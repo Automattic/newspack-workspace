@@ -16,6 +16,7 @@ import { useWizardApiFetch } from '../../../hooks/use-wizard-api-fetch';
 import { WIZARD_STORE_NAMESPACE } from '../../../../../packages/components/src/wizard/store';
 import { getEditGateLayoutUrl, getGateStatus, getGateStatusBadgeLevel } from './utils';
 import { getGateSummarySections } from './gate-summary';
+import { useAccessRuleOptions } from './use-access-rule-options';
 import { AUDIENCE_CONTENT_GATES_WIZARD_SLUG } from './consts';
 
 const { useHistory } = Router;
@@ -32,6 +33,7 @@ export default function ContentGateSettings( {
 	isNewsletter?: boolean;
 } ) {
 	const history = useHistory();
+	const accessRuleOptions = useAccessRuleOptions();
 	const { gates } = useWizardData( slug ) as { gates: Gate[] };
 	const { wizardApiFetch, isFetching, resetError } = useWizardApiFetch( slug );
 	const { addNotice, resetNotices } = useDispatch( WIZARD_STORE_NAMESPACE );
@@ -225,7 +227,7 @@ export default function ContentGateSettings( {
 			>
 				<CardBody>
 					<Grid className="newspack-content-gates__gate__settings" columns={ isNewsletter ? 2 : 3 } gutter={ 16 } borders noMargin>
-						{ getGateSummarySections( gate, isNewsletter ).map( section => (
+						{ getGateSummarySections( gate, isNewsletter, accessRuleOptions ).map( section => (
 							<div key={ section.key }>
 								<h4>{ section.label }</h4>
 								{ section.content }
