@@ -96,15 +96,11 @@ class Newspack_Newsletters_Bulk_Actions {
 			if ( 'trash' === get_post_status( $post_id ) ) {
 				continue;
 			}
-			if ( ! current_user_can( 'edit_post', $post_id ) ) {
-				continue;
-			}
-			// Making the page public can promote the post to `publish`: the active
-			// ESP's updated_post_meta() handler moves it when is_public flips true.
-			// That is the same escalation as publishing any other content, so it needs
-			// publish_post. edit_post alone is satisfied by an author's own unpublished
-			// post. The non-public direction de-escalates and stays on edit_post.
-			if ( $is_public && ! current_user_can( 'publish_post', $post_id ) ) {
+			// The rule itself lives in Newspack_Newsletters::current_user_can_set_public_status(),
+			// which also backs the guard on the write. It is consulted here as well so a
+			// newsletter the user cannot act on is skipped and left out of the count,
+			// rather than attempted and blocked -- the notice reports what was applied.
+			if ( ! \Newspack_Newsletters::current_user_can_set_public_status( $post_id, (bool) $is_public ) ) {
 				continue;
 			}
 			update_post_meta( $post_id, 'is_public', (bool) $is_public );

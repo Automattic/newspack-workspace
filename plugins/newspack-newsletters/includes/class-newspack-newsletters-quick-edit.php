@@ -81,10 +81,9 @@ class Newspack_Newsletters_Quick_Edit {
 			return;
 		}
 		$is_public = isset( $_POST['switch_public_page'] ) && sanitize_text_field( $_POST['switch_public_page'] );
-		// Same reason as Newspack_Newsletters_Bulk_Actions::set_public_status(): making
-		// the page public can promote the post to `publish`, so the escalating
-		// direction needs publish_post rather than edit_post.
-		if ( $is_public && ! current_user_can( 'publish_post', $post_id ) ) {
+		// Newspack_Newsletters::current_user_can_set_public_status() is the one definition
+		// of who may set this, and it also backs the guard on the write itself.
+		if ( ! \Newspack_Newsletters::current_user_can_set_public_status( $post_id, $is_public ) ) {
 			return;
 		}
 		update_post_meta( $post_id, 'is_public', $is_public );
