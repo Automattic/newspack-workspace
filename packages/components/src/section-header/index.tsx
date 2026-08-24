@@ -15,25 +15,20 @@ import {
 	__experimentalHStack as HStack,
 } from '@wordpress/components';
 import { Icon, chevronLeft, moreVertical } from '@wordpress/icons';
+import { Badge } from '@wordpress/ui';
 
 /**
  * Internal dependencies
  */
-import { Badge, Button, Grid } from '..';
-import type { BadgeLevel } from '../badge';
+import Button from '../button';
+import Grid from '../grid';
+import type { CardBadge } from '../types';
 import './style.scss';
 
 /**
  * External dependencies
  */
 import classnames from 'classnames';
-
-export interface SectionHeaderBadge {
-	/** The badge's text. */
-	label: string;
-	/** Badge level, e.g., 'success', 'info', 'warning', 'error'. */
-	level?: BadgeLevel;
-}
 
 export interface SectionHeaderMenuItem {
 	/** The menu item's label. */
@@ -62,8 +57,8 @@ export interface SectionHeaderAction {
 export interface SectionHeaderProps {
 	/** URL to navigate back to. */
 	backNav?: string;
-	/** Badges to display next to the title. */
-	badges?: SectionHeaderBadge[];
+	/** Badges to display beside the title. */
+	badges?: CardBadge[];
 	/** Indicates if the header is centered. */
 	centered?: boolean;
 	/** Additional CSS class name. */
@@ -164,14 +159,18 @@ const SectionHeader = ( {
 
 	let titleContent = null;
 
+	const renderBadge = ( badge: CardBadge & { label: string }, i: number ) => (
+		<Badge key={ i } className="newspack-section-header__badge" intent={ badge.intent || 'none' }>
+			{ badge.label }
+		</Badge>
+	);
+
 	if ( typeof title === 'string' ) {
 		titleContent = (
 			<div className="newspack-section-header__title-container">
 				<HeadingTag className="newspack-section-header__title">
 					{ title }
-					{ badges?.length
-						? badges.map( ( badge, i ) => <Badge key={ i } text={ badge.label } level={ badge.level || 'default' } /> )
-						: null }
+					{ ( badges || [] ).filter( ( badge ): badge is CardBadge & { label: string } => Boolean( badge?.label ) ).map( renderBadge ) }
 				</HeadingTag>
 				{ /* Secondary action before the overflow menu, so a promoted link reads as an action rather than sitting to the right of the kebab. */ }
 				{ secondaryAction && (

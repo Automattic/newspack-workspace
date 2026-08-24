@@ -12,7 +12,11 @@ import apiFetch from '@wordpress/api-fetch';
 import type { APIFetchOptions } from '@wordpress/api-fetch';
 import { createReduxStore, register, dispatch, select } from '@wordpress/data';
 
+/**
+ * Internal dependencies.
+ */
 import { createAction } from './utils';
+import type { CardBadge } from '../../types';
 
 export const WIZARD_STORE_NAMESPACE = 'newspack/wizards';
 
@@ -50,12 +54,7 @@ export interface WizardHeaderAction {
 /**
  * A badge displayed next to the wizard section title.
  */
-export interface WizardBadge {
-	/** The badge's text. */
-	label: string;
-	/** Badge level, e.g., 'success', 'info', 'warning', 'error'. */
-	level?: 'default' | 'info' | 'success' | 'warning' | 'error';
-}
+export type WizardBadge = CardBadge;
 
 /**
  * An item of the wizard section's more-options menu.

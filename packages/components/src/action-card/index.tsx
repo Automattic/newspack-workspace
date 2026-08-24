@@ -9,11 +9,13 @@ import { Draggable, ExternalLink, ToggleControl } from '@wordpress/components';
 import { useEffect, useState } from '@wordpress/element';
 import { __ } from '@wordpress/i18n';
 import { Icon, check, chevronDown, chevronUp, dragHandle } from '@wordpress/icons';
+import { Badge } from '@wordpress/ui';
 
 /**
  * Internal dependencies
  */
 import { Button, Card, Grid, Handoff, Notice, Waiting } from '../';
+import type { CardBadge } from '../types';
 import './style.scss';
 
 /**
@@ -29,8 +31,7 @@ export interface ActionCardProps {
 	href?: string | null;
 	description?: ReactNode | ( () => ReactNode );
 	actionText?: ReactNode | null;
-	badge?: string | string[] | null;
-	badgeLevel?: string;
+	badges?: CardBadge[];
 	className?: string;
 	indent?: boolean | string;
 	notification?: ReactNode;
@@ -81,8 +82,7 @@ export interface ActionCardProps {
  * ActionCard component
  */
 const ActionCard = ( {
-	badge,
-	badgeLevel,
+	badges,
 	className,
 	checkbox,
 	children,
@@ -131,6 +131,11 @@ const ActionCard = ( {
 	dragWrapperRef,
 	onDragCallback,
 }: ActionCardProps ) => {
+	// A badge with no label paints an empty pill, since the library Badge styles its
+	// wrapper rather than its text. Callers derive labels from data that can be absent
+	// (a gateway with no connection status, an unmapped placement), so drop those here
+	// rather than asking every caller to guard its own array.
+	const visibleBadges = ( badges || [] ).filter( ( badge ): badge is CardBadge & { label: string } => Boolean( badge?.label ) );
 	const [ expanded, setExpanded ] = useState( Boolean( isExpanded ) );
 	const [ dragging, setDragging ] = useState( false );
 	const [ targetIndex, setTargetIndex ] = useState< number | null >( null );
@@ -177,9 +182,6 @@ const ActionCard = ( {
 	const togglePositionClass = togglePosition === 'trailing' ? 'is-toggle-trailing' : 'is-toggle-leading';
 	const hasInternalLink = href && href.indexOf( 'http' ) !== 0;
 	const isDisplayingSecondaryAction = secondaryActionText && onSecondaryActionClick;
-	// The false branch only ever carries an array or an empty value at runtime — a
-	// truthy non-array badge is always wrapped by the true branch.
-	const badges = ! Array.isArray( badge ) && badge ? [ badge ] : ( badge as string[] | null | undefined );
 	const HeadingTag = `h${ heading }` as const;
 
 	const cardContent = (
@@ -227,15 +229,11 @@ const ActionCard = ( {
 								) }
 								{ ! titleLink && ! expandable && title }
 							</span>
-							{ badges?.length &&
-								badges.map( ( badgeText, i ) => (
-									<span
-										key={ `badge-${ i }` }
-										className={ `newspack-action-card__badge newspack-action-card__badge-level-${ badgeLevel }` }
-									>
-										{ badgeText }
-									</span>
-								) ) }
+							{ visibleBadges.map( ( { label, intent }, i ) => (
+								<Badge key={ `badge-${ i }` } intent={ intent ?? 'none' }>
+									{ label }
+								</Badge>
+							) ) }
 						</HeadingTag>
 						{ description && (
 							<p>

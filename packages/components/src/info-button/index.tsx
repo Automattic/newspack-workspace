@@ -1,43 +1,64 @@
 /**
- * Info Button
+ * External dependencies.
  */
+import classnames from 'classnames';
 
 /**
  * WordPress dependencies.
  */
-import { Component } from '@wordpress/element';
-import { Tooltip } from '@wordpress/components';
+import { forwardRef } from '@wordpress/element';
+import { __ } from '@wordpress/i18n';
 import { Icon, info } from '@wordpress/icons';
-
-/**
- * External dependencies.
- */
-import classnames from 'classnames';
-import type { ComponentProps } from 'react';
+import { getWpCompatOverlaySlot, Popover, VisuallyHidden } from '@wordpress/ui';
 
 /**
  * Internal dependencies.
  */
 import './style.scss';
 
-type InfoButtonProps = Omit< ComponentProps< typeof Tooltip >, 'children' > & {
-	className?: string;
+type InfoButtonProps = React.ComponentPropsWithoutRef< 'button' > & {
+	description?: string;
+	triggerLabel?: string;
 };
 
-class InfoButton extends Component< InfoButtonProps > {
-	/**
-	 * Render.
-	 */
-	render() {
-		const { className, ...otherProps } = this.props;
-		return (
-			<Tooltip { ...otherProps }>
-				<span className={ classnames( 'newspack-info-button', className ) }>
-					<Icon icon={ info } />
-				</span>
-			</Tooltip>
-		);
+/**
+ * Uses `Popover` rather than `Tooltip`: a tooltip never opens from a touch
+ * pointer, and its popup is not exposed to assistive technology.
+ */
+const InfoButton = forwardRef< HTMLButtonElement, InfoButtonProps >( function InfoButton(
+	{ description, className, triggerLabel, 'aria-label': ariaLabel, ...rest },
+	ref
+) {
+	if ( ! description ) {
+		return null;
 	}
-}
+
+	const name = triggerLabel || ariaLabel || __( 'More information', 'newspack-plugin' );
+
+	return (
+		<Popover.Root>
+			<Popover.Trigger
+				ref={ ref }
+				openOnHover
+				delay={ 200 }
+				closeDelay={ 200 }
+				aria-label={ name }
+				className={ classnames( 'newspack-info-button', className ) }
+				{ ...rest }
+			>
+				<Icon icon={ info } size={ 20 } />
+			</Popover.Trigger>
+			<Popover.Popup
+				variant="unstyled"
+				className="newspack-info-button__popup"
+				portal={ <Popover.Portal className="newspack-info-button__portal" container={ getWpCompatOverlaySlot() } /> }
+				positioner={ <Popover.Positioner className="newspack-info-button__positioner" side="top" sideOffset={ 4 } /> }
+			>
+				<VisuallyHidden render={ <Popover.Title /> }>{ name }</VisuallyHidden>
+				<Popover.Description>{ description }</Popover.Description>
+			</Popover.Popup>
+		</Popover.Root>
+	);
+} );
 
 export default InfoButton;

@@ -1,18 +1,19 @@
 /**
  * WordPress dependencies
  */
-import { __ } from '@wordpress/i18n';
+import { __, sprintf } from '@wordpress/i18n';
 import { CheckboxControl, SelectControl, ToggleControl } from '@wordpress/components';
 import { useDispatch } from '@wordpress/data';
 import { useEffect, useMemo, useRef, useState } from '@wordpress/element';
+import { Stack } from '@wordpress/ui';
 
 /**
  * Internal dependencies
  */
-import { Accordion, AccordionPanel, Divider, Grid, SectionHeader, useUnsavedChangesDialog } from '../../../../../packages/components/src';
+import { CollapsibleGroup, Divider, Grid, SectionHeader, useUnsavedChangesDialog } from '../../../../../packages/components/src';
 import { WIZARD_STORE_NAMESPACE } from '../../../../../packages/components/src/wizard/store';
 import WizardsTab from '../../../wizards-tab';
-import { SettingsField } from './settings-field';
+import { SettingsField, settingsFieldRenders } from './settings-field';
 
 import './configure-view.scss';
 
@@ -422,14 +423,18 @@ const ConfigureViewInner = ( { integrations, loading, inFlightChanges, saving, o
 	const inboundEnabled = ! inboundToggleField || toBool( getFieldValue( inboundToggleField ) );
 	const outboundEnabled = ! outboundToggleField || toBool( getFieldValue( outboundToggleField ) );
 
-	const visibleSettingsFields = settingsFields.filter( fieldIsVisible );
-	const visibleOutboundSettingsFields = outboundSettingsFields.filter( fieldIsVisible );
+	// Counting declarations would print a section heading above a column whose
+	// every field turned out to render nothing.
+	const fieldIsRendered = field => fieldIsVisible( field ) && settingsFieldRenders( field );
+
+	const visibleSettingsFields = settingsFields.filter( fieldIsRendered );
+	const visibleOutboundSettingsFields = outboundSettingsFields.filter( fieldIsRendered );
+	const inboundOptions = inboundField?.options || [];
+	const outboundGroups = outboundField?.grouped_options || [];
 
 	// The divider separates the toggle from the section content below it, so it
 	// only renders when there is content to divide: the caller passes false for a
-	// paused direction or an empty section. Its spacing comes entirely from the
-	// section grid's rowGap — `.newspack-grid > *` zeroes child margins with
-	// !important, so margins set on the divider itself can never take effect.
+	// paused direction or an empty section.
 	const renderSectionToggle = ( toggleSetting, showDivider ) =>
 		toggleSetting && (
 			<>
@@ -452,7 +457,7 @@ const ConfigureViewInner = ( { integrations, loading, inFlightChanges, saving, o
 				{ visibleSettingsFields.length > 0 && (
 					<Grid columns={ 2 } gutter={ 32 }>
 						<SectionHeader heading={ 2 } title={ __( 'Settings', 'newspack-plugin' ) } />
-						<Grid columns={ 1 } gutter={ 24 }>
+						<Stack direction="column" gap="xl">
 							{ visibleSettingsFields.map( field => (
 								<SettingsField
 									key={ field.key }
@@ -461,21 +466,21 @@ const ConfigureViewInner = ( { integrations, loading, inFlightChanges, saving, o
 									onChange={ val => handleFieldChange( field.key, val ) }
 								/>
 							) ) }
-						</Grid>
+						</Stack>
 					</Grid>
 				) }
 
 				{ /* Section 2: Inbound */ }
-				{ inboundField && (
+				{ inboundField && ( inboundOptions.length > 0 || !! inboundToggleField ) && (
 					<>
 						<Divider alignment="full-width" variant="tertiary" marginTop={ 64 } marginBottom={ 64 } />
 						<Grid columns={ 2 } gutter={ 32 } noMargin>
 							<SectionHeader heading={ 2 } title={ __( 'Inbound', 'newspack-plugin' ) } noMargin />
-							<Grid columns={ 1 } rowGap={ 16 } noMargin>
-								{ renderSectionToggle( inboundToggleField, inboundEnabled && ( inboundField.options || [] ).length > 0 ) }
-								{ inboundEnabled && (
-									<Grid columns={ 1 } rowGap={ 8 } noMargin>
-										{ ( inboundField.options || [] ).map( option => {
+							<Stack direction="column" gap="xl">
+								{ renderSectionToggle( inboundToggleField, inboundEnabled && inboundOptions.length > 0 ) }
+								{ inboundEnabled && inboundOptions.length > 0 && (
+									<Stack direction="column" gap="sm">
+										{ inboundOptions.map( option => {
 											// Options are always { value, label, matching_function, has_options } objects
 											// for this field (see class-integration.php:get_settings_config()).
 											const optionValue = option.value;
@@ -500,11 +505,16 @@ const ConfigureViewInner = ( { integrations, loading, inFlightChanges, saving, o
 														onChange={ isChecked =>
 															handleFieldChange( inboundField.key, toggleField( currentMap, option, isChecked ) )
 														}
+														__nextHasNoMarginBottom
 													/>
 													{ checked && (
 														<SelectControl
 															className="newspack-configure-view__inbound-operator"
-															label={ __( 'Segment as', 'newspack-plugin' ) }
+															label={ sprintf(
+																/* translators: %s: name of the metadata field being segmented on. */
+																__( 'Segment %s as', 'newspack-plugin' ),
+																optionLabel
+															) }
 															hideLabelFromVision
 															value={ selectedOperator }
 															options={ operatorOptions }
@@ -514,28 +524,30 @@ const ConfigureViewInner = ( { integrations, loading, inFlightChanges, saving, o
 																	[ optionValue ]: operator,
 																} )
 															}
+															__next40pxDefaultSize
+															__nextHasNoMarginBottom
 														/>
 													) }
 												</div>
 											);
 										} ) }
-									</Grid>
+									</Stack>
 								) }
-							</Grid>
+							</Stack>
 						</Grid>
 					</>
 				) }
 
 				{ /* Section 3: Outbound */ }
-				{ ( outboundField || outboundSettingsFields.length > 0 ) && (
+				{ ( outboundGroups.length > 0 || visibleOutboundSettingsFields.length > 0 || !! outboundToggleField ) && (
 					<>
 						<Divider alignment="full-width" variant="tertiary" marginTop={ 64 } marginBottom={ 64 } />
 						<Grid columns={ 2 } gutter={ 32 } noMargin>
 							<SectionHeader heading={ 2 } title={ __( 'Outbound', 'newspack-plugin' ) } noMargin />
-							<Grid columns={ 1 } rowGap={ 16 } noMargin>
+							<Stack direction="column" gap="xl">
 								{ renderSectionToggle(
 									outboundToggleField,
-									outboundEnabled && ( visibleOutboundSettingsFields.length > 0 || !! outboundField )
+									outboundEnabled && ( visibleOutboundSettingsFields.length > 0 || outboundGroups.length > 0 )
 								) }
 								{ outboundEnabled &&
 									visibleOutboundSettingsFields.map( field => (
@@ -546,18 +558,21 @@ const ConfigureViewInner = ( { integrations, loading, inFlightChanges, saving, o
 											onChange={ val => handleFieldChange( field.key, val ) }
 										/>
 									) ) }
-								{ outboundEnabled && outboundField && (
-									<Accordion hideSingleTitle>
-										{ ( outboundField.grouped_options || [] ).map( ( group, index ) => {
+								{ outboundEnabled && outboundGroups.length > 0 && visibleOutboundSettingsFields.length > 0 && (
+									<Divider data-testid="group-divider" variant="tertiary" marginTop={ 0 } marginBottom={ 0 } />
+								) }
+								{ outboundEnabled && outboundGroups.length > 0 && (
+									<CollapsibleGroup hideSingleTitle titleLevel={ 3 }>
+										{ outboundGroups.map( ( group, index ) => {
 											const currentValue = getFieldValue( outboundField );
 											const selected = Array.isArray( currentValue ) ? currentValue : [];
 											return (
-												<AccordionPanel
+												<CollapsibleGroup.Item
 													key={ `${ index }-${ group.section }` }
 													title={ group.section }
 													defaultOpen={ index === 0 }
 												>
-													<Grid columns={ 1 } rowGap={ 8 } noMargin>
+													<Stack direction="column" gap="sm">
 														{ group.fields.map( fieldName => (
 															<CheckboxControl
 																className="newspack-checkbox-control"
@@ -567,15 +582,16 @@ const ConfigureViewInner = ( { integrations, loading, inFlightChanges, saving, o
 																onChange={ checked =>
 																	handleCheckboxListChange( outboundField.key, currentValue, fieldName, checked )
 																}
+																__nextHasNoMarginBottom
 															/>
 														) ) }
-													</Grid>
-												</AccordionPanel>
+													</Stack>
+												</CollapsibleGroup.Item>
 											);
 										} ) }
-									</Accordion>
+									</CollapsibleGroup>
 								) }
-							</Grid>
+							</Stack>
 						</Grid>
 					</>
 				) }
