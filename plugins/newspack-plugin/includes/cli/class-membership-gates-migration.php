@@ -1592,8 +1592,10 @@ class Membership_Gates_Migration {
 	 * post" toggle. Nothing bridges the two, so without this step those posts are gated
 	 * the moment Memberships is deactivated.
 	 *
-	 * A post already carrying a falsy exemption row is overwritten, not skipped, and its
-	 * ID listed.
+	 * A falsy exemption row is left alone and reported. Turning the toggle off is what
+	 * records one, so overwriting it would undo a decision. Pass --overwrite-falsy for
+	 * rows that predate the toggle, where the falsy value is only the editor echoing the
+	 * registered default back on save.
 	 *
 	 * Migrates only the post types the exemption toggle is offered on. Posts on any other
 	 * type are counted and warned about rather than written: they can still be gated by a
@@ -1612,10 +1614,15 @@ class Membership_Gates_Migration {
 	 * [--live]
 	 * : Apply the changes. Without this flag the command runs as a dry-run and writes nothing.
 	 *
+	 * [--overwrite-falsy]
+	 * : Also record an exemption on posts whose exemption row is already set to a falsy
+	 * value. Only for rows known to predate the exemption toggle.
+	 *
 	 * ## EXAMPLES
 	 *
 	 *     wp newspack migrate-post-exemptions
 	 *     wp newspack migrate-post-exemptions --live
+	 *     wp newspack migrate-post-exemptions --live --overwrite-falsy
 	 *
 	 * @param array $args       Positional args (unused).
 	 * @param array $assoc_args Named args.
@@ -1623,7 +1630,8 @@ class Membership_Gates_Migration {
 	 * @return void
 	 */
 	public function migrate_post_exemptions( $args, $assoc_args ) {
-		$dry_run = ! (bool) \WP_CLI\Utils\get_flag_value( $assoc_args, 'live', false );
+		$dry_run         = ! (bool) \WP_CLI\Utils\get_flag_value( $assoc_args, 'live', false );
+		$overwrite_falsy = (bool) \WP_CLI\Utils\get_flag_value( $assoc_args, 'overwrite-falsy', false );
 
 		if ( ! class_exists( 'Newspack\Content_Restriction_Control' ) ) {
 			WP_CLI::error( 'Newspack\Content_Restriction_Control class not found, so the exemption meta key and its post types cannot be resolved. Aborting.' );
@@ -1664,6 +1672,7 @@ class Membership_Gates_Migration {
 
 		$missing   = [];
 		$falsy     = [];
+		$preserved = [];
 		$failed    = [];
 		$breakdown = [];
 		// Classify and write a chunk at a time, so the meta cache neither grows with the
@@ -1685,6 +1694,10 @@ class Membership_Gates_Migration {
 				++$breakdown[ $key ][ $state ];
 
 				if ( 'already' === $state ) {
+					continue;
+				}
+				if ( 'falsy' === $state && ! $overwrite_falsy ) {
+					$preserved[] = $post_id;
 					continue;
 				}
 				if ( ! $dry_run && ! \update_post_meta( $post_id, \Newspack\Content_Restriction_Control::IS_EXEMPT_META_KEY, true ) ) {
@@ -1734,10 +1747,20 @@ class Membership_Gates_Migration {
 			);
 		}
 
+		if ( ! empty( $preserved ) ) {
+			WP_CLI::warning(
+				sprintf(
+					'%d post(s) are forced public by Memberships but carry a falsy exemption row, so they stay gated after cutover. That row is what turning the toggle off records, so it is left alone. Re-run with --overwrite-falsy for any that predate the toggle: %s',
+					count( $preserved ),
+					self::format_post_id_list( $preserved )
+				)
+			);
+		}
+
 		if ( ! empty( $falsy ) ) {
 			WP_CLI::warning(
 				sprintf(
-					'%d post(s) carried a falsy exemption row and %s: %s',
+					'%d falsy exemption row(s) %s, per --overwrite-falsy: %s',
 					count( $falsy ),
 					$dry_run ? 'would be overwritten' : 'were overwritten',
 					self::format_post_id_list( $falsy )
@@ -1754,12 +1777,13 @@ class Membership_Gates_Migration {
 
 		WP_CLI::success(
 			sprintf(
-				'Done. %d exemption(s) %s (%d with no row, %d overwriting a falsy row). %d post(s) were already exempt.',
+				'Done. %d exemption(s) %s (%d with no row, %d overwriting a falsy row). %d post(s) were already exempt, %d falsy row(s) left alone.',
 				count( $missing ) + count( $falsy ),
 				$dry_run ? 'would be recorded' : 'recorded',
 				count( $missing ),
 				count( $falsy ),
-				count( $in_scope ) - count( $missing ) - count( $falsy ) - count( $failed )
+				count( $in_scope ) - count( $missing ) - count( $falsy ) - count( $failed ) - count( $preserved ),
+				count( $preserved )
 			)
 		);
 
