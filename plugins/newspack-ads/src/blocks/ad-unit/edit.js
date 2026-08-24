@@ -84,7 +84,7 @@ function Edit( { attributes, setAttributes } ) {
 						</Notice>
 					) }
 					{ provider === 'gam' && biddersError && (
-						<Notice status="warning" isDismissible={ false }>
+						<Notice spokenMessage="" status="warning" isDismissible={ false }>
 							{ biddersError }
 						</Notice>
 					) }
