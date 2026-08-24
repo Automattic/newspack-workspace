@@ -418,19 +418,24 @@ export default function SubscriptionProductsList( { scope = 'subscriptions' }: {
 					) }
 				</Notice>
 			) }
-			<DataViews
-				className="newspack-subscription-products__dataviews"
-				data={ processedData }
-				fields={ visibleFields }
-				view={ view }
-				onChangeView={ setView }
-				actions={ actions }
-				paginationInfo={ paginationInfo }
-				defaultLayouts={ { table: {}, grid: {} } }
-				isLoading={ isLoading }
-				getItemId={ ( item: SubscriptionProduct ) => String( item.id ) }
-				search
-			/>
+			{ /* A failed read leaves `processedData` empty, and the notice sits in the
+			     page-level region rather than beside the table, so a rendered "No results"
+			     would read as an empty catalogue on its own. */ }
+			{ ! hasError && (
+				<DataViews
+					className="newspack-subscription-products__dataviews"
+					data={ processedData }
+					fields={ visibleFields }
+					view={ view }
+					onChangeView={ setView }
+					actions={ actions }
+					paginationInfo={ paginationInfo }
+					defaultLayouts={ { table: {}, grid: {} } }
+					isLoading={ isLoading }
+					getItemId={ ( item: SubscriptionProduct ) => String( item.id ) }
+					search
+				/>
+			) }
 		</div>
 	);
 }
