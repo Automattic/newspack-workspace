@@ -15,6 +15,7 @@ import {
 	CardMedia,
 	CheckboxControl,
 	ExternalLink,
+	Notice,
 	ToggleControl,
 	__experimentalVStack as VStack, // eslint-disable-line @wordpress/no-unsafe-wp-apis
 	__experimentalHStack as HStack, // eslint-disable-line @wordpress/no-unsafe-wp-apis
@@ -554,6 +555,25 @@ class ComponentsDemo extends Component {
 									<p style={ { margin: 0 } }>{ __( 'A note under the action.', 'newspack-plugin' ) }</p>
 								</EmptyState.Actions>
 							</EmptyState.Root>
+						</Card>
+						<Card>
+							<h2>{ __( 'Notice', 'newspack-plugin' ) }</h2>
+							{ /* Every status is silenced here: the catalogue renders them all on load, so announcing would read the page out. */ }
+							<Notice spokenMessage="" status="info" isDismissible={ false }>
+								{ __( 'This is an info notice.', 'newspack-plugin' ) }
+							</Notice>
+							<Notice spokenMessage="" status="warning" isDismissible={ false }>
+								{ __( 'This is a warning notice.', 'newspack-plugin' ) }
+							</Notice>
+							<Notice spokenMessage="" status="success" isDismissible={ false }>
+								{ __( 'This is a success notice.', 'newspack-plugin' ) }
+							</Notice>
+							<Notice spokenMessage="" status="error" isDismissible={ false }>
+								{ __( 'This is an error notice.', 'newspack-plugin' ) }
+							</Notice>
+							<Notice spokenMessage="" status="info" onRemove={ () => {} }>
+								{ __( 'This is a dismissible notice.', 'newspack-plugin' ) }
+							</Notice>
 						</Card>
 						<Card>
 							<h2>{ __( 'Plugin installer', 'newspack-plugin' ) }</h2>
