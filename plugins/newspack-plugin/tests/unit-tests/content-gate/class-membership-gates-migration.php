@@ -17,13 +17,16 @@
  *   name as the AC rule slug instead of remapping to 'post_types' / 'specific_posts'.
  *   Pinned by the map_rules_to_ac_format tests below (they flip red).
  *
- * NOT pinned here: NPPD-2064 (fingerprint-based gate splitting/grouping). That fix
- * lands in group_plans_by_fingerprint() and the merged-product consolidation, which
- * depend on WC_Memberships_Membership_Plan and so are not unit-testable in this
- * harness — they are exercised end-to-end against real WooCommerce Memberships. The
+ * NOT pinned here: NPPD-2064 (fingerprint-based gate splitting/grouping). The
  * compute_rules_fingerprint() tests below only pin the fingerprint's *canonicality*
  * (order-independence), which the 2064 fix preserves; they will NOT flip red, so the
  * 2064 author must add net-new grouping/split tests rather than rely on these.
+ *
+ * group_plans_by_fingerprint() resolves plans through wc_memberships_get_membership_plan(),
+ * which the WC Memberships mock supplies, so it IS reachable here — see the descriptor
+ * round-trip test. That test exists because the two halves of the paid mapping drifted
+ * once already: the consumer read access-length keys the producer never wrote, and every
+ * NPPD-2106 test stayed green because they all built descriptors by hand.
  *
  * @package Newspack\Tests\Content_Gate
  */
@@ -35,6 +38,9 @@ use Newspack\CLI\Membership_Gates_Migration;
 // The get_group_paid_descriptors tests assert on WP_CLI warnings, so the recording
 // WP_CLI mock (which captures them in WP_CLI::$warnings) must be loaded.
 require_once dirname( __DIR__, 2 ) . '/mocks/wp-cli-mock.php';
+// Supplies wc_memberships_get_membership_plan(), which group_plans_by_fingerprint()
+// resolves plans through — see the descriptor round-trip test below.
+require_once dirname( __DIR__, 2 ) . '/mocks/wc-memberships-mocks.php';
 require_once dirname( __DIR__, 3 ) . '/includes/cli/class-membership-gates-migration.php';
 
 /**
@@ -851,7 +857,19 @@ HTML;
 		];
 
 		$this->assertSame( $forever_duration, $this->invoke_private_static( 'map_access_length_to_duration', [ '', '' ] ) );
-		$this->assertSame( $forever_duration, $this->invoke_private_static( 'map_access_length_to_duration', [ 0, 'days' ] ) );
+	}
+
+	/**
+	 * NPPD-2106: only an absent period means "unlimited". A real period carrying a
+	 * non-positive amount is a length nobody can act on, and a null period means the
+	 * descriptor never carried an access length at all — mapping either to 'forever'
+	 * would turn a finite or already-closed grant into a lifetime one, which is the
+	 * revenue leak this mapping exists to avoid. Both fail closed instead.
+	 */
+	public function test_map_access_length_to_duration_does_not_widen_a_zero_length_to_forever() {
+		$this->assertNull( $this->invoke_private_static( 'map_access_length_to_duration', [ 0, 'days' ] ) );
+		$this->assertNull( $this->invoke_private_static( 'map_access_length_to_duration', [ -5, 'days' ] ) );
+		$this->assertNull( $this->invoke_private_static( 'map_access_length_to_duration', [ '', null ] ) );
 	}
 
 	/**
@@ -1356,5 +1374,150 @@ HTML;
 			]
 		);
 		return get_post( $post_id );
+	}
+
+	/**
+	 * Register a stand-in WC_Memberships_Membership_Plan that
+	 * group_plans_by_fingerprint() will resolve by ID.
+	 *
+	 * Models only the getters that method calls. The access-length trio is what makes
+	 * this useful: those are the values the paid mapping needs, and reading them from
+	 * a plan object rather than a hand-built array is the whole point of the
+	 * round-trip test below.
+	 *
+	 * @param int        $plan_id       The plan post ID.
+	 * @param int[]      $product_ids   Products that grant the plan.
+	 * @param object[]   $rules         Content restriction rules (see make_rule()).
+	 * @param int|string $length_amount WCM access length amount ('' = unlimited).
+	 * @param string     $length_period WCM access length period ('' = unlimited).
+	 * @param string     $length_type   WCM access length type.
+	 *
+	 * @return void
+	 */
+	private function register_membership_plan( int $plan_id, array $product_ids, array $rules, $length_amount = '', string $length_period = '', string $length_type = 'unlimited' ) {
+		global $wc_memberships_plans_by_id;
+
+		$wc_memberships_plans_by_id[ $plan_id ] = new class( $plan_id, $product_ids, $rules, $length_amount, $length_period, $length_type ) {
+			/**
+			 * Constructor.
+			 *
+			 * @param int        $plan_id       The plan post ID.
+			 * @param int[]      $product_ids   Products that grant the plan.
+			 * @param object[]   $rules         Content restriction rules.
+			 * @param int|string $length_amount WCM access length amount.
+			 * @param string     $length_period WCM access length period.
+			 * @param string     $length_type   WCM access length type.
+			 */
+			public function __construct(
+				private int $plan_id,
+				private array $product_ids,
+				private array $rules,
+				private $length_amount,
+				private string $length_period,
+				private string $length_type
+			) {}
+
+			/**
+			 * The plan name.
+			 *
+			 * @return string
+			 */
+			public function get_name(): string {
+				return sprintf( 'Plan %d', $this->plan_id );
+			}
+
+			/**
+			 * The plan access method.
+			 *
+			 * @return string
+			 */
+			public function get_access_method(): string {
+				return 'purchase';
+			}
+
+			/**
+			 * The plan's content restriction rules.
+			 *
+			 * @return object[]
+			 */
+			public function get_content_restriction_rules(): array {
+				return $this->rules;
+			}
+
+			/**
+			 * Products that grant the plan.
+			 *
+			 * @return int[]
+			 */
+			public function get_product_ids(): array {
+				return $this->product_ids;
+			}
+
+			/**
+			 * The access length amount.
+			 *
+			 * @return int|string
+			 */
+			public function get_access_length_amount() {
+				return $this->length_amount;
+			}
+
+			/**
+			 * The access length period.
+			 *
+			 * @return string
+			 */
+			public function get_access_length_period(): string {
+				return $this->length_period;
+			}
+
+			/**
+			 * The access length type.
+			 *
+			 * @return string
+			 */
+			public function get_access_length_type(): string {
+				return $this->length_type;
+			}
+		};
+	}
+
+	/**
+	 * NPPD-2106: the descriptors group_plans_by_fingerprint() produces must carry
+	 * everything get_group_paid_descriptors() consumes.
+	 *
+	 * The two halves drifted once: the consumer read three access_length_* keys the
+	 * producer never wrote, so the command raised a TypeError on the first
+	 * purchase-gated plan — in dry-run as well as --live — while the whole suite
+	 * stayed green, because every other paid-mapping test hand-builds its descriptor.
+	 * This walks a real "1 year" plan from plan object to mapped duration, so a key
+	 * that stops being written fails here rather than at a publisher's cutover.
+	 */
+	public function test_group_plan_descriptors_carry_what_the_paid_mapping_reads() {
+		$this->register_membership_plan( 4101, [ 5101 ], [ $this->make_rule( 'post', [] ) ], 1, 'years', 'specific' );
+
+		// Called through invokeArgs rather than the invoke_private_static helper, whose
+		// argument spread cannot carry the by-reference $skipped parameter.
+		$group_plans = new \ReflectionMethod( Membership_Gates_Migration::class, 'group_plans_by_fingerprint' );
+		$group_plans->setAccessible( true );
+		$skipped     = [];
+		$call_args   = [ [ 4101 ], &$skipped ];
+		$plan_groups = $group_plans->invokeArgs( null, $call_args );
+
+		$this->assertCount( 1, $plan_groups, 'The plan was grouped rather than skipped.' );
+		$group = array_values( $plan_groups )[0];
+
+		$descriptors = $this->invoke_private_static( 'get_group_paid_descriptors', [ $group ] );
+
+		$this->assertCount( 1, $descriptors );
+		$this->assertSame(
+			[
+				'duration_value' => 12,
+				'duration_unit'  => 'months',
+			],
+			$descriptors[0]['duration'],
+			'A one-year plan maps to a 12-month one_time_purchase window, which is only possible if the producer wrote the access-length keys.'
+		);
+		$this->assertSame( [ 5101 ], $descriptors[0]['one_time_product_ids'] );
 	}
 }

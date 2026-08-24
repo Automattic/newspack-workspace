@@ -553,7 +553,9 @@ class Membership_Gates_Migration {
 	 * @param array $skipped  Skipped-plan summary rows, appended to by reference.
 	 *
 	 * @return array<string,array> Map of fingerprint => list of plan descriptors, each
-	 *                             [ 'pid', 'name', 'access_method', 'ac_rules', 'product_ids' ].
+	 *                             [ 'pid', 'name', 'access_method', 'ac_rules', 'product_ids',
+	 *                             'access_length_amount', 'access_length_period',
+	 *                             'access_length_type' ].
 	 */
 	private static function group_plans_by_fingerprint( array $plan_ids, array &$skipped ): array {
 		$plan_groups = [];
@@ -608,11 +610,19 @@ class Membership_Gates_Migration {
 
 			$fingerprint                   = self::compute_rules_fingerprint( $ac_rules );
 			$plan_groups[ $fingerprint ][] = [
-				'pid'           => $pid,
-				'name'          => $plan_name,
-				'access_method' => $access_method,
-				'ac_rules'      => $ac_rules,
-				'product_ids'   => 'purchase' === $access_method ? array_values( $plan->get_product_ids() ) : [],
+				'pid'                  => $pid,
+				'name'                 => $plan_name,
+				'access_method'        => $access_method,
+				'ac_rules'             => $ac_rules,
+				'product_ids'          => 'purchase' === $access_method ? array_values( $plan->get_product_ids() ) : [],
+				// How long the plan grants access for, read here because
+				// get_group_paid_descriptors() maps it onto the one_time_purchase rule's
+				// duration and has no plan object of its own. An unlimited plan reports
+				// '' for both amount and period; a fixed-date plan reports the days
+				// remaining to its end date, clamped by WCM to a minimum of 1.
+				'access_length_amount' => $plan->get_access_length_amount(),
+				'access_length_period' => $plan->get_access_length_period(),
+				'access_length_type'   => $plan->get_access_length_type(),
 			];
 		}
 
@@ -691,7 +701,7 @@ class Membership_Gates_Migration {
 			if ( ! empty( $variation_ids ) ) {
 				WP_CLI::warning(
 					sprintf(
-						'"%s": dropped linked product variation(s) %s — access rules do not support specific variations. Add the parent product(s) to the gate manually if those variations should grant access.',
+						'"%s": dropped linked product variation(s) %s — access rules do not support specific variations. Adding the parent product(s) to the gate manually restores access for these buyers, but it also grants access to buyers of every OTHER variation of the same product.',
 						$group_plan['name'],
 						implode( ', ', $variation_ids )
 					)
@@ -708,7 +718,12 @@ class Membership_Gates_Migration {
 				}
 			}
 
-			$duration = self::map_access_length_to_duration( $group_plan['access_length_amount'], $group_plan['access_length_period'] );
+			// Read defensively: a descriptor built without the access-length keys yields a
+			// null period, which maps to a null duration and fails closed below, rather
+			// than a warning-plus-TypeError mid-migration.
+			$access_length_period = $group_plan['access_length_period'] ?? null;
+			$access_length_type   = $group_plan['access_length_type'] ?? '';
+			$duration             = self::map_access_length_to_duration( $group_plan['access_length_amount'] ?? '', $access_length_period );
 
 			if ( ! empty( $one_time_product_ids ) && ! $one_time_rule_registered ) {
 				WP_CLI::warning(
@@ -725,24 +740,31 @@ class Membership_Gates_Migration {
 				if ( null === $duration ) {
 					WP_CLI::warning(
 						sprintf(
-							'"%s" has an access length period ("%s") the one_time_purchase rule cannot express. Its one-time product(s) (%s) were NOT mapped — configure a one_time_purchase rule on the gate manually.',
+							'"%s" has an access length (%s) the one_time_purchase rule cannot express. Its one-time product(s) (%s) were NOT mapped — configure a one_time_purchase rule on the gate manually.',
 							$group_plan['name'],
-							$group_plan['access_length_period'],
+							null === $access_length_period
+								? 'not readable from the plan'
+								: sprintf( '"%s %s"', (int) ( $group_plan['access_length_amount'] ?? 0 ), $access_length_period ),
 							implode( ', ', $one_time_product_ids )
 						)
 					);
-				} elseif ( 'fixed' === $group_plan['access_length_type'] ) {
+				} elseif ( 'fixed' === $access_length_type ) {
 					// WCM reports a fixed-date plan's length as the days from its access
 					// start date (or now, when no start is set) to its end date, so the
 					// mapped duration approximates the plan's window length — but the
 					// one_time_purchase rule re-anchors it on each order date, so a late
 					// purchase can grant access past the plan's original calendar end.
+					// WCM clamps that derivation to a minimum of one day, so a window
+					// that has already closed arrives here as "1 days" rather than zero.
 					WP_CLI::warning(
 						sprintf(
-							'"%s" uses fixed access dates; the one_time_purchase rule instead grants %d %s from each order date. Adjust the gate manually if the fixed end date matters.',
+							'"%s" uses fixed access dates; the one_time_purchase rule instead grants %d %s from each order date.%s Adjust the gate manually if the fixed end date matters.',
 							$group_plan['name'],
 							$duration['duration_value'],
-							$duration['duration_unit']
+							$duration['duration_unit'],
+							1 === $duration['duration_value'] && 'days' === $duration['duration_unit']
+								? ' That is WooCommerce Memberships\' minimum, which usually means the plan\'s access window has already closed.'
+								: ''
 						)
 					);
 				}
@@ -785,20 +807,31 @@ class Membership_Gates_Migration {
 	 * - days → days; weeks → days × 7
 	 * - months → months; years → months × 12
 	 *
-	 * @param int|string $amount WCM access length amount ('' when the plan is unlimited).
-	 * @param string     $period WCM access length period ('' when the plan is unlimited).
+	 * @param int|string  $amount WCM access length amount ('' when the plan is unlimited).
+	 * @param string|null $period WCM access length period ('' when the plan is unlimited,
+	 *                            null when the descriptor carries no access length at all).
 	 *
 	 * @return array|null [ 'duration_value' => int, 'duration_unit' => string ], or null
-	 *                    for an unrecognized period — the caller must fail closed, since
-	 *                    guessing here could widen a finite grant into a lifetime one.
+	 *                    for a length the rule cannot express — the caller must fail closed,
+	 *                    since guessing here could widen a finite grant into a lifetime one.
 	 */
-	private static function map_access_length_to_duration( $amount, string $period ): ?array {
-		$amount = (int) $amount;
-		if ( $amount <= 0 || '' === $period ) {
+	private static function map_access_length_to_duration( $amount, ?string $period ): ?array {
+		// An unlimited plan reports no period, and does grant access permanently. This is
+		// the only shape that legitimately maps to 'forever'.
+		if ( '' === $period ) {
 			return [
 				'duration_value' => 0,
 				'duration_unit'  => 'forever',
 			];
+		}
+
+		// A null period means the descriptor was built without the access-length keys, and
+		// a non-positive amount beside a real period is a length nobody can act on. Neither
+		// means "grants forever": mapping either one that way would turn a finite or already
+		// closed grant into a lifetime one, which is the failure this whole path guards.
+		$amount = (int) $amount;
+		if ( null === $period || $amount <= 0 ) {
+			return null;
 		}
 		switch ( $period ) {
 			case 'days':

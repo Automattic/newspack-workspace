@@ -168,3 +168,16 @@ function newspack_register_mock_membership_plan( $plan_id, $product_ids, $is_sub
 	}
 	return $plan;
 }
+
+// [ plan_id => plan object ]. The migration CLIs resolve a plan through the
+// singular factory rather than constructing one, so a test that exercises
+// group_plans_by_fingerprint() registers its plan doubles here.
+global $wc_memberships_plans_by_id;
+$wc_memberships_plans_by_id = [];
+
+if ( ! function_exists( 'wc_memberships_get_membership_plan' ) ) {
+	function wc_memberships_get_membership_plan( $plan_id ) {
+		global $wc_memberships_plans_by_id;
+		return $wc_memberships_plans_by_id[ (int) $plan_id ] ?? false;
+	}
+}
