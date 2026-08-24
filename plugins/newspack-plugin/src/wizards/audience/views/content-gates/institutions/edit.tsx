@@ -26,6 +26,7 @@ import {
 	useConfirmDialog,
 } from '../../../../../../packages/components/src';
 import { WIZARD_STORE_NAMESPACE } from '../../../../../../packages/components/src/wizard/store';
+import { INSTITUTION_RULE_SLUG, invalidateAccessRuleOptions } from '../../../../../content-gate/access-rule-option-sources';
 
 const { useHistory } = Router;
 
@@ -141,6 +142,9 @@ export default function InstitutionEdit( { match }: { match: { params: { id?: st
 
 		request
 			.then( () => {
+				// The gate pickers and summaries name institutions from a list fetched
+				// once per session, so a title added or changed here has to drop it.
+				invalidateAccessRuleOptions( INSTITUTION_RULE_SLUG );
 				setIsDirty( false );
 				history.push( '/institutions' );
 			} )
@@ -161,6 +165,7 @@ export default function InstitutionEdit( { match }: { match: { params: { id?: st
 		startLoadingData( { isQuietLoading: true } );
 		apiFetch( { path: `${ API_PATH }/${ id }?force=true`, method: 'DELETE' } )
 			.then( () => {
+				invalidateAccessRuleOptions( INSTITUTION_RULE_SLUG );
 				setIsDirty( false );
 				history.push( '/institutions' );
 			} )
