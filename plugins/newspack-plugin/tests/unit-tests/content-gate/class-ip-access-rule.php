@@ -986,4 +986,49 @@ class Newspack_Test_IP_Access_Rule extends WP_UnitTestCase {
 		$this->assertStringNotContainsString( '://', $url, 'Check URL should not contain a scheme or host.' );
 		$this->assertStringContainsString( 'institution_id=4242', $url );
 	}
+
+	/**
+	 * The public classifier names each entry shape. It is the single source of
+	 * truth the migration CLI delegates to, so a token carrying both separators
+	 * must read as a malformed CIDR (invalid), never as a dash range.
+	 */
+	public function test_classify_entry() {
+		$this->assertSame( 'ip', IP_Access_Rule::classify_entry( '10.0.0.5' ) );
+		$this->assertSame( 'cidr', IP_Access_Rule::classify_entry( '192.168.1.0/24' ) );
+		$this->assertSame( 'range', IP_Access_Rule::classify_entry( '203.0.113.0-203.0.113.255' ) );
+		$this->assertSame( 'range', IP_Access_Rule::classify_entry( '10.0.0.1 - 10.0.0.9' ), 'Whitespace around the dash is tolerated.' );
+		$this->assertSame( 'invalid', IP_Access_Rule::classify_entry( '203.0.113.255-203.0.113.0' ), 'A reversed range is invalid.' );
+		$this->assertSame( 'invalid', IP_Access_Rule::classify_entry( '10.0.0.0/24-10.0.0.5' ), 'Both separators read as a malformed CIDR.' );
+		$this->assertSame( 'invalid', IP_Access_Rule::classify_entry( '2001:db8::1' ), 'IPv6 is unsupported.' );
+		$this->assertSame( 'invalid', IP_Access_Rule::classify_entry( 'not-an-ip' ) );
+	}
+
+	/**
+	 * Entry size lets a caller judge breadth uniformly: a /16 CIDR and the
+	 * equivalent dash range report the same address count.
+	 */
+	public function test_get_entry_size() {
+		$this->assertSame( 1.0, IP_Access_Rule::get_entry_size( '10.0.0.5' ) );
+		$this->assertSame( 256.0, IP_Access_Rule::get_entry_size( '192.168.1.0/24' ) );
+		$this->assertSame( 65536.0, IP_Access_Rule::get_entry_size( '128.100.0.0/16' ) );
+		$this->assertSame( 256.0, IP_Access_Rule::get_entry_size( '10.0.0.0-10.0.0.255' ), 'A 256-address dash range matches its /24 equivalent.' );
+		$this->assertSame( 65536.0, IP_Access_Rule::get_entry_size( '10.0.0.0-10.0.255.255' ), 'A dash range and its /16 equivalent report the same size.' );
+		$this->assertSame( 2.0 ** 32, IP_Access_Rule::get_entry_size( '0.0.0.0-255.255.255.255' ), 'The whole IPv4 space does not overflow (float).' );
+		$this->assertSame( 0.0, IP_Access_Rule::get_entry_size( 'not-an-ip' ), 'An invalid entry has no size.' );
+	}
+
+	/**
+	 * The public normalizer accepts dash ranges (parity with the runtime check),
+	 * splits on commas and newlines, canonicalizes CIDR mask bits, and surfaces
+	 * invalid entries for reporting rather than dropping them silently.
+	 */
+	public function test_normalize_ip_ranges() {
+		$result = IP_Access_Rule::normalize_ip_ranges( "192.168.1.0/24, 10.0.0.5\n203.0.113.0-203.0.113.255" );
+		$this->assertSame( [ '192.168.1.0/24', '10.0.0.5', '203.0.113.0-203.0.113.255' ], $result['valid'], 'Dash ranges are kept alongside IPs and CIDR blocks.' );
+		$this->assertSame( [], $result['invalid'] );
+
+		$mixed = IP_Access_Rule::normalize_ip_ranges( [ '0.0.0.0/00', 'not-an-ip', '2001:db8::/32' ] );
+		$this->assertSame( [ '0.0.0.0/0' ], $mixed['valid'], 'Leading-zero mask bits are canonicalized.' );
+		$this->assertSame( [ 'not-an-ip', '2001:db8::/32' ], $mixed['invalid'], 'Invalid entries are surfaced in their trimmed original form.' );
+	}
 }
