@@ -273,7 +273,7 @@ class Newspack_Test_IP_Access_Rule extends WP_UnitTestCase {
 		$data     = $response->get_data();
 
 		$this->assertFalse( $data['valid'] );
-		$this->assertSame( 'REST Test Library', $data['institution'], 'Institution name should be returned even on failure.' );
+		$this->assertArrayNotHasKey( 'institution', $data, 'Institution name must not be disclosed to a visitor who did not match it.' );
 
 		if ( null === $original_addr ) {
 			unset( $_SERVER['REMOTE_ADDR'] ); // phpcs:ignore WordPressVIPMinimum.Variables.ServerVariables.UserControlledHeaders, WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___SERVER__REMOTE_ADDR__
