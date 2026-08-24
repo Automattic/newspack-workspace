@@ -1014,8 +1014,9 @@ class Membership_Gates_Migration {
 	 * A post already carrying a falsy exemption row is overwritten, not skipped, and its
 	 * ID listed.
 	 *
-	 * Migrates only the post types the exemption toggle is offered on; rows on any other
-	 * type are counted and reported so the totals reconcile.
+	 * Migrates only the post types the exemption toggle is offered on. Posts on any other
+	 * type are counted and warned about rather than written: they can still be gated by a
+	 * taxonomy access rule, so they need a human decision this command cannot make.
 	 *
 	 * Idempotent, but additive: an exemption recorded by an earlier run is never removed.
 	 * A post whose Memberships flag has since been unchecked is reported so it can be
@@ -1044,7 +1045,7 @@ class Membership_Gates_Migration {
 		$dry_run = ! (bool) \WP_CLI\Utils\get_flag_value( $assoc_args, 'live', false );
 
 		if ( ! class_exists( 'Newspack\Content_Restriction_Control' ) ) {
-			WP_CLI::error( 'Newspack\Content_Restriction_Control class not found. Is newspack-plugin active? Aborting.' );
+			WP_CLI::error( 'Newspack\Content_Restriction_Control class not found, so the exemption meta key and its post types cannot be resolved. Aborting.' );
 		}
 
 		if ( $dry_run ) {
@@ -1139,19 +1140,32 @@ class Membership_Gates_Migration {
 
 		WP_CLI::line( '' );
 
+		// The command never removes an exemption, so this list is the only record of what a
+		// live run touched. Printing it is what makes an over-broad run undoable without
+		// re-deriving the set from the database afterwards.
+		if ( ! empty( $missing ) || ! empty( $falsy ) ) {
+			WP_CLI::line(
+				sprintf(
+					'Exemption %s for: %s',
+					$dry_run ? 'would be recorded' : 'recorded',
+					self::format_post_id_list( array_merge( $missing, $falsy ) )
+				)
+			);
+		}
+
 		if ( ! empty( $falsy ) ) {
 			WP_CLI::warning(
 				sprintf(
 					'%d post(s) carried a falsy exemption row and %s: %s',
 					count( $falsy ),
 					$dry_run ? 'would be overwritten' : 'were overwritten',
-					implode( ', ', $falsy )
+					self::format_post_id_list( $falsy )
 				)
 			);
 		}
 
 		if ( ! empty( $failed ) ) {
-			WP_CLI::warning( sprintf( '%d exemption(s) could not be written, and are still counted in the table above: %s', count( $failed ), implode( ', ', $failed ) ) );
+			WP_CLI::warning( sprintf( '%d exemption(s) could not be written, and are still counted in the table above: %s', count( $failed ), self::format_post_id_list( $failed ) ) );
 		}
 
 		self::report_out_of_scope_force_public( $out_of_scope );
@@ -1170,6 +1184,13 @@ class Membership_Gates_Migration {
 
 		if ( ! $dry_run ) {
 			WP_CLI::line( 'Keep the `_wc_memberships_force_public` meta until this has run for the last time — it is what this command reads.' );
+		}
+
+		// A warning line is invisible to whatever chained this command with the Memberships
+		// deactivation that follows it, and an unwritten exemption cannot be recovered once
+		// the flag it came from is gone. Exit non-zero so the cutover stops here.
+		if ( ! empty( $failed ) ) {
+			WP_CLI::halt( 1 );
 		}
 	}
 
@@ -1229,6 +1250,14 @@ class Membership_Gates_Migration {
 			)
 		);
 
+		// Same hazard as the census query: get_col() reports a failure as an empty set, and
+		// an empty review list is what an operator about to deactivate Memberships reads as
+		// "nothing stays wrongly public".
+		if ( $wpdb->last_error ) {
+			WP_CLI::warning( 'Could not check for exemptions whose Memberships flag was since revoked. Nothing was reviewed — treat this as "unknown", not "none".' );
+			return;
+		}
+
 		if ( empty( $post_ids ) ) {
 			return;
 		}
@@ -1237,15 +1266,25 @@ class Membership_Gates_Migration {
 			sprintf(
 				'%d post(s) are exempt while the Memberships flag says they are not, so they stay public after cutover. Review and clear any the publisher no longer wants free: %s',
 				count( $post_ids ),
-				implode( ', ', $post_ids )
+				self::format_post_id_list( $post_ids )
 			)
 		);
 	}
 
 	/**
-	 * Report the force-public rows on post types the exemption does not apply to.
+	 * Report the force-public posts on post types the exemption toggle is not offered on.
 	 *
-	 * @param array<string,int> $out_of_scope Post type => row count.
+	 * A warning rather than a plain line, because "the exemption does not apply" is not the
+	 * same as "these posts cannot be gated". Nothing in the restriction check is scoped by
+	 * post type: the exemption is honoured on any post ID, and a category or tag access rule
+	 * matches a post through its terms. So a public post type the exemption toggle is not
+	 * offered on — it is absent from `get_available_post_types()` — can still be gated at
+	 * cutover, and these posts are exactly the ones the publisher marked free.
+	 *
+	 * Counts posts, not meta rows: the census query selects DISTINCT post IDs, so duplicate
+	 * force-public rows on one post collapse to a single entry.
+	 *
+	 * @param array<string,int> $out_of_scope Post type => post count.
 	 *
 	 * @return void
 	 */
@@ -1258,12 +1297,35 @@ class Membership_Gates_Migration {
 		foreach ( $out_of_scope as $post_type => $count ) {
 			$parts[] = sprintf( '%s (%d)', $post_type, $count );
 		}
-		WP_CLI::line(
+		WP_CLI::warning(
 			sprintf(
-				'Ignored %d force-public row(s) on post types the exemption does not apply to: %s.',
+				'Skipped %d force-public post(s) on post types the exemption toggle is not offered on: %s. A category or tag access rule can still gate them, and no exemption was recorded — check these by hand before deactivating Memberships.',
 				array_sum( $out_of_scope ),
 				implode( ', ', $parts )
 			)
+		);
+	}
+
+	/**
+	 * Render a list of post IDs for a single CLI line, capped.
+	 *
+	 * These lists are what an operator acts on before deactivating Memberships. Imploding
+	 * every ID scrolls the rest of the summary out of the terminal buffer once the list runs
+	 * to thousands, so the tail is summarised instead.
+	 *
+	 * @param int[] $post_ids Post IDs.
+	 * @param int   $limit    How many IDs to name before summarising the rest.
+	 *
+	 * @return string
+	 */
+	private static function format_post_id_list( array $post_ids, int $limit = 100 ): string {
+		if ( count( $post_ids ) <= $limit ) {
+			return implode( ', ', $post_ids );
+		}
+		return sprintf(
+			'%s (and %d more)',
+			implode( ', ', array_slice( $post_ids, 0, $limit ) ),
+			count( $post_ids ) - $limit
 		);
 	}
 
@@ -1272,9 +1334,10 @@ class Membership_Gates_Migration {
 	 *
 	 * Reads through metadata_exists() rather than get_post_meta(). The exemption meta is
 	 * registered with a default, so get_post_meta() cannot tell "no row" from "row set
-	 * falsy" — and a build carrying a `default_post_metadata` fallback for the Memberships
-	 * flag answers true for exactly the posts this command selects, which would leave it
-	 * with nothing to write. metadata_exists() reads the row itself, past both.
+	 * falsy" — and on a build carrying the `default_post_metadata` fallback for the exemption
+	 * key (which answers from the Memberships flag), it answers true for exactly the posts
+	 * this command selects, which would leave it with nothing to write. metadata_exists()
+	 * reads the row itself, past both.
 	 *
 	 * @param int $post_id Post ID.
 	 *

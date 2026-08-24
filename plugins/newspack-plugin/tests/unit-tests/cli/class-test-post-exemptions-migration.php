@@ -98,8 +98,11 @@ class Test_Post_Exemptions_Migration extends WP_UnitTestCase {
 	public function test_records_an_exemption_where_only_the_memberships_flag_exists() {
 		$post_id = $this->create_force_public_post();
 
-		$this->run_migration( [ 'live' => true ] );
+		$first_run = $this->run_migration( [ 'live' => true ] );
 		$this->assertTrue( $this->has_recorded_exemption( $post_id ) );
+		// The command never removes an exemption, so this list is the only record of what to
+		// undo if a run turns out to have been too broad.
+		$this->assertStringContainsString( 'Exemption recorded for: ' . $post_id, $first_run );
 
 		$output = $this->run_migration( [ 'live' => true ] );
 		$this->assertStringContainsString( '0 exemption(s) recorded', $output );
@@ -135,8 +138,13 @@ class Test_Post_Exemptions_Migration extends WP_UnitTestCase {
 	}
 
 	/**
-	 * A row on a post type the exemption is not registered for is inert, so it is counted
-	 * rather than migrated — that is what lets a census of the raw meta key reconcile.
+	 * A post type the exemption toggle is not offered on is skipped rather than migrated.
+	 * It is warned about, not merely counted: nothing in the restriction check is scoped by
+	 * post type, so a taxonomy access rule can still gate those posts.
+	 *
+	 * Also pins the per-type breakdown table, which is the artifact an operator reconciles
+	 * against before deactivating Memberships — the summary line alone cannot show that the
+	 * skipped type is absent from it.
 	 */
 	public function test_ignores_post_types_the_exemption_is_not_registered_for() {
 		$gateable_id = $this->create_force_public_post();
@@ -146,7 +154,22 @@ class Test_Post_Exemptions_Migration extends WP_UnitTestCase {
 
 		$this->assertTrue( $this->has_recorded_exemption( $gateable_id ) );
 		$this->assertFalse( metadata_exists( 'post', $inert_id, Content_Restriction_Control::IS_EXEMPT_META_KEY ) );
-		$this->assertStringContainsString( 'Ignored 1 force-public row(s) on post types the exemption does not apply to: attachment (1)', $output );
+		$this->assertStringContainsString( 'Skipped 1 force-public post(s) on post types the exemption toggle is not offered on: attachment (1)', $output );
+		$this->assertStringContainsString( 'check these by hand before deactivating Memberships', $output );
+
+		$this->assertSame(
+			[
+				[
+					'Post Type'      => 'post',
+					'Status'         => 'publish',
+					'No Row'         => 1,
+					'Falsy Row'      => 0,
+					'Already Exempt' => 0,
+				],
+			],
+			array_values( WP_CLI::$tables[0]['items'] ),
+			'The breakdown table reports the migrated post type only.'
+		);
 	}
 
 	/**
