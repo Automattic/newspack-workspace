@@ -30,12 +30,12 @@ class InDesign_Converter {
 	/**
 	 * Line terminator used throughout the exported file.
 	 *
-	 * Must stay consistent with self::START_TAG: <ASCII-WIN> promises InDesign
-	 * that lines end with CRLF, and <ASCII-MAC> would promise a bare CR. When
-	 * the header and the terminators disagree, the leftover byte pushes each
+	 * Must stay consistent with self::START_TAG. What NPPM-3098 established is
+	 * that mixed terminators break the import: a stray byte pushes the next
 	 * <pstyle:...> tag off the start of its paragraph and InDesign renders the
-	 * markup as literal text (NPPM-3098). Change one and you must change the
-	 * other.
+	 * markup as literal text. The fix rests on internal consistency — one
+	 * terminator everywhere, declared once — so change this and you must
+	 * revisit the header.
 	 *
 	 * @var string
 	 */
@@ -506,6 +506,11 @@ class InDesign_Converter {
 	 * to character styles, other tags to their text). Entity-encoded brackets
 	 * are content and still come out escaped.
 	 *
+	 * The conversion runs the full body table, so block-level markup a caption
+	 * rarely carries (a <p>, a list) converts to body paragraph styles
+	 * mid-caption rather than escaping as literal text — the acceptable floor
+	 * for input the caption UI does not produce.
+	 *
 	 * @param string $text Text to convert.
 	 *
 	 * @return string Converted text.
@@ -553,6 +558,9 @@ class InDesign_Converter {
 		// of the same characters, while &Lt;/&Gt; are much-less/greater-than and
 		// must stay out. The resolutions after the decode also catch a named
 		// form the running PHP version's entity table leaves undecoded.
+		// &nvlt;/&nvgt; (bracket + combining long stroke) are deliberately left
+		// out: escaping them would drop the negation mark's meaning, and no
+		// editorial surface produces them.
 		$text = preg_replace( '/&(lt|LT|gt|GT|#0*6[02]|#[xX]0*3[cCeE]);/', '&amp;$1;', $text );
 
 		$text = html_entity_decode( $text, ENT_QUOTES | ENT_HTML5, 'UTF-8' );

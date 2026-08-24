@@ -90,6 +90,8 @@ class Newspack_Test_InDesign_Exporter extends WP_UnitTestCase {
 			'classic paragraphs' => [ "<p>Classic one.</p>\n<p>Classic two.</p>\n<p>Classic three.</p>" ],
 			'mixed line endings' => [ "<p>CRLF source.</p>\r\n<p>LF source.</p>\n<p>CR source.</p>\r<p>Last.</p>" ],
 			'blank line runs'    => [ "<p>Before.</p>\n\n\n<p>After.</p>" ],
+			// Every line CR-terminated: the shape of imported legacy-Mac copy.
+			'legacy mac endings' => [ "<p>One.</p>\r<p>Two.</p>\r<p>Three.</p>\r" ],
 			'heading and list'   => [ "<h2>A subhead</h2>\n<ul><li>One</li>\n<li>Two</li></ul>\n<p>Body.</p>" ],
 			'group block'        => [ "<!-- wp:group -->\n<div class=\"wp-block-group\"><!-- wp:paragraph -->\n<p>Inside.</p>\n<!-- /wp:paragraph --></div>\n<!-- /wp:group -->" ],
 			'blockquote'         => [ "<!-- wp:quote -->\n<blockquote class=\"wp-block-quote\"><p>Quoted.</p><cite>Someone</cite></blockquote>\n<!-- /wp:quote -->" ],
@@ -1396,6 +1398,54 @@ class Newspack_Test_InDesign_Exporter extends WP_UnitTestCase {
 		$content   = $converter->convert_post( $post_id );
 
 		$this->assertStringContainsString( 'See \\\\\<dir\\> for details.', $content );
+	}
+
+	/**
+	 * Test that a literal backslash in plain-text fields is escaped.
+	 *
+	 * Titles and credits route through get_transformed_plain_text(); the
+	 * backslash escape must reach them the same way it reaches body content.
+	 */
+	public function test_escapes_backslash_in_plain_text_fields() {
+		$image_id = $this->factory->attachment->create();
+		// update_post_meta() unslashes its input, so slash the fixture to store
+		// the single literal backslash written here.
+		update_post_meta( $image_id, '_media_credit', wp_slash( 'AP\\Photo' ) );
+
+		$post_id = $this->factory->post->create(
+			[
+				// wp_insert_post() unslashes too; same treatment for the title.
+				'post_title'   => wp_slash( 'Backslash \\ in title' ),
+				'post_content' => '<!-- wp:image {"id":' . $image_id . '} --><!-- /wp:image -->',
+			]
+		);
+
+		$converter = new InDesign_Converter();
+		$content   = $converter->convert_post( $post_id );
+
+		$this->assertStringContainsString( '<pstyle:24head>Backslash \\\\ in title', $content );
+		$this->assertStringContainsString( '<pstyle:PhotoCredit>AP\\\\Photo', $content );
+	}
+
+	/**
+	 * Test that nested caption formatting converts cleanly.
+	 *
+	 * Bold inside a link: the link reduces to its text while the bold carries
+	 * through as a character style.
+	 */
+	public function test_converts_nested_caption_formatting() {
+		$image_id = $this->factory->attachment->create();
+		$post_id  = $this->factory->post->create(
+			[
+				'post_title'   => 'Test Post',
+				'post_content' => '<!-- wp:image {"id":' . $image_id . '} --><figure class="wp-block-image"><img src="http://localhost/wp-content/uploads/2025/01/image.jpg" /><figcaption class="wp-element-caption">By <a href="https://example.com"><strong>Jane Doe</strong></a> for The Record.</figcaption></figure><!-- /wp:image -->',
+			]
+		);
+
+		$converter = new InDesign_Converter();
+		$content   = $converter->convert_post( $post_id );
+
+		$this->assertStringContainsString( '<pstyle:PhotoCaption>By <cTypeface:Bold>Jane Doe<cTypeface:> for The Record.', $content );
 	}
 
 	/**

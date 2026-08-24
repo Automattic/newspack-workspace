@@ -74,10 +74,14 @@ class InDesign_Exporter {
 	 */
 	public static function init() {
 		// The Header platform setting was removed (#806) and nothing reads its
-		// option anymore, but stored rows were autoloaded. Clear any that
-		// remain; get_option() resolves from the alloptions/notoptions cache,
-		// so this costs a write only on the one request that still finds a row.
-		if ( false !== get_option( 'newspack_indesign_export_platform' ) ) {
+		// option anymore, but stored rows were autoloaded. Check alloptions —
+		// already in memory on every request — rather than get_option(), whose
+		// miss path costs a per-request query on sites without a persistent
+		// object cache. Rows were written with default autoload, so any that
+		// exist appear here; the delete fires once, and afterwards the check
+		// costs nothing on any site.
+		$alloptions = wp_load_alloptions();
+		if ( isset( $alloptions['newspack_indesign_export_platform'] ) ) {
 			delete_option( 'newspack_indesign_export_platform' );
 		}
 
@@ -460,9 +464,7 @@ class InDesign_Exporter {
 	/**
 	 * Whether photo captions and credits should be excluded from exports.
 	 *
-	 * Photo credits are a separate attribution field and are always exported.
-	 *
-	 * @return bool True when captions should be omitted.
+	 * @return bool True when captions and credits should be omitted.
 	 */
 	public static function get_exclude_captions_setting() {
 		return (bool) get_option( self::EXCLUDE_CAPTIONS_OPTION, self::EXCLUDE_CAPTIONS_DEFAULT );
