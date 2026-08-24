@@ -180,11 +180,14 @@ abstract class Wizard {
 
 		if ( Starter_Content::has_created_starter_content() && current_user_can( 'manage_options' ) ) {
 			$urls['remove_starter_content'] = esc_url(
-				add_query_arg(
-					array(
-						'newspack_reset' => 'starter-content',
+				wp_nonce_url(
+					add_query_arg(
+						array(
+							'newspack_reset' => 'starter-content',
+						),
+						Wizards::get_url( 'newspack-dashboard' )
 					),
-					Wizards::get_url( 'newspack-dashboard' )
+					'newspack_reset_starter-content'
 				)
 			);
 		}
@@ -193,11 +196,14 @@ abstract class Wizard {
 			$urls['components_demo'] = esc_url( admin_url( 'admin.php?page=newspack-components-demo' ) );
 			$urls['setup_wizard']    = esc_url( admin_url( 'admin.php?page=newspack-setup-wizard' ) );
 			$urls['reset_url']       = esc_url(
-				add_query_arg(
-					array(
-						'newspack_reset' => 'reset',
+				wp_nonce_url(
+					add_query_arg(
+						array(
+							'newspack_reset' => 'reset',
+						),
+						Wizards::get_url( 'newspack-dashboard' )
 					),
-					Wizards::get_url( 'newspack-dashboard' )
+					'newspack_reset_reset'
 				)
 			);
 		}

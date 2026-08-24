@@ -345,8 +345,13 @@ final class Newspack {
 		if ( ! current_user_can( 'manage_options' ) ) {
 			return;
 		}
-		$redirect_url   = admin_url( 'admin.php?page=newspack-dashboard' );
 		$newspack_reset = filter_input( INPUT_GET, 'newspack_reset', FILTER_SANITIZE_FULL_SPECIAL_CHARS );
+		if ( ! $newspack_reset ) {
+			return;
+		}
+		check_admin_referer( 'newspack_reset_' . $newspack_reset );
+
+		$redirect_url = admin_url( 'admin.php?page=newspack-dashboard' );
 		if ( 'starter-content' === $newspack_reset ) {
 			Starter_Content::remove_starter_content();
 			$redirect_url = add_query_arg( 'newspack-notice', rawurlencode( __( 'Starter content removed.', 'newspack' ) ), $redirect_url );
