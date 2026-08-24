@@ -478,12 +478,22 @@ class Block_Visibility {
 	 * The blog id is in the key because gate ids are per-site post ids, so a
 	 * switch_to_blog() mid-request would otherwise answer for the wrong site.
 	 *
-	 * Not flushed when a gate is written. The only reader is the render path, which
-	 * returns early under is_admin(), and the gate-editing endpoints return gate data
-	 * rather than rendered post content -- so no request both writes a gate and renders
-	 * a block gated by it. A caller that breaks that assumption needs an invalidation
-	 * hook here, the way Content_Gate flushes its own cache on save_post and the
-	 * post-meta writes.
+	 * Not flushed when a gate is written, and neither stale answer is safe. A stale
+	 * false returns early from is_hidden_for_user() and renders a block whose gates
+	 * have just become active. A stale true reaches compute_gate_rules_match(), which
+	 * passes through when no gate is active -- and under visibility "hidden" that
+	 * pass-through inverts into withholding a block that should have rendered.
+	 *
+	 * What bounds this is the write window, not the direction. A stale entry takes one
+	 * request that reads a gate set, changes the publish status of a gate in it, then
+	 * reads that same set again. Neither reader writes gates -- filter_render_block()
+	 * renders, strip_hidden() strips for the excerpt -- so it takes a caller outside
+	 * this file interleaving a gate write between two reads, and none is known to. The
+	 * stale true additionally needs the second read to miss $rules_match_cache, which
+	 * happens across user ids: filter_render_block() uses the current reader, while
+	 * strip_hidden() always uses 0. Anything that closes that window needs an
+	 * invalidation hook here, the way Content_Gate flushes its own cache on save_post
+	 * and the post-meta writes.
 	 *
 	 * @var bool[]
 	 */
@@ -538,10 +548,10 @@ class Block_Visibility {
 	 * @return bool
 	 */
 	private static function has_active_gates( $gate_ids ) {
-		// Normalized because the answer does not depend on order or repetition, but the
-		// caller's list does: the ids arrive from a block attribute in editor order, and
-		// array_filter() preserves keys, so dropping a zero would otherwise encode as an
-		// object rather than a list and key differently again.
+		// The answer does not depend on the order or the repetition of the ids, but the
+		// caller's list carries both -- they arrive from a block attribute in editor
+		// order. Normalizing first lets every block gated by the same set, however its
+		// author happened to arrange them, share one entry.
 		$ids = array_values( array_unique( array_map( 'intval', $gate_ids ) ) );
 		sort( $ids, SORT_NUMERIC );
 		$cache_key = get_current_blog_id() . ':' . implode( ',', $ids );
