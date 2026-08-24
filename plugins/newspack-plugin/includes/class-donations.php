@@ -994,6 +994,11 @@ class Donations {
 	 * donation URL — which has no referer — were dropped. Request params win
 	 * over referer params.
 	 *
+	 * The modal form's own submission is what carries a promo link's values here:
+	 * appendUtmFields() in newspack-blocks' modal.js copies the landing page's
+	 * utm params onto the form as hidden fields before it submits, so they
+	 * arrive in this request's $_GET rather than depending on the referer.
+	 *
 	 * @param array $params Params parsed from the referer query string.
 	 * @return array Params with the request's utm_* params merged in.
 	 */
