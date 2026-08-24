@@ -29,16 +29,18 @@ class Test_Memberships_Audit extends WP_UnitTestCase {
 	private function facts( array $overrides = [] ) {
 		return array_merge(
 			[
-				'holder_id'                => 501,
-				'team_id'                  => 0,
-				'subscription_id'          => 0,
-				'subscription_customer_id' => null,
-				'subscription_status'      => null,
-				'wcsg_recipient_id'        => null,
-				'order_id'                 => 0,
-				'order_customer_id'        => null,
-				'order_status'             => '',
-				'order_is_paid'            => false,
+				'holder_id'                        => 501,
+				'team_id'                          => 0,
+				'subscription_id'                  => 0,
+				'subscription_customer_id'         => null,
+				'subscription_status'              => null,
+				// Off by default: only a test about the payment-recovery grace sets it.
+				'subscription_in_payment_recovery' => false,
+				'wcsg_recipient_id'                => null,
+				'order_id'                         => 0,
+				'order_customer_id'                => null,
+				'order_status'                     => '',
+				'order_is_paid'                    => false,
 			],
 			$overrides
 		);
@@ -106,11 +108,13 @@ class Test_Memberships_Audit extends WP_UnitTestCase {
 	}
 
 	/**
-	 * `on-hold` (payment retry) grants access under WooCommerce Memberships but
-	 * NOT under Access Control — `WooCommerce_Connection::ACTIVE_SUBSCRIPTION_STATUSES`
-	 * is active + pending-cancel only. Counting it as access-granting would
-	 * report a reader as covered on the very run meant to catch their loss; the
-	 * dunning cohort is its own migration question (NPPD-2052).
+	 * `on-hold` with NO retry scheduled grants access under WooCommerce Memberships
+	 * but not under Access Control, so the reader belongs to the dunning cohort,
+	 * which is its own migration question (NPPD-2052).
+	 *
+	 * On-hold WITH a retry scheduled is the opposite — the payment-recovery grace
+	 * grants it — and is covered separately below. The distinction is the retry
+	 * date, not the status, which is why the status list alone cannot answer this.
 	 */
 	public function test_on_hold_subscription_does_not_grant_access() {
 		$this->assertSame(
@@ -128,9 +132,10 @@ class Test_Memberships_Audit extends WP_UnitTestCase {
 	}
 
 	/**
-	 * The access-granting list must not drift from the one the runtime actually
-	 * evaluates — a divergence would silently move readers between "covered" and
-	 * "loses access" on every audit.
+	 * The status list must not drift from WooCommerce_Connection's — a divergence
+	 * would silently move readers between "covered" and "loses access" on every
+	 * audit. Note this pins the STATUS list only: what the runtime grants is this
+	 * list plus the payment-recovery grace, which facts_grant_access() folds in.
 	 */
 	public function test_access_granting_statuses_match_the_runtime() {
 		if ( ! class_exists( '\Newspack\WooCommerce_Connection' ) ) {
@@ -584,5 +589,131 @@ class Test_Memberships_Audit extends WP_UnitTestCase {
 
 	public function test_plan_ids_reject_zero() {
 		$this->assertInstanceOf( \WP_Error::class, Memberships_Audit::resolve_plan_ids( '0' ) );
+	}
+
+	/**
+	 * An on-hold subscription in payment retry DOES grant access after the flip.
+	 *
+	 * Access_Rules::has_active_subscription() evaluates the status list plus the
+	 * payment-recovery grace, and every caller that builds an evaluation context
+	 * defaults that grace to ON. Classifying on the status alone files the gift as
+	 * inactive — a class that is not even selectable via --only — so the reader
+	 * disappears from the report at exactly the moment the buyer gains access
+	 * through the grace window and the recipient loses it.
+	 */
+	public function test_a_gift_in_payment_recovery_is_reported_rather_than_filed_as_inactive() {
+		$in_recovery = $this->facts(
+			[
+				'subscription_id'                  => 900,
+				'subscription_customer_id'         => 777,
+				'subscription_status'              => 'on-hold',
+				'subscription_in_payment_recovery' => true,
+			]
+		);
+		$plain_hold  = $this->facts(
+			[
+				'subscription_id'          => 901,
+				'subscription_customer_id' => 777,
+				'subscription_status'      => 'on-hold',
+			]
+		);
+
+		$this->assertSame( Memberships_Audit::CLASS_GIFT, Memberships_Audit::classify( $in_recovery ) );
+		$this->assertSame(
+			Memberships_Audit::CLASS_GIFT_INACTIVE,
+			Memberships_Audit::classify( $plain_hold ),
+			'On-hold with no retry scheduled grants nothing, and stays in the dunning cohort.'
+		);
+	}
+
+	/**
+	 * A subscription the holder bought and then gifted away is not their own access.
+	 *
+	 * Access Control excludes a gifted-away subscription for the buyer and grants it
+	 * only to the recipient, so counting it as member-owned marks the holder covered
+	 * and costs them their access at the flip — invisibly, because member-owned is
+	 * only ever an aggregate count and yields no per-member row.
+	 */
+	public function test_a_subscription_gifted_away_by_its_owner_is_not_member_owned() {
+		$gifted_away = $this->facts(
+			[
+				'holder_id'                => 501,
+				'subscription_id'          => 902,
+				'subscription_customer_id' => 501,
+				'subscription_status'      => 'active',
+				'wcsg_recipient_id'        => 777,
+			]
+		);
+		$kept        = $this->facts(
+			[
+				'holder_id'                => 501,
+				'subscription_id'          => 903,
+				'subscription_customer_id' => 501,
+				'subscription_status'      => 'active',
+			]
+		);
+
+		$this->assertSame( Memberships_Audit::CLASS_GIFT, Memberships_Audit::classify( $gifted_away ) );
+		$this->assertSame(
+			Memberships_Audit::CLASS_MEMBER_OWNED,
+			Memberships_Audit::classify( $kept ),
+			'A subscription the holder bought and kept is still their own access.'
+		);
+	}
+
+	/**
+	 * The batch walk visits every row even when the audited set shrinks mid-run.
+	 *
+	 * The audit is read-only; the site is not. A membership leaving the set while
+	 * the walk runs — WooCommerce Memberships' expiry cron, a cancellation — shifts
+	 * every later OFFSET by one and drops an unvisited row, and the count still
+	 * looks about right, so nothing signals it. Each skipped row is a reader who may
+	 * lose access at the flip and never reaches the comp-grant list.
+	 *
+	 * The mutation this pins is real: with OFFSET paging this test fails, reporting
+	 * one ID never visited.
+	 */
+	public function test_the_batch_walk_visits_every_row_when_the_set_shrinks_mid_run() {
+		$batch_size = ( new \ReflectionClass( Memberships_Audit::class ) )->getConstant( 'QUERY_BATCH_SIZE' );
+		$post_ids   = [];
+		for ( $i = 0; $i < $batch_size + 5; $i++ ) {
+			$post_ids[] = self::factory()->post->create( [ 'post_status' => 'publish' ] );
+		}
+		sort( $post_ids );
+
+		$walk = new \ReflectionMethod( Memberships_Audit::class, 'each_post_id_batch' );
+		$walk->setAccessible( true );
+
+		$seen    = [];
+		$removed = false;
+		$walk->invoke(
+			null,
+			[
+				'post_type'   => 'post',
+				'post_status' => 'publish',
+			],
+			function ( $batch ) use ( &$seen, &$removed, $post_ids ) {
+				foreach ( $batch as $post_id ) {
+					$seen[] = (int) $post_id;
+				}
+				// After the first batch, take a row that has ALREADY been visited out
+				// of the set — the shape that shifts an offset walk by one.
+				if ( ! $removed ) {
+					wp_update_post(
+						[
+							'ID'          => $post_ids[0],
+							'post_status' => 'draft',
+						]
+					);
+					$removed = true;
+				}
+			}
+		);
+
+		$still_published = array_values( array_filter( $post_ids, fn( $id ) => $id !== $post_ids[0] ) );
+		$missed          = array_diff( $still_published, $seen );
+
+		$this->assertSame( [], array_values( $missed ), 'Every row still in the set was visited exactly once.' );
+		$this->assertSame( count( $seen ), count( array_unique( $seen ) ), 'No row was visited twice.' );
 	}
 }

@@ -46,13 +46,19 @@ class Memberships_Audit {
 	/**
 	 * Subscription statuses that grant content access under Access Control.
 	 *
-	 * Mirrors `WooCommerce_Connection::ACTIVE_SUBSCRIPTION_STATUSES`, which is
-	 * what `Access_Rules::has_active_subscription()` actually evaluates. Held as
-	 * a local constant so classify() stays pure and testable; a unit test asserts
+	 * Mirrors `WooCommerce_Connection::ACTIVE_SUBSCRIPTION_STATUSES`. Held as a
+	 * local constant so classify() stays pure and testable; a unit test asserts
 	 * the two lists are identical, so drift fails the build rather than a
-	 * migration. **`on-hold` is deliberately absent**: a subscription in payment
-	 * retry grants nothing post-flip, so counting it as access-granting here
-	 * would report a reader as covered who is about to lose access.
+	 * migration.
+	 *
+	 * This list is NOT the whole of what grants access at runtime.
+	 * `Access_Rules::has_active_subscription()` evaluates it PLUS the
+	 * payment-recovery grace, which every caller that builds an evaluation context
+	 * defaults to ON — so an `on-hold` subscription carrying a `payment_retry`
+	 * date does grant access after the flip. That cannot be expressed by widening
+	 * this list, because the distinction is the retry date rather than the status;
+	 * it is carried as the `subscription_in_payment_recovery` fact and folded in by
+	 * facts_grant_access(), which is what classify() actually asks.
 	 *
 	 * @var string[]
 	 */
@@ -247,6 +253,18 @@ class Memberships_Audit {
 	 * @param array $assoc_args Named args.
 	 */
 	public function audit_membership_subscriptions( $args, $assoc_args ) {
+		// Hard error, unlike the Subscriptions check below. Without WooCommerce
+		// Memberships the `wcm-*` statuses are not registered post statuses, and
+		// WP_Query builds its status clause by iterating get_post_stati() — unknown
+		// statuses are dropped, leaving NO status filter at all. Cancelled and expired
+		// memberships would then be audited as if they granted access, and long-lapsed
+		// readers would land on a list whose stated purpose is granting $0
+		// subscriptions. An operator re-running the audit to confirm a flip, after
+		// Memberships has been turned off, is a realistic way into exactly that.
+		if ( ! function_exists( 'wc_memberships' ) || ! \post_type_exists( 'wc_user_membership' ) ) {
+			WP_CLI::error( 'WooCommerce Memberships is not active, so membership statuses cannot be resolved and every membership would be audited as if it granted access. Aborting.' );
+		}
+
 		if ( ! function_exists( 'wcs_get_subscription' ) ) {
 			// Not fatal: a site without Subscriptions has no subscription links to
 			// resolve, and its memberships are exactly the order-only / comp cohorts
@@ -303,11 +321,17 @@ class Memberships_Audit {
 						$progress = \WP_CLI\Utils\make_progress_bar( sprintf( 'Plan %d: %d membership(s)', $plan_id, $total ), $total );
 					}
 
-					foreach ( $membership_ids as $membership_id ) {
-						// Keep memory bounded across a long membership list; the rows
-						// collected below are plain arrays and survive the flush.
-						\WP_CLI\Utils\wp_clear_object_cache();
+					// Once per batch, not once per membership. Flushing per row forecloses
+					// any batch priming, so every read_membership_facts() call then pays a
+					// fresh get_post() plus a meta lookup — two queries per membership
+					// before WooCommerce loads anything. Priming here collapses that to two
+					// queries per batch. Memory stays bounded either way: a batch is
+					// QUERY_BATCH_SIZE posts, and the rows collected below are plain arrays
+					// that survive the flush.
+					\WP_CLI\Utils\wp_clear_object_cache();
+					_prime_post_caches( $membership_ids, false, true );
 
+					foreach ( $membership_ids as $membership_id ) {
 						$facts = self::read_membership_facts( $membership_id );
 						$class = self::classify( $facts );
 
@@ -351,6 +375,29 @@ class Memberships_Audit {
 				}
 				WP_CLI::line( '' );
 			}
+		}
+
+		// The cross-plan totals. A multi-plan run otherwise gives per-plan breakdowns
+		// and no aggregate, leaving the operator to add up a dozen summaries by hand
+		// to answer "how many gift memberships are there" — the question the command
+		// exists to answer. Printed only when there is more than one plan to add up.
+		if ( ! $quiet && $audited_plans > 1 ) {
+			WP_CLI::line( sprintf( '── All %d plans ──', $audited_plans ) );
+			foreach ( self::ALL_CLASSES as $class ) {
+				if ( 0 === $total_counts[ $class ] ) {
+					continue;
+				}
+				WP_CLI::line(
+					sprintf(
+						'  %-22s %5d  %s%s',
+						$class,
+						$total_counts[ $class ],
+						self::CLASS_LABELS[ $class ],
+						in_array( $class, $only_classes, true ) ? ' ←' : ''
+					)
+				);
+			}
+			WP_CLI::line( '' );
 		}
 
 		// A run where every requested plan was skipped audited nothing; reporting
@@ -407,15 +454,19 @@ class Memberships_Audit {
 	 * Fetching every row in one query is what the audit must not do: a paid
 	 * site's membership list runs to tens of thousands, and this command reads
 	 * it on the live site. Paging keeps each query bounded however large the
-	 * plan is. The walk is read-only and ordered by ID, so offset paging is
-	 * stable — nothing shifts underneath it mid-run.
+	 * plan is. The walk seeks on the last ID seen rather than using OFFSET,
+	 * because the audit being read-only does not make the site read-only — see
+	 * the comment on the seek itself.
 	 *
 	 * @param array    $args     WP_Query args. Paging, ordering and `fields` are set here.
-	 * @param callable $callback Receives ( int[] $post_ids, int $total ) per batch.
+	 * @param callable $callback Receives ( int[] $post_ids, int $total ) per batch, where
+	 *                           $total is the count taken at the start of the walk.
 	 *
-	 * @return int Total matching posts.
+	 * @return int The number of posts actually walked.
 	 */
 	private static function each_post_id_batch( array $args, callable $callback ) {
+		global $wpdb;
+
 		$args = array_merge(
 			$args,
 			[
@@ -426,30 +477,59 @@ class Memberships_Audit {
 			]
 		);
 
-		$page  = 1;
+		// Keyset paging, not OFFSET. The audit is read-only but the site is not: a
+		// membership that leaves the audited status set mid-run — WooCommerce
+		// Memberships' expiry cron, a cancellation, a failed renewal — shifts every
+		// later offset by one and silently skips a row. Each skipped row is a reader
+		// who may lose access at the flip and never appears on the comp-grant list,
+		// and the run gives no signal it happened: the count still looks about right.
+		// Seeking on the last ID seen is stable by construction, and drops the
+		// deep-offset cost on the large tables this walk exists for.
+		$last_id      = 0;
+		$where_filter = function ( $where ) use ( &$last_id, $wpdb ) {
+			if ( $last_id > 0 ) {
+				$where .= $wpdb->prepare( " AND {$wpdb->posts}.ID > %d", $last_id );
+			}
+			return $where;
+		};
+		add_filter( 'posts_where', $where_filter );
+
 		$total = 0;
+		$seen  = 0;
+		$first = true;
 
-		while ( true ) {
-			$query = new \WP_Query( array_merge( $args, [ 'paged' => $page ] ) );
+		try {
+			while ( true ) {
+				// Only the first query needs a count; the rest would pay for a full
+				// count of the matching set on every page.
+				$query = new \WP_Query( array_merge( $args, [ 'no_found_rows' => ! $first ] ) );
 
-			if ( 1 === $page ) {
-				$total = (int) $query->found_posts;
+				if ( $first ) {
+					$total = (int) $query->found_posts;
+					$first = false;
+				}
+				if ( empty( $query->posts ) ) {
+					break;
+				}
+
+				$last_id = (int) end( $query->posts );
+				$seen   += count( $query->posts );
+				$callback( $query->posts, $total );
+
+				// A short batch is the last one; asking for the next page would be a
+				// wasted query on every run whose count divides evenly.
+				if ( count( $query->posts ) < self::QUERY_BATCH_SIZE ) {
+					break;
+				}
 			}
-			if ( empty( $query->posts ) ) {
-				break;
-			}
-
-			$callback( $query->posts, $total );
-
-			// A short batch is the last one; asking for the next page would be a
-			// wasted query on every run whose count divides evenly.
-			if ( count( $query->posts ) < self::QUERY_BATCH_SIZE ) {
-				break;
-			}
-			++$page;
+		} finally {
+			remove_filter( 'posts_where', $where_filter );
 		}
 
-		return $total;
+		// The number actually walked, not the opening count: memberships can leave the
+		// set while the walk runs, and reporting the count from before that happened
+		// would claim coverage the run does not have.
+		return $seen;
 	}
 
 	/**
@@ -499,7 +579,7 @@ class Memberships_Audit {
 		if ( ! empty( $facts['subscription_id'] ) ) {
 			$customer_id = $facts['subscription_customer_id'] ?? null;
 			if ( null !== $customer_id ) {
-				$grants_access = self::grants_access( $facts['subscription_status'] ?? '' );
+				$grants_access = self::facts_grant_access( $facts );
 
 				// Access Control resolves a gifted subscription to its recipient, so a
 				// Subscriptions Gifting gift already carries over — it is not a residual.
@@ -511,9 +591,25 @@ class Memberships_Audit {
 					return self::CLASS_GIFT_WCSG;
 				}
 
-				if ( (int) $customer_id !== $holder_id ) {
+				if ( ! $holder_id || (int) $customer_id !== $holder_id ) {
+					// The ! $holder_id half catches an orphaned membership over a guest
+					// purchase, where both IDs are 0: comparing them finds a match and
+					// files a membership with no member as "the member owns their
+					// access", hiding it inside the covered bucket.
 					return $grants_access ? self::CLASS_GIFT : self::CLASS_GIFT_INACTIVE;
 				}
+
+				// The holder IS the subscription's customer, but they gifted it to
+				// someone else. Access Control excludes a gifted-away subscription for
+				// the buyer and grants it only to the recipient, so counting this as
+				// "owns their access" would mark the holder covered and cost them their
+				// access at the flip — with no row anywhere to catch it, since
+				// member-owned is only ever an aggregate count. The sibling teams
+				// migration makes the same check for the same reason.
+				if ( $grants_access && $holder_id && null !== $wcsg_recipient_id && (int) $wcsg_recipient_id !== $holder_id ) {
+					return self::CLASS_GIFT;
+				}
+
 				return $grants_access ? self::CLASS_MEMBER_OWNED : self::CLASS_MEMBER_OWNED_INACTIVE;
 			}
 
@@ -545,14 +641,17 @@ class Memberships_Audit {
 	 * @return int[]
 	 */
 	public static function flagged_user_ids( array $rows ) {
-		$user_ids = [];
+		// Keyed rather than scanned: an in_array() per row is quadratic, and the gift
+		// cohort on an institutional site is exactly where this list gets long.
+		// array_keys() preserves first-seen order, which the report relies on.
+		$seen = [];
 		foreach ( $rows as $row ) {
 			$user_id = (int) ( $row['member_id'] ?? 0 );
-			if ( $user_id && ! in_array( $user_id, $user_ids, true ) ) {
-				$user_ids[] = $user_id;
+			if ( $user_id ) {
+				$seen[ $user_id ] = true;
 			}
 		}
-		return $user_ids;
+		return array_keys( $seen );
 	}
 
 	/**
@@ -602,10 +701,32 @@ class Memberships_Audit {
 	 */
 	private static function grants_access( $status ) {
 		$status = (string) $status;
-		if ( 0 === strpos( $status, 'wc-' ) ) {
+		if ( str_starts_with( $status, 'wc-' ) ) {
 			$status = substr( $status, 3 );
 		}
 		return in_array( $status, self::ACCESS_GRANTING_SUBSCRIPTION_STATUSES, true );
+	}
+
+	/**
+	 * Whether a membership's subscription grants content access after the flip.
+	 *
+	 * The status list plus the payment-recovery grace, which is what
+	 * `Access_Rules::has_active_subscription()` evaluates and what every caller
+	 * building an evaluation context defaults to ON. Asking the status alone would
+	 * file an on-hold-in-recovery gift as inactive and drop the reader from the
+	 * report, even though at the flip the buyer gains access through the grace
+	 * window and the recipient loses it — the exact buyer-vs-recipient question
+	 * this command exists to raise.
+	 *
+	 * @param array $facts Membership facts from read_membership_facts().
+	 *
+	 * @return bool
+	 */
+	private static function facts_grant_access( array $facts ) {
+		if ( ! empty( $facts['subscription_in_payment_recovery'] ) ) {
+			return true;
+		}
+		return self::grants_access( $facts['subscription_status'] ?? '' );
 	}
 
 	/**
@@ -678,18 +799,22 @@ class Memberships_Audit {
 		$order_id        = (int) \get_post_meta( $membership_id, '_order_id', true );
 
 		$facts = [
-			'holder_id'                => $holder_id,
-			'team_id'                  => (int) \get_post_meta( $membership_id, '_team_id', true ),
-			'subscription_id'          => $subscription_id,
-			'subscription_customer_id' => null,
-			'subscription_status'      => '',
-			'wcsg_recipient_id'        => null,
-			'order_id'                 => $order_id,
-			'order_customer_id'        => null,
-			'order_status'             => '',
-			'order_is_paid'            => false,
-			'buyer_email'              => '',
-			'products'                 => [],
+			'holder_id'                        => $holder_id,
+			'team_id'                          => (int) \get_post_meta( $membership_id, '_team_id', true ),
+			'subscription_id'                  => $subscription_id,
+			'subscription_customer_id'         => null,
+			'subscription_status'              => '',
+			// Whether the subscription is on-hold with a retry scheduled. Held
+			// separately from the status because that is the whole distinction: the
+			// runtime's payment-recovery grace turns exactly this shape into access.
+			'subscription_in_payment_recovery' => false,
+			'wcsg_recipient_id'                => null,
+			'order_id'                         => $order_id,
+			'order_customer_id'                => null,
+			'order_status'                     => '',
+			'order_is_paid'                    => false,
+			'buyer_email'                      => '',
+			'products'                         => [],
 		];
 
 		if ( $subscription_id && function_exists( 'wcs_get_subscription' ) ) {
@@ -697,6 +822,8 @@ class Memberships_Audit {
 			if ( $subscription ) {
 				$facts['subscription_customer_id'] = (int) $subscription->get_user_id();
 				$facts['subscription_status']      = $subscription->get_status();
+				$facts['subscription_in_payment_recovery'] = class_exists( 'Newspack\WooCommerce_Connection' )
+					&& \Newspack\WooCommerce_Connection::is_subscription_in_payment_recovery( $subscription );
 				$facts['wcsg_recipient_id']        = self::get_wcsg_recipient_id( $subscription );
 				$facts['products']                 = self::get_product_ids( $subscription );
 				if ( ! $facts['subscription_customer_id'] && method_exists( $subscription, 'get_billing_email' ) ) {
@@ -858,7 +985,12 @@ class Memberships_Audit {
 		}
 
 		$descriptors = [];
-		foreach ( \Newspack\WooCommerce_Connection::get_active_subscriptions_for_user( $user_id ) as $subscription_id ) {
+		// The third argument is $include_payment_recovery, and it must be true here:
+		// its own default is false, but Access_Rules::has_active_subscription() passes
+		// the evaluation context's payment_recovery_grace, which defaults to ON. Asking
+		// with the grace off would under-state coverage and put a member on the
+		// comp-grant list for access they are going to keep.
+		foreach ( \Newspack\WooCommerce_Connection::get_active_subscriptions_for_user( $user_id, [], true ) as $subscription_id ) {
 			$subscription = \wcs_get_subscription( $subscription_id );
 			if ( ! $subscription ) {
 				continue;
