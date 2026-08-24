@@ -226,6 +226,54 @@ export function copyContextFields( sourceForm, targetForm, fields = PICKER_CONTE
 }
 
 /**
+ * Read utm params from a query string, mirroring the server-side prefix match
+ * (Modal_Checkout::merge_request_utm_params()).
+ *
+ * @param {string} search The query string (e.g. window.location.search).
+ *
+ * @return {Object} Map of utm param name → value. Empty values are dropped.
+ */
+export function readUtmParams( search ) {
+	const params = {};
+	new URLSearchParams( search ).forEach( ( value, key ) => {
+		if ( key.startsWith( 'utm' ) && value ) {
+			params[ key ] = value;
+		}
+	} );
+	return params;
+}
+
+/**
+ * Append utm params to a checkout form as hidden fields.
+ *
+ * The modal checkout form GET-submits into its iframe, replacing the landing
+ * URL's query string, and the URL-trigger path strips the params from the
+ * address bar after it fires — so the form's own fields are the only carrier
+ * the checkout request can rely on. A field already on the form wins.
+ *
+ * @param {HTMLFormElement|null} form   The form about to submit.
+ * @param {Object}               params Map of utm param name → value.
+ *
+ * @return {void}
+ */
+export function appendUtmFields( form, params ) {
+	if ( ! form || ! params ) {
+		return;
+	}
+	const doc = form.ownerDocument;
+	Object.keys( params ).forEach( name => {
+		if ( ! params[ name ] || form.querySelector( `input[name="${ name }"]` ) ) {
+			return;
+		}
+		const input = doc.createElement( 'input' );
+		input.type = 'hidden';
+		input.name = name;
+		input.value = params[ name ];
+		form.prepend( input );
+	} );
+}
+
+/**
  * Resolve which form a `checkout_button` URL trigger should submit.
  *
  * Strict order: exact button, picker, then explicit product-only fallback.

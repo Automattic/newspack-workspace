@@ -24,7 +24,7 @@ import {
 	getCheckoutData,
 	getFormattedAmount,
 } from './utils';
-import { resolveCheckoutButtonForm, readCheckoutData, applyContextFields } from './checkout-button-trigger';
+import { resolveCheckoutButtonForm, readCheckoutData, applyContextFields, appendUtmFields, readUtmParams } from './checkout-button-trigger';
 import { applyCtaAttribution } from '../shared/js/cta-attribution';
 
 const CLASS_PREFIX = newspackBlocksModal.newspack_class_prefix;
@@ -283,6 +283,13 @@ domReady( () => {
 		newspackBlocksModal?.is_registration_required &&
 		window?.newspackReaderActivation?.openAuthModal;
 
+	// Snapshot the landing page's utm params before anything can strip them: the
+	// URL-trigger handler rewrites the address bar after it fires, and the form's
+	// own GET submission replaces the query string entirely, so the request the
+	// checkout sees carries only what rides the form. Captured once here, applied
+	// to every form (direct, donate, picker) at submit time.
+	const landingUtmParams = readUtmParams( window.location.search );
+
 	/**
 	 * Handle checkout form submit.
 	 *
@@ -302,6 +309,11 @@ domReady( () => {
 		// (a form rendered inside the surface itself always wins) or when the form is
 		// inside a gate. Must run BEFORE getCheckoutData(), which snapshots the form.
 		applyCtaAttribution( form );
+
+		// Carry the landing page's utm params into the checkout request itself, so
+		// Modal_Checkout::merge_request_utm_params() reads them from $_GET instead
+		// of depending on the referer surviving the trigger's URL rewrite.
+		appendUtmFields( form, landingUtmParams );
 
 		const checkoutData = getCheckoutData( form );
 
@@ -762,22 +774,34 @@ domReady( () => {
 	 */
 	const triggerDonationForm = ( layout, frequency, amount, other = null ) => {
 		let form;
+		let tieredSubmitButton;
 		document.querySelectorAll( '.wpbnbd.wpbnbd--platform-wc form' ).forEach( donationForm => {
+			// First match wins, so a Donate block the page itself carries beats
+			// the hidden copy a URL trigger renders into the footer — the same
+			// resolution order the checkout-button trigger uses.
+			if ( form ) {
+				return;
+			}
 			const frequencyInput = donationForm.querySelector( `input[name="donation_frequency"][value="${ frequency }"]` );
 			if ( ! frequencyInput ) {
 				return;
 			}
 			if ( layout === 'tiered' ) {
-				const frequencyButton = document.querySelector( `button[data-frequency-slug="${ frequency }"]` );
+				// Scoped to this form's block: a document-wide lookup could click
+				// a different Donate block's frequency tab when the page carries
+				// more than one.
+				const container = donationForm.closest( '.wpbnbd' ) || document;
+				const frequencyButton = container.querySelector( `button[data-frequency-slug="${ frequency }"]` );
 				if ( ! frequencyButton ) {
 					return;
 				}
-				frequencyButton.click();
 				const submitButton = donationForm.querySelector( `button[type="submit"][name="donation_value_${ frequency }"][value="${ amount }"]` );
 				if ( ! submitButton ) {
 					return;
 				}
-				submitButton.click();
+				frequencyButton.click();
+				form = donationForm;
+				tieredSubmitButton = submitButton;
 			} else {
 				const amountInput =
 					layout === 'untiered'
@@ -800,7 +824,11 @@ domReady( () => {
 				}
 			}
 		} );
-		if ( form ) {
+		// A single submission, after the loop: submitting inside it would fire
+		// once per matching form when the page and the footer both carry one.
+		if ( tieredSubmitButton ) {
+			tieredSubmitButton.click();
+		} else if ( form ) {
 			triggerFormSubmit( form );
 		}
 	};

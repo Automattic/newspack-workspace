@@ -9,6 +9,8 @@ import {
 	resolveCheckoutButtonForm,
 	copyContextFields,
 	applyContextFields,
+	readUtmParams,
+	appendUtmFields,
 	PICKER_CONTEXT_FIELDS,
 } from './checkout-button-trigger';
 
@@ -404,5 +406,42 @@ describe( 'PICKER_CONTEXT_FIELDS', () => {
 				'coupon',
 			] )
 		);
+	} );
+} );
+
+describe( 'readUtmParams', () => {
+	it( 'keeps utm-prefixed params with values, mirroring the server-side match', () => {
+		expect( readUtmParams( '?utm_source=newsletter&utm_campaign=spring&coupon=NOPE&utm_medium=' ) ).toEqual( {
+			utm_source: 'newsletter',
+			utm_campaign: 'spring',
+		} );
+	} );
+
+	it( 'returns an empty map for an empty query string', () => {
+		expect( readUtmParams( '' ) ).toEqual( {} );
+	} );
+} );
+
+describe( 'appendUtmFields', () => {
+	it( 'appends a hidden field per utm param', () => {
+		const root = render( checkoutButton( { product_id: '1406' } ) );
+		const form = root.querySelector( 'form' );
+		appendUtmFields( form, { utm_source: 'newsletter', utm_campaign: 'spring' } );
+		expect( form.querySelector( 'input[name="utm_source"]' ).value ).toBe( 'newsletter' );
+		expect( form.querySelector( 'input[name="utm_campaign"]' ).value ).toBe( 'spring' );
+	} );
+
+	it( 'never overwrites a field the form already carries', () => {
+		const root = render( checkoutButton( { product_id: '1406' } ) );
+		const form = root.querySelector( 'form' );
+		form.insertAdjacentHTML( 'beforeend', '<input type="hidden" name="utm_source" value="block-value">' );
+		appendUtmFields( form, { utm_source: 'url-value' } );
+		expect( form.querySelectorAll( 'input[name="utm_source"]' ) ).toHaveLength( 1 );
+		expect( form.querySelector( 'input[name="utm_source"]' ).value ).toBe( 'block-value' );
+	} );
+
+	it( 'does not throw on a null form or missing params', () => {
+		expect( () => appendUtmFields( null, { utm_source: 'x' } ) ).not.toThrow();
+		expect( () => appendUtmFields( document.createElement( 'form' ), null ) ).not.toThrow();
 	} );
 } );
