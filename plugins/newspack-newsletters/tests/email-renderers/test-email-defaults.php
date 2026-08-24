@@ -103,12 +103,25 @@ class Test_Email_Defaults extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Pull styles.elements.button.border.radius out of a WP_Theme_JSON_Data.
+	 * Build a theme.json data object outside the WP_Theme_JSON_Data hierarchy,
+	 * standing in for Gutenberg's WP_Theme_JSON_Data_Gutenberg.
 	 *
-	 * @param \WP_Theme_JSON_Data $data Theme.json data.
+	 * @return \Foreign_Theme_JSON_Data
+	 */
+	private function make_foreign_default_data() {
+		require_once __DIR__ . '/fixtures/class-foreign-theme-json-data.php';
+		return new \Foreign_Theme_JSON_Data( [ 'version' => 3 ], 'default' );
+	}
+
+	/**
+	 * Pull styles.elements.button.border.radius out of a theme.json data object.
+	 *
+	 * Not type-hinted: the filter also receives Gutenberg's sibling class.
+	 *
+	 * @param object $data Theme.json data.
 	 * @return string|null Radius value or null if absent.
 	 */
-	private function get_button_radius( \WP_Theme_JSON_Data $data ) {
+	private function get_button_radius( $data ) {
 		$raw = $data->get_data();
 		return $raw['styles']['elements']['button']['border']['radius'] ?? null;
 	}
@@ -218,13 +231,15 @@ class Test_Email_Defaults extends WP_UnitTestCase {
 	// -------------------------------------------------------------------------
 
 	/**
-	 * Pull a font-family out of a WP_Theme_JSON_Data.
+	 * Pull a font-family out of a theme.json data object.
 	 *
-	 * @param \WP_Theme_JSON_Data $data Theme.json data.
-	 * @param string              $side 'body' or 'header'.
+	 * Not type-hinted: the filter also receives Gutenberg's sibling class.
+	 *
+	 * @param object $data Theme.json data.
+	 * @param string $side 'body' or 'header'.
 	 * @return string|null Font family value or null if absent.
 	 */
-	private function get_font( \WP_Theme_JSON_Data $data, string $side ) {
+	private function get_font( $data, string $side ) {
 		$raw = $data->get_data();
 		if ( 'header' === $side ) {
 			return $raw['styles']['elements']['heading']['typography']['fontFamily'] ?? null;
@@ -310,6 +325,67 @@ class Test_Email_Defaults extends WP_UnitTestCase {
 			$result,
 			'A theme-origin body font must override the Newspack default-origin font after merge.'
 		);
+	}
+
+	// -------------------------------------------------------------------------
+	// Gutenberg compatibility: the filter argument is not always core's class.
+	// -------------------------------------------------------------------------
+
+	/**
+	 * With the Gutenberg plugin active the `wp_theme_json_data_*` filters receive
+	 * `WP_Theme_JSON_Data_Gutenberg`, a sibling of core's `WP_Theme_JSON_Data` rather
+	 * than a subclass. A `WP_Theme_JSON_Data` type declaration therefore fatals with a
+	 * TypeError on every theme.json resolution — front end included — before the
+	 * callback's own guards can run.
+	 */
+	public function test_button_radius_accepts_foreign_theme_json_data_when_flag_off() {
+		// Flag off, so this is the state of every site that has not opted in.
+		$data   = $this->make_foreign_default_data();
+		$result = Email_Defaults::inject_button_border_radius( $data );
+
+		$this->assertSame( $data, $result, 'The incoming object must be returned untouched when the flag is off.' );
+		$this->assertNull( $this->get_button_radius( $result ), 'No radius must be injected when the flag is off.' );
+	}
+
+	/**
+	 * Flag ON + email-editor request → the radius is injected into a non-core data object too.
+	 */
+	public function test_button_radius_injects_into_foreign_theme_json_data() {
+		update_option( Feature_Flag::OPTION, '1' );
+		$this->simulate_email_editor_request();
+
+		$result = Email_Defaults::inject_button_border_radius( $this->make_foreign_default_data() );
+
+		$this->assertSame(
+			Email_Defaults::DEFAULT_BUTTON_BORDER_RADIUS,
+			$this->get_button_radius( $result ),
+			'The fallback radius must be injected regardless of which theme.json data class is passed.'
+		);
+	}
+
+	/**
+	 * The font callback carries the same type declaration and the same fatal.
+	 */
+	public function test_fonts_accept_foreign_theme_json_data_when_flag_off() {
+		$data   = $this->make_foreign_default_data();
+		$result = Email_Defaults::inject_fonts( $data );
+
+		$this->assertSame( $data, $result, 'The incoming object must be returned untouched when the flag is off.' );
+		$this->assertNull( $this->get_font( $result, 'body' ), 'No font must be injected when the flag is off.' );
+	}
+
+	/**
+	 * Flag ON + email-editor request → fonts are injected into a non-core data object too.
+	 */
+	public function test_fonts_inject_into_foreign_theme_json_data() {
+		update_option( Feature_Flag::OPTION, '1' );
+		$this->simulate_email_editor_request();
+
+		$result   = Email_Defaults::inject_fonts( $this->make_foreign_default_data() );
+		$expected = \Newspack\Newsletters\Email_Renderers\Fonts::resolve( get_post( self::$newsletter_post_id ) );
+
+		$this->assertSame( $expected['body'], $this->get_font( $result, 'body' ) );
+		$this->assertSame( $expected['header'], $this->get_font( $result, 'header' ) );
 	}
 
 	/**

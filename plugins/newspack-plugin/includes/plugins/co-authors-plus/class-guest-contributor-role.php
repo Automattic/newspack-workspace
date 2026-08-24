@@ -46,6 +46,12 @@ class Guest_Contributor_Role {
 	const SITE_HAS_GUEST_AUTHORS_OPTION_NAME = 'newspack_check_site_has_cap_guest_authors';
 
 	/**
+	 * Log code for outbound-mail-guard suppression events (Logger::newspack_log()).
+	 * The `mode` key in the log data discriminates the three cases sharing it.
+	 */
+	const MAIL_GUARD_LOG_CODE = 'newspack_guest_author_mail_suppressed';
+
+	/**
 	 * Initialize hooks and filters.
 	 */
 	public static function initialize() {
@@ -86,6 +92,11 @@ class Guest_Contributor_Role {
 		// Hide author email on the frontend, if it's a placeholder email.
 		\add_filter( 'theme_mod_show_author_email', [ __CLASS__, 'should_display_author_email' ] );
 		\add_filter( 'newspack_show_coauthor_email', [ __CLASS__, 'should_display_coauthor_email' ], 10, 2 );
+
+		// Never send email to generated placeholder addresses — they bounce and
+		// can get the site's outbound email blocked (e.g. comment notifications
+		// to Guest Contributors created without a real email).
+		self::register_mail_guard();
 
 		// Make sure we check again if the site has guest authors every hour.
 		$re_check_guest_authors = 'newspack_re_check_guest_authors';
@@ -273,16 +284,306 @@ class Guest_Contributor_Role {
 	 * Get dummy email domain.
 	 */
 	public static function get_dummy_email_domain() {
+		/**
+		 * Filters the domain used for generated Guest Contributor placeholder
+		 * email addresses.
+		 *
+		 * This domain is also treated as unroutable by the outbound-mail guard:
+		 * wp_mail() recipients on it are stripped, and mail addressed only to it
+		 * is suppressed. Point it at a reserved, undeliverable domain (RFC 2606)
+		 * only — on a real domain, mail to every address on it would be silently
+		 * dropped site-wide.
+		 *
+		 * @param string $domain Placeholder email domain. Default 'example.com'.
+		 */
 		return \apply_filters( 'newspack_guest_author_email_domain', 'example.com' );
 	}
 
 	/**
 	 * Is a dummy email address?
 	 *
+	 * The match is end-anchored so addresses on domains that merely contain
+	 * the dummy domain as a prefix (e.g. user@example.company.com) are not
+	 * mistaken for placeholders.
+	 *
 	 * @param string $email_address Email address to check.
 	 */
 	public static function is_dummy_email_address( $email_address ) {
-		return strpos( $email_address, '@' . self::get_dummy_email_domain() ) !== false;
+		$suffix = strtolower( '@' . self::get_dummy_email_domain() );
+		return str_ends_with( strtolower( trim( (string) $email_address ) ), $suffix );
+	}
+
+	/**
+	 * Whether the outbound-mail guard should be active for an environment type.
+	 *
+	 * On local and development environments outbound mail terminates in a
+	 * capture tool (e.g. MailHog) instead of bouncing, so suppression would
+	 * only hide mail developers are trying to inspect. Everywhere else —
+	 * including staging, which delivers real mail — the guard is active.
+	 *
+	 * Note: a production site whose WP_ENVIRONMENT_TYPE is set to 'local' or
+	 * 'development' loses this protection.
+	 *
+	 * @param string $environment_type Environment type, as returned by wp_get_environment_type().
+	 *
+	 * @return bool
+	 */
+	public static function is_mail_guard_active_for_environment( string $environment_type ): bool {
+		return ! in_array( $environment_type, [ 'local', 'development' ], true );
+	}
+
+	/**
+	 * Register the outbound-mail guard filters. Registration is unconditional;
+	 * whether anything is suppressed is decided per send by
+	 * is_mail_guard_active(), so the activity filter stays reachable from any
+	 * plugin, not only code that runs before this class loads.
+	 *
+	 * The short-circuit registers at priority 1 so it runs before mailer
+	 * plugins' own pre_wp_mail callbacks. That protects the all-placeholder
+	 * case against callbacks that honor a non-null incoming value (the
+	 * well-behaved majority); a callback that ignores the incoming value can
+	 * still dispatch and overwrite the result regardless of priority.
+	 */
+	public static function register_mail_guard(): void {
+		\add_filter( 'pre_wp_mail', [ __CLASS__, 'short_circuit_dummy_only_email' ], 1, 2 );
+		\add_filter( 'wp_mail', [ __CLASS__, 'remove_dummy_email_recipients' ], 10, 1 );
+	}
+
+	/**
+	 * Whether the outbound-mail guard should suppress anything right now.
+	 * Evaluated on every send, so the filter below can be hooked from any
+	 * plugin, theme, or must-use plugin at any point before mail goes out.
+	 * wp_get_environment_type() memoizes, so the per-call cost is negligible.
+	 *
+	 * @return bool
+	 */
+	public static function is_mail_guard_active(): bool {
+		/**
+		 * Filters whether the outbound-mail guard suppresses placeholder mail.
+		 *
+		 * Defaults to active everywhere except local and development
+		 * environments (see is_mail_guard_active_for_environment()). Because
+		 * this runs per send, any plugin can hook it — to force the guard back
+		 * on for a site whose declared environment type would switch it off,
+		 * or to switch it off for testing. The workspace's Docker mu-plugin
+		 * disables it on dev containers so captured mail stays inspectable.
+		 *
+		 * @param bool $active Whether the guard suppresses placeholder mail.
+		 */
+		return (bool) \apply_filters( 'newspack_guest_author_mail_guard_active', self::is_mail_guard_active_for_environment( \wp_get_environment_type() ) );
+	}
+
+	/**
+	 * Short-circuit wp_mail() when every recipient is a generated placeholder
+	 * address. Returning true reports the email as sent without dispatching
+	 * anything, so callers behave as if delivery succeeded.
+	 *
+	 * Core applies the 'wp_mail' filter before this one, so the recipient
+	 * list seen here has already been stripped by
+	 * remove_dummy_email_recipients() — which deliberately leaves an
+	 * all-dummy list intact (absent Cc/Bcc) so it can be recognized and
+	 * suppressed here.
+	 *
+	 * Scope notes: both guard callbacks no-op when is_mail_guard_active()
+	 * says the guard is off. Mail whose headers carry Cc/Bcc recipients is
+	 * never short-circuited — suppressing it would also suppress delivery to those
+	 * (possibly real) header recipients. Dummy addresses inside Cc/Bcc headers
+	 * are not scrubbed by this guard. Mailer plugins that take over delivery
+	 * from their own pre_wp_mail callback still receive the stripped list —
+	 * core applies the wp_mail filter before any pre_wp_mail callback. The
+	 * priority-1 registration (see register_mail_guard()) protects the
+	 * all-placeholder case only against callbacks that honor a non-null
+	 * incoming value; one that ignores it can still dispatch regardless of
+	 * priority. Plugins that replace the pluggable wp_mail() itself bypass
+	 * both filters and this guard.
+	 *
+	 * @param null|bool $return Short-circuit return value.
+	 * @param array     $atts   wp_mail() arguments.
+	 *
+	 * @return null|bool
+	 */
+	public static function short_circuit_dummy_only_email( $return, $atts ) {
+		if ( null !== $return ) {
+			return $return;
+		}
+		if ( ! self::is_mail_guard_active() ) {
+			return $return;
+		}
+		if ( empty( $atts['to'] ) ) {
+			return $return;
+		}
+		if ( self::has_cc_or_bcc_headers( $atts['headers'] ?? '' ) ) {
+			return $return;
+		}
+		$recipients = self::parse_recipients( $atts['to'] );
+		if ( ! empty( $recipients ) && empty( self::remove_dummy_addresses( $recipients ) ) ) {
+			Logger::newspack_log(
+				self::MAIL_GUARD_LOG_CODE,
+				'Suppressed an outbound email: every recipient is a generated placeholder address.',
+				[
+					'mode'       => 'suppressed_all',
+					'count'      => count( $recipients ),
+					'recipients' => array_slice( array_map( [ __CLASS__, 'extract_address' ], $recipients ), 0, 20 ),
+				],
+				'info'
+			);
+			return true;
+		}
+		return $return;
+	}
+
+	/**
+	 * Remove generated placeholder addresses from a wp_mail() recipient list,
+	 * so mixed recipient lists still reach their real recipients. The value
+	 * (and its string-vs-array type) is left untouched unless a placeholder
+	 * was actually removed.
+	 *
+	 * @param array $args wp_mail() arguments.
+	 *
+	 * @return array
+	 */
+	public static function remove_dummy_email_recipients( $args ) {
+		if ( ! self::is_mail_guard_active() ) {
+			return $args;
+		}
+		if ( empty( $args['to'] ) ) {
+			return $args;
+		}
+		$recipients = self::parse_recipients( $args['to'] );
+		$filtered   = self::remove_dummy_addresses( $recipients );
+		if ( count( $filtered ) === count( $recipients ) ) {
+			// Nothing removed — leave the value (and its type) untouched.
+			return $args;
+		}
+		if ( ! empty( $filtered ) ) {
+			$removed = array_values( array_map( [ __CLASS__, 'extract_address' ], array_diff( $recipients, $filtered ) ) );
+			Logger::newspack_log(
+				self::MAIL_GUARD_LOG_CODE,
+				'Removed generated placeholder recipient(s) from an outbound email.',
+				[
+					'mode'       => 'stripped_mixed',
+					'count'      => count( $removed ),
+					'recipients' => array_slice( $removed, 0, 20 ),
+				],
+				'info'
+			);
+			$args['to'] = $filtered;
+			return $args;
+		}
+		// Every recipient was a placeholder. Core applies this filter BEFORE
+		// pre_wp_mail, so when the mail has no other (Cc/Bcc) recipients the
+		// list must be left as-is for short_circuit_dummy_only_email() to
+		// suppress the send; emptying it here would make wp_mail() error out
+		// instead of reporting success. With Cc/Bcc present the mail proceeds
+		// to those recipients only.
+		if ( self::has_cc_or_bcc_headers( $args['headers'] ?? '' ) ) {
+			Logger::newspack_log(
+				self::MAIL_GUARD_LOG_CODE,
+				'Removed a placeholder-only recipient list from an outbound email; delivering to its Cc/Bcc recipients only.',
+				[
+					'mode'       => 'stripped_to_cc_bcc',
+					'count'      => count( $recipients ),
+					'recipients' => array_slice( array_map( [ __CLASS__, 'extract_address' ], $recipients ), 0, 20 ),
+				],
+				'info'
+			);
+			$args['to'] = [];
+		}
+		return $args;
+	}
+
+	/**
+	 * Whether a wp_mail() headers value carries Cc or Bcc recipients.
+	 *
+	 * Recipients are counted at the same level core parses them: the header
+	 * value split on commas, empty tokens dropped. A header whose value is
+	 * empty or all separators ("Cc:", "Cc: ,") carries no recipients and does
+	 * not count — treating it as recipients would route an all-placeholder
+	 * send past the short-circuit into a hard wp_mail() failure. A non-empty
+	 * token that is not a valid address still counts: the caller explicitly
+	 * addressed someone, and core's own failure behavior is the right feedback
+	 * there.
+	 *
+	 * @param string|string[] $headers Headers, as a string or array of lines.
+	 *
+	 * @return bool
+	 */
+	private static function has_cc_or_bcc_headers( $headers ): bool {
+		$lines = is_array( $headers ) ? $headers : preg_split( '/\r\n|\r|\n/', (string) $headers );
+		foreach ( $lines as $line ) {
+			if ( ! preg_match( '/^\s*b?cc\s*:(.*)$/i', (string) $line, $matches ) ) {
+				continue;
+			}
+			foreach ( explode( ',', $matches[1] ) as $token ) {
+				if ( '' !== trim( $token ) ) {
+					return true;
+				}
+			}
+		}
+		return false;
+	}
+
+	/**
+	 * Normalize a wp_mail() recipient value into a clean list: split
+	 * comma-separated strings, trim, and drop empty entries.
+	 *
+	 * @param string|string[] $to Recipients.
+	 *
+	 * @return string[]
+	 */
+	private static function parse_recipients( $to ): array {
+		$recipients = is_array( $to ) ? $to : explode( ',', (string) $to );
+		$recipients = array_map(
+			function ( $recipient ) {
+				return trim( (string) $recipient );
+			},
+			$recipients
+		);
+		return array_values(
+			array_filter(
+				$recipients,
+				function ( $recipient ) {
+					return '' !== $recipient;
+				}
+			)
+		);
+	}
+
+	/**
+	 * Filter dummy addresses out of a normalized recipient list. Entries may
+	 * be bare addresses or "Name <address>".
+	 *
+	 * @param string[] $recipients Recipients.
+	 *
+	 * @return string[] Recipients that are not dummy addresses.
+	 */
+	private static function remove_dummy_addresses( array $recipients ): array {
+		return array_values(
+			array_filter(
+				$recipients,
+				function ( $recipient ) {
+					return ! self::is_dummy_email_address( self::extract_address( $recipient ) );
+				}
+			)
+		);
+	}
+
+	/**
+	 * Extract the dispatch address from a recipient entry, which may be a bare
+	 * address or "Name <address>". Uses the same greedy pattern as core's
+	 * wp_mail() recipient parsing (wp-includes/pluggable.php), so the address
+	 * judged here is the address core will actually dispatch to — even when a
+	 * quoted display name itself contains angle brackets.
+	 *
+	 * @param string $recipient Recipient entry.
+	 *
+	 * @return string Bare email address.
+	 */
+	private static function extract_address( $recipient ): string {
+		if ( preg_match( '/(.*)<(.+)>/', (string) $recipient, $matches ) ) {
+			return trim( $matches[2] );
+		}
+		return trim( (string) $recipient );
 	}
 
 	/**
@@ -324,6 +625,18 @@ class Guest_Contributor_Role {
 
 		if ( ! empty( $errors->errors['user_login'] ) ) {
 			$errors->remove( 'user_login' );
+		}
+
+		// Since WordPress 7.0.3, edit_user() validates the submitted email at
+		// assignment, so an empty field adds invalid_email before this action
+		// fires. Clear it only when the submission is genuinely empty, judged
+		// on the raw value: input that only sanitization would empty (stray
+		// markup, an address pasted with angle brackets, a non-string
+		// payload) keeps failing validation like any other malformed entry.
+		// phpcs:ignore WordPress.Security.NonceVerification.Missing,WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- Every edit_user() caller verifies a nonce first (user-new.php, user-edit.php, profile.php, wp_ajax_add_user()); the value is only compared with the empty string, never stored or output.
+		$is_empty_email = isset( $_POST['email'] ) && is_string( $_POST['email'] ) && '' === trim( wp_unslash( $_POST['email'] ) );
+		if ( $is_empty_email && ! empty( $errors->errors['invalid_email'] ) ) {
+			$errors->remove( 'invalid_email' );
 		}
 
 		// We still don't want users with duplicate emails.

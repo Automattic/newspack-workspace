@@ -220,13 +220,13 @@ class Newspack_Test_Emails extends WP_UnitTestCase {
 
 		$send_result = Emails::send_email(
 			$test_email['post_id'],
-			'someone@example.com'
+			'someone@example.org'
 		);
 		self::assertTrue( $send_result, 'Email has been sent.' );
 
 		$send_result = Emails::send_email(
 			9999,
-			'someone@example.com'
+			'someone@example.org'
 		);
 		self::assertFalse( $send_result, 'Non-existent email is not sent.' );
 	}
@@ -266,7 +266,7 @@ class Newspack_Test_Emails extends WP_UnitTestCase {
 				Emails::can_send_email( 'test-email-config' ),
 				'can_send_email() must return false for draft (auto-send gate).'
 			);
-			$auto_send_result = Emails::send_email( 'test-email-config', 'someone@example.com' );
+			$auto_send_result = Emails::send_email( 'test-email-config', 'someone@example.org' );
 			self::assertFalse( $auto_send_result, 'send_email() must not dispatch for draft (auto-send gate).' );
 
 			// TEST-SEND: draft is allowed. The headline contract of NPPD-1547.
@@ -274,7 +274,7 @@ class Newspack_Test_Emails extends WP_UnitTestCase {
 			// log in as admin for the duration of the call.
 			$admin = self::login_as_admin();
 			try {
-				$test_send_result = Emails::send_test_email( $test_email['post_id'], 'someone@example.com' );
+				$test_send_result = Emails::send_test_email( $test_email['post_id'], 'someone@example.org' );
 				self::assertTrue(
 					$test_send_result,
 					'send_test_email() must return true for draft — the admin "Send test" operation is decoupled from the auto-send status gate.'
@@ -324,7 +324,7 @@ class Newspack_Test_Emails extends WP_UnitTestCase {
 
 		$admin = self::login_as_admin();
 		try {
-			$result = Emails::send_test_email( $test_email['post_id'], 'tester@example.com' );
+			$result = Emails::send_test_email( $test_email['post_id'], 'tester@example.org' );
 
 			self::assertTrue( $result, 'send_test_email() must return true (not WP_Error) for a draft email with all other prereqs satisfied.' );
 
@@ -332,7 +332,7 @@ class Newspack_Test_Emails extends WP_UnitTestCase {
 			// with the correct recipient — guards against accidentally
 			// short-circuiting before dispatch_email is called.
 			$mailer = tests_retrieve_phpmailer_instance();
-			self::assertContains( 'tester@example.com', $mailer->get_sent()->to[0] );
+			self::assertContains( 'tester@example.org', $mailer->get_sent()->to[0] );
 		} finally {
 			self::logout_admin( $admin );
 			wp_update_post(
@@ -341,6 +341,31 @@ class Newspack_Test_Emails extends WP_UnitTestCase {
 					'post_status' => $original_status,
 				]
 			);
+		}
+	}
+
+	/**
+	 * Test-send refuses generated placeholder recipients: the outbound-mail
+	 * guard suppresses them while reporting success, so accepting one would
+	 * certify a broken configuration as healthy.
+	 */
+	public function test_test_send_rejects_placeholder_recipient() {
+		$test_email = self::get_test_email( 'test-email-config' );
+		$admin      = self::login_as_admin();
+		// Pin the mail guard active: the rejection only applies where
+		// suppression would otherwise lie, and this keeps the test independent
+		// of ambient environment state.
+		add_filter( 'newspack_guest_author_mail_guard_active', '__return_true', 20 );
+		try {
+			reset_phpmailer_instance();
+			$result = Emails::send_test_email( $test_email['post_id'], 'tester@example.com' );
+
+			self::assertWPError( $result, 'A generated placeholder recipient must be rejected, not silently suppressed.' );
+			self::assertSame( 'newspack_emails_test_placeholder_recipient', $result->get_error_code() );
+			self::assertEmpty( tests_retrieve_phpmailer_instance()->get_sent(), 'Nothing may be dispatched for a rejected test-send.' );
+		} finally {
+			remove_filter( 'newspack_guest_author_mail_guard_active', '__return_true', 20 );
+			self::logout_admin( $admin );
 		}
 	}
 
@@ -434,7 +459,7 @@ class Newspack_Test_Emails extends WP_UnitTestCase {
 
 		$admin = self::login_as_admin();
 		try {
-			$result = Emails::send_test_email( $post_id, 'tester@example.com' );
+			$result = Emails::send_test_email( $post_id, 'tester@example.org' );
 
 			self::assertInstanceOf( WP_Error::class, $result );
 			self::assertSame( 'newspack_emails_html_payload_missing', $result->get_error_code() );
@@ -469,7 +494,7 @@ class Newspack_Test_Emails extends WP_UnitTestCase {
 
 		$admin = self::login_as_admin();
 		try {
-			$result = Emails::send_test_email( $post_id, 'tester@example.com' );
+			$result = Emails::send_test_email( $post_id, 'tester@example.org' );
 
 			self::assertInstanceOf( WP_Error::class, $result );
 			self::assertSame( 'newspack_emails_config_name_missing', $result->get_error_code() );
@@ -500,7 +525,7 @@ class Newspack_Test_Emails extends WP_UnitTestCase {
 
 		$admin = self::login_as_admin();
 		try {
-			$result = Emails::send_test_email( $post_id, 'tester@example.com' );
+			$result = Emails::send_test_email( $post_id, 'tester@example.org' );
 
 			self::assertInstanceOf( WP_Error::class, $result );
 			self::assertSame( 'newspack_emails_wrong_post_type', $result->get_error_code() );
@@ -531,7 +556,7 @@ class Newspack_Test_Emails extends WP_UnitTestCase {
 
 		$admin = self::login_as_admin();
 		try {
-			$result = Emails::send_test_email( $post_id, 'tester@example.com' );
+			$result = Emails::send_test_email( $post_id, 'tester@example.org' );
 
 			self::assertInstanceOf( WP_Error::class, $result );
 			self::assertSame( 'newspack_emails_config_name_unknown', $result->get_error_code() );
@@ -551,7 +576,7 @@ class Newspack_Test_Emails extends WP_UnitTestCase {
 		$test_email = self::get_test_email( 'test-email-config' );
 		$admin      = self::login_as_admin();
 		try {
-			$result = Emails::send_test_email( $test_email['post_id'], 'tester@example.com' );
+			$result = Emails::send_test_email( $test_email['post_id'], 'tester@example.org' );
 
 			self::assertTrue( $result, 'Sanity: the test send should succeed.' );
 			self::assertFalse(
@@ -573,7 +598,7 @@ class Newspack_Test_Emails extends WP_UnitTestCase {
 		$admin      = self::login_as_admin();
 		add_filter( 'pre_wp_mail', '__return_false' );
 		try {
-			$result = Emails::send_test_email( $test_email['post_id'], 'tester@example.com' );
+			$result = Emails::send_test_email( $test_email['post_id'], 'tester@example.org' );
 
 			self::assertInstanceOf( WP_Error::class, $result );
 			self::assertSame( 'newspack_emails_test_dispatch_failed', $result->get_error_code() );
@@ -599,7 +624,7 @@ class Newspack_Test_Emails extends WP_UnitTestCase {
 		update_user_meta( $admin[0], 'locale', 'fr_FR' );
 		$before = get_locale();
 		try {
-			$result = Emails::send_test_email( $test_email['post_id'], 'tester@example.com' );
+			$result = Emails::send_test_email( $test_email['post_id'], 'tester@example.org' );
 
 			self::assertTrue( $result, 'Sanity: the test send should succeed.' );
 			self::assertSame( $before, get_locale(), 'Locale must be restored after a successful test-send.' );
@@ -648,7 +673,7 @@ class Newspack_Test_Emails extends WP_UnitTestCase {
 
 		$admin = self::login_as_admin();
 		try {
-			$result = Emails::send_test_email( $test_email['post_id'], 'tester@example.com' );
+			$result = Emails::send_test_email( $test_email['post_id'], 'tester@example.org' );
 
 			self::assertInstanceOf( WP_Error::class, $result );
 			self::assertSame( 'newspack_emails_post_trashed', $result->get_error_code() );
@@ -694,7 +719,7 @@ class Newspack_Test_Emails extends WP_UnitTestCase {
 	public function test_test_send_blocked_when_post_id_invalid() {
 		$admin = self::login_as_admin();
 		try {
-			$result = Emails::send_test_email( 0, 'tester@example.com' );
+			$result = Emails::send_test_email( 0, 'tester@example.org' );
 
 			self::assertInstanceOf( WP_Error::class, $result );
 			self::assertSame( 'newspack_emails_invalid_post_id', $result->get_error_code() );
@@ -733,7 +758,7 @@ class Newspack_Test_Emails extends WP_UnitTestCase {
 				// Friendly label for assertion-failure output. null
 				// and '' don't survive sprintf %s cleanly otherwise.
 				$label  = null === $bad_post_id ? 'NULL' : ( '' === $bad_post_id ? "''" : "'{$bad_post_id}'" );
-				$result = Emails::send_test_email( $bad_post_id, 'tester@example.com' );
+				$result = Emails::send_test_email( $bad_post_id, 'tester@example.org' );
 				self::assertInstanceOf(
 					WP_Error::class,
 					$result,
@@ -787,7 +812,7 @@ class Newspack_Test_Emails extends WP_UnitTestCase {
 			foreach ( [ '1.5', '1e3', '-5' ] as $bad_post_id ) {
 				$request = new WP_REST_Request( 'POST', '/newspack/v1/newspack-emails/test' );
 				$request->set_param( 'post_id', $bad_post_id );
-				$request->set_param( 'recipient', 'tester@example.com' );
+				$request->set_param( 'recipient', 'tester@example.org' );
 
 				$response = rest_get_server()->dispatch( $request );
 
@@ -831,7 +856,7 @@ class Newspack_Test_Emails extends WP_UnitTestCase {
 		try {
 			// Cast post_id to a string to simulate what a $_POST
 			// or untyped REST param would deliver pre-absint.
-			$result = Emails::send_test_email( (string) $test_email['post_id'], 'tester@example.com' );
+			$result = Emails::send_test_email( (string) $test_email['post_id'], 'tester@example.org' );
 			self::assertTrue( $result, 'Numeric-string post_id must be accepted (normalized to int internally).' );
 		} finally {
 			self::logout_admin( $admin );
@@ -896,7 +921,7 @@ class Newspack_Test_Emails extends WP_UnitTestCase {
 		wp_set_current_user( $subscriber_id );
 
 		try {
-			$result = Emails::send_test_email( $test_email['post_id'], 'tester@example.com' );
+			$result = Emails::send_test_email( $test_email['post_id'], 'tester@example.org' );
 
 			self::assertInstanceOf( WP_Error::class, $result );
 			self::assertSame( 'newspack_emails_forbidden', $result->get_error_code() );
@@ -915,7 +940,7 @@ class Newspack_Test_Emails extends WP_UnitTestCase {
 	public function test_test_send_blocked_when_post_missing() {
 		$admin = self::login_as_admin();
 		try {
-			$result = Emails::send_test_email( 9999999, 'tester@example.com' );
+			$result = Emails::send_test_email( 9999999, 'tester@example.org' );
 
 			self::assertInstanceOf( WP_Error::class, $result );
 			self::assertSame( 'newspack_emails_post_missing', $result->get_error_code() );
@@ -947,12 +972,12 @@ class Newspack_Test_Emails extends WP_UnitTestCase {
 			// Post-id path of send_email — the branch that shares
 			// validate_send_prerequisites with send_test_email. Auto-send
 			// must still apply the status check on top.
-			$post_id_result = Emails::send_email( $test_email['post_id'], 'tester@example.com' );
+			$post_id_result = Emails::send_email( $test_email['post_id'], 'tester@example.org' );
 			self::assertFalse( $post_id_result, 'send_email() post-id branch must remain status-gated.' );
 
 			// String path of send_email — the dominant auto-trigger
 			// surface. Status check is inline (not via the helper).
-			$string_result = Emails::send_email( 'test-email-config', 'tester@example.com' );
+			$string_result = Emails::send_email( 'test-email-config', 'tester@example.org' );
 			self::assertFalse( $string_result, 'send_email() string-name branch must remain status-gated.' );
 		} finally {
 			wp_update_post(

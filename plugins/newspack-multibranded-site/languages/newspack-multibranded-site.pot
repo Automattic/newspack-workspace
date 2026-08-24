@@ -1,15 +1,15 @@
 # Copyright (C) 2026 Automattic
-# This file is distributed under the GPL3.
+# This file is distributed under the GPLv2 or later.
 msgid ""
 msgstr ""
-"Project-Id-Version: Newspack Multibranded Site 2.2.0\n"
+"Project-Id-Version: Newspack Multibranded Site 2.4.1\n"
 "Report-Msgid-Bugs-To: https://wordpress.org/support/plugin/newspack-multibranded-site\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-06-04T19:35:01+00:00\n"
+"POT-Creation-Date: 2026-08-11T17:40:02+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: newspack-multibranded-site\n"
@@ -155,112 +155,113 @@ msgstr ""
 msgid "The primary brand for a user"
 msgstr ""
 
-#: dist/admin.js:1
+#. translators: accessibility text appended to link text
+#: dist/admin.js:12
 #: src/admin/views/brands/Brand.js:137
 msgid "Brand"
 msgstr ""
 
-#: dist/admin.js:1
+#: dist/admin.js:12
 #: src/admin/views/brands/Brand.js:138
 msgid "Set your brand identity"
 msgstr ""
 
-#: dist/admin.js:1
+#: dist/admin.js:12
 #: src/admin/views/brands/Brand.js:143
 msgid "Name"
 msgstr ""
 
-#: dist/admin.js:1
+#: dist/admin.js:12
 #: src/admin/views/brands/Brand.js:152
 msgid "Logo"
 msgstr ""
 
-#: dist/admin.js:1
+#: dist/admin.js:12
 #: src/admin/views/brands/Brand.js:161
 msgid "Colors"
 msgstr ""
 
-#: dist/admin.js:1
+#: dist/admin.js:12
 #: src/admin/views/brands/Brand.js:162
 msgid "These are the colors you can customize for this brand in the active theme"
 msgstr ""
 
-#: dist/admin.js:1
+#: dist/admin.js:12
 #: src/admin/views/brands/Brand.js:177
 msgid "Reset default color"
 msgstr ""
 
-#: dist/admin.js:1
+#: dist/admin.js:12
 #: src/admin/views/brands/Brand.js:189
 msgid "Settings"
 msgstr ""
 
-#: dist/admin.js:1
+#: dist/admin.js:12
 #: src/admin/views/brands/Brand.js:193
 msgid "URL Base"
 msgstr ""
 
-#: dist/admin.js:1
+#: dist/admin.js:12
 #: src/admin/views/brands/Brand.js:196
 msgid "Homepage"
 msgstr ""
 
-#: dist/admin.js:1
+#: dist/admin.js:12
 #: src/admin/views/brands/Brand.js:197
 msgid "Default"
 msgstr ""
 
-#: dist/admin.js:1
+#: dist/admin.js:12
 #: src/admin/views/brands/Brand.js:205
 msgid "Slug"
 msgstr ""
 
-#: dist/admin.js:1
+#: dist/admin.js:12
 #: src/admin/views/brands/Brand.js:217
 msgid "Show on Front"
 msgstr ""
 
-#: dist/admin.js:1
+#: dist/admin.js:12
 #: src/admin/views/brands/Brand.js:220
 msgid "Latest posts"
 msgstr ""
 
-#: dist/admin.js:1
+#: dist/admin.js:12
 #: src/admin/views/brands/Brand.js:221
 msgid "A page"
 msgstr ""
 
-#: dist/admin.js:1
+#: dist/admin.js:12
 #: src/admin/views/brands/Brand.js:227
 msgid "Homepage URL"
 msgstr ""
 
-#: dist/admin.js:1
+#: dist/admin.js:12
 #: src/admin/views/brands/Brand.js:231
 msgid "Select a Page"
 msgstr ""
 
-#: dist/admin.js:1
+#: dist/admin.js:12
 #: src/admin/views/brands/Brand.js:247
 msgid "Menus"
 msgstr ""
 
-#: dist/admin.js:1
+#: dist/admin.js:12
 #: src/admin/views/brands/Brand.js:248
 msgid "Customize the menus for this brand"
 msgstr ""
 
-#: dist/admin.js:1
+#: dist/admin.js:12
 #: src/admin/views/brands/Brand.js:258
 msgid "Same as site"
 msgstr ""
 
-#: dist/admin.js:1
+#: dist/admin.js:12
 #: src/admin/views/brands/Brand.js:270
 msgid "Save"
 msgstr ""
 
-#: dist/admin.js:1
+#: dist/admin.js:12
 #: src/admin/views/brands/Brand.js:273
 msgid "Cancel"
 msgstr ""

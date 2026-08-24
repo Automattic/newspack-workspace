@@ -36,17 +36,50 @@ amp-script .tag-labels {
 }
 /* stylelint-enable */
 
-/* Single Posts */
-.single {
-	// When categories are visible
-	.tag-labels {
+// Tag labels render after the category (and sponsor) label and sit on the same line,
+// mirroring the sponsor → category convention. The category `.cat-links` is immediately
+// followed by the tag-labels `.cat-links.tag-labels` in every context (single posts,
+// home, archive, search, and the Content Loop / Carousel blocks), so keep it inline-block
+// and space the tag labels that follow it. The sponsor `.cat-links.sponsor-label` keeps
+// its own layout (from newspack-sponsors), so it is excluded here.
+.cat-links:not( .sponsor-label ):has( + .tag-labels ) {
+	display: inline-block;
+}
+.cat-links + .tag-labels {
+	display: inline-flex;
+	margin-left: 0.5em;
+}
+
+// In the Content Loop (`.wpnbha`) and Carousel (`.wpnbpc`) blocks the category
+// `.cat-links` is block-level (`display: flex` in `.wpnbha`, default block in `.wpnbpc`),
+// which would stack the category and the tag labels that follow it. Re-assert
+// `inline-flex` with higher specificity so the category and tag labels share one line.
+// Sponsor rows (`.cat-links.sponsor-label`) are excluded so their own `flex`/`gap`
+// layout wins deterministically.
+.wpnbha,
+.wpnbpc {
+	.cat-links:not( .sponsor-label ):has( + .tag-labels ),
+	.cat-links + .tag-labels {
 		display: inline-flex;
 	}
-	// Labels render before categories (matching the sponsor-label convention),
-	// so space the category that follows a label — mirrors `.sponsor-label + .cat-links`.
-	.tag-labels + .cat-links {
-		display: inline-block;
+	.cat-links + .tag-labels {
 		margin-left: 0.5em;
+	}
+
+	// The sponsor label is `inline-flex` globally (newspack-sponsors.scss), but
+	// `.wpnbha .cat-links` sets `display: flex` at higher specificity, which makes it
+	// block-level and drops the tag labels onto the next line. Restore its own display
+	// without touching the flex/gap layout the exclusion above exists to protect.
+	// `.wpnbpc` never overrides `.cat-links` display, so this is a no-op there.
+	.cat-links.sponsor-label:has( + .tag-labels ) {
+		display: inline-flex;
+	}
+}
+
+/* Single Posts */
+.single {
+	.tag-labels {
+		display: inline-flex;
 	}
 
 	// Workaround margin/padding override for featured images.
@@ -76,18 +109,9 @@ amp-script .tag-labels {
 	}
 }
 
-// Re-show the category that follows a tag label on search results.
-.search article .tag-labels + .cat-links {
-	display: inline-flex;
-}
-
 // Home page.
 .home {
 	article {
-		.tag-labels,
-		.tag-labels + .cat-links {
-			display: inline-flex;
-		}
 		.tag-labels a,
 		.tag-labels a:hover {
 			padding: 0.3em 0.5em;

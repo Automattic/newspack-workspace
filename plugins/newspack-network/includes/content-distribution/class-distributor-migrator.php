@@ -482,11 +482,7 @@ class Distributor_Migrator {
 			return new WP_Error( 'outgoing_post_error', $e->getMessage() );
 		}
 		$distribution = $outgoing_post->set_distribution( [ $network_url ] );
-		if (
-			is_wp_error( $distribution ) &&
-			// Ignore error if the post is already distributed.
-			'update_failed' !== $distribution->get_error_code()
-		) {
+		if ( is_wp_error( $distribution ) ) {
 			return $distribution;
 		}
 		self::log( sprintf( 'Set distribution for post %d to %s.', $post_id, $network_url ) );

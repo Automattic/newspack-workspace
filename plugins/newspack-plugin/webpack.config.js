@@ -40,6 +40,7 @@ const entry = {
 	'reader-activation': resolveSource( 'src', 'reader-activation', 'index' ),
 	'reader-auth': resolveSource( 'src', 'reader-activation-auth', 'index' ),
 	'newsletters-signup': resolveSource( 'src', 'reader-activation-newsletters', 'index' ),
+	'form-capture': resolveSource( 'src', 'reader-activation-form-capture', 'index' ),
 	'reader-registration-block': resolveSource( 'src', 'blocks', 'reader-registration', 'view' ),
 	'correction-box-block': resolveSource( 'src', 'blocks', 'correction-box', 'index' ),
 	'correction-item-block': resolveSource( 'src', 'blocks', 'correction-item', 'index' ),
@@ -72,9 +73,11 @@ const entry = {
 	'newspack-ui': resolveSource( 'src', 'newspack-ui', 'index' ),
 	bylines: resolveSource( 'src', 'bylines', 'index' ),
 	'nicename-change': resolveSource( 'src', 'nicename-change', 'index' ),
+	'revisions-control': resolveSource( 'src', 'revisions-control', 'index' ),
 	'collections-admin': resolveSource( 'src', 'collections', 'admin', 'index' ),
 	'collections-frontend': resolveSource( 'src', 'collections', 'frontend', 'index' ),
 	'group-subscription-admin': resolveSource( 'src', 'group-subscription', 'admin' ),
+	'csv-export': resolveSource( 'src', 'csv-export', 'index' ),
 };
 
 // Get files for other scripts.

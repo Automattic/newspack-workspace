@@ -304,8 +304,17 @@ class Test_Account_Deletion extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * When handling='flag', the dispatcher must push the contact with an
-	 * `account_deleted` datetime in metadata and not call delete_contact.
+	 * When handling='flag', the dispatcher must push the contact with a
+	 * prefixed `Account_Deleted` datetime in metadata and not call
+	 * delete_contact.
+	 *
+	 * This drives handle_account_deletion() directly, which in production is the
+	 * v1 path: Contact_Sync_Connector::register_handlers() wires
+	 * `reader_delete_sync` to this dispatcher only outside legacy mode, and
+	 * registers the older `reader_deleted` handler in legacy mode. The test runs
+	 * at the default (legacy) version, so the prefixed-key assertions below are
+	 * about the dispatcher's own contract, not a change to legacy deletion
+	 * payloads — legacy deletion never reaches this dispatcher.
 	 */
 	public function test_handle_account_deletion_calls_push_with_timestamp_when_handling_flag() {
 		$this->reset_integrations();
@@ -329,20 +338,25 @@ class Test_Account_Deletion extends \WP_UnitTestCase {
 
 		$pushed = $spy->push_calls[0]['contact'];
 		$this->assertSame( 'reader@example.com', $pushed['email'] );
-		$this->assertArrayHasKey( 'account_deleted', $pushed['metadata'] );
+		// The raw `account_deleted` flag is dropped by prepare_contact() like any
+		// other non-selected metadata (in legacy mode only sync-control keys pass
+		// unprefixed); the dispatcher re-injects the signal under the prefixed
+		// key, which is the durable ESP-side contract.
+		$prefix = $spy->get_metadata_prefix();
+		$this->assertArrayNotHasKey( 'account_deleted', $pushed['metadata'] );
+		$this->assertArrayHasKey( $prefix . 'Account_Deleted', $pushed['metadata'] );
 		$this->assertNotFalse(
-			strtotime( $pushed['metadata']['account_deleted'] ),
-			'account_deleted must be a strtotime-parseable timestamp.'
+			strtotime( $pushed['metadata'][ $prefix . 'Account_Deleted' ] ),
+			'Account_Deleted must be a strtotime-parseable timestamp.'
 		);
 		$this->assertMatchesRegularExpression(
 			'/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/',
-			$pushed['metadata']['account_deleted'],
-			'account_deleted must use the Y-m-d H:i:s format that peer datetime metadata uses.'
+			$pushed['metadata'][ $prefix . 'Account_Deleted' ],
+			'Account_Deleted must use the Y-m-d H:i:s format that peer datetime metadata uses.'
 		);
 		// Flag mode must also re-inject the historical membership_status=user-deleted
 		// signal under the prefixed key, for backward compatibility with publisher
 		// automations that keyed on it before the per-integration deletion settings.
-		$prefix = $spy->get_metadata_prefix();
 		$this->assertSame(
 			'user-deleted',
 			$pushed['metadata'][ $prefix . 'Membership_Status' ],

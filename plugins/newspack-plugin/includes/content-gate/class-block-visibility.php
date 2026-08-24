@@ -53,30 +53,141 @@ class Block_Visibility {
 			return $block_content;
 		}
 
-		// Bypass access control in admin screens and REST requests (block renderer,
-		// preview, query-loop rendering inside the editor) so blocks are never hidden
-		// from editors during content authoring.
-		if ( is_admin() || ( defined( 'REST_REQUEST' ) && REST_REQUEST ) ) {
+		// Bypass access control in admin screens so blocks are never hidden from
+		// editors during content authoring.
+		//
+		// REST requests are deliberately NOT exempt: a context check is not a permission
+		// check, and access has to be evaluated per requester. Authoring contexts that
+		// arrive over REST (block renderer, preview, query-loop rendering inside the
+		// editor) are covered by the `edit_post` check further down, which needs a post
+		// in scope — where none is set up, it fails closed. Re-adding a blanket REST
+		// exemption here would widen what is readable; the REST cases in
+		// Newspack_Test_Block_Visibility pin the behaviour.
+		if ( is_admin() ) {
 			return $block_content;
+		}
+
+		$hidden = self::is_hidden_for_user( $block, get_current_user_id(), get_the_ID() );
+
+		// This response now depends on who asked for it, and the page cache in front of
+		// it cannot always tell requesters apart. Batcache skips a request only when it
+		// carries an X-WP-Nonce header or a wp*/wordpress* cookie; an application
+		// password sends neither, so a privileged REST render would be stored and then
+		// served to the next anonymous caller. Cancel the store whenever this render
+		// shows a block an anonymous reader would not see -- the withheld render is
+		// still cached normally, which is the common case and the one worth caching.
+		if ( self::render_varies_from_anonymous( $block, get_current_user_id(), get_the_ID() ) ) {
+			self::prevent_page_cache();
+		}
+
+		return $hidden ? '' : $block_content;
+	}
+
+	/**
+	 * Whether this render differs from the one an anonymous reader would get.
+	 *
+	 * Compares the two hide-decisions rather than testing a single direction.
+	 * `visibility` is a two-way toggle, and is_hidden_for_user() inverts on it: with
+	 * `hidden`, a reader who matches the rules has the block withheld while anonymous
+	 * keeps it. That render varies per requester too, so a one-directional check
+	 * ("shows a block anonymous would not see") misses it and lets it be cached.
+	 *
+	 * Split out so the decision is testable without inspecting response headers:
+	 * batcache_cancel() and header() are both unobservable under PHPUnit, so a test
+	 * written against them asserts nothing.
+	 *
+	 * Assumes an anonymous render never varies from another anonymous render. The
+	 * `institution` rule contradicts that -- it sets supports_anonymous and evaluates
+	 * on IP or cookie, so two anonymous readers can legitimately differ and the first
+	 * one cached wins. That is pre-existing on the front-end path and unchanged here;
+	 * it is tracked separately rather than assumed away.
+	 *
+	 * @param array    $block   Parsed block.
+	 * @param int      $user_id Reader the response was rendered for.
+	 * @param int|null $post_id Post in scope, for the edit-capability bypass.
+	 * @return bool
+	 */
+	public static function render_varies_from_anonymous( $block, $user_id, $post_id = null ) {
+		return self::is_hidden_for_user( $block, $user_id, $post_id ) !== self::is_hidden_for_user( $block, 0 );
+	}
+
+	/**
+	 * Keep the current response out of the page cache.
+	 *
+	 * Batcache exposes batcache_cancel() for this; DONOTCACHEPAGE is not honoured by
+	 * the build running on Atomic, so it is not enough on its own. The header covers
+	 * any other cache in the path and is a no-op once output has started.
+	 */
+	private static function prevent_page_cache() {
+		if ( function_exists( 'batcache_cancel' ) ) {
+			batcache_cancel();
+		}
+		if ( ! headers_sent() ) {
+			header( 'Cache-Control: private, no-store, max-age=0', true );
+		}
+	}
+
+	/**
+	 * Whether a block should be withheld from a given reader.
+	 *
+	 * Split out of filter_render_block() so callers that are not rendering — the
+	 * excerpt path in particular — can ask the same question for a specific reader
+	 * rather than the current one. Returning false means "show it", which covers
+	 * every pass-through case: a non-target block, no active gates, no active rules.
+	 *
+	 * @param array    $block   Parsed block.
+	 * @param int      $user_id Reader to evaluate against. 0 for logged-out.
+	 * @param int|null $post_id Post the block is being rendered in, or null when
+	 *                          there is no post context. Only used for the
+	 *                          edit-capability bypass.
+	 * @return bool
+	 */
+	public static function is_hidden_for_user( $block, $user_id, $post_id = null ) {
+		if ( ! in_array( $block['blockName'] ?? '', self::get_target_blocks(), true ) ) {
+			return false;
+		}
+
+		// This predicate evaluates rules itself rather than asking
+		// `newspack_is_post_restricted`, so it needs the dependency stated explicitly.
+		// Without it, with Audience Management off, a members-only block stayed hidden
+		// while the article around it rendered in full — a hole in the page and no
+		// registration surface to fill it.
+		//
+		// Reader Activation alone, NOT Content_Gate::is_gating_active(): block
+		// visibility is flag-independent by design — this class registers
+		// unconditionally, its editor panel loads without `NEWSPACK_CONTENT_GATES`,
+		// and in `custom` mode a block needs no gate at all, just a registration rule.
+		// So the feature is live on sites that never enabled content gates, and ANDing
+		// in the constant would make blocks they deliberately hid render to everyone.
+		// What this rule actually depends on is a reader's ability to register, which
+		// is Reader Activation. So on a constant-off site with Reader Activation on,
+		// blocks keep hiding while page-level gating is off — that asymmetry is left
+		// in place knowingly, because block visibility predates the flag and is used
+		// without it.
+		//
+		// Lives in this shared predicate rather than in filter_render_block() so the
+		// excerpt path answers the same way: with Reader Activation off, an excerpt
+		// must not withhold a block the page around it renders in full.
+		// filter_render_block()'s admin and REST bypass still returns before reaching
+		// here, so editor and REST renders don't pay for the option read.
+		if ( ! Reader_Activation::is_enabled() ) {
+			return false;
 		}
 
 		$mode       = $block['attrs']['newspackAccessControlMode'] ?? 'gate';
 		$visibility = $block['attrs']['newspackAccessControlVisibility'] ?? 'visible';
+		$gate_ids   = [];
+		$rules      = [];
 
 		if ( 'gate' === $mode ) {
 			$gate_ids = array_filter( array_map( 'intval', $block['attrs']['newspackAccessControlGateIds'] ?? [] ) );
 			if ( empty( $gate_ids ) ) {
-				return $block_content; // No gates selected → pass-through.
+				return false;
 			}
-			// If every referenced gate has been deleted or unpublished, treat as
-			// pass-through regardless of the visibility setting. This mirrors the
-			// "no gates selected" case and prevents 'hidden' mode from permanently
-			// hiding the block after a gate is removed.
 			if ( ! self::has_active_gates( $gate_ids ) ) {
-				return $block_content;
+				return false;
 			}
 		} else {
-			// Custom mode: check whether any rules are active before going further.
 			$rules = $block['attrs']['newspackAccessControlRules'] ?? [];
 
 			// Defensive cast: the block parser can occasionally yield a stdClass for
@@ -92,26 +203,128 @@ class Block_Visibility {
 								&& ! empty( $rules['custom_access']['access_rules'] );
 
 			if ( ! $has_registration && ! $has_access_rules ) {
-				return $block_content; // No active rules → pass-through.
+				return false;
 			}
 		}
 
 		// Don't restrict content for users who can edit the post it's in.
-		$post_id = get_the_ID();
-		$user_id = get_current_user_id();
 		if ( ! empty( $post_id ) && user_can( $user_id, 'edit_post', $post_id ) ) {
-			return $block_content;
+			return false;
 		}
 
 		$user_matches = ( 'gate' === $mode )
 			? self::evaluate_gate_rules_for_user( $gate_ids, $user_id )
 			: self::evaluate_rules_for_user( $rules, $user_id );
 
-		if ( 'visible' === $visibility ) {
-			return $user_matches ? $block_content : '';
+		return 'visible' === $visibility ? ! $user_matches : $user_matches;
+	}
+
+	/**
+	 * Whether any block in the content carries access-control attributes.
+	 *
+	 * A withheld block always carries newspackAccessControlGateIds or
+	 * newspackAccessControlRules, so content without that substring has nothing
+	 * to strip. Callers use this to skip parse_blocks()/serialize_blocks()
+	 * entirely, and to tell a post that uses the gate from one that does not.
+	 *
+	 * @param string $content Serialized block content.
+	 * @return bool
+	 */
+	public static function has_access_control( $content ) {
+		return false !== strpos( (string) $content, 'newspackAccessControl' );
+	}
+
+	/**
+	 * Remove blocks that are withheld from a logged-out reader.
+	 *
+	 * Evaluated against the anonymous reader (user 0) rather than the current
+	 * one. That is deliberate: Newspack_Blocks_Caching keys cached block markup
+	 * without a user dimension, so reader-varying output would be served across
+	 * readers. This does not guarantee an identical result for every anonymous
+	 * visitor, though: the "institution" access rule supports anonymous
+	 * evaluation and depends on request context (IP/cookie), so it can still
+	 * vary between two anonymous requests.
+	 *
+	 * @param string $content Serialized block content.
+	 * @return string Content with withheld blocks removed.
+	 */
+	public static function strip_blocks_hidden_from_public( $content ) {
+		if ( ! self::has_access_control( $content ) ) {
+			return $content;
 		}
-		// 'hidden'
-		return $user_matches ? '' : $block_content;
+		if ( ! has_blocks( $content ) ) {
+			return $content;
+		}
+
+		// A homepage runs this twice per post -- once from the priority-10 excerpt
+		// filter, then again inside the priority-11 closure whose result discards the
+		// first pass -- and each call is a full parse_blocks() plus recursive walk plus
+		// serialize_blocks(). The three call sites cannot coordinate, so memoize here
+		// instead. Keyed on the content because the decision is evaluated against the
+		// anonymous reader either way, and pure within a request.
+		$key = md5( $content );
+		if ( ! isset( self::$strip_cache[ $key ] ) ) {
+			self::$strip_cache[ $key ] = serialize_blocks( self::strip_hidden( parse_blocks( $content ) ) );
+		}
+		return self::$strip_cache[ $key ];
+	}
+
+	/**
+	 * Recursive half of strip_blocks_hidden_from_public().
+	 *
+	 * Core's serialize_block() walks innerContent and consumes one innerBlocks
+	 * entry per null marker, so dropping a child means dropping its marker too.
+	 * Filtering innerBlocks alone runs the index past the end and throws from
+	 * inside core.
+	 *
+	 * @param array $blocks Parsed blocks.
+	 * @return array
+	 */
+	private static function strip_hidden( $blocks ) {
+		$kept = [];
+
+		foreach ( $blocks as $block ) {
+			if ( self::is_hidden_for_user( $block, 0 ) ) {
+				continue;
+			}
+
+			if ( ! empty( $block['innerBlocks'] ) ) {
+				$inner_blocks  = [];
+				$inner_content = [];
+				$index         = 0;
+
+				// innerContent is always set by parse_blocks(), but this method is public
+				// API another plugin can call with a hand-built array, where a missing
+				// key would silently drop every child.
+				foreach ( (array) ( $block['innerContent'] ?? [] ) as $chunk ) {
+					if ( is_string( $chunk ) ) {
+						$inner_content[] = $chunk;
+						continue;
+					}
+					$child = $block['innerBlocks'][ $index++ ] ?? null;
+					if ( null === $child ) {
+						continue;
+					}
+					// The recursive call evaluates the child itself and returns nothing
+					// when it is withheld, so testing the result replaces a second
+					// is_hidden_for_user() call here and makes $stripped[0] safe by
+					// construction rather than by the two evaluations agreeing.
+					$stripped = self::strip_hidden( [ $child ] );
+					if ( empty( $stripped ) ) {
+						continue;
+					}
+					$inner_blocks[]  = $stripped[0];
+					$inner_content[] = null;
+				}
+
+				$block['innerBlocks']  = $inner_blocks;
+				$block['innerContent'] = $inner_content;
+			}
+
+			$kept[] = $block;
+		}
+
+		return $kept;
 	}
 
 	/**
@@ -158,6 +371,30 @@ class Block_Visibility {
 	 */
 	public static function enqueue_block_editor_assets() {
 		if ( ! current_user_can( 'edit_others_posts' ) ) {
+			return;
+		}
+
+		// No panel while the rules it configures are inert for readers — offering
+		// controls that do nothing is worse than offering none. Matches the predicate
+		// filter_render_block() enforces on, so the panel is present exactly when the
+		// settings it writes have an effect.
+		//
+		// Only the panel. register_block_type_args() stays unconditional on purpose:
+		// the attributes must keep round-tripping through save and load, so a block
+		// configured before Audience Management was switched off still carries its
+		// settings and starts applying again the moment it is switched back on.
+		//
+		// That works because core bootstraps the PHP-registered attributes into the
+		// client registry independently of our script: get_block_editor_server_block_settings()
+		// prints them on `wp-blocks`, the bootstrap reducer keeps that first definition,
+		// and processBlockType merges it under the block's JS settings — which for
+		// core/group carry no `attributes` key. So the parser keeps and re-serializes
+		// newspackAccessControl* even with this script suppressed. Registering these
+		// attributes ONLY from the JS side would therefore be silent data loss on every
+		// re-save; keep the PHP registration primary. The same caveat applies to any
+		// block added through `newspack_content_gate_block_visibility_blocks` that is
+		// not registered in PHP.
+		if ( ! Reader_Activation::is_enabled() ) {
 			return;
 		}
 
@@ -222,10 +459,18 @@ class Block_Visibility {
 	private static $rules_match_cache = [];
 
 	/**
-	 * Reset the per-request cache. Used in unit tests only.
+	 * Per-request cache of stripped content, keyed by md5 of the input.
+	 *
+	 * @var string[]
+	 */
+	private static $strip_cache = [];
+
+	/**
+	 * Reset the per-request caches. Used in unit tests only.
 	 */
 	public static function reset_cache_for_tests() {
 		self::$rules_match_cache = [];
+		self::$strip_cache       = [];
 	}
 
 	/**

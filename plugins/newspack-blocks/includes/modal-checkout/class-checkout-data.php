@@ -269,7 +269,10 @@ final class Checkout_Data {
 
 		$cart_item    = null;
 		$order        = null;
+		$subscription = null;
 		$referrer     = '';
+		$product_id   = null;
+		$amount       = 0;
 		$variation_id = null;
 		$is_variable  = false;
 		$is_grouped   = false;
@@ -303,18 +306,37 @@ final class Checkout_Data {
 			$amount       = $cart_item['data']->get_price();
 			$referrer     = $cart_item['referer'] ?? '';
 		} elseif ( $source instanceof \WC_Order ) {
-			// If order as actually a subscription object, we need to get the original order.
+			// A subscription's purchase details normally live on the order it was
+			// bought through. A subscription created by hand in wp-admin has no parent
+			// order, and its own line items describe the same purchase, so read those
+			// instead (NPPD-2170).
+			//
+			// The two identities stay separate on purpose. A subscription is not an
+			// order, and reporting its ID as an order ID sends the modal to a
+			// view-order URL built from a subscription ID: a page nothing links to,
+			// which renders the read-only receipt from WooCommerce Subscriptions
+			// rather than anything the reader can act on.
 			if ( $source instanceof \WC_Subscription ) {
-				$order = $source->get_parent();
+				$subscription = $source;
+				$parent       = $source->get_parent();
+				$order        = $parent ? $parent : null;
+				$items_source = $parent ? $parent : $source;
 			} else {
-				$order = $source;
+				$order        = $source;
+				$items_source = $source;
 			}
-			$order_items  = $order->get_items();
-			$order_item   = reset( $order_items ); // Use only the first item in the order.
+			$order_items = $items_source->get_items();
+			$order_item  = reset( $order_items ); // Use only the first item in the order.
+			if ( ! $order_item ) {
+				// No line item means no purchase to summarise, and the product and
+				// name lookups below would fatal on the resulting null. Return empty,
+				// the same "nothing to checkout" signal as an empty source above.
+				return $data;
+			}
 			$product_id   = $order_item->get_product_id();
 			$variation_id = $order_item->get_variation_id();
 			$amount       = $order_item->get_subtotal();
-			$referrer     = $order->get_meta( '_newspack_referer' );
+			$referrer     = $items_source->get_meta( '_newspack_referer' );
 		}
 
 		// If we have no referrer, set it to the current path.
@@ -387,6 +409,17 @@ final class Checkout_Data {
 					}
 				}
 			}
+		}
+
+		// A subscription with no parent order has no order to identify itself by, so
+		// name the subscription directly. Without this the modal has nothing to
+		// return the reader to once checkout finishes (NPPD-2170).
+		// Only when there is no parent order to identify the purchase by. With a
+		// parent present the block above owns the key, and widening this would set
+		// subscription_ids for product types it skips — a recurring donation resolves
+		// to `donation`, so it would silently change where those readers land.
+		if ( $subscription && ! $order && empty( $data['subscription_ids'] ) ) {
+			$data['subscription_ids'] = [ $subscription->get_id() ];
 		}
 
 		/**
