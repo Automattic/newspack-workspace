@@ -688,6 +688,47 @@ HTML;
 	}
 
 	/**
+	 * A group where SOME granting products mapped is flagged too, not just one where
+	 * none did.
+	 *
+	 * This is the case the run otherwise reports as a plain success: rules exist, the
+	 * gate is written, the summary row reads `created` — and the gate demands a
+	 * narrower set of purchases than the plans it came from, so readers who bought one
+	 * of the dropped products are locked out of content they paid for. The only other
+	 * signal is a warning scrolling past inside the progress bar.
+	 */
+	public function test_compute_pre_write_issues_flags_a_partial_paid_mapping() {
+		$ac_rules = [
+			[
+				'slug'  => 'post_types',
+				'value' => [ 'post' ],
+			],
+		];
+		$layouts  = [
+			'registration'  => '<p>Upsell.</p>',
+			'custom_access' => '<p>Members.</p>',
+		];
+		// One rule DID map, so the "no access rules at all" branch does not fire.
+		$paid_access_rules = [
+			[
+				[
+					'slug'  => 'subscription',
+					'value' => [ 101 ],
+				],
+			],
+		];
+
+		$issues = $this->invoke_private_static(
+			'compute_pre_write_issues',
+			[ $ac_rules, true, $layouts, $paid_access_rules, [ 'Annual Supporter' ] ]
+		);
+
+		$this->assertCount( 1, $issues );
+		$this->assertStringContainsString( 'not all granting products could be mapped', $issues[0] );
+		$this->assertStringContainsString( 'Annual Supporter', $issues[0], 'The operator is told which plan to look at.' );
+	}
+
+	/**
 	 * A purchase plan with no custom_access layout extracted is flagged — apply_layout()
 	 * will be skipped for the paid access mode, so any registered reader gets through.
 	 * Mirrors verify_migrated_gate()'s "paid access mode is not active" check.

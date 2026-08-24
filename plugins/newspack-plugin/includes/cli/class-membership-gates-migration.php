@@ -168,9 +168,17 @@ class Membership_Gates_Migration {
 			// comes from the plan's membership length (NPPD-2106). Only purchase groups
 			// carry paid rules; a signup or mixed group is registration-gated, so it is
 			// skipped here — matching apply_paid_access()/verify_migrated_gate().
+			//
+			// $unmapped_plans collects the plans whose granting products did not all
+			// map. A group where one plan maps and another does not still writes a
+			// gate, so without carrying this out the run reports `created` for a gate
+			// that restricts less than the plans it came from, and the operator's only
+			// signal is a warning scrolling past inside the progress bar.
+			$unmapped_plans    = [];
 			$paid_access_rules = $has_purchase
-				? self::build_paid_access_rules( self::get_group_paid_descriptors( $group ) )
+				? self::build_paid_access_rules( self::get_group_paid_descriptors( $group, $unmapped_plans ) )
 				: [];
+			$unmapped_plans    = array_values( array_unique( $unmapped_plans ) );
 
 			// Gate identity is the title, but groups are keyed by rule fingerprint —
 			// so two same-named plans with different rules land in different groups
@@ -266,7 +274,7 @@ class Membership_Gates_Migration {
 					WP_CLI::warning( sprintf( '"%s" (gate %d) will not restrict as intended: %s', $gate_title, $gate_id, $issue ) );
 				}
 			} elseif ( $dry_run ) {
-				$verification_issues = self::compute_pre_write_issues( $ac_rules, $has_purchase, $layouts, $paid_access_rules );
+				$verification_issues = self::compute_pre_write_issues( $ac_rules, $has_purchase, $layouts, $paid_access_rules, $unmapped_plans );
 				foreach ( $verification_issues as $issue ) {
 					WP_CLI::warning( sprintf( '"%s" will not migrate correctly: %s', $gate_title, $issue ) );
 				}
@@ -466,10 +474,12 @@ class Membership_Gates_Migration {
 	 * @param bool    $has_purchase      Whether every plan in the group requires a purchase.
 	 * @param array   $layouts           Extracted layout markup keyed by 'registration' and 'custom_access'.
 	 * @param array[] $paid_access_rules Mapped paid-access rule groups from build_paid_access_rules().
+	 * @param array   $unmapped_plans    Names of plans whose granting products did not
+	 *                                   all map to a paid access rule.
 	 *
 	 * @return string[] Human-readable problems; empty when no issues are predicted.
 	 */
-	private static function compute_pre_write_issues( array $ac_rules, bool $has_purchase, array $layouts, array $paid_access_rules ): array {
+	private static function compute_pre_write_issues( array $ac_rules, bool $has_purchase, array $layouts, array $paid_access_rules, array $unmapped_plans = [] ): array {
 		$issues = [];
 
 		// Mirror the unresolvable-slug check from verify_migrated_gate(): slugs the
@@ -511,6 +521,15 @@ class Membership_Gates_Migration {
 				// activated, so any registered reader passes. Mirrors verify_migrated_gate()'s
 				// "paid access mode is not active" check for the pre-write pass.
 				$issues[] = 'its paid access mode will have no access rules (no products could be mapped to a paid access rule), so it will ask for no purchase — any registered reader would get in';
+			} elseif ( ! empty( $unmapped_plans ) ) {
+				// Some, but not all, of the group's granting products mapped. The gate is
+				// written and looks fine, but it demands a narrower set of purchases than
+				// the plans did, so readers who bought one of the dropped products are
+				// locked out of content they paid for.
+				$issues[] = sprintf(
+					'not all granting products could be mapped to a paid access rule (%s), so the gate will demand a narrower set of purchases than the plan(s) did and some paying readers would be locked out',
+					implode( ', ', $unmapped_plans )
+				);
 			}
 		}
 
@@ -663,11 +682,13 @@ class Membership_Gates_Migration {
 	 * activated with an empty rule set (see apply_paid_access()).
 	 *
 	 * @param array $group Plan descriptors from group_plans_by_fingerprint().
+	 * @param array $unmapped Appended by reference with the name of each plan whose
+	 *                        granting products did not all map.
 	 *
 	 * @return array[] Descriptors for build_paid_access_rules(), each
 	 *                 [ 'subscription_product_ids', 'one_time_product_ids', 'duration' ].
 	 */
-	private static function get_group_paid_descriptors( array $group ): array {
+	private static function get_group_paid_descriptors( array $group, array &$unmapped = [] ): array {
 		$descriptors = [];
 
 		// A rule slug the evaluator does not recognize is treated as "don't block"
@@ -699,6 +720,7 @@ class Membership_Gates_Migration {
 			);
 			$product_ids   = array_values( array_diff( $unique_product_ids, $variation_ids ) );
 			if ( ! empty( $variation_ids ) ) {
+				$unmapped[] = $group_plan['name'];
 				WP_CLI::warning(
 					sprintf(
 						'"%s": dropped linked product variation(s) %s — access rules do not support specific variations. Adding the parent product(s) to the gate manually restores access for these buyers, but it also grants access to buyers of every OTHER variation of the same product.',
@@ -734,10 +756,12 @@ class Membership_Gates_Migration {
 					)
 				);
 				$one_time_product_ids = [];
+				$unmapped[]           = $group_plan['name'];
 			}
 
 			if ( ! empty( $one_time_product_ids ) ) {
 				if ( null === $duration ) {
+					$unmapped[] = $group_plan['name'];
 					WP_CLI::warning(
 						sprintf(
 							'"%s" has an access length (%s) the one_time_purchase rule cannot express. Its one-time product(s) (%s) were NOT mapped — configure a one_time_purchase rule on the gate manually.',
