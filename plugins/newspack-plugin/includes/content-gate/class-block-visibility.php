@@ -466,11 +466,36 @@ class Block_Visibility {
 	private static $strip_cache = [];
 
 	/**
+	 * Per-request cache of has_active_gates() results, keyed by
+	 * "{blog_id}:{sorted, de-duplicated gate ids}".
+	 *
+	 * "Cache" here is a static array that lives for one request and is gone when the
+	 * request ends -- the same sense the other two caches in this class use. This
+	 * class writes nothing that outlives a request: no wp_cache_*, no transient, no
+	 * option. So a stale entry cannot reach a later request, and the invalidation
+	 * question below is only about the one it was written in.
+	 *
+	 * The blog id is in the key because gate ids are per-site post ids, so a
+	 * switch_to_blog() mid-request would otherwise answer for the wrong site.
+	 *
+	 * Not flushed when a gate is written. The only reader is the render path, which
+	 * returns early under is_admin(), and the gate-editing endpoints return gate data
+	 * rather than rendered post content -- so no request both writes a gate and renders
+	 * a block gated by it. A caller that breaks that assumption needs an invalidation
+	 * hook here, the way Content_Gate flushes its own cache on save_post and the
+	 * post-meta writes.
+	 *
+	 * @var bool[]
+	 */
+	private static $active_gates_cache = [];
+
+	/**
 	 * Reset the per-request caches. Used in unit tests only.
 	 */
 	public static function reset_cache_for_tests() {
-		self::$rules_match_cache = [];
-		self::$strip_cache       = [];
+		self::$rules_match_cache  = [];
+		self::$strip_cache        = [];
+		self::$active_gates_cache = [];
 	}
 
 	/**
@@ -513,13 +538,28 @@ class Block_Visibility {
 	 * @return bool
 	 */
 	private static function has_active_gates( $gate_ids ) {
+		// Normalized because the answer does not depend on order or repetition, but the
+		// caller's list does: the ids arrive from a block attribute in editor order, and
+		// array_filter() preserves keys, so dropping a zero would otherwise encode as an
+		// object rather than a list and key differently again.
+		$ids = array_values( array_unique( array_map( 'intval', $gate_ids ) ) );
+		sort( $ids, SORT_NUMERIC );
+		$cache_key = get_current_blog_id() . ':' . implode( ',', $ids );
+		if ( isset( self::$active_gates_cache[ $cache_key ] ) ) {
+			return self::$active_gates_cache[ $cache_key ];
+		}
+
+		$has_active = false;
 		foreach ( $gate_ids as $gate_id ) {
 			$gate = Content_Gate::get_gate( $gate_id );
 			if ( ! \is_wp_error( $gate ) && 'publish' === $gate['status'] ) {
-				return true;
+				$has_active = true;
+				break;
 			}
 		}
-		return false;
+
+		self::$active_gates_cache[ $cache_key ] = $has_active;
+		return $has_active;
 	}
 
 	/**
