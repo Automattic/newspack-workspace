@@ -37,6 +37,25 @@ class Test_Users_Columns_Escaping extends WP_UnitTestCase {
 	}
 
 	/**
+	 * A remote-site URL that esc_url() rejects must not link back to the hub.
+	 *
+	 * A rejected value comes back from esc_url() as '', and trailingslashit( '' )
+	 * is '/', so escaping first would make the href an absolute hub path: the
+	 * hub's own user-edit screen for whatever id the node sent. Escaping last
+	 * leaves the href relative, which resolves nowhere.
+	 */
+	public function test_rejected_remote_site_url_does_not_link_to_the_hub() {
+		$user_id = self::factory()->user->create();
+		update_user_meta( $user_id, Users_Utils::USER_META_REMOTE_SITE, 'notaprotocol:example.com' );
+		update_user_meta( $user_id, Users_Utils::USER_META_REMOTE_ID, 7 );
+
+		$out = Users::manage_users_custom_column( '', 'newspack_network_user', $user_id );
+
+		$this->assertSame( 1, preg_match( '/href="([^"]*)"/', $out, $matches ) );
+		$this->assertStringStartsNotWith( '/', $matches[1] );
+	}
+
+	/**
 	 * The Network Activity column must escape the node event summary.
 	 *
 	 * `canonical_url_updated` events derive their summary from the event's
