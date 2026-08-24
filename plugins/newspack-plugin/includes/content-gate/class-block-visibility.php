@@ -23,6 +23,13 @@ class Block_Visibility {
 		add_filter( 'render_block', [ __CLASS__, 'filter_render_block' ], 10, 2 );
 		add_action( 'enqueue_block_editor_assets', [ __CLASS__, 'enqueue_block_editor_assets' ] );
 		add_filter( 'register_block_type_args', [ __CLASS__, 'register_block_type_args' ], 10, 2 );
+
+		// Keep the per-request caches honest across writes (see $active_gates_cache).
+		add_action( 'save_post', [ __CLASS__, 'flush_caches' ] );
+		add_action( 'deleted_post', [ __CLASS__, 'flush_caches' ] );
+		add_action( 'added_post_meta', [ __CLASS__, 'flush_caches' ] );
+		add_action( 'updated_post_meta', [ __CLASS__, 'flush_caches' ] );
+		add_action( 'deleted_post_meta', [ __CLASS__, 'flush_caches' ] );
 	}
 
 	/**
@@ -478,22 +485,11 @@ class Block_Visibility {
 	 * The blog id is in the key because gate ids are per-site post ids, so a
 	 * switch_to_blog() mid-request would otherwise answer for the wrong site.
 	 *
-	 * Not flushed when a gate is written, and neither stale answer is safe. A stale
-	 * false returns early from is_hidden_for_user() and renders a block whose gates
-	 * have just become active. A stale true reaches compute_gate_rules_match(), which
-	 * passes through when no gate is active -- and under visibility "hidden" that
-	 * pass-through inverts into withholding a block that should have rendered.
-	 *
-	 * What bounds this is the write window, not the direction. A stale entry takes one
-	 * request that reads a gate set, changes the publish status of a gate in it, then
-	 * reads that same set again. Neither reader writes gates -- filter_render_block()
-	 * renders, strip_hidden() strips for the excerpt -- so it takes a caller outside
-	 * this file interleaving a gate write between two reads, and none is known to. The
-	 * stale true additionally needs the second read to miss $rules_match_cache, which
-	 * happens across user ids: filter_render_block() uses the current reader, while
-	 * strip_hidden() always uses 0. Anything that closes that window needs an
-	 * invalidation hook here, the way Content_Gate flushes its own cache on save_post
-	 * and the post-meta writes.
+	 * Dropped by flush_caches() on every post and post-meta write, so an entry cannot
+	 * outlive a change to the gates it answers for. It needs that: neither stale answer
+	 * is safe. A stale false renders a block whose gates have just become active, and a
+	 * stale true reaches the pass-through in compute_gate_rules_match(), which under
+	 * visibility "hidden" inverts into withholding a block that should have rendered.
 	 *
 	 * @var bool[]
 	 */
@@ -503,6 +499,25 @@ class Block_Visibility {
 	 * Reset the per-request caches. Used in unit tests only.
 	 */
 	public static function reset_cache_for_tests() {
+		self::flush_caches();
+	}
+
+	/**
+	 * Drop the per-request caches after a write that could change a gate.
+	 *
+	 * Hooked to every post and post-meta write rather than to gate-CPT writes alone,
+	 * matching Content_Gate::flush_gates_cache(): gate settings are persisted with bare
+	 * update_post_meta() calls, and the meta hooks carry a meta ID rather than a post
+	 * type, so telling a gate write from any other costs a lookup on every write. The
+	 * caches are plain arrays, so clearing them unconditionally is cheaper than that
+	 * check and costs at most a recompute on requests that write posts.
+	 *
+	 * All three go, not just the active-gate one. compute_gate_rules_match() reads gate
+	 * status and rule meta on the way to $rules_match_cache, and $strip_cache holds
+	 * output built from both, so clearing only the first would leave the answers it
+	 * feeds still cached.
+	 */
+	public static function flush_caches() {
 		self::$rules_match_cache  = [];
 		self::$strip_cache        = [];
 		self::$active_gates_cache = [];
@@ -552,7 +567,7 @@ class Block_Visibility {
 		// caller's list carries both -- they arrive from a block attribute in editor
 		// order. Normalizing first lets every block gated by the same set, however its
 		// author happened to arrange them, share one entry.
-		$ids = array_values( array_unique( array_map( 'intval', $gate_ids ) ) );
+		$ids = array_unique( array_map( 'intval', $gate_ids ) );
 		sort( $ids, SORT_NUMERIC );
 		$cache_key = get_current_blog_id() . ':' . implode( ',', $ids );
 		if ( isset( self::$active_gates_cache[ $cache_key ] ) ) {
@@ -560,7 +575,7 @@ class Block_Visibility {
 		}
 
 		$has_active = false;
-		foreach ( $gate_ids as $gate_id ) {
+		foreach ( $ids as $gate_id ) {
 			$gate = Content_Gate::get_gate( $gate_id );
 			if ( ! \is_wp_error( $gate ) && 'publish' === $gate['status'] ) {
 				$has_active = true;

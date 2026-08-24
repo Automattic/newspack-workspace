@@ -1063,4 +1063,55 @@ class Newspack_Test_Block_Visibility extends WP_UnitTestCase {
 			'The same gate set in a different order must reuse the cached result.'
 		);
 	}
+
+	/**
+	 * A gate write drops the per-request caches, so the next read sees the new status.
+	 */
+	public function test_gate_write_flushes_active_gate_cache() {
+		$gate_id = $this->make_gate();
+		$fetches = 0;
+
+		$counter = function( $value, $object_id, $meta_key ) use ( &$fetches, $gate_id ) {
+			if ( 'gate_priority' === $meta_key && (int) $object_id === (int) $gate_id ) {
+				++$fetches;
+			}
+			return $value;
+		};
+		add_filter( 'get_post_metadata', $counter, 10, 3 );
+
+		wp_set_current_user( 0 );
+		Block_Visibility::reset_cache_for_tests();
+
+		$block = $this->make_block(
+			'core/group',
+			[
+				'newspackAccessControlMode'    => 'gate',
+				'newspackAccessControlGateIds' => [ $gate_id ],
+			]
+		);
+
+		Block_Visibility::filter_render_block( '<div>members</div>', $block );
+		$after_first = $fetches;
+		Block_Visibility::filter_render_block( '<div>members</div>', $block );
+		$after_cached = $fetches;
+
+		// Snapshot after the write so the write's own meta reads cannot satisfy the
+		// assertion below -- only the render that follows it may.
+		wp_update_post(
+			[
+				'ID'          => $gate_id,
+				'post_status' => 'draft',
+			] 
+		);
+		$after_write = $fetches;
+
+		Block_Visibility::filter_render_block( '<div>members</div>', $block );
+		$after_reread = $fetches;
+
+		remove_filter( 'get_post_metadata', $counter, 10 );
+
+		$this->assertGreaterThan( 0, $after_first, 'The first render must reconstruct the gate.' );
+		$this->assertSame( $after_first, $after_cached, 'The second render must reuse the cached result.' );
+		$this->assertGreaterThan( $after_write, $after_reread, 'A gate write must drop the cache, so the next read reconstructs.' );
+	}
 }
