@@ -478,17 +478,22 @@ class Block_Visibility {
 	 * The blog id is in the key because gate ids are per-site post ids, so a
 	 * switch_to_blog() mid-request would otherwise answer for the wrong site.
 	 *
-	 * Not flushed when a gate is written, because only one of the two stale answers
-	 * can change an outcome. A stale true is re-derived downstream:
-	 * compute_gate_rules_match() re-checks each gate's status itself and returns a
-	 * pass-through when none are active, so it cannot withhold a block whose gates
-	 * went away mid-request. A stale false returns early from is_hidden_for_user()
-	 * and the block renders -- which needs one request to check a gate set, publish a
-	 * gate in it, and then render or excerpt a block carrying that same set. Both
-	 * readers matter here: the render filter bypasses admin and REST, but the excerpt
-	 * path reaches this predicate from strip_hidden() with no such guard. A caller
-	 * that does all three needs an invalidation hook here, the way Content_Gate
-	 * flushes its own cache on save_post and the post-meta writes.
+	 * Not flushed when a gate is written, and neither stale answer is safe. A stale
+	 * false returns early from is_hidden_for_user() and renders a block whose gates
+	 * have just become active. A stale true reaches compute_gate_rules_match(), which
+	 * passes through when no gate is active -- and under visibility "hidden" that
+	 * pass-through inverts into withholding a block that should have rendered.
+	 *
+	 * What bounds this is the write window, not the direction. A stale entry takes one
+	 * request that reads a gate set, changes the publish status of a gate in it, then
+	 * reads that same set again. Neither reader writes gates -- filter_render_block()
+	 * renders, strip_hidden() strips for the excerpt -- so it takes a caller outside
+	 * this file interleaving a gate write between two reads, and none is known to. The
+	 * stale true additionally needs the second read to miss $rules_match_cache, which
+	 * happens across user ids: filter_render_block() uses the current reader, while
+	 * strip_hidden() always uses 0. Anything that closes that window needs an
+	 * invalidation hook here, the way Content_Gate flushes its own cache on save_post
+	 * and the post-meta writes.
 	 *
 	 * @var bool[]
 	 */
