@@ -800,6 +800,20 @@ class Membership_Gates_Migration {
 			}
 		}
 
+		// An empty registration layout is the shape NPPD-2058 is about, and it is
+		// invisible everywhere else in the run: create_gate() seeds a non-empty
+		// default layout and apply_layout() declines to blank it, so the layout post
+		// passes verify_migrated_gate()'s emptiness check and the row still reads
+		// "created". The publisher then goes live with the stock Newspack wall in
+		// place of the upsell they authored. Dry-run is the pass an operator reads
+		// before cutover, so it has to say so here.
+		if ( '' === trim( (string) ( $layouts['registration'] ?? '' ) ) ) {
+			$issues[] = 'no registration layout content could be extracted from its gate post, so the gate will show the default Newspack registration wall rather than the authored one';
+		}
+		if ( $has_purchase && '' === trim( (string) ( $layouts['custom_access'] ?? '' ) ) && null !== $layouts['custom_access'] ) {
+			$issues[] = 'its paid access layout extracted to nothing, so the paid gate will show default content rather than the authored one';
+		}
+
 		if ( $has_purchase ) {
 			if ( null === $layouts['custom_access'] ) {
 				// No custom_access layout found → apply_layout() is never called for
@@ -1439,25 +1453,96 @@ class Membership_Gates_Migration {
 	}
 
 	/**
-	 * Serialize inner blocks, excluding any WooCommerce Memberships wrapper blocks.
+	 * The WooCommerce Memberships wrapper blocks, which are conditional and must
+	 * never be carried into a migrated layout's content.
+	 */
+	const MEMBERSHIP_WRAPPER_BLOCKS = [
+		'woocommerce-memberships/member-content',
+		'woocommerce-memberships/non-member-content',
+	];
+
+	/**
+	 * Serialize inner blocks, excluding any WooCommerce Memberships wrapper blocks
+	 * at any depth.
 	 *
-	 * Membership wrapper blocks (member-content and non-member-content) are
-	 * conditional and should not be included in the migrated gate layout content.
+	 * Depth matters because the wrappers carry opposite audiences. A member-content
+	 * block nested inside a non-member-content one — directly or under an ordinary
+	 * group/columns block — would otherwise be serialized whole into the
+	 * registration layout, which is the layout non-members see. Once WooCommerce
+	 * Memberships is deactivated the block type no longer resolves, so WP_Block
+	 * treats it as static and prints its saved inner content unconditionally: the
+	 * members-only copy is then shown to everyone, and is also missing from the
+	 * layout it belonged to.
 	 *
 	 * @param array $inner_blocks The innerBlocks array from a parsed block.
 	 *
 	 * @return string Serialized block markup.
 	 */
 	private static function serialize_gate_inner_blocks( array $inner_blocks ): string {
-		$membership_block_types = [
-			'woocommerce-memberships/member-content',
-			'woocommerce-memberships/non-member-content',
-		];
-		$filtered = array_filter(
-			$inner_blocks,
-			fn( $b ) => ! in_array( $b['blockName'], $membership_block_types, true )
-		);
-		return \serialize_blocks( array_values( $filtered ) );
+		return \serialize_blocks( self::strip_membership_wrappers( $inner_blocks ) );
+	}
+
+	/**
+	 * Remove WooCommerce Memberships wrapper blocks from a block list, recursively.
+	 *
+	 * @param array $blocks Parsed blocks.
+	 *
+	 * @return array Blocks with every wrapper removed at any depth.
+	 */
+	private static function strip_membership_wrappers( array $blocks ): array {
+		$kept = [];
+		foreach ( $blocks as $block ) {
+			if ( in_array( $block['blockName'] ?? null, self::MEMBERSHIP_WRAPPER_BLOCKS, true ) ) {
+				continue;
+			}
+			$kept[] = empty( $block['innerBlocks'] ) ? $block : self::strip_membership_wrappers_from_block( $block );
+		}
+		return array_values( $kept );
+	}
+
+	/**
+	 * Strip wrapper blocks from one block's descendants, keeping innerContent in step.
+	 *
+	 * WordPress interleaves a block's own markup with its children by walking
+	 * `innerContent`, where each null is the placeholder for the next entry of
+	 * `innerBlocks`. Dropping a child without dropping its placeholder shifts every
+	 * later child into the wrong slot, so the two are rebuilt together here rather
+	 * than filtering `innerBlocks` alone.
+	 *
+	 * @param array $block A parsed block with a non-empty innerBlocks list.
+	 *
+	 * @return array The block with wrappers removed from its subtree.
+	 */
+	private static function strip_membership_wrappers_from_block( array $block ): array {
+		// A block with children but no innerContent map has nothing to keep in step.
+		if ( empty( $block['innerContent'] ) || ! is_array( $block['innerContent'] ) ) {
+			$block['innerBlocks'] = self::strip_membership_wrappers( $block['innerBlocks'] );
+			return $block;
+		}
+
+		$kept_blocks  = [];
+		$kept_content = [];
+		$child_index  = 0;
+		foreach ( $block['innerContent'] as $chunk ) {
+			if ( null !== $chunk ) {
+				$kept_content[] = $chunk;
+				continue;
+			}
+			$child = $block['innerBlocks'][ $child_index ] ?? null;
+			++$child_index;
+			if ( null === $child ) {
+				continue;
+			}
+			if ( in_array( $child['blockName'] ?? null, self::MEMBERSHIP_WRAPPER_BLOCKS, true ) ) {
+				continue;
+			}
+			$kept_blocks[]  = empty( $child['innerBlocks'] ) ? $child : self::strip_membership_wrappers_from_block( $child );
+			$kept_content[] = null;
+		}
+
+		$block['innerBlocks']  = $kept_blocks;
+		$block['innerContent'] = $kept_content;
+		return $block;
 	}
 
 	/**
@@ -1502,7 +1587,8 @@ class Membership_Gates_Migration {
 	 *
 	 * A wrapper's own inner blocks are not searched again: everything inside a
 	 * member-content block already belongs to that wrapper's layout, and
-	 * serialize_gate_inner_blocks() drops a wrapper nested directly within it.
+	 * serialize_gate_inner_blocks() drops any wrapper nested within it at any depth
+	 * — directly, or under an ordinary group/columns block.
 	 *
 	 * @param array $blocks       Parsed blocks to search.
 	 * @param array $wrappers     Accumulated markup keyed 'registration' and

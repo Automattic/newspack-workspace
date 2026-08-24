@@ -697,6 +697,69 @@ HTML;
 	}
 
 	/**
+	 * Members-only content nested inside the non-member wrapper never reaches the
+	 * registration layout, however deeply it is buried.
+	 *
+	 * The two wrappers carry opposite audiences, so this is the one nesting case
+	 * that leaks rather than merely losing content: after WooCommerce Memberships is
+	 * deactivated the wrapper block type no longer resolves, WP_Block treats it as
+	 * static, and its saved inner content prints unconditionally — showing paying
+	 * members' copy to the non-members the registration layout is for.
+	 */
+	public function test_extract_gate_layouts_never_leaks_member_content_into_the_registration_layout() {
+		$gate_content = <<<'HTML'
+<!-- wp:woocommerce-memberships/non-member-content -->
+<!-- wp:paragraph --><p>Subscribe to read.</p><!-- /wp:paragraph -->
+<!-- wp:group --><div class="wp-block-group">
+<!-- wp:woocommerce-memberships/member-content -->
+<!-- wp:paragraph --><p>Members only secret.</p><!-- /wp:paragraph -->
+<!-- /wp:woocommerce-memberships/member-content -->
+</div><!-- /wp:group -->
+<!-- /wp:woocommerce-memberships/non-member-content -->
+HTML;
+		$gate_post = $this->create_gate_post( $gate_content );
+
+		$layouts = $this->invoke_private_static( 'extract_gate_layouts', [ $gate_post ] );
+
+		$this->assertStringContainsString( 'Subscribe to read.', $layouts['registration'] );
+		$this->assertStringNotContainsString( 'Members only secret.', $layouts['registration'] );
+		$this->assertStringNotContainsString( 'woocommerce-memberships/member-content', $layouts['registration'], 'The wrapper block itself is dropped, not just hidden — it would render as static content once WooCommerce Memberships is gone.' );
+	}
+
+	/**
+	 * A cycle spanning two patterns (A references B, B references A) terminates.
+	 *
+	 * This is a different path through the visited set than a pattern that references
+	 * itself: a guard that only remembered the pattern it is currently in would loop
+	 * here, and one that skipped any ref seen anywhere would break the legitimate
+	 * repeat case above. Both have to hold at once.
+	 */
+	public function test_extract_gate_layouts_survives_a_two_pattern_cycle() {
+		$pattern_a = $this->create_pattern_post( 'placeholder' );
+		$pattern_b = $this->create_pattern_post( 'placeholder' );
+		wp_update_post(
+			[
+				'ID'           => $pattern_a,
+				'post_content' => '<!-- wp:block {"ref":' . $pattern_b . '} /-->',
+			]
+		);
+		wp_update_post(
+			[
+				'ID'           => $pattern_b,
+				'post_content' => '<!-- wp:block {"ref":' . $pattern_a . '} /-->'
+					. '<!-- wp:woocommerce-memberships/non-member-content -->'
+					. '<!-- wp:paragraph --><p>Upsell past the cycle.</p><!-- /wp:paragraph -->'
+					. '<!-- /wp:woocommerce-memberships/non-member-content -->',
+			]
+		);
+		$gate_post = $this->create_gate_post( '<!-- wp:block {"ref":' . $pattern_a . '} /-->' );
+
+		$layouts = $this->invoke_private_static( 'extract_gate_layouts', [ $gate_post ] );
+
+		$this->assertStringContainsString( 'Upsell past the cycle.', $layouts['registration'] );
+	}
+
+	/**
 	 * A gate authored as a synced pattern holds its wrappers in a separate wp_block
 	 * post; the `core/block` reference is resolved so that content migrates too.
 	 */
@@ -1089,8 +1152,9 @@ HTML
 				'value' => [ '1' ],
 			],
 		];
-		$layouts  = [
-			'registration'  => '',
+		// A real layout, so the only issue this can produce is the slug one.
+		$layouts = [
+			'registration'  => '<!-- wp:paragraph --><p>Upsell.</p><!-- /wp:paragraph -->',
 			'custom_access' => null,
 		];
 
@@ -1120,8 +1184,9 @@ HTML
 				'value' => [ '2' ],
 			],
 		];
+		// A real layout, so the only issue this can produce is the slug one.
 		$layouts = [
-			'registration'  => '',
+			'registration'  => '<!-- wp:paragraph --><p>Upsell.</p><!-- /wp:paragraph -->',
 			'custom_access' => null,
 		];
 
@@ -1132,6 +1197,36 @@ HTML
 
 		$this->assertCount( 1, $issues );
 		$this->assertStringContainsString( '1 of its 2 content rules do not resolve', $issues[0] );
+	}
+
+	/**
+	 * A gate whose registration layout extracted to nothing is flagged in dry-run.
+	 *
+	 * Nothing else in the run catches this: create_gate() seeds a non-empty default
+	 * layout and apply_layout() declines to blank it, so the gate passes
+	 * verify_migrated_gate()'s emptiness check and the summary row reads "created"
+	 * while the publisher goes live with the stock Newspack wall instead of the
+	 * upsell they wrote. Dry-run is the pass an operator reads before cutover.
+	 */
+	public function test_compute_pre_write_issues_flags_an_empty_registration_layout() {
+		$ac_rules = [
+			[
+				'slug'  => 'post_types',
+				'value' => [ 'post' ],
+			],
+		];
+		$layouts  = [
+			'registration'  => '',
+			'custom_access' => null,
+		];
+
+		$issues = $this->invoke_private_static(
+			'compute_pre_write_issues',
+			[ $ac_rules, false, $layouts, [] ]
+		);
+
+		$this->assertCount( 1, $issues, 'The resolvable slug produces no issue of its own, so the empty layout is the only one.' );
+		$this->assertStringContainsString( 'no registration layout content could be extracted', $issues[0] );
 	}
 
 	/**
