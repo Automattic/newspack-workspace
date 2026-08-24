@@ -197,7 +197,7 @@ export function getValidationError( input: PromoValidationInput ): string | null
 			return sprintf(
 				/* translators: %s: minimum donation amount. */
 				__( 'The amount must be at least %s.', 'newspack-plugin' ),
-				donateConfig.minimum
+				String( donateConfig.minimum )
 			);
 		}
 		if ( typeof effectiveAmount === 'number' && donateConfig.layout_param !== 'untiered' && ! input.presets.includes( effectiveAmount ) ) {
