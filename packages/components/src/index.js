@@ -53,7 +53,6 @@ export { default as TextControl } from './text-control';
 export { default as Waiting } from './waiting';
 export { default as WebPreview } from './web-preview';
 export { default as Wizard } from './wizard';
-export { interpolateOrPlainText } from './wizard';
 export { default as withWizard } from './with-wizard';
 export { default as withWizardScreen } from './with-wizard-screen';
 
