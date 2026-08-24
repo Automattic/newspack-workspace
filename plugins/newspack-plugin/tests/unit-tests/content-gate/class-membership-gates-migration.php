@@ -1874,4 +1874,55 @@ HTML;
 
 		$this->assertNotEmpty( \WP_CLI::$warnings );
 	}
+
+	/**
+	 * NPPD-2063: a taxonomy rule carrying no term IDs is WooCommerce Memberships'
+	 * spelling of "every term of this taxonomy", and it has no faithful Access
+	 * Control equivalent.
+	 *
+	 * Mapping it produces a taxonomy slug with an empty value, which
+	 * Content_Rules::get_gate_content_rules() filters out on read — so the rule
+	 * vanishes between write and evaluation and the gate fails open over everything
+	 * it covered, while verify_migrated_gate() still reports the gate as fine as long
+	 * as one other rule survived. Naming these lets the caller refuse the plan
+	 * instead of migrating a gate that under-restricts silently.
+	 */
+	public function test_whole_taxonomy_rules_are_identified_rather_than_mapped_to_an_empty_value() {
+		$whole_category_taxonomy = $this->make_rule( 'taxonomy', 'category', [] );
+		$named_tags              = $this->make_rule( 'taxonomy', 'post_tag', [ 7, 8 ] );
+		$whole_post_type         = $this->make_rule( 'post_type', 'post', [] );
+
+		$this->assertSame(
+			[ 'category' ],
+			$this->invoke_private_static( 'whole_taxonomy_rule_names', [ [ $whole_category_taxonomy, $named_tags, $whole_post_type ] ] ),
+			'Only the term-less taxonomy rule is unbounded: a taxonomy rule naming terms is expressible, and a term-less POST TYPE rule is the legitimate "post_types" shape.'
+		);
+
+		$this->assertSame(
+			[],
+			$this->invoke_private_static( 'whole_taxonomy_rule_names', [ [ $named_tags, $whole_post_type ] ] ),
+			'A plan with nothing unbounded migrates normally.'
+		);
+	}
+
+	/**
+	 * NPPD-2063: the mapping still emits the empty value for such a rule, which is
+	 * why the caller has to refuse the plan before mapping rather than after.
+	 *
+	 * Pinning this keeps the reason for the pre-mapping check visible: if the mapping
+	 * is ever changed to drop or expand the rule instead, this is where that shows up.
+	 */
+	public function test_a_whole_taxonomy_rule_still_maps_to_a_value_the_reader_discards() {
+		$mapped = $this->invoke_private_static( 'map_rules_to_ac_format', [ [ $this->make_rule( 'taxonomy', 'category', [] ) ] ] );
+
+		$this->assertSame(
+			[
+				[
+					'slug'  => 'category',
+					'value' => [],
+				],
+			],
+			$mapped
+		);
+	}
 }

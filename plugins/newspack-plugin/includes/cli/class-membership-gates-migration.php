@@ -946,6 +946,24 @@ class Membership_Gates_Migration {
 			}
 
 			$wc_rules = $plan->get_content_restriction_rules();
+
+			// Checked before mapping: a whole-taxonomy rule maps to a taxonomy slug
+			// with no term IDs, which Content_Rules::get_gate_content_rules() drops on
+			// read — so the plan would migrate to a gate that silently enforces less
+			// than it reports, and verify_migrated_gate() would still call it a
+			// success as long as one other rule survived.
+			$unbounded_taxonomies = self::whole_taxonomy_rule_names( $wc_rules );
+			if ( ! empty( $unbounded_taxonomies ) ) {
+				$skipped[] = [
+					'plan_name'     => $plan_name,
+					'action'        => sprintf( 'skipped (restricts every term of: %s — add the terms to a gate manually)', implode( ', ', $unbounded_taxonomies ) ),
+					'gate_id'       => '—',
+					'content_rules' => '—',
+					'access_type'   => $access_method,
+				];
+				continue;
+			}
+
 			$ac_rules = self::map_rules_to_ac_format( $wc_rules );
 
 			// A plan with no content restriction rules restricts nothing in WooCommerce
@@ -1369,6 +1387,39 @@ class Membership_Gates_Migration {
 			$args['p'] = $plan_id;
 		}
 		return \get_posts( $args );
+	}
+
+	/**
+	 * The taxonomies a plan restricts in full rather than by named terms.
+	 *
+	 * WooCommerce Memberships spells "every term of this taxonomy" as a taxonomy rule
+	 * carrying no object IDs, and keeps applying it to terms created after the plan
+	 * was written. An Access Control taxonomy rule names the term IDs it covers, so
+	 * there is no faithful snapshot of a rule whose membership keeps growing — and
+	 * the unfaithful one is worse than useless here: a taxonomy slug with an empty
+	 * value is filtered out by Content_Rules::get_gate_content_rules() on read, so
+	 * the rule disappears between write and evaluation and the gate fails open over
+	 * everything that rule covered.
+	 *
+	 * The sibling premium-newsletters command refuses the same shape for the same
+	 * reason ({@see Premium_Newsletters_Migration::restricts_all_lists()}).
+	 *
+	 * @param \WC_Memberships_Membership_Plan_Rule[] $wc_rules Array of WC Memberships rules.
+	 *
+	 * @return string[] Taxonomy names restricted in full; empty when the plan has none.
+	 */
+	private static function whole_taxonomy_rule_names( array $wc_rules ): array {
+		$taxonomy_names = [];
+		foreach ( $wc_rules as $rule ) {
+			$content_type_name = $rule->get_content_type_name();
+			if ( empty( $content_type_name ) || 'taxonomy' !== $rule->get_content_type() ) {
+				continue;
+			}
+			if ( empty( $rule->get_object_ids() ) ) {
+				$taxonomy_names[] = $content_type_name;
+			}
+		}
+		return array_values( array_unique( $taxonomy_names ) );
 	}
 
 	/**
