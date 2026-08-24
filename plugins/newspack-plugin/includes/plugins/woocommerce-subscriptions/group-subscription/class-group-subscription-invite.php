@@ -885,11 +885,16 @@ class Group_Subscription_Invite {
 			// question being asked in the weeks after an upgrade is usually "whose link
 			// is this, and why did it stop working?". Null when the key matches nothing,
 			// which is itself the answer.
+			// Guarded on the subscription itself: validation also fails when the URL
+			// names a subscription that does not exist, and there is nothing to read
+			// entries from in that case.
 			$entry = null;
-			foreach ( self::get_link_invite_entries( $subscription ) as $candidate ) {
-				if ( hash_equals( (string) ( $candidate['key'] ?? '' ), $key ) ) {
-					$entry = $candidate;
-					break;
+			if ( $subscription ) {
+				foreach ( self::get_link_invite_entries( $subscription ) as $candidate ) {
+					if ( hash_equals( (string) ( $candidate['key'] ?? '' ), $key ) ) {
+						$entry = $candidate;
+						break;
+					}
 				}
 			}
 			do_action(
