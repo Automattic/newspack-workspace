@@ -676,7 +676,7 @@ class Membership_Gates_Migration {
 
 		// get_gate_content_rules() drops rules with an empty value, so anything left
 		// is a rule with content behind it — but the evaluator still has to be able
-		// to resolve the slug, which is where the NPPD-2063 slug mistranslation bites.
+		// to resolve the slug, e.g. a taxonomy that is no longer registered on the site.
 		$content_rules = \Newspack\Content_Rules::get_gate_content_rules( $gate_id );
 		$unresolvable  = array_values(
 			array_filter(
@@ -684,30 +684,37 @@ class Membership_Gates_Migration {
 				fn( $slug ) => ! self::is_content_rule_slug_resolvable( $slug )
 			)
 		);
-		if ( empty( $content_rules ) ) {
-			// get_gate_content_rules() drops empty-value rules, so a gate can be written
-			// with rules and still evaluate as having none — say which of the two it is,
-			// because the summary's Content Rules column reports the pre-write count.
-			$written_rules = \get_post_meta( $gate_id, 'content_rules', true );
-			$issues[]      = empty( $written_rules )
-				? 'it has no content rules'
-				: 'none of its content rules select any content';
-		} elseif ( count( $unresolvable ) === count( $content_rules ) ) {
-			$issues[] = sprintf(
-				'none of its content rules resolve to a post type or taxonomy the evaluator can match (%s)',
-				implode( ', ', $unresolvable )
-			);
-		} elseif ( ! empty( $unresolvable ) ) {
-			// A partially dead rule set is a partial leak, not a clean gate: the rules
-			// combine with 'any', so the content selected by the unresolvable rules is
-			// left ungated while the rest is covered. A plan restricting all posts plus a
-			// category is exactly this shape, and it is a common way plans are configured.
-			$issues[] = sprintf(
-				'%d of its %d content rules do not resolve to a post type or taxonomy the evaluator can match (%s), so the content they select stays ungated',
-				count( $unresolvable ),
-				count( $content_rules ),
-				implode( ', ', $unresolvable )
-			);
+
+		// A gate can be written with rules and still evaluate as having fewer, or none
+		// — say so and name the slugs, because the summary's Content Rules column
+		// reports the pre-write count.
+		$written_rules = \get_post_meta( $gate_id, 'content_rules', true );
+		$written_rules = is_array( $written_rules ) ? $written_rules : [];
+		$valueless     = self::describe_valueless_rules( $written_rules );
+		if ( empty( $written_rules ) ) {
+			$issues[] = 'it has no content rules';
+		} elseif ( null !== $valueless ) {
+			$issues[] = $valueless;
+		}
+
+		if ( ! empty( $unresolvable ) ) {
+			if ( count( $unresolvable ) === count( $content_rules ) ) {
+				$issues[] = sprintf(
+					'none of its content rules resolve to a post type or taxonomy the evaluator can match (%s)',
+					implode( ', ', $unresolvable )
+				);
+			} else {
+				// A partially dead rule set is a partial leak, not a clean gate: the rules
+				// combine with 'any', so the content selected by the unresolvable rules is
+				// left ungated while the rest is covered. A plan restricting all posts plus a
+				// category is exactly this shape, and it is a common way plans are configured.
+				$issues[] = sprintf(
+					'%d of its %d content rules do not resolve to a post type or taxonomy the evaluator can match (%s), so the content they select stays ungated',
+					count( $unresolvable ),
+					count( $content_rules ),
+					implode( ', ', $unresolvable )
+				);
+			}
 		}
 
 		// A gate with neither mode active is skipped outright; an active mode with no
@@ -775,6 +782,14 @@ class Membership_Gates_Migration {
 	private static function compute_pre_write_issues( array $ac_rules, bool $has_purchase, array $layouts, array $merged_product_ids ): array {
 		$issues = [];
 
+		// Mirror the empty-value check from verify_migrated_gate(): a rule the read
+		// path drops selects nothing, so the operator sees it before committing to
+		// --live rather than in the post-write verification.
+		$valueless = self::describe_valueless_rules( $ac_rules );
+		if ( null !== $valueless ) {
+			$issues[] = $valueless;
+		}
+
 		// Mirror the unresolvable-slug check from verify_migrated_gate(): slugs the
 		// evaluator cannot resolve map to no content, so those rules leave their
 		// content ungated after cutover.
@@ -816,6 +831,46 @@ class Membership_Gates_Migration {
 		}
 
 		return $issues;
+	}
+
+	/**
+	 * Report content rules that select no content because their value is empty.
+	 *
+	 * Content_Rules::get_gate_content_rules() drops every rule with an empty value
+	 * before the evaluator sees it. A WC rule naming a taxonomy but no terms maps to
+	 * exactly that shape — slug = the taxonomy, value = [] — so it is written, counted
+	 * in the summary's Content Rules column, and then silently ignored at read time.
+	 * Naming the slugs pre-cutover is what turns that into a visible warning.
+	 *
+	 * @param array[] $rules AC-format content rules: [ [ 'slug' => string, 'value' => string[] ], ... ].
+	 *
+	 * @return string|null A human-readable problem, or null when every rule has a value.
+	 */
+	private static function describe_valueless_rules( array $rules ): ?string {
+		$valueless = array_values(
+			array_column(
+				array_filter( $rules, fn( $rule ) => empty( $rule['value'] ) ),
+				'slug'
+			)
+		);
+		if ( empty( $valueless ) ) {
+			return null;
+		}
+		if ( count( $valueless ) === count( $rules ) ) {
+			return sprintf(
+				'none of its content rules select any content (%s)',
+				implode( ', ', $valueless )
+			);
+		}
+		// A partially dropped rule set is a partial leak: the surviving rules still
+		// gate their content, while whatever the dropped ones were meant to cover
+		// stays readable.
+		return sprintf(
+			'%d of its %d content rules select no content (%s), so the content they were meant to cover stays ungated',
+			count( $valueless ),
+			count( $rules ),
+			implode( ', ', $valueless )
+		);
 	}
 
 	/**
@@ -891,6 +946,24 @@ class Membership_Gates_Migration {
 			}
 
 			$wc_rules = $plan->get_content_restriction_rules();
+
+			// Checked before mapping: a whole-taxonomy rule maps to a taxonomy slug
+			// with no term IDs, which Content_Rules::get_gate_content_rules() drops on
+			// read — so the plan would migrate to a gate that silently enforces less
+			// than it reports, and verify_migrated_gate() would still call it a
+			// success as long as one other rule survived.
+			$unbounded_taxonomies = self::whole_taxonomy_rule_names( $wc_rules );
+			if ( ! empty( $unbounded_taxonomies ) ) {
+				$skipped[] = [
+					'plan_name'     => $plan_name,
+					'action'        => sprintf( 'skipped (restricts every term of: %s — add the terms to a gate manually)', implode( ', ', $unbounded_taxonomies ) ),
+					'gate_id'       => '—',
+					'content_rules' => '—',
+					'access_type'   => $access_method,
+				];
+				continue;
+			}
+
 			$ac_rules = self::map_rules_to_ac_format( $wc_rules );
 
 			// A plan with no content restriction rules restricts nothing in WooCommerce
@@ -1317,14 +1390,56 @@ class Membership_Gates_Migration {
 	}
 
 	/**
+	 * The taxonomies a plan restricts in full rather than by named terms.
+	 *
+	 * WooCommerce Memberships spells "every term of this taxonomy" as a taxonomy rule
+	 * carrying no object IDs, and keeps applying it to terms created after the plan
+	 * was written. An Access Control taxonomy rule names the term IDs it covers, so
+	 * there is no faithful snapshot of a rule whose membership keeps growing — and
+	 * the unfaithful one is worse than useless here: a taxonomy slug with an empty
+	 * value is filtered out by Content_Rules::get_gate_content_rules() on read, so
+	 * the rule disappears between write and evaluation and the gate fails open over
+	 * everything that rule covered.
+	 *
+	 * The sibling premium-newsletters command refuses the same shape for the same
+	 * reason ({@see Premium_Newsletters_Migration::restricts_all_lists()}).
+	 *
+	 * @param \WC_Memberships_Membership_Plan_Rule[] $wc_rules Array of WC Memberships rules.
+	 *
+	 * @return string[] Taxonomy names restricted in full; empty when the plan has none.
+	 */
+	private static function whole_taxonomy_rule_names( array $wc_rules ): array {
+		$taxonomy_names = [];
+		foreach ( $wc_rules as $rule ) {
+			$content_type_name = $rule->get_content_type_name();
+			if ( empty( $content_type_name ) || 'taxonomy' !== $rule->get_content_type() ) {
+				continue;
+			}
+			if ( empty( $rule->get_object_ids() ) ) {
+				$taxonomy_names[] = $content_type_name;
+			}
+		}
+		return array_values( array_unique( $taxonomy_names ) );
+	}
+
+	/**
 	 * Map WooCommerce Membership content restriction rules to the Access Control
 	 * content_rules format.
 	 *
-	 * This is the rule-mapping seam for NPPD-2063 (content-rule slug mistranslation):
-	 * the slug is taken verbatim from WC's `get_content_type_name()` (e.g. 'post',
-	 * 'page', 'post_tag'), whereas Access Control keys post-type rules under
-	 * 'post_types' and individual posts under 'specific_posts'. The remapping lands
-	 * in the stacked NPPD-2063 PR; this port preserves the drop-in behavior.
+	 * WC and AC key content restrictions differently. A WC rule carries a content
+	 * type kind (`get_content_type()`, either 'post_type' or 'taxonomy') plus a name
+	 * (`get_content_type_name()`, e.g. 'post', 'page', 'guest-author', 'category',
+	 * 'post_tag') and optional object IDs. AC enforcement only honours these slugs:
+	 * 'post_types' (value = post-type slugs), 'specific_posts' (value = post IDs),
+	 * 'newsletters', and taxonomy slugs (value = term IDs). The mapping is therefore:
+	 *
+	 * - taxonomy rule                        → slug = taxonomy name, value = term IDs.
+	 * - post-type rule, no object IDs        → slug = 'post_types',    value = [ post-type name ].
+	 * - post-type rule, with object IDs      → slug = 'specific_posts', value = post IDs.
+	 *
+	 * The post_type vs. taxonomy split uses the rule's own `get_content_type()`
+	 * discriminator rather than string-matching the name against a hardcoded list, so
+	 * custom post types (e.g. 'guest-author') map correctly.
 	 *
 	 * @param \WC_Memberships_Membership_Plan_Rule[] $wc_rules Array of WC Memberships rules.
 	 *
@@ -1333,8 +1448,8 @@ class Membership_Gates_Migration {
 	private static function map_rules_to_ac_format( array $wc_rules ): array {
 		$ac_rules = [];
 		foreach ( $wc_rules as $rule ) {
-			$slug = $rule->get_content_type_name(); // E.g. 'post', 'category', 'post_tag'.
-			if ( empty( $slug ) ) {
+			$content_type_name = $rule->get_content_type_name(); // A post-type or taxonomy name such as post, page, category or guest-author.
+			if ( empty( $content_type_name ) ) {
 				continue;
 			}
 			// Newsletter-list rules migrate through `migrate-premium-newsletters`
@@ -1343,27 +1458,60 @@ class Membership_Gates_Migration {
 			// list post against the newsletter bucket, never this one — while still
 			// entering the rule fingerprint, splitting two plans that restrict
 			// identical content into two gates.
-			if ( self::get_newsletter_list_cpt() === $slug ) {
+			if ( self::get_newsletter_list_cpt() === $content_type_name ) {
 				continue;
 			}
+
+			$object_ids = array_map( 'strval', array_values( $rule->get_object_ids() ) );
+
+			// WC's content type is one of exactly two values, 'post_type' or 'taxonomy',
+			// so everything that is not the taxonomy branch is a post-type rule.
+			if ( 'taxonomy' === $rule->get_content_type() ) {
+				// Taxonomy rules key under the taxonomy slug; the value is the term IDs.
+				$slug  = $content_type_name;
+				$value = $object_ids;
+			} elseif ( empty( $object_ids ) ) {
+				// A whole-post-type rule keys under 'post_types'; the value is the
+				// post-type slug.
+				$slug  = 'post_types';
+				$value = [ $content_type_name ];
+			} else {
+				// A rule targeting individual objects keys under 'specific_posts'; the
+				// value is the post IDs.
+				$slug  = 'specific_posts';
+				$value = $object_ids;
+			}
+
 			$existing_key = array_search( $slug, array_column( $ac_rules, 'slug' ), true );
 			if ( false !== $existing_key ) {
-				// Merge object IDs into the existing rule for this slug.
-				$ac_rules[ $existing_key ]['value'] = array_map(
-					'strval',
-					array_values(
-						array_unique(
-							array_merge( $ac_rules[ $existing_key ]['value'], $rule->get_object_ids() )
-						)
+				// Merge values into the existing rule for this slug (post-type slugs or
+				// object IDs), de-duplicated.
+				$ac_rules[ $existing_key ]['value'] = array_values(
+					array_unique(
+						array_merge( $ac_rules[ $existing_key ]['value'], $value )
 					)
 				);
 			} else {
 				$ac_rules[] = [
 					'slug'  => $slug,
-					'value' => array_map( 'strval', array_values( $rule->get_object_ids() ) ),
+					'value' => $value,
 				];
 			}
 		}
+
+		// Canonicalize 'post_types' value ordering. Post-type slugs are the only
+		// non-numeric rule values, and compute_rules_fingerprint() orders values with
+		// SORT_NUMERIC (under which every non-numeric string compares as 0, leaving
+		// them unsorted). Sorting the slugs here keeps two plans that restrict the
+		// same post types in a different rule order from producing different
+		// fingerprints and splitting into duplicate gates.
+		foreach ( $ac_rules as &$ac_rule ) {
+			if ( 'post_types' === $ac_rule['slug'] ) {
+				sort( $ac_rule['value'], SORT_STRING );
+			}
+		}
+		unset( $ac_rule );
+
 		return $ac_rules;
 	}
 
