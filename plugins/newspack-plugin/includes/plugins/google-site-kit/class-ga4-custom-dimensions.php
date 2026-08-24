@@ -46,15 +46,33 @@ final class GA4_Custom_Dimensions {
 	];
 
 	/**
-	 * Parameters that only WooCommerce can produce, via Reader Data, the modal
-	 * checkout, or the Donate block.
+	 * Parameters that only WooCommerce can produce: the modal checkout's product
+	 * fields, and the subscription flag Reader Data writes from WooCommerce
+	 * Subscriptions.
+	 *
+	 * Donation parameters are not in this group. See `DONATION_DIMENSIONS`.
 	 */
-	const READER_REVENUE_DIMENSIONS = [
+	const WOOCOMMERCE_DIMENSIONS = [
 		'is_subscriber',
-		'is_donor',
 		'product_id',
 		'product_type',
 		'recurrence',
+	];
+
+	/**
+	 * Donation parameters, which WooCommerce does not have to itself. The Donate
+	 * block renders on every reader-revenue platform - NRH redirects its
+	 * submission to NRH's own checkout - and the gate's form handler reads
+	 * `donation_frequency` and `donation_amount` straight off the submitted form,
+	 * client-side. `is_donor` rides along on every pageview from Reader Data,
+	 * which non-WooCommerce platforms write from the donor landing page (see
+	 * `Reader_Data::get_read_only_keys()`).
+	 *
+	 * So a site donating through NRH or an external platform emits all three
+	 * without WooCommerce, and needs the dimensions to query them.
+	 */
+	const DONATION_DIMENSIONS = [
+		'is_donor',
 		'donation_frequency',
 		'donation_amount',
 	];
@@ -243,25 +261,53 @@ final class GA4_Custom_Dimensions {
 	}
 
 	/**
-	 * Whether this site runs reader revenue.
+	 * Whether this site runs WooCommerce, which is what produces the checkout and
+	 * subscription parameters.
 	 *
-	 * Two near-misses to avoid. `Donations::is_platform_wc()` defaults to true on
-	 * sites that never touched reader revenue. `Reader_Activation::is_woocommerce_active()`
-	 * also demands WooCommerce Subscriptions, which would cost one-time-purchase
-	 * sites their checkout reporting.
+	 * One near-miss to avoid: `Reader_Activation::is_woocommerce_active()` also
+	 * demands WooCommerce Subscriptions, which would cost one-time-purchase sites
+	 * their checkout reporting.
 	 *
 	 * @return bool
 	 */
-	public static function is_reader_revenue_enabled(): bool {
+	public static function is_woocommerce_enabled(): bool {
 		$is_enabled = class_exists( 'WooCommerce' );
 
 		/**
-		 * Filters reader-revenue dimension provisioning, for a site the detection
+		 * Filters WooCommerce dimension provisioning, for a site the detection
 		 * above reads wrongly.
 		 *
-		 * @param bool $is_enabled Whether the site runs reader revenue.
+		 * @param bool $is_enabled Whether the site runs WooCommerce.
 		 */
-		return (bool) apply_filters( 'newspack_ga4_dimensions_reader_revenue_enabled', $is_enabled );
+		return (bool) apply_filters( 'newspack_ga4_dimensions_woocommerce_enabled', $is_enabled );
+	}
+
+	/**
+	 * Whether this site takes donations, on any platform.
+	 *
+	 * Either WooCommerce is installed, or the publisher picked a platform that
+	 * isn't it. `Donations::is_platform_wc()` cannot carry this alone because it
+	 * defaults to true on sites that never touched reader revenue - but read
+	 * negatively, as it is here, a non-`wc` slug is only ever a deliberate choice
+	 * of NRH or an external platform.
+	 *
+	 * Deliberately reads WooCommerce directly rather than through
+	 * `is_woocommerce_enabled()`: the two groups are provisioned independently,
+	 * so each predicate takes exactly one filter and neither override leaks into
+	 * the other.
+	 *
+	 * @return bool
+	 */
+	public static function is_donations_enabled(): bool {
+		$is_enabled = class_exists( 'WooCommerce' ) || ! Donations::is_platform_wc();
+
+		/**
+		 * Filters donation dimension provisioning, for a site the detection above
+		 * reads wrongly.
+		 *
+		 * @param bool $is_enabled Whether the site takes donations.
+		 */
+		return (bool) apply_filters( 'newspack_ga4_dimensions_donations_enabled', $is_enabled );
 	}
 
 	/**
@@ -320,17 +366,22 @@ final class GA4_Custom_Dimensions {
 			'segment_id'                  => 'Matched Segment',
 		];
 
-		// Read once each: both are filterable, and an impure filter could
+		// Read once each: all three are filterable, and an impure filter could
 		// otherwise yield a self-contradictory list that then gets persisted.
 		$has_access_control = self::is_access_control_enabled();
-		$has_reader_revenue = self::is_reader_revenue_enabled();
+		$has_woocommerce    = self::is_woocommerce_enabled();
+		$has_donations      = self::is_donations_enabled();
 
 		if ( ! $has_access_control ) {
 			$dimensions = array_diff_key( $dimensions, array_flip( self::ACCESS_CONTROL_DIMENSIONS ) );
 		}
 
-		if ( ! $has_reader_revenue ) {
-			$dimensions = array_diff_key( $dimensions, array_flip( self::READER_REVENUE_DIMENSIONS ) );
+		if ( ! $has_woocommerce ) {
+			$dimensions = array_diff_key( $dimensions, array_flip( self::WOOCOMMERCE_DIMENSIONS ) );
+		}
+
+		if ( ! $has_donations ) {
+			$dimensions = array_diff_key( $dimensions, array_flip( self::DONATION_DIMENSIONS ) );
 		}
 
 		// Not $has_access_control: Memberships alone renders a gate, but
