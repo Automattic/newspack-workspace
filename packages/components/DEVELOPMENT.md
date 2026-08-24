@@ -360,36 +360,32 @@ function InspectorPanel( { attributes, setAttributes } ) {
 
 #### Wizard (modern)
 
-Use the `Wizard` component for tabbed wizard UIs with data fetching and tabbed navigation:
+Use the `Wizard` component for tabbed wizard UIs with data fetching and tabbed navigation. `Wizard` renders the page-level notice region itself, so don't also render `<GlobalNotices />` alongside it, that would duplicate the region:
 
 ```jsx
 /**
  * WordPress dependencies
  */
 import { __ } from '@wordpress/i18n';
-import { Fragment } from '@wordpress/element';
 
 /**
  * Internal dependencies
  */
-import { GlobalNotices, Notice, Wizard } from '../../../../../packages/components/src';
+import { Wizard } from '../../../../../packages/components/src';
 import sections from './sections';
 
 function Dashboard() {
 	return (
-		<Fragment>
-			<GlobalNotices />
-			<Wizard
-				headerText={ __( 'Newspack / Dashboard', 'newspack-plugin' ) }
-				sections={ sections }
-				renderAboveSections={ () => (
-					<>
-						<BrandHeader />
-						<SiteStatuses />
-					</>
-				) }
-			/>
-		</Fragment>
+		<Wizard
+			headerText={ __( 'Newspack / Dashboard', 'newspack-plugin' ) }
+			sections={ sections }
+			renderAboveSections={ () => (
+				<>
+					<BrandHeader />
+					<SiteStatuses />
+				</>
+			) }
+		/>
 	);
 }
 ```

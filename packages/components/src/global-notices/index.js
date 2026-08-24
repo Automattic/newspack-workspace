@@ -8,7 +8,7 @@ import { parse } from 'qs';
  */
 // eslint-disable-next-line @wordpress/no-unsafe-wp-apis
 import { Notice, Slot, createSlotFill, __experimentalUseSlot as useSlot, __experimentalUseSlotFills as useSlotFills } from '@wordpress/components';
-import { useRef } from '@wordpress/element';
+import { useEffect, useRef, useState } from '@wordpress/element';
 import { Stack } from '@wordpress/ui';
 
 /**
@@ -61,13 +61,29 @@ const GlobalNotices = () => {
 	const slotNode = useRef( null );
 	const activeSlot = useSlot( SLOT_NAME );
 	const fills = useSlotFills( SLOT_NAME );
-	const notices = queryNotices();
+	// Captured once: a slot registering itself re-renders this component, and
+	// re-reading window.location.search then would erase notices this same
+	// mount already announced, especially once the effect below strips it.
+	const [ notices ] = useState( queryNotices );
 
 	// A page can mount a second region deeper in the tree, as a wizard nested in
 	// another does. The registry holds one slot per name, so the last to register
 	// is where every fill lands; a region that no longer owns it would paint an
 	// empty duplicate and a second copy of the query notices, so it steps aside.
-	const ownsSlot = ! activeSlot?.ref || activeSlot.ref.current === slotNode.current;
+	const ownsSlot = ! activeSlot?.ref || activeSlot.ref?.current === slotNode.current;
+
+	useEffect( () => {
+		if ( ! notices.length || ! window.history?.replaceState ) {
+			return;
+		}
+		// TabbedNavigation remounts the wizard tree on every tab change, and the
+		// parameter otherwise survives in the URL to be re-announced each time.
+		const params = new URLSearchParams( window.location.search );
+		params.delete( 'newspack-notice' );
+		const query = params.toString() ? `?${ params.toString() }` : '';
+		window.history.replaceState( {}, '', `${ window.location.pathname }${ query }${ window.location.hash }` );
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [] );
 
 	// An empty region would still paint its padding at the top of every screen.
 	if ( ! ownsSlot || ( ! notices.length && ! fills?.length ) ) {

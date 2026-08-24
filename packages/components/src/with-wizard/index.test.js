@@ -92,7 +92,10 @@ describe( 'withWizard', () => {
 
 			expect( container.querySelectorAll( '.newspack-global-notices' ) ).toHaveLength( 1 );
 
+			const header = container.querySelector( '.newspack-page__header-region' );
+			const noticeRegion = container.querySelector( '.newspack-global-notices' );
 			expect( positionOf( container, '.newspack-global-notices' ) ).toBeGreaterThan( positionOf( container, '.newspack-page__header-region' ) );
+			expect( header.contains( noticeRegion ) ).toBe( false );
 		} );
 
 		it( 'renders the error notice raised above the Wizard inside that region', async () => {

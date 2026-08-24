@@ -16,18 +16,14 @@ import GlobalNotices, { GlobalNoticeFill } from './';
 
 jest.mock( '@wordpress/a11y', () => ( { speak: jest.fn() } ) );
 
-const setSearch = search => {
-	delete window.location;
-	window.location = { search };
+const setLocation = ( search, hash = '' ) => {
+	window.history.replaceState( {}, '', `/wp-admin/admin.php${ search }${ hash }` );
 };
 
-describe( 'GlobalNotices', () => {
-	const originalLocation = window.location;
+const setSearch = search => setLocation( search );
 
+describe( 'GlobalNotices', () => {
 	beforeEach( () => speak.mockClear() );
-	afterAll( () => {
-		window.location = originalLocation;
-	} );
 
 	it( 'renders a success notice from the query parameter', () => {
 		setSearch( '?newspack-notice=Settings%20saved' );
@@ -183,6 +179,88 @@ describe( 'GlobalNotices', () => {
 				</SlotFillProvider>
 			);
 			expect( container.querySelector( '.newspack-global-notices' ) ).toBeNull();
+		} );
+	} );
+
+	describe( 'stripping the newspack-notice parameter after mount', () => {
+		it( 'removes the parameter from the URL once the notice has rendered', () => {
+			setSearch( '?newspack-notice=Settings%20saved' );
+			render(
+				<SlotFillProvider>
+					<GlobalNotices />
+				</SlotFillProvider>
+			);
+			expect( window.location.search ).toBe( '' );
+		} );
+
+		it( 'keeps every other parameter and the hash', () => {
+			setLocation( '?page=newspack-settings&newspack-notice=Settings%20saved', '#/segments' );
+			render(
+				<SlotFillProvider>
+					<GlobalNotices />
+				</SlotFillProvider>
+			);
+			expect( window.location.search ).toBe( '?page=newspack-settings' );
+			expect( window.location.hash ).toBe( '#/segments' );
+		} );
+
+		it( 'leaves the announced notice on screen after the strip', () => {
+			setSearch( '?newspack-notice=Settings%20saved' );
+			render(
+				<SlotFillProvider>
+					<GlobalNotices />
+				</SlotFillProvider>
+			);
+			expect( window.location.search ).toBe( '' );
+			expect( screen.getByText( 'Settings saved' ) ).toBeInTheDocument();
+		} );
+
+		it( 'renders nothing on a remount once the parameter is already stripped', () => {
+			setSearch( '?newspack-notice=Settings%20saved' );
+			const first = render(
+				<SlotFillProvider>
+					<GlobalNotices />
+				</SlotFillProvider>
+			);
+			first.unmount();
+			expect( window.location.search ).toBe( '' );
+
+			const { container } = render(
+				<SlotFillProvider>
+					<GlobalNotices />
+				</SlotFillProvider>
+			);
+			expect( container ).toBeEmptyDOMElement();
+		} );
+
+		it( 'does not touch history when the parameter is absent', () => {
+			setSearch( '?page=newspack-settings' );
+			const replaceState = jest.spyOn( window.history, 'replaceState' );
+
+			render(
+				<SlotFillProvider>
+					<GlobalNotices />
+				</SlotFillProvider>
+			);
+
+			expect( replaceState ).not.toHaveBeenCalled();
+			replaceState.mockRestore();
+		} );
+
+		it( 'does not throw when history.replaceState is unavailable', () => {
+			setSearch( '?newspack-notice=Settings%20saved' );
+			Object.defineProperty( window.history, 'replaceState', { value: undefined, configurable: true } );
+
+			expect( () =>
+				render(
+					<SlotFillProvider>
+						<GlobalNotices />
+					</SlotFillProvider>
+				)
+			).not.toThrow();
+			expect( screen.getByText( 'Settings saved' ) ).toBeInTheDocument();
+
+			delete window.history.replaceState;
 		} );
 	} );
 } );
