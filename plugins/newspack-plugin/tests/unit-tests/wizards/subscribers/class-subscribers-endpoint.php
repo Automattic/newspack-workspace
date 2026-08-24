@@ -819,6 +819,34 @@ class Test_Subscribers_Wizard_Subscribers_Endpoint extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Last seen is the calendar day in the PUBLISHER'S timezone, not UTC.
+	 *
+	 * It sits in the same row as Member since and Last payment, which are localized,
+	 * so formatting this one in UTC puts an evening visit on a negative-offset site
+	 * a day ahead of the others — the admin looking at the screen that evening reads
+	 * tomorrow's date, and the relative subtitle the list renders from it says the
+	 * reader was last seen "in 4 hours".
+	 *
+	 * The default-timezone test above cannot see this: with the site on UTC both
+	 * formattings agree, so it passes either way.
+	 */
+	public function test_last_seen_is_the_publishers_calendar_day_not_utc() {
+		update_option( 'timezone_string', 'America/New_York' );
+		$this->login_admin();
+		$reader = $this->create_reader( 'Evening' );
+		// 20:00 on Nov 20 in New York is already Nov 21 in UTC.
+		\Newspack\Reader_Data::update_item( $reader, 'last_active', (string) ( strtotime( '2025-11-21 01:00:00 UTC' ) * 1000 ) );
+
+		$last_seen_by_id = array_column( $this->dispatch()->get_data()['items'], 'lastSeen', 'id' );
+
+		$this->assertSame(
+			'2025-11-20',
+			$last_seen_by_id[ $reader ],
+			'An 8pm visit in the site timezone is reported as that day, not as the next day in UTC.'
+		);
+	}
+
+	/**
 	 * Hydrating a full page costs the same number of database queries as hydrating
 	 * a single row, and resolves the shared newsletter-list registry once for the
 	 * whole page rather than once per reader.

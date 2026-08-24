@@ -258,8 +258,10 @@ export default function SubscriberList() {
 			{
 				id: 'lastSeen',
 				label: __( 'Last seen', 'newspack-plugin' ),
-				// The reader's most recent login, from the sessions the site still
-				// holds for them. Hidden by default; not server-sortable in this slice.
+				// The reader's most recent page view, from the activity record the site
+				// keeps for them — reading, not signing in, so a reader on a long-lived
+				// auth cookie who visits daily is last seen today and logging out does
+				// not erase it. Hidden by default; not server-sortable in this slice.
 				enableSorting: false,
 				render: ( { item } ) =>
 					item.lastSeen ? (

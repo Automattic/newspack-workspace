@@ -355,7 +355,11 @@ class Patches {
 			return $caps;
 		}
 
-		$post_id = $args[0]; // First item is usually the post ID.
+		// First item is usually the post ID. Cast because the comparison below is
+		// strict against an all-int list: core's own callers cast, but a caller
+		// passing a numeric string (e.g. straight from a request) would otherwise
+		// slip past the guard silently.
+		$post_id = (int) $args[0];
 
 		// If $post_id isn't a valid post, bail early.
 		if ( false === get_post_type( $post_id ) ) {

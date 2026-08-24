@@ -92,4 +92,57 @@ class Test_Patches_Page_Deletion extends WP_UnitTestCase {
 
 		$this->assertSame( $queries_before, $wpdb->num_queries );
 	}
+
+	/**
+	 * The guard scopes itself to deletion and leaves every other capability alone.
+	 *
+	 * The query-count test above measures that the early bail is cheap; this states
+	 * what it must not break. An early return inside a `map_meta_cap` filter is the
+	 * kind of change whose blast radius is the capabilities it now skips, so those
+	 * are asserted directly rather than left to a reasoning step in review — and
+	 * unlike the query count, this cannot go green for the wrong reason if core
+	 * changes how it caches post lookups.
+	 */
+	public function test_the_guard_only_scopes_itself_to_deletion() {
+		$front_page_id = self::factory()->post->create( [ 'post_type' => 'page' ] );
+		update_option( 'show_on_front', 'page' );
+		update_option( 'page_on_front', $front_page_id );
+
+		$this->assertTrue( current_user_can( 'edit_post', $front_page_id ), 'A protected page can still be edited; only deleting it is refused.' );
+		$this->assertTrue( current_user_can( 'delete_pages' ) );
+		$this->assertTrue( current_user_can( 'delete_others_pages' ) );
+		$this->assertTrue( current_user_can( 'delete_published_pages' ) );
+	}
+
+	/**
+	 * Every ID the guard protects is a page.
+	 *
+	 * That is the premise the `delete_page` widening rests on: `delete_page` is the
+	 * capability core generates for the `page` post type, so if get_protected_page_ids()
+	 * ever returned a post of another type, the widening would not cover it and the
+	 * comment explaining the widening would be wrong.
+	 *
+	 * WooCommerce is not loaded in this harness, so on a bare run this exercises the
+	 * front and posts pages only — the seven WooCommerce IDs the list also returns are
+	 * covered wherever the suite runs with WooCommerce active. Asserting the invariant
+	 * rather than one hard-coded page is what makes that possible at all.
+	 */
+	public function test_every_protected_id_is_a_page() {
+		$front_page_id = self::factory()->post->create( [ 'post_type' => 'page' ] );
+		$posts_page_id = self::factory()->post->create( [ 'post_type' => 'page' ] );
+		update_option( 'show_on_front', 'page' );
+		update_option( 'page_on_front', $front_page_id );
+		update_option( 'page_for_posts', $posts_page_id );
+
+		$protected_page_ids = Patches::get_protected_page_ids();
+
+		$this->assertNotEmpty( $protected_page_ids, 'Fixture precondition: the guard has something to protect.' );
+		foreach ( $protected_page_ids as $protected_page_id ) {
+			$this->assertSame(
+				'page',
+				get_post_type( $protected_page_id ),
+				sprintf( 'Protected ID %d is a page, so the delete_page capability covers it.', $protected_page_id )
+			);
+		}
+	}
 }

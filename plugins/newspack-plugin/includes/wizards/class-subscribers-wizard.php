@@ -106,6 +106,12 @@ class Subscribers_Wizard extends Wizard {
 	 * but reading those is a per-reader API call — on a 50-row page that is a
 	 * rate-limit and latency problem that needs a batching/caching layer of its
 	 * own, so the column is deliberately fed from local data only.
+	 *
+	 * Read-only for now: nothing in the plugin writes this key, and it is not
+	 * registered with register_meta(), so the column reads empty on every site
+	 * until a later slice lands the write path. Whatever does that will need an
+	 * auth_callback and a sanitize_callback — reader-writable tags would let a
+	 * reader label themselves.
 	 */
 	const READER_TAGS_META = 'newspack_reader_tags';
 
@@ -1010,6 +1016,14 @@ class Subscribers_Wizard extends Wizard {
 	 * reader could set it themselves. That is fine for an informational column,
 	 * but nothing that grants access may be decided on it.
 	 *
+	 * Formatted through local_date() like every other date this wizard emits. The
+	 * ESP sync publishes the same instant in UTC, but that value is read by a
+	 * machine, whereas this one sits in a table beside localized subscription
+	 * dates: on a negative-offset site an evening visit formatted in UTC lands on
+	 * tomorrow's date, which reads as plainly wrong next to them. Going through
+	 * local_date() also drops a falsy timestamp rather than rendering it as
+	 * 1970-01-01, which matters because the value is client-writable.
+	 *
 	 * @param int $user_id The reader user ID.
 	 *
 	 * @return string|null 'YYYY-MM-DD', or null when the site has no record of them.
@@ -1020,8 +1034,8 @@ class Subscribers_Wizard extends Wizard {
 			return null;
 		}
 		// Reader-data timestamps are JavaScript milliseconds; intdiv() keeps the
-		// conversion integral, since gmdate() takes an int timestamp.
-		return gmdate( 'Y-m-d', intdiv( (int) $last_active, 1000 ) );
+		// conversion integral, since local_date() takes an int timestamp.
+		return $this->local_date( intdiv( (int) $last_active, 1000 ) );
 	}
 
 	/**
