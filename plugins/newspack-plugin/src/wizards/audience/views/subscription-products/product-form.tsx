@@ -26,11 +26,12 @@ import {
 	__experimentalVStack as VStack, // eslint-disable-line @wordpress/no-unsafe-wp-apis
 	__experimentalHStack as HStack, // eslint-disable-line @wordpress/no-unsafe-wp-apis
 } from '@wordpress/components';
+import { Badge } from '@wordpress/ui';
 
 /**
  * Internal dependencies
  */
-import { Badge, Grid, SectionHeader, Divider, useUnsavedChangesDialog } from '../../../../../packages/components/src';
+import { Grid, SectionHeader, Divider, useUnsavedChangesDialog } from '../../../../../packages/components/src';
 import { WIZARD_STORE_NAMESPACE } from '../../../../../packages/components/src/wizard/store';
 import { PolicyChips, EffectivePrice } from './policy-cells';
 
@@ -98,7 +99,7 @@ export default function ProductForm( {
 
 	const [ name, setName ] = useState( initial?.name ?? '' );
 	const [ type, setType ] = useState< ProductType >( ( initial?.type as ProductType ) ?? 'subscription' );
-	const [ status, setStatus ] = useState( initial?.status === 'draft' ? 'draft' : 'publish' );
+	const [ status, setStatus ] = useState< 'publish' | 'draft' >( initial?.status === 'draft' ? 'draft' : 'publish' );
 	const [ isDonation, setIsDonation ] = useState( initial?.is_donation ?? false );
 	const [ availability, setAvailability ] = useState( initial?.availability ?? 'public' );
 
@@ -271,11 +272,11 @@ export default function ProductForm( {
 	useEffect( () => {
 		setHeaderData( {
 			backNav: '#/',
-			sectionName: isEdit ? __( 'Edit plan', 'newspack-plugin' ) : __( 'Add plan', 'newspack-plugin' ),
+			sectionName: isEdit ? __( 'Edit Plan', 'newspack-plugin' ) : __( 'Add Plan', 'newspack-plugin' ),
 			actions: [
 				{
 					type: 'primary',
-					label: isEdit ? __( 'Save changes', 'newspack-plugin' ) : __( 'Create plan', 'newspack-plugin' ),
+					label: isEdit ? __( 'Save', 'newspack-plugin' ) : __( 'Create Plan', 'newspack-plugin' ),
 					icon: null,
 					action: submit,
 					disabled: isSaving,
@@ -469,7 +470,7 @@ export default function ProductForm( {
 							) ) }
 							<div>
 								<Button variant="secondary" onClick={ addPlan }>
-									{ __( 'Add plan', 'newspack-plugin' ) }
+									{ __( 'Add Plan', 'newspack-plugin' ) }
 								</Button>
 							</div>
 						</>
@@ -591,7 +592,9 @@ export default function ProductForm( {
 									<span className="newspack-subscription-products__modal-label">{ __( 'Unlocks', 'newspack-plugin' ) }</span>
 									<div className="newspack-subscription-products__unlocks">
 										{ initial.unlocks.map( gate => (
-											<Badge key={ gate.id } level="default" text={ gate.title } />
+											<Badge key={ gate.id } intent="none">
+												{ gate.title }
+											</Badge>
 										) ) }
 									</div>
 								</div>

@@ -9,11 +9,13 @@ import { __ } from '@wordpress/i18n';
 import { useEffect, useRef } from '@wordpress/element';
 import { DropdownMenu, MenuItem, Tooltip, __experimentalHStack as HStack } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
 import { Icon, chevronLeft, moreVertical } from '@wordpress/icons';
+import { Badge } from '@wordpress/ui';
 
 /**
  * Internal dependencies
  */
-import { Badge, Button, Grid } from '..';
+import Button from '../button';
+import Grid from '../grid';
 import './style.scss';
 
 /**
@@ -26,16 +28,19 @@ import classnames from 'classnames';
  *
  * @typedef {Object} SectionHeaderProps
  * @property {string}             [backNav='']       - URL to navigate back to.
- * @property {string|string[]}    [badge]            - Badge to display in the header.
- * @property {string}             [badgeLevel]       - Badge level, e.g., 'success', 'info', 'warning', 'error'.
+ * @property {Object[]}           [badges]           - Badges to display beside the title, each `{ label, intent }`.
  * @property {boolean}            [centered=false]   - Indicates if the header is centered.
- * @property {?string}            [className=null]   - Additional CSS class name.
+ * @property {?string}            [className=null]   - Additional CSS class name, applied to the outer container.
  * @property {string|Function|*}  [description]      - Description of the section.
  * @property {number}             [heading=2]        - HTML heading level, e.g., 1 for h1, 2 for h2, etc.
  * @property {string|Function|*}  [icon]             - Icon to display in the header.
  * @property {boolean}            [isWhite=false]    - Indicates if the header should use a white theme.
+ * @property {Object[]}           [menu]             - Overflow menu items.
  * @property {boolean}            [noMargin=false]   - Indicates if the header should have no margin.
  * @property {boolean}            [pageHeader=false] - Indicates if the header is used as a page header.
+ * @property {Object}             [primaryAction]    - Primary button, `{ label, href, action }`.
+ * @property {Object}             [secondaryAction]  - Secondary link, `{ label, href, action }`.
+ * @property {string}             [size='default']   - Size variant, either 'default' or 'small'. Scales the title, and the icon with it, independently of `pageHeader`.
  * @property {string}             title              - The title of the section.
  * @property {?string}            [id=null]          - Optional ID for the header element.
  * @property {?string|Function|*} [children=null]    - Optional children to display in the header.
@@ -57,6 +62,7 @@ const SectionHeader = ( {
 	isWhite = false,
 	noMargin = false,
 	pageHeader = false,
+	size = 'default',
 	title,
 	id = null,
 	menu,
@@ -82,7 +88,8 @@ const SectionHeader = ( {
 		centered && 'newspack-section-header--is-centered',
 		isWhite && 'newspack-section-header--is-white',
 		noMargin && 'newspack-section-header--no-margin',
-		pageHeader && 'newspack-section-header--page-header'
+		pageHeader && 'newspack-section-header--page-header',
+		size === 'small' && 'newspack-section-header--small'
 	);
 
 	// The breadcrumb `Page` owns the single page `<h1>`, so a `pageHeader` section
@@ -93,14 +100,18 @@ const SectionHeader = ( {
 
 	let titleContent = null;
 
+	const renderBadge = ( badge, i ) => (
+		<Badge key={ i } className="newspack-section-header__badge" intent={ badge.intent || 'none' }>
+			{ badge.label }
+		</Badge>
+	);
+
 	if ( typeof title === 'string' ) {
 		titleContent = (
 			<div className="newspack-section-header__title-container">
 				<HeadingTag className="newspack-section-header__title">
 					{ title }
-					{ badges?.length
-						? badges.map( ( badge, i ) => <Badge key={ i } text={ badge.label } level={ badge.level || 'default' } /> )
-						: null }
+					{ ( badges || [] ).filter( badge => badge?.label ).map( renderBadge ) }
 				</HeadingTag>
 				{ /* Secondary action before the overflow menu, so a promoted link reads as an action rather than sitting to the right of the kebab. */ }
 				{ secondaryAction && (
@@ -148,7 +159,7 @@ const SectionHeader = ( {
 			<Grid columns={ 1 } gutter={ 8 } className={ classes }>
 				{ icon && (
 					<div className="newspack-section-header__icon">
-						<Icon icon={ icon } size={ 48 } />
+						<Icon icon={ icon } size={ size === 'small' ? 24 : 48 } />
 					</div>
 				) }
 				{ backNav ? (
