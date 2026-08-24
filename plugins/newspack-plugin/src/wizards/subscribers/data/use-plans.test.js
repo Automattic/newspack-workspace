@@ -27,24 +27,26 @@ describe( 'usePlans', () => {
 
 		const { result } = renderHook( () => usePlans() );
 
-		expect( result.current ).toEqual( [] );
+		expect( result.current.plans ).toEqual( [] );
 
-		await waitFor( () => expect( result.current ).toEqual( [ 'Acme Team', 'Digital Monthly' ] ) );
+		await waitFor( () => expect( result.current.plans ).toEqual( [ 'Acme Team', 'Digital Monthly' ] ) );
+		expect( result.current.failed ).toBe( false );
 
 		expect( apiFetch ).toHaveBeenCalledTimes( 1 );
 		expect( apiFetch.mock.calls[ 0 ][ 0 ].path ).toBe( '/newspack/v1/wizard/newspack-subscribers/plans' );
 	} );
 
-	it( 'degrades to no options when the read fails, rather than rejecting', async () => {
-		// The plan list only populates a filter dropdown. A failure here must not
-		// take the table down with it — the subscribers read surfaces its own error
-		// notice for the same failure mode.
+	it( 'degrades to no options when the read fails, and says that it failed', async () => {
+		// The plan list only populates a filter dropdown, so a failure here must not
+		// take the table down with it. It is still reported, because an empty
+		// dropdown otherwise reads as "this site sells no plans".
 		apiFetch.mockRejectedValue( new Error( 'boom' ) );
 
 		const { result } = renderHook( () => usePlans() );
 
-		await waitFor( () => expect( apiFetch ).toHaveBeenCalledTimes( 1 ) );
+		await waitFor( () => expect( result.current.failed ).toBe( true ) );
 
-		expect( result.current ).toEqual( [] );
+		expect( apiFetch ).toHaveBeenCalledTimes( 1 );
+		expect( result.current.plans ).toEqual( [] );
 	} );
 } );

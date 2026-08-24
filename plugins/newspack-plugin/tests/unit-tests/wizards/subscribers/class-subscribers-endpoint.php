@@ -777,8 +777,15 @@ class Test_Subscribers_Wizard_Subscribers_Endpoint extends WP_UnitTestCase {
 
 	/**
 	 * The plans endpoint lists the site's plan names: every group's configured name
-	 * plus the name of every published, non-group subscription product (variations
-	 * included, since a subscription on a variation displays the variation's name).
+	 * plus the name of every published, non-group subscription product. For a
+	 * variable subscription that means its variations only, never the parent —
+	 * individual_plan_name() resolves a subscription through
+	 * wcs_get_canonical_product_id() to the variation, so a row displays
+	 * "Digital Bundle - Annual" and never "Digital Bundle". Offering the parent
+	 * would match those same subscriptions (WooCommerce matches a variation line
+	 * item's parent _product_id) and return rows whose Subscription column reads
+	 * something else, breaking the round trip this endpoint exists to guarantee.
+	 *
 	 * Names are deduplicated and alphabetised; non-subscription products are not
 	 * plans, and neither are the products groups are sold on.
 	 */
@@ -801,9 +808,14 @@ class Test_Subscribers_Wizard_Subscribers_Endpoint extends WP_UnitTestCase {
 		$plans = $this->dispatch_plans()->get_data();
 
 		$this->assertSame(
-			[ 'Acme Team', 'Beta Team', 'Digital Bundle', 'Digital Bundle - Annual', 'Digital Monthly' ],
+			[ 'Acme Team', 'Beta Team', 'Digital Bundle - Annual', 'Digital Monthly' ],
 			$plans['items'],
 			'Group names and non-group subscription product/variation names, deduplicated and alphabetised.'
+		);
+		$this->assertNotContains(
+			'Digital Bundle',
+			$plans['items'],
+			'A variable subscription parent is not an option: no row ever displays it, so filtering on it would return rows showing a variation name instead.'
 		);
 		$this->assertNotContains( 'Tote Bag', $plans['items'], 'A non-subscription product is not a plan.' );
 		$this->assertNotContains(
@@ -811,14 +823,17 @@ class Test_Subscribers_Wizard_Subscribers_Endpoint extends WP_UnitTestCase {
 			$plans['items'],
 			'The product a group is sold on is not an option: members display the group name, so filtering on the product would return only the owners and no row would read as the filtered name.'
 		);
-		$this->assertSame( 5, $plans['total'] );
+		$this->assertSame( 4, $plans['total'] );
 	}
 
 	/**
 	 * A group product is excluded whether it is sold as a whole product or as a
 	 * variation of one, because group enablement is per product/variation and a
-	 * variation does not inherit its parent's setting. The parent of a group
-	 * variation is still an option: it is not itself a group product.
+	 * variation does not inherit its parent's setting.
+	 *
+	 * The variable parent is absent for a different reason than its group-enabled
+	 * variation: the parent name is never displayed on a row, so it is not an option
+	 * on any variable subscription, group-enabled or not.
 	 */
 	public function test_plans_endpoint_excludes_group_variations() {
 		$this->login_admin();
@@ -829,9 +844,35 @@ class Test_Subscribers_Wizard_Subscribers_Endpoint extends WP_UnitTestCase {
 
 		$items = $this->dispatch_plans()->get_data()['items'];
 
-		$this->assertContains( 'Campus Bundle', $items );
 		$this->assertContains( 'Campus Bundle - Individual', $items );
 		$this->assertNotContains( 'Campus Bundle - Site Licence', $items, 'A group-enabled variation is not an option.' );
+		$this->assertNotContains( 'Campus Bundle', $items, 'The variable parent is not an option either — no row displays it.' );
+	}
+
+	/**
+	 * A retired variation is not offered as a filter option.
+	 *
+	 * WooCommerce stores a variation with "Enabled" unchecked as `private`, and
+	 * get_children() returns those alongside published ones — so a publisher
+	 * retiring one tier while its existing subscribers keep it would otherwise get a
+	 * dropdown entry that can never match: the filter's other half resolves names
+	 * through a `publish`-only query. The admin picks a plan they can see in the
+	 * Subscription column of the rows below, and is told nobody holds it.
+	 *
+	 * The sibling test above covers the same rule for a whole product; this is the
+	 * variation level, which get_children() reaches by a different path.
+	 */
+	public function test_plans_endpoint_omits_a_retired_variation() {
+		$this->login_admin();
+
+		$bundle_id = $this->create_subscription_product( 'Campus Bundle', 'variable-subscription' );
+		$this->create_subscription_product( 'Campus Bundle - Current', 'subscription_variation', $bundle_id );
+		$this->create_subscription_product( 'Campus Bundle - Retired', 'subscription_variation', $bundle_id, false, 'private' );
+
+		$items = $this->dispatch_plans()->get_data()['items'];
+
+		$this->assertContains( 'Campus Bundle - Current', $items );
+		$this->assertNotContains( 'Campus Bundle - Retired', $items, 'A disabled variation cannot be matched by the filter, so it must not be offered by it.' );
 	}
 
 	/**

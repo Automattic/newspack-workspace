@@ -101,7 +101,7 @@ export default function SubscriberList() {
 
 	const { setHeaderData } = useDispatch( WIZARD_STORE_NAMESPACE );
 
-	const plans = usePlans();
+	const { plans, failed: plansFailed } = usePlans();
 
 	// The server owns filter/sort/paginate; this page's rows come back already
 	// narrowed. Group-role, tag and newsletter filters arrive in later slices (the
@@ -186,7 +186,12 @@ export default function SubscriberList() {
 			},
 			{
 				id: 'plans',
-				label: __( 'Subscription', 'newspack-plugin' ),
+				// When the plans read failed the dropdown has no options, which would
+				// otherwise be indistinguishable from a site that sells no plans. Say
+				// which it is in the label, since the filter itself has nowhere else to
+				// put it — the subscribers read raises its own notice only when IT
+				// fails, and the two routes fail independently.
+				label: plansFailed ? __( 'Subscription (plan list unavailable)', 'newspack-plugin' ) : __( 'Subscription', 'newspack-plugin' ),
 				// Options come from the plans endpoint rather than the loaded rows:
 				// this list is server-paginated, so the plans on the current page are
 				// not the plans on the site. Filtering is server-side too — see
@@ -297,7 +302,7 @@ export default function SubscriberList() {
 				render: ( { item } ) => <div>{ ( item.newsletters || [] ).join( ', ' ) }</div>,
 			},
 		],
-		[ avatars, planElements ]
+		[ avatars, planElements, plansFailed ]
 	);
 
 	// DataViews only makes the title cell clickable; delegate clicks from the
@@ -343,7 +348,13 @@ export default function SubscriberList() {
 		} );
 	}, [ setHeaderData, total ] );
 
-	if ( subscribersLoading ) {
+	// Only the first load blanks the screen. Filtering and sorting are server-side,
+	// so every filter toggle and every debounced keystroke is a refetch — unmounting
+	// DataViews for those would take the search box's focus with it and flash the
+	// applied filter chips away mid-interaction. Once there are rows to show, the
+	// loading state is handed to DataViews instead, for the same reason avatars fill
+	// in progressively rather than holding the table back.
+	if ( subscribersLoading && ! items.length ) {
 		return (
 			<div className="newspack-subscribers__loading">
 				<Waiting isCenter />
@@ -371,6 +382,7 @@ export default function SubscriberList() {
 				fields={ fields }
 				view={ view }
 				onChangeView={ setView }
+				isLoading={ subscribersLoading }
 				paginationInfo={ { totalItems: total, totalPages: pages } }
 				defaultLayouts={ { table: {} } }
 				getItemId={ item => item.id }
