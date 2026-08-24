@@ -1460,13 +1460,34 @@ class Test_Group_Subscriptions extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * Make a user a manager of a group subscription, the way production stores it.
+	 *
+	 * Production's add_manager() requires the user to already be a member, which is more setup
+	 * than a test about invite keys needs; get_managers() reads this meta directly. The cache
+	 * reset matters because get_managers() memoizes per subscription for the life of the request.
+	 *
+	 * @param \WC_Subscription $subscription The group subscription.
+	 * @param int              $user_id      The user to make a manager.
+	 *
+	 * @return void
+	 */
+	private function make_manager( $subscription, $user_id ) {
+		add_user_meta( $user_id, Group_Subscription::GROUP_SUBSCRIPTION_MANAGER_USER_META_KEY, $subscription->get_id() );
+		Group_Subscription::reset_cache();
+	}
+
+	/**
 	 * Links minted under the legacy per-manager shape were already sent to readers, so every one
-	 * of those keys keeps working, including a manager's whose entry is not the resolved one.
+	 * of those keys keeps working while its creator still manages the group — including a
+	 * manager's whose entry is not the resolved one.
 	 */
 	public function test_validate_link_invite_accepts_legacy_per_manager_keys() {
 		$owner_id   = $this->create_reader_user();
 		$manager_id = $this->create_reader_user();
 		$group_sub  = $this->create_group_subscription( $owner_id );
+		// A real manager, not just an ID in the map: a legacy key is honoured on the terms it was
+		// minted under, and those terms were "while this person manages the group".
+		$this->make_manager( $group_sub, $manager_id );
 
 		$group_sub->update_meta_data(
 			Group_Subscription_Invite::LINK_META,
@@ -1494,11 +1515,15 @@ class Test_Group_Subscriptions extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * A legacy key minted by someone who no longer manages the group still works. That is the
-	 * ticket's case seen from the storage side: readers hold the URL, and who issued it stopped
-	 * mattering the moment the link became the subscription's rather than the manager's.
+	 * A legacy key minted by someone who no longer manages the group stays dead.
+	 *
+	 * Removing a manager is how an institution revokes the links that person circulated, and the
+	 * per-manager shape is what those links were minted under. Honouring the key now would hand
+	 * paid access back to everyone still holding one — on data already in production, silently,
+	 * with no migration and nothing in the release notes. A key whose creator is still a manager
+	 * does survive their demotion (NPPD-2120); this is only about not resurrecting a dead one.
 	 */
-	public function test_validate_link_invite_accepts_legacy_key_of_a_departed_manager() {
+	public function test_validate_link_invite_rejects_a_legacy_key_of_a_departed_manager() {
 		$owner_id    = $this->create_reader_user();
 		$departed_id = $this->create_reader_user();
 		$group_sub   = $this->create_group_subscription( $owner_id );
@@ -1520,8 +1545,58 @@ class Test_Group_Subscriptions extends \WP_UnitTestCase {
 		$group_sub->save();
 
 		$this->assertFalse( Group_Subscription::user_is_manager( $departed_id, $group_sub ) );
-		$this->assertTrue( Group_Subscription_Invite::validate_link_invite( $group_sub, 'departed-key' ) );
-		$this->assertTrue( Group_Subscription_Invite::validate_link_invite( $group_sub, 'owner-key' ) );
+		$this->assertWPError(
+			Group_Subscription_Invite::validate_link_invite( $group_sub, 'departed-key' ),
+			'The departed manager\'s link was revoked when they were removed and must stay revoked.'
+		);
+		$this->assertTrue(
+			Group_Subscription_Invite::validate_link_invite( $group_sub, 'owner-key' ),
+			'A legacy key whose creator still manages the group keeps working.'
+		);
+	}
+
+	/**
+	 * Regenerating on a subscription still in the legacy shape kills every key it held.
+	 *
+	 * This is the promise the Regenerate modal makes to publishers, and in the weeks after an
+	 * upgrade it is the primary revocation path for a group that has more than one legacy key in
+	 * circulation. The existing regenerate test starts from the current shape, so nothing
+	 * otherwise pins the legacy case — and update_meta_data() replacing the whole map rather than
+	 * merging into it is exactly the kind of thing a refactor changes by accident.
+	 */
+	public function test_generate_link_invite_replaces_every_legacy_key() {
+		$owner_id   = $this->create_reader_user();
+		$group_sub  = $this->create_group_subscription( $owner_id );
+		$manager_id = $this->create_reader_user();
+		$this->make_manager( $group_sub, $manager_id );
+
+		$group_sub->update_meta_data(
+			Group_Subscription_Invite::LINK_META,
+			[
+				$owner_id   => [
+					'key'        => 'legacy-owner-key',
+					'created_at' => 1000,
+				],
+				$manager_id => [
+					'key'        => 'legacy-manager-key',
+					'created_at' => 2000,
+				],
+			]
+		);
+		$group_sub->save();
+
+		Group_Subscription_Invite::generate_link_invite( $group_sub, $owner_id );
+		$refetched = wcs_get_subscription( $group_sub->get_id() );
+
+		$this->assertWPError( Group_Subscription_Invite::validate_link_invite( $refetched, 'legacy-owner-key' ) );
+		$this->assertWPError(
+			Group_Subscription_Invite::validate_link_invite( $refetched, 'legacy-manager-key' ),
+			'Regenerating kills a peer manager\'s legacy key too, which is what the modal promises.'
+		);
+		$this->assertTrue(
+			Group_Subscription_Invite::validate_link_invite( $refetched, Group_Subscription_Invite::get_link_invite( $refetched )['key'] ),
+			'The freshly minted key is the only one left.'
+		);
 	}
 
 	/**

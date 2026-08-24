@@ -57,9 +57,10 @@ class Group_Subscription_Invite {
 	 *
 	 * The link belongs to the subscription, not to the manager who minted it, so it keeps working
 	 * when the owner or managers change. Subscriptions written before that carry the legacy
-	 * per-manager shape, [ $manager_user_id => [ 'key' => string, 'created_at' => int ] ]; every key
-	 * in it stays valid on the same terms, and the next regenerate or disable rewrites the meta in
-	 * the current shape.
+	 * per-manager shape, [ $manager_user_id => [ 'key' => string, 'created_at' => int ] ]. A legacy
+	 * key stays valid only while its creator still manages the group — the terms it was minted
+	 * under, and the reason removing a manager revoked their links. The next regenerate or disable
+	 * rewrites the meta in the current shape, at which point the link outlives any manager change.
 	 *
 	 * @var string
 	 */
@@ -237,16 +238,27 @@ class Group_Subscription_Invite {
 			return [ $stored ];
 		}
 
-		// Legacy per-manager shape, from before the link belonged to the subscription. Every key is
-		// honoured, whoever minted it and whether or not they still manage the group: these are the
-		// URLs readers are already holding, and outliving a change of manager is the whole point.
+		// Legacy per-manager shape, from before the link belonged to the subscription. A legacy key
+		// is honoured only while its creator still manages the group, which is exactly what the old
+		// per-manager validation did.
+		//
+		// Keeping that condition matters because removing a manager was how an institution revoked
+		// the links that person had circulated: honouring their keys now would silently hand paid
+		// access back to everyone holding one, on existing production data, with nobody told. New
+		// links get the subscription-wide semantics — they outlive any change of manager — and a
+		// legacy link whose creator is still a manager now survives that manager's demotion too
+		// (NPPD-2120). What does not happen is a dead link coming back to life.
 		$entries = [];
 		foreach ( $stored as $manager_id => $entry ) {
 			if ( ! is_array( $entry ) || empty( $entry['key'] ) ) {
 				continue;
 			}
 			// Normalise to the current shape: for a legacy entry the map key is the creator.
-			$entry['created_by'] = (int) $manager_id;
+			$creator_id = (int) $manager_id;
+			if ( ! Group_Subscription::user_is_manager( $creator_id, $subscription ) ) {
+				continue;
+			}
+			$entry['created_by'] = $creator_id;
 			$entries[]           = $entry;
 		}
 
@@ -283,9 +295,10 @@ class Group_Subscription_Invite {
 	 * Get every key that currently unlocks a subscription's invite link.
 	 *
 	 * One key in the current shape. A subscription still on the legacy per-manager shape has one key
-	 * per manager who ever minted one, and all of them stay valid: those links are already in
-	 * readers' hands, and only the manager segment of the URL — never the key — is being dropped.
-	 * Regenerating or disabling the link clears the whole set.
+	 * per manager who minted one, and each stays valid while its creator still manages the group —
+	 * only the manager segment of the URL is dropped, never the key. A key whose creator has since
+	 * been removed stays revoked, because removing them is what revoked it. Regenerating or
+	 * disabling the link clears the whole set.
 	 *
 	 * @param \WC_Subscription $subscription The subscription object.
 	 *
@@ -384,9 +397,16 @@ class Group_Subscription_Invite {
 			);
 		}
 
+		// Nothing stored means nothing to disable. Skipping the write keeps a no-op click off the
+		// full woocommerce_update_subscription cascade, which this request reaches from My Account.
+		// The check is on the raw meta rather than on get_link_invite_entries(), so a corrupt or
+		// filtered-out value — which no reader could revoke any other way — is still cleared.
+		if ( '' === $subscription->get_meta( self::LINK_META, true ) ) {
+			return true;
+		}
+
 		// Delete rather than store an empty array, so a disabled link is indistinguishable from one
-		// that never existed. Unconditional, so it also clears a legacy subscription's per-manager
-		// keys in one go, and a corrupt value that no reader could revoke any other way.
+		// that never existed. This clears a legacy subscription's per-manager keys in one go.
 		$subscription->delete_meta_data( self::LINK_META );
 		$subscription->save();
 		return true;
