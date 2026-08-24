@@ -1,6 +1,14 @@
 @use "~@wordpress/base-styles/colors" as wp-colors;
 @use "~@wordpress/base-styles/variables" as wp-vars;
 
+$wizard-column-width: calc(calc(var(--newspack-wizard-section-space) * 2) + var(--newspack-wizard-section-width));
+
+@mixin wizard-column {
+	margin: 0 auto;
+	max-width: $wizard-column-width;
+	padding: 0 var(--newspack-wizard-section-space);
+}
+
 :root {
 	/* Sections */
 	--newspack-wizard-section-width: 1006px;
@@ -180,6 +188,10 @@ h1 {
 		place-items: center;
 		position: absolute;
 		width: 100%;
+
+		strong {
+			font-weight: wp-vars.$font-weight-medium;
+		}
 	}
 
 	&.newspack-dashboard {
@@ -191,16 +203,32 @@ h1 {
 	}
 }
 
-.newspack-wizard__content--full-width {
+.newspack-wizard__content--full-width.newspack-wizard__content--full-width {
 	max-width: 100%;
 	padding-left: 0;
 	padding-right: 0;
 }
 
+// The inert-gating warning describes the state of the whole site rather than of the
+// section beneath it, so it spans the full width in every view and sits flush against
+// the header region above. Core's Notice ships margins meant for inline placement,
+// which would open a gap there and break the seam.
+.newspack-wizard__inert-gating-notice.components-notice {
+	border-radius: 0;
+	margin: 0;
+	width: 100%;
+}
+
+.newspack-wizard__load-error.components-notice {
+	border-radius: 0;
+	margin: 0;
+	width: 100%;
+}
+
 .newspack-wizard__sections {
 	margin: 0 auto;
 	padding: calc(var(--newspack-wizard-section-space) * 2) var(--newspack-wizard-section-space) 0;
-	max-width: calc(calc(var(--newspack-wizard-section-space) * 2) + var(--newspack-wizard-section-width));
+	max-width: $wizard-column-width;
 	> .newspack-wizard__heading {
 		margin-bottom: 8px;
 	}
@@ -245,10 +273,12 @@ h1 {
 	}
 }
 
+.newspack-wizard__column {
+	@include wizard-column;
+}
+
 .newspack-dashboard__section {
-	margin: 0 auto;
-	max-width: calc(calc(var(--newspack-wizard-section-space) * 2) + var(--newspack-wizard-section-width));
-	padding: 0 var(--newspack-wizard-section-space);
+	@include wizard-column;
 
 	> h3 {
 		font-size: 1.25rem;

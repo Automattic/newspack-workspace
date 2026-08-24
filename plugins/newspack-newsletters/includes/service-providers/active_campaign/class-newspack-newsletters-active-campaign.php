@@ -1307,7 +1307,7 @@ final class Newspack_Newsletters_Active_Campaign extends \Newspack_Newsletters_S
 					$send_sublist_id               = $legacy_sublist_id;
 				}
 			}
-			$send_lists = $this->get_send_lists( // Get first 10 top-level send lists for autocomplete.
+			$send_lists = $this->get_send_lists_with_fallback( // Get first 10 top-level send lists for autocomplete.
 				[
 					'ids'  => $send_list_id ? [ $send_list_id ] : null, // If we have a selected list, make sure to fetch it.
 					'type' => 'list',
@@ -1319,7 +1319,7 @@ final class Newspack_Newsletters_Active_Campaign extends \Newspack_Newsletters_S
 			}
 			$newsletter_data['lists'] = $send_lists;
 			$send_sublists = $send_list_id || $send_sublist_id ?
-				$this->get_send_lists(
+				$this->get_send_lists_with_fallback(
 					[
 						'ids'       => [ $send_sublist_id ], // If we have a selected sublist, make sure to fetch it. Otherwise, we'll populate sublists later.
 						'parent_id' => $send_list_id,
@@ -1900,9 +1900,20 @@ final class Newspack_Newsletters_Active_Campaign extends \Newspack_Newsletters_S
 	}
 
 	/**
-	 * After Newsletter post is deleted, clean up by deleting corresponding ESP campaign.
+	 * After Newsletter post is trashed, clean up by deleting corresponding ESP campaign.
 	 *
-	 * @param string $post_id Numeric ID of the campaign.
+	 * Cleanup covers the post's own campaigns and nothing else. There is
+	 * deliberately no `ac_message_id` cleanup: messages and campaigns are
+	 * separate ActiveCampaign entities numbered from separate sequences, so a
+	 * message ID is meaningless to any campaign endpoint and a lookup cannot
+	 * tell you whether a campaign of the same number is ours. Reaching for
+	 * `message_delete` instead is no safer — one message backs every send a post
+	 * ever made, so deleting it damages the history of campaigns already out the
+	 * door, which is exactly what DELETABLE_STATUSES exists to prevent. An
+	 * orphaned message left in ActiveCampaign is inert. Mailchimp and Constant
+	 * Contact clean up the same way.
+	 *
+	 * @param int $post_id Numeric ID of the newsletter post.
 	 */
 	public function trash( $post_id ) {
 		if ( Newspack_Newsletters::NEWSPACK_NEWSLETTERS_CPT !== get_post_type( $post_id ) ) {
@@ -1919,14 +1930,13 @@ final class Newspack_Newsletters_Active_Campaign extends \Newspack_Newsletters_S
 			}
 		}
 		$campaign_id = get_post_meta( $post_id, 'ac_campaign_id', true );
-		$message_id  = get_post_meta( $post_id, 'ac_message_id', true );
 		if ( $campaign_id ) {
-			$this->delete_campaign( $campaign_id );
-		}
-		if ( $message_id ) {
-			$message = $this->api_v1_request( 'message_view', 'GET', [ 'query' => [ 'id' => $message_id ] ] );
-			if ( ! is_wp_error( $message ) ) {
-				$this->api_v1_request( 'campaign_delete', 'GET', [ 'query' => [ 'id' => $message_id ] ] );
+			// Clear the stored ID only once the campaign is really gone. A refusal
+			// means it still exists in ActiveCampaign (delete_campaign() declines
+			// anything past draft), and the post must keep pointing at it.
+			$delete_res = $this->delete_campaign( $campaign_id );
+			if ( ! is_wp_error( $delete_res ) ) {
+				delete_post_meta( $post_id, 'ac_campaign_id', $campaign_id );
 			}
 		}
 	}
@@ -2303,7 +2313,10 @@ final class Newspack_Newsletters_Active_Campaign extends \Newspack_Newsletters_S
 			return $result;
 		}
 		if ( ! isset( $result['contacts'], $result['contacts'][0] ) ) {
-			return new WP_Error( 'newspack_newsletters', __( 'No contact data found.' ) );
+			// A dedicated code (rather than the generic `newspack_newsletters`) so
+			// callers can tell "no such contact" from an actual failure, matching
+			// Mailchimp's dedicated not-found code.
+			return new WP_Error( 'newspack_newsletters_contact_not_found', __( 'No contact data found.' ) );
 		}
 		$contact_data = $result['contacts'][0];
 		if ( $return_details ) {
@@ -2323,7 +2336,7 @@ final class Newspack_Newsletters_Active_Campaign extends \Newspack_Newsletters_S
 			if ( \is_wp_error( $contact_result ) ) {
 				return $contact_result;
 			}
-			$contact_fields           = array_reduce(
+			$contact_fields = array_reduce(
 				$contact_result['fieldValues'],
 				function ( $acc, $field ) use ( $fields_perstag_by_id ) {
 					if ( isset( $field['value'] ) && isset( $fields_perstag_by_id[ $field['field'] ] ) ) {
@@ -2333,7 +2346,11 @@ final class Newspack_Newsletters_Active_Campaign extends \Newspack_Newsletters_S
 				},
 				[]
 			);
-			$contact_data['metadata'] = $contact_fields;
+			// The API mostly omits fields the contact has no value for, but can
+			// report an empty value — filter those out explicitly so `metadata`
+			// carries the same meaning as on other providers rather than leaning
+			// on that API behavior.
+			$contact_data['metadata'] = self::filter_set_field_values( $contact_fields );
 		}
 		return $contact_data;
 	}

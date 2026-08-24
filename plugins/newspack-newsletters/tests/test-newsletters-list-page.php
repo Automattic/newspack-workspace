@@ -12,6 +12,17 @@ use Newspack\Newsletters\Admin\Pages\Newsletters_List_Page;
  */
 class Newsletters_List_Page_Test extends WP_UnitTestCase {
 	/**
+	 * `WP_UnitTestCase` doesn't reset `wp_scripts` between tests, so the
+	 * enqueue cases below would otherwise leave `heartbeat` queued, or
+	 * deregistered, for everything that runs after them in this process.
+	 */
+	public function tear_down() {
+		$GLOBALS['wp_scripts'] = null;
+		$GLOBALS['wp_styles']  = null;
+		parent::tear_down();
+	}
+
+	/**
 	 * Slug matches the chassis screen registry and the URL the menu link uses.
 	 */
 	public function test_slug_is_newspack_newsletters_list() {
@@ -61,5 +72,30 @@ class Newsletters_List_Page_Test extends WP_UnitTestCase {
 			$page->get_parent_slug()
 		);
 		$this->assertTrue( $page->is_hidden_from_menu() );
+	}
+
+	/**
+	 * Heartbeat carries the post-lock exchange the "currently editing" line
+	 * reads.
+	 */
+	public function test_enqueues_heartbeat() {
+		( new Newsletters_List_Page() )->enqueue_extras( 'newspack-newsletters-admin-shell' );
+
+		$this->assertTrue( wp_script_is( 'heartbeat', 'enqueued' ) );
+	}
+
+	/**
+	 * Heartbeat is a sibling enqueue, not a dependency of the admin-shell
+	 * bundle, so a site that deregisters it loses the indicator rather than
+	 * the screen: `WP_Dependencies::enqueue()` ignores an unregistered
+	 * handle, where `all_deps()` would have dropped the bundle that named
+	 * it as a dependency.
+	 */
+	public function test_enqueueing_heartbeat_is_inert_once_deregistered() {
+		wp_deregister_script( 'heartbeat' );
+
+		( new Newsletters_List_Page() )->enqueue_extras( 'newspack-newsletters-admin-shell' );
+
+		$this->assertFalse( wp_script_is( 'heartbeat', 'enqueued' ) );
 	}
 }

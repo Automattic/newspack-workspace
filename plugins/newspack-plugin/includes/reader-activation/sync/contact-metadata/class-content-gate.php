@@ -10,7 +10,7 @@ namespace Newspack\Reader_Activation\Sync\Contact_Metadata;
 use Newspack\Reader_Activation\Sync\Contact_Metadata;
 use Newspack\Reader_Activation\Sync\Legacy_Metadata;
 use Newspack\Reader_Activation\Sync\Metadata;
-use Newspack\Access_Rules;
+use Newspack\Access_Attribution;
 use Newspack\Content_Gate as Content_Gate_CPT;
 use Newspack\Group_Subscription;
 use Newspack\Institution;
@@ -32,9 +32,19 @@ class Content_Gate extends Contact_Metadata {
 
 	/**
 	 * Reset the cached custom access gates.
+	 *
+	 * Also clears the attribution memo of readers' owned subscriptions. A sync
+	 * run is one PHP process spanning many readers, and a subscription that
+	 * activates between two syncs in that process would otherwise be missed —
+	 * degrading the source label from the product's name to a bare
+	 * `subscription`.
+	 *
+	 * Called at every batch boundary of the bulk contact loops, alongside the
+	 * object cache flush — see RAS_Contact_Sync::batch_boundary_pause().
 	 */
 	public static function reset_cache() {
 		self::$custom_access_gates_cache = null;
+		Access_Attribution::reset_memo();
 	}
 
 	/**
@@ -151,7 +161,7 @@ class Content_Gate extends Contact_Metadata {
 	 *
 	 * @param array    $evaluations Results from User_Gate_Access::evaluate_gate_for_user().
 	 * @param int      $user_id     User ID.
-	 * @param callable $resolver    Receives ($slug, $value, $user_id) and returns string[] of labels.
+	 * @param callable $resolver    Receives ($slug, $value, $user_id, $context) and returns string[] of labels.
 	 * @return array Sorted, deduplicated labels.
 	 */
 	private static function collect_labels( $evaluations, $user_id, $resolver ) {
@@ -169,7 +179,7 @@ class Content_Gate extends Contact_Metadata {
 					if ( ! $rule['passes'] ) {
 						continue;
 					}
-					foreach ( $resolver( $rule['slug'], $rule['value'], $user_id ) as $label ) {
+					foreach ( $resolver( $rule['slug'], $rule['value'], $user_id, $result['context'] ?? [] ) as $label ) {
 						$labels_set[ $label ] = true;
 					}
 				}
@@ -184,52 +194,18 @@ class Content_Gate extends Contact_Metadata {
 	/**
 	 * Map an access rule slug and value to source labels.
 	 *
+	 * The mapping itself lives in `Access_Attribution`, shared with the GA4
+	 * layer so both consumers attribute a passing rule to the same source.
+	 *
 	 * @param string $slug    Rule slug.
 	 * @param mixed  $value   Rule value.
 	 * @param int    $user_id User ID.
+	 * @param array  $context Evaluation context the gate's rules were evaluated under,
+	 *                        from User_Gate_Access::evaluate_gate_for_user().
 	 * @return array Source labels.
 	 */
-	private static function get_source_labels( $slug, $value, $user_id ) {
-		switch ( $slug ) {
-			case 'subscription':
-				if ( ! is_array( $value ) || ! function_exists( 'wc_get_product' ) ) {
-					return [ 'subscription' ];
-				}
-				// Determine ownership first so an owner of a sub matching an
-				// "any subscription" rule (empty $value) isn't mislabeled as
-				// `group` by the non-strict check below.
-				if ( Access_Rules::has_active_subscription( $user_id, $value, true ) ) {
-					$names = [];
-					foreach ( $value as $product_id ) {
-						if ( Access_Rules::has_active_subscription( $user_id, [ $product_id ], true ) ) {
-							$product = wc_get_product( $product_id );
-							if ( $product ) {
-								$names[] = html_entity_decode( (string) $product->get_name(), ENT_QUOTES | ENT_HTML5, 'UTF-8' );
-							}
-						}
-					}
-					return ! empty( $names ) ? $names : [ 'subscription' ];
-				}
-				// Not an owner — check group subscription membership.
-				if ( Access_Rules::has_active_subscription( $user_id, $value ) ) {
-					return [ 'group' ];
-				}
-				// They might still have access via the
-				// `newspack_access_rules_has_active_subscription` filter hook.
-				return [ 'subscription' ];
-
-			case 'email_domain':
-				return [ 'domain' ];
-
-			case 'institution':
-				return [ 'institution' ];
-
-			case 'reader_data':
-				return [ 'reader_data' ];
-
-			default:
-				return [];
-		}
+	private static function get_source_labels( $slug, $value, $user_id, $context = [] ) {
+		return Access_Attribution::get_source_labels( $slug, $value, $user_id, $context );
 	}
 
 	/**
@@ -239,12 +215,20 @@ class Content_Gate extends Contact_Metadata {
 	 * `Institution::get_matching_names_for_user()` so the GA4 helper and other callers
 	 * share the same logic (memoization, status filters, name decoding).
 	 *
+	 * Group names come from the shared, request-memoized helper, which counts only
+	 * subscriptions with an active status. A group subscription in the payment-retry
+	 * window therefore grants access without contributing a group name, so `$context`
+	 * has nothing to switch on here — it is accepted to keep the resolver signature
+	 * uniform. Aligning the group name with the grace toggle means threading context
+	 * through that shared, cross-feature helper (also used by GA4); tracked in NPPD-2133.
+	 *
 	 * @param string $slug    Rule slug.
 	 * @param mixed  $value   Rule value.
 	 * @param int    $user_id User ID.
+	 * @param array  $context Evaluation context the gate's rules were evaluated under.
 	 * @return array Group labels.
 	 */
-	private static function get_group_labels( $slug, $value, $user_id ) {
+	private static function get_group_labels( $slug, $value, $user_id, $context = [] ) {
 		switch ( $slug ) {
 			case 'subscription':
 				// An empty/non-array $value mirrors Access_Rules::has_active_subscription's

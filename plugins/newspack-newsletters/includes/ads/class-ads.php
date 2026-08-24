@@ -26,6 +26,16 @@ final class Ads {
 	const ADVERTISER_TAX = 'newspack_nl_advertiser';
 
 	/**
+	 * Statuses an advertiser's term count covers. Must stay equal to the union
+	 * of the non-trash `post_status` sets in `Ads_List_REST::filter_rest_query`,
+	 * or the count disagrees with the list it describes. Bump the recount
+	 * sentinel in `maybe_recount_advertiser_terms` whenever this changes.
+	 *
+	 * @var string[]
+	 */
+	const COUNTED_STATUSES = [ 'publish', 'private', 'future', 'draft', 'pending' ];
+
+	/**
 	 * Ads already inserted in the newsletter.
 	 *
 	 * @var array[] Ad ids mapped by newsletter id.
@@ -375,6 +385,32 @@ final class Ads {
 	}
 
 	/**
+	 * Format a date-only ad meta value for display.
+	 *
+	 * `start_date`/`expiry_date` are whole calendar days: `is_ad_active()`
+	 * compares them as `Y-m-d` strings against the newsletter's own date, so
+	 * they carry neither a time nor a timezone. Anchoring at midnight in the
+	 * site timezone is what keeps the rendered day equal to the stored one —
+	 * `strtotime( 'Y-m-d' )` resolves against PHP's default zone (UTC under
+	 * WordPress) and `wp_date()` then converts into the site zone, which moved
+	 * the date a day earlier on every site at a negative UTC offset.
+	 *
+	 * @param mixed $value Raw meta value.
+	 * @return string Localized date, or '' when the value is empty or invalid.
+	 */
+	public static function format_ad_date( $value ) {
+		$value = self::sanitize_ad_date( $value );
+		if ( '' === $value ) {
+			return '';
+		}
+		$date = date_create_immutable( $value . ' 00:00:00', wp_timezone() );
+		if ( false === $date ) {
+			return '';
+		}
+		return wp_date( __( 'F j, Y' ), $date->getTimestamp() );
+	}
+
+	/**
 	 * Count only ads (self::CPT) tagged with each advertiser term, across
 	 * the same statuses the Ads list shows. Registered as the taxonomy's
 	 * `update_count_callback` so newsletter posts tagged with an advertiser
@@ -387,8 +423,6 @@ final class Ads {
 		global $wpdb;
 
 		$taxonomy_name = is_object( $taxonomy ) ? $taxonomy->name : $taxonomy;
-		// Include auto-draft to match the Ads list's draft bucket.
-		$statuses = [ 'publish', 'private', 'future', 'draft', 'pending', 'auto-draft' ];
 
 		foreach ( $terms as $tt_id ) {
 			$tt_id = (int) $tt_id;
@@ -398,15 +432,14 @@ final class Ads {
 					INNER JOIN {$wpdb->posts} p ON p.ID = tr.object_id
 					WHERE tr.term_taxonomy_id = %d
 					AND p.post_type = %s
-					AND p.post_status IN ( %s, %s, %s, %s, %s, %s )",
+					AND p.post_status IN ( %s, %s, %s, %s, %s )",
 					$tt_id,
 					self::CPT,
-					$statuses[0],
-					$statuses[1],
-					$statuses[2],
-					$statuses[3],
-					$statuses[4],
-					$statuses[5]
+					self::COUNTED_STATUSES[0],
+					self::COUNTED_STATUSES[1],
+					self::COUNTED_STATUSES[2],
+					self::COUNTED_STATUSES[3],
+					self::COUNTED_STATUSES[4]
 				)
 			);
 
@@ -419,14 +452,23 @@ final class Ads {
 	/**
 	 * One-time recount of existing advertiser terms so counts predating
 	 * the custom count callback refresh without waiting for the next edit.
-	 * Bump the sentinel whenever the counted statuses change so already
-	 * recounted sites pick up the new semantics (v3: added auto-draft).
 	 */
 	public static function maybe_recount_advertiser_terms() {
-		$option = 'newspack_nl_advertiser_count_recounted_v3';
+		$option = 'newspack_nl_advertiser_count_recounted_v4';
 		if ( get_option( $option ) ) {
 			return;
 		}
+		// `admin_init` also fires on admin-ajax.php, including for logged-out
+		// requests, so gate on the taxonomy's own management capability.
+		$taxonomy = get_taxonomy( self::ADVERTISER_TAX );
+		if ( ! $taxonomy || ! current_user_can( $taxonomy->cap->manage_terms ) ) {
+			return;
+		}
+		// Claim before the work. The recount is one `COUNT(*)` plus one `UPDATE`
+		// per term, so a concurrent burst would otherwise run it once each, and a
+		// pass that times out would re-arm it on every later request.
+		update_option( $option, 1 );
+		delete_option( 'newspack_nl_advertiser_count_recounted_v3' );
 
 		$term_ids = get_terms(
 			[
@@ -435,13 +477,10 @@ final class Ads {
 				'fields'     => 'tt_ids',
 			]
 		);
-		if ( is_wp_error( $term_ids ) ) {
+		if ( is_wp_error( $term_ids ) || empty( $term_ids ) ) {
 			return;
 		}
-		if ( ! empty( $term_ids ) ) {
-			wp_update_term_count_now( $term_ids, self::ADVERTISER_TAX );
-		}
-		update_option( $option, 1 );
+		wp_update_term_count_now( $term_ids, self::ADVERTISER_TAX );
 	}
 
 	/**
@@ -592,7 +631,7 @@ final class Ads {
 		$all_ads = get_posts(
 			[
 				'post_type'      => self::CPT,
-				'posts_per_page' => -1,
+				'posts_per_page' => -1, // phpcs:ignore WordPressVIPMinimum.Performance.NoPaging -- Newsletter ads CPT; config-scale.
 			]
 		);
 		$ads     = [];
@@ -740,19 +779,11 @@ final class Ads {
 	 */
 	public static function custom_column( $column_name, $post_id ) {
 		if ( 'start_date' === $column_name ) {
-			$start_date = get_post_meta( $post_id, 'start_date', true );
-			if ( ! empty( $start_date ) ) {
-				echo esc_html( wp_date( __( 'F j, Y' ), strtotime( $start_date ) ) );
-			} else {
-				echo '—';
-			}
+			$start_date = self::format_ad_date( get_post_meta( $post_id, 'start_date', true ) );
+			echo '' === $start_date ? '—' : esc_html( $start_date );
 		} elseif ( 'expiry_date' === $column_name ) {
-			$expiry_date = get_post_meta( $post_id, 'expiry_date', true );
-			if ( ! empty( $expiry_date ) ) {
-				echo esc_html( wp_date( __( 'F j, Y' ), strtotime( $expiry_date ) ) );
-			} else {
-				echo '—';
-			}
+			$expiry_date = self::format_ad_date( get_post_meta( $post_id, 'expiry_date', true ) );
+			echo '' === $expiry_date ? '—' : esc_html( $expiry_date );
 		} elseif ( 'price' === $column_name ) {
 			$price = get_post_meta( $post_id, 'price', true );
 			if ( ! empty( $price ) ) {
@@ -899,6 +930,24 @@ final class Ads {
 	 */
 	public static function is_ad_inserted( $newsletter_id, $ad_id ) {
 		return ! empty( self::$inserted_ads[ $newsletter_id ] ) && in_array( $ad_id, self::$inserted_ads[ $newsletter_id ], true );
+	}
+
+	/**
+	 * Reset the in-memory inserted-ads tracking.
+	 *
+	 * `mark_ad_inserted()`/`is_ad_inserted()` use a process-global static that is
+	 * otherwise never cleared within a request, so a second render of the same
+	 * newsletter in one request would see every ad already inserted and drop it.
+	 * Callers starting a fresh render should reset first.
+	 *
+	 * @param int|null $newsletter_id Newsletter to reset, or null to reset all.
+	 */
+	public static function reset_inserted_ads( $newsletter_id = null ) {
+		if ( null === $newsletter_id ) {
+			self::$inserted_ads = [];
+			return;
+		}
+		unset( self::$inserted_ads[ $newsletter_id ] );
 	}
 
 	/**

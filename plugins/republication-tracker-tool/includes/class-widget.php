@@ -55,8 +55,26 @@ class Republication_Tracker_Tool_Widget extends WP_Widget {
 		$is_amp = self::is_amp();
 
 		if ( ! $is_amp ) {
-			wp_enqueue_script( 'republication-tracker-tool-clipboard-utils', plugins_url( 'assets/clipboard-utils.js', __DIR__ ), array(), filemtime( plugin_dir_path( __FILE__ ) ), false );
-			wp_enqueue_script( 'republication-tracker-tool-js', plugins_url( 'assets/widget.js', __DIR__ ), array( 'jquery', 'republication-tracker-tool-clipboard-utils' ), filemtime( plugin_dir_path( __FILE__ ) ), false );
+			wp_enqueue_script(
+				'republication-tracker-tool-clipboard-utils',
+				plugins_url( 'assets/clipboard-utils.js', __DIR__ ),
+				array(),
+				REPUBLICATION_TRACKER_TOOL_VERSION,
+				array(
+					'in_footer' => false,
+					'strategy'  => 'defer',
+				)
+			);
+			wp_enqueue_script(
+				'republication-tracker-tool-js',
+				plugins_url( 'assets/widget.js', __DIR__ ),
+				array( 'jquery', 'republication-tracker-tool-clipboard-utils' ),
+				REPUBLICATION_TRACKER_TOOL_VERSION,
+				array(
+					'in_footer' => false,
+					'strategy'  => 'defer',
+				)
+			);
 		}
 		wp_enqueue_style( 'republication-tracker-tool-css', plugins_url( 'assets/widget.css', __DIR__ ), array(), filemtime( plugin_dir_path( __FILE__ ) ) );
 

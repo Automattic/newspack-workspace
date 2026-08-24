@@ -306,7 +306,10 @@ class Metering {
 			Newspack::plugin_url() . '/dist/content-gate-metering.js',
 			[],
 			filemtime( dirname( NEWSPACK_PLUGIN_FILE ) . '/dist/content-gate-metering.js' ),
-			true
+			[
+				'in_footer' => true,
+				'strategy'  => 'defer',
+			]
 		);
 
 		$settings = self::get_effective_settings( $gate_post_id, false );
@@ -352,6 +355,41 @@ class Metering {
 	}
 
 	/**
+	 * Whether the given gate actually meters, i.e. it grants at least one free view.
+	 *
+	 * Metering switched on with 0 free views gates every reader on their first view, so
+	 * it is indistinguishable from metering switched off and nothing downstream of
+	 * metering has anything to count. Each audience is judged on its own settings: a
+	 * count only counts while the section it belongs to is active and metering.
+	 *
+	 * @param int $gate_id Gate ID.
+	 *
+	 * @return bool
+	 */
+	public static function is_gate_metered( $gate_id ) {
+		$anonymous  = self::get_anonymous_settings( $gate_id );
+		$registered = self::get_registered_settings( $gate_id );
+		return ( $anonymous['enabled'] && 0 < $anonymous['count'] ) || ( $registered['enabled'] && 0 < $registered['count'] );
+	}
+
+	/**
+	 * Whether a gate offers metering to a reader class, without consuming a view.
+	 *
+	 * `is_logged_in_metering_allowed()` answers a different question — has this
+	 * reader still got an allowance left — and records the view as a side effect.
+	 * Analytics code must never call it; this is the read-only alternative.
+	 *
+	 * @param int       $gate_id      Gate post ID.
+	 * @param bool|null $is_logged_in Reader class. Defaults to the current reader.
+	 * @return bool
+	 */
+	public static function offers_metering( $gate_id, $is_logged_in = null ) {
+		$is_logged_in = null === $is_logged_in ? \is_user_logged_in() : (bool) $is_logged_in;
+		$settings     = self::get_effective_settings( $gate_id, $is_logged_in );
+		return ! empty( $settings['enabled'] ) && 0 < $settings['count'];
+	}
+
+	/**
 	 * Whether the post has metering enabled.
 	 *
 	 * @param int|null $post_id Post ID. Default is the current post.
@@ -362,14 +400,7 @@ class Metering {
 		if ( ! $post_id ) {
 			$post_id = get_the_ID();
 		}
-		$gate_post_id = Content_Gate::get_gate_post_id( $post_id );
-
-		$settings = self::get_metering_settings( $gate_post_id );
-		if ( $settings['enabled'] && ( $settings['anonymous_count'] > 0 || $settings['registered_count'] > 0 ) ) {
-			return true;
-		}
-
-		return false;
+		return self::is_gate_metered( Content_Gate::get_gate_post_id( $post_id ) );
 	}
 
 	/**

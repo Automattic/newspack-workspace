@@ -3,6 +3,7 @@
  */
 import { addFilter } from '@wordpress/hooks';
 import { createHigherOrderComponent } from '@wordpress/compose';
+import { useSelect } from '@wordpress/data';
 import { InspectorControls } from '@wordpress/block-editor';
 import {
 	FormTokenField,
@@ -17,12 +18,13 @@ import {
 } from '@wordpress/components';
 import { useState, useEffect } from '@wordpress/element';
 import apiFetch from '@wordpress/api-fetch';
-import { __, sprintf } from '@wordpress/i18n';
+import { __ } from '@wordpress/i18n';
 
 /**
  * Internal dependencies
  */
 import './block-visibility.scss';
+import OneTimePurchaseRuleControl from '../components/one-time-purchase-rule-control';
 
 /**
  * Target block types that receive access control attributes.
@@ -186,6 +188,10 @@ const AccessRuleValueControl = ( {
 		};
 	}, [ slug ] ); // eslint-disable-line react-hooks/exhaustive-deps
 
+	if ( 'one_time_purchase' === slug ) {
+		return <OneTimePurchaseRuleControl value={ value } onChange={ onChange } options={ options } productsLabel={ config.name } />;
+	}
+
 	if ( options.length > 0 ) {
 		// Map stored IDs to labels for display; silently drop IDs with no matching option.
 		const valueArr = Array.isArray( value ) ? value : [];
@@ -314,7 +320,12 @@ const BlockVisibilityPanel = ( { attributes, setAttributes }: BlockEditProps ) =
 		const newRules: BlockVisibilityRules = { ...rules, ...updates };
 		const stillActive = hasActiveRules( newRules, mode, gateIds );
 		setAttributes( {
-			newspackAccessControlRules: newRules,
+			// Reset to the registered default when the last rule is turned off, rather
+			// than storing every rule set to inactive. Gutenberg omits an attribute that
+			// deep-equals its default, so the block stops carrying any access-control
+			// markup at all - which is what tells the rest of the plugin that this block
+			// no longer has rules on it.
+			newspackAccessControlRules: stillActive ? newRules : {},
 			// Reset visibility to 'visible' when all custom rules are cleared.
 			...( ! stillActive ? { newspackAccessControlVisibility: 'visible' } : {} ),
 		} );
@@ -389,11 +400,11 @@ const BlockVisibilityPanel = ( { attributes, setAttributes }: BlockEditProps ) =
 
 				<VisibilityControl
 					label={ __( 'Visibility', 'newspack-plugin' ) }
-					help={ sprintf(
-						// translators: %s is either 'gates' or 'rules'.
-						__( 'Content visibility for readers who match any of the selected %s.', 'newspack-plugin' ),
-						mode === 'gate' ? __( 'gates', 'newspack-plugin' ) : __( 'rules', 'newspack-plugin' )
-					) }
+					help={
+						'gate' === mode
+							? __( 'Content visibility for readers who match any of the selected gates.', 'newspack-plugin' )
+							: __( 'Content visibility for readers who match any of the selected rules.', 'newspack-plugin' )
+					}
 					value={ visibility }
 					onChange={ ( v: string ) => setAttributes( { newspackAccessControlVisibility: v } ) }
 					disabled={ ! rulesActive }
@@ -411,7 +422,16 @@ addFilter(
 	'newspack-plugin/block-visibility/inspector',
 	createHigherOrderComponent( BlockEdit => {
 		const WithBlockVisibilityPanel = ( props: BlockEditProps ) => {
-			if ( ! TARGET_BLOCKS.includes( props.name ) ) {
+			// Access rules are post context. A pattern's own editor — including the
+			// post editor's focus mode — is editing a design, not a post, so there is
+			// nothing for the rules to resolve against.
+			const isPatternEditor = useSelect(
+				select =>
+					'wp_block' ===
+					( select( 'core/editor' ) as { getCurrentPostType?: () => string | undefined } | undefined )?.getCurrentPostType?.(),
+				[]
+			);
+			if ( isPatternEditor || ! TARGET_BLOCKS.includes( props.name ) ) {
 				return <BlockEdit { ...props } />;
 			}
 			return (

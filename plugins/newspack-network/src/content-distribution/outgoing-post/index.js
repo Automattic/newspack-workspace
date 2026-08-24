@@ -10,7 +10,7 @@ import { sprintf, __, _n } from '@wordpress/i18n';
 import { useState, useEffect } from '@wordpress/element';
 import { useSelect, useDispatch } from '@wordpress/data';
 import { CheckboxControl, TextControl, Button, Notice } from '@wordpress/components';
-import { broadcast } from '../../icons';
+import { broadcast } from 'newspack-icons';
 import { registerPlugin } from '@wordpress/plugins';
 
 /**

@@ -1,3 +1,43 @@
+## newspack-block-theme [1.31.2](https://github.com/Automattic/newspack-workspace/compare/newspack-block-theme@1.31.1...newspack-block-theme@1.31.2) (2026-08-20)
+
+
+### Dependencies
+
+* **newspack-components:** upgraded to 4.6.3
+
+## newspack-block-theme [1.31.1](https://github.com/Automattic/newspack-workspace/compare/newspack-block-theme@1.31.0...newspack-block-theme@1.31.1) (2026-08-17)
+
+
+### Dependencies
+
+* **newspack-components:** upgraded to 4.6.2
+
+# newspack-block-theme [1.31.0](https://github.com/Automattic/newspack-workspace/compare/newspack-block-theme@1.30.1...newspack-block-theme@1.31.0) (2026-08-17)
+
+
+### Bug Fixes
+
+* **blocks:** APCA contrast picker and derived accent-contrast color ([#730](https://github.com/Automattic/newspack-workspace/issues/730)) ([b05a658](https://github.com/Automattic/newspack-workspace/commit/b05a6588f4d9ebdeb3dbdbc17b5c06c901012ca7))
+
+
+### Features
+
+* **performance:** defer reader-facing JS assets (NPPM-3037) ([#722](https://github.com/Automattic/newspack-workspace/issues/722)) ([2855574](https://github.com/Automattic/newspack-workspace/commit/2855574099c4f416a984cda8565b269e5a9f0fb0))
+
+
+### Dependencies
+
+* **newspack-components:** upgraded to 4.6.1
+* **newspack-scripts:** upgraded to 5.11.0
+
+## newspack-block-theme [1.30.1](https://github.com/Automattic/newspack-workspace/compare/newspack-block-theme@1.30.0...newspack-block-theme@1.30.1) (2026-08-03)
+
+
+### Dependencies
+
+* **newspack-components:** upgraded to 4.6.0
+* **newspack-scripts:** upgraded to 5.10.0
+
 # newspack-block-theme [1.30.0](https://github.com/Automattic/newspack-workspace/compare/newspack-block-theme@1.29.1...newspack-block-theme@1.30.0) (2026-07-20)
 
 

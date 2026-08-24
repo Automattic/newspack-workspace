@@ -1,3 +1,45 @@
+## newspack-multibranded-site [2.4.4](https://github.com/Automattic/newspack-workspace/compare/newspack-multibranded-site@2.4.3...newspack-multibranded-site@2.4.4) (2026-08-20)
+
+
+### Dependencies
+
+* **newspack-components:** upgraded to 4.6.3
+
+## newspack-multibranded-site [2.4.3](https://github.com/Automattic/newspack-workspace/compare/newspack-multibranded-site@2.4.2...newspack-multibranded-site@2.4.3) (2026-08-17)
+
+
+### Dependencies
+
+* **newspack-components:** upgraded to 4.6.2
+
+## newspack-multibranded-site [2.4.2](https://github.com/Automattic/newspack-workspace/compare/newspack-multibranded-site@2.4.1...newspack-multibranded-site@2.4.2) (2026-08-17)
+
+
+### Dependencies
+
+* **newspack-components:** upgraded to 4.6.1
+* **newspack-scripts:** upgraded to 5.11.0
+
+## newspack-multibranded-site [2.4.1](https://github.com/Automattic/newspack-workspace/compare/newspack-multibranded-site@2.4.0...newspack-multibranded-site@2.4.1) (2026-08-05)
+
+
+### Bug Fixes
+
+* **multibrand:** treat brand front page as a page, not an archive ([#658](https://github.com/Automattic/newspack-workspace/issues/658)) ([63f5193](https://github.com/Automattic/newspack-workspace/commit/63f51934ec945dfa3363906fd6a775736fcf0889))
+
+# newspack-multibranded-site [2.4.0](https://github.com/Automattic/newspack-workspace/compare/newspack-multibranded-site@2.3.1...newspack-multibranded-site@2.4.0) (2026-08-03)
+
+
+### Features
+
+* explicit breadcrumb API for Newspack admin headers ([#472](https://github.com/Automattic/newspack-workspace/issues/472)) ([7c43233](https://github.com/Automattic/newspack-workspace/commit/7c4323301f5323822937e93274c4fda4279a787f))
+
+
+### Dependencies
+
+* **newspack-components:** upgraded to 4.6.0
+* **newspack-scripts:** upgraded to 5.10.0
+
 ## newspack-multibranded-site [2.3.1](https://github.com/Automattic/newspack-workspace/compare/newspack-multibranded-site@2.3.0...newspack-multibranded-site@2.3.1) (2026-07-20)
 
 

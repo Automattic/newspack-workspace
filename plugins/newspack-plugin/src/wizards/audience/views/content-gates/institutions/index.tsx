@@ -6,7 +6,7 @@
  * WordPress dependencies
  */
 import { __ } from '@wordpress/i18n';
-import { useState, useEffect, useCallback, useMemo } from '@wordpress/element';
+import { useState, useEffect, useCallback, useMemo, useRef } from '@wordpress/element';
 import { useDispatch } from '@wordpress/data';
 import apiFetch from '@wordpress/api-fetch';
 import { filterSortAndPaginate } from '@wordpress/dataviews';
@@ -18,11 +18,17 @@ import { Button, Spinner } from '@wordpress/components';
  */
 import { DataViews, Router } from '../../../../../../packages/components/src';
 import { WIZARD_STORE_NAMESPACE } from '../../../../../../packages/components/src/wizard/store';
+import { AUDIENCE_CONTENT_GATES_WIZARD_SLUG } from '../consts';
 import InstitutionsOnboarding from './onboarding';
 
 const { useHistory } = Router;
 
 const API_PATH = '/wp/v2/np_institution';
+
+// The bundled @wordpress/dataviews types (v10) predate `isDestructive`,
+// which the WP-core-provided runtime DataViews does support — extend the
+// Action type locally so destructive styling can be declared.
+type InstitutionAction = Action< Institution > & { isDestructive?: boolean };
 
 const DEFAULT_VIEW: View = {
 	type: 'table',
@@ -40,10 +46,13 @@ const DEFAULT_VIEW: View = {
 
 export default function Institutions() {
 	const history = useHistory();
-	const { setHeaderData, addNotice } = useDispatch( WIZARD_STORE_NAMESPACE );
+	const { setHeaderData, addNotice, updateWizardSettings } = useDispatch( WIZARD_STORE_NAMESPACE );
 	const [ data, setData ] = useState< Institution[] >( [] );
 	const [ isLoading, setIsLoading ] = useState( true );
 	const [ view, setView ] = useState< View >( DEFAULT_VIEW );
+	// The last has_institutions value pushed to the gates screen, so a fetch
+	// that does not change it does not clone the whole wizard payload.
+	const lastHasInstitutions = useRef< boolean | undefined >( undefined );
 
 	useEffect( () => {
 		const actions: HeaderAction[] = [
@@ -69,7 +78,23 @@ export default function Institutions() {
 	const fetchData = useCallback( () => {
 		setIsLoading( true );
 		apiFetch< Institution[] >( { path: `${ API_PATH }?per_page=100&context=edit&_embed=wp:featuredmedia` } )
-			.then( setData )
+			.then( institutions => {
+				setData( institutions );
+				// Keep the gates screen header in sync: it promotes the
+				// Institutions entry point out of the kebab menu when the site
+				// has at least one institution. Only write when the derived
+				// value actually changes, since UPDATE_WIZARD_SETTINGS clones
+				// the whole wizard payload and this runs on every list fetch.
+				const hasInstitutions = institutions.length > 0;
+				if ( hasInstitutions !== lastHasInstitutions.current ) {
+					lastHasInstitutions.current = hasInstitutions;
+					updateWizardSettings( {
+						slug: AUDIENCE_CONTENT_GATES_WIZARD_SLUG,
+						path: [ 'config', 'has_institutions' ],
+						value: hasInstitutions,
+					} );
+				}
+			} )
 			.catch( () => {
 				addNotice( {
 					message: __( 'Failed to load institutions. Please refresh the page.', 'newspack-plugin' ),
@@ -78,7 +103,7 @@ export default function Institutions() {
 				} );
 			} )
 			.finally( () => setIsLoading( false ) );
-	}, [ addNotice ] );
+	}, [ addNotice, updateWizardSettings ] );
 
 	useEffect( () => {
 		fetchData();
@@ -157,7 +182,7 @@ export default function Institutions() {
 		[]
 	);
 
-	const actions: Action< Institution >[] = useMemo(
+	const actions: InstitutionAction[] = useMemo(
 		() => [
 			{
 				id: 'edit',
@@ -171,7 +196,7 @@ export default function Institutions() {
 				id: 'copy-url',
 				label: __( 'Copy access page URL', 'newspack-plugin' ),
 				callback: ( items: Institution[] ) => {
-					const baseUrl = ( window as any ).newspackAudience?.institutional_access_url;
+					const baseUrl = window.newspackAudience?.institutional_access_url;
 					const url = baseUrl ? `${ baseUrl }/${ items[ 0 ].slug }/` : '';
 					if ( url ) {
 						navigator.clipboard.writeText( url ).then(
@@ -197,7 +222,7 @@ export default function Institutions() {
 				id: 'delete',
 				label: __( 'Delete', 'newspack-plugin' ),
 				isDestructive: true,
-				RenderModal: ( { items, closeModal }: { items: Institution[]; closeModal: () => void } ) => {
+				RenderModal: ( { items, closeModal }: { items: Institution[]; closeModal?: () => void } ) => {
 					const item = items[ 0 ];
 					const [ isDeleting, setIsDeleting ] = useState( false );
 					return (
@@ -217,11 +242,11 @@ export default function Institutions() {
 										apiFetch( { path: `${ API_PATH }/${ item.id }?force=true`, method: 'DELETE' } )
 											.then( () => {
 												fetchData();
-												closeModal();
+												closeModal?.();
 											} )
 											.catch( () => {
 												setIsDeleting( false );
-												closeModal();
+												closeModal?.();
 												addNotice( {
 													message: __( 'Failed to delete institution. Please try again.', 'newspack-plugin' ),
 													type: 'error',

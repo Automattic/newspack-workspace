@@ -1,3 +1,59 @@
+## newspack-popups [3.16.5](https://github.com/Automattic/newspack-workspace/compare/newspack-popups@3.16.4...newspack-popups@3.16.5) (2026-08-20)
+
+
+### Dependencies
+
+* **newspack-components:** upgraded to 4.6.3
+
+## newspack-popups [3.16.4](https://github.com/Automattic/newspack-workspace/compare/newspack-popups@3.16.3...newspack-popups@3.16.4) (2026-08-18)
+
+
+### Bug Fixes
+
+* **previews:** keep prompt and gate previews alive under WP 7.1 ([#896](https://github.com/Automattic/newspack-workspace/issues/896)) ([f711941](https://github.com/Automattic/newspack-workspace/commit/f71194149ca82e82976e251051d2cece0436842e))
+
+## newspack-popups [3.16.3](https://github.com/Automattic/newspack-workspace/compare/newspack-popups@3.16.2...newspack-popups@3.16.3) (2026-08-17)
+
+
+### Dependencies
+
+* **newspack-components:** upgraded to 4.6.2
+
+## newspack-popups [3.16.2](https://github.com/Automattic/newspack-workspace/compare/newspack-popups@3.16.1...newspack-popups@3.16.2) (2026-08-17)
+
+
+### Bug Fixes
+
+* **campaigns:** show above-header prompts without JS delay (NPPM-2934) ([#449](https://github.com/Automattic/newspack-workspace/issues/449)) ([44fe406](https://github.com/Automattic/newspack-workspace/commit/44fe40691529b05b9c141b1fb28717c91b2e7909))
+
+
+### Dependencies
+
+* **newspack-components:** upgraded to 4.6.1
+* **newspack-scripts:** upgraded to 5.11.0
+
+## newspack-popups [3.16.1](https://github.com/Automattic/newspack-workspace/compare/newspack-popups@3.16.0...newspack-popups@3.16.1) (2026-08-04)
+
+
+### Bug Fixes
+
+* **popups:** limit preset prompt previews to prompt managers ([#794](https://github.com/Automattic/newspack-workspace/issues/794)) ([e52f554](https://github.com/Automattic/newspack-workspace/commit/e52f5544060c32c4eea001d158c11e0df6f7677e))
+
+# newspack-popups [3.16.0](https://github.com/Automattic/newspack-workspace/compare/newspack-popups@3.15.1...newspack-popups@3.16.0) (2026-08-03)
+
+
+### Features
+
+* **audience:** per-field operators for incoming ESP field criteria ([#628](https://github.com/Automattic/newspack-workspace/issues/628)) ([f4449a8](https://github.com/Automattic/newspack-workspace/commit/f4449a806b9794e03bcf3aa2e3f87f42beb67904))
+* **audience:** pricing rules wizard + reader-segment foundation ([#465](https://github.com/Automattic/newspack-workspace/issues/465)) ([496f0e0](https://github.com/Automattic/newspack-workspace/commit/496f0e0047dc30211a530a64395daa1d6e8c6d9e))
+* explicit breadcrumb API for Newspack admin headers ([#472](https://github.com/Automattic/newspack-workspace/issues/472)) ([7c43233](https://github.com/Automattic/newspack-workspace/commit/7c4323301f5323822937e93274c4fda4279a787f))
+
+
+### Dependencies
+
+* **newspack-components:** upgraded to 4.6.0
+* **newspack-scripts:** upgraded to 5.10.0
+
 ## newspack-popups [3.15.1](https://github.com/Automattic/newspack-workspace/compare/newspack-popups@3.15.0...newspack-popups@3.15.1) (2026-07-22)
 
 

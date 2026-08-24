@@ -65,7 +65,10 @@ final class Core {
 			plugins_url( '../dist/frontend.js', __FILE__ ),
 			[],
 			$asset_file['version'],
-			true
+			[
+				'in_footer' => true,
+				'strategy'  => 'defer',
+			]
 		);
 
 		\wp_register_style(

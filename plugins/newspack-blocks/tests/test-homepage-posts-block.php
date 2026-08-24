@@ -5,6 +5,8 @@
  * @package Newspack_Blocks
  */
 
+require_once __DIR__ . '/class-newspack-tag-labels-stub.php';
+
 /**
  * Homepage Posts Block test case.
  */
@@ -329,5 +331,135 @@ class HomepagePostsBlockTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 
 		\Newspack\Tag_Labels::$stub_labels = null;
 		self::assertFalse( Newspack_Blocks_API::newspack_blocks_get_tag_labels( [ 'id' => $post_id ] ) );
+	}
+
+	/**
+	 * A non-viewable post type explicitly opted in via the
+	 * newspack_blocks_articles_allowed_post_types filter is served by the endpoint,
+	 * without loosening the gate for other non-viewable types.
+	 */
+	public function test_articles_endpoint_allows_filter_allowlisted_post_type() {
+		$allowed  = $this->register_non_viewable_cpt( 'newspack_allowed_cpt' );
+		$excluded = $this->register_non_viewable_cpt( 'newspack_secret_cpt' );
+		$allowed_id  = self::factory()->post->create( [ 'post_type' => $allowed, 'post_status' => 'publish' ] );
+		$excluded_id = self::factory()->post->create( [ 'post_type' => $excluded, 'post_status' => 'publish' ] );
+
+		$filter = function ( $types ) use ( $allowed ) {
+			$types[] = $allowed;
+			return $types;
+		};
+		add_filter( 'newspack_blocks_articles_allowed_post_types', $filter );
+		wp_set_current_user( 0 );
+
+		$controller = new WP_REST_Newspack_Articles_Controller();
+		$request    = new WP_REST_Request( 'GET', '/newspack-blocks/v1/articles' );
+		$request->set_param( 'postType', [ $allowed, $excluded ] );
+		$request->set_param( 'postsToShow', 10 );
+		try {
+			$ids = $controller->get_items( $request )->get_data()['ids'];
+		} finally {
+			// Always drop the global filter so a failure here can't leak into later tests.
+			remove_filter( 'newspack_blocks_articles_allowed_post_types', $filter );
+		}
+
+		self::assertContains( $allowed_id, $ids, 'An allow-listed non-viewable post type is served.' );
+		self::assertNotContains( $excluded_id, $ids, 'A non-viewable post type not on the allow-list is still dropped.' );
+	}
+
+	/**
+	 * Opting a post type into the endpoint opts in its published posts only. The
+	 * status gate in build_articles_query() is what keeps unpublished posts of an
+	 * allow-listed type away from an anonymous caller, so assert it directly.
+	 */
+	public function test_articles_endpoint_allowlist_still_hides_unpublished() {
+		$allowed = $this->register_non_viewable_cpt( 'newspack_status_cpt' );
+		$published_id = self::factory()->post->create( [ 'post_type' => $allowed, 'post_status' => 'publish' ] );
+		$draft_id     = self::factory()->post->create( [ 'post_type' => $allowed, 'post_status' => 'draft' ] );
+		$private_id   = self::factory()->post->create( [ 'post_type' => $allowed, 'post_status' => 'private' ] );
+
+		$filter = function ( $types ) use ( $allowed ) {
+			$types[] = $allowed;
+			return $types;
+		};
+		add_filter( 'newspack_blocks_articles_allowed_post_types', $filter );
+		wp_set_current_user( 0 );
+
+		$controller = new WP_REST_Newspack_Articles_Controller();
+		$request    = new WP_REST_Request( 'GET', '/newspack-blocks/v1/articles' );
+		$request->set_param( 'postType', [ $allowed ] );
+		$request->set_param( 'postsToShow', 10 );
+		try {
+			$ids = $controller->get_items( $request )->get_data()['ids'];
+		} finally {
+			// Always drop the global filter so a failure here can't leak into later tests.
+			remove_filter( 'newspack_blocks_articles_allowed_post_types', $filter );
+		}
+
+		self::assertContains( $published_id, $ids, 'A published post of an allow-listed type is served.' );
+		self::assertNotContains( $draft_id, $ids, 'A draft of an allow-listed type stays hidden from an anonymous caller.' );
+		self::assertNotContains( $private_id, $ids, 'A private post of an allow-listed type stays hidden from an anonymous caller.' );
+	}
+
+	/**
+	 * The filter_excerpt() method routes its content through Block_Visibility sanitization
+	 * before excerpt_remove_blocks(), verifying the integration point that strips gated
+	 * content from excerpts built by the homepage-posts block.
+	 */
+	public function test_filter_excerpt_sanitizes_via_block_visibility() {
+		// Skip if the real Block_Visibility is present; the stub-based test is for verification
+		// when newspack-plugin is not loaded.
+		if ( ! property_exists( '\Newspack\Block_Visibility', 'sanitization_was_called' ) ) {
+			$this->markTestSkipped( 'Real \Newspack\Block_Visibility present; stub-based wiring test skipped.' );
+		}
+
+		// Create a post with a gated group block (would be withheld from anonymous users).
+		$gate    = '{"newspackAccessControlMode":"custom","newspackAccessControlRules":{"registration":{"active":true}},"newspackAccessControlVisibility":"visible"}';
+		$content = '<!-- wp:paragraph --><p>PUBLICMARK</p><!-- /wp:paragraph -->'
+			. '<!-- wp:group ' . $gate . ' --><div class="wp-block-group">'
+			. '<!-- wp:paragraph --><p>SECRETMARK</p><!-- /wp:paragraph -->'
+			. '</div><!-- /wp:group -->';
+		$post_id = self::factory()->post->create(
+			[
+				'post_status'  => 'publish',
+				'post_content' => $content,
+				'post_excerpt' => '',
+			]
+		);
+
+		// Reset the flag and call filter_excerpt.
+		\Newspack\Block_Visibility::reset_sanitization_for_tests();
+		$GLOBALS['post'] = get_post( $post_id );
+		setup_postdata( $GLOBALS['post'] );
+
+		Newspack_Blocks::filter_excerpt( [ 'excerptLength' => 999, 'showExcerpt' => true ] );
+		$excerpt = get_the_excerpt( $post_id );
+		Newspack_Blocks::remove_excerpt_filter();
+
+		// Verify: Block_Visibility sanitization was called (the integration point).
+		self::assertTrue(
+			\Newspack\Block_Visibility::$sanitization_was_called,
+			'Block_Visibility::strip_blocks_hidden_from_public() must be called by filter_excerpt().'
+		);
+
+		// Verify *when*: the call has to land before excerpt_remove_blocks(), which
+		// unwraps core/group and destroys the access-control attributes the real
+		// implementation matches on. The stub's marker removal would succeed either
+		// way, so without this the test passes while production strips nothing.
+		self::assertStringContainsString(
+			'newspackAccessControl',
+			\Newspack\Block_Visibility::$received_content,
+			'Sanitization must run while the block attributes are still intact.'
+		);
+		self::assertStringContainsString(
+			'<!-- wp:group',
+			\Newspack\Block_Visibility::$received_content,
+			'Sanitization must run before the block structure is flattened.'
+		);
+
+		// Verify: gated content was stripped; public content remains.
+		self::assertStringNotContainsString( 'SECRETMARK', $excerpt, 'Gated block content must not appear in excerpt.' );
+		self::assertStringContainsString( 'PUBLICMARK', $excerpt, 'Public block content must remain in excerpt.' );
+
+		unset( $GLOBALS['post'] );
 	}
 }

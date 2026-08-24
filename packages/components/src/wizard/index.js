@@ -6,16 +6,26 @@ import classnames from 'classnames';
 /**
  * WordPress dependencies.
  */
-import { DropdownMenu, MenuGroup, MenuItem } from '@wordpress/components';
+// Notice is aliased: `Notice` below is Newspack's own, which this file also uses.
+import {
+	DropdownMenu,
+	MenuGroup,
+	MenuItem,
+	Notice as CoreNotice,
+	SlotFillProvider,
+	createSlotFill,
+	// eslint-disable-next-line @wordpress/no-unsafe-wp-apis
+	__experimentalVStack as VStack,
+} from '@wordpress/components';
 import { useDispatch, useSelect } from '@wordpress/data';
-import { cloneElement, isValidElement, useEffect, useState, forwardRef } from '@wordpress/element';
+import { cloneElement, createInterpolateElement, isValidElement, useEffect, useRef, useState, forwardRef } from '@wordpress/element';
 import { __ } from '@wordpress/i18n';
 import { category, chevronLeft, moreVertical } from '@wordpress/icons';
 
 /**
  * Internal dependencies
  */
-import { Footer, Notice, Button, TabbedNavigation, PluginInstaller, SectionHeader, HandoffMessage, Page } from '../';
+import { Footer, Notice, Button, TabbedNavigation, PluginInstaller, SectionHeader, HandoffMessage, Page, Waiting } from '../';
 import { activeBreadcrumbs, appendSectionName } from './breadcrumbs-select';
 import Router from '../proxied-imports/router';
 import registerStore, { WIZARD_STORE_NAMESPACE } from './store';
@@ -23,6 +33,14 @@ import WizardSnackbar from './components/WizardSnackbar';
 import WizardError from './components/WizardError';
 
 registerStore();
+
+/**
+ * Renders a view's page-level banner outside the padded content column, so it sits
+ * flush beneath the header rather than indented within the section it describes.
+ */
+const { Slot: WizardBannerSlot, Fill: WizardBanner } = createSlotFill( 'NewspackWizardBanner' );
+
+export { WizardBanner };
 
 /**
  * Icon registry for resolving icon name strings passed through the data store.
@@ -38,6 +56,34 @@ const resolveIcon = icon => {
 };
 
 const { HashRouter, Redirect, Route, Switch, useLocation } = Router;
+
+/**
+ * Interpolate a translated message's named tags, falling back to plain text.
+ *
+ * The message is translated, so its tags are site-controlled: any .mo file under
+ * wp-content/languages/plugins, any GlotPress export, or any `gettext`-filter
+ * plugin can supply one. `createInterpolateElement` throws on an unbalanced
+ * closing tag whose name is in the conversion map - verified against core's own
+ * element.js, which is what runs here since the bundle externalizes wp-element.
+ * Nothing above this renders an error boundary, so an uncaught throw would blank
+ * the whole wizard, including the screen the inert-gating notice links to as the
+ * fix. Degraded copy is recoverable; a blank screen is not.
+ *
+ * The other malformed cases already degrade on their own and are left alone: an
+ * unclosed opener drops that tag and renders the rest as text, and a tag not in
+ * the map renders literally.
+ *
+ * @param {string} message    Translated message carrying named tags.
+ * @param {Object} conversion Conversion map for createInterpolateElement.
+ * @return {JSX.Element|string} The interpolated message, or the message with its tags stripped.
+ */
+const interpolateOrPlainText = ( message, conversion ) => {
+	try {
+		return createInterpolateElement( message, conversion );
+	} catch {
+		return message.replace( /<\/?[a-zA-Z][a-zA-Z0-9]*\s*\/?>/g, '' );
+	}
+};
 
 /**
  * Reset the header data when a new section is rendered.
@@ -87,7 +133,7 @@ const WizardHeaderRegion = ( { hideHeader, headerText, sections, sectionName, su
 
 /**
  * @typedef  {Object}     WizardProps
- * @property {string}     headerText                The header text.
+ * @property {string}     [headerText]              Fallback heading, used only when no section declares breadcrumbs.
  * @property {string}     [subHeaderText]           The sub-header text, optional.
  * @property {string}     [apiSlug]                 The API slug, optional.
  * @property {string}     [className]               CSS classes, optional.
@@ -126,6 +172,7 @@ const Wizard = (
 	const isQuietLoading = useSelect( select => select( WIZARD_STORE_NAMESPACE ).isQuietLoading() );
 	const headerData = useSelect( select => select( WIZARD_STORE_NAMESPACE ).getHeaderData() );
 	const notices = useSelect( select => select( WIZARD_STORE_NAMESPACE ).getNotices() );
+	const { invalidateResolution } = useDispatch( WIZARD_STORE_NAMESPACE );
 	const { actions, backNav, badges, sectionDescription, sectionMenu, sectionName, sectionTitle, sectionPrimaryAction, sectionSecondaryAction } =
 		headerData;
 
@@ -139,13 +186,57 @@ const Wizard = (
 	let displayedSections = sections.filter( section => ! section.isHidden );
 
 	const [ pluginRequirementsSatisfied, setPluginRequirementsSatisfied ] = useState( requiredPlugins.length === 0 );
+	// Whether the requirements check has reported back. Until it has, the check
+	// shows the same fetching treatment as the rest of the wizard rather than
+	// the installer's own spinner and the swapped header; the installer only
+	// surfaces once a plugin is actually found missing.
+	const [ pluginRequirementsKnown, setPluginRequirementsKnown ] = useState( requiredPlugins.length === 0 );
+
+	// The data fetch above runs once per mount, while the required plugins are
+	// still missing — endpoints that need them answer empty or error outright,
+	// and either way the resolver records that as the answer. So the installer
+	// has to trigger a refetch, or the section mounts against it and renders
+	// nothing until the user saves. Requirements already met on mount are left
+	// alone: that fetch saw the real site, and refetching would cost every such
+	// wizard a second request on every load.
+	const requirementsWereUnmet = useRef( false );
+	const onPluginStatus = ( { complete } ) => {
+		// Leave the installer first: whatever happens to the refetch, the user
+		// should not be stranded on a required-plugins screen for a plugin they
+		// just installed.
+		setPluginRequirementsKnown( true );
+		setPluginRequirementsSatisfied( complete );
+		if ( ! complete ) {
+			requirementsWereUnmet.current = true;
+		} else if ( requirementsWereUnmet.current ) {
+			requirementsWereUnmet.current = false;
+			if ( apiSlug && isInitialFetchTriggered ) {
+				invalidateResolution( 'getWizardAPIData', [ apiSlug ] );
+			}
+		}
+	};
+
 	if ( ! pluginRequirementsSatisfied ) {
-		headerText = requiredPlugins.length > 1 ? __( 'Required plugins', 'newspack-plugin' ) : __( 'Required plugin', 'newspack-plugin' );
+		if ( pluginRequirementsKnown ) {
+			headerText = requiredPlugins.length > 1 ? __( 'Required plugins', 'newspack-plugin' ) : __( 'Required plugin', 'newspack-plugin' );
+		}
 		displayedSections = [
 			{
 				path: '/',
 				render: () => (
-					<PluginInstaller plugins={ requiredPlugins } onStatus={ ( { complete } ) => setPluginRequirementsSatisfied( complete ) } />
+					<>
+						{ ! pluginRequirementsKnown && (
+							<div className="newspack-wizard__loader">
+								<VStack alignment="center" spacing={ 2 }>
+									<Waiting noMargin />
+									<strong>{ __( 'Fetching…', 'newspack-plugin' ) }</strong>
+								</VStack>
+							</div>
+						) }
+						<div hidden={ ! pluginRequirementsKnown }>
+							<PluginInstaller plugins={ requiredPlugins } onStatus={ onPluginStatus } />
+						</div>
+					</>
 				),
 			},
 		];
@@ -161,6 +252,26 @@ const Wizard = (
 		</TabbedNavigation>
 	);
 
+	// Rendered here rather than as a core admin notice, which wizards strip at
+	// priority -9999. Sits as the first child of .newspack-wizard__main so it lands
+	// flush beneath the header region and spans the full width in every view: this
+	// describes the state of the whole site, not of the section below it, so it reads
+	// as page chrome rather than as content.
+	const inertGating = window.newspack_aux_data?.inert_gating;
+	const inertGatingNotice = inertGating?.show && (
+		<CoreNotice status="warning" isDismissible={ false } className="newspack-wizard__inert-gating-notice">
+			{ /* The conversion map takes childless elements and fills them from the
+			     translated string, so jsx-a11y can't see the content they end up with. */ }
+			{ interpolateOrPlainText( inertGating.message, {
+				/* eslint-disable jsx-a11y/anchor-has-content */
+				accessControl: <a href={ inertGating.urls.accessControl } />,
+				audience: <a href={ inertGating.urls.audience } />,
+				/* eslint-enable jsx-a11y/anchor-has-content */
+				strong: <strong />,
+			} ) }
+		</CoreNotice>
+	);
+
 	const content = (
 		<>
 			<HandoffMessage />
@@ -168,6 +279,8 @@ const Wizard = (
 			{ sections.length > 1 && <ResetHeaderData /> }
 
 			<div className="newspack-wizard__main">
+				{ inertGatingNotice }
+				<WizardBannerSlot bubblesVirtually />
 				<Switch>
 					{ routedSections.map( ( section, index ) => {
 						const SectionComponent = section.render;
@@ -271,38 +384,40 @@ const Wizard = (
 		) : undefined;
 
 	return (
-		<div ref={ ref }>
-			<div
-				className={ classnames( isLoading ? 'newspack-wizard__is-loading' : 'newspack-wizard__is-loaded', {
-					'newspack-wizard__is-loading-quiet': isQuietLoading,
-				} ) }
-			>
-				<HashRouter hashType="slash">
-					{ newspack_aux_data.is_debug_mode && <Notice debugMode /> }
-					<WizardHeaderRegion
-						hideHeader={ hideHeader }
-						headerText={ headerText }
-						sections={ routedSections }
-						sectionName={ sectionName }
-						subTitle={ subHeaderText }
-						actions={ headerActions }
-						tabbedNavigation={ tabbedNavigation }
-					>
-						{ content }
-					</WizardHeaderRegion>
-				</HashRouter>
-				{ notices?.length > 0 && (
-					<div className="newspack-wizard__snackbar-list">
-						{ notices.map( ( notice, index ) => (
-							<WizardSnackbar key={ notice.id || index } id={ notice.id } type={ notice.type } actions={ notice.actions }>
-								{ notice.message }
-							</WizardSnackbar>
-						) ) }
-					</div>
-				) }
+		<SlotFillProvider>
+			<div ref={ ref }>
+				<div
+					className={ classnames( isLoading ? 'newspack-wizard__is-loading' : 'newspack-wizard__is-loaded', {
+						'newspack-wizard__is-loading-quiet': isQuietLoading,
+					} ) }
+				>
+					<HashRouter hashType="slash">
+						{ newspack_aux_data.is_debug_mode && <Notice debugMode /> }
+						<WizardHeaderRegion
+							hideHeader={ hideHeader }
+							headerText={ headerText }
+							sections={ routedSections }
+							sectionName={ sectionName }
+							subTitle={ subHeaderText }
+							actions={ headerActions }
+							tabbedNavigation={ tabbedNavigation }
+						>
+							{ content }
+						</WizardHeaderRegion>
+					</HashRouter>
+					{ notices?.length > 0 && (
+						<div className="newspack-wizard__snackbar-list">
+							{ notices.map( ( notice, index ) => (
+								<WizardSnackbar key={ notice.id || index } id={ notice.id } type={ notice.type } actions={ notice.actions }>
+									{ notice.message }
+								</WizardSnackbar>
+							) ) }
+						</div>
+					) }
+				</div>
+				{ ! isLoading && <Footer simple={ hasSimpleFooter } /> }
 			</div>
-			{ ! isLoading && <Footer simple={ hasSimpleFooter } /> }
-		</div>
+		</SlotFillProvider>
 	);
 };
 

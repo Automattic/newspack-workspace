@@ -383,6 +383,7 @@ final class Modal_Checkout {
 		$after_success_behavior     = filter_input( INPUT_GET, 'after_success_behavior', FILTER_SANITIZE_SPECIAL_CHARS );
 		$after_success_url          = filter_input( INPUT_GET, 'after_success_url', FILTER_SANITIZE_URL );
 		$after_success_button_label = filter_input( INPUT_GET, 'after_success_button_label', FILTER_SANITIZE_SPECIAL_CHARS );
+		$after_success_token        = filter_input( INPUT_GET, 'after_success_token', FILTER_SANITIZE_SPECIAL_CHARS );
 
 		if ( $variation_id ) {
 			$product_id = $variation_id;
@@ -401,7 +402,7 @@ final class Modal_Checkout {
 			wp_parse_str( $parsed_url['query'], $params );
 		}
 
-		$params = array_merge( $params, compact( 'after_success_behavior', 'after_success_url', 'after_success_button_label' ) );
+		$params = array_merge( $params, compact( 'after_success_behavior', 'after_success_url', 'after_success_button_label', 'after_success_token' ) );
 
 		if ( function_exists( 'wpcom_vip_url_to_postid' ) ) {
 			$referer_post_id = wpcom_vip_url_to_postid( $referer );
@@ -758,6 +759,12 @@ final class Modal_Checkout {
 	 */
 	public static function render_modal_markup() {
 		if ( ! self::$has_modal ) {
+			return;
+		}
+		// Never inside the iframe this markup creates: the container would nest in
+		// itself, putting a second "Complete your transaction" dialog in the
+		// reader's checkout (NPPD-2170).
+		if ( self::is_modal_checkout() ) {
 			return;
 		}
 		/**
@@ -1239,6 +1246,346 @@ final class Modal_Checkout {
 	}
 
 	/**
+	 * Behaviors that have somewhere to go once checkout finishes.
+	 *
+	 * Anything else leaves the reader in a modal that won't move and won't close, so it is
+	 * treated as "close the modal" instead.
+	 *
+	 * @var string[]
+	 */
+	const AFTER_SUCCESS_BEHAVIORS = [ 'custom', 'referrer' ];
+
+	/**
+	 * Reduce a post-checkout destination to a single comparable form.
+	 *
+	 * Signing and verifying have to agree on the exact string, and the value passes through
+	 * sanitising on its way between them, so both sides normalise here rather than each
+	 * doing their own.
+	 *
+	 * @param string $url The requested destination.
+	 *
+	 * @return string The normalised destination, or an empty string.
+	 */
+	public static function normalize_after_success_url( $url ) {
+		$url = sanitize_url( (string) $url );
+
+		if ( empty( $url ) ) {
+			return '';
+		}
+
+		// Core compares hosts case-sensitively; host names aren't. Rebuild from the parsed
+		// parts rather than replacing the host in the string: the host can appear again
+		// inside a query parameter, and a `user@host` authority never matches `://host` at
+		// all, so a string replacement either rewrites too much or nothing.
+		$parts = wp_parse_url( $url );
+		if ( ! empty( $parts['host'] ) && strtolower( $parts['host'] ) !== $parts['host'] ) {
+			$parts['host'] = strtolower( $parts['host'] );
+			$url           = self::build_url( $parts );
+		}
+
+		return $url;
+	}
+
+	/**
+	 * Reassemble a URL from `wp_parse_url()` parts.
+	 *
+	 * @param array $parts Parsed URL parts.
+	 *
+	 * @return string
+	 */
+	private static function build_url( $parts ) {
+		$user = $parts['user'] ?? '';
+		$pass = isset( $parts['pass'] ) ? ':' . $parts['pass'] : '';
+		$auth = $user ? $user . $pass . '@' : '';
+
+		// A destination with a host but no scheme is protocol-relative. Losing the `//` here
+		// would turn it into a relative path, which changes where the reader lands and makes
+		// this function non-idempotent — and the token signs a normalised value at mint and
+		// normalises again at read, so idempotence is what makes it verify.
+		$prefix = isset( $parts['scheme'] )
+			? $parts['scheme'] . '://'
+			: ( isset( $parts['host'] ) ? '//' : '' );
+
+		return $prefix
+			. $auth
+			. ( $parts['host'] ?? '' )
+			. ( isset( $parts['port'] ) ? ':' . $parts['port'] : '' )
+			. ( $parts['path'] ?? '' )
+			. ( isset( $parts['query'] ) ? '?' . $parts['query'] : '' )
+			. ( isset( $parts['fragment'] ) ? '#' . $parts['fragment'] : '' );
+	}
+
+	/**
+	 * Whether a post is published, read from the stored status.
+	 *
+	 * `get_post_status()` reports an attachment as `publish` whatever its stored status, so a
+	 * token could be minted from one and could not be revoked by unpublishing. Reading the
+	 * field directly returns the real status, and also steps around the `get_post_status`
+	 * filter, which would otherwise let any plugin move this gate.
+	 *
+	 * @param int $post_id The post to check.
+	 *
+	 * @return boolean
+	 */
+	private static function is_published_post( $post_id ) {
+		return 'publish' === get_post_field( 'post_status', (int) $post_id );
+	}
+
+	/**
+	 * The post a block is being rendered for.
+	 *
+	 * `get_the_ID()` is empty outside the loop, which is where a block in a widget or a footer
+	 * template part renders. The queried object covers that, but only when it is a post: on an
+	 * archive it is a term, whose ID would otherwise be read as an unrelated post's.
+	 *
+	 * @return int Post ID, or 0.
+	 */
+	private static function get_after_success_post_id() {
+		$post_id = (int) get_the_ID();
+
+		if ( $post_id ) {
+			return $post_id;
+		}
+
+		$queried = get_queried_object();
+
+		return $queried instanceof WP_Post ? (int) $queried->ID : 0;
+	}
+
+	/**
+	 * Sign a value for the post-checkout destination it belongs to.
+	 *
+	 * Namespaced so this never produces the same digest as another use of the same key —
+	 * `wp_hash()` with the auth salt also backs the magic-link and email-change secrets, and
+	 * these signatures are published in page HTML.
+	 *
+	 * @param string $payload The value to sign.
+	 *
+	 * @return string
+	 */
+	private static function sign_after_success_payload( $payload ) {
+		// The namespace prefix is what separates this from every other use of the same key and
+		// algorithm. `Reader_Registration::get_frontend_registration_key()` also produces
+		// `hash_hmac( 'sha256', …, wp_salt( 'auth' ) )` and publishes the result to the front
+		// end, so nothing but this prefix distinguishes the two. Never register an integration
+		// ID that begins with it.
+		//
+		// The blog ID is included because `wp_salt()` is network-scoped: without it, a token
+		// minted on one site of a network verifies on every other site in that network.
+		$namespace = 'newspack_blocks_after_success|' . get_current_blog_id() . '|';
+
+		return hash_hmac( 'sha256', $namespace . $payload, wp_salt( 'auth' ) );
+	}
+
+	/**
+	 * Mint a token vouching for a post-checkout destination a block was configured with.
+	 *
+	 * Minted where the block renders, which is the last point this site knows the destination
+	 * came from its own content rather than from the request. Two properties matter:
+	 *
+	 * The destination travels *inside* the token rather than beside it. The token's alphabet
+	 * is URL-safe base64 plus a dot, so the sanitising the value meets in transit — which
+	 * variously deletes percent-encoded octets, drops non-ASCII bytes and HTML-encodes `&`
+	 * and `'` — cannot alter it. Signing the bare URL and hoping every transit point leaves
+	 * it alone is what this avoids.
+	 *
+	 * The token is bound to the post being rendered, and only published posts are signed, so
+	 * a token cannot be minted through the block-renderer REST route or a draft preview by
+	 * someone who can edit posts but not publish them.
+	 *
+	 * `hash_hmac` rather than a nonce: the token has to survive page caching and a reader who
+	 * signs in partway through checkout, and a nonce is bound to a user and a time window.
+	 *
+	 * @param string $url     The destination to vouch for.
+	 * @param int    $post_id The post being rendered. Defaults to the current post.
+	 *
+	 * @return string The token, or an empty string if there is nothing to vouch for.
+	 */
+	public static function get_after_success_token( $url, $post_id = 0 ) {
+		$url = self::normalize_after_success_url( $url );
+
+		if ( '' === $url ) {
+			return '';
+		}
+
+		$post_id = $post_id ? (int) $post_id : self::get_after_success_post_id();
+
+		if ( ! $post_id || ! self::is_published_post( $post_id ) ) {
+			return '';
+		}
+
+		$payload = self::encode_after_success_payload(
+			[
+				'u' => $url,
+				'p' => $post_id,
+			]
+		);
+
+		return $payload . '.' . self::sign_after_success_payload( $payload );
+	}
+
+	/**
+	 * Read a destination back out of a token, if this site vouched for it.
+	 *
+	 * @param string $token The token offered with the request.
+	 *
+	 * @return string The destination, or an empty string if the token is not this site's.
+	 */
+	public static function parse_after_success_token( $token ) {
+		$token = (string) $token;
+
+		if ( '' === $token || false === strpos( $token, '.' ) ) {
+			return '';
+		}
+
+		list( $payload, $signature ) = explode( '.', $token, 2 );
+
+		if ( '' === $payload || '' === $signature ) {
+			return '';
+		}
+
+		if ( ! hash_equals( self::sign_after_success_payload( $payload ), $signature ) ) {
+			return '';
+		}
+
+		$claims = self::decode_after_success_payload( $payload );
+
+		if ( empty( $claims['u'] ) || empty( $claims['p'] ) ) {
+			return '';
+		}
+
+		// Checked at read time as well as at mint time: a post that has since been
+		// unpublished should stop vouching for its destination.
+		if ( ! self::is_published_post( (int) $claims['p'] ) ) {
+			return '';
+		}
+
+		return self::normalize_after_success_url( $claims['u'] );
+	}
+
+	/**
+	 * Encode token claims into a form transit cannot alter.
+	 *
+	 * @param array $claims The claims to encode.
+	 *
+	 * @return string URL-safe base64.
+	 */
+	private static function encode_after_success_payload( $claims ) {
+		return rtrim( strtr( base64_encode( (string) wp_json_encode( $claims ) ), '+/', '-_' ), '=' ); // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_encode
+	}
+
+	/**
+	 * Decode token claims.
+	 *
+	 * @param string $payload URL-safe base64.
+	 *
+	 * @return array The claims, or an empty array if the payload is unreadable.
+	 */
+	private static function decode_after_success_payload( $payload ) {
+		$json = base64_decode( strtr( $payload, '-_', '+/' ), true ); // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_decode
+
+		if ( false === $json ) {
+			return [];
+		}
+
+		$claims = json_decode( $json, true );
+
+		return is_array( $claims ) ? $claims : [];
+	}
+
+	/**
+	 * Reduce a post-checkout destination to one this site is willing to send readers to.
+	 *
+	 * The destination reaches the thank-you page through the request, whether it came from
+	 * the block's own settings or from the link the reader followed, and by that point the
+	 * two look alike. A signature tells them apart: one is minted when a block renders a
+	 * destination a publisher configured, so a destination carrying a valid one is this
+	 * site's own and is honoured wherever it points.
+	 *
+	 * Everything else falls to core's redirect validation, which accepts what
+	 * `allowed_redirect_hosts` reports — this site's own host, plus whatever a publisher
+	 * adds through that filter, plus anything another plugin has added (`Newspack\NRH`
+	 * registers one). A destination arriving in a link with no signature has to clear that
+	 * bar, which is what keeps a crafted link from choosing where a reader lands.
+	 *
+	 * @param string $url   The requested destination.
+	 * @param string $token Token offered with the request, if any.
+	 *
+	 * @return string The destination, or an empty string if it is not allowed.
+	 */
+	public static function sanitize_after_success_url( $url, $token = '' ) {
+		// A token carries its own destination, so a mutated `after_success_url` alongside it
+		// is ignored rather than compared against.
+		$vouched = self::parse_after_success_token( $token );
+
+		if ( '' !== $vouched ) {
+			// Returned as verified. `wp_sanitize_redirect()` is deliberately not applied to
+			// this branch: it strips `'` and percent-encodes non-ASCII, so it would rewrite a
+			// destination this site has already established is the publisher's own — the same
+			// drift the token exists to prevent. The untrusted branch below still gets it, via
+			// `wp_validate_redirect()`. Both have been through `sanitize_url()` in normalising.
+			return $vouched;
+		}
+
+		$url = self::normalize_after_success_url( $url );
+
+		if ( empty( $url ) ) {
+			return '';
+		}
+
+		$validated = (string) wp_validate_redirect( $url, '' );
+
+		if ( '' === $validated ) {
+			/**
+			 * Fires when a post-checkout destination is refused.
+			 *
+			 * The reader is sent nowhere and the modal simply closes, which looks the same
+			 * as a publisher not configuring a destination at all. This is the hook to
+			 * watch if you need to tell those two apart.
+			 *
+			 * @param string $url The refused destination.
+			 */
+			do_action( 'newspack_blocks_modal_checkout_after_success_url_rejected', $url );
+		}
+
+		return $validated;
+	}
+
+	/**
+	 * Drop an after-success behavior the reader can't act on.
+	 *
+	 * A behavior with nowhere to go renders a modal that neither navigates nor closes, so
+	 * the destination, the behavior and its button label all fall away together and the
+	 * reader gets the ordinary "close" button instead of one labelled for a page they
+	 * won't be taken to.
+	 *
+	 * @param array $params After-success params.
+	 *
+	 * @return array The params, less any the reader can't act on.
+	 */
+	public static function filter_after_success_params( $params ) {
+		$behavior = $params['after_success_behavior'] ?? '';
+
+		if ( '' === $behavior ) {
+			return $params;
+		}
+
+		$is_unknown  = ! in_array( $behavior, self::AFTER_SUCCESS_BEHAVIORS, true );
+		$has_nowhere = 'custom' === $behavior && empty( $params['after_success_url'] );
+
+		if ( $is_unknown || $has_nowhere ) {
+			unset(
+				$params['after_success_behavior'],
+				$params['after_success_url'],
+				$params['after_success_button_label'],
+				$params['after_success_token']
+			);
+		}
+
+		return $params;
+	}
+
+	/**
 	 * Get after success button params.
 	 */
 	private static function get_after_success_params() {
@@ -1251,14 +1598,19 @@ final class Modal_Checkout {
 				\wp_parse_str( $referrer_query, $request_params );
 			}
 		}
-		return array_filter(
+		$token = isset( $request_params['after_success_token'] ) ? sanitize_text_field( wp_unslash( $request_params['after_success_token'] ) ) : ''; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+
+		$params = array_filter(
 			[
 				'after_success_behavior'     => isset( $request_params['after_success_behavior'] ) ? sanitize_text_field( wp_unslash( $request_params['after_success_behavior'] ) ) : '', // phpcs:ignore WordPress.Security.NonceVerification.Recommended
-				'after_success_url'          => isset( $request_params['after_success_url'] ) ? sanitize_url( wp_unslash( $request_params['after_success_url'] ) ) : '', // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+				'after_success_url'          => isset( $request_params['after_success_url'] ) ? self::sanitize_after_success_url( wp_unslash( $request_params['after_success_url'] ), $token ) : '', // phpcs:ignore WordPress.Security.NonceVerification.Recommended
 				'after_success_button_label' => isset( $request_params['after_success_button_label'] ) ? sanitize_text_field( wp_unslash( $request_params['after_success_button_label'] ) ) : '', // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+				'after_success_token'        => $token,
 				'action_type'                => isset( $request_params['action_type'] ) ? sanitize_text_field( wp_unslash( $request_params['action_type'] ) ) : '', // phpcs:ignore WordPress.Security.NonceVerification.Recommended
 			]
 		);
+
+		return self::filter_after_success_params( $params );
 	}
 
 	/**

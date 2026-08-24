@@ -263,6 +263,16 @@ class Taxonomy {
 	 */
 	public static function determine_current_brand() {
 		global $wp_query;
+
+		// On a brand front page, the displayed brand is authoritative, regardless of any
+		// brand terms assigned to the cover page itself.
+		$front_page_brand_id = Show_Page_On_Front::get_filtered_brand_id();
+		if ( $front_page_brand_id ) {
+			$brand               = get_term( $front_page_brand_id, self::SLUG );
+			self::$current_brand = $brand instanceof WP_Term ? $brand : null;
+			return;
+		}
+
 		if ( $wp_query->is_singular() ) {
 			self::$current_brand = self::get_current_brand_for_post( get_queried_object() );
 		} elseif ( $wp_query->is_tax() || $wp_query->is_category() || $wp_query->is_tag() ) {

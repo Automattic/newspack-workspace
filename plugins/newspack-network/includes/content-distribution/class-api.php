@@ -12,6 +12,7 @@ use InvalidArgumentException;
 use Newspack_Network\Content_Distribution as Content_Distribution_Class;
 use Newspack_Network\Utils;
 use WP_Error;
+use WP_Post;
 use WP_REST_Request;
 use WP_REST_Response;
 use WP_REST_Server;
@@ -51,8 +52,8 @@ class API {
 						'default' => 'draft',
 					],
 				],
-				'permission_callback' => function () {
-					return current_user_can( Admin::CAPABILITY );
+				'permission_callback' => function ( $request ) {
+					return current_user_can( Admin::CAPABILITY ) && current_user_can( 'edit_post', $request['post_id'] );
 				},
 			]
 		);
@@ -152,16 +153,24 @@ class API {
 	 * @return WP_REST_Response|WP_Error The REST response or error.
 	 */
 	public static function distribute( $request ) {
+		// Re-distributing a syndicated copy would give it a second lineage.
+		if ( Content_Distribution_Class::is_post_incoming( $request->get_param( 'post_id' ) ) ) {
+			return new WP_Error( 'newspack_network_content_distribution_error', __( 'A post received from the network cannot be distributed.', 'newspack-network' ), [ 'status' => 400 ] );
+		}
+
 		if ( ! class_exists( 'Newspack\Data_Events' ) ) {
 			return new WP_Error( 'newspack_network_content_distribution_error', __( 'Data Events class not found.', 'newspack-network' ), [ 'status' => 400 ] );
 		}
 
-		$post_id          = $request->get_param( 'post_id' );
-		$urls             = $request->get_param( 'urls' );
+		$post_id           = $request->get_param( 'post_id' );
+		$urls              = $request->get_param( 'urls' );
 		$status_on_publish = $request->get_param( 'status_on_publish' );
 
-		// Prevent auto-drafts from being distributed.
+		// Prevent missing posts and auto-drafts from being distributed.
 		$post = get_post( $post_id );
+		if ( ! $post instanceof WP_Post ) {
+			return new WP_Error( 'newspack_network_content_distribution_error', __( 'Post not found.', 'newspack-network' ), [ 'status' => 404 ] );
+		}
 		if ( 'auto-draft' === $post->post_status ) {
 			return new WP_Error( 'newspack_network_content_distribution_error', __( 'Post is currently an auto-draft. Save before distributing it.', 'newspack-network' ), [ 'status' => 400 ] );
 		}
@@ -178,8 +187,14 @@ class API {
 			return new WP_Error( 'newspack_network_content_distribution_error', $distribution->get_error_message(), [ 'status' => 400 ] );
 		}
 
-		$payload = $outgoing_post->get_payload( $status_on_publish );
-		Data_Events::dispatch( 'network_post_updated', $payload );
+		$payload    = $outgoing_post->get_payload( $status_on_publish );
+		$dispatched = Data_Events::dispatch( 'network_post_updated', $payload );
+
+		// Bail before storing the payload hash if the dispatch failed, so the next
+		// post update retries the distribution instead of being suppressed by the hash.
+		if ( is_wp_error( $dispatched ) ) {
+			return new WP_Error( 'newspack_network_content_distribution_error', $dispatched->get_error_message(), [ 'status' => 500 ] );
+		}
 
 		// Store payload hash to prevent unnecessary updates.
 		update_post_meta( $post_id, Content_Distribution_Class::PAYLOAD_HASH_META, $outgoing_post->get_payload_hash( $payload ) );

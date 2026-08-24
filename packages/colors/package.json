@@ -1,6 +1,6 @@
 {
 	"name": "newspack-colors",
-	"version": "2.0.0",
+	"version": "1.1.3",
 	"description": "A collection of SCSS color tokens for Newspack projects",
 	"main": "colors.module.scss",
 	"sass": "colors.module.scss",

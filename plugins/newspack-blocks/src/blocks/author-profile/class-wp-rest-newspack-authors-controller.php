@@ -13,6 +13,14 @@ class WP_REST_Newspack_Authors_Controller extends WP_REST_Controller {
 // phpcs:enable WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedClassFound
 
 	/**
+	 * Fields carrying contact details that WordPress reserves for people who manage users.
+	 *
+	 * These endpoints are open to anyone who can edit posts, which is a much wider audience
+	 * than core allows to read an address.
+	 */
+	const USER_MANAGEMENT_FIELDS = [ 'email' ];
+
+	/**
 	 * Constructs the controller.
 	 *
 	 * @access public
@@ -20,6 +28,41 @@ class WP_REST_Newspack_Authors_Controller extends WP_REST_Controller {
 	public function __construct() {
 		$this->namespace = 'newspack-blocks/v1';
 		$this->rest_base = 'authors';
+	}
+
+	/**
+	 * Whether the current user may read author contact details.
+	 *
+	 * Matches the capabilities core requires before exposing a user's address.
+	 *
+	 * @return boolean
+	 */
+	public static function can_read_user_management_fields() {
+		// Keep `list_users` first: on multisite, core maps `edit_users` through
+		// `manage_network_users`, so a site administrator passes only on `list_users`.
+		return current_user_can( 'list_users' ) || current_user_can( 'edit_users' );
+	}
+
+	/**
+	 * Drop any requested fields the current user is not allowed to read.
+	 *
+	 * Applied per request rather than inside the formatting helpers, which also render the
+	 * front-end author blocks for visitors and must keep returning whatever a publisher has
+	 * chosen to publish there.
+	 *
+	 * `false` is the helpers' "every field" convention, used by the front-end blocks; it is
+	 * passed through untouched so those renders are unaffected.
+	 *
+	 * @param array|false $fields Requested fields, or false for every field.
+	 *
+	 * @return array|false Fields the current user may receive.
+	 */
+	public static function restrict_fields( $fields ) {
+		if ( ! is_array( $fields ) || self::can_read_user_management_fields() ) {
+			return $fields;
+		}
+
+		return array_values( array_diff( $fields, self::USER_MANAGEMENT_FIELDS ) );
 	}
 
 	/**
@@ -84,6 +127,7 @@ class WP_REST_Newspack_Authors_Controller extends WP_REST_Controller {
 		$per_page            = ! empty( $request->get_param( 'perPage' ) ) ? $request->get_param( 'perPage' ) : 10; // Number of results to return per page. This is applied to each query, so the actual number of results returned may be up to 2x this number.
 		$avatar_hide_default = ! empty( $request->get_param( 'avatar_hide_default' ) ) ? true : false; // Hide the default avatar if the user has no custom avatar.
 		$fields              = ! empty( $request->get_param( 'fields' ) ) ? explode( ',', $request->get_param( 'fields' ) ) : [ 'id' ]; // Fields to get. Will return at least id.
+		$fields              = self::restrict_fields( $fields );
 		$include             = ! empty( $request->get_param( 'include' ) ) ? explode( ',', $request->get_param( 'include' ) ) : null; // Fetch authors by multiple IDs.
 		$post_id             = ! empty( $request->get_param( 'post_id' ) ) ? $request->get_param( 'post_id' ) : 0; // Fetch authors for a specific post (contextual mode).
 
@@ -210,9 +254,9 @@ class WP_REST_Newspack_Authors_Controller extends WP_REST_Controller {
 							$guest_author = ( new CoAuthors_Guest_Authors() )->get_guest_author_by( 'id', $guest_author->ID );
 
 							if ( in_array( 'avatar', $fields, true ) && function_exists( 'coauthors_get_avatar' ) ) {
-								$avatar = coauthors_get_avatar( $guest_author, 256 );
+								$avatar = coauthors_get_avatar( $guest_author, 256, $avatar_hide_default ? 'blank' : '' );
 
-								if ( $avatar && ( false === strpos( $avatar, 'avatar-default' ) || ! $avatar_hide_default ) ) {
+								if ( \Newspack_Blocks\is_avatar_displayable( $avatar, $avatar_hide_default ) ) {
 									$guest_author_data['avatar'] = $avatar;
 								}
 							}
@@ -238,9 +282,9 @@ class WP_REST_Newspack_Authors_Controller extends WP_REST_Controller {
 						];
 
 						if ( in_array( 'avatar', $fields, true ) ) {
-							$avatar = get_avatar( $user->data->ID, 256 );
+							$avatar = get_avatar( $user->data->ID, 256, $avatar_hide_default ? 'blank' : '' );
 
-							if ( $avatar && ( false === strpos( $avatar, 'avatar-default' ) || ! $avatar_hide_default ) ) {
+							if ( \Newspack_Blocks\is_avatar_displayable( $avatar, $avatar_hide_default ) ) {
 								$user_data['avatar'] = $avatar;
 							}
 						}
@@ -501,8 +545,8 @@ class WP_REST_Newspack_Authors_Controller extends WP_REST_Controller {
 				];
 
 				if ( in_array( 'avatar', $fields, true ) ) {
-					$avatar = get_avatar( $user->data->ID, 256 );
-					if ( $avatar && ( false === strpos( $avatar, 'avatar-default' ) || ! $avatar_hide_default ) ) {
+					$avatar = get_avatar( $user->data->ID, 256, $avatar_hide_default ? 'blank' : '' );
+					if ( \Newspack_Blocks\is_avatar_displayable( $avatar, $avatar_hide_default ) ) {
 						$user_data['avatar'] = $avatar;
 					}
 				}
@@ -551,8 +595,8 @@ class WP_REST_Newspack_Authors_Controller extends WP_REST_Controller {
 			];
 
 			if ( in_array( 'avatar', $fields, true ) && function_exists( 'coauthors_get_avatar' ) ) {
-				$avatar = coauthors_get_avatar( $guest_author, 256 );
-				if ( $avatar && ( false === strpos( $avatar, 'avatar-default' ) || ! $avatar_hide_default ) ) {
+				$avatar = coauthors_get_avatar( $guest_author, 256, $avatar_hide_default ? 'blank' : '' );
+				if ( \Newspack_Blocks\is_avatar_displayable( $avatar, $avatar_hide_default ) ) {
 					$author_data['avatar'] = $avatar;
 				}
 			}
@@ -588,8 +632,8 @@ class WP_REST_Newspack_Authors_Controller extends WP_REST_Controller {
 				];
 
 				if ( in_array( 'avatar', $fields, true ) && function_exists( 'coauthors_get_avatar' ) ) {
-					$avatar = coauthors_get_avatar( $guest_author, 256 );
-					if ( $avatar && ( false === strpos( $avatar, 'avatar-default' ) || ! $avatar_hide_default ) ) {
+					$avatar = coauthors_get_avatar( $guest_author, 256, $avatar_hide_default ? 'blank' : '' );
+					if ( \Newspack_Blocks\is_avatar_displayable( $avatar, $avatar_hide_default ) ) {
 						$author_data['avatar'] = $avatar;
 					}
 				}
@@ -607,8 +651,8 @@ class WP_REST_Newspack_Authors_Controller extends WP_REST_Controller {
 		];
 
 		if ( in_array( 'avatar', $fields, true ) ) {
-			$avatar = get_avatar( $user->data->ID, 256 );
-			if ( $avatar && ( false === strpos( $avatar, 'avatar-default' ) || ! $avatar_hide_default ) ) {
+			$avatar = get_avatar( $user->data->ID, 256, $avatar_hide_default ? 'blank' : '' );
+			if ( \Newspack_Blocks\is_avatar_displayable( $avatar, $avatar_hide_default ) ) {
 				$user_data['avatar'] = $avatar;
 			}
 		}
