@@ -8,7 +8,6 @@
  * WordPress dependencies.
  */
 import { __ } from '@wordpress/i18n';
-import { Fragment } from '@wordpress/element';
 
 /**
  * Internal dependencies.
@@ -16,24 +15,15 @@ import { Fragment } from '@wordpress/element';
 import './style.scss';
 import sections from './sections';
 import Wizard from '../../../../../packages/components/src/wizard';
-import { GlobalNotices, DebugMode } from '../../../../../packages/components/src/';
-
-const {
-	newspack_aux_data: { is_debug_mode: isDebugMode = false },
-} = window;
 
 function Settings() {
 	return (
-		<Fragment>
-			{ isDebugMode && <DebugMode /> }
-			<GlobalNotices />
-			<Wizard
-				className="newspack-admin__tabs"
-				headerText={ __( 'Newspack / Settings', 'newspack' ) }
-				sections={ sections }
-				isInitialFetchTriggered={ false }
-			/>
-		</Fragment>
+		<Wizard
+			className="newspack-admin__tabs"
+			headerText={ __( 'Newspack / Settings', 'newspack' ) }
+			sections={ sections }
+			isInitialFetchTriggered={ false }
+		/>
 	);
 }
 

@@ -17,17 +17,7 @@ import { Notice, CheckboxControl, __experimentalHStack as HStack, __experimental
 /**
  * Internal dependencies
  */
-import {
-	ActionCard,
-	Button,
-	Card,
-	GlobalNotices,
-	Grid,
-	NewspackIcon,
-	ProgressBar,
-	TextControl,
-	withWizardScreen,
-} from '../../../../../packages/components/src';
+import { ActionCard, Button, Card, Grid, NewspackIcon, ProgressBar, TextControl, withWizardScreen } from '../../../../../packages/components/src';
 import Router from '../../../../../packages/components/src/proxied-imports/router';
 import '../../style.scss';
 
@@ -297,7 +287,6 @@ const Welcome = ( { buttonAction } ) => {
 
 					{ ( isInit || isDone ) && (
 						<>
-							<GlobalNotices />
 							{ isInit && (
 								<>
 									<VStack spacing={ 4 }>
