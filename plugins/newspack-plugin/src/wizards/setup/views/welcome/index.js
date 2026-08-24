@@ -105,8 +105,9 @@ const Welcome = ( { buttonAction } ) => {
 			await starterContentInit( setupApproach, existingSiteURL )
 				.then( increment )
 				.catch( err => {
-					// GlobalNotices splits the parameter on commas, so an unencoded message
-					// containing one arrives as two notices, the second of them green.
+					// Encoding keeps an `&` or `#` in the message from truncating the redirect.
+					// It does not protect a comma: GlobalNotices decodes before it splits, so a
+					// message containing one still arrives as two notices, the second green.
 					window.location =
 						'/wp-admin/admin.php?page=newspack-setup-wizard&newspack-notice=' + encodeURIComponent( '_error_' + err.message );
 				} );
