@@ -17,7 +17,7 @@ import { __experimentalHStack as HStack, CheckboxControl } from '@wordpress/comp
 /**
  * Internal dependencies.
  */
-import { Badge, Button, DataViews, Modal, Notice, SectionHeader, Waiting } from '../../../../../../../packages/components/src';
+import { Button, DataViews, Modal, Notice, SectionHeader, StatusIndicator, Waiting } from '../../../../../../../packages/components/src';
 import type { Action, Field, View } from '../../../../../../../packages/components/src/dataviews';
 import WizardsTab from '../../../../../wizards-tab';
 import WizardSection from '../../../../../wizards-section';
@@ -107,16 +107,15 @@ function SubscriberOnlyProducts() {
 				label: __( 'Status', 'newspack-plugin' ),
 				elements: [
 					{ value: 'active', label: __( 'Active', 'newspack-plugin' ) },
-					{ value: 'paused', label: __( 'Paused', 'newspack-plugin' ) },
+					{ value: 'inactive', label: __( 'Inactive', 'newspack-plugin' ) },
 				],
 				filterBy: { operators: [ 'isAny' as const ] },
-				getValue: ( { item }: { item: Restriction } ) => ( item.active ? 'active' : 'paused' ),
-				render: ( { item }: { item: Restriction } ) =>
-					item.active ? (
-						<Badge level="success" text={ __( 'Active', 'newspack-plugin' ) } />
-					) : (
-						<Badge level="warning" text={ __( 'Paused', 'newspack-plugin' ) } />
-					),
+				getValue: ( { item }: { item: Restriction } ) => ( item.active ? 'active' : 'inactive' ),
+				render: ( { item }: { item: Restriction } ) => (
+					<StatusIndicator status={ item.active ? 'active' : 'draft' }>
+						{ item.active ? __( 'Active', 'newspack-plugin' ) : __( 'Inactive', 'newspack-plugin' ) }
+					</StatusIndicator>
+				),
 			},
 			{
 				id: 'created_at',
@@ -138,7 +137,8 @@ function SubscriberOnlyProducts() {
 			},
 			{
 				id: 'toggle',
-				label: ( items: Restriction[] ) => ( items[ 0 ]?.active ? __( 'Pause', 'newspack-plugin' ) : __( 'Resume', 'newspack-plugin' ) ),
+				label: ( items: Restriction[] ) =>
+					items[ 0 ]?.active ? __( 'Set to inactive', 'newspack-plugin' ) : __( 'Set to active', 'newspack-plugin' ),
 				callback: ( items: Restriction[] ) => setActive( items[ 0 ], ! items[ 0 ].active ),
 			},
 			{

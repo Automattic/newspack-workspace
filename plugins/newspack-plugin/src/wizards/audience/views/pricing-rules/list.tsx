@@ -6,9 +6,10 @@
  * WordPress dependencies
  */
 import { __, _n, sprintf } from '@wordpress/i18n';
-import { useState, useEffect, useCallback, useMemo } from '@wordpress/element';
+import { useState, useEffect, useCallback, useMemo, useRef } from '@wordpress/element';
 import { useDispatch } from '@wordpress/data';
 import apiFetch from '@wordpress/api-fetch';
+import { addQueryArgs } from '@wordpress/url';
 import { filterSortAndPaginate } from '@wordpress/dataviews';
 import type { Action, Field, View, RenderModalProps } from '@wordpress/dataviews';
 import {
@@ -22,13 +23,15 @@ import {
 /**
  * Internal dependencies
  */
-import { DataViews, Badge, Router, WizardBanner } from '../../../../../packages/components/src';
+import { DataViews, Router, StatusIndicator, WizardBanner } from '../../../../../packages/components/src';
 import { formatCount } from '../../../../../packages/components/src/breadcrumbs/format-count';
 import { WIZARD_STORE_NAMESPACE } from '../../../../../packages/components/src/wizard/store';
 import CatalogImpact from './catalog-impact';
+import PricingRulesOnboarding from './onboarding';
+import { postStatus } from '../../post-status';
 import { intentLabel } from './recipes';
 import { pricingModelSentence } from './model-sentence';
-import { RULES_API_PATH as API_PATH } from './constants';
+import { RULES_API_PATH as API_PATH, IMPACT_PREVIEW_API_PATH } from './constants';
 
 const { useHistory } = Router;
 
@@ -44,7 +47,11 @@ const DEFAULT_VIEW: View = {
 	titleField: 'title',
 };
 
-const ACTIVE_STATE_LEVEL = { active: 'success', scheduled: 'info', ended: 'default' } as const;
+// The catalogue walk is not bounded by the limit, so a hung route would otherwise
+// hold the whole screen behind the spinner indefinitely.
+const STATS_GATE_TIMEOUT_MS = 8000;
+
+export const ACTIVE_STATE_STATUS = { active: 'active', scheduled: 'scheduled', ended: 'ended' } as const;
 
 const ACTIVE_STATE_LABEL: Record< PricingRuleRow[ 'active_state' ], string > = {
 	active: __( 'Active', 'newspack-plugin' ),
@@ -67,15 +74,29 @@ export default function PricingRulesList() {
 	const [ data, setData ] = useState< PricingRuleRow[] >( [] );
 	const [ isLoading, setIsLoading ] = useState( true );
 	const [ hasError, setHasError ] = useState( false );
+	// Distinct from isLoading: only the first settle blanks the screen, so a
+	// refetch after trashing a rule leaves the table up.
+	const [ hasResolved, setHasResolved ] = useState( false );
+	const [ stats, setStats ] = useState< CatalogImpactResponse | null >( null );
+	const [ statsResolved, setStatsResolved ] = useState( false );
+	// Remounts the card so its cached product sample cannot outlive a trash.
+	const [ statsVersion, setStatsVersion ] = useState( 0 );
 	const [ view, setView ] = useState< View >( DEFAULT_VIEW );
 	const [ segmentMap, setSegmentMap ] = useState< Record< number, string > >( {} );
 	const [ currency, setCurrency ] = useState< PricingRulesCurrency >( { code: '', symbol: '', decimals: 2 } );
 
+	const isReady = hasResolved && statsResolved;
+	// Raw payload, not the filtered view: a search that matches nothing keeps the
+	// DataViews treatment rather than claiming the site has no rules. `isLoading`
+	// as well as `isReady`, so a refetch cannot answer "does this site have rules"
+	// from a payload that is already being replaced.
+	const isEmpty = isReady && ! isLoading && ! hasError && data.length === 0;
+
 	useEffect( () => {
 		setHeaderData( {
-			actions: [ { type: 'primary', label: __( 'Add Rule', 'newspack-plugin' ), href: '#/new' } ],
+			actions: ! isReady || isEmpty ? [] : [ { type: 'primary', label: __( 'Add Rule', 'newspack-plugin' ), href: '#/new' } ],
 		} );
-	}, [ setHeaderData ] );
+	}, [ setHeaderData, isReady, isEmpty ] );
 
 	const fetchData = useCallback( () => {
 		setIsLoading( true );
@@ -93,22 +114,68 @@ export default function PricingRulesList() {
 				setSegmentMap( map );
 			} )
 			.catch( () => setHasError( true ) )
-			.finally( () => setIsLoading( false ) );
+			.finally( () => {
+				setIsLoading( false );
+				setHasResolved( true );
+			} );
 	}, [] );
 
 	useEffect( () => {
 		fetchData();
 	}, [ fetchData ] );
 
+	// One row is enough: total_matching, count_limited and audience are all computed
+	// before the limit applies, and pricing the whole sample costs several times as much.
+	const statsRequest = useRef( 0 );
+	const gateTimer = useRef< ReturnType< typeof setTimeout > | undefined >( undefined );
+
+	const fetchStats = useCallback( () => {
+		const generation = ++statsRequest.current;
+		gateTimer.current = setTimeout( () => {
+			if ( generation === statsRequest.current ) {
+				setStatsResolved( true );
+			}
+		}, STATS_GATE_TIMEOUT_MS );
+		apiFetch< CatalogImpactResponse >( { path: addQueryArgs( IMPACT_PREVIEW_API_PATH, { limit: 1 } ) } )
+			.then( res => {
+				if ( generation === statsRequest.current ) {
+					setStats( res );
+					setStatsVersion( v => v + 1 );
+				}
+			} )
+			.catch( () => {
+				// The list is the screen. A missing headline is not worth a notice.
+			} )
+			.finally( () => {
+				clearTimeout( gateTimer.current );
+				if ( generation === statsRequest.current ) {
+					setStatsResolved( true );
+				}
+			} );
+	}, [] );
+
+	useEffect( () => {
+		fetchStats();
+		return () => {
+			// Invalidates any in-flight response so it cannot write after unmount.
+			statsRequest.current++;
+			clearTimeout( gateTimer.current );
+		};
+	}, [ fetchStats ] );
+
 	const trashRule = useCallback(
 		( id: number ) => {
 			apiFetch( { path: `${ API_PATH }/${ id }`, method: 'DELETE' } )
-				.then( () => fetchData() )
+				.then( () => {
+					fetchData();
+					// The trashed rule leaves the engine's active union.
+					fetchStats();
+				} )
 				.catch( () =>
 					addNotice( { message: __( 'Failed to trash the rule.', 'newspack-plugin' ), type: 'error', id: 'pricing-rules-trash-error' } )
 				);
 		},
-		[ addNotice, fetchData ]
+		[ addNotice, fetchData, fetchStats ]
 	);
 
 	const statusElements = useMemo( () => {
@@ -161,7 +228,7 @@ export default function PricingRulesList() {
 				id: 'status',
 				label: __( 'Status', 'newspack-plugin' ),
 				getValue: ( { item } ) => item.status,
-				render: ( { item } ) => <Badge level={ item.status === 'publish' ? 'success' : 'default' } text={ item.status_label } />,
+				render: ( { item } ) => <StatusIndicator status={ postStatus( item.status ) }>{ item.status_label }</StatusIndicator>,
 				elements: statusElements,
 				filterBy: { operators: [ 'is' ] },
 			},
@@ -170,7 +237,9 @@ export default function PricingRulesList() {
 				label: __( 'Active window', 'newspack-plugin' ),
 				getValue: ( { item } ) => item.active_state,
 				render: ( { item } ) => (
-					<Badge level={ ACTIVE_STATE_LEVEL[ item.active_state ] } text={ ACTIVE_STATE_LABEL[ item.active_state ] ?? item.active_state } />
+					<StatusIndicator status={ ACTIVE_STATE_STATUS[ item.active_state ] ?? 'ended' }>
+						{ ACTIVE_STATE_LABEL[ item.active_state ] ?? item.active_state }
+					</StatusIndicator>
 				),
 				enableSorting: false,
 			},
@@ -257,7 +326,7 @@ export default function PricingRulesList() {
 			sectionName: [
 				{
 					label: __( 'Pricing Rules', 'newspack-plugin' ),
-					count: isLoading || hasError ? undefined : totalItems,
+					count: isLoading || hasError || isEmpty ? undefined : totalItems,
 					countLabel: sprintf(
 						/* translators: %s: number of pricing rules matching the current view. */
 						_n( '%s rule', '%s rules', totalItems, 'newspack-plugin' ),
@@ -266,17 +335,24 @@ export default function PricingRulesList() {
 				},
 			],
 		} );
-	}, [ setHeaderData, totalItems, isLoading, hasError ] );
+	}, [ setHeaderData, totalItems, isLoading, hasError, isEmpty ] );
+
+	if ( ! isReady ) {
+		return (
+			<HStack className="newspack-pricing-rules__loading" justify="center" role="status">
+				<Spinner />
+				<span className="screen-reader-text">{ __( 'Loading pricing rules…', 'newspack-plugin' ) }</span>
+			</HStack>
+		);
+	}
+
+	if ( isEmpty ) {
+		return <PricingRulesOnboarding />;
+	}
 
 	return (
 		<div className="newspack-pricing-rules">
-			<CatalogImpact />
-			{ isLoading && (
-				<div style={ { display: 'flex', justifyContent: 'center', padding: '48px' } }>
-					<Spinner />
-				</div>
-			) }
-			{ ! isLoading && hasError && (
+			{ hasError && (
 				<WizardBanner>
 					<Notice
 						className="newspack-wizard__load-error"
@@ -288,20 +364,19 @@ export default function PricingRulesList() {
 					</Notice>
 				</WizardBanner>
 			) }
-			{ ! isLoading && ! hasError && (
-				<DataViews
-					data={ processedData }
-					fields={ fields }
-					view={ view }
-					onChangeView={ setView }
-					actions={ actions }
-					paginationInfo={ paginationInfo }
-					defaultLayouts={ { table: {} } }
-					isLoading={ isLoading }
-					getItemId={ ( item: PricingRuleRow ) => String( item.id ) }
-					search
-				/>
-			) }
+			<DataViews
+				data={ processedData }
+				fields={ fields }
+				view={ view }
+				onChangeView={ setView }
+				actions={ actions }
+				paginationInfo={ paginationInfo }
+				defaultLayouts={ { table: {} } }
+				isLoading={ isLoading }
+				getItemId={ ( item: PricingRuleRow ) => String( item.id ) }
+				search
+			/>
+			{ stats?.supported && <CatalogImpact key={ statsVersion } stats={ stats } /> }
 		</div>
 	);
 }

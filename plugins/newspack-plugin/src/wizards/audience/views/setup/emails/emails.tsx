@@ -14,7 +14,8 @@ import { Button, __experimentalHStack as HStack } from '@wordpress/components'; 
 /**
  * Internal dependencies.
  */
-import { Badge, DataViews, Notice, utils } from '../../../../../../packages/components/src';
+import { DataViews, Notice, StatusIndicator, utils } from '../../../../../../packages/components/src';
+import { postStatus } from '../../../post-status';
 import WizardsPluginCard from '../../../../wizards-plugin-card';
 import { useWizardApiFetch } from '../../../../hooks/use-wizard-api-fetch';
 import EmailPreview from './email-preview';
@@ -310,10 +311,9 @@ const Emails = () => {
 				render: ( { item }: { item: EmailItem } ) => {
 					const isEnabled = item.status === 'publish';
 					return (
-						<Badge
-							level={ isEnabled ? 'success' : 'default' }
-							text={ isEnabled ? __( 'Enabled', 'newspack-plugin' ) : __( 'Disabled', 'newspack-plugin' ) }
-						/>
+						<StatusIndicator status={ postStatus( item.status ) }>
+							{ isEnabled ? __( 'Enabled', 'newspack-plugin' ) : __( 'Disabled', 'newspack-plugin' ) }
+						</StatusIndicator>
 					);
 				},
 				elements: [

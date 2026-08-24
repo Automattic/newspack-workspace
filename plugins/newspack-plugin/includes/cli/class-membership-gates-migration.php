@@ -1,16 +1,16 @@
 <?php
 /**
- * WP-CLI command to migrate WooCommerce Membership plans and their content gate
- * layouts to Newspack Access Control content gates.
+ * WP-CLI commands to migrate WooCommerce Memberships content restriction to
+ * Newspack Access Control: `migrate-membership-gates` for the plans and their
+ * content gate layouts, `migrate-post-exemptions` for the per-post "public"
+ * overrides those plans never carried.
  *
  * Ported from the standalone `migrate-memberships` drop-in so the tooling ships
  * with the plugin. The class file is included on every request (like the other
  * CLI classes), but only the command registration is gated on WP_CLI, so the
- * runtime cost outside CLI is a class definition. The command reads each
- * published Membership plan's content
- * restriction rules plus the `np_memberships_gate` layout posts and writes the
- * equivalent Access Control gate(s), content rules, and gate layouts through the
- * Content_Gate / Content_Rules data layer.
+ * runtime cost outside CLI is a class definition. `migrate-membership-gates` writes
+ * through the Content_Gate / Content_Rules data layer; `migrate-post-exemptions` is
+ * postmeta plumbing and touches neither.
  *
  * @package Newspack
  */
@@ -22,7 +22,7 @@ use WP_CLI;
 defined( 'ABSPATH' ) || exit;
 
 /**
- * Membership plan → Access Control content gate migration CLI command.
+ * WooCommerce Memberships → Access Control content restriction migration CLI commands.
  */
 class Membership_Gates_Migration {
 	use One_Time_Purchase_Migration;
@@ -1581,5 +1581,379 @@ class Membership_Gates_Migration {
 			}
 		}
 		return false;
+	}
+
+	/**
+	 * Record Access Control exemptions for the posts WooCommerce Memberships forced public.
+	 *
+	 * Memberships' "This content is public" checkbox writes
+	 * `_wc_memberships_force_public = 'yes'` and short-circuits every restriction rule.
+	 * Access Control's equivalent is the "Disable access control restrictions for this
+	 * post" toggle. Nothing bridges the two, so without this step those posts are gated
+	 * the moment Memberships is deactivated.
+	 *
+	 * A falsy exemption row is left alone and reported. Turning the toggle off is what
+	 * records one, so overwriting it would undo a decision. Pass --overwrite-falsy for
+	 * rows that predate the toggle, where the falsy value is only the editor echoing the
+	 * registered default back on save.
+	 *
+	 * Migrates only the post types the exemption toggle is offered on. Posts on any other
+	 * type are counted and warned about rather than written: they can still be gated by a
+	 * taxonomy access rule, so they need a human decision this command cannot make.
+	 *
+	 * Idempotent, but additive: an exemption recorded by an earlier run is never removed.
+	 * A post whose Memberships flag has since been unchecked is reported so it can be
+	 * reviewed — it would otherwise stay public after cutover. Publishers keep using the
+	 * checkbox up to cutover, so the run that counts is the one immediately before
+	 * Memberships is deactivated.
+	 *
+	 * Dry-run by default; pass --live to write.
+	 *
+	 * ## OPTIONS
+	 *
+	 * [--live]
+	 * : Apply the changes. Without this flag the command runs as a dry-run and writes nothing.
+	 *
+	 * [--overwrite-falsy]
+	 * : Also record an exemption on posts whose exemption row is already set to a falsy
+	 * value. Only for rows known to predate the exemption toggle.
+	 *
+	 * ## EXAMPLES
+	 *
+	 *     wp newspack migrate-post-exemptions
+	 *     wp newspack migrate-post-exemptions --live
+	 *     wp newspack migrate-post-exemptions --live --overwrite-falsy
+	 *
+	 * @param array $args       Positional args (unused).
+	 * @param array $assoc_args Named args.
+	 *
+	 * @return void
+	 */
+	public function migrate_post_exemptions( $args, $assoc_args ) {
+		$dry_run         = ! (bool) \WP_CLI\Utils\get_flag_value( $assoc_args, 'live', false );
+		$overwrite_falsy = (bool) \WP_CLI\Utils\get_flag_value( $assoc_args, 'overwrite-falsy', false );
+
+		if ( ! class_exists( 'Newspack\Content_Restriction_Control' ) ) {
+			WP_CLI::error( 'Newspack\Content_Restriction_Control class not found, so the exemption meta key and its post types cannot be resolved. Aborting.' );
+		}
+
+		if ( $dry_run ) {
+			WP_CLI::line( '' );
+			WP_CLI::line( '*** DRY RUN MODE — no data will be modified. Pass --live to write. ***' );
+			WP_CLI::line( '' );
+		}
+
+		if ( ! \Newspack\Content_Gate::is_newspack_feature_enabled() ) {
+			WP_CLI::warning( 'Content gates are disabled on this site (NEWSPACK_CONTENT_GATES). The exemptions will be recorded, but nothing reads them until the feature is enabled.' );
+		}
+
+		$flagged = self::get_force_public_posts();
+		if ( null === $flagged ) {
+			WP_CLI::error( 'Could not read the force-public flags. Aborting rather than reporting an empty set to an operator about to deactivate Memberships.' );
+		}
+
+		$post_types   = array_column( (array) \Newspack\Content_Restriction_Control::get_available_post_types(), 'value' );
+		$in_scope     = [];
+		$out_of_scope = [];
+		foreach ( $flagged as $post ) {
+			if ( in_array( $post['post_type'], $post_types, true ) ) {
+				$in_scope[] = $post;
+			} else {
+				$out_of_scope[ $post['post_type'] ] = ( $out_of_scope[ $post['post_type'] ] ?? 0 ) + 1;
+			}
+		}
+
+		if ( empty( $in_scope ) ) {
+			WP_CLI::line( 'No posts carry the WooCommerce Memberships force-public flag on a post type the exemption applies to.' );
+			self::report_out_of_scope_force_public( $out_of_scope );
+			self::report_revoked_force_public();
+			return;
+		}
+
+		$missing   = [];
+		$falsy     = [];
+		$preserved = [];
+		$failed    = [];
+		$breakdown = [];
+		// Classify and write a chunk at a time, so the meta cache neither grows with the
+		// site nor is thrown away between reading a post and writing it.
+		foreach ( array_chunk( $in_scope, 200 ) as $chunk ) {
+			\update_meta_cache( 'post', array_column( $chunk, 'ID' ) );
+			foreach ( $chunk as $post ) {
+				$post_id = (int) $post['ID'];
+				$state   = self::classify_exemption_state( $post_id );
+
+				$key                 = $post['post_type'] . '|' . $post['post_status'];
+				$breakdown[ $key ] ??= [
+					'post_type'   => $post['post_type'],
+					'post_status' => $post['post_status'],
+					'missing'     => 0,
+					'falsy'       => 0,
+					'already'     => 0,
+				];
+				++$breakdown[ $key ][ $state ];
+
+				if ( 'already' === $state ) {
+					continue;
+				}
+				if ( 'falsy' === $state && ! $overwrite_falsy ) {
+					$preserved[] = $post_id;
+					continue;
+				}
+				if ( ! $dry_run && ! \update_post_meta( $post_id, \Newspack\Content_Restriction_Control::IS_EXEMPT_META_KEY, true ) ) {
+					$failed[] = $post_id;
+					continue;
+				}
+				if ( 'missing' === $state ) {
+					$missing[] = $post_id;
+				} else {
+					$falsy[] = $post_id;
+				}
+			}
+			\WP_CLI\Utils\wp_clear_object_cache();
+		}
+
+		WP_CLI::line( '' );
+		WP_CLI::line( $dry_run ? '=== DRY RUN SUMMARY ===' : '=== MIGRATION SUMMARY ===' );
+		WP_CLI::line( '' );
+
+		\WP_CLI\Utils\format_items(
+			'table',
+			array_map(
+				fn( $row ) => [
+					'Post Type'      => $row['post_type'],
+					'Status'         => $row['post_status'],
+					'No Row'         => $row['missing'],
+					'Falsy Row'      => $row['falsy'],
+					'Already Exempt' => $row['already'],
+				],
+				array_values( $breakdown )
+			),
+			[ 'Post Type', 'Status', 'No Row', 'Falsy Row', 'Already Exempt' ]
+		);
+
+		WP_CLI::line( '' );
+
+		// The command never removes an exemption, so this list is the only record of what a
+		// live run touched. Printing it is what makes an over-broad run undoable without
+		// re-deriving the set from the database afterwards.
+		if ( ! empty( $missing ) || ! empty( $falsy ) ) {
+			WP_CLI::line(
+				sprintf(
+					'Exemption %s for: %s',
+					$dry_run ? 'would be recorded' : 'recorded',
+					self::format_post_id_list( array_merge( $missing, $falsy ) )
+				)
+			);
+		}
+
+		if ( ! empty( $preserved ) ) {
+			WP_CLI::warning(
+				sprintf(
+					'%d post(s) are forced public by Memberships but carry a falsy exemption row, so they stay gated after cutover. That row is what turning the toggle off records, so it is left alone. Re-run with --overwrite-falsy for any that predate the toggle: %s',
+					count( $preserved ),
+					self::format_post_id_list( $preserved )
+				)
+			);
+		}
+
+		if ( ! empty( $falsy ) ) {
+			WP_CLI::warning(
+				sprintf(
+					'%d falsy exemption row(s) %s, per --overwrite-falsy: %s',
+					count( $falsy ),
+					$dry_run ? 'would be overwritten' : 'were overwritten',
+					self::format_post_id_list( $falsy )
+				)
+			);
+		}
+
+		if ( ! empty( $failed ) ) {
+			WP_CLI::warning( sprintf( '%d exemption(s) could not be written, and are still counted in the table above: %s', count( $failed ), self::format_post_id_list( $failed ) ) );
+		}
+
+		self::report_out_of_scope_force_public( $out_of_scope );
+		self::report_revoked_force_public();
+
+		WP_CLI::success(
+			sprintf(
+				'Done. %d exemption(s) %s (%d with no row, %d overwriting a falsy row). %d post(s) were already exempt, %d falsy row(s) left alone.',
+				count( $missing ) + count( $falsy ),
+				$dry_run ? 'would be recorded' : 'recorded',
+				count( $missing ),
+				count( $falsy ),
+				count( $in_scope ) - count( $missing ) - count( $falsy ) - count( $failed ) - count( $preserved ),
+				count( $preserved )
+			)
+		);
+
+		if ( ! $dry_run ) {
+			WP_CLI::line( 'Keep the `_wc_memberships_force_public` meta until this has run for the last time — it is what this command reads.' );
+		}
+
+		// A warning line is invisible to whatever chained this command with the Memberships
+		// deactivation that follows it, and an unwritten exemption cannot be recovered once
+		// the flag it came from is gone. Exit non-zero so the cutover stops here.
+		if ( ! empty( $failed ) ) {
+			WP_CLI::halt( 1 );
+		}
+	}
+
+	/**
+	 * Every post carrying the Memberships force-public flag, whatever its post type.
+	 *
+	 * The `meta_value = 'yes'` filter is not optional: the checkbox writes a `no` row for
+	 * every post it was ever rendered on, outnumbering the real ones by an order of
+	 * magnitude.
+	 *
+	 * @return array[]|null Rows of ID / post_type / post_status ordered by ID, or null
+	 *                      if the query failed.
+	 */
+	private static function get_force_public_posts(): ?array {
+		global $wpdb;
+
+		$rows = $wpdb->get_results( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+			$wpdb->prepare(
+				"SELECT DISTINCT p.ID, p.post_type, p.post_status
+				FROM {$wpdb->posts} p
+				INNER JOIN {$wpdb->postmeta} pm ON pm.post_id = p.ID
+				WHERE pm.meta_key = %s AND pm.meta_value = 'yes'
+				ORDER BY p.ID",
+				\Newspack\Content_Restriction_Control::WC_FORCE_PUBLIC_META_KEY
+			),
+			ARRAY_A
+		);
+
+		// get_results() reports a failed query as an empty set, which here would read as
+		// "no post was ever forced public" to an operator about to deactivate Memberships.
+		return $wpdb->last_error ? null : (array) $rows;
+	}
+
+	/**
+	 * Report posts that are exempt while their Memberships flag says otherwise.
+	 *
+	 * An earlier live run records an exemption; the publisher then unchecks the box. This
+	 * command never revisits that post — it selects on `meta_value = 'yes'` — so the
+	 * exemption outlives the flag and the post stays public after cutover. The same shape
+	 * is also a legitimate editor-set exemption on a post Memberships never forced public,
+	 * so these are named for review, never removed.
+	 *
+	 * @return void
+	 */
+	private static function report_revoked_force_public(): void {
+		global $wpdb;
+
+		$post_ids = $wpdb->get_col( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+			$wpdb->prepare(
+				"SELECT DISTINCT p.ID
+				FROM {$wpdb->posts} p
+				INNER JOIN {$wpdb->postmeta} fp ON fp.post_id = p.ID AND fp.meta_key = %s AND fp.meta_value = 'no'
+				INNER JOIN {$wpdb->postmeta} ex ON ex.post_id = p.ID AND ex.meta_key = %s AND ex.meta_value NOT IN ( '', '0' )
+				ORDER BY p.ID",
+				\Newspack\Content_Restriction_Control::WC_FORCE_PUBLIC_META_KEY,
+				\Newspack\Content_Restriction_Control::IS_EXEMPT_META_KEY
+			)
+		);
+
+		// Same hazard as the census query: get_col() reports a failure as an empty set, and
+		// an empty review list is what an operator about to deactivate Memberships reads as
+		// "nothing stays wrongly public".
+		if ( $wpdb->last_error ) {
+			WP_CLI::warning( 'Could not check for exemptions whose Memberships flag was since revoked. Nothing was reviewed — treat this as "unknown", not "none".' );
+			return;
+		}
+
+		if ( empty( $post_ids ) ) {
+			return;
+		}
+
+		WP_CLI::warning(
+			sprintf(
+				'%d post(s) are exempt while the Memberships flag says they are not, so they stay public after cutover. Review and clear any the publisher no longer wants free: %s',
+				count( $post_ids ),
+				self::format_post_id_list( $post_ids )
+			)
+		);
+	}
+
+	/**
+	 * Report the force-public posts on post types the exemption toggle is not offered on.
+	 *
+	 * A warning rather than a plain line, because "the exemption does not apply" is not the
+	 * same as "these posts cannot be gated". Nothing in the restriction check is scoped by
+	 * post type: the exemption is honoured on any post ID, and a category or tag access rule
+	 * matches a post through its terms. So a public post type the exemption toggle is not
+	 * offered on — it is absent from `get_available_post_types()` — can still be gated at
+	 * cutover, and these posts are exactly the ones the publisher marked free.
+	 *
+	 * Counts posts, not meta rows: the census query selects DISTINCT post IDs, so duplicate
+	 * force-public rows on one post collapse to a single entry.
+	 *
+	 * @param array<string,int> $out_of_scope Post type => post count.
+	 *
+	 * @return void
+	 */
+	private static function report_out_of_scope_force_public( array $out_of_scope ): void {
+		if ( empty( $out_of_scope ) ) {
+			return;
+		}
+		arsort( $out_of_scope );
+		$parts = [];
+		foreach ( $out_of_scope as $post_type => $count ) {
+			$parts[] = sprintf( '%s (%d)', $post_type, $count );
+		}
+		WP_CLI::warning(
+			sprintf(
+				'Skipped %d force-public post(s) on post types the exemption toggle is not offered on: %s. A category or tag access rule can still gate them, and no exemption was recorded — check these by hand before deactivating Memberships.',
+				array_sum( $out_of_scope ),
+				implode( ', ', $parts )
+			)
+		);
+	}
+
+	/**
+	 * Render a list of post IDs for a single CLI line, capped.
+	 *
+	 * These lists are what an operator acts on before deactivating Memberships. Imploding
+	 * every ID scrolls the rest of the summary out of the terminal buffer once the list runs
+	 * to thousands, so the tail is summarised instead.
+	 *
+	 * @param int[] $post_ids Post IDs.
+	 * @param int   $limit    How many IDs to name before summarising the rest.
+	 *
+	 * @return string
+	 */
+	private static function format_post_id_list( array $post_ids, int $limit = 100 ): string {
+		if ( count( $post_ids ) <= $limit ) {
+			return implode( ', ', $post_ids );
+		}
+		return sprintf(
+			'%s (and %d more)',
+			implode( ', ', array_slice( $post_ids, 0, $limit ) ),
+			count( $post_ids ) - $limit
+		);
+	}
+
+	/**
+	 * Where a post stands with respect to the Access Control exemption.
+	 *
+	 * Reads through metadata_exists() rather than get_post_meta(). The exemption meta is
+	 * registered with a default, so get_post_meta() cannot tell "no row" from "row set
+	 * falsy" — and on a build carrying the `default_post_metadata` fallback for the exemption
+	 * key (which answers from the Memberships flag), it answers true for exactly the posts
+	 * this command selects, which would leave it with nothing to write. metadata_exists()
+	 * reads the row itself, past both.
+	 *
+	 * @param int $post_id Post ID.
+	 *
+	 * @return string 'missing' (no row), 'falsy' (a row set falsy), or 'already' (a real
+	 *                exemption, left alone).
+	 */
+	private static function classify_exemption_state( int $post_id ): string {
+		$meta_key = \Newspack\Content_Restriction_Control::IS_EXEMPT_META_KEY;
+		if ( ! \metadata_exists( 'post', $post_id, $meta_key ) ) {
+			return 'missing';
+		}
+		return \get_post_meta( $post_id, $meta_key, true ) ? 'already' : 'falsy';
 	}
 }

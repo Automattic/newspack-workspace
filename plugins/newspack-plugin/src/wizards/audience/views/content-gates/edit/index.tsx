@@ -33,7 +33,7 @@ import ContentRules from './content-rules';
 import MatchLogicToggle from './match-logic-toggle';
 import Registration from './registration';
 import CustomAccess from './custom-access';
-import { getEditGateLayoutUrl, getGateStatus, getGateStatusBadgeLevel } from '../utils';
+import { getEditGateLayoutUrl, getGateStatus, getGateStatusBadgeIntent } from '../utils';
 import { getGateSummarySections } from '../gate-summary';
 import SavePanel from './save-panel';
 import PreferencesModal from './preferences-modal';
@@ -469,7 +469,7 @@ const Edit = ( { match, updateGatesData, slug = AUDIENCE_CONTENT_GATES_WIZARD_SL
 		} );
 		setHeaderData( {
 			actions,
-			badges: isNew ? [] : [ { label: getGateStatus( gate.status ), level: getGateStatusBadgeLevel( gate.status ) } ],
+			badges: isNew ? [] : [ { label: getGateStatus( gate.status ), intent: getGateStatusBadgeIntent( gate.status ) } ],
 			sectionTitle: isNew
 				? sprintf(
 						// translators: %s is the type of content to restrict.

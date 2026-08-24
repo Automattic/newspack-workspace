@@ -15,11 +15,11 @@ Cards sit side by side, so a bare "Enable" names no feature out of context. The 
 
 | State | Condition | Button | Dropdown | Badge |
 |---|---|---|---|---|
-| **Unmet requirements** | `requirements` is set | "Enable" — disabled (clickable if `requirementsActionable`) | Shown if `enabled` and `requirementsActionable` (and `moreControls` provided); otherwise hidden | Error badge with `requirements` text |
+| **Unmet requirements** | `requirements` is set | "Enable" — blocked but still focusable, and described by the badge (clickable if `requirementsActionable`) | Shown if `enabled` and `requirementsActionable` (and `moreControls` provided); otherwise hidden | High-intent badge with `requirements` text |
 | **Disabled** | `!enabled`, no requirements | "Enable" | Hidden | None |
-| **Enabled** | `enabled`, no requirements | "Configure" | Shown if `moreControls` provided | Success badge ("Enabled") |
+| **Enabled** | `enabled`, no requirements | "Configure" | Shown if `moreControls` provided | Stable-intent badge ("Enabled") |
 
-The card content (title + description) is visually muted (gray text, lighter border) when `requirements` is set.
+When `requirements` is set the title drops to the muted text colour. The description already uses that colour in every state, so the unmet-requirements state is signalled by the title colour plus the high-intent badge.
 
 ## Basic usage
 
@@ -40,7 +40,21 @@ import { __ } from '@wordpress/i18n';
 
 ## With unmet requirements
 
-When `requirements` is set the button is disabled and an error badge displays the string. The title and description are visually muted.
+When `requirements` is set, a high-intent badge displays the string and the title drops to the muted text colour. By default the requirement is treated as locked: the button is blocked and the "More" dropdown is hidden, so `onEnable` and `moreControls` have nothing to act on. `onConfigure` is unreachable whenever `requirements` is set at all, locked or not, because the button only reads "Configure" when there is no outstanding requirement.
+
+A blocked button keeps its place in the tab order and is described by the high-intent badge, so a keyboard or screen-reader user reaches it and hears why it will not act. Don't wrap it in your own `disabled` handling, which would undo that.
+
+```tsx
+import { __ } from '@wordpress/i18n';
+
+<CardFeature
+	title={ __( 'Metered countdown', 'newspack-plugin' ) }
+	description={ __( 'Show a countdown banner letting readers know how many free views they have left.', 'newspack-plugin' ) }
+	requirements={ __( 'Requires an API-based ESP', 'newspack-plugin' ) }
+/>
+```
+
+Set `requirementsActionable` when the button is how the reader clears the requirement. It stays clickable and routes to `onEnable`, and an enabled card keeps its "More" dropdown so the feature can still be turned off.
 
 ```tsx
 import { __ } from '@wordpress/i18n';
@@ -50,8 +64,9 @@ import { __ } from '@wordpress/i18n';
 	description={ __( 'Show a countdown banner letting readers know how many free views they have left.', 'newspack-plugin' ) }
 	enabled={ isEnabled }
 	requirements={ __( 'Requires metering', 'newspack-plugin' ) }
-	onEnable={ () => setEnabled( true ) }
-	onConfigure={ () => history.push( '/settings/countdown' ) }
+	requirementsActionable
+	enableLabel={ __( 'Set up metering', 'newspack-plugin' ) }
+	onEnable={ () => history.push( '/settings/metering' ) }
 	moreControls={ [
 		{ title: __( 'Disable', 'newspack-plugin' ), onClick: () => setEnabled( false ) },
 	] }
@@ -60,34 +75,49 @@ import { __ } from '@wordpress/i18n';
 
 ## With a custom icon
 
-The `icon` prop accepts an object, not a bare node. Pass `node` for the icon element, `fill` to control the SVG colour (applied via `currentColor`), `backgroundColor` for a container background, and `radius` for the corner treatment.
+`icon` takes either a descriptor object or a ready React element. A descriptor gets the standard treatment: pass `node` for the icon element, `fill` for the SVG colour, `backgroundColor` for a container background, and `radius` for the corner treatment. A ready element renders exactly as given, with no container, background or radius, which is the escape hatch for an icon that already carries its own chrome.
 
-The icon container is always **40 × 40 px** with the SVG at **24 × 24 px**. `radius` only applies when `backgroundColor` is set.
+A descriptor's container is always **40 × 40 px** with the SVG at **24 × 24 px**. Setting `backgroundColor` without a `radius` gives 2px corners; pass `radius: 'full'` for a circle.
+
+`fill` sets the container's `color`, which the SVG picks up through `fill: currentcolor`. That only recolours single-colour icons that inherit their fill, such as those from `@wordpress/icons`. A vendor's own mark carries `fill` on its paths and keeps its colours, so pair it with `backgroundColor` rather than trying to tint it.
+
+`fill` and `backgroundColor` take any CSS colour. Reach for the Newspack palette when the icon should read as ours, and pass a literal when it should carry a third party's colour.
 
 ```tsx
 import { __ } from '@wordpress/i18n';
 import { Icon, starFilled } from '@wordpress/icons';
+import colors from 'newspack-colors';
 
-// Icon with fill only
+// Newspack palette, fill only
 <CardFeature
 	title={ __( 'Content gifting', 'newspack-plugin' ) }
 	description={ __( 'Let subscribers share gated articles with non-subscribers.', 'newspack-plugin' ) }
-	icon={ { node: <Icon icon={ starFilled } />, fill: '#003da5' } }
+	icon={ { node: <Icon icon={ starFilled } />, fill: colors[ 'primary-600' ] } }
 	enabled={ isEnabled }
 	onEnable={ handleEnable }
 	onConfigure={ handleConfigure }
 	moreControls={ [ { title: __( 'Disable', 'newspack-plugin' ), onClick: handleDisable } ] }
 />
 
-// Icon with circular background
+// A vendor mark on its own brand background, keeping the mark's colours
 <CardFeature
-	title={ __( 'Content gifting', 'newspack-plugin' ) }
-	description={ __( 'Let subscribers share gated articles with non-subscribers.', 'newspack-plugin' ) }
-	icon={ { node: <Icon icon={ starFilled } />, fill: '#003da5', backgroundColor: '#dfe7f4', radius: 'full' } }
+	title={ __( 'Mailchimp', 'newspack-plugin' ) }
+	description={ __( 'Sync reader activity with your Mailchimp audience.', 'newspack-plugin' ) }
+	icon={ { node: <MailchimpMark />, backgroundColor: '#ffe01b', radius: 'full' } }
 	enabled={ isEnabled }
 	onEnable={ handleEnable }
 	onConfigure={ handleConfigure }
 	moreControls={ [ { title: __( 'Disable', 'newspack-plugin' ), onClick: handleDisable } ] }
+/>
+
+// A ready element, rendered as-is
+<CardFeature
+	title={ __( 'Mailchimp', 'newspack-plugin' ) }
+	description={ __( 'Sync reader activity with your Mailchimp audience.', 'newspack-plugin' ) }
+	icon={ <IntegrationIcon provider="mailchimp" /> }
+	enabled={ isEnabled }
+	onEnable={ handleEnable }
+	onConfigure={ handleConfigure }
 />
 ```
 
@@ -112,7 +142,7 @@ import { __ } from '@wordpress/i18n';
 
 ## With a custom badge
 
-Override `badgeText` and `badgeLevel` to change the badge shown when the feature is enabled. Available levels: `default`, `info`, `success`, `warning`, `error`.
+Override `badge` to change the badge shown when the feature is enabled. See [`BadgeIntent`](../types.ts) for the available intents.
 
 ```tsx
 import { __ } from '@wordpress/i18n';
@@ -121,8 +151,7 @@ import { __ } from '@wordpress/i18n';
 	title={ __( 'Stripe', 'newspack-plugin' ) }
 	description={ __( 'Accept payments via Stripe.', 'newspack-plugin' ) }
 	enabled={ isEnabled }
-	badgeText={ __( 'Live mode', 'newspack-plugin' ) }
-	badgeLevel="info"
+	badge={ { label: __( 'Live mode', 'newspack-plugin' ), intent: 'informational' } }
 	onEnable={ handleEnable }
 	onConfigure={ () => history.push( '/settings/stripe' ) }
 	moreControls={ [ { title: __( 'Disable', 'newspack-plugin' ), onClick: handleDisable } ] }
@@ -150,23 +179,34 @@ import { __ } from '@wordpress/i18n';
 />
 ```
 
+## What the layout rests on
+
+The card is built on `Card.Root`, `Card.Header` and `Card.Content` from `@wordpress/ui`. Three things about that pairing decide how it renders.
+
+**Cards in a row bottom-align their action rows.** `Card.Root` is `display: flex; flex-direction: column`, and `.newspack-card-feature__actions` takes `margin-top: auto`. Two cards with descriptions of different lengths still put their buttons on one baseline. No test covers this, because jsdom computes no layout. If a library update drops the column direction, the cards stop aligning and nothing fails.
+
+**The action row sits in `Card.Content`, which the library documents as the main content area.** The description sits in `Card.Header`, so the two are inverted. The gap between them lands at zero while `--wpds-dimension-gap-xl` and `--wpds-dimension-padding-2xl` are both 24px, and `margin-top: auto` is unlayered, so it wins over the library's layered rule either way. Move the action row when the library ships a `Card.Footer`.
+
+**The title keeps its own type size.** `Card.Title` renders at `heading-lg`, which is 15px, and this title is 20px. It uses `heading-x-large()` from `@wordpress/base-styles` instead. Switch to `<Card.Title render={ createElement( 'h3' ) }>` if the two sizes ever agree.
+
 ## Props
 
 | Prop | Type | Default | Description |
 |---|---|---|---|
 | `title` | `string` | — | Card heading (**required**) |
+| `headingLevel` | `2`–`6` | `3` | Heading level for the title. The default sits under a `SectionHeader` or a `WizardsTab` heading, both of which are h2. Raise it when the cards sit under a deeper section label |
 | `description` | `string` | — | Supporting text below the title |
-| `icon` | `CardFeatureIcon` | — | Icon displayed on the right. See `CardFeatureIcon` below. |
+| `icon` | `CardFeatureIcon \| ReactElement` | — | Icon displayed on the right. A descriptor gets the 40 × 40 container; a ready element renders as-is. See `CardFeatureIcon` below. |
 | `enabled` | `boolean` | `false` | Whether the feature is currently enabled |
-| `requirements` | `string` | — | When set, enters the unmet-requirements state; value is used as the error badge text |
+| `requirements` | `string` | — | When set, enters the unmet-requirements state. The value is the high-intent badge text and the primary button's accessible description, so write it to read sensibly after the button's label |
 | `requirementsActionable` | `boolean` | `false` | When `requirements` is set, keep the primary button clickable so it can remediate the unmet requirement, and keep the "More" dropdown visible on an enabled card (degraded but still operable) |
-| `enableLabel` | `string` | `"Enable"` | Primary button label when not enabled |
-| `configureLabel` | `string` | `"Configure"` | Primary button label when enabled |
-| `onEnable` | `() => void` | — | Called when the primary button is clicked and the feature is not enabled |
-| `onConfigure` | `() => void` | — | Called when the primary button is clicked and the feature is enabled |
+| `enableLabel` | `string` | `"Enable"` | Label for the primary button in its "Enable" states: not enabled, or enabled with an unmet requirement |
+| `configureLabel` | `string` | `"Configure"` | Label for the primary button in its "Configure" state: enabled, with no unmet requirement |
+| `onEnable` | `() => void` | — | Called when the primary button is clicked while it reads "Enable". That covers the not-enabled case and the enabled-with-unmet-requirements case, where the feature is on but the requirement is what the button acts on |
+| `onConfigure` | `() => void` | — | Called when the primary button is clicked while it reads "Configure", which is the enabled state with no unmet requirements |
 | `moreControls` | `MoreControl[]` | — | Items for the "More" dropdown. Shown when `enabled` and either there are no `requirements` or `requirementsActionable` is set |
-| `badgeText` | `string` | `"Enabled"` | Badge text shown when enabled |
-| `badgeLevel` | `BadgeLevel` | `"success"` | Badge level shown when enabled |
+| `badge` | `{ label?: string; intent?: BadgeIntent }` | `{ label: "Enabled", intent: "stable" }` | Badge shown when enabled. Ignored while `requirements` is set, which takes the badge |
+| `busy` | `boolean` | `false` | Shows the primary button as busy and blocks it while an action is in flight |
 | `className` | `string` | — | Additional class name applied to the card element |
 
 ### `CardFeatureIcon`
@@ -177,7 +217,8 @@ type CardFeatureIcon = {
 	fill?: string;               // SVG fill colour (applied via currentColor)
 	backgroundColor?: string;    // Background colour of the 40×40 container
 	radius?: 'small' | 'full';   // 'small' = 2px ($radius-small), 'full' = 50% ($radius-round)
-	                             // Only applied when backgroundColor is set.
+	                             // Defaults to 'small' whenever backgroundColor is set,
+	                             // and has nothing to round without one.
 };
 ```
 
@@ -187,6 +228,6 @@ type CardFeatureIcon = {
 type MoreControl = {
 	title: string;
 	onClick: () => void;
-	icon?: React.ReactNode;
+	icon?: JSX.Element;
 };
 ```

@@ -126,24 +126,25 @@ interface CatalogImpactResponse {
 	count_limited: boolean;
 	preview_limited: boolean;
 	sample_count: number;
+	// The cap the engine applied; omitted rather than guessed when it had none.
+	sample_limit?: number;
 	currency: PricingRulesCurrency;
 	sample: CatalogImpactRow[];
 	segment_groups?: SegmentImpactGroup[];
+	// Absent unless the engine's subscriptions layer is present.
+	audience?: RuleAudienceData;
 }
+
+/** Normalise with `finiteNumber` before doing arithmetic on one. */
+type EngineCount = number | string | null;
 
 interface RuleAudienceData {
 	supported: boolean;
-	total: number;
-	caught: number;
-	protected: number;
+	total: EngineCount;
+	caught: EngineCount;
+	protected: EngineCount;
 	count_limited: boolean;
 	application: 'current' | 'locked' | string;
 }
 
-interface RuleAudienceResponse {
-	audience?: RuleAudienceData;
-}
-
-interface RulePreviewResponse extends CatalogImpactResponse {
-	audience?: RuleAudienceData;
-}
+type RulePreviewResponse = CatalogImpactResponse;

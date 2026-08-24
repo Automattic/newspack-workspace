@@ -199,8 +199,8 @@ class Ads_List_REST {
 					$bucket_clauses[]  = "{$wpdb->posts}.post_status = 'trash'";
 					break;
 				case 'draft':
-					$post_status_set    = array_merge( $post_status_set, [ 'draft', 'pending', 'auto-draft' ] );
-					$bucket_clauses[]   = "{$wpdb->posts}.post_status IN ( 'draft', 'pending', 'auto-draft' )";
+					$post_status_set    = array_merge( $post_status_set, [ 'draft', 'pending' ] );
+					$bucket_clauses[]   = "{$wpdb->posts}.post_status IN ( 'draft', 'pending' )";
 					break;
 				case 'expired':
 					$post_status_set    = array_merge( $post_status_set, [ 'publish', 'private' ] );
