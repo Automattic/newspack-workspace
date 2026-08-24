@@ -30,11 +30,8 @@ final class GA4_Custom_Dimensions {
 	const RECHECK_GROUP      = 'newspack';
 
 	/**
-	 * Parameters that only a rendered gate produces. No access control, no gate,
-	 * so nothing ever carries them.
-	 *
-	 * `access_source` is not in this group; it has a stricter condition of its
-	 * own. See `get_dimensions()`.
+	 * Parameters only a rendered gate produces. `access_source` is not among
+	 * them; it has a stricter condition of its own, see `get_dimensions()`.
 	 */
 	const ACCESS_CONTROL_DIMENSIONS = [
 		'gate_post_id',
@@ -46,11 +43,9 @@ final class GA4_Custom_Dimensions {
 	];
 
 	/**
-	 * Parameters that only WooCommerce can produce: the modal checkout's product
-	 * fields, and the subscription flag Reader Data writes from WooCommerce
-	 * Subscriptions.
-	 *
-	 * Donation parameters are not in this group. See `DONATION_DIMENSIONS`.
+	 * Parameters only WooCommerce produces: the modal checkout's product fields,
+	 * and the subscription flag Reader Data writes from WooCommerce
+	 * Subscriptions. Donations are separate, see `DONATION_DIMENSIONS`.
 	 */
 	const WOOCOMMERCE_DIMENSIONS = [
 		'is_subscriber',
@@ -60,16 +55,11 @@ final class GA4_Custom_Dimensions {
 	];
 
 	/**
-	 * Donation parameters, which WooCommerce does not have to itself. The Donate
-	 * block renders on every reader-revenue platform - NRH redirects its
-	 * submission to NRH's own checkout - and the gate's form handler reads
-	 * `donation_frequency` and `donation_amount` straight off the submitted form,
-	 * client-side. `is_donor` rides along on every pageview from Reader Data,
-	 * which non-WooCommerce platforms write from the donor landing page (see
+	 * Donation parameters, which WooCommerce does not have to itself. A site on
+	 * NRH or an external platform emits all three without it: `gate.js` reads
+	 * `donation_frequency` and `donation_amount` off the submitted Donate block
+	 * form, and non-WooCommerce platforms write `is_donor` client-side (see
 	 * `Reader_Data::get_read_only_keys()`).
-	 *
-	 * So a site donating through NRH or an external platform emits all three
-	 * without WooCommerce, and needs the dimensions to query them.
 	 */
 	const DONATION_DIMENSIONS = [
 		'is_donor',
@@ -261,12 +251,12 @@ final class GA4_Custom_Dimensions {
 	}
 
 	/**
-	 * Whether this site runs WooCommerce, which is what produces the checkout and
+	 * Whether this site runs WooCommerce, which produces the checkout and
 	 * subscription parameters.
 	 *
-	 * One near-miss to avoid: `Reader_Activation::is_woocommerce_active()` also
-	 * demands WooCommerce Subscriptions, which would cost one-time-purchase sites
-	 * their checkout reporting.
+	 * Not `Reader_Activation::is_woocommerce_active()`: that also demands
+	 * WooCommerce Subscriptions, and would cost one-time-purchase sites their
+	 * checkout reporting.
 	 *
 	 * @return bool
 	 */
@@ -283,18 +273,13 @@ final class GA4_Custom_Dimensions {
 	}
 
 	/**
-	 * Whether this site takes donations, on any platform.
+	 * Whether this site takes donations, on any platform: WooCommerce is
+	 * installed, or the publisher picked a platform that isn't it.
 	 *
-	 * Either WooCommerce is installed, or the publisher picked a platform that
-	 * isn't it. `Donations::is_platform_wc()` cannot carry this alone because it
-	 * defaults to true on sites that never touched reader revenue - but read
-	 * negatively, as it is here, a non-`wc` slug is only ever a deliberate choice
-	 * of NRH or an external platform.
-	 *
-	 * Deliberately reads WooCommerce directly rather than through
-	 * `is_woocommerce_enabled()`: the two groups are provisioned independently,
-	 * so each predicate takes exactly one filter and neither override leaks into
-	 * the other.
+	 * The platform slug defaults to `wc`, so it only reads reliably negated - a
+	 * non-`wc` slug is always a deliberate choice of NRH or an external platform.
+	 * Reads WooCommerce directly rather than through `is_woocommerce_enabled()`,
+	 * so each group takes exactly one filter.
 	 *
 	 * @return bool
 	 */
@@ -316,11 +301,9 @@ final class GA4_Custom_Dimensions {
 	 *
 	 * GA4 caps event-scoped dimensions at 50 per property and never back-fills,
 	 * and publishers have hit that ceiling, so parameters belonging to a feature
-	 * the site does not run are dropped. Enabling that feature later grows this
-	 * list, which `maybe_schedule_provisioning_for_new_dimensions()` picks up on
-	 * the next admin request.
-	 *
-	 * Dropping is by key, so the priority order of what remains is unchanged.
+	 * the site does not run are dropped - by key, leaving the order intact.
+	 * Enabling the feature later grows the list, which
+	 * `maybe_schedule_provisioning_for_new_dimensions()` picks up.
 	 *
 	 * @return array<string,string>
 	 */
@@ -366,8 +349,8 @@ final class GA4_Custom_Dimensions {
 			'segment_id'                  => 'Matched Segment',
 		];
 
-		// Read once each: all three are filterable, and an impure filter could
-		// otherwise yield a self-contradictory list that then gets persisted.
+		// Read once each: an impure filter could otherwise yield a
+		// self-contradictory list that then gets persisted.
 		$has_access_control = self::is_access_control_enabled();
 		$has_woocommerce    = self::is_woocommerce_enabled();
 		$has_donations      = self::is_donations_enabled();
@@ -398,9 +381,8 @@ final class GA4_Custom_Dimensions {
 	 * provisioning run so a later addition to the list can be told apart from a
 	 * property that is already fully provisioned.
 	 *
-	 * Takes an already-resolved list so a caller can fingerprint the same
-	 * snapshot it acted on; `get_dimensions()` runs filters, so re-deriving it
-	 * here could fingerprint a list the caller never used.
+	 * Takes an already-resolved list, so a caller fingerprints the snapshot it
+	 * acted on rather than a fresh one the filters could answer differently.
 	 *
 	 * @param array<string,string>|null $dimensions Resolved dimension list, or null to resolve now.
 	 * @return string

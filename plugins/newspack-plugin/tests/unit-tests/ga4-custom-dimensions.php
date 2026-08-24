@@ -333,13 +333,9 @@ class Newspack_Test_GA4_Custom_Dimensions extends WP_UnitTestCase {
 	}
 
 	/**
-	 * The donation parameters are not WooCommerce's to gate. A publisher on NRH
-	 * or an external platform emits them from the Donate block and Reader Data
-	 * with no WooCommerce installed, and GA4 never back-fills what it had no
-	 * dimension for.
-	 *
-	 * No filters here: this is the automatic detection, on the environment's real
-	 * (WooCommerce-free) state.
+	 * The donation parameters are not WooCommerce's to gate: a publisher on NRH
+	 * emits them from the Donate block and Reader Data with none installed. No
+	 * filters here, so this runs the automatic detection.
 	 */
 	public function test_donation_dimensions_survive_on_a_non_woocommerce_platform() {
 		$this->assertFalse( class_exists( 'WooCommerce' ), 'This test is only meaningful with WooCommerce absent.' );
@@ -356,8 +352,8 @@ class Newspack_Test_GA4_Custom_Dimensions extends WP_UnitTestCase {
 	}
 
 	/**
-	 * The platform option defaults to `wc`, so a site that never chose a platform
-	 * and never installed WooCommerce is not a donation site.
+	 * The platform option defaults to `wc`, so never choosing one and never
+	 * installing WooCommerce is not a donation site.
 	 */
 	public function test_donation_dimensions_are_omitted_on_the_default_platform_without_woocommerce() {
 		$this->assertFalse( class_exists( 'WooCommerce' ), 'This test is only meaningful with WooCommerce absent.' );
@@ -378,8 +374,8 @@ class Newspack_Test_GA4_Custom_Dimensions extends WP_UnitTestCase {
 	}
 
 	/**
-	 * The lists above are spelled out rather than derived, so that a test can
-	 * fail rather than silently follow the code. This is where they are compared.
+	 * The lists above are spelled out rather than derived, so a change to the
+	 * code fails a test instead of silently following it. Compared here.
 	 */
 	public function test_gated_groups_match_the_production_constants() {
 		$this->assertSame( self::ACCESS_CONTROL_DIMENSIONS, GA4_Custom_Dimensions::ACCESS_CONTROL_DIMENSIONS, 'The access-control group changed; update the test list deliberately.' );
@@ -388,11 +384,9 @@ class Newspack_Test_GA4_Custom_Dimensions extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Memberships alone is enough for a gate, but not for `access_source`, so it
-	 * must not ride along with the gate group.
-	 *
-	 * Isolated because NEWSPACK_CONTENT_GATES is a constant a dozen sibling suites
-	 * define, and once defined it cannot be unset.
+	 * Memberships alone is enough for a gate but not for `access_source`, so it
+	 * must not ride along with the gate group. Isolated because sibling suites
+	 * define NEWSPACK_CONTENT_GATES, which cannot then be unset.
 	 *
 	 * @runInSeparateProcess
 	 * @preserveGlobalState disabled
@@ -411,8 +405,8 @@ class Newspack_Test_GA4_Custom_Dimensions extends WP_UnitTestCase {
 	}
 
 	/**
-	 * The predicates themselves, not just the filter plumbing. This environment
-	 * loads no WooCommerce, no Memberships, and defines no gating constant.
+	 * The predicates themselves, not the filter plumbing. This environment loads
+	 * no WooCommerce, no Memberships, and defines no gating constant.
 	 *
 	 * @runInSeparateProcess
 	 * @preserveGlobalState disabled
@@ -424,11 +418,9 @@ class Newspack_Test_GA4_Custom_Dimensions extends WP_UnitTestCase {
 	}
 
 	/**
-	 * The automatic WooCommerce detection, not the filter that overrides it: a
-	 * detector stuck at false would otherwise leave the suite green while every
-	 * WooCommerce site lost its checkout dimensions.
-	 *
-	 * Isolated because the alias cannot be undone once declared.
+	 * The automatic detection, not the filter over it: a detector stuck at false
+	 * would leave the suite green while every WooCommerce site lost its checkout
+	 * dimensions. Isolated because an alias cannot be undone.
 	 *
 	 * @runInSeparateProcess
 	 * @preserveGlobalState disabled
@@ -444,10 +436,8 @@ class Newspack_Test_GA4_Custom_Dimensions extends WP_UnitTestCase {
 	}
 
 	/**
-	 * The automatic access-control detection, via the gates constant, rather than
-	 * the filter that overrides it.
-	 *
-	 * Isolated because NEWSPACK_CONTENT_GATES cannot be unset once defined.
+	 * The same for access control, via the gates constant. Isolated because
+	 * NEWSPACK_CONTENT_GATES cannot be unset once defined.
 	 *
 	 * @runInSeparateProcess
 	 * @preserveGlobalState disabled
