@@ -6,8 +6,12 @@ import { parse } from 'qs';
 /**
  * WordPress dependencies
  */
+// The two slot hooks are experimental. A `@wordpress/components` minor that renames
+// either one takes this region down at runtime in a consumer's build rather than in
+// this repo's CI, since the package declares that dependency as a caret peer.
 // eslint-disable-next-line @wordpress/no-unsafe-wp-apis
 import { Notice, Slot, createSlotFill, __experimentalUseSlot as useSlot, __experimentalUseSlotFills as useSlotFills } from '@wordpress/components';
+import domReady from '@wordpress/dom-ready';
 import { useEffect, useRef, useState } from '@wordpress/element';
 import { Stack } from '@wordpress/ui';
 
@@ -23,31 +27,27 @@ const { Fill: GlobalNoticeFill } = createSlotFill( SLOT_NAME );
 export { GlobalNoticeFill };
 
 /**
- * Notices passed through the `newspack-notice` query parameter.
+ * Messages passed through the `newspack-notice` query parameter.
  *
  * The text comes off the query string, so it is rendered as plain text rather than
  * markup. Do not reach for `__unstableHTML` here to match the other notices: that
  * would let a crafted admin URL inject markup into wp-admin.
  *
- * These mount together, and `speak()` clears the live regions before it writes, so
- * only the last announcement would survive. The first message is the one that
- * matters, since a redirect puts the error first, so it is the one announced.
+ * A comma separates messages, so a producer must not send one inside a message.
+ * Percent-encoding does not protect it: `qs` decodes the value before this splits
+ * it, so an encoded comma still arrives as a separator. What the encoding on the
+ * producer side does buy is a message containing `&` or `#` surviving the redirect.
  *
- * @return {Array} Notice elements, empty when the parameter is absent.
+ * @return {Array} `{ message, isError }` per message, empty when the parameter is absent.
  */
 const queryNotices = () => {
 	const notice = parse( window.location.search, { ignoreQueryPrefix: true } )[ 'newspack-notice' ];
 	if ( typeof notice !== 'string' || ! notice ) {
 		return [];
 	}
-	return notice.split( ',' ).map( ( text, i ) => {
+	return notice.split( ',' ).map( text => {
 		const isError = text.indexOf( '_error_' ) === 0;
-		const message = isError ? text.replace( '_error_', '' ) : text;
-		return (
-			<Notice isDismissible={ false } status={ isError ? 'error' : 'success' } key={ i } spokenMessage={ 0 === i ? message : '' }>
-				{ message }
-			</Notice>
-		);
+		return { isError, message: isError ? text.replace( '_error_', '' ) : text };
 	} );
 };
 
@@ -65,6 +65,13 @@ const GlobalNotices = () => {
 	// effect below has stripped the parameter, so re-reading the query string
 	// would erase notices this mount already announced.
 	const [ notices ] = useState( queryNotices );
+	// `speak()` resolves the live regions by id and drops the message when they are
+	// absent, and `@wordpress/a11y` only creates them on `domReady`. The wizard
+	// bundle mounts before that, so announcing on mount is silently lost. Holding
+	// `spokenMessage` empty until then also keeps a nested pair of regions from
+	// announcing twice: by the time this flips, slot ownership has settled and only
+	// the owning region is still mounted.
+	const [ announceable, setAnnounceable ] = useState( false );
 
 	// A wizard nested in another mounts a second region. One slot per name means
 	// the last to register takes every fill, so the region that lost it steps
@@ -72,6 +79,13 @@ const GlobalNotices = () => {
 	// identify: were every region to stand down, withWizard's error notices,
 	// which this region also hosts, would vanish with them.
 	const ownsSlot = ! activeSlot?.ref?.current || activeSlot.ref.current === slotNode.current;
+
+	useEffect( () => {
+		if ( ! notices.length ) {
+			return;
+		}
+		domReady( () => setAnnounceable( true ) );
+	}, [ notices.length ] );
 
 	useEffect( () => {
 		if ( ! notices.length || ! window.history?.replaceState ) {
@@ -93,7 +107,19 @@ const GlobalNotices = () => {
 
 	return (
 		<Stack direction="column" gap="sm" className="newspack-global-notices">
-			{ notices }
+			{ notices.map( ( { message, isError }, i ) => (
+				// These mount together, and `speak()` clears the live regions before it
+				// writes, so only the last announcement would survive. The first message
+				// is the one that matters, since a redirect puts the error first.
+				<Notice
+					isDismissible={ false }
+					status={ isError ? 'error' : 'success' }
+					key={ i }
+					spokenMessage={ announceable && 0 === i ? message : '' }
+				>
+					{ message }
+				</Notice>
+			) ) }
 			<Slot ref={ slotNode } name={ SLOT_NAME } bubblesVirtually />
 		</Stack>
 	);

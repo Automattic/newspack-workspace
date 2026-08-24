@@ -1,12 +1,13 @@
 /**
  * External dependencies.
  */
-import { render, screen } from '@testing-library/react';
+import { act, render, screen } from '@testing-library/react';
 
 /**
  * WordPress dependencies.
  */
 import { speak } from '@wordpress/a11y';
+import domReady from '@wordpress/dom-ready';
 import { SlotFillProvider, __experimentalUseSlot as useSlot } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
 
 /**
@@ -15,6 +16,8 @@ import { SlotFillProvider, __experimentalUseSlot as useSlot } from '@wordpress/c
 import GlobalNotices, { GlobalNoticeFill } from './';
 
 jest.mock( '@wordpress/a11y', () => ( { speak: jest.fn() } ) );
+
+jest.mock( '@wordpress/dom-ready', () => jest.fn( cb => cb() ) );
 
 jest.mock( '@wordpress/components', () => {
 	const actual = jest.requireActual( '@wordpress/components' );
@@ -30,6 +33,8 @@ const setSearch = search => setLocation( search );
 describe( 'GlobalNotices', () => {
 	beforeEach( () => {
 		speak.mockClear();
+		domReady.mockClear();
+		domReady.mockImplementation( cb => cb() );
 		useSlot.mockImplementation( jest.requireActual( '@wordpress/components' ).__experimentalUseSlot );
 	} );
 
@@ -174,6 +179,16 @@ describe( 'GlobalNotices', () => {
 			expect( screen.getAllByText( 'Settings saved' ) ).toHaveLength( 1 );
 		} );
 
+		// Both regions mount in the same commit and both see an empty registry, so
+		// both used to render the notice and fire core's announcement effect before
+		// the ownership re-render dropped the loser.
+		it( 'announces a query-parameter notice once, not twice', () => {
+			setSearch( '?newspack-notice=_error_Something%20went%20wrong' );
+			renderNested();
+			expect( speak ).toHaveBeenCalledTimes( 1 );
+			expect( speak ).toHaveBeenCalledWith( 'Something went wrong', 'assertive' );
+		} );
+
 		it( 'renders no region when there is nothing to show', () => {
 			setSearch( '?page=newspack-settings' );
 			const { container } = render(
@@ -308,6 +323,45 @@ describe( 'GlobalNotices', () => {
 			);
 
 			expect( screen.getByText( 'Settings saved' ) ).toBeInTheDocument();
+		} );
+	} );
+
+	describe( 'announcing only once the live regions exist', () => {
+		// @wordpress/a11y creates its live regions on domReady, and speak() drops the
+		// message when they are absent. The wizard bundle mounts before that point.
+		it( 'holds the announcement until domReady fires', () => {
+			let fire;
+			domReady.mockImplementation( cb => {
+				fire = cb;
+			} );
+			setSearch( '?newspack-notice=_error_Something%20went%20wrong' );
+
+			render(
+				<SlotFillProvider>
+					<GlobalNotices />
+				</SlotFillProvider>
+			);
+
+			expect( screen.getByText( 'Something went wrong' ) ).toBeInTheDocument();
+			expect( speak ).not.toHaveBeenCalled();
+
+			act( () => fire() );
+
+			expect( speak ).toHaveBeenCalledTimes( 1 );
+			expect( speak ).toHaveBeenCalledWith( 'Something went wrong', 'assertive' );
+		} );
+
+		it( 'does not wait on domReady when there is nothing to announce', () => {
+			setSearch( '?page=newspack-settings' );
+
+			render(
+				<SlotFillProvider>
+					<GlobalNotices />
+				</SlotFillProvider>
+			);
+
+			expect( domReady ).not.toHaveBeenCalled();
+			expect( speak ).not.toHaveBeenCalled();
 		} );
 	} );
 } );
