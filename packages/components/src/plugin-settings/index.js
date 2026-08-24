@@ -3,11 +3,11 @@
  */
 import classnames from 'classnames';
 
-import { Notice } from '@wordpress/components';
 /**
  * WordPress dependencies.
  */
 import apiFetch from '@wordpress/api-fetch';
+import { Notice } from '@wordpress/components';
 import { Component, Fragment } from '@wordpress/element';
 import { __ } from '@wordpress/i18n';
 

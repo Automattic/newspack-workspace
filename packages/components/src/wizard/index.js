@@ -7,10 +7,10 @@ import classnames from 'classnames';
  * WordPress dependencies.
  */
 import {
-	Notice,
 	DropdownMenu,
 	MenuGroup,
 	MenuItem,
+	Notice,
 	SlotFillProvider,
 	// eslint-disable-next-line @wordpress/no-unsafe-wp-apis
 	__experimentalVStack as VStack,

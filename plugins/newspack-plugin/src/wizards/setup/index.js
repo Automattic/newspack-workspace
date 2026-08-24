@@ -1,9 +1,9 @@
 import '../../shared/js/public-path';
 
-import { Notice } from '@wordpress/components';
 /**
  * WordPress dependencies.
  */
+import { Notice } from '@wordpress/components';
 import { render, createElement, forwardRef } from '@wordpress/element';
 import { __ } from '@wordpress/i18n';
 

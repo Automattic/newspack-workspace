@@ -13,9 +13,9 @@ import { Button, Modal, Page, PluginInstaller } from '../';
 import Router from '../proxied-imports/router';
 import Footer from '../footer';
 import GlobalNotices, { GlobalNoticeFill } from '../global-notices';
+import { htmlToText } from '../utils/html-to-text';
 import './style.scss';
 
-import { htmlToText } from '../utils/html-to-text';
 const { Redirect, Route } = Router;
 
 /**

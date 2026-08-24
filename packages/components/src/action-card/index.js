@@ -5,7 +5,7 @@
 /**
  * WordPress dependencies
  */
-import { Notice, Draggable, ExternalLink, ToggleControl } from '@wordpress/components';
+import { Draggable, ExternalLink, Notice, ToggleControl } from '@wordpress/components';
 import { useEffect, useState } from '@wordpress/element';
 import { __ } from '@wordpress/i18n';
 import { Icon, check, chevronDown, chevronUp, dragHandle } from '@wordpress/icons';
@@ -15,6 +15,7 @@ import { Badge } from '@wordpress/ui';
  * Internal dependencies
  */
 import { Button, Card, Grid, Handoff, Waiting } from '../';
+import { htmlToText } from '../utils/html-to-text';
 import { ActionCardProps } from './action-card.d.ts';
 import './style.scss';
 
@@ -23,7 +24,6 @@ import './style.scss';
  */
 import classnames from 'classnames';
 
-import { htmlToText } from '../utils/html-to-text';
 /**
  * ActionCard component
  * @param {ActionCardProps} props Component props.

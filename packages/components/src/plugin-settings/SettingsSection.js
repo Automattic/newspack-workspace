@@ -8,7 +8,7 @@
 import { Fragment, useState } from '@wordpress/element';
 import { applyFilters } from '@wordpress/hooks';
 import { __ } from '@wordpress/i18n';
-import { Notice, CheckboxControl } from '@wordpress/components';
+import { CheckboxControl, Notice } from '@wordpress/components';
 
 /**
  * Internal dependencies

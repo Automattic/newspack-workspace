@@ -1,6 +1,5 @@
 import '../../../../shared/js/public-path';
 
-import { Notice } from '@wordpress/components';
 /**
  * External dependencies.
  */
@@ -9,6 +8,7 @@ import values from 'lodash/values';
 /**
  * WordPress dependencies.
  */
+import { Notice } from '@wordpress/components';
 import { __ } from '@wordpress/i18n';
 import { forwardRef } from '@wordpress/element';
 /**
