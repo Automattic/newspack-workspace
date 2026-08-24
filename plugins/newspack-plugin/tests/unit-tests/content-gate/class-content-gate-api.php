@@ -6,6 +6,7 @@
  */
 
 use Newspack\Access_Rules;
+use Newspack\Content_Gate;
 use Newspack\Content_Gate_API;
 use Newspack\Institution;
 
@@ -323,6 +324,45 @@ class Newspack_Test_Content_Gate_API extends WP_UnitTestCase {
 				],
 			],
 			$sanitized_gate['custom_access']['access_rules']
+		);
+	}
+
+	/**
+	 * A gate whose stored rules are already invalid has to stay editable. The
+	 * gates list disables a gate by POSTing back the whole gate it just read, so
+	 * rejecting the value the operator never touched would lock the gate on —
+	 * exactly when they are trying to switch off one that walls off paying
+	 * readers. The stored value is already failing closed at evaluation, so
+	 * accepting it unchanged grants nobody anything.
+	 */
+	public function test_a_gate_holding_an_invalid_stored_value_can_still_be_disabled() {
+		$gate_id = Content_Gate::create_gate( [ 'title' => 'Legacy gate' ] );
+		Content_Gate::update_custom_access_settings(
+			$gate_id,
+			[
+				'active'       => true,
+				'access_rules' => [
+					[
+						[
+							'slug'  => 'institution',
+							'value' => 'Springfield University',
+						],
+					],
+				],
+			]
+		);
+		$stored_gate = Content_Gate::get_gate( $gate_id );
+
+		$disabled = Content_Gate_API::sanitize_gate( array_merge( $stored_gate, [ 'status' => 'draft' ] ) );
+		$this->assertNotWPError( $disabled, 'Saving back an untouched invalid value must not block the operator.' );
+		$this->assertSame( 'draft', $disabled['status'] );
+		$this->assertArrayNotHasKey( 'access_rules', $disabled['custom_access'], 'The stored rules are left as they are rather than rewritten.' );
+
+		$changed_gate = $stored_gate;
+		$changed_gate['custom_access']['access_rules'][0][0]['value'] = 'Another University';
+		$this->assertWPError(
+			Content_Gate_API::sanitize_gate( $changed_gate ),
+			'Changing the value is still a new invalid value, and still fails the save.'
 		);
 	}
 }

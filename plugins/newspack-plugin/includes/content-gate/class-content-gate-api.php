@@ -137,9 +137,20 @@ class Content_Gate_API {
 		if ( isset( $gate['custom_access'] ) ) {
 			$sanitized_custom_access = self::sanitize_custom_access( $gate['custom_access'] );
 			if ( is_wp_error( $sanitized_custom_access ) ) {
-				// As a REST `sanitize_callback` return value, the error fails the
-				// request with a 400 rather than silently saving a loosened rule set.
-				return $sanitized_custom_access;
+				if ( ! self::access_rules_are_unchanged( $gate ) ) {
+					// As a REST `sanitize_callback` return value, the error fails the
+					// request with a 400 rather than silently saving a loosened rule set.
+					return $sanitized_custom_access;
+				}
+				// The request is echoing back rules it read, not introducing new ones:
+				// the gates list disables a gate by POSTing the whole gate object. A
+				// gate whose stored value is already invalid has to stay switchable,
+				// or an operator can't turn off one that is walling off paying readers.
+				// Leaving the value where it is grants nobody anything, because it
+				// already fails closed at evaluation. Drop it from the payload so the
+				// stored rules are left alone and the rest of the save goes through.
+				unset( $gate['custom_access']['access_rules'] );
+				$sanitized_custom_access = self::sanitize_custom_access( $gate['custom_access'] );
 			}
 			$sanitized['custom_access'] = $sanitized_custom_access;
 		}
@@ -147,6 +158,26 @@ class Content_Gate_API {
 			$sanitized['content_rules_match'] = in_array( $gate['content_rules_match'], [ 'all', 'any' ], true ) ? $gate['content_rules_match'] : 'all';
 		}
 		return $sanitized;
+	}
+
+	/**
+	 * Whether a request's access rules are the ones the gate already stores.
+	 *
+	 * Compared loosely, because the client round-trips the rules it read through
+	 * JSON and an integer option value can come back either as an int or a string.
+	 *
+	 * @param array $gate The gate as it arrived in the request.
+	 *
+	 * @return bool
+	 */
+	private static function access_rules_are_unchanged( $gate ) {
+		$gate_id = absint( $gate['id'] ?? 0 );
+		if ( ! $gate_id || ! is_array( $gate['custom_access']['access_rules'] ?? null ) ) {
+			return false;
+		}
+		$stored_rules = Content_Gate::get_custom_access_settings( $gate_id )['access_rules'] ?? [];
+		// phpcs:ignore WordPress.PHP.StrictComparisons.LooseComparison
+		return Access_Rules::normalize_rules( $gate['custom_access']['access_rules'] ) == $stored_rules;
 	}
 
 	/**
