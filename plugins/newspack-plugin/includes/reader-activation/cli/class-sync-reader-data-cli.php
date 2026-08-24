@@ -94,8 +94,10 @@ final class Sync_Reader_Data_CLI {
 			}
 
 			if ( $live ) {
-				$update_result = update_user_meta( $reader_data->user_id, $reader_data_user_meta_key, implode( ',', $actual_membership_plan_ids ) );
-				if ( $update_result !== false ) {
+				// Write through update_item() so the value is stored as the JSON
+				// array the data event handlers expect (NPPM-3205).
+				$update_result = Reader_Data::update_item( $reader_data->user_id, 'active_memberships', array_map( 'intval', $actual_membership_plan_ids ) );
+				if ( true === $update_result ) {
 					\WP_CLI::success( sprintf( 'Updated user #%d reader data.', $reader_data->user_id ) );
 				}
 			} else {
