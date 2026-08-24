@@ -1,3 +1,10 @@
+## newspack-components [4.6.3](https://github.com/Automattic/newspack-workspace/compare/newspack-components@4.6.2...newspack-components@4.6.3) (2026-08-20)
+
+
+### Bug Fixes
+
+* **wizard:** refetch data after the installer adds required plugins ([#893](https://github.com/Automattic/newspack-workspace/issues/893)) ([6b23902](https://github.com/Automattic/newspack-workspace/commit/6b239026e4a3dad5118443d9bc384d53248f38fa))
+
 ## newspack-components [4.6.2](https://github.com/Automattic/newspack-workspace/compare/newspack-components@4.6.1...newspack-components@4.6.2) (2026-08-17)
 
 

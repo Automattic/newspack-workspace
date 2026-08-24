@@ -130,11 +130,10 @@ class Advertisers_List_REST_Test extends WP_UnitTestCase {
 	}
 
 	/**
-	 * The Ads list `draft` bucket also surfaces `auto-draft` ads, so the
-	 * advertiser count must include them too — otherwise the count and the
-	 * list disagree by any auto-draft rows.
+	 * The Ads list `draft` bucket hides `auto-draft` ads, so the advertiser
+	 * count must skip them too, or the count and the list disagree.
 	 */
-	public function test_advertiser_count_includes_auto_draft_ads() {
+	public function test_advertiser_count_excludes_auto_draft_ads() {
 		$term = wp_insert_term( 'Auto-draft Advertiser', Ads::ADVERTISER_TAX );
 		$this->assertIsArray( $term );
 		$term_id = (int) $term['term_id'];
@@ -149,17 +148,18 @@ class Advertisers_List_REST_Test extends WP_UnitTestCase {
 
 		clean_term_cache( [ $term_id ], Ads::ADVERTISER_TAX );
 		$fresh = get_term( $term_id, Ads::ADVERTISER_TAX );
-		$this->assertSame( 1, (int) $fresh->count );
+		$this->assertSame( 0, (int) $fresh->count );
 	}
 
 	/**
 	 * A site that already ran the prior one-time recount must still pick up
-	 * the new auto-draft semantics: the bumped sentinel re-runs the recount
+	 * the new counted-status set: the bumped sentinel re-runs the recount
 	 * and refreshes stale term counts.
 	 */
 	public function test_recount_refreshes_stale_counts_after_sentinel_bump() {
-		update_option( 'newspack_nl_advertiser_count_recounted_v2', 1 );
-		delete_option( 'newspack_nl_advertiser_count_recounted_v3' );
+		wp_set_current_user( self::factory()->user->create( [ 'role' => 'administrator' ] ) );
+		update_option( 'newspack_nl_advertiser_count_recounted_v3', 1 );
+		delete_option( 'newspack_nl_advertiser_count_recounted_v4' );
 
 		$term = wp_insert_term( 'Stale-count Advertiser', Ads::ADVERTISER_TAX );
 		$this->assertIsArray( $term );
@@ -168,12 +168,12 @@ class Advertisers_List_REST_Test extends WP_UnitTestCase {
 		$ad = self::factory()->post->create(
 			[
 				'post_type'   => Ads::CPT,
-				'post_status' => 'auto-draft',
+				'post_status' => 'draft',
 			]
 		);
 		wp_set_object_terms( $ad, [ $term_id ], Ads::ADVERTISER_TAX );
 
-		// Force a stale count as if it predated the auto-draft semantics.
+		// Force a stale count as if it predated the current status set.
 		global $wpdb;
 		$tt_id = (int) get_term( $term_id, Ads::ADVERTISER_TAX )->term_taxonomy_id;
 		$wpdb->update( $wpdb->term_taxonomy, [ 'count' => 0 ], [ 'term_taxonomy_id' => $tt_id ] ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
@@ -184,7 +184,47 @@ class Advertisers_List_REST_Test extends WP_UnitTestCase {
 
 		clean_term_cache( [ $term_id ], Ads::ADVERTISER_TAX );
 		$this->assertSame( 1, (int) get_term( $term_id, Ads::ADVERTISER_TAX )->count );
-		$this->assertEquals( 1, get_option( 'newspack_nl_advertiser_count_recounted_v3' ) );
+		$this->assertEquals( 1, get_option( 'newspack_nl_advertiser_count_recounted_v4' ) );
+		$this->assertFalse( get_option( 'newspack_nl_advertiser_count_recounted_v3' ), 'the superseded sentinel is cleaned up' );
+	}
+
+	/**
+	 * `admin_init` also fires on admin-ajax.php, including for logged-out
+	 * requests, so the recount must not run for them.
+	 */
+	public function test_recount_skips_requests_without_the_taxonomy_capability() {
+		wp_set_current_user( 0 );
+		delete_option( 'newspack_nl_advertiser_count_recounted_v4' );
+
+		Ads::maybe_recount_advertiser_terms();
+
+		$this->assertFalse( get_option( 'newspack_nl_advertiser_count_recounted_v4' ) );
+	}
+
+	/**
+	 * The sentinel is claimed before the recount runs, so a concurrent burst
+	 * does the work once rather than once each.
+	 */
+	public function test_recount_claims_the_sentinel_before_counting() {
+		wp_set_current_user( self::factory()->user->create( [ 'role' => 'administrator' ] ) );
+		delete_option( 'newspack_nl_advertiser_count_recounted_v4' );
+
+		$claimed_during_count = null;
+		add_filter(
+			'get_terms_args',
+			function ( $args, $taxonomies ) use ( &$claimed_during_count ) {
+				if ( in_array( Ads::ADVERTISER_TAX, (array) $taxonomies, true ) && null === $claimed_during_count ) {
+					$claimed_during_count = get_option( 'newspack_nl_advertiser_count_recounted_v4' );
+				}
+				return $args;
+			},
+			10,
+			2
+		);
+
+		Ads::maybe_recount_advertiser_terms();
+
+		$this->assertEquals( 1, $claimed_during_count );
 	}
 
 	/**

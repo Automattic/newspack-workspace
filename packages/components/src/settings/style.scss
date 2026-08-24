@@ -1,3 +1,5 @@
+@use "~@wordpress/base-styles/variables" as wp-vars;
+
 .newspack-settings {
 	&__card {
 		&.newspack-card.newspack-action-card {
@@ -28,12 +30,12 @@
 
 		.newspack-settings__section {
 			&__title {
-				align-items: center;
-				display: flex;
-				margin: 0;
-
 				span {
-					line-height: 24px;
+					line-height: wp-vars.$font-line-height-small;
+				}
+
+				.newspack-info-button {
+					margin-block: calc((#{wp-vars.$font-line-height-small} - #{wp-vars.$button-size-small}) / 2);
 				}
 			}
 			&__content {
