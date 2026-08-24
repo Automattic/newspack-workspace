@@ -14,6 +14,17 @@ const mockSetHeaderData = jest.fn();
 jest.mock( '@wordpress/data', () => ( {
 	useDispatch: () => ( { setHeaderData: mockSetHeaderData } ),
 } ) );
+// An empty column is a real element costing a real gap, so the stub keeps it
+// queryable for the tests that assert none is left behind. It also echoes the
+// layout props back: `direction` and `gap` are the only things carrying the
+// column rhythm now that the controls supply no margins of their own.
+jest.mock( '@wordpress/ui', () => ( {
+	Stack: ( { children, direction, gap } ) => (
+		<div data-testid="stack" data-direction={ direction } data-gap={ gap }>
+			{ children }
+		</div>
+	),
+} ) );
 // Stub the components barrel: with @wordpress/data mocked, the real barrel eagerly loads @wordpress/rich-text, whose module-load combineReducers() call throws.
 // Cover everything SettingsField imports so a future select/oauth/textarea fixture renders a stub, not `undefined`.
 jest.mock( '@wordpress/components', () => ( {
@@ -41,22 +52,37 @@ jest.mock( '@wordpress/components', () => ( {
 	),
 	// The inbound operator selector renders once a field is enabled; without a stub
 	// here any test that renders an enabled incoming field hits an undefined element.
-	SelectControl: ( { label, value, onChange } ) => (
-		<input aria-label={ label } value={ value || '' } onChange={ e => onChange( e.target.value ) } />
-	),
+	// Core returns null when it has neither options nor children, which is the
+	// premise the empty-container guards rest on.
+	SelectControl: ( { label, value, onChange, options, children } ) =>
+		options?.length || children ? <input aria-label={ label } value={ value || '' } onChange={ e => onChange( e.target.value ) } /> : null,
 } ) );
 jest.mock( '../../../../../packages/components/src', () => ( {
-	Accordion: ( { children } ) => children,
-	AccordionPanel: ( { children } ) => children,
 	Button: ( { children } ) => children,
-	// Section dividers pass alignment="full-width"; the divider under a section
-	// toggle does not, so the stub tags them apart for the tests that assert on
-	// whether a toggle divider has anything to divide.
-	Divider: ( { alignment } ) => <hr data-testid={ 'full-width' === alignment ? 'section-divider' : 'toggle-divider' } />,
+	// Item flattens, so a collapsed group's contents stay reachable here while the real
+	// component puts them behind hidden="until-found" and out of the tab order. Every
+	// fixture has one group, which the call site renders untitled and permanently open;
+	// a multi-group fixture needs a stub that collapses too.
+	CollapsibleGroup: Object.assign( ( { children } ) => <div data-testid="collapsible-group">{ children }</div>, {
+		Item: ( { children } ) => children,
+	} ),
+	// The view's three dividers differ only by props, so the stub tags them apart
+	// and a test can assert on the one it means rather than on a spanning count.
+	// Divider forwards anything undocumented to its `hr`, so the group divider
+	// names itself and the other two are told apart by alignment.
+	Divider: ( { alignment, ...props } ) => (
+		<hr data-testid={ props[ 'data-testid' ] || ( 'full-width' === alignment ? 'section-divider' : 'toggle-divider' ) } />
+	),
 	Grid: ( { children } ) => children,
-	SectionHeader: () => null,
-	SelectControl: ( { label, value, onChange } ) => (
-		<input aria-label={ label } value={ value || '' } onChange={ e => onChange( e.target.value ) } />
+	SectionHeader: ( { title } ) => <h2>{ title }</h2>,
+	// Mirrors the real control: the Newspack wrapper renders its div whatever
+	// happens, and core's select inside it renders nothing without options.
+	SelectControl: ( { label, value, onChange, options, disabled } ) => (
+		<div className="newspack-select-control">
+			{ options?.length ? (
+				<input aria-label={ label } value={ value || '' } disabled={ !! disabled } onChange={ e => onChange( e.target.value ) } />
+			) : null }
+		</div>
 	),
 	// Minimal controlled input so tests can drive the local draft by typing.
 	TextControl: ( { label, value, onChange } ) => <input aria-label={ label } value={ value ?? '' } onChange={ e => onChange( e.target.value ) } />,
@@ -455,6 +481,40 @@ describe( 'incoming-field operators', () => {
 	} );
 } );
 
+describe( 'incoming-field operator labels', () => {
+	beforeEach( () => {
+		mockSetHeaderData.mockClear();
+		useUnsavedChangesDialog.mockClear();
+		useUnsavedChangesDialog.mockReturnValue( { confirmDialog: null, requestConfirm: jest.fn() } );
+	} );
+
+	// The operator selects hide their labels, so nothing on screen changes if they
+	// go back to sharing one name. Only an assertion catches that.
+	it( 'names each enabled operator select after its own field', () => {
+		renderConfigureView( {
+			integrations: {
+				esp: {
+					...INTEGRATION,
+					settings: [
+						{
+							key: 'incoming_metadata_fields',
+							type: 'metadata',
+							label: 'Inbound',
+							value: { VIP: 'default', DONOR: 'default' },
+							options: [
+								{ value: 'VIP', label: 'VIP', value_type: 'string', matching_function: 'default', has_options: true },
+								{ value: 'DONOR', label: 'Donor', value_type: 'string', matching_function: 'default', has_options: true },
+							],
+						},
+					],
+				},
+			},
+		} );
+		expect( screen.getByLabelText( 'Segment VIP as' ) ).toBeTruthy();
+		expect( screen.getByLabelText( 'Segment Donor as' ) ).toBeTruthy();
+	} );
+} );
+
 describe( 'incoming-field operator reconciliation on save', () => {
 	beforeEach( () => {
 		mockSetHeaderData.mockClear();
@@ -717,5 +777,150 @@ describe( 'ConfigureView per-direction sections', () => {
 		expect( screen.getByLabelText( 'Enable outbound sync' ).checked ).toBe( true );
 		expect( screen.queryByLabelText( 'How to sync deletion' ) ).toBeNull();
 		expect( screen.queryAllByTestId( 'toggle-divider' ) ).toHaveLength( 0 );
+	} );
+
+	it( 'renders no section for a legacy payload whose pickers have no options', () => {
+		renderConfigureView( {
+			integrations: {
+				esp: {
+					...INTEGRATION,
+					settings: [
+						{ key: 'incoming_metadata_fields', type: 'metadata', label: 'Incoming', value: {}, options: [] },
+						{ key: 'outgoing_metadata_fields', type: 'metadata', label: 'Outgoing', value: [], grouped_options: [] },
+					],
+				},
+			},
+		} );
+		expect( screen.queryByText( 'Inbound' ) ).toBeNull();
+		expect( screen.queryByText( 'Outbound' ) ).toBeNull();
+		expect( screen.queryAllByTestId( 'section-divider' ) ).toHaveLength( 0 );
+	} );
+
+	// get_list_options() turns an ESP error into an empty array, so an expired
+	// key leaves the inbound field declared but with nothing to pick from.
+	it( 'keeps the inbound toggle but drops its list when the ESP returns no fields', () => {
+		renderConfigureView( {
+			integrations: {
+				esp: {
+					...INTEGRATION,
+					settings: [
+						{ key: 'incoming_sync_enabled', type: 'checkbox', label: 'Enable inbound sync', value: true },
+						{ key: 'incoming_metadata_fields', type: 'metadata', label: 'Incoming metadata fields', value: {}, options: [] },
+					],
+				},
+			},
+		} );
+		expect( screen.getByLabelText( 'Enable inbound sync' ).checked ).toBe( true );
+		expect( screen.queryAllByTestId( 'toggle-divider' ) ).toHaveLength( 0 );
+		// The section column itself, and not the list it would have wrapped.
+		expect( screen.queryAllByTestId( 'stack' ) ).toHaveLength( 1 );
+	} );
+
+	const outboundIntegration = groupedOptions => ( {
+		esp: {
+			...INTEGRATION,
+			settings: [
+				{ key: 'outgoing_sync_enabled', type: 'checkbox', label: 'Enable outbound sync', value: true },
+				{ key: 'metadata_prefix', type: 'text', label: 'Metadata prefix', value: 'NP_' },
+				{
+					key: 'outgoing_metadata_fields',
+					type: 'metadata',
+					label: 'Outgoing metadata fields',
+					value: [],
+					grouped_options: groupedOptions,
+				},
+			],
+		},
+	} );
+
+	it( 'divides the outbound settings from the field groups only when both are present', () => {
+		const { unmount } = renderConfigureView( {
+			integrations: outboundIntegration( [ { section: 'Basic', fields: [ 'Full Name' ] } ] ),
+		} );
+		expect( screen.getByLabelText( 'Metadata prefix' ).value ).toBe( 'NP_' );
+		expect( screen.getByLabelText( 'Full Name' ) ).toBeTruthy();
+		expect( screen.queryAllByTestId( 'group-divider' ) ).toHaveLength( 1 );
+		unmount();
+
+		const { unmount: unmountEmpty } = renderConfigureView( { integrations: outboundIntegration( [] ) } );
+		expect( screen.getByLabelText( 'Metadata prefix' ).value ).toBe( 'NP_' );
+		expect( screen.queryByTestId( 'collapsible-group' ) ).toBeNull();
+		expect( screen.queryAllByTestId( 'group-divider' ) ).toHaveLength( 0 );
+		unmountEmpty();
+
+		// With no settings field above them, the toggle's own divider already
+		// separates the groups from what precedes them.
+		renderConfigureView( { integrations: bidirectionalIntegration() } );
+		expect( screen.getByTestId( 'collapsible-group' ) ).toBeTruthy();
+		expect( screen.queryAllByTestId( 'group-divider' ) ).toHaveLength( 0 );
+	} );
+
+	// Every section a metadata class declares is skipped when it contributes no
+	// available field, so the grouped list can come back empty.
+	it( 'renders no outbound group container or divider when the field declares no groups', () => {
+		renderConfigureView( {
+			integrations: {
+				esp: {
+					...INTEGRATION,
+					settings: [
+						{ key: 'outgoing_sync_enabled', type: 'checkbox', label: 'Enable outbound sync', value: true },
+						{ key: 'outgoing_metadata_fields', type: 'metadata', label: 'Outgoing metadata fields', value: [], grouped_options: [] },
+					],
+				},
+			},
+		} );
+		expect( screen.getByLabelText( 'Enable outbound sync' ).checked ).toBe( true );
+		expect( screen.queryAllByTestId( 'toggle-divider' ) ).toHaveLength( 0 );
+		expect( screen.queryAllByTestId( 'group-divider' ) ).toHaveLength( 0 );
+		// CollapsibleGroup would render its wrapper around no items at all, so the
+		// guard has to skip the component rather than let it print an empty box.
+		expect( screen.queryByTestId( 'collapsible-group' ) ).toBeNull();
+	} );
+
+	it( 'drops the Settings section when its only field has no options to offer', () => {
+		const withAudienceOptions = options => ( {
+			esp: {
+				...INTEGRATION,
+				settings: [ { key: 'mailchimp_audience_id', type: 'select', label: 'Audience', value: '', options } ],
+			},
+		} );
+
+		const { unmount } = renderConfigureView( { integrations: withAudienceOptions( [ { value: 'a', label: 'Readers' } ] ) } );
+		expect( screen.getByText( 'Settings' ) ).toBeTruthy();
+		expect( screen.getByLabelText( 'Audience' ) ).toBeTruthy();
+		unmount();
+
+		renderConfigureView( { integrations: withAudienceOptions( [] ) } );
+		expect( screen.queryByText( 'Settings' ) ).toBeNull();
+		expect( screen.queryByLabelText( 'Audience' ) ).toBeNull();
+	} );
+
+	// A master list the ESP failed to return is the one setting the Enable flow
+	// tells publishers to come here and fill, so it has to survive an empty list.
+	it( 'keeps a required field and its section when the list comes back empty', () => {
+		renderConfigureView( {
+			integrations: {
+				esp: {
+					...INTEGRATION,
+					settings: [ { key: 'mailchimp_audience_id', type: 'select', label: 'Audience', value: '', required: true, options: [] } ],
+				},
+			},
+		} );
+		expect( screen.getByText( 'Settings' ) ).toBeTruthy();
+		expect( screen.getByLabelText( 'Audience' ) ).toBeTruthy();
+	} );
+
+	// Nothing else supplies the vertical rhythm: the package's grid reset is gone
+	// and the controls no longer carry margins, so a wrong prop here is invisible.
+	it( 'stacks every section column and picker list vertically at its own gap', () => {
+		renderConfigureView( { integrations: bidirectionalIntegration() } );
+		const stacks = screen.getAllByTestId( 'stack' ).map( el => [ el.dataset.direction, el.dataset.gap ] );
+		expect( stacks ).toEqual( [
+			[ 'column', 'xl' ],
+			[ 'column', 'xl' ],
+			[ 'column', 'sm' ],
+			[ 'column', 'xl' ],
+			[ 'column', 'sm' ],
+		] );
 	} );
 } );

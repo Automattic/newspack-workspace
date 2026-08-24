@@ -421,6 +421,142 @@ class Newspack_Test_Block_Visibility extends WP_UnitTestCase {
 	}
 
 	/**
+	 * A render that shows a gated block is marked as varying from anonymous.
+	 *
+	 * Once the REST exemption is gone the response depends on who asked for it, and
+	 * batcache skips a request only when it carries an X-WP-Nonce header or a
+	 * WordPress auth cookie. An application password sends neither, so a privileged
+	 * render would be stored and served to the next anonymous caller. This pins the
+	 * decision that cancels the store.
+	 */
+	public function test_privileged_render_varies_from_anonymous() {
+		$editor_id = $this->factory->user->create( [ 'role' => 'editor' ] );
+		$post_id   = $this->factory->post->create( [ 'post_author' => $editor_id ] );
+		$rules     = [ 'registration' => [ 'active' => true ] ];
+		$block     = $this->make_block_with_rules( 'core/group', $rules, 'visible' );
+
+		Block_Visibility::reset_cache_for_tests();
+		$this->assertTrue(
+			Block_Visibility::render_varies_from_anonymous( $block, $editor_id, $post_id ),
+			'An editor sees a block an anonymous reader does not, so the render must not be cached.'
+		);
+
+		Block_Visibility::reset_cache_for_tests();
+		$this->assertFalse(
+			Block_Visibility::render_varies_from_anonymous( $block, 0, $post_id ),
+			'A withheld render is identical for everyone and stays cacheable.'
+		);
+
+		Block_Visibility::reset_cache_for_tests();
+		$ungated = $this->make_block_with_rules( 'core/group', [], 'visible' );
+		$this->assertFalse(
+			Block_Visibility::render_varies_from_anonymous( $ungated, $editor_id, $post_id ),
+			'A block with no active rules is the same for everyone, privileged or not.'
+		);
+
+		// The other direction of the visibility toggle. A reader who matches the
+		// rules has a `hidden` block withheld while anonymous keeps it, so the
+		// render varies per requester just as much -- a check written as "shows a
+		// block anonymous would not see" returns false here and caches it.
+		$reader_id = $this->factory->user->create( [ 'role' => 'subscriber' ] );
+		$other_id  = $this->factory->post->create();
+		$inverted  = $this->make_block_with_rules( 'core/group', $rules, 'hidden' );
+
+		Block_Visibility::reset_cache_for_tests();
+		$this->assertTrue(
+			Block_Visibility::is_hidden_for_user( $inverted, $reader_id, $other_id ),
+			'Precondition: a matching reader has the hidden-mode block withheld.'
+		);
+		Block_Visibility::reset_cache_for_tests();
+		$this->assertFalse(
+			Block_Visibility::is_hidden_for_user( $inverted, 0, $other_id ),
+			'Precondition: an anonymous reader still sees it, so the two renders differ.'
+		);
+
+		Block_Visibility::reset_cache_for_tests();
+		$this->assertTrue(
+			Block_Visibility::render_varies_from_anonymous( $inverted, $reader_id, $other_id ),
+			'A hidden-mode block withheld from a matching reader varies from the anonymous render too.'
+		);
+	}
+
+	/**
+	 * A REST request is not exempt from access control.
+	 *
+	 * Access rules are evaluated for REST reads on the same terms as the front end. The
+	 * authoring case is served by the `edit_post` check below rather than by exempting REST
+	 * as a whole, so this pins that the exemption is not reintroduced.
+	 *
+	 * `REST_REQUEST` is defined only for real HTTP REST requests (wp-includes/rest-api.php),
+	 * so the constant is set explicitly here. Dispatching through `rest_do_request()` never
+	 * defines it, and a test written that way would not exercise this path at all.
+	 *
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
+	 */
+	public function test_rest_request_is_not_exempt_from_access_rules() {
+		if ( ! defined( 'REST_REQUEST' ) ) {
+			define( 'REST_REQUEST', true );
+		}
+		$post_id         = $this->factory->post->create();
+		$GLOBALS['post'] = get_post( $post_id );
+
+		wp_set_current_user( 0 );
+		Block_Visibility::reset_cache_for_tests();
+
+		$rules  = [ 'registration' => [ 'active' => true ] ];
+		$block  = $this->make_block_with_rules( 'core/group', $rules, 'visible' );
+		$result = Block_Visibility::filter_render_block( '<div>restricted</div>', $block );
+
+		$this->assertSame( '', $result, 'A logged-out caller reading over REST is subject to the same access rules as on the front end.' );
+
+		unset( $GLOBALS['post'] );
+	}
+
+	/**
+	 * The real REST route withholds a gated block from anonymous and shows it to an editor.
+	 *
+	 * Dispatching the route rather than calling the filter directly exercises the
+	 * controller's own post setup, which the edit-capability bypass depends on via
+	 * get_the_ID(). It also covers excerpt.rendered, which reaches readers through a
+	 * different path than content.rendered and needs its own assertion.
+	 */
+	public function test_rest_route_gates_content_and_excerpt_per_requester() {
+		do_action( 'rest_api_init' );
+
+		$editor_id = $this->factory->user->create( [ 'role' => 'editor' ] );
+		$gate      = '{"newspackAccessControlMode":"custom","newspackAccessControlRules":{"registration":{"active":true}},"newspackAccessControlVisibility":"visible"}';
+		$content   = '<!-- wp:paragraph --><p>PUBLICMARK</p><!-- /wp:paragraph -->'
+			. '<!-- wp:group ' . $gate . ' --><div class="wp-block-group">'
+			. '<!-- wp:paragraph --><p>RESTRICTEDMARK</p><!-- /wp:paragraph -->'
+			. '</div><!-- /wp:group -->';
+		$post_id = $this->factory->post->create(
+			[
+				'post_status'  => 'publish',
+				'post_author'  => $editor_id,
+				'post_content' => $content,
+				'post_excerpt' => '',
+			]
+		);
+
+		// Logged out: both fields withhold the gated text.
+		wp_set_current_user( 0 );
+		Block_Visibility::reset_cache_for_tests();
+		$anon = rest_do_request( new WP_REST_Request( 'GET', '/wp/v2/posts/' . $post_id ) )->get_data();
+
+		$this->assertStringNotContainsString( 'RESTRICTEDMARK', $anon['content']['rendered'], 'content.rendered must withhold the gated block from an anonymous caller.' );
+		$this->assertStringNotContainsString( 'RESTRICTEDMARK', $anon['excerpt']['rendered'], 'excerpt.rendered must withhold it too; it reaches readers by a different path.' );
+		$this->assertStringContainsString( 'PUBLICMARK', $anon['content']['rendered'], 'Ungated content is unaffected.' );
+
+		// The post's editor: the authoring case the removed REST exemption existed for.
+		wp_set_current_user( $editor_id );
+		Block_Visibility::reset_cache_for_tests();
+		$editor = rest_do_request( new WP_REST_Request( 'GET', '/wp/v2/posts/' . $post_id ) )->get_data();
+
+		$this->assertStringContainsString( 'RESTRICTEDMARK', $editor['content']['rendered'], 'Someone who can edit the post still sees its gated blocks while authoring over REST.' );
+	}
+
+	/**
 	 * The hide-decision is callable directly with an explicit user, so the excerpt
 	 * path can ask what an anonymous reader would see without changing the current user.
 	 */
@@ -820,5 +956,111 @@ class Newspack_Test_Block_Visibility extends WP_UnitTestCase {
 		$this->assertStringNotContainsString( 'GATED', $out );
 		$this->assertStringContainsString( 'KEEP', $out );
 		$this->assertNotEmpty( parse_blocks( $out ), 'Output is re-parseable.' );
+	}
+
+	/**
+	 * Gate mode: the active-gate check resolves a gate once per request, however
+	 * many blocks render against it.
+	 */
+	public function test_gate_mode_active_gate_check_does_not_refetch_per_render() {
+		$gate_id = $this->make_gate();
+		$fetches = 0;
+
+		// Content_Gate::get_gate() reads gate_priority exactly once per call, so this
+		// counts gate reconstructions. get_post_metadata fires ahead of the meta cache,
+		// so the count reflects calls rather than cache misses.
+		$counter = function ( $value, $object_id, $meta_key ) use ( &$fetches, $gate_id ) {
+			if ( 'gate_priority' === $meta_key && (int) $object_id === (int) $gate_id ) {
+				++$fetches;
+			}
+			return $value;
+		};
+		add_filter( 'get_post_metadata', $counter, 10, 3 );
+
+		wp_set_current_user( 0 );
+		Block_Visibility::reset_cache_for_tests();
+
+		$block = $this->make_block(
+			'core/group',
+			[
+				'newspackAccessControlMode'    => 'gate',
+				'newspackAccessControlGateIds' => [ $gate_id ],
+			]
+		);
+
+		Block_Visibility::filter_render_block( '<div>members</div>', $block );
+		$after_first = $fetches;
+		Block_Visibility::filter_render_block( '<div>members</div>', $block );
+		Block_Visibility::filter_render_block( '<div>members</div>', $block );
+
+		remove_filter( 'get_post_metadata', $counter, 10 );
+
+		// Without this the invariant below is satisfied by a counter that never fired,
+		// so a filter that stopped matching would leave the test green.
+		$this->assertGreaterThan(
+			0,
+			$after_first,
+			'The first render must reconstruct the gate, or this test measures nothing.'
+		);
+		$this->assertSame(
+			$after_first,
+			$fetches,
+			'Gate reconstructions must not grow with the number of block renders.'
+		);
+	}
+
+	/**
+	 * Gate mode: the active-gate check keys on the gate set, not the order it is
+	 * written in.
+	 */
+	public function test_gate_mode_active_gate_check_ignores_gate_id_order() {
+		// Draft gates so has_active_gates() returns false and the rule evaluation
+		// never runs, leaving the active-gate check as the only gate reader.
+		$gate_a  = $this->make_gate( true, 'draft' );
+		$gate_b  = $this->make_gate( true, 'draft' );
+		$fetches = 0;
+
+		$counter = function ( $value, $object_id, $meta_key ) use ( &$fetches, $gate_a, $gate_b ) {
+			if ( 'gate_priority' === $meta_key && in_array( (int) $object_id, [ (int) $gate_a, (int) $gate_b ], true ) ) {
+				++$fetches;
+			}
+			return $value;
+		};
+		add_filter( 'get_post_metadata', $counter, 10, 3 );
+
+		wp_set_current_user( 0 );
+		Block_Visibility::reset_cache_for_tests();
+
+		$forward = $this->make_block(
+			'core/group',
+			[
+				'newspackAccessControlMode'    => 'gate',
+				'newspackAccessControlGateIds' => [ $gate_a, $gate_b ],
+			]
+		);
+		$reverse = $this->make_block(
+			'core/group',
+			[
+				'newspackAccessControlMode'    => 'gate',
+				'newspackAccessControlGateIds' => [ $gate_b, $gate_a ],
+			]
+		);
+
+		Block_Visibility::filter_render_block( '<div>members</div>', $forward );
+		$after_forward = $fetches;
+		Block_Visibility::filter_render_block( '<div>members</div>', $reverse );
+
+		remove_filter( 'get_post_metadata', $counter, 10 );
+
+		$this->assertGreaterThan(
+			0,
+			$after_forward,
+			'The first render must reconstruct the gates, or this test measures nothing.'
+		);
+		$this->assertSame(
+			$after_forward,
+			$fetches,
+			'The same gate set in a different order must reuse the cached result.'
+		);
 	}
 }

@@ -74,15 +74,21 @@ function AudienceSubscriptions( _props: Record< string, unknown >, ref: React.Fo
 			if ( ! registered ) {
 				return null;
 			}
+			const breadcrumbs: { label: string }[] = [
+				{ label: __( 'Audience Management', 'newspack-plugin' ) },
+				{ label: __( 'Subscriptions', 'newspack-plugin' ) },
+			];
+			// A tab that authors its leaf at render time keeps ancestors only here,
+			// following the one-place convention in appendSectionName's docblock.
+			if ( ! registered.rendersLeafCrumb ) {
+				breadcrumbs.push( { label: registered.breadcrumbLabel || tab.label } );
+			}
 			return {
 				label: tab.label,
 				path: tab.path,
-				breadcrumbs: [
-					{ label: __( 'Audience Management', 'newspack-plugin' ) },
-					{ label: __( 'Subscriptions', 'newspack-plugin' ) },
-					{ label: registered.breadcrumbLabel || tab.label },
-				],
+				breadcrumbs,
 				render: registered.render,
+				fullWidth: registered.fullWidth,
 			};
 		} )
 		.filter( Boolean );

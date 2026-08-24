@@ -7,7 +7,7 @@
 /**
  * WordPress dependencies
  */
-import { _n, sprintf } from '@wordpress/i18n';
+import { __ } from '@wordpress/i18n';
 import { useState, useEffect, useRef } from '@wordpress/element';
 import apiFetch from '@wordpress/api-fetch';
 import {
@@ -21,7 +21,7 @@ import {
 import ImpactEmpty, { type ImpactEmptyReason } from './impact-empty';
 import ImpactStats from './impact-stats';
 import ImpactTable from './impact-table';
-import { formatCount } from './impact-format';
+import { sampleNote, finiteNumber } from './impact-format';
 import { RULE_PREVIEW_API_PATH as PREVIEW_PATH } from './constants';
 
 const DEBOUNCE_MS = 500;
@@ -76,8 +76,9 @@ export default function RulePreview( { body, showCycleNote }: RulePreviewProps )
 
 	if ( ! data && ! hasResolved ) {
 		return (
-			<VStack className="newspack-pricing-rules__preview-loading" alignment="center" justify="center">
+			<VStack className="newspack-pricing-rules__preview-loading" alignment="center" justify="center" role="status">
 				<Spinner />
+				<span className="screen-reader-text">{ __( 'Loading the impact preview…', 'newspack-plugin' ) }</span>
 			</VStack>
 		);
 	}
@@ -85,7 +86,7 @@ export default function RulePreview( { body, showCycleNote }: RulePreviewProps )
 	let reason: ImpactEmptyReason | null = null;
 	if ( ! data?.supported ) {
 		reason = 'unsupported';
-	} else if ( data.total_matching === 0 || ! data.sample?.length ) {
+	} else if ( 0 === finiteNumber( data.total_matching ) || ! data.sample?.length ) {
 		reason = 'no-products';
 	}
 
@@ -94,6 +95,7 @@ export default function RulePreview( { body, showCycleNote }: RulePreviewProps )
 	}
 
 	const preview = data as RulePreviewResponse;
+	const note = sampleNote( preview );
 
 	return (
 		<div className={ `newspack-pricing-rules__preview${ isLoading ? ' is-loading' : '' }` }>
@@ -102,6 +104,7 @@ export default function RulePreview( { body, showCycleNote }: RulePreviewProps )
 				totalMatching={ preview.total_matching }
 				countLimited={ preview.count_limited }
 				countBound="upper"
+				productsDescription={ __( 'This rule would price these products.', 'newspack-plugin' ) }
 				audience={ preview.audience }
 			/>
 			<ImpactTable
@@ -110,15 +113,7 @@ export default function RulePreview( { body, showCycleNote }: RulePreviewProps )
 				currency={ preview.currency }
 				showCycleNote={ showCycleNote }
 			/>
-			{ preview.preview_limited && (
-				<p className="newspack-pricing-rules__muted">
-					{ sprintf(
-						/* translators: %s: how many products the table lists. */
-						_n( 'Showing a sample of %s product.', 'Showing a sample of %s products.', preview.sample_count, 'newspack-plugin' ),
-						formatCount( preview.sample_count )
-					) }
-				</p>
-			) }
+			{ note && <p className="newspack-pricing-rules__muted">{ note }</p> }
 		</div>
 	);
 }

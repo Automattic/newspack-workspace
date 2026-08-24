@@ -53,16 +53,78 @@ class Block_Visibility {
 			return $block_content;
 		}
 
-		// Bypass access control in admin screens and REST requests (block renderer,
-		// preview, query-loop rendering inside the editor) so blocks are never hidden
-		// from editors during content authoring.
-		if ( is_admin() || ( defined( 'REST_REQUEST' ) && REST_REQUEST ) ) {
+		// Bypass access control in admin screens so blocks are never hidden from
+		// editors during content authoring.
+		//
+		// REST requests are deliberately NOT exempt: a context check is not a permission
+		// check, and access has to be evaluated per requester. Authoring contexts that
+		// arrive over REST (block renderer, preview, query-loop rendering inside the
+		// editor) are covered by the `edit_post` check further down, which needs a post
+		// in scope — where none is set up, it fails closed. Re-adding a blanket REST
+		// exemption here would widen what is readable; the REST cases in
+		// Newspack_Test_Block_Visibility pin the behaviour.
+		if ( is_admin() ) {
 			return $block_content;
 		}
 
-		return self::is_hidden_for_user( $block, get_current_user_id(), get_the_ID() )
-			? ''
-			: $block_content;
+		$hidden = self::is_hidden_for_user( $block, get_current_user_id(), get_the_ID() );
+
+		// This response now depends on who asked for it, and the page cache in front of
+		// it cannot always tell requesters apart. Batcache skips a request only when it
+		// carries an X-WP-Nonce header or a wp*/wordpress* cookie; an application
+		// password sends neither, so a privileged REST render would be stored and then
+		// served to the next anonymous caller. Cancel the store whenever this render
+		// shows a block an anonymous reader would not see -- the withheld render is
+		// still cached normally, which is the common case and the one worth caching.
+		if ( self::render_varies_from_anonymous( $block, get_current_user_id(), get_the_ID() ) ) {
+			self::prevent_page_cache();
+		}
+
+		return $hidden ? '' : $block_content;
+	}
+
+	/**
+	 * Whether this render differs from the one an anonymous reader would get.
+	 *
+	 * Compares the two hide-decisions rather than testing a single direction.
+	 * `visibility` is a two-way toggle, and is_hidden_for_user() inverts on it: with
+	 * `hidden`, a reader who matches the rules has the block withheld while anonymous
+	 * keeps it. That render varies per requester too, so a one-directional check
+	 * ("shows a block anonymous would not see") misses it and lets it be cached.
+	 *
+	 * Split out so the decision is testable without inspecting response headers:
+	 * batcache_cancel() and header() are both unobservable under PHPUnit, so a test
+	 * written against them asserts nothing.
+	 *
+	 * Assumes an anonymous render never varies from another anonymous render. The
+	 * `institution` rule contradicts that -- it sets supports_anonymous and evaluates
+	 * on IP or cookie, so two anonymous readers can legitimately differ and the first
+	 * one cached wins. That is pre-existing on the front-end path and unchanged here;
+	 * it is tracked separately rather than assumed away.
+	 *
+	 * @param array    $block   Parsed block.
+	 * @param int      $user_id Reader the response was rendered for.
+	 * @param int|null $post_id Post in scope, for the edit-capability bypass.
+	 * @return bool
+	 */
+	public static function render_varies_from_anonymous( $block, $user_id, $post_id = null ) {
+		return self::is_hidden_for_user( $block, $user_id, $post_id ) !== self::is_hidden_for_user( $block, 0 );
+	}
+
+	/**
+	 * Keep the current response out of the page cache.
+	 *
+	 * Batcache exposes batcache_cancel() for this; DONOTCACHEPAGE is not honoured by
+	 * the build running on Atomic, so it is not enough on its own. The header covers
+	 * any other cache in the path and is a no-op once output has started.
+	 */
+	private static function prevent_page_cache() {
+		if ( function_exists( 'batcache_cancel' ) ) {
+			batcache_cancel();
+		}
+		if ( ! headers_sent() ) {
+			header( 'Cache-Control: private, no-store, max-age=0', true );
+		}
 	}
 
 	/**
@@ -404,11 +466,46 @@ class Block_Visibility {
 	private static $strip_cache = [];
 
 	/**
+	 * Per-request cache of has_active_gates() results, keyed by
+	 * "{blog_id}:{sorted, de-duplicated gate ids}".
+	 *
+	 * "Cache" here is a static array that lives for one request and is gone when the
+	 * request ends -- the same sense the other two caches in this class use. This
+	 * class writes nothing that outlives a request: no wp_cache_*, no transient, no
+	 * option. So a stale entry cannot reach a later request, and the invalidation
+	 * question below is only about the one it was written in.
+	 *
+	 * The blog id is in the key because gate ids are per-site post ids, so a
+	 * switch_to_blog() mid-request would otherwise answer for the wrong site.
+	 *
+	 * Not flushed when a gate is written, and neither stale answer is safe. A stale
+	 * false returns early from is_hidden_for_user() and renders a block whose gates
+	 * have just become active. A stale true reaches compute_gate_rules_match(), which
+	 * passes through when no gate is active -- and under visibility "hidden" that
+	 * pass-through inverts into withholding a block that should have rendered.
+	 *
+	 * What bounds this is the write window, not the direction. A stale entry takes one
+	 * request that reads a gate set, changes the publish status of a gate in it, then
+	 * reads that same set again. Neither reader writes gates -- filter_render_block()
+	 * renders, strip_hidden() strips for the excerpt -- so it takes a caller outside
+	 * this file interleaving a gate write between two reads, and none is known to. The
+	 * stale true additionally needs the second read to miss $rules_match_cache, which
+	 * happens across user ids: filter_render_block() uses the current reader, while
+	 * strip_hidden() always uses 0. Anything that closes that window needs an
+	 * invalidation hook here, the way Content_Gate flushes its own cache on save_post
+	 * and the post-meta writes.
+	 *
+	 * @var bool[]
+	 */
+	private static $active_gates_cache = [];
+
+	/**
 	 * Reset the per-request caches. Used in unit tests only.
 	 */
 	public static function reset_cache_for_tests() {
-		self::$rules_match_cache = [];
-		self::$strip_cache       = [];
+		self::$rules_match_cache  = [];
+		self::$strip_cache        = [];
+		self::$active_gates_cache = [];
 	}
 
 	/**
@@ -451,13 +548,28 @@ class Block_Visibility {
 	 * @return bool
 	 */
 	private static function has_active_gates( $gate_ids ) {
+		// The answer does not depend on the order or the repetition of the ids, but the
+		// caller's list carries both -- they arrive from a block attribute in editor
+		// order. Normalizing first lets every block gated by the same set, however its
+		// author happened to arrange them, share one entry.
+		$ids = array_values( array_unique( array_map( 'intval', $gate_ids ) ) );
+		sort( $ids, SORT_NUMERIC );
+		$cache_key = get_current_blog_id() . ':' . implode( ',', $ids );
+		if ( isset( self::$active_gates_cache[ $cache_key ] ) ) {
+			return self::$active_gates_cache[ $cache_key ];
+		}
+
+		$has_active = false;
 		foreach ( $gate_ids as $gate_id ) {
 			$gate = Content_Gate::get_gate( $gate_id );
 			if ( ! \is_wp_error( $gate ) && 'publish' === $gate['status'] ) {
-				return true;
+				$has_active = true;
+				break;
 			}
 		}
-		return false;
+
+		self::$active_gates_cache[ $cache_key ] = $has_active;
+		return $has_active;
 	}
 
 	/**
