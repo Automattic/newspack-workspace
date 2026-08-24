@@ -95,7 +95,8 @@
 			}
 		}
 
-		.components-notice {
+		> .components-notice,
+		> .components-modal__children-container > .components-notice {
 			margin-bottom: wp-vars.$grid-unit-30;
 
 			+ .components-notice {
