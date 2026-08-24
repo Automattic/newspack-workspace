@@ -25,6 +25,15 @@ require_once dirname( __DIR__ ) . '/mocks/wp-cli-mocks.php';
 class Newspack_Test_Reader_Data_Membership_Events extends WP_UnitTestCase {
 
 	/**
+	 * Clear the WP_CLI mock's static output buffers, so CLI transcripts don't
+	 * leak between tests.
+	 */
+	public function set_up() {
+		parent::set_up();
+		WP_CLI::reset();
+	}
+
+	/**
 	 * Store a raw item value directly, bypassing update_item()'s JSON
 	 * encoding, the way legacy writers did.
 	 *
@@ -125,6 +134,24 @@ class Newspack_Test_Reader_Data_Membership_Events extends WP_UnitTestCase {
 	}
 
 	/**
+	 * A stored `0` is a value, not an absence: the decode must not drop it the
+	 * way an empty() check would.
+	 */
+	public function test_active_event_preserves_stored_zero() {
+		$user_id = self::factory()->user->create();
+		self::seed_raw_item( $user_id, 'active_memberships', '0' );
+		Reader_Data::update_active_memberships(
+			time(),
+			[
+				'user_id'      => $user_id,
+				'plan_id'      => 123,
+				'status_after' => 'active',
+			]
+		);
+		self::assertSame( '[0,123]', Reader_Data::get_data( $user_id, 'active_memberships' ) );
+	}
+
+	/**
 	 * The subscriptions handler shares the same decode, so it recovers a bare
 	 * scalar stored value too.
 	 */
@@ -160,5 +187,26 @@ class Newspack_Test_Reader_Data_Membership_Events extends WP_UnitTestCase {
 		self::seed_raw_item( $user_id, 'active_memberships', '[456]' );
 		Sync_Reader_Data_CLI::fix_reader_data_and_membership_discrepancy( [], [ 'live' => true ] );
 		self::assertSame( '[123]', get_user_meta( $user_id, Reader_Data::get_meta_key_name( 'active_memberships' ), true ) );
+	}
+
+	/**
+	 * A rejected write surfaces as a warning instead of a silent skip, so a
+	 * live run's transcript accounts for every flagged reader.
+	 */
+	public function test_sync_cli_warns_when_update_rejected() {
+		$user_id = self::factory()->user->create();
+		self::factory()->post->create(
+			[
+				'post_type'   => 'wc_user_membership',
+				'post_status' => 'wcm-active',
+				'post_author' => $user_id,
+				'post_parent' => 123,
+			]
+		);
+		// Force update_item() to reject the write for this reader's new key.
+		add_filter( 'newspack_reader_data_max_items', '__return_zero' );
+		Sync_Reader_Data_CLI::fix_reader_data_and_membership_discrepancy( [], [ 'live' => true ] );
+		self::assertNotEmpty( WP_CLI::$warnings );
+		self::assertSame( '', get_user_meta( $user_id, Reader_Data::get_meta_key_name( 'active_memberships' ), true ) );
 	}
 }

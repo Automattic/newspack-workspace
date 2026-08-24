@@ -97,7 +97,9 @@ final class Sync_Reader_Data_CLI {
 				// Write through update_item() so the value is stored as the JSON
 				// array the data event handlers expect (NPPM-3205).
 				$update_result = Reader_Data::update_item( $reader_data->user_id, 'active_memberships', array_map( 'intval', $actual_membership_plan_ids ) );
-				if ( true === $update_result ) {
+				if ( \is_wp_error( $update_result ) ) {
+					\WP_CLI::warning( sprintf( 'Could not update user #%d reader data: %s', $reader_data->user_id, $update_result->get_error_message() ) );
+				} else {
 					\WP_CLI::success( sprintf( 'Updated user #%d reader data.', $reader_data->user_id ) );
 				}
 			} else {

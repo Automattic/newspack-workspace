@@ -276,7 +276,9 @@ final class Reader_Data {
 	 * @return array List of IDs.
 	 */
 	private static function decode_item_list( $value ) {
-		if ( empty( $value ) || ! is_string( $value ) ) {
+		// Explicit empty-string check: a stored "0" is a value, not an absence,
+		// matching the falsy-zero contract documented on validate_prepared_item().
+		if ( ! is_string( $value ) || '' === $value ) {
 			return [];
 		}
 		$decoded = json_decode( $value );
