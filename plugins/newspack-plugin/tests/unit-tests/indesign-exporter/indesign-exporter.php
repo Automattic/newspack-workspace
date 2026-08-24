@@ -1449,6 +1449,27 @@ class Newspack_Test_InDesign_Exporter extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Test that dollar-digit text in a quote block survives conversion.
+	 *
+	 * The quote conversion is applied as a replacement over the post body, and
+	 * a replacement string containing $1 would otherwise be read as a regex
+	 * backreference, duplicating part of the quote into itself.
+	 */
+	public function test_quote_with_dollar_digit_text_converts_literally() {
+		$post_id = $this->factory->post->create(
+			[
+				'post_title'   => 'Test Post',
+				'post_content' => '<!-- wp:quote --><blockquote class="wp-block-quote"><p>We raised $1 million last year.</p></blockquote><!-- /wp:quote -->',
+			]
+		);
+
+		$converter = new InDesign_Converter();
+		$content   = $converter->convert_post( $post_id );
+
+		$this->assertStringContainsString( '<pstyle:blockquote>We raised $1 million last year.', $content );
+	}
+
+	/**
 	 * Test that init() clears the legacy platform option row.
 	 *
 	 * The Header platform setting is gone and nothing reads the option, but

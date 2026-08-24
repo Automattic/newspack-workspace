@@ -411,7 +411,17 @@ class InDesign_Converter {
 				}
 			}
 
-			$content = preg_replace( $pattern, $quote_content, $content, 1 );
+			// Replace via a callback so the quote text is inserted literally: as
+			// a replacement string, author copy like "$1 million" would be read
+			// as a regex backreference and duplicate part of the quote.
+			$content = preg_replace_callback(
+				$pattern,
+				static function () use ( $quote_content ) {
+					return $quote_content;
+				},
+				$content,
+				1
+			);
 		}
 		return $content;
 	}
