@@ -1,3 +1,10 @@
+## newspack [6.48.17](https://github.com/Automattic/newspack-workspace/compare/newspack@6.48.16...newspack@6.48.17) (2026-08-24)
+
+
+### Bug Fixes
+
+* **audience:** pricing-rule product scope can target variations ([#946](https://github.com/Automattic/newspack-workspace/issues/946)) ([ce04a07](https://github.com/Automattic/newspack-workspace/commit/ce04a07152064d094dd6d322275fa8b44597ffea))
+
 ## newspack [6.48.16](https://github.com/Automattic/newspack-workspace/compare/newspack@6.48.15...newspack@6.48.16) (2026-08-24)
 
 
