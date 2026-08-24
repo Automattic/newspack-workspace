@@ -7,7 +7,7 @@ import { render, screen } from '@testing-library/react';
  * WordPress dependencies.
  */
 import { speak } from '@wordpress/a11y';
-import { SlotFillProvider } from '@wordpress/components';
+import { SlotFillProvider, __experimentalUseSlot as useSlot } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
 
 /**
  * Internal dependencies.
@@ -16,6 +16,11 @@ import GlobalNotices, { GlobalNoticeFill } from './';
 
 jest.mock( '@wordpress/a11y', () => ( { speak: jest.fn() } ) );
 
+jest.mock( '@wordpress/components', () => {
+	const actual = jest.requireActual( '@wordpress/components' );
+	return { ...actual, __experimentalUseSlot: jest.fn( actual.__experimentalUseSlot ) };
+} );
+
 const setLocation = ( search, hash = '' ) => {
 	window.history.replaceState( {}, '', `/wp-admin/admin.php${ search }${ hash }` );
 };
@@ -23,7 +28,10 @@ const setLocation = ( search, hash = '' ) => {
 const setSearch = search => setLocation( search );
 
 describe( 'GlobalNotices', () => {
-	beforeEach( () => speak.mockClear() );
+	beforeEach( () => {
+		speak.mockClear();
+		useSlot.mockImplementation( jest.requireActual( '@wordpress/components' ).__experimentalUseSlot );
+	} );
 
 	it( 'renders a success notice from the query parameter', () => {
 		setSearch( '?newspack-notice=Settings%20saved' );
@@ -259,8 +267,47 @@ describe( 'GlobalNotices', () => {
 				)
 			).not.toThrow();
 			expect( screen.getByText( 'Settings saved' ) ).toBeInTheDocument();
+		} );
 
+		// Restores History.prototype's method; in the test body a failing assertion
+		// would skip it and leave jsdom's history broken for everything after.
+		afterEach( () => {
 			delete window.history.replaceState;
+		} );
+	} );
+
+	describe( 'slot ownership', () => {
+		it( 'renders both fills at once', () => {
+			setSearch( '?page=newspack-settings' );
+			render(
+				<SlotFillProvider>
+					<GlobalNotices />
+					<GlobalNoticeFill>
+						<span>First fill</span>
+					</GlobalNoticeFill>
+					<GlobalNoticeFill>
+						<span>Second fill</span>
+					</GlobalNoticeFill>
+				</SlotFillProvider>
+			);
+
+			expect( screen.getByText( 'First fill' ) ).toBeInTheDocument();
+			expect( screen.getByText( 'Second fill' ) ).toBeInTheDocument();
+			expect( document.querySelectorAll( '.newspack-global-notices' ) ).toHaveLength( 1 );
+		} );
+
+		it( 'still renders when the slot registration is an unrecognised shape', () => {
+			setSearch( '?newspack-notice=Settings%20saved' );
+			// Every region standing down would take withWizard's error notices with it.
+			useSlot.mockReturnValue( { ref: {} } );
+
+			render(
+				<SlotFillProvider>
+					<GlobalNotices />
+				</SlotFillProvider>
+			);
+
+			expect( screen.getByText( 'Settings saved' ) ).toBeInTheDocument();
 		} );
 	} );
 } );

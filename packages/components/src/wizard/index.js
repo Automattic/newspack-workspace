@@ -382,9 +382,9 @@ const Wizard = (
 		) : undefined;
 
 	return (
-		// `passthrough` collapses this provider when the wizard is nested inside a
-		// `withWizard` page, so both notice regions share one registry and the
-		// wrapper's fills reach the region below this header.
+		// Collapses this provider when nested inside a `withWizard` page, so both
+		// notice regions share one registry and the wrapper's fills reach the
+		// region below this header.
 		<SlotFillProvider passthrough>
 			<div ref={ ref }>
 				<div

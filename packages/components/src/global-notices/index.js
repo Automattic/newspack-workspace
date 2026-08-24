@@ -61,16 +61,17 @@ const GlobalNotices = () => {
 	const slotNode = useRef( null );
 	const activeSlot = useSlot( SLOT_NAME );
 	const fills = useSlotFills( SLOT_NAME );
-	// Captured once: a slot registering itself re-renders this component, and
-	// re-reading window.location.search then would erase notices this same
-	// mount already announced, especially once the effect below strips it.
+	// A slot registering itself re-renders this component, by which point the
+	// effect below has stripped the parameter, so re-reading the query string
+	// would erase notices this mount already announced.
 	const [ notices ] = useState( queryNotices );
 
-	// A page can mount a second region deeper in the tree, as a wizard nested in
-	// another does. The registry holds one slot per name, so the last to register
-	// is where every fill lands; a region that no longer owns it would paint an
-	// empty duplicate and a second copy of the query notices, so it steps aside.
-	const ownsSlot = ! activeSlot?.ref || activeSlot.ref?.current === slotNode.current;
+	// A wizard nested in another mounts a second region. One slot per name means
+	// the last to register takes every fill, so the region that lost it steps
+	// aside rather than paint an empty duplicate. Only for an owner it can
+	// identify: were every region to stand down, withWizard's error notices,
+	// which this region also hosts, would vanish with them.
+	const ownsSlot = ! activeSlot?.ref?.current || activeSlot.ref.current === slotNode.current;
 
 	useEffect( () => {
 		if ( ! notices.length || ! window.history?.replaceState ) {

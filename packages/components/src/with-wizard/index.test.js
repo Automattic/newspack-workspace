@@ -30,8 +30,6 @@ jest.mock( '../footer', () => () => null );
 window.newspack_aux_data = { is_debug_mode: false };
 window.newspack_urls = { support: 'https://help.newspack.com/' };
 
-// Raises a notice-level error as soon as the wrapped component mounts, which is
-// how a wizard reports a recoverable API failure.
 const useRaisedError = ( { setError } ) => {
 	useEffect( () => {
 		setError( { message: 'Something went wrong', code: 'rest_invalid_param' } );
@@ -40,7 +38,6 @@ const useRaisedError = ( { setError } ) => {
 
 const region = container => container.querySelector( '.newspack-global-notices' );
 
-// Document order, so a test can assert one element comes after another.
 const positionOf = ( container, selector ) => Array.from( container.querySelectorAll( '*' ) ).indexOf( container.querySelector( selector ) );
 
 const SECTIONS = [ { path: '/', render: () => <div>Section</div> } ];
