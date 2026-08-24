@@ -131,4 +131,58 @@ describe( 'GlobalNotices', () => {
 		expect( screen.getByText( 'Settings saved' ) ).toBeInTheDocument();
 		expect( screen.getByText( 'Filled notice' ) ).toBeInTheDocument();
 	} );
+
+	describe( 'nested inside another region', () => {
+		// The shape a `Wizard` inside a `withWizard` page renders: an outer region
+		// and a second one further down, sharing one slot-fill registry.
+		const renderNested = () =>
+			render(
+				<SlotFillProvider>
+					<GlobalNotices />
+					<GlobalNoticeFill>
+						<span>Filled notice</span>
+					</GlobalNoticeFill>
+					<div className="deeper">
+						<SlotFillProvider passthrough>
+							<GlobalNotices />
+						</SlotFillProvider>
+					</div>
+				</SlotFillProvider>
+			);
+
+		it( 'renders one region, the innermost one', () => {
+			setSearch( '?page=newspack-settings' );
+			const { container } = renderNested();
+			const regions = container.querySelectorAll( '.newspack-global-notices' );
+			expect( regions ).toHaveLength( 1 );
+			expect( container.querySelector( '.deeper' ) ).toContainElement( regions[ 0 ] );
+		} );
+
+		it( 'renders a fill from the outer level in that region', () => {
+			setSearch( '?page=newspack-settings' );
+			const { container } = renderNested();
+			expect( container.querySelector( '.newspack-global-notices' ) ).toContainElement( screen.getByText( 'Filled notice' ) );
+		} );
+
+		it( 'renders a query-parameter notice once, not twice', () => {
+			setSearch( '?newspack-notice=Settings%20saved' );
+			renderNested();
+			expect( screen.getAllByText( 'Settings saved' ) ).toHaveLength( 1 );
+		} );
+
+		it( 'renders no region when there is nothing to show', () => {
+			setSearch( '?page=newspack-settings' );
+			const { container } = render(
+				<SlotFillProvider>
+					<GlobalNotices />
+					<div className="deeper">
+						<SlotFillProvider passthrough>
+							<GlobalNotices />
+						</SlotFillProvider>
+					</div>
+				</SlotFillProvider>
+			);
+			expect( container.querySelector( '.newspack-global-notices' ) ).toBeNull();
+		} );
+	} );
 } );

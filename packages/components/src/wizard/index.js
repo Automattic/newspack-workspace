@@ -382,7 +382,10 @@ const Wizard = (
 		) : undefined;
 
 	return (
-		<SlotFillProvider>
+		// `passthrough` collapses this provider when the wizard is nested inside a
+		// `withWizard` page, so both notice regions share one registry and the
+		// wrapper's fills reach the region below this header.
+		<SlotFillProvider passthrough>
 			<div ref={ ref }>
 				<div
 					className={ classnames( isLoading ? 'newspack-wizard__is-loading' : 'newspack-wizard__is-loaded', {

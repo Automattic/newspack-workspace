@@ -7,7 +7,8 @@ import { parse } from 'qs';
  * WordPress dependencies
  */
 // eslint-disable-next-line @wordpress/no-unsafe-wp-apis
-import { Notice, createSlotFill, __experimentalUseSlotFills as useSlotFills } from '@wordpress/components';
+import { Notice, Slot, createSlotFill, __experimentalUseSlot as useSlot, __experimentalUseSlotFills as useSlotFills } from '@wordpress/components';
+import { useRef } from '@wordpress/element';
 import { Stack } from '@wordpress/ui';
 
 /**
@@ -17,7 +18,7 @@ import './style.scss';
 
 const SLOT_NAME = 'NewspackGlobalNotice';
 
-const { Slot: GlobalNoticeSlot, Fill: GlobalNoticeFill } = createSlotFill( SLOT_NAME );
+const { Fill: GlobalNoticeFill } = createSlotFill( SLOT_NAME );
 
 export { GlobalNoticeFill };
 
@@ -57,18 +58,26 @@ const queryNotices = () => {
  * fills, so they share one position and one rhythm.
  */
 const GlobalNotices = () => {
+	const slotNode = useRef( null );
+	const activeSlot = useSlot( SLOT_NAME );
 	const fills = useSlotFills( SLOT_NAME );
 	const notices = queryNotices();
 
+	// A page can mount a second region deeper in the tree, as a wizard nested in
+	// another does. The registry holds one slot per name, so the last to register
+	// is where every fill lands; a region that no longer owns it would paint an
+	// empty duplicate and a second copy of the query notices, so it steps aside.
+	const ownsSlot = ! activeSlot?.ref || activeSlot.ref.current === slotNode.current;
+
 	// An empty region would still paint its padding at the top of every screen.
-	if ( ! notices.length && ! fills?.length ) {
+	if ( ! ownsSlot || ( ! notices.length && ! fills?.length ) ) {
 		return null;
 	}
 
 	return (
 		<Stack direction="column" gap="sm" className="newspack-global-notices">
 			{ notices }
-			<GlobalNoticeSlot bubblesVirtually />
+			<Slot ref={ slotNode } name={ SLOT_NAME } bubblesVirtually />
 		</Stack>
 	);
 };
