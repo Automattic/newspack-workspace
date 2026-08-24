@@ -7,7 +7,7 @@ import { parse } from 'qs';
  * WordPress dependencies.
  */
 import { __ } from '@wordpress/i18n';
-import { ClipboardButton, ExternalLink } from '@wordpress/components';
+import { Notice, ClipboardButton, ExternalLink } from '@wordpress/components';
 import { useState, useEffect } from '@wordpress/element';
 import { useDispatch } from '@wordpress/data';
 import { addQueryArgs } from '@wordpress/url';
@@ -15,7 +15,7 @@ import { addQueryArgs } from '@wordpress/url';
 /**
  * Internal dependencies.
  */
-import { PluginSettings, Notice } from '../../../../../packages/components/src';
+import { PluginSettings } from '../../../../../packages/components/src';
 import { useWizardData } from '../../../../../packages/components/src/wizard/store/utils';
 import { WIZARD_STORE_NAMESPACE } from '../../../../../packages/components/src/wizard/store';
 
@@ -143,10 +143,16 @@ const Salesforce = () => {
 				title={ __( 'Salesforce Settings', 'newspack-plugin' ) }
 				description={ () => (
 					<>
-						{ error && <Notice noticeText={ error } isWarning /> }
+						{ error && (
+							<Notice isDismissible={ false } spokenMessage="" status="warning">
+								{ error }
+							</Notice>
+						) }
 
 						{ isConnected && ! error && (
-							<Notice noticeText={ __( 'Your site is connected to Salesforce.', 'newspack-plugin' ) } isSuccess />
+							<Notice isDismissible={ false } status="success" spokenMessage="">
+								{ __( 'Your site is connected to Salesforce.', 'newspack-plugin' ) }
+							</Notice>
 						) }
 
 						{ __(

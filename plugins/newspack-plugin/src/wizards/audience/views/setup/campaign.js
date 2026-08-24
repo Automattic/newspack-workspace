@@ -4,6 +4,7 @@
  * WordPress dependencies
  */
 import { __ } from '@wordpress/i18n';
+import { Notice } from '@wordpress/components';
 import apiFetch from '@wordpress/api-fetch';
 import { useEffect, useState } from '@wordpress/element';
 
@@ -11,7 +12,7 @@ import { useEffect, useState } from '@wordpress/element';
  * Internal dependencies
  */
 import WizardsTab from '../../../wizards-tab';
-import { Button, Notice, Waiting, withWizardScreen } from '../../../../../packages/components/src';
+import { Button, Waiting, withWizardScreen } from '../../../../../packages/components/src';
 import Prompt from '../../components/prompt';
 import './style.scss';
 
@@ -50,7 +51,11 @@ const AudienceCampaign = withWizardScreen( ( { error, setError } ) => {
 			title={ __( 'Set Up Audience Management Campaign', 'newspack-plugin' ) }
 			description={ __( 'Preview and customize the prompts, or use our suggested defaults.', 'newspack-plugin' ) }
 		>
-			{ error && <Notice noticeText={ error?.message || __( 'Something went wrong.', 'newspack-plugin' ) } isError /> }
+			{ error && (
+				<Notice isDismissible={ false } status="error">
+					{ error?.message || __( 'Something went wrong.', 'newspack-plugin' ) }
+				</Notice>
+			) }
 			{ ! prompts && ! error && (
 				<>
 					<Waiting isLeft />

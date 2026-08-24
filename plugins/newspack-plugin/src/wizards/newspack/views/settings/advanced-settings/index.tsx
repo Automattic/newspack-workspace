@@ -6,6 +6,7 @@
  * WordPress dependencies.
  */
 import { __ } from '@wordpress/i18n';
+import { Notice } from '@wordpress/components';
 import { useEffect } from '@wordpress/element';
 
 /**
@@ -14,7 +15,7 @@ import { useEffect } from '@wordpress/element';
 import { ADVANCED_SETTINGS_DEFAULTS } from '../constants';
 import WizardsTab from '../../../../wizards-tab';
 import WizardSection from '../../../../wizards-section';
-import { Button, Grid, hooks, ImageUpload, Notice, utils } from '../../../../../../packages/components/src';
+import { Button, Grid, hooks, ImageUpload, utils } from '../../../../../../packages/components/src';
 import { useWizardApiFetch } from '../../../../hooks/use-wizard-api-fetch';
 import Recirculation from './recirculation';
 import AuthorBio from './author-bio';
@@ -232,7 +233,11 @@ export default function AdvancedSettings() {
 					<PrivateTags data={ data } update={ setData } isFetching={ isFetching } />
 				</WizardSection>
 			) : null }
-			{ errorMessage && <Notice /> }
+			{ errorMessage && (
+				<Notice isDismissible={ false } status="error">
+					{ errorMessage }
+				</Notice>
+			) }
 			<div className="newspack-buttons-card">
 				<Button variant="primary" onClick={ save }>
 					{ __( 'Save', 'newspack-plugin' ) }

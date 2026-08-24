@@ -19,13 +19,13 @@
 import { useEffect, useMemo, useState } from '@wordpress/element';
 import { __, _n, sprintf } from '@wordpress/i18n';
 import { useDispatch } from '@wordpress/data';
-import { __experimentalHStack as HStack, __experimentalVStack as VStack } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
+import { Notice, __experimentalHStack as HStack, __experimentalVStack as VStack } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
 import { Badge, Stack } from '@wordpress/ui';
 
 /**
  * Internal dependencies.
  */
-import { Button, DataViews, Notice, Router, StatusIndicator, Waiting } from '../../../../packages/components/src';
+import { Button, DataViews, Router, StatusIndicator, Waiting } from '../../../../packages/components/src';
 import { formatCount } from '../../../../packages/components/src/breadcrumbs/format-count';
 import './style.scss';
 import { fmtRelative, fmtDate } from '../format';
@@ -350,8 +350,10 @@ export default function SubscriberList() {
 	// A failed read must not read as "this site has no subscribers": say so, and
 	// offer a retry.
 	if ( error ) {
+		const message = sprintf( __( 'Could not load subscribers: %s', 'newspack-plugin' ), error );
 		return (
-			<Notice isError noticeText={ sprintf( __( 'Could not load subscribers: %s', 'newspack-plugin' ), error ) }>
+			<Notice isDismissible={ false } status="error" spokenMessage={ message }>
+				{ message }
 				<Button variant="link" onClick={ reload }>
 					{ __( 'Retry', 'newspack-plugin' ) }
 				</Button>

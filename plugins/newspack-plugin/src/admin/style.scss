@@ -253,7 +253,7 @@ h1 {
 
 		// Match the width of a single card in the 2-column CardFeature grid
 		// (grid has 32px gutter; falls back to 1 column below 744px viewport).
-		@media screen and ( min-width: 744px ) {
+		@media screen and (min-width: 744px) {
 			max-width: calc((100% - 32px) / 2);
 		}
 	}
@@ -303,19 +303,6 @@ h1 {
 	}
 }
 
-// Notice spacing inside wizard layouts.
-.newspack-notice--flush {
-	margin: 0;
-}
-
-.newspack-notice--spaced-top {
-	margin: wp-vars.$grid-unit-10 0 0;
-}
-
-.newspack-notice--spaced-bottom {
-	margin: 0 0 wp-vars.$grid-unit-10;
-}
-
 .newspack-text-muted {
 	color: wp-colors.$gray-700;
 }
@@ -347,21 +334,9 @@ h1 {
 	}
 
 	&.newspack-action-card {
-		.newspack-action-card__notification {
-			&.newspack-action-card__region-children {
-				.newspack-notice {
-					margin-top: 1rem;
-				}
-			}
-		}
-
 		.newspack-action-card__region-children:not(:last-child) {
 			padding-bottom: 0;
 			padding-top: 2rem;
-
-			.newspack-notice {
-				margin-top: 0;
-			}
 		}
 	}
 

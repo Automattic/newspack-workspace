@@ -1,12 +1,12 @@
 import apiFetch from '@wordpress/api-fetch';
 import {
+	Notice,
 	__experimentalHStack as HStack, // eslint-disable-line @wordpress/no-unsafe-wp-apis
 	__experimentalVStack as VStack, // eslint-disable-line @wordpress/no-unsafe-wp-apis
 	Button,
 	Card,
 	CardBody,
 	CardHeader,
-	Notice,
 	ToggleControl,
 } from '@wordpress/components';
 import { useState } from '@wordpress/element';

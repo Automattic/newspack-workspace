@@ -12,7 +12,7 @@ import apiFetch from '@wordpress/api-fetch';
 import { useRef, useEffect, useState } from '@wordpress/element';
 import { Icon, addCard, check, info, layout } from '@wordpress/icons';
 import { isURL } from '@wordpress/url';
-import { CheckboxControl, __experimentalHStack as HStack, __experimentalVStack as VStack } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
+import { Notice, CheckboxControl, __experimentalHStack as HStack, __experimentalVStack as VStack } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
 
 /**
  * Internal dependencies
@@ -24,7 +24,6 @@ import {
 	GlobalNotices,
 	Grid,
 	NewspackIcon,
-	Notice,
 	ProgressBar,
 	TextControl,
 	withWizardScreen,
@@ -116,7 +115,10 @@ const Welcome = ( { buttonAction } ) => {
 			await starterContentInit( setupApproach, existingSiteURL )
 				.then( increment )
 				.catch( err => {
-					window.location = '/wp-admin/admin.php?page=newspack-setup-wizard&newspack-notice=_error_' + err.message;
+					// GlobalNotices splits the parameter on commas, so an unencoded message
+					// containing one arrives as two notices, the second of them green.
+					window.location =
+						'/wp-admin/admin.php?page=newspack-setup-wizard&newspack-notice=' + encodeURIComponent( '_error_' + err.message );
 				} );
 
 			// Generate posts.
@@ -286,7 +288,9 @@ const Welcome = ( { buttonAction } ) => {
 					</p>
 
 					{ isSSL === false && (
-						<Notice isError noticeText={ __( "This site does not use HTTPS. Newspack can't be installed.", 'newspack' ) } />
+						<Notice isDismissible={ false } status="error">
+							{ __( "This site does not use HTTPS. Newspack can't be installed.", 'newspack' ) }
+						</Notice>
 					) }
 
 					{ errors.length ? errors.map( renderErrorBox ) : null }

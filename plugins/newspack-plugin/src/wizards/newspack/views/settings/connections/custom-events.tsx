@@ -7,14 +7,14 @@
  */
 import { __ } from '@wordpress/i18n';
 import { useState, useEffect } from '@wordpress/element';
-import { __experimentalHStack as HStack } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
+import { Notice, __experimentalHStack as HStack } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
 
 /**
  * Internal dependencies
  */
 import { WizardError } from '../../../../errors';
 import { useWizardApiFetch } from '../../../../hooks/use-wizard-api-fetch';
-import { Button, Grid, Notice, TextControl, utils } from '../../../../../../packages/components/src';
+import { Button, Grid, TextControl, utils } from '../../../../../../packages/components/src';
 import { ERROR_MESSAGES } from './constants';
 
 /**
@@ -134,7 +134,11 @@ function CustomEvents() {
 					autoComplete="one-time-code"
 				/>
 			</Grid>
-			{ errorMessage && <Notice isError noticeText={ errorMessage } /> }
+			{ errorMessage && (
+				<Notice isDismissible={ false } status="error">
+					{ errorMessage }
+				</Notice>
+			) }
 			<HStack justify="flex-start" spacing={ 2 }>
 				<Button variant="primary" onClick={ updateGa4Credentials } disabled={ isInputsEmpty() || !! errorMessage }>
 					{ __( 'Save', 'newspack-plugin' ) }

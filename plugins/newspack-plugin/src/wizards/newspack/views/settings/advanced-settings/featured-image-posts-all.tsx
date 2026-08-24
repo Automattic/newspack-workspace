@@ -6,9 +6,8 @@
  * WordPress dependencies
  */
 import { __ } from '@wordpress/i18n';
-import { Fragment } from '@wordpress/element';
 import { Notice } from '@wordpress/components';
-
+import { Fragment } from '@wordpress/element';
 /**
  * Internal dependencies
  */
@@ -18,7 +17,7 @@ export default function FeaturedImagePostsAll( { data, update, postCount }: Them
 	return (
 		<Fragment>
 			{ Number( postCount ) > 1000 && (
-				<Notice isDismissible={ false } status="warning" className="newspack-notice--spaced-bottom">
+				<Notice spokenMessage="" isDismissible={ false } status="warning">
 					{ __( 'You have more than 1000 posts. Applying these settings might take a moment.', 'newspack-plugin' ) }
 				</Notice>
 			) }
@@ -57,7 +56,7 @@ export default function FeaturedImagePostsAll( { data, update, postCount }: Them
 						onChange={ ( featured_image_all_posts: string ) => update( { featured_image_all_posts } ) }
 					/>
 					{ data.featured_image_all_posts !== 'none' && (
-						<Notice isDismissible={ false } status="warning" className="newspack-notice--spaced-top">
+						<Notice spokenMessage="" isDismissible={ false } status="warning">
 							{ __(
 								'After saving the settings with this option selected, all posts will be updated. This cannot be undone.',
 								'newspack-plugin'
@@ -92,7 +91,7 @@ export default function FeaturedImagePostsAll( { data, update, postCount }: Them
 						onChange={ ( post_template_all_posts: string ) => update( { post_template_all_posts } ) }
 					/>
 					{ data.post_template_all_posts !== 'none' && (
-						<Notice isDismissible={ false } status="warning" className="newspack-notice--spaced-top">
+						<Notice spokenMessage="" isDismissible={ false } status="warning">
 							{ __(
 								'After saving the settings with this option selected, all posts will be updated. This cannot be undone.',
 								'newspack-plugin'

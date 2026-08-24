@@ -3,13 +3,14 @@
  */
 import { __ } from '@wordpress/i18n';
 import { useSelect } from '@wordpress/data';
-import { __experimentalHStack as HStack } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
+import { Notice, __experimentalHStack as HStack } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
 
 /**
  * Internal dependencies.
  */
-import { Button, Modal, Notice } from '../..';
+import { Button, Modal } from '../..';
 import { WIZARD_STORE_NAMESPACE } from '../store';
+import { htmlToText } from '../../utils/html-to-text';
 
 const parseError = ( { data, message, code } ) => {
 	let level = 'fatal';
@@ -35,7 +36,9 @@ const WizardError = () => {
 		const fallbackURL = typeof newspack_urls !== 'undefined' && newspack_urls.dashboard;
 		return (
 			<Modal title={ __( 'Unrecoverable error' ) } onRequestClose={ fallbackURL ? () => ( window.location = fallbackURL ) : undefined }>
-				<Notice noticeText={ message } isError rawHTML />
+				<Notice isDismissible={ false } status="error" spokenMessage={ htmlToText( message ) } __unstableHTML>
+					{ message }
+				</Notice>
 				{ fallbackURL && (
 					<HStack justify="flex-end" spacing={ 4 } wrap className="newspack-modal__footer">
 						<Button isPrimary href={ fallbackURL }>
@@ -47,7 +50,17 @@ const WizardError = () => {
 		);
 	}
 
-	return <Notice isError className="newspack-wizard__above-header" noticeText={ message } rawHTML />;
+	return (
+		<Notice
+			isDismissible={ false }
+			status="error"
+			className="newspack-wizard__above-header"
+			spokenMessage={ htmlToText( message ) }
+			__unstableHTML
+		>
+			{ message }
+		</Notice>
+	);
 };
 
 export default WizardError;

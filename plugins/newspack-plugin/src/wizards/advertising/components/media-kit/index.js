@@ -8,9 +8,8 @@
  * WordPress dependencies
  */
 import { __ } from '@wordpress/i18n';
-import apiFetch from '@wordpress/api-fetch';
 import { Notice } from '@wordpress/components';
-
+import apiFetch from '@wordpress/api-fetch';
 /**
  * Internal dependencies
  */

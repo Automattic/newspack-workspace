@@ -4,7 +4,7 @@
  * WordPress dependencies
  */
 import { __, sprintf } from '@wordpress/i18n';
-import { BaseControl, CheckboxControl, ExternalLink, TextareaControl } from '@wordpress/components';
+import { Notice, BaseControl, CheckboxControl, ExternalLink, TextareaControl } from '@wordpress/components';
 import apiFetch from '@wordpress/api-fetch';
 import { Fragment, useEffect, useState } from '@wordpress/element';
 import { seen } from '@wordpress/icons';
@@ -17,7 +17,7 @@ import { stringify } from 'qs';
 /**
  * Internal dependencies
  */
-import { ActionCard, Button, Grid, ImageUpload, Notice, TextControl, WebPreview, hooks } from '../../../../packages/components/src';
+import { ActionCard, Button, Grid, ImageUpload, TextControl, WebPreview, hooks } from '../../../../packages/components/src';
 
 type Attachment = {
 	id?: number;
@@ -293,8 +293,16 @@ export default function Prompt( { inFlight, prompt, setInFlight, setPrompts }: P
 								) }
 							</Fragment>
 						) ) }
-						{ error && <Notice noticeText={ error?.message || __( 'Something went wrong.', 'newspack-plugin' ) } isError /> }
-						{ success && <Notice noticeText={ success } isSuccess /> }
+						{ error && (
+							<Notice isDismissible={ false } status="error">
+								{ error?.message || __( 'Something went wrong.', 'newspack-plugin' ) }
+							</Notice>
+						) }
+						{ success && (
+							<Notice isDismissible={ false } status="success">
+								{ success }
+							</Notice>
+						) }
 						<div className="newspack-buttons-card">
 							<Button
 								isPrimary

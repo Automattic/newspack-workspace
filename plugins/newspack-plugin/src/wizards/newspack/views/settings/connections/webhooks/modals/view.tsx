@@ -7,7 +7,7 @@
  */
 import { __, sprintf } from '@wordpress/i18n';
 import { Fragment } from '@wordpress/element';
-import { Icon } from '@wordpress/components';
+import { Notice, Icon } from '@wordpress/components';
 
 /**
  * External dependencies
@@ -17,7 +17,7 @@ import moment from 'moment';
 /**
  * Internal dependencies
  */
-import { Notice, Modal } from '../../../../../../../../packages/components/src';
+import { Modal } from '../../../../../../../../packages/components/src';
 import { getEndpointLabel, getRequestStatusIcon, hasEndpointErrors } from '../utils';
 
 const View = ( { endpoint, setAction }: { endpoint: ModalComponentProps[ 'endpoint' ]; setAction: ModalComponentProps[ 'setAction' ] } ) => {
@@ -76,7 +76,9 @@ const View = ( { endpoint, setAction }: { endpoint: ModalComponentProps[ 'endpoi
 					) ) }
 				</table>
 			) : (
-				<Notice noticeText={ __( "This endpoint hasn't received any requests yet.", 'newspack-plugin' ) } />
+				<Notice isDismissible={ false } spokenMessage="">
+					{ __( "This endpoint hasn't received any requests yet.", 'newspack-plugin' ) }
+				</Notice>
 			) }
 		</Modal>
 	);

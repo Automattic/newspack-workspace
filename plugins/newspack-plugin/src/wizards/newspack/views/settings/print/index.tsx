@@ -6,7 +6,7 @@
  * WordPress dependencies
  */
 import { __ } from '@wordpress/i18n';
-import { CheckboxControl, Notice, SelectControl } from '@wordpress/components';
+import { Notice, CheckboxControl, SelectControl } from '@wordpress/components';
 import { useEffect, useRef, useState } from '@wordpress/element';
 
 /**
@@ -152,7 +152,7 @@ function Print() {
 							/>
 						) ) }
 						{ selectedPostTypes.length === 0 && (
-							<Notice status="warning" isDismissible={ false }>
+							<Notice spokenMessage="" status="warning" isDismissible={ false }>
 								{ __(
 									'No post types are selected. The "Export as Adobe InDesign" actions will not appear anywhere until you select at least one.',
 									'newspack-plugin'

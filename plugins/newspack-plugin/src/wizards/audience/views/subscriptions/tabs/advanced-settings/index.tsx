@@ -10,12 +10,12 @@ import apiFetch from '@wordpress/api-fetch';
 import { useEffect, useState } from '@wordpress/element';
 import { useDispatch } from '@wordpress/data';
 // eslint-disable-next-line @wordpress/no-unsafe-wp-apis
-import { ExternalLink, SelectControl, __experimentalHStack as HStack, __experimentalVStack as VStack } from '@wordpress/components';
+import { Notice, ExternalLink, SelectControl, __experimentalHStack as HStack, __experimentalVStack as VStack } from '@wordpress/components';
 
 /**
  * Internal dependencies.
  */
-import { Button, Card, Grid, Notice, SectionHeader } from '../../../../../../../packages/components/src';
+import { Button, Card, Grid, SectionHeader } from '../../../../../../../packages/components/src';
 import { WIZARD_STORE_NAMESPACE } from '../../../../../../../packages/components/src/wizard/store';
 import WizardsTab from '../../../../../wizards-tab';
 import WizardSection from '../../../../../wizards-section';
@@ -91,7 +91,7 @@ function AdvancedSettings() {
 							__nextHasNoMarginBottom
 						/>
 						{ saved && (
-							<Notice isDismissible={ false }>
+							<Notice spokenMessage="" isDismissible={ false }>
 								{ __( 'Share the following URL to trigger the subscription upgrade:', 'newspack-plugin' ) }{ ' ' }
 								<a href={ window.newspackAudienceSubscriptions.upgrade_subscription_url } target="_blank" rel="noreferrer noopener">
 									{ window.newspackAudienceSubscriptions.upgrade_subscription_url }

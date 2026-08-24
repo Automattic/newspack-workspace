@@ -3,7 +3,7 @@
  * WordPress dependencies
  */
 import { __ } from '@wordpress/i18n';
-import { CheckboxControl, ExternalLink, RangeControl } from '@wordpress/components';
+import { Notice, CheckboxControl, ExternalLink, RangeControl } from '@wordpress/components';
 import apiFetch from '@wordpress/api-fetch';
 import { useEffect, useState } from '@wordpress/element';
 
@@ -15,7 +15,6 @@ import {
 	Button,
 	Card,
 	Grid,
-	Notice,
 	Divider,
 	PluginInstaller,
 	SectionHeader,
@@ -119,7 +118,11 @@ export default withWizardScreen(
 					</>
 				}
 			>
-				{ error && <Notice noticeText={ error?.message || __( 'Something went wrong.', 'newspack-plugin' ) } isError /> }
+				{ error && (
+					<Notice isDismissible={ false } status="error">
+						{ error?.message || __( 'Something went wrong.', 'newspack-plugin' ) }
+					</Notice>
+				) }
 				{ onChangePlatform && (
 					<ActionCard
 						isMedium
@@ -137,13 +140,14 @@ export default withWizardScreen(
 					/>
 				) }
 				{ 0 < missingPlugins.length && (
-					<Notice
-						noticeText={ __( 'The following plugins are recommended for full Audience Management functionality.', 'newspack-plugin' ) }
-						isWarning
-					/>
+					<Notice isDismissible={ false } spokenMessage="" status="warning">
+						{ __( 'The following plugins are recommended for full Audience Management functionality.', 'newspack-plugin' ) }
+					</Notice>
 				) }
 				{ 0 === missingPlugins.length && prerequisites && ! allReady && (
-					<Notice noticeText={ __( 'Some recommended settings are not yet configured.', 'newspack-plugin' ) } isWarning />
+					<Notice isDismissible={ false } spokenMessage="" status="warning">
+						{ __( 'Some recommended settings are not yet configured.', 'newspack-plugin' ) }
+					</Notice>
 				) }
 				{ ! prerequisites && (
 					<>
@@ -181,9 +185,8 @@ export default withWizardScreen(
 							disabled={ isVerificationForcedOn || inFlight }
 						>
 							{ isVerificationForcedOn && (
-								<Notice
-									isWarning
-									noticeText={
+								<Notice isDismissible={ false } spokenMessage="" status="warning">
+									{
 										<>
 											{ __( 'Verification is required by at least one published content gate: ', 'newspack-plugin' ) }
 											{ verificationRequiredByGates.map( ( gate, index ) => (
@@ -194,7 +197,7 @@ export default withWizardScreen(
 											) ) }
 										</>
 									}
-								/>
+								</Notice>
 							) }
 						</ActionCard>
 						{ hasNewsletters && (
@@ -272,7 +275,9 @@ export default withWizardScreen(
 										{ config.sync_esp && (
 											<>
 												{ 0 < Object.keys( espSyncErrors ).length && (
-													<Notice noticeText={ Object.values( espSyncErrors ).join( ' ' ) } isError />
+													<Notice isDismissible={ false } status="error">
+														{ Object.values( espSyncErrors ).join( ' ' ) }
+													</Notice>
 												) }
 												{ esp === 'mailchimp' && (
 													<Settings

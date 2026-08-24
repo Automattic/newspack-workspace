@@ -7,12 +7,12 @@
  */
 import { Fragment, useState, useEffect, useMemo } from '@wordpress/element';
 import { __, sprintf } from '@wordpress/i18n';
-import { __experimentalVStack as VStack } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
+import { Notice, __experimentalVStack as VStack } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
 
 /**
  * Internal dependencies
  */
-import { Notice, SelectControl, TextControl } from '../../../../../packages/components/src';
+import { SelectControl, TextControl } from '../../../../../packages/components/src';
 
 /**
  * Get select options from object of ad units.
@@ -120,7 +120,11 @@ const PlacementControl = ( {
 	}, [ placementProvider, placementAdUnit, bidders ] );
 
 	if ( ! providers.length ) {
-		return <Notice isWarning noticeText={ __( 'There is no provider available.', 'newspack-plugin' ) } />;
+		return (
+			<Notice isDismissible={ false } spokenMessage="" status="warning">
+				{ __( 'There is no provider available.', 'newspack-plugin' ) }
+			</Notice>
+		);
 	}
 
 	return (
@@ -177,7 +181,7 @@ const PlacementControl = ( {
 					Object.keys( biddersErrors ).map( bidderKey => {
 						if ( biddersErrors[ bidderKey ] ) {
 							return (
-								<Notice key={ bidderKey } isWarning>
+								<Notice isDismissible={ false } spokenMessage="" status="warning" key={ bidderKey }>
 									{ biddersErrors[ bidderKey ] }
 								</Notice>
 							);

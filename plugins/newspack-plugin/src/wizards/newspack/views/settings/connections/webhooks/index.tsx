@@ -7,7 +7,7 @@
  */
 import { __ } from '@wordpress/i18n';
 import { useEffect, useState, Fragment } from '@wordpress/element';
-import { __experimentalHStack as HStack } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
+import { Notice, __experimentalHStack as HStack } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
 
 /**
  * Internal dependencies
@@ -16,7 +16,7 @@ import { API_NAMESPACE } from './constants';
 import EndpointActionsCard from './endpoint-actions-card';
 import EndpointActionsModals from './endpoint-actions-modals';
 import { useWizardApiFetch } from '../../../../../hooks/use-wizard-api-fetch';
-import { Card, Button, Notice, SectionHeader } from '../../../../../../../packages/components/src';
+import { Card, Button, SectionHeader } from '../../../../../../../packages/components/src';
 
 const defaultEndpoint: Endpoint = {
 	url: '',
@@ -100,7 +100,9 @@ function Webhooks() {
 						) ) }
 					</Fragment>
 				) : (
-					<Notice noticeText={ __( 'No endpoints found', 'newspack-plugin' ) } />
+					<Notice isDismissible={ false } spokenMessage="">
+						{ __( 'No endpoints found', 'newspack-plugin' ) }
+					</Notice>
 				) ) }
 			{ selectedEndpoint && (
 				<EndpointActionsModals

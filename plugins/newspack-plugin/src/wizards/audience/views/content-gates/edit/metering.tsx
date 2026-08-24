@@ -2,6 +2,7 @@
  * WordPress dependencies.
  */
 import {
+	Notice,
 	__experimentalNumberControl as NumberControl, // eslint-disable-line @wordpress/no-unsafe-wp-apis
 	__experimentalToggleGroupControl as ToggleGroupControl, // eslint-disable-line @wordpress/no-unsafe-wp-apis
 	__experimentalToggleGroupControlOption as ToggleGroupControlOption, // eslint-disable-line @wordpress/no-unsafe-wp-apis,
@@ -12,7 +13,6 @@ import { __ } from '@wordpress/i18n';
 /**
  * Internal dependencies
  */
-import { Notice } from '../../../../../../packages/components/src';
 
 interface MeteringProps {
 	description?: string;
@@ -35,13 +35,12 @@ export default function Metering( { description, metering, onChange }: MeteringP
 			{ metering.enabled && (
 				<>
 					{ metering.enabled && isCountZero && (
-						<Notice
-							isWarning
-							noticeText={ __(
+						<Notice isDismissible={ false } spokenMessage="" status="warning">
+							{ __(
 								'Free views is set to 0, so no reader gets a free view and content is gated for everyone — the same behavior as turning Metering off. Set 1 or more free views to meter access.',
 								'newspack-plugin'
 							) }
-						/>
+						</Notice>
 					) }
 					<NumberControl
 						label={ __( 'Free views', 'newspack-plugin' ) }

@@ -6,13 +6,14 @@
  * WordPress dependencies.
  */
 import { Component } from '@wordpress/element';
+import { Notice } from '@wordpress/components';
 import { __ } from '@wordpress/i18n';
 import { trash } from '@wordpress/icons';
 
 /**
  * Internal dependencies.
  */
-import { Button, Card, Grid, Notice, TextControl, withWizardScreen } from '../../../../../packages/components/src';
+import { Button, Card, Grid, TextControl, withWizardScreen } from '../../../../../packages/components/src';
 import AdUnitSizeControl, { getSizes } from '../../components/ad-unit-size-control';
 
 /**
@@ -119,10 +120,9 @@ class AdUnit extends Component {
 				</Card>
 
 				{ isInvalidSize && (
-					<Notice
-						isWarning
-						noticeText={ __( 'The ad unit must have at least one valid size or fluid size enabled.', 'newspack-plugin' ) }
-					/>
+					<Notice isDismissible={ false } spokenMessage="" status="warning">
+						{ __( 'The ad unit must have at least one valid size or fluid size enabled.', 'newspack-plugin' ) }
+					</Notice>
 				) }
 
 				<Grid columns={ 4 } gutter={ 8 } className="newspack-grid__thead">

@@ -9,12 +9,12 @@ import { __, sprintf } from '@wordpress/i18n';
 import { useState, useEffect, useCallback, useMemo, Fragment } from '@wordpress/element';
 import { filterSortAndPaginate } from '@wordpress/dataviews';
 import type { Action, Field, View } from '@wordpress/dataviews';
-import { Button, __experimentalHStack as HStack } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
+import { Notice, Button, __experimentalHStack as HStack } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
 
 /**
  * Internal dependencies.
  */
-import { DataViews, Notice, StatusIndicator, utils } from '../../../../../../packages/components/src';
+import { DataViews, StatusIndicator, utils } from '../../../../../../packages/components/src';
 import { postStatus } from '../../../post-status';
 import WizardsPluginCard from '../../../../wizards-plugin-card';
 import { useWizardApiFetch } from '../../../../hooks/use-wizard-api-fetch';
@@ -448,13 +448,12 @@ const Emails = () => {
 		return (
 			<Fragment>
 				<PageHeading />
-				<Notice
-					isError
-					noticeText={ __(
+				<Notice isDismissible={ false } status="error">
+					{ __(
 						'Newspack uses Newspack Newsletters to handle editing email-type content. Please activate this plugin to proceed. Until this feature is configured, default receipts will be used.',
 						'newspack-plugin'
 					) }
-				/>
+				</Notice>
 				<WizardsPluginCard
 					slug="newspack-newsletters"
 					title={ __( 'Newspack Newsletters', 'newspack-plugin' ) }
@@ -472,7 +471,11 @@ const Emails = () => {
 	return (
 		<Fragment>
 			<PageHeading />
-			{ errorMessage && <Notice isError noticeText={ errorMessage } /> }
+			{ errorMessage && (
+				<Notice isDismissible={ false } status="error">
+					{ errorMessage }
+				</Notice>
+			) }
 			{ /* Chip bar only on the Newspack platform (the only one with both
 			     groups). Settings lives in the DataViews toolbar (see `header`
 			     below), so there's nothing to render here off-platform. */ }

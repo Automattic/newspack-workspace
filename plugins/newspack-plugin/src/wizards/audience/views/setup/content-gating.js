@@ -2,7 +2,7 @@
  * WordPress dependencies
  */
 import { __ } from '@wordpress/i18n';
-import { ExternalLink } from '@wordpress/components';
+import { Notice, ExternalLink } from '@wordpress/components';
 import { useEffect, useState } from '@wordpress/element';
 
 /**
@@ -10,7 +10,7 @@ import { useEffect, useState } from '@wordpress/element';
  */
 import CountdownBanner from './countdown-banner';
 import ContentGifting from './content-gifting';
-import { ActionCard, Notice, withWizardScreen } from '../../../../../packages/components/src';
+import { ActionCard, withWizardScreen } from '../../../../../packages/components/src';
 import WizardsTab from '../../../wizards-tab';
 
 export default withWizardScreen( ( { wizardApiFetch } ) => {
@@ -68,7 +68,11 @@ export default withWizardScreen( ( { wizardApiFetch } ) => {
 				</>
 			}
 		>
-			{ error && <Notice noticeText={ error?.message || __( 'Something went wrong.', 'newspack-plugin' ) } isError /> }
+			{ error && (
+				<Notice isDismissible={ false } status="error">
+					{ error?.message || __( 'Something went wrong.', 'newspack-plugin' ) }
+				</Notice>
+			) }
 			<ActionCard
 				title={ __( 'Content Gate', 'newspack-plugin' ) }
 				titleLink={ config.edit_gate_url }

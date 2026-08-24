@@ -4,13 +4,13 @@
  */
 import { __ } from '@wordpress/i18n';
 import {
+	Notice,
 	__experimentalHStack as HStack,
 	__experimentalVStack as VStack,
 	__experimentalSpacer as Spacer,
 	Icon,
 	Spinner,
 	Button,
-	Notice,
 } from '@wordpress/components';
 import { notAllowed } from '@wordpress/icons';
 import { useSelect, useDispatch } from '@wordpress/data';

@@ -5,13 +5,13 @@ import { __, sprintf } from '@wordpress/i18n';
 import { useDispatch } from '@wordpress/data';
 import { useEffect } from '@wordpress/element';
 import {
+	Notice,
 	// eslint-disable-next-line @wordpress/no-unsafe-wp-apis
 	__experimentalVStack as VStack,
 	// eslint-disable-next-line @wordpress/no-unsafe-wp-apis
 	__experimentalToggleGroupControl as ToggleGroupControl,
 	// eslint-disable-next-line @wordpress/no-unsafe-wp-apis
 	__experimentalToggleGroupControlOption as ToggleGroupControlOption,
-	Notice as CoreNotice,
 	ToggleControl,
 	ExternalLink,
 } from '@wordpress/components';
@@ -20,7 +20,7 @@ import {
  * Internal dependencies.
  */
 import MoneyInput from '../../../components/money-input';
-import { Button, Divider, Grid, Notice, SectionHeader, TextControl } from '../../../../../../packages/components/src';
+import { Button, Divider, Grid, interpolateOrPlainText, SectionHeader, TextControl } from '../../../../../../packages/components/src';
 import { useWizardData } from '../../../../../../packages/components/src/wizard/store/utils';
 import { WIZARD_STORE_NAMESPACE } from '../../../../../../packages/components/src/wizard/store';
 import WizardsTab from '../../../../wizards-tab';
@@ -104,22 +104,34 @@ export const DonationAmounts = ( { hideHeader = false }: { hideHeader?: boolean 
 				</ToggleGroupControl>
 			) }
 			{ Array.isArray( trashed ) && 0 < trashed.length && (
-				<Notice isError>
-					{
-						<span
-							dangerouslySetInnerHTML={ {
-								__html: sprintf(
-									// Translators: %1$s is a link to the trashed products. %2$s is a comma-separated list of trashed product names.
-									__(
-										'One or more donation products is in trash. Please <a href="%1$s">restore the product(s)</a> to continue using donation features: %2$s',
-										'newspack-plugin'
-									),
-									'/wp-admin/edit.php?post_status=trash&post_type=product',
-									trashed.join( ', ' )
+				<Notice
+					isDismissible={ false }
+					status="error"
+					spokenMessage={ sprintf(
+						// Translators: %s is a comma-separated list of trashed product names.
+						__(
+							'One or more donation products is in trash. Please restore the product(s) to continue using donation features: %s',
+							'newspack-plugin'
+						),
+						trashed.join( ', ' )
+					) }
+				>
+					<span>
+						{ interpolateOrPlainText(
+							// Translators: <a> wraps the link text to the trashed products list.
+							__(
+								'One or more donation products is in trash. Please <a>restore the product(s)</a> to continue using donation features:',
+								'newspack-plugin'
+							),
+							{
+								a: (
+									/* eslint-disable-next-line jsx-a11y/anchor-has-content */
+									<a href="/wp-admin/edit.php?post_status=trash&post_type=product" />
 								),
-							} }
-						/>
-					}
+							}
+						) }{ ' ' }
+						{ trashed.join( ', ' ) }
+					</span>
 				</Notice>
 			) }
 			<VStack spacing={ 6 }>
@@ -205,11 +217,8 @@ const Donation = () => {
 		<WizardsTab>
 			{ /* Display product validation issues */ }
 			{ hasInvalidProducts ? (
-				<Notice
-					isWarning
-					noticeText={ __( 'Some donation products are invalid. Please correct the following issues:', 'newspack-plugin' ) }
-					style={ { marginBottom: '16px' } }
-				>
+				<Notice isDismissible={ false } spokenMessage="" status="warning">
+					{ __( 'Some donation products are invalid. Please correct the following issues:', 'newspack-plugin' ) }
 					<ul style={ { marginTop: '8px', marginBottom: '0' } }>
 						{ validationResults.map( ( product: ProductValidation ) => {
 							if ( product.issues && product.issues.length > 0 ) {
@@ -252,13 +261,13 @@ const Donation = () => {
 						/>
 						<VStack spacing={ 6 }>
 							{ 'publish' === wizardData.donation_page.status ? (
-								<CoreNotice status="success" isDismissible={ false }>
+								<Notice isDismissible={ false } status="success" spokenMessage="">
 									{ __( 'Your donations landing page is published.', 'newspack-plugin' ) }
-								</CoreNotice>
+								</Notice>
 							) : (
-								<CoreNotice status="warning" isDismissible={ false }>
+								<Notice isDismissible={ false } spokenMessage="" status="warning">
 									{ __( 'Your donations landing page is not yet published.', 'newspack-plugin' ) }
-								</CoreNotice>
+								</Notice>
 							) }
 							<div>
 								<Button

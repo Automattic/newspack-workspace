@@ -2,14 +2,14 @@
  * WordPress dependencies
  */
 import { __ } from '@wordpress/i18n';
-import { BaseControl, CheckboxControl, ExternalLink } from '@wordpress/components';
+import { Notice, BaseControl, CheckboxControl, ExternalLink } from '@wordpress/components';
 import { useEffect, useState } from '@wordpress/element';
 import apiFetch from '@wordpress/api-fetch';
 
 /**
  * Internal dependencies
  */
-import { ActionCard, Button, Grid, Notice, SelectControl } from '../../../../../../packages/components/src';
+import { ActionCard, Button, Grid, SelectControl } from '../../../../../../packages/components/src';
 
 const isValidError = ( e: unknown ): e is WpRestApiError => {
 	return e instanceof Error && 'message' in e;
@@ -85,10 +85,14 @@ const JetpackSSO = () => {
 			>
 				{ settings.force_2fa && (
 					<>
-						{ error && <Notice isError noticeText={ error } /> }
+						{ error && (
+							<Notice isDismissible={ false } status="error">
+								{ error }
+							</Notice>
+						) }
 						{ settings.jetpack_sso_force_2fa && (
 							<>
-								<Notice isWarning>
+								<Notice isDismissible={ false } spokenMessage="" status="warning">
 									{ __(
 										'Two-factor authentication is currently enforced for all users via Jetpack configuration.',
 										'newspack-plugin'

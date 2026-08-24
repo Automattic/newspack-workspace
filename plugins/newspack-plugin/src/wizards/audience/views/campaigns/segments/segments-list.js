@@ -3,12 +3,13 @@
  * WordPress dependencies.
  */
 import { useState, Fragment, useEffect, useCallback, useMemo } from '@wordpress/element';
+import { Notice } from '@wordpress/components';
 import { __ } from '@wordpress/i18n';
 
 /**
  * Internal dependencies.
  */
-import { Card, CardSortableList, Notice, Router } from '../../../../../../packages/components/src';
+import { Card, CardSortableList, Router } from '../../../../../../packages/components/src';
 import { segmentDescription } from '../utils';
 
 const { useHistory } = Router;
@@ -123,7 +124,11 @@ const SegmentsList = ( { wizardApiFetch, segments, setSegments, isLoading } ) =>
 
 	return segments.length ? (
 		<Fragment>
-			{ error && <Notice noticeText={ error } isError /> }
+			{ error && (
+				<Notice isDismissible={ false } status="error">
+					{ error }
+				</Notice>
+			) }
 			<Card headerActions noBorder>
 				<h2>{ __( 'Audience segments', 'newspack-plugin' ) }</h2>
 			</Card>

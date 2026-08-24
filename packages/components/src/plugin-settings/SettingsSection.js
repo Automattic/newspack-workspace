@@ -8,12 +8,12 @@
 import { Fragment, useState } from '@wordpress/element';
 import { applyFilters } from '@wordpress/hooks';
 import { __ } from '@wordpress/i18n';
-import { CheckboxControl } from '@wordpress/components';
+import { Notice, CheckboxControl } from '@wordpress/components';
 
 /**
  * Internal dependencies
  */
-import { ActionCard, Button, Grid, Notice, PageControl, SelectControl, TextControl } from '../';
+import { ActionCard, Button, Grid, PageControl, SelectControl, TextControl } from '../';
 import './style.scss';
 
 const isSelectControl = setting => {
@@ -117,7 +117,11 @@ const SettingsSection = props => {
 		>
 			{ ( active || active === null ) && (
 				<Fragment>
-					{ error?.message && <Notice noticeText={ error.message } isError /> }
+					{ error?.message && (
+						<Notice isDismissible={ false } status="error">
+							{ error.message }
+						</Notice>
+					) }
 					{ createFilter( 'beforeControls' ) }
 					<Grid columns={ columns } gutter={ 32 }>
 						{ fields.map( setting => {

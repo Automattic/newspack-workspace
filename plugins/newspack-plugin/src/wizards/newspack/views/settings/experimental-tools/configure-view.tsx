@@ -8,7 +8,7 @@
  */
 import { __, sprintf } from '@wordpress/i18n';
 import { useState, useEffect } from '@wordpress/element';
-import { TextareaControl, TextControl, SelectControl, ToggleControl, Spinner, Notice } from '@wordpress/components';
+import { Notice, TextareaControl, TextControl, SelectControl, ToggleControl, Spinner } from '@wordpress/components';
 import { Icon, chevronLeft, chevronDown, chevronUp } from '@wordpress/icons';
 import apiFetch from '@wordpress/api-fetch';
 
@@ -264,7 +264,7 @@ export default function ConfigureView( {
 			<p className="newspack-wizard__sections__description">{ tool.description }</p>
 
 			{ tool.location_hint && (
-				<Notice status="info" isDismissible={ false } className="experimental-tools__location-hint">
+				<Notice spokenMessage="" status="info" isDismissible={ false } className="experimental-tools__location-hint">
 					{ tool.location_hint }
 				</Notice>
 			) }

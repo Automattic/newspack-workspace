@@ -1,0 +1,13 @@
+@use "~@wordpress/base-styles/mixins" as wp-mixins;
+@use "~@wordpress/base-styles/variables" as wp-vars;
+
+.newspack-handoff-message {
+	margin-top: 0;
+	position: sticky;
+	top: wp-vars.$admin-bar-height-big;
+	z-index: 100;
+
+	@include wp-mixins.break-medium {
+		top: wp-vars.$admin-bar-height;
+	}
+}

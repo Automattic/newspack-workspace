@@ -2,13 +2,14 @@
  * WordPress dependencies
  */
 import { __ } from '@wordpress/i18n';
+import { Notice } from '@wordpress/components';
 import { useDispatch } from '@wordpress/data';
 import { useState } from '@wordpress/element';
 
 /**
  * Internal dependencies
  */
-import { ActionCard, Button, Notice, PluginInstaller, useConfirmDialog, withWizardScreen } from '../../../../../packages/components/src';
+import { ActionCard, Button, PluginInstaller, useConfirmDialog, withWizardScreen } from '../../../../../packages/components/src';
 import { WIZARD_STORE_NAMESPACE } from '../../../../../packages/components/src/wizard/store';
 import WizardsTab from '../../../wizards-tab';
 import { NEWSPACK, NRH, OTHER } from '../../constants';
@@ -127,13 +128,12 @@ const PlatformSelection = ( { onComplete, onCancel, config, saveConfig, inFlight
 					/>
 					{ installFailed && (
 						<>
-							<Notice
-								isWarning
-								noticeText={ __(
+							<Notice isDismissible={ false } spokenMessage="" status="warning">
+								{ __(
 									'Some plugins could not be installed automatically. Install them manually using the links above, or continue and finish setup later.',
 									'newspack-plugin'
 								) }
-							/>
+							</Notice>
 							<div className="newspack-buttons-card">
 								<Button isPrimary onClick={ onComplete }>
 									{ __( 'Continue', 'newspack-plugin' ) }

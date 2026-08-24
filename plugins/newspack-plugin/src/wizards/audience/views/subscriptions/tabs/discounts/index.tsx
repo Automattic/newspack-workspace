@@ -17,12 +17,12 @@ import { filterSortAndPaginate } from '@wordpress/dataviews';
 import type { Action, Field, View } from '@wordpress/dataviews';
 import { percent } from '@wordpress/icons';
 // eslint-disable-next-line @wordpress/no-unsafe-wp-apis
-import { __experimentalHStack as HStack, __experimentalVStack as VStack } from '@wordpress/components';
+import { Notice, __experimentalHStack as HStack, __experimentalVStack as VStack } from '@wordpress/components';
 
 /**
  * Internal dependencies.
  */
-import { Button, DataViews, Grid, Notice, SectionHeader, StatusIndicator, Waiting } from '../../../../../../../packages/components/src';
+import { Button, DataViews, Grid, SectionHeader, StatusIndicator, Waiting } from '../../../../../../../packages/components/src';
 import { WIZARD_STORE_NAMESPACE } from '../../../../../../../packages/components/src/wizard/store';
 import Router from '../../../../../../../packages/components/src/proxied-imports/router';
 import { SEARCH_ENDPOINTS, WIZARD_ENDPOINT } from '../../constants';
@@ -291,7 +291,11 @@ function SubscriberDiscounts() {
 
 	return (
 		<div className="newspack-subscriber-discounts">
-			{ error && <Notice isError noticeText={ error } /> }
+			{ error && (
+				<Notice isDismissible={ false } status="error">
+					{ error }
+				</Notice>
+			) }
 			{ showEmptyState ? (
 				<div className="newspack-subscriber-discounts__empty">
 					<Grid className="newspack-empty-state" columns={ 4 } noMargin>

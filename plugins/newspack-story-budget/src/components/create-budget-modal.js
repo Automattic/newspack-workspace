@@ -5,7 +5,7 @@
 import { __ } from '@wordpress/i18n';
 import { useState } from '@wordpress/element';
 import { useSelect, useDispatch } from '@wordpress/data';
-import { __experimentalVStack as VStack, __experimentalHStack as HStack, Button, TextControl, Notice } from '@wordpress/components';
+import { Notice, __experimentalVStack as VStack, __experimentalHStack as HStack, Button, TextControl } from '@wordpress/components';
 import { store as noticesStore } from '@wordpress/notices';
 
 /**
@@ -61,7 +61,7 @@ const CreateBudgetModal = ( { onClose } ) => {
 				</div>
 
 				{ budgetError && (
-					<Notice status="error" onRemove={ clearErrors }>
+					<Notice status="error" isDismissible onRemove={ clearErrors }>
 						{ budgetError.message }
 					</Notice>
 				) }

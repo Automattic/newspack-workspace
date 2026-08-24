@@ -8,9 +8,9 @@
 import { __ } from '@wordpress/i18n';
 import apiFetch from '@wordpress/api-fetch';
 import {
+	Notice,
 	Modal,
 	Button,
-	Notice,
 	ToggleControl,
 	RadioControl,
 	__experimentalHStack as HStack, // eslint-disable-line @wordpress/no-unsafe-wp-apis

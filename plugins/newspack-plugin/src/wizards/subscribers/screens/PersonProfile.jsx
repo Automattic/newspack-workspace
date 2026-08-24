@@ -29,6 +29,7 @@ import { createPortal, useEffect, useMemo, useState } from '@wordpress/element';
 import { __, _n, sprintf } from '@wordpress/i18n';
 import { useDispatch } from '@wordpress/data';
 import {
+	Notice,
 	__experimentalHStack as HStack, // eslint-disable-line @wordpress/no-unsafe-wp-apis
 	__experimentalVStack as VStack, // eslint-disable-line @wordpress/no-unsafe-wp-apis
 } from '@wordpress/components';
@@ -36,7 +37,7 @@ import {
 /**
  * Internal dependencies.
  */
-import { Button, Card, Divider, Grid, Notice, Router, SectionHeader, Waiting } from '../../../../packages/components/src';
+import { Button, Card, Divider, Grid, Router, SectionHeader, Waiting } from '../../../../packages/components/src';
 import './style.scss';
 import { WIZARD_STORE_NAMESPACE } from '../../../../packages/components/src/wizard/store';
 import SubscriptionCard from '../components/SubscriptionCard';
@@ -281,8 +282,10 @@ export default function PersonProfile() {
 	// A person who does not exist is a dead end, so it gets a plain statement and
 	// a way back — not a Retry button that can never succeed.
 	if ( notFound ) {
+		const message = __( 'This subscriber could not be found. They may have been deleted.', 'newspack-plugin' );
 		return (
-			<Notice isError noticeText={ __( 'This subscriber could not be found. They may have been deleted.', 'newspack-plugin' ) }>
+			<Notice isDismissible={ false } status="error" spokenMessage={ message }>
+				{ message }
 				<Button variant="link" href={ backNav }>
 					{ __( 'Back to the list', 'newspack-plugin' ) }
 				</Button>
@@ -292,9 +295,11 @@ export default function PersonProfile() {
 
 	// A failed read must not read as "this person has no subscriptions".
 	if ( error || ! subscriber ) {
+		// translators: %s is an error message.
+		const message = sprintf( __( 'Could not load this subscriber: %s', 'newspack-plugin' ), error );
 		return (
-			// translators: %s is an error message.
-			<Notice isError noticeText={ sprintf( __( 'Could not load this subscriber: %s', 'newspack-plugin' ), error ) }>
+			<Notice isDismissible={ false } status="error" spokenMessage={ message }>
+				{ message }
 				<Button variant="link" onClick={ reload }>
 					{ __( 'Retry', 'newspack-plugin' ) }
 				</Button>

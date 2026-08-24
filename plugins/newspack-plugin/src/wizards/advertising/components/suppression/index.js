@@ -4,13 +4,13 @@
 import apiFetch from '@wordpress/api-fetch';
 import { useState, useEffect } from '@wordpress/element';
 import { __ } from '@wordpress/i18n';
-import { ToggleControl, CheckboxControl } from '@wordpress/components';
+import { Notice, ToggleControl, CheckboxControl } from '@wordpress/components';
 import { addQueryArgs } from '@wordpress/url';
 
 /**
  * Internal dependencies
  */
-import { ActionCard, Grid, Notice, Button, CategoryAutocomplete, SectionHeader, Waiting } from '../../../../../packages/components/src';
+import { ActionCard, Grid, Button, CategoryAutocomplete, SectionHeader, Waiting } from '../../../../../packages/components/src';
 
 const Suppression = () => {
 	const [ error, setError ] = useState( false );
@@ -73,7 +73,11 @@ const Suppression = () => {
 			title={ __( 'Suppression settings', 'newspack-plugin' ) }
 			description={ __( 'Configure where ads are suppressed.', 'newspack-plugin' ) }
 		>
-			{ error && <Notice isError noticeText={ error.message } /> }
+			{ error && (
+				<Notice isDismissible={ false } status="error">
+					{ error.message }
+				</Notice>
+			) }
 			<SectionHeader
 				title={ __( 'Post types', 'newspack-plugin' ) }
 				heading={ 3 }

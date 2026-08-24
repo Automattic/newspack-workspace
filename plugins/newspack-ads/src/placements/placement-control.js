@@ -100,7 +100,11 @@ const PlacementControl = ( {
 	}, [ providers, value.ad_unit ] );
 
 	if ( ! providers.length ) {
-		return <Notice isWarning noticeText={ __( 'There is no provider available.', 'newspack-ads' ) } isDismissible={ false } />;
+		return (
+			<Notice status="warning" isDismissible={ false }>
+				{ __( 'There is no provider available.', 'newspack-ads' ) }
+			</Notice>
+		);
 	}
 
 	return (

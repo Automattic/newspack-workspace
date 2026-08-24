@@ -10,6 +10,7 @@ import { __ } from '@wordpress/i18n';
 import apiFetch from '@wordpress/api-fetch';
 import { useState } from '@wordpress/element';
 import {
+	Notice,
 	Modal,
 	ToggleControl,
 	// eslint-disable-next-line @wordpress/no-unsafe-wp-apis
@@ -21,7 +22,7 @@ import {
 /**
  * Internal dependencies.
  */
-import { Button, Notice } from '../../../../../../../packages/components/src';
+import { Button } from '../../../../../../../packages/components/src';
 import { DISCOUNT_SETTINGS_ENDPOINT } from './constants';
 import type { DiscountSettings, DiscountsPayload } from './types';
 
@@ -59,7 +60,11 @@ export default function SettingsModal( { settings, onSaved, onClose }: SettingsM
 			className="newspack-subscriber-discounts__settings"
 		>
 			<VStack spacing={ 6 }>
-				{ error && <Notice isError noticeText={ error } /> }
+				{ error && (
+					<Notice isDismissible={ false } status="error">
+						{ error }
+					</Notice>
+				) }
 				<VStack spacing={ 4 }>
 					<h3>{ __( 'Sale Prices', 'newspack-plugin' ) }</h3>
 					<ToggleControl

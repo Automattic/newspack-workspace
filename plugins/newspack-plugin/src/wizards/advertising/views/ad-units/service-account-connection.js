@@ -2,12 +2,13 @@
  * WordPress dependencies
  */
 import { useState, useRef } from '@wordpress/element';
+import { Notice } from '@wordpress/components';
 import { __ } from '@wordpress/i18n';
 
 /**
  * Internal dependencies
  */
-import { Card, Grid, Notice, SectionHeader } from '../../../../../packages/components/src';
+import { Card, Grid, SectionHeader } from '../../../../../packages/components/src';
 import { handleJSONFile } from '../../components/utils';
 
 const ServiceAccountConnection = ( { updateWithAPI, isConnected } ) => {
@@ -74,7 +75,11 @@ const ServiceAccountConnection = ( { updateWithAPI, isConnected } ) => {
 										'newspack'
 									) }
 								</p>
-								{ fileError && <Notice noticeText={ fileError } isError /> }
+								{ fileError && (
+									<Notice isDismissible={ false } status="error">
+										{ fileError }
+									</Notice>
+								) }
 							</>
 						),
 						actionType: 'chevron',

@@ -5,10 +5,10 @@ import apiFetch from '@wordpress/api-fetch';
 import { createPortal, useEffect, useRef, useState } from '@wordpress/element';
 import { __ } from '@wordpress/i18n';
 import {
+	Notice,
 	// eslint-disable-next-line @wordpress/no-unsafe-wp-apis
 	__experimentalVStack as VStack,
 	DropdownMenu,
-	Notice,
 	Snackbar,
 } from '@wordpress/components';
 import { moreVertical } from '@wordpress/icons';
@@ -16,7 +16,7 @@ import { moreVertical } from '@wordpress/icons';
 /**
  * Internal dependencies
  */
-import { withWizardScreen, Button, Handoff, Waiting, useConfirmDialog, useUnsavedChangesDialog } from '../../../../../../packages/components/src';
+import { Button, Handoff, useConfirmDialog, useUnsavedChangesDialog, Waiting, withWizardScreen } from '../../../../../../packages/components/src';
 import ContextualPromptsSettings from './contextual-prompts-settings';
 import './style.scss';
 

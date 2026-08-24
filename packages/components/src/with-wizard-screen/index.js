@@ -6,7 +6,7 @@ import { cloneElement } from '@wordpress/element';
 /**
  * Internal dependencies
  */
-import { Button, Handoff, Notice, HandoffMessage, TabbedNavigation, Page } from '../';
+import { Button, Handoff, DebugMode, HandoffMessage, TabbedNavigation, Page } from '../';
 import { activeBreadcrumbs } from '../wizard/breadcrumbs-select';
 import { buttonProps } from '../button-props';
 import Router from '../proxied-imports/router';
@@ -112,7 +112,7 @@ export default function withWizardScreen( WrappedComponent, { hidePrimaryButton,
 			}
 			return (
 				<>
-					{ newspack_aux_data.is_debug_mode && <Notice debugMode /> }
+					{ newspack_aux_data.is_debug_mode && <DebugMode /> }
 					{ hideHeader ? (
 						// Without the Page shell the tabs still own the content: it
 						// renders inside the active tab's panel.

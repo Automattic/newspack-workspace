@@ -1,13 +1,14 @@
 /**
  * WordPress dependencies.
  */
+import { Notice } from '@wordpress/components';
 import { useEffect, useState } from '@wordpress/element';
 
 /**
  * Internal dependencies.
  */
 import { HANDOFF_KEY } from '../consts';
-import { Notice } from '../';
+import './style.scss';
 
 /**
  * Handoff Message Component.
@@ -34,5 +35,9 @@ export default function HandoffMessage() {
 	if ( ! handoffMessage ) {
 		return null;
 	}
-	return <Notice isHandoff isDismissible={ false } rawHTML noticeText={ handoffMessage } />;
+	return (
+		<Notice className="newspack-handoff-message" isDismissible={ false } spokenMessage="" status="warning" __unstableHTML>
+			{ handoffMessage }
+		</Notice>
+	);
 }

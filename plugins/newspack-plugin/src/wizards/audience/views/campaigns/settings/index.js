@@ -5,6 +5,7 @@ import apiFetch from '@wordpress/api-fetch';
 import { createPortal, Fragment, useEffect, useRef, useState } from '@wordpress/element';
 import { __, sprintf } from '@wordpress/i18n';
 import {
+	Notice,
 	// eslint-disable-next-line @wordpress/no-unsafe-wp-apis
 	__experimentalVStack as VStack,
 	Snackbar,
@@ -19,7 +20,6 @@ import {
 	Button,
 	Divider,
 	Grid,
-	Notice,
 	SectionHeader,
 	SelectControl,
 	TextControl,
@@ -197,7 +197,11 @@ const Settings = props => {
 		<SettingsScreen { ...props } headerActions={ headerActions }>
 			{ confirmDialog }
 			<WizardsTab>
-				{ error && <Notice isError noticeText={ error.message } /> }
+				{ error && (
+					<Notice isDismissible={ false } status="error">
+						{ error.message }
+					</Notice>
+				) }
 				{ sectionKeys.map( ( sectionKey, index ) => {
 					const section = settings[ sectionKey ];
 					const sectionInfo = section.find( isSectionInfo );

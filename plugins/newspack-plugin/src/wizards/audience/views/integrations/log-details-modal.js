@@ -4,7 +4,7 @@
 import { __ } from '@wordpress/i18n';
 import { useState, useEffect } from '@wordpress/element';
 import apiFetch from '@wordpress/api-fetch';
-import { Spinner, Notice } from '@wordpress/components';
+import { Notice, Spinner } from '@wordpress/components';
 import { Badge } from '@wordpress/ui';
 
 /**

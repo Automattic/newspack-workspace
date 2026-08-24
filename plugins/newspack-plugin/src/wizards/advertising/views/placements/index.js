@@ -14,12 +14,12 @@ import isEqual from 'lodash/isEqual';
 import apiFetch from '@wordpress/api-fetch';
 import { Fragment, useState, useEffect, createPortal } from '@wordpress/element';
 import { __, sprintf } from '@wordpress/i18n';
-import { __experimentalHStack as HStack, __experimentalVStack as VStack, Snackbar, ToggleControl } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
+import { Notice, __experimentalHStack as HStack, __experimentalVStack as VStack, Snackbar, ToggleControl } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
 
 /**
  * Internal dependencies
  */
-import { Button, CardForm, Grid, Notice, withWizardScreen } from '../../../../../packages/components/src';
+import { Button, CardForm, Grid, withWizardScreen } from '../../../../../packages/components/src';
 import PlacementControl from '../../components/placement-control';
 
 /**
@@ -166,7 +166,11 @@ const Placements = () => {
 
 	return (
 		<Fragment>
-			{ ! inFlight && ! providers.length && <Notice isWarning noticeText={ __( 'There is no provider available.', 'newspack-plugin' ) } /> }
+			{ ! inFlight && ! providers.length && (
+				<Notice isDismissible={ false } spokenMessage="" status="warning">
+					{ __( 'There is no provider available.', 'newspack-plugin' ) }
+				</Notice>
+			) }
 			<Grid columns={ 12 } noMargin gutter={ 0 }>
 				<h2 className="newspack-wizard__heading" style={ { gridColumn: 'span 4' } }>
 					{ __( 'Placements', 'newspack-plugin' ) }
@@ -254,8 +258,16 @@ const Placements = () => {
 								} ) }
 							>
 								<VStack spacing={ 4 }>
-									{ error && <Notice isError noticeText={ error.message } /> }
-									{ biddersError && <Notice isWarning noticeText={ biddersError.message } /> }
+									{ error && (
+										<Notice isDismissible={ false } status="error">
+											{ error.message }
+										</Notice>
+									) }
+									{ biddersError && (
+										<Notice isDismissible={ false } spokenMessage="" status="warning">
+											{ biddersError.message }
+										</Notice>
+									) }
 									{ ( enabled || isEnabling ) && placement.hook_name && (
 										<PlacementControl
 											providers={ providers }

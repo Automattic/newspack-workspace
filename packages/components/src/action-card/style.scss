@@ -337,23 +337,6 @@
 		display: flex;
 	}
 
-	/* Notifications */
-	.newspack-action-card__notification {
-		.newspack-notice {
-			margin: 0;
-
-			&__heading {
-				margin-top: 0;
-			}
-		}
-
-		&.newspack-action-card__region-children {
-			.newspack-notice {
-				margin-top: 32px;
-			}
-		}
-	}
-
 	/* Image */
 	.newspack-action-card__image {
 		background-position: center;

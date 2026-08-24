@@ -3,6 +3,7 @@
  */
 import classnames from 'classnames';
 
+import { Notice } from '@wordpress/components';
 /**
  * WordPress dependencies.
  */
@@ -13,7 +14,7 @@ import { __ } from '@wordpress/i18n';
 /**
  * Internal dependencies.
  */
-import { SectionHeader, Notice } from '../';
+import { SectionHeader } from '../';
 import SettingsSection from './SettingsSection';
 
 class PluginSettings extends Component {
@@ -169,7 +170,11 @@ class PluginSettings extends Component {
 		return (
 			<Fragment>
 				{ title && <SectionHeader title={ title } heading={ titleLevel } description={ description } /> }
-				{ error && <Notice isError noticeText={ error.message } /> }
+				{ error && (
+					<Notice isDismissible={ false } status="error">
+						{ error.message }
+					</Notice>
+				) }
 				<div
 					className={ classnames( 'newspack-plugin-settings', {
 						'newspack-wizard-section__is-loading': inFlight && ! Object.keys( settings ).length,

@@ -18,13 +18,13 @@ import { useEffect, useMemo, useState } from '@wordpress/element';
 import { __, sprintf } from '@wordpress/i18n';
 import { useDispatch } from '@wordpress/data';
 import { filterSortAndPaginate } from '@wordpress/dataviews';
-import { __experimentalHStack as HStack } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
+import { Notice, __experimentalHStack as HStack } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
 import { Badge } from '@wordpress/ui';
 
 /**
  * Internal dependencies.
  */
-import { Button, DataViews, Notice, StatusIndicator, Waiting } from '../../../../packages/components/src';
+import { Button, DataViews, StatusIndicator, Waiting } from '../../../../packages/components/src';
 import { fmtDate } from '../format';
 import './style.scss';
 import { SHOW_AVATARS, useAvatars } from '../data/use-avatars';
@@ -237,8 +237,10 @@ export default function GroupList() {
 	// A failed read must not read as "this site has no groups": say so, and offer
 	// a retry.
 	if ( error ) {
+		const message = groupLoadFailedLabel( error );
 		return (
-			<Notice isError noticeText={ groupLoadFailedLabel( error ) }>
+			<Notice isDismissible={ false } status="error" spokenMessage={ message }>
+				{ message }
 				<Button variant="link" onClick={ reload }>
 					{ __( 'Retry', 'newspack-plugin' ) }
 				</Button>

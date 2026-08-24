@@ -16,7 +16,7 @@ import { useDispatch } from '@wordpress/data';
 import apiFetch from '@wordpress/api-fetch';
 import { filterSortAndPaginate } from '@wordpress/dataviews';
 import type { Action, Field, View } from '@wordpress/dataviews';
-import { Spinner, Notice, Button } from '@wordpress/components';
+import { Notice, Spinner, Button } from '@wordpress/components';
 import { gift, globe, lock } from '@wordpress/icons';
 import { Badge } from '@wordpress/ui';
 
@@ -419,7 +419,7 @@ export default function SubscriptionProductsList( { scope = 'subscriptions' }: {
 	return (
 		<div className="newspack-subscription-products">
 			{ policyIsMock && (
-				<Notice status="info" isDismissible={ false } className="newspack-subscription-products__mock-notice">
+				<Notice spokenMessage="" status="info" isDismissible={ false } className="newspack-subscription-products__mock-notice">
 					{ __(
 						'Applied policies and effective price use mock data. They swap to the live policy engine through a single read API with no UI change.',
 						'newspack-plugin'

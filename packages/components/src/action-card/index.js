@@ -5,7 +5,7 @@
 /**
  * WordPress dependencies
  */
-import { Draggable, ExternalLink, ToggleControl } from '@wordpress/components';
+import { Notice, Draggable, ExternalLink, ToggleControl } from '@wordpress/components';
 import { useEffect, useState } from '@wordpress/element';
 import { __ } from '@wordpress/i18n';
 import { Icon, check, chevronDown, chevronUp, dragHandle } from '@wordpress/icons';
@@ -14,7 +14,7 @@ import { Badge } from '@wordpress/ui';
 /**
  * Internal dependencies
  */
-import { Button, Card, Grid, Handoff, Notice, Waiting } from '../';
+import { Button, Card, Grid, Handoff, Waiting } from '../';
 import { ActionCardProps } from './action-card.d.ts';
 import './style.scss';
 
@@ -23,6 +23,7 @@ import './style.scss';
  */
 import classnames from 'classnames';
 
+import { htmlToText } from '../utils/html-to-text';
 /**
  * ActionCard component
  * @param {ActionCardProps} props Component props.
@@ -245,10 +246,36 @@ const ActionCard = ( {
 			</div>
 			{ notification && (
 				<div className="newspack-action-card__notification newspack-action-card__region-children">
-					{ 'error' === notificationLevel && <Notice noticeText={ notification } isError rawHTML={ notificationHTML } /> }
-					{ 'info' === notificationLevel && <Notice noticeText={ notification } rawHTML={ notificationHTML } /> }
-					{ 'success' === notificationLevel && <Notice noticeText={ notification } isSuccess rawHTML={ notificationHTML } /> }
-					{ 'warning' === notificationLevel && <Notice noticeText={ notification } isWarning rawHTML={ notificationHTML } /> }
+					{ 'error' === notificationLevel && (
+						<Notice
+							isDismissible={ false }
+							status="error"
+							spokenMessage={ notificationHTML ? htmlToText( notification ) : notification }
+							__unstableHTML={ notificationHTML }
+						>
+							{ notification }
+						</Notice>
+					) }
+					{ 'info' === notificationLevel && (
+						<Notice isDismissible={ false } spokenMessage="" __unstableHTML={ notificationHTML }>
+							{ notification }
+						</Notice>
+					) }
+					{ 'success' === notificationLevel && (
+						<Notice
+							isDismissible={ false }
+							status="success"
+							spokenMessage={ notificationHTML ? htmlToText( notification ) : notification }
+							__unstableHTML={ notificationHTML }
+						>
+							{ notification }
+						</Notice>
+					) }
+					{ 'warning' === notificationLevel && (
+						<Notice isDismissible={ false } spokenMessage="" status="warning" __unstableHTML={ notificationHTML }>
+							{ notification }
+						</Notice>
+					) }
 				</div>
 			) }
 			{ children && ( ( expandable && expanded ) || ! expandable ) ? (

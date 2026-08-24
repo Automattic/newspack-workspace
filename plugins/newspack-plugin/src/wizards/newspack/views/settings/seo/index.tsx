@@ -6,6 +6,7 @@
  * WordPress dependencies.
  */
 import { __, sprintf } from '@wordpress/i18n';
+import { Notice } from '@wordpress/components';
 import { useState, useEffect } from '@wordpress/element';
 
 /**
@@ -16,7 +17,7 @@ import { ACCOUNTS } from './constants';
 import WizardsTab from '../../../../wizards-tab';
 import VerificationCodes from './verification-codes';
 import WizardSection from '../../../../wizards-section';
-import { Button, Notice } from '../../../../../../packages/components/src';
+import { Button } from '../../../../../../packages/components/src';
 import WizardsActionCard from '../../../../wizards-action-card';
 import useFieldsValidation from '../../../../hooks/use-fields-validation';
 import { useWizardApiFetch } from '../../../../hooks/use-wizard-api-fetch';
@@ -112,14 +113,22 @@ function Seo() {
 				title={ __( 'Webmaster Tools', 'newspack-plugin' ) }
 				description={ __( 'Add verification meta tags to your site', 'newspack-plugin' ) }
 			>
-				{ codesValidation.errorMessage && <Notice isError noticeText={ codesValidation.errorMessage } /> }
+				{ codesValidation.errorMessage && (
+					<Notice isDismissible={ false } status="error">
+						{ codesValidation.errorMessage }
+					</Notice>
+				) }
 				<VerificationCodes setData={ verification => setData( { ...data, verification } ) } data={ data.verification } />
 			</WizardSection>
 			<WizardSection
 				title={ __( 'Social Accounts', 'newspack-plugin' ) }
 				description={ __( 'Let search engines know which social profiles are associated to your site', 'newspack-plugin' ) }
 			>
-				{ accountsValidation.errorMessage && <Notice isError noticeText={ accountsValidation.errorMessage } /> }
+				{ accountsValidation.errorMessage && (
+					<Notice isDismissible={ false } status="error">
+						{ accountsValidation.errorMessage }
+					</Notice>
+				) }
 				<Accounts setData={ urls => setData( { ...data, urls } ) } data={ data.urls } />
 			</WizardSection>
 			<WizardSection>

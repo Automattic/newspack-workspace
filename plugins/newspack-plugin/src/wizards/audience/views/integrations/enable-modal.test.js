@@ -19,7 +19,6 @@ import { EnableModal, getMissingRequiredFields } from './enable-modal';
 jest.mock( '../../../../../packages/components/src', () => ( {
 	Button: jest.requireActual( '../../../../../packages/components/src/button' ).default,
 	Modal: jest.requireActual( '../../../../../packages/components/src/modal' ).default,
-	Notice: jest.requireActual( '../../../../../packages/components/src/notice' ).default,
 	Grid: jest.requireActual( '../../../../../packages/components/src/grid' ).default,
 	SelectControl: jest.requireActual( '../../../../../packages/components/src/select-control' ).default,
 	TextControl: jest.requireActual( '../../../../../packages/components/src/text-control' ).default,
@@ -84,7 +83,8 @@ describe( 'EnableModal', () => {
 		fireEvent.change( screen.getByLabelText( /Mailchimp Audience/ ), { target: { value: 'abc123' } } );
 		fireEvent.click( screen.getByRole( 'button', { name: 'Enable' } ) );
 		await waitFor( () => expect( screen.getByRole( 'button', { name: 'Enable' } ).disabled ).toBe( false ) );
-		expect( screen.getByText( 'Something went wrong. Please try again.' ) ).toBeTruthy();
+		// The notice also announces itself, so the same text sits in the live region.
+		expect( screen.getByText( 'Something went wrong. Please try again.', { ignore: 'script, style, .a11y-speak-region' } ) ).toBeTruthy();
 	} );
 
 	it( 'offers the settings view when a required select has no selectable options', () => {

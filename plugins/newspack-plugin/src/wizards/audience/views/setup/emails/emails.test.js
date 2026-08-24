@@ -55,6 +55,7 @@ jest.mock( '@wordpress/icons', () => ( {
 // sites pass explicit aria-*/role props, so faithful DOM passthroughs keep
 // every assertion meaningful (same approach as settings-modal.test.js).
 jest.mock( '@wordpress/components', () => ( {
+	Notice: ( { children } ) => <div data-testid="notice">{ children }</div>,
 	// eslint-disable-next-line @typescript-eslint/no-unused-vars
 	Button: ( { children, variant, size, isPressed, isBusy, ...rest } ) => <button { ...rest }>{ children }</button>,
 	// eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -108,7 +109,6 @@ jest.mock( '../../../../../../packages/components/src', () => {
 			);
 		},
 		Card: ( { children } ) => <div data-testid="card">{ children }</div>,
-		Notice: ( { noticeText } ) => <div data-testid="notice">{ noticeText }</div>,
 		StatusIndicator: ( { children } ) => <span data-testid="status-indicator">{ children }</span>,
 		utils: {
 			confirmAction: jest.fn( () => true ),

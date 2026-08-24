@@ -4,12 +4,12 @@
 import { useState } from '@wordpress/element';
 import { __, sprintf } from '@wordpress/i18n';
 // eslint-disable-next-line @wordpress/no-unsafe-wp-apis
-import { __experimentalHStack as HStack, __experimentalVStack as VStack } from '@wordpress/components';
+import { Notice, __experimentalHStack as HStack, __experimentalVStack as VStack } from '@wordpress/components';
 
 /**
  * Internal dependencies
  */
-import { Button, Modal, Notice } from '../../../../../packages/components/src';
+import { Button, Modal } from '../../../../../packages/components/src';
 import { hasSelectableOption, isEmptyValue, SettingsField } from './settings-field';
 import './enable-modal.scss';
 
@@ -73,10 +73,9 @@ export const EnableModal = ( { integration, onClose, onEnable, onGoToSettings } 
 		>
 			{ hasUnsatisfiableField ? (
 				<VStack spacing={ 6 } className="newspack-integration-enable-modal__content">
-					<Notice
-						isWarning
-						noticeText={ __( 'No options are available yet. Configure this integration to complete setup.', 'newspack-plugin' ) }
-					/>
+					<Notice isDismissible={ false } spokenMessage="" status="warning">
+						{ __( 'No options are available yet. Configure this integration to complete setup.', 'newspack-plugin' ) }
+					</Notice>
 					<HStack justify="flex-end" spacing={ 2 }>
 						<Button variant="tertiary" onClick={ onClose }>
 							{ __( 'Cancel', 'newspack-plugin' ) }
@@ -88,7 +87,11 @@ export const EnableModal = ( { integration, onClose, onEnable, onGoToSettings } 
 				</VStack>
 			) : (
 				<VStack spacing={ 6 } className="newspack-integration-enable-modal__content">
-					{ error && <Notice isError noticeText={ error } /> }
+					{ error && (
+						<Notice isDismissible={ false } status="error">
+							{ error }
+						</Notice>
+					) }
 					{ missingFields.map( field => (
 						<SettingsField
 							key={ field.key }

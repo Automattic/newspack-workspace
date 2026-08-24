@@ -4,13 +4,14 @@
  * WordPress dependencies.
  */
 import { __ } from '@wordpress/i18n';
+import { Notice } from '@wordpress/components';
 import apiFetch from '@wordpress/api-fetch';
 import { useEffect, useState, useRef, Fragment } from '@wordpress/element';
 
 /**
  * Internal dependencies.
  */
-import { Card, Notice, TextControl } from '../../../../../packages/components/src';
+import { Card, TextControl } from '../../../../../packages/components/src';
 import GoogleOAuth from '../../../newspack/views/settings/connections/google-oauth';
 import { handleJSONFile } from '../utils';
 
@@ -68,7 +69,9 @@ export default function AdsOnboarding( { onUpdate, onSuccess } ) {
 				{ ( ! newspack_ads_wizard.can_connect_google || false === useOAuth ) && (
 					<Fragment>
 						{ isConnected ? (
-							<Notice isSuccess noticeText={ __( "We're all set here!", 'newspack-plugin' ) } />
+							<Notice isDismissible={ false } status="success" spokenMessage="">
+								{ __( "We're all set here!", 'newspack-plugin' ) }
+							</Notice>
 						) : (
 							<Fragment>
 								<p>
@@ -97,7 +100,11 @@ export default function AdsOnboarding( { onUpdate, onSuccess } ) {
 														'newspack-plugin'
 													) }
 												</p>
-												{ fileError && <Notice noticeText={ fileError } isError /> }
+												{ fileError && (
+													<Notice isDismissible={ false } status="error">
+														{ fileError }
+													</Notice>
+												) }
 											</>
 										),
 										actionType: 'chevron',

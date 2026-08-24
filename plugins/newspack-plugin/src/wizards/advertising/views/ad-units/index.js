@@ -6,13 +6,13 @@
  * WordPress dependencies
  */
 import { useEffect, useState } from '@wordpress/element';
-import { __ } from '@wordpress/i18n';
-import { ExternalLink, __experimentalHStack as HStack } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
+import { __, sprintf } from '@wordpress/i18n';
+import { Notice, ExternalLink, __experimentalHStack as HStack } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
 
 /**
  * Internal dependencies
  */
-import { ActionCard, Button, Card, Notice, SelectControl, TextControl, withWizardScreen } from '../../../../../packages/components/src';
+import { ActionCard, Button, Card, SelectControl, TextControl, withWizardScreen } from '../../../../../packages/components/src';
 import ServiceAccountConnection from './service-account-connection';
 import OptionsPopover from './options-popover';
 
@@ -133,27 +133,34 @@ const AdUnits = ( { adUnits, parentAdUnits, onDelete, wizardApiFetch, updateWith
 				</>
 			) }
 			{ missingParentAdUnit && (
-				<Notice
-					noticeText={ __(
-						'The current parent ad unit is inactive or archived. Please select a different parent ad unit.',
-						'newspack-plugin'
-					) }
-					isError
-				/>
+				<Notice isDismissible={ false } status="error">
+					{ __( 'The current parent ad unit is inactive or archived. Please select a different parent ad unit.', 'newspack-plugin' ) }
+				</Notice>
 			) }
 			{ false === serviceData.status?.is_network_code_matched && (
-				<Notice
-					noticeText={ __(
+				<Notice isDismissible={ false } spokenMessage="" status="warning">
+					{ __(
 						'Your GAM network code is different than the network code the site was configured with. Legacy ad units are likely to not load.',
 						'newspack-plugin'
 					) }
-					isWarning
-				/>
+				</Notice>
 			) }
-			{ gamErrorMessage && <Notice noticeText={ gamErrorMessage } isError /> }
+			{ gamErrorMessage && (
+				<Notice isDismissible={ false } status="error">
+					{ gamErrorMessage }
+				</Notice>
+			) }
 			{ serviceData.created_targeting_keys?.length > 0 && (
 				<Notice
-					noticeText={ [
+					isDismissible={ false }
+					status="success"
+					spokenMessage={ sprintf(
+						// Translators: %s is a comma-separated list of targeting key names.
+						__( 'Created custom targeting keys: %s', 'newspack-plugin' ),
+						serviceData.created_targeting_keys.join( ', ' )
+					) }
+				>
+					{ [
 						__( 'Created custom targeting keys:', 'newspack-plugin' ) + '\u00A0',
 						serviceData.created_targeting_keys.join( ', ' ) + '. \u00A0',
 						<ExternalLink
@@ -163,12 +170,13 @@ const AdUnits = ( { adUnits, parentAdUnits, onDelete, wizardApiFetch, updateWith
 							{ __( 'Visit your GAM dashboard', 'newspack-plugin' ) }
 						</ExternalLink>,
 					] }
-					isSuccess
-				/>
+				</Notice>
 			) }
 			{ isLegacy && serviceData.enabled && (
 				<>
-					<Notice noticeText={ __( 'Currently operating in legacy mode.', 'newspack-plugin' ) } isWarning />
+					<Notice isDismissible={ false } spokenMessage="" status="warning">
+						{ __( 'Currently operating in legacy mode.', 'newspack-plugin' ) }
+					</Notice>
 					<HStack alignment="bottom" justify="flex-start" spacing={ 4 }>
 						<TextControl
 							label={ __( 'Network Code', 'newspack-plugin' ) }

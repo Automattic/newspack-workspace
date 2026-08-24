@@ -7,7 +7,7 @@
  */
 
 import apiFetch from '@wordpress/api-fetch';
-import { Button, Modal, Notice, TextControl, TextareaControl, TreeSelect } from '@wordpress/components';
+import { Notice, Button, Modal, TextControl, TextareaControl, TreeSelect } from '@wordpress/components';
 import { useMemo, useState } from '@wordpress/element';
 import { __ } from '@wordpress/i18n';
 

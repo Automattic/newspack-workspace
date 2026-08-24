@@ -7,6 +7,7 @@
  */
 import { __, sprintf } from '@wordpress/i18n';
 import {
+	Notice,
 	BaseControl,
 	RangeControl,
 	// eslint-disable-next-line @wordpress/no-unsafe-wp-apis
@@ -22,16 +23,7 @@ import { useEffect, useMemo, useRef, useState } from '@wordpress/element';
 /**
  * Internal dependencies
  */
-import {
-	Divider,
-	Grid,
-	Notice,
-	Router,
-	SectionHeader,
-	SelectControl,
-	TextControl,
-	useConfirmDialog,
-} from '../../../../../../packages/components/src';
+import { Divider, Grid, Router, SectionHeader, SelectControl, TextControl, useConfirmDialog } from '../../../../../../packages/components/src';
 import { useWizardData } from '../../../../../../packages/components/src/wizard/store/utils';
 import { WIZARD_STORE_NAMESPACE } from '../../../../../../packages/components/src/wizard/store';
 import { useWizardApiFetch } from '../../../../hooks/use-wizard-api-fetch';
@@ -145,7 +137,11 @@ const ContentGiftingSettings = () => {
 	return (
 		<div className="newspack-content-gate__edit">
 			{ confirmDialog }
-			{ giftingErrors.length > 0 && <Notice noticeText={ giftingErrors.join( ', ' ) } isError /> }
+			{ giftingErrors.length > 0 && (
+				<Notice isDismissible={ false } status="error">
+					{ giftingErrors.join( ', ' ) }
+				</Notice>
+			) }
 			<Grid columns={ 2 } gutter={ 32 }>
 				<SectionHeader heading={ 2 } title={ __( 'General settings', 'newspack-plugin' ) } />
 				<VStack spacing={ 4 }>

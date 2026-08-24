@@ -8,7 +8,7 @@
  */
 import apiFetch from '@wordpress/api-fetch';
 import { sprintf, __ } from '@wordpress/i18n';
-import { CardMedia, __experimentalHStack as HStack } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
+import { Notice, CardMedia, __experimentalHStack as HStack } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
 import { useEffect, useState, Fragment } from '@wordpress/element';
 import { decodeEntities } from '@wordpress/html-entities';
 import { moreVertical, settings } from '@wordpress/icons';
@@ -16,7 +16,7 @@ import { moreVertical, settings } from '@wordpress/icons';
 /**
  * Internal dependencies.
  */
-import { ActionCard, Button, Modal, Notice, TextControl } from '../../../../../packages/components/src';
+import { ActionCard, Button, Modal, TextControl } from '../../../../../packages/components/src';
 import PrimaryPromptPopover from '../prompt-popovers/primary';
 import PromptSettingsModal from '../settings-modal';
 import { placementForPopup } from '../../views/campaigns/utils';
@@ -116,16 +116,17 @@ const PromptActionCard = props => {
 				>
 					{ duplicated ? (
 						<>
-							<Notice
-								isSuccess
-								noticeText={ sprintf(
+							<Notice isDismissible={ false } status="success">
+								{ sprintf(
 									// Translators: %s: The title of the item.
 									__( 'Duplicate of “%s” created as a draft.', 'newspack-plugin' ),
 									title
 								) }
-							/>
+							</Notice>
 							{ ! campaignGroups && (
-								<Notice isWarning noticeText={ __( 'This prompt is currently not assigned to any campaign.', 'newspack-plugin' ) } />
+								<Notice isDismissible={ false } spokenMessage="" status="warning">
+									{ __( 'This prompt is currently not assigned to any campaign.', 'newspack-plugin' ) }
+								</Notice>
 							) }
 							<HStack justify="flex-end" spacing={ 4 } wrap className="newspack-modal__footer">
 								<Button
@@ -146,7 +147,9 @@ const PromptActionCard = props => {
 					) : (
 						<>
 							{ ! campaignGroups && (
-								<Notice isWarning noticeText={ __( 'This prompt will not be assigned to any campaign.', 'newspack-plugin' ) } />
+								<Notice isDismissible={ false } spokenMessage="" status="warning">
+									{ __( 'This prompt will not be assigned to any campaign.', 'newspack-plugin' ) }
+								</Notice>
 							) }
 							<TextControl
 								disabled={ inFlight || null === duplicateTitle }

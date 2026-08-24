@@ -7,12 +7,12 @@ import { render, useState } from '@wordpress/element';
 import domReady from '@wordpress/dom-ready';
 import { __ } from '@wordpress/i18n';
 import apiFetch from '@wordpress/api-fetch';
-import { Button, Card, CardBody, CheckboxControl, Notice, SelectControl, SlotFillProvider, TextControl } from '@wordpress/components';
+import { Notice, Button, Card, CardBody, CheckboxControl, SelectControl, SlotFillProvider, TextControl } from '@wordpress/components';
 
 /**
  * Newspack dependencies.
  */
-import { PageControl, Page } from 'newspack-components';
+import { Page, PageControl } from 'newspack-components';
 
 /**
  * Internal dependencies

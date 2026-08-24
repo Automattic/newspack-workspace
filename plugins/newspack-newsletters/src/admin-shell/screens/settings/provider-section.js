@@ -1,8 +1,8 @@
 import {
+	Notice,
 	Card,
 	CardBody,
 	CardHeader,
-	Notice,
 	Button,
 	SelectControl,
 	TextControl,
@@ -74,7 +74,7 @@ export default function ProviderSection( {
 			<CardBody>
 				<VStack spacing={ 4 }>
 					{ showOAuthNotice && (
-						<Notice status="warning" isDismissible={ false }>
+						<Notice spokenMessage="" status="warning" isDismissible={ false }>
 							<p>{ __( 'Authorize this site to connect to the configured provider.', 'newspack-newsletters' ) }</p>
 							<p>
 								<Button variant="primary" onClick={ handleAuthorize }>

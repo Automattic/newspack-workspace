@@ -1,6 +1,9 @@
 @use "~@wordpress/base-styles/colors" as wp-colors;
 
-.newspack-content-gates__gate .newspack-card:not(.newspack-settings__no-border) .newspack-action-card__region-children > .newspack-grid.newspack-ras-campaign__grid {
+.newspack-content-gates__gate
+	.newspack-card:not(.newspack-settings__no-border)
+	.newspack-action-card__region-children
+	> .newspack-grid.newspack-ras-campaign__grid {
 	margin-top: 0 !important;
 }
 
@@ -79,7 +82,7 @@ span.is-skipped {
 			justify-content: center;
 			min-height: 50vh;
 
-			@media screen and ( min-width: 600px ) {
+			@media screen and (min-width: 600px) {
 				min-height: 450px;
 			}
 
@@ -108,9 +111,6 @@ span.is-skipped {
 
 .newspack-ras-wizard {
 	&__prerequisite.newspack-card.newspack-action-card {
-		.newspack-action-card__notification.newspack-action-card__region-children .newspack-notice {
-			margin-top: 0;
-		}
 		.button-group button {
 			margin-right: 8px;
 		}

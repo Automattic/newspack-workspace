@@ -6,6 +6,7 @@
  * WordPress dependencies.
  */
 import { __ } from '@wordpress/i18n';
+import { Notice } from '@wordpress/components';
 import { addQueryArgs, cleanForSlug } from '@wordpress/url';
 import { Fragment, useState, useEffect } from '@wordpress/element';
 
@@ -24,7 +25,6 @@ import {
 	SelectControl,
 	RadioControl,
 	hooks,
-	Notice,
 } from '../../../../../../packages/components/src';
 
 import './style.scss';
@@ -327,7 +327,11 @@ export default function Brand( {
 						onChange={ ( menuId: number ) => updateMenus( location, menuId ) }
 					/>
 				) ) }
-			{ errorMessage && <Notice isError>{ errorMessage }</Notice> }
+			{ errorMessage && (
+				<Notice isDismissible={ false } status="error">
+					{ errorMessage }
+				</Notice>
+			) }
 			{ /* Action Buttons */ }
 			<div className="newspack-buttons-card">
 				<Button disabled={ ! isBrandValid } variant="primary" onClick={ () => upsertBrand( Number( brandId ), brand ) }>

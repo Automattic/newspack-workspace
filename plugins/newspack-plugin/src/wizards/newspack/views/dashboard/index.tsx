@@ -18,7 +18,7 @@ import sections from './sections';
 import BrandHeader from '../../components/brand-header';
 import QuickActions from '../../components/quick-actions';
 import SiteStatuses from '../../components/site-statuses';
-import { Divider, GlobalNotices, Notice, Wizard } from '../../../../../packages/components/src';
+import { Divider, GlobalNotices, DebugMode, Wizard } from '../../../../../packages/components/src';
 
 const {
 	newspack_aux_data: { is_debug_mode: isDebugMode = false },
@@ -28,7 +28,7 @@ function Dashboard() {
 	return (
 		<Fragment>
 			<GlobalNotices />
-			{ isDebugMode && <Notice debugMode /> }
+			{ isDebugMode && <DebugMode /> }
 			<Wizard
 				headerText={ __( 'Newspack / Dashboard', 'newspack' ) }
 				sections={ sections }

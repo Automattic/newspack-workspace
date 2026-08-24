@@ -9,12 +9,12 @@ import { addFilter } from '@wordpress/hooks';
 import { sprintf, __, _n } from '@wordpress/i18n';
 import { Fragment, useState, useEffect } from '@wordpress/element';
 import apiFetch from '@wordpress/api-fetch';
-import { __experimentalHStack as HStack, __experimentalVStack as VStack } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
+import { Notice, __experimentalHStack as HStack, __experimentalVStack as VStack } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
 
 /**
  * Newspack dependencies.
  */
-import { ActionCard, Modal, Notice, Button } from 'newspack-components';
+import { ActionCard, Modal, Button } from 'newspack-components';
 
 /**
  * Internal dependencies.
@@ -201,16 +201,14 @@ const HeaderBiddingGAM = () => {
 									);
 									return (
 										bidderOrders.length > 1 && (
-											<Notice
-												key={ bidderKey }
-												isWarning
-												noticeText={ sprintf(
+											<Notice isDismissible={ false } spokenMessage="" status="warning" key={ bidderKey }>
+												{ sprintf(
 													// Translators: %1 The name of the bidder. %2 The number of orders for the bidder.
 													__( '%1$s is being targeted by %2$d orders.', 'newspack-ads' ),
 													bidders[ bidderKey ].name,
 													bidderOrders.length
 												) }
-											/>
+											</Notice>
 										)
 									);
 								} )
@@ -233,13 +231,12 @@ const HeaderBiddingGAM = () => {
 					onRequestClose={ () => ! inFlight && setEditingOrder( false ) }
 				>
 					{ unrecoverable && (
-						<Notice
-							isError
-							noticeText={ __(
+						<Notice isDismissible={ false } status="error">
+							{ __(
 								'We were unable to fix the issues with this order and have archived it. Please create a new order below.',
 								'newspack-ads'
 							) }
-						/>
+						</Notice>
 					) }
 					<Order
 						bidders={ bidders }

@@ -5,14 +5,14 @@
  */
 import { __ } from '@wordpress/i18n';
 import apiFetch from '@wordpress/api-fetch';
-import { ExternalLink, __experimentalHStack as HStack } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
+import { Notice, ExternalLink, __experimentalHStack as HStack } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
 import { useEffect, useRef, useState } from '@wordpress/element';
 
 /**
  * Internal dependencies
  */
 import WizardsTab from '../../../wizards-tab';
-import { Button, withWizardScreen, Card, Notice, ProgressBar, StepsList } from '../../../../../packages/components/src';
+import { Button, withWizardScreen, Card, ProgressBar, StepsList } from '../../../../../packages/components/src';
 
 const listItems = [
 	__( 'Your <strong>current segments and prompts</strong> will be deactivated and archived.', 'newspack-plugin' ),
@@ -125,7 +125,11 @@ export default withWizardScreen( ( { fetchConfig } ) => {
 							<StepsList stepsListItems={ listItems } narrowList />
 						</Card>
 
-						{ error && <Notice noticeText={ error?.message || __( 'Something went wrong.', 'newspack-plugin' ) } isError /> }
+						{ error && (
+							<Notice isDismissible={ false } status="error">
+								{ error?.message || __( 'Something went wrong.', 'newspack-plugin' ) }
+							</Notice>
+						) }
 
 						<HStack justify="center" spacing={ 4 } wrap>
 							<Button isPrimary onClick={ () => activate() }>

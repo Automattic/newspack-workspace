@@ -7,8 +7,8 @@
  */
 import { __ } from '@wordpress/i18n';
 import { useEffect, useState } from '@wordpress/element';
-import { ExternalLink } from '@wordpress/components';
-import { Button, Card, Notice, SectionHeader } from '../../../../../../packages/components/src';
+import { Notice, ExternalLink } from '@wordpress/components';
+import { Button, Card, SectionHeader } from '../../../../../../packages/components/src';
 import { useWizardApiFetch } from '../../../../hooks/use-wizard-api-fetch';
 
 interface AccessibilityStatementProps {
@@ -85,7 +85,7 @@ export default function AccessibilityStatement( { isFetching }: AccessibilitySta
 		);
 	};
 
-	const getStatusMessage = () => {
+	const getStatusMessage = (): { type: 'error' | 'warning' | 'success' | 'info'; message: string } => {
 		if ( ! localPageData ) {
 			return {
 				type: 'warning',
@@ -164,7 +164,9 @@ export default function AccessibilityStatement( { isFetching }: AccessibilitySta
 				) }
 			</Card>
 
-			<Notice isSuccess={ statusInfo.type === 'success' } isWarning={ statusInfo.type === 'warning' } noticeText={ statusInfo.message } />
+			<Notice isDismissible={ false } status={ statusInfo.type } spokenMessage="">
+				{ statusInfo.message }
+			</Notice>
 
 			<p>
 				{ __(

@@ -14,12 +14,12 @@ import { useState, useEffect, useCallback, useRef } from '@wordpress/element';
 import { useDispatch } from '@wordpress/data';
 import apiFetch from '@wordpress/api-fetch';
 import {
+	Notice,
 	Button,
 	TextControl,
 	SelectControl,
 	CheckboxControl,
 	FormTokenField,
-	Notice,
 	Flex,
 	FlexBlock,
 	FlexItem,
@@ -31,7 +31,7 @@ import { Badge } from '@wordpress/ui';
 /**
  * Internal dependencies
  */
-import { Grid, SectionHeader, Divider, useUnsavedChangesDialog } from '../../../../../packages/components/src';
+import { Divider, Grid, SectionHeader, useUnsavedChangesDialog } from '../../../../../packages/components/src';
 import { WIZARD_STORE_NAMESPACE } from '../../../../../packages/components/src/wizard/store';
 import { PolicyChips, EffectivePrice } from './policy-cells';
 

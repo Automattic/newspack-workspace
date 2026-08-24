@@ -12,12 +12,12 @@ import { __, _n, sprintf } from '@wordpress/i18n';
 import { useMemo, useState } from '@wordpress/element';
 import { filterSortAndPaginate } from '@wordpress/dataviews';
 // eslint-disable-next-line @wordpress/no-unsafe-wp-apis
-import { __experimentalHStack as HStack, CheckboxControl } from '@wordpress/components';
+import { Notice, __experimentalHStack as HStack, CheckboxControl } from '@wordpress/components';
 
 /**
  * Internal dependencies.
  */
-import { Button, DataViews, Modal, Notice, SectionHeader, StatusIndicator, Waiting } from '../../../../../../../packages/components/src';
+import { Button, DataViews, Modal, SectionHeader, StatusIndicator, Waiting } from '../../../../../../../packages/components/src';
 import type { Action, Field, View } from '../../../../../../../packages/components/src/dataviews';
 import WizardsTab from '../../../../../wizards-tab';
 import WizardSection from '../../../../../wizards-section';
@@ -190,7 +190,11 @@ function SubscriberOnlyProducts() {
 			}
 		>
 			<WizardSection>
-				{ error && <Notice isError noticeText={ error } /> }
+				{ error && (
+					<Notice isDismissible={ false } status="error">
+						{ error }
+					</Notice>
+				) }
 				{ loading ? (
 					<Waiting />
 				) : (

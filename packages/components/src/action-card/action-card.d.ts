@@ -12,6 +12,8 @@ export interface ActionCardProps {
 	indent?: string;
 	notification?: string | Error | null;
 	notificationLevel?: 'error' | 'warning' | 'info';
+	/** Renders the notification as raw HTML via the notice's `__unstableHTML` path; opt in only for trusted markup. */
+	notificationHTML?: boolean;
 	isMedium?: boolean;
 	disabled?: boolean | string;
 	hasGreyHeader?: boolean;

@@ -15,6 +15,7 @@
 import { __ } from '@wordpress/i18n';
 import { useState, useEffect } from '@wordpress/element';
 import {
+	Notice,
 	TextControl,
 	__experimentalHStack as HStack, // eslint-disable-line @wordpress/no-unsafe-wp-apis
 	__experimentalVStack as VStack, // eslint-disable-line @wordpress/no-unsafe-wp-apis
@@ -25,7 +26,7 @@ import { decodeEntities } from '@wordpress/html-entities';
 /**
  * Internal dependencies.
  */
-import { Button, Modal, Notice, useConfirmDialog } from '../../../../../../packages/components/src';
+import { Button, Modal, useConfirmDialog } from '../../../../../../packages/components/src';
 import { WIZARD_STORE_NAMESPACE } from '../../../../../../packages/components/src/wizard/store';
 import { useWizardApiFetch } from '../../../../hooks/use-wizard-api-fetch';
 
@@ -240,7 +241,11 @@ const SettingsModal = ( { showModal, closeModal }: { showModal: boolean; closeMo
 			{ confirmDialog }
 			<Modal onRequestClose={ handleClose } size="medium" title={ __( 'Settings', 'newspack-plugin' ) }>
 				<p>{ __( 'Configure the sender details and reply-to address for transactional emails sent to your readers.', 'newspack-plugin' ) }</p>
-				{ errorMessage && <Notice isError noticeText={ errorMessage } /> }
+				{ errorMessage && (
+					<Notice isDismissible={ false } status="error">
+						{ errorMessage }
+					</Notice>
+				) }
 				<VStack>
 					<TextControl
 						label={ __( 'Sender Name', 'newspack-plugin' ) }

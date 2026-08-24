@@ -13,11 +13,11 @@ import { useSelect, useDispatch } from '@wordpress/data';
 import { useEffect, useState, useMemo, useCallback } from '@wordpress/element';
 import { DataViews } from '@wordpress/dataviews/wp';
 import {
+	Notice,
 	__experimentalHStack as HStack,
 	__experimentalVStack as VStack,
 	Button,
 	Modal,
-	Notice,
 	ProgressBar,
 	ToggleControl,
 } from '@wordpress/components';

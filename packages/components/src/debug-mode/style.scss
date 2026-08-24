@@ -1,0 +1,21 @@
+@use "~@wordpress/base-styles/variables" as wp-vars;
+@use "../../../colors/colors.module" as np-colors;
+
+.newspack-debug-mode {
+	align-items: center;
+	background: np-colors.$primary-600;
+	border-radius: 50%;
+	bottom: wp-vars.$grid-unit-20;
+	box-shadow: 0 0 8px 4px rgba(black, 0.08);
+	display: flex;
+	margin: 0 wp-vars.$grid-unit-20;
+	padding: 6px;
+	position: fixed;
+	z-index: 9997;
+
+	> svg {
+		display: block;
+		fill: white;
+		flex: 0 0 24px;
+	}
+}

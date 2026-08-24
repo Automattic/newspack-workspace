@@ -78,8 +78,16 @@ function Edit( { attributes, setAttributes } ) {
 							</ToolbarGroup>
 						</BlockControls>
 					) }
-					{ error && <Notice isError noticeText={ error } isDismissible={ false } /> }
-					{ provider === 'gam' && biddersError && <Notice isWarning noticeText={ biddersError } isDismissible={ false } /> }
+					{ error && (
+						<Notice status="error" isDismissible={ false }>
+							{ error }
+						</Notice>
+					) }
+					{ provider === 'gam' && biddersError && (
+						<Notice status="warning" isDismissible={ false }>
+							{ biddersError }
+						</Notice>
+					) }
 					<div className="newspack-ads-ad-block-placeholder" style={ { width: containerWidth, height: containerHeight } }>
 						<Fragment>
 							<SVG

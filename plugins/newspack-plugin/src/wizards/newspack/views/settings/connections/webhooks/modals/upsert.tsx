@@ -7,14 +7,14 @@
  */
 import { __ } from '@wordpress/i18n';
 import { useState, useEffect, useRef, Fragment } from '@wordpress/element';
-import { CheckboxControl as WpCheckboxControl, TextControl, __experimentalHStack as HStack } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
+import { Notice, CheckboxControl as WpCheckboxControl, TextControl, __experimentalHStack as HStack } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
 
 /**
  * Internal dependencies
  */
 import { ENDPOINTS_CACHE_KEY } from '../constants';
 import { WizardApiError } from '../../../../../../errors';
-import { Button, Notice, Modal, Grid, Divider } from '../../../../../../../../packages/components/src';
+import { Button, Modal, Grid, Divider } from '../../../../../../../../packages/components/src';
 import { validateEndpoint, validateUrl } from '../utils';
 
 /**
@@ -116,12 +116,24 @@ const Upsert = ( {
 					setAction( null, endpoint.id );
 				} }
 			>
-				{ errorMessage && <Notice isError noticeText={ errorMessage } /> }
-				{ true === editing.disabled && <Notice noticeText={ __( 'This webhook endpoint is currently disabled.', 'newspack-plugin' ) } /> }
-				{ editing.disabled && editing.disabled_error && (
-					<Notice isError noticeText={ __( 'Request Error: ', 'newspack-plugin' ) + editing.disabled_error } />
+				{ errorMessage && (
+					<Notice isDismissible={ false } status="error">
+						{ errorMessage }
+					</Notice>
 				) }
-				{ testResponse.success && <Notice isSuccess noticeText={ `${ testResponse.message }: ${ testResponse.code }` } /> }
+				{ true === editing.disabled && (
+					<Notice isDismissible={ false } spokenMessage="" status="warning">
+						{ __( 'This webhook endpoint is currently disabled.', 'newspack-plugin' ) }
+					</Notice>
+				) }
+				{ editing.disabled && editing.disabled_error && (
+					<Notice isDismissible={ false } status="error">
+						{ __( 'Request Error: ', 'newspack-plugin' ) + editing.disabled_error }
+					</Notice>
+				) }
+				{ testResponse.success && (
+					<Notice isDismissible={ false } status="success">{ `${ testResponse.message }: ${ testResponse.code }` }</Notice>
+				) }
 				<Grid columns={ 1 } gutter={ 16 } noMargin>
 					<TextControl
 						label={ __( 'URL', 'newspack-plugin' ) }

@@ -100,7 +100,7 @@ When building a screen, use the **spacing scale** (8px unit: 16, 24, 32, 48, 64)
 
 - **`ActionCard`** – Use when one concept (e.g. a feature or setting) can be toggled on/off and may have extra content below. Internal padding (24px default; 16px/8px for isMedium/isSmall) and 24px between regions keep hierarchy clear; expandable content uses 24px top padding and 24px between siblings.
 - **`CollapsibleGroup`** / **`CollapsibleGroup.Item`** – A stack of independently collapsible items, separated by dividers and flush with the surrounding column. Not a W3C accordion: the items do not coordinate.
-- **`Notice`** – Use for outcome feedback (success/error/warning) or short contextual messages. Vertical margin is 32px so notices don’t collide with cards; keep one primary message per area when possible.
+- **`Notice`** – Use for outcome feedback or short contextual messages. Core's `@wordpress/components` `Notice`: content is `children`, the variant is `status` (`error`, `warning`, `success`, `info`), and `actions` renders buttons or links. Two house conventions differ from core's defaults: pass `isDismissible={ false }` unless you also pass an `onRemove`, and pass `spokenMessage=""` on `info` and `warning` so contextual content stays out of the live region. Announcements replace one another, so where several notices mount together, announce one. Core derives the announcement by serialising `children` mid-render, which throws on the next render when they hold a component using hooks, so pass a string `spokenMessage` whenever the children are not plain text. Keep one primary message per area where possible.
 - **`ProgressBar`** – Progress indicator.
 - **`StepsList`** / **`StepsListItem`** – Step-by-step list components.
 - **`StyleCard`** – Style preview card.
@@ -110,7 +110,7 @@ When building a screen, use the **spacing scale** (8px unit: 16, 24, 32, 48, 64)
 
 - **`Footer`** - Wizard footer component
 - **`Handoff`** - Handoff message component for external integrations
-- **`HandoffMessage`** - Handoff message display component
+- **`HandoffMessage`** - Sticky banner shown on return from a handed-off plugin screen
 - **`TabbedNavigation`** - Tab navigation component
 - **`withWizard`** - Higher-order component for wizard screens (legacy pattern, class-based)
   - Provides plugin management, error handling, loading states
@@ -131,6 +131,7 @@ When building a screen, use the **spacing scale** (8px unit: 16, 24, 32, 48, 64)
 
 ### Utility Components
 
+- **`DebugMode`** - Fixed badge marking a site running in debug mode
 - **`GlobalNotices`** - Global notice system component
 - **`InfoButton`** - Reveals supplementary context from a `description` prop. Anything a reader needs in order to use a control belongs in visible help text instead
 - **`Modal`** - Modal dialog component
@@ -176,7 +177,6 @@ import {
 	ActionCard,
 	Button,
 	Card,
-	Notice,
 	TextControl,
 } from '../../../../../packages/components/src';
 ```
@@ -187,21 +187,21 @@ import {
 
 ```jsx
 // ✅ CORRECT - Within newspack-plugin monorepo
-import { Button, Card, Notice } from '../../../../../packages/components/src';
+import { Button, Card } from '../../../../../packages/components/src';
 ```
 
 **As an npm package:** If `newspack-components` is installed as a dependency in another plugin, import from the package name:
 
 ```jsx
 // ✅ CORRECT - When installed as npm package
-import { Button, Card, Notice } from 'newspack-components';
+import { Button, Card } from 'newspack-components';
 ```
 
 **Import individual components** – Import only what you need; do not import the whole namespace. List named imports **alphabetically** (e.g. from `@wordpress/components` or `newspack-components`):
 
 ```jsx
 // ✅ CORRECT – alphabetical
-import { Button, Card, Notice } from '../../../../../packages/components/src';
+import { Button, Card } from '../../../../../packages/components/src';
 
 // ❌ WRONG – Don't import all
 import * as Components from '../../../../../packages/components/src';
@@ -253,7 +253,7 @@ This section shows how to use components **by context** (backend, blocks, fronte
 /**
  * WordPress dependencies
  */
-import { CheckboxControl, ExternalLink, RangeControl } from '@wordpress/components';
+import { CheckboxControl, ExternalLink, Notice, RangeControl } from '@wordpress/components';
 
 /**
  * Internal dependencies
@@ -263,7 +263,6 @@ import {
 	Button,
 	Card,
 	Grid,
-	Notice,
 	Divider,
 	SectionHeader,
 	TextControl,
@@ -279,7 +278,6 @@ import {
 	Button,
 	Card,
 	Grid,
-	Notice,
 	Divider,
 	PluginInstaller,
 	SectionHeader,
@@ -291,7 +289,7 @@ import {
 export default withWizardScreen( ( { config, updateConfig } ) => {
 	return (
 		<>
-			<Notice noticeText={ __( 'Audience Management is enabled.', 'newspack-plugin' ) } isSuccess />
+			<Notice isDismissible={ false } status="success">{ __( 'Audience Management is enabled.', 'newspack-plugin' ) }</Notice>
 			<Card noBorder>
 				<ActionCard
 					title={ __( 'Present newsletter signup after checkout', 'newspack-plugin' ) }
@@ -541,7 +539,7 @@ When Newspack components don't provide what you need, use these WordPress compon
 ### Feedback and overlays
 
 - **`Spinner`** – Loading spinner
-- **`Notice`** – Inline notice (success/error/warning); prefer Newspack `Notice` in wizards when it fits
+- **`Notice`** – Inline notice. Two house conventions, neither of them core's default: pass `isDismissible={ false }` unless the notice has an `onRemove` to go with a close button, and pass `spokenMessage=""` on `info` and `warning` so contextual content stays out of the live region. Core derives its announcement by serialising `children` mid-render, which throws on the next render when they hold a component using hooks, so pass a string `spokenMessage` whenever the children are not plain text.
 - **`Placeholder`** – Empty state in blocks
 - **`Modal`** – Modal dialog
 - **`Popover`** – Popover (e.g. webhooks endpoint actions, corrections modal)
@@ -622,7 +620,7 @@ Spacing is based on an **8px unit**. Use these values so new styles match existi
 | **8px** | Tight gaps, badge padding, small padding (e.g. ActionCard is-small) | Inline or dense UI |
 | **16px** | Gaps between related controls, buttons card gap, margins inside ActionCard region-children for Card/Grid/TextControl | Related items, form rows |
 | **24px** | Default ActionCard region padding, toggle/region gaps, expandable content padding and sibling spacing | Default internal padding and gaps within a card |
-| **32px** | Card vertical margin, Grid default gap and margin, SectionHeader first-child top, Notice margin, Divider margin | Section rhythm, between blocks |
+| **32px** | Card vertical margin, Grid default gap and margin, SectionHeader first-child top, Divider margin | Section rhythm, between blocks |
 | **48px** | SectionHeader container margin-top, Card horizontal padding (small screens) | Section separation |
 | **64px** | SectionHeader top margin, Divider margins (large breakpoint), buttons card margin, Card horizontal padding (large screens) | Major section separation |
 
@@ -693,7 +691,7 @@ Components rely on WordPress design system states where applicable; a few Newspa
 - **ActionCard (clickable)** – Hover: `box-shadow: 0 4px 8px rgba(black, 0.08)`; transition 125ms ease-in-out. Use for cards that navigate or open.
 - **Button** – Primary, secondary, disabled, and link variants follow `@wordpress/components` Button; focus and hover come from WordPress base styles.
 - **Toggle (inside ActionCard)** – Checked/unchecked and focus states from WordPress ToggleControl; label is visually hidden but available for accessibility.
-- **Notice** – Success (green), error (red), warning (yellow), info (gray) variants; use for feedback only and one primary message per area when possible.
+- **Notice** – `success`, `error`, `warning` and `info` statuses, each rendered by core with its own accent; use for feedback only and one primary message per area when possible.
 
 When adding new interactive components, preserve focus visibility and use the same state patterns (hover shadow, transition) so the UI feels consistent.
 

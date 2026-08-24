@@ -1,5 +1,6 @@
 import '../../../../shared/js/public-path';
 
+import { Notice } from '@wordpress/components';
 /**
  * External dependencies.
  */
@@ -13,7 +14,7 @@ import { forwardRef } from '@wordpress/element';
 /**
  * Internal dependencies.
  */
-import { Wizard, Notice, withWizard } from '../../../../../packages/components/src';
+import { Wizard, withWizard } from '../../../../../packages/components/src';
 import { useWizardData } from '../../../../../packages/components/src/wizard/store/utils';
 import Configuration from './configuration';
 import { AUDIENCE_DONATIONS_WIZARD_SLUG, OTHER } from '../../constants';
@@ -37,7 +38,13 @@ const AudienceDonations = ( props, ref ) => {
 			headerText={ __( 'Audience Management / Donations', 'newspack-plugin' ) }
 			sections={ sections }
 			apiSlug={ AUDIENCE_DONATIONS_WIZARD_SLUG }
-			renderAboveSections={ () => values( donation_data?.errors ).map( ( error, i ) => <Notice key={ i } isError noticeText={ error } /> ) }
+			renderAboveSections={ () =>
+				values( donation_data?.errors ).map( ( error, i ) => (
+					<Notice isDismissible={ false } status="error" key={ i } spokenMessage={ 0 === i ? error : '' }>
+						{ error }
+					</Notice>
+				) )
+			}
 			requiredPlugins={ [ 'newspack-blocks', 'woocommerce', 'woocommerce-subscriptions' ] }
 			ref={ ref }
 		/>

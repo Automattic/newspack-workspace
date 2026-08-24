@@ -10,12 +10,13 @@
  * WordPress dependencies.
  */
 import { __ } from '@wordpress/i18n';
+import { Notice } from '@wordpress/components';
 import { forwardRef } from '@wordpress/element';
 
 /**
  * Internal dependencies.
  */
-import { Notice, Wizard, withWizard } from '../../../../../packages/components/src';
+import { Wizard, withWizard } from '../../../../../packages/components/src';
 import WizardsTab from '../../../wizards-tab';
 import AudienceManagementRequired, { hasAudienceManagement } from '../../components/audience-management-required';
 import { getTab } from './tabs';
@@ -109,7 +110,9 @@ function AudienceSubscriptions( _props: Record< string, unknown >, ref: React.Fo
 					breadcrumbs: [ { label: __( 'Audience Management', 'newspack-plugin' ) }, { label: __( 'Subscriptions', 'newspack-plugin' ) } ],
 					render: () => (
 						<WizardsTab title={ __( 'Subscriptions', 'newspack-plugin' ) }>
-							<Notice isWarning>{ __( 'No Subscriptions screens are available on this site.', 'newspack-plugin' ) }</Notice>
+							<Notice isDismissible={ false } spokenMessage="" status="warning">
+								{ __( 'No Subscriptions screens are available on this site.', 'newspack-plugin' ) }
+							</Notice>
 						</WizardsTab>
 					),
 				},

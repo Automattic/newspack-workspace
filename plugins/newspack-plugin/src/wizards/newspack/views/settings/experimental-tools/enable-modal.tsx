@@ -37,7 +37,7 @@ export default function EnableModal( {
 				<p>{ __( 'This tool is in active development. Your experience using it directly shapes what it becomes.', 'newspack-plugin' ) }</p>
 			) }
 			{ tool.location_hint && (
-				<Notice status="info" isDismissible={ false } className="experimental-tools__location-hint">
+				<Notice spokenMessage="" status="info" isDismissible={ false } className="experimental-tools__location-hint">
 					{ tool.location_hint }
 				</Notice>
 			) }

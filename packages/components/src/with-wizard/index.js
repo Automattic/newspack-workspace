@@ -4,16 +4,17 @@
 import { Component, createRef, Fragment } from '@wordpress/element';
 import { __ } from '@wordpress/i18n';
 import apiFetch from '@wordpress/api-fetch';
-import { __experimentalHStack as HStack } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
+import { Notice, __experimentalHStack as HStack } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
 
 /**
  * Internal dependencies.
  */
-import { Button, Modal, Notice, Page, PluginInstaller } from '../';
+import { Button, Modal, Page, PluginInstaller } from '../';
 import Router from '../proxied-imports/router';
 import Footer from '../footer';
 import './style.scss';
 
+import { htmlToText } from '../utils/html-to-text';
 const { Redirect, Route } = Router;
 
 /**
@@ -81,7 +82,17 @@ export default function withWizard( WrappedComponent, requiredPlugins ) {
 		 */
 		getErrorNotice = error => {
 			const { message } = error;
-			return <Notice isError className="newspack-wizard__above-header" noticeText={ message } rawHTML />;
+			return (
+				<Notice
+					isDismissible={ false }
+					status="error"
+					className="newspack-wizard__above-header"
+					spokenMessage={ htmlToText( message ) }
+					__unstableHTML
+				>
+					{ message }
+				</Notice>
+			);
 		};
 
 		/**
@@ -98,7 +109,9 @@ export default function withWizard( WrappedComponent, requiredPlugins ) {
 			const { message } = error;
 			return (
 				<Modal title={ __( 'Unrecoverable error' ) } onRequestClose={ () => ( window.location = fallbackURL ) }>
-					<Notice noticeText={ message } isError rawHTML />
+					<Notice isDismissible={ false } status="error" spokenMessage={ htmlToText( message ) } __unstableHTML>
+						{ message }
+					</Notice>
 					<HStack justify="flex-end" spacing={ 4 } wrap className="newspack-modal__footer">
 						<Button isPrimary href={ fallbackURL }>
 							{ __( 'Return to Dashboard', 'newspack-plugin' ) }

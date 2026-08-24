@@ -2,13 +2,12 @@
  * WordPress dependencies
  */
 import { __ } from '@wordpress/i18n';
-import { ExternalLink } from '@wordpress/components';
+import { Notice, ExternalLink } from '@wordpress/components';
 
 /**
  * Internal dependencies
  */
 import { Stripe } from './stripe';
-import { Notice } from '../../../../../packages/components/src';
 import { useWizardData } from '../../../../../packages/components/src/wizard/store/utils';
 import WizardsSection from '../../../wizards-section';
 import { PaymentGateway } from './payment-gateway';
@@ -41,11 +40,15 @@ const PaymentGateways = () => {
 				</>
 			) }
 		>
-			{ errors.length > 0 && errors.map( ( error, index ) => <Notice isError key={ index } noticeText={ <span>{ error.message }</span> } /> ) }
+			{ errors.length > 0 &&
+				errors.map( ( error, index ) => (
+					<Notice isDismissible={ false } status="error" key={ index } spokenMessage={ 0 === index ? error.message : '' }>
+						{ <span>{ error.message }</span> }
+					</Notice>
+				) ) }
 			{ is_ssl === false && (
-				<Notice
-					isWarning
-					noticeText={
+				<Notice isDismissible={ false } spokenMessage="" status="warning">
+					{
 						<>
 							{ __(
 								'Missing or invalid SSL configuration detected. To collect payments, the site must be secured with SSL. ',
@@ -54,7 +57,7 @@ const PaymentGateways = () => {
 							<ExternalLink href="https://stripe.com/docs/security/guide">{ __( 'Learn more', 'newspack-plugin' ) }</ExternalLink>
 						</>
 					}
-				/>
+				</Notice>
 			) }
 			{ Object.keys( paymentGateways ).map( gateway => {
 				// Stripe has unique connection status and badge level logic.

@@ -104,6 +104,7 @@ jest.mock( '@wordpress/components', () => {
 	return {
 		TextControl,
 		Button,
+		Notice: ( { children } ) => React.createElement( 'div', { 'data-testid': 'notice' }, children ),
 		__experimentalHStack: Passthrough,
 		__experimentalVStack: Passthrough,
 	};
@@ -145,7 +146,6 @@ jest.mock( '../../../../../../packages/components/src', () => {
 				{ data.length }
 			</div>
 		),
-		Notice: ( { noticeText } ) => <div data-testid="notice">{ noticeText }</div>,
 		// Discard `loading` and `variant` rather than spreading them to
 		// the DOM button — React warns on unrecognized non-boolean
 		// attributes. Same treatment as the @wordpress/components Button

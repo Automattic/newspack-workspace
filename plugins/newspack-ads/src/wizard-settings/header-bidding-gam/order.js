@@ -4,12 +4,12 @@
 import { __ } from '@wordpress/i18n';
 import { Fragment, useState, useEffect } from '@wordpress/element';
 import apiFetch from '@wordpress/api-fetch';
-import { __experimentalHStack as HStack } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
+import { Notice, __experimentalHStack as HStack } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
 
 /**
  * Newspack dependencies.
  */
-import { Card, Notice, TextControl, SelectControl, Button, ProgressBar } from 'newspack-components';
+import { Card, TextControl, SelectControl, Button, ProgressBar } from 'newspack-components';
 
 const { lica_batch_size } = window.newspack_ads_bidding_gam;
 
@@ -227,7 +227,11 @@ const Order = ( { orderId = null, defaultName = '', onPending = () => {}, onErro
 					) }
 				</p>
 			) }
-			{ error && error.data?.status !== '404' && <Notice isError noticeText={ error.message } /> }
+			{ error && error.data?.status !== '404' && (
+				<Notice isDismissible={ false } status="error">
+					{ error.message }
+				</Notice>
+			) }
 			<TextControl
 				label={ __( 'Order name', 'newspack-ads' ) }
 				disabled={ inFlight || order?.order_name }
@@ -277,10 +281,16 @@ const Order = ( { orderId = null, defaultName = '', onPending = () => {}, onErro
 					} )
 				}
 			/>
-			{ ! inFlight && hasIssues() && <Notice isWarning noticeText={ __( "Order exists but it's misconfigured.", 'newspack-ads' ) } /> }
+			{ ! inFlight && hasIssues() && (
+				<Notice isDismissible={ false } spokenMessage="" status="warning">
+					{ __( "Order exists but it's misconfigured.", 'newspack-ads' ) }
+				</Notice>
+			) }
 			{ step && stepName ? (
 				<Fragment>
-					<Notice isWarning noticeText={ __( 'This may take up to 15 minutes, please do not close the window.', 'newspack-ads' ) } />
+					<Notice isDismissible={ false } spokenMessage="" status="warning">
+						{ __( 'This may take up to 15 minutes, please do not close the window.', 'newspack-ads' ) }
+					</Notice>
 					<ProgressBar completed={ step } total={ totalSteps } label={ stepName } />
 				</Fragment>
 			) : null }
