@@ -1,3 +1,10 @@
+## newspack-network [2.22.2](https://github.com/Automattic/newspack-workspace/compare/newspack-network@2.22.1...newspack-network@2.22.2) (2026-08-24)
+
+
+### Bug Fixes
+
+* **network:** escape node-supplied hub admin output ([#871](https://github.com/Automattic/newspack-workspace/issues/871)) ([4dbe67d](https://github.com/Automattic/newspack-workspace/commit/4dbe67d6c36c365254a4517d031ab725a57637e3))
+
 ## newspack-network [2.22.1](https://github.com/Automattic/newspack-workspace/compare/newspack-network@2.22.0...newspack-network@2.22.1) (2026-08-19)
 
 
