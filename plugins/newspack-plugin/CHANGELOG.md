@@ -1,3 +1,10 @@
+## newspack [6.48.16](https://github.com/Automattic/newspack-workspace/compare/newspack@6.48.15...newspack@6.48.16) (2026-08-24)
+
+
+### Bug Fixes
+
+* **newspack-plugin:** restore the major revision controls (NPPM-3155, [#961](https://github.com/Automattic/newspack-workspace/issues/961)) ([914c9f4](https://github.com/Automattic/newspack-workspace/commit/914c9f4220ec88742669baf212312b1a4f143119))
+
 ## newspack [6.48.15](https://github.com/Automattic/newspack-workspace/compare/newspack@6.48.14...newspack@6.48.15) (2026-08-24)
 
 
