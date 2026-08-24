@@ -1,7 +1,7 @@
 /**
  * Internal dependencies
  */
-import { isGateMetered } from './utils';
+import { getGateStatusBadgeIntent, isGateMetered } from './utils';
 
 /**
  * `isGateMetered` decides whether the wizard offers metering-dependent features (the
@@ -53,5 +53,18 @@ describe( 'isGateMetered', () => {
 		} );
 
 		expect( isGateMetered( gate ) ).toBe( false );
+	} );
+} );
+
+describe( 'getGateStatusBadgeIntent', () => {
+	it( 'reads an inactive gate as a draft rather than a settled off state', () => {
+		// A gate that is not published is an unsaved draft post, so it takes `draft`
+		// rather than the `none` a deliberate "off" would use.
+		expect( getGateStatusBadgeIntent( 'draft' ) ).toBe( 'draft' );
+		expect( getGateStatusBadgeIntent( 'pending' ) ).toBe( 'draft' );
+	} );
+
+	it( 'reads a published gate as live', () => {
+		expect( getGateStatusBadgeIntent( 'publish' ) ).toBe( 'stable' );
 	} );
 } );

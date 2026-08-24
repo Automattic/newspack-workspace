@@ -20,7 +20,7 @@ function buildEditUrl( item ) {
 const deleteOne = id => apiFetch( { path: `${ COLLECTION_PATH }/${ id }?force=true`, method: 'DELETE' } );
 
 function copyTitle( source ) {
-	// `??` would pick auto-drafts' empty `title.raw` and produce "Copy of ".
+	// `??` would keep an empty `title.raw` and produce "Copy of ".
 	const raw = ( source?.title?.raw ?? '' ).trim();
 	const rendered = ( source?.title?.rendered ?? '' ).trim();
 	const sourceTitle = raw || rendered || __( 'Untitled', 'newspack-newsletters' );

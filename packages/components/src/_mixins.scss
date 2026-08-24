@@ -1,0 +1,13 @@
+@use "../../colors/colors.module" as colors;
+@use "~@wordpress/base-styles/colors" as wp-colors;
+@use "~@wordpress/base-styles/variables" as wp-vars;
+
+@mixin text-muted {
+	/* stylelint-disable-next-line plugin-wpds/no-unknown-ds-tokens -- the plugin's token list lags the prebuilt design-tokens.css names. */
+	color: var( --wpds-color-foreground-content-neutral-weak, #{wp-colors.$gray-700} );
+}
+
+@mixin wpds-focus-ring {
+	/* stylelint-disable-next-line plugin-wpds/no-unknown-ds-tokens -- the plugin's token list lags the prebuilt design-tokens.css names. */
+	outline: var( --wpds-border-width-focus, var( --wp-admin-border-width-focus, #{wp-vars.$border-width-focus-fallback} ) ) solid var( --wpds-color-stroke-focus, var( --wp-admin-theme-color, #{colors.$primary-600} ) );
+}

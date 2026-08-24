@@ -1093,26 +1093,18 @@ class Group_Subscription_Settings {
 			return;
 		}
 		// Group name is unused (no settings_fields() form); registers sanitize_callback via update_option().
-		\register_setting(
-			'newspack_group_subscription',
-			'newspack_group_subscription_label_singular',
-			[
-				'type'              => 'string',
-				'sanitize_callback' => 'sanitize_text_field',
-				'default'           => '',
-				'show_in_rest'      => false,
-			]
-		);
-		\register_setting(
-			'newspack_group_subscription',
-			'newspack_group_subscription_label_plural',
-			[
-				'type'              => 'string',
-				'sanitize_callback' => 'sanitize_text_field',
-				'default'           => '',
-				'show_in_rest'      => false,
-			]
-		);
+		foreach ( [ 'singular', 'plural' ] as $variant ) {
+			\register_setting(
+				'newspack_group_subscription',
+				Group_Subscription::get_label_option_key( $variant ),
+				[
+					'type'              => 'string',
+					'sanitize_callback' => 'sanitize_text_field',
+					'default'           => '',
+					'show_in_rest'      => false,
+				]
+			);
+		}
 	}
 }
 Group_Subscription_Settings::init();

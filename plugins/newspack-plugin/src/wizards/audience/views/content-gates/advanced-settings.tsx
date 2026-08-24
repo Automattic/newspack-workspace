@@ -25,13 +25,13 @@ import { AUDIENCE_CONTENT_GATES_WIZARD_SLUG } from './consts';
 const feedRestrictionModes = window.newspackAudienceContentGates?.feed_restriction_modes || [];
 
 const AdvancedSettings = ( { closeModal, showModal }: { closeModal: () => void; showModal: boolean } ) => {
-	const wizardData = useWizardData( AUDIENCE_CONTENT_GATES_WIZARD_SLUG ) as WizardData;
+	const wizardData = useWizardData( AUDIENCE_CONTENT_GATES_WIZARD_SLUG ) as ContentGatesWizardData;
 	const initialConfig = {
 		...( wizardData?.config?.advanced_settings || {} ),
 	};
 	const { wizardApiFetch, isFetching, resetError } = useWizardApiFetch( AUDIENCE_CONTENT_GATES_WIZARD_SLUG );
 	const { addNotice, resetNotices, updateWizardSettings } = useDispatch( WIZARD_STORE_NAMESPACE );
-	const [ config, setConfig ] = useState< AdvancedSettingsConfig >( initialConfig );
+	const [ config, setConfig ] = useState< Partial< AdvancedSettingsConfig > >( initialConfig );
 
 	useEffect( () => {
 		if ( showModal ) {
@@ -39,8 +39,8 @@ const AdvancedSettings = ( { closeModal, showModal }: { closeModal: () => void; 
 		}
 	}, [ showModal ] );
 
-	const updateConfig = useRef< ( _config: AdvancedSettingsConfig ) => void >();
-	const handleUpdateConfig = ( _config: AdvancedSettingsConfig ) => {
+	const updateConfig = useRef< ( _config: Partial< AdvancedSettingsConfig > ) => void >();
+	const handleUpdateConfig = ( _config: Partial< AdvancedSettingsConfig > ) => {
 		if ( isFetching ) {
 			return;
 		}
