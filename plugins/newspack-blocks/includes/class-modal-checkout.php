@@ -561,6 +561,12 @@ final class Modal_Checkout {
 	 * checkout URL — which has no referer — were dropped before reaching the
 	 * checkout and order meta. Request params win over referer params.
 	 *
+	 * The modal form's own submission is what carries a promo link's values here:
+	 * appendUtmFields() in modal.js copies the landing page's utm params onto the
+	 * form as hidden fields before it GET-submits into the checkout iframe, so
+	 * they arrive in this request's $_GET rather than depending on the referer
+	 * surviving the trigger's history.replaceState().
+	 *
 	 * @param array $params Params parsed from the referer query string.
 	 * @return array Params with the request's utm_* params merged in.
 	 */
@@ -585,18 +591,28 @@ final class Modal_Checkout {
 	 * Runs on `wp` so the render-time asset enqueues land in the normal queue.
 	 */
 	public static function maybe_setup_url_triggered_checkout() {
-		if ( is_admin() || wp_doing_ajax() || ( function_exists( 'is_checkout' ) && is_checkout() ) ) {
+		if ( is_admin() || wp_doing_ajax() || is_feed() || ( function_exists( 'is_checkout' ) && is_checkout() ) ) {
 			return;
 		}
 		if ( ! function_exists( 'wc_get_product' ) ) {
 			return;
 		}
-		// phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		// phpcs:disable WordPress.Security.NonceVerification.Recommended
 		if ( ! isset( $_GET['checkout'] ) || ! isset( $_GET['type'] ) ) {
 			return;
 		}
 		$type = filter_input( INPUT_GET, 'type', FILTER_SANITIZE_SPECIAL_CHARS );
 		if ( 'donate' === $type ) {
+			// The trigger script only fires when layout, frequency and amount are
+			// all present, so a request missing any of them would render a form
+			// nothing ever submits. Donations must also be on the WooCommerce
+			// platform for the block to produce a servable form.
+			if ( empty( $_GET['layout'] ) || empty( $_GET['frequency'] ) || empty( $_GET['amount'] ) ) {
+				return;
+			}
+			if ( ! method_exists( '\Newspack\Donations', 'is_platform_wc' ) || ! \Newspack\Donations::is_platform_wc() ) {
+				return;
+			}
 			// Defaults resolve to the site's donation settings, which is what the
 			// generator derived its frequency/amount options from.
 			self::$url_triggered_block_html = do_blocks( '<!-- wp:newspack-blocks/donate /-->' );
@@ -605,10 +621,11 @@ final class Modal_Checkout {
 			if ( empty( $attrs ) ) {
 				return;
 			}
-			self::$url_triggered_block_html = do_blocks( '<!-- wp:newspack-blocks/checkout-button ' . wp_json_encode( $attrs ) . ' /-->' );
+			self::$url_triggered_block_html = do_blocks( '<!-- wp:newspack-blocks/checkout-button ' . serialize_block_attributes( $attrs ) . ' /-->' );
 		} else {
 			return;
 		}
+		// phpcs:enable WordPress.Security.NonceVerification.Recommended
 		if ( '' !== self::$url_triggered_block_html ) {
 			add_action( 'wp_footer', [ __CLASS__, 'render_url_triggered_block' ], 1 );
 		}
@@ -636,15 +653,23 @@ final class Modal_Checkout {
 				return [];
 			}
 		}
+		// The coupon and label are non-HTML text values: sanitize_text_field()
+		// keeps their raw characters, where an entity-encoding filter would break
+		// the coupon's title lookup and show readers an encoded label. Escaping
+		// happens at output (view.php / the thank-you template).
+		// phpcs:disable WordPress.Security.NonceVerification.Recommended
+		$coupon       = isset( $_GET['coupon'] ) && is_string( $_GET['coupon'] ) ? sanitize_text_field( wp_unslash( $_GET['coupon'] ) ) : '';
+		$button_label = isset( $_GET['after_success_button_label'] ) && is_string( $_GET['after_success_button_label'] ) ? sanitize_text_field( wp_unslash( $_GET['after_success_button_label'] ) ) : '';
+		// phpcs:enable WordPress.Security.NonceVerification.Recommended
 		return self::build_url_triggered_button_attrs(
 			$product->get_type(),
 			$product_id,
 			$variation_id,
-			(string) filter_input( INPUT_GET, 'coupon', FILTER_SANITIZE_FULL_SPECIAL_CHARS ),
+			$coupon,
 			[
 				'behavior'     => (string) filter_input( INPUT_GET, 'after_success_behavior', FILTER_SANITIZE_SPECIAL_CHARS ),
 				'url'          => (string) filter_input( INPUT_GET, 'after_success_url', FILTER_SANITIZE_URL ),
-				'button_label' => (string) filter_input( INPUT_GET, 'after_success_button_label', FILTER_SANITIZE_SPECIAL_CHARS ),
+				'button_label' => $button_label,
 			]
 		);
 	}
@@ -698,10 +723,13 @@ final class Modal_Checkout {
 		if ( '' !== $coupon ) {
 			$attrs['coupon'] = $coupon;
 		}
-		// No token is passed: this path cannot vouch for a destination, since the URL
-		// arrives in the request and vouching for untrusted input would authorize
-		// exactly what the token exists to refuse. An off-site destination therefore
-		// has to come from a block, where an editor authored it.
+		// The destination is restricted to allowed hosts here (sanitize_after_success_url()
+		// with no token), before it becomes a block attribute. view.php mints an
+		// after_success_token for any afterSuccessURL it renders — including this
+		// synthesized one — so that token only ever vouches for a destination this
+		// pre-validation already accepts. Loosening the check here would widen what
+		// the minted token blesses; an off-site destination still has to come from
+		// a block an editor authored.
 		$after_success_url = isset( $after_success['url'] ) ? self::sanitize_after_success_url( $after_success['url'] ) : '';
 		if ( isset( $after_success['behavior'] ) && 'custom' === $after_success['behavior'] && '' !== $after_success_url ) {
 			$attrs['afterSuccessBehavior'] = 'custom';
@@ -2290,7 +2318,15 @@ final class Modal_Checkout {
 			// A persistent object cache can hold a code-to-ID mapping that
 			// outlives the coupon post, and WooCommerce's data store throws
 			// when it reads the missing post. Skip the coupon rather than
-			// fataling the checkout the reader is standing on.
+			// fataling the checkout the reader is standing on — but leave a
+			// trail: without it, a cache stuck in this state silently charges
+			// every reader on the promo link full price.
+			if ( function_exists( 'wc_get_logger' ) ) {
+				wc_get_logger()->warning(
+					sprintf( 'Modal checkout: skipped auto-applying coupon "%s": %s', $coupon_code, $e->getMessage() ),
+					[ 'source' => 'newspack-blocks' ]
+				);
+			}
 			return;
 		}
 		if ( $applied ) {
