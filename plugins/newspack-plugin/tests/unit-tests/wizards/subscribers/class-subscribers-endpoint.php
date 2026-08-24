@@ -785,9 +785,9 @@ class Test_Subscribers_Wizard_Subscribers_Endpoint extends WP_UnitTestCase {
 		$newsletters_by_id = array_column( $this->dispatch()->get_data()['items'], 'newsletters', 'id' );
 
 		$this->assertSame(
-			[ 'Daily Brief', 'Weekend Read', 'esp-only-list' ],
+			[ 'Daily Brief', 'Weekend Read', 'Unknown list (esp-only-list)' ],
 			$newsletters_by_id[ $subscribed_reader ],
-			'Known lists resolve to their titles; an unknown list ID is kept as-is.'
+			'Known lists resolve to their titles; a list the site has no record of is labelled rather than printed as a bare provider ID, which reads as a newsletter name.'
 		);
 		$this->assertSame( [], $newsletters_by_id[ $unsubscribed_reader ] );
 	}

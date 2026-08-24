@@ -1090,7 +1090,16 @@ class Subscribers_Wizard extends Wizard {
 				continue;
 			}
 			$list_id = (string) $list_id;
-			$names[] = $titles[ $list_id ] ?? $list_id;
+			// A subscribed list the site has no local Subscription_List for is a
+			// normal state, not an edge case: this data is whatever the ESP returned,
+			// and it can name lists that were never mirrored here. Printing the bare
+			// provider ID would put something like `abc123def` in a publisher-facing
+			// column with nothing to say it is not a newsletter name, so it is labelled
+			// as unresolved while keeping the ID, which is what support needs.
+			$names[] = isset( $titles[ $list_id ] )
+				? $titles[ $list_id ]
+				/* translators: %s: the email service provider's identifier for a list the site has no local record of. */
+				: sprintf( __( 'Unknown list (%s)', 'newspack-plugin' ), $list_id );
 		}
 		return array_values( array_unique( array_filter( $names ) ) );
 	}
