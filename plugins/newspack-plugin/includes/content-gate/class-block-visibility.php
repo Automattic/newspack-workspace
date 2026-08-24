@@ -478,12 +478,17 @@ class Block_Visibility {
 	 * The blog id is in the key because gate ids are per-site post ids, so a
 	 * switch_to_blog() mid-request would otherwise answer for the wrong site.
 	 *
-	 * Not flushed when a gate is written. The only reader is the render path, which
-	 * returns early under is_admin(), and the gate-editing endpoints return gate data
-	 * rather than rendered post content -- so no request both writes a gate and renders
-	 * a block gated by it. A caller that breaks that assumption needs an invalidation
-	 * hook here, the way Content_Gate flushes its own cache on save_post and the
-	 * post-meta writes.
+	 * Not flushed when a gate is written, because only one of the two stale answers
+	 * can change an outcome. A stale true is re-derived downstream:
+	 * compute_gate_rules_match() re-checks each gate's status itself and returns a
+	 * pass-through when none are active, so it cannot withhold a block whose gates
+	 * went away mid-request. A stale false returns early from is_hidden_for_user()
+	 * and the block renders -- which needs one request to check a gate set, publish a
+	 * gate in it, and then render or excerpt a block carrying that same set. Both
+	 * readers matter here: the render filter bypasses admin and REST, but the excerpt
+	 * path reaches this predicate from strip_hidden() with no such guard. A caller
+	 * that does all three needs an invalidation hook here, the way Content_Gate
+	 * flushes its own cache on save_post and the post-meta writes.
 	 *
 	 * @var bool[]
 	 */
@@ -538,10 +543,10 @@ class Block_Visibility {
 	 * @return bool
 	 */
 	private static function has_active_gates( $gate_ids ) {
-		// Normalized because the answer does not depend on order or repetition, but the
-		// caller's list does: the ids arrive from a block attribute in editor order, and
-		// array_filter() preserves keys, so dropping a zero would otherwise encode as an
-		// object rather than a list and key differently again.
+		// The answer does not depend on the order or the repetition of the ids, but the
+		// caller's list carries both -- they arrive from a block attribute in editor
+		// order. Normalizing first lets every block gated by the same set, however its
+		// author happened to arrange them, share one entry.
 		$ids = array_values( array_unique( array_map( 'intval', $gate_ids ) ) );
 		sort( $ids, SORT_NUMERIC );
 		$cache_key = get_current_blog_id() . ':' . implode( ',', $ids );

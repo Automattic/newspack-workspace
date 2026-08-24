@@ -995,6 +995,13 @@ class Newspack_Test_Block_Visibility extends WP_UnitTestCase {
 
 		remove_filter( 'get_post_metadata', $counter, 10 );
 
+		// Without this the invariant below is satisfied by a counter that never fired,
+		// so a filter that stopped matching would leave the test green.
+		$this->assertGreaterThan(
+			0,
+			$after_first,
+			'The first render must reconstruct the gate, or this test measures nothing.'
+		);
 		$this->assertSame(
 			$after_first,
 			$fetches,
@@ -1045,6 +1052,11 @@ class Newspack_Test_Block_Visibility extends WP_UnitTestCase {
 
 		remove_filter( 'get_post_metadata', $counter, 10 );
 
+		$this->assertGreaterThan(
+			0,
+			$after_forward,
+			'The first render must reconstruct the gates, or this test measures nothing.'
+		);
 		$this->assertSame(
 			$after_forward,
 			$fetches,
