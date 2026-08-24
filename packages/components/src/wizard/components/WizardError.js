@@ -51,13 +51,7 @@ const WizardError = () => {
 	}
 
 	return (
-		<Notice
-			isDismissible={ false }
-			status="error"
-			className="newspack-wizard__above-header"
-			spokenMessage={ htmlToText( message ) }
-			__unstableHTML
-		>
+		<Notice isDismissible={ false } status="error" spokenMessage={ htmlToText( message ) } __unstableHTML>
 			{ message }
 		</Notice>
 	);
