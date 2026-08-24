@@ -11,6 +11,7 @@ import { ExternalLink } from '@wordpress/components';
 /**
  * Internal dependencies.
  */
+import useConfirmDialog from '../hooks/use-confirm-dialog';
 import './style.scss';
 
 const Footer = ( { simple = undefined } ) => {
@@ -23,6 +24,23 @@ const Footer = ( { simple = undefined } ) => {
 		remove_starter_content: removeStarterContent = false,
 		support_email: supportEmail,
 	} = window.newspack_urls || {};
+
+	const resetDialog = useConfirmDialog( {
+		title: __( 'Reset Newspack?', 'newspack-plugin' ),
+		message: __(
+			'This deletes every Newspack setting on this site and returns you to the setup wizard. Your posts, pages and users are not affected. This cannot be undone.',
+			'newspack-plugin'
+		),
+		confirmButtonText: __( 'Reset Newspack', 'newspack-plugin' ),
+		isDestructive: true,
+	} );
+
+	const starterContentDialog = useConfirmDialog( {
+		title: __( 'Remove starter content?', 'newspack-plugin' ),
+		message: __( 'This deletes the posts, pages and categories created as starter content. This cannot be undone.', 'newspack-plugin' ),
+		confirmButtonText: __( 'Remove starter content', 'newspack-plugin' ),
+		isDestructive: true,
+	} );
 
 	const footerElements = [
 		{
@@ -57,12 +75,14 @@ const Footer = ( { simple = undefined } ) => {
 		footerElements.push( {
 			label: __( 'Reset Newspack', 'newspack-plugin' ),
 			url: resetUrl,
+			confirm: resetDialog.requestConfirm,
 		} );
 	}
 	if ( removeStarterContent ) {
 		footerElements.push( {
 			label: __( 'Remove Starter Content', 'newspack-plugin' ),
 			url: removeStarterContent,
+			confirm: starterContentDialog.requestConfirm,
 		} );
 	}
 	if ( supportEmail ) {
@@ -71,15 +91,39 @@ const Footer = ( { simple = undefined } ) => {
 			url: `mailto:${ supportEmail }`,
 		} );
 	}
+	const renderLink = ( { url, label, external, confirm } ) => {
+		if ( external ) {
+			return <ExternalLink href={ url }>{ label }</ExternalLink>;
+		}
+		if ( ! confirm ) {
+			return <a href={ url }>{ label }</a>;
+		}
+		return (
+			<a
+				href={ url }
+				onClick={ event => {
+					event.preventDefault();
+					confirm( () => {
+						window.location.href = url;
+					} );
+				} }
+			>
+				{ label }
+			</a>
+		);
+	};
+
 	return (
 		<div className="newspack-footer">
 			{ ! simple && (
 				<ul>
-					{ footerElements.map( ( { url, label, external }, index ) => (
-						<li key={ index }>{ external ? <ExternalLink href={ url }>{ label }</ExternalLink> : <a href={ url }>{ label }</a> }</li>
+					{ footerElements.map( ( element, index ) => (
+						<li key={ index }>{ renderLink( element ) }</li>
 					) ) }
 				</ul>
 			) }
+			{ resetDialog.confirmDialog }
+			{ starterContentDialog.confirmDialog }
 		</div>
 	);
 };
