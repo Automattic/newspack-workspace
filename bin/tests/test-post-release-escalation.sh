@@ -153,10 +153,14 @@ CURL
   git -C "$root/origin.git" symbolic-ref HEAD refs/heads/main
 
   git init -q -b main "$root/seed"
+  # Identity is addressed to the fixture with -C, never with a bare `git config`
+  # after a cd. A bare one writes to whatever repo the cwd happens to be in, so a
+  # cd that is missing or wrong lands it in the real checkout, which then quietly
+  # authors real commits under it until someone reads a git log.
+  git -C "$root/seed" config user.email seed@example.com
+  git -C "$root/seed" config user.name seed
   (
     cd "$root/seed"
-    git config user.email seed@example.com
-    git config user.name seed
     mkdir -p packages/components/src/wizard plugins/newspack-plugin
     printf 'export const wizard = 1;\n' > packages/components/src/wizard/index.js
     printf '{"name":"p","dependencies":{"newspack-components":"workspace:*"}}\n' > plugins/newspack-plugin/package.json
@@ -181,13 +185,12 @@ CURL
   )
 
   git clone -q "$root/origin.git" "$root/work"
-  (
-    cd "$root/work"
-    git config user.name newspack-release-bot
-    git config user.email "$BOT_EMAIL"
-    git config pull.ff only
-    git checkout -q alpha && git checkout -q main && git checkout -q release
-  )
+  git -C "$root/work" config user.name newspack-release-bot
+  git -C "$root/work" config user.email "$BOT_EMAIL"
+  git -C "$root/work" config pull.ff only
+  git -C "$root/work" checkout -q alpha
+  git -C "$root/work" checkout -q main
+  git -C "$root/work" checkout -q release
   # Kept outside the work tree: an untracked file there is exactly what the
   # scoped staging protects, so the runner must not depend on one surviving.
   cp "$SUT" "$root/post-release.sh"
