@@ -401,18 +401,15 @@ export default function SubscriptionProductsList( { scope = 'subscriptions' }: {
 		);
 	}
 
-	if ( hasError ) {
-		return (
-			<GlobalNoticeFill>
-				<Notice status="error" isDismissible={ false } actions={ [ { label: __( 'Retry', 'newspack-plugin' ), onClick: fetchData } ] }>
-					{ __( 'Could not load subscription products.', 'newspack-plugin' ) }
-				</Notice>
-			</GlobalNoticeFill>
-		);
-	}
-
 	return (
 		<div className="newspack-subscription-products">
+			{ hasError && (
+				<GlobalNoticeFill>
+					<Notice status="error" isDismissible={ false } actions={ [ { label: __( 'Retry', 'newspack-plugin' ), onClick: fetchData } ] }>
+						{ __( 'Could not load subscription products.', 'newspack-plugin' ) }
+					</Notice>
+				</GlobalNoticeFill>
+			) }
 			{ policyIsMock && (
 				<Notice spokenMessage="" status="info" isDismissible={ false } className="newspack-subscription-products__mock-notice">
 					{ __(
