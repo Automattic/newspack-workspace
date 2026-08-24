@@ -45,7 +45,7 @@ class Membership_Plan_Updated extends Abstract_Backfiller {
 			[
 				'post_type'   => Memberships_Admin::MEMBERSHIP_PLANS_CPT,
 				'post_status' => 'any',
-				'numberposts' => -1,
+				'numberposts' => -1, // phpcs:ignore WordPressVIPMinimum.Performance.NoPaging -- Operator-run CLI command; unbounded by design.
 				'date_query'  => [
 					'column'    => 'post_modified_gmt',
 					'after'     => $this->start,

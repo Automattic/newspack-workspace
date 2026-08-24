@@ -55,6 +55,13 @@ class Content_Restriction_Control {
 	const IS_EXEMPT_META_KEY = 'newspack_content_restriction_is_exempt';
 
 	/**
+	 * Post meta key WooCommerce Memberships uses to force a post public.
+	 *
+	 * @var string
+	 */
+	const WC_FORCE_PUBLIC_META_KEY = '_wc_memberships_force_public';
+
+	/**
 	 * Initialize hooks and filters.
 	 */
 	public static function init() {
@@ -398,7 +405,8 @@ class Content_Restriction_Control {
 			// If custom_access mode is active and we didn't already evaluate it above for an anonymous bypass.
 			if ( ! $is_restricted && null === $anonymous_bypass_passed && ! empty( $gate['custom_access']['active'] ) ) {
 				$access_rules = $gate['custom_access']['access_rules'] ?? [];
-				if ( ! empty( $access_rules ) && ! Access_Rules::evaluate_rules( $access_rules, $user_id ) ) {
+				$rule_context = [ 'payment_recovery_grace' => $gate['custom_access']['payment_recovery_grace'] ?? true ];
+				if ( ! empty( $access_rules ) && ! Access_Rules::evaluate_rules( $access_rules, $user_id, $rule_context ) ) {
 					$is_restricted  = true;
 					$gate_layout_id = $gate['custom_access']['gate_layout_id'] ?? $gate['id'];
 				}

@@ -2310,6 +2310,9 @@ final class Newspack_Newsletters_Mailchimp extends \Newspack_Newsletters_Service
 				'interests'    => [],
 				'merge_fields' => [],
 			];
+			// Collected alongside the loop but only exposed under $return_details,
+			// so a plain lookup keeps its historical keys.
+			$merge_fields_by_list = [];
 			foreach ( $found as $contact ) {
 				foreach ( $keys as $key ) {
 					if ( ! isset( $data[ $key ] ) || empty( $data[ $key ] ) ) {
@@ -2328,9 +2331,39 @@ final class Newspack_Newsletters_Mailchimp extends \Newspack_Newsletters_Service
 					'status'     => $contact['status'],
 				];
 				if ( isset( $contact['merge_fields'] ) ) {
+					// Flat and last-wins, preserved as-is: existing callers read this
+					// shape. Merge fields are defined per audience, so for a contact in
+					// several audiences it holds whichever came back last — which is why
+					// the per-audience map below exists.
 					$data['merge_fields'] = $contact['merge_fields'];
+
+					// Mailchimp reports every merge field defined on the audience, using
+					// an empty string for ones the contact hasn't filled in — filter
+					// those out so `metadata` keeps the shared meaning of "fields the
+					// contact has a value for".
+					$merge_fields_by_list[ $contact['list_id'] ] = self::filter_set_field_values( $contact['merge_fields'] );
 				}
 			}
+
+			// Expose the merge fields under the provider-neutral `metadata` key that
+			// callers requesting full details read, as ActiveCampaign already does.
+			// Merge fields are keyed by merge tag, which is the same identifier
+			// get_contact_fields_for_integrations() reports as a field's `key`, so
+			// the two line up without remapping. Without this an ESP contact pull
+			// finds no `metadata` and stores nothing while reporting success.
+			//
+			// `metadata_by_list` carries the same values keyed by audience. Merge
+			// fields are per-audience in Mailchimp, and a caller's field schema comes
+			// from one specific audience (get_contact_fields_for_integrations() takes
+			// a list ID), so a caller that knows which audience it configured should
+			// read its entry rather than the flat `metadata` — which, like
+			// `merge_fields`, can only report one audience for a multi-audience
+			// contact.
+			if ( $return_details ) {
+				$data['metadata']         = self::filter_set_field_values( $data['merge_fields'] );
+				$data['metadata_by_list'] = $merge_fields_by_list;
+			}
+
 			return $data;
 		} catch ( \Exception $e ) {
 			return new WP_Error(

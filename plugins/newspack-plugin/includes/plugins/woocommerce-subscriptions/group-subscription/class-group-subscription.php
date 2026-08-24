@@ -566,7 +566,8 @@ class Group_Subscription {
 	 * @param int[]                $members_to_add Group member user IDs to add the subscription.
 	 * @param int[]                $members_to_remove Group member user IDs to remove from the subscription.
 	 *
-	 * @return array|\WP_Error Added/removed results.
+	 * @return array|\WP_Error Added/removed results, plus `invites_cancelled`: the emails whose
+	 *                         pending invites the additions fulfilled and cancelled.
 	 */
 	public static function update_members( $subscription, $members_to_add, $members_to_remove = [] ) {
 		$subscription = WooCommerce_Subscriptions::sanitize_subscription( $subscription );
@@ -600,39 +601,122 @@ class Group_Subscription {
 			}
 		}
 
-		// Removals above are persisted before this limit check, so a single call that both removes
-		// and adds past the limit would keep the removals while returning 409. No shipped caller
-		// batches add + remove in one call (the admin JS and admin-post handlers split them into
-		// separate requests), so this can't happen today. If a caller ever combines both arrays,
-		// move this check ahead of the removal loop and compute the projected count there.
-		$existing_members = self::get_members( $subscription );
-		$seat_limit       = self::get_member_seat_limit( $subscription );
-		if ( null !== $seat_limit && count( $existing_members ) + count( $members_to_add ) > $seat_limit ) {
-			return new \WP_Error( 'newspack_group_subscription_update_members', __( 'Member limit reached. Please remove some members or increase the limit.', 'newspack-plugin' ), [ 'status' => 409 ] );
+		// Narrow the additions to the IDs that would genuinely become members: non-readers and users
+		// who already hold this subscription's member meta are no-ops. Filtering them here rather
+		// than in the add loop below keeps the limit projection honest -- counting a no-op ID would
+		// overstate the post-add total and reject an add that in fact fits.
+		$members_to_add = array_values(
+			array_filter(
+				$members_to_add,
+				function ( $member_id ) use ( $subscription ) {
+					return Reader_Activation::is_user_reader( $member_id )
+						&& ! in_array( $subscription->get_id(), self::get_group_subscriptions_for_user( $member_id, true ), true );
+				}
+			)
+		);
+
+		// The limit only bounds additions, so skip the check on removal-only calls: a removal can
+		// never push a group over its limit, and running it there would spuriously 409 an admin
+		// removing a member from an already-over-capacity group (e.g. after lowering the limit).
+		// Removals are persisted above; no shipped caller batches add + remove in one call (the admin
+		// JS and admin-post handlers split them), so a combined over-limit add can't strand a removal.
+		// The threshold is the owner-inclusive member-seat limit, so update_members stays in step with
+		// the invite path and get_member_capacity (the owner occupies one of the limited seats).
+		// The count and the writes below are not atomic: nothing locks between reading the members
+		// and invites here and adding the member meta, so two adds racing for the last seat (two
+		// admins, or an admin add racing an invite acceptance) can both pass this check and both
+		// land, leaving the group one seat over. That has always been true of this code path; the
+		// exposure is admin-only and low-concurrency, so it is accepted rather than locked against.
+		$seat_limit = self::get_member_seat_limit( $subscription );
+		if ( ! empty( $members_to_add ) && null !== $seat_limit ) {
+			// Pending (non-expired) invites reserve a spot, so count them alongside existing members --
+			// this matches the invite path's own limit check, so a direct add can't overfill a group
+			// that already has invites out. Exclude any invite addressed to a user being added: the
+			// add fulfils that invite (it is cancelled below), so it must not double-count against them.
+			$existing_members = self::get_members( $subscription );
+			$adding_emails    = [];
+			foreach ( $members_to_add as $add_id ) {
+				$add_user = \get_userdata( $add_id );
+				if ( $add_user ) {
+					$adding_emails[] = strtolower( $add_user->user_email );
+				}
+			}
+			$pending_invites = array_filter(
+				Group_Subscription_Invite::get_invites( $subscription, false ),
+				function ( $invite ) use ( $adding_emails ) {
+					return empty( $invite['email'] ) || ! in_array( strtolower( $invite['email'] ), $adding_emails, true );
+				}
+			);
+			if ( count( $existing_members ) + count( $pending_invites ) + count( $members_to_add ) > $seat_limit ) {
+				return new \WP_Error( 'newspack_group_subscription_update_members', __( 'Member limit reached. Please remove some members or increase the limit.', 'newspack-plugin' ), [ 'status' => 409 ] );
+			}
 		}
 
-		// Add new members.
-		foreach ( $members_to_add as $member_id ) {
-			if ( ! Reader_Activation::is_user_reader( $member_id ) ) {
-				continue;
+		// A direct add fulfils any outstanding invite to the same email, so cancel it below -- this is
+		// what the "cancelled below" note in the limit check above refers to, and it mirrors the invite
+		// acceptance path (which cancels on add). Without it the new member and their now-stale invite
+		// would both linger, and both count toward the limit. Collect the pending emails once so the add
+		// loop can flag only genuine matches, then cancel them in a single write after the loop --
+		// cancel_invites() persists the subscription, which is too heavy to repeat per member.
+		$pending_invite_emails = [];
+		foreach ( Group_Subscription_Invite::get_invites( $subscription, false ) as $invite ) {
+			if ( ! empty( $invite['email'] ) ) {
+				$pending_invite_emails[] = strtolower( $invite['email'] );
 			}
+		}
+		// Keyed by member ID: cancel_invites() and the caller want the addresses, but the failure log
+		// below wants to name the affected members without carrying their addresses (see there).
+		$invites_to_cancel = [];
 
-			// Avoid adding duplicate meta entries.
-			$existing_group_subscription_ids = self::get_group_subscriptions_for_user( $member_id, true );
-			if ( in_array( $subscription->get_id(), $existing_group_subscription_ids, true ) ) {
-				continue;
-			}
+		// Add new members. $members_to_add holds only genuinely-addable readers at this point, so the
+		// reader and duplicate-meta guards live in the filter above rather than here.
+		foreach ( $members_to_add as $member_id ) {
 			if ( \add_user_meta( $member_id, self::GROUP_SUBSCRIPTION_USER_META_KEY, $subscription->get_id() ) ) {
 				\update_user_meta( $member_id, self::get_member_joined_meta_key( $subscription->get_id() ), time() );
+				$member_email                = \get_userdata( $member_id )->user_email;
 				$members_added[ $member_id ] = [
-					'email' => \get_userdata( $member_id )->user_email,
+					'email' => $member_email,
 					'url'   => \get_edit_user_link( $member_id ),
 				];
+				if ( in_array( strtolower( $member_email ), $pending_invite_emails, true ) ) {
+					$invites_to_cancel[ $member_id ] = $member_email;
+				}
 			}
 		}
+
+		if ( ! empty( $invites_to_cancel ) ) {
+			$cancelled = Group_Subscription_Invite::cancel_invites( $subscription, array_values( $invites_to_cancel ) );
+			if ( is_wp_error( $cancelled ) ) {
+				// Not fatal -- the members were added -- but it leaves stale invites still consuming
+				// seats, so surface it rather than swallowing it. is_group_subscription() returns
+				// false in some My Account contexts, which is the likeliest cause.
+				// The affected people are named by user ID, not address: the newspack_log pipeline
+				// only singles out a top-level `user_email` key for its own handling, which a batch
+				// cannot use, so addresses in `data` would be plain payload. The IDs resolve to the
+				// same readers, and the stale invites themselves stay on the subscription.
+				\do_action(
+					'newspack_log',
+					'newspack_group_subscription_invite_cancel_failed',
+					$cancelled->get_error_message(),
+					[
+						'type' => 'error',
+						'data' => [
+							'subscription_id' => $subscription->get_id(),
+							'member_ids'      => array_keys( $invites_to_cancel ),
+						],
+					]
+				);
+				$invites_to_cancel = [];
+			}
+		}
+
 		return [
-			'members_added'   => $members_added,
-			'members_removed' => $members_removed,
+			'members_added'     => $members_added,
+			'members_removed'   => $members_removed,
+			// The emails whose pending invites this add fulfilled and cancelled, so callers (the
+			// admin JS) can drop the now-stale invite rows instead of leaving them counting a seat.
+			// array_values() drops the member-ID keys, so this serializes as a JSON array for the JS.
+			'invites_cancelled' => array_values( $invites_to_cancel ),
 		];
 	}
 

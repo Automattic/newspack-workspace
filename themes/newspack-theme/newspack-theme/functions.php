@@ -483,11 +483,29 @@ function newspack_scripts() {
 			wp_enqueue_script( 'comment-reply' );
 		}
 
-		wp_enqueue_script( 'newspack-amp-fallback', get_theme_file_uri( '/js/dist/amp-fallback.js' ), array(), wp_get_theme()->get( 'Version' ), true );
+		wp_enqueue_script(
+			'newspack-amp-fallback',
+			get_theme_file_uri( '/js/dist/amp-fallback.js' ),
+			array(),
+			wp_get_theme()->get( 'Version' ),
+			array(
+				'in_footer' => true,
+				'strategy'  => 'defer',
+			)
+		);
 		wp_localize_script( 'newspack-amp-fallback', 'newspackScreenReaderText', $newspack_l10n );
 	}
 
-	wp_enqueue_script( 'newspack-menu-accessibility', get_theme_file_uri( '/js/dist/menu-accessibility.js' ), array(), wp_get_theme()->get( 'Version' ), true );
+	wp_enqueue_script(
+		'newspack-menu-accessibility',
+		get_theme_file_uri( '/js/dist/menu-accessibility.js' ),
+		array(),
+		wp_get_theme()->get( 'Version' ),
+		array(
+			'in_footer' => true,
+			'strategy'  => 'defer',
+		)
+	);
 	wp_localize_script( 'newspack-menu-accessibility', 'newspackScreenReaderText', $newspack_l10n );
 
 	if ( newspack_is_sticky_animated_header() ) {
@@ -495,7 +513,16 @@ function newspack_scripts() {
 		wp_enqueue_script( 'amp-position-observer', 'https://cdn.ampproject.org/v0/amp-position-observer-0.1.js', array(), '0.1', true );
 	}
 
-	wp_enqueue_script( 'newspack-font-loading', get_theme_file_uri( '/js/dist/font-loading.js' ), array(), wp_get_theme()->get( 'Version' ), true );
+	wp_enqueue_script(
+		'newspack-font-loading',
+		get_theme_file_uri( '/js/dist/font-loading.js' ),
+		array(),
+		wp_get_theme()->get( 'Version' ),
+		array(
+			'in_footer' => true,
+			'strategy'  => 'defer',
+		)
+	);
 	wp_localize_script(
 		'newspack-font-loading',
 		'newspackFontLoading',

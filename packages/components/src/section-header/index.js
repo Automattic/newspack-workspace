@@ -102,6 +102,14 @@ const SectionHeader = ( {
 						? badges.map( ( badge, i ) => <Badge key={ i } text={ badge.label } level={ badge.level || 'default' } /> )
 						: null }
 				</HeadingTag>
+				{ /* Secondary action before the overflow menu, so a promoted link reads as an action rather than sitting to the right of the kebab. */ }
+				{ secondaryAction && (
+					<div className="newspack-section-header__secondary-action">
+						<Button variant="link" href={ secondaryAction.href } onClick={ secondaryAction.action }>
+							{ secondaryAction.label }
+						</Button>
+					</div>
+				) }
 				{ menu?.length > 0 && (
 					<DropdownMenu className="newspack-section-header__menu" icon={ moreVertical } label={ __( 'More options', 'newspack-plugin' ) }>
 						{ () =>
@@ -119,13 +127,6 @@ const SectionHeader = ( {
 							) )
 						}
 					</DropdownMenu>
-				) }
-				{ secondaryAction && (
-					<div className="newspack-section-header__secondary-action">
-						<Button variant="link" href={ secondaryAction.href } onClick={ secondaryAction.action }>
-							{ secondaryAction.label }
-						</Button>
-					</div>
 				) }
 			</div>
 		);

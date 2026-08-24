@@ -59,7 +59,7 @@ export const EventDatesEditor = ( { attributes, clientId, setAttributes } ) => {
 							) }
 						>
 							<DateTimePicker
-								currentDate={ startDate ? new Date( startDate ) : null }
+								currentDate={ startDate || null }
 								is12Hour={ true }
 								onChange={ value => {
 									if (
@@ -93,7 +93,7 @@ export const EventDatesEditor = ( { attributes, clientId, setAttributes } ) => {
 								) }
 							>
 								<DateTimePicker
-									currentDate={ endDate ? new Date( endDate ) : null }
+									currentDate={ endDate || null }
 									is12Hour={ true }
 									onChange={ value => {
 										if ( ! value || ! startDate || ( startDate && 0 <= new Date( value ) - new Date( startDate ) ) ) {

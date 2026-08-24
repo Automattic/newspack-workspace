@@ -31,7 +31,7 @@ class Renewal {
 		add_action( 'init', [ __CLASS__, 'add_renewal_endpoint' ] );
 		if ( ! is_admin() ) {
 			add_filter( 'woocommerce_get_query_vars', [ __CLASS__, 'add_renewal_query_var' ] );
-			add_filter( 'pre_get_posts', [ __CLASS__, 'maybe_redirect_renewal_endpoint' ] );
+			add_action( 'pre_get_posts', [ __CLASS__, 'maybe_redirect_renewal_endpoint' ] );
 		}
 	}
 
@@ -81,7 +81,7 @@ class Renewal {
 	 *
 	 * @param \WP_Query $query Query object.
 	 */
-	public static function maybe_redirect_renewal_endpoint( $query ) { // phpcs:ignore WordPressVIPMinimum.Hooks.AlwaysReturnInFilter.VoidReturn, WordPressVIPMinimum.Hooks.AlwaysReturnInFilter.MissingReturnStatement
+	public static function maybe_redirect_renewal_endpoint( $query ) { // phpcs:ignore WordPressVIPMinimum.Hooks.AlwaysReturnInFilter.VoidReturn, WordPressVIPMinimum.Hooks.AlwaysReturnInFilter.MissingReturnStatement, WordPressVIPMinimum.Hooks.AlwaysReturnInFilter.TerminatingInsteadOfReturn -- pre_get_posts is an action, not a filter; the redirect must terminate the request.
 		if (
 			! $query->is_main_query() ||
 			! isset( $query->query_vars[ self::RENEWAL_ENDPOINT ] )
