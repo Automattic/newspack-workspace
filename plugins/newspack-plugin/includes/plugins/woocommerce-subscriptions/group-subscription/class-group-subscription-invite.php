@@ -879,6 +879,19 @@ class Group_Subscription_Invite {
 		// Validate the link.
 		$validation = self::validate_link_invite( $subscription, $key );
 		if ( is_wp_error( $validation ) ) {
+			// The failing key's creator, when the key is one the subscription still
+			// holds. The URL no longer carries a manager ID, so without this a failing
+			// link names only the subscription and the reader who clicked it — and the
+			// question being asked in the weeks after an upgrade is usually "whose link
+			// is this, and why did it stop working?". Null when the key matches nothing,
+			// which is itself the answer.
+			$entry = null;
+			foreach ( self::get_link_invite_entries( $subscription ) as $candidate ) {
+				if ( hash_equals( (string) ( $candidate['key'] ?? '' ), $key ) ) {
+					$entry = $candidate;
+					break;
+				}
+			}
 			do_action(
 				'newspack_log',
 				'newspack_group_subscription_invite_link_invalid',
@@ -888,6 +901,7 @@ class Group_Subscription_Invite {
 					'data' => [
 						'subscription_id' => $subscription_id,
 						'member_id'       => $current_user->ID,
+						'created_by'      => isset( $entry['created_by'] ) ? (int) $entry['created_by'] : null,
 					],
 				]
 			);
