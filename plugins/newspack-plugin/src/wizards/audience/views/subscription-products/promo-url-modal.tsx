@@ -61,7 +61,11 @@ export default function PromoUrlModal( { item, closeModal }: { item: Subscriptio
 	// Any page, Homepage by default; search adds more choices.
 	const [ pageValue, setPageValue ] = useState< string | null | undefined >( HOMEPAGE_VALUE );
 	const [ searchChoices, setSearchChoices ] = useState< PromoPageChoice[] >( [] );
+	// The chosen page is held on its own so it survives the search results
+	// being replaced by a later query.
+	const [ selectedChoice, setSelectedChoice ] = useState< PromoPageChoice | null >( null );
 	const searchTimeout = useRef< ReturnType< typeof setTimeout > >();
+	const searchRequestId = useRef( 0 );
 
 	const [ variationId, setVariationId ] = useState< number | '' >( '' );
 	const [ frequency, setFrequency ] = useState< DonateFrequencySlug >( 'month' );
@@ -95,8 +99,19 @@ export default function PromoUrlModal( { item, closeModal }: { item: Subscriptio
 		if ( ! homepageChoice ) {
 			return [];
 		}
-		return [ homepageChoice, ...searchChoices.filter( choice => choice.url !== homepageChoice.url ) ];
-	}, [ context, searchChoices ] );
+		const seen = new Set< string >( [ homepageChoice.value ] );
+		const choices = [ homepageChoice ];
+		// The chosen page rides ahead of the search results so it stays
+		// selectable after they are replaced.
+		[ ...( selectedChoice ? [ selectedChoice ] : [] ), ...searchChoices ].forEach( choice => {
+			if ( seen.has( choice.value ) || choice.url === homepageChoice.url ) {
+				return;
+			}
+			seen.add( choice.value );
+			choices.push( choice );
+		} );
+		return choices;
+	}, [ context, selectedChoice, searchChoices ] );
 	const selectedPage = pageChoices.find( choice => choice.value === pageValue ) || null;
 
 	const searchPages = ( search: string ) => {
@@ -104,6 +119,9 @@ export default function PromoUrlModal( { item, closeModal }: { item: Subscriptio
 		if ( ! search ) {
 			return;
 		}
+		// Stamp each query so a slower earlier response cannot overwrite a
+		// newer one's results.
+		const requestId = ++searchRequestId.current;
 		searchTimeout.current = setTimeout( () => {
 			apiFetch< { id: number; title: string; url: string }[] >( {
 				path: addQueryArgs( '/wp/v2/search', {
@@ -114,6 +132,9 @@ export default function PromoUrlModal( { item, closeModal }: { item: Subscriptio
 				} ),
 			} )
 				.then( results => {
+					if ( requestId !== searchRequestId.current ) {
+						return;
+					}
 					setSearchChoices( results.map( result => ( { value: String( result.id ), label: result.title, url: result.url } ) ) );
 				} )
 				.catch( () => {} );
@@ -123,7 +144,7 @@ export default function PromoUrlModal( { item, closeModal }: { item: Subscriptio
 	const donateConfig = kind === 'donation' ? context?.donate_config || null : null;
 
 	const planChoices = useMemo(
-		() => ( kind === 'product' ? getPlanChoices( item, context?.eligible_children || [] ) : [] ),
+		() => ( kind === 'product' ? getPlanChoices( item, context?.eligible_children || [], context?.offerable_children ) : [] ),
 		[ kind, item, context ]
 	);
 	const frequencyChoices = useMemo( () => getFrequencyChoices( donateConfig ), [ donateConfig ] );
@@ -172,6 +193,10 @@ export default function PromoUrlModal( { item, closeModal }: { item: Subscriptio
 	// A specific child is required unless the plan's picker provides the
 	// "reader chooses" option.
 	const requiresChild = planChoices.length > 0 && ! planChoices.some( choice => choice.value === '' );
+	// The plan has children, but none a link can serve — refuse the link rather
+	// than emit one naming the bare parent, which would open an empty picker.
+	const childCount = kind === 'product' ? ( ( item.type === 'grouped' ? item.bundled_products : item.variations ) || [] ).length : 0;
+	const hasUnservableChildren = childCount > 0 && planChoices.length === 0;
 	const effectiveAmount: number | 'other' | undefined = useMemo( () => {
 		if ( kind !== 'donation' ) {
 			return undefined;
@@ -214,6 +239,7 @@ export default function PromoUrlModal( { item, closeModal }: { item: Subscriptio
 				kind,
 				hasTarget: Boolean( pageUrl ),
 				requiresChild,
+				hasUnservableChildren,
 				variationId,
 				donateConfig,
 				effectiveAmount,
@@ -229,6 +255,7 @@ export default function PromoUrlModal( { item, closeModal }: { item: Subscriptio
 			kind,
 			pageUrl,
 			requiresChild,
+			hasUnservableChildren,
 			variationId,
 			donateConfig,
 			effectiveAmount,
@@ -335,7 +362,10 @@ export default function PromoUrlModal( { item, closeModal }: { item: Subscriptio
 				) }
 				value={ pageValue }
 				options={ pageChoices.map( ( { value, label } ) => ( { value, label } ) ) }
-				onChange={ value => setPageValue( value ) }
+				onChange={ value => {
+					setPageValue( value );
+					setSelectedChoice( pageChoices.find( choice => choice.value === value ) || null );
+				} }
 				onFilterValueChange={ searchPages }
 				allowReset={ false }
 			/>
