@@ -1,3 +1,7 @@
 .newspack-global-notices {
 	padding: var( --wpds-dimension-gap-sm, 8px ) var( --wpds-dimension-gap-sm, 8px ) 0;
+
+	&__slot {
+		display: contents;
+	}
 }

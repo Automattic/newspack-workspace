@@ -120,7 +120,10 @@ const GlobalNotices = () => {
 					{ message }
 				</Notice>
 			) ) }
-			<Slot ref={ slotNode } name={ SLOT_NAME } bubblesVirtually />
+			{ /* Every fill portals into this one node, so it takes itself out of the layout
+			     rather than stand between the Stack and them: otherwise two fills sit flush
+			     against each other, and an empty slot still spends a gap. */ }
+			<Slot ref={ slotNode } name={ SLOT_NAME } className="newspack-global-notices__slot" bubblesVirtually />
 		</Stack>
 	);
 };
