@@ -20,7 +20,8 @@ import {
  * Internal dependencies.
  */
 import MoneyInput from '../../../components/money-input';
-import { Button, Divider, Grid, interpolateOrPlainText, SectionHeader, TextControl } from '../../../../../../packages/components/src';
+import { Button, Divider, Grid, SectionHeader, TextControl } from '../../../../../../packages/components/src';
+import { interpolateOrPlainText } from '../../../../../../packages/components/src/wizard';
 import { useWizardData } from '../../../../../../packages/components/src/wizard/store/utils';
 import { WIZARD_STORE_NAMESPACE } from '../../../../../../packages/components/src/wizard/store';
 import WizardsTab from '../../../../wizards-tab';
@@ -118,9 +119,9 @@ export const DonationAmounts = ( { hideHeader = false }: { hideHeader?: boolean 
 				>
 					<span>
 						{ interpolateOrPlainText(
-							// Translators: <a> wraps the link text to the trashed products list.
+							// Translators: <a> wraps the link text to the trashed products list. <list /> is replaced with the product names.
 							__(
-								'One or more donation products is in trash. Please <a>restore the product(s)</a> to continue using donation features:',
+								'One or more donation products is in trash. Please <a>restore the product(s)</a> to continue using donation features: <list />',
 								'newspack-plugin'
 							),
 							{
@@ -128,9 +129,9 @@ export const DonationAmounts = ( { hideHeader = false }: { hideHeader?: boolean 
 									/* eslint-disable-next-line jsx-a11y/anchor-has-content */
 									<a href="/wp-admin/edit.php?post_status=trash&post_type=product" />
 								),
+								list: <>{ trashed.join( ', ' ) }</>,
 							}
-						) }{ ' ' }
-						{ trashed.join( ', ' ) }
+						) }
 					</span>
 				</Notice>
 			) }
