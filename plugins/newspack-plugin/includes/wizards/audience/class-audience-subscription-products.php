@@ -277,7 +277,9 @@ class Audience_Subscription_Products extends Wizard {
 	 * @return \WP_REST_Response|\WP_Error
 	 */
 	public function api_get_promo_targets( $request ) {
-		$front_page_id = (int) get_option( 'page_on_front' );
+		// page_on_front survives switching Reading settings back to latest posts,
+		// so only trust it when a static front page is actually being served.
+		$front_page_id = 'page' === get_option( 'show_on_front' ) ? (int) get_option( 'page_on_front' ) : 0;
 		$response      = [
 			'homepage' => [
 				'id'    => $front_page_id,
@@ -297,7 +299,9 @@ class Audience_Subscription_Products extends Wizard {
 				[ 'status' => 400 ]
 			);
 		}
-		$response['eligible_children'] = Promo_Url_Config::get_eligible_children( Promo_Url_Config::get_product_family( $product_id ) );
+		$family                         = Promo_Url_Config::get_product_family( $product_id );
+		$response['eligible_children']  = Promo_Url_Config::get_eligible_children( $family );
+		$response['offerable_children'] = Promo_Url_Config::get_offerable_children( $family );
 		return rest_ensure_response( $response );
 	}
 
@@ -335,8 +339,33 @@ class Audience_Subscription_Products extends Wizard {
 				]
 			);
 		}
-		$coupon = new \WC_Coupon( $code );
-		if ( ! $coupon->get_id() ) {
+		try {
+			$coupon = new \WC_Coupon( $code );
+			if ( ! $coupon->get_id() ) {
+				return rest_ensure_response(
+					[
+						'valid'  => false,
+						'reason' => esc_html__( 'Coupon not found.', 'newspack-plugin' ),
+					]
+				);
+			}
+			$expires     = $coupon->get_date_expires();
+			$usage_limit = (int) $coupon->get_usage_limit();
+			$coupon_data = [
+				'expired'               => $expires && $expires->getTimestamp() < time(),
+				'usage_exceeded'        => $usage_limit > 0 && (int) $coupon->get_usage_count() >= $usage_limit,
+				'product_ids'           => $coupon->get_product_ids(),
+				'excluded_ids'          => $coupon->get_excluded_product_ids(),
+				'category_ids'          => $coupon->get_product_categories(),
+				'excluded_category_ids' => $coupon->get_excluded_product_categories(),
+				'minimum_amount'        => (float) $coupon->get_minimum_amount(),
+			];
+		} catch ( \Exception $e ) {
+			// The same stale-cache condition the checkout's auto-apply guards
+			// against: a cached code-to-ID mapping can outlive the coupon post,
+			// and WooCommerce's data store throws reading the missing post.
+			// Answer as not-found so the two paths agree on what an unusable
+			// coupon means, instead of surfacing a server error.
 			return rest_ensure_response(
 				[
 					'valid'  => false,
@@ -344,26 +373,15 @@ class Audience_Subscription_Products extends Wizard {
 				]
 			);
 		}
-		$expires        = $coupon->get_date_expires();
-		$usage_limit    = (int) $coupon->get_usage_limit();
-		$coupon_data    = [
-			'expired'               => $expires && $expires->getTimestamp() < time(),
-			'usage_exceeded'        => $usage_limit > 0 && (int) $coupon->get_usage_count() >= $usage_limit,
-			'product_ids'           => $coupon->get_product_ids(),
-			'excluded_ids'          => $coupon->get_excluded_product_ids(),
-			'category_ids'          => $coupon->get_product_categories(),
-			'excluded_category_ids' => $coupon->get_excluded_product_categories(),
-			'minimum_amount'        => (float) $coupon->get_minimum_amount(),
-		];
 		$product_context = [];
 		$product_id      = absint( $request->get_param( 'product_id' ) );
 		if ( $product_id && function_exists( 'wc_get_product' ) ) {
 			$product    = wc_get_product( $product_id );
-			$family     = Promo_Url_Config::get_product_family( $product_id );
+			$family     = Promo_Url_Config::get_product_family( $product_id, false );
 			$family_ids = array_merge( [ $family['parent'] ], $family['variations'], $family['members'] );
 			$parent_id  = $product ? (int) $product->get_parent_id() : 0;
 			if ( $parent_id ) {
-				$parent_family = Promo_Url_Config::get_product_family( $parent_id );
+				$parent_family = Promo_Url_Config::get_product_family( $parent_id, false );
 				$family_ids    = array_merge( $family_ids, [ $parent_family['parent'] ], $parent_family['variations'], $parent_family['members'] );
 			}
 			$parent_product  = $parent_id && $product ? wc_get_product( $parent_id ) : null;

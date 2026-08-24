@@ -21,10 +21,15 @@ final class Promo_Url_Config {
 	 * Build the product "family" a plan row spans: the row product itself plus
 	 * its variation children (variable) or bundled members (grouped).
 	 *
-	 * @param int $product_id Plan row product ID.
+	 * @param int  $product_id            Plan row product ID.
+	 * @param bool $expand_picker_members Whether to resolve `picker_members`. The
+	 *                                    expansion calls get_available_variations()
+	 *                                    per variable child — the heaviest read
+	 *                                    here — so callers that only need ids
+	 *                                    (the coupon pre-check) pass false.
 	 * @return array{parent:int,variations:int[],members:int[],picker_members:int[]}
 	 */
-	public static function get_product_family( $product_id ) {
+	public static function get_product_family( $product_id, $expand_picker_members = true ) {
 		$family = [
 			'parent'         => (int) $product_id,
 			'variations'     => [],
@@ -40,8 +45,10 @@ final class Promo_Url_Config {
 		}
 		$children = array_map( 'intval', $product->get_children() );
 		if ( $product->is_type( 'grouped' ) ) {
-			$family['members']        = $children;
-			$family['picker_members'] = self::get_picker_members( $children );
+			$family['members'] = $children;
+			if ( $expand_picker_members ) {
+				$family['picker_members'] = self::get_picker_members( $children );
+			}
 		} else {
 			$family['variations'] = $children;
 		}
@@ -93,6 +100,43 @@ final class Promo_Url_Config {
 		$variations = isset( $family['variations'] ) ? array_map( 'intval', $family['variations'] ) : [];
 		$members    = isset( $family['picker_members'] ) ? array_map( 'intval', $family['picker_members'] ) : [];
 		return array_values( array_unique( array_merge( $variations, $members ) ) );
+	}
+
+	/**
+	 * Child ids the generator may offer as a DIRECT plan option — as opposed to
+	 * get_eligible_children(), which describes what the reader-chooses picker
+	 * serves. A direct link names the child itself, so it must survive the
+	 * URL-trigger's own checks (publish status), and a grouped member must be
+	 * subscription-shaped: the Plans row promotes a plan, and a bundled
+	 * non-subscription extra has no standing as one.
+	 *
+	 * @param array $family See get_product_family().
+	 * @return int[] Ids offerable as direct choices.
+	 */
+	public static function get_offerable_children( $family ) {
+		$offerable = [];
+		if ( ! function_exists( 'wc_get_product' ) ) {
+			return $offerable;
+		}
+		$variations = isset( $family['variations'] ) ? array_map( 'intval', $family['variations'] ) : [];
+		foreach ( $variations as $variation_id ) {
+			$variation = wc_get_product( $variation_id );
+			if ( $variation && 'publish' === $variation->get_status() ) {
+				$offerable[] = $variation_id;
+			}
+		}
+		$members = isset( $family['members'] ) ? array_map( 'intval', $family['members'] ) : [];
+		foreach ( $members as $member_id ) {
+			$member = wc_get_product( $member_id );
+			if ( ! $member || 'publish' !== $member->get_status() ) {
+				continue;
+			}
+			if ( ! in_array( $member->get_type(), [ 'subscription', 'variable-subscription' ], true ) ) {
+				continue;
+			}
+			$offerable[] = $member_id;
+		}
+		return array_values( array_unique( $offerable ) );
 	}
 
 	/**

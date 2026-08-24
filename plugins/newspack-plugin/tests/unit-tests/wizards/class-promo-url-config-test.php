@@ -146,6 +146,7 @@ class Promo_Url_Config_Test extends WP_UnitTestCase {
 		$data = rest_get_server()->dispatch( $request )->get_data();
 		$this->assertNotEmpty( $data['homepage']['url'] );
 		$this->assertArrayHasKey( 'eligible_children', $data );
+		$this->assertArrayHasKey( 'offerable_children', $data );
 		// No page scanning: there are no targets to enumerate.
 		$this->assertArrayNotHasKey( 'targets', $data );
 
@@ -155,6 +156,45 @@ class Promo_Url_Config_Test extends WP_UnitTestCase {
 		$this->assertNotEmpty( $data['homepage']['url'] );
 		$this->assertArrayHasKey( 'donate_config', $data );
 		$this->assertArrayNotHasKey( 'eligible_children', $data );
+	}
+
+	/**
+	 * Test that the homepage choice trusts page_on_front only when a static
+	 * front page is actually being served (show_on_front === 'page'): the
+	 * option survives switching Reading settings back to latest posts, and the
+	 * label would otherwise name a page home_url( '/' ) no longer serves.
+	 */
+	public function test_promo_targets_homepage_honors_show_on_front() {
+		$wizard = new Newspack\Audience_Subscription_Products();
+		add_action( 'rest_api_init', [ $wizard, 'register_api_endpoints' ] );
+		do_action( 'rest_api_init' );
+		$route = '/newspack/v1/wizard/newspack-audience-subscription-products/promo-targets';
+
+		$admin = self::factory()->user->create( [ 'role' => 'administrator' ] );
+		get_user_by( 'id', $admin )->add_cap( 'manage_woocommerce' );
+		wp_set_current_user( $admin );
+
+		$page_id = self::factory()->post->create(
+			[
+				'post_type'  => 'page',
+				'post_title' => 'Legacy front page',
+			]
+		);
+		update_option( 'page_on_front', $page_id );
+		update_option( 'show_on_front', 'posts' );
+
+		$request = new WP_REST_Request( 'GET', $route );
+		$request->set_param( 'type', 'donate' );
+		$data = rest_get_server()->dispatch( $request )->get_data();
+		$this->assertSame( 0, $data['homepage']['id'] );
+		$this->assertSame( 'Homepage', $data['homepage']['title'] );
+
+		update_option( 'show_on_front', 'page' );
+		$request = new WP_REST_Request( 'GET', $route );
+		$request->set_param( 'type', 'donate' );
+		$data = rest_get_server()->dispatch( $request )->get_data();
+		$this->assertSame( $page_id, $data['homepage']['id'] );
+		$this->assertSame( 'Legacy front page', $data['homepage']['title'] );
 	}
 
 	/**

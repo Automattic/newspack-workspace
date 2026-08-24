@@ -29,6 +29,10 @@ export type PromoContext = {
 	// Children a picker can serve — for a grouped plan this excludes children
 	// the tiers form skips (non-subscription, private).
 	eligible_children?: number[];
+	// Children a link may name directly: published, and for grouped members
+	// subscription-shaped. Distinct from eligible_children, which describes
+	// what the reader-chooses picker renders.
+	offerable_children?: number[];
 	donate_config?: PromoTargetDonateConfig | null;
 };
 
@@ -43,12 +47,19 @@ const FREQUENCY_LABELS: Record< DonateFrequencySlug, string > = {
 };
 
 /**
- * Child-product choices for a plan row. "Reader chooses" opens the plan's picker,
- * so it is offered only when that picker renders at least one option: always for
- * a variable plan, and for a grouped plan only when the tiers form serves a child.
+ * Child-product choices for a plan row. Direct choices are limited to the
+ * server-derived offerable set — a private or non-subscription member would
+ * emit a URL the trigger refuses, leaving the reader on a page where nothing
+ * happens. "Reader chooses" opens the plan's picker, so it is offered only when
+ * that picker renders at least one option: always for a variable plan, and for
+ * a grouped plan only when the tiers form serves a child.
  */
-export function getPlanChoices( item: SubscriptionProduct, eligibleChildren: number[] ): { value: number | ''; label: string }[] {
-	const children =
+export function getPlanChoices(
+	item: SubscriptionProduct,
+	eligibleChildren: number[],
+	offerableChildren?: number[]
+): { value: number | ''; label: string }[] {
+	const allChildren =
 		item.type === 'grouped'
 			? ( item.bundled_products || [] ).map( product => ( {
 					value: product.id,
@@ -58,6 +69,7 @@ export function getPlanChoices( item: SubscriptionProduct, eligibleChildren: num
 					value: variation.id,
 					label: variation.plan_label || variation.name,
 			  } ) );
+	const children = Array.isArray( offerableChildren ) ? allChildren.filter( child => offerableChildren.includes( child.value ) ) : allChildren;
 	if ( ! children.length ) {
 		return [];
 	}
@@ -142,6 +154,9 @@ export type PromoValidationInput = {
 	kind: PromoKind;
 	hasTarget: boolean;
 	requiresChild: boolean;
+	// The plan has children, but none survived the offerable filter: a link
+	// would name the bare parent and open an empty picker.
+	hasUnservableChildren?: boolean;
 	variationId: number | '';
 	donateConfig: PromoTargetDonateConfig | null;
 	effectiveAmount: number | 'other' | undefined;
@@ -163,6 +178,9 @@ export function getValidationError( input: PromoValidationInput ): string | null
 	const { kind, donateConfig, effectiveAmount, customAmount } = input;
 	if ( ! input.hasTarget ) {
 		return __( 'Choose a target page.', 'newspack-plugin' );
+	}
+	if ( kind === 'product' && input.hasUnservableChildren ) {
+		return __( 'This plan has no options a link can check out.', 'newspack-plugin' );
 	}
 	if ( kind === 'product' && input.requiresChild && input.variationId === '' ) {
 		return __( 'Choose which plan option the link should check out.', 'newspack-plugin' );

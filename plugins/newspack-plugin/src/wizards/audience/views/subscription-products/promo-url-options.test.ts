@@ -61,6 +61,17 @@ describe( 'getPlanChoices', () => {
 	it( 'labels grouped members with their price', () => {
 		expect( getPlanChoices( groupedItem, [ 201 ] )[ 1 ].label ).toBe( 'Digital ($10)' );
 	} );
+
+	it( 'limits direct choices to the offerable set', () => {
+		// 202 is unofferable (private or not subscription-shaped): the server
+		// refuses a link naming it, so it is not offered.
+		expect( getPlanChoices( groupedItem, [ 201 ], [ 201 ] ).map( c => c.value ) ).toEqual( [ '', 201 ] );
+		expect( getPlanChoices( variableItem, [ 101, 102 ], [ 102 ] ).map( c => c.value ) ).toEqual( [ '', 102 ] );
+	} );
+
+	it( 'offers nothing when no child survives the offerable filter', () => {
+		expect( getPlanChoices( groupedItem, [], [] ) ).toEqual( [] );
+	} );
 } );
 
 describe( 'resolveProductParams', () => {
@@ -131,6 +142,10 @@ describe( 'getValidationError', () => {
 		expect( getValidationError( { ...productBase, requiresChild: true, variationId: '' } ) ).toBe(
 			'Choose which plan option the link should check out.'
 		);
+	} );
+
+	it( 'refuses a plan whose children a link cannot serve', () => {
+		expect( getValidationError( { ...productBase, hasUnservableChildren: true } ) ).toBe( 'This plan has no options a link can check out.' );
 	} );
 
 	it( 'reports a Donate block that cannot take a link', () => {
