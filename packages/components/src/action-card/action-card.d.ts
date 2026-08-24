@@ -10,10 +10,12 @@ export interface ActionCardProps {
 	badges?: CardBadge[];
 	className?: string;
 	indent?: string;
-	notification?: string | Error | null;
-	notificationLevel?: 'error' | 'warning' | 'info';
+	notification?: React.ReactNode | Error | null;
+	notificationLevel?: 'error' | 'warning' | 'info' | 'success';
 	/** Renders the notification as raw HTML via the notice's `__unstableHTML` path; opt in only for trusted markup. */
 	notificationHTML?: boolean;
+	/** What an `error` or `success` notification announces. Only a plain-string `notification` is announced on its own, so anything else stays silent until this is passed. */
+	notificationSpokenMessage?: string;
 	isMedium?: boolean;
 	disabled?: boolean | string;
 	hasGreyHeader?: boolean;

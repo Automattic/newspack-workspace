@@ -7,7 +7,7 @@
  */
 import { ExternalLink, __experimentalHStack as HStack } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
 import { Fragment, useState } from '@wordpress/element';
-import { __ } from '@wordpress/i18n';
+import { __, sprintf } from '@wordpress/i18n';
 import apiFetch from '@wordpress/api-fetch';
 
 /**
@@ -40,13 +40,21 @@ const Providers = ( { services, fetchAdvertisingData, toggleService } ) => {
 	};
 
 	let notifications = [];
+	// The card's children hold components, so they are never announced on their own.
+	// Only the created-keys case is the result of an action worth reading out; the
+	// connection error below describes standing state and stays silent.
+	let spokenNotification = '';
 
 	if ( google_ad_manager.enabled && google_ad_manager.status.error ) {
 		notifications = notifications.concat( [ google_ad_manager.status.error, '\u00A0' ] );
 	} else if ( google_ad_manager?.created_targeting_keys?.length > 0 ) {
+		spokenNotification = sprintf(
+			// Translators: %s is a comma-separated list of targeting key names.
+			__( 'Created custom targeting keys: %s', 'newspack-plugin' ),
+			google_ad_manager.created_targeting_keys.join( ', ' )
+		);
 		notifications = notifications.concat( [
-			__( 'Created custom targeting keys:', 'newspack-plugin' ) + '\u00A0',
-			google_ad_manager.created_targeting_keys.join( ', ' ) + '. \u00A0',
+			spokenNotification + '. \u00A0',
 			// eslint-disable-next-line react/jsx-indent
 			<ExternalLink
 				href={ `https://admanager.google.com/${ google_ad_manager.network_code }#inventory/custom_targeting/list` }
@@ -85,6 +93,7 @@ const Providers = ( { services, fetchAdvertisingData, toggleService } ) => {
 				href={ google_ad_manager?.enabled && '#/google_ad_manager' }
 				notification={ notifications.length ? notifications : null }
 				notificationLevel={ google_ad_manager.created_targeting_keys?.length ? 'success' : 'error' }
+				notificationSpokenMessage={ spokenNotification }
 			/>
 			<PluginToggle
 				plugins={ {

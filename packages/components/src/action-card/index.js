@@ -48,6 +48,7 @@ const ActionCard = ( {
 	notification,
 	notificationLevel,
 	notificationHTML,
+	notificationSpokenMessage,
 	actionContent,
 	actionText,
 	secondaryActionText,
@@ -131,6 +132,18 @@ const ActionCard = ( {
 	const hasInternalLink = href && href.indexOf( 'http' ) !== 0;
 	const isDisplayingSecondaryAction = secondaryActionText && onSecondaryActionClick;
 	const HeadingTag = `h${ heading }`;
+
+	// `notification` is a ReactNode, and core derives its announcement by serialising
+	// children mid-render, which runs any hooks they hold on the notice's own fiber and
+	// throws once their composition changes. Core only ever gets a string from here; a
+	// caller whose notification is not plain text passes `notificationSpokenMessage` to
+	// announce anything at all.
+	let spokenNotification = '';
+	if ( typeof notificationSpokenMessage === 'string' ) {
+		spokenNotification = notificationSpokenMessage;
+	} else if ( typeof notification === 'string' ) {
+		spokenNotification = notificationHTML ? htmlToText( notification ) : notification;
+	}
 
 	const cardContent = (
 		<>
@@ -247,12 +260,7 @@ const ActionCard = ( {
 			{ notification && (
 				<div className="newspack-action-card__notification newspack-action-card__region-children">
 					{ 'error' === notificationLevel && (
-						<Notice
-							isDismissible={ false }
-							status="error"
-							spokenMessage={ notificationHTML ? htmlToText( notification ) : notification }
-							__unstableHTML={ notificationHTML }
-						>
+						<Notice isDismissible={ false } status="error" spokenMessage={ spokenNotification } __unstableHTML={ notificationHTML }>
 							{ notification }
 						</Notice>
 					) }
@@ -262,12 +270,7 @@ const ActionCard = ( {
 						</Notice>
 					) }
 					{ 'success' === notificationLevel && (
-						<Notice
-							isDismissible={ false }
-							status="success"
-							spokenMessage={ notificationHTML ? htmlToText( notification ) : notification }
-							__unstableHTML={ notificationHTML }
-						>
+						<Notice isDismissible={ false } status="success" spokenMessage={ spokenNotification } __unstableHTML={ notificationHTML }>
 							{ notification }
 						</Notice>
 					) }
