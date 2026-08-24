@@ -448,7 +448,7 @@ const Emails = () => {
 		return (
 			<Fragment>
 				<PageHeading />
-				<Notice isDismissible={ false } status="error">
+				<Notice isDismissible={ false } spokenMessage="" status="error">
 					{ __(
 						'Newspack uses Newspack Newsletters to handle editing email-type content. Please activate this plugin to proceed. Until this feature is configured, default receipts will be used.',
 						'newspack-plugin'

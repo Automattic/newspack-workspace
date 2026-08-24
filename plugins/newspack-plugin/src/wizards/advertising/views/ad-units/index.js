@@ -133,7 +133,7 @@ const AdUnits = ( { adUnits, parentAdUnits, onDelete, wizardApiFetch, updateWith
 				</>
 			) }
 			{ missingParentAdUnit && (
-				<Notice isDismissible={ false } status="error">
+				<Notice isDismissible={ false } spokenMessage="" status="error">
 					{ __( 'The current parent ad unit is inactive or archived. Please select a different parent ad unit.', 'newspack-plugin' ) }
 				</Notice>
 			) }
@@ -146,7 +146,7 @@ const AdUnits = ( { adUnits, parentAdUnits, onDelete, wizardApiFetch, updateWith
 				</Notice>
 			) }
 			{ gamErrorMessage && (
-				<Notice isDismissible={ false } status="error">
+				<Notice isDismissible={ false } spokenMessage="" status="error">
 					{ gamErrorMessage }
 				</Notice>
 			) }

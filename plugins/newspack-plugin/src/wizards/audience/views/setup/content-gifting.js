@@ -36,7 +36,7 @@ export default function ContentGifting( { config, setConfig, updateConfig, noBor
 			{ config.content_gifting?.enabled && (
 				<>
 					{ giftingErrors.length > 0 && (
-						<Notice isDismissible={ false } status="error">
+						<Notice isDismissible={ false } spokenMessage="" status="error">
 							{ giftingErrors.join( ', ' ) }
 						</Notice>
 					) }

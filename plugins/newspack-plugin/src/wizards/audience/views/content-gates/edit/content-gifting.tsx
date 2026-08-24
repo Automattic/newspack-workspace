@@ -138,7 +138,7 @@ const ContentGiftingSettings = () => {
 		<div className="newspack-content-gate__edit">
 			{ confirmDialog }
 			{ giftingErrors.length > 0 && (
-				<Notice isDismissible={ false } status="error">
+				<Notice isDismissible={ false } spokenMessage="" status="error">
 					{ giftingErrors.join( ', ' ) }
 				</Notice>
 			) }
