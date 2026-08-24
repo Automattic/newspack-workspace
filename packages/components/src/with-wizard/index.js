@@ -1,10 +1,10 @@
 /**
  * WordPress dependencies.
  */
-import { Component, createRef, Fragment } from '@wordpress/element';
+import { Component, createRef } from '@wordpress/element';
 import { __ } from '@wordpress/i18n';
 import apiFetch from '@wordpress/api-fetch';
-import { Notice, __experimentalHStack as HStack } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
+import { Notice, SlotFillProvider, __experimentalHStack as HStack } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
 
 /**
  * Internal dependencies.
@@ -12,6 +12,7 @@ import { Notice, __experimentalHStack as HStack } from '@wordpress/components'; 
 import { Button, Modal, Page, PluginInstaller } from '../';
 import Router from '../proxied-imports/router';
 import Footer from '../footer';
+import GlobalNotices, { GlobalNoticeFill } from '../global-notices';
 import './style.scss';
 
 import { htmlToText } from '../utils/html-to-text';
@@ -83,15 +84,11 @@ export default function withWizard( WrappedComponent, requiredPlugins ) {
 		getErrorNotice = error => {
 			const { message } = error;
 			return (
-				<Notice
-					isDismissible={ false }
-					status="error"
-					className="newspack-wizard__above-header"
-					spokenMessage={ htmlToText( message ) }
-					__unstableHTML
-				>
-					{ message }
-				</Notice>
+				<GlobalNoticeFill>
+					<Notice isDismissible={ false } status="error" spokenMessage={ htmlToText( message ) } __unstableHTML>
+						{ message }
+					</Notice>
+				</GlobalNoticeFill>
 			);
 		};
 
@@ -309,7 +306,8 @@ export default function withWizard( WrappedComponent, requiredPlugins ) {
 				loadingClasses.push( 'newspack-wizard__is-loading-quiet' );
 			}
 			return (
-				<Fragment>
+				<SlotFillProvider>
+					<GlobalNotices />
 					{ this.getError() }
 					{ this.getModal() }
 					<div className={ loadingClasses.join( ' ' ) }>
@@ -329,7 +327,7 @@ export default function withWizard( WrappedComponent, requiredPlugins ) {
 						/>
 					</div>
 					{ ! loading && <Footer simple={ simpleFooter } /> }
-				</Fragment>
+				</SlotFillProvider>
 			);
 		}
 	};

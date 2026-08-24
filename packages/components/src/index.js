@@ -27,7 +27,7 @@ export { default as Handoff } from './handoff';
 export { default as HandoffMessage } from './handoff-message';
 export { default as InfoButton } from './info-button';
 export { default as ImageUpload } from './image-upload';
-export { default as GlobalNotices } from './global-notices';
+export { default as GlobalNotices, GlobalNoticeFill } from './global-notices';
 export { default as Grid } from './grid';
 export { default as Modal } from './modal';
 export { default as NewspackIcon } from './newspack-icon';
@@ -53,7 +53,7 @@ export { default as TextControl } from './text-control';
 export { default as Waiting } from './waiting';
 export { default as WebPreview } from './web-preview';
 export { default as Wizard } from './wizard';
-export { WizardBanner, interpolateOrPlainText } from './wizard';
+export { interpolateOrPlainText } from './wizard';
 export { default as withWizard } from './with-wizard';
 export { default as withWizardScreen } from './with-wizard-screen';
 

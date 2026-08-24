@@ -29,7 +29,7 @@ jest.mock( '../../../../../packages/components/src', () => {
 	const history = { push: jest.fn() };
 	return {
 		DataViews: () => null,
-		WizardBanner: ( { children } ) => <>{ children }</>,
+		GlobalNoticeFill: ( { children } ) => <>{ children }</>,
 		Router: { useHistory: () => history },
 	};
 } );

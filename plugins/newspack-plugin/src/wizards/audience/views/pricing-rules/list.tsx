@@ -23,7 +23,7 @@ import {
 /**
  * Internal dependencies
  */
-import { DataViews, Router, StatusIndicator, WizardBanner } from '../../../../../packages/components/src';
+import { DataViews, GlobalNoticeFill, Router, StatusIndicator } from '../../../../../packages/components/src';
 import { formatCount } from '../../../../../packages/components/src/breadcrumbs/format-count';
 import { WIZARD_STORE_NAMESPACE } from '../../../../../packages/components/src/wizard/store';
 import CatalogImpact from './catalog-impact';
@@ -353,16 +353,11 @@ export default function PricingRulesList() {
 	return (
 		<div className="newspack-pricing-rules">
 			{ hasError && (
-				<WizardBanner>
-					<Notice
-						className="newspack-wizard__load-error"
-						status="error"
-						isDismissible={ false }
-						actions={ [ { label: __( 'Retry', 'newspack-plugin' ), onClick: fetchData } ] }
-					>
+				<GlobalNoticeFill>
+					<Notice status="error" isDismissible={ false } actions={ [ { label: __( 'Retry', 'newspack-plugin' ), onClick: fetchData } ] }>
 						{ __( 'Could not load pricing rules.', 'newspack-plugin' ) }
 					</Notice>
-				</WizardBanner>
+				</GlobalNoticeFill>
 			) }
 			<DataViews
 				data={ processedData }

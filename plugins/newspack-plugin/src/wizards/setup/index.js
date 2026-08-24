@@ -11,7 +11,7 @@ import { __ } from '@wordpress/i18n';
  * Internal dependencies.
  */
 import { Welcome, Settings, Services, Design, Completed } from './views/';
-import { withWizard, withWizardScreen } from '../../../packages/components/src';
+import { withWizard, withWizardScreen, GlobalNoticeFill } from '../../../packages/components/src';
 import Router from '../../../packages/components/src/proxied-imports/router';
 import './style.scss';
 
@@ -59,9 +59,11 @@ const SetupWizard = ( { wizardApiFetch, setError }, ref ) => {
 	return (
 		<div ref={ ref }>
 			{ newspack_aux_data.has_completed_setup && (
-				<Notice isDismissible={ false } spokenMessage="" status="warning">
-					{ __( 'Heads up! The setup has already been completed. No need to run it again.', 'newspack' ) }
-				</Notice>
+				<GlobalNoticeFill>
+					<Notice isDismissible={ false } spokenMessage="" status="warning">
+						{ __( 'Heads up! The setup has already been completed. No need to run it again.', 'newspack' ) }
+					</Notice>
+				</GlobalNoticeFill>
 			) }
 			<HashRouter hashType="slash">
 				{ ROUTES.map( ( route, index ) => {

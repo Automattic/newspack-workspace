@@ -12,7 +12,6 @@ import {
 	MenuGroup,
 	MenuItem,
 	SlotFillProvider,
-	createSlotFill,
 	// eslint-disable-next-line @wordpress/no-unsafe-wp-apis
 	__experimentalVStack as VStack,
 } from '@wordpress/components';
@@ -24,7 +23,19 @@ import { category, chevronLeft, moreVertical } from '@wordpress/icons';
 /**
  * Internal dependencies
  */
-import { Footer, DebugMode, Button, TabbedNavigation, PluginInstaller, SectionHeader, HandoffMessage, Page, Waiting } from '../';
+import {
+	Footer,
+	DebugMode,
+	Button,
+	TabbedNavigation,
+	PluginInstaller,
+	SectionHeader,
+	HandoffMessage,
+	GlobalNotices,
+	GlobalNoticeFill,
+	Page,
+	Waiting,
+} from '../';
 import { activeBreadcrumbs, appendSectionName } from './breadcrumbs-select';
 import Router from '../proxied-imports/router';
 import registerStore, { WIZARD_STORE_NAMESPACE } from './store';
@@ -32,14 +43,6 @@ import WizardSnackbar from './components/WizardSnackbar';
 import WizardError from './components/WizardError';
 
 registerStore();
-
-/**
- * Renders a view's page-level banner outside the padded content column, so it sits
- * flush beneath the header rather than indented within the section it describes.
- */
-const { Slot: WizardBannerSlot, Fill: WizardBanner } = createSlotFill( 'NewspackWizardBanner' );
-
-export { WizardBanner };
 
 /**
  * Icon registry for resolving icon name strings passed through the data store.
@@ -251,14 +254,10 @@ const Wizard = (
 		</TabbedNavigation>
 	);
 
-	// Rendered here rather than as a core admin notice, which wizards strip at
-	// priority -9999. Sits as the first child of .newspack-wizard__main so it lands
-	// flush beneath the header region and spans the full width in every view: this
-	// describes the state of the whole site, not of the section below it, so it reads
-	// as page chrome rather than as content.
+	// Rendered here rather than as a core admin notice, which wizards strip at priority -9999.
 	const inertGating = window.newspack_aux_data?.inert_gating;
 	const inertGatingNotice = inertGating?.show && (
-		<Notice spokenMessage="" status="warning" isDismissible={ false } className="newspack-wizard__inert-gating-notice">
+		<Notice spokenMessage="" status="warning" isDismissible={ false }>
 			{ /* The conversion map takes childless elements and fills them from the
 			     translated string, so jsx-a11y can't see the content they end up with. */ }
 			{ interpolateOrPlainText( inertGating.message, {
@@ -274,12 +273,12 @@ const Wizard = (
 	const content = (
 		<>
 			<HandoffMessage />
+			<GlobalNotices />
 
 			{ sections.length > 1 && <ResetHeaderData /> }
 
 			<div className="newspack-wizard__main">
-				{ inertGatingNotice }
-				<WizardBannerSlot bubblesVirtually />
+				{ inertGatingNotice && <GlobalNoticeFill>{ inertGatingNotice }</GlobalNoticeFill> }
 				<Switch>
 					{ routedSections.map( ( section, index ) => {
 						const SectionComponent = section.render;

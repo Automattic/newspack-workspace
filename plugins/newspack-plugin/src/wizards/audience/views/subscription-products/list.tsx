@@ -23,7 +23,7 @@ import { Badge } from '@wordpress/ui';
 /**
  * Internal dependencies
  */
-import { DataViews, Router, StatusIndicator, WizardBanner } from '../../../../../packages/components/src';
+import { DataViews, GlobalNoticeFill, Router, StatusIndicator } from '../../../../../packages/components/src';
 import { formatCount } from '../../../../../packages/components/src/breadcrumbs/format-count';
 import { WIZARD_STORE_NAMESPACE } from '../../../../../packages/components/src/wizard/store';
 import { postStatus } from '../../post-status';
@@ -403,16 +403,11 @@ export default function SubscriptionProductsList( { scope = 'subscriptions' }: {
 
 	if ( hasError ) {
 		return (
-			<WizardBanner>
-				<Notice
-					className="newspack-wizard__load-error"
-					status="error"
-					isDismissible={ false }
-					actions={ [ { label: __( 'Retry', 'newspack-plugin' ), onClick: fetchData } ] }
-				>
+			<GlobalNoticeFill>
+				<Notice status="error" isDismissible={ false } actions={ [ { label: __( 'Retry', 'newspack-plugin' ), onClick: fetchData } ] }>
 					{ __( 'Could not load subscription products.', 'newspack-plugin' ) }
 				</Notice>
-			</WizardBanner>
+			</GlobalNoticeFill>
 		);
 	}
 
