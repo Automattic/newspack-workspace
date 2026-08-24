@@ -22,6 +22,7 @@ import {
 import MoneyInput from '../../../components/money-input';
 import { Button, Divider, Grid, SectionHeader, TextControl } from '../../../../../../packages/components/src';
 import { interpolateOrPlainText } from '../../../../../../packages/components/src/wizard';
+import { htmlToText } from '../../../../../../packages/components/src/utils/html-to-text';
 import { useWizardData } from '../../../../../../packages/components/src/wizard/store/utils';
 import { WIZARD_STORE_NAMESPACE } from '../../../../../../packages/components/src/wizard/store';
 import WizardsTab from '../../../../wizards-tab';
@@ -79,6 +80,12 @@ export const DonationAmounts = ( { hideHeader = false }: { hideHeader?: boolean 
 	// Whether we can use the Name Your Price extension. If not, layout is forced to Tiered.
 	const canUseNameYourPrice = window.newspackAudienceDonations?.can_use_name_your_price;
 
+	// Translators: <a> wraps the link text to the trashed products list. <list /> is replaced with the product names.
+	const trashedProductsMessage = __(
+		'One or more donation products is in trash. Please <a>restore the product(s)</a> to continue using donation features: <list />',
+		'newspack-plugin'
+	);
+
 	return (
 		<>
 			{ ! hideHeader && (
@@ -108,30 +115,18 @@ export const DonationAmounts = ( { hideHeader = false }: { hideHeader?: boolean 
 				<Notice
 					isDismissible={ false }
 					status="error"
-					spokenMessage={ sprintf(
-						// Translators: %s is a comma-separated list of trashed product names.
-						__(
-							'One or more donation products is in trash. Please restore the product(s) to continue using donation features: %s',
-							'newspack-plugin'
-						),
-						trashed.join( ', ' )
-					) }
+					// Read out from the same msgid the notice displays, so a translation
+					// cannot leave the two saying different things.
+					spokenMessage={ htmlToText( trashedProductsMessage.replace( '<list />', trashed.join( ', ' ) ) ) }
 				>
 					<span>
-						{ interpolateOrPlainText(
-							// Translators: <a> wraps the link text to the trashed products list. <list /> is replaced with the product names.
-							__(
-								'One or more donation products is in trash. Please <a>restore the product(s)</a> to continue using donation features: <list />',
-								'newspack-plugin'
+						{ interpolateOrPlainText( trashedProductsMessage, {
+							a: (
+								/* eslint-disable-next-line jsx-a11y/anchor-has-content */
+								<a href="/wp-admin/edit.php?post_status=trash&post_type=product" />
 							),
-							{
-								a: (
-									/* eslint-disable-next-line jsx-a11y/anchor-has-content */
-									<a href="/wp-admin/edit.php?post_status=trash&post_type=product" />
-								),
-								list: <>{ trashed.join( ', ' ) }</>,
-							}
-						) }
+							list: <>{ trashed.join( ', ' ) }</>,
+						} ) }
 					</span>
 				</Notice>
 			) }

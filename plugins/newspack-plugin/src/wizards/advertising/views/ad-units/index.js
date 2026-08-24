@@ -96,6 +96,14 @@ const AdUnits = ( { adUnits, parentAdUnits, onDelete, wizardApiFetch, updateWith
 		parentAdUnitOptions.push( { label: '', value: parentAdUnitId } );
 	}
 
+	// One msgid for what is read out and what is shown, so a translation cannot leave
+	// the two saying different things.
+	const createdTargetingKeysMessage = sprintf(
+		// Translators: %s is a comma-separated list of targeting key names.
+		__( 'Created custom targeting keys: %s', 'newspack-plugin' ),
+		( serviceData.created_targeting_keys || [] ).join( ', ' )
+	);
+
 	return (
 		<>
 			{ ! isLegacy && networkCode && (
@@ -151,18 +159,9 @@ const AdUnits = ( { adUnits, parentAdUnits, onDelete, wizardApiFetch, updateWith
 				</Notice>
 			) }
 			{ serviceData.created_targeting_keys?.length > 0 && (
-				<Notice
-					isDismissible={ false }
-					status="success"
-					spokenMessage={ sprintf(
-						// Translators: %s is a comma-separated list of targeting key names.
-						__( 'Created custom targeting keys: %s', 'newspack-plugin' ),
-						serviceData.created_targeting_keys.join( ', ' )
-					) }
-				>
+				<Notice isDismissible={ false } status="success" spokenMessage={ createdTargetingKeysMessage }>
 					{ [
-						__( 'Created custom targeting keys:', 'newspack-plugin' ) + '\u00A0',
-						serviceData.created_targeting_keys.join( ', ' ) + '. \u00A0',
+						createdTargetingKeysMessage + '. \u00A0',
 						<ExternalLink
 							href={ `https://admanager.google.com/${ serviceData.network_code }#inventory/custom_targeting/list` }
 							key="google-ad-manager-custom-targeting-link"
