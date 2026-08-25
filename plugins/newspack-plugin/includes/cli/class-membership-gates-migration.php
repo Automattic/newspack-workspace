@@ -28,6 +28,15 @@ class Membership_Gates_Migration {
 	use One_Time_Purchase_Migration;
 
 	/**
+	 * The WooCommerce Memberships wrapper blocks, which are conditional and must
+	 * never be carried into a migrated layout's content.
+	 */
+	private const MEMBERSHIP_WRAPPER_BLOCKS = [
+		'woocommerce-memberships/member-content',
+		'woocommerce-memberships/non-member-content',
+	];
+
+	/**
 	 * Create or update Newspack Access Control content gates from WooCommerce
 	 * Membership plans.
 	 *
@@ -371,7 +380,7 @@ class Membership_Gates_Migration {
 					WP_CLI::warning( sprintf( '"%s" (gate %d) will not restrict as intended: %s', $gate_title, $gate_id, $issue ) );
 				}
 			} elseif ( $dry_run ) {
-				$verification_issues = self::compute_pre_write_issues( $ac_rules, $has_purchase, $layouts, $merged_product_ids );
+				$verification_issues = self::compute_pre_write_issues( $ac_rules, $has_purchase, $layouts, $merged_product_ids, null !== $memberships_gate );
 				foreach ( $verification_issues as $issue ) {
 					WP_CLI::warning( sprintf( '"%s" will not migrate correctly: %s', $gate_title, $issue ) );
 				}
@@ -436,12 +445,21 @@ class Membership_Gates_Migration {
 				$dry_run ? 'would be created/updated' : 'created/updated'
 			)
 		);
-		// Written but unenforceable is worse than not written at all — it looks
-		// migrated. Call it out after the success line so it is not lost in the table.
+		// Written but wrong is worse than not written at all — it looks migrated. Call
+		// it out after the success line so it is not lost in the table.
+		//
+		// The two passes count different things, so they say different things. Dry-run
+		// issues come from compute_pre_write_issues(), which also predicts a gate that
+		// restricts correctly but shows Newspack's default copy. On --live the issues
+		// come from verify_migrated_gate(), which reads the written gate and cannot see
+		// that case at all; there it surfaces as apply_layout()'s own per-gate warning
+		// and is not counted here.
 		if ( $unenforceable ) {
 			WP_CLI::warning(
 				sprintf(
-					'%d of those gate(s) will not restrict as intended (see the WARN rows above). Fix them before deactivating WooCommerce Memberships.',
+					$dry_run
+						? '%d of those gate(s) will not restrict as intended, or will show default copy in place of the authored gate (see the WARN rows above). Fix them before deactivating WooCommerce Memberships.'
+						: '%d of those gate(s) will not restrict as intended (see the WARN rows above). Fix them before deactivating WooCommerce Memberships.',
 					$unenforceable
 				)
 			);
@@ -769,17 +787,26 @@ class Membership_Gates_Migration {
 	 *
 	 * A computable subset of verify_migrated_gate() that needs no written gate: slugs
 	 * that the evaluator cannot resolve, and purchase-mode gaps (no custom_access
-	 * layout extracted, or no usable product IDs). Called in
-	 * dry-run mode so the planning pass surfaces the same warnings --live would.
+	 * layout extracted, or no usable product IDs). Called in dry-run mode so the
+	 * planning pass surfaces those warnings before anything is written.
+	 *
+	 * The two empty-layout issues are dry-run only. verify_migrated_gate() reads the
+	 * written gate, and a gate whose layout kept its seeded default is indistinguishable
+	 * there from one that migrated authored copy — so on --live the condition surfaces
+	 * as apply_layout()'s own warning instead, and the summary row still reads
+	 * "created".
 	 *
 	 * @param array[] $ac_rules           AC-format content rules: [ [ 'slug' => string, 'value' => string[] ], ... ].
 	 * @param bool    $has_purchase       Whether every plan in the group requires a purchase.
 	 * @param array   $layouts            Extracted layout markup keyed by 'registration' and 'custom_access'.
 	 * @param int[]   $merged_product_ids Merged parent product IDs for the custom_access mode.
+	 * @param bool    $has_gate_post      Whether a np_memberships_gate post was found for the group.
+	 *                                    An empty layout only means content was lost when
+	 *                                    there was a post to lose it from.
 	 *
 	 * @return string[] Human-readable problems; empty when no issues are predicted.
 	 */
-	private static function compute_pre_write_issues( array $ac_rules, bool $has_purchase, array $layouts, array $merged_product_ids ): array {
+	private static function compute_pre_write_issues( array $ac_rules, bool $has_purchase, array $layouts, array $merged_product_ids, bool $has_gate_post = true ): array {
 		$issues = [];
 
 		// Mirror the empty-value check from verify_migrated_gate(): a rule the read
@@ -813,6 +840,21 @@ class Membership_Gates_Migration {
 					implode( ', ', $unresolvable )
 				);
 			}
+		}
+
+		// create_gate() seeds a non-empty default layout and apply_layout() declines to
+		// blank it, so a gate that extracted nothing still passes verify_migrated_gate()'s
+		// emptiness check and reads "created". Dry-run is the only pass that can tell an
+		// operator the authored copy did not come across.
+		//
+		// A group with no gate post at all reaches here with an empty registration
+		// layout too, and that is the expected outcome rather than lost content — hence
+		// the $has_gate_post guard.
+		if ( $has_gate_post && '' === trim( (string) ( $layouts['registration'] ?? '' ) ) ) {
+			$issues[] = 'no registration layout content could be extracted from its gate post, so the gate will show the default Newspack registration wall rather than the authored one';
+		}
+		if ( $has_purchase && null !== $layouts['custom_access'] && '' === trim( $layouts['custom_access'] ) ) {
+			$issues[] = 'its paid access layout extracted to nothing, so the paid gate will show default content rather than the authored one';
 		}
 
 		if ( $has_purchase ) {
@@ -1587,71 +1629,339 @@ class Membership_Gates_Migration {
 	}
 
 	/**
-	 * Serialize inner blocks, excluding any WooCommerce Memberships wrapper blocks.
+	 * Serialize inner blocks, excluding any WooCommerce Memberships wrapper blocks
+	 * at any depth within this block tree.
 	 *
-	 * Membership wrapper blocks (member-content and non-member-content) are
-	 * conditional and should not be included in the migrated gate layout content.
+	 * Depth matters because the wrappers carry opposite audiences. A member-content
+	 * block nested inside a non-member-content one — directly or under an ordinary
+	 * group/columns block — would otherwise be serialized whole into the
+	 * registration layout, which is the layout non-members see. Once WooCommerce
+	 * Memberships is deactivated the block type no longer resolves, so WP_Block
+	 * treats it as static and prints its saved inner content unconditionally: the
+	 * members-only copy is then shown to everyone, and is also missing from the
+	 * layout it belonged to.
 	 *
-	 * Part of the layout-extraction seam for NPPD-2058 (empty layouts for
-	 * reusable-block / nested gate layouts).
+	 * A `core/block` reference is the one depth this does not reach. The reference is
+	 * carried through untouched because it resolves at render time, which is what the
+	 * migrated layout wants — but it means a wrapper living inside the referenced
+	 * pattern is beyond the strip. warn_on_wrapper_in_referenced_pattern() reports
+	 * that shape rather than silently carrying it.
 	 *
-	 * @param array $inner_blocks The innerBlocks array from a parsed block.
+	 * A wrapper of the SAME type as the one being extracted is a different case: its
+	 * audience is the audience this layout is already for, so its content belongs in
+	 * the layout. It is unwrapped — the wrapper goes, its children stay in place.
+	 *
+	 * @param array  $inner_blocks The innerBlocks array from a parsed block.
+	 * @param string $keep_wrapper The wrapper block name being extracted. A nested
+	 *                             wrapper of this name is unwrapped; the opposite one
+	 *                             is dropped whole.
+	 * @param int    $gate_post_id The gate post being extracted, for warning context.
 	 *
 	 * @return string Serialized block markup.
 	 */
-	private static function serialize_gate_inner_blocks( array $inner_blocks ): string {
-		$membership_block_types = [
-			'woocommerce-memberships/member-content',
-			'woocommerce-memberships/non-member-content',
-		];
-		$filtered = array_filter(
-			$inner_blocks,
-			fn( $b ) => ! in_array( $b['blockName'], $membership_block_types, true )
+	private static function serialize_gate_inner_blocks( array $inner_blocks, string $keep_wrapper, int $gate_post_id ): string {
+		return \serialize_blocks( self::strip_membership_wrappers( $inner_blocks, $keep_wrapper, $gate_post_id ) );
+	}
+
+	/**
+	 * Remove WooCommerce Memberships wrapper blocks from a block list, recursively.
+	 *
+	 * @param array  $blocks       Parsed blocks.
+	 * @param string $keep_wrapper The wrapper block name whose content belongs in this
+	 *                             layout. Nested wrappers of this name are unwrapped;
+	 *                             the opposite wrapper is dropped with its content.
+	 * @param int    $gate_post_id The gate post being extracted, for warning context.
+	 *
+	 * @return array Blocks with every wrapper resolved at any depth in this tree.
+	 */
+	private static function strip_membership_wrappers( array $blocks, string $keep_wrapper, int $gate_post_id ): array {
+		$kept = [];
+		foreach ( $blocks as $block ) {
+			$block_name = $block['blockName'] ?? null;
+			if ( $keep_wrapper === $block_name ) {
+				// Same audience as the layout being built: keep the content, drop the
+				// wrapper around it.
+				foreach ( self::strip_membership_wrappers( $block['innerBlocks'] ?? [], $keep_wrapper, $gate_post_id ) as $unwrapped ) {
+					$kept[] = $unwrapped;
+				}
+				continue;
+			}
+			if ( in_array( $block_name, self::MEMBERSHIP_WRAPPER_BLOCKS, true ) ) {
+				continue;
+			}
+			if ( 'core/block' === $block_name ) {
+				self::warn_on_wrapper_in_referenced_pattern( $block, $gate_post_id );
+			}
+			$kept[] = empty( $block['innerBlocks'] ) ? $block : self::strip_membership_wrappers_from_block( $block, $keep_wrapper, $gate_post_id );
+		}
+		return array_values( $kept );
+	}
+
+	/**
+	 * Warn when a synced pattern carried into a layout holds a membership wrapper.
+	 *
+	 * The reference is left in the layout markup deliberately, so the wrapper inside
+	 * it survives the strip. After WooCommerce Memberships is deactivated an
+	 * unregistered wrapper prints its saved inner content unconditionally, which
+	 * shows members-only copy to whoever sees the layout. Nothing else in the run
+	 * can see this, because the markup that reaches the layout is a reference.
+	 *
+	 * @param array $block        A parsed `core/block` reference.
+	 * @param int   $gate_post_id The gate post being extracted.
+	 *
+	 * @return void
+	 */
+	private static function warn_on_wrapper_in_referenced_pattern( array $block, int $gate_post_id ): void {
+		$ref = (int) ( $block['attrs']['ref'] ?? 0 );
+		if ( ! $ref ) {
+			return;
+		}
+		// One scan per gate/pattern pair: extraction runs once per plan group, and the
+		// Primary-gate fallback makes many groups resolve to the same gate post.
+		static $scanned = [];
+		$key = $gate_post_id . ':' . $ref;
+		if ( isset( $scanned[ $key ] ) ) {
+			return;
+		}
+		$scanned[ $key ] = true;
+
+		$wrappers = self::find_wrappers_in_pattern( $ref, [] );
+		if ( empty( $wrappers ) ) {
+			return;
+		}
+		WP_CLI::warning(
+			sprintf(
+				'Gate post %d carries synced pattern %d into a layout, and that pattern contains a %s block. Edit the pattern to remove the wrapper before cutover, or the copy inside it will be shown to every reader.',
+				$gate_post_id,
+				$ref,
+				implode( ' and a ', $wrappers )
+			)
 		);
-		return \serialize_blocks( array_values( $filtered ) );
+	}
+
+	/**
+	 * Names of the membership wrappers reachable from a synced pattern.
+	 *
+	 * Follows `core/block` references, because a pattern may hold another pattern and
+	 * WordPress resolves the whole chain at render time — so a wrapper two hops down
+	 * still reaches the reader.
+	 *
+	 * Unlike the resolution guard in collect_gate_layout_markup(), this checks the post
+	 * type only. A draft or password-protected pattern renders nothing today, but the
+	 * operator reads this warning before cutover and can publish it after; warning about
+	 * a pattern that turns out to be inert costs less than staying quiet about one that
+	 * does not.
+	 *
+	 * @param int   $ref     The wp_block post ID.
+	 * @param array $visited Pattern IDs already followed on this path, keyed by ID.
+	 *
+	 * @return string[] Distinct wrapper block names found, in the order encountered.
+	 */
+	private static function find_wrappers_in_pattern( int $ref, array $visited ): array {
+		if ( ! $ref || isset( $visited[ $ref ] ) ) {
+			return [];
+		}
+		$referenced = \get_post( $ref );
+		if ( ! $referenced instanceof \WP_Post || 'wp_block' !== $referenced->post_type ) {
+			return [];
+		}
+		$found = [];
+		self::collect_wrapper_names( \parse_blocks( $referenced->post_content ), $found, $visited + [ $ref => true ] );
+		return array_keys( $found );
+	}
+
+	/**
+	 * Accumulate membership wrapper block names found anywhere in a block tree.
+	 *
+	 * @param array $blocks  Parsed blocks to search.
+	 * @param array $found   Wrapper names found, keyed by name, filled by reference.
+	 * @param array $visited Pattern IDs already followed on this path, keyed by ID.
+	 *
+	 * @return void
+	 */
+	private static function collect_wrapper_names( array $blocks, array &$found, array $visited ): void {
+		foreach ( $blocks as $block ) {
+			$block_name = $block['blockName'] ?? null;
+			if ( in_array( $block_name, self::MEMBERSHIP_WRAPPER_BLOCKS, true ) ) {
+				$found[ $block_name ] = true;
+			}
+			if ( 'core/block' === $block_name ) {
+				foreach ( self::find_wrappers_in_pattern( (int) ( $block['attrs']['ref'] ?? 0 ), $visited ) as $nested ) {
+					$found[ $nested ] = true;
+				}
+				continue;
+			}
+			if ( ! empty( $block['innerBlocks'] ) ) {
+				self::collect_wrapper_names( $block['innerBlocks'], $found, $visited );
+			}
+		}
+	}
+
+	/**
+	 * Strip wrapper blocks from one block's descendants, keeping innerContent in step.
+	 *
+	 * WordPress interleaves a block's own markup with its children by walking
+	 * `innerContent`, where each null is the placeholder for the next entry of
+	 * `innerBlocks`. Dropping a child without dropping its placeholder shifts every
+	 * later child into the wrong slot, so the two are rebuilt together here rather
+	 * than filtering `innerBlocks` alone.
+	 *
+	 * @param array  $block        A parsed block with a non-empty innerBlocks list.
+	 * @param string $keep_wrapper The wrapper block name to unwrap rather than drop.
+	 * @param int    $gate_post_id The gate post being extracted, for warning context.
+	 *
+	 * @return array The block with wrappers resolved in its subtree.
+	 */
+	private static function strip_membership_wrappers_from_block( array $block, string $keep_wrapper, int $gate_post_id ): array {
+		// A block with children but no innerContent map has nothing to keep in step.
+		if ( empty( $block['innerContent'] ) || ! is_array( $block['innerContent'] ) ) {
+			$block['innerBlocks'] = self::strip_membership_wrappers( $block['innerBlocks'], $keep_wrapper, $gate_post_id );
+			return $block;
+		}
+
+		$kept_blocks  = [];
+		$kept_content = [];
+		$child_index  = 0;
+		foreach ( $block['innerContent'] as $chunk ) {
+			if ( null !== $chunk ) {
+				$kept_content[] = $chunk;
+				continue;
+			}
+			$child = $block['innerBlocks'][ $child_index ] ?? null;
+			++$child_index;
+			if ( null === $child ) {
+				continue;
+			}
+			$child_name = $child['blockName'] ?? null;
+			if ( $keep_wrapper === $child_name ) {
+				// Unwrapped in place: each surviving grandchild needs its own placeholder,
+				// or serialize_block() reads the innerContent map out of step.
+				foreach ( self::strip_membership_wrappers( $child['innerBlocks'] ?? [], $keep_wrapper, $gate_post_id ) as $unwrapped ) {
+					$kept_blocks[]  = $unwrapped;
+					$kept_content[] = null;
+				}
+				continue;
+			}
+			if ( in_array( $child_name, self::MEMBERSHIP_WRAPPER_BLOCKS, true ) ) {
+				continue;
+			}
+			if ( 'core/block' === $child_name ) {
+				self::warn_on_wrapper_in_referenced_pattern( $child, $gate_post_id );
+			}
+			$kept_blocks[]  = empty( $child['innerBlocks'] ) ? $child : self::strip_membership_wrappers_from_block( $child, $keep_wrapper, $gate_post_id );
+			$kept_content[] = null;
+		}
+
+		$block['innerBlocks']  = $kept_blocks;
+		$block['innerContent'] = $kept_content;
+		return $block;
 	}
 
 	/**
 	 * Extract registration and custom_access layout block content from an
 	 * np_memberships_gate post.
 	 *
-	 * - Registration layout: inner block content of the top-level
+	 * - Registration layout: inner block content of the
 	 *   `woocommerce-memberships/non-member-content` block(s) (the gate/upsell shown to
 	 *   non-members).
-	 * - Custom access layout: inner block content of the top-level
+	 * - Custom access layout: inner block content of the
 	 *   `woocommerce-memberships/member-content` block(s) (shown to paying members).
 	 *
-	 * A gate post may interleave several top-level wrappers of the same type — a post
-	 * mixing public and members-only sections. Each type's wrappers are concatenated in
-	 * document order so no authored content is dropped.
+	 * The whole block tree is searched and reusable `core/block` references are
+	 * resolved to the referenced `wp_block` post, so a gate whose wrappers sit inside a
+	 * group or columns block — or live in a synced pattern — migrates with its authored
+	 * content instead of an empty layout (NPPD-2058).
 	 *
-	 * This is the layout-extraction seam for NPPD-2058: only top-level wrapper
-	 * blocks are inspected, so gates whose wrappers are nested (e.g. inside a group
-	 * or a reusable `core/block`) yield empty layouts. The stacked NPPD-2058 PR
-	 * walks nested/reusable blocks; this port preserves the top-level-only behavior.
+	 * A gate post may hold several wrappers of the same type — a post mixing public and
+	 * members-only sections. Each type's wrappers are concatenated in document order so
+	 * no authored content is dropped.
 	 *
 	 * @param \WP_Post $gate_post The np_memberships_gate post.
 	 *
 	 * @return array{registration: string, custom_access: string|null}
 	 */
 	private static function extract_gate_layouts( \WP_Post $gate_post ): array {
-		$blocks               = \parse_blocks( $gate_post->post_content );
-		$registration_markup  = null;
-		$custom_access_markup = null;
-
-		foreach ( $blocks as $block ) {
-			if ( 'woocommerce-memberships/non-member-content' === $block['blockName'] ) {
-				$registration_markup = ( $registration_markup ?? '' ) . self::serialize_gate_inner_blocks( $block['innerBlocks'] );
-			}
-			if ( 'woocommerce-memberships/member-content' === $block['blockName'] ) {
-				$custom_access_markup = ( $custom_access_markup ?? '' ) . self::serialize_gate_inner_blocks( $block['innerBlocks'] );
-			}
-		}
+		$layouts = [
+			'registration'  => null,
+			'custom_access' => null,
+		];
+		self::collect_gate_layout_markup( \parse_blocks( $gate_post->post_content ), $layouts, [], $gate_post->ID );
 
 		return [
-			'registration'  => $registration_markup ?? '',
-			'custom_access' => $custom_access_markup,
+			'registration'  => $layouts['registration'] ?? '',
+			'custom_access' => $layouts['custom_access'],
 		];
+	}
+
+	/**
+	 * Walk parsed blocks and concatenate the inner content of every WooCommerce
+	 * Memberships wrapper block found, at any depth.
+	 *
+	 * A wrapper's own inner blocks are not searched again: everything inside a
+	 * member-content block already belongs to that wrapper's layout, and
+	 * serialize_gate_inner_blocks() resolves any wrapper nested within it — unwrapping
+	 * a same-audience one, dropping the opposite.
+	 *
+	 * @param array $blocks       Parsed blocks to search.
+	 * @param array $layouts      Accumulated layout markup keyed 'registration' and
+	 *                            'custom_access', filled by reference. Each stays null
+	 *                            until its wrapper type is found, which is what tells
+	 *                            the caller "no custom access layout" apart from "an
+	 *                            empty one".
+	 * @param array $visited      wp_block post IDs already resolved on the path taken to
+	 *                            reach these blocks, keyed by ID. Each descent gets a
+	 *                            copy rather than sharing one set, so a pattern placed
+	 *                            twice contributes twice while a pattern that reaches
+	 *                            itself cannot recurse forever.
+	 * @param int   $gate_post_id The gate post being extracted, for warning context.
+	 *
+	 * @return void
+	 */
+	private static function collect_gate_layout_markup( array $blocks, array &$layouts, array $visited, int $gate_post_id ): void {
+		foreach ( $blocks as $block ) {
+			$block_name = $block['blockName'] ?? null;
+
+			if ( 'woocommerce-memberships/non-member-content' === $block_name ) {
+				$layouts['registration'] = ( $layouts['registration'] ?? '' ) . self::serialize_gate_inner_blocks( $block['innerBlocks'], 'woocommerce-memberships/non-member-content', $gate_post_id );
+				continue;
+			}
+			if ( 'woocommerce-memberships/member-content' === $block_name ) {
+				$layouts['custom_access'] = ( $layouts['custom_access'] ?? '' ) . self::serialize_gate_inner_blocks( $block['innerBlocks'], 'woocommerce-memberships/member-content', $gate_post_id );
+				continue;
+			}
+
+			if ( 'core/block' === $block_name ) {
+				$ref = (int) ( $block['attrs']['ref'] ?? 0 );
+				if ( ! $ref || isset( $visited[ $ref ] ) ) {
+					continue;
+				}
+				$referenced = \get_post( $ref );
+				// The same guards core/block's own render callback applies — post type,
+				// published status, and no password — so extraction sees what a reader
+				// would: a pattern core would not render contributes nothing here either.
+				if (
+					! $referenced instanceof \WP_Post
+					|| 'wp_block' !== $referenced->post_type
+					|| 'publish' !== $referenced->post_status
+					|| ! empty( $referenced->post_password )
+				) {
+					WP_CLI::warning(
+						sprintf(
+							'Gate post %d references synced pattern %d, which is missing, unpublished or password-protected — any gate content it holds will not migrate.',
+							$gate_post_id,
+							$ref
+						)
+					);
+					continue;
+				}
+				self::collect_gate_layout_markup( \parse_blocks( $referenced->post_content ), $layouts, $visited + [ $ref => true ], $gate_post_id );
+				continue;
+			}
+
+			if ( ! empty( $block['innerBlocks'] ) ) {
+				self::collect_gate_layout_markup( $block['innerBlocks'], $layouts, $visited, $gate_post_id );
+			}
+		}
 	}
 
 	/**
