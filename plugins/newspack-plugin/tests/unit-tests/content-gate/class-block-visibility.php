@@ -1101,7 +1101,7 @@ class Newspack_Test_Block_Visibility extends WP_UnitTestCase {
 			[
 				'ID'          => $gate_id,
 				'post_status' => 'draft',
-			] 
+			]
 		);
 		$after_write = $fetches;
 
