@@ -1925,4 +1925,120 @@ HTML;
 			$mapped
 		);
 	}
+
+	/**
+	 * WCM "Hide content only" (hide_content) keeps the item in the feed with a
+	 * teaser, so it maps to Access Control's truncate mode with feeds restricted.
+	 */
+	public function test_map_wcm_feed_config_hide_content_maps_to_truncate() {
+		$this->assertSame(
+			[
+				'restrict_feeds'        => 1,
+				'feed_restriction_mode' => 'truncate',
+			],
+			Membership_Gates_Migration::map_wcm_feed_config_to_ac( 'hide_content', false )
+		);
+	}
+
+	/**
+	 * WCM "Hide completely" (hide) and "Redirect" both drop the item from the
+	 * feed, so they map to Access Control's exclude mode.
+	 */
+	public function test_map_wcm_feed_config_hide_and_redirect_map_to_exclude() {
+		$expected = [
+			'restrict_feeds'        => 1,
+			'feed_restriction_mode' => 'exclude',
+		];
+		$this->assertSame( $expected, Membership_Gates_Migration::map_wcm_feed_config_to_ac( 'hide', false ) );
+		$this->assertSame( $expected, Membership_Gates_Migration::map_wcm_feed_config_to_ac( 'redirect', false ) );
+	}
+
+	/**
+	 * "Skip content restriction in RSS feeds" makes restricted posts public in
+	 * feeds, so it wins over the restriction mode: Access Control leaves feeds
+	 * unrestricted and writes no mode.
+	 */
+	public function test_map_wcm_feed_config_skip_feeds_leaves_feeds_unrestricted() {
+		$expected = [
+			'restrict_feeds'        => 0,
+			'feed_restriction_mode' => null,
+		];
+		$this->assertSame( $expected, Membership_Gates_Migration::map_wcm_feed_config_to_ac( 'hide_content', true ) );
+		$this->assertSame( $expected, Membership_Gates_Migration::map_wcm_feed_config_to_ac( 'hide', true ) );
+	}
+
+	/**
+	 * Reads the three Memberships options that govern feed behaviour, defaulting
+	 * the restriction mode to WCM's own 'hide_content'.
+	 */
+	public function test_get_wcm_feed_config_reads_the_memberships_options() {
+		update_option( 'wc_memberships_restriction_mode', 'hide' );
+		update_option( 'newspack_skip_content_restriction_in_rss_feeds', 'yes' );
+		update_option( 'wc_memberships_show_excerpts', 'yes' );
+
+		$this->assertSame(
+			[
+				'restriction_mode' => 'hide',
+				'skip_feeds'       => true,
+				'show_excerpts'    => true,
+			],
+			Membership_Gates_Migration::get_wcm_feed_config()
+		);
+
+		delete_option( 'wc_memberships_restriction_mode' );
+		$this->assertSame(
+			'hide_content',
+			Membership_Gates_Migration::get_wcm_feed_config()['restriction_mode'],
+			'An unset restriction mode should default to WCM\'s own hide_content.'
+		);
+
+		delete_option( 'newspack_skip_content_restriction_in_rss_feeds' );
+		delete_option( 'wc_memberships_show_excerpts' );
+	}
+
+	/**
+	 * An unrecognized restriction mode maps to truncate, not exclude. WCM
+	 * normalizes such a value back to its hide_content default, so migrating it to
+	 * exclude would drop feed items WCM was actually keeping.
+	 */
+	public function test_map_wcm_feed_config_unknown_mode_falls_back_to_truncate() {
+		$this->assertSame(
+			[
+				'restrict_feeds'        => 1,
+				'feed_restriction_mode' => 'truncate',
+			],
+			Membership_Gates_Migration::map_wcm_feed_config_to_ac( 'some-legacy-value', false )
+		);
+	}
+
+	/**
+	 * The --live write payload always sets restrict_feeds, and includes
+	 * feed_restriction_mode only when the mapping chose one — a null mode (feeds
+	 * left unrestricted) is omitted so update_settings() leaves the stored mode
+	 * untouched.
+	 */
+	public function test_feed_settings_write_payload_omits_a_null_mode() {
+		$this->assertSame(
+			[
+				'restrict_feeds'        => 1,
+				'feed_restriction_mode' => 'exclude',
+			],
+			Membership_Gates_Migration::feed_settings_write_payload(
+				[
+					'restrict_feeds'        => 1,
+					'feed_restriction_mode' => 'exclude',
+				]
+			)
+		);
+		$this->assertSame(
+			[ 'restrict_feeds' => 0 ],
+			Membership_Gates_Migration::feed_settings_write_payload(
+				[
+					'restrict_feeds'        => 0,
+					'feed_restriction_mode' => null,
+				]
+			),
+			'A null mode must be omitted so the stored feed_restriction_mode is left untouched.'
+		);
+	}
 }

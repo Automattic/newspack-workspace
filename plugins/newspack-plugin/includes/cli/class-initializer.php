@@ -140,6 +140,7 @@ class Initializer {
 				);
 			}
 			WP_CLI::add_command( 'newspack migrate-membership-gates', [ 'Newspack\CLI\Membership_Gates_Migration', 'migrate_membership_gates' ] );
+			WP_CLI::add_command( 'newspack migrate-feed-settings', [ 'Newspack\CLI\Membership_Gates_Migration', 'migrate_feed_settings' ] );
 			WP_CLI::add_command( 'newspack migrate-premium-newsletters', [ 'Newspack\CLI\Premium_Newsletters_Migration', 'migrate_premium_newsletters' ] );
 		}
 
