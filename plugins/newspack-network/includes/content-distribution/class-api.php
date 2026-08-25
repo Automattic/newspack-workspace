@@ -353,9 +353,15 @@ class API {
 		//
 		// A genuinely omitted key passes only on a partial payload, which is the one
 		// shape that legitimately carries just the fields it is changing. On a full
-		// payload the field is required: insert() hands it to
-		// use_block_editor_for_post_type() before anything else validates it, so the
-		// omission surfaces as a PHP warning rather than as this route's 400.
+		// payload the field is required: insert() reads it straight out of the
+		// payload before anything else validates it, so the omission surfaces as a
+		// PHP warning rather than as this route's 400.
+		//
+		// Requiring fields stops at post_type deliberately. insert() dereferences
+		// several other fields just as unguarded — title, slug, content, timestamps
+		// and more — but post_type is the one whose value decides what the caller is
+		// authorized to create, via the allowlist below. This is that check's
+		// precondition, not payload-shape validation.
 		if ( ! array_key_exists( 'post_type', $payload['post_data'] ) ) {
 			if ( ! empty( $payload['partial'] ) ) {
 				return null;
@@ -408,11 +414,13 @@ class API {
 	 * kses in core's own two contexts.
 	 *
 	 * Deliberately not reproduced: `convert_invalid_entities` (10) and `balanceTags`
-	 * (50). Both are ungated, so they are not part of holding a caller to their own
-	 * capabilities, and `remove_all_filters()` dropped them for every caller before
-	 * this change too. The cost is that content stored through this route is less
-	 * normalized than the same content saved in the editor, on a site with
-	 * `use_balanceTags` enabled.
+	 * (50). Neither is capability-gated, so they are not part of holding a caller to
+	 * their own capabilities, and `remove_all_filters()` dropped them for every
+	 * caller before this change too. The cost is that content stored through this
+	 * route is less normalized than the same content saved in the editor: CP1252
+	 * numeric entities survive verbatim on every site, and unbalanced tags survive
+	 * where `use_balanceTags` is enabled — only `balanceTags()` is gated on that
+	 * option.
 	 *
 	 * Title and excerpt are filtered twice — here, and again by core's
 	 * `title_save_pre`/`excerpt_save_pre`, which this route never removes. Both
