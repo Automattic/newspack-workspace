@@ -7,7 +7,7 @@
  * (WC content rules → valid AC 'post_types' / 'specific_posts' / taxonomy slugs).
  * The extract_gate_layouts / serialize_gate_inner_blocks tests assert the NPPD-2058
  * behavior: a gate layout is found wherever the wrapper block sits, including nested
- * and reusable blocks, and nested membership wrappers are stripped from the result.
+ * and reusable blocks, and membership wrappers nested in the result are stripped.
  *
  * NOT pinned here: NPPD-2064 (fingerprint-based gate splitting/grouping). That fix
  * lands in group_plans_by_fingerprint() and the merged-product consolidation, which
@@ -74,6 +74,7 @@ class Test_Membership_Gates_Migration extends \WP_UnitTestCase {
 	 */
 	public function set_up() {
 		parent::set_up();
+		\WP_CLI::reset();
 		global $products_database;
 		$this->original_products_database = $products_database;
 		// phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- Raw argv, kept verbatim so tear_down() can restore it.
@@ -872,8 +873,7 @@ HTML;
 	}
 
 	/**
-	 * A wrapper nested inside another block (here a group) is found and migrated —
-	 * the top-level-only extraction that made these gates migrate empty is gone
+	 * A wrapper nested inside another block (here a group) is found and migrated
 	 * (NPPD-2058).
 	 */
 	public function test_extract_gate_layouts_finds_nested_wrapper_blocks() {
@@ -909,9 +909,11 @@ HTML;
 <!-- wp:woocommerce-memberships/non-member-content -->
 <!-- wp:paragraph --><p>Subscribe to read.</p><!-- /wp:paragraph -->
 <!-- wp:group --><div class="wp-block-group">
+<!-- wp:paragraph --><p>Before the wrapper.</p><!-- /wp:paragraph -->
 <!-- wp:woocommerce-memberships/member-content -->
 <!-- wp:paragraph --><p>Members only secret.</p><!-- /wp:paragraph -->
 <!-- /wp:woocommerce-memberships/member-content -->
+<!-- wp:paragraph --><p>After the wrapper.</p><!-- /wp:paragraph -->
 </div><!-- /wp:group -->
 <!-- /wp:woocommerce-memberships/non-member-content -->
 HTML;
@@ -921,7 +923,18 @@ HTML;
 
 		$this->assertStringContainsString( 'Subscribe to read.', $layouts['registration'] );
 		$this->assertStringNotContainsString( 'Members only secret.', $layouts['registration'] );
-		$this->assertStringNotContainsString( 'woocommerce-memberships/member-content', $layouts['registration'], 'The wrapper block itself is dropped, not just hidden — it would render as static content once WooCommerce Memberships is gone.' );
+		$this->assertStringNotContainsString( 'woocommerce-memberships/member-content', $layouts['registration'], 'The wrapper block itself is dropped, not just hidden — an unregistered block type renders its saved inner content as static markup.' );
+		// The siblings are what make this test bite twice: dropping a child without
+		// dropping its innerContent placeholder shifts the survivors into the wrong
+		// slots, so a serializer that filtered innerBlocks alone would reorder these
+		// two or index past the end of the array.
+		$this->assertStringContainsString( 'Before the wrapper.', $layouts['registration'] );
+		$this->assertStringContainsString( 'After the wrapper.', $layouts['registration'] );
+		$this->assertLessThan(
+			strpos( $layouts['registration'], 'After the wrapper.' ),
+			strpos( $layouts['registration'], 'Before the wrapper.' ),
+			'The blocks either side of the dropped wrapper keep their document order.'
+		);
 	}
 
 	/**
@@ -1044,9 +1057,8 @@ HTML
 		$layouts = $this->invoke_private_static( 'extract_gate_layouts', [ $gate_post ] );
 
 		$this->assertSame( '', $layouts['registration'] );
-		$warnings = array_filter( \WP_CLI::$messages, fn( $m ) => 'warning' === $m[0] );
-		$this->assertNotEmpty( $warnings, 'The skipped pattern reference is warned about.' );
-		$this->assertStringContainsString( (string) $pattern_id, implode( ' ', array_column( $warnings, 1 ) ) );
+		$this->assertNotEmpty( \WP_CLI::$warnings, 'The skipped pattern reference is warned about.' );
+		$this->assertStringContainsString( (string) $pattern_id, implode( ' ', \WP_CLI::$warnings ) );
 	}
 
 	/**
@@ -1073,7 +1085,7 @@ HTML
 			. '<!-- wp:woocommerce-memberships/member-content --><!-- wp:paragraph --><p>Drop me.</p><!-- /wp:paragraph --><!-- /wp:woocommerce-memberships/member-content -->'
 		);
 
-		$serialized = $this->invoke_private_static( 'serialize_gate_inner_blocks', [ $inner_blocks ] );
+		$serialized = $this->invoke_private_static( 'serialize_gate_inner_blocks', [ $inner_blocks, 'woocommerce-memberships/non-member-content', 0 ] );
 
 		$this->assertStringContainsString( 'Keep me.', $serialized );
 		$this->assertStringNotContainsString( 'woocommerce-memberships/member-content', $serialized );
@@ -1424,13 +1436,8 @@ HTML
 	}
 
 	/**
-	 * A gate whose registration layout extracted to nothing is flagged in dry-run.
-	 *
-	 * Nothing else in the run catches this: create_gate() seeds a non-empty default
-	 * layout and apply_layout() declines to blank it, so the gate passes
-	 * verify_migrated_gate()'s emptiness check and the summary row reads "created"
-	 * while the publisher goes live with the stock Newspack wall instead of the
-	 * upsell they wrote. Dry-run is the pass an operator reads before cutover.
+	 * A gate whose registration layout extracted to nothing is flagged in dry-run —
+	 * the one pass that can see it, for the reason compute_pre_write_issues() gives.
 	 */
 	public function test_compute_pre_write_issues_flags_an_empty_registration_layout() {
 		$ac_rules = [
@@ -1451,6 +1458,167 @@ HTML
 
 		$this->assertCount( 1, $issues, 'The resolvable slug produces no issue of its own, so the empty layout is the only one.' );
 		$this->assertStringContainsString( 'no registration layout content could be extracted', $issues[0] );
+	}
+
+	/**
+	 * A group with no gate post at all is not flagged for its empty registration
+	 * layout. There was no authored copy to lose, so the seeded Newspack default is
+	 * the right outcome rather than a warning the operator has to triage.
+	 */
+	public function test_compute_pre_write_issues_does_not_flag_an_empty_layout_when_no_gate_post_exists() {
+		$ac_rules = [
+			[
+				'slug'  => 'post_types',
+				'value' => [ 'post' ],
+			],
+		];
+		$layouts  = [
+			'registration'  => '',
+			'custom_access' => null,
+		];
+
+		$issues = $this->invoke_private_static(
+			'compute_pre_write_issues',
+			[ $ac_rules, false, $layouts, [], false ]
+		);
+
+		$this->assertSame( [], $issues, 'No gate post means no lost content to warn about.' );
+	}
+
+	/**
+	 * A paid access layout that was found but extracted to nothing is flagged, which
+	 * is a different shape from one that was never found: null means the paid mode
+	 * never activates, an empty string means it activates over default copy.
+	 */
+	public function test_compute_pre_write_issues_flags_an_empty_paid_access_layout() {
+		$ac_rules = [
+			[
+				'slug'  => 'post_types',
+				'value' => [ 'post' ],
+			],
+		];
+		$layouts  = [
+			'registration'  => '<!-- wp:paragraph --><p>Subscribe.</p><!-- /wp:paragraph -->',
+			'custom_access' => '',
+		];
+
+		$issues = $this->invoke_private_static(
+			'compute_pre_write_issues',
+			[ $ac_rules, true, $layouts, [ 42 ] ]
+		);
+
+		$this->assertCount( 1, $issues );
+		$this->assertStringContainsString( 'paid access layout extracted to nothing', $issues[0] );
+	}
+
+	/**
+	 * A synced-pattern reference inside a wrapper is carried into the layout as a
+	 * reference, not resolved and inlined.
+	 *
+	 * The layout renders through WordPress, which resolves the ref itself, so passing
+	 * it through keeps the publisher's pattern editable in one place after migration.
+	 * The wrapper strip deliberately does not follow it.
+	 */
+	public function test_extract_gate_layouts_carries_a_pattern_reference_through_a_wrapper() {
+		$pattern_id = $this->create_pattern_post( '<!-- wp:paragraph --><p>Shared upsell copy.</p><!-- /wp:paragraph -->' );
+		$gate_post  = $this->create_gate_post(
+			'<!-- wp:woocommerce-memberships/non-member-content -->'
+			. sprintf( '<!-- wp:block {"ref":%d} /-->', $pattern_id )
+			. '<!-- /wp:woocommerce-memberships/non-member-content -->'
+		);
+
+		$layouts = $this->invoke_private_static( 'extract_gate_layouts', [ $gate_post ] );
+
+		$this->assertStringContainsString( sprintf( '<!-- wp:block {"ref":%d} /-->', $pattern_id ), $layouts['registration'], 'The reference survives verbatim.' );
+		$this->assertStringNotContainsString( 'Shared upsell copy.', $layouts['registration'], 'The referenced content is not inlined.' );
+	}
+
+	/**
+	 * A wrapper nested inside one of the same type is unwrapped, not dropped.
+	 *
+	 * Both wrappers address the same audience, so the inner one's copy belongs in the
+	 * layout being built. Only the opposite wrapper carries content this layout's
+	 * readers must not see.
+	 */
+	public function test_extract_gate_layouts_unwraps_a_nested_wrapper_of_the_same_type() {
+		// Two nestings, because the strip takes a different path for each: a direct
+		// child of the wrapper is walked as a plain block list, while one inside a
+		// group also has an innerContent placeholder map to keep in step.
+		$gate_content = <<<'HTML'
+<!-- wp:woocommerce-memberships/non-member-content -->
+<!-- wp:paragraph --><p>Outer upsell.</p><!-- /wp:paragraph -->
+<!-- wp:woocommerce-memberships/non-member-content -->
+<!-- wp:paragraph --><p>Directly nested upsell.</p><!-- /wp:paragraph -->
+<!-- /wp:woocommerce-memberships/non-member-content -->
+<!-- wp:group --><div class="wp-block-group">
+<!-- wp:woocommerce-memberships/non-member-content -->
+<!-- wp:paragraph --><p>Grouped upsell.</p><!-- /wp:paragraph -->
+<!-- /wp:woocommerce-memberships/non-member-content -->
+</div><!-- /wp:group -->
+<!-- /wp:woocommerce-memberships/non-member-content -->
+HTML;
+		$gate_post = $this->create_gate_post( $gate_content );
+
+		$layouts = $this->invoke_private_static( 'extract_gate_layouts', [ $gate_post ] );
+
+		$this->assertStringContainsString( 'Outer upsell.', $layouts['registration'] );
+		$this->assertStringContainsString( 'Directly nested upsell.', $layouts['registration'], 'A same-audience wrapper contributes its content rather than losing it.' );
+		$this->assertStringContainsString( 'Grouped upsell.', $layouts['registration'], 'The same holds one level down, where placeholders have to be kept in step.' );
+		$this->assertStringNotContainsString( 'woocommerce-memberships/non-member-content', $layouts['registration'], 'The wrapper markup itself is still dropped.' );
+	}
+
+	/**
+	 * A wrapper two pattern hops away is warned about.
+	 *
+	 * WordPress resolves the whole reference chain at render time, so a wrapper inside
+	 * a pattern inside a pattern reaches the reader exactly like one hop does.
+	 */
+	public function test_extract_gate_layouts_warns_about_a_wrapper_behind_chained_patterns() {
+		$inner_pattern_id = $this->create_pattern_post(
+			'<!-- wp:woocommerce-memberships/member-content -->'
+			. '<!-- wp:paragraph --><p>Members only secret.</p><!-- /wp:paragraph -->'
+			. '<!-- /wp:woocommerce-memberships/member-content -->'
+		);
+		$outer_pattern_id = $this->create_pattern_post( sprintf( '<!-- wp:block {"ref":%d} /-->', $inner_pattern_id ) );
+		$gate_post        = $this->create_gate_post(
+			'<!-- wp:woocommerce-memberships/non-member-content -->'
+			. sprintf( '<!-- wp:block {"ref":%d} /-->', $outer_pattern_id )
+			. '<!-- /wp:woocommerce-memberships/non-member-content -->'
+		);
+
+		$this->invoke_private_static( 'extract_gate_layouts', [ $gate_post ] );
+
+		$this->assertNotEmpty( \WP_CLI::$warnings, 'The wrapper behind two hops is warned about.' );
+		$this->assertStringContainsString( 'member-content', implode( ' ', \WP_CLI::$warnings ) );
+	}
+
+	/**
+	 * A pattern carried into a layout that holds a membership wrapper is warned about.
+	 *
+	 * The strip cannot reach inside a reference, so the wrapper survives into the
+	 * layout. Once WooCommerce Memberships is deactivated an unregistered block type
+	 * prints its saved inner content as static markup, which puts members-only copy
+	 * in front of the non-members the registration layout is for. The warning is the
+	 * only place this shape is visible.
+	 */
+	public function test_extract_gate_layouts_warns_when_a_carried_pattern_holds_a_wrapper() {
+		$pattern_id = $this->create_pattern_post(
+			'<!-- wp:woocommerce-memberships/member-content -->'
+			. '<!-- wp:paragraph --><p>Members only secret.</p><!-- /wp:paragraph -->'
+			. '<!-- /wp:woocommerce-memberships/member-content -->'
+		);
+		$gate_post  = $this->create_gate_post(
+			'<!-- wp:woocommerce-memberships/non-member-content -->'
+			. sprintf( '<!-- wp:block {"ref":%d} /-->', $pattern_id )
+			. '<!-- /wp:woocommerce-memberships/non-member-content -->'
+		);
+
+		$this->invoke_private_static( 'extract_gate_layouts', [ $gate_post ] );
+
+		$this->assertNotEmpty( \WP_CLI::$warnings, 'The carried wrapper is warned about.' );
+		$warning_text = implode( ' ', \WP_CLI::$warnings );
+		$this->assertStringContainsString( (string) $pattern_id, $warning_text, 'The warning names the pattern to edit.' );
+		$this->assertStringContainsString( 'member-content', $warning_text, 'The warning names the wrapper found.' );
 	}
 
 	/**
