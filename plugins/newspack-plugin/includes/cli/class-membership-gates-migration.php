@@ -2245,7 +2245,9 @@ class Membership_Gates_Migration {
 	 */
 	public static function get_wcm_feed_config(): array {
 		return [
-			// WCM's own out-of-the-box default is 'hide_content'.
+			// WCM validates this option against hide/hide_content/redirect and falls
+			// back to hide_content for anything else (its Restrictions::get_restriction_mode()),
+			// so an unset value behaves as hide_content — the fallback used here too.
 			'restriction_mode' => (string) \get_option( 'wc_memberships_restriction_mode', 'hide_content' ),
 			// Newspack's addition: when on, restricted posts are public in feeds.
 			'skip_feeds'       => 'yes' === \get_option( 'newspack_skip_content_restriction_in_rss_feeds', 'no' ),
