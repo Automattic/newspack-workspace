@@ -612,7 +612,7 @@ class Test_Premium_Newsletters_Verify extends \WP_UnitTestCase {
 						'value' => [ 46 ],
 					],
 				],
-			] 
+			]
 		);
 
 		$partitioned = $this->invoke_private_static( 'partition_gates', [ [ $gate ] ] );
