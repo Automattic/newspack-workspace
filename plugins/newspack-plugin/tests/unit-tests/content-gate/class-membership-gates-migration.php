@@ -1197,6 +1197,30 @@ HTML;
 	}
 
 	/**
+	 * A dead reference sitting outside the wrappers is not carried in as unconditional
+	 * copy.
+	 *
+	 * It renders nothing, so prefixing it would turn a layout that extracted to nothing
+	 * into one that looks authored — and the seeded default, which does render, would be
+	 * overwritten with a wall the reader sees as blank.
+	 */
+	public function test_extract_gate_layouts_drops_an_unrenderable_block_from_unconditional_copy() {
+		$draft_pattern_id = $this->create_pattern_post( '<!-- wp:paragraph --><p>Never published.</p><!-- /wp:paragraph -->', 'draft' );
+		$gate_post        = $this->create_gate_post(
+			sprintf( '<!-- wp:block {"ref":%d} /-->', $draft_pattern_id )
+			. '<!-- wp:woocommerce-memberships/member-content -->'
+			. '<!-- wp:paragraph --><p>Thanks for supporting us.</p><!-- /wp:paragraph -->'
+			. '<!-- /wp:woocommerce-memberships/member-content -->'
+		);
+
+		$layouts = $this->invoke_private_static( 'extract_gate_layouts', [ $gate_post ] );
+
+		$this->assertStringNotContainsString( 'wp:block', $layouts['custom_access'], 'A reference that renders nothing is not unconditional copy.' );
+		$this->assertStringContainsString( 'Thanks for supporting us.', $layouts['custom_access'] );
+		$this->assertSame( '', $layouts['registration'], 'The layout that extracted to nothing stays empty, so the seeded default stands.' );
+	}
+
+	/**
 	 * An empty gate post returns an empty registration layout and a null custom_access
 	 * one. apply_layout() reads that distinction to leave the gate's seeded default
 	 * alone rather than blanking it, and there is no authored copy here to prefer.
