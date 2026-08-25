@@ -313,7 +313,9 @@ class Test_Feed_Restriction extends \WP_UnitTestCase {
 		// which is what Memberships::is_active() checks).
 		require __DIR__ . '/../../mocks/wc-memberships-active-mock.php';
 
-		$this->set_feed_mode( 'exclude' );
+		// Leave feed_restriction_mode unset, as the affected Memberships-only sites
+		// do: the mode then resolves to the shipped exclude default, and the guard
+		// still has to override it to off.
 
 		$this->assertSame(
 			Content_Gate_Advanced_Settings::FEED_MODE_OFF,

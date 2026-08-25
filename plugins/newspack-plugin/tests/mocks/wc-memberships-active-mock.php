@@ -18,8 +18,8 @@ if ( ! class_exists( 'WC_Memberships' ) ) {
 if ( ! function_exists( 'wc_memberships' ) ) {
 	function wc_memberships() {
 		// The real function returns the plugin instance; a stub object keeps any
-		// caller that dereferences it from fataling, though is_active() only
-		// needs function_exists().
+		// caller that dereferences it from triggering a fatal error, though
+		// is_active() only needs function_exists().
 		return new WC_Memberships();
 	}
 }
