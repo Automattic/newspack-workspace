@@ -989,12 +989,21 @@ function wc_create_order( $data ) {
 function wc_get_checkout_url() {
 	return 'https://example.com/checkout';
 }
-function wc_get_page_permalink( $page ) {
-	return 'https://example.com/' . $page;
+// Guarded, unlike the rest of this file: these two names are also declared by
+// tests/unit-tests/my-account.php and the group-subscription my-account tests.
+// Nothing is broken today only because include order happens to reach this file
+// first; a new file declaring either name at file scope and sorting earlier
+// would fatal the suite on redeclare.
+if ( ! function_exists( 'wc_get_page_permalink' ) ) {
+	function wc_get_page_permalink( $page ) {
+		return 'https://example.com/' . $page;
+	}
 }
-function wc_get_endpoint_url( $endpoint, $value = '', $permalink = '' ) {
-	$permalink = $permalink ? $permalink : 'https://example.com/';
-	return \trailingslashit( $permalink ) . $endpoint . ( $value ? '/' . $value : '' );
+if ( ! function_exists( 'wc_get_endpoint_url' ) ) {
+	function wc_get_endpoint_url( $endpoint, $value = '', $permalink = '' ) {
+		$permalink = $permalink ? $permalink : 'https://example.com/';
+		return \trailingslashit( $permalink ) . $endpoint . ( $value ? '/' . $value : '' );
+	}
 }
 function wcs_is_subscription( $order ) {
 	global $subscriptions_database;
