@@ -195,7 +195,7 @@ class Audience_Content_Gates extends Wizard {
 						],
 						// Validate the whole object against the schema so the nested
 						// feed_restriction_mode enum is actually enforced (a bad value
-						// returns a 400 instead of being silently coerced to exclude).
+						// returns a 400 instead of being silently coerced to the default).
 						'validate_callback'    => 'rest_validate_request_arg',
 						'sanitize_callback'    => 'rest_sanitize_request_arg',
 					],
@@ -451,7 +451,7 @@ class Audience_Content_Gates extends Wizard {
 	private function prepare_advanced_settings_response( $advanced ) {
 		return [
 			'restrict_feeds'                 => (bool) ( $advanced['restrict_feeds'] ?? false ),
-			'feed_restriction_mode'          => (string) ( $advanced['feed_restriction_mode'] ?? Content_Gate_Advanced_Settings::FEED_MODE_EXCLUDE ),
+			'feed_restriction_mode'          => (string) ( $advanced['feed_restriction_mode'] ?? Content_Gate_Advanced_Settings::FEED_MODE_TRUNCATE ),
 			'newsletter_link_bypass_enabled' => (bool) ( $advanced['newsletter_link_bypass_enabled'] ?? false ),
 		];
 	}
