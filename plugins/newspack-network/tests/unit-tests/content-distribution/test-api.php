@@ -440,6 +440,13 @@ class TestApi extends \WP_UnitTestCase {
 			'Precondition: kses must be filtering content for this user before the insert.'
 		);
 
+		// A callback with a non-default accepted_args, because every reachable core
+		// registration on this hook uses the default of 1 — asserting against those
+		// passes even when the restore drops the argument. strval() returns the
+		// content unchanged, and WP_Hook hands it only the one argument the filter
+		// call carries, whatever accepted_args says.
+		add_filter( 'content_save_pre', 'strval', 22, 2 );
+
 		$this->insert_and_get_content( $this->make_insert_request( 'safe content' ) );
 
 		// Assert the priority, not just presence: a presence-only check passes even
@@ -454,12 +461,13 @@ class TestApi extends \WP_UnitTestCase {
 			has_filter( 'content_save_pre', 'wp_filter_global_styles_post' ),
 			'The insert must restore the other content_save_pre callbacks too, not just kses.'
 		);
-		// accepted_args is restored too, and nothing else here would notice: a loop
-		// that passed a literal 1 would satisfy every assertion above, then break any
-		// callback registered with more than one argument for the rest of the request.
+		// accepted_args is restored too, and nothing else here would notice: a
+		// restore that passed a literal 1, or dropped the argument for its default,
+		// would satisfy every assertion above, then break any callback registered
+		// with more than one argument for the rest of the request.
 		$this->assertSame(
-			1,
-			$GLOBALS['wp_filter']['content_save_pre']->callbacks[10]['wp_filter_post_kses']['accepted_args'],
+			2,
+			$GLOBALS['wp_filter']['content_save_pre']->callbacks[22]['strval']['accepted_args'],
 			'The restore must reproduce accepted_args, not just the priority.'
 		);
 
@@ -1019,6 +1027,27 @@ class TestApi extends \WP_UnitTestCase {
 				"A $label post_data must be refused by name, not by an incidental failure."
 			);
 		}
+
+		// null is deliberately not in the set above: it fails the isset() in
+		// check_incoming_post_type(), so it never reaches the shape guard. It is
+		// refused a layer down instead, by the constructor's emptiness check, under
+		// that path's own code — asserted here so the shape stays covered without
+		// implying the guard sees it.
+		$payload              = get_sample_payload( 'https://origin.test', get_bloginfo( 'url' ) );
+		$payload['post_data'] = null;
+
+		$request = new WP_REST_Request( 'POST', '/newspack-network/v1/content-distribution/insert' );
+		$request->set_header( 'Content-Type', 'application/json' );
+		$request->set_body( wp_json_encode( [ 'payload' => $payload ] ) );
+
+		$response = rest_get_server()->dispatch( $request );
+
+		$this->assertSame( 400, $response->get_status(), 'A null post_data must still be refused.' );
+		$this->assertSame(
+			'invalid_payload',
+			$response->as_error()->get_error_code(),
+			'A null post_data is refused by the constructor, not by the shape guard it never reaches.'
+		);
 	}
 
 	/**
@@ -1073,10 +1102,10 @@ class TestApi extends \WP_UnitTestCase {
 	/**
 	 * A full payload must carry a post type.
 	 *
-	 * The omission is allowed only for a partial update. On a full payload the
-	 * value reaches use_block_editor_for_post_type() inside insert() before
-	 * anything validates it, so without this the caller gets a PHP warning
-	 * instead of this route's 400.
+	 * The omission is allowed only for a partial update. On a full payload,
+	 * insert() reads the value straight out of the payload before anything
+	 * validates it, so without this the caller gets a PHP warning instead of
+	 * this route's 400.
 	 *
 	 * @group content-distribution-api
 	 */
@@ -1085,7 +1114,6 @@ class TestApi extends \WP_UnitTestCase {
 		kses_init();
 
 		$payload = get_sample_payload( 'https://origin.test', get_bloginfo( 'url' ) );
-		$payload['post_data']['thumbnail_url'] = '';
 		unset( $payload['post_data']['post_type'] );
 
 		$request = new WP_REST_Request( 'POST', '/newspack-network/v1/content-distribution/insert' );
