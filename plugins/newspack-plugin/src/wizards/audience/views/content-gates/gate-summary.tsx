@@ -12,17 +12,25 @@ import { __, _n, sprintf } from '@wordpress/i18n';
  * Internal dependencies.
  */
 import ContentRuleControl from './edit/content-rule-control';
-import { normalizeOneTimePurchaseValue } from '../../../../content-gate/components/one-time-purchase-rule-control';
+import { getProductTokens, normalizeOneTimePurchaseValue } from '../../../../content-gate/components/one-time-purchase-rule-control';
 
 const availableAccessRules = window.newspackAudienceContentGates.available_access_rules || {};
 
 const noOp = () => {};
 
 /**
- * Map option values to labels, falling back to the raw value.
+ * Name each value the way the editor's token field names it.
+ *
+ * Sharing `getProductTokens()` with the pickers is what keeps the two readings of one
+ * gate the same: two products under one name, or a parent's sibling variations, are
+ * told apart here exactly as they are in the field that set them, and a value the
+ * picker no longer offers reads as its ID rather than disappearing into a bare number
+ * that looks like a different product.
  */
-const getOptionLabels = ( values: Array< string | number >, options: { value: string | number; label: string }[] = [] ) =>
-	values.map( value => options.find( option => String( option.value ) === String( value ) )?.label ?? String( value ) ).join( ', ' );
+const getOptionLabels = ( values: Array< string | number >, options: { value: string | number; label: string }[] = [] ) => {
+	const { tokenByValue } = getProductTokens( options, values );
+	return values.map( value => tokenByValue.get( String( value ) ) ?? String( value ) ).join( ', ' );
+};
 
 /**
  * Human-readable summary for an access rule value.

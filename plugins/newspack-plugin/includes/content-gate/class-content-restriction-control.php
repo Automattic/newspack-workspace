@@ -350,12 +350,17 @@ class Content_Restriction_Control {
 	 * tree is walked at most once per term, even across many rules and posts (e.g.
 	 * the Premium Newsletters cron loop).
 	 *
+	 * Public because the gate migration has to decide coverage the same way this
+	 * evaluator decides access: a second expansion kept in step by hand would let the
+	 * two disagree about what a rule gates, and the migration would then merge, or
+	 * refuse to merge, on a reading the site never applies.
+	 *
 	 * @param array        $term_ids Term IDs from a content rule's value (may be stored as strings).
 	 * @param \WP_Taxonomy $taxonomy Taxonomy object the term IDs belong to.
 	 *
 	 * @return int[] De-duplicated term IDs including descendants.
 	 */
-	private static function expand_hierarchical_terms( array $term_ids, \WP_Taxonomy $taxonomy ): array {
+	public static function expand_hierarchical_terms( array $term_ids, \WP_Taxonomy $taxonomy ): array {
 		$term_ids = array_map( 'intval', $term_ids );
 		if ( ! $taxonomy->hierarchical ) {
 			return $term_ids;

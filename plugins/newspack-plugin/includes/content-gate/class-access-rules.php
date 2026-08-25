@@ -41,6 +41,16 @@ class Access_Rules {
 	private static $one_time_purchase_memo = [];
 
 	/**
+	 * Request-scoped memos of the paid-rule product options, keyed by rule slug. Both
+	 * lists walk the catalog and each variable parent's children, and Content_Gate_API
+	 * resolves every registered rule's options once per rule in a save payload — so a
+	 * gate with several access rules would otherwise repeat that walk per rule.
+	 *
+	 * @var array<string,array[]>
+	 */
+	private static $product_options_memo = [];
+
+	/**
 	 * Context for the evaluation currently in progress, set by evaluate_rules()
 	 * / evaluate_rule() from the settings of the gate being evaluated. Rule
 	 * callbacks read it via get_evaluation_context(). Empty outside an
@@ -461,23 +471,109 @@ class Access_Rules {
 	 * @return array Active subscription IDs.
 	 */
 	public static function get_subscription_products_options() {
+		if ( isset( self::$product_options_memo['subscription'] ) ) {
+			return self::$product_options_memo['subscription'];
+		}
 		if ( ! function_exists( 'wc_get_products' ) ) {
 			return [];
 		}
-		$products = \wc_get_products(
-			[
-				'type'  => [ 'subscription', 'variable-subscription' ],
-				'limit' => -1,
-			]
+		self::$product_options_memo['subscription'] = self::build_product_options(
+			\wc_get_products(
+				[
+					'type'  => [ 'subscription', 'variable-subscription' ],
+					'limit' => -1,
+				]
+			)
 		);
+		return self::$product_options_memo['subscription'];
+	}
+
+	/**
+	 * Build rule options for a set of parent products, listing each variable
+	 * product's variations alongside their parent.
+	 *
+	 * A variation is a valid rule value: both paid matchers test the order line
+	 * item's product_id *and* its variation_id, so a rule naming a variation grants
+	 * only that variation, exactly as a WooCommerce Memberships plan naming the same
+	 * variation did. Offering parents alone would leave those rules unselectable, and
+	 * a value absent from this list is dropped the first time the rule is edited.
+	 *
+	 * @param \WC_Product[] $products Parent products.
+	 *
+	 * @return array[] Label/value option pairs, each parent followed by its variations.
+	 */
+	private static function build_product_options( array $products ): array {
+		$variation_ids = [];
+		foreach ( $products as $product ) {
+			if ( $product->is_type( [ 'variable', 'variable-subscription' ] ) ) {
+				$variation_ids = array_merge( $variation_ids, $product->get_children() );
+			}
+		}
+
+		$variations_by_parent = [];
+		if ( ! empty( $variation_ids ) ) {
+			// One query for the variation objects across all parents. The child-ID
+			// lookup above is still per parent — WC_Product_Variable::get_children()
+			// reads each parent's own children, behind a transient.
+			$variations = \wc_get_products(
+				[
+					'type'    => 'variation',
+					'include' => $variation_ids,
+					'limit'   => -1,
+				]
+			);
+			foreach ( $variations as $variation ) {
+				$variations_by_parent[ $variation->get_parent_id() ][] = $variation;
+			}
+		}
+
 		$options = [];
 		foreach ( $products as $product ) {
 			$options[] = [
 				'label' => $product->get_name(),
 				'value' => $product->get_id(),
 			];
+			foreach ( $variations_by_parent[ $product->get_id() ] ?? [] as $variation ) {
+				$options[] = [
+					'label' => self::variation_option_label( $product, $variation ),
+					'value' => $variation->get_id(),
+				];
+			}
 		}
 		return $options;
+	}
+
+	/**
+	 * Label one variation distinctly from its parent and its siblings.
+	 *
+	 * Composed from the parent name and the variation's attributes rather than read
+	 * from the variation's own title, which WooCommerce generates when the variation
+	 * is saved and does not regenerate when its attributes change afterwards. The
+	 * editor's token field resolves a selection back to a rule value by label, so two
+	 * options sharing a label select the wrong variation.
+	 *
+	 * @param \WC_Product $parent    The parent product.
+	 * @param \WC_Product $variation The variation (a \WC_Product_Variation in production).
+	 *
+	 * @return string
+	 */
+	private static function variation_option_label( \WC_Product $parent, \WC_Product $variation ): string {
+		$attributes = \wc_get_formatted_variation( $variation, true, true );
+		if ( ! $attributes ) {
+			// A variation with no attributes to name still needs a distinct label.
+			return sprintf(
+				/* translators: 1: parent product name, 2: variation ID */
+				__( '%1$s (variation #%2$d)', 'newspack-plugin' ),
+				$parent->get_name(),
+				$variation->get_id()
+			);
+		}
+		return sprintf(
+			/* translators: 1: parent product name, 2: variation attributes, e.g. "Term: Annual" */
+			__( '%1$s — %2$s', 'newspack-plugin' ),
+			$parent->get_name(),
+			$attributes
+		);
 	}
 
 	/**
@@ -564,30 +660,25 @@ class Access_Rules {
 		//
 		// TODO (NPPD-2132): unlike the subscription and institution options (also
 		// full dumps, but inherently small), a shop's simple/variable catalog can be
-		// large, and this list is serialized into every block-editor payload. Move to
-		// a bounded/REST-searchable product picker; the memo only helps within a
+		// large — and each variable product contributes its variations too — while
+		// this list is serialized into every block-editor payload. Move to a
+		// bounded/REST-searchable product picker; the memo only helps within a
 		// single request.
-		static $options = null;
-		if ( null !== $options ) {
-			return $options;
+		if ( isset( self::$product_options_memo['one_time_purchase'] ) ) {
+			return self::$product_options_memo['one_time_purchase'];
 		}
 		if ( ! function_exists( 'wc_get_products' ) ) {
 			return [];
 		}
-		$products = \wc_get_products(
-			[
-				'type'  => [ 'simple', 'variable' ],
-				'limit' => -1,
-			]
+		self::$product_options_memo['one_time_purchase'] = self::build_product_options(
+			\wc_get_products(
+				[
+					'type'  => [ 'simple', 'variable' ],
+					'limit' => -1,
+				]
+			)
 		);
-		$options  = [];
-		foreach ( $products as $product ) {
-			$options[] = [
-				'label' => $product->get_name(),
-				'value' => $product->get_id(),
-			];
-		}
-		return $options;
+		return self::$product_options_memo['one_time_purchase'];
 	}
 
 	/**
@@ -620,6 +711,15 @@ class Access_Rules {
 	 */
 	public static function flush_one_time_purchase_memo() {
 		self::$one_time_purchase_memo = [];
+	}
+
+	/**
+	 * Flush the request-scoped product options memos for both paid rules.
+	 *
+	 * Primarily for tests; in production the memos are per-request by nature.
+	 */
+	public static function flush_product_options_memo() {
+		self::$product_options_memo = [];
 	}
 
 	/**

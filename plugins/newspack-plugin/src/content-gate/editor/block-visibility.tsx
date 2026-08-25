@@ -24,7 +24,7 @@ import { __ } from '@wordpress/i18n';
  * Internal dependencies
  */
 import './block-visibility.scss';
-import OneTimePurchaseRuleControl from '../components/one-time-purchase-rule-control';
+import OneTimePurchaseRuleControl, { getProductTokens } from '../components/one-time-purchase-rule-control';
 
 /**
  * Target block types that receive access control attributes.
@@ -193,19 +193,27 @@ const AccessRuleValueControl = ( {
 	}
 
 	if ( options.length > 0 ) {
-		// Map stored IDs to labels for display; silently drop IDs with no matching option.
 		const valueArr = Array.isArray( value ) ? value : [];
-		const selectedLabels = options.filter( o => valueArr.some( v => String( v ) === String( o.value ) ) ).map( o => o.label );
+		// FormTokenField round-trips a selection as its display string, so two options
+		// sharing a label would resolve one selection to both of their IDs — ordinary
+		// now that the pickers list variations, which are named after their parent. The
+		// bijection also keeps a stored ID the picker no longer offers, rather than
+		// dropping it the first time this field is edited.
+		const { tokenByValue, valueByToken } = getProductTokens( options, valueArr );
 
 		return (
 			<FormTokenField
 				label={ config.name }
-				value={ selectedLabels }
-				suggestions={ options.map( o => o.label ) }
+				value={ valueArr.map( v => tokenByValue.get( String( v ) ) as string ) }
+				suggestions={ options.map( o => tokenByValue.get( String( o.value ) ) as string ) }
 				onChange={ ( tokens: ( string | { value: string } )[] ) => {
-					const labels = tokens.map( t => ( typeof t === 'string' ? t : t.value ) );
-					onChange( options.filter( o => labels.includes( o.label ) ).map( o => o.value ) );
+					onChange(
+						tokens
+							.map( token => valueByToken.get( typeof token === 'string' ? token : token.value ) )
+							.filter( ( v ): v is string | number => undefined !== v )
+					);
 				} }
+				__experimentalValidateInput={ ( token: string ) => valueByToken.has( token ) }
 				__experimentalExpandOnFocus
 				__next40pxDefaultSize
 				__nextHasNoMarginBottom

@@ -9,13 +9,13 @@
  * behavior: a gate layout is found wherever the wrapper block sits, including nested
  * and reusable blocks, and membership wrappers nested in the result are stripped.
  *
- * NOT pinned here: NPPD-2064 (fingerprint-based gate splitting/grouping). That fix
- * lands in group_plans_by_fingerprint() and the merged-product consolidation, which
- * depend on WC_Memberships_Membership_Plan and so are not unit-testable in this
- * harness — they are exercised end-to-end against real WooCommerce Memberships. The
- * compute_rules_fingerprint() tests below only pin the fingerprint's *canonicality*
- * (order-independence), which the 2064 fix preserves; they will NOT flip red, so the
- * 2064 author must add net-new grouping/split tests rather than rely on these.
+ * NPPD-2064 (content-overlap consolidation) is pinned by the tests below: the decision
+ * through its pure helpers — rules_cover, rule_sets_overlap, plan_rule_set_consolidation —
+ * and the fold itself through consolidate_plan_groups(), which is what writes the merged
+ * group the gate is built from. Only group_plans_by_fingerprint() ahead of it needs
+ * WC_Memberships_Membership_Plan and is exercised end-to-end instead. The
+ * compute_rules_fingerprint() tests pin the fingerprint's canonicality, which that fix
+ * preserves.
  *
  * @package Newspack\Tests\Content_Gate
  */
@@ -212,12 +212,15 @@ class Test_Membership_Gates_Migration extends \WP_UnitTestCase {
 	 * whose variation_id is 0, which every simple-product line item's is. A negative ID
 	 * is dropped for the same reason: absint() would have turned it into a different,
 	 * real product ID. A deleted product writes a rule nothing can satisfy, which fails
-	 * safe but over-restricts, so it is dropped and reported too. Variations keep this
-	 * command's inherited behavior and stay dropped.
+	 * safe but over-restricts, so it is dropped and reported too.
+	 *
+	 * A variation is kept: a gate rule matches a line item on product_id or
+	 * variation_id, so the variation ID grants exactly what the plan granted — where
+	 * the parent product would also admit buyers of its sibling variations.
 	 */
 	public function test_resolve_product_ids_drops_ids_a_subscription_rule_must_not_carry() {
-		$product   = self::factory()->post->create( [ 'post_type' => 'product' ] );
-		$variation = self::factory()->post->create( [ 'post_type' => 'product_variation' ] );
+		$product   = $this->create_product( 'subscription' );
+		$variation = $this->register_product_type( self::factory()->post->create( [ 'post_type' => 'product_variation' ] ), 'subscription_variation' );
 		$deleted   = self::factory()->post->create( [ 'post_type' => 'product' ] );
 		wp_delete_post( $deleted, true );
 
@@ -233,10 +236,14 @@ class Test_Membership_Gates_Migration extends \WP_UnitTestCase {
 
 		$resolved = $this->invoke_private_static( 'resolve_product_ids', [ $group ] );
 
-		$this->assertSame( [ $product ], $resolved['product_ids'] );
+		$this->assertSame( [ $product, $variation ], $resolved['product_ids'] );
+		$this->assertSame(
+			[ $product, $variation ],
+			$resolved['subscription_ids'],
+			'A subscription variation belongs on the subscription rule; a one-time rule would expire access the plan granted for as long as it ran.'
+		);
 		$this->assertSame( [ 0, -7 ], $resolved['dropped']['invalid'] );
 		$this->assertSame( [ $deleted ], $resolved['dropped']['unresolvable'] );
-		$this->assertSame( [ $variation ], $resolved['dropped']['variations'] );
 	}
 
 	/**
@@ -1396,7 +1403,7 @@ HTML
 
 		$issues = $this->invoke_private_static(
 			'compute_pre_write_issues',
-			[ $ac_rules, false, $layouts, [] ]
+			[ $ac_rules, false, $layouts ]
 		);
 
 		$this->assertCount( 1, $issues );
@@ -1428,7 +1435,7 @@ HTML
 
 		$issues = $this->invoke_private_static(
 			'compute_pre_write_issues',
-			[ $ac_rules, false, $layouts, [] ]
+			[ $ac_rules, false, $layouts ]
 		);
 
 		$this->assertCount( 1, $issues );
@@ -1453,7 +1460,7 @@ HTML
 
 		$issues = $this->invoke_private_static(
 			'compute_pre_write_issues',
-			[ $ac_rules, false, $layouts, [] ]
+			[ $ac_rules, false, $layouts ]
 		);
 
 		$this->assertCount( 1, $issues, 'The resolvable slug produces no issue of its own, so the empty layout is the only one.' );
@@ -1479,7 +1486,7 @@ HTML
 
 		$issues = $this->invoke_private_static(
 			'compute_pre_write_issues',
-			[ $ac_rules, false, $layouts, [], false ]
+			[ $ac_rules, false, $layouts, false ]
 		);
 
 		$this->assertSame( [], $issues, 'No gate post means no lost content to warn about.' );
@@ -1504,7 +1511,7 @@ HTML
 
 		$issues = $this->invoke_private_static(
 			'compute_pre_write_issues',
-			[ $ac_rules, true, $layouts, [ 42 ] ]
+			[ $ac_rules, true, $layouts ]
 		);
 
 		$this->assertCount( 1, $issues );
@@ -1640,38 +1647,11 @@ HTML;
 
 		$issues = $this->invoke_private_static(
 			'compute_pre_write_issues',
-			[ $ac_rules, true, $layouts, [ 123 ] ]
+			[ $ac_rules, true, $layouts ]
 		);
 
 		$this->assertCount( 1, $issues );
 		$this->assertStringContainsString( 'paid access mode will not be activated', $issues[0] );
-	}
-
-	/**
-	 * A purchase plan whose merged product IDs are all empty is flagged — access_rules
-	 * will be an empty array, so the paid access mode asks for no purchase and any
-	 * registered reader passes. Mirrors verify_migrated_gate()'s "active but has no
-	 * access rules" check.
-	 */
-	public function test_compute_pre_write_issues_flags_purchase_plan_with_empty_product_ids() {
-		$ac_rules = [
-			[
-				'slug'  => 'post_types',
-				'value' => [ 'post' ],
-			],
-		];
-		$layouts  = [
-			'registration'  => '<p>Upsell.</p>',
-			'custom_access' => '<p>Member content.</p>',
-		];
-
-		$issues = $this->invoke_private_static(
-			'compute_pre_write_issues',
-			[ $ac_rules, true, $layouts, [] ]
-		);
-
-		$this->assertCount( 1, $issues );
-		$this->assertStringContainsString( 'no access rules', $issues[0] );
 	}
 
 	/**
@@ -1704,7 +1684,7 @@ HTML;
 
 		$issues = $this->invoke_private_static(
 			'compute_pre_write_issues',
-			[ $whole_taxonomy_only, false, $layouts, [] ]
+			[ $whole_taxonomy_only, false, $layouts ]
 		);
 		$this->assertCount( 1, $issues );
 		$this->assertStringContainsString( 'none of its content rules select any content', $issues[0] );
@@ -1722,7 +1702,7 @@ HTML;
 
 		$issues = $this->invoke_private_static(
 			'compute_pre_write_issues',
-			[ $mixed, false, $layouts, [] ]
+			[ $mixed, false, $layouts ]
 		);
 		$this->assertCount( 1, $issues );
 		$this->assertStringContainsString( '1 of its 2 content rules select no content', $issues[0] );
@@ -1748,7 +1728,7 @@ HTML;
 			[],
 			$this->invoke_private_static(
 				'compute_pre_write_issues',
-				[ $ac_rules, false, $layouts, [] ]
+				[ $ac_rules, false, $layouts ]
 			)
 		);
 	}
@@ -1772,7 +1752,7 @@ HTML;
 			[],
 			$this->invoke_private_static(
 				'compute_pre_write_issues',
-				[ $ac_rules, true, $layouts, [ 99 ] ]
+				[ $ac_rules, true, $layouts ]
 			)
 		);
 	}
@@ -2309,6 +2289,283 @@ HTML;
 				],
 			],
 			$mapped
+		);
+	}
+
+	/**
+	 * A rule set covers another when every one of the other's rules has a same-slug
+	 * rule here whose value contains it. Coverage is directional, and an empty
+	 * (site-wide) rule set is never a subset — folding a site-wide gate into anything
+	 * would hand its whole audience to another plan's product list.
+	 */
+	public function test_rules_cover_is_directional_set_containment() {
+		$category_five           = [
+			[
+				'slug'  => 'category',
+				'value' => [ '5' ],
+			],
+		];
+		$category_five_six       = [
+			[
+				'slug'  => 'category',
+				'value' => [ '5', '6' ],
+			],
+		];
+		$category_plus_all_posts = [
+			[
+				'slug'  => 'category',
+				'value' => [ '5' ],
+			],
+			[
+				'slug'  => 'post_types',
+				'value' => [ 'post' ],
+			],
+		];
+
+		$this->assertTrue( $this->invoke_private_static( 'rules_cover', [ $category_five_six, $category_five ] ) );
+		$this->assertFalse( $this->invoke_private_static( 'rules_cover', [ $category_five, $category_five_six ] ) );
+		$this->assertTrue( $this->invoke_private_static( 'rules_cover', [ $category_plus_all_posts, $category_five ] ) );
+		$this->assertFalse( $this->invoke_private_static( 'rules_cover', [ $category_five, $category_plus_all_posts ] ) );
+		$this->assertFalse(
+			$this->invoke_private_static( 'rules_cover', [ $category_plus_all_posts, [] ] ),
+			'An empty rule set gates nothing, so it is never folded into another group.'
+		);
+	}
+
+	/**
+	 * Two rule sets that share a category but each add a different tag overlap without
+	 * either covering the other. One gate would need a single product list for two
+	 * disjoint entitlements, so they stay separate and the denial risk is reported
+	 * rather than merged away.
+	 */
+	public function test_plan_rule_set_consolidation_flags_overlap_it_cannot_merge() {
+		$category_and_tag_seven = [
+			[
+				'slug'  => 'category',
+				'value' => [ '5' ],
+			],
+			[
+				'slug'  => 'post_tag',
+				'value' => [ '7' ],
+			],
+		];
+		$category_and_tag_eight = [
+			[
+				'slug'  => 'category',
+				'value' => [ '5' ],
+			],
+			[
+				'slug'  => 'post_tag',
+				'value' => [ '8' ],
+			],
+		];
+
+		$plan = $this->invoke_private_static(
+			'plan_rule_set_consolidation',
+			[ [ $category_and_tag_seven, $category_and_tag_eight ], [ true, true ] ]
+		);
+
+		$this->assertSame( [], $plan['absorbed_by'] );
+		$this->assertSame( [ [ 0, 1 ] ], $plan['overlaps'] );
+	}
+
+	/**
+	 * A signup group is never folded into a purchase superset, even when its content is
+	 * a strict subset. The merged gate would carry the purchase group's custom_access,
+	 * so every registered reader who reaches the signup plan's content for free today
+	 * would be asked for a subscription tomorrow.
+	 */
+	public function test_plan_rule_set_consolidation_does_not_merge_across_the_purchase_boundary() {
+		$signup_category_only    = [
+			[
+				'slug'  => 'category',
+				'value' => [ '5' ],
+			],
+		];
+		$purchase_all_posts_too  = [
+			[
+				'slug'  => 'category',
+				'value' => [ '5' ],
+			],
+			[
+				'slug'  => 'post_types',
+				'value' => [ 'post' ],
+			],
+		];
+
+		$plan = $this->invoke_private_static(
+			'plan_rule_set_consolidation',
+			[ [ $signup_category_only, $purchase_all_posts_too ], [ false, true ] ]
+		);
+
+		$this->assertSame( [], $plan['absorbed_by'] );
+		$this->assertSame( [ [ 0, 1 ] ], $plan['overlaps'], 'The cross-boundary overlap is reported instead.' );
+	}
+
+	/**
+	 * A gate group of one plan, gating the given terms of one taxonomy.
+	 *
+	 * @param string $name        Plan name, which becomes part of the gate title.
+	 * @param int[]  $term_ids    Category term IDs the plan gates.
+	 * @param int    $product_id  The plan's access product.
+	 * @param string $taxonomy    Taxonomy slug for the rule.
+	 *
+	 * @return array[] A single-plan group in group_plans_by_fingerprint()'s shape.
+	 */
+	private function make_taxonomy_plan_group( string $name, array $term_ids, int $product_id, string $taxonomy = 'category' ): array {
+		return [
+			[
+				'pid'           => 0,
+				'name'          => $name,
+				'access_method' => 'purchase',
+				'ac_rules'      => [
+					[
+						'slug'  => $taxonomy,
+						'value' => array_map( 'strval', $term_ids ),
+					],
+				],
+				'product_ids'   => [ $product_id ],
+			],
+		];
+	}
+
+	/**
+	 * A plan gating a parent category and one gating its child are the commonest shape
+	 * of this bug. The evaluator expands a term to its descendants
+	 * (Content_Restriction_Control::expand_hierarchical_terms()), so the parent plan
+	 * already gates the child's posts — comparing the stored term IDs alone would read
+	 * them as disjoint and leave two gates with disjoint product lists.
+	 *
+	 * The third plan names both terms. Expansion makes it and the parent-only plan cover
+	 * each other, which strict coverage would refuse to absorb in either direction, so
+	 * the tie has to break rather than leave the two split.
+	 */
+	public function test_consolidate_plan_groups_absorbs_a_child_category_into_its_parent() {
+		$parent_term = self::factory()->category->create();
+		$child_term  = self::factory()->category->create( [ 'parent' => $parent_term ] );
+		$child_product  = $this->create_product( 'subscription' );
+		$parent_product = $this->create_product( 'subscription' );
+		$both_product   = $this->create_product( 'subscription' );
+
+		\WP_CLI::reset();
+		$merged = $this->invoke_private_static(
+			'consolidate_plan_groups',
+			[
+				[
+					$this->make_taxonomy_plan_group( 'Child Only', [ $child_term ], $child_product ),
+					$this->make_taxonomy_plan_group( 'Parent Wide', [ $parent_term ], $parent_product ),
+					$this->make_taxonomy_plan_group( 'Parent And Child', [ $parent_term, $child_term ], $both_product ),
+				],
+			]
+		);
+
+		$this->assertCount( 1, $merged, 'All three gate the same content once the parent term is expanded.' );
+		// Folding widens paid access, and --live gates that behind one confirmation built
+		// from these announcements. A silent fold would widen access with nothing to answer.
+		$this->assertCount( 2, \WP_CLI::$warnings, 'Each fold is announced to the operator.' );
+		$this->assertStringContainsString( 'Child Only', implode( ' ', \WP_CLI::$warnings ) );
+		$this->assertStringContainsString( 'Parent And Child', implode( ' ', \WP_CLI::$warnings ) );
+		$this->assertSame(
+			[ $parent_product, $child_product, $both_product ],
+			$this->invoke_private_static( 'resolve_product_ids', [ $merged[0] ] )['product_ids'],
+			'Every plan\'s product lands on the one gate, so no plan\'s members are denied.'
+		);
+	}
+
+	/**
+	 * The fold itself, not just the decision: three nested tiers collapse to one group
+	 * carrying all three plans, and that group's products are the union of theirs. This
+	 * is the shape the gate is built from, and it is where an absorbed group folded into
+	 * a root that no longer seeds a gate would fatal on a missing key.
+	 */
+	public function test_consolidate_plan_groups_folds_nested_tiers_into_one_group() {
+		$basic   = $this->create_product( 'subscription' );
+		$plus    = $this->create_product( 'subscription' );
+		$top     = $this->create_product( 'subscription' );
+		$groups  = [
+			$this->make_taxonomy_plan_group( 'Basic', [ 5 ], $basic ),
+			$this->make_taxonomy_plan_group( 'Plus', [ 5, 6 ], $plus ),
+			$this->make_taxonomy_plan_group( 'Top', [ 5, 6, 7 ], $top ),
+		];
+
+		$merged = $this->invoke_private_static( 'consolidate_plan_groups', [ $groups ] );
+
+		$this->assertCount( 1, $merged, 'Three nested tiers gate one another\'s content, so one gate covers them.' );
+		$this->assertSame(
+			[ 'Top', 'Basic', 'Plus' ],
+			array_column( $merged[0], 'name' ),
+			'The widest tier seeds the group and the narrower ones fold into it.'
+		);
+		$this->assertSame(
+			[ $top, $basic, $plus ],
+			$this->invoke_private_static( 'resolve_product_ids', [ $merged[0] ] )['product_ids'],
+			'The merged gate carries every folded plan\'s product, which is what keeps their members admitted.'
+		);
+	}
+
+	/**
+	 * Overlap detection is deliberately conservative, because a miss costs a reader
+	 * their access while a false positive costs one warning. A whole-post-type rule
+	 * therefore counts as overlapping any narrower rule, which cannot be resolved
+	 * without querying the posts. Rules on different taxonomies, with no post-type rule
+	 * to connect them, do not.
+	 */
+	public function test_rule_sets_overlap_errs_towards_reporting() {
+		$all_posts      = [
+			[
+				'slug'  => 'post_types',
+				'value' => [ 'post' ],
+			],
+		];
+		$category_five  = [
+			[
+				'slug'  => 'category',
+				'value' => [ '5' ],
+			],
+		];
+		$specific_posts = [
+			[
+				'slug'  => 'specific_posts',
+				'value' => [ '42' ],
+			],
+		];
+		$tag_seven      = [
+			[
+				'slug'  => 'post_tag',
+				'value' => [ '7' ],
+			],
+		];
+
+		$this->assertTrue( $this->invoke_private_static( 'rule_sets_overlap', [ $all_posts, $category_five ] ) );
+		$this->assertTrue( $this->invoke_private_static( 'rule_sets_overlap', [ $all_posts, $specific_posts ] ) );
+		$this->assertFalse( $this->invoke_private_static( 'rule_sets_overlap', [ $category_five, $tag_seven ] ) );
+	}
+
+	/**
+	 * A purchase group whose products all failed to resolve is named so the caller can
+	 * refuse the run. Its gate would activate paid access carrying no access rule,
+	 * asking for no purchase at all — the one failure that is worse than not migrating,
+	 * because it publishes the content to every registered reader.
+	 */
+	public function test_find_paid_groups_without_products_names_only_the_open_gates() {
+		$named = function ( string $access_method, string $name ) {
+			return [ array_merge( $this->make_group_plan( $access_method ), [ 'name' => $name ] ) ];
+		};
+		$plan_groups = [
+			'paid-empty'  => $named( 'purchase', 'Paid Without Products' ),
+			'paid-ok'     => $named( 'purchase', 'Paid With Products' ),
+			'signup-only' => $named( 'signup', 'Signup Only' ),
+		];
+		$products_by_group = [
+			'paid-empty'  => [ 'product_ids' => [] ],
+			'paid-ok'     => [ 'product_ids' => [ 42 ] ],
+			'signup-only' => [ 'product_ids' => [] ],
+		];
+
+		$this->assertSame(
+			[ 'Paid Without Products' ],
+			$this->invoke_private_static( 'find_paid_groups_without_products', [ $plan_groups, $products_by_group ] ),
+			'Only the purchase group with no products is named; a signup group writes no paid rule to begin with.'
 		);
 	}
 }

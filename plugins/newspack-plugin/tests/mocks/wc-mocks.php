@@ -547,6 +547,20 @@ class WC_Product {
 	public function get_children() {
 		return $this->data['children'] ?? [];
 	}
+	/**
+	 * Fixtures build a parent before its variations exist, so children are wired after
+	 * construction. Returns $this so a fixture helper's return value stays chainable.
+	 *
+	 * @param int[] $children Variation IDs.
+	 * @return self
+	 */
+	public function set_children( array $children ): self {
+		$this->data['children'] = $children;
+		return $this;
+	}
+	public function get_attributes() {
+		return $this->data['attributes'] ?? [];
+	}
 	public function get_regular_price() {
 		return $this->data['regular_price'] ?? ( $this->meta['_regular_price'] ?? 0 );
 	}
@@ -1633,6 +1647,10 @@ if ( ! function_exists( 'get_woocommerce_currency' ) ) {
  * actually gets — the property the CLI's SELECTABLE_PRODUCT_STATUSES constant claims to
  * mirror. `limit` is accepted and ignored (fixtures are small).
  *
+ * `include` maps to post__in in WC_Product_Data_Store_CPT, so it narrows the result to
+ * the listed IDs. Callers that fetch variations by ID rely on it to keep one parent's
+ * children out of another picker's list.
+ *
  * @param array $args Query args.
  * @return WC_Product[] The matching products.
  */
@@ -1640,9 +1658,13 @@ function wc_get_products( $args = [] ) {
 	global $products_database;
 	$types    = isset( $args['type'] ) ? (array) $args['type'] : null;
 	$statuses = isset( $args['status'] ) ? (array) $args['status'] : [ 'draft', 'pending', 'private', 'publish' ];
+	$include  = isset( $args['include'] ) ? array_map( 'intval', (array) $args['include'] ) : null;
 	$matches  = [];
 	foreach ( $products_database as $product ) {
-		if ( null !== $types && ! in_array( $product->get_type(), $types, true ) ) {
+		if ( null !== $types && ! $product->is_type( $types ) ) {
+			continue;
+		}
+		if ( null !== $include && ! in_array( (int) $product->get_id(), $include, true ) ) {
 			continue;
 		}
 		if ( ! in_array( $product->get_status(), $statuses, true ) ) {
@@ -1651,6 +1673,29 @@ function wc_get_products( $args = [] ) {
 		$matches[] = $product;
 	}
 	return $matches;
+}
+
+/**
+ * Flat-format a variation's attributes, as the option labels in Access_Rules do.
+ *
+ * Keyed off get_type() rather than the real function's is_a( …, 'WC_Product_Variation' )
+ * check: the fixtures are WC_Product instances carrying a variation type, so an
+ * instanceof test would return '' for every one of them and hide the labels under test.
+ *
+ * @param WC_Product $variation      The variation.
+ * @param bool       $flat           Unused; the mock only produces the flat form.
+ * @param bool       $include_names  Whether to prefix each value with its attribute name.
+ * @return string
+ */
+function wc_get_formatted_variation( $variation, $flat = false, $include_names = true ) {
+	if ( ! $variation->is_type( 'variation' ) ) {
+		return '';
+	}
+	$pairs = [];
+	foreach ( $variation->get_attributes() as $name => $value ) {
+		$pairs[] = $include_names ? sprintf( '%s: %s', ucfirst( $name ), $value ) : $value;
+	}
+	return implode( ', ', $pairs );
 }
 /**
  * Minimal stand-in for WooCommerce's admin field renderer. Only enough markup to let a metabox

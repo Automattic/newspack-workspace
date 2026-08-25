@@ -12,7 +12,7 @@ import { TextControl } from '@wordpress/components';
  */
 import { FormTokenField } from '../../../../../../packages/components/src';
 import { WIZARD_STORE_NAMESPACE } from '../../../../../../packages/components/src/wizard/store';
-import OneTimePurchaseRuleControl from '../../../../../content-gate/components/one-time-purchase-rule-control';
+import OneTimePurchaseRuleControl, { getProductTokens } from '../../../../../content-gate/components/one-time-purchase-rule-control';
 
 type RuleOption = { value: string | number; label: string };
 
@@ -83,14 +83,24 @@ export default function AccessRuleControl( { slug, value, onChange }: GateRuleCo
 		return <OneTimePurchaseRuleControl value={ value } onChange={ onChange } options={ options } TokenField={ FormTokenField } />;
 	}
 	if ( options && options.length > 0 ) {
+		const selectedValues = Array.isArray( value ) ? ( value as Array< string | number > ) : [];
+		// FormTokenField round-trips a selection as its display string, so two options
+		// sharing a label would resolve one selection to both of their IDs. Variations
+		// are named after their parent, which makes that ordinary rather than rare.
+		const { tokenByValue, valueByToken } = getProductTokens( options, selectedValues );
 		return (
 			<FormTokenField
 				label={ '' }
-				value={ options
-					.filter( o => ( value as Array< string | number > ).some( v => String( v ) === String( o.value ) ) )
-					.map( o => o.label ) }
-				onChange={ ( items: string[] ) => onChange( options?.filter( o => items.includes( o.label ) ).map( o => o.value ) ?? [] ) }
-				suggestions={ options.map( o => o.label ) }
+				value={ selectedValues.map( v => tokenByValue.get( String( v ) ) as string ) }
+				onChange={ ( tokens: ( string | { value: string } )[] ) =>
+					onChange(
+						tokens
+							.map( token => valueByToken.get( typeof token === 'string' ? token : token.value ) )
+							.filter( ( v ): v is string | number => undefined !== v )
+					)
+				}
+				suggestions={ options.map( o => tokenByValue.get( String( o.value ) ) as string ) }
+				__experimentalValidateInput={ ( token: string ) => valueByToken.has( token ) }
 				__experimentalExpandOnFocus
 				__next40pxDefaultSize
 			/>
