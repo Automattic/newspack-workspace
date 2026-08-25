@@ -70,6 +70,12 @@ class Premium_Newsletters_Verify {
 	const COVERAGE_PARTIAL_POPULATION = 'partial_population';
 
 	/**
+	 * A gate that restricts on email verification, whose restricted readers are
+	 * unverified accounts rather than the holders of any product.
+	 */
+	const COVERAGE_UNENUMERABLE_VERIFICATION = 'unenumerable_verification';
+
+	/**
 	 * Why each incompleteness reason means the run cannot be read as a pass.
 	 *
 	 * Keyed by the COVERAGE_* reason constants; each value is a sprintf template
@@ -81,11 +87,12 @@ class Premium_Newsletters_Verify {
 	 * coverage_is_complete() does not care which reason it is looking at.
 	 */
 	const COVERAGE_REASON_MESSAGES = [
-		self::COVERAGE_TRUNCATED            => '"%1$s" (gate %2$d): --max-batches stopped this gate part-way, so some of its readers were never checked.',
-		self::COVERAGE_CAP_EXHAUSTED        => '"%1$s" (gate %2$d): skipped entirely, because an earlier gate had already spent --max-batches.',
-		self::COVERAGE_EMPTY_POPULATION     => '"%1$s" (gate %2$d): no reader holds or has held its products, so nobody was checked. A gate whose products no subscription can match yields an empty population and a clean-looking run, which is indistinguishable from a gate that is genuinely unused.',
-		self::COVERAGE_UNENUMERABLE_PAYWALL => '"%1$s" (gate %2$d): paywalled by %3$s. This command has no way to list who holds or has held that access, so not one of its readers was checked and a leak behind it would go unreported.',
-		self::COVERAGE_PARTIAL_POPULATION   => '"%1$s" (gate %2$d): its subscription products were walked, but it also grants access through %3$s. Readers who reached its lists that way were never enumerated, so this gate is only partly checked.',
+		self::COVERAGE_TRUNCATED                 => '"%1$s" (gate %2$d): --max-batches stopped this gate part-way, so some of its readers were never checked.',
+		self::COVERAGE_CAP_EXHAUSTED             => '"%1$s" (gate %2$d): skipped entirely, because an earlier gate had already spent --max-batches.',
+		self::COVERAGE_EMPTY_POPULATION          => '"%1$s" (gate %2$d): no reader holds or has held its products, so nobody was checked. A gate whose products no subscription can match yields an empty population and a clean-looking run, which is indistinguishable from a gate that is genuinely unused.',
+		self::COVERAGE_UNENUMERABLE_PAYWALL      => '"%1$s" (gate %2$d): paywalled by %3$s. This command has no way to list who holds or has held that access, so not one of its readers was checked and a leak behind it would go unreported.',
+		self::COVERAGE_PARTIAL_POPULATION        => '"%1$s" (gate %2$d): its subscription products were walked, but it also grants access through %3$s. Readers who reached its lists that way were never enumerated, so this gate is only partly checked.',
+		self::COVERAGE_UNENUMERABLE_VERIFICATION => '"%1$s" (gate %2$d): restricts readers whose email address is unverified, and no product query can list them. The runtime removes those readers from its lists, so a leak behind this gate would go unreported.',
 	];
 
 	/**
@@ -171,6 +178,17 @@ class Premium_Newsletters_Verify {
 	 * [--max-batches=<number>]
 	 * : Stop after roughly this many batches, across the whole run. Useful for sampling a large site before committing to a full run: the population is walked lazily, so a run that stops early never reads the rest of it. Must be a positive integer; omit it for no limit. Not an exact cap: a gate's last batch is never counted against it, so a run spanning several gates can check somewhat more readers than batch-size times max-batches implies.
 	 *
+	 * [--format=<format>]
+	 * : Format for the per-reader rows. Under --live those rows name every reader unsubscribed at the ESP, so a machine-readable format is worth archiving with the site's migration record.
+	 * ---
+	 * default: table
+	 * options:
+	 *   - table
+	 *   - csv
+	 *   - json
+	 *   - yaml
+	 * ---
+	 *
 	 * ## EXAMPLES
 	 *
 	 *     wp newspack verify-premium-newsletters
@@ -208,12 +226,18 @@ class Premium_Newsletters_Verify {
 		// explicit 0 is rejected too, rather than silently reinterpreted as
 		// "unlimited" — a value the operator typed should mean what it says.
 		$max_batches_arg = \WP_CLI\Utils\get_flag_value( $assoc_args, 'max-batches', null );
-		$max_batches     = 0;
-		if ( null !== $max_batches_arg ) {
-			$max_batches = (int) $max_batches_arg;
-			if ( $max_batches <= 0 ) {
-				WP_CLI::error( sprintf( 'Invalid --max-batches value "%s". Pass a positive integer.', $max_batches_arg ) );
-			}
+		$max_batches     = self::parse_positive_int( $max_batches_arg, 0 );
+		if ( null === $max_batches ) {
+			WP_CLI::error( sprintf( 'Invalid --max-batches value "%s". Pass a positive integer.', $max_batches_arg ) );
+		}
+
+		// Settled here beside the other argument checks, not down at its first use:
+		// the run can return early on a site with no verifiable gate, and a mistyped
+		// value read after that point would never be reported at all.
+		$batch_size_arg = \WP_CLI\Utils\get_flag_value( $assoc_args, 'batch-size', null );
+		$batch_size     = self::parse_positive_int( $batch_size_arg, 100 );
+		if ( null === $batch_size ) {
+			WP_CLI::error( sprintf( 'Invalid --batch-size value "%s". Pass a positive integer.', $batch_size_arg ) );
 		}
 
 		if ( ! class_exists( 'Newspack\Content_Gate' ) ) {
@@ -229,9 +253,9 @@ class Premium_Newsletters_Verify {
 		$blocked = self::describe_blocking_preflight(
 			\Newspack\Memberships::is_active(),
 			\Newspack\Content_Gate::is_gating_active(),
-			// The two functions the population walk actually calls, rather than the
-			// wcs_get_subscriptions() it used to: all three ship together in
-			// subscriptions-core, but a preflight should test what the run will use.
+			// The two functions the population walk actually calls. All of
+			// subscriptions-core ships together, but a preflight should test what the
+			// run will use.
 			function_exists( 'wcs_get_subscriptions_for_product' ) && function_exists( 'wcs_get_subscription' ),
 			\Newspack_Newsletters_Subscription::has_subscription_management()
 		);
@@ -242,10 +266,18 @@ class Premium_Newsletters_Verify {
 		$gate_arg = \WP_CLI\Utils\get_flag_value( $assoc_args, 'gate', null );
 		$gates    = \Newspack\Content_Gate::get_gates( \Newspack\Content_Gate::GATE_CPT, 'publish', true );
 		if ( null !== $gate_arg ) {
-			$gate_id = (int) $gate_arg;
-			$gates   = array_values( array_filter( $gates, fn( $g ) => (int) $g['id'] === $gate_id ) );
+			// Validated before the cast, not after it. (int) resolves "12abc", "12.9",
+			// "12x" and " 12" all to 12, so a mistyped value would scope the run to a
+			// gate the operator never named — and under --live that means removals at
+			// the ESP against that gate, with nothing local to reverse from. This is
+			// the same mistake the bare-flag guard above refuses to let through.
+			$gate_id = self::parse_gate_id( $gate_arg );
+			if ( null === $gate_id ) {
+				WP_CLI::error( sprintf( 'Invalid --gate value "%s". Pass a gate\'s post ID as a positive integer.', $gate_arg ) );
+			}
+			$gates = array_values( array_filter( $gates, fn( $g ) => (int) $g['id'] === $gate_id ) );
 			if ( empty( $gates ) ) {
-				WP_CLI::error( sprintf( 'No published premium newsletter gate found with ID %s.', $gate_arg ) );
+				WP_CLI::error( sprintf( 'No published premium newsletter gate found with ID %d.', $gate_id ) );
 			}
 		}
 
@@ -253,6 +285,17 @@ class Premium_Newsletters_Verify {
 		$coverage    = self::new_coverage();
 
 		foreach ( $partitioned['registration_only'] as $gate ) {
+			if ( ! empty( $gate['requires_verification'] ) && ! empty( self::restricted_list_ids_for_gate( $gate ) ) ) {
+				$coverage = self::with_incomplete_gate( $coverage, self::COVERAGE_UNENUMERABLE_VERIFICATION, $gate );
+				WP_CLI::warning(
+					sprintf(
+						'"%s" (gate %d): restricts readers whose email address is unverified, and this command cannot list them — none of them were checked.',
+						$gate['title'],
+						$gate['id']
+					)
+				);
+				continue;
+			}
 			WP_CLI::line(
 				sprintf(
 					'"%s" (gate %d): nothing to verify. It has no paid access rules, so every registered reader is entitled and no reader can be wrongly subscribed.',
@@ -296,19 +339,20 @@ class Premium_Newsletters_Verify {
 		}
 
 		$auto_signup = (bool) \get_option( 'newspack_premium_newsletters_auto_signup', 1 );
-		$batch_size  = max( 1, (int) \WP_CLI\Utils\get_flag_value( $assoc_args, 'batch-size', 100 ) );
 
 		// Shared across every gate below, by reference, so --max-batches caps the
 		// whole run as its help text promises rather than resetting per gate.
 		$batches = 0;
 
-		$rows    = [];
-		$summary = self::new_summary();
+		$rows       = [];
+		$summary    = self::new_summary();
+		$seen_pairs = [];
+		$esp        = self::default_esp_gateway();
 		foreach ( $partitioned['verifiable'] as $gate ) {
-			$rows = array_merge( $rows, self::verify_gate( $gate, $auto_signup, $live, $batch_size, $max_batches, $batches, $coverage, $summary ) );
+			$rows = array_merge( $rows, self::verify_gate( $gate, $auto_signup, $live, $batch_size, $max_batches, $batches, $coverage, $summary, $seen_pairs, $esp ) );
 		}
 
-		self::report( $rows, $summary, $coverage, $auto_signup, $live );
+		self::report( $rows, $summary, $coverage, $auto_signup, $live, (string) \WP_CLI\Utils\get_flag_value( $assoc_args, 'format', 'table' ) );
 
 		if ( self::verification_failed( $summary, $coverage ) ) {
 			WP_CLI::error( self::describe_failure( $summary, $coverage ) );
@@ -327,28 +371,103 @@ class Premium_Newsletters_Verify {
 	 * under --live that means ESP removals across the whole site rather than the one
 	 * gate named. Reading the raw argv is the only place the mistake is still visible.
 	 *
-	 * Copied from Premium_Newsletters_Migration::get_valueless_value_flags()
-	 * (includes/cli/class-premium-newsletters-migration.php) rather than reused: that
-	 * method's value-flag list is hardcoded to `--plan`, so calling it here would mean
-	 * adding a parameter to a sibling command's method for this command's sake. The
-	 * logic below is otherwise identical.
+	 * The scan itself lives in Premium_Newsletters_Migration
+	 * (includes/cli/class-premium-newsletters-migration.php), which takes the flag list
+	 * as a parameter. The flags differ per command; the scan is the part that must not
+	 * drift, because it is the guard standing between a mistyped flag and a --live run.
 	 *
 	 * @param string[]|null $argv Raw argument vector; defaults to $_SERVER['argv'].
 	 *
 	 * @return string[] The value-requiring flags present without a value.
 	 */
 	private static function get_valueless_value_flags( $argv = null ): array {
-		if ( null === $argv ) {
-			$argv = isset( $_SERVER['argv'] ) ? (array) $_SERVER['argv'] : []; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput
+		return Premium_Newsletters_Migration::get_valueless_value_flags( $argv, [ '--gate', '--batch-size', '--max-batches' ] );
+	}
+
+	/**
+	 * A CLI flag value read as a positive integer, or null when it is not one.
+	 *
+	 * Kept separate from the flag reads so the decision is testable without entering
+	 * the command, and applied before any (int) cast: PHP resolves "12abc", "12.9" and
+	 * " 12" all to 12, so casting first and validating the result accepts a value the
+	 * operator did not type. For --gate that means running against a different gate;
+	 * for --batch-size and --max-batches, a run of a size nobody asked for.
+	 *
+	 * @param mixed $value   The raw flag value, or null when the flag was omitted.
+	 * @param int   $default What an omitted flag means.
+	 *
+	 * @return int|null The value, the default when the flag was omitted, or null when
+	 *                  the value is not a positive integer.
+	 */
+	private static function parse_positive_int( $value, int $default ): ?int {
+		if ( null === $value ) {
+			return $default;
 		}
-		$value_flags = [ '--gate', '--batch-size', '--max-batches' ];
-		$bare_flags  = [];
-		foreach ( $argv as $token ) {
-			if ( in_array( $token, $value_flags, true ) ) {
-				$bare_flags[] = $token;
+		if ( ! is_string( $value ) && ! is_int( $value ) ) {
+			return null;
+		}
+		$value = (string) $value;
+		if ( 1 !== preg_match( '/^[1-9][0-9]*$/', $value ) ) {
+			return null;
+		}
+		return (int) $value;
+	}
+
+	/**
+	 * A --gate flag value read as a gate post ID, or null when it is not one.
+	 *
+	 * @param mixed $value The raw --gate value.
+	 *
+	 * @return int|null The gate ID, or null when the value is not a positive integer.
+	 */
+	private static function parse_gate_id( $value ): ?int {
+		$gate_id = self::parse_positive_int( $value, 0 );
+		return $gate_id > 0 ? $gate_id : null;
+	}
+
+	/**
+	 * The three ESP operations the reader loop performs.
+	 *
+	 * Wrapped as callables so verify_gate() can be exercised against fakes — the
+	 * provider read and the removal are the two edges the test harness cannot load,
+	 * and the classification between them is where this command's decisions live.
+	 * The same seam walk_population() uses for the subscriptions query.
+	 *
+	 * @return array{contact:callable,lists:callable,remove:callable}
+	 */
+	private static function default_esp_gateway(): array {
+		return [
+			'contact' => fn( string $email ) => \Newspack_Newsletters_Subscription::get_contact_data( $email ),
+			'lists'   => fn( string $email ) => \Newspack_Newsletters_Subscription::get_contact_lists( $email ),
+			'remove'  => fn( string $email, string $public_id ) => \Newspack_Newsletters_Contacts::add_and_remove_lists( $email, [], [ $public_id ], 'Verifying premium newsletter lists' ),
+		];
+	}
+
+	/**
+	 * Release what the walk has accumulated since the last batch.
+	 *
+	 * The lazy population walk bounds the reader IDs, not the objects built from
+	 * them: every reader adds a WP_User and the subscriptions hydrated while
+	 * evaluating its access rules to WordPress's object cache, and ActiveCampaign
+	 * additionally memoizes each contact's raw API payload for the life of the
+	 * process, which no object-cache flush can reach. Both grow with the population,
+	 * so they are released where the run already pauses. The other long-walk CLIs in
+	 * this directory do the same at their batch boundary.
+	 *
+	 * @param string[] $emails The reader emails checked since the last release.
+	 *
+	 * @return void
+	 */
+	private static function release_batch_caches( array $emails ): void {
+		$provider = class_exists( 'Newspack_Newsletters' ) ? \Newspack_Newsletters::get_service_provider() : null;
+		if ( $provider && method_exists( $provider, 'clear_contact_data' ) ) {
+			foreach ( $emails as $email ) {
+				$provider->clear_contact_data( $email );
 			}
 		}
-		return array_values( array_unique( $bare_flags ) );
+		if ( function_exists( 'WP_CLI\Utils\wp_clear_object_cache' ) ) {
+			\WP_CLI\Utils\wp_clear_object_cache();
+		}
 	}
 
 	/**
@@ -392,27 +511,45 @@ class Premium_Newsletters_Verify {
 	 * would stamp a still-subscribed reader as clean: a real leak converted into a
 	 * pass, in the one place this command writes.
 	 *
-	 * Reading the lists back closes that. Anything short of the list being visibly
-	 * gone is 'unresolved' rather than 'removed' — a failed removal, a failed
-	 * re-read and a re-read still showing the list all mean the same thing to an
-	 * operator, which is that this reader's removal is not confirmed and the run
-	 * has to be repeated.
+	 * Reading the lists back closes that, but only as far as the re-read itself can be
+	 * trusted — and it goes through the same provider methods, which swallow a failed
+	 * request into an empty array. So one transient failure produces both halves at
+	 * once: the write takes the create-contact branch and removes nothing, and the
+	 * confirming read comes back empty and reads as "the list is gone". An empty
+	 * re-read is therefore only accepted as evidence when the contact still resolves
+	 * on a further read; without that it is indistinguishable from a swallowed
+	 * failure. A re-read that still names other lists is evidence on its own — an
+	 * empty array is the only ambiguous shape.
 	 *
-	 * @param mixed  $removal_result What add_and_remove_lists() returned.
-	 * @param mixed  $lists_after    What get_contact_lists() returned afterwards, or [] when the
-	 *                               removal itself errored and no re-read was made.
-	 * @param string $public_id      The list's public (ESP) ID.
+	 * Anything short of the list being visibly gone is 'unresolved' rather than
+	 * 'removed' — a failed removal, an untrustworthy re-read and a re-read still
+	 * showing the list all mean the same thing to an operator, which is that this
+	 * reader's removal is not confirmed and the run has to be repeated.
+	 *
+	 * @param mixed  $removal_result        What add_and_remove_lists() returned.
+	 * @param mixed  $lists_after           What get_contact_lists() returned afterwards, or [] when
+	 *                                      the removal itself errored and no re-read was made.
+	 * @param string $public_id             The list's public (ESP) ID.
+	 * @param bool   $contact_still_resolves Whether a further contact read succeeded, which is what
+	 *                                      makes an empty re-read believable. Only consulted when
+	 *                                      $lists_after is empty.
 	 *
 	 * @return string 'removed' when the list is confirmed gone, 'unresolved' otherwise.
 	 */
-	private static function classify_removal( $removal_result, $lists_after, string $public_id ): string {
+	private static function classify_removal( $removal_result, $lists_after, string $public_id, bool $contact_still_resolves = true ): string {
 		if ( \is_wp_error( $removal_result ) ) {
 			return 'unresolved';
 		}
 		if ( \is_wp_error( $lists_after ) || ! is_array( $lists_after ) ) {
 			return 'unresolved';
 		}
-		return self::is_subscribed_to_list( $public_id, $lists_after ) ? 'unresolved' : 'removed';
+		if ( self::is_subscribed_to_list( $public_id, $lists_after ) ) {
+			return 'unresolved';
+		}
+		if ( empty( $lists_after ) && ! $contact_still_resolves ) {
+			return 'unresolved';
+		}
+		return 'removed';
 	}
 
 	/**
@@ -804,19 +941,36 @@ class Premium_Newsletters_Verify {
 			if ( ! is_array( $group ) ) {
 				continue;
 			}
+
+			// Access_Rules::evaluate_rules() is OR between groups and AND within a
+			// group, so the question is asked per group, not per rule. A group holding
+			// a subscription rule that names products admits nobody who does not also
+			// hold one of those products — whatever else it ANDs on top only narrows
+			// that set further, and the walk already covers it. Asking per rule instead
+			// reports a gate with a single `subscription + institution` group as only
+			// partly checked, and fails a run that in fact checked everyone who could
+			// get in.
+			$group_widens = true;
+			foreach ( $group as $rule ) {
+				if ( 'subscription' !== (string) ( $rule['slug'] ?? '' ) ) {
+					continue;
+				}
+				if ( ! empty( array_filter( array_map( 'intval', (array) ( $rule['value'] ?? null ) ) ) ) ) {
+					$group_widens = false;
+					break;
+				}
+			}
+			if ( ! $group_widens ) {
+				continue;
+			}
+
 			foreach ( $group as $rule ) {
 				$slug  = (string) ( $rule['slug'] ?? '' );
 				$value = $rule['value'] ?? null;
 				if ( '' === $slug ) {
 					continue;
 				}
-				if ( 'subscription' === $slug ) {
-					// A subscription rule naming products is the one population this
-					// command can walk, so it is not a gap.
-					if ( ! empty( array_filter( array_map( 'intval', (array) $value ) ) ) ) {
-						continue;
-					}
-				} elseif ( 'one_time_purchase' !== $slug && empty( $value ) ) {
+				if ( 'one_time_purchase' !== $slug && 'subscription' !== $slug && empty( $value ) ) {
 					continue;
 				}
 				$slugs[] = $slug;
@@ -879,6 +1033,16 @@ class Premium_Newsletters_Verify {
 		$unenumerable      = [];
 		$registration_only = [];
 		foreach ( $gates as $gate ) {
+			// Registration mode restricts on its own terms, independently of the paid
+			// mode below: Content_Restriction_Control::is_post_restricted() restricts a
+			// logged-in reader with no verified-email meta, and
+			// Premium_Newsletters::check_access() then removes that reader from the
+			// gate's lists. Unverified readers are not the holders of any product, so
+			// no population query reaches them — the gate is recorded as unenumerable
+			// on that axis whichever bucket it lands in below.
+			$gate['requires_verification'] = ! empty( $gate['registration']['active'] )
+				&& ! empty( $gate['registration']['require_verification'] );
+
 			if ( empty( $gate['custom_access']['active'] ) ) {
 				$registration_only[] = $gate;
 				continue;
@@ -986,8 +1150,7 @@ class Premium_Newsletters_Verify {
 	 * building a WC_Subscription for any of them, and matches a subscription
 	 * through either `_product_id` or `_variation_id` — the same two item meta keys
 	 * wcs_get_subscriptions() reaches this function to match on when it is given a
-	 * product and no customer, so the set of subscriptions is unchanged from what
-	 * this command used to walk.
+	 * product and no customer, so the two answer with the same set.
 	 *
 	 * One difference, in the widening direction: this function applies no status
 	 * clause for `any`, so it also returns trashed subscriptions, which
@@ -1036,13 +1199,12 @@ class Premium_Newsletters_Verify {
 	/**
 	 * Walk a gate's population, yielding each distinct reader exactly once.
 	 *
-	 * Lazily, in chunks, which is the whole point. The population query used to
-	 * hydrate a WC_Subscription for every match of every product before a single
-	 * reader was checked, so a publisher with years of subscription history — the
-	 * site where an operator reaches for --max-batches to sample — ran out of
-	 * memory before the command printed anything. Neither pacing flag bounded it:
-	 * they pace the ESP calls downstream of a population that was already fully
-	 * built.
+	 * Lazily, in chunks, which is the whole point. Hydrating a WC_Subscription for
+	 * every match of every product before checking a single reader exhausts memory
+	 * on a publisher with years of subscription history — the site where an operator
+	 * reaches for --max-batches to sample — before the command prints anything.
+	 * Neither pacing flag bounds that: they pace the ESP calls downstream of the
+	 * population, not its construction.
 	 *
 	 * Resolving a chunk at a time bounds that. A subscription ID costs a machine
 	 * word; a hydrated subscription costs kilobytes, and only $chunk_size of them
@@ -1057,8 +1219,7 @@ class Premium_Newsletters_Verify {
 	 * The chunk is a database concern and a batch is an ESP concern, so a chunk
 	 * boundary is not a batch boundary and neither is a coverage boundary. What
 	 * makes a run complete is finishing this walk; stopping part-way is recorded by
-	 * the caller as COVERAGE_TRUNCATED, exactly as it was when the population was
-	 * an array.
+	 * the caller as COVERAGE_TRUNCATED.
 	 *
 	 * @param int[]    $subscription_ids  Subscription IDs to resolve readers from.
 	 * @param int      $chunk_size        Subscriptions to resolve at a time; forced to at least 1.
@@ -1112,14 +1273,11 @@ class Premium_Newsletters_Verify {
 	 * as unresolved rather than as an empty list, which is the same safe default
 	 * this command already applies to any lookup it cannot trust.
 	 *
-	 * This duplicates the provider knowledge kept in
-	 * Newspack\Reader_Activation\Integrations\ESP::pull_contact_data()'s
-	 * `$not_found_codes` allowlist (includes/reader-activation/integrations/class-esp.php).
-	 * The two already disagree — that allowlist predates Constant Contact's
-	 * dedicated code and still names only Mailchimp's and Active Campaign's, so a
-	 * Constant Contact miss reaches it as a hard error rather than being
-	 * normalized. Out of scope here; noted so whoever closes that gap, or adds a
-	 * fourth provider, finds both places.
+	 * The same provider knowledge is kept as an exact-match allowlist in
+	 * Newspack\Reader_Activation\Integrations\ESP::pull_contact_data()
+	 * (includes/reader-activation/integrations/class-esp.php), which normalizes a miss
+	 * to the framework's canonical code for its batch drivers. Adding a fourth
+	 * provider means adding it there too.
 	 *
 	 * @param \WP_Error $error The error get_contact_data() returned.
 	 *
@@ -1159,7 +1317,7 @@ class Premium_Newsletters_Verify {
 	 * A pure question-and-answer seam over the batch bookkeeping verify_gate() used
 	 * to do inline, so it can be tested without a WooCommerce Subscriptions
 	 * population or an ESP to read. It only answers; it does not mutate $in_batch or
-	 * $batches itself — the caller still owns stepping those, exactly as before.
+	 * $batches itself: the caller owns stepping those.
 	 *
 	 * 'continue' covers two different situations identically: not yet at a batch
 	 * boundary, and at a boundary with no more work left in this gate's population.
@@ -1207,25 +1365,21 @@ class Premium_Newsletters_Verify {
 	 *                           checked, and fail when any part of it went unwalked.
 	 * @param array $summary     Outcome counts, by reference. Every row is counted here; only the
 	 *                           ones the report lists are returned.
+	 * @param array $seen_pairs  Reader-and-list pairs already checked in this run, by reference.
+	 *                           Shared across every gate's call: is_post_restricted() answers for
+	 *                           the list post rather than for one gate, so two gates naming the
+	 *                           same list would otherwise check and count the same reader twice.
+	 * @param array $esp         The ESP gateway: 'contact', 'lists' and 'remove' callables. Taken
+	 *                           as a parameter so the classification path can be tested without a
+	 *                           provider, the way walk_population() takes its resolver.
 	 *
 	 * @return array[] The rows needing attention, per status_needs_attention().
 	 */
-	private static function verify_gate( array $gate, bool $auto_signup, bool $live, int $batch_size, int $max_batches, int &$batches, array &$coverage, array &$summary ): array {
+	private static function verify_gate( array $gate, bool $auto_signup, bool $live, int $batch_size, int $max_batches, int &$batches, array &$coverage, array &$summary, array &$seen_pairs, array $esp ): array {
 		$list_ids = self::restricted_list_ids_for_gate( $gate );
 		if ( empty( $list_ids ) ) {
 			WP_CLI::line( self::describe_gate_without_lists( $gate ) );
 			return [];
-		}
-		if ( ! empty( $gate['unenumerable_rules'] ) ) {
-			// This gate's products give a population to walk, but they are not the
-			// only way into its lists: another rule grants access to readers this
-			// command cannot list. The walk below is real coverage and the gate is
-			// still worth checking — it just is not the whole gate, and a run that
-			// claimed otherwise would be making the same promise the empty-population
-			// case does.
-			$rules    = self::describe_rule_slugs( $gate['unenumerable_rules'] );
-			$coverage = self::with_incomplete_gate( $coverage, self::COVERAGE_PARTIAL_POPULATION, $gate, $rules );
-			WP_CLI::warning( sprintf( '"%s" (gate %d): also grants access through %s, whose holders are not in the population below.', $gate['title'], $gate['id'], $rules ) );
 		}
 		if ( $max_batches && $batches >= $max_batches ) {
 			WP_CLI::warning( sprintf( '"%s" (gate %d): skipped entirely because --max-batches was already reached by an earlier gate.', $gate['title'], $gate['id'] ) );
@@ -1237,6 +1391,32 @@ class Premium_Newsletters_Verify {
 			WP_CLI::warning( sprintf( '"%s" (gate %d): no reader holds or has held its products, so there is nobody to check.', $gate['title'], $gate['id'] ) );
 			$coverage = self::with_incomplete_gate( $coverage, self::COVERAGE_EMPTY_POPULATION, $gate );
 			return [];
+		}
+
+		// Recorded only once the walk is going ahead. Both gaps below describe a
+		// population this walk does not reach, and a gate skipped outright above has
+		// no walk for them to qualify — saying its products "were walked" alongside
+		// the line saying it was skipped would put two incompatible statements about
+		// the same gate in front of the operator.
+		if ( ! empty( $gate['unenumerable_rules'] ) ) {
+			// This gate's products give a population to walk, but they are not the
+			// only way into its lists: another rule grants access to readers this
+			// command cannot list. The walk below is real coverage and the gate is
+			// still worth checking — it just is not the whole gate, and a run that
+			// claimed otherwise would be making the same promise the empty-population
+			// case does.
+			$rules    = self::describe_rule_slugs( $gate['unenumerable_rules'] );
+			$coverage = self::with_incomplete_gate( $coverage, self::COVERAGE_PARTIAL_POPULATION, $gate, $rules );
+			WP_CLI::warning( sprintf( '"%s" (gate %d): also grants access through %s, whose holders are not in the population below.', $gate['title'], $gate['id'], $rules ) );
+		}
+		if ( ! empty( $gate['requires_verification'] ) ) {
+			// Verification restricts on the registration branch, independently of the
+			// products this walk keys on: an unverified reader who never held one is
+			// restricted and could still be subscribed. The per-reader check below
+			// honours verification for readers who are in the population, so this is
+			// about the readers who are not.
+			$coverage = self::with_incomplete_gate( $coverage, self::COVERAGE_UNENUMERABLE_VERIFICATION, $gate );
+			WP_CLI::warning( sprintf( '"%s" (gate %d): also restricts readers whose email address is unverified, and those who hold none of its products are not in the population below.', $gate['title'], $gate['id'] ) );
 		}
 
 		// Subscriptions rather than readers: the readers behind them are resolved a
@@ -1252,10 +1432,11 @@ class Premium_Newsletters_Verify {
 			$public_ids[ $list_id ] = self::public_id_for_list( $list_id );
 		}
 
-		$rows       = [];
-		$in_batch   = 0;
-		$checked    = 0;
-		$population = self::population_walker( $subscription_ids );
+		$rows         = [];
+		$in_batch     = 0;
+		$checked      = 0;
+		$batch_emails = [];
+		$population   = self::population_walker( $subscription_ids );
 		// Consumed by hand rather than with foreach, because the batch bookkeeping
 		// needs to know whether another reader is coming before it decides to pause
 		// or stop. Advancing first and asking valid() afterwards is that lookahead;
@@ -1288,14 +1469,30 @@ class Premium_Newsletters_Verify {
 			// recovers that distinction: its WP_Error code names a genuine miss on
 			// all three providers (is_contact_not_found_error()), so that case
 			// still counts as "no lists" rather than failing the reader.
-			$contact_data = \Newspack_Newsletters_Subscription::get_contact_data( $user->user_email );
+			$contact_data = $esp['contact']( $user->user_email );
 			if ( \is_wp_error( $contact_data ) && ! self::is_contact_not_found_error( $contact_data ) ) {
 				foreach ( $list_ids as $list_id ) {
 					self::record_row( $rows, $summary, self::make_row( $gate, $list_id, $user, 'unresolved' ) );
 				}
 			} else {
-				$contact_lists = \is_wp_error( $contact_data ) ? [] : \Newspack_Newsletters_Subscription::get_contact_lists( $user->user_email );
-				$unresolved    = \is_wp_error( $contact_lists ) || ! is_array( $contact_lists );
+				$contact_missing = \is_wp_error( $contact_data );
+				$contact_lists   = $contact_missing ? [] : $esp['lists']( $user->user_email );
+				$unresolved      = \is_wp_error( $contact_lists ) || ! is_array( $contact_lists );
+
+				// An empty list set from a contact that exists is the ambiguous shape:
+				// it is what a reader on no lists looks like, and also what every
+				// provider returns when the list read fails. The pre-read above does
+				// not cover it — on Mailchimp and Constant Contact get_contact_lists()
+				// issues a second, un-memoized request that can fail on its own, and on
+				// ActiveCampaign the contact read is memoized while the list read hits a
+				// different endpoint entirely. Corroborating with a further contact read
+				// costs one call on this path only, and turns a flaking provider into
+				// unresolved rows rather than a clean run. Residual worth knowing: on
+				// ActiveCampaign the corroborating read is served from that memo, so a
+				// contactLists endpoint failing on its own still reads as "no lists".
+				if ( ! $unresolved && ! $contact_missing && empty( $contact_lists ) ) {
+					$unresolved = \is_wp_error( $esp['contact']( $user->user_email ) );
+				}
 
 				foreach ( $list_ids as $list_id ) {
 					$public_id = $public_ids[ $list_id ];
@@ -1303,28 +1500,57 @@ class Premium_Newsletters_Verify {
 						self::record_row( $rows, $summary, self::make_row( $gate, $list_id, $user, 'unresolved' ) );
 						continue;
 					}
+
+					// is_post_restricted() answers for the list post, consulting every
+					// gate that matches it rather than only the gate being walked. Two
+					// gates naming the same list would otherwise check the same reader
+					// twice, spend the ESP calls twice, and count the same leak twice —
+					// so the printed leak count could exceed the readers actually
+					// leaking, and disagree with the deduped coverage count beside it.
+					$pair_key = $user_id . '_' . $list_id;
+					if ( isset( $seen_pairs[ $pair_key ] ) ) {
+						continue;
+					}
+					$seen_pairs[ $pair_key ] = true;
+
 					$is_restricted = \Newspack\Content_Restriction_Control::is_post_restricted( false, $list_id, $user_id );
 					$is_subscribed = self::is_subscribed_to_list( $public_id, $contact_lists );
 					$status        = self::classify_reader( $is_restricted, $is_subscribed, $auto_signup );
 
 					if ( 'leak' === $status && $live ) {
-						$removed = \Newspack_Newsletters_Contacts::add_and_remove_lists( $user->user_email, [], [ $public_id ], 'Verifying premium newsletter lists' );
+						$removed = $esp['remove']( $user->user_email, $public_id );
 						// A non-error return is not proof the list is gone, so the lists
 						// are read again and the removal is only recorded once it shows.
-						$lists_after = \is_wp_error( $removed ) ? [] : \Newspack_Newsletters_Subscription::get_contact_lists( $user->user_email );
-						$status      = self::classify_removal( $removed, $lists_after, $public_id );
+						// An empty re-read is corroborated the same way as above, because
+						// the write and the confirming read share a failure mode: see
+						// classify_removal().
+						$lists_after = \is_wp_error( $removed ) ? [] : $esp['lists']( $user->user_email );
+						$corroborated = true;
+						if ( is_array( $lists_after ) && empty( $lists_after ) && ! \is_wp_error( $removed ) ) {
+							$corroborated = ! \is_wp_error( $esp['contact']( $user->user_email ) );
+						}
+						$status = self::classify_removal( $removed, $lists_after, $public_id, $corroborated );
+						if ( 'removed' === $status ) {
+							// Logged as it lands, not only in the final report: a run
+							// killed part-way has already written these at the ESP, and
+							// the scrollback is then the only place they survive.
+							WP_CLI::log( sprintf( 'Removed %s from list %d (gate %d).', $user->user_email, $list_id, $gate['id'] ) );
+						}
 					}
 					self::record_row( $rows, $summary, self::make_row( $gate, $list_id, $user, $status ) );
 				}
 			}
 
 			++$in_batch;
-			$batch_action = self::next_batch_action( $in_batch, $batch_size, $batches, $max_batches, $more_work_remains );
+			$batch_emails[] = $user->user_email;
+			$batch_action   = self::next_batch_action( $in_batch, $batch_size, $batches, $max_batches, $more_work_remains );
 			if ( $in_batch >= $batch_size ) {
 				$in_batch = 0;
 			}
 			if ( 'pause' === $batch_action ) {
 				++$batches;
+				self::release_batch_caches( $batch_emails );
+				$batch_emails = [];
 				sleep( 1 );
 			} elseif ( 'stop' === $batch_action ) {
 				++$batches;
@@ -1477,10 +1703,11 @@ class Premium_Newsletters_Verify {
 	 * @param array             $coverage    Coverage record.
 	 * @param bool              $auto_signup Whether auto-signup is on.
 	 * @param bool              $live        Whether removals were written.
+	 * @param string            $format      Format for the rows table, per WP-CLI's --format.
 	 *
 	 * @return void
 	 */
-	private static function report( array $rows, array $summary, array $coverage, bool $auto_signup, bool $live ): void {
+	private static function report( array $rows, array $summary, array $coverage, bool $auto_signup, bool $live, string $format = 'table' ): void {
 		WP_CLI::line( '' );
 		WP_CLI::line( $live ? '=== VERIFICATION SUMMARY (--live: leaks removed) ===' : '=== VERIFICATION SUMMARY (report only) ===' );
 		WP_CLI::line( '' );
@@ -1488,7 +1715,10 @@ class Premium_Newsletters_Verify {
 			'table',
 			[
 				[
-					'Checked'      => $summary['checked'],
+					// Rows, not readers: one per reader-and-list pair. The coverage line
+					// below counts distinct readers, and the two numbers differ whenever a
+					// gate restricts more than one list.
+					'Rows'         => $summary['checked'],
 					'Leaks'        => $summary['leak'],
 					'Removed'      => $summary['removed'],
 					'Gaps'         => $summary['gap'],
@@ -1497,7 +1727,7 @@ class Premium_Newsletters_Verify {
 					'Unresolved'   => $summary['unresolved'],
 				],
 			],
-			[ 'Checked', 'Leaks', 'Removed', 'Gaps', 'OK', 'Not asserted', 'Unresolved' ]
+			[ 'Rows', 'Leaks', 'Removed', 'Gaps', 'OK', 'Not asserted', 'Unresolved' ]
 		);
 
 		// Already only the rows worth listing — record_row() dropped the rest as they
@@ -1506,8 +1736,11 @@ class Premium_Newsletters_Verify {
 		$attention = array_values( array_filter( $rows, fn( $r ) => self::status_needs_attention( $r['status'] ?? '' ) ) );
 		if ( ! empty( $attention ) ) {
 			WP_CLI::line( '' );
+			// Honours --format so a --live run's rows can be archived alongside the rest
+			// of a site's migration record: the summary above is reconstructible from
+			// these rows, and these rows are not reconstructible from anything.
 			\WP_CLI\Utils\format_items(
-				'table',
+				$format,
 				array_map(
 					fn( $r ) => [
 						'Gate'   => $r['gate'],
@@ -1529,7 +1762,7 @@ class Premium_Newsletters_Verify {
 
 		WP_CLI::line( '' );
 		if ( 0 < $summary['removed'] ) {
-			WP_CLI::line( sprintf( '%d subscription(s) were removed at the ESP and confirmed gone. They are listed above; this is the only record of them.', $summary['removed'] ) );
+			WP_CLI::line( sprintf( '%d subscription(s) were removed at the ESP and confirmed gone. They are listed above, were logged as they landed, and each one also went to the `newspack_esp_sync` log through add_and_remove_lists().', $summary['removed'] ) );
 		}
 		if ( ! $auto_signup ) {
 			WP_CLI::line( 'Auto-signup is off, so an entitled reader who is not subscribed is counted as "not asserted" rather than a gap: they opt in themselves.' );

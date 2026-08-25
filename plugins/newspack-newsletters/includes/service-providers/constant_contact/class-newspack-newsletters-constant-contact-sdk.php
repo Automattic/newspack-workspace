@@ -574,7 +574,9 @@ final class Newspack_Newsletters_Constant_Contact_SDK {
 	 *
 	 * @param string $email_address Email address.
 	 *
-	 * @return object|false Contact or false if not found.
+	 * @return object|false|WP_Error Contact, false when there is no such contact, or a
+	 *                               WP_Error when the request failed or the address
+	 *                               matched more than one record.
 	 */
 	public function get_contact( $email_address ) {
 		try {
@@ -596,7 +598,19 @@ final class Newspack_Newsletters_Constant_Contact_SDK {
 			return false;
 		}
 		if ( 1 !== count( $res->contacts ) ) {
-			return false;
+			// Not the same thing as a miss, and only this method can tell the two
+			// apart. A caller handed `false` here would read the address as belonging
+			// to nobody, and go on to treat the reader as subscribed to no lists —
+			// when what happened is that the account holds records this lookup cannot
+			// choose between.
+			return new WP_Error(
+				'newspack_newsletters_constant_contact_contact_ambiguous',
+				sprintf(
+					/* translators: %d: number of Constant Contact records matching one email address. */
+					__( 'Found %d contacts for this email address; expected one.', 'newspack-newsletters' ),
+					count( $res->contacts )
+				)
+			);
 		}
 		return $res->contacts[0];
 	}

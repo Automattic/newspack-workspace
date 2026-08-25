@@ -1293,12 +1293,11 @@ final class Newspack_Newsletters_Constant_Contact extends \Newspack_Newsletters_
 	/**
 	 * Get contact data by email.
 	 *
-	 * The SDK tells "no such contact" apart from "the request failed" (see
-	 * Constant_Contact_SDK::get_contact()), and that distinction is preserved here
-	 * rather than collapsed into one generic error as before: a failed request
-	 * passes through the SDK's own error unchanged, while a genuine miss gets a
-	 * dedicated not-found code, matching Mailchimp's and Active Campaign's own
-	 * dedicated not-found codes.
+	 * The SDK tells "no such contact" apart from "the request failed" and from "the
+	 * address matched several records" (see Constant_Contact_SDK::get_contact()),
+	 * and each keeps its own error here: a failed or ambiguous lookup passes the
+	 * SDK's error through unchanged, while a genuine miss gets a dedicated
+	 * not-found code, matching Mailchimp's and Active Campaign's.
 	 *
 	 * @param string $email Email address.
 	 * @param bool   $return_details Fetch full contact data.

@@ -124,7 +124,7 @@ class Test_Premium_Newsletters_Verify extends \WP_UnitTestCase {
 	 * The summary counts every bucket, including rows the ESP could not answer for
 	 * and leaks a --live run removed. Counted as each row is produced, because a
 	 * passing row is not kept: 'checked' is what the report prints in place of the
-	 * row count it used to take.
+	 * row count.
 	 */
 	public function test_the_summary_counts_every_bucket() {
 		$summary = $this->summary_of( [ 'leak', 'leak', 'gap', 'ok', 'removed', 'not_asserted', 'unresolved' ] );
@@ -144,9 +144,9 @@ class Test_Premium_Newsletters_Verify extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * Only the rows the report lists are kept; the rest are counted and dropped. A
-	 * clean run over a large site used to hold every one of its passing rows for
-	 * the length of the run to print a single number.
+	 * Only the rows the report lists are kept; the rest are counted and dropped.
+	 * Keeping them all would mean a clean run over a large site holding every
+	 * passing row for the length of the run to print a single number.
 	 */
 	public function test_record_row_keeps_only_the_rows_the_report_lists() {
 		$rows    = [];
@@ -305,8 +305,8 @@ class Test_Premium_Newsletters_Verify extends \WP_UnitTestCase {
 	/**
 	 * --max-batches stopping a gate part-way leaves readers unchecked, so a clean
 	 * result is not evidence and the run must fail — whatever it found before it
-	 * stopped. This is the reproduced blocker: the truncated run used to warn on
-	 * STDERR, which a cutover script gating on $? never sees, and then exit 0.
+	 * stopped. Warning on STDERR is not enough on its own: a cutover script gating
+	 * on $? never sees it.
 	 */
 	public function test_a_truncated_run_fails_whatever_its_findings() {
 		$coverage = $this->invoke_private_static(
@@ -419,6 +419,7 @@ class Test_Premium_Newsletters_Verify extends \WP_UnitTestCase {
 			Premium_Newsletters_Verify::COVERAGE_EMPTY_POPULATION,
 			Premium_Newsletters_Verify::COVERAGE_UNENUMERABLE_PAYWALL,
 			Premium_Newsletters_Verify::COVERAGE_PARTIAL_POPULATION,
+			Premium_Newsletters_Verify::COVERAGE_UNENUMERABLE_VERIFICATION,
 		];
 
 		$this->assertSame( $reasons, array_keys( Premium_Newsletters_Verify::COVERAGE_REASON_MESSAGES ) );
@@ -627,9 +628,9 @@ class Test_Premium_Newsletters_Verify extends \WP_UnitTestCase {
 
 	/**
 	 * A gate paywalled only by a one-time purchase is paywalled all the same: its
-	 * non-buyers are restricted and a leak among them is possible. It used to land
-	 * with the registration-only gates and be reported as having "no paid access
-	 * rules", which was false, and the run passed anyway. It belongs in neither the
+	 * non-buyers are restricted and a leak among them is possible. Filing it with
+	 * the registration-only gates would report it as having "no paid access rules"
+	 * and pass the run on a gate nobody checked. It belongs in neither the
 	 * checkable bucket nor the harmless one.
 	 */
 	public function test_partition_gates_files_a_non_subscription_paywall_on_its_own() {
@@ -1226,9 +1227,8 @@ class Test_Premium_Newsletters_Verify extends \WP_UnitTestCase {
 	 * The population walk is paged so it never holds every subscription at once,
 	 * and paging must not change who gets checked: every reader behind the page
 	 * boundary is still reached, each of them once, whichever page they first
-	 * appeared on. A reader with subscriptions in two different pages used to be
-	 * deduplicated by an array key built before any of them were checked; the
-	 * seen-set carried across pages is what replaces that.
+	 * appeared on. Deduplicating by an array key built before any reader is checked
+	 * cannot span pages; the seen-set carried across them is what does.
 	 */
 	public function test_walk_population_yields_each_reader_once_across_pages() {
 		$pages     = [];
@@ -1340,6 +1340,162 @@ class Test_Premium_Newsletters_Verify extends \WP_UnitTestCase {
 		$this->assertSame(
 			'continue',
 			$this->invoke_private_static( 'next_batch_action', [ 10, 10, 2, 3, false ] )
+		);
+	}
+
+	/**
+	 * A gate that requires email verification restricts readers on the registration
+	 * branch, whatever its paid mode says. Content_Restriction_Control restricts a
+	 * logged-in reader with no verified-email meta, and Premium_Newsletters then
+	 * removes that reader from the gate's lists — so a run that filed the gate as
+	 * harmless would announce that no reader can be wrongly subscribed to lists the
+	 * runtime is actively unsubscribing people from.
+	 */
+	public function test_partition_gates_marks_a_verification_gate_as_restricting() {
+		$gate = $this->make_gate( 5, false );
+		$gate['registration']['require_verification'] = true;
+
+		$partitioned = $this->invoke_private_static( 'partition_gates', [ [ $gate ] ] );
+
+		$this->assertCount( 1, $partitioned['registration_only'] );
+		$this->assertTrue( $partitioned['registration_only'][0]['requires_verification'] );
+	}
+
+	/**
+	 * Verification is only a restriction when the registration mode is on. A gate
+	 * carrying the flag with registration inactive restricts nobody through it, and
+	 * reporting a coverage gap there would fail runs that are in fact complete.
+	 */
+	public function test_partition_gates_ignores_verification_on_an_inactive_registration_mode() {
+		$gate                                        = $this->make_gate(
+			6,
+			true,
+			[
+				[
+					[
+						'slug'  => 'subscription',
+						'value' => [ 41 ],
+					],
+				],
+			] 
+		);
+		$gate['registration']                        = [
+			'active'               => false,
+			'require_verification' => true,
+		];
+
+		$partitioned = $this->invoke_private_static( 'partition_gates', [ [ $gate ] ] );
+
+		$this->assertCount( 1, $partitioned['verifiable'] );
+		$this->assertFalse( $partitioned['verifiable'][0]['requires_verification'] );
+	}
+
+	/**
+	 * Access rules are OR between groups and AND within one, so a group holding a
+	 * subscription rule that names products admits nobody outside that product
+	 * population — whatever else it ANDs on top only narrows it. Reading the rules
+	 * flat reports such a gate as partly checked and fails a run that did check
+	 * everyone who could get in.
+	 */
+	public function test_unenumerable_paid_rules_ignores_a_rule_anded_with_a_product_rule() {
+		$one_group_anding_both = [
+			[
+				[
+					'slug'  => 'subscription',
+					'value' => [ 46 ],
+				],
+				[
+					'slug'  => 'institution',
+					'value' => [ 900 ],
+				],
+			],
+		];
+
+		$this->assertSame( [], $this->invoke_private_static( 'unenumerable_paid_rules', [ $one_group_anding_both ] ) );
+	}
+
+	/**
+	 * The same two rules in separate groups are a genuine second way in: an
+	 * institution holder needs no subscription, and this command cannot list them.
+	 */
+	public function test_unenumerable_paid_rules_reports_a_rule_ored_against_a_product_rule() {
+		$two_groups = [
+			[
+				[
+					'slug'  => 'subscription',
+					'value' => [ 46 ],
+				],
+			],
+			[
+				[
+					'slug'  => 'institution',
+					'value' => [ 900 ],
+				],
+			],
+		];
+
+		$this->assertSame( [ 'institution' ], $this->invoke_private_static( 'unenumerable_paid_rules', [ $two_groups ] ) );
+	}
+
+	/**
+	 * (int) resolves "12abc", "12.9" and " 12" all to 12, so casting a --gate value
+	 * before validating it scopes the run to a gate the operator never named — and
+	 * under --live that is ESP removals against that gate, with nothing local to
+	 * reverse from.
+	 */
+	public function test_parse_gate_id_rejects_anything_but_a_positive_integer() {
+		$this->assertSame( 12, $this->invoke_private_static( 'parse_gate_id', [ '12' ] ) );
+
+		foreach ( [ '12abc', '12.9', '12x', ' 12', '1e3', '0', '-4', '', 'abc' ] as $not_a_gate_id ) {
+			$this->assertNull(
+				$this->invoke_private_static( 'parse_gate_id', [ $not_a_gate_id ] ),
+				sprintf( '"%s" must not resolve to a gate ID.', $not_a_gate_id )
+			);
+		}
+	}
+
+	/**
+	 * --batch-size and --max-batches take the same reading, so a mistyped value on
+	 * either is refused rather than quietly turned into a run of a size nobody
+	 * asked for. An omitted flag keeps its default.
+	 */
+	public function test_parse_positive_int_defaults_only_for_an_omitted_flag() {
+		$this->assertSame( 100, $this->invoke_private_static( 'parse_positive_int', [ null, 100 ] ) );
+		$this->assertSame( 250, $this->invoke_private_static( 'parse_positive_int', [ '250', 100 ] ) );
+		$this->assertNull( $this->invoke_private_static( 'parse_positive_int', [ '0', 100 ] ) );
+		$this->assertNull( $this->invoke_private_static( 'parse_positive_int', [ '-5', 100 ] ) );
+		$this->assertNull( $this->invoke_private_static( 'parse_positive_int', [ 'abc', 100 ] ) );
+	}
+
+	/**
+	 * The confirming re-read goes through the same provider methods as the write,
+	 * and every shipped provider swallows a failed request into an empty array. One
+	 * transient failure therefore makes the write take its create-contact branch,
+	 * removing nothing, while the re-read comes back empty and reads as "the list is
+	 * gone" — stamping a still-subscribed reader as removed in the one place this
+	 * command writes. An empty re-read is only evidence when the contact still
+	 * resolves.
+	 */
+	public function test_classify_removal_refuses_an_empty_reread_it_cannot_corroborate() {
+		$this->assertSame(
+			'unresolved',
+			$this->invoke_private_static( 'classify_removal', [ true, [], 'list-a', false ] )
+		);
+		$this->assertSame(
+			'removed',
+			$this->invoke_private_static( 'classify_removal', [ true, [], 'list-a', true ] )
+		);
+	}
+
+	/**
+	 * A re-read still naming other lists is evidence on its own: the request plainly
+	 * succeeded, so the absent list is absent because it was removed. Only an empty
+	 * array is ambiguous, so corroboration is not demanded here.
+	 */
+	public function test_classify_removal_accepts_a_reread_that_names_other_lists() {
+		$this->assertSame(
+			'removed',
+			$this->invoke_private_static( 'classify_removal', [ true, [ 'list-b' ], 'list-a', false ] )
 		);
 	}
 }
