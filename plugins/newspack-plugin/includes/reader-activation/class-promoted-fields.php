@@ -126,6 +126,10 @@ class Promoted_Fields {
 					'name'        => self::get_display_name( $field, $integration ),
 					'description' => $field->get_description(),
 					'options'     => $field->get_options(),
+					// The options here are a list the provider already resolved, so
+					// Access_Rules can't derive this: a dropdown the provider has no
+					// choices for yet would register as free text.
+					'has_options' => $field->takes_option_values(),
 					'is_boolean'  => 'boolean' === $field->get_value_type(),
 					'callback'    => function ( $user_id, $args ) use ( $field ) {
 						return self::evaluate_field( $field, $user_id, $args );

@@ -1,7 +1,7 @@
 /**
  * WordPress dependencies.
  */
-import { __ } from '@wordpress/i18n';
+import { __, sprintf } from '@wordpress/i18n';
 import { useEffect, useState } from '@wordpress/element';
 import { useDispatch } from '@wordpress/data';
 import apiFetch from '@wordpress/api-fetch';
@@ -12,6 +12,7 @@ import { TextControl } from '@wordpress/components';
  */
 import { FormTokenField } from '../../../../../../packages/components/src';
 import { WIZARD_STORE_NAMESPACE } from '../../../../../../packages/components/src/wizard/store';
+import { isMalformedAccessRuleValue } from '../utils';
 import OneTimePurchaseRuleControl from '../../../../../content-gate/components/one-time-purchase-rule-control';
 
 type RuleOption = { value: string | number; label: string };
@@ -87,9 +88,24 @@ export default function AccessRuleControl( { slug, value, onChange }: GateRuleCo
 	// string be saved where an array of option values belongs.
 	if ( rule.has_options ) {
 		const valueArr = Array.isArray( value ) ? value : [];
+		// The picker can hold no token for a value that isn't an option, so on its own
+		// it would read as "no constraint" — the opposite of what the stored value
+		// does. Name the value, so the operator can replace it rather than guess why
+		// the rule looks empty.
+		const malformedValueNotice = isMalformedAccessRuleValue( rule, value )
+			? sprintf(
+					// translators: %s: the stored value.
+					__(
+						'The saved value “%s” is not one of this rule’s options, so the rule grants no access. Pick from the list to replace it.',
+						'newspack-plugin'
+					),
+					String( value )
+			  )
+			: undefined;
 		return (
 			<FormTokenField
 				label={ '' }
+				description={ malformedValueNotice }
 				value={ options.filter( o => valueArr.some( v => String( v ) === String( o.value ) ) ).map( o => o.label ) }
 				onChange={ ( items: string[] ) => onChange( options.filter( o => items.includes( o.label ) ).map( o => o.value ) ) }
 				suggestions={ options.map( o => o.label ) }

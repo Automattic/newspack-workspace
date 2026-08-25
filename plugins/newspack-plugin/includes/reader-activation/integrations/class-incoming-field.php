@@ -182,6 +182,20 @@ class Incoming_Field {
 	}
 
 	/**
+	 * Whether the field's value is one or more entries from its option list,
+	 * rather than free text.
+	 *
+	 * Declared by the value type rather than read off the resolved list: a
+	 * provider can describe a dropdown that has no choices configured yet, and
+	 * counting its options would read that as a free-text field.
+	 *
+	 * @return bool
+	 */
+	public function takes_option_values() {
+		return in_array( $this->value_type, [ 'select', 'multiselect' ], true ) || ! empty( $this->options );
+	}
+
+	/**
 	 * Set the options.
 	 *
 	 * @param array $options Array of [ 'value' => ..., 'label' => ... ].

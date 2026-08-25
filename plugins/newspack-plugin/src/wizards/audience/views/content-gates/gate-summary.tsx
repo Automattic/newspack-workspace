@@ -12,6 +12,7 @@ import { __, _n, sprintf } from '@wordpress/i18n';
  * Internal dependencies.
  */
 import ContentRuleControl from './edit/content-rule-control';
+import { isMalformedAccessRuleValue } from './utils';
 import { normalizeOneTimePurchaseValue } from '../../../../content-gate/components/one-time-purchase-rule-control';
 
 const availableAccessRules = window.newspackAudienceContentGates.available_access_rules || {};
@@ -59,6 +60,13 @@ const formatAccessRuleValue = ( rule: GateAccessRule ): string => {
 			// translators: %s: list of product names. Shown when the stored duration is unrecognized; the rule then never grants access.
 			__( '%s (invalid duration, grants no access)', 'newspack-plugin' ),
 			products
+		);
+	}
+	if ( isMalformedAccessRuleValue( config, rule.value ) ) {
+		return sprintf(
+			// translators: %s: the stored value. Shown when the value is in a shape the rule can't use; the rule then never grants access.
+			__( '%s (invalid value, grants no access)', 'newspack-plugin' ),
+			String( rule.value )
 		);
 	}
 	if ( Array.isArray( rule.value ) && config?.options ) {

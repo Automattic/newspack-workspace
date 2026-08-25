@@ -1,7 +1,7 @@
 /**
  * Internal dependencies
  */
-import { getGateStatusBadgeIntent, isGateMetered } from './utils';
+import { getGateStatusBadgeIntent, isGateMetered, isMalformedAccessRuleValue } from './utils';
 
 /**
  * `isGateMetered` decides whether the wizard offers metering-dependent features (the
@@ -66,5 +66,30 @@ describe( 'getGateStatusBadgeIntent', () => {
 
 	it( 'reads a published gate as live', () => {
 		expect( getGateStatusBadgeIntent( 'publish' ) ).toBe( 'stable' );
+	} );
+} );
+
+/**
+ * A stored value in the wrong shape for its rule denies every reader, because
+ * `Newspack\Access_Rules::evaluate_rule()` fails closed on it. Both the editor and
+ * the gate summary label such a value; neither may render it as a live condition
+ * or as an empty selection (NPPD-2143).
+ */
+describe( 'isMalformedAccessRuleValue', () => {
+	const optionsBacked = { name: 'Institutional access', has_options: true };
+	const freeText = { name: 'Whitelisted email domain', has_options: false };
+
+	it( 'reads free text on an options-backed rule as malformed', () => {
+		expect( isMalformedAccessRuleValue( optionsBacked, 'Springfield University' ) ).toBe( true );
+		expect( isMalformedAccessRuleValue( optionsBacked, [ 12 ] ) ).toBe( false );
+	} );
+
+	it( 'reads a list on a free-text rule as malformed', () => {
+		expect( isMalformedAccessRuleValue( freeText, [ 'example.com' ] ) ).toBe( true );
+		expect( isMalformedAccessRuleValue( freeText, 'example.com' ) ).toBe( false );
+	} );
+
+	it( 'leaves boolean rules alone, which carry no value to judge', () => {
+		expect( isMalformedAccessRuleValue( { name: 'Has donated', is_boolean: true, has_options: false }, true ) ).toBe( false );
 	} );
 } );

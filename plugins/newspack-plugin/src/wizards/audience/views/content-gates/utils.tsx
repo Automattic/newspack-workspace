@@ -42,6 +42,23 @@ export const isGateMetered = ( gate: Gate ) => {
 	return meters( gate.registration ) || meters( gate.custom_access );
 };
 
+/**
+ * Whether a stored access rule value is in a shape the rule can't use: free text
+ * on an options-backed rule, or a list on a free-text one. Such a value denies
+ * every reader, since `Newspack\Access_Rules::evaluate_rule()` fails closed on
+ * it, so the wizard has to label it rather than render it as a live condition.
+ *
+ * Rules with a composite value shape (one-time purchase) own their formatting and
+ * their control, both of which run before this, so only the list/text split is
+ * decided here.
+ */
+export const isMalformedAccessRuleValue = ( config: AccessRule | undefined, value: GateAccessRuleValue ) => {
+	if ( ! config || config.is_boolean || 'boolean' === typeof value ) {
+		return false;
+	}
+	return config.has_options ? ! Array.isArray( value ) : Array.isArray( value );
+};
+
 export const getGateStatus = ( status: GateStatus ) => {
 	return status === 'publish' ? __( 'Active', 'newspack-plugin' ) : __( 'Inactive', 'newspack-plugin' );
 };

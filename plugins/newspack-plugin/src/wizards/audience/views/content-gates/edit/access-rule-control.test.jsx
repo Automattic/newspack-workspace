@@ -18,7 +18,7 @@ import AccessRuleControl from './access-rule-control';
 import registerWizardStore from '../../../../../../packages/components/src/wizard/store';
 
 jest.mock( '../../../../../../packages/components/src', () => ( {
-	FormTokenField: () => <div data-testid="token-picker" />,
+	FormTokenField: ( { description } ) => <div data-testid="token-picker">{ description }</div>,
 } ) );
 jest.mock( '@wordpress/api-fetch', () => jest.fn( () => Promise.resolve( [] ) ) );
 
@@ -37,6 +37,15 @@ describe( 'Access rule control', () => {
 
 		expect( screen.getByTestId( 'token-picker' ) ).toBeInTheDocument();
 		expect( screen.queryByRole( 'textbox' ) ).not.toBeInTheDocument();
+	} );
+
+	it( 'names a stored value the picker cannot show, instead of rendering as an empty selection', () => {
+		// A legacy string on an options-backed rule denies every reader, but the picker
+		// can hold no token for it - so on its own it would read as "no constraint".
+		renderControl( 'institution', { name: 'Institutional access', has_options: true, options: [] }, 'Springfield University' );
+
+		expect( screen.getByTestId( 'token-picker' ) ).toHaveTextContent( 'Springfield University' );
+		expect( screen.getByTestId( 'token-picker' ) ).toHaveTextContent( 'grants no access' );
 	} );
 
 	it( 'renders the free-text box only for a rule that declares no options source', () => {

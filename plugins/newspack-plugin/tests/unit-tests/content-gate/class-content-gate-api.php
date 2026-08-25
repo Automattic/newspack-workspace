@@ -328,14 +328,13 @@ class Newspack_Test_Content_Gate_API extends WP_UnitTestCase {
 	}
 
 	/**
-	 * A gate whose stored rules are already invalid has to stay editable. The
-	 * gates list disables a gate by POSTing back the whole gate it just read, so
-	 * rejecting the value the operator never touched would lock the gate on —
-	 * exactly when they are trying to switch off one that walls off paying
-	 * readers. The stored value is already failing closed at evaluation, so
-	 * accepting it unchanged grants nobody anything.
+	 * Create a published gate holding an institution rule whose stored value is a
+	 * legacy free-text string, as a site that saved one before the value shape was
+	 * enforced still holds today.
+	 *
+	 * @return int The gate ID.
 	 */
-	public function test_a_gate_holding_an_invalid_stored_value_can_still_be_disabled() {
+	private function create_gate_with_invalid_stored_rule() {
 		$gate_id = Content_Gate::create_gate( [ 'title' => 'Legacy gate' ] );
 		Content_Gate::update_custom_access_settings(
 			$gate_id,
@@ -351,18 +350,78 @@ class Newspack_Test_Content_Gate_API extends WP_UnitTestCase {
 				],
 			]
 		);
-		$stored_gate = Content_Gate::get_gate( $gate_id );
+		return $gate_id;
+	}
 
-		$disabled = Content_Gate_API::sanitize_gate( array_merge( $stored_gate, [ 'status' => 'draft' ] ) );
+	/**
+	 * The request WP hands to the `sanitize_callback`, carrying the gate ID from
+	 * the route.
+	 *
+	 * @param int $gate_id The gate ID in the route.
+	 *
+	 * @return WP_REST_Request
+	 */
+	private function gate_update_request( $gate_id ) {
+		$request = new WP_REST_Request( 'POST', '/newspack/v1/wizard/audience-content-gates/' . $gate_id );
+		$request->set_param( 'id', $gate_id );
+		return $request;
+	}
+
+	/**
+	 * A gate whose stored rules are already invalid has to stay switchable. The
+	 * gates list turns a gate off by POSTing back the whole gate it just read, so
+	 * rejecting the value the operator never touched would lock the gate on —
+	 * exactly when they are trying to switch off one that walls off paying
+	 * readers. Turning it back on is the opposite case: that save puts a gate that
+	 * denies every reader live, so it has to fix the value first.
+	 */
+	public function test_an_invalid_stored_value_can_be_saved_back_only_by_a_save_that_turns_the_gate_off() {
+		wp_set_current_user( self::factory()->user->create( [ 'role' => 'administrator' ] ) );
+		$gate_id     = $this->create_gate_with_invalid_stored_rule();
+		$stored_gate = Content_Gate::get_gate( $gate_id );
+		$request     = $this->gate_update_request( $gate_id );
+
+		$disabled = Content_Gate_API::sanitize_gate( array_merge( $stored_gate, [ 'status' => 'draft' ] ), $request );
 		$this->assertNotWPError( $disabled, 'Saving back an untouched invalid value must not block the operator.' );
 		$this->assertSame( 'draft', $disabled['status'] );
 		$this->assertArrayNotHasKey( 'access_rules', $disabled['custom_access'], 'The stored rules are left as they are rather than rewritten.' );
 
-		$changed_gate = $stored_gate;
+		$this->assertWPError(
+			Content_Gate_API::sanitize_gate( array_merge( $stored_gate, [ 'status' => 'publish' ] ), $request ),
+			'The same payload that publishes the gate must not go through: it would put a gate denying every reader live.'
+		);
+
+		$changed_gate = array_merge( $stored_gate, [ 'status' => 'draft' ] );
 		$changed_gate['custom_access']['access_rules'][0][0]['value'] = 'Another University';
 		$this->assertWPError(
-			Content_Gate_API::sanitize_gate( $changed_gate ),
+			Content_Gate_API::sanitize_gate( $changed_gate, $request ),
 			'Changing the value is still a new invalid value, and still fails the save.'
+		);
+	}
+
+	/**
+	 * Two reads that must not be driven by the request body: the stored rules are
+	 * the ones the gate in the route holds, and the comparison is only made for a
+	 * caller who could save the gate anyway — sanitization runs ahead of the
+	 * route's `permission_callback`, so nothing else has checked yet.
+	 */
+	public function test_stored_rules_are_read_from_the_route_gate_and_only_for_an_editor() {
+		$admin_id    = self::factory()->user->create( [ 'role' => 'administrator' ] );
+		$gate_id     = $this->create_gate_with_invalid_stored_rule();
+		$other_gate  = Content_Gate::create_gate( [ 'title' => 'Unrelated gate' ] );
+		$stored_gate = Content_Gate::get_gate( $gate_id );
+		$disabling   = array_merge( $stored_gate, [ 'status' => 'draft' ] );
+
+		wp_set_current_user( $admin_id );
+		$this->assertWPError(
+			Content_Gate_API::sanitize_gate( $disabling, $this->gate_update_request( $other_gate ) ),
+			'A body naming one gate must be compared against the gate the route names, which stores different rules.'
+		);
+
+		wp_set_current_user( 0 );
+		$this->assertWPError(
+			Content_Gate_API::sanitize_gate( $disabling, $this->gate_update_request( $gate_id ) ),
+			'A caller who cannot edit the gate must not learn from the response code what it stores.'
 		);
 	}
 }

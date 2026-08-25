@@ -76,6 +76,28 @@ describe( 'useWizardApiFetch', () => {
 		expect( errorStoreWrites() ).toEqual( [] );
 	} );
 
+	it( 'surfaces the message a rejected parameter carries, not WP’s generic wrapper (NPPD-2143)', async () => {
+		// WP keeps a sanitize_callback's message under `data.params`, and sends
+		// `Invalid parameter(s): gate` as the top-level message. Showing the wrapper
+		// tells the operator neither which rule was rejected nor what to do about it.
+		mockWizardApiFetch.mockRejectedValue( {
+			message: 'Invalid parameter(s): gate',
+			code: 'rest_invalid_param',
+			data: {
+				status: 400,
+				params: { gate: 'Invalid value for the "Institutional access" access rule.' },
+			},
+		} );
+
+		render( <HookProbe /> );
+
+		await act( async () => {
+			await hook.wizardApiFetch( { path: 'test-slug' } ).catch( () => {} );
+		} );
+
+		expect( screen.getByTestId( 'error' ).textContent ).toBe( 'Invalid value for the "Institutional access" access rule.' );
+	} );
+
 	it( 'clears a stale error when the slug changes (NPPM-2733)', async () => {
 		// The loop-free slug-reset effect must clear a prior slug's error so it
 		// can't leak into a new slug. Added in response to earlier review.

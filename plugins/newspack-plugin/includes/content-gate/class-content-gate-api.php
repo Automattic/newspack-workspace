@@ -109,12 +109,18 @@ class Content_Gate_API {
 	 * TODO: Handle errors from the remaining sanitization methods (content rules,
 	 * registration, metering) the way custom access errors already propagate.
 	 *
-	 * @param array $gate The gate.
+	 * @param array            $gate    The gate.
+	 * @param \WP_REST_Request $request Optional. The request being sanitized, as WP passes it
+	 *                                  to a `sanitize_callback`. It carries the route's own
+	 *                                  gate ID, which is the one to read stored settings
+	 *                                  against — the ID in the body is caller-supplied and can
+	 *                                  name a different gate.
 	 *
 	 * @return array|\WP_Error The sanitized gate, or an error when an access rule
 	 *                         holds an invalid value.
 	 */
-	public static function sanitize_gate( $gate ) {
+	public static function sanitize_gate( $gate, $request = null ) {
+		$gate_id   = $request instanceof \WP_REST_Request ? absint( $request['id'] ?? 0 ) : 0;
 		$sanitized = [];
 		// Only include fields the request explicitly provided, so an omitted
 		// field does not clobber an existing gate's stored value on update
@@ -126,7 +132,7 @@ class Content_Gate_API {
 			$sanitized['priority'] = intval( $gate['priority'] );
 		}
 		if ( isset( $gate['status'] ) ) {
-			$sanitized['status'] = self::sanitize_status( $gate['status'], $gate['id'] ?? 0 );
+			$sanitized['status'] = self::sanitize_status( $gate['status'], $gate_id );
 		}
 		if ( isset( $gate['content_rules'] ) ) {
 			$sanitized['content_rules'] = self::sanitize_rules( $gate['content_rules'], 'content' );
@@ -137,18 +143,17 @@ class Content_Gate_API {
 		if ( isset( $gate['custom_access'] ) ) {
 			$sanitized_custom_access = self::sanitize_custom_access( $gate['custom_access'] );
 			if ( is_wp_error( $sanitized_custom_access ) ) {
-				if ( ! self::access_rules_are_unchanged( $gate ) ) {
+				if ( ! self::save_leaves_rules_unenforced( $gate, $sanitized, $gate_id ) || ! self::access_rules_are_unchanged( $gate, $gate_id ) ) {
 					// As a REST `sanitize_callback` return value, the error fails the
 					// request with a 400 rather than silently saving a loosened rule set.
 					return $sanitized_custom_access;
 				}
-				// The request is echoing back rules it read, not introducing new ones:
-				// the gates list disables a gate by POSTing the whole gate object. A
-				// gate whose stored value is already invalid has to stay switchable,
-				// or an operator can't turn off one that is walling off paying readers.
-				// Leaving the value where it is grants nobody anything, because it
-				// already fails closed at evaluation. Drop it from the payload so the
-				// stored rules are left alone and the rest of the save goes through.
+				// The save switches the gate off and echoes back the rules it read, rather
+				// than introducing new ones: the gates list disables a gate by POSTing the
+				// whole gate object. A gate whose stored value is already invalid has to
+				// stay switchable, or an operator can't turn off one that is walling off
+				// paying readers. Drop the rules from the payload so the stored ones are
+				// left alone and the rest of the save goes through.
 				unset( $gate['custom_access']['access_rules'] );
 				$sanitized_custom_access = self::sanitize_custom_access( $gate['custom_access'] );
 			}
@@ -161,18 +166,49 @@ class Content_Gate_API {
 	}
 
 	/**
+	 * Whether a save leaves the gate's access rules unevaluated, either by
+	 * unpublishing the gate or by switching its custom access section off.
+	 *
+	 * Only such a save may carry an already-invalid stored value back untouched.
+	 * A save that publishes or activates the gate has to fix the value first,
+	 * otherwise one click on the gates list's "Set to active" would put a gate
+	 * that denies every reader live, under a notice reading "gate enabled".
+	 *
+	 * @param array $gate           The gate as it arrived in the request.
+	 * @param array $sanitized_gate The gate sanitized so far, which carries the resulting status.
+	 * @param int   $gate_id        The gate ID from the route.
+	 *
+	 * @return bool
+	 */
+	private static function save_leaves_rules_unenforced( $gate, $sanitized_gate, $gate_id ) {
+		// Rules are only evaluated while the custom access section is active.
+		if ( isset( $gate['custom_access']['active'] ) && ! boolval( $gate['custom_access']['active'] ) ) {
+			return true;
+		}
+		// A save that omits `status` leaves the stored one in place.
+		$status = $sanitized_gate['status'] ?? ( $gate_id ? get_post_status( $gate_id ) : 'draft' );
+		return 'publish' !== $status;
+	}
+
+	/**
 	 * Whether a request's access rules are the ones the gate already stores.
 	 *
 	 * Compared loosely, because the client round-trips the rules it read through
 	 * JSON and an integer option value can come back either as an int or a string.
 	 *
-	 * @param array $gate The gate as it arrived in the request.
+	 * @param array $gate    The gate as it arrived in the request.
+	 * @param int   $gate_id The gate ID from the route.
 	 *
 	 * @return bool
 	 */
-	private static function access_rules_are_unchanged( $gate ) {
-		$gate_id = absint( $gate['id'] ?? 0 );
+	private static function access_rules_are_unchanged( $gate, $gate_id ) {
 		if ( ! $gate_id || ! is_array( $gate['custom_access']['access_rules'] ?? null ) ) {
+			return false;
+		}
+		// Sanitization runs ahead of the route's `permission_callback`, so the read is
+		// guarded here too: without it the response code tells a caller who can't edit
+		// the gate whether it stores exactly the rules they sent.
+		if ( ! current_user_can( 'edit_post', $gate_id ) ) {
 			return false;
 		}
 		$stored_rules = Content_Gate::get_custom_access_settings( $gate_id )['access_rules'] ?? [];

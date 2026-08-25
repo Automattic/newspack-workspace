@@ -66,7 +66,16 @@ class Access_Rules {
 	 *     @type string   $name               The rule name.
 	 *     @type string   $description        The rule description.
 	 *     @type mixed    $default            The rule default value.
-	 *     @type array    $options            The rule options.
+	 *     @type array    $options            The rule options: a list of `[ 'value', 'label' ]`
+	 *                                        entries, or a callable returning one.
+	 *     @type bool     $has_options        Optional. Whether the rule's value is one or more
+	 *                                        entries from `options` (an array), rather than free
+	 *                                        text (a string). Defaults to whether `options` was
+	 *                                        declared. Declare it explicitly whenever the options
+	 *                                        passed are an already-resolved list that can be
+	 *                                        legitimately empty — a rule offering no options yet
+	 *                                        still takes option values, and the default would
+	 *                                        read it as free text.
 	 *     @type callable $callback           The rule callback.
 	 *     @type callable $sanitize_callback  Optional. Sanitizes the rule's stored value; rules
 	 *                                        with composite (non-scalar, non-list) value shapes
@@ -104,14 +113,10 @@ class Access_Rules {
 				'description' => '',
 				'default'     => ! empty( $config['options'] ) ? [] : '',
 				'options'     => [],
-				// Whether the registration declared an options source (a callable, or a
-				// populated list). This is the discriminator between an options-backed
-				// rule (value: array of option values) and a free-text rule (value:
-				// string) — the *resolved* options list can't serve that purpose, since
-				// a callable source legitimately resolves to an empty list while no
+				// Derived from what the registration declared — a callable source, or a
+				// populated list. The *resolved* list can't serve as the discriminator,
+				// since a callable legitimately resolves to an empty list while no
 				// matching entities (institutions, subscription products) exist yet.
-				// An explicitly empty `options` array (e.g. a promoted ESP field with
-				// no options) still registers as free-text, matching `default` below.
 				'has_options' => ! empty( $config['options'] ),
 				'is_boolean'  => false,
 			]
@@ -134,7 +139,7 @@ class Access_Rules {
 	 *
 	 * @return bool
 	 */
-	public static function is_malformed_rule_value( $value ) {
+	public static function is_malformed_rule_value( mixed $value ): bool {
 		return ! is_array( $value ) && null !== $value && '' !== $value;
 	}
 
