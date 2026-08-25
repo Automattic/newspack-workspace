@@ -296,11 +296,17 @@ class Test_Feed_Restriction extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * While WooCommerce Memberships is active it owns feed restriction, so Access
-	 * Control yields entirely — even under the shipped restrict_feeds/exclude
+	 * While WooCommerce Memberships is active, Access Control yields feed
+	 * restriction entirely — even under the shipped restrict_feeds/exclude
 	 * defaults a Memberships-only site cannot change (NPPM-3204). The effective
-	 * mode resolves to "off" and the restricted post stays in the feed, the
-	 * opposite of test_exclude_mode_drops_only_restricted_posts above.
+	 * mode resolves to "off" and the restricted post survives, the opposite of
+	 * test_exclude_mode_drops_only_restricted_posts above.
+	 *
+	 * The gate cannot supply the restriction here — Content_Restriction_Control
+	 * bails on the same Memberships::is_active() check — so the post is marked
+	 * restricted through `newspack_is_post_restricted`, standing in for
+	 * Memberships restricting it. Without that nothing would drop the post
+	 * either way and the feed assertion would hold with or without the guard.
 	 *
 	 * Runs isolated because WC_Memberships, once declared, would make
 	 * Memberships::is_active() true for every later feed test in this process.
@@ -313,9 +319,14 @@ class Test_Feed_Restriction extends \WP_UnitTestCase {
 		// which is what Memberships::is_active() checks).
 		require __DIR__ . '/../../mocks/wc-memberships-active-mock.php';
 
-		// Leave feed_restriction_mode unset, as the affected Memberships-only sites
-		// do: the mode then resolves to the shipped exclude default, and the guard
-		// still has to override it to off.
+		// The affected sites had neither value written. set_up() persists
+		// restrict_feeds = 1, which is what the shipped default resolves to anyway,
+		// and feed_restriction_mode is left unset so it resolves to the shipped
+		// exclude default. The guard still has to override the result to off.
+
+		add_filter( 'newspack_is_post_restricted', '__return_true', 99 );
+		$feed_ids = $this->feed_post_ids();
+		remove_filter( 'newspack_is_post_restricted', '__return_true', 99 );
 
 		$this->assertSame(
 			Content_Gate_Advanced_Settings::FEED_MODE_OFF,
@@ -324,7 +335,7 @@ class Test_Feed_Restriction extends \WP_UnitTestCase {
 		);
 		$this->assertContains(
 			$this->post_id,
-			$this->feed_post_ids(),
+			$feed_ids,
 			'With Memberships active, Access Control must not drop the restricted post from the feed.'
 		);
 	}
