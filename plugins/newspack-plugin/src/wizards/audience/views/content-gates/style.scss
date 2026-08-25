@@ -72,7 +72,7 @@
 	// Caution under a picker holding IDs the option list cannot describe.
 	.newspack-access-rule-values-notice {
 		color: wp-colors.$gray-700;
-		font-size: 12px;
+		font-size: wp-vars.$helptext-font-size;
 		margin: wp-vars.$grid-unit-10 0 0;
 	}
 

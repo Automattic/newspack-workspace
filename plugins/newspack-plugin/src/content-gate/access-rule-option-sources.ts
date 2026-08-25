@@ -71,6 +71,23 @@ export function invalidateAccessRuleOptions( slug: string ): void {
 }
 
 /**
+ * Whether a rule's values are picked from a list rather than typed as free text.
+ *
+ * Asked of the rule, not of the list it currently holds. A fetched list is legitimately
+ * empty for a moment — every institution deleted, say — and a picker that read that as
+ * "this rule has no options" would drop to the free-text control, which writes a string
+ * over the IDs the rule still stores.
+ *
+ * @param slug             The rule slug.
+ * @param localisedOptions The rule's options as localised with the page.
+ *
+ * @return Whether the rule is backed by an option list.
+ */
+export function isOptionBackedAccessRule( slug: string, localisedOptions: AccessRuleOption[] ): boolean {
+	return localisedOptions.length > 0 || undefined !== ACCESS_RULE_OPTION_SOURCES[ slug ];
+}
+
+/**
  * The option source for a rule, if its options are fetched.
  *
  * @param slug The rule slug.

@@ -33,7 +33,7 @@ import {
 	isAccessRuleOptionInput,
 	resolveAccessRuleOptionTokens,
 } from '../access-rule-options';
-import { getAccessRuleOptionSource } from '../access-rule-option-sources';
+import { getAccessRuleOptionSource, isOptionBackedAccessRule } from '../access-rule-option-sources';
 import OneTimePurchaseRuleControl from '../components/one-time-purchase-rule-control';
 import UnlistedValuesNotice from '../components/unlisted-values-notice';
 
@@ -88,6 +88,13 @@ const availableAccessRules: Record< string, AccessRuleConfig > = window.newspack
 const availableGates: GateOption[] = window.newspackBlockVisibility?.available_gates ?? [];
 
 /**
+ * The gate picker is not an access rule, but it reads the same list of published gates
+ * that `Block_Visibility::has_active_gates()` tests against, so it uses the rule pickers'
+ * token helpers under this slug.
+ */
+const GATE_RULE_SLUG = 'gate';
+
+/**
  * Whether any rules are currently active on the block.
  */
 function hasActiveRules( rules: BlockVisibilityRules, mode: string, gateIds: number[] ): boolean {
@@ -140,17 +147,15 @@ const GateControls = ( { gateIds, onChange }: { gateIds: number[]; onChange: ( i
 		<PanelRow>
 			<FormTokenField
 				label={ __( 'Gates', 'newspack-plugin' ) }
-				value={ getAccessRuleOptionTokens( gateOptions, gateIds, getMissingOptionLabel( 'gate' ) ) }
+				value={ getAccessRuleOptionTokens( gateOptions, gateIds, getMissingOptionLabel( GATE_RULE_SLUG ) ) }
 				suggestions={ gateOptions.map( formatAccessRuleOptionLabel ) }
 				onChange={ ( tokens: ( string | TokenItem )[] ) =>
 					// The attribute is typed as integers, and a preserved value may come
 					// back as the string the token carried, so coerce before storing.
-					onChange( resolveAccessRuleOptionTokens( tokens, gateOptions, gateIds ).map( Number ) )
+					onChange( resolveAccessRuleOptionTokens( tokens, gateOptions, { slug: GATE_RULE_SLUG, stored: gateIds } ).map( Number ) )
 				}
-				messages={ getAccessRuleTokenFieldMessages(
-					__( 'Not a selectable gate. Pick one from the list, or type its ID.', 'newspack-plugin' )
-				) }
-				__experimentalValidateInput={ ( input: string ) => isAccessRuleOptionInput( input, gateOptions ) }
+				messages={ getAccessRuleTokenFieldMessages( GATE_RULE_SLUG ) }
+				__experimentalValidateInput={ ( input: string ) => isAccessRuleOptionInput( input, gateOptions, GATE_RULE_SLUG ) }
 				__experimentalAutoSelectFirstMatch
 				__experimentalExpandOnFocus
 				__next40pxDefaultSize
@@ -188,14 +193,10 @@ const AccessRuleValueControl = ( {
 		let cancelled = false;
 		source()
 			.then( fetched => {
-				if ( cancelled ) {
-					return;
-				}
-				// Keep the localised list when the response is empty. A filtered query or
-				// a narrowed collection would otherwise leave the rule with no options at
-				// all, which drops the picker to the free-text control below — and that
-				// writes a string over the rule's stored IDs.
-				if ( fetched.length > 0 ) {
+				if ( ! cancelled ) {
+					// Including an empty list: the site really does have no institutions
+					// left, and keeping the page-load snapshot would leave deleted ones
+					// selectable. An options-backed rule keeps its picker either way.
 					setOptions( fetched );
 				}
 			} )
@@ -209,43 +210,54 @@ const AccessRuleValueControl = ( {
 		};
 	}, [ slug ] );
 
-	if ( 'one_time_purchase' === slug ) {
-		return <OneTimePurchaseRuleControl value={ value } onChange={ onChange } options={ options } productsLabel={ config.name } />;
-	}
+	// Rendered alongside whichever control the rule gets, since the list the publisher is
+	// editing against is the stale one wherever the fetch failed.
+	const fetchFailedNotice = didFetchFail && <p className="newspack-access-rule-values-notice">{ getAccessRuleOptionsFetchFailedNotice() }</p>;
 
-	if ( options.length > 0 ) {
+	let control;
+	if ( 'one_time_purchase' === slug ) {
+		control = <OneTimePurchaseRuleControl value={ value } onChange={ onChange } options={ options } productsLabel={ config.name } />;
+	} else if ( isOptionBackedAccessRule( slug, staticOptions ) ) {
 		const selected = Array.isArray( value ) ? value : [];
-		return (
+		control = (
 			<>
 				<FormTokenField
 					label={ config.name }
 					value={ getAccessRuleOptionTokens( options, selected, getMissingOptionLabel( slug ) ) }
 					suggestions={ options.map( formatAccessRuleOptionLabel ) }
-					onChange={ ( tokens: ( string | TokenItem )[] ) => onChange( resolveAccessRuleOptionTokens( tokens, options, selected ) ) }
-					messages={ getAccessRuleTokenFieldMessages() }
-					__experimentalValidateInput={ ( input: string ) => isAccessRuleOptionInput( input, options ) }
+					onChange={ ( tokens: ( string | TokenItem )[] ) =>
+						onChange( resolveAccessRuleOptionTokens( tokens, options, { slug, stored: selected } ) )
+					}
+					messages={ getAccessRuleTokenFieldMessages( slug ) }
+					__experimentalValidateInput={ ( input: string ) => isAccessRuleOptionInput( input, options, slug ) }
 					__experimentalAutoSelectFirstMatch
 					__experimentalExpandOnFocus
 					__next40pxDefaultSize
 					__nextHasNoMarginBottom
 				/>
 				<UnlistedValuesNotice options={ options } value={ selected } />
-				{ didFetchFail && <p className="newspack-access-rule-values-notice">{ getAccessRuleOptionsFetchFailedNotice() }</p> }
 			</>
+		);
+	} else {
+		control = (
+			<TextControl
+				hideLabelFromVision
+				label={ config.name }
+				placeholder={ config.placeholder ?? '' }
+				help={ __( 'Separate with commas.', 'newspack-plugin' ) }
+				value={ typeof value === 'string' ? value : '' }
+				onChange={ onChange as ( value: string ) => void }
+				__next40pxDefaultSize
+				__nextHasNoMarginBottom
+			/>
 		);
 	}
 
 	return (
-		<TextControl
-			hideLabelFromVision
-			label={ config.name }
-			placeholder={ config.placeholder ?? '' }
-			help={ __( 'Separate with commas.', 'newspack-plugin' ) }
-			value={ typeof value === 'string' ? value : '' }
-			onChange={ onChange as ( value: string ) => void }
-			__next40pxDefaultSize
-			__nextHasNoMarginBottom
-		/>
+		<>
+			{ control }
+			{ fetchFailedNotice }
+		</>
 	);
 };
 

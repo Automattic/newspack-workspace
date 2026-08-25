@@ -9,6 +9,16 @@
  */
 import { render, screen, fireEvent, within } from '@testing-library/react';
 
+/**
+ * WordPress dependencies
+ */
+import apiFetch from '@wordpress/api-fetch';
+
+/**
+ * Internal dependencies
+ */
+import { INSTITUTION_RULE_SLUG, invalidateAccessRuleOptions } from '../access-rule-option-sources';
+
 const registeredFilters = {};
 
 jest.mock( '@wordpress/hooks', () => ( {
@@ -40,6 +50,8 @@ window.newspackBlockVisibility = {
 	],
 	available_access_rules: {
 		subscription: { name: 'Active subscription', description: '', default: [], options: DUPLICATE_NAME_PRODUCTS },
+		// The one rule whose options are fetched at edit time rather than localised.
+		institution: { name: 'Institutional access', description: '', default: [], options: [ { value: 12, label: 'City Library' } ] },
 	},
 };
 
@@ -118,5 +130,40 @@ describe( 'block visibility panel, access rule picker', () => {
 		renderSubscriptionRule( [ 188250 ] );
 
 		expect( screen.queryByRole( 'note' ) ).not.toBeInTheDocument();
+	} );
+} );
+
+describe( 'block visibility panel, a rule whose options are fetched', () => {
+	const renderInstitutionRule = value =>
+		renderPanel( {
+			newspackAccessControlMode: 'custom',
+			newspackAccessControlRules: { custom_access: { active: true, access_rules: [ [ { slug: 'institution', value } ] ] } },
+		} );
+
+	beforeEach( () => {
+		// The fetched list is cached for the page's lifetime, so each case has to start
+		// from an uncached one to get its own response.
+		invalidateAccessRuleOptions( INSTITUTION_RULE_SLUG );
+		apiFetch.mockResolvedValue( [] );
+	} );
+
+	it( 'keeps the picker when the list comes back empty, and stops naming what the list no longer holds', async () => {
+		// Deleting the last institution is a legitimate empty response, not a failure.
+		// Falling back to the page-load snapshot would leave a deleted institution named
+		// and selectable, and reading the empty list as "this rule has no options" would
+		// drop the rule to the free-text control, which writes a string over its IDs.
+		renderInstitutionRule( [ 12 ] );
+
+		expect( await screen.findByText( '(institution not listed) (#12)' ) ).toBeInTheDocument();
+		expect( screen.queryByRole( 'textbox' ) ).not.toBeInTheDocument();
+	} );
+
+	it( 'keeps the page-load list when the request fails, and says it may be stale', async () => {
+		apiFetch.mockRejectedValue( new Error( 'Network error' ) );
+
+		renderInstitutionRule( [ 12 ] );
+
+		expect( await screen.findByText( /may be outdated/ ) ).toBeInTheDocument();
+		expect( screen.getByText( 'City Library (#12)' ) ).toBeInTheDocument();
 	} );
 } );

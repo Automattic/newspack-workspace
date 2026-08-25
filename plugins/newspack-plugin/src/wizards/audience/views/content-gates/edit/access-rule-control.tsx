@@ -17,6 +17,7 @@ import {
 	isAccessRuleOptionInput,
 	resolveAccessRuleOptionTokens,
 } from '../../../../../content-gate/access-rule-options';
+import { isOptionBackedAccessRule } from '../../../../../content-gate/access-rule-option-sources';
 import OneTimePurchaseRuleControl from '../../../../../content-gate/components/one-time-purchase-rule-control';
 import UnlistedValuesNotice from '../../../../../content-gate/components/unlisted-values-notice';
 import { useAccessRuleOptions } from '../use-access-rule-options';
@@ -31,7 +32,7 @@ export default function AccessRuleControl( { slug, value, onChange }: GateRuleCo
 	if ( 'one_time_purchase' === slug ) {
 		return <OneTimePurchaseRuleControl value={ value } onChange={ onChange } options={ options } TokenField={ FormTokenField } />;
 	}
-	if ( options.length > 0 ) {
+	if ( isOptionBackedAccessRule( slug, rule.options ?? [] ) ) {
 		const selected = Array.isArray( value ) ? value : [];
 		return (
 			<>
@@ -40,10 +41,12 @@ export default function AccessRuleControl( { slug, value, onChange }: GateRuleCo
 					label={ rule.name }
 					description={ __( 'Search by name or ID.', 'newspack-plugin' ) }
 					value={ getAccessRuleOptionTokens( options, selected, getMissingOptionLabel( slug ) ) }
-					onChange={ ( tokens: ( string | TokenItem )[] ) => onChange( resolveAccessRuleOptionTokens( tokens, options, selected ) ) }
+					onChange={ ( tokens: ( string | TokenItem )[] ) =>
+						onChange( resolveAccessRuleOptionTokens( tokens, options, { slug, stored: selected } ) )
+					}
 					suggestions={ options.map( formatAccessRuleOptionLabel ) }
-					messages={ getAccessRuleTokenFieldMessages() }
-					__experimentalValidateInput={ ( input: string ) => isAccessRuleOptionInput( input, options ) }
+					messages={ getAccessRuleTokenFieldMessages( slug ) }
+					__experimentalValidateInput={ ( input: string ) => isAccessRuleOptionInput( input, options, slug ) }
 					__experimentalAutoSelectFirstMatch
 					__experimentalExpandOnFocus
 					__next40pxDefaultSize

@@ -1,18 +1,22 @@
 /**
  * External dependencies
  */
-import { render, screen, fireEvent, within } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 
 /**
  * WordPress dependencies
  */
+import apiFetch from '@wordpress/api-fetch';
 import { select } from '@wordpress/data';
 
 /**
  * Internal dependencies
  */
 import AccessRuleControl from './access-rule-control';
+import { INSTITUTION_RULE_SLUG, invalidateAccessRuleOptions } from '../../../../../content-gate/access-rule-option-sources';
 import registerWizardStore, { WIZARD_STORE_NAMESPACE } from '../../../../../../packages/components/src/wizard/store';
+
+jest.mock( '@wordpress/api-fetch', () => jest.fn() );
 
 // The control dispatches notices through the wizard store, which registers on demand.
 // `@wordpress/data` itself is left real — `@wordpress/components` needs it — and the
@@ -134,5 +138,48 @@ describe( 'AccessRuleControl option picker', () => {
 		renderControl( { options: [], value: 'example.com', onChange: jest.fn() } );
 
 		expect( screen.getByDisplayValue( 'example.com' ) ).toBeInTheDocument();
+	} );
+} );
+
+describe( 'AccessRuleControl, a rule whose options are fetched', () => {
+	const renderInstitutionControl = value => {
+		window.newspackAudienceContentGates = {
+			available_access_rules: {
+				institution: { name: 'Institutional access', options: [ { value: 12, label: 'City Library' } ] },
+			},
+		};
+		return render( <AccessRuleControl slug="institution" value={ value } onChange={ jest.fn() } /> );
+	};
+
+	beforeEach( () => {
+		// The fetched list is cached for the app's lifetime, so each case has to start
+		// from an uncached one to get its own response.
+		invalidateAccessRuleOptions( INSTITUTION_RULE_SLUG );
+		apiFetch.mockResolvedValue( [] );
+	} );
+
+	it( 'keeps the picker when the list comes back empty, and stops naming what the list no longer holds', async () => {
+		// Institutions are created and deleted in this same app, so deleting the last one
+		// is a legitimate empty response. Falling back to the page-load snapshot would
+		// leave a deleted institution named and selectable, and reading the empty list as
+		// "this rule has no options" would drop it to the free-text control, which writes
+		// a string over the rule's IDs.
+		renderInstitutionControl( [ 12 ] );
+
+		expect( await screen.findByText( '(institution not listed) (#12)' ) ).toBeInTheDocument();
+		expect( screen.queryByRole( 'textbox' ) ).not.toBeInTheDocument();
+	} );
+
+	it( 'keeps the page-load list when the request fails, and says so', async () => {
+		apiFetch.mockRejectedValue( new Error( 'Network error' ) );
+
+		renderInstitutionControl( [ 12 ] );
+
+		await waitFor( () =>
+			expect( select( WIZARD_STORE_NAMESPACE ).getNotices() ).toContainEqual(
+				expect.objectContaining( { id: `rule-options-error-${ INSTITUTION_RULE_SLUG }`, type: 'error' } )
+			)
+		);
+		expect( screen.getByText( 'City Library (#12)' ) ).toBeInTheDocument();
 	} );
 } );

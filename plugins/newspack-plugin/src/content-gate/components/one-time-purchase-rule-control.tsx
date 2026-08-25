@@ -29,6 +29,8 @@ import {
 } from '../access-rule-options';
 import UnlistedValuesNotice from './unlisted-values-notice';
 
+const RULE_SLUG = 'one_time_purchase';
+
 const DURATION_UNITS = [ 'days', 'months', 'forever' ] as const;
 
 /**
@@ -88,12 +90,12 @@ export default function OneTimePurchaseRuleControl( {
 		<>
 			<TokenField
 				label={ productsLabel }
-				value={ getAccessRuleOptionTokens( options, currentValue.product_ids, getMissingOptionLabel( 'one_time_purchase' ) ) }
+				value={ getAccessRuleOptionTokens( options, currentValue.product_ids, getMissingOptionLabel( RULE_SLUG ) ) }
 				suggestions={ options.map( formatAccessRuleOptionLabel ) }
 				onChange={ ( tokens: ( string | TokenItem )[] ) =>
 					onChange( {
 						...currentValue,
-						product_ids: resolveAccessRuleOptionTokens( tokens, options, currentValue.product_ids ),
+						product_ids: resolveAccessRuleOptionTokens( tokens, options, { slug: RULE_SLUG, stored: currentValue.product_ids } ),
 					} )
 				}
 				// FormTokenField accepts free-typed tokens by default, and one that
@@ -102,10 +104,8 @@ export default function OneTimePurchaseRuleControl( {
 				// renders nothing, say what the field wants in the announcement, and
 				// let Enter commit the highlighted suggestion so typing a product name
 				// selects it rather than being rejected.
-				__experimentalValidateInput={ ( input: string ) => isAccessRuleOptionInput( input, options ) }
-				messages={ getAccessRuleTokenFieldMessages(
-					__( 'Not a selectable product. Pick one from the list, or type its ID.', 'newspack-plugin' )
-				) }
+				__experimentalValidateInput={ ( input: string ) => isAccessRuleOptionInput( input, options, RULE_SLUG ) }
+				messages={ getAccessRuleTokenFieldMessages( RULE_SLUG ) }
 				__experimentalAutoSelectFirstMatch
 				__experimentalExpandOnFocus
 				__next40pxDefaultSize

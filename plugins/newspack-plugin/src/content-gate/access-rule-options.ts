@@ -40,6 +40,20 @@ const TOKEN_ID_PATTERN = /\(#([^)]+)\)\s*$/;
 const BARE_ID_PATTERN = /^\d+$/;
 
 /**
+ * Rules whose option list is the complete set of values that can ever match, so an ID the
+ * list does not describe is not a value at all and is refused rather than stored.
+ *
+ * The other rules are why a bare ID is admitted in the first place: an "Active
+ * subscription" rule matches a variation ID and a one-time purchase the `_variation_id`
+ * on an order item, neither of which the list holds. Gates and institutions work the
+ * other way — each list is the published posts, and each server-side test resolves from
+ * that same set — so an ID outside the list matches nobody. For a gate that is not a
+ * harmless no-op: a block whose gates all fail `Block_Visibility::has_active_gates()` is
+ * shown to everyone.
+ */
+const EXHAUSTIVE_OPTION_RULES = [ 'gate', 'institution' ];
+
+/**
  * Stand-in name for a stored value the option list does not contain. Keyed by rule slug
  * so the wording names the right kind of thing.
  *
@@ -141,27 +155,35 @@ export function getAccessRuleOptionTokens( options: AccessRuleOption[], value: u
  * Resolve tokens coming back from `FormTokenField` to option values.
  *
  * A token matches its option by the ID it carries, so options sharing a name stay
- * distinct. A token typed or pasted as a bare ID resolves too, whether or not an option
- * describes it: evaluation resolves more than the option list holds — an "Active
- * subscription" rule matches a variation ID, a one-time purchase the `_variation_id` on
- * an order item — so a publisher who removes such a token can type it back in.
+ * distinct. For a rule whose option list is not the whole story, a token typed or pasted
+ * as a bare ID resolves whether or not an option describes it: evaluation resolves more
+ * than the list holds — an "Active subscription" rule matches a variation ID, a one-time
+ * purchase the `_variation_id` on an order item — so a publisher who removes such a token
+ * can type it back in. For the rules in `EXHAUSTIVE_OPTION_RULES` there is nothing to
+ * type back in, and an ID from those lists' outside is dropped.
  *
- * @param tokens  The tokens from the field.
- * @param options The available rule options.
- * @param stored  The values currently stored on the rule. IDs among these resolve even
- *                when no option matches them, so a value the option list cannot describe
- *                is preserved rather than silently dropped. A full `<name> (#<id>)` token
- *                for an unknown ID resolves only from here, so a rule's own tokens
- *                survive a round trip without a pasted one inventing a value.
+ * @param tokens        The tokens from the field.
+ * @param options       The available rule options.
+ * @param config        The rule the tokens belong to.
+ * @param config.slug   The rule slug, which decides whether an ID no option describes is
+ *                      a value at all.
+ * @param config.stored The values currently stored on the rule. IDs among these resolve
+ *                      even when no option matches them, so a value the option list
+ *                      cannot describe is preserved rather than silently dropped — for
+ *                      every rule, since an unpublished gate is still the gate the block
+ *                      was pointed at. A full `<name> (#<id>)` token for an unknown ID
+ *                      resolves only from here, so a rule's own tokens survive a round
+ *                      trip without a pasted one inventing a value.
  *
  * @return The selected option values, deduplicated, in token order.
  */
 export function resolveAccessRuleOptionTokens(
 	tokens: ( string | TokenItem )[],
 	options: AccessRuleOption[],
-	stored: readonly ( string | number )[] = []
+	{ slug, stored = [] }: { slug: string; stored?: readonly ( string | number )[] }
 ): ( string | number )[] {
 	const byLabel = new Map( options.map( option => [ formatAccessRuleOptionLabel( option ), option.value ] ) );
+	const acceptsUnlistedIds = ! EXHAUSTIVE_OPTION_RULES.includes( slug );
 	const resolved: ( string | number )[] = [];
 
 	for ( const token of tokens ) {
@@ -176,7 +198,9 @@ export function resolveAccessRuleOptionTokens(
 			const trimmed = String( raw ).trim();
 			const id = ( trimmed.match( TOKEN_ID_PATTERN )?.[ 1 ] ?? trimmed ).trim();
 			value = findAccessRuleOption( options, id )?.value ?? stored.find( v => String( v ) === id );
-			if ( undefined === value && BARE_ID_PATTERN.test( trimmed ) ) {
+			// Post IDs start at 1, and `sanitize_access_rule` filters falsy values out of
+			// the saved list, so a `0` accepted here would vanish on the next reload.
+			if ( undefined === value && acceptsUnlistedIds && BARE_ID_PATTERN.test( trimmed ) && Number( trimmed ) > 0 ) {
 				value = Number( trimmed );
 			}
 		}
@@ -189,8 +213,8 @@ export function resolveAccessRuleOptionTokens(
 }
 
 /**
- * Whether an input typed into the field resolves to a value: an option's full token, or
- * a bare ID, which need not be one the option list describes.
+ * Whether an input typed into the field resolves to a value: an option's full token, or —
+ * for a rule whose option list is not exhaustive — a bare ID the list need not describe.
  *
  * Used as `FormTokenField`'s input validator, which drops anything it rejects rather than
  * letting it become a token that silently disappears on the next render. The field
@@ -206,12 +230,29 @@ export function resolveAccessRuleOptionTokens(
  *
  * @param input   The typed input.
  * @param options The available rule options.
+ * @param slug    The rule slug.
  *
  * @return Whether the input resolves.
  */
-export function isAccessRuleOptionInput( input: string, options: AccessRuleOption[] ): boolean {
-	return resolveAccessRuleOptionTokens( [ input ], options ).length > 0;
+export function isAccessRuleOptionInput( input: string, options: AccessRuleOption[], slug: string ): boolean {
+	return resolveAccessRuleOptionTokens( [ input ], options, { slug } ).length > 0;
 }
+
+/**
+ * Wording for an input the field refused, keyed by rule slug: it names the kind of thing
+ * the list holds, and it promises typing an ID only where an unlisted one is accepted.
+ */
+const INVALID_INPUT_MESSAGES: Record< string, () => string > = {
+	subscription: () => __( 'Not a selectable product. Pick one from the list, or type its ID.', 'newspack-plugin' ),
+	one_time_purchase: () => __( 'Not a selectable product. Pick one from the list, or type its ID.', 'newspack-plugin' ),
+	institution: () => __( 'Not a selectable institution. Pick one from the list.', 'newspack-plugin' ),
+	gate: () => __( 'Not a selectable gate. Pick one from the list.', 'newspack-plugin' ),
+};
+
+/**
+ * Wording for a rule this module knows nothing about, which accepts an unlisted ID.
+ */
+const DEFAULT_INVALID_INPUT_MESSAGE = () => __( 'Not a selectable option. Pick one from the list, or type its ID.', 'newspack-plugin' );
 
 /**
  * `FormTokenField`'s announcement strings.
@@ -220,16 +261,16 @@ export function isAccessRuleOptionInput( input: string, options: AccessRuleOptio
  * generic strings have to be repeated to override the fourth. The default for that
  * fourth one is "Invalid item", which says nothing about what the field accepts.
  *
- * @param invalid Wording for a rejected input. Defaults to the option-picker phrasing.
+ * @param slug The rule slug, which decides the wording for a rejected input.
  *
  * @return The messages for `FormTokenField`.
  */
-export function getAccessRuleTokenFieldMessages( invalid?: string ) {
+export function getAccessRuleTokenFieldMessages( slug: string ) {
 	return {
 		added: __( 'Item added.', 'newspack-plugin' ),
 		removed: __( 'Item removed.', 'newspack-plugin' ),
 		remove: __( 'Remove item', 'newspack-plugin' ),
-		__experimentalInvalid: invalid ?? __( 'Not a selectable option. Pick one from the list, or type its ID.', 'newspack-plugin' ),
+		__experimentalInvalid: ( INVALID_INPUT_MESSAGES[ slug ] ?? DEFAULT_INVALID_INPUT_MESSAGE )(),
 	};
 }
 

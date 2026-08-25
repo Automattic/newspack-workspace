@@ -19,11 +19,25 @@ import { useEffect } from '@wordpress/element';
  */
 import { getUnlistedAccessRuleValuesNotice, hasUnlistedAccessRuleValues, type AccessRuleOption } from '../access-rule-options';
 
+/**
+ * Whether the caution has been spoken yet in this page's lifetime.
+ *
+ * Module scope rather than component state, because the repetition to suppress happens
+ * across mounts: the block inspector unmounts on deselection, so an effect keyed on the
+ * component's own lifetime read the whole paragraph out again every time a publisher
+ * clicked between two blocks carrying an unlisted value. `@wordpress/a11y` will not
+ * absorb the repeat either — it appends a non-breaking space to a message matching the
+ * previous one, precisely to force a re-announcement. The wording is the same whichever
+ * picker raises it, so a second reading carries nothing the first did not.
+ */
+let hasSpokenNotice = false;
+
 export default function UnlistedValuesNotice( { options, value }: { options: AccessRuleOption[]; value: unknown } ) {
 	const hasUnlisted = hasUnlistedAccessRuleValues( options, value );
 
 	useEffect( () => {
-		if ( hasUnlisted ) {
+		if ( hasUnlisted && ! hasSpokenNotice ) {
+			hasSpokenNotice = true;
 			speak( getUnlistedAccessRuleValuesNotice(), 'polite' );
 		}
 	}, [ hasUnlisted ] );

@@ -65,10 +65,11 @@ export function useAccessRuleOptions(): Record< string, AccessRuleOption[] > {
 			Object.fromEntries(
 				Object.entries( rules ).map( ( [ slug, rule ] ) => [
 					slug,
-					// An empty response leaves the localised list in place: it was
-					// complete at page load, and dropping to no options at all would turn
-					// still-granting IDs into entries a publisher can only remove.
-					fetchedOptions[ slug ]?.length ? fetchedOptions[ slug ] : rule?.options ?? [],
+					// A response that came back empty is used as it is: the site really
+					// does have no institutions left, and falling back to the page-load
+					// snapshot would leave deleted ones named and selectable. Only a
+					// failed fetch keeps the snapshot, and it says so in a notice.
+					fetchedOptions[ slug ] ?? rule?.options ?? [],
 				] )
 			),
 		// eslint-disable-next-line react-hooks/exhaustive-deps
