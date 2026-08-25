@@ -44,6 +44,19 @@ class Memberships_Audit {
 	const QUERY_BATCH_SIZE = 500;
 
 	/**
+	 * Seconds to pause between batches unless --sleep says otherwise.
+	 *
+	 * The audit reads the whole membership table on a production site, several
+	 * queries per row, as fast as the database will answer. Nothing about the audit
+	 * needs that speed — it is an operator running a report, not a request serving a
+	 * reader — so the default trades a couple of minutes on a large site for leaving
+	 * headroom to the readers using it at the same time. Pass --sleep=0 to opt out.
+	 *
+	 * @var float
+	 */
+	const DEFAULT_SLEEP_SECONDS = 2;
+
+	/**
 	 * Subscription statuses that grant content access under Access Control.
 	 *
 	 * Mirrors `WooCommerce_Connection::ACTIVE_SUBSCRIPTION_STATUSES`. Held as a
@@ -231,6 +244,12 @@ class Memberships_Audit {
 	 * [--only=<classes>]
 	 * : Comma-delimited classes to report member-by-member: gift, order-only, order-only-unpaid, subscription-missing. Defaults to gift + order-only. Counts for every class are printed regardless.
 	 *
+	 * [--sleep=<seconds>]
+	 * : Seconds to pause between batches of memberships, to keep a full-table walk from monopolising the database on a live site. Pass 0 to run flat out.
+	 * ---
+	 * default: 2
+	 * ---
+	 *
 	 * [--format=<format>]
 	 * : Output format. `ids` prints only the flagged user IDs, one per line, deduplicated per user.
 	 * ---
@@ -246,6 +265,7 @@ class Memberships_Audit {
 	 *
 	 *     wp newspack audit-membership-subscriptions
 	 *     wp newspack audit-membership-subscriptions --plan-ids=78,91
+	 *     wp newspack audit-membership-subscriptions --sleep=0
 	 *     wp newspack audit-membership-subscriptions --only=gift --format=csv
 	 *     wp newspack audit-membership-subscriptions --only=gift --format=ids
 	 *
@@ -271,6 +291,15 @@ class Memberships_Audit {
 			// this command still classifies correctly.
 			WP_CLI::warning( 'WooCommerce Subscriptions is not active — every membership is audited as if it had no subscription link.' );
 		}
+
+		// Validated rather than absint()-ed: a mistyped --sleep=2s would otherwise
+		// silently become 2, and --sleep=-1 would become 0, so an operator asking for
+		// a gentler run could get a faster one without being told.
+		$sleep_arg = \WP_CLI\Utils\get_flag_value( $assoc_args, 'sleep', self::DEFAULT_SLEEP_SECONDS );
+		if ( ! is_numeric( $sleep_arg ) || (float) $sleep_arg < 0 ) {
+			WP_CLI::error( sprintf( 'Invalid --sleep value "%s". Pass a non-negative number of seconds, or 0 to run without pausing.', $sleep_arg ) );
+		}
+		$sleep_seconds = (float) $sleep_arg;
 
 		$format = \WP_CLI\Utils\get_flag_value( $assoc_args, 'format', 'table' );
 		// Only the table format narrates. csv/json/ids are consumed by redirecting
@@ -350,7 +379,12 @@ class Memberships_Audit {
 							$progress->tick();
 						}
 					}
-				}
+				},
+				// Only this walk paces itself. It is the one that reads the whole
+				// membership table with several queries per row; the plan walk below is
+				// a handful of rows and pausing it would only make the command feel slow
+				// before it has done anything.
+				$sleep_seconds
 			);
 
 			if ( $progress ) {
@@ -461,10 +495,11 @@ class Memberships_Audit {
 	 * @param array    $args     WP_Query args. Paging, ordering and `fields` are set here.
 	 * @param callable $callback Receives ( int[] $post_ids, int $total ) per batch, where
 	 *                           $total is the count taken at the start of the walk.
+	 * @param float    $sleep    Seconds to pause between batches; 0 runs without pausing.
 	 *
 	 * @return int The number of posts actually walked.
 	 */
-	private static function each_post_id_batch( array $args, callable $callback ) {
+	private static function each_post_id_batch( array $args, callable $callback, float $sleep = 0 ) {
 		global $wpdb;
 
 		$args = array_merge(
@@ -520,6 +555,13 @@ class Memberships_Audit {
 				// wasted query on every run whose count divides evenly.
 				if ( count( $query->posts ) < self::QUERY_BATCH_SIZE ) {
 					break;
+				}
+
+				// Between batches only, so a run that fits in one batch never pauses and
+				// the last batch never pauses on the way out. usleep() takes whole
+				// microseconds, which lets --sleep=0.5 mean what it says.
+				if ( $sleep > 0 ) {
+					usleep( (int) round( $sleep * 1000000 ) );
 				}
 			}
 		} finally {

@@ -662,6 +662,53 @@ class Test_Memberships_Audit extends WP_UnitTestCase {
 	}
 
 	/**
+	 * The walk pauses between batches, and only between them.
+	 *
+	 * The audit reads a production membership table as fast as the database answers,
+	 * so it paces itself by default. Two things have to hold for that to be worth
+	 * having: the pause happens between batches (not after the last one, where it
+	 * would only delay the operator), and --sleep=0 removes it entirely.
+	 *
+	 * Timed with a deliberately small pause: this asserts the wiring, not the wall
+	 * clock, so it stays fast and does not flake on a loaded machine.
+	 */
+	public function test_the_batch_walk_paces_itself_between_batches() {
+		$batch_size = ( new \ReflectionClass( Memberships_Audit::class ) )->getConstant( 'QUERY_BATCH_SIZE' );
+		// One full batch plus a short one: the walk pauses after the full batch and
+		// stops on the short one, so exactly one pause. A count that divides evenly
+		// into the batch size would pause once more, because a full batch is
+		// indistinguishable from "there is more to do" until the next query comes back
+		// empty — that extra pause is the same wasted round trip the size check
+		// already documents, and it is not what this test is about.
+		for ( $i = 0; $i < ( $batch_size + 5 ); $i++ ) {
+			self::factory()->post->create( [ 'post_status' => 'publish' ] );
+		}
+
+		$walk = new \ReflectionMethod( Memberships_Audit::class, 'each_post_id_batch' );
+		$walk->setAccessible( true );
+		$args = [
+			'post_type'   => 'post',
+			'post_status' => 'publish',
+		];
+
+		// Half a second, so the pause dominates the query time rather than competing
+		// with it: differencing two timed runs would make this flake on a busy machine.
+		$pause = 0.5;
+
+		$started = microtime( true );
+		$walk->invoke( null, $args, function () {}, 0.0 );
+		$unpaced = microtime( true ) - $started;
+
+		$started = microtime( true );
+		$walk->invoke( null, $args, function () {}, $pause );
+		$paced = microtime( true ) - $started;
+
+		$this->assertLessThan( $pause, $unpaced, '--sleep=0 does not pause at all.' );
+		$this->assertGreaterThanOrEqual( $pause, $paced, 'One pause separates the two batches.' );
+		$this->assertLessThan( $pause * 2, $paced, 'Exactly one pause: the walk does not also sleep after the final batch.' );
+	}
+
+	/**
 	 * The batch walk visits every row even when the audited set shrinks mid-run.
 	 *
 	 * The audit is read-only; the site is not. A membership leaving the set while
