@@ -495,7 +495,7 @@ class Test_Premium_Newsletters_Verify extends \WP_UnitTestCase {
 	public function test_classify_removal_records_a_confirmed_removal() {
 		$this->assertSame(
 			'removed',
-			$this->invoke_private_static( 'classify_removal', [ true, [ '456' ], '123' ] )
+			$this->invoke_private_static( 'classify_removal', [ true, [ '456' ], '123', true ] )
 		);
 	}
 
@@ -508,7 +508,7 @@ class Test_Premium_Newsletters_Verify extends \WP_UnitTestCase {
 	 * is 'unresolved', which also fails the run.
 	 */
 	public function test_classify_removal_rejects_a_removal_the_esp_did_not_make() {
-		$status = $this->invoke_private_static( 'classify_removal', [ true, [ '123', '456' ], '123' ] );
+		$status = $this->invoke_private_static( 'classify_removal', [ true, [ '123', '456' ], '123', true ] );
 
 		$this->assertSame( 'unresolved', $status );
 		$this->assertTrue(
@@ -526,11 +526,11 @@ class Test_Premium_Newsletters_Verify extends \WP_UnitTestCase {
 	public function test_classify_removal_is_unresolved_when_it_cannot_be_confirmed() {
 		$this->assertSame(
 			'unresolved',
-			$this->invoke_private_static( 'classify_removal', [ new \WP_Error( 'newspack_newsletters_error', 'Nope' ), [], '123' ] )
+			$this->invoke_private_static( 'classify_removal', [ new \WP_Error( 'newspack_newsletters_error', 'Nope' ), [], '123', true ] )
 		);
 		$this->assertSame(
 			'unresolved',
-			$this->invoke_private_static( 'classify_removal', [ true, new \WP_Error( 'newspack_newsletters_error', 'Nope' ), '123' ] )
+			$this->invoke_private_static( 'classify_removal', [ true, new \WP_Error( 'newspack_newsletters_error', 'Nope' ), '123', true ] )
 		);
 	}
 
@@ -917,6 +917,10 @@ class Test_Premium_Newsletters_Verify extends \WP_UnitTestCase {
 		'newspack_newsletters_mailchimp_search_members' => 'mailchimp/class-newspack-newsletters-mailchimp.php',
 		'newspack_newsletter_error_get_contact'         => 'constant_contact/class-newspack-newsletters-constant-contact-sdk.php',
 		'newspack_newsletters_error'                    => 'class-newspack-newsletters-service-provider.php',
+		// An address matching several Constant Contact records is not a miss. Taking
+		// the not-found branch would read that reader as subscribed to nothing and
+		// pass every restricted list they hold.
+		'newspack_newsletters_constant_contact_contact_ambiguous' => 'constant_contact/class-newspack-newsletters-constant-contact-sdk.php',
 	];
 
 	/**
@@ -1377,7 +1381,7 @@ class Test_Premium_Newsletters_Verify extends \WP_UnitTestCase {
 						'value' => [ 41 ],
 					],
 				],
-			] 
+			]
 		);
 		$gate['registration']                        = [
 			'active'               => false,
@@ -1497,5 +1501,135 @@ class Test_Premium_Newsletters_Verify extends \WP_UnitTestCase {
 			'removed',
 			$this->invoke_private_static( 'classify_removal', [ true, [ 'list-b' ], 'list-a', false ] )
 		);
+	}
+
+	/**
+	 * An ESP gateway built from canned answers, standing in for the provider.
+	 *
+	 * @param array $contact_returns One return value per `contact` call, in order.
+	 * @param mixed $lists_return    What the `lists` call returns.
+	 *
+	 * @return array{gateway:array,calls:object} The gateway, and a counter the caller
+	 *                                           reads to assert how often it was used.
+	 */
+	private function fake_esp_gateway( array $contact_returns, $lists_return ): array {
+		$calls = new \stdClass();
+		$calls->contact = 0;
+		$calls->lists   = 0;
+		$gateway = [
+			'contact' => function () use ( $contact_returns, $calls ) {
+				$index = $calls->contact;
+				++$calls->contact;
+				return $contact_returns[ $index ] ?? end( $contact_returns );
+			},
+			'lists'   => function () use ( $lists_return, $calls ) {
+				++$calls->lists;
+				return $lists_return;
+			},
+			'remove'  => fn() => true,
+		];
+		return [
+			'gateway' => $gateway,
+			'calls'   => $calls,
+		];
+	}
+
+	/**
+	 * Every shipped provider turns a failed list read into an empty array, so an
+	 * empty list set from a contact that exists means either "on no lists" or "the
+	 * provider stopped answering". Believing it outright classifies a restricted
+	 * reader as ok and lets the run exit 0 over a real leak, so it is only accepted
+	 * once a further contact read shows the provider is still answering.
+	 */
+	public function test_an_empty_list_set_is_unresolved_when_the_provider_stops_answering() {
+		$contact         = [ 'email' => 'reader@example.test' ];
+		$provider_failed = new \WP_Error( 'newspack_newsletters_mailchimp_search_members', 'Gateway timeout' );
+		$fake            = $this->fake_esp_gateway( [ $contact, $provider_failed ], [] );
+
+		[ $lists, $unresolved ] = $this->invoke_private_static( 'read_list_membership', [ $fake['gateway'], 'reader@example.test' ] );
+
+		$this->assertTrue( $unresolved );
+		$this->assertSame( [], $lists );
+		$this->assertSame( 2, $fake['calls']->contact, 'The empty list set should have been corroborated by a second contact read.' );
+	}
+
+	/**
+	 * The same empty list set is the truth when the provider is plainly still
+	 * answering. Treating it as unresolved would fail every site whose readers are
+	 * genuinely on no lists.
+	 */
+	public function test_an_empty_list_set_is_believed_when_the_contact_still_resolves() {
+		$contact = [ 'email' => 'reader@example.test' ];
+		$fake    = $this->fake_esp_gateway( [ $contact, $contact ], [] );
+
+		[ $lists, $unresolved ] = $this->invoke_private_static( 'read_list_membership', [ $fake['gateway'], 'reader@example.test' ] );
+
+		$this->assertFalse( $unresolved );
+		$this->assertSame( [], $lists );
+	}
+
+	/**
+	 * A non-empty list set is evidence on its own — the provider plainly answered —
+	 * so it costs no corroborating call.
+	 */
+	public function test_a_populated_list_set_is_taken_at_face_value() {
+		$fake = $this->fake_esp_gateway( [ [ 'email' => 'reader@example.test' ] ], [ 'list-a' ] );
+
+		[ $lists, $unresolved ] = $this->invoke_private_static( 'read_list_membership', [ $fake['gateway'], 'reader@example.test' ] );
+
+		$this->assertFalse( $unresolved );
+		$this->assertSame( [ 'list-a' ], $lists );
+		$this->assertSame( 1, $fake['calls']->contact );
+	}
+
+	/**
+	 * A reader the ESP has no contact for is on no lists, which is a fact rather than
+	 * a failure. Failing them would fail every run over a site whose paying readers
+	 * are not all in the ESP.
+	 */
+	public function test_a_contact_that_does_not_exist_reads_as_no_lists() {
+		$missing = new \WP_Error( 'newspack_newsletters_mailchimp_contact_not_found', 'Contact not found' );
+		$fake    = $this->fake_esp_gateway( [ $missing ], [ 'list-a' ] );
+
+		[ $lists, $unresolved ] = $this->invoke_private_static( 'read_list_membership', [ $fake['gateway'], 'reader@example.test' ] );
+
+		$this->assertFalse( $unresolved );
+		$this->assertSame( [], $lists );
+		$this->assertSame( 0, $fake['calls']->lists, 'A missing contact has no lists to read.' );
+	}
+
+	/**
+	 * A failed contact read is not a missing contact: nothing is known about this
+	 * reader, and reporting them as on no lists would hide a leak.
+	 */
+	public function test_a_failed_contact_read_is_unresolved() {
+		$provider_failed = new \WP_Error( 'newspack_newsletters_error', 'Service unavailable' );
+		$fake            = $this->fake_esp_gateway( [ $provider_failed ], [ 'list-a' ] );
+
+		[ $lists, $unresolved ] = $this->invoke_private_static( 'read_list_membership', [ $fake['gateway'], 'reader@example.test' ] );
+
+		$this->assertTrue( $unresolved );
+		$this->assertSame( [], $lists );
+		$this->assertSame( 0, $fake['calls']->lists );
+	}
+
+	/**
+	 * The corroborating read is strict where the primary read is forgiving, and the
+	 * asymmetry is the point. Corroboration only runs once the primary read has
+	 * already resolved the contact, so a contact that now reads as missing is a
+	 * contradiction rather than a fact about the reader — and it is the shape a
+	 * flaking provider takes, since Mailchimp returns its not-found code whenever
+	 * exact_matches comes back empty on an HTTP 200. Forgiving it classifies a
+	 * subscribed, restricted reader as ok and passes the run.
+	 */
+	public function test_a_contact_that_vanishes_between_reads_is_unresolved() {
+		$contact      = [ 'email' => 'reader@example.test' ];
+		$vanished     = new \WP_Error( 'newspack_newsletters_mailchimp_contact_not_found', 'Contact not found' );
+		$fake         = $this->fake_esp_gateway( [ $contact, $vanished ], [] );
+
+		[ $lists, $unresolved ] = $this->invoke_private_static( 'read_list_membership', [ $fake['gateway'], 'reader@example.test' ] );
+
+		$this->assertTrue( $unresolved );
+		$this->assertSame( [], $lists );
 	}
 }

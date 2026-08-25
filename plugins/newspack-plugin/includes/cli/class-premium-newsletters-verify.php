@@ -76,6 +76,27 @@ class Premium_Newsletters_Verify {
 	const COVERAGE_UNENUMERABLE_VERIFICATION = 'unenumerable_verification';
 
 	/**
+	 * The formats --format accepts for the per-reader rows.
+	 *
+	 * Matched against the synopsis, and checked before the run rather than at
+	 * format_items(), which a --live run only reaches after writing to the ESP.
+	 */
+	const ROW_FORMATS = [ 'table', 'csv', 'json', 'yaml' ];
+
+	/**
+	 * Whether STDOUT is reserved for the rows document.
+	 *
+	 * Set once from --format. Under a machine format every line this command writes
+	 * except the rows themselves goes to STDERR, so `… --format=json > rows.json`
+	 * yields a file a parser can read. Static because the narrative is emitted from
+	 * the gate loop and the reader walk as well as the report, and threading a flag
+	 * through all of them would be the same decision written five times.
+	 *
+	 * @var bool
+	 */
+	private static $rows_only_stdout = false;
+
+	/**
 	 * Why each incompleteness reason means the run cannot be read as a pass.
 	 *
 	 * Keyed by the COVERAGE_* reason constants; each value is a sprintf template
@@ -240,6 +261,16 @@ class Premium_Newsletters_Verify {
 			WP_CLI::error( sprintf( 'Invalid --batch-size value "%s". Pass a positive integer.', $batch_size_arg ) );
 		}
 
+		// WP-CLI's dispatcher already rejects a value outside the synopsis `options:`
+		// block before this method runs, so this is defence in depth for a direct PHP
+		// caller — and it is what sets the stream split below, which has to be decided
+		// before the first line of output either way.
+		$format = (string) \WP_CLI\Utils\get_flag_value( $assoc_args, 'format', 'table' );
+		if ( ! in_array( $format, self::ROW_FORMATS, true ) ) {
+			WP_CLI::error( sprintf( 'Invalid --format value "%s". Pass one of: %s.', $format, implode( ', ', self::ROW_FORMATS ) ) );
+		}
+		self::$rows_only_stdout = 'table' !== $format;
+
 		if ( ! class_exists( 'Newspack\Content_Gate' ) ) {
 			WP_CLI::error( 'Newspack\Content_Gate class not found. Is newspack-plugin active? Aborting.' );
 		}
@@ -296,7 +327,7 @@ class Premium_Newsletters_Verify {
 				);
 				continue;
 			}
-			WP_CLI::line(
+			self::narrate(
 				sprintf(
 					'"%s" (gate %d): nothing to verify. It has no paid access rules, so every registered reader is entitled and no reader can be wrongly subscribed.',
 					$gate['title'],
@@ -309,7 +340,7 @@ class Premium_Newsletters_Verify {
 			// A paid gate over content other than newsletters restricts nobody's
 			// list membership, so its unenumerable rules cost this run nothing.
 			if ( empty( self::restricted_list_ids_for_gate( $gate ) ) ) {
-				WP_CLI::line( self::describe_gate_without_lists( $gate ) );
+				self::narrate( self::describe_gate_without_lists( $gate ) );
 				continue;
 			}
 			$rules    = self::describe_rule_slugs( $gate['unenumerable_rules'] );
@@ -324,21 +355,26 @@ class Premium_Newsletters_Verify {
 			);
 		}
 
+		$auto_signup = (bool) \get_option( 'newspack_premium_newsletters_auto_signup', 1 );
+
 		if ( empty( $partitioned['verifiable'] ) ) {
 			// Reached with an incomplete coverage record whenever an unenumerable
 			// gate was named above, in which case this run fails without having
 			// compared anything. The success line below is only reachable when that
 			// list was empty, which is what keeps it true.
+			//
+			// Reported through report() rather than printing the gaps directly, so a
+			// machine format still emits its document here and still keeps the
+			// narrative off STDOUT. An archiving script must not have to tell this
+			// path apart from a run that walked a population and found nothing.
 			$summary = self::new_summary();
-			self::print_coverage_gaps( $coverage );
+			self::report( [], $summary, $coverage, $auto_signup, false, $format );
 			if ( self::verification_failed( $summary, $coverage ) ) {
 				WP_CLI::error( self::describe_failure( $summary, $coverage ) );
 			}
-			WP_CLI::success( 'No premium newsletter gate restricts a list behind a product, so there is nothing to compare.' );
+			self::succeed( 'No premium newsletter gate restricts a list behind a product, so there is nothing to compare.' );
 			return;
 		}
-
-		$auto_signup = (bool) \get_option( 'newspack_premium_newsletters_auto_signup', 1 );
 
 		// Shared across every gate below, by reference, so --max-batches caps the
 		// whole run as its help text promises rather than resetting per gate.
@@ -352,12 +388,12 @@ class Premium_Newsletters_Verify {
 			$rows = array_merge( $rows, self::verify_gate( $gate, $auto_signup, $live, $batch_size, $max_batches, $batches, $coverage, $summary, $seen_pairs, $esp ) );
 		}
 
-		self::report( $rows, $summary, $coverage, $auto_signup, $live, (string) \WP_CLI\Utils\get_flag_value( $assoc_args, 'format', 'table' ) );
+		self::report( $rows, $summary, $coverage, $auto_signup, $live, $format );
 
 		if ( self::verification_failed( $summary, $coverage ) ) {
 			WP_CLI::error( self::describe_failure( $summary, $coverage ) );
 		}
-		WP_CLI::success( self::describe_success( $coverage ) );
+		self::succeed( self::describe_success( $coverage ) );
 	}
 
 	/**
@@ -381,7 +417,7 @@ class Premium_Newsletters_Verify {
 	 * @return string[] The value-requiring flags present without a value.
 	 */
 	private static function get_valueless_value_flags( $argv = null ): array {
-		return Premium_Newsletters_Migration::get_valueless_value_flags( $argv, [ '--gate', '--batch-size', '--max-batches' ] );
+		return Premium_Newsletters_Migration::get_valueless_value_flags( $argv, [ '--gate', '--batch-size', '--max-batches', '--format' ] );
 	}
 
 	/**
@@ -441,6 +477,125 @@ class Premium_Newsletters_Verify {
 			'lists'   => fn( string $email ) => \Newspack_Newsletters_Subscription::get_contact_lists( $email ),
 			'remove'  => fn( string $email, string $public_id ) => \Newspack_Newsletters_Contacts::add_and_remove_lists( $email, [], [ $public_id ], 'Verifying premium newsletter lists' ),
 		];
+	}
+
+	/**
+	 * One reader's ESP list membership, and whether it can be trusted.
+	 *
+	 * Every shipped provider's get_contact_lists() swallows a failed API call into an
+	 * empty array rather than a WP_Error, so it cannot tell "no contact" from "could
+	 * not ask". Reading get_contact_data() first recovers part of that distinction:
+	 * its WP_Error code names a genuine miss on all three providers, so a reader with
+	 * no contact counts as "on no lists" rather than failing.
+	 *
+	 * That pre-read does not cover the remaining ambiguity — an empty list set from a
+	 * contact that exists is both what a reader on no lists looks like and what a
+	 * failed list read returns. On Mailchimp and Constant Contact the list read is a
+	 * second, un-memoized request that can fail on its own; on ActiveCampaign it is a
+	 * different endpoint entirely. So an empty set is corroborated by a further
+	 * contact read before it is believed, which costs one call on that path only and
+	 * turns a flaking provider into unresolved rows rather than a clean run.
+	 *
+	 * What this closes, precisely: a failure that persists across two reads. It does
+	 * not close a single transient one, on any provider. Mailchimp's and Constant
+	 * Contact's get_contact_lists() are get_contact_data() plus a filter, so the
+	 * corroborating call re-issues the request that just failed and a blip clearing
+	 * in between reads as "no lists"; ActiveCampaign's list read is a separate
+	 * endpoint the corroborating call never touches at all. Deciding this from the
+	 * contact payload already in hand would be stronger, but it means mirroring each
+	 * provider's own membership filter — Mailchimp counts only `subscribed` entries —
+	 * and ActiveCampaign's payload carries no membership to read.
+	 *
+	 * @param array  $esp   The ESP gateway.
+	 * @param string $email The reader's email address.
+	 *
+	 * @return array{0:array,1:bool} The reader's lists, and whether the read is
+	 *                               unresolved — in which case the lists are empty and
+	 *                               mean nothing.
+	 */
+	private static function read_list_membership( array $esp, string $email ): array {
+		$contact_data = $esp['contact']( $email );
+		if ( \is_wp_error( $contact_data ) && ! self::is_contact_not_found_error( $contact_data ) ) {
+			return [ [], true ];
+		}
+
+		$contact_missing = \is_wp_error( $contact_data );
+		$contact_lists   = $contact_missing ? [] : $esp['lists']( $email );
+		if ( \is_wp_error( $contact_lists ) || ! is_array( $contact_lists ) ) {
+			return [ [], true ];
+		}
+		// Strict is_wp_error() here, unlike the primary read above, which forgives a
+		// not-found code. This branch only runs when the primary read already resolved
+		// the contact, so a contact that now reads as missing is a contradiction, not a
+		// fact about the reader — and it is the shape a flaking provider takes:
+		// Mailchimp returns its not-found code whenever exact_matches comes back empty
+		// on an HTTP 200. Forgiving it here would classify a subscribed, restricted
+		// reader as ok and pass the run.
+		if ( ! $contact_missing && empty( $contact_lists ) && \is_wp_error( self::read_contact_afresh( $esp, $email ) ) ) {
+			return [ [], true ];
+		}
+		return [ $contact_lists, false ];
+	}
+
+	/**
+	 * Write one line of narrative, to whichever stream is carrying it.
+	 *
+	 * WP_CLI::line() goes to STDOUT, which under a machine format belongs to the rows
+	 * document alone. WP_CLI::warning() and ::error() already go to STDERR and need
+	 * no equivalent.
+	 *
+	 * @param string $line The line.
+	 *
+	 * @return void
+	 */
+	private static function narrate( string $line ): void {
+		if ( self::$rows_only_stdout ) {
+			// phpcs:ignore WordPressVIPMinimum.Functions.RestrictedFunctions.file_ops_fwrite -- STDERR is a stream, not the file system; this is WP-CLI's own idiom for keeping STDOUT parseable.
+			fwrite( STDERR, $line . "\n" );
+			return;
+		}
+		WP_CLI::line( $line );
+	}
+
+	/**
+	 * End the run successfully, without writing to a stream the rows have claimed.
+	 *
+	 * WP_CLI::success() writes to STDOUT, so under a machine format it lands against
+	 * the rows document with no separator — `[]Success: …` is not JSON.
+	 *
+	 * @param string $message The success message.
+	 *
+	 * @return void
+	 */
+	private static function succeed( string $message ): void {
+		if ( self::$rows_only_stdout ) {
+			self::narrate( 'Success: ' . $message );
+			return;
+		}
+		WP_CLI::success( $message );
+	}
+
+	/**
+	 * Read a contact again, past any memo the provider is holding.
+	 *
+	 * ActiveCampaign caches each contact's payload in the provider instance for the
+	 * life of the process, and caches it before testing the result for an error. A
+	 * corroborating read served from that cache issues no request and returns
+	 * whatever the first read returned, so it cannot tell the caller whether the
+	 * provider is still answering — which is the only question it is asked. Dropping
+	 * the entry first makes the read a real request on all three shipped providers.
+	 *
+	 * @param array  $esp   The ESP gateway.
+	 * @param string $email The reader's email address.
+	 *
+	 * @return mixed What the contact read returned.
+	 */
+	private static function read_contact_afresh( array $esp, string $email ) {
+		$provider = class_exists( 'Newspack_Newsletters' ) ? \Newspack_Newsletters::get_service_provider() : null;
+		if ( $provider && method_exists( $provider, 'clear_contact_data' ) ) {
+			$provider->clear_contact_data( $email );
+		}
+		return $esp['contact']( $email );
 	}
 
 	/**
@@ -531,12 +686,15 @@ class Premium_Newsletters_Verify {
 	 *                                      the removal itself errored and no re-read was made.
 	 * @param string $public_id             The list's public (ESP) ID.
 	 * @param bool   $contact_still_resolves Whether a further contact read succeeded, which is what
-	 *                                      makes an empty re-read believable. Only consulted when
-	 *                                      $lists_after is empty.
+	 *                                      makes an empty re-read believable. Consulted only when
+	 *                                      $lists_after is empty, but required either way: the
+	 *                                      permissive value is the one that stamps a
+	 *                                      still-subscribed reader as removed, so it must be
+	 *                                      passed deliberately rather than fallen back on.
 	 *
 	 * @return string 'removed' when the list is confirmed gone, 'unresolved' otherwise.
 	 */
-	private static function classify_removal( $removal_result, $lists_after, string $public_id, bool $contact_still_resolves = true ): string {
+	private static function classify_removal( $removal_result, $lists_after, string $public_id, bool $contact_still_resolves ): string {
 		if ( \is_wp_error( $removal_result ) ) {
 			return 'unresolved';
 		}
@@ -1378,7 +1536,7 @@ class Premium_Newsletters_Verify {
 	private static function verify_gate( array $gate, bool $auto_signup, bool $live, int $batch_size, int $max_batches, int &$batches, array &$coverage, array &$summary, array &$seen_pairs, array $esp ): array {
 		$list_ids = self::restricted_list_ids_for_gate( $gate );
 		if ( empty( $list_ids ) ) {
-			WP_CLI::line( self::describe_gate_without_lists( $gate ) );
+			self::narrate( self::describe_gate_without_lists( $gate ) );
 			return [];
 		}
 		if ( $max_batches && $batches >= $max_batches ) {
@@ -1422,7 +1580,7 @@ class Premium_Newsletters_Verify {
 		// Subscriptions rather than readers: the readers behind them are resolved a
 		// chunk at a time as the walk runs, so their number is not known yet, and one
 		// reader can hold several of these. It is an upper bound, and said as one.
-		WP_CLI::line( sprintf( '"%s" (gate %d): checking the reader(s) behind %d subscription(s) against %d list(s)…', $gate['title'], $gate['id'], count( $subscription_ids ), count( $list_ids ) ) );
+		self::narrate( sprintf( '"%s" (gate %d): checking the reader(s) behind %d subscription(s) against %d list(s)…', $gate['title'], $gate['id'], count( $subscription_ids ), count( $list_ids ) ) );
 		$coverage = self::with_gate_walked( $coverage, $gate );
 
 		// Resolved once per gate rather than once per reader: a list ID's public ID
@@ -1449,7 +1607,19 @@ class Premium_Newsletters_Verify {
 
 			++$checked;
 			$coverage = self::with_reader_checked( $coverage, $user_id );
-			$user     = \get_user_by( 'id', $user_id );
+
+			// Resolved before the ESP read, not after it. is_post_restricted() answers
+			// for the list post rather than for one gate, so a pair already checked
+			// under an earlier gate would produce an identical verdict — and reading the
+			// ESP for it first would spend the calls this dedup exists to save, while
+			// the unresolved and missing-user branches below would record a second row
+			// for the same pair and fail the run on it.
+			$pending_list_ids = array_values( array_filter( $list_ids, fn( $id ) => ! isset( $seen_pairs[ $id ][ $user_id ] ) ) );
+			if ( empty( $pending_list_ids ) ) {
+				continue;
+			}
+
+			$user = \get_user_by( 'id', $user_id );
 			if ( ! $user ) {
 				// The subscription still names a list to check, but there is no WP_User
 				// to build a make_row() from — no email, and nothing to ask the ESP
@@ -1457,46 +1627,25 @@ class Premium_Newsletters_Verify {
 				// email still on a restricted list at the ESP could never be reported as
 				// a leak, so it is recorded as unresolved instead, the same status a
 				// failed ESP lookup gets.
-				foreach ( $list_ids as $list_id ) {
+				foreach ( $pending_list_ids as $list_id ) {
+					$seen_pairs[ $list_id ][ $user_id ] = true;
 					self::record_row( $rows, $summary, self::make_missing_user_row( $gate, $list_id, $user_id ) );
 				}
 				continue;
 			}
 
-			// Every shipped provider's get_contact_lists() swallows a failed API
-			// call into an empty array rather than a WP_Error, so it cannot tell
-			// "no contact" from "could not ask". Reading get_contact_data() first
-			// recovers that distinction: its WP_Error code names a genuine miss on
-			// all three providers (is_contact_not_found_error()), so that case
-			// still counts as "no lists" rather than failing the reader.
-			$contact_data = $esp['contact']( $user->user_email );
-			if ( \is_wp_error( $contact_data ) && ! self::is_contact_not_found_error( $contact_data ) ) {
-				foreach ( $list_ids as $list_id ) {
+			[ $contact_lists, $unresolved ] = self::read_list_membership( $esp, $user->user_email );
+			if ( $unresolved ) {
+				foreach ( $pending_list_ids as $list_id ) {
+					$seen_pairs[ $list_id ][ $user_id ] = true;
 					self::record_row( $rows, $summary, self::make_row( $gate, $list_id, $user, 'unresolved' ) );
 				}
 			} else {
-				$contact_missing = \is_wp_error( $contact_data );
-				$contact_lists   = $contact_missing ? [] : $esp['lists']( $user->user_email );
-				$unresolved      = \is_wp_error( $contact_lists ) || ! is_array( $contact_lists );
-
-				// An empty list set from a contact that exists is the ambiguous shape:
-				// it is what a reader on no lists looks like, and also what every
-				// provider returns when the list read fails. The pre-read above does
-				// not cover it — on Mailchimp and Constant Contact get_contact_lists()
-				// issues a second, un-memoized request that can fail on its own, and on
-				// ActiveCampaign the contact read is memoized while the list read hits a
-				// different endpoint entirely. Corroborating with a further contact read
-				// costs one call on this path only, and turns a flaking provider into
-				// unresolved rows rather than a clean run. Residual worth knowing: on
-				// ActiveCampaign the corroborating read is served from that memo, so a
-				// contactLists endpoint failing on its own still reads as "no lists".
-				if ( ! $unresolved && ! $contact_missing && empty( $contact_lists ) ) {
-					$unresolved = \is_wp_error( $esp['contact']( $user->user_email ) );
-				}
-
-				foreach ( $list_ids as $list_id ) {
+				foreach ( $pending_list_ids as $list_id ) {
 					$public_id = $public_ids[ $list_id ];
-					if ( $unresolved || null === $public_id ) {
+					if ( null === $public_id ) {
+						// The gate names a list whose public ID cannot be resolved, so
+						// there is nothing to compare the ESP's answer against.
 						self::record_row( $rows, $summary, self::make_row( $gate, $list_id, $user, 'unresolved' ) );
 						continue;
 					}
@@ -1507,11 +1656,11 @@ class Premium_Newsletters_Verify {
 					// twice, spend the ESP calls twice, and count the same leak twice —
 					// so the printed leak count could exceed the readers actually
 					// leaking, and disagree with the deduped coverage count beside it.
-					$pair_key = $user_id . '_' . $list_id;
-					if ( isset( $seen_pairs[ $pair_key ] ) ) {
-						continue;
-					}
-					$seen_pairs[ $pair_key ] = true;
+					// Nested integer keys rather than one interned "user_list" string per
+					// pair: this map is deliberately run-wide and nothing releases it, and
+					// on the large sites this command is for it would otherwise be the
+					// largest thing the walk holds.
+					$seen_pairs[ $list_id ][ $user_id ] = true;
 
 					$is_restricted = \Newspack\Content_Restriction_Control::is_post_restricted( false, $list_id, $user_id );
 					$is_subscribed = self::is_subscribed_to_list( $public_id, $contact_lists );
@@ -1524,17 +1673,21 @@ class Premium_Newsletters_Verify {
 						// An empty re-read is corroborated the same way as above, because
 						// the write and the confirming read share a failure mode: see
 						// classify_removal().
-						$lists_after = \is_wp_error( $removed ) ? [] : $esp['lists']( $user->user_email );
+						$lists_after  = \is_wp_error( $removed ) ? [] : $esp['lists']( $user->user_email );
 						$corroborated = true;
 						if ( is_array( $lists_after ) && empty( $lists_after ) && ! \is_wp_error( $removed ) ) {
-							$corroborated = ! \is_wp_error( $esp['contact']( $user->user_email ) );
+							// Strict is_wp_error() here, unlike the dry-run check above,
+							// which forgives a not-found code. After a removal a contact
+							// that no longer resolves is not evidence the list is gone —
+							// it is a reader this run can say nothing about.
+							$corroborated = ! \is_wp_error( self::read_contact_afresh( $esp, $user->user_email ) );
 						}
 						$status = self::classify_removal( $removed, $lists_after, $public_id, $corroborated );
 						if ( 'removed' === $status ) {
 							// Logged as it lands, not only in the final report: a run
 							// killed part-way has already written these at the ESP, and
 							// the scrollback is then the only place they survive.
-							WP_CLI::log( sprintf( 'Removed %s from list %d (gate %d).', $user->user_email, $list_id, $gate['id'] ) );
+							self::narrate( sprintf( 'Removed %s from list %d (gate %d).', $user->user_email, $list_id, $gate['id'] ) );
 						}
 					}
 					self::record_row( $rows, $summary, self::make_row( $gate, $list_id, $user, $status ) );
@@ -1554,6 +1707,8 @@ class Premium_Newsletters_Verify {
 				sleep( 1 );
 			} elseif ( 'stop' === $batch_action ) {
 				++$batches;
+				self::release_batch_caches( $batch_emails );
+				$batch_emails = [];
 				WP_CLI::warning( sprintf( 'Stopped after %d batch(es) total because of --max-batches. This run does not cover the whole population.', $batches ) );
 				// The warning above goes to STDERR, which a cutover script gating on
 				// $? never sees. Recording the truncation is what actually stops this
@@ -1562,6 +1717,12 @@ class Premium_Newsletters_Verify {
 				break;
 			}
 		}
+
+		// The tail batch reaches here through 'continue' rather than 'pause', so the
+		// readers checked since the last release are still held. On ActiveCampaign
+		// that is one raw API payload each, carried into every later gate.
+		self::release_batch_caches( $batch_emails );
+		$batch_emails = [];
 
 		if ( 0 === $checked ) {
 			// Subscriptions to the gate's products exist, but not one of them belongs
@@ -1671,30 +1832,6 @@ class Premium_Newsletters_Verify {
 	}
 
 	/**
-	 * Print each gap in the run's coverage, or nothing when there are none.
-	 *
-	 * Called from the full report and from the early exit a run takes when it has
-	 * no verifiable gate to walk, because that exit can now fail — a gate paywalled
-	 * by rules this command cannot enumerate produces a gap and no rows at all —
-	 * and the operator needs the same explanation either way.
-	 *
-	 * @param array $coverage Coverage record.
-	 *
-	 * @return void
-	 */
-	private static function print_coverage_gaps( array $coverage ): void {
-		$coverage_gaps = self::describe_coverage_gaps( $coverage );
-		if ( empty( $coverage_gaps ) ) {
-			return;
-		}
-		WP_CLI::line( '' );
-		WP_CLI::line( 'Coverage is incomplete, so this run is not a pass whatever it found:' );
-		foreach ( $coverage_gaps as $gap_line ) {
-			WP_CLI::line( '  - ' . $gap_line );
-		}
-	}
-
-	/**
 	 * Print the summary, then the rows that need attention.
 	 *
 	 * @param array[]           $rows        The rows needing attention. Passing rows are counted
@@ -1708,37 +1845,50 @@ class Premium_Newsletters_Verify {
 	 * @return void
 	 */
 	private static function report( array $rows, array $summary, array $coverage, bool $auto_signup, bool $live, string $format = 'table' ): void {
-		WP_CLI::line( '' );
-		WP_CLI::line( $live ? '=== VERIFICATION SUMMARY (--live: leaks removed) ===' : '=== VERIFICATION SUMMARY (report only) ===' );
-		WP_CLI::line( '' );
-		\WP_CLI\Utils\format_items(
-			'table',
-			[
+		// Under a machine format, STDOUT carries the rows and nothing else: the point
+		// of archiving a --live run's rows is that a parser can read them back, and a
+		// header line and an ASCII summary in the same stream defeat that. The
+		// narrative goes to STDERR instead of being dropped, so an operator watching a
+		// redirected run still sees the coverage claim — and WP_CLI::success() /
+		// ::error() carry it there too.
+		$is_table = 'table' === $format;
+		$narrate  = fn( string $line ) => self::narrate( $line );
+
+		$narrate( '' );
+		$narrate( $live ? '=== VERIFICATION SUMMARY (--live: leaks removed) ===' : '=== VERIFICATION SUMMARY (report only) ===' );
+		$narrate( '' );
+		if ( $is_table ) {
+			\WP_CLI\Utils\format_items(
+				'table',
 				[
-					// Rows, not readers: one per reader-and-list pair. The coverage line
-					// below counts distinct readers, and the two numbers differ whenever a
-					// gate restricts more than one list.
-					'Rows'         => $summary['checked'],
-					'Leaks'        => $summary['leak'],
-					'Removed'      => $summary['removed'],
-					'Gaps'         => $summary['gap'],
-					'OK'           => $summary['ok'],
-					'Not asserted' => $summary['not_asserted'],
-					'Unresolved'   => $summary['unresolved'],
+					[
+						// Rows, not readers: one per reader-and-list pair. The coverage line
+						// below counts distinct readers, and the two numbers differ whenever a
+						// gate restricts more than one list.
+						'Rows'         => $summary['checked'],
+						'Leaks'        => $summary['leak'],
+						'Removed'      => $summary['removed'],
+						'Gaps'         => $summary['gap'],
+						'OK'           => $summary['ok'],
+						'Not asserted' => $summary['not_asserted'],
+						'Unresolved'   => $summary['unresolved'],
+					],
 				],
-			],
-			[ 'Rows', 'Leaks', 'Removed', 'Gaps', 'OK', 'Not asserted', 'Unresolved' ]
-		);
+				[ 'Rows', 'Leaks', 'Removed', 'Gaps', 'OK', 'Not asserted', 'Unresolved' ]
+			);
+		}
 
 		// Already only the rows worth listing — record_row() dropped the rest as they
 		// were counted — but filtered again rather than trusted, so this stays correct
 		// if a caller ever hands it a full set.
 		$attention = array_values( array_filter( $rows, fn( $r ) => self::status_needs_attention( $r['status'] ?? '' ) ) );
-		if ( ! empty( $attention ) ) {
-			WP_CLI::line( '' );
-			// Honours --format so a --live run's rows can be archived alongside the rest
-			// of a site's migration record: the summary above is reconstructible from
-			// these rows, and these rows are not reconstructible from anything.
+		if ( $is_table && ! empty( $attention ) ) {
+			self::narrate( '' );
+		}
+		// Emitted even when empty under a machine format: an archiving script cannot
+		// tell "nothing to report" from a failed invocation if a clean run writes no
+		// document at all.
+		if ( ! $is_table || ! empty( $attention ) ) {
 			\WP_CLI\Utils\format_items(
 				$format,
 				array_map(
@@ -1754,21 +1904,27 @@ class Premium_Newsletters_Verify {
 			);
 		}
 
-		WP_CLI::line( '' );
-		WP_CLI::line( sprintf( 'Coverage: %s.', self::describe_checked_scope( $coverage ) ) );
-		WP_CLI::line( 'This covers readers who hold or have held a gate\'s products, and nobody else. A reader who satisfied the source Memberships plan with a non-subscription product, one who joined a list before it became premium, one whose membership was granted by hand, and a group-subscription member entitled through someone else\'s subscription rather than their own are all restricted after cutover and all invisible here — no provider-agnostic bulk read of ESP list membership exists to reach them. A current group member missing from a list is never reported as a gap, and a lapsed group member still on one is a leak this command cannot see.' );
+		$narrate( '' );
+		$narrate( sprintf( 'Coverage: %s.', self::describe_checked_scope( $coverage ) ) );
+		$narrate( 'This covers readers who hold or have held a gate\'s products, and nobody else. A reader who satisfied the source Memberships plan with a non-subscription product, one who joined a list before it became premium, one whose membership was granted by hand, and a group-subscription member entitled through someone else\'s subscription rather than their own are all restricted after cutover and all invisible here — no provider-agnostic bulk read of ESP list membership exists to reach them. A current group member missing from a list is never reported as a gap, and a lapsed group member still on one is a leak this command cannot see.' );
 
-		self::print_coverage_gaps( $coverage );
+		foreach ( self::describe_coverage_gaps( $coverage ) as $index => $gap_line ) {
+			if ( 0 === $index ) {
+				$narrate( '' );
+				$narrate( 'Coverage is incomplete, so this run is not a pass whatever it found:' );
+			}
+			$narrate( '  - ' . $gap_line );
+		}
 
-		WP_CLI::line( '' );
+		$narrate( '' );
 		if ( 0 < $summary['removed'] ) {
-			WP_CLI::line( sprintf( '%d subscription(s) were removed at the ESP and confirmed gone. They are listed above, were logged as they landed, and each one also went to the `newspack_esp_sync` log through add_and_remove_lists().', $summary['removed'] ) );
+			$narrate( sprintf( '%d subscription(s) were removed at the ESP and confirmed gone. They are listed above, were logged as they landed, and each one also went to the `newspack_esp_sync` log through add_and_remove_lists().', $summary['removed'] ) );
 		}
 		if ( ! $auto_signup ) {
-			WP_CLI::line( 'Auto-signup is off, so an entitled reader who is not subscribed is counted as "not asserted" rather than a gap: they opt in themselves.' );
+			$narrate( 'Auto-signup is off, so an entitled reader who is not subscribed is counted as "not asserted" rather than a gap: they opt in themselves.' );
 		}
 		if ( 0 < $summary['gap'] ) {
-			WP_CLI::line( 'Gaps are reported but never written. An on-demand run cannot tell a reader who never subscribed from one who unsubscribed on purpose, so additions are left to the auto-signup flow, where the renewal snapshot protects an opt-out.' );
+			$narrate( 'Gaps are reported but never written. An on-demand run cannot tell a reader who never subscribed from one who unsubscribed on purpose, so additions are left to the auto-signup flow, where the renewal snapshot protects an opt-out.' );
 		}
 	}
 }
