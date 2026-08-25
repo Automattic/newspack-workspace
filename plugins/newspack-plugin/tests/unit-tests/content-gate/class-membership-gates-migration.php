@@ -1077,6 +1077,9 @@ HTML
 		$layouts = $this->invoke_private_static( 'extract_gate_layouts', [ $gate_post ] );
 
 		$this->assertStringContainsString( 'Available only to members.', $layouts['registration'], 'The authored copy migrates rather than being dropped.' );
+		// The paid layout too, so a group whose plans require a purchase migrates as a
+		// paywall rather than as a gate any registered reader passes.
+		$this->assertSame( $layouts['registration'], $layouts['custom_access'], 'Both modes get a layout to activate against.' );
 	}
 
 	/**
@@ -1099,6 +1102,98 @@ HTML;
 
 		$this->assertStringContainsString( 'Subscribe to read.', $layouts['registration'] );
 		$this->assertStringContainsString( 'This post is only available to members.', $layouts['registration'], 'Copy outside the wrapper is part of the gate the reader saw.' );
+		$this->assertLessThan(
+			strpos( $layouts['registration'], 'Subscribe to read.' ),
+			strpos( $layouts['registration'], 'This post is only available to members.' ),
+			'The unconditional copy leads the layout.'
+		);
+		// Filling a layout the publisher never authored would activate paid access
+		// against a members view that does not exist.
+		$this->assertNull( $layouts['custom_access'], 'Unconditional copy does not create a paid layout.' );
+	}
+
+	/**
+	 * A gate whose only authored view is for members keeps the seeded registration wall.
+	 *
+	 * That default carries the auth form. Filling the registration layout with the
+	 * gate's unconditional copy would overwrite it, leaving a reader looking at a
+	 * heading with no way through the wall.
+	 */
+	public function test_extract_gate_layouts_leaves_a_registration_layout_unauthored() {
+		$gate_content = <<<'HTML'
+<!-- wp:heading --><h2>Members only</h2><!-- /wp:heading -->
+<!-- wp:woocommerce-memberships/member-content -->
+<!-- wp:paragraph --><p>Thanks for supporting us.</p><!-- /wp:paragraph -->
+<!-- /wp:woocommerce-memberships/member-content -->
+HTML;
+		$gate_post = $this->create_gate_post( $gate_content );
+
+		$layouts = $this->invoke_private_static( 'extract_gate_layouts', [ $gate_post ] );
+
+		$this->assertSame( '', $layouts['registration'], 'No non-member view was authored, so the seeded wall stands.' );
+		$this->assertStringContainsString( 'Members only', $layouts['custom_access'], 'The unconditional copy still joins the layout that exists.' );
+	}
+
+	/**
+	 * A reference whose pattern holds the wrappers is not also carried in as
+	 * unconditional copy.
+	 *
+	 * The walk already resolved that reference and took the wrappers' content, so
+	 * keeping the reference too would render the upsell twice — and would put a
+	 * member-content wrapper inside the non-member wall, where it prints its inner
+	 * content to everyone once WooCommerce Memberships is deactivated.
+	 */
+	public function test_extract_gate_layouts_does_not_repeat_a_wrapper_bearing_pattern() {
+		$pattern_id = $this->create_pattern_post(
+			'<!-- wp:woocommerce-memberships/non-member-content -->'
+			. '<!-- wp:paragraph --><p>Subscribe to read.</p><!-- /wp:paragraph -->'
+			. '<!-- /wp:woocommerce-memberships/non-member-content -->'
+			. '<!-- wp:woocommerce-memberships/member-content -->'
+			. '<!-- wp:paragraph --><p>Members only secret.</p><!-- /wp:paragraph -->'
+			. '<!-- /wp:woocommerce-memberships/member-content -->'
+		);
+		$gate_post  = $this->create_gate_post( sprintf( '<!-- wp:block {"ref":%d} /-->', $pattern_id ) );
+
+		$layouts = $this->invoke_private_static( 'extract_gate_layouts', [ $gate_post ] );
+
+		$this->assertStringContainsString( 'Subscribe to read.', $layouts['registration'] );
+		$this->assertStringNotContainsString( 'wp:block', $layouts['registration'], 'The reference is not carried in alongside the content taken from it.' );
+		$this->assertStringNotContainsString( 'Members only secret.', $layouts['registration'] );
+		$this->assertStringContainsString( 'Members only secret.', $layouts['custom_access'] );
+	}
+
+	/**
+	 * A container holding nothing but a dead reference is not mistaken for content.
+	 *
+	 * The group renders as an empty div, so migrating it would replace a seeded default
+	 * that does render with a wall the reader sees as blank.
+	 */
+	public function test_extract_gate_layouts_returns_empty_for_a_container_holding_a_dead_reference() {
+		$draft_pattern_id = $this->create_pattern_post( '<!-- wp:paragraph --><p>Never published.</p><!-- /wp:paragraph -->', 'draft' );
+		$gate_post        = $this->create_gate_post(
+			'<!-- wp:group --><div class="wp-block-group">'
+			. sprintf( '<!-- wp:block {"ref":%d} /-->', $draft_pattern_id )
+			. '</div><!-- /wp:group -->'
+		);
+
+		$layouts = $this->invoke_private_static( 'extract_gate_layouts', [ $gate_post ] );
+
+		$this->assertSame( '', $layouts['registration'] );
+		$this->assertNull( $layouts['custom_access'] );
+	}
+
+	/**
+	 * A reference to a published but empty pattern renders nothing, and is treated as
+	 * nothing — the guard is about what reaches the reader, not what resolves.
+	 */
+	public function test_extract_gate_layouts_returns_empty_for_a_reference_to_an_empty_pattern() {
+		$empty_pattern_id = $this->create_pattern_post( '' );
+		$gate_post        = $this->create_gate_post( sprintf( '<!-- wp:block {"ref":%d} /-->', $empty_pattern_id ) );
+
+		$layouts = $this->invoke_private_static( 'extract_gate_layouts', [ $gate_post ] );
+
+		$this->assertSame( '', $layouts['registration'] );
+		$this->assertNull( $layouts['custom_access'] );
 	}
 
 	/**
@@ -1130,19 +1225,6 @@ HTML;
 
 		$this->assertSame( '', $layouts['registration'], 'A reference that renders nothing does not become the layout.' );
 		$this->assertNull( $layouts['custom_access'] );
-	}
-
-	/**
-	 * The fallback also fills the paid layout, so a group whose plans require a purchase
-	 * migrates as a paywall instead of a gate any registered reader passes.
-	 */
-	public function test_extract_gate_layouts_fallback_fills_the_paid_layout_too() {
-		$gate_post = $this->create_gate_post( '<!-- wp:paragraph --><p>Subscribe for full access.</p><!-- /wp:paragraph -->' );
-
-		$layouts = $this->invoke_private_static( 'extract_gate_layouts', [ $gate_post ] );
-
-		$this->assertStringContainsString( 'Subscribe for full access.', $layouts['custom_access'], 'A wrapper-less gate gives the paid mode a layout to activate against.' );
-		$this->assertSame( $layouts['registration'], $layouts['custom_access'], 'Both modes carry the copy the publisher wrote.' );
 	}
 
 	/**
