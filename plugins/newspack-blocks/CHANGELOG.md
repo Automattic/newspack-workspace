@@ -1,3 +1,10 @@
+## @automattic/newspack-blocks [4.30.4](https://github.com/Automattic/newspack-workspace/compare/newspack-blocks@4.30.3...newspack-blocks@4.30.4) (2026-08-25)
+
+
+### Bug Fixes
+
+* **blocks:** track modal purchases made via the Store API ([#881](https://github.com/Automattic/newspack-workspace/issues/881)) ([06cd0a9](https://github.com/Automattic/newspack-workspace/commit/06cd0a95946703497a8f2bba0ecfd06c69a09718))
+
 ## @automattic/newspack-blocks [4.30.3](https://github.com/Automattic/newspack-workspace/compare/newspack-blocks@4.30.2...newspack-blocks@4.30.3) (2026-08-20)
 
 

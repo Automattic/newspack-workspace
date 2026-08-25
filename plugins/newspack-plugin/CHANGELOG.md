@@ -1,3 +1,31 @@
+## newspack [6.48.18](https://github.com/Automattic/newspack-workspace/compare/newspack@6.48.17...newspack@6.48.18) (2026-08-25)
+
+
+### Bug Fixes
+
+* **reader-data:** recover non-JSON membership list values ([#967](https://github.com/Automattic/newspack-workspace/issues/967)) ([a0973c0](https://github.com/Automattic/newspack-workspace/commit/a0973c0351e9ba05038caff7e30ef6a9df246ed2))
+
+## newspack [6.48.17](https://github.com/Automattic/newspack-workspace/compare/newspack@6.48.16...newspack@6.48.17) (2026-08-24)
+
+
+### Bug Fixes
+
+* **audience:** pricing-rule product scope can target variations ([#946](https://github.com/Automattic/newspack-workspace/issues/946)) ([ce04a07](https://github.com/Automattic/newspack-workspace/commit/ce04a07152064d094dd6d322275fa8b44597ffea))
+
+## newspack [6.48.16](https://github.com/Automattic/newspack-workspace/compare/newspack@6.48.15...newspack@6.48.16) (2026-08-24)
+
+
+### Bug Fixes
+
+* **newspack-plugin:** restore the major revision controls (NPPM-3155, [#961](https://github.com/Automattic/newspack-workspace/issues/961)) ([914c9f4](https://github.com/Automattic/newspack-workspace/commit/914c9f4220ec88742669baf212312b1a4f143119))
+
+## newspack [6.48.15](https://github.com/Automattic/newspack-workspace/compare/newspack@6.48.14...newspack@6.48.15) (2026-08-24)
+
+
+### Bug Fixes
+
+* **cli:** record per-post Memberships exemptions (NPPD-2199, [#934](https://github.com/Automattic/newspack-workspace/issues/934)) ([cab80db](https://github.com/Automattic/newspack-workspace/commit/cab80dbc068940e414abf70d2cb1a067c298bf7d))
+
 ## newspack [6.48.14](https://github.com/Automattic/newspack-workspace/compare/newspack@6.48.13...newspack@6.48.14) (2026-08-20)
 
 
