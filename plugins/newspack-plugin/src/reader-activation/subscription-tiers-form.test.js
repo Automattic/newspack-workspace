@@ -21,8 +21,8 @@ function renderForm( { flatIsCurrent = false, flatIsSelected = true, seatsValue 
 				<input type="radio" name="product_id" value="312"${ flatIsSelected ? '' : ' checked' } data-per-seat="1" data-seats-min="3" data-seats-max="6">
 			</label>
 			<p class="newspack__subscription-tiers__seats"${ hidden }>
-				<label for="group_seats">Number of team seats</label>
-				<input type="number" name="quantity" id="group_seats" step="1" min="3" value="${ seatsValue }" data-original-value="${ originalValue }"${ disabled }>
+				<label for="newspack-group-seats-item-554">Number of team seats</label>
+				<input type="number" name="quantity" id="newspack-group-seats-item-554" step="1" min="3" value="${ seatsValue }" data-original-value="${ originalValue }"${ disabled }>
 			</p>
 			<button type="submit">Change Subscription</button>
 			<button type="button" class="newspack-ui__modal__cancel">Cancel</button>
@@ -30,7 +30,7 @@ function renderForm( { flatIsCurrent = false, flatIsSelected = true, seatsValue 
 	`;
 	init();
 	return {
-		seats: document.querySelector( '#group_seats' ),
+		seats: document.querySelector( '.newspack__subscription-tiers__seats input[name="quantity"]' ),
 		field: document.querySelector( '.newspack__subscription-tiers__seats' ),
 		flat: document.querySelector( 'input[value="311"]' ),
 		perSeat: document.querySelector( 'input[value="312"]' ),

@@ -68,7 +68,9 @@ export default function init() {
 			// otherwise — and a disabled input submits nothing, so a flat tier sends no
 			// seat count at all. Without that, its price would be billed per seat.
 			const seatsField = form.querySelector( '.newspack__subscription-tiers__seats' );
-			const seatsInput = form.querySelector( '#group_seats' );
+			// By name, not by id: one page can hold several switch modals, each with
+			// its own seats field, and the id is unique per form for that reason.
+			const seatsInput = seatsField?.querySelector( 'input[name="quantity"]' );
 			let seatsTierId = null;
 			const syncSeatsToTier = () => {
 				if ( ! seatsField || ! seatsInput ) {

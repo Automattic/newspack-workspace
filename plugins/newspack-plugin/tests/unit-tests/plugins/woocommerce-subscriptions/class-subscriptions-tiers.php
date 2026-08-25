@@ -902,8 +902,8 @@ class Newspack_Test_Subscriptions_Tiers extends WP_UnitTestCase {
 
 		// Defaults to the minimum. Asserted as one attribute cluster so the values
 		// are pinned to the seats input rather than to anything else on the form.
-		$this->assertStringContainsString( 'name="quantity" id="group_seats" step="1" min="2" value="2"', $html );
-		$this->assertStringContainsString( '<label for="group_seats">', $html );
+		$this->assertStringContainsString( 'name="quantity" id="newspack-group-seats-product-303" step="1" min="2" value="2"', $html );
+		$this->assertStringContainsString( '<label for="newspack-group-seats-product-303">', $html );
 		$this->assertStringContainsString( '<p class="newspack__subscription-tiers__seats">', $html );
 		// An unlimited product has no ceiling to enforce in the browser: the cluster
 		// above runs straight from min to value, with no max attribute between them.
@@ -925,7 +925,7 @@ class Newspack_Test_Subscriptions_Tiers extends WP_UnitTestCase {
 
 		$html = $this->render_tier_form( $product, $switch_data );
 
-		$this->assertStringContainsString( 'id="group_seats" step="1" min="2" max="10" value="5"', $html );
+		$this->assertStringContainsString( 'id="newspack-group-seats-item-' . $switch_data['item_id'] . '" step="1" min="2" max="10" value="5"', $html );
 		$this->assertStringContainsString( 'data-original-value="5"', $html );
 		// The seats field submits the quantity, so no hidden input duplicates it.
 		$this->assertStringNotContainsString( 'type="hidden" name="quantity"', $html );
@@ -1006,7 +1006,7 @@ class Newspack_Test_Subscriptions_Tiers extends WP_UnitTestCase {
 
 		$html = $this->render_tier_form( $grouped, $switch_data );
 
-		$this->assertStringContainsString( 'id="group_seats" step="1" min="2" value="3"', $html );
+		$this->assertStringContainsString( 'id="newspack-group-seats-item-' . $switch_data['item_id'] . '" step="1" min="2" value="3"', $html );
 		$this->assertStringContainsString( 'data-original-value="3" disabled>', $html );
 		$this->assertStringContainsString( '<p class="newspack__subscription-tiers__seats" hidden>', $html );
 	}
@@ -1064,6 +1064,51 @@ class Newspack_Test_Subscriptions_Tiers extends WP_UnitTestCase {
 		$this->assertStringContainsString( 'data-subscription-id="' . $switch_data['subscription']->get_id() . '"', $html );
 		// The modal carries the switch params the checkout needs, at the seats already paid for.
 		$this->assertStringContainsString( '<input type="hidden" name="item" value="' . $switch_data['item_id'] . '">', $html );
-		$this->assertStringContainsString( 'id="group_seats" step="1" min="2" max="10" value="4"', $html );
+		$this->assertStringContainsString( 'id="newspack-group-seats-item-' . $switch_data['item_id'] . '" step="1" min="2" max="10" value="4"', $html );
+	}
+
+	/**
+	 * A reader with two group subscriptions gets two switch modals in the same
+	 * footer, each with its own seats field. The ids are keyed to the line item
+	 * being switched so the two never collide: duplicate ids would point both
+	 * labels at the first field, and clicking the second modal's label would
+	 * focus the first modal's input.
+	 */
+	public function test_two_switch_modals_have_distinct_seats_input_ids() {
+		global $wcs_grouped_parents;
+		$user_id = self::factory()->user->create();
+		wp_set_current_user( $user_id );
+		$this->make_tier_product( 330, $this->per_seat_meta( 2, 10 ) );
+		wc_create_mock_product(
+			[
+				'id'       => 331,
+				'type'     => 'grouped',
+				'name'     => 'Tiers',
+				'children' => [ 330 ],
+			]
+		);
+		$wcs_grouped_parents = [ 330 => [ 331 ] ];
+
+		$first = $this->make_switch_data( $user_id, [ 330 ], 330, 4 );
+		// Two products so the switched line item gets the second mock item ID, which
+		// is what two real subscriptions would have.
+		$second = $this->make_switch_data( $user_id, [ 331, 330 ], 330, 6 );
+		$this->assertNotSame( $first['item_id'], $second['item_id'], 'Fixture must give the two line items different IDs.' );
+
+		Subscriptions_Tiers::register_switch_modal( $first['item_id'], $first['item'], $first['subscription'] );
+		Subscriptions_Tiers::register_switch_modal( $second['item_id'], $second['item'], $second['subscription'] );
+
+		ob_start();
+		Subscriptions_Tiers::print_switch_subscription_link_modal();
+		$html = ob_get_clean();
+
+		$wcs_grouped_parents = [];
+
+		$first_id  = 'newspack-group-seats-item-' . $first['item_id'];
+		$second_id = 'newspack-group-seats-item-' . $second['item_id'];
+		$this->assertSame( 1, substr_count( $html, 'id="' . $first_id . '"' ) );
+		$this->assertSame( 1, substr_count( $html, 'id="' . $second_id . '"' ) );
+		$this->assertStringContainsString( '<label for="' . $first_id . '">', $html );
+		$this->assertStringContainsString( '<label for="' . $second_id . '">', $html );
 	}
 }

@@ -996,6 +996,12 @@ class Group_Subscription_Settings {
 		}
 
 		$subscription = is_a( $subscription, 'WC_Subscription' ) ? $subscription : \wcs_get_subscription( $subscription_id );
+		// The seat fields are only ever rendered for a per-seat group, so their
+		// presence on anything else is a request that did not come from this meta
+		// box. Rescaling on it would resize an unrelated subscription's line item.
+		if ( ! self::is_per_seat( $subscription ) ) {
+			return;
+		}
 		self::sync_seat_line_item_from_post( $subscription );
 		$seat_result = self::set_seat_quantity( $subscription, $submitted_seats );
 		// WooCommerce collects meta-box errors here and prints them on the next screen

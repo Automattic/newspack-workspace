@@ -742,6 +742,14 @@ class Subscriptions_Tiers {
 			}
 		}
 
+		// One page can hold several of these forms -- print_switch_subscription_link_modal()
+		// prints one modal per switch link -- so the input's id has to be unique or the
+		// labels all point at the first one. Keyed by what identifies the form: the line
+		// item being switched, or the product being bought.
+		$seats_input_id = 'newspack-group-seats-' . ( $switch_data
+			? 'item-' . absint( $switch_data['item_id'] )
+			: 'product-' . ( $product ? absint( $product->get_id() ) : 0 ) );
+
 		// Start from the seats the reader already pays for when that line sells
 		// seats, otherwise from the tier's own minimum — then hold it inside the
 		// selected tier's bounds, which a differently-priced tier may narrow.
@@ -826,8 +834,8 @@ class Subscriptions_Tiers {
 			<?php endif; ?>
 			<?php if ( $seats_field ) : ?>
 				<p class="newspack__subscription-tiers__seats"<?php echo $selected_seats ? '' : ' hidden'; ?>>
-					<label for="group_seats"><?php echo esc_html( $seats_field['label'] ); ?></label>
-					<input type="number" name="quantity" id="group_seats" step="1" min="<?php echo esc_attr( $seats_field['min'] ); ?>"<?php echo $seats_field['max'] > 0 ? ' max="' . esc_attr( $seats_field['max'] ) . '"' : ''; ?> value="<?php echo esc_attr( $seats_value ); ?>" data-original-value="<?php echo esc_attr( $seats_original ); ?>"<?php echo $selected_seats ? '' : ' disabled'; ?>>
+					<label for="<?php echo esc_attr( $seats_input_id ); ?>"><?php echo esc_html( $seats_field['label'] ); ?></label>
+					<input type="number" name="quantity" id="<?php echo esc_attr( $seats_input_id ); ?>" step="1" min="<?php echo esc_attr( $seats_field['min'] ); ?>"<?php echo $seats_field['max'] > 0 ? ' max="' . esc_attr( $seats_field['max'] ) . '"' : ''; ?> value="<?php echo esc_attr( $seats_value ); ?>" data-original-value="<?php echo esc_attr( $seats_original ); ?>"<?php echo $selected_seats ? '' : ' disabled'; ?>>
 					<span class="newspack-ui__helper-text"><?php echo esc_html( $seats_field['help'] ); ?></span>
 				</p>
 				<?php

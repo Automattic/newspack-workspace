@@ -524,6 +524,12 @@ import { domReady, onCheckoutPlaceOrderProcessing } from './utils';
 								$quantity.find( 'h3, input[name="quantity"]' ).removeClass( 'newspack-ui__field-error' );
 								if ( res.checkout_data ) {
 									$( '#modal-checkout-product-details' ).attr( 'data-checkout', JSON.stringify( res.checkout_data ) );
+									// The server may accept a quantity other than the one asked
+									// for — a product sold in bounds clamps to them. Show the
+									// count the reader is about to pay for, not the one they typed.
+									if ( res.checkout_data.quantity ) {
+										input.val( res.checkout_data.quantity );
+									}
 								}
 								$( document.body ).trigger( 'update_checkout', { update_shipping_method: false } );
 							} else {

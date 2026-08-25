@@ -997,6 +997,38 @@ class Test_Group_Subscription_Settings extends WP_UnitTestCase {
 	}
 
 	/**
+	 * The seats field is only rendered for a per-seat group, so seat fields posted
+	 * against anything else did not come from this meta box. Acting on them would
+	 * resize a line item nobody asked to resize.
+	 */
+	public function test_save_ignores_seats_for_a_flat_subscription() {
+		$subscription = $this->make_per_seat_subscription(
+			951,
+			[
+				'per_seat' => false,
+				'quantity' => 1,
+				'subtotal' => 40,
+				'total'    => 40,
+			]
+		);
+		$prefix = Group_Subscription_Settings::GROUP_SUBSCRIPTION_META_PREFIX;
+
+		$this->run_meta_box_save(
+			$subscription,
+			[
+				$prefix . 'enabled'          => 'yes',
+				$prefix . 'enabled_baseline' => 'yes',
+				$prefix . 'seats'            => '9',
+				$prefix . 'seats_baseline'   => '1',
+			]
+		);
+
+		$item = Group_Subscription_Settings::get_seat_line_item( $subscription );
+		$this->assertSame( 1, $item->get_quantity(), 'A flat group sells no seats, so nothing rescales.' );
+		$this->assertSame( 40.0, (float) $item->get_subtotal() );
+	}
+
+	/**
 	 * A seat cut the group cannot absorb is refused, and the admin is told why
 	 * rather than being left to wonder why the number sprang back.
 	 */
