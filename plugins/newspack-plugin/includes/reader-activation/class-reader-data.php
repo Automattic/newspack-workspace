@@ -275,7 +275,12 @@ final class Reader_Data {
 	 *
 	 * @return array List of IDs.
 	 */
-	private static function decode_item_list( $value ) {
+	private static function decode_item_list( mixed $value ): array {
+		// A writer that handed update_user_meta() a real array gets it back
+		// unserialized; pass it through rather than resetting the reader's list.
+		if ( is_array( $value ) ) {
+			return array_values( array_filter( $value, 'is_scalar' ) );
+		}
 		// Explicit empty-string check: a stored "0" is a value, not an absence,
 		// matching the falsy-zero contract documented on validate_prepared_item().
 		if ( ! is_string( $value ) || '' === $value ) {

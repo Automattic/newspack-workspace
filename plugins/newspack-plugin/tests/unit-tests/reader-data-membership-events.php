@@ -39,7 +39,7 @@ class Newspack_Test_Reader_Data_Membership_Events extends WP_UnitTestCase {
 	 *
 	 * @param int    $user_id   User ID.
 	 * @param string $key       Item key.
-	 * @param string $raw_value Raw meta value.
+	 * @param mixed  $raw_value Raw meta value.
 	 */
 	private static function seed_raw_item( $user_id, $key, $raw_value ) {
 		update_user_meta( $user_id, 'newspack_reader_data_keys', [ $key ] );
@@ -117,11 +117,67 @@ class Newspack_Test_Reader_Data_Membership_Events extends WP_UnitTestCase {
 	}
 
 	/**
+	 * The comma-separated shape on the active branch: the one legacy shape
+	 * whose pre-fix failure was silent — json_decode() yields null and the
+	 * append auto-vivifies — quietly dropping every other plan.
+	 */
+	public function test_active_event_recovers_comma_separated_value() {
+		$user_id = self::factory()->user->create();
+		self::seed_raw_item( $user_id, 'active_memberships', '123,456' );
+		Reader_Data::update_active_memberships(
+			time(),
+			[
+				'user_id'      => $user_id,
+				'plan_id'      => 789,
+				'status_after' => 'active',
+			]
+		);
+		self::assertSame( '[123,456,789]', Reader_Data::get_data( $user_id, 'active_memberships' ) );
+	}
+
+	/**
+	 * A value stored as a real PHP array (a raw update_user_meta() write,
+	 * returned unserialized on read) passes through instead of resetting
+	 * the reader's list.
+	 */
+	public function test_inactive_event_recovers_array_value() {
+		$user_id = self::factory()->user->create();
+		self::seed_raw_item( $user_id, 'active_memberships', [ 123, 456 ] );
+		Reader_Data::update_active_memberships(
+			time(),
+			[
+				'user_id'      => $user_id,
+				'plan_id'      => 123,
+				'status_after' => 'expired',
+			]
+		);
+		self::assertSame( '[456]', Reader_Data::get_data( $user_id, 'active_memberships' ) );
+	}
+
+	/**
 	 * An unrecoverable stored value starts the list fresh instead of crashing.
 	 */
 	public function test_active_event_starts_fresh_on_unrecoverable_value() {
 		$user_id = self::factory()->user->create();
 		self::seed_raw_item( $user_id, 'active_memberships', 'not-json' );
+		Reader_Data::update_active_memberships(
+			time(),
+			[
+				'user_id'      => $user_id,
+				'plan_id'      => 123,
+				'status_after' => 'active',
+			]
+		);
+		self::assertSame( '[123]', Reader_Data::get_data( $user_id, 'active_memberships' ) );
+	}
+
+	/**
+	 * A JSON object is not a plan list: previously a fatal on the active
+	 * branch, now the list starts fresh.
+	 */
+	public function test_active_event_starts_fresh_on_json_object_value() {
+		$user_id = self::factory()->user->create();
+		self::seed_raw_item( $user_id, 'active_memberships', '{"a":1}' );
 		Reader_Data::update_active_memberships(
 			time(),
 			[
