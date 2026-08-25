@@ -997,6 +997,48 @@ class Test_Group_Subscription_Settings extends WP_UnitTestCase {
 	}
 
 	/**
+	 * A subscription assembled by hand can carry more than one line, and the seat
+	 * count belongs to the per-seat product's line -- not to whichever line the
+	 * items happen to be stored in first. Rescaling the wrong one would move money
+	 * on a product that sells no seats.
+	 */
+	public function test_seat_line_item_is_the_per_seat_product_line() {
+		$other_product = wc_create_mock_product(
+			[
+				'id'   => 9600,
+				'type' => 'subscription',
+			]
+		);
+		$other_line    = new WC_Order_Item_Product(
+			[
+				'id'         => 9601,
+				'product_id' => $other_product->get_id(),
+				'quantity'   => 1,
+				'subtotal'   => 15,
+				'total'      => 15,
+			]
+		);
+		$seat_line     = new WC_Order_Item_Product(
+			[
+				'id'         => 9602,
+				'product_id' => 1952, // make_per_seat_subscription() derives the product ID as $id + 1000.
+				'quantity'   => 3,
+				'subtotal'   => 30,
+				'total'      => 30,
+			]
+		);
+		// The non-seat line first, so "the first item" and "the seat item" differ.
+		$subscription = $this->make_per_seat_subscription( 952, [ 'items' => [ $other_line, $seat_line ] ] );
+
+		$this->assertSame( 9602, Group_Subscription_Settings::get_seat_line_item( $subscription )->get_id() );
+
+		$this->assertTrue( Group_Subscription_Settings::set_seat_quantity( $subscription, 6 ) );
+		$this->assertSame( 6, $seat_line->get_quantity() );
+		$this->assertSame( 60.0, (float) $seat_line->get_subtotal() );
+		$this->assertSame( 1, $other_line->get_quantity(), 'The line that sells no seats is untouched.' );
+	}
+
+	/**
 	 * The seats field is only rendered for a per-seat group, so seat fields posted
 	 * against anything else did not come from this meta box. Acting on them would
 	 * resize a line item nobody asked to resize.

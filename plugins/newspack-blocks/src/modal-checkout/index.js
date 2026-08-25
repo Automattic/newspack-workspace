@@ -482,6 +482,21 @@ import { domReady, onCheckoutPlaceOrderProcessing } from './utils';
 				}
 
 				/**
+				 * Replace the quantity form's result line, and mark the field when the
+				 * server refused the change.
+				 *
+				 * @param {boolean} success
+				 * @param {string}  message
+				 */
+				function showQuantityResult( success, message ) {
+					$quantity.find( '.result' ).remove();
+					$quantity.append(
+						`<p class="result ${ CLASS_PREFIX }__helper-text ${ ! success ? CLASS_PREFIX + '__inline-error' : '' }">` + message + '</p>'
+					);
+					$quantity.find( 'h3, input[name="quantity"]' ).toggleClass( 'newspack-ui__field-error', ! success );
+				}
+
+				/**
 				 * Handle quantity form submission.
 				 *
 				 * On success the order review is refreshed to show the new total, and the
@@ -512,16 +527,17 @@ import { domReady, onCheckoutPlaceOrderProcessing } from './utils';
 						type: 'POST',
 						url: newspackBlocksModalCheckout.ajax_url,
 						data,
-						success: ( { success, data: res } ) => {
+						success: response => {
+							// A malformed request returns bare (`0`), so there is no envelope
+							// to read and nothing the reader could act on.
+							if ( ! response || typeof response.success === 'undefined' ) {
+								showQuantityResult( false, newspackBlocksModalCheckout.quantity_error );
+								return;
+							}
+							const { success, data: res } = response;
 							clearNotices();
-							$quantity.find( '.result' ).remove();
-							$quantity.append(
-								`<p class="result ${ CLASS_PREFIX }__helper-text ${ ! success ? CLASS_PREFIX + '__inline-error' : '' }">` +
-									res.message +
-									'</p>'
-							);
+							showQuantityResult( success, res?.message || newspackBlocksModalCheckout.quantity_error );
 							if ( success ) {
-								$quantity.find( 'h3, input[name="quantity"]' ).removeClass( 'newspack-ui__field-error' );
 								if ( res.checkout_data ) {
 									$( '#modal-checkout-product-details' ).attr( 'data-checkout', JSON.stringify( res.checkout_data ) );
 									// The server may accept a quantity other than the one asked
@@ -534,9 +550,10 @@ import { domReady, onCheckoutPlaceOrderProcessing } from './utils';
 								$( document.body ).trigger( 'update_checkout', { update_shipping_method: false } );
 							} else {
 								input.focus();
-								$quantity.find( 'h3, input[name="quantity"]' ).addClass( 'newspack-ui__field-error' );
 							}
 						},
+						// An expired nonce dies with a 403, which never reaches success:.
+						error: () => showQuantityResult( false, newspackBlocksModalCheckout.quantity_error ),
 						complete: () => {
 							unblockForm( $quantity );
 							input.attr( 'disabled', false );

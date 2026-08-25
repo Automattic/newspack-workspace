@@ -423,19 +423,55 @@ final class Modal_Checkout {
 	 */
 	private static function clamp_quantity( $quantity, $product_id ) {
 		$quantity = max( 1, (int) $quantity );
+		// The quantity arrives in the request, so on its own it is the caller's
+		// claim about how many of something to charge for — `newspack_checkout=1`
+		// needs no nonce, which is what makes a crafted link a multiplier on the
+		// price. What makes it meaningful is a plugin owning the product's
+		// quantity rules, and the field filter is where it says so. Nobody
+		// answering means the modal is single-quantity for this product, whatever
+		// the request asked for.
+		if ( ! self::has_quantity_field( $product_id ) ) {
+			return 1;
+		}
 		/**
 		 * Filters the line-item quantity the modal checkout will use for a product.
 		 *
-		 * A plugin that owns a product's quantity rules may move it in either
-		 * direction — returning 1 for a product that must never be bought in
-		 * multiples, or raising it to a minimum the product is never sold below.
-		 * Runs after the floor of one, so a callback only ever sees a valid
-		 * quantity, and its own return is floored again.
+		 * Only consulted for a product whose quantity rules a plugin has claimed
+		 * through `newspack_blocks_modal_checkout_quantity_field`. Such a plugin
+		 * may move the quantity in either direction — returning 1 for a product
+		 * that must never be bought in multiples, or raising it to a minimum the
+		 * product is never sold below. Runs after the floor of one, so a callback
+		 * only ever sees a valid quantity, and its own return is floored again.
 		 *
 		 * @param int $quantity   Requested quantity, at least 1.
 		 * @param int $product_id Product the quantity is for (variation preferred), 0 when unknown.
 		 */
 		return max( 1, (int) apply_filters( 'newspack_blocks_modal_checkout_quantity', $quantity, (int) $product_id ) );
+	}
+
+	/**
+	 * Whether any plugin has claimed a product's quantity rules.
+	 *
+	 * The same filter `render_quantity_form()` reads to decide whether to print a
+	 * quantity control, asked here without a cart item because the initial add
+	 * happens before there is one. Sharing the filter is the point: the product
+	 * that gets a quantity control is exactly the product a quantity may be
+	 * requested for.
+	 *
+	 * @param int $product_id Product the quantity is for (variation preferred), 0 when unknown.
+	 *
+	 * @return bool
+	 */
+	private static function has_quantity_field( $product_id ) {
+		if ( ! $product_id || ! function_exists( 'wc_get_product' ) ) {
+			return false;
+		}
+		$product = \wc_get_product( (int) $product_id );
+		if ( ! $product ) {
+			return false;
+		}
+		/** This filter is documented in includes/class-modal-checkout.php */
+		return ! empty( apply_filters( 'newspack_blocks_modal_checkout_quantity_field', null, $product, [] ) );
 	}
 
 	/**
@@ -805,7 +841,7 @@ final class Modal_Checkout {
 		// third-party notice content here.
 		if ( ! $cart_item_key ) {
 			$error_notices = \wc_get_notices( 'error' );
-			\wc_clear_notices();
+			\wc_clear_notices( 'error' );
 			wp_send_json_error(
 				[
 					'message' => ! empty( $error_notices[0]['notice'] )
@@ -864,8 +900,21 @@ final class Modal_Checkout {
 			if ( (int) $cart_item['product_id'] !== (int) $product_id && (int) $cart_item['variation_id'] !== (int) $product_id ) {
 				continue;
 			}
+			// WooCommerce Subscriptions writes `subscription_switch` onto the cart item
+			// from `switch-subscription` in the request, and this rebuild has no such
+			// request behind it. Re-adding would drop the record, and the checkout would
+			// raise a second full-price subscription instead of switching the one the
+			// reader already pays for. The seat count for a switch is chosen in the tier
+			// picker, which submits the whole switch again, so there is nothing to lose
+			// by refusing here.
+			if ( ! empty( $cart_item['subscription_switch'] ) ) {
+				return new \WP_Error(
+					'newspack_blocks_quantity_switch_cart',
+					__( 'Go back and choose the number you want before changing your subscription.', 'newspack-blocks' )
+				);
+			}
 			$original_quantity = max( 1, (int) $cart_item['quantity'] );
-			foreach ( self::PRESERVED_CART_ITEM_KEYS as $key ) {
+			foreach ( self::get_preserved_cart_item_keys() as $key ) {
 				if ( isset( $cart_item[ $key ] ) ) {
 					$cart_item_data[ $key ] = $cart_item[ $key ];
 				}
@@ -964,7 +1013,7 @@ final class Modal_Checkout {
 
 		wp_send_json_success(
 			[
-				'message'       => __( 'Seats updated.', 'newspack-blocks' ),
+				'message'       => __( 'Updated.', 'newspack-blocks' ),
 				// update_order_review only returns the review-order table and payment-box
 				// fragments, so the #modal-checkout-product-details data carrier — which
 				// sits outside the checkout form and feeds the GA4 events — would keep
@@ -974,6 +1023,22 @@ final class Modal_Checkout {
 		);
 
 		wp_die();
+	}
+
+	/**
+	 * The cart item keys a quantity change carries over.
+	 *
+	 * @return string[]
+	 */
+	private static function get_preserved_cart_item_keys() {
+		/**
+		 * Filters the cart item keys the in-modal quantity form carries over when it
+		 * re-adds the product at a new quantity. A plugin that turned the quantity
+		 * field on for a product is the one that knows what its cart item holds.
+		 *
+		 * @param string[] $keys Cart item keys to preserve.
+		 */
+		return (array) apply_filters( 'newspack_blocks_modal_checkout_preserved_cart_item_keys', self::PRESERVED_CART_ITEM_KEYS );
 	}
 
 	/**
@@ -1140,6 +1205,7 @@ final class Modal_Checkout {
 				'ajax_url'              => admin_url( 'admin-ajax.php' ),
 				'nyp_nonce'             => wp_create_nonce( 'newspack_checkout_name_your_price' ),
 				'quantity_nonce'        => wp_create_nonce( 'newspack_checkout_quantity' ),
+				'quantity_error'        => __( 'Something went wrong. Please try again.', 'newspack-blocks' ),
 				'checkout_nonce'        => wp_create_nonce( 'newspack_modal_checkout_nonce' ),
 				'newspack_class_prefix' => self::get_class_prefix(),
 				'is_checkout_complete'  => function_exists( 'is_order_received_page' ) && is_order_received_page(),
@@ -2762,6 +2828,12 @@ final class Modal_Checkout {
 		// The filter's consumers are handed this product to decide on, so bail
 		// rather than pass them something they cannot ask anything of.
 		if ( ! $product || ! method_exists( $product, 'get_id' ) ) {
+			return;
+		}
+		// A cart WooCommerce Subscriptions is holding for a switch cannot be rebuilt
+		// at a new quantity without losing the switch (see update_cart_quantity()),
+		// so it gets no control that would invite one.
+		if ( ! empty( $cart_item['subscription_switch'] ) ) {
 			return;
 		}
 

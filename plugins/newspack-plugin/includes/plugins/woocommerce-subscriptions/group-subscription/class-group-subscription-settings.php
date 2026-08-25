@@ -425,10 +425,20 @@ class Group_Subscription_Settings {
 		if ( ! $subscription ) {
 			return null;
 		}
+		$first = null;
 		foreach ( $subscription->get_items() as $item ) {
-			return $item;
+			if ( null === $first ) {
+				$first = $item;
+			}
+			// A subscription assembled by hand -- which is the surface the seat field
+			// lives on -- can carry more than one line, and rescaling the wrong one
+			// would move money on a product that sells no seats.
+			$product_id = $item->get_variation_id() ? $item->get_variation_id() : $item->get_product_id();
+			if ( $product_id && self::is_per_seat( $product_id ) ) {
+				return $item;
+			}
 		}
-		return null;
+		return $first;
 	}
 
 	/**
@@ -1043,13 +1053,16 @@ class Group_Subscription_Settings {
 			return;
 		}
 		// phpcs:disable WordPress.Security.NonceVerification.Missing -- The only caller verifies woocommerce_meta_nonce before reaching here.
-		if ( isset( $_POST['order_item_qty'][ $item_id ] ) ) {
+		// Scalars only: sanitize_text_field() answers '' for an array, which would set
+		// the quantity to zero and make the rescale read the whole line as one seat's
+		// price. WooCommerce's own items table posts scalars.
+		if ( isset( $_POST['order_item_qty'][ $item_id ] ) && is_scalar( $_POST['order_item_qty'][ $item_id ] ) ) {
 			$item->set_quantity( sanitize_text_field( wp_unslash( $_POST['order_item_qty'][ $item_id ] ) ) );
 		}
-		if ( isset( $_POST['line_subtotal'][ $item_id ] ) ) {
+		if ( isset( $_POST['line_subtotal'][ $item_id ] ) && is_scalar( $_POST['line_subtotal'][ $item_id ] ) ) {
 			$item->set_subtotal( sanitize_text_field( wp_unslash( $_POST['line_subtotal'][ $item_id ] ) ) );
 		}
-		if ( isset( $_POST['line_total'][ $item_id ] ) ) {
+		if ( isset( $_POST['line_total'][ $item_id ] ) && is_scalar( $_POST['line_total'][ $item_id ] ) ) {
 			$item->set_total( sanitize_text_field( wp_unslash( $_POST['line_total'][ $item_id ] ) ) );
 		}
 		// phpcs:enable WordPress.Security.NonceVerification.Missing

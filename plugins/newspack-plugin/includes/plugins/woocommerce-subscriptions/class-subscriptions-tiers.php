@@ -168,7 +168,13 @@ class Subscriptions_Tiers {
 			return;
 		}
 		foreach ( self::$switch_subscription_links as $switch_data ) {
-			if ( ! wcs_is_product_switchable_type( $switch_data['item']['product_id'] ) ) {
+			// The canonical ID, so a tiered plan is judged on the variation the reader
+			// holds. Per-seat meta lives on the variation, and asking about the parent
+			// would print no modal behind a switch link this class already rendered.
+			$switchable_id = function_exists( 'wcs_get_canonical_product_id' )
+				? wcs_get_canonical_product_id( $switch_data['item'] )
+				: $switch_data['item']['product_id'];
+			if ( ! wcs_is_product_switchable_type( $switchable_id ) ) {
 				continue;
 			}
 			$product = wc_get_product( $switch_data['item']['product_id'] );

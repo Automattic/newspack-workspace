@@ -218,6 +218,24 @@ class Test_Group_Subscription_Seats extends WP_UnitTestCase {
 	}
 
 	/**
+	 * A maximum saved below the minimum would leave the product with no seat count
+	 * that satisfies both bounds, so it could not be bought at all. The maximum
+	 * gives way, and the plan sells at exactly its minimum.
+	 */
+	public function test_bounds_raise_a_maximum_below_the_minimum() {
+		$product = $this->make_per_seat_product( 9160, 5, 2 );
+
+		$this->assertSame(
+			[
+				'min' => 5,
+				'max' => 5,
+			],
+			Group_Subscription_Seats::get_bounds( $product )
+		);
+		$this->assertTrue( Group_Subscription_Seats::validate_quantity( $product, 5 ) );
+	}
+
+	/**
 	 * Enforces both the minimum and maximum seat bounds; a max of 0 means unlimited.
 	 */
 	public function test_validate_quantity_enforces_bounds() {

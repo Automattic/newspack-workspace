@@ -11,11 +11,6 @@
 
 	function init() {
 		$( 'input#_newspack_group_subscription_enabled,input.variable_newspack_group_subscription_enabled' ).trigger( 'change' );
-		// Also sync the per-seat/per-team split directly, so a saved pricing mode
-		// renders correctly even if the enabled checkbox's own change handler above
-		// doesn't fire (e.g. an unchecked box, where the fields stay hidden anyway
-		// but should still reflect the right internal state once revealed).
-		$( 'select[id^="_newspack_group_subscription_pricing_mode"]' ).trigger( 'change' );
 		$( '#woocommerce-product-data' ).on( 'woocommerce_variations_loaded', init );
 		$( '.woocommerce_variation' ).on( 'click', 'h3', init );
 	}
@@ -37,11 +32,19 @@
 
 	// Pricing mode select. The variation row's select ID carries a `_<loop>` suffix
 	// (e.g. `_newspack_group_subscription_pricing_mode_0`), hence the prefix match.
+	//
+	// Both rows stay hidden while group subscriptions are off for the product: the
+	// pricing mode only chooses which of the two a group product shows, and toggling
+	// on it alone would reveal a member limit or seat bounds on a product that has
+	// no group at all.
 	function showOrHidePerSeatOptions( scope ) {
 		const $scope = $( scope );
+		const enabled = $scope
+			.find( 'input#_newspack_group_subscription_enabled,input.variable_newspack_group_subscription_enabled' )
+			.is( ':checked' );
 		const mode = $scope.find( 'select[id^="_newspack_group_subscription_pricing_mode"]' ).val();
-		$scope.find( '.show_if_newspack_group_subscription_per_seat' ).toggle( mode === 'per_seat' );
-		$scope.find( '.show_if_newspack_group_subscription_per_team' ).toggle( mode !== 'per_seat' );
+		$scope.find( '.show_if_newspack_group_subscription_per_seat' ).toggle( enabled && mode === 'per_seat' );
+		$scope.find( '.show_if_newspack_group_subscription_per_team' ).toggle( enabled && mode !== 'per_seat' );
 	}
 
 	function showOrHideAllOptions( e ) {

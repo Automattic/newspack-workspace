@@ -480,24 +480,51 @@ class ModalCheckoutTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 	}
 
 	/**
-	 * Absent quantity defaults to one seat.
+	 * A requested quantity, once a plugin has claimed the product's quantity rules.
+	 *
+	 * @return array<string,array{0:?string,1:int}>
 	 */
-	public function test_requested_quantity_defaults_to_one() {
-		unset( $_GET['quantity'], $_REQUEST['quantity'] );
-		$this->assertSame( 1, \Newspack_Blocks\Modal_Checkout::get_requested_quantity() );
+	public function requested_quantity_provider() {
+		return [
+			'absent'   => [ null, 1 ],
+			'zero'     => [ '0', 1 ],
+			// (int), not absint(): absint() takes the absolute value, so ?quantity=-5
+			// would become 5 rather than flooring at 1 like any other out-of-range ask.
+			'negative' => [ '-5', 1 ],
+			'in range' => [ '7', 7 ],
+		];
 	}
 
 	/**
-	 * Zero (or any value below one) floors at one; a valid quantity passes through.
+	 * @dataProvider requested_quantity_provider
+	 *
+	 * @param string|null $requested The quantity in the request, or null for none.
+	 * @param int         $expected  The quantity the checkout will use.
 	 */
-	public function test_requested_quantity_floors_at_one() {
-		$_GET['quantity']     = '0';
-		$_REQUEST['quantity'] = '0';
-		$this->assertSame( 1, \Newspack_Blocks\Modal_Checkout::get_requested_quantity() );
+	public function test_requested_quantity_is_floored_at_one( $requested, $expected ) {
+		$this->set_quantity_field_args( $this->get_quantity_field_args_fixture() );
+		if ( null === $requested ) {
+			unset( $_GET['quantity'], $_REQUEST['quantity'] );
+		} else {
+			$_GET['quantity']     = $requested;
+			$_REQUEST['quantity'] = $requested;
+		}
 
-		$_GET['quantity']     = '7';
-		$_REQUEST['quantity'] = '7';
-		$this->assertSame( 7, \Newspack_Blocks\Modal_Checkout::get_requested_quantity() );
+		$this->assertSame( $expected, \Newspack_Blocks\Modal_Checkout::get_requested_quantity( 920 ) );
+
+		unset( $_GET['quantity'], $_REQUEST['quantity'] );
+	}
+
+	/**
+	 * `newspack_checkout=1` needs no nonce, so a quantity in the request is the
+	 * caller's claim and nothing more. Without a plugin claiming the product's
+	 * quantity rules, a crafted link would otherwise multiply what the reader pays.
+	 */
+	public function test_requested_quantity_is_one_without_a_quantity_field() {
+		$_GET['quantity']     = '250';
+		$_REQUEST['quantity'] = '250';
+
+		$this->assertSame( 1, \Newspack_Blocks\Modal_Checkout::get_requested_quantity( 920 ) );
 
 		unset( $_GET['quantity'], $_REQUEST['quantity'] );
 	}
@@ -507,27 +534,14 @@ class ModalCheckoutTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 	 * must honor it too, since it reads $_REQUEST rather than $_GET alone.
 	 */
 	public function test_requested_quantity_reads_post_for_in_modal_form() {
+		$this->set_quantity_field_args( $this->get_quantity_field_args_fixture() );
 		unset( $_GET['quantity'] );
 		$_POST['quantity']    = '3';
 		$_REQUEST['quantity'] = '3';
 
-		$this->assertSame( 3, \Newspack_Blocks\Modal_Checkout::get_requested_quantity() );
+		$this->assertSame( 3, \Newspack_Blocks\Modal_Checkout::get_requested_quantity( 920 ) );
 
 		unset( $_POST['quantity'], $_REQUEST['quantity'] );
-	}
-
-	/**
-	 * A negative quantity floors at one. Must use (int), not absint(): absint()
-	 * takes the absolute value, so ?quantity=-5 would otherwise become 5 instead
-	 * of flooring at 1 like any other out-of-range request.
-	 */
-	public function test_requested_quantity_floors_negative_at_one() {
-		$_GET['quantity']     = '-5';
-		$_REQUEST['quantity'] = '-5';
-
-		$this->assertSame( 1, \Newspack_Blocks\Modal_Checkout::get_requested_quantity() );
-
-		unset( $_GET['quantity'], $_REQUEST['quantity'] );
 	}
 
 	/**
@@ -1399,7 +1413,7 @@ class ModalCheckoutTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 	 * @param int $product_id Product ID of the line item.
 	 * @param int $quantity   Quantity of the line item.
 	 */
-	private function set_mock_single_item_cart( $product_id = 920, $quantity = 2 ) {
+	private function set_mock_single_item_cart( $product_id = 920, $quantity = 2, $extra = [] ) {
 		$product = new class( $product_id ) {
 			/**
 			 * Product ID.
@@ -1436,12 +1450,15 @@ class ModalCheckoutTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 			}
 		};
 
-		$cart_item = [
-			'product_id'   => $product_id,
-			'variation_id' => 0,
-			'quantity'     => $quantity,
-			'data'         => $product,
-		];
+		$cart_item = array_merge(
+			$extra,
+			[
+				'product_id'   => $product_id,
+				'variation_id' => 0,
+				'quantity'     => $quantity,
+				'data'         => $product,
+			]
+		);
 
 		WC()->cart = new class( $cart_item ) {
 			/**
@@ -1663,10 +1680,47 @@ class ModalCheckoutTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 	}
 
 	/**
+	 * WooCommerce Subscriptions writes `subscription_switch` onto the cart item from
+	 * the request that started the switch, and the quantity AJAX carries no such
+	 * request. Re-adding would drop the record, and the checkout would raise a second
+	 * full-price subscription instead of switching the one the reader already pays
+	 * for -- so the rebuild is refused and the cart is left exactly as it was.
+	 */
+	public function test_update_cart_quantity_refuses_a_switch_cart() {
+		$this->set_quantity_field_args( $this->get_quantity_field_args_fixture() );
+		$cart = $this->set_mutable_cart( 920, 4, [ 'subscription_switch' => [ 'subscription_id' => 77 ] ] );
+
+		$result = \Newspack_Blocks\Modal_Checkout::update_cart_quantity( 920, 8 );
+
+		$this->assertWPError( $result );
+		$this->assertSame( 'newspack_blocks_quantity_switch_cart', $result->get_error_code() );
+		$item = reset( $cart->contents );
+		$this->assertSame( 4, $item['quantity'], 'The switch cart item is untouched.' );
+		$this->assertSame( [ 'subscription_id' => 77 ], $item['subscription_switch'] );
+	}
+
+	/**
+	 * A control the reader could use on a switch cart would only ever produce the
+	 * refusal above, so it is not offered.
+	 */
+	public function test_quantity_form_is_not_rendered_on_a_switch_cart() {
+		$this->set_modal_checkout_request();
+		$this->set_mock_single_item_cart( 920, 4, [ 'subscription_switch' => [ 'subscription_id' => 77 ] ] );
+		$this->set_quantity_field_args( $this->get_quantity_field_args_fixture() );
+
+		ob_start();
+		\Newspack_Blocks\Modal_Checkout::render_quantity_form();
+		$output = ob_get_clean();
+
+		$this->assertSame( '', $output );
+	}
+
+	/**
 	 * The happy path: the line item comes back at the new quantity, the data the
 	 * original add attached survives the round trip, and coupons are re-applied.
 	 */
 	public function test_update_cart_quantity_re_adds_at_the_new_quantity() {
+		$this->set_quantity_field_args( $this->get_quantity_field_args_fixture() );
 		$cart          = $this->set_mutable_cart( 920, 2, [ 'gate_post_id' => 55 ] );
 		$cart->applied = [ 'summer25' ];
 
@@ -1687,6 +1741,7 @@ class ModalCheckoutTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 	 * back before the rejection is reported.
 	 */
 	public function test_update_cart_quantity_restores_the_original_item_when_rejected() {
+		$this->set_quantity_field_args( $this->get_quantity_field_args_fixture() );
 		$cart                      = $this->set_mutable_cart( 920, 2, [ 'gate_post_id' => 55 ] );
 		$cart->applied             = [ 'summer25' ];
 		$cart->rejected_quantities = [ 99 ];
@@ -1726,6 +1781,7 @@ class ModalCheckoutTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 	 * to the GA4 events — has to be rewritten from the response instead.
 	 */
 	public function test_update_cart_quantity_payload_reports_the_new_quantity() {
+		$this->set_quantity_field_args( $this->get_quantity_field_args_fixture() );
 		$cart = $this->set_mutable_cart( 920, 2 );
 
 		\Newspack_Blocks\Modal_Checkout::update_cart_quantity( 920, 5 );
@@ -1740,6 +1796,7 @@ class ModalCheckoutTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 	 * — and their answer is the one used.
 	 */
 	public function test_requested_quantity_is_filtered_with_the_product() {
+		$this->set_quantity_field_args( $this->get_quantity_field_args_fixture() );
 		$_GET['quantity']     = '5';
 		$_REQUEST['quantity'] = '5';
 		$seen                 = [];
@@ -1767,6 +1824,7 @@ class ModalCheckoutTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 	 * whatever it returns, so a stray 0 can't reach the cart as a silent removal.
 	 */
 	public function test_filtered_quantity_is_floored_at_one() {
+		$this->set_quantity_field_args( $this->get_quantity_field_args_fixture() );
 		$_GET['quantity']     = '4';
 		$_REQUEST['quantity'] = '4';
 
@@ -1787,6 +1845,7 @@ class ModalCheckoutTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 	 * from inside the modal either.
 	 */
 	public function test_update_cart_quantity_respects_the_filter() {
+		$this->set_quantity_field_args( $this->get_quantity_field_args_fixture() );
 		$cart = $this->set_mutable_cart( 920, 1 );
 
 		$filter = function () {

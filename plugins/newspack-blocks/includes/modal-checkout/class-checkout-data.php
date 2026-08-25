@@ -385,9 +385,9 @@ final class Checkout_Data {
 		} else {
 			// An order's amount is a line subtotal already scaled by quantity; a
 			// product's or cart item's is a per-unit price, so scale it here instead.
-			// Skip the multiply entirely at quantity 1 (the overwhelming majority of
-			// calls): it keeps every pre-existing single-seat path byte-identical, and
-			// avoids a TypeError from `'' * 1` for a product with no price set.
+			// Skipping the multiply at quantity 1 keeps every pre-existing single-seat
+			// path byte-identical: get_price() returns a string, and the multiply would
+			// hand a float to consumers that have always seen the string.
 			$line_amount              = ( $source instanceof \WC_Order || 1 === $quantity ) ? $amount : (float) $amount * $quantity;
 			$data['amount']           = $line_amount;
 			// Only a cart or order line item has a real seat count to report. For a

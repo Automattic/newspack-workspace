@@ -73,19 +73,14 @@ class Group_Subscription_Seats {
 	/**
 	 * Let WooCommerce Subscriptions switch a per-seat product whatever its type.
 	 *
-	 * Changing seats is a quantity switch on the plan the reader already has, and
-	 * WooCommerce Subscriptions runs the whole machinery for it — the proration
-	 * calculator, the switch order, `complete_subscription_switches()` — off one
-	 * gate: `wcs_is_product_switchable_type()`. That gate answers by product type
-	 * and the store's own switching setting, so a simple subscription sold per
-	 * seat is refused, its switch link goes nowhere, and the seat count can never
-	 * change. Saying yes here is the whole fix: nothing else in the switch flow
-	 * treats a simple product differently, and a quantity-only switch is already
-	 * a switch WooCommerce Subscriptions accepts.
+	 * WooCommerce Subscriptions runs its whole switch machinery off one gate,
+	 * `wcs_is_product_switchable_type()`, which answers by product type and the
+	 * store's switching setting — so a simple subscription sold per seat is refused
+	 * and its seat count could never change. Nothing else in the switch flow treats
+	 * a simple product differently.
 	 *
-	 * Scoped to per-seat products, so every other product — and the publisher's
-	 * switching setting for it — is left exactly as WooCommerce Subscriptions
-	 * decided, in both directions.
+	 * Scoped to per-seat products, so every other product keeps the answer
+	 * WooCommerce Subscriptions gave, in both directions.
 	 *
 	 * @param bool             $is_switchable Whether WooCommerce Subscriptions considers the product switchable.
 	 * @param \WC_Product|null $product       The product, or its parent when a variation was passed in.
@@ -116,9 +111,17 @@ class Group_Subscription_Seats {
 	 */
 	public static function get_bounds( $product ) {
 		$settings = Group_Subscription_Settings::get_product_settings( $product );
+		$min      = max( 1, (int) $settings['min_seats'] );
+		$max      = max( 0, (int) $settings['max_seats'] );
+		// Nothing stops a publisher saving a maximum below the minimum, and every seat
+		// count would then fail one bound or the other, leaving the product unbuyable
+		// with no error that names the cause. One seat count is better than none.
+		if ( $max > 0 && $max < $min ) {
+			$max = $min;
+		}
 		return [
-			'min' => max( 1, (int) $settings['min_seats'] ),
-			'max' => max( 0, (int) $settings['max_seats'] ),
+			'min' => $min,
+			'max' => $max,
 		];
 	}
 
@@ -138,21 +141,10 @@ class Group_Subscription_Seats {
 	 * Shared by every checkout context — the product page, the modal, the tier
 	 * picker — so the label and bounds cannot drift between them.
 	 *
-	 * The feature check belongs here rather than only in `init()`. Turning the
-	 * feature off unregisters every hook this class owns, including the guards
-	 * that enforce the bounds, but the tier picker calls this method directly
-	 * (see `Subscriptions_Tiers::render_form()`) and per-seat meta persists on the
-	 * product. Without the check, a site with the feature turned off would still
-	 * render a seats field whose bounds nothing enforces and whose count nothing
-	 * clamps. Answering null takes the field away everywhere at once, since
-	 * `modal_quantity_field()`, `quantity_input_args()`, `render_quantity_label()`
-	 * and `available_variation_args()` all read it.
-	 *
-	 * `Group_Subscription_Settings::is_per_seat()` is deliberately left alone: it
-	 * is the plain fact of how a product is configured, and a group's capacity is
-	 * read from the stored pricing mode rather than through it, so an early return
-	 * there would not make a flag-off site any more consistent — it would only put
-	 * two different answers to "is this per seat?" in the same codebase.
+	 * The feature check is repeated here, not left to `init()`: the tier picker
+	 * calls this directly and per-seat meta persists on the product, so a site with
+	 * the feature off would otherwise render a seats field with none of this class's
+	 * guards registered behind it.
 	 *
 	 * @param \WC_Product|int $product Product object or ID.
 	 *
@@ -235,20 +227,14 @@ class Group_Subscription_Seats {
 	/**
 	 * Hold the modal checkout to a seat count the product can actually be sold at.
 	 *
-	 * A quantity in the modal checkout means seats, and only a per-seat product
-	 * has any. Anything else is bought exactly once: without that, a request
-	 * carrying a seat count — a group owner switching from a per-seat tier to a
-	 * flat one, or a crafted URL — would buy that many of a product whose price
-	 * covers the whole group, billing the flat price N times. The bounds guards
-	 * can't catch it: they only ever run against a per-seat product's own
-	 * minimum and maximum.
+	 * A quantity in the modal checkout means seats, and only a per-seat product has
+	 * any. Anything else is bought exactly once, so a request carrying a seat count
+	 * cannot bill a flat group price N times — the bounds guards would not catch
+	 * that, since they only ever run against a per-seat product's own bounds.
 	 *
-	 * A per-seat product is held to those bounds in both directions. The modal
-	 * checkout has no seat count of its own to send, so a Checkout Button block
-	 * with no default seats asks for one — and one seat on a plan that sells no
-	 * fewer than two is a quantity the guards refuse, leaving the reader on an
-	 * empty cart with no seats control to correct it. The publisher's minimum is
-	 * the shared control's default everywhere else; it is the default here too.
+	 * A per-seat product is held to its bounds in both directions, including
+	 * upwards: a Checkout Button with no default seats asks for one, and one seat
+	 * on a plan that sells no fewer than two is a quantity the guards refuse.
 	 *
 	 * @param int $quantity   Requested quantity, at least 1.
 	 * @param int $product_id Product the quantity is for (variation preferred).
@@ -557,6 +543,10 @@ class Group_Subscription_Seats {
 	 * a per-seat group moving onto a flat plan is buying one price for the whole
 	 * group, and has no seats to prorate.
 	 *
+	 * `'yes'` rather than `'yes-upgrade'`, so a seat decrease is prorated too: the
+	 * owner is credited the unused part of the cycle, which WooCommerce Subscriptions
+	 * pays back by moving the next payment date out rather than by refunding.
+	 *
 	 * @param mixed $value The pre-option value: false unless something has already answered.
 	 *
 	 * @return mixed 'yes' for a switch onto a per-seat plan, otherwise the value unchanged.
@@ -616,6 +606,14 @@ class Group_Subscription_Seats {
 	 */
 	private static function get_cart_items() {
 		if ( ! function_exists( 'WC' ) || ! \WC() || ! \WC()->cart ) {
+			return [];
+		}
+		// `WC_Cart::get_cart()` loads the cart from the session when it has not been
+		// loaded yet, and that load reads this same option through WooCommerce
+		// Subscriptions' own session handlers -- so calling it here before the load
+		// has finished would re-enter this callback. Totals are always calculated
+		// after the load, which is the pass this branch exists for.
+		if ( ! did_action( 'woocommerce_cart_loaded_from_session' ) ) {
 			return [];
 		}
 		return \WC()->cart->get_cart();
