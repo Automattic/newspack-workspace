@@ -335,6 +335,10 @@ class Content_Gate_Advanced_Settings {
 	 * even when `restrict_feeds` is on, or a restricting mode to gate a feed even
 	 * when `restrict_feeds` is off.
 	 *
+	 * One exception: while WooCommerce Memberships is active the method returns
+	 * FEED_MODE_OFF ahead of the filter, so the filter cannot re-enable Access
+	 * Control feed restriction on a Memberships site — WCM owns feeds there.
+	 *
 	 * @param array $context Context for the filter, as built by
 	 *                       get_feed_filter_context(): always a
 	 *                       `[ 'query' => \WP_Query|null, 'post' => \WP_Post|null ]`
@@ -344,6 +348,16 @@ class Content_Gate_Advanced_Settings {
 	 * @return string One of FEED_MODE_OFF, FEED_MODE_TRUNCATE, FEED_MODE_EXCLUDE.
 	 */
 	public static function get_feed_restriction_mode( $context = [] ): string {
+		// While WooCommerce Memberships is active it owns feed restriction, the
+		// same way it owns the front end until it is deactivated at migration.
+		// Access Control stays out entirely: a Memberships-only site inherits the
+		// shipped restrict_feeds/exclude defaults but has no Access Control UI to
+		// change them (the wizard registers only behind NEWSPACK_CONTENT_GATES),
+		// so acting here silently switched such sites to exclude-mode feeds with
+		// no setting to turn off. See NPPM-3204.
+		if ( Memberships::is_active() ) {
+			return self::FEED_MODE_OFF;
+		}
 		$settings = self::get_settings();
 		$mode     = empty( $settings['restrict_feeds'] ) ? self::FEED_MODE_OFF : $settings['feed_restriction_mode'];
 

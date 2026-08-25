@@ -296,6 +296,38 @@ class Test_Feed_Restriction extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * While WooCommerce Memberships is active it owns feed restriction, so Access
+	 * Control yields entirely — even under the shipped restrict_feeds/exclude
+	 * defaults a Memberships-only site cannot change (NPPM-3204). The effective
+	 * mode resolves to "off" and the restricted post stays in the feed, the
+	 * opposite of test_exclude_mode_drops_only_restricted_posts above.
+	 *
+	 * Runs isolated because WC_Memberships, once declared, would make
+	 * Memberships::is_active() true for every later feed test in this process.
+	 *
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
+	 */
+	public function test_active_memberships_yields_feed_restriction_to_wcm() {
+		// Stand in for an active WooCommerce Memberships install (global scope,
+		// which is what Memberships::is_active() checks).
+		require __DIR__ . '/../../mocks/wc-memberships-active-mock.php';
+
+		$this->set_feed_mode( 'exclude' );
+
+		$this->assertSame(
+			Content_Gate_Advanced_Settings::FEED_MODE_OFF,
+			Content_Gate_Advanced_Settings::get_feed_restriction_mode(),
+			'With Memberships active, the effective feed mode should be off regardless of the exclude default.'
+		);
+		$this->assertContains(
+			$this->post_id,
+			$this->feed_post_ids(),
+			'With Memberships active, Access Control must not drop the restricted post from the feed.'
+		);
+	}
+
+	/**
 	 * Exclude mode back-fills the feed to `posts_per_rss` with older unrestricted
 	 * posts, matching WC Memberships. The newest posts are all restricted, so
 	 * without over-fetching the first page would be empty; with it, the feed
