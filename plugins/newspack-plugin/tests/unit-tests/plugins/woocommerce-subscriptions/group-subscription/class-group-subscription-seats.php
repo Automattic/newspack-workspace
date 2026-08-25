@@ -435,6 +435,28 @@ class Test_Group_Subscription_Seats extends WP_UnitTestCase {
 	}
 
 	/**
+	 * A plan the publisher has since unpublished is not switchable, the same test
+	 * WooCommerce Subscriptions applies to every type it answers for. The group
+	 * page's switch link is the plan's own permalink, so saying yes here would give
+	 * an owner a button to a plan that is no longer there.
+	 */
+	public function test_unpublished_per_seat_product_is_not_switchable() {
+		$draft = wc_create_mock_product(
+			[
+				'id'     => 942,
+				'status' => 'draft',
+				'meta'   => [
+					Group_Subscription_Settings::GROUP_SUBSCRIPTION_META_PREFIX . 'enabled'      => 'yes',
+					Group_Subscription_Settings::GROUP_SUBSCRIPTION_META_PREFIX . 'pricing_mode' => Group_Subscription_Settings::PRICING_MODE_PER_SEAT,
+					Group_Subscription_Settings::GROUP_SUBSCRIPTION_META_PREFIX . 'min_seats'    => 2,
+				],
+			]
+		);
+
+		$this->assertFalse( Group_Subscription_Seats::allow_per_seat_switching( false, $draft ) );
+	}
+
+	/**
 	 * Every other product keeps whatever WooCommerce Subscriptions decided, in
 	 * both directions: this answers for per-seat plans alone.
 	 */
@@ -531,30 +553,33 @@ class Test_Group_Subscription_Seats extends WP_UnitTestCase {
 	public function test_clamp_modal_quantity_keeps_per_seat_quantity() {
 		$this->make_per_seat_product( 928, 2, 0 );
 
-		$this->assertSame( 5, Group_Subscription_Seats::clamp_modal_quantity( 5, 928 ) );
+		$this->assertSame( 5, Group_Subscription_Seats::clamp_modal_quantity( null, 928, 5 ) );
 	}
 
 	/**
-	 * A flat (per-team) product is bought exactly once, whatever the request
-	 * asked for. Its price covers the whole group, so honoring a seat count would
-	 * bill that price per seat — the case a group owner hits by switching from a
-	 * per-seat tier to a flat one, carrying their seats with them.
+	 * A flat (per-team) product sells no seats, so this class vouches for nothing:
+	 * the modal checkout's own default of one stands. Its price covers the whole
+	 * group, so honoring a seat count would bill that price per seat — the case a
+	 * group owner hits by switching from a per-seat tier to a flat one, carrying
+	 * their seats with them.
 	 */
-	public function test_clamp_modal_quantity_holds_flat_product_at_one() {
+	public function test_clamp_modal_quantity_vouches_for_nothing_on_a_flat_product() {
 		$this->make_flat_product( 929 );
 
-		$this->assertSame( 1, Group_Subscription_Seats::clamp_modal_quantity( 5, 929 ) );
+		$this->assertNull( Group_Subscription_Seats::clamp_modal_quantity( null, 929, 5 ) );
 	}
 
 	/**
 	 * A product with no group settings at all, and a product ID that resolves to
-	 * nothing, are both single-item purchases: only a per-seat product has seats.
+	 * nothing, are neither of them sold per seat, so the incoming answer is handed
+	 * back untouched rather than overridden.
 	 */
-	public function test_clamp_modal_quantity_holds_non_group_products_at_one() {
+	public function test_clamp_modal_quantity_leaves_non_group_products_alone() {
 		wc_create_mock_product( [ 'id' => 930 ] );
 
-		$this->assertSame( 1, Group_Subscription_Seats::clamp_modal_quantity( 4, 930 ) );
-		$this->assertSame( 1, Group_Subscription_Seats::clamp_modal_quantity( 4, 999 ) );
+		$this->assertNull( Group_Subscription_Seats::clamp_modal_quantity( null, 930, 4 ) );
+		$this->assertNull( Group_Subscription_Seats::clamp_modal_quantity( null, 999, 4 ) );
+		$this->assertSame( 3, Group_Subscription_Seats::clamp_modal_quantity( 3, 930, 4 ), 'Another consumer of the filter keeps its answer.' );
 	}
 
 	/**
@@ -835,14 +860,14 @@ class Test_Group_Subscription_Seats extends WP_UnitTestCase {
 	public function test_modal_quantity_is_raised_to_the_minimum() {
 		$this->make_per_seat_product( 950, 2, 10 );
 
-		$this->assertSame( 2, Group_Subscription_Seats::clamp_modal_quantity( 1, 950 ) );
-		$this->assertSame( 2, Group_Subscription_Seats::clamp_modal_quantity( 0, 950 ) );
-		$this->assertSame( 4, Group_Subscription_Seats::clamp_modal_quantity( 4, 950 ) );
-		$this->assertSame( 10, Group_Subscription_Seats::clamp_modal_quantity( 25, 950 ), 'A request above the maximum is still clamped down to it.' );
+		$this->assertSame( 2, Group_Subscription_Seats::clamp_modal_quantity( null, 950, 1 ) );
+		$this->assertSame( 2, Group_Subscription_Seats::clamp_modal_quantity( null, 950, 0 ) );
+		$this->assertSame( 4, Group_Subscription_Seats::clamp_modal_quantity( null, 950, 4 ) );
+		$this->assertSame( 10, Group_Subscription_Seats::clamp_modal_quantity( null, 950, 25 ), 'A request above the maximum is still clamped down to it.' );
 
 		$this->make_per_seat_product( 951, 3, 0 );
-		$this->assertSame( 3, Group_Subscription_Seats::clamp_modal_quantity( 1, 951 ) );
-		$this->assertSame( 25, Group_Subscription_Seats::clamp_modal_quantity( 25, 951 ), 'An unlimited maximum leaves a large request alone.' );
+		$this->assertSame( 3, Group_Subscription_Seats::clamp_modal_quantity( null, 951, 1 ) );
+		$this->assertSame( 25, Group_Subscription_Seats::clamp_modal_quantity( null, 951, 25 ), 'An unlimited maximum leaves a large request alone.' );
 	}
 
 	/**

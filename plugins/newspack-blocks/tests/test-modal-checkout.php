@@ -379,6 +379,9 @@ if ( class_exists( 'WC_Cart' ) && ! class_exists( 'Newspack_Blocks_Test_Mutable_
 		 */
 		public function empty_cart() {
 			$this->contents = [];
+			// Real WC_Cart::empty_cart() drops applied coupons too, and the code under
+			// test re-applies them afterwards.
+			$this->applied = [];
 		}
 
 		/**
@@ -466,6 +469,7 @@ class ModalCheckoutTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 		remove_all_filters( 'woocommerce_cart_item_removed_message' );
 		remove_all_filters( 'newspack_blocks_donate_billing_fields_keys' );
 		remove_all_filters( 'newspack_blocks_modal_checkout_quantity_field' );
+		remove_all_filters( 'newspack_blocks_modal_checkout_quantity' );
 		unset(
 			$_POST['billing_email'],
 			$_POST['post_data'],
@@ -502,7 +506,7 @@ class ModalCheckoutTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 	 * @param int         $expected  The quantity the checkout will use.
 	 */
 	public function test_requested_quantity_is_floored_at_one( $requested, $expected ) {
-		$this->set_quantity_field_args( $this->get_quantity_field_args_fixture() );
+		$this->vouch_for_requested_quantity();
 		if ( null === $requested ) {
 			unset( $_GET['quantity'], $_REQUEST['quantity'] );
 		} else {
@@ -517,10 +521,10 @@ class ModalCheckoutTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 
 	/**
 	 * `newspack_checkout=1` needs no nonce, so a quantity in the request is the
-	 * caller's claim and nothing more. Without a plugin claiming the product's
-	 * quantity rules, a crafted link would otherwise multiply what the reader pays.
+	 * caller's claim and nothing more. Without a plugin vouching for it, a crafted
+	 * link would otherwise multiply what the reader pays.
 	 */
-	public function test_requested_quantity_is_one_without_a_quantity_field() {
+	public function test_requested_quantity_is_one_when_nobody_vouches_for_it() {
 		$_GET['quantity']     = '250';
 		$_REQUEST['quantity'] = '250';
 
@@ -534,7 +538,7 @@ class ModalCheckoutTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 	 * must honor it too, since it reads $_REQUEST rather than $_GET alone.
 	 */
 	public function test_requested_quantity_reads_post_for_in_modal_form() {
-		$this->set_quantity_field_args( $this->get_quantity_field_args_fixture() );
+		$this->vouch_for_requested_quantity();
 		unset( $_GET['quantity'] );
 		$_POST['quantity']    = '3';
 		$_REQUEST['quantity'] = '3';
@@ -1514,6 +1518,21 @@ class ModalCheckoutTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 	}
 
 	/**
+	 * Vouch for whatever quantity the request asks for, as a plugin that owns a
+	 * product's quantity rules would.
+	 */
+	private function vouch_for_requested_quantity() {
+		add_filter(
+			'newspack_blocks_modal_checkout_quantity',
+			function ( $vouched, $product_id, $requested ) {
+				return $requested;
+			},
+			10,
+			3
+		);
+	}
+
+	/**
 	 * Field args a per-seat product's filter callback would return.
 	 *
 	 * @return array
@@ -1680,32 +1699,56 @@ class ModalCheckoutTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 	}
 
 	/**
-	 * WooCommerce Subscriptions writes `subscription_switch` onto the cart item from
-	 * the request that started the switch, and the quantity AJAX carries no such
-	 * request. Re-adding would drop the record, and the checkout would raise a second
-	 * full-price subscription instead of switching the one the reader already pays
-	 * for -- so the rebuild is refused and the cart is left exactly as it was.
+	 * WooCommerce Subscriptions writes these onto the cart item from the request that
+	 * started the switch, renewal, resubscribe or first payment, and the quantity
+	 * AJAX carries no such request. Re-adding would drop the record, and the checkout
+	 * would raise a second full-price subscription while the one the reader meant to
+	 * pay for or change stays as it was -- so the rebuild is refused and the cart is
+	 * left exactly as it was.
+	 *
+	 * @dataProvider wcs_subscription_cart_item_key_provider
+	 *
+	 * @param string $key The cart item key WooCommerce Subscriptions writes.
 	 */
-	public function test_update_cart_quantity_refuses_a_switch_cart() {
-		$this->set_quantity_field_args( $this->get_quantity_field_args_fixture() );
-		$cart = $this->set_mutable_cart( 920, 4, [ 'subscription_switch' => [ 'subscription_id' => 77 ] ] );
+	public function test_update_cart_quantity_refuses_a_subscription_cart( $key ) {
+		$this->vouch_for_requested_quantity();
+		$cart = $this->set_mutable_cart( 920, 4, [ $key => [ 'subscription_id' => 77 ] ] );
 
 		$result = \Newspack_Blocks\Modal_Checkout::update_cart_quantity( 920, 8 );
 
 		$this->assertWPError( $result );
-		$this->assertSame( 'newspack_blocks_quantity_switch_cart', $result->get_error_code() );
+		$this->assertSame( 'newspack_blocks_quantity_subscription_cart', $result->get_error_code() );
 		$item = reset( $cart->contents );
-		$this->assertSame( 4, $item['quantity'], 'The switch cart item is untouched.' );
-		$this->assertSame( [ 'subscription_id' => 77 ], $item['subscription_switch'] );
+		$this->assertSame( 4, $item['quantity'], 'The cart item is untouched.' );
+		$this->assertSame( [ 'subscription_id' => 77 ], $item[ $key ] );
 	}
 
 	/**
-	 * A control the reader could use on a switch cart would only ever produce the
-	 * refusal above, so it is not offered.
+	 * The keys WooCommerce Subscriptions writes onto a cart it built to change or
+	 * take payment for a subscription the reader already has.
+	 *
+	 * @return array<string,array{0:string}>
 	 */
-	public function test_quantity_form_is_not_rendered_on_a_switch_cart() {
+	public function wcs_subscription_cart_item_key_provider() {
+		return [
+			'switch'          => [ 'subscription_switch' ],
+			'renewal'         => [ 'subscription_renewal' ],
+			'resubscribe'     => [ 'subscription_resubscribe' ],
+			'initial payment' => [ 'subscription_initial_payment' ],
+		];
+	}
+
+	/**
+	 * A control the reader could use on such a cart would only ever produce the
+	 * refusal above, so it is not offered.
+	 *
+	 * @dataProvider wcs_subscription_cart_item_key_provider
+	 *
+	 * @param string $key The cart item key WooCommerce Subscriptions writes.
+	 */
+	public function test_quantity_form_is_not_rendered_on_a_subscription_cart( $key ) {
 		$this->set_modal_checkout_request();
-		$this->set_mock_single_item_cart( 920, 4, [ 'subscription_switch' => [ 'subscription_id' => 77 ] ] );
+		$this->set_mock_single_item_cart( 920, 4, [ $key => [ 'subscription_id' => 77 ] ] );
 		$this->set_quantity_field_args( $this->get_quantity_field_args_fixture() );
 
 		ob_start();
@@ -1720,7 +1763,7 @@ class ModalCheckoutTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 	 * original add attached survives the round trip, and coupons are re-applied.
 	 */
 	public function test_update_cart_quantity_re_adds_at_the_new_quantity() {
-		$this->set_quantity_field_args( $this->get_quantity_field_args_fixture() );
+		$this->vouch_for_requested_quantity();
 		$cart          = $this->set_mutable_cart( 920, 2, [ 'gate_post_id' => 55 ] );
 		$cart->applied = [ 'summer25' ];
 
@@ -1731,7 +1774,7 @@ class ModalCheckoutTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 		$item = reset( $cart->contents );
 		$this->assertSame( 5, $item['quantity'] );
 		$this->assertSame( 55, $item['gate_post_id'] );
-		$this->assertSame( [ 'summer25', 'summer25' ], $cart->applied, 'The saved coupon should be re-applied to the rebuilt cart.' );
+		$this->assertSame( [ 'summer25' ], $cart->applied, 'The saved coupon should be re-applied to the rebuilt cart.' );
 	}
 
 	/**
@@ -1741,7 +1784,7 @@ class ModalCheckoutTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 	 * back before the rejection is reported.
 	 */
 	public function test_update_cart_quantity_restores_the_original_item_when_rejected() {
-		$this->set_quantity_field_args( $this->get_quantity_field_args_fixture() );
+		$this->vouch_for_requested_quantity();
 		$cart                      = $this->set_mutable_cart( 920, 2, [ 'gate_post_id' => 55 ] );
 		$cart->applied             = [ 'summer25' ];
 		$cart->rejected_quantities = [ 99 ];
@@ -1754,7 +1797,7 @@ class ModalCheckoutTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 		$item = reset( $cart->contents );
 		$this->assertSame( 2, $item['quantity'], 'The original quantity should be restored.' );
 		$this->assertSame( 55, $item['gate_post_id'], 'The restored item should keep its preserved data.' );
-		$this->assertSame( [ 'summer25', 'summer25' ], $cart->applied, 'Coupons should survive a rejected change.' );
+		$this->assertSame( [ 'summer25' ], $cart->applied, 'Coupons should survive a rejected change.' );
 	}
 
 	/**
@@ -1781,7 +1824,7 @@ class ModalCheckoutTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 	 * to the GA4 events — has to be rewritten from the response instead.
 	 */
 	public function test_update_cart_quantity_payload_reports_the_new_quantity() {
-		$this->set_quantity_field_args( $this->get_quantity_field_args_fixture() );
+		$this->vouch_for_requested_quantity();
 		$cart = $this->set_mutable_cart( 920, 2 );
 
 		\Newspack_Blocks\Modal_Checkout::update_cart_quantity( 920, 5 );
@@ -1796,23 +1839,22 @@ class ModalCheckoutTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 	 * — and their answer is the one used.
 	 */
 	public function test_requested_quantity_is_filtered_with_the_product() {
-		$this->set_quantity_field_args( $this->get_quantity_field_args_fixture() );
 		$_GET['quantity']     = '5';
 		$_REQUEST['quantity'] = '5';
 		$seen                 = [];
 
-		$filter = function ( $quantity, $product_id ) use ( &$seen ) {
-			$seen[] = [ $quantity, $product_id ];
-			return 920 === $product_id ? $quantity : 1;
+		$filter = function ( $vouched, $product_id, $requested ) use ( &$seen ) {
+			$seen[] = [ $vouched, $product_id, $requested ];
+			return 920 === $product_id ? $requested : $vouched;
 		};
-		add_filter( 'newspack_blocks_modal_checkout_quantity', $filter, 10, 2 );
+		add_filter( 'newspack_blocks_modal_checkout_quantity', $filter, 10, 3 );
 
 		$this->assertSame( 5, \Newspack_Blocks\Modal_Checkout::get_requested_quantity( 920 ) );
 		$this->assertSame( 1, \Newspack_Blocks\Modal_Checkout::get_requested_quantity( 921 ) );
 		$this->assertSame(
-			[ [ 5, 920 ], [ 5, 921 ] ],
+			[ [ null, 920, 5 ], [ null, 921, 5 ] ],
 			$seen,
-			'The callback should see the floored request and the product it is for.'
+			'The callback should see nothing vouched for yet, the product, and the floored request.'
 		);
 
 		remove_filter( 'newspack_blocks_modal_checkout_quantity', $filter, 10 );
@@ -1824,7 +1866,6 @@ class ModalCheckoutTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 	 * whatever it returns, so a stray 0 can't reach the cart as a silent removal.
 	 */
 	public function test_filtered_quantity_is_floored_at_one() {
-		$this->set_quantity_field_args( $this->get_quantity_field_args_fixture() );
 		$_GET['quantity']     = '4';
 		$_REQUEST['quantity'] = '4';
 
@@ -1845,7 +1886,6 @@ class ModalCheckoutTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 	 * from inside the modal either.
 	 */
 	public function test_update_cart_quantity_respects_the_filter() {
-		$this->set_quantity_field_args( $this->get_quantity_field_args_fixture() );
 		$cart = $this->set_mutable_cart( 920, 1 );
 
 		$filter = function () {

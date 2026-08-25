@@ -60,6 +60,24 @@ final class Modal_Checkout {
 	 *
 	 * @var string[]
 	 */
+	/**
+	 * Cart item keys by which WooCommerce Subscriptions marks a cart it built to
+	 * change or take payment for a subscription the reader already has. Each is
+	 * written from the request that started it, so a cart rebuilt without that
+	 * request loses it -- and the checkout then raises a new subscription instead.
+	 *
+	 * Taken from the `$cart_item_key` property of the WooCommerce Subscriptions
+	 * class that sets each one.
+	 *
+	 * @var string[]
+	 */
+	const WCS_SUBSCRIPTION_CART_ITEM_KEYS = [
+		'subscription_switch',
+		'subscription_renewal',
+		'subscription_resubscribe',
+		'subscription_initial_payment',
+	];
+
 	const PRESERVED_CART_ITEM_KEYS = [
 		'nyp',
 		'base_price',
@@ -423,55 +441,24 @@ final class Modal_Checkout {
 	 */
 	private static function clamp_quantity( $quantity, $product_id ) {
 		$quantity = max( 1, (int) $quantity );
-		// The quantity arrives in the request, so on its own it is the caller's
-		// claim about how many of something to charge for — `newspack_checkout=1`
-		// needs no nonce, which is what makes a crafted link a multiplier on the
-		// price. What makes it meaningful is a plugin owning the product's
-		// quantity rules, and the field filter is where it says so. Nobody
-		// answering means the modal is single-quantity for this product, whatever
-		// the request asked for.
-		if ( ! self::has_quantity_field( $product_id ) ) {
-			return 1;
-		}
 		/**
 		 * Filters the line-item quantity the modal checkout will use for a product.
 		 *
-		 * Only consulted for a product whose quantity rules a plugin has claimed
-		 * through `newspack_blocks_modal_checkout_quantity_field`. Such a plugin
-		 * may move the quantity in either direction — returning 1 for a product
-		 * that must never be bought in multiples, or raising it to a minimum the
-		 * product is never sold below. Runs after the floor of one, so a callback
-		 * only ever sees a valid quantity, and its own return is floored again.
+		 * The modal is single-quantity by default. A quantity arrives in the request,
+		 * and `newspack_checkout=1` needs no nonce, so on its own it is the caller's
+		 * claim about how many of something to charge for — which is what makes a
+		 * crafted link a multiplier on the price. Answering this filter is how a
+		 * plugin that owns the product's quantity rules vouches for one: it may
+		 * return the requested quantity, hold it to bounds the product is sold
+		 * within, or raise it to a minimum. Null — nobody has claimed this product —
+		 * means one, whatever the request asked for.
 		 *
-		 * @param int $quantity   Requested quantity, at least 1.
-		 * @param int $product_id Product the quantity is for (variation preferred), 0 when unknown.
+		 * @param null|int $vouched    The quantity to use, or null for the default of one.
+		 * @param int      $product_id Product the quantity is for (variation preferred), 0 when unknown.
+		 * @param int      $requested  Requested quantity, at least 1.
 		 */
-		return max( 1, (int) apply_filters( 'newspack_blocks_modal_checkout_quantity', $quantity, (int) $product_id ) );
-	}
-
-	/**
-	 * Whether any plugin has claimed a product's quantity rules.
-	 *
-	 * The same filter `render_quantity_form()` reads to decide whether to print a
-	 * quantity control, asked here without a cart item because the initial add
-	 * happens before there is one. Sharing the filter is the point: the product
-	 * that gets a quantity control is exactly the product a quantity may be
-	 * requested for.
-	 *
-	 * @param int $product_id Product the quantity is for (variation preferred), 0 when unknown.
-	 *
-	 * @return bool
-	 */
-	private static function has_quantity_field( $product_id ) {
-		if ( ! $product_id || ! function_exists( 'wc_get_product' ) ) {
-			return false;
-		}
-		$product = \wc_get_product( (int) $product_id );
-		if ( ! $product ) {
-			return false;
-		}
-		/** This filter is documented in includes/class-modal-checkout.php */
-		return ! empty( apply_filters( 'newspack_blocks_modal_checkout_quantity_field', null, $product, [] ) );
+		$vouched = apply_filters( 'newspack_blocks_modal_checkout_quantity', null, (int) $product_id, $quantity );
+		return null === $vouched ? 1 : max( 1, (int) $vouched );
 	}
 
 	/**
@@ -900,18 +887,20 @@ final class Modal_Checkout {
 			if ( (int) $cart_item['product_id'] !== (int) $product_id && (int) $cart_item['variation_id'] !== (int) $product_id ) {
 				continue;
 			}
-			// WooCommerce Subscriptions writes `subscription_switch` onto the cart item
-			// from `switch-subscription` in the request, and this rebuild has no such
-			// request behind it. Re-adding would drop the record, and the checkout would
-			// raise a second full-price subscription instead of switching the one the
-			// reader already pays for. The seat count for a switch is chosen in the tier
-			// picker, which submits the whole switch again, so there is nothing to lose
-			// by refusing here.
-			if ( ! empty( $cart_item['subscription_switch'] ) ) {
-				return new \WP_Error(
-					'newspack_blocks_quantity_switch_cart',
-					__( 'Go back and choose the number you want before changing your subscription.', 'newspack-blocks' )
-				);
+			// WooCommerce Subscriptions writes these onto the cart item from the request
+			// that started the switch, renewal, resubscribe or first payment, and this
+			// rebuild has no such request behind it. Re-adding would drop the record, and
+			// the checkout would raise a second full-price subscription while the one the
+			// reader meant to pay for or change stays as it was. The seat count for a
+			// switch is chosen in the tier picker, which submits the whole switch again,
+			// so there is nothing to lose by refusing here.
+			foreach ( self::WCS_SUBSCRIPTION_CART_ITEM_KEYS as $wcs_key ) {
+				if ( ! empty( $cart_item[ $wcs_key ] ) ) {
+					return new \WP_Error(
+						'newspack_blocks_quantity_subscription_cart',
+						__( 'Go back and choose the number you want before changing your subscription.', 'newspack-blocks' )
+					);
+				}
 			}
 			$original_quantity = max( 1, (int) $cart_item['quantity'] );
 			foreach ( self::get_preserved_cart_item_keys() as $key ) {
@@ -939,7 +928,7 @@ final class Modal_Checkout {
 			// Read the rejection before restoring, so the restore's own notices
 			// cannot be mistaken for it.
 			$error_notices = \wc_get_notices( 'error' );
-			\wc_clear_notices();
+			\wc_clear_notices( 'error' );
 			$cart->add_to_cart( $product_id, $original_quantity, 0, [], $cart_item_data );
 			self::reapply_coupons( $coupons );
 
@@ -2830,10 +2819,10 @@ final class Modal_Checkout {
 		if ( ! $product || ! method_exists( $product, 'get_id' ) ) {
 			return;
 		}
-		// A cart WooCommerce Subscriptions is holding for a switch cannot be rebuilt
-		// at a new quantity without losing the switch (see update_cart_quantity()),
-		// so it gets no control that would invite one.
-		if ( ! empty( $cart_item['subscription_switch'] ) ) {
+		// A cart WooCommerce Subscriptions is holding for an existing subscription
+		// cannot be rebuilt at a new quantity without losing that record (see
+		// update_cart_quantity()), so it gets no control that would invite one.
+		if ( array_intersect_key( array_filter( $cart_item ), array_flip( self::WCS_SUBSCRIPTION_CART_ITEM_KEYS ) ) ) {
 			return;
 		}
 

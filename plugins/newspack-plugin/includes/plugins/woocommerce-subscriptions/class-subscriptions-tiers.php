@@ -33,6 +33,11 @@ class Subscriptions_Tiers {
 		add_filter( 'woocommerce_order_button_text', [ __CLASS__, 'order_button_text' ], 20 );
 		add_filter( 'option_woocommerce_subscriptions_order_button_text', [ __CLASS__, 'order_button_text' ], 9 );
 
+		// The modal checkout buys one of a product unless somebody vouches for a
+		// different quantity, and a switch that leaves the line item's own quantity
+		// alone is asking for exactly that (see vouch_switch_quantity()).
+		add_filter( 'newspack_blocks_modal_checkout_quantity', [ __CLASS__, 'vouch_switch_quantity' ], 10, 3 );
+
 		// Link-triggered modal rendering.
 		add_action( 'wp_footer', [ __CLASS__, 'print_modal' ] );
 		add_filter( 'newspack_popups_assess_has_disabled_popups', [ __CLASS__, 'disable_popups' ] );
@@ -138,6 +143,48 @@ class Subscriptions_Tiers {
 			'subscription' => $subscription,
 		];
 		return $text;
+	}
+
+	/**
+	 * Vouch for the quantity a switch is carrying over from the subscription it
+	 * is changing.
+	 *
+	 * The modal checkout adds the chosen product at a quantity of one unless a
+	 * plugin vouches for another, so a tier change on a multi-quantity line item
+	 * would otherwise rewrite it down to one. The picker submits that quantity as
+	 * a hidden field for exactly this reason (see `render_form()`).
+	 *
+	 * Only a quantity that matches the line item being switched is vouched for:
+	 * carrying a number over is not a request to buy more of anything, which is
+	 * what makes it safe to honour from a request that needs no nonce. Raising the
+	 * count is a seat change, and belongs to whoever sells seats.
+	 *
+	 * @param null|int $vouched    The quantity vouched for so far, or null.
+	 * @param int      $product_id Product the quantity is for (variation preferred).
+	 * @param int      $requested  Requested quantity, at least 1.
+	 *
+	 * @return null|int The carried-over quantity, or the unchanged incoming value.
+	 */
+	public static function vouch_switch_quantity( $vouched, $product_id, $requested = 1 ) {
+		if ( null !== $vouched || ! is_user_logged_in() || ! function_exists( 'wcs_get_subscription' ) ) {
+			return $vouched;
+		}
+		// phpcs:disable WordPress.Security.NonceVerification.Recommended -- Reads only, and answers nothing for a subscription the requester does not own.
+		$subscription_id = isset( $_REQUEST['switch-subscription'] ) ? absint( wp_unslash( $_REQUEST['switch-subscription'] ) ) : 0;
+		$item_id         = isset( $_REQUEST['item'] ) ? absint( wp_unslash( $_REQUEST['item'] ) ) : 0;
+		// phpcs:enable WordPress.Security.NonceVerification.Recommended
+		if ( ! $subscription_id || ! $item_id ) {
+			return $vouched;
+		}
+		$subscription = WooCommerce_Subscriptions::sanitize_subscription( $subscription_id );
+		if ( ! $subscription || (int) $subscription->get_user_id() !== get_current_user_id() ) {
+			return $vouched;
+		}
+		$line_item = $subscription->get_item( $item_id, false );
+		if ( ! $line_item ) {
+			return $vouched;
+		}
+		return max( 1, (int) $line_item->get_quantity() ) === (int) $requested ? (int) $requested : $vouched;
 	}
 
 	/**
@@ -846,13 +893,11 @@ class Subscriptions_Tiers {
 				</p>
 				<?php
 			elseif ( $line_quantity ) :
-				// No seats field to submit the count, so carry the seats the reader already
-				// pays for. This branch only runs when none of the offered tiers sells
-				// seats, and on a site with group subscriptions turned on the modal
-				// checkout's clamp holds such a tier to one item regardless — so what it
-				// really covers is the site that has the feature off, where no seats field
-				// is rendered and no clamp is registered, and the existing quantity would
-				// otherwise be rewritten down to one.
+				// None of the offered tiers sells seats, so there is no seats field to
+				// submit the count -- but the line item being switched may still hold more
+				// than one, and the modal checkout buys one of a product unless something
+				// vouches for another. vouch_switch_quantity() vouches for exactly this
+				// number, and nothing raises it.
 				?>
 				<input type="hidden" name="quantity" value="<?php echo esc_attr( $line_quantity ); ?>">
 			<?php endif; ?>

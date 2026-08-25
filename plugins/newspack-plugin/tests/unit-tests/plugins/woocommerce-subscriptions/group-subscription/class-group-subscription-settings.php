@@ -997,6 +997,39 @@ class Test_Group_Subscription_Settings extends WP_UnitTestCase {
 	}
 
 	/**
+	 * `sanitize_text_field()` answers '' for an array, which would set the line
+	 * quantity to zero and make the rescale read the whole line as one seat's price.
+	 * WooCommerce's own items table posts scalars, so an array is a malformed
+	 * request and the posted line values are left alone.
+	 */
+	public function test_seat_save_ignores_an_array_posted_for_a_line_value() {
+		$subscription = $this->make_per_seat_subscription(
+			953,
+			[
+				'quantity' => 4,
+				'subtotal' => 40,
+				'total'    => 40,
+			]
+		);
+		$item   = Group_Subscription_Settings::get_seat_line_item( $subscription );
+		$prefix = Group_Subscription_Settings::GROUP_SUBSCRIPTION_META_PREFIX;
+
+		$this->run_meta_box_save(
+			$subscription,
+			[
+				$prefix . 'enabled'          => 'yes',
+				$prefix . 'enabled_baseline' => 'yes',
+				$prefix . 'seats'            => '8',
+				$prefix . 'seats_baseline'   => '4',
+				'order_item_qty'             => [ $item->get_id() => [ 'nonsense' ] ],
+			]
+		);
+
+		$this->assertSame( 8, $item->get_quantity(), 'The seat count the admin submitted is still applied.' );
+		$this->assertSame( 80.0, (float) $item->get_subtotal(), 'The unit price comes from the line, not from a zeroed quantity.' );
+	}
+
+	/**
 	 * A subscription assembled by hand can carry more than one line, and the seat
 	 * count belongs to the per-seat product's line -- not to whichever line the
 	 * items happen to be stored in first. Rescaling the wrong one would move money

@@ -1111,4 +1111,41 @@ class Newspack_Test_Subscriptions_Tiers extends WP_UnitTestCase {
 		$this->assertStringContainsString( '<label for="' . $first_id . '">', $html );
 		$this->assertStringContainsString( '<label for="' . $second_id . '">', $html );
 	}
+
+	/**
+	 * The modal checkout buys one of a product unless something vouches for another,
+	 * so a tier change on a multi-seat line item would rewrite it down to one. The
+	 * quantity the switch carries over is vouched for; a larger one is not, because
+	 * carrying a number over is not a request to buy more of anything and the
+	 * request it arrives in needs no nonce.
+	 */
+	public function test_switch_quantity_is_vouched_for_only_when_it_matches_the_line_item() {
+		$user_id = self::factory()->user->create();
+		wp_set_current_user( $user_id );
+		$this->make_tier_product( 340, $this->per_seat_meta( 2, 0 ) );
+		$switch_data = $this->make_switch_data( $user_id, [ 340 ], 340, 4 );
+
+		$_REQUEST['switch-subscription'] = $switch_data['subscription']->get_id();
+		$_REQUEST['item']                = $switch_data['item_id'];
+
+		$this->assertSame( 4, Subscriptions_Tiers::vouch_switch_quantity( null, 340, 4 ) );
+		$this->assertNull( Subscriptions_Tiers::vouch_switch_quantity( null, 340, 9 ), 'Raising the count is a seat change, not a carry-over.' );
+
+		// Somebody else's subscription tells a crafted request nothing about itself.
+		wp_set_current_user( self::factory()->user->create() );
+		$this->assertNull( Subscriptions_Tiers::vouch_switch_quantity( null, 340, 4 ) );
+
+		unset( $_REQUEST['switch-subscription'], $_REQUEST['item'] );
+	}
+
+	/**
+	 * A request that is not a switch carries no line item to match against, so
+	 * nothing is vouched for and the modal checkout's default of one stands.
+	 */
+	public function test_no_switch_vouches_for_no_quantity() {
+		wp_set_current_user( self::factory()->user->create() );
+		unset( $_REQUEST['switch-subscription'], $_REQUEST['item'] );
+
+		$this->assertNull( Subscriptions_Tiers::vouch_switch_quantity( null, 340, 4 ) );
+	}
 }

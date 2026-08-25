@@ -398,8 +398,12 @@ final class Checkout_Data {
 			if ( $source instanceof \WC_Cart || $source instanceof \WC_Order ) {
 				$data['quantity'] = $quantity;
 			}
-			$data['price_summary']    = self::get_price_summary( $name, $line_amount, $recurrence, $variation_id ? $variation_id : $product_id, $quantity );
-			$data['summary_template'] = self::get_price_summary( $name, '{{PRICE}}', $recurrence, $variation_id ? $variation_id : $product_id, $quantity );
+			// An order line's subtotal already carries the sign-up fee for every unit --
+			// WooCommerce Subscriptions folds the fee into the unit price when it prices
+			// the line -- so the summary must not scale the fee a second time for it.
+			$summary_quantity         = $source instanceof \WC_Order ? 1 : $quantity;
+			$data['price_summary']    = self::get_price_summary( $name, $line_amount, $recurrence, $variation_id ? $variation_id : $product_id, $summary_quantity );
+			$data['summary_template'] = self::get_price_summary( $name, '{{PRICE}}', $recurrence, $variation_id ? $variation_id : $product_id, $summary_quantity );
 			$data['recurrence']       = $recurrence;
 		}
 		if ( $variation_id ) {

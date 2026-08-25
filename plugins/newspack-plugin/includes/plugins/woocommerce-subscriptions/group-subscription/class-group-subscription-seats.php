@@ -56,9 +56,9 @@ class Group_Subscription_Seats {
 		// per-seat products; newspack-blocks owns the markup and the AJAX round trip.
 		\add_filter( 'newspack_blocks_modal_checkout_quantity_field', [ __CLASS__, 'modal_quantity_field' ], 10, 2 );
 
-		// Seats are the only reason the modal checkout carries a quantity at all, so
-		// anything that isn't sold per seat is bought exactly once.
-		\add_filter( 'newspack_blocks_modal_checkout_quantity', [ __CLASS__, 'clamp_modal_quantity' ], 10, 2 );
+		// Seats are the only quantity this class vouches for; everything else is left
+		// to whoever owns it, and to the modal checkout's own default of one.
+		\add_filter( 'newspack_blocks_modal_checkout_quantity', [ __CLASS__, 'clamp_modal_quantity' ], 10, 3 );
 
 		// Seats bought mid-cycle have to be paid for from the day they are added,
 		// which is WooCommerce Subscriptions' recurring-price proration.
@@ -99,7 +99,18 @@ class Group_Subscription_Seats {
 		if ( ! $subject ) {
 			return $is_switchable;
 		}
-		return Group_Subscription_Settings::is_per_seat( $subject ) ? true : $is_switchable;
+		if ( ! Group_Subscription_Settings::is_per_seat( $subject ) ) {
+			return $is_switchable;
+		}
+		// The same published test `wcs_is_product_switchable_type()` applies to every
+		// type it answers for. Per-seat meta survives unpublishing, and the group
+		// page's switch link is the plan's own permalink, so without this an owner
+		// gets a button to a plan that is no longer there.
+		$parent = $variation ? $product : $subject;
+		if ( $parent && method_exists( $parent, 'get_status' ) && 'publish' !== $parent->get_status() ) {
+			return $is_switchable;
+		}
+		return true;
 	}
 
 	/**
@@ -225,34 +236,33 @@ class Group_Subscription_Seats {
 	}
 
 	/**
-	 * Hold the modal checkout to a seat count the product can actually be sold at.
-	 *
-	 * A quantity in the modal checkout means seats, and only a per-seat product has
-	 * any. Anything else is bought exactly once, so a request carrying a seat count
-	 * cannot bill a flat group price N times — the bounds guards would not catch
-	 * that, since they only ever run against a per-seat product's own bounds.
+	 * Vouch for a seat count the product can actually be sold at.
 	 *
 	 * A per-seat product is held to its bounds in both directions, including
 	 * upwards: a Checkout Button with no default seats asks for one, and one seat
 	 * on a plan that sells no fewer than two is a quantity the guards refuse.
 	 *
-	 * @param int $quantity   Requested quantity, at least 1.
-	 * @param int $product_id Product the quantity is for (variation preferred).
+	 * A product this class does not sell seats for gets the incoming answer back
+	 * untouched, so another consumer of the filter keeps whatever it vouched for
+	 * and an unclaimed product keeps the modal checkout's default of one.
 	 *
-	 * @return int A seat count within the product's bounds, or 1 for anything not sold per seat.
+	 * @param null|int $vouched    The quantity vouched for so far, or null.
+	 * @param int      $product_id Product the quantity is for (variation preferred).
+	 * @param int      $requested  Requested quantity, at least 1.
+	 *
+	 * @return null|int A seat count within the product's bounds, or the unchanged incoming value.
 	 */
-	public static function clamp_modal_quantity( $quantity, $product_id ) {
+	public static function clamp_modal_quantity( $vouched, $product_id, $requested = 1 ) {
 		if ( ! function_exists( 'wc_get_product' ) ) {
-			return $quantity;
+			return $vouched;
 		}
-		// A product that can't be resolved can't be shown to sell seats, so it is
-		// treated like any other single-item purchase.
+		// A product that can't be resolved can't be shown to sell seats.
 		$product = \wc_get_product( $product_id );
 		if ( ! $product || ! Group_Subscription_Settings::is_per_seat( $product ) ) {
-			return 1;
+			return $vouched;
 		}
 		$bounds   = self::get_bounds( $product );
-		$quantity = max( (int) $quantity, $bounds['min'] );
+		$quantity = max( (int) $requested, $bounds['min'] );
 		return $bounds['max'] > 0 ? min( $quantity, $bounds['max'] ) : $quantity;
 	}
 
@@ -609,10 +619,9 @@ class Group_Subscription_Seats {
 			return [];
 		}
 		// `WC_Cart::get_cart()` loads the cart from the session when it has not been
-		// loaded yet, and that load reads this same option through WooCommerce
-		// Subscriptions' own session handlers -- so calling it here before the load
-		// has finished would re-enter this callback. Totals are always calculated
-		// after the load, which is the pass this branch exists for.
+		// loaded yet, so reading it from a `pre_option_` callback that runs early
+		// would force that load out of turn. Totals are always calculated after the
+		// load, which is the pass this branch exists for.
 		if ( ! did_action( 'woocommerce_cart_loaded_from_session' ) ) {
 			return [];
 		}

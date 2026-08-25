@@ -1195,6 +1195,27 @@ if ( ! class_exists( 'WC_Subscriptions_Switcher' ) ) {
 		 *
 		 * @param string $item_action Type of switch items to include (ignored).
 		 */
+		/**
+		 * WooCommerce Subscriptions' own switch-URL builder, which appends the
+		 * `_wcsnonce` its switch handler refuses a request without.
+		 *
+		 * @param int                   $item_id      Line item ID.
+		 * @param WC_Order_Item_Product $item         Line item.
+		 * @param WC_Subscription       $subscription Subscription the item belongs to.
+		 *
+		 * @return string
+		 */
+		public static function get_switch_url( $item_id, $item, $subscription ) {
+			return add_query_arg(
+				[
+					'switch-subscription' => $subscription->get_id(),
+					'item'                => $item_id,
+					'_wcsnonce'           => wp_create_nonce( 'wcs_switch_request' ),
+				],
+				'https://example.org/product/'
+			);
+		}
+
 		public static function cart_contains_switches( $item_action = 'any' ) {
 			unset( $item_action );
 			global $wcs_mock_cart_switches;

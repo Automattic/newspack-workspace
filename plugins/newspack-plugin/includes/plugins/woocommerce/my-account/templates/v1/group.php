@@ -96,16 +96,7 @@ if ( in_array( $subscription_status, [ 'cancelled', 'expired' ], true ) ) {
 						// refuses a URL without the `_wcsnonce` it appends -- a hand-built
 						// link would send a reader without JavaScript back to My Account
 						// with nothing changed and nothing said.
-						$change_seats_url = method_exists( '\WC_Subscriptions_Switcher', 'get_switch_url' )
-							? \WC_Subscriptions_Switcher::get_switch_url( $seat_item->get_id(), $seat_item, $subscription )
-							: add_query_arg(
-								[
-									'switch-subscription' => $subscription->get_id(),
-									'item'                => $seat_item->get_id(),
-									'_wcsnonce'           => wp_create_nonce( 'wcs_switch_request' ),
-								],
-								wc_get_page_permalink( 'myaccount' )
-							);
+						$change_seats_url = \WC_Subscriptions_Switcher::get_switch_url( $seat_item->get_id(), $seat_item, $subscription );
 						?>
 						<a href="<?php echo esc_url( $change_seats_url ); ?>" class="wcs-switch-link newspack-ui__button newspack-ui__button--secondary">
 							<?php esc_html_e( 'Change seats', 'newspack-plugin' ); ?>

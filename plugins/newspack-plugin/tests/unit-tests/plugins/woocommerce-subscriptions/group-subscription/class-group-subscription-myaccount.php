@@ -889,10 +889,12 @@ class Test_Group_Subscription_MyAccount extends WP_UnitTestCase {
 
 		$this->assertStringContainsString( 'Change seats', $html );
 		$this->assertStringContainsString( 'class="wcs-switch-link', $html );
-		// The href carries the params the modal's form re-submits, and is also the
-		// no-JS fallback back into My Account.
+		// The href carries the params the modal's form re-submits.
 		$this->assertStringContainsString( 'switch-subscription=' . $sub->get_id(), $html );
 		$this->assertStringContainsString( 'item=7311', $html );
+		// And the nonce WooCommerce Subscriptions' switch handler refuses a request
+		// without, so the link still works for a reader with JavaScript off.
+		$this->assertStringContainsString( '_wcsnonce=', $html );
 	}
 
 	/**
