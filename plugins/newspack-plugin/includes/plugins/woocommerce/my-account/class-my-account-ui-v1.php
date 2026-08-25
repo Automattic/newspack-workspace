@@ -137,7 +137,10 @@ class My_Account_UI_V1 {
 				\Newspack\Newspack::plugin_url() . '/dist/account-frontend.js',
 				[],
 				\Newspack\Newspack::asset_version( 'account-frontend' ),
-				true
+				[
+					'in_footer' => true,
+					'strategy'  => 'defer',
+				]
 			);
 			\wp_localize_script(
 				'newspack-account-frontend',
@@ -150,7 +153,10 @@ class My_Account_UI_V1 {
 				\Newspack\Newspack::plugin_url() . '/dist/my-account-v1.js',
 				[ 'newspack-ui' ],
 				\Newspack\Newspack::asset_version( 'my-account-v1' ),
-				true
+				[
+					'in_footer' => true,
+					'strategy'  => 'defer',
+				]
 			);
 			\wp_localize_script(
 				'newspack-my-account-v1',

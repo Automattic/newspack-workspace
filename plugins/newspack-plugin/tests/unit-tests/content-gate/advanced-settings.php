@@ -102,9 +102,37 @@ class Test_Advanced_Settings extends \WP_UnitTestCase {
 		wp_delete_post( $this->unrestricted_post_id, true );
 
 		delete_option( Content_Gate_Advanced_Settings::OPTION_PREFIX . 'restrict_feeds' );
+		delete_option( Content_Gate_Advanced_Settings::OPTION_PREFIX . 'feed_restriction_mode' );
 		Content_Gate_Advanced_Settings::reset_cache();
 
 		parent::tear_down();
+	}
+
+	/**
+	 * With no stored mode, the feed restriction mode defaults to "exclude" to
+	 * match WooCommerce Memberships (restricted items dropped from feeds).
+	 */
+	public function test_feed_restriction_mode_defaults_to_exclude() {
+		$settings = Content_Gate_Advanced_Settings::get_settings();
+		$this->assertSame( 'exclude', $settings['feed_restriction_mode'] );
+	}
+
+	/**
+	 * An unknown or corrupt stored mode is normalized back to the exclude default
+	 * rather than silently disabling feed restriction.
+	 */
+	public function test_invalid_feed_restriction_mode_falls_back_to_exclude() {
+		$updated = Content_Gate_Advanced_Settings::update_settings( [ 'feed_restriction_mode' => 'nonsense' ] );
+		$this->assertSame( 'exclude', $updated['feed_restriction_mode'] );
+	}
+
+	/**
+	 * A valid mode round-trips through update/get.
+	 */
+	public function test_feed_restriction_mode_persists() {
+		$updated = Content_Gate_Advanced_Settings::update_settings( [ 'feed_restriction_mode' => 'truncate' ] );
+		$this->assertSame( 'truncate', $updated['feed_restriction_mode'] );
+		$this->assertSame( 'truncate', Content_Gate_Advanced_Settings::get_settings()['feed_restriction_mode'] );
 	}
 
 	/**

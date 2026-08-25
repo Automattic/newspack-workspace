@@ -121,7 +121,7 @@ final class Newspack_Popups_Expiry {
 			[
 				'post_type'      => Newspack_Popups::NEWSPACK_POPUPS_CPT,
 				'post_status'    => 'publish',
-				'posts_per_page' => -1,
+				'posts_per_page' => -1, // phpcs:ignore WordPressVIPMinimum.Performance.NoPaging -- Prompt CPT; config-scale.
 				'meta_query'     => [ // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query
 					'relation' => 'AND',
 					[

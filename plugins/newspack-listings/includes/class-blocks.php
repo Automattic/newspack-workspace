@@ -187,7 +187,10 @@ final class Blocks {
 				NEWSPACK_LISTINGS_URL . 'dist/curated-list.js',
 				[ 'mediaelement-core' ],
 				NEWSPACK_LISTINGS_VERSION,
-				true
+				[
+					'in_footer' => true,
+					'strategy'  => 'defer',
+				]
 			);
 		}
 	}

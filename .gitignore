@@ -9,7 +9,10 @@ repos/*
 !repos/themes/.gitkeep
 logs
 html
-data
+# Anchored: this is the workspace-root database volume. Unanchored it also
+# swallowed source directories named `data/` inside plugins (e.g. a wizard's
+# data hooks), silently dropping new files there from commits.
+/data
 bin/secrets.json
 snapshots
 manager-html

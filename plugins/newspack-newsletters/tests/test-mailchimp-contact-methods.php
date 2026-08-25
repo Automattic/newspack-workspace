@@ -440,6 +440,36 @@ class MailchimpContactMethodsTest extends WP_UnitTestCase {
 				// some noise to make sure it doesn't change anything.
 				$response['exact_matches']['members'][0]['noise'] = 'noise';
 
+			} elseif ( 'with-merge-fields@example.com' === $args['query'] ) {
+				// Simulates a contact carrying merge-field values, including ones the
+				// contact has not filled in (Mailchimp returns every field defined on
+				// the audience) and a legitimate zero.
+				$response = $base_success_response;
+				$response['exact_matches']['members'][] = $base_member_response;
+				$response['exact_matches']['members'][0]['merge_fields'] = [
+					'FNAME'     => 'Sample',
+					'CRM_SCORE' => '42',
+					'DONATIONS' => 0,
+					'UNSET'     => '',
+				];
+
+			} elseif ( 'two-audiences-merge-fields@example.com' === $args['query'] ) {
+				// Simulates a contact in two audiences, each with its own merge fields.
+				// Merge fields are defined per audience in Mailchimp, so the values
+				// differ and only one audience matches a caller's field schema.
+				$response = $base_success_response;
+				$response['exact_matches']['members'][] = $base_member_response;
+				$response['exact_matches']['members'][] = $base_member_response;
+				$response['exact_matches']['members'][0]['merge_fields'] = [
+					'CRM_SCORE' => '11',
+				];
+				$response['exact_matches']['members'][1]['list_id'] = 'list2';
+				$response['exact_matches']['members'][1]['id'] = '456';
+				$response['exact_matches']['members'][1]['contact_id'] = 'bbb';
+				$response['exact_matches']['members'][1]['merge_fields'] = [
+					'CRM_SCORE' => '22',
+				];
+
 			} elseif ( 'found-empty@example.com' === $args['query'] ) {
 				// Simulates a response of a contact with zero lists.
 				$response = $base_success_response;
@@ -570,6 +600,176 @@ class MailchimpContactMethodsTest extends WP_UnitTestCase {
 		}
 
 		remove_filter( 'mailchimp_mock_get', [ __CLASS__, 'get_contact_mock_response' ] );
+	}
+
+	/**
+	 * Callers requesting full details read field values from `metadata` — the
+	 * provider-neutral key ActiveCampaign already sets. Without it a Newspack
+	 * ESP contact pull finds nothing to store and reports success anyway.
+	 *
+	 * Merge fields are keyed by merge tag, which is the same identifier
+	 * get_contact_fields_for_integrations() reports as a field's `key`, so the
+	 * two line up without remapping.
+	 *
+	 * @return void
+	 */
+	public function test_get_contact_data_exposes_merge_fields_as_metadata() {
+		$provider = Newspack_Newsletters::get_service_provider();
+		add_filter( 'mailchimp_mock_get', [ __CLASS__, 'get_contact_mock_response' ], 10, 3 );
+
+		$contact_data = $provider->get_contact_data( 'with-merge-fields@example.com', true );
+
+		remove_filter( 'mailchimp_mock_get', [ __CLASS__, 'get_contact_mock_response' ] );
+
+		$this->assertSame(
+			[
+				'FNAME'     => 'Sample',
+				'CRM_SCORE' => '42',
+				'DONATIONS' => 0,
+				'UNSET'     => '',
+			],
+			$contact_data['merge_fields'],
+			'The raw merge fields keep their historical shape.'
+		);
+		$this->assertSame(
+			[
+				'FNAME'     => 'Sample',
+				'CRM_SCORE' => '42',
+				'DONATIONS' => 0,
+			],
+			$contact_data['metadata'],
+			'metadata mirrors the merge fields keyed by merge tag, minus the ones with no value.'
+		);
+	}
+
+	/**
+	 * Mailchimp returns every merge field defined on the audience, using an
+	 * empty string for ones the contact hasn't filled in, where ActiveCampaign
+	 * reports only fields carrying a value. Drop the empties so `metadata`
+	 * means the same thing on both providers — otherwise a pull persists empty
+	 * reader-data entries on one ESP and not the other.
+	 *
+	 * A falsy-but-real value is a value: `0` from a number field must survive.
+	 *
+	 * @return void
+	 */
+	public function test_metadata_drops_unset_fields_but_keeps_zero() {
+		$provider = Newspack_Newsletters::get_service_provider();
+		add_filter( 'mailchimp_mock_get', [ __CLASS__, 'get_contact_mock_response' ], 10, 3 );
+
+		$contact_data = $provider->get_contact_data( 'with-merge-fields@example.com', true );
+
+		remove_filter( 'mailchimp_mock_get', [ __CLASS__, 'get_contact_mock_response' ] );
+
+		$this->assertArrayNotHasKey( 'UNSET', $contact_data['metadata'], 'A field the contact has no value for is not metadata.' );
+		$this->assertArrayHasKey( 'DONATIONS', $contact_data['metadata'], 'Zero is a value the contact has.' );
+		$this->assertSame( 0, $contact_data['metadata']['DONATIONS'] );
+	}
+
+	/**
+	 * Merge fields belong to an audience, and a caller's field schema comes from
+	 * one specific audience. A contact in several audiences must therefore be
+	 * reported per audience — the flat `merge_fields` can only hold whichever
+	 * came back last, so a caller reading it could store another audience's
+	 * values or none.
+	 *
+	 * @return void
+	 */
+	public function test_metadata_by_list_reports_each_audience_separately() {
+		$provider = Newspack_Newsletters::get_service_provider();
+		add_filter( 'mailchimp_mock_get', [ __CLASS__, 'get_contact_mock_response' ], 10, 3 );
+
+		$contact_data = $provider->get_contact_data( 'two-audiences-merge-fields@example.com', true );
+
+		remove_filter( 'mailchimp_mock_get', [ __CLASS__, 'get_contact_mock_response' ] );
+
+		$this->assertSame(
+			[
+				'list1' => [ 'CRM_SCORE' => '11' ],
+				'list2' => [ 'CRM_SCORE' => '22' ],
+			],
+			$contact_data['metadata_by_list'],
+			'Each audience reports its own merge fields.'
+		);
+		$this->assertSame( [ 'CRM_SCORE' => '22' ], $contact_data['metadata'], 'The flat map still reports one audience, as merge_fields always has.' );
+	}
+
+	/**
+	 * A single-audience contact still gets the per-audience map, so callers can
+	 * read it unconditionally.
+	 *
+	 * @return void
+	 */
+	public function test_metadata_by_list_is_present_for_a_single_audience() {
+		$provider = Newspack_Newsletters::get_service_provider();
+		add_filter( 'mailchimp_mock_get', [ __CLASS__, 'get_contact_mock_response' ], 10, 3 );
+
+		$contact_data = $provider->get_contact_data( 'with-merge-fields@example.com', true );
+
+		remove_filter( 'mailchimp_mock_get', [ __CLASS__, 'get_contact_mock_response' ] );
+
+		$this->assertSame(
+			[
+				'list1' => [
+					'FNAME'     => 'Sample',
+					'CRM_SCORE' => '42',
+					'DONATIONS' => 0,
+				],
+			],
+			$contact_data['metadata_by_list']
+		);
+	}
+
+	/**
+	 * A contact with no merge fields at all still gets the key, empty.
+	 *
+	 * @return void
+	 */
+	public function test_metadata_by_list_is_empty_without_merge_fields() {
+		$provider = Newspack_Newsletters::get_service_provider();
+		add_filter( 'mailchimp_mock_get', [ __CLASS__, 'get_contact_mock_response' ], 10, 3 );
+
+		$contact_data = $provider->get_contact_data( 'one-audience-tag-and-group@example.com', true );
+
+		remove_filter( 'mailchimp_mock_get', [ __CLASS__, 'get_contact_mock_response' ] );
+
+		$this->assertSame( [], $contact_data['metadata_by_list'] );
+	}
+
+	/**
+	 * A contact with no merge fields still gets the key, so callers can read it
+	 * unconditionally rather than testing for presence.
+	 *
+	 * @return void
+	 */
+	public function test_get_contact_data_sets_empty_metadata_without_merge_fields() {
+		$provider = Newspack_Newsletters::get_service_provider();
+		add_filter( 'mailchimp_mock_get', [ __CLASS__, 'get_contact_mock_response' ], 10, 3 );
+
+		$contact_data = $provider->get_contact_data( 'one-audience-tag-and-group@example.com', true );
+
+		remove_filter( 'mailchimp_mock_get', [ __CLASS__, 'get_contact_mock_response' ] );
+
+		$this->assertSame( [], $contact_data['metadata'] );
+	}
+
+	/**
+	 * The key is gated on the details flag, mirroring ActiveCampaign — a plain
+	 * lookup keeps its historical shape.
+	 *
+	 * @return void
+	 */
+	public function test_get_contact_data_omits_metadata_without_details() {
+		$provider = Newspack_Newsletters::get_service_provider();
+		add_filter( 'mailchimp_mock_get', [ __CLASS__, 'get_contact_mock_response' ], 10, 3 );
+
+		$contact_data = $provider->get_contact_data( 'with-merge-fields@example.com' );
+
+		remove_filter( 'mailchimp_mock_get', [ __CLASS__, 'get_contact_mock_response' ] );
+
+		$this->assertArrayNotHasKey( 'metadata', $contact_data );
+		$this->assertArrayNotHasKey( 'metadata_by_list', $contact_data );
+		$this->assertArrayHasKey( 'merge_fields', $contact_data );
 	}
 
 	/**

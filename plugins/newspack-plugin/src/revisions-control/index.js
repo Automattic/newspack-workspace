@@ -1,6 +1,6 @@
 /* globals jQuery, newspack_revisions_control */
 
-import './newspack-revisions.scss';
+import './style.scss';
 
 ( function ( $ ) {
 	if ( typeof wp.revisions.view.MetaTo !== 'undefined' ) {
@@ -73,7 +73,8 @@ import './newspack-revisions.scss';
 			const button = document.createElement( 'input' );
 			button.type = 'button';
 			button.value = '';
-			button.className = 'mark-major button button-secondary';
+			// Match the size of core's neighbouring "Restore This Revision" button.
+			button.className = 'mark-major button button-secondary button-compact';
 
 			const t = this; // eslint-disable-line @typescript-eslint/no-this-alias
 			const revision_id = this.model.attributes.to.attributes.id;
@@ -83,19 +84,24 @@ import './newspack-revisions.scss';
 				t.getMessageSpan().html( labels.loading ).show();
 				toggleRevisionMajor( post_id, revision_id, function ( data ) {
 					t.getMessageSpan().html( labels.saved ).fadeOut( 1000 );
-					const response = jQuery.parseJSON( data );
+					const response = JSON.parse( data );
 					t.updateRevisionMajor( response.major );
 				} );
 			};
 
-			this.$el.find( '.mark-major' ).remove();
-			this.$el.append( button );
-
 			// Add feedback message Span
 			const message = document.createElement( 'span' );
 			message.className = 'mark-major-message';
-			message.style = 'margin-left:10px';
-			this.$el.append( message );
+
+			// Both are floated right, so the last one inserted sits furthest left:
+			// message, then this button, then core's "Restore This Revision".
+			this.$el.find( '.mark-major, .mark-major-message' ).remove();
+			const restoreButton = this.$el.find( '.restore-revision' );
+			if ( restoreButton.length ) {
+				restoreButton.after( button, message );
+			} else {
+				this.$el.append( button, message );
+			}
 
 			const label = document.createElement( 'span' );
 			label.className = 'major-label newspack-revisions-color';

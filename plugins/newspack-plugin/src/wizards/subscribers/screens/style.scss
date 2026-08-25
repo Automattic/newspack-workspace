@@ -1,0 +1,486 @@
+@use "~@wordpress/base-styles/variables" as wp-vars;
+@use "~@wordpress/base-styles/colors" as wp-colors;
+@use "~@wordpress/base-styles/breakpoints" as wp-breakpoints;
+
+// Section-header descriptions are plain strings (SectionHeader renders them
+// inside a `<p>`, so markup there would be invalid nesting). Honour their line
+// breaks so a multi-line description — the profile's email + member-since —
+// reads as separate lines instead of running together.
+.newspack-wizard__header .newspack-section-header p,
+.newspack-wizard__section-header p {
+	white-space: pre-line !important;
+}
+
+.newspack-subscribers__snackbar {
+	bottom: wp-vars.$grid-unit-15;
+	left: 50%;
+	position: fixed;
+	transform: translateX( -50% );
+	z-index: 100000;
+}
+
+.newspack-subscribers__card-icon {
+	width: wp-vars.$grid-unit-40;
+	height: auto;
+	display: block;
+}
+
+// Active, non-default payment cards keep their status badge but hide it: it
+// reserves the badge's (taller-than-text) height so promoting a card to default
+// doesn't shift the row. Hidden from view and, via aria-hidden, screen readers.
+.newspack-subscribers__badge-placeholder {
+	visibility: hidden;
+}
+
+.newspack-subscribers__email,
+.newspack-subscribers__muted {
+	color: wp-colors.$gray-700;
+	font-size: wp-vars.$helptext-font-size;
+	line-height: wp-vars.$default-line-height;
+	font-weight: normal;
+}
+
+.newspack-subscribers__header-count {
+	color: wp-colors.$gray-700;
+	font-weight: normal;
+}
+
+// Center the loading spinner in the content area while data resolves.
+.newspack-subscribers__loading {
+	align-items: center;
+	display: flex;
+	justify-content: center;
+	min-height: 50vh;
+}
+
+// Whole-row click affordance for the subscriber list.
+.newspack-subscribers__clickable-rows {
+	.dataviews-view-table tbody tr.dataviews-view-table__row {
+		cursor: pointer;
+
+		&:hover {
+			background: rgba( wp-colors.$gray-100, 0.5 );
+		}
+	}
+}
+
+.newspack-subscribers__avatar {
+	width: wp-vars.$grid-unit-40;
+	height: wp-vars.$grid-unit-40;
+	border-radius: 50%;
+	flex-shrink: 0;
+	object-fit: cover;
+	background: wp-colors.$gray-100;
+}
+
+// Profile header avatar, portaled into the wizard section header, top-right.
+.newspack-wizard__section-header.newspack-subscribers__has-avatar {
+	position: relative;
+}
+
+.newspack-subscribers__profile-avatar {
+	position: absolute;
+	top: 0;
+	right: 0;
+	width: wp-vars.$grid-unit-80;
+	height: wp-vars.$grid-unit-80;
+	border-radius: 50%;
+	object-fit: cover;
+	background: wp-colors.$gray-100;
+}
+
+// Spinner placeholder shown in the avatar circle until the URL resolves.
+.newspack-subscribers__profile-avatar--loading {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+}
+
+// Full-width notices hosted below the wizard header/tabs (inserted as the first
+// child of .newspack-wizard__main), spanning wider than the content column.
+.newspack-subscribers__notices:not(:empty) {
+	margin-bottom: wp-vars.$grid-unit-20;
+}
+
+// Modal flow body: rely on the stack's gap for vertical rhythm, so reset the
+// default top/bottom margins on its direct children (paragraphs, controls).
+.newspack-subscribers__flow > * {
+	margin-top: 0;
+	margin-bottom: 0;
+}
+
+.newspack-subscribers__notices-inner {
+	background: wp-colors.$gray-300;
+	display: flex;
+	flex-direction: column;
+	gap: 1px;
+	padding-bottom: 1px;
+
+	.components-notice {
+		margin: 0;
+	}
+}
+
+// Inline name button rendered as plain dark text, matching the un-linked
+// names in the Subscribers/Groups lists. Used for table row names.
+.newspack-subscribers__rowlink {
+	background: none;
+	border: 0;
+	color: wp-colors.$gray-900;
+	cursor: pointer;
+	padding: 0;
+	text-align: left;
+
+	&:hover {
+		color: var( --wp-admin-theme-color );
+	}
+
+	&:focus-visible {
+		outline: var( --wp-admin-border-width-focus, 1.5px ) solid var( --wp-admin-theme-color );
+		outline-offset: 2px;
+	}
+}
+
+// Custom section header row: heading (+ light-gray seat count) on the left,
+// actions on the right. Matches the SectionHeader title type scale.
+.newspack-subscribers__section-head {
+	margin-block: wp-vars.$grid-unit-30 wp-vars.$grid-unit-15;
+}
+
+.newspack-subscribers__section-title {
+	font-size: wp-vars.$font-size-x-large;
+	font-weight: wp-vars.$font-weight-medium;
+	line-height: wp-vars.$font-line-height-x-large;
+	margin: 0;
+}
+
+// A standalone section heading (no surrounding flex row) carries both classes;
+// this beats section-title's margin reset so section-head's block spacing applies.
+.newspack-subscribers__section-title.newspack-subscribers__section-head {
+	margin-block: wp-vars.$grid-unit-30 wp-vars.$grid-unit-15;
+}
+
+// Seat count beside the "Members" heading: same size/line-height as the title,
+// lighter weight and gray so it reads as secondary.
+.newspack-subscribers__seat-count {
+	color: wp-colors.$gray-700;
+	font-size: wp-vars.$font-size-x-large;
+	font-weight: normal;
+	line-height: wp-vars.$font-line-height-x-large;
+}
+
+.newspack-subscribers__note-card.newspack-card--core {
+	background-color: wp-colors.$gray-100;
+	overflow: hidden;
+
+	.components-card__body,
+	.newspack-card--core__body {
+		background-color: transparent;
+	}
+}
+
+// The shared subscription card (components/SubscriptionCard.jsx). Scoped to the
+// card's own class rather than to a host screen, so it renders identically on the
+// person profile and inside the group-detail "View subscription" drawer.
+.newspack-subscribers__card {
+	.components-card__header,
+	.newspack-card--core__header {
+		padding: wp-vars.$grid-unit-20;
+	}
+	// The title is an h3 for heading-level order (the hosting section is an h2),
+	// so pin its type rather than inherit the browser's h3 default — the card
+	// heading should read at the card's own scale, not the document's.
+	.newspack-subscribers__card-title {
+		font-size: wp-vars.$default-font-size;
+		font-weight: wp-vars.$font-weight-medium;
+		line-height: wp-vars.$default-line-height;
+		margin: 0;
+	}
+	// The Dropdown wrapper ships as inline-block, whose line box is ~0.2px taller
+	// than the button; flex collapses it to the button's exact height. Pinning the
+	// flex basis keeps it from shrinking below the button when the row is tight.
+	.newspack-subscribers__card-menu {
+		display: flex;
+		flex: 0 0 wp-vars.$button-size-compact;
+	}
+	// The compact kebab is taller than the header's text row, so pull it in by
+	// half the difference to keep the card header at its text-only height.
+	.newspack-subscribers__card-menu-toggle {
+		$kebab-pull: calc( ( 20px - #{wp-vars.$button-size-compact} ) / 2 );
+
+		margin-top: $kebab-pull;
+		margin-bottom: $kebab-pull;
+	}
+	// A group card's title doubles as a link to the group page; keep it looking
+	// like the heading and only reveal the link affordance on hover/focus.
+	.newspack-subscribers__card-title-link.components-button.is-link {
+		color: inherit;
+		font: inherit;
+		height: auto;
+		text-decoration: none;
+
+		&:hover,
+		&:focus {
+			color: var(--wp-admin-theme-color);
+		}
+	}
+	.components-card__body,
+	.newspack-card--core__body {
+		padding: wp-vars.$grid-unit-20;
+
+		> * {
+			margin: 0 !important;
+			padding: 0 !important;
+		}
+	}
+}
+
+// DataViews ships its search input and footer page-select as `.components-base-control`,
+// which adds `margin-bottom: 16px`. That throws their parent HStacks out of vertical
+// alignment with the buttons next to them. Drop the bottom margin so the toolbar and
+// footer collapse to a single line.
+.dataviews-wrapper {
+	.dataviews__search .components-base-control,
+	.dataviews-pagination .components-base-control {
+		margin-bottom: 0;
+	}
+}
+
+.newspack-subscribers__orders-wrapper {
+	.dataviews-view-table {
+		tr td:first-child,
+		tr th:first-child {
+			padding-left: wp-vars.$grid-unit-15 !important;
+		}
+		tr td:last-child,
+		tr th:last-child {
+			padding-right: wp-vars.$grid-unit-15 !important;
+		}
+		tr:hover {
+			background: rgba( wp-colors.$gray-100, 0.5 );
+		}
+	}
+}
+
+.newspack-subscribers__profile {
+	// The "could not load" / "not found" notices carry their retry and back links
+	// as notice actions; give them room and a consistent button metric.
+	.components-notice__actions {
+		margin-top: wp-vars.$grid-unit-15;
+
+		.components-button {
+			height: wp-vars.$grid-unit-40;
+			line-height: 1;
+			margin-left: 0;
+			margin-right: 0;
+			padding: 0 wp-vars.$grid-unit-15;
+		}
+	}
+
+	// Inline (non-full-width) DataViews inherit a -48px horizontal bleed from the
+	// wizard content style; cancel it so the member/invitation tables align with
+	// the rest of the section.
+	.newspack-dataviews {
+		margin-left: 0 !important;
+		margin-right: 0 !important;
+	}
+
+	// Tighten the default 48px edge padding on the group detail tables.
+	.dataviews-view-table {
+		tr td:first-child,
+		tr th:first-child {
+			padding-left: wp-vars.$grid-unit-15 !important;
+		}
+		tr td:last-child,
+		tr th:last-child {
+			padding-right: wp-vars.$grid-unit-15 !important;
+		}
+	}
+
+	// The footer ships its own 48px horizontal padding; tighten it to match the
+	// table cells so the pagination and bulk-action bar line up with the content.
+	.dataviews-footer {
+		padding-left: wp-vars.$grid-unit-15 !important;
+		padding-right: wp-vars.$grid-unit-15 !important;
+	}
+
+	// These fixed profile tables have no search or actions, so drop the now-empty
+	// DataViews view-actions toolbar. Column-header sorting still works. The
+	// members table opts back in below, since it has search.
+	.dataviews__view-actions {
+		display: none;
+	}
+}
+
+// The members table enables search, so restore its view-actions toolbar (hidden
+// for the other fixed profile tables above) and drop its horizontal padding so
+// the search field lines up with the table edge.
+.newspack-subscribers__members-dataviews .dataviews__view-actions {
+	display: flex;
+	padding-left: 0 !important;
+	padding-right: 0 !important;
+}
+
+.newspack-subscribers__modal-text {
+	margin: 0;
+}
+
+.newspack-subscribers__nowrap {
+	white-space: nowrap;
+}
+
+// "View subscription" drawer: a read-only, right-edge slide-in panel that
+// mirrors the newsletters quick-edit look. Built on @wordpress/components Modal
+// with custom overlay/frame classes so it anchors to the right instead of
+// rendering centered.
+.newspack-subscribers__sub-detail-overlay {
+	align-items: stretch;
+	justify-content: flex-end;
+	padding: 0;
+}
+
+.components-modal__frame.newspack-subscribers__sub-detail-modal {
+	animation: 0.2s ease-out forwards newspack-subscribers__sub-detail-slide-in;
+	border-radius: 0;
+	box-shadow: -1px 0 16px rgb( 0 0 0 / 8% );
+	display: flex;
+	flex-direction: column;
+	height: 100vh;
+	margin: 0;
+	max-height: 100vh;
+	width: 350px;
+
+	@media ( max-width: wp-breakpoints.$break-small ) {
+		width: 100vw;
+	}
+
+	// Drop the modal's built-in content padding so the header/content classes
+	// below own the spacing (matching the newsletters quick-edit), and let the
+	// inner wrappers flex so the content area scrolls within the full height.
+	.components-modal__content {
+		display: flex;
+		flex-direction: column;
+		padding: 0;
+	}
+
+	.components-modal__children-container {
+		display: flex;
+		flex: 1 1 auto;
+		flex-direction: column;
+		min-height: 0;
+	}
+}
+
+@keyframes newspack-subscribers__sub-detail-slide-in {
+	from {
+		transform: translateX( 100% );
+	}
+
+	to {
+		transform: translateX( 0 );
+	}
+}
+
+@keyframes newspack-subscribers__sub-detail-slide-out {
+	from {
+		transform: translateX( 0 );
+	}
+
+	to {
+		transform: translateX( 100% );
+	}
+}
+
+// Mirror the slide-in with a slide-out on close. @wp/components' Modal adds
+// `is-animating-out` and keeps the panel mounted until an animationend fires
+// (which bubbles up from the frame), so animating the frame is enough. Suppress
+// the overlay's default disappear animation so the motion stays a slide, not a
+// fade. The compound selector outweighs the base frame rule in the cascade.
+.components-modal__screen-overlay.newspack-subscribers__sub-detail-overlay.is-animating-out {
+	animation: none;
+}
+
+.components-modal__screen-overlay.newspack-subscribers__sub-detail-overlay.is-animating-out .components-modal__frame {
+	animation: 0.2s ease-in forwards newspack-subscribers__sub-detail-slide-out;
+}
+
+@media ( prefers-reduced-motion: reduce ) {
+	.newspack-subscribers__sub-detail-overlay,
+	.components-modal__frame.newspack-subscribers__sub-detail-modal,
+	.components-modal__screen-overlay.newspack-subscribers__sub-detail-overlay.is-animating-out .components-modal__frame {
+		animation: none;
+	}
+}
+
+.newspack-subscribers__sub-detail-header {
+	flex: 0 0 auto;
+	padding: wp-vars.$grid-unit-30 wp-vars.$grid-unit-30 0;
+}
+
+.newspack-subscribers__sub-detail-title {
+	flex: 1;
+	font-size: inherit;
+	font-weight: wp-vars.$font-weight-medium;
+	margin: 0;
+}
+
+.newspack-subscribers__sub-detail-content {
+	flex: 1 1 auto;
+	overflow-y: auto;
+	padding: wp-vars.$grid-unit-30;
+}
+
+// Match the WordPress control label (e.g. TextControl): 11px, medium weight,
+// uppercase, gray-900.
+.newspack-subscribers__sub-detail-label {
+	color: wp-colors.$gray-900;
+	font-size: wp-vars.$font-size-x-small;
+	font-weight: wp-vars.$font-weight-medium;
+	text-transform: uppercase;
+}
+
+.newspack-subscribers__sub-detail-value {
+	// The Badge ships display: block, so it would stretch to the full row width
+	// here; keep it hugging its label (e.g. the status pill).
+	.newspack-badge {
+		display: inline-block;
+	}
+}
+
+// Pinned action bar at the bottom of the drawer: the same subscription CTAs as
+// the person-profile group card. Mirrors the newspack-newsletters quick-edit
+// footer (white, sticky, no divider, buttons split 50/50).
+.newspack-subscribers__sub-detail-footer {
+	background: wp-colors.$white;
+	bottom: 0;
+	flex: 0 0 auto;
+	padding: wp-vars.$grid-unit-20 wp-vars.$grid-unit-30;
+	position: sticky;
+	z-index: 1;
+
+	.components-button {
+		flex: 1;
+		justify-content: center;
+	}
+}
+
+// Labeled label/value rows on the subscription and payment-method cards,
+// reusing the quick-edit drawer's label style. Each row is a one-pair `dl` (see
+// CardRow), so the browser's default list margins are cleared here.
+.newspack-subscribers__card-row {
+	display: flex;
+	flex-direction: column;
+	gap: wp-vars.$grid-unit-05;
+	margin: 0;
+}
+
+.newspack-subscribers__card-label {
+	color: wp-colors.$gray-900;
+	font-size: wp-vars.$font-size-x-small;
+	font-weight: wp-vars.$font-weight-medium;
+	text-transform: uppercase;
+}
+
+.newspack-subscribers__card-value {
+	margin: 0;
+}

@@ -508,13 +508,16 @@ function acquireV2InvisibleToken( siteKey ) {
 /**
  * Register a reader via a frontend integration.
  *
- * @param {string} email                  Reader email address.
- * @param {string} integrationId          Registered integration ID.
- * @param {Object} profileFields          Optional profile fields: { first_name, last_name, metadata }.
- * @param {Object} profileFields.metadata Optional arbitrary key-value pairs to store as user meta.
+ * @param {string}  email                  Reader email address.
+ * @param {string}  integrationId          Registered integration ID.
+ * @param {Object}  profileFields          Optional profile fields: { first_name, last_name, metadata }.
+ * @param {Object}  profileFields.metadata Optional arbitrary key-value pairs to store as user meta.
+ * @param {Object}  options                Optional transport options.
+ * @param {boolean} options.keepalive      Keep the request alive through page navigation.
+ * @param {string}  options.captchaToken   Pre-acquired reCAPTCHA token, skips acquisition.
  * @return {Promise} Resolves with reader data on success, rejects with error on failure.
  */
-function register( email, integrationId, profileFields = {} ) {
+export function register( email, integrationId, profileFields = {}, options = {} ) {
 	const config = newspack_ras_config?.frontend_registration_integrations || {};
 	const integration = config[ integrationId ];
 
@@ -544,7 +547,10 @@ function register( email, integrationId, profileFields = {} ) {
 	const captchaVersion = newspack_ras_config?.captcha_version;
 	let captchaPromise;
 
-	if ( captchaSiteKey ) {
+	if ( options.captchaToken ) {
+		// Pre-acquired token (e.g. warmed before a page-navigating form submit).
+		captchaPromise = Promise.resolve( options.captchaToken );
+	} else if ( captchaSiteKey ) {
 		if ( ! window.grecaptcha ) {
 			return Promise.reject( new Error( 'reCAPTCHA is configured but not loaded.' ) );
 		}
@@ -582,10 +588,16 @@ function register( email, integrationId, profileFields = {} ) {
 			if ( nonce ) {
 				headers[ 'X-WP-Nonce' ] = nonce;
 			}
+			// keepalive: Firefox only supports it from version 133 (unknown init
+			// keys are silently ignored), so on older Firefox the request may
+			// still be cancelled at page unload. Accepted for v1: a
+			// navigator.sendBeacon fallback cannot carry the response callers
+			// consume here.
 			return fetch( newspack_ras_config.frontend_registration_url, {
 				method: 'POST',
 				headers,
 				credentials: 'same-origin',
+				keepalive: Boolean( options.keepalive ),
 				body: JSON.stringify( body ),
 			} );
 		} )
@@ -616,11 +628,27 @@ function register( email, integrationId, profileFields = {} ) {
 			return data;
 		} )
 		.catch( function ( error ) {
-			dispatchActivity( 'reader_registration_failed', {
-				email,
-				integration_id: integrationId,
-				error: error.code || 'network_error',
-			} );
+			if ( 'reader_already_exists' === error.code ) {
+				// A 409 is a successful outcome server-side: the reader exists and
+				// the auth intention is pinned to this email. Reflect the identity
+				// in the client store (which popups/segmentation read) and record
+				// a registration activity with the 'existing' status rather than a
+				// failure — on sites with returning readers this is the routine
+				// result. The promise still rejects so callers can distinguish
+				// created from existing.
+				setReaderEmail( email );
+				dispatchActivity( 'reader_registered', {
+					email,
+					integration_id: integrationId,
+					status: 'existing',
+				} );
+			} else {
+				dispatchActivity( 'reader_registration_failed', {
+					email,
+					integration_id: integrationId,
+					error: error.code || 'network_error',
+				} );
+			}
 			throw error;
 		} );
 }

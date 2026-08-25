@@ -237,7 +237,7 @@ class Test_Post_Type extends WP_UnitTestCase {
 				'post_type'      => Post_Type::get_post_type(),
 				'orderby'        => self::$order_column_name,
 				'order'          => 'ASC',
-				'posts_per_page' => -1,
+				'posts_per_page' => -1, // phpcs:ignore WordPressVIPMinimum.Performance.NoPaging -- Unbounded queries are acceptable in tests.
 			]
 		);
 

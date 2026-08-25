@@ -1,6 +1,7 @@
 #!/bin/bash
 
 NABSPATH="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
+source "$(dirname "${BASH_SOURCE[0]}")/bin/_common.sh"
 source "$(dirname "${BASH_SOURCE[0]}")/bin/repos.sh"
 
 # Use -it flags only when TTY is available
@@ -180,10 +181,9 @@ start() {
     # These don't survive reboots, so this runs on every start.
     if [[ "$(uname)" == "Darwin" ]]; then
         missing_aliases=()
-        lo0_addrs=$(ifconfig lo0 2>/dev/null)
         for octet in $(seq 2 100); do
             ip="127.0.0.$octet"
-            if ! echo "$lo0_addrs" | grep -qE "inet $ip( |$)"; then
+            if ! lo0_alias_exists "$ip"; then
                 missing_aliases+=("$ip")
             fi
         done

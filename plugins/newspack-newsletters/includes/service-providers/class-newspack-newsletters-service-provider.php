@@ -1029,6 +1029,38 @@ Error message(s) received:
 	}
 
 	/**
+	 * Drop contact fields the contact has no value for.
+	 *
+	 * Providers disagree on whether valueless fields are reported: Mailchimp
+	 * returns every merge field defined on the audience, using an empty string
+	 * for ones the contact hasn't filled in, while ActiveCampaign's API mostly
+	 * omits them but can report an empty value. Every provider filters its
+	 * `metadata` through this helper so the key means the same thing
+	 * everywhere — the fields the contact has a value for — and a caller
+	 * storing it (e.g. a reader-data pull) doesn't persist empty entries for
+	 * one ESP and not another.
+	 *
+	 * Only unset values are dropped. A falsy-but-real value — `0` from a number
+	 * field, `'0'` from a text field — is a value the contact has, and callers
+	 * such as reader data store it as one.
+	 *
+	 * @param array $fields Contact field values keyed by field key.
+	 *
+	 * @return array Fields the contact has a value for.
+	 */
+	protected static function filter_set_field_values( $fields ) {
+		if ( ! is_array( $fields ) ) {
+			return [];
+		}
+		return array_filter(
+			$fields,
+			function ( $value ) {
+				return null !== $value && '' !== $value && [] !== $value;
+			}
+		);
+	}
+
+	/**
 	 * Call get_send_lists() and normalize any provider-specific failure into a
 	 * WP_Error.
 	 *

@@ -1,4 +1,4 @@
-<?php // phpcs:disable Squiz.Commenting.FunctionComment.Missing, Squiz.Commenting.ClassComment.Missing, Squiz.Commenting.VariableComment.Missing, Squiz.Commenting.FileComment.Missing, Generic.Files.OneObjectStructurePerFile.MultipleFound
+<?php // phpcs:disable Squiz.Commenting.FunctionComment.Missing, Squiz.Commenting.ClassComment.Missing, Squiz.Commenting.VariableComment.Missing, Squiz.Commenting.FileComment.Missing
 /**
  * Tests the `wp newspack esp sync` results tally (NPPD-1883).
  *
@@ -16,19 +16,7 @@ use Newspack\Reader_Activation\Integrations;
 
 require_once dirname( __DIR__, 3 ) . '/includes/cli/class-ras-contact-sync.php';
 require_once dirname( __DIR__ ) . '/integrations/class-failing-sample-integration.php';
-
-// Minimal WP_CLI stub: sync_contacts() logs progress via WP_CLI::log(), which is
-// not loaded under PHPUnit. Only the logging surface the sync path touches is stubbed.
-if ( ! class_exists( 'WP_CLI' ) ) {
-	class WP_CLI {
-		public static function log( $message ) {}
-		public static function line( $message = '' ) {}
-		public static function success( $message ) {}
-		public static function error( $message ) {
-			throw new \Exception( esc_html( $message ) );
-		}
-	}
-}
+require_once dirname( __DIR__, 2 ) . '/mocks/wp-cli-mock.php';
 
 /**
  * Results tally of the batch sync driver.
@@ -197,5 +185,65 @@ class Test_RAS_Contact_Sync_Tally extends WP_UnitTestCase {
 			$second,
 			'A second run must not accumulate the first run into its tally.'
 		);
+	}
+
+	/**
+	 * `wp newspack esp sync` is a legacy alias: it must announce itself on
+	 * STDERR (so the alias's STDOUT stays frozen for tooling that pipes or
+	 * parses it) and keep the exact historical summary wording (NPPD-2076).
+	 */
+	public function test_esp_sync_alias_prints_notice_and_frozen_summary() {
+		WP_CLI::reset();
+		Integrations::get_integration( 'tally_mock' )->update_enabled_outgoing_fields( [ 'Content Access' ] );
+
+		RAS_Contact_Sync::cli_sync_contacts(
+			[],
+			[
+				'dry-run'  => true,
+				'user-ids' => (string) $this->active_user_id,
+				'fields'   => 'Content Access',
+			]
+		);
+
+		$this->assertNotEmpty( WP_CLI::$warnings );
+		$this->assertStringContainsString( 'legacy alias of `wp newspack integrations backfill`', WP_CLI::$warnings[0], 'The alias announces itself via warning (STDERR).' );
+		$this->assertSame(
+			[ 'Would sync 1 contacts (0 errors, 0 skipped).' ],
+			WP_CLI::$successes,
+			'The alias summary keeps the exact historical `esp sync` wording.'
+		);
+	}
+
+	/**
+	 * Read the protected static inter-batch pacing counter.
+	 *
+	 * @return int
+	 */
+	private function get_unpaused_contacts() {
+		$prop = new \ReflectionProperty( RAS_Contact_Sync::class, 'unpaused_contacts' );
+		$prop->setAccessible( true );
+		return $prop->getValue();
+	}
+
+	/**
+	 * A dry-run push never reaches a provider, so it must not accrue the
+	 * pacing that exists to space out real external requests — previewing
+	 * 100k readers should not cost ~17 minutes of sleep (NPPD-2076 review).
+	 */
+	public function test_dry_run_push_does_not_accrue_pacing() {
+		$this->run_sync(
+			[
+				'user_ids'   => [ $this->active_user_id, $this->inactive_user_id ],
+				'is_dry_run' => true,
+			]
+		);
+
+		$this->assertSame( 0, $this->get_unpaused_contacts(), 'Dry-run push contacts generate no provider traffic to pace.' );
+	}
+
+	public function test_wet_push_accrues_pacing_per_contact() {
+		$this->run_sync( [ 'user_ids' => [ $this->active_user_id, $this->inactive_user_id ] ] );
+
+		$this->assertSame( 2, $this->get_unpaused_contacts(), 'Each wet-pushed contact reached the integrations and counts toward pacing.' );
 	}
 }

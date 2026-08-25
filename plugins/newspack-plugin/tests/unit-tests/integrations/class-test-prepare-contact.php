@@ -70,10 +70,14 @@ class Test_Prepare_Contact extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * Test that prepare_contact returns contact unchanged in legacy mode.
+	 * Test that in legacy mode a non-ESP integration still applies its own
+	 * outbound selection to the pre-filtered legacy data (NPPD-2107). The
+	 * unconditional legacy passthrough is reserved for the `esp` integration,
+	 * whose config the legacy pipeline already filtered by.
 	 */
-	public function test_legacy_mode_returns_unchanged() {
+	public function test_legacy_mode_applies_own_outbound_selection() {
 		$this->set_metadata_version( 'legacy' );
+		$this->integration->update_enabled_outgoing_fields( [ 'Account' ] );
 
 		$contact = [
 			'email'    => 'test@example.com',
@@ -85,7 +89,11 @@ class Test_Prepare_Contact extends \WP_UnitTestCase {
 
 		$result = $this->integration->prepare_contact( $contact );
 
-		$this->assertSame( $contact, $result );
+		$this->assertSame(
+			[ 'NP_Account' => '123' ],
+			$result['metadata'],
+			'Only the enabled outbound field survives for a non-ESP integration in legacy mode.'
+		);
 	}
 
 	/**

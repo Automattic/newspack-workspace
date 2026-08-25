@@ -235,4 +235,25 @@ class Newspack_Test_User_Gate_Access extends WP_UnitTestCase {
 		$this->assertFalse( $result['groups'][0]['passes'], 'First group should fail.' );
 		$this->assertTrue( $result['groups'][1]['passes'], 'Second group should pass.' );
 	}
+
+	/**
+	 * An unconfigured one_time_purchase rule denies access, so the panel must
+	 * describe it as such rather than falling into the generic "(any)" branch
+	 * that suits rules whose evaluator reads an empty value as no constraint.
+	 */
+	public function test_format_rule_value_describes_unconfigured_one_time_purchase() {
+		$format_rule_value_method = new ReflectionMethod( User_Gate_Access::class, 'format_rule_value' );
+		$format_rule_value_method->setAccessible( true );
+
+		$this->assertSame(
+			'(no products selected) (invalid duration, grants no access)',
+			$format_rule_value_method->invoke( null, 'one_time_purchase', [] ),
+			'An empty one_time_purchase value should read as granting no access, matching how the rule evaluates.'
+		);
+		$this->assertSame(
+			'(any)',
+			$format_rule_value_method->invoke( null, 'email_domain', '' ),
+			'An empty value for a rule that reads it as no constraint should still read "(any)".'
+		);
+	}
 }

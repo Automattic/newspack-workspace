@@ -252,7 +252,7 @@ class Starter_Content_Generated extends Starter_Content_Provider {
 	 */
 	public static function generate_title( $post_index = 0 ) {
 		if ( Starter_Content::is_e2e() ) {
-			return $post_index . ' ' . file_get_contents( NEWSPACK_ABSPATH . 'includes/raw_assets/markup/title.txt' );
+			return $post_index . ' ' . file_get_contents( NEWSPACK_ABSPATH . 'includes/raw_assets/markup/title.txt' ); // phpcs:ignore WordPressVIPMinimum.Performance.FetchingRemoteData.FileGetContentsUnknown -- Reads a bundled plugin asset from the local filesystem.
 		}
 		$title = self::get_lipsum( 'words', wp_rand( 7, 14 ) );
 		$title = ucfirst( strtolower( str_replace( '.', '', $title ) ) ); // Remove periods, convert to sentence case.
@@ -397,7 +397,7 @@ class Starter_Content_Generated extends Starter_Content_Provider {
 	 */
 	public static function get_lipsum( $type, $amount ) {
 		if ( Starter_Content::is_e2e() ) {
-			return file_get_contents( NEWSPACK_ABSPATH . 'includes/raw_assets/markup/body.txt' );
+			return file_get_contents( NEWSPACK_ABSPATH . 'includes/raw_assets/markup/body.txt' ); // phpcs:ignore WordPressVIPMinimum.Performance.FetchingRemoteData.FileGetContentsUnknown -- Reads a bundled plugin asset from the local filesystem.
 		}
 		if ( 'paras' === $type ) {
 			return implode( PHP_EOL, self::lipsum_paragraphs( $amount ) );
