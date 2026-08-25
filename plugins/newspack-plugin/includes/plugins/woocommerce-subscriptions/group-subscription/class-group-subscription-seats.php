@@ -184,14 +184,24 @@ class Group_Subscription_Seats {
 	/**
 	 * Validate a requested seat count against a product's bounds.
 	 *
-	 * @param \WC_Product|int $product  Product object or ID.
-	 * @param int             $quantity Requested seat count.
+	 * @param \WC_Product|int $product    Product object or ID.
+	 * @param int             $quantity   Requested seat count.
+	 * @param int             $held_seats Seats the buyer already holds on this plan, which the
+	 *                                    maximum may not push them below. 0 when they hold none.
 	 *
 	 * @return true|\WP_Error True when the quantity fits the bounds, a WP_Error otherwise.
 	 */
-	public static function validate_quantity( $product, $quantity ) {
+	public static function validate_quantity( $product, $quantity, $held_seats = 0 ) {
 		$quantity = (int) $quantity;
 		$bounds   = self::get_bounds( $product );
+		// A group that already holds more seats than the plan now sells keeps them:
+		// the maximum bounds what may be bought, not what has been. Without this, a
+		// publisher lowering it would leave those owners no seat count they could
+		// submit -- the ceiling refuses everything at or above their occupancy, and
+		// the occupancy floor refuses everything below it.
+		if ( $bounds['max'] > 0 && (int) $held_seats > $bounds['max'] ) {
+			$bounds['max'] = (int) $held_seats;
+		}
 		if ( $quantity < $bounds['min'] ) {
 			return new \WP_Error(
 				self::ERROR_CODE,
@@ -263,7 +273,12 @@ class Group_Subscription_Seats {
 		}
 		$bounds   = self::get_bounds( $product );
 		$quantity = max( (int) $requested, $bounds['min'] );
-		return $bounds['max'] > 0 ? min( $quantity, $bounds['max'] ) : $quantity;
+		// Same exemption validate_quantity() applies: a group above a lowered maximum
+		// keeps its seats, so the clamp must not pull the count under the floor the
+		// occupancy guard then enforces.
+		$held = self::get_held_seats( self::get_owned_switch_subscription(), $product );
+		$max  = $bounds['max'] > 0 ? max( $bounds['max'], $held ) : 0;
+		return $max > 0 ? min( $quantity, $max ) : $quantity;
 	}
 
 	/**
@@ -522,6 +537,30 @@ class Group_Subscription_Seats {
 	}
 
 	/**
+	 * The seats a subscription already holds on the product being bought.
+	 *
+	 * Zero unless the subscription's own line item is for that same product, since
+	 * seats bought on one plan say nothing about what another plan may be sold at.
+	 *
+	 * @param \WC_Subscription|null $subscription The subscription being switched, if any.
+	 * @param \WC_Product|int       $product      Product object or ID being bought.
+	 *
+	 * @return int
+	 */
+	private static function get_held_seats( $subscription, $product ) {
+		if ( ! $subscription ) {
+			return 0;
+		}
+		$item = Group_Subscription_Settings::get_seat_line_item( $subscription );
+		if ( ! $item ) {
+			return 0;
+		}
+		$item_product_id = $item->get_variation_id() ? $item->get_variation_id() : $item->get_product_id();
+		$product_id      = is_object( $product ) ? $product->get_id() : (int) $product;
+		return (int) $item_product_id === (int) $product_id ? max( 0, (int) $item->get_quantity() ) : 0;
+	}
+
+	/**
 	 * Count the seats a group has already committed.
 	 *
 	 * Everyone in the group — the owner included — occupies a seat, and so does
@@ -719,7 +758,8 @@ class Group_Subscription_Seats {
 			}
 			return null;
 		}
-		$result = self::validate_quantity( $product, $quantity );
+		$subscription = self::get_owned_switch_subscription( $switch_subscription_id );
+		$result       = self::validate_quantity( $product, $quantity, self::get_held_seats( $subscription, $product ) );
 		if ( is_wp_error( $result ) ) {
 			return $result->get_error_message();
 		}
@@ -727,7 +767,6 @@ class Group_Subscription_Seats {
 		// are what capacity is measured in, so a seat taken away from a member or a
 		// pending invitation leaves the group over its own limit. Nobody can be
 		// removed on their behalf here, so the reader is asked to do it first.
-		$subscription = self::get_owned_switch_subscription( $switch_subscription_id );
 		if ( $subscription ) {
 			$occupancy = self::get_occupancy( $subscription );
 			if ( (int) $quantity < $occupancy ) {

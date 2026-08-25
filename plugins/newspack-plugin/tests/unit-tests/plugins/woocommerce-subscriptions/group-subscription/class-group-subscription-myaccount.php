@@ -880,6 +880,40 @@ class Test_Group_Subscription_MyAccount extends WP_UnitTestCase {
 	 * The owner of an active per-seat group gets a switch link the front-end
 	 * script can bind the tiers modal to.
 	 */
+	/**
+	 * A per-seat group's owner is paying per seat, so the page says how many of the
+	 * seats they bought are in use. Both numbers count the owner and every invitation
+	 * still holding a seat -- the same measure "Change seats" is judged against.
+	 */
+	public function test_group_page_shows_the_seat_count_for_a_per_seat_group() {
+		$owner_id = $this->create_reader_user();
+		$sub      = $this->create_priced_group_subscription( $owner_id, Group_Subscription_Settings::PRICING_MODE_PER_SEAT );
+		wp_set_current_user( $owner_id );
+
+		$html = $this->render_group_page( $sub );
+
+		// The fixture's line item holds 4 seats, and the owner alone occupies one.
+		$this->assertStringContainsString( '1 of 4 seats', $html );
+	}
+
+	/**
+	 * A flat group's price covers the whole group however many people are in it, so
+	 * there are no seats to report and the page is left as it was.
+	 */
+	public function test_group_page_shows_no_seat_count_for_a_flat_group() {
+		$owner_id = $this->create_reader_user();
+		$sub      = $this->create_priced_group_subscription( $owner_id, Group_Subscription_Settings::PRICING_MODE_PER_TEAM );
+		wp_set_current_user( $owner_id );
+
+		$html = $this->render_group_page( $sub );
+
+		$this->assertStringNotContainsString( 'newspack-my-account__group--seats', $html );
+	}
+
+	/**
+	 * The owner of an active per-seat group gets a link into the switch modal, since
+	 * the switch is what prices and takes payment for a seat change.
+	 */
 	public function test_group_page_renders_change_seats_for_owner() {
 		$owner_id = $this->create_reader_user();
 		$sub      = $this->create_priced_group_subscription( $owner_id, Group_Subscription_Settings::PRICING_MODE_PER_SEAT );

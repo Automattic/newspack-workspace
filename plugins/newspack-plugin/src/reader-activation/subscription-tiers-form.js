@@ -86,7 +86,11 @@ export default function init() {
 				}
 				seatsField.hidden = false;
 				seatsInput.disabled = false;
-				const min = parseInt( tier.dataset.seatsMin, 10 ) || 1;
+				// The plan's own minimum, raised to the seats already in use: a group can
+				// never shrink below the people in it, and the server refuses it either
+				// way. The floor belongs to the group, so it survives a tier change.
+				const floor = parseInt( seatsField.dataset.seatsFloor, 10 ) || 0;
+				const min = Math.max( parseInt( tier.dataset.seatsMin, 10 ) || 1, floor );
 				const max = parseInt( tier.dataset.seatsMax, 10 ) || 0;
 				seatsInput.min = min;
 				if ( max > 0 ) {

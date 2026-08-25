@@ -5,6 +5,8 @@
  * @package Newspack\Tests
  */
 
+use Newspack\Group_Subscription;
+use Newspack\Group_Subscription_Invite;
 use Newspack\Group_Subscription_Settings;
 use Newspack\Subscriptions_Tiers;
 
@@ -849,6 +851,29 @@ class Newspack_Test_Subscriptions_Tiers extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Seat the given number of members and pending invitations on a group, so the
+	 * occupancy the seats field floors at is a real one.
+	 *
+	 * @param \WC_Subscription $subscription The group subscription.
+	 * @param int              $members      Members to add, besides the owner.
+	 * @param int              $invites      Invitations still waiting to be accepted.
+	 */
+	private function add_group_members( $subscription, $members, $invites = 0 ) {
+		for ( $i = 0; $i < $members; $i++ ) {
+			add_user_meta( self::factory()->user->create(), Group_Subscription::GROUP_SUBSCRIPTION_USER_META_KEY, $subscription->get_id() );
+		}
+		$pending = [];
+		for ( $i = 0; $i < $invites; $i++ ) {
+			$pending[ 'pending-' . $i ] = [
+				'email'      => 'pending-' . $i . '@example.com',
+				'expiration' => time() + HOUR_IN_SECONDS,
+			];
+		}
+		$subscription->update_meta_data( Group_Subscription_Invite::META, $pending );
+		Group_Subscription::reset_cache();
+	}
+
+	/**
 	 * Render the tiers form and return its markup.
 	 *
 	 * @param \WC_Product $product     Product the form is rendered for.
@@ -904,7 +929,7 @@ class Newspack_Test_Subscriptions_Tiers extends WP_UnitTestCase {
 		// are pinned to the seats input rather than to anything else on the form.
 		$this->assertStringContainsString( 'name="quantity" id="newspack-group-seats-product-303" step="1" min="2" value="2"', $html );
 		$this->assertStringContainsString( '<label for="newspack-group-seats-product-303">', $html );
-		$this->assertStringContainsString( '<p class="newspack__subscription-tiers__seats">', $html );
+		$this->assertStringContainsString( '<p class="newspack__subscription-tiers__seats" data-seats-floor="0">', $html );
 		// An unlimited product has no ceiling to enforce in the browser: the cluster
 		// above runs straight from min to value, with no max attribute between them.
 		$this->assertStringContainsString( 'data-seats-max=""', $html );
@@ -978,7 +1003,7 @@ class Newspack_Test_Subscriptions_Tiers extends WP_UnitTestCase {
 
 		$html = $this->render_tier_form( $grouped );
 
-		$this->assertStringContainsString( '<p class="newspack__subscription-tiers__seats" hidden>', $html );
+		$this->assertStringContainsString( '<p class="newspack__subscription-tiers__seats" data-seats-floor="0" hidden>', $html );
 		$this->assertStringContainsString( 'data-original-value="" disabled>', $html );
 	}
 
@@ -1008,25 +1033,9 @@ class Newspack_Test_Subscriptions_Tiers extends WP_UnitTestCase {
 
 		$this->assertStringContainsString( 'id="newspack-group-seats-item-' . $switch_data['item_id'] . '" step="1" min="2" value="3"', $html );
 		$this->assertStringContainsString( 'data-original-value="3" disabled>', $html );
-		$this->assertStringContainsString( '<p class="newspack__subscription-tiers__seats" hidden>', $html );
-	}
-
-	/**
-	 * A seat count the newly chosen tier cannot sell is pulled into its bounds
-	 * before the field is ever shown, rather than being submitted and rejected at
-	 * the far end.
-	 */
-	public function test_seats_value_is_clamped_to_the_selected_tier_bounds() {
-		$user_id = self::factory()->user->create();
-		wp_set_current_user( $user_id );
-		$product     = $this->make_tier_product( 314, $this->per_seat_meta( 2, 4 ) );
-		$switch_data = $this->make_switch_data( $user_id, [ 314 ], 314, 9 );
-
-		$html = $this->render_tier_form( $product, $switch_data );
-
-		$this->assertStringContainsString( 'min="2" max="4" value="4"', $html );
-		// The reader's real seat count is still what "unchanged" means.
-		$this->assertStringContainsString( 'data-original-value="9"', $html );
+		// Hidden because the badged tier is the flat one; the floor is asserted by the
+		// test that owns it.
+		$this->assertMatchesRegularExpression( '/<p class="newspack__subscription-tiers__seats" data-seats-floor="\d+" hidden>/', $html );
 	}
 
 	/**
@@ -1110,6 +1119,42 @@ class Newspack_Test_Subscriptions_Tiers extends WP_UnitTestCase {
 		$this->assertSame( 1, substr_count( $html, 'id="' . $second_id . '"' ) );
 		$this->assertStringContainsString( '<label for="' . $first_id . '">', $html );
 		$this->assertStringContainsString( '<label for="' . $second_id . '">', $html );
+	}
+
+	/**
+	 * A group can never shrink below the people already in it, so the switch modal's
+	 * seats field will not spin below the seats in use -- the server refuses it either
+	 * way, but a floor the reader can see beats an error after they submit.
+	 */
+	public function test_switch_seats_field_floors_at_the_seats_in_use() {
+		$user_id = self::factory()->user->create();
+		wp_set_current_user( $user_id );
+		$product     = $this->make_tier_product( 341, $this->per_seat_meta( 2, 10 ) );
+		$switch_data = $this->make_switch_data( $user_id, [ 341 ], 341, 6 );
+		// Four members plus the owner, and one invitation still holding a seat.
+		$this->add_group_members( $switch_data['subscription'], 4, 1 );
+
+		$html = $this->render_tier_form( $product, $switch_data );
+
+		$this->assertStringContainsString( 'step="1" min="6" max="10" value="6"', $html );
+	}
+
+	/**
+	 * A publisher can lower the maximum under a group that already bought more. The
+	 * field keeps the seats they hold rather than clamping to a ceiling the occupancy
+	 * floor would then refuse, which would leave no submittable count at all.
+	 */
+	public function test_switch_seats_field_keeps_seats_above_a_lowered_maximum() {
+		$user_id = self::factory()->user->create();
+		wp_set_current_user( $user_id );
+		$product     = $this->make_tier_product( 342, $this->per_seat_meta( 2, 5 ) );
+		$switch_data = $this->make_switch_data( $user_id, [ 342 ], 342, 8 );
+
+		$html = $this->render_tier_form( $product, $switch_data );
+
+		$this->assertStringContainsString( 'step="1" min="2" max="8" value="8"', $html );
+		// The reader's real seat count is still what "unchanged" means.
+		$this->assertStringContainsString( 'data-original-value="8"', $html );
 	}
 
 	/**

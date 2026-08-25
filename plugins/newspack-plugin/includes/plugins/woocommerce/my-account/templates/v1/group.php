@@ -14,6 +14,7 @@
 
 use Newspack\Group_Subscription;
 use Newspack\Group_Subscription_MyAccount;
+use Newspack\Group_Subscription_Seats;
 use Newspack\Group_Subscription_Settings;
 use Newspack\Newspack_UI_Icons;
 use Newspack\Subscriptions_Tiers;
@@ -75,6 +76,32 @@ if ( in_array( $subscription_status, [ 'cancelled', 'expired' ], true ) ) {
 			<span class="<?php echo esc_attr( implode( ' ', $status_badge_classes ) ); ?>">
 				<?php echo esc_html( wcs_get_subscription_status_name( $subscription_status ) ); ?>
 			</span>
+			<?php
+			// Only a per-seat group has seats the owner pays for and can change, so it
+			// is the only one told how many are in use. Both numbers include the owner
+			// and every invitation still waiting to be accepted, which is what the
+			// "Change seats" control is measured against.
+			if ( Group_Subscription_Settings::is_per_seat( $subscription ) ) :
+				$seats_in_use  = Group_Subscription_Seats::get_occupancy( $subscription );
+				$seats_bought  = Group_Subscription::get_member_capacity( $subscription );
+				if ( null !== $seats_bought ) :
+					?>
+					<span class="newspack-my-account__group--seats newspack-ui__font--xs">
+						<?php
+						echo esc_html(
+							sprintf(
+								/* translators: 1: seats in use, 2: seats bought. */
+								__( '%1$d of %2$d seats', 'newspack-plugin' ),
+								$seats_in_use,
+								$seats_bought
+							)
+						);
+						?>
+					</span>
+					<?php
+				endif;
+			endif;
+			?>
 		</div>
 		<div class="newspack-my-account__subscription--actions">
 			<div class="newspack-my-account__subscription--actions-container">

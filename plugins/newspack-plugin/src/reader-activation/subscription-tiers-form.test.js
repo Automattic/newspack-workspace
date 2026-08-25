@@ -8,8 +8,9 @@ import init from './subscription-tiers-form';
  * @param {boolean} options.flatIsSelected Whether the flat tier starts out checked.
  * @param {string}  options.seatsValue     Initial seats value.
  * @param {string}  options.originalValue  Seats the reader already pays for, if any.
+ * @param {number}  options.seatsFloor     Seats already in use, which the field cannot go below.
  */
-function renderForm( { flatIsCurrent = false, flatIsSelected = true, seatsValue = '3', originalValue = '' } = {} ) {
+function renderForm( { flatIsCurrent = false, flatIsSelected = true, seatsValue = '3', originalValue = '', seatsFloor = 0 } = {} ) {
 	const hidden = flatIsSelected ? ' hidden' : '';
 	const disabled = flatIsSelected ? ' disabled' : '';
 	document.body.innerHTML = `
@@ -20,7 +21,7 @@ function renderForm( { flatIsCurrent = false, flatIsSelected = true, seatsValue 
 			<label class="newspack-ui__input-card${ flatIsCurrent ? '' : ' current' }">
 				<input type="radio" name="product_id" value="312"${ flatIsSelected ? '' : ' checked' } data-per-seat="1" data-seats-min="3" data-seats-max="6">
 			</label>
-			<p class="newspack__subscription-tiers__seats"${ hidden }>
+			<p class="newspack__subscription-tiers__seats" data-seats-floor="${ seatsFloor }"${ hidden }>
 				<label for="newspack-group-seats-item-554">Number of team seats</label>
 				<input type="number" name="quantity" id="newspack-group-seats-item-554" step="1" min="3" value="${ seatsValue }" data-original-value="${ originalValue }"${ disabled }>
 			</p>
@@ -129,5 +130,20 @@ describe( 'subscription tiers form seats field', () => {
 		seats.dispatchEvent( new Event( 'input' ) );
 
 		expect( submit.disabled ).toBe( true );
+	} );
+
+	it( 'will not let the field go below the seats already in use', () => {
+		// The per-seat tier sells from 3; six people are already seated.
+		const { seats, flat, perSeat } = renderForm( { flatIsSelected: false, seatsValue: '7', seatsFloor: 6 } );
+
+		expect( seats.min ).toBe( '6' );
+
+		// The floor belongs to the group, so a round trip through another tier and
+		// back leaves it in place.
+		selectTier( flat );
+		selectTier( perSeat );
+
+		expect( seats.min ).toBe( '6' );
+		expect( seats.value ).toBe( '6' );
 	} );
 } );

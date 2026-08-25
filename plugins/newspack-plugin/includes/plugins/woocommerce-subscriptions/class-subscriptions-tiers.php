@@ -803,12 +803,32 @@ class Subscriptions_Tiers {
 			? 'item-' . absint( $switch_data['item_id'] )
 			: 'product-' . ( $product ? absint( $product->get_id() ) : 0 ) );
 
+		// A group can never shrink below the people already in it, so the field's floor
+		// is whichever is higher: the plan's minimum, or the seats in use. Enforced on
+		// the server either way (see Group_Subscription_Seats::get_quantity_error()),
+		// but a spinner that will not go below the number is a better answer than an
+		// error after the fact.
+		$seats_floor = $switch_data ? Group_Subscription_Seats::get_occupancy( $switch_data['subscription'] ) : 0;
+
+		// A group that already holds more seats than its own plan now sells keeps them:
+		// the maximum bounds what may be bought, not what has been, so a publisher
+		// lowering it does not leave those owners without a submittable seat count.
+		// Only on the plan they already hold — moving to a different tier is buying
+		// that tier, and its maximum binds.
+		$line_product_id  = $line_product ? $line_product->get_id() : 0;
+		$staying_on_plan  = $line_product_id && $selected_product && $line_product_id === $selected_product->get_id();
+		$seats_ceiling    = $staying_on_plan && $line_seats && $line_quantity ? $line_quantity : 0;
+
 		// Start from the seats the reader already pays for when that line sells
 		// seats, otherwise from the tier's own minimum — then hold it inside the
 		// selected tier's bounds, which a differently-priced tier may narrow.
 		$seats_original = $line_seats && $line_quantity ? $line_quantity : '';
 		$seats_value    = null;
 		if ( $seats_field ) {
+			$seats_field['min'] = max( $seats_field['min'], $seats_floor );
+			if ( $seats_field['max'] > 0 ) {
+				$seats_field['max'] = max( $seats_field['max'], $seats_ceiling, $seats_field['min'] );
+			}
 			$seats_value = max( $seats_field['min'], (int) ( $seats_original ? $seats_original : $seats_field['min'] ) );
 			if ( $seats_field['max'] > 0 ) {
 				$seats_value = min( $seats_field['max'], $seats_value );
@@ -886,7 +906,7 @@ class Subscriptions_Tiers {
 				<input type="hidden" name="item" value="<?php echo absint( $switch_data['item_id'] ); ?>">
 			<?php endif; ?>
 			<?php if ( $seats_field ) : ?>
-				<p class="newspack__subscription-tiers__seats"<?php echo $selected_seats ? '' : ' hidden'; ?>>
+				<p class="newspack__subscription-tiers__seats" data-seats-floor="<?php echo esc_attr( $seats_floor ); ?>"<?php echo $selected_seats ? '' : ' hidden'; ?>>
 					<label for="<?php echo esc_attr( $seats_input_id ); ?>"><?php echo esc_html( $seats_field['label'] ); ?></label>
 					<input type="number" name="quantity" id="<?php echo esc_attr( $seats_input_id ); ?>" step="1" min="<?php echo esc_attr( $seats_field['min'] ); ?>"<?php echo $seats_field['max'] > 0 ? ' max="' . esc_attr( $seats_field['max'] ) . '"' : ''; ?> value="<?php echo esc_attr( $seats_value ); ?>" data-original-value="<?php echo esc_attr( $seats_original ); ?>"<?php echo $selected_seats ? '' : ' disabled'; ?>>
 					<span class="newspack-ui__helper-text"><?php echo esc_html( $seats_field['help'] ); ?></span>

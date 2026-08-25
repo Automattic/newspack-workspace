@@ -236,6 +236,22 @@ class Test_Group_Subscription_Seats extends WP_UnitTestCase {
 	}
 
 	/**
+	 * A publisher can lower the maximum under a group that already bought more. The
+	 * maximum bounds what may be bought, not what has been, so the seats already held
+	 * stay valid -- otherwise the ceiling would refuse everything at or above the
+	 * group's occupancy and the occupancy floor everything below it, leaving no seat
+	 * count the owner could submit at all.
+	 */
+	public function test_held_seats_survive_a_lowered_maximum() {
+		$product = $this->make_per_seat_product( 9161, 2, 5 );
+
+		$this->assertWPError( Group_Subscription_Seats::validate_quantity( $product, 8 ) );
+		$this->assertTrue( Group_Subscription_Seats::validate_quantity( $product, 8, 8 ) );
+		$this->assertTrue( Group_Subscription_Seats::validate_quantity( $product, 6, 8 ), 'Dropping toward the maximum is still allowed.' );
+		$this->assertWPError( Group_Subscription_Seats::validate_quantity( $product, 9, 8 ), 'Buying past what they hold is not.' );
+	}
+
+	/**
 	 * Enforces both the minimum and maximum seat bounds; a max of 0 means unlimited.
 	 */
 	public function test_validate_quantity_enforces_bounds() {

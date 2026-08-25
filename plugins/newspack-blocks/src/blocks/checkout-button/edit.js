@@ -212,6 +212,12 @@ function CheckoutButtonEdit( props ) {
 	const [ productData, setProductData ] = useState( {} );
 	const [ variations, setVariations ] = useState( [] );
 	const [ nyp, setNYP ] = useState( false );
+	// Resolved server-side, like the donation flag: a seat count is only honoured
+	// for a product sold per seat, so offering the control anywhere else would
+	// invite a number that is discarded at checkout. Per-seat meta lives on the
+	// variation for a tiered plan, hence the separate state for the chosen one.
+	const [ variationHasSeats, setVariationHasSeats ] = useState( false );
+	const hasSeats = variation ? variationHasSeats : !! productData?.newspack_has_seats;
 
 	// Resolved server-side, since a donation is not always identifiable from the
 	// product meta. Variations inherit it from their parent, which is the product
@@ -249,10 +255,17 @@ function CheckoutButtonEdit( props ) {
 	useEffect( () => {
 		if ( variation ) {
 			apiFetch( { path: `/wc/v2/products/${ product }/variations/${ variation }` } )
-				.then( res => setNYP( getNYP( res ) ) )
-				.catch( () => setNYP( {} ) );
+				.then( res => {
+					setNYP( getNYP( res ) );
+					setVariationHasSeats( !! res?.newspack_has_seats );
+				} )
+				.catch( () => {
+					setNYP( {} );
+					setVariationHasSeats( false );
+				} );
 		} else {
 			setNYP( getNYP( productData ) );
+			setVariationHasSeats( false );
 		}
 	}, [ variation ] );
 
@@ -411,22 +424,19 @@ function CheckoutButtonEdit( props ) {
 						/>
 					</PanelBody>
 				) }
-				<PanelBody title={ __( 'Seats', 'newspack-blocks' ) } initialOpen={ false }>
-					<p>
-						{ __(
-							'Optional. Pre-fill the number of seats for products sold per seat. Readers can change it before paying.',
-							'newspack-blocks'
-						) }
-					</p>
-					<TextControl
-						type="number"
-						label={ __( 'Default seats', 'newspack-blocks' ) }
-						value={ quantity || '' }
-						min={ 1 }
-						onChange={ value => setAttributes( { quantity: value ? parseInt( value, 10 ) : undefined } ) }
-						__next40pxDefaultSize
-					/>
-				</PanelBody>
+				{ hasSeats && (
+					<PanelBody title={ __( 'Seats', 'newspack-blocks' ) } initialOpen={ false }>
+						<p>{ __( 'Optional. Pre-fill the number of seats. Readers can change it before paying.', 'newspack-blocks' ) }</p>
+						<TextControl
+							type="number"
+							label={ __( 'Default seats', 'newspack-blocks' ) }
+							value={ quantity || '' }
+							min={ 1 }
+							onChange={ value => setAttributes( { quantity: value ? parseInt( value, 10 ) : undefined } ) }
+							__next40pxDefaultSize
+						/>
+					</PanelBody>
+				) }
 			</InspectorControls>
 		</>
 	);
