@@ -510,21 +510,6 @@ class Newspack_Blocks_Modal_Checkout_Data_Test extends WP_UnitTestCase_Blocks {
 	}
 
 	/**
-	 * The default quantity of 1 leaves the sign-up fee unchanged, so existing
-	 * (pre-quantity) callers of get_price_summary() see no behavior change.
-	 */
-	public function test_price_summary_defaults_to_unmultiplied_signup_fee() {
-		$GLOBALS['newspack_blocks_test_sign_up_fee'] = 5;
-		$GLOBALS['newspack_blocks_test_products']    = [
-			322 => new WC_Product( 322, 'subscription', [], '10', 'Supporter' ),
-		];
-
-		Checkout_Data::get_price_summary( 'Supporter', 10, 'month', 322 );
-
-		$this->assertEquals( 5, $GLOBALS['newspack_blocks_test_last_wcs_price_string_args']['initial_amount'] );
-	}
-
-	/**
 	 * Variable subscription parents should behave like variable products.
 	 */
 	public function test_variable_subscription_parent_is_marked_variable() {

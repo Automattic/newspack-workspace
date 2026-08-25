@@ -33,9 +33,6 @@ class Subscriptions_Tiers {
 		add_filter( 'woocommerce_order_button_text', [ __CLASS__, 'order_button_text' ], 20 );
 		add_filter( 'option_woocommerce_subscriptions_order_button_text', [ __CLASS__, 'order_button_text' ], 9 );
 
-		// The modal checkout buys one of a product unless somebody vouches for a
-		// different quantity, and a switch that leaves the line item's own quantity
-		// alone is asking for exactly that (see vouch_switch_quantity()).
 		add_filter( 'newspack_blocks_modal_checkout_quantity', [ __CLASS__, 'vouch_switch_quantity' ], 10, 3 );
 
 		// Link-triggered modal rendering.
@@ -151,13 +148,11 @@ class Subscriptions_Tiers {
 	 *
 	 * The modal checkout adds the chosen product at a quantity of one unless a
 	 * plugin vouches for another, so a tier change on a multi-quantity line item
-	 * would otherwise rewrite it down to one. The picker submits that quantity as
-	 * a hidden field for exactly this reason (see `render_form()`).
+	 * would otherwise rewrite it down to one.
 	 *
-	 * Only a quantity that matches the line item being switched is vouched for:
-	 * carrying a number over is not a request to buy more of anything, which is
-	 * what makes it safe to honour from a request that needs no nonce. Raising the
-	 * count is a seat change, and belongs to whoever sells seats.
+	 * Only a quantity matching the line item being switched is vouched for, which
+	 * is what makes it safe to honour from a request that needs no nonce. Raising
+	 * the count is a seat change, and belongs to whoever sells seats.
 	 *
 	 * @param null|int $vouched    The quantity vouched for so far, or null.
 	 * @param int      $product_id Product the quantity is for (variation preferred).
@@ -216,7 +211,7 @@ class Subscriptions_Tiers {
 		}
 		foreach ( self::$switch_subscription_links as $switch_data ) {
 			// The canonical ID, so a tiered plan is judged on the variation the reader
-			// holds. Per-seat meta lives on the variation, and asking about the parent
+			// holds: per-seat meta lives on the variation, and asking about the parent
 			// would print no modal behind a switch link this class already rendered.
 			$switchable_id = function_exists( 'wcs_get_canonical_product_id' )
 				? wcs_get_canonical_product_id( $switch_data['item'] )
@@ -236,10 +231,8 @@ class Subscriptions_Tiers {
 			} elseif ( $product->get_parent_id() ) {
 				$parent_product = wc_get_product( $product->get_parent_id() );
 			} elseif ( 'subscription' === $product->get_type() ) {
-				// A simple subscription stands alone — it is the only tier it offers,
-				// and render_form() renders a single-tier form for it. Reaching here
-				// means something declared it switchable (a per-seat group plan does),
-				// so it gets the same modal every other switch link gets.
+				// A simple subscription is the only tier it offers, and reaching here
+				// means something declared it switchable (a per-seat group plan does).
 				$parent_product = $product;
 			}
 			if ( ! $parent_product ) {
@@ -589,7 +582,7 @@ class Subscriptions_Tiers {
 		$should_render_description = ! defined( 'NEWSPACK_DISABLE_SUBSCRIPTION_DESCRIPTION' ) || ! NEWSPACK_DISABLE_SUBSCRIPTION_DESCRIPTION;
 		$description               = $product->get_description();
 
-		// Each tier carries its own seat bounds so the form's single seats field can
+		// Each tier publishes its own seat bounds so the form's single seats field can
 		// follow whichever one is checked. A tier with no attributes here sells no
 		// seats, which is what tells the field to hide and stop submitting.
 		$seats = Group_Subscription_Seats::get_field_args( $product );
@@ -771,11 +764,9 @@ class Subscriptions_Tiers {
 
 		// Seat bounds belong to the tier being bought, not to the reader's current
 		// one: two per-seat tiers can sell different minimums, and a flat tier sells
-		// no seats at all. Each card publishes its own bounds (see
-		// render_product_card()) and the field below follows whichever tier is
-		// checked. Every product here is concrete — get_tiers_by_frequency() expands
-		// a variable subscription into its variations, which is where per-seat meta
-		// lives for those.
+		// no seats at all. Every product here is concrete — get_tiers_by_frequency()
+		// expands a variable subscription into its variations, which is where
+		// per-seat meta lives for those.
 		$line_product   = $switch_data ? $switch_data['item']->get_product() : null;
 		$line_seats     = $line_product ? Group_Subscription_Seats::get_field_args( $line_product ) : null;
 		$selected_seats = $selected_product ? Group_Subscription_Seats::get_field_args( $selected_product ) : null;
@@ -795,26 +786,21 @@ class Subscriptions_Tiers {
 			}
 		}
 
-		// One page can hold several of these forms -- print_switch_subscription_link_modal()
-		// prints one modal per switch link -- so the input's id has to be unique or the
-		// labels all point at the first one. Keyed by what identifies the form: the line
-		// item being switched, or the product being bought.
+		// One page can hold several of these forms -- one modal per switch link -- so
+		// the input's id has to be unique or the labels all point at the first one.
 		$seats_input_id = 'newspack-group-seats-' . ( $switch_data
 			? 'item-' . absint( $switch_data['item_id'] )
 			: 'product-' . ( $product ? absint( $product->get_id() ) : 0 ) );
 
 		// A group can never shrink below the people already in it, so the field's floor
 		// is whichever is higher: the plan's minimum, or the seats in use. Enforced on
-		// the server either way (see Group_Subscription_Seats::get_quantity_error()),
-		// but a spinner that will not go below the number is a better answer than an
-		// error after the fact.
+		// the server either way (see Group_Subscription_Seats::get_quantity_error()).
 		$seats_floor = $switch_data ? Group_Subscription_Seats::get_occupancy( $switch_data['subscription'] ) : 0;
 
 		// A group that already holds more seats than its own plan now sells keeps them:
-		// the maximum bounds what may be bought, not what has been, so a publisher
-		// lowering it does not leave those owners without a submittable seat count.
-		// Only on the plan they already hold — moving to a different tier is buying
-		// that tier, and its maximum binds.
+		// the maximum bounds what may be bought, not what has been. Only on the plan
+		// they already hold — moving to a different tier is buying that tier, and its
+		// maximum binds.
 		$line_product_id  = $line_product ? $line_product->get_id() : 0;
 		$staying_on_plan  = $line_product_id && $selected_product && $line_product_id === $selected_product->get_id();
 		$seats_ceiling    = $staying_on_plan && $line_seats && $line_quantity ? $line_quantity : 0;
@@ -913,11 +899,10 @@ class Subscriptions_Tiers {
 				</p>
 				<?php
 			elseif ( $line_quantity ) :
-				// None of the offered tiers sells seats, so there is no seats field to
-				// submit the count -- but the line item being switched may still hold more
-				// than one, and the modal checkout buys one of a product unless something
-				// vouches for another. vouch_switch_quantity() vouches for exactly this
-				// number, and nothing raises it.
+				// No tier here sells seats, so there is no seats field to submit the
+				// count -- but the line item being switched may still hold more than
+				// one, and the modal checkout buys one unless vouch_switch_quantity()
+				// vouches for this exact number.
 				?>
 				<input type="hidden" name="quantity" value="<?php echo esc_attr( $line_quantity ); ?>">
 			<?php endif; ?>
@@ -1209,8 +1194,8 @@ class Subscriptions_Tiers {
 		// switch. Only an explicitly submitted quantity counts as deliberate: the tiers
 		// modal always submits one when the target tier can carry seats, so an absent
 		// quantity is not a seat change, and reading it as one would skip the product
-		// and amount checks below for exactly the crafted-request and no-JavaScript
-		// cases this backstop exists for.
+		// and amount checks below for the crafted-request and no-JavaScript cases this
+		// backstop exists for.
 		$line_quantity = max( 1, (int) $line_item->get_quantity() );
 		if ( isset( $_REQUEST['quantity'] ) && absint( wp_unslash( $_REQUEST['quantity'] ) ) !== $line_quantity ) {
 			return null;

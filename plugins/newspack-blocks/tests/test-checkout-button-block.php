@@ -241,9 +241,6 @@ class CheckoutButtonBlockTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 	 * silently never learn that a tiered plan sells seats.
 	 */
 	public function test_seats_rest_field_registers_on_products_and_variations() {
-		if ( ! function_exists( '\Newspack_Blocks\Checkout_Button\register_seats_rest_field' ) ) {
-			$this->markTestSkipped( 'Seats REST field not loaded.' );
-		}
 		\Newspack_Blocks\Checkout_Button\register_seats_rest_field();
 
 		\Newspack\Group_Subscription_Seats::$stub_per_seat_product_ids = [ 51 ];

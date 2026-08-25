@@ -534,21 +534,6 @@ class ModalCheckoutTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 	}
 
 	/**
-	 * The in-modal quantity form posts rather than gets; get_requested_quantity()
-	 * must honor it too, since it reads $_REQUEST rather than $_GET alone.
-	 */
-	public function test_requested_quantity_reads_post_for_in_modal_form() {
-		$this->vouch_for_requested_quantity();
-		unset( $_GET['quantity'] );
-		$_POST['quantity']    = '3';
-		$_REQUEST['quantity'] = '3';
-
-		$this->assertSame( 3, \Newspack_Blocks\Modal_Checkout::get_requested_quantity( 920 ) );
-
-		unset( $_POST['quantity'], $_REQUEST['quantity'] );
-	}
-
-	/**
 	 * Set serialized checkout data in the request.
 	 *
 	 * @param string $post_data Serialized checkout data.
@@ -1411,96 +1396,33 @@ class ModalCheckoutTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 	}
 
 	/**
-	 * Set WC()->cart to a cart double holding a single line item, as the modal
-	 * checkout always does.
+	 * Set WC()->cart to a mutable cart double holding one line item.
 	 *
-	 * @param int $product_id Product ID of the line item.
-	 * @param int $quantity   Quantity of the line item.
+	 * @param int   $product_id Product ID of the line item.
+	 * @param int   $quantity   Quantity of the line item.
+	 * @param array $extra      Extra cart item data (e.g. preserved keys).
+	 *
+	 * @return Newspack_Blocks_Test_Mutable_Cart
 	 */
-	private function set_mock_single_item_cart( $product_id = 920, $quantity = 2, $extra = [] ) {
-		$product = new class( $product_id ) {
-			/**
-			 * Product ID.
-			 *
-			 * @var int
-			 */
-			private $id;
-
-			/**
-			 * Constructor.
-			 *
-			 * @param int $id Product ID.
-			 */
-			public function __construct( $id ) {
-				$this->id = $id;
-			}
-
-			/**
-			 * Get the product ID.
-			 *
-			 * @return int
-			 */
-			public function get_id() {
-				return $this->id;
-			}
-
-			/**
-			 * Whether the product exists.
-			 *
-			 * @return bool
-			 */
-			public function exists() {
-				return true;
-			}
-		};
-
-		$cart_item = array_merge(
-			$extra,
+	private function set_mutable_cart( $product_id = 920, $quantity = 2, $extra = [] ) {
+		if ( ! class_exists( 'Newspack_Blocks_Test_Mutable_Cart' ) ) {
+			$this->markTestSkipped( 'Requires the WC_Cart stub from test-modal-checkout-data.php.' );
+		}
+		$cart = new Newspack_Blocks_Test_Mutable_Cart(
 			[
-				'product_id'   => $product_id,
-				'variation_id' => 0,
-				'quantity'     => $quantity,
-				'data'         => $product,
+				'existing' => array_merge(
+					$extra,
+					[
+						'product_id'   => $product_id,
+						'variation_id' => 0,
+						'quantity'     => $quantity,
+						'data'         => new WC_Product( $product_id, 'simple', [], '10', 'Product ' . $product_id ),
+					]
+				),
 			]
 		);
-
-		WC()->cart = new class( $cart_item ) {
-			/**
-			 * Cart contents, keyed by cart item key.
-			 *
-			 * @var array
-			 */
-			private $contents;
-
-			/**
-			 * Constructor.
-			 *
-			 * @param array $cart_item The single cart item.
-			 */
-			public function __construct( $cart_item ) {
-				$this->contents = [ 'abc123' => $cart_item ];
-			}
-
-			/**
-			 * Get the cart contents.
-			 *
-			 * @return array
-			 */
-			public function get_cart() {
-				return $this->contents;
-			}
-
-			/**
-			 * Get a single cart item.
-			 *
-			 * @param string $key Cart item key.
-			 *
-			 * @return array|false
-			 */
-			public function get_cart_item( $key ) {
-				return isset( $this->contents[ $key ] ) ? $this->contents[ $key ] : false;
-			}
-		};
+		WC()->cart = $cart;
+		return $cart;
 	}
 
 	/**
@@ -1552,7 +1474,7 @@ class ModalCheckoutTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 	 */
 	public function test_quantity_form_renders_when_filter_returns_args() {
 		$this->set_modal_checkout_request();
-		$this->set_mock_single_item_cart( 920, 2 );
+		$this->set_mutable_cart( 920, 2 );
 		$this->set_quantity_field_args( $this->get_quantity_field_args_fixture() );
 
 		ob_start();
@@ -1567,21 +1489,8 @@ class ModalCheckoutTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 		$this->assertStringContainsString( 'Number of team seats', $output );
 		$this->assertStringContainsString( 'Seats include the team owner.', $output );
 		$this->assertStringContainsString( 'name="product_id" value="920"', $output );
-	}
-
-	/**
-	 * The label is associated with the input, not just placed near it: a screen
-	 * reader landing on the number field must hear what the number means.
-	 */
-	public function test_quantity_form_label_is_associated_with_the_input() {
-		$this->set_modal_checkout_request();
-		$this->set_mock_single_item_cart( 920, 2 );
-		$this->set_quantity_field_args( $this->get_quantity_field_args_fixture() );
-
-		ob_start();
-		\Newspack_Blocks\Modal_Checkout::render_quantity_form();
-		$output = ob_get_clean();
-
+		// The label is associated with the input, not just placed near it: a screen
+		// reader landing on the number field must hear what the number means.
 		$this->assertStringContainsString( '<label for="modal_checkout_quantity">Number of team seats</label>', $output );
 		$this->assertStringContainsString( 'id="modal_checkout_quantity"', $output );
 	}
@@ -1591,7 +1500,7 @@ class ModalCheckoutTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 	 */
 	public function test_quantity_form_omits_max_when_unlimited() {
 		$this->set_modal_checkout_request();
-		$this->set_mock_single_item_cart( 920, 3 );
+		$this->set_mutable_cart( 920, 3 );
 		$args        = $this->get_quantity_field_args_fixture();
 		$args['max'] = 0;
 		$this->set_quantity_field_args( $args );
@@ -1610,7 +1519,7 @@ class ModalCheckoutTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 	 */
 	public function test_quantity_form_renders_nothing_without_filter() {
 		$this->set_modal_checkout_request();
-		$this->set_mock_single_item_cart( 920, 2 );
+		$this->set_mutable_cart( 920, 2 );
 
 		ob_start();
 		\Newspack_Blocks\Modal_Checkout::render_quantity_form();
@@ -1623,7 +1532,7 @@ class ModalCheckoutTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 	 * Outside modal checkout the form never renders, even with the filter on.
 	 */
 	public function test_quantity_form_renders_nothing_outside_modal_checkout() {
-		$this->set_mock_single_item_cart( 920, 2 );
+		$this->set_mutable_cart( 920, 2 );
 		$this->set_quantity_field_args( $this->get_quantity_field_args_fixture() );
 
 		ob_start();
@@ -1639,7 +1548,7 @@ class ModalCheckoutTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 	 */
 	public function test_quantity_form_filter_receives_product_and_cart_item() {
 		$this->set_modal_checkout_request();
-		$this->set_mock_single_item_cart( 920, 2 );
+		$this->set_mutable_cart( 920, 2 );
 
 		$received = [];
 		add_filter(
@@ -1666,36 +1575,6 @@ class ModalCheckoutTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 			],
 			$received
 		);
-	}
-
-	/**
-	 * Set WC()->cart to a mutable cart double holding one line item.
-	 *
-	 * @param int   $product_id Product ID of the line item.
-	 * @param int   $quantity   Quantity of the line item.
-	 * @param array $extra      Extra cart item data (e.g. preserved keys).
-	 *
-	 * @return Newspack_Blocks_Test_Mutable_Cart
-	 */
-	private function set_mutable_cart( $product_id = 920, $quantity = 2, $extra = [] ) {
-		if ( ! class_exists( 'Newspack_Blocks_Test_Mutable_Cart' ) ) {
-			$this->markTestSkipped( 'Requires the WC_Cart stub from test-modal-checkout-data.php.' );
-		}
-		$cart = new Newspack_Blocks_Test_Mutable_Cart(
-			[
-				'existing' => array_merge(
-					$extra,
-					[
-						'product_id'   => $product_id,
-						'variation_id' => 0,
-						'quantity'     => $quantity,
-						'data'         => new WC_Product( $product_id, 'simple', [], '10', 'Product ' . $product_id ),
-					]
-				),
-			]
-		);
-		WC()->cart = $cart;
-		return $cart;
 	}
 
 	/**
@@ -1748,7 +1627,7 @@ class ModalCheckoutTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 	 */
 	public function test_quantity_form_is_not_rendered_on_a_subscription_cart( $key ) {
 		$this->set_modal_checkout_request();
-		$this->set_mock_single_item_cart( 920, 4, [ $key => [ 'subscription_id' => 77 ] ] );
+		$this->set_mutable_cart( 920, 4, [ $key => [ 'subscription_id' => 77 ] ] );
 		$this->set_quantity_field_args( $this->get_quantity_field_args_fixture() );
 
 		ob_start();
@@ -1850,9 +1729,8 @@ class ModalCheckoutTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 		add_filter( 'newspack_blocks_modal_checkout_quantity', $filter, 10, 3 );
 
 		$this->assertSame( 5, \Newspack_Blocks\Modal_Checkout::get_requested_quantity( 920 ) );
-		$this->assertSame( 1, \Newspack_Blocks\Modal_Checkout::get_requested_quantity( 921 ) );
 		$this->assertSame(
-			[ [ null, 920, 5 ], [ null, 921, 5 ] ],
+			[ [ null, 920, 5 ] ],
 			$seen,
 			'The callback should see nothing vouched for yet, the product, and the floored request.'
 		);

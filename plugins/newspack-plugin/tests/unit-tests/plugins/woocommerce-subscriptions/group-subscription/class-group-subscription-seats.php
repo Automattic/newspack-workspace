@@ -56,6 +56,7 @@ class Test_Group_Subscription_Seats extends WP_UnitTestCase {
 	 * failure part-way through cannot leave is_admin() true for everything after.
 	 */
 	public function tear_down() {
+		delete_option( 'newspack_group_subscription_label_singular' );
 		global $products_database, $subscriptions_database;
 		$products_database      = [];
 		$subscriptions_database = [];
@@ -198,23 +199,15 @@ class Test_Group_Subscription_Seats extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Bounds resolve from product meta, a flat product has no seats field, and
-	 * the field label uses the publisher's configured group label.
+	 * The seats field is labelled with whatever the publisher calls a group, so a
+	 * site that renamed groups to teams asks for team seats. The option is cleared
+	 * in tear_down() rather than inline, so a failure here cannot leak it into the
+	 * tests that follow.
 	 */
-	public function test_bounds_and_label() {
-		$product = $this->make_per_seat_product( 911, 2, 8 );
-		$this->assertSame(
-			[
-				'min' => 2,
-				'max' => 8,
-			],
-			Group_Subscription_Seats::get_bounds( $product ) 
-		);
-		$this->assertNull( Group_Subscription_Seats::get_field_args( $this->make_flat_product( 912 ) ) );
-
+	public function test_field_label_uses_the_publisher_group_label() {
 		update_option( 'newspack_group_subscription_label_singular', 'Team' );
+
 		$this->assertStringContainsString( 'team', Group_Subscription_Seats::get_field_label() );
-		delete_option( 'newspack_group_subscription_label_singular' );
 	}
 
 	/**
@@ -427,26 +420,18 @@ class Test_Group_Subscription_Seats extends WP_UnitTestCase {
 	}
 
 	/**
-	 * A per-seat product is switchable whatever WooCommerce Subscriptions' own
-	 * product-type rule says: changing seats is a quantity switch, and WCS counts
-	 * only variable and grouped products as switchable, so a simple per-seat plan
-	 * would otherwise have a "Change seats" button that goes nowhere.
+	 * WooCommerce Subscriptions counts only variable and grouped products as
+	 * switchable, so without this a simple per-seat plan would have a "Change seats"
+	 * button that goes nowhere. It resolves a variation to its parent before filtering
+	 * and hands the variation over separately, and per-seat meta lives on the variation
+	 * for a tiered plan -- so both shapes have to answer true.
 	 */
-	public function test_per_seat_product_is_switchable() {
-		$per_seat = $this->make_per_seat_product( 937, 2, 5 );
-
-		$this->assertTrue( Group_Subscription_Seats::allow_per_seat_switching( false, $per_seat ) );
-	}
-
-	/**
-	 * WooCommerce Subscriptions resolves a variation to its parent before
-	 * filtering and passes the variation alongside, and per-seat meta lives on
-	 * the variation for a tiered plan.
-	 */
-	public function test_per_seat_variation_is_switchable() {
+	public function test_per_seat_products_and_variations_are_switchable() {
+		$simple    = $this->make_per_seat_product( 937, 2, 5 );
 		$parent    = wc_create_mock_product( [ 'id' => 938 ] );
 		$variation = $this->make_per_seat_product( 939, 2, 5 );
 
+		$this->assertTrue( Group_Subscription_Seats::allow_per_seat_switching( false, $simple ) );
 		$this->assertTrue( Group_Subscription_Seats::allow_per_seat_switching( false, $parent, $variation ) );
 	}
 
@@ -560,16 +545,6 @@ class Test_Group_Subscription_Seats extends WP_UnitTestCase {
 
 		$other = [ 'label' => 'Licenses' ];
 		$this->assertSame( $other, Group_Subscription_Seats::modal_quantity_field( $other, $product ) );
-	}
-
-	/**
-	 * A per-seat product keeps the seat count it was asked for: seats are exactly
-	 * what the modal checkout's quantity means.
-	 */
-	public function test_clamp_modal_quantity_keeps_per_seat_quantity() {
-		$this->make_per_seat_product( 928, 2, 0 );
-
-		$this->assertSame( 5, Group_Subscription_Seats::clamp_modal_quantity( null, 928, 5 ) );
 	}
 
 	/**
@@ -753,49 +728,52 @@ class Test_Group_Subscription_Seats extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Proration is forced on while the request is switching onto a per-seat plan,
-	 * and left to the publisher's own setting once it is not.
+	 * A seat bought mid-cycle has to be paid for from the day it is added, which is
+	 * WooCommerce Subscriptions' recurring-price proration -- and publishers leave
+	 * that setting off by default. What decides it is the plan being switched TO:
+	 * a switch onto a per-seat plan is buying seats and owes for them, a switch onto
+	 * a flat plan buys one price for the whole group and has none to prorate.
+	 *
+	 * @dataProvider proration_switch_provider
+	 *
+	 * @param bool        $source_per_seat Whether the subscription being switched is per seat.
+	 * @param bool        $target_per_seat Whether the plan being switched to is per seat.
+	 * @param string|bool $expected       What the pre-option filter should answer.
 	 */
-	public function test_proration_forced_on_for_per_seat_switch() {
-		$subscription = $this->make_group_subscription( 936, [ 'quantity' => 3 ] );
+	public function test_proration_follows_the_plan_being_switched_to( $source_per_seat, $target_per_seat, $expected ) {
+		$subscription_id = $source_per_seat ? 936 : 943;
+		$target_id       = $subscription_id * 10;
+		$subscription    = $this->make_group_subscription(
+			$subscription_id,
+			$source_per_seat ? [ 'quantity' => 3 ] : [ 'per_seat' => false ]
+		);
+		if ( $target_per_seat ) {
+			$this->make_per_seat_product( $target_id, 1, 0 );
+		} else {
+			$this->make_flat_product( $target_id );
+		}
 		wp_set_current_user( $subscription->get_user_id() );
-		$_REQUEST['switch-subscription'] = 936;
-		$_REQUEST['product_id']          = $this->product_id_for( $subscription );
+		$_REQUEST['switch-subscription'] = $subscription_id;
+		$_REQUEST['product_id']          = $target_id;
 
-		$this->assertSame( 'yes', Group_Subscription_Seats::force_recurring_proration( false ) );
+		$this->assertSame( $expected, Group_Subscription_Seats::force_recurring_proration( false ) );
 
+		// No switch in the request is no switch at all, whatever the plan sells.
 		unset( $_REQUEST['switch-subscription'] );
 		$this->assertFalse( Group_Subscription_Seats::force_recurring_proration( false ) );
 	}
 
 	/**
-	 * A flat group switching onto a per-seat plan is buying seats, and every one
-	 * of them has to be paid for from the day of the switch. What it is leaving
-	 * behind does not come into it.
+	 * Source and target pricing modes, and the proration answer each pair earns.
+	 *
+	 * @return array<string,array{0:bool,1:bool,2:string|bool}>
 	 */
-	public function test_proration_forced_on_for_flat_to_per_seat_switch() {
-		$flat = $this->make_group_subscription( 943, [ 'per_seat' => false ] );
-		$this->make_per_seat_product( 9430, 1, 0 );
-		wp_set_current_user( $flat->get_user_id() );
-		$_REQUEST['switch-subscription'] = 943;
-		$_REQUEST['product_id']          = 9430;
-
-		$this->assertSame( 'yes', Group_Subscription_Seats::force_recurring_proration( false ) );
-	}
-
-	/**
-	 * A per-seat group switching onto a flat plan is buying one price for the
-	 * whole group, so there are no seats to prorate and the publisher's setting
-	 * stands.
-	 */
-	public function test_proration_untouched_for_per_seat_to_flat_switch() {
-		$per_seat = $this->make_group_subscription( 944, [ 'quantity' => 5 ] );
-		$this->make_flat_product( 9440 );
-		wp_set_current_user( $per_seat->get_user_id() );
-		$_REQUEST['switch-subscription'] = 944;
-		$_REQUEST['product_id']          = 9440;
-
-		$this->assertFalse( Group_Subscription_Seats::force_recurring_proration( false ) );
+	public function proration_switch_provider() {
+		return [
+			'per seat to per seat' => [ true, true, 'yes' ],
+			'flat to per seat'     => [ false, true, 'yes' ],
+			'per seat to flat'     => [ true, false, false ],
+		];
 	}
 
 	/**

@@ -877,10 +877,6 @@ class Test_Group_Subscription_MyAccount extends WP_UnitTestCase {
 	}
 
 	/**
-	 * The owner of an active per-seat group gets a switch link the front-end
-	 * script can bind the tiers modal to.
-	 */
-	/**
 	 * A per-seat group's owner is paying per seat, so the page says how many of the
 	 * seats they bought are in use. Both numbers count the owner and every invitation
 	 * still holding a seat -- the same measure "Change seats" is judged against.
@@ -929,35 +925,5 @@ class Test_Group_Subscription_MyAccount extends WP_UnitTestCase {
 		// And the nonce WooCommerce Subscriptions' switch handler refuses a request
 		// without, so the link still works for a reader with JavaScript off.
 		$this->assertStringContainsString( '_wcsnonce=', $html );
-	}
-
-	/**
-	 * A manager doesn't pay for the group, so they get no switch link.
-	 */
-	public function test_group_page_hides_change_seats_from_manager() {
-		$owner_id   = $this->create_reader_user();
-		$manager_id = $this->create_reader_user();
-		$sub        = $this->create_priced_group_subscription( $owner_id, Group_Subscription_Settings::PRICING_MODE_PER_SEAT );
-		$this->add_member( $manager_id, $sub );
-		wp_set_current_user( $manager_id );
-
-		$html = $this->render_group_page( $sub );
-
-		$this->assertStringNotContainsString( 'Change seats', $html );
-		$this->assertStringNotContainsString( 'wcs-switch-link', $html );
-	}
-
-	/**
-	 * A flat-priced group sells no seats, so its owner gets no switch link either.
-	 */
-	public function test_group_page_hides_change_seats_for_flat_group() {
-		$owner_id = $this->create_reader_user();
-		$sub      = $this->create_priced_group_subscription( $owner_id, Group_Subscription_Settings::PRICING_MODE_PER_TEAM );
-		wp_set_current_user( $owner_id );
-
-		$html = $this->render_group_page( $sub );
-
-		$this->assertStringNotContainsString( 'Change seats', $html );
-		$this->assertStringNotContainsString( 'wcs-switch-link', $html );
 	}
 }

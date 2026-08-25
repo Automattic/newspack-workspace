@@ -54,20 +54,28 @@ final class Modal_Checkout {
 	 *
 	 * WC_Cart has no "change this line item's quantity, keep everything else"
 	 * path that also re-runs the add-to-cart guards, so the item is emptied and
-	 * re-added. Anything the original add attached to the item — the name-your-
-	 * price amount, and the prompt/gate attribution the Data Events layer reads
-	 * back out at checkout — would be lost without this.
+	 * re-added. Anything the original add attached to it — the name-your-price
+	 * amount, the prompt/gate attribution the Data Events layer reads back at
+	 * checkout — would be lost without this.
 	 *
 	 * @var string[]
 	 */
+	const PRESERVED_CART_ITEM_KEYS = [
+		'nyp',
+		'base_price',
+		'referer',
+		'gate_post_id',
+		'newspack_popup_id',
+		'prompt_title',
+	];
+
 	/**
 	 * Cart item keys by which WooCommerce Subscriptions marks a cart it built to
 	 * change or take payment for a subscription the reader already has. Each is
 	 * written from the request that started it, so a cart rebuilt without that
 	 * request loses it -- and the checkout then raises a new subscription instead.
 	 *
-	 * Taken from the `$cart_item_key` property of the WooCommerce Subscriptions
-	 * class that sets each one.
+	 * Taken from the `$cart_item_key` property of the class that sets each one.
 	 *
 	 * @var string[]
 	 */
@@ -76,15 +84,6 @@ final class Modal_Checkout {
 		'subscription_renewal',
 		'subscription_resubscribe',
 		'subscription_initial_payment',
-	];
-
-	const PRESERVED_CART_ITEM_KEYS = [
-		'nyp',
-		'base_price',
-		'referer',
-		'gate_post_id',
-		'newspack_popup_id',
-		'prompt_title',
 	];
 
 	/**
@@ -409,9 +408,7 @@ final class Modal_Checkout {
 	/**
 	 * Seats (line-item quantity) requested when the modal checkout is opened.
 	 * Reads $_GET and $_POST, since a Checkout Button sends its default seats as a
-	 * query argument and the tier picker posts them as a form field. A missing or
-	 * malformed value means one, which clamp_quantity() then hands to whichever
-	 * plugin owns the product's quantity rules.
+	 * query argument and the tier picker posts them as a form field.
 	 *
 	 * @param int $product_id Product the quantity is for (variation preferred), 0 when unknown.
 	 *
@@ -427,9 +424,7 @@ final class Modal_Checkout {
 	/**
 	 * Floor a quantity at one and let the product's owner clamp it further.
 	 *
-	 * The modal checkout knows nothing about what a given product may be sold in
-	 * multiples of; the plugin that turned the quantity field on for it does. This
-	 * is the one place a requested quantity becomes the quantity actually added to
+	 * The one place a requested quantity becomes the quantity actually added to
 	 * the cart, so every path shares one rule: the initial request via
 	 * get_requested_quantity(), and the in-modal seats form via
 	 * update_cart_quantity().
@@ -448,10 +443,8 @@ final class Modal_Checkout {
 		 * and `newspack_checkout=1` needs no nonce, so on its own it is the caller's
 		 * claim about how many of something to charge for — which is what makes a
 		 * crafted link a multiplier on the price. Answering this filter is how a
-		 * plugin that owns the product's quantity rules vouches for one: it may
-		 * return the requested quantity, hold it to bounds the product is sold
-		 * within, or raise it to a minimum. Null — nobody has claimed this product —
-		 * means one, whatever the request asked for.
+		 * plugin that owns the product's quantity rules vouches for one. Null —
+		 * nobody has claimed this product — means one, whatever the request asked for.
 		 *
 		 * @param null|int $vouched    The quantity to use, or null for the default of one.
 		 * @param int      $product_id Product the quantity is for (variation preferred), 0 when unknown.
@@ -861,9 +854,9 @@ final class Modal_Checkout {
 	 *
 	 * WC_Cart offers no "change this quantity and re-run the add-to-cart guards"
 	 * path, so the item is emptied and re-added. That makes the rejected case
-	 * dangerous: an add_to_cart() a guard turned down would leave the cart empty,
-	 * and WooCommerce answers update_order_review on an empty cart by replacing
-	 * the whole checkout form with a "your session has expired" notice
+	 * dangerous: an add_to_cart() a guard turned down leaves the cart empty, and
+	 * WooCommerce answers update_order_review on an empty cart by replacing the
+	 * whole checkout form with a "your session has expired" notice
 	 * (WC_AJAX::update_order_review_expired()). So a rejection puts the reader's
 	 * original line item back before it reports anything.
 	 *
@@ -889,11 +882,9 @@ final class Modal_Checkout {
 			}
 			// WooCommerce Subscriptions writes these onto the cart item from the request
 			// that started the switch, renewal, resubscribe or first payment, and this
-			// rebuild has no such request behind it. Re-adding would drop the record, and
-			// the checkout would raise a second full-price subscription while the one the
-			// reader meant to pay for or change stays as it was. The seat count for a
-			// switch is chosen in the tier picker, which submits the whole switch again,
-			// so there is nothing to lose by refusing here.
+			// rebuild has no such request behind it. Re-adding would drop the record and
+			// raise a second full-price subscription at checkout. A switch chooses its
+			// seat count in the tier picker, which submits the whole switch again.
 			foreach ( self::WCS_SUBSCRIPTION_CART_ITEM_KEYS as $wcs_key ) {
 				if ( ! empty( $cart_item[ $wcs_key ] ) ) {
 					return new \WP_Error(
@@ -981,15 +972,14 @@ final class Modal_Checkout {
 		$quantity   = filter_input( INPUT_POST, 'quantity', FILTER_SANITIZE_NUMBER_INT );
 
 		// A missing quantity is a malformed request. "0" is a real value the floor
-		// below handles, so it must not be mistaken for an absent one: filter_input()
-		// returns a string when the field is present, and null when it is not.
+		// below handles, so it must not be mistaken for an absent one.
 		if ( ! $product_id || ! is_string( $quantity ) || '' === $quantity ) {
 			return;
 		}
 
-		// The real bounds check belongs to whoever hooked the field filter, and it
-		// runs inside add_to_cart(). This only keeps a 0 or negative from reaching
-		// the cart as a silent item removal.
+		// The real bounds check belongs to whoever hooked the field filter and runs
+		// inside add_to_cart(). This only keeps a 0 or negative from reaching the
+		// cart as a silent item removal.
 		$quantity = max( 1, (int) $quantity );
 
 		$result = self::update_cart_quantity( (int) $product_id, $quantity );
@@ -1006,7 +996,7 @@ final class Modal_Checkout {
 				// update_order_review only returns the review-order table and payment-box
 				// fragments, so the #modal-checkout-product-details data carrier — which
 				// sits outside the checkout form and feeds the GA4 events — would keep
-				// reporting the page-load quantity. Hand the JS a fresh payload for it.
+				// reporting the page-load quantity.
 				'checkout_data' => Checkout_Data::get_checkout_data( \WC()->cart ),
 			]
 		);
@@ -2790,8 +2780,7 @@ final class Modal_Checkout {
 	 *
 	 * The modal is single-quantity by default, and stays that way unless a
 	 * consumer of the field filter below returns arguments for this product.
-	 * Nothing here knows what the quantity means — the label and bounds all come
-	 * from the filter.
+	 * The label and bounds all come from the filter.
 	 */
 	public static function render_quantity_form() {
 		if ( ! self::is_modal_checkout() || ! function_exists( 'WC' ) || ! \WC()->cart ) {
@@ -2806,16 +2795,15 @@ final class Modal_Checkout {
 		}
 
 		$cart = \WC()->cart;
-		// Line-item count, not get_cart_contents_count(): the latter sums quantities,
-		// so a multi-seat purchase would fail this guard and hide its own field.
+		// Line-item count, not get_cart_contents_count(): that sums quantities, so a
+		// multi-seat purchase would fail this guard and hide its own field.
 		if ( 1 !== count( $cart->get_cart() ) ) {
 			return;
 		}
 		$cart_item_key = array_key_first( $cart->get_cart() );
 		$cart_item     = $cart->get_cart_item( $cart_item_key );
 		$product       = isset( $cart_item['data'] ) ? $cart_item['data'] : null;
-		// The filter's consumers are handed this product to decide on, so bail
-		// rather than pass them something they cannot ask anything of.
+		// The filter's consumers are handed this product to decide on.
 		if ( ! $product || ! method_exists( $product, 'get_id' ) ) {
 			return;
 		}

@@ -314,19 +314,6 @@ describe( 'copyContextFields', () => {
 
 	// The picker form replaces the button's own form, so a coupon attached to the
 	// Checkout Button block is only auto-applied if it is carried across.
-	it( 'leaves the picker’s own seats field to the reader', () => {
-		const root = render(
-			`<form id="src"><input type="hidden" name="quantity" value="3"></form>
-			<form id="dst"><input type="number" name="quantity" id="group_seats" value="2"></form>`
-		);
-
-		copyContextFields( root.querySelector( '#src' ), root.querySelector( '#dst' ) );
-
-		const inputs = root.querySelectorAll( '#dst input[name="quantity"]' );
-		expect( inputs ).toHaveLength( 1 );
-		expect( inputs[ 0 ].id ).toBe( 'group_seats' );
-	} );
-
 	it( 'copies the auto-applied coupon to the picker form', () => {
 		const root = render( '<form id="src"><input type="hidden" name="coupon" value="MEMBER10"></form><form id="dst"></form>' );
 

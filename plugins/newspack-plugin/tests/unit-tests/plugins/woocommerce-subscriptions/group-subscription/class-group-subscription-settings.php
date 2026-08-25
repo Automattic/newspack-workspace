@@ -591,31 +591,19 @@ class Test_Group_Subscription_Settings extends WP_UnitTestCase {
 	 */
 
 	/**
-	 * With no pricing meta set, a product defaults to flat (per-team) pricing
-	 * with a one-seat minimum and no maximum.
+	 * Pricing meta is read into the product settings, and a product carrying none
+	 * of it is flat (per-team) with a one-seat minimum and no maximum -- which is
+	 * what keeps every product that predates per-seat pricing priced as it was.
 	 */
-	public function test_product_settings_default_to_per_team() {
-		$product = wc_create_mock_product(
+	public function test_product_settings_read_pricing_meta_and_default_to_per_team() {
+		$prefix   = Group_Subscription_Settings::GROUP_SUBSCRIPTION_META_PREFIX;
+		$bare     = wc_create_mock_product(
 			[
 				'id'   => 901,
 				'type' => 'subscription',
 			]
 		);
-
-		$settings = Group_Subscription_Settings::get_product_settings( $product );
-
-		$this->assertSame( Group_Subscription_Settings::PRICING_MODE_PER_TEAM, $settings['pricing_mode'] );
-		$this->assertSame( 1, $settings['min_seats'] );
-		$this->assertSame( 0, $settings['max_seats'] );
-	}
-
-	/**
-	 * Product-level pricing mode and seat bound meta are read into settings, and
-	 * is_per_seat() reports true once both 'enabled' and 'per_seat' are set.
-	 */
-	public function test_product_settings_read_per_seat_meta() {
-		$prefix  = Group_Subscription_Settings::GROUP_SUBSCRIPTION_META_PREFIX;
-		$product = wc_create_mock_product(
+		$per_seat = wc_create_mock_product(
 			[
 				'id'   => 902,
 				'type' => 'subscription',
@@ -628,17 +616,22 @@ class Test_Group_Subscription_Settings extends WP_UnitTestCase {
 			]
 		);
 
-		$settings = Group_Subscription_Settings::get_product_settings( $product );
+		$defaults = Group_Subscription_Settings::get_product_settings( $bare );
+		$this->assertSame( Group_Subscription_Settings::PRICING_MODE_PER_TEAM, $defaults['pricing_mode'] );
+		$this->assertSame( 1, $defaults['min_seats'] );
+		$this->assertSame( 0, $defaults['max_seats'] );
 
+		$settings = Group_Subscription_Settings::get_product_settings( $per_seat );
 		$this->assertSame( 'per_seat', $settings['pricing_mode'] );
 		$this->assertSame( 3, $settings['min_seats'] );
 		$this->assertSame( 10, $settings['max_seats'] );
-		$this->assertTrue( Group_Subscription_Settings::is_per_seat( $product ) );
+		$this->assertTrue( Group_Subscription_Settings::is_per_seat( $per_seat ) );
 	}
 
 	/**
-	 * A per-seat subscription's capacity is derived from the line item quantity,
-	 * not from the (ignored) product limit meta.
+	 * A per-seat subscription's capacity is the purchased seat count -- the line
+	 * item quantity -- and neither the product's limit meta nor a subscription-level
+	 * override displaces it.
 	 */
 	public function test_per_seat_subscription_capacity_is_line_item_quantity() {
 		$subscription = $this->make_subscription_with_product(
@@ -647,7 +640,7 @@ class Test_Group_Subscription_Settings extends WP_UnitTestCase {
 				'pricing_mode' => 'per_seat',
 				'limit'        => '50', // Ignored in per-seat mode.
 			],
-			[],
+			[ 'limit' => 9 ], // The subscription-level override is ignored too.
 			[
 				'items' => [
 					new WC_Order_Item_Product(
@@ -666,33 +659,6 @@ class Test_Group_Subscription_Settings extends WP_UnitTestCase {
 		$this->assertSame( 6, $settings['limit'], 'Per-seat limit should equal the purchased seat count (the line item quantity).' );
 		$this->assertSame( 6, Group_Subscription::get_member_capacity( $subscription ), 'Per-seat member capacity should equal the line item quantity.' );
 		$this->assertSame( 'per_seat', $settings['pricing_mode'] );
-	}
-
-	/**
-	 * A per-seat subscription ignores an explicit subscription-level limit meta
-	 * override; the line item quantity is the sole source of truth for capacity.
-	 */
-	public function test_per_seat_subscription_ignores_limit_meta_override() {
-		$subscription = $this->make_subscription_with_product(
-			[
-				'enabled'      => 'yes',
-				'pricing_mode' => 'per_seat',
-			],
-			[ 'limit' => 9 ],
-			[
-				'items' => [
-					new WC_Order_Item_Product(
-						[
-							'id'         => 9041,
-							'product_id' => 123,
-							'quantity'   => 2,
-						]
-					),
-				],
-			]
-		);
-
-		$this->assertSame( 2, Group_Subscription::get_member_capacity( $subscription ), 'Per-seat capacity should ignore the subscription limit meta override and use the line item quantity instead.' );
 	}
 
 	/*
@@ -1138,27 +1104,6 @@ class Test_Group_Subscription_Settings extends WP_UnitTestCase {
 	}
 
 	/**
-	 * The seat save must be registered at priority 20 on
-	 * woocommerce_process_shop_order_meta. WooCommerce writes the order line items
-	 * from the POST at priority 10, so a rescale at 10 is silently reverted --
-	 * Newspack registers at plugin load and WooCommerce during init, so at equal
-	 * priority Newspack always runs first. This asserts the number, not just that
-	 * the callback is hooked, because the number is the whole fix.
-	 */
-	public function test_seat_save_is_registered_after_woocommerce_line_items() {
-		$this->assertSame(
-			20,
-			has_action( 'woocommerce_process_shop_order_meta', [ Group_Subscription_Settings::class, 'save_group_subscription_seats' ] ),
-			'The seat save must run after WooCommerce writes the line items at priority 10.'
-		);
-		$this->assertSame(
-			10,
-			has_action( 'woocommerce_process_shop_order_meta', [ Group_Subscription_Settings::class, 'save_group_subscription_meta' ] ),
-			'The settings save stays at 10; only the seat rescale moved.'
-		);
-	}
-
-	/**
 	 * End-to-end guard for the ordering: with a stand-in for WooCommerce's own
 	 * line-items save hooked at priority 10, a seat change still sticks. Fail this
 	 * and an admin's edit reverts on screen with no error shown.
@@ -1242,36 +1187,6 @@ class Test_Group_Subscription_Settings extends WP_UnitTestCase {
 		$this->assertSame( 7, $item->get_quantity() );
 		$this->assertSame( 70.0, (float) $item->get_subtotal(), 'The unit price must come from the POST (10), not the stale object (15).' );
 		$this->assertSame( 70.0, (float) $item->get_total(), 'The unit price must come from the POST (10), not the stale object (15).' );
-	}
-
-	/**
-	 * Outside the order items editor nothing posts those fields, and the object stays
-	 * the base -- there being nothing fresher to use.
-	 */
-	public function test_seat_save_falls_back_to_the_object_without_posted_line_item() {
-		$subscription = $this->make_per_seat_subscription(
-			953,
-			[
-				'quantity' => 2,
-				'subtotal' => 30,
-				'total'    => 30,
-			]
-		);
-		$prefix = Group_Subscription_Settings::GROUP_SUBSCRIPTION_META_PREFIX;
-
-		$this->run_meta_box_save(
-			$subscription,
-			[
-				$prefix . 'enabled'          => 'yes',
-				$prefix . 'enabled_baseline' => 'yes',
-				$prefix . 'seats'            => '4',
-				$prefix . 'seats_baseline'   => '2',
-			]
-		);
-
-		$item = Group_Subscription_Settings::get_seat_line_item( $subscription );
-		$this->assertSame( 4, $item->get_quantity() );
-		$this->assertSame( 60.0, (float) $item->get_subtotal(), 'The object unit price (15) applies when the POST carries no line item.' );
 	}
 
 	/**

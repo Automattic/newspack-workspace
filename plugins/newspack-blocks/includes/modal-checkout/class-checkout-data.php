@@ -385,22 +385,21 @@ final class Checkout_Data {
 		} else {
 			// An order's amount is a line subtotal already scaled by quantity; a
 			// product's or cart item's is a per-unit price, so scale it here instead.
-			// Skipping the multiply at quantity 1 keeps every pre-existing single-seat
-			// path byte-identical: get_price() returns a string, and the multiply would
-			// hand a float to consumers that have always seen the string.
+			// The quantity-1 short circuit is load-bearing: get_price() returns a
+			// string, and multiplying would hand a float to consumers that have only
+			// ever seen the string.
 			$line_amount              = ( $source instanceof \WC_Order || 1 === $quantity ) ? $amount : (float) $amount * $quantity;
 			$data['amount']           = $line_amount;
 			// Only a cart or order line item has a real seat count to report. For a
-			// bare product source, the block's hidden field (or a reader's later
-			// in-modal edit) is the source of truth: omitting the key here — instead
-			// of hardcoding 1 — keeps getCheckoutData()'s JSON-wins merge in utils.js
-			// from overwriting that real value with a stale default.
+			// bare product source the block's hidden field is the source of truth, so
+			// omitting the key — rather than hardcoding 1 — keeps getCheckoutData()'s
+			// JSON-wins merge in utils.js from overwriting it with a stale default.
 			if ( $source instanceof \WC_Cart || $source instanceof \WC_Order ) {
 				$data['quantity'] = $quantity;
 			}
-			// An order line's subtotal already carries the sign-up fee for every unit --
-			// WooCommerce Subscriptions folds the fee into the unit price when it prices
-			// the line -- so the summary must not scale the fee a second time for it.
+			// WooCommerce Subscriptions folds the sign-up fee into the unit price when
+			// it prices an order line, so its subtotal already carries the fee for
+			// every unit and the summary must not scale it a second time.
 			$summary_quantity         = $source instanceof \WC_Order ? 1 : $quantity;
 			$data['price_summary']    = self::get_price_summary( $name, $line_amount, $recurrence, $variation_id ? $variation_id : $product_id, $summary_quantity );
 			$data['summary_template'] = self::get_price_summary( $name, '{{PRICE}}', $recurrence, $variation_id ? $variation_id : $product_id, $summary_quantity );

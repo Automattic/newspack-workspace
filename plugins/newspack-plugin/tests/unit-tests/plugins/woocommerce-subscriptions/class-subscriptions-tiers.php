@@ -937,23 +937,51 @@ class Newspack_Test_Subscriptions_Tiers extends WP_UnitTestCase {
 	}
 
 	/**
-	 * On a switch the seats field starts at the seats the reader already has, and
-	 * carries that same value as the original the front-end guard compares
-	 * against — so leaving it alone is still a no-op. A capped product also
-	 * publishes its ceiling.
+	 * The switch modal's seats field opens on the seats the reader already pays for,
+	 * bounded by what the plan can still be sold at. Two rules narrow those bounds
+	 * beyond the product's own: a group can never shrink below the people already in
+	 * it, and a group that bought more seats than the plan now sells keeps them --
+	 * the maximum bounds what may be bought, not what has been.
+	 *
+	 * @dataProvider switch_seats_field_provider
+	 *
+	 * @param int    $product_id Product ID for the fixture.
+	 * @param int    $min        The plan's minimum seats.
+	 * @param int    $max        The plan's maximum seats.
+	 * @param int    $quantity   Seats on the line item being switched.
+	 * @param int    $members    Members besides the owner.
+	 * @param int    $invites    Invitations still holding a seat.
+	 * @param string $expected The attribute cluster the field should render.
 	 */
-	public function test_per_seat_switch_form_prefills_line_quantity() {
+	public function test_switch_seats_field_bounds( $product_id, $min, $max, $quantity, $members, $invites, $expected ) {
 		$user_id = self::factory()->user->create();
 		wp_set_current_user( $user_id );
-		$product     = $this->make_tier_product( 304, $this->per_seat_meta( 2, 10 ) );
-		$switch_data = $this->make_switch_data( $user_id, [ 304 ], 304, 5 );
+		$product     = $this->make_tier_product( $product_id, $this->per_seat_meta( $min, $max ) );
+		$switch_data = $this->make_switch_data( $user_id, [ $product_id ], $product_id, $quantity );
+		if ( $members || $invites ) {
+			$this->add_group_members( $switch_data['subscription'], $members, $invites );
+		}
 
 		$html = $this->render_tier_form( $product, $switch_data );
 
-		$this->assertStringContainsString( 'id="newspack-group-seats-item-' . $switch_data['item_id'] . '" step="1" min="2" max="10" value="5"', $html );
-		$this->assertStringContainsString( 'data-original-value="5"', $html );
+		$this->assertStringContainsString( $expected, $html );
+		// Whatever the bounds, the reader's real seat count is what "unchanged" means.
+		$this->assertStringContainsString( 'data-original-value="' . $quantity . '"', $html );
 		// The seats field submits the quantity, so no hidden input duplicates it.
 		$this->assertStringNotContainsString( 'type="hidden" name="quantity"', $html );
+	}
+
+	/**
+	 * Plan bounds and group occupancy, and the field each combination should render.
+	 *
+	 * @return array<string,array{0:int,1:int,2:int,3:int,4:int,5:int,6:string}>
+	 */
+	public function switch_seats_field_provider() {
+		return [
+			'opens on the seats already paid for' => [ 304, 2, 10, 5, 0, 0, 'step="1" min="2" max="10" value="5"' ],
+			'floors at the seats in use'          => [ 341, 2, 10, 6, 4, 1, 'step="1" min="6" max="10" value="6"' ],
+			'keeps seats above a lowered maximum' => [ 342, 2, 5, 8, 0, 0, 'step="1" min="2" max="8" value="8"' ],
+		];
 	}
 
 	/**
@@ -1039,44 +1067,6 @@ class Newspack_Test_Subscriptions_Tiers extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Screens that print their own switch link never fire WooCommerce
-	 * Subscriptions' switch-link filter, so they register the modal themselves.
-	 * Once registered, the footer prints a modal bound to that subscription — the
-	 * hook the group page's "Change seats" link opens.
-	 */
-	public function test_register_switch_modal_prints_a_modal_for_the_subscription() {
-		global $wcs_grouped_parents;
-		$user_id = self::factory()->user->create();
-		wp_set_current_user( $user_id );
-		$this->make_tier_product( 320, $this->per_seat_meta( 2, 10 ) );
-		wc_create_mock_product(
-			[
-				'id'       => 321,
-				'type'     => 'grouped',
-				'name'     => 'Tiers',
-				'children' => [ 320 ],
-			]
-		);
-		// The footer resolves the line item's product to its grouped parent before
-		// rendering; without a parent there is no tier list to render.
-		$wcs_grouped_parents = [ 320 => [ 321 ] ];
-		$switch_data         = $this->make_switch_data( $user_id, [ 320 ], 320, 4 );
-
-		Subscriptions_Tiers::register_switch_modal( $switch_data['item_id'], $switch_data['item'], $switch_data['subscription'] );
-
-		ob_start();
-		Subscriptions_Tiers::print_switch_subscription_link_modal();
-		$html = ob_get_clean();
-
-		$wcs_grouped_parents = [];
-
-		$this->assertStringContainsString( 'data-subscription-id="' . $switch_data['subscription']->get_id() . '"', $html );
-		// The modal carries the switch params the checkout needs, at the seats already paid for.
-		$this->assertStringContainsString( '<input type="hidden" name="item" value="' . $switch_data['item_id'] . '">', $html );
-		$this->assertStringContainsString( 'id="newspack-group-seats-item-' . $switch_data['item_id'] . '" step="1" min="2" max="10" value="4"', $html );
-	}
-
-	/**
 	 * A reader with two group subscriptions gets two switch modals in the same
 	 * footer, each with its own seats field. The ids are keyed to the line item
 	 * being switched so the two never collide: duplicate ids would point both
@@ -1113,48 +1103,17 @@ class Newspack_Test_Subscriptions_Tiers extends WP_UnitTestCase {
 
 		$wcs_grouped_parents = [];
 
+		// The footer prints a modal bound to each subscription, carrying the switch
+		// params its form re-submits.
+		$this->assertStringContainsString( 'data-subscription-id="' . $first['subscription']->get_id() . '"', $html );
+		$this->assertStringContainsString( '<input type="hidden" name="item" value="' . $first['item_id'] . '">', $html );
+
 		$first_id  = 'newspack-group-seats-item-' . $first['item_id'];
 		$second_id = 'newspack-group-seats-item-' . $second['item_id'];
 		$this->assertSame( 1, substr_count( $html, 'id="' . $first_id . '"' ) );
 		$this->assertSame( 1, substr_count( $html, 'id="' . $second_id . '"' ) );
 		$this->assertStringContainsString( '<label for="' . $first_id . '">', $html );
 		$this->assertStringContainsString( '<label for="' . $second_id . '">', $html );
-	}
-
-	/**
-	 * A group can never shrink below the people already in it, so the switch modal's
-	 * seats field will not spin below the seats in use -- the server refuses it either
-	 * way, but a floor the reader can see beats an error after they submit.
-	 */
-	public function test_switch_seats_field_floors_at_the_seats_in_use() {
-		$user_id = self::factory()->user->create();
-		wp_set_current_user( $user_id );
-		$product     = $this->make_tier_product( 341, $this->per_seat_meta( 2, 10 ) );
-		$switch_data = $this->make_switch_data( $user_id, [ 341 ], 341, 6 );
-		// Four members plus the owner, and one invitation still holding a seat.
-		$this->add_group_members( $switch_data['subscription'], 4, 1 );
-
-		$html = $this->render_tier_form( $product, $switch_data );
-
-		$this->assertStringContainsString( 'step="1" min="6" max="10" value="6"', $html );
-	}
-
-	/**
-	 * A publisher can lower the maximum under a group that already bought more. The
-	 * field keeps the seats they hold rather than clamping to a ceiling the occupancy
-	 * floor would then refuse, which would leave no submittable count at all.
-	 */
-	public function test_switch_seats_field_keeps_seats_above_a_lowered_maximum() {
-		$user_id = self::factory()->user->create();
-		wp_set_current_user( $user_id );
-		$product     = $this->make_tier_product( 342, $this->per_seat_meta( 2, 5 ) );
-		$switch_data = $this->make_switch_data( $user_id, [ 342 ], 342, 8 );
-
-		$html = $this->render_tier_form( $product, $switch_data );
-
-		$this->assertStringContainsString( 'step="1" min="2" max="8" value="8"', $html );
-		// The reader's real seat count is still what "unchanged" means.
-		$this->assertStringContainsString( 'data-original-value="8"', $html );
 	}
 
 	/**

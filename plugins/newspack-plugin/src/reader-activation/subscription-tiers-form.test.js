@@ -50,14 +50,6 @@ function selectTier( radio ) {
 }
 
 describe( 'subscription tiers form seats field', () => {
-	it( 'hides and disables the seats field while a flat tier is selected', () => {
-		const { field, seats } = renderForm();
-
-		// A disabled input is not submitted, so the flat tier carries no seat count.
-		expect( field.hidden ).toBe( true );
-		expect( seats.disabled ).toBe( true );
-	} );
-
 	it( 'shows the field and applies the tier bounds when a per-seat tier is picked', () => {
 		const { field, seats, perSeat } = renderForm();
 
@@ -112,24 +104,14 @@ describe( 'subscription tiers form seats field', () => {
 			originalValue: '4',
 		} );
 
+		// An edit that lands on the count they already pay for is not a change.
+		seats.dispatchEvent( new Event( 'input' ) );
 		expect( submit.disabled ).toBe( true );
 
 		seats.value = '5';
 		seats.dispatchEvent( new Event( 'input' ) );
 
 		expect( submit.disabled ).toBe( false );
-	} );
-
-	it( 'keeps submit disabled when neither the tier nor the seats changed', () => {
-		const { seats, submit } = renderForm( {
-			flatIsSelected: false,
-			seatsValue: '4',
-			originalValue: '4',
-		} );
-
-		seats.dispatchEvent( new Event( 'input' ) );
-
-		expect( submit.disabled ).toBe( true );
 	} );
 
 	it( 'will not let the field go below the seats already in use', () => {

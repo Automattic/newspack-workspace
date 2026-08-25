@@ -383,9 +383,9 @@ class Group_Subscription_Settings {
 		$settings['enabled'] = '' !== $enabled_meta ? \wc_string_to_bool( $enabled_meta ) : $settings['enabled']; // Empty string means the meta is unset; any other value, including 'no' or false, is a real override.
 		$settings['limit']   = '' !== $limit_meta ? (int) $limit_meta : $settings['limit']; // Empty string means the meta is unset; any other value, including '0', is a real override.
 
-		// The subscription-level limit override above is a flat-mode concept; in per-seat
-		// mode the purchased seat count (the line item quantity) is the sole source of
-		// truth for capacity, so it replaces whatever the override just computed.
+		// The subscription-level limit override above is a flat-mode concept; in
+		// per-seat mode the purchased seat count is the only source of truth for
+		// capacity, so it replaces whatever the override just computed.
 		if ( self::PRICING_MODE_PER_SEAT === $settings['pricing_mode'] ) {
 			$seat_item         = self::get_seat_line_item( $subscription );
 			$settings['limit'] = $seat_item ? (int) $seat_item->get_quantity() : 0;
@@ -460,10 +460,9 @@ class Group_Subscription_Settings {
 	 *
 	 * The owner-facing way to buy or drop seats is the WooCommerce Subscriptions
 	 * switch, which prices the change and takes payment. This is the support-side
-	 * correction for the times that is the wrong answer -- a goodwill seat, a
-	 * miscounted order -- so it rescales the existing line item in place on the
-	 * same subscription rather than raising an order. It keeps the floor the
-	 * switch guard applies: seats can never fall below the people already in them.
+	 * correction -- a goodwill seat, a miscounted order -- so it rescales the
+	 * existing line item in place rather than raising an order. It keeps the floor
+	 * the switch guard applies: seats never fall below the people already in them.
 	 *
 	 * @param \WC_Subscription|int $subscription The subscription object or ID.
 	 * @param int                  $seats        The new seat count, including the owner.
@@ -481,9 +480,8 @@ class Group_Subscription_Settings {
 			);
 		}
 		// A group is never smaller than its owner, so anything below one seat is a
-		// one-seat group rather than an error. The meta box can only ever submit a
-		// non-negative number (its save handler runs the value through absint), so
-		// this floor is for direct callers.
+		// one-seat group rather than an error. The meta box can only submit a
+		// non-negative number, so this floor is for direct callers.
 		$seats     = max( 1, (int) $seats );
 		$occupancy = Group_Subscription_Seats::get_occupancy( $subscription );
 		if ( $seats < $occupancy ) {
@@ -498,7 +496,7 @@ class Group_Subscription_Settings {
 			);
 		}
 		// Rescale from the current unit price rather than the product's, so a
-		// discounted or manually-edited line keeps the price the customer agreed to.
+		// discounted or hand-edited line keeps the price the customer agreed to.
 		$old_quantity  = max( 1, (int) $item->get_quantity() );
 		$unit_subtotal = (float) $item->get_subtotal() / $old_quantity;
 		$unit_total    = (float) $item->get_total() / $old_quantity;
@@ -510,9 +508,9 @@ class Group_Subscription_Settings {
 		$item->set_subtotal( round( $unit_subtotal * $seats, $decimals ) );
 		$item->set_total( round( $unit_total * $seats, $decimals ) );
 		$item->save();
-		// WC_Abstract_Order::calculate_totals() rolls the line items up into the
-		// subscription total. Guarded because the subscription can be any object
-		// WCS hands back, and older versions did not always expose it.
+		// Rolls the line items up into the subscription total. Guarded because the
+		// subscription can be any object WCS hands back, and older versions did not
+		// always expose it.
 		if ( method_exists( $subscription, 'calculate_totals' ) ) {
 			$subscription->calculate_totals();
 		}
@@ -753,9 +751,9 @@ class Group_Subscription_Settings {
 					<?php
 					if ( self::is_per_seat( $subscription ) ) {
 						// Capacity in per-seat mode is the purchased seat count, so there is no
-						// limit to override: the admin edits the seat count itself, and the save
-						// handler rescales the line item. The min is only a hint for the browser;
-						// set_seat_quantity() is what actually refuses a cut below occupancy.
+						// limit to override: the admin edits the seat count itself. The min is
+						// only a browser hint; set_seat_quantity() is what refuses a cut below
+						// occupancy.
 						$occupied_seats = Group_Subscription_Seats::get_occupancy( $subscription );
 						\woocommerce_wp_text_input(
 							[
@@ -955,22 +953,15 @@ class Group_Subscription_Settings {
 	/**
 	 * Apply an admin seat-count change from the meta box.
 	 *
-	 * Deliberately a separate callback at priority 20, not part of
-	 * save_group_subscription_meta() at 10. WooCommerce saves the order line items
-	 * on this very hook at priority 10 (`WC_Meta_Box_Order_Items::save`, registered
-	 * by `Automattic\WooCommerce\Internal\Admin\Orders\Edit::add_save_meta_boxes()`),
-	 * and `wc_save_order_items()` rewrites every item's quantity, subtotal and total
-	 * from the POST. The subscription edit screen submits those fields on every save
-	 * whether or not the admin ever opened the line items panel, and WooCommerce
-	 * Subscriptions does not unhook that callback. Newspack registers at plugin-load
-	 * time and WooCommerce during `init`, so at equal priority Newspack always runs
-	 * first -- a rescale done at 10 would be reverted by WooCommerce moments later,
-	 * with no error and the old seat count back on screen.
-	 *
-	 * 20 puts the rescale after that save and still ahead of
-	 * `WC_Meta_Box_Order_Downloads::save` (30) and `WC_Meta_Box_Order_Data::save`
-	 * (40), so anything reading the subscription total sees the new one. Do not
-	 * lower this priority.
+	 * Priority 20 is load-bearing, and a separate callback from
+	 * save_group_subscription_meta() at 10 for that reason. WooCommerce saves the
+	 * order line items on this same hook at priority 10
+	 * (`WC_Meta_Box_Order_Items::save`), and `wc_save_order_items()` rewrites every
+	 * item's quantity, subtotal and total from the POST -- on every save of the
+	 * subscription edit screen, whether or not the admin opened the line items
+	 * panel. A rescale at 10 would be reverted moments later with no error. 20 is
+	 * still ahead of `WC_Meta_Box_Order_Downloads::save` (30) and
+	 * `WC_Meta_Box_Order_Data::save` (40). Do not lower it.
 	 *
 	 * Running second means the line item we hold may be a handle taken before
 	 * WooCommerce wrote to it, so the rescale is re-based on the POST first --
@@ -994,8 +985,7 @@ class Group_Subscription_Settings {
 
 		// A per-seat group renders the seat count in place of the limit field, and its
 		// capacity lives on the line item rather than in meta, so an edit rescales the
-		// subscription instead of writing an override. Same baseline rule as the
-		// settings: a field the admin never touched is not a change.
+		// subscription instead of writing an override.
 		if ( ! isset( $_POST[ $prefix . 'seats' ], $_POST[ $prefix . 'seats_baseline' ] ) ) {
 			return;
 		}
@@ -1015,8 +1005,8 @@ class Group_Subscription_Settings {
 		self::sync_seat_line_item_from_post( $subscription );
 		$seat_result = self::set_seat_quantity( $subscription, $submitted_seats );
 		// WooCommerce collects meta-box errors here and prints them on the next screen
-		// load; without it a refused change would just spring back with no explanation.
-		// Guarded because this class also runs outside wp-admin.
+		// load; without it a refused change springs back with no explanation. Guarded
+		// because this class also runs outside wp-admin.
 		if ( is_wp_error( $seat_result ) && class_exists( '\WC_Admin_Meta_Boxes' ) ) {
 			\WC_Admin_Meta_Boxes::add_error( $seat_result->get_error_message() );
 		}
@@ -1026,23 +1016,19 @@ class Group_Subscription_Settings {
 	 * Re-base the seat line item on what WooCommerce just wrote from this same POST.
 	 *
 	 * The rescale divides the line's existing money by its existing quantity to get a
-	 * unit price, so the numbers it starts from have to be the current ones. Running
-	 * at priority 20 means `wc_save_order_items()` has already written the line item
-	 * at priority 10, but it did so through its own freshly loaded copy: the handle
-	 * this callback holds can still carry the values from before that write. Dividing
-	 * stale money by a stale quantity yields the wrong unit price, and the seat count
-	 * would come out right at the wrong price -- the failure is silent, because
-	 * nothing about the result looks malformed.
+	 * unit price, so it has to start from current numbers. `wc_save_order_items()`
+	 * wrote the line item at priority 10 through its own freshly loaded copy, so the
+	 * handle this callback holds can still carry pre-write values -- and dividing
+	 * stale money by a stale quantity yields the wrong unit price silently.
 	 *
 	 * So the POST is the base, not the object. These are the same three keys
 	 * `wc_save_order_items()` reads (`wc-admin-functions.php`), and the values go to
-	 * the same setters WooCommerce hands them to, raw: `set_subtotal()`/`set_total()`
-	 * run `wc_format_decimal()` themselves, which is what parses the localised price
-	 * the items table submits ("1.234,56"). Parsing it a second way here would be a
-	 * second chance to disagree with WooCommerce.
+	 * the same setters raw: `set_subtotal()`/`set_total()` run `wc_format_decimal()`
+	 * themselves, which is what parses the localised price the items table submits
+	 * ("1.234,56").
 	 *
-	 * Fields absent -- any context that is not the order items editor, including the
-	 * tests -- leaves the object as the base, which is then the freshest thing there is.
+	 * Fields absent -- any context that is not the order items editor -- leaves the
+	 * object as the base.
 	 *
 	 * @param \WC_Subscription $subscription The subscription being saved.
 	 */
