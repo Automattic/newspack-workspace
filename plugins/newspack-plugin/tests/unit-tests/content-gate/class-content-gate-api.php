@@ -424,4 +424,84 @@ class Newspack_Test_Content_Gate_API extends WP_UnitTestCase {
 			'A caller who cannot edit the gate must not learn from the response code what it stores.'
 		);
 	}
+
+	/**
+	 * The other route to a gate that grants everyone: enable an options-backed
+	 * rule on a site with nothing to select, touch nothing, save. The rule seeds
+	 * with its `[]` default, which is a well-formed "no constraint" value, and
+	 * `Institution::evaluate()` returns true for it. An active gate must not save
+	 * in that state.
+	 */
+	public function test_active_custom_access_rejects_an_options_backed_rule_with_nothing_selected() {
+		$sanitized_gate = Content_Gate_API::sanitize_gate(
+			[
+				'custom_access' => [
+					'active'       => true,
+					'access_rules' => [
+						[
+							[
+								'slug'  => 'institution',
+								'value' => [],
+							],
+						],
+					],
+				],
+			]
+		);
+		$this->assertWPError( $sanitized_gate );
+		$this->assertSame( 'empty_access_rule_value', $sanitized_gate->get_error_code() );
+	}
+
+	/**
+	 * The same rule set is fine while custom access is off — that is a gate being
+	 * configured, not one letting everyone through.
+	 */
+	public function test_inactive_custom_access_accepts_a_rule_with_nothing_selected() {
+		$sanitized_gate = Content_Gate_API::sanitize_gate(
+			[
+				'custom_access' => [
+					'active'       => false,
+					'access_rules' => [
+						[
+							[
+								'slug'  => 'institution',
+								'value' => [],
+							],
+						],
+					],
+				],
+			]
+		);
+		$this->assertNotWPError( $sanitized_gate );
+		$this->assertSame( [], $sanitized_gate['custom_access']['access_rules'][0][0]['value'] );
+	}
+
+	/**
+	 * The escape hatch: a gate already stored in that state can be switched off.
+	 * Turning custom access off is the operator's way out, so it must not be the
+	 * one save the guard refuses.
+	 */
+	public function test_a_gate_storing_an_unselected_rule_can_have_custom_access_switched_off() {
+		$gate_id = Content_Gate::create_gate( [ 'title' => 'Half-configured gate' ] );
+		Content_Gate::update_custom_access_settings(
+			$gate_id,
+			[
+				'active'       => true,
+				'access_rules' => [
+					[
+						[
+							'slug'  => 'institution',
+							'value' => [],
+						],
+					],
+				],
+			]
+		);
+		$stored_gate                             = Content_Gate::get_gate( $gate_id );
+		$stored_gate['custom_access']['active']  = false;
+
+		$switched_off = Content_Gate_API::sanitize_gate( $stored_gate );
+		$this->assertNotWPError( $switched_off );
+		$this->assertFalse( $switched_off['custom_access']['active'] );
+	}
 }

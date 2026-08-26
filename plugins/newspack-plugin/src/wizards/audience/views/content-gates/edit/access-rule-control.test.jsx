@@ -18,7 +18,11 @@ import AccessRuleControl from './access-rule-control';
 import registerWizardStore from '../../../../../../packages/components/src/wizard/store';
 
 jest.mock( '../../../../../../packages/components/src', () => ( {
-	FormTokenField: ( { description } ) => <div data-testid="token-picker">{ description }</div>,
+	FormTokenField: ( { description, disabled } ) => (
+		<div data-testid="token-picker" data-disabled={ String( !! disabled ) }>
+			{ description }
+		</div>
+	),
 } ) );
 jest.mock( '@wordpress/api-fetch', () => jest.fn( () => Promise.resolve( [] ) ) );
 
@@ -46,6 +50,16 @@ describe( 'Access rule control', () => {
 
 		expect( screen.getByTestId( 'token-picker' ) ).toHaveTextContent( 'Springfield University' );
 		expect( screen.getByTestId( 'token-picker' ) ).toHaveTextContent( 'grants no access' );
+	} );
+
+	it( 'disables the picker and says why when the rule has nothing to select', () => {
+		// The seeded default is an empty array, which evaluates as "no constraint" —
+		// so an interactive picker with no options offers the publisher exactly one
+		// expressible answer, and it opens the gate.
+		renderControl( 'institution', { name: 'Institutional access', has_options: true, options: [] }, [] );
+
+		expect( screen.getByTestId( 'token-picker' ) ).toHaveAttribute( 'data-disabled', 'true' );
+		expect( screen.getByTestId( 'token-picker' ) ).toHaveTextContent( 'grants access to everyone' );
 	} );
 
 	it( 'renders the free-text box only for a rule that declares no options source', () => {

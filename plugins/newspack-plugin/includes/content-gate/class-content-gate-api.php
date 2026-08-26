@@ -142,6 +142,9 @@ class Content_Gate_API {
 		}
 		if ( isset( $gate['custom_access'] ) ) {
 			$sanitized_custom_access = self::sanitize_custom_access( $gate['custom_access'] );
+			if ( ! is_wp_error( $sanitized_custom_access ) ) {
+				$sanitized_custom_access = self::reject_unselected_options_backed_rules( $gate, $sanitized_custom_access, $gate_id );
+			}
 			if ( is_wp_error( $sanitized_custom_access ) ) {
 				if ( ! self::save_leaves_rules_unenforced( $gate, $sanitized, $gate_id ) || ! self::access_rules_are_unchanged( $gate, $gate_id ) ) {
 					// As a REST `sanitize_callback` return value, the error fails the
@@ -163,6 +166,56 @@ class Content_Gate_API {
 			$sanitized['content_rules_match'] = in_array( $gate['content_rules_match'], [ 'all', 'any' ], true ) ? $gate['content_rules_match'] : 'all';
 		}
 		return $sanitized;
+	}
+
+	/**
+	 * Reject an active gate whose options-backed rule has nothing selected.
+	 *
+	 * An empty value is well-formed: it means "no constraint", so the rule
+	 * evaluates true for every reader and the gate stops restricting anything.
+	 * That is reachable without typing a character — enabling a rule seeds it with
+	 * the `[]` default, and on a site with no institutions published, or no
+	 * subscription products, the picker has nothing else to offer.
+	 *
+	 * Only while custom access is active. A gate being configured may hold a rule
+	 * the operator has not filled in yet.
+	 *
+	 * @param array $gate                    The gate as it arrived in the request.
+	 * @param array $sanitized_custom_access The sanitized custom access settings.
+	 * @param int   $gate_id                 The gate's ID, or 0 when it is being created.
+	 *
+	 * @return array|\WP_Error The settings unchanged, or an error naming the rule.
+	 */
+	private static function reject_unselected_options_backed_rules( $gate, $sanitized_custom_access, $gate_id ) {
+		if ( ! isset( $sanitized_custom_access['access_rules'] ) ) {
+			return $sanitized_custom_access;
+		}
+		// A request that doesn't carry `active` isn't changing it, so the stored
+		// value decides whether the gate is currently letting readers through.
+		$is_active = $sanitized_custom_access['active']
+			?? ( Content_Gate::get_custom_access_settings( $gate_id )['active'] ?? false );
+		if ( ! $is_active ) {
+			return $sanitized_custom_access;
+		}
+
+		$registered_rules = Access_Rules::get_registered_rules();
+		foreach ( $sanitized_custom_access['access_rules'] as $group ) {
+			foreach ( $group as $rule ) {
+				if ( empty( $registered_rules[ $rule['slug'] ]['has_options'] ) || [] !== $rule['value'] ) {
+					continue;
+				}
+				return new \WP_Error(
+					'empty_access_rule_value',
+					sprintf(
+						/* translators: %s: the access rule's name, e.g. "Institutional access". */
+						__( 'Select at least one option for the “%s” access rule, or turn the rule off. Left empty, it grants access to everyone.', 'newspack-plugin' ),
+						$registered_rules[ $rule['slug'] ]['name']
+					),
+					[ 'status' => 400 ]
+				);
+			}
+		}
+		return $sanitized_custom_access;
 	}
 
 	/**
