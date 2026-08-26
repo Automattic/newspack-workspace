@@ -2213,8 +2213,8 @@ class Test_Integrations extends \WP_UnitTestCase {
 	 * Mailchimp DD/MM/YYYY value silently landing eleven months wrong).
 	 */
 	public function test_normalize_date_value_without_format_requires_iso_shape() {
-		// Returned verbatim rather than misread American-first. (The ISO-shaped
-		// happy paths are already pinned by test_normalize_date_value.)
+		// Returned verbatim rather than misread American-first. The ISO-shaped
+		// happy paths are already pinned by test_normalize_date_value.
 		$this->assertSame( '03/04/2026', Date_Value::normalize( '03/04/2026' ) );
 	}
 

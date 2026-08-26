@@ -2805,7 +2805,7 @@ final class Newspack_Newsletters_Mailchimp extends \Newspack_Newsletters_Service
 		if ( in_array( $type, [ 'dropdown', 'radio' ], true ) ) {
 			$value_type = 'select';
 		} elseif ( 'date' === $type ) {
-			$value_type        = 'date';
+			$value_type = 'date';
 			// Probed rather than assumed: on an older newspack-plugin the operator
 			// would travel to newspack-popups unvalidated, where a stale build
 			// crashes on it (see integrations_supports_date_range()).

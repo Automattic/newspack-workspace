@@ -357,9 +357,7 @@ describe( 'Date range criteria input for an existing segment with a loaded "Days
 	// storage: backspacing the value to empty makes the bound ambiguous (days: 0),
 	// and chosenType must already hold the loaded direction so the selector doesn't
 	// flip to the opposite direction.
-	const wizardApiFetch = mountExistingSegment( () => [
-		{ criteria_id: 'LAST_GIFT_DATE', value: { end: { type: 'relative', days: 7 } } },
-	] );
+	const wizardApiFetch = mountExistingSegment( () => [ { criteria_id: 'LAST_GIFT_DATE', value: { end: { type: 'relative', days: 7 } } } ] );
 
 	it( 'keeps "Days from now" once the loaded value is cleared, and stores a positive offset when retyped', async () => {
 		await waitFor( () => expect( screen.getByLabelText( 'To' ) ).toHaveValue( 'future' ) );
@@ -526,9 +524,7 @@ describe( 'Date range criteria input for an existing segment with an ambiguous b
 	// fetch resolves, which is exactly the scenario the regression hit: the
 	// control first mounts with no bound at all, then re-renders once the real,
 	// ambiguous bound loads.
-	mountExistingSegment( () => [
-		{ criteria_id: 'LAST_GIFT_DATE', value: { start: { type: 'relative', days: 0 } } },
-	] );
+	mountExistingSegment( () => [ { criteria_id: 'LAST_GIFT_DATE', value: { start: { type: 'relative', days: 0 } } } ] );
 
 	it( 'renders the derived direction and value once the stored bound loads, instead of Any', async () => {
 		await waitFor( () => expect( screen.getByLabelText( 'From' ) ).toHaveValue( 'past' ) );
