@@ -97,13 +97,19 @@ class Audience_Content_Gates extends Wizard {
 			'newspackAudienceContentGates',
 			array_merge(
 				[
-					'api'                     => '/' . NEWSPACK_API_NAMESPACE . '/wizard/' . $this->slug,
-					'available_access_rules'  => Access_Rules::get_access_rules_for_client(),
-					'available_content_rules' => Content_Rules::get_content_rules(),
-					'edit_gate_layout_url'    => Content_Gate::get_edit_gate_layout_url(),
-					'presave_checks_enabled'  => Content_Gate::get_presave_checks_enabled(),
-					'default_gate_status'     => Content_Gate::get_default_new_gate_status(),
-					'feed_restriction_modes'  => Content_Gate_Advanced_Settings::get_feed_restriction_mode_options(),
+					'api'                           => '/' . NEWSPACK_API_NAMESPACE . '/wizard/' . $this->slug,
+					'available_access_rules'        => Access_Rules::get_access_rules_for_client(),
+					'available_content_rules'       => Content_Rules::get_content_rules(),
+					'edit_gate_layout_url'          => Content_Gate::get_edit_gate_layout_url(),
+					'presave_checks_enabled'        => Content_Gate::get_presave_checks_enabled(),
+					'default_gate_status'           => Content_Gate::get_default_new_gate_status(),
+					'feed_restriction_modes'        => Content_Gate_Advanced_Settings::get_feed_restriction_mode_options(),
+					// While Memberships is active it governs feeds and Access Control
+					// stands down, so the feed controls below still save but change
+					// nothing until cutover. The wizard says so rather than hiding
+					// them: the stored value is what takes effect once Memberships is
+					// deactivated. See Content_Gate_Advanced_Settings::get_feed_restriction_mode().
+					'feeds_governed_by_memberships' => Memberships::is_active(),
 				],
 				$this->get_audience_management_script_data()
 			)
