@@ -1,3 +1,10 @@
+## newspack [6.48.19](https://github.com/Automattic/newspack-workspace/compare/newspack@6.48.18...newspack@6.48.19) (2026-08-26)
+
+
+### Bug Fixes
+
+* **content-gate:** yield RSS feed restriction to WooCommerce Memberships (NPPM-3204, [#969](https://github.com/Automattic/newspack-workspace/issues/969)) ([3bebd49](https://github.com/Automattic/newspack-workspace/commit/3bebd49f57182cf572b1861a9a7c999deda425bb))
+
 ## newspack [6.48.18](https://github.com/Automattic/newspack-workspace/compare/newspack@6.48.17...newspack@6.48.18) (2026-08-25)
 
 
