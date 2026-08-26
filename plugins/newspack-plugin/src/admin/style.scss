@@ -188,6 +188,10 @@ h1 {
 		place-items: center;
 		position: absolute;
 		width: 100%;
+
+		strong {
+			font-weight: wp-vars.$font-weight-medium;
+		}
 	}
 
 	&.newspack-dashboard {
@@ -199,7 +203,7 @@ h1 {
 	}
 }
 
-.newspack-wizard__content--full-width {
+.newspack-wizard__content--full-width.newspack-wizard__content--full-width {
 	max-width: 100%;
 	padding-left: 0;
 	padding-right: 0;

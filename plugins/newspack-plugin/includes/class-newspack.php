@@ -97,6 +97,7 @@ final class Newspack {
 		include_once NEWSPACK_ABSPATH . 'includes/class-plugin-manager.php';
 		include_once NEWSPACK_ABSPATH . 'includes/class-theme-manager.php';
 		include_once NEWSPACK_ABSPATH . 'includes/class-admin-plugins-screen.php';
+		include_once NEWSPACK_ABSPATH . 'includes/class-admin-list-table-layout.php';
 		include_once NEWSPACK_ABSPATH . 'includes/reader-activation/class-reader-activation.php';
 		include_once NEWSPACK_ABSPATH . 'includes/reader-activation/class-reader-registration.php';
 		include_once NEWSPACK_ABSPATH . 'includes/reader-activation/class-reader-activation-emails.php';
@@ -159,6 +160,10 @@ final class Newspack {
 		include_once NEWSPACK_ABSPATH . 'includes/subscriber-commerce/class-subscriber-commerce.php';
 		include_once NEWSPACK_ABSPATH . 'includes/subscriber-commerce/class-product-targeting.php';
 		include_once NEWSPACK_ABSPATH . 'includes/subscriber-commerce/class-subscriber-eligibility.php';
+		include_once NEWSPACK_ABSPATH . 'includes/subscriber-commerce/class-subscriber-discounts.php';
+		include_once NEWSPACK_ABSPATH . 'includes/subscriber-commerce/class-subscriber-discounts-pricing.php';
+		include_once NEWSPACK_ABSPATH . 'includes/subscriber-commerce/class-subscriber-discounts-admin.php';
+		include_once NEWSPACK_ABSPATH . 'includes/subscriber-commerce/class-subscriber-discounts-display.php';
 		include_once NEWSPACK_ABSPATH . 'includes/subscriber-commerce/class-subscriber-only-products.php';
 		include_once NEWSPACK_ABSPATH . 'includes/subscriber-commerce/class-product-purchase-restriction.php';
 		include_once NEWSPACK_ABSPATH . 'includes/subscriber-commerce/class-subscriber-only-products-api.php';

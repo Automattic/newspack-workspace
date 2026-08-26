@@ -23,6 +23,7 @@ The framework is built on top of [Data Events](../../data-events/README.md) and 
 | `class-integration.php` | Abstract base class. Implements settings storage, metadata prefix, outgoing/incoming field selection, contact preparation, the health-check shell, and the data-event handler dispatcher. |
 | `class-esp.php` | Built-in ESP integration. Generic adapter for Newspack Newsletters (Mailchimp, ActiveCampaign, Constant Contact). |
 | `class-incoming-field.php` | Value object describing an external field returned by an integration. Carries display metadata plus flags for access rules and segmentation criteria. |
+| `class-date-value.php` | Date value helpers shared by the pull pipeline and the access-rule evaluator: source-format normalization to ISO and calendar-date validation. |
 | `class-contact-pull.php` | Pull pipeline. Per-integration synchronous loopback requests plus ActionScheduler-backed retries with exponential backoff. |
 | `class-contact-cron.php` | Recurring cron orchestration. Stages users for pull/push and processes both queues every 5 minutes. |
 
@@ -338,14 +339,19 @@ Only transient failures (network errors, provider 5xx/429) are retried. A reject
 $field = new Incoming_Field( 'membership_level', $raw );
 $field
     ->set_name( __( 'Membership Level', 'my-plugin' ) )
-    ->set_value_type( 'string' )                    // 'string' or 'boolean'.
-    ->set_matching_function( 'list__in' )           // 'default', 'list__in', 'list__not_in', 'range'.
+    ->set_value_type( 'string' )                    // 'string', 'boolean', 'number', 'date', 'datetime', 'select', or 'multiselect'.
+    ->set_matching_function( 'list__in' )           // 'default', 'list__in', 'list__not_in', 'range', 'date_range'.
+    ->set_date_format( '' )                         // PHP date format (e.g. 'm/d/Y'); empty if provider sends ISO 8601 / Y-m-d.
     ->set_options( [ [ 'value' => 'gold', 'label' => 'Gold' ], ... ] )
     ->set_description( __( 'Member tier from the CRM.', 'my-plugin' ) )
     ->set_is_access_rule( true )                    // Register as a content gate access rule.
     ->set_is_segment_criteria( true )               // Register as a popups segmentation criterion.
     ->set_access_rule_callback( function ( $user_id, $args ) { /* ... */ } );
 ```
+
+**Declare `date_format` on every `date` / `datetime` field, even when it is empty.** The raw schema array is snapshotted when a publisher enables a field, and the key's presence is how the framework tells "the provider says its dates are ISO 8601" from "this entry predates source formats, so the format is unknown". An entry set to `date_range` with the key *absent* is refreshed from the live schema on the next read; a format the live schema declares is persisted back — a one-time repair. When the live schema declares nothing either, the entry is treated as ISO for that read only and re-examined on the next one, so a declaration that arrives later (a provider update, a cache that was empty) still lands — which is also why an integration that never declares the key keeps re-fetching the live schema on every read. One that declares `''` is taken at its word and never refetched.
+
+A date value the framework cannot confidently parse is stored **untouched** rather than guessed at — the matcher then rejects it, so the criterion matches nobody rather than matching wrongly. When that happens the pull writes a line to the Newspack log naming the field and the source format it used, which is the only signal that a declared format is missing or wrong.
 
 Use `configure_incoming_field()` to enrich a field after construction — it's called on every field returned by `get_available_incoming_fields()` and again whenever stored fields are re-hydrated. This is where you set `is_access_rule`, `is_segment_criteria`, and any custom callback.
 

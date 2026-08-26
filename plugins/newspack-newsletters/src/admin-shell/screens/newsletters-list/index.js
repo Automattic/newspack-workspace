@@ -14,6 +14,7 @@ import HeaderCount from '../../components/header-count';
 import ItemsPerPage from '../../components/items-per-page';
 import { EMPTY_STATE_CLASS, getEmptyStateHeading } from '../../constants';
 import { useHeaderActions } from '../../header-actions-context';
+import useLockedPosts, { LockedPostsContext, MAX_CHECKED } from '../../hooks/use-locked-posts';
 import usePersistedView from '../../hooks/use-persisted-view';
 import isStrictlyEmpty from '../../utils/is-strictly-empty';
 import useNewslettersData from './use-newsletters-data';
@@ -47,6 +48,7 @@ export default function NewslettersListScreen() {
 	const [ quickEditItem, setQuickEditItem ] = useState( null );
 	const { data, paginationInfo, isLoading, hasResolved, hasLoadedOnce, trashCount, progress, refresh } = useNewslettersData( view );
 	const filterElements = useFilterElements();
+	const locks = useLockedPosts( useMemo( () => data.slice( 0, MAX_CHECKED ).map( item => item.id ), [ data ] ) );
 
 	const addNewHref = `${ getAdminUrl() }post-new.php?post_type=${ getCptSlug() }`;
 
@@ -103,27 +105,29 @@ export default function NewslettersListScreen() {
 	return (
 		<>
 			<HeaderCount count={ paginationInfo.totalItems } />
-			<DataViews
-				className="newspack-newsletters-list"
-				data={ data }
-				fields={ fields }
-				view={ view }
-				onChangeView={ setView }
-				actions={ actions }
-				paginationInfo={ paginationInfo }
-				defaultLayouts={ DEFAULT_LAYOUTS }
-				isLoading={ isLoading }
-				getItemId={ item => String( item.id ) }
-				search
-				config={ DATAVIEWS_CONFIG }
-				header={
-					<ItemsPerPage
-						value={ view.perPage }
-						progress={ progress }
-						onChange={ perPage => setView( current => ( { ...current, perPage, page: 1 } ) ) }
-					/>
-				}
-			/>
+			<LockedPostsContext.Provider value={ locks }>
+				<DataViews
+					className="newspack-newsletters-list"
+					data={ data }
+					fields={ fields }
+					view={ view }
+					onChangeView={ setView }
+					actions={ actions }
+					paginationInfo={ paginationInfo }
+					defaultLayouts={ DEFAULT_LAYOUTS }
+					isLoading={ isLoading }
+					getItemId={ item => String( item.id ) }
+					search
+					config={ DATAVIEWS_CONFIG }
+					header={
+						<ItemsPerPage
+							value={ view.perPage }
+							progress={ progress }
+							onChange={ perPage => setView( current => ( { ...current, perPage, page: 1 } ) ) }
+						/>
+					}
+				/>
+			</LockedPostsContext.Provider>
 			{ quickEditItem && (
 				<NewslettersQuickEditPanel
 					item={ quickEditItem }

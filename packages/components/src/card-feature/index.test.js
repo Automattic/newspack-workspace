@@ -200,7 +200,7 @@ describe( 'CardFeature', () => {
 		} );
 
 		it( 'accepts custom badge text', () => {
-			render( <CardFeature title="Stripe" enabled badgeText="Live mode" badgeLevel="info" /> );
+			render( <CardFeature title="Stripe" enabled badge={ { label: 'Live mode', intent: 'informational' } } /> );
 			expect( screen.getByText( 'Live mode' ) ).toBeInTheDocument();
 		} );
 	} );

@@ -855,7 +855,47 @@ abstract class Integration {
 	 *
 	 * @var string[]
 	 */
-	private const ALLOWED_INCOMING_MATCHING_FUNCTIONS = [ 'default', 'range', 'list__in', 'list__not_in' ];
+	private const ALLOWED_INCOMING_MATCHING_FUNCTIONS = [ 'default', 'range', 'list__in', 'list__not_in', 'date_range' ];
+
+	/**
+	 * Matching functions a legacy-shaped entry may adopt from the live schema
+	 * overlay. A legacy entry predates stored snapshots, so its effective
+	 * operator has always been whatever the provider mapper emitted at read
+	 * time — but only for these long-standing defaults. A default introduced
+	 * later (date_range) changes matching semantics and makes the pull rewrite
+	 * stored reader values, so a legacy entry must keep exact matching until the
+	 * publisher deliberately opts in on the Integrations screen.
+	 *
+	 * @var string[]
+	 */
+	private const LEGACY_OVERLAY_MATCHING_FUNCTIONS = [ 'default', 'range', 'list__in', 'list__not_in' ];
+
+	/**
+	 * Whether a stored entry is set to date range matching but carries no source
+	 * date format, and so needs one overlaid from the live provider schema.
+	 *
+	 * `date_format` is not in SCHEMA_KEYS, so an entry saved between the schema
+	 * expansion and the arrival of source formats looks current and is never
+	 * refreshed — yet the pull needs the format to normalize the value. Without it
+	 * a non-ISO value is stored raw, the matcher rejects it, and the criterion
+	 * silently matches nobody. Absent means "never stored"; a provider that sends
+	 * ISO stores `''` explicitly. When the live schema declares a format, the read
+	 * path resolves it once and persists it back — a one-time repair per entry.
+	 * When it declares none, the entry resolves to ISO in memory only and is
+	 * re-examined on each read: the declaration may still arrive (a provider
+	 * update that starts emitting formats, a provider cache that was empty), and
+	 * persisting `''` would latch "provider sends ISO" over "format unknown" with
+	 * no way to tell them apart again.
+	 *
+	 * @param array $raw_data Stored raw field data.
+	 * @return bool
+	 */
+	private static function needs_source_date_format( $raw_data ) {
+		return is_array( $raw_data )
+			&& isset( $raw_data['matching_function'] )
+			&& 'date_range' === $raw_data['matching_function']
+			&& ! array_key_exists( 'date_format', $raw_data );
+	}
 
 	/**
 	 * Get the enabled incoming fields for this integration.
@@ -878,23 +918,25 @@ abstract class Integration {
 			return [];
 		}
 
-		$has_legacy_entries = false;
+		$needs_live_schema = false;
 		foreach ( $stored as $key => $raw_data ) {
 			if ( ! is_string( $key ) || '' === $key ) {
 				continue;
 			}
-			if ( ! is_array( $raw_data ) || empty( array_intersect( self::SCHEMA_KEYS, array_keys( $raw_data ) ) ) ) {
-				$has_legacy_entries = true;
+			if ( ! is_array( $raw_data ) || empty( array_intersect( self::SCHEMA_KEYS, array_keys( $raw_data ) ) ) || self::needs_source_date_format( $raw_data ) ) {
+				$needs_live_schema = true;
 				break;
 			}
 		}
 
 		// Resolve the live provider list once, only when at least one entry needs it.
 		// On API failure, fall back to the stored raw_data unchanged.
-		$live_by_key = [];
-		if ( $has_legacy_entries ) {
+		$live_by_key          = [];
+		$live_schema_resolved = false;
+		if ( $needs_live_schema ) {
 			$available = $this->get_available_incoming_fields();
 			if ( ! is_wp_error( $available ) && is_array( $available ) ) {
+				$live_schema_resolved = true;
 				foreach ( $available as $available_field ) {
 					if ( $available_field instanceof Integrations\Incoming_Field ) {
 						$live_by_key[ $available_field->get_key() ] = $available_field->get_raw_data();
@@ -903,16 +945,42 @@ abstract class Integration {
 			}
 		}
 
-		$fields = [];
+		$fields           = [];
+		$repaired_formats = [];
 		foreach ( $stored as $key => $raw_data ) {
 			if ( ! is_string( $key ) || '' === $key ) {
 				continue;
 			}
 			$raw_data = is_array( $raw_data ) ? $raw_data : [];
-			if ( empty( array_intersect( self::SCHEMA_KEYS, array_keys( $raw_data ) ) ) && isset( $live_by_key[ $key ] ) ) {
-				// Stored entry is in the legacy shape — overlay the live schema while
-				// preserving any non-schema keys the publisher may have stored.
-				$raw_data = array_merge( $raw_data, $live_by_key[ $key ] );
+			if ( empty( array_intersect( self::SCHEMA_KEYS, array_keys( $raw_data ) ) ) ) {
+				if ( isset( $live_by_key[ $key ] ) ) {
+					// Stored entry is in the legacy shape — overlay the live schema while
+					// preserving any non-schema keys the publisher may have stored. A
+					// newer live default (date_range) is pinned back to exact matching:
+					// it would silently change how the entry matches and how the pull
+					// stores the value, for a field enabled long before it existed.
+					$live_data = $live_by_key[ $key ];
+					if (
+						isset( $live_data['matching_function'] )
+						&& ! in_array( $live_data['matching_function'], self::LEGACY_OVERLAY_MATCHING_FUNCTIONS, true )
+					) {
+						$live_data['matching_function'] = 'default';
+					}
+					$raw_data = array_merge( $raw_data, $live_data );
+				}
+			} elseif ( self::needs_source_date_format( $raw_data ) && $live_schema_resolved ) {
+				// Fill in just the source format — the publisher's stored operator and
+				// the rest of the snapshot stay authoritative. Only a declared format
+				// is queued for persistence (see needs_source_date_format() for why an
+				// undeclared one resolves to ISO for this read alone); an API failure
+				// resolves nothing, so the next read retries.
+				$live_entry = isset( $live_by_key[ $key ] ) && is_array( $live_by_key[ $key ] ) ? $live_by_key[ $key ] : null;
+				if ( null !== $live_entry && array_key_exists( 'date_format', $live_entry ) ) {
+					$raw_data['date_format']  = $live_entry['date_format'];
+					$repaired_formats[ $key ] = $live_entry['date_format'];
+				} else {
+					$raw_data['date_format'] = '';
+				}
 			}
 			$field = new Integrations\Incoming_Field( $key, $raw_data );
 			$field = $this->configure_incoming_field( $field );
@@ -927,9 +995,49 @@ abstract class Integration {
 				) {
 					$field->set_matching_function( $raw_data['matching_function'] );
 				}
+				// Same for the source date format: the ESP integration maps it in its
+				// configure_incoming_field(), but nothing else does — without this, a
+				// non-ESP integration declaring a real format in its raw schema would
+				// present '' to the pull and the access-rule evaluator, so values
+				// would be stored un-normalized and the pull log would misreport the
+				// source format as undeclared. Fills the gap only: a format set by
+				// configure_incoming_field() is fresher than the stored snapshot.
+				if (
+					'' === $field->get_date_format()
+					&& isset( $raw_data['date_format'] )
+					&& is_scalar( $raw_data['date_format'] )
+					&& '' !== (string) $raw_data['date_format']
+				) {
+					$field->set_date_format( (string) $raw_data['date_format'] );
+				}
 				$fields[] = $field;
 			}
 		}
+
+		if ( ! empty( $repaired_formats ) ) {
+			// Self-heal: persist the resolved source formats so the live resolution
+			// doesn't repeat on every read. The provider fetch above takes real time,
+			// and a publisher saving the Integrations screen inside that window must
+			// not have their write reverted by a stale full-array write-back — so
+			// re-read the option and set only the resolved formats, and only on
+			// entries that still need them. update_option() no-ops on an unchanged
+			// value, so two racing repairs are harmless.
+			$option_name = self::INCOMING_FIELDS_OPTION_PREFIX . $this->id;
+			\wp_cache_delete( $option_name, 'options' );
+			$fresh       = \get_option( $option_name, [] );
+			$fresh       = is_array( $fresh ) ? $fresh : [];
+			$fresh_dirty = false;
+			foreach ( $repaired_formats as $key => $format ) {
+				if ( isset( $fresh[ $key ] ) && self::needs_source_date_format( $fresh[ $key ] ) ) {
+					$fresh[ $key ]['date_format'] = $format;
+					$fresh_dirty                  = true;
+				}
+			}
+			if ( $fresh_dirty ) {
+				\update_option( $option_name, $fresh, false );
+			}
+		}
+
 		return $fields;
 	}
 

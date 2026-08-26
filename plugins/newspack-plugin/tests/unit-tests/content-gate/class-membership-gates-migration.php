@@ -3,16 +3,11 @@
  * Characterization tests for the migrate-membership-gates CLI (NPPD-2059).
  *
  * These pin the behavior of the pure mapping/fingerprint/layout-extraction
- * helpers exactly as ported from the standalone drop-in. Where a test asserts a
- * buggy result on purpose it is flagged with the follow-up issue ID; those
- * stacked fixes will flip the corresponding assertion:
- *
- * - NPPD-2058: extract_gate_layouts() only inspects top-level wrapper blocks, so
- *   nested / reusable-block gate layouts migrate as empty. Pinned by the
- *   extract_gate_layouts / serialize_gate_inner_blocks tests below (they flip red).
- * - NPPD-2063: map_rules_to_ac_format() emits the raw WooCommerce content-type
- *   name as the AC rule slug instead of remapping to 'post_types' / 'specific_posts'.
- *   Pinned by the map_rules_to_ac_format tests below (they flip red).
+ * helpers. The map_rules_to_ac_format tests assert the NPPD-2063 translation table
+ * (WC content rules → valid AC 'post_types' / 'specific_posts' / taxonomy slugs).
+ * The extract_gate_layouts / serialize_gate_inner_blocks tests assert the NPPD-2058
+ * behavior: a gate layout is found wherever the wrapper block sits, including nested
+ * and reusable blocks, and membership wrappers nested in the result are stripped.
  *
  * NOT pinned here: NPPD-2064 (fingerprint-based gate splitting/grouping). That fix
  * lands in group_plans_by_fingerprint() and the merged-product consolidation, which
@@ -79,6 +74,7 @@ class Test_Membership_Gates_Migration extends \WP_UnitTestCase {
 	 */
 	public function set_up() {
 		parent::set_up();
+		\WP_CLI::reset();
 		global $products_database;
 		$this->original_products_database = $products_database;
 		// phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- Raw argv, kept verbatim so tear_down() can restore it.
@@ -117,16 +113,24 @@ class Test_Membership_Gates_Migration extends \WP_UnitTestCase {
 	/**
 	 * Build a minimal stand-in for a WC_Memberships_Membership_Plan_Rule.
 	 *
-	 * The drop-in's rule mapping only calls get_content_type_name() and
+	 * The rule mapping only calls get_content_type(), get_content_type_name() and
 	 * get_object_ids(), so the WC Memberships plugin is not needed to exercise it.
 	 *
+	 * @param string $content_type      The WC content type kind ('post_type' or 'taxonomy').
 	 * @param string $content_type_name The WC content type name (e.g. 'post', 'category').
 	 * @param int[]  $object_ids        The restricted object IDs.
 	 *
 	 * @return object A rule-shaped object.
 	 */
-	private function make_rule( string $content_type_name, array $object_ids ) {
-		return new class( $content_type_name, $object_ids ) {
+	private function make_rule( string $content_type, string $content_type_name, array $object_ids ) {
+		return new class( $content_type, $content_type_name, $object_ids ) {
+
+			/**
+			 * The WC content type kind.
+			 *
+			 * @var string
+			 */
+			private $content_type;
 
 			/**
 			 * The WC content type name.
@@ -145,12 +149,23 @@ class Test_Membership_Gates_Migration extends \WP_UnitTestCase {
 			/**
 			 * Constructor.
 			 *
+			 * @param string $content_type      The WC content type kind.
 			 * @param string $content_type_name The WC content type name.
 			 * @param int[]  $object_ids        The restricted object IDs.
 			 */
-			public function __construct( string $content_type_name, array $object_ids ) {
+			public function __construct( string $content_type, string $content_type_name, array $object_ids ) {
+				$this->content_type      = $content_type;
 				$this->content_type_name = $content_type_name;
 				$this->object_ids        = $object_ids;
+			}
+
+			/**
+			 * Return the WC content type kind ('post_type' or 'taxonomy').
+			 *
+			 * @return string
+			 */
+			public function get_content_type() {
+				return $this->content_type;
 			}
 
 			/**
@@ -509,36 +524,104 @@ class Test_Membership_Gates_Migration extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * NPPD-2063: the AC rule slug is the raw WooCommerce content-type name, not the
-	 * AC content-rules key ('post_types' for post types, 'specific_posts' for
-	 * individual posts). Object IDs are stringified. The stacked NPPD-2063 fix will
-	 * change the expected slug here.
+	 * A post-type rule targeting specific objects maps to a 'specific_posts' rule
+	 * whose value is the stringified object IDs — the slug AC enforcement honours for
+	 * individual posts (a raw 'post'/'page' slug would never match any post).
 	 */
-	public function test_map_rules_to_ac_format_uses_raw_wc_content_type_name_as_slug() {
-		$post_rule = $this->make_rule( 'post', [ 12, 34 ] );
+	public function test_map_rules_to_ac_format_maps_specific_post_type_rule_to_specific_posts() {
+		$post_rule = $this->make_rule( 'post_type', 'post', [ 12, 34 ] );
 
 		$mapped_rules = $this->invoke_private_static( 'map_rules_to_ac_format', [ [ $post_rule ] ] );
 
 		$this->assertSame(
 			[
 				[
-					'slug'  => 'post',
+					'slug'  => 'specific_posts',
 					'value' => [ '12', '34' ],
 				],
 			],
-			$mapped_rules,
-			'Slug should be the verbatim WC content-type name and values stringified (NPPD-2063 seam).'
+			$mapped_rules
 		);
 	}
 
 	/**
-	 * Two rules with the same content type are merged into one AC rule with a
-	 * de-duplicated, stringified value list. (The 'category' slug assertion is also
-	 * touched by NPPD-2063, which will remap the slug — expect this to flip red too.)
+	 * A post-type rule with no object IDs restricts the whole post type, so it maps
+	 * to a 'post_types' rule whose value is the post-type slug.
+	 */
+	public function test_map_rules_to_ac_format_maps_all_posts_rule_to_post_types() {
+		$all_posts_rule = $this->make_rule( 'post_type', 'post', [] );
+
+		$mapped_rules = $this->invoke_private_static( 'map_rules_to_ac_format', [ [ $all_posts_rule ] ] );
+
+		$this->assertSame(
+			[
+				[
+					'slug'  => 'post_types',
+					'value' => [ 'post' ],
+				],
+			],
+			$mapped_rules
+		);
+	}
+
+	/**
+	 * The post_type vs. taxonomy split relies on the rule's own get_content_type()
+	 * discriminator, so a whole-post-type rule for a custom post type (here
+	 * 'guest-author') maps to a 'post_types' rule carrying that custom post-type slug
+	 * as its value — no hardcoded post-type name list is consulted.
+	 */
+	public function test_map_rules_to_ac_format_maps_custom_post_type_to_post_types() {
+		$guest_author_rule = $this->make_rule( 'post_type', 'guest-author', [] );
+
+		$mapped_rules = $this->invoke_private_static( 'map_rules_to_ac_format', [ [ $guest_author_rule ] ] );
+
+		$this->assertSame(
+			[
+				[
+					'slug'  => 'post_types',
+					'value' => [ 'guest-author' ],
+				],
+			],
+			$mapped_rules
+		);
+	}
+
+	/**
+	 * Taxonomy rules already use the taxonomy slug as their AC slug (which AC
+	 * enforcement resolves via get_taxonomy()), so they pass through unchanged with a
+	 * term-ID value list.
+	 */
+	public function test_map_rules_to_ac_format_keeps_taxonomy_slug_unchanged() {
+		$category_rule = $this->make_rule( 'taxonomy', 'category', [ 5, 6 ] );
+		$tag_rule      = $this->make_rule( 'taxonomy', 'post_tag', [ 7 ] );
+
+		$mapped_rules = $this->invoke_private_static(
+			'map_rules_to_ac_format',
+			[ [ $category_rule, $tag_rule ] ]
+		);
+
+		$this->assertSame(
+			[
+				[
+					'slug'  => 'category',
+					'value' => [ '5', '6' ],
+				],
+				[
+					'slug'  => 'post_tag',
+					'value' => [ '7' ],
+				],
+			],
+			$mapped_rules
+		);
+	}
+
+	/**
+	 * Two rules that map to the same AC slug are merged into one rule with a
+	 * de-duplicated, stringified value list.
 	 */
 	public function test_map_rules_to_ac_format_merges_and_dedupes_object_ids_for_the_same_slug() {
-		$first_category_rule  = $this->make_rule( 'category', [ 1, 2 ] );
-		$second_category_rule = $this->make_rule( 'category', [ 2, 3 ] );
+		$first_category_rule  = $this->make_rule( 'taxonomy', 'category', [ 1, 2 ] );
+		$second_category_rule = $this->make_rule( 'taxonomy', 'category', [ 2, 3 ] );
 
 		$mapped_rules = $this->invoke_private_static(
 			'map_rules_to_ac_format',
@@ -551,10 +634,123 @@ class Test_Membership_Gates_Migration extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * A mixed rule set exercises all three mappings and their merge semantics at
+	 * once: whole-post-type rules merge their post-type slugs under 'post_types',
+	 * specific-object rules (across different post types) merge their IDs under
+	 * 'specific_posts', and a taxonomy rule keeps its own slug. The 'post_types'
+	 * value is sorted (see the canonicalization test below).
+	 */
+	public function test_map_rules_to_ac_format_merges_mixed_rule_set_by_target_slug() {
+		$all_posts_rule    = $this->make_rule( 'post_type', 'post', [] );
+		$all_pages_rule    = $this->make_rule( 'post_type', 'page', [] );
+		$specific_page     = $this->make_rule( 'post_type', 'page', [ 5 ] );
+		$specific_articles = $this->make_rule( 'post_type', 'post', [ 12, 34 ] );
+		$category_rule     = $this->make_rule( 'taxonomy', 'category', [ 8 ] );
+
+		$mapped_rules = $this->invoke_private_static(
+			'map_rules_to_ac_format',
+			[ [ $all_posts_rule, $all_pages_rule, $specific_page, $specific_articles, $category_rule ] ]
+		);
+
+		$this->assertSame(
+			[
+				[
+					'slug'  => 'post_types',
+					'value' => [ 'page', 'post' ],
+				],
+				[
+					'slug'  => 'specific_posts',
+					'value' => [ '5', '12', '34' ],
+				],
+				[
+					'slug'  => 'category',
+					'value' => [ '8' ],
+				],
+			],
+			$mapped_rules,
+			'Only post_types is canonicalized; specific_posts and taxonomy values keep insertion order (the fingerprint orders those numeric IDs via SORT_NUMERIC).'
+		);
+	}
+
+	/**
+	 * The 'post_types' value is sorted, so two plans restricting the same post types
+	 * in a different rule order produce identical mapped output — and therefore the
+	 * same grouping fingerprint, so they share one gate instead of splitting into
+	 * duplicates. (Post-type slugs are non-numeric, and compute_rules_fingerprint()'s
+	 * SORT_NUMERIC pass would otherwise leave their order untouched.)
+	 */
+	public function test_map_rules_to_ac_format_canonicalizes_post_types_value_order() {
+		$posts_then_pages = [
+			$this->make_rule( 'post_type', 'post', [] ),
+			$this->make_rule( 'post_type', 'page', [] ),
+		];
+		$pages_then_posts = [
+			$this->make_rule( 'post_type', 'page', [] ),
+			$this->make_rule( 'post_type', 'post', [] ),
+		];
+
+		$mapped_posts_first = $this->invoke_private_static( 'map_rules_to_ac_format', [ $posts_then_pages ] );
+		$mapped_pages_first = $this->invoke_private_static( 'map_rules_to_ac_format', [ $pages_then_posts ] );
+
+		$this->assertSame(
+			[
+				[
+					'slug'  => 'post_types',
+					'value' => [ 'page', 'post' ],
+				],
+			],
+			$mapped_posts_first,
+			'post_types values are sorted, so rule order does not change the output.'
+		);
+		$this->assertSame( $mapped_posts_first, $mapped_pages_first, 'Rule order does not change the mapped output.' );
+
+		$this->assertSame(
+			$this->invoke_private_static( 'compute_rules_fingerprint', [ $mapped_posts_first ] ),
+			$this->invoke_private_static( 'compute_rules_fingerprint', [ $mapped_pages_first ] ),
+			'Identical output yields identical fingerprints, so the plans group into one gate.'
+		);
+	}
+
+	/**
+	 * A plan with no content restriction rules maps to no AC rules, which is what
+	 * group_plans_by_fingerprint() reads to skip the plan instead of publishing an
+	 * inert gate.
+	 */
+	public function test_map_rules_to_ac_format_maps_an_empty_rule_set_to_no_rules() {
+		$this->assertSame( [], $this->invoke_private_static( 'map_rules_to_ac_format', [ [] ] ) );
+	}
+
+	/**
+	 * Two rules naming the same whole post type collapse into a single 'post_types'
+	 * entry carrying one slug, rather than repeating it.
+	 */
+	public function test_map_rules_to_ac_format_dedupes_identical_whole_post_type_rules() {
+		$mapped_rules = $this->invoke_private_static(
+			'map_rules_to_ac_format',
+			[
+				[
+					$this->make_rule( 'post_type', 'post', [] ),
+					$this->make_rule( 'post_type', 'post', [] ),
+				],
+			]
+		);
+
+		$this->assertSame(
+			[
+				[
+					'slug'  => 'post_types',
+					'value' => [ 'post' ],
+				],
+			],
+			$mapped_rules
+		);
+	}
+
+	/**
 	 * Rules with an empty content-type name are dropped entirely.
 	 */
 	public function test_map_rules_to_ac_format_skips_rules_with_empty_content_type() {
-		$empty_rule = $this->make_rule( '', [ 7 ] );
+		$empty_rule = $this->make_rule( 'post_type', '', [ 7 ] );
 
 		$mapped_rules = $this->invoke_private_static( 'map_rules_to_ac_format', [ [ $empty_rule ] ] );
 
@@ -677,25 +873,206 @@ HTML;
 	}
 
 	/**
-	 * NPPD-2058: only top-level wrapper blocks are inspected, so a gate whose
-	 * non-member-content wrapper is nested inside another block (here a group)
-	 * migrates as an EMPTY registration layout. The stacked NPPD-2058 fix walks
-	 * nested/reusable blocks and will make these assertions non-empty.
+	 * A wrapper nested inside another block (here a group) is found and migrated
+	 * (NPPD-2058).
 	 */
-	public function test_extract_gate_layouts_returns_empty_for_nested_wrapper_blocks() {
+	public function test_extract_gate_layouts_finds_nested_wrapper_blocks() {
 		$gate_content = <<<'HTML'
 <!-- wp:group --><div class="wp-block-group">
+<!-- wp:columns --><div class="wp-block-columns">
 <!-- wp:woocommerce-memberships/non-member-content -->
 <!-- wp:paragraph --><p>Nested upsell.</p><!-- /wp:paragraph -->
 <!-- /wp:woocommerce-memberships/non-member-content -->
+</div><!-- /wp:columns -->
 </div><!-- /wp:group -->
 HTML;
 		$gate_post = $this->create_gate_post( $gate_content );
 
 		$layouts = $this->invoke_private_static( 'extract_gate_layouts', [ $gate_post ] );
 
-		$this->assertSame( '', $layouts['registration'], 'A nested non-member-content wrapper yields an empty registration layout (NPPD-2058 bug).' );
-		$this->assertNull( $layouts['custom_access'], 'No top-level member-content wrapper means a null custom-access layout.' );
+		$this->assertStringContainsString( 'Nested upsell.', $layouts['registration'] );
+		$this->assertNull( $layouts['custom_access'], 'No member-content wrapper anywhere means a null custom-access layout.' );
+	}
+
+	/**
+	 * Members-only content nested inside the non-member wrapper never reaches the
+	 * registration layout, however deeply it is buried.
+	 *
+	 * The two wrappers carry opposite audiences, so this is the one nesting case
+	 * that leaks rather than merely losing content: after WooCommerce Memberships is
+	 * deactivated the wrapper block type no longer resolves, WP_Block treats it as
+	 * static, and its saved inner content prints unconditionally — showing paying
+	 * members' copy to the non-members the registration layout is for.
+	 */
+	public function test_extract_gate_layouts_never_leaks_member_content_into_the_registration_layout() {
+		$gate_content = <<<'HTML'
+<!-- wp:woocommerce-memberships/non-member-content -->
+<!-- wp:paragraph --><p>Subscribe to read.</p><!-- /wp:paragraph -->
+<!-- wp:group --><div class="wp-block-group">
+<!-- wp:paragraph --><p>Before the wrapper.</p><!-- /wp:paragraph -->
+<!-- wp:woocommerce-memberships/member-content -->
+<!-- wp:paragraph --><p>Members only secret.</p><!-- /wp:paragraph -->
+<!-- /wp:woocommerce-memberships/member-content -->
+<!-- wp:paragraph --><p>After the wrapper.</p><!-- /wp:paragraph -->
+</div><!-- /wp:group -->
+<!-- /wp:woocommerce-memberships/non-member-content -->
+HTML;
+		$gate_post = $this->create_gate_post( $gate_content );
+
+		$layouts = $this->invoke_private_static( 'extract_gate_layouts', [ $gate_post ] );
+
+		$this->assertStringContainsString( 'Subscribe to read.', $layouts['registration'] );
+		$this->assertStringNotContainsString( 'Members only secret.', $layouts['registration'] );
+		$this->assertStringNotContainsString( 'woocommerce-memberships/member-content', $layouts['registration'], 'The wrapper block itself is dropped, not just hidden — an unregistered block type renders its saved inner content as static markup.' );
+		// The siblings are what make this test bite twice: dropping a child without
+		// dropping its innerContent placeholder shifts the survivors into the wrong
+		// slots, so a serializer that filtered innerBlocks alone would reorder these
+		// two or index past the end of the array.
+		$this->assertStringContainsString( 'Before the wrapper.', $layouts['registration'] );
+		$this->assertStringContainsString( 'After the wrapper.', $layouts['registration'] );
+		$this->assertLessThan(
+			strpos( $layouts['registration'], 'After the wrapper.' ),
+			strpos( $layouts['registration'], 'Before the wrapper.' ),
+			'The blocks either side of the dropped wrapper keep their document order.'
+		);
+	}
+
+	/**
+	 * A cycle spanning two patterns (A references B, B references A) terminates.
+	 *
+	 * This is a different path through the visited set than a pattern that references
+	 * itself: a guard that only remembered the pattern it is currently in would loop
+	 * here, and one that skipped any ref seen anywhere would break the legitimate
+	 * repeat case above. Both have to hold at once.
+	 */
+	public function test_extract_gate_layouts_survives_a_two_pattern_cycle() {
+		$pattern_a = $this->create_pattern_post( 'placeholder' );
+		$pattern_b = $this->create_pattern_post( 'placeholder' );
+		wp_update_post(
+			[
+				'ID'           => $pattern_a,
+				'post_content' => '<!-- wp:block {"ref":' . $pattern_b . '} /-->',
+			]
+		);
+		wp_update_post(
+			[
+				'ID'           => $pattern_b,
+				'post_content' => '<!-- wp:block {"ref":' . $pattern_a . '} /-->'
+					. '<!-- wp:woocommerce-memberships/non-member-content -->'
+					. '<!-- wp:paragraph --><p>Upsell past the cycle.</p><!-- /wp:paragraph -->'
+					. '<!-- /wp:woocommerce-memberships/non-member-content -->',
+			]
+		);
+		$gate_post = $this->create_gate_post( '<!-- wp:block {"ref":' . $pattern_a . '} /-->' );
+
+		$layouts = $this->invoke_private_static( 'extract_gate_layouts', [ $gate_post ] );
+
+		$this->assertStringContainsString( 'Upsell past the cycle.', $layouts['registration'] );
+	}
+
+	/**
+	 * A gate authored as a synced pattern holds its wrappers in a separate wp_block
+	 * post; the `core/block` reference is resolved so that content migrates too.
+	 */
+	public function test_extract_gate_layouts_resolves_reusable_block_references() {
+		$pattern_id   = $this->create_pattern_post(
+			<<<'HTML'
+<!-- wp:woocommerce-memberships/non-member-content -->
+<!-- wp:paragraph --><p>Pattern upsell.</p><!-- /wp:paragraph -->
+<!-- /wp:woocommerce-memberships/non-member-content -->
+<!-- wp:woocommerce-memberships/member-content -->
+<!-- wp:paragraph --><p>Pattern members-only.</p><!-- /wp:paragraph -->
+<!-- /wp:woocommerce-memberships/member-content -->
+HTML
+		);
+		$gate_post = $this->create_gate_post( '<!-- wp:block {"ref":' . $pattern_id . '} /-->' );
+
+		$layouts = $this->invoke_private_static( 'extract_gate_layouts', [ $gate_post ] );
+
+		$this->assertStringContainsString( 'Pattern upsell.', $layouts['registration'] );
+		$this->assertStringContainsString( 'Pattern members-only.', $layouts['custom_access'] );
+	}
+
+	/**
+	 * The reference guard is scoped to one path of the walk, not the whole gate, so a
+	 * pattern placed twice contributes twice — the same "no authored content dropped"
+	 * rule that governs repeated inline wrappers.
+	 */
+	public function test_extract_gate_layouts_keeps_both_copies_of_a_repeated_pattern() {
+		$pattern_id = $this->create_pattern_post(
+			<<<'HTML'
+<!-- wp:woocommerce-memberships/non-member-content -->
+<!-- wp:paragraph --><p>Reused upsell.</p><!-- /wp:paragraph -->
+<!-- /wp:woocommerce-memberships/non-member-content -->
+HTML
+		);
+		$reference = '<!-- wp:block {"ref":' . $pattern_id . '} /-->';
+		$gate_post = $this->create_gate_post( $reference . "\n" . $reference );
+
+		$layouts = $this->invoke_private_static( 'extract_gate_layouts', [ $gate_post ] );
+
+		$this->assertSame( 2, substr_count( $layouts['registration'], 'Reused upsell.' ) );
+	}
+
+	/**
+	 * A pattern that references itself would otherwise recurse forever. The walk stops
+	 * at the repeat and still reaches the wrapper that follows it.
+	 */
+	public function test_extract_gate_layouts_survives_a_self_referencing_pattern() {
+		$pattern_id = $this->create_pattern_post( 'placeholder' );
+		wp_update_post(
+			[
+				'ID'           => $pattern_id,
+				'post_content' => '<!-- wp:block {"ref":' . $pattern_id . '} /-->'
+					. '<!-- wp:woocommerce-memberships/non-member-content -->'
+					. '<!-- wp:paragraph --><p>Upsell past the loop.</p><!-- /wp:paragraph -->'
+					. '<!-- /wp:woocommerce-memberships/non-member-content -->',
+			]
+		);
+		$gate_post = $this->create_gate_post( '<!-- wp:block {"ref":' . $pattern_id . '} /-->' );
+
+		$layouts = $this->invoke_private_static( 'extract_gate_layouts', [ $gate_post ] );
+
+		$this->assertStringContainsString( 'Upsell past the loop.', $layouts['registration'] );
+	}
+
+	/**
+	 * An unpublished pattern renders nothing for a reader, so extraction skips it the
+	 * same way — but the operator is told, because the gate will migrate short of the
+	 * content its author sees in the editor.
+	 */
+	public function test_extract_gate_layouts_warns_on_an_unpublished_pattern_reference() {
+		\WP_CLI::$messages = [];
+		$pattern_id        = $this->create_pattern_post(
+			<<<'HTML'
+<!-- wp:woocommerce-memberships/non-member-content -->
+<!-- wp:paragraph --><p>Draft upsell.</p><!-- /wp:paragraph -->
+<!-- /wp:woocommerce-memberships/non-member-content -->
+HTML
+			,
+			'draft'
+		);
+		$gate_post = $this->create_gate_post( '<!-- wp:block {"ref":' . $pattern_id . '} /-->' );
+
+		$layouts = $this->invoke_private_static( 'extract_gate_layouts', [ $gate_post ] );
+
+		$this->assertSame( '', $layouts['registration'] );
+		$this->assertNotEmpty( \WP_CLI::$warnings, 'The skipped pattern reference is warned about.' );
+		$this->assertStringContainsString( (string) $pattern_id, implode( ' ', \WP_CLI::$warnings ) );
+	}
+
+	/**
+	 * With no wrapper anywhere in the tree, registration comes back as an empty string
+	 * and custom_access as null. apply_layout() reads that distinction to leave the
+	 * gate's seeded default layout alone rather than blanking it.
+	 */
+	public function test_extract_gate_layouts_returns_empty_when_no_wrapper_exists() {
+		$gate_post = $this->create_gate_post( '<!-- wp:paragraph --><p>Just an article.</p><!-- /wp:paragraph -->' );
+
+		$layouts = $this->invoke_private_static( 'extract_gate_layouts', [ $gate_post ] );
+
+		$this->assertSame( '', $layouts['registration'] );
+		$this->assertNull( $layouts['custom_access'] );
 	}
 
 	/**
@@ -708,7 +1085,7 @@ HTML;
 			. '<!-- wp:woocommerce-memberships/member-content --><!-- wp:paragraph --><p>Drop me.</p><!-- /wp:paragraph --><!-- /wp:woocommerce-memberships/member-content -->'
 		);
 
-		$serialized = $this->invoke_private_static( 'serialize_gate_inner_blocks', [ $inner_blocks ] );
+		$serialized = $this->invoke_private_static( 'serialize_gate_inner_blocks', [ $inner_blocks, 'woocommerce-memberships/non-member-content', 0 ] );
 
 		$this->assertStringContainsString( 'Keep me.', $serialized );
 		$this->assertStringNotContainsString( 'woocommerce-memberships/member-content', $serialized );
@@ -719,10 +1096,11 @@ HTML;
 	 * A gate whose every content rule carries a slug the evaluator cannot resolve is
 	 * reported as unenforceable.
 	 *
-	 * This is the NPPD-2063 slug mistranslation seen from the operator's side: the
-	 * migration writes rules with the raw WooCommerce content-type name ('post'), and
-	 * Content_Restriction_Control::rule_matches_post() falls through to
-	 * get_taxonomy( 'post' ) — which is null — so the gate matches no post at all.
+	 * A raw WooCommerce content-type name ('post') is the canonical shape of an
+	 * unresolvable slug: Content_Restriction_Control::rule_matches_post() handles
+	 * 'post_types', 'specific_posts' and 'newsletters' by name and treats every other
+	 * slug as a taxonomy, so it falls through to get_taxonomy( 'post' ) — which is
+	 * null — and the gate matches no post at all.
 	 */
 	public function test_verify_migrated_gate_flags_content_rules_the_evaluator_cannot_resolve() {
 		$gate_id = $this->create_enforceable_gate(
@@ -744,10 +1122,8 @@ HTML;
 	/**
 	 * A gate whose rules are only partly resolvable under-gates rather than failing
 	 * outright: the rules combine with 'any', so the content behind the dead slugs is
-	 * left readable while the rest is gated. That partial leak is reported too — a
-	 * plan restricting all posts plus a category (a common WCM configuration) maps to
-	 * exactly this shape, and reporting it clean would hide the NPPD-2063 blast radius
-	 * until cutover.
+	 * left readable while the rest is gated. That partial leak is reported too, since
+	 * reporting such a gate clean would hide the leak until cutover.
 	 */
 	public function test_verify_migrated_gate_flags_content_rules_only_some_of_which_resolve() {
 		$gate_id = $this->create_enforceable_gate(
@@ -768,6 +1144,33 @@ HTML;
 		$this->assertCount( 1, $issues );
 		$this->assertStringContainsString( '1 of its 2 content rules do not resolve', $issues[0] );
 		$this->assertStringContainsString( 'post', $issues[0], 'The dead slug is named so the operator knows what is left ungated.' );
+	}
+
+	/**
+	 * Rules with an empty value are dropped by get_gate_content_rules(), so a gate
+	 * written with two rules can evaluate as having one. The verification reads the written meta,
+	 * not the evaluated rules, so the dropped slug is named rather than the gate
+	 * passing as clean while the content that rule covered stays readable.
+	 */
+	public function test_verify_migrated_gate_flags_a_written_rule_that_selects_no_content() {
+		$gate_id = $this->create_enforceable_gate(
+			[
+				[
+					'slug'  => 'post_types',
+					'value' => [ 'post' ],
+				],
+				[
+					'slug'  => 'category',
+					'value' => [],
+				],
+			]
+		);
+
+		$issues = $this->invoke_private_static( 'verify_migrated_gate', [ $gate_id ] );
+
+		$this->assertCount( 1, $issues );
+		$this->assertStringContainsString( '1 of its 2 content rules select no content', $issues[0] );
+		$this->assertStringContainsString( 'category', $issues[0] );
 	}
 
 	/**
@@ -985,8 +1388,9 @@ HTML;
 				'value' => [ '1' ],
 			],
 		];
-		$layouts  = [
-			'registration'  => '',
+		// A real layout, so the only issue this can produce is the slug one.
+		$layouts = [
+			'registration'  => '<!-- wp:paragraph --><p>Upsell.</p><!-- /wp:paragraph -->',
 			'custom_access' => null,
 		];
 
@@ -1016,8 +1420,9 @@ HTML;
 				'value' => [ '2' ],
 			],
 		];
+		// A real layout, so the only issue this can produce is the slug one.
 		$layouts = [
-			'registration'  => '',
+			'registration'  => '<!-- wp:paragraph --><p>Upsell.</p><!-- /wp:paragraph -->',
 			'custom_access' => null,
 		];
 
@@ -1028,6 +1433,192 @@ HTML;
 
 		$this->assertCount( 1, $issues );
 		$this->assertStringContainsString( '1 of its 2 content rules do not resolve', $issues[0] );
+	}
+
+	/**
+	 * A gate whose registration layout extracted to nothing is flagged in dry-run —
+	 * the one pass that can see it, for the reason compute_pre_write_issues() gives.
+	 */
+	public function test_compute_pre_write_issues_flags_an_empty_registration_layout() {
+		$ac_rules = [
+			[
+				'slug'  => 'post_types',
+				'value' => [ 'post' ],
+			],
+		];
+		$layouts  = [
+			'registration'  => '',
+			'custom_access' => null,
+		];
+
+		$issues = $this->invoke_private_static(
+			'compute_pre_write_issues',
+			[ $ac_rules, false, $layouts, [] ]
+		);
+
+		$this->assertCount( 1, $issues, 'The resolvable slug produces no issue of its own, so the empty layout is the only one.' );
+		$this->assertStringContainsString( 'no registration layout content could be extracted', $issues[0] );
+	}
+
+	/**
+	 * A group with no gate post at all is not flagged for its empty registration
+	 * layout. There was no authored copy to lose, so the seeded Newspack default is
+	 * the right outcome rather than a warning the operator has to triage.
+	 */
+	public function test_compute_pre_write_issues_does_not_flag_an_empty_layout_when_no_gate_post_exists() {
+		$ac_rules = [
+			[
+				'slug'  => 'post_types',
+				'value' => [ 'post' ],
+			],
+		];
+		$layouts  = [
+			'registration'  => '',
+			'custom_access' => null,
+		];
+
+		$issues = $this->invoke_private_static(
+			'compute_pre_write_issues',
+			[ $ac_rules, false, $layouts, [], false ]
+		);
+
+		$this->assertSame( [], $issues, 'No gate post means no lost content to warn about.' );
+	}
+
+	/**
+	 * A paid access layout that was found but extracted to nothing is flagged, which
+	 * is a different shape from one that was never found: null means the paid mode
+	 * never activates, an empty string means it activates over default copy.
+	 */
+	public function test_compute_pre_write_issues_flags_an_empty_paid_access_layout() {
+		$ac_rules = [
+			[
+				'slug'  => 'post_types',
+				'value' => [ 'post' ],
+			],
+		];
+		$layouts  = [
+			'registration'  => '<!-- wp:paragraph --><p>Subscribe.</p><!-- /wp:paragraph -->',
+			'custom_access' => '',
+		];
+
+		$issues = $this->invoke_private_static(
+			'compute_pre_write_issues',
+			[ $ac_rules, true, $layouts, [ 42 ] ]
+		);
+
+		$this->assertCount( 1, $issues );
+		$this->assertStringContainsString( 'paid access layout extracted to nothing', $issues[0] );
+	}
+
+	/**
+	 * A synced-pattern reference inside a wrapper is carried into the layout as a
+	 * reference, not resolved and inlined.
+	 *
+	 * The layout renders through WordPress, which resolves the ref itself, so passing
+	 * it through keeps the publisher's pattern editable in one place after migration.
+	 * The wrapper strip deliberately does not follow it.
+	 */
+	public function test_extract_gate_layouts_carries_a_pattern_reference_through_a_wrapper() {
+		$pattern_id = $this->create_pattern_post( '<!-- wp:paragraph --><p>Shared upsell copy.</p><!-- /wp:paragraph -->' );
+		$gate_post  = $this->create_gate_post(
+			'<!-- wp:woocommerce-memberships/non-member-content -->'
+			. sprintf( '<!-- wp:block {"ref":%d} /-->', $pattern_id )
+			. '<!-- /wp:woocommerce-memberships/non-member-content -->'
+		);
+
+		$layouts = $this->invoke_private_static( 'extract_gate_layouts', [ $gate_post ] );
+
+		$this->assertStringContainsString( sprintf( '<!-- wp:block {"ref":%d} /-->', $pattern_id ), $layouts['registration'], 'The reference survives verbatim.' );
+		$this->assertStringNotContainsString( 'Shared upsell copy.', $layouts['registration'], 'The referenced content is not inlined.' );
+	}
+
+	/**
+	 * A wrapper nested inside one of the same type is unwrapped, not dropped.
+	 *
+	 * Both wrappers address the same audience, so the inner one's copy belongs in the
+	 * layout being built. Only the opposite wrapper carries content this layout's
+	 * readers must not see.
+	 */
+	public function test_extract_gate_layouts_unwraps_a_nested_wrapper_of_the_same_type() {
+		// Two nestings, because the strip takes a different path for each: a direct
+		// child of the wrapper is walked as a plain block list, while one inside a
+		// group also has an innerContent placeholder map to keep in step.
+		$gate_content = <<<'HTML'
+<!-- wp:woocommerce-memberships/non-member-content -->
+<!-- wp:paragraph --><p>Outer upsell.</p><!-- /wp:paragraph -->
+<!-- wp:woocommerce-memberships/non-member-content -->
+<!-- wp:paragraph --><p>Directly nested upsell.</p><!-- /wp:paragraph -->
+<!-- /wp:woocommerce-memberships/non-member-content -->
+<!-- wp:group --><div class="wp-block-group">
+<!-- wp:woocommerce-memberships/non-member-content -->
+<!-- wp:paragraph --><p>Grouped upsell.</p><!-- /wp:paragraph -->
+<!-- /wp:woocommerce-memberships/non-member-content -->
+</div><!-- /wp:group -->
+<!-- /wp:woocommerce-memberships/non-member-content -->
+HTML;
+		$gate_post = $this->create_gate_post( $gate_content );
+
+		$layouts = $this->invoke_private_static( 'extract_gate_layouts', [ $gate_post ] );
+
+		$this->assertStringContainsString( 'Outer upsell.', $layouts['registration'] );
+		$this->assertStringContainsString( 'Directly nested upsell.', $layouts['registration'], 'A same-audience wrapper contributes its content rather than losing it.' );
+		$this->assertStringContainsString( 'Grouped upsell.', $layouts['registration'], 'The same holds one level down, where placeholders have to be kept in step.' );
+		$this->assertStringNotContainsString( 'woocommerce-memberships/non-member-content', $layouts['registration'], 'The wrapper markup itself is still dropped.' );
+	}
+
+	/**
+	 * A wrapper two pattern hops away is warned about.
+	 *
+	 * WordPress resolves the whole reference chain at render time, so a wrapper inside
+	 * a pattern inside a pattern reaches the reader exactly like one hop does.
+	 */
+	public function test_extract_gate_layouts_warns_about_a_wrapper_behind_chained_patterns() {
+		$inner_pattern_id = $this->create_pattern_post(
+			'<!-- wp:woocommerce-memberships/member-content -->'
+			. '<!-- wp:paragraph --><p>Members only secret.</p><!-- /wp:paragraph -->'
+			. '<!-- /wp:woocommerce-memberships/member-content -->'
+		);
+		$outer_pattern_id = $this->create_pattern_post( sprintf( '<!-- wp:block {"ref":%d} /-->', $inner_pattern_id ) );
+		$gate_post        = $this->create_gate_post(
+			'<!-- wp:woocommerce-memberships/non-member-content -->'
+			. sprintf( '<!-- wp:block {"ref":%d} /-->', $outer_pattern_id )
+			. '<!-- /wp:woocommerce-memberships/non-member-content -->'
+		);
+
+		$this->invoke_private_static( 'extract_gate_layouts', [ $gate_post ] );
+
+		$this->assertNotEmpty( \WP_CLI::$warnings, 'The wrapper behind two hops is warned about.' );
+		$this->assertStringContainsString( 'member-content', implode( ' ', \WP_CLI::$warnings ) );
+	}
+
+	/**
+	 * A pattern carried into a layout that holds a membership wrapper is warned about.
+	 *
+	 * The strip cannot reach inside a reference, so the wrapper survives into the
+	 * layout. Once WooCommerce Memberships is deactivated an unregistered block type
+	 * prints its saved inner content as static markup, which puts members-only copy
+	 * in front of the non-members the registration layout is for. The warning is the
+	 * only place this shape is visible.
+	 */
+	public function test_extract_gate_layouts_warns_when_a_carried_pattern_holds_a_wrapper() {
+		$pattern_id = $this->create_pattern_post(
+			'<!-- wp:woocommerce-memberships/member-content -->'
+			. '<!-- wp:paragraph --><p>Members only secret.</p><!-- /wp:paragraph -->'
+			. '<!-- /wp:woocommerce-memberships/member-content -->'
+		);
+		$gate_post  = $this->create_gate_post(
+			'<!-- wp:woocommerce-memberships/non-member-content -->'
+			. sprintf( '<!-- wp:block {"ref":%d} /-->', $pattern_id )
+			. '<!-- /wp:woocommerce-memberships/non-member-content -->'
+		);
+
+		$this->invoke_private_static( 'extract_gate_layouts', [ $gate_post ] );
+
+		$this->assertNotEmpty( \WP_CLI::$warnings, 'The carried wrapper is warned about.' );
+		$warning_text = implode( ' ', \WP_CLI::$warnings );
+		$this->assertStringContainsString( (string) $pattern_id, $warning_text, 'The warning names the pattern to edit.' );
+		$this->assertStringContainsString( 'member-content', $warning_text, 'The warning names the wrapper found.' );
 	}
 
 	/**
@@ -1081,6 +1672,61 @@ HTML;
 
 		$this->assertCount( 1, $issues );
 		$this->assertStringContainsString( 'no access rules', $issues[0] );
+	}
+
+	/**
+	 * A WC rule naming a taxonomy with no terms maps to a rule with an empty value,
+	 * which Content_Rules::get_gate_content_rules() drops at read time — so it gates
+	 * nothing while still being counted in the summary. The dry run says so before the
+	 * operator commits to --live, in both shapes: on its own the gate would cover no
+	 * content at all, and alongside a rule that does resolve it is a partial leak.
+	 */
+	public function test_compute_pre_write_issues_flags_rules_that_select_no_content() {
+		$layouts = [
+			'registration'  => '<p>Register.</p>',
+			'custom_access' => null,
+		];
+
+		$whole_taxonomy_only = $this->invoke_private_static(
+			'map_rules_to_ac_format',
+			[ [ $this->make_rule( 'taxonomy', 'category', [] ) ] ]
+		);
+		$this->assertSame(
+			[
+				[
+					'slug'  => 'category',
+					'value' => [],
+				],
+			],
+			$whole_taxonomy_only,
+			'A term-less taxonomy rule still maps to a rule the evaluator will never see.'
+		);
+
+		$issues = $this->invoke_private_static(
+			'compute_pre_write_issues',
+			[ $whole_taxonomy_only, false, $layouts, [] ]
+		);
+		$this->assertCount( 1, $issues );
+		$this->assertStringContainsString( 'none of its content rules select any content', $issues[0] );
+		$this->assertStringContainsString( 'category', $issues[0] );
+
+		$mixed = $this->invoke_private_static(
+			'map_rules_to_ac_format',
+			[
+				[
+					$this->make_rule( 'taxonomy', 'category', [] ),
+					$this->make_rule( 'post_type', 'post', [] ),
+				],
+			]
+		);
+
+		$issues = $this->invoke_private_static(
+			'compute_pre_write_issues',
+			[ $mixed, false, $layouts, [] ]
+		);
+		$this->assertCount( 1, $issues );
+		$this->assertStringContainsString( '1 of its 2 content rules select no content', $issues[0] );
+		$this->assertStringContainsString( 'category', $issues[0], 'The dropped slug is named so the operator knows what stays ungated.' );
 	}
 
 	/**
@@ -1153,6 +1799,25 @@ HTML;
 	}
 
 	/**
+	 * Create a synced-pattern (wp_block) post for `core/block` reference tests.
+	 *
+	 * @param string $content The block markup.
+	 * @param string $status  Post status; 'draft' stands in for a pattern the walker
+	 *                        must skip.
+	 *
+	 * @return int The wp_block post ID.
+	 */
+	private function create_pattern_post( string $content, string $status = 'publish' ): int {
+		return self::factory()->post->create(
+			[
+				'post_type'    => 'wp_block',
+				'post_content' => $content,
+				'post_status'  => $status,
+			]
+		);
+	}
+
+	/**
 	 * Create a published post carrying the given block content, standing in for an
 	 * np_memberships_gate.
 	 *
@@ -1184,14 +1849,15 @@ HTML;
 	 */
 	public function test_map_rules_to_ac_format_skips_newsletter_list_rules() {
 		$rules = [
-			$this->make_rule( 'post', [] ),
-			$this->make_rule( Subscription_Lists::CPT, [ 21, 22 ] ),
+			$this->make_rule( 'post_type', 'post', [] ),
+			$this->make_rule( 'post_type', Subscription_Lists::CPT, [ 21, 22 ] ),
 		];
 
 		$mapped_rules = $this->invoke_private_static( 'map_rules_to_ac_format', [ $rules ] );
 
 		$this->assertCount( 1, $mapped_rules );
-		$this->assertSame( 'post', $mapped_rules[0]['slug'] );
+		$this->assertSame( 'post_types', $mapped_rules[0]['slug'] );
+		$this->assertSame( [ 'post' ], $mapped_rules[0]['value'] );
 	}
 
 	/**
@@ -1201,10 +1867,10 @@ HTML;
 	 */
 	public function test_plan_has_newsletter_rules_distinguishes_the_skip_reason() {
 		$this->assertTrue(
-			$this->invoke_private_static( 'plan_has_newsletter_rules', [ [ $this->make_rule( Subscription_Lists::CPT, [ 21 ] ) ] ] )
+			$this->invoke_private_static( 'plan_has_newsletter_rules', [ [ $this->make_rule( 'post_type', Subscription_Lists::CPT, [ 21 ] ) ] ] )
 		);
 		$this->assertFalse(
-			$this->invoke_private_static( 'plan_has_newsletter_rules', [ [ $this->make_rule( 'post', [] ) ] ] )
+			$this->invoke_private_static( 'plan_has_newsletter_rules', [ [ $this->make_rule( 'post_type', 'post', [] ) ] ] )
 		);
 	}
 
@@ -1593,5 +2259,56 @@ HTML;
 		);
 
 		$this->assertNotEmpty( \WP_CLI::$warnings );
+	}
+
+	/**
+	 * NPPD-2063: a taxonomy rule carrying no term IDs is WooCommerce Memberships'
+	 * spelling of "every term of this taxonomy", and it has no faithful Access
+	 * Control equivalent.
+	 *
+	 * Mapping it produces a taxonomy slug with an empty value, which
+	 * Content_Rules::get_gate_content_rules() filters out on read — so the rule
+	 * vanishes between write and evaluation and the gate fails open over everything
+	 * it covered, while verify_migrated_gate() still reports the gate as fine as long
+	 * as one other rule survived. Naming these lets the caller refuse the plan
+	 * instead of migrating a gate that under-restricts silently.
+	 */
+	public function test_whole_taxonomy_rules_are_identified_rather_than_mapped_to_an_empty_value() {
+		$whole_category_taxonomy = $this->make_rule( 'taxonomy', 'category', [] );
+		$named_tags              = $this->make_rule( 'taxonomy', 'post_tag', [ 7, 8 ] );
+		$whole_post_type         = $this->make_rule( 'post_type', 'post', [] );
+
+		$this->assertSame(
+			[ 'category' ],
+			$this->invoke_private_static( 'whole_taxonomy_rule_names', [ [ $whole_category_taxonomy, $named_tags, $whole_post_type ] ] ),
+			'Only the term-less taxonomy rule is unbounded: a taxonomy rule naming terms is expressible, and a term-less POST TYPE rule is the legitimate "post_types" shape.'
+		);
+
+		$this->assertSame(
+			[],
+			$this->invoke_private_static( 'whole_taxonomy_rule_names', [ [ $named_tags, $whole_post_type ] ] ),
+			'A plan with nothing unbounded migrates normally.'
+		);
+	}
+
+	/**
+	 * NPPD-2063: the mapping still emits the empty value for such a rule, which is
+	 * why the caller has to refuse the plan before mapping rather than after.
+	 *
+	 * Pinning this keeps the reason for the pre-mapping check visible: if the mapping
+	 * is ever changed to drop or expand the rule instead, this is where that shows up.
+	 */
+	public function test_a_whole_taxonomy_rule_still_maps_to_a_value_the_reader_discards() {
+		$mapped = $this->invoke_private_static( 'map_rules_to_ac_format', [ [ $this->make_rule( 'taxonomy', 'category', [] ) ] ] );
+
+		$this->assertSame(
+			[
+				[
+					'slug'  => 'category',
+					'value' => [],
+				],
+			],
+			$mapped
+		);
 	}
 }

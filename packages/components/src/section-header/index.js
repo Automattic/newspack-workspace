@@ -9,11 +9,11 @@ import { __ } from '@wordpress/i18n';
 import { useEffect, useRef } from '@wordpress/element';
 import { DropdownMenu, MenuItem, Tooltip, __experimentalHStack as HStack } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
 import { Icon, chevronLeft, moreVertical } from '@wordpress/icons';
+import { Badge } from '@wordpress/ui';
 
 /**
  * Internal dependencies
  */
-import Badge from '../badge';
 import Button from '../button';
 import Grid from '../grid';
 import './style.scss';
@@ -28,7 +28,7 @@ import classnames from 'classnames';
  *
  * @typedef {Object} SectionHeaderProps
  * @property {string}             [backNav='']       - URL to navigate back to.
- * @property {Object[]}           [badges]           - Badges to display beside the title, each `{ label, level }`.
+ * @property {Object[]}           [badges]           - Badges to display beside the title, each `{ label, intent }`.
  * @property {boolean}            [centered=false]   - Indicates if the header is centered.
  * @property {?string}            [className=null]   - Additional CSS class name, applied to the outer container.
  * @property {string|Function|*}  [description]      - Description of the section.
@@ -100,14 +100,18 @@ const SectionHeader = ( {
 
 	let titleContent = null;
 
+	const renderBadge = ( badge, i ) => (
+		<Badge key={ i } className="newspack-section-header__badge" intent={ badge.intent || 'none' }>
+			{ badge.label }
+		</Badge>
+	);
+
 	if ( typeof title === 'string' ) {
 		titleContent = (
 			<div className="newspack-section-header__title-container">
 				<HeadingTag className="newspack-section-header__title">
 					{ title }
-					{ badges?.length
-						? badges.map( ( badge, i ) => <Badge key={ i } text={ badge.label } level={ badge.level || 'default' } /> )
-						: null }
+					{ ( badges || [] ).filter( badge => badge?.label ).map( renderBadge ) }
 				</HeadingTag>
 				{ /* Secondary action before the overflow menu, so a promoted link reads as an action rather than sitting to the right of the kebab. */ }
 				{ secondaryAction && (
