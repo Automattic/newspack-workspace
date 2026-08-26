@@ -1017,8 +1017,9 @@ Error message(s) received:
 	 *   - matching_function (string): Defaults to 'default' (strict equality). Use 'list__in' for
 	 *       multi-select fields whose stored value is a delimited list, 'range' for numeric fields
 	 *       (emitted by Mailchimp for number merge fields), or 'date_range' for a 'date'/'datetime'
-	 *       field to offer publishers a { start, end } window operator. The consumer also recognizes
-	 *       'list__not_in', though no current provider emits it.
+	 *       field to offer publishers a { start, end } window operator — but only when
+	 *       integrations_supports_date_range() confirms the active newspack-plugin can consume it.
+	 *       The consumer also recognizes 'list__not_in', though no current provider emits it.
 	 *   - date_format (string): PHP date format string describing how the provider renders a
 	 *       'date'/'datetime' field's value (e.g. 'm/d/Y'). Empty means the provider already
 	 *       sends ISO 8601 / 'Y-m-d', which is what ActiveCampaign does; a provider whose dates
@@ -1036,6 +1037,31 @@ Error message(s) received:
 	 */
 	public function get_contact_fields_for_integrations( $list_id = null ) {
 		return [];
+	}
+
+	/**
+	 * Whether the active newspack-plugin can consume the date_range operator.
+	 *
+	 * The schema mappers are where date_range originates, and the two plugins
+	 * update independently: an older newspack-plugin stores the operator without
+	 * probing and re-emits it to newspack-popups, where a stale build crashes on
+	 * an unresolvable matching function and stops prompt display sitewide. Probe
+	 * for the Incoming_Field setter that shipped alongside date-range support and
+	 * fall back to exact matching when it is absent.
+	 *
+	 * @return bool
+	 */
+	protected static function integrations_supports_date_range() {
+		$supported = method_exists( '\Newspack\Reader_Activation\Integrations\Incoming_Field', 'set_date_format' );
+		/**
+		 * Filters whether the schema mappers may emit the date_range operator.
+		 *
+		 * The probe result is fixed by which newspack-plugin is installed, so this
+		 * exists chiefly to let tests pin both branches.
+		 *
+		 * @param bool $supported Whether the active newspack-plugin supports it.
+		 */
+		return apply_filters( 'newspack_newsletters_integrations_supports_date_range', $supported );
 	}
 
 	/**

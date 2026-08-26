@@ -104,6 +104,32 @@ class ActiveCampaignIntegrationsSchemaTest extends WP_UnitTestCase {
 	}
 
 	/**
+	 * The operator originates here and the plugins update independently: on a
+	 * site whose newspack-plugin predates date-range support, date_range would
+	 * reach newspack-popups unvalidated and a stale build crashes on it. The
+	 * mapper probes the consumer and degrades to exact matching. (The stub in
+	 * tests/mocks/class-newspack-plugin-incoming-field-mock.php is what makes
+	 * the probe resolve true for the other tests in this file.)
+	 */
+	public function test_date_types_degrade_to_exact_match_without_consumer_support() {
+		add_filter( 'newspack_newsletters_integrations_supports_date_range', '__return_false' );
+		$mapped = $this->map_field(
+			[
+				'perstag' => 'LAST_GIFT',
+				'title'   => 'Last Gift',
+				'type'    => 'date',
+			]
+		);
+		remove_filter( 'newspack_newsletters_integrations_supports_date_range', '__return_false' );
+
+		$this->assertSame( 'default', $mapped['matching_function'] );
+		// Only the operator degrades — the field still describes itself fully, so
+		// nothing downstream has to special-case the degraded shape.
+		$this->assertSame( 'date', $mapped['value_type'] );
+		$this->assertSame( '', $mapped['date_format'] );
+	}
+
+	/**
 	 * Value-type mapping is derived from AC's field type so the framework constrains
 	 * the segment operator per field shape. Mirrors newspack-manager's ActiveCampaign
 	 * integration so the same field types identically across both AC integrations.

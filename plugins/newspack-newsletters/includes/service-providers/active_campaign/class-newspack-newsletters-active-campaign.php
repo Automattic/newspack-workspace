@@ -2529,11 +2529,14 @@ final class Newspack_Newsletters_Active_Campaign extends \Newspack_Newsletters_S
 		}
 
 		// A date field defaults to the date range operator; exact-match text on a
-		// date is technically valid but never what a publisher wants.
+		// date is technically valid but never what a publisher wants. Probed
+		// rather than assumed: on an older newspack-plugin the operator would
+		// travel to newspack-popups unvalidated, where a stale build crashes on
+		// it (see integrations_supports_date_range()).
 		$matching_function = 'default';
 		if ( $is_multi_select ) {
 			$matching_function = 'list__in';
-		} elseif ( 'date' === $value_type || 'datetime' === $value_type ) {
+		} elseif ( ( 'date' === $value_type || 'datetime' === $value_type ) && self::integrations_supports_date_range() ) {
 			$matching_function = 'date_range';
 		}
 

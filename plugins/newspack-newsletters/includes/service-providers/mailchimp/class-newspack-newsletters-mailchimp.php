@@ -2805,10 +2805,11 @@ final class Newspack_Newsletters_Mailchimp extends \Newspack_Newsletters_Service
 		if ( in_array( $type, [ 'dropdown', 'radio' ], true ) ) {
 			$value_type = 'select';
 		} elseif ( 'date' === $type ) {
-			// 'birthday' is deliberately excluded: it is MM/DD with no year, so it
-			// cannot be placed on an absolute timeline and stays exact-match text.
 			$value_type        = 'date';
-			$matching_function = 'date_range';
+			// Probed rather than assumed: on an older newspack-plugin the operator
+			// would travel to newspack-popups unvalidated, where a stale build
+			// crashes on it (see integrations_supports_date_range()).
+			$matching_function = self::integrations_supports_date_range() ? 'date_range' : 'default';
 			$date_format       = self::map_mailchimp_date_format(
 				isset( $field['options']['date_format'] ) ? (string) $field['options']['date_format'] : ''
 			);
