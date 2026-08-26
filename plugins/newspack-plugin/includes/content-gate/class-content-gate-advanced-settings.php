@@ -239,7 +239,7 @@ class Content_Gate_Advanced_Settings {
 		// '0' returned by get_option() as truthy.
 		$settings = [
 			'restrict_feeds'                 => (int) get_option( self::OPTION_PREFIX . 'restrict_feeds', 1 ),
-			'feed_restriction_mode'          => self::sanitize_feed_mode( get_option( self::OPTION_PREFIX . 'feed_restriction_mode', self::FEED_MODE_EXCLUDE ) ),
+			'feed_restriction_mode'          => self::sanitize_feed_mode( get_option( self::OPTION_PREFIX . 'feed_restriction_mode', self::FEED_MODE_TRUNCATE ) ),
 			'newsletter_link_bypass_enabled' => (int) get_option( self::OPTION_PREFIX . 'newsletter_link_bypass_enabled', 0 ),
 		];
 
@@ -251,15 +251,15 @@ class Content_Gate_Advanced_Settings {
 	 * Normalize a stored feed restriction mode to a known value.
 	 *
 	 * Only truncate/exclude are storable; anything else (including a legacy or
-	 * corrupt value) falls back to the exclude default, matching WC Memberships'
-	 * out-of-the-box behaviour of dropping restricted items from feeds.
+	 * corrupt value) falls back to the truncate default, which keeps items in the
+	 * feed with the gate teaser rather than dropping them.
 	 *
 	 * @param mixed $mode Raw mode value.
 	 *
 	 * @return string
 	 */
 	private static function sanitize_feed_mode( mixed $mode ): string {
-		return in_array( $mode, self::get_feed_restriction_modes(), true ) ? $mode : self::FEED_MODE_EXCLUDE;
+		return in_array( $mode, self::get_feed_restriction_modes(), true ) ? $mode : self::FEED_MODE_TRUNCATE;
 	}
 
 	/**
@@ -271,7 +271,8 @@ class Content_Gate_Advanced_Settings {
 	 * @return string[]
 	 */
 	public static function get_feed_restriction_modes(): array {
-		return [ self::FEED_MODE_EXCLUDE, self::FEED_MODE_TRUNCATE ];
+		// Truncate first so the default mode leads the wizard's select options.
+		return [ self::FEED_MODE_TRUNCATE, self::FEED_MODE_EXCLUDE ];
 	}
 
 	/**
@@ -377,8 +378,8 @@ class Content_Gate_Advanced_Settings {
 
 	/**
 	 * Remove restricted posts from RSS feed queries when the feed mode is
-	 * "exclude", matching WC Memberships' default of keeping restricted content
-	 * out of feeds entirely (not just blanking the body).
+	 * "exclude", matching WC Memberships' hide/redirect restriction modes, which
+	 * drop restricted items from feeds entirely rather than blanking the body.
 	 *
 	 * Runs on the `the_posts` filter rather than a `post__not_in` on
 	 * `pre_get_posts` because gate restriction is rule-based and per-reader:
