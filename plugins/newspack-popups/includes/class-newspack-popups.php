@@ -844,7 +844,6 @@ final class Newspack_Popups {
 			'newspack-popups',
 			'newspack_popups_data',
 			[
-				'frontend_url'                 => get_site_url(),
 				'preview_post'                 => self::preview_post_permalink(),
 				'preview_archive'              => self::preview_archive_permalink(),
 				'custom_placements'            => Newspack_Popups_Custom_Placements::get_custom_placements(),
@@ -923,6 +922,23 @@ final class Newspack_Popups {
 		// Used by the Newspack Plugin's Campaigns Wizard.
 		$is_view_as_preview = false != Newspack_Popups_View_As::viewing_as_spec();
 		return ! empty( self::previewed_popup_id() ) || ! empty( self::preset_popup_id() ) || $is_view_as_preview || $is_customizer_preview;
+	}
+
+	/**
+	 * Whether the current user may preview a given prompt.
+	 *
+	 * Previews render unsaved, request-supplied prompt content, so both halves
+	 * matter: the capability, and the id actually naming a prompt. Shared so the
+	 * renderer (Newspack_Popups_Model::retrieve_preview_popup) and the front-end
+	 * param list (Newspack_Popups_Inserter::preview_param_names) cannot drift apart
+	 * — a gate stricter than the renderer would produce a preview whose links go
+	 * nowhere, and one looser would leak preview state onto ordinary pages.
+	 *
+	 * @param int|string $post_id Prompt ID from the request.
+	 * @return bool
+	 */
+	public static function can_preview_popup( $post_id ) {
+		return self::is_user_admin() && self::NEWSPACK_POPUPS_CPT === get_post_type( $post_id );
 	}
 
 	/**

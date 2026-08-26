@@ -1,3 +1,24 @@
+## newspack-network [2.22.3](https://github.com/Automattic/newspack-workspace/compare/newspack-network@2.22.2...newspack-network@2.22.3) (2026-08-26)
+
+
+### Bug Fixes
+
+* **content-distribution:** filter caller-supplied content on insert ([#924](https://github.com/Automattic/newspack-workspace/issues/924)) ([1deb19a](https://github.com/Automattic/newspack-workspace/commit/1deb19a6a239394bcda09c4a5d58623d22a4335c))
+
+## newspack-network [2.22.2](https://github.com/Automattic/newspack-workspace/compare/newspack-network@2.22.1...newspack-network@2.22.2) (2026-08-24)
+
+
+### Bug Fixes
+
+* **network:** escape node-supplied hub admin output ([#871](https://github.com/Automattic/newspack-workspace/issues/871)) ([4dbe67d](https://github.com/Automattic/newspack-workspace/commit/4dbe67d6c36c365254a4517d031ab725a57637e3))
+
+## newspack-network [2.22.1](https://github.com/Automattic/newspack-workspace/compare/newspack-network@2.22.0...newspack-network@2.22.1) (2026-08-19)
+
+
+### Bug Fixes
+
+* **network:** distribute dynamic galleries as resolved images ([#918](https://github.com/Automattic/newspack-workspace/issues/918)) ([0e1d1a1](https://github.com/Automattic/newspack-workspace/commit/0e1d1a149e48ba2f6425477eea41164fc6b195d7))
+
 # newspack-network [2.22.0](https://github.com/Automattic/newspack-workspace/compare/newspack-network@2.21.2...newspack-network@2.22.0) (2026-08-17)
 
 

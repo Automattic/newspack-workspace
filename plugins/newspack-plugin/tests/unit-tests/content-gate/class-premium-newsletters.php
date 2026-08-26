@@ -9,6 +9,7 @@
 namespace Newspack\Tests\Content_Gate;
 
 use Newspack\Content_Gate;
+use Newspack\Content_Restriction_Control;
 use Newspack\Content_Rules;
 use Newspack\Data_Events;
 use Newspack\Premium_Newsletters;
@@ -67,6 +68,17 @@ class Newspack_Test_Premium_Newsletters extends \WP_UnitTestCase {
 		$gates_prop = new \ReflectionProperty( Premium_Newsletters::class, 'gates' );
 		$gates_prop->setAccessible( true );
 		$gates_prop->setValue( null, null );
+
+		// Content_Restriction_Control memoizes per post for the life of the request.
+		// PHPUnit shares one process across the suite, so without this the maps
+		// carry entries keyed by post IDs that later tests reuse, and a test passes
+		// or fails depending on where its fixtures land in the auto-increment
+		// sequence. Five sibling test files in this directory reset the same four.
+		foreach ( [ 'post_gate_id_map', 'post_gate_layout_id_map', 'post_gates_map', 'term_descendants_map' ] as $cache_property ) {
+			$cache_property_reflection = new \ReflectionProperty( Content_Restriction_Control::class, $cache_property );
+			$cache_property_reflection->setAccessible( true );
+			$cache_property_reflection->setValue( null, [] );
+		}
 	}
 
 	/**
