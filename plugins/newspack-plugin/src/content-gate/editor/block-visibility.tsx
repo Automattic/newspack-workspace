@@ -201,29 +201,33 @@ const AccessRuleValueControl = ( {
 		const selectedLabels = options.filter( o => valueArr.some( v => String( v ) === String( o.value ) ) ).map( o => o.label );
 
 		// Nothing to select means the only value the picker can produce is the empty
-		// one, which reads as "no constraint" and grants every reader.
+		// one, which reads as "no constraint" and grants every reader. This control
+		// takes no help text of its own, so the reason goes in a sibling.
+		const hasNothingToSelect = 0 === options.length;
 		return (
-			<FormTokenField
-				label={ config.name }
-				disabled={ 0 === options.length }
-				help={
-					0 === options.length
-						? __(
-								'This rule has nothing to select yet, so it grants access to everyone. Add the items it selects, or turn the rule off.',
-								'newspack-plugin'
-						  )
-						: undefined
-				}
-				value={ selectedLabels }
-				suggestions={ options.map( o => o.label ) }
-				onChange={ ( tokens: ( string | { value: string } )[] ) => {
-					const labels = tokens.map( t => ( typeof t === 'string' ? t : t.value ) );
-					onChange( options.filter( o => labels.includes( o.label ) ).map( o => o.value ) );
-				} }
-				__experimentalExpandOnFocus
-				__next40pxDefaultSize
-				__nextHasNoMarginBottom
-			/>
+			<>
+				<FormTokenField
+					label={ config.name }
+					disabled={ hasNothingToSelect }
+					value={ selectedLabels }
+					suggestions={ options.map( o => o.label ) }
+					onChange={ ( tokens: ( string | { value: string } )[] ) => {
+						const labels = tokens.map( t => ( typeof t === 'string' ? t : t.value ) );
+						onChange( options.filter( o => labels.includes( o.label ) ).map( o => o.value ) );
+					} }
+					__experimentalExpandOnFocus
+					__next40pxDefaultSize
+					__nextHasNoMarginBottom
+				/>
+				{ hasNothingToSelect && (
+					<p className="components-base-control__help">
+						{ __(
+							'This rule has nothing to select yet, so it grants access to everyone. Add the items it selects, or turn the rule off.',
+							'newspack-plugin'
+						) }
+					</p>
+				) }
+			</>
 		);
 	}
 
