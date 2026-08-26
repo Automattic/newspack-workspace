@@ -6,7 +6,7 @@ import { act, fireEvent, render, screen } from '@testing-library/react';
 /**
  * Internal dependencies
  */
-import { ConfigureView, operatorOptionsForField, reconcileOperators, toggleField } from './configure-view';
+import { ConfigureView, fallbackOperator, operatorOptionsForField, reconcileOperators, toggleField } from './configure-view';
 import { useUnsavedChangesDialog } from '../../../../../packages/components/src';
 
 const mockSetHeaderData = jest.fn();
@@ -408,7 +408,12 @@ describe( 'incoming-field operators', () => {
 
 	it( 'constrains operator options by value_type', () => {
 		expect( operatorOptionsForField( { value_type: 'number' } ).map( o => o.value ) ).toEqual( [ 'range' ] );
-		expect( operatorOptionsForField( { value_type: 'date' } ).map( o => o.value ) ).toEqual( [ 'date_range', 'default' ] );
+		// Date fields carry the full shape once so the publisher-facing labels are
+		// pinned alongside the values.
+		expect( operatorOptionsForField( { value_type: 'date' } ) ).toEqual( [
+			{ label: 'Date range', value: 'date_range' },
+			{ label: 'Text', value: 'default' },
+		] );
 		expect( operatorOptionsForField( { value_type: 'datetime' } ).map( o => o.value ) ).toEqual( [ 'date_range', 'default' ] );
 		expect( operatorOptionsForField( { value_type: 'boolean' } ).map( o => o.value ) ).toEqual( [ 'default' ] );
 		expect( operatorOptionsForField( { value_type: 'multiselect' } ).map( o => o.value ) ).toEqual( [ 'list__in' ] );
@@ -417,15 +422,14 @@ describe( 'incoming-field operators', () => {
 		expect( operatorOptionsForField( { value_type: 'string', has_options: true } ).map( o => o.value ) ).toEqual( [ 'default', 'list__in' ] );
 	} );
 
-	it( 'offers a date range and text for date fields', () => {
-		expect( operatorOptionsForField( { value_type: 'date' } ) ).toEqual( [
-			{ label: 'Date range', value: 'date_range' },
-			{ label: 'Text', value: 'default' },
-		] );
-		expect( operatorOptionsForField( { value_type: 'datetime' } ) ).toEqual( [
-			{ label: 'Date range', value: 'date_range' },
-			{ label: 'Text', value: 'default' },
-		] );
+	it( 'falls back to the operator the save-time repair will store', () => {
+		// The rendered select and reconcileOperators share this helper, so a
+		// stored out-of-set operator (a leftover 'list__in' on a now-date field)
+		// can never display Date range while the next save writes Text — which
+		// would both contradict the publisher and make the displayed option
+		// unselectable, since choosing what is already shown fires no onChange.
+		expect( fallbackOperator( operatorOptionsForField( { value_type: 'date' } ) ) ).toBe( 'default' );
+		expect( fallbackOperator( operatorOptionsForField( { value_type: 'number' } ) ) ).toBe( 'range' );
 	} );
 
 	it( 'leaves an already-stored Text operator on a date field alone', () => {
