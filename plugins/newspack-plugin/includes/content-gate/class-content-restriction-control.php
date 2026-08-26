@@ -55,6 +55,13 @@ class Content_Restriction_Control {
 	const IS_EXEMPT_META_KEY = 'newspack_content_restriction_is_exempt';
 
 	/**
+	 * Post meta key WooCommerce Memberships uses to force a post public.
+	 *
+	 * @var string
+	 */
+	const WC_FORCE_PUBLIC_META_KEY = '_wc_memberships_force_public';
+
+	/**
 	 * Initialize hooks and filters.
 	 */
 	public static function init() {
