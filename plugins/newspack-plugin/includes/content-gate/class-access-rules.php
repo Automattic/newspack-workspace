@@ -125,21 +125,27 @@ class Access_Rules {
 	}
 
 	/**
-	 * Whether a stored rule value is malformed configuration rather than the
-	 * absence of a constraint.
+	 * Whether an options-backed rule's stored value is malformed configuration
+	 * rather than the absence of a constraint.
 	 *
-	 * Only `null`, `''` and `[]` mean "not configured". Every other non-array
-	 * shape is a value nobody can interpret, and a rule callback must fail closed
-	 * on it rather than read it as "no constraint". That deliberately includes the
-	 * falsy scalars `0`, `'0'`, `0.0` and `false`, which an `empty()` check would
-	 * wave through — a legacy free-text rule holding `0` is still a value an
-	 * operator typed, not an unconfigured rule.
+	 * Only for rules whose well-formed value is an array of option values — the
+	 * ones registered with an options source, so `has_options` is true. Only
+	 * `null`, `''` and `[]` mean "not configured" there. Every other non-array
+	 * shape is a value nobody can interpret, and the rule callback must fail
+	 * closed on it rather than read it as "no constraint". That deliberately
+	 * includes the falsy scalars `0`, `'0'`, `0.0` and `false`, which an
+	 * `empty()` check would wave through — a legacy free-text rule holding `0`
+	 * is still a value an operator typed, not an unconfigured rule.
+	 *
+	 * The other two rule shapes must not call this: a boolean rule stores exactly
+	 * `true`, and a free-text rule stores a string, both of which this reads as
+	 * malformed. Their well-formed values are non-arrays by definition.
 	 *
 	 * @param mixed $value The stored rule value.
 	 *
 	 * @return bool
 	 */
-	public static function is_malformed_rule_value( mixed $value ): bool {
+	public static function is_malformed_options_backed_value( mixed $value ): bool {
 		return ! is_array( $value ) && null !== $value && '' !== $value;
 	}
 
@@ -541,7 +547,7 @@ class Access_Rules {
 		// A value of the wrong shape (e.g. a free-text string saved before values
 		// were validated) is malformed configuration, not the absence of a
 		// constraint — fail closed, mirroring Institution::evaluate().
-		if ( self::is_malformed_rule_value( $product_ids ) ) {
+		if ( self::is_malformed_options_backed_value( $product_ids ) ) {
 			return false;
 		}
 

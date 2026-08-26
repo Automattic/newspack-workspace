@@ -276,7 +276,7 @@ class Institution {
 		// A value of the wrong shape (e.g. a free-text string saved before values
 		// were validated) is malformed configuration, not the absence of a
 		// constraint — fail closed rather than grant access.
-		if ( Access_Rules::is_malformed_rule_value( $institution_ids ) ) {
+		if ( Access_Rules::is_malformed_options_backed_value( $institution_ids ) ) {
 			return false;
 		}
 
