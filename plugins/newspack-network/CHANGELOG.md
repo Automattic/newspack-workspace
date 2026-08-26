@@ -1,3 +1,10 @@
+## newspack-network [2.22.3](https://github.com/Automattic/newspack-workspace/compare/newspack-network@2.22.2...newspack-network@2.22.3) (2026-08-26)
+
+
+### Bug Fixes
+
+* **content-distribution:** filter caller-supplied content on insert ([#924](https://github.com/Automattic/newspack-workspace/issues/924)) ([1deb19a](https://github.com/Automattic/newspack-workspace/commit/1deb19a6a239394bcda09c4a5d58623d22a4335c))
+
 ## newspack-network [2.22.2](https://github.com/Automattic/newspack-workspace/compare/newspack-network@2.22.1...newspack-network@2.22.2) (2026-08-24)
 
 
