@@ -276,26 +276,76 @@ class Newspack_Test_WooCommerce_Connection_Transactional_Emails extends WP_UnitT
 	 * "instead of WooCommerce's default receipt", but nothing suppressed the
 	 * WooCommerce one, so the reader received both.
 	 */
-	public function test_wc_completed_order_email_is_suppressed_when_newspack_sends_its_own() {
+	public function test_wc_completed_order_email_is_suppressed_once_newspack_has_sent() {
 		$this->enable_reader_revenue_emails();
 		$this->stage_product( 814, 'Membership: Yearly', 'subscription', 'year' );
 		$order = $this->stage_order( 814, 'Membership: Yearly' );
 
+		self::assertTrue(
+			WooCommerce_Connection::send_customizable_receipt_email( $order->get_id() ),
+			'Precondition: the Newspack email has to actually go out.'
+		);
 		self::assertFalse(
 			WooCommerce_Connection::disable_duplicate_wc_completed_order_email( true, $order ),
-			"WooCommerce's Completed Order email should stand down when Newspack sends its own."
+			"WooCommerce's Completed Order email should stand down once Newspack has sent its own."
 		);
 	}
 
 	/**
-	 * With the Newspack emails switched off, WooCommerce's own email is the
-	 * only receipt the reader would get — suppressing it would leave them
-	 * with nothing.
+	 * The reason the suppression reads the sent marker rather than recomputing
+	 * whether an email applies: a send that fails leaves the reader with nothing
+	 * at all if WooCommerce has already been waved off.
+	 */
+	public function test_wc_completed_order_email_survives_a_failed_newspack_send() {
+		$this->enable_reader_revenue_emails();
+		$this->stage_product( 818, 'Membership: Yearly', 'subscription', 'year' );
+		$order = $this->stage_order( 818, 'Membership: Yearly' );
+
+		// Fail delivery the way a broken mailer would, short of the send itself.
+		add_filter( 'pre_wp_mail', '__return_false' );
+		self::assertFalse(
+			WooCommerce_Connection::send_customizable_receipt_email( $order->get_id() ),
+			'Precondition: the Newspack send has to fail for this to test anything.'
+		);
+		self::assertFalse(
+			$order->meta_exists( '_newspack_receipt_email_sent' ),
+			'A failed send must not leave a sent marker behind.'
+		);
+		self::assertTrue(
+			WooCommerce_Connection::disable_duplicate_wc_completed_order_email( true, $order ),
+			'A reader must not be left with no receipt at all.'
+		);
+	}
+
+	/**
+	 * Reading the marker only works because the Newspack send runs first. Both
+	 * callbacks sit on the same WooCommerce action, so the ordering has to come
+	 * from an explicit priority rather than from registration order.
+	 */
+	public function test_newspack_send_runs_before_the_woocommerce_completed_order_email() {
+		$priority = has_filter(
+			'woocommerce_order_status_completed_notification',
+			[ WooCommerce_Connection::class, 'send_customizable_receipt_email' ]
+		);
+
+		self::assertNotFalse( $priority, 'The Newspack sender must be hooked to the completed-order notification.' );
+		self::assertLessThan(
+			10,
+			$priority,
+			'WooCommerce triggers its Completed Order email at priority 10; Newspack has to have sent, and written its marker, before then.'
+		);
+	}
+
+	/**
+	 * With the Newspack emails switched off, nothing sends and no marker is
+	 * written, so WooCommerce's own email is the reader's only receipt.
 	 */
 	public function test_wc_completed_order_email_survives_when_newspack_emails_are_disabled() {
 		$this->disable_reader_revenue_emails();
 		$this->stage_product( 815, 'Membership: Yearly', 'subscription', 'year' );
 		$order = $this->stage_order( 815, 'Membership: Yearly' );
+
+		WooCommerce_Connection::send_customizable_receipt_email( $order->get_id() );
 
 		self::assertTrue(
 			WooCommerce_Connection::disable_duplicate_wc_completed_order_email( true, $order ),
@@ -311,6 +361,7 @@ class Newspack_Test_WooCommerce_Connection_Transactional_Emails extends WP_UnitT
 		$this->enable_reader_revenue_emails();
 		$this->stage_product( 816, 'Membership: Yearly', 'subscription', 'year' );
 		$order = $this->stage_order( 816, 'Membership: Yearly' );
+		WooCommerce_Connection::send_customizable_receipt_email( $order->get_id() );
 
 		self::assertFalse(
 			WooCommerce_Connection::disable_duplicate_wc_completed_order_email( false, $order ),

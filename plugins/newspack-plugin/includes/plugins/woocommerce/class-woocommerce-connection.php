@@ -61,7 +61,13 @@ class WooCommerce_Connection {
 		\add_action( 'cli_init', [ __CLASS__, 'register_cli_commands' ] );
 
 		// Emails.
-		\add_filter( 'woocommerce_order_status_completed_notification', [ __CLASS__, 'send_customizable_receipt_email' ] );
+		/**
+		 * Priority 5, ahead of WooCommerce's own Completed Order email at 10.
+		 * disable_duplicate_wc_completed_order_email() decides by reading the
+		 * sent marker this call writes, so the send has to have happened —
+		 * or failed — before WooCommerce asks whether its email is enabled.
+		 */
+		\add_filter( 'woocommerce_order_status_completed_notification', [ __CLASS__, 'send_customizable_receipt_email' ], 5 );
 		\add_filter( 'woocommerce_email_enabled_customer_completed_order', [ __CLASS__, 'disable_duplicate_wc_completed_order_email' ], 10, 2 );
 		\add_action( 'cancelled_subscription_notification', [ __CLASS__, 'send_customizable_cancellation_email' ] );
 
@@ -660,15 +666,11 @@ class WooCommerce_Connection {
 	 * describes, and the Receipt template's copy ("a receipt for your recent
 	 * transaction") reads correctly for any product.
 	 *
-	 * Shared with {@see disable_duplicate_wc_completed_order_email()} so that
-	 * the decision to suppress WooCommerce's own email cannot drift from the
-	 * decision to send ours.
-	 *
 	 * @param \WC_Order $order The order.
 	 *
 	 * @return string|false One of Reader_Revenue_Emails::EMAIL_TYPES, or false.
 	 */
-	public static function get_customizable_email_type_for_order( $order ) {
+	private static function get_customizable_email_type_for_order( $order ) {
 		if ( empty( $order ) || ! is_a( $order, 'WC_Order' ) ) {
 			return false;
 		}
@@ -701,8 +703,13 @@ class WooCommerce_Connection {
 	 * as is the gift recipient's `recipient_completed_order`.
 	 *
 	 * Only ever suppresses: an email another filter has already disabled stays
-	 * disabled, and one Newspack has no replacement for is left enabled rather
-	 * than leaving the reader with no receipt at all.
+	 * disabled, and one Newspack has not replaced is left enabled.
+	 *
+	 * The decision reads the sent marker rather than recomputing whether an
+	 * email applies, so that a Newspack send which fails — a mailer error, a
+	 * filtered-out recipient — does not wave WooCommerce off and leave the
+	 * reader with no receipt at all. This depends on the Newspack send running
+	 * first, which its priority 5 registration guarantees.
 	 *
 	 * @param bool           $enabled Whether the email is enabled.
 	 * @param \WC_Order|null $object  The order the email is being sent for, if any.
@@ -716,7 +723,9 @@ class WooCommerce_Connection {
 		if ( ! $enabled || ! is_a( $object, 'WC_Order' ) ) {
 			return $enabled;
 		}
-		return ! self::get_customizable_email_type_for_order( $object );
+		$already_sent = $object->get_meta( '_newspack_welcome_email_sent', true )
+			|| $object->get_meta( '_newspack_receipt_email_sent', true );
+		return ! $already_sent;
 	}
 
 	/**
