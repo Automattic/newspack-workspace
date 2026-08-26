@@ -14,6 +14,21 @@ import { SelectControl, TextControl } from '../';
  * where days is negative for the past and positive for the future. The UI splits
  * the relative case in two so a publisher never has to type a minus sign.
  */
+export type DateRangeBoundValue = { type: 'absolute'; date: string } | { type: 'relative'; days: number };
+
+export type DateRangeValue = {
+	/** The start bound, absent when the range is open at the start. */
+	start?: DateRangeBoundValue;
+	/** The end bound, absent when the range is open at the end. */
+	end?: DateRangeBoundValue;
+};
+
+/** The bound type as the UI models it. '' is no bound at all. */
+type BoundType = '' | 'absolute' | 'past' | 'future';
+
+/** A bound type the publisher can pick a value for. */
+type SettableBoundType = Exclude< BoundType, '' >;
+
 const BOUND_TYPES = [
 	{ label: __( 'Any', 'newspack-plugin' ), value: '' },
 	{ label: __( 'Date', 'newspack-plugin' ), value: 'absolute' },
@@ -38,7 +53,7 @@ const today = () => {
 };
 
 // Zero days is the same day either way, and normalizes to "Days ago".
-const boundTypeOf = bound => {
+const boundTypeOf = ( bound?: DateRangeBoundValue ): BoundType => {
 	if ( ! bound || ! bound.type ) {
 		return '';
 	}
@@ -48,7 +63,7 @@ const boundTypeOf = bound => {
 	return bound.days > 0 ? 'future' : 'past';
 };
 
-const boundValueOf = bound => {
+const boundValueOf = ( bound?: DateRangeBoundValue ): string => {
 	if ( ! bound ) {
 		return '';
 	}
@@ -60,7 +75,7 @@ const boundValueOf = bound => {
 // for edits to the value itself: a date input reports '' both when cleared and
 // transiently while its value is being retyped, and substituting today() there
 // would silently move a saved window out from under the publisher.
-const makeBound = ( type, rawValue, seed = false ) => {
+const makeBound = ( type: SettableBoundType, rawValue: string, seed = false ): DateRangeBoundValue | undefined => {
 	if ( 'absolute' === type ) {
 		const date = rawValue || ( seed ? today() : '' );
 		// An absolute bound with no date is not a bound: emitted and saved, it
@@ -83,14 +98,25 @@ const makeBound = ( type, rawValue, seed = false ) => {
 	return { type: 'relative', days: 'future' === type ? days : -days };
 };
 
-const DateRangeBound = ( { label, testId, bound, onChange } ) => {
+type DateRangeBoundProps = {
+	/** The row label (From/To). */
+	label: string;
+	/** Test id for the value input. */
+	testId: string;
+	/** The stored bound, absent when the row is unbounded. */
+	bound?: DateRangeBoundValue;
+	/** Called with the new bound, or undefined when the row becomes unbounded. */
+	onChange: ( bound: DateRangeBoundValue | undefined ) => void;
+};
+
+const DateRangeBound = ( { label, testId, bound, onChange }: DateRangeBoundProps ) => {
 	// The bound type is normally derived from the stored value, but a zero-magnitude
 	// relative bound (`days: 0`) is the same day whether the publisher chose "ago" or
 	// "from now" — the sign can't tell them apart. `chosenType` records the direction
 	// to fall back on while the bound stays ambiguous, and starts out `null` — no
 	// direction known yet — since the bound this control receives can arrive
 	// asynchronously (e.g. an existing segment fetched after first mount).
-	const [ chosenType, setChosenType ] = useState( null );
+	const [ chosenType, setChosenType ] = useState< BoundType | null >( null );
 	const derivedType = boundTypeOf( bound );
 	const isAmbiguous = 'relative' === bound?.type && 0 === bound.days;
 
@@ -118,7 +144,7 @@ const DateRangeBound = ( { label, testId, bound, onChange } ) => {
 				__next40pxDefaultSize
 				value={ type }
 				options={ BOUND_TYPES }
-				onChange={ nextType => {
+				onChange={ ( nextType: BoundType ) => {
 					setChosenType( nextType );
 					onChange( nextType ? makeBound( nextType, '', true ) : undefined );
 				} }
@@ -142,7 +168,7 @@ const DateRangeBound = ( { label, testId, bound, onChange } ) => {
 					min={ 'absolute' === type ? undefined : 0 }
 					max={ 'absolute' === type ? undefined : MAX_RELATIVE_DAYS }
 					value={ boundValueOf( bound ) }
-					onChange={ nextValue => onChange( makeBound( type, nextValue ) ) }
+					onChange={ ( nextValue: string ) => onChange( makeBound( type, nextValue ) ) }
 				/>
 			) }
 		</div>
@@ -166,12 +192,12 @@ const PRESETS = [
 /**
  * Which preset a stored range corresponds to.
  *
- * @param {*} start The start bound.
- * @param {*} end   The end bound.
- * @return {string} A PRESETS value: '' when unbounded, the day count when the
- *                  range is exactly one of the presets, otherwise 'custom'.
+ * @param start The start bound.
+ * @param end   The end bound.
+ * @return A PRESETS value: '' when unbounded, the day count when the range is
+ *         exactly one of the presets, otherwise 'custom'.
  */
-const presetOf = ( start, end ) => {
+const presetOf = ( start?: DateRangeBoundValue, end?: DateRangeBoundValue ): string => {
 	if ( ! start && ! end ) {
 		return '';
 	}
@@ -189,13 +215,24 @@ const presetOf = ( start, end ) => {
 	return 'custom';
 };
 
-const DateRangeSetting = ( { start, end, onChange, label, ...props } ) => {
+type DateRangeSettingProps = {
+	/** The start bound. */
+	start?: DateRangeBoundValue;
+	/** The end bound. */
+	end?: DateRangeBoundValue;
+	/** Called with the new range, or undefined when the range is dropped. */
+	onChange: ( value: DateRangeValue | undefined ) => void;
+	/** The criterion's name, used as the preset selector's screen-reader label. */
+	label?: string;
+} & Omit< React.HTMLAttributes< HTMLDivElement >, 'onChange' >;
+
+const DateRangeSetting = ( { start, end, onChange, label, ...props }: DateRangeSettingProps ) => {
 	const derivedPreset = presetOf( start, end );
 	// A range that matches a preset is indistinguishable from the same range built
 	// by hand, and an empty one is indistinguishable from "Custom, nothing filled
 	// in yet" — so a deliberate Custom choice has to be remembered rather than
 	// re-derived. Starts null: nothing chosen yet, so the stored value decides.
-	const [ chosenPreset, setChosenPreset ] = useState( null );
+	const [ chosenPreset, setChosenPreset ] = useState< string | null >( null );
 
 	// Custom explains any range, so it is never overridden by what the value looks
 	// like. Every other selection stays in step with a range that arrived from
@@ -210,9 +247,10 @@ const DateRangeSetting = ( { start, end, onChange, label, ...props } ) => {
 	// criterion, so omitting one would leave a stale bound behind. An empty range
 	// emits nothing at all, which drops the criterion — an empty `{}` would reach
 	// the matcher as "no bounds to check" and match every reader with a date.
-	const changeRange = ( nextStart, nextEnd ) => onChange( nextStart || nextEnd ? { start: nextStart, end: nextEnd } : undefined );
+	const changeRange = ( nextStart?: DateRangeBoundValue, nextEnd?: DateRangeBoundValue ) =>
+		onChange( nextStart || nextEnd ? { start: nextStart, end: nextEnd } : undefined );
 
-	const changePreset = next => {
+	const changePreset = ( next: string ) => {
 		setChosenPreset( next );
 		if ( 'custom' === next ) {
 			// Keep the current range so the rows open on what the preset meant.
