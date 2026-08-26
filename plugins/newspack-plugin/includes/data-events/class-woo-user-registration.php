@@ -59,12 +59,7 @@ final class Woo_User_Registration {
 		// is processing checkout?
 		add_action( 'woocommerce_checkout_process', [ __CLASS__, 'checkout_process' ] );
 
-		// The Store API checkout — the transport express wallets like Apple Pay and
-		// Google Pay submit through — never fires woocommerce_checkout_process. This
-		// action is that pipeline's equivalent signal: it fires once per checkout
-		// POST, before the account is created, while the cart is loaded for the
-		// metadata harvest. It carries the customer, whose billing email is what
-		// tells the created account apart from any other in the same process.
+		// The Store API's equivalent signal; see store_api_checkout_process().
 		add_action( 'woocommerce_store_api_checkout_update_customer_from_request', [ __CLASS__, 'store_api_checkout_process' ], 10, 2 );
 
 		// created a user?
@@ -87,8 +82,14 @@ final class Woo_User_Registration {
 	/**
 	 * Note a Store API checkout is under way, and whose account it expects to create.
 	 *
-	 * Unlike the classic signal this one carries the customer, so the account
-	 * this checkout creates can be told apart from any other created in the same
+	 * The Store API checkout — the transport express wallets like Apple Pay and
+	 * Google Pay submit through — never fires woocommerce_checkout_process. The
+	 * action below is that pipeline's equivalent signal: it fires once per
+	 * checkout POST, before the account is created, while the cart is loaded for
+	 * the metadata harvest.
+	 *
+	 * Unlike the classic signal it carries the customer, so the account this
+	 * checkout creates can be told apart from any other created in the same
 	 * process. WooCommerce writes the posted billing email onto the customer
 	 * before firing this, and refuses to create an account without one, so an
 	 * empty email here means no account will follow.
