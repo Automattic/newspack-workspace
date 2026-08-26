@@ -1,3 +1,10 @@
+## newspack-network [2.22.4](https://github.com/Automattic/newspack-workspace/compare/newspack-network@2.22.3...newspack-network@2.22.4) (2026-08-26)
+
+
+### Bug Fixes
+
+* **network:** process each hub webhook delivery at most once ([#940](https://github.com/Automattic/newspack-workspace/issues/940)) ([6976c7b](https://github.com/Automattic/newspack-workspace/commit/6976c7bc35117b0dc859fa8903e13c3071cd3731))
+
 ## newspack-network [2.22.3](https://github.com/Automattic/newspack-workspace/compare/newspack-network@2.22.2...newspack-network@2.22.3) (2026-08-26)
 
 
