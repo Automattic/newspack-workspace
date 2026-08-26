@@ -860,9 +860,13 @@ abstract class Integration {
 	 * refreshed — yet the pull needs the format to normalize the value. Without it
 	 * a non-ISO value is stored raw, the matcher rejects it, and the criterion
 	 * silently matches nobody. Absent means "never stored"; a provider that sends
-	 * ISO stores `''` explicitly. The read path resolves the format once and
-	 * persists it back, so this is a one-time repair per entry rather than a live
-	 * resolution on every read.
+	 * ISO stores `''` explicitly. When the live schema declares a format, the read
+	 * path resolves it once and persists it back — a one-time repair per entry.
+	 * When it declares none, the entry resolves to ISO in memory only and is
+	 * re-examined on each read: the declaration may still arrive (a provider
+	 * update that starts emitting formats, a provider cache that was empty), and
+	 * persisting `''` would latch "provider sends ISO" over "format unknown" with
+	 * no way to tell them apart again.
 	 *
 	 * @param array $raw_data Stored raw field data.
 	 * @return bool
@@ -922,8 +926,8 @@ abstract class Integration {
 			}
 		}
 
-		$fields       = [];
-		$stored_dirty = false;
+		$fields           = [];
+		$repaired_formats = [];
 		foreach ( $stored as $key => $raw_data ) {
 			if ( ! is_string( $key ) || '' === $key ) {
 				continue;
@@ -947,14 +951,17 @@ abstract class Integration {
 				}
 			} elseif ( self::needs_source_date_format( $raw_data ) && $live_schema_resolved ) {
 				// Fill in just the source format — the publisher's stored operator and
-				// the rest of the snapshot stay authoritative. Absent from the live
-				// schema (an integration that never declares formats, or a field that
-				// left the provider) means ISO. Persisted below so this is a one-time
-				// repair, not a live resolution on every read; an API failure persists
-				// nothing, so the next read retries.
-				$raw_data['date_format']       = isset( $live_by_key[ $key ]['date_format'] ) ? $live_by_key[ $key ]['date_format'] : '';
-				$stored[ $key ]['date_format'] = $raw_data['date_format'];
-				$stored_dirty                  = true;
+				// the rest of the snapshot stay authoritative. Only a declared format
+				// is queued for persistence (see needs_source_date_format() for why an
+				// undeclared one resolves to ISO for this read alone); an API failure
+				// resolves nothing, so the next read retries.
+				$live_entry = isset( $live_by_key[ $key ] ) && is_array( $live_by_key[ $key ] ) ? $live_by_key[ $key ] : null;
+				if ( null !== $live_entry && array_key_exists( 'date_format', $live_entry ) ) {
+					$raw_data['date_format']  = $live_entry['date_format'];
+					$repaired_formats[ $key ] = $live_entry['date_format'];
+				} else {
+					$raw_data['date_format'] = '';
+				}
 			}
 			$field = new Integrations\Incoming_Field( $key, $raw_data );
 			$field = $this->configure_incoming_field( $field );
@@ -988,11 +995,28 @@ abstract class Integration {
 			}
 		}
 
-		if ( $stored_dirty ) {
+		if ( ! empty( $repaired_formats ) ) {
 			// Self-heal: persist the resolved source formats so the live resolution
-			// doesn't repeat on every read. update_option() no-ops on an unchanged
-			// value, so concurrent requests racing here are harmless.
-			\update_option( self::INCOMING_FIELDS_OPTION_PREFIX . $this->id, $stored, false );
+			// doesn't repeat on every read. The provider fetch above takes real time,
+			// and a publisher saving the Integrations screen inside that window must
+			// not have their write reverted by a stale full-array write-back — so
+			// re-read the option and set only the resolved formats, and only on
+			// entries that still need them. update_option() no-ops on an unchanged
+			// value, so two racing repairs are harmless.
+			$option_name = self::INCOMING_FIELDS_OPTION_PREFIX . $this->id;
+			\wp_cache_delete( $option_name, 'options' );
+			$fresh       = \get_option( $option_name, [] );
+			$fresh       = is_array( $fresh ) ? $fresh : [];
+			$fresh_dirty = false;
+			foreach ( $repaired_formats as $key => $format ) {
+				if ( isset( $fresh[ $key ] ) && self::needs_source_date_format( $fresh[ $key ] ) ) {
+					$fresh[ $key ]['date_format'] = $format;
+					$fresh_dirty                  = true;
+				}
+			}
+			if ( $fresh_dirty ) {
+				\update_option( $option_name, $fresh, false );
+			}
 		}
 
 		return $fields;

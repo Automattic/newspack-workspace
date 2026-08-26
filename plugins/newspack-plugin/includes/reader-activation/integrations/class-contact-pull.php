@@ -267,115 +267,6 @@ class Contact_Pull {
 	}
 
 	/**
-	 * Normalize an ESP date value to ISO so the criteria matcher sees one format.
-	 *
-	 * Resolved here, at write time, because this is the only place the provider's
-	 * own format metadata is still in hand — `03/04/2026` is genuinely ambiguous
-	 * between Mailchimp's two `date_format` settings once it reaches storage.
-	 *
-	 * A value that cannot be parsed is returned untouched: never destroy publisher
-	 * data to satisfy a format. The matcher fails closed on non-ISO values, and the
-	 * reader's next pull repairs the entry.
-	 *
-	 * PHP's general parser is only ever handed an already ISO-shaped value, whether
-	 * or not a format was declared. It reads an ambiguous slash-separated date
-	 * American-first, so a Mailchimp DD/MM/YYYY value reaching it would land months
-	 * off; and it silently rolls an impossible calendar date over (`2026-02-30`
-	 * becomes `2026-03-02`) instead of failing. Both produce a confident wrong
-	 * answer, which is strictly worse than the untouched value the matcher fails
-	 * closed on. The ISO gate plus the round-trip check below keep every such case
-	 * on the "return it unchanged" path.
-	 *
-	 * @param mixed  $value      Raw value from the integration.
-	 * @param string $format     Source format as a PHP date format string. Empty means
-	 *                           the provider already sends ISO 8601 / Y-m-d. A format
-	 *                           that parses no year (`m/d`) is treated as undeclared:
-	 *                           it would parse cleanly into the Unix epoch year, and a
-	 *                           confident `1970-03-04` is exactly the wrong answer the
-	 *                           paths below exist to avoid.
-	 * @param string $value_type Either 'date' or 'datetime'.
-	 * @return mixed ISO string, or the value unchanged.
-	 */
-	public static function normalize_date_value( $value, $format = '', $value_type = 'date' ) {
-		if ( ! is_string( $value ) || '' === trim( $value ) ) {
-			return $value;
-		}
-
-		$trimmed = trim( $value );
-		$date    = false;
-
-		if ( '' !== $format && self::format_specifies_year( $format ) ) {
-			// The `!` resets fields the format doesn't specify to zero instead of
-			// "now", so a datetime under a date-only source format stores the same
-			// value on every pull rather than embedding the pull moment.
-			$date = \DateTimeImmutable::createFromFormat( '!' . $format, $trimmed );
-			// createFromFormat is permissive: it happily parses '2026-13-45' against
-			// 'Y-m-d' and rolls the overflow into the next year. Warnings are how it
-			// reports that, so treat any as a parse failure. As of PHP 8.2
-			// getLastErrors() returns false rather than an array when clean.
-			$errors = \DateTimeImmutable::getLastErrors();
-			if ( is_array( $errors ) && ( ! empty( $errors['warning_count'] ) || ! empty( $errors['error_count'] ) ) ) {
-				$date = false;
-			}
-		}
-
-		if ( false === $date ) {
-			// Reached when no format was declared, or when a declared one didn't fit.
-			// An ISO value arriving under a declared slash format is the legitimate
-			// rescue here; anything else is ambiguous and must not be guessed at.
-			if ( ! self::is_iso_shaped_date( $trimmed ) ) {
-				return $value;
-			}
-			try {
-				$date = new \DateTimeImmutable( $trimmed );
-			} catch ( \Exception $e ) {
-				return $value;
-			}
-			// The parser rolls an out-of-calendar day over rather than throwing, so
-			// the date part has to survive the round trip to be trusted.
-			if ( $date->format( 'Y-m-d' ) !== substr( $trimmed, 0, 10 ) ) {
-				return $value;
-			}
-		}
-
-		return $date->format( 'datetime' === $value_type ? \DateTimeInterface::ATOM : 'Y-m-d' );
-	}
-
-	/**
-	 * Whether a PHP date format string parses a year.
-	 *
-	 * `createFromFormat()` accepts a year-less format (`m/d`) without complaint —
-	 * the `!` prefix resets the unspecified year to the Unix epoch, so `03/04`
-	 * becomes a confident, well-formed `1970-03-04` that nothing downstream can
-	 * tell from a real date. The in-tree provider mappers never emit such a
-	 * format (Mailchimp's year-less `birthday` is deliberately not a date type),
-	 * but any third-party `set_date_format()` caller can. Backslash-escaped
-	 * literals (`\Y`) don't count as specifiers.
-	 *
-	 * @param string $format PHP date format string.
-	 * @return bool
-	 */
-	private static function format_specifies_year( $format ) {
-		return 1 === preg_match( '/(?<!\\\\)[YyoXx]/', $format );
-	}
-
-	/**
-	 * Whether a string is already ISO-shaped: a `YYYY-MM-DD` date, optionally
-	 * followed by a time component. Gates the fallback parse in
-	 * normalize_date_value() so an ambiguous non-ISO value isn't handed to PHP's
-	 * general parser, which reads slash-separated dates American-first.
-	 *
-	 * Month and day are bounded rather than merely digit-shaped, matching the
-	 * client matcher's ISO_DATE and the segment criteria schema pattern.
-	 *
-	 * @param string $value Trimmed candidate value.
-	 * @return bool
-	 */
-	private static function is_iso_shaped_date( $value ) {
-		return 1 === preg_match( '/^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])([T\s].*)?$/', $value );
-	}
-
-	/**
 	 * Pull data from a single integration and store selected fields.
 	 *
 	 * A pull whose reader-data writes fail returns a WP_Error: fetching alone
@@ -475,13 +366,13 @@ class Contact_Pull {
 				// rule or segment matching the literal string keeps working unless the
 				// publisher deliberately switches the operator.
 				if ( ( 'date' === $value_type || 'datetime' === $value_type ) && 'date_range' === $field->get_matching_function() ) {
-					$normalized = self::normalize_date_value( $value, $field->get_date_format(), $value_type );
-					// A non-empty value that comes back still not ISO-shaped is the
-					// fail-closed path: the matcher rejects it, so the segment silently
-					// matches nobody. That is indistinguishable from "no reader qualifies"
-					// out in the admin, so say so here — it is the only signal that the
-					// provider's declared source format is missing or wrong.
-					if ( is_string( $normalized ) && '' !== trim( $normalized ) && ! self::is_iso_shaped_date( trim( $normalized ) ) ) {
+					$normalized = Date_Value::normalize( $value, $field->get_date_format(), $value_type );
+					// A non-empty value that comes back still not matcher-readable is
+					// the fail-closed path: the segment silently matches nobody, which
+					// is indistinguishable from "no reader qualifies" out in the admin —
+					// so say so here. It is the only signal that the provider's declared
+					// source format is missing or wrong.
+					if ( is_string( $normalized ) && '' !== trim( $normalized ) && null === Date_Value::to_calendar_date( $normalized ) ) {
 						Logger::log(
 							sprintf(
 								'Date field "%s" from %s could not be normalized (source format: %s); it will not match any date range.',

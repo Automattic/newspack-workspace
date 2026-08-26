@@ -10,7 +10,7 @@ namespace Newspack\Reader_Activation;
 use Newspack\Access_Rules;
 use Newspack\Reader_Data;
 use Newspack\Reader_Activation\Integration;
-use Newspack\Reader_Activation\Integrations\Contact_Pull;
+use Newspack\Reader_Activation\Integrations\Date_Value;
 use Newspack\Reader_Activation\Integrations\Incoming_Field;
 
 defined( 'ABSPATH' ) || exit;
@@ -281,44 +281,22 @@ class Promoted_Fields {
 				return empty( array_intersect( (array) $args, $user_values ) );
 			case 'date_range':
 				// Access rules have no range UI — a rule still holds one typed value and
-				// still matches it exactly. But selecting this operator makes the pull
-				// rewrite stored values to ISO, so a rule the publisher wrote in the
-				// provider's own format ('03/04/2026') would silently stop matching a
-				// stored '2026-03-04'. Put both sides through the same normalizer and
-				// compare calendar dates, so the rule keeps meaning what it meant.
-				$stored_date = self::to_calendar_date( $value );
-				$rule_date   = self::to_calendar_date(
-					Contact_Pull::normalize_date_value( $args, $field->get_date_format(), $field->get_value_type() )
+				// still matches it exactly. Both sides go through the same normalizer:
+				// the rule, because a publisher may write it in the provider's own
+				// format ('03/04/2026') while the pull rewrites stored values to ISO;
+				// and the stored value, because the pull only rewrites a reader's value
+				// on that reader's next pull — until then it is still in the provider's
+				// format, and the rule must not deny a reader over that timing.
+				$stored_date = Date_Value::to_calendar_date(
+					Date_Value::normalize( $value, $field->get_date_format(), $field->get_value_type() )
+				);
+				$rule_date   = Date_Value::to_calendar_date(
+					Date_Value::normalize( $args, $field->get_date_format(), $field->get_value_type() )
 				);
 				return null !== $stored_date && $stored_date === $rule_date;
 			default:
 				return $value === $args;
 		}
-	}
-
-	/**
-	 * Reduce a date value to its calendar date, or null when it isn't one.
-	 *
-	 * Mirrors the client matcher's `toCalendarDate()` (newspack-popups
-	 * `src/criteria/matching-functions.js`) so both consumers of a `date_range`
-	 * field agree on what counts as a date, and on reading the date part as
-	 * written rather than shifting it into a timezone.
-	 *
-	 * @param mixed $value Candidate value.
-	 * @return string|null A `YYYY-MM-DD` string, or null.
-	 */
-	private static function to_calendar_date( $value ) {
-		if ( ! is_string( $value ) ) {
-			return null;
-		}
-		$candidate = substr( trim( $value ), 0, 10 );
-		if ( 1 !== preg_match( '/^(\d{4})-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/', $candidate, $matches ) ) {
-			return null;
-		}
-		// The bounded pattern still admits a day that doesn't exist in its month
-		// (`2026-02-30`), which the normalizer stores untouched precisely because it
-		// isn't a date. It must not become one here either.
-		return checkdate( (int) $matches[2], (int) $matches[3], (int) $matches[1] ) ? $candidate : null;
 	}
 
 	/**

@@ -449,6 +449,17 @@ class Test_Promoted_Fields extends \WP_UnitTestCase {
 		$this->assertTrue( $method->invoke( null, $mailchimp_field, $user_id, '01/15/2026' ) );
 		$this->assertFalse( $method->invoke( null, $mailchimp_field, $user_id, '01/16/2026' ) );
 
+		// The stored value passes through the same normalizer as the rule: the
+		// pull only rewrites a reader's value on that reader's next pull, so
+		// between the publisher selecting Date range and that pull the value is
+		// still in the provider's format — the rule must not deny the reader
+		// over that timing.
+		\Newspack\Reader_Data::update_item( $user_id, 'LAST_GIFT_DATE', wp_json_encode( '01/15/2026' ) );
+		$this->assertTrue( $method->invoke( null, $mailchimp_field, $user_id, '01/15/2026' ) );
+		$this->assertTrue( $method->invoke( null, $mailchimp_field, $user_id, '2026-01-15' ) );
+		$this->assertFalse( $method->invoke( null, $mailchimp_field, $user_id, '01/16/2026' ) );
+		\Newspack\Reader_Data::update_item( $user_id, 'LAST_GIFT_DATE', wp_json_encode( '2026-01-15' ) );
+
 		// A datetime value is compared on its date part, as written — the ATOM form
 		// the pull stores can never be typed into a gate rule by hand.
 		\Newspack\Reader_Data::update_item( $user_id, 'LAST_GIFT_DATE', wp_json_encode( '2026-01-15T23:30:00-06:00' ) );
@@ -471,6 +482,13 @@ class Test_Promoted_Fields extends \WP_UnitTestCase {
 		// A leap day is a real date and still matches.
 		\Newspack\Reader_Data::update_item( $user_id, 'LAST_GIFT_DATE', wp_json_encode( '2024-02-29' ) );
 		$this->assertTrue( $method->invoke( null, $field, $user_id, '2024-02-29' ) );
+
+		// An ISO-looking prefix with trailing junk must not be admitted as its
+		// first ten characters — the one stored shape that used to fail open.
+		\Newspack\Reader_Data::update_item( $user_id, 'LAST_GIFT_DATE', wp_json_encode( '2026-01-15abc' ) );
+		$this->assertFalse( $method->invoke( null, $field, $user_id, '2026-01-15' ) );
+		\Newspack\Reader_Data::update_item( $user_id, 'LAST_GIFT_DATE', wp_json_encode( '2026-01-15 TBD' ) );
+		$this->assertFalse( $method->invoke( null, $field, $user_id, '2026-01-15' ) );
 	}
 
 	/**
@@ -479,8 +497,9 @@ class Test_Promoted_Fields extends \WP_UnitTestCase {
 	 * segment matching and takes prompt display down sitewide. newspack-popups
 	 * is not loaded in this suite, which is exactly the probe-less environment
 	 * an old build presents (the probe method can't exist), so this pins the
-	 * degradation path; the probe-present path is covered from the popups side
-	 * by its own CriteriaTest, since CI runs each plugin's suite in isolation.
+	 * degradation path; the probe-present path is pinned by the stub-loading
+	 * test below, which must run after this one (the stub, once loaded, exists
+	 * for the rest of the process — PHPUnit runs methods in declaration order).
 	 */
 	public function test_supported_matching_function_degrades_without_the_popups_probe() {
 		if ( class_exists( '\Newspack_Popups_Criteria' ) ) {
@@ -502,6 +521,29 @@ class Test_Promoted_Fields extends \WP_UnitTestCase {
 		// degrades to exact matching — a criterion that matches too narrowly,
 		// rather than one that breaks the page.
 		$this->assertSame( 'default', $method->invoke( null, 'date_range' ) );
+		$this->assertSame( 'default', $method->invoke( null, 'a_future_operator' ) );
+	}
+
+	/**
+	 * The probe's success branch: a newspack-popups that answers the probe keeps
+	 * date_range intact. The stub declares the real class and method names, so
+	 * this fails if the probe's method_exists() arguments are mistyped or its
+	 * ternary is inverted — both of which would otherwise silently degrade every
+	 * date criterion to exact matching with two green suites. When the real
+	 * newspack-popups is loaded (a local combined run), the assertions hold
+	 * against it directly and the stub is skipped.
+	 */
+	public function test_supported_matching_function_passes_a_probed_operator_through() {
+		if ( ! class_exists( '\Newspack_Popups_Criteria' ) ) {
+			require_once dirname( __DIR__, 2 ) . '/mocks/class-newspack-popups-criteria-mock.php';
+		}
+
+		$method = new \ReflectionMethod( Promoted_Fields::class, 'supported_matching_function' );
+		$method->setAccessible( true );
+
+		$this->assertSame( 'date_range', $method->invoke( null, 'date_range' ) );
+		// The probe answers for unknown names too: an operator the installed
+		// build can't resolve still degrades even though the probe exists.
 		$this->assertSame( 'default', $method->invoke( null, 'a_future_operator' ) );
 	}
 
