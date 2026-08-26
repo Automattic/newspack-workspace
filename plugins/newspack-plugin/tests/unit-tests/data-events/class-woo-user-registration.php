@@ -8,7 +8,7 @@
 use Newspack\Data_Events\Woo_User_Registration;
 use Newspack\Reader_Activation;
 
-require_once __DIR__ . '/../mocks/wc-mocks.php';
+require_once __DIR__ . '/../../mocks/wc-mocks.php';
 
 /**
  * Test the Woo_User_Registration checkout watcher.
@@ -28,7 +28,7 @@ require_once __DIR__ . '/../mocks/wc-mocks.php';
  *
  * @group data-events
  */
-class Newspack_Test_Woo_User_Registration extends WP_UnitTestCase {
+class Newspack_Test_Data_Events_Woo_User_Registration extends WP_UnitTestCase {
 
 	/**
 	 * Captured newspack_registered_reader_via_woo dispatches.
@@ -124,6 +124,22 @@ class Newspack_Test_Woo_User_Registration extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Fire the Store API checkout signal.
+	 *
+	 * @param string|null $billing_email Billing email the checkout carries, or
+	 *                                   null to fire the signal without a
+	 *                                   customer at all.
+	 */
+	private function store_api_signal( $billing_email = null ) {
+		$customer = null;
+		if ( null !== $billing_email ) {
+			$customer = new WC_Customer( 0 );
+			$customer->set_billing_email( $billing_email );
+		}
+		do_action( 'woocommerce_store_api_checkout_update_customer_from_request', $customer, new WP_REST_Request( 'POST', '/wc/store/v1/checkout' ) );
+	}
+
+	/**
 	 * A Store API checkout (the wallet transport) announces the customer it
 	 * creates: the pre-creation signal arrives, then the account exists.
 	 *
@@ -132,7 +148,7 @@ class Newspack_Test_Woo_User_Registration extends WP_UnitTestCase {
 	 */
 	public function test_store_api_checkout_announces_created_customer() {
 		$this->stub_wc_with_cart();
-		do_action( 'woocommerce_store_api_checkout_update_customer_from_request', null, new WP_REST_Request( 'POST', '/wc/store/v1/checkout' ) );
+		$this->store_api_signal( 'store-api-reader@example.test' );
 		$user_id = self::factory()->user->create( [ 'user_email' => 'store-api-reader@example.test' ] );
 		do_action( 'woocommerce_created_customer', $user_id );
 
@@ -159,7 +175,7 @@ class Newspack_Test_Woo_User_Registration extends WP_UnitTestCase {
 				],
 			]
 		);
-		do_action( 'woocommerce_store_api_checkout_update_customer_from_request', null, new WP_REST_Request( 'POST', '/wc/store/v1/checkout' ) );
+		$this->store_api_signal( 'store-api-campaign@example.test' );
 		$user_id = self::factory()->user->create( [ 'user_email' => 'store-api-campaign@example.test' ] );
 		do_action( 'woocommerce_created_customer', $user_id );
 
@@ -183,7 +199,7 @@ class Newspack_Test_Woo_User_Registration extends WP_UnitTestCase {
 	public function test_checkout_signal_without_cart_still_announces() {
 		$this->stub_wc_with_cart();
 		WC()->cart = null;
-		do_action( 'woocommerce_store_api_checkout_update_customer_from_request', null, new WP_REST_Request( 'POST', '/wc/store/v1/checkout' ) );
+		$this->store_api_signal( 'no-cart@example.test' );
 		$user_id = self::factory()->user->create( [ 'user_email' => 'no-cart@example.test' ] );
 		do_action( 'woocommerce_created_customer', $user_id );
 
@@ -208,12 +224,12 @@ class Newspack_Test_Woo_User_Registration extends WP_UnitTestCase {
 				],
 			]
 		);
-		do_action( 'woocommerce_store_api_checkout_update_customer_from_request', null, new WP_REST_Request( 'POST', '/wc/store/v1/checkout' ) );
+		$this->store_api_signal( 'batch-first@example.test' );
 		do_action( 'woocommerce_created_customer', self::factory()->user->create( [ 'user_email' => 'batch-first@example.test' ] ) );
 
 		// Second checkout in the same process, with nothing to harvest.
 		WC()->cart = new WC_Cart( [] );
-		do_action( 'woocommerce_store_api_checkout_update_customer_from_request', null, new WP_REST_Request( 'POST', '/wc/store/v1/checkout' ) );
+		$this->store_api_signal( 'batch-second@example.test' );
 		do_action( 'woocommerce_created_customer', self::factory()->user->create( [ 'user_email' => 'batch-second@example.test' ] ) );
 
 		$this->assertCount( 2, $this->fired );
@@ -233,7 +249,7 @@ class Newspack_Test_Woo_User_Registration extends WP_UnitTestCase {
 	 */
 	public function test_checkout_state_is_consumed_by_the_account_it_announces() {
 		$this->stub_wc_with_cart();
-		do_action( 'woocommerce_store_api_checkout_update_customer_from_request', null, new WP_REST_Request( 'POST', '/wc/store/v1/checkout' ) );
+		$this->store_api_signal( 'checkout-account@example.test' );
 		do_action( 'woocommerce_created_customer', self::factory()->user->create( [ 'user_email' => 'checkout-account@example.test' ] ) );
 
 		// No second checkout signal: nothing announces this account.
@@ -244,19 +260,36 @@ class Newspack_Test_Woo_User_Registration extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Classic checkout keeps announcing (regression control).
+	 * Classic checkout keeps announcing, campaign attribution intact.
+	 *
+	 * The control for the claim that this branch leaves the classic pipeline
+	 * alone, so it asserts something the classic path alone produces. Asserting
+	 * registration_method would not: created_customer() sets that for whichever
+	 * pipeline announced. newspack_popup_id only survives if the classic signal
+	 * harvested the cart, which is the behaviour at risk.
 	 *
 	 * @runInSeparateProcess
 	 * @preserveGlobalState disabled
 	 */
 	public function test_classic_checkout_announces_created_customer() {
-		$this->stub_wc_with_cart();
+		$this->stub_wc_with_cart(
+			[
+				'item1' => [
+					'newspack_popup_id' => 456,
+					'prompt_title'      => 'Winter drive',
+					'referer'           => '/support-us/',
+				],
+			]
+		);
 		do_action( 'woocommerce_checkout_process' );
 		$user_id = self::factory()->user->create( [ 'user_email' => 'classic-reader@example.test' ] );
 		do_action( 'woocommerce_created_customer', $user_id );
 
 		$this->assertCount( 1, $this->fired );
 		$this->assertSame( 'woocommerce', $this->fired[0]['metadata']['registration_method'] );
+		$this->assertSame( 456, $this->fired[0]['metadata']['newspack_popup_id'], 'The classic signal must still harvest the cart it checks out.' );
+		$this->assertSame( 'Winter drive', $this->fired[0]['metadata']['prompt_title'] );
+		$this->assertSame( '/support-us/', $this->fired[0]['metadata']['referer'] );
 	}
 
 	/**
@@ -269,5 +302,101 @@ class Newspack_Test_Woo_User_Registration extends WP_UnitTestCase {
 		do_action( 'woocommerce_created_customer', $user_id );
 
 		$this->assertCount( 0, $this->fired, 'Account creation outside a checkout must not announce a reader.' );
+	}
+
+	/**
+	 * A Store API checkout announces only the account it is creating.
+	 *
+	 * The signal fires on every block-checkout POST, including a logged-in
+	 * shopper's, where no account follows it. Keying the state to the email the
+	 * checkout expects stops that standing state from speaking for an unrelated
+	 * account created later in the same process.
+	 *
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
+	 */
+	public function test_store_api_checkout_does_not_announce_a_different_account() {
+		$this->stub_wc_with_cart();
+		$this->store_api_signal( 'expected-buyer@example.test' );
+
+		// An account that is not this checkout's buyer — a gift recipient, or any
+		// creation that happens to land in the same process.
+		do_action( 'woocommerce_created_customer', self::factory()->user->create( [ 'user_email' => 'someone-else@example.test' ] ) );
+
+		$this->assertCount( 0, $this->fired, 'A Store API checkout must not announce an account it did not create.' );
+
+		// A non-match must not disarm the checkout: the buyer's own account
+		// arriving afterwards is still this checkout's to announce.
+		$buyer_id = self::factory()->user->create( [ 'user_email' => 'expected-buyer@example.test' ] );
+		do_action( 'woocommerce_created_customer', $buyer_id );
+
+		$this->assertCount( 1, $this->fired, 'The expected account must still announce when it arrives after an unrelated one.' );
+		$this->assertSame( $buyer_id, $this->fired[0]['user_id'] );
+	}
+
+	/**
+	 * Classic checkout announces every account it creates.
+	 *
+	 * Subscriptions Gifting creates a second account during a classic checkout —
+	 * the gift recipient — on the order-status transition. Both reached the
+	 * announcement before this branch, and the Store API fix must not narrow
+	 * that to the first one.
+	 *
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
+	 */
+	public function test_classic_checkout_announces_every_account_it_creates() {
+		$this->stub_wc_with_cart();
+		do_action( 'woocommerce_checkout_process' );
+		do_action( 'woocommerce_created_customer', self::factory()->user->create( [ 'user_email' => 'classic-buyer@example.test' ] ) );
+		do_action( 'woocommerce_created_customer', self::factory()->user->create( [ 'user_email' => 'classic-recipient@example.test' ] ) );
+
+		$this->assertCount( 2, $this->fired, 'Classic checkout announced both accounts before this branch; it must still do so.' );
+		$this->assertSame( 'classic-buyer@example.test', $this->fired[0]['email'] );
+		$this->assertSame( 'classic-recipient@example.test', $this->fired[1]['email'] );
+	}
+
+	/**
+	 * The expected email matches the created account regardless of case.
+	 *
+	 * The customer object carries the address as it was posted; the user record
+	 * carries it as WordPress saved it, and email_exists() treats the two as the
+	 * same account case-insensitively. Comparing them raw would reject a
+	 * legitimate account and put the original bug back with the suite green.
+	 *
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
+	 */
+	public function test_store_api_checkout_matches_the_account_regardless_of_email_case() {
+		$this->stub_wc_with_cart();
+		$this->store_api_signal( '  Mixed.Case@Example.test ' );
+		$user_id = self::factory()->user->create( [ 'user_email' => 'mixed.case@example.test' ] );
+		do_action( 'woocommerce_created_customer', $user_id );
+
+		$this->assertCount( 1, $this->fired, 'A case or whitespace difference must not stop the checkout announcing its own buyer.' );
+		$this->assertSame( $user_id, $this->fired[0]['user_id'] );
+	}
+
+	/**
+	 * A Store API signal carrying no email falls back to announcing the first
+	 * account created.
+	 *
+	 * Covers the fallback branch on purpose, and is the only test that does.
+	 * WooCommerce refuses to create an account without a billing email, so this
+	 * branch is not reachable on the announce path in production — it exists so
+	 * an unexpected empty signal degrades to the old behaviour rather than
+	 * silently announcing nothing.
+	 *
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
+	 */
+	public function test_store_api_signal_without_an_email_announces_the_first_account() {
+		$this->stub_wc_with_cart();
+		$this->store_api_signal( null );
+		$user_id = self::factory()->user->create( [ 'user_email' => 'fallback@example.test' ] );
+		do_action( 'woocommerce_created_customer', $user_id );
+
+		$this->assertCount( 1, $this->fired, 'An empty signal must degrade to announcing the first account, not to silence.' );
+		$this->assertSame( $user_id, $this->fired[0]['user_id'] );
 	}
 }
