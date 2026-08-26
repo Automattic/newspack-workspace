@@ -32,9 +32,51 @@ class Test_Print_Section extends WP_UnitTestCase {
 	public function set_up() {
 		parent::set_up();
 		delete_option( Optional_Modules::OPTION_NAME );
+		delete_option( 'newspack_indesign_export_platform' );
 		delete_option( InDesign_Exporter::POST_TYPES_OPTION );
 		delete_option( InDesign_Exporter::EXCLUDE_CAPTIONS_OPTION );
 		$this->section = new Print_Section();
+	}
+
+	/**
+	 * Test that the platform setting is exposed with its Windows default.
+	 */
+	public function test_api_get_print_settings_includes_platform_default() {
+		$result = $this->section->api_get_print_settings();
+
+		$this->assertArrayHasKey( 'indesign_platform', $result );
+		$this->assertSame( 'win', $result['indesign_platform'] );
+	}
+
+	/**
+	 * Test that a valid platform value is persisted.
+	 */
+	public function test_api_update_print_settings_persists_platform() {
+		$request = new WP_REST_Request();
+		$request->set_param( 'module_enabled_print', true );
+		$request->set_param( 'indesign_platform', 'mac' );
+
+		$result = $this->section->api_update_print_settings( $request );
+
+		$this->assertIsArray( $result );
+		$this->assertSame( 'mac', $result['indesign_platform'] );
+		$this->assertSame( 'mac', get_option( 'newspack_indesign_export_platform' ) );
+	}
+
+	/**
+	 * Test that an invalid platform value is rejected before any write.
+	 */
+	public function test_api_update_print_settings_rejects_invalid_platform() {
+		$request = new WP_REST_Request();
+		$request->set_param( 'module_enabled_print', true );
+		$request->set_param( 'indesign_platform', 'linux' );
+
+		$result = $this->section->api_update_print_settings( $request );
+
+		$this->assertInstanceOf( WP_Error::class, $result );
+		$this->assertSame( 'invalid_param', $result->get_error_code() );
+		$this->assertSame( 400, $result->get_error_data()['status'] );
+		$this->assertFalse( get_option( 'newspack_indesign_export_platform' ) );
 	}
 
 	/**

@@ -33,11 +33,9 @@ class Newspack_Test_InDesign_Exporter extends WP_UnitTestCase {
 	public function tear_down() {
 		unset( $GLOBALS['_test_cap_coauthors'] );
 
+		delete_option( InDesign_Exporter::PLATFORM_OPTION );
 		delete_option( InDesign_Exporter::POST_TYPES_OPTION );
 		delete_option( InDesign_Exporter::EXCLUDE_CAPTIONS_OPTION );
-		// Legacy option removed with the Header platform setting; the cleanup
-		// test writes it, and no constant can name it anymore.
-		delete_option( 'newspack_indesign_export_platform' );
 
 		foreach ( self::TEST_POST_TYPES as $post_type ) {
 			if ( post_type_exists( $post_type ) ) {
@@ -1449,6 +1447,112 @@ class Newspack_Test_InDesign_Exporter extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Test that the Mac platform emits the Mac format: header and CR endings.
+	 *
+	 * Some InDesign installs only recognize the Mac form of Tagged Text — a
+	 * Windows header is placed as literal text, tags and all (NPPM-3098). The
+	 * format is a pair: <ASCII-MAC> declares bare-CR terminators, so no LF may
+	 * appear anywhere in the file, captions included.
+	 */
+	public function test_convert_post_mac_platform_emits_mac_format() {
+		$image_id = $this->factory->attachment->create();
+		wp_update_post(
+			[
+				'ID'           => $image_id,
+				'post_excerpt' => 'Mac caption',
+			]
+		);
+
+		$post_id = $this->factory->post->create(
+			[
+				'post_title'   => 'Test Post',
+				'post_content' => "<!-- wp:paragraph -->\n<p>First para.</p>\n<!-- /wp:paragraph -->\n\n<!-- wp:image {\"id\":" . $image_id . '} --><!-- /wp:image -->',
+			]
+		);
+
+		$converter = new InDesign_Converter();
+		$content   = $converter->convert_post( $post_id, [ 'platform' => 'mac' ] );
+
+		$this->assertStringContainsString( '<ASCII-MAC>', $content );
+		$this->assertStringNotContainsString( '<ASCII-WIN>', $content );
+		$this->assertStringContainsString( '<pstyle:PhotoCaption>Mac caption', $content );
+		$this->assertGreaterThan( 0, substr_count( $content, "\r" ), 'Expected CR terminators.' );
+		$this->assertSame( 0, substr_count( $content, "\n" ), 'Found an LF: Mac exports are CR-terminated only.' );
+	}
+
+	/**
+	 * Test that every content shape is uniformly CR-terminated on Mac.
+	 *
+	 * The counterpart of the CRLF test above: whatever line endings the source
+	 * content carries, the Mac format may contain no LF byte at all.
+	 *
+	 * @dataProvider line_ending_content_provider
+	 *
+	 * @param string $post_content Post content to convert.
+	 */
+	public function test_convert_post_line_endings_are_uniformly_cr_on_mac( $post_content ) {
+		$post_id = $this->factory->post->create(
+			[
+				'post_title'   => 'Test Post',
+				'post_content' => $post_content,
+			]
+		);
+
+		$converter = new InDesign_Converter();
+		$content   = $converter->convert_post( $post_id, [ 'platform' => 'mac' ] );
+
+		$this->assertStringContainsString( '<ASCII-MAC>', $content );
+		$this->assertGreaterThan( 0, substr_count( $content, "\r" ), 'Expected at least one line terminator.' );
+		$this->assertSame( 0, substr_count( $content, "\n" ), 'Found an LF: part of the file is not Mac-terminated.' );
+	}
+
+	/**
+	 * Test that an unknown platform value falls back to the Windows format.
+	 *
+	 * Covers rows stored by the setting's earlier releases, whose 'auto' value
+	 * no longer names a format.
+	 */
+	public function test_convert_post_unknown_platform_falls_back_to_win() {
+		$post_id = $this->factory->post->create(
+			[
+				'post_title'   => 'Test Post',
+				'post_content' => '<p>Body copy.</p>',
+			]
+		);
+
+		$converter = new InDesign_Converter();
+		$content   = $converter->convert_post( $post_id, [ 'platform' => 'auto' ] );
+
+		$this->assertStringContainsString( '<ASCII-WIN>', $content );
+		$this->assertStringNotContainsString( '<ASCII-MAC>', $content );
+		$crlf = substr_count( $content, "\r\n" );
+		$this->assertSame( $crlf, substr_count( $content, "\r" ) );
+		$this->assertSame( $crlf, substr_count( $content, "\n" ) );
+	}
+
+	/**
+	 * Test that the platform setting defaults to Windows and constrains values
+	 * to formats the converter can emit.
+	 */
+	public function test_platform_setting_defaults_and_sanitizes() {
+		delete_option( 'newspack_indesign_export_platform' );
+		$this->assertSame( 'win', InDesign_Exporter::get_platform_setting() );
+
+		update_option( 'newspack_indesign_export_platform', 'mac' );
+		$this->assertSame( 'mac', InDesign_Exporter::get_platform_setting() );
+
+		update_option( 'newspack_indesign_export_platform', 'win' );
+		$this->assertSame( 'win', InDesign_Exporter::get_platform_setting() );
+
+		// Legacy value from the removed User-Agent mode, and junk.
+		update_option( 'newspack_indesign_export_platform', 'auto' );
+		$this->assertSame( 'win', InDesign_Exporter::get_platform_setting() );
+
+		update_option( 'newspack_indesign_export_platform', [ 'mac' ] );
+		$this->assertSame( 'win', InDesign_Exporter::get_platform_setting() );
+	}
+
+	/**
 	 * Test that dollar-digit text in a quote block survives conversion.
 	 *
 	 * The quote conversion is applied as a replacement over the post body, and
@@ -1467,19 +1571,5 @@ class Newspack_Test_InDesign_Exporter extends WP_UnitTestCase {
 		$content   = $converter->convert_post( $post_id );
 
 		$this->assertStringContainsString( '<pstyle:blockquote>We raised $1 million last year.', $content );
-	}
-
-	/**
-	 * Test that init() clears the legacy platform option row.
-	 *
-	 * The Header platform setting is gone and nothing reads the option, but
-	 * stored rows were autoloaded, so init() deletes any that remain.
-	 */
-	public function test_init_deletes_legacy_platform_option() {
-		add_option( 'newspack_indesign_export_platform', 'mac' );
-
-		InDesign_Exporter::init();
-
-		$this->assertFalse( get_option( 'newspack_indesign_export_platform' ) );
 	}
 }

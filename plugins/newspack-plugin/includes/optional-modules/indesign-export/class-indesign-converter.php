@@ -15,31 +15,43 @@ defined( 'ABSPATH' ) || exit;
 class InDesign_Converter {
 
 	/**
-	 * Tagged Text start tag, written as the first line of every export.
+	 * Tagged Text formats the converter can emit, keyed by platform.
 	 *
-	 * This declares the format of the file itself — not the operating system
-	 * running InDesign, which reads this format on both macOS and Windows.
-	 * ASCII because get_transformed_text() escapes every code point above 127
-	 * to a <0xXXXX> tag, leaving the payload 7-bit; WIN because every line ends
-	 * with self::EOL.
+	 * Each pairs the start tag written as the first line with the line
+	 * terminator used throughout the file: <ASCII-WIN> declares CRLF endings
+	 * and <ASCII-MAC> a bare CR. They are selected together because what
+	 * NPPM-3098 established is that only internal consistency matters to the
+	 * import — a stray byte pushes the next <pstyle:...> tag off the start of
+	 * its paragraph and InDesign renders the markup as literal text. The
+	 * platform is a site setting because some InDesign installs recognize only
+	 * the Mac form: handed a Windows file, they place the whole thing as plain
+	 * text, header and tags included. ASCII in both cases, because
+	 * get_transformed_text() escapes every code point above 127 to a <0xXXXX>
+	 * tag, leaving the payload 7-bit.
 	 *
-	 * @var string
+	 * @var array
 	 */
-	private const START_TAG = '<ASCII-WIN>';
+	public const FORMATS = [
+		'win' => [
+			'start_tag' => '<ASCII-WIN>',
+			'eol'       => "\r\n",
+		],
+		'mac' => [
+			'start_tag' => '<ASCII-MAC>',
+			'eol'       => "\r",
+		],
+	];
 
 	/**
-	 * Line terminator used throughout the exported file.
+	 * Platform used when none is configured or a stored value is unknown.
 	 *
-	 * Must stay consistent with self::START_TAG. What NPPM-3098 established is
-	 * that mixed terminators break the import: a stray byte pushes the next
-	 * <pstyle:...> tag off the start of its paragraph and InDesign renders the
-	 * markup as literal text. The fix rests on internal consistency — one
-	 * terminator everywhere, declared once — so change this and you must
-	 * revisit the header.
+	 * Windows, which places correctly in most InDesign installs — including
+	 * every Mac install in NPPM-3098's reports except the one that motivated
+	 * keeping a choice.
 	 *
 	 * @var string
 	 */
-	private const EOL = "\r\n";
+	public const DEFAULT_PLATFORM = 'win';
 
 	/**
 	 * Block types with no print equivalent, excluded from InDesign export by default.
@@ -79,6 +91,17 @@ class InDesign_Converter {
 	private $styles;
 
 	/**
+	 * Line terminator for the export being built.
+	 *
+	 * Set from the selected format at the top of convert_post() and read by
+	 * every step that emits or normalizes line endings, so the whole file —
+	 * body, quotes, captions — ends lines the way its start tag declares.
+	 *
+	 * @var string
+	 */
+	private $eol = self::FORMATS[ self::DEFAULT_PLATFORM ]['eol'];
+
+	/**
 	 * Constructor.
 	 *
 	 * @param array $styles Optional. Custom InDesign styles configuration.
@@ -99,6 +122,11 @@ class InDesign_Converter {
 	 *     @type bool   $include_captions Whether to append the photo captions and credits
 	 *                                    section at the end of the export. One flag covers
 	 *                                    both fields (NPPM-3098). Default true.
+	 *     @type string $platform         Tagged Text format to emit: 'win' (<ASCII-WIN>,
+	 *                                    CRLF endings) or 'mac' (<ASCII-MAC>, CR). The
+	 *                                    header and terminator travel together — see
+	 *                                    self::FORMATS. Unknown values fall back to the
+	 *                                    default. Default 'win'.
 	 * }
 	 * @return string|false InDesign Tagged Text content, or false on failure.
 	 */
@@ -112,12 +140,19 @@ class InDesign_Converter {
 			'include_subtitle' => true,
 			'include_byline'   => true,
 			'include_captions' => true,
+			'platform'         => self::DEFAULT_PLATFORM,
 		];
 		$options = wp_parse_args( $options, $default_options );
 
+		// Unknown values — including 'auto' rows stored by the setting's
+		// earlier User-Agent mode — fall back to the default format.
+		$platform  = is_string( $options['platform'] ) && isset( self::FORMATS[ $options['platform'] ] ) ? $options['platform'] : self::DEFAULT_PLATFORM;
+		$format    = self::FORMATS[ $platform ];
+		$this->eol = $format['eol'];
+
 		$content_parts = [];
 
-		$content_parts[] = self::START_TAG;
+		$content_parts[] = $format['start_tag'];
 		$content_parts[] = $this->styles['headline'] . $this->get_transformed_plain_text( $post->post_title );
 
 		if ( $options['include_subtitle'] ) {
@@ -137,15 +172,15 @@ class InDesign_Converter {
 		$content_parts[] = $this->process_post_content( $post->post_content, $options );
 		$content_parts[] = $this->process_post_images( $post, $options );
 
-		$content = implode( self::EOL, array_filter( $content_parts ) );
+		$content = implode( $this->eol, array_filter( $content_parts ) );
 
-		// Final guarantee that the file matches what self::START_TAG declares.
+		// Final guarantee that the file matches what its start tag declares.
 		// Post content reaches the converter with line endings of every flavor
 		// (pasted copy, imported HTML, serialized blocks), and the conversion
-		// steps above introduce their own. A single stray CR or LF makes part of
-		// the file Mac- or Unix-terminated while the header promises CRLF, and
-		// InDesign then places that stretch as literal markup.
-		$normalized = preg_replace( '/\r\n|\r|\n/', self::EOL, $content );
+		// steps above introduce their own. A single stray byte makes part of
+		// the file disagree with the declared terminator, and InDesign then
+		// places that stretch as literal markup.
+		$normalized = preg_replace( '/\r\n|\r|\n/', $this->eol, $content );
 
 		// preg_replace() yields null on a PCRE failure. Returning it would break
 		// the documented string|false contract and reach the download headers as
@@ -407,7 +442,7 @@ class InDesign_Converter {
 			if ( ! empty( $cite_matches ) ) {
 				$cite = $cite_matches[1];
 				if ( ! empty( $cite ) ) {
-					$quote_content .= self::EOL . $this->styles['pullquote_name'] . wp_strip_all_tags( $cite );
+					$quote_content .= $this->eol . $this->styles['pullquote_name'] . wp_strip_all_tags( $cite );
 				}
 			}
 
@@ -466,7 +501,7 @@ class InDesign_Converter {
 			'/<(?:div|ol|ul|a|img|figure)[^>]*>/'  => '',
 
 			// Replace paragraphs and remaining lists end tags with line breaks.
-			'/<\/(?:p|ul|ol)[^>]*>/'               => self::EOL,
+			'/<\/(?:p|ul|ol)[^>]*>/'               => $this->eol,
 
 			// Remove all remaining closing tags.
 			'/<\/[^>]*>/'                          => '',
@@ -621,7 +656,7 @@ class InDesign_Converter {
 		// consumes CRLF as one unit: matching on \n alone would count the LF of a
 		// CRLF pair as a separate break and rewrite it, stranding the CR in front
 		// as a bare Mac-style terminator (NPPM-2813).
-		$content = preg_replace( '/(?:\r\n|\r|\n){2,}/', self::EOL, $content );
+		$content = preg_replace( '/(?:\r\n|\r|\n){2,}/', $this->eol, $content );
 		$content = trim( $content );
 
 		return $content;
@@ -722,12 +757,12 @@ class InDesign_Converter {
 				continue;
 			}
 
-			$tag_content .= self::EOL;
+			$tag_content .= $this->eol;
 			if ( $caption ) {
-				$tag_content .= '<pstyle:PhotoCaption>' . $this->get_transformed_rich_text( $caption ) . self::EOL;
+				$tag_content .= '<pstyle:PhotoCaption>' . $this->get_transformed_rich_text( $caption ) . $this->eol;
 			}
 			if ( $credit ) {
-				$tag_content .= '<pstyle:PhotoCredit>' . $this->get_transformed_plain_text( $credit ) . self::EOL;
+				$tag_content .= '<pstyle:PhotoCredit>' . $this->get_transformed_plain_text( $credit ) . $this->eol;
 			}
 		}
 
@@ -738,7 +773,7 @@ class InDesign_Converter {
 			return '';
 		}
 
-		return self::EOL . $tag_content;
+		return $this->eol . $tag_content;
 	}
 
 	/**

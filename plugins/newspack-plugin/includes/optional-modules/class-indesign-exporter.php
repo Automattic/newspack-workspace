@@ -24,6 +24,17 @@ class InDesign_Exporter {
 	public const MODULE_NAME = 'indesign-export';
 
 	/**
+	 * Option name storing the Tagged Text platform for exports.
+	 *
+	 * Values are keys of InDesign_Converter::FORMATS ('win' or 'mac'). Rows
+	 * written by the setting's earlier releases may hold 'auto', from a removed
+	 * User-Agent mode; get_platform_setting() maps those to the default.
+	 *
+	 * @var string
+	 */
+	public const PLATFORM_OPTION = 'newspack_indesign_export_platform';
+
+	/**
 	 * Option name storing the list of post types whose admin screens get the export action.
 	 *
 	 * @var string
@@ -73,18 +84,6 @@ class InDesign_Exporter {
 	 * Initialize the module.
 	 */
 	public static function init() {
-		// The Header platform setting was removed (#806) and nothing reads its
-		// option anymore, but stored rows were autoloaded. Check alloptions —
-		// already in memory on every request — rather than get_option(), whose
-		// miss path costs a per-request query on sites without a persistent
-		// object cache. Rows were written with default autoload, so any that
-		// exist appear here; the delete fires once, and afterwards the check
-		// costs nothing on any site.
-		$alloptions = wp_load_alloptions();
-		if ( isset( $alloptions['newspack_indesign_export_platform'] ) ) {
-			delete_option( 'newspack_indesign_export_platform' );
-		}
-
 		if ( ! self::is_feature_enabled() ) {
 			return;
 		}
@@ -432,6 +431,7 @@ class InDesign_Exporter {
 	private static function export_posts( $post_ids ) {
 		$converter        = new InDesign_Converter();
 		$include_captions = ! self::get_exclude_captions_setting();
+		$platform         = self::get_platform_setting();
 		$exported_files   = [];
 
 		foreach ( $post_ids as $post_id ) {
@@ -442,7 +442,10 @@ class InDesign_Exporter {
 
 			$content          = $converter->convert_post(
 				$post,
-				[ 'include_captions' => $include_captions ]
+				[
+					'include_captions' => $include_captions,
+					'platform'         => $platform,
+				]
 			);
 			$filename         = self::generate_filename( $post );
 			$exported_files[] = [
@@ -459,6 +462,19 @@ class InDesign_Exporter {
 			// Multiple files export as zip.
 			self::download_zip_file( $exported_files );
 		}
+	}
+
+	/**
+	 * Get the configured Tagged Text platform.
+	 *
+	 * The stored value is constrained to the formats the converter can emit;
+	 * unknown values — including legacy 'auto' rows — fall back to the default.
+	 *
+	 * @return string A key of InDesign_Converter::FORMATS.
+	 */
+	public static function get_platform_setting() {
+		$value = get_option( self::PLATFORM_OPTION, InDesign_Converter::DEFAULT_PLATFORM );
+		return is_string( $value ) && isset( InDesign_Converter::FORMATS[ $value ] ) ? $value : InDesign_Converter::DEFAULT_PLATFORM;
 	}
 
 	/**

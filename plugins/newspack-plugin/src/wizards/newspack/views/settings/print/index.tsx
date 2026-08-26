@@ -6,7 +6,7 @@
  * WordPress dependencies
  */
 import { __ } from '@wordpress/i18n';
-import { CheckboxControl, Notice } from '@wordpress/components';
+import { CheckboxControl, Notice, SelectControl } from '@wordpress/components';
 import { useEffect, useRef, useState } from '@wordpress/element';
 
 /**
@@ -17,6 +17,11 @@ import WizardSection from '../../../../wizards-section';
 import WizardsActionCard from '../../../../wizards-action-card';
 import useWizardApiFetchToggle from '../../../../hooks/use-wizard-api-fetch-toggle';
 
+const PLATFORM_OPTIONS: { label: string; value: IndesignPlatform }[] = [
+	{ label: __( 'Windows (ASCII-WIN)', 'newspack-plugin' ), value: 'win' },
+	{ label: __( 'Mac (ASCII-MAC)', 'newspack-plugin' ), value: 'mac' },
+];
+
 // Coalesce a rapid series of post-type checkbox clicks into a single save.
 const POST_TYPES_SAVE_DEBOUNCE_MS = 500;
 
@@ -26,6 +31,7 @@ function Print() {
 		apiNamespace: 'newspack-settings/print',
 		data: {
 			module_enabled_print: false,
+			indesign_platform: 'win',
 			indesign_post_types: [ 'post' ],
 			available_post_types: [],
 			indesign_exclude_captions: false,
@@ -113,6 +119,21 @@ function Print() {
 			</WizardSection>
 			{ apiData.module_enabled_print && (
 				<>
+					<WizardSection
+						title={ __( 'Header platform', 'newspack-plugin' ) }
+						description={ __(
+							'Exports declare their format on the first line and end every line to match. Windows places correctly in most InDesign installs; if placed files show tags as literal text, switch to Mac.',
+							'newspack-plugin'
+						) }
+					>
+						<SelectControl
+							label={ __( 'Platform', 'newspack-plugin' ) }
+							value={ apiData.indesign_platform }
+							disabled={ isFetching }
+							options={ PLATFORM_OPTIONS }
+							onChange={ ( value: IndesignPlatform ) => save( { indesign_platform: value } ) }
+						/>
+					</WizardSection>
 					<WizardSection
 						title={ __( 'Available post types', 'newspack-plugin' ) }
 						description={ __(
