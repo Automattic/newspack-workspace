@@ -1,3 +1,10 @@
+## newspack [6.48.20](https://github.com/Automattic/newspack-workspace/compare/newspack@6.48.19...newspack@6.48.20) (2026-08-26)
+
+
+### Bug Fixes
+
+* **my-account:** expire and single-use the email change links ([#951](https://github.com/Automattic/newspack-workspace/issues/951)) ([fe58da5](https://github.com/Automattic/newspack-workspace/commit/fe58da5a92c4efe42d5e2c7ff2218aaae85a247c))
+
 ## newspack [6.48.19](https://github.com/Automattic/newspack-workspace/compare/newspack@6.48.18...newspack@6.48.19) (2026-08-26)
 
 
