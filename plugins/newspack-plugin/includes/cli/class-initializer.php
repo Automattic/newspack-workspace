@@ -38,6 +38,7 @@ class Initializer {
 		include_once NEWSPACK_ABSPATH . 'includes/cli/class-membership-gates-migration.php';
 		include_once NEWSPACK_ABSPATH . 'includes/cli/class-discounts-migration.php';
 		include_once NEWSPACK_ABSPATH . 'includes/cli/class-premium-newsletters-migration.php';
+		include_once NEWSPACK_ABSPATH . 'includes/cli/class-premium-newsletters-verify.php';
 		include_once NEWSPACK_ABSPATH . 'includes/cli/class-fix-memberships.php';
 	}
 
@@ -150,6 +151,11 @@ class Initializer {
 				[ 'Newspack\CLI\Fix_Memberships', 'run' ]
 			);
 		}
+
+		// Registered unconditionally, unlike the migration commands: this one runs
+		// after WooCommerce Memberships is deactivated, so gating it on Memberships
+		// would remove it at exactly the moment it is needed.
+		WP_CLI::add_command( 'newspack verify-premium-newsletters', [ 'Newspack\CLI\Premium_Newsletters_Verify', 'verify_premium_newsletters' ] );
 
 		Optional_Modules::register_commands();
 	}

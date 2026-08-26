@@ -500,12 +500,16 @@ class ESP extends Integration {
 		}
 
 		if ( is_wp_error( $contact_data ) ) {
-			// Providers name "no such contact" differently (Mailchimp has a
-			// dedicated code, ActiveCampaign a generic one); normalize to the
-			// framework's canonical code so batch drivers can classify the
-			// reader as skipped without provider knowledge.
+			// Providers name "no such contact" differently (Mailchimp and Constant
+			// Contact have dedicated codes, ActiveCampaign a generic one); normalize
+			// to the framework's canonical code so batch drivers can classify the
+			// reader as skipped without provider knowledge. Matched exactly rather
+			// than by suffix: this list is what the framework has verified means a
+			// miss, and a code it has not seen must reach the caller as the error it
+			// is.
 			$not_found_codes = [
 				'newspack_newsletters_mailchimp_contact_not_found',
+				'newspack_newsletters_constant_contact_contact_not_found',
 				'newspack_newsletters_contact_not_found',
 			];
 			if ( in_array( $contact_data->get_error_code(), $not_found_codes, true ) ) {
