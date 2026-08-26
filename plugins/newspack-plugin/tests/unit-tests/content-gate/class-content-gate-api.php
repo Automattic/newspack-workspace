@@ -531,4 +531,54 @@ class Newspack_Test_Content_Gate_API extends WP_UnitTestCase {
 		$this->assertNotWPError( $sanitized_gate );
 		$this->assertSame( [], $sanitized_gate['custom_access']['access_rules'][0][0]['value'] );
 	}
+
+	/**
+	 * The other read in the same guard: whether the *stored* gate is active. A
+	 * body that omits `active` isn't changing it, so the stored value decides —
+	 * but reading it for a caller who can't edit the gate would let an
+	 * unauthenticated POST tell an active gate with nothing selected from any
+	 * other gate, by the response code alone.
+	 */
+	public function test_the_stored_active_flag_is_read_only_for_a_caller_who_could_save_the_gate() {
+		$gate_id = Content_Gate::create_gate( [ 'title' => 'Active gate with nothing selected' ] );
+		Content_Gate::update_custom_access_settings(
+			$gate_id,
+			[
+				'active'       => true,
+				'access_rules' => [
+					[
+						[
+							'slug'  => 'institution',
+							'value' => [],
+						],
+					],
+				],
+			]
+		);
+		// No `active` key, so the guard has to fall back to the stored one.
+		$body = [
+			'custom_access' => [
+				'access_rules' => [
+					[
+						[
+							'slug'  => 'institution',
+							'value' => [],
+						],
+					],
+				],
+			],
+		];
+
+		wp_set_current_user( self::factory()->user->create( [ 'role' => 'administrator' ] ) );
+		$this->assertWPError(
+			Content_Gate_API::sanitize_gate( $body, $this->gate_update_request( $gate_id ) ),
+			'An editor saving an active gate that grants everyone still has to fix it.'
+		);
+
+		wp_set_current_user( 0 );
+		$this->assertNotWPError(
+			Content_Gate_API::sanitize_gate( $body, $this->gate_update_request( $gate_id ) ),
+			'A caller who cannot edit the gate must not learn its stored state from the response code; the request fails on permissions instead.'
+		);
+	}
 }

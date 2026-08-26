@@ -197,8 +197,16 @@ class Content_Gate_API {
 		}
 		// A request that doesn't carry `active` isn't changing it, so the stored
 		// value decides whether the gate is currently letting readers through.
-		$is_active = $sanitized_custom_access['active']
-			?? ( Content_Gate::get_custom_access_settings( $gate_id )['active'] ?? false );
+		// Sanitization runs ahead of the route's `permission_callback`, so that read
+		// is guarded the same way access_rules_are_unchanged() guards its own:
+		// without it the response code tells a caller who can't edit the gate
+		// whether it stores an active rule with nothing selected. Treating the
+		// unreadable case as inactive skips the refusal and leaves the request to
+		// fail on permissions, which is what it would have done anyway.
+		$is_active = $sanitized_custom_access['active'] ?? false;
+		if ( ! isset( $sanitized_custom_access['active'] ) && $gate_id && current_user_can( 'edit_post', $gate_id ) ) {
+			$is_active = Content_Gate::get_custom_access_settings( $gate_id )['active'] ?? false;
+		}
 		if ( ! $is_active ) {
 			return $sanitized_custom_access;
 		}
