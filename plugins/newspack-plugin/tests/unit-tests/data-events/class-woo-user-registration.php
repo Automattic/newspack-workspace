@@ -378,25 +378,22 @@ class Newspack_Test_Data_Events_Woo_User_Registration extends WP_UnitTestCase {
 	}
 
 	/**
-	 * A Store API signal carrying no email falls back to announcing the first
-	 * account created.
+	 * A Store API signal carrying no email announces nothing.
 	 *
-	 * Covers the fallback branch on purpose, and is the only test that does.
-	 * WooCommerce refuses to create an account without a billing email, so this
-	 * branch is not reachable on the announce path in production — it exists so
-	 * an unexpected empty signal degrades to the old behaviour rather than
-	 * silently announcing nothing.
+	 * WooCommerce refuses to create a customer without a valid billing address,
+	 * so a signal with no email is followed by no account of its own. Anything
+	 * created while it stands belongs to something else in the request, and
+	 * announcing it would name the wrong reader.
 	 *
 	 * @runInSeparateProcess
 	 * @preserveGlobalState disabled
 	 */
-	public function test_store_api_signal_without_an_email_announces_the_first_account() {
+	public function test_store_api_signal_without_an_email_announces_nothing() {
 		$this->stub_wc_with_cart();
 		$this->store_api_signal( null );
-		$user_id = self::factory()->user->create( [ 'user_email' => 'fallback@example.test' ] );
+		$user_id = self::factory()->user->create( [ 'user_email' => 'unrelated@example.test' ] );
 		do_action( 'woocommerce_created_customer', $user_id );
 
-		$this->assertCount( 1, $this->fired, 'An empty signal must degrade to announcing the first account, not to silence.' );
-		$this->assertSame( $user_id, $this->fired[0]['user_id'] );
+		$this->assertCount( 0, $this->fired, 'A signal with no email must not announce an account that cannot be its own.' );
 	}
 }

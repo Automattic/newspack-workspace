@@ -36,8 +36,8 @@ final class Woo_User_Registration {
 	/**
 	 * Folded billing email the in-flight Store API checkout expects to create.
 	 *
-	 * Empty means the signal carried none, in which case the first account
-	 * created stands in — see claim_account().
+	 * Empty means the signal carried none, which means no account will follow
+	 * it, so nothing is announced against it — see claim_account().
 	 *
 	 * @var string
 	 */
@@ -159,13 +159,13 @@ final class Woo_User_Registration {
 	 */
 	private static function claim_account( $email ) {
 		if ( self::$store_api_checkout ) {
-			// No email on the signal, so nothing to match against and the first
-			// account created stands in. Unreachable on the announce path today:
-			// WooCommerce will not create an account without a billing email, so a
-			// signal without one is followed by no account at all.
+			// A signal without an email creates no account: WooCommerce refuses a
+			// customer without a valid billing address. So any account arriving
+			// while this is empty belongs to something else in the request, and
+			// announcing it would name the wrong reader — the same harm this
+			// keying exists to prevent.
 			if ( '' === self::$store_api_expected_email ) {
-				self::$store_api_checkout = false;
-				return true;
+				return false;
 			}
 
 			if ( self::fold_email( $email ) === self::$store_api_expected_email ) {
