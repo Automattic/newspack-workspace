@@ -296,6 +296,51 @@ class Test_Feed_Restriction extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * While WooCommerce Memberships is active, Access Control yields feed
+	 * restriction entirely — even under the shipped restrict_feeds/exclude
+	 * defaults a Memberships-only site cannot change (NPPM-3204). The effective
+	 * mode resolves to "off" and the restricted post survives, the opposite of
+	 * test_exclude_mode_drops_only_restricted_posts above.
+	 *
+	 * The gate cannot supply the restriction here — Content_Restriction_Control
+	 * bails on the same Memberships::is_active() check — so the post is marked
+	 * restricted through `newspack_is_post_restricted`, standing in for
+	 * Memberships restricting it. Without that nothing would drop the post
+	 * either way and the feed assertion would hold with or without the guard.
+	 *
+	 * Runs isolated because WC_Memberships, once declared, would make
+	 * Memberships::is_active() true for every later feed test in this process.
+	 *
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
+	 */
+	public function test_active_memberships_yields_feed_restriction_to_wcm() {
+		// Stand in for an active WooCommerce Memberships install (global scope,
+		// which is what Memberships::is_active() checks).
+		require __DIR__ . '/../../mocks/wc-memberships-active-mock.php';
+
+		// The affected sites had neither value written. set_up() persists
+		// restrict_feeds = 1, which is what the shipped default resolves to anyway,
+		// and feed_restriction_mode is left unset so it resolves to the shipped
+		// exclude default. The guard still has to override the result to off.
+
+		add_filter( 'newspack_is_post_restricted', '__return_true', 99 );
+		$feed_ids = $this->feed_post_ids();
+		remove_filter( 'newspack_is_post_restricted', '__return_true', 99 );
+
+		$this->assertSame(
+			Content_Gate_Advanced_Settings::FEED_MODE_OFF,
+			Content_Gate_Advanced_Settings::get_feed_restriction_mode(),
+			'With Memberships active, the effective feed mode should be off regardless of the exclude default.'
+		);
+		$this->assertContains(
+			$this->post_id,
+			$feed_ids,
+			'With Memberships active, Access Control must not drop the restricted post from the feed.'
+		);
+	}
+
+	/**
 	 * Exclude mode back-fills the feed to `posts_per_rss` with older unrestricted
 	 * posts, matching WC Memberships. The newest posts are all restricted, so
 	 * without over-fetching the first page would be empty; with it, the feed
