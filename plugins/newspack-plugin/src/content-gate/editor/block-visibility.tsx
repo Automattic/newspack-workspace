@@ -200,10 +200,12 @@ const AccessRuleValueControl = ( {
 		const valueArr = Array.isArray( value ) ? value : [];
 		const selectedLabels = options.filter( o => valueArr.some( v => String( v ) === String( o.value ) ) ).map( o => o.label );
 
-		// Nothing to select means the only value the picker can produce is the empty
-		// one, which reads as "no constraint" and grants every reader. This control
-		// takes no help text of its own, so the reason goes in a sibling.
-		const hasNothingToSelect = 0 === options.length;
+		// Only for a rule whose empty value means "no constraint": nothing to select
+		// leaves the picker able to produce only that value, which grants every
+		// reader. A rule that still constrains when empty — `subscription`, which
+		// then requires any active subscription — keeps a working picker. This
+		// control takes no help text of its own, so the reason goes in a sibling.
+		const hasNothingToSelect = !! config.empty_grants_access && 0 === options.length;
 		return (
 			<>
 				<FormTokenField

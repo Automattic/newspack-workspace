@@ -109,16 +109,23 @@ class Access_Rules {
 		$rule = wp_parse_args(
 			$config,
 			[
-				'name'        => ucwords( str_replace( '_', ' ', $config['id'] ) ),
-				'description' => '',
-				'default'     => ! empty( $config['options'] ) ? [] : '',
-				'options'     => [],
+				'name'                => ucwords( str_replace( '_', ' ', $config['id'] ) ),
+				'description'         => '',
+				'default'             => ! empty( $config['options'] ) ? [] : '',
+				'options'             => [],
 				// Derived from what the registration declared — a callable source, or a
 				// populated list. The *resolved* list can't serve as the discriminator,
 				// since a callable legitimately resolves to an empty list while no
 				// matching entities (institutions, subscription products) exist yet.
-				'has_options' => ! empty( $config['options'] ),
-				'is_boolean'  => false,
+				'has_options'         => ! empty( $config['options'] ),
+				'is_boolean'          => false,
+				// Whether an empty value means the rule imposes no constraint, so
+				// leaving it empty grants access to every reader. It is a property of
+				// the rule's callback, not of the value's shape: `institution` returns
+				// true when it names none, while `subscription` naming no product
+				// still requires *an* active subscription. Only a rule that declares
+				// this may be refused a save for holding an empty value.
+				'empty_grants_access' => false,
 			]
 		);
 		self::$rules[ $rule['id'] ] = $rule;
@@ -193,11 +200,12 @@ class Access_Rules {
 				'callback'    => [ __CLASS__, 'has_reader_data' ],
 			],
 			'institution'       => [
-				'name'               => __( 'Institutional access', 'newspack-plugin' ),
-				'description'        => __( 'Grant access to readers from selected institutions.', 'newspack-plugin' ),
-				'options'            => [ Institution::class, 'get_options' ],
-				'callback'           => [ Institution::class, 'evaluate' ],
-				'supports_anonymous' => true,
+				'name'                => __( 'Institutional access', 'newspack-plugin' ),
+				'description'         => __( 'Grant access to readers from selected institutions.', 'newspack-plugin' ),
+				'options'             => [ Institution::class, 'get_options' ],
+				'callback'            => [ Institution::class, 'evaluate' ],
+				'supports_anonymous'  => true,
+				'empty_grants_access' => true,
 			],
 		];
 

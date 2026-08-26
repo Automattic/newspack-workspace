@@ -102,11 +102,15 @@ export default function AccessRuleControl( { slug, value, onChange }: GateRuleCo
 					String( value )
 			  )
 			: undefined;
-		// Nothing to select means the only value the picker can produce is the empty
-		// one, which reads as "no constraint" and grants every reader. Say so and
-		// take the field out of play, rather than offering a choice that opens the gate.
+		// Only for a rule whose empty value means "no constraint": nothing to select
+		// leaves the picker able to produce only that value, which grants every
+		// reader. Say so and take the field out of play, rather than offering a
+		// choice that opens the gate. A rule that still constrains when empty —
+		// `subscription`, which then requires any active subscription — keeps a
+		// working picker.
+		const grantsAllWhenEmpty = !! rule.empty_grants_access;
 		const nothingToSelectNotice =
-			! malformedValueNotice && 0 === options.length
+			! malformedValueNotice && grantsAllWhenEmpty && 0 === options.length
 				? __(
 						'This rule has nothing to select yet, so it grants access to everyone. Add the items it selects, or turn the rule off.',
 						'newspack-plugin'
@@ -115,7 +119,7 @@ export default function AccessRuleControl( { slug, value, onChange }: GateRuleCo
 		return (
 			<FormTokenField
 				label={ '' }
-				disabled={ 0 === options.length }
+				disabled={ grantsAllWhenEmpty && 0 === options.length }
 				description={ malformedValueNotice ?? nothingToSelectNotice }
 				value={ options.filter( o => valueArr.some( v => String( v ) === String( o.value ) ) ).map( o => o.label ) }
 				onChange={ ( items: string[] ) => onChange( options.filter( o => items.includes( o.label ) ).map( o => o.value ) ) }

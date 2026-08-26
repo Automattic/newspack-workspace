@@ -52,14 +52,23 @@ describe( 'Access rule control', () => {
 		expect( screen.getByTestId( 'token-picker' ) ).toHaveTextContent( 'grants no access' );
 	} );
 
-	it( 'disables the picker and says why when the rule has nothing to select', () => {
-		// The seeded default is an empty array, which evaluates as "no constraint" —
-		// so an interactive picker with no options offers the publisher exactly one
-		// expressible answer, and it opens the gate.
-		renderControl( 'institution', { name: 'Institutional access', has_options: true, options: [] }, [] );
+	it( 'disables the picker and says why when an empty value would grant everyone', () => {
+		// The seeded default is an empty array, which `institution` evaluates as "no
+		// constraint" — so an interactive picker with no options offers the publisher
+		// exactly one expressible answer, and it opens the gate.
+		renderControl( 'institution', { name: 'Institutional access', has_options: true, empty_grants_access: true, options: [] }, [] );
 
 		expect( screen.getByTestId( 'token-picker' ) ).toHaveAttribute( 'data-disabled', 'true' );
 		expect( screen.getByTestId( 'token-picker' ) ).toHaveTextContent( 'grants access to everyone' );
+	} );
+
+	it( 'leaves the picker usable for a rule that still constrains when empty', () => {
+		// `subscription` naming no product requires any active subscription, so an
+		// empty value is a configuration a publisher chooses — not the gate opening.
+		renderControl( 'subscription', { name: 'Active subscription', has_options: true, options: [] }, [] );
+
+		expect( screen.getByTestId( 'token-picker' ) ).toHaveAttribute( 'data-disabled', 'false' );
+		expect( screen.getByTestId( 'token-picker' ) ).not.toHaveTextContent( 'grants access to everyone' );
 	} );
 
 	it( 'renders the free-text box only for a rule that declares no options source', () => {

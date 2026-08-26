@@ -143,7 +143,7 @@ class Content_Gate_API {
 		if ( isset( $gate['custom_access'] ) ) {
 			$sanitized_custom_access = self::sanitize_custom_access( $gate['custom_access'] );
 			if ( ! is_wp_error( $sanitized_custom_access ) ) {
-				$sanitized_custom_access = self::reject_unselected_options_backed_rules( $gate, $sanitized_custom_access, $gate_id );
+				$sanitized_custom_access = self::reject_rules_left_unconstrained( $gate, $sanitized_custom_access, $gate_id );
 			}
 			if ( is_wp_error( $sanitized_custom_access ) ) {
 				if ( ! self::save_leaves_rules_unenforced( $gate, $sanitized, $gate_id ) || ! self::access_rules_are_unchanged( $gate, $gate_id ) ) {
@@ -169,13 +169,18 @@ class Content_Gate_API {
 	}
 
 	/**
-	 * Reject an active gate whose options-backed rule has nothing selected.
+	 * Reject an active gate holding a rule that has been left granting everyone.
 	 *
-	 * An empty value is well-formed: it means "no constraint", so the rule
-	 * evaluates true for every reader and the gate stops restricting anything.
-	 * That is reachable without typing a character — enabling a rule seeds it with
-	 * the `[]` default, and on a site with no institutions published, or no
-	 * subscription products, the picker has nothing else to offer.
+	 * Scoped to rules registered with `empty_grants_access`, whose callback reads
+	 * an empty value as "no constraint" and so evaluates true for every reader.
+	 * That state is reachable without typing a character — enabling the rule seeds
+	 * it with the `[]` default, and on a site with no institutions published the
+	 * picker has nothing else to offer.
+	 *
+	 * An empty value is not the same thing on every options-backed rule, which is
+	 * why the declaration decides and `has_options` does not: `subscription`
+	 * naming no product still requires *an* active subscription, and refusing that
+	 * save would block a configuration publishers rely on.
 	 *
 	 * Only while custom access is active. A gate being configured may hold a rule
 	 * the operator has not filled in yet.
@@ -186,7 +191,7 @@ class Content_Gate_API {
 	 *
 	 * @return array|\WP_Error The settings unchanged, or an error naming the rule.
 	 */
-	private static function reject_unselected_options_backed_rules( $gate, $sanitized_custom_access, $gate_id ) {
+	private static function reject_rules_left_unconstrained( $gate, $sanitized_custom_access, $gate_id ) {
 		if ( ! isset( $sanitized_custom_access['access_rules'] ) ) {
 			return $sanitized_custom_access;
 		}
@@ -201,7 +206,7 @@ class Content_Gate_API {
 		$registered_rules = Access_Rules::get_registered_rules();
 		foreach ( $sanitized_custom_access['access_rules'] as $group ) {
 			foreach ( $group as $rule ) {
-				if ( empty( $registered_rules[ $rule['slug'] ]['has_options'] ) || [] !== $rule['value'] ) {
+				if ( empty( $registered_rules[ $rule['slug'] ]['empty_grants_access'] ) || [] !== $rule['value'] ) {
 					continue;
 				}
 				return new \WP_Error(

@@ -504,4 +504,31 @@ class Newspack_Test_Content_Gate_API extends WP_UnitTestCase {
 		$this->assertNotWPError( $switched_off );
 		$this->assertFalse( $switched_off['custom_access']['active'] );
 	}
+
+	/**
+	 * `[]` is a configuration for some options-backed rules, not the absence of
+	 * one. `subscription` with no product named requires *any* active
+	 * subscription, which still keeps non-subscribers out. Only a rule that
+	 * declares `empty_grants_access` opens the gate when left empty, so only
+	 * that rule may refuse the save.
+	 */
+	public function test_active_custom_access_accepts_an_empty_value_for_a_rule_that_still_constrains() {
+		$sanitized_gate = Content_Gate_API::sanitize_gate(
+			[
+				'custom_access' => [
+					'active'       => true,
+					'access_rules' => [
+						[
+							[
+								'slug'  => 'subscription',
+								'value' => [],
+							],
+						],
+					],
+				],
+			]
+		);
+		$this->assertNotWPError( $sanitized_gate );
+		$this->assertSame( [], $sanitized_gate['custom_access']['access_rules'][0][0]['value'] );
+	}
 }
