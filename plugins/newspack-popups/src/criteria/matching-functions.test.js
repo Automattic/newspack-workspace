@@ -67,6 +67,26 @@ describe( 'date_range matching function', () => {
 		expect( dateRange( { value: '03/04/2026' }, config ) ).toBe( false );
 	} );
 
+	it( 'rejects an ISO-looking prefix with trailing junk, but not a real time', () => {
+		const config = { value: { start: absolute( '2026-01-01' ), end: absolute( '2026-12-31' ) } };
+		// The normalizer stores these untouched precisely because it could not
+		// trust them; matching on the first ten characters would fail open.
+		expect( dateRange( { value: '2026-01-15abc' }, config ) ).toBe( false );
+		expect( dateRange( { value: '2026-01-15/bogus' }, config ) ).toBe( false );
+		expect( dateRange( { value: '2026-01-15 TBD' }, config ) ).toBe( false );
+		// A time component in either separator style is not junk.
+		expect( dateRange( { value: '2026-01-15 23:30:00' }, config ) ).toBe( true );
+		expect( dateRange( { value: '2026-01-15T23:30:00Z' }, config ) ).toBe( true );
+	} );
+
+	it( 'trims whitespace and rejects year zero, matching the server side', () => {
+		const config = { value: { start: absolute( '2026-01-01' ), end: absolute( '2026-12-31' ) } };
+		// The access-rule evaluator trims before validating; agree with it.
+		expect( dateRange( { value: ' 2026-01-15' }, config ) ).toBe( true );
+		// checkdate() on the PHP side has no year zero.
+		expect( dateRange( { value: '0000-01-15' }, { value: { end: absolute( '2026-01-01' ) } } ) ).toBe( false );
+	} );
+
 	it( 'rejects a day that does not exist in its month, on either side', () => {
 		// The bounded pattern admits '2026-02-30' — it sorts perfectly well between
 		// real dates, so as a stored value it would match a window it isn't in, and
@@ -114,6 +134,19 @@ describe( 'date_range matching function', () => {
 		expect( dateRange( { value: '2026-06-15' }, { value: { end: { type: 'relative', days: 'ten' } } } ) ).toBe( false );
 	} );
 
+	it( 'fails closed on a present-but-unusable bound of any type', () => {
+		// null, 0 and '' are present bounds that resolve to nothing. The check is
+		// on presence, not truthiness: reading them as "no bound set" would widen
+		// the window to every reader with a date — a broken "since 2030" segment
+		// matching everybody. Neither the wizard nor the schema produces them,
+		// but import and the register_meta route accept them.
+		expect( dateRange( { value: '2026-06-15' }, { value: { start: null } } ) ).toBe( false );
+		expect( dateRange( { value: '2026-06-15' }, { value: { start: 0 } } ) ).toBe( false );
+		expect( dateRange( { value: '2026-06-15' }, { value: { start: '' } } ) ).toBe( false );
+		expect( dateRange( { value: '2026-06-15' }, { value: { start: {} } } ) ).toBe( false );
+		expect( dateRange( { value: '2026-06-15' }, { value: { end: null } } ) ).toBe( false );
+	} );
+
 	it( 'fails closed on a relative offset beyond the Date range', () => {
 		// The number input is unconstrained, so a nine-digit offset is typeable.
 		// setDate() then yields an Invalid Date whose components format to the
@@ -126,5 +159,18 @@ describe( 'date_range matching function', () => {
 	it( 'still resolves a large but in-range relative offset', () => {
 		// Guarding the overflow must not reject ordinary multi-year windows.
 		expect( dateRange( { value: '2026-06-15' }, { value: { start: relative( -3650 ) } } ) ).toBe( true );
+	} );
+
+	it( 'sorts a distant-past relative bound correctly via a zero-padded year', () => {
+		// Year 931 must format as '0931-…' — unpadded it sorts above '2026-…'
+		// lexicographically, so the bound would exclude the dates it should include.
+		expect( dateRange( { value: '2026-06-15' }, { value: { start: relative( -400000 ) } } ) ).toBe( true );
+	} );
+
+	it( 'fails closed once a relative offset leaves four-digit years', () => {
+		// A negative year formats with a sign and sorts below every real date; a
+		// five-digit one sorts above. Both are rejected rather than compared.
+		expect( dateRange( { value: '2026-06-15' }, { value: { start: relative( -1000000 ) } } ) ).toBe( false );
+		expect( dateRange( { value: '2026-06-15' }, { value: { end: relative( 10000000 ) } } ) ).toBe( false );
 	} );
 } );
