@@ -321,40 +321,45 @@ describe( 'Date range criteria input', () => {
 		// name is the only thing distinguishing their preset selectors.
 		expect( screen.getByLabelText( 'ActiveCampaign: Last Gift Date' ) ).toBe( screen.getByTestId( 'date-range-preset' ) );
 	} );
+
+	it( 'caps the day magnitude so typos stay inside four-digit years', () => {
+		selectCustom();
+		fireEvent.change( screen.getByLabelText( 'From' ), { target: { value: 'past' } } );
+		// Import and REST bypass the input, so the matcher still fails closed on
+		// larger offsets — the cap turns a wild typo into browser validation.
+		expect( screen.getByTestId( 'date-range-start-value' ) ).toHaveAttribute( 'max', '100000' );
+	} );
 } );
+
+// Shared scaffold for the existing-segment suites below: registers a beforeEach
+// that builds a segment holding the given criteria, wires the fetch mock and
+// renders the editor, and returns the mock for save assertions. The segment is
+// rebuilt per test because the editor updates criterion objects in place — a
+// shared fixture would leak one test's edits into the next.
+const mountExistingSegment = ( makeSegmentCriteria, criteriaRegistry = criteria ) => {
+	let existingSegment;
+	const wizardApiFetch = jest.fn( ( { method } = {} ) => Promise.resolve( 'POST' === method ? existingSegment : [ existingSegment ] ) );
+	beforeEach( () => {
+		window.newspackAudienceCampaigns = { criteria: criteriaRegistry };
+		existingSegment = { ...SEGMENTS[ 0 ], criteria: makeSegmentCriteria() };
+		wizardApiFetch.mockClear();
+		render(
+			<MemoryRouter>
+				<SingleSegment segmentId={ SEGMENTS[ 0 ].id } setSegments={ jest.fn() } wizardApiFetch={ wizardApiFetch } />
+			</MemoryRouter>
+		);
+	} );
+	return wizardApiFetch;
+};
 
 describe( 'Date range criteria input for an existing segment with a loaded "Days from now" end bound', () => {
 	// Regression coverage for editing (not just loading) a bound that arrived from
 	// storage: backspacing the value to empty makes the bound ambiguous (days: 0),
 	// and chosenType must already hold the loaded direction so the selector doesn't
 	// flip to the opposite direction.
-	const existingSegment = {
-		...SEGMENTS[ 0 ],
-		criteria: [
-			{
-				criteria_id: 'LAST_GIFT_DATE',
-				value: { end: { type: 'relative', days: 7 } },
-			},
-		],
-	};
-
-	const wizardApiFetch = jest.fn( ( { method } = {} ) => Promise.resolve( 'POST' === method ? existingSegment : [ existingSegment ] ) );
-
-	const mockProps = {
-		segmentId: existingSegment.id,
-		setSegments: jest.fn(),
-		wizardApiFetch,
-	};
-
-	beforeEach( () => {
-		window.newspackAudienceCampaigns = { criteria };
-		wizardApiFetch.mockClear();
-		render(
-			<MemoryRouter>
-				<SingleSegment { ...mockProps } />
-			</MemoryRouter>
-		);
-	} );
+	const wizardApiFetch = mountExistingSegment( () => [
+		{ criteria_id: 'LAST_GIFT_DATE', value: { end: { type: 'relative', days: 7 } } },
+	] );
 
 	it( 'keeps "Days from now" once the loaded value is cleared, and stores a positive offset when retyped', async () => {
 		await waitFor( () => expect( screen.getByLabelText( 'To' ) ).toHaveValue( 'future' ) );
@@ -385,38 +390,13 @@ describe( 'Date range criteria input for an existing segment with a loaded absol
 	// while the *emitted* bound disappears. A saved { type: 'absolute', date: '' }
 	// is a bound the matcher can only reject: the segment would silently match
 	// nobody while looking configured in the admin.
-	// Built fresh per test: the editor updates criterion objects in place, so a
-	// shared fixture would leak one test's edits into the next.
-	const makeExistingSegment = () => ( {
-		...SEGMENTS[ 0 ],
-		criteria: [
-			{
-				criteria_id: 'LAST_GIFT_DATE',
-				value: { start: { type: 'absolute', date: '2026-01-01' }, end: { type: 'relative', days: 7 } },
-			},
-			{ criteria_id: 'newsletter', value: 'subscribers' },
-		],
-	} );
-	let existingSegment;
-
-	const wizardApiFetch = jest.fn( ( { method } = {} ) => Promise.resolve( 'POST' === method ? existingSegment : [ existingSegment ] ) );
-
-	const mockProps = {
-		segmentId: SEGMENTS[ 0 ].id,
-		setSegments: jest.fn(),
-		wizardApiFetch,
-	};
-
-	beforeEach( () => {
-		window.newspackAudienceCampaigns = { criteria };
-		existingSegment = makeExistingSegment();
-		wizardApiFetch.mockClear();
-		render(
-			<MemoryRouter>
-				<SingleSegment { ...mockProps } />
-			</MemoryRouter>
-		);
-	} );
+	const wizardApiFetch = mountExistingSegment( () => [
+		{
+			criteria_id: 'LAST_GIFT_DATE',
+			value: { start: { type: 'absolute', date: '2026-01-01' }, end: { type: 'relative', days: 7 } },
+		},
+		{ criteria_id: 'newsletter', value: 'subscribers' },
+	] );
 
 	it( 'keeps a cleared date input open for retyping but saves the range without the bound', async () => {
 		await waitFor( () => expect( screen.getByLabelText( 'From' ) ).toHaveValue( 'absolute' ) );
@@ -463,36 +443,10 @@ describe( 'Date range criteria input clearing a relative bound', () => {
 	// Clearing the day magnitude mirrors clearing a date: the bound is dropped
 	// rather than saved as { days: 0 } — a zero-day bound would quietly move
 	// the window's edge to today — while the row stays open for retyping.
-	const makeExistingSegment = () => ( {
-		...SEGMENTS[ 0 ],
-		criteria: [
-			{
-				criteria_id: 'LAST_GIFT_DATE',
-				value: { end: { type: 'relative', days: 7 } },
-			},
-			{ criteria_id: 'newsletter', value: 'subscribers' },
-		],
-	} );
-	let existingSegment;
-
-	const wizardApiFetch = jest.fn( ( { method } = {} ) => Promise.resolve( 'POST' === method ? existingSegment : [ existingSegment ] ) );
-
-	const mockProps = {
-		segmentId: SEGMENTS[ 0 ].id,
-		setSegments: jest.fn(),
-		wizardApiFetch,
-	};
-
-	beforeEach( () => {
-		window.newspackAudienceCampaigns = { criteria };
-		existingSegment = makeExistingSegment();
-		wizardApiFetch.mockClear();
-		render(
-			<MemoryRouter>
-				<SingleSegment { ...mockProps } />
-			</MemoryRouter>
-		);
-	} );
+	const wizardApiFetch = mountExistingSegment( () => [
+		{ criteria_id: 'LAST_GIFT_DATE', value: { end: { type: 'relative', days: 7 } } },
+		{ criteria_id: 'newsletter', value: 'subscribers' },
+	] );
 
 	it( 'keeps a cleared magnitude open for retyping but saves the range without the bound', async () => {
 		await waitFor( () => expect( screen.getByLabelText( 'To' ) ).toHaveValue( 'future' ) );
@@ -522,35 +476,15 @@ describe( 'Date range value rendered after the operator moved back to Text', () 
 	// must not render the object — it would show "[object Object]", and one
 	// keystroke would save that literal over the range.
 	const textOperatorCriteria = criteria.map( c => ( 'LAST_GIFT_DATE' === c.id ? { ...c, matching_function: 'default' } : c ) );
-	const makeExistingSegment = () => ( {
-		...SEGMENTS[ 0 ],
-		criteria: [
+	mountExistingSegment(
+		() => [
 			{
 				criteria_id: 'LAST_GIFT_DATE',
 				value: { start: { type: 'relative', days: -30 }, end: { type: 'relative', days: 0 } },
 			},
 		],
-	} );
-	let existingSegment;
-
-	const wizardApiFetch = jest.fn( ( { method } = {} ) => Promise.resolve( 'POST' === method ? existingSegment : [ existingSegment ] ) );
-
-	const mockProps = {
-		segmentId: SEGMENTS[ 0 ].id,
-		setSegments: jest.fn(),
-		wizardApiFetch,
-	};
-
-	beforeEach( () => {
-		window.newspackAudienceCampaigns = { criteria: textOperatorCriteria };
-		existingSegment = makeExistingSegment();
-		wizardApiFetch.mockClear();
-		render(
-			<MemoryRouter>
-				<SingleSegment { ...mockProps } />
-			</MemoryRouter>
-		);
-	} );
+		textOperatorCriteria
+	);
 
 	it( 'renders an empty text input instead of the object', async () => {
 		await waitFor( () => expect( screen.getByPlaceholderText( 'Untitled Segment' ) ).toHaveValue( 'Subscribers' ) );
@@ -563,30 +497,7 @@ describe( 'Date range criteria input for a criterion still holding a Text-operat
 	// segments holding a plain string criterion value. An object update merged
 	// into that string would spread it into character-indexed keys
 	// ({ 0: '0', 1: '3', …, start, end }) and save the garbage unvalidated.
-	const makeExistingSegment = () => ( {
-		...SEGMENTS[ 0 ],
-		criteria: [ { criteria_id: 'LAST_GIFT_DATE', value: '03/04/2026' } ],
-	} );
-	let existingSegment;
-
-	const wizardApiFetch = jest.fn( ( { method } = {} ) => Promise.resolve( 'POST' === method ? existingSegment : [ existingSegment ] ) );
-
-	const mockProps = {
-		segmentId: SEGMENTS[ 0 ].id,
-		setSegments: jest.fn(),
-		wizardApiFetch,
-	};
-
-	beforeEach( () => {
-		window.newspackAudienceCampaigns = { criteria };
-		existingSegment = makeExistingSegment();
-		wizardApiFetch.mockClear();
-		render(
-			<MemoryRouter>
-				<SingleSegment { ...mockProps } />
-			</MemoryRouter>
-		);
-	} );
+	const wizardApiFetch = mountExistingSegment( () => [ { criteria_id: 'LAST_GIFT_DATE', value: '03/04/2026' } ] );
 
 	it( 'replaces the stored string instead of spreading it into index keys', async () => {
 		await waitFor( () => expect( screen.getByPlaceholderText( 'Untitled Segment' ) ).toHaveValue( 'Subscribers' ) );
@@ -615,30 +526,9 @@ describe( 'Date range criteria input for an existing segment with an ambiguous b
 	// fetch resolves, which is exactly the scenario the regression hit: the
 	// control first mounts with no bound at all, then re-renders once the real,
 	// ambiguous bound loads.
-	const existingSegment = {
-		...SEGMENTS[ 0 ],
-		criteria: [
-			{
-				criteria_id: 'LAST_GIFT_DATE',
-				value: { start: { type: 'relative', days: 0 } },
-			},
-		],
-	};
-
-	const mockProps = {
-		segmentId: existingSegment.id,
-		setSegments: jest.fn(),
-		wizardApiFetch: () => Promise.resolve( [ existingSegment ] ),
-	};
-
-	beforeEach( () => {
-		window.newspackAudienceCampaigns = { criteria };
-		render(
-			<MemoryRouter>
-				<SingleSegment { ...mockProps } />
-			</MemoryRouter>
-		);
-	} );
+	mountExistingSegment( () => [
+		{ criteria_id: 'LAST_GIFT_DATE', value: { start: { type: 'relative', days: 0 } } },
+	] );
 
 	it( 'renders the derived direction and value once the stored bound loads, instead of Any', async () => {
 		await waitFor( () => expect( screen.getByLabelText( 'From' ) ).toHaveValue( 'past' ) );
@@ -651,34 +541,13 @@ describe( 'Date range criteria input for an existing segment stored as a rolling
 	// Custom — the two produce identical values, so only the shape distinguishes them.
 	// A second criterion so the segment stays saveable once the date range is
 	// dropped — a segment with no criteria at all can't be saved.
-	const existingSegment = {
-		...SEGMENTS[ 0 ],
-		criteria: [
-			{
-				criteria_id: 'LAST_GIFT_DATE',
-				value: { start: { type: 'relative', days: -30 }, end: { type: 'relative', days: 0 } },
-			},
-			{ criteria_id: 'newsletter', value: 'subscribers' },
-		],
-	};
-
-	const wizardApiFetch = jest.fn( ( { method } = {} ) => Promise.resolve( 'POST' === method ? existingSegment : [ existingSegment ] ) );
-
-	const mockProps = {
-		segmentId: existingSegment.id,
-		setSegments: jest.fn(),
-		wizardApiFetch,
-	};
-
-	beforeEach( () => {
-		window.newspackAudienceCampaigns = { criteria };
-		wizardApiFetch.mockClear();
-		render(
-			<MemoryRouter>
-				<SingleSegment { ...mockProps } />
-			</MemoryRouter>
-		);
-	} );
+	const wizardApiFetch = mountExistingSegment( () => [
+		{
+			criteria_id: 'LAST_GIFT_DATE',
+			value: { start: { type: 'relative', days: -30 }, end: { type: 'relative', days: 0 } },
+		},
+		{ criteria_id: 'newsletter', value: 'subscribers' },
+	] );
 
 	it( 'shows the matching preset rather than Custom, with no bound rows', async () => {
 		await waitFor( () => expect( screen.getByTestId( 'date-range-preset' ) ).toHaveValue( '30' ) );

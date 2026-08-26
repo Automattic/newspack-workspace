@@ -21,6 +21,13 @@ const BOUND_TYPES = [
 	{ label: __( 'Days from now', 'newspack-plugin' ), value: 'future' },
 ];
 
+// Upper magnitude for a relative bound: ~273 years, far inside Date's range,
+// and it keeps the resolved year four digits so the matcher's lexicographic
+// compare stays valid. Import and REST bypass this input, so the matcher still
+// fails closed on larger offsets — this just turns a wild typo into
+// browser-level validation instead of a segment that matches nobody.
+const MAX_RELATIVE_DAYS = 100000;
+
 // Today as YYYY-MM-DD in local time. toISOString() converts to UTC and would give
 // the wrong day for anyone west of Greenwich.
 const today = () => {
@@ -133,6 +140,7 @@ const DateRangeBound = ( { label, testId, bound, onChange } ) => {
 					hideLabelFromVision
 					type={ 'absolute' === type ? 'date' : 'number' }
 					min={ 'absolute' === type ? undefined : 0 }
+					max={ 'absolute' === type ? undefined : MAX_RELATIVE_DAYS }
 					value={ boundValueOf( bound ) }
 					onChange={ nextValue => onChange( makeBound( type, nextValue ) ) }
 				/>
