@@ -466,11 +466,10 @@
 	}
 
 	/* Article meta */
-	// `.tag-labels` shares this rule rather than repeating it. Tag labels used to
-	// carry `cat-links` and borrow its styling, which also handed them every
-	// `.cat-links a` rule a publisher wrote for categories. The coupling lived in
-	// the markup, so sharing the selector here restores the layout without
-	// reopening the capture.
+	// `.tag-labels` shares this rule rather than repeating it, so an edit to one
+	// cannot silently diverge from the other. The wrapper carries only
+	// `tag-labels`, which is what keeps a publisher's per-section `.cat-links a`
+	// rule from reaching a tag label; sharing layout here does not give that back.
 	.cat-links,
 	.tag-labels {
 		display: flex;

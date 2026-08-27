@@ -7,8 +7,8 @@
 .tag-labels {
 	align-items: stretch;
 	display: inline-flex;
-	// Parity with the base `.cat-links` rule the wrapper matched before
-	// NPPM-3048 (labels sized and spaced like the adjacent category chips).
+	// Sized and spaced like the category row beside it, mirroring the base
+	// `.cat-links` rule in `sass/site/primary/_posts-and-pages.scss`.
 	font-size: var(--newspack-theme-font-size-xs);
 	margin: 0 0 #{0.75 * structure.$size__spacing-unit};
 	position: relative;
@@ -39,7 +39,8 @@
 /* stylelint-disable selector-type-no-unknown  */
 .tag-labels,
 amp-script .tag-labels {
-	// Use `.tag-label.flag` so this beats `.wpnbha .cat-links a` / `.wpnbpc .cat-links a` on specificity.
+	// `.tag-label.flag` rather than `.tag-label`: two classes are what put this
+	// above the white `.tag-labels a` sets, so a chip keeps its own color.
 	.tag-label.flag {
 		background: var(--newspack-theme-color-highlight);
 		color: var(--newspack-theme-color-text-main);
@@ -55,7 +56,7 @@ amp-script .tag-labels {
 
 // Tag labels render after the category (and sponsor) label and sit on the same line,
 // mirroring the sponsor → category convention. The category `.cat-links` is immediately
-// followed by the tag-labels `.cat-links.tag-labels` in every context (single posts,
+// followed by `.tag-labels` in every context (single posts,
 // home, archive, search, and the Content Loop / Carousel blocks), so keep it inline-block
 // and space the tag labels that follow it. The sponsor `.cat-links.sponsor-label` keeps
 // its own layout (from newspack-sponsors), so it is excluded here.
@@ -101,7 +102,6 @@ amp-script .tag-labels {
 
 	// Workaround margin/padding override for featured images.
 	.featured-image-behind {
-		// Selector updated with the markup: labels no longer carry `cat-links` (NPPM-3048).
 		.tag-labels {
 			a,
 			a:hover {

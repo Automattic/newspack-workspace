@@ -29,12 +29,11 @@ class Test_Tag_Labels extends WP_UnitTestCase {
 	/**
 	 * The outer wrapper must not carry `cat-links`.
 	 *
-	 * Tag labels used to borrow that class for its styling, which also handed
-	 * them every `.cat-links a` rule a publisher had written for categories --
-	 * per-section colour overrides are common, and they recoloured labels that
-	 * were never meant to follow the category palette. Callers now declare their
-	 * own `.tag-labels` styling, so re-adding the class here would silently
-	 * reopen the capture on every caller at once.
+	 * That class hands an element every `.cat-links a` rule a publisher has
+	 * written for categories, and per-section color overrides are common enough
+	 * that labels would follow a palette they are not meant to follow. Callers
+	 * declare their own `.tag-labels` styling, so re-adding the class here would
+	 * open that path on every caller at once.
 	 */
 	public function test_display_does_not_emit_cat_links() {
 		ob_start();
