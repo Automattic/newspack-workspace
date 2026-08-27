@@ -12,6 +12,11 @@ on:
   # trigger, and leaves no run to re-run. Dispatching on `release` or `alpha`
   # does the work the push would have; the alternative is pushing an empty
   # commit to the branch.
+  #
+  # A dispatch runs the workflow file as it exists on the branch it targets,
+  # and GitHub refuses one whose target lacks this trigger. The hatch is
+  # therefore unusable on a branch until a promotion has carried this file to
+  # it -- the empty commit stays the fallback until then.
   workflow_dispatch:
 
 concurrency:
