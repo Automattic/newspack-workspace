@@ -17,13 +17,14 @@ import {
 	__experimentalToggleGroupControlOption as ToggleGroupControlOption,
 } from '@wordpress/components';
 import { useState, useEffect } from '@wordpress/element';
-import { __ } from '@wordpress/i18n';
+import { __, sprintf } from '@wordpress/i18n';
 
 /**
  * Internal dependencies
  */
 import './block-visibility.scss';
 import { fetchAllPages } from '../utils/fetch-all-pages';
+import { isMalformedAccessRuleValue, isUnconstrainedAccessRuleValue } from '../utils/access-rule-value';
 import OneTimePurchaseRuleControl from '../components/one-time-purchase-rule-control';
 
 /**
@@ -207,10 +208,34 @@ export const AccessRuleValueControl = ( {
 		// control takes no help text of its own, so the reason goes in a sibling.
 		const hasNothingToSelect = !! config.empty_grants_access && 0 === options.length;
 		// The same state with something to pick stays usable: the operator can fix it
-		// here, and the notice is what tells them it needs fixing. A populated value
-		// of the wrong shape is the opposite state — the rule then denies every
-		// reader — so it is read off `value` rather than off the mapped list.
-		const grantsEveryone = !! config.empty_grants_access && ( Array.isArray( value ) ? 0 === value.length : ! value );
+		// here, and the notice is what tells them it needs fixing.
+		const grantsEveryone = isUnconstrainedAccessRuleValue( config, value );
+		// The opposite state, and the one the picker cannot show at all: a populated
+		// value of the wrong shape denies every reader, yet holds no token, so the
+		// control would read as an empty selection. Name the value, or an operator
+		// who ends the edit here writes `[]` over it and opens the gate.
+		const hasMalformedValue = isMalformedAccessRuleValue( config, value );
+		let valueNotice;
+		if ( hasMalformedValue ) {
+			valueNotice = sprintf(
+				// translators: %s: the stored value.
+				__(
+					'The saved value “%s” is not one of this rule’s options, so the rule grants no access. Pick from the list to replace it.',
+					'newspack-plugin'
+				),
+				String( value )
+			);
+		} else if ( grantsEveryone && hasNothingToSelect ) {
+			valueNotice = __(
+				'This rule has nothing to select yet, so it grants access to everyone. Add the items it selects, or turn the rule off.',
+				'newspack-plugin'
+			);
+		} else if ( grantsEveryone ) {
+			valueNotice = __(
+				'Nothing is selected, so this rule grants access to everyone. Select at least one option, or turn the rule off.',
+				'newspack-plugin'
+			);
+		}
 		return (
 			<>
 				<FormTokenField
@@ -226,19 +251,7 @@ export const AccessRuleValueControl = ( {
 					__next40pxDefaultSize
 					__nextHasNoMarginBottom
 				/>
-				{ grantsEveryone && (
-					<p className="components-base-control__help">
-						{ hasNothingToSelect
-							? __(
-									'This rule has nothing to select yet, so it grants access to everyone. Add the items it selects, or turn the rule off.',
-									'newspack-plugin'
-							  )
-							: __(
-									'Nothing is selected, so this rule grants access to everyone. Select at least one option, or turn the rule off.',
-									'newspack-plugin'
-							  ) }
-					</p>
-				) }
+				{ valueNotice && <p className="components-base-control__help">{ valueNotice }</p> }
 			</>
 		);
 	}

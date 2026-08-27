@@ -33,7 +33,10 @@ jest.mock( '@wordpress/components', () => ( {
 		return null;
 	},
 } ) );
-jest.mock( '@wordpress/i18n', () => ( { __: ( s: string ) => s } ) );
+jest.mock( '@wordpress/i18n', () => ( {
+	__: ( s: string ) => s,
+	sprintf: ( s: string, ...args: unknown[] ) => s.replace( /%s/, String( args[ 0 ] ) ),
+} ) );
 jest.mock( '@wordpress/element', () => ( {
 	useState: jest.fn( ( v: any ) => [ v, jest.fn() ] ),
 	useEffect: jest.fn(),
@@ -168,5 +171,24 @@ describe( 'block-visibility access rule value control', () => {
 		const control = renderControl( 'subscription', { name: 'Active subscription', has_options: true, options: [] }, [] );
 
 		expect( childrenOf( control )[ 0 ].props.disabled ).toBe( false );
+	} );
+
+	it( 'names a stored value the picker cannot show', () => {
+		// A legacy string denies every reader, but holds no token — so without the
+		// notice the control reads as an empty selection, and an editor who leaves
+		// it that way saves `[]` over a value that was failing closed.
+		const control = renderControl(
+			'institution',
+			{
+				name: 'Institutional access',
+				has_options: true,
+				empty_grants_access: true,
+				options: [ { value: 1, label: 'Springfield University' } ],
+			},
+			'Shelbyville University'
+		);
+
+		expect( childrenOf( control )[ 1 ].props.children ).toContain( 'Shelbyville University' );
+		expect( childrenOf( control )[ 1 ].props.children ).toContain( 'grants no access' );
 	} );
 } );
