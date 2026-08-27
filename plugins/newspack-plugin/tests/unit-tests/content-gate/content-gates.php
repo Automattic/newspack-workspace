@@ -1261,11 +1261,10 @@ class Test_Content_Gates extends \WP_UnitTestCase {
 
 		// is_excluded_from_gating() is private; reach it directly via
 		// reflection so this can assert on its actual output rather than
-		// inferring it from a real post's ID, which -- being always
-		// positive -- could never demonstrate this guard either way (see
-		// the coordinator's review: comparing a positive post ID against an
-		// all-negative/zero excluded array can't fail whether or not the
-		// array_filter() is even there).
+		// inferring it from a real post's ID. A real ID is always positive,
+		// and comparing a positive ID against an all-negative/zero excluded
+		// array cannot fail whether or not the array_filter() is there, so a
+		// post-based version of this test would pass either way.
 		$method = new \ReflectionMethod( Content_Gate::class, 'is_excluded_from_gating' );
 		$method->setAccessible( true );
 
