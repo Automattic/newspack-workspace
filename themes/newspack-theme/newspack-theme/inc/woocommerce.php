@@ -27,17 +27,47 @@ function newspack_woocommerce_setup() {
 add_action( 'after_setup_theme', 'newspack_woocommerce_setup' );
 
 /**
- * Add theme's WooCommerce styles.
+ * Whether the current request needs the theme's WooCommerce styles.
  *
- * @return void
+ * Two complementary checks, not alternatives. The native WooCommerce routes are
+ * matched here directly; everything else (a WooCommerce shortcode or block
+ * embedded in an ordinary page) is answered by newspack-plugin's detector,
+ * which reports false on those native routes by design. Replacing the route
+ * checks with the detector would therefore unstyle the shop, cart, checkout and
+ * account pages.
+ *
+ * The detector errs towards true when it cannot tell, which here costs an
+ * unneeded stylesheet rather than an unstyled page.
+ *
+ * @return bool True when the theme's WooCommerce stylesheet should be enqueued.
  */
-function newspack_woocommerce_scripts() {
+function newspack_request_needs_woocommerce_styles() {
 	if (
 		( function_exists( 'is_woocommerce' ) && is_woocommerce() )
 		|| ( function_exists( 'is_cart' ) && is_cart() )
 		|| ( function_exists( 'is_checkout' ) && is_checkout() )
 		|| ( function_exists( 'is_account_page' ) && is_account_page() )
 	) {
+		return true;
+	}
+
+	// Absent newspack-plugin the theme keeps its previous behaviour, covering
+	// the native routes only.
+	return class_exists( 'Newspack\WooCommerce_Content_Detector' )
+		&& \Newspack\WooCommerce_Content_Detector::current_request_has_woocommerce_content();
+}
+
+/**
+ * Add theme's WooCommerce styles.
+ *
+ * The theme drops WooCommerce's own `woocommerce-general` stylesheet for every
+ * request, so anything this does not enqueue for renders with no storefront
+ * styling at all.
+ *
+ * @return void
+ */
+function newspack_woocommerce_scripts() {
+	if ( newspack_request_needs_woocommerce_styles() ) {
 		wp_enqueue_style( 'newspack-woocommerce-style', get_template_directory_uri() . '/styles/woocommerce.css', array( 'newspack-style' ), wp_get_theme()->get( 'Version' ) );
 		wp_style_add_data( 'newspack-woocommerce-style', 'rtl', 'replace' );
 	}
