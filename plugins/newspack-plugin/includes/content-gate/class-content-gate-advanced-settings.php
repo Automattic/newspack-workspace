@@ -138,7 +138,26 @@ class Content_Gate_Advanced_Settings {
 		// Memberships is independent of Audience Management and keeps
 		// enforcing either way, so it isn't gated behind
 		// Content_Gate::is_gating_active() the way the first-party half is.
-		return Memberships::is_active() || Content_Gate::has_first_party_restriction_source();
+		//
+		// The filter is applied here, to the combined answer, rather than being
+		// taken from Content_Gate::has_first_party_restriction_source(): that
+		// one filters the first-party half alone, and OR-ing Memberships in
+		// after it would leave a callback returning false with no effect on a
+		// Memberships site.
+		$has_restriction_source = Memberships::is_active()
+			|| Content_Gate::detect_first_party_restriction_source();
+
+		/**
+		 * Filters whether anything on this site can restrict a post.
+		 *
+		 * The feed hooks short-circuit entirely when this is false, so code that
+		 * answers `newspack_is_post_restricted` on its own — a publisher plugin
+		 * restricting posts without publishing a gate or activating Memberships —
+		 * must return true here, or its restricted posts ship in full in the feed.
+		 *
+		 * @param bool $has_restriction_source Whether a restriction source was detected.
+		 */
+		return (bool) apply_filters( 'newspack_content_gate_has_restriction_source', $has_restriction_source );
 	}
 
 	/**

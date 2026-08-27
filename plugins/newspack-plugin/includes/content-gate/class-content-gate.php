@@ -292,20 +292,39 @@ class Content_Gate {
 	}
 
 	/**
+	 * The unfiltered half of {@see self::has_first_party_restriction_source()}.
+	 *
+	 * Separate so a caller that combines this with another restriction source
+	 * can apply `newspack_content_gate_has_restriction_source` to the combined
+	 * answer instead of to this half alone. Filtering the half and then OR-ing
+	 * the other source in afterwards silently drops the filter's force-disable
+	 * direction: a callback returning false is overridden by the source that
+	 * was added after it. {@see Content_Gate_Advanced_Settings::has_restriction_source()}
+	 * is the caller that needs this.
+	 *
+	 * Gates only count while gating is active — otherwise a site with inert
+	 * gates pays this check's cost (a get_gates() query, on cache miss) to
+	 * evaluate a restriction that is guaranteed to be a no-op everywhere this
+	 * predicate gates work.
+	 *
+	 * @return bool
+	 */
+	public static function detect_first_party_restriction_source(): bool {
+		return self::is_gating_active()
+			&& ! empty( self::get_gates( self::GATE_CPT, 'publish', false ) );
+	}
+
+	/**
 	 * Whether Newspack's own Content Restriction Control gates could restrict
 	 * a post on this site — independent of WooCommerce Memberships, which is
 	 * a separate restriction source callers combine in for themselves (see
 	 * {@see Content_Gate_Advanced_Settings::has_restriction_source()} for the
 	 * feed path, and {@see self::filter_rest_response()} for REST).
 	 *
-	 * Shared by both callers so they agree on what "a first-party gate could
-	 * restrict something" means, and both resolve the
-	 * `newspack_content_gate_has_restriction_source` filter through this one
-	 * call rather than duplicating the apply_filters() — see that filter's
-	 * docblock for why the seam exists: a publisher plugin that answers
-	 * `newspack_is_post_restricted` on its own, without publishing a gate or
-	 * activating Memberships, needs a way to opt back in here or its
-	 * restricted posts ship unrestricted wherever this predicate gates work.
+	 * The filtered form, and what a caller wants when this predicate is the
+	 * whole answer — the REST path. A caller that ORs another restriction
+	 * source in afterwards wants {@see self::detect_first_party_restriction_source()}
+	 * instead, and applies the filter to the combined value itself.
 	 *
 	 * Not memoized: the gate lookup itself is cached by self::get_gates(), so
 	 * a second memo here would only add a value that can go stale against the
@@ -314,12 +333,7 @@ class Content_Gate {
 	 * @return bool
 	 */
 	public static function has_first_party_restriction_source(): bool {
-		// Gates only count while gating is active — otherwise a site with inert
-		// gates pays this check's cost (a get_gates() query, on cache miss) to
-		// evaluate a restriction that is guaranteed to be a no-op everywhere
-		// this predicate gates work.
-		$has_first_party_restriction_source = self::is_gating_active()
-			&& ! empty( self::get_gates( self::GATE_CPT, 'publish', false ) );
+		$has_first_party_restriction_source = self::detect_first_party_restriction_source();
 
 		/**
 		 * Filters whether Newspack's own gate mechanism could restrict a post
