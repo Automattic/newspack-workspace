@@ -82,8 +82,12 @@ export function invalidateAccessRuleOptions( slug: string ): void {
  * control, which writes a string over the IDs the rule still stores.
  *
  * `declaresOptions` is the rule's own answer, from `Access_Rules::register_rule()`, and it
- * settles the question on its own: it is drawn from the rule's value type rather than from
- * whatever its options callback returned on this page load.
+ * settles the question either way: it is drawn from the rule's value type rather than from
+ * whatever its options callback returned on this page load. `register_rule()` is a public
+ * extension point and its `has_options` may be declared `false` alongside an options list,
+ * so an explicit `false` decides too — otherwise this picker would render tokens for a rule
+ * whose save `sanitize_access_rule()` then refuses. Only where the caller has no registry
+ * entry to read do the lists stand in for it.
  *
  * @param slug             The rule slug.
  * @param localisedOptions The rule's options as localised with the page.
@@ -91,8 +95,8 @@ export function invalidateAccessRuleOptions( slug: string ): void {
  *
  * @return Whether the rule is backed by an option list.
  */
-export function isOptionBackedAccessRule( slug: string, localisedOptions: AccessRuleOption[], declaresOptions = false ): boolean {
-	return declaresOptions || localisedOptions.length > 0 || undefined !== ACCESS_RULE_OPTION_SOURCES[ slug ];
+export function isOptionBackedAccessRule( slug: string, localisedOptions: AccessRuleOption[], declaresOptions?: boolean ): boolean {
+	return declaresOptions ?? ( localisedOptions.length > 0 || undefined !== ACCESS_RULE_OPTION_SOURCES[ slug ] );
 }
 
 /**

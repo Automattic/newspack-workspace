@@ -33,6 +33,11 @@ class Newspack_Test_Content_Gate_API extends WP_UnitTestCase {
 	public function set_up() {
 		parent::set_up();
 		$this->registered_rules_snapshot = Access_Rules::get_registered_rules();
+		// The gate routes require this capability and sanitization withholds its refusals
+		// from a caller without it, so every test about what a save is refused for is a
+		// test about the operator writing the gate. The ones about what an unauthorized
+		// caller may learn set their own user.
+		wp_set_current_user( self::factory()->user->create( [ 'role' => 'administrator' ] ) );
 	}
 
 	/**
@@ -477,9 +482,9 @@ class Newspack_Test_Content_Gate_API extends WP_UnitTestCase {
 		);
 
 		wp_set_current_user( 0 );
-		$this->assertWPError(
+		$this->assertNotWPError(
 			Content_Gate_API::sanitize_gate( $disabling, $this->gate_update_request( $gate_id ) ),
-			'A caller who cannot edit the gate must not learn from the response code what it stores.'
+			'A caller who cannot edit the gate must not learn from the response code what it stores; the request fails on permissions instead.'
 		);
 	}
 
@@ -613,6 +618,40 @@ class Newspack_Test_Content_Gate_API extends WP_UnitTestCase {
 
 		$this->assertNotWPError( $sanitized_gate );
 		$this->assertSame( [], $sanitized_gate['custom_access']['access_rules'] );
+	}
+
+	/**
+	 * Sanitization runs ahead of the route's `permission_callback`, so a refusal
+	 * returned from it answers a caller who has not been authorized yet — and the
+	 * message names a registered rule, which for a promoted field is an entry from
+	 * the publisher's CRM field roster. The request has to fail on permissions
+	 * instead, as it did before there was anything to refuse.
+	 */
+	public function test_a_refusal_is_withheld_from_a_caller_who_could_not_save_the_gate() {
+		$body = [
+			'custom_access' => [
+				'active'       => true,
+				'access_rules' => [
+					[
+						[
+							'slug'  => 'institution',
+							'value' => [],
+						],
+					],
+				],
+			],
+		];
+
+		$this->assertWPError( Content_Gate_API::sanitize_gate( $body ), 'The operator writing the gate is told what to fix.' );
+
+		wp_set_current_user( 0 );
+		$sanitized_gate = Content_Gate_API::sanitize_gate( $body );
+		$this->assertNotWPError( $sanitized_gate );
+		$this->assertArrayNotHasKey(
+			'access_rules',
+			$sanitized_gate['custom_access'],
+			'Withholding the refusal must not save the rule set it refused either.'
+		);
 	}
 
 	/**

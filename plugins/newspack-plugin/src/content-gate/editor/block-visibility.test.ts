@@ -142,11 +142,16 @@ describe( 'block-visibility access rule value control', () => {
 	// The rule's control is returned inside a fragment that also carries the caution for a
 	// stale option list, so the control itself is one level in.
 	const controlOf = ( element: any ) => childrenOf( element )[ 0 ];
+	// The picker is wrapped in the component that renders the caution about its stored
+	// value and ties the two together for a screen reader, so the field is its child and
+	// the caution is the prop it was handed.
+	const pickerOf = ( element: any ) => childrenOf( controlOf( element ) )[ 0 ].props.children;
+	const valueNoticeOf = ( element: any ) => childrenOf( controlOf( element ) )[ 0 ].props.notice;
 
 	it( 'gives an options-backed rule the picker even when its option list is empty', () => {
 		const control = renderControl( 'institution', { name: 'Institutional access', has_options: true, options: [] }, [] );
 
-		expect( childrenOf( controlOf( control ) )[ 0 ].type ).toBe( FormTokenField );
+		expect( pickerOf( control ).type ).toBe( FormTokenField );
 	} );
 
 	it( 'gives a rule that declares no options source the free-text box', () => {
@@ -165,7 +170,7 @@ describe( 'block-visibility access rule value control', () => {
 			[]
 		);
 
-		expect( childrenOf( controlOf( control ) )[ 0 ].props.disabled ).toBe( true );
+		expect( pickerOf( control ).props.disabled ).toBe( true );
 	} );
 
 	it( 'leaves the picker usable for a rule that still constrains when empty', () => {
@@ -173,7 +178,7 @@ describe( 'block-visibility access rule value control', () => {
 		// empty value is a configuration a publisher chooses — not the gate opening.
 		const control = renderControl( 'subscription', { name: 'Active subscription', has_options: true, options: [] }, [] );
 
-		expect( childrenOf( controlOf( control ) )[ 0 ].props.disabled ).toBe( false );
+		expect( pickerOf( control ).props.disabled ).toBe( false );
 	} );
 
 	it( 'names a stored value the picker cannot show', () => {
@@ -191,7 +196,7 @@ describe( 'block-visibility access rule value control', () => {
 			'Shelbyville University'
 		);
 
-		expect( childrenOf( controlOf( control ) )[ 1 ].props.children ).toContain( 'Shelbyville University' );
-		expect( childrenOf( controlOf( control ) )[ 1 ].props.children ).toContain( 'grants no access' );
+		expect( valueNoticeOf( control ) ).toContain( 'Shelbyville University' );
+		expect( valueNoticeOf( control ) ).toContain( 'grants no access' );
 	} );
 } );

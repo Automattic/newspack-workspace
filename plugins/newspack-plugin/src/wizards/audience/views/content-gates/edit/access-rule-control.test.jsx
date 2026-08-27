@@ -230,6 +230,10 @@ describe( 'AccessRuleControl, a rule whose value would let everyone through', ()
 
 		expect( await screen.findByText( /grants access to everyone/ ) ).toBeInTheDocument();
 		expect( screen.getByRole( 'combobox' ) ).toBeDisabled();
+		// And the reason is tied to the field. A disabled control is out of the tab order,
+		// so an adjacent paragraph the field does not point at reaches nobody arriving by
+		// keyboard.
+		expect( screen.getByRole( 'group' ) ).toHaveAttribute( 'aria-describedby', screen.getByRole( 'note' ).id );
 	} );
 
 	it( 'says nothing about granting everyone while the rule still names something', async () => {

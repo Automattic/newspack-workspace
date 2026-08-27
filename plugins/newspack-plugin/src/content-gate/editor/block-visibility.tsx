@@ -36,6 +36,7 @@ import {
 } from '../access-rule-options';
 import { getAccessRuleOptionSource, isOptionBackedAccessRule } from '../access-rule-option-sources';
 import { getAccessRuleValueNotice, isAccessRulePickerInert, isUnconstrainedAccessRuleValue } from '../utils/access-rule-value';
+import AccessRuleValueNotice from '../components/access-rule-value-notice';
 import OneTimePurchaseRuleControl from '../components/one-time-purchase-rule-control';
 import UnlistedValuesNotice from '../components/unlisted-values-notice';
 
@@ -228,27 +229,24 @@ export const AccessRuleValueControl = ( {
 		const valueNotice = getAccessRuleValueNotice( config, value, hasOptions );
 		control = (
 			<>
-				<FormTokenField
-					label={ config.name }
-					disabled={ isAccessRulePickerInert( config, value, hasOptions ) }
-					value={ getAccessRuleOptionTokens( options, selected, getMissingOptionLabel( slug ) ) }
-					suggestions={ options.map( formatAccessRuleOptionLabel ) }
-					maxSuggestions={ MAX_OPTION_SUGGESTIONS }
-					onChange={ ( tokens: ( string | TokenItem )[] ) =>
-						onChange( resolveAccessRuleOptionTokens( tokens, options, { slug, stored: selected } ) )
-					}
-					messages={ getAccessRuleTokenFieldMessages( slug ) }
-					__experimentalValidateInput={ ( input: string ) => isAccessRuleOptionInput( input, options, slug ) }
-					__experimentalAutoSelectFirstMatch
-					__experimentalExpandOnFocus
-					__next40pxDefaultSize
-					__nextHasNoMarginBottom
-				/>
-				{ valueNotice && (
-					<p role="note" className="newspack-access-rule-values-notice">
-						{ valueNotice }
-					</p>
-				) }
+				<AccessRuleValueNotice label={ config.name } notice={ valueNotice }>
+					<FormTokenField
+						label={ config.name }
+						disabled={ isAccessRulePickerInert( config, value, hasOptions ) }
+						value={ getAccessRuleOptionTokens( options, selected, getMissingOptionLabel( slug ) ) }
+						suggestions={ options.map( formatAccessRuleOptionLabel ) }
+						maxSuggestions={ MAX_OPTION_SUGGESTIONS }
+						onChange={ ( tokens: ( string | TokenItem )[] ) =>
+							onChange( resolveAccessRuleOptionTokens( tokens, options, { slug, stored: selected } ) )
+						}
+						messages={ getAccessRuleTokenFieldMessages( slug ) }
+						__experimentalValidateInput={ ( input: string ) => isAccessRuleOptionInput( input, options, slug ) }
+						__experimentalAutoSelectFirstMatch
+						__experimentalExpandOnFocus
+						__next40pxDefaultSize
+						__nextHasNoMarginBottom
+					/>
+				</AccessRuleValueNotice>
 				{ /* A different state from the ones above, and it can stand alongside a
 				     value the picker holds tokens for: these are stored IDs no option
 				     describes. */ }

@@ -19,6 +19,7 @@ import {
 	resolveAccessRuleOptionTokens,
 } from '../../../../../content-gate/access-rule-options';
 import { isOptionBackedAccessRule } from '../../../../../content-gate/access-rule-option-sources';
+import AccessRuleValueNotice from '../../../../../content-gate/components/access-rule-value-notice';
 import OneTimePurchaseRuleControl from '../../../../../content-gate/components/one-time-purchase-rule-control';
 import UnlistedValuesNotice from '../../../../../content-gate/components/unlisted-values-notice';
 import { getAccessRuleValueNotice, isAccessRulePickerInert, isUnconstrainedAccessRuleValue } from '../utils';
@@ -42,23 +43,25 @@ export default function AccessRuleControl( { slug, value, onChange }: GateRuleCo
 		const valueNotice = getAccessRuleValueNotice( rule, value, hasOptions );
 		return (
 			<>
-				<FormTokenField
-					hideLabelFromVision
-					label={ rule.name }
-					disabled={ isAccessRulePickerInert( rule, value, hasOptions ) }
-					description={ valueNotice ?? __( 'Search by name or ID.', 'newspack-plugin' ) }
-					value={ getAccessRuleOptionTokens( options, selected, getMissingOptionLabel( slug ) ) }
-					onChange={ ( tokens: ( string | TokenItem )[] ) =>
-						onChange( resolveAccessRuleOptionTokens( tokens, options, { slug, stored: selected } ) )
-					}
-					suggestions={ options.map( formatAccessRuleOptionLabel ) }
-					maxSuggestions={ MAX_OPTION_SUGGESTIONS }
-					messages={ getAccessRuleTokenFieldMessages( slug ) }
-					__experimentalValidateInput={ ( input: string ) => isAccessRuleOptionInput( input, options, slug ) }
-					__experimentalAutoSelectFirstMatch
-					__experimentalExpandOnFocus
-					__next40pxDefaultSize
-				/>
+				<AccessRuleValueNotice label={ rule.name } notice={ valueNotice }>
+					<FormTokenField
+						hideLabelFromVision
+						label={ rule.name }
+						disabled={ isAccessRulePickerInert( rule, value, hasOptions ) }
+						description={ valueNotice ? undefined : __( 'Search by name or ID.', 'newspack-plugin' ) }
+						value={ getAccessRuleOptionTokens( options, selected, getMissingOptionLabel( slug ) ) }
+						onChange={ ( tokens: ( string | TokenItem )[] ) =>
+							onChange( resolveAccessRuleOptionTokens( tokens, options, { slug, stored: selected } ) )
+						}
+						suggestions={ options.map( formatAccessRuleOptionLabel ) }
+						maxSuggestions={ MAX_OPTION_SUGGESTIONS }
+						messages={ getAccessRuleTokenFieldMessages( slug ) }
+						__experimentalValidateInput={ ( input: string ) => isAccessRuleOptionInput( input, options, slug ) }
+						__experimentalAutoSelectFirstMatch
+						__experimentalExpandOnFocus
+						__next40pxDefaultSize
+					/>
+				</AccessRuleValueNotice>
 				{ /* A value of the wrong shape is named above; this names stored IDs the
 				     list cannot describe, which is a different state and can coexist with
 				     none of the others. */ }

@@ -60,7 +60,12 @@ export const isEmptyAccessRuleValue = ( value: unknown ) =>
  * decided here.
  */
 export const isMalformedAccessRuleValue = ( config: AccessRuleShape | undefined, value: unknown ) => {
-	if ( ! config || config.is_boolean || 'boolean' === typeof value ) {
+	// Only the rule's own declaration exempts a value from the shape test. A boolean
+	// stored against a rule that is not boolean is malformed, which is what PHP says
+	// too: `is_malformed_options_backed_value( false )` is true and the save is refused.
+	// Such a value predates this change, and reading it as well-formed would render it
+	// as an ordinary empty picker with no caution, then fail the save unannounced.
+	if ( ! config || config.is_boolean ) {
 		return false;
 	}
 	if ( takesOptionValues( config ) ) {

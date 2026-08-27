@@ -215,9 +215,19 @@ class Incoming_Field {
 	 * Whether the field's value is one or more entries from its option list,
 	 * rather than free text.
 	 *
-	 * Declared by the value type rather than read off the resolved list: a
-	 * provider can describe a dropdown that has no choices configured yet, and
-	 * counting its options would read that as a free-text field.
+	 * The value type decides it, so a dropdown whose choices the provider has not
+	 * configured yet still takes option values. A populated option list stands in
+	 * for the declaration where there is none: `Esp::configure_incoming_field()`
+	 * lets a provider send `options` without a `value_type`, and reading those
+	 * fields as free text would send a list of option values down the plain-string
+	 * branch.
+	 *
+	 * Widening this narrows what a rule may store. A `select` field whose option
+	 * fetch came back empty now takes option values, so a free-text value stored
+	 * for it before is rejected on save and labelled "grants no access" in both
+	 * pickers. That direction is deliberate — the alternative saves a value that
+	 * evaluates as malformed — but such a value needs re-picking by hand; there is
+	 * no migration for it.
 	 *
 	 * @return bool
 	 */

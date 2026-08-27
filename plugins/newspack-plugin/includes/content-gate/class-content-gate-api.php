@@ -186,17 +186,23 @@ class Content_Gate_API {
 				$sanitized_custom_access = self::reject_rules_left_unconstrained( $sanitized_custom_access, $gate_id, $leaves_rules_unenforced );
 			}
 			if ( is_wp_error( $sanitized_custom_access ) ) {
-				if ( ! $leaves_rules_unenforced || ! self::access_rules_are_unchanged( $gate, $gate_id ) ) {
+				// Only a caller who could act on the refusal is told about it. Sanitization
+				// runs ahead of the route's `permission_callback`, so an error returned here
+				// answers a caller who has not been authorized yet, and these messages name
+				// registered rules — for a promoted field, an entry from the publisher's CRM
+				// field roster. Before there was anything to refuse, the same request fell
+				// through to a permission failure, and it still does.
+				if ( self::caller_can_manage_gates() && ( ! $leaves_rules_unenforced || ! self::access_rules_are_unchanged( $gate, $gate_id ) ) ) {
 					// As a REST `sanitize_callback` return value, the error fails the
 					// request with a 400 rather than silently saving a loosened rule set.
 					return self::in_context_error( $sanitized_custom_access, $leaves_rules_unenforced );
 				}
-				// The save switches the gate off and echoes back the rules it read, rather
-				// than introducing new ones: the gates list disables a gate by POSTing the
-				// whole gate object. A gate whose stored value is already invalid has to
-				// stay switchable, or an operator can't turn off one that is walling off
-				// paying readers. Drop the rules from the payload so the stored ones are
-				// left alone and the rest of the save goes through.
+				// The other save that gets here switches the gate off and echoes back the
+				// rules it read, rather than introducing new ones: the gates list disables a
+				// gate by POSTing the whole gate object. A gate whose stored value is already
+				// invalid has to stay switchable, or an operator can't turn off one that is
+				// walling off paying readers. Drop the rules from the payload so the stored
+				// ones are left alone and the rest of the save goes through.
 				unset( $gate['custom_access']['access_rules'] );
 				$sanitized_custom_access = self::sanitize_custom_access( $gate['custom_access'] );
 			}
@@ -387,7 +393,21 @@ class Content_Gate_API {
 	 * @return bool
 	 */
 	private static function caller_can_save_gate( $gate_id ) {
-		return (bool) $gate_id && current_user_can( self::MANAGE_GATES_CAPABILITY );
+		return (bool) $gate_id && self::caller_can_manage_gates();
+	}
+
+	/**
+	 * Whether the caller holds the capability the gate routes require, and so may be
+	 * told why their save was refused.
+	 *
+	 * Not the same question as `caller_can_save_gate()`, which also needs a gate to
+	 * read: a gate being created has no ID yet, and its refusals still belong to the
+	 * operator writing it.
+	 *
+	 * @return bool
+	 */
+	private static function caller_can_manage_gates() {
+		return current_user_can( self::MANAGE_GATES_CAPABILITY );
 	}
 
 	/**
@@ -410,8 +430,11 @@ class Content_Gate_API {
 		if ( isset( $gate['custom_access']['active'] ) && ! boolval( $gate['custom_access']['active'] ) ) {
 			return true;
 		}
-		// A save that omits `status` leaves the stored one in place.
-		$status = $sanitized_gate['status'] ?? ( $gate_id ? get_post_status( $gate_id ) : 'draft' );
+		// A save that omits `status` leaves the stored one in place. Guarded like the
+		// other stored reads in this class, since sanitization runs ahead of the route's
+		// `permission_callback`; an unreadable status counts as a draft, which leaves the
+		// request to fail on permissions as it would have anyway.
+		$status = $sanitized_gate['status'] ?? ( self::caller_can_save_gate( $gate_id ) ? get_post_status( $gate_id ) : 'draft' );
 		return 'publish' !== $status;
 	}
 
@@ -808,6 +831,11 @@ class Content_Gate_API {
 	/**
 	 * Sanitize the gate post status.
 	 *
+	 * An unrecognised status falls back to the stored one, read under the same guard
+	 * as the other stored reads in this class: sanitization runs ahead of the route's
+	 * `permission_callback`, and a caller who cannot save the gate gets `draft`, which
+	 * leaves the request to fail on permissions as it would have anyway.
+	 *
 	 * @param string $status Post status.
 	 * @param int    $gate_id Gate ID.
 	 *
@@ -817,7 +845,7 @@ class Content_Gate_API {
 		$sanitized = sanitize_text_field( $status );
 		$valid = in_array( $sanitized, Content_Gate::get_post_statuses(), true );
 		if ( ! $valid ) {
-			$sanitized = $gate_id ? get_post_status( $gate_id ) : 'draft';
+			$sanitized = self::caller_can_save_gate( $gate_id ) ? get_post_status( $gate_id ) : 'draft';
 		}
 		return $sanitized;
 	}
