@@ -2,7 +2,14 @@
  * WordPress dependencies.
  */
 import { __ } from '@wordpress/i18n';
-import { CheckboxControl, ExternalLink, SelectControl, TextareaControl } from '@wordpress/components';
+import {
+	CheckboxControl,
+	ExternalLink,
+	SelectControl,
+	TextareaControl,
+	__experimentalToggleGroupControl as ToggleGroupControl, // eslint-disable-line @wordpress/no-unsafe-wp-apis
+	__experimentalToggleGroupControlOption as ToggleGroupControlOption, // eslint-disable-line @wordpress/no-unsafe-wp-apis
+} from '@wordpress/components';
 
 /**
  * Internal dependencies.
@@ -141,6 +148,28 @@ export const SettingsField = ( { field, value, onChange } ) => {
 			);
 		}
 		case 'checkbox':
+			// A checkbox field may declare `control: 'toggle_group'` to render as an
+			// Enabled/Disabled toggle group instead — the same stored boolean, but a
+			// presentation suited to feature switches whose label names the feature
+			// ("Deals") rather than the action ("Enable deals"). Integrations running
+			// against a plugin without this parameter fall back to the checkbox.
+			if ( 'toggle_group' === field.control ) {
+				return (
+					<ToggleGroupControl
+						key={ key }
+						label={ label }
+						help={ help }
+						value={ value ? 'enabled' : 'disabled' }
+						onChange={ next => onChange( 'enabled' === next ) }
+						isBlock
+						__next40pxDefaultSize
+						__nextHasNoMarginBottom
+					>
+						<ToggleGroupControlOption label={ __( 'Enabled', 'newspack-plugin' ) } value="enabled" />
+						<ToggleGroupControlOption label={ __( 'Disabled', 'newspack-plugin' ) } value="disabled" />
+					</ToggleGroupControl>
+				);
+			}
 			return <CheckboxControl key={ key } label={ label } help={ help } checked={ !! value } onChange={ onChange } __nextHasNoMarginBottom />;
 		case 'select': {
 			const selectable = hasSelectableOption( field );
