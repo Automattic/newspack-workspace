@@ -77,10 +77,10 @@ class Newspack_Test_Data_Events_Woo_User_Registration extends WP_UnitTestCase {
 	private static function reset_watcher_state() {
 		$ref = new ReflectionClass( Woo_User_Registration::class );
 		foreach ( [
-			'processing_checkout'       => false,
-			'store_api_checkout'        => false,
-			'store_api_expected_email'  => '',
-			'metadata'                  => [],
+			'processing_checkout'      => false,
+			'store_api_checkout'       => false,
+			'store_api_expected_email' => '',
+			'metadata'                 => [],
 		] as $prop => $value ) {
 			$property = $ref->getProperty( $prop );
 			$property->setAccessible( true );
