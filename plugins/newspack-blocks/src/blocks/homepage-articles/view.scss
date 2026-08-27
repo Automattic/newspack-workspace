@@ -272,8 +272,6 @@
 		.cat-links a,
 		.cat-links a:visited,
 		.tag-labels,
-		.tag-labels a,
-		.tag-labels a:visited,
 		figcaption {
 			color: inherit;
 		}
@@ -326,8 +324,7 @@
 			.entry-title a,
 			.entry-meta,
 			.entry-meta .byline a,
-			.cat-links a,
-			.tag-labels a {
+			.cat-links a {
 				color: np-colors.$neutral-000;
 			}
 		}
