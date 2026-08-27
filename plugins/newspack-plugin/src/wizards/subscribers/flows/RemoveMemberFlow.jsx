@@ -29,13 +29,17 @@ export default function RemoveMemberFlow( { members, actions, onClose, onDone } 
 	const groupLabel = GROUP_LABEL.toLowerCase();
 
 	const remove = async () => {
-		await actions.removeMembers( list.map( member => member.id ) );
+		// Report what the server removed, not what was sent: update_members() skips
+		// IDs that aren't readers or aren't members of this group and still answers
+		// 200, so a batch can be applied in part.
+		const result = await actions.removeMembers( list.map( member => member.id ) );
+		const removed = Object.keys( result?.members_removed || {} ).length;
 		onDone(
-			1 === count
+			1 === count && 1 === removed
 				? sprintf( __( '%1$s removed from the %2$s.', 'newspack-plugin' ), name, groupLabel )
 				: sprintf(
-						_n( '%1$d member removed from the %2$s.', '%1$d members removed from the %2$s.', count, 'newspack-plugin' ),
-						count,
+						_n( '%1$d member removed from the %2$s.', '%1$d members removed from the %2$s.', removed, 'newspack-plugin' ),
+						removed,
 						groupLabel
 				  )
 		);

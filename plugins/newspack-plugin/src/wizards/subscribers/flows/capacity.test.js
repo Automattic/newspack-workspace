@@ -24,8 +24,10 @@ describe( 'seatsRemaining', () => {
 		expect( seatsRemaining( { seatLimit: 3, seatsReserved: 5 } ) ).toBe( 0 );
 	} );
 
-	it( 'treats a missing group as having no room rather than throwing', () => {
-		expect( seatsRemaining( undefined ) ).toBe( Infinity );
+	it( 'treats a missing group as having no room, not as unlimited', () => {
+		// The safe default: with nothing loaded, the flows must withhold Add and
+		// Invite rather than offer them against a group they know nothing about.
+		expect( seatsRemaining( undefined ) ).toBe( 0 );
 	} );
 } );
 

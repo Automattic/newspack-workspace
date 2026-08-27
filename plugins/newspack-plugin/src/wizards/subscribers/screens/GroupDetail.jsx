@@ -107,6 +107,13 @@ function GroupDetailView() {
 
 	const [ modal, setModal ] = useState( null );
 	const [ snackbar, setSnackbar ] = useState( null );
+	// A refused role change is worth reading twice — "no longer active" (409),
+	// "only an existing member can be made a manager" (400), a 403 — so it lands in
+	// a Notice that stays put, not a snackbar that auto-dismisses. `roleBusy` is
+	// the in-flight guard: these are the only writes with no modal to block a
+	// second click, which would otherwise fire a duplicate request.
+	const [ roleError, setRoleError ] = useState( '' );
+	const [ roleBusy, setRoleBusy ] = useState( false );
 	const [ membersView, setMembersView ] = useState( MEMBERS_VIEW );
 	const [ invitesView, setInvitesView ] = useState( INVITES_VIEW );
 
@@ -126,6 +133,22 @@ function GroupDetailView() {
 			}
 		},
 		[ reload ]
+	);
+
+	const changeRole = useCallback(
+		async ( member, role, message ) => {
+			setRoleBusy( true );
+			setRoleError( '' );
+			try {
+				await actions.setManagerRole( member.id, role );
+				onDone( message );
+			} catch ( e ) {
+				setRoleError( e?.message || __( 'Something went wrong.', 'newspack-plugin' ) );
+			} finally {
+				setRoleBusy( false );
+			}
+		},
+		[ actions, onDone ]
 	);
 
 	const goToOwner = useCallback( () => {
@@ -247,28 +270,17 @@ function GroupDetailView() {
 			{
 				id: 'make-manager',
 				label: __( 'Make manager', 'newspack-plugin' ),
+				disabled: roleBusy,
 				isEligible: item => 'member' === item.role && isManageable( group ),
-				callback: async items => {
-					try {
-						await actions.setManagerRole( items[ 0 ].id, 'manager' );
-						onDone( sprintf( __( '%s is now a manager.', 'newspack-plugin' ), items[ 0 ].name ) );
-					} catch ( e ) {
-						setSnackbar( { message: e?.message || __( 'Something went wrong.', 'newspack-plugin' ) } );
-					}
-				},
+				callback: items => changeRole( items[ 0 ], 'manager', sprintf( __( '%s is now a manager.', 'newspack-plugin' ), items[ 0 ].name ) ),
 			},
 			{
 				id: 'remove-manager',
 				label: __( 'Remove manager', 'newspack-plugin' ),
+				disabled: roleBusy,
 				isEligible: item => 'manager' === item.role && isManageable( group ),
-				callback: async items => {
-					try {
-						await actions.setManagerRole( items[ 0 ].id, 'member' );
-						onDone( sprintf( __( '%s is no longer a manager.', 'newspack-plugin' ), items[ 0 ].name ) );
-					} catch ( e ) {
-						setSnackbar( { message: e?.message || __( 'Something went wrong.', 'newspack-plugin' ) } );
-					}
-				},
+				callback: items =>
+					changeRole( items[ 0 ], 'member', sprintf( __( '%s is no longer a manager.', 'newspack-plugin' ), items[ 0 ].name ) ),
 			},
 			{
 				id: 'remove-member',
@@ -280,7 +292,7 @@ function GroupDetailView() {
 				callback: items => setModal( { kind: 'remove', members: items } ),
 			},
 		],
-		[ group, actions, onDone ]
+		[ group, changeRole, roleBusy ]
 	);
 
 	const { data: processedMembers, paginationInfo: membersPagination } = useMemo(
@@ -370,19 +382,42 @@ function GroupDetailView() {
 	const hasLink = !! group.inviteLink?.active;
 
 	const copyInviteLink = async () => {
+		let url = '';
 		try {
 			// An existing link is copied as-is; if there is none, creating it is
 			// implicit in the first copy, mirroring the owner's My Account flow.
-			const url = hasLink ? group.inviteLink.url : ( await actions.generateInviteLink() )?.url;
-			await window.navigator?.clipboard?.writeText( url );
-			onDone( __( 'Invite link copied to clipboard.', 'newspack-plugin' ) );
+			url = ( hasLink ? group.inviteLink.url : ( await actions.generateInviteLink() )?.url ) || '';
 		} catch ( e ) {
-			setSnackbar( { message: e?.message || __( 'Could not copy the invite link.', 'newspack-plugin' ) } );
+			setSnackbar( { message: e?.message || __( 'Could not create the invite link.', 'newspack-plugin' ) } );
+			return;
 		}
+		if ( ! url ) {
+			setSnackbar( { message: __( 'Could not create the invite link.', 'newspack-plugin' ) } );
+			return;
+		}
+		// `clipboard` is absent in an insecure context and in older browsers, where
+		// optional chaining would resolve to undefined and let the await succeed —
+		// reporting a copy that never happened. The link is minted either way, so a
+		// clipboard failure reports the link, not a failed action.
+		let copied = false;
+		try {
+			if ( window.navigator?.clipboard?.writeText ) {
+				await window.navigator.clipboard.writeText( url );
+				copied = true;
+			}
+		} catch ( e ) {
+			copied = false;
+		}
+		onDone(
+			copied
+				? __( 'Invite link copied to clipboard.', 'newspack-plugin' )
+				: __( 'Invite link ready, but it could not be copied to your clipboard.', 'newspack-plugin' )
+		);
 	};
 
 	return (
 		<div className="newspack-subscribers__profile">
+			{ roleError && <Notice isError noticeText={ roleError } /> }
 			<HStack className="newspack-subscribers__section-head" justify="space-between" alignment="center">
 				<HStack spacing={ 2 } justify="flex-start" alignment="baseline" expanded={ false }>
 					<h2 className="newspack-subscribers__section-title">{ __( 'Members', 'newspack-plugin' ) }</h2>
@@ -425,7 +460,7 @@ function GroupDetailView() {
 										copyInviteLink();
 									} }
 								>
-									{ __( 'Copy invite link', 'newspack-plugin' ) }
+									{ hasLink ? __( 'Copy invite link', 'newspack-plugin' ) : __( 'Create invite link', 'newspack-plugin' ) }
 								</MenuItem>
 								{ hasLink && (
 									<MenuItem

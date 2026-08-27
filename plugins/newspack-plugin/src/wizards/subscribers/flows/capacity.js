@@ -20,17 +20,22 @@ import { __ } from '@wordpress/i18n';
  * seat another invitation has already claimed.
  *
  * A seat limit of 0 means unlimited — not zero seats — so it yields Infinity,
- * which is safe to slice an array by.
+ * which is safe to slice an array by. No group at all is the opposite case: with
+ * nothing loaded there is nothing to know the capacity of, so it reports no room
+ * and the callers withhold Add and Invite rather than offering them.
  *
  * @param {Object} group The group as returned by /groups/<id>.
- * @return {number} Seats available, or Infinity when the group is uncapped.
+ * @return {number} Seats available, Infinity when the group is uncapped, 0 when there is no group.
  */
 export const seatsRemaining = group => {
-	const limit = Number( group?.seatLimit ) || 0;
+	if ( ! group ) {
+		return 0;
+	}
+	const limit = Number( group.seatLimit ) || 0;
 	if ( limit <= 0 ) {
 		return Infinity;
 	}
-	return Math.max( 0, limit - ( Number( group?.seatsReserved ) || 0 ) );
+	return Math.max( 0, limit - ( Number( group.seatsReserved ) || 0 ) );
 };
 
 /**

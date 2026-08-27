@@ -14,6 +14,19 @@ defined( 'ABSPATH' ) || exit;
  */
 class Group_Subscription_API {
 	const NAMESPACE = 'newspack-group-subscription/v1';
+
+	/**
+	 * Shortest search term /search-users will answer. Below this the term matches
+	 * most of the reader base, and every match carries an email address.
+	 */
+	const SEARCH_USERS_MIN_LENGTH = 2;
+
+	/**
+	 * Rows each of the two /search-users queries returns at most. The endpoint
+	 * feeds a picker, so a term broad enough to hit the cap is one the caller
+	 * should narrow rather than page through.
+	 */
+	const SEARCH_USERS_LIMIT = 20;
 	/**
 	 * Initialize hooks.
 	 */
@@ -190,21 +203,28 @@ class Group_Subscription_API {
 				'methods'             => \WP_REST_Server::EDITABLE,
 				'callback'            => [ __CLASS__, 'api_set_manager_role' ],
 				'permission_callback' => [ __CLASS__, 'role_permission_callback' ],
+				// Each arg pairs its sanitizer with `rest_validate_request_arg`: WP only
+				// injects the default validator when an arg declares NO
+				// sanitize_callback, so `enum`/`minimum` on an arg that sanitizes are
+				// inert unless the validator is named explicitly.
 				'args'                => [
 					'subscription_id' => [
 						'type'              => 'integer',
 						'required'          => true,
 						'sanitize_callback' => 'absint',
+						'validate_callback' => 'rest_validate_request_arg',
 					],
 					'user_id'         => [
 						'type'              => 'integer',
 						'required'          => true,
 						'sanitize_callback' => 'absint',
+						'validate_callback' => 'rest_validate_request_arg',
 					],
 					'role'            => [
-						'type'     => 'string',
-						'required' => true,
-						'enum'     => [ 'manager', 'member' ],
+						'type'              => 'string',
+						'required'          => true,
+						'enum'              => [ 'manager', 'member' ],
+						'validate_callback' => 'rest_validate_request_arg',
 					],
 				],
 			]
@@ -223,12 +243,14 @@ class Group_Subscription_API {
 						'type'              => 'integer',
 						'required'          => true,
 						'sanitize_callback' => 'absint',
+						'validate_callback' => 'rest_validate_request_arg',
 					],
 					'limit'           => [
 						'type'              => 'integer',
 						'required'          => true,
 						'minimum'           => 0,
 						'sanitize_callback' => 'absint',
+						'validate_callback' => 'rest_validate_request_arg',
 					],
 				],
 			]
@@ -262,7 +284,7 @@ class Group_Subscription_API {
 	 *
 	 * @return bool Whether the user may change roles in this group.
 	 */
-	public static function role_permission_callback( $request ): bool {
+	public static function role_permission_callback( \WP_REST_Request $request ): bool {
 		$subscription = WooCommerce_Subscriptions::sanitize_subscription( $request->get_param( 'subscription_id' ) );
 		if ( ! $subscription ) {
 			return false;
@@ -281,7 +303,7 @@ class Group_Subscription_API {
 	 *
 	 * @return bool Whether the user is a store admin acting on a real group.
 	 */
-	public static function admin_permission_callback( $request ): bool {
+	public static function admin_permission_callback( \WP_REST_Request $request ): bool {
 		$subscription = WooCommerce_Subscriptions::sanitize_subscription( $request->get_param( 'subscription_id' ) );
 		if ( ! $subscription ) {
 			return false;
@@ -307,7 +329,7 @@ class Group_Subscription_API {
 	 *
 	 * @return int The manager user ID to act as, or 0 when there is none.
 	 */
-	public static function resolve_link_manager_id( $subscription ): int {
+	public static function resolve_link_manager_id( \WC_Subscription|int $subscription ): int {
 		$subscription = WooCommerce_Subscriptions::sanitize_subscription( $subscription );
 		if ( ! $subscription ) {
 			return 0;
@@ -323,13 +345,35 @@ class Group_Subscription_API {
 	}
 
 	/**
+	 * The rejection for an invite-link call that resolves to no manager.
+	 *
+	 * There is nobody to act as when resolve_link_manager_id() returns 0 — an
+	 * ownerless subscription, or a caller who is neither a manager nor a store
+	 * admin. Minting or deleting a link under user 0 would attach it to no
+	 * account, so the call is refused rather than passed through.
+	 *
+	 * @return \WP_Error
+	 */
+	private static function no_link_manager_error(): \WP_Error {
+		return new \WP_Error(
+			'newspack_group_subscription_no_link_manager',
+			sprintf(
+				/* translators: %s: lowercase singular group label (e.g. "group", "team"). */
+				__( 'This %s has no owner to hold an invite link.', 'newspack-plugin' ),
+				Group_Subscription::get_label_lower( 'singular' )
+			),
+			[ 'status' => 403 ]
+		);
+	}
+
+	/**
 	 * Promote a member to manager, or demote a manager back to a member.
 	 *
 	 * @param \WP_REST_Request $request The request object.
 	 *
 	 * @return \WP_REST_Response|\WP_Error The response object.
 	 */
-	public static function api_set_manager_role( $request ): \WP_REST_Response|\WP_Error {
+	public static function api_set_manager_role( \WP_REST_Request $request ): \WP_REST_Response|\WP_Error {
 		$subscription_id = $request->get_param( 'subscription_id' );
 		// Match the member/invite endpoints: terminal-state subscriptions accept no
 		// changes. 409 Conflict, the shared "can't write in this state" status.
@@ -369,7 +413,7 @@ class Group_Subscription_API {
 	 *
 	 * @return \WP_REST_Response|\WP_Error The response object.
 	 */
-	public static function api_update_seat_limit( $request ): \WP_REST_Response|\WP_Error {
+	public static function api_update_seat_limit( \WP_REST_Request $request ): \WP_REST_Response|\WP_Error {
 		$subscription_id = $request->get_param( 'subscription_id' );
 		$subscription    = WooCommerce_Subscriptions::sanitize_subscription( $subscription_id );
 		// Only a real group has a seat limit to move. Mirror api_get_group() and the
@@ -434,7 +478,7 @@ class Group_Subscription_API {
 	 *
 	 * @return int The committed seat count.
 	 */
-	public static function reserved_seats( $subscription ): int {
+	public static function reserved_seats( \WC_Subscription|int $subscription ): int {
 		$subscription = WooCommerce_Subscriptions::sanitize_subscription( $subscription );
 		if ( ! $subscription ) {
 			return 0;
@@ -446,6 +490,13 @@ class Group_Subscription_API {
 	/**
 	 * User search for group subscription.
 	 *
+	 * Two queries run: one over the user table's own columns, one over first/last
+	 * name meta. Both are bounded by SEARCH_USERS_LIMIT and both skip terms shorter
+	 * than SEARCH_USERS_MIN_LENGTH, so the endpoint can't be used to page out the
+	 * reader base — every row it returns carries an email address. The bounds sit
+	 * inside the `newspack_group_subscription_user_query_args` filter, so a
+	 * publisher can still widen them.
+	 *
 	 * @param \WP_REST_Request $request The request object.
 	 *
 	 * @return \WP_REST_Response The response object.
@@ -454,11 +505,16 @@ class Group_Subscription_API {
 		if ( ! function_exists( 'wcs_get_subscription' ) ) {
 			return \rest_ensure_response( new \WP_Error( 'newspack_group_subscription_api', __( 'WooCommerce Subscriptions is not available.', 'newspack-plugin' ) ) );
 		}
-		$search          = $request->get_param( 'search' );
+		$search          = trim( (string) $request->get_param( 'search' ) );
 		$subscription_id = $request->get_param( 'subscription_id' );
 		$subscription    = wcs_get_subscription( $subscription_id );
 		if ( ! $subscription ) {
 			return \rest_ensure_response( new \WP_Error( 'newspack_group_subscription_api_search_users', __( 'Subscription not found.', 'newspack-plugin' ) ) );
+		}
+		// A term this short matches most of the reader base, and every row below
+		// carries an email address, so answer with nothing rather than a dump.
+		if ( mb_strlen( $search ) < self::SEARCH_USERS_MIN_LENGTH ) {
+			return \rest_ensure_response( [] );
 		}
 		$exclude   = Group_Subscription::get_members( $subscription );
 		$exclude[] = $subscription->get_user_id();
@@ -474,6 +530,7 @@ class Group_Subscription_API {
 				[
 					'fields'         => [ 'ID', 'user_email' ],
 					'exclude'        => $exclude,
+					'number'         => self::SEARCH_USERS_LIMIT,
 					'search'         => "*$search*",
 					'search_columns' => [ 'ID', 'user_login', 'user_url', 'user_email', 'user_nicename', 'display_name' ],
 					'role__in'       => Reader_Activation::get_reader_roles(),
@@ -494,6 +551,7 @@ class Group_Subscription_API {
 				[
 					'fields'     => [ 'ID', 'user_email' ],
 					'exclude'    => $exclude,
+					'number'     => self::SEARCH_USERS_LIMIT,
 					'role__in'   => Reader_Activation::get_reader_roles(),
 					'meta_query' => [ // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query
 						'relation' => 'OR',
@@ -686,7 +744,11 @@ class Group_Subscription_API {
 				)
 			);
 		}
-		$result = Group_Subscription_Invite::generate_link_invite( $subscription_id, self::resolve_link_manager_id( $subscription_id ) );
+		$manager_id = self::resolve_link_manager_id( $subscription_id );
+		if ( ! $manager_id ) {
+			return \rest_ensure_response( self::no_link_manager_error() );
+		}
+		$result = Group_Subscription_Invite::generate_link_invite( $subscription_id, $manager_id );
 		return \rest_ensure_response( $result );
 	}
 
@@ -699,7 +761,11 @@ class Group_Subscription_API {
 	 */
 	public static function api_delete_invite_link( $request ) {
 		$subscription_id = $request->get_param( 'subscription_id' );
-		$result = Group_Subscription_Invite::delete_link_invite( $subscription_id, self::resolve_link_manager_id( $subscription_id ) );
+		$manager_id = self::resolve_link_manager_id( $subscription_id );
+		if ( ! $manager_id ) {
+			return \rest_ensure_response( self::no_link_manager_error() );
+		}
+		$result = Group_Subscription_Invite::delete_link_invite( $subscription_id, $manager_id );
 		return \rest_ensure_response( $result );
 	}
 }

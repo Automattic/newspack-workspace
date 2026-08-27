@@ -463,10 +463,8 @@ class Subscribers_Wizard extends Wizard {
 	 *
 	 * @return \WP_REST_Response|\WP_Error
 	 */
-	public function api_get_group( $request ): \WP_REST_Response|\WP_Error {
-		$this->group_subscriptions_cache = null;
-		$this->group_membership_index    = null;
-		$this->raw_status_ids_cache      = [];
+	public function api_get_group( \WP_REST_Request $request ): \WP_REST_Response|\WP_Error {
+		$this->reset_request_caches();
 
 		$subscription = function_exists( 'wcs_get_subscription' ) ? \wcs_get_subscription( (int) $request->get_param( 'id' ) ) : false;
 		$settings     = $subscription && class_exists( '\Newspack\Group_Subscription_Settings' )

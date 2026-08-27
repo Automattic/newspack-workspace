@@ -49,6 +49,8 @@ export default function AddMembersFlow( { group, actions, onClose, onDone } ) {
 		const failures = [];
 		const readerIds = [];
 		const toInvite = [];
+		let added = 0;
+		let invited = 0;
 
 		try {
 			for ( const email of accepted ) {
@@ -60,11 +62,29 @@ export default function AddMembersFlow( { group, actions, onClose, onDone } ) {
 				}
 			}
 			if ( readerIds.length ) {
-				await actions.addMembers( readerIds );
+				// Count what the server stored, not what was sent: update_members()
+				// silently drops IDs that are already members or aren't readers and
+				// still answers 200, so `members_added` is the only honest total.
+				const result = await actions.addMembers( readerIds );
+				added = Object.keys( result?.members_added || {} ).length;
+				if ( added < readerIds.length ) {
+					failures.push(
+						sprintf(
+							_n(
+								'%d address was already a member, or is not a reader account, and was skipped.',
+								'%d addresses were already members, or are not reader accounts, and were skipped.',
+								readerIds.length - added,
+								'newspack-plugin'
+							),
+							readerIds.length - added
+						)
+					);
+				}
 			}
 			for ( const email of toInvite ) {
 				try {
 					await actions.invite( email );
+					invited++;
 				} catch ( e ) {
 					failures.push( `${ email }: ${ e?.message || __( 'Something went wrong.', 'newspack-plugin' ) }` );
 				}
@@ -75,8 +95,6 @@ export default function AddMembersFlow( { group, actions, onClose, onDone } ) {
 			return;
 		}
 
-		const added = readerIds.length;
-		const invited = toInvite.length - failures.length;
 		const parts = [];
 		if ( added ) {
 			parts.push( sprintf( _n( '%d member added.', '%d members added.', added, 'newspack-plugin' ), added ) );

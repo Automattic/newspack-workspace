@@ -45,6 +45,8 @@ class Test_Group_Subscription_Admin_API extends WP_UnitTestCase {
 		$subscriptions_database = [];
 		Group_Subscription::reset_cache();
 		Group_Subscription_Settings::clear_group_subscription_ids_cache();
+		// Register the routes so the wiring test below can dispatch through them.
+		do_action( 'rest_api_init' );
 	}
 
 	/**
@@ -167,6 +169,39 @@ class Test_Group_Subscription_Admin_API extends WP_UnitTestCase {
 	 * Role changes: owner-only, and the admin acting on the owner's behalf.
 	 * ---------------------------------------------------------------------
 	 */
+
+	/**
+	 * The guards are wired to their routes, not merely correct in isolation.
+	 *
+	 * Every other assertion in this file calls a permission callback as a plain
+	 * function, so replacing either route's `permission_callback` with
+	 * `__return_true` would leave them all green. Dispatching through
+	 * rest_get_server() is what pins /manager to role_permission_callback() and
+	 * /seat-limit to admin_permission_callback(): a manager is admitted by the
+	 * general callback both routes could plausibly have been given, so a 403 here
+	 * can only come from the stricter guard.
+	 */
+	public function test_registered_routes_refuse_a_manager() {
+		$owner_id   = $this->create_reader();
+		$manager_id = $this->create_reader();
+		$member_id  = $this->create_reader();
+		$group      = $this->create_group( $owner_id );
+		$this->add_manager( $manager_id, $group );
+		$this->add_member( $member_id, $group );
+
+		wp_set_current_user( $manager_id );
+
+		$this->assertSame(
+			403,
+			rest_get_server()->dispatch( $this->role_request( $group->get_id(), $member_id, 'manager' ) )->get_status(),
+			'POST /manager must refuse a manager at the route, not just in the callback.'
+		);
+		$this->assertSame(
+			403,
+			rest_get_server()->dispatch( $this->seat_limit_request( $group->get_id(), 10 ) )->get_status(),
+			'POST /seat-limit must refuse a manager at the route, not just in the callback.'
+		);
+	}
 
 	/**
 	 * The owner may promote one of their members. This is the shipped My Account
@@ -660,5 +695,67 @@ class Test_Group_Subscription_Admin_API extends WP_UnitTestCase {
 			Group_Subscription_API::resolve_link_manager_id( $group ),
 			'An outsider must resolve to no manager at all.'
 		);
+	}
+
+	/*
+	 * ---------------------------------------------------------------------
+	 * Ownerless groups: user 0 is nobody, not everybody.
+	 * ---------------------------------------------------------------------
+	 */
+
+	/**
+	 * A subscription with no customer has no owner, so get_managers() must not seed
+	 * its list with 0.
+	 *
+	 * Seeding it made user_is_manager( 0, $subscription ) true, which is what
+	 * permission_callback() asks — so a logged-out caller was admitted to every
+	 * member, invite, invite-link and rename route on such a group.
+	 */
+	public function test_ownerless_group_has_no_managers_and_admits_no_logged_out_caller() {
+		$member_id = $this->create_reader();
+		$group     = $this->create_group( 0 );
+		$this->add_member( $member_id, $group );
+
+		$this->assertSame(
+			[],
+			Group_Subscription::get_managers( $group ),
+			'A subscription with no customer must have no managers.'
+		);
+
+		wp_set_current_user( 0 );
+		$request = new WP_REST_Request( 'POST', '/newspack-group-subscription/v1/invite' );
+		$request->set_param( 'subscription_id', $group->get_id() );
+
+		$this->assertFalse(
+			Group_Subscription_API::permission_callback( $request ),
+			'A logged-out caller must not manage an ownerless group.'
+		);
+	}
+
+	/**
+	 * An ownerless group has nobody to hold an invite link, so the routes that mint
+	 * and delete one refuse rather than writing under user 0 — a link attached to no
+	 * account, which no invitee could ever redeem.
+	 */
+	public function test_invite_link_routes_refuse_an_ownerless_group() {
+		$admin_id = $this->create_store_admin();
+		$group    = $this->create_group( 0 );
+		wp_set_current_user( $admin_id );
+
+		$this->assertSame(
+			0,
+			Group_Subscription_API::resolve_link_manager_id( $group ),
+			'An ownerless group resolves to no link manager, even for a store admin.'
+		);
+
+		foreach ( [ 'POST', 'DELETE' ] as $method ) {
+			$request = new WP_REST_Request( $method, '/newspack-group-subscription/v1/invite-link' );
+			$request->set_param( 'subscription_id', $group->get_id() );
+			$this->assertSame(
+				403,
+				rest_get_server()->dispatch( $request )->get_status(),
+				sprintf( '%s /invite-link must refuse an ownerless group rather than minting under user 0.', $method )
+			);
+		}
 	}
 }

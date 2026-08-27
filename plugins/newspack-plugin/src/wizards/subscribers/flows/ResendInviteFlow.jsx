@@ -1,4 +1,3 @@
-/* eslint-disable @wordpress/i18n-translator-comments */
 /**
  * Flow — resend a pending or expired email invitation.
  *
@@ -11,7 +10,7 @@
  * WordPress dependencies.
  */
 import { createInterpolateElement } from '@wordpress/element';
-import { __, sprintf } from '@wordpress/i18n';
+import { __ } from '@wordpress/i18n';
 
 /**
  * Internal dependencies.
@@ -34,11 +33,12 @@ export default function ResendInviteFlow( { invite, actions, onClose, onDone } )
 			onConfirm={ resend }
 		>
 			{ createInterpolateElement(
-				sprintf(
-					__( 'Send the invitation email to <strong>%s</strong> again? They get a fresh link and the expiry resets.', 'newspack-plugin' ),
-					email
-				),
-				{ strong: <strong /> }
+				/* translators: <email/> is replaced with the recipient's email address. */
+				__( 'Send the invitation email to <email/> again? They get a fresh link and the expiry resets.', 'newspack-plugin' ),
+				// The address is a React token, never interpolated into the format
+				// string: createInterpolateElement parses its input as markup, so an
+				// address — or a translation that mangles the tag — would crash the modal.
+				{ email: <strong>{ email }</strong> }
 			) }
 		</ConfirmFlow>
 	);

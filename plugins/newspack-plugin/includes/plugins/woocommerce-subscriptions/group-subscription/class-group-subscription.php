@@ -236,8 +236,13 @@ class Group_Subscription {
 		if ( isset( self::$managers_cache[ $subscription_id ] ) ) {
 			$managers = self::$managers_cache[ $subscription_id ];
 		} else {
-			// The owner is always a manager: ownership implies management.
-			$managers = [ $subscription ? $subscription->get_user_id() : 0 ];
+			// The owner is always a manager: ownership implies management. A
+			// subscription with no customer has no owner to seed with, and seeding
+			// the falsy ID would make user_is_manager( 0, $subscription ) true —
+			// which reads as "a logged-out caller manages this group" everywhere
+			// that predicate is used, including permission_callback().
+			$owner_id = $subscription ? (int) $subscription->get_user_id() : 0;
+			$managers = $owner_id ? [ $owner_id ] : [];
 			if ( $subscription ) {
 				$stored = \get_users(
 					[
@@ -404,12 +409,11 @@ class Group_Subscription {
 	 *
 	 * @return bool Whether the role change is permitted.
 	 */
-	public static function user_can_manage_roles( $actor_id, $subscription ): bool {
+	public static function user_can_manage_roles( int $actor_id, \WC_Subscription|int $subscription ): bool {
 		$subscription = WooCommerce_Subscriptions::sanitize_subscription( $subscription );
 		if ( ! $subscription ) {
 			return false;
 		}
-		$actor_id = (int) $actor_id;
 
 		// A logged-out / unresolved actor decides nothing — guard before the owner
 		// comparison so an actor of 0 never matches an ownerless (owner 0) group.

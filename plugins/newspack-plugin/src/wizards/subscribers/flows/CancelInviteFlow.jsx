@@ -1,4 +1,3 @@
-/* eslint-disable @wordpress/i18n-translator-comments */
 /**
  * Flow — cancel a pending or expired email invitation.
  *
@@ -11,7 +10,7 @@
  * WordPress dependencies.
  */
 import { createInterpolateElement } from '@wordpress/element';
-import { __, sprintf } from '@wordpress/i18n';
+import { __ } from '@wordpress/i18n';
 
 /**
  * Internal dependencies.
@@ -36,14 +35,15 @@ export default function CancelInviteFlow( { invite, actions, onClose, onDone } )
 			onConfirm={ cancel }
 		>
 			{ createInterpolateElement(
-				sprintf(
-					__(
-						"Cancel the invitation to <strong>%s</strong>? The link in their email stops working and they can't join unless you invite them again.",
-						'newspack-plugin'
-					),
-					email
+				/* translators: <email/> is replaced with the recipient's email address. */
+				__(
+					"Cancel the invitation to <email/>? The link in their email stops working and they can't join unless you invite them again.",
+					'newspack-plugin'
 				),
-				{ strong: <strong /> }
+				// The address is a React token, never interpolated into the format
+				// string: createInterpolateElement parses its input as markup, so an
+				// address — or a translation that mangles the tag — would crash the modal.
+				{ email: <strong>{ email }</strong> }
 			) }
 		</ConfirmFlow>
 	);
