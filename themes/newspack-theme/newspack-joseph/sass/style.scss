@@ -72,6 +72,7 @@ body:not(.newspack-ui) {
 figcaption,
 .entry-meta,
 .cat-links,
+.tag-labels,
 .entry-footer,
 .nav1,
 .secondary-menu,
@@ -101,7 +102,8 @@ input[type="submit"] {
 .widgettitle,
 .wp-block-columns .wp-block-column > .accent-header,
 div.wpnbha .article-section-title,
-.cat-links {
+.cat-links,
+.tag-labels {
 	font-size: var(--newspack-theme-font-size-base);
 	margin-bottom: structure.$size__spacing-unit;
 }
@@ -199,7 +201,8 @@ div.wpnbha .article-section-title,
 .search,
 .blog,
 .archive {
-	.cat-links {
+	.cat-links,
+	.tag-labels {
 		font-size: var(--newspack-theme-font-size-sm);
 
 		&::before {
@@ -510,12 +513,14 @@ hr {
 	align-items: stretch;
 	font-size: var(--newspack-theme-font-size-sm);
 
-	.cat-links {
+	.cat-links,
+	.tag-labels {
 		font-size: var(--newspack-theme-font-size-sm);
 	}
 
 	@include utilities.media( tabletonly ) {
-		+ .cat-links {
+		+ .cat-links,
+		+ .tag-labels {
 			font-size: var(--newspack-theme-font-size-sm);
 		}
 	}

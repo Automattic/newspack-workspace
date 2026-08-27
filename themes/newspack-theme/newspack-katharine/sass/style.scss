@@ -39,6 +39,12 @@
 
 // Accent headers
 
+// Tag labels take the colour but not the leading rule: that `::before` heads a row
+// of plain-text links, and the labels are chips it would sit detached from.
+.tag-labels {
+	color: var(--newspack-theme-color-primary-against-white);
+}
+
 .accent-header,
 .article-section-title,
 .cat-links,
@@ -88,7 +94,8 @@
 .site-footer {
 	.accent-header,
 	.article-section-title,
-	.cat-links {
+	.cat-links,
+	.tag-labels {
 		color: inherit;
 	}
 
@@ -105,6 +112,7 @@
 .wp-block-columns .wp-block-column > .accent-header,
 div.wpnbha .article-section-title,
 .cat-links,
+.tag-labels,
 .archive .page-title {
 	margin: 0 0 #{1.5 * structure.$size__spacing-unit};
 }
@@ -115,14 +123,16 @@ div.wpnbha.is-grid .article-section-title {
 
 .accent-header,
 div.wpnbha .article-section-title,
-.cat-links {
+.cat-links,
+.tag-labels {
 	font-size: var(--newspack-theme-font-size-xs);
 }
 
 .blog,
 .search,
 .archive {
-	.cat-links {
+	.cat-links,
+	.tag-labels {
 		margin-bottom: #{0.5 * structure.$size__spacing-unit};
 
 		&::before {
@@ -417,7 +427,8 @@ figcaption,
 	border-bottom-color: var(--newspack-theme-color-text-main);
 }
 
-.wpnbha .cat-links {
+.wpnbha .cat-links,
+.wpnbha .tag-labels {
 	&::before {
 		display: none;
 	}
