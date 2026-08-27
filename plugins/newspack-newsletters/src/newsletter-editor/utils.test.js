@@ -6,23 +6,39 @@ import { getSettledSendLists, validateNewsletter } from './utils';
 // Guards the condition that decides whether a resolution check may run at all.
 // Getting this wrong in either direction is worse than the bug it supports: too
 // eager and Send is disabled on valid newsletters, too lazy and it never fires.
+//
+// The gate is `hasRetrievedData` — the `retrieve` call — because that is the
+// request that asks the ESP for the stored id by id. `hasRetrievedLists` tracks
+// a different request that only the sidebar makes, and gating on it left the
+// check permanently asleep whenever the sidebar had not fetched.
 describe( 'getSettledSendLists', () => {
 	const lists = [ { id: '42', label: 'Weekly' } ];
+	const retrieved = { newsletterData: { lists }, hasRetrievedData: true, isRetrievingData: false, isRetrievingLists: false };
 
-	it( 'returns the lists once a fetch has completed', () => {
-		expect( getSettledSendLists( { newsletterData: { lists }, hasRetrievedLists: true, isRetrievingLists: false } ) ).toEqual( lists );
+	it( 'returns the lists once the newsletter data has been retrieved', () => {
+		expect( getSettledSendLists( retrieved ) ).toEqual( lists );
 	} );
 
-	it( 'withholds the lists while a fetch is in flight', () => {
-		expect( getSettledSendLists( { newsletterData: { lists }, hasRetrievedLists: true, isRetrievingLists: true } ) ).toBeNull();
+	it( 'returns the lists even though no send-list fetch has run', () => {
+		// The sidebar populates `hasRetrievedLists`; the send button must not
+		// wait on a panel the author may never open.
+		expect( getSettledSendLists( { ...retrieved, hasRetrievedLists: false } ) ).toEqual( lists );
 	} );
 
-	it( 'withholds the lists before any fetch has completed', () => {
-		expect( getSettledSendLists( { newsletterData: { lists }, hasRetrievedLists: false, isRetrievingLists: false } ) ).toBeNull();
+	it( 'withholds the lists while the newsletter data is being retrieved', () => {
+		expect( getSettledSendLists( { ...retrieved, isRetrievingData: true } ) ).toBeNull();
+	} );
+
+	it( 'withholds the lists while a send-list fetch is in flight', () => {
+		expect( getSettledSendLists( { ...retrieved, isRetrievingLists: true } ) ).toBeNull();
+	} );
+
+	it( 'withholds the lists before the newsletter data has been retrieved', () => {
+		expect( getSettledSendLists( { ...retrieved, hasRetrievedData: false } ) ).toBeNull();
 	} );
 
 	it( 'returns null rather than undefined when the store holds no lists yet', () => {
-		expect( getSettledSendLists( { newsletterData: {}, hasRetrievedLists: true, isRetrievingLists: false } ) ).toBeNull();
+		expect( getSettledSendLists( { ...retrieved, newsletterData: {} } ) ).toBeNull();
 	} );
 
 	it( 'tolerates an empty store state', () => {

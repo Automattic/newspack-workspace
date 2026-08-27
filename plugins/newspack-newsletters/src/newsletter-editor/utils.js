@@ -35,22 +35,28 @@ export const isSupportedESP = () => {
 };
 
 /**
- * The ESP's send lists, but only once they can be trusted to be complete enough
- * to say a stored list is missing.
+ * The ESP's send lists, but only once a missing stored id would mean something.
  *
- * The store's `lists` is an accumulating cache filled by searches and by-id
- * lookups rather than the provider's full roster, so it is only meaningful
- * after a fetch has finished. Callers pass the result straight to
- * `validateNewsletter`, which skips its resolution check on a null.
+ * Gated on the `retrieve` request rather than on the send-list fetch. Every
+ * active provider's `retrieve` asks for the stored `send_list_id` by id and
+ * widens only if that lookup fails, so once it has completed, a stored id still
+ * absent from `lists` genuinely did not resolve. That also survives the cap on
+ * how many lists `retrieve` returns for the autocomplete, since the stored id
+ * is requested explicitly rather than hoped for among the first page.
+ *
+ * `hasRetrievedLists` tracks a different request, which only the sidebar issues.
+ * Gating on it tied the send guard to whether the author had opened a panel, and
+ * left the check asleep whenever they had not.
  *
  * @param {Object}  newsletterDataState                   Result of the `useNewsletterData` hook.
  * @param {Object}  newsletterDataState.newsletterData    Newsletter data from the store.
- * @param {boolean} newsletterDataState.hasRetrievedLists Whether a list fetch has completed.
- * @param {boolean} newsletterDataState.isRetrievingLists Whether a list fetch is in flight.
+ * @param {boolean} newsletterDataState.hasRetrievedData  Whether `retrieve` has completed.
+ * @param {boolean} newsletterDataState.isRetrievingData  Whether `retrieve` is in flight.
+ * @param {boolean} newsletterDataState.isRetrievingLists Whether a send-list fetch is in flight.
  * @return {?Object[]} The fetched lists, or null while the answer is unknown.
  */
-export const getSettledSendLists = ( { newsletterData, hasRetrievedLists, isRetrievingLists } = {} ) => {
-	if ( ! hasRetrievedLists || isRetrievingLists ) {
+export const getSettledSendLists = ( { newsletterData, hasRetrievedData, isRetrievingData, isRetrievingLists } = {} ) => {
+	if ( ! hasRetrievedData || isRetrievingData || isRetrievingLists ) {
 		return null;
 	}
 	return newsletterData?.lists || null;
