@@ -21,7 +21,7 @@ import { get } from 'lodash';
  */
 import { getServiceProvider } from '../../service-providers';
 import { isManualProvider } from '../../utils/service-provider';
-import { validateNewsletter } from '../../newsletter-editor/utils';
+import { getSettledSendLists, validateNewsletter } from '../../newsletter-editor/utils';
 import { useNewsletterData } from '../../newsletter-editor/store';
 import { refreshEmailHtml } from '../../editor/mjml';
 import './style.scss';
@@ -191,9 +191,10 @@ export default compose( [
 	}, [ saveDidSucceed ] );
 
 	const { is_public } = meta;
-	const { newsletterData } = useNewsletterData();
+	const newsletterDataState = useNewsletterData();
+	const { newsletterData } = newsletterDataState;
 
-	const newsletterValidationErrors = validateNewsletter( meta );
+	const newsletterValidationErrors = validateNewsletter( meta, getSettledSendLists( newsletterDataState ) );
 
 	const { renderPreSendInfo, renderPostUpdateInfo } = getServiceProvider();
 

@@ -35,15 +35,39 @@ export const isSupportedESP = () => {
 };
 
 /**
+ * The ESP's send lists, but only once they can be trusted to be complete enough
+ * to say a stored list is missing.
+ *
+ * The store's `lists` is an accumulating cache filled by searches and by-id
+ * lookups rather than the provider's full roster, so it is only meaningful
+ * after a fetch has finished. Callers pass the result straight to
+ * `validateNewsletter`, which skips its resolution check on a null.
+ *
+ * @param {Object}  newsletterDataState                   Result of the `useNewsletterData` hook.
+ * @param {Object}  newsletterDataState.newsletterData    Newsletter data from the store.
+ * @param {boolean} newsletterDataState.hasRetrievedLists Whether a list fetch has completed.
+ * @param {boolean} newsletterDataState.isRetrievingLists Whether a list fetch is in flight.
+ * @return {?Object[]} The fetched lists, or null while the answer is unknown.
+ */
+export const getSettledSendLists = ( { newsletterData, hasRetrievedLists, isRetrievingLists } = {} ) => {
+	if ( ! hasRetrievedLists || isRetrievingLists ) {
+		return null;
+	}
+	return newsletterData?.lists || null;
+};
+
+/**
  * Validation utility.
  *
- * @param {Object} meta              Post meta.
- * @param {string} meta.senderEmail  Sender email address.
- * @param {string} meta.senderName   Sender name.
- * @param {string} meta.send_list_id Send-to list ID.
+ * @param {Object}    meta              Post meta.
+ * @param {string}    meta.senderEmail  Sender email address.
+ * @param {string}    meta.senderName   Sender name.
+ * @param {string}    meta.send_list_id Send-to list ID.
+ * @param {?Object[]} sendLists         Send lists fetched from the connected ESP,
+ *                                      or null when that fetch hasn't settled.
  * @return {string[]} Array of validation messages. If empty, newsletter is valid.
  */
-export const validateNewsletter = ( meta = {} ) => {
+export const validateNewsletter = ( meta = {}, sendLists = null ) => {
 	if ( isManualProvider() ) {
 		return [];
 	}
@@ -54,6 +78,13 @@ export const validateNewsletter = ( meta = {} ) => {
 	}
 	if ( ! listId ) {
 		messages.push( __( 'Missing required list.', 'newspack-newsletters' ) );
+	} else if ( sendLists?.length && ! sendLists.find( item => item.id.toString() === listId.toString() ) ) {
+		// A stored list id survives an ESP switch, so a set id is not the same thing
+		// as a reachable audience — only one the connected provider still knows
+		// about counts. A null or empty `sendLists` means the caller cannot answer
+		// that yet, and blocking Send on an unanswered question would disable it on
+		// perfectly valid newsletters.
+		messages.push( __( 'The saved list isn’t available in the connected email service provider.', 'newspack-newsletters' ) );
 	}
 	return messages;
 };
