@@ -35,6 +35,25 @@ if ( ! class_exists( __NAMESPACE__ . '\Tag_Labels' ) ) {
 		}
 
 		/**
+		 * Mirror of the real class's display(): delegates to generate_html() with the
+		 * same defaults rather than building markup of its own, so the stub has a
+		 * single markup path just as the real class does.
+		 *
+		 * @param array|null $labels        Labels to display.
+		 * @param bool       $links         Whether to link each label.
+		 * @param string     $outer_element HTML element for the outer container.
+		 *
+		 * @return void
+		 */
+		public static function display( $labels = null, $links = true, $outer_element = 'span' ) {
+			if ( empty( $labels ) ) {
+				return;
+			}
+
+			echo wp_kses_post( self::generate_html( $labels, $links, array( 'tag-labels' ), array( 'tag-label', 'flag' ), $outer_element ) . ' ' );
+		}
+
+		/**
 		 * Generates HTML for given tag labels. Mirrors the real
 		 * \Newspack\Tag_Labels::generate_html() so caller contract tests
 		 * exercise the classes the caller passes.
