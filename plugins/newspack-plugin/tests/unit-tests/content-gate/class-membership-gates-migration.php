@@ -2436,6 +2436,190 @@ HTML;
 	}
 
 	/**
+	 * The carve-out repairs an overlap the merge path cannot touch: coverage is decided
+	 * per slug, so a whole-post-type plan never "covers" a category plan, and the two
+	 * would otherwise be written as gates that deny both plans on the shared posts.
+	 * The broad gate excludes the narrow one's content, and the narrow gate takes on
+	 * the broad plan's product so its members are not turned away inside the carve-out.
+	 */
+	public function test_consolidate_plan_groups_repairs_a_cross_slug_overlap_with_a_carve_out() {
+		$groups = [
+			$this->make_plan_group(
+				'All Posts',
+				[
+					[
+						'slug'  => 'post_types',
+						'value' => [ 'post' ],
+					],
+				],
+				101 
+			),
+			$this->make_taxonomy_plan_group( 'Premium Section', [ 5 ], 202 ),
+		];
+
+		$widened         = [];
+		$overlaps        = [];
+		$carved          = [];
+		$carved_products = [];
+		$merged          = $this->invoke_private_static(
+			'consolidate_plan_groups',
+			[ $groups, &$widened, &$overlaps, &$carved, &$carved_products ]
+		);
+
+		$this->assertCount( 2, $merged, 'A carve-out keeps both gates; it is the alternative to merging them.' );
+		$this->assertSame( [], $overlaps, 'A repaired overlap is no longer put to the operator as unrepairable.' );
+		$this->assertSame( [ '"Premium Section" out of "All Posts"' ], $carved );
+
+		$broad_rules = $merged[0][0]['ac_rules'];
+		$this->assertSame(
+			[
+				[
+					'slug'  => 'post_types',
+					'value' => [ 'post' ],
+				],
+				[
+					'slug'      => 'category',
+					'value'     => [ '5' ],
+					'exclusion' => true,
+				],
+			],
+			$broad_rules,
+			'The broad gate keeps its own rule and gains the narrow gate\'s content as an exclusion.'
+		);
+
+		$this->assertSame( [ 1 => [ 101 ] ], $carved_products, 'The carved-out gate takes on the excluding plan\'s product.' );
+	}
+
+	/**
+	 * A carve-out excuses the narrow group's content from the broad gate, so a signup
+	 * group carved out of a purchase gate — or the reverse — hands content a reader
+	 * reaches today by registering to a gate that demands a subscription. Absorption
+	 * refuses the same crossing, for the same reason.
+	 */
+	public function test_consolidate_plan_groups_will_not_carve_across_the_purchase_boundary() {
+		$signup_wide = $this->make_plan_group(
+			'Registration Wall',
+			[
+				[
+					'slug'  => 'post_types',
+					'value' => [ 'post' ],
+				],
+			],
+			0,
+			'signup'
+		);
+		$paid_tag    = $this->make_plan_group(
+			'Premium Tag',
+			[
+				[
+					'slug'  => 'post_tag',
+					'value' => [ '32' ],
+				],
+			],
+			$this->create_product( 'subscription' )
+		);
+
+		\WP_CLI::reset();
+		$widened         = [];
+		$overlaps        = [];
+		$carved          = [];
+		$carved_products = [];
+		$this->invoke_private_static(
+			'consolidate_plan_groups',
+			[ [ $signup_wide, $paid_tag ], &$widened, &$overlaps, &$carved, &$carved_products ]
+		);
+
+		$this->assertSame( [], $carved, 'The pair is left alone rather than carved.' );
+		$this->assertSame( [ '"Registration Wall" against "Premium Tag"' ], $overlaps );
+	}
+
+	/**
+	 * Two rules of one slug cannot live on a gate as an inclusion and an exclusion: the
+	 * wizard renders one row per slug and writes an edit to every rule carrying it, so
+	 * the gate would be uneditable afterwards. Nested same-taxonomy tiers therefore
+	 * stay on the merge path, where they are already handled.
+	 */
+	public function test_carve_out_direction_refuses_two_rules_of_the_same_slug() {
+		// The broad side is decidable here — it is the one gating whole post types — so
+		// only the shared `category` slug stands between this pair and a carve-out.
+		$this->assertNull(
+			$this->invoke_private_static(
+				'carve_out_direction',
+				[
+					[
+						[
+							'slug'  => 'post_types',
+							'value' => [ 'post' ],
+						],
+						[
+							'slug'  => 'category',
+							'value' => [ '5' ],
+						],
+					],
+					[
+						[
+							'slug'  => 'category',
+							'value' => [ '9' ],
+						],
+					],
+				]
+			)
+		);
+	}
+
+	/**
+	 * `specific_posts` is an inclusion override evaluated ahead of exclusions, so a
+	 * carve-out cannot remove a post it names — on either side of the pair.
+	 */
+	public function test_carve_out_direction_refuses_specific_posts_on_either_side() {
+		$post_types = [
+			[
+				'slug'  => 'post_types',
+				'value' => [ 'post' ],
+			],
+		];
+		$specific   = [
+			[
+				'slug'  => 'specific_posts',
+				'value' => [ '77' ],
+			],
+		];
+
+		$this->assertNull( $this->invoke_private_static( 'carve_out_direction', [ $post_types, $specific ] ) );
+		$this->assertNull( $this->invoke_private_static( 'carve_out_direction', [ $specific, $post_types ] ) );
+	}
+
+	/**
+	 * The post-type side hosts the exclusion, whichever order the pair arrives in, and
+	 * a pair with post types on both sides or neither has no decidable broad side.
+	 */
+	public function test_carve_out_direction_names_the_post_type_side() {
+		$post_types = [
+			[
+				'slug'  => 'post_types',
+				'value' => [ 'post' ],
+			],
+		];
+		$category   = [
+			[
+				'slug'  => 'category',
+				'value' => [ '5' ],
+			],
+		];
+		$tag        = [
+			[
+				'slug'  => 'post_tag',
+				'value' => [ '9' ],
+			],
+		];
+
+		$this->assertSame( 'a', $this->invoke_private_static( 'carve_out_direction', [ $post_types, $category ] ) );
+		$this->assertSame( 'b', $this->invoke_private_static( 'carve_out_direction', [ $category, $post_types ] ) );
+		$this->assertNull( $this->invoke_private_static( 'carve_out_direction', [ $category, $tag ] ) );
+		$this->assertNull( $this->invoke_private_static( 'carve_out_direction', [ $post_types, $post_types ] ) );
+	}
+
+	/**
 	 * A gate group of one plan with the given content rules.
 	 *
 	 * @param string  $name          Plan name, which becomes the gate title.
@@ -2541,35 +2725,49 @@ HTML;
 	}
 
 	/**
-	 * An overlap the consolidation cannot merge is handed back to the caller, not just
-	 * warned about. It is the denial this command exists to prevent, in the one shape
-	 * it cannot repair, and gates stay inert until Memberships is deactivated — so a
-	 * run that writes the split looks clean and the warning is long gone by the time a
-	 * reader is turned away. The caller puts it to the pre-flight prompt instead, and
-	 * the message carries each side's member count so the operator can size the risk.
+	 * An overlap that neither merging nor a carve-out can repair is handed back to the
+	 * caller, not just warned about. It is the denial this command exists to prevent,
+	 * and gates stay inert until Memberships is deactivated — so a run that writes the
+	 * split looks clean and the warning is long gone by the time a reader is turned
+	 * away. The caller puts it to the pre-flight prompt instead, and the message
+	 * carries each side's member count so the operator can size the risk.
+	 *
+	 * Two category sets that share a term without either containing the other: they
+	 * overlap, neither covers the other, and a carve-out would need both an inclusion
+	 * and an exclusion of `category` on one gate, which the wizard cannot edit.
 	 */
 	public function test_consolidate_plan_groups_hands_unmergeable_overlaps_to_the_caller() {
-		$whole_post_type = $this->make_plan_group(
-			'All Posts',
+		$shared        = self::factory()->category->create();
+		$news          = $this->make_plan_group(
+			'Newsroom',
 			[
 				[
-					'slug'  => 'post_types',
-					'value' => [ 'post' ],
+					'slug'  => 'category',
+					'value' => array_map( 'strval', [ $shared, self::factory()->category->create() ] ),
 				],
 			],
 			$this->create_product( 'subscription' ),
 			'purchase',
 			120
 		);
-		$one_category    = $this->make_taxonomy_plan_group( 'Investigations', [ self::factory()->category->create() ], $this->create_product( 'subscription' ) );
+		$investigations = $this->make_plan_group(
+			'Investigations',
+			[
+				[
+					'slug'  => 'category',
+					'value' => array_map( 'strval', [ $shared, self::factory()->category->create() ] ),
+				],
+			],
+			$this->create_product( 'subscription' )
+		);
 
 		\WP_CLI::reset();
 		$widened  = [];
 		$overlaps = [];
-		$merged   = $this->invoke_private_static( 'consolidate_plan_groups', [ [ $whole_post_type, $one_category ], &$widened, &$overlaps ] );
+		$merged   = $this->invoke_private_static( 'consolidate_plan_groups', [ [ $news, $investigations ], &$widened, &$overlaps ] );
 
 		$this->assertCount( 2, $merged, 'Neither rule set covers the other, so one gate cannot carry both product lists.' );
-		$this->assertSame( [ '"All Posts" against "Investigations"' ], $overlaps );
+		$this->assertSame( [ '"Newsroom" against "Investigations"' ], $overlaps );
 		$this->assertStringContainsString( '120 active member(s)', implode( ' ', \WP_CLI::$warnings ) );
 	}
 

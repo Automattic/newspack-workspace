@@ -214,7 +214,9 @@ class Membership_Gates_Migration {
 		// loop after it, sees the gate groups that will actually be written.
 		$widened_by_consolidation = [];
 		$unmergeable_overlaps     = [];
-		$plan_groups              = self::consolidate_plan_groups( array_values( $plan_groups ), $widened_by_consolidation, $unmergeable_overlaps );
+		$carved_out               = [];
+		$carved_products          = [];
+		$plan_groups              = self::consolidate_plan_groups( array_values( $plan_groups ), $widened_by_consolidation, $unmergeable_overlaps, $carved_out, $carved_products );
 
 		$group_count = count( $plan_groups );
 		if ( $group_count < ( $total - count( $skipped ) ) ) {
@@ -246,7 +248,7 @@ class Membership_Gates_Migration {
 		$durations_by_group = [];
 		foreach ( $plan_groups as $fingerprint => $group ) {
 			$gate_title                         = self::gate_title( $group );
-			$products_by_group[ $fingerprint ]  = self::resolve_product_ids( $group );
+			$products_by_group[ $fingerprint ]  = self::resolve_product_ids( $group, $carved_products[ $fingerprint ] ?? [] );
 			$durations_by_group[ $fingerprint ] = self::resolve_group_duration( $group, $duration_override );
 			self::report_dropped_product_ids( $gate_title, $products_by_group[ $fingerprint ]['dropped'], self::group_requires_purchase( $group ) );
 			self::report_duration_conflict( $gate_title, $durations_by_group[ $fingerprint ]['conflict'] );
@@ -329,6 +331,12 @@ class Membership_Gates_Migration {
 		}
 		if ( ! empty( $widened_by_consolidation ) ) {
 			$to_confirm[] = sprintf( 'merge %s, widening access as described above', implode( ', ', $widened_by_consolidation ) );
+		}
+		if ( ! empty( $carved_out ) ) {
+			$to_confirm[] = sprintf(
+				'carve %s, so each plan keeps its own members and the excluding plan\'s members also reach the carved-out content',
+				implode( ', ', $carved_out )
+			);
 		}
 		if ( ! empty( $unmergeable_overlaps ) ) {
 			$to_confirm[] = sprintf(
@@ -1358,6 +1366,149 @@ class Membership_Gates_Migration {
 	}
 
 	/**
+	 * Which of two rule sets can host an exclusion carve-out of the other.
+	 *
+	 * A carve-out writes the broad group's gate as "its own content, except the narrow
+	 * group's" and hands the narrow group's gate the broad group's access products.
+	 * Both populations then reach what Memberships gave them: the broad plan's holders
+	 * through the broad gate outside the carve-out and through the narrow gate inside
+	 * it, the narrow plan's holders through the narrow gate alone. It repairs what
+	 * merging cannot, because gates combine with AND — a post matching two gates
+	 * demands both product lists, which is the denial this command exists to prevent.
+	 *
+	 * Three conditions have to hold, each a hard limit rather than a preference:
+	 *
+	 * - Neither side carries a `specific_posts` rule. That rule is an inclusion
+	 *   override evaluated ahead of exclusions in
+	 *   Content_Restriction_Control::get_post_gates(), so no carve-out can remove a
+	 *   post it names.
+	 * - The two rule sets share no slug. The wizard renders one row per slug and
+	 *   applies an edit to every rule carrying it (see the audience wizard's
+	 *   content-rules editor), so a gate holding both an inclusion and an exclusion of
+	 *   one slug cannot be edited afterwards without corrupting one of them.
+	 * - Exactly one side gates whole post types. That is the only shape where broad and
+	 *   narrow are decidable from the rules alone; anything else needs a post query.
+	 *
+	 * @param array[] $rules_a First rule set, unexpanded.
+	 * @param array[] $rules_b Second rule set, unexpanded.
+	 *
+	 * @return string|null 'a' or 'b' for the side that hosts the exclusion, null when
+	 *                     the overlap cannot be repaired this way.
+	 */
+	private static function carve_out_direction( array $rules_a, array $rules_b ): ?string {
+		if ( empty( $rules_a ) || empty( $rules_b ) ) {
+			return null;
+		}
+
+		$slugs_a = array_column( $rules_a, 'slug' );
+		$slugs_b = array_column( $rules_b, 'slug' );
+
+		if ( in_array( 'specific_posts', $slugs_a, true ) || in_array( 'specific_posts', $slugs_b, true ) ) {
+			return null;
+		}
+		if ( array_intersect( $slugs_a, $slugs_b ) ) {
+			return null;
+		}
+
+		$a_gates_post_types = in_array( 'post_types', $slugs_a, true );
+		$b_gates_post_types = in_array( 'post_types', $slugs_b, true );
+		if ( $a_gates_post_types === $b_gates_post_types ) {
+			return null;
+		}
+
+		return $a_gates_post_types ? 'a' : 'b';
+	}
+
+	/**
+	 * Repair the overlaps that an exclusion carve-out can express.
+	 *
+	 * Runs over the pairs consolidation could not merge and rewrites the ones whose
+	 * shape {@see carve_out_direction()} accepts, leaving the rest for the caller to
+	 * warn about. Slug disjointness is retested against the broad group's rules as they
+	 * stand, not as they arrived, so a second carve-out onto the same gate is refused
+	 * when it would collide with the exclusion the first one added.
+	 *
+	 * A carve-out never crosses the purchase boundary, for the reason absorption does
+	 * not: excusing a signup group's content from its own gate hands it to a purchase
+	 * gate, and a reader who reaches it today by registering is denied at cutover.
+	 *
+	 * @param array[] $groups          Consolidated groups, keyed by root index.
+	 * @param array   $overlaps        [i, j] index pairs that could not be merged.
+	 * @param array   $carved          Filled with one description per repaired pair, by reference.
+	 * @param array   $carved_products Filled with the products each narrow group gains, keyed by
+	 *                                 its index in $groups, by reference.
+	 *
+	 * @return array{groups: array[], overlaps: array} The groups with carve-outs applied, and the
+	 *               overlap pairs that remain unrepaired.
+	 */
+	private static function apply_carve_outs( array $groups, array $overlaps, array &$carved, array &$carved_products ): array {
+		$surviving = [];
+
+		foreach ( $overlaps as $pair ) {
+			list( $i, $j ) = $pair;
+
+			$direction = self::group_requires_purchase( $groups[ $i ] ) === self::group_requires_purchase( $groups[ $j ] )
+				? self::carve_out_direction( $groups[ $i ][0]['ac_rules'], $groups[ $j ][0]['ac_rules'] )
+				: null;
+			if ( null === $direction ) {
+				$surviving[] = $pair;
+				continue;
+			}
+
+			$broad  = 'a' === $direction ? $i : $j;
+			$narrow = 'a' === $direction ? $j : $i;
+
+			$broad_products = array_values(
+				array_unique( array_map( 'intval', array_merge( [], ...array_column( $groups[ $broad ], 'product_ids' ) ) ) )
+			);
+
+			foreach ( $groups[ $narrow ][0]['ac_rules'] as $rule ) {
+				$rule['exclusion']                 = true;
+				$groups[ $broad ][0]['ac_rules'][] = $rule;
+			}
+
+			$carved_products[ $narrow ] = array_values(
+				array_unique( array_merge( $carved_products[ $narrow ] ?? [], $broad_products ) )
+			);
+
+			$carved[] = sprintf(
+				'"%s" out of "%s"',
+				self::gate_title( $groups[ $narrow ] ),
+				self::gate_title( $groups[ $broad ] )
+			);
+
+			WP_CLI::warning( self::format_carve_out_warning( $groups[ $narrow ], $groups[ $broad ] ) );
+		}
+
+		return [
+			'groups'   => $groups,
+			'overlaps' => $surviving,
+		];
+	}
+
+	/**
+	 * Build the warning for one overlap repaired by a carve-out.
+	 *
+	 * Names the residual over-grant rather than claiming the repair is free. The broad
+	 * gate's products land on the narrow gate, so a reader holding only the broad plan
+	 * reaches every post the narrow gate covers — including posts of a type the broad
+	 * plan never gated, which Memberships would have kept from them. Nobody is denied,
+	 * and the alternative is two gates that deny both plans on the shared content.
+	 *
+	 * @param array[] $narrow The group being carved out.
+	 * @param array[] $broad  The group hosting the exclusion.
+	 *
+	 * @return string
+	 */
+	private static function format_carve_out_warning( array $narrow, array $broad ): string {
+		return sprintf(
+			'"%1$s" and "%2$s" gate overlapping content. "%2$s" will exclude "%1$s"\'s content, and "%1$s" gains "%2$s"\'s access products, so neither plan\'s members are denied. "%2$s"\'s members reach all of "%1$s"\'s content as a result, including any outside the post types "%2$s" gates.',
+			self::gate_title( $narrow ),
+			self::gate_title( $broad )
+		);
+	}
+
+	/**
 	 * Plan how fingerprint groups consolidate by content overlap.
 	 *
 	 * A group whose content is a subset of another's is absorbed into the covering
@@ -1472,12 +1623,18 @@ class Membership_Gates_Migration {
 	 *                          reference, so the caller can put them to the operator.
 	 * @param array   $overlaps Filled with one line per pair of gates that overlap
 	 *                          without either covering the other, by reference. These
-	 *                          are the splits this consolidation cannot repair, and the
-	 *                          caller puts them to the operator alongside the folds.
+	 *                          are the splits neither consolidation nor a carve-out can
+	 *                          repair, and the caller puts them to the operator
+	 *                          alongside the folds.
+	 * @param array   $carved   Filled with one line per overlap repaired by an exclusion
+	 *                          carve-out, by reference.
+	 * @param array   $carved_products Filled with the access products each carved-out group
+	 *                          gains from the gate excluding it, keyed by that group's
+	 *                          position in the returned list, by reference.
 	 *
 	 * @return array[] The consolidated gate groups, re-indexed.
 	 */
-	private static function consolidate_plan_groups( array $groups, array &$widened = [], array &$overlaps = [] ): array {
+	private static function consolidate_plan_groups( array $groups, array &$widened = [], array &$overlaps = [], array &$carved = [], array &$carved_products = [] ): array {
 		$rule_sets          = array_map( fn( $group ) => self::expand_rule_set_for_coverage( $group[0]['ac_rules'] ), $groups );
 		$group_has_purchase = array_map( fn( $group ) => self::group_requires_purchase( $group ), $groups );
 
@@ -1495,13 +1652,24 @@ class Membership_Gates_Migration {
 			WP_CLI::warning( self::format_consolidation_warning( $groups[ $index ], $groups[ $root ] ) );
 		}
 
-		foreach ( $plan['overlaps'] as $pair ) {
+		// Overlap indices are always roots, so both keys survive in $merged, and any plan
+		// folded into a root is named in the warnings below.
+		$repaired = self::apply_carve_outs( $merged, $plan['overlaps'], $carved, $carved_products );
+		$merged   = $repaired['groups'];
+
+		foreach ( $repaired['overlaps'] as $pair ) {
 			list( $i, $j ) = $pair;
-			// Overlap indices are always roots, so both keys survive in $merged, and any
-			// plan folded into a root is named in the warning.
 			$overlaps[] = sprintf( '"%s" against "%s"', self::gate_title( $merged[ $i ] ), self::gate_title( $merged[ $j ] ) );
 			WP_CLI::warning( self::format_overlap_warning( $merged[ $i ], $merged[ $j ] ) );
 		}
+
+		// Carve-out product transfers are keyed by root index; the caller reads them
+		// against the re-indexed list, so translate before array_values() drops the keys.
+		$positions       = array_flip( array_keys( $merged ) );
+		$carved_products = array_combine(
+			array_map( fn( $index ) => $positions[ $index ], array_keys( $carved_products ) ),
+			array_values( $carved_products )
+		);
 
 		return array_values( $merged );
 	}
@@ -1612,7 +1780,11 @@ class Membership_Gates_Migration {
 	 * granted. Dropping it would leave the plan's members outside the gate; resolving it
 	 * to the parent would admit buyers of sibling variations the plan never covered.
 	 *
-	 * @param array[] $group Plan descriptors, each carrying a 'product_ids' key.
+	 * @param array[] $group     Plan descriptors, each carrying a 'product_ids' key.
+	 * @param int[]   $carved_in Products this group gains from a gate that excludes its
+	 *                           content, so the excluding plan's members are not denied
+	 *                           inside the carve-out. Empty for every group that is not
+	 *                           the narrow side of one.
 	 *
 	 * @return array 'product_ids' are the surviving product and variation IDs, in the
 	 *               order they appeared; 'subscription_ids' and 'one_time_ids' partition them
@@ -1621,8 +1793,8 @@ class Membership_Gates_Migration {
 	 *               therefore appears as 0) and 'unresolvable' (no product or variation
 	 *               post with that ID).
 	 */
-	private static function resolve_product_ids( array $group ): array {
-		$raw = array_merge( ...array_values( array_column( $group, 'product_ids' ) ) );
+	private static function resolve_product_ids( array $group, array $carved_in = [] ): array {
+		$raw = array_merge( array_values( $carved_in ), ...array_values( array_column( $group, 'product_ids' ) ) );
 
 		$product_ids  = [];
 		$invalid      = [];
