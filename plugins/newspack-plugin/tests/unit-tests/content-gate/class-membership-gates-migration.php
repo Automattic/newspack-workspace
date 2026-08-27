@@ -35,6 +35,11 @@ require_once dirname( __DIR__, 3 ) . '/includes/cli/class-membership-gates-migra
  */
 class Test_Membership_Gates_Migration extends \WP_UnitTestCase {
 
+	// The consolidation tests expand hierarchical terms through
+	// Content_Restriction_Control, whose descendant memo is request-scoped and
+	// therefore outlives a rolled-back case that reused the same term IDs.
+	use \Newspack\Tests\Content_Gate\Traits\Trait_Restriction_Cache_Test;
+
 	/**
 	 * Load the newsletters mocks once for the class. Deferred to set_up_before_class()
 	 * rather than a file-scope require because PHPUnit loads every test file before the
@@ -75,6 +80,7 @@ class Test_Membership_Gates_Migration extends \WP_UnitTestCase {
 	public function set_up() {
 		parent::set_up();
 		\WP_CLI::reset();
+		$this->reset_restriction_cache();
 		global $products_database;
 		$this->original_products_database = $products_database;
 		// phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- Raw argv, kept verbatim so tear_down() can restore it.
@@ -99,15 +105,19 @@ class Test_Membership_Gates_Migration extends \WP_UnitTestCase {
 	/**
 	 * Invoke a private static method on the CLI class via reflection.
 	 *
+	 * Uses invokeArgs() rather than invoke(): several of these methods report through a
+	 * by-reference out-parameter, and spreading the argument list would pass those by
+	 * value.
+	 *
 	 * @param string $method_name The method name.
-	 * @param array  $arguments   Positional arguments.
+	 * @param array  $arguments   Positional arguments; pass `&$var` for an out-parameter.
 	 *
 	 * @return mixed The method return value.
 	 */
 	private function invoke_private_static( string $method_name, array $arguments ) {
 		$reflected_method = new \ReflectionMethod( Membership_Gates_Migration::class, $method_name );
 		$reflected_method->setAccessible( true );
-		return $reflected_method->invoke( null, ...$arguments );
+		return $reflected_method->invokeArgs( null, $arguments );
 	}
 
 	/**
@@ -2413,18 +2423,38 @@ HTML;
 	 * @return array[] A single-plan group in group_plans_by_fingerprint()'s shape.
 	 */
 	private function make_taxonomy_plan_group( string $name, array $term_ids, int $product_id, string $taxonomy = 'category' ): array {
+		return $this->make_plan_group(
+			$name,
+			[
+				[
+					'slug'  => $taxonomy,
+					'value' => array_map( 'strval', $term_ids ),
+				],
+			],
+			$product_id
+		);
+	}
+
+	/**
+	 * A gate group of one plan with the given content rules.
+	 *
+	 * @param string  $name          Plan name, which becomes the gate title.
+	 * @param array[] $ac_rules      The plan's AC-format content rules.
+	 * @param int     $product_id    The plan's access product, or 0 for a signup plan.
+	 * @param string  $access_method 'purchase' or 'signup'.
+	 * @param int     $member_count  Active memberships on the plan.
+	 *
+	 * @return array[] A single-plan group in group_plans_by_fingerprint()'s shape.
+	 */
+	private function make_plan_group( string $name, array $ac_rules, int $product_id, string $access_method = 'purchase', int $member_count = 0 ): array {
 		return [
 			[
 				'pid'           => 0,
 				'name'          => $name,
-				'access_method' => 'purchase',
-				'ac_rules'      => [
-					[
-						'slug'  => $taxonomy,
-						'value' => array_map( 'strval', $term_ids ),
-					],
-				],
-				'product_ids'   => [ $product_id ],
+				'member_count'  => $member_count,
+				'access_method' => $access_method,
+				'ac_rules'      => $ac_rules,
+				'product_ids'   => $product_id ? [ $product_id ] : [],
 			],
 		];
 	}
@@ -2479,13 +2509,20 @@ HTML;
 	 * a root that no longer seeds a gate would fatal on a missing key.
 	 */
 	public function test_consolidate_plan_groups_folds_nested_tiers_into_one_group() {
-		$basic   = $this->create_product( 'subscription' );
-		$plus    = $this->create_product( 'subscription' );
-		$top     = $this->create_product( 'subscription' );
-		$groups  = [
-			$this->make_taxonomy_plan_group( 'Basic', [ 5 ], $basic ),
-			$this->make_taxonomy_plan_group( 'Plus', [ 5, 6 ], $plus ),
-			$this->make_taxonomy_plan_group( 'Top', [ 5, 6, 7 ], $top ),
+		// Real, unrelated categories: the nesting here is in the rule values, not in the
+		// term hierarchy, and a bare term ID would collide with another case's fixtures
+		// in the descendant memo.
+		$first  = self::factory()->category->create();
+		$second = self::factory()->category->create();
+		$third  = self::factory()->category->create();
+
+		$basic  = $this->create_product( 'subscription' );
+		$plus   = $this->create_product( 'subscription' );
+		$top    = $this->create_product( 'subscription' );
+		$groups = [
+			$this->make_taxonomy_plan_group( 'Basic', [ $first ], $basic ),
+			$this->make_taxonomy_plan_group( 'Plus', [ $first, $second ], $plus ),
+			$this->make_taxonomy_plan_group( 'Top', [ $first, $second, $third ], $top ),
 		];
 
 		$merged = $this->invoke_private_static( 'consolidate_plan_groups', [ $groups ] );
@@ -2501,6 +2538,118 @@ HTML;
 			$this->invoke_private_static( 'resolve_product_ids', [ $merged[0] ] )['product_ids'],
 			'The merged gate carries every folded plan\'s product, which is what keeps their members admitted.'
 		);
+	}
+
+	/**
+	 * An overlap the consolidation cannot merge is handed back to the caller, not just
+	 * warned about. It is the denial this command exists to prevent, in the one shape
+	 * it cannot repair, and gates stay inert until Memberships is deactivated — so a
+	 * run that writes the split looks clean and the warning is long gone by the time a
+	 * reader is turned away. The caller puts it to the pre-flight prompt instead, and
+	 * the message carries each side's member count so the operator can size the risk.
+	 */
+	public function test_consolidate_plan_groups_hands_unmergeable_overlaps_to_the_caller() {
+		$whole_post_type = $this->make_plan_group(
+			'All Posts',
+			[
+				[
+					'slug'  => 'post_types',
+					'value' => [ 'post' ],
+				],
+			],
+			$this->create_product( 'subscription' ),
+			'purchase',
+			120
+		);
+		$one_category    = $this->make_taxonomy_plan_group( 'Investigations', [ self::factory()->category->create() ], $this->create_product( 'subscription' ) );
+
+		\WP_CLI::reset();
+		$widened  = [];
+		$overlaps = [];
+		$merged   = $this->invoke_private_static( 'consolidate_plan_groups', [ [ $whole_post_type, $one_category ], &$widened, &$overlaps ] );
+
+		$this->assertCount( 2, $merged, 'Neither rule set covers the other, so one gate cannot carry both product lists.' );
+		$this->assertSame( [ '"All Posts" against "Investigations"' ], $overlaps );
+		$this->assertStringContainsString( '120 active member(s)', implode( ' ', \WP_CLI::$warnings ) );
+	}
+
+	/**
+	 * The partition must not move with the order the plans arrive in. Plans are read ID
+	 * ascending, so a plan published between the approved dry run and the --live run
+	 * reshuffles the input — and with a positional tie-break that would silently change
+	 * which gate an absorbed plan's products land on, and therefore who is denied.
+	 */
+	public function test_consolidate_plan_groups_partition_does_not_depend_on_input_order() {
+		$shared    = self::factory()->category->create();
+		$culture   = self::factory()->category->create();
+		$investing = self::factory()->category->create();
+
+		// Two covering roots that tie on rule count and cover neither each other nor the
+		// same content. Which one takes 'Narrow' — and therefore whose product list its
+		// members end up behind — is the whole question.
+		$narrow  = $this->make_taxonomy_plan_group( 'Narrow', [ $shared ], $this->create_product( 'subscription' ) );
+		$root_a  = $this->make_taxonomy_plan_group( 'Root A', [ $shared, $culture ], $this->create_product( 'subscription' ) );
+		$root_b  = $this->make_taxonomy_plan_group( 'Root B', [ $shared, $investing ], $this->create_product( 'subscription' ) );
+		$titles  = function ( array $groups ) {
+			$gate_titles = array_map(
+				fn( $group ) => $this->invoke_private_static( 'gate_title', [ $group ] ),
+				$this->invoke_private_static( 'consolidate_plan_groups', [ $groups ] )
+			);
+			sort( $gate_titles );
+			return $gate_titles;
+		};
+
+		$this->assertSame(
+			$titles( [ $narrow, $root_a, $root_b ] ),
+			$titles( [ $root_b, $root_a, $narrow ] ),
+			'Equally sized covering roots tie on rule count; the tie breaks on what they gate, not on where they sit.'
+		);
+	}
+
+	/**
+	 * A signup fold widens no paid access — neither gate carries an access product — so
+	 * the operator is not asked to approve a stake that does not exist. The prompt is
+	 * built from these lines, and a wrong stake is as likely to abort a harmless merge
+	 * as to wave a real one through.
+	 */
+	public function test_consolidate_plan_groups_does_not_claim_paid_widening_for_a_signup_fold() {
+		$parent_term = self::factory()->category->create();
+		$child_term  = self::factory()->category->create( [ 'parent' => $parent_term ] );
+
+		\WP_CLI::reset();
+		$this->invoke_private_static(
+			'consolidate_plan_groups',
+			[
+				[
+					$this->make_plan_group(
+						'Child Signup',
+						[
+							[
+								'slug'  => 'category',
+								'value' => [ (string) $child_term ],
+							],
+						],
+						0,
+						'signup' 
+					),
+					$this->make_plan_group(
+						'Parent Signup',
+						[
+							[
+								'slug'  => 'category',
+								'value' => [ (string) $parent_term ],
+							],
+						],
+						0,
+						'signup' 
+					),
+				],
+			]
+		);
+
+		$warning = implode( ' ', \WP_CLI::$warnings );
+		$this->assertStringContainsString( 'Consolidating "Child Signup" into "Parent Signup"', $warning );
+		$this->assertStringNotContainsString( 'access products', $warning );
 	}
 
 	/**
@@ -2542,30 +2691,60 @@ HTML;
 	}
 
 	/**
-	 * A purchase group whose products all failed to resolve is named so the caller can
-	 * refuse the run. Its gate would activate paid access carrying no access rule,
-	 * asking for no purchase at all — the one failure that is worse than not migrating,
-	 * because it publishes the content to every registered reader.
+	 * A purchase group for which no paid access rule can be built is named so the
+	 * caller can refuse the live run. Its gate would activate paid access carrying no
+	 * access rule, asking for no purchase at all — the one failure that is worse than
+	 * not migrating, because it publishes the content to every registered reader.
+	 *
+	 * The last group is the reason the guard asks build_access_rules() rather than
+	 * testing the product list: it holds a product that reached neither paid bucket, so
+	 * a product-list test would pass it and the gate would publish open.
 	 */
-	public function test_find_paid_groups_without_products_names_only_the_open_gates() {
-		$named = function ( string $access_method, string $name ) {
+	public function test_find_paid_groups_without_access_rules_names_only_the_open_gates() {
+		$named             = function ( string $access_method, string $name ) {
 			return [ array_merge( $this->make_group_plan( $access_method ), [ 'name' => $name ] ) ];
 		};
-		$plan_groups = [
-			'paid-empty'  => $named( 'purchase', 'Paid Without Products' ),
-			'paid-ok'     => $named( 'purchase', 'Paid With Products' ),
-			'signup-only' => $named( 'signup', 'Signup Only' ),
+		$plan_groups       = [
+			'paid-empty'      => $named( 'purchase', 'Paid Without Products' ),
+			'paid-ok'         => $named( 'purchase', 'Paid With Products' ),
+			'signup-only'     => $named( 'signup', 'Signup Only' ),
+			'paid-unbucketed' => $named( 'purchase', 'Paid With Unclassifiable Product' ),
 		];
 		$products_by_group = [
-			'paid-empty'  => [ 'product_ids' => [] ],
-			'paid-ok'     => [ 'product_ids' => [ 42 ] ],
-			'signup-only' => [ 'product_ids' => [] ],
+			'paid-empty'      => [
+				'product_ids'      => [],
+				'subscription_ids' => [],
+				'one_time_ids'     => [],
+			],
+			'paid-ok'         => [
+				'product_ids'      => [ 42 ],
+				'subscription_ids' => [ 42 ],
+				'one_time_ids'     => [],
+			],
+			'signup-only'     => [
+				'product_ids'      => [],
+				'subscription_ids' => [],
+				'one_time_ids'     => [],
+			],
+			'paid-unbucketed' => [
+				'product_ids'      => [ 77 ],
+				'subscription_ids' => [],
+				'one_time_ids'     => [],
+			],
 		];
+		$no_duration       = [ 'duration' => null ];
 
 		$this->assertSame(
-			[ 'Paid Without Products' ],
-			$this->invoke_private_static( 'find_paid_groups_without_products', [ $plan_groups, $products_by_group ] ),
-			'Only the purchase group with no products is named; a signup group writes no paid rule to begin with.'
+			[ 'Paid Without Products', 'Paid With Unclassifiable Product' ],
+			$this->invoke_private_static(
+				'find_paid_groups_without_access_rules',
+				[
+					$plan_groups,
+					$products_by_group,
+					array_fill_keys( array_keys( $plan_groups ), $no_duration ),
+				]
+			),
+			'A signup group writes no paid rule to begin with; the two purchase groups that would emit no access rule are named.'
 		);
 	}
 }

@@ -85,7 +85,10 @@ class Newspack_Test_Audit_Subscription_Products extends WP_UnitTestCase {
 	 */
 	private function register_product( int $product_id, string $name, string $status = 'publish', string $type = 'subscription', int $parent_id = 0 ): WC_Product {
 		global $products_database;
-		$product                          = new WC_Product(
+		// Variations are staged as WC_Product_Variation: the picker's label builder is
+		// typed to it, as production is, so a plain WC_Product would not reach it.
+		$product_class                    = wc_mock_product_class( $type );
+		$product                          = new $product_class(
 			[
 				'id'        => $product_id,
 				'name'      => $name,

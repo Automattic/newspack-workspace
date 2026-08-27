@@ -49,7 +49,7 @@ class Newspack_Test_Access_Rules_Product_Options extends WP_UnitTestCase {
 					'children' => [ 11, 12 ],
 				]
 			),
-			new WC_Product(
+			new WC_Product_Variation(
 				[
 					'id'         => 11,
 					'type'       => 'variation',
@@ -57,7 +57,7 @@ class Newspack_Test_Access_Rules_Product_Options extends WP_UnitTestCase {
 					'attributes' => [ 'term' => 'Monthly' ],
 				]
 			),
-			new WC_Product(
+			new WC_Product_Variation(
 				[
 					'id'         => 12,
 					'type'       => 'variation',
@@ -80,7 +80,7 @@ class Newspack_Test_Access_Rules_Product_Options extends WP_UnitTestCase {
 					'children' => [ 31, 32 ],
 				]
 			),
-			new WC_Product(
+			new WC_Product_Variation(
 				[
 					'id'         => 31,
 					'type'       => 'subscription_variation',
@@ -88,7 +88,7 @@ class Newspack_Test_Access_Rules_Product_Options extends WP_UnitTestCase {
 					'attributes' => [ 'tier' => 'Basic' ],
 				]
 			),
-			new WC_Product(
+			new WC_Product_Variation(
 				[
 					'id'         => 32,
 					'type'       => 'subscription_variation',
@@ -155,19 +155,19 @@ class Newspack_Test_Access_Rules_Product_Options extends WP_UnitTestCase {
 					'children' => [ 41, 42 ],
 				]
 			),
-			new WC_Product(
+			new WC_Product_Variation(
 				[
 					'id'        => 41,
 					'type'      => 'subscription_variation',
 					'parent_id' => 40,
-				] 
+				]
 			),
-			new WC_Product(
+			new WC_Product_Variation(
 				[
 					'id'        => 42,
 					'type'      => 'subscription_variation',
 					'parent_id' => 40,
-				] 
+				]
 			),
 		];
 

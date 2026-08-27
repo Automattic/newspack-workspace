@@ -552,12 +552,17 @@ class Access_Rules {
 	 * editor's token field resolves a selection back to a rule value by label, so two
 	 * options sharing a label select the wrong variation.
 	 *
-	 * @param \WC_Product $parent    The parent product.
-	 * @param \WC_Product $variation The variation (a \WC_Product_Variation in production).
+	 * Typed to the variation class rather than \WC_Product because
+	 * wc_get_formatted_variation() short-circuits to '' for anything else, which would
+	 * fall through to the attributeless branch and label a real variation "(variation
+	 * #12)" instead of failing.
+	 *
+	 * @param \WC_Product           $parent    The parent product.
+	 * @param \WC_Product_Variation $variation The variation.
 	 *
 	 * @return string
 	 */
-	private static function variation_option_label( \WC_Product $parent, \WC_Product $variation ): string {
+	private static function variation_option_label( \WC_Product $parent, \WC_Product_Variation $variation ): string {
 		$attributes = \wc_get_formatted_variation( $variation, true, true );
 		if ( ! $attributes ) {
 			// A variation with no attributes to name still needs a distinct label.

@@ -594,6 +594,18 @@ class WC_Product {
 	}
 }
 
+/**
+ * A variation, as its own class.
+ *
+ * Production code narrows a parameter to WC_Product_Variation where only a variation
+ * can arrive — Access_Rules::variation_option_label() does, because
+ * wc_get_formatted_variation() silently returns '' for anything else. A fixture built
+ * as a plain WC_Product carrying a variation type would not satisfy that hint, so
+ * variations are staged through this class.
+ */
+class WC_Product_Variation extends WC_Product {
+}
+
 class WC_Cart {
 	public $cart_contents = [];
 	public function __construct( $cart_contents = [] ) {
@@ -627,6 +639,18 @@ if ( ! class_exists( 'WC_Subscriptions_Cart' ) ) {
 }
 
 /**
+ * The mock class a product of this type is staged as.
+ *
+ * @param string $type The WooCommerce product type.
+ * @return string The class name.
+ */
+function wc_mock_product_class( string $type ): string {
+	return in_array( $type, [ 'variation', 'subscription_variation' ], true )
+		? WC_Product_Variation::class
+		: WC_Product::class;
+}
+
+/**
  * Register a mock product in the global products database.
  *
  * @param array $data Product data including 'id', 'children', 'type', 'name', 'price'.
@@ -634,7 +658,8 @@ if ( ! class_exists( 'WC_Subscriptions_Cart' ) ) {
  */
 function wc_create_mock_product( $data = [] ) {
 	global $products_database;
-	$product = new WC_Product( $data );
+	$product_class = wc_mock_product_class( $data['type'] ?? 'simple' );
+	$product       = new $product_class( $data );
 	$products_database[ $product->get_id() ] = $product;
 	return $product;
 }

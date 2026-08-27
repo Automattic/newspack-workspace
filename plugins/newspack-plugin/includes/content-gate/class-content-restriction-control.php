@@ -355,6 +355,12 @@ class Content_Restriction_Control {
 	 * two disagree about what a rule gates, and the migration would then merge, or
 	 * refuse to merge, on a reading the site never applies.
 	 *
+	 * The memo is request-scoped and nothing invalidates it on a term edit, which is
+	 * right for a web request and wrong for a process that outlives one. A caller that
+	 * changes the term hierarchy mid-run — an importer, a taxonomy remap — calls
+	 * {@see flush_term_descendants_memo()} before expanding again, or it will decide
+	 * access from the tree as it stood before its own edits.
+	 *
 	 * @param array        $term_ids Term IDs from a content rule's value (may be stored as strings).
 	 * @param \WP_Taxonomy $taxonomy Taxonomy object the term IDs belong to.
 	 *
@@ -375,6 +381,20 @@ class Content_Restriction_Control {
 			$expanded = array_merge( $expanded, self::$term_descendants_map[ $cache_key ] );
 		}
 		return array_values( array_unique( $expanded ) );
+	}
+
+	/**
+	 * Discard the request-scoped descendant memo.
+	 *
+	 * {@see expand_hierarchical_terms()} is public, so the memo is reachable from
+	 * outside this class and has to be discardable from there too. In a web request
+	 * the term hierarchy does not change under the memo and this is never needed;
+	 * a long-lived CLI process that edits terms, and the test suite, are the callers.
+	 *
+	 * @return void
+	 */
+	public static function flush_term_descendants_memo() {
+		self::$term_descendants_map = [];
 	}
 
 	/**
