@@ -61,7 +61,14 @@ class Content_Gate_API {
 					'properties' => [
 						'enabled' => [ 'type' => 'boolean' ],
 						'count'   => [ 'type' => 'integer' ],
-						'period'  => [ 'type' => 'string' ],
+						'period'  => [
+							'type' => 'string',
+							'enum' => [ 'day', 'week', 'month' ],
+						],
+						'scope'   => [
+							'type' => 'string',
+							'enum' => [ 'site', 'gate' ],
+						],
 					],
 				],
 			],
@@ -75,7 +82,14 @@ class Content_Gate_API {
 					'properties' => [
 						'enabled' => [ 'type' => 'boolean' ],
 						'count'   => [ 'type' => 'integer' ],
-						'period'  => [ 'type' => 'string' ],
+						'period'  => [
+							'type' => 'string',
+							'enum' => [ 'day', 'week', 'month' ],
+						],
+						'scope'   => [
+							'type' => 'string',
+							'enum' => [ 'site', 'gate' ],
+						],
 					],
 				],
 				'gate_layout_id'         => [
@@ -210,7 +224,13 @@ class Content_Gate_API {
 			$sanitized['count'] = max( 0, intval( $metering['count'] ) );
 		}
 		if ( isset( $metering['period'] ) ) {
-			$sanitized['period'] = sanitize_text_field( $metering['period'] );
+			// Only these three have an expiration, and one period the site meter cannot hold
+			// pushes adoption into its conflict branch, pinning every gate on the site.
+			$period              = sanitize_text_field( $metering['period'] );
+			$sanitized['period'] = in_array( $period, [ 'day', 'week', 'month' ], true ) ? $period : 'month';
+		}
+		if ( isset( $metering['scope'] ) ) {
+			$sanitized['scope'] = Site_Meter::sanitize_scope( $metering['scope'] );
 		}
 		return $sanitized;
 	}
@@ -304,7 +324,14 @@ class Content_Gate_API {
 	 * @return mixed|\WP_Error The sanitized access rule or error if invalid.
 	 */
 	public static function sanitize_access_rule( $access_rule ) {
-		$rules = Access_Rules::get_access_rules();
+		// The registered rules, not the resolved ones: sanitizing reads only `is_boolean`,
+		// `sanitize_callback` and whether the rule is options-backed at all, none of which
+		// an options callback affects. Resolving here would run each rule's full-catalog
+		// query once per rule in the payload — six times over on a six-rule gate — and the
+		// options-backed test would then turn on whether the shop currently has any
+		// products, sending a valid ID list down the plain-string branch on an empty
+		// catalog. Values are sanitized off the request and never checked against the list.
+		$rules = Access_Rules::get_registered_rules();
 		$slug  = sanitize_text_field( $access_rule['slug'] );
 
 		if ( empty( $slug ) || ! isset( $rules[ $slug ] ) ) {
