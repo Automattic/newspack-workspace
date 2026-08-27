@@ -4,13 +4,21 @@
 @use "../variables-site/structure";
 
 // Tag labels
+
+// Sized and spaced like the category row beside it, mirroring the base
+// `.cat-links` rule in `sass/site/primary/_posts-and-pages.scss`. Zero
+// specificity because that rule sits in the theme's own stylesheet, where a
+// style variation's `.cat-links, .tag-labels` rule comes later and wins; this
+// file is enqueued after the theme, so at equal weight it would beat the
+// variation instead. `:where()` restores the order the variations expect.
+:where(.tag-labels) {
+	font-size: var(--newspack-theme-font-size-xs);
+	margin: 0 0 #{0.75 * structure.$size__spacing-unit};
+}
+
 .tag-labels {
 	align-items: stretch;
 	display: inline-flex;
-	// Sized and spaced like the category row beside it, mirroring the base
-	// `.cat-links` rule in `sass/site/primary/_posts-and-pages.scss`.
-	font-size: var(--newspack-theme-font-size-xs);
-	margin: 0 0 #{0.75 * structure.$size__spacing-unit};
 	position: relative;
 	// Where a category is plain text, wrapped rows can touch without showing it.
 	// A label always has a background, so its rows need separating. This sits on
