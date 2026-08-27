@@ -528,8 +528,13 @@ class Outgoing_Post {
 			];
 		}
 
-		$content     = apply_filters( 'the_content', get_the_content( null, false, get_post( $this->post->ID ) ) );
-		$attachments = self::get_content_attachments( $content );
+		// Read the images out of the content that is actually being distributed.
+		// Blocks are rewritten on their way out, so the original content and the
+		// distributed content can name different images, and an image the node
+		// can't find here opens its lightbox at the wrong size. Scanning the raw
+		// content also keeps out images that only exist because a `the_content`
+		// filter injected them, such as ads or related posts.
+		$attachments = self::get_content_attachments( $this->get_raw_post_content() );
 		foreach ( $attachments as $attachment ) {
 			if ( isset( $attachment_data[ $attachment->ID ] ) ) {
 				continue;

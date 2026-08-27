@@ -445,4 +445,137 @@ class TestOutgoingPost extends \WP_UnitTestCase {
 		$this->assertArrayNotHasKey( 'title', $partial_payload['post_data'] );
 		$this->assertArrayNotHasKey( 'content', $partial_payload['post_data'] );
 	}
+
+	/**
+	 * An attachment carrying dimensions, so media_data holds real sizes rather
+	 * than the 'none' the node's lightbox falls back to.
+	 *
+	 * @param int $post_parent The post to attach it to.
+	 * @param int $width       The image width.
+	 * @param int $height      The image height.
+	 *
+	 * @return int The attachment ID.
+	 */
+	private function image_attachment( $post_parent = 0, $width = 1200, $height = 800 ) {
+		$attachment_id = $this->factory->attachment->create_object(
+			[
+				'file'           => 'media-data-' . wp_rand() . '.png',
+				'post_parent'    => $post_parent,
+				'post_mime_type' => 'image/png',
+			]
+		);
+
+		wp_update_attachment_metadata(
+			$attachment_id,
+			[
+				'file'   => 'media-data.png',
+				'width'  => $width,
+				'height' => $height,
+			]
+		);
+
+		return $attachment_id;
+	}
+
+	/**
+	 * An image block in the shape the editor saves it.
+	 *
+	 * @param int $attachment_id The attachment ID.
+	 *
+	 * @return string The block markup.
+	 */
+	private function image_block( $attachment_id ) {
+		return sprintf(
+			'<!-- wp:image {"id":%1$d,"sizeSlug":"large"} --><figure class="wp-block-image size-large"><img src="%2$s" alt="" class="wp-image-%1$d"/></figure><!-- /wp:image -->',
+			$attachment_id,
+			wp_get_attachment_url( $attachment_id )
+		);
+	}
+
+	/**
+	 * A distributed post carrying the given content.
+	 *
+	 * @param string $content The post content.
+	 *
+	 * @return Outgoing_Post
+	 */
+	private function outgoing_post_with_content( $content ) {
+		$post = $this->factory->post->create_and_get(
+			[
+				'post_type'    => 'post',
+				'post_author'  => $this->some_editor->ID,
+				'post_content' => $content,
+			]
+		);
+
+		$outgoing_post = new Outgoing_Post( $post );
+		$outgoing_post->set_distribution( [ $this->network[0]['url'] ] );
+
+		return $outgoing_post;
+	}
+
+	/**
+	 * Every image in the distributed content is described in media_data, with the
+	 * dimensions the node needs to open it at full size.
+	 */
+	public function test_media_data_describes_the_content_images() {
+		$attachment_id = $this->image_attachment( 0, 1200, 800 );
+		$outgoing_post = $this->outgoing_post_with_content( $this->image_block( $attachment_id ) );
+
+		$media_data = $outgoing_post->get_payload()['post_data']['media_data'];
+
+		$this->assertArrayHasKey( $attachment_id, $media_data );
+		$this->assertSame( 1200, $media_data[ $attachment_id ]['width'] );
+		$this->assertSame( 800, $media_data[ $attachment_id ]['height'] );
+	}
+
+	/**
+	 * The payload follows the content being distributed, so an image that exists
+	 * only because a `the_content` filter injected it stays out of media_data.
+	 */
+	public function test_media_data_ignores_images_injected_by_filters() {
+		$in_content = $this->image_attachment();
+		$injected   = $this->image_attachment();
+
+		$inject = function ( $content ) use ( $injected ) {
+			return $content . '<img src="http://example.org/injected.png" class="wp-image-' . $injected . '"/>';
+		};
+		add_filter( 'the_content', $inject );
+
+		$outgoing_post = $this->outgoing_post_with_content( $this->image_block( $in_content ) );
+		$media_data    = $outgoing_post->get_payload()['post_data']['media_data'];
+
+		remove_filter( 'the_content', $inject );
+
+		$this->assertArrayHasKey( $in_content, $media_data );
+		$this->assertArrayNotHasKey( $injected, $media_data );
+	}
+
+	/**
+	 * The reported case. A WordPress 7.1 dynamic gallery stores no image IDs, so
+	 * the images it resolves to were missing from media_data and the node opened
+	 * them in its lightbox at unknown dimensions.
+	 */
+	public function test_media_data_covers_a_flattened_dynamic_gallery() {
+		if ( ! function_exists( 'block_core_gallery_resolve_dynamic_source' ) ) {
+			$this->markTestSkipped( 'Dynamic galleries require WordPress 7.1 or later; this suite runs ' . get_bloginfo( 'version' ) . '.' );
+		}
+
+		$outgoing_post = $this->outgoing_post_with_content(
+			'<!-- wp:gallery {"dynamicContent":{"source":"core/attached-media"}} --><!-- /wp:gallery -->'
+		);
+
+		$attachment_ids = [];
+		for ( $i = 0; $i < 3; $i++ ) {
+			$attachment_ids[] = $this->image_attachment( $outgoing_post->get_post()->ID, 900, 600 );
+		}
+
+		$media_data = $outgoing_post->get_payload()['post_data']['media_data'];
+
+		foreach ( $attachment_ids as $attachment_id ) {
+			$this->assertArrayHasKey( $attachment_id, $media_data );
+			$this->assertSame( 900, $media_data[ $attachment_id ]['width'] );
+			$this->assertSame( 600, $media_data[ $attachment_id ]['height'] );
+		}
+	}
 }
