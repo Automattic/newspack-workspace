@@ -338,6 +338,11 @@ class HomepagePostsBlockTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 				$posts_by_id[ $post_id ]['newspack_post_byline'],
 				'The editor byline must not carry a live link.'
 			);
+			self::assertStringContainsString(
+				'href="#"',
+				$posts_by_id[ $post_id ]['newspack_post_avatars'],
+				'The editor avatar anchor is neutralized, not removed.'
+			);
 			self::assertStringNotContainsString(
 				'href="http',
 				$posts_by_id[ $post_id ]['newspack_post_avatars'],
