@@ -1,3 +1,10 @@
+## newspack [6.48.22](https://github.com/Automattic/newspack-workspace/compare/newspack@6.48.21...newspack@6.48.22) (2026-08-27)
+
+
+### Bug Fixes
+
+* **data-events:** announce readers created during Store API checkouts ([#897](https://github.com/Automattic/newspack-workspace/issues/897)) ([205f800](https://github.com/Automattic/newspack-workspace/commit/205f80053c0a493256d1e5e80dbaeffd75933536))
+
 ## newspack [6.48.21](https://github.com/Automattic/newspack-workspace/compare/newspack@6.48.20...newspack@6.48.21) (2026-08-26)
 
 
