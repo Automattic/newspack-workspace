@@ -661,9 +661,13 @@ class Content_Gate_API {
 	 * @return mixed|\WP_Error The sanitized access rule or error if invalid.
 	 */
 	public static function sanitize_access_rule( $access_rule ) {
-		// Registered (unresolved) rules carry everything this method reads —
-		// `is_boolean`, `has_options` — so the option lists (institution query,
-		// product query) are not resolved here.
+		// The registered rules, not the resolved ones: sanitizing reads only `is_boolean`,
+		// `sanitize_callback` and whether the rule is options-backed at all, none of which
+		// an options callback affects. Resolving here would run each rule's full-catalog
+		// query once per rule in the payload — six times over on a six-rule gate — and the
+		// options-backed test would then turn on whether the shop currently has any
+		// products, sending a valid ID list down the plain-string branch on an empty
+		// catalog. Values are sanitized off the request and never checked against the list.
 		$rules = Access_Rules::get_registered_rules();
 		$slug  = sanitize_text_field( $access_rule['slug'] ?? '' );
 

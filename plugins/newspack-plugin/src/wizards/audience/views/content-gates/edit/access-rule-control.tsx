@@ -12,6 +12,7 @@ import { FormTokenField } from '../../../../../../packages/components/src';
 import {
 	formatAccessRuleOptionLabel,
 	getAccessRuleOptionTokens,
+	MAX_OPTION_SUGGESTIONS,
 	getAccessRuleTokenFieldMessages,
 	getMissingOptionLabel,
 	isAccessRuleOptionInput,
@@ -83,6 +84,7 @@ export default function AccessRuleControl( { slug, value, onChange }: GateRuleCo
 						onChange( resolveAccessRuleOptionTokens( tokens, options, { slug, stored: selected } ) )
 					}
 					suggestions={ options.map( formatAccessRuleOptionLabel ) }
+					maxSuggestions={ MAX_OPTION_SUGGESTIONS }
 					messages={ getAccessRuleTokenFieldMessages( slug ) }
 					__experimentalValidateInput={ ( input: string ) => isAccessRuleOptionInput( input, options, slug ) }
 					__experimentalAutoSelectFirstMatch
@@ -92,7 +94,7 @@ export default function AccessRuleControl( { slug, value, onChange }: GateRuleCo
 				{ /* A value of the wrong shape is named above; this names stored IDs the
 				     list cannot describe, which is a different state and can coexist with
 				     none of the others. */ }
-				<UnlistedValuesNotice options={ options } value={ selected } />
+				<UnlistedValuesNotice slug={ slug } options={ options } value={ selected } />
 			</>
 		);
 	}

@@ -1,7 +1,7 @@
 /**
  * External dependencies
  */
-import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, within, act } from '@testing-library/react';
 
 /**
  * WordPress dependencies
@@ -41,13 +41,13 @@ const DUPLICATE_NAME_PRODUCTS = [
 	{ value: 300000, label: 'Monthly' },
 ];
 
-const renderControl = ( { options, value, onChange } ) => {
+const renderControl = ( { slug = 'subscription', name = 'Active subscription', options, value, onChange } ) => {
 	window.newspackAudienceContentGates = {
 		available_access_rules: {
-			subscription: { name: 'Active subscription', options },
+			[ slug ]: { name, options },
 		},
 	};
-	return render( <AccessRuleControl slug="subscription" value={ value } onChange={ onChange } /> );
+	return render( <AccessRuleControl slug={ slug } value={ value } onChange={ onChange } /> );
 };
 
 describe( 'AccessRuleControl option picker', () => {
@@ -181,6 +181,24 @@ describe( 'AccessRuleControl, a rule whose options are fetched', () => {
 			)
 		);
 		expect( screen.getByText( 'City Library (#12)' ) ).toBeInTheDocument();
+	} );
+} );
+
+describe( 'AccessRuleControl suggestion cap', () => {
+	it( 'offers every option on focus, past the field default of 100', async () => {
+		const manyProducts = Array.from( { length: 105 }, ( _, i ) => ( { value: i + 1, label: `Product ${ i + 1 }` } ) );
+		renderControl( { options: manyProducts, value: [], onChange: jest.fn() } );
+
+		const input = await screen.findByRole( 'combobox' );
+		// A real focus, not a synthetic event: `__experimentalExpandOnFocus` only expands
+		// when the input is the document's active element.
+		act( () => input.focus() );
+
+		// Cut to 100, the rest read to a publisher as not existing — the list on focus is
+		// unfiltered, so nothing they could type would be ranked in front of the cap.
+		const suggestions = await screen.findAllByRole( 'option' );
+		expect( suggestions ).toHaveLength( manyProducts.length );
+		expect( suggestions[ 104 ] ).toHaveTextContent( 'Product 105 (#105)' );
 	} );
 } );
 

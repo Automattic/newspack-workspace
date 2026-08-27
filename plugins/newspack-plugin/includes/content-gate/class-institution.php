@@ -170,16 +170,26 @@ class Institution {
 	/**
 	 * Get institution options for the access rule multi-select.
 	 *
+	 * Published institutions only, matching `rebuild_cache()`: an institution that is not
+	 * published is never evaluated and so can never grant access, and offering one here
+	 * would let a publisher build a rule that silently does nothing. The institution editor
+	 * always saves with `publish`, so any other status comes from editing the post directly.
+	 *
 	 * @return array Array of [ 'label' => string, 'value' => int ].
 	 */
 	public static function get_options() {
 		$posts   = \get_posts(
 			[
-				'post_type'      => self::POST_TYPE,
-				'post_status'    => 'publish',
-				'posts_per_page' => -1, // phpcs:ignore WordPressVIPMinimum.Performance.NoPaging -- Institution CPT; config-scale.
-				'orderby'        => 'title',
-				'order'          => 'ASC',
+				'post_type'              => self::POST_TYPE,
+				'post_status'            => 'publish',
+				'posts_per_page'         => -1, // phpcs:ignore WordPressVIPMinimum.Performance.NoPaging -- Institution CPT; config-scale.
+				'orderby'                => 'title',
+				'order'                  => 'ASC',
+				// Only the title and ID are read, and this runs on every admin page load
+				// that localises the access rules. `get_posts()` already forces
+				// `no_found_rows`, so there is no row count to suppress here.
+				'update_post_meta_cache' => false,
+				'update_post_term_cache' => false,
 			]
 		);
 		$options = [];

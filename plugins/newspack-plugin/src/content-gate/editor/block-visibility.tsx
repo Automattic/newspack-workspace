@@ -27,6 +27,7 @@ import './block-visibility.scss';
 import {
 	formatAccessRuleOptionLabel,
 	getAccessRuleOptionTokens,
+	MAX_OPTION_SUGGESTIONS,
 	getAccessRuleTokenFieldMessages,
 	getAccessRuleOptionsFetchFailedNotice,
 	getMissingOptionLabel,
@@ -150,6 +151,7 @@ const GateControls = ( { gateIds, onChange }: { gateIds: number[]; onChange: ( i
 				label={ __( 'Gates', 'newspack-plugin' ) }
 				value={ getAccessRuleOptionTokens( gateOptions, gateIds, getMissingOptionLabel( GATE_RULE_SLUG ) ) }
 				suggestions={ gateOptions.map( formatAccessRuleOptionLabel ) }
+				maxSuggestions={ MAX_OPTION_SUGGESTIONS }
 				onChange={ ( tokens: ( string | TokenItem )[] ) =>
 					// The attribute is typed as integers, and a preserved value may come
 					// back as the string the token carried, so coerce before storing.
@@ -262,6 +264,7 @@ export const AccessRuleValueControl = ( {
 					disabled={ hasNothingToSelect }
 					value={ getAccessRuleOptionTokens( options, selected, getMissingOptionLabel( slug ) ) }
 					suggestions={ options.map( formatAccessRuleOptionLabel ) }
+					maxSuggestions={ MAX_OPTION_SUGGESTIONS }
 					onChange={ ( tokens: ( string | TokenItem )[] ) =>
 						onChange( resolveAccessRuleOptionTokens( tokens, options, { slug, stored: selected } ) )
 					}
@@ -276,7 +279,7 @@ export const AccessRuleValueControl = ( {
 				{ /* A different state from the ones above, and it can stand alongside a
 				     value the picker holds tokens for: these are stored IDs no option
 				     describes. */ }
-				<UnlistedValuesNotice options={ options } value={ selected } />
+				<UnlistedValuesNotice slug={ slug } options={ options } value={ selected } />
 			</>
 		);
 	} else {

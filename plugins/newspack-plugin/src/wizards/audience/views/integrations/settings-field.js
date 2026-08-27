@@ -2,7 +2,14 @@
  * WordPress dependencies.
  */
 import { __ } from '@wordpress/i18n';
-import { CheckboxControl, ExternalLink, SelectControl, TextareaControl } from '@wordpress/components';
+import {
+	CheckboxControl,
+	ExternalLink,
+	SelectControl,
+	TextareaControl,
+	__experimentalToggleGroupControl as ToggleGroupControl, // eslint-disable-line @wordpress/no-unsafe-wp-apis
+	__experimentalToggleGroupControlOption as ToggleGroupControlOption, // eslint-disable-line @wordpress/no-unsafe-wp-apis
+} from '@wordpress/components';
 
 /**
  * Internal dependencies.
@@ -18,6 +25,18 @@ import './settings-field.scss';
  * @return {boolean} True when the value is absent or the empty string.
  */
 export const isEmptyValue = value => value === undefined || value === null || value === '';
+
+/**
+ * Coerce a stored field value to boolean.
+ *
+ * Values can arrive from WP options as scalar strings (`'1'`/`'0'`/`'true'`/
+ * `'false'`/`''`); `Boolean( '0' )` is `true` in JS, so the falsy string forms
+ * are matched explicitly.
+ *
+ * @param {*} value Value to coerce.
+ * @return {boolean} The boolean form.
+ */
+export const toBool = value => ( typeof value === 'string' ? ! [ '', '0', 'false' ].includes( value.toLowerCase() ) : Boolean( value ) );
 
 /**
  * Whether a select field offers an option that can actually be chosen.
@@ -140,8 +159,34 @@ export const SettingsField = ( { field, value, onChange } ) => {
 				</div>
 			);
 		}
-		case 'checkbox':
-			return <CheckboxControl key={ key } label={ label } help={ help } checked={ !! value } onChange={ onChange } __nextHasNoMarginBottom />;
+		case 'checkbox': {
+			// toBool, not truthiness: stored values round-trip through WP options
+			// as scalar strings, and `'0'`/`'false'` must read as off.
+			const checked = toBool( value );
+			// A checkbox field may declare `control: 'toggle_group'` to render as an
+			// Enabled/Disabled toggle group instead — the same stored boolean, but a
+			// presentation suited to feature switches whose label names the feature
+			// ("Deals") rather than the action ("Enable deals"). Integrations running
+			// against a plugin without this parameter fall back to the checkbox.
+			if ( 'toggle_group' === field.control ) {
+				return (
+					<ToggleGroupControl
+						key={ key }
+						label={ label }
+						help={ help }
+						value={ checked ? 'enabled' : 'disabled' }
+						onChange={ next => onChange( 'enabled' === next ) }
+						isBlock
+						__next40pxDefaultSize
+						__nextHasNoMarginBottom
+					>
+						<ToggleGroupControlOption label={ __( 'Enabled', 'newspack-plugin' ) } value="enabled" />
+						<ToggleGroupControlOption label={ __( 'Disabled', 'newspack-plugin' ) } value="disabled" />
+					</ToggleGroupControl>
+				);
+			}
+			return <CheckboxControl key={ key } label={ label } help={ help } checked={ checked } onChange={ onChange } __nextHasNoMarginBottom />;
+		}
 		case 'select': {
 			const selectable = hasSelectableOption( field );
 			return (
