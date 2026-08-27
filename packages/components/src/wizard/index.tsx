@@ -138,6 +138,8 @@ export interface WizardSection {
 	primaryAction?: SectionHeaderProps[ 'primaryAction' ];
 	/** The section's secondary action. */
 	secondaryAction?: SectionHeaderProps[ 'secondaryAction' ];
+	/** The section header's size variant. */
+	size?: SectionHeaderProps[ 'size' ];
 	/** Whether the section content spans the full width. */
 	fullWidth?: boolean;
 	/** Additional props passed to the section component. */
@@ -246,8 +248,18 @@ const Wizard = (
 	const headerData: WizardHeaderData = useSelect( select => ( select( WIZARD_STORE_NAMESPACE ) as WizardsStoreSelectors ).getHeaderData() );
 	const notices: WizardNotice[] = useSelect( select => ( select( WIZARD_STORE_NAMESPACE ) as WizardsStoreSelectors ).getNotices() );
 	const { invalidateResolution } = useDispatch( WIZARD_STORE_NAMESPACE );
-	const { actions, backNav, badges, sectionDescription, sectionMenu, sectionName, sectionTitle, sectionPrimaryAction, sectionSecondaryAction } =
-		headerData;
+	const {
+		actions,
+		backNav,
+		badges,
+		sectionDescription,
+		sectionMenu,
+		sectionName,
+		sectionSize,
+		sectionTitle,
+		sectionPrimaryAction,
+		sectionSecondaryAction,
+	} = headerData;
 
 	const mainActions = actions?.filter(
 		( action ): action is WizardHeaderAction & { type: 'primary' | 'secondary' } => action.type === 'primary' || action.type === 'secondary'
@@ -383,6 +395,7 @@ const Wizard = (
 												primaryAction={ sectionPrimaryAction || section.primaryAction }
 												secondaryAction={ sectionSecondaryAction || section.secondaryAction }
 												heading={ 2 }
+												size={ sectionSize || section.size }
 												noMargin
 											/>
 										) }

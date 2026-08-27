@@ -16,6 +16,7 @@ import { createReduxStore, register, dispatch, select } from '@wordpress/data';
  * Internal dependencies.
  */
 import { createAction } from './utils';
+import type { SectionHeaderProps } from '../../section-header';
 import type { CardBadge } from '../../types';
 
 export const WIZARD_STORE_NAMESPACE = 'newspack/wizards';
@@ -98,6 +99,7 @@ export interface WizardHeaderData {
 	sectionName?: string;
 	sectionTitle?: string;
 	sectionMenu?: WizardMenuItem[];
+	sectionSize?: SectionHeaderProps[ 'size' ];
 	sectionPrimaryAction?: WizardSectionAction;
 	sectionSecondaryAction?: WizardSectionAction;
 }
