@@ -19,6 +19,7 @@ import { Button, Spinner } from '@wordpress/components';
 import { DataViews, Router } from '../../../../../../packages/components/src';
 import { WIZARD_STORE_NAMESPACE } from '../../../../../../packages/components/src/wizard/store';
 import { AUDIENCE_CONTENT_GATES_WIZARD_SLUG } from '../consts';
+import { INSTITUTION_RULE_SLUG, invalidateAccessRuleOptions } from '../../../../../content-gate/access-rule-option-sources';
 import InstitutionsOnboarding from './onboarding';
 
 const { useHistory } = Router;
@@ -241,6 +242,10 @@ export default function Institutions() {
 										setIsDeleting( true );
 										apiFetch( { path: `${ API_PATH }/${ item.id }?force=true`, method: 'DELETE' } )
 											.then( () => {
+												// The gate pickers and summaries name institutions
+												// from a list fetched once per session, so a
+												// deletion has to drop it.
+												invalidateAccessRuleOptions( INSTITUTION_RULE_SLUG );
 												fetchData();
 												closeModal?.();
 											} )

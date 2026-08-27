@@ -35,6 +35,7 @@ import Registration from './registration';
 import CustomAccess from './custom-access';
 import { getEditGateLayoutUrl, getGateStatus, getGateStatusBadgeIntent } from '../utils';
 import { getGateSummarySections } from '../gate-summary';
+import { useAccessRuleOptions } from '../use-access-rule-options';
 import SavePanel from './save-panel';
 import PreferencesModal from './preferences-modal';
 
@@ -91,6 +92,7 @@ const Edit = ( { match, updateGatesData, slug = AUDIENCE_CONTENT_GATES_WIZARD_SL
 	};
 
 	const history = useHistory();
+	const accessRuleOptions = useAccessRuleOptions();
 	const { id: _id, type } = match.params;
 	const id = _id ? parseInt( _id ) : 0;
 	// Undefined until the wizard store resolves the gates request.
@@ -534,7 +536,8 @@ const Edit = ( { match, updateGatesData, slug = AUDIENCE_CONTENT_GATES_WIZARD_SL
 					summary={ getGateSummarySections(
 						{ ...gate, content_rules: contentRules, registration, custom_access: customAccess },
 						isNewsletter,
-						siteMeter
+						siteMeter,
+						accessRuleOptions
 					) }
 					onCancel={ () => setShowSavePanel( false ) }
 					onConfirm={ handleSaveConfirm }
