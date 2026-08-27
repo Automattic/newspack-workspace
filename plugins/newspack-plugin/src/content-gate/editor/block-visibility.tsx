@@ -16,15 +16,26 @@ import {
 	// eslint-disable-next-line @wordpress/no-unsafe-wp-apis
 	__experimentalToggleGroupControlOption as ToggleGroupControlOption,
 } from '@wordpress/components';
+import type { TokenItem } from '@wordpress/components/build-types/form-token-field/types.d.ts';
 import { useState, useEffect } from '@wordpress/element';
-import apiFetch from '@wordpress/api-fetch';
 import { __ } from '@wordpress/i18n';
 
 /**
  * Internal dependencies
  */
 import './block-visibility.scss';
-import OneTimePurchaseRuleControl, { getProductTokens } from '../components/one-time-purchase-rule-control';
+import {
+	formatAccessRuleOptionLabel,
+	getAccessRuleOptionTokens,
+	getAccessRuleTokenFieldMessages,
+	getAccessRuleOptionsFetchFailedNotice,
+	getMissingOptionLabel,
+	isAccessRuleOptionInput,
+	resolveAccessRuleOptionTokens,
+} from '../access-rule-options';
+import { getAccessRuleOptionSource, isOptionBackedAccessRule } from '../access-rule-option-sources';
+import OneTimePurchaseRuleControl from '../components/one-time-purchase-rule-control';
+import UnlistedValuesNotice from '../components/unlisted-values-notice';
 
 /**
  * Target block types that receive access control attributes.
@@ -77,6 +88,13 @@ const availableAccessRules: Record< string, AccessRuleConfig > = window.newspack
 const availableGates: GateOption[] = window.newspackBlockVisibility?.available_gates ?? [];
 
 /**
+ * The gate picker is not an access rule, but it reads the same list of published gates
+ * that `Block_Visibility::has_active_gates()` tests against, so it uses the rule pickers'
+ * token helpers under this slug.
+ */
+const GATE_RULE_SLUG = 'gate';
+
+/**
  * Whether any rules are currently active on the block.
  */
 function hasActiveRules( rules: BlockVisibilityRules, mode: string, gateIds: number[] ): boolean {
@@ -121,34 +139,30 @@ const VisibilityControl = ( {
  * A reader needs to satisfy any one of the selected gates' rules to match.
  */
 const GateControls = ( { gateIds, onChange }: { gateIds: number[]; onChange: ( ids: number[] ) => void } ) => {
-	const selectedLabels = availableGates.filter( g => gateIds.includes( g.id ) ).map( g => g.title );
+	// Gate titles are no more unique than product names, so tokens carry the gate ID for
+	// the same reason the access-rule pickers do.
+	const gateOptions = availableGates.map( g => ( { value: g.id, label: g.title } ) );
 
 	return (
 		<PanelRow>
 			<FormTokenField
 				label={ __( 'Gates', 'newspack-plugin' ) }
-				value={ selectedLabels }
-				suggestions={ availableGates.map( g => g.title ) }
-				onChange={ ( tokens: ( string | { value: string } )[] ) => {
-					const labels = tokens.map( t => ( typeof t === 'string' ? t : t.value ) );
-					onChange( availableGates.filter( g => labels.includes( g.title ) ).map( g => g.id ) );
-				} }
+				value={ getAccessRuleOptionTokens( gateOptions, gateIds, getMissingOptionLabel( GATE_RULE_SLUG ) ) }
+				suggestions={ gateOptions.map( formatAccessRuleOptionLabel ) }
+				onChange={ ( tokens: ( string | TokenItem )[] ) =>
+					// The attribute is typed as integers, and a preserved value may come
+					// back as the string the token carried, so coerce before storing.
+					onChange( resolveAccessRuleOptionTokens( tokens, gateOptions, { slug: GATE_RULE_SLUG, stored: gateIds } ).map( Number ) )
+				}
+				messages={ getAccessRuleTokenFieldMessages( GATE_RULE_SLUG ) }
+				__experimentalValidateInput={ ( input: string ) => isAccessRuleOptionInput( input, gateOptions, GATE_RULE_SLUG ) }
+				__experimentalAutoSelectFirstMatch
 				__experimentalExpandOnFocus
 				__next40pxDefaultSize
 				__nextHasNoMarginBottom
 			/>
 		</PanelRow>
 	);
-};
-
-/**
- * Rules whose options must be fetched dynamically.
- */
-const DYNAMIC_OPTION_RULES: Record< string, { path: string; mapItem: ( item: DynamicOptionItem ) => AccessRuleOption } > = {
-	institution: {
-		path: '/wp/v2/np_institution?per_page=100&context=edit',
-		mapItem: ( item: DynamicOptionItem ) => ( { value: item.id, label: item.title.raw } ),
-	},
 };
 
 /**
@@ -166,55 +180,73 @@ const AccessRuleValueControl = ( {
 	value: ActiveRule[ 'value' ];
 	onChange: ( value: ActiveRule[ 'value' ] ) => void;
 } ) => {
-	const dynamicConfig = DYNAMIC_OPTION_RULES[ slug ];
 	const staticOptions: AccessRuleOption[] = config.options ?? [];
 
 	const [ options, setOptions ] = useState< AccessRuleOption[] >( staticOptions );
+	const [ didFetchFail, setDidFetchFail ] = useState( false );
 
 	useEffect( () => {
-		if ( ! dynamicConfig ) {
+		const source = getAccessRuleOptionSource( slug );
+		if ( ! source ) {
 			return;
 		}
 		let cancelled = false;
-		apiFetch< DynamicOptionItem[] >( { path: dynamicConfig.path } )
-			.then( items => {
+		source()
+			.then( fetched => {
 				if ( ! cancelled ) {
-					setOptions( items.map( dynamicConfig.mapItem ) );
+					// Including an empty list: the site really does have no institutions
+					// left, and keeping the page-load snapshot would leave deleted ones
+					// selectable. An options-backed rule keeps its picker either way.
+					setOptions( fetched );
 				}
 			} )
-			.catch( () => {} );
+			.catch( () => {
+				if ( ! cancelled ) {
+					setDidFetchFail( true );
+				}
+			} );
 		return () => {
 			cancelled = true;
 		};
-	}, [ slug ] ); // eslint-disable-line react-hooks/exhaustive-deps
+	}, [ slug ] );
 
+	// Rendered alongside whichever control the rule gets, since the list the publisher is
+	// editing against is the stale one wherever the fetch failed.
+	const fetchFailedNotice = didFetchFail && <p className="newspack-access-rule-values-notice">{ getAccessRuleOptionsFetchFailedNotice() }</p>;
+
+	let control;
 	if ( 'one_time_purchase' === slug ) {
-		return <OneTimePurchaseRuleControl value={ value } onChange={ onChange } options={ options } productsLabel={ config.name } />;
-	}
-
-	if ( options.length > 0 ) {
-		const valueArr = Array.isArray( value ) ? value : [];
-		// FormTokenField round-trips a selection as its display string, so two options
-		// sharing a label would resolve one selection to both of their IDs — ordinary
-		// now that the pickers list variations, which are named after their parent. The
-		// bijection also keeps a stored ID the picker no longer offers, rather than
-		// dropping it the first time this field is edited.
-		const { tokenByValue, valueByToken } = getProductTokens( options, valueArr );
-
-		return (
-			<FormTokenField
+		control = <OneTimePurchaseRuleControl value={ value } onChange={ onChange } options={ options } productsLabel={ config.name } />;
+	} else if ( isOptionBackedAccessRule( slug, staticOptions ) ) {
+		const selected = Array.isArray( value ) ? value : [];
+		control = (
+			<>
+				<FormTokenField
+					label={ config.name }
+					value={ getAccessRuleOptionTokens( options, selected, getMissingOptionLabel( slug ) ) }
+					suggestions={ options.map( formatAccessRuleOptionLabel ) }
+					onChange={ ( tokens: ( string | TokenItem )[] ) =>
+						onChange( resolveAccessRuleOptionTokens( tokens, options, { slug, stored: selected } ) )
+					}
+					messages={ getAccessRuleTokenFieldMessages( slug ) }
+					__experimentalValidateInput={ ( input: string ) => isAccessRuleOptionInput( input, options, slug ) }
+					__experimentalAutoSelectFirstMatch
+					__experimentalExpandOnFocus
+					__next40pxDefaultSize
+					__nextHasNoMarginBottom
+				/>
+				<UnlistedValuesNotice options={ options } value={ selected } />
+			</>
+		);
+	} else {
+		control = (
+			<TextControl
+				hideLabelFromVision
 				label={ config.name }
-				value={ valueArr.map( v => tokenByValue.get( String( v ) ) as string ) }
-				suggestions={ options.map( o => tokenByValue.get( String( o.value ) ) as string ) }
-				onChange={ ( tokens: ( string | { value: string } )[] ) => {
-					onChange(
-						tokens
-							.map( token => valueByToken.get( typeof token === 'string' ? token : token.value ) )
-							.filter( ( v ): v is string | number => undefined !== v )
-					);
-				} }
-				__experimentalValidateInput={ ( token: string ) => valueByToken.has( token ) }
-				__experimentalExpandOnFocus
+				placeholder={ config.placeholder ?? '' }
+				help={ __( 'Separate with commas.', 'newspack-plugin' ) }
+				value={ typeof value === 'string' ? value : '' }
+				onChange={ onChange as ( value: string ) => void }
 				__next40pxDefaultSize
 				__nextHasNoMarginBottom
 			/>
@@ -222,16 +254,10 @@ const AccessRuleValueControl = ( {
 	}
 
 	return (
-		<TextControl
-			hideLabelFromVision
-			label={ config.name }
-			placeholder={ config.placeholder ?? '' }
-			help={ __( 'Separate with commas.', 'newspack-plugin' ) }
-			value={ typeof value === 'string' ? value : '' }
-			onChange={ onChange as ( value: string ) => void }
-			__next40pxDefaultSize
-			__nextHasNoMarginBottom
-		/>
+		<>
+			{ control }
+			{ fetchFailedNotice }
+		</>
 	);
 };
 

@@ -76,7 +76,9 @@ class Abstract_Incoming_Event {
 	/**
 	 * Processes the event in the hub by persisting it in the Event Log
 	 *
-	 * @return void
+	 * @return int|false|null The Event Log row ID on success; false if the row could
+	 *                        not be written (a storage failure the caller can retry);
+	 *                        null if the event was already logged (a no-op).
 	 */
 	public function process_in_hub() {
 		Debugger::log( 'Processing event' );
@@ -88,6 +90,7 @@ class Abstract_Incoming_Event {
 			}
 			$this->always_process_in_hub();
 		}
+		return $event_id;
 	}
 
 	/**
