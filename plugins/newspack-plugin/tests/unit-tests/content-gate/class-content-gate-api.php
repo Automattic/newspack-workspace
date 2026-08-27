@@ -357,14 +357,49 @@ class Newspack_Test_Content_Gate_API extends WP_UnitTestCase {
 	 * The request WP hands to the `sanitize_callback`, carrying the gate ID from
 	 * the route.
 	 *
-	 * @param int $gate_id The gate ID in the route.
+	 * @param int      $gate_id      The gate ID in the route.
+	 * @param int|null $body_gate_id Optional. A contradicting gate ID in the request body.
 	 *
 	 * @return WP_REST_Request
 	 */
-	private function gate_update_request( $gate_id ) {
+	private function gate_update_request( $gate_id, $body_gate_id = null ) {
 		$request = new WP_REST_Request( 'POST', '/newspack/v1/wizard/audience-content-gates/' . $gate_id );
-		$request->set_param( 'id', $gate_id );
+		// Where WP itself puts the route's captures, and the only source the body
+		// cannot shadow.
+		$request->set_url_params( [ 'id' => $gate_id ] );
+		if ( null !== $body_gate_id ) {
+			$request->set_body_params( [ 'id' => $body_gate_id ] );
+		}
 		return $request;
+	}
+
+	/**
+	 * Create a gate holding an institution rule with nothing selected: a
+	 * well-formed value that `Institution::evaluate()` reads as "no constraint",
+	 * so the rule grants access to every reader.
+	 *
+	 * @param bool  $active    Whether custom access is switched on.
+	 * @param array $selection The institution IDs the rule names.
+	 *
+	 * @return int The gate ID.
+	 */
+	private function create_gate_with_stored_institution_rule( $active = true, $selection = [] ) {
+		$gate_id = Content_Gate::create_gate( [ 'title' => 'Half-configured gate' ] );
+		Content_Gate::update_custom_access_settings(
+			$gate_id,
+			[
+				'active'       => $active,
+				'access_rules' => [
+					[
+						[
+							'slug'  => 'institution',
+							'value' => $selection,
+						],
+					],
+				],
+			]
+		);
+		return $gate_id;
 	}
 
 	/**
@@ -405,7 +440,7 @@ class Newspack_Test_Content_Gate_API extends WP_UnitTestCase {
 	 * caller who could save the gate anyway — sanitization runs ahead of the
 	 * route's `permission_callback`, so nothing else has checked yet.
 	 */
-	public function test_stored_rules_are_read_from_the_route_gate_and_only_for_an_editor() {
+	public function test_stored_rules_are_read_from_the_route_gate_and_only_for_a_caller_who_could_save_it() {
 		$admin_id    = self::factory()->user->create( [ 'role' => 'administrator' ] );
 		$gate_id     = $this->create_gate_with_invalid_stored_rule();
 		$other_gate  = Content_Gate::create_gate( [ 'title' => 'Unrelated gate' ] );
@@ -416,6 +451,10 @@ class Newspack_Test_Content_Gate_API extends WP_UnitTestCase {
 		$this->assertWPError(
 			Content_Gate_API::sanitize_gate( $disabling, $this->gate_update_request( $other_gate ) ),
 			'A body naming one gate must be compared against the gate the route names, which stores different rules.'
+		);
+		$this->assertNotWPError(
+			Content_Gate_API::sanitize_gate( $disabling, $this->gate_update_request( $gate_id, $other_gate ) ),
+			'`get_param()` reads the body ahead of the URL, so a top-level `id` there must not decide which gate is read.'
 		);
 
 		wp_set_current_user( 0 );
@@ -482,23 +521,9 @@ class Newspack_Test_Content_Gate_API extends WP_UnitTestCase {
 	 * one save the guard refuses.
 	 */
 	public function test_a_gate_storing_an_unselected_rule_can_have_custom_access_switched_off() {
-		$gate_id = Content_Gate::create_gate( [ 'title' => 'Half-configured gate' ] );
-		Content_Gate::update_custom_access_settings(
-			$gate_id,
-			[
-				'active'       => true,
-				'access_rules' => [
-					[
-						[
-							'slug'  => 'institution',
-							'value' => [],
-						],
-					],
-				],
-			]
-		);
-		$stored_gate                             = Content_Gate::get_gate( $gate_id );
-		$stored_gate['custom_access']['active']  = false;
+		$gate_id                                = $this->create_gate_with_stored_institution_rule();
+		$stored_gate                            = Content_Gate::get_gate( $gate_id );
+		$stored_gate['custom_access']['active'] = false;
 
 		$switched_off = Content_Gate_API::sanitize_gate( $stored_gate );
 		$this->assertNotWPError( $switched_off );
@@ -540,21 +565,7 @@ class Newspack_Test_Content_Gate_API extends WP_UnitTestCase {
 	 * other gate, by the response code alone.
 	 */
 	public function test_the_stored_active_flag_is_read_only_for_a_caller_who_could_save_the_gate() {
-		$gate_id = Content_Gate::create_gate( [ 'title' => 'Active gate with nothing selected' ] );
-		Content_Gate::update_custom_access_settings(
-			$gate_id,
-			[
-				'active'       => true,
-				'access_rules' => [
-					[
-						[
-							'slug'  => 'institution',
-							'value' => [],
-						],
-					],
-				],
-			]
-		);
+		$gate_id = $this->create_gate_with_stored_institution_rule();
 		// No `active` key, so the guard has to fall back to the stored one.
 		$body = [
 			'custom_access' => [
@@ -580,5 +591,149 @@ class Newspack_Test_Content_Gate_API extends WP_UnitTestCase {
 			Content_Gate_API::sanitize_gate( $body, $this->gate_update_request( $gate_id ) ),
 			'A caller who cannot edit the gate must not learn its stored state from the response code; the request fails on permissions instead.'
 		);
+
+		// An Editor holds `edit_post` on a published gate — the routes require
+		// `manage_options`, and these reads have to require what the routes do.
+		wp_set_current_user( self::factory()->user->create( [ 'role' => 'editor' ] ) );
+		$this->assertNotWPError(
+			Content_Gate_API::sanitize_gate( $body, $this->gate_update_request( $gate_id ) ),
+			'A caller the route would refuse must not drive a read of the gate either.'
+		);
+	}
+
+	/**
+	 * A partial save carries only the settings it changes, and they are merged
+	 * over the stored ones — so a save that switches the gate on without
+	 * resending its rules puts the stored rules live. Judging only what the
+	 * payload names would leave the granting-everyone state one ordinary save
+	 * away.
+	 */
+	public function test_a_save_that_activates_the_gate_is_judged_against_the_rules_it_leaves_out() {
+		wp_set_current_user( self::factory()->user->create( [ 'role' => 'administrator' ] ) );
+		$gate_id = $this->create_gate_with_stored_institution_rule( false );
+
+		$refused = Content_Gate_API::sanitize_gate(
+			[
+				'status'        => 'publish',
+				'custom_access' => [ 'active' => true ],
+			],
+			$this->gate_update_request( $gate_id )
+		);
+		$this->assertWPError( $refused );
+		$this->assertSame( 'empty_access_rule_value', $refused->get_error_code() );
+
+		$this->assertNotWPError(
+			Content_Gate_API::sanitize_gate(
+				[
+					'status'        => 'draft',
+					'custom_access' => [ 'active' => true ],
+				],
+				$this->gate_update_request( $gate_id )
+			),
+			'A save that leaves the rules unenforced puts nothing live, and the operator may be on their way out of the state.'
+		);
+	}
+
+	/**
+	 * The same for a save that names no custom access section at all: publishing
+	 * the gate is enough to put the rules it stores live.
+	 */
+	public function test_publishing_a_gate_is_judged_against_the_rules_it_stores() {
+		wp_set_current_user( self::factory()->user->create( [ 'role' => 'administrator' ] ) );
+		$gate_id = $this->create_gate_with_stored_institution_rule();
+		wp_update_post(
+			[
+				'ID'          => $gate_id,
+				'post_status' => 'draft',
+			]
+		);
+
+		$refused = Content_Gate_API::sanitize_gate( [ 'status' => 'publish' ], $this->gate_update_request( $gate_id ) );
+		$this->assertWPError( $refused );
+		$this->assertSame( 'empty_access_rule_value', $refused->get_error_code() );
+	}
+
+	/**
+	 * A save that omits `status` isn't changing it, so the stored status is what
+	 * decides whether the rules end up enforced — and only a save that leaves
+	 * them unenforced may carry an already-invalid stored value back untouched.
+	 */
+	public function test_the_stored_status_decides_whether_a_save_leaves_the_rules_unenforced() {
+		wp_set_current_user( self::factory()->user->create( [ 'role' => 'administrator' ] ) );
+		$gate_id = $this->create_gate_with_invalid_stored_rule();
+		$body    = [ 'custom_access' => Content_Gate::get_gate( $gate_id )['custom_access'] ];
+
+		$this->assertWPError(
+			Content_Gate_API::sanitize_gate( $body, $this->gate_update_request( $gate_id ) ),
+			'The gate is published, so this save keeps its invalid rules enforced.'
+		);
+
+		wp_update_post(
+			[
+				'ID'          => $gate_id,
+				'post_status' => 'draft',
+			]
+		);
+		$this->assertNotWPError(
+			Content_Gate_API::sanitize_gate( $body, $this->gate_update_request( $gate_id ) ),
+			'The same save against a gate that is already out of service enforces nothing.'
+		);
+	}
+
+	/**
+	 * `empty_grants_access` is a property of the rule's callback, not of its
+	 * value's shape. A free-text rule left blank grants every reader just as an
+	 * options-backed one with nothing selected does.
+	 */
+	public function test_an_active_gate_may_not_leave_a_free_text_rule_that_grants_everyone_blank() {
+		$refused = Content_Gate_API::sanitize_gate(
+			[
+				'custom_access' => [
+					'active'       => true,
+					'access_rules' => [
+						[
+							[
+								'slug'  => 'email_domain',
+								'value' => '',
+							],
+						],
+					],
+				],
+			]
+		);
+		$this->assertWPError( $refused );
+		$this->assertSame( 'empty_access_rule_value', $refused->get_error_code() );
+	}
+
+	/**
+	 * Emptying the rule and taking the gate out of service in one save is still
+	 * refused — the value would grant everyone the moment the gate is live again
+	 * — but the refusal must not answer with "turn the rule off", which is what
+	 * that save was doing.
+	 */
+	public function test_the_refusal_is_worded_for_a_save_that_was_taking_the_gate_out_of_service() {
+		wp_set_current_user( self::factory()->user->create( [ 'role' => 'administrator' ] ) );
+		$institution_id = self::factory()->post->create( [ 'post_type' => Institution::POST_TYPE ] );
+		$gate_id        = $this->create_gate_with_stored_institution_rule( true, [ $institution_id ] );
+
+		$refused = Content_Gate_API::sanitize_gate(
+			[
+				'status'        => 'draft',
+				'custom_access' => [
+					'active'       => true,
+					'access_rules' => [
+						[
+							[
+								'slug'  => 'institution',
+								'value' => [],
+							],
+						],
+					],
+				],
+			],
+			$this->gate_update_request( $gate_id )
+		);
+		$this->assertWPError( $refused );
+		$this->assertStringContainsString( 'active again', $refused->get_error_message() );
 	}
 }

@@ -24,7 +24,16 @@ jest.mock( '../../../../../../packages/components/src', () => ( {
 		</div>
 	),
 } ) );
-jest.mock( '@wordpress/api-fetch', () => jest.fn( () => Promise.resolve( [] ) ) );
+// The control reads every page of the collection, so it asks for an unparsed
+// response and reads X-WP-TotalPages off it.
+jest.mock( '@wordpress/api-fetch', () =>
+	jest.fn( () =>
+		Promise.resolve( {
+			headers: { get: () => '1' },
+			json: () => Promise.resolve( [] ),
+		} )
+	)
+);
 
 // The control dispatches a notice when its options request fails, so the wizard
 // store has to exist for useDispatch() to resolve.

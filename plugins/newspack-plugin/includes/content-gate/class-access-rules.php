@@ -82,6 +82,12 @@ class Access_Rules {
 	 *                                        must provide one — Content_Gate_API delegates to it
 	 *                                        instead of the generic list/scalar sanitization.
 	 *     @type bool     $is_boolean         Whether the rule is a boolean rule.
+	 *     @type bool     $empty_grants_access
+	 *                                        Optional. Whether the rule's callback reads an empty
+	 *                                        value as "no constraint", so leaving it empty grants
+	 *                                        access to every reader. Defaults to false. A rule
+	 *                                        that declares it is refused a save while the gate is
+	 *                                        active and its value is empty.
 	 *     @type bool     $supports_anonymous Whether the rule's callback can evaluate access for
 	 *                                        a logged-out visitor (`user_id = 0`). Defaults to
 	 *                                        false — `evaluate_rule` short-circuits to false for
@@ -95,36 +101,40 @@ class Access_Rules {
 	 */
 	public static function register_rule( $config ) {
 		if ( ! isset( $config['id'] ) ) {
-			return new \WP_Error( 'invalid_rule_id', __( 'Rule ID is required.', 'newspack' ) );
+			return new \WP_Error( 'invalid_rule_id', __( 'Rule ID is required.', 'newspack-plugin' ) );
 		}
 		if ( isset( self::$rules[ $config['id'] ] ) ) {
-			return new \WP_Error( 'rule_already_registered', __( 'Rule already registered.', 'newspack' ) );
+			return new \WP_Error( 'rule_already_registered', __( 'Rule already registered.', 'newspack-plugin' ) );
 		}
 		if ( ! isset( $config['callback'] ) ) {
-			return new \WP_Error( 'invalid_rule_callback', __( 'Rule callback is required.', 'newspack' ) );
+			return new \WP_Error( 'invalid_rule_callback', __( 'Rule callback is required.', 'newspack-plugin' ) );
 		}
 		if ( ! is_callable( $config['callback'] ) ) {
-			return new \WP_Error( 'invalid_rule_callback', __( 'Rule callback is not callable.', 'newspack' ) );
+			return new \WP_Error( 'invalid_rule_callback', __( 'Rule callback is not callable.', 'newspack-plugin' ) );
 		}
-		$rule = wp_parse_args(
+		// Derived from what the registration declared — a callable source, or a
+		// populated list — unless it declares `has_options` itself. The *resolved*
+		// list can't serve as the discriminator, since a callable legitimately
+		// resolves to an empty list while no matching entities (institutions,
+		// subscription products) exist yet.
+		$has_options = $config['has_options'] ?? ! empty( $config['options'] );
+		$rule        = wp_parse_args(
 			$config,
 			[
 				'name'                => ucwords( str_replace( '_', ' ', $config['id'] ) ),
 				'description'         => '',
-				'default'             => ! empty( $config['options'] ) ? [] : '',
+				// The default has to hold the shape the rule takes, so it follows
+				// `has_options` rather than the options list: a rule declaring itself
+				// options-backed while its resolved list is still empty would otherwise
+				// seed the picker with `''`, which sanitization rejects.
+				'default'             => $has_options ? [] : '',
 				'options'             => [],
-				// Derived from what the registration declared — a callable source, or a
-				// populated list. The *resolved* list can't serve as the discriminator,
-				// since a callable legitimately resolves to an empty list while no
-				// matching entities (institutions, subscription products) exist yet.
-				'has_options'         => ! empty( $config['options'] ),
+				'has_options'         => $has_options,
 				'is_boolean'          => false,
-				// Whether an empty value means the rule imposes no constraint, so
-				// leaving it empty grants access to every reader. It is a property of
-				// the rule's callback, not of the value's shape: `institution` returns
-				// true when it names none, while `subscription` naming no product
-				// still requires *an* active subscription. Only a rule that declares
-				// this may be refused a save for holding an empty value.
+				// It is a property of the rule's callback, not of the value's shape:
+				// `institution` returns true when it names none, and so do the two
+				// free-text rules when left blank, while `subscription` naming no
+				// product still requires *an* active subscription.
 				'empty_grants_access' => false,
 			]
 		);
@@ -189,15 +199,17 @@ class Access_Rules {
 				'sanitize_callback' => [ __CLASS__, 'sanitize_one_time_purchase_value' ],
 			],
 			'email_domain'      => [
-				'name'        => __( 'Whitelisted email domain', 'newspack-plugin' ),
-				'description' => __( 'Only allow readers with specific email domains.', 'newspack-plugin' ),
-				'placeholder' => __( 'example.com,another.com', 'newspack-plugin' ),
-				'callback'    => [ __CLASS__, 'is_email_domain_whitelisted' ],
+				'name'                => __( 'Whitelisted email domain', 'newspack-plugin' ),
+				'description'         => __( 'Only allow readers with specific email domains.', 'newspack-plugin' ),
+				'placeholder'         => __( 'example.com,another.com', 'newspack-plugin' ),
+				'callback'            => [ __CLASS__, 'is_email_domain_whitelisted' ],
+				'empty_grants_access' => true,
 			],
 			'reader_data'       => [
-				'name'        => __( 'Reader data', 'newspack-plugin' ),
-				'description' => __( 'Set custom conditions based on reader data key/value pairs.', 'newspack-plugin' ),
-				'callback'    => [ __CLASS__, 'has_reader_data' ],
+				'name'                => __( 'Reader data', 'newspack-plugin' ),
+				'description'         => __( 'Set custom conditions based on reader data key/value pairs.', 'newspack-plugin' ),
+				'callback'            => [ __CLASS__, 'has_reader_data' ],
+				'empty_grants_access' => true,
 			],
 			'institution'       => [
 				'name'                => __( 'Institutional access', 'newspack-plugin' ),

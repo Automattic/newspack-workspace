@@ -4,7 +4,6 @@
 import { __, sprintf } from '@wordpress/i18n';
 import { useEffect, useState } from '@wordpress/element';
 import { useDispatch } from '@wordpress/data';
-import apiFetch from '@wordpress/api-fetch';
 import { TextControl } from '@wordpress/components';
 
 /**
@@ -12,7 +11,8 @@ import { TextControl } from '@wordpress/components';
  */
 import { FormTokenField } from '../../../../../../packages/components/src';
 import { WIZARD_STORE_NAMESPACE } from '../../../../../../packages/components/src/wizard/store';
-import { isMalformedAccessRuleValue } from '../utils';
+import { isMalformedAccessRuleValue, isUnconstrainedAccessRuleValue } from '../utils';
+import { fetchAllPages } from '../../../../../content-gate/utils/fetch-all-pages';
 import OneTimePurchaseRuleControl from '../../../../../content-gate/components/one-time-purchase-rule-control';
 
 type RuleOption = { value: string | number; label: string };
@@ -31,7 +31,7 @@ function dynamicRule< T >( config: DynamicRuleConfig< T > ): DynamicRuleConfig< 
  */
 const DYNAMIC_OPTION_RULES: Record< string, DynamicRuleConfig< any > > = {
 	institution: dynamicRule< Institution >( {
-		path: '/wp/v2/np_institution?per_page=100&context=edit',
+		path: '/wp/v2/np_institution?context=edit',
 		mapItem: item => ( { value: item.id, label: item.title.raw } ),
 	} ),
 };
@@ -50,7 +50,7 @@ function useRuleOptions( slug: string ) {
 			return;
 		}
 		let cancelled = false;
-		apiFetch< any[] >( { path: config.path } ) // eslint-disable-line @typescript-eslint/no-explicit-any
+		fetchAllPages< any >( config.path ) // eslint-disable-line @typescript-eslint/no-explicit-any
 			.then( items => {
 				if ( ! cancelled ) {
 					setOptions( items.map( config.mapItem ) );
@@ -108,19 +108,27 @@ export default function AccessRuleControl( { slug, value, onChange }: GateRuleCo
 		// choice that opens the gate. A rule that still constrains when empty —
 		// `subscription`, which then requires any active subscription — keeps a
 		// working picker.
-		const grantsAllWhenEmpty = !! rule.empty_grants_access;
-		const nothingToSelectNotice =
-			! malformedValueNotice && grantsAllWhenEmpty && 0 === options.length
-				? __(
-						'This rule has nothing to select yet, so it grants access to everyone. Add the items it selects, or turn the rule off.',
-						'newspack-plugin'
-				  )
-				: undefined;
+		const hasNothingToSelect = !! rule.empty_grants_access && 0 === options.length;
+		// The same state with something to pick is the operator's to fix, so the
+		// picker stays usable and only says what the value does today. The save is
+		// refused while it stands, and a notice here is what stops that being the
+		// first they hear of it.
+		const grantsEveryoneNotice = hasNothingToSelect
+			? __(
+					'This rule has nothing to select yet, so it grants access to everyone. Add the items it selects, or turn the rule off.',
+					'newspack-plugin'
+			  )
+			: __(
+					'Nothing is selected, so this rule grants access to everyone. Select at least one option, or turn the rule off.',
+					'newspack-plugin'
+			  );
+		const unconstrainedNotice =
+			! malformedValueNotice && ( hasNothingToSelect || isUnconstrainedAccessRuleValue( rule, value ) ) ? grantsEveryoneNotice : undefined;
 		return (
 			<FormTokenField
 				label={ '' }
-				disabled={ grantsAllWhenEmpty && 0 === options.length }
-				description={ malformedValueNotice ?? nothingToSelectNotice }
+				disabled={ hasNothingToSelect }
+				description={ malformedValueNotice ?? unconstrainedNotice }
 				value={ options.filter( o => valueArr.some( v => String( v ) === String( o.value ) ) ).map( o => o.label ) }
 				onChange={ ( items: string[] ) => onChange( options.filter( o => items.includes( o.label ) ).map( o => o.value ) ) }
 				suggestions={ options.map( o => o.label ) }
@@ -133,7 +141,11 @@ export default function AccessRuleControl( { slug, value, onChange }: GateRuleCo
 		<TextControl
 			hideLabelFromVision
 			label={ rule.name }
-			help={ __( 'Separate with commas.', 'newspack-plugin' ) }
+			help={
+				isUnconstrainedAccessRuleValue( rule, value )
+					? __( 'Left empty, this rule grants access to everyone. Enter at least one value, or turn the rule off.', 'newspack-plugin' )
+					: __( 'Separate with commas.', 'newspack-plugin' )
+			}
 			value={ value as string }
 			onChange={ onChange }
 			__next40pxDefaultSize

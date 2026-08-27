@@ -543,7 +543,7 @@ class Audience_Content_Gates extends Wizard {
 	 * @return \WP_REST_Response|\WP_Error
 	 */
 	public function delete_gate( $request ) {
-		$id = $request->get_param( 'id' );
+		$id = Content_Gate_API::get_route_gate_id( $request );
 		$gate = get_post( $id );
 		if ( ! $gate ) {
 			return new \WP_Error( 'invalid_gate_id', __( 'Invalid gate ID.', 'newspack-plugin' ), [ 'status' => 400 ] );
@@ -563,7 +563,7 @@ class Audience_Content_Gates extends Wizard {
 	 * @return \WP_REST_Response|\WP_Error
 	 */
 	public function api_duplicate_gate( $request ) {
-		$id   = $request->get_param( 'id' );
+		$id   = Content_Gate_API::get_route_gate_id( $request );
 		$gate = get_post( $id );
 		if ( ! $gate ) {
 			return new \WP_Error( 'invalid_gate_id', __( 'Invalid gate ID.', 'newspack-plugin' ), [ 'status' => 400 ] );
@@ -591,7 +591,7 @@ class Audience_Content_Gates extends Wizard {
 	 * @return \WP_REST_Response|\WP_Error
 	 */
 	public function update_gate( $request ) {
-		$gate = Content_Gate::update_gate_settings( $request->get_param( 'id' ), $request->get_param( 'gate' ) );
+		$gate = Content_Gate::update_gate_settings( Content_Gate_API::get_route_gate_id( $request ), $request->get_param( 'gate' ) );
 		if ( is_wp_error( $gate ) ) {
 			return $gate;
 		}

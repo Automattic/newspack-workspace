@@ -12,7 +12,7 @@ import { __, _n, sprintf } from '@wordpress/i18n';
  * Internal dependencies.
  */
 import ContentRuleControl from './edit/content-rule-control';
-import { isMalformedAccessRuleValue } from './utils';
+import { isMalformedAccessRuleValue, isUnconstrainedAccessRuleValue } from './utils';
 import { normalizeOneTimePurchaseValue } from '../../../../content-gate/components/one-time-purchase-rule-control';
 
 const availableAccessRules = window.newspackAudienceContentGates.available_access_rules || {};
@@ -68,6 +68,11 @@ const formatAccessRuleValue = ( rule: GateAccessRule ): string => {
 			__( '%s (invalid value, grants no access)', 'newspack-plugin' ),
 			String( rule.value )
 		);
+	}
+	// A rule left empty renders as a blank condition, which is indistinguishable
+	// from a narrow one — while it is the state that lets every reader through.
+	if ( isUnconstrainedAccessRuleValue( config, rule.value ) ) {
+		return __( 'Not set (grants access to everyone)', 'newspack-plugin' );
 	}
 	if ( Array.isArray( rule.value ) && config?.options ) {
 		return getOptionLabels( rule.value, config.options );

@@ -1,7 +1,7 @@
 /**
  * Internal dependencies
  */
-import { getGateStatusBadgeIntent, isGateMetered, isMalformedAccessRuleValue } from './utils';
+import { getGateStatusBadgeIntent, isGateMetered, isMalformedAccessRuleValue, isUnconstrainedAccessRuleValue } from './utils';
 
 /**
  * `isGateMetered` decides whether the wizard offers metering-dependent features (the
@@ -89,7 +89,43 @@ describe( 'isMalformedAccessRuleValue', () => {
 		expect( isMalformedAccessRuleValue( freeText, 'example.com' ) ).toBe( false );
 	} );
 
+	it( 'reads an unset value as not configured rather than malformed', () => {
+		// An unset value is not a shape the rule can't use: `Institution::evaluate()`
+		// reads it as "not configured" and grants every reader, so calling it
+		// malformed would tell the operator the rule denies everyone at the moment
+		// it grants everyone.
+		expect( isMalformedAccessRuleValue( optionsBacked, '' ) ).toBe( false );
+		expect( isMalformedAccessRuleValue( optionsBacked, null ) ).toBe( false );
+	} );
+
 	it( 'leaves boolean rules alone, which carry no value to judge', () => {
 		expect( isMalformedAccessRuleValue( { name: 'Has donated', is_boolean: true, has_options: false }, true ) ).toBe( false );
+	} );
+} );
+
+/**
+ * The state the ticket is about: a rule that imposes no constraint lets every
+ * reader through, so the wizard has to say so rather than render a blank
+ * condition (NPPD-2143).
+ */
+describe( 'isUnconstrainedAccessRuleValue', () => {
+	const institution = { name: 'Institutional access', has_options: true, empty_grants_access: true };
+	const emailDomain = { name: 'Whitelisted email domain', has_options: false, empty_grants_access: true };
+	const subscription = { name: 'Active subscription', has_options: true };
+
+	it( 'reads the empty value of a rule that grants everyone when empty', () => {
+		expect( isUnconstrainedAccessRuleValue( institution, [] ) ).toBe( true );
+		expect( isUnconstrainedAccessRuleValue( institution, '' ) ).toBe( true );
+		expect( isUnconstrainedAccessRuleValue( emailDomain, '' ) ).toBe( true );
+	} );
+
+	it( 'leaves a populated rule alone', () => {
+		expect( isUnconstrainedAccessRuleValue( institution, [ 12 ] ) ).toBe( false );
+		expect( isUnconstrainedAccessRuleValue( emailDomain, 'example.com' ) ).toBe( false );
+	} );
+
+	it( 'is not about emptiness alone: a rule that still constrains when empty is a configuration', () => {
+		// `subscription` naming no product requires any active subscription.
+		expect( isUnconstrainedAccessRuleValue( subscription, [] ) ).toBe( false );
 	} );
 } );

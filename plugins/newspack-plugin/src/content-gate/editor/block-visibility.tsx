@@ -17,13 +17,13 @@ import {
 	__experimentalToggleGroupControlOption as ToggleGroupControlOption,
 } from '@wordpress/components';
 import { useState, useEffect } from '@wordpress/element';
-import apiFetch from '@wordpress/api-fetch';
 import { __ } from '@wordpress/i18n';
 
 /**
  * Internal dependencies
  */
 import './block-visibility.scss';
+import { fetchAllPages } from '../utils/fetch-all-pages';
 import OneTimePurchaseRuleControl from '../components/one-time-purchase-rule-control';
 
 /**
@@ -146,7 +146,7 @@ const GateControls = ( { gateIds, onChange }: { gateIds: number[]; onChange: ( i
  */
 const DYNAMIC_OPTION_RULES: Record< string, { path: string; mapItem: ( item: DynamicOptionItem ) => AccessRuleOption } > = {
 	institution: {
-		path: '/wp/v2/np_institution?per_page=100&context=edit',
+		path: '/wp/v2/np_institution?context=edit',
 		mapItem: ( item: DynamicOptionItem ) => ( { value: item.id, label: item.title.raw } ),
 	},
 };
@@ -155,7 +155,7 @@ const DYNAMIC_OPTION_RULES: Record< string, { path: string; mapItem: ( item: Dyn
  * Value control for a single access rule.
  * Renders FormTokenField for rules with options, TextControl for free-text rules.
  */
-const AccessRuleValueControl = ( {
+export const AccessRuleValueControl = ( {
 	slug,
 	config,
 	value,
@@ -176,7 +176,7 @@ const AccessRuleValueControl = ( {
 			return;
 		}
 		let cancelled = false;
-		apiFetch< DynamicOptionItem[] >( { path: dynamicConfig.path } )
+		fetchAllPages< DynamicOptionItem >( dynamicConfig.path )
 			.then( items => {
 				if ( ! cancelled ) {
 					setOptions( items.map( dynamicConfig.mapItem ) );
@@ -206,6 +206,11 @@ const AccessRuleValueControl = ( {
 		// then requires any active subscription — keeps a working picker. This
 		// control takes no help text of its own, so the reason goes in a sibling.
 		const hasNothingToSelect = !! config.empty_grants_access && 0 === options.length;
+		// The same state with something to pick stays usable: the operator can fix it
+		// here, and the notice is what tells them it needs fixing. A populated value
+		// of the wrong shape is the opposite state — the rule then denies every
+		// reader — so it is read off `value` rather than off the mapped list.
+		const grantsEveryone = !! config.empty_grants_access && ( Array.isArray( value ) ? 0 === value.length : ! value );
 		return (
 			<>
 				<FormTokenField
@@ -221,12 +226,17 @@ const AccessRuleValueControl = ( {
 					__next40pxDefaultSize
 					__nextHasNoMarginBottom
 				/>
-				{ hasNothingToSelect && (
+				{ grantsEveryone && (
 					<p className="components-base-control__help">
-						{ __(
-							'This rule has nothing to select yet, so it grants access to everyone. Add the items it selects, or turn the rule off.',
-							'newspack-plugin'
-						) }
+						{ hasNothingToSelect
+							? __(
+									'This rule has nothing to select yet, so it grants access to everyone. Add the items it selects, or turn the rule off.',
+									'newspack-plugin'
+							  )
+							: __(
+									'Nothing is selected, so this rule grants access to everyone. Select at least one option, or turn the rule off.',
+									'newspack-plugin'
+							  ) }
 					</p>
 				) }
 			</>
@@ -238,7 +248,11 @@ const AccessRuleValueControl = ( {
 			hideLabelFromVision
 			label={ config.name }
 			placeholder={ config.placeholder ?? '' }
-			help={ __( 'Separate with commas.', 'newspack-plugin' ) }
+			help={
+				config.empty_grants_access && ! value
+					? __( 'Left empty, this rule grants access to everyone. Enter at least one value, or turn the rule off.', 'newspack-plugin' )
+					: __( 'Separate with commas.', 'newspack-plugin' )
+			}
 			value={ typeof value === 'string' ? value : '' }
 			onChange={ onChange as ( value: string ) => void }
 			__next40pxDefaultSize
