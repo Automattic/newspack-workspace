@@ -462,10 +462,10 @@ class Incoming_Post {
 			}
 		}
 
-		// The thumbnail URL comes from the peer's payload and is fetched server-side. Core's
-		// wp_safe_remote_get blocks RFC1918 and loopback but not the 169.254.0.0/16
-		// cloud-metadata range, so refuse any URL that resolves into a private or reserved
-		// range before making the request (SSRF).
+		// The thumbnail URL comes from the peer's payload and is fetched server-side.
+		// Network::is_safe_sideload_url() is the authoritative gate and its docblock carries
+		// the reasoning; this pre-check exists so a refusal gets a message naming the post,
+		// and sideload_peer_image() refuses again on its own regardless.
 		if ( ! Network::is_safe_sideload_url( $thumbnail_url ) ) {
 			self::log( 'Featured image URL is not a valid external URL, skipping sideload for post ' . $this->ID );
 			return;
