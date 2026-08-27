@@ -12,6 +12,11 @@
 	font-size: var(--newspack-theme-font-size-xs);
 	margin: 0 0 #{0.75 * structure.$size__spacing-unit};
 	position: relative;
+	// Where a category is plain text, wrapped rows can touch without showing it.
+	// A label always has a background, so its rows need separating. This sits on
+	// the container rather than the chips: a bottom margin would also hang below
+	// the last row, which is why the block contexts zero one out.
+	row-gap: #{0.25 * structure.$size__spacing-unit};
 
 	a,
 	a:visited {
