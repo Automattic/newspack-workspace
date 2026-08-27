@@ -441,7 +441,9 @@ class Perfmatters {
 		// Like the lite-site veto above, this holds even under
 		// NEWSPACK_IGNORE_PERFMATTERS_DEFAULTS: it is a functional requirement of
 		// the page, not a configuration default.
-		if ( class_exists( 'Newspack\Content_Gate\IP_Access_Rule' ) && Content_Gate\IP_Access_Rule::is_landing_page_request() ) {
+		// No autoload: the class self-initializes on load, and it is only ever
+		// loaded deliberately, when content gates are enabled.
+		if ( class_exists( 'Newspack\Content_Gate\IP_Access_Rule', false ) && Content_Gate\IP_Access_Rule::is_landing_page_request() ) {
 			return false;
 		}
 		return $delay_js;

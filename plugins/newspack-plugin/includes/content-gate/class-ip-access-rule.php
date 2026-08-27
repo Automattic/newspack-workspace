@@ -512,13 +512,6 @@ class IP_Access_Rule {
 			return;
 		}
 
-		// Both legitimate flows set the bypass cookie before redirecting here,
-		// so a success param without it is a shared or hand-crafted URL — it
-		// must not inject a `connected` event into the publisher's data.
-		if ( 'success' === $result && ! self::is_cookie_set() ) {
-			return;
-		}
-
 		$payload = [
 			'action' => 'success' === $result ? 'connected' : 'not_verified',
 		];
@@ -528,6 +521,13 @@ class IP_Access_Rule {
 		$institution_id = isset( $_GET['institution-id'] ) ? absint( $_GET['institution-id'] ) : 0; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
 		if ( $institution_id ) {
 			$payload['institution'] = 'Institution ' . $institution_id;
+		}
+		// Both legitimate flows set the bypass cookie before redirecting here,
+		// so a success param without it is a shared or hand-crafted URL — it
+		// must not inject a `connected` event into the publisher's data. The
+		// URL cleanup below still runs, so the params don't stick around.
+		if ( 'success' === $result && ! self::is_cookie_set() ) {
+			$payload = null;
 		}
 		?>
 		<script>
@@ -541,6 +541,9 @@ class IP_Access_Rule {
 					url.searchParams.delete( param );
 				} );
 				window.history.replaceState( window.history.state, '', url.toString() );
+			}
+			if ( ! payload ) {
+				return;
 			}
 			var tries = 0;
 			( function send() {

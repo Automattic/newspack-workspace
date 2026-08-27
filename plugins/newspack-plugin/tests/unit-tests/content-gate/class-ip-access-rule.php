@@ -1231,11 +1231,14 @@ class Newspack_Test_IP_Access_Rule extends WP_UnitTestCase {
 		$this->assertNotFalse( has_action( 'wp_footer', [ IP_Access_Rule::class, 'print_result_event' ] ) );
 
 		// Without the bypass cookie the success param is a shared or
-		// hand-crafted URL, and no event may be injected from it.
+		// hand-crafted URL: no event may be injected from it, but the URL
+		// cleanup still runs so the params don't survive reloads.
 		unset( $_COOKIE[ IP_Access_Rule::COOKIE_NAME ] ); // phpcs:ignore WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___COOKIE
 		ob_start();
 		IP_Access_Rule::print_result_event();
-		$this->assertSame( '', ob_get_clean() );
+		$gated_script = ob_get_clean();
+		$this->assertStringContainsString( 'var payload = null', $gated_script, 'No connected event without the bypass cookie.' );
+		$this->assertStringContainsString( 'replaceState', $gated_script, 'URL cleanup runs even when the event is withheld.' );
 
 		$_COOKIE[ IP_Access_Rule::COOKIE_NAME ] = '1'; // phpcs:ignore WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___COOKIE
 		ob_start();
