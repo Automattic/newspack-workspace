@@ -12,6 +12,7 @@ import { __ } from '@wordpress/i18n';
  * Internal dependencies
  */
 import { CardFeature, Router } from '../../../../../packages/components/src';
+import type { CardBadge } from '../../../../../packages/components/src/types';
 
 const { useHistory } = Router;
 
@@ -23,11 +24,10 @@ type SettingsCardProps = {
 	requirements?: string;
 	/** Omit for a setting that is always on and only ever configured, such as metering. */
 	toggleEnabled?: () => void;
-	badgeText?: string;
-	badgeLevel?: 'default' | 'info' | 'success' | 'warning' | 'error';
+	badge?: CardBadge;
 };
 
-const SettingsCard = ( { title, description, enabled, requirements, toggleEnabled, href = '', badgeText, badgeLevel }: SettingsCardProps ) => {
+const SettingsCard = ( { title, description, enabled, requirements, toggleEnabled, href = '', badge }: SettingsCardProps ) => {
 	const history = useHistory();
 	const configure = () => history.push( href );
 
@@ -42,8 +42,7 @@ const SettingsCard = ( { title, description, enabled, requirements, toggleEnable
 			enableLabel={ toggleEnabled ? undefined : __( 'Configure', 'newspack-plugin' ) }
 			onEnable={ toggleEnabled || configure }
 			onConfigure={ configure }
-			badgeText={ badgeText }
-			badgeLevel={ badgeLevel }
+			badge={ badge }
 			moreControls={
 				toggleEnabled
 					? [
