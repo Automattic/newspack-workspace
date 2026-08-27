@@ -232,4 +232,78 @@ class Newspack_Test_Perfmatters extends WP_UnitTestCase {
 		);
 		$this->assertContains( 'plugins/complianz-gdpr', $options['assets']['rucss_excluded_stylesheets'] );
 	}
+
+	/**
+	 * Perfmatters decides whether to delay a stylesheet by substring-matching each
+	 * exclusion entry against the whole `<link>` tag (Perfmatters CSS.php, via
+	 * Utilities::match_in_array/stripos). Asserting an entry is merely *present* in
+	 * the list — as an assertContains check does — cannot tell whether it still
+	 * matches anything Jetpack actually serves: NPPM-3167 sat broken across the
+	 * fleet for four months because `_inc/social-logos` stopped matching when
+	 * Jetpack 15.7 relocated the file to `_inc/build/social-logos/`, and no test
+	 * noticed. These tests run the real matcher against the tag shapes Jetpack
+	 * emits, so narrowing or dropping an entry fails here rather than on a
+	 * publisher's homepage.
+	 *
+	 * @param string $tag   Full stylesheet link tag as WordPress would emit it.
+	 * @param string $label Human-readable description used in the failure message.
+	 *
+	 * @dataProvider jetpack_share_stylesheet_tags
+	 */
+	public function test_jetpack_share_stylesheets_match_an_exclusion_entry( $tag, $label ) {
+		$exclusions = Perfmatters::add_rucss_excluded_stylesheets( [] );
+
+		$this->assertNotEmpty( $exclusions, 'The defaults must supply exclusion entries.' );
+
+		foreach ( $exclusions as $entry ) {
+			if ( '' !== $entry && false !== stripos( $tag, $entry ) ) {
+				return;
+			}
+		}
+
+		$this->fail(
+			sprintf(
+				'No RUCSS exclusion entry matches %s, so Perfmatters will delay it until the reader interacts with the page. Tag: %s',
+				$label,
+				$tag
+			)
+		);
+	}
+
+	/**
+	 * Both asset URL shapes Jetpack can emit for its share-button styles.
+	 *
+	 * The CDN variants are what Jetpack's Asset CDN ("Speed up static file load
+	 * times") serves, and they drop the `plugins/jetpack/` segment entirely — which
+	 * is why an exclusion entry carrying that prefix silently stops matching the
+	 * moment a publisher enables the setting. `c0.wp.com` is the CDN's real host and
+	 * has to stay real for these rows to mean anything; the site host and the version
+	 * numbers are invented.
+	 *
+	 * @return array<string, array{0: string, 1: string}>
+	 */
+	public function jetpack_share_stylesheet_tags() {
+		$tag = function ( $handle, $href ) {
+			return sprintf( "<link rel='stylesheet' id='%s' href='%s' media='all' />", $handle, $href );
+		};
+
+		return [
+			'social logos, served from the plugin directory' => [
+				$tag( 'social-logos-css', 'https://example.test/wp-content/plugins/jetpack/_inc/build/social-logos/social-logos.css?ver=16.2' ),
+				"Jetpack's social logos CSS served from the plugin directory",
+			],
+			'social logos, served from the Jetpack CDN'  => [
+				$tag( 'social-logos-css', 'https://c0.wp.com/p/jetpack/16.2/_inc/build/social-logos/social-logos.css' ),
+				"Jetpack's social logos CSS served from the Jetpack CDN",
+			],
+			'share buttons, served from the plugin directory' => [
+				$tag( 'sharedaddy-css', 'https://example.test/wp-content/plugins/jetpack/modules/sharedaddy/sharing.css?ver=16.2' ),
+				"Jetpack's share button CSS served from the plugin directory",
+			],
+			'share buttons, served from the Jetpack CDN' => [
+				$tag( 'sharedaddy-css', 'https://c0.wp.com/p/jetpack/16.2/modules/sharedaddy/sharing.css' ),
+				"Jetpack's share button CSS served from the Jetpack CDN",
+			],
+		];
+	}
 }
