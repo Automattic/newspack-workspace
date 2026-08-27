@@ -13,6 +13,7 @@ namespace Newspack\Wizards\Newspack;
 
 use Newspack\Optional_Modules;
 use Newspack\Optional_Modules\InDesign_Exporter;
+use Newspack\Optional_Modules\InDesign_Export\InDesign_Converter;
 use WP_REST_Server;
 
 /**
@@ -90,7 +91,7 @@ class Print_Section extends Wizard_Section {
 
 		$has_platform_param = $request->has_param( 'indesign_platform' );
 		$platform           = $has_platform_param ? $request->get_param( 'indesign_platform' ) : null;
-		if ( $has_platform_param && ! in_array( $platform, InDesign_Exporter::ALLOWED_PLATFORMS, true ) ) {
+		if ( $has_platform_param && ( ! is_string( $platform ) || ! isset( InDesign_Converter::FORMATS[ $platform ] ) ) ) {
 			return new \WP_Error( 'invalid_param', __( 'Invalid parameter for indesign_platform.', 'newspack-plugin' ), [ 'status' => 400 ] );
 		}
 

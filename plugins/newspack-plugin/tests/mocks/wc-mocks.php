@@ -608,17 +608,49 @@ class WC_Product {
 	public function get_parent_id() {
 		return $this->data['parent_id'] ?? 0;
 	}
+	/**
+	 * WC_Product_Variation resolves its permalink through the parent, whose page
+	 * is the only one a reader can buy from — the variation post has none. Code
+	 * that links a product goes through here rather than get_permalink( $id ),
+	 * so the mock has to model that or a test would see a URL production never
+	 * emits.
+	 *
+	 * @return string
+	 */
+	public function get_permalink() {
+		$parent_id = $this->get_parent_id();
+		return get_permalink( $parent_id ? $parent_id : $this->get_id() );
+	}
 	public function get_children() {
 		return $this->data['children'] ?? [];
 	}
 	public function get_regular_price() {
 		return $this->data['regular_price'] ?? ( $this->meta['_regular_price'] ?? 0 );
 	}
+	/**
+	 * Price reads apply their WooCommerce filters, as WC_Data::get_prop() does
+	 * in `view` context. Without this, code that filters a price and code that
+	 * reads one can disagree with no test able to see it.
+	 */
 	public function get_price() {
-		return $this->data['price'] ?? ( $this->meta['_price'] ?? $this->get_regular_price() );
+		$price = $this->data['price'] ?? ( $this->meta['_price'] ?? $this->get_regular_price() );
+		return apply_filters( 'woocommerce_product_get_price', $price, $this );
 	}
 	public function set_price( $price ) {
 		$this->data['price'] = $price;
+	}
+	public function get_sale_price() {
+		$sale_price = $this->data['sale_price'] ?? ( $this->meta['_sale_price'] ?? '' );
+		return apply_filters( 'woocommerce_product_get_sale_price', $sale_price, $this );
+	}
+	/**
+	 * Mirrors WC_Product::is_on_sale() — a sale price is set and undercuts the
+	 * regular price.
+	 */
+	public function is_on_sale() {
+		$sale_price = $this->get_sale_price();
+		$on_sale    = '' !== (string) $sale_price && (float) $this->get_regular_price() > (float) $sale_price;
+		return apply_filters( 'woocommerce_product_is_on_sale', $on_sale, $this );
 	}
 	public function get_meta( $key, $single = true ) {
 		return $this->meta[ $key ] ?? '';
@@ -658,9 +690,14 @@ if ( ! class_exists( 'WC_Subscriptions_Cart' ) ) {
 }
 
 /**
+ * The post statuses `WC_Product_Query` searches when a query passes no `status`.
+ */
+const WC_PRODUCT_QUERY_DEFAULT_STATUSES = [ 'draft', 'pending', 'private', 'publish' ];
+
+/**
  * Register a mock product in the global products database.
  *
- * @param array $data Product data including 'id', 'children', 'type', 'name', 'price'.
+ * @param array $data Product data including 'id', 'type', 'name', 'status', 'price', 'children'.
  * @return WC_Product
  */
 function wc_create_mock_product( $data = [] ) {
@@ -668,6 +705,68 @@ function wc_create_mock_product( $data = [] ) {
 	$product = new WC_Product( $data );
 	$products_database[ $product->get_id() ] = $product;
 	return $product;
+}
+
+/**
+ * Query the mock products database.
+ *
+ * Supports the arguments Newspack's callers actually pass: `type` (one type or a list of
+ * them), `status`, `limit` and `return`. Registration order stands in for real
+ * WooCommerce's ordering, which none of the callers depend on. Any other filtering
+ * argument is fatal rather than ignored: this mock is defined unconditionally, so a
+ * caller silently getting an unfiltered result is a test that passes for the wrong reason.
+ *
+ * Omitting `status` is not "no status filter": `WC_Product_Query` defaults it to draft,
+ * pending, private and publish, and callers rely on that default — the access-rule
+ * subscription picker lists a drafted product deliberately, because readers still hold
+ * subscriptions to it. Applying the same default here is what lets a test tell that
+ * behaviour apart from a mock that never filtered.
+ *
+ * Arguments real WooCommerce discards are the exception — neither a `WC_Product_Query`
+ * default var nor a mapped meta key, so ignoring one is what production does too.
+ *
+ * @param array $args Query args.
+ * @return WC_Product[]|int[] Matching products, or their IDs with `return => 'ids'`.
+ * @throws InvalidArgumentException When passed a filtering argument the mock does not implement.
+ */
+function wc_get_products( $args = [] ) {
+	global $products_database;
+	// Not every consumer of this file registers a product, and the mock is defined
+	// unconditionally, so the global may still be unset when a caller lands here.
+	$products_database = $products_database ?? [];
+	$supported         = [ 'type', 'status', 'limit', 'return' ];
+	// Passed by Donations, discarded by WooCommerce.
+	$inert             = [ 'only_get_newspack_subscriptions' ];
+	$unknown           = array_diff( array_keys( $args ), $supported, $inert );
+	if ( ! empty( $unknown ) ) {
+		throw new InvalidArgumentException(
+			esc_html( 'wc_get_products mock does not implement: ' . implode( ', ', $unknown ) . '. Add it to tests/mocks/wc-mocks.php.' )
+		);
+	}
+	$types    = isset( $args['type'] ) ? (array) $args['type'] : [];
+	$statuses = isset( $args['status'] ) ? (array) $args['status'] : WC_PRODUCT_QUERY_DEFAULT_STATUSES;
+	$products = array_values(
+		array_filter(
+			$products_database,
+			function ( $product ) use ( $types, $statuses ) {
+				if ( ! empty( $types ) && ! $product->is_type( $types ) ) {
+					return false;
+				}
+				return in_array( $product->get_status(), $statuses, true );
+			}
+		)
+	);
+	$limit    = isset( $args['limit'] ) ? (int) $args['limit'] : -1;
+	$products = $limit > 0 ? array_slice( $products, 0, $limit ) : $products;
+	if ( isset( $args['return'] ) && 'ids' === $args['return'] ) {
+		return array_map(
+			function ( $product ) {
+				return $product->get_id();
+			},
+			$products
+		);
+	}
+	return $products;
 }
 
 class WC_Order {
@@ -1406,6 +1505,22 @@ function wc_create_order( $data ) {
 function wc_get_checkout_url() {
 	return 'https://example.com/checkout';
 }
+// Guarded, unlike the rest of this file: these two names are also declared by
+// tests/unit-tests/my-account.php and the group-subscription my-account tests.
+// Nothing is broken today only because include order happens to reach this file
+// first; a new file declaring either name at file scope and sorting earlier
+// would fatal the suite on redeclare.
+if ( ! function_exists( 'wc_get_page_permalink' ) ) {
+	function wc_get_page_permalink( $page ) {
+		return 'https://example.com/' . $page;
+	}
+}
+if ( ! function_exists( 'wc_get_endpoint_url' ) ) {
+	function wc_get_endpoint_url( $endpoint, $value = '', $permalink = '' ) {
+		$permalink = $permalink ? $permalink : 'https://example.com/';
+		return \trailingslashit( $permalink ) . $endpoint . ( $value ? '/' . $value : '' );
+	}
+}
 function wcs_is_subscription( $order ) {
 	global $subscriptions_database;
 	// Mirror real WooCommerce Subscriptions: only an actual WC_Subscription object
@@ -1759,35 +1874,6 @@ if ( ! function_exists( 'get_woocommerce_currency' ) ) {
 	function get_woocommerce_currency() {
 		return 'USD';
 	}
-}
-/**
- * Minimal WC_Product_Query stand-in: filters $products_database on `type` and `status`.
- *
- * Type matching goes through is_type() so a `subscription_variation` answers to
- * `variation`, like the real product classes. The `status` default reproduces
- * WC_Product_Query's own default ( draft, pending, private, publish ), which is what a
- * caller that omits `status` actually gets — the property the CLI's
- * SELECTABLE_PRODUCT_STATUSES constant claims to mirror. `limit` is accepted and ignored
- * (fixtures are small).
- *
- * @param array $args Query args.
- * @return WC_Product[] The matching products.
- */
-function wc_get_products( $args = [] ) {
-	global $products_database;
-	$types    = isset( $args['type'] ) ? (array) $args['type'] : [];
-	$statuses = isset( $args['status'] ) ? (array) $args['status'] : [ 'draft', 'pending', 'private', 'publish' ];
-	$matches  = [];
-	foreach ( $products_database as $product ) {
-		if ( $types && ! $product->is_type( $types ) ) {
-			continue;
-		}
-		if ( ! in_array( $product->get_status(), $statuses, true ) ) {
-			continue;
-		}
-		$matches[] = $product;
-	}
-	return $matches;
 }
 /**
  * Minimal stand-in for WooCommerce's admin field renderer. Only enough markup to let a metabox

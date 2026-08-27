@@ -24,6 +24,28 @@ class Access_Rules {
 	private static $rules = [];
 
 	/**
+	 * Request-scoped memo for the subscription product options.
+	 *
+	 * Building the list costs a full-catalog product query plus a variation query, and
+	 * `get_access_rules()` resolves every registered rule's options callback on every
+	 * call. It is public and several admin screens localize it, so a request that reaches
+	 * it more than once pays that cost once.
+	 *
+	 * @var array|null
+	 */
+	private static $subscription_products_options = null;
+
+	/**
+	 * Request-scoped memo for the one-time purchase product options.
+	 *
+	 * Same reasoning as {@see self::$subscription_products_options}, over a shop's whole
+	 * simple/variable catalog.
+	 *
+	 * @var array|null
+	 */
+	private static $one_time_purchase_products_options = null;
+
+	/**
 	 * Valid duration units for the one-time purchase rule.
 	 *
 	 * @var array
@@ -458,9 +480,35 @@ class Access_Rules {
 	/**
 	 * Get subscriptions eligible for access rules.
 	 *
-	 * @return array Active subscription IDs.
+	 * Variations of a variable subscription are listed alongside their parent, because the
+	 * rule evaluates them: `WC_Subscription::has_product()` matches a line item's
+	 * `variation_id` as well as its `product_id`. Selecting the parent therefore grants
+	 * access to subscribers of any of its variations, while selecting a single variation
+	 * narrows the rule to that one — gating on the annual tier of a variable subscription
+	 * but not the monthly, say. Without the variations listed, that narrower rule can be
+	 * held by a gate (migrated data carries variation IDs) but never configured or read
+	 * back in the editor.
+	 *
+	 * Unpublished products are listed too — `wc_get_products()` defaults to draft, pending,
+	 * private and publish. Unlike institutions, whose options are published-only, a
+	 * subscription to a product the publisher has since drafted still evaluates: the line
+	 * item is what the rule matches, and it does not stop existing when the product is
+	 * unpublished. Hiding those products would make the readers still paying for them
+	 * ungateable. Variations narrow that set to publish and private, which is not a
+	 * different policy but the same one: WooCommerce reads a variable product's children
+	 * as `post_status IN ( 'publish', 'private' )`, so draft is not a state its own admin
+	 * produces for a variation, and nothing can have been bought in it.
+	 *
+	 * The result is memoized per request. The list itself is still unbounded and is
+	 * serialized into every editor payload; NPPD-2132 replaces it with a searchable
+	 * picker, which is what removes that cost rather than deferring it.
+	 *
+	 * @return array Array of [ 'label' => string, 'value' => int ].
 	 */
 	public static function get_subscription_products_options() {
+		if ( null !== self::$subscription_products_options ) {
+			return self::$subscription_products_options;
+		}
 		if ( ! function_exists( 'wc_get_products' ) ) {
 			return [];
 		}
@@ -470,14 +518,131 @@ class Access_Rules {
 				'limit' => -1,
 			]
 		);
-		$options = [];
+		$variations_by_parent = self::get_subscription_variation_posts( $products );
+		$options              = [];
 		foreach ( $products as $product ) {
 			$options[] = [
 				'label' => $product->get_name(),
 				'value' => $product->get_id(),
 			];
+			foreach ( $variations_by_parent[ $product->get_id() ] ?? [] as $variation ) {
+				$options[] = [
+					'label' => self::get_variation_option_label( $product->get_name(), $variation ),
+					'value' => $variation->ID,
+				];
+			}
 		}
+		self::$subscription_products_options = $options;
 		return $options;
+	}
+
+	/**
+	 * Flush the request-scoped product options memos.
+	 *
+	 * For tests; in production the memos are per-request by nature. A PHPUnit run is one
+	 * request for the whole suite, so `Newspack_Request_Memo_Reset` calls this before
+	 * every test to put the request boundary back where the memos assume it is.
+	 *
+	 * @return void
+	 */
+	public static function flush_product_options_memos() {
+		self::$subscription_products_options      = null;
+		self::$one_time_purchase_products_options = null;
+	}
+
+	/**
+	 * Fetch the variation posts of the given variable subscriptions, keyed by parent ID.
+	 *
+	 * The post row carries everything a label needs — WooCommerce stores a variation's
+	 * generated title in `post_title` and its attribute summary in `post_excerpt` — so this
+	 * reads the posts directly rather than hydrating a `WC_Product` per variation.
+	 * Hydrating would cost a full meta read, a parent re-read and two term lookups each,
+	 * and this runs on every admin page load that localises the access rules, including
+	 * every block editor load.
+	 *
+	 * Publish and private is the whole set WooCommerce itself reads a variable product's
+	 * children as, so it is every variation that can exist for a publisher to have sold.
+	 * Private earns its place: a reader can hold an active subscription to a tier the
+	 * publisher has since hidden, and the rule still has to be able to name it.
+	 *
+	 * @param \WC_Product[] $products The subscription products to collect variations for.
+	 *
+	 * @return array<int, \WP_Post[]> Variation posts keyed by parent product ID.
+	 */
+	private static function get_subscription_variation_posts( $products ) {
+		$parent_ids = [];
+		foreach ( $products as $product ) {
+			if ( $product->is_type( 'variable-subscription' ) ) {
+				$parent_ids[] = $product->get_id();
+			}
+		}
+		if ( empty( $parent_ids ) ) {
+			return [];
+		}
+		$variations = \get_posts(
+			[
+				'post_type'              => 'product_variation',
+				'post_parent__in'        => $parent_ids,
+				'post_status'            => [ 'publish', 'private' ],
+				'posts_per_page'         => -1, // phpcs:ignore WordPressVIPMinimum.Performance.NoPaging -- Variations of the subscription products already fetched; config-scale.
+				'orderby'                => [
+					'menu_order' => 'ASC',
+					'ID'         => 'ASC',
+				],
+				// Only the title, excerpt, ID and parent are read.
+				'update_post_meta_cache' => false,
+				'update_post_term_cache' => false,
+			]
+		);
+		$by_parent = [];
+		foreach ( $variations as $variation ) {
+			$by_parent[ $variation->post_parent ][] = $variation;
+		}
+		return $by_parent;
+	}
+
+	/**
+	 * Build the option label for a subscription variation.
+	 *
+	 * WooCommerce generates a variation's title as "Parent - Attribute" and names it that
+	 * way throughout its own admin, so that title is the label wherever it is usable. It is
+	 * usable when it still opens with the parent's current name and adds something to it.
+	 * Two things break that. WooCommerce drops the attribute suffix when the parent carries
+	 * three or more attributes, or two or more where an attribute name is multi-word,
+	 * leaving the variation titled exactly like its parent. And the title is generated at
+	 * the variation's last save: `WC_Product_Variable_Data_Store_CPT::sync_variation_names()`
+	 * rewrites it when the parent is renamed through the CRUD path, but an importer or a
+	 * direct `wp_update_post()` leaves it on the old name.
+	 *
+	 * Either way the title stops telling a publisher which tier they are picking, so
+	 * recover the attributes from the summary and pair them with the parent's current name.
+	 * The summary spells out attribute names where the generated title omits them
+	 * ("Term: Annual" rather than "Annual"); matching the generated style would mean
+	 * hydrating the variation, which costs more than the fallback is worth.
+	 *
+	 * Labels need not be unique: the pickers render every option as `<name> (#<id>)` and
+	 * resolve a token by the ID it carries, so two options sharing a name stay distinct.
+	 * That ` (#<id>)` suffix is a parsing contract and stays fixed, but the separator
+	 * joining a name to its attributes carries no such role, so it is translatable —
+	 * WooCommerce makes its own equivalent filterable for the same reason.
+	 *
+	 * @param string   $parent_name The variable subscription parent's name.
+	 * @param \WP_Post $variation   The variation post.
+	 *
+	 * @return string The option label.
+	 */
+	private static function get_variation_option_label( string $parent_name, \WP_Post $variation ): string {
+		$title             = $variation->post_title;
+		$names_this_parent = str_starts_with( $title, $parent_name ) && strlen( $title ) > strlen( $parent_name );
+		if ( $names_this_parent || '' === $variation->post_excerpt ) {
+			return $title;
+		}
+		return sprintf(
+			/* translators: 1: variable subscription name, e.g. "Membership". 2: the variation's attribute summary, e.g. "Term: Annual". */
+			__( '%1$s - %2$s', 'newspack-plugin' ),
+			$parent_name,
+			$variation->post_excerpt
+		);
 	}
 
 	/**
@@ -558,18 +723,13 @@ class Access_Rules {
 	 * @return array Product options as label/value pairs.
 	 */
 	public static function get_one_time_purchase_products_options() {
-		// Request-scoped memo: the full-catalog query would otherwise run once per
-		// rule sanitized on a gate save (Content_Gate_API resolves all rule options
-		// for each rule in the payload).
-		//
 		// TODO (NPPD-2132): unlike the subscription and institution options (also
 		// full dumps, but inherently small), a shop's simple/variable catalog can be
 		// large, and this list is serialized into every block-editor payload. Move to
 		// a bounded/REST-searchable product picker; the memo only helps within a
 		// single request.
-		static $options = null;
-		if ( null !== $options ) {
-			return $options;
+		if ( null !== self::$one_time_purchase_products_options ) {
+			return self::$one_time_purchase_products_options;
 		}
 		if ( ! function_exists( 'wc_get_products' ) ) {
 			return [];
@@ -587,6 +747,7 @@ class Access_Rules {
 				'value' => $product->get_id(),
 			];
 		}
+		self::$one_time_purchase_products_options = $options;
 		return $options;
 	}
 

@@ -46,11 +46,6 @@
 	font-weight: normal;
 }
 
-.newspack-subscribers__header-count {
-	color: wp-colors.$gray-700;
-	font-weight: normal;
-}
-
 // Center the loading spinner in the content area while data resolves.
 .newspack-subscribers__loading {
 	align-items: center;
@@ -443,14 +438,6 @@
 	font-size: wp-vars.$font-size-x-small;
 	font-weight: wp-vars.$font-weight-medium;
 	text-transform: uppercase;
-}
-
-.newspack-subscribers__sub-detail-value {
-	// The Badge ships display: block, so it would stretch to the full row width
-	// here; keep it hugging its label (e.g. the status pill).
-	.newspack-badge {
-		display: inline-block;
-	}
 }
 
 // Pinned action bar at the bottom of the drawer: the same subscription CTAs as

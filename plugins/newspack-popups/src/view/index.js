@@ -7,6 +7,7 @@ import './style.scss';
 import './patterns.scss';
 import { handleSegmentation } from './segmentation';
 import { handleAnalytics } from './analytics/ga4';
+import { reportMatchedSegments } from './analytics/segments';
 import { handleContextualPromptAnalytics } from './analytics/contextual-prompt';
 import { propagatePreviewParams } from './preview-links';
 import { domReady, logPageview, getPrompts } from './utils';
@@ -16,6 +17,9 @@ import './merge-tags';
 domReady( () => {
 	window.newspackRAS = window.newspackRAS || [];
 	window.newspackRAS.push( logPageview ); // Pageviews should be logged whether or not prompts are enabled.
+	// Segment reach is reported whether or not prompts are enabled, and must run
+	// after logPageview so the reported set matches what prompts targeted.
+	window.newspackRAS.push( reportMatchedSegments );
 
 	// Wrapped, and after the pageview push, on purpose. Everything below runs for
 	// every reader, while link rewriting is an admin-only preview nicety; a throw
