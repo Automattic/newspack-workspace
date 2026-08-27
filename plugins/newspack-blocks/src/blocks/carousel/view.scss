@@ -263,7 +263,12 @@
 			margin-right: 1.5em;
 		}
 	}
-	.cat-links {
+	// Tag labels no longer carry `cat-links` (they used to borrow its styling and
+	// inherited publishers' per-section category rules with it). Sharing the
+	// selector keeps one source for the carousel's chip styling; a publisher rule
+	// written for `.cat-links a` still cannot reach `.tag-labels`.
+	.cat-links,
+	.tag-labels {
 		color: np-colors.$neutral-000;
 		font-size: 0.6em;
 		font-weight: bold;

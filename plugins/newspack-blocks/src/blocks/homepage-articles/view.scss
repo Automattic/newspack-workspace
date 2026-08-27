@@ -271,6 +271,9 @@
 		.cat-links,
 		.cat-links a,
 		.cat-links a:visited,
+		.tag-labels,
+		.tag-labels a,
+		.tag-labels a:visited,
 		figcaption {
 			color: inherit;
 		}
@@ -323,7 +326,8 @@
 			.entry-title a,
 			.entry-meta,
 			.entry-meta .byline a,
-			.cat-links a {
+			.cat-links a,
+			.tag-labels a {
 				color: np-colors.$neutral-000;
 			}
 		}
@@ -465,7 +469,13 @@
 	}
 
 	/* Article meta */
-	.cat-links {
+	// `.tag-labels` shares this rule rather than repeating it. Tag labels used to
+	// carry `cat-links` and borrow its styling, which also handed them every
+	// `.cat-links a` rule a publisher wrote for categories. The coupling lived in
+	// the markup, so sharing the selector here restores the layout without
+	// reopening the capture.
+	.cat-links,
+	.tag-labels {
 		display: flex;
 		flex-wrap: wrap;
 		font-size: variables.$font__size-xxs;
@@ -477,26 +487,6 @@
 			display: flex;
 			gap: 0.5em;
 		}
-
-		a {
-			text-decoration: none;
-
-			&:hover {
-				text-decoration: underline;
-			}
-		}
-	}
-
-	// Tag labels: layout parity with `.cat-links`. The wrapper no longer
-	// carries `cat-links` — per-section `.cat-links a` styling must never
-	// restyle labels (NPPM-3049) — so the layout it relied on is declared
-	// here. Colors are intentionally not declared: chips keep their own.
-	.tag-labels {
-		display: flex;
-		flex-wrap: wrap;
-		font-size: variables.$font__size-xxs;
-		font-weight: bold;
-		margin: 0 0 0.5em;
 
 		a {
 			text-decoration: none;
