@@ -64,14 +64,22 @@ trait One_Time_Purchase_Migration {
 	 * Memberships grants access from any one plan and the gate has a single rule to
 	 * say it with. The caller reports the choice rather than making it silently.
 	 *
+	 * A one-time product handed over by a carve-out votes on the length like a plan of
+	 * the group's own. Transferring the products without the length they need would
+	 * leave the gate no one-time rule to write, and a group with no one-time plan of
+	 * its own would have no length to fall back on — the entitlement would be dropped
+	 * with nothing in the run's output to say so.
+	 *
 	 * @param array[]    $group    Plan descriptors.
 	 * @param array|null $override Operator-supplied duration, or null to derive.
+	 * @param array[]    $carried  One entry per gate whose content this group is carved
+	 *                             out of, each [ 'name', 'one_time_ids', 'duration' ].
 	 *
 	 * @return array{duration:?array,plans:string[],conflict:?string} 'duration' is null
 	 *         when 'plans' is non-empty and no length could be derived: the caller stops
 	 *         the run over that.
 	 */
-	private static function resolve_group_duration( array $group, ?array $override ): array {
+	private static function resolve_group_duration( array $group, ?array $override, array $carried = [] ): array {
 		$plans     = [];
 		$durations = [];
 		// A group that does not require a purchase writes no paid access rules at all,
@@ -94,6 +102,13 @@ trait One_Time_Purchase_Migration {
 			}
 			$plans[]     = $plan['name'];
 			$durations[] = $plan['one_time_duration'] ?? null;
+		}
+		foreach ( $carried as $source ) {
+			if ( empty( $source['one_time_ids'] ) ) {
+				continue;
+			}
+			$plans[]     = $source['name'];
+			$durations[] = $source['duration'] ?? null;
 		}
 
 		if ( empty( $plans ) ) {

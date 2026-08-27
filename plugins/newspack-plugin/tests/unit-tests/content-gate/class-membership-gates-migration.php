@@ -2146,15 +2146,30 @@ HTML;
 	/**
 	 * The branch that matters is the one PHPUnit could never reach before: STDIN is
 	 * never a terminal under test, so the prompt itself went unexercised while the
-	 * error path looked covered. With the terminal check passed in, a superseding
-	 * group under --live is pinned as reaching the prompt rather than the abort.
+	 * error path looked covered. With the terminal check and the answer passed in, a
+	 * superseding group under --live is pinned as reaching the prompt rather than the
+	 * abort — and a "y" lets the run continue.
 	 */
 	public function test_confirm_or_error_prompts_when_stdin_is_a_terminal() {
-		\WP_CLI::$messages = [];
+		\WP_CLI::reset();
 
-		$this->invoke_private_static( 'confirm_or_error', [ 'Proceed?', [], true ] );
+		$this->invoke_private_static( 'confirm_or_error', [ 'Proceed?', [], true, fn() => "y\n" ] );
 
-		$this->assertContains( [ 'confirm', 'Proceed?' ], \WP_CLI::$messages );
+		$this->assertContains( 'Proceed? [y/n] ', \WP_CLI::$logs );
+	}
+
+	/**
+	 * Declining must not report success. This command is meant to be chained with the
+	 * WooCommerce Memberships deactivation, and WP_CLI::confirm() exits 0 on "n" — so
+	 * `migrate-membership-gates --live && wp plugin deactivate woocommerce-memberships`
+	 * would take away the only thing restricting the content, with no gate written at
+	 * all. Erroring is what stops the chain.
+	 */
+	public function test_confirm_or_error_aborts_when_the_operator_declines() {
+		$this->expectException( \WP_CLI_Mock_Exception::class );
+		$this->expectExceptionMessage( 'do not deactivate WooCommerce Memberships' );
+
+		$this->invoke_private_static( 'confirm_or_error', [ 'Proceed?', [], true, fn() => "n\n" ] );
 	}
 
 	/**
@@ -2170,14 +2185,22 @@ HTML;
 
 	/**
 	 * --yes answers the prompt up front, which is what makes a non-interactive run
-	 * possible at all.
+	 * possible at all — without reading an answer nothing is there to give.
 	 */
 	public function test_confirm_or_error_accepts_yes_without_a_terminal() {
-		\WP_CLI::$messages = [];
+		$this->invoke_private_static(
+			'confirm_or_error',
+			[
+				'Proceed?',
+				[ 'yes' => true ],
+				false,
+				function () {
+					$this->fail( '--yes must answer the prompt without reading STDIN.' );
+				},
+			]
+		);
 
-		$this->invoke_private_static( 'confirm_or_error', [ 'Proceed?', [ 'yes' => true ], false ] );
-
-		$this->assertContains( [ 'confirm', 'Proceed?' ], \WP_CLI::$messages );
+		$this->assertTrue( true, 'Reaching here is the assertion: the prompt was never asked.' );
 	}
 
 
@@ -2415,14 +2438,15 @@ HTML;
 	/**
 	 * A gate group of one plan, gating the given terms of one taxonomy.
 	 *
-	 * @param string $name        Plan name, which becomes part of the gate title.
-	 * @param int[]  $term_ids    Category term IDs the plan gates.
-	 * @param int    $product_id  The plan's access product.
-	 * @param string $taxonomy    Taxonomy slug for the rule.
+	 * @param string $name          Plan name, which becomes part of the gate title.
+	 * @param int[]  $term_ids      Category term IDs the plan gates.
+	 * @param int    $product_id    The plan's access product.
+	 * @param string $taxonomy      Taxonomy slug for the rule.
+	 * @param string $access_method 'purchase' or 'signup'.
 	 *
 	 * @return array[] A single-plan group in group_plans_by_fingerprint()'s shape.
 	 */
-	private function make_taxonomy_plan_group( string $name, array $term_ids, int $product_id, string $taxonomy = 'category' ): array {
+	private function make_taxonomy_plan_group( string $name, array $term_ids, int $product_id, string $taxonomy = 'category', string $access_method = 'purchase' ): array {
 		return $this->make_plan_group(
 			$name,
 			[
@@ -2431,7 +2455,8 @@ HTML;
 					'value' => array_map( 'strval', $term_ids ),
 				],
 			],
-			$product_id
+			$product_id,
+			$access_method
 		);
 	}
 
@@ -2443,6 +2468,17 @@ HTML;
 	 * the broad plan's product so its members are not turned away inside the carve-out.
 	 */
 	public function test_consolidate_plan_groups_repairs_a_cross_slug_overlap_with_a_carve_out() {
+		$category  = self::factory()->category->create();
+		$broad_id  = $this->create_product( 'subscription' );
+		$narrow_id = $this->create_product( 'subscription' );
+		// The overlap is decided from the rules alone, so the operator is told how many
+		// posts actually carry both — the number that tells a repair from a no-op.
+		self::factory()->post->create(
+			[
+				'post_status'   => 'publish',
+				'post_category' => [ $category ],
+			]
+		);
 		$groups = [
 			$this->make_plan_group(
 				'All Posts',
@@ -2452,25 +2488,28 @@ HTML;
 						'value' => [ 'post' ],
 					],
 				],
-				101 
+				$broad_id
 			),
-			$this->make_taxonomy_plan_group( 'Premium Section', [ 5 ], 202 ),
+			$this->make_taxonomy_plan_group( 'Premium Section', [ $category ], $narrow_id ),
 		];
 
-		$widened         = [];
-		$overlaps        = [];
-		$carved          = [];
-		$carved_products = [];
-		$merged          = $this->invoke_private_static(
+		$widened    = [];
+		$overlaps   = [];
+		$carved     = [];
+		$carve_outs = [];
+		$merged     = $this->invoke_private_static(
 			'consolidate_plan_groups',
-			[ $groups, &$widened, &$overlaps, &$carved, &$carved_products ]
+			[ $groups, &$widened, &$overlaps, &$carved, &$carve_outs ]
 		);
 
 		$this->assertCount( 2, $merged, 'A carve-out keeps both gates; it is the alternative to merging them.' );
 		$this->assertSame( [], $overlaps, 'A repaired overlap is no longer put to the operator as unrepairable.' );
-		$this->assertSame( [ '"Premium Section" out of "All Posts"' ], $carved );
+		$this->assertSame(
+			[ '"Premium Section" out of "All Posts" (1 post(s))' ],
+			$carved,
+			'The pair is a suspected overlap, so the operator is told how much content the carve-out actually covers.'
+		);
 
-		$broad_rules = $merged[0][0]['ac_rules'];
 		$this->assertSame(
 			[
 				[
@@ -2479,15 +2518,234 @@ HTML;
 				],
 				[
 					'slug'      => 'category',
-					'value'     => [ '5' ],
+					'value'     => [ (string) $category ],
 					'exclusion' => true,
 				],
 			],
-			$broad_rules,
+			$merged[0][0]['ac_rules'],
 			'The broad gate keeps its own rule and gains the narrow gate\'s content as an exclusion.'
 		);
 
-		$this->assertSame( [ 1 => [ 101 ] ], $carved_products, 'The carved-out gate takes on the excluding plan\'s product.' );
+		$this->assertSame( 1, $carve_outs[0]['narrow'] );
+		$this->assertSame( 0, $carve_outs[0]['broad'] );
+		$this->assertSame( [ $broad_id ], $carve_outs[0]['product_ids'], 'The carved-out gate takes on the excluding plan\'s product.' );
+	}
+
+	/**
+	 * The transfer is only half the promise: the carved-out gate has to end up granting
+	 * the products, and a one-time product becomes a rule only with an access length.
+	 * The narrow plan here grants on a subscription and has no length of its own, so
+	 * carrying the products without the excluding plan's length would drop the one-time
+	 * entitlement entirely — and every reader who bought that product would be denied on
+	 * the posts the carve-out just took off the broad gate.
+	 */
+	public function test_a_carve_out_carries_the_access_length_its_products_need() {
+		$category        = self::factory()->category->create();
+		$one_time_id     = $this->create_product( 'simple' );
+		$subscription_id = $this->create_product( 'subscription' );
+
+		$broad  = $this->make_plan_group(
+			'All Posts',
+			[
+				[
+					'slug'  => 'post_types',
+					'value' => [ 'post' ],
+				],
+			],
+			$one_time_id,
+			'purchase',
+			0,
+			$this->duration( 0, 'forever' )
+		);
+		$narrow = $this->make_taxonomy_plan_group( 'Premium Section', [ $category ], $subscription_id );
+
+		$carved     = [];
+		$carve_outs = [];
+		$widened    = [];
+		$overlaps   = [];
+		$merged     = $this->invoke_private_static(
+			'consolidate_plan_groups',
+			[ [ $broad, $narrow ], &$widened, &$overlaps, &$carved, &$carve_outs ]
+		);
+
+		$carried  = $this->invoke_private_static( 'carried_access_by_group', [ $carve_outs ] );
+		$products = $this->invoke_private_static( 'resolve_product_ids', [ $merged[1], $carried[1]['product_ids'] ] );
+		$duration = $this->invoke_private_static( 'resolve_group_duration', [ $merged[1], null, $carried[1]['sources'] ] );
+
+		$this->assertSame(
+			[
+				[
+					[
+						'slug'  => 'subscription',
+						'value' => [ $subscription_id ],
+					],
+				],
+				[
+					[
+						'slug'  => 'one_time_purchase',
+						'value' => [
+							'product_ids'    => [ $one_time_id ],
+							'duration_value' => 0,
+							'duration_unit'  => 'forever',
+						],
+					],
+				],
+			],
+			$this->invoke_private_static( 'build_access_rules', [ $products, $duration['duration'] ] ),
+			'The carved-out gate grants its own subscription and the excluding plan\'s one-time product, for as long as that plan granted it.'
+		);
+	}
+
+	/**
+	 * An exclusion takes content off the broad gate and leaves the carved-out gate as
+	 * the only thing over it, so the repair is only sound while that gate holds. Where
+	 * it could not be written — a failed creation, or a purchase group with no paid
+	 * layout to activate — keeping the exclusion would leave paid content behind free
+	 * registration or behind nothing. Dropping it puts the run back where it started.
+	 */
+	public function test_an_exclusion_is_dropped_when_its_carved_out_gate_does_not_hold() {
+		$post_types = [
+			'slug'  => 'post_types',
+			'value' => [ 'post' ],
+		];
+		$exclusion  = [
+			'slug'      => 'category',
+			'value'     => [ '5' ],
+			'exclusion' => true,
+		];
+		$carve_outs = [
+			[
+				'narrow' => 1,
+				'broad'  => 0,
+				'rules'  => [ $exclusion ],
+			],
+		];
+
+		\WP_CLI::reset();
+		$this->assertSame(
+			[ $post_types ],
+			$this->invoke_private_static(
+				'drop_unheld_carve_outs',
+				[ [ $post_types, $exclusion ], $carve_outs, 0, [ 1 => false ], [ 'All Posts', 'Premium Section' ] ]
+			),
+			'The broad gate goes on covering the content its counterpart cannot hold.'
+		);
+		$this->assertStringContainsString( 'the overlap the carve-out repaired is back', strtolower( implode( ' ', \WP_CLI::$warnings ) ) );
+
+		$this->assertSame(
+			[ $post_types, $exclusion ],
+			$this->invoke_private_static(
+				'drop_unheld_carve_outs',
+				[ [ $post_types, $exclusion ], $carve_outs, 0, [ 1 => true ], [ 'All Posts', 'Premium Section' ] ]
+			),
+			'A gate that will enforce keeps the repair.'
+		);
+	}
+
+	/**
+	 * The pre-flight compares what the rules would name against the products the group
+	 * holds, rather than asking only whether the rule list came back non-empty. A
+	 * one-time product with no access length writes no rule, and a surviving
+	 * subscription rule keeps the list non-empty — so without this the entitlement is
+	 * dropped behind a rule list that looks healthy.
+	 */
+	public function test_find_groups_with_unwritten_products_sees_past_a_surviving_subscription_rule() {
+		$plan_groups = [ 'mixed' => [ array_merge( $this->make_group_plan( 'purchase' ), [ 'name' => 'Mixed' ] ) ] ];
+		$products    = [
+			'mixed' => [
+				'product_ids'      => [ 42, 36 ],
+				'subscription_ids' => [ 42 ],
+				'one_time_ids'     => [ 36 ],
+			],
+		];
+
+		$this->assertSame(
+			[ 'Mixed' => [ 36 ] ],
+			$this->invoke_private_static(
+				'find_groups_with_unwritten_products',
+				[ $plan_groups, $products, [ 'mixed' => [ 'duration' => null ] ] ]
+			),
+			'The one-time product has no rule to appear in, so it is named before anything is written.'
+		);
+		$this->assertSame(
+			[],
+			$this->invoke_private_static(
+				'find_groups_with_unwritten_products',
+				[ $plan_groups, $products, [ 'mixed' => [ 'duration' => $this->duration( 0, 'forever' ) ] ] ]
+			),
+			'With a length to write, both products are named by a rule.'
+		);
+	}
+
+	/**
+	 * A carve-out copies the narrow group's rules onto the broad gate as exclusions, and
+	 * the evaluator answers "does not match" for every post of a slug it cannot resolve.
+	 * As an inclusion that is harmless; as an exclusion it reads as "every post is
+	 * carved out", and get_post_gates() then skips the broad gate site-wide — the whole
+	 * paywall, feeds included. The rule has to be checked before it changes role.
+	 */
+	public function test_carve_out_direction_refuses_a_narrow_rule_the_evaluator_cannot_resolve() {
+		$post_types = [
+			[
+				'slug'  => 'post_types',
+				'value' => [ 'post' ],
+			],
+		];
+		$dead_taxonomy = [
+			[
+				'slug'  => 'taxonomy_from_a_deactivated_plugin',
+				'value' => [ '5' ],
+			],
+		];
+
+		$this->assertNull( $this->invoke_private_static( 'carve_out_direction', [ $post_types, $dead_taxonomy ] ) );
+		$this->assertNull( $this->invoke_private_static( 'carve_out_direction', [ $dead_taxonomy, $post_types ] ) );
+	}
+
+	/**
+	 * Two registration plans have nothing for a carve-out to repair: either gate admits
+	 * any logged-in reader, so neither can lock the other's members out, and a signup
+	 * plan carries no access products to transfer. Writing one would rewrite a gate's
+	 * content rules, ask the operator to approve it, and describe a paid stake that
+	 * cannot exist.
+	 */
+	public function test_consolidate_plan_groups_does_not_carve_two_registration_groups() {
+		$category = self::factory()->category->create();
+
+		\WP_CLI::reset();
+		$widened    = [];
+		$overlaps   = [];
+		$carved     = [];
+		$carve_outs = [];
+		$this->invoke_private_static(
+			'consolidate_plan_groups',
+			[
+				[
+					$this->make_plan_group(
+						'All Posts Signup',
+						[
+							[
+								'slug'  => 'post_types',
+								'value' => [ 'post' ],
+							],
+						],
+						0,
+						'signup'
+					),
+					$this->make_taxonomy_plan_group( 'Section Signup', [ $category ], 0, 'category', 'signup' ),
+				],
+				&$widened,
+				&$overlaps,
+				&$carved,
+				&$carve_outs,
+			]
+		);
+
+		$this->assertSame( [], $carved, 'There is nothing to repair, so nothing is rewritten.' );
+		$this->assertSame( [], $overlaps, 'Neither gate can deny the other\'s members, so the operator is not asked to answer for it.' );
+		$warning = implode( ' ', \WP_CLI::$warnings );
+		$this->assertStringContainsString( 'no reader is denied at either gate', $warning );
+		$this->assertStringNotContainsString( 'access products', $warning );
 	}
 
 	/**
@@ -2622,23 +2880,26 @@ HTML;
 	/**
 	 * A gate group of one plan with the given content rules.
 	 *
-	 * @param string  $name          Plan name, which becomes the gate title.
-	 * @param array[] $ac_rules      The plan's AC-format content rules.
-	 * @param int     $product_id    The plan's access product, or 0 for a signup plan.
-	 * @param string  $access_method 'purchase' or 'signup'.
-	 * @param int     $member_count  Active memberships on the plan.
+	 * @param string     $name              Plan name, which becomes the gate title.
+	 * @param array[]    $ac_rules          The plan's AC-format content rules.
+	 * @param int        $product_id        The plan's access product, or 0 for a signup plan.
+	 * @param string     $access_method     'purchase' or 'signup'.
+	 * @param int        $member_count      Active memberships on the plan.
+	 * @param array|null $one_time_duration The plan's own access length, as
+	 *                                      derive_one_time_duration() reads it.
 	 *
 	 * @return array[] A single-plan group in group_plans_by_fingerprint()'s shape.
 	 */
-	private function make_plan_group( string $name, array $ac_rules, int $product_id, string $access_method = 'purchase', int $member_count = 0 ): array {
+	private function make_plan_group( string $name, array $ac_rules, int $product_id, string $access_method = 'purchase', int $member_count = 0, ?array $one_time_duration = null ): array {
 		return [
 			[
-				'pid'           => 0,
-				'name'          => $name,
-				'member_count'  => $member_count,
-				'access_method' => $access_method,
-				'ac_rules'      => $ac_rules,
-				'product_ids'   => $product_id ? [ $product_id ] : [],
+				'pid'               => 0,
+				'name'              => $name,
+				'member_count'      => $member_count,
+				'access_method'     => $access_method,
+				'ac_rules'          => $ac_rules,
+				'product_ids'       => $product_id ? [ $product_id ] : [],
+				'one_time_duration' => $one_time_duration,
 			],
 		];
 	}
