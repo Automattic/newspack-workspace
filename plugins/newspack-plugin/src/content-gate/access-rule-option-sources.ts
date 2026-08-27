@@ -41,7 +41,7 @@ const ACCESS_RULE_OPTION_SOURCES: Record< string, () => Promise< AccessRuleOptio
 		// Ordered by title to match `Institution::get_options()`, so the picker reads the
 		// same way whichever list rendered it.
 		const items = await apiFetch< InstitutionItem[] >( {
-			path: '/wp/v2/np_institution?context=edit&orderby=title&order=asc&per_page=-1',
+			path: '/wp/v2/np_institution?context=edit&orderby=title&order=asc&per_page=-1&_fields=id,title',
 		} );
 		return items.map( item => ( { value: item.id, label: item.title.raw } ) );
 	},

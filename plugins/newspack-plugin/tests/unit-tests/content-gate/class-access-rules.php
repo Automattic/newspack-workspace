@@ -78,9 +78,10 @@ class Newspack_Test_Access_Rules extends WP_UnitTestCase {
 	public function set_up() {
 		parent::set_up();
 
-		// Reset the subscriptions database.
-		global $subscriptions_database;
+		// Reset the subscriptions and products databases.
+		global $subscriptions_database, $products_database;
 		$subscriptions_database = [];
+		$products_database      = [];
 
 		// Create test users.
 		self::$owner_user_id      = $this->factory->user->create( [ 'role' => 'subscriber' ] );
@@ -736,5 +737,161 @@ class Newspack_Test_Access_Rules extends WP_UnitTestCase {
 		);
 
 		wp_delete_post( $plumbing_gate_id, true );
+	}
+
+	/**
+	 * Create a real `product_variation` post, the way WooCommerce stores one: the generated
+	 * title in `post_title` and the attribute summary in `post_excerpt`.
+	 *
+	 * The variation options are read from the post rows rather than from hydrated products,
+	 * so these have to be real posts for the tests to exercise the query that ships.
+	 *
+	 * @param int    $parent_id The variable subscription's product ID.
+	 * @param string $title     The variation's generated title.
+	 * @param string $summary   The attribute summary, if any.
+	 * @param string $status    The post status.
+	 *
+	 * @return int The variation post ID.
+	 */
+	private function create_variation_post( $parent_id, $title, $summary = '', $status = 'publish' ) {
+		return $this->factory->post->create(
+			[
+				'post_type'    => 'product_variation',
+				'post_parent'  => $parent_id,
+				'post_title'   => $title,
+				'post_excerpt' => $summary,
+				'post_status'  => $status,
+			]
+		);
+	}
+
+	/**
+	 * A variable subscription's variations are selectable in their own right, so a gate can
+	 * require one tier of it without requiring the others.
+	 *
+	 * The rule already evaluates variation IDs — `WC_Subscription::has_product()` matches a
+	 * line item's `variation_id` as well as its `product_id` — so leaving them out of the
+	 * options made a rule the system honours impossible to configure, or to read back once
+	 * migrated data had put one in a gate.
+	 *
+	 * @group Access_Rules
+	 */
+	public function test_get_subscription_products_options_includes_variations() {
+		wc_create_mock_product(
+			[
+				'id'   => 900,
+				'type' => 'subscription',
+				'name' => 'Supporter',
+			]
+		);
+		wc_create_mock_product(
+			[
+				'id'   => 901,
+				'type' => 'variable-subscription',
+				'name' => 'Membership',
+			]
+		);
+		$monthly_variation_id = $this->create_variation_post( 901, 'Membership - Monthly' );
+		$annual_variation_id  = $this->create_variation_post( 901, 'Membership - Annual' );
+
+		$options_by_value = array_column( Access_Rules::get_subscription_products_options(), 'label', 'value' );
+
+		$this->assertSame(
+			[
+				900                   => 'Supporter',
+				901                   => 'Membership',
+				$monthly_variation_id => 'Membership - Monthly',
+				$annual_variation_id  => 'Membership - Annual',
+			],
+			$options_by_value,
+			'Options should list simple subscriptions, variable subscription parents, and each parent\'s variations.'
+		);
+	}
+
+	/**
+	 * A private variation is listed, a draft one is not.
+	 *
+	 * A publisher can hide a tier without the readers still paying for it losing their
+	 * subscription, so a rule has to be able to name it. A draft variation has never been
+	 * purchasable, so listing it would only offer a rule that matches nothing.
+	 *
+	 * @group Access_Rules
+	 */
+	public function test_get_subscription_products_options_includes_private_variations_only() {
+		wc_create_mock_product(
+			[
+				'id'   => 910,
+				'type' => 'variable-subscription',
+				'name' => 'Membership',
+			]
+		);
+		$private_variation_id = $this->create_variation_post( 910, 'Membership - Retired', '', 'private' );
+		$this->create_variation_post( 910, 'Membership - Draft', '', 'draft' );
+
+		$values = array_column( Access_Rules::get_subscription_products_options(), 'value' );
+
+		$this->assertSame( [ 910, $private_variation_id ], $values, 'A private variation should be listed; a draft one should not.' );
+	}
+
+	/**
+	 * A variation belonging to a product that is not a variable subscription is not listed,
+	 * so an unrelated variable product's tiers cannot leak into the subscription rule.
+	 *
+	 * @group Access_Rules
+	 */
+	public function test_get_subscription_products_options_ignores_non_subscription_variations() {
+		wc_create_mock_product(
+			[
+				'id'   => 915,
+				'type' => 'variable',
+				'name' => 'Tote bag',
+			]
+		);
+		$this->create_variation_post( 915, 'Tote bag - Large' );
+
+		$values = array_column( Access_Rules::get_subscription_products_options(), 'value' );
+
+		$this->assertSame( [], $values, 'A plain variable product and its variations should not be listed.' );
+	}
+
+	/**
+	 * WooCommerce drops the attribute suffix from a variation's generated title when the
+	 * parent carries three or more attributes (or two or more where an attribute name is
+	 * multi-word), leaving the variation titled exactly like its parent.
+	 *
+	 * A picker listing "Membership" four times tells a publisher nothing about which tier
+	 * each entry is, so recover the attributes from the variation's summary. Where there is
+	 * no summary to recover, the bare parent title stands: the pickers render every option
+	 * as `<name> (#<id>)`, so the entries stay individually selectable either way.
+	 *
+	 * @group Access_Rules
+	 */
+	public function test_get_subscription_products_options_names_variations_titled_like_their_parent() {
+		wc_create_mock_product(
+			[
+				'id'   => 920,
+				'type' => 'variable-subscription',
+				'name' => 'Membership',
+			]
+		);
+		// Titled exactly like the parent, but carrying an attribute summary.
+		$monthly_variation_id = $this->create_variation_post( 920, 'Membership', 'Term: Monthly' );
+		$annual_variation_id  = $this->create_variation_post( 920, 'Membership', 'Term: Annual' );
+		// Titled like the parent with no attribute summary to fall back on.
+		$bare_variation_id = $this->create_variation_post( 920, 'Membership' );
+
+		$options_by_value = array_column( Access_Rules::get_subscription_products_options(), 'label', 'value' );
+
+		$this->assertSame(
+			[
+				920                   => 'Membership',
+				$monthly_variation_id => 'Membership - Term: Monthly',
+				$annual_variation_id  => 'Membership - Term: Annual',
+				// No attribute summary to recover, so the generated title stands.
+				$bare_variation_id    => 'Membership',
+			],
+			$options_by_value,
+			'A variation titled like its parent should take its attribute summary where it has one.'
+		);
 	}
 }

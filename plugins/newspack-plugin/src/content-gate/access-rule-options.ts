@@ -30,6 +30,19 @@ import type { TokenItem } from '@wordpress/components/build-types/form-token-fie
 export type AccessRuleOption = { value: string | number; label: string };
 
 /**
+ * How many suggestions a picker renders when nothing has been typed.
+ *
+ * `FormTokenField` defaults to 100, which is a display cap rather than a fetch cap: it
+ * ranks by the typed query before slicing, so an option past the cap is still reachable
+ * by name or ID. But with `__experimentalExpandOnFocus` the unfiltered list is what a
+ * publisher sees on focus, and a site with more than 100 institutions read that as the
+ * rest not existing. This raises the cap far enough that browsing works at realistic list
+ * sizes while still bounding the DOM — the suggestion list is not virtualised, so it
+ * renders one node per suggestion. Past it, an option is reached by typing its name or ID.
+ */
+export const MAX_OPTION_SUGGESTIONS = 500;
+
+/**
  * The ID a token carries, e.g. `188250` in `Annual (#188250)`.
  */
 const TOKEN_ID_PATTERN = /\(#([^)]+)\)\s*$/;

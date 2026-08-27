@@ -458,7 +458,26 @@ class Access_Rules {
 	/**
 	 * Get subscriptions eligible for access rules.
 	 *
-	 * @return array Active subscription IDs.
+	 * Variations of a variable subscription are listed alongside their parent, because the
+	 * rule evaluates them: `WC_Subscription::has_product()` matches a line item's
+	 * `variation_id` as well as its `product_id`. Selecting the parent therefore grants
+	 * access to subscribers of any of its variations, while selecting a single variation
+	 * narrows the rule to that one — gating on the annual tier of a variable subscription
+	 * but not the monthly, say. Without the variations listed, that narrower rule can be
+	 * held by a gate (migrated data carries variation IDs) but never configured or read
+	 * back in the editor.
+	 *
+	 * Unpublished products are listed too — `wc_get_products()` defaults to draft, pending,
+	 * private and publish. Unlike institutions, whose options are published-only, a
+	 * subscription to a product the publisher has since drafted still evaluates: the line
+	 * item is what the rule matches, and it does not stop existing when the product is
+	 * unpublished. Hiding those products would make the readers still paying for them
+	 * ungateable.
+	 *
+	 * The list is unbounded and rebuilt per call. See NPPD-2138 for memoizing it — gate
+	 * saves rebuild it once per rule.
+	 *
+	 * @return array Array of [ 'label' => string, 'value' => int ].
 	 */
 	public static function get_subscription_products_options() {
 		if ( ! function_exists( 'wc_get_products' ) ) {
@@ -470,14 +489,100 @@ class Access_Rules {
 				'limit' => -1,
 			]
 		);
-		$options = [];
+		$variations_by_parent = self::get_subscription_variation_posts( $products );
+		$options              = [];
 		foreach ( $products as $product ) {
 			$options[] = [
 				'label' => $product->get_name(),
 				'value' => $product->get_id(),
 			];
+			foreach ( $variations_by_parent[ $product->get_id() ] ?? [] as $variation ) {
+				$options[] = [
+					'label' => self::get_variation_option_label( $product->get_name(), $variation ),
+					'value' => $variation->ID,
+				];
+			}
 		}
 		return $options;
+	}
+
+	/**
+	 * Fetch the variation posts of the given variable subscriptions, keyed by parent ID.
+	 *
+	 * The post row carries everything a label needs — WooCommerce stores a variation's
+	 * generated title in `post_title` and its attribute summary in `post_excerpt` — so this
+	 * reads the posts directly rather than hydrating a `WC_Product` per variation.
+	 * Hydrating would cost a full meta read, a parent re-read and two term lookups each,
+	 * and this runs on every admin page load that localises the access rules, including
+	 * every block editor load.
+	 *
+	 * Private variations are included alongside published ones: a reader can hold an active
+	 * subscription to a tier the publisher has since hidden, and the rule still has to be
+	 * able to name it.
+	 *
+	 * @param \WC_Product[] $products The subscription products to collect variations for.
+	 *
+	 * @return array<int, \WP_Post[]> Variation posts keyed by parent product ID.
+	 */
+	private static function get_subscription_variation_posts( $products ) {
+		$parent_ids = [];
+		foreach ( $products as $product ) {
+			if ( $product->is_type( 'variable-subscription' ) ) {
+				$parent_ids[] = $product->get_id();
+			}
+		}
+		if ( empty( $parent_ids ) ) {
+			return [];
+		}
+		$variations = \get_posts(
+			[
+				'post_type'              => 'product_variation',
+				'post_parent__in'        => $parent_ids,
+				'post_status'            => [ 'publish', 'private' ],
+				'posts_per_page'         => -1,
+				'orderby'                => [
+					'menu_order' => 'ASC',
+					'ID'         => 'ASC',
+				],
+				// Only the title, excerpt, ID and parent are read.
+				'update_post_meta_cache' => false,
+				'update_post_term_cache' => false,
+			]
+		);
+		$by_parent = [];
+		foreach ( $variations as $variation ) {
+			$by_parent[ $variation->post_parent ][] = $variation;
+		}
+		return $by_parent;
+	}
+
+	/**
+	 * Build the option label for a subscription variation.
+	 *
+	 * WooCommerce generates a variation's title as "Parent - Attribute" and names it that
+	 * way throughout its own admin, so that title is the label wherever it is usable. But it
+	 * drops the attribute suffix when the parent carries three or more attributes, or two or
+	 * more where an attribute name is multi-word — leaving the variation titled exactly like
+	 * its parent. Recover the attributes from the summary in that case, so the variation
+	 * still reads as the tier it is rather than as a second copy of its parent. The summary
+	 * spells out attribute names where the generated title omits them ("Term: Annual" rather
+	 * than "Annual"); matching the generated style would mean hydrating the variation, which
+	 * costs more than the fallback is worth.
+	 *
+	 * Labels need not be unique: the pickers render every option as `<name> (#<id>)` and
+	 * resolve a token by the ID it carries, so two options sharing a name stay distinct.
+	 *
+	 * @param string   $parent_name The variable subscription parent's name.
+	 * @param \WP_Post $variation   The variation post.
+	 *
+	 * @return string The option label.
+	 */
+	private static function get_variation_option_label( string $parent_name, \WP_Post $variation ): string {
+		$label = $variation->post_title;
+		if ( $label !== $parent_name ) {
+			return $label;
+		}
+		return '' !== $variation->post_excerpt ? sprintf( '%s - %s', $label, $variation->post_excerpt ) : $label;
 	}
 
 	/**
