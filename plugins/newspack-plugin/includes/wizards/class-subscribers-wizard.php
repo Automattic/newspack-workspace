@@ -92,11 +92,21 @@ class Subscribers_Wizard extends Wizard {
 
 	/**
 	 * Per-request memo of newsletter list public ID → display title, built once
-	 * from the site's own subscription lists. See get_newsletter_list_titles().
+	 * from the site's own subscription lists. Null once resolved means the site
+	 * has no list registry to read. See get_newsletter_list_titles().
 	 *
 	 * @var array<string,string>|null
 	 */
-	private $newsletter_list_titles_cache = null;
+	private ?array $newsletter_list_titles_cache = null;
+
+	/**
+	 * Whether the newsletter-list registry has been resolved this request. Kept
+	 * apart from the memo itself because a null memo is a resolved state — the
+	 * registry is unreadable — and not an unfilled one.
+	 *
+	 * @var bool
+	 */
+	private bool $newsletter_list_titles_resolved = false;
 
 	/**
 	 * User meta key holding a reader's tags: short, admin-applied labels
@@ -589,10 +599,11 @@ class Subscribers_Wizard extends Wizard {
 	 * re-resolving within a single request, so each entry point starts clean.
 	 */
 	private function reset_request_caches() {
-		$this->group_subscriptions_cache    = null;
-		$this->group_membership_index       = null;
-		$this->raw_status_ids_cache         = [];
-		$this->newsletter_list_titles_cache = null;
+		$this->group_subscriptions_cache       = null;
+		$this->group_membership_index          = null;
+		$this->raw_status_ids_cache            = [];
+		$this->newsletter_list_titles_cache    = null;
+		$this->newsletter_list_titles_resolved = false;
 	}
 
 	/**
@@ -1026,16 +1037,28 @@ class Subscribers_Wizard extends Wizard {
 	 *
 	 * @param int $user_id The reader user ID.
 	 *
-	 * @return string|null 'YYYY-MM-DD', or null when the site has no record of them.
+	 * @return string|null 'YYYY-MM-DD', or null when the site has no usable record of them.
 	 */
-	private function last_seen_date( $user_id ) {
+	private function last_seen_date( int $user_id ): ?string {
 		$last_active = Reader_Data::get_data( $user_id, 'last_active' );
 		if ( empty( $last_active ) || ! is_numeric( $last_active ) ) {
 			return null;
 		}
 		// Reader-data timestamps are JavaScript milliseconds; intdiv() keeps the
 		// conversion integral, since local_date() takes an int timestamp.
-		return $this->local_date( intdiv( (int) $last_active, 1000 ) );
+		$timestamp = intdiv( (int) $last_active, 1000 );
+		$now       = time();
+		// The browser writes this value from its own clock, and the client store
+		// keeps whichever of the stored and the local value is larger, so a device
+		// running ahead writes a timestamp the site can never lower again. A small
+		// overshoot is ordinary clock skew and reads as now. Further ahead than a
+		// day describes the device's clock rather than the reader, so the record is
+		// dropped: an unknown last-seen is a smaller lie than one that dates a
+		// dormant reader to today and keeps doing so.
+		if ( $timestamp > $now + DAY_IN_SECONDS ) {
+			return null;
+		}
+		return $this->local_date( min( $timestamp, $now ) );
 	}
 
 	/**
@@ -1046,7 +1069,7 @@ class Subscribers_Wizard extends Wizard {
 	 *
 	 * @return string[]
 	 */
-	private function reader_tags( $user_id ) {
+	private function reader_tags( int $user_id ): array {
 		$tags = get_user_meta( $user_id, self::READER_TAGS_META, true );
 		// A JSON-encoded list is accepted alongside a stored array, so a value
 		// written through a JSON-shaped path (WP-CLI, the REST meta API) reads back
@@ -1059,7 +1082,9 @@ class Subscribers_Wizard extends Wizard {
 			return [];
 		}
 		$tags = array_map( 'sanitize_text_field', array_filter( $tags, 'is_scalar' ) );
-		return array_values( array_unique( array_filter( $tags ) ) );
+		// Empty entries go, and only those: array_filter()'s default callback tests
+		// truthiness, which would also drop a tag literally named "0".
+		return array_values( array_unique( array_diff( $tags, [ '' ] ) ) );
 	}
 
 	/**
@@ -1070,26 +1095,38 @@ class Subscribers_Wizard extends Wizard {
 	 * `newsletter_subscribed_lists` reader-data item, which the newsletter data
 	 * events keep in step with the ESP — and the list IDs it holds are resolved
 	 * against the site's own list definitions. No ESP call is made; see
-	 * READER_TAGS_META for why. A list ID with no local definition falls back to
-	 * itself, so a column entry is never silently dropped.
+	 * READER_TAGS_META for why. A list ID the site holds no definition for is
+	 * labelled as unresolved and keeps its ID, so a column entry is never silently
+	 * dropped — but only when the site has a list registry to check against. When
+	 * it has none, nothing is reported rather than everything being called
+	 * unknown; see get_newsletter_list_titles().
 	 *
 	 * @param int $user_id The reader user ID.
 	 *
 	 * @return string[]
 	 */
-	private function reader_newsletters( $user_id ) {
+	private function reader_newsletters( int $user_id ): array {
 		$raw      = Reader_Data::get_data( $user_id, 'newsletter_subscribed_lists' );
 		$list_ids = is_string( $raw ) ? json_decode( $raw, true ) : $raw;
 		if ( ! is_array( $list_ids ) ) {
 			return [];
 		}
 		$titles = $this->get_newsletter_list_titles();
-		$names  = [];
+		if ( null === $titles ) {
+			// No registry to resolve against — on a site that has since deactivated
+			// the Newsletters plugin, the stored subscriptions are still there. The
+			// site cannot say those lists are unknown, only that it cannot look them
+			// up, which is what the column's empty state already means.
+			return [];
+		}
+		$names = [];
+		// Deduplicated by list ID, before resolution: two lists can carry the same
+		// title, and collapsing on the title would drop one of the subscriptions.
+		$list_ids = array_unique( array_map( 'strval', array_filter( $list_ids, 'is_scalar' ) ) );
 		foreach ( $list_ids as $list_id ) {
-			if ( ! is_scalar( $list_id ) ) {
+			if ( '' === $list_id ) {
 				continue;
 			}
-			$list_id = (string) $list_id;
 			// A subscribed list the site has no local Subscription_List for is a
 			// normal state, not an edge case: this data is whatever the ESP returned,
 			// and it can name lists that were never mirrored here. Printing the bare
@@ -1101,7 +1138,7 @@ class Subscribers_Wizard extends Wizard {
 				/* translators: %s: the email service provider's identifier for a list the site has no local record of. */
 				: sprintf( __( 'Unknown list (%s)', 'newspack-plugin' ), $list_id );
 		}
-		return array_values( array_unique( array_filter( $names ) ) );
+		return $names;
 	}
 
 	/**
@@ -1112,20 +1149,27 @@ class Subscribers_Wizard extends Wizard {
 	 * on demand costs a query — so the map is built once per request and read
 	 * per row, the same shape the group-membership index uses.
 	 *
-	 * @return array<string,string>
+	 * A site running without the Newsletters plugin has no registry at all, which
+	 * is reported as null and is a different thing from a registry that exists and
+	 * holds no lists: the first cannot resolve any ID, the second resolves them
+	 * all to "not one of ours".
+	 *
+	 * @return array<string,string>|null The map, or null when there is no registry to read.
 	 */
-	private function get_newsletter_list_titles() {
-		if ( null !== $this->newsletter_list_titles_cache ) {
+	private function get_newsletter_list_titles(): ?array {
+		if ( $this->newsletter_list_titles_resolved ) {
 			return $this->newsletter_list_titles_cache;
 		}
+		$this->newsletter_list_titles_resolved = true;
+		if ( ! class_exists( '\Newspack\Newsletters\Subscription_Lists' ) || ! method_exists( '\Newspack\Newsletters\Subscription_Lists', 'get_all' ) ) {
+			return null;
+		}
 		$titles = [];
-		if ( class_exists( '\Newspack\Newsletters\Subscription_Lists' ) && method_exists( '\Newspack\Newsletters\Subscription_Lists', 'get_all' ) ) {
-			foreach ( \Newspack\Newsletters\Subscription_Lists::get_all() as $list ) {
-				$public_id = (string) $list->get_public_id();
-				$title     = (string) $list->get_title();
-				if ( '' !== $public_id && '' !== $title ) {
-					$titles[ $public_id ] = $title;
-				}
+		foreach ( \Newspack\Newsletters\Subscription_Lists::get_all() as $list ) {
+			$public_id = (string) $list->get_public_id();
+			$title     = (string) $list->get_title();
+			if ( '' !== $public_id && '' !== $title ) {
+				$titles[ $public_id ] = $title;
 			}
 		}
 		$this->newsletter_list_titles_cache = $titles;

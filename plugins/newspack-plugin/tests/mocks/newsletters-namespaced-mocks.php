@@ -4,6 +4,12 @@ namespace Newspack\Newsletters;
 
 if ( ! class_exists( 'Newspack\Newsletters\Subscription_List' ) ) {
 	class Subscription_List {
+		// The real class's own prefix and format: a local list's public ID is the
+		// prefix plus its post ID, and that ID is the join key a stored
+		// `newsletter_subscribed_lists` entry is matched against. A remote-only list
+		// carries the ESP's own ID instead, which this stub does not model.
+		const PUBLIC_ID_PREFIX = 'newspack-';
+
 		private $id;
 
 		public function __construct( int $id ) {
@@ -15,12 +21,14 @@ if ( ! class_exists( 'Newspack\Newsletters\Subscription_List' ) ) {
 		}
 
 		public function get_public_id(): string {
-			return 'list-' . $this->id;
+			return self::PUBLIC_ID_PREFIX . $this->id;
 		}
 
 		public function get_title(): string {
-			// Reads the list post, which get_all() has already primed into the post cache.
-			return (string) get_the_title( $this->id );
+			// The raw post title, as the real class returns it. get_the_title() would
+			// texturize quotes and dashes, which the production path does not.
+			$post = get_post( $this->id );
+			return $post ? (string) $post->post_title : '';
 		}
 
 		/**
@@ -46,7 +54,7 @@ if ( ! class_exists( 'Newspack\Newsletters\Subscription_List' ) ) {
 
 if ( ! class_exists( 'Newspack\Newsletters\Subscription_Lists' ) ) {
 	class Subscription_Lists {
-		const CPT = 'np_newsletter_list';
+		const CPT = 'newspack_nl_list';
 
 		public static function get_all(): array {
 			// Mirrors the real implementation's shape: a post query per call, whose

@@ -752,12 +752,16 @@ class Test_Subscribers_Wizard_Subscribers_Endpoint extends WP_UnitTestCase {
 		$array_reader = $this->create_reader( 'ArrayTags' );
 		$json_reader  = $this->create_reader( 'JsonTags' );
 		$bare_reader  = $this->create_reader( 'NoTags' );
-		update_user_meta( $array_reader, \Newspack\Subscribers_Wizard::READER_TAGS_META, [ 'vip', 'met-in-person' ] );
+		update_user_meta( $array_reader, \Newspack\Subscribers_Wizard::READER_TAGS_META, [ 'vip', 'met-in-person', '0' ] );
 		update_user_meta( $json_reader, \Newspack\Subscribers_Wizard::READER_TAGS_META, wp_json_encode( [ 'vip', 'vip', 'lapsed' ] ) );
 
 		$tags_by_id = array_column( $this->dispatch()->get_data()['items'], 'tags', 'id' );
 
-		$this->assertSame( [ 'vip', 'met-in-person' ], $tags_by_id[ $array_reader ] );
+		$this->assertSame(
+			[ 'vip', 'met-in-person', '0' ],
+			$tags_by_id[ $array_reader ],
+			'Empty tags are dropped, and only those — a tag named "0" is a tag.'
+		);
 		$this->assertSame( [ 'vip', 'lapsed' ], $tags_by_id[ $json_reader ], 'A JSON-encoded value is decoded, and duplicates collapse.' );
 		$this->assertSame( [], $tags_by_id[ $bare_reader ] );
 	}
@@ -766,7 +770,8 @@ class Test_Subscribers_Wizard_Subscribers_Endpoint extends WP_UnitTestCase {
 	 * The Newsletters column reports the site's own record of what a reader is
 	 * subscribed to (the `newsletter_subscribed_lists` reader-data item), resolved
 	 * to the titles the site shows for those lists. A list the site has no
-	 * definition for falls back to its ID rather than vanishing from the column.
+	 * definition for is labelled as unresolved, keeping its ID, rather than
+	 * vanishing from the column or reading as a newsletter name.
 	 */
 	public function test_newsletters_hydrate_from_local_subscription_state() {
 		$this->login_admin();
@@ -793,6 +798,33 @@ class Test_Subscribers_Wizard_Subscribers_Endpoint extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Subscriptions are deduplicated by list ID, before the ID is resolved to a
+	 * title. Two lists can share a title — collapsing on the title would report one
+	 * subscription where the reader has two — and a list titled "0" is a list.
+	 */
+	public function test_newsletters_dedupe_by_list_id_not_by_resolved_title() {
+		$this->login_admin();
+		$morning_brief = $this->create_newsletter_list( 'Daily Brief' );
+		$evening_brief = $this->create_newsletter_list( 'Daily Brief' );
+		$zero_titled   = $this->create_newsletter_list( '0' );
+
+		$reader = $this->create_reader( 'Duplicated' );
+		\Newspack\Reader_Data::update_item(
+			$reader,
+			'newsletter_subscribed_lists',
+			wp_json_encode( [ $morning_brief, $evening_brief, $morning_brief, $zero_titled ] )
+		);
+
+		$newsletters_by_id = array_column( $this->dispatch()->get_data()['items'], 'newsletters', 'id' );
+
+		$this->assertSame(
+			[ 'Daily Brief', 'Daily Brief', '0' ],
+			$newsletters_by_id[ $reader ],
+			'The repeated list ID collapses; two same-titled lists and a list titled "0" all survive.'
+		);
+	}
+
+	/**
 	 * Last seen reports the reader's `last_active` record — the value reader
 	 * activation stamps on every page view, and the same one the ESP sync publishes
 	 * as `Last_Active`, so this column and the publisher's ESP agree about a reader.
@@ -816,6 +848,28 @@ class Test_Subscribers_Wizard_Subscribers_Endpoint extends WP_UnitTestCase {
 		$this->assertSame( '2025-11-20', $last_seen_by_id[ $active_reader ] );
 		$this->assertNull( $last_seen_by_id[ $dormant_reader ], 'A reader the site holds no activity record for reads as unknown, not as a guessed date.' );
 		$this->assertNull( $last_seen_by_id[ $garbled_reader ] );
+	}
+
+	/**
+	 * A last-seen record ahead of the site's own clock is not taken at face value.
+	 *
+	 * The browser writes this value from its own clock and the client store keeps
+	 * the larger of the stored and local values, so a device running fast writes a
+	 * timestamp nothing can lower again: without a server-side line, one visit from
+	 * a misconfigured device parks the reader in the future for good. Ordinary skew
+	 * still reads as now, so a clock a minute fast doesn't blank the column.
+	 */
+	public function test_last_seen_does_not_trust_a_clock_ahead_of_the_site() {
+		$this->login_admin();
+		$skewed_reader = $this->create_reader( 'Skewed' );
+		$future_reader = $this->create_reader( 'Future' );
+		\Newspack\Reader_Data::update_item( $skewed_reader, 'last_active', (string) ( ( time() + MINUTE_IN_SECONDS ) * 1000 ) );
+		\Newspack\Reader_Data::update_item( $future_reader, 'last_active', (string) ( strtotime( '+3 years' ) * 1000 ) );
+
+		$last_seen_by_id = array_column( $this->dispatch()->get_data()['items'], 'lastSeen', 'id' );
+
+		$this->assertSame( wp_date( 'Y-m-d' ), $last_seen_by_id[ $skewed_reader ], 'A slightly fast clock reads as now, not as tomorrow.' );
+		$this->assertNull( $last_seen_by_id[ $future_reader ], 'A record years ahead describes the device clock, not the reader, so it reads as unknown.' );
 	}
 
 	/**
@@ -882,7 +936,7 @@ class Test_Subscribers_Wizard_Subscribers_Endpoint extends WP_UnitTestCase {
 		$this->assertSame(
 			$single_row_cost,
 			$full_page_cost,
-			'Hydrating 50 rows must not cost more queries than hydrating 1 — a per-row lookup crept in.'
+			'Hydrating 50 rows must not cost more queries than hydrating 1 for the columns this measures — a per-row lookup crept in. Subscription hydration is an in-memory mock here and contributes nothing to either side.'
 		);
 		$this->assertSame(
 			1,
