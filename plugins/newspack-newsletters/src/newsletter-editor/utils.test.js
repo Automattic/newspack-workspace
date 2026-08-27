@@ -41,6 +41,12 @@ describe( 'getSettledSendLists', () => {
 		expect( getSettledSendLists( { ...retrieved, newsletterData: {} } ) ).toBeNull();
 	} );
 
+	it( 'reports an empty roster as unknown rather than as an empty list', () => {
+		// One representation for "cannot tell yet". An empty array is truthy, so
+		// it would otherwise reach callers as if it were a settled answer.
+		expect( getSettledSendLists( { ...retrieved, newsletterData: { lists: [] } } ) ).toBeNull();
+	} );
+
 	it( 'tolerates an empty store state', () => {
 		expect( getSettledSendLists( {} ) ).toBeNull();
 	} );

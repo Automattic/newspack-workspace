@@ -53,13 +53,13 @@ export const isSupportedESP = () => {
  * @param {boolean} newsletterDataState.hasRetrievedData  Whether `retrieve` has completed.
  * @param {boolean} newsletterDataState.isRetrievingData  Whether `retrieve` is in flight.
  * @param {boolean} newsletterDataState.isRetrievingLists Whether a send-list fetch is in flight.
- * @return {?Object[]} The fetched lists, or null while the answer is unknown.
+ * @return {?Object[]} A non-empty list of lists, or null while the answer is unknown.
  */
 export const getSettledSendLists = ( { newsletterData, hasRetrievedData, isRetrievingData, isRetrievingLists } = {} ) => {
 	if ( ! hasRetrievedData || isRetrievingData || isRetrievingLists ) {
 		return null;
 	}
-	return newsletterData?.lists || null;
+	return newsletterData?.lists?.length ? newsletterData.lists : null;
 };
 
 /**
@@ -69,8 +69,9 @@ export const getSettledSendLists = ( { newsletterData, hasRetrievedData, isRetri
  * @param {string}    meta.senderEmail  Sender email address.
  * @param {string}    meta.senderName   Sender name.
  * @param {string}    meta.send_list_id Send-to list ID.
- * @param {?Object[]} sendLists         Send lists fetched from the connected ESP,
- *                                      or null when that fetch hasn't settled.
+ * @param {?Object[]} sendLists         Send lists fetched from the connected ESP.
+ *                                      Null or empty means the fetch has not
+ *                                      settled, and the resolution check is skipped.
  * @return {string[]} Array of validation messages. If empty, newsletter is valid.
  */
 export const validateNewsletter = ( meta = {}, sendLists = null ) => {
