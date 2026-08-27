@@ -249,17 +249,75 @@ class Network {
 	 * @return bool True if the address is private or reserved and must be refused.
 	 */
 	public static function is_blocked_sideload_ip( string $ip ): bool {
-		if ( false === filter_var( $ip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE ) ) {
-			return true;
-		}
+		$blocked_early = false === filter_var( $ip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE );
 
-		foreach ( [ '100.64.0.0/10', '198.18.0.0/15' ] as $cidr ) {
-			if ( self::ipv4_in_cidr( $ip, $cidr ) ) {
-				return true;
+		if ( ! $blocked_early ) {
+			foreach ( [ '100.64.0.0/10', '198.18.0.0/15' ] as $cidr ) {
+				if ( self::ipv4_in_cidr( $ip, $cidr ) ) {
+					$blocked_early = true;
+					break;
+				}
 			}
 		}
 
-		return false;
+		// PHP's reserved-range flags understand ::ffff:0:0/96 and nothing else, so the other
+		// ways of writing a v4 address in v6 slip past: 64:ff9b::a9fe:a9fe and 2002:a9fe:a9fe::
+		// both name 169.254.169.254. Neither prefix is routable from our hosts, which have no
+		// NAT64 gateway or 6to4 relay, so this is the same defence-in-depth as the CGNAT and
+		// benchmarking entries above rather than a reachable hole.
+		$blocked = $blocked_early;
+		if ( ! $blocked ) {
+			foreach ( [ '64:ff9b::/96', '2002::/16' ] as $cidr ) {
+				if ( self::ipv6_in_cidr( $ip, $cidr ) ) {
+					$blocked = true;
+					break;
+				}
+			}
+		}
+
+		/**
+		 * Filters whether a resolved address is refused for a peer image sideload.
+		 *
+		 * This check runs after wp_http_validate_url() and overrides it, so a network
+		 * that answers `http_request_host_is_external` to allow its own private
+		 * addressing still loses avatar and thumbnail sync here. This filter is how
+		 * such a network opts an address back in; the default is to refuse.
+		 *
+		 * @param bool   $blocked Whether the address is refused.
+		 * @param string $ip      The resolved IPv4 or IPv6 address.
+		 */
+		return (bool) apply_filters( 'newspack_network_blocked_sideload_ip', $blocked, $ip );
+	}
+
+	/**
+	 * Whether an IPv6 address sits inside a CIDR block. Non-IPv6 input returns false.
+	 *
+	 * @param string $ip   IP address to test.
+	 * @param string $cidr CIDR block, e.g. '64:ff9b::/96'.
+	 *
+	 * @return bool True if $ip is IPv6 and within $cidr.
+	 */
+	private static function ipv6_in_cidr( string $ip, string $cidr ): bool {
+		if ( ! filter_var( $ip, FILTER_VALIDATE_IP, FILTER_FLAG_IPV6 ) ) {
+			return false;
+		}
+		list( $subnet, $bits ) = explode( '/', $cidr );
+		$ip_bytes     = inet_pton( $ip );
+		$subnet_bytes = inet_pton( $subnet );
+		if ( false === $ip_bytes || false === $subnet_bytes ) {
+			return false;
+		}
+		$bits      = (int) $bits;
+		$whole     = intdiv( $bits, 8 );
+		$remainder = $bits % 8;
+		if ( 0 !== strncmp( $ip_bytes, $subnet_bytes, $whole ) ) {
+			return false;
+		}
+		if ( 0 === $remainder ) {
+			return true;
+		}
+		$mask = ( 0xff << ( 8 - $remainder ) ) & 0xff;
+		return ( ord( $ip_bytes[ $whole ] ) & $mask ) === ( ord( $subnet_bytes[ $whole ] ) & $mask );
 	}
 
 	/**
