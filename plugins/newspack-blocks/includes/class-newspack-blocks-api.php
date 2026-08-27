@@ -187,7 +187,9 @@ class Newspack_Blocks_API {
 	 * Runs on the finished markup — after the newspack_blocks_post_byline
 	 * filter — so links injected by filters (e.g. custom bylines) are covered
 	 * too, matching the category-link convention used elsewhere in this
-	 * payload.
+	 * payload. Prefixed variants such as xlink:href and data-href are matched
+	 * deliberately: xlink:href navigates like href, and over-neutralizing a
+	 * non-navigating attribute is harmless in a payload only the editor sees.
 	 *
 	 * @param string $html Rendered markup destined for the editor payload.
 	 * @return string Markup with every href pointing at '#'.
