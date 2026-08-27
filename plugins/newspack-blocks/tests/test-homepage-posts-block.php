@@ -339,10 +339,6 @@ class HomepagePostsBlockTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 	 * (NPPM-3049, the block-side counterpart of the NPPM-3048 theme fix).
 	 */
 	public function test_display_tag_labels_renders_without_cat_links() {
-		if ( ! property_exists( '\Newspack\Tag_Labels', 'stub_labels' ) ) {
-			$this->markTestSkipped( 'Real \Newspack\Tag_Labels present; stub-based contract test skipped.' );
-		}
-
 		ob_start();
 		Newspack_Blocks::display_tag_labels(
 			[
@@ -360,20 +356,16 @@ class HomepagePostsBlockTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 	}
 
 	/**
-	 * Empty labels produce no output (parity with Tag_Labels::display()).
+	 * Empty labels produce no output, not an empty wrapper.
+	 *
+	 * `null` and `[]` reach the same early return, so one call covers both. What
+	 * this catches is a wrapper, or the space that trails it, being echoed when
+	 * there is nothing to put inside.
 	 */
 	public function test_display_tag_labels_outputs_nothing_for_empty_labels() {
-		if ( ! property_exists( '\Newspack\Tag_Labels', 'stub_labels' ) ) {
-			$this->markTestSkipped( 'Real \Newspack\Tag_Labels present; stub-based contract test skipped.' );
-		}
-
-		ob_start();
-		Newspack_Blocks::display_tag_labels( [] );
-		self::assertSame( '', ob_get_clean(), 'Empty labels must render nothing, not an empty wrapper.' );
-
 		ob_start();
 		Newspack_Blocks::display_tag_labels( null );
-		self::assertSame( '', ob_get_clean(), 'Null labels (the documented default) must render nothing.' );
+		self::assertSame( '', ob_get_clean(), 'Empty labels must render nothing, not an empty wrapper.' );
 	}
 
 	/**
