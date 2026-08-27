@@ -99,6 +99,104 @@ class TestNetworkUtils extends WP_UnitTestCase {
 	}
 
 	/**
+	 * A hostname that resolves to nothing is refused, which is the branch every
+	 * IP-literal test skips. Inverting the fail-closed check in resolve_host()'s caller
+	 * leaves the rest of this file green, so without this the branch is unpinned.
+	 *
+	 * Hermetic: RFC 2606 reserves .invalid, so it is NXDOMAIN everywhere, and a container
+	 * with no resolver at all lands on the same assertion.
+	 */
+	public function test_unresolvable_host_is_refused() {
+		$this->assertFalse( Network::is_safe_sideload_url( 'http://no-such-host.invalid/x.jpg' ) );
+	}
+
+	/**
+	 * A resolved address a network deliberately allows can be opted back in, without
+	 * loosening anything else. Networks on private addressing answer
+	 * `http_request_host_is_external` to permit their own hosts, which this guard would
+	 * otherwise override, costing them avatar and thumbnail sync.
+	 */
+	public function test_blocked_ip_filter_can_opt_an_address_back_in() {
+		$allow_one = function ( $blocked, $ip ) {
+			return '10.0.0.5' === $ip ? false : $blocked;
+		};
+
+		$this->assertTrue( Network::is_blocked_sideload_ip( '10.0.0.5' ), 'Blocked by default.' );
+
+		add_filter( 'newspack_network_blocked_sideload_ip', $allow_one, 10, 2 );
+		$allowed  = Network::is_blocked_sideload_ip( '10.0.0.5' );
+		$metadata = Network::is_blocked_sideload_ip( '169.254.169.254' );
+		remove_filter( 'newspack_network_blocked_sideload_ip', $allow_one, 10 );
+
+		$this->assertFalse( $allowed, 'The filter opts the named address back in.' );
+		$this->assertTrue( $metadata, 'Everything else stays refused.' );
+	}
+
+	/**
+	 * The v4-in-v6 spellings of a blocked address are blocked too. PHP's reserved-range
+	 * flags cover ::ffff:0:0/96 and nothing else, so NAT64 and 6to4 forms of
+	 * 169.254.169.254 would otherwise pass.
+	 *
+	 * @dataProvider v4_in_v6_provider
+	 *
+	 * @param string $ip       Address under test.
+	 * @param bool   $expected Whether it must be refused.
+	 * @param string $label    What the address is.
+	 */
+	public function test_v4_in_v6_forms_are_blocked( $ip, $expected, $label ) {
+		$this->assertSame( $expected, Network::is_blocked_sideload_ip( $ip ), $label );
+	}
+
+	/**
+	 * Addresses for test_v4_in_v6_forms_are_blocked().
+	 *
+	 * @return array[]
+	 */
+	public function v4_in_v6_provider() {
+		return [
+			'ipv4-mapped metadata' => [ '::ffff:169.254.169.254', true, 'IPv4-mapped 169.254.169.254' ],
+			'nat64 metadata'       => [ '64:ff9b::a9fe:a9fe', true, 'NAT64 169.254.169.254' ],
+			'6to4 metadata'        => [ '2002:a9fe:a9fe::', true, '6to4 169.254.169.254' ],
+			'public v6 unaffected' => [ '2606:4700:4700::1111', false, 'A public v6 address' ],
+		];
+	}
+
+	/**
+	 * The guard is registered on the hook by the production code path, not just reachable
+	 * when a test registers it by hand.
+	 *
+	 * Every other redirect test writes the hook name itself, so renaming it in
+	 * sideload_peer_image() would leave them green while the redirect guard did nothing on
+	 * a real site. This drives a genuine sideload and reads has_action() from inside the
+	 * request, then aborts before any network I/O.
+	 */
+	public function test_sideload_registers_the_redirect_guard_on_the_real_hook() {
+		$registered = null;
+
+		$intercept = function ( $preempt, $args, $url ) use ( &$registered ) {
+			$registered = has_action(
+				'requests-requests.before_redirect', // phpcs:ignore WordPress.NamingConventions.ValidHookName.UseUnderscores
+				[ Network::class, 'assert_safe_redirect' ]
+			);
+			return new \WP_Error( 'test_intercepted', 'Aborted before any network I/O.' );
+		};
+
+		add_filter( 'pre_http_request', $intercept, 10, 3 );
+		Network::sideload_peer_image( 'https://example.com/x.jpg', 0, null, 'id' );
+		remove_filter( 'pre_http_request', $intercept, 10 );
+
+		$this->assertNotFalse( $registered, 'The sideload must register the guard on the hook Requests fires.' );
+
+		$this->assertFalse(
+			has_action(
+				'requests-requests.before_redirect', // phpcs:ignore WordPress.NamingConventions.ValidHookName.UseUnderscores
+				[ Network::class, 'assert_safe_redirect' ]
+			),
+			'And must remove it again once the sideload returns.'
+		);
+	}
+
+	/**
 	 * The peer sideload refuses an unsafe initial URL up front, returning a WP_Error rather
 	 * than making the request.
 	 */
@@ -127,8 +225,8 @@ class TestNetworkUtils extends WP_UnitTestCase {
 	 * redirect still load.
 	 */
 	public function test_redirect_validator_allows_public_target() {
+		$this->expectNotToPerformAssertions();
 		Network::assert_safe_redirect( 'http://93.184.216.34/x.jpg' );
-		$this->assertTrue( true, 'A public redirect target must not throw.' );
 	}
 
 	/**
