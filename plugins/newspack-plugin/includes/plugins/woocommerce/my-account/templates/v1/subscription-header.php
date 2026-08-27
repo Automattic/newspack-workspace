@@ -32,9 +32,14 @@ if ( ! empty( $actions['cancel'] ) ) {
 	$actions['cancel'] = $cancel_action;
 }
 
-// Rename 'Change payment' action.
+// Rename the 'Change payment' action, keeping the distinction WCS makes: a
+// subscription with no gateway yet needs a card added, not an existing one
+// updated. Telling a reader with nothing on file to "update" their payment
+// method is what sent them looking for a card they never had (NPPD-2170).
 if ( ! empty( $actions['change_payment_method']['name'] ) ) {
-	$actions['change_payment_method']['name'] = __( 'Update payment method', 'newspack-plugin' );
+	$actions['change_payment_method']['name'] = $subscription->has_payment_gateway()
+		? __( 'Update payment method', 'newspack-plugin' )
+		: __( 'Add payment method', 'newspack-plugin' );
 }
 
 \do_action( 'newspack_woocommerce_before_subscription_header', $subscription, $actions );

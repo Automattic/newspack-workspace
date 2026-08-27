@@ -6,10 +6,10 @@ import { buildQueryParams, toQueryString } from '../../utils/build-query';
 import { isFetchAllPerPage } from '../../utils/per-page';
 
 const COLLECTION_PATH = `/wp/v2/${ LAYOUT_CPT_SLUG }`;
-// `future` is excluded — layouts don't surface scheduling. `auto-draft` keeps "Add new" + back visible.
-const DEFAULT_STATUSES = 'publish,private,draft,pending,auto-draft';
+// `future` is excluded: layouts don't surface scheduling.
+const DEFAULT_STATUSES = 'publish,private,draft,pending';
 
-function buildPath( view ) {
+export function buildPath( view ) {
 	if ( ! view ) {
 		return '';
 	}

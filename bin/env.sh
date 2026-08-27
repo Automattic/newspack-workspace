@@ -127,14 +127,30 @@ each_worktree_in_env() {
     done < <(grep -E '^[[:space:]]*-[[:space:]]+\./worktrees(-repos)?/[^[:space:]:]+:/newspack-(repos|plugins|themes)/[^[:space:]:]+' "$file" 2>/dev/null)
 }
 
+# True for an explicit help request in the name position. It matches -h and
+# --help and nothing else, so `up --all` — the one other dash-leading token read
+# from that position — still reaches its own branch below.
+is_help_arg() {
+    [[ "$1" == "-h" || "$1" == "--help" ]]
+}
+
+# Print a subcommand's usage and exit. Status 0 when the user asked for help,
+# 1 when the name was simply missing — one usage string serves both, and the
+# caller passes whatever it read positionally so this can tell them apart.
+env_usage() {
+    local name="$1"; shift
+    printf '%s\n' "$@"
+    is_help_arg "$name" && exit 0
+    exit 1
+}
+
 case $1 in
     create)
         env_name="$2"
-        if [[ -z "$env_name" ]]; then
-            echo "Usage: n env create <name> --worktree <repo>:<branch> [--worktree ...] [--domain <domain>] [--up]"
-            exit 1
+        if [[ -z "$env_name" ]] || is_help_arg "$env_name"; then
+            env_usage "$env_name" "Usage: n env create <name> --worktree <repo>:<branch> [--worktree ...] [--domain <domain>] [--up]"
         fi
-        validate_env_name "$env_name"
+        validate_new_env_name "$env_name"
         # Reject names that would collide after dash/underscore normalization.
         normalized=$(echo "$env_name" | tr '-' '_')
         for f in "$NABSPATH"/docker-compose.env-*.yml; do
@@ -312,6 +328,14 @@ ${worktree_volumes}      - ./envs/${env_name}/html:/var/www/html
       - APACHE_RUN_USER=\${USE_CUSTOM_APACHE_USER:-www-data}
     extra_hosts:
       - "host.docker.internal:host-gateway"
+    ## Probes memcached -- see docker-compose.yml for the rationale. Kept in step
+    ## with the healthcheck migration in env_up().
+    healthcheck:
+      test: ["CMD", "bash", "-c", "echo > /dev/tcp/127.0.0.1/11211"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 180s
     networks:
       default: {}
       newspack_envs:
@@ -362,10 +386,8 @@ YAML
         ;;
     up)
         env_name="$2"
-        if [[ -z "$env_name" ]]; then
-            echo "Usage: n env up <name> [--build]"
-            echo "       n env up --all [--build]"
-            exit 1
+        if [[ -z "$env_name" ]] || is_help_arg "$env_name"; then
+            env_usage "$env_name" "Usage: n env up <name> [--build]" "       n env up --all [--build]"
         fi
         # --all: start all existing environments.
         if [[ "$env_name" == "--all" ]]; then
@@ -437,6 +459,34 @@ networks:
 MIGRATE
             echo "Migrated $env_name: added shared network (domain: $domain)"
         fi
+        # --- Migration: add the memcached healthcheck if missing ---
+        # Compose files are generated once at create time, so envs predating the
+        # healthcheck would never get it. Keep this block in step with the
+        # healthcheck in the generated YAML above.
+        if ! grep -q 'healthcheck:' "$compose_file"; then
+            awk '
+                { print }
+                /^      - "host\.docker\.internal:host-gateway"$/ && !inserted {
+                    print "    ## Probes memcached -- see docker-compose.yml for the rationale."
+                    print "    healthcheck:"
+                    print "      test: [\"CMD\", \"bash\", \"-c\", \"echo > /dev/tcp/127.0.0.1/11211\"]"
+                    print "      interval: 30s"
+                    print "      timeout: 5s"
+                    print "      retries: 3"
+                    print "      start_period: 180s"
+                    inserted = 1
+                }
+            ' "$compose_file" > "${compose_file}.tmp" && mv "${compose_file}.tmp" "$compose_file"
+            # awk's insertion flag is invisible to the shell, so re-read the file:
+            # a compose file without the anchor line passes through unchanged, and
+            # reporting a migration that did not happen would send whoever debugs
+            # a stale env looking in the wrong place.
+            if grep -q 'healthcheck:' "$compose_file"; then
+                echo "Migrated $env_name: added memcached healthcheck"
+            else
+                echo "Warning: could not add the memcached healthcheck to $compose_file (no extra_hosts anchor). Recreate the env to pick it up." >&2
+            fi
+        fi
         # Re-read domain after potential migration.
         domain=$(domain_for_env "$compose_file")
         # Ensure loopback alias exists (macOS only — Linux routes all 127.x.x.x by default).
@@ -501,6 +551,22 @@ MIGRATE
             -e 's|SSLCertificateFile .*|SSLCertificateFile /etc/ssl/certs/${domain}.pem|' \
             -e 's|SSLCertificateKeyFile .*|SSLCertificateKeyFile /etc/ssl/certs/${domain}-key.pem|' \
             /etc/apache2/sites-available/000-default.conf"
+        # Provision Composer vendor/ for the migrated monorepo plugins and themes,
+        # so plugin activation doesn't fatal on a missing vendor/autoload.php (the
+        # foundation-smoke failure mode). Idempotent; skips projects whose vendor/
+        # is already present. On failure it warns (actionably) rather than tearing
+        # down an otherwise-usable env.
+        #
+        # Ahead of the WP-CLI calls below deliberately: every one of them boots
+        # WordPress and loads the active plugins, so on an env whose database
+        # already has a Newspack plugin active while its mounted vendor/ is missing,
+        # they fatal before provisioning would have run. That repairs itself on a
+        # second `n env up`, but only because the failures here are non-fatal --
+        # running first repairs such an env in one pass. This step needs no
+        # database, so nothing is lost by doing it earlier.
+        docker exec "$container_name" bash /var/scripts/ensure-vendor.sh || \
+            echo "Warning: vendor provisioning reported errors (see above); affected plugins may fatal on activation. Try 'n ci-build all'."
+
         # Auto-install WordPress if not already installed.
         echo "Waiting for WordPress setup..."
         for i in $(seq 1 20); do
@@ -586,9 +652,8 @@ MIGRATE
         ;;
     down)
         env_name="$2"
-        if [[ -z "$env_name" ]]; then
-            echo "Usage: n env down <name>"
-            exit 1
+        if [[ -z "$env_name" ]] || is_help_arg "$env_name"; then
+            env_usage "$env_name" "Usage: n env down <name>"
         fi
         validate_env_name "$env_name"
         container_name=$(echo "newspack_env_${env_name}" | tr '-' '_')
@@ -597,9 +662,8 @@ MIGRATE
         ;;
     destroy)
         env_name="$2"
-        if [[ -z "$env_name" ]]; then
-            echo "Usage: n env destroy <name>"
-            exit 1
+        if [[ -z "$env_name" ]] || is_help_arg "$env_name"; then
+            env_usage "$env_name" "Usage: n env destroy <name>"
         fi
         validate_env_name "$env_name"
         compose_file="$NABSPATH/docker-compose.env-${env_name}.yml"
@@ -683,6 +747,10 @@ MIGRATE
         echo "Destroyed environment '$env_name'"
         ;;
     list)
+        if is_help_arg "$2"; then
+            echo "Usage: n env list [--porcelain]"
+            exit 0
+        fi
         porcelain=false
         if [[ "$2" == "--porcelain" ]]; then
             porcelain=true
@@ -732,6 +800,7 @@ MIGRATE
             case $1 in
                 --all) cleanup_all=true; shift ;;
                 --yes) cleanup_yes=true; shift ;;
+                -h|--help) echo "Usage: n env cleanup [--all] [--yes]"; exit 0 ;;
                 *) echo "Usage: n env cleanup [--all] [--yes]"; exit 1 ;;
             esac
         done

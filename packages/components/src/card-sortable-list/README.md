@@ -16,8 +16,7 @@ A drag-and-drop sortable list of cards. Each item displays a title and a status 
 |-------|------|-------------|
 | `id` | `string` \| `number` | Unique identifier for the item. Used as the React `key`. |
 | `title` | `string` | Label rendered in the card header. |
-| `badgeLevel` | `'default'` \| `'success'` \| `'info'` \| `'warning'` \| `'error'` | Visual style of the status badge. |
-| `badgeText` | `string` | Text displayed inside the badge. |
+| `badge` | `{ label: string; intent?: BadgeIntent }` | Status badge for the row. Omit it, or leave `label` empty, to render no badge. `intent` defaults to `none`. See [`BadgeIntent`](../types.ts) for the available intents. |
 
 ## Usage
 
@@ -25,9 +24,9 @@ A drag-and-drop sortable list of cards. Each item displays a title and a status 
 import { CardSortableList } from 'newspack-components';
 
 const [ items, setItems ] = useState( [
-	{ id: 1, title: 'Homepage', badgeLevel: 'success', badgeText: 'Active' },
-	{ id: 2, title: 'About',    badgeLevel: 'default', badgeText: 'Draft'  },
-	{ id: 3, title: 'Contact',  badgeLevel: 'warning', badgeText: 'Review' },
+	{ id: 1, title: 'Homepage', badge: { label: 'Active', intent: 'stable' } },
+	{ id: 2, title: 'About',    badge: { label: 'Draft',  intent: 'draft'  } },
+	{ id: 3, title: 'Contact',  badge: { label: 'Review', intent: 'medium' } },
 ] );
 
 const handleReorder = ( fromIndex, toIndex ) => {

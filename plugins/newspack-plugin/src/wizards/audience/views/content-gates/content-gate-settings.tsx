@@ -6,15 +6,16 @@ import { CardBody } from '@wordpress/components';
 import { useDispatch } from '@wordpress/data';
 import { decodeEntities } from '@wordpress/html-entities';
 import { createInterpolateElement, useRef } from '@wordpress/element';
+import { Badge } from '@wordpress/ui';
 
 /**
  * Internal dependencies
  */
-import { Badge, Card, Grid, Router, useConfirmDialog } from '../../../../../packages/components/src';
+import { Card, Grid, Router, useConfirmDialog } from '../../../../../packages/components/src';
 import { useWizardData } from '../../../../../packages/components/src/wizard/store/utils';
 import { useWizardApiFetch } from '../../../hooks/use-wizard-api-fetch';
 import { WIZARD_STORE_NAMESPACE } from '../../../../../packages/components/src/wizard/store';
-import { getEditGateLayoutUrl, getGateStatus, getGateStatusBadgeLevel } from './utils';
+import { getEditGateLayoutUrl, getGateStatus, getGateStatusBadgeIntent } from './utils';
 import { getGateSummarySections } from './gate-summary';
 import { AUDIENCE_CONTENT_GATES_WIZARD_SLUG } from './consts';
 
@@ -32,7 +33,9 @@ export default function ContentGateSettings( {
 	isNewsletter?: boolean;
 } ) {
 	const history = useHistory();
-	const { gates = null as unknown as Gate[] } = useWizardData( slug ) as WizardData;
+	const wizardData = useWizardData( slug ) as ContentGatesWizardData;
+	const gates = ( wizardData?.gates || [] ) as Gate[];
+	const siteMeter = wizardData?.config?.site_meter;
 	const { wizardApiFetch, isFetching, resetError } = useWizardApiFetch( slug );
 	const { addNotice, resetNotices } = useDispatch( WIZARD_STORE_NAMESPACE );
 	const { confirmDialog: deleteDialog, requestConfirm: requestDelete } = useConfirmDialog( {
@@ -156,7 +159,7 @@ export default function ContentGateSettings( {
 		);
 	};
 
-	const actions = [
+	const actions: { label: string; action?: () => void; href?: string; disabled?: boolean; destructive?: boolean }[][] = [
 		[
 			{
 				label: __( 'Edit', 'newspack-plugin' ),
@@ -216,7 +219,7 @@ export default function ContentGateSettings( {
 						<>
 							<h3>
 								<a href={ `#/edit/${ gate.id }` }>{ gate.title }</a>
-								<Badge level={ getGateStatusBadgeLevel( gate.status ) } text={ getGateStatus( gate.status ) } />
+								<Badge intent={ getGateStatusBadgeIntent( gate.status ) }>{ getGateStatus( gate.status ) }</Badge>
 							</h3>
 						</>
 					),
@@ -225,7 +228,7 @@ export default function ContentGateSettings( {
 			>
 				<CardBody>
 					<Grid className="newspack-content-gates__gate__settings" columns={ isNewsletter ? 2 : 3 } gutter={ 16 } borders noMargin>
-						{ getGateSummarySections( gate, isNewsletter ).map( section => (
+						{ getGateSummarySections( gate, isNewsletter, siteMeter ).map( section => (
 							<div key={ section.key }>
 								<h4>{ section.label }</h4>
 								{ section.content }

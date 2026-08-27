@@ -114,9 +114,15 @@ final class GA4_Custom_Dimensions {
 	/**
 	 * Keep a recurring monthly recheck scheduled while a GA4 property is
 	 * connected, and drop it when none is. The recheck re-runs provisioning so
-	 * additions to Newspack's dimension list, or dimensions deleted in GA4,
-	 * self-heal without a manual CLI run. When everything is already in place it
-	 * is a no-op: one list call, zero writes.
+	 * dimensions deleted in GA4 self-heal without a manual CLI run. When
+	 * everything is already in place it is a no-op: one list call, zero writes.
+	 *
+	 * Additions to Newspack's dimension list do not wait for the recheck:
+	 * they schedule an immediate run (see
+	 * `maybe_schedule_provisioning_for_new_dimensions()`), because GA4
+	 * dimensions are not retroactive — events sent before a dimension exists
+	 * never become queryable, so a month-long wait would lose exactly the
+	 * launch data a new dimension ships for.
 	 *
 	 * Also the entry point for a changed dimension list: GA4 collects a dimension
 	 * only from the moment it exists, so an addition is provisioned now rather
@@ -125,6 +131,8 @@ final class GA4_Custom_Dimensions {
 	 * Idempotent and safe to call repeatedly (e.g. on every admin page load).
 	 */
 	public static function maybe_schedule_recheck() {
+		// WP-Cron based, deliberately ahead of the Action Scheduler guard.
+		self::maybe_schedule_provisioning_for_new_dimensions();
 		if ( ! function_exists( 'as_schedule_recurring_action' ) || ! function_exists( 'as_has_scheduled_action' ) ) {
 			return;
 		}
@@ -150,11 +158,55 @@ final class GA4_Custom_Dimensions {
 	}
 
 	/**
+	 * Schedule an immediate provisioning run when Newspack's dimension list has
+	 * grown since the last run on this property, so a newly shipped dimension
+	 * exists before (or moments after) its events start flowing instead of up
+	 * to a month later.
+	 *
+	 * A summary without a recorded list — written before the list was recorded
+	 * in the summary — counts as grown, so already-provisioned sites converge
+	 * on their first admin visit after this code ships. Growth triggers one
+	 * run per change: the run records the current list in the summary even
+	 * when individual creates fail, leaving retries of failed creates to the
+	 * monthly recheck like any other create error.
+	 *
+	 * Never-provisioned sites are not scheduled here; first-time provisioning
+	 * belongs to the property-connection path (`schedule_provisioning()`).
+	 */
+	private static function maybe_schedule_provisioning_for_new_dimensions() {
+		if ( ! self::get_property_id() ) {
+			return;
+		}
+		$provisioned = get_option( self::PROVISIONED_OPTION, [] );
+		if ( ! is_array( $provisioned ) || empty( $provisioned['property_id'] ) ) {
+			return;
+		}
+		$known = isset( $provisioned['dimensions'] ) && is_array( $provisioned['dimensions'] ) ? $provisioned['dimensions'] : [];
+		$new   = array_diff( array_keys( self::get_dimensions() ), $known );
+		if ( empty( $new ) ) {
+			return;
+		}
+		if ( wp_next_scheduled( self::PROVISION_ACTION ) ) {
+			return;
+		}
+		wp_schedule_single_event( time() + 10, self::PROVISION_ACTION );
+		Logger::log( 'Scheduled GA4 dimension provisioning for new dimensions: ' . implode( ', ', $new ) . '.', self::LOGGER_HEADER );
+	}
+
+	/**
 	 * Priority-ordered list of custom dimensions Newspack provisions.
 	 * Each entry: parameter name => display name.
+	 *
+	 * `access_source` is appended conditionally rather than listed inline: it
+	 * only fires on sites running Access Control, and GA4 caps event-scoped
+	 * custom dimensions at 50 – a publisher has already hit that ceiling, so a
+	 * dimension that never fires must not spend a slot. Appending (rather than
+	 * inserting) keeps the existing entries' priority order intact.
+	 *
+	 * @return array<string,string>
 	 */
 	public static function get_dimensions() {
-		return [
+		$dimensions = [
 			'gate_post_id'                => 'Gate Post ID',
 			'is_reader'                   => 'Is Reader',
 			'action_type'                 => 'Action Type',
@@ -191,7 +243,14 @@ final class GA4_Custom_Dimensions {
 			'lists'                       => 'Newsletter Lists',
 			'categories'                  => 'Categories',
 			'author'                      => 'Author',
+			'segment_id'                  => 'Matched Segment',
 		];
+
+		if ( Content_Gate::is_newspack_feature_enabled() ) {
+			$dimensions['access_source'] = 'Access Source';
+		}
+
+		return $dimensions;
 	}
 
 	/**
@@ -480,6 +539,9 @@ final class GA4_Custom_Dimensions {
 			'schema'         => $has_transient_error ? null : self::schema_fingerprint(),
 			'auth_source'    => $used_source,
 			'timestamp'      => time(),
+			// The list this run knew about, so a later addition to
+			// get_dimensions() is detectable and can provision immediately.
+			'dimensions'     => array_keys( self::get_dimensions() ),
 			'created'        => $created,
 			'skipped_exists' => $skipped_exists,
 			'errors'         => $errors,
