@@ -104,7 +104,9 @@ class Network {
 		}
 
 		// Requests fires this bridge action before following each redirect; the callback
-		// throws on an unsafe target, which Requests turns into a WP_Error for the caller.
+		// throws on an unsafe target. Requests only propagates it — WP_Http::request()
+		// is what catches it and hands the caller a WP_Error, which is where the
+		// no-fatal behaviour actually comes from.
 		add_action( 'requests-requests.before_redirect', [ __CLASS__, 'assert_safe_redirect' ] ); // phpcs:ignore WordPress.NamingConventions.ValidHookName.UseUnderscores
 		try {
 			return media_sideload_image( $url, $post_id, $desc, $return );
@@ -122,29 +124,39 @@ class Network {
 	 *
 	 * @param string $location Redirect target URL.
 	 *
+	 * Throwing out of a do_action callback skips the array_pop() in do_action_ref_array(),
+	 * so current_filter() keeps reporting this hook for the rest of the request, once per
+	 * refused hop. Accepted rather than worked around: every current_filter() check in the
+	 * workspace tests a named hook, the request is already failing, and core's
+	 * $options['hooks']->register() route is not reachable from a plugin.
+	 *
 	 * @throws \WpOrg\Requests\Exception If the target is unsafe, on WordPress 6.2+.
 	 * @throws \Requests_Exception       If the target is unsafe, on WordPress < 6.2.
 	 */
-	public static function assert_safe_redirect( $location ) {
+	public static function assert_safe_redirect( $location ): void {
 		if ( is_string( $location ) && ! self::is_safe_sideload_url( $location ) ) {
 			// The namespaced Requests exception only exists on WordPress 6.2+, but this guard
 			// protects older versions too, where the class is Requests_Exception. Throw whichever
 			// the running core provides so WP_Http catches it and returns a WP_Error, rather than
 			// fataling with class-not-found on the exact versions we target.
 			if ( class_exists( '\WpOrg\Requests\Exception' ) ) {
-				throw new \WpOrg\Requests\Exception( esc_html__( 'Refused a sideload redirect to a private or reserved address.', 'newspack-network' ), 'newspack_network_unsafe_sideload_redirect' );
+				// phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- an exception message is not output, and escaping it corrupts the translated string.
+				throw new \WpOrg\Requests\Exception( __( 'Refused a sideload redirect to a private or reserved address.', 'newspack-network' ), 'newspack_network_unsafe_sideload_redirect' );
 			}
-			throw new \Requests_Exception( esc_html__( 'Refused a sideload redirect to a private or reserved address.', 'newspack-network' ), 'newspack_network_unsafe_sideload_redirect' );
+			// phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- as above.
+			throw new \Requests_Exception( __( 'Refused a sideload redirect to a private or reserved address.', 'newspack-network' ), 'newspack_network_unsafe_sideload_redirect' );
 		}
 	}
 
 	/**
 	 * Whether a peer-supplied URL is safe to fetch server-side with media_sideload_image.
 	 *
-	 * The sideload runs through wp_safe_remote_get, which blocks RFC1918 and loopback
-	 * but not 169.254.0.0/16 — the cloud-metadata range — so a peer could otherwise point
-	 * this site at an internal address (SSRF). This adds the reserved-range check core
-	 * omits, and resolves hostnames (both A and AAAA) so a name pointing at a blocked
+	 * The one place the reasoning for this guard is written down; callers name it rather
+	 * than restating it. The sideload runs through wp_safe_remote_get, which blocks RFC1918
+	 * and loopback. WordPress 7.1 rejects 169.254.0.0/16 too, but older versions do not, and
+	 * nothing in core covers CGNAT 100.64.0.0/10 or benchmarking 198.18.0.0/15 — so a peer
+	 * could otherwise point this site at an internal address (SSRF). This adds the ranges
+	 * core misses, and resolves hostnames (both A and AAAA) so a name pointing at a blocked
 	 * address is refused as well as a literal IP.
 	 *
 	 * Residual: this validates the address at resolve time, and the fetch re-resolves at
