@@ -38,10 +38,13 @@ export const INSTITUTION_RULE_SLUG = 'institution';
  */
 const ACCESS_RULE_OPTION_SOURCES: Record< string, () => Promise< AccessRuleOption[] > > = {
 	[ INSTITUTION_RULE_SLUG ]: async () => {
-		// Ordered by title to match `Institution::get_options()`, so the picker reads the
-		// same way whichever list rendered it.
+		// Ordered by title and pinned to published posts to match
+		// `Institution::get_options()`, so the picker reads the same way and offers the same
+		// institutions whichever list rendered it. Core already defaults the collection to
+		// published, so `status` changes nothing today; it is named so the two lists stay in
+		// step if a `rest_np_institution_collection_params` filter moves that default.
 		const items = await apiFetch< InstitutionItem[] >( {
-			path: '/wp/v2/np_institution?context=edit&orderby=title&order=asc&per_page=-1&_fields=id,title',
+			path: '/wp/v2/np_institution?context=edit&status=publish&orderby=title&order=asc&per_page=-1&_fields=id,title',
 		} );
 		return items.map( item => ( { value: item.id, label: item.title.raw } ) );
 	},
