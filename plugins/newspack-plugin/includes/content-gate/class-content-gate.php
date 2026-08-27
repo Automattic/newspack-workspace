@@ -471,20 +471,15 @@ class Content_Gate {
 	 * would need it (is_singular(), the main-query check) live in
 	 * restrict_post(), never reached from a REST callback.
 	 *
-	 * This split exists because the more obvious design — claiming the lock
-	 * inside this shared method, so every caller gets it for free — is
-	 * unsound: `rest_prepare_{$post_type}` fires for an in-process REST
-	 * dispatch exactly as it does for an external request, and in-process
-	 * dispatchers exist that run *during* an ordinary front-end page render
+	 * Claiming the lock here instead would be unsound: `rest_prepare_{$post_type}`
+	 * fires for an in-process REST dispatch as it does for an external request,
+	 * and dispatchers exist that run during an ordinary front-end page render
 	 * (co-authors-plus's block renderer, newspack-network's hub Woo store,
-	 * newspack-community's moderation list table). A REST read of any gated
-	 * post part-way through such a render would claim the lock as a side
-	 * effect; the render's own restrict_post() call, still to come via
-	 * `the_post`, would then see has_rendered() already true and bail —
-	 * serving that page's post ungated on the public front end. See
-	 * tests/unit-tests/content-gate/class-content-gate-rest.php's
-	 * test_in_process_rest_dispatch_during_page_render_does_not_disarm_front_end_gating(),
-	 * which fails against that shared-lock design and passes against this one.
+	 * newspack-community's moderation list table). A REST read part-way through
+	 * such a render would claim the lock, and the render's own restrict_post()
+	 * call would then see has_rendered() true and bail — serving that page's
+	 * post ungated. test_in_process_rest_dispatch_during_page_render_does_not_disarm_front_end_gating()
+	 * is what holds this.
 	 *
 	 * @param \WP_Post $post Post to evaluate.
 	 * @return array|null Array with 'teaser' and 'gate' keys, or null when the
@@ -569,13 +564,9 @@ class Content_Gate {
 		// opt-in below on every REST-exposed post type on such a site for
 		// nothing — the exact waste this guard exists to avoid.
 		//
-		// $is_newsletter is hard-coded false inside has_first_party_restriction_source(),
-		// so a site with only premium-newsletter gates published (no plain
-		// GATE_CPT gate) is treated as having no restriction source here —
-		// currently unreachable, since Premium_Newsletters gates
-		// `newspack_nl_list` (Newspack_Newsletters\Subscription_Lists::CPT),
-		// which registers with `show_in_rest => false` and so never fires
-		// this hook at all. Would need revisiting if that ever changes.
+		// Premium-newsletter gates are not counted as a restriction source here.
+		// They gate `newspack_nl_list`, which registers `show_in_rest => false`
+		// and so never reaches this hook; revisit if that changes.
 		if ( Memberships::is_active() || ! self::has_first_party_restriction_source() ) {
 			return $response;
 		}
@@ -739,13 +730,8 @@ class Content_Gate {
 			return;
 		}
 
-		// Deliberately should_restrict_post() + build_restriction(), not
-		// get_restriction_for_post(): that thin wrapper does not claim the
-		// render lock (see its own docblock for why), and this method needs
-		// to claim it BETWEEN the decision and the renders, not skip
-		// claiming it at all. Calling get_restriction_for_post() here would
-		// silently reopen #821's unbounded re-entry for this method's own
-		// two renders.
+		// Not get_restriction_for_post(): the lock has to be claimed between the
+		// decision and the renders below, and that wrapper never claims it.
 		if ( ! self::should_restrict_post( $post ) ) {
 			return;
 		}

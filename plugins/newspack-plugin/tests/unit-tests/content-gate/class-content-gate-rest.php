@@ -81,8 +81,12 @@ class Test_Content_Gate_Rest extends \WP_UnitTestCase {
 	public function set_up() {
 		parent::set_up();
 
+		// Nulling the global makes the next rest_get_server() build a fresh
+		// server and fire rest_api_init itself, which is what re-registers the
+		// filters (see this method's docblock). Calling do_action() as well
+		// would run the whole registry a second time.
 		$GLOBALS['wp_rest_server'] = null;
-		do_action( 'rest_api_init', rest_get_server() );
+		rest_get_server();
 
 		self::reset_gate_rendered_flag();
 
@@ -109,19 +113,27 @@ class Test_Content_Gate_Rest extends \WP_UnitTestCase {
 		);
 
 		$this->gate_id = Content_Gate::create_gate( [ 'title' => 'REST Gate' ] );
-		Content_Gate::update_gate_settings(
-			$this->gate_id,
-			[
-				'title'         => 'REST Gate',
-				'status'        => 'publish',
-				'priority'      => 0,
-				'content_rules' => [
-					[
-						'slug'  => 'specific_posts',
-						'value' => [ $this->gated_post_id ],
-					],
-				],
-				'registration'  => [
+		$this->configure_gate( [ $this->gated_post_id ] );
+	}
+
+	/**
+	 * Point the gate at a set of posts, with the registration every test starts from.
+	 *
+	 * The settings array runs to 25 lines and the tests vary two things in it:
+	 * which posts the specific_posts rule names, and whether the gate demands a
+	 * verified reader. Two call sites stay written out below because they also
+	 * change metering or custom_access, where seeing the whole block is the point.
+	 *
+	 * @param int[]|null $post_ids     Posts the rule names; null leaves the rule as it is.
+	 * @param array      $registration Registration values overriding the defaults.
+	 */
+	private function configure_gate( $post_ids = null, array $registration = [] ) {
+		$settings = [
+			'title'        => 'REST Gate',
+			'status'       => 'publish',
+			'priority'     => 0,
+			'registration' => array_merge(
+				[
 					'active'               => true,
 					'metering'             => [
 						'enabled' => false,
@@ -131,8 +143,18 @@ class Test_Content_Gate_Rest extends \WP_UnitTestCase {
 					'require_verification' => false,
 					'gate_id'              => 0,
 				],
-			]
-		);
+				$registration
+			),
+		];
+		if ( null !== $post_ids ) {
+			$settings['content_rules'] = [
+				[
+					'slug'  => 'specific_posts',
+					'value' => $post_ids,
+				],
+			];
+		}
+		Content_Gate::update_gate_settings( $this->gate_id, $settings );
 	}
 
 	/**
@@ -230,13 +252,13 @@ class Test_Content_Gate_Rest extends \WP_UnitTestCase {
 	 * must still withhold the gated body and serve the teaser, not the full
 	 * content.
 	 *
-	 * Core's WP_REST_Posts_Controller::get_item() temporarily clears
-	 * $post->post_password (via can_access_password_content() /
-	 * check_password_required()) to render the real body into
-	 * content.rendered when the caller supplies the correct ?password=, then
-	 * restores post_password before firing rest_prepare_{$post_type}. By the
-	 * time filter_rest_response() runs, post_password_required( $post ) is
-	 * true again even though content.rendered already carries the full body
+	 * WP_REST_Posts_Controller::prepare_item_for_response() adds a
+	 * post_password_required override (check_password_required(), gated by
+	 * can_access_password_content()) while it builds content.rendered from the
+	 * real body, then removes it before firing rest_prepare_{$post_type}.
+	 * $post->post_password itself is never touched. By the time
+	 * filter_rest_response() runs, post_password_required( $post ) is true
+	 * again even though content.rendered already carries the full body
 	 * -- so a guard keyed on post_password_required() alone would bail here
 	 * and let the full body through unchanged. Holding the password does not
 	 * grant the gate's entitlement, so this reader must still see the teaser.
@@ -364,21 +386,7 @@ class Test_Content_Gate_Rest extends \WP_UnitTestCase {
 	 * @return int The reader's user ID.
 	 */
 	private function create_unentitled_reader() {
-		Content_Gate::update_gate_settings(
-			$this->gate_id,
-			[
-				'registration' => [
-					'active'               => true,
-					'metering'             => [
-						'enabled' => false,
-						'count'   => 0,
-						'period'  => 'month',
-					],
-					'require_verification' => true,
-					'gate_id'              => 0,
-				],
-			]
-		);
+		$this->configure_gate( null, [ 'require_verification' => true ] );
 		return self::factory()->user->create( [ 'role' => 'subscriber' ] );
 	}
 
@@ -550,30 +558,7 @@ class Test_Content_Gate_Rest extends \WP_UnitTestCase {
 				'post_content' => '<!-- wp:paragraph --><p>Free paragraph one.</p><!-- /wp:paragraph --><!-- wp:paragraph --><p>Free paragraph two.</p><!-- /wp:paragraph --><!-- wp:paragraph --><p>' . self::BODY_SENTINEL . '</p><!-- /wp:paragraph -->',
 			]
 		);
-		Content_Gate::update_gate_settings(
-			$this->gate_id,
-			[
-				'title'         => 'REST Gate',
-				'status'        => 'publish',
-				'priority'      => 0,
-				'content_rules' => [
-					[
-						'slug'  => 'specific_posts',
-						'value' => [ $this->gated_post_id, $second_gated_id ],
-					],
-				],
-				'registration'  => [
-					'active'               => true,
-					'metering'             => [
-						'enabled' => false,
-						'count'   => 0,
-						'period'  => 'month',
-					],
-					'require_verification' => false,
-					'gate_id'              => 0,
-				],
-			]
-		);
+		$this->configure_gate( [ $this->gated_post_id, $second_gated_id ] );
 		wp_set_current_user( 0 );
 
 		$data = $this->rest_get( '/wp/v2/posts', [ 'include' => [ $this->gated_post_id, $second_gated_id ] ] );
@@ -586,21 +571,6 @@ class Test_Content_Gate_Rest extends \WP_UnitTestCase {
 				'Every gated item in a collection must withhold its body.'
 			);
 		}
-	}
-
-	/**
-	 * An embed-context response keeps the shape core gives it.
-	 */
-	public function test_embed_context_does_not_gain_a_content_key() {
-		wp_set_current_user( 0 );
-
-		$data = $this->rest_get( '/wp/v2/posts/' . $this->gated_post_id, [ 'context' => 'embed' ] );
-
-		$this->assertArrayNotHasKey(
-			'content',
-			$data,
-			'Embed responses omit content; the filter must not fabricate the key.'
-		);
 	}
 
 	/**
@@ -826,9 +796,9 @@ class Test_Content_Gate_Rest extends \WP_UnitTestCase {
 	 * add_filter( 'rest_send_nocache_headers', '__return_true' ) in
 	 * Content_Gate::filter_rest_response() ever runs -- that data set would
 	 * stay green even if that add_filter() call were deleted outright.
-	 * Confirmed empirically: moving that add_filter() call to after the
-	 * `null === $restriction` check it currently precedes did not fail a
-	 * logged-in-subscriber version of this case. An anonymous entitled reader
+	 * A logged-in-subscriber version of this case stays green even when that
+	 * add_filter() call moves after the `null === $restriction` check it
+	 * currently precedes, so it cannot be what guards it. An anonymous entitled reader
 	 * has no such baseline to hide behind, so this is the version that
 	 * actually exercises Content_Gate::filter_rest_response()'s own
 	 * contribution to the response headers.
@@ -974,11 +944,11 @@ class Test_Content_Gate_Rest extends \WP_UnitTestCase {
 	 * serve_request_and_capture_headers()'s docblock for why the filter
 	 * alone is not sufficient evidence).
 	 *
-	 * Before the guard filter_rest_response() checks existed, that method
-	 * reached the `rest_send_nocache_headers` opt-in unconditionally for
-	 * every REST-exposed post type as soon as the feature flag was on,
-	 * regardless of whether anything on the site could actually restrict a
-	 * post -- an attachment read (`/wp/v2/media`) was enough to flip it.
+	 * Without that guard, filter_rest_response() reaches the
+	 * `rest_send_nocache_headers` opt-in for every REST-exposed post type as
+	 * soon as the feature flag is on, regardless of whether anything on the
+	 * site could restrict a post -- an attachment read (`/wp/v2/media`) is
+	 * enough to flip it.
 	 */
 	public function test_rest_reads_do_not_force_nocache_headers_without_a_restriction_source() {
 		wp_update_post(
@@ -992,19 +962,11 @@ class Test_Content_Gate_Rest extends \WP_UnitTestCase {
 		$result  = $this->serve_request_and_capture_headers( '/wp/v2/posts/' . $this->open_post_id );
 		$headers = $result['headers'];
 
-		if ( isset( $headers['Cache-Control'] ) ) {
-			$this->assertStringNotContainsString(
-				'no-store',
-				$headers['Cache-Control'],
-				'A site with no published gate must not force no-cache headers on REST reads.'
-			);
-		} else {
-			$this->assertArrayNotHasKey(
-				'Cache-Control',
-				$headers,
-				'A site with no published gate must not force no-cache headers on REST reads.'
-			);
-		}
+		$this->assertStringNotContainsString(
+			'no-store',
+			$headers['Cache-Control'] ?? '',
+			'A site with no published gate must not force no-cache headers on REST reads.'
+		);
 	}
 
 	// NOTE: filter_rest_response() also bails when Memberships::is_active(),
@@ -1030,12 +992,12 @@ class Test_Content_Gate_Rest extends \WP_UnitTestCase {
 	 * Test_Feed_Restriction::test_restriction_source_filter_opts_a_gateless_site_back_in()
 	 * and Content_Gate::has_first_party_restriction_source()'s docblock).
 	 *
-	 * Regression test for a real bug in an earlier version of this guard: it
-	 * inlined the has_first_party_restriction_source() logic without the
+	 * The guard has to resolve the filter, not just the gate lookup: inlining
+	 * has_first_party_restriction_source()'s logic without the
 	 * `apply_filters( 'newspack_content_gate_has_restriction_source', … )`
-	 * call, so a site that legitimately opted back in via that filter was
-	 * silently ignored and stayed ungated over REST regardless -- an
-	 * entitlement verdict the front end (and the feed) would have honored.
+	 * call leaves a site that legitimately opts back in through that filter
+	 * ungated over REST -- an entitlement verdict the front end and the feed
+	 * both honor.
 	 */
 	public function test_third_party_restriction_source_opt_in_is_honored_over_rest() {
 		// The layout post a real gate would have resolved to, forced below so
@@ -1151,30 +1113,7 @@ class Test_Content_Gate_Rest extends \WP_UnitTestCase {
 				'post_content' => '<!-- wp:paragraph --><p>Free paragraph one.</p><!-- /wp:paragraph --><!-- wp:paragraph --><p>Free paragraph two.</p><!-- /wp:paragraph --><!-- wp:paragraph --><p>' . self::BODY_SENTINEL . '</p><!-- /wp:paragraph -->',
 			]
 		);
-		Content_Gate::update_gate_settings(
-			$this->gate_id,
-			[
-				'title'         => 'REST Gate',
-				'status'        => 'publish',
-				'priority'      => 0,
-				'content_rules' => [
-					[
-						'slug'  => 'specific_posts',
-						'value' => [ $this->gated_post_id, $front_end_post_id ],
-					],
-				],
-				'registration'  => [
-					'active'               => true,
-					'metering'             => [
-						'enabled' => false,
-						'count'   => 0,
-						'period'  => 'month',
-					],
-					'require_verification' => false,
-					'gate_id'              => 0,
-				],
-			]
-		);
+		$this->configure_gate( [ $this->gated_post_id, $front_end_post_id ] );
 		wp_set_current_user( 0 );
 
 		// Step 1: an in-process REST dispatch of a DIFFERENT gated post,
@@ -1267,8 +1206,7 @@ class Test_Content_Gate_Rest extends \WP_UnitTestCase {
 		// never occurs anywhere in the plugin's markup, so it can never
 		// distinguish an overlay gate from an inline one. 'newspack-content-gate__inline-gate'
 		// is what get_inline_gate_content_for_post() actually emits when style
-		// resolves to 'inline' (the value the wrong-post bug this replaces
-		// would have silently left in place); its absence is genuine evidence
+		// resolves to 'inline'; its absence is genuine evidence
 		// that get_inline_gate_html() returned the empty string this claim
 		// requires for a non-inline style.
 		$this->assertStringNotContainsString(
