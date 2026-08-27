@@ -169,7 +169,7 @@ class Test_Email_Verification_Prompt extends WP_UnitTestCase {
 	 * them rather than being asked for a code with no stated reason.
 	 */
 	public function test_prompts_unverified_reader_matching_an_institution() {
-		$institution_id = $this->create_institution( 'Voyager Technologies', 'voyager.example' );
+		$institution_id = $this->create_institution( 'Example University', 'example.test' );
 		$this->create_gate(
 			[
 				[
@@ -180,14 +180,14 @@ class Test_Email_Verification_Prompt extends WP_UnitTestCase {
 				],
 			]
 		);
-		$reader_id = $this->create_reader( 'reader@voyager.example' );
+		$reader_id = $this->create_reader( 'reader@example.test' );
 
 		$this->assertTrue( $this->visit_gated_post_as( $reader_id ), 'Sanity: the unverified reader is denied.' );
 
 		$prompt_context = Email_Verification_Prompt::get_prompt_context();
 		$this->assertNotFalse( $prompt_context, 'The denied reader is offered the verification prompt.' );
-		$this->assertSame( [ 'Voyager Technologies' ], $prompt_context['institutions'] );
-		$this->assertSame( 'reader@voyager.example', $prompt_context['email'] );
+		$this->assertSame( [ 'Example University' ], $prompt_context['institutions'] );
+		$this->assertSame( 'reader@example.test', $prompt_context['email'] );
 	}
 
 	/**
@@ -200,12 +200,12 @@ class Test_Email_Verification_Prompt extends WP_UnitTestCase {
 				[
 					[
 						'slug'  => 'email_domain',
-						'value' => 'voyager.example',
+						'value' => 'example.test',
 					],
 				],
 			]
 		);
-		$reader_id = $this->create_reader( 'reader@voyager.example' );
+		$reader_id = $this->create_reader( 'reader@example.test' );
 
 		$this->assertTrue( $this->visit_gated_post_as( $reader_id ), 'Sanity: the unverified reader is denied.' );
 
@@ -220,7 +220,7 @@ class Test_Email_Verification_Prompt extends WP_UnitTestCase {
 	 * paywall, so the prompt must not promise otherwise.
 	 */
 	public function test_no_prompt_when_verification_would_not_unlock_the_gate() {
-		$institution_id = $this->create_institution( 'Voyager Technologies', 'voyager.example' );
+		$institution_id = $this->create_institution( 'Example University', 'example.test' );
 		$this->create_gate(
 			[
 				[
@@ -235,7 +235,7 @@ class Test_Email_Verification_Prompt extends WP_UnitTestCase {
 				],
 			]
 		);
-		$reader_id = $this->create_reader( 'reader@voyager.example' );
+		$reader_id = $this->create_reader( 'reader@example.test' );
 
 		$this->assertTrue( $this->visit_gated_post_as( $reader_id ), 'Sanity: the unverified reader is denied.' );
 		$this->assertFalse(
@@ -250,8 +250,8 @@ class Test_Email_Verification_Prompt extends WP_UnitTestCase {
 	 * through only one, the prompt names that one alone.
 	 */
 	public function test_only_institutions_the_gate_grants_through_are_named() {
-		$granted_institution_id = $this->create_institution( 'Voyager Technologies', 'voyager.example' );
-		$this->create_institution( 'Unrelated Institute', 'voyager.example' );
+		$granted_institution_id = $this->create_institution( 'Example University', 'example.test' );
+		$this->create_institution( 'Unrelated Institute', 'example.test' );
 		$this->create_gate(
 			[
 				[
@@ -262,8 +262,8 @@ class Test_Email_Verification_Prompt extends WP_UnitTestCase {
 				],
 			]
 		);
-		$matching_reader_id     = $this->create_reader( 'reader@voyager.example' );
-		$non_matching_reader_id = $this->create_reader( 'reader@elsewhere.example' );
+		$matching_reader_id     = $this->create_reader( 'reader@example.test' );
+		$non_matching_reader_id = $this->create_reader( 'reader@elsewhere.test' );
 
 		$this->assertTrue( $this->visit_gated_post_as( $non_matching_reader_id ), 'Sanity: the unverified reader is denied.' );
 		$this->assertFalse(
@@ -275,7 +275,7 @@ class Test_Email_Verification_Prompt extends WP_UnitTestCase {
 		$prompt_context = Email_Verification_Prompt::get_prompt_context();
 		$this->assertNotFalse( $prompt_context );
 		$this->assertSame(
-			[ 'Voyager Technologies' ],
+			[ 'Example University' ],
 			$prompt_context['institutions'],
 			'Only the institution this gate grants access through is named, not every institution the address matches.'
 		);
@@ -287,8 +287,8 @@ class Test_Email_Verification_Prompt extends WP_UnitTestCase {
 	 * would tell them an institution unlocks the article when it never will.
 	 */
 	public function test_only_institutions_in_a_passing_group_are_named() {
-		$unlocking_institution_id = $this->create_institution( 'Voyager Technologies', 'voyager.example' );
-		$blocked_institution_id   = $this->create_institution( 'Grounded Institute', 'voyager.example' );
+		$unlocking_institution_id = $this->create_institution( 'Example University', 'example.test' );
+		$blocked_institution_id   = $this->create_institution( 'Grounded Institute', 'example.test' );
 		$this->create_gate(
 			[
 				[
@@ -309,14 +309,14 @@ class Test_Email_Verification_Prompt extends WP_UnitTestCase {
 				],
 			]
 		);
-		$reader_id = $this->create_reader( 'reader@voyager.example' );
+		$reader_id = $this->create_reader( 'reader@example.test' );
 
 		$this->assertTrue( $this->visit_gated_post_as( $reader_id ), 'Sanity: the unverified reader is denied.' );
 
 		$prompt_context = Email_Verification_Prompt::get_prompt_context();
 		$this->assertNotFalse( $prompt_context );
 		$this->assertSame(
-			[ 'Voyager Technologies' ],
+			[ 'Example University' ],
 			$prompt_context['institutions'],
 			'Grounded Institute is ANDed with a rule the reader fails, so verifying never opens that route.'
 		);
@@ -328,7 +328,7 @@ class Test_Email_Verification_Prompt extends WP_UnitTestCase {
 	 * is the promise the prompt must not make.
 	 */
 	public function test_no_prompt_when_a_lower_priority_gate_still_denies() {
-		$institution_id = $this->create_institution( 'Voyager Technologies', 'voyager.example' );
+		$institution_id = $this->create_institution( 'Example University', 'example.test' );
 		$this->create_gate(
 			[
 				[
@@ -351,7 +351,7 @@ class Test_Email_Verification_Prompt extends WP_UnitTestCase {
 			],
 			2
 		);
-		$reader_id = $this->create_reader( 'reader@voyager.example' );
+		$reader_id = $this->create_reader( 'reader@example.test' );
 
 		$this->assertTrue( $this->visit_gated_post_as( $reader_id ), 'Sanity: the unverified reader is denied.' );
 		$this->assertFalse(
@@ -365,7 +365,7 @@ class Test_Email_Verification_Prompt extends WP_UnitTestCase {
 	 * whether to prompt and nothing else — an unverified reader is still denied.
 	 */
 	public function test_simulation_does_not_grant_access() {
-		$institution_id = $this->create_institution( 'Voyager Technologies', 'voyager.example' );
+		$institution_id = $this->create_institution( 'Example University', 'example.test' );
 		$this->create_gate(
 			[
 				[
@@ -376,18 +376,18 @@ class Test_Email_Verification_Prompt extends WP_UnitTestCase {
 				],
 			]
 		);
-		$reader_id = $this->create_reader( 'reader@voyager.example' );
+		$reader_id = $this->create_reader( 'reader@example.test' );
 		$this->visit_gated_post_as( $reader_id );
 
 		$this->assertNotFalse( Email_Verification_Prompt::get_prompt_context(), 'Sanity: the prompt evaluated, running the simulation.' );
 		$this->assertFalse(
-			Access_Rules::is_email_domain_whitelisted( $reader_id, 'voyager.example' ),
+			Access_Rules::is_email_domain_whitelisted( $reader_id, 'example.test' ),
 			'The email-domain rule still denies an unverified reader after the prompt has evaluated it.'
 		);
 
 		update_user_meta( $reader_id, Reader_Activation::EMAIL_VERIFIED, true );
 		$this->assertTrue(
-			Access_Rules::is_email_domain_whitelisted( $reader_id, 'voyager.example' ),
+			Access_Rules::is_email_domain_whitelisted( $reader_id, 'example.test' ),
 			'Verifying is what grants access.'
 		);
 	}
@@ -398,15 +398,15 @@ class Test_Email_Verification_Prompt extends WP_UnitTestCase {
 	 * second reader would be a real change to someone who never asked for one.
 	 */
 	public function test_assumption_does_not_reach_another_reader() {
-		$reader_a_id = $this->create_reader( 'a@voyager.example' );
-		$reader_b_id = $this->create_reader( 'b@voyager.example' );
+		$reader_a_id = $this->create_reader( 'a@example.test' );
+		$reader_b_id = $this->create_reader( 'b@example.test' );
 
 		$verdicts = Access_Rules::with_assumed_verification(
 			$reader_a_id,
 			function () use ( $reader_a_id, $reader_b_id ) {
 				return [
-					'a' => Access_Rules::is_email_domain_whitelisted( $reader_a_id, 'voyager.example' ),
-					'b' => Access_Rules::is_email_domain_whitelisted( $reader_b_id, 'voyager.example' ),
+					'a' => Access_Rules::is_email_domain_whitelisted( $reader_a_id, 'example.test' ),
+					'b' => Access_Rules::is_email_domain_whitelisted( $reader_b_id, 'example.test' ),
 				];
 			}
 		);
@@ -420,7 +420,7 @@ class Test_Email_Verification_Prompt extends WP_UnitTestCase {
 	 * assumption must not survive that and leak into the next real access decision.
 	 */
 	public function test_assumption_is_cleared_when_the_callback_throws() {
-		$reader_id = $this->create_reader( 'reader@voyager.example' );
+		$reader_id = $this->create_reader( 'reader@example.test' );
 
 		try {
 			Access_Rules::with_assumed_verification(
@@ -435,7 +435,7 @@ class Test_Email_Verification_Prompt extends WP_UnitTestCase {
 		}
 
 		$this->assertFalse(
-			Access_Rules::is_email_domain_whitelisted( $reader_id, 'voyager.example' ),
+			Access_Rules::is_email_domain_whitelisted( $reader_id, 'example.test' ),
 			'The rule denies the unverified reader again once the hypothetical has unwound.'
 		);
 	}
@@ -445,7 +445,7 @@ class Test_Email_Verification_Prompt extends WP_UnitTestCase {
 	 * non-reader account on the same domain is out of the flow whatever its state.
 	 */
 	public function test_no_prompt_for_a_verified_reader_or_a_non_reader() {
-		$institution_id = $this->create_institution( 'Voyager Technologies', 'voyager.example' );
+		$institution_id = $this->create_institution( 'Example University', 'example.test' );
 		$this->create_gate(
 			[
 				[
@@ -456,7 +456,7 @@ class Test_Email_Verification_Prompt extends WP_UnitTestCase {
 				],
 			]
 		);
-		$reader_id = $this->create_reader( 'reader@voyager.example', true );
+		$reader_id = $this->create_reader( 'reader@example.test', true );
 
 		$this->assertFalse( $this->visit_gated_post_as( $reader_id ), 'A verified reader on the domain is granted access.' );
 		$this->assertFalse( Email_Verification_Prompt::get_prompt_context() );
@@ -464,7 +464,7 @@ class Test_Email_Verification_Prompt extends WP_UnitTestCase {
 		$editor_id = self::factory()->user->create(
 			[
 				'role'       => 'editor',
-				'user_email' => 'editor@voyager.example',
+				'user_email' => 'editor@example.test',
 			]
 		);
 		$this->visit_gated_post_as( $editor_id );
@@ -481,7 +481,7 @@ class Test_Email_Verification_Prompt extends WP_UnitTestCase {
 	 * on the configuration it helps most.
 	 */
 	public function test_prompts_when_the_gate_also_walls_registration_behind_verification() {
-		$institution_id = $this->create_institution( 'Voyager Technologies', 'voyager.example' );
+		$institution_id = $this->create_institution( 'Example University', 'example.test' );
 		$this->create_gate(
 			[
 				[
@@ -497,7 +497,7 @@ class Test_Email_Verification_Prompt extends WP_UnitTestCase {
 				'require_verification' => true,
 			]
 		);
-		$reader_id = $this->create_reader( 'reader@voyager.example' );
+		$reader_id = $this->create_reader( 'reader@example.test' );
 
 		$this->assertTrue( $this->visit_gated_post_as( $reader_id ), 'Sanity: the unverified reader is denied.' );
 		$this->assertNotFalse(
@@ -512,7 +512,7 @@ class Test_Email_Verification_Prompt extends WP_UnitTestCase {
 	 * what to show, and a second read finding it wiped would drop the gate.
 	 */
 	public function test_resolving_the_prompt_leaves_the_gate_resolution_intact() {
-		$institution_id = $this->create_institution( 'Voyager Technologies', 'voyager.example' );
+		$institution_id = $this->create_institution( 'Example University', 'example.test' );
 		$gate_id        = $this->create_gate(
 			[
 				[
@@ -523,7 +523,7 @@ class Test_Email_Verification_Prompt extends WP_UnitTestCase {
 				],
 			]
 		);
-		$reader_id = $this->create_reader( 'reader@voyager.example' );
+		$reader_id = $this->create_reader( 'reader@example.test' );
 		$this->visit_gated_post_as( $reader_id );
 
 		$resolved_gate_id   = Content_Gate::get_gate_post_id();
@@ -542,7 +542,7 @@ class Test_Email_Verification_Prompt extends WP_UnitTestCase {
 	 * they have nowhere to type.
 	 */
 	public function test_no_prompt_where_the_auth_modal_is_filtered_off() {
-		$institution_id = $this->create_institution( 'Voyager Technologies', 'voyager.example' );
+		$institution_id = $this->create_institution( 'Example University', 'example.test' );
 		$this->create_gate(
 			[
 				[
@@ -553,7 +553,7 @@ class Test_Email_Verification_Prompt extends WP_UnitTestCase {
 				],
 			]
 		);
-		$reader_id = $this->create_reader( 'reader@voyager.example' );
+		$reader_id = $this->create_reader( 'reader@example.test' );
 
 		$this->visit_gated_post_as( $reader_id );
 		$this->assertNotFalse( Email_Verification_Prompt::get_prompt_context(), 'Sanity: the reader is offered the prompt.' );
@@ -571,7 +571,7 @@ class Test_Email_Verification_Prompt extends WP_UnitTestCase {
 	 * Anonymous visitors are out of scope: there is no address to verify.
 	 */
 	public function test_no_prompt_for_anonymous_visitors() {
-		$institution_id = $this->create_institution( 'Voyager Technologies', 'voyager.example' );
+		$institution_id = $this->create_institution( 'Example University', 'example.test' );
 		$this->create_gate(
 			[
 				[
@@ -592,7 +592,7 @@ class Test_Email_Verification_Prompt extends WP_UnitTestCase {
 	 * layout's own subscribe CTA remains the reader's alternative.
 	 */
 	public function test_prompt_is_prepended_to_the_gate_layout() {
-		$institution_id = $this->create_institution( 'Voyager Technologies', 'voyager.example' );
+		$institution_id = $this->create_institution( 'Example University', 'example.test' );
 		$this->create_gate(
 			[
 				[
@@ -603,7 +603,7 @@ class Test_Email_Verification_Prompt extends WP_UnitTestCase {
 				],
 			]
 		);
-		$reader_id = $this->create_reader( 'reader@voyager.example' );
+		$reader_id = $this->create_reader( 'reader@example.test' );
 		$this->visit_gated_post_as( $reader_id );
 
 		$layout_id      = Content_Gate::get_gate_layout_id();
@@ -611,7 +611,7 @@ class Test_Email_Verification_Prompt extends WP_UnitTestCase {
 		$rendered       = apply_filters( 'newspack_gate_layout_content', $layout_content, $layout_id );
 
 		$this->assertStringContainsString( 'newspack-content-gate__verification-prompt', $rendered );
-		$this->assertStringContainsString( 'Voyager Technologies', $rendered );
+		$this->assertStringContainsString( 'Example University', $rendered );
 		$this->assertStringEndsWith( $layout_content, $rendered, 'The layout content is kept, with the prompt above it.' );
 	}
 
@@ -619,7 +619,7 @@ class Test_Email_Verification_Prompt extends WP_UnitTestCase {
 	 * A layout that is not the one denying this reader must not pick up the prompt.
 	 */
 	public function test_prompt_is_not_prepended_to_another_layout() {
-		$institution_id = $this->create_institution( 'Voyager Technologies', 'voyager.example' );
+		$institution_id = $this->create_institution( 'Example University', 'example.test' );
 		$this->create_gate(
 			[
 				[
@@ -630,7 +630,7 @@ class Test_Email_Verification_Prompt extends WP_UnitTestCase {
 				],
 			]
 		);
-		$reader_id = $this->create_reader( 'reader@voyager.example' );
+		$reader_id = $this->create_reader( 'reader@example.test' );
 		$this->visit_gated_post_as( $reader_id );
 
 		$other_layout_id = Content_Gate::get_gate_layout_id() + 1000;
