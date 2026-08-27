@@ -11,7 +11,8 @@
 		margin: 0 0 var(--wp--preset--spacing--30);
 	}
 
-	.cat-links {
+	.cat-links,
+	.tag-labels {
 		color: var(--wp--preset--color--contrast);
 		font-size: var(--wp--preset--font-size--small);
 		line-height: var(--wp--custom--line-height--small);
@@ -62,12 +63,14 @@
 	.has-background:not(.has-base-background-color) &,
 	.has-text-color & {
 		.cat-links,
+		.tag-labels,
 		.entry-meta,
 		.more-link {
 			color: currentcolor;
 		}
 
 		.cat-links,
+		.tag-labels,
 		.entry-title {
 			a:hover {
 				color: color-mix(in srgb, currentcolor 80%, transparent);
@@ -159,12 +162,14 @@
 			}
 
 			.cat-links,
+			.tag-labels,
 			.entry-meta,
 			.more-link {
 				color: inherit;
 			}
 
 			.cat-links,
+			.tag-labels,
 			.entry-title {
 				a:hover {
 					color: rgba(white, 0.85);
