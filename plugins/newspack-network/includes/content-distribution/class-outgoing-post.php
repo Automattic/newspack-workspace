@@ -500,12 +500,40 @@ class Outgoing_Post {
 	}
 
 	/**
+	 * The content the receiving site will end up storing.
+	 *
+	 * `media_data` describes the images in the post so the receiving site can size
+	 * them, which only works if it describes the images that site actually has. The
+	 * two ends have to agree on which content that is: Incoming_Post::get_post_content()
+	 * keeps the block-processed content for a block post and the filtered content
+	 * for a classic one, so this branches the same way. Reading the original post
+	 * content instead, as this used to, misses a block rewritten on its way out,
+	 * a WordPress 7.1 dynamic gallery above all, since it carries no image IDs
+	 * until distribution resolves it.
+	 *
+	 * @return string The content the receiving site will store.
+	 */
+	protected function get_distributed_content() {
+		if ( use_block_editor_for_post_type( $this->post->post_type ) && has_blocks( $this->post->post_content ) ) {
+			return $this->get_raw_post_content();
+		}
+
+		return $this->get_processed_post_content();
+	}
+
+	/**
 	 * Get the post attachment data for distribution.
 	 *
 	 * @return array The post attachment data.
 	 */
 	protected function get_post_media_data() {
 		$attachment_data = [];
+
+		// Read the content before the CDN override goes on. Preparing it can run a
+		// block processor that installs and removes this same filter, and WordPress
+		// keys hook callbacks by name, so the inner removal would take this one with
+		// it and the URLs below would come back rewritten to the origin's CDN.
+		$content = $this->get_distributed_content();
 
 		add_filter( 'jetpack_photon_override_image_downsize', '__return_true' );
 
@@ -528,13 +556,7 @@ class Outgoing_Post {
 			];
 		}
 
-		// Read the images out of the content that is actually being distributed.
-		// Blocks are rewritten on their way out, so the original content and the
-		// distributed content can name different images, and an image the node
-		// can't find here opens its lightbox at the wrong size. Scanning the raw
-		// content also keeps out images that only exist because a `the_content`
-		// filter injected them, such as ads or related posts.
-		$attachments = self::get_content_attachments( $this->get_raw_post_content() );
+		$attachments = self::get_content_attachments( $content );
 		foreach ( $attachments as $attachment ) {
 			if ( isset( $attachment_data[ $attachment->ID ] ) ) {
 				continue;

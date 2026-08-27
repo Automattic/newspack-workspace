@@ -7,6 +7,7 @@
 
 namespace Test\Content_Distribution;
 
+use Newspack_Network\Content_Distribution\Blocks;
 use Newspack_Network\Content_Distribution\Outgoing_Post;
 use Newspack_Network\Hub\Node as Hub_Node;
 use WP_User;
@@ -577,5 +578,91 @@ class TestOutgoingPost extends \WP_UnitTestCase {
 			$this->assertSame( 900, $media_data[ $attachment_id ]['width'] );
 			$this->assertSame( 600, $media_data[ $attachment_id ]['height'] );
 		}
+	}
+
+	/**
+	 * A classic post is stored on the receiving site as filtered content, so an
+	 * image a shortcode or a filter puts there has to be described too. Scanning
+	 * the block-processed content alone would leave the node rendering an image
+	 * the payload says nothing about.
+	 */
+	public function test_media_data_covers_a_classic_post() {
+		$shortcode_image = $this->image_attachment();
+
+		add_shortcode(
+			'np_test_image',
+			function () use ( $shortcode_image ) {
+				return '<img src="http://example.org/shortcode.png" class="wp-image-' . $shortcode_image . '"/>';
+			}
+		);
+
+		$outgoing_post = $this->outgoing_post_with_content( 'Before. [np_test_image] After.' );
+		$media_data    = $outgoing_post->get_payload()['post_data']['media_data'];
+
+		remove_shortcode( 'np_test_image' );
+
+		$this->assertArrayHasKey( $shortcode_image, $media_data );
+	}
+
+	/**
+	 * Media discovery follows the content after the block processors have run, not
+	 * the content as authored. Pinned with a processor rather than a gallery so it
+	 * holds on every WordPress version.
+	 */
+	public function test_media_data_follows_the_processed_blocks() {
+		$authored     = $this->image_attachment();
+		$distributed  = $this->image_attachment();
+		$replacement  = $this->image_block( $distributed );
+
+		Blocks::register_block_processor(
+			'core/image',
+			function () use ( $replacement ) {
+				return parse_blocks( $replacement )[0];
+			}
+		);
+
+		$outgoing_post = $this->outgoing_post_with_content( $this->image_block( $authored ) );
+		$media_data    = $outgoing_post->get_payload()['post_data']['media_data'];
+
+		Blocks::reset_block_processors( 'core/image' );
+
+		$this->assertArrayHasKey( $distributed, $media_data, 'The image that reaches the node should be described.' );
+		$this->assertArrayNotHasKey( $authored, $media_data, 'The image the processor replaced should not be.' );
+	}
+
+	/**
+	 * Every media URL in the payload is read with the image-CDN override in place,
+	 * so a node gets the origin's own files rather than the origin's CDN.
+	 *
+	 * The override is a single named callback, and WordPress keys hooks by name, so
+	 * a block processor that installs and removes the same one, as the dynamic
+	 * gallery processor does, used to take this method's override down with it.
+	 */
+	public function test_media_data_keeps_the_cdn_override_for_every_image() {
+		Blocks::register_block_processor(
+			'core/image',
+			function ( $block ) {
+				add_filter( 'jetpack_photon_override_image_downsize', '__return_true' );
+				remove_filter( 'jetpack_photon_override_image_downsize', '__return_true' );
+				return $block;
+			}
+		);
+
+		// Fires once per media_data entry, and nowhere else in a payload build.
+		$overridden = [];
+		$probe      = function ( $caption ) use ( &$overridden ) {
+			$overridden[] = has_filter( 'jetpack_photon_override_image_downsize', '__return_true' );
+			return $caption;
+		};
+		add_filter( 'wp_get_attachment_caption', $probe );
+
+		$outgoing_post = $this->outgoing_post_with_content( $this->image_block( $this->image_attachment() ) );
+		$outgoing_post->get_payload();
+
+		remove_filter( 'wp_get_attachment_caption', $probe );
+		Blocks::reset_block_processors( 'core/image' );
+
+		$this->assertNotEmpty( $overridden, 'The probe should have seen at least one image.' );
+		$this->assertNotContains( false, $overridden );
 	}
 }
