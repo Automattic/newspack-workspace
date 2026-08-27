@@ -12,6 +12,13 @@ import { __, _n, sprintf } from '@wordpress/i18n';
  * Internal dependencies.
  */
 import ContentRuleControl from './edit/content-rule-control';
+import {
+	findAccessRuleOption,
+	formatAccessRuleOptionLabel,
+	formatMissingAccessRuleOptionLabel,
+	getMissingOptionLabel,
+	type AccessRuleOption,
+} from '../../../../content-gate/access-rule-options';
 import { getMeteringCount, isMalformedAccessRuleValue, isUnconstrainedAccessRuleValue } from './utils';
 import { normalizeOneTimePurchaseValue } from '../../../../content-gate/components/one-time-purchase-rule-control';
 
@@ -20,19 +27,33 @@ const availableAccessRules = window.newspackAudienceContentGates.available_acces
 const noOp = () => {};
 
 /**
- * Map option values to labels, falling back to the raw value.
+ * Name each stored value alongside the ID it stores — the same identification the
+ * pickers give, so a gate reads the same way wherever it is inspected. Names repeat
+ * across product and institution tiers, and a value the option list cannot describe is
+ * named rather than printed bare.
  */
-const getOptionLabels = ( values: Array< string | number >, options: { value: string | number; label: string }[] = [] ) =>
-	values.map( value => options.find( option => String( option.value ) === String( value ) )?.label ?? String( value ) ).join( ', ' );
+const formatAccessRuleOptionValues = ( values: Array< string | number >, options: AccessRuleOption[] = [], slug: string ) =>
+	values
+		.map( value => {
+			const option = findAccessRuleOption( options, value );
+			return option ? formatAccessRuleOptionLabel( option ) : formatMissingAccessRuleOptionLabel( value, getMissingOptionLabel( slug ) );
+		} )
+		.join( ', ' );
 
 /**
  * Human-readable summary for an access rule value.
+ *
+ * @param rule          The rule to summarise.
+ * @param optionsBySlug The options to name the rule's values with, from
+ *                      `useAccessRuleOptions()`. Falls back to the list localised with
+ *                      the page for a rule the caller did not supply.
  */
-const formatAccessRuleValue = ( rule: GateAccessRule ): string => {
+const formatAccessRuleValue = ( rule: GateAccessRule, optionsBySlug: Record< string, AccessRuleOption[] > ): string => {
 	const config = availableAccessRules[ rule.slug ];
+	const options = optionsBySlug[ rule.slug ] ?? config?.options;
 	if ( 'one_time_purchase' === rule.slug ) {
 		const { product_ids: productIds, duration_value: durationValue, duration_unit: durationUnit } = normalizeOneTimePurchaseValue( rule.value );
-		const products = getOptionLabels( productIds, config?.options );
+		const products = formatAccessRuleOptionValues( productIds, options, rule.slug );
 		if ( 'forever' === durationUnit ) {
 			return sprintf(
 				// translators: %s: list of product names.
@@ -74,8 +95,8 @@ const formatAccessRuleValue = ( rule: GateAccessRule ): string => {
 	if ( isUnconstrainedAccessRuleValue( config, rule.value ) ) {
 		return __( 'Not set (grants access to everyone)', 'newspack-plugin' );
 	}
-	if ( Array.isArray( rule.value ) && config?.options ) {
-		return getOptionLabels( rule.value, config.options );
+	if ( Array.isArray( rule.value ) && options ) {
+		return formatAccessRuleOptionValues( rule.value, options, rule.slug );
 	}
 	// Boolean rules carry no displayable value (mirrors the pre-formatter
 	// rendering, where React printed nothing for a boolean child).
@@ -164,11 +185,21 @@ const formatMetering = ( metering: Metering, siteCount?: number, sitePeriod?: Me
 /**
  * Build the Content rules / Registered access / Paid access sections for a gate.
  *
- * @param gate         The gate (live edit state or a saved gate).
- * @param isNewsletter Whether this is a premium-newsletter gate (hides registration).
- * @param siteMeter    The shared allowance, so a summary can name where its count comes from.
+ * @param gate          The gate (live edit state or a saved gate).
+ * @param isNewsletter  Whether this is a premium-newsletter gate (hides registration).
+ * @param siteMeter     The shared allowance, so a summary can name where its count comes from.
+ * @param optionsBySlug The options to name each rule's values with, from
+ *                      `useAccessRuleOptions()`. The list localised with the page goes
+ *                      stale while the app is open — institutions are created and
+ *                      deleted in it — and a summary built from it would call an
+ *                      institution added a moment ago "not listed".
  */
-export const getGateSummarySections = ( gate: Gate, isNewsletter = false, siteMeter?: SiteMeterConfig ): GateSummarySection[] => {
+export const getGateSummarySections = (
+	gate: Gate,
+	isNewsletter = false,
+	siteMeter?: SiteMeterConfig,
+	optionsBySlug: Record< string, AccessRuleOption[] > = {}
+): GateSummarySection[] => {
 	const sections: GateSummarySection[] = [];
 
 	sections.push( {
@@ -236,7 +267,7 @@ export const getGateSummarySections = ( gate: Gate, isNewsletter = false, siteMe
 						ruleGroup.map( rule =>
 							availableAccessRules[ rule.slug ]?.name ? (
 								<p key={ `${ groupIndex }-${ rule.slug }` }>
-									<strong>{ availableAccessRules[ rule.slug ].name }:</strong> { formatAccessRuleValue( rule ) }
+									<strong>{ availableAccessRules[ rule.slug ].name }:</strong> { formatAccessRuleValue( rule, optionsBySlug ) }
 								</p>
 							) : null
 						)

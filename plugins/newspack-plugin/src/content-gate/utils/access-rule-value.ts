@@ -9,10 +9,22 @@
  * differ: the wizard's carries the rule's current value, the editor's does not.
  */
 type AccessRuleShape = {
-	has_options: boolean;
+	has_options?: boolean;
 	is_boolean?: boolean;
 	empty_grants_access?: boolean;
+	options?: unknown[];
 };
+
+/**
+ * Whether a rule's value is a list of option values rather than free text.
+ *
+ * `has_options` is the rule's own answer, from `Access_Rules::register_rule()`, and it
+ * settles the question: it is drawn from the rule's value type rather than from whatever
+ * its options callback returned. Only where a caller has no registry entry to read — a
+ * rule config assembled by hand — does the loaded list stand in for it, and then a
+ * populated one is the only evidence available.
+ */
+const takesOptionValues = ( config: AccessRuleShape ) => config.has_options ?? ( Array.isArray( config.options ) && config.options.length > 0 );
 
 /**
  * Whether a rule holds the empty value for its shape: `[]` on an options-backed
@@ -40,7 +52,7 @@ export const isMalformedAccessRuleValue = ( config: AccessRuleShape | undefined,
 	if ( ! config || config.is_boolean || 'boolean' === typeof value ) {
 		return false;
 	}
-	if ( config.has_options ) {
+	if ( takesOptionValues( config ) ) {
 		return ! Array.isArray( value ) && ! isEmptyAccessRuleValue( value );
 	}
 	return Array.isArray( value );

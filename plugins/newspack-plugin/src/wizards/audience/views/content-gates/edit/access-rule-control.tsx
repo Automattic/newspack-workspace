@@ -2,80 +2,30 @@
  * WordPress dependencies.
  */
 import { __, sprintf } from '@wordpress/i18n';
-import { useEffect, useState } from '@wordpress/element';
-import { useDispatch } from '@wordpress/data';
 import { TextControl } from '@wordpress/components';
+import type { TokenItem } from '@wordpress/components/build-types/form-token-field/types.d.ts';
 
 /**
  * Internal dependencies
  */
 import { FormTokenField } from '../../../../../../packages/components/src';
-import { WIZARD_STORE_NAMESPACE } from '../../../../../../packages/components/src/wizard/store';
-import { isMalformedAccessRuleValue, isUnconstrainedAccessRuleValue } from '../utils';
-import { fetchAllPages } from '../../../../../content-gate/utils/fetch-all-pages';
+import {
+	formatAccessRuleOptionLabel,
+	getAccessRuleOptionTokens,
+	getAccessRuleTokenFieldMessages,
+	getMissingOptionLabel,
+	isAccessRuleOptionInput,
+	resolveAccessRuleOptionTokens,
+} from '../../../../../content-gate/access-rule-options';
+import { isOptionBackedAccessRule } from '../../../../../content-gate/access-rule-option-sources';
 import OneTimePurchaseRuleControl from '../../../../../content-gate/components/one-time-purchase-rule-control';
-
-type RuleOption = { value: string | number; label: string };
-
-interface DynamicRuleConfig< T > {
-	path: string;
-	mapItem: ( item: T ) => RuleOption;
-}
-
-function dynamicRule< T >( config: DynamicRuleConfig< T > ): DynamicRuleConfig< T > {
-	return config;
-}
-
-/**
- * Rules whose options should be fetched dynamically via the REST API.
- */
-const DYNAMIC_OPTION_RULES: Record< string, DynamicRuleConfig< any > > = {
-	institution: dynamicRule< Institution >( {
-		path: '/wp/v2/np_institution?context=edit',
-		mapItem: item => ( { value: item.id, label: item.title.raw } ),
-	} ),
-};
-
-/**
- * Return options for a rule, fetching dynamically when configured.
- */
-function useRuleOptions( slug: string ) {
-	const rule = window.newspackAudienceContentGates.available_access_rules[ slug ];
-	const [ options, setOptions ] = useState< RuleOption[] >( rule?.options ?? [] );
-	const { addNotice } = useDispatch( WIZARD_STORE_NAMESPACE );
-
-	useEffect( () => {
-		const config = DYNAMIC_OPTION_RULES[ slug ];
-		if ( ! config ) {
-			return;
-		}
-		let cancelled = false;
-		fetchAllPages< any >( config.path ) // eslint-disable-line @typescript-eslint/no-explicit-any
-			.then( items => {
-				if ( ! cancelled ) {
-					setOptions( items.map( config.mapItem ) );
-				}
-			} )
-			.catch( () => {
-				if ( ! cancelled ) {
-					addNotice( {
-						message: __( 'Failed to load options. The list may be outdated.', 'newspack-plugin' ),
-						type: 'error',
-						id: `rule-options-error-${ slug }`,
-					} );
-				}
-			} );
-		return () => {
-			cancelled = true;
-		};
-	}, [ slug, addNotice ] );
-
-	return options;
-}
+import UnlistedValuesNotice from '../../../../../content-gate/components/unlisted-values-notice';
+import { isMalformedAccessRuleValue, isUnconstrainedAccessRuleValue } from '../utils';
+import { useAccessRuleOptions } from '../use-access-rule-options';
 
 export default function AccessRuleControl( { slug, value, onChange }: GateRuleControlProps ) {
 	const rule = window.newspackAudienceContentGates.available_access_rules[ slug ];
-	const options = useRuleOptions( slug );
+	const options = useAccessRuleOptions()[ slug ] ?? [];
 
 	if ( ! rule || rule.is_boolean ) {
 		return null;
@@ -83,11 +33,8 @@ export default function AccessRuleControl( { slug, value, onChange }: GateRuleCo
 	if ( 'one_time_purchase' === slug ) {
 		return <OneTimePurchaseRuleControl value={ value } onChange={ onChange } options={ options } TokenField={ FormTokenField } />;
 	}
-	// Options-backed rules always get the token field — with an empty option list
-	// it renders an empty picker. Degrading to the free-text control would let a
-	// string be saved where an array of option values belongs.
-	if ( rule.has_options ) {
-		const valueArr = Array.isArray( value ) ? value : [];
+	if ( isOptionBackedAccessRule( slug, rule.options ?? [], rule.has_options ) ) {
+		const selected = Array.isArray( value ) ? value : [];
 		// The picker can hold no token for a value that isn't an option, so on its own
 		// it would read as "no constraint" — the opposite of what the stored value
 		// does. Name the value, so the operator can replace it rather than guess why
@@ -125,16 +72,28 @@ export default function AccessRuleControl( { slug, value, onChange }: GateRuleCo
 		const unconstrainedNotice =
 			! malformedValueNotice && ( hasNothingToSelect || isUnconstrainedAccessRuleValue( rule, value ) ) ? grantsEveryoneNotice : undefined;
 		return (
-			<FormTokenField
-				label={ '' }
-				disabled={ hasNothingToSelect }
-				description={ malformedValueNotice ?? unconstrainedNotice }
-				value={ options.filter( o => valueArr.some( v => String( v ) === String( o.value ) ) ).map( o => o.label ) }
-				onChange={ ( items: string[] ) => onChange( options.filter( o => items.includes( o.label ) ).map( o => o.value ) ) }
-				suggestions={ options.map( o => o.label ) }
-				__experimentalExpandOnFocus
-				__next40pxDefaultSize
-			/>
+			<>
+				<FormTokenField
+					hideLabelFromVision
+					label={ rule.name }
+					disabled={ hasNothingToSelect }
+					description={ malformedValueNotice ?? unconstrainedNotice ?? __( 'Search by name or ID.', 'newspack-plugin' ) }
+					value={ getAccessRuleOptionTokens( options, selected, getMissingOptionLabel( slug ) ) }
+					onChange={ ( tokens: ( string | TokenItem )[] ) =>
+						onChange( resolveAccessRuleOptionTokens( tokens, options, { slug, stored: selected } ) )
+					}
+					suggestions={ options.map( formatAccessRuleOptionLabel ) }
+					messages={ getAccessRuleTokenFieldMessages( slug ) }
+					__experimentalValidateInput={ ( input: string ) => isAccessRuleOptionInput( input, options, slug ) }
+					__experimentalAutoSelectFirstMatch
+					__experimentalExpandOnFocus
+					__next40pxDefaultSize
+				/>
+				{ /* A value of the wrong shape is named above; this names stored IDs the
+				     list cannot describe, which is a different state and can coexist with
+				     none of the others. */ }
+				<UnlistedValuesNotice options={ options } value={ selected } />
+			</>
 		);
 	}
 	return (

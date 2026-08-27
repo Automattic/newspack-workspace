@@ -139,17 +139,20 @@ describe( 'block-visibility access rule value control', () => {
 	const renderControl = ( slug: string, config: any, value: any ) => AccessRuleValueControl( { slug, config, value, onChange: () => {} } );
 	const childrenOf = ( element: any ): any[] =>
 		( Array.isArray( element.props.children ) ? element.props.children : [ element.props.children ] ).filter( Boolean );
+	// The rule's control is returned inside a fragment that also carries the caution for a
+	// stale option list, so the control itself is one level in.
+	const controlOf = ( element: any ) => childrenOf( element )[ 0 ];
 
 	it( 'gives an options-backed rule the picker even when its option list is empty', () => {
 		const control = renderControl( 'institution', { name: 'Institutional access', has_options: true, options: [] }, [] );
 
-		expect( childrenOf( control )[ 0 ].type ).toBe( FormTokenField );
+		expect( childrenOf( controlOf( control ) )[ 0 ].type ).toBe( FormTokenField );
 	} );
 
 	it( 'gives a rule that declares no options source the free-text box', () => {
 		const control = renderControl( 'email_domain', { name: 'Whitelisted email domain', has_options: false, options: [] }, '' );
 
-		expect( control.type ).toBe( TextControl );
+		expect( controlOf( control ).type ).toBe( TextControl );
 	} );
 
 	it( 'takes the picker out of play when an empty value would grant everyone', () => {
@@ -162,7 +165,7 @@ describe( 'block-visibility access rule value control', () => {
 			[]
 		);
 
-		expect( childrenOf( control )[ 0 ].props.disabled ).toBe( true );
+		expect( childrenOf( controlOf( control ) )[ 0 ].props.disabled ).toBe( true );
 	} );
 
 	it( 'leaves the picker usable for a rule that still constrains when empty', () => {
@@ -170,7 +173,7 @@ describe( 'block-visibility access rule value control', () => {
 		// empty value is a configuration a publisher chooses — not the gate opening.
 		const control = renderControl( 'subscription', { name: 'Active subscription', has_options: true, options: [] }, [] );
 
-		expect( childrenOf( control )[ 0 ].props.disabled ).toBe( false );
+		expect( childrenOf( controlOf( control ) )[ 0 ].props.disabled ).toBe( false );
 	} );
 
 	it( 'names a stored value the picker cannot show', () => {
@@ -188,7 +191,7 @@ describe( 'block-visibility access rule value control', () => {
 			'Shelbyville University'
 		);
 
-		expect( childrenOf( control )[ 1 ].props.children ).toContain( 'Shelbyville University' );
-		expect( childrenOf( control )[ 1 ].props.children ).toContain( 'grants no access' );
+		expect( childrenOf( controlOf( control ) )[ 1 ].props.children ).toContain( 'Shelbyville University' );
+		expect( childrenOf( controlOf( control ) )[ 1 ].props.children ).toContain( 'grants no access' );
 	} );
 } );
