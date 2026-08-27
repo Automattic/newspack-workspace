@@ -432,7 +432,13 @@ figcaption,
 	&::before {
 		display: none;
 	}
+}
 
+// Only the category takes the block's link color. A label's own color comes
+// from the customizer rule printed in `wp_head`, and naming `.tag-labels` here
+// would put these `:hover` and `:visited` arms level with it, leaving the
+// chip's color to be decided by which stylesheet loads last.
+.wpnbha .cat-links {
 	a,
 	a:visited,
 	a:hover {
