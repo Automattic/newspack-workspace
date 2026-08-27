@@ -69,7 +69,12 @@
 			color: currentcolor;
 		}
 
+		// This theme gives a tag label no chip of its own, so it is plain text like
+		// the category beside it and needs the same hover. Naming both selectors is
+		// not the coupling NPPM-3049 breaks: that was the shared class in the
+		// markup, which let a publisher's `.cat-links a` rule reach a tag label.
 		.cat-links,
+		.tag-labels,
 		.entry-title {
 			a:hover {
 				color: color-mix(in srgb, currentcolor 80%, transparent);
@@ -168,6 +173,7 @@
 			}
 
 			.cat-links,
+			.tag-labels,
 			.entry-title {
 				a:hover {
 					color: rgba(white, 0.85);
