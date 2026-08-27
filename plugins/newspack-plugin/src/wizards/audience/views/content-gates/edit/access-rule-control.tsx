@@ -1,7 +1,7 @@
 /**
  * WordPress dependencies.
  */
-import { __, sprintf } from '@wordpress/i18n';
+import { __ } from '@wordpress/i18n';
 import { TextControl } from '@wordpress/components';
 import type { TokenItem } from '@wordpress/components/build-types/form-token-field/types.d.ts';
 
@@ -21,7 +21,7 @@ import {
 import { isOptionBackedAccessRule } from '../../../../../content-gate/access-rule-option-sources';
 import OneTimePurchaseRuleControl from '../../../../../content-gate/components/one-time-purchase-rule-control';
 import UnlistedValuesNotice from '../../../../../content-gate/components/unlisted-values-notice';
-import { isMalformedAccessRuleValue, isUnconstrainedAccessRuleValue } from '../utils';
+import { getAccessRuleValueNotice, isAccessRulePickerInert, isUnconstrainedAccessRuleValue } from '../utils';
 import { useAccessRuleOptions } from '../use-access-rule-options';
 
 export default function AccessRuleControl( { slug, value, onChange }: GateRuleControlProps ) {
@@ -36,49 +36,17 @@ export default function AccessRuleControl( { slug, value, onChange }: GateRuleCo
 	}
 	if ( isOptionBackedAccessRule( slug, rule.options ?? [], rule.has_options ) ) {
 		const selected = Array.isArray( value ) ? value : [];
-		// The picker can hold no token for a value that isn't an option, so on its own
-		// it would read as "no constraint" — the opposite of what the stored value
-		// does. Name the value, so the operator can replace it rather than guess why
-		// the rule looks empty.
-		const malformedValueNotice = isMalformedAccessRuleValue( rule, value )
-			? sprintf(
-					// translators: %s: the stored value.
-					__(
-						'The saved value “%s” is not one of this rule’s options, so the rule grants no access. Pick from the list to replace it.',
-						'newspack-plugin'
-					),
-					String( value )
-			  )
-			: undefined;
-		// Only for a rule whose empty value means "no constraint": nothing to select
-		// leaves the picker able to produce only that value, which grants every
-		// reader. Say so and take the field out of play, rather than offering a
-		// choice that opens the gate. A rule that still constrains when empty —
-		// `subscription`, which then requires any active subscription — keeps a
-		// working picker.
-		const hasNothingToSelect = !! rule.empty_grants_access && 0 === options.length;
-		// The same state with something to pick is the operator's to fix, so the
-		// picker stays usable and only says what the value does today. The save is
-		// refused while it stands, and a notice here is what stops that being the
-		// first they hear of it.
-		const grantsEveryoneNotice = hasNothingToSelect
-			? __(
-					'This rule has nothing to select yet, so it grants access to everyone. Add the items it selects, or turn the rule off.',
-					'newspack-plugin'
-			  )
-			: __(
-					'Nothing is selected, so this rule grants access to everyone. Select at least one option, or turn the rule off.',
-					'newspack-plugin'
-			  );
-		const unconstrainedNotice =
-			! malformedValueNotice && ( hasNothingToSelect || isUnconstrainedAccessRuleValue( rule, value ) ) ? grantsEveryoneNotice : undefined;
+		const hasOptions = options.length > 0;
+		// Both the caution and the inert state come from the shared module, so this picker
+		// and the block editor's reach the same verdict on one stored value.
+		const valueNotice = getAccessRuleValueNotice( rule, value, hasOptions );
 		return (
 			<>
 				<FormTokenField
 					hideLabelFromVision
 					label={ rule.name }
-					disabled={ hasNothingToSelect }
-					description={ malformedValueNotice ?? unconstrainedNotice ?? __( 'Search by name or ID.', 'newspack-plugin' ) }
+					disabled={ isAccessRulePickerInert( rule, value, hasOptions ) }
+					description={ valueNotice ?? __( 'Search by name or ID.', 'newspack-plugin' ) }
 					value={ getAccessRuleOptionTokens( options, selected, getMissingOptionLabel( slug ) ) }
 					onChange={ ( tokens: ( string | TokenItem )[] ) =>
 						onChange( resolveAccessRuleOptionTokens( tokens, options, { slug, stored: selected } ) )
@@ -107,7 +75,7 @@ export default function AccessRuleControl( { slug, value, onChange }: GateRuleCo
 					? __( 'Left empty, this rule grants access to everyone. Enter at least one value, or turn the rule off.', 'newspack-plugin' )
 					: __( 'Separate with commas.', 'newspack-plugin' )
 			}
-			value={ value as string }
+			value={ 'string' === typeof value ? value : '' }
 			onChange={ onChange }
 			__next40pxDefaultSize
 		/>

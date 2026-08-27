@@ -64,6 +64,13 @@ class Newspack_Test_Content_Gate_API extends WP_UnitTestCase {
 			],
 			'nppd2143_empty_options'    => [ 'options' => [] ],
 			'nppd2143_no_options'       => [],
+			// The one shape the two discriminators disagree on: `Promoted_Fields`
+			// registers this for a provider dropdown whose choices have not been
+			// pulled yet, and reading `options` instead would call it free text.
+			'nppd2143_declared_options' => [
+				'options'     => [],
+				'has_options' => true,
+			],
 		];
 		foreach ( $declared_options_per_rule as $rule_id => $config ) {
 			Access_Rules::register_rule(
@@ -100,6 +107,18 @@ class Newspack_Test_Content_Gate_API extends WP_UnitTestCase {
 			]
 		);
 		$this->assertSame( 'free text', $sanitized['value'], 'An empty declared options list keeps the free-text value.' );
+
+		// A rule that declares itself options-backed is one, whatever its list holds today.
+		$this->assertTrue( $registered['nppd2143_declared_options']['has_options'], 'A declared has_options survives an empty resolved list.' );
+		$this->assertWPError(
+			Content_Gate_API::sanitize_access_rule(
+				[
+					'slug'  => 'nppd2143_declared_options',
+					'value' => 'free text',
+				]
+			),
+			'A string value must be rejected on a rule that declares itself options-backed, even with no options resolved.'
+		);
 	}
 
 	/**
@@ -555,6 +574,45 @@ class Newspack_Test_Content_Gate_API extends WP_UnitTestCase {
 		);
 		$this->assertNotWPError( $sanitized_gate );
 		$this->assertSame( [], $sanitized_gate['custom_access']['access_rules'][0][0]['value'] );
+	}
+
+	/**
+	 * An active gate carrying no access rules at all imposes no condition, so every
+	 * reader passes it — the same state as one rule left empty, reached by sending
+	 * the whole set as `[]` rather than by emptying one rule. The per-rule loop
+	 * cannot see it, having nothing to iterate.
+	 */
+	public function test_active_custom_access_refuses_an_empty_rule_set() {
+		$refused = Content_Gate_API::sanitize_gate(
+			[
+				'custom_access' => [
+					'active'       => true,
+					'access_rules' => [],
+				],
+			]
+		);
+
+		$this->assertWPError( $refused, 'An active gate with no access rules must not save.' );
+		$this->assertSame( 'empty_access_rules', $refused->get_error_code() );
+	}
+
+	/**
+	 * The refusal above is about the gate being live, not about the rule set being
+	 * empty: a gate switched off is allowed to hold no rules, which is how one is
+	 * cleared before Paid access is turned back on.
+	 */
+	public function test_inactive_custom_access_accepts_an_empty_rule_set() {
+		$sanitized_gate = Content_Gate_API::sanitize_gate(
+			[
+				'custom_access' => [
+					'active'       => false,
+					'access_rules' => [],
+				],
+			]
+		);
+
+		$this->assertNotWPError( $sanitized_gate );
+		$this->assertSame( [], $sanitized_gate['custom_access']['access_rules'] );
 	}
 
 	/**

@@ -232,6 +232,18 @@ describe( 'AccessRuleControl, a rule whose value would let everyone through', ()
 		expect( screen.getByRole( 'combobox' ) ).toBeDisabled();
 	} );
 
+	it( 'says nothing about granting everyone while the rule still names something', async () => {
+		// The institutions a rule names can be deleted after it is saved. The value is
+		// then populated and denies every reader, so the caution for an empty rule is the
+		// opposite of what it does — and disabling the field would leave deleting the
+		// whole rule as the only way to clear the stale tokens.
+		renderRule( 'institution', { name: 'Institutional access', has_options: true, empty_grants_access: true, options: [] }, [ 12 ] );
+
+		expect( await screen.findByText( '(institution not listed) (#12)' ) ).toBeInTheDocument();
+		expect( screen.queryByText( /grants access to everyone/ ) ).not.toBeInTheDocument();
+		expect( screen.getByRole( 'combobox' ) ).not.toBeDisabled();
+	} );
+
 	it( 'keeps the picker for a rule that still constrains when empty, and for one with nothing to select', () => {
 		// `subscription` naming no product requires any active subscription, so an empty
 		// value is a configuration a publisher chooses. It has no options source either, so

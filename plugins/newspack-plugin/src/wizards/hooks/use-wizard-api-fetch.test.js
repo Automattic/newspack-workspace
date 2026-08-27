@@ -98,6 +98,25 @@ describe( 'useWizardApiFetch', () => {
 		expect( screen.getByTestId( 'error' ).textContent ).toBe( 'Invalid value for the "Institutional access" access rule.' );
 	} );
 
+	it( 'leaves a missing-parameter error alone, whose `params` is a list of names', async () => {
+		// `rest_missing_callback_param` files a numerically-indexed list of parameter
+		// names under the same key the case above reads as messages. Reading it there
+		// would replace WP's own wording with a bare parameter name.
+		mockWizardApiFetch.mockRejectedValue( {
+			message: 'Missing parameter(s): gate',
+			code: 'rest_missing_callback_param',
+			data: { status: 400, params: [ 'gate' ] },
+		} );
+
+		render( <HookProbe /> );
+
+		await act( async () => {
+			await hook.wizardApiFetch( { path: 'test-slug' } ).catch( () => {} );
+		} );
+
+		expect( screen.getByTestId( 'error' ).textContent ).toBe( 'Missing parameter(s): gate' );
+	} );
+
 	it( 'clears a stale error when the slug changes (NPPM-2733)', async () => {
 		// The loop-free slug-reset effect must clear a prior slug's error so it
 		// can't leak into a new slug. Added in response to earlier review.

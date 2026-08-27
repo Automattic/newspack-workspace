@@ -18,7 +18,7 @@ import {
 } from '@wordpress/components';
 import type { TokenItem } from '@wordpress/components/build-types/form-token-field/types.d.ts';
 import { useState, useEffect } from '@wordpress/element';
-import { __, sprintf } from '@wordpress/i18n';
+import { __ } from '@wordpress/i18n';
 
 /**
  * Internal dependencies
@@ -35,7 +35,7 @@ import {
 	resolveAccessRuleOptionTokens,
 } from '../access-rule-options';
 import { getAccessRuleOptionSource, isOptionBackedAccessRule } from '../access-rule-option-sources';
-import { isMalformedAccessRuleValue, isUnconstrainedAccessRuleValue } from '../utils/access-rule-value';
+import { getAccessRuleValueNotice, isAccessRulePickerInert, isUnconstrainedAccessRuleValue } from '../utils/access-rule-value';
 import OneTimePurchaseRuleControl from '../components/one-time-purchase-rule-control';
 import UnlistedValuesNotice from '../components/unlisted-values-notice';
 
@@ -222,46 +222,15 @@ export const AccessRuleValueControl = ( {
 		control = <OneTimePurchaseRuleControl value={ value } onChange={ onChange } options={ options } productsLabel={ config.name } />;
 	} else if ( isOptionBackedAccessRule( slug, staticOptions, config.has_options ) ) {
 		const selected = Array.isArray( value ) ? value : [];
-		// Only for a rule whose empty value means "no constraint": nothing to select
-		// leaves the picker able to produce only that value, which grants every
-		// reader. A rule that still constrains when empty — `subscription`, which
-		// then requires any active subscription — keeps a working picker. This
-		// control takes no help text of its own, so the reason goes in a sibling.
-		const hasNothingToSelect = !! config.empty_grants_access && 0 === options.length;
-		// The same state with something to pick stays usable: the operator can fix it
-		// here, and the notice is what tells them it needs fixing.
-		const grantsEveryone = isUnconstrainedAccessRuleValue( config, value );
-		// The opposite state, and the one the picker cannot show at all: a populated
-		// value of the wrong shape denies every reader, yet holds no token, so the
-		// control would read as an empty selection. Name the value, or an operator
-		// who ends the edit here writes `[]` over it and opens the gate.
-		const hasMalformedValue = isMalformedAccessRuleValue( config, value );
-		let valueNotice;
-		if ( hasMalformedValue ) {
-			valueNotice = sprintf(
-				// translators: %s: the stored value.
-				__(
-					'The saved value “%s” is not one of this rule’s options, so the rule grants no access. Pick from the list to replace it.',
-					'newspack-plugin'
-				),
-				String( value )
-			);
-		} else if ( grantsEveryone && hasNothingToSelect ) {
-			valueNotice = __(
-				'This rule has nothing to select yet, so it grants access to everyone. Add the items it selects, or turn the rule off.',
-				'newspack-plugin'
-			);
-		} else if ( grantsEveryone ) {
-			valueNotice = __(
-				'Nothing is selected, so this rule grants access to everyone. Select at least one option, or turn the rule off.',
-				'newspack-plugin'
-			);
-		}
+		const hasOptions = options.length > 0;
+		// Both the caution and the inert state come from the shared module, so this picker
+		// and the Audience wizard's reach the same verdict on one stored value.
+		const valueNotice = getAccessRuleValueNotice( config, value, hasOptions );
 		control = (
 			<>
 				<FormTokenField
 					label={ config.name }
-					disabled={ hasNothingToSelect }
+					disabled={ isAccessRulePickerInert( config, value, hasOptions ) }
 					value={ getAccessRuleOptionTokens( options, selected, getMissingOptionLabel( slug ) ) }
 					suggestions={ options.map( formatAccessRuleOptionLabel ) }
 					maxSuggestions={ MAX_OPTION_SUGGESTIONS }
@@ -275,7 +244,11 @@ export const AccessRuleValueControl = ( {
 					__next40pxDefaultSize
 					__nextHasNoMarginBottom
 				/>
-				{ valueNotice && <p className="components-base-control__help">{ valueNotice }</p> }
+				{ valueNotice && (
+					<p role="note" className="newspack-access-rule-values-notice">
+						{ valueNotice }
+					</p>
+				) }
 				{ /* A different state from the ones above, and it can stand alongside a
 				     value the picker holds tokens for: these are stored IDs no option
 				     describes. */ }
@@ -289,7 +262,7 @@ export const AccessRuleValueControl = ( {
 				label={ config.name }
 				placeholder={ config.placeholder ?? '' }
 				help={
-					config.empty_grants_access && ! value
+					isUnconstrainedAccessRuleValue( config, value )
 						? __( 'Left empty, this rule grants access to everyone. Enter at least one value, or turn the rule off.', 'newspack-plugin' )
 						: __( 'Separate with commas.', 'newspack-plugin' )
 				}

@@ -267,6 +267,20 @@ class Content_Gate_API {
 			return $sanitized_custom_access;
 		}
 
+		// No rules at all is the same state as one rule left empty, and the loop below
+		// cannot reach it — there is nothing to iterate. Both evaluation sites skip the
+		// rule check outright on an empty set, so an active gate holding one admits every
+		// reader. `sanitize_access_rules_grouped()` refuses this only where the set was
+		// emptied by dropping unknown slugs; a payload sending `[]` arrives here clean,
+		// and the wizard allows Save whenever the gate also has a registration wall.
+		if ( empty( $access_rules ) ) {
+			return new \WP_Error(
+				'empty_access_rules',
+				__( 'Paid access is on but no access rule is set, so the gate would grant access to everyone. Add a rule, or turn Paid access off.', 'newspack-plugin' ),
+				[ 'status' => 400 ]
+			);
+		}
+
 		$registered_rules = Access_Rules::get_registered_rules();
 		foreach ( $access_rules as $group ) {
 			if ( ! is_array( $group ) ) {

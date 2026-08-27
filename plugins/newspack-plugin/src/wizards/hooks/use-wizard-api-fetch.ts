@@ -39,12 +39,16 @@ let promiseCache: Record< string, any > = {};
  * `Invalid parameter(s): <param name>` as the top-level message. That generic string is
  * what the wizard would otherwise show, naming neither what was wrong nor how to fix it.
  *
+ * Only `rest_invalid_param` fills `data.params` that way. `rest_missing_callback_param`
+ * fills it with a numerically-indexed list of parameter *names*, so reading that as
+ * messages would turn "Missing parameter(s): gate" into a bare "gate".
+ *
  * @param error The error response from the API.
  * @return      The per-parameter messages, or an empty string when there are none.
  */
 const getInvalidParamMessage = ( error: WpFetchError ): string => {
 	const params = error.data?.params;
-	if ( ! params || typeof params !== 'object' ) {
+	if ( 'rest_invalid_param' !== error.code || ! params || typeof params !== 'object' ) {
 		return '';
 	}
 	return Object.values( params )

@@ -118,7 +118,12 @@ export const sharesTheSiteMeter = ( gate: Gate ) => {
 
 // The two verdicts a rule's stored value can carry are shared with the block
 // editor's visibility panel, which renders the same rules from the same registry.
-export { isMalformedAccessRuleValue, isUnconstrainedAccessRuleValue } from '../../../../content-gate/utils/access-rule-value';
+export {
+	getAccessRuleValueNotice,
+	isAccessRulePickerInert,
+	isMalformedAccessRuleValue,
+	isUnconstrainedAccessRuleValue,
+} from '../../../../content-gate/utils/access-rule-value';
 
 export const getGateStatus = ( status: GateStatus ) => {
 	return status === 'publish' ? __( 'Active', 'newspack-plugin' ) : __( 'Inactive', 'newspack-plugin' );

@@ -84,11 +84,15 @@ const formatAccessRuleValue = ( rule: GateAccessRule, optionsBySlug: Record< str
 		);
 	}
 	if ( isMalformedAccessRuleValue( config, rule.value ) ) {
-		return sprintf(
-			// translators: %s: the stored value. Shown when the value is in a shape the rule can't use; the rule then never grants access.
-			__( '%s (invalid value, grants no access)', 'newspack-plugin' ),
-			String( rule.value )
-		);
+		// Only a string is quoted back. Anything else renders as `[object Object]` or as
+		// a comma-joined list that reads like something the publisher typed.
+		return 'string' === typeof rule.value
+			? sprintf(
+					// translators: %s: the stored value. Shown when the value is in a shape the rule can't use; the rule then never grants access.
+					__( '%s (invalid value, grants no access)', 'newspack-plugin' ),
+					rule.value
+			  )
+			: __( 'Invalid value (grants no access)', 'newspack-plugin' );
 	}
 	// A rule left empty renders as a blank condition, which is indistinguishable
 	// from a narrow one — while it is the state that lets every reader through.
