@@ -720,16 +720,14 @@ class Content_Gate {
 		if ( is_admin() ) {
 			return;
 		}
-		// Never in Privacy Policy page.
-		if ( is_privacy_policy() ) {
-			return;
-		}
+		// Only the guards that need a query to answer. Every exclusion that can
+		// be decided from the post ID alone — Privacy Policy, Terms and
+		// Conditions, Accessibility Statement, and the WooCommerce page IDs —
+		// lives in is_excluded_from_gating(), which should_restrict_post() runs
+		// below. Keeping a second copy here would mean a fourth exclusion has to
+		// be added in two places to take effect on both paths.
 		// Never in My Account pages.
 		if ( function_exists( 'is_account_page' ) && is_account_page() ) {
-			return;
-		}
-		// Never in Terms and Conditions page.
-		if ( function_exists( 'wc_terms_and_conditions_page_id' ) && $post->ID === wc_terms_and_conditions_page_id() ) {
 			return;
 		}
 		// Never in WooCommerce cart page.
@@ -738,10 +736,6 @@ class Content_Gate {
 		}
 		// Never in WooCommerce checkout page.
 		if ( function_exists( 'is_checkout' ) && is_checkout() ) {
-			return;
-		}
-		// Never on Accessibility Statement page.
-		if ( $post->ID === get_theme_mod( 'accessibility_statement_page_id' ) ) {
 			return;
 		}
 
