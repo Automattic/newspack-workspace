@@ -524,13 +524,16 @@ class Content_Distribution {
 			$distributed_post = self::get_distributed_post( $post );
 		}
 		if ( $distributed_post ) {
-			$payload_hash = $distributed_post->get_payload_hash();
+			// The hash covers the whole payload, and the partial is a slice of that
+			// same payload, so build it once and use it for both.
+			$full_payload = $distributed_post->get_payload();
+			$payload_hash = $distributed_post->get_payload_hash( $full_payload );
 			$post         = $distributed_post->get_post();
 			// Skip if the payload hash is the same.
 			if ( get_post_meta( $post->ID, self::PAYLOAD_HASH_META, true ) === $payload_hash ) {
 				return;
 			}
-			$payload = $distributed_post->get_partial_payload( $post_data_keys );
+			$payload = $distributed_post->get_partial_payload( $post_data_keys, $full_payload );
 			if ( is_wp_error( $payload ) ) {
 				return $payload;
 			}

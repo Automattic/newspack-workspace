@@ -8,6 +8,7 @@
 namespace Newspack_Network\Content_Distribution;
 
 use Newspack_Network\Content_Distribution as Content_Distribution_Class;
+use Newspack_Network\Debugger;
 use Newspack_Network\User_Update_Watcher;
 use Newspack_Network\Utils\Network;
 use WP_Error;
@@ -28,6 +29,13 @@ class Outgoing_Post {
 	 * @var WP_Post
 	 */
 	protected $post = null;
+
+	/**
+	 * The post content prepared for distribution, built once per payload.
+	 *
+	 * @var string|null
+	 */
+	protected $raw_post_content = null;
 
 	/**
 	 * Constructor.
@@ -99,6 +107,40 @@ class Outgoing_Post {
 	 */
 	public function get_post() {
 		return $this->post;
+	}
+
+	/**
+	 * Log a message about a post on its way out.
+	 *
+	 * Sends the message to the Newspack plugin's logger, which records without any
+	 * constant set, so a gallery that leaves without its images no longer does so
+	 * silently on a publisher site. This mirrors Incoming_Post::log().
+	 *
+	 * The debugger runs as well rather than instead. Newspack\Logger only fires an
+	 * action, and the plugin that listens for it is not present on a development or
+	 * staging site, so preferring one over the other would swallow the message in
+	 * exactly the setup someone defines `NEWSPACK_NETWORK_DEBUG` for. Debugger::log()
+	 * is a no-op without that constant, so running both costs nothing.
+	 *
+	 * @param string $message The message to log.
+	 * @param array  $context Context for the log entry, such as the post ID.
+	 * @param string $type    The log type. Either 'error' or 'debug'. Default 'error'.
+	 *
+	 * @return void
+	 */
+	public static function log( $message, $context = [], $type = 'error' ) {
+		if ( method_exists( 'Newspack\Logger', 'newspack_log' ) ) {
+			\Newspack\Logger::newspack_log( 'newspack_network_outgoing_post', $message, $context, $type );
+		}
+
+		$prefix = '[Outgoing Post]';
+		if ( ! empty( $context['post_id'] ) ) {
+			$prefix .= ' ' . $context['post_id'];
+			unset( $context['post_id'] );
+		}
+		$suffix = empty( $context ) ? '' : ' ' . wp_json_encode( $context );
+
+		Debugger::log( $prefix . ' ' . $message . $suffix );
 	}
 
 	/**
@@ -305,6 +347,11 @@ class Outgoing_Post {
 	 * @return array|WP_Error The post payload or WP_Error if the post is invalid.
 	 */
 	public function get_payload( $status_on_publish = 'draft' ) {
+		// One payload describes the post at one moment. Preparing the content is the
+		// expensive half and several fields below need it, so it is built once here
+		// and reused, then dropped so the next payload sees the post as it is then.
+		$this->raw_post_content = null;
+
 		$post_author = self::get_outgoing_wp_user_author( $this->post->post_author );
 
 		$payload = [
@@ -352,17 +399,22 @@ class Outgoing_Post {
 	/**
 	 * Get a partial payload for distribution.
 	 *
-	 * @param string[] $post_data_keys Keys in the post_data array to include in
-	 *                                 the partial payload.
+	 * @param string[]   $post_data_keys Keys in the post_data array to include in
+	 *                                   the partial payload.
+	 * @param array|null $payload        A payload already built for this post, to
+	 *                                   take the partial from rather than building
+	 *                                   a second identical one.
 	 *
 	 * @return array|WP_Error The partial payload or WP_Error if any of the keys were not found.
 	 */
-	public function get_partial_payload( $post_data_keys ) {
+	public function get_partial_payload( $post_data_keys, $payload = null ) {
 		if ( is_string( $post_data_keys ) ) {
 			$post_data_keys = [ $post_data_keys ];
 		}
 
-		$payload = $this->get_payload();
+		if ( empty( $payload ) ) {
+			$payload = $this->get_payload();
+		}
 		foreach ( $post_data_keys as $post_data_key ) {
 			if ( ! isset( $payload['post_data'][ $post_data_key ] ) ) {
 				return new WP_Error( 'key_not_found', __( 'Key not found in payload.', 'newspack-network' ) );
@@ -389,15 +441,24 @@ class Outgoing_Post {
 	/**
 	 * Get the raw post content for distribution.
 	 *
+	 * Built once per payload. Several payload fields read it, and a dynamic gallery
+	 * queries the database for its images on each pass, so a distribution used to
+	 * parse and serialize the post several times for one identical result.
+	 *
+	 * The payload is the boundary the cache follows: get_payload() drops it on the
+	 * way in, so two payloads from one Outgoing_Post each see the post as it stands
+	 * when they are built, and everything within one payload agrees.
+	 *
 	 * @return string The raw post content.
 	 */
 	protected function get_raw_post_content() {
-		if ( ! use_block_editor_for_post_type( $this->post->post_type ) ) {
-			return $this->post->post_content;
+		if ( null !== $this->raw_post_content ) {
+			return $this->raw_post_content;
 		}
 
-		if ( ! has_blocks( $this->post->post_content ) ) {
-			return $this->post->post_content;
+		if ( ! use_block_editor_for_post_type( $this->post->post_type ) || ! has_blocks( $this->post->post_content ) ) {
+			$this->raw_post_content = $this->post->post_content;
+			return $this->raw_post_content;
 		}
 
 		$post_id = $this->post->ID;
@@ -408,7 +469,9 @@ class Outgoing_Post {
 			parse_blocks( $this->post->post_content )
 		);
 
-		return serialize_blocks( $blocks );
+		$this->raw_post_content = serialize_blocks( $blocks );
+
+		return $this->raw_post_content;
 	}
 
 	/**
