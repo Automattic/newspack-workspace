@@ -2,18 +2,20 @@
  * Ads list screen — React DataView replacing the classic ads CPT list.
  */
 
-import { __experimentalHStack as HStack, Spinner } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
+import { Button, __experimentalHStack as HStack, Spinner } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
 import { DataViews } from '@wordpress/dataviews/wp';
 import { useEffect, useMemo, useState } from '@wordpress/element';
 import { __ } from '@wordpress/i18n';
 import { emailAd } from 'newspack-icons';
 
+import { EmptyState } from 'newspack-components';
 import { getAdminUrl } from '../../admin-globals';
-import EmptyState from '../../components/empty-state';
 import HeaderCount from '../../components/header-count';
 import ItemsPerPage from '../../components/items-per-page';
+import { EMPTY_STATE_CLASS, getEmptyStateHeading } from '../../constants';
 import { useHeaderActions } from '../../header-actions-context';
 import usePersistedView from '../../hooks/use-persisted-view';
+import isStrictlyEmpty from '../../utils/is-strictly-empty';
 import { fetchAllTerms } from '../../utils/terms';
 import useAdsData from './use-ads-data';
 import { getFields } from './fields';
@@ -79,13 +81,7 @@ export default function AdsListScreen() {
 	const fields = useMemo( () => getFields( filterTerms ), [ filterTerms ] );
 	const actions = useMemo( () => getActions( { refresh, openQuickEdit: setQuickEditItem } ), [ refresh ] );
 
-	const isStrictEmpty =
-		hasLoadedOnce &&
-		! isLoading &&
-		paginationInfo.totalItems === 0 &&
-		trashCount === 0 &&
-		! view.search &&
-		( ! view.filters || view.filters.length === 0 );
+	const isStrictEmpty = isStrictlyEmpty( { hasLoadedOnce, isLoading, paginationInfo, trashCount, view } );
 
 	useHeaderActions(
 		useMemo(
@@ -113,16 +109,22 @@ export default function AdsListScreen() {
 
 	if ( isStrictEmpty ) {
 		return (
-			<EmptyState
-				icon={ emailAd }
-				title={ __( 'Get started with newsletter ads', 'newspack-newsletters' ) }
-				description={ __(
-					'Monetise newsletters with sponsored or house ads. Schedule by date, target by placement or category.',
-					'newspack-newsletters'
-				) }
-				ctaTitle={ __( 'Add Newsletter Ad', 'newspack-newsletters' ) }
-				ctaHref={ addNewHref }
-			/>
+			<EmptyState.Root className={ EMPTY_STATE_CLASS }>
+				<EmptyState.Header
+					icon={ emailAd }
+					heading={ getEmptyStateHeading() }
+					title={ __( 'Get started with newsletter ads', 'newspack-newsletters' ) }
+					description={ __(
+						'Monetise newsletters with sponsored or house ads. Schedule by date, target by placement or category.',
+						'newspack-newsletters'
+					) }
+				/>
+				<EmptyState.Actions>
+					<Button variant="primary" href={ addNewHref }>
+						{ __( 'Add Newsletter Ad', 'newspack-newsletters' ) }
+					</Button>
+				</EmptyState.Actions>
+			</EmptyState.Root>
 		);
 	}
 

@@ -485,16 +485,20 @@ class Premium_Newsletters_Migration {
 	 * site-wide auto-signup setting). Reading the raw argv is the only place the
 	 * mistake is still visible.
 	 *
-	 * @param string[]|null $argv Raw argument vector; defaults to $_SERVER['argv'].
+	 * Shared with Premium_Newsletters_Verify, which passes its own flag list. The flags
+	 * differ per command; the scan is the guard standing between a mistyped flag and a
+	 * --live run, and two copies of it would drift.
+	 *
+	 * @param string[]|null $argv        Raw argument vector; defaults to $_SERVER['argv'].
+	 * @param string[]      $value_flags The value-requiring flags to look for.
 	 *
 	 * @return string[] The value-requiring flags present without a value.
 	 */
-	public static function get_valueless_value_flags( $argv = null ): array {
+	public static function get_valueless_value_flags( $argv = null, array $value_flags = [ '--plan', '--one-time-duration' ] ): array {
 		if ( null === $argv ) {
 			$argv = isset( $_SERVER['argv'] ) ? (array) $_SERVER['argv'] : []; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput
 		}
-		$value_flags = [ '--plan', '--one-time-duration' ];
-		$bare_flags  = [];
+		$bare_flags = [];
 		foreach ( $argv as $token ) {
 			if ( in_array( $token, $value_flags, true ) ) {
 				$bare_flags[] = $token;

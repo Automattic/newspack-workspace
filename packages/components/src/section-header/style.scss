@@ -5,7 +5,6 @@
 @use "~@wordpress/base-styles/colors" as wp-colors;
 @use "~@wordpress/base-styles/variables" as wp-vars;
 @use "~@wordpress/base-styles/mixins" as wp-mixins;
-@use "../../../colors/colors.module" as colors;
 
 .newspack-section-header {
 	flex: 1;
@@ -127,7 +126,7 @@
 
 		.newspack-section-header__menu,
 		.newspack-section-header__secondary-action,
-		.newspack-badge {
+		.newspack-section-header__badge {
 			margin-top: 8px;
 		}
 	}

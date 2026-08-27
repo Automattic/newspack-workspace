@@ -1,110 +1,145 @@
 /**
- * The gate pickers and the summaries name institutions from a list fetched once per app
- * lifetime, so every write here has to drop it — otherwise an institution renamed or
- * deleted a moment ago is still named the old way, or named at all, wherever a gate is
- * inspected. The cache itself is covered in `access-rule-option-sources.test.js`; this is
- * the half that would regress silently if these handlers were refactored.
+ * External dependencies.
  */
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { HashRouter } from 'react-router-dom';
 
 /**
- * External dependencies
+ * WordPress dependencies.
  */
-import { act, render, waitFor } from '@testing-library/react';
+import apiFetch from '@wordpress/api-fetch';
+import { dispatch, select } from '@wordpress/data';
 
 /**
- * Internal dependencies
+ * Internal dependencies.
  */
 import InstitutionEdit from './edit';
+import { WIZARD_STORE_NAMESPACE } from '../../../../../../packages/components/src/wizard/store';
 
-// mock-prefixed so Jest's hoisted jest.mock factories may close over them.
-const mockApiFetch = jest.fn();
-const mockInvalidate = jest.fn();
-const mockHeaderActions = { current: null };
-const mockDispatch = {
-	setHeaderData: data => {
-		mockHeaderActions.current = data.actions ?? mockHeaderActions.current;
-	},
-	startLoadingData: jest.fn(),
-	finishLoadingData: jest.fn(),
-	addNotice: jest.fn(),
-};
+jest.mock( '@wordpress/api-fetch', () => jest.fn() );
 
-jest.mock( '@wordpress/api-fetch', () => ( { __esModule: true, default: ( ...args ) => mockApiFetch( ...args ) } ) );
-jest.mock( '@wordpress/data', () => ( { useDispatch: () => mockDispatch } ) );
-jest.mock( '@wordpress/icons', () => ( { envelope: null, globe: null, customPostType: null } ) );
+// InstitutionEdit reaches useHistory() through useConfirmDialog; in production it
+// runs inside the wizard's HashRouter, so the tests supply the same context.
+const renderEditor = ( { id } = {} ) =>
+	render(
+		<HashRouter>
+			<InstitutionEdit match={ { params: id ? { id } : {} } } />
+		</HashRouter>
+	);
 
-jest.mock( '@wordpress/components', () => {
-	const React = require( 'react' );
-	const Passthrough = ( { children } ) => React.createElement( 'div', null, children );
-	return { __experimentalVStack: Passthrough, CardBody: Passthrough, Spinner: Passthrough, TextareaControl: () => null };
-} );
-
-// The form's own fields are irrelevant to the invalidation contract, and the real
-// components package cannot load in this jsdom env.
-jest.mock( '../../../../../../packages/components/src', () => {
-	const React = require( 'react' );
-	const Passthrough = ( { children } ) => React.createElement( 'div', null, children );
-	return {
-		CardSettingsGroup: Passthrough,
-		Divider: () => null,
-		Grid: Passthrough,
-		ImageUpload: () => null,
-		Router: { useHistory: () => ( { push: jest.fn() } ) },
-		SectionHeader: () => null,
-		TextControl: () => null,
-		// Confirm immediately: the dialog is not what is under test.
-		useConfirmDialog: () => ( { confirmDialog: null, requestConfirm: callback => callback() } ),
-	};
-} );
-
-jest.mock( '../../../../../../packages/components/src/wizard/store', () => ( { WIZARD_STORE_NAMESPACE: 'newspack/wizards' } ) );
-
-jest.mock( '../../../../../content-gate/access-rule-option-sources', () => ( {
-	INSTITUTION_RULE_SLUG: 'institution',
-	invalidateAccessRuleOptions: ( ...args ) => mockInvalidate( ...args ),
-} ) );
-
-const EXISTING_INSTITUTION = {
-	id: 5,
-	title: { raw: 'City Library', rendered: 'City Library' },
+const institutionFixture = ipRange => ( {
+	id: 7,
+	title: { raw: 'Example University', rendered: 'Example University' },
 	excerpt: { raw: '', rendered: '' },
 	featured_media: 0,
+	slug: 'example-university',
 	status: 'publish',
-	meta: {},
-};
+	meta: { np_institution_email_domain: '', np_institution_ip_range: ipRange, np_institution_reader_data: '' },
+} );
+
+const getIpRangeField = () => screen.getByLabelText( /IPs, CIDR blocks, or IP ranges/ );
+const getMessagesRegion = () => document.getElementById( 'newspack-institution-ip-range-messages' );
+const getSaveAction = () =>
+	select( WIZARD_STORE_NAMESPACE )
+		.getHeaderData()
+		?.actions?.find( action => action.label === 'Save' );
 
 /**
- * Render the editor for an existing institution and hand back its header actions, which
- * is where Save and Delete live.
+ * Render the editor for a stored institution and wait for its meta to load.
+ *
+ * @param {string} ipRange The stored `np_institution_ip_range` value.
+ * @return {Promise<HTMLElement>} The IP range field.
  */
-const renderEditor = async () => {
-	mockApiFetch.mockResolvedValue( EXISTING_INSTITUTION );
-	render( <InstitutionEdit match={ { params: { id: '5' } } } /> );
-	await waitFor( () => expect( mockHeaderActions.current ).not.toBeNull() );
-	return mockHeaderActions.current;
-};
+async function renderStoredInstitution( ipRange ) {
+	apiFetch.mockResolvedValue( institutionFixture( ipRange ) );
+	renderEditor( { id: '7' } );
+	await waitFor( () => expect( getIpRangeField() ).toBeInTheDocument() );
+	return getIpRangeField();
+}
 
-describe( 'Institution editor — fetched option list invalidation', () => {
-	beforeEach( () => {
-		mockInvalidate.mockClear();
-		mockApiFetch.mockReset();
-		mockHeaderActions.current = null;
+beforeEach( () => {
+	apiFetch.mockReset();
+	dispatch( WIZARD_STORE_NAMESPACE ).resetNotices();
+	dispatch( WIZARD_STORE_NAMESPACE ).resetHeaderData();
+} );
+
+describe( 'InstitutionEdit — IP range warnings', () => {
+	it( 'analyzes stored entries on load, without the admin touching the field', async () => {
+		await renderStoredInstitution( '10.0.0.1-banana' );
+		expect( screen.getByText( /never grant access: 10\.0\.0\.1-banana/ ) ).toBeInTheDocument();
 	} );
 
-	it.each( [ 'Save', 'Delete' ] )( '%s drops the cached list, so the gate pickers name what the site now has', async label => {
-		const actions = await renderEditor();
-
-		await act( async () => actions.find( action => action.label === label ).action() );
-
-		expect( mockInvalidate ).toHaveBeenCalledWith( 'institution' );
+	it( 'establishes the live region before there is anything to announce, and describes the field with it', async () => {
+		const field = await renderStoredInstitution( '203.0.113.5' );
+		const region = getMessagesRegion();
+		// Present but empty: a region added at the same moment as its first message
+		// is not reliably announced by screen readers.
+		expect( region ).toBeEmptyDOMElement();
+		expect( field ).toHaveAttribute( 'aria-describedby', region.id );
+		expect( field ).toHaveAttribute( 'aria-invalid', 'false' );
 	} );
 
-	it( 'keeps the cached list when the write failed, since nothing changed', async () => {
-		const actions = await renderEditor();
-		mockApiFetch.mockRejectedValue( new Error( 'Network error' ) );
+	it( 'recomputes from the committed value on blur, not on every keystroke', () => {
+		renderEditor();
+		fireEvent.click( screen.getByRole( 'checkbox', { name: 'IP range' } ) );
+		const field = getIpRangeField();
 
-		await act( async () => actions.find( action => action.label === 'Save' ).action() );
+		// A half-typed range is not yet wrong, so nothing is flagged while typing.
+		fireEvent.change( field, { target: { value: '10.0.0.1-banana' } } );
+		expect( getMessagesRegion() ).toBeEmptyDOMElement();
 
-		expect( mockInvalidate ).not.toHaveBeenCalled();
+		fireEvent.blur( field, { target: { value: '10.0.0.1-banana' } } );
+		expect( screen.getByText( /never grant access: 10\.0\.0\.1-banana/ ) ).toBeInTheDocument();
+		expect( field ).toHaveAttribute( 'aria-invalid', 'true' );
+	} );
+
+	it( 'drops a stale warning as soon as the admin edits the value again', async () => {
+		const field = await renderStoredInstitution( '10.0.0.1-banana' );
+		expect( getMessagesRegion() ).not.toBeEmptyDOMElement();
+		fireEvent.change( field, { target: { value: '10.0.0.1-10.0.0.9' } } );
+		expect( getMessagesRegion() ).toBeEmptyDOMElement();
+		expect( field ).toHaveAttribute( 'aria-invalid', 'false' );
+	} );
+
+	it( 'drops the warning when the rule is toggled off', async () => {
+		await renderStoredInstitution( '10.0.0.1-banana' );
+		expect( getMessagesRegion() ).not.toBeEmptyDOMElement();
+		fireEvent.click( screen.getByRole( 'checkbox', { name: 'IP range' } ) );
+		expect( getMessagesRegion() ).toBeNull();
+	} );
+
+	it( 'keeps aria-invalid false when only the over-broad warning applies: the entry is valid, just wide', async () => {
+		const field = await renderStoredInstitution( '0.0.0.0/0' );
+		expect( screen.getByText( /covers more than 65,536 addresses/ ) ).toBeInTheDocument();
+		expect( field ).toHaveAttribute( 'aria-invalid', 'false' );
+	} );
+
+	it( 'names the confusable character rather than only calling the entry invalid', async () => {
+		await renderStoredInstitution( '192.168.1.1–192.168.1.9' );
+		expect( screen.getByText( /look standard but are not: en dash/ ) ).toBeInTheDocument();
+	} );
+
+	it( 'raises a snackbar on save so a paste-then-Save admin still sees the warning', async () => {
+		await renderStoredInstitution( '10.0.0.1-banana' );
+		await waitFor( () => expect( getSaveAction() ).toBeDefined() );
+		apiFetch.mockResolvedValueOnce( institutionFixture( '10.0.0.1-banana' ) );
+		await act( async () => {
+			await getSaveAction().action();
+		} );
+		expect( select( WIZARD_STORE_NAMESPACE ).getNotices() ).toEqual(
+			expect.arrayContaining( [
+				expect.objectContaining( { type: 'warning', message: expect.stringMatching( /never grant access: 10\.0\.0\.1-banana/ ) } ),
+			] )
+		);
+	} );
+
+	it( 'stays quiet on save when every entry is valid and plausibly sized', async () => {
+		await renderStoredInstitution( '198.51.100.0/24' );
+		await waitFor( () => expect( getSaveAction() ).toBeDefined() );
+		apiFetch.mockResolvedValueOnce( institutionFixture( '198.51.100.0/24' ) );
+		await act( async () => {
+			await getSaveAction().action();
+		} );
+		expect( select( WIZARD_STORE_NAMESPACE ).getNotices() ).toEqual( [] );
 	} );
 } );
