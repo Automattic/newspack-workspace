@@ -5,6 +5,14 @@ on:
     branches:
       - release
       - alpha
+  # Recovery hatch. A push whose head commit message carries `[skip ci]` is
+  # dropped by GitHub Actions for every workflow on that push. The release
+  # commits this workflow makes carry that marker, so a promotion merge that
+  # quotes one of them in its body silences the release it was meant to
+  # trigger, and leaves no run to re-run. Dispatching on `release` or `alpha`
+  # does the work the push would have; the alternative is pushing an empty
+  # commit to the branch.
+  workflow_dispatch:
 
 concurrency:
   group: release-${{ github.ref }}
@@ -42,6 +50,9 @@ jobs:
   release:
     name: Release
     runs-on: ubuntu-latest
+    # workflow_dispatch accepts any branch; releasing is only ever correct from
+    # the two the push trigger names.
+    if: contains(fromJSON('["refs/heads/release", "refs/heads/alpha"]'), github.ref)
     # Dependent jobs must tell "released" from "ran and released nothing".
     # post-release.sh identifies what the release came from via `git log --skip
     # 1`, assuming an automated release commit at the tip. A no-release run
