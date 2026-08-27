@@ -83,14 +83,16 @@ class Network {
 	 * wrapper holds even if a caller skips its own pre-check. Legitimate images behind a
 	 * redirect still load; only hops into a blocked range are stopped.
 	 *
-	 * @param string      $url     External image URL.
+	 * @param mixed       $url     External image URL. Comes straight from a peer payload,
+	 *                             so a non-string is refused here rather than raising a
+	 *                             TypeError before the guard can run.
 	 * @param int         $post_id Parent post ID (0 for none).
 	 * @param string|null $desc    Image description.
 	 * @param string      $return  media_sideload_image return type ('html', 'src' or 'id').
 	 *
 	 * @return int|string|\WP_Error Whatever media_sideload_image returns; WP_Error if a hop is refused.
 	 */
-	public static function sideload_peer_image( string $url, int $post_id = 0, ?string $desc = null, string $return = 'html' ) {
+	public static function sideload_peer_image( $url, int $post_id = 0, ?string $desc = null, string $return = 'html' ): int|string|\WP_Error {
 		if ( ! self::is_safe_sideload_url( $url ) ) {
 			return new \WP_Error( 'newspack_network_unsafe_sideload_url', __( 'Refused a sideload request to a private or reserved address.', 'newspack-network' ) );
 		}
