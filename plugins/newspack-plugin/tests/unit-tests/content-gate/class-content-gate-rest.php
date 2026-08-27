@@ -265,6 +265,95 @@ class Test_Content_Gate_Rest extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * A response that never carried `content` must still be substituted.
+	 *
+	 * Embed context omits the field, so a guard asking whether it is empty
+	 * reads "core withheld the body" and returns early -- leaving the excerpt
+	 * core built while its own password override was still active, which is
+	 * the whole body. The guard has to ask whether the caller could access
+	 * the password content, not what the response happens to carry.
+	 */
+	public function test_embed_context_with_the_correct_password_withholds_the_gated_body() {
+		wp_update_post(
+			[
+				'ID'            => $this->gated_post_id,
+				'post_password' => 'secret',
+			]
+		);
+		wp_set_current_user( 0 );
+
+		$data = $this->rest_get(
+			'/wp/v2/posts/' . $this->gated_post_id,
+			[
+				'context'  => 'embed',
+				'password' => 'secret',
+			]
+		);
+
+		$this->assertArrayNotHasKey( 'content', $data, 'Embed context omits content, which is the precondition this test exercises.' );
+		$this->assertStringNotContainsString(
+			self::BODY_SENTINEL,
+			$data['excerpt']['rendered'],
+			'An embed read holding only the post password must not carry the gated body in the excerpt.'
+		);
+	}
+
+	/**
+	 * The same precondition reached the other way: a `_fields` selection that
+	 * omits `content`. comment_status is in the selection because the early
+	 * return also skipped forcing it closed.
+	 */
+	public function test_fields_selection_omitting_content_withholds_the_gated_body() {
+		wp_update_post(
+			[
+				'ID'            => $this->gated_post_id,
+				'post_password' => 'secret',
+			]
+		);
+		wp_set_current_user( 0 );
+
+		$data = $this->rest_get(
+			'/wp/v2/posts/' . $this->gated_post_id,
+			[
+				'_fields'  => 'excerpt,comment_status',
+				'password' => 'secret',
+			]
+		);
+
+		$this->assertArrayNotHasKey( 'content', $data, 'The selection omits content, which is the precondition this test exercises.' );
+		$this->assertStringNotContainsString(
+			self::BODY_SENTINEL,
+			$data['excerpt']['rendered'],
+			'A field selection holding only the post password must not carry the gated body in the excerpt.'
+		);
+		$this->assertSame( 'closed', $data['comment_status'], 'Comments are reported closed alongside the withheld body.' );
+	}
+
+	/**
+	 * Without the password, core withheld everything and the gate adds nothing.
+	 *
+	 * The teaser is the free portion of a gated post, but this caller cannot
+	 * read the post at all on the front end, so writing it into the excerpt
+	 * would disclose more over REST than the front end does.
+	 */
+	public function test_embed_context_without_the_password_is_left_to_core() {
+		wp_update_post(
+			[
+				'ID'            => $this->gated_post_id,
+				'post_password' => 'secret',
+			]
+		);
+		wp_set_current_user( 0 );
+
+		$data = $this->rest_get(
+			'/wp/v2/posts/' . $this->gated_post_id,
+			[ 'context' => 'embed' ]
+		);
+
+		$this->assertSame( '', trim( wp_strip_all_tags( $data['excerpt']['rendered'] ) ), 'A caller without the password must not receive the gate teaser.' );
+	}
+
+	/**
 	 * An anonymous read of an ungated post is untouched.
 	 */
 	public function test_anonymous_read_of_an_open_post_is_untouched() {
