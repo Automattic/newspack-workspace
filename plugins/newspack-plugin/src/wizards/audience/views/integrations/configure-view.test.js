@@ -19,6 +19,7 @@ jest.mock( '@wordpress/data', () => ( {
 // layout props back: `direction` and `gap` are the only things carrying the
 // column rhythm now that the controls supply no margins of their own.
 jest.mock( '@wordpress/ui', () => ( {
+	Badge: ( { children } ) => <span data-testid="badge">{ children }</span>,
 	Stack: ( { children, direction, gap } ) => (
 		<div data-testid="stack" data-direction={ direction } data-gap={ gap }>
 			{ children }
@@ -62,7 +63,6 @@ jest.mock( '@wordpress/components', () => ( {
 		options?.length || children ? <input aria-label={ label } value={ value || '' } onChange={ e => onChange( e.target.value ) } /> : null,
 } ) );
 jest.mock( '../../../../../packages/components/src', () => ( {
-	Badge: ( { text } ) => <span data-testid="badge">{ text }</span>,
 	Button: ( { children } ) => children,
 	// Item flattens, so a collapsed group's contents stay reachable here while the real
 	// component puts them behind hidden="until-found" and out of the tab order. Every

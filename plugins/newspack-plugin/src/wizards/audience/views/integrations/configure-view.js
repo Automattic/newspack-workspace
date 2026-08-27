@@ -5,12 +5,12 @@ import { __, sprintf } from '@wordpress/i18n';
 import { CheckboxControl, SelectControl, ToggleControl } from '@wordpress/components';
 import { useDispatch } from '@wordpress/data';
 import { useEffect, useMemo, useRef, useState } from '@wordpress/element';
-import { Stack } from '@wordpress/ui';
+import { Badge, Stack } from '@wordpress/ui';
 
 /**
  * Internal dependencies
  */
-import { Badge, CollapsibleGroup, Divider, Grid, SectionHeader, useUnsavedChangesDialog } from '../../../../../packages/components/src';
+import { CollapsibleGroup, Divider, Grid, SectionHeader, useUnsavedChangesDialog } from '../../../../../packages/components/src';
 import { WIZARD_STORE_NAMESPACE } from '../../../../../packages/components/src/wizard/store';
 import WizardsTab from '../../../wizards-tab';
 import { SettingsField, settingsFieldRenders, toBool } from './settings-field';
@@ -612,7 +612,7 @@ const ConfigureViewInner = ( { integrations, loading, inFlightChanges, saving, o
 																	/>
 																	{ isNew && (
 																		<span className="newspack-outbound-field-row__badges">
-																			<Badge text={ __( 'New', 'newspack-plugin' ) } level="success" />
+																			<Badge intent="stable">{ __( 'New', 'newspack-plugin' ) }</Badge>
 																		</span>
 																	) }
 																</div>
