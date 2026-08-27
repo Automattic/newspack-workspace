@@ -1,88 +1,98 @@
 /**
+ * The gate summary is where a publisher reads back what a gate grants, so the
+ * metering line has to name the right allowance and say what running out of it
+ * leads to. Where a gate offers registration the allowance ends at the registration
+ * wall; where it does not, the paid path governs signed-out readers too and the two
+ * audiences draw on different site meter counts.
+ */
+
+/**
  * External dependencies
  */
-import { render, screen } from '@testing-library/react';
+import { render } from '@testing-library/react';
 
-/**
- * The summary reads `available_access_rules` at module scope, so the globals have to be
- * in place before it is required.
- */
-const ANNUAL_188250 = { value: 188250, label: 'Annual' };
-const ANNUAL_205482 = { value: 205482, label: 'Annual' };
+jest.mock( './edit/content-rule-control', () => ( { __esModule: true, default: () => null } ) );
 
-window.newspackAudienceContentGates = {
-	available_access_rules: {
-		subscription: { name: 'Active subscription', options: [ ANNUAL_188250, ANNUAL_205482 ] },
-		one_time_purchase: {
-			name: 'One-time purchase',
-			options: [ ANNUAL_188250, ANNUAL_205482, { value: 42, label: 'Founder&#8217;s Club' } ],
-		},
-	},
-	available_content_rules: {},
-};
+const SPLIT_METER = { anonymous_count: 3, registered_count: 5, period: 'month' };
 
-/**
- * Internal dependencies
- */
-const { getGateSummarySections } = require( './gate-summary' );
-const { formatAccessRuleOptionLabel } = require( '../../../../content-gate/access-rule-options' );
-
-const gateWith = ( ...rules ) => ( {
+const buildGate = ( { registration, custom_access: customAccess } = {} ) => ( {
+	id: 1,
+	title: 'Gate',
+	status: 'publish',
 	content_rules: [],
-	registration: { active: false, metering: { enabled: false } },
-	custom_access: { active: true, access_rules: [ rules ], metering: { enabled: false } },
+	registration: {
+		active: false,
+		require_verification: false,
+		metering: { enabled: false, count: 0, period: 'month', scope: 'site' },
+		...registration,
+	},
+	custom_access: {
+		active: false,
+		access_rules: [],
+		metering: { enabled: false, count: 0, period: 'month', scope: 'site' },
+		...customAccess,
+	},
 } );
 
-const renderPaidAccess = ( gate, optionsBySlug ) => {
-	const section = getGateSummarySections( gate, false, optionsBySlug ).find( s => 'custom_access' === s.key );
-	render( <div>{ section.content }</div> );
+const summarise = ( gate, key, { isNewsletter = false, siteMeter = SPLIT_METER } = {} ) => {
+	const { getGateSummarySections } = require( './gate-summary' );
+	const section = getGateSummarySections( gate, isNewsletter, siteMeter ).find( entry => entry.key === key );
+	const { container } = render( <>{ section.content }</> );
+	return container.textContent;
 };
 
-describe( 'gate summary, Paid access', () => {
-	it( 'identifies same-named products by ID on every rule, including one-time purchase', () => {
-		// Both lists come from the same catalogue, so a summary that names one and not
-		// the other reads as `Annual (#188250), Annual (#205482)` above `Annual, Annual`.
-		renderPaidAccess(
-			gateWith(
-				{ slug: 'subscription', value: [ 188250, 205482 ] },
-				{ slug: 'one_time_purchase', value: { product_ids: [ 188250, 205482 ], duration_value: 0, duration_unit: 'forever' } }
-			)
+const meteredPath = ( overrides = {} ) => ( {
+	active: true,
+	metering: { enabled: true, count: 0, period: 'month', scope: 'site', ...overrides },
+} );
+
+describe( 'gate summary metering copy', () => {
+	beforeEach( () => {
+		// Read at module load; must exist before the module is required.
+		window.newspackAudienceContentGates = { available_access_rules: {} };
+	} );
+
+	it( 'names both allowances when the paid path also governs signed-out readers', () => {
+		const gate = buildGate( { custom_access: meteredPath() } );
+
+		expect( summarise( gate, 'custom_access' ) ).toContain(
+			'3 free views per month for signed-out readers, 5 for signed-in, before content is restricted (site meter)'
 		);
-
-		expect( screen.getByText( 'Annual (#188250), Annual (#205482)' ) ).toBeInTheDocument();
-		expect( screen.getByText( 'Annual (#188250), Annual (#205482) (forever)' ) ).toBeInTheDocument();
 	} );
 
-	it( 'formats a value the same way the pickers do', () => {
-		// The three surfaces that show a rule's values have drifted before; pin the
-		// summary to the helper the pickers build their tokens from.
-		renderPaidAccess( gateWith( { slug: 'subscription', value: [ 188250 ] } ) );
+	it( 'quotes one allowance when both audiences get the same number', () => {
+		const gate = buildGate( { custom_access: meteredPath() } );
+		const siteMeter = { anonymous_count: 5, registered_count: 5, period: 'month' };
 
-		expect( screen.getByText( formatAccessRuleOptionLabel( ANNUAL_188250 ) ) ).toBeInTheDocument();
+		expect( summarise( gate, 'custom_access', { siteMeter } ) ).toContain( '5 free views per month before content is restricted (site meter)' );
 	} );
 
-	it( 'decodes entities in a one-time product name', () => {
-		renderPaidAccess( gateWith( { slug: 'one_time_purchase', value: { product_ids: [ 42 ], duration_value: 30, duration_unit: 'days' } } ) );
+	it( 'leaves the allowance unqualified where readers meet a registration wall first', () => {
+		const gate = buildGate( { registration: meteredPath(), custom_access: meteredPath() } );
+		const text = summarise( gate, 'custom_access' );
 
-		expect( screen.getByText( 'Founder’s Club (#42) (30 days from purchase)' ) ).toBeInTheDocument();
+		expect( text ).toContain( '5 free views per month (site meter)' );
+		expect( text ).not.toContain( 'before content is restricted' );
+		expect( text ).not.toContain( 'signed-out readers' );
 	} );
 
-	it( 'prefers the options it is handed over the ones localised with the page', () => {
-		// Institutions are created and deleted in the same app, so a summary built from
-		// the page-load snapshot would call one added a moment ago "not listed" — the
-		// wording that tells a publisher a value may be safe to remove.
-		renderPaidAccess( gateWith( { slug: 'subscription', value: [ 700001 ] } ), {
-			subscription: [ { value: 700001, label: 'Added just now' } ],
-		} );
+	it( 'never qualifies the registered access allowance, which always precedes a wall', () => {
+		const gate = buildGate( { registration: meteredPath() } );
+		const text = summarise( gate, 'registration' );
 
-		expect( screen.getByText( 'Added just now (#700001)' ) ).toBeInTheDocument();
+		expect( text ).toContain( '3 free views per month (site meter)' );
+		expect( text ).not.toContain( 'before content is restricted' );
 	} );
 
-	it( 'names a value no option describes rather than printing it bare', () => {
-		renderPaidAccess(
-			gateWith( { slug: 'one_time_purchase', value: { product_ids: [ 999999 ], duration_value: 0, duration_unit: 'forever' } } )
-		);
+	it( 'treats a premium newsletter gate as having no registration wall', () => {
+		const gate = buildGate( { registration: meteredPath(), custom_access: meteredPath() } );
 
-		expect( screen.getByText( '(product not listed) (#999999) (forever)' ) ).toBeInTheDocument();
+		expect( summarise( gate, 'custom_access', { isNewsletter: true } ) ).toContain( 'before content is restricted' );
+	} );
+
+	it( 'quotes the single stored count for a gate keeping its own allowance', () => {
+		const gate = buildGate( { custom_access: meteredPath( { count: 1, period: 'week', scope: 'gate' } ) } );
+
+		expect( summarise( gate, 'custom_access' ) ).toContain( '1 free view per week before content is restricted (this gate only)' );
 	} );
 } );
