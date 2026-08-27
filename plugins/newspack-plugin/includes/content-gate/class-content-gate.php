@@ -560,40 +560,32 @@ class Content_Gate {
 		if ( Memberships::is_active() || ! self::has_first_party_restriction_source() ) {
 			return $response;
 		}
-		// Core already withheld the content for a password-protected post whose
-		// caller has not supplied the correct password (content.rendered === '',
-		// see WP_REST_Posts_Controller::prepare_item_for_response()). That is the
-		// more restrictive authority here, so defer to it rather than overwrite
-		// the empty string with a teaser the caller hasn't earned either the
-		// password or the gate for.
+		// A password-protected body core withheld is the more restrictive
+		// authority here: substituting would hand back the gate's teaser for a
+		// post the same caller cannot read at all on the front end.
 		//
-		// post_password_required() alone can no longer be trusted to mean that,
-		// though: when the correct password IS supplied,
-		// WP_REST_Posts_Controller::prepare_item_for_response() temporarily adds
-		// a `post_password_required` filter (check_password_required(), gated by
-		// can_access_password_content() matching the request's ?password= — see
-		// class-wp-rest-posts-controller.php:1989-1996) so post_password_required()
-		// reports false while content.rendered is built from the real body, then
-		// removes that filter (:2051-2053) before firing this hook. $post->post_password
-		// itself is never touched. By the time we run, post_password_required( $post )
-		// is true again (the override filter is gone) even though the response
-		// already carries the full body — so the check has to be what core
-		// actually withheld, not merely whether a password exists. Holding the
-		// password does not grant the gate's entitlement, so a correctly-supplied
-		// password still falls through to the restriction check below.
+		// post_password_required() cannot answer that on its own.
+		// WP_REST_Posts_Controller::prepare_item_for_response() adds a
+		// `post_password_required` override (check_password_required()) while it
+		// builds content.rendered, then removes it before firing this hook, so by
+		// the time we run the function reports true again even on a response
+		// carrying the full body. $post->post_password is never touched.
 		//
-		// Known gap, not fixed here: if the body is password-protected AND
-		// genuinely empty (content.rendered === '' with no password supplied,
-		// or supplied-but-wrong), this whole block returns early and none of
-		// the substitutions below run — including comment_status, which stays
-		// whatever core reported rather than being forced to 'closed'. No
-		// content is disclosed either way (there was none to disclose), just a
-		// comment-status mismatch against the front end for this one combination.
-		if ( \post_password_required( $post ) ) {
-			$data = $response->get_data();
-			if ( empty( $data['content']['rendered'] ) ) {
-				return $response;
-			}
+		// So ask the controller that built the response, using the predicate it
+		// used. Reading content.rendered instead misjudges every response that
+		// omits the field — context=embed, or a _fields list without it — where
+		// core withheld nothing and the excerpt still carries the real body.
+		//
+		// Holding the password is not the gate's entitlement, so a caller who has
+		// it still falls through to the restriction check below.
+		//
+		// Known gap, not fixed here: when core did withhold the body, this returns
+		// early and none of the substitutions below run — including comment_status,
+		// which stays whatever core reported rather than being forced to 'closed'.
+		// No content is disclosed (there was none to disclose), just a
+		// comment-status mismatch against the front end.
+		if ( \post_password_required( $post ) && ! self::rest_caller_has_post_password( $post, $request ) ) {
+			return $response;
 		}
 
 		// The restriction filter is not a pure predicate: metering records
@@ -652,6 +644,34 @@ class Content_Gate {
 		$response->set_data( $data );
 
 		return $response;
+	}
+
+	/**
+	 * Whether the request carries what core needs to serve a password-protected body.
+	 *
+	 * Defers to the controller that prepared the response instead of re-deriving
+	 * the comparison, so the edit-context exemption and the password check stay
+	 * core's to define. A post type served by something other than a posts
+	 * controller has no such predicate to consult and is reported as withheld,
+	 * which leaves core's own output untouched.
+	 *
+	 * @param \WP_Post         $post    Post being prepared.
+	 * @param \WP_REST_Request $request Request object.
+	 * @return bool
+	 */
+	private static function rest_caller_has_post_password( $post, $request ) {
+		if ( ! $request instanceof \WP_REST_Request ) {
+			return false;
+		}
+		$post_type = get_post_type_object( $post->post_type );
+		if ( ! $post_type instanceof \WP_Post_Type || ! method_exists( $post_type, 'get_rest_controller' ) ) {
+			return false;
+		}
+		$controller = $post_type->get_rest_controller();
+		if ( ! $controller instanceof \WP_REST_Posts_Controller ) {
+			return false;
+		}
+		return (bool) $controller->can_access_password_content( $post, $request );
 	}
 
 	/**
