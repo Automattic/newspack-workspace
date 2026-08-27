@@ -393,6 +393,59 @@ class HomepagePostsBlockTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 	}
 
 	/**
+	 * Avatar markup whose URL carries an href query parameter must come
+	 * through intact — neutralization touches only real anchor href
+	 * attributes, never "href=" text inside another attribute's value
+	 * (the shape produced by URL-rewriting avatar proxies).
+	 */
+	public function test_editor_posts_endpoint_preserves_avatar_markup() {
+		$author_id = self::factory()->user->create(
+			[
+				'role'          => 'author',
+				'display_name'  => 'Ada Fixture',
+				'user_nicename' => 'ada-fixture',
+			]
+		);
+		self::factory()->post->create(
+			[
+				'post_status' => 'publish',
+				'post_author' => $author_id,
+			]
+		);
+		wp_set_current_user( self::factory()->user->create( [ 'role' => 'administrator' ] ) );
+
+		$proxied_avatar_filter = function () {
+			return '<img src="https://cdn.example.test/proxy?url=a&amp;href=x" srcset="https://cdn.example.test/proxy?url=b&amp;href=y 2x" class="avatar" alt="" width="48" height="48" />';
+		};
+		add_filter( 'pre_get_avatar', $proxied_avatar_filter );
+
+		$request = new WP_REST_Request( 'GET', '/newspack-blocks/v1/newspack-blocks-posts' );
+		$request->set_param( 'postsToShow', 10 );
+		$posts = rest_do_request( $request )->get_data();
+
+		remove_filter( 'pre_get_avatar', $proxied_avatar_filter );
+
+		self::assertNotEmpty( $posts, 'The editor posts endpoint returns the published post.' );
+		foreach ( $posts as $post_data ) {
+			self::assertStringContainsString(
+				'src="https://cdn.example.test/proxy?url=a&amp;href=x"',
+				$post_data['newspack_post_avatars'],
+				'The avatar src survives neutralization byte-identical.'
+			);
+			self::assertStringContainsString(
+				'srcset="https://cdn.example.test/proxy?url=b&amp;href=y 2x"',
+				$post_data['newspack_post_avatars'],
+				'The avatar srcset survives neutralization byte-identical.'
+			);
+			self::assertStringContainsString(
+				'href="#"',
+				$post_data['newspack_post_avatars'],
+				'The avatar anchor is still neutralized.'
+			);
+		}
+	}
+
+	/**
 	 * The front-end byline formatter keeps live author-archive links.
 	 *
 	 * The discriminating mirror of the editor tests above: neutralization

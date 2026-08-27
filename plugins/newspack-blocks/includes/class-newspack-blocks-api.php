@@ -180,22 +180,26 @@ class Newspack_Blocks_API {
 	}
 
 	/**
-	 * Point every link in a rendered payload fragment at '#'.
+	 * Point every anchor in a rendered payload fragment at '#'.
 	 *
 	 * The editor canvas renders the byline and avatar fields verbatim, so a
 	 * live URL navigates the canvas iframe away from the post being edited.
 	 * Runs on the finished markup — after the newspack_blocks_post_byline
 	 * filter — so links injected by filters (e.g. custom bylines) are covered
 	 * too, matching the category-link convention used elsewhere in this
-	 * payload. Prefixed variants such as xlink:href and data-href are matched
-	 * deliberately: xlink:href navigates like href, and over-neutralizing a
-	 * non-navigating attribute is harmless in a payload only the editor sees.
+	 * payload. Only real anchor href attributes are rewritten: "href=" text
+	 * inside another attribute's value (avatar proxy URLs), xlink:href sprite
+	 * references, and plain text all pass through untouched.
 	 *
 	 * @param string $html Rendered markup destined for the editor payload.
-	 * @return string Markup with every href pointing at '#'.
+	 * @return string Markup with every anchor href pointing at '#'.
 	 */
 	private static function neutralize_editor_links( $html ) {
-		return preg_replace( '/\bhref\s*=\s*("[^"]*"|\'[^\']*\'|[^\s>]+)/i', 'href="#"', (string) $html );
+		$processor = new \WP_HTML_Tag_Processor( (string) $html );
+		while ( $processor->next_tag( 'A' ) ) {
+			$processor->set_attribute( 'href', '#' );
+		}
+		return $processor->get_updated_html();
 	}
 
 	/**
