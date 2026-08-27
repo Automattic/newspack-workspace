@@ -354,6 +354,103 @@ class Test_Content_Gate_Rest extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * Raise the gate so a registered reader no longer clears it.
+	 *
+	 * The gate from set_up() admits anyone registered, which makes every
+	 * logged-in reader entitled. The comment tests below need a reader the gate turns
+	 * away while still being logged in, because core refuses an anonymous REST
+	 * comment before any of this is reached.
+	 *
+	 * @return int The reader's user ID.
+	 */
+	private function create_unentitled_reader() {
+		Content_Gate::update_gate_settings(
+			$this->gate_id,
+			[
+				'registration' => [
+					'active'               => true,
+					'metering'             => [
+						'enabled' => false,
+						'count'   => 0,
+						'period'  => 'month',
+					],
+					'require_verification' => true,
+					'gate_id'              => 0,
+				],
+			]
+		);
+		return self::factory()->user->create( [ 'role' => 'subscriber' ] );
+	}
+
+	/**
+	 * A reader the gate turns away cannot comment on the gated post.
+	 *
+	 * The REST payload reports comment_status as closed for this reader, while
+	 * WP_REST_Comments_Controller gates creation on comments_open() --
+	 * which the front-end pair cannot answer, since it keys on a render lock
+	 * restrict_post() sets and on get_queried_object_id(), 0 under a REST
+	 * dispatch. Without a REST-side guard the API accepts a comment on a post
+	 * it has just described as closed to the same caller.
+	 */
+	public function test_unentitled_reader_cannot_comment_on_a_gated_post() {
+		$reader_id = $this->create_unentitled_reader();
+		wp_set_current_user( $reader_id );
+
+		$this->assertNotNull(
+			Content_Gate::get_restriction_for_post( get_post( $this->gated_post_id ) ),
+			'Precondition: the gate must turn this reader away.'
+		);
+
+		$request = new \WP_REST_Request( 'POST', '/wp/v2/comments' );
+		$request->set_param( 'post', $this->gated_post_id );
+		$request->set_param( 'content', 'Attempted comment.' );
+		$response = rest_do_request( $request );
+
+		$this->assertSame( 403, $response->get_status(), 'A gated post must refuse the comment.' );
+		$this->assertSame(
+			'rest_comment_closed',
+			$response->get_data()['code'] ?? '',
+			'The refusal should read as closed comments, matching the payload this reader was served.'
+		);
+	}
+
+	/**
+	 * The guard follows entitlement, not the gate: a reader who clears it can
+	 * still comment, and so can anyone on an ungated post.
+	 */
+	public function test_entitled_reader_can_still_comment_on_a_gated_post() {
+		$reader_id = $this->create_unentitled_reader();
+		update_user_meta( $reader_id, 'np_reader_email_verified', true );
+		wp_set_current_user( $reader_id );
+
+		$this->assertNull(
+			Content_Gate::get_restriction_for_post( get_post( $this->gated_post_id ) ),
+			'Precondition: a verified reader clears this gate.'
+		);
+
+		// Two comments from one author in the same second trip WordPress's flood
+		// check, which has nothing to do with the gate. Core documents
+		// unhooking check_comment_flood_db() as the way to opt out; filtering
+		// wp_is_comment_flood does not work here, because that filter is added
+		// by check_comment_flood_db() itself once the check runs.
+		remove_action( 'check_comment_flood', 'check_comment_flood_db', 10 );
+
+		foreach ( [ $this->gated_post_id, $this->open_post_id ] as $post_id ) {
+			$request = new \WP_REST_Request( 'POST', '/wp/v2/comments' );
+			$request->set_param( 'post', $post_id );
+			// Distinct text per post: WordPress rejects a duplicate comment from
+			// the same author, which would fail the second pass for a reason
+			// this test is not about.
+			$request->set_param( 'content', "Allowed comment on $post_id." );
+			$response = rest_do_request( $request );
+
+			$this->assertSame( 201, $response->get_status(), "Post $post_id should accept the comment." );
+		}
+
+		add_action( 'check_comment_flood', 'check_comment_flood_db', 10, 4 );
+	}
+
+	/**
 	 * An anonymous read of an ungated post is untouched.
 	 */
 	public function test_anonymous_read_of_an_open_post_is_untouched() {

@@ -176,6 +176,7 @@ class Content_Gate {
 		add_filter( 'the_content', [ __CLASS__, 'handle_restricted_content' ], PHP_INT_MAX );
 		add_filter( 'comments_open', [ __CLASS__, 'filter_comments_open' ], 10, 2 );
 		add_filter( 'comments_array', [ __CLASS__, 'filter_comments_array' ], 10, 2 );
+		add_filter( 'rest_pre_insert_comment', [ __CLASS__, 'filter_rest_pre_insert_comment' ], 10, 2 );
 		add_filter( 'get_comments_number', [ __CLASS__, 'filter_comments_number' ], 10, 2 );
 
 		/** Add gate content filters to mimic 'the_content'. See 'wp-includes/default-filters.php' for reference. */
@@ -909,6 +910,43 @@ class Content_Gate {
 			return false;
 		}
 		return $open;
+	}
+
+	/**
+	 * Refuse a REST-created comment on a post the author cannot read.
+	 *
+	 * The comments_open() pair is front-end only: the render lock is set by
+	 * restrict_post(), and get_queried_object_id() is 0 under a REST dispatch.
+	 * WP_REST_Comments_Controller gates creation on comments_open(), so without
+	 * this a reader with no entitlement can comment on a post whose own REST
+	 * payload this plugin has just reported as comment_status: closed.
+	 *
+	 * Hooked here rather than on comments_open so the decision stays inside the
+	 * comments endpoint. Widening comments_open() itself would reach the admin
+	 * comment screens and every front-end call for a post that is not the one
+	 * being rendered, which is a much larger surface than the mismatch.
+	 *
+	 * @param array|\WP_Error  $prepared_comment Prepared comment data.
+	 * @param \WP_REST_Request $request          Request object.
+	 * @return array|\WP_Error
+	 */
+	public static function filter_rest_pre_insert_comment( $prepared_comment, $request ) {
+		if ( is_wp_error( $prepared_comment ) || ! self::is_newspack_feature_enabled() ) {
+			return $prepared_comment;
+		}
+		$post_id = isset( $prepared_comment['comment_post_ID'] ) ? (int) $prepared_comment['comment_post_ID'] : 0;
+		$post    = $post_id ? get_post( $post_id ) : null;
+		if ( ! $post instanceof \WP_Post ) {
+			return $prepared_comment;
+		}
+		if ( null === self::get_restriction_for_post( $post ) ) {
+			return $prepared_comment;
+		}
+		return new \WP_Error(
+			'rest_comment_closed',
+			__( 'Sorry, comments are closed for this post.', 'newspack-plugin' ),
+			[ 'status' => 403 ]
+		);
 	}
 
 	/**
