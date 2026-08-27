@@ -134,12 +134,27 @@ class Users {
 		if ( array_key_exists( $avatar_meta_key, $user_data ) && is_array( $user_data[ $avatar_meta_key ] ) && ! empty( $user_data[ $avatar_meta_key ]['full'] ) ) {
 			$avatar_url = $user_data[ $avatar_meta_key ]['full'];
 
-			// The avatar URL comes from the network event payload and is fetched server-side
-			// via media_sideload_image -> download_url -> wp_safe_remote_get. Core blocks
-			// RFC1918 and loopback there but not the 169.254.0.0/16 cloud-metadata range, so
-			// a peer could otherwise make this site request that internal address (SSRF).
-			// is_safe_sideload_url() adds the reserved-range check core omits.
+			// The avatar URL comes from the network event payload and is fetched server-side.
+			// Network::is_safe_sideload_url() is the authoritative gate and its docblock
+			// carries the reasoning; this pre-check exists for the log line below, and
+			// sideload_peer_image() refuses again on its own regardless.
 			if ( ! Network::is_safe_sideload_url( $avatar_url ) ) {
+				// A refusal here is the guard doing its job, but it is also the only
+				// signal that a peer's avatars have stopped syncing. Debugger::log()
+				// writes nothing unless NEWSPACK_NETWORK_DEBUG is defined, which no
+				// production site sets, so route this the way Incoming_Post::log()
+				// routes its own refusal — through newspack_log, which Newspack
+				// Manager collects — and keep the debug line for a local trace.
+				if ( method_exists( 'Newspack\Logger', 'newspack_log' ) ) {
+					\Newspack\Logger::newspack_log(
+						'newspack_network_avatar_sideload',
+						'Refused an avatar sideload: the URL resolves to a private or reserved address.',
+						[
+							'user_id' => $user_id,
+						],
+						'error'
+					);
+				}
 				Debugger::log( 'Avatar URL is not a valid external URL, skipping sideload' );
 				return false;
 			}
