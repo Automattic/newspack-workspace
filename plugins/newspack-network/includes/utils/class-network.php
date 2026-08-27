@@ -167,16 +167,19 @@ class Network {
 			return false;
 		}
 
-		// A bracketed IPv6 literal would arrive with its brackets; strip them before
-		// validating. This is defensive, since wp_http_validate_url already rejects such hosts.
+		// A bracketed IPv6 literal keeps its brackets through wp_parse_url(), so strip them
+		// before validating. Unreachable today — wp_http_validate_url() above rejects any
+		// host containing ':' — and kept as the thing that would be needed first if core
+		// ever relaxed that check.
 		$host = trim( $host, '[]' );
 
 		if ( filter_var( $host, FILTER_VALIDATE_IP ) ) {
 			$ips = [ $host ];
 		} else {
 			$ips = self::resolve_host( $host );
-			if ( empty( $ips ) ) {
-				// Unresolvable host: fail closed rather than let the fetch resolve it later.
+			if ( null === $ips || empty( $ips ) ) {
+				// Unresolvable host, or a lookup we could not complete: fail closed rather
+				// than let the fetch resolve it later.
 				return false;
 			}
 		}
@@ -199,20 +202,30 @@ class Network {
 	 *
 	 * @param string $host Hostname to resolve.
 	 *
-	 * @return string[] Resolved IP addresses; empty if the host resolves to none.
+	 * @return string[]|null Resolved IP addresses, empty if the host resolves to none,
+	 *                       or null if a lookup failed and the answer is unknown.
 	 */
-	private static function resolve_host( string $host ): array {
+	private static function resolve_host( string $host ): ?array {
 		$ips = gethostbynamel( $host );
 		$ips = ( false === $ips ) ? [] : $ips;
 
 		// Peers control the hostname, so an unresolvable one would emit an E_WARNING per event;
 		// the empty/false return is handled fail-closed below, so the warning carries nothing.
 		$aaaa = @dns_get_record( $host, DNS_AAAA ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
-		if ( is_array( $aaaa ) ) {
-			foreach ( $aaaa as $record ) {
-				if ( ! empty( $record['ipv6'] ) ) {
-					$ips[] = $record['ipv6'];
-				}
+
+		// A query error and "no AAAA records" are different answers, and only the second is
+		// safe to act on: false means we never learned the host's v6 addresses, so approving
+		// it on its A record alone would skip the v6 half of this check entirely. A host with
+		// a public A record and an internal AAAA record clears the guard that way, which is
+		// the case this function exists to catch. Absent records return an empty array, so
+		// the ordinary A-only host is unaffected.
+		if ( false === $aaaa ) {
+			return null;
+		}
+
+		foreach ( $aaaa as $record ) {
+			if ( ! empty( $record['ipv6'] ) ) {
+				$ips[] = $record['ipv6'];
 			}
 		}
 
