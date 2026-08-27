@@ -52,8 +52,10 @@ function newspack_request_needs_woocommerce_styles() {
 	}
 
 	// Absent newspack-plugin the theme keeps its previous behaviour, covering
-	// the native routes only.
-	return class_exists( 'Newspack\WooCommerce_Content_Detector' )
+	// the native routes only. Autoloading is off because newspack-plugin
+	// includes the class as it loads, long before this runs, so an autoload
+	// pass here could only reach some other plugin's handler for the namespace.
+	return class_exists( 'Newspack\WooCommerce_Content_Detector', false )
 		&& \Newspack\WooCommerce_Content_Detector::current_request_has_woocommerce_content();
 }
 
