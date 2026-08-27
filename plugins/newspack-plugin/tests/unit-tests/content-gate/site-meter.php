@@ -68,7 +68,6 @@ class Test_Site_Meter extends \WP_UnitTestCase {
 			delete_option( Site_Meter::OPTION_PREFIX . $key );
 		}
 		delete_option( Site_Meter::ADOPTED_OPTION );
-		delete_option( Site_Meter::CLAIM_OPTION );
 		parent::tear_down();
 	}
 
@@ -283,31 +282,6 @@ class Test_Site_Meter extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * The counter key is what actually collapses several gates onto one allowance;
-	 * matching settings alone would still hand a reader a fresh count per gate.
-	 */
-	public function test_sharing_gates_count_against_one_key() {
-		$this->mark_adopted();
-		$metering = [
-			'enabled' => true,
-			'count'   => 3,
-			'period'  => 'month',
-		];
-		$first = $this->create_gate( $metering, $metering );
-		$second = $this->create_gate( $metering, $metering );
-
-		$this->assertSame(
-			Metering::get_meter_key( $first, true ),
-			Metering::get_meter_key( $second, true ),
-			'Two sharing gates must count against the same key'
-		);
-		// Against the gate IDs, not get_shared_meter_key(): comparing the key to the call
-		// it is built from would pass even on a key that collided with a gate ID.
-		$this->assertNotSame( (string) $first, Metering::get_meter_key( $first, true ) );
-		$this->assertNotSame( (string) $second, Metering::get_meter_key( $second, true ) );
-	}
-
-	/**
 	 * The behaviour the shared meter exists to deliver: an allowance spent in one
 	 * section is gone in the next, rather than starting again per gate.
 	 */
@@ -340,6 +314,10 @@ class Test_Site_Meter extends \WP_UnitTestCase {
 			$this->get_spent_views( $user_id, (string) $news ),
 			'Nothing is written to the per-gate counter while the gate shares the pool'
 		);
+		// Against the gate IDs, not get_shared_meter_key(): comparing the key to the call
+		// it is built from would pass even on a key that collided with a gate ID.
+		$this->assertNotSame( (string) $news, Metering::get_meter_key( $news, true ) );
+		$this->assertNotSame( (string) $sport, Metering::get_meter_key( $sport, true ) );
 	}
 
 	/**
@@ -475,23 +453,6 @@ class Test_Site_Meter extends \WP_UnitTestCase {
 			'Bringing the reset closer must not refund the view already spent'
 		);
 		$this->assertCount( 1, $this->get_spent_views( $user_id, Site_Meter::get_shared_meter_key() ) );
-	}
-
-	/**
-	 * An opted-out gate must not draw down the shared pool.
-	 */
-	public function test_an_opted_out_gate_counts_against_its_own_key() {
-		$this->mark_adopted();
-		$metering = [
-			'enabled' => true,
-			'count'   => 3,
-			'period'  => 'month',
-		];
-		$shared = $this->create_gate( $metering, $metering );
-		$separate = $this->create_gate( $metering, $metering, Site_Meter::SCOPE_GATE );
-
-		$this->assertSame( (string) $separate, Metering::get_meter_key( $separate, true ) );
-		$this->assertNotSame( Metering::get_meter_key( $shared, true ), Metering::get_meter_key( $separate, true ) );
 	}
 
 	/**
@@ -871,6 +832,45 @@ class Test_Site_Meter extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * Adoption writes only the options that do not exist yet. A run that started
+	 * before a publisher's save must not finish after it and write the vote over
+	 * their values: the save reported success, so the values it wrote are the
+	 * site's configuration, not a state the migration may replace.
+	 */
+	public function test_a_late_adoption_run_does_not_overwrite_a_written_allowance() {
+		$metering = [
+			'enabled' => true,
+			'count'   => 3,
+			'period'  => 'week',
+		];
+		$gate_id = $this->create_gate( $metering, $metering );
+		Site_Meter::update_settings(
+			[
+				'anonymous_count'  => 10,
+				'registered_count' => 10,
+				'period'           => 'month',
+			]
+		);
+		$this->assertFalse( Site_Meter::has_adopted(), 'The write above has to land before adoption for this to mean anything' );
+
+		Site_Meter::maybe_adopt_gate_settings();
+
+		$settings = Site_Meter::get_settings();
+		$this->assertSame( 10, $settings['anonymous_count'], 'The written signed-out allowance stands' );
+		$this->assertSame( 10, $settings['registered_count'], 'The written signed-in allowance stands' );
+		$this->assertSame( 'month', $settings['period'], 'The written period stands' );
+		$this->assertTrue( Site_Meter::has_adopted(), 'The late run still completes adoption' );
+		// The stored meter is not the vote here, so the published gate's own grant —
+		// what its readers actually get — must be preserved by a pin.
+		$this->assertSame(
+			Site_Meter::SCOPE_GATE,
+			Content_Gate::get_custom_access_settings( $gate_id )['metering']['scope'],
+			'A published gate whose grant differs from the stored meter keeps its own allowance'
+		);
+		$this->assertSame( 3, Metering::get_registered_settings( $gate_id )['count'], 'Readers of the gate keep the allowance it granted' );
+	}
+
+	/**
 	 * The front end reads these on every gated request, so adoption must leave real
 	 * rows behind even when it settles on the defaults.
 	 */
@@ -941,6 +941,57 @@ class Test_Site_Meter extends \WP_UnitTestCase {
 		$this->assertTrue(
 			Metering::is_gate_metered( $gate_id ),
 			'An unverified reader asking gets the same answer as everyone else'
+		);
+	}
+
+	/**
+	 * A signed-in unverified reader is held at the wall, and the wall's shared
+	 * allowance is the signed-out count — the only count adoption votes it into.
+	 * Resolving that reader against the signed-in count would quote an allowance
+	 * the wall never granted, on the one path where the two can differ.
+	 */
+	public function test_a_reader_held_at_the_wall_is_offered_the_walls_own_allowance() {
+		Site_Meter::update_settings(
+			[
+				'anonymous_count'  => 2,
+				'registered_count' => 0,
+			]
+		);
+		$this->mark_adopted();
+		$gate_id = Content_Gate::create_gate( [ 'title' => 'Verified Wall' ] );
+		$this->gate_ids[] = $gate_id;
+		Content_Gate::update_gate_settings(
+			$gate_id,
+			[
+				'title'         => 'Verified Wall',
+				'status'        => 'publish',
+				'priority'      => 0,
+				'content_rules' => [
+					[
+						'slug'  => 'post_types',
+						'value' => [ 'post' ],
+					],
+				],
+				'registration'  => [
+					'active'               => true,
+					'require_verification' => true,
+					'metering'             => [
+						'enabled' => true,
+						'count'   => 9,
+						'period'  => 'month',
+					],
+				],
+			]
+		);
+		// Registered without authenticating, which would write a cookie outliving the test.
+		$reader = \Newspack\Reader_Activation::register_reader( 'unverified-wall@example.test', 'Test Reader', false );
+		$this->assertIsInt( $reader, 'The reader is registered, so the assertion below is not vacuous' );
+		$this->user_ids[] = $reader;
+		wp_set_current_user( $reader );
+
+		$this->assertTrue(
+			Metering::offers_metering( $gate_id ),
+			'The wall grants signed-out views, and the reader it holds is offered that allowance, not the signed-in one'
 		);
 	}
 
@@ -1044,7 +1095,6 @@ class Test_Site_Meter extends \WP_UnitTestCase {
 	 * defaults to every gate, so a failed write has to leave the run open to retry.
 	 */
 	public function test_a_failed_write_does_not_mark_the_site_adopted() {
-		update_option( Site_Meter::OPTION_PREFIX . 'anonymous_count', 3 );
 		$this->create_gate(
 			[
 				'enabled' => true,
@@ -1057,21 +1107,23 @@ class Test_Site_Meter extends \WP_UnitTestCase {
 				'period'  => 'month',
 			]
 		);
-		// Holding the stored value against the write is how update_option() reports failure.
-		$refuse_write = function () {
-			return 3;
+		// A write the database dropped leaves no row behind; deleting the option the
+		// moment it lands is the closest a test can get to that.
+		$drop_write = function () {
+			delete_option( Site_Meter::OPTION_PREFIX . 'anonymous_count' );
 		};
-		add_filter( 'pre_update_option_' . Site_Meter::OPTION_PREFIX . 'anonymous_count', $refuse_write );
+		add_action( 'add_option_' . Site_Meter::OPTION_PREFIX . 'anonymous_count', $drop_write );
 
 		Site_Meter::maybe_adopt_gate_settings();
 
-		remove_filter( 'pre_update_option_' . Site_Meter::OPTION_PREFIX . 'anonymous_count', $refuse_write );
+		remove_action( 'add_option_' . Site_Meter::OPTION_PREFIX . 'anonymous_count', $drop_write );
 
 		$this->assertFalse( Site_Meter::has_adopted(), 'A run that could not write must not record itself as done' );
-		$this->assertFalse(
-			get_option( Site_Meter::CLAIM_OPTION, false ),
-			'The claim is released so the next request can retry'
-		);
+
+		Site_Meter::maybe_adopt_gate_settings();
+
+		$this->assertTrue( Site_Meter::has_adopted(), 'Left unmarked, the next request completes the adoption' );
+		$this->assertSame( 5, Site_Meter::get_setting( 'anonymous_count' ), 'The retried run seeds the missing option' );
 	}
 
 	/**

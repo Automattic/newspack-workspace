@@ -12,13 +12,13 @@ defined( 'ABSPATH' ) || exit;
 /**
  * One free-view allowance shared by every content gate.
  *
- * Counters used to be keyed by gate, so a site whose tiers unlock via different
- * product lists gave readers a fresh allowance per section. This class owns the
- * counts and reset period centrally; gates keep their own enablement, so a hard
- * wall and a metered gate can coexist against the same pool.
+ * The counts and reset period live here rather than on each gate, so a reader
+ * moving between gated sections draws on one pool and the countdown reports one
+ * number. Gates keep their own enablement, so a hard wall and a metered gate
+ * can coexist against the same pool.
  *
  * A gate can still opt out per audience path by setting its metering `scope` to
- * `gate`, which restores the pre-2191 per-gate counter.
+ * `gate`, which keys that path's counter by the gate again.
  */
 class Site_Meter {
 	/**
@@ -35,16 +35,6 @@ class Site_Meter {
 	 * have already adopted.
 	 */
 	const ADOPTED_OPTION = 'newspack_content_gate_meter_adopted';
-
-	/**
-	 * Option claimed by the request currently running the adoption routine.
-	 */
-	const CLAIM_OPTION = 'newspack_content_gate_meter_adoption_claim';
-
-	/**
-	 * Seconds after which an adoption claim is treated as abandoned.
-	 */
-	const CLAIM_TIMEOUT = 300;
 
 	/**
 	 * Scope value: the gate draws on the shared site allowance.
@@ -82,7 +72,27 @@ class Site_Meter {
 	 * Initialize hooks.
 	 */
 	public static function init(): void {
-		add_action( 'admin_init', [ __CLASS__, 'maybe_adopt_gate_settings' ] );
+		add_action( 'admin_init', [ __CLASS__, 'maybe_adopt_on_admin_init' ] );
+	}
+
+	/**
+	 * Run adoption for an admin pageload.
+	 *
+	 * `admin_init` also fires on admin-ajax.php and admin-post.php, which serve
+	 * `nopriv` actions and any reader's session, so without the capability check a
+	 * visitor would get to choose when the migration runs — and on the sites this
+	 * feature targets, readers self-register as users, which is why a bare login
+	 * check is not enough. The wizard's REST callbacks sit behind
+	 * `api_permissions_check` and call {@see self::maybe_adopt_gate_settings()}
+	 * directly, so they are unaffected by this guard.
+	 *
+	 * @return void
+	 */
+	public static function maybe_adopt_on_admin_init(): void {
+		if ( ! current_user_can( 'edit_posts' ) ) {
+			return;
+		}
+		self::maybe_adopt_gate_settings();
 	}
 
 	/**
@@ -114,11 +124,9 @@ class Site_Meter {
 	/**
 	 * Get one site meter setting.
 	 *
-	 * Separate from `get_settings()` so that callers wanting the whole set are typed to
-	 * receive an array and nothing else. Folding both into one method meant every such
-	 * caller advertised an error return it could not handle, and iterating a `WP_Error`
-	 * walks its properties rather than failing, so a mistake there would be written to
-	 * the database rather than raised.
+	 * Separate from `get_settings()` so that callers wanting the whole set are typed
+	 * to receive an array and nothing else; only this per-key entry point can be
+	 * asked for a key that does not exist, so only it reports one.
 	 *
 	 * @param string $key The setting key.
 	 *
@@ -184,17 +192,18 @@ class Site_Meter {
 				continue;
 			}
 			$sanitized = self::sanitize_setting( $key, $value );
-			if ( is_wp_error( $sanitized ) ) {
-				return $sanitized;
-			}
-			if ( $sanitized === $current[ $key ] ) {
+			// Skip only when the row itself already holds the value. A value that merely
+			// equals the default has no row, and a save with no row is not a save:
+			// adoption seeds absent options, so it would replace this one later.
+			if ( $sanitized === $current[ $key ] && null !== get_option( self::OPTION_PREFIX . $key, null ) ) {
 				continue;
 			}
 			// A value reported but never written shows the publisher a save that did not happen.
 			if ( ! update_option( self::OPTION_PREFIX . $key, $sanitized ) ) {
 				return new \WP_Error(
 					'newspack_site_meter_update_failed',
-					__( 'Failed to update the site meter settings.', 'newspack-plugin' )
+					__( 'Failed to update the site meter settings.', 'newspack-plugin' ),
+					[ 'status' => 500 ]
 				);
 			}
 			$current[ $key ] = $sanitized;
@@ -247,35 +256,6 @@ class Site_Meter {
 	}
 
 	/**
-	 * Claim the adoption run for this request.
-	 *
-	 * `admin_init` fires on admin-ajax.php and admin-post.php, both reachable without
-	 * a session, so a burst of anonymous requests after a deploy would otherwise each
-	 * run the whole routine. The work is idempotent, so duplicates cannot corrupt the
-	 * result; what this stops is a slow duplicate finishing after a publisher has
-	 * already edited the allowance and writing its stale answer over theirs.
-	 *
-	 * This narrows the window; it does not close it. `add_option()` checks for the
-	 * option in PHP and then writes with `INSERT ... ON DUPLICATE KEY UPDATE`, so two
-	 * requests that both pass the check both write and both report success. It is not
-	 * a mutex and must not be built on as one. A claim older than CLAIM_TIMEOUT is
-	 * treated as abandoned, so a run that dies part-way does not block adoption forever.
-	 *
-	 * @return bool Whether this request owns the run.
-	 */
-	private static function claim_adoption(): bool {
-		if ( add_option( self::CLAIM_OPTION, time(), '', false ) ) {
-			return true;
-		}
-		$claimed_at = (int) get_option( self::CLAIM_OPTION );
-		if ( $claimed_at && ( time() - $claimed_at ) < self::CLAIM_TIMEOUT ) {
-			return false;
-		}
-		update_option( self::CLAIM_OPTION, time(), false );
-		return true;
-	}
-
-	/**
 	 * Seed the site meter from existing gates, once per site.
 	 *
 	 * Sites upgrading into a shared meter must not have their allowances change
@@ -305,7 +285,12 @@ class Site_Meter {
 			return;
 		}
 
-		if ( ! self::claim_adoption() ) {
+		// Access still belongs to Woo Memberships until a site cuts over, and its
+		// gates live under another post type, so running now would spend the one
+		// adoption run on a site whose gating this vote cannot see. Deferred, it
+		// runs on the first admin request after the migration deactivates
+		// Memberships, when the Access Control gates are the ones in force.
+		if ( Memberships::is_active() ) {
 			return;
 		}
 
@@ -364,24 +349,46 @@ class Site_Meter {
 
 		$agrees = $periods_representable && count( $anonymous ) <= 1 && count( $registered ) <= 1 && count( $periods ) <= 1;
 
+		$adopted_settings = self::get_default_settings();
 		if ( $agrees ) {
-			$settings = [];
 			if ( ! empty( $anonymous ) ) {
-				$settings['anonymous_count'] = reset( $anonymous );
+				$adopted_settings['anonymous_count'] = reset( $anonymous );
 			}
 			if ( ! empty( $registered ) ) {
-				$settings['registered_count'] = reset( $registered );
+				$adopted_settings['registered_count'] = reset( $registered );
 			}
 			if ( ! empty( $periods ) ) {
-				$settings['period'] = reset( $periods );
+				$adopted_settings['period'] = reset( $periods );
 			}
-			// Left unmarked so the next request retries. Adopting on settings that were
-			// never written would serve every gate the defaults.
-			if ( is_wp_error( self::update_settings( $settings ) ) ) {
-				delete_option( self::CLAIM_OPTION );
+		}
+
+		// One writer, first write wins, per key. A value already stored is a
+		// publisher's save — configuration the vote may not replace — so every key is
+		// written with add_option(), which loses to an existing row. That guarantee is
+		// only as strong as add_option()'s duplicate check: the check is skipped when
+		// this request has already cached the key as absent, and the INSERT behind it
+		// overwrites on a duplicate key, so the cache is dropped first to force a real
+		// existence check. What remains is the check-to-insert gap of one statement.
+		wp_cache_delete( 'notoptions', 'options' );
+		foreach ( $adopted_settings as $setting_key => $value ) {
+			add_option( self::OPTION_PREFIX . $setting_key, self::sanitize_setting( $setting_key, $value ) );
+		}
+
+		// A write that did not stick leaves its option absent. Bail before the pins:
+		// they compare gates against the stored meter, so pinning here would judge
+		// them against a value the vote never wrote — and a pin, once stamped, is not
+		// retried away. Left unmarked, the next request retries the whole vote.
+		foreach ( array_keys( self::get_default_settings() ) as $setting_key ) {
+			if ( null === get_option( self::OPTION_PREFIX . $setting_key, null ) ) {
 				return;
 			}
-			foreach ( $dormant as $gate_id ) {
+		}
+
+		if ( $agrees ) {
+			// Enforcing gates included: the stored meter is not always the vote — a
+			// value saved before adoption ran outranks it — and a published gate whose
+			// grant differs from what was stored must keep that grant.
+			foreach ( array_merge( $enforcing, $dormant ) as $gate_id ) {
 				self::pin_differing_paths( $gate_id );
 			}
 		} else {
@@ -394,9 +401,7 @@ class Site_Meter {
 			self::pin_gate_to_own_meter( $gate_id );
 		}
 
-		self::persist_settings();
 		self::mark_adopted();
-		delete_option( self::CLAIM_OPTION );
 	}
 
 	/**
@@ -430,21 +435,6 @@ class Site_Meter {
 			if ( $differs ) {
 				self::pin_path( $gate_id, $path_key );
 			}
-		}
-	}
-
-	/**
-	 * Write the resolved settings to their options.
-	 *
-	 * Adoption can settle on values that match the defaults, and `update_settings()`
-	 * skips writes that change nothing, so without this the options can stay absent
-	 * and every gated request pays for three option misses.
-	 *
-	 * @return void
-	 */
-	private static function persist_settings(): void {
-		foreach ( self::get_settings() as $key => $value ) {
-			update_option( self::OPTION_PREFIX . $key, $value );
 		}
 	}
 
@@ -524,8 +514,8 @@ class Site_Meter {
 	 * A wall requiring verification holds an unverified signed-in reader, but never
 	 * meters them: `Metering::is_logged_in_metering_allowed()` bails on that state
 	 * before it reads a counter, so the wall's signed-in allowance is not served to
-	 * anyone. Giving it a vote made a wall that agrees with its own paywall read as a
-	 * site-wide conflict, and adoption answers that by pinning every gate, once.
+	 * anyone. A vote from it would make a wall that agrees with its own paywall read
+	 * as a site-wide conflict, and adoption would answer by pinning every gate.
 	 *
 	 * @param int $gate_id Gate ID.
 	 *

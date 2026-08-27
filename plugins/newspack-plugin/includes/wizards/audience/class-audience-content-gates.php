@@ -556,8 +556,9 @@ class Audience_Content_Gates extends Wizard {
 	 * @return \WP_REST_Response|\WP_Error
 	 */
 	public function update_site_meter( \WP_REST_Request $request ): \WP_REST_Response|\WP_Error {
-		// Before the write: adoption seeds the allowance from the gates, so a caller
-		// reaching this route first would have its setting reverted by the run that follows.
+		// Before the write, so a site that can adopt has adopted by the time the save
+		// lands (adoption defers while Woo Memberships is active). The seed is add-only,
+		// so an adoption run already in flight cannot overwrite what this request writes.
 		Site_Meter::maybe_adopt_gate_settings();
 		// Only what the request actually sent: forwarding an absent count as null would
 		// sanitize to zero and silently close the allowance site-wide.

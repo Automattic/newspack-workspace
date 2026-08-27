@@ -272,9 +272,15 @@ class Metering {
 	/**
 	 * Get the counter key for the reader the given settings govern.
 	 *
-	 * Counters keyed by gate gave a reader crossing sections a fresh allowance per
-	 * gate. A shared scope collapses them onto one key so the allowance, and the
-	 * countdown that reports it, hold across the whole site.
+	 * A shared scope collapses every sharing gate onto one counter key, so the
+	 * allowance, and the countdown that reports it, hold across the whole site.
+	 *
+	 * The shared key starts empty. Per-gate counters are not merged into it — a
+	 * union of the posts already read can exceed the shared count and lock a reader
+	 * out mid-period — so on the day adoption completes, every reader starts the
+	 * shared counter with a full allowance, whatever they had spent under the
+	 * per-gate keys. Pages cached before the switch still localize the old key, so
+	 * a page-cache purge belongs in the same deploy.
 	 *
 	 * Legacy Woo Memberships gates keep their per-gate key: they predate the scope
 	 * setting and read both meters from the shared `metering` meta.
@@ -402,10 +408,16 @@ class Metering {
 		if ( Memberships::is_active() ) {
 			return $is_logged_in ? self::get_registered_settings( $gate_id ) : self::get_anonymous_settings( $gate_id );
 		}
-		$path = self::is_gated_by_registration( $gate_id, $is_logged_in, $for_current_reader )
+		$is_registration_path = self::is_gated_by_registration( $gate_id, $is_logged_in, $for_current_reader );
+		$path                 = $is_registration_path
 			? Content_Gate::get_registration_settings( $gate_id )
 			: Content_Gate::get_custom_access_settings( $gate_id );
-		return self::resolve_settings( $path['active'], $path['metering'], Site_Meter::count_key_for_reader( $is_logged_in ) );
+		// The wall's shared allowance is the signed-out count — the only count adoption
+		// votes it into (see Site_Meter::get_path_audiences()). A signed-in unverified
+		// reader held at the wall is therefore described by that count, not by a
+		// signed-in allowance the wall never granted.
+		$site_count_key = $is_registration_path ? 'anonymous_count' : Site_Meter::count_key_for_reader( $is_logged_in );
+		return self::resolve_settings( $path['active'], $path['metering'], $site_count_key );
 	}
 
 	/**
