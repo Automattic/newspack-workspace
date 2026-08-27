@@ -187,6 +187,11 @@ supersede_bot_prs() {
   local stem="$1" target="$2" new_url="$3" bot_identity="$4" reason="$5"
   local new_number="${3##*/}"
   local prs n head_sha committer
+  # --limit 100 is not pagination-shy: every run closes every escalation PR it
+  # matches, so the steady state is one open per target. Passing 100 means the
+  # closing has failed on that many consecutive conflicted syncs, and the
+  # truncation is then the least of the problems — reaching this ceiling is a
+  # signal worth noticing, not a case worth paginating for.
   prs=$(STEM="$stem" \
     gh pr list --base "$target" --state open --limit 100 \
       --json number,headRefName,isCrossRepository \
