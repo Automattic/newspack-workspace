@@ -158,6 +158,23 @@ div.wpnbha .article-section-title,
 	}
 }
 
+// Type size only. The single-post category rule this mirrors is a block-level flex
+// row with a trailing `::after` divider drawn across the remaining width; labels
+// take neither, so they stay inline beside a sponsor label and no divider is drawn
+// through a row of chips.
+.single .tag-labels {
+	flex-wrap: wrap;
+	font-size: var(--newspack-theme-font-size-base);
+}
+
+// `.single .cat-links` below is a block-level flex row, which pushes the tag labels
+// that follow it onto the next line. Same shape the parent handles for `.wpnbha`:
+// restore the sponsor label's own inline display when labels follow it, leaving its
+// flex/gap layout alone.
+.single .cat-links.sponsor-label:has( + .tag-labels ) {
+	display: inline-flex;
+}
+
 .accent-header:not(.widget-title),
 .single .cat-links {
 	align-items: center;
