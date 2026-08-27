@@ -196,6 +196,7 @@ class Content_Gate {
 		include __DIR__ . '/class-content-rules.php';
 		include __DIR__ . '/class-content-restriction-control.php';
 		include __DIR__ . '/class-block-patterns.php';
+		include __DIR__ . '/class-site-meter.php';
 		include __DIR__ . '/class-metering.php';
 		include __DIR__ . '/class-metering-countdown.php';
 		include __DIR__ . '/content-gifting/class-content-gifting.php';
@@ -208,6 +209,7 @@ class Content_Gate {
 		include __DIR__ . '/class-block-visibility.php';
 		include __DIR__ . '/class-gate-preview.php';
 
+		Site_Meter::init();
 		Content_Gate\Gate_Preview::init();
 	}
 
@@ -1433,9 +1435,8 @@ class Content_Gate {
 			// views. A tier that is active but meters 0 views gates every reader on their
 			// first view, so its layout must not advertise "free articles" it never
 			// delivers (NPPD-2056).
-			$custom_access_meters = ! empty( $custom_access_settings['active'] )
-				&& ! empty( $custom_access_settings['metering']['enabled'] )
-				&& absint( $custom_access_settings['metering']['count'] ?? 0 ) > 0;
+			$custom_access_metering = Metering::resolve_path_settings( $custom_access_settings, true );
+			$custom_access_meters   = $custom_access_metering['enabled'] && $custom_access_metering['count'] > 0;
 			if ( $custom_access_meters ) {
 				$pattern_slug = 'pay-wall-one-tier-metering';
 			}
@@ -1667,6 +1668,23 @@ class Content_Gate {
 	}
 
 	/**
+	 * Get the metering settings an audience path starts from.
+	 *
+	 * Both audience paths and the layout-copy resolver fill missing values from this,
+	 * so drift between copies would let a gate advertise an allowance it does not serve.
+	 *
+	 * @return array{enabled: bool, count: int, period: string, scope: string} Default metering settings.
+	 */
+	public static function get_default_metering_settings(): array {
+		return [
+			'enabled' => false,
+			'count'   => 1,
+			'period'  => 'month',
+			'scope'   => Site_Meter::SCOPE_SITE,
+		];
+	}
+
+	/**
 	 * Get registration settings for a gate.
 	 *
 	 * @param int $gate_id Gate ID.
@@ -1679,11 +1697,7 @@ class Content_Gate {
 			$registration = [];
 		}
 
-		$default_metering = [
-			'enabled' => false,
-			'count'   => 1,
-			'period'  => 'month',
-		];
+		$default_metering = self::get_default_metering_settings();
 
 		return [
 			'active'               => isset( $registration['active'] ) ? (bool) $registration['active'] : false,
@@ -1748,11 +1762,7 @@ class Content_Gate {
 		// Normalize legacy flat rules to grouped format.
 		$access_rules = Access_Rules::normalize_rules( $access_rules );
 
-		$default_metering = [
-			'enabled' => false,
-			'count'   => 1,
-			'period'  => 'month',
-		];
+		$default_metering = self::get_default_metering_settings();
 
 		return [
 			'active'                 => isset( $custom_access['active'] ) ? (bool) $custom_access['active'] : false,
