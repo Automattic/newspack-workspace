@@ -74,6 +74,14 @@ class IP_Access_Rule {
 		add_action( 'init', [ __CLASS__, 'add_rewrite_rule' ] );
 		add_action( 'rest_api_init', [ __CLASS__, 'register_rest_route' ] );
 		add_action( 'template_redirect', [ __CLASS__, 'handle_redirect' ] );
+		// After third-party tag registration: Site Kit modules register their
+		// GA4/GTM snippet printing on template_redirect at priority 10, and the
+		// landing page renders and exits — at the default priority the
+		// publisher's analytics tag is never registered for it and the page
+		// sends no pageview. Only the rendering branch runs late; the
+		// query-param redirect in handle_redirect() emits no HTML and stays at
+		// the default priority so other redirect handlers can't pre-empt it.
+		add_action( 'template_redirect', [ __CLASS__, 'handle_landing_page' ], 100 );
 		add_action( 'template_redirect', [ __CLASS__, 'handle_result_notice' ] );
 	}
 
@@ -167,6 +175,7 @@ class IP_Access_Rule {
 		$institution_id = $request->get_param( 'institution_id' );
 		$valid          = false;
 		$inst_name      = '';
+		$matched_id     = 0;
 
 		if ( $institution_id ) {
 			$institutions = \Newspack\Institution::get_cached_institutions();
@@ -174,13 +183,15 @@ class IP_Access_Rule {
 				$user_id  = get_current_user_id();
 				$valid    = \Newspack\Institution::user_matches_institution( $user_id, $institutions[ $institution_id ], true );
 				$inst_name = get_the_title( $institution_id );
+				$matched_id = (int) $institution_id;
 			}
 		} else {
 			/** This filter is documented in handle_redirect(). */
 			$result = apply_filters( 'newspack_content_gate_check_ip', false );
 			$valid  = (bool) $result;
 			if ( is_int( $result ) ) {
-				$inst_name = get_the_title( $result );
+				$inst_name  = get_the_title( $result );
+				$matched_id = $result;
 			}
 		}
 
@@ -191,9 +202,13 @@ class IP_Access_Rule {
 		$data = [ 'valid' => $valid ];
 		// Only disclose the institution name to a visitor who actually matched it;
 		// otherwise an unauthenticated caller could enumerate every institution's
-		// name by iterating institution_id.
+		// name by iterating institution_id. The ID gets the same treatment for
+		// symmetry, and lets the destination page label its GA4 event.
 		if ( $valid && $inst_name ) {
 			$data['institution'] = $inst_name;
+		}
+		if ( $valid && $matched_id ) {
+			$data['institution_id'] = $matched_id;
 		}
 
 		return new \WP_REST_Response( $data );
@@ -321,50 +336,27 @@ class IP_Access_Rule {
 	}
 
 	/**
-	 * Handle the institutional access check.
+	 * Handle the query-param institutional access check.
 	 *
 	 * For `?institutional-access=1` or `?institutional-access` on any URL:
 	 * performs the IP check server-side, then redirects back to the same URL
-	 * with a result parameter.
-	 *
-	 * For the dedicated `/institutional-access` endpoint: renders a loading page
-	 * that performs the check via the REST API and redirects on completion.
+	 * with a result parameter. The dedicated `/institutional-access` endpoint
+	 * is handled by handle_landing_page() instead.
 	 */
 	public static function handle_redirect() {
 		if ( ! get_query_var( self::ENDPOINT ) && ! isset( $_GET[ self::ENDPOINT ] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
 			return;
 		}
+		if ( self::is_landing_page_request() ) {
+			return;
+		}
 
-		// Never cache this page.
+		// Never cache this response.
 		if ( function_exists( 'batcache_cancel' ) ) {
 			batcache_cancel();
 		}
 		nocache_headers();
 
-		// Check if this is the dedicated endpoint or a query param on a regular URL.
-		$slug = get_query_var( self::ENDPOINT . '-slug' );
-		$request_path = wp_parse_url( $_SERVER['REQUEST_URI'], PHP_URL_PATH ); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput
-		$is_dedicated = $slug || (bool) preg_match( '#^/?' . preg_quote( self::ENDPOINT, '#' ) . '/?$#', trim( $request_path, '/' ) );
-
-		if ( $is_dedicated ) {
-			$institution_id = null;
-			if ( $slug ) {
-				$posts = get_posts(
-					[
-						'post_type'      => \Newspack\Institution::POST_TYPE,
-						'name'           => sanitize_title( $slug ),
-						'posts_per_page' => 1,
-						'post_status'    => 'publish',
-						'fields'         => 'ids',
-					]
-				);
-				$institution_id = ! empty( $posts ) ? $posts[0] : null;
-			}
-			self::render_loading_page( $institution_id );
-			exit;
-		}
-
-		// Query param on a regular URL: server-side check and redirect.
 		/**
 		 * Filter whether the current IP is valid for content gate access.
 		 *
@@ -376,13 +368,89 @@ class IP_Access_Rule {
 			self::set_cookie();
 		}
 
-		$redirect_url = self::get_redirect_url();
-		$redirect_url = add_query_arg( self::RESULT_PARAM, $result ? 'success' : 'failure', $redirect_url );
-		if ( is_int( $result ) ) {
-			$redirect_url = add_query_arg( 'institution', rawurlencode( get_the_title( $result ) ), $redirect_url );
-		}
-		wp_safe_redirect( $redirect_url );
+		wp_safe_redirect( self::get_result_redirect_url( $result ) );
 		exit;
+	}
+
+	/**
+	 * Render the loading page on the dedicated `/institutional-access` endpoint.
+	 *
+	 * Hooked late on template_redirect (see init()) so third-party analytics
+	 * tags are registered before the page renders and exits.
+	 */
+	public static function handle_landing_page() {
+		if ( ! self::is_landing_page_request() ) {
+			return;
+		}
+
+		// Never cache this page.
+		if ( function_exists( 'batcache_cancel' ) ) {
+			batcache_cancel();
+		}
+		nocache_headers();
+
+		$institution_id = null;
+		$slug           = get_query_var( self::ENDPOINT . '-slug' );
+		if ( $slug ) {
+			$posts = get_posts(
+				[
+					'post_type'      => \Newspack\Institution::POST_TYPE,
+					'name'           => sanitize_title( $slug ),
+					'posts_per_page' => 1,
+					'post_status'    => 'publish',
+					'fields'         => 'ids',
+				]
+			);
+			$institution_id = ! empty( $posts ) ? $posts[0] : null;
+		}
+		self::render_loading_page( $institution_id );
+		exit;
+	}
+
+	/**
+	 * Whether the current request is for the dedicated landing page — the
+	 * rendered loading page — as opposed to the query-param flow on a regular
+	 * URL, which redirects without rendering anything. Public because the
+	 * Perfmatters integration vetoes JS delay on this request.
+	 *
+	 * @return bool
+	 */
+	public static function is_landing_page_request() {
+		// On the dedicated endpoint the query var comes from the rewrite rule;
+		// the query-param flow sets it through $_GET (which WP mirrors into the
+		// query var). Query var without the GET param therefore identifies the
+		// rendered landing page at any install depth, with no path parsing —
+		// a path check would misclassify subdirectory installs.
+		return (bool) get_query_var( self::ENDPOINT ) && ! isset( $_GET[ self::ENDPOINT ] ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+	}
+
+	/**
+	 * Build the query-param flow's post-check redirect URL: the current URL
+	 * without the endpoint param, carrying the result and, on a match, the
+	 * institution's name (for the snackbar) and ID (for the GA4 event).
+	 *
+	 * @param bool|int $result IP check result: institution post ID on a match, false otherwise.
+	 *
+	 * @return string The redirect URL.
+	 */
+	private static function get_result_redirect_url( $result ) {
+		$redirect_url = self::get_redirect_url();
+		if ( is_int( $result ) ) {
+			$redirect_url = add_query_arg(
+				[
+					'institution'    => rawurlencode( get_the_title( $result ) ),
+					'institution-id' => $result,
+				],
+				$redirect_url
+			);
+		} else {
+			// get_redirect_url() carries over the current query string, so a
+			// failed re-check must not inherit a previous success's institution
+			// params — the destination page would label its not_verified event
+			// with an institution the visitor did not match.
+			$redirect_url = remove_query_arg( [ 'institution', 'institution-id' ], $redirect_url );
+		}
+		return add_query_arg( self::RESULT_PARAM, $result ? 'success' : 'failure', $redirect_url );
 	}
 
 	/**
@@ -422,6 +490,71 @@ class IP_Access_Rule {
 				]
 			);
 		}
+
+		if ( in_array( $result, [ 'success', 'failure' ], true ) ) {
+			add_action( 'wp_footer', [ __CLASS__, 'print_result_event' ] );
+		}
+	}
+
+	/**
+	 * Print the GA4 event for a redirect-borne IP-check outcome.
+	 *
+	 * Fires np_institutional_access on the page the check redirected back to —
+	 * for both the query-param flow and the dedicated landing page's success
+	 * path. The landing page never fires `connected` itself, so a success is
+	 * counted exactly once. gtag is polled for because Perfmatters' JS delay
+	 * releases analytics scripts only on first user interaction, which typically
+	 * happens after this script runs.
+	 */
+	public static function print_result_event() {
+		$result = isset( $_GET[ self::RESULT_PARAM ] ) ? sanitize_text_field( wp_unslash( $_GET[ self::RESULT_PARAM ] ) ) : ''; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		if ( ! in_array( $result, [ 'success', 'failure' ], true ) ) {
+			return;
+		}
+
+		// Both legitimate flows set the bypass cookie before redirecting here,
+		// so a success param without it is a shared or hand-crafted URL — it
+		// must not inject a `connected` event into the publisher's data.
+		if ( 'success' === $result && ! self::is_cookie_set() ) {
+			return;
+		}
+
+		$payload = [
+			'action' => 'success' === $result ? 'connected' : 'not_verified',
+		];
+		// The event param uses the same anonymized identifier as the GA4 `group`
+		// dimension, not the institution's display name (which the URL still
+		// carries for the snackbar).
+		$institution_id = isset( $_GET['institution-id'] ) ? absint( $_GET['institution-id'] ) : 0; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		if ( $institution_id ) {
+			$payload['institution'] = 'Institution ' . $institution_id;
+		}
+		?>
+		<script>
+		( function() {
+			var payload = <?php echo wp_json_encode( $payload ); ?>;
+			// Strip the result params so a reload, back-button return, or shared
+			// URL doesn't fire another event (or re-exempt the page from cache).
+			if ( window.history && window.history.replaceState && window.URL ) {
+				var url = new URL( window.location.href );
+				[ <?php echo wp_json_encode( self::RESULT_PARAM ); ?>, 'institution', 'institution-id' ].forEach( function( param ) {
+					url.searchParams.delete( param );
+				} );
+				window.history.replaceState( window.history.state, '', url.toString() );
+			}
+			var tries = 0;
+			( function send() {
+				if ( 'function' === typeof window.gtag ) {
+					window.gtag( 'event', 'np_institutional_access', payload );
+					return;
+				}
+				if ( tries++ < 60 ) {
+					setTimeout( send, 500 );
+				}
+			} )();
+		} )();
+		</script>
+		<?php
 	}
 
 	/**
@@ -568,10 +701,34 @@ class IP_Access_Rule {
 				var detailEl  = document.getElementById( 'ip-check-detail' );
 				var redirectUrl = <?php echo wp_json_encode( $redirect_url ); ?>;
 				var resultParam = <?php echo wp_json_encode( $result_param ); ?>;
+				var institutionLabel = <?php echo wp_json_encode( $institution_id ? 'Institution ' . $institution_id : '' ); ?>;
+
+				// Only the outcomes that never leave this page are reported here;
+				// a success redirects, and the destination page fires `connected`.
+				// gtag is polled for so a tag that loads after the outcome (JS
+				// delay, slow network) still records it; the page stays open on
+				// every outcome reported here, so late delivery is fine.
+				function sendEvent( action ) {
+					var payload = { action: action };
+					if ( institutionLabel ) {
+						payload.institution = institutionLabel;
+					}
+					var tries = 0;
+					( function send() {
+						if ( 'function' === typeof window.gtag ) {
+							window.gtag( 'event', 'np_institutional_access', payload );
+							return;
+						}
+						if ( tries++ < 60 ) {
+							setTimeout( send, 500 );
+						}
+					} )();
+				}
 
 				var controller = new AbortController();
 				var timer = setTimeout( function() {
 					controller.abort();
+					sendEvent( "timeout" );
 					showError(
 						<?php echo wp_json_encode( __( 'Verification timed out.', 'newspack-plugin' ) ); ?>,
 						<?php echo wp_json_encode( __( 'Please check your connection and try again.', 'newspack-plugin' ) ); ?>
@@ -597,20 +754,36 @@ class IP_Access_Rule {
 						setTimeout( function() {
 							var url = new URL( redirectUrl, location.origin );
 							url.searchParams.set( resultParam, 'success' );
+							// redirectUrl comes from redirect_to/referer, so never
+							// let institution params ride through from it — only
+							// the REST response labels this verification.
+							url.searchParams.delete( 'institution' );
+							url.searchParams.delete( 'institution-id' );
 							if ( data.institution ) {
 								url.searchParams.set( 'institution', data.institution );
+							}
+							if ( data.institution_id ) {
+								url.searchParams.set( 'institution-id', data.institution_id );
 							}
 							location.href = url.toString();
 						}, 1500 );
 					} else {
+						sendEvent( "not_verified" );
 						showError(
 							<?php echo wp_json_encode( __( "We couldn't verify your location.", 'newspack-plugin' ) ); ?>,
 							<?php echo wp_json_encode( __( "Make sure you're on your organization's network and try again.", 'newspack-plugin' ) ); ?>
 						);
 					}
 				} )
-				.catch( function() {
+				.catch( function( err ) {
 					clearTimeout( timer );
+					// An abort is the timeout firing: its event and message are
+					// already handled above, and the generic copy must not
+					// overwrite the timeout copy the visitor is reading.
+					if ( err && 'AbortError' === err.name ) {
+						return;
+					}
+					sendEvent( "error" );
 					showError(
 						<?php echo wp_json_encode( __( 'Verification failed.', 'newspack-plugin' ) ); ?>,
 						<?php echo wp_json_encode( __( 'An error occurred. Please try again.', 'newspack-plugin' ) ); ?>

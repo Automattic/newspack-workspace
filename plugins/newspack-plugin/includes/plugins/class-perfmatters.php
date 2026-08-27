@@ -436,6 +436,14 @@ class Perfmatters {
 		if ( Lite_Site::is_lite_site_request() ) {
 			return false;
 		}
+		// The IP-access landing page auto-redirects with no user interaction, so
+		// delayed analytics would never execute and the visit would go unrecorded.
+		// Like the lite-site veto above, this holds even under
+		// NEWSPACK_IGNORE_PERFMATTERS_DEFAULTS: it is a functional requirement of
+		// the page, not a configuration default.
+		if ( class_exists( 'Newspack\Content_Gate\IP_Access_Rule' ) && Content_Gate\IP_Access_Rule::is_landing_page_request() ) {
+			return false;
+		}
 		return $delay_js;
 	}
 
