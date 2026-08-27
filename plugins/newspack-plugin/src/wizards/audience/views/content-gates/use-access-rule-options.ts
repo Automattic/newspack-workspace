@@ -12,6 +12,19 @@ import { getAccessRuleOptionsFetchFailedNotice, type AccessRuleOption } from '..
 import { getAccessRuleOptionSource } from '../../../../content-gate/access-rule-option-sources';
 
 /**
+ * Requests whose failure has already been announced.
+ *
+ * The source hands every reader the same promise, and this hook has a reader per gate on
+ * the landing page, so one rejection reaches all of them. The wizard store appends
+ * notices unconditionally and `WizardSnackbar` announces an error assertively, so
+ * without this a six-gate site raised six identical snackbars and a screen reader read
+ * every one. Keyed on the promise rather than the slug because that is exactly the scope
+ * wanted: the source drops a rejected entry, so a later retry is a different promise and
+ * announces again.
+ */
+const announcedFailures = new WeakSet< Promise< AccessRuleOption[] > >();
+
+/**
  * The options to name a rule's stored values with, keyed by rule slug: the list
  * localised with the page, replaced by a freshly fetched one for the rules whose options
  * are fetched.
@@ -39,20 +52,28 @@ export function useAccessRuleOptions(): Record< string, AccessRuleOption[] > {
 			.split( ',' )
 			.filter( Boolean )
 			.forEach( slug => {
-				getAccessRuleOptionSource( slug )?.()
+				const request = getAccessRuleOptionSource( slug )?.();
+				if ( ! request ) {
+					return;
+				}
+				request
 					.then( options => {
 						if ( ! cancelled ) {
 							setFetchedOptions( current => ( { ...current, [ slug ]: options } ) );
 						}
 					} )
 					.catch( () => {
-						if ( ! cancelled ) {
-							addNotice( {
-								message: getAccessRuleOptionsFetchFailedNotice(),
-								type: 'error',
-								id: `rule-options-error-${ slug }`,
-							} );
+						// An unmounted reader announces nothing, and it must not claim the
+						// announcement either – a reader still on screen makes it instead.
+						if ( cancelled || announcedFailures.has( request ) ) {
+							return;
 						}
+						announcedFailures.add( request );
+						addNotice( {
+							message: getAccessRuleOptionsFetchFailedNotice(),
+							type: 'error',
+							id: `rule-options-error-${ slug }`,
+						} );
 					} );
 			} );
 		return () => {
