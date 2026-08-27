@@ -1561,7 +1561,7 @@ final class Reader_Activation {
 	 *
 	 * @return bool
 	 */
-	private static function should_render_auth_modal() {
+	public static function should_render_auth_modal() {
 		/**
 		 * Filters whether to render reader auth form.
 		 *

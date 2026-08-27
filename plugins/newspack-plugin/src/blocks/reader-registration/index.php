@@ -117,7 +117,7 @@ function render_verification_box() {
 			<span class="newspack-ui__icon newspack-ui__icon--neutral">
 				<?php Newspack_UI_Icons::print_svg( 'login' ); ?>
 			</span>
-			<p>
+			<p data-error-target role="status">
 				<?php
 				echo wp_kses_post(
 					sprintf(

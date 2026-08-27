@@ -7,6 +7,7 @@ import { getEventPayload, sendEvent } from '../reader-activation/analytics';
 import { debugLog } from '../reader-activation/utils';
 import { persistCtaAttribution } from '../shared/js/cta-attribution';
 import { propagateGatePreviewParams } from './preview-links';
+import { wireInlineVerificationBox } from '../reader-activation-auth/inline-verification';
 
 const EVENT_NAME = 'np_gate_interaction';
 
@@ -110,6 +111,62 @@ function initReloadHandler() {
 
 		ras.on( 'overlay', refreshPage ); // When an overlay is closed.
 		ras.on( 'activity', refreshPage ); // When a newly registered reader is detected.
+	} );
+}
+
+/**
+ * Wire the email verification prompts rendered above the gate layout for a reader
+ * whose address is on a whitelisted domain but unverified.
+ *
+ * Sends the OTP, then hands the reader to the auth modal's OTP state. Verifying
+ * reloads the article, which the gate now grants.
+ */
+function initVerificationPrompts() {
+	const boxes = [ ...document.querySelectorAll( '.newspack-content-gate__verification-prompt' ) ];
+	if ( ! boxes.length ) {
+		return;
+	}
+	window.newspackRAS = window.newspackRAS || [];
+	window.newspackRAS.push( function ( ras ) {
+		boxes.forEach( box => {
+			wireInlineVerificationBox( box, {
+				url: box.dataset.verificationUrl,
+				nonce: box.dataset.verificationNonce,
+				errorText: box.dataset.errorMessage,
+				onSent: () => {
+					ras.setOTPTimer();
+					// Both checks run before the call, not after: the code is already sent
+					// by this point, and openAuthModal's own early returns invoke
+					// onSuccess — so a modal that never opened would reload the page past
+					// the reader instead of handing control back. `_openAuthModal` is read
+					// at click time because the auth bundle attaches it on its own RAS
+					// callback and nothing orders the two pushes.
+					if (
+						typeof ras._openAuthModal !== 'function' ||
+						! document.querySelector( '.newspack-reader-auth-modal .newspack-reader-auth' )
+					) {
+						return false;
+					}
+					ras._openAuthModal( {
+						skipAuthenticatedCheck: true,
+						skipNewslettersSignup: true,
+						backButtonClosesModal: true,
+						initialState: 'otp',
+						closeOnSuccess: true,
+						skipSuccess: false,
+						// Reload on close rather than only on success: the modal holds a
+						// success step the reader dismisses, and the gate's own reload
+						// handler stands down while an overlay is open. onSuccess covers
+						// the path where the modal closes itself. Reloading either way is
+						// safe — a reader who dismissed without verifying gets the same
+						// gate back.
+						onSuccess: () => window.location.reload(),
+						onClose: () => window.location.reload(),
+					} );
+					return true;
+				},
+			} );
+		} );
 	} );
 }
 
@@ -415,6 +472,7 @@ domReady( function () {
 	// it renders, and an inline gate's 'seen' handler only runs once it scrolls into
 	// view. A CTA click must always persist attribution.
 	manageCtaClicks( gate );
+	initVerificationPrompts();
 
 	initReloadHandler();
 	if ( gate.classList.contains( 'newspack-content-gate__overlay-gate' ) ) {
