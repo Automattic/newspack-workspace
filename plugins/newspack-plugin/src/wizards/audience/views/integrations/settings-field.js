@@ -27,6 +27,18 @@ import './settings-field.scss';
 export const isEmptyValue = value => value === undefined || value === null || value === '';
 
 /**
+ * Coerce a stored field value to boolean.
+ *
+ * Values can arrive from WP options as scalar strings (`'1'`/`'0'`/`'true'`/
+ * `'false'`/`''`); `Boolean( '0' )` is `true` in JS, so the falsy string forms
+ * are matched explicitly.
+ *
+ * @param {*} value Value to coerce.
+ * @return {boolean} The boolean form.
+ */
+export const toBool = value => ( typeof value === 'string' ? ! [ '', '0', 'false' ].includes( value.toLowerCase() ) : Boolean( value ) );
+
+/**
  * Whether a select field offers an option that can actually be chosen.
  *
  * The ESP list call prepends a `None` entry to every successful response, so a
@@ -147,7 +159,10 @@ export const SettingsField = ( { field, value, onChange } ) => {
 				</div>
 			);
 		}
-		case 'checkbox':
+		case 'checkbox': {
+			// toBool, not truthiness: stored values round-trip through WP options
+			// as scalar strings, and `'0'`/`'false'` must read as off.
+			const checked = toBool( value );
 			// A checkbox field may declare `control: 'toggle_group'` to render as an
 			// Enabled/Disabled toggle group instead — the same stored boolean, but a
 			// presentation suited to feature switches whose label names the feature
@@ -159,7 +174,7 @@ export const SettingsField = ( { field, value, onChange } ) => {
 						key={ key }
 						label={ label }
 						help={ help }
-						value={ value ? 'enabled' : 'disabled' }
+						value={ checked ? 'enabled' : 'disabled' }
 						onChange={ next => onChange( 'enabled' === next ) }
 						isBlock
 						__next40pxDefaultSize
@@ -170,7 +185,8 @@ export const SettingsField = ( { field, value, onChange } ) => {
 					</ToggleGroupControl>
 				);
 			}
-			return <CheckboxControl key={ key } label={ label } help={ help } checked={ !! value } onChange={ onChange } __nextHasNoMarginBottom />;
+			return <CheckboxControl key={ key } label={ label } help={ help } checked={ checked } onChange={ onChange } __nextHasNoMarginBottom />;
+		}
 		case 'select': {
 			const selectable = hasSelectableOption( field );
 			return (

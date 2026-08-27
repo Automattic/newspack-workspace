@@ -170,11 +170,15 @@ describe( 'SettingsField with control: toggle_group', () => {
 		expect( screen.getByRole( 'radio', { name: 'Disabled' } ) ).not.toBeChecked();
 	} );
 
-	// Stored checkbox values round-trip through WP options as '1'/'', so the
-	// falsy string form must land on Disabled.
-	it( 'maps a falsy stored value to Disabled', () => {
-		render( <SettingsField field={ field } value={ '' } onChange={ () => {} } /> );
-		expect( screen.getByRole( 'radio', { name: 'Disabled' } ) ).toBeChecked();
+	// Stored checkbox values round-trip through WP options as scalar strings,
+	// and `Boolean( '0' )` is `true` in JS — every falsy stored form must land
+	// on Disabled.
+	it( 'maps every falsy stored form to Disabled', () => {
+		[ '', '0', 'false', false, undefined ].forEach( stored => {
+			const { unmount } = render( <SettingsField field={ field } value={ stored } onChange={ () => {} } /> );
+			expect( screen.getByRole( 'radio', { name: 'Disabled' } ) ).toBeChecked();
+			unmount();
+		} );
 	} );
 
 	// The stored value stays a boolean — the option strings are presentation
@@ -189,5 +193,10 @@ describe( 'SettingsField with control: toggle_group', () => {
 	it( 'keeps rendering a plain checkbox without the control parameter', () => {
 		render( <SettingsField field={ { ...field, control: undefined } } value={ true } onChange={ () => {} } /> );
 		expect( screen.getByRole( 'checkbox', { name: 'Deals' } ) ).toBeChecked();
+	} );
+
+	it( 'coerces string forms on the plain checkbox path too', () => {
+		render( <SettingsField field={ { ...field, control: undefined } } value={ '0' } onChange={ () => {} } /> );
+		expect( screen.getByRole( 'checkbox', { name: 'Deals' } ) ).not.toBeChecked();
 	} );
 } );
