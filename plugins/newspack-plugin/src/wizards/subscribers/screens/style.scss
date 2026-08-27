@@ -434,14 +434,6 @@
 	text-transform: uppercase;
 }
 
-.newspack-subscribers__sub-detail-value {
-	// The Badge ships display: block, so it would stretch to the full row width
-	// here; keep it hugging its label (e.g. the status pill).
-	.newspack-badge {
-		display: inline-block;
-	}
-}
-
 // Pinned action bar at the bottom of the drawer: the same subscription CTAs as
 // the person-profile group card. Mirrors the newspack-newsletters quick-edit
 // footer (white, sticky, no divider, buttons split 50/50).

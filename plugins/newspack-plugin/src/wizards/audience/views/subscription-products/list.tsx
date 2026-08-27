@@ -17,13 +17,16 @@ import apiFetch from '@wordpress/api-fetch';
 import { filterSortAndPaginate } from '@wordpress/dataviews';
 import type { Action, Field, View } from '@wordpress/dataviews';
 import { Spinner, Notice, Button } from '@wordpress/components';
+import { gift, globe, lock } from '@wordpress/icons';
+import { Badge } from '@wordpress/ui';
 
 /**
  * Internal dependencies
  */
-import { DataViews, Badge, Router, WizardBanner } from '../../../../../packages/components/src';
+import { DataViews, Router, StatusIndicator, WizardBanner } from '../../../../../packages/components/src';
 import { formatCount } from '../../../../../packages/components/src/breadcrumbs/format-count';
 import { WIZARD_STORE_NAMESPACE } from '../../../../../packages/components/src/wizard/store';
+import { postStatus } from '../../post-status';
 import { PolicyChips, EffectivePrice } from './policy-cells';
 
 const { useHistory } = Router;
@@ -50,6 +53,11 @@ const inScope = ( item: SubscriptionProduct, scope: Scope ): boolean => {
 	}
 	return scope === 'donations' ? item.is_donation : ! item.is_donation;
 };
+
+// Availability is a configuration fact, not a problem, so Private is not a warning. Private
+// takes the `informational` the design system documents for it; Free takes `low` ("worth
+// noticing") so the three stay distinct. Public is the default state and stays quiet.
+export const AVAILABILITY_ICON = { free: gift, private: lock, public: globe } as const;
 
 // Breadcrumb leaf per scope. Kept in step with the tab labels in index.tsx.
 const SCOPE_LABELS: Record< Scope, string > = {
@@ -215,7 +223,9 @@ export default function SubscriptionProductsList( { scope = 'subscriptions' }: {
 						return item.bundled_products.length ? (
 							<div className="newspack-subscription-products__bundled">
 								{ item.bundled_products.map( bundled => (
-									<Badge key={ bundled.id } level="default" text={ bundled.name } />
+									<Badge key={ bundled.id } intent="none">
+										{ bundled.name }
+									</Badge>
 								) ) }
 							</div>
 						) : (
@@ -234,7 +244,7 @@ export default function SubscriptionProductsList( { scope = 'subscriptions' }: {
 				enableSorting: false,
 				render: ( { item } ) =>
 					item.is_group_subscription ? (
-						<Badge level="info" text={ item.group_member_label } />
+						<span>{ item.group_member_label }</span>
 					) : (
 						<span className="newspack-subscription-products__muted">&mdash;</span>
 					),
@@ -248,7 +258,9 @@ export default function SubscriptionProductsList( { scope = 'subscriptions' }: {
 					item.bundled_products.length ? (
 						<div className="newspack-subscription-products__bundled">
 							{ item.bundled_products.map( bundled => (
-								<Badge key={ bundled.id } level="default" text={ bundled.name } />
+								<Badge key={ bundled.id } intent="none">
+									{ bundled.name }
+								</Badge>
 							) ) }
 						</div>
 					) : (
@@ -286,10 +298,9 @@ export default function SubscriptionProductsList( { scope = 'subscriptions' }: {
 				id: 'availability',
 				label: __( 'Availability', 'newspack-plugin' ),
 				getValue: ( { item } ) => item.availability,
-				render: ( { item } ) => {
-					const levels = { free: 'info', private: 'warning', public: 'default' } as const;
-					return <Badge level={ levels[ item.availability ] } text={ item.availability_label } />;
-				},
+				render: ( { item } ) => (
+					<StatusIndicator icon={ AVAILABILITY_ICON[ item.availability ] ?? globe }>{ item.availability_label }</StatusIndicator>
+				),
 				elements: [
 					{ value: 'public', label: __( 'Public', 'newspack-plugin' ) },
 					{ value: 'private', label: __( 'Private', 'newspack-plugin' ) },
@@ -309,7 +320,9 @@ export default function SubscriptionProductsList( { scope = 'subscriptions' }: {
 					item.unlocks.length ? (
 						<div className="newspack-subscription-products__unlocks">
 							{ item.unlocks.map( gate => (
-								<Badge key={ gate.id } level="default" text={ gate.title } />
+								<Badge key={ gate.id } intent="none">
+									{ gate.title }
+								</Badge>
 							) ) }
 						</div>
 					) : (
@@ -320,7 +333,7 @@ export default function SubscriptionProductsList( { scope = 'subscriptions' }: {
 				id: 'status',
 				label: __( 'Status', 'newspack-plugin' ),
 				getValue: ( { item } ) => item.status,
-				render: ( { item } ) => <Badge level={ item.status === 'publish' ? 'success' : 'default' } text={ item.status_label } />,
+				render: ( { item } ) => <StatusIndicator status={ postStatus( item.status ) }>{ item.status_label }</StatusIndicator>,
 				elements: statusElements,
 				filterBy: { operators: [ 'is' ] },
 			},

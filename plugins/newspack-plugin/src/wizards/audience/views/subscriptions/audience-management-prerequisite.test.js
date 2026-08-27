@@ -4,7 +4,7 @@
  * Enforcement for both subscriber-commerce features is gated on Audience
  * Management, so a publisher configuring either one here would be authoring
  * rules that do nothing. Blocking tab by tab was the alternative and is worse:
- * Configuration alone still works, but a screen with one live tab and two
+ * Advanced Settings alone still works, but a screen with one live tab and two
  * prerequisite notices reads as broken rather than as a dependency.
  */
 
@@ -65,13 +65,13 @@ jest.mock(
 // the assertions below would fail for the right reason.
 jest.mock( './tabs', () => ( {
 	getTab: () => ( {
-		render: () => require( 'react' ).createElement( 'div', null, 'Configuration tab' ),
+		render: () => require( 'react' ).createElement( 'div', null, 'Advanced Settings tab' ),
 	} ),
 } ) );
 
 const setUpScreen = audienceManagementEnabled => {
 	window.newspackAudienceSubscriptions = {
-		tabs: [ { slug: 'configuration', label: 'Configuration', path: '/' } ],
+		tabs: [ { slug: 'advanced-settings', label: 'Advanced Settings', path: '/' } ],
 		audience_management_enabled: audienceManagementEnabled,
 		audience_management_url: 'https://example.test/wp-admin/admin.php?page=newspack-audience',
 	};
@@ -84,7 +84,7 @@ describe( 'Subscriptions screen without Audience Management', () => {
 		render( <AudienceSubscriptions /> );
 
 		expect( screen.getByText( PREREQUISITE_HEADING ) ).toBeInTheDocument();
-		expect( screen.queryByText( 'Configuration tab' ) ).not.toBeInTheDocument();
+		expect( screen.queryByText( 'Advanced Settings tab' ) ).not.toBeInTheDocument();
 	} );
 
 	it( 'points the publisher at the setup flow', () => {
@@ -103,7 +103,7 @@ describe( 'Subscriptions screen without Audience Management', () => {
 
 		render( <AudienceSubscriptions /> );
 
-		expect( screen.getByText( 'Configuration tab' ) ).toBeInTheDocument();
+		expect( screen.getByText( 'Advanced Settings tab' ) ).toBeInTheDocument();
 		expect( screen.queryByText( PREREQUISITE_HEADING ) ).not.toBeInTheDocument();
 	} );
 } );

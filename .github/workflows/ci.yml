@@ -293,6 +293,11 @@ jobs:
     needs: changed-packages
     if: needs.changed-packages.outputs.any == 'true' && needs.changed-packages.outputs.php-matrix != '{"include":[]}'
     runs-on: ubuntu-latest
+    # A stalled fetch in "Install WordPress test suite" used to hold a runner
+    # until the 6-hour default timeout killed it, with the PR's check reading
+    # as still-running the whole time. This job normally finishes in 3-6
+    # minutes, so 20 is slack for a slow runner and nothing more.
+    timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix: ${{ fromJson(needs.changed-packages.outputs.php-matrix) }}
@@ -347,26 +352,82 @@ jobs:
           fi
       - name: Install WordPress test suite
         if: steps.check.outputs.has_tests == 'true'
+        # Below the job budget on purpose. A transfer slow enough to keep
+        # retrying but never trip the speed limit can burn --max-time on every
+        # attempt, and hitting the job timeout instead reports as a cancelled
+        # job that names no step. Failing here names this step.
+        timeout-minutes: 15
         run: |
-          # svn isn't on ubuntu-latest runners by default; the WP develop
-          # repo's phpunit test library is published over svn.
-          sudo apt-get update -qq
-          sudo apt-get install -y -qq subversion
-          # Download WP core and test library.
+          # Without pipefail, a `curl | tar` pipeline reports only tar's status.
+          # A failed download then surfaces as tar's bare "exit code 2" -- the
+          # symptom of a corrupt archive -- and the step blames the extraction for
+          # a network problem it never saw. Carried over from main, which added it
+          # to the svn-era version of this step that the tarball fetch replaced.
+          set -o pipefail
+
+          # Every fetch below is a stall risk, and an unguarded one used to wedge
+          # here with no output naming the URL it was on. curl aborts a transfer
+          # that drops under 1KB/s for 30s and retries it, and each fetch
+          # announces itself so a log tail identifies the culprit.
+          fetch() {
+            curl --fail --location --silent --show-error \
+              --connect-timeout 15 --max-time 300 \
+              --speed-limit 1024 --speed-time 30 \
+              --retry 5 --retry-delay 5 --retry-max-time 300 --retry-all-errors "$@"
+          }
+
           mkdir -p "$WP_TESTS_DIR"
-          WP_TESTS_TAG=$(curl -s "https://api.wordpress.org/core/version-check/1.7/" | jq -r '.offers[0].version')
+
+          echo "Resolving the current WordPress version..."
+          WP_TESTS_TAG=$(fetch "https://api.wordpress.org/core/version-check/1.7/" | jq -r '.offers[0].version')
+          # An empty or null version would build URLs like wordpress-null.tar.gz,
+          # whose 404 surfaces as a confusing tar error several lines later.
+          if [ -z "$WP_TESTS_TAG" ] || [ "$WP_TESTS_TAG" = "null" ]; then
+            echo "Could not resolve a WordPress version from api.wordpress.org"
+            exit 1
+          fi
+          echo "WordPress $WP_TESTS_TAG"
+
+          # The two sources tag releases differently: wordpress.org names its
+          # core tarball with the version as published ("7.1"), while
+          # wordpress-develop tags are always three-part ("7.1.0"). They agree
+          # once a patch ships, so the develop tag 404s only between an x.y.0
+          # release and its first patch -- a window this job would otherwise
+          # spend entirely red. Derive the tag rather than sharing the variable.
+          WP_DEVELOP_TAG="$WP_TESTS_TAG"
+          case "$WP_DEVELOP_TAG" in
+            *.*.*) ;;
+            *) WP_DEVELOP_TAG="$WP_DEVELOP_TAG.0" ;;
+          esac
 
           # The tarball's top-level directory is "wordpress/". Extract to
           # $WP_CORE_DIR's parent and strip that prefix so files land at
           # $WP_CORE_DIR directly. Avoids the "mv: same file" failure when
           # $WP_CORE_DIR happens to be /tmp/wordpress.
+          echo "Fetching WordPress core..."
           rm -rf "$WP_CORE_DIR"
           mkdir -p "$WP_CORE_DIR"
-          curl -s "https://wordpress.org/wordpress-$WP_TESTS_TAG.tar.gz" \
+          fetch "https://wordpress.org/wordpress-$WP_TESTS_TAG.tar.gz" \
             | tar xz --strip-components=1 -C "$WP_CORE_DIR"
 
-          svn co --quiet "https://develop.svn.wordpress.org/tags/$WP_TESTS_TAG/tests/phpunit/includes/" "$WP_TESTS_DIR/includes"
-          svn co --quiet "https://develop.svn.wordpress.org/tags/$WP_TESTS_TAG/tests/phpunit/data/" "$WP_TESTS_DIR/data"
+          # The phpunit test library used to arrive via two `svn co` calls against
+          # develop.svn.wordpress.org. svn has no timeout of its own and those
+          # checkouts are what hung; it also had to be apt-installed on every run,
+          # since ubuntu-latest carries no subversion. The wordpress-develop tag
+          # holds the same tree and comes over the same HTTPS as core above, so one
+          # guarded fetch replaces both checkouts and the apt install.
+          echo "Fetching the phpunit test library..."
+          rm -rf "$WP_TESTS_DIR/includes" "$WP_TESTS_DIR/data"
+          fetch "https://github.com/WordPress/wordpress-develop/archive/refs/tags/$WP_DEVELOP_TAG.tar.gz" \
+            | tar xz --strip-components=3 -C "$WP_TESTS_DIR" \
+                "wordpress-develop-$WP_DEVELOP_TAG/tests/phpunit/includes" \
+                "wordpress-develop-$WP_DEVELOP_TAG/tests/phpunit/data"
+          # A silently-empty test library fails later as a cryptic "class
+          # WP_UnitTestCase not found", so assert the bootstrap actually landed.
+          if [ ! -f "$WP_TESTS_DIR/includes/bootstrap.php" ]; then
+            echo "The phpunit test library is missing $WP_TESTS_DIR/includes/bootstrap.php"
+            exit 1
+          fi
 
           # Write wp-tests-config.php.
           cat > "$WP_TESTS_DIR/wp-tests-config.php" << 'WPCFG'

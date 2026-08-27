@@ -10,8 +10,8 @@ the one part with no counterpart there.
 
 The parts hang off one exported object rather than the flat named exports the
 rest of this package uses. That is deliberate, to keep them recognisable against
-`@wordpress/ui`'s own `Drawer`, and not a pattern for the next compound
-component to copy.
+`@wordpress/ui`'s own `Drawer`. It is also the shape compound components in this
+package follow, `EmptyState` included.
 
 ```jsx
 import { Drawer } from 'newspack-components';
