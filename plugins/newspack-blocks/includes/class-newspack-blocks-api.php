@@ -193,7 +193,7 @@ class Newspack_Blocks_API {
 	 * @return string Markup with every href pointing at '#'.
 	 */
 	private static function neutralize_editor_links( $html ) {
-		return preg_replace( '/\bhref=("[^"]*"|\'[^\']*\')/', 'href="#"', (string) $html );
+		return preg_replace( '/\bhref\s*=\s*("[^"]*"|\'[^\']*\'|[^\s>]+)/i', 'href="#"', (string) $html );
 	}
 
 	/**

@@ -356,16 +356,16 @@ class HomepagePostsBlockTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 		self::factory()->post->create( [ 'post_status' => 'publish' ] );
 		wp_set_current_user( self::factory()->user->create( [ 'role' => 'administrator' ] ) );
 
-		add_filter(
-			'newspack_blocks_post_byline',
-			function () {
-				return '<span class="author vcard"><a class="url fn n" href="https://example.test/author/custom">Custom Byline</a></span>';
-			}
-		);
+		$live_link_byline_filter = function () {
+			return '<span class="author vcard"><a class="url fn n" href="https://example.test/author/custom">Custom Byline</a></span>';
+		};
+		add_filter( 'newspack_blocks_post_byline', $live_link_byline_filter );
 
 		$request = new WP_REST_Request( 'GET', '/newspack-blocks/v1/newspack-blocks-posts' );
 		$request->set_param( 'postsToShow', 10 );
 		$posts = rest_do_request( $request )->get_data();
+
+		remove_filter( 'newspack_blocks_post_byline', $live_link_byline_filter );
 
 		self::assertNotEmpty( $posts, 'The editor posts endpoint returns the published post.' );
 		foreach ( $posts as $post_data ) {
@@ -422,7 +422,7 @@ class HomepagePostsBlockTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 		);
 		self::assertStringContainsString( 'Frank Fixture', $byline, 'The author name renders in the front-end byline.' );
 
-		unset( $GLOBALS['post'] );
+		wp_reset_postdata();
 	}
 
 	/**
