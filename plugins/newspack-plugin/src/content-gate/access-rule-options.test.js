@@ -8,6 +8,7 @@ import {
 	getAccessRuleOptionTokens,
 	getAccessRuleTokenFieldMessages,
 	getMissingOptionLabel,
+	getUnlistedAccessRuleValuesNotice,
 	hasUnlistedAccessRuleValues,
 	isAccessRuleOptionInput,
 	resolveAccessRuleOptionTokens,
@@ -46,9 +47,9 @@ describe( 'formatAccessRuleOptionLabel', () => {
 } );
 
 describe( 'getMissingOptionLabel', () => {
-	// "not listed" rather than "deleted": an option list holds parent products and
-	// published institutions, while evaluation also resolves variation IDs, so a value
-	// missing from the list is often still granting access.
+	// "not listed" rather than "deleted": an option list holds what its picker can offer,
+	// while evaluation resolves more than that — a one-time purchase matches an order
+	// item's variation ID — so a value missing from the list is often still granting access.
 	it( 'names the right kind of thing per rule', () => {
 		expect( getMissingOptionLabel( 'subscription' ) ).toBe( '(product not listed)' );
 		expect( getMissingOptionLabel( 'institution' ) ).toBe( '(institution not listed)' );
@@ -189,7 +190,7 @@ describe( 'isAccessRuleOptionInput', () => {
 describe( 'hasUnlistedAccessRuleValues', () => {
 	it( 'reports whether the rule holds a value no option describes', () => {
 		expect( hasUnlistedAccessRuleValues( OPTIONS, [ 188250, 300000 ] ) ).toBe( false );
-		// A subscription variation ID, for instance: not in the option list, still granting.
+		// A deleted product, for instance: not in the option list, still granting.
 		expect( hasUnlistedAccessRuleValues( OPTIONS, [ 188250, 999999 ] ) ).toBe( true );
 		expect( hasUnlistedAccessRuleValues( OPTIONS, 'not-an-array' ) ).toBe( false );
 	} );
@@ -211,5 +212,27 @@ describe( 'getAccessRuleTokenFieldMessages', () => {
 		// No "type its ID" for a gate: the list is every gate there is, so an ID outside
 		// it is refused and offering it would be a promise the field does not keep.
 		expect( getAccessRuleTokenFieldMessages( 'gate' ).__experimentalInvalid ).toBe( 'Not a selectable gate. Pick one from the list.' );
+	} );
+} );
+
+describe( 'getUnlistedAccessRuleValuesNotice', () => {
+	// The notice names the causes a publisher should go looking for, so a rule whose
+	// picker cannot produce a given cause must not name it. The subscription picker lists
+	// a variable subscription's variations, so a variation is not why an entry is missing
+	// there; the institution picker holds no products at all.
+	it( 'names only causes the rule can have', () => {
+		expect( getUnlistedAccessRuleValuesNotice( 'subscription' ) ).not.toMatch( /unpublished/ );
+		expect( getUnlistedAccessRuleValuesNotice( 'institution' ) ).toMatch( /institution that was deleted or unpublished/ );
+		expect( getUnlistedAccessRuleValuesNotice( 'institution' ) ).not.toMatch( /product/ );
+	} );
+
+	it( 'falls back to slug-agnostic wording, since rules can be registered by anyone', () => {
+		expect( getUnlistedAccessRuleValuesNotice( 'something-else' ) ).toMatch( /an item that was deleted/ );
+	} );
+
+	it( 'always says that removing an entry widens the gate, whatever the rule', () => {
+		for ( const slug of [ 'subscription', 'institution', 'something-else' ] ) {
+			expect( getUnlistedAccessRuleValuesNotice( slug ) ).toMatch( /widens who this gate lets in/ );
+		}
 	} );
 } );

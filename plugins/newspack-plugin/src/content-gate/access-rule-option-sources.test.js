@@ -36,6 +36,16 @@ describe( 'getAccessRuleOptionSource', () => {
 		expect( apiFetch ).toHaveBeenCalledWith( { path: expect.stringContaining( 'per_page=-1' ) } );
 	} );
 
+	// `Institution::get_options()` localises published institutions only, and an
+	// institution that is not published can never grant access. Core defaults the
+	// collection to published, so this pins the two lists to the same rows rather than to
+	// the same default.
+	it( 'asks for published institutions only, matching the localised list', async () => {
+		await fetchInstitutions();
+
+		expect( apiFetch ).toHaveBeenCalledWith( { path: expect.stringContaining( 'status=publish' ) } );
+	} );
+
 	// api-fetch walks the collection a page at a time, and the block editor remounts its
 	// picker on every block selection, so a fetch per reader would be a walk per reader.
 	it( 'walks the collection once however many readers ask for it', async () => {

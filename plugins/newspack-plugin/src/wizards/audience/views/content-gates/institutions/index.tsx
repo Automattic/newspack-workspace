@@ -78,7 +78,13 @@ export default function Institutions() {
 
 	const fetchData = useCallback( () => {
 		setIsLoading( true );
-		apiFetch< Institution[] >( { path: `${ API_PATH }?per_page=100&context=edit&_embed=wp:featuredmedia` } )
+		// The table paginates, sorts and searches client-side, so it needs the whole
+		// collection. `per_page=-1` is apiFetch's unbounded form — fetchAllMiddleware walks
+		// the `Link: rel="next"` headers and resolves to every page merged. A fixed page
+		// size put the institutions past it out of reach entirely: not listed, and so not
+		// editable. The value is apiFetch's, not the REST API's: the posts controller caps
+		// `per_page` at 100 and would reject -1 outright.
+		apiFetch< Institution[] >( { path: `${ API_PATH }?per_page=-1&context=edit&_embed=wp:featuredmedia` } )
 			.then( institutions => {
 				setData( institutions );
 				// Keep the gates screen header in sync: it promotes the
