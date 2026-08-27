@@ -69,7 +69,14 @@ class Content_Gate_API {
 					'properties' => [
 						'enabled' => [ 'type' => 'boolean' ],
 						'count'   => [ 'type' => 'integer' ],
-						'period'  => [ 'type' => 'string' ],
+						'period'  => [
+							'type' => 'string',
+							'enum' => [ 'day', 'week', 'month' ],
+						],
+						'scope'   => [
+							'type' => 'string',
+							'enum' => [ 'site', 'gate' ],
+						],
 					],
 				],
 			],
@@ -83,7 +90,14 @@ class Content_Gate_API {
 					'properties' => [
 						'enabled' => [ 'type' => 'boolean' ],
 						'count'   => [ 'type' => 'integer' ],
-						'period'  => [ 'type' => 'string' ],
+						'period'  => [
+							'type' => 'string',
+							'enum' => [ 'day', 'week', 'month' ],
+						],
+						'scope'   => [
+							'type' => 'string',
+							'enum' => [ 'site', 'gate' ],
+						],
 					],
 				],
 				'gate_layout_id'         => [
@@ -510,7 +524,13 @@ class Content_Gate_API {
 			$sanitized['count'] = max( 0, intval( $metering['count'] ) );
 		}
 		if ( isset( $metering['period'] ) ) {
-			$sanitized['period'] = sanitize_text_field( $metering['period'] );
+			// Only these three have an expiration, and one period the site meter cannot hold
+			// pushes adoption into its conflict branch, pinning every gate on the site.
+			$period              = sanitize_text_field( $metering['period'] );
+			$sanitized['period'] = in_array( $period, [ 'day', 'week', 'month' ], true ) ? $period : 'month';
+		}
+		if ( isset( $metering['scope'] ) ) {
+			$sanitized['scope'] = Site_Meter::sanitize_scope( $metering['scope'] );
 		}
 		return $sanitized;
 	}

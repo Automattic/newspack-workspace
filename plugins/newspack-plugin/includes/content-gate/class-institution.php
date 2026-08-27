@@ -139,7 +139,7 @@ class Institution {
 	 *     Optional. Institution rules.
 	 *
 	 *     @type string $email_domain Comma-separated domains (e.g., 'university.edu,uni.ac.uk').
-	 *     @type string $ip_range     Comma-separated IPs/CIDR (e.g., '192.168.1.0/24,10.0.0.5').
+	 *     @type string $ip_range     Comma-separated IPs, CIDR blocks, or dash ranges (e.g., '192.168.1.0/24,10.0.0.5,203.0.113.0-203.0.113.255').
 	 *     @type string $reader_data  Semicolon-delimited key=value pairs (e.g., 'org=uni;role=staff').
 	 * }
 	 *

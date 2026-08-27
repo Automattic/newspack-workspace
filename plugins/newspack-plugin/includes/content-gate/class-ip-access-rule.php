@@ -249,9 +249,17 @@ class IP_Access_Rule {
 	/**
 	 * REST API callback for the institutional IP allowlist.
 	 *
-	 * Returns one entry per institution that has at least one valid IPv4 or
-	 * CIDR range. Malformed entries are dropped silently. Email-domain and
-	 * reader-data rules are not exposed.
+	 * Returns one entry per institution that has at least one valid IPv4
+	 * address, CIDR block, or dash range. Malformed entries are dropped
+	 * silently. Email-domain and reader-data rules are not exposed.
+	 *
+	 * `ip_ranges` is a plain `string[]` carrying three notations with no
+	 * discriminator field: `10.0.0.5`, `10.0.0.0/24` and `10.0.0.1-10.0.0.9`.
+	 * A consumer that only understands the first two ignores dash entries,
+	 * which fails closed (the reader sees the gate). A site running such a
+	 * consumer can rewrite or drop entries through the
+	 * `newspack_content_gate_ip_allowlist` filter below — e.g. expanding dash
+	 * ranges into CIDR blocks — without restricting what admins may type.
 	 *
 	 * @return \WP_REST_Response
 	 */
@@ -303,7 +311,7 @@ class IP_Access_Rule {
 					'readonly'    => true,
 				],
 				'ip_ranges' => [
-					'description' => __( 'Validated IPv4 addresses or CIDR blocks granting access.', 'newspack-plugin' ),
+					'description' => __( 'Validated IPv4 addresses, CIDR blocks, or dash ranges granting access.', 'newspack-plugin' ),
 					'type'        => 'array',
 					'items'       => [ 'type' => 'string' ],
 					'readonly'    => true,
@@ -623,14 +631,184 @@ class IP_Access_Rule {
 	}
 
 	/**
-	 * Parse a comma-separated list of IPs and CIDR blocks.
+	 * Convert an IPv4 address to its unsigned 32-bit value.
 	 *
-	 * Trims whitespace (around tokens and around the `/` separator), drops
-	 * empty tokens, and discards anything that isn't a valid IPv4 address or
-	 * CIDR block (`<ipv4>/<0-32>`). Returned CIDR entries are emitted in their
+	 * `ip2long()` returns a signed int, so on a 32-bit PHP build every address
+	 * above 127.255.255.255 comes back negative and a straddling range like
+	 * `10.0.0.0-200.0.0.0` would read as reversed. Formatting with `%u` yields
+	 * the unsigned value on every platform.
+	 *
+	 * @param string $ip Validated IPv4 address.
+	 *
+	 * @return float Unsigned 32-bit value.
+	 */
+	private static function ip_to_unsigned( $ip ) {
+		return (float) sprintf( '%u', ip2long( $ip ) );
+	}
+
+	/**
+	 * Classify and normalize a single allowlist entry.
+	 *
+	 * The one place that decides what an institution IP entry is and how it is
+	 * spelled. `/` is checked before `-`, so a token carrying both (e.g.
+	 * `10.0.0.0/24-10.0.0.5`) reads as a malformed CIDR and is rejected rather
+	 * than as a dash range. CIDR mask bits are canonicalized to their numeric
+	 * value so a leading-zero spelling like `/00` cannot evade a downstream
+	 * string-shape check while still matching numerically.
+	 *
+	 * @param string $entry A single entry (whitespace tolerated around the token
+	 *                      and its `/` or `-` separator).
+	 *
+	 * @return array{type: string, value: string} `type` is 'ip', 'cidr',
+	 *         'range', or 'invalid'; `value` is the normalized entry, or '' when
+	 *         invalid.
+	 */
+	private static function parse_entry( $entry ) {
+		$entry = trim( (string) $entry );
+		if ( '' === $entry ) {
+			return [
+				'type'  => 'invalid',
+				'value' => '',
+			];
+		}
+		if ( false !== strpos( $entry, '/' ) ) {
+			list( $subnet, $bits ) = explode( '/', $entry, 2 );
+			$subnet                = trim( $subnet );
+			$bits                  = trim( $bits );
+			if ( ctype_digit( $bits ) && (int) $bits <= 32 && filter_var( $subnet, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4 ) ) {
+				return [
+					'type'  => 'cidr',
+					'value' => $subnet . '/' . (int) $bits,
+				];
+			}
+			return [
+				'type'  => 'invalid',
+				'value' => '',
+			];
+		}
+		if ( false !== strpos( $entry, '-' ) ) {
+			list( $start, $end ) = explode( '-', $entry, 2 );
+			$start               = trim( $start );
+			$end                 = trim( $end );
+			if (
+				filter_var( $start, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4 )
+				&& filter_var( $end, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4 )
+				// A reversed range (end < start) is most likely a typo; treat it as invalid rather than silently swapping the bounds.
+				&& self::ip_to_unsigned( $start ) <= self::ip_to_unsigned( $end )
+			) {
+				return [
+					'type'  => 'range',
+					'value' => $start . '-' . $end,
+				];
+			}
+			return [
+				'type'  => 'invalid',
+				'value' => '',
+			];
+		}
+		if ( filter_var( $entry, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4 ) ) {
+			return [
+				'type'  => 'ip',
+				'value' => $entry,
+			];
+		}
+		return [
+			'type'  => 'invalid',
+			'value' => '',
+		];
+	}
+
+	/**
+	 * Classify a single allowlist entry.
+	 *
+	 * The public classifier the migration CLI delegates to, so the wizard, the
+	 * runtime access check, and the migration cannot drift on what an entry is.
+	 *
+	 * @param string $entry A single entry.
+	 *
+	 * @return string One of 'ip', 'cidr', 'range', or 'invalid'.
+	 */
+	public static function classify_entry( $entry ) {
+		return self::parse_entry( $entry )['type'];
+	}
+
+	/**
+	 * Number of IPv4 addresses a single entry grants access to.
+	 *
+	 * Lets a caller judge breadth uniformly across all three shapes — a `/16`
+	 * CIDR and the equivalent dash range report the same size. Returns a float
+	 * because the whole IPv4 space (2**32) overflows a 32-bit int.
+	 *
+	 * @param string $entry A single entry.
+	 *
+	 * @return float Address count, or 0.0 for an invalid entry.
+	 */
+	public static function get_entry_size( $entry ) {
+		$parsed = self::parse_entry( $entry );
+		switch ( $parsed['type'] ) {
+			case 'ip':
+				return 1.0;
+			case 'cidr':
+				list( , $bits ) = explode( '/', $parsed['value'], 2 );
+				return 2.0 ** ( 32 - (int) $bits );
+			case 'range':
+				list( $start, $end ) = explode( '-', $parsed['value'], 2 );
+				return self::ip_to_unsigned( $end ) - self::ip_to_unsigned( $start ) + 1;
+			default:
+				return 0.0;
+		}
+	}
+
+	/**
+	 * Split and validate a raw allowlist value into valid and invalid entries.
+	 *
+	 * Splits on commas and newlines — accepting both the wizard's comma-separated
+	 * string and an option map's array or multiline value — then classifies each
+	 * entry. The canonical validator the migration CLI delegates to, so a value
+	 * accepted at the runtime check is accepted at migration and vice versa.
+	 *
+	 * @param string|array $raw Raw allowlist value.
+	 *
+	 * @return array{valid: string[], invalid: string[]} Valid entries in their
+	 *         normalized form; invalid entries in their trimmed original form.
+	 */
+	public static function normalize_ip_ranges( $raw ) {
+		$tokens = [];
+		foreach ( ( is_array( $raw ) ? $raw : [ $raw ] ) as $chunk ) {
+			$tokens = array_merge( $tokens, preg_split( '/[,\n\r]+/', (string) $chunk ) );
+		}
+		$valid   = [];
+		$invalid = [];
+		foreach ( $tokens as $token ) {
+			if ( '' === trim( $token ) ) {
+				continue;
+			}
+			$parsed = self::parse_entry( $token );
+			if ( 'invalid' === $parsed['type'] ) {
+				$invalid[] = trim( $token );
+			} else {
+				$valid[] = $parsed['value'];
+			}
+		}
+		return [
+			'valid'   => array_values( $valid ),
+			'invalid' => array_values( $invalid ),
+		];
+	}
+
+	/**
+	 * Parse a comma-separated list of IPs, CIDR blocks, and dash ranges.
+	 *
+	 * Trims whitespace (around tokens and around the `/` and `-` separators),
+	 * drops empty tokens, and discards anything that isn't a valid IPv4
+	 * address, CIDR block (`<ipv4>/<0-32>`), or dash range
+	 * (`<ipv4>-<ipv4>` with start <= end). Entries are emitted in their
 	 * trimmed form.
 	 *
-	 * @param string $raw Comma-separated list (e.g. `"192.168.1.0/24,10.0.0.5"`).
+	 * A token carrying both separators (e.g. `10.0.0.0/24-10.0.0.5`) is read as
+	 * a CIDR block and dropped: the `/` branch is checked first.
+	 *
+	 * @param string $raw Comma-separated list (e.g. `"192.168.1.0/24,10.0.0.5,203.0.113.0-203.0.113.255"`).
 	 *
 	 * @return string[] Validated entries.
 	 */
@@ -638,32 +816,14 @@ class IP_Access_Rule {
 		if ( empty( $raw ) ) {
 			return [];
 		}
-		$tokens = array_filter( array_map( 'trim', explode( ',', $raw ) ) );
-		$valid  = [];
-		foreach ( $tokens as $token ) {
-			if ( strpos( $token, '/' ) !== false ) {
-				list( $subnet, $bits ) = explode( '/', $token, 2 );
-				$subnet = trim( $subnet );
-				$bits   = trim( $bits );
-				if ( ! ctype_digit( $bits ) ) {
-					continue;
-				}
-				if ( (int) $bits > 32 || ! filter_var( $subnet, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4 ) ) {
-					continue;
-				}
-				$valid[] = $subnet . '/' . $bits;
-			} elseif ( filter_var( $token, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4 ) ) {
-				$valid[] = $token;
-			}
-		}
-		return array_values( $valid );
+		return self::normalize_ip_ranges( $raw )['valid'];
 	}
 
 	/**
 	 * Check if an IP address matches any of the given ranges.
 	 *
 	 * @param string $ip     The IP address to check.
-	 * @param string $ranges Comma-separated list of IPs and/or CIDR blocks.
+	 * @param string $ranges Comma-separated list of IPs, CIDR blocks, and/or dash ranges.
 	 *
 	 * @return bool Whether the IP matches any range.
 	 */
@@ -671,7 +831,8 @@ class IP_Access_Rule {
 		if ( ! filter_var( $ip, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4 ) ) {
 			return false;
 		}
-		$ip_long = ip2long( $ip );
+		$ip_long     = ip2long( $ip );
+		$ip_unsigned = self::ip_to_unsigned( $ip );
 
 		foreach ( self::parse_ip_ranges( $ranges ) as $range ) {
 			if ( strpos( $range, '/' ) !== false ) {
@@ -679,6 +840,11 @@ class IP_Access_Rule {
 				$subnet_long = ip2long( $subnet );
 				$mask        = -1 << ( 32 - (int) $bits );
 				if ( ( $ip_long & $mask ) === ( $subnet_long & $mask ) ) {
+					return true;
+				}
+			} elseif ( strpos( $range, '-' ) !== false ) {
+				list( $start, $end ) = explode( '-', $range, 2 );
+				if ( self::ip_to_unsigned( $start ) <= $ip_unsigned && $ip_unsigned <= self::ip_to_unsigned( $end ) ) {
 					return true;
 				}
 			} elseif ( $ip_long === ip2long( $range ) ) {

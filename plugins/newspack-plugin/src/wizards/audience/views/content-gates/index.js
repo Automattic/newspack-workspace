@@ -19,7 +19,7 @@ import { WIZARD_STORE_NAMESPACE } from '../../../../../packages/components/src/w
 import { redirectWithoutAudienceManagement, requireAudienceManagement } from '../../components/audience-management-required';
 import ContentGates from './content-gates';
 import Edit from './edit';
-import CountdownBanner from './edit/countdown-banner';
+import MeteringSettings from './edit/metering-settings';
 import ContentGifting from './edit/content-gifting';
 import Institutions from './institutions';
 import InstitutionEdit from './institutions/edit';
@@ -40,7 +40,7 @@ const GuardedContentGates = requireAudienceManagement( ContentGates, {
 	getConfig,
 } );
 const GuardedEdit = redirectWithoutAudienceManagement( Edit, GATES_ROUTE, getConfig );
-const GuardedCountdownBanner = redirectWithoutAudienceManagement( CountdownBanner, GATES_ROUTE, getConfig );
+const GuardedMeteringSettings = redirectWithoutAudienceManagement( MeteringSettings, GATES_ROUTE, getConfig );
 const GuardedContentGifting = redirectWithoutAudienceManagement( ContentGifting, GATES_ROUTE, getConfig );
 const GuardedInstitutions = redirectWithoutAudienceManagement( Institutions, GATES_ROUTE, getConfig );
 const GuardedInstitutionEdit = redirectWithoutAudienceManagement( InstitutionEdit, GATES_ROUTE, getConfig );
@@ -76,17 +76,14 @@ const AudienceContentGates = ( props, ref ) => {
 					breadcrumbs: ACCESS_CONTROL,
 				},
 				{
-					path: '/settings/countdown-banner',
-					render: GuardedCountdownBanner,
+					path: '/settings/metering',
+					render: GuardedMeteringSettings,
 					isHidden: true,
 					exact: true,
 					backNav: '#/content-gates',
-					title: __( 'Metered Countdown', 'newspack-plugin' ),
-					breadcrumbs: [ ...ACCESS_CONTROL, { label: __( 'Metered Countdown', 'newspack-plugin' ) } ],
-					description: __(
-						'Show a countdown banner letting readers know how many free views they have left before content is restricted.',
-						'newspack-plugin'
-					),
+					title: __( 'Metering', 'newspack-plugin' ),
+					size: 'hidden',
+					breadcrumbs: [ ...ACCESS_CONTROL, { label: __( 'Metering', 'newspack-plugin' ) } ],
 				},
 				{
 					path: '/settings/content-gifting',
@@ -95,11 +92,8 @@ const AudienceContentGates = ( props, ref ) => {
 					exact: true,
 					backNav: '#/content-gates',
 					title: __( 'Content Gifting', 'newspack-plugin' ),
+					size: 'hidden',
 					breadcrumbs: [ ...ACCESS_CONTROL, { label: __( 'Content Gifting', 'newspack-plugin' ) } ],
-					description: __(
-						'Let members gift articles to non-subscribers. Recipients can read the full content without needing to subscribe.',
-						'newspack-plugin'
-					),
 				},
 				{
 					path: '/institutions',

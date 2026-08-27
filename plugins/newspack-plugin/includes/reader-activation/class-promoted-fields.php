@@ -10,6 +10,7 @@ namespace Newspack\Reader_Activation;
 use Newspack\Access_Rules;
 use Newspack\Reader_Data;
 use Newspack\Reader_Activation\Integration;
+use Newspack\Reader_Activation\Integrations\Date_Value;
 use Newspack\Reader_Activation\Integrations\Incoming_Field;
 
 defined( 'ABSPATH' ) || exit;
@@ -25,6 +26,16 @@ class Promoted_Fields {
 	 * @var array|null
 	 */
 	private static $promoted_fields = null;
+
+	/**
+	 * Matching functions that predate the newspack-popups capability probe. Any
+	 * newspack-popups build old enough to lack `supports_matching_function()`
+	 * still resolves every one of these, so they never need gating — only
+	 * operators introduced alongside or after the probe do.
+	 *
+	 * @var string[]
+	 */
+	private const BASELINE_MATCHING_FUNCTIONS = [ 'default', 'range', 'list__in', 'list__not_in' ];
 
 	/**
 	 * Initialize hooks.
@@ -187,13 +198,39 @@ class Promoted_Fields {
 				[
 					'name'               => self::get_display_name( $field, $integration ),
 					'category'           => 'integrations',
-					'matching_function'  => $field->get_matching_function(),
+					'matching_function'  => self::supported_matching_function( $field->get_matching_function() ),
 					'matching_attribute' => $field->get_key(),
 					'options'            => $options,
 					'description'        => $field->get_description(),
 				]
 			);
 		}
+	}
+
+	/**
+	 * Resolve a matching function the installed newspack-popups can actually run.
+	 *
+	 * Newer operators ship here before newspack-popups is updated to match, and an
+	 * old build leaves an unresolvable name as a raw string and then calls it —
+	 * a TypeError that escapes segment matching and takes prompt display down
+	 * sitewide, not just for that segment. Newer builds fail closed on their own,
+	 * but that guard is exactly what a stale build lacks, so ask first and fall
+	 * back to exact matching (a criterion that matches too narrowly, rather than
+	 * one that breaks the page).
+	 *
+	 * @param string $matching_function The field's matching function.
+	 * @return string A matching function the installed newspack-popups supports.
+	 */
+	private static function supported_matching_function( $matching_function ) {
+		if ( in_array( $matching_function, self::BASELINE_MATCHING_FUNCTIONS, true ) ) {
+			return $matching_function;
+		}
+		// An older newspack-popups has no such method. Its absence means "cannot
+		// confirm support", which for anything past the baseline means don't emit it.
+		if ( ! method_exists( '\Newspack_Popups_Criteria', 'supports_matching_function' ) ) {
+			return 'default';
+		}
+		return \Newspack_Popups_Criteria::supports_matching_function( $matching_function ) ? $matching_function : 'default';
 	}
 
 	/**
@@ -246,6 +283,21 @@ class Promoted_Fields {
 			case 'list__not_in':
 				$user_values = self::parse_list_value( $value );
 				return empty( array_intersect( (array) $args, $user_values ) );
+			case 'date_range':
+				// Access rules have no range UI — a rule still holds one typed value and
+				// still matches it exactly. Both sides go through the same normalizer:
+				// the rule, because a publisher may write it in the provider's own
+				// format ('03/04/2026') while the pull rewrites stored values to ISO;
+				// and the stored value, because the pull only rewrites a reader's value
+				// on that reader's next pull — until then it is still in the provider's
+				// format, and the rule must not deny a reader over that timing.
+				$stored_date = Date_Value::to_calendar_date(
+					Date_Value::normalize( $value, $field->get_date_format(), $field->get_value_type() )
+				);
+				$rule_date   = Date_Value::to_calendar_date(
+					Date_Value::normalize( $args, $field->get_date_format(), $field->get_value_type() )
+				);
+				return null !== $stored_date && $stored_date === $rule_date;
 			default:
 				return $value === $args;
 		}

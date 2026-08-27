@@ -467,4 +467,150 @@ class Test_Promoted_Fields extends \WP_UnitTestCase {
 		$this->assertTrue( $method->invoke( null, $field, $user_id, [ 'Politics' ] ) );
 		$this->assertFalse( $method->invoke( null, $field, $user_id, [ 'Sports' ] ) );
 	}
+
+	/**
+	 * Access rules pass a scalar argument and have no date-range UI, so a field
+	 * typed as date_range still matches one date exactly. It compares calendar
+	 * dates rather than raw strings: choosing the operator makes the pull rewrite
+	 * stored values to ISO, and a rule written in the provider's own format would
+	 * otherwise silently stop matching a live gate.
+	 */
+	public function test_date_range_field_still_exact_matches_as_access_rule() {
+		$user_id = $this->factory->user->create();
+		if ( ! class_exists( '\Newspack\Reader_Data' ) ) {
+			$this->markTestSkipped( 'Reader_Data not available.' );
+		}
+		\Newspack\Reader_Data::update_item( $user_id, 'LAST_GIFT_DATE', wp_json_encode( '2026-01-15' ) );
+
+		$method = new \ReflectionMethod( Promoted_Fields::class, 'evaluate_field' );
+		$method->setAccessible( true );
+
+		$field = ( new Incoming_Field( 'LAST_GIFT_DATE' ) )
+			->set_value_type( 'date' )
+			->set_matching_function( 'date_range' );
+
+		$this->assertTrue( $method->invoke( null, $field, $user_id, '2026-01-15' ) );
+		$this->assertFalse( $method->invoke( null, $field, $user_id, '2026-01-16' ) );
+
+		// A rule the publisher wrote in the provider's format keeps matching the
+		// value the pull rewrote to ISO.
+		$mailchimp_field = ( new Incoming_Field( 'LAST_GIFT_DATE' ) )
+			->set_value_type( 'date' )
+			->set_matching_function( 'date_range' )
+			->set_date_format( 'm/d/Y' );
+		$this->assertTrue( $method->invoke( null, $mailchimp_field, $user_id, '01/15/2026' ) );
+		$this->assertFalse( $method->invoke( null, $mailchimp_field, $user_id, '01/16/2026' ) );
+
+		// The stored value passes through the same normalizer as the rule: the
+		// pull only rewrites a reader's value on that reader's next pull, so
+		// between the publisher selecting Date range and that pull the value is
+		// still in the provider's format — the rule must not deny the reader
+		// over that timing.
+		\Newspack\Reader_Data::update_item( $user_id, 'LAST_GIFT_DATE', wp_json_encode( '01/15/2026' ) );
+		$this->assertTrue( $method->invoke( null, $mailchimp_field, $user_id, '01/15/2026' ) );
+		$this->assertTrue( $method->invoke( null, $mailchimp_field, $user_id, '2026-01-15' ) );
+		$this->assertFalse( $method->invoke( null, $mailchimp_field, $user_id, '01/16/2026' ) );
+		\Newspack\Reader_Data::update_item( $user_id, 'LAST_GIFT_DATE', wp_json_encode( '2026-01-15' ) );
+
+		// A datetime value is compared on its date part, as written — the ATOM form
+		// the pull stores can never be typed into a gate rule by hand.
+		\Newspack\Reader_Data::update_item( $user_id, 'LAST_GIFT_DATE', wp_json_encode( '2026-01-15T23:30:00-06:00' ) );
+		$datetime_field = ( new Incoming_Field( 'LAST_GIFT_DATE' ) )
+			->set_value_type( 'datetime' )
+			->set_matching_function( 'date_range' );
+		$this->assertTrue( $method->invoke( null, $datetime_field, $user_id, '2026-01-15' ) );
+		$this->assertFalse( $method->invoke( null, $datetime_field, $user_id, '2026-01-16' ) );
+
+		// A reader with no value never matches, even against an unusable rule.
+		\Newspack\Reader_Data::update_item( $user_id, 'LAST_GIFT_DATE', wp_json_encode( '' ) );
+		$this->assertFalse( $method->invoke( null, $field, $user_id, '' ) );
+		$this->assertFalse( $method->invoke( null, $field, $user_id, 'not a date' ) );
+
+		// A day that doesn't exist in its month is what the normalizer stores
+		// untouched precisely because it isn't a date; it must not become one here.
+		\Newspack\Reader_Data::update_item( $user_id, 'LAST_GIFT_DATE', wp_json_encode( '2026-02-30' ) );
+		$this->assertFalse( $method->invoke( null, $field, $user_id, '2026-02-30' ) );
+
+		// A leap day is a real date and still matches.
+		\Newspack\Reader_Data::update_item( $user_id, 'LAST_GIFT_DATE', wp_json_encode( '2024-02-29' ) );
+		$this->assertTrue( $method->invoke( null, $field, $user_id, '2024-02-29' ) );
+
+		// An ISO-looking prefix with trailing junk must not be admitted as its
+		// first ten characters — the one stored shape that used to fail open.
+		\Newspack\Reader_Data::update_item( $user_id, 'LAST_GIFT_DATE', wp_json_encode( '2026-01-15abc' ) );
+		$this->assertFalse( $method->invoke( null, $field, $user_id, '2026-01-15' ) );
+		\Newspack\Reader_Data::update_item( $user_id, 'LAST_GIFT_DATE', wp_json_encode( '2026-01-15 TBD' ) );
+		$this->assertFalse( $method->invoke( null, $field, $user_id, '2026-01-15' ) );
+	}
+
+	/**
+	 * The version-skew guard is what stops an old newspack-popups from being
+	 * handed a matching function it can't resolve — a TypeError that escapes
+	 * segment matching and takes prompt display down sitewide. newspack-popups
+	 * is not loaded in this suite, which is exactly the probe-less environment
+	 * an old build presents (the probe method can't exist), so this pins the
+	 * degradation path; the probe-present path is pinned by the stub-loading
+	 * test below, which must run after this one (the stub, once loaded, exists
+	 * for the rest of the process — PHPUnit runs methods in declaration order).
+	 */
+	public function test_supported_matching_function_degrades_without_the_popups_probe() {
+		if ( class_exists( '\Newspack_Popups_Criteria' ) ) {
+			$this->markTestSkipped( 'newspack-popups is loaded; this test covers the probe-less environment.' );
+		}
+
+		$method = new \ReflectionMethod( Promoted_Fields::class, 'supported_matching_function' );
+		$method->setAccessible( true );
+
+		// Baseline operators predate the capability probe: every newspack-popups
+		// build old enough to lack the probe still resolves all of them, so they
+		// must pass through untouched — degrading them would silently change
+		// matching semantics on sites that are not skewed at all.
+		foreach ( [ 'default', 'range', 'list__in', 'list__not_in' ] as $matching_function ) {
+			$this->assertSame( $matching_function, $method->invoke( null, $matching_function ), $matching_function );
+		}
+
+		// Anything past the baseline cannot be confirmed without the probe, so it
+		// degrades to exact matching — a criterion that matches too narrowly,
+		// rather than one that breaks the page.
+		$this->assertSame( 'default', $method->invoke( null, 'date_range' ) );
+		$this->assertSame( 'default', $method->invoke( null, 'a_future_operator' ) );
+	}
+
+	/**
+	 * The probe's success branch: a newspack-popups that answers the probe keeps
+	 * date_range intact. The stub declares the real class and method names, so
+	 * this fails if the probe's method_exists() arguments are mistyped or its
+	 * ternary is inverted — both of which would otherwise silently degrade every
+	 * date criterion to exact matching with two green suites. When the real
+	 * newspack-popups is loaded (a local combined run), the assertions hold
+	 * against it directly and the stub is skipped.
+	 */
+	public function test_supported_matching_function_passes_a_probed_operator_through() {
+		if ( ! class_exists( '\Newspack_Popups_Criteria' ) ) {
+			require_once dirname( __DIR__, 2 ) . '/mocks/class-newspack-popups-criteria-mock.php';
+		}
+
+		$method = new \ReflectionMethod( Promoted_Fields::class, 'supported_matching_function' );
+		$method->setAccessible( true );
+
+		$this->assertSame( 'date_range', $method->invoke( null, 'date_range' ) );
+		// The probe answers for unknown names too: an operator the installed
+		// build can't resolve still degrades even though the probe exists.
+		$this->assertSame( 'default', $method->invoke( null, 'a_future_operator' ) );
+	}
+
+	/**
+	 * The baseline list is a hand-maintained copy of the operator set that
+	 * predates the popups capability probe. It must never grow: an operator
+	 * added to it skips the probe entirely and would be emitted to builds that
+	 * cannot resolve it — the exact crash the probe exists to prevent.
+	 */
+	public function test_baseline_matching_functions_is_frozen() {
+		$constant = new \ReflectionClassConstant( Promoted_Fields::class, 'BASELINE_MATCHING_FUNCTIONS' );
+		$this->assertSame(
+			[ 'default', 'range', 'list__in', 'list__not_in' ],
+			$constant->getValue(),
+			'BASELINE_MATCHING_FUNCTIONS is the pre-probe operator set; new operators must rely on the probe, not the baseline.'
+		);
+	}
 }
