@@ -144,7 +144,13 @@ class Tag_Labels {
 			return;
 		}
 
-		echo wp_kses_post( self::generate_html( $labels, $links, array( 'tag-labels', 'cat-links' ), array( 'tag-label', 'flag' ), $outer_element ) . ' ' );
+		// No `cat-links` here. Tag labels used to borrow that class for its styling,
+		// which also handed them every `.cat-links a` rule a publisher had written for
+		// categories -- per-section colour overrides are a common pattern, and they
+		// recoloured tag labels that were never meant to follow the category palette.
+		// Every caller that relied on the borrowed styling now declares its own; see
+		// the `.tag-labels` rules in newspack-blocks and both themes.
+		echo wp_kses_post( self::generate_html( $labels, $links, array( 'tag-labels' ), array( 'tag-label', 'flag' ), $outer_element ) . ' ' );
 	}
 
 	/**
