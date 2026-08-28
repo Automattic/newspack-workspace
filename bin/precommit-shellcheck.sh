@@ -1,8 +1,12 @@
 #!/bin/sh
 # Pre-commit ShellCheck helper (invoked by lint-staged for staged *.sh files).
 #
-# Gates at `error` only, matching the CI step in .github/workflows/ci.yml, so the
-# hook never blocks a commit over a finding CI would let through. Configuration
+# Gates at `error` only, the same severity floor as the CI step in
+# .github/workflows/ci.yml, so the hook never blocks a commit over a finding CI
+# would let through. The version is not matched: CI pins one (see the comment on
+# SHELLCHECK_VERSION there) while this runs whatever the developer installed, so
+# a newer local build can flag something CI passes, and an older one can miss
+# something CI catches. CI is the gate; this is the fast signal. Configuration
 # comes from .shellcheckrc at the repo root, which deliberately leaves the local
 # severity at `style` for editors; the -S here is what narrows the hook.
 #
