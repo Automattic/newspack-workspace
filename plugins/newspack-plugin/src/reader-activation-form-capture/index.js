@@ -7,6 +7,15 @@ import { getMatchedForms, getEmailValue, getNameValues } from './utils';
 // v3 tokens expire at 120s; refresh with margin.
 const CAPTCHA_TOKEN_TTL = 100 * 1000;
 
+// Longest a Gravity Forms submission is held for the registration response
+// (ms). The hold ends when the response lands, so this is a ceiling, not a
+// delay — but it must clear the endpoint's slow path (account creation:
+// user insert plus registration hooks, observed above 1.5s), or the auth
+// cookies lose the race and the page GF navigates to renders signed out.
+// GF shows its spinner throughout, so the worst case reads as submit
+// latency rather than a stuck form.
+const GF_CAPTURE_WAIT = 3000;
+
 window.newspackRAS = window.newspackRAS || [];
 window.newspackRAS.push( readerActivation => {
 	const config = window.newspack_form_capture || {};
@@ -110,7 +119,7 @@ window.newspackRAS.push( readerActivation => {
 			// v3 tokens are single-use.
 			warmToken = null;
 		}
-		readerActivation.register( email, 'form-capture', getNameValues( form ), options ).catch( error => {
+		return readerActivation.register( email, 'form-capture', getNameValues( form ), options ).catch( error => {
 			// Only failures that can succeed on a retry within this pageview
 			// release the dedupe: a network error (the response never parsed,
 			// so no code) or a server-side registration failure. Everything
@@ -182,10 +191,19 @@ window.newspackRAS.push( readerActivation => {
 			return;
 		}
 		gformHooked = true;
-		window.gform.utils.addAsyncFilter( 'gform/submission/pre_submission', data => {
+		window.gform.utils.addAsyncFilter( 'gform/submission/pre_submission', async data => {
 			try {
 				if ( data?.form && getMatchedForms( selectors ).includes( data.form ) ) {
-					captureForm( data.form );
+					const pending = captureForm( data.form );
+					if ( pending ) {
+						// GF awaits this filter, so hold the submission until
+						// the registration response lands its auth cookies —
+						// the page GF navigates to then renders the reader as
+						// signed in. Bounded: past GF_CAPTURE_WAIT the
+						// submission proceeds with the request still in
+						// flight, which keepalive lets survive navigation.
+						await Promise.race( [ pending, new Promise( resolve => setTimeout( resolve, GF_CAPTURE_WAIT ) ) ] );
+					}
 				}
 			} catch ( err ) {
 				// Capture must never break the vendor's submission.

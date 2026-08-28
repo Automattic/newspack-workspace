@@ -383,5 +383,82 @@ describe( 'form-capture client', () => {
 			await submitViaGform( form );
 			expect( ras.register.mock.calls[ 0 ][ 3 ].captchaToken ).toBe( 'gf-warm-token' );
 		} );
+
+		/**
+		 * GF awaits the pre_submission filter chain, so the adapter can hold
+		 * the submission until the registration response sets the reader's
+		 * auth cookies — the page GF navigates to then renders already
+		 * authenticated. The hold is bounded: registration must never hold
+		 * the reader's submission hostage.
+		 */
+		describe( 'bounded await of the registration', () => {
+			// Settle pending microtask chains without running timers.
+			const drain = async ( rounds = 20 ) => {
+				for ( let i = 0; i < rounds; i++ ) {
+					await Promise.resolve();
+				}
+			};
+
+			it( 'holds the GF submission until the registration settles', async () => {
+				const { submitViaGform } = installFakeGform();
+				const ras = loadCaptureClient( GF_FORM );
+				let resolveRegister;
+				ras.register.mockImplementation(
+					() =>
+						new Promise( resolve => {
+							resolveRegister = resolve;
+						} )
+				);
+				let settled = false;
+				submitViaGform( document.querySelector( 'form' ) ).then( () => {
+					settled = true;
+				} );
+				await flush();
+				expect( settled ).toBe( false );
+				resolveRegister( {} );
+				await flush();
+				expect( settled ).toBe( true );
+			} );
+
+			it( 'releases the submission after the bounded wait when the registration hangs', async () => {
+				jest.useFakeTimers();
+				try {
+					const { submitViaGform } = installFakeGform();
+					const ras = loadCaptureClient( GF_FORM );
+					ras.register.mockImplementation( () => new Promise( () => {} ) );
+					let settled = false;
+					submitViaGform( document.querySelector( 'form' ) ).then( () => {
+						settled = true;
+					} );
+					await drain();
+					expect( settled ).toBe( false );
+					jest.advanceTimersByTime( 3000 );
+					await drain();
+					expect( settled ).toBe( true );
+				} finally {
+					jest.useRealTimers();
+				}
+			} );
+
+			it( 'does not delay the submission when nothing is captured', async () => {
+				// Guards the implementation shape: the wait must be on the
+				// pending registration, not an unconditional timer.
+				jest.useFakeTimers();
+				try {
+					const { submitViaGform } = installFakeGform();
+					const ras = loadCaptureClient( GF_FORM );
+					ras.getReader.mockReturnValue( { email: 'gf-reader@example.com' } );
+					let settled = false;
+					submitViaGform( document.querySelector( 'form' ) ).then( () => {
+						settled = true;
+					} );
+					await drain();
+					expect( settled ).toBe( true );
+					expect( ras.register ).not.toHaveBeenCalled();
+				} finally {
+					jest.useRealTimers();
+				}
+			} );
+		} );
 	} );
 } );
