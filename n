@@ -391,12 +391,9 @@ case $1 in
         fi
 
         ;;
-    # No `sh -c` wrapper here: the arguments go straight into the container
-    # command's argv, so no shell parses them a second time. Interpolating them
-    # into an `sh -c "..."` string splits them on whitespace and treats any
-    # metacharacter -- `;`, `&&` -- as syntax. Same form as the site-setup.sh and
-    # watch-repo.sh calls elsewhere in this file.
     sites-list)
+        # Arguments go straight into the container command's argv, so no shell
+        # parses them a second time.
         docker exec $DOCKER_IT $TARGET_CONTAINER /var/scripts/sites-list.sh "${@:2}"
         ;;
     sites-drop)
