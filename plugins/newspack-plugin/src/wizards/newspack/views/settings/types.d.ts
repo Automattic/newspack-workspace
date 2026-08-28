@@ -101,7 +101,7 @@ type JetpackSSOSettings = Partial< {
 } >;
 
 /** Print */
-type IndesignPlatform = 'auto' | 'mac' | 'win';
+type IndesignPlatform = 'win' | 'mac';
 
 type IndesignPostTypeOption = {
 	value: string;
