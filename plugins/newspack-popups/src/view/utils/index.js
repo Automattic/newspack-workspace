@@ -6,6 +6,7 @@ export * from './segments';
 
 import { getRawId } from './prompts';
 import { periods } from './segments';
+import { whenActivated } from './prerender';
 
 // The minimum continuous amount of time the prompt must be in the viewport before being considered visible.
 const MINIMUM_VISIBLE_TIME = 250;
@@ -83,9 +84,24 @@ export const handleSeen = ( prompt, ras ) => {
  *
  * @param {Object} ras Reader Data Library object.
  *
- * @return {Object} Total pageviews.
+ * @return {Object|undefined} Total pageviews, or undefined while prerendering.
  */
 export const logPageview = ras => {
+	let pageviews;
+	whenActivated( () => {
+		pageviews = countPageview( ras );
+	} );
+	return pageviews;
+};
+
+/**
+ * Increment the pageview counters and persist them.
+ *
+ * @param {Object} ras Reader Data Library object.
+ *
+ * @return {Object} Total pageviews.
+ */
+const countPageview = ras => {
 	const now = Date.now();
 	const pageviewTemplate = {
 		day: {

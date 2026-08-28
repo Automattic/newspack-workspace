@@ -11,6 +11,7 @@ import {
 	shouldPromptBeDisplayed,
 	syncMatchedSegments,
 } from './utils';
+import { whenActivated } from './utils/prerender';
 
 /**
  * Match reader to segments.
@@ -114,6 +115,13 @@ export const handleSegmentation = prompts => {
 		maybeDisplayPrompts();
 	} else {
 		window.newspackRAS = window.newspackRAS || [];
-		window.newspackRAS.push( maybeDisplayPrompts );
+		// Held for a prerendered page, in step with the pageview counter that
+		// frequency capping reads. Evaluating here would read a counter that has
+		// not been written yet: `logPageview` is queued ahead of this and defers
+		// its write the same way, and frequency arithmetic expects a count that
+		// already includes the current page. Since the queue drains in push
+		// order, both callbacks register their listeners in that order too, so
+		// the write still lands before this evaluation on activation (NPPM-3134).
+		window.newspackRAS.push( ras => whenActivated( () => maybeDisplayPrompts( ras ) ) );
 	}
 };

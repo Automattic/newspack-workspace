@@ -1,5 +1,7 @@
 /* globals newspack_metering_settings */
 
+import { whenActivated } from '../reader-activation/prerender.js';
+
 const settings = newspack_metering_settings;
 
 const storeKey = 'metering-' + settings.gate_id || 0;
@@ -87,7 +89,17 @@ function lockContent( ras ) {
 	}
 }
 
-function meter( ras ) {
+/**
+ * Apply the metering gate to the current page.
+ *
+ * The decision half — whether to lock the content — runs immediately, including
+ * during a prerender, so the page never activates and then changes under the
+ * reader. Only the recording half waits: an article the reader never opens must
+ * not spend one of their free reads.
+ *
+ * @param {Object} ras Reader Data Library object.
+ */
+export function meter( ras ) {
 	const data = getUserData( ras.store );
 	let locked = false;
 	// Lock content if reached limit, remove gate content if not.
@@ -106,11 +118,17 @@ function meter( ras ) {
 		if ( settings.article_view ) {
 			ras.dispatchActivity( settings.article_view.action, settings.article_view.data );
 		}
-		// Add current content to read content.
-		if ( ! data.content.includes( settings.post_id ) ) {
-			data.content.push( settings.post_id );
-			ras.store.set( storeKey, data );
-		}
+		// Add current content to read content. Re-read the stored data inside the
+		// deferred callback rather than reusing `data`: a prerendered page can sit
+		// idle for minutes, and writing back a snapshot taken before activation
+		// would drop reads the reader made in another tab meanwhile.
+		whenActivated( () => {
+			const current = getUserData( ras.store );
+			if ( ! current.content.includes( settings.post_id ) ) {
+				current.content.push( settings.post_id );
+				ras.store.set( storeKey, current );
+			}
+		} );
 	}
 }
 
