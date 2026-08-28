@@ -92,8 +92,7 @@ window.newspackRAS.push( readerActivation => {
 		}
 	};
 
-	const handleSubmit = event => {
-		const form = event.target;
+	const captureForm = form => {
 		if ( form.checkValidity && ! form.checkValidity() ) {
 			return;
 		}
@@ -127,6 +126,8 @@ window.newspackRAS.push( readerActivation => {
 			}
 		} );
 	};
+
+	const handleSubmit = event => captureForm( event.target );
 
 	const attach = () => {
 		getMatchedForms( selectors ).forEach( form => {
@@ -162,4 +163,40 @@ window.newspackRAS.push( readerActivation => {
 		}, 200 );
 	} );
 	observer.observe( document.body, { childList: true, subtree: true } );
+
+	/**
+	 * Gravity Forms (2.9+ theme framework) never yields a native submit event
+	 * to capture: its button intercepts the click and submits via programmatic
+	 * form.submit(), and its own submit listener cancels any native submit
+	 * event as an "unsupported flow". Hook GF's public filter bus instead, at
+	 * the point every GF submission funnels through — whatever the submission
+	 * type (submit, next, save…) or method, matching what the submit listener
+	 * sees from tools that submit natively. The callback must return the
+	 * payload: GF's awaited filter chain hands its return value onward, and
+	 * undefined breaks the vendor submission — which is also why capture
+	 * failures are swallowed here.
+	 */
+	let gformHooked = false;
+	const hookGravityForms = () => {
+		if ( gformHooked || ! window.gform?.utils?.addAsyncFilter ) {
+			return;
+		}
+		gformHooked = true;
+		window.gform.utils.addAsyncFilter( 'gform/submission/pre_submission', data => {
+			try {
+				if ( data?.form && getMatchedForms( selectors ).includes( data.form ) ) {
+					captureForm( data.form );
+				}
+			} catch ( err ) {
+				// Capture must never break the vendor's submission.
+			}
+			return data;
+		} );
+	};
+	hookGravityForms();
+	// gform.utils can land after this deferred script (order follows DOM
+	// position). Every deferred script has run by DOMContentLoaded; load
+	// covers async stragglers.
+	document.addEventListener( 'DOMContentLoaded', hookGravityForms, { once: true } );
+	window.addEventListener( 'load', hookGravityForms, { once: true } );
 } );
