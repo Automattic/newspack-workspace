@@ -440,6 +440,36 @@ describe( 'form-capture client', () => {
 				}
 			} );
 
+			it( 'clears the bounding timer once the registration settles', async () => {
+				// A resolved race does not cancel the losing timer on its own;
+				// left pending, one fires per submission and holds Jest's
+				// teardown open.
+				jest.useFakeTimers();
+				try {
+					const { submitViaGform } = installFakeGform();
+					const ras = loadCaptureClient( GF_FORM );
+					let resolveRegister;
+					ras.register.mockImplementation(
+						() =>
+							new Promise( resolve => {
+								resolveRegister = resolve;
+							} )
+					);
+					// Baseline absorbs unrelated timers (stale mutation-observer
+					// debounces from earlier client loads on the shared document).
+					await drain();
+					const baseline = jest.getTimerCount();
+					const chain = submitViaGform( document.querySelector( 'form' ) );
+					await drain();
+					expect( jest.getTimerCount() ).toBe( baseline + 1 );
+					resolveRegister( {} );
+					await chain;
+					expect( jest.getTimerCount() ).toBe( baseline );
+				} finally {
+					jest.useRealTimers();
+				}
+			} );
+
 			it( 'does not delay the submission when nothing is captured', async () => {
 				// Guards the implementation shape: the wait must be on the
 				// pending registration, not an unconditional timer.

@@ -202,7 +202,16 @@ window.newspackRAS.push( readerActivation => {
 						// signed in. Bounded: past GF_CAPTURE_WAIT the
 						// submission proceeds with the request still in
 						// flight, which keepalive lets survive navigation.
-						await Promise.race( [ pending, new Promise( resolve => setTimeout( resolve, GF_CAPTURE_WAIT ) ) ] );
+						// Settling clears the timer, so no timer outlives the
+						// hold it bounds.
+						await new Promise( resolve => {
+							const timer = setTimeout( resolve, GF_CAPTURE_WAIT );
+							const settle = () => {
+								clearTimeout( timer );
+								resolve();
+							};
+							pending.then( settle, settle );
+						} );
 					}
 				}
 			} catch ( err ) {
