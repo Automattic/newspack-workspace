@@ -26,18 +26,27 @@ set -euo pipefail
 # same principle even where it happens to be root-owned, because nothing needed
 # here lives there and its permissions vary by machine.
 #
-# The pin must also cover every external command below, or the script dies under
-# `set -e` with a confusing "command not found". Today that is ifconfig (/sbin),
-# grep (/usr/bin) and sed (/usr/bin). Adding a call to anything outside these
-# directories means reconsidering this line, not widening it reflexively.
+# The pin must also cover every external command below. An uncovered command
+# usually dies under `set -e` with a confusing "command not found" -- but not
+# always, and the exception is the dangerous one: a command in a condition is
+# exempt from `set -e`, so its 127 becomes an ordinary false. host-add reads
+# grep's status explicitly for that reason; see the comment there. Today the
+# helpers are ifconfig (/sbin), grep (/usr/bin) and sed (/usr/bin). Adding a
+# call to anything outside these directories means reconsidering this line,
+# not widening it reflexively.
 #
 # Two things outside this line carry the same weight. Line 1 is an absolute
 # `#!/bin/bash` on purpose: `#!/usr/bin/env bash` would have env search the
 # caller's forwarded PATH for an interpreter, as root, before this line runs,
 # and no pin here could reach that. And the sudoers grant must name the copy
-# bin/setup-networking.sh installs at /usr/local/bin, which it chowns to
-# root:wheel -- granting a path inside a developer's checkout would let the
-# login user edit this file rather than having to hijack PATH at all.
+# bin/setup-networking.sh installs at /usr/local/bin -- granting a path inside
+# a developer's checkout would let the login user edit this file rather than
+# having to hijack PATH at all. Note what that does and does not buy: the
+# installer chowns the file to root:wheel, but whether an entry can be replaced
+# is governed by its containing directory, and /usr/local/bin is owned by the
+# login user on any machine where Homebrew created it. The checkout path is
+# still the worse of the two, and this is not the same as saying the installed
+# copy cannot be swapped.
 #
 # bin/tests/test-newspack-manage-host-path.sh proves the pin holds, and pins
 # the shebang behaviourally with its own hijack probe.
