@@ -94,7 +94,10 @@ abstract class Abstract_Backfiller {
 	/**
 	 * Gets the events to be processed
 	 *
-	 * @return \Newspack_Network\Incoming_Events\Abstract_Incoming_Event[] $events An array of events.
+	 * Iterated once by process_events(), so an implementation may return an array or
+	 * yield — whichever suits the size of the set it is drawing from.
+	 *
+	 * @return iterable<\Newspack_Network\Incoming_Events\Abstract_Incoming_Event> The events.
 	 */
 	abstract public function get_events();
 
@@ -117,6 +120,7 @@ abstract class Abstract_Backfiller {
 	public function process_events() {
 		$events    = $this->get_events();
 		$processed = 0;
+		$can_clear = function_exists( 'WP_CLI\Utils\wp_clear_object_cache' );
 
 		foreach ( $events as $event ) {
 
@@ -127,7 +131,7 @@ abstract class Abstract_Backfiller {
 			// rather than the cache the whole site is sharing — which is what
 			// wp_cache_flush() would do.
 			++$processed;
-			if ( 0 === $processed % self::CLEAR_CACHE_EVERY && function_exists( 'WP_CLI\Utils\wp_clear_object_cache' ) ) {
+			if ( $can_clear && 0 === $processed % self::CLEAR_CACHE_EVERY ) {
 				\WP_CLI\Utils\wp_clear_object_cache();
 			}
 

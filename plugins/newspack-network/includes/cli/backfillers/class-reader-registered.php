@@ -40,7 +40,7 @@ class Reader_Registered extends Abstract_Backfiller {
 	 * could change underneath it, and every record after the change would be silently
 	 * skipped; a list of IDs captured up front cannot drift.
 	 *
-	 * @return \Generator|\Newspack_Network\Incoming_Events\Abstract_Incoming_Event[] $events The events.
+	 * @return \Generator<\Newspack_Network\Incoming_Events\Abstract_Incoming_Event> The events.
 	 */
 	public function get_events() {
 		$roles_to_sync = \Newspack_Network\Utils\Users::get_synced_user_roles();
@@ -87,7 +87,14 @@ class Reader_Registered extends Abstract_Backfiller {
 			}
 		);
 
-		foreach ( array_chunk( $user_ids, self::BATCH_SIZE ) as $batch ) {
+		// Sliced one batch at a time rather than array_chunk()ed up front: chunking
+		// copies the whole ID list into an array of arrays, which is a second full copy
+		// of it held for the length of the run.
+		$total = count( $user_ids );
+
+		for ( $offset = 0; $offset < $total; $offset += self::BATCH_SIZE ) {
+			$batch = array_slice( $user_ids, $offset, self::BATCH_SIZE );
+
 			$users = get_users(
 				[
 					'include' => $batch,
