@@ -33,7 +33,12 @@ ok(){ if [ "$2" = "$3" ]; then echo "  PASS  $1"; pass=$((pass+1)); else echo " 
 [ -x "$WRAP" ] || { echo "  FAIL  wrapper not found or not executable at $WRAP"; exit 1; }
 
 # --- the pinned value, read from the wrapper --------------------------------
-PIN="$(grep -m1 '^export PATH=' "$WRAP" | sed 's/^export PATH=//; s/[[:space:]]*$//')"
+# Count before reading. Every check below reads one assignment, so a second
+# `export PATH=` further down -- appending the caller's PATH back, say -- would
+# govern at runtime while this spec still measured the first one.
+PIN_ASSIGNMENTS="$(grep -c '^export PATH=' "$WRAP")"
+ok "wrapper declares exactly one pinned PATH" "$PIN_ASSIGNMENTS" "1"
+PIN="$(grep '^export PATH=' "$WRAP" | tail -1 | sed 's/^export PATH=//; s/[[:space:]]*$//')"
 ok "wrapper declares a pinned PATH" "$([ -n "$PIN" ] && echo yes || echo no)" "yes"
 
 # --- every pinned directory must be writable only by root -------------------
@@ -51,6 +56,11 @@ ok "wrapper declares a pinned PATH" "$([ -n "$PIN" ] && echo yes || echo no)" "y
 # target, and a link sitting in root-owned / cannot be replaced by a user.
 dir_root_only() {
     local d="$1" owner mode g o
+    # An empty element is not an absent directory: PATH treats "" as the
+    # process's working directory at lookup time, so a single stray colon puts
+    # the caller's cwd on root's search path. Reject it before the -d test,
+    # which would otherwise read it as "absent" and pass.
+    [ -n "$d" ] || return 1
     [ -d "$d" ] || return 0   # absent dir contributes nothing to lookup
     if stat --version >/dev/null 2>&1; then
         owner=$(stat -L -c '%U' "$d"); mode=$(stat -L -c '%a' "$d")   # GNU
@@ -68,7 +78,11 @@ dir_root_only() {
 
 writable=""
 IFS=: read -r -a PIN_DIRS <<< "$PIN"
-for d in "${PIN_DIRS[@]}"; do
+# ${arr[@]} on an empty array is an unbound variable under `set -u` on bash 3.2,
+# which is /bin/bash on macOS -- and the array is empty exactly when the pin
+# line has been deleted, the one regression this spec exists to catch. Without
+# the fallback the run aborts there and the hijack probes never execute.
+for d in "${PIN_DIRS[@]:-}"; do
     dir_root_only "$d" || writable="$writable $d"
 done
 ok "every pinned directory is owned by root and not group- or world-writable" "$writable" ""
@@ -113,11 +127,33 @@ CMDS="$(derive_commands "$WRAP")"
 ok "derivation finds the wrapper's helpers" \
    "$([ "$(printf '%s\n' "$CMDS" | grep -c .)" -ge 2 ] && echo yes || echo no)" "yes"
 
+# Derivation filters candidates through `command -v` on the machine running
+# this spec, which discards non-commands and absent helpers alike. That makes
+# the set a lower bound: the wrapper is macOS-only while `Shell specs` runs on
+# ubuntu, where ifconfig is not installed, so it never enters the set and
+# removing /sbin from the pin passes there while failing on macOS. Name the
+# helpers, check what can be checked here, and say plainly what could not be.
+EXPECTED_HELPERS="ifconfig grep sed"
+skipped=""
 uncovered=""
 for c in $CMDS; do
     PATH="$PIN" command -v "$c" >/dev/null 2>&1 || uncovered="$uncovered $c"
 done
 ok "every command the wrapper invokes resolves under its own pinned PATH" "$uncovered" ""
+
+missing_expected=""
+for c in $EXPECTED_HELPERS; do
+    if ! command -v "$c" >/dev/null 2>&1; then
+        skipped="$skipped $c"
+        continue
+    fi
+    printf '%s\n' "$CMDS" | grep -qx "$c" || missing_expected="$missing_expected $c"
+done
+ok "derivation finds every helper this platform can see" "$missing_expected" ""
+if [ -n "$skipped" ]; then
+    echo "  SKIP  not installed here, so their resolution is unverified:$skipped"
+    echo "        (the wrapper is macOS-only; run this on macOS to cover them)"
+fi
 
 # --- the hijack probe, with a control that must hijack ----------------------
 mkdir -p "$FIX/evil"
@@ -133,11 +169,11 @@ hijack_probe() {
 
 ok "planted ifconfig is not reached" "$(hijack_probe "$WRAP")" "clean"
 
-# Without this control, "clean" cannot tell a working pin from a code path that
-# was never reached: any early return added ahead of the ifconfig call would
-# also leave the marker absent, and the probe above would still report a pass.
-# Running the identical probe against a copy with the pin stripped proves the
-# probe can still detect a hijack when one is present.
+# "clean" alone cannot tell a working pin from a code path that was never
+# reached: an early return added ahead of the ifconfig call would leave the
+# marker absent too, and the probe above would still report a pass. Running the
+# identical probe against a copy with the pin stripped is what distinguishes
+# them.
 unpinned="$FIX/unpinned"
 grep -v '^export PATH=' "$WRAP" > "$unpinned"; chmod +x "$unpinned"
 ok "control: the same probe hijacks once the pin is removed" \
