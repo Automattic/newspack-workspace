@@ -558,25 +558,40 @@ jobs:
           # names a shell: `n`, bin/newspack-manage-host and the per-package
           # .hooks/pre-push scripts all carry no extension. The interpreter is
           # matched by name rather than by a trailing "sh", so a shebang like
-          # `#!/usr/bin/env fish` is not swept in. NUL-delimited throughout so a
-          # path containing whitespace cannot split into two arguments.
-          {
-            git ls-files -z '*.sh'
-            git ls-files -z | while IFS= read -r -d '' f; do
-              case "${f##*/}" in *.*) continue ;; esac
-              [ -f "$f" ] || continue
-              head -1 "$f" 2>/dev/null \
-                | grep -Eq '^#!(/[^ ]+)*/(env +)?(sh|bash|dash|ksh|zsh)( |$)' \
-                && printf '%s\0' "$f"
-            done
-          } | sort -zu > shell-files.txt
+          # `#!/usr/bin/env fish` is not swept in. zsh is deliberately absent:
+          # shellcheck refuses to parse it (SC1071) and reports that refusal at
+          # error severity, so including it would fail the gate on a file no
+          # directive can rescue. NUL-delimited throughout so a path containing
+          # whitespace cannot split into two arguments.
+          git ls-files -z '*.sh' | sort -zu > shell-globbed.txt
+          git ls-files -z | while IFS= read -r -d '' f; do
+            case "${f##*/}" in *.*) continue ;; esac
+            [ -f "$f" ] || continue
+            head -1 "$f" 2>/dev/null \
+              | grep -Eq '^#!(/[^ ]+)*/(env +)?(sh|bash|dash|ksh)( |$)' \
+              && printf '%s\0' "$f"
+          done | sort -zu > shell-shebang.txt
+          # Shell scripts that carry neither an extension nor a shebang, so
+          # neither arm above can see them. .husky/pre-commit is one: husky
+          # asks for hook files without a shebang (its own deprecation notice
+          # says the line "WILL FAIL in v10.0.0"), and it runs on every commit
+          # in the repo, where a syntax error takes every other linter down
+          # with it silently.
+          printf '%s\0' .husky/pre-commit > shell-named.txt
+          cat shell-globbed.txt shell-shebang.txt shell-named.txt | sort -zu > shell-files.txt
 
+          # Each arm is checked separately: a single total would still look
+          # healthy if one arm silently stopped matching, which is the failure
+          # that hides 79 files behind a plausible-looking count.
+          for arm in shell-globbed shell-shebang shell-named; do
+            n=$(tr -dc '\0' < "$arm.txt" | wc -c | tr -d ' ')
+            if [ "$n" -eq 0 ]; then
+              echo "Enumeration arm '$arm' matched nothing; refusing to run a partial check."
+              exit 1
+            fi
+            echo "  $arm: $n"
+          done
           count=$(tr -dc '\0' < shell-files.txt | wc -c | tr -d ' ')
-          # A list that matched nothing would otherwise pass silently.
-          if [ "$count" -eq 0 ]; then
-            echo "No shell files matched."
-            exit 1
-          fi
           echo "Checking $count files."
           xargs -0 "$SHELLCHECK" -x -S error -f gcc < shell-files.txt
 
