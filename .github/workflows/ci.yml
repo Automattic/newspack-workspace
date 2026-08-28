@@ -538,14 +538,17 @@ jobs:
           # digest is pinned by selenium, mise, grafana/alloy and others.
           # Bumping SHELLCHECK_VERSION means replacing this line too.
           SHELLCHECK_SHA256: 8c3be12b05d5c177a04c29e3c78ce89ac86f1595681cab149b65b97c4e227198
-        # Errors only. The tree carries 119 warning-level findings across 39
-        # files, so a warning gate would fail on its first run; raising the floor
-        # is a separate cleanup. -x follows sourced files, honouring the
+        # Errors only: a warning gate would fail on its first run (119 findings
+        # across 39 files when measured 2026-08-27), so raising the floor is a
+        # separate cleanup. -x follows sourced files, honouring the
         # `# shellcheck source=` directives already in the tree.
         run: |
           # Downloaded to a file rather than piped into tar: a stream cannot be
           # checked before it is extracted.
-          curl -fsSL -o shellcheck.tar.xz "https://github.com/koalaman/shellcheck/releases/download/${SHELLCHECK_VERSION}/shellcheck-${SHELLCHECK_VERSION}.linux.x86_64.tar.xz"
+          # Retried and time-boxed: this job has no `if:` gate and ci-ok requires it,
+          # so a transient reach for the release asset would redden a check on a PR
+          # that never touched shell. The sha256 below makes a retry safe.
+          curl -fsSL --retry 3 --retry-all-errors --max-time 120 -o shellcheck.tar.xz "https://github.com/koalaman/shellcheck/releases/download/${SHELLCHECK_VERSION}/shellcheck-${SHELLCHECK_VERSION}.linux.x86_64.tar.xz"
           echo "${SHELLCHECK_SHA256}  shellcheck.tar.xz" | sha256sum -c -
           tar -xJf shellcheck.tar.xz
           SHELLCHECK="$PWD/shellcheck-${SHELLCHECK_VERSION}/shellcheck"
