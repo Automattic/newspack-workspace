@@ -125,6 +125,34 @@ class Newspack_Test_Salesforce extends WP_UnitTestCase {
 	}
 
 	/**
+	 * A refresh response whose body isn't decodable JSON is reported as an error.
+	 * The suite promotes PHP warnings to failures, so this also pins that reading
+	 * fields off the failed decode stays warning-free.
+	 */
+	public function test_refresh_token_handles_undecodable_response_body() {
+		$this->connect_salesforce();
+		$filter = function() {
+			return [
+				'headers'  => [],
+				'body'     => 'Bad Gateway',
+				'response' => [
+					'code'    => 502,
+					'message' => 'Bad Gateway',
+				],
+				'cookies'  => [],
+				'filename' => null,
+			];
+		};
+		add_filter( 'pre_http_request', $filter );
+
+		$result = self::call_private( 'refresh_salesforce_token' );
+
+		remove_filter( 'pre_http_request', $filter );
+
+		self::assertWPError( $result, 'An undecodable refresh response is reported as an error.' );
+	}
+
+	/**
 	 * A granted token is saved and returned.
 	 */
 	public function test_refresh_token_saves_and_returns_granted_token() {
