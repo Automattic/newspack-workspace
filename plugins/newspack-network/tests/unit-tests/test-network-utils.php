@@ -169,6 +169,12 @@ class TestNetworkUtils extends WP_UnitTestCase {
 	 * sideload_peer_image() would leave them green while the redirect guard did nothing on
 	 * a real site. This drives a genuine sideload and reads has_action() from inside the
 	 * request, then aborts before any network I/O.
+	 *
+	 * The URL is a literal IP for the same reason the rest of the class uses one: a host
+	 * that cannot resolve is refused by is_safe_sideload_url() before the hook is ever
+	 * registered, so the interceptor never runs and every assertion below passes on a probe
+	 * that did not happen. The assertNotNull guards against that, and fails rather than
+	 * passing quietly.
 	 */
 	public function test_sideload_registers_the_redirect_guard_on_the_real_hook() {
 		$registered = null;
@@ -182,9 +188,10 @@ class TestNetworkUtils extends WP_UnitTestCase {
 		};
 
 		add_filter( 'pre_http_request', $intercept, 10, 3 );
-		Network::sideload_peer_image( 'https://example.com/x.jpg', 0, null, 'id' );
+		Network::sideload_peer_image( 'https://93.184.216.34/x.jpg', 0, null, 'id' );
 		remove_filter( 'pre_http_request', $intercept, 10 );
 
+		$this->assertNotNull( $registered, 'The sideload must reach the HTTP layer, or this test asserts nothing.' );
 		$this->assertNotFalse( $registered, 'The sideload must register the guard on the hook Requests fires.' );
 
 		$this->assertFalse(
