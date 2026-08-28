@@ -33,7 +33,7 @@ export const OnboardingModal = () => {
 					'newspack-plugin'
 				) }
 			</p>
-			{ window.newspackAudienceIntegrations?.esp_provider === 'mailchimp' && (
+			{ Boolean( window.newspackAudienceIntegrations?.esp_sync_configured ) && (
 				<p>
 					{ __(
 						'The Mailchimp integration is the reader sync previously configured under Audience → Setup. Its settings carried over; nothing needs to be reconfigured.',

@@ -92,6 +92,8 @@ declare global {
 			integrations_settings_enabled: boolean;
 			esp_provider?: string;
 			// wp_localize_script() stringifies booleans ('1'/''); read through Boolean().
+			esp_sync_configured?: boolean | string;
+			// wp_localize_script() stringifies booleans ('1'/''); read through Boolean().
 			show_onboarding?: boolean | string;
 			onboarding_notices?: string[];
 		};

@@ -257,20 +257,19 @@ class ESP extends Integration {
 			return [];
 		}
 
-		$enriched     = [];
-		$config       = parent::get_settings_config();
-		$config       = array_combine(
+		$enriched = [];
+		$config   = parent::get_settings_config();
+		$config   = array_combine(
 			array_column( $config, 'key' ),
 			$config
 		);
-		$list_options = [
-			'options' => $this->get_list_options(),
-		];
 
 		if ( 'mailchimp' === $this->get_provider_slug() ) {
+			// get_list_options() hits the provider API — only fetch when the
+			// audience field is actually offered.
 			$enriched[] = array_merge(
 				$config['mailchimp_audience_id'],
-				$list_options
+				[ 'options' => $this->get_list_options() ]
 			);
 			$enriched[] = $config['mailchimp_reader_default_status'];
 		}

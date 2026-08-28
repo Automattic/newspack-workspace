@@ -102,6 +102,14 @@ class Audience_Integrations extends Wizard {
 
 		$localized_data['show_onboarding'] = ! (bool) \get_user_meta( \get_current_user_id(), self::ONBOARDING_DISMISSED_META, true );
 
+		// Whether the Mailchimp (esp) integration's legacy sync is actually
+		// configured — connected with a stored audience. The onboarding modal
+		// gates its "settings carried over" copy on this, not on the provider
+		// slug: a Mailchimp site that never set up reader sync has nothing to
+		// carry over. Stored-config check only; no provider API call.
+		$esp_integration                        = Integrations::get_integration( 'esp' );
+		$localized_data['esp_sync_configured'] = $esp_integration ? (bool) $esp_integration->is_set_up() : false;
+
 		/**
 		 * Extra paragraphs for the Integrations onboarding modal.
 		 *

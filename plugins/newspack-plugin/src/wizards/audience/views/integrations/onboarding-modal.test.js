@@ -28,7 +28,7 @@ describe( 'OnboardingModal', () => {
 	beforeEach( () => {
 		apiFetch.mockReset();
 		apiFetch.mockResolvedValue( {} );
-		window.newspackAudienceIntegrations = { show_onboarding: true, onboarding_notices: [], esp_provider: 'mailchimp' };
+		window.newspackAudienceIntegrations = { show_onboarding: true, onboarding_notices: [], esp_sync_configured: true };
 	} );
 
 	it( 'renders nothing once onboarding was dismissed', () => {
@@ -54,8 +54,9 @@ describe( 'OnboardingModal', () => {
 		expect( screen.getByText( 'Reader sync moved to the ActiveCampaign integration.' ) ).toBeInTheDocument();
 	} );
 
-	it( 'omits the Mailchimp carry-over paragraph when Mailchimp is not the provider', () => {
-		window.newspackAudienceIntegrations.esp_provider = 'active_campaign';
+	it( 'omits the Mailchimp carry-over paragraph when legacy sync was never configured', () => {
+		// wp_localize_script() stringifies false to '' — mirror the wire format.
+		window.newspackAudienceIntegrations.esp_sync_configured = '';
 		render( <OnboardingModal /> );
 		expect( screen.getByRole( 'dialog', { name: 'Welcome to Integrations' } ) ).toBeInTheDocument();
 		expect( screen.queryByText( /settings carried over/ ) ).not.toBeInTheDocument();
