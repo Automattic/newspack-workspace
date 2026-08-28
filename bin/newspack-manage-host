@@ -81,10 +81,19 @@ case "$1" in
         [[ $# -lt 3 ]] && usage
         validate_loopback_ip "$2"
         validate_local_domain "$3"
-        # Don't add if already present.
-        if ! grep -q "[[:space:]]${3}$" /etc/hosts 2>/dev/null; then
-            echo "$2 $3" >> /etc/hosts
-        fi
+        # Don't add if already present. grep's status is read explicitly
+        # because `if ! grep ...` cannot tell "no match" from "grep did not
+        # run": under `set -e` a condition is exempt, so a 127 from a grep
+        # outside the pinned PATH would invert to true and append a duplicate
+        # on every call. 0 = present, 1 = absent, anything else is a failure
+        # to report rather than to interpret.
+        grep_status=0
+        grep -q "[[:space:]]${3}$" /etc/hosts || grep_status=$?
+        case "$grep_status" in
+            0) ;;
+            1) echo "$2 $3" >> /etc/hosts ;;
+            *) echo "Error: could not read /etc/hosts (grep exited $grep_status)." >&2; exit 1 ;;
+        esac
         ;;
     host-remove)
         validate_local_domain "$2"
