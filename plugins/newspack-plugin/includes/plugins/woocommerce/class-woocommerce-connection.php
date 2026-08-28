@@ -723,8 +723,19 @@ class WooCommerce_Connection {
 		if ( ! $enabled || ! is_a( $object, 'WC_Order' ) ) {
 			return $enabled;
 		}
-		$already_sent = $object->get_meta( '_newspack_welcome_email_sent', true )
-			|| $object->get_meta( '_newspack_receipt_email_sent', true );
+
+		// Read the marker from the data store rather than from the order handed
+		// in. WooCommerce carries one instance from the status transition all
+		// the way into the email trigger, and that instance was hydrated before
+		// the Newspack send wrote its marker on an instance of its own — its
+		// in-memory meta is stale, and trusting it lets the duplicate through.
+		$order = \wc_get_order( $object->get_id() );
+		if ( ! is_a( $order, 'WC_Order' ) ) {
+			return $enabled;
+		}
+
+		$already_sent = $order->get_meta( '_newspack_welcome_email_sent', true )
+			|| $order->get_meta( '_newspack_receipt_email_sent', true );
 		return ! $already_sent;
 	}
 

@@ -292,6 +292,39 @@ class Newspack_Test_WooCommerce_Connection_Transactional_Emails extends WP_UnitT
 	}
 
 	/**
+	 * WooCommerce hands this filter the order instance that carried the status
+	 * transition — hydrated before the Newspack send wrote its marker, and never
+	 * re-read afterwards. Reading the marker off that instance sees stale meta
+	 * and lets the duplicate through, which is what a reader actually received:
+	 * the Newspack email, then WooCommerce's Completed Order email a second later.
+	 *
+	 * The mock cannot show this on its own — wc_get_order() hands back the same
+	 * instance the send mutated — so the stale hand-off is staged explicitly.
+	 */
+	public function test_wc_completed_order_email_is_suppressed_given_a_stale_order_instance() {
+		$this->enable_reader_revenue_emails();
+		$this->stage_product( 820, 'Membership: Yearly', 'subscription', 'year' );
+		$order = $this->stage_order( 820, 'Membership: Yearly' );
+
+		// The instance WooCommerce carries from the status transition into the
+		// email trigger, snapshotted before the send the way a real one predates it.
+		$in_flight = clone $order;
+
+		self::assertTrue(
+			WooCommerce_Connection::send_customizable_receipt_email( $order->get_id() ),
+			'Precondition: the Newspack email has to actually go out.'
+		);
+		self::assertFalse(
+			$in_flight->meta_exists( '_newspack_receipt_email_sent' ),
+			'Precondition: the in-flight instance must not have seen the marker write.'
+		);
+		self::assertFalse(
+			WooCommerce_Connection::disable_duplicate_wc_completed_order_email( true, $in_flight ),
+			"WooCommerce's Completed Order email should stand down on the persisted marker, not on the passed instance's stale meta."
+		);
+	}
+
+	/**
 	 * The reason the suppression reads the sent marker rather than recomputing
 	 * whether an email applies: a send that fails leaves the reader with nothing
 	 * at all if WooCommerce has already been waved off.
