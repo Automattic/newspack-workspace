@@ -111,7 +111,7 @@ class Audience_Integrations extends Wizard {
 		 *
 		 * @param string[] $notices Notice paragraphs.
 		 */
-		$localized_data['onboarding_notices'] = \array_values( \array_filter( \array_map( 'strval', (array) \apply_filters( 'newspack_audience_integrations_onboarding_notices', [] ) ) ) );
+		$localized_data['onboarding_notices'] = \array_values( \array_filter( (array) \apply_filters( 'newspack_audience_integrations_onboarding_notices', [] ), 'is_string' ) );
 
 		\wp_localize_script(
 			'newspack-wizards',

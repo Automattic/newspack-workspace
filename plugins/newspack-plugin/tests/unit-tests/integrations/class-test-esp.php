@@ -901,4 +901,22 @@ class Test_ESP extends \WP_UnitTestCase {
 		$keys = array_column( ( new ESP() )->get_settings_config(), 'key' );
 		$this->assertNotContains( 'active_campaign_master_list', $keys );
 	}
+
+	/**
+	 * Under the Mailchimp-only restriction, a non-Mailchimp provider is never
+	 * "set up" — that is what keeps the integration out of
+	 * get_active_configured_integrations() and prevents a doomed sync attempt
+	 * from being scheduled and retried.
+	 */
+	public function test_is_set_up_requires_mailchimp_when_restricted() {
+		\update_option( 'newspack_integration_settings_esp_mailchimp_audience_id', 'list-abc' );
+
+		$this->set_provider( 'active_campaign' );
+		$this->assertFalse( $this->make_restricted_esp()->is_set_up() );
+
+		$this->set_provider( 'mailchimp' );
+		$this->assertTrue( $this->make_restricted_esp()->is_set_up() );
+
+		\delete_option( 'newspack_integration_settings_esp_mailchimp_audience_id' );
+	}
 }

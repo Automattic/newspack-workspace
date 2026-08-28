@@ -33,12 +33,14 @@ export const OnboardingModal = () => {
 					'newspack-plugin'
 				) }
 			</p>
-			<p>
-				{ __(
-					'The Mailchimp integration is the reader sync previously configured under Audience → Setup. Its settings carried over; nothing needs to be reconfigured.',
-					'newspack-plugin'
-				) }
-			</p>
+			{ window.newspackAudienceIntegrations?.esp_provider === 'mailchimp' && (
+				<p>
+					{ __(
+						'The Mailchimp integration is the reader sync previously configured under Audience → Setup. Its settings carried over; nothing needs to be reconfigured.',
+						'newspack-plugin'
+					) }
+				</p>
+			) }
 			{ notices.map( ( notice, index ) => (
 				<p key={ index }>{ notice }</p>
 			) ) }

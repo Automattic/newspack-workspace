@@ -90,7 +90,9 @@ declare global {
 		};
 		newspackAudienceIntegrations: {
 			integrations_settings_enabled: boolean;
-			show_onboarding?: boolean;
+			esp_provider?: string;
+			// wp_localize_script() stringifies booleans ('1'/''); read through Boolean().
+			show_onboarding?: boolean | string;
 			onboarding_notices?: string[];
 		};
 		newspackAudienceContentGates: {

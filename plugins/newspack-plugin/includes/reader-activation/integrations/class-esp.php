@@ -112,9 +112,18 @@ class ESP extends Integration {
 	 * state; "is the provider reachable right now?" is `health_check()`'s
 	 * job.
 	 *
+	 * Under the Mailchimp-only restriction a non-Mailchimp provider is never
+	 * set up, which keeps this integration out of
+	 * get_active_configured_integrations(): a flag-on site mid-migration gets
+	 * a clean stop instead of a sync attempt whose provider error would be
+	 * classified transient and retried forever.
+	 *
 	 * @return bool True if a provider is selected and a master list ID is stored.
 	 */
 	public function is_set_up() {
+		if ( $this->is_mailchimp_only() && 'mailchimp' !== $this->get_provider_slug() ) {
+			return false;
+		}
 		return $this->is_connected() && (bool) $this->get_master_list_id();
 	}
 
