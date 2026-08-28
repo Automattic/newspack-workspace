@@ -213,11 +213,14 @@ class Test_Group_Subscriptions extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * Test get_managers() with a non-existent subscription returns an empty-ish result.
+	 * Test get_managers() seeds no owner when the subscription cannot be resolved.
+	 *
+	 * Seeding the falsy ID would make user_is_manager( 0, $subscription ) true, which
+	 * reads as "a logged-out caller manages this group" in every permission check.
 	 */
 	public function test_get_managers_invalid_subscription() {
 		$managers = Group_Subscription::get_managers( 99999 );
-		$this->assertContains( 0, $managers, 'Invalid subscription should return [0]' );
+		$this->assertSame( [], $managers, 'An unresolvable subscription should have no managers' );
 	}
 
 	/**
