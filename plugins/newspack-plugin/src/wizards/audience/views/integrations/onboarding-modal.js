@@ -26,7 +26,7 @@ export const OnboardingModal = () => {
 		apiFetch( { path: DISMISS_PATH, method: 'POST' } ).catch( () => {} );
 	};
 	return (
-		<Modal title={ __( 'Welcome to Integrations', 'newspack-plugin' ) } onRequestClose={ dismiss }>
+		<Modal title={ __( 'Welcome to Integrations', 'newspack-plugin' ) } size="small" onRequestClose={ dismiss }>
 			<p>
 				{ __(
 					'This screen brings reader-data connections into one place. Each service is a card: enable it, configure its settings, and review its activity logs from here.',
