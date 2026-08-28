@@ -16,6 +16,8 @@ require_once __DIR__ . '/../mocks/wc-mocks.php';
  * must not be able to terminate the SOQL string literal it lands in.
  */
 class Newspack_Test_Salesforce_Soql_Escaping extends WP_UnitTestCase {
+	const INSTANCE_URL = 'https://newspack.my.salesforce.com';
+
 	/**
 	 * URLs of intercepted Salesforce API requests.
 	 *
@@ -28,21 +30,26 @@ class Newspack_Test_Salesforce_Soql_Escaping extends WP_UnitTestCase {
 		global $orders_database;
 		$orders_database      = [];
 		$this->requested_urls = [];
-		update_option( Salesforce::SALESFORCE_INSTANCE_URL, 'https://newspack.my.salesforce.com' );
+		update_option( Salesforce::SALESFORCE_INSTANCE_URL, self::INSTANCE_URL );
 		update_option( Salesforce::SALESFORCE_ACCESS_TOKEN, 'test-access-token' );
+		// WP_UnitTestCase restores the hook state after each test, so the filter can't outlive this test case.
 		add_filter( 'pre_http_request', [ $this, 'intercept_request' ], 10, 3 );
 	}
 
 	/**
 	 * Intercept outgoing Salesforce API requests, recording the URL and
-	 * returning an empty successful query response.
+	 * returning an empty successful query response. Requests to any other
+	 * host pass through untouched.
 	 *
 	 * @param false|array $preempt     Whether to preempt the request.
 	 * @param array       $parsed_args Request arguments.
 	 * @param string      $url         Request URL.
-	 * @return array Mocked HTTP response.
+	 * @return false|array Mocked HTTP response for Salesforce requests, $preempt otherwise.
 	 */
 	public function intercept_request( $preempt, $parsed_args, $url ) {
+		if ( 0 !== strpos( $url, self::INSTANCE_URL ) ) {
+			return $preempt;
+		}
 		$this->requested_urls[] = $url;
 		return [
 			'headers'  => [],
