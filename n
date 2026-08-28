@@ -199,6 +199,7 @@ start() {
         done
         if [[ ${#missing_aliases[@]} -gt 0 || ${#missing_hosts[@]} -gt 0 ]]; then
             # Use the wrapper script if installed (passwordless sudo), otherwise fall back to raw sudo.
+            warn_if_manage_host_stale
             if command -v newspack-manage-host >/dev/null 2>&1; then
                 for ip in "${missing_aliases[@]}"; do
                     sudo newspack-manage-host alias-add "$ip"

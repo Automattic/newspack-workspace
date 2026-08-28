@@ -58,4 +58,22 @@ NP_NC='\033[0m'
 log_info() { echo -e "${NP_BLUE}[INFO]${NP_NC} ${1}"; }
 log_success() { echo -e "${NP_GREEN}[SUCCESS]${NP_NC} ${1}"; }
 log_warning() { echo -e "${NP_YELLOW}[WARNING]${NP_NC} ${1}"; }
+# Warn when the installed passwordless wrapper is older than the repo copy.
+#
+# bin/setup-networking.sh snapshots bin/newspack-manage-host to /usr/local/bin
+# once, and nothing re-syncs it: every caller resolves the installed copy and
+# gates only on `command -v`. A machine set up before a change to the wrapper
+# therefore keeps running the old one indefinitely, which matters because the
+# wrapper runs as root -- the PATH pin it carries reaches nobody who does not
+# re-run the installer. Warn rather than act: this is a sudo-owned file, and a
+# script that silently re-copied it would need root at an arbitrary moment.
+warn_if_manage_host_stale() {
+    local installed="/usr/local/bin/newspack-manage-host"
+    local repo="${NABSPATH:-.}/bin/newspack-manage-host"
+    [ -f "$installed" ] && [ -f "$repo" ] || return 0
+    cmp -s "$installed" "$repo" && return 0
+    log_warning "The installed newspack-manage-host differs from this checkout's copy."
+    log_warning "Re-run ./bin/setup-networking.sh to update it (it runs as root via sudo)."
+}
+
 log_error() { echo -e "${NP_RED}[ERROR]${NP_NC} ${1}"; }
