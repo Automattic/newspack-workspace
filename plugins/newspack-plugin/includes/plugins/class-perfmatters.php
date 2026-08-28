@@ -130,14 +130,15 @@ class Perfmatters {
 	 *
 	 * Perfmatters substring-matches each entry against the whole `<link>` tag. An
 	 * entry that stops matching fails silently: the stylesheet is withheld until the
-	 * reader's first interaction, so the page renders unstyled in that area with no
-	 * error and no log line.
+	 * reader's first interaction, and wherever its rules are not already inlined in
+	 * the generated used-CSS, that part of the page renders unstyled — with no error
+	 * and no log line.
 	 *
 	 * Prefer a component's stable identifier over a path, because both halves of a
 	 * path move. Jetpack relocated its social logos into `_inc/build/` in 15.7 and
 	 * the entry went dead across the fleet for months (NPPM-3167); Jetpack's Asset
-	 * CDN drops the `plugins/jetpack/` prefix, so prefixed entries stop matching
-	 * whenever a publisher enables "Speed up static file load times" (#3810). The
+	 * CDN serves the same files from a path with no `plugins/jetpack/` segment, so a
+	 * prefixed entry stops matching wherever those assets are CDN-hosted (#3810). The
 	 * identifier survives both, since the tag's handle carries it as well as the URL.
 	 *
 	 * @return string[] Stylesheet identifiers.
