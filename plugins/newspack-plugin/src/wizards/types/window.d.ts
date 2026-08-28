@@ -90,6 +90,8 @@ declare global {
 		};
 		newspackAudienceIntegrations: {
 			integrations_settings_enabled: boolean;
+			show_onboarding?: boolean;
+			onboarding_notices?: string[];
 		};
 		newspackAudienceContentGates: {
 			api: string;

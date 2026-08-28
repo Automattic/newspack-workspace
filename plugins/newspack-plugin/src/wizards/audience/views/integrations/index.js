@@ -14,6 +14,7 @@ import { WIZARD_STORE_NAMESPACE } from '../../../../../packages/components/src/w
 import { SettingsSection } from './settings-section';
 import { ConfigureView } from './configure-view';
 import { LogsView } from './logs-view';
+import { OnboardingModal } from './onboarding-modal';
 
 const API_PATH = '/newspack/v1/wizard/newspack-audience-integrations/settings';
 
@@ -263,35 +264,38 @@ const AudienceIntegrations = ( props, ref ) => {
 	};
 
 	return (
-		<Wizard
-			headerText={ __( 'Audience Management / Integrations', 'newspack-plugin' ) }
-			sections={ [
-				{
-					path: '/settings',
-					exact: true,
-					render: SettingsSection,
-					props: sharedProps,
-					breadcrumbs: INTEGRATIONS_BREADCRUMBS,
-				},
-				{
-					path: '/settings/:integrationId/logs',
-					render: LogsView,
-					props: sharedProps,
-					isHidden: true,
-					fullWidth: true,
-					breadcrumbs: INTEGRATIONS_BREADCRUMBS,
-				},
-				{
-					path: '/settings/:integrationId',
-					render: ConfigureView,
-					props: sharedProps,
-					backNav: '#/settings',
-					isHidden: true,
-					breadcrumbs: INTEGRATIONS_BREADCRUMBS,
-				},
-			] }
-			ref={ ref }
-		/>
+		<>
+			<OnboardingModal />
+			<Wizard
+				headerText={ __( 'Audience Management / Integrations', 'newspack-plugin' ) }
+				sections={ [
+					{
+						path: '/settings',
+						exact: true,
+						render: SettingsSection,
+						props: sharedProps,
+						breadcrumbs: INTEGRATIONS_BREADCRUMBS,
+					},
+					{
+						path: '/settings/:integrationId/logs',
+						render: LogsView,
+						props: sharedProps,
+						isHidden: true,
+						fullWidth: true,
+						breadcrumbs: INTEGRATIONS_BREADCRUMBS,
+					},
+					{
+						path: '/settings/:integrationId',
+						render: ConfigureView,
+						props: sharedProps,
+						backNav: '#/settings',
+						isHidden: true,
+						breadcrumbs: INTEGRATIONS_BREADCRUMBS,
+					},
+				] }
+				ref={ ref }
+			/>
+		</>
 	);
 };
 
