@@ -104,6 +104,13 @@ export default function NewslettersQuickEditPanel( { item, onClose, onSaved } ) 
 	const categoriesReadOnly = ! optionsLoaded || categoriesUnavailable;
 	const tagsReadOnly = ! optionsLoaded || tagsUnavailable;
 
+	// A disabled field drops out of the tab order, so the wait needs its own
+	// explanation. `help` lands in the field's `aria-describedby`; an empty
+	// string suppresses the default how-to text, which these fields have
+	// never shown.
+	const categoriesHelp = optionsLoaded ? '' : __( 'Loading categories…', 'newspack-newsletters' );
+	const tagsHelp = optionsLoaded ? '' : __( 'Loading tags…', 'newspack-newsletters' );
+
 	const categoriesDirty = ! sortedIdsEqual( categorySelections, initialCategorySelections );
 	const tagsDirty = ! sortedIdsEqual( tagSelections, initialTagSelections );
 	const isDirty = visibility !== initialVisibility || categoriesDirty || tagsDirty;
@@ -163,13 +170,13 @@ export default function NewslettersQuickEditPanel( { item, onClose, onSaved } ) 
 				label={ __( 'Categories', 'newspack-newsletters' ) }
 				value={ categoryTokens }
 				suggestions={ categoryNames }
+				help={ categoriesHelp }
 				disabled={ categoriesReadOnly }
 				onChange={ next => {
 					hasEditedCategoriesRef.current = true;
 					setCategorySelections( resolveTokens( next, categorySelections, categories ) );
 				} }
 				__experimentalValidateInput={ validateCategory }
-				__experimentalShowHowTo={ false }
 				__next40pxDefaultSize
 				__nextHasNoMarginBottom
 			/>
@@ -182,13 +189,13 @@ export default function NewslettersQuickEditPanel( { item, onClose, onSaved } ) 
 				label={ __( 'Tags', 'newspack-newsletters' ) }
 				value={ tagTokens }
 				suggestions={ tagNames }
+				help={ tagsHelp }
 				disabled={ tagsReadOnly }
 				onChange={ next => {
 					hasEditedTagsRef.current = true;
 					setTagSelections( resolveTokens( next, tagSelections, tags ) );
 				} }
 				__experimentalValidateInput={ validateTag }
-				__experimentalShowHowTo={ false }
 				__next40pxDefaultSize
 				__nextHasNoMarginBottom
 			/>

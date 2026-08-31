@@ -132,6 +132,14 @@ export default function AdsQuickEditPanel( { item, advertisers, placements, term
 	const placementReadOnly = ! termsLoaded || placementUnavailable;
 	const categoriesReadOnly = ! categoriesLoaded || categoriesUnavailable;
 
+	// A disabled field drops out of the tab order, so the wait needs its own
+	// explanation. `help` lands in the field's `aria-describedby`; an empty
+	// string suppresses the default how-to text, which these fields have
+	// never shown.
+	const advertiserHelp = termsLoaded ? '' : __( 'Loading advertisers…', 'newspack-newsletters' );
+	const placementHelp = termsLoaded ? '' : __( 'Loading ad placements…', 'newspack-newsletters' );
+	const categoriesHelp = categoriesLoaded ? '' : __( 'Loading categories…', 'newspack-newsletters' );
+
 	const advertiserDirty = ! sortedIdsEqual( advertiserSelections, initialAdvertiserSelections );
 	const placementDirty = ! sortedIdsEqual( placementSelections, initialPlacementSelections );
 	const categoriesDirty = ! sortedIdsEqual( categorySelections, initialCategorySelections );
@@ -228,13 +236,13 @@ export default function AdsQuickEditPanel( { item, advertisers, placements, term
 				label={ __( 'Advertiser', 'newspack-newsletters' ) }
 				value={ advertiserTokens }
 				suggestions={ advertiserSuggestions }
+				help={ advertiserHelp }
 				disabled={ advertiserReadOnly }
 				onChange={ next => {
 					hasEditedAdvertiserRef.current = true;
 					setAdvertiserSelections( resolveTokens( next, advertiserSelections, advertisers ) );
 				} }
 				__experimentalValidateInput={ validateAdvertiser }
-				__experimentalShowHowTo={ false }
 				__next40pxDefaultSize
 				__nextHasNoMarginBottom
 			/>
@@ -245,13 +253,13 @@ export default function AdsQuickEditPanel( { item, advertisers, placements, term
 				label={ __( 'Ad placement', 'newspack-newsletters' ) }
 				value={ placementTokens }
 				suggestions={ placementSuggestions }
+				help={ placementHelp }
 				disabled={ placementReadOnly }
 				onChange={ next => {
 					hasEditedPlacementRef.current = true;
 					setPlacementSelections( resolveTokens( next, placementSelections, placements ) );
 				} }
 				__experimentalValidateInput={ validatePlacement }
-				__experimentalShowHowTo={ false }
 				__next40pxDefaultSize
 				__nextHasNoMarginBottom
 			/>
@@ -262,13 +270,13 @@ export default function AdsQuickEditPanel( { item, advertisers, placements, term
 				label={ __( 'Categories', 'newspack-newsletters' ) }
 				value={ categoryTokens }
 				suggestions={ categorySuggestions }
+				help={ categoriesHelp }
 				disabled={ categoriesReadOnly }
 				onChange={ next => {
 					hasEditedCategoriesRef.current = true;
 					setCategorySelections( resolveTokens( next, categorySelections, categories ) );
 				} }
 				__experimentalValidateInput={ validateCategory }
-				__experimentalShowHowTo={ false }
 				__next40pxDefaultSize
 				__nextHasNoMarginBottom
 			/>

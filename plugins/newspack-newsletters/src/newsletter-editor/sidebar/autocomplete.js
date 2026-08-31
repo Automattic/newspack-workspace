@@ -111,7 +111,7 @@ const Autocomplete = ( { availableItems, label = '', onChange, onFocus, onInputC
 					suggestions={ availableItems.map( item => item.label ) }
 					value={ [] }
 					__experimentalExpandOnFocus={ true }
-					__experimentalShowHowTo={ false }
+					help=""
 					__next40pxDefaultSize
 					__nextHasNoMarginBottom
 				/>
