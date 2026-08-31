@@ -391,4 +391,65 @@ class Test_Group_Subscription_Invite extends WP_UnitTestCase {
 			'A valid key with a mismatched email must not create an account for the requesting address.'
 		);
 	}
+
+	/**
+	 * An invitation email names whoever issued it, and never nobody.
+	 *
+	 * `added_by` is the sender a recipient should see and reply to. It is absent on
+	 * invitations issued before it was recorded, and resolves to nothing once that
+	 * account is deleted. The placeholders are publisher-editable, so a template
+	 * reading "*SENDER_NAME* invited you" renders a headless sentence on an empty
+	 * value: resolution falls through the owner to the site instead.
+	 *
+	 * This is deliberately unlike how an invite LINK is attributed. A link lives in
+	 * a manager\'s slot and is re-validated against that manager when it is clicked,
+	 * so an admin acts on the owner\'s link rather than minting a dead one of their
+	 * own. See Group_Subscription_API::resolve_link_manager_id(). An email is a
+	 * message from a person; a link is an artifact of the group.
+	 */
+	public function test_invite_email_always_names_a_sender() {
+		$owner_id  = $this->create_user( true );
+		$owner     = get_userdata( $owner_id );
+		$sender_id = $this->create_user( true );
+		$sender    = get_userdata( $sender_id );
+
+		$owned_group = wcs_create_subscription(
+			[
+				'customer_id'    => $owner_id,
+				'status'         => 'active',
+				'billing_period' => 'month',
+			]
+		);
+		$owned_group->update_meta_data( Group_Subscription_Settings::GROUP_SUBSCRIPTION_META_PREFIX . 'enabled', 'yes' );
+
+		$resolve_invite_sender_method = new ReflectionMethod( Group_Subscription_Invite::class, 'resolve_invite_sender' );
+		$resolve_invite_sender_method->setAccessible( true );
+
+		$this->assertSame(
+			[ $sender->display_name, $sender->user_email ],
+			$resolve_invite_sender_method->invoke( null, $owned_group->get_id(), [ 'added_by' => $sender_id ] ),
+			'The person who issued the invitation is the one the recipient sees, so a reply reaches them.'
+		);
+
+		$this->assertSame(
+			[ $owner->display_name, $owner->user_email ],
+			$resolve_invite_sender_method->invoke( null, $owned_group->get_id(), [ 'added_by' => 0 ] ),
+			'An invitation with no recorded sender is signed by the group owner rather than by nobody.'
+		);
+
+		$ownerless_group = wcs_create_subscription(
+			[
+				'customer_id'    => 0,
+				'status'         => 'active',
+				'billing_period' => 'month',
+			]
+		);
+		$ownerless_group->update_meta_data( Group_Subscription_Settings::GROUP_SUBSCRIPTION_META_PREFIX . 'enabled', 'yes' );
+
+		$this->assertSame(
+			[ get_bloginfo( 'name' ), get_option( 'admin_email' ) ],
+			$resolve_invite_sender_method->invoke( null, $ownerless_group->get_id(), [ 'added_by' => 0 ] ),
+			'An ownerless group has nobody to fall back to, so the site signs the invitation.'
+		);
+	}
 }

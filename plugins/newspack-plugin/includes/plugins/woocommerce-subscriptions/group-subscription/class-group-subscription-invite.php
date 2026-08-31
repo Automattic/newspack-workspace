@@ -458,6 +458,50 @@ class Group_Subscription_Invite {
 	}
 
 	/**
+	 * The name and address an invitation email is sent as.
+	 *
+	 * `added_by` is the person who issued the invitation, which is who a recipient
+	 * should see and reply to -- an admin inviting from the Subscribers screen is
+	 * named, not hidden behind the group's owner. That is deliberately different
+	 * from how an invite LINK is attributed: a link is minted in a manager's slot
+	 * and re-validated against that manager when it is clicked, so an admin acts on
+	 * the owner's link instead (Group_Subscription_API::resolve_link_manager_id()).
+	 * An email invitation is a message from a person; a link is an artifact of the
+	 * group. The two answer to different owners on purpose.
+	 *
+	 * Both fallbacks exist because the placeholders are publisher-editable: a
+	 * template reading "*SENDER_NAME* invited you" produces a headless sentence if
+	 * either value is empty. `added_by` is absent on invitations issued before it
+	 * was recorded, and resolves to nothing once that account is deleted, so fall
+	 * back to the group's owner and then to the site itself.
+	 *
+	 * @param int        $subscription_id The subscription ID.
+	 * @param array|null $invite          The invite record, when there is one.
+	 *
+	 * @return array{0:string,1:string} The sender's display name and email address.
+	 */
+	private static function resolve_invite_sender( $subscription_id, $invite ): array {
+		$candidates = [];
+		if ( $invite && ! empty( $invite['added_by'] ) ) {
+			$candidates[] = (int) $invite['added_by'];
+		}
+		$subscription = WooCommerce_Subscriptions::sanitize_subscription( $subscription_id );
+		if ( $subscription ) {
+			$candidates[] = (int) $subscription->get_user_id();
+		}
+		foreach ( $candidates as $candidate_id ) {
+			$sender = $candidate_id ? get_user_by( 'id', $candidate_id ) : false;
+			if ( $sender ) {
+				return [ $sender->display_name, $sender->user_email ];
+			}
+		}
+		return [
+			(string) get_bloginfo( 'name' ),
+			(string) get_option( 'admin_email', '' ),
+		];
+	}
+
+	/**
 	 * Send an invitation email.
 	 *
 	 * @param int    $subscription_id The subscription ID.
@@ -467,17 +511,9 @@ class Group_Subscription_Invite {
 	 * @return bool Whether the email was sent.
 	 */
 	public static function send_invite_email( $subscription_id, $key, $email ) {
-		$url          = self::get_invite_url( $subscription_id, $key, $email );
-		$invite       = self::get_invite_by_key( $subscription_id, $key );
-		$sender_email = '';
-		$sender_name  = '';
-		if ( $invite && ! empty( $invite['added_by'] ) ) {
-			$sender = get_user_by( 'id', $invite['added_by'] );
-			if ( $sender ) {
-				$sender_email = $sender->user_email;
-				$sender_name  = $sender->display_name;
-			}
-		}
+		$url    = self::get_invite_url( $subscription_id, $key, $email );
+		$invite = self::get_invite_by_key( $subscription_id, $key );
+		[ $sender_name, $sender_email ] = self::resolve_invite_sender( $subscription_id, $invite );
 		return Emails::send_email(
 			self::EMAIL_TYPE,
 			$email,

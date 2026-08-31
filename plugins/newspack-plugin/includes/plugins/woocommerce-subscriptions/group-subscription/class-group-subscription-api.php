@@ -325,6 +325,16 @@ class Group_Subscription_API {
 	 * its minter's manager status; this resolver keeps the admin surface from
 	 * creating new instances of it, it does not fix it.
 	 *
+	 * This is why an admin's two ways of inviting are attributed to two different
+	 * people, which is intended rather than an oversight. An email invitation
+	 * records its actual sender and names them to the recipient
+	 * (Group_Subscription_Invite::resolve_invite_sender()); a link cannot, because
+	 * it is validated against the manager whose slot holds it, and an admin has no
+	 * slot. Read the split as what each thing is: the email is a message from a
+	 * person, the link is an artifact of the group. Attributing the email to the
+	 * owner too would misdirect the reply; attributing the link to the admin would
+	 * mint a link that never opens.
+	 *
 	 * @param \WC_Subscription|int $subscription The subscription object or ID.
 	 *
 	 * @return int The manager user ID to act as, or 0 when there is none.
