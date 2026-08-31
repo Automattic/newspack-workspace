@@ -1,3 +1,80 @@
+# @automattic/newspack-blocks [4.31.0](https://github.com/Automattic/newspack-workspace/compare/newspack-blocks@4.30.5...newspack-blocks@4.31.0) (2026-08-31)
+
+
+### Bug Fixes
+
+* **blocks:** allow opted-in post types on the public /articles endpoint ([#522](https://github.com/Automattic/newspack-workspace/issues/522)) ([4ad30b4](https://github.com/Automattic/newspack-workspace/commit/4ad30b494bbdf5ecbb57576ddb922d9a300acb33))
+* **blocks:** escape checkout-button container class attribute ([#616](https://github.com/Automattic/newspack-workspace/issues/616)) ([f727cc2](https://github.com/Automattic/newspack-workspace/commit/f727cc209f2e50ae49f4397350d65721cb2c4b9b))
+
+
+### Features
+
+* add tag labels to the Carousel block ([#429](https://github.com/Automattic/newspack-workspace/issues/429)) ([567e5ab](https://github.com/Automattic/newspack-workspace/commit/567e5ab9fb54b69bd6e9377eac3f3f76ca8e29c2))
+* **subscriptions:** add a card to a manually created subscription ([#840](https://github.com/Automattic/newspack-workspace/issues/840)) ([3c752a0](https://github.com/Automattic/newspack-workspace/commit/3c752a00aebdfdf393ad36bc063e9df4c0c82d91))
+
+
+### Dependencies
+
+* **newspack-colors:** upgraded to 1.1.4
+* **newspack-icons:** upgraded to 1.1.2
+* **newspack-components:** upgraded to 4.7.0
+
+## @automattic/newspack-blocks [4.30.5](https://github.com/Automattic/newspack-workspace/compare/newspack-blocks@4.30.4...newspack-blocks@4.30.5) (2026-08-31)
+
+
+### Bug Fixes
+
+* **homepage-articles:** neutralize editor author links (NPPM-3165) ([#992](https://github.com/Automattic/newspack-workspace/issues/992)) ([b19c5ae](https://github.com/Automattic/newspack-workspace/commit/b19c5aeeab022ecd28afaba72999f4af1810f8e7))
+
+## @automattic/newspack-blocks [4.30.4](https://github.com/Automattic/newspack-workspace/compare/newspack-blocks@4.30.3...newspack-blocks@4.30.4) (2026-08-25)
+
+
+### Bug Fixes
+
+* **blocks:** track modal purchases made via the Store API ([#881](https://github.com/Automattic/newspack-workspace/issues/881)) ([06cd0a9](https://github.com/Automattic/newspack-workspace/commit/06cd0a95946703497a8f2bba0ecfd06c69a09718))
+
+## @automattic/newspack-blocks [4.30.3](https://github.com/Automattic/newspack-workspace/compare/newspack-blocks@4.30.2...newspack-blocks@4.30.3) (2026-08-20)
+
+
+### Dependencies
+
+* **newspack-components:** upgraded to 4.6.3
+
+## @automattic/newspack-blocks [4.30.2](https://github.com/Automattic/newspack-workspace/compare/newspack-blocks@4.30.1...newspack-blocks@4.30.2) (2026-08-18)
+
+
+### Bug Fixes
+
+* **content-gate:** keep withheld blocks out of generated excerpts ([#832](https://github.com/Automattic/newspack-workspace/issues/832)) ([86eecfe](https://github.com/Automattic/newspack-workspace/commit/86eecfeef6eb07440afc8d5ffa239907cceb45a3))
+
+## @automattic/newspack-blocks [4.30.1](https://github.com/Automattic/newspack-workspace/compare/newspack-blocks@4.30.0...newspack-blocks@4.30.1) (2026-08-17)
+
+
+### Dependencies
+
+* **newspack-components:** upgraded to 4.6.2
+
+# @automattic/newspack-blocks [4.30.0](https://github.com/Automattic/newspack-workspace/compare/newspack-blocks@4.29.2...newspack-blocks@4.30.0) (2026-08-17)
+
+
+### Bug Fixes
+
+* **blocks:** APCA contrast picker and derived accent-contrast color ([#730](https://github.com/Automattic/newspack-workspace/issues/730)) ([b05a658](https://github.com/Automattic/newspack-workspace/commit/b05a6588f4d9ebdeb3dbdbc17b5c06c901012ca7))
+* **newspack-blocks:** skip article-block image crops on wpcom uploads ([#576](https://github.com/Automattic/newspack-workspace/issues/576)) ([451272c](https://github.com/Automattic/newspack-workspace/commit/451272c3989cb3ed5f25daaa1e647e1b5dcbf453))
+
+
+### Features
+
+* **performance:** defer reader-facing JS assets (NPPM-3037) ([#722](https://github.com/Automattic/newspack-workspace/issues/722)) ([2855574](https://github.com/Automattic/newspack-workspace/commit/2855574099c4f416a984cda8565b269e5a9f0fb0))
+
+
+### Dependencies
+
+* **newspack-colors:** upgraded to 1.1.3
+* **newspack-icons:** upgraded to 1.1.1
+* **newspack-components:** upgraded to 4.6.1
+* **newspack-scripts:** upgraded to 5.11.0
+
 ## @automattic/newspack-blocks [4.29.2](https://github.com/Automattic/newspack-workspace/compare/newspack-blocks@4.29.1...newspack-blocks@4.29.2) (2026-08-07)
 
 

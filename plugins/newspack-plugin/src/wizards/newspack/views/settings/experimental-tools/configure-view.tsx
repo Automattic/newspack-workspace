@@ -85,7 +85,7 @@ function LogsField( { field }: { field: ToolField } ) {
 										/* translators: 1: model name, 2: response time in seconds. */
 										__( '%1$s · %2$ss', 'newspack-plugin' ),
 										log.settings?.model ?? 'unknown',
-										log.response_time
+										String( log.response_time )
 									) }
 								</span>
 								<Icon icon={ isExpanded ? chevronUp : chevronDown } />

@@ -16,8 +16,9 @@ module.exports = function releaseConfig( { name, phpFile, npmPublish = false } )
 		branches: [
 			'release',
 			{ name: 'alpha', prerelease: true },
-			{ name: 'hotfix/*', prerelease: '${name.replace(/\\//g, "-")}' },
-			{ name: 'epic/*', prerelease: '${name.replace(/\\//g, "-")}' },
+			// hotfix/* and epic/* branches no longer publish prerelease tags:
+			// CI's build-zips job already produces an installable zip for every
+			// commit, so the tags and their builds were redundant.
 		],
 		plugins: [
 			'@semantic-release/commit-analyzer',
@@ -33,12 +34,8 @@ module.exports = function releaseConfig( { name, phpFile, npmPublish = false } )
 			[
 				'@semantic-release/github',
 				{
-					// Migrated commits reference legacy-repo PR numbers that don't
-					// exist as monorepo issues; the success step resolves those refs
-					// to comment on AND label them, failing the release job. Disable
-					// both. Re-enable post-migration (NPPM-2752 Phase 6).
-					successComment: false,
-					releasedLabels: false,
+					// A release failure is surfaced by the workflow itself, so
+					// semantic-release does not also open an issue for it.
 					failComment: false,
 					failTitle: false,
 					assets: [

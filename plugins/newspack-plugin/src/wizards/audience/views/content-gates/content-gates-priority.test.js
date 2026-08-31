@@ -76,7 +76,7 @@ jest.mock( '../../../../../packages/components/src/wizard/store', () => ( {
 // Avoid pulling in the real gate-status helpers; the modal only needs strings.
 jest.mock( './utils', () => ( {
 	getGateStatus: () => 'Active',
-	getGateStatusBadgeLevel: () => 'success',
+	getGateStatusBadgeIntent: () => 'stable',
 } ) );
 
 describe( 'Content Gates Priority modal', () => {

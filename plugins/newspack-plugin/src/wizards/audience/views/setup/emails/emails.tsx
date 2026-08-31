@@ -14,7 +14,8 @@ import { Button, __experimentalHStack as HStack } from '@wordpress/components'; 
 /**
  * Internal dependencies.
  */
-import { Badge, DataViews, Notice, utils } from '../../../../../../packages/components/src';
+import { DataViews, Notice, StatusIndicator, utils } from '../../../../../../packages/components/src';
+import { postStatus } from '../../../post-status';
 import WizardsPluginCard from '../../../../wizards-plugin-card';
 import { useWizardApiFetch } from '../../../../hooks/use-wizard-api-fetch';
 import EmailPreview from './email-preview';
@@ -44,6 +45,11 @@ interface EmailItem {
 	chip: 'auth-account' | 'reader-revenue';
 	source: 'newspack' | 'woocommerce';
 }
+
+// The bundled @wordpress/dataviews types (v10) predate `isDestructive`,
+// which the WP-core-provided runtime DataViews does support — extend the
+// Action type locally so destructive styling can be declared.
+type EmailAction = Action< EmailItem > & { isDestructive?: boolean };
 
 interface EmailSettings {
 	newspack_emails: EmailItem[];
@@ -305,10 +311,9 @@ const Emails = () => {
 				render: ( { item }: { item: EmailItem } ) => {
 					const isEnabled = item.status === 'publish';
 					return (
-						<Badge
-							level={ isEnabled ? 'success' : 'default' }
-							text={ isEnabled ? __( 'Enabled', 'newspack-plugin' ) : __( 'Disabled', 'newspack-plugin' ) }
-						/>
+						<StatusIndicator status={ postStatus( item.status ) }>
+							{ isEnabled ? __( 'Enabled', 'newspack-plugin' ) : __( 'Disabled', 'newspack-plugin' ) }
+						</StatusIndicator>
 					);
 				},
 				elements: [
@@ -327,7 +332,7 @@ const Emails = () => {
 		[]
 	);
 
-	const actions: Action< EmailItem >[] = [
+	const actions: EmailAction[] = [
 		{
 			id: 'edit',
 			label: __( 'Edit', 'newspack-plugin' ),
