@@ -425,7 +425,7 @@ class Jetpack {
 	 *
 	 * @param string $query  The sharing service URL query parameter.
 	 * @param object $source Sharing service properties. Unused.
-	 * @param string $id     Sharing ID. Unused.
+	 * @param string|false $id     Sharing ID. Unused.
 	 * @param array  $args   Array of sharing service options. Unused.
 	 * @return string The (possibly blanked) query.
 	 */
