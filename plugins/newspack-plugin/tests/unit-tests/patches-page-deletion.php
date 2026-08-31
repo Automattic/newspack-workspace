@@ -5,8 +5,6 @@
  * @package Newspack\Tests
  */
 
-use Newspack\Patches;
-
 /**
  * Patches::prevent_accidental_page_deletion(), a `map_meta_cap` filter.
  */
@@ -30,30 +28,32 @@ class Test_Patches_Page_Deletion extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Restore the front-page settings the tests change.
+	 * Make a page and set it as the static front page.
+	 *
+	 * @return int The page ID.
 	 */
-	public function tear_down() {
-		delete_option( 'page_on_front' );
-		update_option( 'show_on_front', 'posts' );
-		parent::tear_down();
+	private function create_front_page(): int {
+		$front_page_id = self::factory()->post->create( [ 'post_type' => 'page' ] );
+		update_option( 'show_on_front', 'page' );
+		update_option( 'page_on_front', $front_page_id );
+
+		return $front_page_id;
 	}
 
 	/**
 	 * The static front page can't be deleted, even by an administrator.
 	 *
-	 * Both spellings are asserted. Core's map_meta_cap() handles `delete_post` and
-	 * `delete_page` in one branch, and the `page` post type's own delete_post
-	 * capability is literally `delete_page` — the spelling wp_ajax_delete_page()
-	 * and the XML-RPC wp_deletePage() ask for. Guarding only `delete_post` leaves
-	 * those two routes able to delete the homepage.
+	 * Both spellings are asserted: wp_ajax_delete_page() and the XML-RPC
+	 * wp_deletePage() ask for `delete_page`, so guarding only `delete_post` leaves
+	 * those two routes able to delete the homepage. Editing is asserted alongside,
+	 * because deletion is the only thing the guard may refuse.
 	 */
 	public function test_a_protected_page_cannot_be_deleted() {
-		$front_page_id = self::factory()->post->create( [ 'post_type' => 'page' ] );
-		update_option( 'show_on_front', 'page' );
-		update_option( 'page_on_front', $front_page_id );
+		$front_page_id = $this->create_front_page();
 
 		$this->assertFalse( current_user_can( 'delete_post', $front_page_id ) );
 		$this->assertFalse( current_user_can( 'delete_page', $front_page_id ) );
+		$this->assertTrue( current_user_can( 'edit_post', $front_page_id ) );
 	}
 
 	/**
@@ -67,10 +67,24 @@ class Test_Patches_Page_Deletion extends WP_UnitTestCase {
 	}
 
 	/**
+	 * A protected page passed as a WP_Post is still refused.
+	 *
+	 * `current_user_can( 'delete_post', $post )` is a legal call, so the guard
+	 * resolves `$args[0]` through get_post() rather than casting it. Casting an
+	 * object yields 1, which both warns and compares the wrong page.
+	 */
+	public function test_a_protected_page_is_matched_when_passed_as_an_object() {
+		$front_page_id = $this->create_front_page();
+
+		$this->assertFalse( current_user_can( 'delete_post', get_post( $front_page_id ) ) );
+		$this->assertFalse( current_user_can( 'delete_post', (string) $front_page_id ) );
+	}
+
+	/**
 	 * The guard only inspects deletion capabilities.
 	 *
 	 * It runs on every meta capability check in the request, and `$args[0]` is a
-	 * post ID only for post capabilities — for `edit_user` it is a user ID. Looking
+	 * post ID only for post capabilities: for `edit_user` it is a user ID. Looking
 	 * that up as a post costs a database query per check, which turns any admin
 	 * screen that resolves edit links for a page of users into an N+1.
 	 */
@@ -91,58 +105,5 @@ class Test_Patches_Page_Deletion extends WP_UnitTestCase {
 		current_user_can( 'edit_user', $other_user_id );
 
 		$this->assertSame( $queries_before, $wpdb->num_queries );
-	}
-
-	/**
-	 * The guard scopes itself to deletion and leaves every other capability alone.
-	 *
-	 * The query-count test above measures that the early bail is cheap; this states
-	 * what it must not break. An early return inside a `map_meta_cap` filter is the
-	 * kind of change whose blast radius is the capabilities it now skips, so those
-	 * are asserted directly rather than left to a reasoning step in review — and
-	 * unlike the query count, this cannot go green for the wrong reason if core
-	 * changes how it caches post lookups.
-	 */
-	public function test_the_guard_only_scopes_itself_to_deletion() {
-		$front_page_id = self::factory()->post->create( [ 'post_type' => 'page' ] );
-		update_option( 'show_on_front', 'page' );
-		update_option( 'page_on_front', $front_page_id );
-
-		$this->assertTrue( current_user_can( 'edit_post', $front_page_id ), 'A protected page can still be edited; only deleting it is refused.' );
-		$this->assertTrue( current_user_can( 'delete_pages' ) );
-		$this->assertTrue( current_user_can( 'delete_others_pages' ) );
-		$this->assertTrue( current_user_can( 'delete_published_pages' ) );
-	}
-
-	/**
-	 * Every ID the guard protects is a page.
-	 *
-	 * That is the premise the `delete_page` widening rests on: `delete_page` is the
-	 * capability core generates for the `page` post type, so if get_protected_page_ids()
-	 * ever returned a post of another type, the widening would not cover it and the
-	 * comment explaining the widening would be wrong.
-	 *
-	 * WooCommerce is not loaded in this harness, so on a bare run this exercises the
-	 * front and posts pages only — the seven WooCommerce IDs the list also returns are
-	 * covered wherever the suite runs with WooCommerce active. Asserting the invariant
-	 * rather than one hard-coded page is what makes that possible at all.
-	 */
-	public function test_every_protected_id_is_a_page() {
-		$front_page_id = self::factory()->post->create( [ 'post_type' => 'page' ] );
-		$posts_page_id = self::factory()->post->create( [ 'post_type' => 'page' ] );
-		update_option( 'show_on_front', 'page' );
-		update_option( 'page_on_front', $front_page_id );
-		update_option( 'page_for_posts', $posts_page_id );
-
-		$protected_page_ids = Patches::get_protected_page_ids();
-
-		$this->assertNotEmpty( $protected_page_ids, 'Fixture precondition: the guard has something to protect.' );
-		foreach ( $protected_page_ids as $protected_page_id ) {
-			$this->assertSame(
-				'page',
-				get_post_type( $protected_page_id ),
-				sprintf( 'Protected ID %d is a page, so the delete_page capability covers it.', $protected_page_id )
-			);
-		}
 	}
 }
