@@ -1,3 +1,12 @@
+# newspack-theme [2.26.0](https://github.com/Automattic/newspack-workspace/compare/newspack-theme@2.25.1...newspack-theme@2.26.0) (2026-08-31)
+
+
+### Features
+
+* add tag labels to the Carousel block ([#429](https://github.com/Automattic/newspack-workspace/issues/429)) ([567e5ab](https://github.com/Automattic/newspack-workspace/commit/567e5ab9fb54b69bd6e9377eac3f3f76ca8e29c2))
+* **campaigns:** Contextual Prompts, AI-assisted story donation asks ([#686](https://github.com/Automattic/newspack-workspace/issues/686)) ([f896387](https://github.com/Automattic/newspack-workspace/commit/f896387b5c3c096b6ed0cacbf2fe89b3e7f6b703)), closes [#719](https://github.com/Automattic/newspack-workspace/issues/719)
+* **themes:** offer Header and Body fonts in the editor font picker ([#842](https://github.com/Automattic/newspack-workspace/issues/842)) ([6286f75](https://github.com/Automattic/newspack-workspace/commit/6286f75c8dc6dbf52e5f0c5fcc09bf0e75699e0e))
+
 ## newspack-theme [2.25.1](https://github.com/Automattic/newspack-workspace/compare/newspack-theme@2.25.0...newspack-theme@2.25.1) (2026-08-17)
 
 
