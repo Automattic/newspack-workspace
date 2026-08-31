@@ -180,29 +180,6 @@ class Newspack_Blocks_API {
 	}
 
 	/**
-	 * Point every anchor in a rendered payload fragment at '#'.
-	 *
-	 * The editor canvas renders the byline and avatar fields verbatim, so a
-	 * live URL navigates the canvas iframe away from the post being edited.
-	 * Runs on the finished markup — after the newspack_blocks_post_byline
-	 * filter — so links injected by filters (e.g. custom bylines) are covered
-	 * too, matching the category-link convention used elsewhere in this
-	 * payload. Only real anchor href attributes are rewritten: "href=" text
-	 * inside another attribute's value (avatar proxy URLs), xlink:href sprite
-	 * references, and plain text all pass through untouched.
-	 *
-	 * @param string $html Rendered markup destined for the editor payload.
-	 * @return string Markup with every anchor href pointing at '#'.
-	 */
-	private static function neutralize_editor_links( $html ) {
-		$processor = new \WP_HTML_Tag_Processor( (string) $html );
-		while ( $processor->next_tag( 'A' ) ) {
-			$processor->set_attribute( 'href', '#' );
-		}
-		return $processor->get_updated_html();
-	}
-
-	/**
 	 * Register the video-playlist endpoint.
 	 */
 	public static function register_video_playlist_endpoint() {
@@ -304,8 +281,8 @@ class Newspack_Blocks_API {
 				'newspack_sponsors_show_author'     => Newspack_Blocks::newspack_display_sponsors_and_authors( $sponsors ),
 				'newspack_sponsors_show_categories' => Newspack_Blocks::newspack_display_sponsors_and_categories( $sponsors ),
 				'newspack_tag_labels'               => self::newspack_blocks_get_tag_labels( $data ),
-				'newspack_post_avatars'             => self::neutralize_editor_links( \newspack_blocks_format_avatars( $author_info ) ),
-				'newspack_post_byline'              => self::neutralize_editor_links( \newspack_blocks_format_byline( $author_info ) ),
+				'newspack_post_avatars'             => \newspack_blocks_format_avatars( $author_info ),
+				'newspack_post_byline'              => \newspack_blocks_format_byline( $author_info ),
 				'post_status'                       => $post->post_status,
 				'post_type'                         => $post->post_type,
 				'post_link'                         => Newspack_Blocks::get_post_link( $post->ID ),
