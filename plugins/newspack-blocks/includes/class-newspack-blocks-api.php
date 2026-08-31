@@ -102,7 +102,7 @@ class Newspack_Blocks_API {
 			return '';
 		}
 
-		$linked_category = '<a href="#">' . $category->name . '</a>';
+		$linked_category = '<a href="' . esc_url( get_category_link( $category->term_id ) ) . '">' . $category->name . '</a>';
 
 		return apply_filters( 'newspack_blocks_categories', $linked_category );
 	}

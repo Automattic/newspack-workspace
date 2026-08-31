@@ -35,10 +35,10 @@ const sponsors = [
 ];
 
 describe( 'sponsor markup in the editor preview', () => {
-	it( 'renders the sponsor logo anchor inert', () => {
+	it( 'renders the sponsor logo anchor with its real URL', () => {
 		const anchors = collectAnchors( formatSponsorLogos( sponsors ) );
 		expect( anchors.length ).toBeGreaterThan( 0 );
-		anchors.forEach( anchor => expect( anchor.props.href ).toBe( '#' ) );
+		anchors.forEach( anchor => expect( anchor.props.href ).toBe( 'https://sponsor.example.test/supporters/' ) );
 	} );
 
 	it( 'renders the sponsor byline anchor inert', () => {

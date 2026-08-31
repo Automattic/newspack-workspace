@@ -1,4 +1,4 @@
-/* eslint-disable jsx-a11y/anchor-is-valid, @typescript-eslint/no-explicit-any */
+/* eslint-disable @typescript-eslint/no-explicit-any */
 
 /**
  * Internal dependencies
@@ -90,7 +90,7 @@ class Edit extends Component< HomepageArticlesProps > {
 				{ getPostStatusLabel( post ) }
 				{ showImage && post.newspack_featured_image_src && (
 					<figure className="post-thumbnail" key="thumbnail">
-						<a href="#">
+						<a href={ post.post_link }>
 							{ imageShape === 'landscape' && <img src={ post.newspack_featured_image_src.landscape } alt="" /> }
 							{ imageShape === 'portrait' && <img src={ post.newspack_featured_image_src.portrait } alt="" /> }
 							{ imageShape === 'square' && <img src={ post.newspack_featured_image_src.square } alt="" /> }
@@ -119,7 +119,7 @@ class Edit extends Component< HomepageArticlesProps > {
 						<div className="cat-links tag-labels">
 							{ post.newspack_tag_labels.map( ( newspack_tag_label, index ) => {
 								return newspack_tag_label.link ? (
-									<a key={ index } href="#" className="tag-label flag">
+									<a key={ index } href={ newspack_tag_label.link } className="tag-label flag">
 										{ newspack_tag_label.flag }
 									</a>
 								) : (
@@ -132,11 +132,11 @@ class Edit extends Component< HomepageArticlesProps > {
 					) }
 					{ RichText.isEmpty( sectionHeader ) ? (
 						<h2 className="entry-title" key="title">
-							<a href="#">{ postTitle }</a>
+							<a href={ post.post_link }>{ postTitle }</a>
 						</h2>
 					) : (
 						<h3 className="entry-title" key="title">
-							<a href="#">{ postTitle }</a>
+							<a href={ post.post_link }>{ postTitle }</a>
 						</h3>
 					) }
 					{ IS_SUBTITLE_SUPPORTED_IN_THEME && showSubtitle && (
@@ -155,7 +155,7 @@ class Edit extends Component< HomepageArticlesProps > {
 						</RawHTML>
 					) }
 					{ showReadMore && post.post_link && (
-						<a href="#" key="readmore" className="more-link">
+						<a href={ post.post_link } key="readmore" className="more-link">
 							{ readMoreLabel }
 						</a>
 					) }

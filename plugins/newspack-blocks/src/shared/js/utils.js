@@ -18,11 +18,7 @@ export const formatSponsorLogos = sponsorInfo => (
 		{ sponsorInfo.map( sponsor => (
 			<Fragment key={ sponsor.id }>
 				{ sponsor.src && (
-					// A live sponsor URL would navigate the editor-canvas iframe away from
-					// the post being edited; the sponsor slot replaces the byline when
-					// newspack_sponsors_show_author is off, so it needs the same inert
-					// href="#" the other editor anchors use.
-					<a href="#">
+					<a href={ sponsor.sponsor_url }>
 						<img src={ sponsor.src } width={ sponsor.img_width } height={ sponsor.img_height } alt={ sponsor.sponsor_name } />
 					</a>
 				) }
@@ -38,7 +34,7 @@ export const formatSponsorByline = sponsorInfo => (
 			return [
 				...accumulator,
 				<span className="author" key={ sponsor.id }>
-					{ /* author_link is never populated in the editor payload; href="#" makes the inertness explicit. */ }
+					{ /* author_link is never populated in the payload; '#' keeps the anchor inert-by-content, and the container handler covers it regardless. */ }
 					<a href="#">{ sponsor.sponsor_name }</a>
 				</span>,
 				index < sponsorInfo.length - 2 && ', ',
