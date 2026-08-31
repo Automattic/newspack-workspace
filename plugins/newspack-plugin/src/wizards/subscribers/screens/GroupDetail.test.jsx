@@ -69,6 +69,7 @@ const group = overrides => ( {
 	],
 	invites: [],
 	inviteLink: { active: false, url: '' },
+	canManage: true,
 	...overrides,
 } );
 
@@ -108,6 +109,18 @@ describe( 'the member row actions', () => {
 		await renderDetail( group( { status: 'cancelled' } ) );
 
 		expect( screen.queryAllByRole( 'button', { name: 'Actions' } ) ).toHaveLength( 0 );
+	} );
+
+	// Reading this screen and writing from it are separate capabilities, so a
+	// caller can legitimately hold the first without the second. The group is live
+	// and every row is actionable — only the caller cannot act, and the controls
+	// have to say so rather than 403 on click.
+	it( 'withholds member management from a caller who may read the group but not write to it', async () => {
+		await renderDetail( group( { canManage: false } ) );
+
+		expect( screen.queryAllByRole( 'button', { name: 'Actions' } ) ).toHaveLength( 0 );
+		expect( screen.getByRole( 'button', { name: 'Adjust seats' } ) ).toBeDisabled();
+		expect( screen.getByRole( 'button', { name: 'Add members' } ) ).toBeDisabled();
 	} );
 
 	it( 'offers demotion, never removal, for a manager the owner promoted', async () => {

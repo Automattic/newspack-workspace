@@ -96,8 +96,13 @@ const INVITES_VIEW = {
 // so isManageable() reads true while the server refuses it. That is inert — the
 // endpoint 409s — and unfixable here without a richer status field, since the map
 // has already collapsed trash into on-hold before the client sees it.
-const isManageable = group => group && 'cancelled' !== group.status;
-const isActive = group => group && 'active' === group.status;
+//
+// Both also require `canManage`, the caller's own write capability as the endpoint
+// reports it. Opening this screen and writing from it are separate capabilities
+// (see api_get_group), so a role can hold the first without the second; folding it
+// in here disables the controls instead of letting them 403 on click.
+const isManageable = group => group && 'cancelled' !== group.status && group.canManage;
+const isActive = group => group && 'active' === group.status && group.canManage;
 
 function GroupDetailView() {
 	const { id } = useParams();

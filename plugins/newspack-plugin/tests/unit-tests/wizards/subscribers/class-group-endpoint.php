@@ -276,6 +276,45 @@ class Test_Subscribers_Wizard_Group_Endpoint extends WP_UnitTestCase {
 	}
 
 	/**
+	 * `canManage` reports whether this caller may use the screen's write buttons.
+	 *
+	 * Opening the screen needs `manage_options`; every write on it goes to the
+	 * group-subscription API, which admits a non-manager on `manage_woocommerce`
+	 * alone. The two are independent capabilities, so the payload has to say which
+	 * one the caller actually holds — otherwise the client renders live buttons
+	 * that 403 on click.
+	 */
+	public function test_can_manage_reports_the_callers_write_capability() {
+		wp_set_current_user( $this->create_reader_user( 'administrator' ) );
+		$group = $this->create_group_subscription( $this->create_reader_user(), 5 );
+
+		// The write capability is granted through the filter WordPress resolves
+		// every capability check against, rather than by editing the role: the
+		// endpoint asks current_user_can(), so this is the state it actually reads.
+		$grant_write = function ( $allcaps ) {
+			$allcaps['manage_woocommerce'] = true;
+			return $allcaps;
+		};
+
+		add_filter( 'user_has_cap', $grant_write );
+		$this->assertTrue(
+			$this->dispatch( $group->get_id() )->get_data()['canManage'],
+			'A caller holding the write capability is told the buttons will work.'
+		);
+
+		// The same reader, now without the write capability. WooCommerce is what
+		// grants it, so a site running without it -- or a role given manage_options
+		// on its own -- lands here.
+		remove_filter( 'user_has_cap', $grant_write );
+		$response = $this->dispatch( $group->get_id() );
+		$this->assertSame( 200, $response->get_status(), 'Losing the write capability must not close the screen; it is still a legitimate read.' );
+		$this->assertFalse(
+			$response->get_data()['canManage'],
+			'A caller who can read the group but not write to it is told so, rather than discovering it from a 403.'
+		);
+	}
+
+	/**
 	 * `seatsReserved` is the floor the seat limit cannot be set below: everyone
 	 * holding a seat plus every outstanding invite.
 	 */

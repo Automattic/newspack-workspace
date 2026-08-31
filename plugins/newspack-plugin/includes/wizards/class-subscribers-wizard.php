@@ -496,6 +496,16 @@ class Subscribers_Wizard extends Wizard {
 					// form and the rule that rejects it can't disagree.
 					'seatsReserved' => Group_Subscription_API::reserved_seats( $subscription ),
 					'billing'       => $this->subscription_billing( $subscription ),
+					// Whether this caller may use the screen's write buttons. Reading the
+					// screen needs `manage_options` ($capability); every write on it goes
+					// to the group-subscription API, which admits an admin on
+					// `manage_woocommerce` alone -- permission_callback(),
+					// role_permission_callback() and admin_permission_callback() all
+					// reduce to that capability for someone who is not a manager of the
+					// group. The two are independent, so a role holding one and not the
+					// other is possible, and without this the buttons would render live
+					// and fail with a 403 on click.
+					'canManage'     => current_user_can( 'manage_woocommerce' ),
 				]
 			)
 		);
