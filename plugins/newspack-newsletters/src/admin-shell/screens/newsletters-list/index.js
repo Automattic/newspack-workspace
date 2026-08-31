@@ -130,6 +130,7 @@ export default function NewslettersListScreen() {
 			</LockedPostsContext.Provider>
 			{ quickEditItem && (
 				<NewslettersQuickEditPanel
+					key={ quickEditItem.id }
 					item={ quickEditItem }
 					onClose={ () => setQuickEditItem( null ) }
 					onSaved={ () => {

@@ -270,6 +270,7 @@ final class Newspack {
 		include_once NEWSPACK_ABSPATH . 'includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-invite.php';
 		include_once NEWSPACK_ABSPATH . 'includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-myaccount.php';
 		include_once NEWSPACK_ABSPATH . 'includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-settings.php';
+		include_once NEWSPACK_ABSPATH . 'includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-seats.php';
 		include_once NEWSPACK_ABSPATH . 'includes/plugins/class-woocommerce-gateway-stripe.php';
 		include_once NEWSPACK_ABSPATH . 'includes/export/class-csv-exports.php';
 		include_once NEWSPACK_ABSPATH . 'includes/plugins/class-teams-for-memberships.php';

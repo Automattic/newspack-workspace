@@ -14,12 +14,23 @@ defined( 'ABSPATH' ) || exit;
  */
 class Group_Subscription_Settings {
 	/**
+	 * Pricing modes. Per team is the flat price the feature shipped with; per seat
+	 * bills the product price multiplied by the purchased seat count (the line-item
+	 * quantity), mirroring Teams for WooCommerce Memberships' per-member pricing.
+	 */
+	const PRICING_MODE_PER_TEAM = 'per_team';
+	const PRICING_MODE_PER_SEAT = 'per_seat';
+
+	/**
 	 * Default group subscription settings.
 	 */
 	const DEFAULT_SETTINGS = [
-		'enabled' => false,
-		'limit'   => 0,
-		'name'    => '',
+		'enabled'      => false,
+		'limit'        => 0,
+		'name'         => '',
+		'pricing_mode' => self::PRICING_MODE_PER_TEAM,
+		'min_seats'    => 1,
+		'max_seats'    => 0,
 	];
 
 	/**
@@ -44,6 +55,8 @@ class Group_Subscription_Settings {
 		\add_action( 'admin_enqueue_scripts', [ __CLASS__, 'admin_enqueue_scripts' ] );
 		\add_action( 'add_meta_boxes', [ __CLASS__, 'add_group_subscription_meta_box' ], 26, 2 );
 		\add_action( 'woocommerce_process_shop_order_meta', [ __CLASS__, 'save_group_subscription_meta' ], 10, 2 );
+		// Priority 20 is load-bearing: see save_group_subscription_seats().
+		\add_action( 'woocommerce_process_shop_order_meta', [ __CLASS__, 'save_group_subscription_seats' ], 20, 2 );
 		\add_action( 'wp_ajax_newspack_group_subscription_search_users', [ __CLASS__, 'ajax_search_users' ] );
 
 		// Customize subscription column in admin list table for group subscriptions.
@@ -180,9 +193,51 @@ class Group_Subscription_Settings {
 		if ( ! Content_Gate::is_newspack_feature_enabled() ) {
 			return $custom_product_pricing_options;
 		}
+		$custom_product_pricing_options['newspack_group_subscription_pricing_mode'] = [
+			'id'            => self::GROUP_SUBSCRIPTION_META_PREFIX . 'pricing_mode',
+			'wrapper_class' => 'show_if_newspack_group_subscription_enabled',
+			'label'         => __( 'Group subscription pricing', 'newspack-plugin' ),
+			'desc_tip'      => true,
+			'description'   => __( 'Per group charges the subscription price once for the whole group. Per seat charges the subscription price for every seat the buyer chooses.', 'newspack-plugin' ),
+			'default'       => self::DEFAULT_SETTINGS['pricing_mode'],
+			'product_types' => [ 'subscription', 'subscription_variation' ],
+			'type'          => 'select',
+			'options'       => [
+				self::PRICING_MODE_PER_TEAM => __( 'Per group (flat price)', 'newspack-plugin' ),
+				self::PRICING_MODE_PER_SEAT => __( 'Per seat', 'newspack-plugin' ),
+			],
+		];
+		$custom_product_pricing_options['newspack_group_subscription_min_seats'] = [
+			'id'                => self::GROUP_SUBSCRIPTION_META_PREFIX . 'min_seats',
+			'wrapper_class'     => 'show_if_newspack_group_subscription_enabled show_if_newspack_group_subscription_per_seat',
+			'label'             => __( 'Minimum seats (including owner)', 'newspack-plugin' ),
+			'desc_tip'          => true,
+			'description'       => __( 'The fewest seats a buyer can purchase. The subscription price is charged per seat.', 'newspack-plugin' ),
+			'default'           => self::DEFAULT_SETTINGS['min_seats'],
+			'product_types'     => [ 'subscription', 'subscription_variation' ],
+			'type'              => 'number',
+			'custom_attributes' => [
+				'step' => 1,
+				'min'  => 1,
+			],
+		];
+		$custom_product_pricing_options['newspack_group_subscription_max_seats'] = [
+			'id'                => self::GROUP_SUBSCRIPTION_META_PREFIX . 'max_seats',
+			'wrapper_class'     => 'show_if_newspack_group_subscription_enabled show_if_newspack_group_subscription_per_seat',
+			'label'             => __( 'Maximum seats (including owner)', 'newspack-plugin' ),
+			'desc_tip'          => true,
+			'description'       => __( 'The most seats a buyer can purchase. Set to 0 for no maximum.', 'newspack-plugin' ),
+			'default'           => self::DEFAULT_SETTINGS['max_seats'],
+			'product_types'     => [ 'subscription', 'subscription_variation' ],
+			'type'              => 'number',
+			'custom_attributes' => [
+				'step' => 1,
+				'min'  => 0,
+			],
+		];
 		$custom_product_pricing_options['newspack_group_subscription_limit'] = [
 			'id'                => self::GROUP_SUBSCRIPTION_META_PREFIX . 'limit',
-			'wrapper_class'     => 'show_if_newspack_group_subscription_enabled',
+			'wrapper_class'     => 'show_if_newspack_group_subscription_enabled show_if_newspack_group_subscription_per_team',
 			'label'             => __( 'Group subscription member limit (including owner)', 'newspack-plugin' ),
 			'desc_tip'          => true,
 			'description'       => __( 'Set the maximum number of members, including the owner. The minimum is 2, so there is always room for one member besides the owner. Set to 0 to allow an unlimited number of group members.', 'newspack-plugin' ),
@@ -286,6 +341,13 @@ class Group_Subscription_Settings {
 		$settings['enabled'] = '' !== $enabled_meta ? \wc_string_to_bool( $enabled_meta ) : $settings['enabled']; // Empty string means the meta is unset; any other value, including 'no' or false, is a real override.
 		$settings['limit']   = '' !== $limit_meta ? (int) $limit_meta : $settings['limit']; // Empty string means the meta is unset; any other value, including '0', is a real override.
 
+		$mode_meta                = $product->get_meta( self::GROUP_SUBSCRIPTION_META_PREFIX . 'pricing_mode', true );
+		$min_meta                 = $product->get_meta( self::GROUP_SUBSCRIPTION_META_PREFIX . 'min_seats', true );
+		$max_meta                 = $product->get_meta( self::GROUP_SUBSCRIPTION_META_PREFIX . 'max_seats', true );
+		$settings['pricing_mode'] = self::PRICING_MODE_PER_SEAT === $mode_meta ? self::PRICING_MODE_PER_SEAT : self::PRICING_MODE_PER_TEAM;
+		$settings['min_seats']    = '' !== $min_meta ? max( 1, absint( $min_meta ) ) : $settings['min_seats'];
+		$settings['max_seats']    = '' !== $max_meta ? absint( $max_meta ) : $settings['max_seats'];
+
 		/**
 		 * Filter the group subscription settings for a product.
 		 *
@@ -294,7 +356,9 @@ class Group_Subscription_Settings {
 		 */
 		$settings = apply_filters( 'newspack_group_subscription_product_settings', $settings, $product );
 
-		$settings['limit'] = self::normalize_limit( $settings['limit'] ?? 0 );
+		$settings['limit'] = self::PRICING_MODE_PER_SEAT === $settings['pricing_mode']
+			? max( 1, (int) ( $settings['limit'] ?? 0 ) ) // Seats bought is exact capacity; a one-seat group is the owner alone.
+			: self::normalize_limit( $settings['limit'] ?? 0 );
 		return $settings;
 	}
 
@@ -318,6 +382,15 @@ class Group_Subscription_Settings {
 		$name_meta           = $subscription->get_meta( self::GROUP_SUBSCRIPTION_META_PREFIX . 'name', true );
 		$settings['enabled'] = '' !== $enabled_meta ? \wc_string_to_bool( $enabled_meta ) : $settings['enabled']; // Empty string means the meta is unset; any other value, including 'no' or false, is a real override.
 		$settings['limit']   = '' !== $limit_meta ? (int) $limit_meta : $settings['limit']; // Empty string means the meta is unset; any other value, including '0', is a real override.
+
+		// The subscription-level limit override above is a flat-mode concept; in
+		// per-seat mode the purchased seat count is the only source of truth for
+		// capacity, so it replaces whatever the override just computed.
+		if ( self::PRICING_MODE_PER_SEAT === $settings['pricing_mode'] ) {
+			$seat_item         = self::get_seat_line_item( $subscription );
+			$settings['limit'] = $seat_item ? (int) $seat_item->get_quantity() : 0;
+		}
+
 		if ( $name_meta ) {
 			$settings['name'] = $name_meta;
 		} else {
@@ -333,8 +406,115 @@ class Group_Subscription_Settings {
 		 */
 		$settings = apply_filters( 'newspack_group_subscription_settings', $settings, $subscription );
 
-		$settings['limit'] = self::normalize_limit( $settings['limit'] ?? 0 );
+		$settings['limit'] = self::PRICING_MODE_PER_SEAT === $settings['pricing_mode']
+			? max( 1, (int) ( $settings['limit'] ?? 0 ) ) // Seats bought is exact capacity; a one-seat group is the owner alone.
+			: self::normalize_limit( $settings['limit'] ?? 0 );
 		return $settings;
+	}
+
+	/**
+	 * The line item whose quantity is the purchased seat count. Newspack's checkout
+	 * always produces single-item subscriptions, so this is the first product line.
+	 *
+	 * @param \WC_Subscription|int $subscription The subscription object or ID.
+	 *
+	 * @return \WC_Order_Item_Product|null
+	 */
+	public static function get_seat_line_item( $subscription ) {
+		$subscription = WooCommerce_Subscriptions::sanitize_subscription( $subscription );
+		if ( ! $subscription ) {
+			return null;
+		}
+		$first = null;
+		foreach ( $subscription->get_items() as $item ) {
+			if ( null === $first ) {
+				$first = $item;
+			}
+			// A subscription assembled by hand -- which is the surface the seat field
+			// lives on -- can carry more than one line, and rescaling the wrong one
+			// would move money on a product that sells no seats.
+			$product_id = $item->get_variation_id() ? $item->get_variation_id() : $item->get_product_id();
+			if ( $product_id && self::is_per_seat( $product_id ) ) {
+				return $item;
+			}
+		}
+		return $first;
+	}
+
+	/**
+	 * Whether a product or subscription bills per seat.
+	 *
+	 * @param \WC_Product|\WC_Subscription|int $object Product, subscription, or product ID.
+	 *
+	 * @return bool
+	 */
+	public static function is_per_seat( $object ) {
+		$settings = is_a( $object, 'WC_Subscription' )
+			? self::get_subscription_settings( $object )
+			: self::get_product_settings( $object );
+		return ! empty( $settings['enabled'] ) && self::PRICING_MODE_PER_SEAT === $settings['pricing_mode'];
+	}
+
+	/**
+	 * Change a per-seat group's seat count without charging for it.
+	 *
+	 * The owner-facing way to buy or drop seats is the WooCommerce Subscriptions
+	 * switch, which prices the change and takes payment. This is the support-side
+	 * correction -- a goodwill seat, a miscounted order -- so it rescales the
+	 * existing line item in place rather than raising an order. It keeps the floor
+	 * the switch guard applies: seats never fall below the people already in them.
+	 *
+	 * @param \WC_Subscription|int $subscription The subscription object or ID.
+	 * @param int                  $seats        The new seat count, including the owner.
+	 *
+	 * @return true|\WP_Error True on success, WP_Error when the change is refused.
+	 */
+	public static function set_seat_quantity( $subscription, $seats ) {
+		$subscription = WooCommerce_Subscriptions::sanitize_subscription( $subscription );
+		$item         = $subscription ? self::get_seat_line_item( $subscription ) : null;
+		if ( ! $item ) {
+			return new \WP_Error(
+				Group_Subscription_Seats::ERROR_CODE,
+				__( 'Subscription line item not found.', 'newspack-plugin' ),
+				[ 'status' => 400 ]
+			);
+		}
+		// A group is never smaller than its owner, so anything below one seat is a
+		// one-seat group rather than an error. The meta box can only submit a
+		// non-negative number, so this floor is for direct callers.
+		$seats     = max( 1, (int) $seats );
+		$occupancy = Group_Subscription_Seats::get_occupancy( $subscription );
+		if ( $seats < $occupancy ) {
+			return new \WP_Error(
+				Group_Subscription_Seats::ERROR_CODE,
+				sprintf(
+					/* translators: %d: seats in use. */
+					__( '%d seats are in use; remove members or invitations first.', 'newspack-plugin' ),
+					$occupancy
+				),
+				[ 'status' => 400 ]
+			);
+		}
+		// Rescale from the current unit price rather than the product's, so a
+		// discounted or hand-edited line keeps the price the customer agreed to.
+		$old_quantity  = max( 1, (int) $item->get_quantity() );
+		$unit_subtotal = (float) $item->get_subtotal() / $old_quantity;
+		$unit_total    = (float) $item->get_total() / $old_quantity;
+		// Round the rescaled totals -- not the unit price -- to the store's own
+		// precision, so a line that does not divide evenly (40 over 3 seats) stores
+		// 53.33 rather than 53.333333333333336.
+		$decimals = function_exists( 'wc_get_price_decimals' ) ? \wc_get_price_decimals() : 2;
+		$item->set_quantity( $seats );
+		$item->set_subtotal( round( $unit_subtotal * $seats, $decimals ) );
+		$item->set_total( round( $unit_total * $seats, $decimals ) );
+		$item->save();
+		// Rolls the line items up into the subscription total. Guarded because the
+		// subscription can be any object WCS hands back, and older versions did not
+		// always expose it.
+		if ( method_exists( $subscription, 'calculate_totals' ) ) {
+			$subscription->calculate_totals();
+		}
+		return true;
 	}
 
 	/**
@@ -525,7 +705,6 @@ class Group_Subscription_Settings {
 		?>
 		<div class="newspack-group-subscription__container<?php echo $is_at_limit ? ' is-at-limit' : ''; ?>" data-subscription-id="<?php echo \esc_attr( $subscription->get_id() ); ?>" data-member-limit="<?php echo \esc_attr( null === $seat_limit ? '' : (string) $seat_limit ); ?>" data-spots-offset="<?php echo \esc_attr( (string) $spots_offset ); ?>">
 			<input type="hidden" name="<?php echo \esc_attr( self::GROUP_SUBSCRIPTION_META_PREFIX . 'enabled_baseline' ); ?>" value="<?php echo \esc_attr( \wc_bool_to_string( $settings['enabled'] ) ); ?>" />
-			<input type="hidden" name="<?php echo \esc_attr( self::GROUP_SUBSCRIPTION_META_PREFIX . 'limit_baseline' ); ?>" value="<?php echo \esc_attr( (int) $settings['limit'] ); ?>" />
 			<input type="hidden" name="<?php echo \esc_attr( self::GROUP_SUBSCRIPTION_META_PREFIX . 'name_baseline' ); ?>" value="<?php echo \esc_attr( $settings['name'] ); ?>" />
 			<div class="newspack-group-subscription__settings">
 				<h3><?php \esc_html_e( 'Settings', 'newspack-plugin' ); ?></h3>
@@ -570,13 +749,43 @@ class Group_Subscription_Settings {
 				</div>
 				<div class="form-row">
 					<?php
-					$pricing_options = self::add_custom_product_pricing_options( [] );
-					foreach ( $pricing_options as $option_key => $option_config ) {
-						if ( $option_key === 'newspack_group_subscription_limit' ) {
-							$option_config['value'] = $settings['limit'];
-							\woocommerce_wp_text_input( $option_config );
-							break;
+					if ( self::is_per_seat( $subscription ) ) {
+						// Capacity in per-seat mode is the purchased seat count, so there is no
+						// limit to override: the admin edits the seat count itself. The min is
+						// only a browser hint; set_seat_quantity() is what refuses a cut below
+						// occupancy.
+						$occupied_seats = Group_Subscription_Seats::get_occupancy( $subscription );
+						\woocommerce_wp_text_input(
+							[
+								'id'                => self::GROUP_SUBSCRIPTION_META_PREFIX . 'seats',
+								'name'              => self::GROUP_SUBSCRIPTION_META_PREFIX . 'seats',
+								'label'             => __( 'Seats (including owner)', 'newspack-plugin' ),
+								'desc_tip'          => true,
+								'description'       => __( 'The number of seats this group has bought. Changing it here resizes the subscription without charging or refunding the customer.', 'newspack-plugin' ),
+								'value'             => (int) $settings['limit'],
+								'type'              => 'number',
+								'wrapper_class'     => 'show_if_newspack_group_subscription_enabled',
+								'custom_attributes' => [
+									'step' => 1,
+									'min'  => max( 1, $occupied_seats ),
+								],
+							]
+						);
+						?>
+						<input type="hidden" name="<?php echo \esc_attr( self::GROUP_SUBSCRIPTION_META_PREFIX . 'seats_baseline' ); ?>" value="<?php echo \esc_attr( (int) $settings['limit'] ); ?>" />
+						<?php
+					} else {
+						$pricing_options = self::add_custom_product_pricing_options( [] );
+						foreach ( $pricing_options as $option_key => $option_config ) {
+							if ( $option_key === 'newspack_group_subscription_limit' ) {
+								$option_config['value'] = $settings['limit'];
+								\woocommerce_wp_text_input( $option_config );
+								break;
+							}
 						}
+						?>
+						<input type="hidden" name="<?php echo \esc_attr( self::GROUP_SUBSCRIPTION_META_PREFIX . 'limit_baseline' ); ?>" value="<?php echo \esc_attr( (int) $settings['limit'] ); ?>" />
+						<?php
 					}
 					?>
 				</div>
@@ -739,6 +948,110 @@ class Group_Subscription_Settings {
 				self::clear_group_subscription_ids_cache();
 			}
 		}
+	}
+
+	/**
+	 * Apply an admin seat-count change from the meta box.
+	 *
+	 * Priority 20 is load-bearing, and a separate callback from
+	 * save_group_subscription_meta() at 10 for that reason. WooCommerce saves the
+	 * order line items on this same hook at priority 10
+	 * (`WC_Meta_Box_Order_Items::save`), and `wc_save_order_items()` rewrites every
+	 * item's quantity, subtotal and total from the POST -- on every save of the
+	 * subscription edit screen, whether or not the admin opened the line items
+	 * panel. A rescale at 10 would be reverted moments later with no error. 20 is
+	 * still ahead of `WC_Meta_Box_Order_Downloads::save` (30) and
+	 * `WC_Meta_Box_Order_Data::save` (40). Do not lower it.
+	 *
+	 * Running second means the line item we hold may be a handle taken before
+	 * WooCommerce wrote to it, so the rescale is re-based on the POST first --
+	 * see sync_seat_line_item_from_post().
+	 *
+	 * @param int              $subscription_id Subscription ID.
+	 * @param \WC_Subscription $subscription    Optional. Subscription object. Default null - will be loaded from the ID.
+	 */
+	public static function save_group_subscription_seats( $subscription_id, $subscription = null ) {
+		if ( ! function_exists( 'wcs_is_subscription' ) || ! function_exists( 'wcs_get_subscription' ) || ! function_exists( 'wc_clean' ) || ! \wcs_is_subscription( $subscription_id ) ) {
+			return;
+		}
+
+		// Same nonce as the settings save: both handle one submit of the same screen.
+		// See: WCS_Meta_Box_Subscription_Data::save().
+		if ( empty( $_POST['woocommerce_meta_nonce'] ) || ! \wp_verify_nonce( \wc_clean( \wp_unslash( $_POST['woocommerce_meta_nonce'] ) ), 'woocommerce_save_data' ) ) { // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized
+			return;
+		}
+
+		$prefix = self::GROUP_SUBSCRIPTION_META_PREFIX;
+
+		// A per-seat group renders the seat count in place of the limit field, and its
+		// capacity lives on the line item rather than in meta, so an edit rescales the
+		// subscription instead of writing an override.
+		if ( ! isset( $_POST[ $prefix . 'seats' ], $_POST[ $prefix . 'seats_baseline' ] ) ) {
+			return;
+		}
+		$submitted_seats = absint( wp_unslash( $_POST[ $prefix . 'seats' ] ) );
+		$baseline_seats  = absint( wp_unslash( $_POST[ $prefix . 'seats_baseline' ] ) );
+		if ( $submitted_seats === $baseline_seats ) {
+			return;
+		}
+
+		$subscription = is_a( $subscription, 'WC_Subscription' ) ? $subscription : \wcs_get_subscription( $subscription_id );
+		// The seat fields are only ever rendered for a per-seat group, so their
+		// presence on anything else is a request that did not come from this meta
+		// box. Rescaling on it would resize an unrelated subscription's line item.
+		if ( ! self::is_per_seat( $subscription ) ) {
+			return;
+		}
+		self::sync_seat_line_item_from_post( $subscription );
+		$seat_result = self::set_seat_quantity( $subscription, $submitted_seats );
+		// WooCommerce collects meta-box errors here and prints them on the next screen
+		// load; without it a refused change springs back with no explanation. Guarded
+		// because this class also runs outside wp-admin.
+		if ( is_wp_error( $seat_result ) && class_exists( '\WC_Admin_Meta_Boxes' ) ) {
+			\WC_Admin_Meta_Boxes::add_error( $seat_result->get_error_message() );
+		}
+	}
+
+	/**
+	 * Re-base the seat line item on what WooCommerce just wrote from this same POST.
+	 *
+	 * The rescale divides the line's existing money by its existing quantity to get a
+	 * unit price, so it has to start from current numbers. `wc_save_order_items()`
+	 * wrote the line item at priority 10 through its own freshly loaded copy, so the
+	 * handle this callback holds can still carry pre-write values -- and dividing
+	 * stale money by a stale quantity yields the wrong unit price silently.
+	 *
+	 * So the POST is the base, not the object. These are the same three keys
+	 * `wc_save_order_items()` reads (`wc-admin-functions.php`), and the values go to
+	 * the same setters raw: `set_subtotal()`/`set_total()` run `wc_format_decimal()`
+	 * themselves, which is what parses the localised price the items table submits
+	 * ("1.234,56").
+	 *
+	 * Fields absent -- any context that is not the order items editor -- leaves the
+	 * object as the base.
+	 *
+	 * @param \WC_Subscription $subscription The subscription being saved.
+	 */
+	private static function sync_seat_line_item_from_post( $subscription ) {
+		$item    = self::get_seat_line_item( $subscription );
+		$item_id = $item ? (int) $item->get_id() : 0;
+		if ( ! $item_id ) {
+			return;
+		}
+		// phpcs:disable WordPress.Security.NonceVerification.Missing -- The only caller verifies woocommerce_meta_nonce before reaching here.
+		// Scalars only: sanitize_text_field() answers '' for an array, which would set
+		// the quantity to zero and make the rescale read the whole line as one seat's
+		// price. WooCommerce's own items table posts scalars.
+		if ( isset( $_POST['order_item_qty'][ $item_id ] ) && is_scalar( $_POST['order_item_qty'][ $item_id ] ) ) {
+			$item->set_quantity( sanitize_text_field( wp_unslash( $_POST['order_item_qty'][ $item_id ] ) ) );
+		}
+		if ( isset( $_POST['line_subtotal'][ $item_id ] ) && is_scalar( $_POST['line_subtotal'][ $item_id ] ) ) {
+			$item->set_subtotal( sanitize_text_field( wp_unslash( $_POST['line_subtotal'][ $item_id ] ) ) );
+		}
+		if ( isset( $_POST['line_total'][ $item_id ] ) && is_scalar( $_POST['line_total'][ $item_id ] ) ) {
+			$item->set_total( sanitize_text_field( wp_unslash( $_POST['line_total'][ $item_id ] ) ) );
+		}
+		// phpcs:enable WordPress.Security.NonceVerification.Missing
 	}
 
 	/**

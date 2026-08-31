@@ -88,13 +88,28 @@ class Access_Rules {
 	 *     @type string   $name               The rule name.
 	 *     @type string   $description        The rule description.
 	 *     @type mixed    $default            The rule default value.
-	 *     @type array    $options            The rule options.
+	 *     @type array    $options            The rule options: a list of `[ 'value', 'label' ]`
+	 *                                        entries, or a callable returning one.
+	 *     @type bool     $has_options        Optional. Whether the rule's value is one or more
+	 *                                        entries from `options` (an array), rather than free
+	 *                                        text (a string). Defaults to whether `options` was
+	 *                                        declared. Declare it explicitly whenever the options
+	 *                                        passed are an already-resolved list that can be
+	 *                                        legitimately empty — a rule offering no options yet
+	 *                                        still takes option values, and the default would
+	 *                                        read it as free text.
 	 *     @type callable $callback           The rule callback.
 	 *     @type callable $sanitize_callback  Optional. Sanitizes the rule's stored value; rules
 	 *                                        with composite (non-scalar, non-list) value shapes
 	 *                                        must provide one — Content_Gate_API delegates to it
 	 *                                        instead of the generic list/scalar sanitization.
 	 *     @type bool     $is_boolean         Whether the rule is a boolean rule.
+	 *     @type bool     $empty_grants_access
+	 *                                        Optional. Whether the rule's callback reads an empty
+	 *                                        value as "no constraint", so leaving it empty grants
+	 *                                        access to every reader. Defaults to false. A rule
+	 *                                        that declares it is refused a save while the gate is
+	 *                                        active and its value is empty.
 	 *     @type bool     $supports_anonymous Whether the rule's callback can evaluate access for
 	 *                                        a logged-out visitor (`user_id = 0`). Defaults to
 	 *                                        false — `evaluate_rule` short-circuits to false for
@@ -108,28 +123,69 @@ class Access_Rules {
 	 */
 	public static function register_rule( $config ) {
 		if ( ! isset( $config['id'] ) ) {
-			return new \WP_Error( 'invalid_rule_id', __( 'Rule ID is required.', 'newspack' ) );
+			return new \WP_Error( 'invalid_rule_id', __( 'Rule ID is required.', 'newspack-plugin' ) );
 		}
 		if ( isset( self::$rules[ $config['id'] ] ) ) {
-			return new \WP_Error( 'rule_already_registered', __( 'Rule already registered.', 'newspack' ) );
+			return new \WP_Error( 'rule_already_registered', __( 'Rule already registered.', 'newspack-plugin' ) );
 		}
 		if ( ! isset( $config['callback'] ) ) {
-			return new \WP_Error( 'invalid_rule_callback', __( 'Rule callback is required.', 'newspack' ) );
+			return new \WP_Error( 'invalid_rule_callback', __( 'Rule callback is required.', 'newspack-plugin' ) );
 		}
 		if ( ! is_callable( $config['callback'] ) ) {
-			return new \WP_Error( 'invalid_rule_callback', __( 'Rule callback is not callable.', 'newspack' ) );
+			return new \WP_Error( 'invalid_rule_callback', __( 'Rule callback is not callable.', 'newspack-plugin' ) );
 		}
-		$rule = wp_parse_args(
+		// Derived from what the registration declared — a callable source, or a
+		// populated list — unless it declares `has_options` itself. The *resolved*
+		// list can't serve as the discriminator, since a callable legitimately
+		// resolves to an empty list while no matching entities (institutions,
+		// subscription products) exist yet.
+		$has_options = $config['has_options'] ?? ! empty( $config['options'] );
+		$rule        = wp_parse_args(
 			$config,
 			[
-				'name'        => ucwords( str_replace( '_', ' ', $config['id'] ) ),
-				'description' => '',
-				'default'     => ! empty( $config['options'] ) ? [] : '',
-				'options'     => [],
-				'is_boolean'  => false,
+				'name'                => ucwords( str_replace( '_', ' ', $config['id'] ) ),
+				'description'         => '',
+				// The default has to hold the shape the rule takes, so it follows
+				// `has_options` rather than the options list: a rule declaring itself
+				// options-backed while its resolved list is still empty would otherwise
+				// seed the picker with `''`, which sanitization rejects.
+				'default'             => $has_options ? [] : '',
+				'options'             => [],
+				'has_options'         => $has_options,
+				'is_boolean'          => false,
+				// It is a property of the rule's callback, not of the value's shape:
+				// `institution` returns true when it names none, and so do the two
+				// free-text rules when left blank, while `subscription` naming no
+				// product still requires *an* active subscription.
+				'empty_grants_access' => false,
 			]
 		);
 		self::$rules[ $rule['id'] ] = $rule;
+	}
+
+	/**
+	 * Whether an options-backed rule's stored value is malformed configuration
+	 * rather than the absence of a constraint.
+	 *
+	 * Only for rules whose well-formed value is an array of option values — the
+	 * ones registered with an options source, so `has_options` is true. Only
+	 * `null`, `''` and `[]` mean "not configured" there. Every other non-array
+	 * shape is a value nobody can interpret, and the rule callback must fail
+	 * closed on it rather than read it as "no constraint". That deliberately
+	 * includes the falsy scalars `0`, `'0'`, `0.0` and `false`, which an
+	 * `empty()` check would wave through — a legacy free-text rule holding `0`
+	 * is still a value an operator typed, not an unconfigured rule.
+	 *
+	 * The other two rule shapes must not call this: a boolean rule stores exactly
+	 * `true`, and a free-text rule stores a string, both of which this reads as
+	 * malformed. Their well-formed values are non-arrays by definition.
+	 *
+	 * @param mixed $value The stored rule value.
+	 *
+	 * @return bool
+	 */
+	public static function is_malformed_options_backed_value( mixed $value ): bool {
+		return ! is_array( $value ) && null !== $value && '' !== $value;
 	}
 
 	/**
@@ -165,22 +221,25 @@ class Access_Rules {
 				'sanitize_callback' => [ __CLASS__, 'sanitize_one_time_purchase_value' ],
 			],
 			'email_domain'      => [
-				'name'        => __( 'Whitelisted email domain', 'newspack-plugin' ),
-				'description' => __( 'Only allow readers with specific email domains.', 'newspack-plugin' ),
-				'placeholder' => __( 'example.com,another.com', 'newspack-plugin' ),
-				'callback'    => [ __CLASS__, 'is_email_domain_whitelisted' ],
+				'name'                => __( 'Whitelisted email domain', 'newspack-plugin' ),
+				'description'         => __( 'Only allow readers with specific email domains.', 'newspack-plugin' ),
+				'placeholder'         => __( 'example.com,another.com', 'newspack-plugin' ),
+				'callback'            => [ __CLASS__, 'is_email_domain_whitelisted' ],
+				'empty_grants_access' => true,
 			],
 			'reader_data'       => [
-				'name'        => __( 'Reader data', 'newspack-plugin' ),
-				'description' => __( 'Set custom conditions based on reader data key/value pairs.', 'newspack-plugin' ),
-				'callback'    => [ __CLASS__, 'has_reader_data' ],
+				'name'                => __( 'Reader data', 'newspack-plugin' ),
+				'description'         => __( 'Set custom conditions based on reader data key/value pairs.', 'newspack-plugin' ),
+				'callback'            => [ __CLASS__, 'has_reader_data' ],
+				'empty_grants_access' => true,
 			],
 			'institution'       => [
-				'name'               => __( 'Institutional access', 'newspack-plugin' ),
-				'description'        => __( 'Grant access to readers from selected institutions.', 'newspack-plugin' ),
-				'options'            => [ Institution::class, 'get_options' ],
-				'callback'           => [ Institution::class, 'evaluate' ],
-				'supports_anonymous' => true,
+				'name'                => __( 'Institutional access', 'newspack-plugin' ),
+				'description'         => __( 'Grant access to readers from selected institutions.', 'newspack-plugin' ),
+				'options'             => [ Institution::class, 'get_options' ],
+				'callback'            => [ Institution::class, 'evaluate' ],
+				'supports_anonymous'  => true,
+				'empty_grants_access' => true,
 			],
 		];
 
@@ -650,9 +709,12 @@ class Access_Rules {
 	 * Also checks if the user is a member of a group subscription with the required products.
 	 *
 	 * Note: `$strict` only constrains the built-in ownership / group-membership checks.
-	 * The `newspack_access_rules_has_active_subscription` filter is always applied and
-	 * its return value is the final result, so a third-party filter callback can grant
-	 * access even when `$strict` is true. Filter authors should opt in to the 4th `$strict`
+	 * The `newspack_access_rules_has_active_subscription` filter is applied to every
+	 * well-formed evaluation and its return value is the final result, so a third-party
+	 * filter callback can grant access even when `$strict` is true. The one exception
+	 * is a malformed `$product_ids`: malformed configuration fails closed before the
+	 * filter runs, so a filter cannot grant access based on a value nobody can
+	 * interpret. Filter authors should opt in to the 4th `$strict`
 	 * arg (`accepted_args` >= 4) and respect it — e.g., short-circuit and return
 	 * `$has_subscription` unchanged when `$strict` is true and the access claim isn't
 	 * strictly an owned subscription. Otherwise callers using `$strict` to distinguish
@@ -660,11 +722,20 @@ class Access_Rules {
 	 * filter-granted access as local ownership.
 	 *
 	 * @param int   $user_id     User ID.
-	 * @param array $product_ids Required product IDs.
+	 * @param mixed $product_ids Required product IDs — an array when well-formed
+	 *                           (empty means any subscription qualifies); any other
+	 *                           shape is treated as malformed and fails closed.
 	 * @param bool  $strict      If true, only consider active subscriptions owned by $user_id (ignore group subscription memberships).
 	 * @return bool
 	 */
 	public static function has_active_subscription( $user_id, $product_ids, $strict = false ) {
+		// A value of the wrong shape (e.g. a free-text string saved before values
+		// were validated) is malformed configuration, not the absence of a
+		// constraint — fail closed, mirroring Institution::evaluate().
+		if ( self::is_malformed_options_backed_value( $product_ids ) ) {
+			return false;
+		}
+
 		$has_subscription = false;
 
 		// Whether on-hold subscriptions in payment recovery (failed-payment retry

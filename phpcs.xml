@@ -37,11 +37,13 @@
 		</properties>
 	</rule>
 
-	<!-- Each plugin is a separate deliverable, so a test double in one may
-	     legitimately declare a class another plugin ships. This sniff compares
-	     across every file in the run, so it fires only on a whole-tree
-	     `composer phpcs` and never in CI, which lints one directory at a time.
-	     Confining it to non-test code makes the two agree. -->
+	<!-- Test doubles duplicate class names on purpose: a stand-in for a class
+	     another plugin ships, or a second stub of the same thing for an
+	     isolated case. The sniff cannot tell either from a genuine duplicate.
+	     It also sees a pair only when both files land in the same forked batch,
+	     and that boundary moves whenever a PHP file is added anywhere, so it
+	     reports against whichever pull request shifted it rather than the one
+	     that introduced the duplicate. -->
 	<rule ref="Generic.Classes.DuplicateClassName">
 		<exclude-pattern>*/tests/*</exclude-pattern>
 	</rule>
