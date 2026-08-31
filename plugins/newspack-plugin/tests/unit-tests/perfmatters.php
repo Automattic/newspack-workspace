@@ -1,6 +1,6 @@
 <?php
 /**
- * Tests the Perfmatters integration.
+ * Tests the Perfmatters integration (NPPM-2934).
  *
  * @package Newspack\Tests
  */

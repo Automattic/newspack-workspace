@@ -581,6 +581,12 @@ class Content_Gifting {
 	 * Print the gift modal.
 	 */
 	public static function print_gift_modal() {
+		// Modal checkout renders in an iframe with its own modal. Emitting another
+		// modal's markup inside it puts unrelated content in the reader's checkout
+		// (NPPD-2170), so nothing is printed there.
+		if ( class_exists( '\Newspack_Blocks\Modal_Checkout' ) && \Newspack_Blocks\Modal_Checkout::is_modal_checkout() ) {
+			return;
+		}
 		?>
 		<div class="newspack-ui">
 			<div id="newspack-content-gifting-modal" class="newspack-ui__modal-container" data-state="closed">

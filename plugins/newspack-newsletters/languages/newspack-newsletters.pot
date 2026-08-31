@@ -2,14 +2,14 @@
 # This file is distributed under the GPL2.
 msgid ""
 msgstr ""
-"Project-Id-Version: Newspack Newsletters 3.33.4\n"
+"Project-Id-Version: Newspack Newsletters 3.39.5\n"
 "Report-Msgid-Bugs-To: https://wordpress.org/support/plugin/newspack-newsletters\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-06-03T18:58:37+00:00\n"
+"POT-Creation-Date: 2026-08-31T17:54:03+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: newspack-newsletters\n"
@@ -39,12 +39,20 @@ msgstr ""
 msgid "https://newspack.com/"
 msgstr ""
 
+#: includes/admin/class-admin-shell-preferences.php:104
+msgid "Invalid preference value."
+msgstr ""
+
+#: includes/admin/class-ads-list-rest.php:101
+msgid "Start and expiration dates must be valid YYYY-MM-DD dates."
+msgstr ""
+
 #: includes/admin/class-advertisers-list-rest.php:79
 msgid "An advertiser cannot be its own parent."
 msgstr ""
 
 #: includes/admin/class-settings-rest.php:125
-#: includes/class-newspack-newsletters.php:980
+#: includes/class-newspack-newsletters.php:1137
 msgid "Please select a newsletter service provider."
 msgstr ""
 
@@ -53,12 +61,12 @@ msgid "Unknown service provider."
 msgstr ""
 
 #: includes/admin/class-settings-rest.php:145
-#: includes/class-newspack-newsletters.php:1005
+#: includes/class-newspack-newsletters.php:1162
 msgid "The selected service provider is not available on this site."
 msgstr ""
 
 #: includes/admin/class-settings-rest.php:158
-#: includes/class-newspack-newsletters.php:994
+#: includes/class-newspack-newsletters.php:1151
 msgid "Please input credentials."
 msgstr ""
 
@@ -82,39 +90,62 @@ msgid "Track the clicks on ads in your newsletter"
 msgstr ""
 
 #: includes/admin/pages/class-ads-list-page.php:41
-#: dist/admin-shell.js:165
+#: dist/admin-shell.js:217
 #: src/admin-shell/screens/index.js:22
 msgid "Newsletter Ads"
 msgstr ""
 
+#: includes/admin/pages/class-ads-list-page.php:90
+#: includes/admin/pages/class-advertisers-list-page.php:91
+#: includes/admin/pages/class-layouts-list-page.php:92
+#: includes/admin/pages/class-newsletters-list-page.php:82
+#: includes/admin/pages/class-settings-page.php:59
+#: includes/class-newspack-newsletters-subscription.php:1339
+#: includes/class-newspack-newsletters-subscription.php:1352
+msgid "Newsletters"
+msgstr ""
+
+#: includes/admin/pages/class-ads-list-page.php:91
+#: includes/admin/pages/class-advertisers-list-page.php:92
+#: dist/newsletterAdsEditor.js:7
+#: src/ads/newsletter-editor/index.js:11
+msgid "Advertising"
+msgstr ""
+
+#: includes/admin/pages/class-ads-list-page.php:92
+#: includes/ads/class-ads.php:213
+#: src/editor/blocks/ad/edit.js:87
+msgid "Ads"
+msgstr ""
+
 #: includes/admin/pages/class-advertisers-list-page.php:37
-#: includes/ads/class-ads.php:301
-#: dist/admin-shell.js:167
+#: includes/admin/pages/class-advertisers-list-page.php:93
+#: includes/ads/class-ads.php:304
+#: dist/admin-shell.js:219
 #: src/admin-shell/screens/index.js:26
 msgid "Advertisers"
 msgstr ""
 
 #: includes/admin/pages/class-layouts-list-page.php:39
+#: includes/admin/pages/class-layouts-list-page.php:93
 #: includes/class-newspack-newsletters-layouts.php:58
-#: dist/admin-shell.js:168
+#: dist/admin-shell.js:220
 #: src/admin-shell/screens/index.js:30
 msgid "Layouts"
 msgstr ""
 
-#: includes/admin/pages/class-layouts-list-page.php:91
-msgid "Newsletters / Layouts"
-msgstr ""
-
 #: includes/admin/pages/class-newsletters-list-page.php:35
-#: includes/class-newspack-newsletters.php:575
-#: dist/admin-shell.js:160
+#: includes/admin/pages/class-newsletters-list-page.php:83
+#: includes/class-newspack-newsletters.php:652
+#: dist/admin-shell.js:212
 #: src/admin-shell/screens/index.js:18
 msgid "All Newsletters"
 msgstr ""
 
 #: includes/admin/pages/class-settings-page.php:38
-#: includes/class-newspack-newsletters-settings.php:230
-#: dist/admin-shell.js:168
+#: includes/admin/pages/class-settings-page.php:60
+#: includes/class-newspack-newsletters-settings.php:248
+#: dist/admin-shell.js:220
 #: src/admin-shell/screens/index.js:34
 msgid "Settings"
 msgstr ""
@@ -191,213 +222,211 @@ msgstr ""
 msgid "Filter by ad placement"
 msgstr ""
 
-#: includes/ads/class-ads.php:209
+#: includes/ads/class-ads.php:212
 msgid "Newsletters Ads"
 msgstr ""
 
-#: includes/ads/class-ads.php:210
-#: src/editor/blocks/ad/edit.js:87
-msgid "Ads"
-msgstr ""
-
-#: includes/ads/class-ads.php:249
+#: includes/ads/class-ads.php:252
 msgid "Sorry, you are not allowed to manage newsletter advertisers."
 msgstr ""
 
-#: includes/ads/class-ads.php:250
+#: includes/ads/class-ads.php:253
 msgid "You need permission to manage newsletter ads"
 msgstr ""
 
-#: includes/ads/class-ads.php:262
+#: includes/ads/class-ads.php:265
 msgctxt "post type general name"
 msgid "Newsletter Ads"
 msgstr ""
 
-#: includes/ads/class-ads.php:263
+#: includes/ads/class-ads.php:266
 msgctxt "post type singular name"
 msgid "Newsletter Ad"
 msgstr ""
 
-#: includes/ads/class-ads.php:264
+#: includes/ads/class-ads.php:267
 msgctxt "admin menu"
 msgid "Newsletter Ads"
 msgstr ""
 
-#: includes/ads/class-ads.php:265
+#: includes/ads/class-ads.php:268
 msgctxt "add new on admin bar"
 msgid "Newsletter Ad"
 msgstr ""
 
-#: includes/ads/class-ads.php:266
+#: includes/ads/class-ads.php:269
 msgctxt "popup"
 msgid "Add New"
 msgstr ""
 
-#: includes/ads/class-ads.php:267
-msgid "Add New Newsletter Ad"
-msgstr ""
-
-#: includes/ads/class-ads.php:268
-msgid "New Newsletter Ad"
-msgstr ""
-
-#: includes/ads/class-ads.php:269
-msgid "Edit Newsletter Ad"
-msgstr ""
-
 #: includes/ads/class-ads.php:270
-msgid "View Newsletter Ad"
+#: dist/admin-shell.js:217
+#: src/admin-shell/screens/ads-list/index.js:98
+#: src/admin-shell/screens/ads-list/index.js:123
+msgid "Add Newsletter Ad"
 msgstr ""
 
 #: includes/ads/class-ads.php:271
-msgid "View Newsletter Ads"
+msgid "New Newsletter Ad"
 msgstr ""
 
 #: includes/ads/class-ads.php:272
-msgid "All Newsletter Ads"
+msgid "Edit Newsletter Ad"
 msgstr ""
 
 #: includes/ads/class-ads.php:273
-msgid "Search Newsletter Ads"
+msgid "View Newsletter Ad"
 msgstr ""
 
 #: includes/ads/class-ads.php:274
-msgid "Parent Newsletter Ads:"
+msgid "View Newsletter Ads"
 msgstr ""
 
 #: includes/ads/class-ads.php:275
-msgid "No Newsletter Ads found."
+msgid "All Newsletter Ads"
 msgstr ""
 
 #: includes/ads/class-ads.php:276
-msgid "No Newsletter Ads found in Trash."
+msgid "Search Newsletter Ads"
 msgstr ""
 
 #: includes/ads/class-ads.php:277
-msgid "Newsletter Ads list"
+msgid "Parent Newsletter Ads:"
 msgstr ""
 
 #: includes/ads/class-ads.php:278
-msgid "Newsletter Ad published"
+msgid "No Newsletter Ads found."
 msgstr ""
 
 #: includes/ads/class-ads.php:279
-msgid "Newsletter Ad published privately"
+msgid "No Newsletter Ads found in Trash."
 msgstr ""
 
 #: includes/ads/class-ads.php:280
-msgid "Newsletter Ad reverted to draft"
+msgid "Newsletter Ads list"
 msgstr ""
 
 #: includes/ads/class-ads.php:281
-msgid "Newsletter Ad scheduled"
+msgid "Newsletter Ad published"
 msgstr ""
 
 #: includes/ads/class-ads.php:282
+msgid "Newsletter Ad published privately"
+msgstr ""
+
+#: includes/ads/class-ads.php:283
+msgid "Newsletter Ad reverted to draft"
+msgstr ""
+
+#: includes/ads/class-ads.php:284
+msgid "Newsletter Ad scheduled"
+msgstr ""
+
+#: includes/ads/class-ads.php:285
 msgid "Newsletter Ad updated"
 msgstr ""
 
-#: includes/ads/class-ads.php:302
-#: dist/admin-shell.js:149
-#: dist/admin-shell.js:160
-#: src/admin-shell/screens/ads-list/fields.js:143
-#: src/admin-shell/screens/ads-list/quick-edit-panel.js:124
+#: includes/ads/class-ads.php:305
+#: dist/admin-shell.js:201
+#: dist/admin-shell.js:212
+#: src/admin-shell/screens/ads-list/fields.js:185
+#: src/admin-shell/screens/ads-list/quick-edit-panel.js:143
 msgid "Advertiser"
 msgstr ""
 
-#: includes/ads/class-ads.php:303
+#: includes/ads/class-ads.php:306
 msgid "Search Advertisers"
 msgstr ""
 
-#: includes/ads/class-ads.php:304
+#: includes/ads/class-ads.php:307
 msgid "Popular Advertisers"
 msgstr ""
 
-#: includes/ads/class-ads.php:305
+#: includes/ads/class-ads.php:308
 msgid "All Advertisers"
 msgstr ""
 
-#: includes/ads/class-ads.php:306
+#: includes/ads/class-ads.php:309
 msgid "Parent Advertisers"
 msgstr ""
 
-#: includes/ads/class-ads.php:307
+#: includes/ads/class-ads.php:310
 msgid "Parent Advertiser"
 msgstr ""
 
-#: includes/ads/class-ads.php:308
+#: includes/ads/class-ads.php:311
 msgid "The advertiser name"
 msgstr ""
 
-#: includes/ads/class-ads.php:310
+#: includes/ads/class-ads.php:313
 msgid "Assign a parent advertiser"
 msgstr ""
 
-#: includes/ads/class-ads.php:311
+#: includes/ads/class-ads.php:314
 msgid "Optional description for this advertiser"
 msgstr ""
 
-#: includes/ads/class-ads.php:312
+#: includes/ads/class-ads.php:315
 msgid "Edit Advertiser"
 msgstr ""
 
-#: includes/ads/class-ads.php:313
+#: includes/ads/class-ads.php:316
 msgid "View Advertiser"
 msgstr ""
 
-#: includes/ads/class-ads.php:314
+#: includes/ads/class-ads.php:317
 msgid "Update Advertiser"
 msgstr ""
 
-#: includes/ads/class-ads.php:315
+#: includes/ads/class-ads.php:318
 msgid "Add New Advertiser"
 msgstr ""
 
-#: includes/ads/class-ads.php:316
+#: includes/ads/class-ads.php:319
 msgid "New Advertiser Name"
 msgstr ""
 
-#: includes/ads/class-ads.php:317
+#: includes/ads/class-ads.php:320
 msgid "No advertisers found"
 msgstr ""
 
-#: includes/ads/class-ads.php:318
+#: includes/ads/class-ads.php:321
 msgid "No advertisers"
 msgstr ""
 
-#: includes/ads/class-ads.php:319
+#: includes/ads/class-ads.php:322
 msgid "Filter by advertiser"
 msgstr ""
 
-#: includes/ads/class-ads.php:321
+#: includes/ads/class-ads.php:324
 msgid "Newspack Newsletters Ads Advertisers"
 msgstr ""
 
-#: includes/ads/class-ads.php:420
+#: includes/ads/class-ads.php:548
 msgid "promotion"
 msgstr ""
 
-#: includes/ads/class-ads.php:420
+#: includes/ads/class-ads.php:548
 msgid "ad"
 msgstr ""
 
-#: includes/ads/class-ads.php:621
+#: includes/ads/class-ads.php:753
 msgid "Start Date"
 msgstr ""
 
-#: includes/ads/class-ads.php:622
-#: dist/adsEditor.js:19
-#: src/ads/editor/index.js:263
+#: includes/ads/class-ads.php:754
+#: dist/adsEditor.js:34
+#: src/ads/editor/index.js:333
 msgid "Expiration Date"
 msgstr ""
 
-#: includes/ads/class-ads.php:623
-#: dist/admin-shell.js:149
-#: dist/admin-shell.js:160
-#: dist/adsEditor.js:13
-#: src/admin-shell/screens/ads-list/fields.js:203
-#: src/admin-shell/screens/ads-list/quick-edit-panel.js:172
-#: src/ads/editor/index.js:96
+#: includes/ads/class-ads.php:755
+#: dist/admin-shell.js:201
+#: dist/admin-shell.js:212
+#: dist/adsEditor.js:28
+#: src/admin-shell/screens/ads-list/fields.js:247
+#: src/admin-shell/screens/ads-list/quick-edit-panel.js:191
+#: src/ads/editor/index.js:166
 msgid "Price"
 msgstr ""
 
@@ -427,48 +456,52 @@ msgstr[1] ""
 
 #: includes/class-newspack-newsletters-contacts.php:323
 #: includes/class-newspack-newsletters-contacts.php:358
-#: includes/class-newspack-newsletters-subscription.php:988
+#: includes/class-newspack-newsletters-subscription.php:1025
 msgid "Not supported for this provider"
 msgstr ""
 
-#: includes/class-newspack-newsletters-editor.php:295
-#: includes/class-newspack-newsletters-editor.php:341
+#: includes/class-newspack-newsletters-editor.php:313
+#: includes/class-newspack-newsletters-editor.php:367
+#: includes/email-renderers/class-theme-json-builder.php:332
 msgctxt "font size name"
 msgid "Small"
 msgstr ""
 
-#: includes/class-newspack-newsletters-editor.php:300
-#: includes/class-newspack-newsletters-editor.php:347
+#: includes/class-newspack-newsletters-editor.php:318
+#: includes/class-newspack-newsletters-editor.php:373
+#: includes/email-renderers/class-theme-json-builder.php:334
 msgctxt "font size name"
 msgid "Medium"
 msgstr ""
 
-#: includes/class-newspack-newsletters-editor.php:305
-#: includes/class-newspack-newsletters-editor.php:353
+#: includes/class-newspack-newsletters-editor.php:323
+#: includes/class-newspack-newsletters-editor.php:379
+#: includes/email-renderers/class-theme-json-builder.php:335
 msgctxt "font size name"
 msgid "Large"
 msgstr ""
 
-#: includes/class-newspack-newsletters-editor.php:310
-#: includes/class-newspack-newsletters-editor.php:359
+#: includes/class-newspack-newsletters-editor.php:328
+#: includes/class-newspack-newsletters-editor.php:385
+#: includes/email-renderers/class-theme-json-builder.php:337
 msgctxt "font size name"
 msgid "Extra Large"
 msgstr ""
 
-#: includes/class-newspack-newsletters-editor.php:539
+#: includes/class-newspack-newsletters-editor.php:592
 msgid "Continue reading…"
 msgstr ""
 
-#: includes/class-newspack-newsletters-editor.php:540
+#: includes/class-newspack-newsletters-editor.php:593
 msgid "By "
 msgstr ""
 
-#: includes/class-newspack-newsletters-editor.php:541
+#: includes/class-newspack-newsletters-editor.php:594
 msgid "and "
 msgstr ""
 
 #: includes/class-newspack-newsletters-layouts.php:59
-#: src/newsletter-editor/index.js:143
+#: src/newsletter-editor/index.js:144
 msgid "Layout"
 msgstr ""
 
@@ -558,14 +591,14 @@ msgid "Make newsletter page public?"
 msgstr ""
 
 #: includes/class-newspack-newsletters-settings.php:79
-#: dist/admin-shell.js:155
+#: dist/admin-shell.js:207
 #: src/admin-shell/screens/settings/provider-section.js:88
 #: src/components/init-modal/screens/api-keys/index.js:95
 msgid "Service Provider"
 msgstr ""
 
 #: includes/class-newspack-newsletters-settings.php:86
-#: dist/admin-shell.js:155
+#: dist/admin-shell.js:207
 #: src/admin-shell/screens/settings/provider-credentials-schema.js:7
 msgid "Mailchimp API Key"
 msgstr ""
@@ -574,119 +607,127 @@ msgstr ""
 msgid "Append recommended Mailchimp footer to layouts"
 msgstr ""
 
-#: includes/class-newspack-newsletters-settings.php:106
-#: dist/admin-shell.js:155
+#: includes/class-newspack-newsletters-settings.php:108
+msgid "Resubscribe error message"
+msgstr ""
+
+#: includes/class-newspack-newsletters-settings.php:120
+msgid "Shown to readers who unsubscribed from Mailchimp and try to resubscribe on the site. HTML links are allowed. Leave empty for the default message."
+msgstr ""
+
+#: includes/class-newspack-newsletters-settings.php:124
+#: dist/admin-shell.js:207
 #: src/admin-shell/screens/settings/provider-credentials-schema.js:16
 msgid "Constant Contact API Key"
 msgstr ""
 
-#: includes/class-newspack-newsletters-settings.php:113
-#: dist/admin-shell.js:155
+#: includes/class-newspack-newsletters-settings.php:131
+#: dist/admin-shell.js:207
 #: src/admin-shell/screens/settings/provider-credentials-schema.js:20
 #: src/components/init-modal/screens/api-keys/index.js:156
 msgid "Constant Contact API Secret"
 msgstr ""
 
-#: includes/class-newspack-newsletters-settings.php:120
-#: dist/admin-shell.js:155
+#: includes/class-newspack-newsletters-settings.php:138
+#: dist/admin-shell.js:207
 #: src/admin-shell/screens/settings/provider-credentials-schema.js:26
 #: src/components/init-modal/screens/api-keys/index.js:211
 msgid "ActiveCampaign API URL"
 msgstr ""
 
-#: includes/class-newspack-newsletters-settings.php:127
-#: dist/admin-shell.js:155
+#: includes/class-newspack-newsletters-settings.php:145
+#: dist/admin-shell.js:207
 #: src/admin-shell/screens/settings/provider-credentials-schema.js:30
 #: src/components/init-modal/screens/api-keys/index.js:220
 msgid "ActiveCampaign API Key"
 msgstr ""
 
-#: includes/class-newspack-newsletters-settings.php:135
+#: includes/class-newspack-newsletters-settings.php:153
 msgid "Public Newsletter Posts Slug"
 msgstr ""
 
-#: includes/class-newspack-newsletters-settings.php:153
+#: includes/class-newspack-newsletters-settings.php:171
 msgid "Letterhead API Key"
 msgstr ""
 
-#: includes/class-newspack-newsletters-settings.php:166
+#: includes/class-newspack-newsletters-settings.php:184
 msgid "Allow comments to be enabled for public Newsletters"
 msgstr ""
 
-#: includes/class-newspack-newsletters-settings.php:176
+#: includes/class-newspack-newsletters-settings.php:194
 msgid "Disable Related Posts on public newsletter posts?"
 msgstr ""
 
-#: includes/class-newspack-newsletters-settings.php:229
-#: includes/class-newspack-newsletters-settings.php:244
+#: includes/class-newspack-newsletters-settings.php:247
+#: includes/class-newspack-newsletters-settings.php:262
 msgid "Newsletters Settings"
 msgstr ""
 
-#: includes/class-newspack-newsletters-settings.php:247
+#: includes/class-newspack-newsletters-settings.php:265
 msgid "Campaign Monitor support will be deprecated"
 msgstr ""
 
-#: includes/class-newspack-newsletters-settings.php:248
+#: includes/class-newspack-newsletters-settings.php:266
 msgid "Please connect a different service provider to ensure continued support."
 msgstr ""
 
-#: includes/class-newspack-newsletters-settings.php:278
+#: includes/class-newspack-newsletters-settings.php:296
 msgid "Authorize the application"
 msgstr ""
 
 #. translators: %s: email service provider name
-#: includes/class-newspack-newsletters-settings.php:283
+#: includes/class-newspack-newsletters-settings.php:301
 #, php-format
 msgid "Authorize %s to connect to Newspack."
 msgstr ""
 
-#: includes/class-newspack-newsletters-settings.php:288
-#: dist/admin-shell.js:155
+#: includes/class-newspack-newsletters-settings.php:306
+#: dist/admin-shell.js:207
 #: src/admin-shell/screens/settings/provider-section.js:81
 msgid "Authorize"
 msgstr ""
 
-#: includes/class-newspack-newsletters-settings.php:301
+#: includes/class-newspack-newsletters-settings.php:319
 msgid "No list data found."
 msgstr ""
 
-#: includes/class-newspack-newsletters-settings.php:308
-#: includes/class-subscription-lists.php:122
-#: includes/class-subscription-lists.php:123
-#: includes/class-subscription-lists.php:124
-#: includes/class-subscription-lists.php:125
-#: includes/class-subscription-lists.php:127
+#: includes/class-newspack-newsletters-settings.php:326
+#: includes/class-subscription-lists.php:161
+#: includes/class-subscription-lists.php:162
+#: includes/class-subscription-lists.php:163
+#: includes/class-subscription-lists.php:164
+#: includes/class-subscription-lists.php:166
 #: dist/blocks.js:1
-#: src/blocks/subscribe/edit.js:204
+#: src/blocks/subscribe/edit.js:235
 msgid "Subscription Lists"
 msgstr ""
 
-#: includes/class-newspack-newsletters-settings.php:310
+#: includes/class-newspack-newsletters-settings.php:328
 msgid "Add new"
 msgstr ""
 
-#: includes/class-newspack-newsletters-settings.php:313
+#: includes/class-newspack-newsletters-settings.php:331
 msgid "Save changes to display the selected provider lists."
 msgstr ""
 
-#: includes/class-newspack-newsletters-settings.php:315
+#: includes/class-newspack-newsletters-settings.php:333
 msgid "Manage the lists available for subscription."
 msgstr ""
 
-#: includes/class-newspack-newsletters-settings.php:319
+#: includes/class-newspack-newsletters-settings.php:337
 msgid "List name"
 msgstr ""
 
-#: includes/class-newspack-newsletters-settings.php:320
+#: includes/class-newspack-newsletters-settings.php:338
 msgid "List details"
 msgstr ""
 
-#: includes/class-newspack-newsletters-settings.php:350
-#: dist/admin-shell.js:150
-#: dist/admin-shell.js:155
-#: dist/admin-shell.js:160
-#: dist/admin-shell.js:165
-#: dist/adsEditor.js:1
+#: includes/class-newspack-newsletters-settings.php:368
+#: dist/admin-shell.js:202
+#: dist/admin-shell.js:207
+#: dist/admin-shell.js:212
+#: dist/admin-shell.js:217
+#: dist/adsEditor.js:16
 #: src/admin-shell/screens/ads-list/actions.js:39
 #: src/admin-shell/screens/advertisers-list/actions.js:21
 #: src/admin-shell/screens/layouts-list/actions.js:81
@@ -697,317 +738,327 @@ msgstr ""
 msgid "Edit"
 msgstr ""
 
-#: includes/class-newspack-newsletters-settings.php:361
-#: dist/admin-shell.js:155
+#: includes/class-newspack-newsletters-settings.php:379
+#: dist/admin-shell.js:207
 #: dist/wizard-bridge.js:1
 #: src/admin-shell/screens/settings/local-list-modal.js:177
 msgid "List title"
 msgstr ""
 
-#: includes/class-newspack-newsletters-settings.php:362
-#: dist/admin-shell.js:155
+#: includes/class-newspack-newsletters-settings.php:380
+#: dist/admin-shell.js:207
 #: dist/wizard-bridge.js:1
 #: src/admin-shell/screens/settings/local-list-modal.js:185
 msgid "List description"
 msgstr ""
 
-#: includes/class-newspack-newsletters-settings.php:470
-#: includes/class-newspack-newsletters-settings.php:476
-#: includes/class-newspack-newsletters-subscription.php:1139
-#: includes/class-newspack-newsletters-subscription.php:1237
-#: includes/class-newspack-newsletters-subscription.php:1240
+#: includes/class-newspack-newsletters-settings.php:488
+#: includes/class-newspack-newsletters-settings.php:494
+#: includes/class-newspack-newsletters-subscription.php:1176
+#: includes/class-newspack-newsletters-subscription.php:1277
+#: includes/class-newspack-newsletters-subscription.php:1280
 msgid "Invalid request."
 msgstr ""
 
-#: includes/class-newspack-newsletters-subscription.php:264
+#: includes/class-newspack-newsletters-subscription.php:268
 msgid "The \"lists\" parameter must be an array."
 msgstr ""
 
-#: includes/class-newspack-newsletters-subscription.php:295
+#: includes/class-newspack-newsletters-subscription.php:299
 msgid "Local lists are not available for the configured provider."
 msgstr ""
 
-#: includes/class-newspack-newsletters-subscription.php:348
-#: includes/class-subscription-lists.php:663
-#: includes/class-subscription-lists.php:864
+#: includes/class-newspack-newsletters-subscription.php:352
+#: includes/class-subscription-lists.php:758
+#: includes/class-subscription-lists.php:959
 msgid "Subscription list not found."
 msgstr ""
 
-#: includes/class-newspack-newsletters-subscription.php:373
+#: includes/class-newspack-newsletters-subscription.php:377
 msgid "Local lists must be edited via /lists/local/{id}."
 msgstr ""
 
-#: includes/class-newspack-newsletters-subscription.php:384
-#: includes/class-subscription-lists.php:599
-#: includes/class-subscription-lists.php:681
-#: dist/admin-shell.js:155
+#: includes/class-newspack-newsletters-subscription.php:388
+#: includes/class-subscription-lists.php:694
+#: includes/class-subscription-lists.php:776
+#: dist/admin-shell.js:207
 #: dist/wizard-bridge.js:1
 #: src/admin-shell/screens/settings/local-list-modal.js:86
 msgid "List title is required."
 msgstr ""
 
-#: includes/class-newspack-newsletters-subscription.php:430
-#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:2103
-#: includes/service-providers/class-newspack-newsletters-service-provider.php:564
-#: dist/admin-shell.js:155
+#: includes/class-newspack-newsletters-subscription.php:434
+#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:2388
+#: includes/service-providers/class-newspack-newsletters-service-provider.php:574
+#: dist/admin-shell.js:207
 #: dist/wizard-bridge.js:1
 #: src/admin-shell/screens/settings/local-list-modal.js:32
 msgid "List"
 msgstr ""
 
-#: includes/class-newspack-newsletters-subscription.php:576
-#: includes/class-newspack-newsletters-subscription.php:610
-#: includes/class-newspack-newsletters-subscription.php:683
+#: includes/class-newspack-newsletters-subscription.php:601
+#: includes/class-newspack-newsletters-subscription.php:647
+#: includes/class-newspack-newsletters-subscription.php:720
 msgid "Provider is not set."
 msgstr ""
 
-#: includes/class-newspack-newsletters-subscription.php:614
-#: includes/class-subscription-lists.php:775
-#: includes/class-subscription-lists.php:814
+#: includes/class-newspack-newsletters-subscription.php:651
+#: includes/class-subscription-lists.php:870
+#: includes/class-subscription-lists.php:909
 msgid "Invalid list configuration."
 msgstr ""
 
-#: includes/class-newspack-newsletters-subscription.php:678
+#: includes/class-newspack-newsletters-subscription.php:715
 msgid "Missing email address."
 msgstr ""
 
-#: includes/class-newspack-newsletters-subscription.php:687
+#: includes/class-newspack-newsletters-subscription.php:724
 msgid "Provider does not handle the contact-exists check."
 msgstr ""
 
 #. translators: %s: User display name.
-#: includes/class-newspack-newsletters-subscription.php:1166
+#: includes/class-newspack-newsletters-subscription.php:1208
 #, php-format
 msgid "Hello, %s!"
 msgstr ""
 
-#: includes/class-newspack-newsletters-subscription.php:1167
+#: includes/class-newspack-newsletters-subscription.php:1209
 msgid "Verify your email address by visiting the following address:"
 msgstr ""
 
 #. translators: %s Site title.
-#: includes/class-newspack-newsletters-subscription.php:1184
+#: includes/class-newspack-newsletters-subscription.php:1226
 #, php-format
 msgid "[%s] Verify your email"
 msgstr ""
 
-#: includes/class-newspack-newsletters-subscription.php:1218
+#: includes/class-newspack-newsletters-subscription.php:1259
 msgid "Check your email address for a verification link."
 msgstr ""
 
-#: includes/class-newspack-newsletters-subscription.php:1232
+#: includes/class-newspack-newsletters-subscription.php:1272
 msgid "You're not logged in."
 msgstr ""
 
-#: includes/class-newspack-newsletters-subscription.php:1248
+#: includes/class-newspack-newsletters-subscription.php:1287
 msgid "Your email has been verified."
 msgstr ""
 
-#: includes/class-newspack-newsletters-subscription.php:1301
-msgid "Newsletters"
-msgstr ""
-
-#: includes/class-newspack-newsletters-subscription.php:1319
+#: includes/class-newspack-newsletters-subscription.php:1413
 msgid "Please verify your email address before managing your newsletters subscriptions."
 msgstr ""
 
-#: includes/class-newspack-newsletters-subscription.php:1323
+#: includes/class-newspack-newsletters-subscription.php:1417
 msgid "Verify Email"
 msgstr ""
 
 #. translators: %s: Error message.
-#: includes/class-newspack-newsletters-subscription.php:1344
+#: includes/class-newspack-newsletters-subscription.php:1438
 #, php-format
 msgid "Error while attempting to subscribe: %s"
 msgstr ""
 
-#: includes/class-newspack-newsletters-subscription.php:1352
+#: includes/class-newspack-newsletters-subscription.php:1446
 msgid "Manage your newsletter preferences."
 msgstr ""
 
-#: includes/class-newspack-newsletters-subscription.php:1386
+#: includes/class-newspack-newsletters-subscription.php:1480
 msgid "Update subscriptions"
 msgstr ""
 
-#: includes/class-newspack-newsletters-subscription.php:1404
+#: includes/class-newspack-newsletters-subscription.php:1505
 msgid "You must be logged in and verified to update your subscriptions."
 msgstr ""
 
-#: includes/class-newspack-newsletters-subscription.php:1433
+#: includes/class-newspack-newsletters-subscription.php:1534
 msgid "You must select newsletters to update."
 msgstr ""
 
-#: includes/class-newspack-newsletters-subscription.php:1435
+#: includes/class-newspack-newsletters-subscription.php:1536
 msgid "Your subscriptions were updated."
 msgstr ""
 
-#: includes/class-newspack-newsletters.php:243
+#: includes/class-newspack-newsletters.php:257
 msgid "No newsletter service provider configured."
 msgstr ""
 
-#: includes/class-newspack-newsletters.php:565
+#: includes/class-newspack-newsletters.php:642
 msgctxt "post type general name"
 msgid "Newsletters"
 msgstr ""
 
-#: includes/class-newspack-newsletters.php:566
+#: includes/class-newspack-newsletters.php:643
 msgctxt "post type singular name"
 msgid "Newsletter"
 msgstr ""
 
-#: includes/class-newspack-newsletters.php:567
+#: includes/class-newspack-newsletters.php:644
 msgctxt "admin menu"
 msgid "Newsletters"
 msgstr ""
 
-#: includes/class-newspack-newsletters.php:568
+#: includes/class-newspack-newsletters.php:645
 msgctxt "add new on admin bar"
 msgid "Newsletter"
 msgstr ""
 
-#: includes/class-newspack-newsletters.php:569
+#: includes/class-newspack-newsletters.php:646
 msgctxt "newsletter"
 msgid "Add New"
 msgstr ""
 
-#: includes/class-newspack-newsletters.php:570
-msgid "Add New Newsletter"
+#: includes/class-newspack-newsletters.php:647
+#: dist/admin-shell.js:212
+#: src/admin-shell/screens/newsletters-list/index.js:70
+#: src/admin-shell/screens/newsletters-list/index.js:92
+msgid "Add Newsletter"
 msgstr ""
 
-#: includes/class-newspack-newsletters.php:571
+#: includes/class-newspack-newsletters.php:648
 msgid "New Newsletter"
 msgstr ""
 
-#: includes/class-newspack-newsletters.php:572
+#: includes/class-newspack-newsletters.php:649
 msgid "Edit Newsletter"
 msgstr ""
 
-#: includes/class-newspack-newsletters.php:573
+#: includes/class-newspack-newsletters.php:650
 msgid "View Newsletter"
 msgstr ""
 
-#: includes/class-newspack-newsletters.php:574
+#: includes/class-newspack-newsletters.php:651
 msgid "View Newsletters"
 msgstr ""
 
-#: includes/class-newspack-newsletters.php:576
+#: includes/class-newspack-newsletters.php:653
 msgid "Search Newsletters"
 msgstr ""
 
-#: includes/class-newspack-newsletters.php:577
+#: includes/class-newspack-newsletters.php:654
 msgid "Parent Newsletters:"
 msgstr ""
 
-#: includes/class-newspack-newsletters.php:578
+#: includes/class-newspack-newsletters.php:655
 msgid "No newsletters found."
 msgstr ""
 
-#: includes/class-newspack-newsletters.php:579
+#: includes/class-newspack-newsletters.php:656
 msgid "No newsletters found in Trash."
 msgstr ""
 
-#: includes/class-newspack-newsletters.php:580
+#: includes/class-newspack-newsletters.php:657
 msgid "Newsletter Archives"
 msgstr ""
 
-#: includes/class-newspack-newsletters.php:581
+#: includes/class-newspack-newsletters.php:658
 msgid "Newsletter Attributes"
 msgstr ""
 
-#: includes/class-newspack-newsletters.php:582
+#: includes/class-newspack-newsletters.php:659
 msgid "Insert into newsletter"
 msgstr ""
 
-#: includes/class-newspack-newsletters.php:583
+#: includes/class-newspack-newsletters.php:660
 msgid "Uploaded to this newsletter"
 msgstr ""
 
-#: includes/class-newspack-newsletters.php:584
+#: includes/class-newspack-newsletters.php:661
 msgid "Filter newsletters list"
 msgstr ""
 
-#: includes/class-newspack-newsletters.php:585
+#: includes/class-newspack-newsletters.php:662
 msgid "Newsletters list navigation"
 msgstr ""
 
-#: includes/class-newspack-newsletters.php:586
+#: includes/class-newspack-newsletters.php:663
 msgid "Newsletters list"
 msgstr ""
 
-#: includes/class-newspack-newsletters.php:587
+#: includes/class-newspack-newsletters.php:664
 msgid "Newsletter sent."
 msgstr ""
 
-#: includes/class-newspack-newsletters.php:588
+#: includes/class-newspack-newsletters.php:665
 msgid "Newsletter published privately."
 msgstr ""
 
-#: includes/class-newspack-newsletters.php:589
+#: includes/class-newspack-newsletters.php:666
 msgid "Newsletter reverted to draft."
 msgstr ""
 
-#: includes/class-newspack-newsletters.php:590
+#: includes/class-newspack-newsletters.php:667
 msgid "Newsletter scheduled."
 msgstr ""
 
-#: includes/class-newspack-newsletters.php:591
-#: dist/admin-shell.js:147
-#: src/admin-shell/screens/newsletters-list/quick-edit-panel.js:84
+#: includes/class-newspack-newsletters.php:668
+#: dist/admin-shell.js:198
+#: src/admin-shell/screens/newsletters-list/quick-edit-panel.js:113
 msgid "Newsletter updated."
 msgstr ""
 
-#: includes/class-newspack-newsletters.php:592
+#: includes/class-newspack-newsletters.php:669
 msgid "Newsletter Link"
 msgstr ""
 
-#: includes/class-newspack-newsletters.php:593
+#: includes/class-newspack-newsletters.php:670
 msgid "A link to a newsletter."
 msgstr ""
 
 #. translators: Relative time stamp of sent/published date
-#: includes/class-newspack-newsletters.php:722
+#: includes/class-newspack-newsletters.php:811
 #, php-format
 msgid "Sent %1$s ago"
 msgstr ""
 
 #. translators:  Absolute time stamp of sent/published date
-#: includes/class-newspack-newsletters.php:725
+#: includes/class-newspack-newsletters.php:814
 #, php-format
 msgid "Sent %1$s"
 msgstr ""
 
-#: includes/class-newspack-newsletters.php:740
+#: includes/class-newspack-newsletters.php:829
 msgid "Public page"
 msgstr ""
 
-#: includes/class-newspack-newsletters.php:767
+#: includes/class-newspack-newsletters.php:856
 msgid "No"
 msgstr ""
 
-#: includes/class-newspack-newsletters.php:767
+#: includes/class-newspack-newsletters.php:856
 msgid "Yes"
 msgstr ""
 
-#: includes/class-newspack-newsletters.php:825
+#: includes/class-newspack-newsletters.php:914
 msgid "When true, return only the bundled prebuilt layouts and skip the saved-posts query."
 msgstr ""
 
-#: includes/class-newspack-newsletters.php:1072
-#: includes/class-newspack-newsletters.php:1091
+#: includes/class-newspack-newsletters.php:1057
+#: includes/service-providers/campaign_monitor/class-newspack-newsletters-campaign-monitor.php:539
+msgid "Newsletter not found."
+msgstr ""
+
+#: includes/class-newspack-newsletters.php:1065
+msgid "Failed to render the newsletter."
+msgstr ""
+
+#: includes/class-newspack-newsletters.php:1229
+#: includes/class-newspack-newsletters.php:1248
+#: includes/class-newspack-newsletters.php:1273
+#: includes/class-newspack-newsletters.php:1298
 msgid "You cannot use this resource."
 msgstr ""
 
 #. translators: urge users to input their API credentials on settings page.
-#: includes/class-newspack-newsletters.php:1195
+#: includes/class-newspack-newsletters.php:1400
 #, php-format
 msgid "Thank you for activating Newspack Newsletters. Please <a href=\"%s\">head to settings</a> to set up your API credentials."
 msgstr ""
 
-#: includes/class-newspack-newsletters.php:1357
+#: includes/class-newspack-newsletters.php:1566
 msgid "Lists not available while using manual configuration."
 msgstr ""
 
-#: includes/class-newspack-newsletters.php:1363
+#: includes/class-newspack-newsletters.php:1572
 msgid "Lists not available for the current Newsletters setup."
 msgstr ""
 
@@ -1047,499 +1098,564 @@ msgstr ""
 msgid "Error: Missing information, try updating this list"
 msgstr ""
 
-#: includes/class-subscription-lists.php:120
+#: includes/class-subscription-lists.php:159
 msgctxt "Post Type General Name"
 msgid "Subscription Lists"
 msgstr ""
 
-#: includes/class-subscription-lists.php:121
+#: includes/class-subscription-lists.php:160
 msgctxt "Post Type Singular Name"
 msgid "Subscription List"
 msgstr ""
 
-#: includes/class-subscription-lists.php:126
+#: includes/class-subscription-lists.php:165
 msgid "Parent Subscription List"
 msgstr ""
 
-#: includes/class-subscription-lists.php:128
+#: includes/class-subscription-lists.php:167
 msgid "Add New List"
 msgstr ""
 
-#: includes/class-subscription-lists.php:129
+#: includes/class-subscription-lists.php:168
 msgid "Add New"
 msgstr ""
 
-#: includes/class-subscription-lists.php:130
+#: includes/class-subscription-lists.php:169
 msgid "New Subscription List"
 msgstr ""
 
-#: includes/class-subscription-lists.php:131
+#: includes/class-subscription-lists.php:170
 msgid "Edit List"
 msgstr ""
 
-#: includes/class-subscription-lists.php:132
+#: includes/class-subscription-lists.php:171
 msgid "Update List"
 msgstr ""
 
-#: includes/class-subscription-lists.php:133
+#: includes/class-subscription-lists.php:172
 msgid "View List"
 msgstr ""
 
-#: includes/class-subscription-lists.php:134
+#: includes/class-subscription-lists.php:173
 msgid "View Subscription Lists"
 msgstr ""
 
-#: includes/class-subscription-lists.php:135
+#: includes/class-subscription-lists.php:174
 msgid "Search Subscription List"
 msgstr ""
 
-#: includes/class-subscription-lists.php:136
+#: includes/class-subscription-lists.php:175
 msgid "Not found"
 msgstr ""
 
-#: includes/class-subscription-lists.php:137
+#: includes/class-subscription-lists.php:176
 msgid "Not found in Trash"
 msgstr ""
 
-#: includes/class-subscription-lists.php:138
+#: includes/class-subscription-lists.php:177
 msgid "Featured Image"
 msgstr ""
 
-#: includes/class-subscription-lists.php:139
+#: includes/class-subscription-lists.php:178
 msgid "Set featured image"
 msgstr ""
 
-#: includes/class-subscription-lists.php:140
+#: includes/class-subscription-lists.php:179
 msgid "Remove featured image"
 msgstr ""
 
-#: includes/class-subscription-lists.php:141
+#: includes/class-subscription-lists.php:180
 msgid "Use as featured image"
 msgstr ""
 
-#: includes/class-subscription-lists.php:142
+#: includes/class-subscription-lists.php:181
 msgid "Insert into item"
 msgstr ""
 
-#: includes/class-subscription-lists.php:143
+#: includes/class-subscription-lists.php:182
 msgid "Uploaded to this item"
 msgstr ""
 
-#: includes/class-subscription-lists.php:144
+#: includes/class-subscription-lists.php:183
 msgid "Items list"
 msgstr ""
 
-#: includes/class-subscription-lists.php:145
+#: includes/class-subscription-lists.php:184
 msgid "Items list navigation"
 msgstr ""
 
-#: includes/class-subscription-lists.php:146
+#: includes/class-subscription-lists.php:185
 msgid "Filter items list"
 msgstr ""
 
-#: includes/class-subscription-lists.php:149
+#: includes/class-subscription-lists.php:188
 msgid "Subscription List"
 msgstr ""
 
-#: includes/class-subscription-lists.php:150
+#: includes/class-subscription-lists.php:189
 msgid "Newsletter Subscription list"
 msgstr ""
 
-#: includes/class-subscription-lists.php:286
+#: includes/class-subscription-lists.php:325
 msgid "Other providers this list is already configured for:"
 msgstr ""
 
-#: includes/class-subscription-lists.php:672
-#: includes/class-subscription-lists.php:872
+#: includes/class-subscription-lists.php:767
+#: includes/class-subscription-lists.php:967
 msgid "This subscription list is not a local list."
 msgstr ""
 
-#: includes/class-subscription-lists.php:880
+#: includes/class-subscription-lists.php:975
 msgid "Could not delete the subscription list."
 msgstr ""
 
-#: includes/class-subscription-lists.php:929
-#: dist/admin-shell.js:149
-#: dist/admin-shell.js:165
+#: includes/class-subscription-lists.php:1024
+#: dist/admin-shell.js:201
+#: dist/admin-shell.js:217
 #: src/admin-shell/screens/advertisers-list/fields.js:54
 #: src/admin-shell/screens/advertisers-list/modal.js:173
 msgid "Description"
 msgstr ""
 
-#: includes/class-subscription-lists.php:946
+#: includes/class-subscription-lists.php:1041
 msgid "Back to Subscription Lists management"
 msgstr ""
 
-#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:99
+#: includes/email-renderers/class-editor-bootstrap.php:192
+msgid "Newsletter"
+msgstr ""
+
+#: includes/email-renderers/class-editor-bootstrap.php:193
+msgid "Newspack newsletter email template."
+msgstr ""
+
+#: includes/email-renderers/class-theme-json-builder.php:330
+msgctxt "font size name"
+msgid "Extra Extra Small"
+msgstr ""
+
+#: includes/email-renderers/class-theme-json-builder.php:331
+msgctxt "font size name"
+msgid "Extra Small"
+msgstr ""
+
+#: includes/email-renderers/class-theme-json-builder.php:333
+msgctxt "font size name"
+msgid "Normal"
+msgstr ""
+
+#: includes/email-renderers/class-theme-json-builder.php:336
+msgctxt "font size name"
+msgid "Huge"
+msgstr ""
+
+#: includes/email-renderers/class-theme-json-builder.php:338
+msgctxt "font size name"
+msgid "Extra Extra Large"
+msgstr ""
+
+#: includes/email-renderers/class-theme-json-builder.php:339
+msgctxt "font size name"
+msgid "XXX Large"
+msgstr ""
+
+#: includes/email-renderers/class-theme-json-builder.php:340
+msgctxt "font size name"
+msgid "XXXX Large"
+msgstr ""
+
+#: includes/email-renderers/class-theme-json-builder.php:341
+msgctxt "font size name"
+msgid "XXXXX Large"
+msgstr ""
+
+#: includes/email-renderers/class-theme-json-builder.php:342
+msgctxt "font size name"
+msgid "XXXXXX Large"
+msgstr ""
+
+#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:151
 msgid "personalization tag"
 msgstr ""
 
-#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:105
+#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:157
 msgid "Inserts the contact's email address."
 msgstr ""
 
-#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:109
+#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:161
 msgid "Inserts the contact's first name."
 msgstr ""
 
-#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:114
+#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:166
 msgid "Inserts the contact's last name."
 msgstr ""
 
-#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:119
+#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:171
 msgid "Inserts the contact's full name."
 msgstr ""
 
-#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:124
+#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:176
 msgid "Inserts the contact's phone number."
 msgstr ""
 
-#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:129
+#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:181
 msgid "Inserts the contact's organization name."
 msgstr ""
 
-#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:135
+#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:187
 msgid "Inserts the date the contact subscribed to the list."
 msgstr ""
 
-#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:139
+#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:191
 msgid "Inserts the time the contact subscribed to the list."
 msgstr ""
 
-#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:144
+#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:196
 msgid "Inserts the unsubscribe link required in every email."
 msgstr ""
 
-#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:148
+#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:200
 msgid "Inserts a link to view this campaign in a web browser (web copy link)."
 msgstr ""
 
-#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:153
+#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:205
 msgid "Inserts a web copy link without social-share links."
 msgstr ""
 
-#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:157
+#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:209
 msgid "Inserts a link to the contact's subscription preferences page."
 msgstr ""
 
-#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:162
+#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:214
 msgid "Inserts a link that lets the contact forward this email to a friend."
 msgstr ""
 
-#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:168
+#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:220
 msgid "Inserts the deal owner's first name."
 msgstr ""
 
-#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:172
+#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:224
 msgid "Inserts the deal owner's last name."
 msgstr ""
 
-#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:176
+#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:228
 msgid "Inserts the deal owner's email address."
 msgstr ""
 
-#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:180
+#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:232
 msgid "Inserts the deal title."
 msgstr ""
 
-#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:184
+#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:236
 msgid "Inserts the deal description."
 msgstr ""
 
-#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:188
+#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:240
 msgid "Inserts the deal value."
 msgstr ""
 
-#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:192
+#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:244
 msgid "Inserts the deal status."
 msgstr ""
 
-#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:196
+#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:248
 msgid "Inserts the deal pipeline."
 msgstr ""
 
-#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:200
+#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:252
 msgid "Inserts the deal stage."
 msgstr ""
 
-#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:204
+#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:256
 msgid "Inserts the deal created date."
 msgstr ""
 
-#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:208
+#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:260
 msgid "Inserts the deal last-updated date."
 msgstr ""
 
-#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:213
+#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:265
 msgid "Inserts the account name."
 msgstr ""
 
-#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:218
+#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:270
 msgid "Inserts the account URL."
 msgstr ""
 
-#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:222
+#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:274
 msgid "Inserts the account created date."
 msgstr ""
 
-#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:226
+#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:278
 msgid "Inserts the account last-updated date."
 msgstr ""
 
-#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:230
+#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:282
 msgid "Inserts the account address line 1."
 msgstr ""
 
-#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:234
+#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:286
 msgid "Inserts the account address line 2."
 msgstr ""
 
-#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:238
+#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:290
 msgid "Inserts the account city."
 msgstr ""
 
-#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:242
+#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:294
 msgid "Inserts the account state or province."
 msgstr ""
 
-#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:247
+#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:299
 msgid "Inserts the account postal code."
 msgstr ""
 
-#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:252
+#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:304
 msgid "Inserts the account number of employees."
 msgstr ""
 
-#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:256
+#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:308
 msgid "Inserts the account annual revenue."
 msgstr ""
 
-#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:260
+#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:312
 msgid "Inserts the account industry or vertical."
 msgstr ""
 
-#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:264
+#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:316
 msgid "Inserts the account country."
 msgstr ""
 
-#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:269
+#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:321
 msgid "Inserts the full set of social-share submit links."
 msgstr ""
 
-#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:274
+#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:326
 msgid "Inserts a Facebook Like button."
 msgstr ""
 
-#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:279
+#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:331
 msgid "Inserts a Share on Facebook link/icon."
 msgstr ""
 
-#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:284
+#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:336
 msgid "Inserts a Share on Facebook link (no icon)."
 msgstr ""
 
-#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:289
+#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:341
 msgid "Inserts a Share on X (formerly Twitter) link/icon."
 msgstr ""
 
-#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:294
+#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:346
 msgid "Inserts a Share on X (formerly Twitter) link (no icon)."
 msgstr ""
 
-#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:299
+#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:351
 msgid "Inserts a Share on Digg link/icon."
 msgstr ""
 
-#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:304
+#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:356
 msgid "Inserts a Share on Digg link (no icon)."
 msgstr ""
 
-#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:309
+#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:361
 msgid "Inserts a Share on Reddit link/icon."
 msgstr ""
 
-#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:314
+#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:366
 msgid "Inserts a Share on Reddit link (no icon)."
 msgstr ""
 
-#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:319
+#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:371
 msgid "Inserts a Share on del.icio.us link/icon."
 msgstr ""
 
-#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:324
+#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:376
 msgid "Inserts a Share on del.icio.us link (no icon)."
 msgstr ""
 
-#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:329
+#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:381
 msgid "Inserts a Share on Google+ link/icon."
 msgstr ""
 
-#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:334
+#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:386
 msgid "Inserts a Share on Google+ link (no icon)."
 msgstr ""
 
-#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:339
+#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:391
 msgid "Inserts a Share on StumbleUpon link/icon."
 msgstr ""
 
-#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:344
+#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:396
 msgid "Inserts a Share on StumbleUpon link (no icon)."
 msgstr ""
 
-#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:350
+#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:402
 msgid "Inserts today's date."
 msgstr ""
 
-#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:355
+#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:407
 msgid "Inserts today's date plus N days. Replace 1 with the number of days you want to add."
 msgstr ""
 
-#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:360
+#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:412
 msgid "Inserts today's date minus N days. Replace 1 with the number of days you want to subtract."
 msgstr ""
 
-#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:366
+#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:418
 msgid "Inserts the sender / list contact info."
 msgstr ""
 
-#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:371
+#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:423
 msgid "Inserts the sender / list contact info on a single line."
 msgstr ""
 
-#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:376
+#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:428
 msgid "Inserts the list's permission reminder."
 msgstr ""
 
-#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:382
+#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:434
 msgid "Inserts the contact's IP address."
 msgstr ""
 
-#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:387
+#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:439
 msgid "Inserts the name of the contact's list."
 msgstr ""
 
-#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:392
+#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:444
 msgid "Inserts the contact's unique ID."
 msgstr ""
 
-#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:397
+#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:449
 msgid "Inserts the campaign's unique ID."
 msgstr ""
 
-#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:401
+#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:453
 msgid "Inserts the message's unique ID."
 msgstr ""
 
-#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:433
+#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:485
 msgid "Active Campaign API credentials are missing."
 msgstr ""
 
-#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:488
-#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:1299
-#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:1382
+#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:562
+msgid "ActiveCampaign did not respond in time. This is usually a temporary issue on ActiveCampaign's end. Please wait a few minutes and try again; if the problem continues, try sending a fresh copy of the newsletter."
+msgstr ""
+
+#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:588
+#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:1401
+#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:1484
 msgid "ActiveCampaign API credentials are missing."
 msgstr ""
 
-#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:551
-#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:556
+#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:653
+#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:658
 msgid "An error occurred while communicating with ActiveCampaign."
 msgstr ""
 
-#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:866
+#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:968
 msgid "Please input ActiveCampaign API URL and Key."
 msgstr ""
 
-#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:951
+#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:1053
 msgid "ActiveCampaign supports searching by a single search term only."
 msgstr ""
 
 #. Translators: %s is the segment ID.
-#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:992
+#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:1094
 #, php-format
 msgid "Untitled %s"
 msgstr ""
 
-#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:1182
+#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:1284
 msgid "Missing or invalid ActiveCampign credentials."
 msgstr ""
 
 #. translators: %s are comma-separated emails.
-#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:1364
+#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:1466
 #, php-format
 msgid "ActiveCampaign test message sent successfully to %s."
 msgstr ""
 
-#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:1388
+#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:1490
 #: includes/service-providers/campaign_monitor/class-newspack-newsletters-campaign-monitor.php:572
 #: includes/service-providers/constant_contact/class-newspack-newsletters-constant-contact.php:890
 #: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:1191
 msgid "The newsletter subject cannot be empty."
 msgstr ""
 
-#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:1428
+#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:1530
 msgid "Please input sender name and email address."
 msgstr ""
 
-#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:1434
+#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:1536
 msgid "Please select a list."
 msgstr ""
 
-#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:1463
+#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:1565
 msgid "ActiveCampaign sync error: "
 msgstr ""
 
-#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:1494
+#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:1596
 msgid "Error creating campaign: Message HTML is missing. Campaign not sent."
 msgstr ""
 
 #. Translators: %s is the upstream error message from ActiveCampaign.
-#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:1532
+#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:1634
 #, php-format
 msgid "Could not verify the selected segment with ActiveCampaign (%s). Sending was aborted to avoid sending to the entire audience."
 msgstr ""
 
-#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:1540
+#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:1642
 msgid "The selected segment could not be found in ActiveCampaign. Sending was aborted to avoid sending to the entire audience. Please re-select a segment and try again."
 msgstr ""
 
-#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:1600
+#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:1714
 msgid "Campaign is not deletable."
 msgstr ""
 
-#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:2098
+#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:1793
+msgid "Newspack could not confirm with ActiveCampaign whether this newsletter had already started sending, so it was not resent (to avoid a duplicate). Please wait a few minutes and try again, or check the campaign status in ActiveCampaign."
+msgstr ""
+
+#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:1860
+msgid "This newsletter's ActiveCampaign campaign is in an unexpected state (paused or stopped) and may have already partially sent. To avoid sending it twice, Newspack did not resend it. Please review the campaign in ActiveCampaign before trying again."
+msgstr ""
+
+#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:2383
 msgid "Active Campaign List"
 msgstr ""
 
-#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:2099
+#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:2384
 msgid "Active Campaign Tag"
 msgstr ""
 
-#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:2100
-#: includes/service-providers/class-newspack-newsletters-service-provider.php:561
-#: src/newsletter-editor/sidebar/send-to.js:40
+#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:2385
+#: includes/service-providers/class-newspack-newsletters-service-provider.php:571
+#: src/newsletter-editor/sidebar/send-to.js:44
 msgid "list"
 msgstr ""
 
-#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:2101
-#: includes/service-providers/class-newspack-newsletters-service-provider.php:562
+#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:2386
+#: includes/service-providers/class-newspack-newsletters-service-provider.php:572
 msgid "lists"
 msgstr ""
 
-#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:2102
+#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:2387
 msgid "segment"
 msgstr ""
 
-#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:2104
-#: includes/service-providers/class-newspack-newsletters-service-provider.php:565
+#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:2389
+#: includes/service-providers/class-newspack-newsletters-service-provider.php:575
 msgid "Lists"
 msgstr ""
 
-#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:2105
+#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:2390
 msgid "Segments"
 msgstr ""
 
 #. translators: %1$s and %2$s are opening and closing link tag to Active Campaign documentation.
-#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:2124
+#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:2409
 #, php-format
 msgid "Note for Active Campaign: You need to manually create a segment using the above tag to be able to send campaigns to this list. %1$sLearn more%2$s"
 msgstr ""
@@ -1598,10 +1714,6 @@ msgstr ""
 msgid "Campaign Monitor test sent successfully to %s."
 msgstr ""
 
-#: includes/service-providers/campaign_monitor/class-newspack-newsletters-campaign-monitor.php:539
-msgid "Newsletter not found."
-msgstr ""
-
 #: includes/service-providers/campaign_monitor/class-newspack-newsletters-campaign-monitor.php:595
 msgid "Failed creating Campaign Monitor campaign: "
 msgstr ""
@@ -1653,7 +1765,7 @@ msgid "Failed to send %d times. Please check the provider connection and try sen
 msgstr ""
 
 #. translators: %1$s is the campaign title, %2$s is the edit link, %3$s is the error message.
-#: includes/service-providers/class-newspack-newsletters-service-provider.php:494
+#: includes/service-providers/class-newspack-newsletters-service-provider.php:504
 #, php-format
 msgid ""
 "Hi,\n"
@@ -1668,36 +1780,36 @@ msgid ""
 "\t"
 msgstr ""
 
-#: includes/service-providers/class-newspack-newsletters-service-provider.php:514
+#: includes/service-providers/class-newspack-newsletters-service-provider.php:524
 msgid "ERROR: Sending a newsletter failed"
 msgstr ""
 
-#: includes/service-providers/class-newspack-newsletters-service-provider.php:563
-#: src/newsletter-editor/sidebar/send-to.js:41
+#: includes/service-providers/class-newspack-newsletters-service-provider.php:573
+#: src/newsletter-editor/sidebar/send-to.js:45
 msgid "sublist"
 msgstr ""
 
-#: includes/service-providers/class-newspack-newsletters-service-provider.php:566
+#: includes/service-providers/class-newspack-newsletters-service-provider.php:576
 msgid "Sublist"
 msgstr ""
 
-#: includes/service-providers/class-newspack-newsletters-service-provider.php:568
+#: includes/service-providers/class-newspack-newsletters-service-provider.php:578
 msgid "Once this list is saved, a tag will be created for it."
 msgstr ""
 
-#: includes/service-providers/class-newspack-newsletters-service-provider.php:569
+#: includes/service-providers/class-newspack-newsletters-service-provider.php:579
 msgid "Tag created for this list"
 msgstr ""
 
-#: includes/service-providers/class-newspack-newsletters-service-provider.php:664
+#: includes/service-providers/class-newspack-newsletters-service-provider.php:674
 msgid "Sorry, an error has occurred. Please try again later or contact us for support."
 msgstr ""
 
-#: includes/service-providers/class-newspack-newsletters-service-provider.php:784
+#: includes/service-providers/class-newspack-newsletters-service-provider.php:796
 msgid "Local list not properly configured for the provider"
 msgstr ""
 
-#: includes/service-providers/class-newspack-newsletters-service-provider.php:810
+#: includes/service-providers/class-newspack-newsletters-service-provider.php:822
 msgid "Local list not found"
 msgstr ""
 
@@ -1840,8 +1952,8 @@ msgstr ""
 #: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:382
 #: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:422
 #: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:984
-#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:1334
-#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:1417
+#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:1442
+#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:1525
 msgid "Mailchimp campaign ID not found."
 msgstr ""
 
@@ -1888,459 +2000,513 @@ msgstr ""
 msgid "Unrecognized Mailchimp sublist type \"%s\". Sending was aborted to avoid sending to the entire audience."
 msgstr ""
 
-#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:1326
+#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:1434
 msgid "Unable to synchronize with Mailchimp."
 msgstr ""
 
-#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:1424
+#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:1532
 msgid "Invalid Mailchimp Interest."
 msgstr ""
 
-#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:1439
+#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:1547
 msgid "Mailchimp list ID not found."
 msgstr ""
 
-#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:1466
+#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:1574
 msgid "The selected segment could not be found in Mailchimp. The audience was not updated to avoid sending to the entire list."
 msgstr ""
 
 #. Translators: %s is the unrecognized segment type returned by Mailchimp.
-#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:1490
+#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:1598
 #, php-format
 msgid "Unrecognized Mailchimp segment type \"%s\". The audience was not updated to avoid sending to the entire list."
 msgstr ""
 
-#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:1538
+#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:1645
 msgid "We'll need to subscribe this email address manually. Please contact our support team."
 msgstr ""
 
-#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:1552
+#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:1680
 msgid "An unknown Mailchimp error occurred."
 msgstr ""
 
-#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:1718
+#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:1846
 msgid "Response returned no merge_fields"
 msgstr ""
 
 #. Translators: %1$s is the merge field key, %2$s is the error message.
-#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:1796
+#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:1924
 #, php-format
 msgid "Failed to create merge field %1$s. Error response: %2$s"
 msgstr ""
 
 #. Translators: %1$s is the merge field key, %2$s is the merge field tag.
-#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:1803
+#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:1931
 #, php-format
 msgid "Created merge field %1$s with tag %2$s."
 msgstr ""
 
-#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:1979
+#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2107
 msgid "Error upserting contact to Mailchimp."
 msgstr ""
 
 #. Translators: 1 is a hash value representing the contact's new ID. 2 is the contact's new email address.
-#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:1989
+#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2117
 #, php-format
 msgid "Contact requested email change. Migrated to %1$s (%2$s)."
 msgstr ""
 
-#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:1995
+#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2123
 msgid "Error adding migration note to existing contact."
 msgstr ""
 
 #. Translators: 1 is a hash value representing the contact's previous ID. 2 is the contact's previous email address.
-#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2003
+#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2131
 #, php-format
 msgid "Contact requested email change. Migrated from %1$s (%2$s)."
 msgstr ""
 
-#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2009
+#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2137
 msgid "Error adding migration note to new contact."
 msgstr ""
 
-#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2013
+#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2141
 msgid "Error deleting existing contact."
 msgstr ""
 
-#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2170
+#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2298
 msgid "Error reaching to search-members endpoint"
 msgstr ""
 
-#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2175
+#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2303
 msgid "Contact not found"
 msgstr ""
 
-#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2284
+#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2445
 msgid "audience"
 msgstr ""
 
-#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2285
+#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2446
 msgid "audiences"
 msgstr ""
 
-#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2286
+#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2447
 msgid "group, segment, or tag"
 msgstr ""
 
-#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2287
+#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2448
 msgid "Audience"
 msgstr ""
 
-#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2288
+#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2449
 msgid "Audiences"
 msgstr ""
 
-#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2289
+#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2450
 msgid "Group, Segment, or Tag"
 msgstr ""
 
-#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2290
+#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2451
 msgid "Mailchimp Audience"
 msgstr ""
 
 #. translators: %s is the name of the group category. "Newspack newsletters" by default.
-#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2292
+#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2453
 #, php-format
 msgid "Mailchimp Group under the %s category"
 msgstr ""
 
-#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2294
+#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2455
 msgid "Once this list is saved, a Group will be created for it."
 msgstr ""
 
 #. translators: %s is the name of the group category. "Newspack newsletters" by default.
-#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2296
+#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2457
 #, php-format
 msgid "Group created for this list under %s:"
 msgstr ""
 
-#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2299
+#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2460
 msgid "Mailchimp Group"
 msgstr ""
 
-#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2302
+#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2463
 msgid "Mailchimp Tag"
 msgstr ""
 
-#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2314
+#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2475
 #: src/editor/blocks/merge-tags/utils.js:28
 msgid "merge tag"
 msgstr ""
 
-#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2320
+#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2481
 msgid "Creates a \"View this email in your browser link\" to your campaign page."
 msgstr ""
 
-#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2324
+#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2485
 msgid "Displays the unique ID for your campaign."
 msgstr ""
 
-#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2328
+#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2489
 msgid "Adds the Referral badge to your campaign."
 msgstr ""
 
-#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2332
+#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2493
 msgid "Adds a text-only version of the Rewards link."
 msgstr ""
 
-#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2336
+#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2497
 msgid "Inserts links to translate your sent campaign into different languages."
 msgstr ""
 
-#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2340
+#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2501
 msgid "Adds a list of links to translate the content in your campaign. Replace xx with the code for the language your campaign is written in, and we'll display other available languages."
 msgstr ""
 
-#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2344
+#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2505
 msgid "Displays the language code for a particular subscriber. For example, if your subscriber's language is set to English, the merge tag output will display the code en."
 msgstr ""
 
-#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2348
+#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2509
 msgid "Displays the plain-text language for a particular subscriber. All languages are written English, so if your subscriber's language is set to German we'll display \"German\" instead of Deutsch."
 msgstr ""
 
-#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2352
+#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2513
 msgid "Use to show the current date in a given format. Replace X with the format of your choice."
 msgstr ""
 
-#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2356
+#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2517
 msgid "Displays a list of links to recent campaigns sent to the audience indicated. Replace X with the number of campaigns to show."
 msgstr ""
 
-#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2360
+#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2521
 msgid "Creates a linked table of contents in your campaign."
 msgstr ""
 
-#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2364
+#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2525
 msgid "Creates a table of contents in your campaigns as plain-text."
 msgstr ""
 
-#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2368
+#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2529
 msgid "Use this merge tag to generate preview text in a custom-coded campaign."
 msgstr ""
 
-#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2372
+#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2533
 msgid "Creates a poll to record subscriber ratings of 1–10."
 msgstr ""
 
-#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2376
+#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2537
 msgid "Creates a one-question survey with a set number of responses that subscribers can choose from."
 msgstr ""
 
-#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2380
+#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2541
 msgid "Use this tag to include a promo code in a campaign. Replace the \"x\" variables in your Promo Code merge tag to specify what promo code to display."
 msgstr ""
 
-#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2385
+#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2546
 msgid "Inserts your subscriber's first name if it's available in your audience."
 msgstr ""
 
-#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2390
+#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2551
 msgid "Inserts your subscriber's last name if it's available in your audience."
 msgstr ""
 
-#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2395
+#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2556
 msgid "Inserts your subscriber's email address."
 msgstr ""
 
-#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2399
+#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2560
 msgid "Inserts your subscriber’s phone number if it’s available in your audience."
 msgstr ""
 
-#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2403
+#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2564
 msgid "Inserts your subscriber’s address if it’s available in your audience."
 msgstr ""
 
-#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2408
+#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2569
 msgid "Inserts the name of your audience."
 msgstr ""
 
-#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2412
+#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2573
 msgid "Inserts the name of your company or organization that's listed in the required email footer content for your audience."
 msgstr ""
 
-#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2416
+#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2577
 msgid "Inserts the number of subscribers in your audience in plain-text."
 msgstr ""
 
-#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2420
+#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2581
 msgid "Inserts the company or organization name listed under Primary Account Contact info in your Mailchimp account."
 msgstr ""
 
-#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2424
+#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2585
 msgid "Displays MM/DD/YYYY or DD/MM/YYYY based on your settings in your account Details."
 msgstr ""
 
-#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2428
+#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2589
 msgid "Displays the current year. This is great if you include a copyright date in your campaign, because it will update automatically every year."
 msgstr ""
 
-#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2433
+#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2594
 msgid "Gives your subscribers the opportunity to unsubscribe from your emails. (Required by law and Mailchimp's Terms of Use.)"
 msgstr ""
 
-#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2437
+#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2598
 msgid "Inserts your audience's permission reminder"
 msgstr ""
 
-#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2441
+#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2602
 msgid "Inserts in your mailing address and the \"Add us to your address book\" link that points to the vcard (.vcf) file with your address details."
 msgstr ""
 
-#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2445
+#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2606
 msgid "Inserts an \"Add us to your address book\" link to your campaign."
 msgstr ""
 
-#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2449
+#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2610
 msgid "Inserts a text URL that points to your vcard (.vcf) file of your address details. Use this as a link's Web Address to create a linked version."
 msgstr ""
 
-#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2453
+#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2614
 msgid "Creates a link to the About Your List page."
 msgstr ""
 
-#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2457
+#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2618
 msgid "Inserts your audience's unique ID from your audience's hosted forms."
 msgstr ""
 
-#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2461
+#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2622
 msgid "Inserts the website URL set in the Required Email Footer Content for this audience."
 msgstr ""
 
-#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2465
+#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2626
 msgid "Inserts your company or organization postal mailing address or P.O. Box as plain text."
 msgstr ""
 
-#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2469
+#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2630
 msgid "Inserts your mailing address as plain text on a single line."
 msgstr ""
 
-#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2473
+#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2634
 msgid "Inserts your company or organization telephone number."
 msgstr ""
 
-#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2477
+#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2638
 msgid "Inserts the email address located in the Required Email Footer Content for this audience."
 msgstr ""
 
-#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2481
+#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2642
 msgid "Inserts the URL for your audience's hosted signup form."
 msgstr ""
 
-#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2485
+#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2646
 msgid "Inserts a link to the contact's update profile page."
 msgstr ""
 
-#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2489
+#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2650
 msgid "Inserts the URL to your audience's Forward to a Friend form."
 msgstr ""
 
-#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2494
+#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2655
 msgid "Inserts your X (formerly Twitter) avatar, follower, post, and following counts; a follow link; and your latest posts."
 msgstr ""
 
-#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2499
+#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2660
 msgid "Inserts your X (formerly Twitter) avatar, follower, post, and following counts, and a follow link. Excludes your latest posts."
 msgstr ""
 
-#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2504
+#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2665
 msgid "Displays your X (formerly Twitter) profile URL."
 msgstr ""
 
-#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2509
+#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2670
 msgid "Sets the number of X (formerly Twitter) posts to show. Replace 2 with the number you'd like to display."
 msgstr ""
 
-#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2514
+#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2675
 msgid "Inserts another user's X (formerly Twitter) profile. Replace TWITTERUSERNAME with their handle."
 msgstr ""
 
-#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2519
+#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2680
 msgid "Adds a Share button that lets subscribers post a link to your campaign on X (formerly Twitter)."
 msgstr ""
 
-#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2524
+#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2685
 msgid "Posts custom text (instead of your subject line) alongside a link to your campaign on X (formerly Twitter)."
 msgstr ""
 
-#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2542
+#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2703
 msgid "Note for Mailchimp: The group is a subset of the Audience selected above. When a reader subscribes to this List, they will also be subscribed to the selected Audience."
 msgstr ""
 
-#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2557
+#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2718
 msgid "Error sending test email. Please enter a name and email in the \"FROM\" section."
 msgstr ""
 
-#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2579
+#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2740
 msgid "List ID is required."
 msgstr ""
 
 #: includes/tracking/class-admin.php:63
-#: dist/admin-shell.js:160
-#: src/admin-shell/screens/ads-list/fields.js:189
+#: dist/admin-shell.js:212
+#: src/admin-shell/screens/ads-list/fields.js:233
 msgid "Impressions"
 msgstr ""
 
 #: includes/tracking/class-admin.php:64
-#: dist/admin-shell.js:160
-#: src/admin-shell/screens/ads-list/fields.js:196
+#: dist/admin-shell.js:212
+#: src/admin-shell/screens/ads-list/fields.js:240
 msgid "Clicks"
 msgstr ""
 
-#: src/blocks/subscribe/index.php:56
+#: newspack-newsletters.php:49
+msgid "Newspack Newsletters is missing its Composer dependencies. Please run \"composer install\" in the plugin directory."
+msgstr ""
+
+#: src/blocks/subscribe/index.php:115
 msgid "Error loading the reCaptcha library."
 msgstr ""
 
-#: src/blocks/subscribe/index.php:462
+#: src/blocks/subscribe/index.php:551
 msgid "You must enter a valid email address."
 msgstr ""
 
-#: src/blocks/subscribe/index.php:466
+#: src/blocks/subscribe/index.php:555
 msgid "You must select a list."
 msgstr ""
 
-#. translators: %s: field label
-#: dist/admin-shell.js:143
-#: src/admin-shell/screens/newsletters-list/status-label.js:13
-#: src/components/send-button/index.js:190
+#. translators: %s: the drawer's title.
+#: dist/admin-shell.js:191
+#: src/admin-shell/components/items-per-page/index.js:32
+msgid "All"
+msgstr ""
+
+#: dist/admin-shell.js:191
+#: src/admin-shell/components/items-per-page/index.js:98
+msgid "Loading all items. This may take a moment."
+msgstr ""
+
+#: dist/admin-shell.js:191
+#: src/admin-shell/components/items-per-page/index.js:99
+msgid "Finished loading items."
+msgstr ""
+
+#. translators: 1: number of items loaded so far, 2: total number of items.
+#: dist/admin-shell.js:192
+#: src/admin-shell/components/items-per-page/index.js:122
+#, js-format
+msgid "Loading %1$s of %2$s…"
+msgstr ""
+
+#: dist/admin-shell.js:192
+#: src/admin-shell/components/items-per-page/index.js:136
+msgid "Items per page"
+msgstr ""
+
+#: dist/admin-shell.js:192
+#: src/admin-shell/hooks/use-collection-data.js:147
+msgid "Only some items could be loaded. Reload the page to try again."
+msgstr ""
+
+#. translators: %s: number of items shown
+#: dist/admin-shell.js:193
+#: src/admin-shell/hooks/use-collection-data.js:179
+#, js-format
+msgid "Showing the first %s items. Use search or filters to narrow the list."
+msgstr ""
+
+#: dist/admin-shell.js:193
+#: src/admin-shell/screens/newsletters-list/status-label.js:15
+#: src/components/send-button/index.js:217
+msgid "Published"
+msgstr ""
+
+#: dist/admin-shell.js:193
+#: src/admin-shell/screens/newsletters-list/status-label.js:15
+#: src/components/send-button/index.js:219
 msgid "Sent"
 msgstr ""
 
-#: dist/admin-shell.js:143
-#: dist/admin-shell.js:147
+#: dist/admin-shell.js:193
+#: dist/admin-shell.js:198
 #: src/admin-shell/screens/ads-list/status-label.js:15
-#: src/admin-shell/screens/newsletters-list/status-label.js:14
-#: src/components/send-button/index.js:198
+#: src/admin-shell/screens/newsletters-list/status-label.js:16
+#: src/components/send-button/index.js:227
 msgid "Scheduled"
 msgstr ""
 
-#: dist/admin-shell.js:143
-#: dist/admin-shell.js:147
-#: src/admin-shell/screens/ads-list/status-label.js:17
-#: src/admin-shell/screens/newsletters-list/status-label.js:15
+#: dist/admin-shell.js:193
+#: src/admin-shell/screens/newsletters-list/status-label.js:17
 msgid "Draft"
 msgstr ""
 
-#: dist/admin-shell.js:143
-#: dist/admin-shell.js:147
-#: dist/admin-shell.js:155
-#: dist/admin-shell.js:160
+#: dist/admin-shell.js:193
+#: dist/admin-shell.js:198
+#: dist/admin-shell.js:207
+#: dist/admin-shell.js:212
 #: src/admin-shell/screens/ads-list/actions.js:84
-#: src/admin-shell/screens/ads-list/status-label.js:18
+#: src/admin-shell/screens/ads-list/status-label.js:19
 #: src/admin-shell/screens/newsletters-list/actions.js:186
-#: src/admin-shell/screens/newsletters-list/status-label.js:16
+#: src/admin-shell/screens/newsletters-list/status-label.js:18
 msgid "Trash"
 msgstr ""
 
-#: dist/admin-shell.js:143
-#: dist/admin-shell.js:147
-#: src/admin-shell/screens/newsletters-list/fields.js:46
-#: src/admin-shell/screens/newsletters-list/quick-edit-panel.js:92
+#: dist/admin-shell.js:193
+#: dist/admin-shell.js:198
+#: src/admin-shell/screens/newsletters-list/fields.js:47
+#: src/admin-shell/screens/newsletters-list/quick-edit-panel.js:121
 msgid "(no subject)"
 msgstr ""
 
+#. translators: %s: formatted publish date
+#: dist/admin-shell.js:195
+#: src/admin-shell/screens/newsletters-list/fields.js:66
+#, js-format
+msgid "Published %s"
+msgstr ""
+
 #. translators: %s: formatted send date
-#: dist/admin-shell.js:144
-#: src/admin-shell/screens/newsletters-list/fields.js:63
+#: dist/admin-shell.js:195
+#: src/admin-shell/screens/newsletters-list/fields.js:69
 #, js-format
 msgid "Sent %s"
 msgstr ""
 
 #. translators: %s: formatted scheduled date
-#: dist/admin-shell.js:145
-#: src/admin-shell/screens/newsletters-list/fields.js:69
+#: dist/admin-shell.js:196
+#: src/admin-shell/screens/newsletters-list/fields.js:75
 #, js-format
 msgid "Scheduled for %s"
 msgstr ""
 
-#: dist/admin-shell.js:145
-#: dist/admin-shell.js:147
-#: dist/admin-shell.js:155
-#: src/admin-shell/screens/newsletters-list/fields.js:130
-#: src/admin-shell/screens/newsletters-list/fields.js:233
-#: src/admin-shell/screens/newsletters-list/quick-edit-panel.js:130
-#: src/newsletter-editor/public/index.js:20
-#: src/newsletter-editor/public/index.js:62
+#: dist/admin-shell.js:196
+#: dist/admin-shell.js:198
+#: dist/admin-shell.js:207
+#: src/admin-shell/screens/newsletters-list/fields.js:136
+#: src/admin-shell/screens/newsletters-list/fields.js:249
+#: src/admin-shell/screens/newsletters-list/quick-edit-panel.js:166
+#: src/newsletter-editor/public/index.js:25
+#: src/newsletter-editor/public/index.js:68
 msgid "Email and web"
 msgstr ""
 
-#: dist/admin-shell.js:145
-#: dist/admin-shell.js:147
-#: dist/admin-shell.js:155
-#: src/admin-shell/screens/newsletters-list/fields.js:130
-#: src/admin-shell/screens/newsletters-list/fields.js:234
-#: src/admin-shell/screens/newsletters-list/quick-edit-panel.js:135
+#: dist/admin-shell.js:196
+#: dist/admin-shell.js:198
+#: dist/admin-shell.js:207
+#: src/admin-shell/screens/newsletters-list/fields.js:136
+#: src/admin-shell/screens/newsletters-list/fields.js:250
+#: src/admin-shell/screens/newsletters-list/quick-edit-panel.js:171
 #: src/editor/blocks/visibility-attribute/index.js:33
-#: src/newsletter-editor/public/index.js:20
-#: src/newsletter-editor/public/index.js:67
+#: src/newsletter-editor/public/index.js:25
+#: src/newsletter-editor/public/index.js:73
 msgid "Email only"
 msgstr ""
 
-#: dist/admin-shell.js:145
-#: dist/admin-shell.js:147
-#: dist/admin-shell.js:149
-#: dist/admin-shell.js:155
-#: dist/adsEditor.js:1
+#: dist/admin-shell.js:196
+#: dist/admin-shell.js:198
+#: dist/admin-shell.js:201
+#: dist/admin-shell.js:207
+#: dist/adsEditor.js:16
 #: dist/wizard-bridge.js:1
 #: dist/wizard-bridge.js:4
 #: src/admin-shell/components/confirm-modal/index.js:28
@@ -2350,7 +2516,7 @@ msgstr ""
 #: src/admin-shell/screens/settings/local-list-delete-modal.js:32
 #: src/admin-shell/screens/settings/local-list-modal.js:209
 #: src/components/ad-placements/index.js:59
-#: src/components/send-button/index.js:359
+#: src/components/send-button/index.js:397
 #: src/newsletter-editor/layout/index.js:248
 #: src/newsletter-editor/layout/index.js:272
 #: src/newsletter-editor/layout/index.js:303
@@ -2358,37 +2524,37 @@ msgstr ""
 msgid "Cancel"
 msgstr ""
 
-#: dist/admin-shell.js:145
+#: dist/admin-shell.js:196
 #: src/admin-shell/components/rename-form/index.js:42
 msgid "Renamed."
 msgstr ""
 
-#: dist/admin-shell.js:145
+#: dist/admin-shell.js:196
 #: src/admin-shell/components/rename-form/index.js:47
 msgid "Could not rename. Please try again."
 msgstr ""
 
-#: dist/admin-shell.js:145
-#: dist/admin-shell.js:149
-#: dist/admin-shell.js:165
+#: dist/admin-shell.js:196
+#: dist/admin-shell.js:201
+#: dist/admin-shell.js:217
 #: dist/blocks.js:4
 #: src/admin-shell/components/rename-form/index.js:55
 #: src/admin-shell/screens/advertisers-list/fields.js:46
 #: src/admin-shell/screens/advertisers-list/modal.js:165
-#: src/blocks/subscribe/edit.js:354
+#: src/blocks/subscribe/edit.js:385
 #: src/newsletter-editor/sidebar/sender.js:56
 msgid "Name"
 msgstr ""
 
-#: dist/admin-shell.js:145
-#: dist/admin-shell.js:147
-#: dist/admin-shell.js:149
-#: dist/admin-shell.js:155
-#: dist/adsEditor.js:1
+#: dist/admin-shell.js:196
+#: dist/admin-shell.js:198
+#: dist/admin-shell.js:201
+#: dist/admin-shell.js:207
+#: dist/adsEditor.js:16
 #: src/admin-shell/components/quick-edit-panel/index.js:96
 #: src/admin-shell/components/rename-form/index.js:66
-#: src/admin-shell/screens/ads-list/quick-edit-panel.js:121
-#: src/admin-shell/screens/newsletters-list/quick-edit-panel.js:103
+#: src/admin-shell/screens/ads-list/quick-edit-panel.js:130
+#: src/admin-shell/screens/newsletters-list/quick-edit-panel.js:133
 #: src/admin-shell/screens/settings/options-section.js:27
 #: src/admin-shell/screens/settings/provider-section.js:71
 #: src/components/ad-placements/index.js:62
@@ -2397,7 +2563,7 @@ msgid "Save"
 msgstr ""
 
 #. translators: %d: number of newsletters updated
-#: dist/admin-shell.js:146
+#: dist/admin-shell.js:197
 #: src/admin-shell/screens/newsletters-list/actions.js:73
 #, js-format
 msgid "Visibility updated for %d newsletter."
@@ -2406,7 +2572,7 @@ msgstr[0] ""
 msgstr[1] ""
 
 #. translators: %d: number of newsletters that failed
-#: dist/admin-shell.js:147
+#: dist/admin-shell.js:198
 #: src/admin-shell/screens/newsletters-list/actions.js:80
 #, js-format
 msgid "Failed to update visibility for %d newsletter."
@@ -2414,87 +2580,115 @@ msgid_plural "Failed to update visibility for %d newsletters."
 msgstr[0] ""
 msgstr[1] ""
 
-#: dist/admin-shell.js:147
+#: dist/admin-shell.js:198
 #: src/admin-shell/components/quick-edit-panel/index.js:46
 msgid "Discard unsaved changes?"
 msgstr ""
 
-#: dist/admin-shell.js:147
+#: dist/admin-shell.js:198
 #: src/admin-shell/components/quick-edit-panel/index.js:82
-#: src/newsletter-editor/public/index.js:54
+#: src/newsletter-editor/public/index.js:60
 msgid "Close"
 msgstr ""
 
-#: dist/admin-shell.js:147
-#: dist/admin-shell.js:149
-#: src/admin-shell/screens/ads-list/quick-edit-panel.js:113
-#: src/admin-shell/screens/newsletters-list/quick-edit-panel.js:96
+#: dist/admin-shell.js:198
+#: src/utils/service-provider.js:46
+msgid "Published as an article on your site."
+msgstr ""
+
+#: dist/admin-shell.js:198
+#: src/utils/service-provider.js:47
+msgid "Sent by email and published as an article on your site."
+msgstr ""
+
+#: dist/admin-shell.js:198
+#: src/utils/service-provider.js:49
+msgid "Not visible on your site."
+msgstr ""
+
+#: dist/admin-shell.js:198
+#: src/utils/service-provider.js:50
+msgid "Sent by email only; not visible on your site."
+msgstr ""
+
+#: dist/admin-shell.js:198
+#: dist/admin-shell.js:201
+#: src/admin-shell/screens/ads-list/quick-edit-panel.js:122
+#: src/admin-shell/screens/newsletters-list/quick-edit-panel.js:126
 msgid "Quick edit"
 msgstr ""
 
-#: dist/admin-shell.js:147
-#: src/admin-shell/screens/newsletters-list/quick-edit-panel.js:88
+#: dist/admin-shell.js:198
+#: src/admin-shell/screens/newsletters-list/quick-edit-panel.js:117
 msgid "Could not update newsletter. Please try again."
 msgstr ""
 
-#: dist/admin-shell.js:147
-#: dist/admin-shell.js:149
-#: dist/admin-shell.js:155
-#: dist/admin-shell.js:160
-#: src/admin-shell/screens/ads-list/fields.js:210
-#: src/admin-shell/screens/ads-list/quick-edit-panel.js:144
-#: src/admin-shell/screens/newsletters-list/fields.js:199
-#: src/admin-shell/screens/newsletters-list/quick-edit-panel.js:106
+#: dist/admin-shell.js:198
+#: dist/admin-shell.js:201
+#: dist/admin-shell.js:207
+#: dist/admin-shell.js:212
+#: src/admin-shell/screens/ads-list/fields.js:254
+#: src/admin-shell/screens/ads-list/quick-edit-panel.js:163
+#: src/admin-shell/screens/newsletters-list/fields.js:215
+#: src/admin-shell/screens/newsletters-list/quick-edit-panel.js:136
 msgid "Categories"
 msgstr ""
 
-#: dist/admin-shell.js:147
-#: dist/admin-shell.js:155
-#: dist/editorBlocks.js:1
-#: src/admin-shell/screens/newsletters-list/fields.js:215
-#: src/admin-shell/screens/newsletters-list/quick-edit-panel.js:116
+#: dist/admin-shell.js:198
+#: dist/admin-shell.js:207
+#: dist/editorBlocks.js:16
+#: src/admin-shell/screens/newsletters-list/fields.js:231
+#: src/admin-shell/screens/newsletters-list/quick-edit-panel.js:149
 #: src/editor/blocks/posts-inserter/query-controls.js:268
 msgid "Tags"
 msgstr ""
 
-#: dist/admin-shell.js:147
-#: dist/admin-shell.js:155
-#: src/admin-shell/screens/newsletters-list/fields.js:231
-#: src/admin-shell/screens/newsletters-list/quick-edit-panel.js:126
+#: dist/admin-shell.js:198
+#: dist/admin-shell.js:207
+#: src/admin-shell/screens/newsletters-list/fields.js:247
+#: src/admin-shell/screens/newsletters-list/quick-edit-panel.js:162
 #: src/editor/blocks/visibility-attribute/index.js:70
 #: src/editor/blocks/visibility-attribute/index.js:99
-#: src/newsletter-editor/public/index.js:36
+#: src/newsletter-editor/public/index.js:42
 msgid "Visibility"
 msgstr ""
 
-#: dist/admin-shell.js:147
-#: src/admin-shell/screens/newsletters-list/quick-edit-panel.js:132
-#: src/newsletter-editor/public/index.js:64
-msgid "Sent by email and published as an article on your site."
-msgstr ""
-
-#: dist/admin-shell.js:147
-#: src/admin-shell/screens/newsletters-list/quick-edit-panel.js:137
-#: src/newsletter-editor/public/index.js:69
-msgid "Sent by email only; not visible on your site."
-msgstr ""
-
-#: dist/admin-shell.js:147
+#: dist/admin-shell.js:198
+#: dist/admin-shell.js:201
+#: dist/adsEditor.js:28
+#: src/admin-shell/screens/ads-list/quick-edit-panel.js:136
 #: src/admin-shell/screens/ads-list/status-label.js:14
+#: src/ads/editor/index.js:153
 msgid "Active"
 msgstr ""
 
-#: dist/admin-shell.js:147
+#: dist/admin-shell.js:198
 #: src/admin-shell/screens/ads-list/status-label.js:16
 msgid "Expired"
 msgstr ""
 
-#: dist/admin-shell.js:147
-#: dist/admin-shell.js:149
-#: dist/admin-shell.js:168
-#: dist/editorBlocks.js:1
-#: src/admin-shell/screens/ads-list/fields.js:53
-#: src/admin-shell/screens/ads-list/quick-edit-panel.js:109
+#: dist/admin-shell.js:198
+#: dist/admin-shell.js:201
+#: dist/adsEditor.js:28
+#: src/admin-shell/screens/ads-list/quick-edit-panel.js:137
+#: src/admin-shell/screens/ads-list/status-label.js:18
+#: src/ads/editor/index.js:154
+msgid "Inactive"
+msgstr ""
+
+#. translators: PHP date format for an ad's start/expiration day. Date tokens only — these values have no time.
+#: dist/admin-shell.js:198
+#: src/admin-shell/screens/ads-list/fields.js:41
+msgid "F j, Y"
+msgstr ""
+
+#. translators: %s: the drawer's title.
+#: dist/admin-shell.js:199
+#: dist/admin-shell.js:201
+#: dist/admin-shell.js:220
+#: dist/editorBlocks.js:16
+#: src/admin-shell/screens/ads-list/fields.js:79
+#: src/admin-shell/screens/ads-list/quick-edit-panel.js:118
 #: src/admin-shell/screens/layouts-list/fields.js:121
 #: src/components/init-modal/screens/layout-picker/index.js:149
 #: src/editor/blocks/posts-inserter/query-controls.js:30
@@ -2507,334 +2701,233 @@ msgid "(no title)"
 msgstr ""
 
 #. translators: %s: formatted expiry date
-#: dist/admin-shell.js:148
-#: src/admin-shell/screens/ads-list/fields.js:70
+#: dist/admin-shell.js:200
+#: src/admin-shell/screens/ads-list/fields.js:97
 #, js-format
 msgid "Expired %s"
 msgstr ""
 
 #. translators: %s: formatted start date
-#: dist/admin-shell.js:149
-#: src/admin-shell/screens/ads-list/fields.js:76
+#: dist/admin-shell.js:201
+#: src/admin-shell/screens/ads-list/fields.js:106
 #, js-format
 msgid "Starts %s"
 msgstr ""
 
-#: dist/admin-shell.js:149
-#: src/admin-shell/screens/ads-list/quick-edit-panel.js:101
+#: dist/admin-shell.js:201
+#: src/admin-shell/screens/ads-list/fields.js:46
+msgid "Runs from this day, in the site timezone."
+msgstr ""
+
+#: dist/admin-shell.js:201
+#: src/admin-shell/screens/ads-list/fields.js:47
+msgid "Runs through the end of this day, in the site timezone."
+msgstr ""
+
+#: dist/admin-shell.js:201
+#: src/admin-shell/screens/ads-list/quick-edit-panel.js:110
 msgid "Ad updated."
 msgstr ""
 
-#: dist/admin-shell.js:149
-#: src/admin-shell/screens/ads-list/quick-edit-panel.js:105
+#: dist/admin-shell.js:201
+#: src/admin-shell/screens/ads-list/quick-edit-panel.js:114
 msgid "Could not update ad. Please try again."
 msgstr ""
 
-#: dist/admin-shell.js:149
-#: dist/admin-shell.js:160
-#: src/admin-shell/screens/ads-list/fields.js:159
-#: src/admin-shell/screens/ads-list/quick-edit-panel.js:134
+#: dist/admin-shell.js:201
+#: dist/admin-shell.js:207
+#: dist/admin-shell.js:212
+#: dist/adsEditor.js:28
+#: src/admin-shell/screens/ads-list/fields.js:171
+#: src/admin-shell/screens/ads-list/quick-edit-panel.js:133
+#: src/admin-shell/screens/newsletters-list/fields.js:169
+#: src/ads/editor/index.js:150
+msgid "Status"
+msgstr ""
+
+#: dist/admin-shell.js:201
+#: dist/adsEditor.js:28
+#: src/admin-shell/screens/ads-list/quick-edit-panel.js:140
+#: src/ads/editor/index.js:158
+msgid "Active ads run according to their start and expiration dates. Inactive ads are never shown."
+msgstr ""
+
+#: dist/admin-shell.js:201
+#: dist/admin-shell.js:212
+#: src/admin-shell/screens/ads-list/fields.js:201
+#: src/admin-shell/screens/ads-list/quick-edit-panel.js:153
 msgid "Ad placement"
 msgstr ""
 
-#: dist/admin-shell.js:149
-#: dist/admin-shell.js:160
-#: src/admin-shell/screens/ads-list/fields.js:175
-#: src/admin-shell/screens/ads-list/quick-edit-panel.js:155
+#: dist/admin-shell.js:201
+#: dist/admin-shell.js:212
+#: src/admin-shell/screens/ads-list/fields.js:217
+#: src/admin-shell/screens/ads-list/quick-edit-panel.js:174
 msgid "Start date"
 msgstr ""
 
-#: dist/admin-shell.js:149
-#: dist/admin-shell.js:160
-#: src/admin-shell/screens/ads-list/fields.js:182
-#: src/admin-shell/screens/ads-list/quick-edit-panel.js:163
+#: dist/admin-shell.js:201
+#: dist/admin-shell.js:212
+#: src/admin-shell/screens/ads-list/fields.js:225
+#: src/admin-shell/screens/ads-list/quick-edit-panel.js:182
 msgid "Expiration date"
 msgstr ""
 
-#: dist/admin-shell.js:149
-#: src/admin-shell/screens/ads-list/quick-edit-panel.js:166
+#: dist/admin-shell.js:201
+#: src/admin-shell/screens/ads-list/quick-edit-panel.js:185
 msgid "Expiration date must be on or after the start date."
 msgstr ""
 
-#: dist/admin-shell.js:149
-#: src/admin-shell/screens/ads-list/quick-edit-panel.js:177
+#: dist/admin-shell.js:201
+#: src/admin-shell/screens/ads-list/quick-edit-panel.js:196
 msgid "Price must be a non-negative finite number."
 msgstr ""
 
-#: dist/admin-shell.js:149
+#: dist/admin-shell.js:201
 #: src/admin-shell/screens/advertisers-list/modal.js:153
 msgid "Edit advertiser"
 msgstr ""
 
-#: dist/admin-shell.js:149
-#: dist/admin-shell.js:167
-#: src/admin-shell/screens/advertisers-list/index.js:77
-#: src/admin-shell/screens/advertisers-list/index.js:103
+#: dist/admin-shell.js:201
+#: dist/admin-shell.js:219
+#: src/admin-shell/screens/advertisers-list/index.js:84
+#: src/admin-shell/screens/advertisers-list/index.js:111
 #: src/admin-shell/screens/advertisers-list/modal.js:153
-msgid "Add new advertiser"
+msgid "Add Advertiser"
 msgstr ""
 
-#: dist/admin-shell.js:149
+#: dist/admin-shell.js:201
 #: src/admin-shell/screens/advertisers-list/modal.js:106
 msgid "Name is required."
 msgstr ""
 
-#: dist/admin-shell.js:149
+#: dist/admin-shell.js:201
 #: src/admin-shell/screens/advertisers-list/modal.js:146
 msgid "Failed to save advertiser. Please try again."
 msgstr ""
 
-#: dist/admin-shell.js:149
+#: dist/admin-shell.js:201
 #: src/admin-shell/screens/advertisers-list/modal.js:174
 msgid "Optional description for this advertiser."
 msgstr ""
 
-#: dist/admin-shell.js:149
-#: dist/admin-shell.js:165
+#: dist/admin-shell.js:201
+#: dist/admin-shell.js:217
 #: src/admin-shell/screens/advertisers-list/fields.js:60
 #: src/admin-shell/screens/advertisers-list/modal.js:180
 msgid "Slug"
 msgstr ""
 
-#: dist/admin-shell.js:149
+#: dist/admin-shell.js:201
 #: src/admin-shell/screens/advertisers-list/modal.js:181
 msgid "Leave blank to auto-generate from the name."
 msgstr ""
 
-#: dist/admin-shell.js:149
+#: dist/admin-shell.js:201
 #: src/admin-shell/screens/advertisers-list/modal.js:188
 msgid "Parent advertiser"
 msgstr ""
 
-#: dist/admin-shell.js:149
+#: dist/admin-shell.js:201
 #: src/admin-shell/screens/advertisers-list/modal.js:189
 msgid "— None —"
 msgstr ""
 
-#: dist/admin-shell.js:149
-#: dist/admin-shell.js:155
+#: dist/admin-shell.js:201
+#: dist/admin-shell.js:207
 #: dist/wizard-bridge.js:1
 #: src/admin-shell/screens/advertisers-list/modal.js:201
 #: src/admin-shell/screens/settings/local-list-modal.js:212
 msgid "Save changes"
 msgstr ""
 
-#: dist/admin-shell.js:149
+#: dist/admin-shell.js:201
 #: src/admin-shell/screens/advertisers-list/modal.js:201
 msgid "Add advertiser"
 msgstr ""
 
-#: dist/admin-shell.js:149
-#: dist/editorBlocks.js:5
-#: src/newsletter-editor/styling/index.js:27
-msgid "Sans Serif"
-msgstr ""
-
-#: dist/admin-shell.js:149
-#: dist/editorBlocks.js:5
-#: src/newsletter-editor/styling/index.js:31
-msgid "Arial"
-msgstr ""
-
-#: dist/admin-shell.js:149
-#: dist/editorBlocks.js:5
-#: src/newsletter-editor/styling/index.js:35
-msgid "Tahoma"
-msgstr ""
-
-#: dist/admin-shell.js:149
-#: dist/editorBlocks.js:5
-#: src/newsletter-editor/styling/index.js:39
-msgid "Trebuchet"
-msgstr ""
-
-#: dist/admin-shell.js:149
-#: dist/editorBlocks.js:5
-#: src/newsletter-editor/styling/index.js:43
-msgid "Verdana"
-msgstr ""
-
-#: dist/admin-shell.js:149
-#: dist/editorBlocks.js:5
-#: src/newsletter-editor/styling/index.js:49
-msgid "Serif"
-msgstr ""
-
-#: dist/admin-shell.js:149
-#: dist/editorBlocks.js:5
-#: src/newsletter-editor/styling/index.js:53
-msgid "Georgia"
-msgstr ""
-
-#: dist/admin-shell.js:149
-#: dist/editorBlocks.js:5
-#: src/newsletter-editor/styling/index.js:57
-msgid "Palatino"
-msgstr ""
-
-#: dist/admin-shell.js:149
-#: dist/editorBlocks.js:5
-#: src/newsletter-editor/styling/index.js:61
-msgid "Times New Roman"
-msgstr ""
-
-#: dist/admin-shell.js:149
-#: dist/editorBlocks.js:5
-#: src/newsletter-editor/styling/index.js:67
-msgid "Monospace"
-msgstr ""
-
-#: dist/admin-shell.js:149
-#: dist/editorBlocks.js:5
-#: src/newsletter-editor/styling/index.js:71
-msgid "Courier"
-msgstr ""
-
-#: dist/admin-shell.js:149
-#: dist/editorBlocks.js:5
-#: src/editor/blocks/posts-inserter/index.js:249
-#: src/newsletter-editor/styling/index.js:331
-msgid "Color"
-msgstr ""
-
-#: dist/admin-shell.js:149
-#: dist/blocks.js:1
-#: dist/editorBlocks.js:5
-#: src/blocks/subscribe/edit.js:194
-#: src/editor/blocks/posts-inserter/index.js:261
-#: src/newsletter-editor/styling/index.js:337
-msgid "Text"
-msgstr ""
-
-#: dist/admin-shell.js:149
-#: dist/blocks.js:1
-#: dist/editorBlocks.js:5
-#: src/blocks/subscribe/edit.js:199
-#: src/newsletter-editor/styling/index.js:342
-msgid "Background"
-msgstr ""
-
-#: dist/admin-shell.js:149
-#: dist/editorBlocks.js:5
-#: src/editor/blocks/posts-inserter/index.js:265
-#: src/newsletter-editor/styling/index.js:346
-msgid "Typography"
-msgstr ""
-
-#: dist/admin-shell.js:149
-#: dist/editorBlocks.js:5
-#: src/newsletter-editor/styling/index.js:349
-msgid "Headings font"
-msgstr ""
-
-#: dist/admin-shell.js:149
-#: dist/editorBlocks.js:5
-#: src/newsletter-editor/styling/index.js:358
-msgid "Body font"
-msgstr ""
-
-#: dist/admin-shell.js:149
-#: dist/editorBlocks.js:5
-#: src/newsletter-editor/styling/index.js:368
-#: src/newsletter-editor/styling/index.js:372
-#: src/newsletter-editor/styling/index.js:383
-msgid "Custom CSS"
-msgstr ""
-
-#: dist/admin-shell.js:149
-#: dist/editorBlocks.js:5
-#: src/newsletter-editor/styling/index.js:373
-msgid "This is an advanced feature and may result in unpredictable behavior. Custom CSS will be appended to default styles in sent emails only."
-msgstr ""
-
-#: dist/admin-shell.js:149
-#: dist/editorBlocks.js:5
-#: src/newsletter-editor/styling/index.js:384
-msgid "Write custom CSS…"
-msgstr ""
-
-#: dist/admin-shell.js:149
+#: dist/admin-shell.js:201
 #: dist/editorBlocks.js:1
 #: src/editor/blocks/posts-inserter/utils.js:104
 msgctxt "comma separator for multiple authors"
 msgid ","
 msgstr ""
 
-#: dist/admin-shell.js:149
+#: dist/admin-shell.js:201
 #: src/editor/blocks/posts-inserter/sample-posts.js:25
 msgid "A compelling headline for the lead story"
 msgstr ""
 
-#: dist/admin-shell.js:149
+#: dist/admin-shell.js:201
 #: src/editor/blocks/posts-inserter/sample-posts.js:26
 msgid "Sample excerpt — replace this with a brief teaser that gives readers a reason to keep reading. Two short sentences usually does the job."
 msgstr ""
 
-#: dist/admin-shell.js:149
+#: dist/admin-shell.js:201
 #: src/editor/blocks/posts-inserter/sample-posts.js:34
 msgid "Second story, a notable update from the week"
 msgstr ""
 
-#: dist/admin-shell.js:149
+#: dist/admin-shell.js:201
 #: src/editor/blocks/posts-inserter/sample-posts.js:35
 msgid "Sample excerpt — the second post often pairs with the lead to round out the top of the newsletter. Keep the tone consistent with the lead."
 msgstr ""
 
-#: dist/admin-shell.js:149
+#: dist/admin-shell.js:201
 #: src/editor/blocks/posts-inserter/sample-posts.js:43
 msgid "Third pick, something readers might have missed"
 msgstr ""
 
-#: dist/admin-shell.js:149
+#: dist/admin-shell.js:201
 #: src/editor/blocks/posts-inserter/sample-posts.js:44
 msgid "Sample excerpt — a third entry to flesh out the section, useful when a layout shows multiple posts side by side."
 msgstr ""
 
-#: dist/admin-shell.js:149
+#: dist/admin-shell.js:201
 #: src/editor/blocks/posts-inserter/sample-posts.js:52
 msgid "A fourth article to fill out the grid"
 msgstr ""
 
-#: dist/admin-shell.js:149
+#: dist/admin-shell.js:201
 #: src/editor/blocks/posts-inserter/sample-posts.js:53
 msgid "Sample excerpt — additional padding for grid layouts that ask for four posts. The first three are usually plenty."
 msgstr ""
 
-#: dist/admin-shell.js:149
+#: dist/admin-shell.js:201
 #: src/admin-shell/screens/layouts-list/fields.js:226
 msgid "Empty layout"
 msgstr ""
 
-#: dist/admin-shell.js:149
+#: dist/admin-shell.js:201
 #: src/admin-shell/screens/layouts-list/actions.js:26
 msgid "Untitled"
 msgstr ""
 
 #. translators: %s: original layout title
-#: dist/admin-shell.js:150
+#: dist/admin-shell.js:202
 #: src/admin-shell/screens/layouts-list/actions.js:29
 #, js-format
 msgid "Copy of %s"
 msgstr ""
 
-#: dist/admin-shell.js:150
+#: dist/admin-shell.js:202
 #: src/admin-shell/screens/layouts-list/actions.js:95
 msgid "Duplicate"
 msgstr ""
 
-#: dist/admin-shell.js:150
+#: dist/admin-shell.js:202
 #: src/admin-shell/screens/layouts-list/actions.js:104
 msgid "Layout duplicated."
 msgstr ""
 
-#: dist/admin-shell.js:150
+#: dist/admin-shell.js:202
 #: src/admin-shell/screens/layouts-list/actions.js:106
 msgid "Failed to duplicate layout."
 msgstr ""
 
-#: dist/admin-shell.js:150
-#: dist/admin-shell.js:155
-#: dist/admin-shell.js:160
+#: dist/admin-shell.js:202
+#: dist/admin-shell.js:207
+#: dist/admin-shell.js:212
 #: src/admin-shell/screens/ads-list/actions.js:66
 #: src/admin-shell/screens/ads-list/actions.js:67
 #: src/admin-shell/screens/layouts-list/actions.js:113
@@ -2843,10 +2936,10 @@ msgstr ""
 msgid "Rename"
 msgstr ""
 
-#: dist/admin-shell.js:150
-#: dist/admin-shell.js:155
-#: dist/admin-shell.js:165
-#: dist/adsEditor.js:1
+#: dist/admin-shell.js:202
+#: dist/admin-shell.js:207
+#: dist/admin-shell.js:217
+#: dist/adsEditor.js:16
 #: src/admin-shell/screens/advertisers-list/actions.js:34
 #: src/admin-shell/screens/layouts-list/actions.js:126
 #: src/admin-shell/screens/settings/lists-section.js:191
@@ -2854,32 +2947,32 @@ msgstr ""
 msgid "Delete"
 msgstr ""
 
-#: dist/admin-shell.js:150
-#: dist/admin-shell.js:158
-#: dist/admin-shell.js:163
-#: dist/admin-shell.js:165
-#: src/admin-shell/screens/ads-list/actions.js:154
-#: src/admin-shell/screens/ads-list/actions.js:162
+#: dist/admin-shell.js:202
+#: dist/admin-shell.js:210
+#: dist/admin-shell.js:215
+#: dist/admin-shell.js:217
+#: src/admin-shell/screens/ads-list/actions.js:153
+#: src/admin-shell/screens/ads-list/actions.js:161
 #: src/admin-shell/screens/advertisers-list/actions.js:41
 #: src/admin-shell/screens/layouts-list/actions.js:135
-#: src/admin-shell/screens/newsletters-list/actions.js:256
-#: src/admin-shell/screens/newsletters-list/actions.js:264
+#: src/admin-shell/screens/newsletters-list/actions.js:255
+#: src/admin-shell/screens/newsletters-list/actions.js:263
 msgid "Delete permanently"
 msgstr ""
 
-#: dist/admin-shell.js:150
-#: dist/admin-shell.js:158
-#: dist/admin-shell.js:163
-#: dist/admin-shell.js:165
-#: src/admin-shell/screens/ads-list/actions.js:163
+#: dist/admin-shell.js:202
+#: dist/admin-shell.js:210
+#: dist/admin-shell.js:215
+#: dist/admin-shell.js:217
+#: src/admin-shell/screens/ads-list/actions.js:162
 #: src/admin-shell/screens/advertisers-list/actions.js:42
 #: src/admin-shell/screens/layouts-list/actions.js:136
-#: src/admin-shell/screens/newsletters-list/actions.js:265
+#: src/admin-shell/screens/newsletters-list/actions.js:264
 msgid "Deleting…"
 msgstr ""
 
 #. translators: %d: number of layouts
-#: dist/admin-shell.js:151
+#: dist/admin-shell.js:203
 #: src/admin-shell/screens/layouts-list/actions.js:139
 #, js-format
 msgid "Permanently delete %d layout? Newsletters created from it keep their content; only the saved layout entry is removed. This cannot be undone."
@@ -2887,7 +2980,7 @@ msgid_plural "Permanently delete %d layouts? Newsletters created from them keep 
 msgstr[0] ""
 msgstr[1] ""
 
-#: dist/admin-shell.js:151
+#: dist/admin-shell.js:203
 #: src/admin-shell/screens/layouts-list/actions.js:151
 msgid "Layout deleted."
 msgid_plural "Layouts deleted."
@@ -2895,7 +2988,7 @@ msgstr[0] ""
 msgstr[1] ""
 
 #. translators: %d: number that failed
-#: dist/admin-shell.js:152
+#: dist/admin-shell.js:204
 #: src/admin-shell/screens/layouts-list/actions.js:155
 #, js-format
 msgid "Failed to delete %d layout. Please try again."
@@ -2903,45 +2996,45 @@ msgid_plural "Failed to delete %d layouts. Please try again."
 msgstr[0] ""
 msgstr[1] ""
 
-#: dist/admin-shell.js:152
+#: dist/admin-shell.js:204
 #: dist/wizard-bridge.js:1
 #: src/admin-shell/screens/settings/local-list-delete-modal.js:15
 msgid "Delete local list"
 msgstr ""
 
 #. translators: %s is the title of the local list being deleted.
-#: dist/admin-shell.js:155
+#: dist/admin-shell.js:207
 #: dist/wizard-bridge.js:4
 #: src/admin-shell/screens/settings/local-list-delete-modal.js:26
 #, js-format
 msgid "Delete the local list \"%s\"? This cannot be undone."
 msgstr ""
 
-#: dist/admin-shell.js:155
+#: dist/admin-shell.js:207
 #: dist/wizard-bridge.js:4
 #: src/admin-shell/screens/settings/local-list-delete-modal.js:35
 msgid "Delete list"
 msgstr ""
 
-#: dist/admin-shell.js:155
+#: dist/admin-shell.js:207
 #: dist/wizard-bridge.js:1
 #: src/admin-shell/screens/settings/local-list-modal.js:76
 msgid "Configure later"
 msgstr ""
 
-#: dist/admin-shell.js:155
+#: dist/admin-shell.js:207
 #: dist/wizard-bridge.js:1
 #: src/admin-shell/screens/settings/local-list-modal.js:148
 msgid "Edit subscription list"
 msgstr ""
 
-#: dist/admin-shell.js:155
+#: dist/admin-shell.js:207
 #: dist/wizard-bridge.js:1
 #: src/admin-shell/screens/settings/local-list-modal.js:150
 msgid "Edit local list"
 msgstr ""
 
-#: dist/admin-shell.js:155
+#: dist/admin-shell.js:207
 #: dist/wizard-bridge.js:1
 #: src/admin-shell/screens/settings/lists-section.js:117
 #: src/admin-shell/screens/settings/lists-section.js:140
@@ -2949,49 +3042,49 @@ msgstr ""
 msgid "Add new local list"
 msgstr ""
 
-#: dist/admin-shell.js:155
+#: dist/admin-shell.js:207
 #: dist/wizard-bridge.js:1
 #: src/admin-shell/screens/settings/local-list-modal.js:91
 msgid "Missing list reference."
 msgstr ""
 
-#: dist/admin-shell.js:155
+#: dist/admin-shell.js:207
 #: dist/wizard-bridge.js:1
 #: src/admin-shell/screens/settings/local-list-modal.js:127
 msgid "A modal extension failed after save."
 msgstr ""
 
-#: dist/admin-shell.js:155
+#: dist/admin-shell.js:207
 #: dist/wizard-bridge.js:1
 #: src/admin-shell/screens/settings/local-list-modal.js:135
 msgid "Could not update subscription list. Please try again."
 msgstr ""
 
-#: dist/admin-shell.js:155
+#: dist/admin-shell.js:207
 #: dist/wizard-bridge.js:1
 #: src/admin-shell/screens/settings/local-list-modal.js:137
 msgid "Could not update local list. Please try again."
 msgstr ""
 
-#: dist/admin-shell.js:155
+#: dist/admin-shell.js:207
 #: dist/wizard-bridge.js:1
 #: src/admin-shell/screens/settings/local-list-modal.js:139
 msgid "Could not create local list. Please try again."
 msgstr ""
 
-#: dist/admin-shell.js:155
+#: dist/admin-shell.js:207
 #: dist/wizard-bridge.js:1
 #: src/admin-shell/screens/settings/local-list-modal.js:186
 msgid "Optional description for this list."
 msgstr ""
 
-#: dist/admin-shell.js:155
+#: dist/admin-shell.js:207
 #: dist/wizard-bridge.js:1
 #: src/admin-shell/screens/settings/local-list-modal.js:212
 msgid "Add list"
 msgstr ""
 
-#: dist/admin-shell.js:155
+#: dist/admin-shell.js:207
 #: src/admin-shell/screens/settings/lists-section.js:68
 #: src/admin-shell/screens/settings/lists-section.js:83
 #: src/admin-shell/screens/settings/lists-section.js:114
@@ -2999,212 +3092,210 @@ msgstr ""
 msgid "Subscription lists"
 msgstr ""
 
-#: dist/admin-shell.js:155
+#: dist/admin-shell.js:207
 #: src/admin-shell/screens/settings/lists-section.js:72
 msgid "Could not load lists from the configured provider."
 msgstr ""
 
-#: dist/admin-shell.js:155
+#: dist/admin-shell.js:207
 #: src/admin-shell/screens/settings/lists-section.js:86
 msgid "Loading lists…"
 msgstr ""
 
-#: dist/admin-shell.js:155
+#: dist/admin-shell.js:207
 #: src/admin-shell/screens/settings/lists-section.js:146
 msgid "Manage which lists are available for subscription."
 msgstr ""
 
-#: dist/admin-shell.js:155
+#: dist/admin-shell.js:207
 #: src/admin-shell/screens/settings/lists-section.js:158
 msgid "(unnamed list)"
 msgstr ""
 
-#: dist/admin-shell.js:155
+#: dist/admin-shell.js:207
 #: src/admin-shell/screens/settings/lists-section.js:54
 msgid "Could not update the subscription list."
 msgstr ""
 
-#: dist/admin-shell.js:155
+#: dist/admin-shell.js:207
 #: src/admin-shell/screens/settings/lists-section.js:169
 msgid "Configure an audience to enable this list."
 msgstr ""
 
-#: dist/admin-shell.js:155
+#: dist/admin-shell.js:207
 #: dist/wizard-bridge.js:4
 #: src/admin-shell/screens/settings/lists-section.js:43
 #: src/wizard-bridge/local-list-modal-host.js:75
 msgid "Could not delete the local list."
 msgstr ""
 
-#: dist/admin-shell.js:155
+#: dist/admin-shell.js:207
 #: src/admin-shell/screens/settings/lists-section.js:123
 msgid "No lists found for the configured provider yet. Save provider settings first if you have just connected."
 msgstr ""
 
-#: dist/admin-shell.js:155
-#: dist/admin-shell.js:168
+#: dist/admin-shell.js:207
+#: dist/admin-shell.js:220
 #: src/admin-shell/screens/settings/index.js:176
 #: src/admin-shell/screens/settings/options-section.js:13
 msgid "Newsletter options"
 msgstr ""
 
-#: dist/admin-shell.js:155
+#: dist/admin-shell.js:207
 #: src/admin-shell/screens/settings/provider-credentials-schema.js:8
 #: src/components/init-modal/screens/api-keys/index.js:138
 msgid "Find or generate your API key"
 msgstr ""
 
-#: dist/admin-shell.js:155
+#: dist/admin-shell.js:207
 #: src/admin-shell/screens/settings/provider-section.js:69
 msgid "Service provider"
 msgstr ""
 
-#: dist/admin-shell.js:155
+#: dist/admin-shell.js:207
 #: src/admin-shell/screens/settings/provider-section.js:78
 msgid "Authorize this site to connect to the configured provider."
 msgstr ""
 
-#: dist/admin-shell.js:155
+#: dist/admin-shell.js:207
 #: src/admin-shell/screens/settings/provider-section.js:48
 msgid "Could not open the authorisation window. Allow popups for this site and try again."
 msgstr ""
 
-#: dist/admin-shell.js:155
+#: dist/admin-shell.js:207
 #: src/admin-shell/screens/settings/provider-section.js:105
 msgid "Set — enter a new value to replace."
 msgstr ""
 
-#: dist/admin-shell.js:155
-#: src/admin-shell/screens/newsletters-list/use-newsletters-data.js:13
+#: dist/admin-shell.js:207
+#: src/admin-shell/screens/newsletters-list/use-newsletters-data.js:16
 msgid "Failed to load newsletters. Please refresh the page."
 msgstr ""
 
-#: dist/admin-shell.js:155
+#: dist/admin-shell.js:207
 #: src/admin-shell/screens/newsletters-list/actions.js:122
-#: src/admin-shell/screens/newsletters-list/fields.js:147
+#: src/admin-shell/screens/newsletters-list/fields.js:162
 #: src/newsletter-editor/sidebar/index.js:206
 msgid "Subject"
 msgstr ""
 
-#: dist/admin-shell.js:155
-#: dist/admin-shell.js:160
-#: src/admin-shell/screens/ads-list/fields.js:129
-#: src/admin-shell/screens/newsletters-list/fields.js:154
-msgid "Status"
+#: dist/admin-shell.js:207
+#: src/admin-shell/screens/newsletters-list/fields.js:184
+msgid "Publish date"
 msgstr ""
 
-#: dist/admin-shell.js:155
-#: src/admin-shell/screens/newsletters-list/fields.js:168
+#: dist/admin-shell.js:207
+#: src/admin-shell/screens/newsletters-list/fields.js:184
 msgid "Send date"
 msgstr ""
 
-#: dist/admin-shell.js:155
-#: src/admin-shell/screens/newsletters-list/fields.js:175
+#: dist/admin-shell.js:207
+#: src/admin-shell/screens/newsletters-list/fields.js:191
 msgid "Send list"
 msgstr ""
 
-#: dist/admin-shell.js:155
-#: dist/admin-shell.js:168
+#: dist/admin-shell.js:207
+#: dist/admin-shell.js:220
 #: src/admin-shell/screens/layouts-list/fields.js:157
-#: src/admin-shell/screens/newsletters-list/fields.js:187
+#: src/admin-shell/screens/newsletters-list/fields.js:203
 #: src/components/init-modal/screens/layout-picker/index.js:164
 msgid "Author"
 msgstr ""
 
-#: dist/admin-shell.js:155
-#: dist/admin-shell.js:160
-#: dist/editorBlocks.js:5
-#: src/admin-shell/screens/ads-list/fields.js:221
-#: src/admin-shell/screens/newsletters-list/fields.js:242
+#: dist/admin-shell.js:207
+#: dist/admin-shell.js:212
+#: dist/editorBlocks.js:20
+#: src/admin-shell/screens/ads-list/fields.js:265
+#: src/admin-shell/screens/newsletters-list/fields.js:258
 #: src/editor/blocks/posts-inserter/index.js:202
 msgid "Date"
 msgstr ""
 
-#: dist/admin-shell.js:155
-#: dist/admin-shell.js:160
+#: dist/admin-shell.js:207
+#: dist/admin-shell.js:212
 #: src/admin-shell/screens/ads-list/actions.js:51
 #: src/admin-shell/screens/newsletters-list/actions.js:99
 msgid "Quick Edit"
 msgstr ""
 
-#: dist/admin-shell.js:155
+#: dist/admin-shell.js:207
 #: src/admin-shell/screens/newsletters-list/actions.js:123
 msgid "Newsletter renamed."
 msgstr ""
 
-#: dist/admin-shell.js:155
+#: dist/admin-shell.js:207
 #: src/admin-shell/screens/newsletters-list/actions.js:132
 msgid "View public page"
 msgstr ""
 
-#: dist/admin-shell.js:155
+#: dist/admin-shell.js:207
 #: src/admin-shell/screens/newsletters-list/actions.js:148
 msgid "Set visibility to Email and web"
 msgstr ""
 
-#: dist/admin-shell.js:155
+#: dist/admin-shell.js:207
 #: src/admin-shell/screens/newsletters-list/actions.js:168
 msgid "Set visibility to Email only"
 msgstr ""
 
-#: dist/admin-shell.js:155
-#: dist/admin-shell.js:160
-#: src/admin-shell/screens/ads-list/actions.js:87
-#: src/admin-shell/screens/ads-list/actions.js:95
-#: src/admin-shell/screens/newsletters-list/actions.js:189
-#: src/admin-shell/screens/newsletters-list/actions.js:197
+#: dist/admin-shell.js:207
+#: dist/admin-shell.js:212
+#: src/admin-shell/screens/ads-list/actions.js:86
+#: src/admin-shell/screens/ads-list/actions.js:94
+#: src/admin-shell/screens/newsletters-list/actions.js:188
+#: src/admin-shell/screens/newsletters-list/actions.js:196
 msgid "Move to trash"
 msgstr ""
 
-#: dist/admin-shell.js:155
-#: dist/admin-shell.js:160
-#: src/admin-shell/screens/ads-list/actions.js:96
-#: src/admin-shell/screens/newsletters-list/actions.js:198
+#: dist/admin-shell.js:207
+#: dist/admin-shell.js:212
+#: src/admin-shell/screens/ads-list/actions.js:95
+#: src/admin-shell/screens/newsletters-list/actions.js:197
 msgid "Moving…"
 msgstr ""
 
 #. translators: %d: number of newsletters
-#: dist/admin-shell.js:156
-#: src/admin-shell/screens/newsletters-list/actions.js:201
+#: dist/admin-shell.js:208
+#: src/admin-shell/screens/newsletters-list/actions.js:200
 #, js-format
 msgid "Move %d newsletter to the trash? You can restore it from the Trash filter later."
 msgid_plural "Move %d newsletters to the trash? You can restore them from the Trash filter later."
 msgstr[0] ""
 msgstr[1] ""
 
-#: dist/admin-shell.js:156
-#: src/admin-shell/screens/newsletters-list/actions.js:213
+#: dist/admin-shell.js:208
+#: src/admin-shell/screens/newsletters-list/actions.js:212
 msgid "Newsletter moved to trash."
 msgid_plural "Newsletters moved to trash."
 msgstr[0] ""
 msgstr[1] ""
 
 #. translators: %d: number that failed
-#: dist/admin-shell.js:157
-#: src/admin-shell/screens/newsletters-list/actions.js:217
+#: dist/admin-shell.js:209
+#: src/admin-shell/screens/newsletters-list/actions.js:216
 #, js-format
 msgid "Failed to trash %d newsletter. Please try again."
 msgid_plural "Failed to trash %d newsletters. Please try again."
 msgstr[0] ""
 msgstr[1] ""
 
-#: dist/admin-shell.js:157
-#: dist/admin-shell.js:162
-#: src/admin-shell/screens/ads-list/actions.js:131
-#: src/admin-shell/screens/newsletters-list/actions.js:233
+#: dist/admin-shell.js:209
+#: dist/admin-shell.js:214
+#: src/admin-shell/screens/ads-list/actions.js:130
+#: src/admin-shell/screens/newsletters-list/actions.js:232
 msgid "Restore"
 msgstr ""
 
-#: dist/admin-shell.js:157
-#: src/admin-shell/screens/newsletters-list/actions.js:243
+#: dist/admin-shell.js:209
+#: src/admin-shell/screens/newsletters-list/actions.js:242
 msgid "Newsletter restored."
 msgid_plural "Newsletters restored."
 msgstr[0] ""
 msgstr[1] ""
 
 #. translators: %d: number that failed
-#: dist/admin-shell.js:158
-#: src/admin-shell/screens/newsletters-list/actions.js:247
+#: dist/admin-shell.js:210
+#: src/admin-shell/screens/newsletters-list/actions.js:246
 #, js-format
 msgid "Failed to restore %d newsletter."
 msgid_plural "Failed to restore %d newsletters."
@@ -3212,101 +3303,95 @@ msgstr[0] ""
 msgstr[1] ""
 
 #. translators: %d: number of newsletters
-#: dist/admin-shell.js:159
-#: src/admin-shell/screens/newsletters-list/actions.js:268
+#: dist/admin-shell.js:211
+#: src/admin-shell/screens/newsletters-list/actions.js:267
 #, js-format
 msgid "Permanently delete %d newsletter? This cannot be undone."
 msgid_plural "Permanently delete %d newsletters? This cannot be undone."
 msgstr[0] ""
 msgstr[1] ""
 
-#: dist/admin-shell.js:159
-#: src/admin-shell/screens/newsletters-list/actions.js:280
+#: dist/admin-shell.js:211
+#: src/admin-shell/screens/newsletters-list/actions.js:279
 msgid "Newsletter deleted."
 msgid_plural "Newsletters deleted."
 msgstr[0] ""
 msgstr[1] ""
 
 #. translators: %d: number that failed
-#: dist/admin-shell.js:160
-#: src/admin-shell/screens/newsletters-list/actions.js:284
+#: dist/admin-shell.js:212
+#: src/admin-shell/screens/newsletters-list/actions.js:283
 #, js-format
 msgid "Failed to delete %d newsletter."
 msgid_plural "Failed to delete %d newsletters."
 msgstr[0] ""
 msgstr[1] ""
 
-#: dist/admin-shell.js:160
-#: src/admin-shell/screens/newsletters-list/index.js:63
-#: src/admin-shell/screens/newsletters-list/index.js:85
-msgid "Add new newsletter"
-msgstr ""
-
-#: dist/admin-shell.js:160
-#: src/admin-shell/screens/newsletters-list/index.js:83
+#: dist/admin-shell.js:212
+#: src/admin-shell/screens/newsletters-list/index.js:90
 msgid "Get started with newsletters"
 msgstr ""
 
-#: dist/admin-shell.js:160
-#: src/admin-shell/screens/newsletters-list/index.js:84
+#: dist/admin-shell.js:212
+#: src/admin-shell/screens/newsletters-list/index.js:91
 msgid "Compose, schedule, and send newsletters to your subscribers via your connected ESP."
 msgstr ""
 
-#: dist/admin-shell.js:160
-#: src/admin-shell/screens/ads-list/use-ads-data.js:13
+#: dist/admin-shell.js:212
+#: src/admin-shell/screens/ads-list/use-ads-data.js:16
 msgid "Failed to load ads. Please refresh the page."
 msgstr ""
 
-#: dist/admin-shell.js:160
-#: dist/admin-shell.js:168
+#: dist/admin-shell.js:212
+#: dist/admin-shell.js:220
 #: src/admin-shell/screens/ads-list/actions.js:74
-#: src/admin-shell/screens/ads-list/fields.js:122
+#: src/admin-shell/screens/ads-list/fields.js:164
 #: src/admin-shell/screens/layouts-list/fields.js:174
 #: src/components/init-modal/screens/layout-picker/index.js:144
 #: src/newsletter-editor/layout/index.js:238
 msgid "Title"
 msgstr ""
 
-#: dist/admin-shell.js:160
+#: dist/admin-shell.js:212
 #: src/admin-shell/screens/ads-list/actions.js:75
 msgid "Ad renamed."
 msgstr ""
 
 #. translators: %d: number of ads
-#: dist/admin-shell.js:161
-#: src/admin-shell/screens/ads-list/actions.js:99
+#: dist/admin-shell.js:213
+#: src/admin-shell/screens/ads-list/actions.js:98
 #, js-format
 msgid "Move %d ad to the trash? You can restore it from the Trash filter later."
 msgid_plural "Move %d ads to the trash? You can restore them from the Trash filter later."
 msgstr[0] ""
 msgstr[1] ""
 
-#: dist/admin-shell.js:161
-#: src/admin-shell/screens/ads-list/actions.js:111
+#: dist/admin-shell.js:213
+#: src/admin-shell/screens/ads-list/actions.js:110
 msgid "Ad moved to trash."
 msgid_plural "Ads moved to trash."
 msgstr[0] ""
 msgstr[1] ""
 
 #. translators: %d: number that failed
-#: dist/admin-shell.js:162
-#: src/admin-shell/screens/ads-list/actions.js:115
+#: dist/admin-shell.js:214
+#: src/admin-shell/screens/ads-list/actions.js:114
 #, js-format
 msgid "Failed to trash %d ad. Please try again."
 msgid_plural "Failed to trash %d ads. Please try again."
 msgstr[0] ""
 msgstr[1] ""
 
-#: dist/admin-shell.js:162
-#: src/admin-shell/screens/ads-list/actions.js:141
+#: dist/admin-shell.js:214
+#: src/admin-shell/screens/ads-list/actions.js:140
 msgid "Ad restored."
 msgid_plural "Ads restored."
 msgstr[0] ""
 msgstr[1] ""
 
 #. translators: %d: number that failed
-#: dist/admin-shell.js:163
-#: src/admin-shell/screens/ads-list/actions.js:145
+#: dist/admin-shell.js:215
+#: src/admin-shell/screens/ads-list/actions.js:144
 #, js-format
 msgid "Failed to restore %d ad."
 msgid_plural "Failed to restore %d ads."
@@ -3314,63 +3399,57 @@ msgstr[0] ""
 msgstr[1] ""
 
 #. translators: %d: number of ads
-#: dist/admin-shell.js:164
-#: src/admin-shell/screens/ads-list/actions.js:166
+#: dist/admin-shell.js:216
+#: src/admin-shell/screens/ads-list/actions.js:165
 #, js-format
 msgid "Permanently delete %d ad? This cannot be undone."
 msgid_plural "Permanently delete %d ads? This cannot be undone."
 msgstr[0] ""
 msgstr[1] ""
 
-#: dist/admin-shell.js:164
-#: src/admin-shell/screens/ads-list/actions.js:178
+#: dist/admin-shell.js:216
+#: src/admin-shell/screens/ads-list/actions.js:177
 msgid "Ad deleted."
 msgid_plural "Ads deleted."
 msgstr[0] ""
 msgstr[1] ""
 
 #. translators: %d: number that failed
-#: dist/admin-shell.js:165
-#: src/admin-shell/screens/ads-list/actions.js:182
+#: dist/admin-shell.js:217
+#: src/admin-shell/screens/ads-list/actions.js:181
 #, js-format
 msgid "Failed to delete %d ad."
 msgid_plural "Failed to delete %d ads."
 msgstr[0] ""
 msgstr[1] ""
 
-#: dist/admin-shell.js:165
-#: src/admin-shell/screens/ads-list/index.js:91
-#: src/admin-shell/screens/ads-list/index.js:116
-msgid "Add new newsletter ad"
-msgstr ""
-
-#: dist/admin-shell.js:165
-#: src/admin-shell/screens/ads-list/index.js:111
+#: dist/admin-shell.js:217
+#: src/admin-shell/screens/ads-list/index.js:118
 msgid "Get started with newsletter ads"
 msgstr ""
 
-#: dist/admin-shell.js:165
-#: src/admin-shell/screens/ads-list/index.js:112
+#: dist/admin-shell.js:217
+#: src/admin-shell/screens/ads-list/index.js:119
 msgid "Monetise newsletters with sponsored or house ads. Schedule by date, target by placement or category."
 msgstr ""
 
-#: dist/admin-shell.js:165
-#: src/admin-shell/screens/advertisers-list/use-advertisers-data.js:18
+#: dist/admin-shell.js:217
+#: src/admin-shell/screens/advertisers-list/use-advertisers-data.js:22
 msgid "Failed to load advertisers. Please refresh the page."
 msgstr ""
 
-#: dist/admin-shell.js:165
+#: dist/admin-shell.js:217
 #: src/admin-shell/screens/advertisers-list/fields.js:12
 msgid "(no name)"
 msgstr ""
 
-#: dist/admin-shell.js:165
+#: dist/admin-shell.js:217
 #: src/admin-shell/screens/advertisers-list/fields.js:66
 msgid "Count"
 msgstr ""
 
 #. translators: %d: number of advertisers
-#: dist/admin-shell.js:166
+#: dist/admin-shell.js:218
 #: src/admin-shell/screens/advertisers-list/actions.js:45
 #, js-format
 msgid "Permanently delete %d advertiser? Ads referencing it will lose the assignment. This cannot be undone."
@@ -3378,7 +3457,7 @@ msgid_plural "Permanently delete %d advertisers? Ads referencing them will lose 
 msgstr[0] ""
 msgstr[1] ""
 
-#: dist/admin-shell.js:166
+#: dist/admin-shell.js:218
 #: src/admin-shell/screens/advertisers-list/actions.js:62
 msgid "Advertiser deleted."
 msgid_plural "Advertisers deleted."
@@ -3386,7 +3465,7 @@ msgstr[0] ""
 msgstr[1] ""
 
 #. translators: %d: number that failed
-#: dist/admin-shell.js:167
+#: dist/admin-shell.js:219
 #: src/admin-shell/screens/advertisers-list/actions.js:66
 #, js-format
 msgid "Failed to delete %d advertiser. Please try again."
@@ -3394,233 +3473,234 @@ msgid_plural "Failed to delete %d advertisers. Please try again."
 msgstr[0] ""
 msgstr[1] ""
 
-#: dist/admin-shell.js:167
-#: src/admin-shell/screens/advertisers-list/index.js:98
+#: dist/admin-shell.js:219
+#: src/admin-shell/screens/advertisers-list/index.js:106
 msgid "Get started with advertisers"
 msgstr ""
 
-#: dist/admin-shell.js:167
-#: src/admin-shell/screens/advertisers-list/index.js:99
+#: dist/admin-shell.js:219
+#: src/admin-shell/screens/advertisers-list/index.js:107
 msgid "Group ads by the advertiser they belong to so you can track and report on each one separately."
 msgstr ""
 
-#: dist/admin-shell.js:167
-#: src/admin-shell/screens/layouts-list/index.js:40
+#: dist/admin-shell.js:219
+#: src/admin-shell/screens/layouts-list/index.js:44
 msgid "Paragraph"
 msgstr ""
 
 #. translators: %d: 1-based prebuilt index.
-#: dist/admin-shell.js:168
+#: dist/admin-shell.js:220
 #: src/admin-shell/screens/layouts-list/use-prebuilt-layouts.js:31
 #, js-format
 msgid "Prebuilt %d"
 msgstr ""
 
-#: dist/admin-shell.js:168
-#: src/admin-shell/screens/layouts-list/index.js:150
+#: dist/admin-shell.js:220
+#: src/admin-shell/screens/layouts-list/index.js:172
 #: src/admin-shell/screens/layouts-list/use-prebuilt-layouts.js:50
 msgid "Newspack"
 msgstr ""
 
-#: dist/admin-shell.js:168
-#: src/admin-shell/screens/layouts-list/use-layouts-data.js:35
+#: dist/admin-shell.js:220
+#: src/admin-shell/screens/layouts-list/use-layouts-data.js:44
 msgid "Failed to load layouts. Please refresh the page."
 msgstr ""
 
-#: dist/admin-shell.js:168
-#: src/admin-shell/screens/layouts-list/index.js:210
+#: dist/admin-shell.js:220
+#: src/admin-shell/screens/layouts-list/index.js:238
 msgid "Layout renamed."
 msgstr ""
 
-#: dist/admin-shell.js:168
-#: src/admin-shell/screens/layouts-list/index.js:212
+#: dist/admin-shell.js:220
+#: src/admin-shell/screens/layouts-list/index.js:240
 msgid "Failed to rename layout."
 msgstr ""
 
-#: dist/admin-shell.js:168
+#: dist/admin-shell.js:220
 #: src/admin-shell/screens/layouts-list/fields.js:183
 #: src/components/init-modal/screens/layout-picker/index.js:153
 msgid "Preview"
 msgstr ""
 
-#: dist/admin-shell.js:168
+#: dist/admin-shell.js:220
 #: src/admin-shell/screens/layouts-list/fields.js:191
 msgid "Last modified"
 msgstr ""
 
-#: dist/admin-shell.js:168
-#: src/admin-shell/screens/layouts-list/index.js:230
-msgid "Add new layout"
+#: dist/admin-shell.js:220
+#: src/admin-shell/screens/layouts-list/index.js:258
+msgid "Add Layout"
 msgstr ""
 
-#: dist/admin-shell.js:168
+#: dist/admin-shell.js:220
 #: src/admin-shell/screens/settings/index.js:35
 msgid "Provider connected."
 msgstr ""
 
-#: dist/admin-shell.js:168
+#: dist/admin-shell.js:220
 #: src/admin-shell/screens/settings/index.js:98
 msgid "Provider settings saved."
 msgstr ""
 
-#: dist/admin-shell.js:168
+#: dist/admin-shell.js:220
 #: src/admin-shell/screens/settings/index.js:102
 msgid "Could not save settings. Check the credentials and try again."
 msgstr ""
 
-#: dist/admin-shell.js:168
+#: dist/admin-shell.js:220
 #: src/admin-shell/screens/settings/index.js:125
 msgid "Could not save settings."
 msgstr ""
 
-#: dist/admin-shell.js:168
+#: dist/admin-shell.js:220
 #: src/admin-shell/screens/settings/index.js:134
 msgid "Newsletter options saved."
 msgstr ""
 
-#: dist/admin-shell.js:168
+#: dist/admin-shell.js:220
 #: src/admin-shell/screens/settings/index.js:138
 msgid "Letterhead saved."
 msgstr ""
 
-#: dist/admin-shell.js:168
+#: dist/admin-shell.js:220
 #: src/admin-shell/screens/settings/index.js:154
 msgid "Could not load settings. Refresh the page to try again."
 msgstr ""
 
-#: dist/admin-shell.js:168
+#: dist/admin-shell.js:220
 #: src/admin-shell/screens/settings/index.js:188
 msgid "Letterhead"
 msgstr ""
 
-#: dist/adsEditor.js:1
+#. translators: %s: the drawer's title.
+#: dist/adsEditor.js:16
 #: src/components/ad-placements/index.js:55
 msgid "Placement Name"
 msgstr ""
 
-#: dist/adsEditor.js:1
+#: dist/adsEditor.js:16
 #: src/components/ad-placements/index.js:86
 msgid "Are you sure you want to delete this placement?"
 msgstr ""
 
-#: dist/adsEditor.js:1
+#: dist/adsEditor.js:16
 #: src/components/ad-placements/index.js:99
 msgid "Tip: Use the \"Newsletter Ad\" block to insert the ad placements into your newsletter content."
 msgstr ""
 
-#: dist/adsEditor.js:1
-#: dist/adsEditor.js:13
-#: src/ads/editor/index.js:149
+#: dist/adsEditor.js:16
+#: dist/adsEditor.js:28
+#: src/ads/editor/index.js:219
 #: src/components/ad-placements/index.js:103
 msgid "New Placement"
 msgstr ""
 
-#: dist/adsEditor.js:1
-#: src/ads/editor/index.js:47
+#: dist/adsEditor.js:16
+#: src/ads/editor/index.js:83
 msgid "The expiration date is set in the past. This ad will not be displayed."
 msgstr ""
 
 #. translators: %s: date.
-#: dist/adsEditor.js:4
-#: src/ads/editor/index.js:53
+#: dist/adsEditor.js:19
+#: src/ads/editor/index.js:89
 #, js-format
 msgid "The expiration date is set before the start date (%s). This ad will not be displayed."
 msgstr ""
 
 #. translators: %1$s: date, %2$s: date.
-#: dist/adsEditor.js:7
-#: src/ads/editor/index.js:62
+#: dist/adsEditor.js:22
+#: src/ads/editor/index.js:98
 #, js-format
 msgid "This ad will be displayed between %1$s and %2$s."
 msgstr ""
 
 #. translators: %s: date.
-#: dist/adsEditor.js:10
-#: src/ads/editor/index.js:69
+#: dist/adsEditor.js:25
+#: src/ads/editor/index.js:105
 #, js-format
 msgid "This ad will be displayed starting %s."
 msgstr ""
 
 #. translators: %s: date.
-#: dist/adsEditor.js:13
-#: src/ads/editor/index.js:75
+#: dist/adsEditor.js:28
+#: src/ads/editor/index.js:111
 #, js-format
 msgid "This ad will be displayed until %s."
 msgstr ""
 
-#: dist/adsEditor.js:13
-#: src/ads/editor/index.js:93
+#: dist/adsEditor.js:28
+#: src/ads/editor/index.js:147
 msgid "Ad settings"
 msgstr ""
 
-#: dist/adsEditor.js:13
-#: src/ads/editor/index.js:104
+#: dist/adsEditor.js:28
+#: src/ads/editor/index.js:174
 msgid "Insertion strategy"
 msgstr ""
 
-#: dist/adsEditor.js:13
-#: src/ads/editor/index.js:105
+#: dist/adsEditor.js:28
+#: src/ads/editor/index.js:175
 msgid "Whether to insert the ad at a percentage or block count of the newsletter content or assigned to a placement."
 msgstr ""
 
-#: dist/adsEditor.js:13
-#: src/ads/editor/index.js:114
+#: dist/adsEditor.js:28
+#: src/ads/editor/index.js:184
 msgid "Percentage"
 msgstr ""
 
-#: dist/adsEditor.js:13
-#: src/ads/editor/index.js:118
+#: dist/adsEditor.js:28
+#: src/ads/editor/index.js:188
 msgid "Block count"
 msgstr ""
 
-#: dist/adsEditor.js:13
-#: src/ads/editor/index.js:122
-#: src/ads/editor/index.js:129
+#: dist/adsEditor.js:28
+#: src/ads/editor/index.js:192
+#: src/ads/editor/index.js:199
 #: src/editor/blocks/ad/edit.js:63
 msgid "Placement"
 msgstr ""
 
-#: dist/adsEditor.js:13
-#: src/ads/editor/index.js:145
+#: dist/adsEditor.js:28
+#: src/ads/editor/index.js:215
 msgid "Select a placement"
 msgstr ""
 
-#: dist/adsEditor.js:13
-#: src/ads/editor/index.js:159
+#: dist/adsEditor.js:28
+#: src/ads/editor/index.js:229
 msgid "New Placement Name"
 msgstr ""
 
-#: dist/adsEditor.js:13
-#: src/ads/editor/index.js:160
+#: dist/adsEditor.js:28
+#: src/ads/editor/index.js:230
 msgid "Press Enter to save the new placement."
 msgstr ""
 
-#: dist/adsEditor.js:13
-#: src/ads/editor/index.js:193
+#: dist/adsEditor.js:28
+#: src/ads/editor/index.js:263
 msgid "Manage placements"
 msgstr ""
 
-#: dist/adsEditor.js:13
-#: src/ads/editor/index.js:197
+#: dist/adsEditor.js:28
+#: src/ads/editor/index.js:267
 msgid "Manage Ad Placements"
 msgstr ""
 
 #. translators: %s: percentage.
-#: dist/adsEditor.js:16
-#: src/ads/editor/index.js:218
+#: dist/adsEditor.js:31
+#: src/ads/editor/index.js:288
 #, js-format
 msgid "The ad will be automatically inserted about %s into the newsletter content."
 msgstr ""
 
 #. translators: %d: number.
-#: dist/adsEditor.js:19
-#: src/ads/editor/index.js:236
+#: dist/adsEditor.js:34
+#: src/ads/editor/index.js:306
 #, js-format
 msgid "The ad will be automatically inserted after %d blocks of newsletter content."
 msgstr ""
 
-#: dist/adsEditor.js:19
-#: src/ads/editor/index.js:244
+#: dist/adsEditor.js:34
+#: src/ads/editor/index.js:314
 msgid "Custom Start Date"
 msgstr ""
 
@@ -3635,344 +3715,513 @@ msgid "Success"
 msgstr ""
 
 #: dist/blocks.js:1
-#: src/blocks/subscribe/edit.js:136
+#: src/blocks/subscribe/edit.js:139
 msgid "Form settings"
 msgstr ""
 
 #: dist/blocks.js:1
-#: src/blocks/subscribe/edit.js:138
+#: src/blocks/subscribe/edit.js:141
 msgid "Display input labels"
 msgstr ""
 
 #: dist/blocks.js:1
-#: src/blocks/subscribe/edit.js:143
+#: src/blocks/subscribe/edit.js:146
 msgid "Email placeholder"
 msgstr ""
 
 #: dist/blocks.js:1
-#: src/blocks/subscribe/edit.js:148
+#: src/blocks/subscribe/edit.js:151
 msgid "Display name field"
 msgstr ""
 
 #: dist/blocks.js:1
-#: src/blocks/subscribe/edit.js:155
+#: src/blocks/subscribe/edit.js:158
 #: src/service-providers/example/index.js:32
 msgid "Name placeholder"
 msgstr ""
 
 #: dist/blocks.js:1
-#: src/blocks/subscribe/edit.js:160
+#: src/blocks/subscribe/edit.js:163
 msgid "Display \"Last Name\" field"
 msgstr ""
 
 #: dist/blocks.js:1
-#: src/blocks/subscribe/edit.js:166
+#: src/blocks/subscribe/edit.js:169
 msgid "\"Last Name\" placeholder"
 msgstr ""
 
 #: dist/blocks.js:1
-#: src/blocks/subscribe/edit.js:175
+#: src/blocks/subscribe/edit.js:178
 msgid "Display list description"
 msgstr ""
 
 #: dist/blocks.js:1
-#: src/blocks/subscribe/edit.js:181
+#: src/blocks/subscribe/edit.js:184
+msgid "After subscribe"
+msgstr ""
+
+#: dist/blocks.js:1
+#: src/blocks/subscribe/edit.js:186
+msgid "Post-signup button"
+msgstr ""
+
+#: dist/blocks.js:1
+#: src/blocks/subscribe/edit.js:187
+msgid "After a successful signup, present a button that sends the reader to another page."
+msgstr ""
+
+#: dist/blocks.js:1
+#: src/blocks/subscribe/edit.js:190
+msgid "Show the success message"
+msgstr ""
+
+#: dist/blocks.js:1
+#: src/blocks/subscribe/edit.js:191
+msgid "Go to a custom URL"
+msgstr ""
+
+#: dist/blocks.js:1
+#: src/blocks/subscribe/edit.js:192
+msgid "Go to the previous page"
+msgstr ""
+
+#: dist/blocks.js:1
+#: src/blocks/subscribe/edit.js:198
+msgid "Button label"
+msgstr ""
+
+#: dist/blocks.js:1
+#: src/blocks/subscribe/edit.js:205
+msgid "Custom URL"
+msgstr ""
+
+#: dist/blocks.js:1
+#: src/blocks/subscribe/edit.js:206
+msgid "https://example.com"
+msgstr ""
+
+#: dist/blocks.js:1
+#: src/blocks/subscribe/edit.js:212
 msgid "Styles"
 msgstr ""
 
 #: dist/blocks.js:1
-#: src/blocks/subscribe/edit.js:183
+#: src/blocks/subscribe/edit.js:214
 msgid "Make sure to pick a color that will contrast against the rest of your site's color scheme, to help this block stand out!"
 msgstr ""
 
 #: dist/blocks.js:1
-#: src/blocks/subscribe/edit.js:209
+#: dist/editorBlocks.js:20
+#: src/blocks/subscribe/edit.js:225
+#: src/editor/blocks/posts-inserter/index.js:261
+#: src/newsletter-editor/styling/index.js:337
+msgid "Text"
+msgstr ""
+
+#: dist/blocks.js:1
+#: dist/editorBlocks.js:20
+#: src/blocks/subscribe/edit.js:230
+#: src/newsletter-editor/styling/index.js:342
+msgid "Background"
+msgstr ""
+
+#: dist/blocks.js:1
+#: src/blocks/subscribe/edit.js:240
 msgid "You must enable lists for subscription."
 msgstr ""
 
 #: dist/blocks.js:1
-#: src/blocks/subscribe/edit.js:216
+#: src/blocks/subscribe/edit.js:247
 msgid "You must select at least one list."
 msgstr ""
 
 #: dist/blocks.js:1
-#: src/blocks/subscribe/edit.js:235
+#: src/blocks/subscribe/edit.js:266
 msgid "Manage your subscription lists"
 msgstr ""
 
 #: dist/blocks.js:1
-#: src/blocks/subscribe/edit.js:239
+#: src/blocks/subscribe/edit.js:270
 msgid "Mailchimp Settings"
 msgstr ""
 
 #: dist/blocks.js:1
-#: src/blocks/subscribe/edit.js:241
+#: src/blocks/subscribe/edit.js:272
 msgid "Enable double opt-in"
 msgstr ""
 
 #: dist/blocks.js:1
-#: src/blocks/subscribe/edit.js:242
+#: src/blocks/subscribe/edit.js:273
 msgid "Whether the new contact will have its status as \"pending\" until email confirmation"
 msgstr ""
 
 #: dist/blocks.js:1
-#: src/blocks/subscribe/edit.js:252
+#: src/blocks/subscribe/edit.js:283
 msgid "Spam protection"
 msgstr ""
 
 #. translators: %s is either 'enabled' or 'disabled'.
 #: dist/blocks.js:4
-#: src/blocks/subscribe/edit.js:256
+#: src/blocks/subscribe/edit.js:287
 #, js-format
 msgid "reCAPTCHA is currently %s."
 msgstr ""
 
 #: dist/blocks.js:4
-#: src/blocks/subscribe/edit.js:258
+#: src/blocks/subscribe/edit.js:289
 msgid "enabled"
 msgstr ""
 
 #: dist/blocks.js:4
-#: src/blocks/subscribe/edit.js:259
+#: src/blocks/subscribe/edit.js:290
 msgid "disabled"
 msgstr ""
 
 #: dist/blocks.js:4
-#: src/blocks/subscribe/edit.js:264
+#: src/blocks/subscribe/edit.js:295
 msgid "It's highly recommended that you enable reCAPTCHA protection to prevent spambots from using this form!"
 msgstr ""
 
 #: dist/blocks.js:4
-#: src/blocks/subscribe/edit.js:272
+#: src/blocks/subscribe/edit.js:303
 msgid "Configure your reCAPTCHA settings."
 msgstr ""
 
 #: dist/blocks.js:4
-#: src/blocks/subscribe/edit.js:280
+#: src/blocks/subscribe/edit.js:311
 msgid "Edited State"
 msgstr ""
 
 #: dist/blocks.js:4
-#: src/blocks/subscribe/edit.js:308
+#: src/blocks/subscribe/edit.js:339
 msgid "A previously selected list is no longer available. Please, revise the subscription lists selection."
 msgstr ""
 
 #: dist/blocks.js:4
-#: src/blocks/subscribe/edit.js:368
+#: src/blocks/subscribe/edit.js:399
 msgid "Last Name"
 msgstr ""
 
 #: dist/blocks.js:4
-#: src/blocks/subscribe/edit.js:384
+#: src/blocks/subscribe/edit.js:415
 msgid "Email Address"
 msgstr ""
 
 #: dist/blocks.js:4
-#: src/blocks/subscribe/edit.js:394
+#: src/blocks/subscribe/edit.js:425
 msgid "Sign up"
 msgstr ""
 
 #: dist/blocks.js:4
-#: src/blocks/subscribe/edit.js:408
+#: src/blocks/subscribe/edit.js:439
 msgid "Success message"
 msgstr ""
 
-#: dist/editorBlocks.js:1
+#: dist/blocks.js:4
+#: src/blocks/subscribe/edit.js:454
+msgid "Continue"
+msgstr ""
+
+#: dist/editorBlocks.js:16
 #: src/editor/blocks/posts-inserter/query-controls.js:207
 msgid "Post type"
 msgstr ""
 
-#: dist/editorBlocks.js:1
+#: dist/editorBlocks.js:16
 #: src/editor/blocks/posts-inserter/query-controls.js:214
 msgid "Display specific posts"
 msgstr ""
 
-#: dist/editorBlocks.js:1
+#: dist/editorBlocks.js:16
 #: src/editor/blocks/posts-inserter/query-controls.js:220
 msgid "Display sponsored posts"
 msgstr ""
 
-#: dist/editorBlocks.js:1
+#: dist/editorBlocks.js:16
 #: src/editor/blocks/posts-inserter/query-controls.js:229
 msgid "Add posts"
 msgstr ""
 
-#: dist/editorBlocks.js:1
+#: dist/editorBlocks.js:16
 #: src/editor/blocks/posts-inserter/query-controls.js:256
 msgid "Hide Advanced Filters"
 msgstr ""
 
-#: dist/editorBlocks.js:1
+#: dist/editorBlocks.js:16
 #: src/editor/blocks/posts-inserter/query-controls.js:257
 msgid "Show Advanced Filters"
 msgstr ""
 
-#: dist/editorBlocks.js:1
+#: dist/editorBlocks.js:16
 #: src/editor/blocks/posts-inserter/query-controls.js:277
 msgid "Excluded Categories"
 msgstr ""
 
-#: dist/editorBlocks.js:1
+#: dist/editorBlocks.js:16
 #: src/editor/blocks/posts-inserter/query-controls.js:286
 msgid "Excluded Tags"
 msgstr ""
 
-#: dist/editorBlocks.js:1
+#: dist/editorBlocks.js:16
 #: src/editor/blocks/posts-inserter/query-controls.js:291
 msgid "Order by"
 msgstr ""
 
-#: dist/editorBlocks.js:1
+#: dist/editorBlocks.js:16
 #: src/editor/blocks/posts-inserter/query-controls.js:295
 msgid "Newest to oldest"
 msgstr ""
 
-#: dist/editorBlocks.js:1
+#: dist/editorBlocks.js:16
 #: src/editor/blocks/posts-inserter/query-controls.js:299
 msgid "Oldest to newest"
 msgstr ""
 
 #. translators: label for ordering posts by title in ascending order
-#: dist/editorBlocks.js:3
+#: dist/editorBlocks.js:18
 #: src/editor/blocks/posts-inserter/query-controls.js:304
 msgid "A → Z"
 msgstr ""
 
 #. translators: label for ordering posts by title in descending order
-#: dist/editorBlocks.js:5
+#: dist/editorBlocks.js:20
 #: src/editor/blocks/posts-inserter/query-controls.js:309
 msgid "Z → A"
 msgstr ""
 
-#: dist/editorBlocks.js:5
+#: dist/editorBlocks.js:20
+#: src/newsletter-editor/styling/index.js:27
+msgid "Sans Serif"
+msgstr ""
+
+#: dist/editorBlocks.js:20
+#: src/newsletter-editor/styling/index.js:31
+msgid "Arial"
+msgstr ""
+
+#: dist/editorBlocks.js:20
+#: src/newsletter-editor/styling/index.js:35
+msgid "Tahoma"
+msgstr ""
+
+#: dist/editorBlocks.js:20
+#: src/newsletter-editor/styling/index.js:39
+msgid "Trebuchet"
+msgstr ""
+
+#: dist/editorBlocks.js:20
+#: src/newsletter-editor/styling/index.js:43
+msgid "Verdana"
+msgstr ""
+
+#: dist/editorBlocks.js:20
+#: src/newsletter-editor/styling/index.js:49
+msgid "Serif"
+msgstr ""
+
+#: dist/editorBlocks.js:20
+#: src/newsletter-editor/styling/index.js:53
+msgid "Georgia"
+msgstr ""
+
+#: dist/editorBlocks.js:20
+#: src/newsletter-editor/styling/index.js:57
+msgid "Palatino"
+msgstr ""
+
+#: dist/editorBlocks.js:20
+#: src/newsletter-editor/styling/index.js:61
+msgid "Times New Roman"
+msgstr ""
+
+#: dist/editorBlocks.js:20
+#: src/newsletter-editor/styling/index.js:67
+msgid "Monospace"
+msgstr ""
+
+#: dist/editorBlocks.js:20
+#: src/newsletter-editor/styling/index.js:71
+msgid "Courier"
+msgstr ""
+
+#: dist/editorBlocks.js:20
+#: src/editor/blocks/posts-inserter/index.js:249
+#: src/newsletter-editor/styling/index.js:331
+msgid "Color"
+msgstr ""
+
+#: dist/editorBlocks.js:20
+#: src/editor/blocks/posts-inserter/index.js:265
+#: src/newsletter-editor/styling/index.js:346
+msgid "Typography"
+msgstr ""
+
+#: dist/editorBlocks.js:20
+#: src/newsletter-editor/styling/index.js:349
+msgid "Headings font"
+msgstr ""
+
+#: dist/editorBlocks.js:20
+#: src/newsletter-editor/styling/index.js:358
+msgid "Body font"
+msgstr ""
+
+#: dist/editorBlocks.js:20
+#: src/newsletter-editor/styling/index.js:368
+#: src/newsletter-editor/styling/index.js:372
+#: src/newsletter-editor/styling/index.js:383
+msgid "Custom CSS"
+msgstr ""
+
+#: dist/editorBlocks.js:20
+#: src/newsletter-editor/styling/index.js:373
+msgid "This is an advanced feature and may result in unpredictable behavior. Custom CSS will be appended to default styles in sent emails only."
+msgstr ""
+
+#: dist/editorBlocks.js:20
+#: src/newsletter-editor/styling/index.js:384
+msgid "Write custom CSS…"
+msgstr ""
+
+#: dist/editorBlocks.js:20
+#: src/editor/blocks/posts-inserter/posts-preview.js:160
+msgid "No posts found"
+msgstr ""
+
+#: dist/editorBlocks.js:20
+#: src/editor/blocks/posts-inserter/posts-preview.js:161
+msgid "Verify filter settings."
+msgstr ""
+
+#: dist/editorBlocks.js:20
 #: src/editor/blocks/posts-inserter/index.js:73
 msgid "Subtitle"
 msgstr ""
 
-#: dist/editorBlocks.js:5
+#: dist/editorBlocks.js:20
 #: src/editor/blocks/posts-inserter/index.js:142
 msgid "Show image on top"
 msgstr ""
 
-#: dist/editorBlocks.js:5
+#: dist/editorBlocks.js:20
 #: src/editor/blocks/posts-inserter/index.js:148
 msgid "Show image on left"
 msgstr ""
 
-#: dist/editorBlocks.js:5
+#: dist/editorBlocks.js:20
 #: src/editor/blocks/posts-inserter/index.js:154
 msgid "Show image on right"
 msgstr ""
 
-#: dist/editorBlocks.js:5
+#: dist/editorBlocks.js:20
 #: src/editor/blocks/posts-inserter/index.js:163
 msgctxt "image size abbreviation"
 msgid "S"
 msgstr ""
 
-#: dist/editorBlocks.js:5
+#: dist/editorBlocks.js:20
 #: src/editor/blocks/posts-inserter/index.js:164
 msgid "Small"
 msgstr ""
 
-#: dist/editorBlocks.js:5
+#: dist/editorBlocks.js:20
 #: src/editor/blocks/posts-inserter/index.js:168
 msgctxt "image size abbreviation"
 msgid "M"
 msgstr ""
 
-#: dist/editorBlocks.js:5
+#: dist/editorBlocks.js:20
 #: src/editor/blocks/posts-inserter/index.js:169
 msgid "Medium"
 msgstr ""
 
-#: dist/editorBlocks.js:5
+#: dist/editorBlocks.js:20
 #: src/editor/blocks/posts-inserter/index.js:173
 msgctxt "image size abbreviation"
 msgid "L"
 msgstr ""
 
-#: dist/editorBlocks.js:5
+#: dist/editorBlocks.js:20
 #: src/editor/blocks/posts-inserter/index.js:174
 msgid "Large"
 msgstr ""
 
-#: dist/editorBlocks.js:5
+#: dist/editorBlocks.js:20
 #: src/editor/blocks/posts-inserter/index.js:181
 msgid "Post Content"
 msgstr ""
 
-#: dist/editorBlocks.js:5
+#: dist/editorBlocks.js:20
 #: src/editor/blocks/posts-inserter/index.js:183
 msgid "Post subtitle"
 msgstr ""
 
-#: dist/editorBlocks.js:5
+#: dist/editorBlocks.js:20
 #: src/editor/blocks/posts-inserter/index.js:188
 msgid "Post excerpt"
 msgstr ""
 
-#: dist/editorBlocks.js:5
+#: dist/editorBlocks.js:20
 #: src/editor/blocks/posts-inserter/index.js:194
 msgid "Max number of words in excerpt"
 msgstr ""
 
-#: dist/editorBlocks.js:5
+#: dist/editorBlocks.js:20
 #: src/editor/blocks/posts-inserter/index.js:207
 msgid "Featured image"
 msgstr ""
 
-#: dist/editorBlocks.js:5
+#: dist/editorBlocks.js:20
 #: src/editor/blocks/posts-inserter/index.js:212
 msgid "Author's name"
 msgstr ""
 
-#: dist/editorBlocks.js:5
+#: dist/editorBlocks.js:20
 #: src/editor/blocks/posts-inserter/index.js:217
 msgid "\"Continue reading…\" link"
 msgstr ""
 
-#: dist/editorBlocks.js:5
+#: dist/editorBlocks.js:20
 #: src/editor/blocks/posts-inserter/index.js:224
 msgid "Image size"
 msgstr ""
 
-#: dist/editorBlocks.js:5
+#: dist/editorBlocks.js:20
 #: src/editor/blocks/posts-inserter/index.js:243
 msgid "Sorting & Filtering"
 msgstr ""
 
-#: dist/editorBlocks.js:5
+#: dist/editorBlocks.js:20
 #: src/editor/blocks/posts-inserter/index.js:255
 msgid "Heading"
 msgstr ""
 
-#: dist/editorBlocks.js:5
+#: dist/editorBlocks.js:20
 #: src/editor/blocks/posts-inserter/index.js:268
 msgid "Heading size"
 msgstr ""
 
-#: dist/editorBlocks.js:5
+#: dist/editorBlocks.js:20
 #: src/editor/blocks/posts-inserter/index.js:281
 msgid "Subtitle size"
 msgstr ""
 
-#: dist/editorBlocks.js:5
+#: dist/editorBlocks.js:20
 #: src/editor/blocks/posts-inserter/index.js:294
 msgid "Text size"
 msgstr ""
 
-#: dist/editorBlocks.js:5
+#: dist/editorBlocks.js:20
 #: src/editor/blocks/posts-inserter/index.js:313
 msgid "Insert posts"
 msgstr ""
 
-#: dist/editorBlocks.js:5
+#: dist/editorBlocks.js:20
 #: src/editor/blocks/posts-inserter/index.js:410
 msgid "Posts Inserter"
 msgstr ""
 
-#: dist/editorBlocks.js:5
+#: dist/editorBlocks.js:20
 #: src/editor/blocks/posts-inserter/index.js:411
 msgid "Lets you insert posts into your newsletter."
 msgstr ""
@@ -4007,11 +4256,6 @@ msgstr[1] ""
 #: src/ads/newsletter-editor/disable-auto-ads.js:89
 #, js-format
 msgid "Manage %ss"
-msgstr ""
-
-#: dist/newsletterAdsEditor.js:7
-#: src/ads/newsletter-editor/index.js:11
-msgid "Advertising"
 msgstr ""
 
 #: src/components/copy-html/index.js:29
@@ -4102,71 +4346,94 @@ msgstr ""
 msgid "Use selected layout"
 msgstr ""
 
-#: src/components/send-button/index.js:58
-#: src/components/send-button/index.js:83
-#: src/components/send-button/index.js:87
+#: src/components/send-button/index.js:60
+#: src/components/send-button/index.js:65
+msgid "Failed to load email preview."
+msgstr ""
+
+#: src/components/send-button/index.js:62
+#: src/components/send-button/index.js:67
+msgid "Could not load preview."
+msgstr ""
+
+#: src/components/send-button/index.js:81
+#: src/components/send-button/index.js:106
+#: src/components/send-button/index.js:110
 msgid "Preview email"
 msgstr ""
 
-#: src/components/send-button/index.js:188
-msgid "Sending"
+#: src/components/send-button/index.js:215
+msgid "Publishing…"
 msgstr ""
 
-#: src/components/send-button/index.js:190
+#: src/components/send-button/index.js:215
+msgid "Sending…"
+msgstr ""
+
+#: src/components/send-button/index.js:219
 msgid "Sent and Published"
 msgstr ""
 
-#: src/components/send-button/index.js:195
-#: src/components/send-button/index.js:203
+#: src/components/send-button/index.js:224
+#: src/components/send-button/index.js:232
+msgid "Publish"
+msgstr ""
+
+#: src/components/send-button/index.js:224
+#: src/components/send-button/index.js:234
 msgid "Send"
 msgstr ""
 
-#: src/components/send-button/index.js:201
+#: src/components/send-button/index.js:230
+msgid "Schedule"
+msgstr ""
+
+#: src/components/send-button/index.js:230
 msgid "Schedule sending"
 msgstr ""
 
-#: src/components/send-button/index.js:203
+#: src/components/send-button/index.js:234
 msgid "Send and Publish"
 msgstr ""
 
-#: src/components/send-button/index.js:208
+#: src/components/send-button/index.js:239
 msgid "Updating…"
 msgstr ""
 
-#: src/components/send-button/index.js:210
+#: src/components/send-button/index.js:241
 msgid "Update and copy HTML"
 msgstr ""
 
-#: src/components/send-button/index.js:212
+#: src/components/send-button/index.js:243
 #: src/newsletter-editor/layout/index.js:269
 msgid "Update"
 msgstr ""
 
-#: src/components/send-button/index.js:230
-msgid "Mark as sent and publish"
-msgstr ""
-
-#: src/components/send-button/index.js:230
-msgid "Mark as sent"
-msgstr ""
-
-#: src/components/send-button/index.js:260
+#: src/components/send-button/index.js:287
 msgid "Unschedule"
 msgstr ""
 
-#: src/components/send-button/index.js:285
+#: src/components/send-button/index.js:312
 msgid "Newsletter HTML"
 msgstr ""
 
-#: src/components/send-button/index.js:316
+#: src/components/send-button/index.js:352
 msgid "Something went wrong when converting the post to email"
 msgstr ""
 
-#: src/components/send-button/index.js:340
+#: src/components/send-button/index.js:377
+msgid "Publish your newsletter?"
+msgstr ""
+
+#: src/components/send-button/index.js:377
 msgid "Send your newsletter?"
 msgstr ""
 
-#: src/components/with-api-handler/index.js:12
+#: src/components/with-api-handler/index.js:17
+msgid "Published on"
+msgstr ""
+
+#: src/components/with-api-handler/index.js:17
 msgid "Campaign sent on"
 msgstr ""
 
@@ -4376,27 +4643,27 @@ msgstr ""
 msgid "Only visible in the sent email."
 msgstr ""
 
-#: src/editor/index.js:88
+#: src/editor/index.js:111
 msgid "Circle Black"
 msgstr ""
 
-#: src/editor/index.js:93
+#: src/editor/index.js:116
 msgid "Circle White"
 msgstr ""
 
-#: src/editor/index.js:98
+#: src/editor/index.js:121
 msgid "Black"
 msgstr ""
 
-#: src/editor/index.js:103
+#: src/editor/index.js:126
 msgid "White"
 msgstr ""
 
-#: src/editor/mjml/index.js:120
+#: src/editor/mjml/index.js:136
 msgid "Failed to refresh email HTML"
 msgstr ""
 
-#: src/editor/mjml/index.js:137
+#: src/editor/mjml/index.js:169
 msgid "Error refreshing email HTML."
 msgstr ""
 
@@ -4418,41 +4685,41 @@ msgstr ""
 msgid "Only the last 10 errors are stored."
 msgstr ""
 
-#: src/newsletter-editor/editor/index.js:131
+#: src/newsletter-editor/editor/index.js:126
 msgid "\"Custom Fields\" meta box is active in the UI. This will prevent the newsletter editor from functioning correctly. Please disable this meta box in the \"Panels\" section of the Editor Preferences."
 msgstr ""
 
-#: src/newsletter-editor/editor/index.js:140
+#: src/newsletter-editor/editor/index.js:135
 msgid "Open Editor Preferences"
 msgstr ""
 
 #. translators: %s: error message
-#: src/newsletter-editor/editor/index.js:153
+#: src/newsletter-editor/editor/index.js:148
 #, js-format
 msgid "Error sending newsletter: %s"
 msgstr ""
 
-#: src/newsletter-editor/editor/index.js:168
+#: src/newsletter-editor/editor/index.js:163
 msgid "Email content is too long and may get clipped by email clients."
 msgstr ""
 
-#: src/newsletter-editor/index.js:93
+#: src/newsletter-editor/index.js:94
 msgid "Error communicating with service provider."
 msgstr ""
 
-#: src/newsletter-editor/index.js:110
+#: src/newsletter-editor/index.js:111
 msgid "Layout Global Styles"
 msgstr ""
 
-#: src/newsletter-editor/index.js:110
+#: src/newsletter-editor/index.js:111
 msgid "Newsletter Global Styles"
 msgstr ""
 
-#: src/newsletter-editor/index.js:126
+#: src/newsletter-editor/index.js:127
 msgid "Newsletter Campaign"
 msgstr ""
 
-#: src/newsletter-editor/index.js:137
+#: src/newsletter-editor/index.js:138
 msgid "Testing"
 msgstr ""
 
@@ -4501,8 +4768,8 @@ msgstr ""
 msgid "Resetting the layout will remove all customizations and edits you’ve made. This action cannot be undone."
 msgstr ""
 
-#: src/newsletter-editor/public/index.js:52
-#: src/newsletter-editor/public/index.js:57
+#: src/newsletter-editor/public/index.js:58
+#: src/newsletter-editor/public/index.js:63
 msgid "Newsletter visibility"
 msgstr ""
 
@@ -4577,16 +4844,16 @@ msgstr ""
 msgid "Campaign Name"
 msgstr ""
 
-#. Translators: Error shown when we can't find the selected list for a newsletter. %s is the ESP's label for the list entity.
-#. Translators: Error shown when we can't find the selected sublist for a newsletter. %s is the ESP's label for the sublist entity or entities.
-#: src/newsletter-editor/sidebar/send-to.js:86
-#: src/newsletter-editor/sidebar/send-to.js:98
+#. Translators: Warning shown when a newsletter's stored list isn't available in the connected ESP. %s is the ESP's label for the list entity.
+#. Translators: Warning shown when a newsletter's stored sublist isn't available in the connected ESP. %s is the ESP's label for the sublist entity or entities.
+#: src/newsletter-editor/sidebar/send-to.js:99
+#: src/newsletter-editor/sidebar/send-to.js:113
 #, js-format
-msgid "Could not find the selected %s. It may have been deleted in your email service provider."
+msgid "The saved %s isn’t available in the connected email service provider. Choose a new one before sending."
 msgstr ""
 
 #. Translators: A summary of which list the campaign is set to send to, and the total number of contacts, if available. %1$s is the number of contacts. %2$s is the label of the list (ex: Main), %3$s is the label for the type of the list (ex: "list" on Active Campaign and "audience" on Mailchimp).
-#: src/newsletter-editor/sidebar/send-to.js:113
+#: src/newsletter-editor/sidebar/send-to.js:134
 #, js-format
 msgid "This newsletter will be sent to <strong>%1$s contact</strong> in the <strong>%2$s</strong> %3$s."
 msgid_plural "This newsletter will be sent to <strong>all %1$s contacts</strong> in the <strong>%2$s</strong> %3$s."
@@ -4594,25 +4861,25 @@ msgstr[0] ""
 msgstr[1] ""
 
 #. translators: A summary of which list and sublist the campaign is set to send to, and the total number of contacts, if available. %1$s: number of contacts, %2$s: list label, %3$s: list type, %4$s: sublist label, %5$s: sublist type.
-#: src/newsletter-editor/sidebar/send-to.js:127
+#: src/newsletter-editor/sidebar/send-to.js:148
 #, js-format
 msgid "This newsletter will be sent to <strong>%1$s contact</strong> in the <strong>%2$s</strong> %3$s who is part of the <strong>%4$s</strong> %5$s."
 msgid_plural "This newsletter will be sent to <strong>all %1$s contacts</strong> in the <strong>%2$s</strong> %3$s who are part of the <strong>%4$s</strong> %5$s."
 msgstr[0] ""
 msgstr[1] ""
 
-#: src/newsletter-editor/sidebar/send-to.js:153
+#: src/newsletter-editor/sidebar/send-to.js:174
 msgid "Send to"
 msgstr ""
 
-#: src/newsletter-editor/sidebar/send-to.js:161
+#: src/newsletter-editor/sidebar/send-to.js:182
 msgid "Updated send-to info fetched from ESP."
 msgstr ""
 
 #. Translators: Error shown when we can't find info on the selected list. %s is the ESP's label for the list entity.
 #. Translators: Error shown when we can't find info on the selected sublist. %s is the ESP's label for the sublist entity or entities.
-#: src/newsletter-editor/sidebar/send-to.js:174
-#: src/newsletter-editor/sidebar/send-to.js:209
+#: src/newsletter-editor/sidebar/send-to.js:195
+#: src/newsletter-editor/sidebar/send-to.js:230
 #, js-format
 msgid "Invalid %s selection."
 msgstr ""
@@ -4692,11 +4959,11 @@ msgstr ""
 msgid "Send a test email"
 msgstr ""
 
-#: src/newsletter-editor/utils.js:63
+#: src/newsletter-editor/utils.js:53
 msgid "Missing required sender info."
 msgstr ""
 
-#: src/newsletter-editor/utils.js:66
+#: src/newsletter-editor/utils.js:56
 msgid "Missing required list."
 msgstr ""
 
