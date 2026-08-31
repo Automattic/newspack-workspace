@@ -48,6 +48,10 @@ final class Accessibility_Statement_Page {
 	 * at a deleted page would otherwise go back to the database on every call,
 	 * which on the Pages list table is once per row.
 	 *
+	 * The blog ID is part of the key because this is a plain static: page IDs
+	 * repeat across a network, so without it a switch_to_blog() could be handed
+	 * another site's page.
+	 *
 	 * @var array{key: string, id: int, page: \WP_Post|null}|null
 	 */
 	private static ?array $resolved = null;
@@ -83,7 +87,7 @@ final class Accessibility_Statement_Page {
 	private static function resolve(): array {
 		$page_id   = (int) get_option( self::OPTION_NAME, 0 );
 		$legacy_id = (int) get_theme_mod( self::LEGACY_THEME_MOD );
-		$key       = $page_id . ':' . $legacy_id;
+		$key       = get_current_blog_id() . ':' . $page_id . ':' . $legacy_id;
 
 		if ( self::$resolved && $key === self::$resolved['key'] ) {
 			return self::$resolved;
@@ -262,18 +266,14 @@ final class Accessibility_Statement_Page {
 			$legacy_id = (int) get_theme_mod( self::LEGACY_THEME_MOD );
 			$legacy    = $legacy_id ? get_post( $legacy_id ) : null;
 			if ( $legacy && 'page' === $legacy->post_type ) {
-				add_option( self::OPTION_NAME, $legacy_id, '', true );
+				self::store_page_id( $legacy_id );
 			}
 			return;
 		}
 
 		$page_id = self::find_legacy_page_id();
 		if ( $page_id ) {
-			// add_option, not update_option: the decision to write was made
-			// before a multi-query scan, and a create_page() that landed in the
-			// gap must keep its pointer rather than be sent back to an older
-			// page. Core's INSERT ... ON DUPLICATE KEY leaves the row alone.
-			add_option( self::OPTION_NAME, $page_id, '', true );
+			self::store_page_id( $page_id );
 			// The page may have come from a theme that is no longer active;
 			// a rolled-back plugin only looks at the active one.
 			set_theme_mod( self::LEGACY_THEME_MOD, $page_id );
@@ -284,6 +284,30 @@ final class Accessibility_Statement_Page {
 		// Recorded last: a request that dies inside the scan should retry on the
 		// next one rather than abandon the site's page for good.
 		update_option( self::MIGRATION_FLAG, 1, true );
+	}
+
+	/**
+	 * Store the pointer, unless another request stored one while we were looking.
+	 *
+	 * The decision to write is made before a lookup that costs several queries,
+	 * so a create_page() can land in the gap, and its page is the one the site
+	 * should keep. add_option() cannot make that call here: the miss this request
+	 * already cached leaves the option in `notoptions`, which is exactly the case
+	 * where add_option() skips its own existence check and overwrites. Dropping
+	 * the two cache entries first is what makes the re-read see a concurrent
+	 * write. That narrows the window to the re-read itself rather than closing
+	 * it; no option API can do better, and the cost lands once per site.
+	 *
+	 * @param int $page_id The page ID to store.
+	 * @return void
+	 */
+	private static function store_page_id( int $page_id ): void {
+		wp_cache_delete( 'notoptions', 'options' );
+		wp_cache_delete( 'alloptions', 'options' );
+
+		if ( ! (int) get_option( self::OPTION_NAME, 0 ) ) {
+			update_option( self::OPTION_NAME, $page_id, true );
+		}
 	}
 
 	/**

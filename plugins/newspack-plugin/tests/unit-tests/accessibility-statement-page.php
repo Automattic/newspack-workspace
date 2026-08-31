@@ -406,9 +406,10 @@ class Test_Accessibility_Statement_Page extends WP_UnitTestCase {
 	}
 
 	/**
-	 * A caller passing something other than an array gets it back untouched,
-	 * so another plugin's misuse of the filter costs it the states it had
-	 * collected rather than fatalling the posts list screen.
+	 * Core always passes an array. A caller that passes something else gets it
+	 * back untouched, so this filter is not what drops whatever earlier filters
+	 * had collected. Core still fatals on count() further down, which is where
+	 * that caller's bug belongs.
 	 */
 	public function test_post_state_leaves_an_unexpected_argument_alone() {
 		Accessibility_Statement_Page::create_page();
@@ -534,6 +535,22 @@ class Test_Accessibility_Statement_Page extends WP_UnitTestCase {
 		Accessibility_Statement_Page::migrate_legacy_theme_mod();
 
 		$this->assertSame( $page_id, (int) get_option( Accessibility_Statement_Page::OPTION_NAME ) );
+	}
+
+	/**
+	 * A pointer row left holding a falsy value still gets adopted. The guard
+	 * before the scan reads it as "no pointer", so the write afterwards has to
+	 * agree, or the flag is recorded and the site can never adopt at all.
+	 */
+	public function test_a_falsy_stored_pointer_does_not_block_adoption() {
+		$page_id = $this->make_page( 'publish' );
+		update_option( Accessibility_Statement_Page::OPTION_NAME, 0 );
+		set_theme_mod( Accessibility_Statement_Page::LEGACY_THEME_MOD, $page_id );
+
+		Accessibility_Statement_Page::migrate_legacy_theme_mod();
+
+		$this->assertSame( $page_id, (int) get_option( Accessibility_Statement_Page::OPTION_NAME ) );
+		$this->assertSame( $page_id, Accessibility_Statement_Page::get_page_id() );
 	}
 
 	/**
