@@ -9,6 +9,7 @@ import { __ } from '@wordpress/i18n';
 import { useEffect, useState } from '@wordpress/element';
 import { ExternalLink } from '@wordpress/components';
 import { speak } from '@wordpress/a11y';
+import { decodeEntities } from '@wordpress/html-entities';
 import { Button, Card, Notice, SectionHeader } from '../../../../../../packages/components/src';
 import { useWizardApiFetch } from '../../../../hooks/use-wizard-api-fetch';
 
@@ -24,13 +25,13 @@ type PageData = {
 };
 
 /**
- * Where no page exists, the server says whether the site has never created one
- * ( 'none' ) or created one that has since gone ( 'missing' ).
+ * Where no page exists, the server sends a reason in place of the page: whether
+ * the site has never created one ( 'none' ) or created one that has since gone
+ * ( 'missing' ).
  */
-type PageResponse = PageData | { status: 'none' | 'missing' };
+type PageResponse = PageData | { reason: 'none' | 'missing' };
 
-const isPage = ( response: PageResponse ): response is PageData =>
-	Boolean( response?.status ) && response.status !== 'none' && response.status !== 'missing';
+const isPage = ( response: PageResponse ): response is PageData => Boolean( response ) && ! ( 'reason' in response );
 
 export default function AccessibilityStatement( { isFetching }: AccessibilityStatementProps ) {
 	const { wizardApiFetch, errorMessage, resetError } = useWizardApiFetch( 'newspack-settings/advanced-settings/accessibility-statement' );
@@ -46,7 +47,7 @@ export default function AccessibilityStatement( { isFetching }: AccessibilitySta
 			setIsPageMissing( false );
 		} else {
 			setLocalPageData( null );
-			setIsPageMissing( response?.status === 'missing' );
+			setIsPageMissing( response?.reason === 'missing' );
 		}
 		setLocalIsFetching( false );
 		if ( announce ) {
@@ -58,8 +59,9 @@ export default function AccessibilityStatement( { isFetching }: AccessibilitySta
 		setLocalPageData( null );
 		setIsPageMissing( false );
 		setLocalIsFetching( false );
-		// The notice is a plain div, so nothing else announces the failure.
-		speak( error?.message ?? __( 'Something went wrong.', 'newspack-plugin' ), 'assertive' );
+		// The notice is a plain div, so nothing else announces the failure. It
+		// renders the message decoded, so announce the decoded text too.
+		speak( decodeEntities( error?.message ?? __( 'Something went wrong.', 'newspack-plugin' ) ), 'assertive' );
 	};
 
 	useEffect( () => {

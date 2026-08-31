@@ -22,7 +22,10 @@ final class Accessibility_Statement_Page {
 	 * and style variation kept its own, and a site lost the page each time it
 	 * switched. Still read until the upgrade has run, and still written on
 	 * create, so a plugin rolled back to before this change finds the page
-	 * where it looks for it instead of making a second one.
+	 * where it looks for it instead of making a second one. Both the write and
+	 * the read only ever see the active theme, so the breadcrumb covers a
+	 * rollback on a site that has not switched theme since; rolling forward
+	 * re-adopts from the option either way.
 	 */
 	const LEGACY_THEME_MOD = 'accessibility_statement_page_id';
 
@@ -40,14 +43,68 @@ final class Accessibility_Statement_Page {
 	const PAGE_SLUG = 'accessibility-statement';
 
 	/**
+	 * What the stored pointer resolved to this request, keyed by the values it
+	 * was resolved from. get_post() caches a hit but not a miss, so a pointer
+	 * at a deleted page would otherwise go back to the database on every call,
+	 * which on the Pages list table is once per row.
+	 *
+	 * @var array{key: string, id: int, page: \WP_Post|null}|null
+	 */
+	private static ?array $resolved = null;
+
+	/**
 	 * Add hooks.
 	 */
 	public static function init(): void {
 		// Register REST routes.
 		add_action( 'rest_api_init', [ __CLASS__, 'register_rest_routes' ], 10 );
 		add_action( 'admin_init', [ __CLASS__, 'migrate_legacy_theme_mod' ], 10 );
+		// Trashing, restoring or deleting the page changes what the pointer
+		// resolves to without changing the pointer itself.
+		add_action( 'clean_post_cache', [ __CLASS__, 'forget_resolved_page' ], 10 );
 		// Add post status to accessibility statement page.
 		add_filter( 'display_post_states', [ __CLASS__, 'post_status' ], 10, 2 );
+	}
+
+	/**
+	 * Drop the resolved pointer so the next read looks it up again.
+	 *
+	 * @return void
+	 */
+	public static function forget_resolved_page(): void {
+		self::$resolved = null;
+	}
+
+	/**
+	 * Resolve the stored pointer to an ID and, where it still exists, a page.
+	 *
+	 * @return array{key: string, id: int, page: \WP_Post|null}
+	 */
+	private static function resolve(): array {
+		$page_id   = (int) get_option( self::OPTION_NAME, 0 );
+		$legacy_id = (int) get_theme_mod( self::LEGACY_THEME_MOD );
+		$key       = $page_id . ':' . $legacy_id;
+
+		if ( self::$resolved && $key === self::$resolved['key'] ) {
+			return self::$resolved;
+		}
+
+		$page = $page_id ? self::usable_page( $page_id ) : null;
+		if ( ! $page && $legacy_id ) {
+			$legacy = self::usable_page( $legacy_id );
+			if ( $legacy ) {
+				$page_id = $legacy_id;
+				$page    = $legacy;
+			}
+		}
+
+		self::$resolved = [
+			'key'  => $key,
+			'id'   => $page_id,
+			'page' => $page,
+		];
+
+		return self::$resolved;
 	}
 
 	/**
@@ -58,21 +115,17 @@ final class Accessibility_Statement_Page {
 	 * which on an auto-updating site can be days, and it covers a page an older
 	 * version created while the plugin was rolled back.
 	 *
+	 * That fallback reads the active theme only, and skips a trashed page,
+	 * where the upgrade scan reads every theme's mods and keeps a trashed page
+	 * on purpose. So a site that switched theme before updating has no link
+	 * until the upgrade runs; widening the fallback would put a scan of every
+	 * theme's mods on every front-end render.
+	 *
 	 * @return int The stored page ID, which may point at a page that has since
 	 *             been trashed or deleted, or 0 if no pointer was ever stored.
 	 */
 	public static function get_page_id(): int {
-		$page_id = (int) get_option( self::OPTION_NAME, 0 );
-		if ( $page_id && self::usable_page( $page_id ) ) {
-			return $page_id;
-		}
-
-		$legacy_id = (int) get_theme_mod( self::LEGACY_THEME_MOD );
-		if ( $legacy_id && self::usable_page( $legacy_id ) ) {
-			return $legacy_id;
-		}
-
-		return $page_id;
+		return self::resolve()['id'];
 	}
 
 	/**
@@ -82,12 +135,7 @@ final class Accessibility_Statement_Page {
 	 *                       deleted, or it sits in the trash.
 	 */
 	private static function get_stored_page(): ?\WP_Post {
-		$page_id = self::get_page_id();
-		if ( ! $page_id ) {
-			return null;
-		}
-
-		return self::usable_page( $page_id );
+		return self::resolve()['page'];
 	}
 
 	/**
@@ -196,8 +244,11 @@ final class Accessibility_Statement_Page {
 	 */
 	public static function migrate_legacy_theme_mod(): void {
 		// admin_init also fires on admin-ajax.php and admin-post.php, both
-		// reachable logged out. Anonymous requests should not pay for the scan.
-		if ( wp_doing_ajax() || ! is_user_logged_in() ) {
+		// reachable logged out, and every logged-in reader reaches the admin
+		// through their profile. Only a user who could create the page pays for
+		// the scan and its writes; the legacy fallback in get_page_id() covers
+		// the site until one of them shows up.
+		if ( wp_doing_ajax() || ! current_user_can( 'edit_pages' ) ) {
 			return;
 		}
 
@@ -211,14 +262,18 @@ final class Accessibility_Statement_Page {
 			$legacy_id = (int) get_theme_mod( self::LEGACY_THEME_MOD );
 			$legacy    = $legacy_id ? get_post( $legacy_id ) : null;
 			if ( $legacy && 'page' === $legacy->post_type ) {
-				update_option( self::OPTION_NAME, $legacy_id, true );
+				add_option( self::OPTION_NAME, $legacy_id, '', true );
 			}
 			return;
 		}
 
 		$page_id = self::find_legacy_page_id();
 		if ( $page_id ) {
-			update_option( self::OPTION_NAME, $page_id, true );
+			// add_option, not update_option: the decision to write was made
+			// before a multi-query scan, and a create_page() that landed in the
+			// gap must keep its pointer rather than be sent back to an older
+			// page. Core's INSERT ... ON DUPLICATE KEY leaves the row alone.
+			add_option( self::OPTION_NAME, $page_id, '', true );
 			// The page may have come from a theme that is no longer active;
 			// a rolled-back plugin only looks at the active one.
 			set_theme_mod( self::LEGACY_THEME_MOD, $page_id );
@@ -309,13 +364,11 @@ final class Accessibility_Statement_Page {
 					'methods'             => \WP_REST_Server::READABLE,
 					'callback'            => [ __CLASS__, 'api_get_page' ],
 					'permission_callback' => [ __CLASS__, 'api_permissions_check' ],
-					'args'                => [],
 				],
 				[
 					'methods'             => \WP_REST_Server::CREATABLE,
 					'callback'            => [ __CLASS__, 'api_create_page' ],
 					'permission_callback' => [ __CLASS__, 'api_permissions_check' ],
-					'args'                => [],
 				],
 			]
 		);
@@ -337,9 +390,12 @@ final class Accessibility_Statement_Page {
 	/**
 	 * API callback for getting accessibility statement page.
 	 *
-	 * Where there is no page, the response says whether the site has never
-	 * created one ('none') or created one that has since gone ('missing'), so
-	 * the wizard can explain which of the two the publisher is looking at.
+	 * Where there is no page, the response carries a `reason` instead of the
+	 * page: whether the site has never created one ('none') or created one that
+	 * has since gone ('missing'), so the wizard can explain which of the two the
+	 * publisher is looking at. It is its own key because `status` is a post
+	 * status, and a client testing `status` against these two names would
+	 * misread any post status registered under either.
 	 *
 	 * @return \WP_REST_Response|\WP_Error Response object.
 	 */
@@ -349,7 +405,7 @@ final class Accessibility_Statement_Page {
 			return rest_ensure_response( $page_data );
 		}
 
-		return rest_ensure_response( [ 'status' => self::get_page_id() ? 'missing' : 'none' ] );
+		return rest_ensure_response( [ 'reason' => self::get_page_id() ? 'missing' : 'none' ] );
 	}
 
 	/**
@@ -371,16 +427,16 @@ final class Accessibility_Statement_Page {
 	/**
 	 * Add post status to accessibility statement page.
 	 *
+	 * Core always passes an array and a WP_Post. Another plugin calling the
+	 * filter with something else gets it back untouched, rather than having
+	 * whatever earlier filters contributed replaced with an empty array.
+	 *
 	 * @param mixed $post_states The post states, normally an array.
 	 * @param mixed $post The post object, normally a WP_Post.
-	 * @return array The post states.
+	 * @return mixed The post states.
 	 */
-	public static function post_status( $post_states, $post = null ): array {
-		if ( ! is_array( $post_states ) ) {
-			$post_states = [];
-		}
-
-		if ( $post instanceof \WP_Post && $post->ID === self::get_page_id() ) {
+	public static function post_status( $post_states, $post = null ) {
+		if ( is_array( $post_states ) && $post instanceof \WP_Post && $post->ID === self::get_page_id() ) {
 			$post_states['accessibility_statement'] = __( 'Accessibility Statement', 'newspack-plugin' );
 		}
 		return $post_states;

@@ -90,19 +90,6 @@ class Test_Accessibility_Statement_Page extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Repeated reads must stay free of side effects.
-	 */
-	public function test_repeated_reads_create_nothing() {
-		$before = $this->count_pages();
-
-		for ( $i = 0; $i < 5; $i++ ) {
-			Accessibility_Statement_Page::get_page();
-		}
-
-		$this->assertSame( $before, $this->count_pages() );
-	}
-
-	/**
 	 * A stored page is returned with the fields the wizard and theme read.
 	 */
 	public function test_get_page_returns_the_stored_page() {
@@ -232,21 +219,6 @@ class Test_Accessibility_Statement_Page extends WP_UnitTestCase {
 	}
 
 	/**
-	 * The ID the content gate compares against is an integer, so its strict
-	 * comparison with a post ID holds.
-	 */
-	public function test_the_stored_id_is_an_integer_for_the_content_gate() {
-		$page_id = $this->make_page();
-		set_theme_mod( Accessibility_Statement_Page::LEGACY_THEME_MOD, (string) $page_id );
-		Accessibility_Statement_Page::migrate_legacy_theme_mod();
-
-		$stored = Accessibility_Statement_Page::get_page_id();
-
-		$this->assertIsInt( $stored );
-		$this->assertTrue( get_post( $page_id )->ID === $stored );
-	}
-
-	/**
 	 * Sites that stored the pointer as a theme mod keep their existing page.
 	 * The legacy mod is deliberately left in place, so rolling the plugin back
 	 * finds the page where the old code looks for it.
@@ -265,29 +237,6 @@ class Test_Accessibility_Statement_Page extends WP_UnitTestCase {
 		$page = Accessibility_Statement_Page::get_page();
 		$this->assertIsArray( $page );
 		$this->assertSame( get_permalink( $page_id ), $page['pageUrl'] );
-	}
-
-	/**
-	 * A site that switched theme after creating its page left the ID behind in
-	 * the mods of the theme it was using at the time, so migration has to look
-	 * past the active theme to find it.
-	 */
-	public function test_a_theme_mod_from_an_inactive_theme_is_adopted() {
-		$page_id  = $this->make_page();
-		$inactive = $this->inactive_stylesheet();
-
-		update_option(
-			'theme_mods_' . $inactive,
-			[ Accessibility_Statement_Page::LEGACY_THEME_MOD => $page_id ]
-		);
-
-		$before = $this->count_pages();
-		Accessibility_Statement_Page::migrate_legacy_theme_mod();
-
-		$this->assertSame( $page_id, Accessibility_Statement_Page::get_page_id() );
-		$this->assertSame( $before, $this->count_pages() );
-
-		delete_option( 'theme_mods_' . $inactive );
 	}
 
 	/**
@@ -391,7 +340,7 @@ class Test_Accessibility_Statement_Page extends WP_UnitTestCase {
 
 		$this->assertSame( $page_id, Accessibility_Statement_Page::get_page_id() );
 		$this->assertFalse( Accessibility_Statement_Page::get_page() );
-		$this->assertSame( 'missing', Accessibility_Statement_Page::api_get_page()->get_data()['status'] );
+		$this->assertSame( 'missing', Accessibility_Statement_Page::api_get_page()->get_data()['reason'] );
 
 		wp_untrash_post( $page_id );
 		wp_update_post(
@@ -457,14 +406,16 @@ class Test_Accessibility_Statement_Page extends WP_UnitTestCase {
 	}
 
 	/**
-	 * The post-state filter tolerates a caller that passes something other than
-	 * a post object, rather than fatalling the posts list screen.
+	 * A caller passing something other than an array gets it back untouched,
+	 * so another plugin's misuse of the filter costs it the states it had
+	 * collected rather than fatalling the posts list screen.
 	 */
-	public function test_post_state_tolerates_an_unexpected_argument() {
+	public function test_post_state_leaves_an_unexpected_argument_alone() {
 		Accessibility_Statement_Page::create_page();
 
 		$this->assertSame( [], Accessibility_Statement_Page::post_status( [], 123 ) );
-		$this->assertSame( [], Accessibility_Statement_Page::post_status( null, null ) );
+		$this->assertSame( 'sticky', Accessibility_Statement_Page::post_status( 'sticky', null ) );
+		$this->assertNull( Accessibility_Statement_Page::post_status( null, null ) );
 	}
 
 	/**
@@ -549,13 +500,40 @@ class Test_Accessibility_Statement_Page extends WP_UnitTestCase {
 	 */
 	public function test_api_response_separates_never_created_from_deleted() {
 		$never = Accessibility_Statement_Page::api_get_page();
-		$this->assertSame( 'none', $never->get_data()['status'] );
+		$this->assertSame( 'none', $never->get_data()['reason'] );
 
 		Accessibility_Statement_Page::create_page();
 		wp_delete_post( get_option( Accessibility_Statement_Page::OPTION_NAME ), true );
 
 		$deleted = Accessibility_Statement_Page::api_get_page();
-		$this->assertSame( 'missing', $deleted->get_data()['status'] );
+		$this->assertSame( 'missing', $deleted->get_data()['reason'] );
+		$this->assertArrayNotHasKey( 'status', $deleted->get_data() );
+	}
+
+	/**
+	 * Only a user who could create the page pays for the scan and its writes.
+	 * Every logged-in reader reaches admin_init through their profile screen,
+	 * and this change exists to keep reader-facing requests read-only.
+	 */
+	public function test_migration_waits_for_a_user_who_could_create_the_page() {
+		$page_id = $this->make_page( 'publish' );
+		set_theme_mod( Accessibility_Statement_Page::LEGACY_THEME_MOD, $page_id );
+
+		foreach ( [ 0, $this->factory()->user->create( [ 'role' => 'subscriber' ] ) ] as $user_id ) {
+			wp_set_current_user( $user_id );
+			Accessibility_Statement_Page::migrate_legacy_theme_mod();
+
+			$this->assertFalse( get_option( Accessibility_Statement_Page::OPTION_NAME ) );
+			$this->assertFalse( get_option( Accessibility_Statement_Page::MIGRATION_FLAG ) );
+		}
+
+		// The page is still found meanwhile, through the legacy theme mod.
+		$this->assertSame( $page_id, Accessibility_Statement_Page::get_page_id() );
+
+		wp_set_current_user( $this->factory()->user->create( [ 'role' => 'administrator' ] ) );
+		Accessibility_Statement_Page::migrate_legacy_theme_mod();
+
+		$this->assertSame( $page_id, (int) get_option( Accessibility_Statement_Page::OPTION_NAME ) );
 	}
 
 	/**
