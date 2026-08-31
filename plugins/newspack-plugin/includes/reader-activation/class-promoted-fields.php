@@ -306,6 +306,14 @@ class Promoted_Fields {
 				);
 				return null !== $stored_date && $stored_date === $rule_date;
 			default:
+				// A rule on an options-backed field stores the chosen options as a list,
+				// because that is the shape `has_options` makes the sanitizer require,
+				// while the reader holds the single value the provider sent. Membership
+				// is the comparison there; equality still decides wherever both sides
+				// carry the same shape, which is every other field.
+				if ( is_array( $args ) && ! is_array( $value ) ) {
+					return in_array( $value, $args, true );
+				}
 				return $value === $args;
 		}
 	}

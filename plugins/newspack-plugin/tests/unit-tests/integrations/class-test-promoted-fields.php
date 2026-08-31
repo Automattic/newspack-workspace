@@ -255,6 +255,39 @@ class Test_Promoted_Fields extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * A select field's rule stores the chosen options as a list, because `has_options`
+	 * makes the sanitizer require one, while the reader holds the single value the
+	 * provider sent. Comparing those two for equality can never match, so the rule walls
+	 * out every reader it was written to admit — and a provider whose options call fails
+	 * mid-edit is enough to reach it.
+	 */
+	public function test_evaluate_default_matching_against_a_selected_option() {
+		$user_id = $this->factory->user->create();
+
+		if ( class_exists( '\Newspack\Reader_Data' ) ) {
+			\Newspack\Reader_Data::update_item( $user_id, 'org', wp_json_encode( 'Newspack' ) );
+		}
+
+		$evaluate_field = new \ReflectionMethod( Promoted_Fields::class, 'evaluate_field' );
+		$evaluate_field->setAccessible( true );
+
+		$select_field = ( new Incoming_Field( 'org' ) )->set_value_type( 'select' );
+
+		$this->assertTrue(
+			$evaluate_field->invoke( null, $select_field, $user_id, [ 'Newspack' ] ),
+			'A reader holding one of the selected options should match.'
+		);
+		$this->assertFalse(
+			$evaluate_field->invoke( null, $select_field, $user_id, [ 'Other' ] ),
+			'A reader holding none of them should not.'
+		);
+		$this->assertTrue(
+			$evaluate_field->invoke( null, $select_field, $user_id, [ 'Other', 'Newspack' ] ),
+			'A multi-option rule should match a reader holding any one of them.'
+		);
+	}
+
+	/**
 	 * Test that evaluate_field handles boolean value_type.
 	 */
 	public function test_evaluate_boolean_matching() {
