@@ -15,15 +15,17 @@ defined( 'ABSPATH' ) || exit;
  * This class handles functional customizations. UI customizations are handled in My_Account_UI classes.
  */
 class WooCommerce_My_Account {
-	const RESET_PASSWORD_URL_PARAM     = 'reset-password';
-	const DELETE_ACCOUNT_URL_PARAM     = 'delete-account';
-	const DELETE_ACCOUNT_FORM          = 'delete-account-form';
-	const SEND_MAGIC_LINK_PARAM        = 'magic-link';
-	const AFTER_ACCOUNT_DELETION_PARAM = 'account-deleted';
-	const CANCEL_EMAIL_CHANGE_PARAM    = 'cancel-email-change';
-	const VERIFY_EMAIL_CHANGE_PARAM    = 'verify-email-change';
-	const PENDING_EMAIL_CHANGE_META    = 'newspack_pending_email_change';
-	const ALLOWED_PARAMS               = [
+	const RESET_PASSWORD_URL_PARAM         = 'reset-password';
+	const DELETE_ACCOUNT_URL_PARAM         = 'delete-account';
+	const DELETE_ACCOUNT_FORM              = 'delete-account-form';
+	const SEND_MAGIC_LINK_PARAM            = 'magic-link';
+	const AFTER_ACCOUNT_DELETION_PARAM     = 'account-deleted';
+	const CANCEL_EMAIL_CHANGE_PARAM        = 'cancel-email-change';
+	const VERIFY_EMAIL_CHANGE_PARAM        = 'verify-email-change';
+	const PENDING_EMAIL_CHANGE_META        = 'newspack_pending_email_change';
+	const PENDING_EMAIL_CHANGE_TOKENS_META = 'newspack_pending_email_change_tokens';
+	const EMAIL_CHANGE_TOKEN_EXPIRY        = DAY_IN_SECONDS;
+	const ALLOWED_PARAMS                   = [
 		self::RESET_PASSWORD_URL_PARAM,
 		self::DELETE_ACCOUNT_URL_PARAM,
 		self::SEND_MAGIC_LINK_PARAM,
@@ -1087,20 +1089,262 @@ class WooCommerce_My_Account {
 	}
 
 	/**
-	 * Get email change verification url.
+	 * Get an email change url carrying a single-use token.
 	 *
 	 * @param string $param The email change param.
-	 * @param string $value The email change param value.
+	 * @param string $token The token to embed in the url.
 	 *
 	 * @return string
 	 */
-	public static function get_email_change_url( $param, $value ) {
+	public static function get_email_change_url( $param, $token ) {
 		return \add_query_arg(
 			[
-				$param => \wp_hash( $value ),
+				$param => $token,
 			],
 			\wc_get_endpoint_url( 'edit-account', '', \wc_get_page_permalink( 'myaccount' ) )
 		);
+	}
+
+	/**
+	 * Issue a fresh set of single-use tokens for a pending email change.
+	 *
+	 * The verification and cancellation links are delivered to different
+	 * mailboxes, so each gets its own token. Both addresses are stored with
+	 * them in a single record: the one the request is for, so a token can only
+	 * ever settle the address it was issued for, and the one it was issued
+	 * from, so the links stop working if the account address moves by any other
+	 * route in the meantime. Both tokens expire together.
+	 *
+	 * @param int    $user_id   User ID.
+	 * @param string $new_email The address the request is for.
+	 *
+	 * @return array Token set with 'from', 'email', 'verify', 'cancel' and 'expires' keys, or an empty array if it could not be stored.
+	 */
+	private static function create_email_change_tokens( $user_id, $new_email ) {
+		$user = \get_userdata( $user_id );
+		if ( ! $user ) {
+			return [];
+		}
+		$tokens = [
+			'from'    => $user->user_email,
+			'email'   => $new_email,
+			'verify'  => \wp_generate_password( 32, false ),
+			'cancel'  => \wp_generate_password( 32, false ),
+			'expires' => time() + self::EMAIL_CHANGE_TOKEN_EXPIRY,
+		];
+		if ( ! \update_user_meta( $user_id, self::PENDING_EMAIL_CHANGE_TOKENS_META, $tokens ) ) {
+			return [];
+		}
+		return $tokens;
+	}
+
+	/**
+	 * Get a user's usable email change tokens.
+	 *
+	 * A request is only usable while the account still holds the address it was
+	 * issued from. If that address moves by any other route — an admin
+	 * correcting it, or any programmatic update — the request no longer
+	 * describes the account it was made against, and settling it would revert
+	 * the newer address and push that revert on to Stripe and the ESP.
+	 *
+	 * @param int $user_id User ID.
+	 *
+	 * @return array Token set, or an empty array if there is none, it has expired, or the account address has moved.
+	 */
+	private static function get_email_change_tokens( $user_id ) {
+		$tokens = \get_user_meta( $user_id, self::PENDING_EMAIL_CHANGE_TOKENS_META, true );
+		if (
+			! is_array( $tokens )
+			|| empty( $tokens['from'] )
+			|| empty( $tokens['email'] )
+			|| empty( $tokens['verify'] )
+			|| empty( $tokens['cancel'] )
+			|| empty( $tokens['expires'] )
+			|| time() > (int) $tokens['expires']
+		) {
+			return [];
+		}
+		$user = \get_userdata( $user_id );
+		if ( ! $user || $tokens['from'] !== $user->user_email ) {
+			return [];
+		}
+		return $tokens;
+	}
+
+	/**
+	 * Get the address a user's email change is waiting on.
+	 *
+	 * A request that can no longer be settled — expired links, or an account
+	 * address that has moved since — is cleared here, so the account form
+	 * unlocks instead of holding a change the reader can neither complete nor
+	 * cancel. Either key left behind is swept, since by this point the request
+	 * is unusable whichever half of it survived.
+	 *
+	 * Note that this is an accessor that writes: reading the pending address
+	 * settles an unusable request as a side effect. Both call sites render the
+	 * account form for the current reader, which is what that behaviour is for.
+	 *
+	 * @param int $user_id User ID.
+	 *
+	 * @return string Pending email address, or an empty string if there is none.
+	 */
+	public static function get_pending_email_change( $user_id ) {
+		$tokens = self::get_email_change_tokens( $user_id );
+		if ( $tokens ) {
+			return $tokens['email'];
+		}
+		if (
+			\get_user_meta( $user_id, self::PENDING_EMAIL_CHANGE_META, true )
+			|| \get_user_meta( $user_id, self::PENDING_EMAIL_CHANGE_TOKENS_META, true )
+		) {
+			self::clear_pending_email_change( $user_id );
+		}
+		return '';
+	}
+
+	/**
+	 * Get the cancellation url for a user's pending email change.
+	 *
+	 * @param int $user_id User ID.
+	 *
+	 * @return string Cancellation url, or an empty string if there is no pending change.
+	 */
+	public static function get_cancel_email_change_url( $user_id ) {
+		$tokens = self::get_email_change_tokens( $user_id );
+		if ( empty( $tokens['cancel'] ) ) {
+			return '';
+		}
+		return self::get_email_change_url( self::CANCEL_EMAIL_CHANGE_PARAM, $tokens['cancel'] );
+	}
+
+	/**
+	 * Get the verification url for a user's pending email change.
+	 *
+	 * Deliberately private, and deliberately not the mirror image of the
+	 * accessor above: this hands out the token that completes the change, so it
+	 * exists to keep the two links assembled the same way and under test, not
+	 * as something other code should be able to call.
+	 *
+	 * @param int $user_id User ID.
+	 *
+	 * @return string Verification url, or an empty string if there is no pending change.
+	 */
+	private static function get_verify_email_change_url( $user_id ) {
+		$tokens = self::get_email_change_tokens( $user_id );
+		if ( empty( $tokens['verify'] ) ) {
+			return '';
+		}
+		return self::get_email_change_url( self::VERIFY_EMAIL_CHANGE_PARAM, $tokens['verify'] );
+	}
+
+	/**
+	 * Clear all pending email change state for a user.
+	 *
+	 * @param int $user_id User ID.
+	 */
+	private static function clear_pending_email_change( $user_id ) {
+		\delete_user_meta( $user_id, self::PENDING_EMAIL_CHANGE_META );
+		\delete_user_meta( $user_id, self::PENDING_EMAIL_CHANGE_TOKENS_META );
+	}
+
+	/**
+	 * Claim a pending email change, so that only one caller can settle it.
+	 *
+	 * Two clicks on the same link can both pass the token comparison before
+	 * either clears the request. The delete is what decides: the database
+	 * removes the record once, and only the caller whose statement removed it
+	 * goes on to apply the change.
+	 *
+	 * The claim is all or nothing. `$wpdb::delete()` returns `false` on a SQL
+	 * error as well as `0` when another caller got there first, so the mirror
+	 * is only cleared once the token record is actually gone. Clearing it
+	 * regardless would leave a request the caller has been told is over still
+	 * live in every other respect — form locked, both links working.
+	 *
+	 * @param int $user_id User ID.
+	 *
+	 * @return bool Whether this caller claimed the request.
+	 */
+	private static function claim_pending_email_change( $user_id ) {
+		global $wpdb;
+		$claimed = $wpdb->delete( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.SlowDBQuery.slow_db_query_meta_key
+			$wpdb->usermeta,
+			[
+				'user_id'  => $user_id,
+				'meta_key' => self::PENDING_EMAIL_CHANGE_TOKENS_META,
+			]
+		);
+		\wp_cache_delete( $user_id, 'user_meta' );
+		if ( ! $claimed ) {
+			return false;
+		}
+		\delete_user_meta( $user_id, self::PENDING_EMAIL_CHANGE_META );
+		return true;
+	}
+
+	/**
+	 * Settle a pending email change, applying the requested address.
+	 *
+	 * @param int    $user_id User ID.
+	 * @param string $secret  Token from the verification link.
+	 *
+	 * @return true|\WP_Error True once the address is updated.
+	 */
+	public static function verify_email_change( $user_id, $secret ) {
+		$tokens = self::get_email_change_tokens( $user_id );
+		if ( empty( $tokens['verify'] ) || ! hash_equals( $tokens['verify'], (string) $secret ) ) {
+			return new \WP_Error( 'newspack_email_change_unavailable', __( 'This email change request has been cancelled or expired.', 'newspack-plugin' ) );
+		}
+		$user = \get_userdata( $user_id );
+		if ( ! $user ) {
+			return new \WP_Error( 'newspack_email_change_unavailable', __( 'This email change request has been cancelled or expired.', 'newspack-plugin' ) );
+		}
+		// Single use: the request is spent whether or not the update succeeds.
+		if ( ! self::claim_pending_email_change( $user_id ) ) {
+			return new \WP_Error( 'newspack_email_change_unavailable', __( 'This email change request has been cancelled or expired.', 'newspack-plugin' ) );
+		}
+		$new_email = $tokens['email'];
+		$old_email = $user->user_email;
+		$update    = \wp_update_user(
+			[
+				'ID'         => $user_id,
+				'user_email' => $new_email,
+			]
+		);
+		if ( \is_wp_error( $update ) || ! $update ) {
+			// The request is already spent, so the reader has to ask again. Core
+			// rechecks the address on update, so the common failure here is that
+			// something claimed it inside the 24 hours — worth saying, since
+			// "something went wrong" reads as a site fault and invites a reload
+			// of a link that will never work again.
+			$reason = \is_wp_error( $update ) ? $update->get_error_message() : '';
+			return new \WP_Error( 'newspack_email_change_failed', $reason ? $reason : __( 'Something went wrong.', 'newspack-plugin' ) );
+		}
+		$customer = new \WC_Customer( $user_id );
+		$customer->set_billing_email( $new_email );
+		$customer->save();
+		self::maybe_sync_email_change_with_stripe( $user_id, $new_email );
+		self::sync_email_change_with_esp( $user_id, $new_email, $old_email );
+		return true;
+	}
+
+	/**
+	 * Drop a pending email change, leaving the account address as it is.
+	 *
+	 * @param int    $user_id User ID.
+	 * @param string $secret  Token from the cancellation link.
+	 *
+	 * @return true|\WP_Error True once the request is dropped.
+	 */
+	public static function cancel_email_change( $user_id, $secret ) {
+		$tokens = self::get_email_change_tokens( $user_id );
+		if ( empty( $tokens['cancel'] ) || ! hash_equals( $tokens['cancel'], (string) $secret ) ) {
+			return new \WP_Error( 'newspack_email_change_unavailable', __( 'This email change request has been cancelled or expired.', 'newspack-plugin' ) );
+		}
+		if ( ! self::claim_pending_email_change( $user_id ) ) {
+			return new \WP_Error( 'newspack_email_change_unavailable', __( 'This email change request has been cancelled or expired.', 'newspack-plugin' ) );
+		}
+		return true;
 	}
 
 	/**
@@ -1127,10 +1371,14 @@ class WooCommerce_My_Account {
 		} elseif ( \email_exists( $new_email ) ) {
 			\wc_add_notice( __( 'This email address is already in use.', 'newspack-plugin' ), 'error' );
 		} else {
-			$update = \update_user_meta( $user_id, self::PENDING_EMAIL_CHANGE_META, $new_email );
-			if ( ! $update ) {
+			// The token record carries the requested address, so it is written
+			// first and is what every later step reads. The plain meta below
+			// mirrors it for anything still reading that key directly.
+			$tokens = self::create_email_change_tokens( $user_id, $new_email );
+			if ( ! $tokens ) {
 				\wc_add_notice( __( 'Something went wrong. Please try again.', 'newspack-plugin' ), 'error' );
 			} else {
+				\update_user_meta( $user_id, self::PENDING_EMAIL_CHANGE_META, $new_email );
 				$sent = [];
 				if (
 					Emails::send_email(
@@ -1143,7 +1391,7 @@ class WooCommerce_My_Account {
 							],
 							[
 								'template' => '*EMAIL_CANCELLATION_URL*',
-								'value'    => self::get_email_change_url( self::CANCEL_EMAIL_CHANGE_PARAM, $old_email ),
+								'value'    => self::get_cancel_email_change_url( $user_id ),
 							],
 						]
 					)
@@ -1157,11 +1405,11 @@ class WooCommerce_My_Account {
 						[
 							[
 								'template' => '*EMAIL_VERIFICATION_URL*',
-								'value'    => self::get_email_change_url( self::VERIFY_EMAIL_CHANGE_PARAM, $old_email ),
+								'value'    => self::get_verify_email_change_url( $user_id ),
 							],
 							[
 								'template' => '*EMAIL_CANCELLATION_URL*',
-								'value'    => self::get_email_change_url( self::CANCEL_EMAIL_CHANGE_PARAM, $old_email ),
+								'value'    => self::get_cancel_email_change_url( $user_id ),
 							],
 						]
 					)
@@ -1216,34 +1464,9 @@ class WooCommerce_My_Account {
 		if ( ! $secret ) {
 			return;
 		}
-		$message   = __( 'Your email address has been successfully updated.', 'newspack-plugin' );
-		$is_error  = false;
-		$user_id   = \get_current_user_id();
-		$new_email = \get_user_meta( $user_id, self::PENDING_EMAIL_CHANGE_META, true );
-		$old_email = \wp_get_current_user()->user_email;
-		if ( $new_email && \wp_hash( $old_email ) === $secret ) {
-			\delete_user_meta( \get_current_user_id(), self::PENDING_EMAIL_CHANGE_META );
-			$update = \wp_update_user(
-				[
-					'ID'         => $user_id,
-					'user_email' => $new_email,
-				]
-			);
-			if ( $update ) {
-				$customer = new \WC_Customer( $user_id );
-				$customer->set_billing_email( $new_email );
-				$customer->save();
-				self::maybe_sync_email_change_with_stripe( $user_id, $new_email );
-				self::sync_email_change_with_esp( $user_id, $new_email, $old_email );
-				\delete_user_meta( $user_id, self::PENDING_EMAIL_CHANGE_META );
-			} else {
-				$message  = __( 'Something went wrong.', 'newspack-plugin' );
-				$is_error = true;
-			}
-		} else {
-			$message  = __( 'This email change request has been cancelled or expired.', 'newspack-plugin' );
-			$is_error = true;
-		}
+		$result   = self::verify_email_change( \get_current_user_id(), $secret );
+		$is_error = \is_wp_error( $result );
+		$message  = $is_error ? $result->get_error_message() : __( 'Your email address has been successfully updated.', 'newspack-plugin' );
 		\wp_safe_redirect(
 			\add_query_arg(
 				[
@@ -1271,15 +1494,9 @@ class WooCommerce_My_Account {
 		if ( ! $secret ) {
 			return;
 		}
-		$current_email = \wp_get_current_user()->user_email;
-		$message       = __( 'Your email address change request has been cancelled.', 'newspack-plugin' );
-		$is_error      = false;
-		if ( \wp_hash( $current_email ) === $secret ) {
-			\delete_user_meta( \get_current_user_id(), self::PENDING_EMAIL_CHANGE_META );
-		} else {
-			$message  = __( 'This email change request has been cancelled or expired.', 'newspack-plugin' );
-			$is_error = true;
-		}
+		$result   = self::cancel_email_change( \get_current_user_id(), $secret );
+		$is_error = \is_wp_error( $result );
+		$message  = $is_error ? $result->get_error_message() : __( 'Your email address change request has been cancelled.', 'newspack-plugin' );
 		\wp_safe_redirect(
 			\add_query_arg(
 				[
