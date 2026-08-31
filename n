@@ -393,10 +393,12 @@ case $1 in
 
         ;;
     sites-list)
-        docker exec $DOCKER_IT $TARGET_CONTAINER sh -c "/var/scripts/sites-list.sh ${@:2}"
+        # Arguments go straight into the container command's argv, so no shell
+        # parses them a second time.
+        docker exec $DOCKER_IT $TARGET_CONTAINER /var/scripts/sites-list.sh "${@:2}"
         ;;
     sites-drop)
-        docker exec $DOCKER_IT $TARGET_CONTAINER sh -c "/var/scripts/sites-drop.sh ${@:2}"
+        docker exec $DOCKER_IT $TARGET_CONTAINER /var/scripts/sites-drop.sh "${@:2}"
         ;;
     build)
         if [[ -n "$2" ]]; then
