@@ -27,19 +27,19 @@ describe( 'getBackTarget', () => {
 } );
 
 describe( 'shouldReuseActiveCode', () => {
-	it( 'reuses the existing code when "email me a code" is clicked and a code is active', () => {
+	it( 'reuses the code when "email me a code" is clicked after one was already sent', () => {
 		expect( shouldReuseActiveCode( true, true ) ).toBe( true );
 	} );
 
-	it( 'requests a new code when "email me a code" is clicked and no code is active', () => {
+	it( 'requests a code when "email me a code" is clicked and none has been sent yet', () => {
 		expect( shouldReuseActiveCode( true, false ) ).toBe( false );
 	} );
 
-	it( 'never reuses for the resend button, even when a code is active', () => {
+	it( 'never reuses for the resend button, even after a code was sent', () => {
 		expect( shouldReuseActiveCode( false, true ) ).toBe( false );
 	} );
 
-	it( 'requests a new code for the resend button when none is active', () => {
+	it( 'requests a code for the resend button when none has been sent', () => {
 		expect( shouldReuseActiveCode( false, false ) ).toBe( false );
 	} );
 } );

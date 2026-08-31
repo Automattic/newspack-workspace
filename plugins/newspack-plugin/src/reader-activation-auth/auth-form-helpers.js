@@ -13,16 +13,18 @@
 export const getBackTarget = ( formAction, readerHasPassword ) => ( formAction === 'otp' && readerHasPassword ? 'pwd' : 'signin' );
 
 /**
- * Whether "email me a code" should reuse the reader's existing one-time code instead of
- * requesting a new one from the server.
+ * Whether "email me a code" should reuse a one-time code already sent in this session
+ * instead of requesting a new one from the server.
  *
  * A reader who already requested a code and returned to the password step can choose the
- * code again; reusing the active code shows the code-entry step without restarting the
- * resend cooldown or stranding the code already in their inbox (NPPM-3054). The resend
- * button always requests a new code, so it never reuses.
+ * code again; reusing it shows the code-entry step without restarting the resend cooldown
+ * or stranding the code already in their inbox (NPPM-3054). The resend button always
+ * requests a new code, so it never reuses. The signal is a per-session "a code was sent"
+ * flag, not the persistent np_otp_hash cookie (which lingers ~29 minutes across sessions
+ * and would make a genuine first request skip the send).
  *
  * @param {boolean} isSendCodeButton Whether the "email me a code" button was clicked, not resend.
- * @param {boolean} hasActiveCode    Whether an active one-time code already exists for the reader.
+ * @param {boolean} codeAlreadySent  Whether a one-time code has already been sent in this session.
  * @return {boolean} True to reuse the existing code and skip the server request.
  */
-export const shouldReuseActiveCode = ( isSendCodeButton, hasActiveCode ) => isSendCodeButton && hasActiveCode;
+export const shouldReuseActiveCode = ( isSendCodeButton, codeAlreadySent ) => isSendCodeButton && codeAlreadySent;

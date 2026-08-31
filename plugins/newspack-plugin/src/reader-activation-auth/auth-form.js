@@ -98,6 +98,10 @@ window.newspackRAS.push( function ( readerActivation ) {
 			 * Handle auth form action selection.
 			 */
 			let formAction;
+			// Whether a one-time code has been sent in this modal session. A per-session flag,
+			// not the np_otp_hash cookie, which persists ~29 minutes across sessions and would
+			// make a genuine first "email me a code" click skip the send (NPPM-3054).
+			let codeSent = false;
 			container.setFormAction = ( action, shouldFocus = false ) => {
 				if ( ! FORM_ALLOWED_ACTIONS.includes( action ) ) {
 					action = 'signin';
@@ -236,7 +240,7 @@ window.newspackRAS.push( function ( readerActivation ) {
 						// server for a new code, which would restart the resend cooldown and strand the
 						// code already in their inbox. Only the "email me a code" button reuses; resend
 						// always requests a fresh code.
-						if ( shouldReuseActiveCode( ev.currentTarget === sendCodeButton, !! readerActivation.getOTPHash() ) ) {
+						if ( shouldReuseActiveCode( ev.currentTarget === sendCodeButton, codeSent ) ) {
 							container.setFormAction( 'otp' );
 							handleOTPTimer();
 							return;
@@ -271,6 +275,7 @@ window.newspackRAS.push( function ( readerActivation ) {
 									formAction === 'pwd' ? newspack_reader_activation_labels.code_sent : newspack_reader_activation_labels.code_resent
 								);
 								container.setFormAction( 'otp' );
+								codeSent = true;
 								if ( ! readerActivation.getOTPTimeRemaining() ) {
 									readerActivation.setOTPTimer();
 								}
