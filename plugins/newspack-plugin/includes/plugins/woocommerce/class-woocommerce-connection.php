@@ -566,6 +566,90 @@ class WooCommerce_Connection {
 	}
 
 	/**
+	 * Get a human-readable payment method label for an order.
+	 *
+	 * Prefers the card brand and last four digits from a saved payment token —
+	 * read from the order's own tokens (as WooPayments attaches them), or
+	 * recovered from the customer's saved tokens via the gateway reference the
+	 * Stripe gateway stores in order meta. Falls back to the payment gateway's
+	 * customer-facing title (e.g. "Credit / Debit Card"), since the card details
+	 * of a plain one-time payment are not stored locally at all.
+	 *
+	 * @param \WC_Order $order The order.
+	 *
+	 * @return string Payment method label.
+	 */
+	public static function get_payment_method_label( $order ) {
+		if ( class_exists( 'WC_Payment_Tokens' ) ) {
+			// First attempt: tokens attached to the order itself, as WooPayments does.
+			foreach ( $order->get_payment_tokens() as $token_id ) {
+				$label = self::get_card_token_label( \WC_Payment_Tokens::get( $token_id ) );
+				if ( $label ) {
+					return $label;
+				}
+			}
+			/**
+			 * Second attempt: gateways like Stripe save cards against the customer,
+			 * not the order — the order carries only the gateway's payment method
+			 * reference in meta. Match that reference to the customer's saved
+			 * tokens to recover the card.
+			 */
+			$source_id   = $order->get_meta( '_stripe_source_id' );
+			$customer_id = $order->get_customer_id();
+			if ( $source_id && $customer_id ) {
+				foreach ( \WC_Payment_Tokens::get_customer_tokens( $customer_id, $order->get_payment_method() ) as $customer_token ) {
+					if ( $customer_token->get_token() !== $source_id ) {
+						continue;
+					}
+					$label = self::get_card_token_label( $customer_token );
+					if ( $label ) {
+						return $label;
+					}
+				}
+			}
+		}
+		$title = $order->get_payment_method_title();
+		if ( ! empty( $title ) ) {
+			return \wp_strip_all_tags( $title );
+		}
+		return __( 'Card', 'newspack-plugin' );
+	}
+
+	/**
+	 * Build a "<Brand> ending in <last4>" label from a saved credit card token.
+	 *
+	 * @param \WC_Payment_Token|null $token The token, or null.
+	 *
+	 * @return string|false The label, or false when the token isn't a credit
+	 *                      card or is missing its brand or last four digits —
+	 *                      some gateways store tokens without either, and a
+	 *                      partial label would be worse than the gateway title.
+	 */
+	private static function get_card_token_label( $token ) {
+		if ( ! $token || ! is_a( $token, 'WC_Payment_Token_CC' ) ) {
+			return false;
+		}
+		$last4 = $token->get_last4();
+		$type  = $token->get_card_type();
+		if ( ! $last4 || ! $type ) {
+			return false;
+		}
+		$brand = function_exists( 'wc_get_credit_card_type_label' ) ? \wc_get_credit_card_type_label( $type ) : ucwords( str_replace( [ '-', '_' ], ' ', (string) $type ) );
+		// The label lands in the email HTML unescaped, and the brand passes
+		// through a public filter — strip HTML tags, the same treatment the
+		// *AMOUNT* placeholder gets. Placeholder literals are a separate,
+		// negligible concern handled by substitution order, not by this strip.
+		return \wp_strip_all_tags(
+			sprintf(
+				/* translators: 1: card brand, e.g. "Visa". 2: the card's last four digits. */
+				__( '%1$s ending in %2$s', 'newspack-plugin' ),
+				$brand,
+				$last4
+			)
+		);
+	}
+
+	/**
 	 * Send the customizable receipt or welcome email instead of WooCommerce's default receipt.
 	 *
 	 * @param int $order_id The order ID.
@@ -580,8 +664,7 @@ class WooCommerce_Connection {
 		}
 
 		// If there are no donation products in the order, do not override the default WC receipt email.
-		$has_donation_product = \Newspack\Donations::get_order_donation_product_id( $order->get_id() ) !== false;
-		if ( ! $has_donation_product ) {
+		if ( ! Donations::get_order_donation_product_id( $order->get_id() ) ) {
 			return false;
 		}
 
@@ -650,7 +733,7 @@ class WooCommerce_Connection {
 			],
 			[
 				'template' => '*PAYMENT_METHOD*',
-				'value'    => __( 'Card', 'newspack-plugin' ) . ' – ' . $order->get_payment_method(),
+				'value'    => self::get_payment_method_label( $order ),
 			],
 			[
 				'template' => '*RECEIPT_URL*',
@@ -669,9 +752,13 @@ class WooCommerce_Connection {
 		);
 		if ( $sent ) {
 			$order->add_meta_data( $email_sent_meta, true, true );
-			return false;
+			// Persist the marker: this hook fires after the status transition has
+			// already saved the order, on a freshly hydrated instance, so without
+			// an explicit save the already-sent guard never holds across requests.
+			$order->save();
+			return true;
 		}
-		return true;
+		return false;
 	}
 
 	/**

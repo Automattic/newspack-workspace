@@ -30,6 +30,44 @@ final class GA4_Custom_Dimensions {
 	const RECHECK_GROUP      = 'newspack';
 
 	/**
+	 * Parameters only a rendered gate produces. `access_source` is not among
+	 * them; it has a stricter condition of its own, see `get_dimensions()`.
+	 */
+	const ACCESS_CONTROL_DIMENSIONS = [
+		'gate_post_id',
+		'gate_has_donation_block',
+		'gate_has_registration_block',
+		'gate_has_checkout_button',
+		'gate_has_registration_link',
+		'gate_has_signin_link',
+	];
+
+	/**
+	 * Parameters only WooCommerce produces: the modal checkout's product fields,
+	 * and the subscription flag Reader Data writes from WooCommerce
+	 * Subscriptions. Donations are separate, see `DONATION_DIMENSIONS`.
+	 */
+	const WOOCOMMERCE_DIMENSIONS = [
+		'is_subscriber',
+		'product_id',
+		'product_type',
+		'recurrence',
+	];
+
+	/**
+	 * Donation parameters, which WooCommerce does not have to itself. A site on
+	 * NRH or an external platform emits all three without it: `gate.js` reads
+	 * `donation_frequency` and `donation_amount` off the submitted Donate block
+	 * form, and non-WooCommerce platforms write `is_donor` client-side (see
+	 * `Reader_Data::get_read_only_keys()`).
+	 */
+	const DONATION_DIMENSIONS = [
+		'is_donor',
+		'donation_frequency',
+		'donation_amount',
+	];
+
+	/**
 	 * Register hooks.
 	 */
 	public static function init() {
@@ -114,9 +152,15 @@ final class GA4_Custom_Dimensions {
 	/**
 	 * Keep a recurring monthly recheck scheduled while a GA4 property is
 	 * connected, and drop it when none is. The recheck re-runs provisioning so
-	 * additions to Newspack's dimension list, or dimensions deleted in GA4,
-	 * self-heal without a manual CLI run. When everything is already in place it
-	 * is a no-op: one list call, zero writes.
+	 * dimensions deleted in GA4 self-heal without a manual CLI run. When
+	 * everything is already in place it is a no-op: one list call, zero writes.
+	 *
+	 * Additions to Newspack's dimension list do not wait for the recheck:
+	 * they schedule an immediate run (see
+	 * `maybe_schedule_provisioning_for_new_dimensions()`), because GA4
+	 * dimensions are not retroactive — events sent before a dimension exists
+	 * never become queryable, so a month-long wait would lose exactly the
+	 * launch data a new dimension ships for.
 	 *
 	 * Also the entry point for a changed dimension list: GA4 collects a dimension
 	 * only from the moment it exists, so an addition is provisioned now rather
@@ -125,6 +169,8 @@ final class GA4_Custom_Dimensions {
 	 * Idempotent and safe to call repeatedly (e.g. on every admin page load).
 	 */
 	public static function maybe_schedule_recheck() {
+		// WP-Cron based, deliberately ahead of the Action Scheduler guard.
+		self::maybe_schedule_provisioning_for_new_dimensions();
 		if ( ! function_exists( 'as_schedule_recurring_action' ) || ! function_exists( 'as_has_scheduled_action' ) ) {
 			return;
 		}
@@ -150,11 +196,119 @@ final class GA4_Custom_Dimensions {
 	}
 
 	/**
+	 * Schedule an immediate provisioning run when Newspack's dimension list has
+	 * grown since the last run on this property, so a newly shipped dimension
+	 * exists before (or moments after) its events start flowing instead of up
+	 * to a month later.
+	 *
+	 * A summary without a recorded list — written before the list was recorded
+	 * in the summary — counts as grown, so already-provisioned sites converge
+	 * on their first admin visit after this code ships. Growth triggers one
+	 * run per change: the run records the current list in the summary even
+	 * when individual creates fail, leaving retries of failed creates to the
+	 * monthly recheck like any other create error.
+	 *
+	 * Never-provisioned sites are not scheduled here; first-time provisioning
+	 * belongs to the property-connection path (`schedule_provisioning()`).
+	 */
+	private static function maybe_schedule_provisioning_for_new_dimensions() {
+		if ( ! self::get_property_id() ) {
+			return;
+		}
+		$provisioned = get_option( self::PROVISIONED_OPTION, [] );
+		if ( ! is_array( $provisioned ) || empty( $provisioned['property_id'] ) ) {
+			return;
+		}
+		$known = isset( $provisioned['dimensions'] ) && is_array( $provisioned['dimensions'] ) ? $provisioned['dimensions'] : [];
+		$new   = array_diff( array_keys( self::get_dimensions() ), $known );
+		if ( empty( $new ) ) {
+			return;
+		}
+		if ( wp_next_scheduled( self::PROVISION_ACTION ) ) {
+			return;
+		}
+		wp_schedule_single_event( time() + 10, self::PROVISION_ACTION );
+		Logger::log( 'Scheduled GA4 dimension provisioning for new dimensions: ' . implode( ', ', $new ) . '.', self::LOGGER_HEADER );
+	}
+
+	/**
+	 * Whether this site can render a gate. Covers both routes, the way
+	 * `Content_Gate::get_gate_post_id()` does: Memberships when active, the
+	 * first-party feature otherwise.
+	 *
+	 * @return bool
+	 */
+	public static function is_access_control_enabled(): bool {
+		$is_enabled = Content_Gate::is_newspack_feature_enabled() || Memberships::is_active();
+
+		/**
+		 * Filters access-control dimension provisioning, for a site the detection
+		 * above reads wrongly.
+		 *
+		 * @param bool $is_enabled Whether the site runs access control.
+		 */
+		return (bool) apply_filters( 'newspack_ga4_dimensions_access_control_enabled', $is_enabled );
+	}
+
+	/**
+	 * Whether this site runs WooCommerce, which produces the checkout and
+	 * subscription parameters.
+	 *
+	 * Not `Reader_Activation::is_woocommerce_active()`: that also demands
+	 * WooCommerce Subscriptions, and would cost one-time-purchase sites their
+	 * checkout reporting.
+	 *
+	 * @return bool
+	 */
+	public static function is_woocommerce_enabled(): bool {
+		$is_enabled = class_exists( 'WooCommerce' );
+
+		/**
+		 * Filters WooCommerce dimension provisioning, for a site the detection
+		 * above reads wrongly.
+		 *
+		 * @param bool $is_enabled Whether the site runs WooCommerce.
+		 */
+		return (bool) apply_filters( 'newspack_ga4_dimensions_woocommerce_enabled', $is_enabled );
+	}
+
+	/**
+	 * Whether this site takes donations, on any platform: WooCommerce is
+	 * installed, or the publisher picked a platform that isn't it.
+	 *
+	 * The platform slug defaults to `wc`, so it only reads reliably negated - a
+	 * non-`wc` slug is always a deliberate choice of NRH or an external platform.
+	 * Reads WooCommerce directly rather than through `is_woocommerce_enabled()`,
+	 * so each group takes exactly one filter.
+	 *
+	 * @return bool
+	 */
+	public static function is_donations_enabled(): bool {
+		$is_enabled = class_exists( 'WooCommerce' ) || ! Donations::is_platform_wc();
+
+		/**
+		 * Filters donation dimension provisioning, for a site the detection above
+		 * reads wrongly.
+		 *
+		 * @param bool $is_enabled Whether the site takes donations.
+		 */
+		return (bool) apply_filters( 'newspack_ga4_dimensions_donations_enabled', $is_enabled );
+	}
+
+	/**
 	 * Priority-ordered list of custom dimensions Newspack provisions.
 	 * Each entry: parameter name => display name.
+	 *
+	 * GA4 caps event-scoped dimensions at 50 per property and never back-fills,
+	 * and publishers have hit that ceiling, so parameters belonging to a feature
+	 * the site does not run are dropped - by key, leaving the order intact.
+	 * Enabling the feature later grows the list, which
+	 * `maybe_schedule_provisioning_for_new_dimensions()` picks up.
+	 *
+	 * @return array<string,string>
 	 */
 	public static function get_dimensions() {
-		return [
+		$dimensions = [
 			'gate_post_id'                => 'Gate Post ID',
 			'is_reader'                   => 'Is Reader',
 			'action_type'                 => 'Action Type',
@@ -184,14 +338,42 @@ final class GA4_Custom_Dimensions {
 			'product_id'                  => 'Product ID',
 			'product_type'                => 'Product Type',
 			'recurrence'                  => 'Recurrence',
-			'price'                       => 'Price',
+			// `price` is absent on purpose: the modal checkout sends `amount`
+			// instead, folding `price` into it, so no event ever carried it.
 			'donation_frequency'          => 'Donation Frequency',
 			'donation_amount'             => 'Donation Amount',
 			'registration_method'         => 'Registration Method',
 			'lists'                       => 'Newsletter Lists',
 			'categories'                  => 'Categories',
 			'author'                      => 'Author',
+			'segment_id'                  => 'Matched Segment',
 		];
+
+		// Read once each: an impure filter could otherwise yield a
+		// self-contradictory list that then gets persisted.
+		$has_access_control = self::is_access_control_enabled();
+		$has_woocommerce    = self::is_woocommerce_enabled();
+		$has_donations      = self::is_donations_enabled();
+
+		if ( ! $has_access_control ) {
+			$dimensions = array_diff_key( $dimensions, array_flip( self::ACCESS_CONTROL_DIMENSIONS ) );
+		}
+
+		if ( ! $has_woocommerce ) {
+			$dimensions = array_diff_key( $dimensions, array_flip( self::WOOCOMMERCE_DIMENSIONS ) );
+		}
+
+		if ( ! $has_donations ) {
+			$dimensions = array_diff_key( $dimensions, array_flip( self::DONATION_DIMENSIONS ) );
+		}
+
+		// Not $has_access_control: Memberships alone renders a gate, but
+		// GoogleSiteKit sends access_source only under is_gating_active().
+		if ( Content_Gate::is_gating_active() ) {
+			$dimensions['access_source'] = 'Access Source';
+		}
+
+		return $dimensions;
 	}
 
 	/**
@@ -199,10 +381,17 @@ final class GA4_Custom_Dimensions {
 	 * provisioning run so a later addition to the list can be told apart from a
 	 * property that is already fully provisioned.
 	 *
+	 * Takes an already-resolved list, so a caller fingerprints the snapshot it
+	 * acted on rather than a fresh one the filters could answer differently.
+	 *
+	 * @param array<string,string>|null $dimensions Resolved dimension list, or null to resolve now.
 	 * @return string
 	 */
-	public static function schema_fingerprint() {
-		return md5( (string) wp_json_encode( array_keys( self::get_dimensions() ) ) );
+	public static function schema_fingerprint( $dimensions = null ) {
+		if ( null === $dimensions ) {
+			$dimensions = self::get_dimensions();
+		}
+		return md5( (string) wp_json_encode( array_keys( $dimensions ) ) );
 	}
 
 	/**
@@ -408,9 +597,13 @@ final class GA4_Custom_Dimensions {
 			return new \WP_Error( 'newspack_ga4_dimensions', 'No GA4 property ID configured.' );
 		}
 
+		// One snapshot for the whole run, or the summary records a schema that
+		// was never provisioned and every later run reads it as out of date.
+		$dimensions = self::get_dimensions();
+
 		$used_source = null;
 		$result      = self::with_admin_client(
-			function ( $client, $source ) use ( $property_id, &$used_source ) {
+			function ( $client, $source ) use ( $property_id, $dimensions, &$used_source ) {
 				$used_source = $source;
 				try {
 					$existing = $client->list_custom_dimensions( $property_id );
@@ -431,7 +624,7 @@ final class GA4_Custom_Dimensions {
 				$errors              = [];
 				$has_transient_error = false;
 
-				foreach ( self::get_dimensions() as $parameter_name => $display_name ) {
+				foreach ( $dimensions as $parameter_name => $display_name ) {
 					if ( isset( $existing_params[ $parameter_name ] ) ) {
 						$skipped_exists[] = $parameter_name;
 						continue;
@@ -477,9 +670,12 @@ final class GA4_Custom_Dimensions {
 			// repairs the Google connection. Permanent failures (the dimension
 			// cap, validation) record the fingerprint anyway – no retry can fix
 			// them; the monthly recheck is the self-heal path.
-			'schema'         => $has_transient_error ? null : self::schema_fingerprint(),
+			'schema'         => $has_transient_error ? null : self::schema_fingerprint( $dimensions ),
 			'auth_source'    => $used_source,
 			'timestamp'      => time(),
+			// The list this run knew about, so a later addition to
+			// get_dimensions() is detectable and can provision immediately.
+			'dimensions'     => array_keys( $dimensions ),
 			'created'        => $created,
 			'skipped_exists' => $skipped_exists,
 			'errors'         => $errors,

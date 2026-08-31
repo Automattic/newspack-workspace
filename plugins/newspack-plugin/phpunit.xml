@@ -10,6 +10,9 @@
       <directory suffix=".php">./vendor</directory>
     </exclude>
   </coverage>
+  <extensions>
+    <extension class="Newspack_Request_Memo_Reset"/>
+  </extensions>
   <testsuites>
     <testsuite name="Newspack Test Suite">
       <directory suffix=".php">./tests/unit-tests</directory>

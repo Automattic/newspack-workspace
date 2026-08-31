@@ -7,6 +7,15 @@ import { getMatchedForms, getEmailValue, getNameValues } from './utils';
 // v3 tokens expire at 120s; refresh with margin.
 const CAPTCHA_TOKEN_TTL = 100 * 1000;
 
+// Longest a Gravity Forms submission is held for the registration response
+// (ms). The hold ends when the response lands, so this is a ceiling, not a
+// delay — but it must clear the endpoint's slow path (account creation:
+// user insert plus registration hooks, observed above 1.5s), or the auth
+// cookies lose the race and the page GF navigates to renders signed out.
+// GF shows its spinner throughout, so the worst case reads as submit
+// latency rather than a stuck form.
+const GF_CAPTURE_WAIT = 3000;
+
 window.newspackRAS = window.newspackRAS || [];
 window.newspackRAS.push( readerActivation => {
 	const config = window.newspack_form_capture || {};
@@ -92,8 +101,7 @@ window.newspackRAS.push( readerActivation => {
 		}
 	};
 
-	const handleSubmit = event => {
-		const form = event.target;
+	const captureForm = form => {
 		if ( form.checkValidity && ! form.checkValidity() ) {
 			return;
 		}
@@ -111,7 +119,7 @@ window.newspackRAS.push( readerActivation => {
 			// v3 tokens are single-use.
 			warmToken = null;
 		}
-		readerActivation.register( email, 'form-capture', getNameValues( form ), options ).catch( error => {
+		return readerActivation.register( email, 'form-capture', getNameValues( form ), options ).catch( error => {
 			// Only failures that can succeed on a retry within this pageview
 			// release the dedupe: a network error (the response never parsed,
 			// so no code) or a server-side registration failure. Everything
@@ -127,6 +135,8 @@ window.newspackRAS.push( readerActivation => {
 			}
 		} );
 	};
+
+	const handleSubmit = event => captureForm( event.target );
 
 	const attach = () => {
 		getMatchedForms( selectors ).forEach( form => {
@@ -162,4 +172,58 @@ window.newspackRAS.push( readerActivation => {
 		}, 200 );
 	} );
 	observer.observe( document.body, { childList: true, subtree: true } );
+
+	/**
+	 * Gravity Forms (2.9+ theme framework) never yields a native submit event
+	 * to capture: its button intercepts the click and submits via programmatic
+	 * form.submit(), and its own submit listener cancels any native submit
+	 * event as an "unsupported flow". Hook GF's public filter bus instead, at
+	 * the point every GF submission funnels through — whatever the submission
+	 * type (submit, next, save…) or method, matching what the submit listener
+	 * sees from tools that submit natively. The callback must return the
+	 * payload: GF's awaited filter chain hands its return value onward, and
+	 * undefined breaks the vendor submission — which is also why capture
+	 * failures are swallowed here.
+	 */
+	let gformHooked = false;
+	const hookGravityForms = () => {
+		if ( gformHooked || ! window.gform?.utils?.addAsyncFilter ) {
+			return;
+		}
+		gformHooked = true;
+		window.gform.utils.addAsyncFilter( 'gform/submission/pre_submission', async data => {
+			try {
+				if ( data?.form && getMatchedForms( selectors ).includes( data.form ) ) {
+					const pending = captureForm( data.form );
+					if ( pending ) {
+						// GF awaits this filter, so hold the submission until
+						// the registration response lands its auth cookies —
+						// the page GF navigates to then renders the reader as
+						// signed in. Bounded: past GF_CAPTURE_WAIT the
+						// submission proceeds with the request still in
+						// flight, which keepalive lets survive navigation.
+						// Settling clears the timer, so no timer outlives the
+						// hold it bounds.
+						await new Promise( resolve => {
+							const timer = setTimeout( resolve, GF_CAPTURE_WAIT );
+							const settle = () => {
+								clearTimeout( timer );
+								resolve();
+							};
+							pending.then( settle, settle );
+						} );
+					}
+				}
+			} catch ( err ) {
+				// Capture must never break the vendor's submission.
+			}
+			return data;
+		} );
+	};
+	hookGravityForms();
+	// gform.utils can land after this deferred script (order follows DOM
+	// position). Every deferred script has run by DOMContentLoaded; load
+	// covers async stragglers.
+	document.addEventListener( 'DOMContentLoaded', hookGravityForms, { once: true } );
+	window.addEventListener( 'load', hookGravityForms, { once: true } );
 } );

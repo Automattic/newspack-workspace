@@ -94,12 +94,18 @@ if ( 'experimental-tools' in settingsTabs ) {
 const settingsSectionKeys = Object.keys( settingsTabs ) as SectionKeys[];
 
 export default settingsSectionKeys.reduce( ( acc: any[], sectionPath ) => {
+	// The keys come from the object itself, so the tab is always there; the
+	// lookup is nullable only because optional entries can be absent.
+	const tab = settingsTabs[ sectionPath ];
+	if ( ! tab ) {
+		return acc;
+	}
 	acc.push( {
-		label: settingsTabs[ sectionPath ].label,
-		exact: '/' === ( settingsTabs[ sectionPath ].path ?? '' ),
-		path: settingsTabs[ sectionPath ].path ?? `/${ sectionPath }`,
-		activeTabPaths: settingsTabs[ sectionPath ].activeTabPaths ?? undefined,
-		breadcrumbs: [ { label: __( 'Settings', 'newspack' ) }, { label: settingsTabs[ sectionPath ].label } ],
+		label: tab.label,
+		exact: '/' === ( tab.path ?? '' ),
+		path: tab.path ?? `/${ sectionPath }`,
+		activeTabPaths: tab.activeTabPaths ?? undefined,
+		breadcrumbs: [ { label: __( 'Settings', 'newspack' ) }, { label: tab.label } ],
 		render: sectionComponents[ sectionPath ] ?? sectionComponents.default,
 	} );
 	return acc;
