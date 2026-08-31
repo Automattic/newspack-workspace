@@ -23,24 +23,26 @@ defined( 'ABSPATH' ) || exit;
  */
 class WooCommerce_Subscriptions {
 	/**
-	 * Product statuses the gate product picker offers (mirrors the default statuses
-	 * `Access_Rules::get_subscription_products_options` -> `wc_get_products` lists). A
-	 * subscription line item on a parent product outside this set is not gate-selectable,
-	 * so Access Control can never reference it. Single source of truth shared by the audit
+	 * Product statuses the gate product picker offers for a parent product (mirrors the
+	 * default statuses `Access_Rules::get_subscription_products_options` -> `wc_get_products`
+	 * lists). A subscription line item whose parent product is outside this set has no
+	 * gate-selectable product behind it. Single source of truth shared by the audit
 	 * classifier and the repair target check so the two can't drift.
 	 *
-	 * Parents only: the picker also lists each variable parent's variations, which this
-	 * set deliberately excludes. A repair re-points an order line item, and
-	 * WC_Order_Item_Product::set_product_id() throws on a non-`product` post.
+	 * Variations are the picker's other half and are deliberately not modelled here: it
+	 * lists a variable subscription's publish and private variations alongside the parent,
+	 * but only while it lists the parent, so the parent is what decides whether a line item
+	 * is reachable at all. {@see classify_subscription_product_link()}.
 	 *
 	 * @var string[]
 	 */
 	const SELECTABLE_PRODUCT_STATUSES = [ 'publish', 'private', 'draft', 'pending' ];
 
 	/**
-	 * Product types a repair may target: the parent half of what the gate product picker
-	 * offers. The picker also lists these parents' variations, which a repair must not
-	 * use — a non-`product` post throws in WC_Order_Item_Product::set_product_id().
+	 * Parent product types the gate product picker offers. A repair target outside this set
+	 * is not a product a repair may point a line item at — a non-`product` post such as a
+	 * variation also throws in WC_Order_Item_Product::set_product_id(), which is why a
+	 * variation stays out of this set even though a gate can now reference one.
 	 *
 	 * @var string[]
 	 */
@@ -453,10 +455,10 @@ class WooCommerce_Subscriptions {
 	 *   - Variant A (orphaned line item): the line item carries no product reference (the
 	 *     product was hard-deleted, or the subscription was created by hand), or the
 	 *     subscription has no line items at all. AC can never match it.
-	 *   - Variant B (non-gate-selectable product): the line item points at a product no gate
-	 *     can reference — a type outside the allowlist, or a status outside it (e.g. trashed
-	 *     or auto-draft). Liveness keys on the parent, so a variation under a listed parent
-	 *     is not Variant B; the picker offers it.
+	 *   - Variant B (non-gate-selectable product): the line item points at a product the gate
+	 *     picker can never offer — the wrong type (only subscription / variable-subscription
+	 *     are selectable) or a status outside the picker's allowlist (e.g. trashed or
+	 *     auto-draft). No gate can be configured with it.
 	 *
 	 * A product ID already persisted on an access surface is the exception to variant B:
 	 * both a gate's paid-access rule and a group/row/stack block's inline
@@ -526,7 +528,7 @@ class WooCommerce_Subscriptions {
 
 		if ( ! empty( $fragile ) ) {
 			WP_CLI::line( '' );
-			WP_CLI::line( sprintf( '%d active subscription(s) are on a non-gate-selectable product that a gate or block still references. Access Control matches these today, so they are NOT at risk and --map refuses them. They are fragile: the picker can no longer offer that product, so it appears in the editor only as its raw ID.', count( $fragile ) ) );
+			WP_CLI::line( sprintf( '%d active subscription(s) are on a non-gate-selectable product that a gate or block still references. Access Control matches these today, so they are NOT at risk and --map refuses them. They are fragile: the product picker can no longer offer that product, so re-saving the gate or block would drop it.', count( $fragile ) ) );
 			WP_CLI::line( '' );
 			self::render_audit_table( $fragile );
 		}
@@ -746,10 +748,10 @@ class WooCommerce_Subscriptions {
 			'message'         => '',
 		];
 
-		// The swap target must be a parent product a repair can write. Anything outside the
-		// allowlist (wrong type — simple, grouped — or a non-listed status) leaves the
-		// reader just as unmatchable, so reject it rather than report a hollow success.
-		// A variation is rejected too, even though the picker offers one: its post type
+		// The swap target must be a product a gate can actually reference. Anything the
+		// picker would not list (wrong type — simple, variation, grouped — or a non-listed
+		// status) leaves the reader just as unmatchable, so reject it rather than report a
+		// hollow success. This also blocks a variation ID, whose non-`product` post type
 		// would otherwise throw in set_product_id() and abort the batch.
 		$target = wc_get_product( $product_id );
 		if ( ! $target ) {
@@ -905,8 +907,9 @@ class WooCommerce_Subscriptions {
 	 * population and let a repair move a working subscription off the ID its gate/block matches on.
 	 *
 	 * Liveness keys on the line item's parent `product_id`: the picker
-	 * (`Access_Rules::get_subscription_products_options`) lists a variation only under a
-	 * parent it already offers, so it is still the parent's liveness — not the specific
+	 * (`Access_Rules::get_subscription_products_options`) offers `subscription` /
+	 * `variable-subscription` parents, and a variable subscription's variations only
+	 * alongside the parent it lists, so it is the parent's liveness — not the specific
 	 * variation's — that decides whether a fresh gate can be configured to match.
 	 * The access-referenced check is wider: `WC_Subscription::has_product()` compares a stored
 	 * rule value against both `product_id` and `variation_id`, so an already-persisted rule
@@ -1228,10 +1231,10 @@ class WooCommerce_Subscriptions {
 	/**
 	 * Fetch the gate-selectable subscription products, for guess-matching.
 	 *
-	 * The parent half of `Access_Rules::get_subscription_products_options`: the same product
-	 * types and statuses (via the shared allowlist constants), without the variations that
-	 * picker also lists — a repair target has to be a `product` post. So the picker's set is
-	 * this set plus the variations of the parents in it.
+	 * Mirrors the parent products in `Access_Rules::get_subscription_products_options`: the
+	 * same types and statuses the gate product picker lists (via the shared allowlist
+	 * constants). The picker's variations are left out — this set feeds name-matching for a
+	 * repair, and a repair may not point a line item at a variation.
 	 *
 	 * @return array List of `[ 'id' => int, 'name' => string ]`.
 	 */
@@ -1254,9 +1257,9 @@ class WooCommerce_Subscriptions {
 	}
 
 	/**
-	 * Whether a product is one the gate picker would list — the same type + status allowlist
-	 * as `get_live_subscription_products()`, so the repair target check and the audit's
-	 * live-product set can't drift.
+	 * Whether a product is a parent product the gate picker would list — the same type +
+	 * status allowlist as `get_live_subscription_products()`, so the repair target check and
+	 * the audit's live-product set can't drift.
 	 *
 	 * @param \WC_Product $product The product to test.
 	 * @return bool

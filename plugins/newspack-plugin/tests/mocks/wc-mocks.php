@@ -547,20 +547,6 @@ class WC_Product {
 	public function get_children() {
 		return $this->data['children'] ?? [];
 	}
-	/**
-	 * Fixtures build a parent before its variations exist, so children are wired after
-	 * construction. Returns $this so a fixture helper's return value stays chainable.
-	 *
-	 * @param int[] $children Variation IDs.
-	 * @return self
-	 */
-	public function set_children( array $children ): self {
-		$this->data['children'] = $children;
-		return $this;
-	}
-	public function get_attributes() {
-		return $this->data['attributes'] ?? [];
-	}
 	public function get_regular_price() {
 		return $this->data['regular_price'] ?? ( $this->meta['_regular_price'] ?? 0 );
 	}
@@ -592,18 +578,6 @@ class WC_Product {
 	public function get_meta( $key, $single = true ) {
 		return $this->meta[ $key ] ?? '';
 	}
-}
-
-/**
- * A variation, as its own class.
- *
- * Production code narrows a parameter to WC_Product_Variation where only a variation
- * can arrive — Access_Rules::variation_option_label() does, because
- * wc_get_formatted_variation() silently returns '' for anything else. A fixture built
- * as a plain WC_Product carrying a variation type would not satisfy that hint, so
- * variations are staged through this class.
- */
-class WC_Product_Variation extends WC_Product {
 }
 
 class WC_Cart {
@@ -639,29 +613,83 @@ if ( ! class_exists( 'WC_Subscriptions_Cart' ) ) {
 }
 
 /**
- * The mock class a product of this type is staged as.
- *
- * @param string $type The WooCommerce product type.
- * @return string The class name.
+ * The post statuses `WC_Product_Query` searches when a query passes no `status`.
  */
-function wc_mock_product_class( string $type ): string {
-	return in_array( $type, [ 'variation', 'subscription_variation' ], true )
-		? WC_Product_Variation::class
-		: WC_Product::class;
-}
+const WC_PRODUCT_QUERY_DEFAULT_STATUSES = [ 'draft', 'pending', 'private', 'publish' ];
 
 /**
  * Register a mock product in the global products database.
  *
- * @param array $data Product data including 'id', 'children', 'type', 'name', 'price'.
+ * @param array $data Product data including 'id', 'type', 'name', 'status', 'price', 'children'.
  * @return WC_Product
  */
 function wc_create_mock_product( $data = [] ) {
 	global $products_database;
-	$product_class = wc_mock_product_class( $data['type'] ?? 'simple' );
-	$product       = new $product_class( $data );
+	$product = new WC_Product( $data );
 	$products_database[ $product->get_id() ] = $product;
 	return $product;
+}
+
+/**
+ * Query the mock products database.
+ *
+ * Supports the arguments Newspack's callers actually pass: `type` (one type or a list of
+ * them), `status`, `limit` and `return`. Registration order stands in for real
+ * WooCommerce's ordering, which none of the callers depend on. Any other filtering
+ * argument is fatal rather than ignored: this mock is defined unconditionally, so a
+ * caller silently getting an unfiltered result is a test that passes for the wrong reason.
+ *
+ * Omitting `status` is not "no status filter": `WC_Product_Query` defaults it to draft,
+ * pending, private and publish, and callers rely on that default — the access-rule
+ * subscription picker lists a drafted product deliberately, because readers still hold
+ * subscriptions to it. Applying the same default here is what lets a test tell that
+ * behaviour apart from a mock that never filtered.
+ *
+ * Arguments real WooCommerce discards are the exception — neither a `WC_Product_Query`
+ * default var nor a mapped meta key, so ignoring one is what production does too.
+ *
+ * @param array $args Query args.
+ * @return WC_Product[]|int[] Matching products, or their IDs with `return => 'ids'`.
+ * @throws InvalidArgumentException When passed a filtering argument the mock does not implement.
+ */
+function wc_get_products( $args = [] ) {
+	global $products_database;
+	// Not every consumer of this file registers a product, and the mock is defined
+	// unconditionally, so the global may still be unset when a caller lands here.
+	$products_database = $products_database ?? [];
+	$supported         = [ 'type', 'status', 'limit', 'return' ];
+	// Passed by Donations, discarded by WooCommerce.
+	$inert             = [ 'only_get_newspack_subscriptions' ];
+	$unknown           = array_diff( array_keys( $args ), $supported, $inert );
+	if ( ! empty( $unknown ) ) {
+		throw new InvalidArgumentException(
+			esc_html( 'wc_get_products mock does not implement: ' . implode( ', ', $unknown ) . '. Add it to tests/mocks/wc-mocks.php.' )
+		);
+	}
+	$types    = isset( $args['type'] ) ? (array) $args['type'] : [];
+	$statuses = isset( $args['status'] ) ? (array) $args['status'] : WC_PRODUCT_QUERY_DEFAULT_STATUSES;
+	$products = array_values(
+		array_filter(
+			$products_database,
+			function ( $product ) use ( $types, $statuses ) {
+				if ( ! empty( $types ) && ! $product->is_type( $types ) ) {
+					return false;
+				}
+				return in_array( $product->get_status(), $statuses, true );
+			}
+		)
+	);
+	$limit    = isset( $args['limit'] ) ? (int) $args['limit'] : -1;
+	$products = $limit > 0 ? array_slice( $products, 0, $limit ) : $products;
+	if ( isset( $args['return'] ) && 'ids' === $args['return'] ) {
+		return array_map(
+			function ( $product ) {
+				return $product->get_id();
+			},
+			$products
+		);
+	}
+	return $products;
 }
 
 class WC_Order {
@@ -1679,64 +1707,6 @@ if ( ! function_exists( 'get_woocommerce_currency' ) ) {
 	function get_woocommerce_currency() {
 		return 'USD';
 	}
-}
-/**
- * Minimal WC_Product_Query stand-in: filters $products_database on `type` and `status`.
- *
- * The `status` default reproduces WC_Product_Query's own default
- * ( draft, pending, private, publish ), which is what a caller that omits `status`
- * actually gets — the property the CLI's SELECTABLE_PRODUCT_STATUSES constant claims to
- * mirror. `limit` is accepted and ignored (fixtures are small).
- *
- * `include` maps to post__in in WC_Product_Data_Store_CPT, so it narrows the result to
- * the listed IDs. Callers that fetch variations by ID rely on it to keep one parent's
- * children out of another picker's list.
- *
- * @param array $args Query args.
- * @return WC_Product[] The matching products.
- */
-function wc_get_products( $args = [] ) {
-	global $products_database;
-	$types    = isset( $args['type'] ) ? (array) $args['type'] : null;
-	$statuses = isset( $args['status'] ) ? (array) $args['status'] : [ 'draft', 'pending', 'private', 'publish' ];
-	$include  = isset( $args['include'] ) ? array_map( 'intval', (array) $args['include'] ) : null;
-	$matches  = [];
-	foreach ( $products_database as $product ) {
-		if ( null !== $types && ! $product->is_type( $types ) ) {
-			continue;
-		}
-		if ( null !== $include && ! in_array( (int) $product->get_id(), $include, true ) ) {
-			continue;
-		}
-		if ( ! in_array( $product->get_status(), $statuses, true ) ) {
-			continue;
-		}
-		$matches[] = $product;
-	}
-	return $matches;
-}
-
-/**
- * Flat-format a variation's attributes, as the option labels in Access_Rules do.
- *
- * Keyed off get_type() rather than the real function's is_a( …, 'WC_Product_Variation' )
- * check: the fixtures are WC_Product instances carrying a variation type, so an
- * instanceof test would return '' for every one of them and hide the labels under test.
- *
- * @param WC_Product $variation      The variation.
- * @param bool       $flat           Unused; the mock only produces the flat form.
- * @param bool       $include_names  Whether to prefix each value with its attribute name.
- * @return string
- */
-function wc_get_formatted_variation( $variation, $flat = false, $include_names = true ) {
-	if ( ! $variation->is_type( 'variation' ) ) {
-		return '';
-	}
-	$pairs = [];
-	foreach ( $variation->get_attributes() as $name => $value ) {
-		$pairs[] = $include_names ? sprintf( '%s: %s', ucfirst( $name ), $value ) : $value;
-	}
-	return implode( ', ', $pairs );
 }
 /**
  * Minimal stand-in for WooCommerce's admin field renderer. Only enough markup to let a metabox

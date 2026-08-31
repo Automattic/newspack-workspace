@@ -904,13 +904,15 @@ class Premium_Newsletters_Migration {
 	 * own — a rule nothing can satisfy — but they leave the gate stricter than the plan
 	 * was, so the caller warns rather than staying silent.
 	 *
-	 * Variation IDs are kept, as in the sibling content gate command.
+	 * Variation IDs are kept, unlike in the sibling content gate command.
 	 * WC_Subscription::has_product() matches a line item on either its product_id or
 	 * its variation_id, so the variation ID admits exactly the readers who bought that
 	 * variation — which is what the plan granted. Substituting the parent would also
 	 * admit holders of its sibling variations, and dropping the ID restricts readers
 	 * the plan admitted, who Premium_Newsletters::check_access() then unsubscribes at
-	 * cutover.
+	 * cutover. The gate editor's product picker lists a variable subscription's
+	 * variations alongside its parent, so a migrated variation ID is shown there and
+	 * survives a re-save of that field.
 	 *
 	 * @param array[] $group Plan descriptors, each carrying a 'product_ids' key.
 	 *
@@ -1002,7 +1004,7 @@ class Premium_Newsletters_Migration {
 		if ( ! empty( $payload['variation_ids'] ) ) {
 			WP_CLI::warning(
 				sprintf(
-					'"%s": its paid access rule names product variation ID(s) %s rather than their parent. That is what the plan granted: readers who bought a sibling variation of the same product do not get in.',
+					'"%s": its paid access rule keeps product variation ID(s) %s, which is what the plan granted — narrower than the parent product, which would also admit holders of its sibling variations. The gate editor lists them, so they survive a re-save. Leave them alone unless you mean to change what the gate grants.',
 					$payload['title'],
 					implode( ', ', $payload['variation_ids'] )
 				)

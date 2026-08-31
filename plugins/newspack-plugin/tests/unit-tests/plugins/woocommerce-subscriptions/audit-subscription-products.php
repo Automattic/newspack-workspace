@@ -54,9 +54,6 @@ class Newspack_Test_Audit_Subscription_Products extends WP_UnitTestCase {
 		$products_database      = [];
 		$wcs_mock_ignore_offset = false;
 		$wcs_mock_query_log     = [];
-		// The picker memoizes per request, so a class that ran before this one would
-		// otherwise leave its catalog in place for the gate-picker comparison below.
-		Access_Rules::flush_product_options_memo();
 		WP_CLI::reset();
 		$this->user_id = self::factory()->user->create( [ 'role' => 'subscriber' ] );
 	}
@@ -80,21 +77,16 @@ class Newspack_Test_Audit_Subscription_Products extends WP_UnitTestCase {
 	 * @param string $name       Product name.
 	 * @param string $status     Post status (publish|draft|pending|private|trash).
 	 * @param string $type       Product type (subscription|variation|...).
-	 * @param int    $parent_id  Parent product ID, for a variation.
 	 * @return WC_Product
 	 */
-	private function register_product( int $product_id, string $name, string $status = 'publish', string $type = 'subscription', int $parent_id = 0 ): WC_Product {
+	private function register_product( int $product_id, string $name, string $status = 'publish', string $type = 'subscription' ): WC_Product {
 		global $products_database;
-		// Variations are staged as WC_Product_Variation: the picker's label builder is
-		// typed to it, as production is, so a plain WC_Product would not reach it.
-		$product_class                    = wc_mock_product_class( $type );
-		$product                          = new $product_class(
+		$product                          = new WC_Product(
 			[
-				'id'        => $product_id,
-				'name'      => $name,
-				'type'      => $type,
-				'status'    => $status,
-				'parent_id' => $parent_id,
+				'id'     => $product_id,
+				'name'   => $name,
+				'type'   => $type,
+				'status' => $status,
 			]
 		);
 		$products_database[ $product_id ] = $product;
@@ -782,44 +774,58 @@ class Newspack_Test_Audit_Subscription_Products extends WP_UnitTestCase {
 	}
 
 	/**
-	 * The CLI's live-product set is the parent half of the gate picker's. The allowlist
-	 * constants restate `Access_Rules::get_subscription_products_options()`'s implicit
-	 * defaults, so this pins Newspack-side drift: a `status` argument or a third type added
-	 * there (and not here) makes the sets diverge and this test fail.
+	 * The CLI's live-product set must stay identical to the parent products the gate picker
+	 * offers. The allowlist constants restate `Access_Rules::get_subscription_products_options()`'s
+	 * implicit defaults, so this pins Newspack-side drift: a `status` argument or a third
+	 * type added there (and not here) makes the sets diverge and this test fail. It cannot
+	 * catch WooCommerce-side drift — the `wc_get_products` mock hardcodes WC's current
+	 * no-`status` default (draft/pending/private/publish), so a change to `WC_Product_Query`'s
+	 * defaults would move the real picker while the mock (and this test) stand still.
 	 *
-	 * The picker also lists each variable parent's variations; this set deliberately does
-	 * not, because a repair re-points an order line item and
-	 * WC_Order_Item_Product::set_product_id() throws on a non-`product` post. The fixture
-	 * therefore gives its variable subscription a real child, so that difference is
-	 * asserted rather than an accident of a childless fixture.
-	 *
-	 * It cannot catch WooCommerce-side drift — the `wc_get_products` mock hardcodes WC's
-	 * current no-`status` default (draft/pending/private/publish), so a change to
-	 * `WC_Product_Query`'s defaults would move the real picker while the mock (and this
-	 * test) stand still.
+	 * The picker's variations are excluded from the comparison rather than added to the CLI
+	 * set, and asserted absent so the exclusion cannot go unnoticed. This set feeds
+	 * `guess_products_by_name()` and the repair target check, and a repair may not point a
+	 * line item at a variation: `WC_Order_Item_Product::set_product_id()` rejects a
+	 * `product_variation` post outright.
 	 */
-	public function test_live_product_set_matches_the_gate_picker() {
-		$this->register_product( 10, 'Published Sub', 'publish' );
-		$this->register_product( 11, 'Draft Sub', 'draft' );
-		$this->register_product( 12, 'Pending Sub', 'pending' );
-		$this->register_product( 13, 'Private Sub', 'private' );
-		$this->register_product( 14, 'Variable Sub', 'publish', 'variable-subscription' )
-			->set_children( [ 141 ] );
-		$this->register_product( 141, 'Variable Sub - Gold', 'publish', 'subscription_variation', 14 );
-		$this->register_product( 15, 'Trashed Sub', 'trash' );
-		$this->register_product( 16, 'Simple Product', 'publish', 'simple' );
+	public function test_live_product_set_matches_the_gate_pickers_parent_products() {
+		// Numbered clear of the post IDs the factory hands out: mock products are not real
+		// posts, so a collision would make the variation filter below drop one of them.
+		$this->register_product( 9010, 'Published Sub', 'publish' );
+		$this->register_product( 9011, 'Draft Sub', 'draft' );
+		$this->register_product( 9012, 'Pending Sub', 'pending' );
+		$this->register_product( 9013, 'Private Sub', 'private' );
+		$this->register_product( 9014, 'Variable Sub', 'publish', 'variable-subscription' );
+		$this->register_product( 9015, 'Trashed Sub', 'trash' );
+		$this->register_product( 9016, 'Simple Product', 'publish', 'simple' );
+		$variation_id = self::factory()->post->create(
+			[
+				'post_type'   => 'product_variation',
+				'post_parent' => 9014,
+				'post_title'  => 'Variable Sub - Annual',
+			]
+		);
 
 		$get_live_subscription_products = new ReflectionMethod( WooCommerce_Subscriptions::class, 'get_live_subscription_products' );
 		$get_live_subscription_products->setAccessible( true );
 		$cli_ids = wp_list_pluck( $get_live_subscription_products->invoke( null ), 'id' );
 
 		$picker_ids = wp_list_pluck( Access_Rules::get_subscription_products_options(), 'value' );
+		$parent_ids = array_values(
+			array_filter(
+				$picker_ids,
+				function ( $id ) {
+					return 'product_variation' !== get_post_type( $id );
+				}
+			)
+		);
 
 		sort( $cli_ids );
-		sort( $picker_ids );
-		$this->assertSame( [ 10, 11, 12, 13, 14 ], $cli_ids, 'Only gate-selectable types and statuses belong in the live set.' );
-		$this->assertSame( [ 10, 11, 12, 13, 14, 141 ], $picker_ids, 'The picker adds each variable parent\'s variations.' );
-		$this->assertSame( [], array_diff( $cli_ids, $picker_ids ), 'Every repair target must be selectable in a gate.' );
+		sort( $parent_ids );
+		$this->assertSame( [ 9010, 9011, 9012, 9013, 9014 ], $cli_ids, 'Only gate-selectable types and statuses belong in the live set.' );
+		$this->assertContains( $variation_id, $picker_ids, 'The gate picker offers a variable subscription\'s variations.' );
+		$this->assertNotContains( $variation_id, $cli_ids, 'A repair can never point a line item at a variation, so the live set holds parents only.' );
+		$this->assertSame( $parent_ids, $cli_ids, 'The audit\'s live-product set must be exactly the parent products the gate picker offers.' );
 	}
 
 	/**

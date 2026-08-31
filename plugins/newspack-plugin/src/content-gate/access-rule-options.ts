@@ -30,6 +30,22 @@ import type { TokenItem } from '@wordpress/components/build-types/form-token-fie
 export type AccessRuleOption = { value: string | number; label: string };
 
 /**
+ * How many suggestions a picker renders when nothing has been typed.
+ *
+ * `FormTokenField` defaults to 100, which is a display cap rather than a fetch cap: it
+ * ranks by the typed query before slicing, so an option past the cap is still reachable
+ * by name or ID. But with `__experimentalExpandOnFocus` the unfiltered list is what a
+ * publisher sees on focus, and a site with more than 100 institutions read that as the
+ * rest not existing. This raises the cap far enough that browsing works at realistic list
+ * sizes while still bounding the DOM — the suggestion list is not virtualised, so it
+ * renders one node per suggestion. Past it, an option is reached by typing its name or ID.
+ *
+ * This moves the cliff rather than removing it. NPPD-2132 removes it, by making the picker
+ * query the server as the publisher types instead of rendering a whole list up front.
+ */
+export const MAX_OPTION_SUGGESTIONS = 500;
+
+/**
  * The ID a token carries, e.g. `188250` in `Annual (#188250)`.
  */
 const TOKEN_ID_PATTERN = /\(#([^)]+)\)\s*$/;
@@ -58,13 +74,12 @@ const EXHAUSTIVE_OPTION_RULES = [ 'gate', 'institution' ];
  * so the wording names the right kind of thing.
  *
  * The wording says "not listed", not "deleted" or "unavailable", because the two are not
- * the same and only one of them is safe to remove. An option list holds parent products
- * and published institutions, while evaluation resolves more than that — an "Active
- * subscription" rule matches a variation ID, and a one-time purchase matches the
- * `_variation_id` on an order item. Such an ID grants access every day while never
- * appearing in the list, so a publisher must not read it as dead configuration: removing
- * it widens the gate, and removing a rule's last value widens it further, since an empty
- * value list applies no filter at all.
+ * the same and only one of them is safe to remove. An option list holds what a picker can
+ * currently offer, while evaluation resolves more than that — a one-time purchase rule
+ * matches the `_variation_id` on an order item, and its picker lists parent products only.
+ * Such an ID grants access every day while never appearing in the list, so a publisher
+ * must not read it as dead configuration: removing it widens the gate, and removing a
+ * rule's last value widens it further, since an empty value list applies no filter at all.
  */
 const MISSING_OPTION_LABELS: Record< string, () => string > = {
 	subscription: () => __( '(product not listed)', 'newspack-plugin' ),
@@ -300,14 +315,43 @@ export function hasUnlistedAccessRuleValues( options: AccessRuleOption[], value:
 }
 
 /**
- * Caution shown alongside a picker holding values no option describes, so the reading
+ * Caution shown alongside a picker holding values no option describes, keyed by rule slug
+ * the way `MISSING_OPTION_LABELS` is. What a picker can fail to list differs per rule: the
+ * subscription picker offers a variable subscription's variations, while the institution
+ * picker offers published institutions only, so naming a cause the rule cannot have sends
+ * a publisher looking for the wrong thing.
+ */
+const UNLISTED_VALUES_NOTICES: Record< string, () => string > = {
+	subscription: () =>
+		__(
+			'Entries marked “not listed” are not in this list — a product or variation that was deleted, or a product that is no longer a subscription. They are still checked when access is evaluated, so removing one widens who this gate lets in.',
+			'newspack-plugin'
+		),
+	institution: () =>
+		__(
+			'Entries marked “not listed” are not in this list — an institution that was deleted or unpublished. They are still checked when access is evaluated, so removing one widens who this gate lets in.',
+			'newspack-plugin'
+		),
+};
+
+/**
+ * Wording for a rule this module knows nothing about. `Access_Rules::register_rule()` is
+ * public, so an options-backed rule may come from anywhere and need not hold products.
+ */
+const DEFAULT_UNLISTED_VALUES_NOTICE = () =>
+	__(
+		'Entries marked “not listed” are not in this list — an item that was deleted, unpublished, or is not offered here. They are still checked when access is evaluated, so removing one widens who this gate lets in.',
+		'newspack-plugin'
+	);
+
+/**
+ * The caution shown alongside a picker holding values no option describes, so the reading
  * that the token invites — stale entry, safe to delete — does not go unchallenged.
+ *
+ * @param slug The rule slug.
  *
  * @return The caution text.
  */
-export function getUnlistedAccessRuleValuesNotice(): string {
-	return __(
-		'Entries marked “not listed” are not in this list — a product variation, or an item that was deleted or unpublished. They are still checked when access is evaluated, so removing one widens who this gate lets in.',
-		'newspack-plugin'
-	);
+export function getUnlistedAccessRuleValuesNotice( slug: string ): string {
+	return ( UNLISTED_VALUES_NOTICES[ slug ] ?? DEFAULT_UNLISTED_VALUES_NOTICE )();
 }

@@ -170,16 +170,26 @@ class Institution {
 	/**
 	 * Get institution options for the access rule multi-select.
 	 *
+	 * Published institutions only, matching `rebuild_cache()`: an institution that is not
+	 * published is never evaluated and so can never grant access, and offering one here
+	 * would let a publisher build a rule that silently does nothing. The institution editor
+	 * always saves with `publish`, so any other status comes from editing the post directly.
+	 *
 	 * @return array Array of [ 'label' => string, 'value' => int ].
 	 */
 	public static function get_options() {
 		$posts   = \get_posts(
 			[
-				'post_type'      => self::POST_TYPE,
-				'post_status'    => 'publish',
-				'posts_per_page' => -1, // phpcs:ignore WordPressVIPMinimum.Performance.NoPaging -- Institution CPT; config-scale.
-				'orderby'        => 'title',
-				'order'          => 'ASC',
+				'post_type'              => self::POST_TYPE,
+				'post_status'            => 'publish',
+				'posts_per_page'         => -1, // phpcs:ignore WordPressVIPMinimum.Performance.NoPaging -- Institution CPT; config-scale.
+				'orderby'                => 'title',
+				'order'                  => 'ASC',
+				// Only the title and ID are read, and this runs on every admin page load
+				// that localises the access rules. `get_posts()` already forces
+				// `no_found_rows`, so there is no row count to suppress here.
+				'update_post_meta_cache' => false,
+				'update_post_term_cache' => false,
 			]
 		);
 		$options = [];
@@ -266,12 +276,22 @@ class Institution {
 	 * Evaluate whether a user matches any of the selected institutions.
 	 *
 	 * @param int   $user_id         User ID.
-	 * @param array $institution_ids Selected institution IDs.
+	 * @param mixed $institution_ids Selected institution IDs — an array of post IDs
+	 *                               when well-formed; any other shape is treated as
+	 *                               malformed and fails closed.
 	 *
 	 * @return bool Whether the user matches any institution.
 	 */
 	public static function evaluate( $user_id, $institution_ids ) {
-		if ( empty( $institution_ids ) || ! is_array( $institution_ids ) ) {
+		// A value of the wrong shape (e.g. a free-text string saved before values
+		// were validated) is malformed configuration, not the absence of a
+		// constraint — fail closed rather than grant access.
+		if ( Access_Rules::is_malformed_options_backed_value( $institution_ids ) ) {
+			return false;
+		}
+
+		// An empty value means the rule imposes no constraint.
+		if ( empty( $institution_ids ) ) {
 			return true;
 		}
 
