@@ -1,3 +1,10 @@
+## newspack-block-theme [1.31.3](https://github.com/Automattic/newspack-workspace/compare/newspack-block-theme@1.31.2...newspack-block-theme@1.31.3) (2026-08-31)
+
+
+### Dependencies
+
+* **newspack-components:** upgraded to 4.7.0
+
 ## newspack-block-theme [1.31.2](https://github.com/Automattic/newspack-workspace/compare/newspack-block-theme@1.31.1...newspack-block-theme@1.31.2) (2026-08-20)
 
 
