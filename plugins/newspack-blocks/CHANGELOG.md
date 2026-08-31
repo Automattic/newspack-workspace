@@ -1,3 +1,10 @@
+## @automattic/newspack-blocks [4.30.5](https://github.com/Automattic/newspack-workspace/compare/newspack-blocks@4.30.4...newspack-blocks@4.30.5) (2026-08-31)
+
+
+### Bug Fixes
+
+* **homepage-articles:** neutralize editor author links (NPPM-3165) ([#992](https://github.com/Automattic/newspack-workspace/issues/992)) ([b19c5ae](https://github.com/Automattic/newspack-workspace/commit/b19c5aeeab022ecd28afaba72999f4af1810f8e7))
+
 ## @automattic/newspack-blocks [4.30.4](https://github.com/Automattic/newspack-workspace/compare/newspack-blocks@4.30.3...newspack-blocks@4.30.4) (2026-08-25)
 
 
