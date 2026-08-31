@@ -25,6 +25,8 @@ import {
 	getFormattedAmount,
 } from './utils';
 import { resolveCheckoutButtonForm, readCheckoutData, applyContextFields, appendUtmFields, readUtmParams } from './checkout-button-trigger';
+import { resolveDonationTrigger } from './donate-trigger';
+import { TIERS_BASED_READY_EVENT } from '../shared/js/tiers-based-ready';
 import { applyCtaAttribution } from '../shared/js/cta-attribution';
 
 const CLASS_PREFIX = newspackBlocksModal.newspack_class_prefix;
@@ -283,11 +285,10 @@ domReady( () => {
 		newspackBlocksModal?.is_registration_required &&
 		window?.newspackReaderActivation?.openAuthModal;
 
-	// Snapshot the landing page's utm params before anything can strip them: the
-	// URL-trigger handler rewrites the address bar after it fires, and the form's
-	// own GET submission replaces the query string entirely, so the request the
-	// checkout sees carries only what rides the form. Captured once here, applied
-	// to every form (direct, donate, picker) at submit time.
+	// Snapshot the landing page's utm params: the form's own GET submission
+	// replaces the query string entirely, so the request the checkout sees
+	// carries only what rides the form. Captured once, applied to every form
+	// (direct, donate, picker) at submit time.
 	const landingUtmParams = readUtmParams( window.location.search );
 
 	/**
@@ -312,7 +313,7 @@ domReady( () => {
 
 		// Carry the landing page's utm params into the checkout request itself, so
 		// Modal_Checkout::merge_request_utm_params() reads them from $_GET instead
-		// of depending on the referer surviving the trigger's URL rewrite.
+		// of depending on the referer.
 		appendUtmFields( form, landingUtmParams );
 
 		const checkoutData = getCheckoutData( form );
@@ -765,72 +766,122 @@ domReady( () => {
 		} );
 
 	/**
+	 * Query params a modal checkout URL trigger consumes (see
+	 * handleModalCheckoutUrlParams). Only these are stripped after a successful
+	 * trigger — unrelated params (UTMs, plain-permalink ids) and the hash
+	 * survive.
+	 */
+	const CHECKOUT_TRIGGER_PARAMS = [ 'checkout', 'type', 'layout', 'frequency', 'amount', 'other', 'product_id', 'variation_id' ];
+
+	/**
+	 * Remove the modal checkout trigger params from the address bar.
+	 */
+	const stripCheckoutUrlParams = () => {
+		const url = new URL( window.location.href );
+		CHECKOUT_TRIGGER_PARAMS.forEach( param => url.searchParams.delete( param ) );
+		window.history.replaceState( null, null, url.href );
+	};
+
+	/**
 	 * Handle donation form triggers.
+	 *
+	 * Resolution (which form, which tier) is delegated to resolveDonationTrigger,
+	 * which validates the URL params and never mutates the DOM, so a trigger that
+	 * can't complete leaves the page untouched. Only the first form in DOM order
+	 * that fully satisfies the trigger is acted on.
 	 *
 	 * @param {string}      layout    The donation layout.
 	 * @param {string}      frequency The donation frequency.
 	 * @param {string}      amount    The donation amount.
 	 * @param {string|null} other     Optional. The custom amount when other is selected.
+	 *
+	 * @return {boolean} Whether a donation form was triggered.
 	 */
 	const triggerDonationForm = ( layout, frequency, amount, other = null ) => {
-		let form;
-		let tieredSubmitButton;
-		document.querySelectorAll( '.wpbnbd.wpbnbd--platform-wc form' ).forEach( donationForm => {
-			// First match wins, so a Donate block the page itself carries beats
-			// the hidden copy a URL trigger renders into the footer — the same
-			// resolution order the checkout-button trigger uses.
-			if ( form ) {
-				return;
-			}
-			const frequencyInput = donationForm.querySelector( `input[name="donation_frequency"][value="${ frequency }"]` );
-			if ( ! frequencyInput ) {
-				return;
-			}
-			if ( layout === 'tiered' ) {
-				// Scoped to this form's block: a document-wide lookup could click
-				// a different Donate block's frequency tab when the page carries
-				// more than one.
-				const container = donationForm.closest( '.wpbnbd' ) || document;
-				const frequencyButton = container.querySelector( `button[data-frequency-slug="${ frequency }"]` );
-				if ( ! frequencyButton ) {
-					return;
-				}
-				const submitButton = donationForm.querySelector( `button[type="submit"][name="donation_value_${ frequency }"][value="${ amount }"]` );
-				if ( ! submitButton ) {
-					return;
-				}
-				frequencyButton.click();
-				form = donationForm;
-				tieredSubmitButton = submitButton;
-			} else {
-				const amountInput =
-					layout === 'untiered'
-						? donationForm.querySelector( `input[name="donation_value_${ frequency }_untiered"]` )
-						: donationForm.querySelector( `input[name="donation_value_${ frequency }"][value="${ amount }"]` );
-				if ( frequencyInput && amountInput ) {
-					frequencyInput.checked = true;
-					if ( layout === 'untiered' ) {
-						amountInput.value = amount;
-					} else if ( amount === 'other' ) {
-						amountInput.click();
-						const otherInput = donationForm.querySelector( `input[name="donation_value_${ frequency }_other"]` );
-						if ( otherInput && other ) {
-							otherInput.value = other;
-						}
-					} else {
-						amountInput.checked = true;
-					}
-					form = donationForm;
-				}
-			}
-		} );
-		// A single submission, after the loop: submitting inside it would fire
-		// once per matching form when the page and the footer both carry one.
-		if ( tieredSubmitButton ) {
-			tieredSubmitButton.click();
-		} else if ( form ) {
-			triggerFormSubmit( form );
+		const resolution = resolveDonationTrigger( document, { layout, frequency, amount } );
+		const described = `layout "${ layout }", frequency "${ frequency }" and amount "${ amount }"`;
+		if ( resolution.status === 'invalid-params' ) {
+			// eslint-disable-next-line no-console
+			console.warn( `Newspack modal checkout: invalid donate trigger parameters (${ described }). The checkout was not triggered.` );
+			return false;
 		}
+		if ( resolution.status === 'no-match' ) {
+			// eslint-disable-next-line no-console
+			console.warn( `Newspack modal checkout: no donate form matches ${ described }. The checkout was not triggered.` );
+			return false;
+		}
+		if ( resolution.status === 'not-ready' ) {
+			// The tiersBased view script has not initialized this block yet —
+			// modal.js and tiersBased.js load async in either order, and when
+			// modal.js is first (typical on fast/cached loads, where execution
+			// follows document order and modal.js is printed first) tab and tier
+			// clicks would do nothing. Retry when the block announces readiness;
+			// the listener re-arms if the matching block still isn't the one that
+			// became ready. Returning false keeps the URL params (see
+			// handleModalCheckoutUrlParams), so the retry — or a reload, if
+			// readiness never comes — still has them; a successful retry strips
+			// them here since the caller's pass is already over. Waiting is the
+			// expected order on healthy loads, so nothing is logged unless
+			// readiness never arrives.
+			const readyWarningTimeout = setTimeout( () => {
+				// eslint-disable-next-line no-console
+				console.warn(
+					`Newspack modal checkout: the donate form matching ${ described } never finished initializing. The checkout was not triggered; the URL params were kept so a reload can retry.`
+				);
+			}, 5000 );
+			document.addEventListener(
+				TIERS_BASED_READY_EVENT,
+				() => {
+					clearTimeout( readyWarningTimeout );
+					if ( triggerDonationForm( layout, frequency, amount, other ) ) {
+						stripCheckoutUrlParams();
+					}
+				},
+				{ once: true }
+			);
+			return false;
+		}
+		const { form } = resolution;
+		if ( resolution.status === 'tiered' ) {
+			// Clicking the tab synchronously updates each tier submit button's
+			// `name` and `value` attributes (see src/blocks/donate/tiers-based/view.ts);
+			// resolution already verified the view script is initialized. Blocks
+			// with a single enabled frequency render no tabs and need no click.
+			if ( resolution.frequencyButton ) {
+				resolution.frequencyButton.click();
+			}
+			const submitButton = form.querySelector( `button[type="submit"][data-tier-index="${ resolution.tierIndex }"]` );
+			if ( ! submitButton ) {
+				// eslint-disable-next-line no-console
+				console.warn( `Newspack modal checkout: no tier submit button matches ${ described }. The checkout was not triggered.` );
+				return false;
+			}
+			submitButton.click();
+			return true;
+		}
+		resolution.frequencyInput.checked = true;
+		if ( resolution.status === 'untiered' ) {
+			resolution.amountInput.value = amount;
+		} else if ( amount === 'other' ) {
+			resolution.amountInput.click();
+			const otherInput = form.querySelector( `input[name="donation_value_${ frequency }_other"]` );
+			if ( otherInput && other ) {
+				otherInput.value = other;
+			}
+		} else {
+			resolution.amountInput.checked = true;
+		}
+		// requestSubmit runs the form's constraint validation (e.g. the untiered
+		// amount input's `min`), and a refused submit would otherwise still be
+		// reported as success — stripping the URL params of a link that did
+		// nothing. Check first so failures stay visible and retryable.
+		if ( ! form.checkValidity() ) {
+			// eslint-disable-next-line no-console
+			console.warn( `Newspack modal checkout: the donate form rejected the values for ${ described }. The checkout was not triggered.` );
+			return false;
+		}
+		triggerFormSubmit( form );
+		return true;
 	};
 
 	/**
@@ -867,9 +918,10 @@ domReady( () => {
 		if ( ! urlParams.has( 'checkout' ) ) {
 			return;
 		}
-		// Default to stripping the params after handling. The checkout button
-		// trigger overrides this so a link that matches no form stays visible
-		// and diagnosable rather than being silently dropped.
+		// Default to stripping the params after handling. The donate and
+		// checkout button triggers override this so a link that fails to
+		// trigger stays visible and diagnosable rather than being silently
+		// dropped, and a reload can retry a transient failure.
 		let shouldStripParams = true;
 		const type = urlParams.get( 'type' );
 		if ( type === 'donate' ) {
@@ -878,7 +930,11 @@ domReady( () => {
 			const amount = urlParams.get( 'amount' );
 			const other = urlParams.get( 'other' );
 			if ( layout && frequency && amount ) {
-				triggerDonationForm( layout, frequency, amount, other );
+				shouldStripParams = triggerDonationForm( layout, frequency, amount, other );
+			} else {
+				shouldStripParams = false;
+				// eslint-disable-next-line no-console
+				console.warn( 'Newspack modal checkout: donate trigger is missing layout, frequency or amount. The checkout was not triggered.' );
 			}
 		} else if ( type === 'checkout_button' ) {
 			const productId = urlParams.get( 'product_id' );
@@ -899,10 +955,10 @@ domReady( () => {
 				triggerFormSubmit( form );
 			}
 		}
-		// Remove the URL params to prevent re-triggering, but only when the
+		// Remove the trigger params to prevent re-triggering, but only when the
 		// trigger succeeded.
 		if ( shouldStripParams ) {
-			window.history.replaceState( null, null, window.location.pathname );
+			stripCheckoutUrlParams();
 		}
 	};
 	handleModalCheckoutUrlParams();
