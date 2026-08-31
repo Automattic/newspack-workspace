@@ -111,8 +111,13 @@ export default function NewslettersQuickEditPanel( { item, onClose, onSaved } ) 
 
 	// A disabled field drops out of the tab order, so the wait needs its own
 	// explanation.
-	// `help` lands in the field's `aria-describedby`; an empty string suppresses
-	// the default how-to text, which these fields have never shown.
+	// `help` lands in the field's `aria-describedby`, but it only exists from WP
+	// 7.1 and this plugin supports 6.9, where the prop is dropped. Passing
+	// `__experimentalShowHowTo={ false }` alongside it keeps the default how-to
+	// text suppressed there; on 7.1 `help` still wins, at the cost of a
+	// deprecation notice. So on 6.9/7.0 the wait goes unexplained — accepted,
+	// because `FormTokenField` offers no other described-by hook. Drop the
+	// experimental prop, and revisit the explanation, once the floor is 7.1.
 	const categoriesHelp = optionsLoaded ? '' : __( 'Loading categories…', 'newspack-newsletters' );
 	const tagsHelp = optionsLoaded ? '' : __( 'Loading tags…', 'newspack-newsletters' );
 
@@ -182,6 +187,7 @@ export default function NewslettersQuickEditPanel( { item, onClose, onSaved } ) 
 					setCategorySelections( resolveTokens( next, categorySelections, categories ) );
 				} }
 				__experimentalValidateInput={ validateCategory }
+				__experimentalShowHowTo={ false }
 				__next40pxDefaultSize
 				__nextHasNoMarginBottom
 			/>
@@ -201,6 +207,7 @@ export default function NewslettersQuickEditPanel( { item, onClose, onSaved } ) 
 					setTagSelections( resolveTokens( next, tagSelections, tags ) );
 				} }
 				__experimentalValidateInput={ validateTag }
+				__experimentalShowHowTo={ false }
 				__next40pxDefaultSize
 				__nextHasNoMarginBottom
 			/>
