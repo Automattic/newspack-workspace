@@ -19,6 +19,16 @@ declare global {
 			preview_post: string;
 			preview_archive: string;
 			integrations_settings_enabled: boolean;
+			// Optional: only localized when the content-gifting and institutions
+			// features are available, so every read guards with `?.`.
+			available_products?: PurchasableProductOption[];
+			content_gifting?: {
+				has_metering?: boolean;
+				can_use_gifting?: {
+					errors?: Record< string, string[] >;
+				};
+			};
+			institutional_access_url?: string;
 			// Optional: consumers guard with `?.`/fallbacks because the
 			// payload can be absent (plugin filter strips it, non-Audience
 			// mount, HMR reseed) — keep the type honest about that.
@@ -62,13 +72,21 @@ declare global {
 			can_use_name_your_price: boolean;
 		};
 		newspackAudienceSubscriptions: {
+			tabs: Array<{
+				slug: string;
+				label: string;
+				path: string;
+			}>;
 			memberships_url: string;
+			memberships_active: boolean;
 			primary_product: string;
 			eligible_products: Array<{
 				id: string;
 				title: string;
 			}>;
 			upgrade_subscription_url: string;
+			audience_management_enabled?: string;
+			audience_management_url?: string;
 		};
 		newspackAudienceIntegrations: {
 			integrations_settings_enabled: boolean;
@@ -82,10 +100,14 @@ declare global {
 			presave_checks_enabled: boolean | string;
 			default_gate_status: GateStatus;
 			feed_restriction_modes?: { value: FeedRestrictionMode; label: string }[];
+			// True while WooCommerce Memberships governs feeds, which makes the feed
+			// controls inert until cutover. Same wp_localize_script() stringification
+			// as presave_checks_enabled above ('1'/''), so read it truthily.
+			feeds_governed_by_memberships?: boolean | string;
 			// Audience Management is a prerequisite for content gates. Only ever the
 			// string wp_localize_script() produced ('1' on, '' off) - nothing writes a
 			// real boolean back, so typing it wider would invite a `=== true` that can
-			// never hold. Read it via hasAudienceManagement() in content-gates/utils.
+			// never hold. Read it via hasAudienceManagement() in audience/components/audience-management-required.
 			//
 			// Optional because both keys are absent on a page whose localized config
 			// predates this feature, which the readers already handle: hasAudienceManagement()

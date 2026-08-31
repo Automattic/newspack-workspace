@@ -1,4 +1,4 @@
-import { store, dispatchActivity, getActivities, getUniqueActivitiesBy, setReaderEmail, setAuthenticated, getReader } from './index';
+import { store, dispatchActivity, getActivities, getUniqueActivitiesBy, setReaderEmail, setAuthenticated, getReader, register } from './index';
 import { on, off } from './events';
 
 describe( 'newspackReaderActivation', () => {
@@ -568,5 +568,80 @@ describe( 'shouldClearReaderData (NPPM-2899)', () => {
 				hasAuthReaderCookie: false,
 			} )
 		).toBe( false );
+	} );
+} );
+
+describe( 'register() transport options', () => {
+	beforeEach( () => {
+		// A prior describe block's afterEach deletes window.newspack_reader_data
+		// and doesn't restore it; re-seed it so dispatchActivity()'s store.add()
+		// (via assertNotReadOnly's bare newspack_reader_data reference) doesn't
+		// throw a ReferenceError on the register() success path.
+		global.newspack_reader_data = {};
+		global.newspack_ras_config = {
+			frontend_registration_url: 'https://test.test/wp-json/newspack/v1/reader-activation/register',
+			frontend_registration_integrations: {
+				'form-capture': { key: 'test-key', label: 'Form Capture' },
+			},
+		};
+		global.fetch = jest.fn( () =>
+			Promise.resolve( {
+				ok: true,
+				json: () => Promise.resolve( { success: true, status: 'created', email: 'a@b.co' } ),
+			} )
+		);
+	} );
+	afterEach( () => {
+		delete global.newspack_reader_data;
+		delete global.newspack_ras_config;
+		delete global.fetch;
+	} );
+	it( 'passes keepalive to fetch when requested', async () => {
+		await register( 'a@b.co', 'form-capture', {}, { keepalive: true } );
+		expect( global.fetch ).toHaveBeenCalledWith( expect.any( String ), expect.objectContaining( { keepalive: true } ) );
+	} );
+	it( 'does not set keepalive by default', async () => {
+		await register( 'a@b.co', 'form-capture' );
+		expect( global.fetch.mock.calls[ 0 ][ 1 ].keepalive ).toBe( false );
+	} );
+	it( 'uses a pre-acquired captcha token without invoking grecaptcha', async () => {
+		global.newspack_ras_config.captcha_site_key = 'site-key';
+		global.newspack_ras_config.captcha_version = 'v3';
+		// No window.grecaptcha stub: acquisition would reject if attempted.
+		await register( 'a@b.co', 'form-capture', {}, { captchaToken: 'warm-token' } );
+		const body = JSON.parse( global.fetch.mock.calls[ 0 ][ 1 ].body );
+		expect( body[ 'g-recaptcha-response' ] ).toBe( 'warm-token' );
+	} );
+	it( 'treats an existing-reader 409 as a successful capture client-side', async () => {
+		global.fetch = jest.fn( () =>
+			Promise.resolve( {
+				ok: false,
+				status: 409,
+				json: () => Promise.resolve( { code: 'reader_already_exists', message: 'Exists.' } ),
+			} )
+		);
+		// The promise still rejects — callers distinguish created from existing…
+		await expect( register( 'known@example.com', 'form-capture' ) ).rejects.toMatchObject( { code: 'reader_already_exists' } );
+		// …but the captured identity reaches the client store (read by targeting)…
+		expect( getReader().email ).toBe( 'known@example.com' );
+		// …and the activity stream records a registration with 'existing' status,
+		// not a failure — on sites with returning readers this is the routine outcome.
+		const registered = getActivities( 'reader_registered' ).filter( a => a.data.email === 'known@example.com' );
+		expect( registered ).toHaveLength( 1 );
+		expect( registered[ 0 ].data.status ).toBe( 'existing' );
+		expect( getActivities( 'reader_registration_failed' ).filter( a => a.data.email === 'known@example.com' ) ).toHaveLength( 0 );
+	} );
+	it( 'still records a failure activity for non-conflict errors', async () => {
+		global.fetch = jest.fn( () =>
+			Promise.resolve( {
+				ok: false,
+				status: 429,
+				json: () => Promise.resolve( { code: 'rate_limit_exceeded', message: 'Too many.' } ),
+			} )
+		);
+		await expect( register( 'limited@example.com', 'form-capture' ) ).rejects.toMatchObject( { code: 'rate_limit_exceeded' } );
+		expect( getReader().email ).not.toBe( 'limited@example.com' );
+		const failed = getActivities( 'reader_registration_failed' ).filter( a => a.data.email === 'limited@example.com' );
+		expect( failed ).toHaveLength( 1 );
 	} );
 } );

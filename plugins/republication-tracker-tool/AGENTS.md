@@ -34,7 +34,7 @@ The root file's `fix:js` remedy does not apply here: this plugin has no `fix:js`
 
 - **Never run the `readme` script.** `README.md` has deliberately diverged from `readme.txt` (Newspack maintainer credit, added contributor, different stable tag). `grunt readme` regenerates it from `readme.txt` and silently reverts all of that to the original INN Labs text.
 
-- **`grunt i18n` is the only mechanism that regenerates this plugin's `.pot`, and it is manual.** Its addtextdomain glob does not exclude `vendor/` or `tests/`, so running it rewrites text domains across every Composer dependency.
+- **Do not run `grunt i18n`.** CI regenerates this plugin's `.pot` (see the root `AGENTS.md`), so the `makepot` half is redundant. The `addtextdomain` half has no CI equivalent, and its glob excludes neither `vendor/` nor `tests/`, so it will rewrite text domains in any dependency or test file that carries a gettext call. No current dependency does, so a run today changes nothing there, but the exposure returns the moment one is added.
 
 - **`assets/*.js` and `assets/*.css` are hand-written, git-tracked source served straight to the browser.** Webpack never reads or writes `assets/`. Only `src/` → `dist/` is built.
 

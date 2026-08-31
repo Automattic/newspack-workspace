@@ -20,10 +20,23 @@ class WooCommerce_Subscriptions {
 	const REACTIVATED_FOR_SWITCH_META = '_newspack_switch_reactivated_subscriptions';
 
 	/**
+	 * Option recording which WooCommerce Subscriptions product-type settings
+	 * Newspack turned on, as a list of the option names written.
+	 *
+	 * Write provenance, not a gate: once the WooCommerce row exists,
+	 * `maybe_enable_legacy_product_types()` never reconsiders it anyway. This
+	 * exists so the write is answerable afterwards — which sites Newspack
+	 * touched, and which of the two rows it created — so that a corrective
+	 * release could reverse only those and leave a publisher's own choice alone.
+	 */
+	const PRODUCT_TYPES_ENABLED_OPTION = 'newspack_subscriptions_enabled_product_types';
+
+	/**
 	 * Initialize hooks and filters.
 	 */
 	public static function init() {
 		add_action( 'plugins_loaded', [ __CLASS__, 'woocommerce_subscriptions_integration_init' ] );
+		add_action( 'admin_init', [ __CLASS__, 'maybe_enable_legacy_product_types' ] );
 		add_filter( 'woocommerce_subscriptions_product_limited_for_user', [ __CLASS__, 'maybe_limit_subscription_product_for_user' ], 10, 3 );
 		add_filter( 'woocommerce_subscriptions_product_trial_length', [ __CLASS__, 'limit_free_trials_to_one_per_user' ], 10, 2 );
 		add_filter( 'wcs_get_users_subscriptions', [ __CLASS__, 'filter_subscriptions_for_account_page' ], 10, 1 );
@@ -43,6 +56,17 @@ class WooCommerce_Subscriptions {
 		add_action( 'woocommerce_store_api_checkout_order_processed', [ __CLASS__, 'maybe_reactivate_pending_cancel_switch' ], 40 );
 		add_action( 'woocommerce_order_status_failed', [ __CLASS__, 'maybe_revert_reactivation_on_failed_switch' ] );
 		add_action( 'woocommerce_order_status_cancelled', [ __CLASS__, 'maybe_revert_reactivation_on_failed_switch' ] );
+
+		// Adding a card to a subscription that has no next payment date: eligibility
+		// plus the follow-through that resumes billing. See
+		// allow_add_payment_method_without_next_payment() for the whole story.
+		// Priority 20: WCS registers its own answer at 10 and we only override a no.
+		add_filter( 'woocommerce_can_subscription_be_updated_to_new-payment-method', [ __CLASS__, 'allow_add_payment_method_without_next_payment' ], 20, 2 );
+		// Not `woocommerce_subscription_payment_method_updated`: that fires before the
+		// card is validated or charged, so a declined card would still leave a
+		// schedule behind. This filter runs after process_payment() and carries its
+		// result, so the schedule can follow the payment instead of preceding it.
+		add_filter( 'woocommerce_subscriptions_process_payment_for_change_method_via_pay_shortcode', [ __CLASS__, 'schedule_next_payment_after_payment_method_added' ], 10, 2 );
 	}
 
 	/**
@@ -317,6 +341,260 @@ class WooCommerce_Subscriptions {
 		// reactivated on purpose in the meantime.
 		$order->delete_meta_data( self::REACTIVATED_FOR_SWITCH_META );
 		$order->save();
+	}
+
+	/**
+	 * Let a reader add a card to a subscription that has no next payment date.
+	 *
+	 * WCS withholds the "change payment method" action from any subscription
+	 * whose next payment date is unset, in
+	 * {@see \WC_Subscriptions_Change_Payment_Gateway::can_subscription_be_updated_to_new_payment_method()}.
+	 * That rule assumes a next payment date always exists once a subscription is
+	 * running, which holds for subscriptions bought at checkout but not for ones
+	 * a publisher creates by hand in wp-admin: those start with no payment method
+	 * and nothing scheduled, so the reader is offered no way to put a card on
+	 * file and the subscription can never be paid (NPPD-2170).
+	 *
+	 * The rule is enforced in exactly one place, and every part of the flow reads
+	 * it — the action button, the form, and the request validator all call
+	 * `can_be_updated_to( 'new-payment-method' )`. The POST handler applies no
+	 * status or date test of its own, so granting eligibility is sufficient to
+	 * open the flow end to end. WCS then labels the action "Add payment" rather
+	 * than "Change payment" whenever the subscription has no gateway yet, which
+	 * is the wording this case wants.
+	 *
+	 * Deliberately narrow. WCS refuses the action for several distinct reasons;
+	 * this reproduces the ones current WCS applies in
+	 * `can_subscription_be_updated_to_new_payment_method()` — automatic payments
+	 * switched off store-wide, no recurring charge, no gateway that can take a
+	 * customer card, a gateway that cannot cancel — and overrides only the
+	 * missing-next-payment / not-active refusal it targets. If a future WCS adds a
+	 * refusal, mirror it below. Overriding just the one refusal, rather than
+	 * returning a blanket `true`, is what keeps a publisher's "no automatic
+	 * renewals" choice intact.
+	 *
+	 * Paired with {@see schedule_next_payment_after_payment_method_added()},
+	 * which schedules the payment the missing date would otherwise leave unset.
+	 *
+	 * @param bool             $can_be_updated Whether WCS allows the change.
+	 * @param \WC_Subscription $subscription   The subscription being checked.
+	 *
+	 * @return bool Whether the payment method can be changed.
+	 */
+	public static function allow_add_payment_method_without_next_payment( $can_be_updated, $subscription ) {
+		if ( $can_be_updated ) {
+			return $can_be_updated;
+		}
+
+		if ( ! ( $subscription instanceof \WC_Subscription ) ) {
+			return $can_be_updated;
+		}
+
+		// Reproduce every WCS refusal except the missing-next-payment / not-active
+		// one this filter exists to override. See
+		// WC_Subscriptions_Change_Payment_Gateway::can_subscription_be_updated_to_new_payment_method().
+
+		// The store has turned automatic payments off entirely — a publisher
+		// configuration choice, not a per-subscription state. static:: so a test
+		// subclass can override the WCS-dependent read.
+		if ( static::store_requires_manual_renewal() ) {
+			return $can_be_updated;
+		}
+
+		// Nothing recurring to charge, so nothing to add a card for. WCS reads the
+		// filtered ('view') total here; 'edit' is deliberate, so a site filtering
+		// order totals cannot open the flow on a subscription with nothing to bill.
+		if ( (float) $subscription->get_total( 'edit' ) <= 0 ) {
+			return $can_be_updated;
+		}
+
+		// No gateway can take a card from the reader, so the flow would dead-end.
+		if ( ! self::one_gateway_supports_customer_payment_method_change() ) {
+			return $can_be_updated;
+		}
+
+		// The subscription's own gateway cannot cancel, which WCS requires before
+		// letting a reader swap payment method. A card-less subscription reads as
+		// manual here, so this passes for the hand-made case it targets.
+		if ( ! $subscription->payment_method_supports( 'subscription_cancellation' ) ) {
+			return $can_be_updated;
+		}
+
+		// The refusal we override, limited to statuses where putting a card on file
+		// leads somewhere: awaiting a first payment, suspended, or running.
+		// pending-cancel is excluded — its next payment is already cleared by
+		// design, so it would always match, and the action would do nothing for a
+		// subscription winding down (reactivating restores WCS's own flow).
+		if ( ! $subscription->has_status( [ 'pending', 'on-hold', 'active' ] ) ) {
+			return $can_be_updated;
+		}
+
+		if ( $subscription->get_time( 'next_payment' ) > 0 ) {
+			return $can_be_updated;
+		}
+
+		return true;
+	}
+
+	/**
+	 * Whether the store has switched automatic payments off — WCS's manual
+	 * renewals required with the reader-facing auto-renew toggle disabled. Under
+	 * that configuration WCS deliberately hides the payment-method change action,
+	 * and the eligibility filter must not re-open it.
+	 *
+	 * `protected` rather than `private` and called through `static::` so a test
+	 * can override this WCS-dependent read with a subclass, without the eligibility
+	 * filter having to load WooCommerce Subscriptions or define its globals. A
+	 * missing toggle class leaves the manual-renewal setting to decide, matching
+	 * WCS's own guard.
+	 *
+	 * @return bool
+	 */
+	protected static function store_requires_manual_renewal() {
+		$required       = function_exists( 'wcs_is_manual_renewal_required' ) && \wcs_is_manual_renewal_required();
+		$toggle_enabled = class_exists( 'WCS_My_Account_Auto_Renew_Toggle' ) && \WCS_My_Account_Auto_Renew_Toggle::is_enabled();
+
+		return $required && ! $toggle_enabled;
+	}
+
+	/**
+	 * Whether any gateway lets a reader change their own payment method.
+	 *
+	 * Routed through the WCS handler class rather than
+	 * `WC_Subscriptions_Payment_Gateways` directly, because WooPayments
+	 * substitutes its own handler and WCS resolves the capability through
+	 * whichever is active.
+	 *
+	 * @return bool
+	 */
+	private static function one_gateway_supports_customer_payment_method_change() {
+		if ( ! class_exists( 'WC_Subscriptions_Core_Plugin' ) ) {
+			return false;
+		}
+
+		$handler = \WC_Subscriptions_Core_Plugin::instance()->get_gateways_handler_class();
+		if ( ! is_callable( [ $handler, 'one_gateway_supports' ] ) ) {
+			return false;
+		}
+
+		return (bool) $handler::one_gateway_supports( 'subscription_payment_method_change_customer' );
+	}
+
+	/**
+	 * Schedule the next payment once a card is attached to a subscription that
+	 * had none.
+	 *
+	 * The other half of {@see allow_add_payment_method_without_next_payment()},
+	 * and deliberately narrower than it: eligibility opens the form for three
+	 * statuses, but only `active` gets a date written here.
+	 *
+	 * An `active` subscription is, by WCS's own model, currently inside a paid
+	 * period — the reader has access. For the subscriptions this targets, a human
+	 * granted that period on purpose (support setting a stuck subscription active
+	 * so the reader keeps access). Scheduling the first *future* charge one
+	 * billing period out is consistent with both facts, and it is what unlocks
+	 * WCS's early renewal — `wcs_can_user_renew_early()` refuses on
+	 * `subscription_no_next_payment`, so a reader who wants to pay sooner has no
+	 * self-serve route until a date exists. With a date set, "Renew now" appears
+	 * and takes payment immediately, resetting the cycle from that payment.
+	 *
+	 * `pending` and `on-hold` are left to WooCommerce: they carry an unpaid order,
+	 * and paying it is what activates the subscription and sets its date. Writing
+	 * a date for them would also withdraw the "Add payment method" action (this
+	 * pair steps back once a date exists, while WCS still refuses a non-active
+	 * subscription), stranding the reader with a card on file and no way back.
+	 *
+	 * `calculate_date( 'next_payment' )` derives the date from the last payment or
+	 * the start date plus one billing period, keeps it far enough out to survive a
+	 * daylight-saving shift, and returns `0` when the next period would fall past
+	 * the subscription's end date; a `0` is respected. `can_date_be_updated()`
+	 * additionally gates on the gateway supporting date changes, so a gateway that
+	 * owns the billing agreement and refuses them (PayPal Standard) never gets a
+	 * Woo-side schedule it would not honour.
+	 *
+	 * Runs on `woocommerce_subscriptions_process_payment_for_change_method_via_pay_shortcode`,
+	 * which WCS applies after `process_payment()` and before it bails on a
+	 * non-success result. Scheduling from the earlier
+	 * `woocommerce_subscription_payment_method_updated` action would write a date
+	 * for a card that was later declined, leaving an automatic renewal queued
+	 * against a card the gateway never accepted.
+	 *
+	 * @param array            $result       The payment result, with a `result` key.
+	 * @param \WC_Subscription $subscription The subscription whose method changed.
+	 *
+	 * @return array The unmodified payment result.
+	 */
+	public static function schedule_next_payment_after_payment_method_added( $result, $subscription ) {
+		if ( ! ( $subscription instanceof \WC_Subscription ) ) {
+			return $result;
+		}
+
+		// Only once the card has actually been accepted. WCS returns here after
+		// process_payment() and bails on anything but success, so a declined card
+		// must leave no schedule behind.
+		if ( ! is_array( $result ) || ! isset( $result['result'] ) || 'success' !== $result['result'] ) {
+			return $result;
+		}
+
+		// Ask the subscription whether a chargeable gateway is attached rather than
+		// trusting a method string: this runs for admin and bulk updates too, and
+		// has_payment_gateway() is the same predicate the My Account label uses.
+		if ( ! $subscription->has_payment_gateway() || $subscription->is_manual() ) {
+			return $result;
+		}
+
+		// Only the gap this pair exists to close. An already-scheduled payment is
+		// the reader's or WCS's, and is never rewritten.
+		if ( $subscription->get_time( 'next_payment' ) > 0 ) {
+			return $result;
+		}
+
+		// Active only. See the note above on why pending / on-hold are left to
+		// WooCommerce's own payment-completes-then-schedules flow.
+		if ( ! $subscription->has_status( 'active' ) ) {
+			return $result;
+		}
+
+		// Respect the same gate WCS applies to every date write: the gateway must
+		// support date changes, or its schedule and Woo's would silently diverge.
+		if ( ! $subscription->can_date_be_updated( 'next_payment' ) ) {
+			return $result;
+		}
+
+		$next_payment = $subscription->calculate_date( 'next_payment' );
+		if ( empty( $next_payment ) ) {
+			return $result;
+		}
+
+		// update_dates() validates the new date against the subscription's other
+		// dates and throws when they disagree. A subscription we could not
+		// schedule is left as it was: the reader still has their card on file,
+		// and the publisher can set the date by hand.
+		try {
+			$subscription->update_dates( [ 'next_payment' => $next_payment ] );
+			$subscription->save();
+			$subscription->add_order_note(
+				sprintf(
+					/* translators: %s: the newly scheduled next payment date, localised. */
+					__( 'Next payment scheduled for %s after the subscriber added a payment method.', 'newspack-plugin' ),
+					$subscription->get_date_to_display( 'next_payment' )
+				)
+			);
+		} catch ( \Exception $e ) {
+			// An order note rather than Logger::error(): Logger::log() returns early
+			// unless NEWSPACK_LOG_LEVEL is defined and non-zero, which it is not on a
+			// stock site, so the one failure this method plans for would otherwise
+			// leave no trace anywhere the publisher looks.
+			$subscription->add_order_note(
+				sprintf(
+					/* translators: %s: the reason the date could not be set. */
+					__( 'A payment method was added, but the next payment date could not be scheduled: %s. The next payment date may need setting by hand.', 'newspack-plugin' ),
+					$e->getMessage()
+				)
+			);
+		}
+
+		return $result;
 	}
 
 	/**
@@ -672,6 +950,111 @@ class WooCommerce_Subscriptions {
 		Card_Expiry_Warning::init();
 	}
 
+	/**
+	 * Enable the `subscription` and `variable-subscription` product types, once.
+	 *
+	 * WooCommerce Subscriptions 9.0 added a "Subscription product creation" section
+	 * whose two checkboxes default to off, which removes those product types from
+	 * the product-type dropdown. Newspack still creates them — the Audience wizard
+	 * writes them directly — so on an unconfigured site a publisher cannot create
+	 * or switch to a product type our own wizard produces.
+	 *
+	 * Runs on `admin_init`, matching how the plugin writes other third-party
+	 * options (`Parsely::migrate_meta_type()`, `WooCommerce_Email_Style_Sync`,
+	 * `Emails_Section`), which keeps it off ordinary front-end pageloads, REST
+	 * requests and cron. It is not an authentication guarantee: `admin-ajax.php`
+	 * fires `admin_init` too, so a `wp_ajax_nopriv_*` action reaches this
+	 * unauthenticated. That is harmless here — the write is one-shot and the same
+	 * either way — but the hook is a narrower surface, not a logged-in one.
+	 *
+	 * Nothing is lost by waiting — a Subscriptions upgrade happens through an
+	 * admin action, so `admin_init` fires in the same session, and the
+	 * product-type dropdown this unblocks is itself only reachable in wp-admin.
+	 * It also makes the opt-out filter usable from a theme's `functions.php`,
+	 * which a `plugins_loaded` call would not.
+	 *
+	 * @return void
+	 */
+	public static function maybe_enable_legacy_product_types() {
+		if ( ! self::is_active() ) {
+			return;
+		}
+		self::enable_legacy_product_types();
+	}
+
+	/**
+	 * Write the product-type settings, for options that have never been written.
+	 *
+	 * Only an option whose row is absent is touched. Anything that has saved the
+	 * setting leaves a `'no'`, including WooCommerce's own settings screen when the
+	 * box is unticked, so an absent row is the only signal that the publisher has no
+	 * preference. That makes this self-limiting: after the first write the row
+	 * exists, so the check never passes again and an unticked box stays unticked.
+	 *
+	 * Known limitation, accepted deliberately: `WC_Admin_Settings::save_fields()`
+	 * writes every field in a section on any save of that tab, not only the fields
+	 * the publisher touched. A site that reached 9.0 and then saved WooCommerce →
+	 * Settings → Subscriptions for an unrelated reason therefore has `'no'` rows
+	 * nobody chose, and this permanently no-ops for it. Widening the test to treat
+	 * `'no'` as fair game would forfeit the one thing that makes writing another
+	 * plugin's setting safe — so those sites are left to the settings screen.
+	 *
+	 * Deliberately not gated on the Subscriptions version. Writing the option before
+	 * a site reaches 9.0 is the point — the new default then never applies.
+	 *
+	 * @return void
+	 */
+	public static function enable_legacy_product_types() {
+		/**
+		 * Filters whether Newspack enables the legacy subscription product types.
+		 *
+		 * Returning false leaves the WooCommerce settings untouched. Because the
+		 * write runs on `admin_init` and happens at most once per option, the
+		 * filter must be added before then — a plugin, mu-plugin or a theme's
+		 * `functions.php` all work; it cannot be used to undo a write already made.
+		 *
+		 * @param bool $enable Whether to enable the legacy subscription product types.
+		 */
+		if ( ! apply_filters( 'newspack_subscriptions_enable_legacy_product_types', true ) ) {
+			return;
+		}
+
+		$options = [
+			'woocommerce_subscriptions_enable_simple_subscription',
+			'woocommerce_subscriptions_enable_variable_subscription',
+		];
+
+		// A sentinel default rather than a `false ===` test: `get_option()` returns
+		// the default only when the row is absent, so this stays correct even for
+		// an option stored as `false` or an empty string.
+		$absent  = new \stdClass();
+		$written = [];
+		foreach ( $options as $option ) {
+			if ( $absent === get_option( $option, $absent ) ) {
+				$written[] = $option;
+			}
+		}
+
+		if ( empty( $written ) ) {
+			return;
+		}
+
+		foreach ( $written as $option ) {
+			update_option( $option, 'yes' );
+		}
+
+		update_option(
+			self::PRODUCT_TYPES_ENABLED_OPTION,
+			array_values( array_unique( array_merge( (array) get_option( self::PRODUCT_TYPES_ENABLED_OPTION, [] ), $written ) ) )
+		);
+
+		Logger::newspack_log(
+			'newspack_subscriptions_product_types_enabled',
+			'Enabled WooCommerce Subscriptions product types that had never been configured.',
+			[ 'options' => $written ],
+			'info'
+		);
+	}
 
 	/**
 	 * Check if WooCommerce Subscriptions is active.

@@ -17,7 +17,7 @@ The Newspack monorepo. All product [plugins](plugins), [themes](themes), and sha
 
 Built packages are available in two places:
 
-- **[Newspack Download Center](https://help.newspack.com/download-center/)** — Easy links to the latest stable releases
+- **[Newspack Download Center](https://newspack.com/download-center/)** — Easy links to the latest stable releases
 - **[GitHub Releases](https://github.com/Automattic/newspack-workspace/releases)** — All releases, including pre-releases and historical versions
 
 Download the `.zip` file for the plugin or theme you want, then install it on your WordPress site via the WordPress admin interface (Plugins → Add New → Upload Plugin, or Appearance → Themes → Add New → Upload Theme).
@@ -235,12 +235,22 @@ Batcache is also enabled by default. It relies on memcached to cache the end out
 
 X-debug is configured by default. In order to use it:
 
-- Set you browser extension to use the `DOCKERDEBUG` IDE Key.
-- Configure your IDE to use the same IDE Key, listen to port 9003 and add the necessary path mappings.
+- Set your browser extension to use the `DOCKERDEBUG` IDE Key.
+- Configure your IDE to use the same IDE Key, listen on port 9003 and add the path mappings below.
 
-Here's an example of a `launch.json` file for VSCode to be used for the `newspack-plugin` repo:
+WordPress reaches plugins and themes through symlinks under `html/wp-content/`, and PHP resolves a symlink before it reports the file to Xdebug. The paths the debugger sees are the mount points, not the `wp-content` ones, so map all five and a breakpoint works wherever you set it:
 
-```
+| Container path | Host path |
+| --- | --- |
+| `/newspack-monorepo` | repository root |
+| `/newspack-plugins` | `plugins/` |
+| `/newspack-themes` | `themes/` |
+| `/newspack-repos` | `repos/` |
+| `/var/www/html` | `html/` |
+
+A `launch.json` for VSCode, with the editor opened at the repository root:
+
+```jsonc
 {
   "version": "0.2.0",
   "configurations": [
@@ -250,7 +260,7 @@ Here's an example of a `launch.json` file for VSCode to be used for the `newspac
       "request": "launch",
       "port": 9003,
       "log": false,
-      "maxConnections": 1, // @see  https://github.com/xdebug/vscode-php-debug/issues/604
+      "maxConnections": 1, // @see https://github.com/xdebug/vscode-php-debug/issues/604
       "xdebugSettings": {
         "resolved_breakpoints": "0", // @see https://github.com/xdebug/vscode-php-debug/issues/629 and https://stackoverflow.com/a/69925257/3059883
         "max_data": 512,
@@ -258,12 +268,29 @@ Here's an example of a `launch.json` file for VSCode to be used for the `newspac
         "max_children": 128
       },
       "pathMappings": {
-        "/newspack-plugins/newspack-plugin": "${workspaceRoot}"
-      },
+        "/newspack-monorepo": "${workspaceFolder}",
+        "/newspack-plugins": "${workspaceFolder}/plugins",
+        "/newspack-themes": "${workspaceFolder}/themes",
+        "/newspack-repos": "${workspaceFolder}/repos",
+        "/var/www/html": "${workspaceFolder}/html"
+      }
     }
   ]
 }
 ```
+
+### Mapping an isolated environment
+
+An isolated environment mounts a worktree over the plugin or theme it overrides. The container path stays the same, so the mapping above sends the debugger to the shared checkout and breakpoints in the worktree never bind. Add one entry per overridden plugin, more specific than the shared one:
+
+```jsonc
+"pathMappings": {
+  "/newspack-plugins/newspack-plugin": "${workspaceFolder}/worktrees/fix-my-branch/plugins/newspack-plugin",
+  "/newspack-plugins": "${workspaceFolder}/plugins"
+}
+```
+
+The directory under `worktrees/` is the branch name with each `/` replaced by `-`. Run `n env list` to see which branch an environment has for each plugin.
 
 ## Isolated Environments (Git Worktrees)
 

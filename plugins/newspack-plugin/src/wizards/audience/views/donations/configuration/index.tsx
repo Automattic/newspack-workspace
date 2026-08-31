@@ -4,13 +4,23 @@
 import { __, sprintf } from '@wordpress/i18n';
 import { useDispatch } from '@wordpress/data';
 import { useEffect } from '@wordpress/element';
-import { ToggleControl, ExternalLink } from '@wordpress/components';
+import {
+	// eslint-disable-next-line @wordpress/no-unsafe-wp-apis
+	__experimentalVStack as VStack,
+	// eslint-disable-next-line @wordpress/no-unsafe-wp-apis
+	__experimentalToggleGroupControl as ToggleGroupControl,
+	// eslint-disable-next-line @wordpress/no-unsafe-wp-apis
+	__experimentalToggleGroupControlOption as ToggleGroupControlOption,
+	Notice as CoreNotice,
+	ToggleControl,
+	ExternalLink,
+} from '@wordpress/components';
 
 /**
  * Internal dependencies.
  */
 import MoneyInput from '../../../components/money-input';
-import { Button, Card, Grid, Notice, SectionHeader, SelectControl, TextControl } from '../../../../../../packages/components/src';
+import { Button, Divider, Grid, Notice, SectionHeader, TextControl } from '../../../../../../packages/components/src';
 import { useWizardData } from '../../../../../../packages/components/src/wizard/store/utils';
 import { WIZARD_STORE_NAMESPACE } from '../../../../../../packages/components/src/wizard/store';
 import WizardsTab from '../../../../wizards-tab';
@@ -40,7 +50,7 @@ const FREQUENCIES: Record<
 };
 const FREQUENCY_SLUGS: FrequencySlug[] = Object.keys( FREQUENCIES ) as FrequencySlug[];
 
-export const DonationAmounts = () => {
+export const DonationAmounts = ( { hideHeader = false }: { hideHeader?: boolean } = {} ) => {
 	const wizardData = useWizardData( AUDIENCE_DONATIONS_WIZARD_SLUG ) as AudienceDonationsWizardData;
 	const { updateWizardSettings } = useDispatch( WIZARD_STORE_NAMESPACE );
 
@@ -70,7 +80,7 @@ export const DonationAmounts = () => {
 
 	return (
 		<>
-			<Card headerActions noBorder>
+			{ ! hideHeader && (
 				<SectionHeader
 					title={ __( 'Suggested Donations', 'newspack-plugin' ) }
 					description={ __(
@@ -79,26 +89,20 @@ export const DonationAmounts = () => {
 					) }
 					noMargin
 				/>
-				{ canUseNameYourPrice && (
-					<SelectControl
-						label={ __( 'Donation Type', 'newspack-plugin' ) }
-						onChange={ () => changeHandler( [ 'tiered' ] )( ! tiered ) }
-						buttonOptions={ [
-							{
-								value: true,
-								label: __( 'Tiered', 'newspack-plugin' ),
-							},
-							{
-								value: false,
-								label: __( 'Untiered', 'newspack-plugin' ),
-							},
-						] }
-						buttonSmall
-						value={ tiered }
-						hideLabelFromVision
-					/>
-				) }
-			</Card>
+			) }
+			{ canUseNameYourPrice && (
+				<ToggleGroupControl
+					label={ __( 'Donation Type', 'newspack-plugin' ) }
+					value={ tiered ? 'tiered' : 'untiered' }
+					onChange={ value => changeHandler( [ 'tiered' ] )( 'tiered' === value ) }
+					hideLabelFromVision
+					isBlock
+					__next40pxDefaultSize
+				>
+					<ToggleGroupControlOption label={ __( 'Tiered', 'newspack-plugin' ) } value="tiered" />
+					<ToggleGroupControlOption label={ __( 'Untiered', 'newspack-plugin' ) } value="untiered" />
+				</ToggleGroupControl>
+			) }
 			{ Array.isArray( trashed ) && 0 < trashed.length && (
 				<Notice isError>
 					{
@@ -118,116 +122,46 @@ export const DonationAmounts = () => {
 					}
 				</Notice>
 			) }
-			{ tiered ? (
-				<Grid columns={ 1 }>
-					{ availableFrequencies.map( section => {
-						const isFrequencyDisabled = disabledFrequencies[ section.key ];
-						const isOneFrequencyActive = Object.values( disabledFrequencies ).filter( Boolean ).length === FREQUENCY_SLUGS.length - 1;
-						return (
-							<Card noBorder key={ section.key }>
-								<Grid columns={ 1 } gutter={ 8 }>
-									<ToggleControl
-										checked={ ! isFrequencyDisabled }
-										onChange={ () => changeHandler( [ 'disabledFrequencies', section.key ] )( ! isFrequencyDisabled ) }
-										label={ section.tieredLabel }
-										disabled={ ! isFrequencyDisabled && isOneFrequencyActive }
-									/>
-									{ ! isFrequencyDisabled && (
-										<Grid columns={ 3 } rowGap={ 16 }>
-											<MoneyInput
-												currencySymbol={ currencySymbol }
-												label={ __( 'Low-tier' ) }
-												error={
-													amounts[ section.key ][ 0 ] < minimumDonationFloat
-														? __(
-																'Warning: suggested donations should be at least the minimum donation amount.',
-																'newspack-plugin'
-														  )
-														: null
-												}
-												value={ amounts[ section.key ][ 0 ] }
-												min={ minimumDonationFloat }
-												onChange={ changeHandler( [ 'amounts', section.key, 0 ] ) }
-											/>
-											<MoneyInput
-												currencySymbol={ currencySymbol }
-												label={ __( 'Mid-tier' ) }
-												error={
-													amounts[ section.key ][ 1 ] < minimumDonationFloat
-														? __(
-																'Warning: suggested donations should be at least the minimum donation amount.',
-																'newspack-plugin'
-														  )
-														: null
-												}
-												value={ amounts[ section.key ][ 1 ] }
-												min={ minimumDonationFloat }
-												onChange={ changeHandler( [ 'amounts', section.key, 1 ] ) }
-											/>
-											<MoneyInput
-												currencySymbol={ currencySymbol }
-												label={ __( 'High-tier' ) }
-												error={
-													amounts[ section.key ][ 2 ] < minimumDonationFloat
-														? __(
-																'Warning: suggested donations should be at least the minimum donation amount.',
-																'newspack-plugin'
-														  )
-														: null
-												}
-												value={ amounts[ section.key ][ 2 ] }
-												min={ minimumDonationFloat }
-												onChange={ changeHandler( [ 'amounts', section.key, 2 ] ) }
-											/>
-										</Grid>
-									) }
-								</Grid>
-							</Card>
-						);
-					} ) }
-				</Grid>
-			) : (
-				<Grid columns={ 1 }>
-					<Card noBorder>
-						<Grid columns={ 3 } rowGap={ 16 }>
-							{ availableFrequencies.map( section => {
-								const isFrequencyDisabled = disabledFrequencies[ section.key ];
-								const isOneFrequencyActive =
-									Object.values( disabledFrequencies ).filter( Boolean ).length === FREQUENCY_SLUGS.length - 1;
-								return (
-									<Grid columns={ 1 } gutter={ 16 } key={ section.key }>
-										<ToggleControl
-											checked={ ! isFrequencyDisabled }
-											onChange={ () => changeHandler( [ 'disabledFrequencies', section.key ] )( ! isFrequencyDisabled ) }
-											label={ section.tieredLabel }
-											disabled={ ! isFrequencyDisabled && isOneFrequencyActive }
-										/>
-										{ ! isFrequencyDisabled && (
-											<MoneyInput
-												currencySymbol={ currencySymbol }
-												label={ section.staticLabel }
-												value={ amounts[ section.key ][ 3 ] }
-												min={ minimumDonationFloat }
-												error={
-													amounts[ section.key ][ 3 ] < minimumDonationFloat
-														? __(
-																'Warning: suggested donations should be at least the minimum donation amount.',
-																'newspack-plugin'
-														  )
-														: null
-												}
-												onChange={ changeHandler( [ 'amounts', section.key, 3 ] ) }
-												key={ section.key }
-											/>
-										) }
+			<VStack spacing={ 6 }>
+				{ availableFrequencies.map( section => {
+					const isFrequencyDisabled = disabledFrequencies[ section.key ];
+					const isOneFrequencyActive = Object.values( disabledFrequencies ).filter( Boolean ).length === FREQUENCY_SLUGS.length - 1;
+					const renderAmountInput = ( index: number, label: string ) => (
+						<MoneyInput
+							currencySymbol={ currencySymbol }
+							label={ label }
+							error={
+								amounts[ section.key ][ index ] < minimumDonationFloat
+									? __( 'Warning: suggested donations should be at least the minimum donation amount.', 'newspack-plugin' )
+									: null
+							}
+							value={ amounts[ section.key ][ index ] }
+							min={ minimumDonationFloat }
+							onChange={ changeHandler( [ 'amounts', section.key, index ] ) }
+							key={ `${ section.key }-${ index }` }
+						/>
+					);
+					return (
+						<VStack spacing={ 4 } key={ section.key }>
+							<ToggleControl
+								checked={ ! isFrequencyDisabled }
+								onChange={ () => changeHandler( [ 'disabledFrequencies', section.key ] )( ! isFrequencyDisabled ) }
+								label={ section.tieredLabel }
+								disabled={ ! isFrequencyDisabled && isOneFrequencyActive }
+							/>
+							{ ! isFrequencyDisabled &&
+								( tiered ? (
+									<Grid columns={ 3 } gutter={ 16 } noMargin>
+										{ renderAmountInput( 0, __( 'Low-tier' ) ) }
+										{ renderAmountInput( 1, __( 'Mid-tier' ) ) }
+										{ renderAmountInput( 2, __( 'High-tier' ) ) }
 									</Grid>
-								);
-							} ) }
-						</Grid>
-					</Card>
-				</Grid>
-			) }
-			<Grid columns={ 3 }>
+								) : (
+									renderAmountInput( 3, section.staticLabel )
+								) ) }
+						</VStack>
+					);
+				} ) }
 				<TextControl
 					label={ __( 'Minimum donation', 'newspack-plugin' ) }
 					help={ __(
@@ -238,8 +172,9 @@ export const DonationAmounts = () => {
 					min={ 1 }
 					value={ minimumDonationFloat }
 					onChange={ ( value: string ) => changeHandler( [ 'minimumDonation' ] )( value ) }
+					withMargin={ false }
 				/>
-			</Grid>
+			</VStack>
 		</>
 	);
 };
@@ -264,8 +199,10 @@ const Donation = () => {
 	const validationResults = Object.values( wizardData.product_validation || {} );
 	const hasInvalidProducts = validationResults.some( product => product.issues.length > 0 );
 
+	const hasDonationData = wizardData.donation_data && ! ( 'errors' in wizardData.donation_data );
+
 	return (
-		<WizardsTab title={ __( 'Configuration', 'newspack-plugin' ) }>
+		<WizardsTab>
 			{ /* Display product validation issues */ }
 			{ hasInvalidProducts ? (
 				<Notice
@@ -306,28 +243,55 @@ const Donation = () => {
 
 			{ wizardData.donation_page && (
 				<>
-					<Card noBorder headerActions>
-						<SectionHeader title={ __( 'Donations Landing Page', 'newspack-plugin' ) } noMargin />
-						<Button variant="secondary" isSmall href={ wizardData.donation_page.editUrl } onClick={ undefined }>
-							{ __( 'Edit Page' ) }
-						</Button>
-					</Card>
-					{ 'publish' === wizardData.donation_page.status ? (
-						<Notice
-							isSuccess
-							noticeText={ __( 'Your donations landing page is published.', 'newspack-plugin' ) }
-							style={ { marginBottom: '64px' } }
+					<Grid columns={ 2 } gutter={ 32 } noMargin>
+						<SectionHeader
+							heading={ 2 }
+							title={ __( 'Donations Landing Page', 'newspack-plugin' ) }
+							description={ __( 'Manage the landing page for your donations.', 'newspack-plugin' ) }
+							noMargin
 						/>
-					) : (
-						<Notice
-							isWarning
-							noticeText={ __( 'Your donations landing page is not yet published.', 'newspack-plugin' ) }
-							style={ { marginBottom: '64px' } }
-						/>
-					) }
+						<VStack spacing={ 6 }>
+							{ 'publish' === wizardData.donation_page.status ? (
+								<CoreNotice status="success" isDismissible={ false }>
+									{ __( 'Your donations landing page is published.', 'newspack-plugin' ) }
+								</CoreNotice>
+							) : (
+								<CoreNotice status="warning" isDismissible={ false }>
+									{ __( 'Your donations landing page is not yet published.', 'newspack-plugin' ) }
+								</CoreNotice>
+							) }
+							<div>
+								<Button
+									variant="secondary"
+									size="compact"
+									href={ wizardData.donation_page.editUrl }
+									aria-label={ __( 'Edit donations landing page', 'newspack-plugin' ) }
+								>
+									{ __( 'Edit Page' ) }
+								</Button>
+							</div>
+						</VStack>
+					</Grid>
+					{ hasDonationData && <Divider alignment="full-width" variant="tertiary" /> }
 				</>
 			) }
-			<DonationAmounts />
+
+			{ hasDonationData && (
+				<Grid columns={ 2 } gutter={ 32 } noMargin>
+					<SectionHeader
+						heading={ 2 }
+						title={ __( 'Suggested Donations', 'newspack-plugin' ) }
+						description={ __(
+							'Set suggested donation amounts. These will be the default settings for the Donate block.',
+							'newspack-plugin'
+						) }
+						noMargin
+					/>
+					<VStack spacing={ 6 }>
+						<DonationAmounts hideHeader />
+					</VStack>
+				</Grid>
+			) }
 		</WizardsTab>
 	);
 };

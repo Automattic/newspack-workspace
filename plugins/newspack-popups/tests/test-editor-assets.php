@@ -67,6 +67,10 @@ class EditorAssetsTest extends WP_UnitTestCase {
 		$this->created_asset_dirs  = [];
 		wp_reset_postdata();
 		unset( $GLOBALS['post'] );
+		unregister_post_type( 'archived_cpt' );
+		unregister_post_type( 'archiveless_cpt' );
+		delete_option( Newspack_Popups_Settings::AI_COPY_ASSISTANT_ENABLED_OPTION );
+		delete_option( Newspack_Popups_Contextual_Prompt_Pattern::OPTION_PATTERN_ID );
 		if ( null === $this->original_prompt_meta_boxes ) {
 			unset( $GLOBALS['wp_meta_boxes'][ Newspack_Popups::NEWSPACK_POPUPS_CPT ] );
 		} else {
@@ -191,6 +195,113 @@ class EditorAssetsTest extends WP_UnitTestCase {
 		self::assertContains( 'wp-plugins', wp_scripts()->registered['newspack-popups']->deps );
 		self::assertSame( $this->get_asset_metadata( 'documentSettings.asset.php' )['version'], wp_scripts()->registered['newspack-popups']->ver );
 		self::assertFalse( wp_style_is( 'newspack-popups-editor', 'enqueued' ) );
+	}
+
+	/**
+	 * Decode a script's localized data object.
+	 *
+	 * @param string $handle      Script handle.
+	 * @param string $object_name Localized object name.
+	 *
+	 * @return array|null Decoded data, or null when the object is not localized.
+	 */
+	private function get_localized_data( $handle, $object_name ) {
+		$data = wp_scripts()->get_data( $handle, 'data' );
+		if ( ! $data || ! preg_match( '/var ' . preg_quote( $object_name, '/' ) . ' = (.*);/', $data, $matches ) ) {
+			return null;
+		}
+		return json_decode( $matches[1], true );
+	}
+
+	/**
+	 * Test the Contextual Prompt inspector and document panel are enabled on a
+	 * supported post type: public with an archive. Both are pointed at the same
+	 * pattern, which is what an instance is recognized by.
+	 */
+	public function test_contextual_prompt_is_enabled_on_supported_post_types() {
+		register_post_type(
+			'archived_cpt',
+			[
+				'public'      => true,
+				'has_archive' => true,
+			]
+		);
+		update_option( Newspack_Popups_Settings::AI_COPY_ASSISTANT_ENABLED_OPTION, true );
+		$this->set_editor_screen( 'archived_cpt' );
+
+		do_action( 'enqueue_block_assets' );
+		do_action( 'enqueue_block_editor_assets' );
+
+		$pattern_id = (int) get_option( Newspack_Popups_Contextual_Prompt_Pattern::OPTION_PATTERN_ID, 0 );
+		self::assertGreaterThan( 0, $pattern_id );
+
+		$blocks_data = $this->get_localized_data( 'newspack-popups-blocks', 'newspack_popups_blocks_data' );
+		self::assertNotEmpty( $blocks_data['contextual_prompts_enabled'] );
+		self::assertSame( $pattern_id, (int) $blocks_data['contextual_prompts_pattern_id'] );
+		self::assertTrue( wp_script_is( 'newspack-popups', 'enqueued' ) );
+		self::assertStringContainsString( 'documentSettings.js', wp_scripts()->registered['newspack-popups']->src );
+
+		$panel_data = $this->get_localized_data( 'newspack-popups', 'newspackPopupsContextualPrompt' );
+		self::assertNotNull( $panel_data );
+		self::assertSame( $pattern_id, (int) $panel_data['patternId'] );
+	}
+
+	/**
+	 * Test a Contextual Prompt cannot be authored on a post type the generation
+	 * API rejects: public without an archive. The document settings script gates
+	 * on the same supported list, so it does not enqueue there — and the panel is
+	 * the only way to insert an instance.
+	 */
+	public function test_contextual_prompt_is_not_insertable_on_unsupported_post_types() {
+		register_post_type( 'archiveless_cpt', [ 'public' => true ] );
+		update_option( Newspack_Popups_Settings::AI_COPY_ASSISTANT_ENABLED_OPTION, true );
+		$this->set_editor_screen( 'archiveless_cpt' );
+
+		do_action( 'enqueue_block_assets' );
+		do_action( 'enqueue_block_editor_assets' );
+
+		$blocks_data = $this->get_localized_data( 'newspack-popups-blocks', 'newspack_popups_blocks_data' );
+		self::assertNotEmpty( $blocks_data['contextual_prompts_enabled'] );
+		self::assertFalse( wp_script_is( 'newspack-popups', 'enqueued' ) );
+	}
+
+	/**
+	 * Test the feature reports itself off the post editor: the inspector loads
+	 * everywhere the blocks bundle does, so it needs the pattern id there too.
+	 */
+	public function test_contextual_prompt_is_enabled_off_post_editors() {
+		update_option( Newspack_Popups_Settings::AI_COPY_ASSISTANT_ENABLED_OPTION, true );
+		$this->ensure_dist_asset_files();
+		set_current_screen( 'site-editor' );
+
+		do_action( 'enqueue_block_assets' );
+		do_action( 'enqueue_block_editor_assets' );
+
+		$blocks_data = $this->get_localized_data( 'newspack-popups-blocks', 'newspack_popups_blocks_data' );
+		self::assertNotEmpty( $blocks_data['contextual_prompts_enabled'] );
+		$pattern_id = (int) get_option( Newspack_Popups_Contextual_Prompt_Pattern::OPTION_PATTERN_ID, 0 );
+		self::assertGreaterThan( 0, $pattern_id );
+		self::assertSame( $pattern_id, (int) $blocks_data['contextual_prompts_pattern_id'] );
+	}
+
+	/**
+	 * Test no pattern is seeded before the site opts into AI use: reading the id
+	 * is what seeds it, so the editor must not ask for one.
+	 */
+	public function test_contextual_prompt_pattern_is_not_seeded_before_opt_in() {
+		$this->set_editor_screen( 'post' );
+
+		do_action( 'enqueue_block_assets' );
+		do_action( 'enqueue_block_editor_assets' );
+
+		$blocks_data = $this->get_localized_data( 'newspack-popups-blocks', 'newspack_popups_blocks_data' );
+		self::assertEmpty( $blocks_data['contextual_prompts_enabled'] );
+		self::assertSame( 0, (int) $blocks_data['contextual_prompts_pattern_id'] );
+
+		$panel_data = $this->get_localized_data( 'newspack-popups', 'newspackPopupsContextualPrompt' );
+		self::assertSame( 0, (int) $panel_data['patternId'] );
+
+		self::assertFalse( get_option( Newspack_Popups_Contextual_Prompt_Pattern::OPTION_PATTERN_ID, false ) );
 	}
 
 	/**

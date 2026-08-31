@@ -7,7 +7,7 @@ End-user documentation lives in [`docs/readme.md`](docs/readme.md). Read it rath
 ## Three names refer to this one plugin
 
 - `super-cool-ad-inserter` is the directory, the pnpm filter, the `n build` target, the `wp plugin activate` slug and the wp.org slug.
-- `super-cool-ad-inserter-plugin` is the main PHP file (plus `.php`), the block namespace, the `.pot` domain and the frozen legacy GitHub repo.
+- `super-cool-ad-inserter-plugin` is the main PHP file (plus `.php`), the block namespace, the `.pot` filename and the frozen legacy GitHub repo.
 - `scaip` is every PHP function, option, hook and text-domain prefix.
 
 **Grep for `scaip`**, not for the plugin name.
@@ -34,7 +34,7 @@ End-user documentation lives in [`docs/readme.md`](docs/readme.md). Read it rath
 
 - **One callback backs both `[scaip]` and the generic `[ad]` shortcode tag**, which can collide with other ad plugins. It returns an empty string whenever the `scaip_shortcode` action produced no output, so a missing ad provider or empty widget area is a silent no-op.
 
-- **Translations are effectively unavailable.** The shipped `.pot` was generated against the `super-cool-ad-inserter-plugin` domain while runtime strings use `scaip`, so it holds only the plugin-header strings. There is also no `load_plugin_textdomain()` call, though modern WordPress just-in-time loading covers that part.
+- **Translations stay unavailable until the next regeneration.** The shipped `.pot` was generated against the `super-cool-ad-inserter-plugin` domain while runtime strings use `scaip`, so it holds only the plugin-header strings (5 entries against the 15 a correct extraction produces). The shared regeneration script (`.github/scripts/update-translations.sh`) reads the domain from the plugin header, so it extracts as `scaip` while keeping the shipped filename. The change affects nothing distributed through wp.org, which reports no language packs and 0% translated in every locale, and the plugin ships no `.po` of its own; a publisher holding a private translation keyed to the old domain would still need to rekey it. Separately, the text domain `scaip` does not match the wp.org slug `super-cool-ad-inserter`, which is what actually blocks official language packs from loading. Just-in-time loading covers the absent `load_plugin_textdomain()` call, so adding one would not help. That mismatch is a pre-existing gap and its own ticket.
 
 ## Cross-plugin coupling with newspack-ads
 

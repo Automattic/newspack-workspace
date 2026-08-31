@@ -149,6 +149,177 @@ if ( ! class_exists( 'WC_Product_Variation' ) ) {
 	}
 }
 
+if ( ! class_exists( 'WC_Order_Item_Product' ) ) {
+	/**
+	 * Minimal order line item stub.
+	 */
+	class WC_Order_Item_Product {
+		/**
+		 * Product ID.
+		 *
+		 * @var int
+		 */
+		private $product_id;
+
+		/**
+		 * Line subtotal.
+		 *
+		 * @var string
+		 */
+		private $subtotal;
+
+		/**
+		 * Line-item quantity.
+		 *
+		 * @var int
+		 */
+		private $quantity;
+
+		/**
+		 * Constructor.
+		 *
+		 * @param int    $product_id Product ID.
+		 * @param string $subtotal   Line subtotal.
+		 * @param int    $quantity   Line-item quantity.
+		 */
+		public function __construct( $product_id, $subtotal = '25', $quantity = 1 ) {
+			$this->product_id = $product_id;
+			$this->subtotal   = $subtotal;
+			$this->quantity   = $quantity;
+		}
+
+		public function get_product_id() {
+			return $this->product_id;
+		}
+
+		public function get_variation_id() {
+			return 0;
+		}
+
+		public function get_subtotal() {
+			return $this->subtotal;
+		}
+
+		public function get_quantity() {
+			return $this->quantity;
+		}
+	}
+}
+
+if ( ! class_exists( 'WC_Cart' ) ) {
+	/**
+	 * Minimal WooCommerce cart stub whose get_cart() returns pre-set line items.
+	 */
+	class WC_Cart {
+		/**
+		 * Cart items, keyed by cart item key.
+		 *
+		 * @var array
+		 */
+		private $items;
+
+		/**
+		 * Constructor.
+		 *
+		 * @param array $items Cart items, keyed by cart item key.
+		 */
+		public function __construct( $items ) {
+			$this->items = $items;
+		}
+
+		/**
+		 * Get cart items.
+		 *
+		 * @return array
+		 */
+		public function get_cart() {
+			return $this->items;
+		}
+	}
+}
+
+if ( ! class_exists( 'WC_Subscriptions_Product' ) ) {
+	/**
+	 * Minimal WC_Subscriptions_Product stub exposing only what get_price_summary() reads.
+	 */
+	class WC_Subscriptions_Product {
+		/**
+		 * Billing interval.
+		 *
+		 * @param WC_Product $product Product.
+		 * @return int
+		 */
+		public static function get_interval( $product ) {
+			unset( $product );
+			return 1;
+		}
+
+		/**
+		 * Trial length.
+		 *
+		 * @param WC_Product $product Product.
+		 * @return int
+		 */
+		public static function get_trial_length( $product ) {
+			unset( $product );
+			return 0;
+		}
+
+		/**
+		 * Trial period.
+		 *
+		 * @param WC_Product $product Product.
+		 * @return string
+		 */
+		public static function get_trial_period( $product ) {
+			unset( $product );
+			return '';
+		}
+
+		/**
+		 * Sign-up fee, read from a test-controlled global so a single test can set it.
+		 *
+		 * @param WC_Product $product Product.
+		 * @return float
+		 */
+		public static function get_sign_up_fee( $product ) {
+			unset( $product );
+			return $GLOBALS['newspack_blocks_test_sign_up_fee'] ?? 0;
+		}
+	}
+}
+
+if ( ! class_exists( 'WC_Subscription' ) ) {
+	/**
+	 * Minimal subscription stub. A subscription created by hand in wp-admin has
+	 * no parent order, so get_parent() returning false is the case under test.
+	 */
+	class WC_Subscription extends WC_Order {
+		/**
+		 * Parent order, or false when there is none.
+		 *
+		 * @var WC_Order|false
+		 */
+		private $parent;
+
+		/**
+		 * Constructor.
+		 *
+		 * @param array          $items  Line items.
+		 * @param WC_Order|false $parent Parent order, or false.
+		 * @param int            $id     Subscription ID.
+		 */
+		public function __construct( $items = [], $parent = false, $id = 901 ) {
+			parent::__construct( $id, '', $items );
+			$this->parent = $parent;
+		}
+
+		public function get_parent() {
+			return $this->parent;
+		}
+	}
+}
+
 if ( ! function_exists( 'wc_get_product' ) ) {
 	/**
 	 * Minimal wc_get_product stub.
@@ -174,8 +345,123 @@ class Newspack_Blocks_Modal_Checkout_Data_Test extends WP_UnitTestCase_Blocks {
 	 * Clean up product fixtures.
 	 */
 	public function tear_down() {
-		unset( $GLOBALS['newspack_blocks_test_products'] );
+		unset(
+			$GLOBALS['newspack_blocks_test_products'],
+			$GLOBALS['newspack_blocks_test_sign_up_fee'],
+			$GLOBALS['newspack_blocks_test_last_wcs_price_string_args']
+		);
 		parent::tear_down();
+	}
+
+	/**
+	 * Build a minimal WC_Cart stub whose get_cart() returns a single, given item.
+	 *
+	 * @param array $cart_item Cart item array (product_id, variation_id, quantity, data, ...).
+	 * @return WC_Cart
+	 */
+	private function make_cart( $cart_item ) {
+		return new WC_Cart( [ 'cart_item_key' => $cart_item ] );
+	}
+
+	/**
+	 * Build a simple WC_Product stub for cart/order quantity fixtures.
+	 *
+	 * @param int    $id    Product ID.
+	 * @param string $price Product price.
+	 * @return WC_Product
+	 */
+	private function make_product( $id, $price ) {
+		return new WC_Product( $id, 'simple', [], (string) $price, 'Product ' . $id );
+	}
+
+	/**
+	 * A cart line item's quantity flows into `quantity`, and the per-unit price is
+	 * multiplied into `amount` — a cart's price is per unit, unlike an order's.
+	 */
+	public function test_cart_checkout_data_includes_quantity_and_multiplied_amount() {
+		$cart = $this->make_cart( [ 'product_id' => 77, 'variation_id' => 0, 'quantity' => 4, 'data' => $this->make_product( 77, 10 ) ] );
+		$data = Checkout_Data::get_checkout_data( $cart );
+		$this->assertSame( 4, $data['quantity'] );
+		$this->assertSame( 40.0, $data['amount'] );
+	}
+
+	/**
+	 * A cart item missing `quantity` (version skew, or a non-WooCommerce caller)
+	 * must not fatal, and behaves as a single seat. At quantity 1 the multiply is
+	 * skipped entirely, so `amount` stays byte-identical to the pre-quantity
+	 * behavior (the raw string `get_price()` returns) rather than becoming a float.
+	 */
+	public function test_cart_checkout_data_defaults_missing_quantity_to_one() {
+		$cart = $this->make_cart( [ 'product_id' => 78, 'variation_id' => 0, 'data' => $this->make_product( 78, 10 ) ] );
+		$data = Checkout_Data::get_checkout_data( $cart );
+		$this->assertSame( 1, $data['quantity'] );
+		$this->assertSame( '10', $data['amount'] );
+	}
+
+	/**
+	 * A product with no price set (`get_price()` returns '', e.g. a blank `_price`
+	 * meta) must not fatal when a quantity above one multiplies it. PHP 8 throws a
+	 * TypeError on `'' * int`; the multiply must coerce to float first so a
+	 * Checkout Button, metering countdown, or gifting CTA pointing at such a
+	 * product doesn't white-screen.
+	 */
+	public function test_cart_checkout_data_handles_empty_price_with_quantity() {
+		$cart = $this->make_cart( [ 'product_id' => 81, 'variation_id' => 0, 'quantity' => 3, 'data' => $this->make_product( 81, '' ) ] );
+		$data = Checkout_Data::get_checkout_data( $cart );
+		$this->assertSame( 3, $data['quantity'] );
+		$this->assertSame( 0.0, $data['amount'] );
+	}
+
+	/**
+	 * An order line item's `get_subtotal()` already reflects quantity, so it must
+	 * not be multiplied again — only `quantity` itself is surfaced.
+	 */
+	public function test_order_checkout_data_does_not_double_multiply_amount() {
+		$GLOBALS['newspack_blocks_test_products'] = [
+			79 => new WC_Product( 79, 'simple', [], '10', 'Product 79' ),
+		];
+		$order = new WC_Order( 950, '', [ new WC_Order_Item_Product( 79, '40', 4 ) ] );
+
+		$data = Checkout_Data::get_checkout_data( $order );
+
+		$this->assertSame( 4, $data['quantity'] );
+		$this->assertSame( '40', $data['amount'], 'The order subtotal already reflects quantity and must not be multiplied again.' );
+	}
+
+	/**
+	 * A bare product source (no cart or order) carries no `quantity` at all.
+	 * Only a cart or order line item has a real seat count to report; for a
+	 * bare product, the block's hidden field (or a reader's later in-modal
+	 * edit) is the source of truth, and `data-checkout` has nothing to say
+	 * about it. Emitting a hardcoded `quantity: 1` here would let it
+	 * overwrite that real value when `getCheckoutData()` merges the two.
+	 */
+	public function test_product_checkout_data_omits_quantity() {
+		$product = new WC_Product( 80, 'simple', [], '10', 'Product 80' );
+
+		$data = Checkout_Data::get_checkout_data( $product );
+
+		$this->assertArrayNotHasKey( 'quantity', $data );
+		$this->assertSame( '10', $data['amount'] );
+	}
+
+	/**
+	 * The subscription sign-up fee is charged per seat by WCS, so get_price_summary()
+	 * must multiply it by quantity before handing it to wcs_price_string().
+	 */
+	public function test_price_summary_multiplies_signup_fee_by_quantity() {
+		$GLOBALS['newspack_blocks_test_sign_up_fee'] = 5;
+		$GLOBALS['newspack_blocks_test_products']    = [
+			321 => new WC_Product( 321, 'subscription', [], '10', 'Supporter' ),
+		];
+
+		Checkout_Data::get_price_summary( 'Supporter', 10, 'month', 321, 3 );
+
+		$this->assertEquals(
+			15,
+			$GLOBALS['newspack_blocks_test_last_wcs_price_string_args']['initial_amount'],
+			'The sign-up fee should be multiplied by quantity, since WCS charges it per seat.'
+		);
 	}
 
 	/**
@@ -196,6 +482,82 @@ class Newspack_Blocks_Modal_Checkout_Data_Test extends WP_UnitTestCase_Blocks {
 		$this->assertTrue( $data['is_variable'] );
 		$this->assertSame( [ 1407, 1408 ], $data['variation_ids'] );
 		$this->assertArrayNotHasKey( 'amount', $data );
+	}
+
+	/**
+	 * A subscription created by hand in wp-admin has no parent order. Reading its
+	 * purchase details must fall back to its own line items rather than calling
+	 * get_items() on the `false` that get_parent() returns, which took down the
+	 * modal's completion step with a fatal (NPPD-2170).
+	 */
+	public function test_subscription_without_a_parent_order_reads_its_own_items() {
+		$GLOBALS['newspack_blocks_test_products'] = [
+			2170 => new WC_Product( 2170, 'subscription', [], '25', 'Monthly Supporter' ),
+		];
+
+		$subscription = new WC_Subscription( [ new WC_Order_Item_Product( 2170, '25' ) ], false, 901 );
+
+		$data = Checkout_Data::get_checkout_data( $subscription );
+
+		$this->assertSame( '2170', $data['product_id'] );
+		$this->assertSame( '25', $data['amount'] );
+
+		// The subscription must identify itself as a subscription. Reporting its ID
+		// as order_id sends the modal to /view-order/<subscription id>, which nothing
+		// links to and which renders WCS's read-only receipt.
+		$this->assertArrayNotHasKey( 'order_id', $data );
+		$this->assertSame( [ 901 ], $data['subscription_ids'] );
+	}
+
+	/**
+	 * With a parent order present, its items remain the source of truth.
+	 */
+	public function test_subscription_with_a_parent_order_reads_the_parent() {
+		$GLOBALS['newspack_blocks_test_products'] = [
+			2171 => new WC_Product( 2171, 'subscription', [], '99', 'Annual Supporter' ),
+		];
+
+		$parent       = new WC_Order( 900, '', [ new WC_Order_Item_Product( 2171, '99' ) ] );
+		$subscription = new WC_Subscription( [ new WC_Order_Item_Product( 2170, '25' ) ], $parent, 901 );
+
+		$data = Checkout_Data::get_checkout_data( $subscription );
+
+		$this->assertSame( '2171', $data['product_id'] );
+		$this->assertSame( '99', $data['amount'] );
+
+		// The parent order is a real order, so it identifies the purchase.
+		$this->assertSame( 900, $data['order_id'] );
+	}
+
+	/**
+	 * A subscription that has a parent order keeps that order's identity, even when
+	 * its product type is one the subscription_ids branch skips. A recurring
+	 * donation resolves to `donation`, so widening the parentless fallback would
+	 * silently move those readers from /view-order/ to /view-subscription/.
+	 */
+	public function test_donation_subscription_with_a_parent_keeps_order_identity() {
+		$GLOBALS['newspack_blocks_test_products'] = [
+			2172 => new WC_Product( 2172, 'simple', [], '15', 'Monthly Donation' ),
+		];
+
+		$parent       = new WC_Order( 902, '', [ new WC_Order_Item_Product( 2172, '15' ) ] );
+		$subscription = new WC_Subscription( [ new WC_Order_Item_Product( 2172, '15' ) ], $parent, 903 );
+
+		$data = Checkout_Data::get_checkout_data( $subscription );
+
+		$this->assertSame( 902, $data['order_id'] );
+		$this->assertArrayNotHasKey( 'subscription_ids', $data );
+	}
+
+	/**
+	 * A subscription or order with no line items has no purchase to summarise.
+	 * It must return empty rather than fatalling on the null product the missing
+	 * line item would leave behind (NPPD-2170).
+	 */
+	public function test_source_with_no_line_items_returns_empty() {
+		$subscription = new WC_Subscription( [], false, 901 );
+
+		$this->assertSame( [], Checkout_Data::get_checkout_data( $subscription ) );
 	}
 
 	/**

@@ -55,7 +55,7 @@ const PromptActionCard = props => {
 			<ActionCard
 				isSmall
 				noBorder
-				badge={ placementForPopup( prompt ) }
+				badges={ [ { label: placementForPopup( prompt ) } ] }
 				className={ className }
 				title={ title.length ? decodeEntities( title ) : __( '(no title)', 'newspack-plugin' ) }
 				titleLink={ decodeEntities( editLink ) }
