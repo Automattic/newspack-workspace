@@ -45,10 +45,10 @@ const SORT_FIELD_TO_ORDERBY = {
 };
 
 export function buildQueryParams( view = {} ) {
-	// A post carries one `wp:term` link per taxonomy and
-	// `WP_REST_Server::embed_links()` dispatches each one, so the embed
-	// costs an internal REST dispatch per row per taxonomy — three per row
-	// on this screen.
+	// A post carries one `wp:term` link per REST-visible taxonomy on its post
+	// type, and `embed_links()` dispatches each link the `_embed` list matches,
+	// caching by href — which differs per row. So the embed costs a dispatch per
+	// row per taxonomy: three here (advertiser, placement, category).
 	const visibleFields = Array.isArray( view.fields ) ? view.fields : null;
 	const needsTerms = ! visibleFields || TERM_BACKED_FIELDS.some( field => visibleFields.includes( field ) );
 

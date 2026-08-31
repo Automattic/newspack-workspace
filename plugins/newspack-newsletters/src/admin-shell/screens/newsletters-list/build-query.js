@@ -33,11 +33,15 @@ const SORT_FIELD_TO_ORDERBY = {
 };
 
 export function buildQueryParams( view = {} ) {
-	// A post carries one `wp:term` link per taxonomy and
-	// `WP_REST_Server::embed_links()` dispatches each one, so the term embed
-	// costs an internal REST dispatch per row per taxonomy — two per row
-	// here, and only the (hidden-by-default) Categories/Tags columns read
-	// them.
+	// A post carries one `wp:term` link per REST-visible taxonomy on its post
+	// type, and `embed_links()` dispatches each link the `_embed` list matches,
+	// caching by href — which differs per row. So `wp:term` costs a dispatch per
+	// row per taxonomy, and it is not just the two this screen shows:
+	// newsletters also carry the advertiser taxonomy (shared with the ads CPT)
+	// and, with Co-Authors Plus active, its `author` taxonomy. Only the
+	// hidden-by-default Categories/Tags columns read `wp:term`, which is why it
+	// is gated; the `author` rel is separate and stays, since the Author column
+	// reads `_embedded.author`.
 	const visibleFields = Array.isArray( view.fields ) ? view.fields : null;
 	const needsTerms = ! visibleFields || visibleFields.includes( 'categories' ) || visibleFields.includes( 'tags' );
 
