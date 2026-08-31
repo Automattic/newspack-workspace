@@ -17,7 +17,7 @@ import apiFetch from '@wordpress/api-fetch';
 /**
  * Internal dependencies
  */
-import SubscriptionProductsList, { AVAILABILITY_INTENT } from './list';
+import SubscriptionProductsList, { AVAILABILITY_ICON } from './list';
 
 jest.mock( '@wordpress/api-fetch', () => jest.fn() );
 
@@ -156,20 +156,16 @@ describe( 'the Plans list header count', () => {
 	} );
 } );
 
-describe( 'AVAILABILITY_INTENT', () => {
+describe( 'AVAILABILITY_ICON', () => {
 	it( 'covers every availability tier the endpoint can report', () => {
-		expect( Object.keys( AVAILABILITY_INTENT ).sort() ).toEqual( [ 'free', 'private', 'public' ] );
+		expect( Object.keys( AVAILABILITY_ICON ).sort() ).toEqual( [ 'free', 'private', 'public' ] );
+		Object.values( AVAILABILITY_ICON ).forEach( icon => expect( icon ).toBeTruthy() );
 	} );
 
-	it( 'keeps Public quiet and gives Private and Free their own colour', () => {
-		// Public is the normal state, so it stays neutral. The other two have to read
-		// apart from it and from each other at a glance, which a second neutral would not.
-		expect( AVAILABILITY_INTENT.public ).toBe( 'none' );
-		const intents = Object.values( AVAILABILITY_INTENT );
-		expect( new Set( intents ).size ).toBe( intents.length );
-	} );
-
-	it( 'reads Private as context rather than a problem', () => {
-		expect( AVAILABILITY_INTENT.private ).toBe( 'informational' );
+	it( 'gives no two tiers the same glyph', () => {
+		// The column offers the three as separate filters, and the glyph is the only
+		// thing telling them apart: nothing here is tinted.
+		const icons = Object.values( AVAILABILITY_ICON );
+		expect( new Set( icons ).size ).toBe( icons.length );
 	} );
 } );

@@ -74,6 +74,10 @@ require_once 'mocks/wc-memberships.php';
 // WC CLI mock.
 require_once 'mocks/wp-cli.php';
 
+// newspack-plugin Incoming_Field mock, so the integrations schema mappers'
+// date-range capability probe resolves true in this standalone suite.
+require_once 'mocks/class-newspack-plugin-incoming-field-mock.php';
+
 // Stubs for RDB methods.
 if ( ! class_exists( 'BlockBindings' ) ) {
 	require_once __DIR__ . '/mocks/class-blockbindings.php';

@@ -19,16 +19,16 @@ import {
 	__experimentalVStack as VStack, // eslint-disable-line @wordpress/no-unsafe-wp-apis
 	__experimentalHStack as HStack, // eslint-disable-line @wordpress/no-unsafe-wp-apis
 } from '@wordpress/components';
-import { Badge } from '@wordpress/ui';
 
 /**
  * Internal dependencies
  */
-import { DataViews, Router, WizardBanner } from '../../../../../packages/components/src';
+import { DataViews, Router, StatusIndicator, WizardBanner } from '../../../../../packages/components/src';
 import { formatCount } from '../../../../../packages/components/src/breadcrumbs/format-count';
 import { WIZARD_STORE_NAMESPACE } from '../../../../../packages/components/src/wizard/store';
 import CatalogImpact from './catalog-impact';
 import PricingRulesOnboarding from './onboarding';
+import { postStatus } from '../../post-status';
 import { intentLabel } from './recipes';
 import { pricingModelSentence } from './model-sentence';
 import { RULES_API_PATH as API_PATH, IMPACT_PREVIEW_API_PATH } from './constants';
@@ -51,7 +51,7 @@ const DEFAULT_VIEW: View = {
 // hold the whole screen behind the spinner indefinitely.
 const STATS_GATE_TIMEOUT_MS = 8000;
 
-const ACTIVE_STATE_INTENT = { active: 'stable', scheduled: 'informational', ended: 'none' } as const;
+export const ACTIVE_STATE_STATUS = { active: 'active', scheduled: 'scheduled', ended: 'ended' } as const;
 
 const ACTIVE_STATE_LABEL: Record< PricingRuleRow[ 'active_state' ], string > = {
 	active: __( 'Active', 'newspack-plugin' ),
@@ -228,7 +228,7 @@ export default function PricingRulesList() {
 				id: 'status',
 				label: __( 'Status', 'newspack-plugin' ),
 				getValue: ( { item } ) => item.status,
-				render: ( { item } ) => <Badge intent={ item.status === 'publish' ? 'stable' : 'draft' }>{ item.status_label }</Badge>,
+				render: ( { item } ) => <StatusIndicator status={ postStatus( item.status ) }>{ item.status_label }</StatusIndicator>,
 				elements: statusElements,
 				filterBy: { operators: [ 'is' ] },
 			},
@@ -237,9 +237,9 @@ export default function PricingRulesList() {
 				label: __( 'Active window', 'newspack-plugin' ),
 				getValue: ( { item } ) => item.active_state,
 				render: ( { item } ) => (
-					<Badge intent={ ACTIVE_STATE_INTENT[ item.active_state ] ?? 'none' }>
+					<StatusIndicator status={ ACTIVE_STATE_STATUS[ item.active_state ] ?? 'ended' }>
 						{ ACTIVE_STATE_LABEL[ item.active_state ] ?? item.active_state }
-					</Badge>
+					</StatusIndicator>
 				),
 				enableSorting: false,
 			},

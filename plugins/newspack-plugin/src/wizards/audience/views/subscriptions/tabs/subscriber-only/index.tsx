@@ -13,12 +13,11 @@ import { useMemo, useState } from '@wordpress/element';
 import { filterSortAndPaginate } from '@wordpress/dataviews';
 // eslint-disable-next-line @wordpress/no-unsafe-wp-apis
 import { __experimentalHStack as HStack, CheckboxControl } from '@wordpress/components';
-import { Badge } from '@wordpress/ui';
 
 /**
  * Internal dependencies.
  */
-import { Button, DataViews, Modal, Notice, SectionHeader, Waiting } from '../../../../../../../packages/components/src';
+import { Button, DataViews, Modal, Notice, SectionHeader, StatusIndicator, Waiting } from '../../../../../../../packages/components/src';
 import type { Action, Field, View } from '../../../../../../../packages/components/src/dataviews';
 import WizardsTab from '../../../../../wizards-tab';
 import WizardSection from '../../../../../wizards-section';
@@ -112,12 +111,11 @@ function SubscriberOnlyProducts() {
 				],
 				filterBy: { operators: [ 'isAny' as const ] },
 				getValue: ( { item }: { item: Restriction } ) => ( item.active ? 'active' : 'inactive' ),
-				render: ( { item }: { item: Restriction } ) =>
-					item.active ? (
-						<Badge intent="stable">{ __( 'Active', 'newspack-plugin' ) }</Badge>
-					) : (
-						<Badge intent="medium">{ __( 'Inactive', 'newspack-plugin' ) }</Badge>
-					),
+				render: ( { item }: { item: Restriction } ) => (
+					<StatusIndicator status={ item.active ? 'active' : 'draft' }>
+						{ item.active ? __( 'Active', 'newspack-plugin' ) : __( 'Inactive', 'newspack-plugin' ) }
+					</StatusIndicator>
+				),
 			},
 			{
 				id: 'created_at',

@@ -24,13 +24,13 @@ import { Badge } from '@wordpress/ui';
 /**
  * Internal dependencies.
  */
-import { Button, DataViews, Notice, Waiting } from '../../../../packages/components/src';
+import { Button, DataViews, Notice, StatusIndicator, Waiting } from '../../../../packages/components/src';
 import { fmtDate } from '../format';
 import './style.scss';
 import { SHOW_AVATARS, useAvatars } from '../data/use-avatars';
 import { useGroups } from '../data/use-groups';
 import { WIZARD_STORE_NAMESPACE } from '../../../../packages/components/src/wizard/store';
-import { STATUS_LABELS, STATUS_BADGE_INTENT } from '../status';
+import { STATUS_INDICATORS, STATUS_LABELS } from '../status';
 import { GROUP_LABEL_PLURAL, groupCountLabel, groupLoadFailedLabel } from '../labels';
 import { SubscriptionLink } from '../links';
 
@@ -168,7 +168,9 @@ export default function GroupList() {
 				elements: Object.entries( STATUS_LABELS ).map( ( [ value, label ] ) => ( { value, label } ) ),
 				filterBy: { operators: [ 'isAny' ] },
 				getValue: ( { item } ) => item.status,
-				render: ( { item } ) => <Badge intent={ STATUS_BADGE_INTENT[ item.status ] }>{ STATUS_LABELS[ item.status ] }</Badge>,
+				render: ( { item } ) => (
+					<StatusIndicator status={ STATUS_INDICATORS[ item.status ] }>{ STATUS_LABELS[ item.status ] }</StatusIndicator>
+				),
 			},
 			{
 				id: 'createdAt',

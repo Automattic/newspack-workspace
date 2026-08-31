@@ -1,3 +1,31 @@
+## newspack-network [2.22.5](https://github.com/Automattic/newspack-workspace/compare/newspack-network@2.22.4...newspack-network@2.22.5) (2026-08-31)
+
+
+### Dependencies
+
+* **newspack-icons:** upgraded to 1.1.2
+
+## newspack-network [2.22.4](https://github.com/Automattic/newspack-workspace/compare/newspack-network@2.22.3...newspack-network@2.22.4) (2026-08-26)
+
+
+### Bug Fixes
+
+* **network:** process each hub webhook delivery at most once ([#940](https://github.com/Automattic/newspack-workspace/issues/940)) ([6976c7b](https://github.com/Automattic/newspack-workspace/commit/6976c7bc35117b0dc859fa8903e13c3071cd3731))
+
+## newspack-network [2.22.3](https://github.com/Automattic/newspack-workspace/compare/newspack-network@2.22.2...newspack-network@2.22.3) (2026-08-26)
+
+
+### Bug Fixes
+
+* **content-distribution:** filter caller-supplied content on insert ([#924](https://github.com/Automattic/newspack-workspace/issues/924)) ([1deb19a](https://github.com/Automattic/newspack-workspace/commit/1deb19a6a239394bcda09c4a5d58623d22a4335c))
+
+## newspack-network [2.22.2](https://github.com/Automattic/newspack-workspace/compare/newspack-network@2.22.1...newspack-network@2.22.2) (2026-08-24)
+
+
+### Bug Fixes
+
+* **network:** escape node-supplied hub admin output ([#871](https://github.com/Automattic/newspack-workspace/issues/871)) ([4dbe67d](https://github.com/Automattic/newspack-workspace/commit/4dbe67d6c36c365254a4517d031ab725a57637e3))
+
 ## newspack-network [2.22.1](https://github.com/Automattic/newspack-workspace/compare/newspack-network@2.22.0...newspack-network@2.22.1) (2026-08-19)
 
 

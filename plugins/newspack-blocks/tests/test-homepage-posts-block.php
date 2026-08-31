@@ -284,6 +284,208 @@ class HomepagePostsBlockTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 	}
 
 	/**
+	 * The editor posts endpoint must not expose live author-archive links.
+	 *
+	 * The editor canvas renders newspack_post_byline and newspack_post_avatars
+	 * verbatim, so a real href navigates the canvas iframe away from the post
+	 * being edited. Author anchors must be neutralized to href="#", matching
+	 * the category link convention in the same payload.
+	 */
+	public function test_editor_posts_endpoint_neutralizes_author_archive_links() {
+		$author_id = self::factory()->user->create(
+			[
+				'role'          => 'author',
+				'display_name'  => 'Jane Example',
+				'user_nicename' => 'jane-example',
+			]
+		);
+		$authored_post_id = self::factory()->post->create(
+			[
+				'post_status' => 'publish',
+				'post_author' => $author_id,
+			]
+		);
+		// A post whose author no longer exists still renders a byline anchor
+		// ("by" with no name, empty author lookup) and must be neutralized too.
+		$orphan_post_id = self::factory()->post->create(
+			[
+				'post_status' => 'publish',
+				'post_author' => 99999,
+			]
+		);
+		wp_set_current_user( self::factory()->user->create( [ 'role' => 'administrator' ] ) );
+
+		$request = new WP_REST_Request( 'GET', '/newspack-blocks/v1/newspack-blocks-posts' );
+		$request->set_param( 'postsToShow', 10 );
+		$posts = rest_do_request( $request )->get_data();
+
+		$posts_by_id = array_column( $posts, null, 'id' );
+		self::assertArrayHasKey( $authored_post_id, $posts_by_id, 'The endpoint returns the authored post.' );
+		self::assertArrayHasKey( $orphan_post_id, $posts_by_id, 'The endpoint returns the orphaned-author post.' );
+
+		self::assertStringContainsString(
+			'Jane Example',
+			$posts_by_id[ $authored_post_id ]['newspack_post_byline'],
+			'The author name still renders in the editor byline.'
+		);
+
+		foreach ( [ $authored_post_id, $orphan_post_id ] as $post_id ) {
+			self::assertStringContainsString(
+				'href="#"',
+				$posts_by_id[ $post_id ]['newspack_post_byline'],
+				'The editor byline anchor is neutralized, not removed.'
+			);
+			self::assertStringNotContainsString(
+				'href="http',
+				$posts_by_id[ $post_id ]['newspack_post_byline'],
+				'The editor byline must not carry a live link.'
+			);
+			self::assertStringContainsString(
+				'href="#"',
+				$posts_by_id[ $post_id ]['newspack_post_avatars'],
+				'The editor avatar anchor is neutralized, not removed.'
+			);
+			self::assertStringNotContainsString(
+				'href="http',
+				$posts_by_id[ $post_id ]['newspack_post_avatars'],
+				'The editor avatar link must not carry a live link.'
+			);
+		}
+	}
+
+	/**
+	 * Byline HTML injected via the newspack_blocks_post_byline filter (the
+	 * newspack-plugin custom-bylines feature hooks it and replaces the byline
+	 * wholesale) must be neutralized too — neutralization runs on the finished
+	 * payload, after the filter.
+	 */
+	public function test_editor_posts_endpoint_neutralizes_filtered_byline_links() {
+		self::factory()->post->create( [ 'post_status' => 'publish' ] );
+		wp_set_current_user( self::factory()->user->create( [ 'role' => 'administrator' ] ) );
+
+		$live_link_byline_filter = function () {
+			return '<span class="author vcard"><a class="url fn n" href="https://example.test/author/custom">Custom Byline</a></span>';
+		};
+		add_filter( 'newspack_blocks_post_byline', $live_link_byline_filter );
+
+		$request = new WP_REST_Request( 'GET', '/newspack-blocks/v1/newspack-blocks-posts' );
+		$request->set_param( 'postsToShow', 10 );
+		$posts = rest_do_request( $request )->get_data();
+
+		remove_filter( 'newspack_blocks_post_byline', $live_link_byline_filter );
+
+		self::assertNotEmpty( $posts, 'The editor posts endpoint returns the published post.' );
+		foreach ( $posts as $post_data ) {
+			self::assertStringContainsString(
+				'Custom Byline',
+				$post_data['newspack_post_byline'],
+				'The filtered byline content is preserved.'
+			);
+			self::assertStringNotContainsString(
+				'https://example.test/author/custom',
+				$post_data['newspack_post_byline'],
+				'A live link supplied by the byline filter must be neutralized in the editor payload.'
+			);
+			self::assertStringContainsString(
+				'href="#"',
+				$post_data['newspack_post_byline'],
+				'The filtered byline anchor is neutralized, not removed.'
+			);
+		}
+	}
+
+	/**
+	 * Avatar markup whose URL carries an href query parameter must come
+	 * through intact — neutralization touches only real anchor href
+	 * attributes, never "href=" text inside another attribute's value
+	 * (the shape produced by URL-rewriting avatar proxies).
+	 */
+	public function test_editor_posts_endpoint_preserves_avatar_markup() {
+		$author_id = self::factory()->user->create(
+			[
+				'role'          => 'author',
+				'display_name'  => 'Ada Fixture',
+				'user_nicename' => 'ada-fixture',
+			]
+		);
+		self::factory()->post->create(
+			[
+				'post_status' => 'publish',
+				'post_author' => $author_id,
+			]
+		);
+		wp_set_current_user( self::factory()->user->create( [ 'role' => 'administrator' ] ) );
+
+		$proxied_avatar_filter = function () {
+			return '<img src="https://cdn.example.test/proxy?url=a&amp;href=x" srcset="https://cdn.example.test/proxy?url=b&amp;href=y 2x" class="avatar" alt="" width="48" height="48" />';
+		};
+		add_filter( 'pre_get_avatar', $proxied_avatar_filter );
+
+		$request = new WP_REST_Request( 'GET', '/newspack-blocks/v1/newspack-blocks-posts' );
+		$request->set_param( 'postsToShow', 10 );
+		$posts = rest_do_request( $request )->get_data();
+
+		remove_filter( 'pre_get_avatar', $proxied_avatar_filter );
+
+		self::assertNotEmpty( $posts, 'The editor posts endpoint returns the published post.' );
+		foreach ( $posts as $post_data ) {
+			self::assertStringContainsString(
+				'src="https://cdn.example.test/proxy?url=a&amp;href=x"',
+				$post_data['newspack_post_avatars'],
+				'The avatar src survives neutralization byte-identical.'
+			);
+			self::assertStringContainsString(
+				'srcset="https://cdn.example.test/proxy?url=b&amp;href=y 2x"',
+				$post_data['newspack_post_avatars'],
+				'The avatar srcset survives neutralization byte-identical.'
+			);
+			self::assertStringContainsString(
+				'href="#"',
+				$post_data['newspack_post_avatars'],
+				'The avatar anchor is still neutralized.'
+			);
+		}
+	}
+
+	/**
+	 * The front-end byline formatter keeps live author-archive links.
+	 *
+	 * The discriminating mirror of the editor tests above: neutralization
+	 * belongs to the editor payload only, and moving it into the shared
+	 * formatter would break every reader-facing author link while the editor
+	 * tests stayed green.
+	 */
+	public function test_front_end_byline_formatter_keeps_live_author_links() {
+		$author_id = self::factory()->user->create(
+			[
+				'role'          => 'author',
+				'display_name'  => 'Frank Fixture',
+				'user_nicename' => 'frank-fixture',
+			]
+		);
+		$post_id   = self::factory()->post->create(
+			[
+				'post_status' => 'publish',
+				'post_author' => $author_id,
+			]
+		);
+
+		$GLOBALS['post'] = get_post( $post_id );
+		setup_postdata( $GLOBALS['post'] );
+
+		$byline = newspack_blocks_format_byline( Newspack_Blocks::prepare_authors() );
+
+		self::assertStringContainsString(
+			get_author_posts_url( $author_id, 'frank-fixture' ),
+			$byline,
+			'The front-end byline keeps the live author-archive link.'
+		);
+		self::assertStringContainsString( 'Frank Fixture', $byline, 'The author name renders in the front-end byline.' );
+
+		wp_reset_postdata();
+	}
+
+	/**
 	 * The newspack_tag_labels REST field exposes the { flag, link } shape
 	 * returned by \Newspack\Tag_Labels, normalized to a 0-indexed list.
 	 *

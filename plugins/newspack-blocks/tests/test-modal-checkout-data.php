@@ -289,51 +289,6 @@ if ( ! class_exists( 'WC_Subscriptions_Product' ) ) {
 	}
 }
 
-if ( ! class_exists( 'WC_Order' ) ) {
-	/**
-	 * Minimal WooCommerce order stub.
-	 */
-	class WC_Order {
-		/**
-		 * Line items.
-		 *
-		 * @var array
-		 */
-		protected $items = [];
-
-		/**
-		 * Order ID.
-		 *
-		 * @var int
-		 */
-		protected $id;
-
-		/**
-		 * Constructor.
-		 *
-		 * @param array $items Line items.
-		 * @param int   $id    Order ID.
-		 */
-		public function __construct( $items = [], $id = 900 ) {
-			$this->items = $items;
-			$this->id    = $id;
-		}
-
-		public function get_id() {
-			return $this->id;
-		}
-
-		public function get_items() {
-			return $this->items;
-		}
-
-		public function get_meta( $key ) {
-			unset( $key );
-			return '';
-		}
-	}
-}
-
 if ( ! class_exists( 'WC_Subscription' ) ) {
 	/**
 	 * Minimal subscription stub. A subscription created by hand in wp-admin has
@@ -355,7 +310,7 @@ if ( ! class_exists( 'WC_Subscription' ) ) {
 		 * @param int            $id     Subscription ID.
 		 */
 		public function __construct( $items = [], $parent = false, $id = 901 ) {
-			parent::__construct( $items, $id );
+			parent::__construct( $id, '', $items );
 			$this->parent = $parent;
 		}
 
@@ -465,7 +420,7 @@ class Newspack_Blocks_Modal_Checkout_Data_Test extends WP_UnitTestCase_Blocks {
 		$GLOBALS['newspack_blocks_test_products'] = [
 			79 => new WC_Product( 79, 'simple', [], '10', 'Product 79' ),
 		];
-		$order = new WC_Order( [ new WC_Order_Item_Product( 79, '40', 4 ) ], 950 );
+		$order = new WC_Order( 950, '', [ new WC_Order_Item_Product( 79, '40', 4 ) ] );
 
 		$data = Checkout_Data::get_checkout_data( $order );
 
@@ -562,7 +517,7 @@ class Newspack_Blocks_Modal_Checkout_Data_Test extends WP_UnitTestCase_Blocks {
 			2171 => new WC_Product( 2171, 'subscription', [], '99', 'Annual Supporter' ),
 		];
 
-		$parent       = new WC_Order( [ new WC_Order_Item_Product( 2171, '99' ) ], 900 );
+		$parent       = new WC_Order( 900, '', [ new WC_Order_Item_Product( 2171, '99' ) ] );
 		$subscription = new WC_Subscription( [ new WC_Order_Item_Product( 2170, '25' ) ], $parent, 901 );
 
 		$data = Checkout_Data::get_checkout_data( $subscription );
@@ -585,7 +540,7 @@ class Newspack_Blocks_Modal_Checkout_Data_Test extends WP_UnitTestCase_Blocks {
 			2172 => new WC_Product( 2172, 'simple', [], '15', 'Monthly Donation' ),
 		];
 
-		$parent       = new WC_Order( [ new WC_Order_Item_Product( 2172, '15' ) ], 902 );
+		$parent       = new WC_Order( 902, '', [ new WC_Order_Item_Product( 2172, '15' ) ] );
 		$subscription = new WC_Subscription( [ new WC_Order_Item_Product( 2172, '15' ) ], $parent, 903 );
 
 		$data = Checkout_Data::get_checkout_data( $subscription );
