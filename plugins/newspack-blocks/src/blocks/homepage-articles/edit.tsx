@@ -6,6 +6,7 @@
 import QueryControls from '../../components/query-controls';
 import { postsBlockSelector, postsBlockDispatch, isBlogPrivate, shouldReflow } from './utils';
 import { getBylineHTML, formatSponsorLogos, formatSponsorByline, getPostStatusLabel } from '../../shared/js/utils';
+import { preventPreviewNavigation } from '../../shared/js/inert-preview';
 import { PostTypesPanel, PostStatusesPanel } from '../../components/editor-panels';
 
 /**
@@ -694,6 +695,7 @@ class Edit extends Component< HomepageArticlesProps > {
 				<div
 					{ ...blockProps }
 					className={ classes }
+					onClickCapture={ preventPreviewNavigation }
 					style={ {
 						color: textColor.color,
 					} }
