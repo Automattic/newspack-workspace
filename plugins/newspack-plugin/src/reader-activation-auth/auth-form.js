@@ -8,7 +8,7 @@ import { getPendingCheckout } from '../reader-activation/checkout';
 import { openNewslettersSignupModal } from '../reader-activation-newsletters/newsletters-modal';
 import { openVerificationModal } from './verification-modal';
 import { maybeConfirmRegistration } from './confirmation-modal';
-import { getBackTarget } from './auth-form-helpers';
+import { getBackTarget, shouldReuseActiveCode } from './auth-form-helpers';
 
 import './google-oauth';
 import './otp-input';
@@ -231,6 +231,16 @@ window.newspackRAS.push( function ( readerActivation ) {
 					button.addEventListener( 'click', function ( ev ) {
 						ev.preventDefault();
 						form.setMessageContent();
+						// A reader who already requested a code and returned to the password step can
+						// choose the code again. Show the existing code-entry step instead of asking the
+						// server for a new code, which would restart the resend cooldown and strand the
+						// code already in their inbox. Only the "email me a code" button reuses; resend
+						// always requests a fresh code.
+						if ( shouldReuseActiveCode( ev.currentTarget === sendCodeButton, !! readerActivation.getOTPHash() ) ) {
+							container.setFormAction( 'otp' );
+							handleOTPTimer();
+							return;
+						}
 						form.startLoginFlow();
 						const body = new FormData();
 						body.set( 'reader-activation-auth-form', 1 );

@@ -1,4 +1,4 @@
-import { getBackTarget } from './auth-form-helpers';
+import { getBackTarget, shouldReuseActiveCode } from './auth-form-helpers';
 
 describe( 'getBackTarget', () => {
 	it( 'returns to the password step from the code step when the reader has a password', () => {
@@ -23,5 +23,23 @@ describe( 'getBackTarget', () => {
 
 	it( 'returns to the email step from the success step', () => {
 		expect( getBackTarget( 'success', true ) ).toBe( 'signin' );
+	} );
+} );
+
+describe( 'shouldReuseActiveCode', () => {
+	it( 'reuses the existing code when "email me a code" is clicked and a code is active', () => {
+		expect( shouldReuseActiveCode( true, true ) ).toBe( true );
+	} );
+
+	it( 'requests a new code when "email me a code" is clicked and no code is active', () => {
+		expect( shouldReuseActiveCode( true, false ) ).toBe( false );
+	} );
+
+	it( 'never reuses for the resend button, even when a code is active', () => {
+		expect( shouldReuseActiveCode( false, true ) ).toBe( false );
+	} );
+
+	it( 'requests a new code for the resend button when none is active', () => {
+		expect( shouldReuseActiveCode( false, false ) ).toBe( false );
 	} );
 } );
