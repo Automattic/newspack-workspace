@@ -12,6 +12,7 @@ import {
 	readUtmParams,
 	appendUtmFields,
 	PICKER_CONTEXT_FIELDS,
+	SYNTHESIZED_CONTAINER_SELECTOR,
 } from './checkout-button-trigger';
 
 const VARIATION_MODAL_CLASS_PREFIX = 'newspack-blocks__modal-variation';
@@ -272,6 +273,48 @@ describe( 'resolveCheckoutButtonForm', () => {
 	} );
 } );
 
+describe( 'resolveCheckoutButtonForm — synthesized form demotion', () => {
+	const synthesized = html => `<div class="${ SYNTHESIZED_CONTAINER_SELECTOR.slice( 1 ) }" style="display:none">${ html }</div>`;
+
+	it( 'prefers a page-authored button over an earlier synthesized one', () => {
+		// The synthesized form is rendered first to prove the preference is not
+		// DOM order.
+		const root = render( synthesized( checkoutButton( { product_id: '1406' }, 'Synth' ) ) + checkoutButton( { product_id: '1406' }, 'Page' ) );
+		const pageForm = root.querySelectorAll( '.wp-block-newspack-blocks-checkout-button form' )[ 1 ];
+		expect( resolveCheckoutButtonForm( root, '1406', null, PICKER_OPTIONS ) ).toBe( pageForm );
+	} );
+
+	// The page block's coupon and after-checkout settings are the editor's, so a
+	// synthesized form locked to the requested variation must not outrank them.
+	it( 'lets the picker with page context outrank a synthesized exact variation match', () => {
+		const pageUnlocked = `<div class="wp-block-newspack-blocks-checkout-button"><form data-checkout='${ JSON.stringify( {
+			product_id: '1406',
+			is_variable: true,
+		} ) }'><input type="hidden" name="coupon" value="PAGE20"><button type="submit">Subscribe</button></form></div>`;
+		const synthLocked = synthesized(
+			`<div class="wp-block-newspack-blocks-checkout-button"><form data-checkout='${ JSON.stringify( {
+				product_id: '1406',
+				variation_id: '1407',
+				is_variable: true,
+			} ) }'><input type="hidden" name="coupon" value="URL5"><button type="submit">Complete</button></form></div>`
+		);
+		const root = render( pageUnlocked + synthLocked + variationPicker( '1406', [ '1407', '1408' ] ) );
+		const pickerForm = root.querySelector( `.${ VARIATION_MODAL_CLASS_PREFIX } form` );
+
+		const result = resolveCheckoutButtonForm( root, '1406', '1407', PICKER_OPTIONS );
+
+		expect( result ).toBe( pickerForm );
+		expect( pickerForm.querySelector( 'input[name="coupon"]' ).value ).toBe( 'PAGE20' );
+	} );
+
+	it( 'serves the synthesized exact match when the page has no button for the product', () => {
+		const synthLocked = synthesized( checkoutButton( { product_id: '1406', variation_id: '1407', is_variable: true } ) );
+		const root = render( synthLocked + variationPicker( '1406', [ '1407', '1408' ] ) );
+		const synthForm = root.querySelector( `${ SYNTHESIZED_CONTAINER_SELECTOR } form` );
+		expect( resolveCheckoutButtonForm( root, '1406', '1407', PICKER_OPTIONS ) ).toBe( synthForm );
+	} );
+} );
+
 describe( 'copyContextFields', () => {
 	it( 'copies present source fields, skips missing ones, and does not overwrite existing target fields', () => {
 		const root = render(
@@ -443,5 +486,14 @@ describe( 'appendUtmFields', () => {
 	it( 'does not throw on a null form or missing params', () => {
 		expect( () => appendUtmFields( null, { utm_source: 'x' } ) ).not.toThrow();
 		expect( () => appendUtmFields( document.createElement( 'form' ), null ) ).not.toThrow();
+	} );
+
+	// Param names come straight from the landing URL, so one carrying selector
+	// syntax must not break the submission.
+	it( 'tolerates a field name carrying selector syntax', () => {
+		const root = render( checkoutButton( { product_id: '1406' } ) );
+		const form = root.querySelector( 'form' );
+		expect( () => appendUtmFields( form, { 'utm"]': 'x' } ) ).not.toThrow();
+		expect( form.elements.namedItem( 'utm"]' ).value ).toBe( 'x' );
 	} );
 } );
