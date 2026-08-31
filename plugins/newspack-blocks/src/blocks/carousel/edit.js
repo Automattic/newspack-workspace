@@ -1,4 +1,4 @@
-/* eslint-disable jsx-a11y/anchor-is-valid, jsx-a11y/anchor-has-content, jsx-a11y/click-events-have-key-events, jsx-a11y/interactive-supports-focus */
+/* eslint-disable jsx-a11y/anchor-has-content, jsx-a11y/click-events-have-key-events, jsx-a11y/interactive-supports-focus */
 
 /**
  * External dependencies
@@ -36,6 +36,7 @@ import QueryControls from '../../components/query-controls';
 import { PostTypesPanel, PostStatusesPanel } from '../../components/editor-panels';
 import createSwiper from './create-swiper';
 import { getBylineHTML, formatSponsorLogos, formatSponsorByline, getPostStatusLabel } from '../../shared/js/utils';
+import { preventPreviewNavigation } from '../../shared/js/inert-preview';
 // Use same posts store as Homepage Posts block.
 import { postsBlockSelector, postsBlockDispatch, shouldReflow } from '../homepage-articles/utils';
 
@@ -355,7 +356,7 @@ class Edit extends Component {
 					<PostTypesPanel attributes={ attributes } setAttributes={ setAttributes } />
 					<PostStatusesPanel attributes={ attributes } setAttributes={ setAttributes } />
 				</InspectorControls>
-				<div { ...blockProps } className={ classes }>
+				<div { ...blockProps } className={ classes } onClickCapture={ preventPreviewNavigation }>
 					{ hasNoPosts && (
 						<Placeholder className="component-placeholder__align-center">
 							<div style={ { margin: 'auto' } }>{ __( 'Sorry, no posts were found.' ) }</div>
@@ -380,7 +381,7 @@ class Edit extends Component {
 									>
 										{ getPostStatusLabel( post ) }
 										<figure className="post-thumbnail">
-											<a href="#" rel="bookmark">
+											<a href={ post.post_link } rel="bookmark">
 												{ post.newspack_featured_image_src ? (
 													<img
 														className={ `image-fit-${ imageFit }` }
@@ -416,7 +417,7 @@ class Edit extends Component {
 													<div className="cat-links tag-labels">
 														{ post.newspack_tag_labels.map( ( newspack_tag_label, index ) => {
 															return newspack_tag_label.link ? (
-																<a key={ index } href="#" className="tag-label flag">
+																<a key={ index } href={ newspack_tag_label.link } className="tag-label flag">
 																	{ newspack_tag_label.flag }
 																</a>
 															) : (
@@ -429,7 +430,7 @@ class Edit extends Component {
 												) }
 												{ showTitle && (
 													<h3 className="entry-title">
-														<a href="#">{ decodeEntities( post.title.rendered.trim() ) }</a>
+														<a href={ post.post_link }>{ decodeEntities( post.title.rendered.trim() ) }</a>
 													</h3>
 												) }
 												<div className="entry-meta">
