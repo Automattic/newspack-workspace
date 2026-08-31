@@ -51,12 +51,12 @@ export const termsForTaxonomy = ( item, taxonomy ) => {
 	return [];
 };
 
-export const initialSelectionsForTaxonomy = ( item, taxonomy ) =>
+const initialSelectionsForTaxonomy = ( item, taxonomy ) =>
 	termsForTaxonomy( item, taxonomy )
 		.map( term => ( { id: term?.id, name: term?.name } ) )
 		.filter( s => typeof s.id === 'number' && s.name );
 
-export const selectionsFromIds = ( ids, options ) =>
+const selectionsFromIds = ( ids, options ) =>
 	( Array.isArray( ids ) ? ids : [] )
 		.map( id => ( Array.isArray( options ) ? options : [] ).find( option => option?.id === id ) )
 		.filter( option => option && option.name )
@@ -78,6 +78,17 @@ export const selectionsForTaxonomy = ( item, ids, taxonomy, options ) => {
 	}
 	const byId = new Map( [ ...selectionsFromIds( ids, options ), ...embedded ].map( selection => [ selection.id, selection ] ) );
 	return ids.map( id => byId.get( id ) ).filter( Boolean );
+};
+
+// IDs the options list cannot account for. Distinct from `unresolvedIds`,
+// which measures against the merged selections: the embed can render a token
+// the options list has never heard of, and that token looks editable while
+// being impossible to restore, since the options list is what feeds both the
+// suggestions and `__experimentalValidateInput`. Remove it once and it cannot
+// be typed back. So this, not the merged gap, is what decides editability.
+export const idsMissingFromOptions = ( ids, options ) => {
+	const known = new Set( ( Array.isArray( options ) ? options : [] ).map( option => option?.id ) );
+	return ( Array.isArray( ids ) ? ids : [] ).filter( id => typeof id === 'number' && ! known.has( id ) );
 };
 
 export const unresolvedIds = ( ids, selections ) => {

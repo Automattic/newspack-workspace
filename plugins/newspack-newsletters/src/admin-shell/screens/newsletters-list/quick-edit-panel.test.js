@@ -84,10 +84,12 @@ describe( 'NewslettersQuickEditPanel', () => {
 		expect( screen.getByTestId( 'panel-dirty' ) ).toHaveTextContent( 'false' );
 	} );
 
-	// The embed caps at 100 terms per taxonomy and is absent entirely when
-	// no taxonomy column is visible, so neither source is complete on its
-	// own. Term 55 is reachable only through the embed here.
-	it( 'merges the embed with the fetched options list', async () => {
+	// The embed caps at 100 terms per taxonomy and is absent entirely when no
+	// taxonomy column is visible, so neither source is complete on its own.
+	// Term 55 is reachable only through the embed here, which renders it but
+	// also holds the field read-only: the options list that feeds the
+	// suggestions and the token validator cannot account for it.
+	it( 'merges the embed with the fetched options list, read-only', async () => {
 		renderPanel(
 			makeItem( {
 				categories: [ 5, 55 ],
@@ -95,9 +97,11 @@ describe( 'NewslettersQuickEditPanel', () => {
 			} )
 		);
 
+		// The embed renders before the fetch settles; `News` needs the options list.
 		expect( await screen.findByText( 'Opinion' ) ).toBeInTheDocument();
-		await waitFor( () => expect( screen.getByText( 'News' ) ).toBeInTheDocument() );
-		await waitFor( () => expect( screen.getByLabelText( 'Categories' ) ).not.toBeDisabled() );
+		await waitFor( () => expect( visibleNotices() ).toContain( CATEGORIES_UNAVAILABLE ) );
+		expect( screen.getByText( 'News' ) ).toBeInTheDocument();
+		expect( screen.getByLabelText( 'Categories' ) ).toBeDisabled();
 	} );
 
 	// Read-only rather than editable while loading: an edit made against a

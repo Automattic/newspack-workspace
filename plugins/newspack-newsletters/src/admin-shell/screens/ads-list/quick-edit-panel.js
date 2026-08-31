@@ -15,7 +15,7 @@ import { emailAd } from 'newspack-icons';
 import QuickEditPanel from '../../components/quick-edit-panel';
 import TermsUnavailableNotice from '../../components/terms-unavailable-notice';
 import { notifyError, notifySuccess } from '../../notices';
-import { fetchAllTerms, resolveTokens, selectionsForTaxonomy, sortedIdsEqual, unresolvedIds } from '../../utils/terms';
+import { fetchAllTerms, idsMissingFromOptions, resolveTokens, selectionsForTaxonomy, sortedIdsEqual, unresolvedIds } from '../../utils/terms';
 
 const POSTS_PATH = '/wp/v2/newspack_nl_ads_cpt';
 
@@ -35,7 +35,6 @@ function useQuickEditCategories() {
 					setCategories( Array.isArray( terms ) ? terms : [] );
 				}
 			} )
-			.catch( () => {} )
 			.finally( () => {
 				if ( ! cancelled ) {
 					setHasLoaded( true );
@@ -117,11 +116,17 @@ export default function AdsQuickEditPanel( { item, advertisers, placements, term
 		}
 	}, [ initialCategorySelections ] );
 
-	// Gated on the fetch having settled so a slow load can't flash a
-	// warning before the options arrive.
-	const advertiserUnavailable = termsLoaded && unresolvedAdvertiserIds.length > 0;
-	const placementUnavailable = termsLoaded && unresolvedPlacementIds.length > 0;
-	const categoriesUnavailable = categoriesLoaded && unresolvedCategoryIds.length > 0;
+	// Measured against the options list rather than the merged selections: a
+	// term the embed can render but the options list has never seen would leave
+	// the field editable yet impossible to restore once the token is removed.
+	// Gated on the fetch having settled so a slow load can't flash a warning
+	// before the options arrive.
+	const advertiserOptionGap = useMemo( () => idsMissingFromOptions( item?.newspack_nl_advertiser, advertisers ), [ item, advertisers ] );
+	const placementOptionGap = useMemo( () => idsMissingFromOptions( item?.ad_placement, placements ), [ item, placements ] );
+	const categoryOptionGap = useMemo( () => idsMissingFromOptions( item?.categories, categories ), [ item, categories ] );
+	const advertiserUnavailable = termsLoaded && advertiserOptionGap.length > 0;
+	const placementUnavailable = termsLoaded && placementOptionGap.length > 0;
+	const categoriesUnavailable = categoriesLoaded && categoryOptionGap.length > 0;
 
 	// A field is editable only once its options have settled and account
 	// for every stored term. Editing earlier would race the baseline: with
@@ -133,9 +138,9 @@ export default function AdsQuickEditPanel( { item, advertisers, placements, term
 	const categoriesReadOnly = ! categoriesLoaded || categoriesUnavailable;
 
 	// A disabled field drops out of the tab order, so the wait needs its own
-	// explanation. `help` lands in the field's `aria-describedby`; an empty
-	// string suppresses the default how-to text, which these fields have
-	// never shown.
+	// explanation.
+	// `help` lands in the field's `aria-describedby`; an empty string suppresses
+	// the default how-to text, which these fields have never shown.
 	const advertiserHelp = termsLoaded ? '' : __( 'Loading advertisers…', 'newspack-newsletters' );
 	const placementHelp = termsLoaded ? '' : __( 'Loading ad placements…', 'newspack-newsletters' );
 	const categoriesHelp = categoriesLoaded ? '' : __( 'Loading categories…', 'newspack-newsletters' );

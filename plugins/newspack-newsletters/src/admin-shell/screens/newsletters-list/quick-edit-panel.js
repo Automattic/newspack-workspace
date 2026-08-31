@@ -16,7 +16,7 @@ import QuickEditPanel from '../../components/quick-edit-panel';
 import TermsUnavailableNotice from '../../components/terms-unavailable-notice';
 import { getNewsletterVisibilityDescriptions } from '../../../utils/service-provider';
 import { notifyError, notifySuccess } from '../../notices';
-import { fetchAllTerms, resolveTokens, selectionsForTaxonomy, sortedIdsEqual, unresolvedIds } from '../../utils/terms';
+import { fetchAllTerms, idsMissingFromOptions, resolveTokens, selectionsForTaxonomy, sortedIdsEqual, unresolvedIds } from '../../utils/terms';
 
 const POSTS_PATH = '/wp/v2/newspack_nl_cpt';
 
@@ -91,10 +91,15 @@ export default function NewslettersQuickEditPanel( { item, onClose, onSaved } ) 
 		}
 	}, [ initialTagSelections ] );
 
-	// Gated on the fetch having settled so a slow load can't flash a
-	// warning before the options arrive.
-	const categoriesUnavailable = optionsLoaded && unresolvedCategoryIds.length > 0;
-	const tagsUnavailable = optionsLoaded && unresolvedTagIds.length > 0;
+	// Measured against the options list rather than the merged selections: a
+	// term the embed can render but the options list has never seen would leave
+	// the field editable yet impossible to restore once the token is removed.
+	// Gated on the fetch having settled so a slow load can't flash a warning
+	// before the options arrive.
+	const categoryOptionGap = useMemo( () => idsMissingFromOptions( item?.categories, categories ), [ item, categories ] );
+	const tagOptionGap = useMemo( () => idsMissingFromOptions( item?.tags, tags ), [ item, tags ] );
+	const categoriesUnavailable = optionsLoaded && categoryOptionGap.length > 0;
+	const tagsUnavailable = optionsLoaded && tagOptionGap.length > 0;
 
 	// A field is editable only once its options have settled and account for
 	// every stored term. Editing earlier would race the baseline: with no
@@ -105,9 +110,9 @@ export default function NewslettersQuickEditPanel( { item, onClose, onSaved } ) 
 	const tagsReadOnly = ! optionsLoaded || tagsUnavailable;
 
 	// A disabled field drops out of the tab order, so the wait needs its own
-	// explanation. `help` lands in the field's `aria-describedby`; an empty
-	// string suppresses the default how-to text, which these fields have
-	// never shown.
+	// explanation.
+	// `help` lands in the field's `aria-describedby`; an empty string suppresses
+	// the default how-to text, which these fields have never shown.
 	const categoriesHelp = optionsLoaded ? '' : __( 'Loading categories…', 'newspack-newsletters' );
 	const tagsHelp = optionsLoaded ? '' : __( 'Loading tags…', 'newspack-newsletters' );
 

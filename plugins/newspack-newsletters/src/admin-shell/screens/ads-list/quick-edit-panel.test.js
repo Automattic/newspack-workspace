@@ -169,9 +169,7 @@ describe( 'AdsQuickEditPanel taxonomy handling', () => {
 	} );
 
 	// The embedded id is deliberately absent from `ADVERTISERS`, so the
-	// options list cannot render it and the embed is the only source. The
-	// field stays editable because `unresolvedIds` measures against the
-	// merged selections, not the options list.
+	// options list cannot render it and the embed is the only source.
 	const withEmbeddedTerms = () => ( {
 		...makeItem( 'publish' ),
 		newspack_nl_advertiser: [ 55 ],
@@ -187,7 +185,27 @@ describe( 'AdsQuickEditPanel taxonomy handling', () => {
 	it( 'still reads embedded terms when they are present', async () => {
 		renderPanel( withEmbeddedTerms() );
 		expect( await screen.findByText( 'Beta Corp' ) ).toBeInTheDocument();
-		expect( screen.getByLabelText( 'Advertiser' ) ).not.toBeDisabled();
+	} );
+
+	// The embed can render a token the options list has never seen. Editing
+	// then looks available but is a trap: the suggestions and the token
+	// validator both come from the options list, so removing the token makes it
+	// impossible to type back, and the save would write the taxonomy empty.
+	it( 'holds a field read-only when only the embed can account for a stored term', async () => {
+		renderPanel( withEmbeddedTerms() );
+		expect( await screen.findByText( 'Beta Corp' ) ).toBeInTheDocument();
+		await waitFor( () => expect( visibleNotices() ).toContain( ADVERTISERS_UNAVAILABLE ) );
+		expect( screen.getByLabelText( 'Advertiser' ) ).toBeDisabled();
+	} );
+
+	// The same shape when the options request fails outright: `fetchAllTerms`
+	// swallows the failure and settles empty, which must not read as success
+	// just because the embed still renders the token.
+	it( 'holds a field read-only when its options request settled empty', async () => {
+		renderPanel( withEmbeddedTerms(), { advertisers: [] } );
+		expect( await screen.findByText( 'Beta Corp' ) ).toBeInTheDocument();
+		await waitFor( () => expect( visibleNotices() ).toContain( ADVERTISERS_UNAVAILABLE ) );
+		expect( screen.getByLabelText( 'Advertiser' ) ).toBeDisabled();
 	} );
 
 	it( 'omits untouched taxonomies from a status-only save', async () => {
