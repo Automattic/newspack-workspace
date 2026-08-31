@@ -25,7 +25,9 @@ module.exports = {
 				callback: 'npm run release:archive',
 			},
 		],
-		...gitCommitStep( [ 'CHANGELOG.md', 'src/scss/_theme-description.scss', 'functions.php' ] ),
+		// languages/** carries the translation files release.yml regenerates just
+		// before multi-semantic-release runs (see config/release.js).
+		...gitCommitStep( [ 'CHANGELOG.md', 'src/scss/_theme-description.scss', 'functions.php', 'languages/**' ] ),
 	],
 	plugins: [
 		'@semantic-release/commit-analyzer',

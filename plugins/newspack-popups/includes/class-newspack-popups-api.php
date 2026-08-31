@@ -120,6 +120,174 @@ final class Newspack_Popups_API {
 				'permission_callback' => [ $this, 'permission_callback' ],
 			]
 		);
+		if ( Newspack_Popups::is_contextual_prompts_enabled() ) {
+			register_rest_route(
+				'newspack-popups/v1',
+				'/contextual-prompt/status',
+				[
+					'methods'             => \WP_REST_Server::READABLE,
+					'callback'            => [ __CLASS__, 'api_get_contextual_prompt_status' ],
+					'permission_callback' => function () {
+						return current_user_can( 'edit_posts' );
+					},
+				]
+			);
+			register_rest_route(
+				'newspack-popups/v1',
+				'/contextual-prompt/enable',
+				[
+					'methods'             => \WP_REST_Server::EDITABLE,
+					// Opting into AI use is an administrator decision.
+					'callback'            => [ __CLASS__, 'api_set_contextual_prompt_enabled' ],
+					'permission_callback' => [ $this, 'permission_callback' ],
+					'args'                => [
+						'enabled' => [
+							'required'          => true,
+							'sanitize_callback' => 'rest_sanitize_boolean',
+						],
+					],
+				]
+			);
+			register_rest_route(
+				'newspack-popups/v1',
+				'/contextual-prompt/reset-design',
+				[
+					'methods'             => \WP_REST_Server::EDITABLE,
+					// The design is the site's, and the pattern is administrator-only.
+					'callback'            => [ __CLASS__, 'api_reset_contextual_prompt_design' ],
+					'permission_callback' => [ $this, 'permission_callback' ],
+				]
+			);
+			register_rest_route(
+				'newspack-popups/v1',
+				'/contextual-prompt/profile',
+				[
+					'methods'             => \WP_REST_Server::EDITABLE,
+					'callback'            => [ __CLASS__, 'api_save_contextual_prompt_profile' ],
+					'permission_callback' => [ $this, 'permission_callback' ],
+					'args'                => [
+						'fields' => [
+							'required' => true,
+							'type'     => 'object',
+						],
+					],
+				]
+			);
+		}
+	}
+
+	/**
+	 * Report whether Contextual Prompts is opted into, and whether the current
+	 * user is allowed to change that.
+	 *
+	 * @return WP_REST_Response
+	 */
+	public static function api_get_contextual_prompt_status() {
+		return rest_ensure_response( self::contextual_prompt_status() );
+	}
+
+	/**
+	 * The Contextual Prompts status payload: opt-in state, whether the user can
+	 * manage it, the publisher-profile fields, and the pattern the design is
+	 * edited in. The route is open to `edit_posts`, but that is wizard
+	 * configuration only an administrator may see: anyone else gets the opt-in
+	 * state alone.
+	 *
+	 * @return array
+	 */
+	private static function contextual_prompt_status() {
+		$can_manage = current_user_can( 'manage_options' );
+		if ( ! $can_manage ) {
+			return [
+				'enabled'    => Newspack_Popups_Settings::is_ai_copy_assistant_enabled(),
+				'can_manage' => false,
+			];
+		}
+		// Reading the id seeds the pattern, so it is only asked for once the site
+		// has opted in: the feature writes nothing before that.
+		$enabled    = Newspack_Popups_Settings::is_ai_copy_assistant_enabled();
+		$pattern_id = $enabled ? Newspack_Popups_Contextual_Prompt_Pattern::get_pattern_id() : 0;
+		return [
+			'enabled'          => $enabled,
+			'can_manage'       => $can_manage,
+			'fields'           => Newspack_Popups_Settings::get_ai_copy_assistant_fields(),
+			'override_active'  => Newspack_Popups_Settings::is_override_active(),
+			'pattern_id'       => $pattern_id,
+			// Guarded: get_edit_post_link() resolves an id of 0 against the global post.
+			'pattern_edit_url' => $pattern_id ? (string) get_edit_post_link( $pattern_id, 'raw' ) : '',
+			// Whether the design has been changed from the one the plugin ships,
+			// which is the only state a reset has anything to undo.
+			'design_modified'  => $pattern_id ? Newspack_Popups_Contextual_Prompt_Pattern::is_design_modified() : false,
+		];
+	}
+
+	/**
+	 * Save the Contextual Prompts publisher profile. Administrator-only.
+	 *
+	 * @param WP_REST_Request $request Request object.
+	 * @return WP_REST_Response
+	 */
+	public static function api_save_contextual_prompt_profile( $request ) {
+		$enabled = self::require_contextual_prompts_enabled();
+		if ( is_wp_error( $enabled ) ) {
+			return $enabled;
+		}
+
+		Newspack_Popups_Settings::save_ai_copy_assistant_fields( (array) $request['fields'] );
+		return rest_ensure_response( self::contextual_prompt_status() );
+	}
+
+	/**
+	 * Put the prompt design back to the one this plugin ships. Administrator-only.
+	 *
+	 * @return WP_REST_Response|WP_Error
+	 */
+	public static function api_reset_contextual_prompt_design() {
+		$enabled = self::require_contextual_prompts_enabled();
+		if ( is_wp_error( $enabled ) ) {
+			return $enabled;
+		}
+
+		if ( ! Newspack_Popups_Contextual_Prompt_Pattern::reset_pattern() ) {
+			return new \WP_Error(
+				'newspack_contextual_prompts_reset_failed',
+				esc_html__( 'The design could not be reset. Try again.', 'newspack-popups' ),
+				[ 'status' => 500 ]
+			);
+		}
+
+		return rest_ensure_response( self::contextual_prompt_status() );
+	}
+
+	/**
+	 * Guard for endpoints that must stay inert until an administrator opts the site
+	 * into AI use. Some newsrooms are contractually barred from using AI, so the
+	 * feature reads and writes nothing before opt-in — see NPPD-2095. The opt-in
+	 * status/enable endpoints are deliberately exempt; they are how opt-in happens.
+	 *
+	 * @return true|\WP_Error True when enabled, WP_Error otherwise.
+	 */
+	private static function require_contextual_prompts_enabled() {
+		if ( Newspack_Popups_Settings::is_ai_copy_assistant_enabled() ) {
+			return true;
+		}
+
+		return new \WP_Error(
+			'newspack_contextual_prompts_disabled',
+			esc_html__( 'Contextual Prompts is not enabled for this site.', 'newspack-popups' ),
+			[ 'status' => 403 ]
+		);
+	}
+
+	/**
+	 * Opt this site into (or out of) Contextual Prompts. Administrator-only.
+	 *
+	 * @param WP_REST_Request $request Request object.
+	 * @return WP_REST_Response
+	 */
+	public static function api_set_contextual_prompt_enabled( $request ) {
+		update_option( Newspack_Popups_Settings::AI_COPY_ASSISTANT_ENABLED_OPTION, (bool) $request['enabled'] );
+		return rest_ensure_response( self::contextual_prompt_status() );
 	}
 
 	/**

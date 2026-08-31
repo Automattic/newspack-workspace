@@ -132,7 +132,7 @@ function GoogleOAuth( {
 			return sprintf(
 				// translators: %s: connected user's email address.
 				__( 'Connected as %s', 'newspack-plugin' ),
-				userBasicInfo?.email
+				userBasicInfo?.email ?? ''
 			);
 		}
 		return __( 'Not connected', 'newspack-plugin' );

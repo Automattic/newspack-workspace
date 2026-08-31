@@ -4,20 +4,20 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "5afdd6eda101fe9ebd968fc1f8fbed2d",
+    "content-hash": "a5290d8ed1fed5c0b9157176aa7bbfd1",
     "packages": [
         {
             "name": "automattic/jetpack-autoloader",
-            "version": "v5.0.21",
+            "version": "v5.0.23",
             "source": {
                 "type": "git",
                 "url": "https://github.com/Automattic/jetpack-autoloader.git",
-                "reference": "07b6e0d9b5f948659ce8503140551d5758865a3c"
+                "reference": "d11b2d621035dcb920abce8ae09bebd5da5f9ff8"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/Automattic/jetpack-autoloader/zipball/07b6e0d9b5f948659ce8503140551d5758865a3c",
-                "reference": "07b6e0d9b5f948659ce8503140551d5758865a3c",
+                "url": "https://api.github.com/repos/Automattic/jetpack-autoloader/zipball/d11b2d621035dcb920abce8ae09bebd5da5f9ff8",
+                "reference": "d11b2d621035dcb920abce8ae09bebd5da5f9ff8",
                 "shasum": ""
             },
             "require": {
@@ -66,9 +66,9 @@
                 "wordpress"
             ],
             "support": {
-                "source": "https://github.com/Automattic/jetpack-autoloader/tree/v5.0.21"
+                "source": "https://github.com/Automattic/jetpack-autoloader/tree/v5.0.23"
             },
-            "time": "2026-07-13T23:33:42+00:00"
+            "time": "2026-08-11T18:32:06+00:00"
         },
         {
             "name": "campaignmonitor/createsend-php",
@@ -136,16 +136,16 @@
         },
         {
             "name": "woocommerce/email-editor",
-            "version": "2.15.1",
+            "version": "2.16.1",
             "source": {
                 "type": "git",
                 "url": "https://github.com/woocommerce/email-editor.git",
-                "reference": "620f16bc1ee7ad33b7b5df8f354286a0033a33da"
+                "reference": "29ff66fa639a9b356c6f1b4032249b6fcea7a264"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/woocommerce/email-editor/zipball/620f16bc1ee7ad33b7b5df8f354286a0033a33da",
-                "reference": "620f16bc1ee7ad33b7b5df8f354286a0033a33da",
+                "url": "https://api.github.com/repos/woocommerce/email-editor/zipball/29ff66fa639a9b356c6f1b4032249b6fcea7a264",
+                "reference": "29ff66fa639a9b356c6f1b4032249b6fcea7a264",
                 "shasum": ""
             },
             "require": {
@@ -187,9 +187,9 @@
             ],
             "description": "Email editor based on WordPress Gutenberg package.",
             "support": {
-                "source": "https://github.com/woocommerce/email-editor/tree/2.15.1"
+                "source": "https://github.com/woocommerce/email-editor/tree/2.16.1"
             },
-            "time": "2026-07-30T06:35:43+00:00"
+            "time": "2026-08-14T18:44:41+00:00"
         }
     ],
     "packages-dev": [

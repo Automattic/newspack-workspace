@@ -5,7 +5,7 @@
 /**
  * WordPress dependencies
  */
-import { __, sprintf } from '@wordpress/i18n';
+import { __, _n, sprintf } from '@wordpress/i18n';
 import { useState, useEffect, useCallback, useMemo } from '@wordpress/element';
 import { useDispatch } from '@wordpress/data';
 import apiFetch from '@wordpress/api-fetch';
@@ -14,6 +14,7 @@ import type { Action, Field, View, RenderModalProps } from '@wordpress/dataviews
 import {
 	Spinner,
 	Button,
+	Notice,
 	__experimentalVStack as VStack, // eslint-disable-line @wordpress/no-unsafe-wp-apis
 	__experimentalHStack as HStack, // eslint-disable-line @wordpress/no-unsafe-wp-apis
 } from '@wordpress/components';
@@ -21,7 +22,8 @@ import {
 /**
  * Internal dependencies
  */
-import { DataViews, Badge, Router } from '../../../../../packages/components/src';
+import { DataViews, Badge, Router, WizardBanner } from '../../../../../packages/components/src';
+import { formatCount } from '../../../../../packages/components/src/breadcrumbs/format-count';
 import { WIZARD_STORE_NAMESPACE } from '../../../../../packages/components/src/wizard/store';
 import CatalogImpact from './catalog-impact';
 import { intentLabel } from './recipes';
@@ -64,18 +66,20 @@ export default function PricingRulesList() {
 	const history = useHistory();
 	const [ data, setData ] = useState< PricingRuleRow[] >( [] );
 	const [ isLoading, setIsLoading ] = useState( true );
+	const [ hasError, setHasError ] = useState( false );
 	const [ view, setView ] = useState< View >( DEFAULT_VIEW );
 	const [ segmentMap, setSegmentMap ] = useState< Record< number, string > >( {} );
 	const [ currency, setCurrency ] = useState< PricingRulesCurrency >( { code: '', symbol: '', decimals: 2 } );
 
 	useEffect( () => {
 		setHeaderData( {
-			actions: [ { type: 'primary', label: __( 'Add rule', 'newspack-plugin' ), href: '#/new' } ],
+			actions: [ { type: 'primary', label: __( 'Add Rule', 'newspack-plugin' ), href: '#/new' } ],
 		} );
 	}, [ setHeaderData ] );
 
 	const fetchData = useCallback( () => {
 		setIsLoading( true );
+		setHasError( false );
 		apiFetch< PricingRulesResponse >( { path: API_PATH } )
 			.then( response => {
 				setData( response.rules || [] );
@@ -88,15 +92,9 @@ export default function PricingRulesList() {
 				} );
 				setSegmentMap( map );
 			} )
-			.catch( () =>
-				addNotice( {
-					message: __( 'Failed to load pricing rules. Please refresh the page.', 'newspack-plugin' ),
-					type: 'error',
-					id: 'pricing-rules-fetch-error',
-				} )
-			)
+			.catch( () => setHasError( true ) )
 			.finally( () => setIsLoading( false ) );
-	}, [ addNotice ] );
+	}, [] );
 
 	useEffect( () => {
 		fetchData();
@@ -239,7 +237,7 @@ export default function PricingRulesList() {
 										closeModal?.();
 									} }
 								>
-									{ __( 'Move to trash', 'newspack-plugin' ) }
+									{ __( 'Move to Trash', 'newspack-plugin' ) }
 								</Button>
 							</HStack>
 						</VStack>
@@ -252,14 +250,45 @@ export default function PricingRulesList() {
 
 	const { data: processedData, paginationInfo } = useMemo( () => filterSortAndPaginate( data, view, fields ), [ data, view, fields ] );
 
+	// No count while the fetch is in flight or after it failed: a "(0)" would read as an empty list.
+	const totalItems = paginationInfo.totalItems;
+	useEffect( () => {
+		setHeaderData( {
+			sectionName: [
+				{
+					label: __( 'Pricing Rules', 'newspack-plugin' ),
+					count: isLoading || hasError ? undefined : totalItems,
+					countLabel: sprintf(
+						/* translators: %s: number of pricing rules matching the current view. */
+						_n( '%s rule', '%s rules', totalItems, 'newspack-plugin' ),
+						formatCount( totalItems )
+					),
+				},
+			],
+		} );
+	}, [ setHeaderData, totalItems, isLoading, hasError ] );
+
 	return (
 		<div className="newspack-pricing-rules">
 			<CatalogImpact />
-			{ isLoading ? (
+			{ isLoading && (
 				<div style={ { display: 'flex', justifyContent: 'center', padding: '48px' } }>
 					<Spinner />
 				</div>
-			) : (
+			) }
+			{ ! isLoading && hasError && (
+				<WizardBanner>
+					<Notice
+						className="newspack-wizard__load-error"
+						status="error"
+						isDismissible={ false }
+						actions={ [ { label: __( 'Retry', 'newspack-plugin' ), onClick: fetchData } ] }
+					>
+						{ __( 'Could not load pricing rules.', 'newspack-plugin' ) }
+					</Notice>
+				</WizardBanner>
+			) }
+			{ ! isLoading && ! hasError && (
 				<DataViews
 					data={ processedData }
 					fields={ fields }

@@ -319,9 +319,17 @@ final class Newspack_Popups_Model {
 		if ( ! Newspack_Popups::can_preview_popup( $post_id ) ) {
 			return null;
 		}
-		// Up-to-date post data is stored in an autosave.
+		// The editor's autosave only holds the freshest content while there are
+		// unsaved changes. After a full save it can be OLDER than the saved post
+		// (Gutenberg's autosave() no-ops on a clean post), so prefer it only when
+		// it is actually newer than the saved post — otherwise a block removed
+		// before the last save would linger in the preview (NPPM-2940).
+		$saved       = get_post( $post_id );
 		$autosave    = wp_get_post_autosave( $post_id );
-		$post_object = $autosave ? $autosave : get_post( $post_id );
+		$post_object = $saved;
+		if ( $autosave && ( ! $saved || strtotime( $autosave->post_modified_gmt ) > strtotime( $saved->post_modified_gmt ) ) ) {
+			$post_object = $autosave;
+		}
 		if ( ! $post_object ) {
 			return null;
 		}
@@ -723,6 +731,13 @@ final class Newspack_Popups_Model {
 
 		if ( $duplicate_of ) {
 			$popup['duplicate_of'] = $duplicate_of;
+		}
+
+		$ab_fields = Newspack_Popups_AB_Tests::get_popup_ab_fields( $id, true );
+
+		if ( $ab_fields ) {
+			$popup['ab_test_id'] = $ab_fields['test_id'];
+			$popup['ab_variant'] = $ab_fields['variant'];
 		}
 
 		if ( self::is_inline( $popup ) ) {
@@ -1183,6 +1198,10 @@ final class Newspack_Popups_Model {
 				<?php if ( ! empty( $utm_suppression ) ) : ?>
 					data-suppression="<?php echo esc_attr( $utm_suppression ); ?>"
 				<?php endif; ?>
+				<?php if ( ! empty( $popup['ab_test_id'] ) ) : ?>
+					data-ab-test-id="<?php echo esc_attr( $popup['ab_test_id'] ); ?>"
+					data-ab-variant="<?php echo esc_attr( $popup['ab_variant'] ); ?>"
+				<?php endif; ?>
 			>
 				<?php echo do_shortcode( $body ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
 			</div>
@@ -1343,6 +1362,10 @@ final class Newspack_Popups_Model {
 			data-frequency="<?php echo esc_attr( $frequency_config ); ?>"
 			<?php if ( ! empty( $utm_suppression ) ) : ?>
 				data-suppression="<?php echo esc_attr( $utm_suppression ); ?>"
+			<?php endif; ?>
+			<?php if ( ! empty( $popup['ab_test_id'] ) ) : ?>
+				data-ab-test-id="<?php echo esc_attr( $popup['ab_test_id'] ); ?>"
+				data-ab-variant="<?php echo esc_attr( $popup['ab_variant'] ); ?>"
 			<?php endif; ?>
 
 			<?php if ( $is_scroll_triggered ) : ?>
