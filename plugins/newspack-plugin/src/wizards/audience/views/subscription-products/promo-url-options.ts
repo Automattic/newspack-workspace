@@ -33,6 +33,9 @@ export type PromoContext = {
 	// subscription-shaped. Distinct from eligible_children, which describes
 	// what the reader-chooses picker renders.
 	offerable_children?: number[];
+	// Whether a link naming the row product itself yields a working button
+	// (the renderer's price gate).
+	parent_offerable?: boolean;
 	donate_config?: PromoTargetDonateConfig | null;
 };
 
@@ -157,6 +160,8 @@ export type PromoValidationInput = {
 	// The plan has children, but none survived the offerable filter: a link
 	// would name the bare parent and open an empty picker.
 	hasUnservableChildren?: boolean;
+	// False when a link naming the row product itself cannot render a button.
+	parentOfferable?: boolean;
 	variationId: number | '';
 	donateConfig: PromoTargetDonateConfig | null;
 	effectiveAmount: number | 'other' | undefined;
@@ -185,6 +190,9 @@ export function getValidationError( input: PromoValidationInput ): string | null
 	if ( kind === 'product' && input.requiresChild && input.variationId === '' ) {
 		return __( 'Choose which plan option the link should check out.', 'newspack-plugin' );
 	}
+	if ( kind === 'product' && input.variationId === '' && input.parentOfferable === false ) {
+		return __( 'This plan cannot be checked out from a link.', 'newspack-plugin' );
+	}
 	if ( kind === 'donation' ) {
 		if ( ! donateConfig ) {
 			return __( 'The Donate block on this page cannot take a promotional link.', 'newspack-plugin' );
@@ -203,6 +211,11 @@ export function getValidationError( input: PromoValidationInput ): string | null
 		if ( typeof effectiveAmount === 'number' && donateConfig.layout_param !== 'untiered' && ! input.presets.includes( effectiveAmount ) ) {
 			return __( 'Choose one of the amounts available on the target page.', 'newspack-plugin' );
 		}
+	}
+	// A pending check withholds the link: the generator's promise is that an
+	// emitted URL works, so an unanswered coupon cannot ride along.
+	if ( 'checking' === input.couponState ) {
+		return __( 'Checking the coupon…', 'newspack-plugin' );
 	}
 	if ( 'invalid' === input.couponState ) {
 		return input.couponReason || __( 'The coupon code is not valid.', 'newspack-plugin' );

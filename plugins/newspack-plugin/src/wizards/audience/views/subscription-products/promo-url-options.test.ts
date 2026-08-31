@@ -148,6 +148,16 @@ describe( 'getValidationError', () => {
 		expect( getValidationError( { ...productBase, hasUnservableChildren: true } ) ).toBe( 'This plan has no options a link can check out.' );
 	} );
 
+	it( 'refuses a parent-naming link when the parent cannot render a button', () => {
+		// An unpriced non-variable plan yields no checkout form, so the link
+		// would do nothing.
+		expect( getValidationError( { ...productBase, variationId: '', parentOfferable: false } ) ).toBe(
+			'This plan cannot be checked out from a link.'
+		);
+		// A chosen child is its own link target; the parent verdict does not gate it.
+		expect( getValidationError( { ...productBase, parentOfferable: false } ) ).toBeNull();
+	} );
+
 	it( 'reports a Donate block that cannot take a link', () => {
 		expect( getValidationError( { ...donationBase, donateConfig: null } ) ).toBe(
 			'The Donate block on this page cannot take a promotional link.'
@@ -175,8 +185,11 @@ describe( 'getValidationError', () => {
 		expect( getValidationError( { ...productBase, couponState: 'invalid' } ) ).toBe( 'The coupon code is not valid.' );
 	} );
 
-	it( 'does not block on a coupon still being checked or already valid', () => {
-		expect( getValidationError( { ...productBase, couponState: 'checking' } ) ).toBeNull();
+	it( 'withholds the link while the coupon check is pending', () => {
+		expect( getValidationError( { ...productBase, couponState: 'checking' } ) ).toBe( 'Checking the coupon…' );
+	} );
+
+	it( 'does not block on an idle or valid coupon state', () => {
 		expect( getValidationError( { ...productBase, couponState: 'valid' } ) ).toBeNull();
 		expect( getValidationError( { ...productBase, couponState: 'idle' } ) ).toBeNull();
 	} );

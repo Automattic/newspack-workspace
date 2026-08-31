@@ -49,7 +49,7 @@ import type { PromoContext, PromoCouponResponse, PromoPageChoice } from './promo
 const API_BASE = '/newspack/v1/wizard/newspack-audience-subscription-products';
 const HOMEPAGE_VALUE = 'home';
 
-type CouponStatus = { state: 'idle' | 'checking' | 'valid' | 'invalid'; reason?: string };
+type CouponStatus = { state: 'idle' | 'checking' | 'valid' | 'invalid'; reason?: string; code?: string; productId?: number };
 
 export default function PromoUrlModal( { item, closeModal }: { item: SubscriptionProduct; closeModal?: () => void } ) {
 	const { addNotice } = useDispatch( WIZARD_STORE_NAMESPACE );
@@ -176,12 +176,21 @@ export default function PromoUrlModal( { item, closeModal }: { item: Subscriptio
 			} )
 				.then( result => {
 					if ( ! ignore ) {
-						setCouponStatus( result.valid ? { state: 'valid' } : { state: 'invalid', reason: result.reason } );
+						setCouponStatus(
+							result.valid
+								? { state: 'valid', code: coupon, productId: couponProductId }
+								: { state: 'invalid', reason: result.reason, code: coupon, productId: couponProductId }
+						);
 					}
 				} )
 				.catch( () => {
 					if ( ! ignore ) {
-						setCouponStatus( { state: 'invalid', reason: __( 'Could not validate the coupon.', 'newspack-plugin' ) } );
+						setCouponStatus( {
+							state: 'invalid',
+							reason: __( 'Could not validate the coupon.', 'newspack-plugin' ),
+							code: coupon,
+							productId: couponProductId,
+						} );
 					}
 				} );
 		}, 500 );
@@ -191,6 +200,23 @@ export default function PromoUrlModal( { item, closeModal }: { item: Subscriptio
 		};
 	}, [ coupon, couponProductId ] );
 
+	// A settled status only counts for the exact coupon/product pair it answered.
+	// Anything else — including the frame before the effect fires — is still
+	// checking, and the link is withheld until the current pair's answer arrives.
+	const effectiveCouponState = useMemo( () => {
+		if ( ! coupon ) {
+			return 'idle' as const;
+		}
+		if (
+			( couponStatus.state === 'valid' || couponStatus.state === 'invalid' ) &&
+			couponStatus.code === coupon &&
+			couponStatus.productId === couponProductId
+		) {
+			return couponStatus.state;
+		}
+		return 'checking' as const;
+	}, [ coupon, couponProductId, couponStatus ] );
+
 	// A specific child is required unless the plan's picker provides the
 	// "reader chooses" option.
 	const requiresChild = planChoices.length > 0 && ! planChoices.some( choice => choice.value === '' );
@@ -198,6 +224,8 @@ export default function PromoUrlModal( { item, closeModal }: { item: Subscriptio
 	// than emit one naming the bare parent, which would open an empty picker.
 	const childCount = kind === 'product' ? ( ( item.type === 'grouped' ? item.bundled_products : item.variations ) || [] ).length : 0;
 	const hasUnservableChildren = childCount > 0 && planChoices.length === 0;
+	// Absent on older responses means no verdict, not a refusal.
+	const parentOfferable = kind === 'product' ? context?.parent_offerable !== false : undefined;
 	const effectiveAmount: number | 'other' | undefined = useMemo( () => {
 		if ( kind !== 'donation' ) {
 			return undefined;
@@ -241,12 +269,13 @@ export default function PromoUrlModal( { item, closeModal }: { item: Subscriptio
 				hasTarget: Boolean( pageUrl ),
 				requiresChild,
 				hasUnservableChildren,
+				parentOfferable,
 				variationId,
 				donateConfig,
 				effectiveAmount,
 				customAmount,
 				presets: amountChoices.presets,
-				couponState: kind === 'product' ? couponStatus.state : undefined,
+				couponState: kind === 'product' ? effectiveCouponState : undefined,
 				couponReason: couponStatus.reason,
 				afterSuccess: kind === 'product' ? afterSuccess : '',
 				afterSuccessUrl,
@@ -257,6 +286,8 @@ export default function PromoUrlModal( { item, closeModal }: { item: Subscriptio
 			pageUrl,
 			requiresChild,
 			hasUnservableChildren,
+			parentOfferable,
+			effectiveCouponState,
 			variationId,
 			donateConfig,
 			effectiveAmount,
@@ -324,7 +355,7 @@ export default function PromoUrlModal( { item, closeModal }: { item: Subscriptio
 	}
 
 	let couponHelp: string | undefined;
-	switch ( couponStatus.state ) {
+	switch ( effectiveCouponState ) {
 		case 'checking':
 			couponHelp = __( 'Checking…', 'newspack-plugin' );
 			break;
