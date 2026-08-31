@@ -20,6 +20,7 @@ import {
 	Button,
 	ComboboxControl,
 	Notice,
+	Panel,
 	PanelBody,
 	SelectControl,
 	Spinner,
@@ -440,13 +441,17 @@ export default function PromoUrlModal( { item, closeModal }: { item: Subscriptio
 					) }
 				</>
 			) }
-			<PanelBody title={ __( 'Campaign tracking', 'newspack-plugin' ) } initialOpen={ false }>
-				<HStack alignment="top">
-					<TextControl label="utm_source" value={ utmSource } onChange={ setUtmSource } />
-					<TextControl label="utm_medium" value={ utmMedium } onChange={ setUtmMedium } />
-					<TextControl label="utm_campaign" value={ utmCampaign } onChange={ setUtmCampaign } />
-				</HStack>
-			</PanelBody>
+			{ /* PanelBody draws only top/bottom rules on its own; Panel supplies the
+			     surrounding frame so the section reads as one bordered box. */ }
+			<Panel>
+				<PanelBody title={ __( 'Campaign tracking', 'newspack-plugin' ) } initialOpen={ false }>
+					<HStack alignment="top">
+						<TextControl label="utm_source" value={ utmSource } onChange={ setUtmSource } />
+						<TextControl label="utm_medium" value={ utmMedium } onChange={ setUtmMedium } />
+						<TextControl label="utm_campaign" value={ utmCampaign } onChange={ setUtmCampaign } />
+					</HStack>
+				</PanelBody>
+			</Panel>
 			{ validationError ? (
 				<Notice status="warning" isDismissible={ false }>
 					{ validationError }
