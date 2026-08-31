@@ -273,10 +273,10 @@ final class Accessibility_Statement_Page {
 
 		$page_id = self::find_legacy_page_id();
 		if ( $page_id ) {
-			self::store_page_id( $page_id );
-			// The page may have come from a theme that is no longer active;
-			// a rolled-back plugin only looks at the active one.
-			set_theme_mod( self::LEGACY_THEME_MOD, $page_id );
+			// The page may have come from a theme that is no longer active; a
+			// rolled-back plugin only looks at the active one, so the breadcrumb
+			// has to name the page the site ends up on, not the one found here.
+			set_theme_mod( self::LEGACY_THEME_MOD, self::store_page_id( $page_id ) );
 		} elseif ( get_theme_mod( self::LEGACY_THEME_MOD ) ) {
 			remove_theme_mod( self::LEGACY_THEME_MOD );
 		}
@@ -298,16 +298,27 @@ final class Accessibility_Statement_Page {
 	 * write. That narrows the window to the re-read itself rather than closing
 	 * it; no option API can do better, and the cost lands once per site.
 	 *
+	 * All three option cache entries go, not just the two the autoloaded row
+	 * uses: an autoload optimiser can leave the row out of `alloptions`, and the
+	 * per-option entry would then serve this request's own miss back to us.
+	 *
 	 * @param int $page_id The page ID to store.
-	 * @return void
+	 * @return int The page ID the site points at, which is not the one passed in
+	 *             when another request got there first.
 	 */
-	private static function store_page_id( int $page_id ): void {
+	private static function store_page_id( int $page_id ): int {
+		wp_cache_delete( self::OPTION_NAME, 'options' );
 		wp_cache_delete( 'notoptions', 'options' );
 		wp_cache_delete( 'alloptions', 'options' );
 
-		if ( ! (int) get_option( self::OPTION_NAME, 0 ) ) {
-			update_option( self::OPTION_NAME, $page_id, true );
+		$stored = (int) get_option( self::OPTION_NAME, 0 );
+		if ( $stored ) {
+			return $stored;
 		}
+
+		update_option( self::OPTION_NAME, $page_id, true );
+
+		return $page_id;
 	}
 
 	/**

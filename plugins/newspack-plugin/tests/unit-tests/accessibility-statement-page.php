@@ -554,6 +554,42 @@ class Test_Accessibility_Statement_Page extends WP_UnitTestCase {
 	}
 
 	/**
+	 * A pointer stored while the scan was running wins. The decision to write is
+	 * made before the scan starts, so a create_page() landing in that gap would
+	 * otherwise be sent back to the older page, and the rollback breadcrumb with
+	 * it. This is the branch the cache deletes in store_page_id() exist for.
+	 */
+	public function test_a_pointer_stored_during_the_scan_is_not_overwritten() {
+		global $wpdb;
+
+		$legacy     = $this->make_page();
+		$concurrent = $this->make_page( 'publish' );
+		set_theme_mod( Accessibility_Statement_Page::LEGACY_THEME_MOD, $legacy );
+
+		// Fires part-way through the scan. Writing straight to the table leaves
+		// this request's cached miss in place, exactly as another process would.
+		$store_competing_pointer = function ( $mods ) use ( $wpdb, $concurrent ) {
+			$wpdb->replace( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+				$wpdb->options,
+				[
+					'option_name'  => Accessibility_Statement_Page::OPTION_NAME,
+					'option_value' => $concurrent,
+					'autoload'     => 'on',
+				]
+			);
+			return $mods;
+		};
+
+		$filter = 'option_theme_mods_' . get_stylesheet();
+		add_filter( $filter, $store_competing_pointer );
+		Accessibility_Statement_Page::migrate_legacy_theme_mod();
+		remove_filter( $filter, $store_competing_pointer );
+
+		$this->assertSame( $concurrent, (int) get_option( Accessibility_Statement_Page::OPTION_NAME ) );
+		$this->assertSame( $concurrent, (int) get_theme_mod( Accessibility_Statement_Page::LEGACY_THEME_MOD ) );
+	}
+
+	/**
 	 * The admin list marks the page the site actually uses.
 	 */
 	public function test_post_state_marks_the_stored_page() {

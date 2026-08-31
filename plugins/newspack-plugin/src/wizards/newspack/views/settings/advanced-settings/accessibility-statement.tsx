@@ -31,7 +31,8 @@ type PageData = {
  */
 type PageResponse = PageData | { reason: 'none' | 'missing' };
 
-const isPage = ( response: PageResponse ): response is PageData => typeof response === 'object' && response !== null && ! ( 'reason' in response );
+export const isPage = ( response: PageResponse ): response is PageData =>
+	typeof response === 'object' && response !== null && ! ( 'reason' in response );
 
 export default function AccessibilityStatement( { isFetching }: AccessibilityStatementProps ) {
 	const { wizardApiFetch, errorMessage, resetError } = useWizardApiFetch( 'newspack-settings/advanced-settings/accessibility-statement' );
