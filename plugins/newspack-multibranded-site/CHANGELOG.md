@@ -1,3 +1,17 @@
+## newspack-multibranded-site [2.4.5](https://github.com/Automattic/newspack-workspace/compare/newspack-multibranded-site@2.4.4...newspack-multibranded-site@2.4.5) (2026-08-31)
+
+
+### Dependencies
+
+* **newspack-components:** upgraded to 4.7.0
+
+## newspack-multibranded-site [2.4.4](https://github.com/Automattic/newspack-workspace/compare/newspack-multibranded-site@2.4.3...newspack-multibranded-site@2.4.4) (2026-08-20)
+
+
+### Dependencies
+
+* **newspack-components:** upgraded to 4.6.3
+
 ## newspack-multibranded-site [2.4.3](https://github.com/Automattic/newspack-workspace/compare/newspack-multibranded-site@2.4.2...newspack-multibranded-site@2.4.3) (2026-08-17)
 
 

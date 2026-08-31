@@ -7,6 +7,9 @@
 
 namespace Test\Content_Distribution;
 
+// The payloads below carry absolute image URLs that get sideloaded on import.
+require_once __DIR__ . '/mock-remote-images.php';
+
 /**
  * Get a sample distributed post payload for testing.
  *
@@ -41,7 +44,7 @@ function get_sample_payload( $origin = '', $destination = '' ) {
 			'raw_content'    => '<!-- wp:paragraph --><p>Content</p><!-- /wp:paragraph -->',
 			'content'        => '<p>Content</p>',
 			'excerpt'        => 'Excerpt',
-			'thumbnail_url'  => 'https://picsum.photos/id/1/300/300.jpg',
+			'thumbnail_url'  => 'https://example.test/image-1.jpg',
 			'comment_status' => 'open',
 			'ping_status'    => 'open',
 			'taxonomy'       => [
@@ -73,7 +76,7 @@ function get_sample_payload( $origin = '', $destination = '' ) {
 			],
 			'media_data'     => [
 				[
-					'url'        => 'https://picsum.photos/id/1/300/300.jpg',
+					'url'        => 'https://example.test/image-1.jpg',
 					'caption'    => 'Caption',
 					'credit'     => 'Credit',
 					'credit_url' => 'https://credit.url',
