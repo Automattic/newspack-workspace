@@ -447,7 +447,13 @@ final class CSV_Exports {
 				<?php if ( 'users' === $type ) : ?>
 					<fieldset class="newspack-csv-export-modal__field" aria-describedby="<?php echo \esc_attr( $id ); ?>-roles-desc">
 						<legend><?php \esc_html_e( 'Roles', 'newspack-plugin' ); ?></legend>
-						<p class="description" id="<?php echo \esc_attr( $id ); ?>-roles-desc"><?php \esc_html_e( 'Leave all unchecked to export every role.', 'newspack-plugin' ); ?></p>
+						<p class="description" id="<?php echo \esc_attr( $id ); ?>-roles-desc">
+							<?php
+							echo $config['filter_unrepresented']
+								? \esc_html__( 'Leave all unchecked to keep the current list filter. This view has no checkbox here.', 'newspack-plugin' )
+								: \esc_html__( 'Leave all unchecked to export every role.', 'newspack-plugin' );
+							?>
+						</p>
 						<div class="newspack-csv-export-modal__checkboxes">
 							<?php foreach ( \wp_roles()->get_names() as $role => $label ) : ?>
 								<label>
@@ -483,7 +489,13 @@ final class CSV_Exports {
 				<?php if ( 'subscriptions' === $type && function_exists( 'wcs_get_subscription_statuses' ) ) : ?>
 					<fieldset class="newspack-csv-export-modal__field" aria-describedby="<?php echo \esc_attr( $id ); ?>-statuses-desc">
 						<legend><?php \esc_html_e( 'Statuses', 'newspack-plugin' ); ?></legend>
-						<p class="description" id="<?php echo \esc_attr( $id ); ?>-statuses-desc"><?php \esc_html_e( 'Leave all unchecked to export every status.', 'newspack-plugin' ); ?></p>
+						<p class="description" id="<?php echo \esc_attr( $id ); ?>-statuses-desc">
+							<?php
+							echo $config['filter_unrepresented']
+								? \esc_html__( 'Leave all unchecked to keep the current list filter. This view has no checkbox here.', 'newspack-plugin' )
+								: \esc_html__( 'Leave all unchecked to export every status.', 'newspack-plugin' );
+							?>
+						</p>
 						<div class="newspack-csv-export-modal__checkboxes">
 							<?php foreach ( \wcs_get_subscription_statuses() as $status => $label ) : ?>
 								<label>
@@ -553,19 +565,29 @@ final class CSV_Exports {
 	 *     @type string   $date_to   Y-m-d, or ''.
 	 *     @type string[] $roles     Preselected roles.
 	 *     @type string[] $statuses  Preselected subscription statuses.
+	 *     @type bool     $filter_unrepresented Whether the list's current filter
+	 *                                          has no control in the dialog, so
+	 *                                          clearing the group cannot lift it.
 	 * }
 	 */
 	private static function get_prefilled_config( string $type ): array {
 		// phpcs:disable WordPress.Security.NonceVerification.Recommended
 		$prefilled = [
-			'date_from' => '',
-			'date_to'   => '',
-			'roles'     => [],
-			'statuses'  => [],
+			'date_from'            => '',
+			'date_to'              => '',
+			'roles'                => [],
+			'statuses'             => [],
+			'filter_unrepresented' => false,
 		];
 
 		if ( 'users' === $type && ! empty( $_GET['role'] ) && is_string( $_GET['role'] ) ) {
-			$prefilled['roles'] = self::sanitize_roles( [ \sanitize_key( \wp_unslash( $_GET['role'] ) ) ] );
+			$role               = \sanitize_key( \wp_unslash( $_GET['role'] ) );
+			$prefilled['roles'] = self::sanitize_roles( [ $role ] );
+			// Core's role-less `?role=none` view has no checkbox of its own, so
+			// clearing the group cannot express it and the export keeps the
+			// list's filter instead. The dialog says so rather than promising
+			// something it does not do (see Users_CSV_Exporter::build_query_args()).
+			$prefilled['filter_unrepresented'] = empty( $prefilled['roles'] );
 		}
 
 		if ( 'subscriptions' === $type ) {
@@ -578,6 +600,8 @@ final class CSV_Exports {
 			}
 			if ( '' !== $status && 'all' !== $status ) {
 				$prefilled['statuses'] = self::sanitize_statuses( [ $status ] );
+				// The Trash tab has no checkbox, same as `?role=none` above.
+				$prefilled['filter_unrepresented'] = empty( $prefilled['statuses'] );
 			}
 			// The list's month filter is the closest thing it has to a date
 			// range; carry it in as one so the dialog opens on the same view.
