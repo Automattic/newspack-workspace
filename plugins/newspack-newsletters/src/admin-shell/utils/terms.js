@@ -91,6 +91,18 @@ export const idsMissingFromOptions = ( ids, options ) => {
 	return ( Array.isArray( ids ) ? ids : [] ).filter( id => typeof id === 'number' && ! known.has( id ) );
 };
 
+// Union of two term lists, newest name winning, sorted by name to match the
+// REST default. Used when a list is re-fetched: `fetchAllTerms` returns
+// whatever it collected when a page request fails, so replacing a good list
+// with a short one would drop terms that are still there. Growing only means a
+// failed re-attempt can never cost ground. The trade is that a term deleted
+// elsewhere lingers until the screen is reloaded.
+export const mergeTerms = ( current, next ) => {
+	const byId = new Map( ( Array.isArray( current ) ? current : [] ).map( term => [ term.id, term ] ) );
+	( Array.isArray( next ) ? next : [] ).forEach( term => byId.set( term.id, term ) );
+	return [ ...byId.values() ].sort( ( a, b ) => String( a.name ).localeCompare( String( b.name ) ) );
+};
+
 export const unresolvedIds = ( ids, selections ) => {
 	const resolved = new Set( selections.map( selection => selection.id ) );
 	return ( Array.isArray( ids ) ? ids : [] ).filter( id => typeof id === 'number' && ! resolved.has( id ) );

@@ -14,7 +14,7 @@ import HeaderCount from '../../components/header-count';
 import ItemsPerPage from '../../components/items-per-page';
 import { useHeaderActions } from '../../header-actions-context';
 import usePersistedView from '../../hooks/use-persisted-view';
-import { fetchAllTerms, idsMissingFromOptions } from '../../utils/terms';
+import { fetchAllTerms, idsMissingFromOptions, mergeTerms } from '../../utils/terms';
 import useAdsData from './use-ads-data';
 import { getFields } from './fields';
 import { getActions } from './actions';
@@ -48,25 +48,18 @@ const ADS_CPT = 'newspack_nl_ads_cpt';
 // swallows request failures and returns what it collected, so Quick Edit
 // judges completeness by whether the settled lists account for an ad's
 // stored term IDs.
-// Union rather than replacement. `fetchAllTerms` breaks out of its pagination
-// loop on the first failed request and returns what it collected, so a
-// re-attempt that blips comes back short — and since Quick Edit now gates
-// editability on these lists, replacing a good list with a truncated one would
-// disable a field for an ad that is fine, and empty the filter dropdowns with
-// it. Growing only means a blip can never cost ground.
-const mergeTerms = ( current, next ) => {
-	const byId = new Map( current.map( term => [ term.id, term ] ) );
-	( Array.isArray( next ) ? next : [] ).forEach( term => byId.set( term.id, term ) );
-	return [ ...byId.values() ];
-};
-
 function useFilterTerms() {
 	const [ terms, setTerms ] = useState( { advertisers: [], placements: [], hasLoaded: false } );
 	const [ attempt, setAttempt ] = useState( 0 );
 	// Quick Edit gates editability on these lists, so a single failed request
 	// would otherwise leave every ad opened afterwards read-only until the page
-	// is reloaded.
-	const reload = useCallback( () => setAttempt( current => current + 1 ), [] );
+	// is reloaded. `hasLoaded` goes back to false for the duration: a
+	// re-attempt is a load, and without this the panel would paint "could not
+	// be loaded" — announcing it — for the round trip that is about to fix it.
+	const reload = useCallback( () => {
+		setTerms( current => ( { ...current, hasLoaded: false } ) );
+		setAttempt( current => current + 1 );
+	}, [] );
 
 	useEffect( () => {
 		let cancelled = false;
@@ -103,29 +96,37 @@ export default function AdsListScreen() {
 
 	const fields = useMemo( () => getFields( filterTerms ), [ filterTerms ] );
 
-	// Retry the shared lists when Quick Edit opens, but only when this ad has
-	// terms they cannot explain — that is, only when the panel would otherwise
-	// render the field read-only. A healthy list is never refetched, and the ref
-	// caps it at one attempt per row so a site whose taxonomy really is empty
-	// cannot spin.
-	const retriedForRef = useRef( null );
-	useEffect( () => {
-		if ( ! quickEditItem ) {
-			retriedForRef.current = null;
-			return;
-		}
-		if ( retriedForRef.current === quickEditItem.id ) {
-			return;
-		}
-		const incomplete =
-			idsMissingFromOptions( quickEditItem.newspack_nl_advertiser, filterTerms.advertisers ).length > 0 ||
-			idsMissingFromOptions( quickEditItem.ad_placement, filterTerms.placements ).length > 0;
-		if ( incomplete ) {
-			retriedForRef.current = quickEditItem.id;
-			reloadFilterTerms();
-		}
-	}, [ quickEditItem, filterTerms, reloadFilterTerms ] );
-	const actions = useMemo( () => getActions( { refresh, openQuickEdit: setQuickEditItem } ), [ refresh ] );
+	// Read at click time, so the callback below can stay stable for `getActions`.
+	const filterTermsRef = useRef( filterTerms );
+	filterTermsRef.current = filterTerms;
+
+	// Retry the shared lists when Quick Edit opens on a row they cannot explain
+	// — that is, only when the panel would otherwise render the field read-only.
+	// A healthy list is never refetched, and an unsettled one is left alone, so
+	// opening mid-load cannot cancel the fetch and restart its pagination.
+	//
+	// This runs in the click handler rather than an effect so the reload batches
+	// with setting the item: the panel's first render then already shows the
+	// loading state, instead of painting a "could not be loaded" notice — and
+	// announcing it through `speak()` — for the frame before an effect could
+	// clear it. One click is one attempt, so it cannot spin on a site whose
+	// taxonomy is legitimately empty.
+	const openQuickEdit = useCallback(
+		item => {
+			const { advertisers, placements, hasLoaded } = filterTermsRef.current;
+			const incomplete =
+				hasLoaded &&
+				( idsMissingFromOptions( item?.newspack_nl_advertiser, advertisers ).length > 0 ||
+					idsMissingFromOptions( item?.ad_placement, placements ).length > 0 );
+			if ( incomplete ) {
+				reloadFilterTerms();
+			}
+			setQuickEditItem( item );
+		},
+		[ reloadFilterTerms ]
+	);
+
+	const actions = useMemo( () => getActions( { refresh, openQuickEdit } ), [ refresh, openQuickEdit ] );
 
 	const isStrictEmpty =
 		hasLoadedOnce &&
