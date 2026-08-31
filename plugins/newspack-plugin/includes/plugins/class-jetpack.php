@@ -423,10 +423,10 @@ class Jetpack {
 	 * handler. The real query is stashed for the client script by
 	 * add_obfuscation_data_attribute().
 	 *
-	 * @param string $query  The sharing service URL query parameter.
-	 * @param object $source Sharing service properties. Unused.
+	 * @param string       $query  The sharing service URL query parameter.
+	 * @param object       $source Sharing service properties. Unused.
 	 * @param string|false $id     Sharing ID. Unused.
-	 * @param array  $args   Array of sharing service options. Unused.
+	 * @param array        $args   Array of sharing service options. Unused.
 	 * @return string The (possibly blanked) query.
 	 */
 	public static function obfuscate_share_query( $query, $source = null, $id = false, $args = [] ) {
