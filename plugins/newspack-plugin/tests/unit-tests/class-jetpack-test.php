@@ -93,11 +93,14 @@ class Test_Jetpack extends \WP_UnitTestCase {
 	 */
 	public function test_opt_out_filter_disables_query_blanking() {
 		add_filter( 'newspack_jetpack_obfuscate_share_links', '__return_false' );
-		$this->assertSame(
-			'share=twitter',
-			Jetpack::obfuscate_share_query( 'share=twitter', null, 'sharing-twitter-1', $this->get_link_args() )
-		);
-		remove_filter( 'newspack_jetpack_obfuscate_share_links', '__return_false' );
+		try {
+			$this->assertSame(
+				'share=twitter',
+				Jetpack::obfuscate_share_query( 'share=twitter', null, 'sharing-twitter-1', $this->get_link_args() )
+			);
+		} finally {
+			remove_filter( 'newspack_jetpack_obfuscate_share_links', '__return_false' );
+		}
 	}
 
 	/**
@@ -105,8 +108,11 @@ class Test_Jetpack extends \WP_UnitTestCase {
 	 */
 	public function test_opt_out_filter_disables_data_attribute() {
 		add_filter( 'newspack_jetpack_obfuscate_share_links', '__return_false' );
-		$result = Jetpack::add_obfuscation_data_attribute( [], null, 'sharing-twitter-1', $this->get_link_args() );
-		$this->assertArrayNotHasKey( 'share-query', $result );
-		remove_filter( 'newspack_jetpack_obfuscate_share_links', '__return_false' );
+		try {
+			$result = Jetpack::add_obfuscation_data_attribute( [], null, 'sharing-twitter-1', $this->get_link_args() );
+			$this->assertArrayNotHasKey( 'share-query', $result );
+		} finally {
+			remove_filter( 'newspack_jetpack_obfuscate_share_links', '__return_false' );
+		}
 	}
 }

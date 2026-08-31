@@ -491,8 +491,8 @@ class Jetpack {
 			return;
 		}
 		var href = anchor.getAttribute( 'href' ) || '';
-		var nb = query.indexOf( 'nb=' ) === -1 ? '&nb=1' : '';
-		anchor.setAttribute( 'href', href + ( href.indexOf( '?' ) === -1 ? '?' : '&' ) + query + nb );
+		var url = href + ( href.indexOf( '?' ) === -1 ? '?' : '&' ) + query;
+		anchor.setAttribute( 'href', url + ( url.indexOf( 'nb=' ) === -1 ? '&nb=1' : '' ) );
 		anchor.removeAttribute( 'data-share-query' );
 	}
 	[ 'pointerover', 'focusin', 'touchstart' ].forEach( function ( type ) {
