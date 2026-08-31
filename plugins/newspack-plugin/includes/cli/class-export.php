@@ -24,7 +24,7 @@ class Export {
 	 * ## OPTIONS
 	 *
 	 * [--status=<status>]
-	 * : Subscription status to export (e.g. active, on-hold). Defaults to all statuses.
+	 * : Subscription statuses to export, comma-separated (e.g. active,on-hold). Defaults to all statuses.
 	 *
 	 * [--product=<id>]
 	 * : Only subscriptions containing this product ID.
@@ -43,6 +43,18 @@ class Export {
 	 *
 	 * [--month=<yyyymm>]
 	 * : Only subscriptions created in this month, e.g. 202605.
+	 *
+	 * [--date-from=<yyyy-mm-dd>]
+	 * : Only subscriptions created on or after this date. Supersedes --month.
+	 *
+	 * [--date-to=<yyyy-mm-dd>]
+	 * : Only subscriptions created on or before this date. Supersedes --month.
+	 *
+	 * [--delimiter=<delimiter>]
+	 * : Field delimiter: comma (default), semicolon, tab or pipe.
+	 *
+	 * [--date-format=<format>]
+	 * : PHP date format for date columns. Default Y-m-d H:i:s.
 	 *
 	 * [--output=<path>]
 	 * : Output file path. Defaults to newspack-subscriptions-export-<date>-<random>.csv in the current directory.
@@ -64,7 +76,6 @@ class Export {
 		// Map flags to the admin-list param shape so the exporters' query
 		// translation is the single code path for both surfaces.
 		$flag_map = [
-			'status'         => 'post_status',
 			'product'        => '_wcs_product',
 			'customer'       => '_customer_user',
 			'payment-method' => '_payment_method',
@@ -87,10 +98,25 @@ class Export {
 	 * ## OPTIONS
 	 *
 	 * [--role=<role>]
-	 * : Only users with this role.
+	 * : Only users with these roles, comma-separated (e.g. subscriber,customer).
 	 *
 	 * [--search=<term>]
 	 * : Search term (same semantics as the admin users list search).
+	 *
+	 * [--date-from=<yyyy-mm-dd>]
+	 * : Only users registered on or after this date.
+	 *
+	 * [--date-to=<yyyy-mm-dd>]
+	 * : Only users registered on or before this date.
+	 *
+	 * [--meta=<keys>]
+	 * : Add one column per user meta key, comma-separated. Keys the site does not store are rejected.
+	 *
+	 * [--delimiter=<delimiter>]
+	 * : Field delimiter: comma (default), semicolon, tab or pipe.
+	 *
+	 * [--date-format=<format>]
+	 * : PHP date format for date columns. Default Y-m-d H:i:s.
 	 *
 	 * [--output=<path>]
 	 * : Output file path. Defaults to newspack-users-export-<date>-<random>.csv in the current directory.
@@ -107,13 +133,122 @@ class Export {
 	 */
 	public static function export_users( array $args, array $assoc_args ): void {
 		$params = [];
-		if ( ! empty( $assoc_args['role'] ) ) {
-			$params['role'] = $assoc_args['role'];
-		}
 		if ( ! empty( $assoc_args['search'] ) ) {
 			$params['s'] = $assoc_args['search'];
 		}
 		self::run_export( 'users', $params, $assoc_args );
+	}
+
+	/**
+	 * Translate the export-option flags into the export config the admin
+	 * dialog posts, so both surfaces go through one sanitizer.
+	 *
+	 * @param string $type       Export type: 'subscriptions' or 'users'.
+	 * @param array  $assoc_args CLI associative args.
+	 * @return array Sanitized export config.
+	 */
+	private static function build_export_config( string $type, array $assoc_args ): array {
+		$raw = [
+			'date_from' => $assoc_args['date-from'] ?? '',
+			'date_to'   => $assoc_args['date-to'] ?? '',
+			'delimiter' => $assoc_args['delimiter'] ?? '',
+		];
+
+		$date_format = $assoc_args['date-format'] ?? '';
+		if ( '' !== $date_format ) {
+			// Anything outside the offered formats is still a valid PHP date
+			// format on the command line; route it through the custom slot.
+			if ( in_array( $date_format, CSV_Exports::DATE_FORMATS, true ) ) {
+				$raw['date_format'] = $date_format;
+			} else {
+				$raw['date_format']        = 'custom';
+				$raw['date_format_custom'] = $date_format;
+			}
+		}
+
+		if ( 'users' === $type ) {
+			$raw['meta_keys'] = self::split_list( $assoc_args['meta'] ?? '' );
+			$raw['roles']     = self::split_list( $assoc_args['role'] ?? '' );
+		}
+		if ( 'subscriptions' === $type ) {
+			$raw['statuses'] = self::split_list( $assoc_args['status'] ?? '' );
+		}
+
+		// selection_submitted is deliberately not set here. It exists so an
+		// emptied dialog overrides the list filter it was opened on; the CLI
+		// has no list filter, so setting it would only suppress the flags that
+		// travel in $params — --month among them.
+		$config = CSV_Exports::sanitize_export_config( $raw, $type );
+		self::assert_flags_survived_sanitization( $raw, $config, $assoc_args );
+		return $config;
+	}
+
+	/**
+	 * Stop the run when a supplied flag did not survive sanitization.
+	 *
+	 * The dialog can drop an unrecognized value silently — its inputs come from
+	 * a list the server rendered. A hand-typed flag cannot: dropping it removes
+	 * the restriction the operator asked for, so `--role=subsciber` would write
+	 * every user to a CSV instead of none.
+	 *
+	 * @param array $raw        The raw config assembled from the flags.
+	 * @param array $config     The sanitized config.
+	 * @param array $assoc_args CLI associative args.
+	 */
+	private static function assert_flags_survived_sanitization( array $raw, array $config, array $assoc_args ): void {
+		foreach ( [
+			'roles'    => 'role',
+			'statuses' => 'status',
+		] as $key => $flag ) {
+			// Compared value by value rather than by count: a repeated value
+			// collapses on one side only, which would let a typo through
+			// alongside a duplicate.
+			$dropped = [];
+			foreach ( $raw[ $key ] ?? [] as $value ) {
+				$normalized = 'statuses' === $key
+					? \wcs_sanitize_subscription_status_key( $value )
+					: \sanitize_key( $value );
+				if ( ! in_array( $normalized, $config[ $key ] ?? [], true ) ) {
+					$dropped[] = $value;
+				}
+			}
+			if ( ! empty( $dropped ) ) {
+				WP_CLI::error( sprintf( 'Unrecognized --%1$s value: %2$s', $flag, implode( ', ', array_unique( $dropped ) ) ) );
+			}
+		}
+		$dropped_keys = array_diff( $raw['meta_keys'] ?? [], $config['meta_keys'] ?? [] );
+		if ( ! empty( $dropped_keys ) ) {
+			WP_CLI::error( sprintf( 'This site stores no user meta under: %s', implode( ', ', $dropped_keys ) ) );
+		}
+		foreach ( [
+			'date_from' => 'date-from',
+			'date_to'   => 'date-to',
+		] as $key => $flag ) {
+			if ( '' !== ( $raw[ $key ] ?? '' ) && ! isset( $config[ $key ] ) ) {
+				WP_CLI::error( sprintf( 'Invalid --%1$s value "%2$s"; expected YYYY-MM-DD.', $flag, $raw[ $key ] ) );
+			}
+		}
+		if ( '' !== ( $raw['delimiter'] ?? '' ) && ! isset( $config['delimiter'] ) ) {
+			WP_CLI::error( sprintf( 'Unrecognized --delimiter value "%s"; expected comma, semicolon, tab or pipe.', $raw['delimiter'] ) );
+		}
+		// Truncating this would not fail; it would format every date cell wrongly.
+		$custom_format = $raw['date_format_custom'] ?? '';
+		if ( '' !== $custom_format && mb_strlen( $custom_format ) > CSV_Exports::MAX_CUSTOM_DATE_FORMAT_LENGTH ) {
+			WP_CLI::error( sprintf( '--date-format must be at most %d characters.', CSV_Exports::MAX_CUSTOM_DATE_FORMAT_LENGTH ) );
+		}
+	}
+
+	/**
+	 * Split a comma-separated flag value into a list.
+	 *
+	 * @param mixed $value Flag value.
+	 * @return string[]
+	 */
+	private static function split_list( $value ): array {
+		if ( ! is_string( $value ) || '' === trim( $value ) ) {
+			return [];
+		}
+		return array_values( array_filter( array_map( 'trim', explode( ',', $value ) ) ) );
 	}
 
 	/**
@@ -135,13 +270,15 @@ class Export {
 		// batch exporter's exported-row counter accumulates per instance, so
 		// reusing one instance across pages inflates get_total_exported() and
 		// ends the export early.
-		$make_exporter = function ( $page ) use ( $type, $params, $filename, $assoc_args ) {
+		$config        = self::build_export_config( $type, $assoc_args );
+		$make_exporter = function ( $page ) use ( $type, $params, $config, $filename, $assoc_args ) {
 			$exporter = CSV_Exports::get_exporter( $type );
 			if ( ! $exporter ) {
 				WP_CLI::error( 'WooCommerce (with its CSV export framework) must be active.' );
 			}
 			$exporter->set_filename( $filename );
 			$exporter->set_list_params( $params );
+			$exporter->set_export_config( $config );
 			if ( ! empty( $assoc_args['per-page'] ) ) {
 				$exporter->set_limit( absint( $assoc_args['per-page'] ) );
 			}

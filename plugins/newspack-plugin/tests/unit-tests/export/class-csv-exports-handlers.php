@@ -359,5 +359,13 @@ class Newspack_Test_CSV_Export_Handlers extends WP_UnitTestCase {
 			get_transient( 'newspack_export_total_' . md5( $filename ) ),
 			'The finished run must not leave its pinned total behind.'
 		);
+
+		// WooCommerce writes the headers row only on the page that reports
+		// 100%, which a short run never reaches — and the download refuses a
+		// file whose header row is missing. Without one written here, the
+		// partial CSV this notice warns about could not be downloaded at all.
+		$exporter = CSV_Exports::get_exporter( 'subscriptions' );
+		$exporter->set_filename( $filename );
+		$this->assertFileExists( $exporter->get_headers_row_file_path_public() );
 	}
 }

@@ -9,6 +9,10 @@ namespace Newspack;
 
 defined( 'ABSPATH' ) || exit;
 
+// The export dialog offers the site's user meta keys, so this loads with the
+// controller rather than with the WooCommerce-dependent exporters.
+require_once __DIR__ . '/class-user-meta-columns.php';
+
 /**
  * Batched CSV exports of WooCommerce Subscriptions and WP users, triggered
  * from the admin list tables and exporting the current filtered view.
@@ -52,6 +56,49 @@ final class CSV_Exports {
 	const EXPORTS_DIR = 'newspack-csv-exports';
 
 	/**
+	 * Export types whose button rendered on this screen, so the footer knows
+	 * which dialogs to print.
+	 *
+	 * @var string[]
+	 */
+	private static $rendered_types = [];
+
+	/**
+	 * Field delimiters offered in the export modal, as form value => character.
+	 * Posting a key rather than the character keeps a tab intact through form
+	 * encoding.
+	 */
+	const DELIMITERS = [
+		'comma'     => ',',
+		'semicolon' => ';',
+		'tab'       => "\t",
+		'pipe'      => '|',
+	];
+
+	/**
+	 * Date formats offered in the export modal, beyond the default and a
+	 * custom PHP format string.
+	 */
+	const DATE_FORMATS = [ 'Y-m-d H:i:s', 'Y-m-d', 'm/d/Y', 'd/m/Y', 'M j, Y' ];
+
+	/**
+	 * Longest custom date format string accepted.
+	 */
+	const MAX_CUSTOM_DATE_FORMAT_LENGTH = 32;
+
+	/**
+	 * The date format a CSV date column is written in unless the export picks
+	 * another one.
+	 */
+	const DEFAULT_DATE_FORMAT = 'Y-m-d H:i:s';
+
+	/**
+	 * Timestamp the date-format options are previewed with in the dialog
+	 * (2026-03-04 17:01:29 UTC), chosen so day and month can't be confused.
+	 */
+	const DATE_FORMAT_SAMPLE = 1772643689;
+
+	/**
 	 * Initialize hooks.
 	 */
 	public static function init() {
@@ -61,6 +108,7 @@ final class CSV_Exports {
 		\add_action( 'manage_posts_extra_tablenav', [ __CLASS__, 'render_subscriptions_button_cpt' ] );
 		\add_action( 'manage_users_extra_tablenav', [ __CLASS__, 'render_users_button' ] );
 
+		\add_action( 'admin_footer', [ __CLASS__, 'render_export_modals' ] );
 		\add_action( 'admin_enqueue_scripts', [ __CLASS__, 'admin_enqueue_scripts' ] );
 		\add_action( 'wp_ajax_' . self::AJAX_ACTION, [ __CLASS__, 'ajax_export' ] );
 		\add_action( 'admin_init', [ __CLASS__, 'download_export_file' ] );
@@ -95,6 +143,128 @@ final class CSV_Exports {
 			return class_exists( 'WooCommerce' ) && \current_user_can( 'list_users' ) && \current_user_can( 'manage_woocommerce' );
 		}
 		return false;
+	}
+
+	/**
+	 * Sanitize the export options posted from the export modal.
+	 *
+	 * Everything the exporters read from the config passes through here, so a
+	 * value that fails validation is dropped rather than reaching a query or a
+	 * date() call.
+	 *
+	 * @param array  $raw  Raw config params.
+	 * @param string $type Export type: 'subscriptions' or 'users'.
+	 * @return array Sanitized config.
+	 */
+	public static function sanitize_export_config( array $raw, string $type ): array {
+		// Both surfaces post this. It is what separates "the admin cleared the
+		// selection" from "no selection was ever made": an unchecked checkbox
+		// group posts nothing at all, so without it an emptied dialog would be
+		// indistinguishable from a bare button press and would silently fall
+		// back to the list's own filter.
+		$config = [ 'selection_submitted' => ! empty( $raw['selection_submitted'] ) ];
+
+		foreach ( [ 'date_from', 'date_to' ] as $key ) {
+			$date = isset( $raw[ $key ] ) && is_string( $raw[ $key ] ) ? trim( $raw[ $key ] ) : '';
+			if ( self::is_valid_date( $date ) ) {
+				$config[ $key ] = $date;
+			}
+		}
+		// A reversed range would silently export nothing; read it as the range
+		// the admin meant.
+		if ( ! empty( $config['date_from'] ) && ! empty( $config['date_to'] ) && $config['date_from'] > $config['date_to'] ) {
+			[ $config['date_from'], $config['date_to'] ] = [ $config['date_to'], $config['date_from'] ];
+		}
+
+		$delimiter_key = isset( $raw['delimiter'] ) && is_string( $raw['delimiter'] ) ? \sanitize_key( $raw['delimiter'] ) : '';
+		if ( isset( self::DELIMITERS[ $delimiter_key ] ) ) {
+			$config['delimiter'] = self::DELIMITERS[ $delimiter_key ];
+		}
+
+		$config['date_format'] = self::sanitize_date_format( $raw );
+
+		if ( 'users' === $type ) {
+			$config['meta_keys'] = User_Meta_Columns::sanitize_keys( $raw['meta_keys'] ?? [] );
+			$config['roles']     = self::sanitize_roles( $raw['roles'] ?? [] );
+		}
+		if ( 'subscriptions' === $type ) {
+			$config['statuses'] = self::sanitize_statuses( $raw['statuses'] ?? [] );
+		}
+
+		return $config;
+	}
+
+	/**
+	 * Whether a string is a real calendar date in Y-m-d form.
+	 *
+	 * @param string $date Candidate date.
+	 * @return bool
+	 */
+	private static function is_valid_date( string $date ): bool {
+		if ( ! preg_match( '/^(\d{4})-(\d{2})-(\d{2})$/', $date, $matches ) ) {
+			return false;
+		}
+		return checkdate( (int) $matches[2], (int) $matches[3], (int) $matches[1] );
+	}
+
+	/**
+	 * Resolve the date format for an export: one of the offered formats, a
+	 * custom PHP format string, or the default.
+	 *
+	 * @param array $raw Raw config params.
+	 * @return string PHP date format string.
+	 */
+	private static function sanitize_date_format( array $raw ): string {
+		$format = isset( $raw['date_format'] ) && is_string( $raw['date_format'] ) ? trim( $raw['date_format'] ) : '';
+		if ( 'custom' === $format ) {
+			$custom = isset( $raw['date_format_custom'] ) && is_string( $raw['date_format_custom'] )
+				? \sanitize_text_field( $raw['date_format_custom'] )
+				: '';
+			// Cut by characters, not bytes: the input's maxlength counts
+			// characters too, and a byte cut can split a multibyte separator
+			// and put invalid UTF-8 into every date cell.
+			$custom = mb_substr( $custom, 0, self::MAX_CUSTOM_DATE_FORMAT_LENGTH );
+			return '' !== $custom ? $custom : self::DEFAULT_DATE_FORMAT;
+		}
+		return in_array( $format, self::DATE_FORMATS, true ) ? $format : self::DEFAULT_DATE_FORMAT;
+	}
+
+	/**
+	 * Sanitize the selected roles against the roles the site actually has.
+	 *
+	 * @param mixed $roles Raw roles param.
+	 * @return string[]
+	 */
+	private static function sanitize_roles( $roles ): array {
+		if ( ! is_array( $roles ) ) {
+			return [];
+		}
+		$known = array_keys( \wp_roles()->get_names() );
+		return array_values( array_intersect( array_map( '\sanitize_key', array_filter( $roles, 'is_scalar' ) ), $known ) );
+	}
+
+	/**
+	 * Sanitize the selected subscription statuses against the registered ones.
+	 *
+	 * @param mixed $statuses Raw statuses param.
+	 * @return string[]
+	 */
+	private static function sanitize_statuses( $statuses ): array {
+		if ( ! is_array( $statuses ) || ! function_exists( 'wcs_get_subscription_statuses' ) ) {
+			return [];
+		}
+		$known     = array_keys( \wcs_get_subscription_statuses() );
+		$sanitized = [];
+		foreach ( $statuses as $status ) {
+			if ( ! is_scalar( $status ) ) {
+				continue;
+			}
+			$status = \wcs_sanitize_subscription_status_key( (string) $status );
+			if ( in_array( $status, $known, true ) ) {
+				$sanitized[] = $status;
+			}
+		}
+		return array_values( array_unique( $sanitized ) );
 	}
 
 	/**
@@ -224,11 +394,202 @@ final class CSV_Exports {
 	 */
 	private static function render_export_button( string $type ) {
 		printf(
-			'<div class="alignleft actions newspack-csv-export-wrap"><button type="button" class="button newspack-csv-export" data-export="%1$s" aria-describedby="newspack-csv-export-desc-%1$s">%2$s</button> <span id="newspack-csv-export-desc-%1$s" class="screen-reader-text">%3$s</span><span class="newspack-csv-export__status" hidden></span><span class="newspack-csv-export__announce screen-reader-text" role="status"></span></div>',
+			'<div class="alignleft actions newspack-csv-export-wrap"><button type="button" class="button newspack-csv-export" data-export="%1$s" aria-haspopup="dialog">%2$s</button><span class="newspack-csv-export__status" hidden></span><span class="newspack-csv-export__announce screen-reader-text" role="status"></span></div>',
 			\esc_attr( $type ),
-			\esc_html__( 'Export CSV', 'newspack-plugin' ),
-			\esc_html__( 'Exports the current filtered view as CSV, as a point-in-time snapshot. List sorting is not applied to the export.', 'newspack-plugin' )
+			\esc_html__( 'Export CSV', 'newspack-plugin' )
 		);
+		self::$rendered_types[] = $type;
+	}
+
+	/**
+	 * Print the export dialogs for the buttons this screen rendered.
+	 *
+	 * They belong in the footer rather than beside their button: every list
+	 * table sits inside its own <form>, and a nested <form> is dropped by the
+	 * HTML parser, leaving a dialog with no fields to submit.
+	 */
+	public static function render_export_modals() {
+		foreach ( array_unique( self::$rendered_types ) as $type ) {
+			self::render_export_modal( $type );
+		}
+	}
+
+	/**
+	 * Render the export options dialog for a list table.
+	 *
+	 * The controls are prefilled from the filters already applied to the list,
+	 * so the dialog narrows an existing view rather than starting from scratch.
+	 *
+	 * @param string $type Export type: 'subscriptions' or 'users'.
+	 */
+	private static function render_export_modal( string $type ) {
+		$id     = 'newspack-csv-export-modal-' . $type;
+		$config = self::get_prefilled_config( $type );
+		?>
+		<dialog class="newspack-csv-export-modal" id="<?php echo \esc_attr( $id ); ?>" aria-labelledby="<?php echo \esc_attr( $id ); ?>-title" aria-describedby="<?php echo \esc_attr( $id ); ?>-desc">
+			<form method="dialog" class="newspack-csv-export-modal__form">
+				<h2 id="<?php echo \esc_attr( $id ); ?>-title">
+					<?php echo 'users' === $type ? \esc_html__( 'Export users', 'newspack-plugin' ) : \esc_html__( 'Export subscriptions', 'newspack-plugin' ); ?>
+				</h2>
+				<p class="description" id="<?php echo \esc_attr( $id ); ?>-desc"><?php \esc_html_e( 'A point-in-time snapshot of the rows these options select. List sorting is not applied.', 'newspack-plugin' ); ?></p>
+
+				<?php // Tells the server the options below were actually submitted; see sanitize_export_config(). ?>
+				<input type="hidden" name="selection_submitted" value="1">
+
+				<fieldset class="newspack-csv-export-modal__field newspack-csv-export-modal__field--dates">
+					<legend><?php echo 'users' === $type ? \esc_html__( 'Registered', 'newspack-plugin' ) : \esc_html__( 'Created', 'newspack-plugin' ); ?></legend>
+					<label for="<?php echo \esc_attr( $id ); ?>-date-from"><?php echo \esc_html_x( 'from', 'start of a date range', 'newspack-plugin' ); ?></label>
+					<input type="date" id="<?php echo \esc_attr( $id ); ?>-date-from" name="date_from" value="<?php echo \esc_attr( $config['date_from'] ); ?>">
+					<label for="<?php echo \esc_attr( $id ); ?>-date-to"><?php echo \esc_html_x( 'to', 'end of a date range', 'newspack-plugin' ); ?></label>
+					<input type="date" id="<?php echo \esc_attr( $id ); ?>-date-to" name="date_to" value="<?php echo \esc_attr( $config['date_to'] ); ?>">
+				</fieldset>
+
+				<?php if ( 'users' === $type ) : ?>
+					<fieldset class="newspack-csv-export-modal__field" aria-describedby="<?php echo \esc_attr( $id ); ?>-roles-desc">
+						<legend><?php \esc_html_e( 'Roles', 'newspack-plugin' ); ?></legend>
+						<p class="description" id="<?php echo \esc_attr( $id ); ?>-roles-desc"><?php \esc_html_e( 'Leave all unchecked to export every role.', 'newspack-plugin' ); ?></p>
+						<div class="newspack-csv-export-modal__checkboxes">
+							<?php foreach ( \wp_roles()->get_names() as $role => $label ) : ?>
+								<label>
+									<input type="checkbox" name="roles[]" value="<?php echo \esc_attr( $role ); ?>" <?php \checked( in_array( $role, $config['roles'], true ) ); ?>>
+									<?php echo \esc_html( \translate_user_role( $label ) ); ?>
+								</label>
+							<?php endforeach; ?>
+						</div>
+					</fieldset>
+					<?php $meta_keys = User_Meta_Columns::get_available_keys(); ?>
+					<?php if ( ! empty( $meta_keys ) ) : ?>
+						<div class="newspack-csv-export-modal__field">
+							<label for="<?php echo \esc_attr( $id ); ?>-meta-keys"><?php \esc_html_e( 'Extra user meta', 'newspack-plugin' ); ?></label>
+							<p class="description" id="<?php echo \esc_attr( $id ); ?>-meta-keys-desc">
+								<?php \esc_html_e( 'Adds one column per key, headed by the key itself. Registration fields collected by Memberships or a form plugin live here.', 'newspack-plugin' ); ?>
+							</p>
+							<select
+								id="<?php echo \esc_attr( $id ); ?>-meta-keys"
+								class="newspack-csv-export-modal__meta-keys"
+								name="meta_keys[]"
+								aria-describedby="<?php echo \esc_attr( $id ); ?>-meta-keys-desc"
+								multiple
+								size="6"
+							>
+								<?php foreach ( $meta_keys as $meta_key ) : ?>
+									<option value="<?php echo \esc_attr( $meta_key ); ?>"><?php echo \esc_html( $meta_key ); ?></option>
+								<?php endforeach; ?>
+							</select>
+						</div>
+					<?php endif; ?>
+				<?php endif; ?>
+
+				<?php if ( 'subscriptions' === $type && function_exists( 'wcs_get_subscription_statuses' ) ) : ?>
+					<fieldset class="newspack-csv-export-modal__field" aria-describedby="<?php echo \esc_attr( $id ); ?>-statuses-desc">
+						<legend><?php \esc_html_e( 'Statuses', 'newspack-plugin' ); ?></legend>
+						<p class="description" id="<?php echo \esc_attr( $id ); ?>-statuses-desc"><?php \esc_html_e( 'Leave all unchecked to export every status.', 'newspack-plugin' ); ?></p>
+						<div class="newspack-csv-export-modal__checkboxes">
+							<?php foreach ( \wcs_get_subscription_statuses() as $status => $label ) : ?>
+								<label>
+									<input type="checkbox" name="statuses[]" value="<?php echo \esc_attr( $status ); ?>" <?php \checked( in_array( $status, $config['statuses'], true ) ); ?>>
+									<?php echo \esc_html( $label ); ?>
+								</label>
+							<?php endforeach; ?>
+						</div>
+					</fieldset>
+				<?php endif; ?>
+
+				<div class="newspack-csv-export-modal__field">
+					<label for="<?php echo \esc_attr( $id ); ?>-delimiter"><?php \esc_html_e( 'Separate fields by', 'newspack-plugin' ); ?></label>
+					<select id="<?php echo \esc_attr( $id ); ?>-delimiter" name="delimiter">
+						<option value="comma"><?php \esc_html_e( 'Comma', 'newspack-plugin' ); ?></option>
+						<option value="semicolon"><?php \esc_html_e( 'Semicolon', 'newspack-plugin' ); ?></option>
+						<option value="tab"><?php \esc_html_e( 'Tab', 'newspack-plugin' ); ?></option>
+						<option value="pipe"><?php \esc_html_e( 'Pipe', 'newspack-plugin' ); ?></option>
+					</select>
+				</div>
+
+				<div class="newspack-csv-export-modal__field">
+					<label for="<?php echo \esc_attr( $id ); ?>-date-format"><?php \esc_html_e( 'Date format', 'newspack-plugin' ); ?></label>
+					<select id="<?php echo \esc_attr( $id ); ?>-date-format" name="date_format" class="newspack-csv-export-modal__date-format">
+						<?php foreach ( self::DATE_FORMATS as $format ) : ?>
+							<option value="<?php echo \esc_attr( $format ); ?>">
+								<?php
+								printf(
+									/* translators: 1: a sample date, 2: the PHP date format producing it. */
+									\esc_html__( '%1$s (%2$s)', 'newspack-plugin' ),
+									\esc_html( gmdate( $format, self::DATE_FORMAT_SAMPLE ) ),
+									\esc_html( $format )
+								);
+								?>
+							</option>
+						<?php endforeach; ?>
+						<option value="custom"><?php \esc_html_e( 'Custom…', 'newspack-plugin' ); ?></option>
+					</select>
+					<div class="newspack-csv-export-modal__date-format-custom" hidden>
+						<label for="<?php echo \esc_attr( $id ); ?>-date-format-custom"><?php \esc_html_e( 'Custom date format', 'newspack-plugin' ); ?></label>
+						<input
+							type="text"
+							id="<?php echo \esc_attr( $id ); ?>-date-format-custom"
+							name="date_format_custom"
+							maxlength="<?php echo \esc_attr( (string) self::MAX_CUSTOM_DATE_FORMAT_LENGTH ); ?>"
+							placeholder="<?php \esc_attr_e( 'PHP date format, e.g. d/m/Y', 'newspack-plugin' ); ?>"
+						>
+					</div>
+				</div>
+
+				<?php // Cancel closes the dialog from JS rather than submitting, which leaves Export as the form's only submit button and therefore what Enter fires from any field. ?>
+				<div class="newspack-csv-export-modal__actions">
+					<button type="button" class="button newspack-csv-export-modal__cancel"><?php \esc_html_e( 'Cancel', 'newspack-plugin' ); ?></button>
+					<button type="submit" class="button button-primary" value="export"><?php \esc_html_e( 'Export', 'newspack-plugin' ); ?></button>
+				</div>
+			</form>
+		</dialog>
+		<?php
+	}
+
+	/**
+	 * Read the list's current filters into the export dialog's initial state.
+	 *
+	 * @param string $type Export type: 'subscriptions' or 'users'.
+	 * @return array {
+	 *     @type string   $date_from Y-m-d, or ''.
+	 *     @type string   $date_to   Y-m-d, or ''.
+	 *     @type string[] $roles     Preselected roles.
+	 *     @type string[] $statuses  Preselected subscription statuses.
+	 * }
+	 */
+	private static function get_prefilled_config( string $type ): array {
+		// phpcs:disable WordPress.Security.NonceVerification.Recommended
+		$prefilled = [
+			'date_from' => '',
+			'date_to'   => '',
+			'roles'     => [],
+			'statuses'  => [],
+		];
+
+		if ( 'users' === $type && ! empty( $_GET['role'] ) && is_string( $_GET['role'] ) ) {
+			$prefilled['roles'] = self::sanitize_roles( [ \sanitize_key( \wp_unslash( $_GET['role'] ) ) ] );
+		}
+
+		if ( 'subscriptions' === $type ) {
+			$status = '';
+			foreach ( [ 'post_status', 'status' ] as $param ) {
+				if ( ! empty( $_GET[ $param ] ) && is_string( $_GET[ $param ] ) ) {
+					$status = \sanitize_key( \wp_unslash( $_GET[ $param ] ) );
+					break;
+				}
+			}
+			if ( '' !== $status && 'all' !== $status ) {
+				$prefilled['statuses'] = self::sanitize_statuses( [ $status ] );
+			}
+			// The list's month filter is the closest thing it has to a date
+			// range; carry it in as one so the dialog opens on the same view.
+			$month = isset( $_GET['m'] ) && is_string( $_GET['m'] ) ? \sanitize_key( \wp_unslash( $_GET['m'] ) ) : '';
+			if ( preg_match( '/^(\d{4})(\d{2})$/', $month, $matches ) ) {
+				$prefilled['date_from'] = sprintf( '%s-%s-01', $matches[1], $matches[2] );
+				$prefilled['date_to']   = sprintf( '%s-%s-%s', $matches[1], $matches[2], gmdate( 't', gmmktime( 0, 0, 0, (int) $matches[2], 1, (int) $matches[1] ) ) );
+			}
+		}
+		// phpcs:enable WordPress.Security.NonceVerification.Recommended
+
+		return $prefilled;
 	}
 
 	/**
@@ -325,6 +686,14 @@ final class CSV_Exports {
 		}
 		$exporter->set_list_params( $list_params );
 
+		// The options chosen in the export dialog, posted on every step so the
+		// column set, delimiter and date format stay identical across the run.
+		$config_params = [];
+		if ( ! empty( $_POST['export_config'] ) && is_string( $_POST['export_config'] ) ) {
+			\wp_parse_str( ltrim( \wp_unslash( $_POST['export_config'] ), '?' ), $config_params ); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized
+		}
+		$exporter->set_export_config( self::sanitize_export_config( $config_params, $type ) );
+
 		// First export on the site arms the daily stale-file sweep.
 		self::schedule_cleanup();
 
@@ -351,6 +720,7 @@ final class CSV_Exports {
 			// The run is over: drop its pinned total rather than leaving the
 			// transient to expire on its own.
 			$exporter->clear_pinned_total();
+			$exporter->ensure_headers_row_file();
 			\wp_send_json_success(
 				[
 					'step'       => 'done',
@@ -413,8 +783,10 @@ final class CSV_Exports {
 		}
 		$exporter->set_filename( $filename );
 		// A served export is deleted on send; a replayed link would otherwise
-		// quietly download a headers-only CSV.
-		if ( ! file_exists( $exporter->get_export_file_path() ) ) {
+		// quietly download a headers-only CSV. The headers row is checked too:
+		// this exporter carries no export config, so it cannot regenerate a
+		// missing header row with the column set and delimiter the run used.
+		if ( ! file_exists( $exporter->get_export_file_path() ) || ! file_exists( $exporter->get_headers_row_file_path_public() ) ) {
 			\wp_die( \esc_html__( 'This download link has expired. Please run the export again.', 'newspack-plugin' ), '', 410 );
 		}
 		// Streamed rather than WC's export(), which loads the whole file into

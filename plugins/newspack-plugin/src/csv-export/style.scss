@@ -1,8 +1,98 @@
 /**
- * Export CSV button + status, rendered inside the list tables' tablenav.
+ * Export CSV button + status, rendered inside the list tables' tablenav, and
+ * the export options dialog it opens.
  */
+
+@use "~@wordpress/base-styles/colors" as wp-colors;
+
 .newspack-csv-export-wrap {
 	display: flex;
 	align-items: center;
 	gap: 8px;
+}
+
+.newspack-csv-export-modal {
+	border: 1px solid wp-colors.$gray-300;
+	border-radius: 4px;
+	box-shadow: 0 3px 30px rgba( 25, 30, 35, 0.2 );
+	/* The UA stylesheet binds background and color together on dialog (Canvas / CanvasText), so overriding one without the other can separate them into dark-on-dark. */
+	background: wp-colors.$white;
+	color: wp-colors.$gray-900;
+	max-width: 480px;
+	padding: 24px;
+	width: 100%;
+	/* The meta-key picker grows with the site, so the dialog scrolls rather than running off the viewport. */
+	max-height: calc( 100vh - 64px );
+	overflow-y: auto;
+
+	&::backdrop {
+		background: rgba( 0, 0, 0, 0.4 );
+	}
+
+	h2 {
+		margin: 0 0 16px;
+	}
+
+	fieldset {
+		border: 0;
+		padding: 0;
+		/* A fieldset's UA min-inline-size is min-content, which outranks the max-width above and would let a long role name widen the dialog. */
+		min-inline-size: 0;
+	}
+
+	legend {
+		font-weight: 600;
+		padding: 0;
+	}
+
+	.description {
+		margin: 4px 0 8px;
+	}
+}
+
+.newspack-csv-export-modal__field {
+	margin-bottom: 16px;
+	max-width: 100%;
+
+	> label {
+		display: inline-block;
+		font-weight: 600;
+		margin-right: 4px;
+	}
+}
+
+.newspack-csv-export-modal__field--dates > label {
+	font-weight: 400;
+}
+
+.newspack-csv-export-modal__field--checkbox > label {
+	font-weight: 400;
+}
+
+.newspack-csv-export-modal__checkboxes {
+	display: grid;
+	gap: 4px;
+	grid-template-columns: repeat( 2, minmax( 0, 1fr ) );
+
+	label {
+		font-weight: 400;
+	}
+}
+
+.newspack-csv-export-modal__meta-keys {
+	width: 100%;
+}
+
+.newspack-csv-export-modal__date-format-custom {
+	margin-top: 8px;
+
+	input {
+		width: 100%;
+	}
+}
+
+.newspack-csv-export-modal__actions {
+	display: flex;
+	gap: 8px;
+	justify-content: flex-end;
 }

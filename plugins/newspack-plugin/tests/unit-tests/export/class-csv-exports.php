@@ -8,18 +8,29 @@
 use Newspack\CSV_Exports;
 use Newspack\CSV_Batch_Exporter;
 use Newspack\Users_CSV_Exporter;
+use Newspack\User_Meta_Columns;
 
 require_once dirname( __DIR__, 2 ) . '/mocks/wc-mocks.php';
 require_once dirname( __DIR__, 3 ) . '/includes/export/class-users-csv-exporter.php';
 
 /**
  * Test the export-filename contract (the security property binding a
- * filename to its capability-checked type), the streamed save_to(), and the
- * stale-file cleanup sweep.
+ * filename to its capability-checked type), the streamed save_to(), the
+ * stale-file cleanup sweep, and the export-options boundary the dialog and
+ * the CLI both post through.
  *
  * @group csv-export
  */
 class Newspack_Test_CSV_Exports extends WP_UnitTestCase {
+
+	/**
+	 * The meta-key list is cached in a transient that outlives the per-test
+	 * transaction rollback.
+	 */
+	public function set_up() {
+		parent::set_up();
+		User_Meta_Columns::flush_available_keys();
+	}
 
 	/**
 	 * Generated filenames carry the type prefix (binding them to their
@@ -111,5 +122,121 @@ class Newspack_Test_CSV_Exports extends WP_UnitTestCase {
 		$this->assertFileExists( $fresh );
 		unlink( $fresh );
 		// phpcs:enable
+	}
+
+	/**
+	 * The export dialog is client-supplied input, so every option it sends is
+	 * validated against a known set and dropped when it does not match. This
+	 * is the boundary that keeps an arbitrary role, status, delimiter or date
+	 * out of the export query and out of gmdate().
+	 */
+	public function test_sanitize_export_config_rejects_unknown_values() {
+		$config = CSV_Exports::sanitize_export_config(
+			[
+				'date_from' => '2026-02-30',
+				'date_to'   => 'yesterday',
+				'delimiter' => 'tilde',
+				'roles'     => [ 'subscriber', 'not_a_role' ],
+				'statuses'  => [ 'active', 'not_a_status' ],
+				'meta_keys' => [ 'never_written' ],
+			],
+			'users'
+		);
+
+		$this->assertArrayNotHasKey( 'date_from', $config, 'February 30th is not a date.' );
+		$this->assertArrayNotHasKey( 'date_to', $config );
+		$this->assertArrayNotHasKey( 'delimiter', $config, 'An unoffered delimiter falls back to the exporter default.' );
+		$this->assertSame( [ 'subscriber' ], $config['roles'] );
+		$this->assertSame( CSV_Exports::DEFAULT_DATE_FORMAT, $config['date_format'] );
+		$this->assertArrayNotHasKey( 'statuses', $config, 'Statuses belong to the subscriptions export only.' );
+		$this->assertSame( [], $config['meta_keys'], 'A meta key the site does not store is not exportable.' );
+
+		$subscriptions = CSV_Exports::sanitize_export_config( [ 'statuses' => [ 'active', 'not_a_status' ] ], 'subscriptions' );
+		$this->assertSame( [ 'wc-active' ], $subscriptions['statuses'] );
+		$this->assertArrayNotHasKey( 'roles', $subscriptions );
+	}
+
+	/**
+	 * A range entered back to front is read as the range the admin meant,
+	 * rather than exporting nothing.
+	 */
+	public function test_sanitize_export_config_swaps_a_reversed_date_range() {
+		$config = CSV_Exports::sanitize_export_config(
+			[
+				'date_from' => '2026-06-30',
+				'date_to'   => '2026-01-01',
+			],
+			'users'
+		);
+
+		$this->assertSame( '2026-01-01', $config['date_from'] );
+		$this->assertSame( '2026-06-30', $config['date_to'] );
+	}
+
+	/**
+	 * The custom date format is free text, so it is length-capped; an empty
+	 * one falls back to the default rather than producing blank dates.
+	 */
+	public function test_sanitize_export_config_custom_date_format() {
+		$custom = CSV_Exports::sanitize_export_config(
+			[
+				'date_format'        => 'custom',
+				'date_format_custom' => str_repeat( 'Y', 100 ),
+			],
+			'users'
+		);
+		$this->assertSame( str_repeat( 'Y', CSV_Exports::MAX_CUSTOM_DATE_FORMAT_LENGTH ), $custom['date_format'] );
+
+		$empty = CSV_Exports::sanitize_export_config(
+			[
+				'date_format'        => 'custom',
+				'date_format_custom' => '',
+			],
+			'users'
+		);
+		$this->assertSame( CSV_Exports::DEFAULT_DATE_FORMAT, $empty['date_format'] );
+	}
+
+	/**
+	 * Date columns follow the chosen format, and a value that cannot be parsed
+	 * is passed through untouched rather than becoming an epoch date.
+	 */
+	public function test_format_export_date() {
+		$exporter = new Users_CSV_Exporter();
+
+		$this->assertSame( '2026-05-14 09:00:00', $exporter->format_export_date( '2026-05-14 09:00:00' ), 'Without a config the default format is a passthrough.' );
+
+		$exporter->set_export_config( [ 'date_format' => 'd/m/Y' ] );
+		$this->assertSame( '14/05/2026', $exporter->format_export_date( '2026-05-14 09:00:00' ) );
+		$this->assertSame( '', $exporter->format_export_date( '' ) );
+		$this->assertSame( 'not a date', $exporter->format_export_date( 'not a date' ) );
+	}
+
+	/**
+	 * The WooCommerce exporter constructor pins the column set, but the export
+	 * options that decide which optional columns exist only arrive afterwards.
+	 * Setting the config therefore has to recompute the columns, or the header
+	 * row and the prepared rows disagree about the file's shape.
+	 */
+	public function test_setting_the_config_recomputes_the_column_set() {
+		$user_id = self::factory()->user->create();
+		update_user_meta( $user_id, 'reader_zip_code', '07079' );
+
+		$exporter = new Users_CSV_Exporter();
+		$this->assertArrayNotHasKey( 'meta_reader_zip_code', $exporter->get_column_names() );
+
+		$exporter->set_export_config( [ 'meta_keys' => [ 'reader_zip_code' ] ] );
+		$this->assertArrayHasKey( 'meta_reader_zip_code', $exporter->get_column_names() );
+	}
+
+	/**
+	 * The delimiter chosen in the dialog reaches the file writer.
+	 */
+	public function test_export_config_sets_the_delimiter() {
+		$exporter = new Users_CSV_Exporter();
+		$this->assertSame( ',', $exporter->get_delimiter() );
+
+		$exporter->set_export_config( CSV_Exports::sanitize_export_config( [ 'delimiter' => 'semicolon' ], 'users' ) );
+		$this->assertSame( ';', $exporter->get_delimiter() );
 	}
 }

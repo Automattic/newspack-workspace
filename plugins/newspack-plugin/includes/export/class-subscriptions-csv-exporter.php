@@ -21,7 +21,7 @@ require_once __DIR__ . '/class-csv-batch-exporter.php';
  * - `newspack_subscriptions_export_headers` filters the column id => label map.
  * - `newspack_subscriptions_export_row` filters each row (keyed by column id).
  * - `newspack_subscriptions_export_query_args` filters the query args built
- *   from the captured list params.
+ *   from the captured list params and the chosen export options.
  *
  * This class must only be loaded after WooCommerce's WC_CSV_Batch_Exporter
  * abstract (see CSV_Exports::load_exporter_dependencies()).
@@ -103,9 +103,10 @@ class Subscriptions_CSV_Exporter extends CSV_Batch_Exporter {
 	 *                          memoize the product-filter ID set across the
 	 *                          run's pages; '' disables caching (the default,
 	 *                          keeping the method pure for direct callers).
+	 * @param array  $config    Export options chosen in the export dialog.
 	 * @return array Query args.
 	 */
-	public static function build_query_args( array $params, string $cache_key = '' ): array {
+	public static function build_query_args( array $params, string $cache_key = '', array $config = [] ): array {
 		// Array-shaped params (a mangled ?m[]=... URL) would TypeError in the
 		// string handling below; degrade to "filter ignored" instead.
 		$params = array_filter( \wc_clean( $params ), 'is_scalar' );
@@ -115,16 +116,26 @@ class Subscriptions_CSV_Exporter extends CSV_Batch_Exporter {
 			'order'   => 'ASC',
 		];
 
-		// Status: CPT lists send post_status, HPOS lists send status. Default
-		// to every subscription status, matching the admin list's "All" view.
+		// Status: the dialog's selection supersedes the list's status tab, which
+		// can only ever hold one status. CPT lists send post_status, HPOS lists
+		// send status. With neither, export every status, matching the admin
+		// list's "All" view — and once a selection has been submitted, clearing
+		// every checkbox means every status rather than "keep the status tab",
+		// except on a view the dialog has no checkbox for (Trash), where there
+		// was nothing to clear.
 		$status = '';
 		if ( ! empty( $params['post_status'] ) ) {
 			$status = $params['post_status'];
 		} elseif ( ! empty( $params['status'] ) ) {
 			$status = $params['status'];
 		}
-		if ( '' === $status || 'all' === $status ) {
-			$args['status'] = array_keys( \wcs_get_subscription_statuses() );
+		$offered_statuses = array_keys( \wcs_get_subscription_statuses() );
+		if ( ! empty( $config['statuses'] ) ) {
+			$args['status'] = $config['statuses'];
+		} elseif ( '' === $status || 'all' === $status ) {
+			$args['status'] = $offered_statuses;
+		} elseif ( ! empty( $config['selection_submitted'] ) && in_array( \wcs_sanitize_subscription_status_key( $status ), $offered_statuses, true ) ) {
+			$args['status'] = $offered_statuses;
 		} else {
 			$args['status'] = [ \wcs_sanitize_subscription_status_key( $status ) ];
 		}
@@ -178,8 +189,13 @@ class Subscriptions_CSV_Exporter extends CSV_Batch_Exporter {
 			}
 		}
 
-		// Month filter (m=YYYYMM) becomes an inclusive date_created range.
-		if ( ! empty( $params['m'] ) && preg_match( '/^\d{6}$/', $params['m'] ) ) {
+		// Month filter (m=YYYYMM) becomes an inclusive date_created range. The
+		// dialog's own range supersedes it — it is the same filter, expressed
+		// with day precision — and clearing the range in the dialog clears the
+		// month filter with it rather than quietly restoring it.
+		if ( ! empty( $config['date_from'] ) || ! empty( $config['date_to'] ) ) {
+			$args['date_created'] = self::build_date_created_arg( $config );
+		} elseif ( empty( $config['selection_submitted'] ) && ! empty( $params['m'] ) && preg_match( '/^\d{6}$/', $params['m'] ) ) {
 			$year                 = substr( $params['m'], 0, 4 );
 			$month                = substr( $params['m'], 4, 2 );
 			$last_day             = gmdate( 't', gmmktime( 0, 0, 0, (int) $month, 1, (int) $year ) );
@@ -191,8 +207,30 @@ class Subscriptions_CSV_Exporter extends CSV_Batch_Exporter {
 		 *
 		 * @param array $args   wc_get_orders-style query args.
 		 * @param array $params The captured admin-list params.
+		 * @param array $config The export options chosen in the export dialog.
 		 */
-		return apply_filters( 'newspack_subscriptions_export_query_args', $args, $params );
+		return apply_filters( 'newspack_subscriptions_export_query_args', $args, $params, $config );
+	}
+
+	/**
+	 * Build the wc_get_orders date_created argument for the export's date range.
+	 *
+	 * WooCommerce reads a date argument at day precision in the site's
+	 * timezone, so the bounds are passed as bare dates: a time component would
+	 * be discarded, and writing one would suggest the boundary can be tuned by
+	 * editing it. An open end is left open with the `<=` / `>=` prefixes
+	 * WooCommerce's date arguments accept.
+	 *
+	 * @param array $config Export config.
+	 * @return string
+	 */
+	private static function build_date_created_arg( array $config ): string {
+		$from = ! empty( $config['date_from'] ) ? $config['date_from'] : '';
+		$to   = ! empty( $config['date_to'] ) ? $config['date_to'] : '';
+		if ( '' !== $from && '' !== $to ) {
+			return $from . '...' . $to;
+		}
+		return '' !== $from ? '>=' . $from : '<=' . $to;
 	}
 
 	/**
@@ -240,7 +278,7 @@ class Subscriptions_CSV_Exporter extends CSV_Batch_Exporter {
 	public function prepare_data_to_export(): void {
 		// Pass the run's filename so a product filter's ID set is resolved once
 		// per run rather than re-queried on every page.
-		$args             = self::build_query_args( $this->list_params, $this->get_filename() );
+		$args             = self::build_query_args( $this->list_params, $this->get_filename(), $this->export_config );
 		$args['limit']    = $this->get_limit();
 		$args['offset']   = ( $this->get_page() - 1 ) * $this->get_limit();
 		$args['paginate'] = true;
@@ -303,12 +341,12 @@ class Subscriptions_CSV_Exporter extends CSV_Batch_Exporter {
 		$row = [
 			'subscription_id'     => $subscription->get_id(),
 			'status'              => $subscription->get_status(),
-			'date_created'        => $date_created ? $date_created->date( 'Y-m-d H:i:s' ) : '',
-			'start_date'          => self::get_date_field( $subscription, 'start' ),
-			'trial_end_date'      => self::get_date_field( $subscription, 'trial_end' ),
-			'next_payment_date'   => self::get_date_field( $subscription, 'next_payment' ),
-			'last_payment_date'   => self::get_date_field( $subscription, 'last_order_date_created' ),
-			'end_date'            => self::get_date_field( $subscription, 'end' ),
+			'date_created'        => $this->format_export_date( $date_created ? $date_created->date( CSV_Exports::DEFAULT_DATE_FORMAT ) : '' ),
+			'start_date'          => $this->format_export_date( self::get_date_field( $subscription, 'start' ) ),
+			'trial_end_date'      => $this->format_export_date( self::get_date_field( $subscription, 'trial_end' ) ),
+			'next_payment_date'   => $this->format_export_date( self::get_date_field( $subscription, 'next_payment' ) ),
+			'last_payment_date'   => $this->format_export_date( self::get_date_field( $subscription, 'last_order_date_created' ) ),
+			'end_date'            => $this->format_export_date( self::get_date_field( $subscription, 'end' ) ),
 			'billing_period'      => $subscription->get_billing_period(),
 			'billing_interval'    => $subscription->get_billing_interval(),
 			'product_ids'         => implode( ', ', $product_ids ),
