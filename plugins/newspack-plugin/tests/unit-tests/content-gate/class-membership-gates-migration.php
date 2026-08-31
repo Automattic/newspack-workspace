@@ -2878,6 +2878,47 @@ HTML;
 	}
 
 	/**
+	 * Only the overlap warnings and their ordering read a plan's member count, and
+	 * `get_memberships_count()` pulls every active membership ID into PHP to produce it.
+	 * So it is resolved on first read rather than while grouping, and cached per plan —
+	 * two descriptors on one plan, read twice, cost a single lookup.
+	 */
+	public function test_plan_member_count_is_resolved_lazily_and_cached_per_plan() {
+		require_once __DIR__ . '/../../mocks/wc-memberships-plan-lookup-mock.php';
+
+		global $newspack_mock_counted_plans, $newspack_mock_plan_lookups;
+		$newspack_mock_counted_plans = [ 4242 => new \Newspack_Mock_Counted_Membership_Plan( 4242, 37 ) ];
+		$newspack_mock_plan_lookups  = [];
+
+		$reflected_member_counts = new \ReflectionProperty( Membership_Gates_Migration::class, 'member_counts' );
+		$reflected_member_counts->setAccessible( true );
+		$reflected_member_counts->setValue( null, [] );
+
+		$two_plans_one_membership_plan = [ [ 'pid' => 4242 ], [ 'pid' => 4242 ] ];
+
+		$this->assertSame( 74, $this->invoke_private_static( 'group_member_count', [ $two_plans_one_membership_plan ] ) );
+		$this->assertSame( 74, $this->invoke_private_static( 'group_member_count', [ $two_plans_one_membership_plan ] ) );
+		$this->assertSame( [ 4242 ], $newspack_mock_plan_lookups, 'The plan is looked up once, however often the count is read.' );
+
+		$newspack_mock_plan_lookups = [];
+		$this->assertSame(
+			5,
+			$this->invoke_private_static(
+				'group_member_count',
+				[
+					[
+						[
+							'pid'          => 4242,
+							'member_count' => 5,
+						],
+					],
+				] 
+			)
+		);
+		$this->assertSame( [], $newspack_mock_plan_lookups, 'A descriptor carrying the count is taken at its word.' );
+	}
+
+	/**
 	 * A gate group of one plan with the given content rules.
 	 *
 	 * @param string     $name              Plan name, which becomes the gate title.

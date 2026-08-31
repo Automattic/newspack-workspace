@@ -31,6 +31,16 @@ class Membership_Gates_Migration {
 	 * The WooCommerce Memberships wrapper blocks, which are conditional and must
 	 * never be carried into a migrated layout's content.
 	 */
+	/**
+	 * Active membership counts, keyed by plan post ID.
+	 *
+	 * Filled by {@see plan_member_count()} on first read. One command run is one process,
+	 * so the cache lives as long as the migration it serves.
+	 *
+	 * @var array<int,int>
+	 */
+	private static $member_counts = [];
+
 	private const MEMBERSHIP_WRAPPER_BLOCKS = [
 		'woocommerce-memberships/member-content',
 		'woocommerce-memberships/non-member-content',
@@ -1189,8 +1199,10 @@ class Membership_Gates_Migration {
 	 * @param array $skipped  Skipped-plan summary rows, appended to by reference.
 	 *
 	 * @return array<string,array> Map of fingerprint => list of plan descriptors, each
-	 *                             [ 'pid', 'name', 'member_count', 'access_method', 'ac_rules',
-	 *                             'product_ids', 'one_time_duration' ].
+	 *                             [ 'pid', 'name', 'access_method', 'ac_rules',
+	 *                             'product_ids', 'one_time_duration' ]. The plan's member
+	 *                             count is not among them: {@see plan_member_count()}
+	 *                             resolves it from 'pid' for the few plans that need it.
 	 */
 	private static function group_plans_by_fingerprint( array $plan_ids, array &$skipped ): array {
 		$plan_groups = [];
@@ -1267,7 +1279,6 @@ class Membership_Gates_Migration {
 			$plan_groups[ $fingerprint ][] = [
 				'pid'               => $pid,
 				'name'              => $plan_name,
-				'member_count'      => $plan->get_memberships_count( 'active' ),
 				'access_method'     => $access_method,
 				'ac_rules'          => $ac_rules,
 				'product_ids'       => 'purchase' === $access_method ? array_values( $plan->get_product_ids() ) : [],
@@ -2117,7 +2128,41 @@ class Membership_Gates_Migration {
 	 * @return int
 	 */
 	private static function group_member_count( array $group ): int {
-		return array_sum( array_map( fn( $plan ) => (int) ( $plan['member_count'] ?? 0 ), $group ) );
+		return array_sum( array_map( fn( $plan ) => self::plan_member_count( $plan ), $group ) );
+	}
+
+	/**
+	 * Active memberships on one plan, resolved once per plan and only when read.
+	 *
+	 * `WC_Memberships_Membership_Plan::get_memberships_count()` is not a COUNT query: it
+	 * runs an unpaged `get_posts()` for every membership on the plan and counts the IDs in
+	 * PHP. Only the overlap warnings and the order they are reported in ever read the
+	 * number, so resolving it while grouping would materialise every active membership on
+	 * the site for a figure most runs never print.
+	 *
+	 * A descriptor that already carries the count is taken at its word, so a caller
+	 * holding the number does not pay for it twice.
+	 *
+	 * @param array $plan One plan descriptor.
+	 *
+	 * @return int
+	 */
+	private static function plan_member_count( array $plan ): int {
+		if ( isset( $plan['member_count'] ) ) {
+			return (int) $plan['member_count'];
+		}
+
+		$plan_id = (int) ( $plan['pid'] ?? 0 );
+		if ( ! $plan_id || ! function_exists( 'wc_memberships_get_membership_plan' ) ) {
+			return 0;
+		}
+
+		if ( ! array_key_exists( $plan_id, self::$member_counts ) ) {
+			$membership_plan                 = \wc_memberships_get_membership_plan( $plan_id );
+			self::$member_counts[ $plan_id ] = $membership_plan ? (int) $membership_plan->get_memberships_count( 'active' ) : 0;
+		}
+
+		return self::$member_counts[ $plan_id ];
 	}
 
 	/**
