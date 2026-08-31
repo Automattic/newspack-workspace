@@ -55,18 +55,17 @@ function useFilterTerms() {
 		let cancelled = false;
 		Promise.all( [ fetchAllTerms( '/wp/v2/newspack_nl_advertiser' ), fetchAllTerms( '/wp/v2/ad_placement' ) ] )
 			.then( ( [ advertisers, placements ] ) => {
-				if ( cancelled ) {
-					return;
-				}
-				setTerms( {
-					advertisers: Array.isArray( advertisers ) ? advertisers : [],
-					placements: Array.isArray( placements ) ? placements : [],
-					hasLoaded: true,
-				} );
-			} )
-			.catch( () => {
 				if ( ! cancelled ) {
-					setTerms( { advertisers: [], placements: [], hasLoaded: true } );
+					setTerms( current => ( {
+						...current,
+						advertisers: Array.isArray( advertisers ) ? advertisers : [],
+						placements: Array.isArray( placements ) ? placements : [],
+					} ) );
+				}
+			} )
+			.finally( () => {
+				if ( ! cancelled ) {
+					setTerms( current => ( { ...current, hasLoaded: true } ) );
 				}
 			} );
 		return () => {
