@@ -985,6 +985,27 @@ class Newspack_Test_Subscriptions_Tiers extends WP_UnitTestCase {
 	}
 
 	/**
+	 * The current plan's radio advertises the same widened ceiling as the seats
+	 * field. When a group holds more seats than the plan now sells, the field's
+	 * maximum is raised to what it holds so those seats are kept; the client clamp
+	 * reads the radio rather than the field, so the radio has to carry that same
+	 * raised ceiling or a group that outgrew a lowered maximum is pulled back down
+	 * to it on load -- silently reducing the seats it pays for.
+	 */
+	public function test_switch_current_tier_radio_matches_the_widened_ceiling() {
+		$user_id = self::factory()->user->create();
+		wp_set_current_user( $user_id );
+		$product     = $this->make_tier_product( 343, $this->per_seat_meta( 2, 5 ) );
+		$switch_data = $this->make_switch_data( $user_id, [ 343 ], 343, 8 );
+
+		$html = $this->render_tier_form( $product, $switch_data );
+
+		// The field is widened to the eight seats held; the radio must agree, not
+		// carry the plan's raw maximum of five.
+		$this->assertStringContainsString( 'value="343" data-per-seat="1" data-seats-min="2" data-seats-max="8" checked', $html );
+	}
+
+	/**
 	 * Each tier publishes its own seat bounds on its radio, so the single seats
 	 * field can follow whichever tier is checked. A flat tier publishes none,
 	 * which is what tells the field to hide and stop submitting.

@@ -1,3 +1,10 @@
+## newspack-newsletters [3.40.1](https://github.com/Automattic/newspack-workspace/compare/newspack-newsletters@3.40.0...newspack-newsletters@3.40.1) (2026-08-31)
+
+
+### Bug Fixes
+
+* **newsletters:** correct permission handling in bulk actions ([#880](https://github.com/Automattic/newspack-workspace/issues/880)) ([fd10bbd](https://github.com/Automattic/newspack-workspace/commit/fd10bbda969c3a12a170011d6c4ae079a753808e))
+
 # newspack-newsletters [3.40.0](https://github.com/Automattic/newspack-workspace/compare/newspack-newsletters@3.39.5...newspack-newsletters@3.40.0) (2026-08-31)
 
 
