@@ -62,6 +62,24 @@ export const selectionsFromIds = ( ids, options ) =>
 		.filter( option => option && option.name )
 		.map( option => ( { id: option.id, name: option.name } ) );
 
+// Resolve a post's stored term IDs into `{ id, name }` selections from
+// both the `wp:term` embed and a fetched options list. Neither source is
+// complete on its own: the embed is absent whenever no term-backed column
+// is visible, and it caps at 100 terms per taxonomy
+// (`WP_REST_Server::embed_links()` raises an embedded collection's
+// `per_page` to the schema maximum, and the terms schema maxes at 100).
+// Both yield the same REST `name` for a given term, so precedence is
+// immaterial today — but it is the embed that wins, being spread last
+// into a `Map` that keeps the last entry per ID.
+export const selectionsForTaxonomy = ( item, ids, taxonomy, options ) => {
+	const embedded = initialSelectionsForTaxonomy( item, taxonomy );
+	if ( ! Array.isArray( ids ) ) {
+		return embedded;
+	}
+	const byId = new Map( [ ...selectionsFromIds( ids, options ), ...embedded ].map( selection => [ selection.id, selection ] ) );
+	return ids.map( id => byId.get( id ) ).filter( Boolean );
+};
+
 export const unresolvedIds = ( ids, selections ) => {
 	const resolved = new Set( selections.map( selection => selection.id ) );
 	return ( Array.isArray( ids ) ? ids : [] ).filter( id => typeof id === 'number' && ! resolved.has( id ) );

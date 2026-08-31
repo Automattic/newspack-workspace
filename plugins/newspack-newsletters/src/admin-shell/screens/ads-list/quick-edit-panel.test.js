@@ -168,10 +168,14 @@ describe( 'AdsQuickEditPanel taxonomy handling', () => {
 		ad_placement: [ 20 ],
 	} );
 
+	// The embedded id is deliberately absent from `ADVERTISERS`, so the
+	// options list cannot render it and the embed is the only source. The
+	// field stays editable because `unresolvedIds` measures against the
+	// merged selections, not the options list.
 	const withEmbeddedTerms = () => ( {
 		...makeItem( 'publish' ),
-		newspack_nl_advertiser: [ 10 ],
-		_embedded: { 'wp:term': [ [ { id: 10, name: 'Acme', taxonomy: 'newspack_nl_advertiser' } ] ] },
+		newspack_nl_advertiser: [ 55 ],
+		_embedded: { 'wp:term': [ [ { id: 55, name: 'Beta Corp', taxonomy: 'newspack_nl_advertiser' } ] ] },
 	} );
 
 	it( 'hydrates the fields from raw term IDs when the embed is absent', async () => {
@@ -182,7 +186,8 @@ describe( 'AdsQuickEditPanel taxonomy handling', () => {
 
 	it( 'still reads embedded terms when they are present', async () => {
 		renderPanel( withEmbeddedTerms() );
-		expect( await screen.findByText( 'Acme' ) ).toBeInTheDocument();
+		expect( await screen.findByText( 'Beta Corp' ) ).toBeInTheDocument();
+		expect( screen.getByLabelText( 'Advertiser' ) ).not.toBeDisabled();
 	} );
 
 	it( 'omits untouched taxonomies from a status-only save', async () => {
@@ -231,11 +236,12 @@ describe( 'AdsQuickEditPanel taxonomy handling', () => {
 		expect( visibleNotices() ).not.toContain( CATEGORIES_UNAVAILABLE );
 	} );
 
-	// The `wp:term` embed caps at 10 terms per taxonomy, so an ad with more
-	// than that arrives with a truncated embed. The fetched options list is
-	// complete and must be allowed to fill the gap, rather than the short
-	// embed making the field look broken.
-	it( 'fills the gap when the embed truncates at 10 terms', async () => {
+	// The `wp:term` embed caps at 100 terms per taxonomy, so an ad with more
+	// than that arrives truncated. The fetched options list is complete and
+	// must be allowed to fill the gap, rather than the short embed making
+	// the field look broken. Exercised here with a shorter embed than the
+	// ad's stored IDs, which is the same shape at a cheaper size.
+	it( 'fills the gap when the embed arrives truncated', async () => {
 		const allCategories = Array.from( { length: 11 }, ( _, i ) => ( { id: i + 1, name: `Cat ${ i + 1 }` } ) );
 		mockCategoriesFetch( allCategories );
 		renderPanel( {
@@ -280,7 +286,7 @@ describe( 'AdsQuickEditPanel taxonomy handling', () => {
 		renderPanel( {
 			...makeItem( 'publish' ),
 			categories: allCategories.map( c => c.id ),
-			// The embed caps at 10, so the 11th is missing until the fetch lands.
+			// A truncated embed: the 11th term is missing until the fetch lands.
 			_embedded: { 'wp:term': [ allCategories.slice( 0, 10 ).map( c => ( { ...c, taxonomy: 'category' } ) ) ] },
 		} );
 
@@ -296,27 +302,22 @@ describe( 'AdsQuickEditPanel taxonomy handling', () => {
 		expect( visibleNotices() ).not.toContain( CATEGORIES_UNAVAILABLE );
 	} );
 
-	it( 'still refuses to send the unshowable categories on save', async () => {
-		const onSaved = jest.fn();
-		renderPanel( { ...makeItem( 'publish' ), categories: [ 77 ] }, { onSaved } );
-		fireEvent.click( await screen.findByRole( 'radio', { name: 'Inactive' } ) );
-		fireEvent.click( screen.getByTestId( 'panel-save' ) );
-		await waitFor( () => expect( onSaved ).toHaveBeenCalled() );
-		expect( postCall().data ).not.toHaveProperty( 'categories' );
-	} );
-
 	// A field with unresolvable stored terms is read-only, so it can never
 	// go dirty and is never sent. The ride-along in `handleSave` stays as a
 	// backstop should that guard ever be relaxed.
-	it( 'never sends a taxonomy whose stored terms could not all be resolved', async () => {
+	it.each( [
+		[ 'Categories', 'categories' ],
+		[ 'Advertiser', 'newspack_nl_advertiser' ],
+	] )( 'never sends %s when its stored terms could not all be resolved', async ( label, key ) => {
 		const onSaved = jest.fn();
-		renderPanel( { ...makeItem( 'publish' ), newspack_nl_advertiser: [ 99 ] }, { onSaved } );
+		renderPanel( { ...makeItem( 'publish' ), [ key ]: [ 99 ] }, { onSaved } );
 
-		await waitFor( () => expect( screen.getByLabelText( 'Advertiser' ) ).toBeDisabled() );
+		await waitFor( () => expect( screen.getByLabelText( label ) ).toBeDisabled() );
 		fireEvent.click( screen.getByRole( 'radio', { name: 'Inactive' } ) );
 		fireEvent.click( screen.getByTestId( 'panel-save' ) );
 		await waitFor( () => expect( onSaved ).toHaveBeenCalled() );
 
-		expect( postCall().data ).not.toHaveProperty( 'newspack_nl_advertiser' );
+		expect( postCall().data.status ).toBe( 'draft' );
+		expect( postCall().data ).not.toHaveProperty( key );
 	} );
 } );

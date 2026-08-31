@@ -7,14 +7,15 @@
  */
 
 import apiFetch from '@wordpress/api-fetch';
-import { FormTokenField, Notice, RadioControl, TextControl } from '@wordpress/components';
+import { FormTokenField, RadioControl, TextControl } from '@wordpress/components';
 import { useEffect, useMemo, useRef, useState } from '@wordpress/element';
 import { __ } from '@wordpress/i18n';
 import { emailAd } from 'newspack-icons';
 
 import QuickEditPanel from '../../components/quick-edit-panel';
+import TermsUnavailableNotice from '../../components/terms-unavailable-notice';
 import { notifyError, notifySuccess } from '../../notices';
-import { fetchAllTerms, initialSelectionsForTaxonomy, resolveTokens, selectionsFromIds, sortedIdsEqual, unresolvedIds } from '../../utils/terms';
+import { fetchAllTerms, resolveTokens, selectionsForTaxonomy, sortedIdsEqual, unresolvedIds } from '../../utils/terms';
 
 const POSTS_PATH = '/wp/v2/newspack_nl_ads_cpt';
 
@@ -47,30 +48,6 @@ function useQuickEditCategories() {
 	return { categories, hasLoaded };
 }
 
-// Resolve the post's stored term IDs through the embed first, then the
-// options list. The `wp:term` embed caps at 10 terms per taxonomy (the
-// REST default `per_page`, and the embed link sets none), so a truncated
-// embed must not shadow a fully-paginated options list.
-const selectionsForTaxonomy = ( item, ids, taxonomy, options ) => {
-	const embedded = initialSelectionsForTaxonomy( item, taxonomy );
-	if ( ! Array.isArray( ids ) ) {
-		return embedded;
-	}
-	const byId = new Map( [ ...selectionsFromIds( ids, options ), ...embedded ].map( selection => [ selection.id, selection ] ) );
-	return ids.map( id => byId.get( id ) ).filter( Boolean );
-};
-
-// A settled options list that still can't account for every stored term
-// means the field would misrepresent the ad, so it goes read-only rather
-// than showing a quietly wrong value.
-function TermsUnavailableNotice( { children } ) {
-	return (
-		<Notice status="warning" isDismissible={ false } politeness="polite" spokenMessage={ children }>
-			{ children }
-		</Notice>
-	);
-}
-
 export default function AdsQuickEditPanel( { item, advertisers, placements, termsLoaded = false, onClose, onSaved } ) {
 	const { categories, hasLoaded: categoriesLoaded } = useQuickEditCategories();
 	// Terms are only embedded when a taxonomy column is visible, so each
@@ -86,7 +63,9 @@ export default function AdsQuickEditPanel( { item, advertisers, placements, term
 		[ item, placements ]
 	);
 	const initialCategorySelections = useMemo( () => selectionsForTaxonomy( item, item?.categories, 'category', categories ), [ item, categories ] );
-	// Unresolvable terms can't be shown or removed, so they ride along on save.
+	// Stored IDs the options list cannot explain. They gate the read-only
+	// state below, and ride along on save as a backstop should that gate
+	// ever be relaxed — a term the user could not see must not be dropped.
 	const unresolvedAdvertiserIds = useMemo(
 		() => unresolvedIds( item?.newspack_nl_advertiser, initialAdvertiserSelections ),
 		[ item, initialAdvertiserSelections ]
@@ -145,10 +124,10 @@ export default function AdsQuickEditPanel( { item, advertisers, placements, term
 	const categoriesUnavailable = categoriesLoaded && unresolvedCategoryIds.length > 0;
 
 	// A field is editable only once its options have settled and account
-	// for every stored term. Editing earlier would race the baseline: the
-	// embed caps at 10 terms, so an edit made before the full list arrives
-	// would be diffed against a baseline that grows underneath it, and the
-	// terms resolved late would drop out of the save.
+	// for every stored term. Editing earlier would race the baseline: with
+	// no embed, or one capped at 100 terms, an edit made before the full
+	// list arrives would be diffed against a baseline that grows underneath
+	// it, and the terms resolved late would drop out of the save.
 	const advertiserReadOnly = ! termsLoaded || advertiserUnavailable;
 	const placementReadOnly = ! termsLoaded || placementUnavailable;
 	const categoriesReadOnly = ! categoriesLoaded || categoriesUnavailable;
@@ -260,9 +239,7 @@ export default function AdsQuickEditPanel( { item, advertisers, placements, term
 				__nextHasNoMarginBottom
 			/>
 			{ advertiserUnavailable && (
-				<TermsUnavailableNotice>
-					{ __( 'Advertisers could not be loaded. Edit this ad to change them.', 'newspack-newsletters' ) }
-				</TermsUnavailableNotice>
+				<TermsUnavailableNotice message={ __( 'Advertisers could not be loaded. Edit this ad to change them.', 'newspack-newsletters' ) } />
 			) }
 			<FormTokenField
 				label={ __( 'Ad placement', 'newspack-newsletters' ) }
@@ -279,9 +256,7 @@ export default function AdsQuickEditPanel( { item, advertisers, placements, term
 				__nextHasNoMarginBottom
 			/>
 			{ placementUnavailable && (
-				<TermsUnavailableNotice>
-					{ __( 'Ad placements could not be loaded. Edit this ad to change them.', 'newspack-newsletters' ) }
-				</TermsUnavailableNotice>
+				<TermsUnavailableNotice message={ __( 'Ad placements could not be loaded. Edit this ad to change them.', 'newspack-newsletters' ) } />
 			) }
 			<FormTokenField
 				label={ __( 'Categories', 'newspack-newsletters' ) }
@@ -298,9 +273,7 @@ export default function AdsQuickEditPanel( { item, advertisers, placements, term
 				__nextHasNoMarginBottom
 			/>
 			{ categoriesUnavailable && (
-				<TermsUnavailableNotice>
-					{ __( 'Categories could not be loaded. Edit this ad to change them.', 'newspack-newsletters' ) }
-				</TermsUnavailableNotice>
+				<TermsUnavailableNotice message={ __( 'Categories could not be loaded. Edit this ad to change them.', 'newspack-newsletters' ) } />
 			) }
 			<TextControl
 				type="date"
