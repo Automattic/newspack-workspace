@@ -7,12 +7,12 @@
  * WordPress dependencies
  */
 import { __, _x, sprintf } from '@wordpress/i18n';
+import { Button } from '@wordpress/components';
 
 /**
  * Internal dependencies
  */
-import { Grid } from '../../../../../packages/components/src';
-import StatTile, { type StatTileProps } from './stat-tile';
+import { Grid, StatCard } from '../../../../../packages/components/src';
 import { formatCount, finiteNumber } from './impact-format';
 
 interface ImpactStatsProps {
@@ -29,7 +29,20 @@ interface ImpactStatsProps {
 	onViewProducts?: () => void;
 }
 
-type Figure = Pick< StatTileProps, 'value' | 'valueLabel' >;
+interface Tile {
+	id: string;
+	label: string;
+	// Pre-formatted by the caller. Null renders the null glyph.
+	value: string | null;
+	// Spoken instead of the visible value, whose meaning may rest on punctuation.
+	valueLabel?: string;
+	description: string;
+	note?: string;
+	actionLabel?: string;
+	onAction?: () => void;
+}
+
+type Figure = Pick< Tile, 'value' | 'valueLabel' >;
 
 const bounded = ( value: EngineCount, limited: boolean, bound: 'lower' | 'upper' = 'lower' ): Figure => {
 	const count = finiteNumber( value );
@@ -75,10 +88,10 @@ export default function ImpactStats( {
 }: ImpactStatsProps ) {
 	const scope = audience?.supported ? audience : null;
 	const isLocked = 'locked' === scope?.application;
-	const lockedNote = __( 'Applies to new sign-ups only', 'newspack-plugin' );
+	const lockedNote = __( 'Applies to new sign-ups only.', 'newspack-plugin' );
 
 	// Keyed on an untranslated id, so no locale can collide two tiles.
-	const tiles: ( StatTileProps & { id: string } )[] = [
+	const tiles: Tile[] = [
 		{
 			id: 'products',
 			label: __( 'Products affected', 'newspack-plugin' ),
@@ -96,7 +109,7 @@ export default function ImpactStats( {
 				id: 'scope',
 				label: __( 'Subscribers in scope', 'newspack-plugin' ),
 				...bounded( scope.total, scope.count_limited ),
-				description: __( 'Renewing subscriptions on those products', 'newspack-plugin' ),
+				description: __( 'Renewing subscriptions on those products.', 'newspack-plugin' ),
 			},
 			// The engine truncates oldest-first and the oldest are the ones a cohort
 			// gate protects, so a capped split under-reports who is repriced.
@@ -104,23 +117,39 @@ export default function ImpactStats( {
 				id: 'caught',
 				label: __( 'Eligible at renewal', 'newspack-plugin' ),
 				...( isLocked ? { value: null } : bounded( scope.caught, scope.count_limited ) ),
-				description: __( 'Repriced at their next renewal', 'newspack-plugin' ),
-				secondary: isLocked ? lockedNote : undefined,
+				description: __( 'Repriced at their next renewal.', 'newspack-plugin' ),
+				note: isLocked ? lockedNote : undefined,
 			},
 			{
 				id: 'protected',
 				label: _x( 'Protected', 'subscribers who keep their original price', 'newspack-plugin' ),
 				...( isLocked ? { value: null } : bounded( scope.protected, scope.count_limited ) ),
-				description: __( 'Keep the price they signed up at', 'newspack-plugin' ),
-				secondary: isLocked ? lockedNote : undefined,
+				description: __( 'Keep the price they signed up at.', 'newspack-plugin' ),
+				note: isLocked ? lockedNote : undefined,
 			}
 		);
 	}
 
 	return (
 		<Grid className="newspack-pricing-rules__stats" columns={ tiles.length } gutter={ 16 } noMargin>
-			{ tiles.map( ( { id, ...tile } ) => (
-				<StatTile key={ id } { ...tile } />
+			{ tiles.map( ( { id, label, value, valueLabel, description, note, actionLabel, onAction } ) => (
+				<StatCard.Root key={ id }>
+					<StatCard.Label>{ label }</StatCard.Label>
+					<StatCard.Body>
+						<StatCard.Value value={ value } valueLabel={ valueLabel } />
+					</StatCard.Body>
+					<StatCard.Footer>
+						{ /* Its own element, or Footer would fold the reason and the description into one sentence. */ }
+						{ note && <p className="newspack-stat-card__description">{ note }</p> }
+						{ description }
+						{ actionLabel && onAction && (
+							// Opens a modal, so a button styled as a link rather than an anchor.
+							<Button variant="link" className="newspack-stat-card__action" onClick={ onAction }>
+								{ actionLabel }
+							</Button>
+						) }
+					</StatCard.Footer>
+				</StatCard.Root>
 			) ) }
 		</Grid>
 	);

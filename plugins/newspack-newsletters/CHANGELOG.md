@@ -1,3 +1,22 @@
+# newspack-newsletters [3.40.0](https://github.com/Automattic/newspack-workspace/compare/newspack-newsletters@3.39.5...newspack-newsletters@3.40.0) (2026-08-31)
+
+
+### Bug Fixes
+
+* **newsletters:** pixel open counts and disabled-tracking cleanup ([#906](https://github.com/Automattic/newspack-workspace/issues/906)) ([439c92c](https://github.com/Automattic/newspack-workspace/commit/439c92c0ee3b41dcbb2677f626af8f5b7c3ae3c8))
+* three WordPress 7.1 regressions in Newsletters ([#876](https://github.com/Automattic/newspack-workspace/issues/876)) ([2cbc687](https://github.com/Automattic/newspack-workspace/commit/2cbc6877394b03eb1fff4694753414ef37d03406))
+
+
+### Features
+
+* **themes:** offer Header and Body fonts in the editor font picker ([#842](https://github.com/Automattic/newspack-workspace/issues/842)) ([6286f75](https://github.com/Automattic/newspack-workspace/commit/6286f75c8dc6dbf52e5f0c5fcc09bf0e75699e0e))
+
+
+### Dependencies
+
+* **newspack-components:** upgraded to 4.7.0
+* **newspack-icons:** upgraded to 1.1.2
+
 ## newspack-newsletters [3.39.5](https://github.com/Automattic/newspack-workspace/compare/newspack-newsletters@3.39.4...newspack-newsletters@3.39.5) (2026-08-20)
 
 

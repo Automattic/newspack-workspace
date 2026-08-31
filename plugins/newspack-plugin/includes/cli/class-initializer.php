@@ -38,6 +38,7 @@ class Initializer {
 		include_once NEWSPACK_ABSPATH . 'includes/cli/class-membership-gates-migration.php';
 		include_once NEWSPACK_ABSPATH . 'includes/cli/class-discounts-migration.php';
 		include_once NEWSPACK_ABSPATH . 'includes/cli/class-premium-newsletters-migration.php';
+		include_once NEWSPACK_ABSPATH . 'includes/cli/class-premium-newsletters-verify.php';
 		include_once NEWSPACK_ABSPATH . 'includes/cli/class-fix-memberships.php';
 	}
 
@@ -99,6 +100,12 @@ class Initializer {
 		WP_CLI::add_command( 'newspack export-subscriptions', [ 'Newspack\CLI\Export', 'export_subscriptions' ] );
 		WP_CLI::add_command( 'newspack export-users', [ 'Newspack\CLI\Export', 'export_users' ] );
 
+		// Registered whether or not WooCommerce Memberships is active, unlike the
+		// migrate-* commands below: it reads `_wc_memberships_force_public`, ordinary
+		// postmeta that outlives the plugin, and already-flipped sites are the ones
+		// needing it.
+		WP_CLI::add_command( 'newspack migrate-post-exemptions', [ 'Newspack\CLI\Membership_Gates_Migration', 'migrate_post_exemptions' ] );
+
 		// Only register the Teams for Memberships diagnostics command on sites where the
 		// SkyVerge plugin is active. No reason to surface it in `wp help` otherwise.
 		if ( class_exists( 'WC_Memberships_For_Teams_Loader' ) ) {
@@ -144,6 +151,11 @@ class Initializer {
 				[ 'Newspack\CLI\Fix_Memberships', 'run' ]
 			);
 		}
+
+		// Registered unconditionally, unlike the migration commands: this one runs
+		// after WooCommerce Memberships is deactivated, so gating it on Memberships
+		// would remove it at exactly the moment it is needed.
+		WP_CLI::add_command( 'newspack verify-premium-newsletters', [ 'Newspack\CLI\Premium_Newsletters_Verify', 'verify_premium_newsletters' ] );
 
 		Optional_Modules::register_commands();
 	}

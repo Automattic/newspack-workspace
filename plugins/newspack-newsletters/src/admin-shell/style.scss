@@ -225,6 +225,10 @@ body.newspack-newsletters-admin-screen .dataviews-filters__visibility-toggle[ari
 	display: none;
 }
 
+.newspack-newsletters-admin .dataviews-filters-toggle__count {
+	display: none;
+}
+
 // Muted item count portalled next to the breadcrumbs page title.
 .newspack-newsletters-header-count {
 	color: wp-colors.$gray-700;
@@ -233,32 +237,14 @@ body.newspack-newsletters-admin-screen .dataviews-filters__visibility-toggle[ari
 }
 
 .newspack-newsletters-list {
-	&__author,
-	&__status,
-	&__visibility {
-		align-items: center;
-		display: inline-flex;
-		gap: wp-vars.$grid-unit-10;
+	&__title-cell,
+	&__locked {
+		min-width: 0;
 	}
 
-	&__author-icon,
-	&__status-icon,
-	&__visibility-icon {
-		@include inline-icon;
-	}
-
-	&__author-avatar {
-		align-items: center;
-		display: inline-flex;
-		flex-shrink: 0;
-		height: 24px;
-		justify-content: center;
-		width: 24px;
-
-		img {
-			border-radius: 50%;
-			display: block;
-		}
+	&__locked {
+		color: wp-colors.$gray-700;
+		font-weight: wp-vars.$font-weight-regular;
 	}
 }
 
@@ -423,13 +409,11 @@ body.newspack-newsletters-admin-screen .dataviews-filters__visibility-toggle[ari
 
 // Trim the WP icon's 4px viewBox padding to its visible 16px footprint.
 .dataviews-view-table {
-	.newspack-newsletters-list__author-icon,
-	.newspack-newsletters-list__status-icon,
-	.newspack-newsletters-list__visibility-icon {
+	.newspack-newsletters-user-row__icon {
 		margin: -4px;
 	}
 
-	.newspack-newsletters-list__author-avatar {
+	.newspack-newsletters-user-row__avatar {
 		height: 16px;
 		width: 16px;
 	}

@@ -91,7 +91,7 @@ export default function CatalogImpact( { stats }: CatalogImpactProps ) {
 			<ImpactStats
 				totalMatching={ stats.total_matching }
 				countLimited={ stats.count_limited }
-				productsDescription={ __( 'Rules currently price these products', 'newspack-plugin' ) }
+				productsDescription={ __( 'Rules currently price these products.', 'newspack-plugin' ) }
 				audience={ stats.audience }
 				onViewProducts={ hasAffectedProducts ? open : undefined }
 			/>

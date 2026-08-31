@@ -1,7 +1,9 @@
 /**
  * Internal dependencies
  */
-import { displayStatuses, STATUS_BADGE_INTENT, STATUS_LABELS } from './status';
+import { displayStatuses, STATUS_BADGE_INTENT, STATUS_INDICATORS, STATUS_LABELS } from './status';
+import { postStatus } from '../audience/post-status';
+import { statusGlyph } from '../../../packages/components/src/status-indicator';
 
 // The status-reduction rule these assertions pin is documented on the PHP side,
 // in Subscribers_Wizard::reduced_status(); the endpoint's `status` filter
@@ -43,6 +45,35 @@ describe( 'displayStatuses', () => {
 	} );
 } );
 
+describe( 'STATUS_INDICATORS', () => {
+	it( 'gives every labelled status a name', () => {
+		expect( Object.keys( STATUS_INDICATORS ) ).toEqual( Object.keys( STATUS_LABELS ) );
+		Object.values( STATUS_INDICATORS ).forEach( name => expect( name ).toBeTruthy() );
+	} );
+
+	// Offered as separate filters, so two drawing the same mark leaves the reader
+	// unable to tell apart the results of two of them.
+	it( 'gives no two statuses the same mark', () => {
+		const glyphs = Object.values( STATUS_INDICATORS ).map( statusGlyph );
+		expect( new Set( glyphs ).size ).toBe( glyphs.length );
+	} );
+
+	it( 'separates a live subscription from one needing attention and one gone', () => {
+		expect( STATUS_INDICATORS.active ).toBe( 'active' );
+		expect( STATUS_INDICATORS[ 'on-hold' ] ).toBe( 'attention' );
+		expect( STATUS_INDICATORS.cancelled ).toBe( 'cancelled' );
+	} );
+
+	// The vocabulary guarantees one name draws one mark. It cannot guarantee two
+	// wizards reach for the same name for the same word, and Pending is the pair
+	// that has drifted apart before.
+	it( 'names Pending the way the Audience lists do', () => {
+		expect( STATUS_INDICATORS.pending ).toBe( postStatus( 'pending' ) );
+	} );
+} );
+
+// The badge intents outlive the column: the profile card and the person header
+// still badge a single status, where an attention marker is what a badge is for.
 describe( 'STATUS_BADGE_INTENT', () => {
 	it( 'gives every labelled status an intent', () => {
 		expect( Object.keys( STATUS_BADGE_INTENT ) ).toEqual( Object.keys( STATUS_LABELS ) );

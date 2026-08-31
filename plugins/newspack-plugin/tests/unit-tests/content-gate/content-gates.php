@@ -3173,13 +3173,15 @@ class Test_Content_Gates extends \WP_UnitTestCase {
 		$premium_newsletters_wizard = \Newspack\Wizards::get_wizard( 'premium-newsletters' );
 
 		$content_gate_request = new \WP_REST_Request( 'POST', '/' . NEWSPACK_API_NAMESPACE . '/wizard/newspack-premium-newsletters/' . $this->gate_ids[2] . '/duplicate' );
-		$content_gate_request->set_param( 'id', $this->gate_ids[2] );
+		// Where the server puts a route's captures when it dispatches, and where the
+		// handlers read the gate ID from — a body parameter must not name the gate.
+		$content_gate_request->set_url_params( [ 'id' => $this->gate_ids[2] ] );
 		$rejection = $premium_newsletters_wizard->api_duplicate_gate( $content_gate_request );
 		$this->assertWPError( $rejection, 'The premium newsletters wizard rejects content gates' );
 		$this->assertSame( 400, $rejection->get_error_data()['status'] );
 
 		$newsletter_request = new \WP_REST_Request( 'POST', '/' . NEWSPACK_API_NAMESPACE . '/wizard/newspack-premium-newsletters/' . $newsletter_gate_id . '/duplicate' );
-		$newsletter_request->set_param( 'id', $newsletter_gate_id );
+		$newsletter_request->set_url_params( [ 'id' => $newsletter_gate_id ] );
 		$success = $premium_newsletters_wizard->api_duplicate_gate( $newsletter_request );
 		$this->assertNotWPError( $success );
 		$this->assertSame( 'Premium Newsletter Gate copy', $success->get_data()['title'] );
