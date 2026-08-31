@@ -116,23 +116,50 @@ add_action(
 	function () {
 		// phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- Compared against a literal prefix and never output; a sanitizer would alter the string being matched.
 		if ( isset( $_SERVER['REQUEST_URI'] ) && str_starts_with( wp_unslash( $_SERVER['REQUEST_URI'] ), '/_email' ) ) {
+			// The gate below varies the response on a secret request header, but page
+			// caches key on the URL, not that header — so a stored authorized 200
+			// would be replayed to an unauthenticated request at the same URL, a
+			// bypass. Exclude every /_email response from the page cache before the
+			// gate runs. batcache_cancel() is the load-bearing one on WordPress.com /
+			// Atomic: Batcache serves stored copies before plugins load, so stopping
+			// the store is the only reliable point (this Batcache ignores
+			// DONOTCACHEPAGE, which is kept only for other page caches on other
+			// hosts). nocache_headers() on each branch below covers the edge, proxies
+			// and browser. batcache_cancel() is defined only on cached web requests,
+			// hence the guard.
+			if ( function_exists( 'batcache_cancel' ) ) {
+				batcache_cancel();
+			}
+			if ( ! defined( 'DONOTCACHEPAGE' ) ) {
+				define( 'DONOTCACHEPAGE', true );
+			}
 			// The sendbox dumps every captured outgoing email — including reader
 			// password-reset and account-verification links — so it must never be
 			// served to an unauthenticated visitor. Gate it behind a per-run shared
 			// secret that provisioning writes to the NEWSPACK_E2E_SENDBOX_SECRET
 			// constant, and fail closed (403) — before emitting any email content —
 			// whenever that constant is unset/empty or the request does not present
-			// a matching `secret` query arg. hash_equals keeps the compare
-			// timing-safe.
+			// a matching secret. The secret travels in a request header, not the URL,
+			// so it stays out of access logs, published Playwright artifacts and
+			// browser history; hash_equals keeps the compare timing-safe. Both
+			// branches send no-cache headers so an intermediary — the managed edge in
+			// front of a non-local target, which this repo can't inspect or pin —
+			// can't retain either the dump or the refusal.
 			$configured_secret = defined( 'NEWSPACK_E2E_SENDBOX_SECRET' ) ? (string) constant( 'NEWSPACK_E2E_SENDBOX_SECRET' ) : '';
-			// phpcs:ignore WordPress.Security.NonceVerification.Recommended, WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- Read-only, secret-gated endpoint so a nonce doesn't apply; the value is compared via hash_equals against a configured secret and never output, and sanitizing would alter the string being matched.
-			$provided_secret = isset( $_GET['secret'] ) && is_string( $_GET['secret'] ) ? (string) wp_unslash( $_GET['secret'] ) : '';
+			// phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- Compared via hash_equals against a configured secret and never output; sanitizing would alter the string being matched.
+			$provided_secret = isset( $_SERVER['HTTP_X_NEWSPACK_E2E_SENDBOX_SECRET'] ) && is_string( $_SERVER['HTTP_X_NEWSPACK_E2E_SENDBOX_SECRET'] ) ? (string) wp_unslash( $_SERVER['HTTP_X_NEWSPACK_E2E_SENDBOX_SECRET'] ) : '';
 			if ( '' === $configured_secret || ! hash_equals( $configured_secret, $provided_secret ) ) {
+				nocache_headers();
 				status_header( 403 );
 				header( 'Content-Type: text/plain' );
 				echo 'Forbidden';
 				exit;
 			}
+			nocache_headers();
+			// The sendbox renders captured email HTML verbatim — a page of links — so
+			// suppress the Referer to keep the request URL out of any off-site
+			// request a followed link might trigger.
+			header( 'Referrer-Policy: no-referrer' );
 			header( 'Content-Type: text/html' );
 			?>
 			<html><head><title>Email Sendbox</title></head><body>
