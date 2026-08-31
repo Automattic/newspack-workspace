@@ -186,7 +186,7 @@ class Metering_Countdown {
 				return;
 			}
 			\Newspack_Blocks\Modal_Checkout::enqueue_modal( $product->get_id() );
-			\Newspack_Blocks::enqueue_view_assets( 'checkout-button' );
+			\Newspack_Blocks::enqueue_view_assets( 'checkout-button', 'defer' );
 			$checkout_data = \Newspack_Blocks\Modal_Checkout\Checkout_Data::get_checkout_data( $product );
 			?>
 			<div class="wp-block-newspack-blocks-checkout-button">
@@ -249,7 +249,7 @@ class Metering_Countdown {
 											__( '<span class="newspack-countdown-banner__views">%1$d</span>/<span class="newspack-countdown-banner__total_views">%2$d</span> free articles this %3$s', 'newspack-plugin' ),
 											$views,
 											$total_views,
-											Metering::get_metering_period()
+											Metering::get_period_label( Metering::get_metering_period() )
 										),
 										$views,
 										$total_views,

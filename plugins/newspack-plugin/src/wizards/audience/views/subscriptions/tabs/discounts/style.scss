@@ -1,0 +1,82 @@
+/**
+ * Subscriber discounts tab.
+ */
+
+@use "~@wordpress/base-styles/colors" as wp-colors;
+@use "~@wordpress/base-styles/variables" as wp-vars;
+
+.newspack-subscriber-discounts {
+	&__empty {
+		margin: 0 auto;
+		max-width: calc(var(--newspack-wizard-section-space) * 2 + var(--newspack-wizard-section-width));
+		padding: 0 var(--newspack-wizard-section-space);
+	}
+
+	&__applies-to {
+		display: inline-block;
+	}
+
+	&__applies-to-excluded {
+		color: wp-colors.$gray-700;
+		display: block;
+	}
+
+	&__fetching {
+		display: flex;
+		justify-content: center;
+		padding: 48px 0;
+
+		strong {
+			font-weight: wp-vars.$font-weight-medium;
+		}
+	}
+
+	&__header-count {
+		color: wp-colors.$gray-700;
+		font-weight: normal;
+	}
+
+	&__preview {
+		border-collapse: collapse;
+		width: 100%;
+
+		th,
+		td {
+			border-bottom: 1px solid wp-colors.$gray-100;
+			padding: wp-vars.$grid-unit-15 0;
+			text-align: left;
+		}
+
+		th {
+			color: wp-colors.$gray-900;
+			font-size: wp-vars.$font-size-x-small;
+			font-weight: wp-vars.$font-weight-medium;
+			text-transform: uppercase;
+		}
+
+		td:nth-child(2) {
+			color: wp-colors.$gray-700;
+			font-weight: normal;
+		}
+
+		del {
+			margin-right: 4px;
+		}
+	}
+
+	.dataviews-title-field--clickable:focus:not(:focus-visible) {
+		box-shadow: none;
+		color: inherit;
+	}
+
+	&__preview-more td {
+		color: wp-colors.$gray-700;
+		font-style: italic;
+	}
+
+	&__settings {
+		h3 {
+			margin: 0;
+		}
+	}
+}

@@ -69,7 +69,7 @@ class Nodes {
 		$nodes  = get_posts(
 			[
 				'post_type'      => self::POST_TYPE_SLUG,
-				'posts_per_page' => -1,
+				'posts_per_page' => -1, // phpcs:ignore WordPressVIPMinimum.Performance.NoPaging -- Network nodes CPT; a network has a handful of nodes.
 				'fields'         => 'ids',
 			]
 		);

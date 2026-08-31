@@ -2,14 +2,14 @@
 # This file is distributed under the GPL2.
 msgid ""
 msgstr ""
-"Project-Id-Version: Newspack Story Budget 1.0.0\n"
+"Project-Id-Version: Newspack Story Budget 1.2.0\n"
 "Report-Msgid-Bugs-To: https://wordpress.org/support/plugin/newspack-story-budget\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-04-30T19:36:48+00:00\n"
+"POT-Creation-Date: 2026-08-11T17:40:44+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: newspack-story-budget\n"
@@ -37,8 +37,8 @@ msgstr ""
 #: includes/class-admin.php:50
 #: includes/class-admin.php:51
 #: includes/class-budgets.php:54
-#: dist/story-budget-app.js:158
-#: src/app/index.js:83
+#: dist/story-budget-app.js:157
+#: src/app/index.js:82
 msgid "Story Budget"
 msgstr ""
 
@@ -46,13 +46,13 @@ msgstr ""
 #: includes/class-admin.php:252
 #: includes/class-admin.php:338
 #: includes/fields/class-fields.php:150
-#: dist/story-budget-app.js:155
+#: dist/story-budget-app.js:154
 #: src/components/create-new-story.js:100
 msgid "Budget"
 msgstr ""
 
 #: includes/class-admin.php:228
-#: dist/story-budget-app.js:143
+#: dist/story-budget-app.js:142
 #: dist/story-budget-editor.js:1
 #: src/components/story-field-control.js:60
 msgid "No budget"
@@ -284,7 +284,7 @@ msgid "An internal name for the story."
 msgstr ""
 
 #: includes/fields/class-fields.php:106
-#: dist/story-budget-app.js:155
+#: dist/story-budget-app.js:154
 #: src/components/create-new-story.js:89
 msgid "Story Name"
 msgstr ""
@@ -314,7 +314,7 @@ msgid "Story budget this story is assigned to."
 msgstr ""
 
 #: includes/fields/class-fields.php:150
-#: dist/story-budget-app.js:158
+#: dist/story-budget-app.js:157
 #: src/app/index.js:75
 msgid "Budgets"
 msgstr ""
@@ -426,7 +426,7 @@ msgid "Story Statuses"
 msgstr ""
 
 #: includes/fields/class-statuses.php:48
-#: dist/story-budget-editor.js:1
+#: dist/story-budget-editor.js:8
 #: src/editor/index.js:80
 msgid "Story Status"
 msgstr ""
@@ -487,47 +487,47 @@ msgstr ""
 msgid "Non-hierarchical taxonomies are not supported."
 msgstr ""
 
-#. translators: %s: field label
-#: dist/story-budget-app.js:143
+#. translators: 1: Filter name.
+#: dist/story-budget-app.js:142
 #: dist/story-budget-data.js:1
 #: dist/story-budget-editor.js:1
 #: src/utils/fields.js:17
 msgid "Yes"
 msgstr ""
 
-#: dist/story-budget-app.js:143
+#: dist/story-budget-app.js:142
 #: dist/story-budget-data.js:1
 #: dist/story-budget-editor.js:1
 #: src/utils/fields.js:18
 msgid "No"
 msgstr ""
 
-#: dist/story-budget-app.js:143
-#: dist/story-budget-editor.js:1
+#: dist/story-budget-app.js:142
+#: dist/story-budget-editor.js:8
 #: src/components/story-field.js:109
 msgid "Click to set"
 msgstr ""
 
-#: dist/story-budget-app.js:143
-#: dist/story-budget-app.js:152
-#: dist/story-budget-editor.js:1
+#: dist/story-budget-app.js:142
+#: dist/story-budget-app.js:151
+#: dist/story-budget-editor.js:8
 #: src/components/story-field.js:167
 #: src/hooks/index.js:130
 msgid "View"
 msgstr ""
 
-#: dist/story-budget-app.js:143
-#: dist/story-budget-app.js:152
-#: dist/story-budget-editor.js:1
+#: dist/story-budget-app.js:142
+#: dist/story-budget-app.js:151
+#: dist/story-budget-editor.js:8
 #: src/components/story-field.js:172
 #: src/hooks/index.js:159
 msgid "Edit Post"
 msgstr ""
 
-#: dist/story-budget-app.js:143
-#: dist/story-budget-app.js:152
-#: dist/story-budget-app.js:155
-#: dist/story-budget-editor.js:1
+#: dist/story-budget-app.js:142
+#: dist/story-budget-app.js:151
+#: dist/story-budget-app.js:154
+#: dist/story-budget-editor.js:8
 #: src/components/budget-field/budget-field-auto-archive-date.js:96
 #: src/components/budget-field/budget-field-name.js:65
 #: src/components/create-budget-modal.js:74
@@ -537,10 +537,10 @@ msgstr ""
 msgid "Save"
 msgstr ""
 
-#: dist/story-budget-app.js:143
-#: dist/story-budget-app.js:152
-#: dist/story-budget-app.js:155
-#: dist/story-budget-editor.js:1
+#: dist/story-budget-app.js:142
+#: dist/story-budget-app.js:151
+#: dist/story-budget-app.js:154
+#: dist/story-budget-editor.js:8
 #: src/components/budget-field/budget-field-auto-archive-date.js:110
 #: src/components/budget-field/budget-field-name.js:68
 #: src/components/create-budget-modal.js:71
@@ -551,32 +551,37 @@ msgstr ""
 msgid "Cancel"
 msgstr ""
 
-#: dist/story-budget-app.js:143
+#: dist/story-budget-app.js:142
+#: dist/story-budget-editor.js:1
 #: src/components/stories-edit.js:41
 msgid "Clear field"
 msgstr ""
 
-#: dist/story-budget-app.js:143
+#: dist/story-budget-app.js:142
+#: dist/story-budget-editor.js:1
 #: src/components/stories-edit.js:44
 msgid "Cancel changes"
 msgstr ""
 
 #. translators: %d: number of stories
-#: dist/story-budget-app.js:144
+#: dist/story-budget-app.js:143
+#: dist/story-budget-editor.js:2
 #: src/components/stories-edit.js:79
 #, js-format
 msgid "%d stories"
 msgstr ""
 
 #. translators: %1$s: first item title, %2$s: second item title
-#: dist/story-budget-app.js:145
+#: dist/story-budget-app.js:144
+#: dist/story-budget-editor.js:3
 #: src/components/stories-edit.js:89
 #, js-format
 msgid "%1$s and %2$s"
 msgstr ""
 
 #. translators: %1$s: comma-separated list of item titles, %2$s: last item title
-#: dist/story-budget-app.js:146
+#: dist/story-budget-app.js:145
+#: dist/story-budget-editor.js:4
 #: src/components/stories-edit.js:98
 #, js-format
 msgid "%1$s, and %2$s"
@@ -584,290 +589,295 @@ msgstr ""
 
 #. translators: %s is the title of the story.
 #. translators: %s is the title for the selected stories.
-#: dist/story-budget-app.js:149
+#: dist/story-budget-app.js:148
+#: dist/story-budget-editor.js:6
 #: src/components/stories-edit.js:180
 #: src/components/stories-edit.js:185
 #, js-format
 msgid "Editing %s"
 msgstr ""
 
-#: dist/story-budget-app.js:149
+#: dist/story-budget-app.js:148
+#: dist/story-budget-editor.js:6
 #: src/components/stories-edit.js:237
 msgid "The following fields will be updated:"
 msgstr ""
 
-#: dist/story-budget-app.js:149
+#: dist/story-budget-app.js:148
+#: dist/story-budget-editor.js:6
 #: src/components/stories-edit.js:249
 msgid "Will be empty"
 msgstr ""
 
-#: dist/story-budget-app.js:149
+#: dist/story-budget-app.js:148
+#: dist/story-budget-editor.js:6
 #: src/components/stories-edit.js:261
 msgid "Save story"
 msgstr ""
 
 #. translators: %d is the number of stories.
-#: dist/story-budget-app.js:152
+#: dist/story-budget-app.js:151
+#: dist/story-budget-editor.js:8
 #: src/components/stories-edit.js:264
 #, js-format
 msgid "Save %d stories"
 msgstr ""
 
-#: dist/story-budget-app.js:152
+#: dist/story-budget-app.js:151
 #: src/hooks/index.js:139
 msgid "Edit Fields"
 msgstr ""
 
-#: dist/story-budget-app.js:152
+#: dist/story-budget-app.js:151
 #: src/hooks/index.js:147
 msgid "Refresh"
 msgstr ""
 
-#: dist/story-budget-app.js:152
+#: dist/story-budget-app.js:151
 #: src/components/stories.js:113
 msgid "Fetching Stories…"
 msgstr ""
 
-#: dist/story-budget-app.js:152
+#: dist/story-budget-app.js:151
 #: src/components/stories.js:124
 msgid "Something went wrong"
 msgstr ""
 
-#: dist/story-budget-app.js:152
+#: dist/story-budget-app.js:151
 #: src/components/stories.js:143
 msgid "Reconnect"
 msgstr ""
 
-#: dist/story-budget-app.js:152
+#: dist/story-budget-app.js:151
 #: src/components/stories.js:146
 msgid "Leave remote site"
 msgstr ""
 
-#: dist/story-budget-app.js:152
+#: dist/story-budget-app.js:151
 #: src/components/stories.js:156
 msgid "Reload page"
 msgstr ""
 
-#: dist/story-budget-app.js:152
+#: dist/story-budget-app.js:151
 #: src/components/stories.js:186
 msgid "Loading stories…"
 msgstr ""
 
-#: dist/story-budget-app.js:152
+#: dist/story-budget-app.js:151
 #: src/components/stories.js:187
 msgid "Refresh all stories"
 msgstr ""
 
-#: dist/story-budget-app.js:152
+#: dist/story-budget-app.js:151
 #: src/components/stories.js:195
 msgid "Edit mode"
 msgstr ""
 
-#: dist/story-budget-app.js:152
+#: dist/story-budget-app.js:151
 #: src/components/story.js:100
 msgid "Preview is unavailable when accessing remotely"
 msgstr ""
 
-#: dist/story-budget-app.js:152
+#: dist/story-budget-app.js:151
 #: src/components/story.js:103
 msgid "Preview in a new tab"
 msgstr ""
 
-#: dist/story-budget-app.js:152
+#: dist/story-budget-app.js:151
 #: src/components/story.js:108
 msgid "Preview is unavailable"
 msgstr ""
 
-#: dist/story-budget-app.js:152
+#: dist/story-budget-app.js:151
 #: src/components/story.js:166
 msgid "Close"
 msgstr ""
 
-#: dist/story-budget-app.js:152
+#: dist/story-budget-app.js:151
 #: src/components/story.js:171
 msgid "Edit post"
 msgstr ""
 
 #. translators: 1: Current page number, 2: Total number of pages.
-#: dist/story-budget-app.js:155
+#: dist/story-budget-app.js:154
 #: src/components/budget-pagination.js:28
 msgid "Current page"
 msgstr ""
 
-#: dist/story-budget-app.js:155
+#: dist/story-budget-app.js:154
 #: src/components/budget-pagination.js:49
 msgid "Previous page"
 msgstr ""
 
-#: dist/story-budget-app.js:155
+#: dist/story-budget-app.js:154
 #: src/components/budget-pagination.js:59
 msgid "Next page"
 msgstr ""
 
-#: dist/story-budget-app.js:155
+#: dist/story-budget-app.js:154
 #: src/components/budget-field/budget-field-name.js:51
 msgid "Edit Budget"
 msgstr ""
 
-#: dist/story-budget-app.js:155
+#: dist/story-budget-app.js:154
 #: src/components/budget-field/budget-field-name.js:56
 msgid "Name"
 msgstr ""
 
-#: dist/story-budget-app.js:155
+#: dist/story-budget-app.js:154
 #: src/components/budget-field/budget-field-auto-archive-date.js:63
 #: src/components/budget-rows.js:236
 msgid "Auto-archive set for "
 msgstr ""
 
-#: dist/story-budget-app.js:155
+#: dist/story-budget-app.js:154
 #: src/components/budget-field/budget-field-auto-archive-date.js:69
 msgid "Click to set an auto-archive date"
 msgstr ""
 
-#: dist/story-budget-app.js:155
+#: dist/story-budget-app.js:154
 #: src/components/budget-field/budget-field-auto-archive-date.js:77
 msgid "Auto-Archive"
 msgstr ""
 
-#: dist/story-budget-app.js:155
+#: dist/story-budget-app.js:154
 #: src/components/budget-field/budget-field-auto-archive-date.js:90
 msgid "Automatically archive on "
 msgstr ""
 
-#: dist/story-budget-app.js:155
+#: dist/story-budget-app.js:154
 #: src/components/budget-field/budget-field-auto-archive-date.js:106
 msgid "Reset"
 msgstr ""
 
-#: dist/story-budget-app.js:155
+#: dist/story-budget-app.js:154
 #: src/components/budget-rows.js:159
 msgid "View Stories"
 msgstr ""
 
-#: dist/story-budget-app.js:155
+#: dist/story-budget-app.js:154
 #: src/components/budget-rows.js:169
 msgid "Unarchive"
 msgstr ""
 
-#: dist/story-budget-app.js:155
+#: dist/story-budget-app.js:154
 #: src/components/budget-rows.js:169
 msgid "Archive"
 msgstr ""
 
-#: dist/story-budget-app.js:155
+#: dist/story-budget-app.js:154
 #: src/components/budget-rows.js:254
 msgid "Actions"
 msgstr ""
 
-#: dist/story-budget-app.js:155
+#: dist/story-budget-app.js:154
 #: src/components/budget-rows.js:266
 msgid "No budgets found."
 msgstr ""
 
-#: dist/story-budget-app.js:155
+#: dist/story-budget-app.js:154
 #: src/components/budgets.js:46
 msgid "Loading…"
 msgstr ""
 
-#: dist/story-budget-app.js:155
+#: dist/story-budget-app.js:154
 #: src/components/budgets.js:47
 msgid "Fetching Budgets…"
 msgstr ""
 
-#: dist/story-budget-app.js:155
+#: dist/story-budget-app.js:154
 #: src/components/budgets.js:107
 msgid "Search"
 msgstr ""
 
-#: dist/story-budget-app.js:155
+#: dist/story-budget-app.js:154
 #: src/components/budgets.js:114
 msgid "Budget Status"
 msgstr ""
 
-#: dist/story-budget-app.js:155
+#: dist/story-budget-app.js:154
 #: src/components/budgets.js:118
 msgid "Active"
 msgstr ""
 
-#: dist/story-budget-app.js:155
+#: dist/story-budget-app.js:154
 #: src/components/budgets.js:122
 msgid "Archived"
 msgstr ""
 
-#: dist/story-budget-app.js:155
+#: dist/story-budget-app.js:154
 #: src/components/budgets.js:132
 msgid "Edit Mode"
 msgstr ""
 
-#: dist/story-budget-app.js:155
+#: dist/story-budget-app.js:154
 #: src/components/create-new-story.js:42
 msgid "Select a budget"
 msgstr ""
 
-#: dist/story-budget-app.js:155
+#: dist/story-budget-app.js:154
 #: src/components/create-new-story.js:46
 msgid "Add new budget"
 msgstr ""
 
-#: dist/story-budget-app.js:155
+#: dist/story-budget-app.js:154
 #: src/components/create-new-story.js:113
 msgid "New Budget Name"
 msgstr ""
 
-#: dist/story-budget-app.js:155
+#: dist/story-budget-app.js:154
 #: src/components/create-budget-modal.js:55
 msgid "Budget Name"
 msgstr ""
 
-#: dist/story-budget-app.js:155
+#: dist/story-budget-app.js:154
 #: src/components/sites.js:25
 msgid "Connect"
 msgstr ""
 
-#: dist/story-budget-app.js:155
+#: dist/story-budget-app.js:154
 #: src/components/authorizing-site.js:46
 msgid "Connection authorized"
 msgstr ""
 
-#: dist/story-budget-app.js:155
+#: dist/story-budget-app.js:154
 #: src/components/authorizing-site.js:46
 msgid "Connection denied"
 msgstr ""
 
-#: dist/story-budget-app.js:155
+#: dist/story-budget-app.js:154
 #: src/components/authorizing-site.js:50
 msgid "Redirecting…"
 msgstr ""
 
 #. translators: %s is the name of the site.
-#: dist/story-budget-app.js:158
+#: dist/story-budget-app.js:157
 #: src/components/sites-nav.js:27
 #, js-format
 msgid "Leave %s"
 msgstr ""
 
-#: dist/story-budget-app.js:158
-#: src/app/index.js:124
+#: dist/story-budget-app.js:157
+#: src/app/index.js:119
 #: src/components/sites-nav.js:37
 msgid "Connect to remote site"
 msgstr ""
 
-#: dist/story-budget-app.js:158
+#: dist/story-budget-app.js:157
 #: src/app/index.js:71
 msgid "Stories"
 msgstr ""
 
-#: dist/story-budget-app.js:158
-#: src/app/index.js:115
-#: src/app/index.js:133
-msgid "Add New Story"
+#: dist/story-budget-app.js:157
+#: src/app/index.js:110
+#: src/app/index.js:128
+msgid "Add Story"
 msgstr ""
 
-#: dist/story-budget-app.js:158
-#: src/app/index.js:145
-#: src/app/index.js:152
-msgid "Add New Budget"
+#: dist/story-budget-app.js:157
+#: src/app/index.js:140
+#: src/app/index.js:147
+msgid "Add Budget"
 msgstr ""
 
 #: dist/story-budget-data.js:1

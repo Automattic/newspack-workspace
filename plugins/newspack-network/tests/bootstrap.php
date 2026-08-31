@@ -32,5 +32,10 @@ tests_add_filter( 'muplugins_loaded', 'newspack_network_hub_manually_load_plugin
 
 require_once __DIR__ . '/../vendor/yoast/phpunit-polyfills/phpunitpolyfills-autoload.php';
 
+// Lets tests call the WP-CLI command classes directly.
+require_once __DIR__ . '/class-wp-cli-halt.php';
+require_once __DIR__ . '/class-wp-cli.php';
+require_once __DIR__ . '/wp-cli-utils.php';
+
 // Start up the WP testing environment.
 require "{$newspack_network_hub_test_dir}/includes/bootstrap.php";

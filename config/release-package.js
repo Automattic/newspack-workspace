@@ -14,27 +14,41 @@
  * tagFormat here. These libraries are all unscoped, so the patch is a no-op for
  * them.
  */
+const { gitCommitStep } = require( './release-helpers' );
+
 module.exports = {
 	branches: [
 		'release',
 		{ name: 'alpha', prerelease: true },
-		{ name: 'hotfix/*', prerelease: '${name.replace(/\\//g, "-")}' },
-		{ name: 'epic/*', prerelease: '${name.replace(/\\//g, "-")}' },
+		// hotfix/* and epic/* branches no longer publish prerelease tags:
+		// CI's build-zips job already produces an installable zip for every
+		// commit, so the tags and their builds were redundant.
 	],
 	plugins: [
 		'@semantic-release/commit-analyzer',
 		'@semantic-release/release-notes-generator',
 		'@semantic-release/npm',
-		[ '@semantic-release/github', { successComment: false, releasedLabels: false, failComment: false, failTitle: false } ],
+		// A release failure is surfaced by the workflow itself, so semantic-release
+		// does not also open an issue for it.
+		[ '@semantic-release/github', { failComment: false, failTitle: false } ],
 	],
 	prepare: [
 		'@semantic-release/changelog',
 		'@semantic-release/npm',
-		{
-			path: '@semantic-release/git',
-			assets: [ 'package.json', 'CHANGELOG.md' ],
-			message:
-				'chore(release): ${nextRelease.version} [skip ci]\n\n${nextRelease.notes}',
-		},
+		// CHANGELOG.md only, and only on `release` — same contract as the plugins
+		// in config/release.js. package.json is deliberately NOT committed here:
+		// @semantic-release/npm concretizes internal `workspace:*` deps in the
+		// working tree before publishing, so committing the manifest would put
+		// those concrete pins on the branch. That breaks the next
+		// `pnpm install --frozen-lockfile` (the root lockfile is keyed to
+		// workspace:*) and, once installed, makes pnpm resolve the shared
+		// packages from the npm registry instead of linking packages/ — the
+		// registry tarballs ship raw JSX in src/, outside every plugin's
+		// babel-loader scope. The published tarballs still get real dep versions,
+		// because the npm publish phase reads the concretized working tree.
+		// The version bump itself is committed by
+		// .github/scripts/finalize-package-versions.cjs, which reverts the deps
+		// back to workspace:* first.
+		...gitCommitStep( [ 'CHANGELOG.md' ] ),
 	],
 };

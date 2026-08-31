@@ -10,6 +10,7 @@ namespace Newspack\Tests\Content_Gate;
 use Newspack\Content_Gate;
 use Newspack\Metering;
 use Newspack\Reader_Activation;
+use Newspack\Site_Meter;
 
 /**
  * Tests for the Metering class.
@@ -71,6 +72,8 @@ class Test_Metering extends \WP_UnitTestCase {
 	 *     @type bool   $metering_enabled     Whether metering is enabled.
 	 *     @type int    $metering_count       Number of metered views allowed.
 	 *     @type string $metering_period      Metering period (day, week, month).
+	 *     @type string $metering_scope       Whether the allowance comes from the site
+	 *                                        meter ('site') or the gate ('gate').
 	 * }
 	 * @return int Gate ID.
 	 */
@@ -80,6 +83,9 @@ class Test_Metering extends \WP_UnitTestCase {
 			'metering_enabled'     => true,
 			'metering_count'       => 3,
 			'metering_period'      => 'month',
+			// These assert on each gate's own count, so they opt out. The shared path has
+			// its own test class.
+			'metering_scope'       => Site_Meter::SCOPE_GATE,
 		];
 		$args = wp_parse_args( $args, $defaults );
 
@@ -98,30 +104,55 @@ class Test_Metering extends \WP_UnitTestCase {
 						'value' => [ 'post' ],
 					],
 				],
-				'registration'  => $args['registration'] ?? [
-					'active'               => true,
-					'metering'             => [
-						'enabled' => $args['metering_enabled'],
-						'count'   => $args['metering_count'],
-						'period'  => $args['metering_period'],
+				'registration'  => isset( $args['registration'] )
+					? $this->with_metering_scope( $args['registration'], $args['metering_scope'] )
+					: [
+						'active'               => true,
+						'metering'             => [
+							'enabled' => $args['metering_enabled'],
+							'count'   => $args['metering_count'],
+							'period'  => $args['metering_period'],
+							'scope'   => $args['metering_scope'],
+						],
+						'require_verification' => $args['require_verification'],
+						'gate_id'              => 0,
 					],
-					'require_verification' => $args['require_verification'],
-					'gate_id'              => 0,
-				],
-				'custom_access' => $args['custom_access'] ?? [
-					'active'       => true,
-					'metering'     => [
-						'enabled' => $args['metering_enabled'],
-						'count'   => $args['metering_count'],
-						'period'  => $args['metering_period'],
+				'custom_access' => isset( $args['custom_access'] )
+					? $this->with_metering_scope( $args['custom_access'], $args['metering_scope'] )
+					: [
+						'active'       => true,
+						'metering'     => [
+							'enabled' => $args['metering_enabled'],
+							'count'   => $args['metering_count'],
+							'period'  => $args['metering_period'],
+							'scope'   => $args['metering_scope'],
+						],
+						'gate_id'      => 0,
+						'access_rules' => [],
 					],
-					'gate_id'      => 0,
-					'access_rules' => [],
-				],
 			]
 		);
 
 		return $gate_id;
+	}
+
+	/**
+	 * Stamp a metering scope onto an audience path that does not name one.
+	 *
+	 * Tests that hand-build a path assert on the count they wrote there, so they need
+	 * that count to be the one in force. Without a scope the gate would fall through
+	 * to the site meter and every such assertion would read the site's default.
+	 *
+	 * @param array  $section Registration or custom access settings.
+	 * @param string $scope   Scope to apply when the section does not set one.
+	 *
+	 * @return array The settings, with a metering scope.
+	 */
+	private function with_metering_scope( $section, $scope ) {
+		if ( isset( $section['metering'] ) && is_array( $section['metering'] ) && ! isset( $section['metering']['scope'] ) ) {
+			$section['metering']['scope'] = $scope;
+		}
+		return $section;
 	}
 
 	/**
@@ -898,5 +929,133 @@ class Test_Metering extends \WP_UnitTestCase {
 		// Past the registration wall, so the paid access settings govern.
 		$this->assertEquals( 3, Metering::get_total_metered_views( true ), 'Verified readers should get the paid access count' );
 		$this->assertEquals( 'month', Metering::get_metering_period( $post_id ), 'Verified readers should get the paid access period' );
+	}
+
+	/**
+	 * Content_Gate::is_metering_enabled() answers "may this site use metering-dependent
+	 * features" for the Audience wizards. It has to read the gate's metering through
+	 * Metering, since the gate array exposes metering under its registration and paid
+	 * access sections rather than at the top level.
+	 */
+	public function test_is_metering_enabled_finds_a_metered_gate() {
+		$gate_id = $this->create_gate_with_settings( [ 'metering_count' => 3 ] );
+
+		$this->assertTrue( Metering::is_gate_metered( $gate_id ), 'A gate granting 3 free views meters' );
+		$this->assertTrue( Content_Gate::is_metering_enabled(), 'A metered gate makes metering available to the wizard' );
+	}
+
+	/**
+	 * Metering switched on with 0 free views gates every reader on their first view, so
+	 * it is metering in name only - the countdown banner has nothing to count down. The
+	 * wizard must not offer those features on the strength of such a gate (NPPD-2056).
+	 */
+	public function test_a_gate_granting_no_free_views_does_not_meter() {
+		$gate_id = $this->create_gate_with_settings( [ 'metering_count' => 0 ] );
+
+		$this->assertFalse( Metering::is_gate_metered( $gate_id ), 'Metering enabled with 0 free views does not meter' );
+		$this->assertFalse( Content_Gate::is_metering_enabled(), 'A gate granting no free views must not advertise metering to the wizard' );
+	}
+
+	/**
+	 * A count belonging to a section whose metering is switched off must not rescue
+	 * another section that meters 0 views.
+	 */
+	public function test_a_disabled_sections_count_does_not_rescue_another() {
+		$gate_id = $this->create_gate_with_settings(
+			[
+				// Anonymous readers: a leftover count, but metering switched off.
+				'registration'  => [
+					'active'               => true,
+					'metering'             => [
+						'enabled' => false,
+						'count'   => 3,
+						'period'  => 'month',
+					],
+					'require_verification' => false,
+					'gate_id'              => 0,
+				],
+				// Registered readers: metering on, but no free views to give.
+				'custom_access' => [
+					'active'       => true,
+					'metering'     => [
+						'enabled' => true,
+						'count'   => 0,
+						'period'  => 'month',
+					],
+					'gate_id'      => 0,
+					'access_rules' => [],
+				],
+			]
+		);
+
+		$this->assertFalse( Metering::is_gate_metered( $gate_id ), 'Neither audience meters, so the gate does not meter' );
+	}
+
+	/**
+	 * The default layout a new gate generates has to match what the gate actually grants.
+	 * A paid tier that is active but meters 0 free views gates every reader immediately, so
+	 * its registration layout must not advertise "free articles" it never delivers - a
+	 * metering paid tier still gets the metering layout (NPPD-2056).
+	 */
+	public function test_zero_view_paid_tier_generates_a_non_metering_layout() {
+		$metered_gate_id = $this->create_gate_generating_layouts( 3 );
+		$gated_gate_id   = $this->create_gate_generating_layouts( 0 );
+
+		$this->assertStringContainsString(
+			'free article',
+			$this->get_registration_layout_content( $metered_gate_id ),
+			'A metering paid tier advertises its free articles'
+		);
+		$this->assertStringNotContainsString(
+			'free article',
+			$this->get_registration_layout_content( $gated_gate_id ),
+			'A paid tier granting 0 free views must not advertise free articles it never delivers'
+		);
+	}
+
+	/**
+	 * Create a gate the way the wizard does - passing full settings to create_gate() so the
+	 * default layouts are generated against the gate's real metering, not empty defaults.
+	 *
+	 * @param int $custom_access_count Free views the paid tier grants.
+	 *
+	 * @return int Gate ID.
+	 */
+	private function create_gate_generating_layouts( $custom_access_count ) {
+		$metering = [
+			'enabled' => true,
+			'count'   => $custom_access_count,
+			'period'  => 'month',
+		];
+		$gate_id  = Content_Gate::create_gate(
+			[
+				'title'         => 'Test Gate',
+				'registration'  => [
+					'active'   => true,
+					'metering' => $metering,
+					'gate_id'  => 0,
+				],
+				'custom_access' => [
+					'active'       => true,
+					'metering'     => $metering,
+					'gate_id'      => 0,
+					'access_rules' => [],
+				],
+			]
+		);
+		$this->gate_ids[] = $gate_id;
+		return $gate_id;
+	}
+
+	/**
+	 * The post content of the registration-mode layout a gate generated on save.
+	 *
+	 * @param int $gate_id Gate ID.
+	 *
+	 * @return string
+	 */
+	private function get_registration_layout_content( $gate_id ) {
+		$layout_id = Content_Gate::get_registration_settings( $gate_id )['gate_layout_id'] ?? 0;
+		return $layout_id ? (string) get_post_field( 'post_content', $layout_id ) : '';
 	}
 }

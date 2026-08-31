@@ -1,17 +1,74 @@
 import { __, _x, sprintf } from '@wordpress/i18n';
 import type { DonationFrequencySlug } from './types';
 
+// Normalize a hex color to exactly six lowercase hex digits (no leading #).
+// Accepts #RGB, #RRGGBB and #RRGGBBAA (the alpha pair is stripped), with or
+// without the leading #, case-insensitively; returns null when unparseable.
+// Keep in sync with Newspack_Blocks::get_apca_luminance() in
+// includes/class-newspack-blocks.php.
+const normalizeHex = ( color: string ): string | null => {
+	let hex = color.trim().replace( /^#/, '' ).toLowerCase();
+	if ( hex.length === 3 ) {
+		hex = hex[ 0 ] + hex[ 0 ] + hex[ 1 ] + hex[ 1 ] + hex[ 2 ] + hex[ 2 ];
+	} else if ( hex.length === 8 ) {
+		hex = hex.substring( 0, 6 );
+	}
+	return /^[a-f\d]{6}$/.test( hex ) ? hex : null;
+};
+
 const hexToRGB = ( hex: string ): number[] => {
-	const parts = hex
-		.replace( /^#?([a-f\d])([a-f\d])([a-f\d])$/i, ( m, r, g, b ) => '#' + r + r + g + g + b + b )
-		.substring( 1 )
-		.match( /.{2}/g );
+	const parts = hex.match( /.{2}/g );
 	if ( parts === null ) {
 		return [ 0, 0, 0 ];
 	}
 	return parts.map( x => parseInt( x, 16 ) );
 };
 
+// APCA soft-clamps near-black luminance and treats unparseable input as white
+// (luminance 1) so callers fall back to black text.
+const apcaLuminance = ( color: string ): number => {
+	const hex = normalizeHex( color );
+	if ( hex === null ) {
+		return 1;
+	}
+
+	const [ r, g, b ] = hexToRGB( hex );
+
+	let y = 0.2126729 * Math.pow( r / 255, 2.4 ) + 0.7151522 * Math.pow( g / 255, 2.4 ) + 0.072175 * Math.pow( b / 255, 2.4 );
+
+	if ( y <= 0.022 ) {
+		y += Math.pow( 0.022 - y, 1.414 );
+	}
+
+	return y;
+};
+
+// APCA lightness contrast (Lc): positive is dark text on a lighter background,
+// negative is light text on a darker background. Both luminances are clamped.
+const apcaContrast = ( backgroundY: number, textY: number ): number => {
+	if ( Math.abs( backgroundY - textY ) < 0.0005 ) {
+		return 0;
+	}
+
+	if ( backgroundY > textY ) {
+		const sapc = ( Math.pow( backgroundY, 0.56 ) - Math.pow( textY, 0.57 ) ) * 1.14;
+		return sapc < 0.1 ? 0 : ( sapc - 0.027 ) * 100;
+	}
+
+	const sapc = ( Math.pow( backgroundY, 0.65 ) - Math.pow( textY, 0.62 ) ) * 1.14;
+	return sapc > -0.1 ? 0 : ( sapc + 0.027 ) * 100;
+};
+
+/**
+ * Pick either black or white text, whichever reads better on the given background.
+ *
+ * Scores pure black and pure white as text against the background and returns
+ * whichever produces the greater APCA lightness contrast (Lc); ties fall to
+ * black. The constants are the SA98G set from apca-w3 0.1.9.
+ *
+ * Keep in sync with Newspack_Blocks::get_color_for_contrast() in
+ * includes/class-newspack-blocks.php.
+ */
 export const getColorForContrast = ( color?: string ): string => {
 	const blackColor = '#000000';
 	const whiteColor = '#ffffff';
@@ -19,19 +76,11 @@ export const getColorForContrast = ( color?: string ): string => {
 		return blackColor;
 	}
 
-	const backgroundColorRGB = hexToRGB( color );
-	const blackRGB = hexToRGB( blackColor );
+	const backgroundY = apcaLuminance( color );
+	const blackLc = apcaContrast( backgroundY, apcaLuminance( blackColor ) );
+	const whiteLc = apcaContrast( backgroundY, apcaLuminance( whiteColor ) );
 
-	const l1 =
-		0.2126 * Math.pow( backgroundColorRGB[ 0 ] / 255, 2.2 ) +
-		0.7152 * Math.pow( backgroundColorRGB[ 1 ] / 255, 2.2 ) +
-		0.0722 * Math.pow( backgroundColorRGB[ 2 ] / 255, 2.2 );
-	const l2 =
-		0.2126 * Math.pow( blackRGB[ 0 ] / 255, 2.2 ) + 0.7152 * Math.pow( blackRGB[ 1 ] / 255, 2.2 ) + 0.0722 * Math.pow( blackRGB[ 2 ] / 255, 2.2 );
-
-	const contrastRatio = l1 > l2 ? ( l1 + 0.05 ) / ( l2 + 0.05 ) : ( l2 + 0.05 ) / ( l1 + 0.05 );
-
-	return contrastRatio > 5 ? blackColor : whiteColor;
+	return Math.abs( whiteLc ) > Math.abs( blackLc ) ? whiteColor : blackColor;
 };
 
 export const getMigratedAmount = (

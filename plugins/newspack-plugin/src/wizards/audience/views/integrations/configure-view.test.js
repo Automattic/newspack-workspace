@@ -6,7 +6,7 @@ import { act, fireEvent, render, screen } from '@testing-library/react';
 /**
  * Internal dependencies
  */
-import { ConfigureView, operatorOptionsForField, reconcileOperators, toggleField } from './configure-view';
+import { ConfigureView, fallbackOperator, operatorOptionsForField, reconcileOperators, toggleField } from './configure-view';
 import { useUnsavedChangesDialog } from '../../../../../packages/components/src';
 
 const mockSetHeaderData = jest.fn();
@@ -14,29 +14,75 @@ const mockSetHeaderData = jest.fn();
 jest.mock( '@wordpress/data', () => ( {
 	useDispatch: () => ( { setHeaderData: mockSetHeaderData } ),
 } ) );
+// An empty column is a real element costing a real gap, so the stub keeps it
+// queryable for the tests that assert none is left behind. It also echoes the
+// layout props back: `direction` and `gap` are the only things carrying the
+// column rhythm now that the controls supply no margins of their own.
+jest.mock( '@wordpress/ui', () => ( {
+	Stack: ( { children, direction, gap } ) => (
+		<div data-testid="stack" data-direction={ direction } data-gap={ gap }>
+			{ children }
+		</div>
+	),
+} ) );
 // Stub the components barrel: with @wordpress/data mocked, the real barrel eagerly loads @wordpress/rich-text, whose module-load combineReducers() call throws.
 // Cover everything SettingsField imports so a future select/oauth/textarea fixture renders a stub, not `undefined`.
 jest.mock( '@wordpress/components', () => ( {
-	CheckboxControl: () => null,
+	// Real inputs (not null stubs) so the per-direction section tests can assert
+	// on picker visibility and drive the enable toggles.
+	CheckboxControl: ( { label, checked, onChange } ) => (
+		<input
+			type="checkbox"
+			aria-label={ typeof label === 'string' ? label : undefined }
+			checked={ !! checked }
+			onChange={ e => onChange( e.target.checked ) }
+		/>
+	),
+	ToggleControl: ( { label, checked, onChange } ) => (
+		<input
+			type="checkbox"
+			aria-label={ typeof label === 'string' ? label : undefined }
+			checked={ !! checked }
+			onChange={ e => onChange( e.target.checked ) }
+		/>
+	),
 	ExternalLink: ( { children } ) => children,
 	TextareaControl: ( { label, value, onChange } ) => (
 		<textarea aria-label={ label } value={ value || '' } onChange={ e => onChange( e.target.value ) } />
 	),
 	// The inbound operator selector renders once a field is enabled; without a stub
 	// here any test that renders an enabled incoming field hits an undefined element.
-	SelectControl: ( { label, value, onChange } ) => (
-		<input aria-label={ label } value={ value || '' } onChange={ e => onChange( e.target.value ) } />
-	),
+	// Core returns null when it has neither options nor children, which is the
+	// premise the empty-container guards rest on.
+	SelectControl: ( { label, value, onChange, options, children } ) =>
+		options?.length || children ? <input aria-label={ label } value={ value || '' } onChange={ e => onChange( e.target.value ) } /> : null,
 } ) );
 jest.mock( '../../../../../packages/components/src', () => ( {
-	Accordion: ( { children } ) => children,
-	AccordionPanel: ( { children } ) => children,
 	Button: ( { children } ) => children,
-	Divider: () => null,
+	// Item flattens, so a collapsed group's contents stay reachable here while the real
+	// component puts them behind hidden="until-found" and out of the tab order. Every
+	// fixture has one group, which the call site renders untitled and permanently open;
+	// a multi-group fixture needs a stub that collapses too.
+	CollapsibleGroup: Object.assign( ( { children } ) => <div data-testid="collapsible-group">{ children }</div>, {
+		Item: ( { children } ) => children,
+	} ),
+	// The view's three dividers differ only by props, so the stub tags them apart
+	// and a test can assert on the one it means rather than on a spanning count.
+	// Divider forwards anything undocumented to its `hr`, so the group divider
+	// names itself and the other two are told apart by alignment.
+	Divider: ( { alignment, ...props } ) => (
+		<hr data-testid={ props[ 'data-testid' ] || ( 'full-width' === alignment ? 'section-divider' : 'toggle-divider' ) } />
+	),
 	Grid: ( { children } ) => children,
-	SectionHeader: () => null,
-	SelectControl: ( { label, value, onChange } ) => (
-		<input aria-label={ label } value={ value || '' } onChange={ e => onChange( e.target.value ) } />
+	SectionHeader: ( { title } ) => <h2>{ title }</h2>,
+	// Mirrors the real control: the Newspack wrapper renders its div whatever
+	// happens, and core's select inside it renders nothing without options.
+	SelectControl: ( { label, value, onChange, options, disabled } ) => (
+		<div className="newspack-select-control">
+			{ options?.length ? (
+				<input aria-label={ label } value={ value || '' } disabled={ !! disabled } onChange={ e => onChange( e.target.value ) } />
+			) : null }
+		</div>
 	),
 	// Minimal controlled input so tests can drive the local draft by typing.
 	TextControl: ( { label, value, onChange } ) => <input aria-label={ label } value={ value ?? '' } onChange={ e => onChange( e.target.value ) } />,
@@ -388,13 +434,46 @@ describe( 'incoming-field operators', () => {
 
 	it( 'constrains operator options by value_type', () => {
 		expect( operatorOptionsForField( { value_type: 'number' } ).map( o => o.value ) ).toEqual( [ 'range' ] );
-		expect( operatorOptionsForField( { value_type: 'date' } ).map( o => o.value ) ).toEqual( [ 'default' ] );
-		expect( operatorOptionsForField( { value_type: 'datetime' } ).map( o => o.value ) ).toEqual( [ 'default' ] );
+		// Date fields carry the full shape once so the publisher-facing labels are
+		// pinned alongside the values.
+		expect( operatorOptionsForField( { value_type: 'date' } ) ).toEqual( [
+			{ label: 'Date range', value: 'date_range' },
+			{ label: 'Text', value: 'default' },
+		] );
+		expect( operatorOptionsForField( { value_type: 'datetime' } ).map( o => o.value ) ).toEqual( [ 'date_range', 'default' ] );
 		expect( operatorOptionsForField( { value_type: 'boolean' } ).map( o => o.value ) ).toEqual( [ 'default' ] );
 		expect( operatorOptionsForField( { value_type: 'multiselect' } ).map( o => o.value ) ).toEqual( [ 'list__in' ] );
 		expect( operatorOptionsForField( { value_type: 'select' } ).map( o => o.value ) ).toEqual( [ 'default', 'list__in' ] );
 		expect( operatorOptionsForField( { value_type: 'string', has_options: false } ).map( o => o.value ) ).toEqual( [ 'default', 'range' ] );
 		expect( operatorOptionsForField( { value_type: 'string', has_options: true } ).map( o => o.value ) ).toEqual( [ 'default', 'list__in' ] );
+	} );
+
+	it( 'falls back to the operator the save-time repair will store', () => {
+		// The rendered select and reconcileOperators share this helper, so a
+		// stored out-of-set operator (a leftover 'list__in' on a now-date field)
+		// can never display Date range while the next save writes Text — which
+		// would both contradict the publisher and make the displayed option
+		// unselectable, since choosing what is already shown fires no onChange.
+		expect( fallbackOperator( operatorOptionsForField( { value_type: 'date' } ) ) ).toBe( 'default' );
+		expect( fallbackOperator( operatorOptionsForField( { value_type: 'number' } ) ) ).toBe( 'range' );
+	} );
+
+	it( 'leaves an already-stored Text operator on a date field alone', () => {
+		// Text stays valid for date fields, so reconcileOperators must not rewrite a
+		// field the publisher enabled before the date range operator existed.
+		const map = { last_gift_date: 'default' };
+		const options = [ { value: 'last_gift_date', value_type: 'date' } ];
+		expect( reconcileOperators( map, options ) ).toBe( map );
+	} );
+
+	it( 'repairs an out-of-set operator on a date field to Text, not Date range', () => {
+		// 'range' was choosable for these fields before value types existed.
+		// Falling back to the first offered option would silently opt the field
+		// into date-range matching — and pull-time value rewriting — on an
+		// unrelated save; exact matching is the repair that changes nothing.
+		const map = { last_gift_date: 'range' };
+		const options = [ { value: 'last_gift_date', value_type: 'date' } ];
+		expect( reconcileOperators( map, options ) ).toEqual( { last_gift_date: 'default' } );
 	} );
 
 	it( 'toggles a field in/out of the operator map using the field default', () => {
@@ -432,6 +511,40 @@ describe( 'incoming-field operators', () => {
 			)
 		).toEqual( { NAME: 'default' } );
 		expect( toggleField( {}, { value: 'FAVS', has_options: true, matching_function: 'list__in' }, true ) ).toEqual( { FAVS: 'list__in' } );
+	} );
+} );
+
+describe( 'incoming-field operator labels', () => {
+	beforeEach( () => {
+		mockSetHeaderData.mockClear();
+		useUnsavedChangesDialog.mockClear();
+		useUnsavedChangesDialog.mockReturnValue( { confirmDialog: null, requestConfirm: jest.fn() } );
+	} );
+
+	// The operator selects hide their labels, so nothing on screen changes if they
+	// go back to sharing one name. Only an assertion catches that.
+	it( 'names each enabled operator select after its own field', () => {
+		renderConfigureView( {
+			integrations: {
+				esp: {
+					...INTEGRATION,
+					settings: [
+						{
+							key: 'incoming_metadata_fields',
+							type: 'metadata',
+							label: 'Inbound',
+							value: { VIP: 'default', DONOR: 'default' },
+							options: [
+								{ value: 'VIP', label: 'VIP', value_type: 'string', matching_function: 'default', has_options: true },
+								{ value: 'DONOR', label: 'Donor', value_type: 'string', matching_function: 'default', has_options: true },
+							],
+						},
+					],
+				},
+			},
+		} );
+		expect( screen.getByLabelText( 'Segment VIP as' ) ).toBeTruthy();
+		expect( screen.getByLabelText( 'Segment Donor as' ) ).toBeTruthy();
 	} );
 } );
 
@@ -482,5 +595,365 @@ describe( 'incoming-field operator reconciliation on save', () => {
 			getLatestSaveAction()();
 		} );
 		expect( onSave ).toHaveBeenCalledWith( 'esp', { mailchimp_audience_id: 'abc123' } );
+	} );
+} );
+
+describe( 'ConfigureView per-direction sections', () => {
+	beforeEach( () => {
+		mockSetHeaderData.mockClear();
+		useUnsavedChangesDialog.mockClear();
+		useUnsavedChangesDialog.mockReturnValue( { confirmDialog: null, requestConfirm: jest.fn() } );
+	} );
+
+	// A bidirectional integration as the capability-aware backend declares it:
+	// each direction carries its enable toggle alongside its metadata field.
+	const bidirectionalIntegration = () => ( {
+		esp: {
+			...INTEGRATION,
+			settings: [
+				{ key: 'mailchimp_audience_id', type: 'text', label: 'Audience ID', value: '' },
+				{ key: 'outgoing_sync_enabled', type: 'checkbox', label: 'Enable outbound sync', value: true },
+				{
+					key: 'outgoing_metadata_fields',
+					type: 'metadata',
+					label: 'Outgoing metadata fields',
+					value: [ 'Full Name' ],
+					grouped_options: [ { section: 'Basic', fields: [ 'Full Name', 'Signup Date' ] } ],
+				},
+				{ key: 'incoming_sync_enabled', type: 'checkbox', label: 'Enable inbound sync', value: true },
+				{
+					key: 'incoming_metadata_fields',
+					type: 'metadata',
+					label: 'Incoming metadata fields',
+					value: { vip: 'default' },
+					options: [ { value: 'vip', label: 'VIP', matching_function: 'default', has_options: false } ],
+				},
+			],
+		},
+	} );
+
+	// The backend omits a direction's fields when the integration lacks the
+	// capability, so the view must simply not render that section.
+	it( 'renders no direction sections for an integration that declares neither', () => {
+		renderConfigureView();
+		expect( screen.queryByLabelText( 'Enable outbound sync' ) ).toBeNull();
+		expect( screen.queryByLabelText( 'Enable inbound sync' ) ).toBeNull();
+		expect( screen.queryByLabelText( 'Full Name' ) ).toBeNull();
+		expect( screen.queryByLabelText( 'VIP' ) ).toBeNull();
+	} );
+
+	it( 'renders both sections with their toggles and pickers when enabled', () => {
+		renderConfigureView( { integrations: bidirectionalIntegration() } );
+		expect( screen.getByLabelText( 'Enable outbound sync' ).checked ).toBe( true );
+		expect( screen.getByLabelText( 'Enable inbound sync' ).checked ).toBe( true );
+		expect( screen.getByLabelText( 'Full Name' ).checked ).toBe( true );
+		expect( screen.getByLabelText( 'Signup Date' ).checked ).toBe( false );
+		expect( screen.getByLabelText( 'VIP' ).checked ).toBe( true );
+	} );
+
+	it( 'hides only the outbound picker when outbound sync is toggled off and submits just the toggle', async () => {
+		const onSave = jest.fn( () => Promise.resolve() );
+		renderConfigureView( { integrations: bidirectionalIntegration(), onSave } );
+
+		fireEvent.click( screen.getByLabelText( 'Enable outbound sync' ) );
+		expect( screen.queryByLabelText( 'Full Name' ) ).toBeNull();
+		expect( screen.getByLabelText( 'VIP' ) ).toBeInTheDocument();
+
+		await act( async () => {
+			getLatestSaveAction()();
+		} );
+		// The field selection is not part of the payload: pausing must not
+		// rewrite (or clear) the stored outgoing_metadata_fields option.
+		expect( onSave ).toHaveBeenCalledWith( 'esp', { outgoing_sync_enabled: false } );
+	} );
+
+	it( 'restores the inbound selection after toggling the direction off and back on', () => {
+		renderConfigureView( { integrations: bidirectionalIntegration() } );
+
+		const toggle = () => screen.getByLabelText( 'Enable inbound sync' );
+		fireEvent.click( toggle() );
+		expect( screen.queryByLabelText( 'VIP' ) ).toBeNull();
+		expect( screen.getByLabelText( 'Full Name' ) ).toBeInTheDocument();
+		expect( useUnsavedChangesDialog ).toHaveBeenLastCalledWith( { when: true } );
+
+		fireEvent.click( toggle() );
+		expect( screen.getByLabelText( 'VIP' ).checked ).toBe( true );
+		// A net-zero toggle leaves nothing pending.
+		expect( useUnsavedChangesDialog ).toHaveBeenLastCalledWith( { when: false } );
+	} );
+
+	// Payloads predating the toggles (or an integration that opted out of them)
+	// must keep rendering the pickers unconditionally.
+	it( 'renders pickers without toggles for a payload lacking the toggle fields', () => {
+		const integrations = bidirectionalIntegration();
+		integrations.esp.settings = integrations.esp.settings.filter( f => ! f.key.endsWith( '_sync_enabled' ) );
+		renderConfigureView( { integrations } );
+		expect( screen.queryByLabelText( 'Enable outbound sync' ) ).toBeNull();
+		expect( screen.queryByLabelText( 'Enable inbound sync' ) ).toBeNull();
+		expect( screen.getByLabelText( 'Full Name' ) ).toBeInTheDocument();
+		expect( screen.getByLabelText( 'VIP' ) ).toBeInTheDocument();
+	} );
+
+	// The push-pipeline settings (metadata prefix, account-deletion sync) render
+	// inside the Outbound section and follow the outbound pause the same way the
+	// outgoing picker does.
+	it( 'renders push settings in the Outbound section and hides them while paused', () => {
+		const integrations = bidirectionalIntegration();
+		integrations.esp.settings = [
+			{ key: 'sync_account_deletion', type: 'checkbox', label: 'Sync account deletion', value: true },
+			{
+				key: 'account_deletion_handling',
+				type: 'select',
+				label: 'Deletion handling',
+				value: 'flag',
+				options: [
+					{ value: 'flag', label: 'Flag' },
+					{ value: 'delete', label: 'Delete' },
+				],
+				condition: { field: 'sync_account_deletion', equals: true },
+			},
+			{ key: 'metadata_prefix', type: 'text', label: 'Metadata field prefix', value: 'NP_' },
+			...integrations.esp.settings,
+		];
+		renderConfigureView( { integrations } );
+		expect( screen.getByLabelText( 'Sync account deletion' ).checked ).toBe( true );
+		expect( screen.getByLabelText( 'Deletion handling' ) ).toBeInTheDocument();
+
+		// Document order pins the placement: own settings first, then the Inbound
+		// picker, then the push settings inside the Outbound section.
+		const order = screen
+			.getAllByLabelText( /^(Audience ID|VIP|Sync account deletion|Metadata field prefix)$/ )
+			.map( el => el.getAttribute( 'aria-label' ) );
+		expect( order ).toEqual( [ 'Audience ID', 'VIP', 'Sync account deletion', 'Metadata field prefix' ] );
+
+		fireEvent.click( screen.getByLabelText( 'Enable outbound sync' ) );
+		expect( screen.queryByLabelText( 'Sync account deletion' ) ).toBeNull();
+		expect( screen.queryByLabelText( 'Deletion handling' ) ).toBeNull();
+		expect( screen.queryByLabelText( 'Metadata field prefix' ) ).toBeNull();
+		// The integration's own settings stay put.
+		expect( screen.getByLabelText( 'Audience ID' ) ).toBeInTheDocument();
+
+		fireEvent.click( screen.getByLabelText( 'Enable outbound sync' ) );
+		expect( screen.getByLabelText( 'Sync account deletion' ).checked ).toBe( true );
+		expect( screen.getByLabelText( 'Metadata field prefix' ).value ).toBe( 'NP_' );
+	} );
+
+	// With push-group settings but no picker (a partial third-party override),
+	// the Outbound section still renders its toggle and settings.
+	it( 'renders the Outbound section for push settings without a picker', () => {
+		const integrations = bidirectionalIntegration();
+		integrations.esp.settings = [
+			{ key: 'metadata_prefix', type: 'text', label: 'Metadata field prefix', value: 'NP_' },
+			...integrations.esp.settings.filter( f => f.key !== 'outgoing_metadata_fields' ),
+		];
+		renderConfigureView( { integrations } );
+		expect( screen.getByLabelText( 'Metadata field prefix' ) ).toBeInTheDocument();
+
+		fireEvent.click( screen.getByLabelText( 'Enable outbound sync' ) );
+		expect( screen.queryByLabelText( 'Metadata field prefix' ) ).toBeNull();
+	} );
+
+	// A toggle whose paired metadata field is missing (a third-party
+	// get_settings_fields() override) must stay visible and editable rather
+	// than shipping a field the view can neither display nor save.
+	it( 'falls an orphaned direction toggle through to the generic Settings group', async () => {
+		const onSave = jest.fn( () => Promise.resolve() );
+		const integrations = bidirectionalIntegration();
+		integrations.esp.settings = integrations.esp.settings.filter( f => f.key !== 'outgoing_metadata_fields' );
+		renderConfigureView( { integrations, onSave } );
+
+		// No Outbound section without the picker field, but the toggle survives.
+		expect( screen.queryByLabelText( 'Full Name' ) ).toBeNull();
+		const toggle = screen.getByLabelText( 'Enable outbound sync' );
+		expect( toggle.checked ).toBe( true );
+
+		fireEvent.click( toggle );
+		await act( async () => {
+			getLatestSaveAction()();
+		} );
+		expect( onSave ).toHaveBeenCalledWith( 'esp', { outgoing_sync_enabled: false } );
+	} );
+
+	// The divider under a section toggle only separates it from the content
+	// below, so a direction with nothing to show must not render one.
+	it( 'renders a toggle divider per enabled section, and none once both are paused', () => {
+		renderConfigureView( { integrations: bidirectionalIntegration() } );
+		expect( screen.queryAllByTestId( 'toggle-divider' ) ).toHaveLength( 2 );
+
+		fireEvent.click( screen.getByLabelText( 'Enable outbound sync' ) );
+		fireEvent.click( screen.getByLabelText( 'Enable inbound sync' ) );
+		expect( screen.queryAllByTestId( 'toggle-divider' ) ).toHaveLength( 0 );
+	} );
+
+	// An enabled Outbound section that declares a settings field but has no
+	// picker, and hides that field behind an unsatisfied condition, still
+	// renders the section — with nothing under the toggle to divide.
+	it( 'renders no outbound toggle divider when every outbound settings field is hidden', () => {
+		renderConfigureView( {
+			integrations: {
+				esp: {
+					...INTEGRATION,
+					settings: [
+						{ key: 'mailchimp_audience_id', type: 'text', label: 'Audience ID', value: '' },
+						{ key: 'outgoing_sync_enabled', type: 'checkbox', label: 'Enable outbound sync', value: true },
+						{
+							key: 'account_deletion_handling',
+							type: 'text',
+							label: 'How to sync deletion',
+							value: 'flag',
+							condition: { field: 'mailchimp_audience_id', equals: 'never-matches' },
+						},
+					],
+				},
+			},
+		} );
+		expect( screen.getByLabelText( 'Enable outbound sync' ).checked ).toBe( true );
+		expect( screen.queryByLabelText( 'How to sync deletion' ) ).toBeNull();
+		expect( screen.queryAllByTestId( 'toggle-divider' ) ).toHaveLength( 0 );
+	} );
+
+	it( 'renders no section for a legacy payload whose pickers have no options', () => {
+		renderConfigureView( {
+			integrations: {
+				esp: {
+					...INTEGRATION,
+					settings: [
+						{ key: 'incoming_metadata_fields', type: 'metadata', label: 'Incoming', value: {}, options: [] },
+						{ key: 'outgoing_metadata_fields', type: 'metadata', label: 'Outgoing', value: [], grouped_options: [] },
+					],
+				},
+			},
+		} );
+		expect( screen.queryByText( 'Inbound' ) ).toBeNull();
+		expect( screen.queryByText( 'Outbound' ) ).toBeNull();
+		expect( screen.queryAllByTestId( 'section-divider' ) ).toHaveLength( 0 );
+	} );
+
+	// get_list_options() turns an ESP error into an empty array, so an expired
+	// key leaves the inbound field declared but with nothing to pick from.
+	it( 'keeps the inbound toggle but drops its list when the ESP returns no fields', () => {
+		renderConfigureView( {
+			integrations: {
+				esp: {
+					...INTEGRATION,
+					settings: [
+						{ key: 'incoming_sync_enabled', type: 'checkbox', label: 'Enable inbound sync', value: true },
+						{ key: 'incoming_metadata_fields', type: 'metadata', label: 'Incoming metadata fields', value: {}, options: [] },
+					],
+				},
+			},
+		} );
+		expect( screen.getByLabelText( 'Enable inbound sync' ).checked ).toBe( true );
+		expect( screen.queryAllByTestId( 'toggle-divider' ) ).toHaveLength( 0 );
+		// The section column itself, and not the list it would have wrapped.
+		expect( screen.queryAllByTestId( 'stack' ) ).toHaveLength( 1 );
+	} );
+
+	const outboundIntegration = groupedOptions => ( {
+		esp: {
+			...INTEGRATION,
+			settings: [
+				{ key: 'outgoing_sync_enabled', type: 'checkbox', label: 'Enable outbound sync', value: true },
+				{ key: 'metadata_prefix', type: 'text', label: 'Metadata prefix', value: 'NP_' },
+				{
+					key: 'outgoing_metadata_fields',
+					type: 'metadata',
+					label: 'Outgoing metadata fields',
+					value: [],
+					grouped_options: groupedOptions,
+				},
+			],
+		},
+	} );
+
+	it( 'divides the outbound settings from the field groups only when both are present', () => {
+		const { unmount } = renderConfigureView( {
+			integrations: outboundIntegration( [ { section: 'Basic', fields: [ 'Full Name' ] } ] ),
+		} );
+		expect( screen.getByLabelText( 'Metadata prefix' ).value ).toBe( 'NP_' );
+		expect( screen.getByLabelText( 'Full Name' ) ).toBeTruthy();
+		expect( screen.queryAllByTestId( 'group-divider' ) ).toHaveLength( 1 );
+		unmount();
+
+		const { unmount: unmountEmpty } = renderConfigureView( { integrations: outboundIntegration( [] ) } );
+		expect( screen.getByLabelText( 'Metadata prefix' ).value ).toBe( 'NP_' );
+		expect( screen.queryByTestId( 'collapsible-group' ) ).toBeNull();
+		expect( screen.queryAllByTestId( 'group-divider' ) ).toHaveLength( 0 );
+		unmountEmpty();
+
+		// With no settings field above them, the toggle's own divider already
+		// separates the groups from what precedes them.
+		renderConfigureView( { integrations: bidirectionalIntegration() } );
+		expect( screen.getByTestId( 'collapsible-group' ) ).toBeTruthy();
+		expect( screen.queryAllByTestId( 'group-divider' ) ).toHaveLength( 0 );
+	} );
+
+	// Every section a metadata class declares is skipped when it contributes no
+	// available field, so the grouped list can come back empty.
+	it( 'renders no outbound group container or divider when the field declares no groups', () => {
+		renderConfigureView( {
+			integrations: {
+				esp: {
+					...INTEGRATION,
+					settings: [
+						{ key: 'outgoing_sync_enabled', type: 'checkbox', label: 'Enable outbound sync', value: true },
+						{ key: 'outgoing_metadata_fields', type: 'metadata', label: 'Outgoing metadata fields', value: [], grouped_options: [] },
+					],
+				},
+			},
+		} );
+		expect( screen.getByLabelText( 'Enable outbound sync' ).checked ).toBe( true );
+		expect( screen.queryAllByTestId( 'toggle-divider' ) ).toHaveLength( 0 );
+		expect( screen.queryAllByTestId( 'group-divider' ) ).toHaveLength( 0 );
+		// CollapsibleGroup would render its wrapper around no items at all, so the
+		// guard has to skip the component rather than let it print an empty box.
+		expect( screen.queryByTestId( 'collapsible-group' ) ).toBeNull();
+	} );
+
+	it( 'drops the Settings section when its only field has no options to offer', () => {
+		const withAudienceOptions = options => ( {
+			esp: {
+				...INTEGRATION,
+				settings: [ { key: 'mailchimp_audience_id', type: 'select', label: 'Audience', value: '', options } ],
+			},
+		} );
+
+		const { unmount } = renderConfigureView( { integrations: withAudienceOptions( [ { value: 'a', label: 'Readers' } ] ) } );
+		expect( screen.getByText( 'Settings' ) ).toBeTruthy();
+		expect( screen.getByLabelText( 'Audience' ) ).toBeTruthy();
+		unmount();
+
+		renderConfigureView( { integrations: withAudienceOptions( [] ) } );
+		expect( screen.queryByText( 'Settings' ) ).toBeNull();
+		expect( screen.queryByLabelText( 'Audience' ) ).toBeNull();
+	} );
+
+	// A master list the ESP failed to return is the one setting the Enable flow
+	// tells publishers to come here and fill, so it has to survive an empty list.
+	it( 'keeps a required field and its section when the list comes back empty', () => {
+		renderConfigureView( {
+			integrations: {
+				esp: {
+					...INTEGRATION,
+					settings: [ { key: 'mailchimp_audience_id', type: 'select', label: 'Audience', value: '', required: true, options: [] } ],
+				},
+			},
+		} );
+		expect( screen.getByText( 'Settings' ) ).toBeTruthy();
+		expect( screen.getByLabelText( 'Audience' ) ).toBeTruthy();
+	} );
+
+	// Nothing else supplies the vertical rhythm: the package's grid reset is gone
+	// and the controls no longer carry margins, so a wrong prop here is invisible.
+	it( 'stacks every section column and picker list vertically at its own gap', () => {
+		renderConfigureView( { integrations: bidirectionalIntegration() } );
+		const stacks = screen.getAllByTestId( 'stack' ).map( el => [ el.dataset.direction, el.dataset.gap ] );
+		expect( stacks ).toEqual( [
+			[ 'column', 'xl' ],
+			[ 'column', 'xl' ],
+			[ 'column', 'sm' ],
+			[ 'column', 'xl' ],
+			[ 'column', 'sm' ],
+		] );
 	} );
 } );

@@ -5,12 +5,35 @@
  * @package Newspack_Blocks
  */
 
+require_once __DIR__ . '/class-newspack-donations-stub.php';
 require_once dirname( __DIR__ ) . '/src/blocks/checkout-button/view.php';
 
 /**
  * Checkout Button Block.
  */
 class CheckoutButtonBlockTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
+
+	/**
+	 * Reset the Donations stub between tests.
+	 */
+	public function set_up() {
+		parent::set_up();
+		\Newspack\Donations::$stub_donation_product_ids = [];
+		\Newspack\Donations::$stub_calls                = [];
+	}
+
+	/**
+	 * Register the donation REST field and return its registered definition.
+	 *
+	 * Only reads the REST registry — registering twice overwrites the same key,
+	 * so there is nothing to reset and no global left mutated for other tests.
+	 *
+	 * @return array The field definition.
+	 */
+	private function register_donation_field() {
+		\Newspack_Blocks\Checkout_Button\register_donation_rest_field();
+		return $GLOBALS['wp_rest_additional_fields']['product']['newspack_is_donation'] ?? [];
+	}
 
 	/**
 	 * Render the block with the given attributes merged into a minimal valid set.
@@ -174,5 +197,115 @@ class CheckoutButtonBlockTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 	public function test_empty_coupon_attribute_emits_no_field() {
 		$output = $this->render( [ 'coupon' => '' ] );
 		$this->assertStringNotContainsString( 'name="coupon"', $output );
+	}
+
+	/**
+	 * The field must be registered under the 'product' object type.
+	 *
+	 * That string is what WooCommerce's products controller resolves to, since
+	 * its schema title is the post type. If it ever stopped matching, the editor
+	 * would silently never learn a product is a donation.
+	 */
+	public function test_donation_rest_field_registers_on_the_product_object_type() {
+		$field = $this->register_donation_field();
+
+		$this->assertNotEmpty( $field, 'newspack_is_donation should be registered for the "product" object type.' );
+		$this->assertArrayHasKey( 'get_callback', $field );
+		$this->assertSame( 'boolean', $field['schema']['type'] );
+		$this->assertTrue( $field['schema']['readonly'] );
+		$this->assertContains( 'view', $field['schema']['context'], 'The editor fetches without a context param, so it receives "view".' );
+	}
+
+	/**
+	 * The field must delegate to Donations::is_donation_product() and cast to bool.
+	 */
+	public function test_donation_rest_field_delegates_to_donations() {
+		$field = $this->register_donation_field();
+		\Newspack\Donations::$stub_donation_product_ids = [ 42 ];
+
+		$this->assertTrue( $field['get_callback']( [ 'id' => 42 ] ) );
+		$this->assertFalse( $field['get_callback']( [ 'id' => 7 ] ) );
+		$this->assertSame( [ 42, 7 ], \Newspack\Donations::$stub_calls );
+	}
+
+	/**
+	 * Load rendered block output into a DOMDocument, leaving the libxml error
+	 * buffer clean so parse errors do not leak into later tests.
+	 *
+	 * @param string $output Rendered HTML.
+	 * @return DOMDocument The parsed document.
+	 */
+	private function load_dom( $output ) {
+		$dom      = new DOMDocument();
+		$previous = libxml_use_internal_errors( true );
+		$dom->loadHTML( '<!DOCTYPE html><html><body>' . $output . '</body></html>' );
+		libxml_clear_errors();
+		libxml_use_internal_errors( $previous );
+		return $dom;
+	}
+
+	/**
+	 * Find the checkout-button container <div> within a parsed document.
+	 *
+	 * @param DOMDocument $dom Parsed document.
+	 * @return DOMElement|null The container element, or null if absent.
+	 */
+	private function find_container( DOMDocument $dom ) {
+		foreach ( $dom->getElementsByTagName( 'div' ) as $div ) {
+			if ( false !== strpos( $div->getAttribute( 'class' ), 'wp-block-newspack-blocks-checkout-button' ) ) {
+				return $div;
+			}
+		}
+		return null;
+	}
+
+	/**
+	 * Return the container <div> node from rendered output, or null.
+	 *
+	 * @param string $output Rendered HTML.
+	 * @return DOMElement|null The container element.
+	 */
+	private function get_container( $output ) {
+		return $this->find_container( $this->load_dom( $output ) );
+	}
+
+	/**
+	 * The className is rendered inside the container's class attribute and must
+	 * stay there: it cannot introduce a separate attribute on the container. A
+	 * value crafted to close the attribute is escaped, so no style or
+	 * event-handler attribute appears and the value remains part of the class.
+	 */
+	public function test_container_classname_cannot_inject_attributes() {
+		$output    = $this->render( [ 'className' => 'x" style="position:fixed;inset:0" onmouseover="window.__x=1" data-x="' ] );
+		$container = $this->get_container( $output );
+
+		$this->assertNotNull( $container, 'Checkout-button container should render.' );
+		$this->assertFalse( $container->hasAttribute( 'style' ), 'className must not introduce a style attribute.' );
+		$this->assertFalse( $container->hasAttribute( 'onmouseover' ), 'className must not introduce an event handler.' );
+		$this->assertFalse( $container->hasAttribute( 'data-x' ), 'className must not introduce arbitrary attributes.' );
+		$this->assertStringContainsString(
+			'style=',
+			$container->getAttribute( 'class' ),
+			'The className value should remain inside the class attribute.'
+		);
+	}
+
+	/**
+	 * The className must stay inside the class attribute even when it carries
+	 * angle brackets: it cannot escape the container tag to add an element.
+	 */
+	public function test_container_classname_cannot_inject_elements() {
+		$output = $this->render( [ 'className' => 'x"><img src=x onerror="window.__x=1">' ] );
+		$dom    = $this->load_dom( $output );
+
+		$this->assertSame( 0, $dom->getElementsByTagName( 'img' )->length, 'className must not inject an element.' );
+
+		$container = $this->find_container( $dom );
+		$this->assertNotNull( $container, 'Checkout-button container should render.' );
+		$this->assertStringContainsString(
+			'<img',
+			$container->getAttribute( 'class' ),
+			'The bracketed className value should remain inside the class attribute.'
+		);
 	}
 }

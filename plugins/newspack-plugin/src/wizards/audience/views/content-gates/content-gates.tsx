@@ -13,7 +13,6 @@ import { useEffect, useRef, useState } from '@wordpress/element';
 /**
  * Internal dependencies
  */
-import Router from '../../../../../packages/components/src/proxied-imports/router';
 import { Divider, Grid } from '../../../../../packages/components/src';
 import { useWizardData } from '../../../../../packages/components/src/wizard/store/utils';
 import { useWizardApiFetch } from '../../../hooks/use-wizard-api-fetch';
@@ -24,12 +23,23 @@ import ContentGateSettings from './content-gate-settings';
 import AdvancedSettings from './advanced-settings';
 import SettingsCard from './settings-card';
 import { AUDIENCE_CONTENT_GATES_WIZARD_SLUG } from './consts';
+import { getMeteringDescription, isGateMetered } from './utils';
 import './style.scss';
 
-const { useHistory } = Router;
+/**
+ * Describe what the site meter is currently doing, for the Metering card badge.
+ *
+ * @param hasMetering  Whether any gate meters against the site allowance.
+ * @param hasCountdown Whether the countdown banner is showing.
+ */
+function getMeteringBadge( hasMetering: boolean, hasCountdown: boolean ) {
+	if ( ! hasMetering ) {
+		return __( 'Not in use', 'newspack-plugin' );
+	}
+	return hasCountdown ? __( 'In use, with countdown', 'newspack-plugin' ) : __( 'In use', 'newspack-plugin' );
+}
 
 const ContentGates = ( { updateGatesData }: { updateGatesData: ( gates: Gate[] ) => void } ) => {
-	const history = useHistory();
 	const wizardData = useWizardData( AUDIENCE_CONTENT_GATES_WIZARD_SLUG ) as WizardData;
 	const { wizardApiFetch, isFetching, errorMessage, resetError } = useWizardApiFetch( AUDIENCE_CONTENT_GATES_WIZARD_SLUG );
 	const { addNotice, resetNotices, resetHeaderData, setHeaderData, updateWizardSettings } = useDispatch( WIZARD_STORE_NAMESPACE );
@@ -38,7 +48,9 @@ const ContentGates = ( { updateGatesData }: { updateGatesData: ( gates: Gate[] )
 	const ref = useRef( null );
 	const gates = ( wizardData?.gates || [] ) as Gate[];
 	const config = ( wizardData?.config || {} ) as GateSettings;
-	const hasMetering = gates.some( gate => gate.registration?.metering?.enabled || gate.custom_access?.metering?.enabled );
+	const siteMeter = config.site_meter;
+	const hasMetering = gates.some( gate => isGateMetered( gate, siteMeter ) );
+	const hasInstitutions = !! config.has_institutions;
 
 	useEffect( () => {
 		if ( isFetching ) {
@@ -48,22 +60,27 @@ const ContentGates = ( { updateGatesData }: { updateGatesData: ( gates: Gate[] )
 			resetHeaderData();
 			return;
 		}
-		const sectionMenu = [
-			{
-				label: __( 'Institutions', 'newspack-plugin' ),
-				action: () => history.push( '/institutions' ),
-			},
-			{
-				label: __( 'Advanced Settings', 'newspack-plugin' ),
-				action: () => setShowAdvancedSettings( true ),
-			},
+		const institutionsLink: SectionMenuItem = {
+			label: __( 'Institutions', 'newspack-plugin' ),
+			href: '#/institutions',
+		};
+		const gatePriorityItem: SectionMenuItem = {
+			label: __( 'Gate Priority', 'newspack-plugin' ),
+			action: () => setShowPriorityModal( true ),
+		};
+		const advancedSettingsItem: SectionMenuItem = {
+			label: __( 'Advanced Settings', 'newspack-plugin' ),
+			action: () => setShowAdvancedSettings( true ),
+		};
+		// Built in display order. Gate Priority only appears once there is more
+		// than one gate to order; Institutions is promoted out of the kebab to
+		// a visible entry point beside the title while it is in use, so it stays
+		// in the menu only when it is not.
+		const sectionMenu: SectionMenuItem[] = [
+			...( gates.length > 1 ? [ gatePriorityItem ] : [] ),
+			...( ! hasInstitutions ? [ institutionsLink ] : [] ),
+			advancedSettingsItem,
 		];
-		if ( gates.length > 1 ) {
-			sectionMenu.unshift( {
-				label: __( 'Gate Priority', 'newspack-plugin' ),
-				action: () => setShowPriorityModal( true ),
-			} );
-		}
 		setHeaderData( {
 			actions: [
 				{
@@ -78,42 +95,10 @@ const ContentGates = ( { updateGatesData }: { updateGatesData: ( gates: Gate[] )
 				'newspack-plugin'
 			),
 			sectionMenu,
+			sectionSecondaryAction: hasInstitutions ? institutionsLink : undefined,
 		} );
-	}, [ isFetching, gates ] );
+	}, [ isFetching, gates, hasInstitutions ] );
 
-	const toggleCountdownBanner = useRef< () => void >();
-	const handleToggleCountdownBanner = () => {
-		resetError();
-		resetNotices();
-		wizardApiFetch(
-			{
-				path: '/newspack/v1/wizard/newspack-audience-access-control/countdown-banner',
-				method: 'POST',
-				quiet: true,
-				data: { enabled: config.countdown_banner?.enabled ? 0 : 1 },
-			},
-			{
-				onSuccess( data: MeteringCountdownConfig ) {
-					updateWizardSettings( {
-						slug: AUDIENCE_CONTENT_GATES_WIZARD_SLUG,
-						path: [ 'config' ],
-						value: { ...wizardData?.config, countdown_banner: data },
-					} );
-					addNotice( {
-						message: sprintf(
-							// translators: %s is the status of the countdown banner.
-							__( 'Metered countdown %s.', 'newspack-plugin' ),
-							config.countdown_banner?.enabled ? __( 'disabled', 'newspack-plugin' ) : __( 'enabled', 'newspack-plugin' )
-						),
-						type: 'success',
-						id: 'countdown-banner-config-updated',
-						actions: [ { label: __( 'Undo', 'newspack-plugin' ), onClick: () => toggleCountdownBanner.current?.() } ],
-					} );
-				},
-			}
-		);
-	};
-	toggleCountdownBanner.current = handleToggleCountdownBanner;
 	const toggleContentGifting = useRef< () => void >();
 	const handleToggleContentGifting = () => {
 		resetError();
@@ -175,18 +160,15 @@ const ContentGates = ( { updateGatesData }: { updateGatesData: ( gates: Gate[] )
 					return <ContentGateSettings key={ gate.id } gate={ gate } updateGatesData={ updateGatesData } />;
 				} ) }
 			</VStack>
-			<Divider alignment="full-width" />
+			<Divider alignment="full-width" variant="tertiary" />
 			<Grid className="newspack-content-gates__other-settings" columns={ 2 } gutter={ 32 }>
 				<SettingsCard
-					title={ __( 'Metered Countdown', 'newspack-plugin' ) }
-					description={ __(
-						'Show a countdown banner letting readers know how many free views they have left before content is restricted.',
-						'newspack-plugin'
-					) }
-					enabled={ !! config.countdown_banner?.enabled }
-					requirements={ ! hasMetering ? __( 'Requires Metering', 'newspack-plugin' ) : undefined }
-					toggleEnabled={ toggleCountdownBanner.current }
-					href={ '/settings/countdown-banner' }
+					title={ __( 'Metering', 'newspack-plugin' ) }
+					description={ getMeteringDescription( siteMeter ) }
+					// Always on: nothing to enable, so the badge carries whether a gate draws on it.
+					enabled
+					badge={ { label: getMeteringBadge( hasMetering, !! config.countdown_banner?.enabled ), intent: hasMetering ? 'stable' : 'none' } }
+					href={ '/settings/metering' }
 				/>
 				<SettingsCard
 					title={ __( 'Content Gifting', 'newspack-plugin' ) }

@@ -39,6 +39,12 @@ const CRITERIA = [
 		category: 'newsletter',
 		name: 'Newsletter',
 	},
+	{
+		id: 'LAST_GIFT_DATE',
+		category: 'integrations',
+		name: 'Last Gift Date',
+		matching_function: 'date_range',
+	},
 ];
 
 describe( 'segmentDescription', () => {
@@ -72,5 +78,48 @@ describe( 'segmentDescription', () => {
 		// Once the list names resolve, it renders the human-readable label.
 		await waitFor( () => expect( container.textContent ).toContain( 'Not subscribed to:' ) );
 		await waitFor( () => expect( container.textContent ).toContain( 'Weekly Digest' ) );
+	} );
+
+	it( 'renders a date range criterion instead of "[object Object]"', () => {
+		// Each bound is itself an object, so the generic `key: value` pass would
+		// stringify both ends.
+		const withRange = value => ( {
+			configuration: { is_disabled: false },
+			criteria: [ { criteria_id: 'LAST_GIFT_DATE', value } ],
+		} );
+
+		const absolute = render(
+			<div>
+				{ segmentDescription(
+					withRange( {
+						start: { type: 'absolute', date: '2026-01-01' },
+						end: { type: 'relative', days: 0 },
+					} )
+				) }
+			</div>
+		);
+		expect( absolute.container.textContent ).not.toContain( '[object Object]' );
+		expect( absolute.container.textContent ).toContain( 'Last Gift Date: 2026-01-01 to today' );
+
+		const rolling = render(
+			<div>{ segmentDescription( withRange( { start: { type: 'relative', days: -30 }, end: { type: 'relative', days: 0 } } ) ) }</div>
+		);
+		expect( rolling.container.textContent ).toContain( 'Last Gift Date: 30 days ago to today' );
+
+		const forward = render( <div>{ segmentDescription( withRange( { end: { type: 'relative', days: 1 } } ) ) }</div> );
+		expect( forward.container.textContent ).toContain( 'Last Gift Date: until 1 day from now' );
+
+		const openEnded = render( <div>{ segmentDescription( withRange( { start: { type: 'absolute', date: '2026-01-01' } } ) ) }</div> );
+		expect( openEnded.container.textContent ).toContain( 'Last Gift Date: from 2026-01-01' );
+	} );
+
+	it( 'leaves a min/max criterion value on the generic key: value rendering', () => {
+		// The date-range formatter must not swallow the shipped range operator.
+		const segment = {
+			configuration: { is_disabled: false },
+			criteria: [ { criteria_id: 'LAST_GIFT_DATE', value: { min: 1, max: 5 } } ],
+		};
+		const { container } = render( <div>{ segmentDescription( segment ) }</div> );
+		expect( container.textContent ).toContain( 'min: 1, max: 5' );
 	} );
 } );

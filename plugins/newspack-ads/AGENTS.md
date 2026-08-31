@@ -5,7 +5,7 @@ See `../../AGENTS.md` for shared workspace conventions (Docker, `n` script, codi
 ## Gotchas
 
 - **No PHP autoloading.** Every new PHP file must be manually added as `include_once` in `Core::includes()` (`includes/class-core.php`). Missing this causes "class not found" errors at runtime. GAM API classes additionally need `require_once` in `includes/providers/gam/api/class-api.php`.
-- **`npm run lint` runs JS and SCSS only.** PHP linting requires separate `npm run lint:php`. Running only `npm run lint` will miss PHP violations.
+- **`npm run lint` runs JS and SCSS only** and will miss PHP violations. Lint PHP from the workspace root (see the root guide).
 - **The advertising settings UI lives in `newspack-plugin`, not here.** This repo provides REST APIs, blocks, and frontend rendering. The wizard page that consumes them is `Newspack_Ads_Configuration_Manager` in newspack-plugin.
 - **Settings are migrating.** Old settings live in `Newspack_Ads_Configuration_Manager` (in newspack-plugin). New settings should use the `Settings` class in this repo (`includes/class-settings.php`).
 - **Bidding features are gated.** Header bidding (Prebid.js) only activates when `NEWSPACK_ADS_EXPERIMENTAL_BIDDERS` is defined as `true` in `wp-config.php`. Without it, bidding code exists but never runs.

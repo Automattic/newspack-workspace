@@ -598,7 +598,7 @@ final class Newspack_Newsletters_Mailchimp extends \Newspack_Newsletters_Service
 			}
 
 			// Prefetch send list info if we have a selected list and/or sublist.
-			$send_lists = $this->get_send_lists(
+			$send_lists = $this->get_send_lists_with_fallback(
 				[
 					'ids'  => $send_list_id ? [ $send_list_id ] : null, // If we have a selected list, make sure to fetch it.
 					'type' => 'list',
@@ -611,7 +611,7 @@ final class Newspack_Newsletters_Mailchimp extends \Newspack_Newsletters_Service
 			$newsletter_data['lists'] = $send_lists;
 
 			$send_sublists = $send_list_id || $send_sublist_id ? // Prefetch send lists only if we have something selected already.
-				$this->get_send_lists(
+				$this->get_send_lists_with_fallback(
 					[
 						'ids'       => [ $send_sublist_id ], // If we have a selected sublist, make sure to fetch it. Otherwise, we'll populate sublists later.
 						'parent_id' => $send_list_id,
@@ -2310,6 +2310,9 @@ final class Newspack_Newsletters_Mailchimp extends \Newspack_Newsletters_Service
 				'interests'    => [],
 				'merge_fields' => [],
 			];
+			// Collected alongside the loop but only exposed under $return_details,
+			// so a plain lookup keeps its historical keys.
+			$merge_fields_by_list = [];
 			foreach ( $found as $contact ) {
 				foreach ( $keys as $key ) {
 					if ( ! isset( $data[ $key ] ) || empty( $data[ $key ] ) ) {
@@ -2328,9 +2331,39 @@ final class Newspack_Newsletters_Mailchimp extends \Newspack_Newsletters_Service
 					'status'     => $contact['status'],
 				];
 				if ( isset( $contact['merge_fields'] ) ) {
+					// Flat and last-wins, preserved as-is: existing callers read this
+					// shape. Merge fields are defined per audience, so for a contact in
+					// several audiences it holds whichever came back last — which is why
+					// the per-audience map below exists.
 					$data['merge_fields'] = $contact['merge_fields'];
+
+					// Mailchimp reports every merge field defined on the audience, using
+					// an empty string for ones the contact hasn't filled in — filter
+					// those out so `metadata` keeps the shared meaning of "fields the
+					// contact has a value for".
+					$merge_fields_by_list[ $contact['list_id'] ] = self::filter_set_field_values( $contact['merge_fields'] );
 				}
 			}
+
+			// Expose the merge fields under the provider-neutral `metadata` key that
+			// callers requesting full details read, as ActiveCampaign already does.
+			// Merge fields are keyed by merge tag, which is the same identifier
+			// get_contact_fields_for_integrations() reports as a field's `key`, so
+			// the two line up without remapping. Without this an ESP contact pull
+			// finds no `metadata` and stores nothing while reporting success.
+			//
+			// `metadata_by_list` carries the same values keyed by audience. Merge
+			// fields are per-audience in Mailchimp, and a caller's field schema comes
+			// from one specific audience (get_contact_fields_for_integrations() takes
+			// a list ID), so a caller that knows which audience it configured should
+			// read its entry rather than the flat `metadata` — which, like
+			// `merge_fields`, can only report one audience for a multi-audience
+			// contact.
+			if ( $return_details ) {
+				$data['metadata']         = self::filter_set_field_values( $data['merge_fields'] );
+				$data['metadata_by_list'] = $merge_fields_by_list;
+			}
+
 			return $data;
 		} catch ( \Exception $e ) {
 			return new WP_Error(
@@ -2736,6 +2769,8 @@ final class Newspack_Newsletters_Mailchimp extends \Newspack_Newsletters_Service
 	 *
 	 * Mailchimp types eligible for access-rule / segmentation defaults: text, number, date, radio, dropdown.
 	 * Other types (phone, url, imageurl, birthday, zip, address) are exposed but not promoted by default.
+	 * `birthday` is deliberately excluded from the `date` value_type as well: it is MM/DD with no
+	 * year, so it cannot be placed on an absolute timeline and stays exact-match text.
 	 *
 	 * @param array $field Raw merge field from the Mailchimp API.
 	 * @return array|null Mapped field, or null if no usable identifier is available.
@@ -2766,10 +2801,18 @@ final class Newspack_Newsletters_Mailchimp extends \Newspack_Newsletters_Service
 		// range matching. Mirrors the ActiveCampaign mapper for cross-ESP consistency.
 		$value_type        = 'string';
 		$matching_function = 'default';
+		$date_format       = '';
 		if ( in_array( $type, [ 'dropdown', 'radio' ], true ) ) {
 			$value_type = 'select';
-		} elseif ( in_array( $type, [ 'date', 'birthday' ], true ) ) {
+		} elseif ( 'date' === $type ) {
 			$value_type = 'date';
+			// Probed rather than assumed: on an older newspack-plugin the operator
+			// would travel to newspack-popups unvalidated, where a stale build
+			// crashes on it (see integrations_supports_date_range()).
+			$matching_function = self::integrations_supports_date_range() ? 'date_range' : 'default';
+			$date_format       = self::map_mailchimp_date_format(
+				isset( $field['options']['date_format'] ) ? (string) $field['options']['date_format'] : ''
+			);
 		} elseif ( 'number' === $type ) {
 			$value_type        = 'number';
 			$matching_function = 'range';
@@ -2780,10 +2823,29 @@ final class Newspack_Newsletters_Mailchimp extends \Newspack_Newsletters_Service
 			'name'                => ! empty( $field['name'] ) ? $field['name'] : $tag,
 			'value_type'          => $value_type,
 			'matching_function'   => $matching_function,
+			'date_format'         => $date_format,
 			'options'             => $options,
 			'description'         => isset( $field['help_text'] ) ? $field['help_text'] : '',
 			'is_access_rule'      => $is_promoted_by_default,
 			'is_segment_criteria' => $is_promoted_by_default,
 		];
+	}
+
+	/**
+	 * Translate a Mailchimp date_format option into a PHP date format string.
+	 *
+	 * Mailchimp renders a date merge field per this setting, so '03/04/2026' means
+	 * different days under the two options. An unrecognized format returns '',
+	 * which the consumer reads as ISO 8601 / Y-m-d.
+	 *
+	 * @param string $format The Mailchimp date_format option.
+	 * @return string A PHP date format string, or ''.
+	 */
+	private static function map_mailchimp_date_format( $format ) {
+		$formats = [
+			'MM/DD/YYYY' => 'm/d/Y',
+			'DD/MM/YYYY' => 'd/m/Y',
+		];
+		return isset( $formats[ $format ] ) ? $formats[ $format ] : '';
 	}
 }

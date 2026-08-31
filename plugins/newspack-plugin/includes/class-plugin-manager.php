@@ -104,7 +104,7 @@ class Plugin_Manager {
 				'Author'      => \esc_html__( 'Automattic', 'newspack-plugin' ),
 				'PluginURI'   => \esc_url( 'https://newspack.com' ),
 				'AuthorURI'   => \esc_url( 'https://automattic.com' ),
-				'Download'    => 'https://github.com/Automattic/newspack-ads/releases/latest/download/newspack-ads.zip',
+				'Download'    => 'https://newspack.com/downloads/newspack-ads/latest',
 			],
 			'newspack-blocks'             => [
 				'Name'        => \esc_html__( 'Newspack Blocks', 'newspack-plugin' ),
@@ -112,7 +112,7 @@ class Plugin_Manager {
 				'Author'      => \esc_html__( 'Automattic', 'newspack-plugin' ),
 				'PluginURI'   => \esc_url( 'https://newspack.com' ),
 				'AuthorURI'   => \esc_url( 'https://automattic.com' ),
-				'Download'    => 'https://github.com/Automattic/newspack-blocks/releases/latest/download/newspack-blocks.zip',
+				'Download'    => 'https://newspack.com/downloads/newspack-blocks/latest',
 			],
 			'newspack-content-converter'  => [
 				'Name'        => \esc_html__( 'Newspack Content Converter', 'newspack-plugin' ),
@@ -129,7 +129,7 @@ class Plugin_Manager {
 				'Author'      => \esc_html__( 'Automattic', 'newspack-plugin' ),
 				'PluginURI'   => \esc_url( 'https://newspack.com' ),
 				'AuthorURI'   => \esc_url( 'https://automattic.com' ),
-				'Download'    => 'https://github.com/Automattic/newspack-multibranded-site/releases/latest/download/newspack-multibranded-site.zip',
+				'Download'    => 'https://newspack.com/downloads/newspack-multibranded-site/latest',
 				'Quiet'       => true,
 			],
 			'newspack-network'            => [
@@ -138,7 +138,7 @@ class Plugin_Manager {
 				'Author'      => \esc_html__( 'Automattic', 'newspack-plugin' ),
 				'PluginURI'   => \esc_url( 'https://newspack.com' ),
 				'AuthorURI'   => \esc_url( 'https://automattic.com' ),
-				'Download'    => 'https://github.com/Automattic/newspack-network/releases/latest/download/newspack-network.zip',
+				'Download'    => 'https://newspack.com/downloads/newspack-network/latest',
 				'Quiet'       => true,
 			],
 			'newspack-newsletters'        => [
@@ -147,7 +147,7 @@ class Plugin_Manager {
 				'Author'      => \esc_html__( 'Automattic', 'newspack-plugin' ),
 				'PluginURI'   => \esc_url( 'https://newspack.com' ),
 				'AuthorURI'   => \esc_url( 'https://automattic.com' ),
-				'Download'    => 'https://github.com/Automattic/newspack-newsletters/releases/latest/download/newspack-newsletters.zip',
+				'Download'    => 'https://newspack.com/downloads/newspack-newsletters/latest',
 			],
 			'newspack-popups'             => [
 				'Name'        => \esc_html__( 'Newspack Campaigns', 'newspack-plugin' ),
@@ -155,7 +155,7 @@ class Plugin_Manager {
 				'Author'      => \esc_html__( 'Automattic', 'newspack-plugin' ),
 				'PluginURI'   => \esc_url( 'https://newspack.com' ),
 				'AuthorURI'   => \esc_url( 'https://automattic.com' ),
-				'Download'    => 'https://github.com/Automattic/newspack-popups/releases/latest/download/newspack-popups.zip',
+				'Download'    => 'https://newspack.com/downloads/newspack-popups/latest',
 			],
 			'newspack-sponsors'           => [
 				'Name'        => \esc_html__( 'Newspack Sponsors', 'newspack-plugin' ),
@@ -163,7 +163,7 @@ class Plugin_Manager {
 				'Author'      => \esc_html__( 'Automattic', 'newspack-plugin' ),
 				'PluginURI'   => \esc_url( 'https://newspack.com' ),
 				'AuthorURI'   => \esc_url( 'https://automattic.com' ),
-				'Download'    => 'https://github.com/Automattic/newspack-sponsors/releases/latest/download/newspack-sponsors.zip',
+				'Download'    => 'https://newspack.com/downloads/newspack-sponsors/latest',
 			],
 			'newspack-listings'           => [
 				'Name'        => \esc_html__( 'Newspack Listings', 'newspack-plugin' ),
@@ -171,7 +171,7 @@ class Plugin_Manager {
 				'Author'      => \esc_html__( 'Automattic', 'newspack-plugin' ),
 				'PluginURI'   => \esc_url( 'https://newspack.com' ),
 				'AuthorURI'   => \esc_url( 'https://automattic.com' ),
-				'Download'    => 'https://github.com/Automattic/newspack-listings/releases/latest/download/newspack-listings.zip',
+				'Download'    => 'https://newspack.com/downloads/newspack-listings/latest',
 			],
 			'newspack-theme'              => [
 				'Name'        => \esc_html__( 'Newspack Theme', 'newspack-plugin' ),

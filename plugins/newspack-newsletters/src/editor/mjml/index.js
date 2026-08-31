@@ -5,6 +5,7 @@
  */
 import { __ } from '@wordpress/i18n';
 import apiFetch from '@wordpress/api-fetch';
+import { addQueryArgs } from '@wordpress/url';
 import { useSelect, useDispatch } from '@wordpress/data';
 import { useEffect } from '@wordpress/element';
 import { isLayoutEditor, usePrevious } from '../../newsletter-editor/utils';
@@ -23,12 +24,26 @@ import mjml2html from 'mjml-browser';
 /**
  * Refresh the email-compliant HTML for a post.
  *
+ * Resolves to a result object rather than a bare string: `{ result: 'success', html }`
+ * on success, or `{ result: 'error', error }` if the render/compile fails.
+ *
  * @param {number} postId      The current post ID.
  * @param {string} postTitle   The current post title.
  * @param {string} postContent The current post content.
- * @return {Promise<string>} The refreshed email HTML.
+ * @return {Promise<{result: string, html?: string, error?: Error}>} The refresh result.
  */
 export const refreshEmailHtml = async ( postId, postTitle, postContent ) => {
+	const editorData = typeof newspack_email_editor_data !== 'undefined' ? newspack_email_editor_data : {};
+	// The server-render endpoint only accepts the newsletter CPT. Gate the Woo
+	// branch to that CPT so the Layout (newspack_nl_layo_cpt) and Ad editors fall
+	// through to the MJML path even when the flag is on (otherwise they 404).
+	if ( editorData.use_woo_renderer && editorData.current_post_type === editorData.newsletter_post_type ) {
+		return apiFetch( {
+			path: addQueryArgs( '/newspack-newsletters/v1/post-html', { post_id: postId } ),
+		} )
+			.then( ( { html } ) => ( { result: 'success', html } ) )
+			.catch( error => ( { result: 'error', error } ) );
+	}
 	return apiFetch( {
 		path: `/newspack-newsletters/v1/post-mjml`,
 		method: 'POST',
