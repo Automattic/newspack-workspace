@@ -166,6 +166,11 @@ class Jetpack {
 		// Modify the related posts timeframe.
 		add_filter( 'jetpack_relatedposts_filter_date_range', [ __CLASS__, 'restrict_age_of_related_posts' ] );
 
+		// Hide social share links from bots by deferring the un-cacheable share URL until real user interaction.
+		add_filter( 'jetpack_sharing_display_query', [ __CLASS__, 'obfuscate_share_query' ], 10, 4 );
+		add_filter( 'jetpack_sharing_data_attributes', [ __CLASS__, 'add_obfuscation_data_attribute' ], 10, 4 );
+		add_action( 'wp_footer', [ __CLASS__, 'print_share_obfuscation_script' ] );
+
 		// Disable Jetpack Image Studio as late as possible so dequeues cannot be overridden.
 		add_action( 'admin_print_scripts', [ __CLASS__, 'disable_image_studio' ], 999 );
 	}
@@ -375,6 +380,126 @@ class Jetpack {
 		}
 
 		return $date_range;
+	}
+
+	/**
+	 * Whether the social share-link bot obfuscation is enabled.
+	 *
+	 * Jetpack's "official" share buttons (X, Facebook, LinkedIn, Reddit, Print, Email…)
+	 * point at the post's own permalink with a `?share=<service>` query. Requesting that
+	 * URL is un-cacheable by construction: it carries a query string and returns a dynamic
+	 * redirect, so it boots full WordPress every time. Bots crawling the links in bulk turn
+	 * that into real origin load. When enabled, the share query is deferred out of the
+	 * rendered markup and rebuilt on genuine user interaction, so crawlers never see a
+	 * fetchable `?share=` URL and hit the cacheable permalink instead.
+	 *
+	 * @return bool
+	 */
+	private static function is_share_obfuscation_enabled() {
+		/**
+		 * Filters whether Jetpack social share links are obfuscated to discourage bot traffic.
+		 *
+		 * @param bool $enabled Whether the obfuscation is enabled. Default true.
+		 */
+		return (bool) apply_filters( 'newspack_jetpack_obfuscate_share_links', true );
+	}
+
+	/**
+	 * Whether a Jetpack share-link query is one of the un-cacheable, origin round-trip
+	 * "official" services (e.g. `share=twitter`) as opposed to a direct off-site link.
+	 *
+	 * @param mixed $query The query string passed to Sharing_Source::get_link().
+	 * @return bool
+	 */
+	private static function is_share_roundtrip_query( $query ) {
+		return is_string( $query ) && 0 === strpos( $query, 'share=' );
+	}
+
+	/**
+	 * Blank the `?share=` query on the rendered share-button href.
+	 *
+	 * With the query removed, the visible href is the bare (cacheable) post permalink,
+	 * so a crawler following it gets a cache hit rather than the un-cacheable share
+	 * handler. The real query is stashed for the client script by
+	 * add_obfuscation_data_attribute().
+	 *
+	 * @param string $query  The sharing service URL query parameter.
+	 * @param object $source Sharing service properties. Unused.
+	 * @param string $id     Sharing ID. Unused.
+	 * @param array  $args   Array of sharing service options. Unused.
+	 * @return string The (possibly blanked) query.
+	 */
+	public static function obfuscate_share_query( $query, $source = null, $id = false, $args = [] ) {
+		if ( self::is_share_obfuscation_enabled() && self::is_share_roundtrip_query( $query ) ) {
+			return '';
+		}
+		return $query;
+	}
+
+	/**
+	 * Stash the original `?share=` query in a data attribute so the client script can
+	 * rebuild the real share URL on genuine user interaction.
+	 *
+	 * The value is the raw query token (e.g. `share=twitter`), not a URL, so no fetchable
+	 * `?share=` URL string is left in the DOM for URL-scraping bots to follow.
+	 *
+	 * @param array  $data_attributes Attributes supplied from the sharing source. Keys are
+	 *                                rendered with a `data-` prefix.
+	 * @param object $source          Sharing service properties. Unused.
+	 * @param string $id              Sharing ID. Unused.
+	 * @param array  $args            Array of sharing service options, as collected by
+	 *                                Sharing_Source::get_link() via func_get_args(). Index 3
+	 *                                holds the query string.
+	 * @return array The (possibly augmented) data attributes.
+	 */
+	public static function add_obfuscation_data_attribute( $data_attributes, $source = null, $id = false, $args = [] ) {
+		$data_attributes = (array) $data_attributes;
+		$query           = $args[3] ?? '';
+		if ( self::is_share_obfuscation_enabled() && self::is_share_roundtrip_query( $query ) ) {
+			$data_attributes['share-query'] = $query;
+		}
+		return $data_attributes;
+	}
+
+	/**
+	 * Print the small progressive-enhancement script that restores the real share URL.
+	 *
+	 * On the first genuine interaction (hover, focus or touch) with a share link, the
+	 * original `?share=…` query is appended back onto its permalink href. From that point
+	 * the anchor behaves exactly as Jetpack renders it, so native navigation, popup
+	 * handlers and share-stat counting are untouched. Bots that neither run this script nor
+	 * dispatch interaction events only ever see the bare, cacheable permalink. `&nb=1`
+	 * mirrors what Jetpack's own sharing.js appends for real user clicks.
+	 */
+	public static function print_share_obfuscation_script() {
+		if ( ! self::is_share_obfuscation_enabled() ) {
+			return;
+		}
+		if ( ! class_exists( 'Jetpack' ) || ! \Jetpack::is_module_active( 'sharedaddy' ) ) {
+			return;
+		}
+		wp_print_inline_script_tag(
+			<<<'JS'
+( function () {
+	function restore( event ) {
+		var anchor = event.target && event.target.closest ? event.target.closest( 'a[data-share-query]' ) : null;
+		if ( ! anchor ) {
+			return;
+		}
+		var query = anchor.getAttribute( 'data-share-query' );
+		if ( ! query ) {
+			return;
+		}
+		var href = anchor.getAttribute( 'href' ) || '';
+		anchor.setAttribute( 'href', href + ( href.indexOf( '?' ) === -1 ? '?' : '&' ) + query + '&nb=1' );
+		anchor.removeAttribute( 'data-share-query' );
+	}
+	[ 'pointerover', 'focusin', 'touchstart' ].forEach( function ( type ) {
+		document.addEventListener( type, restore, true );
+	} );
+} )();
+JS
+		);
 	}
 
 	/**
