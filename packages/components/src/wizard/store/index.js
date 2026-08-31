@@ -168,9 +168,20 @@ const store = createReduxStore( WIZARD_STORE_NAMESPACE, {
  * both newspack-blocks and newspack-manager). @wordpress/data keeps a single
  * registry on `wp.data`, so the second call is a no-op that logs
  * `Store "newspack/wizards" is already registered.` — guard it instead.
+ *
+ * The first bundle to register wins, and it is not necessarily the newest one:
+ * consumers rebuild on their own schedules, so an older copy of this package can
+ * get there first and leave newer selectors missing. That is worth knowing about
+ * while developing, so keep the breadcrumb outside production builds.
  */
 export default () => {
 	if ( select( WIZARD_STORE_NAMESPACE ) ) {
+		if ( 'production' !== process.env.NODE_ENV ) {
+			// eslint-disable-next-line no-console
+			console.warn(
+				`Wizard store: "${ WIZARD_STORE_NAMESPACE }" is already registered, so this copy of newspack-components was ignored. Two bundles of the package are on this page and the first one to load wins.`
+			);
+		}
 		return;
 	}
 	register( store );
