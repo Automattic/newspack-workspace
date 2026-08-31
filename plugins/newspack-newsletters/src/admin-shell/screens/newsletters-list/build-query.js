@@ -33,8 +33,11 @@ const SORT_FIELD_TO_ORDERBY = {
 };
 
 export function buildQueryParams( view = {} ) {
-	// Term embeds cost ~2 internal REST dispatches per row and only the
-	// (hidden-by-default) Categories/Tags columns read them.
+	// A post carries one `wp:term` link per taxonomy and
+	// `WP_REST_Server::embed_links()` dispatches each one, so the term embed
+	// costs an internal REST dispatch per row per taxonomy — two per row
+	// here, and only the (hidden-by-default) Categories/Tags columns read
+	// them.
 	const visibleFields = Array.isArray( view.fields ) ? view.fields : null;
 	const needsTerms = ! visibleFields || visibleFields.includes( 'categories' ) || visibleFields.includes( 'tags' );
 
