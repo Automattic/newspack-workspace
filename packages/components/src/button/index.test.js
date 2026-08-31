@@ -135,14 +135,15 @@ describe( 'Button with a javascript: href alone', () => {
 	const link = () => screen.getByText( 'Save' ).closest( 'a' );
 
 	it( 'renders no link', () => {
-		const warn = jest.spyOn( console, 'warn' ).mockImplementation( () => {} );
+		// Silenced only; the assertion below is about the markup, not the warning.
+		jest.spyOn( console, 'warn' ).mockImplementation( () => {} );
 		render( <Button href="JavaScript:alert(1)">Save</Button> );
 
 		expect( link() ).toBeNull();
 	} );
 
 	it( 'sees through interleaved control characters', () => {
-		const warn = jest.spyOn( console, 'warn' ).mockImplementation( () => {} );
+		jest.spyOn( console, 'warn' ).mockImplementation( () => {} );
 		render( <Button href={ 'java\nscript:alert(1)' }>Save</Button> );
 
 		expect( link() ).toBeNull();
