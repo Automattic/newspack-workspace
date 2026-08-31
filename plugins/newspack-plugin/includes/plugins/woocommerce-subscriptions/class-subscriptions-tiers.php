@@ -545,8 +545,9 @@ class Subscriptions_Tiers {
 	 * @param bool        $show_variation_attributes Whether the card should render the product variation attributes.
 	 * @param bool        $current                   Whether the product should have the "current" badge.
 	 * @param bool        $selected                  Whether the product should be checked.
+	 * @param int         $seats_ceiling             Seats the current plan already holds, so its radio advertises the same widened maximum as the seats field. 0 for every card but the current one.
 	 */
-	private static function render_product_card( $product, $show_variation_attributes = false, $current = false, $selected = false ) {
+	private static function render_product_card( $product, $show_variation_attributes = false, $current = false, $selected = false, $seats_ceiling = 0 ) {
 		// A name-your-price product has no fixed price to print — get_price() is
 		// empty, so wcs_price_string() would render a bare "/ month" — and the
 		// amount is carried by the form's own input instead.
@@ -586,6 +587,16 @@ class Subscriptions_Tiers {
 		// follow whichever one is checked. A tier with no attributes here sells no
 		// seats, which is what tells the field to hide and stop submitting.
 		$seats = Group_Subscription_Seats::get_field_args( $product );
+
+		// The plan the reader already holds carries the same widened ceiling the seats
+		// field uses: a group that outgrew a since-lowered maximum keeps the seats it
+		// pays for. The client clamp reads this radio, not the field, so without the
+		// match it would pull those seats back down to the plan's raw maximum on load.
+		// Only the current plan has a ceiling (render_form() sets it only when staying
+		// on plan), and only a per-seat, bounded tier has a maximum to raise.
+		if ( $seats && $current && $seats_ceiling > 0 && $seats['max'] > 0 ) {
+			$seats['max'] = max( $seats['max'], $seats_ceiling );
+		}
 
 		?>
 		<label class="newspack-ui__input-card <?php echo $current ? esc_attr( 'current' ) : ''; ?>">
@@ -867,7 +878,7 @@ class Subscriptions_Tiers {
 									self::render_nyp_product_card( $products[0], $products[0] === $current_product, $switch_data );
 								} else {
 									foreach ( $products as $product ) {
-										self::render_product_card( $product, false, $switch_data && $product === $current_product, $product === $selected_product );
+										self::render_product_card( $product, false, $switch_data && $product === $current_product, $product === $selected_product, $seats_ceiling );
 									}
 								}
 								?>
@@ -880,7 +891,7 @@ class Subscriptions_Tiers {
 			if ( ! $should_render_tabs ) {
 				foreach ( $tiers as $products ) {
 					foreach ( $products as $product ) {
-						self::render_product_card( $product, true, $switch_data && $product === $current_product, $product === $selected_product );
+						self::render_product_card( $product, true, $switch_data && $product === $current_product, $product === $selected_product, $seats_ceiling );
 					}
 				}
 			}
