@@ -2,14 +2,14 @@
 # This file is distributed under the GPL2.
 msgid ""
 msgstr ""
-"Project-Id-Version: Newspack Ads 3.11.2\n"
+"Project-Id-Version: Newspack Ads 3.13.1\n"
 "Report-Msgid-Bugs-To: https://wordpress.org/support/plugin/newspack-ads\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-06-05T21:50:40+00:00\n"
+"POT-Creation-Date: 2026-08-11T17:39:52+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: newspack-ads\n"
@@ -78,19 +78,19 @@ msgstr ""
 msgid "Dense"
 msgstr ""
 
-#: includes/class-bidding.php:668
+#: includes/class-bidding.php:669
 msgid "Header Bidding"
 msgstr ""
 
-#: includes/class-bidding.php:669
+#: includes/class-bidding.php:670
 msgid "Configure your settings to quickly implement header bidding."
 msgstr ""
 
-#: includes/class-bidding.php:680
+#: includes/class-bidding.php:681
 msgid "Debug mode"
 msgstr ""
 
-#: includes/class-bidding.php:681
+#: includes/class-bidding.php:682
 msgid "Run Prebid.js in debug mode."
 msgstr ""
 
@@ -985,18 +985,18 @@ msgstr ""
 msgid "Media Kit"
 msgstr ""
 
-#: includes/media-kit/class-media-kit.php:231
+#: includes/media-kit/class-media-kit.php:240
 msgid "Media Kit page creation failed, and no existing page was found."
 msgstr ""
 
 #. translators: %d is the post ID.
-#: includes/media-kit/class-media-kit.php:235
+#: includes/media-kit/class-media-kit.php:244
 #, php-format
 msgid "Media Kit page already created - post ID: %d."
 msgstr ""
 
 #. translators: %d is the post ID.
-#: includes/media-kit/class-media-kit.php:239
+#: includes/media-kit/class-media-kit.php:248
 #, php-format
 msgid "Media Kit page created successfully - post ID: %d"
 msgstr ""
@@ -1257,7 +1257,7 @@ msgid "Render an ad unit from your inventory."
 msgstr ""
 
 #: dist/editor.js:6
-#: dist/header-bidding-gam.js:1
+#: dist/header-bidding-gam.js:12
 #: src/blocks/ad-unit/edit.js:77
 #: src/wizard-settings/header-bidding-gam/order-popover.js:43
 msgid "Edit"
@@ -1300,174 +1300,175 @@ msgstr ""
 msgid "Add a new tab."
 msgstr ""
 
-#: dist/header-bidding-gam.js:1
-#: src/wizard-settings/header-bidding-gam/order.js:48
+#. translators: accessibility text appended to link text
+#: dist/header-bidding-gam.js:12
+#: src/wizard-settings/header-bidding-gam/order.js:49
 msgid "Creating Order…"
 msgstr ""
 
-#: dist/header-bidding-gam.js:1
-#: src/wizard-settings/header-bidding-gam/order.js:50
+#: dist/header-bidding-gam.js:12
+#: src/wizard-settings/header-bidding-gam/order.js:51
 msgid "Creating Line Items…"
 msgstr ""
 
-#: dist/header-bidding-gam.js:1
-#: src/wizard-settings/header-bidding-gam/order.js:52
+#: dist/header-bidding-gam.js:12
+#: src/wizard-settings/header-bidding-gam/order.js:53
 msgid "Associating Creatives…"
 msgstr ""
 
-#: dist/header-bidding-gam.js:1
-#: src/wizard-settings/header-bidding-gam/order.js:223
+#: dist/header-bidding-gam.js:12
+#: src/wizard-settings/header-bidding-gam/order.js:224
 msgid "Create the order and line items on your Google Ad Manager network according to the pre-defined price bucket settings."
 msgstr ""
 
-#: dist/header-bidding-gam.js:1
-#: src/wizard-settings/header-bidding-gam/order.js:231
+#: dist/header-bidding-gam.js:12
+#: src/wizard-settings/header-bidding-gam/order.js:232
 msgid "Order name"
 msgstr ""
 
-#: dist/header-bidding-gam.js:1
-#: src/wizard-settings/header-bidding-gam/order.js:245
+#: dist/header-bidding-gam.js:12
+#: src/wizard-settings/header-bidding-gam/order.js:246
 msgid "Bidder Revenue Share"
 msgstr ""
 
-#: dist/header-bidding-gam.js:1
-#: src/wizard-settings/header-bidding-gam/order.js:246
+#: dist/header-bidding-gam.js:12
+#: src/wizard-settings/header-bidding-gam/order.js:247
 msgid "This is agreed upon revenue share between you and the bid partner. Input the percentage that goes to the bidder, i.e. 20 for 20%."
 msgstr ""
 
-#: dist/header-bidding-gam.js:1
-#: src/wizard-settings/header-bidding-gam/order.js:260
+#: dist/header-bidding-gam.js:12
+#: src/wizard-settings/header-bidding-gam/order.js:261
 msgid "Bidders"
 msgstr ""
 
-#: dist/header-bidding-gam.js:1
-#: src/wizard-settings/header-bidding-gam/order.js:263
+#: dist/header-bidding-gam.js:12
+#: src/wizard-settings/header-bidding-gam/order.js:264
 msgid "Which bidders to include in this order. Select bidders that all have the same revenue share and make sure to not include the same bidder in more than one header bidding order."
 msgstr ""
 
-#: dist/header-bidding-gam.js:1
-#: src/wizard-settings/header-bidding-gam/order.js:279
+#: dist/header-bidding-gam.js:12
+#: src/wizard-settings/header-bidding-gam/order.js:280
 msgid "Order exists but it's misconfigured."
 msgstr ""
 
-#: dist/header-bidding-gam.js:1
-#: src/wizard-settings/header-bidding-gam/order.js:282
+#: dist/header-bidding-gam.js:12
+#: src/wizard-settings/header-bidding-gam/order.js:283
 msgid "This may take up to 15 minutes, please do not close the window."
 msgstr ""
 
-#: dist/header-bidding-gam.js:1
-#: dist/header-bidding-gam.js:13
+#: dist/header-bidding-gam.js:12
+#: dist/header-bidding-gam.js:24
 #: src/wizard-settings/header-bidding-gam/index.js:220
-#: src/wizard-settings/header-bidding-gam/order.js:295
+#: src/wizard-settings/header-bidding-gam/order.js:296
 msgid "Cancel"
 msgstr ""
 
-#: dist/header-bidding-gam.js:1
-#: src/wizard-settings/header-bidding-gam/order.js:310
+#: dist/header-bidding-gam.js:12
+#: src/wizard-settings/header-bidding-gam/order.js:311
 msgid "Fix issues"
 msgstr ""
 
-#: dist/header-bidding-gam.js:1
-#: src/wizard-settings/header-bidding-gam/order.js:39
+#: dist/header-bidding-gam.js:12
+#: src/wizard-settings/header-bidding-gam/order.js:40
 msgid "Update Order"
 msgstr ""
 
-#: dist/header-bidding-gam.js:1
-#: dist/header-bidding-gam.js:13
-#: src/wizard-settings/header-bidding-gam/index.js:113
+#: dist/header-bidding-gam.js:12
+#: dist/header-bidding-gam.js:24
+#: src/wizard-settings/header-bidding-gam/index.js:114
 #: src/wizard-settings/header-bidding-gam/index.js:232
-#: src/wizard-settings/header-bidding-gam/order.js:39
+#: src/wizard-settings/header-bidding-gam/order.js:40
 msgid "Create Order"
 msgstr ""
 
-#: dist/header-bidding-gam.js:1
+#: dist/header-bidding-gam.js:12
 #: src/wizard-settings/header-bidding-gam/order-popover.js:33
 msgid "Close Popover"
 msgstr ""
 
-#: dist/header-bidding-gam.js:1
+#: dist/header-bidding-gam.js:12
 #: src/wizard-settings/header-bidding-gam/order-popover.js:54
 msgid "Archive"
 msgstr ""
 
-#: dist/header-bidding-gam.js:1
+#: dist/header-bidding-gam.js:12
 #: src/wizard-settings/header-bidding-gam/order-popover.js:58
 msgid "GAM Dashboard"
 msgstr ""
 
-#: dist/header-bidding-gam.js:1
-#: src/wizard-settings/header-bidding-gam/index.js:104
+#: dist/header-bidding-gam.js:12
+#: src/wizard-settings/header-bidding-gam/index.js:105
 msgid "Are you sure you want to leave this page?"
 msgstr ""
 
-#: dist/header-bidding-gam.js:1
-#: dist/header-bidding-gam.js:4
-#: src/wizard-settings/header-bidding-gam/index.js:113
-#: src/wizard-settings/header-bidding-gam/index.js:146
+#: dist/header-bidding-gam.js:12
+#: dist/header-bidding-gam.js:15
+#: src/wizard-settings/header-bidding-gam/index.js:114
+#: src/wizard-settings/header-bidding-gam/index.js:147
 msgid "Manage Orders"
 msgstr ""
 
-#: dist/header-bidding-gam.js:1
-#: src/wizard-settings/header-bidding-gam/index.js:119
+#: dist/header-bidding-gam.js:12
+#: src/wizard-settings/header-bidding-gam/index.js:120
 msgid "Google Ad Manager Integration"
 msgstr ""
 
 #. translators: %s: Number of line items in the order.
-#: dist/header-bidding-gam.js:4
-#: src/wizard-settings/header-bidding-gam/index.js:129
+#: dist/header-bidding-gam.js:15
+#: src/wizard-settings/header-bidding-gam/index.js:130
 #, js-format
 msgid "There is %s available order."
 msgid_plural "There are %s available orders."
 msgstr[0] ""
 msgstr[1] ""
 
-#: dist/header-bidding-gam.js:4
-#: src/wizard-settings/header-bidding-gam/index.js:73
+#: dist/header-bidding-gam.js:15
+#: src/wizard-settings/header-bidding-gam/index.js:74
 msgid "Loading…"
 msgstr ""
 
-#: dist/header-bidding-gam.js:4
-#: src/wizard-settings/header-bidding-gam/index.js:73
+#: dist/header-bidding-gam.js:15
+#: src/wizard-settings/header-bidding-gam/index.js:74
 msgid "There are no orders configured."
 msgstr ""
 
 #. translators: %1$d: the bidder revenue share for this order.
-#: dist/header-bidding-gam.js:7
-#: src/wizard-settings/header-bidding-gam/index.js:159
+#: dist/header-bidding-gam.js:18
+#: src/wizard-settings/header-bidding-gam/index.js:160
 #, js-format
 msgid "Bidder Revenue Share: %1$d%%"
 msgstr ""
 
 #. translators: %s: comma-separated list of adapters for the order or "any" if undefined.
-#: dist/header-bidding-gam.js:10
-#: src/wizard-settings/header-bidding-gam/index.js:165
+#: dist/header-bidding-gam.js:21
+#: src/wizard-settings/header-bidding-gam/index.js:166
 #, js-format
 msgid "Bidders: %s"
 msgstr ""
 
-#: dist/header-bidding-gam.js:10
-#: src/wizard-settings/header-bidding-gam/index.js:168
+#: dist/header-bidding-gam.js:21
+#: src/wizard-settings/header-bidding-gam/index.js:169
 msgid "any"
 msgstr ""
 
-#: dist/header-bidding-gam.js:10
-#: src/wizard-settings/header-bidding-gam/index.js:179
+#: dist/header-bidding-gam.js:21
+#: src/wizard-settings/header-bidding-gam/index.js:180
 msgid "Are you sure you'd like to archive this order?"
 msgstr ""
 
 #. Translators: %1 The name of the bidder. %2 The number of orders for the bidder.
-#: dist/header-bidding-gam.js:13
+#: dist/header-bidding-gam.js:24
 #: src/wizard-settings/header-bidding-gam/index.js:209
 #, js-format
 msgid "%1$s is being targeted by %2$d orders."
 msgstr ""
 
-#: dist/header-bidding-gam.js:13
+#: dist/header-bidding-gam.js:24
 #: src/wizard-settings/header-bidding-gam/index.js:232
 msgid "Edit Order"
 msgstr ""
 
-#: dist/header-bidding-gam.js:13
+#: dist/header-bidding-gam.js:24
 #: src/wizard-settings/header-bidding-gam/index.js:238
 msgid "We were unable to fix the issues with this order and have archived it. Please create a new order below."
 msgstr ""

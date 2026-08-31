@@ -45,11 +45,27 @@ const PlatformSelection = ( { onComplete, onCancel, config, saveConfig, inFlight
 	const { saveWizardSettings } = useDispatch( WIZARD_STORE_NAMESPACE );
 	const [ installing, setInstalling ] = useState( null );
 	const [ installFailed, setInstallFailed ] = useState( false );
+	// Only warn about Access Control when the site has something to lose. The flag is
+	// the same one behind the standing inert-gating notice, so the dialog and that
+	// notice agree about what counts as configured.
+	const hasAccessControl = window.newspack_aux_data?.inert_gating?.has_surfaces;
 	const { confirmDialog: disableDialog, requestConfirm: requestDisable } = useConfirmDialog( {
 		title: __( 'Disable Audience Management?', 'newspack-plugin' ),
-		message: __(
-			'Disabling Audience Management turns off reader registration, the My Account dashboard, and related reader features. Your settings are preserved and you can re-enable it later.',
-			'newspack-plugin'
+		message: (
+			<>
+				<p>
+					{ __(
+						'Disabling Audience Management turns off reader registration, the My Account dashboard, and related reader features.',
+						'newspack-plugin'
+					) }
+				</p>
+				{ hasAccessControl && (
+					<p>
+						{ __( 'Gated content, premium newsletters, and member-only blocks will become public for all readers.', 'newspack-plugin' ) }
+					</p>
+				) }
+				<p>{ __( 'Are you sure you want to disable these features?', 'newspack-plugin' ) }</p>
+			</>
 		),
 		confirmButtonText: __( 'Disable', 'newspack-plugin' ),
 		isDestructive: true,

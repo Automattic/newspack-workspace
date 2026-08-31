@@ -1,0 +1,33 @@
+@use "~@wordpress/base-styles/variables" as wp-vars;
+
+.newspack-popups {
+	&__contextual-prompt-candidate {
+		cursor: pointer;
+
+		&:hover,
+		&[aria-checked="true"] {
+			background: color-mix(in srgb, var(--wp-components-color-accent, var(--wp-admin-theme-color)) 4%, transparent);
+			box-shadow: 0 0 0 var(--wp-admin-border-width-focus, 2px) var(--wp-admin-theme-color);
+			color: var(--wp-components-color-accent, var(--wp-admin-theme-color));
+		}
+
+		&:focus-visible {
+			box-shadow: 0 0 0 currentcolor inset, 0 0 0 var(--wp-admin-border-width-focus) var(--wp-components-color-accent, var(--wp-admin-theme-color));
+			outline: none;
+		}
+	}
+
+	&__contextual-prompt-candidate-body {
+		margin: wp-vars.$grid-unit-05 0 0;
+	}
+
+	&__contextual-prompt-apply {
+		justify-content: center;
+		width: 100%;
+	}
+
+	&__contextual-prompt-generate {
+		justify-content: center;
+		width: 100%;
+	}
+}

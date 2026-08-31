@@ -15,6 +15,7 @@ defined( 'ABSPATH' ) || exit;
 class Premium_Newsletters_Wizard extends Wizard {
 
 	use Wizards\Traits\Content_Gate_Preferences;
+	use Wizards\Traits\Audience_Management_Dependency;
 
 	/**
 	 * Admin page slug.
@@ -109,7 +110,7 @@ class Premium_Newsletters_Wizard extends Wizard {
 						'properties'        => Content_Gate_API::$gate_properties,
 					],
 				],
-				'permission_callback' => [ $this, 'api_permissions_check' ],
+				'permission_callback' => [ $this, 'api_permissions_check_audience_management' ],
 			]
 		);
 
@@ -146,7 +147,7 @@ class Premium_Newsletters_Wizard extends Wizard {
 			[
 				'methods'             => 'POST',
 				'callback'            => [ $this, 'api_duplicate_gate' ],
-				'permission_callback' => [ $this, 'api_permissions_check' ],
+				'permission_callback' => [ $this, 'api_permissions_check_audience_management' ],
 				'args'                => [
 					'id' => [
 						'type'              => 'integer',
@@ -221,13 +222,16 @@ class Premium_Newsletters_Wizard extends Wizard {
 		\wp_localize_script(
 			'newspack-wizards',
 			'newspackAudienceContentGates',
-			[
-				'api'                     => '/' . NEWSPACK_API_NAMESPACE . '/wizard/' . $this->slug,
-				'available_access_rules'  => Access_Rules::get_access_rules_for_client(),
-				'available_content_rules' => Content_Rules::get_premium_newsletter_rules(),
-				'presave_checks_enabled'  => Content_Gate::get_presave_checks_enabled(),
-				'default_gate_status'     => Content_Gate::get_default_new_gate_status(),
-			]
+			array_merge(
+				[
+					'api'                     => '/' . NEWSPACK_API_NAMESPACE . '/wizard/' . $this->slug,
+					'available_access_rules'  => Access_Rules::get_access_rules_for_client(),
+					'available_content_rules' => Content_Rules::get_premium_newsletter_rules(),
+					'presave_checks_enabled'  => Content_Gate::get_presave_checks_enabled(),
+					'default_gate_status'     => Content_Gate::get_default_new_gate_status(),
+				],
+				$this->get_audience_management_script_data()
+			)
 		);
 
 		\wp_localize_script(

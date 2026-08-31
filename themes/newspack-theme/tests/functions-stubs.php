@@ -91,3 +91,25 @@ function newspack_typography_css_wrap() {
  */
 function newspack_sanitize_svgs() {
 }
+/**
+ * Gutenberg's sibling of WP_Theme_JSON_Data; only defined when the plugin is
+ * active, so static analysis needs this stand-in. Deliberately not extending
+ * the core class: the real one is a sibling, not a subclass.
+ */
+class WP_Theme_JSON_Data_Gutenberg {
+	/**
+	 * Return the underlying data.
+	 *
+	 * @return array
+	 */
+	public function get_data() {
+	}
+	/**
+	 * Merge new data into the object.
+	 *
+	 * @param array $new_data Data to merge.
+	 * @return WP_Theme_JSON_Data_Gutenberg
+	 */
+	public function update_with( $new_data ) {
+	}
+}
