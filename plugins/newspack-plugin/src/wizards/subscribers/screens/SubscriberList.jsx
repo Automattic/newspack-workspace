@@ -300,7 +300,14 @@ export default function SubscriberList() {
 			{
 				id: 'newsletters',
 				label: __( 'Newsletters', 'newspack-plugin' ),
-				// The lists the site records this reader as subscribed to, by title.
+				// The lists the site records this reader as subscribed to. Each arrives
+				// as `{ id, title }`, with a null title for a list the site holds no
+				// definition for — routinely the ESP's own IDs, which are never
+				// mirrored locally. The unresolved wording is composed here rather
+				// than server-side so the ID stays machine-readable for a future
+				// filter, and so this string sits in the same bundle as the column
+				// heading above it. Showing the bare ID is not an option: `abc123def`
+				// in a publisher-facing column reads as a newsletter name.
 				// Hidden by default; display-only until there is a server-side filter.
 				enableSorting: false,
 				render: ( { item } ) => {
@@ -308,7 +315,20 @@ export default function SubscriberList() {
 					if ( newsletters.length === 0 ) {
 						return <span>—</span>;
 					}
-					return <div>{ newsletters.join( ', ' ) }</div>;
+					return (
+						<div>
+							{ newsletters
+								.map(
+									list =>
+										// Nullish, not falsy: unresolved is the null the endpoint
+										// sends, not every title JavaScript reads as empty.
+										list.title ??
+										/* translators: %s: the email service provider's identifier for a list the site has no local record of. */
+										sprintf( __( 'Unknown list (%s)', 'newspack-plugin' ), list.id )
+								)
+								.join( ', ' ) }
+						</div>
+					);
 				},
 			},
 		],

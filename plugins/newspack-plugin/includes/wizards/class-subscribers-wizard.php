@@ -1088,22 +1088,31 @@ class Subscribers_Wizard extends Wizard {
 	}
 
 	/**
-	 * The newsletters a reader is subscribed to, as the titles the site shows for
-	 * them.
+	 * The newsletters a reader is subscribed to, each as its list ID and the title
+	 * the site shows for it.
 	 *
 	 * The subscription itself is read from the reader's own record — the
 	 * `newsletter_subscribed_lists` reader-data item, which the newsletter data
 	 * events keep in step with the ESP — and the list IDs it holds are resolved
 	 * against the site's own list definitions. No ESP call is made; see
-	 * READER_TAGS_META for why. A list ID the site holds no definition for is
-	 * labelled as unresolved and keeps its ID, so a column entry is never silently
-	 * dropped — but only when the site has a list registry to check against. When
-	 * it has none, nothing is reported rather than everything being called
-	 * unknown; see get_newsletter_list_titles().
+	 * READER_TAGS_META for why.
+	 *
+	 * A list the site holds no definition for reports a null title rather than a
+	 * synthesized one, and always keeps its ID. Unresolved is a routine state, not
+	 * a rarity: the stored set is `get_contact_combined_lists()`, which merges the
+	 * ESP's own list IDs with the site's local public IDs, so a Mailchimp or
+	 * ActiveCampaign site regularly holds IDs it has no local record of. Sending
+	 * the ID rather than a sentence keeps it machine-readable, since a filter
+	 * matches on a list ID and not on prose, and leaves the wording to the client,
+	 * next to the column heading it sits under.
+	 *
+	 * Resolution needs a registry at all: when the site has none, nothing is
+	 * reported rather than every list being called unknown; see
+	 * get_newsletter_list_titles().
 	 *
 	 * @param int $user_id The reader user ID.
 	 *
-	 * @return string[]
+	 * @return array<array{id:string,title:?string}>
 	 */
 	private function reader_newsletters( int $user_id ): array {
 		$raw      = Reader_Data::get_data( $user_id, 'newsletter_subscribed_lists' );
@@ -1119,7 +1128,7 @@ class Subscribers_Wizard extends Wizard {
 			// up, which is what the column's empty state already means.
 			return [];
 		}
-		$names = [];
+		$lists = [];
 		// Deduplicated by list ID, before resolution: two lists can carry the same
 		// title, and collapsing on the title would drop one of the subscriptions.
 		$list_ids = array_unique( array_map( 'strval', array_filter( $list_ids, 'is_scalar' ) ) );
@@ -1127,18 +1136,12 @@ class Subscribers_Wizard extends Wizard {
 			if ( '' === $list_id ) {
 				continue;
 			}
-			// A subscribed list the site has no local Subscription_List for is a
-			// normal state, not an edge case: this data is whatever the ESP returned,
-			// and it can name lists that were never mirrored here. Printing the bare
-			// provider ID would put something like `abc123def` in a publisher-facing
-			// column with nothing to say it is not a newsletter name, so it is labelled
-			// as unresolved while keeping the ID, which is what support needs.
-			$names[] = isset( $titles[ $list_id ] )
-				? $titles[ $list_id ]
-				/* translators: %s: the email service provider's identifier for a list the site has no local record of. */
-				: sprintf( __( 'Unknown list (%s)', 'newspack-plugin' ), $list_id );
+			$lists[] = [
+				'id'    => $list_id,
+				'title' => $titles[ $list_id ] ?? null,
+			];
 		}
-		return $names;
+		return $lists;
 	}
 
 	/**

@@ -770,8 +770,8 @@ class Test_Subscribers_Wizard_Subscribers_Endpoint extends WP_UnitTestCase {
 	 * The Newsletters column reports the site's own record of what a reader is
 	 * subscribed to (the `newsletter_subscribed_lists` reader-data item), resolved
 	 * to the titles the site shows for those lists. A list the site has no
-	 * definition for is labelled as unresolved, keeping its ID, rather than
-	 * vanishing from the column or reading as a newsletter name.
+	 * definition for reports a null title and keeps its ID, rather than vanishing
+	 * from the column or being flattened into prose the client cannot match on.
 	 */
 	public function test_newsletters_hydrate_from_local_subscription_state() {
 		$this->login_admin();
@@ -790,9 +790,22 @@ class Test_Subscribers_Wizard_Subscribers_Endpoint extends WP_UnitTestCase {
 		$newsletters_by_id = array_column( $this->dispatch()->get_data()['items'], 'newsletters', 'id' );
 
 		$this->assertSame(
-			[ 'Daily Brief', 'Weekend Read', 'Unknown list (esp-only-list)' ],
+			[
+				[
+					'id'    => (string) $daily_list_id,
+					'title' => 'Daily Brief',
+				],
+				[
+					'id'    => (string) $weekly_list_id,
+					'title' => 'Weekend Read',
+				],
+				[
+					'id'    => 'esp-only-list',
+					'title' => null,
+				],
+			],
 			$newsletters_by_id[ $subscribed_reader ],
-			'Known lists resolve to their titles; a list the site has no record of is labelled rather than printed as a bare provider ID, which reads as a newsletter name.'
+			'Known lists resolve to their titles; a list the site has no record of keeps its ID with a null title, so the client can tell the two apart and a filter has something to match on.'
 		);
 		$this->assertSame( [], $newsletters_by_id[ $unsubscribed_reader ] );
 	}
@@ -818,7 +831,20 @@ class Test_Subscribers_Wizard_Subscribers_Endpoint extends WP_UnitTestCase {
 		$newsletters_by_id = array_column( $this->dispatch()->get_data()['items'], 'newsletters', 'id' );
 
 		$this->assertSame(
-			[ 'Daily Brief', 'Daily Brief', '0' ],
+			[
+				[
+					'id'    => (string) $morning_brief,
+					'title' => 'Daily Brief',
+				],
+				[
+					'id'    => (string) $evening_brief,
+					'title' => 'Daily Brief',
+				],
+				[
+					'id'    => (string) $zero_titled,
+					'title' => '0',
+				],
+			],
 			$newsletters_by_id[ $reader ],
 			'The repeated list ID collapses; two same-titled lists and a list titled "0" all survive.'
 		);
@@ -932,7 +958,7 @@ class Test_Subscribers_Wizard_Subscribers_Endpoint extends WP_UnitTestCase {
 		$full_page                    = $this->dispatch( [ 'per_page' => 50 ] )->get_data();
 
 		$this->assertCount( 50, $full_page['items'], 'The measured page really is 50 rows.' );
-		$this->assertSame( [ 'Daily Brief' ], $full_page['items'][0]['newsletters'], 'The page really is hydrating the batched columns.' );
+		$this->assertSame( [ 'Daily Brief' ], array_column( $full_page['items'][0]['newsletters'], 'title' ), 'The page really is hydrating the batched columns.' );
 		$this->assertSame(
 			$single_row_cost,
 			$full_page_cost,
