@@ -103,12 +103,51 @@ final class Promo_Url_Config {
 	}
 
 	/**
+	 * Whether the checkout-button renderer resolves a price for a product,
+	 * mirroring view.php: the product's own price, or — under Name Your Price —
+	 * the suggested price falling back to the minimum. A product with none
+	 * renders no form, so a link naming it would do nothing.
+	 *
+	 * @param \WC_Product|false|null $product The product.
+	 * @return bool Whether a price resolves.
+	 */
+	private static function has_resolvable_price( $product ) {
+		if ( ! $product ) {
+			return false;
+		}
+		$price = $product->get_price();
+		if ( class_exists( '\WC_Name_Your_Price_Helpers' ) && \WC_Name_Your_Price_Helpers::is_nyp( $product->get_id() ) ) {
+			$price = \WC_Name_Your_Price_Helpers::get_suggested_price( $product->get_id() );
+			if ( ! $price ) {
+				$price = \WC_Name_Your_Price_Helpers::get_minimum_price( $product->get_id() );
+			}
+		}
+		return (bool) $price;
+	}
+
+	/**
+	 * Whether a direct link naming this product yields a working checkout
+	 * button, mirroring the render gate in the block's view.php: a variable-type
+	 * parent always renders (its button opens the picker), anything else needs a
+	 * resolvable price.
+	 *
+	 * @param \WC_Product $product The product.
+	 * @return bool Whether a direct link can serve the product.
+	 */
+	public static function is_direct_button_servable( $product ) {
+		if ( in_array( $product->get_type(), [ 'variable', 'variable-subscription' ], true ) ) {
+			return true;
+		}
+		return self::has_resolvable_price( $product );
+	}
+
+	/**
 	 * Child ids the generator may offer as a DIRECT plan option — as opposed to
 	 * get_eligible_children(), which describes what the reader-chooses picker
 	 * serves. A direct link names the child itself, so it must survive the
-	 * URL-trigger's own checks (publish status), and a grouped member must be
-	 * subscription-shaped: the Plans row promotes a plan, and a bundled
-	 * non-subscription extra has no standing as one.
+	 * URL-trigger's own checks (publish status) and the renderer's price gate,
+	 * and a grouped member must be subscription-shaped: the Plans row promotes a
+	 * plan, and a bundled non-subscription extra has no standing as one.
 	 *
 	 * @param array $family See get_product_family().
 	 * @return int[] Ids offerable as direct choices.
@@ -119,10 +158,16 @@ final class Promo_Url_Config {
 			return $offerable;
 		}
 		$variations = isset( $family['variations'] ) ? array_map( 'intval', $family['variations'] ) : [];
-		foreach ( $variations as $variation_id ) {
-			$variation = wc_get_product( $variation_id );
-			if ( $variation && 'publish' === $variation->get_status() ) {
-				$offerable[] = $variation_id;
+		if ( ! empty( $variations ) ) {
+			// A variation-locked button passes view.php's price gate on the
+			// PARENT's resolvable price (WooCommerce syncs it from the
+			// variations), so resolve it once for the whole set.
+			$parent_priced = self::has_resolvable_price( wc_get_product( (int) ( $family['parent'] ?? 0 ) ) );
+			foreach ( $variations as $variation_id ) {
+				$variation = wc_get_product( $variation_id );
+				if ( $variation && 'publish' === $variation->get_status() && $parent_priced ) {
+					$offerable[] = $variation_id;
+				}
 			}
 		}
 		$members = isset( $family['members'] ) ? array_map( 'intval', $family['members'] ) : [];
@@ -132,6 +177,9 @@ final class Promo_Url_Config {
 				continue;
 			}
 			if ( ! in_array( $member->get_type(), [ 'subscription', 'variable-subscription' ], true ) ) {
+				continue;
+			}
+			if ( ! self::is_direct_button_servable( $member ) ) {
 				continue;
 			}
 			$offerable[] = $member_id;
@@ -207,9 +255,38 @@ final class Promo_Url_Config {
 	}
 
 	/**
+	 * Disable config frequencies whose donation child product is missing. The
+	 * renderer's frequency list reflects settings only, while the checkout bails
+	 * without a cart when the frequency's product ID is absent (see the `$is_wc`
+	 * branch of Donations::process_donation_request()) — so a link must not
+	 * offer such a frequency. Pure so the intersection is testable.
+	 *
+	 * @param array|null $config      Promo donate config (see map_donate_configuration()), or null.
+	 * @param array      $product_ids Frequency-slug-to-product-id map; an empty
+	 *                                value means the frequency has no product.
+	 * @return array|null Config with productless frequencies disabled, or null
+	 *                    when none remain enabled.
+	 */
+	public static function filter_frequencies_without_products( $config, $product_ids ) {
+		if ( null === $config ) {
+			return null;
+		}
+		$any_enabled = false;
+		foreach ( $config['frequencies'] as $slug => $frequency ) {
+			if ( ! empty( $frequency['enabled'] ) && empty( $product_ids[ $slug ] ) ) {
+				$config['frequencies'][ $slug ]['enabled'] = false;
+			}
+			$any_enabled = $any_enabled || ! empty( $config['frequencies'][ $slug ]['enabled'] );
+		}
+		return $any_enabled ? $config : null;
+	}
+
+	/**
 	 * Promo config for a donation link. The block the link opens is rendered from
 	 * schema defaults (Modal_Checkout::maybe_setup_url_triggered_checkout()), so
 	 * resolving those same defaults describes what the reader's block accepts.
+	 * Frequencies are then intersected with the donation products that actually
+	 * exist, mirroring the checkout's own bail.
 	 *
 	 * @return array|null Promo donate config, or null when donations can't take one.
 	 */
@@ -222,9 +299,12 @@ final class Promo_Url_Config {
 		if ( $block_type ) {
 			$attrs = $block_type->prepare_attributes_for_render( $attrs );
 		}
-		return self::evaluate_donate_configuration(
-			\Newspack_Blocks_Donate_Renderer_Base::get_configuration( $attrs ),
-			\Newspack_Blocks::can_use_name_your_price()
+		return self::filter_frequencies_without_products(
+			self::evaluate_donate_configuration(
+				\Newspack_Blocks_Donate_Renderer_Base::get_configuration( $attrs ),
+				\Newspack_Blocks::can_use_name_your_price()
+			),
+			Donations::get_donation_product_child_products_ids()
 		);
 	}
 

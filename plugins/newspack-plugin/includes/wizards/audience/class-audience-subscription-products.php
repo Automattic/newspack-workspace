@@ -302,6 +302,10 @@ class Audience_Subscription_Products extends Wizard {
 		$family                         = Promo_Url_Config::get_product_family( $product_id );
 		$response['eligible_children']  = Promo_Url_Config::get_eligible_children( $family );
 		$response['offerable_children'] = Promo_Url_Config::get_offerable_children( $family );
+		// Whether a link naming the row product itself yields a working button
+		// (renderer price gate) — the UI refuses parent-naming links otherwise.
+		$parent_product                = function_exists( 'wc_get_product' ) ? wc_get_product( $product_id ) : null;
+		$response['parent_offerable']  = $parent_product ? Promo_Url_Config::is_direct_button_servable( $parent_product ) : false;
 		return rest_ensure_response( $response );
 	}
 

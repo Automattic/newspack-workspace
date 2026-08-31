@@ -147,6 +147,7 @@ class Promo_Url_Config_Test extends WP_UnitTestCase {
 		$this->assertNotEmpty( $data['homepage']['url'] );
 		$this->assertArrayHasKey( 'eligible_children', $data );
 		$this->assertArrayHasKey( 'offerable_children', $data );
+		$this->assertArrayHasKey( 'parent_offerable', $data );
 		// No page scanning: there are no targets to enumerate.
 		$this->assertArrayNotHasKey( 'targets', $data );
 
@@ -195,6 +196,42 @@ class Promo_Url_Config_Test extends WP_UnitTestCase {
 		$data = rest_get_server()->dispatch( $request )->get_data();
 		$this->assertSame( $page_id, $data['homepage']['id'] );
 		$this->assertSame( 'Legacy front page', $data['homepage']['title'] );
+	}
+
+	/**
+	 * Test that frequencies whose donation child product is missing are
+	 * disabled — the checkout bails without a cart for them — and that a config
+	 * with no product-backed frequency left collapses to null.
+	 */
+	public function test_filter_frequencies_without_products() {
+		$config = Promo_Url_Config::map_donate_configuration( $this->donate_configuration(), true );
+
+		// All enabled frequencies have products: unchanged.
+		$intact = Promo_Url_Config::filter_frequencies_without_products(
+			$config,
+			[
+				'month' => 201,
+				'year'  => 202,
+			]
+		);
+		$this->assertTrue( $intact['frequencies']['month']['enabled'] );
+		$this->assertTrue( $intact['frequencies']['year']['enabled'] );
+
+		// A missing product disables its frequency but keeps the config.
+		$partial = Promo_Url_Config::filter_frequencies_without_products(
+			$config,
+			[
+				'month' => 201,
+				'year'  => false,
+			]
+		);
+		$this->assertTrue( $partial['frequencies']['month']['enabled'] );
+		$this->assertFalse( $partial['frequencies']['year']['enabled'] );
+
+		// No product-backed frequency at all: no config, so the UI reports
+		// donations as unavailable instead of emitting a dead link.
+		$this->assertNull( Promo_Url_Config::filter_frequencies_without_products( $config, [] ) );
+		$this->assertNull( Promo_Url_Config::filter_frequencies_without_products( null, [ 'month' => 201 ] ) );
 	}
 
 	/**
