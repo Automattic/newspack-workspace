@@ -25,6 +25,16 @@ const clickButton = async () => {
 	} );
 };
 
+// React formats its warnings with `%s` placeholders and passes the values as
+// further arguments, so assert against the whole call rather than one argument.
+const messagesFrom = spy => spy.mock.calls.flat().join( ' ' );
+
+// A failing assertion skips any `mockRestore()` left after it, which would leave
+// the console swallowed for every later test in the file.
+afterEach( () => {
+	jest.restoreAllMocks();
+} );
+
 describe( 'Button href with onClick', () => {
 	it( 'awaits the onClick, then pushes the route', async () => {
 		const historyRef = { current: null };
@@ -118,7 +128,6 @@ describe( 'Button href with onClick outside a router', () => {
 			expect( window.location.href ).toBe( '' );
 		} );
 		expect( warn ).toHaveBeenCalledWith( expect.stringContaining( 'javascript:' ) );
-		warn.mockRestore();
 	} );
 } );
 
@@ -130,7 +139,6 @@ describe( 'Button with a javascript: href alone', () => {
 		render( <Button href="JavaScript:alert(1)">Save</Button> );
 
 		expect( link() ).toBeNull();
-		warn.mockRestore();
 	} );
 
 	it( 'sees through interleaved control characters', () => {
@@ -138,7 +146,6 @@ describe( 'Button with a javascript: href alone', () => {
 		render( <Button href={ 'java\nscript:alert(1)' }>Save</Button> );
 
 		expect( link() ).toBeNull();
-		warn.mockRestore();
 	} );
 
 	it( 'leaves an ordinary href alone', () => {
@@ -147,31 +154,29 @@ describe( 'Button with a javascript: href alone', () => {
 	} );
 } );
 
-// `loading` is this component's own prop name; the core Button expresses the same
-// state as `isBusy`. Passing `loading` straight through lands it on the DOM node,
-// which React rejects with an unknown-prop warning.
 describe( 'Button loading prop', () => {
 	const button = () => screen.getByRole( 'button', { name: 'Save' } );
 
 	it( 'renders the core busy state without putting `loading` on the DOM node', () => {
 		const error = jest.spyOn( console, 'error' ).mockImplementation( () => {} );
-		render( <Button loading>Save</Button> );
-
-		expect( button() ).toHaveClass( 'is-busy' );
-		expect( button() ).not.toHaveAttribute( 'loading' );
-		expect( error ).not.toHaveBeenCalled();
-		error.mockRestore();
-	} );
-
-	it( 'leaves the button idle without the prop', () => {
-		render( <Button>Save</Button> );
+		const { rerender } = render( <Button>Save</Button> );
 
 		expect( button() ).not.toHaveClass( 'is-busy' );
+
+		rerender( <Button loading>Save</Button> );
+
+		expect( button() ).toHaveClass( 'is-busy' );
+		// React drops an unknown boolean-valued attribute instead of writing it, so
+		// the warning rather than the absent attribute is what a revert trips. It is
+		// also deduped per property name for the life of the module registry, which
+		// is why this names the message instead of asserting no errors at all.
+		expect( messagesFrom( error ) ).not.toContain( 'non-boolean attribute' );
 	} );
 } );
 
-// A ref on a plain function component is dropped with a warning, so the wizard
-// screens that measure or focus a button need it forwarded to the DOM node.
+// core's Button wraps itself in a Tooltip when it is given a `label`, and the
+// Tooltip needs a ref on its child. Two call sites do that with this Button:
+// the experimental-tools back button and the audience segment-group heading.
 describe( 'Button ref', () => {
 	it( 'forwards the ref to the rendered button', () => {
 		const error = jest.spyOn( console, 'error' ).mockImplementation( () => {} );
@@ -179,7 +184,6 @@ describe( 'Button ref', () => {
 		render( <Button ref={ ref }>Save</Button> );
 
 		expect( ref.current ).toBe( screen.getByRole( 'button', { name: 'Save' } ) );
-		expect( error ).not.toHaveBeenCalled();
-		error.mockRestore();
+		expect( messagesFrom( error ) ).not.toContain( 'Function components cannot be given refs' );
 	} );
 } );
