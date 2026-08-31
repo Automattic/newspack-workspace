@@ -29,6 +29,22 @@ describe( 'preventPreviewNavigation', () => {
 		expect( event.defaultPrevented ).toBe( true );
 	} );
 
+	it( 'leaves a modified click alone so open-in-new-tab still works', () => {
+		[ 'ctrlKey', 'metaKey', 'shiftKey', 'altKey' ].forEach( modifier => {
+			const container = document.createElement( 'div' );
+			container.innerHTML = '<a href="https://example.test/">Headline</a>';
+			document.body.appendChild( container );
+			container.addEventListener( 'click', preventPreviewNavigation, true );
+			const event = new MouseEvent( 'click', {
+				bubbles: true,
+				cancelable: true,
+				[ modifier ]: true,
+			} );
+			container.querySelector( 'a' ).dispatchEvent( event );
+			expect( event.defaultPrevented ).toBe( false );
+		} );
+	} );
+
 	it( 'leaves non-anchor clicks alone', () => {
 		const container = document.createElement( 'div' );
 		container.innerHTML = '<article><h2 class="entry-title">Headline</h2></article>';
