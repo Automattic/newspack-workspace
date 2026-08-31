@@ -692,7 +692,7 @@ final class Magic_Link {
 			if ( $token_data['time'] < $expire ) {
 				unset( $tokens[ $index ] );
 
-			} elseif ( $token_data['token'] === $token ) {
+			} elseif ( hash_equals( $token_data['token'], (string) $token ) ) {
 				$valid_token = $token_data;
 
 				/** If token data has a client hash, it must be equal to the user's. */
@@ -766,10 +766,10 @@ final class Magic_Link {
 			if ( $token_data['time'] < $expire ) {
 				unset( $tokens[ $index ] );
 
-			} elseif ( ! empty( $token_data['otp'] ) && $token_data['otp']['hash'] === $hash ) {
+			} elseif ( ! empty( $token_data['otp'] ) && hash_equals( $token_data['otp']['hash'], (string) $hash ) ) {
 				$valid_token = $token_data;
 
-				if ( $token_data['otp']['code'] === $code ) {
+				if ( hash_equals( $token_data['otp']['code'], (string) $code ) ) {
 					unset( $tokens[ $index ] );
 					self::clear_token_cookies();
 				} else {
