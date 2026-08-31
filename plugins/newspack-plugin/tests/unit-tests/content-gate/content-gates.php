@@ -1247,8 +1247,8 @@ class Test_Content_Gates extends \WP_UnitTestCase {
 	/**
 	 * Every exclusion source in is_excluded_from_gating() defaults to a
 	 * non-positive value when unconfigured: get_option( 'wp_page_for_privacy_policy' )
-	 * and get_theme_mod( 'accessibility_statement_page_id' ) both cast to 0,
-	 * and wc_get_page_id() returns -1. Confirms a post ID of 0 -- a
+	 * and Accessibility_Statement_Page::get_page_id() both return 0, and
+	 * wc_get_page_id() returns -1. Confirms a post ID of 0 -- a
 	 * degenerate value a caller with no real post in context could pass --
 	 * cannot spuriously match those unconfigured defaults (the
 	 * `array_filter( …, $id > 0 )` guard this pins), and that a WooCommerce
@@ -3255,13 +3255,15 @@ class Test_Content_Gates extends \WP_UnitTestCase {
 		$premium_newsletters_wizard = \Newspack\Wizards::get_wizard( 'premium-newsletters' );
 
 		$content_gate_request = new \WP_REST_Request( 'POST', '/' . NEWSPACK_API_NAMESPACE . '/wizard/newspack-premium-newsletters/' . $this->gate_ids[2] . '/duplicate' );
-		$content_gate_request->set_param( 'id', $this->gate_ids[2] );
+		// Where the server puts a route's captures when it dispatches, and where the
+		// handlers read the gate ID from — a body parameter must not name the gate.
+		$content_gate_request->set_url_params( [ 'id' => $this->gate_ids[2] ] );
 		$rejection = $premium_newsletters_wizard->api_duplicate_gate( $content_gate_request );
 		$this->assertWPError( $rejection, 'The premium newsletters wizard rejects content gates' );
 		$this->assertSame( 400, $rejection->get_error_data()['status'] );
 
 		$newsletter_request = new \WP_REST_Request( 'POST', '/' . NEWSPACK_API_NAMESPACE . '/wizard/newspack-premium-newsletters/' . $newsletter_gate_id . '/duplicate' );
-		$newsletter_request->set_param( 'id', $newsletter_gate_id );
+		$newsletter_request->set_url_params( [ 'id' => $newsletter_gate_id ] );
 		$success = $premium_newsletters_wizard->api_duplicate_gate( $newsletter_request );
 		$this->assertNotWPError( $success );
 		$this->assertSame( 'Premium Newsletter Gate copy', $success->get_data()['title'] );

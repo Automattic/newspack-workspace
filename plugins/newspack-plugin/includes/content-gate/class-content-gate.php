@@ -365,7 +365,7 @@ class Content_Gate {
 	private static function is_excluded_from_gating( $post_id ) {
 		$excluded = [
 			(int) get_option( 'wp_page_for_privacy_policy' ),
-			(int) get_theme_mod( 'accessibility_statement_page_id' ),
+			(int) Accessibility_Statement_Page::get_page_id(),
 		];
 		if ( function_exists( 'wc_terms_and_conditions_page_id' ) ) {
 			$excluded[] = (int) wc_terms_and_conditions_page_id();

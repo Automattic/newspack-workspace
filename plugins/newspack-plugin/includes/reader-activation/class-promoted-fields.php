@@ -133,12 +133,23 @@ class Promoted_Fields {
 			}
 			Access_Rules::register_rule(
 				[
-					'id'          => $key,
-					'name'        => self::get_display_name( $field, $integration ),
-					'description' => $field->get_description(),
-					'options'     => $field->get_options(),
-					'is_boolean'  => 'boolean' === $field->get_value_type(),
-					'callback'    => function ( $user_id, $args ) use ( $field ) {
+					'id'                  => $key,
+					'name'                => self::get_display_name( $field, $integration ),
+					'description'         => $field->get_description(),
+					'options'             => $field->get_options(),
+					// The options here are a list the provider already resolved, so
+					// Access_Rules can't derive this: a dropdown the provider has no
+					// choices for yet would register as free text.
+					'has_options'         => $field->takes_option_values(),
+					'is_boolean'          => 'boolean' === $field->get_value_type(),
+					// Read off the matching function, because that is what decides it:
+					// `list__not_in` naming nothing excludes nobody, and `range` with no
+					// bounds falls back to 0..PHP_INT_MAX. Either admits every reader who
+					// holds the field at all. `list__in`, `date_range` and `default` deny
+					// on an empty value, so declaring them would refuse a save that is
+					// merely narrow.
+					'empty_grants_access' => in_array( $field->get_matching_function(), [ 'list__not_in', 'range' ], true ),
+					'callback'            => function ( $user_id, $args ) use ( $field ) {
 						return self::evaluate_field( $field, $user_id, $args );
 					},
 				]
@@ -295,6 +306,14 @@ class Promoted_Fields {
 				);
 				return null !== $stored_date && $stored_date === $rule_date;
 			default:
+				// A rule on an options-backed field stores the chosen options as a list,
+				// because that is the shape `has_options` makes the sanitizer require,
+				// while the reader holds the single value the provider sent. Membership
+				// is the comparison there; equality still decides wherever both sides
+				// carry the same shape, which is every other field.
+				if ( is_array( $args ) && ! is_array( $value ) ) {
+					return in_array( $value, $args, true );
+				}
 				return $value === $args;
 		}
 	}

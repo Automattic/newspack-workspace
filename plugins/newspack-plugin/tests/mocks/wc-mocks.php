@@ -238,6 +238,10 @@ $wc_mock_notices = [];
 // Mock registry: product_id => array of grouped-parent product IDs (NPPM-2926).
 global $wcs_grouped_parents;
 $wcs_grouped_parents = [];
+// Whether the current mock "request" is on a single-product page. Real
+// WooCommerce derives is_product() from WP_Query; standing up a full product
+// page query per test is overkill, so tests toggle this flag directly instead.
+$wc_mock_is_product = false;
 
 /**
  * Reset the order-item lookup table.
@@ -264,6 +268,60 @@ function wc_mocks_reset_order_items() {
 function wc_mocks_reset_notices() {
 	global $wc_mock_notices;
 	$wc_mock_notices = [];
+}
+
+/**
+ * Mock of WooCommerce's is_product() conditional tag.
+ *
+ * Defined unconditionally like wc_add_notice() above, so any
+ * function_exists( 'is_product' ) or direct call in production code executes
+ * against this mock for the whole suite. Reads the flag tests set via
+ * wc_mocks_set_is_product(); defaults to false (not a product page).
+ *
+ * @return bool
+ */
+function is_product() {
+	global $wc_mock_is_product;
+	return ! empty( $wc_mock_is_product );
+}
+
+/**
+ * Toggle the is_product() mock for the current test.
+ *
+ * @param bool $is_product Whether the mock "request" is on a single-product page.
+ */
+function wc_mocks_set_is_product( $is_product ) {
+	global $wc_mock_is_product;
+	$wc_mock_is_product = $is_product;
+}
+
+/**
+ * Recording mock of WooCommerce's admin meta-box error bag, the channel a save
+ * handler uses to tell the admin why their edit did not take. Errors land on
+ * the $wc_mock_meta_box_errors global so tests can assert them.
+ *
+ * Defined unconditionally, so any class_exists( 'WC_Admin_Meta_Boxes' ) gate in
+ * production code executes against this mock for the whole suite; a test
+ * asserting on it should call wc_mocks_reset_meta_box_errors() from set_up().
+ */
+class WC_Admin_Meta_Boxes {
+	/**
+	 * Record an error for display on the next admin screen.
+	 *
+	 * @param string $text Error message.
+	 */
+	public static function add_error( $text ) {
+		global $wc_mock_meta_box_errors;
+		$wc_mock_meta_box_errors[] = $text;
+	}
+}
+
+/**
+ * Reset the errors recorded by the WC_Admin_Meta_Boxes mock.
+ */
+function wc_mocks_reset_meta_box_errors() {
+	global $wc_mock_meta_box_errors;
+	$wc_mock_meta_box_errors = [];
 }
 
 /**
@@ -504,6 +562,17 @@ class WC_Product {
 	public function get_name() {
 		return $this->data['name'] ?? '';
 	}
+	/**
+	 * WC_Product::get_title() is the post title, which for a product is its name.
+	 * Rendering code reaches for the title rather than the name, so the mock has
+	 * to answer both or a rendered card would fatal where production works.
+	 */
+	public function get_title() {
+		return $this->get_name();
+	}
+	public function get_description() {
+		return $this->data['description'] ?? '';
+	}
 	public function get_status() {
 		return $this->data['status'] ?? 'publish';
 	}
@@ -613,9 +682,14 @@ if ( ! class_exists( 'WC_Subscriptions_Cart' ) ) {
 }
 
 /**
+ * The post statuses `WC_Product_Query` searches when a query passes no `status`.
+ */
+const WC_PRODUCT_QUERY_DEFAULT_STATUSES = [ 'draft', 'pending', 'private', 'publish' ];
+
+/**
  * Register a mock product in the global products database.
  *
- * @param array $data Product data including 'id', 'children', 'type', 'name', 'price'.
+ * @param array $data Product data including 'id', 'type', 'name', 'status', 'price', 'children'.
  * @return WC_Product
  */
 function wc_create_mock_product( $data = [] ) {
@@ -623,6 +697,68 @@ function wc_create_mock_product( $data = [] ) {
 	$product = new WC_Product( $data );
 	$products_database[ $product->get_id() ] = $product;
 	return $product;
+}
+
+/**
+ * Query the mock products database.
+ *
+ * Supports the arguments Newspack's callers actually pass: `type` (one type or a list of
+ * them), `status`, `limit` and `return`. Registration order stands in for real
+ * WooCommerce's ordering, which none of the callers depend on. Any other filtering
+ * argument is fatal rather than ignored: this mock is defined unconditionally, so a
+ * caller silently getting an unfiltered result is a test that passes for the wrong reason.
+ *
+ * Omitting `status` is not "no status filter": `WC_Product_Query` defaults it to draft,
+ * pending, private and publish, and callers rely on that default — the access-rule
+ * subscription picker lists a drafted product deliberately, because readers still hold
+ * subscriptions to it. Applying the same default here is what lets a test tell that
+ * behaviour apart from a mock that never filtered.
+ *
+ * Arguments real WooCommerce discards are the exception — neither a `WC_Product_Query`
+ * default var nor a mapped meta key, so ignoring one is what production does too.
+ *
+ * @param array $args Query args.
+ * @return WC_Product[]|int[] Matching products, or their IDs with `return => 'ids'`.
+ * @throws InvalidArgumentException When passed a filtering argument the mock does not implement.
+ */
+function wc_get_products( $args = [] ) {
+	global $products_database;
+	// Not every consumer of this file registers a product, and the mock is defined
+	// unconditionally, so the global may still be unset when a caller lands here.
+	$products_database = $products_database ?? [];
+	$supported         = [ 'type', 'status', 'limit', 'return' ];
+	// Passed by Donations, discarded by WooCommerce.
+	$inert             = [ 'only_get_newspack_subscriptions' ];
+	$unknown           = array_diff( array_keys( $args ), $supported, $inert );
+	if ( ! empty( $unknown ) ) {
+		throw new InvalidArgumentException(
+			esc_html( 'wc_get_products mock does not implement: ' . implode( ', ', $unknown ) . '. Add it to tests/mocks/wc-mocks.php.' )
+		);
+	}
+	$types    = isset( $args['type'] ) ? (array) $args['type'] : [];
+	$statuses = isset( $args['status'] ) ? (array) $args['status'] : WC_PRODUCT_QUERY_DEFAULT_STATUSES;
+	$products = array_values(
+		array_filter(
+			$products_database,
+			function ( $product ) use ( $types, $statuses ) {
+				if ( ! empty( $types ) && ! $product->is_type( $types ) ) {
+					return false;
+				}
+				return in_array( $product->get_status(), $statuses, true );
+			}
+		)
+	);
+	$limit    = isset( $args['limit'] ) ? (int) $args['limit'] : -1;
+	$products = $limit > 0 ? array_slice( $products, 0, $limit ) : $products;
+	if ( isset( $args['return'] ) && 'ids' === $args['return'] ) {
+		return array_map(
+			function ( $product ) {
+				return $product->get_id();
+			},
+			$products
+		);
+	}
+	return $products;
 }
 
 class WC_Order {
@@ -1126,10 +1262,47 @@ if ( ! class_exists( 'WC_Subscriptions_Switcher' ) ) {
 		 *
 		 * @param string $item_action Type of switch items to include (ignored).
 		 */
+		/**
+		 * WooCommerce Subscriptions' own switch-URL builder, which appends the
+		 * `_wcsnonce` its switch handler refuses a request without.
+		 *
+		 * @param int                   $item_id      Line item ID.
+		 * @param WC_Order_Item_Product $item         Line item.
+		 * @param WC_Subscription       $subscription Subscription the item belongs to.
+		 *
+		 * @return string
+		 */
+		public static function get_switch_url( $item_id, $item, $subscription ) {
+			return add_query_arg(
+				[
+					'switch-subscription' => $subscription->get_id(),
+					'item'                => $item_id,
+					'_wcsnonce'           => wp_create_nonce( 'wcs_switch_request' ),
+				],
+				'https://example.org/product/'
+			);
+		}
+
 		public static function cart_contains_switches( $item_action = 'any' ) {
 			unset( $item_action );
 			global $wcs_mock_cart_switches;
 			return $wcs_mock_cart_switches ?? false;
+		}
+
+		/**
+		 * Stageable: set the $wcs_mock_item_switchable global to false to simulate
+		 * WooCommerce Subscriptions refusing a switch — switching turned off, a
+		 * gateway that can't change the billed amount, a subscription with no
+		 * parent order. Defaults to true, like an ordinary switchable line item.
+		 *
+		 * @param WC_Order_Item_Product $item         Item to switch (ignored).
+		 * @param WC_Subscription       $subscription Subscription the item belongs to (ignored).
+		 * @param int                   $user_id      User performing the switch (ignored).
+		 */
+		public static function can_item_be_switched_by_user( $item, $subscription, $user_id = 0 ) {
+			unset( $item, $subscription, $user_id );
+			global $wcs_mock_item_switchable;
+			return $wcs_mock_item_switchable ?? true;
 		}
 
 		public static function calculate_total_paid_since_last_order( $subscription, $subscription_item, $include_sign_up_fees = 'include_sign_up_fees', $orders_to_include = [] ) {
@@ -1464,6 +1637,47 @@ function wcs_get_subscriptions_for_product( $product_ids, $fields = 'ids', $args
 	}
 	return $subscriptions;
 }
+/**
+ * Whether a user holds a subscription, optionally to a given product and in a
+ * given set of statuses. Mirrors the real helper closely enough for the
+ * `function_exists()` gates production code puts in front of it, which is what
+ * decides whether a WCS-dependent code path runs at all.
+ *
+ * @param int             $user_id    User ID.
+ * @param int|string      $product_id Optional product the subscription must hold.
+ * @param string|string[] $status     Optional status or statuses; 'any' matches all.
+ *
+ * @return bool
+ */
+function wcs_user_has_subscription( $user_id = 0, $product_id = '', $status = 'any' ) {
+	foreach ( wcs_get_users_subscriptions( (int) $user_id ) as $subscription ) {
+		if ( $product_id && ! $subscription->has_product( (int) $product_id ) ) {
+			continue;
+		}
+		if ( 'any' !== $status && ! $subscription->has_status( $status ) ) {
+			continue;
+		}
+		return true;
+	}
+	return false;
+}
+/**
+ * Build a recurring price string. Real WCS returns localized markup; the mock
+ * returns a plain, assertable equivalent from the same argument keys.
+ *
+ * @param array $args Price string args: recurring_amount, subscription_period,
+ *                    subscription_interval.
+ *
+ * @return string
+ */
+function wcs_price_string( $args = [] ) {
+	$amount   = isset( $args['recurring_amount'] ) ? (string) $args['recurring_amount'] : '';
+	$period   = ! empty( $args['subscription_period'] ) ? $args['subscription_period'] : 'month';
+	$interval = max( 1, (int) ( $args['subscription_interval'] ?? 1 ) );
+	return 1 === $interval
+		? sprintf( '%s / %s', $amount, $period )
+		: sprintf( '%s every %d %ss', $amount, $interval, $period );
+}
 function wcs_get_canonical_product_id( $item ) {
 	if ( is_object( $item ) && method_exists( $item, 'get_product_id' ) ) {
 		// Real WCS: the variation ID is the canonical ID when present.
@@ -1654,33 +1868,6 @@ if ( ! function_exists( 'get_woocommerce_currency' ) ) {
 	function get_woocommerce_currency() {
 		return 'USD';
 	}
-}
-/**
- * Minimal WC_Product_Query stand-in: filters $products_database on `type` and `status`.
- *
- * The `status` default reproduces WC_Product_Query's own default
- * ( draft, pending, private, publish ), which is what a caller that omits `status`
- * actually gets — the property the CLI's SELECTABLE_PRODUCT_STATUSES constant claims to
- * mirror. `limit` is accepted and ignored (fixtures are small).
- *
- * @param array $args Query args.
- * @return WC_Product[] The matching products.
- */
-function wc_get_products( $args = [] ) {
-	global $products_database;
-	$types    = isset( $args['type'] ) ? (array) $args['type'] : null;
-	$statuses = isset( $args['status'] ) ? (array) $args['status'] : [ 'draft', 'pending', 'private', 'publish' ];
-	$matches  = [];
-	foreach ( $products_database as $product ) {
-		if ( null !== $types && ! in_array( $product->get_type(), $types, true ) ) {
-			continue;
-		}
-		if ( ! in_array( $product->get_status(), $statuses, true ) ) {
-			continue;
-		}
-		$matches[] = $product;
-	}
-	return $matches;
 }
 /**
  * Minimal stand-in for WooCommerce's admin field renderer. Only enough markup to let a metabox
