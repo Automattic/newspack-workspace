@@ -34,6 +34,12 @@ class Test_Group_Subscription_Admin_API extends WP_UnitTestCase {
 	public static function set_up_before_class() {
 		parent::set_up_before_class();
 		require_once dirname( __DIR__, 4 ) . '/mocks/wc-mocks.php';
+		// The group routes ride the Access Control feature flag; enable it so
+		// register_routes() does not return early and the dispatch tests below reach
+		// their permission callbacks instead of a 404.
+		if ( ! defined( 'NEWSPACK_CONTENT_GATES' ) ) {
+			define( 'NEWSPACK_CONTENT_GATES', true );
+		}
 	}
 
 	/**

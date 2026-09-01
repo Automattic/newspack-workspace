@@ -1,4 +1,3 @@
-/* eslint-disable @wordpress/i18n-translator-comments */
 /**
  * Flow — invite people to a group by email, on the owner's behalf.
  *
@@ -42,27 +41,50 @@ export default function InviteMemberFlow( { group, actions, onClose, onDone } ) 
 		setBusy( true );
 		setError( '' );
 		const failures = [];
+		let sent = 0;
 		for ( const email of accepted ) {
 			try {
 				// Sequential rather than parallel: each invitation re-checks the seat
 				// limit server-side, and firing them at once would let a batch race
 				// past a limit that only has room for some of them.
-				await actions.invite( email );
+				//
+				// A call that does not throw is not a delivered invitation:
+				// generate_invite() writes the row first and reports the send in
+				// `email_sent`. An undelivered invitation still holds a seat, so
+				// counting it as sent would let the admin fill the group with
+				// invitations nobody received and then meet the seat limit with
+				// nothing pointing at mail delivery.
+				const invite = await actions.invite( email );
+				if ( invite?.email_sent ) {
+					sent++;
+				} else {
+					failures.push(
+						sprintf(
+							/* translators: %s: email address the invitation was addressed to. */
+							__(
+								'%s: the invitation was created but the email could not be sent. It holds a seat until you cancel it.',
+								'newspack-plugin'
+							),
+							email
+						)
+					);
+				}
 			} catch ( e ) {
 				failures.push( `${ email }: ${ e?.message || __( 'Something went wrong.', 'newspack-plugin' ) }` );
 			}
 		}
-		const sent = accepted.length - failures.length;
 		if ( failures.length ) {
 			setError( failures.join( ' ' ) );
 			setBusy( false );
 			// A partial send still changed the group, so let the screen refresh
 			// without closing the modal over the error.
 			if ( sent > 0 ) {
+				/* translators: %d: number of invitations sent. */
 				onDone( sprintf( _n( '%d invitation sent.', '%d invitations sent.', sent, 'newspack-plugin' ), sent ), { keepOpen: true } );
 			}
 			return;
 		}
+		/* translators: %d: number of invitations sent. */
 		onDone( sprintf( _n( '%d invitation sent.', '%d invitations sent.', sent, 'newspack-plugin' ), sent ) );
 	};
 
@@ -89,6 +111,7 @@ export default function InviteMemberFlow( { group, actions, onClose, onDone } ) 
 				{ overCapacity && (
 					<p className="newspack-subscribers__modal-text">
 						{ sprintf(
+							/* translators: %d: number of invites that fit in the remaining seats. */
 							_n(
 								'Only %d invite will be sent, to match the available seats.',
 								'Only %d invites will be sent, to match the available seats.',

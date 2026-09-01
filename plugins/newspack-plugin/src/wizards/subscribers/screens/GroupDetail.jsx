@@ -1,4 +1,3 @@
-/* eslint-disable @wordpress/i18n-translator-comments */
 /**
  * L1 — Group detail (admin management).
  *
@@ -181,6 +180,7 @@ function GroupDetailView() {
 						{ ' ' }
 						<span
 							className="newspack-subscribers__header-count"
+							/* translators: %s: name of the group owner. */
 							aria-label={ sprintf( __( 'Owned by %s', 'newspack-plugin' ), ownerName ) }
 						>
 							{ `(${ ownerName })` }
@@ -277,7 +277,9 @@ function GroupDetailView() {
 				label: __( 'Make manager', 'newspack-plugin' ),
 				disabled: roleBusy,
 				isEligible: item => 'member' === item.role && isManageable( group ),
-				callback: items => changeRole( items[ 0 ], 'manager', sprintf( __( '%s is now a manager.', 'newspack-plugin' ), items[ 0 ].name ) ),
+				callback: items =>
+					/* translators: %s: name of the member promoted to manager. */
+					changeRole( items[ 0 ], 'manager', sprintf( __( '%s is now a manager.', 'newspack-plugin' ), items[ 0 ].name ) ),
 			},
 			{
 				id: 'remove-manager',
@@ -285,6 +287,7 @@ function GroupDetailView() {
 				disabled: roleBusy,
 				isEligible: item => 'manager' === item.role && isManageable( group ),
 				callback: items =>
+					/* translators: %s: name of the manager demoted to member. */
 					changeRole( items[ 0 ], 'member', sprintf( __( '%s is no longer a manager.', 'newspack-plugin' ), items[ 0 ].name ) ),
 			},
 			{
@@ -353,6 +356,10 @@ function GroupDetailView() {
 				id: 'cancel-invite',
 				label: __( 'Cancel invite', 'newspack-plugin' ),
 				isDestructive: true,
+				// Cancelling is a write like any other, so it needs the caller's write
+				// capability. Unlike resending it does not need an active group —
+				// clearing invitations off a lapsed group is exactly when it is useful.
+				isEligible: () => isManageable( group ),
 				callback: items => setModal( { kind: 'cancel-invite', invite: items[ 0 ] } ),
 			},
 		],
@@ -374,7 +381,11 @@ function GroupDetailView() {
 
 	if ( error || ! group ) {
 		return (
-			<Notice isError noticeText={ error || sprintf( __( '%s not found.', 'newspack-plugin' ), GROUP_LABEL ) }>
+			<Notice
+				isError
+				/* translators: %s: singular group label (e.g. "Group", "Team"). */
+				noticeText={ error || sprintf( __( '%s not found.', 'newspack-plugin' ), GROUP_LABEL ) }
+			>
 				<Button variant="link" onClick={ reload }>
 					{ __( 'Retry', 'newspack-plugin' ) }
 				</Button>

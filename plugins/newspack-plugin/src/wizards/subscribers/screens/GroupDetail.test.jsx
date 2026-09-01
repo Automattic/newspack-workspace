@@ -123,7 +123,7 @@ describe( 'the member row actions', () => {
 		expect( screen.getByRole( 'button', { name: 'Add members' } ) ).toBeDisabled();
 	} );
 
-	it( 'offers demotion, never removal, for a manager the owner promoted', async () => {
+	it( 'offers demotion as well as removal for a manager the owner promoted', async () => {
 		await renderDetail(
 			group( {
 				memberList: [

@@ -1,4 +1,4 @@
-/* eslint-disable @wordpress/i18n-translator-comments, no-bitwise */
+/* eslint-disable no-bitwise */
 /**
  * L0 — Subscriber list (DataViews, full-width).
  *
@@ -351,7 +351,11 @@ export default function SubscriberList() {
 	// offer a retry.
 	if ( error ) {
 		return (
-			<Notice isError noticeText={ sprintf( __( 'Could not load subscribers: %s', 'newspack-plugin' ), error ) }>
+			<Notice
+				isError
+				/* translators: %s: the error message the read failed with. */
+				noticeText={ sprintf( __( 'Could not load subscribers: %s', 'newspack-plugin' ), error ) }
+			>
 				<Button variant="link" onClick={ reload }>
 					{ __( 'Retry', 'newspack-plugin' ) }
 				</Button>

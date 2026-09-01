@@ -26,10 +26,13 @@ export default function RegenerateLinkFlow( { actions, onClose, onDone } ) {
 		// clipboard for the admin to paste — the confirm modal has no field to show
 		// it in. A clipboard failure (permissions, insecure context) must not read
 		// as a failed regeneration, since the link was already minted server-side.
+		// `clipboard` is absent in an insecure context and in older browsers, where
+		// optional chaining would resolve to undefined and let the await succeed,
+		// reporting a copy that never happened — so test for the method first.
 		let copied = false;
 		try {
-			if ( link?.url ) {
-				await window.navigator?.clipboard?.writeText( link.url );
+			if ( link?.url && window.navigator?.clipboard?.writeText ) {
+				await window.navigator.clipboard.writeText( link.url );
 				copied = true;
 			}
 		} catch ( e ) {

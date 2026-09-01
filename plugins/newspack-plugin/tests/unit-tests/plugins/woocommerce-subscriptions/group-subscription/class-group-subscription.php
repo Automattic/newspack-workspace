@@ -269,7 +269,7 @@ class Test_Group_Subscription extends WP_UnitTestCase {
 	 * exactly as an owned one would.
 	 */
 	public function test_member_capacity_is_the_limit_when_ownerless() {
-		// customer_id 0 -> get_managers() returns [0], an empty/phantom owner.
+		// customer_id 0 -> no owner, so get_managers() returns an empty list.
 		$sub = $this->create_group_subscription( 0, 10 );
 
 		$this->assertSame(

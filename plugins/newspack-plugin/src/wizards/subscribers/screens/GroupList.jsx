@@ -1,4 +1,4 @@
-/* eslint-disable @wordpress/i18n-translator-comments, no-bitwise */
+/* eslint-disable no-bitwise */
 /**
  * L0 — Group list (DataViews, full-width).
  *
@@ -162,7 +162,8 @@ export default function GroupList() {
 					<span>
 						{ item.seatLimit > 0
 							? `${ item.members } / ${ item.seatLimit }`
-							: sprintf( __( '%s / Unlimited', 'newspack-plugin' ), item.members ) }
+							: /* translators: %s: number of members in the group. */
+							  sprintf( __( '%s / Unlimited', 'newspack-plugin' ), item.members ) }
 					</span>
 				),
 				enableSorting: true,

@@ -1,4 +1,3 @@
-/* eslint-disable @wordpress/i18n-translator-comments */
 /**
  * Flow — adjust a group's seat limit.
  *
@@ -53,8 +52,10 @@ export default function AdjustSeatsFlow( { group, actions, onClose, onDone } ) {
 			const saved = Number( result?.seatLimit ) || 0;
 			onDone(
 				0 === saved
-					? sprintf( __( 'Seat limit removed — this %s is now unlimited.', 'newspack-plugin' ), GROUP_LABEL.toLowerCase() )
-					: sprintf( __( 'Seat limit updated to %d.', 'newspack-plugin' ), saved )
+					? /* translators: %s: lowercase singular group label (e.g. "group", "team"). */
+					  sprintf( __( 'Seat limit removed — this %s is now unlimited.', 'newspack-plugin' ), GROUP_LABEL.toLowerCase() )
+					: /* translators: %d: the new seat limit. */
+					  sprintf( __( 'Seat limit updated to %d.', 'newspack-plugin' ), saved )
 			);
 		} catch ( e ) {
 			setError( e?.message || __( 'Something went wrong.', 'newspack-plugin' ) );
@@ -68,7 +69,10 @@ export default function AdjustSeatsFlow( { group, actions, onClose, onDone } ) {
 				{ error && <Notice isError noticeText={ error } /> }
 				<ToggleControl
 					label={ __( 'Unlimited seats', 'newspack-plugin' ) }
-					help={ sprintf( __( 'Anyone invited can join this %s, with no cap.', 'newspack-plugin' ), GROUP_LABEL.toLowerCase() ) }
+					help={
+						/* translators: %s: lowercase singular group label (e.g. "group", "team"). */
+						sprintf( __( 'Anyone invited can join this %s, with no cap.', 'newspack-plugin' ), GROUP_LABEL.toLowerCase() )
+					}
 					checked={ unlimited }
 					disabled={ busy }
 					onChange={ setUnlimited }
@@ -83,6 +87,7 @@ export default function AdjustSeatsFlow( { group, actions, onClose, onDone } ) {
 						disabled={ busy }
 						onChange={ setValue }
 						help={ sprintf(
+							/* translators: %d: number of seats held by members and pending invitations. */
 							__( '%d seats are committed to members and pending invitations. The limit cannot be set below this.', 'newspack-plugin' ),
 							reserved
 						) }

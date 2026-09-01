@@ -1,4 +1,3 @@
-/* eslint-disable @wordpress/i18n-translator-comments */
 /**
  * Flow — add people to a group directly, on the owner's behalf.
  *
@@ -70,6 +69,7 @@ export default function AddMembersFlow( { group, actions, onClose, onDone } ) {
 				if ( added < readerIds.length ) {
 					failures.push(
 						sprintf(
+							/* translators: %d: number of addresses that were skipped. */
 							_n(
 								'%d address was already a member, or is not a reader account, and was skipped.',
 								'%d addresses were already members, or are not reader accounts, and were skipped.',
@@ -83,8 +83,27 @@ export default function AddMembersFlow( { group, actions, onClose, onDone } ) {
 			}
 			for ( const email of toInvite ) {
 				try {
-					await actions.invite( email );
-					invited++;
+					// A call that does not throw is not a delivered invitation:
+					// generate_invite() writes the row first and reports the send in
+					// `email_sent`. An undelivered invitation still holds a seat, so
+					// counting it as sent would let the admin fill the group with
+					// invitations nobody received and then meet the seat limit with
+					// nothing pointing at mail delivery.
+					const invite = await actions.invite( email );
+					if ( invite?.email_sent ) {
+						invited++;
+					} else {
+						failures.push(
+							sprintf(
+								/* translators: %s: email address the invitation was addressed to. */
+								__(
+									'%s: the invitation was created but the email could not be sent. It holds a seat until you cancel it.',
+									'newspack-plugin'
+								),
+								email
+							)
+						);
+					}
 				} catch ( e ) {
 					failures.push( `${ email }: ${ e?.message || __( 'Something went wrong.', 'newspack-plugin' ) }` );
 				}
@@ -97,11 +116,13 @@ export default function AddMembersFlow( { group, actions, onClose, onDone } ) {
 
 		const parts = [];
 		if ( added ) {
+			/* translators: %d: number of members added to the group. */
 			parts.push( sprintf( _n( '%d member added.', '%d members added.', added, 'newspack-plugin' ), added ) );
 		}
 		if ( invited ) {
 			parts.push(
 				sprintf(
+					/* translators: %d: number of invitations sent. */
 					_n(
 						'%d invitation sent — no account on this site yet.',
 						'%d invitations sent — no accounts on this site yet.',
@@ -149,6 +170,7 @@ export default function AddMembersFlow( { group, actions, onClose, onDone } ) {
 				{ overCapacity && (
 					<p className="newspack-subscribers__modal-text">
 						{ sprintf(
+							/* translators: %d: number of people that fit in the remaining seats. */
 							_n(
 								'Only %d person will be added, to match the available seats.',
 								'Only %d people will be added, to match the available seats.',

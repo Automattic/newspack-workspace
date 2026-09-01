@@ -231,6 +231,7 @@ class Subscribers_Wizard extends Wizard {
 					'search'   => [
 						'type'              => 'string',
 						'sanitize_callback' => 'sanitize_text_field',
+						'validate_callback' => 'rest_validate_request_arg',
 					],
 					'orderby'  => [
 						'type'              => 'string',

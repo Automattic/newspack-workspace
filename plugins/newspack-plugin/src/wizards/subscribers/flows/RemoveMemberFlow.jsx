@@ -1,4 +1,3 @@
-/* eslint-disable @wordpress/i18n-translator-comments */
 /**
  * Flow — remove one or more people from a group.
  *
@@ -34,10 +33,31 @@ export default function RemoveMemberFlow( { members, actions, onClose, onDone } 
 		// 200, so a batch can be applied in part.
 		const result = await actions.removeMembers( list.map( member => member.id ) );
 		const removed = Object.keys( result?.members_removed || {} ).length;
+		if ( 0 === removed ) {
+			// Nothing applied is a failure, not a success reading "0 members removed".
+			// A refusal already arrives as a 403 (api_update_members re-checks the
+			// peer-manager rule per target), so an empty result means the IDs were no
+			// longer members. ConfirmFlow renders the rejection as the modal's own
+			// error and leaves it open; nothing changed, so nothing needs refetching.
+			throw new Error(
+				sprintf(
+					/* translators: %s: lowercase singular group label (e.g. "group", "team"). */
+					_n(
+						'Nobody was removed — that person is no longer a member of this %s.',
+						'Nobody was removed — those people are no longer members of this %s.',
+						count,
+						'newspack-plugin'
+					),
+					groupLabel
+				)
+			);
+		}
 		onDone(
 			1 === count && 1 === removed
-				? sprintf( __( '%1$s removed from the %2$s.', 'newspack-plugin' ), name, groupLabel )
+				? /* translators: 1: member name. 2: lowercase singular group label (e.g. "group", "team"). */
+				  sprintf( __( '%1$s removed from the %2$s.', 'newspack-plugin' ), name, groupLabel )
 				: sprintf(
+						/* translators: 1: number of members removed. 2: lowercase singular group label (e.g. "group", "team"). */
 						_n( '%1$d member removed from the %2$s.', '%1$d members removed from the %2$s.', removed, 'newspack-plugin' ),
 						removed,
 						groupLabel
@@ -59,6 +79,7 @@ export default function RemoveMemberFlow( { members, actions, onClose, onDone } 
 						// format string: a display name containing "<" or ">" would otherwise
 						// be parsed as markup by createInterpolateElement and crash the modal.
 						sprintf(
+							/* translators: %s: lowercase singular group label (e.g. "group", "team"). */
 							__(
 								'Are you sure you want to remove <name/> from this %s? This frees up a seat and the member loses access.',
 								'newspack-plugin'
@@ -68,6 +89,7 @@ export default function RemoveMemberFlow( { members, actions, onClose, onDone } 
 						{ name: <strong>{ name }</strong> }
 				  )
 				: sprintf(
+						/* translators: 1: number of members. 2: lowercase singular group label (e.g. "group", "team"). */
 						_n(
 							'Are you sure you want to remove %1$d member from this %2$s? This frees up a seat and they lose access.',
 							'Are you sure you want to remove %1$d members from this %2$s? This frees up their seats and they lose access.',
