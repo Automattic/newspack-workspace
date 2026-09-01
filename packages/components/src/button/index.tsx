@@ -6,7 +6,7 @@
  * WordPress dependencies.
  */
 import { Button as BaseComponent } from '@wordpress/components';
-import { useEffect, useState } from '@wordpress/element';
+import { forwardRef, useEffect, useState } from '@wordpress/element';
 
 /**
  * Internal dependencies
@@ -32,7 +32,7 @@ const isJavascriptHref = ( href?: string ) =>
 		.toLowerCase()
 		.startsWith( 'javascript:' );
 
-const Button = ( { href, loading = undefined, onClick, ...otherProps }: Props ) => {
+const Button = forwardRef< HTMLElement, Props >( ( { href, loading = undefined, onClick, ...otherProps }: Props, ref ) => {
 	const history = useHistory();
 	const [ isAwaitingOnClick, setIsAwaitingOnClick ] = useState( false );
 
@@ -67,10 +67,14 @@ const Button = ( { href, loading = undefined, onClick, ...otherProps }: Props ) 
 	if ( isAwaitingOnClick ) {
 		otherProps.disabled = true;
 	}
-	// `loading` isn't a typed @wordpress/components Button prop; forwarded via spread for prop-parity.
-	// The cast crosses Button's button/anchor union: href and onClick are reassigned above, which
-	// the flattened rest type can't express.
-	return <BaseComponent { ...{ loading: loading ? true : undefined } } { ...( otherProps as React.ComponentProps< typeof BaseComponent > ) } />;
-};
+	// `loading` is this component's own prop name; @wordpress/components' Button
+	// expresses the same state as `isBusy`. Forwarding `loading` verbatim would
+	// land it on the DOM node, which React rejects as a non-boolean attribute.
+	// The cast crosses Button's button/anchor union: href and onClick are reassigned
+	// above, which the flattened rest type can't express.
+	return <BaseComponent ref={ ref } isBusy={ loading ? true : undefined } { ...( otherProps as React.ComponentProps< typeof BaseComponent > ) } />;
+} );
+
+Button.displayName = 'Button';
 
 export default Button;

@@ -38,10 +38,13 @@ export const INSTITUTION_RULE_SLUG = 'institution';
  */
 const ACCESS_RULE_OPTION_SOURCES: Record< string, () => Promise< AccessRuleOption[] > > = {
 	[ INSTITUTION_RULE_SLUG ]: async () => {
-		// Ordered by title to match `Institution::get_options()`, so the picker reads the
-		// same way whichever list rendered it.
+		// Ordered by title and pinned to published posts to match
+		// `Institution::get_options()`, so the picker reads the same way and offers the same
+		// institutions whichever list rendered it. Core already defaults the collection to
+		// published, so `status` changes nothing today; it is named so the two lists stay in
+		// step if a `rest_np_institution_collection_params` filter moves that default.
 		const items = await apiFetch< InstitutionItem[] >( {
-			path: '/wp/v2/np_institution?context=edit&orderby=title&order=asc&per_page=-1',
+			path: '/wp/v2/np_institution?context=edit&status=publish&orderby=title&order=asc&per_page=-1&_fields=id,title',
 		} );
 		return items.map( item => ( { value: item.id, label: item.title.raw } ) );
 	},
@@ -73,18 +76,27 @@ export function invalidateAccessRuleOptions( slug: string ): void {
 /**
  * Whether a rule's values are picked from a list rather than typed as free text.
  *
- * Asked of the rule, not of the list it currently holds. A fetched list is legitimately
- * empty for a moment — every institution deleted, say — and a picker that read that as
- * "this rule has no options" would drop to the free-text control, which writes a string
- * over the IDs the rule still stores.
+ * Asked of the rule, not of the list it currently holds. A list is legitimately empty for
+ * a moment — every institution deleted, a shop with no subscription products yet — and a
+ * picker that read that as "this rule has no options" would drop to the free-text
+ * control, which writes a string over the IDs the rule still stores.
+ *
+ * `declaresOptions` is the rule's own answer, from `Access_Rules::register_rule()`, and it
+ * settles the question either way: it is drawn from the rule's value type rather than from
+ * whatever its options callback returned on this page load. `register_rule()` is a public
+ * extension point and its `has_options` may be declared `false` alongside an options list,
+ * so an explicit `false` decides too — otherwise this picker would render tokens for a rule
+ * whose save `sanitize_access_rule()` then refuses. Only where the caller has no registry
+ * entry to read do the lists stand in for it.
  *
  * @param slug             The rule slug.
  * @param localisedOptions The rule's options as localised with the page.
+ * @param declaresOptions  The rule's registered `has_options`, where the caller has it.
  *
  * @return Whether the rule is backed by an option list.
  */
-export function isOptionBackedAccessRule( slug: string, localisedOptions: AccessRuleOption[] ): boolean {
-	return localisedOptions.length > 0 || undefined !== ACCESS_RULE_OPTION_SOURCES[ slug ];
+export function isOptionBackedAccessRule( slug: string, localisedOptions: AccessRuleOption[], declaresOptions?: boolean ): boolean {
+	return declaresOptions ?? ( localisedOptions.length > 0 || undefined !== ACCESS_RULE_OPTION_SOURCES[ slug ] );
 }
 
 /**

@@ -243,8 +243,6 @@ const CoreCard = ( {
 						<ToggleControl
 							className="newspack-card--core__action"
 							label={ otherProps.title }
-							// hideLabelFromVision is not a typed ToggleControl prop; forwarded via spread for prop-parity.
-							{ ...{ hideLabelFromVision: true } }
 							checked={ isActive }
 							onChange={ onToggle }
 						/>
@@ -257,8 +255,6 @@ const CoreCard = ( {
 						<ToggleControl
 							className="newspack-card--core__action"
 							label={ otherProps.title }
-							// hideLabelFromVision is not a typed ToggleControl prop; forwarded via spread for prop-parity.
-							{ ...{ hideLabelFromVision: true } }
 							checked={ isActive }
 							onChange={ onToggle }
 						/>

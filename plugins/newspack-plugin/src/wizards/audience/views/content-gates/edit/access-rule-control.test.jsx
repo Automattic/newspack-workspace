@@ -1,7 +1,7 @@
 /**
  * External dependencies
  */
-import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, within, act } from '@testing-library/react';
 
 /**
  * WordPress dependencies
@@ -41,13 +41,13 @@ const DUPLICATE_NAME_PRODUCTS = [
 	{ value: 300000, label: 'Monthly' },
 ];
 
-const renderControl = ( { options, value, onChange } ) => {
+const renderControl = ( { slug = 'subscription', name = 'Active subscription', options, value, onChange } ) => {
 	window.newspackAudienceContentGates = {
 		available_access_rules: {
-			subscription: { name: 'Active subscription', options },
+			[ slug ]: { name, options },
 		},
 	};
-	return render( <AccessRuleControl slug="subscription" value={ value } onChange={ onChange } /> );
+	return render( <AccessRuleControl slug={ slug } value={ value } onChange={ onChange } /> );
 };
 
 describe( 'AccessRuleControl option picker', () => {
@@ -181,5 +181,81 @@ describe( 'AccessRuleControl, a rule whose options are fetched', () => {
 			)
 		);
 		expect( screen.getByText( 'City Library (#12)' ) ).toBeInTheDocument();
+	} );
+} );
+
+describe( 'AccessRuleControl suggestion cap', () => {
+	it( 'offers every option on focus, past the field default of 100', async () => {
+		const manyProducts = Array.from( { length: 105 }, ( _, i ) => ( { value: i + 1, label: `Product ${ i + 1 }` } ) );
+		renderControl( { options: manyProducts, value: [], onChange: jest.fn() } );
+
+		const input = await screen.findByRole( 'combobox' );
+		// A real focus, not a synthetic event: `__experimentalExpandOnFocus` only expands
+		// when the input is the document's active element.
+		act( () => input.focus() );
+
+		// Cut to 100, the rest read to a publisher as not existing — the list on focus is
+		// unfiltered, so nothing they could type would be ranked in front of the cap.
+		const suggestions = await screen.findAllByRole( 'option' );
+		expect( suggestions ).toHaveLength( manyProducts.length );
+		expect( suggestions[ 104 ] ).toHaveTextContent( 'Product 105 (#105)' );
+	} );
+} );
+
+describe( 'AccessRuleControl, a rule whose value would let everyone through', () => {
+	const renderRule = ( slug, config, value ) => {
+		window.newspackAudienceContentGates = { available_access_rules: { [ slug ]: config } };
+		return render( <AccessRuleControl slug={ slug } value={ value } onChange={ jest.fn() } /> );
+	};
+
+	beforeEach( () => {
+		invalidateAccessRuleOptions( INSTITUTION_RULE_SLUG );
+		apiFetch.mockResolvedValue( [] );
+	} );
+
+	it( 'names a stored value the picker cannot show, instead of rendering as an empty selection', () => {
+		// A legacy string on an options-backed rule denies every reader, but the picker can
+		// hold no token for it — so on its own it would read as "no constraint", and an
+		// editor who ends the edit here writes `[]` over it and opens the gate.
+		renderRule( 'institution', { name: 'Institutional access', has_options: true, options: [] }, 'Springfield University' );
+
+		expect( screen.getByText( /Springfield University/ ) ).toHaveTextContent( 'grants no access' );
+	} );
+
+	it( 'disables the picker and says why when an empty value would grant everyone', async () => {
+		// The seeded default is an empty array, which `institution` evaluates as "no
+		// constraint" — so an interactive picker with no options offers exactly one
+		// expressible answer, and it opens the gate.
+		renderRule( 'institution', { name: 'Institutional access', has_options: true, empty_grants_access: true, options: [] }, [] );
+
+		expect( await screen.findByText( /grants access to everyone/ ) ).toBeInTheDocument();
+		expect( screen.getByRole( 'combobox' ) ).toBeDisabled();
+		// And the reason is tied to the field. A disabled control is out of the tab order,
+		// so an adjacent paragraph the field does not point at reaches nobody arriving by
+		// keyboard.
+		expect( screen.getByRole( 'group' ) ).toHaveAttribute( 'aria-describedby', screen.getByRole( 'note' ).id );
+	} );
+
+	it( 'says nothing about granting everyone while the rule still names something', async () => {
+		// The institutions a rule names can be deleted after it is saved. The value is
+		// then populated and denies every reader, so the caution for an empty rule is the
+		// opposite of what it does — and disabling the field would leave deleting the
+		// whole rule as the only way to clear the stale tokens.
+		renderRule( 'institution', { name: 'Institutional access', has_options: true, empty_grants_access: true, options: [] }, [ 12 ] );
+
+		expect( await screen.findByText( '(institution not listed) (#12)' ) ).toBeInTheDocument();
+		expect( screen.queryByText( /grants access to everyone/ ) ).not.toBeInTheDocument();
+		expect( screen.getByRole( 'combobox' ) ).not.toBeDisabled();
+	} );
+
+	it( 'keeps the picker for a rule that still constrains when empty, and for one with nothing to select', () => {
+		// `subscription` naming no product requires any active subscription, so an empty
+		// value is a configuration a publisher chooses. It has no options source either, so
+		// a shop with no products yet is where the control used to fall through to free
+		// text — which writes a string over a value that must be an array of IDs.
+		renderRule( 'subscription', { name: 'Active subscription', has_options: true, options: [] }, [] );
+
+		expect( screen.getByRole( 'combobox' ) ).not.toBeDisabled();
+		expect( screen.queryByText( /grants access to everyone/ ) ).not.toBeInTheDocument();
 	} );
 } );
