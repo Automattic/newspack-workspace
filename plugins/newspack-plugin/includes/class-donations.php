@@ -953,7 +953,11 @@ class Donations {
 			$filter = 'after_success_url' === $attribute_name ? FILTER_SANITIZE_URL : FILTER_SANITIZE_FULL_SPECIAL_CHARS;
 			$value  = filter_input( INPUT_GET, $attribute_name, $filter );
 			if ( ! empty( $value ) ) {
-				$query_args[ sanitize_key( $attribute_name ) ] = $value;
+				// Encoded like the utm values below, and like the twin loop in
+				// `Newspack_Blocks\Modal_Checkout` — add_query_arg() does not
+				// encode, so a destination carrying its own query string would
+				// otherwise split when merged into the checkout URL.
+				$query_args[ sanitize_key( $attribute_name ) ] = rawurlencode( $value );
 			}
 		}
 
