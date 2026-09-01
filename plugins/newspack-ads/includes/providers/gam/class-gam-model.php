@@ -824,7 +824,7 @@ final class GAM_Model {
 			"<!-- /%s/%s --><div id='div-gpt-ad-%s-0'></div>",
 			$network_code,
 			$code,
-			$unique_id
+			esc_attr( $unique_id )
 		);
 		return $code;
 	}

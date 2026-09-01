@@ -1211,6 +1211,88 @@ class Test_Content_Gates extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * A page configured as excluded from gating (the site's Privacy Policy
+	 * page here) is never gated, even when it matches a published gate's
+	 * content rules.
+	 */
+	public function test_excluded_page_is_never_gated() {
+		$excluded_post_id = $this->post_ids[0];
+		wp_set_current_user( 0 );
+
+		// Precondition: this post matches the published 'post_types' => ['post']
+		// gate from set_up() and would ordinarily be restricted.
+		$this->assertNotFalse(
+			Content_Gate::is_post_restricted( $excluded_post_id ),
+			'Precondition: the post must be restricted before the exclusion is configured.'
+		);
+
+		update_option( 'wp_page_for_privacy_policy', $excluded_post_id );
+
+		$this->assertNull(
+			Content_Gate::get_restriction_for_post( get_post( $excluded_post_id ) ),
+			'The Privacy Policy page must never be gated, regardless of content rules.'
+		);
+
+		// Control: an ordinary post matching the same gate, not configured as
+		// any excluded page, is still gated.
+		$control_post_id  = $this->factory->post->create();
+		$this->post_ids[] = $control_post_id;
+
+		$this->assertIsArray(
+			Content_Gate::get_restriction_for_post( get_post( $control_post_id ) ),
+			'An ordinary post matching the gate must still be restricted.'
+		);
+	}
+
+	/**
+	 * Every exclusion source in is_excluded_from_gating() defaults to a
+	 * non-positive value when unconfigured: get_option( 'wp_page_for_privacy_policy' )
+	 * and Accessibility_Statement_Page::get_page_id() both return 0, and
+	 * wc_get_page_id() returns -1. Confirms a post ID of 0 -- a
+	 * degenerate value a caller with no real post in context could pass --
+	 * cannot spuriously match those unconfigured defaults (the
+	 * `array_filter( …, $id > 0 )` guard this pins), and that a WooCommerce
+	 * page which IS configured is excluded exactly like the Privacy Policy
+	 * page.
+	 */
+	public function test_non_positive_ids_do_not_spuriously_match_unconfigured_pages() {
+		require_once dirname( __DIR__, 2 ) . '/mocks/wc-mocks.php';
+		wp_set_current_user( 0 );
+
+		// is_excluded_from_gating() is private; reach it directly via
+		// reflection so this can assert on its actual output rather than
+		// inferring it from a real post's ID. A real ID is always positive,
+		// and comparing a positive ID against an all-negative/zero excluded
+		// array cannot fail whether or not the array_filter() is there, so a
+		// post-based version of this test would pass either way.
+		$method = new \ReflectionMethod( Content_Gate::class, 'is_excluded_from_gating' );
+		$method->setAccessible( true );
+
+		$this->assertFalse(
+			$method->invoke( null, 0 ),
+			'A post ID of 0 must not spuriously match unconfigured (non-positive) exclusion sources.'
+		);
+
+		// A real post matching the gate is still restricted while every
+		// exclusion source is unconfigured.
+		$this->assertIsArray(
+			Content_Gate::get_restriction_for_post( get_post( $this->post_ids[0] ) ),
+			'An unconfigured WooCommerce page must not exclude a real post from gating.'
+		);
+
+		// Configured: a real myaccount page ID is excluded, same as the
+		// Privacy Policy page.
+		$myaccount_post_id = $this->factory->post->create();
+		$this->post_ids[]  = $myaccount_post_id;
+		update_option( 'woocommerce_myaccount_page_id', $myaccount_post_id );
+
+		$this->assertNull(
+			Content_Gate::get_restriction_for_post( get_post( $myaccount_post_id ) ),
+			'A configured WooCommerce myaccount page must never be gated.'
+		);
+	}
+
+	/**
 	 * Test that already grouped access_rules remain unchanged.
 	 */
 	public function test_custom_access_preserves_grouped_rules() {
@@ -3173,13 +3255,15 @@ class Test_Content_Gates extends \WP_UnitTestCase {
 		$premium_newsletters_wizard = \Newspack\Wizards::get_wizard( 'premium-newsletters' );
 
 		$content_gate_request = new \WP_REST_Request( 'POST', '/' . NEWSPACK_API_NAMESPACE . '/wizard/newspack-premium-newsletters/' . $this->gate_ids[2] . '/duplicate' );
-		$content_gate_request->set_param( 'id', $this->gate_ids[2] );
+		// Where the server puts a route's captures when it dispatches, and where the
+		// handlers read the gate ID from — a body parameter must not name the gate.
+		$content_gate_request->set_url_params( [ 'id' => $this->gate_ids[2] ] );
 		$rejection = $premium_newsletters_wizard->api_duplicate_gate( $content_gate_request );
 		$this->assertWPError( $rejection, 'The premium newsletters wizard rejects content gates' );
 		$this->assertSame( 400, $rejection->get_error_data()['status'] );
 
 		$newsletter_request = new \WP_REST_Request( 'POST', '/' . NEWSPACK_API_NAMESPACE . '/wizard/newspack-premium-newsletters/' . $newsletter_gate_id . '/duplicate' );
-		$newsletter_request->set_param( 'id', $newsletter_gate_id );
+		$newsletter_request->set_url_params( [ 'id' => $newsletter_gate_id ] );
 		$success = $premium_newsletters_wizard->api_duplicate_gate( $newsletter_request );
 		$this->assertNotWPError( $success );
 		$this->assertSame( 'Premium Newsletter Gate copy', $success->get_data()['title'] );

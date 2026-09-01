@@ -19,11 +19,17 @@ import { Button, Spinner } from '@wordpress/components';
 import { DataViews, Router } from '../../../../../../packages/components/src';
 import { WIZARD_STORE_NAMESPACE } from '../../../../../../packages/components/src/wizard/store';
 import { AUDIENCE_CONTENT_GATES_WIZARD_SLUG } from '../consts';
+import { INSTITUTION_RULE_SLUG, invalidateAccessRuleOptions } from '../../../../../content-gate/access-rule-option-sources';
 import InstitutionsOnboarding from './onboarding';
 
 const { useHistory } = Router;
 
 const API_PATH = '/wp/v2/np_institution';
+
+// The bundled @wordpress/dataviews types (v10) predate `isDestructive`,
+// which the WP-core-provided runtime DataViews does support — extend the
+// Action type locally so destructive styling can be declared.
+type InstitutionAction = Action< Institution > & { isDestructive?: boolean };
 
 const DEFAULT_VIEW: View = {
 	type: 'table',
@@ -72,7 +78,13 @@ export default function Institutions() {
 
 	const fetchData = useCallback( () => {
 		setIsLoading( true );
-		apiFetch< Institution[] >( { path: `${ API_PATH }?per_page=100&context=edit&_embed=wp:featuredmedia` } )
+		// The table paginates, sorts and searches client-side, so it needs the whole
+		// collection. `per_page=-1` is apiFetch's unbounded form — fetchAllMiddleware walks
+		// the `Link: rel="next"` headers and resolves to every page merged. A fixed page
+		// size put the institutions past it out of reach entirely: not listed, and so not
+		// editable. The value is apiFetch's, not the REST API's: the posts controller caps
+		// `per_page` at 100 and would reject -1 outright.
+		apiFetch< Institution[] >( { path: `${ API_PATH }?per_page=-1&context=edit&_embed=wp:featuredmedia` } )
 			.then( institutions => {
 				setData( institutions );
 				// Keep the gates screen header in sync: it promotes the
@@ -177,7 +189,7 @@ export default function Institutions() {
 		[]
 	);
 
-	const actions: Action< Institution >[] = useMemo(
+	const actions: InstitutionAction[] = useMemo(
 		() => [
 			{
 				id: 'edit',
@@ -191,7 +203,7 @@ export default function Institutions() {
 				id: 'copy-url',
 				label: __( 'Copy access page URL', 'newspack-plugin' ),
 				callback: ( items: Institution[] ) => {
-					const baseUrl = ( window as any ).newspackAudience?.institutional_access_url;
+					const baseUrl = window.newspackAudience?.institutional_access_url;
 					const url = baseUrl ? `${ baseUrl }/${ items[ 0 ].slug }/` : '';
 					if ( url ) {
 						navigator.clipboard.writeText( url ).then(
@@ -217,7 +229,7 @@ export default function Institutions() {
 				id: 'delete',
 				label: __( 'Delete', 'newspack-plugin' ),
 				isDestructive: true,
-				RenderModal: ( { items, closeModal }: { items: Institution[]; closeModal: () => void } ) => {
+				RenderModal: ( { items, closeModal }: { items: Institution[]; closeModal?: () => void } ) => {
 					const item = items[ 0 ];
 					const [ isDeleting, setIsDeleting ] = useState( false );
 					return (
@@ -236,12 +248,16 @@ export default function Institutions() {
 										setIsDeleting( true );
 										apiFetch( { path: `${ API_PATH }/${ item.id }?force=true`, method: 'DELETE' } )
 											.then( () => {
+												// The gate pickers and summaries name institutions
+												// from a list fetched once per session, so a
+												// deletion has to drop it.
+												invalidateAccessRuleOptions( INSTITUTION_RULE_SLUG );
 												fetchData();
-												closeModal();
+												closeModal?.();
 											} )
 											.catch( () => {
 												setIsDeleting( false );
-												closeModal();
+												closeModal?.();
 												addNotice( {
 													message: __( 'Failed to delete institution. Please try again.', 'newspack-plugin' ),
 													type: 'error',

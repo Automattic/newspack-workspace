@@ -10,9 +10,6 @@
 #   - release branch -> a8c workspace (stable),  reusing SLACK_AUTH_TOKEN.
 #   - alpha   branch -> Newspack workspace (alpha), using SLACK_NEWSPACK_BOT_TOKEN.
 #
-# hotfix/* and epic/* are intentionally silent (the workflow step's `if` already
-# excludes them; the case below is defence in depth).
-#
 # Released packages are detected by diffing the tag list captured before the
 # release step ($TAGS_BEFORE_FILE) against the tags present now. The legacy
 # per-repo ":ship: ... released: <url>" pings were sent by Zapier, which the

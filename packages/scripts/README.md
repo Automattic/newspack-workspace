@@ -94,6 +94,8 @@ The following assumes that CI will run:
 1. `npm run release` for `release`, `alpha`, `hotfix/*`, and `epic/*` branches
 1. `post-release.sh` script on `release` branch, after the above command completes
 
+> **Note:** this section describes the release config this package ships for standalone repos (e.g. `newspack-manager`, `newspack-manager-admin`). The `newspack-workspace` monorepo releases through its own config (`config/release.js`), where `hotfix/*` and `epic/*` branches no longer publish prerelease tags or builds — the monorepo CI's `build-zips` job already produces an installable zip for every commit. The branch prefixes remain valid there; pushes to them just don't release.
+
 ### Regular release flow
 
 1. Create a new branch off the `trunk` branch.

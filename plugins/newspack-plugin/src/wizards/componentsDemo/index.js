@@ -20,7 +20,7 @@ import {
 	__experimentalHStack as HStack, // eslint-disable-line @wordpress/no-unsafe-wp-apis
 } from '@wordpress/components';
 import { Component, Fragment, render, createInterpolateElement, createRef } from '@wordpress/element';
-import { __ } from '@wordpress/i18n';
+import { __, sprintf } from '@wordpress/i18n';
 import { Icon, plus, postList, settings } from '@wordpress/icons';
 
 /**
@@ -36,11 +36,14 @@ import {
 	CardFeature,
 	CardForm,
 	CardSettingsGroup,
+	CollapsibleGroup,
 	ColorPicker,
+	EmptyState,
 	Footer,
 	Grid,
 	Handoff,
 	ImageUpload,
+	InfoButton,
 	Modal,
 	Notice,
 	Page,
@@ -49,6 +52,8 @@ import {
 	PluginToggle,
 	ProgressBar,
 	SelectControl,
+	StatCard,
+	TableCard,
 	TextControl,
 	Divider,
 	Drawer,
@@ -387,6 +392,170 @@ class ComponentsDemo extends Component {
 							</Drawer.Root>
 						</Card>
 						<Card>
+							<h2>{ __( 'StatCard', 'newspack-plugin' ) }</h2>
+							<Grid columns={ 4 } gutter={ 16 } noMargin>
+								<StatCard.Root>
+									<StatCard.Label>{ __( 'Subscribers reached', 'newspack-plugin' ) }</StatCard.Label>
+									<StatCard.Body>
+										<StatCard.Value
+											value="1,284"
+											suffix={
+												<StatCard.Delta direction="up" tone="positive">
+													2%
+												</StatCard.Delta>
+											}
+										/>
+										<StatCard.Secondary>{ __( 'Up from 1,190 last month', 'newspack-plugin' ) }</StatCard.Secondary>
+									</StatCard.Body>
+									<StatCard.Footer>{ __( 'Readers who received at least one campaign.', 'newspack-plugin' ) }</StatCard.Footer>
+								</StatCard.Root>
+								<StatCard.Root>
+									<StatCard.Label
+										suffix={
+											<InfoButton
+												description={ __( 'Averaged across the timeframe.', 'newspack-plugin' ) }
+												triggerLabel={ __( 'More information about Average order value', 'newspack-plugin' ) }
+											/>
+										}
+									>
+										{ __( 'Average order value', 'newspack-plugin' ) }
+									</StatCard.Label>
+									<StatCard.Body>
+										<StatCard.Value
+											value="$1.2M"
+											valueLabel={ __( '1.2 million dollars', 'newspack-plugin' ) }
+											suffix={
+												<StatCard.Delta direction="down" tone="negative">
+													4%
+												</StatCard.Delta>
+											}
+										/>
+									</StatCard.Body>
+									<StatCard.Footer>
+										{ __( 'Products this rule applies to.', 'newspack-plugin' ) }
+										<Button isLink className="newspack-stat-card__action" onClick={ () => console.log( 'StatCard action' ) }>
+											{ __( 'See the products', 'newspack-plugin' ) }
+										</Button>
+									</StatCard.Footer>
+								</StatCard.Root>
+								<StatCard.Root>
+									<StatCard.Label>{ __( 'Refund rate', 'newspack-plugin' ) }</StatCard.Label>
+									<StatCard.Body>
+										<StatCard.Value value={ null } />
+									</StatCard.Body>
+									<StatCard.Footer>
+										{ __( 'The null glyph, named "Not applicable" to screen readers.', 'newspack-plugin' ) }
+									</StatCard.Footer>
+								</StatCard.Root>
+								<StatCard.Root>
+									<StatCard.Label>{ __( 'Paywall conversions', 'newspack-plugin' ) }</StatCard.Label>
+									<StatCard.Body>
+										<StatCard.Value value={ __( '0 of 17', 'newspack-plugin' ) } variant="text" />
+									</StatCard.Body>
+									<StatCard.Footer>
+										{ __( 'A phrase rather than a number, so it drops the hero scale.', 'newspack-plugin' ) }
+									</StatCard.Footer>
+								</StatCard.Root>
+							</Grid>
+						</Card>
+						<Card>
+							<h2>{ __( 'CollapsibleGroup', 'newspack-plugin' ) }</h2>
+							<p>
+								{ __(
+									'A stack of independently collapsible items, separated by dividers and sitting flush with the surrounding column. A collapsed item stays reachable by the browser find-in-page, which expands it to reveal the match.',
+									'newspack-plugin'
+								) }
+							</p>
+							<CollapsibleGroup titleLevel={ 3 }>
+								<CollapsibleGroup.Item title={ __( 'Contact fields', 'newspack-plugin' ) } defaultOpen>
+									<p>{ __( 'An item set to defaultOpen starts expanded.', 'newspack-plugin' ) }</p>
+								</CollapsibleGroup.Item>
+								<CollapsibleGroup.Item title={ __( 'Tags and segments', 'newspack-plugin' ) }>
+									<p>{ __( 'Items are independent: opening one does not close the others.', 'newspack-plugin' ) }</p>
+								</CollapsibleGroup.Item>
+								<CollapsibleGroup.Item title={ __( 'Sync options', 'newspack-plugin' ) }>
+									<p>{ __( 'A divider separates each item from the next, but never trails the last one.', 'newspack-plugin' ) }</p>
+								</CollapsibleGroup.Item>
+							</CollapsibleGroup>
+							<h3>{ __( 'Single item', 'newspack-plugin' ) }</h3>
+							<p>
+								{ __(
+									'With nothing to collapse against, hideSingleTitle renders a lone item open and drops its title.',
+									'newspack-plugin'
+								) }
+							</p>
+							<CollapsibleGroup hideSingleTitle>
+								<CollapsibleGroup.Item title={ __( 'Contact fields', 'newspack-plugin' ) }>
+									<p>{ __( 'This content is always visible.', 'newspack-plugin' ) }</p>
+								</CollapsibleGroup.Item>
+							</CollapsibleGroup>
+						</Card>
+						<Card>
+							<h2>{ __( 'Table card', 'newspack-plugin' ) }</h2>
+							<TableCard
+								title={ __( 'Price Schedule', 'newspack-plugin' ) }
+								titleId="components-demo-table-card-title"
+								actions={
+									<Button variant="secondary" size="compact">
+										{ __( 'Add Price', 'newspack-plugin' ) }
+									</Button>
+								}
+							>
+								<div role="region" aria-labelledby="components-demo-table-card-title">
+									{ /* Real tables supply the 24px card-padding alignment from their stylesheet. */ }
+									<table style={ { borderCollapse: 'collapse', width: '100%' } }>
+										<thead>
+											<tr>
+												<th style={ { padding: '8px 24px', textAlign: 'left' } }>{ __( 'Cycles', 'newspack-plugin' ) }</th>
+												<th style={ { padding: '8px 24px', textAlign: 'left' } }>{ __( 'Price', 'newspack-plugin' ) }</th>
+											</tr>
+										</thead>
+										<tbody>
+											<tr>
+												<td style={ { padding: '8px 24px' } }>1 → 3</td>
+												<td style={ { padding: '8px 24px' } }>$3.00</td>
+											</tr>
+											<tr>
+												<td style={ { padding: '8px 24px' } }>4 onward</td>
+												<td style={ { padding: '8px 24px' } }>$6.00</td>
+											</tr>
+										</tbody>
+									</table>
+								</div>
+							</TableCard>
+						</Card>
+						<Card>
+							<h2>{ __( 'Empty state', 'newspack-plugin' ) }</h2>
+							<EmptyState.Root>
+								<EmptyState.Header
+									icon={ postList }
+									title={ __( 'Get started with posts', 'newspack-plugin' ) }
+									description={ __( 'Nothing here yet. Once you publish, your posts show up in this list.', 'newspack-plugin' ) }
+									heading={ 3 }
+								/>
+								<EmptyState.Actions>
+									<Button variant="primary">{ __( 'Add Post', 'newspack-plugin' ) }</Button>
+								</EmptyState.Actions>
+							</EmptyState.Root>
+						</Card>
+						<Card>
+							<h2>{ __( 'Empty state (small, stacked actions)', 'newspack-plugin' ) }</h2>
+							<EmptyState.Root size="small">
+								<EmptyState.Header
+									icon={ postList }
+									title={ __( 'Nothing to show yet', 'newspack-plugin' ) }
+									description={ __(
+										'The small size suits an empty state standing in for a panel inside a card.',
+										'newspack-plugin'
+									) }
+								/>
+								<EmptyState.Actions orientation="column">
+									<Button variant="primary">{ __( 'Add Post', 'newspack-plugin' ) }</Button>
+									<p style={ { margin: 0 } }>{ __( 'A note under the action.', 'newspack-plugin' ) }</p>
+								</EmptyState.Actions>
+							</EmptyState.Root>
+						</Card>
+						<Card>
 							<h2>{ __( 'Notice', 'newspack-plugin' ) }</h2>
 							<Notice noticeText={ __( 'This is an info notice.', 'newspack-plugin' ) } />
 							<Notice noticeText={ __( 'This is an error notice.', 'newspack-plugin' ) } isError />
@@ -502,7 +671,7 @@ class ComponentsDemo extends Component {
 							toggleChecked={ actionCardToggleChecked }
 						/>
 						<ActionCard
-							badge={ __( 'Premium', 'newspack-plugin' ) }
+							badges={ [ { label: __( 'Premium', 'newspack-plugin' ) } ] }
 							title={ __( 'Example Ten', 'newspack-plugin' ) }
 							description={ __( 'An example of an action card with a badge.', 'newspack-plugin' ) }
 							actionText={ __( 'Install', 'newspack-plugin' ) }
@@ -538,7 +707,10 @@ class ComponentsDemo extends Component {
 							checkbox="checked"
 						/>
 						<ActionCard
-							badge={ [ __( 'Premium', 'newspack-plugin' ), __( 'Archived', 'newspack-plugin' ) ] }
+							badges={ [
+								{ label: __( 'Premium', 'newspack-plugin' ), intent: 'informational' },
+								{ label: __( 'Archived', 'newspack-plugin' ), intent: 'draft' },
+							] }
 							title={ __( 'Example Fourteen', 'newspack-plugin' ) }
 							description={ __( 'An example of an action card with two badges.', 'newspack-plugin' ) }
 							actionText={ __( 'Install', 'newspack-plugin' ) }
@@ -547,8 +719,7 @@ class ComponentsDemo extends Component {
 							} }
 						/>
 						<ActionCard
-							badge={ __( 'It works', 'newspack-plugin' ) }
-							badgeLevel="success"
+							badges={ [ { label: __( 'It works', 'newspack-plugin' ), intent: 'stable' } ] }
 							title={ __( 'Example Fifteen', 'newspack-plugin' ) }
 							description={ __( 'An example of an action card with a success badge.', 'newspack-plugin' ) }
 							actionText={ __( 'Install', 'newspack-plugin' ) }
@@ -557,8 +728,7 @@ class ComponentsDemo extends Component {
 							} }
 						/>
 						<ActionCard
-							badge={ __( 'Uh oh', 'newspack-plugin' ) }
-							badgeLevel="warning"
+							badges={ [ { label: __( 'Uh oh', 'newspack-plugin' ), intent: 'medium' } ] }
 							title={ __( 'Example Sixteen', 'newspack-plugin' ) }
 							description={ __( 'An example of an action card with a warning badge.', 'newspack-plugin' ) }
 							actionText={ __( 'Install', 'newspack-plugin' ) }
@@ -567,8 +737,7 @@ class ComponentsDemo extends Component {
 							} }
 						/>
 						<ActionCard
-							badge={ __( 'Oh no', 'newspack-plugin' ) }
-							badgeLevel="error"
+							badges={ [ { label: __( 'Oh no', 'newspack-plugin' ), intent: 'high' } ] }
 							title={ __( 'Example Seventeen', 'newspack-plugin' ) }
 							description={ __( 'An example of an action card with an error badge.', 'newspack-plugin' ) }
 							actionText={ __( 'Install', 'newspack-plugin' ) }
@@ -577,10 +746,9 @@ class ComponentsDemo extends Component {
 							} }
 						/>
 						<ActionCard
-							badge={ __( 'Brand awareness', 'newspack-plugin' ) }
-							badgeLevel="brand"
+							badges={ [ { label: __( 'Brand awareness', 'newspack-plugin' ), intent: 'informational' } ] }
 							title={ __( 'Example Eighteen', 'newspack-plugin' ) }
-							description={ __( 'An example of an action card with a brand-colored badge.', 'newspack-plugin' ) }
+							description={ __( 'An example of an action card with an informational badge.', 'newspack-plugin' ) }
 							actionText={ __( 'Install', 'newspack-plugin' ) }
 							onClick={ () => {
 								console.log( 'Install clicked' );
@@ -1004,6 +1172,7 @@ class ComponentsDemo extends Component {
 							<h3>{ __( 'States', 'newspack-plugin' ) }</h3>
 							<Grid columns={ 2 } gutter={ 16 }>
 								<CardFeature
+									headingLevel={ 4 }
 									title={ __( 'Metered countdown', 'newspack-plugin' ) }
 									description={ __(
 										'Show a countdown banner letting readers know how many free views they have left.',
@@ -1014,6 +1183,7 @@ class ComponentsDemo extends Component {
 									onConfigure={ () => {} }
 								/>
 								<CardFeature
+									headingLevel={ 4 }
 									title={ __( 'Metered countdown', 'newspack-plugin' ) }
 									description={ __(
 										'Show a countdown banner letting readers know how many free views they have left.',
@@ -1028,6 +1198,7 @@ class ComponentsDemo extends Component {
 							<h3>{ __( 'Interactive toggle', 'newspack-plugin' ) }</h3>
 							<Grid columns={ 2 } gutter={ 16 }>
 								<CardFeature
+									headingLevel={ 4 }
 									title={ __( 'Metered countdown', 'newspack-plugin' ) }
 									description={ __(
 										'Show a countdown banner letting readers know how many free views they have left.',
@@ -1044,6 +1215,7 @@ class ComponentsDemo extends Component {
 							<h3>{ __( 'With a custom icon', 'newspack-plugin' ) }</h3>
 							<Grid columns={ 2 } gutter={ 16 }>
 								<CardFeature
+									headingLevel={ 4 }
 									title={ __( 'Content gifting', 'newspack-plugin' ) }
 									description={ __( 'Let subscribers share gated articles with non-subscribers.', 'newspack-plugin' ) }
 									icon={ { node: <Icon icon={ settings } />, fill: '#757575', backgroundColor: '#f0f0f0' } }
@@ -1052,6 +1224,7 @@ class ComponentsDemo extends Component {
 									onConfigure={ () => {} }
 								/>
 								<CardFeature
+									headingLevel={ 4 }
 									title={ __( 'Content gifting', 'newspack-plugin' ) }
 									description={ __( 'Let subscribers share gated articles with non-subscribers.', 'newspack-plugin' ) }
 									icon={ { node: <Icon icon={ settings } />, fill: '#003da5', backgroundColor: '#dfe7f4', radius: 'full' } }
@@ -1064,6 +1237,7 @@ class ComponentsDemo extends Component {
 							<h3>{ __( 'With custom button labels', 'newspack-plugin' ) }</h3>
 							<Grid columns={ 2 } gutter={ 16 }>
 								<CardFeature
+									headingLevel={ 4 }
 									title={ __( 'Apple News', 'newspack-plugin' ) }
 									description={ __( 'Automatically publish articles to Apple News.', 'newspack-plugin' ) }
 									enabled={ this.state.cardFeatureCustomEnabled }
@@ -1082,11 +1256,11 @@ class ComponentsDemo extends Component {
 							<h3>{ __( 'With a custom badge', 'newspack-plugin' ) }</h3>
 							<Grid columns={ 2 } gutter={ 16 }>
 								<CardFeature
+									headingLevel={ 4 }
 									title={ __( 'Stripe', 'newspack-plugin' ) }
 									description={ __( 'Accept payments via Stripe.', 'newspack-plugin' ) }
 									enabled={ true }
-									badgeText={ __( 'Live mode', 'newspack-plugin' ) }
-									badgeLevel="info"
+									badge={ { label: __( 'Live mode', 'newspack-plugin' ), intent: 'informational' } }
 									onEnable={ () => {} }
 									onConfigure={ () => {} }
 									moreControls={ [ { title: __( 'Disable', 'newspack-plugin' ), onClick: () => {} } ] }
@@ -1095,6 +1269,7 @@ class ComponentsDemo extends Component {
 							<h3>{ __( 'With multiple dropdown controls', 'newspack-plugin' ) }</h3>
 							<Grid columns={ 2 } gutter={ 16 }>
 								<CardFeature
+									headingLevel={ 4 }
 									title={ __( 'Newsletters', 'newspack-plugin' ) }
 									description={ __( 'Send newsletters directly from the WordPress editor.', 'newspack-plugin' ) }
 									enabled={ true }
@@ -1121,7 +1296,7 @@ class ComponentsDemo extends Component {
 								<CardForm
 									title={ __( 'Above Header', 'newspack-plugin' ) }
 									description={ __( 'Displays an ad above the site header.', 'newspack-plugin' ) }
-									badge={ this.state.cardFormEnabled ? { level: 'success', text: __( 'Enabled', 'newspack-plugin' ) } : undefined }
+									badge={ this.state.cardFormEnabled ? { intent: 'stable', label: __( 'Enabled', 'newspack-plugin' ) } : undefined }
 									actions={
 										this.state.cardFormEnabled ? (
 											<Button
@@ -1166,14 +1341,18 @@ class ComponentsDemo extends Component {
 									isOpen={ false }
 								/>
 							</VStack>
-							<h3>{ __( 'Badge levels', 'newspack-plugin' ) }</h3>
+							<h3>{ __( 'Badge intents', 'newspack-plugin' ) }</h3>
 							<VStack spacing={ 2 }>
-								{ [ 'success', 'info', 'warning', 'error' ].map( level => (
+								{ [ 'high', 'medium', 'low', 'stable', 'informational', 'draft', 'none' ].map( intent => (
 									<CardForm
-										key={ level }
+										key={ intent }
 										title={ __( 'Example placement', 'newspack-plugin' ) }
-										description={ __( 'Badge level: ', 'newspack-plugin' ) + level }
-										badge={ { level, text: level.charAt( 0 ).toUpperCase() + level.slice( 1 ) } }
+										description={ sprintf(
+											// translators: %s is a badge intent name, e.g. "stable".
+											__( 'Badge intent: %s', 'newspack-plugin' ),
+											intent
+										) }
+										badge={ { intent, label: intent.charAt( 0 ).toUpperCase() + intent.slice( 1 ) } }
 										actions={
 											<Button variant="tertiary" size="compact">
 												{ __( 'Edit', 'newspack-plugin' ) }

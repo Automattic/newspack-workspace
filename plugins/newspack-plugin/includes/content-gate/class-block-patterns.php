@@ -114,14 +114,16 @@ class Block_Patterns {
 	 */
 	public static function get_metering_settings( $pattern_context ) {
 		$count  = 4;
-		$period = __( 'month', 'newspack-plugin' );
+		$period = \Newspack\Metering::get_period_label( 'month' );
 		if ( ! empty( $pattern_context['custom_access_settings']['metering'] ) ) {
-			$metering = $pattern_context['custom_access_settings']['metering'];
+			// Resolved, not stored: a gate on the shared allowance ignores its own count,
+			// and this copy is baked into the layout post.
+			$metering = \Newspack\Metering::resolve_path_settings( $pattern_context['custom_access_settings'], true );
 			if ( ! empty( $metering['count'] ) ) {
 				$count = absint( $metering['count'] );
 			}
 			if ( ! empty( $metering['period'] ) ) {
-				$period = sanitize_text_field( $metering['period'] );
+				$period = \Newspack\Metering::get_period_label( $metering['period'] );
 			}
 		}
 		return [

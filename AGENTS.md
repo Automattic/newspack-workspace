@@ -78,6 +78,7 @@ A husky hook runs `lint-staged` on every `git commit` (installed by `pnpm instal
 
 - **Auto-fix** with the package's own script for JS and SCSS: `pnpm --filter <package> run fix:js` / `format:scss`. For PHP use `composer phpcbf -- <path>` from the root instead; the packages' `fix:php` scripts can rewrite files across the whole monorepo (see above).
 - **Bypass** with `git commit --no-verify`, or `HUSKY=0` for one command or a whole shell. CI re-lints every PR, so skipping locally never lands unlinted code.
+- **Shell scope** is staged `*.sh`, gated at `error` to match CI. ShellCheck is a system package rather than something `pnpm install` provides, so a checkout without it **skips** this check with a notice instead of failing — the only linter here that does. CI runs the same gate on every PR and additionally sweeps tracked extensionless shell scripts (`n`, `bin/newspack-manage-host`, the `.hooks/pre-push` files), which `lint-staged` cannot glob without matching every file in the repo — its config keys are micromatch patterns, so a path can be matched, but a shebang cannot. Config lives in `.shellcheckrc`, which leaves the local severity at `style` so editors still surface the warning-level findings the gate defers.
 - **PHP scope** comes from `phpcs.xml`'s `<file>` elements, for both the hook and CI, so the hook never blocks a commit over a file CI would not lint. `bin/` is deliberately excluded: it is dev tooling, and the VIP standard's assumptions don't hold for CLI scripts.
 - **Skipped during a merge.** Completing a merge stages the entire base integration, which no author wrote, so linting it would judge the merge against the base branch's lint debt. Rebase, cherry-pick and revert are not exempt.
 - **Personal hooks** go in `.husky/pre-commit.local` — gitignored and per-checkout, so each worktree needs its own. Runs after the lint as a POSIX-`sh` snippet; exit non-zero to block.
@@ -162,8 +163,6 @@ n env cleanup                 # Interactive bulk cleanup
 - All env containers share the `newspack_envs` bridge network with their domain as a DNS alias, so they can reach each other (hub/node setups).
 - `n env destroy` removes the container, DB, html dir, hosts entry and worktrees.
 
-With the `newspack` Claude Code plugin installed, `newspack:env-create`, `newspack:env-destroy` and `newspack:worktree` wrap these.
-
 ## Cross-plugin changes
 
 One repository, so a cross-plugin change is one branch and one PR. Before changing shared code in `newspack-plugin`, find its consumers (`grep -rn "<hook or class>" plugins/`) — hooks, filters and direct calls all cross plugin boundaries. Build and test dependencies before dependents: `n build <plugin>`, then `n test-php` in each affected plugin.
@@ -171,15 +170,10 @@ One repository, so a cross-plugin change is one branch and one PR. Before changi
 ## Pull requests
 
 - **Squash merge** (`gh pr merge --squash`). The exception is branch promotions between `main`, `alpha` and `release`, which use merge commits to preserve history.
+- **`hotfix/*` and `epic/*` branches don't release.** They remain valid branch names, but pushes to them no longer publish prerelease tags or builds; releases come only from `release` (stable) and `alpha`. To test a branch on a site, use the installable zip CI's `build-zips` job attaches to every commit.
 - **Never push or merge unless asked.**
 - **One Copilot pass per PR**, requested when the PR opens. After addressing its feedback do not re-request it; the next review should be a human's.
-
-With the `newspack` plugin installed: `newspack:pr-create` → `newspack:pr-feedback` → `newspack:pr-ready` → `newspack:pr-merge`, plus `newspack:pr-test` to test a PR in an isolated env. Install it with `n setup-agents`, or:
-
-```
-/plugin marketplace add Automattic/newspack-devkit
-/plugin install newspack@newspack-devkit
-```
+- **PR bodies follow [the repository template](.github/PULL_REQUEST_TEMPLATE.md).** `gh pr create --body`/`--body-file` bypasses GitHub's automatic template application, so compose the body into the template's sections yourself, and tick only the checklist items that are actually true.
 
 ## External tools
 
