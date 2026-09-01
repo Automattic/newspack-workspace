@@ -125,4 +125,62 @@ class CriteriaTest extends WP_UnitTestCase {
 			$criteria_config['test_criteria_config']['optionParams']
 		);
 	}
+
+	/**
+	 * The supported list is what a registering plugin probes before emitting a
+	 * matching function, so it has to stay in step with the keys exported by
+	 * src/criteria/matching-functions.js — a name advertised here but missing there
+	 * is exactly the unresolvable-function crash the probe exists to avoid.
+	 */
+	public function test_supports_matching_function() {
+		// date_range is the operator registering plugins actually probe for; the
+		// baseline operators predate the probe and are covered by the JS-module
+		// assertion below.
+		$this->assertTrue( Newspack_Popups_Criteria::supports_matching_function( 'date_range' ) );
+
+		$this->assertFalse( Newspack_Popups_Criteria::supports_matching_function( 'does_not_exist' ) );
+		$this->assertFalse( Newspack_Popups_Criteria::supports_matching_function( '' ) );
+	}
+
+	/**
+	 * Every advertised matching function must exist in the JS module, so the two
+	 * lists can't drift as operators are added.
+	 */
+	public function test_supported_matching_functions_exist_in_js_module() {
+		$source = file_get_contents( __DIR__ . '/../src/criteria/matching-functions.js' ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents
+
+		foreach ( Newspack_Popups_Criteria::SUPPORTED_MATCHING_FUNCTIONS as $matching_function ) {
+			$this->assertMatchesRegularExpression(
+				'/^\t' . preg_quote( $matching_function, '/' ) . ':\s/m',
+				$source,
+				"$matching_function is advertised as supported but not exported by matching-functions.js"
+			);
+		}
+	}
+
+	/**
+	 * The client matcher's ISO_DATE and the criterion schema's date pattern are
+	 * load-bearing mirrors: a schema that admits what the matcher rejects
+	 * produces segments that validate and then match nobody. Extract the JS
+	 * literal and assert the two agree, so they can't drift apart silently.
+	 * (The PHP copy in newspack-plugin, Date_Value::CALENDAR_DATE_PATTERN,
+	 * names both of these as mirrors in its docblock.)
+	 */
+	public function test_client_iso_date_pattern_matches_the_segment_schema() {
+		$source = file_get_contents( __DIR__ . '/../src/criteria/matching-functions.js' ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents
+		$this->assertSame(
+			1,
+			preg_match( '/const ISO_DATE = \/\^(?<pattern>.+)\$\/;/', $source, $matches ),
+			'ISO_DATE literal not found in matching-functions.js'
+		);
+
+		$schema_method = new ReflectionMethod( 'Newspack_Segments_Model', 'get_date_bound_schema' );
+		$schema_method->setAccessible( true );
+		$schema = $schema_method->invoke( null );
+
+		$this->assertSame(
+			'^' . $matches['pattern'] . '$',
+			$schema['oneOf'][0]['properties']['date']['pattern']
+		);
+	}
 }
