@@ -123,6 +123,40 @@ class Newspack_Test_Convert_Subscription_Variation extends WP_UnitTestCase {
 	}
 
 	/**
+	 * A product carrying the conversion stash validates as an interrupted run to resume,
+	 * with parent and attributes recovered from the stash; a plain product without the
+	 * stash is rejected.
+	 */
+	public function test_validate_target_resumes_interrupted_conversion() {
+		$product_id = self::factory()->post->create(
+			[
+				'post_type'  => 'product',
+				'post_title' => 'Subscription - Print - Yearly',
+			]
+		);
+		$this->assertWPError( Convert_Subscription_Variation::validate_target( $product_id ) );
+
+		update_post_meta( $product_id, Convert_Subscription_Variation::CONVERTED_PARENT_META, 900 );
+		update_post_meta( $product_id, Convert_Subscription_Variation::CONVERTED_ATTRIBUTES_META, [ 'plan' => 'Print - In Area - Yearly' ] );
+
+		$target = Convert_Subscription_Variation::validate_target( $product_id );
+		$this->assertIsArray( $target );
+		$this->assertTrue( $target['already_converted'] );
+		$this->assertSame( 900, $target['parent_id'] );
+		$this->assertSame( [ 'plan' => 'Print - In Area - Yearly' ], $target['attributes'] );
+	}
+
+	/**
+	 * A fresh variation target is flagged as not yet converted.
+	 */
+	public function test_validate_target_flags_fresh_targets() {
+		$this->register_parent( 900 );
+		$variation_id = $this->create_variation_post( 900 );
+		$target       = Convert_Subscription_Variation::validate_target( $variation_id );
+		$this->assertFalse( $target['already_converted'] );
+	}
+
+	/**
 	 * An attribute option is pruned when the converted variation was its only user.
 	 */
 	public function test_prune_removes_option_only_the_converted_variation_used() {

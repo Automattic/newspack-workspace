@@ -41,6 +41,14 @@ class Convert_Subscription_Variation {
 	const UNPAID_ORDER_STATUSES = [ 'wc-pending', 'wc-failed', 'wc-on-hold' ];
 
 	/**
+	 * Meta stashed on the product during conversion so an interrupted run can resume:
+	 * once the post is no longer a variation, its parent link and attribute values are
+	 * gone, and the later phases (line items, parent pruning) need both.
+	 */
+	const CONVERTED_PARENT_META     = '_newspack_converted_from_parent';
+	const CONVERTED_ATTRIBUTES_META = '_newspack_converted_attributes';
+
+	/**
 	 * Convert variations of a variable subscription product into standalone simple
 	 * subscription products, keeping their IDs and migrating all subscription and
 	 * unpaid-order line items.
@@ -105,11 +113,15 @@ class Convert_Subscription_Variation {
 				continue;
 			}
 
-			$converted = self::convert_post( $target );
-			if ( \is_wp_error( $converted ) ) {
-				WP_CLI::error( $converted->get_error_message() );
+			if ( $target['already_converted'] ) {
+				WP_CLI::line( sprintf( 'Product %d is already converted (interrupted run) — resuming the remaining phases.', $target['variation_id'] ) );
+			} else {
+				$converted = self::convert_post( $target );
+				if ( \is_wp_error( $converted ) ) {
+					WP_CLI::error( $converted->get_error_message() );
+				}
+				WP_CLI::line( sprintf( 'Converted product %d to a simple subscription (catalog visibility: %s).', $target['variation_id'], $converted['catalog_visibility'] ) );
 			}
-			WP_CLI::line( sprintf( 'Converted product %d to a simple subscription (catalog visibility: %s).', $target['variation_id'], $converted['catalog_visibility'] ) );
 
 			$migrated = self::migrate_line_items( $target, $verbose );
 			WP_CLI::line(
@@ -157,6 +169,19 @@ class Convert_Subscription_Variation {
 			return new WP_Error( 'newspack_convert_variation', sprintf( 'Post %d does not exist.', $variation_id ) );
 		}
 		if ( 'product_variation' !== $post->post_type ) {
+			// A product carrying the conversion stash is a previous run that was
+			// interrupted after the post conversion; resume its remaining phases.
+			$stashed_parent = (int) \get_post_meta( $variation_id, self::CONVERTED_PARENT_META, true );
+			if ( 'product' === $post->post_type && $stashed_parent ) {
+				$stashed_attributes = \get_post_meta( $variation_id, self::CONVERTED_ATTRIBUTES_META, true );
+				return [
+					'variation_id'      => $variation_id,
+					'parent_id'         => $stashed_parent,
+					'title'             => $post->post_title,
+					'attributes'        => is_array( $stashed_attributes ) ? $stashed_attributes : [],
+					'already_converted' => true,
+				];
+			}
 			return new WP_Error( 'newspack_convert_variation', sprintf( 'Post %d is a "%s", not a product variation.', $variation_id, $post->post_type ) );
 		}
 		$parent = \wc_get_product( $post->post_parent );
@@ -175,10 +200,11 @@ class Convert_Subscription_Variation {
 		}
 
 		return [
-			'variation_id' => $variation_id,
-			'parent_id'    => (int) $post->post_parent,
-			'title'        => $post->post_title,
-			'attributes'   => $attributes,
+			'variation_id'      => $variation_id,
+			'parent_id'         => (int) $post->post_parent,
+			'title'             => $post->post_title,
+			'attributes'        => $attributes,
+			'already_converted' => false,
 		];
 	}
 
@@ -255,6 +281,9 @@ class Convert_Subscription_Variation {
 	public static function convert_post( array $target ) {
 		$variation_id = $target['variation_id'];
 		$parent       = \wc_get_product( $target['parent_id'] );
+
+		\update_post_meta( $variation_id, self::CONVERTED_PARENT_META, $target['parent_id'] );
+		\update_post_meta( $variation_id, self::CONVERTED_ATTRIBUTES_META, $target['attributes'] );
 
 		$updated = \wp_update_post(
 			[
