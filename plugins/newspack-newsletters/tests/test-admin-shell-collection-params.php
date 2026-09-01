@@ -122,13 +122,17 @@ class Admin_Shell_Collection_Params_Test extends WP_UnitTestCase {
 	}
 
 	/**
-	 * An unprivileged caller is held to core's ceiling on every collection
-	 * the raise touches. The newsletters CPT is public, so without the gate
-	 * an anonymous request could ask for ten times as many rows as core
-	 * allows; a subscriber can read the collection but has no business
-	 * asking for a thousand rows of it either. Collections a caller cannot
-	 * reach at all (layouts needs `edit_others_posts`) are skipped, which
-	 * is the same guarantee by a shorter route.
+	 * An unprivileged caller is held to core's ceiling on every collection the
+	 * raise touches. The newsletters CPT is public, so without the gate an
+	 * anonymous request could ask for ten times as many rows as core allows;
+	 * a subscriber can read the collection but has no business asking for a
+	 * thousand rows of it either.
+	 *
+	 * Both `CORE_MAX_PER_PAGE + 1` and the raised ceiling are asked for: the
+	 * first pins where the gate sits, the second that it still holds well
+	 * above it. Collections not exposed to the caller are skipped — the
+	 * layouts CPT is not registered at all in this suite, since it registers
+	 * on `init` behind `edit_others_posts` and the bootstrap runs as user 0.
 	 *
 	 * @dataProvider unprivileged_callers
 	 * @param string $role Role to authenticate as, or '' for a logged-out caller.
@@ -143,14 +147,16 @@ class Admin_Shell_Collection_Params_Test extends WP_UnitTestCase {
 				continue;
 			}
 
-			$request = new WP_REST_Request( 'GET', '/wp/v2/' . $rest_base );
-			$request->set_param( 'per_page', Admin_Shell_Collection_Params::MAX_PER_PAGE );
+			foreach ( [ Admin_Shell_Collection_Params::CORE_MAX_PER_PAGE + 1, Admin_Shell_Collection_Params::MAX_PER_PAGE ] as $per_page ) {
+				$request = new WP_REST_Request( 'GET', '/wp/v2/' . $rest_base );
+				$request->set_param( 'per_page', $per_page );
 
-			$this->assertSame(
-				400,
-				rest_do_request( $request )->get_status(),
-				'Expected the core cap to hold on: ' . $name
-			);
+				$this->assertSame(
+					400,
+					rest_do_request( $request )->get_status(),
+					'Expected the core cap to hold on ' . $name . ' at per_page ' . $per_page
+				);
+			}
 			++$checked;
 		}
 
@@ -175,7 +181,8 @@ class Admin_Shell_Collection_Params_Test extends WP_UnitTestCase {
 	 *
 	 * Resolved rather than assumed: `newspack_nl_ad_placement` already
 	 * overrides `rest_base` elsewhere in this plugin, so a name is not
-	 * safe to use as a path.
+	 * safe to use as a path. Returns null for anything not registered or not
+	 * exposed to REST, which is how unroutable collections are skipped.
 	 *
 	 * @param string $name Post type or taxonomy name.
 	 * @return string|null

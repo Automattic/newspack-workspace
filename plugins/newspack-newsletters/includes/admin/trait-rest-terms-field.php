@@ -53,7 +53,7 @@ trait Rest_Terms_Field {
 				// different taxonomies, and a lookup that missed would blank
 				// the columns instead of raising.
 				'get_callback' => static function ( $post_array ) use ( $taxonomies ) {
-					return self::get_terms_payload( isset( $post_array['id'] ) ? (int) $post_array['id'] : 0, $taxonomies );
+					return static::get_terms_payload( isset( $post_array['id'] ) ? (int) $post_array['id'] : 0, $taxonomies );
 				},
 				'schema'       => [
 					// Only the list screens and Quick Edit read this, and they
