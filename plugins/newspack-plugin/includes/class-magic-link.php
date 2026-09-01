@@ -692,7 +692,7 @@ final class Magic_Link {
 			if ( $token_data['time'] < $expire ) {
 				unset( $tokens[ $index ] );
 
-			} elseif ( hash_equals( $token_data['token'], (string) $token ) ) {
+			} elseif ( hash_equals( (string) $token_data['token'], (string) $token ) ) {
 				$valid_token = $token_data;
 
 				/** If token data has a client hash, it must be equal to the user's. */
