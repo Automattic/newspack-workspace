@@ -28,6 +28,12 @@ defined( 'ABSPATH' ) || exit;
  * the post type has changed, so item props can't be used to find them) and rewritten via
  * CRUD, with the stale `_variation_id` meta zeroed directly — a 0→0 prop set records no
  * change, so WC would never persist it.
+ *
+ * Operator requirements: take a database snapshot before a live run — the conversion has
+ * no undo path. After a live run, spot-check a few migrated subscribers against the
+ * site's content gates: line items lose their reference to the parent product, so any
+ * gate rule or membership plan keyed to the parent stops matching them (the report phase
+ * enumerates those references as follow-up work).
  */
 class Convert_Subscription_Variation {
 
@@ -36,6 +42,10 @@ class Convert_Subscription_Variation {
 	 * links, pending manual renewals). Their line items are rewritten along with the
 	 * subscriptions'; completed/refunded/cancelled orders are history and left alone.
 	 *
+	 * Subscriptions are rewritten in EVERY status, including trash: they are standing
+	 * records rather than history, and a restored or reactivated subscription must point
+	 * at a working product. The status breakdown in the report makes that scope visible.
+	 *
 	 * @var string[]
 	 */
 	const UNPAID_ORDER_STATUSES = [ 'wc-pending', 'wc-failed', 'wc-on-hold' ];
@@ -43,10 +53,22 @@ class Convert_Subscription_Variation {
 	/**
 	 * Meta stashed on the product during conversion so an interrupted run can resume:
 	 * once the post is no longer a variation, its parent link and attribute values are
-	 * gone, and the later phases (line items, parent pruning) need both.
+	 * gone, and the later phases (line items, parent pruning) need both. The stash is
+	 * deleted when all phases complete, so its presence specifically marks an
+	 * interrupted run — a finished product carries no trace of it.
 	 */
 	const CONVERTED_PARENT_META     = '_newspack_converted_from_parent';
 	const CONVERTED_ATTRIBUTES_META = '_newspack_converted_attributes';
+
+	/**
+	 * How many line items to rewrite between object-cache flushes. Each rewritten item
+	 * hydrates order-item (and, on first migration, subscription) objects into the
+	 * persistent object cache; without periodic flushes a large migration can exhaust
+	 * memory mid-run.
+	 *
+	 * @var int
+	 */
+	const ITEM_FLUSH_INTERVAL = 200;
 
 	/**
 	 * Convert variations of a variable subscription product into standalone simple
@@ -60,7 +82,8 @@ class Convert_Subscription_Variation {
 	 *
 	 * [--live]
 	 * : Run the command in live mode, converting the products and rewriting line items.
-	 *   Without it the command reports what would change.
+	 *   Without it the command reports what would change. Take a database snapshot
+	 *   before a live run; there is no undo path.
 	 *
 	 * [--verbose]
 	 * : Produce more output.
@@ -79,8 +102,12 @@ class Convert_Subscription_Variation {
 		if ( ! function_exists( 'wcs_get_subscription' ) ) {
 			WP_CLI::error( 'WooCommerce Subscriptions must be active.' );
 		}
-		$live    = isset( $assoc_args['live'] );
-		$verbose = isset( $assoc_args['verbose'] );
+		// Negated spellings must stay dry: WP-CLI hands --no-live over as boolean false
+		// (which get_flag_value() honors) but --live=false as the STRING 'false', which
+		// both isset() and a bool cast read as an affirmative flag. filter_var()
+		// normalizes every spelling of "no" an operator might reach for.
+		$live    = filter_var( \WP_CLI\Utils\get_flag_value( $assoc_args, 'live', false ), FILTER_VALIDATE_BOOLEAN );
+		$verbose = filter_var( \WP_CLI\Utils\get_flag_value( $assoc_args, 'verbose', false ), FILTER_VALIDATE_BOOLEAN );
 
 		$targets = [];
 		foreach ( $args as $raw_id ) {
@@ -108,20 +135,45 @@ class Convert_Subscription_Variation {
 					$report['historical_items']
 				)
 			);
+			if ( $target['already_converted'] ) {
+				WP_CLI::line( sprintf( 'Product %d is already converted (interrupted run) — the remaining phases will be completed.', $target['variation_id'] ) );
+			}
+
+			// Line items lose their reference to the parent product during migration, so
+			// anything keyed to the parent stops matching converted subscribers. Surface
+			// those references as operator follow-up work in both modes.
+			$parent_references = self::find_parent_product_references( $target['parent_id'] );
+			foreach ( $parent_references as $reference ) {
+				WP_CLI::warning( $reference );
+			}
+			if ( ! empty( $parent_references ) ) {
+				WP_CLI::warning(
+					sprintf(
+						'After conversion, subscribers of product %1$d will no longer match rules keyed to parent %2$d. Add product %1$d wherever coverage should continue.',
+						$target['variation_id'],
+						$target['parent_id']
+					)
+				);
+			}
 
 			if ( ! $live ) {
 				continue;
 			}
 
-			if ( $target['already_converted'] ) {
-				WP_CLI::line( sprintf( 'Product %d is already converted (interrupted run) — resuming the remaining phases.', $target['variation_id'] ) );
-			} else {
-				$converted = self::convert_post( $target );
-				if ( \is_wp_error( $converted ) ) {
-					WP_CLI::error( $converted->get_error_message() );
-				}
-				WP_CLI::line( sprintf( 'Converted product %d to a simple subscription (catalog visibility: %s).', $target['variation_id'], $converted['catalog_visibility'] ) );
+			// convert_post() is idempotent, so an interrupted run re-runs it in full
+			// rather than trusting that every step completed before the interruption.
+			$converted = self::convert_post( $target );
+			if ( \is_wp_error( $converted ) ) {
+				WP_CLI::error( $converted->get_error_message() );
 			}
+			WP_CLI::line(
+				sprintf(
+					'%s product %d to a simple subscription (catalog visibility: %s).',
+					$target['already_converted'] ? 'Finished converting' : 'Converted',
+					$target['variation_id'],
+					$converted['catalog_visibility']
+				)
+			);
 
 			$migrated = self::migrate_line_items( $target, $verbose );
 			WP_CLI::line(
@@ -144,6 +196,18 @@ class Convert_Subscription_Variation {
 			foreach ( $pruned['skipped'] as $attribute => $reason ) {
 				WP_CLI::warning( sprintf( 'Left parent attribute "%s" untouched: %s', $attribute, $reason ) );
 			}
+			foreach ( $pruned['warnings'] as $warning ) {
+				WP_CLI::warning( $warning );
+			}
+
+			foreach ( self::finalize_parent( $target['parent_id'] ) as $warning ) {
+				WP_CLI::warning( $warning );
+			}
+
+			// A clean finish leaves no trace of the resume stash; its presence
+			// specifically marks an interrupted run.
+			\delete_post_meta( $target['variation_id'], self::CONVERTED_PARENT_META );
+			\delete_post_meta( $target['variation_id'], self::CONVERTED_ATTRIBUTES_META );
 			WP_CLI::line( '' );
 		}
 
@@ -161,7 +225,7 @@ class Convert_Subscription_Variation {
 	 *
 	 * @param int $variation_id The variation ID.
 	 * @return array|WP_Error Target data: variation_id, parent_id, title, attributes
-	 *                        (attribute slug => variation's value).
+	 *                        (attribute slug => variation's value), already_converted.
 	 */
 	public static function validate_target( int $variation_id ) {
 		$post = \get_post( $variation_id );
@@ -170,7 +234,7 @@ class Convert_Subscription_Variation {
 		}
 		if ( 'product_variation' !== $post->post_type ) {
 			// A product carrying the conversion stash is a previous run that was
-			// interrupted after the post conversion; resume its remaining phases.
+			// interrupted mid-conversion; every phase re-runs (they are idempotent).
 			$stashed_parent = (int) \get_post_meta( $variation_id, self::CONVERTED_PARENT_META, true );
 			if ( 'product' === $post->post_type && $stashed_parent ) {
 				$stashed_attributes = \get_post_meta( $variation_id, self::CONVERTED_ATTRIBUTES_META, true );
@@ -181,6 +245,9 @@ class Convert_Subscription_Variation {
 					'attributes'        => is_array( $stashed_attributes ) ? $stashed_attributes : [],
 					'already_converted' => true,
 				];
+			}
+			if ( 'product' === $post->post_type ) {
+				return new WP_Error( 'newspack_convert_variation', sprintf( 'Post %d is already a standalone product — if a previous conversion completed, there is nothing to do.', $variation_id ) );
 			}
 			return new WP_Error( 'newspack_convert_variation', sprintf( 'Post %d is a "%s", not a product variation.', $variation_id, $post->post_type ) );
 		}
@@ -210,7 +277,8 @@ class Convert_Subscription_Variation {
 
 	/**
 	 * Count the line items the migration will rewrite, and the historical references it
-	 * will deliberately leave alone.
+	 * will deliberately leave alone. Subscriptions are counted in every status (see the
+	 * scoping note on UNPAID_ORDER_STATUSES).
 	 *
 	 * @param int $variation_id The variation ID.
 	 * @return array Counts: subscription_items, subscription_items_by_status,
@@ -225,10 +293,10 @@ class Convert_Subscription_Variation {
 				$wpdb->prepare(
 					"SELECT orders.type AS order_type, orders.status AS order_status, oi.order_item_type, COUNT(*) AS items
 					FROM {$wpdb->prefix}woocommerce_order_items oi
-					INNER JOIN {$wpdb->prefix}woocommerce_order_itemmeta oim ON oim.order_item_id = oi.order_item_id AND oim.meta_key = '_variation_id' AND oim.meta_value = %d
+					INNER JOIN {$wpdb->prefix}woocommerce_order_itemmeta oim ON oim.order_item_id = oi.order_item_id AND oim.meta_key = '_variation_id' AND oim.meta_value = %s
 					INNER JOIN {$wpdb->prefix}wc_orders orders ON orders.id = oi.order_id
 					GROUP BY orders.type, orders.status, oi.order_item_type",
-					$variation_id
+					(string) $variation_id
 				)
 			);
 		} else {
@@ -236,10 +304,10 @@ class Convert_Subscription_Variation {
 				$wpdb->prepare(
 					"SELECT orders.post_type AS order_type, orders.post_status AS order_status, oi.order_item_type, COUNT(*) AS items
 					FROM {$wpdb->prefix}woocommerce_order_items oi
-					INNER JOIN {$wpdb->prefix}woocommerce_order_itemmeta oim ON oim.order_item_id = oi.order_item_id AND oim.meta_key = '_variation_id' AND oim.meta_value = %d
+					INNER JOIN {$wpdb->prefix}woocommerce_order_itemmeta oim ON oim.order_item_id = oi.order_item_id AND oim.meta_key = '_variation_id' AND oim.meta_value = %s
 					INNER JOIN {$wpdb->prefix}posts orders ON orders.ID = oi.order_id
 					GROUP BY orders.post_type, orders.post_status, oi.order_item_type",
-					$variation_id
+					(string) $variation_id
 				)
 			);
 		}
@@ -271,9 +339,13 @@ class Convert_Subscription_Variation {
 
 	/**
 	 * Convert the variation post into a standalone simple subscription product.
+	 * Idempotent: an interrupted run re-executes every step safely.
 	 *
 	 * Subscription variations and simple subscriptions share the same `_subscription_*`
-	 * meta keys, so price, period, and interval carry over without translation.
+	 * meta keys, so price, period, and interval carry over without translation. Parent-
+	 * derived properties that a variation resolves at read time (catalog visibility, the
+	 * 'parent' tax-class sentinel, an inherited shipping class) are materialized here,
+	 * because a standalone product no longer has a parent to resolve them against.
 	 *
 	 * @param array $target Target data from validate_target().
 	 * @return array|WP_Error On success: [ 'catalog_visibility' => string ].
@@ -281,6 +353,9 @@ class Convert_Subscription_Variation {
 	public static function convert_post( array $target ) {
 		$variation_id = $target['variation_id'];
 		$parent       = \wc_get_product( $target['parent_id'] );
+		if ( ! $parent ) {
+			return new WP_Error( 'newspack_convert_variation', sprintf( 'Parent %d no longer resolves; cannot inherit its properties.', $target['parent_id'] ) );
+		}
 
 		\update_post_meta( $variation_id, self::CONVERTED_PARENT_META, $target['parent_id'] );
 		\update_post_meta( $variation_id, self::CONVERTED_ATTRIBUTES_META, $target['attributes'] );
@@ -315,7 +390,24 @@ class Convert_Subscription_Variation {
 		// Purchase stays possible via direct links and checkout buttons either way;
 		// matching the parent keeps a deliberately unlisted catalog unlisted.
 		$product->set_catalog_visibility( $parent->get_catalog_visibility() );
+
+		// A variation's 'parent' tax-class sentinel is resolved by
+		// WC_Product_Variation::get_tax_class(); the base product class instead
+		// sanitizes it away at hydration ('parent' is not a valid class), silently
+		// downgrading the product to the standard rate. The sentinel is only visible
+		// in the raw meta, so that is what decides the normalization.
+		if ( 'parent' === \get_post_meta( $variation_id, '_tax_class', true ) ) {
+			$product->set_tax_class( $parent->get_tax_class() );
+		}
 		$product->save();
+
+		// "Same as parent" shipping class means the variation carries no term of its
+		// own; a standalone product must own the term to keep the class.
+		$own_shipping_class = \wp_get_object_terms( $variation_id, 'product_shipping_class', [ 'fields' => 'ids' ] );
+		if ( ( empty( $own_shipping_class ) || \is_wp_error( $own_shipping_class ) ) && $parent->get_shipping_class_id() ) {
+			\wp_set_object_terms( $variation_id, [ (int) $parent->get_shipping_class_id() ], 'product_shipping_class' );
+		}
+
 		\wc_delete_product_transients( $variation_id );
 		\wc_delete_product_transients( $target['parent_id'] );
 
@@ -325,7 +417,8 @@ class Convert_Subscription_Variation {
 	/**
 	 * Rewrite subscription and unpaid-order line items to reference the standalone
 	 * product. Idempotent: already-migrated items are rewritten harmlessly and only
-	 * first-time migrations add an order note.
+	 * first-time migrations add an order note. The object cache is flushed periodically
+	 * so a large migration doesn't accumulate every hydrated item and subscription.
 	 *
 	 * @param array $target  Target data from validate_target().
 	 * @param bool  $verbose Whether to print each item.
@@ -336,13 +429,18 @@ class Convert_Subscription_Variation {
 		$item_rows    = self::get_in_scope_item_rows( $variation_id );
 		$display_keys = self::item_display_meta_keys( $target['attributes'] );
 
+		$progress = null;
+		if ( ! $verbose && ! empty( $item_rows ) && function_exists( '\WP_CLI\Utils\make_progress_bar' ) ) {
+			$progress = \WP_CLI\Utils\make_progress_bar( sprintf( 'Rewriting %d line items', count( $item_rows ) ), count( $item_rows ) );
+		}
+
 		$noted    = [];
 		$counts   = [
 			'items'    => 0,
 			'failures' => 0,
 			'notes'    => 0,
 		];
-		foreach ( $item_rows as $row ) {
+		foreach ( $item_rows as $index => $row ) {
 			try {
 				$item            = new \WC_Order_Item_Product( (int) $row->order_item_id );
 				$first_migration = ( (int) $item->get_product_id() !== $variation_id );
@@ -376,6 +474,15 @@ class Convert_Subscription_Variation {
 				$counts['failures']++;
 				WP_CLI::warning( sprintf( 'Failed to rewrite item %d (order %d): %s', (int) $row->order_item_id, (int) $row->order_id, $e->getMessage() ) );
 			}
+			if ( $progress ) {
+				$progress->tick();
+			}
+			if ( 0 === ( $index + 1 ) % self::ITEM_FLUSH_INTERVAL && function_exists( '\WP_CLI\Utils\wp_clear_object_cache' ) ) {
+				\WP_CLI\Utils\wp_clear_object_cache();
+			}
+		}
+		if ( $progress ) {
+			$progress->finish();
 		}
 
 		$counts['remaining'] = count( self::get_in_scope_item_rows( $variation_id ) );
@@ -401,11 +508,11 @@ class Convert_Subscription_Variation {
 				$wpdb->prepare(
 					"SELECT oi.order_item_id, oi.order_id, orders.type AS order_type
 					FROM {$wpdb->prefix}woocommerce_order_items oi
-					INNER JOIN {$wpdb->prefix}woocommerce_order_itemmeta oim ON oim.order_item_id = oi.order_item_id AND oim.meta_key = '_variation_id' AND oim.meta_value = %d
+					INNER JOIN {$wpdb->prefix}woocommerce_order_itemmeta oim ON oim.order_item_id = oi.order_item_id AND oim.meta_key = '_variation_id' AND oim.meta_value = %s
 					INNER JOIN {$wpdb->prefix}wc_orders orders ON orders.id = oi.order_id
 					WHERE oi.order_item_type = 'line_item'
 					AND ( orders.type = 'shop_subscription' OR ( orders.type = 'shop_order' AND orders.status IN ( $statuses_in ) ) )",
-					$variation_id
+					(string) $variation_id
 				)
 			);
 		}
@@ -413,14 +520,78 @@ class Convert_Subscription_Variation {
 			$wpdb->prepare(
 				"SELECT oi.order_item_id, oi.order_id, orders.post_type AS order_type
 				FROM {$wpdb->prefix}woocommerce_order_items oi
-				INNER JOIN {$wpdb->prefix}woocommerce_order_itemmeta oim ON oim.order_item_id = oi.order_item_id AND oim.meta_key = '_variation_id' AND oim.meta_value = %d
+				INNER JOIN {$wpdb->prefix}woocommerce_order_itemmeta oim ON oim.order_item_id = oi.order_item_id AND oim.meta_key = '_variation_id' AND oim.meta_value = %s
 				INNER JOIN {$wpdb->prefix}posts orders ON orders.ID = oi.order_id
 				WHERE oi.order_item_type = 'line_item'
 				AND ( orders.post_type = 'shop_subscription' OR ( orders.post_type = 'shop_order' AND orders.post_status IN ( $statuses_in ) ) )",
-				$variation_id
+				(string) $variation_id
 			)
 		);
 		// phpcs:enable
+	}
+
+	/**
+	 * Find site configuration that references the parent product by ID: content gate
+	 * access rules and membership plan product lists. Migrated line items stop carrying
+	 * the parent ID, so these references are follow-up work for the operator.
+	 *
+	 * @param int $parent_id The parent product ID.
+	 * @return array Human-readable reference descriptions.
+	 */
+	public static function find_parent_product_references( int $parent_id ): array {
+		$references = [];
+
+		$gate_post_types = array_filter(
+			[
+				class_exists( '\Newspack\Content_Gate' ) ? \Newspack\Content_Gate::GATE_CPT : null,
+				'wc_membership_plan',
+			]
+		);
+		$posts           = \get_posts(
+			[
+				'post_type'      => $gate_post_types,
+				'post_status'    => 'any',
+				'posts_per_page' => 100,
+				'fields'         => 'ids',
+			]
+		);
+		foreach ( $posts as $post_id ) {
+			$post_type = \get_post_type( $post_id );
+			$meta_key  = 'wc_membership_plan' === $post_type ? '_product_ids' : 'access_rules';
+			$value     = \get_post_meta( $post_id, $meta_key, true );
+			if ( $value && self::value_references_product( $value, $parent_id ) ) {
+				$references[] = sprintf(
+					'%s "%s" (#%d) references parent product %d in its %s.',
+					'wc_membership_plan' === $post_type ? 'Membership plan' : 'Content gate',
+					\get_the_title( $post_id ),
+					$post_id,
+					$parent_id,
+					'wc_membership_plan' === $post_type ? 'product list' : 'access rules'
+				);
+			}
+		}
+		return $references;
+	}
+
+	/**
+	 * Whether a stored configuration value references a product ID. Recurses arrays and
+	 * matches exact IDs only (int or numeric string), never substrings. Pure logic,
+	 * split out for unit testing.
+	 *
+	 * @param mixed $value      The stored value (scalar or nested array).
+	 * @param int   $product_id The product ID to look for.
+	 * @return bool
+	 */
+	public static function value_references_product( $value, int $product_id ): bool {
+		if ( is_array( $value ) ) {
+			foreach ( $value as $entry ) {
+				if ( self::value_references_product( $entry, $product_id ) ) {
+					return true;
+				}
+			}
+			return false;
+		}
+		return is_numeric( $value ) && (int) $value === $product_id;
 	}
 
 	/**
@@ -432,16 +603,18 @@ class Convert_Subscription_Variation {
 	 * attribute is left untouched with a warning rather than guessing.
 	 *
 	 * @param array $target Target data from validate_target().
-	 * @return array [ 'removed' => attribute => values[], 'skipped' => attribute => reason ].
+	 * @return array [ 'removed' => attribute => values[], 'skipped' => attribute => reason,
+	 *                 'warnings' => string[] ].
 	 */
 	public static function prune_parent_attribute_options( array $target ): array {
 		$result = [
-			'removed' => [],
-			'skipped' => [],
+			'removed'  => [],
+			'skipped'  => [],
+			'warnings' => [],
 		];
 		$parent = \wc_get_product( $target['parent_id'] );
 		if ( ! $parent ) {
-			$result['skipped'][''] = sprintf( 'parent %d no longer resolves.', $target['parent_id'] );
+			$result['warnings'][] = sprintf( 'Parent %d no longer resolves; attribute pruning skipped entirely.', $target['parent_id'] );
 			return $result;
 		}
 
@@ -490,9 +663,19 @@ class Convert_Subscription_Variation {
 			// and save() skips the write. Clone before editing.
 			$pruned = clone $attribute;
 			$pruned->set_options( $keep );
-			$attributes[ $attribute_slug ]                = $pruned;
-			$changed                                      = true;
+			$attributes[ $attribute_slug ]          = $pruned;
+			$changed                                = true;
 			$result['removed'][ $attribute_slug ][] = $converted_value;
+
+			$defaults = $parent->get_default_attributes();
+			if ( isset( $defaults[ $attribute_slug ] ) && (string) $defaults[ $attribute_slug ] === (string) $converted_value ) {
+				$result['warnings'][] = sprintf(
+					'Parent %d\'s default selection for attribute "%s" was the pruned value "%s" — update the default in the product editor.',
+					$target['parent_id'],
+					$attribute_slug,
+					$converted_value
+				);
+			}
 		}
 
 		if ( $changed ) {
@@ -504,9 +687,31 @@ class Convert_Subscription_Variation {
 	}
 
 	/**
+	 * Re-sync the parent variable product after it loses a child: nothing else in the
+	 * conversion path refreshes its price-range meta and lookup row, so the displayed
+	 * range would keep reflecting the departed variation. Also flags a parent left with
+	 * no variations at all.
+	 *
+	 * @param int $parent_id The parent product ID.
+	 * @return array Warnings for the operator.
+	 */
+	public static function finalize_parent( int $parent_id ): array {
+		$warnings = [];
+		if ( class_exists( '\WC_Product_Variable' ) ) {
+			\WC_Product_Variable::sync( $parent_id );
+		}
+		$parent = \wc_get_product( $parent_id );
+		if ( $parent && ! count( $parent->get_children() ) ) {
+			$warnings[] = sprintf( 'Parent %d has no variations left and is still %s — consider retiring it.', $parent_id, $parent->get_status() );
+		}
+		return $warnings;
+	}
+
+	/**
 	 * Decide which parent attribute options survive pruning. Pure logic, split out for
 	 * unit testing: an option is removed only when it belongs to the converted variation
-	 * and no remaining variation still uses that value.
+	 * and no remaining variation still uses that value — where a wildcard variation (an
+	 * empty "Any" value) counts as using every value.
 	 *
 	 * @param array      $options          The parent attribute's current options (strings for
 	 *                                     custom attributes, term IDs for taxonomy ones).
@@ -517,7 +722,7 @@ class Convert_Subscription_Variation {
 	 * @return array Options to keep, reindexed.
 	 */
 	public static function compute_pruned_options( array $options, $option_to_remove, array $remaining_values, string $converted_value ): array {
-		if ( in_array( $converted_value, $remaining_values, true ) ) {
+		if ( in_array( $converted_value, $remaining_values, true ) || in_array( '', $remaining_values, true ) ) {
 			return array_values( $options );
 		}
 		return array_values(

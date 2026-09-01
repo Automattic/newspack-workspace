@@ -186,6 +186,34 @@ class Newspack_Test_Convert_Subscription_Variation extends WP_UnitTestCase {
 	}
 
 	/**
+	 * A wildcard sibling (empty "Any" attribute value) counts as using every value, so
+	 * nothing is pruned while one remains.
+	 */
+	public function test_prune_keeps_options_when_a_wildcard_sibling_remains() {
+		$options = [ 'Digital', 'Print' ];
+		$kept    = Convert_Subscription_Variation::compute_pruned_options(
+			$options,
+			'Print',
+			[ '' ],
+			'Print'
+		);
+		$this->assertSame( $options, $kept );
+	}
+
+	/**
+	 * Parent-reference detection matches exact product IDs (int or numeric string) at
+	 * any nesting depth, and never matches substrings or non-numeric values.
+	 */
+	public function test_value_references_product_matches_exact_ids_only() {
+		$this->assertTrue( Convert_Subscription_Variation::value_references_product( 185511, 185511 ) );
+		$this->assertTrue( Convert_Subscription_Variation::value_references_product( '185511', 185511 ) );
+		$this->assertTrue( Convert_Subscription_Variation::value_references_product( [ 'rules' => [ [ 'product_ids' => [ 222051, '185511' ] ] ] ], 185511 ) );
+		$this->assertFalse( Convert_Subscription_Variation::value_references_product( [ 1855, '1855112', '185511abc' ], 185511 ) );
+		$this->assertFalse( Convert_Subscription_Variation::value_references_product( 'a string mentioning 185511 in prose', 185511 ) );
+		$this->assertFalse( Convert_Subscription_Variation::value_references_product( [], 185511 ) );
+	}
+
+	/**
 	 * Taxonomy-backed attributes store term IDs as options; pruning compares them
 	 * loosely by string so int and numeric-string IDs match.
 	 */
