@@ -33,6 +33,10 @@ export const openEmail = async (page, subjectPrefix, emailAddress) => {
     }).toPass({ timeout: 30000 });
     await emailLink.click();
   } finally {
+    // Clearing replaces the whole extra-header set, which is fine while this is the
+    // only code that sets page-level headers (playwright.config.ts sets none). If a
+    // global header is ever added there, capture and restore it here instead —
+    // otherwise this clear silently drops it for the rest of the page's life.
     await page.setExtraHTTPHeaders({});
   }
 };

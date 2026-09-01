@@ -36,4 +36,24 @@ test.describe("Email sendbox access control", () => {
     expect(response?.status()).toBe(200);
     await expect(page.getByRole("heading", { name: "Email Sendbox" })).toBeVisible();
   });
+
+  // Guards the page-cache exclusion (batcache_cancel() in e2e-plugin.php). The
+  // secret rides a header, which page caches don't key on, so a stored authorized
+  // 200 would otherwise be replayed to an unauthenticated request at the same URL.
+  // Batcache stores a page after two accesses, so prime one URL with two authorized
+  // loads, then confirm an unauthenticated load of that same URL is still refused
+  // rather than served the cached dump. A fresh, unique URL keeps the probe from
+  // colliding with a neighbouring run's cache. Without the exclusion this fails with
+  // a cached 200; note it can only fail where a page cache is active (it may pass
+  // trivially on an uncached target).
+  test("does not serve a cached authorized page to an unauthenticated request", { tag: "@vanilla" }, async ({ page }) => {
+    const url = `/_email?cache-probe=${Date.now()}`;
+    await page.setExtraHTTPHeaders({ [SENDBOX_SECRET_HEADER]: emailSendboxSecret() });
+    await page.goto(url);
+    await page.goto(url); // Second authorized hit crosses the cache's store threshold.
+    await page.setExtraHTTPHeaders({});
+    const response = await page.goto(url);
+    expect(response?.status()).toBe(403);
+    await expect(page.getByText("Email Sendbox")).toHaveCount(0);
+  });
 });
