@@ -43,12 +43,12 @@ class Admin_Shell_Collection_Params_Test extends WP_UnitTestCase {
 	 * Every collection a list screen reads accepts the raised ceiling.
 	 */
 	public function test_every_list_collection_accepts_the_raised_ceiling() {
-		foreach ( Admin_Shell_Collection_Params::get_collections() as $rest_base ) {
-			$params = apply_filters( 'rest_' . $rest_base . '_collection_params', [ 'per_page' => [ 'maximum' => 100 ] ] );
+		foreach ( Admin_Shell_Collection_Params::get_collections() as $collection ) {
+			$params = apply_filters( 'rest_' . $collection . '_collection_params', [ 'per_page' => [ 'maximum' => 100 ] ] );
 			$this->assertSame(
 				Admin_Shell_Collection_Params::MAX_PER_PAGE,
 				$params['per_page']['maximum'],
-				'Expected a raised ceiling for: ' . $rest_base
+				'Expected a raised ceiling for: ' . $collection
 			);
 		}
 	}
@@ -109,20 +109,6 @@ class Admin_Shell_Collection_Params_Test extends WP_UnitTestCase {
 	}
 
 	/**
-	 * The newsletters CPT is public, so without a capability gate the
-	 * raised ceiling would let any anonymous caller ask one request to
-	 * render ten times as many rows as core allows.
-	 */
-	public function test_a_logged_out_caller_is_held_to_the_core_cap() {
-		wp_set_current_user( 0 );
-
-		$request = new WP_REST_Request( 'GET', '/wp/v2/' . Newspack_Newsletters::NEWSPACK_NEWSLETTERS_CPT );
-		$request->set_param( 'per_page', Admin_Shell_Collection_Params::CORE_MAX_PER_PAGE + 1 );
-
-		$this->assertSame( 400, rest_do_request( $request )->get_status() );
-	}
-
-	/**
 	 * The gate is on the raise, not on the collection: core's own ceiling
 	 * still works for everyone.
 	 */
@@ -136,26 +122,19 @@ class Admin_Shell_Collection_Params_Test extends WP_UnitTestCase {
 	}
 
 	/**
-	 * A subscriber can read the collection but has no business asking for
-	 * a thousand rows of it.
+	 * An unprivileged caller is held to core's ceiling on every collection
+	 * the raise touches. The newsletters CPT is public, so without the gate
+	 * an anonymous request could ask for ten times as many rows as core
+	 * allows; a subscriber can read the collection but has no business
+	 * asking for a thousand rows of it either. Collections a caller cannot
+	 * reach at all (layouts needs `edit_others_posts`) are skipped, which
+	 * is the same guarantee by a shorter route.
+	 *
+	 * @dataProvider unprivileged_callers
+	 * @param string $role Role to authenticate as, or '' for a logged-out caller.
 	 */
-	public function test_a_subscriber_is_held_to_the_core_cap() {
-		wp_set_current_user( self::factory()->user->create( [ 'role' => 'subscriber' ] ) );
-
-		$request = new WP_REST_Request( 'GET', '/wp/v2/' . Newspack_Newsletters::NEWSPACK_NEWSLETTERS_CPT );
-		$request->set_param( 'per_page', Admin_Shell_Collection_Params::MAX_PER_PAGE );
-
-		$this->assertSame( 400, rest_do_request( $request )->get_status() );
-	}
-
-	/**
-	 * The gate covers every collection the raise touches, not just the
-	 * newsletters CPT. The layouts CPT only registers for a user who can
-	 * edit others' posts, so for a logged-out caller it is not routable at
-	 * all, which is the same guarantee reached earlier.
-	 */
-	public function test_the_gate_covers_every_raised_collection() {
-		wp_set_current_user( 0 );
+	public function test_an_unprivileged_caller_is_held_to_the_core_cap( $role ) {
+		wp_set_current_user( '' === $role ? 0 : self::factory()->user->create( [ 'role' => $role ] ) );
 
 		$checked = 0;
 		foreach ( Admin_Shell_Collection_Params::get_collections() as $name ) {
@@ -170,12 +149,24 @@ class Admin_Shell_Collection_Params_Test extends WP_UnitTestCase {
 			$this->assertSame(
 				400,
 				rest_do_request( $request )->get_status(),
-				'Expected the core cap to hold for a logged-out caller on: ' . $name
+				'Expected the core cap to hold on: ' . $name
 			);
 			++$checked;
 		}
 
 		$this->assertGreaterThan( 0, $checked, 'No collection was reachable, so the gate went untested.' );
+	}
+
+	/**
+	 * Callers the raise is not meant for.
+	 *
+	 * @return array<string, array{0: string}>
+	 */
+	public function unprivileged_callers() {
+		return [
+			'logged out' => [ '' ],
+			'subscriber' => [ 'subscriber' ],
+		];
 	}
 
 	/**

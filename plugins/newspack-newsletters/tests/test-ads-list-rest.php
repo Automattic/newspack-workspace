@@ -400,8 +400,8 @@ class Ads_List_REST_Test extends WP_UnitTestCase {
 
 	/**
 	 * Every taxonomy the ads list touches ships as `{ id, name }`: the
-	 * columns render the names, and Quick Edit seeds its pickers from
-	 * the IDs and sends all three back on every save.
+	 * columns render the names, and Quick Edit seeds its pickers from the
+	 * IDs, having no other source for them.
 	 */
 	public function test_terms_field_covers_every_quick_edit_taxonomy() {
 		$post_id     = $this->make_ad();

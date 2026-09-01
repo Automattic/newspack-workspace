@@ -29,9 +29,9 @@ class Ads_List_REST {
 
 	/**
 	 * Taxonomies behind the Advertiser, Ad placement and Categories
-	 * columns. Quick Edit seeds all three from the same payload and
-	 * sends them back on every save, so the list asks for this field
-	 * whether or not those columns are visible.
+	 * columns. Quick Edit has no other source for the names, so the list
+	 * asks for this field whether or not those columns are visible —
+	 * otherwise a hidden column would leave its picker empty.
 	 */
 	const LIST_TAXONOMIES = [ 'newspack_nl_advertiser', 'newspack_nl_ad_placement', 'category' ];
 

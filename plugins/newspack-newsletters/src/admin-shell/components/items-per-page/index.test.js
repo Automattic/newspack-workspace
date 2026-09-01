@@ -47,8 +47,11 @@ describe( 'ItemsPerPage', () => {
 		[ '10', '20', '50', '100' ].forEach( label => expect( screen.getByRole( 'radio', { name: label } ) ).toBeInTheDocument() );
 	} );
 
+	// `progress` is deliberately passed to a component that no longer
+	// declares it: the removed overlay rendered from exactly that prop, so
+	// without it this assertion would also hold against the old version.
 	it( 'renders no loading indicator of its own', () => {
-		const { container } = render( <ItemsPerPage value={ PER_PAGE_ALL } onChange={ jest.fn() } /> );
+		const { container } = render( <ItemsPerPage value={ PER_PAGE_ALL } onChange={ jest.fn() } progress={ { loaded: 100, total: 1200 } } /> );
 		expect( container ).toBeEmptyDOMElement();
 		expect( document.querySelector( '.newspack-newsletters-fetch-all-progress' ) ).toBeNull();
 	} );

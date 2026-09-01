@@ -70,8 +70,8 @@ class Admin_Shell_Collection_Params {
 	 * Hook the cap onto every collection the list screens read.
 	 */
 	public static function register_filters(): void {
-		foreach ( self::get_collections() as $rest_base ) {
-			add_filter( 'rest_' . $rest_base . '_collection_params', [ __CLASS__, 'raise_per_page_cap' ] );
+		foreach ( self::get_collections() as $collection ) {
+			add_filter( 'rest_' . $collection . '_collection_params', [ __CLASS__, 'raise_per_page_cap' ] );
 		}
 	}
 

@@ -11,8 +11,7 @@
  * package styles against). It is mounted in the DataViews `header` slot.
  *
  * Loading is left entirely to DataViews, which pulses the list and sets
- * `aria-busy` while a fetch is in flight. A second, custom indicator on
- * top of that read as two competing animations.
+ * `aria-busy` while a fetch is in flight.
  */
 
 import {

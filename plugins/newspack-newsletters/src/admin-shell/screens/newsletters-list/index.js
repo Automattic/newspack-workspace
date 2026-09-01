@@ -34,8 +34,8 @@ const DEFAULT_VIEW = {
 
 const DEFAULT_LAYOUTS = { table: {} };
 
-// `urlPatch` is read at module scope so a forwarded legacy link seeds
-// the view once, rather than being re-applied on every re-render.
+// Built at module scope so a forwarded legacy link is parsed out of
+// `window.location.search` once rather than on every render.
 const PERSIST_OPTIONS = {
 	fieldIds: FIELD_IDS,
 	layoutTypes: Object.keys( DEFAULT_LAYOUTS ),
