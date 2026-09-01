@@ -1,3 +1,10 @@
+## newspack-newsletters [3.40.2](https://github.com/Automattic/newspack-workspace/compare/newspack-newsletters@3.40.1...newspack-newsletters@3.40.2) (2026-09-01)
+
+
+### Bug Fixes
+
+* **newsletters:** scope Mailchimp cache cron to enabled audiences ([#1010](https://github.com/Automattic/newspack-workspace/issues/1010)) ([e7fe5eb](https://github.com/Automattic/newspack-workspace/commit/e7fe5ebf9804f7fb7ac3b065a90470d61cb8949d))
+
 ## newspack-newsletters [3.40.1](https://github.com/Automattic/newspack-workspace/compare/newspack-newsletters@3.40.0...newspack-newsletters@3.40.1) (2026-08-31)
 
 
