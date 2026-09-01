@@ -15,6 +15,21 @@ defined( 'ABSPATH' ) || exit;
 class Jetpack {
 
 	/**
+	 * Seed identifying the share-token HMAC. Global (not post-scoped) so the gate can verify a
+	 * token at `plugins_loaded`, before the main query resolves which post is being requested.
+	 *
+	 * @var string
+	 */
+	const TOKEN_ACTION = 'newspack_share';
+
+	/**
+	 * Query arg carrying the share token on a restored share URL.
+	 *
+	 * @var string
+	 */
+	const TOKEN_QUERY_ARG = '_newspack_share_token';
+
+	/**
 	 * Modules scripts handles.
 	 *
 	 * @var string[]
@@ -170,6 +185,11 @@ class Jetpack {
 		add_filter( 'jetpack_sharing_display_query', [ __CLASS__, 'obfuscate_share_query' ], 10, 4 );
 		add_filter( 'jetpack_sharing_data_attributes', [ __CLASS__, 'add_obfuscation_data_attribute' ], 10, 4 );
 		add_action( 'wp_footer', [ __CLASS__, 'print_share_obfuscation_script' ] );
+
+		// Reject fabricated `?share=` requests as early as possible, before WordPress resolves
+		// the query or loads the theme. `plugins_loaded` is the earliest hook where the token
+		// signing functions are available (pluggable functions are loaded just before it fires).
+		add_action( 'plugins_loaded', [ __CLASS__, 'gate_share_request' ] );
 
 		// Disable Jetpack Image Studio as late as possible so dequeues cannot be overridden.
 		add_action( 'admin_print_scripts', [ __CLASS__, 'disable_image_studio' ], 999 );
@@ -457,8 +477,117 @@ class Jetpack {
 		$query           = $args[3] ?? '';
 		if ( self::is_share_obfuscation_enabled() && self::is_share_roundtrip_query( $query ) ) {
 			$data_attributes['share-query'] = $query;
+			// Sign the restored request so the server-side gate can tell a real, JS-restored
+			// share URL from one a crawler fabricated by appending `?share=…` to a permalink.
+			$data_attributes['share-token'] = self::share_token();
 		}
 		return $data_attributes;
+	}
+
+	/**
+	 * Whether Jetpack's sharing module is active. The gate and the restoration script both
+	 * depend on it, so they stay in step about when the obfuscation is in play.
+	 *
+	 * @return bool
+	 */
+	private static function is_sharedaddy_active() {
+		return class_exists( 'Jetpack' ) && \Jetpack::is_module_active( 'sharedaddy' );
+	}
+
+	/**
+	 * A rotating, signed token proving a share URL came from our own markup rather than being
+	 * fabricated by a crawler.
+	 *
+	 * Deliberately not a WordPress nonce. Nonces are session-scoped and live only 12-24h, but
+	 * this token is baked into page-cacheable HTML that Batcache can serve for up to a day, so a
+	 * nonce would expire while the cached page is still live and reject genuine share clicks. The
+	 * token instead rotates on a daily bucket and is accepted for a few buckets (see
+	 * is_valid_share_token()), comfortably outlasting the cache. It carries no CSRF duty: sharing
+	 * is not a state-changing authenticated action. And since the token sits in the cached markup
+	 * any HTML-parsing bot can read it anyway, so its lifetime does not weaken the deterrent,
+	 * which only ever stopped crawlers that fabricate `?share=` without parsing the page.
+	 *
+	 * @param int $bucket_offset How many daily buckets back to compute the token for. 0 is current.
+	 * @return string
+	 */
+	public static function share_token( $bucket_offset = 0 ) {
+		$bucket = (int) floor( time() / DAY_IN_SECONDS ) - (int) $bucket_offset;
+		return wp_hash( self::TOKEN_ACTION . '|' . $bucket, 'nonce' );
+	}
+
+	/**
+	 * Whether a token matches the current or a recent daily bucket. The window (current plus the
+	 * previous two buckets, so two-to-three days) is wider than the 24h maximum page-cache TTL,
+	 * so a share click on a day-old cached page still verifies, with margin for clock skew.
+	 *
+	 * @param string $token The token from the request.
+	 * @return bool
+	 */
+	public static function is_valid_share_token( $token ) {
+		if ( ! is_string( $token ) || '' === $token ) {
+			return false;
+		}
+		for ( $offset = 0; $offset <= 2; $offset++ ) {
+			if ( hash_equals( self::share_token( $offset ), $token ) ) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/**
+	 * Whether the current request is an un-cacheable `?share=` round-trip that lacks a valid
+	 * Newspack share token, and so should be turned away before it reaches Jetpack's handler.
+	 *
+	 * Reads only request globals, so it can run at `plugins_loaded` without the main query. A
+	 * genuine share click carries the token that add_obfuscation_data_attribute() minted and the
+	 * client script appended on restore; a crawler that fabricated the URL does not. Non-front-end
+	 * contexts and sites where Jetpack sharing is off are left alone, since their `?share=` (if
+	 * any) is not ours to intercept.
+	 *
+	 * @return bool
+	 */
+	public static function should_block_share_request() {
+		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Only detecting a share request; the token is verified below.
+		if ( ! isset( $_GET['share'] ) ) {
+			return false;
+		}
+		if ( is_admin() || wp_doing_ajax() || wp_doing_cron() ) {
+			return false;
+		}
+		if ( ! self::is_share_obfuscation_enabled() || ! self::is_sharedaddy_active() ) {
+			return false;
+		}
+		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- The share token below is our own signed verification, not a WordPress nonce.
+		$token = isset( $_GET[ self::TOKEN_QUERY_ARG ] ) ? sanitize_text_field( wp_unslash( $_GET[ self::TOKEN_QUERY_ARG ] ) ) : '';
+		return ! self::is_valid_share_token( $token );
+	}
+
+	/**
+	 * The URL a blocked share request is redirected to: the current request stripped of the
+	 * share args, i.e. the bare, page-cacheable permalink.
+	 *
+	 * @return string
+	 */
+	public static function get_share_redirect_url() {
+		return remove_query_arg( [ 'share', 'nb', self::TOKEN_QUERY_ARG ] );
+	}
+
+	/**
+	 * Turn away fabricated `?share=` requests with a redirect to the cacheable permalink.
+	 *
+	 * Hooked early (`plugins_loaded`) so a crawler that guessed the `?share=` pattern is
+	 * bounced before WordPress resolves the query or renders the theme, rather than booting
+	 * Jetpack's un-cacheable share pipeline. Genuine clicks carry a valid token and pass through.
+	 *
+	 * @return void
+	 */
+	public static function gate_share_request() {
+		if ( ! self::should_block_share_request() ) {
+			return;
+		}
+		wp_safe_redirect( self::get_share_redirect_url() );
+		exit;
 	}
 
 	/**
@@ -468,18 +597,17 @@ class Jetpack {
 	 * original `?share=…` query is appended back onto its permalink href. From that point
 	 * the anchor behaves exactly as Jetpack renders it, so native navigation, popup
 	 * handlers and share-stat counting are untouched. Bots that neither run this script nor
-	 * dispatch interaction events only ever see the bare, cacheable permalink. `&nb=1`
-	 * mirrors what Jetpack's own sharing.js appends for real user clicks.
+	 * dispatch interaction events only ever see the bare, cacheable permalink. The token is
+	 * appended so the restored URL clears the server-side gate, and `&nb=1` mirrors what
+	 * Jetpack's own sharing.js appends for real user clicks.
 	 */
 	public static function print_share_obfuscation_script() {
-		if ( ! self::is_share_obfuscation_enabled() ) {
+		if ( ! self::is_share_obfuscation_enabled() || ! self::is_sharedaddy_active() ) {
 			return;
 		}
-		if ( ! class_exists( 'Jetpack' ) || ! \Jetpack::is_module_active( 'sharedaddy' ) ) {
-			return;
-		}
+		$token_arg = self::TOKEN_QUERY_ARG;
 		wp_print_inline_script_tag(
-			<<<'JS'
+			<<<JS
 ( function () {
 	function restore( event ) {
 		var anchor = event.target && event.target.closest ? event.target.closest( 'a[data-share-query]' ) : null;
@@ -490,10 +618,16 @@ class Jetpack {
 		if ( ! query ) {
 			return;
 		}
+		var token = anchor.getAttribute( 'data-share-token' );
 		var href = anchor.getAttribute( 'href' ) || '';
 		var url = href + ( href.indexOf( '?' ) === -1 ? '?' : '&' ) + query;
-		anchor.setAttribute( 'href', url + ( url.indexOf( 'nb=' ) === -1 ? '&nb=1' : '' ) );
+		if ( token ) {
+			url += '&{$token_arg}=' + encodeURIComponent( token );
+		}
+		url += ( url.indexOf( 'nb=' ) === -1 ? '&nb=1' : '' );
+		anchor.setAttribute( 'href', url );
 		anchor.removeAttribute( 'data-share-query' );
+		anchor.removeAttribute( 'data-share-token' );
 	}
 	[ 'pointerover', 'focusin', 'touchstart' ].forEach( function ( type ) {
 		document.addEventListener( type, restore, true );
