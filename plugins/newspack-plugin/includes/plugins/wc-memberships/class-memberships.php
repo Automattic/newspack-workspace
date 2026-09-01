@@ -504,9 +504,19 @@ class Memberships {
 
 		// Remove the default restriction handler from 'SkyVerge\WooCommerce\Memberships\Restrictions\Posts::restrict_post'.
 		$restriction_instance = \wc_memberships()->get_restrictions_instance()->get_posts_restrictions_instance();
-		\remove_action( 'wp', spl_object_hash( $restriction_instance ) . 'handle_restriction_modes', 9 );
-		\remove_action( 'wp', spl_object_hash( $restriction_instance ) . 'handle_restriction_modes' ); // For compatibility with Woo Memberships < 1.27.2.
+		self::remove_posts_restriction_handler( $restriction_instance );
 		\add_filter( 'wc_memberships_restrictable_comment_types', '__return_empty_array' );
+	}
+
+	/**
+	 * Remove WooCommerce Memberships' default posts restriction handler.
+	 *
+	 * @param object $restriction_instance WooCommerce Memberships posts restriction instance.
+	 */
+	public static function remove_posts_restriction_handler( $restriction_instance ) {
+		$callback = [ $restriction_instance, 'handle_restriction_modes' ];
+		\remove_action( 'wp', $callback, 9 );
+		\remove_action( 'wp', $callback ); // For compatibility with Woo Memberships < 1.27.2.
 	}
 
 	/**
@@ -861,6 +871,142 @@ class Memberships {
 		}
 
 		return (int) reset( $user_subscriptions );
+	}
+
+	/**
+	 * Whether the user still holds active access equivalent to what $product
+	 * grants — via an active membership of a plan the product grants (Layer 3),
+	 * or another active subscription that grants the same plan (Layer 2).
+	 *
+	 * Used to suppress the "update payment" notice when a recoverable
+	 * subscription is effectively superseded by equivalent active access bought
+	 * through a different product. NPPM-2926.
+	 *
+	 * @param \WC_Product $product                 The purchased product (variation-accurate).
+	 * @param int|null    $user_id                 User ID. Defaults to the current user.
+	 * @param int|null    $exclude_subscription_id Subscription under evaluation; an active
+	 *                                             membership tied to it is not counted as
+	 *                                             "other" access (self-match guard).
+	 *
+	 * @return bool
+	 */
+	public static function user_has_equivalent_active_access( $product, $user_id = null, $exclude_subscription_id = null ) {
+		if ( ! self::is_active() || ! $product ) {
+			return false;
+		}
+		$user_id = $user_id ?? get_current_user_id();
+		if ( ! $user_id ) {
+			return false;
+		}
+
+		$plan_ids = self::get_plan_ids_for_product( $product );
+		if ( empty( $plan_ids ) ) {
+			return false;
+		}
+
+		// Access is only equivalent when EVERY plan the product grants is still
+		// covered. A product can grant several plans; a reader who kept Plan A
+		// but lost Plan B still has to pay to restore Plan B, so a single
+		// surviving plan must not suppress the notice. Both layers below
+		// contribute coverage, and any plan left uncovered is decisive.
+		$covered_plan_ids = [];
+
+		// Layer 3 — currently-active membership access. Enumerate the user's
+		// active memberships so we can skip one tied to the subscription under
+		// evaluation: a membership kept active by the same on-hold/pending
+		// subscription is not "other" access, and counting it would falsely
+		// suppress the very notice that subscription needs. This mirrors
+		// Layer 2's active-status self-match proofing. NPPM-2926.
+		if ( function_exists( 'wc_memberships_get_user_active_memberships' ) ) {
+			foreach ( wc_memberships_get_user_active_memberships( $user_id ) as $membership ) {
+				$plan_id = (int) $membership->get_plan_id();
+				if ( ! in_array( $plan_id, $plan_ids, true ) ) {
+					continue;
+				}
+				// Only subscription-tied memberships expose get_subscription_id();
+				// a plain (e.g. manually granted) membership is always "other" access.
+				if ( $exclude_subscription_id
+					&& method_exists( $membership, 'get_subscription_id' )
+					&& (int) $membership->get_subscription_id() === (int) $exclude_subscription_id ) {
+					continue;
+				}
+				$covered_plan_ids[] = $plan_id;
+			}
+		}
+
+		// Layer 2 — another active subscription that grants the same plan.
+		// get_user_subscription_for_membership_plan() resolves through
+		// WooCommerce_Connection::get_active_subscriptions_for_user(), which
+		// filters to ACTIVE_SUBSCRIPTION_STATUSES — so the on-hold/pending
+		// subscription under evaluation can never self-match here. Plans already
+		// covered by Layer 3 are skipped, and the first plan neither layer covers
+		// settles the answer — so this stays at one lookup in the common
+		// single-plan case rather than one per plan.
+		foreach ( $plan_ids as $plan_id ) {
+			if ( in_array( $plan_id, $covered_plan_ids, true ) ) {
+				continue;
+			}
+			if ( ! self::get_user_subscription_for_membership_plan( $user_id, $plan_id ) ) {
+				return false;
+			}
+		}
+		return true;
+	}
+
+	/**
+	 * Get the IDs of membership plans granted by a product, matching the product
+	 * itself, its parent (variations), and its grouped parents. NPPM-2926.
+	 *
+	 * @param \WC_Product $product Product.
+	 *
+	 * @return int[] Plan IDs.
+	 */
+	private static function get_plan_ids_for_product( $product ) {
+		if ( ! self::is_active() || ! $product || ! function_exists( 'wc_memberships_get_membership_plans' ) ) {
+			return [];
+		}
+
+		// Build the set of product IDs that could be configured on a plan: the
+		// purchased product/variation, its parent variable product, and any
+		// grouped parents (mirrors the resolution in WooCommerce_Update_Payment_Notice).
+		$candidate_ids = [ (int) $product->get_id() ];
+		$parent_id     = (int) $product->get_parent_id();
+		if ( $parent_id > 0 ) {
+			$candidate_ids[] = $parent_id;
+		}
+		if ( class_exists( 'WC_Subscriptions_Product' ) && method_exists( 'WC_Subscriptions_Product', 'get_visible_grouped_parent_product_ids' ) ) {
+			// Look the grouped parents up from the resolved parent as well as the
+			// purchased product. get_visible_grouped_parent_product_ids() resolves
+			// through get_parent_ids(), which matches a grouped product's `_children`
+			// meta -- and that holds top-level product IDs, never variation IDs. A
+			// variation therefore finds no grouped parent on its own, so a plan
+			// granting the grouped parent would be missed for a variation purchase.
+			// Layer 1 resolves to the parent before this same lookup.
+			$grouped_lookup_products = [ $product ];
+			if ( $parent_id > 0 ) {
+				$parent_product = wc_get_product( $parent_id );
+				if ( $parent_product ) {
+					$grouped_lookup_products[] = $parent_product;
+				}
+			}
+			foreach ( $grouped_lookup_products as $lookup_product ) {
+				foreach ( (array) \WC_Subscriptions_Product::get_visible_grouped_parent_product_ids( $lookup_product ) as $grouped_id ) {
+					$candidate_ids[] = (int) $grouped_id;
+				}
+			}
+		}
+		$candidate_ids = array_unique( array_filter( $candidate_ids ) );
+
+		$plan_ids = [];
+		foreach ( wc_memberships_get_membership_plans() as $plan ) {
+			foreach ( $candidate_ids as $candidate_id ) {
+				if ( $plan->has_product( $candidate_id ) ) {
+					$plan_ids[] = (int) $plan->get_id();
+					break;
+				}
+			}
+		}
+		return array_values( array_unique( $plan_ids ) );
 	}
 
 	/**

@@ -67,7 +67,8 @@ class Layouts_List_REST_Test extends WP_UnitTestCase {
 
 		$this->assertSame( $user_id, $author['id'] );
 		$this->assertSame( 'Grace Hopper', $author['name'] );
-		$this->assertNotSame( '', $author['avatar'] );
+		$this->assertArrayHasKey( 24, $author['avatar_urls'] );
+		$this->assertArrayHasKey( 48, $author['avatar_urls'] );
 	}
 
 	/**

@@ -176,7 +176,7 @@ const WizardsToggleHeaderCard = < T extends Record< string, any > >( {
 				}
 				error={ errorMessage }
 				disabled={ isFetching }
-				toggleOnChange={ active => {
+				toggleOnChange={ ( active: boolean ) => {
 					updateSettings( onToggle( active, settingsUpdates ), true );
 				} }
 				toggleChecked={ isChecked }

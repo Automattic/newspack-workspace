@@ -33,6 +33,7 @@ class Test_Subscriber_Commerce extends \WP_UnitTestCase {
 	 */
 	public function tear_down() {
 		remove_all_filters( 'newspack_subscriber_commerce_enforcement_active' );
+		remove_all_filters( 'newspack_reader_activation_enabled' );
 		parent::tear_down();
 	}
 
@@ -68,6 +69,26 @@ class Test_Subscriber_Commerce extends \WP_UnitTestCase {
 	public function test_enforcement_is_active_without_memberships() {
 		$this->enable_gates();
 		$this->assertTrue( Subscriber_Commerce::is_enforcement_active() );
+	}
+
+	/**
+	 * Audience Management is a prerequisite for enforcement, matching the way
+	 * content gates go inert without it (NPPD-1846).
+	 *
+	 * Everything the reader is sent to when a purchase is refused — the
+	 * subscription, registration, sign-in — belongs to Audience Management. With
+	 * it off, blocking the purchase strands the reader at a notice pointing
+	 * somewhere that cannot be reached.
+	 *
+	 * The admin stays reachable so the publisher can still author rules, which is
+	 * the same split is_admin_available() already draws for Memberships.
+	 */
+	public function test_enforcement_stands_down_without_audience_management() {
+		$this->enable_gates();
+		add_filter( 'newspack_reader_activation_enabled', '__return_false' );
+
+		$this->assertFalse( Subscriber_Commerce::is_enforcement_active() );
+		$this->assertTrue( Subscriber_Commerce::is_admin_available() );
 	}
 
 	/**

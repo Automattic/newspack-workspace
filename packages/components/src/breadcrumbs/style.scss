@@ -1,4 +1,5 @@
 @use "~@wordpress/base-styles/colors" as wp-colors;
+@use "~@wordpress/base-styles/variables" as wp-vars;
 
 .newspack-breadcrumbs__list {
 	list-style: none;
@@ -24,6 +25,11 @@
 		flex-shrink: 1;
 		min-width: 0;
 	}
+}
+
+.newspack-breadcrumbs__count {
+	color: var(--wpds-color-foreground-content-neutral-weak, #{wp-colors.$gray-700});
+	font-weight: wp-vars.$font-weight-regular;
 }
 
 .newspack-breadcrumbs__separator {

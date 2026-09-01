@@ -285,7 +285,7 @@ class TestIncomingPost extends \WP_UnitTestCase {
 
 		// Set a different thumbnail URL.
 		$payload = $this->get_sample_payload();
-		$payload['post_data']['thumbnail_url'] = 'https://picsum.photos/id/2/300/300.jpg';
+		$payload['post_data']['thumbnail_url'] = 'https://example.test/image-2.jpg';
 
 		// Insert the linked post with the updated thumbnail.
 		$this->incoming_post->insert( $payload );

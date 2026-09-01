@@ -65,11 +65,18 @@ require_once 'trait-wc-memberships-setup.php';
 // MailChimp mock.
 require_once 'mocks/class-mailchimp-mock.php';
 
+// Exception used to intercept the subscribe block's redirect branch in tests.
+require_once 'mocks/class-newspack-newsletters-subscribe-block-redirect-interrupt.php';
+
 // WC Memberships mock.
 require_once 'mocks/wc-memberships.php';
 
 // WC CLI mock.
 require_once 'mocks/wp-cli.php';
+
+// newspack-plugin Incoming_Field mock, so the integrations schema mappers'
+// date-range capability probe resolves true in this standalone suite.
+require_once 'mocks/class-newspack-plugin-incoming-field-mock.php';
 
 // Stubs for RDB methods.
 if ( ! class_exists( 'BlockBindings' ) ) {

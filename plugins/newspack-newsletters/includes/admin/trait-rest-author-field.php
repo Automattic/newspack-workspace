@@ -42,9 +42,9 @@ trait Rest_Author_Field {
 					'type'       => [ 'object', 'null' ],
 					'readonly'   => true,
 					'properties' => [
-						'id'     => [ 'type' => 'integer' ],
-						'name'   => [ 'type' => 'string' ],
-						'avatar' => [ 'type' => 'string' ],
+						'id'          => [ 'type' => 'integer' ],
+						'name'        => [ 'type' => 'string' ],
+						'avatar_urls' => [ 'type' => 'object' ],
 					],
 				],
 			]
@@ -65,7 +65,7 @@ trait Rest_Author_Field {
 	 * A post author reduced to what the Author column renders.
 	 *
 	 * @param int $post_id Post ID.
-	 * @return array|null { id, name, avatar }, or null when the author is gone.
+	 * @return array|null { id, name, avatar_urls }, or null when the author is gone.
 	 */
 	public static function get_author_payload( int $post_id ): ?array {
 		$post = $post_id ? get_post( $post_id ) : null;
@@ -78,13 +78,21 @@ trait Rest_Author_Field {
 			return null;
 		}
 
-		// The 48px source keeps the 16px display crisp on hi-DPI screens.
-		$avatar = get_avatar_url( $user->ID, [ 'size' => 48 ] );
+		// Keyed like core's `avatar_urls` so the shared user-row component
+		// reads this field unchanged: the row renders at 16px, so 24 is the
+		// 1x source and 48 the retina one.
+		$avatar_urls = [];
+		foreach ( [ 24, 48 ] as $size ) {
+			$url = get_avatar_url( $user->ID, [ 'size' => $size ] );
+			if ( is_string( $url ) && '' !== $url ) {
+				$avatar_urls[ $size ] = $url;
+			}
+		}
 
 		return [
-			'id'     => (int) $user->ID,
-			'name'   => (string) $user->display_name,
-			'avatar' => is_string( $avatar ) ? $avatar : '',
+			'id'          => (int) $user->ID,
+			'name'        => (string) $user->display_name,
+			'avatar_urls' => $avatar_urls,
 		];
 	}
 }

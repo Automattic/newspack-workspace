@@ -55,6 +55,11 @@ if ( ! function_exists( 'wc_get_page_permalink' ) ) {
 
 /**
  * Test Group_Subscription_MyAccount My Account integration.
+ *
+ * PHPUnit reads @group from the class docblock, not the file's, so the group the
+ * file header advertises has to be repeated here to actually take effect.
+ *
+ * @group group-subscription-myaccount
  */
 class Test_Group_Subscription_MyAccount extends WP_UnitTestCase {
 
@@ -70,6 +75,8 @@ class Test_Group_Subscription_MyAccount extends WP_UnitTestCase {
 	 */
 	public function set_up() {
 		parent::set_up();
+		global $products_database;
+		$products_database                        = [];
 		$GLOBALS['newspack_test_is_account_page'] = true;
 	}
 
@@ -77,8 +84,10 @@ class Test_Group_Subscription_MyAccount extends WP_UnitTestCase {
 	 * Tear down: reset globals and subscriptions DB.
 	 */
 	public function tear_down() {
-		global $subscriptions_database;
-		$subscriptions_database = [];
+		global $subscriptions_database, $products_database, $wcs_mock_item_switchable;
+		$subscriptions_database   = [];
+		$products_database        = [];
+		$wcs_mock_item_switchable = null;
 
 		unset( $GLOBALS['newspack_test_is_account_page'] );
 
@@ -719,5 +728,202 @@ class Test_Group_Subscription_MyAccount extends WP_UnitTestCase {
 
 		// Member meta untouched.
 		$this->assertTrue( Group_Subscription::user_is_member( $member_id, $sub ) );
+	}
+
+	// ---- can_change_seats tests ----
+
+	/**
+	 * Build a group subscription whose product bills either per seat or flat, with
+	 * a single seat line item. Mirrors what the group page renders against.
+	 *
+	 * @param int    $customer_id  Owner user ID.
+	 * @param string $pricing_mode Group pricing mode meta value.
+	 * @param bool   $with_item    Whether to give the subscription a line item.
+	 *
+	 * @return WC_Subscription
+	 */
+	private function create_priced_group_subscription( int $customer_id, string $pricing_mode, bool $with_item = true ): WC_Subscription {
+		$prefix     = Group_Subscription_Settings::GROUP_SUBSCRIPTION_META_PREFIX;
+		$product_id = 7301;
+		wc_create_mock_product(
+			[
+				'id'   => $product_id,
+				'type' => 'subscription',
+				'name' => 'Group plan',
+				'meta' => [
+					$prefix . 'enabled'      => 'yes',
+					$prefix . 'pricing_mode' => $pricing_mode,
+					$prefix . 'min_seats'    => 2,
+					$prefix . 'max_seats'    => 10,
+				],
+			]
+		);
+
+		$items = $with_item ? [
+			new WC_Order_Item_Product(
+				[
+					'id'         => 7311,
+					'product_id' => $product_id,
+					'quantity'   => 4,
+				]
+			),
+		] : [];
+
+		$subscription = wcs_create_subscription(
+			[
+				'customer_id'    => $customer_id,
+				'status'         => 'active',
+				'billing_period' => 'month',
+				'items'          => $items,
+			]
+		);
+		$subscription->update_meta_data( $prefix . 'enabled', 'yes' );
+		return $subscription;
+	}
+
+	/**
+	 * The owner of an active per-seat group can change seats.
+	 */
+	public function test_can_change_seats_true_for_owner_of_active_per_seat_group() {
+		$owner_id = $this->create_reader_user();
+		$sub      = $this->create_priced_group_subscription( $owner_id, Group_Subscription_Settings::PRICING_MODE_PER_SEAT );
+
+		$this->assertTrue( Group_Subscription_MyAccount::can_change_seats( $sub, $owner_id ) );
+	}
+
+	/**
+	 * A manager is not the payer, so the seat change is refused for them even on
+	 * an otherwise eligible group.
+	 */
+	public function test_can_change_seats_false_for_manager() {
+		$owner_id   = $this->create_reader_user();
+		$manager_id = $this->create_reader_user();
+		$sub        = $this->create_priced_group_subscription( $owner_id, Group_Subscription_Settings::PRICING_MODE_PER_SEAT );
+		$this->add_member( $manager_id, $sub );
+
+		$this->assertFalse( Group_Subscription_MyAccount::can_change_seats( $sub, $manager_id ) );
+	}
+
+	/**
+	 * A flat-priced group sells no seats, so there is nothing to change.
+	 */
+	public function test_can_change_seats_false_for_flat_group() {
+		$owner_id = $this->create_reader_user();
+		$sub      = $this->create_priced_group_subscription( $owner_id, Group_Subscription_Settings::PRICING_MODE_PER_TEAM );
+
+		$this->assertFalse( Group_Subscription_MyAccount::can_change_seats( $sub, $owner_id ) );
+	}
+
+	/**
+	 * A cancelled subscription can't be switched, so seats can't be changed.
+	 */
+	public function test_can_change_seats_false_for_inactive_subscription() {
+		$owner_id = $this->create_reader_user();
+		$sub      = $this->create_priced_group_subscription( $owner_id, Group_Subscription_Settings::PRICING_MODE_PER_SEAT );
+		$sub->set_status( 'cancelled' );
+
+		$this->assertFalse( Group_Subscription_MyAccount::can_change_seats( $sub, $owner_id ) );
+	}
+
+	/**
+	 * Without a line item there is nothing for the native switch to rewrite.
+	 */
+	public function test_can_change_seats_false_without_seat_line_item() {
+		$owner_id = $this->create_reader_user();
+		$sub      = $this->create_priced_group_subscription( $owner_id, Group_Subscription_Settings::PRICING_MODE_PER_SEAT, false );
+
+		$this->assertFalse( Group_Subscription_MyAccount::can_change_seats( $sub, $owner_id ) );
+	}
+
+	/**
+	 * WooCommerce Subscriptions has the last word. When it would refuse the
+	 * switch — switching turned off, a gateway that can't change the billed
+	 * amount — the button must not be offered, because it could only lead to a
+	 * dead end.
+	 */
+	public function test_can_change_seats_false_when_wcs_refuses_the_switch() {
+		global $wcs_mock_item_switchable;
+		$owner_id = $this->create_reader_user();
+		$sub      = $this->create_priced_group_subscription( $owner_id, Group_Subscription_Settings::PRICING_MODE_PER_SEAT );
+
+		$wcs_mock_item_switchable = false;
+
+		$this->assertFalse( Group_Subscription_MyAccount::can_change_seats( $sub, $owner_id ) );
+	}
+
+	/**
+	 * A logged-out visitor owns nothing.
+	 */
+	public function test_can_change_seats_false_for_logged_out_visitor() {
+		$owner_id = $this->create_reader_user();
+		$sub      = $this->create_priced_group_subscription( $owner_id, Group_Subscription_Settings::PRICING_MODE_PER_SEAT );
+
+		$this->assertFalse( Group_Subscription_MyAccount::can_change_seats( $sub, 0 ) );
+	}
+
+	// ---- "Change seats" action rendering ----
+
+	/**
+	 * Render the group page for the current user and return its markup.
+	 *
+	 * @param WC_Subscription $subscription The group subscription.
+	 *
+	 * @return string The rendered markup.
+	 */
+	private function render_group_page( WC_Subscription $subscription ): string {
+		ob_start();
+		Group_Subscription_MyAccount::render_group_page( $subscription );
+		return ob_get_clean();
+	}
+
+	/**
+	 * A per-seat group's owner is paying per seat, so the page says how many of the
+	 * seats they bought are in use. Both numbers count the owner and every invitation
+	 * still holding a seat -- the same measure "Change seats" is judged against.
+	 */
+	public function test_group_page_shows_the_seat_count_for_a_per_seat_group() {
+		$owner_id = $this->create_reader_user();
+		$sub      = $this->create_priced_group_subscription( $owner_id, Group_Subscription_Settings::PRICING_MODE_PER_SEAT );
+		wp_set_current_user( $owner_id );
+
+		$html = $this->render_group_page( $sub );
+
+		// The fixture's line item holds 4 seats, and the owner alone occupies one.
+		$this->assertStringContainsString( '1 of 4 seats', $html );
+	}
+
+	/**
+	 * A flat group's price covers the whole group however many people are in it, so
+	 * there are no seats to report and the page is left as it was.
+	 */
+	public function test_group_page_shows_no_seat_count_for_a_flat_group() {
+		$owner_id = $this->create_reader_user();
+		$sub      = $this->create_priced_group_subscription( $owner_id, Group_Subscription_Settings::PRICING_MODE_PER_TEAM );
+		wp_set_current_user( $owner_id );
+
+		$html = $this->render_group_page( $sub );
+
+		$this->assertStringNotContainsString( 'newspack-my-account__group--seats', $html );
+	}
+
+	/**
+	 * The owner of an active per-seat group gets a link into the switch modal, since
+	 * the switch is what prices and takes payment for a seat change.
+	 */
+	public function test_group_page_renders_change_seats_for_owner() {
+		$owner_id = $this->create_reader_user();
+		$sub      = $this->create_priced_group_subscription( $owner_id, Group_Subscription_Settings::PRICING_MODE_PER_SEAT );
+		wp_set_current_user( $owner_id );
+
+		$html = $this->render_group_page( $sub );
+
+		$this->assertStringContainsString( 'Change seats', $html );
+		$this->assertStringContainsString( 'class="wcs-switch-link', $html );
+		// The href carries the params the modal's form re-submits.
+		$this->assertStringContainsString( 'switch-subscription=' . $sub->get_id(), $html );
+		$this->assertStringContainsString( 'item=7311', $html );
+		// And the nonce WooCommerce Subscriptions' switch handler refuses a request
+		// without, so the link still works for a reader with JavaScript off.
+		$this->assertStringContainsString( '_wcsnonce=', $html );
 	}
 }

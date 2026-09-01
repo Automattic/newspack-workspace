@@ -5,22 +5,23 @@
  * `newspack_newsletters_ad_status` so the column matches the filter.
  */
 
-import { Icon, Tooltip } from '@wordpress/components';
+import { Tooltip } from '@wordpress/components';
 import { __, sprintf } from '@wordpress/i18n';
-import { drafts, notAllowed, published, scheduled, trash } from '@wordpress/icons';
 import { dateI18n, getSettings as getDateSettings, gmdateI18n } from '@wordpress/date';
+
+import { StatusIndicator } from 'newspack-components';
 
 import { getAdminUrl } from '../../admin-globals';
 import { formatPostDate } from '../../utils/format-date';
 import { termsForTaxonomy } from '../../utils/terms';
 import { statusKindLabel, STATUS_KIND_LABELS } from './status-label';
 
-const STATUS_KIND_ICONS = {
-	active: published,
-	scheduled,
-	expired: notAllowed,
-	draft: drafts,
-	trash,
+export const STATUS_KIND_STATUSES = {
+	active: 'active',
+	scheduled: 'scheduled',
+	expired: 'ended',
+	draft: 'draft',
+	trash: 'trash',
 };
 
 // Ad windows are whole calendar days: the meta is `Y-m-d`, and `is_ad_active()`
@@ -75,8 +76,7 @@ const getTitle = item => item?.title?.raw ?? item?.title?.rendered ?? '';
 
 const renderTitle = ( { item } ) => {
 	const raw = getTitle( item );
-	// Auto-drafts carry WordPress's "Auto Draft" placeholder; show a friendly title instead.
-	const title = ! raw || 'auto-draft' === item?.status ? __( '(no title)', 'newspack-newsletters' ) : raw;
+	const title = raw || __( '(no title)', 'newspack-newsletters' );
 	return (
 		<a className="newspack-newsletters-list__title" href={ editUrl( item ) } onClickCapture={ event => event.stopPropagation() }>
 			<strong>{ title }</strong>
@@ -87,7 +87,7 @@ const renderTitle = ( { item } ) => {
 const renderStatus = ( { item } ) => {
 	const status = item?.newspack_newsletters_ad_status || {};
 	const kind = status.kind || 'draft';
-	const icon = STATUS_KIND_ICONS[ kind ] || STATUS_KIND_ICONS.draft;
+	const statusName = STATUS_KIND_STATUSES[ kind ] || STATUS_KIND_STATUSES.draft;
 
 	let label;
 	if ( 'expired' === kind && status.expires_at ) {
@@ -110,12 +110,7 @@ const renderStatus = ( { item } ) => {
 		label = statusKindLabel( kind );
 	}
 
-	return (
-		<span className="newspack-newsletters-list__status">
-			<Icon className="newspack-newsletters-list__status-icon" icon={ icon } size={ 24 } />
-			<span>{ label }</span>
-		</span>
-	);
+	return <StatusIndicator status={ statusName }>{ label }</StatusIndicator>;
 };
 
 const renderTerms =

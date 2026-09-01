@@ -466,9 +466,15 @@ final class Reader_Activation {
 
 		$value = \get_option( self::OPTIONS_PREFIX . $name, $config[ $name ] );
 
-		// Use default value type for casting bool option value.
+		/*
+		 * Cast to the default value's type. Options come back from the database as
+		 * strings, but out of a warm object cache as the type they were written with,
+		 * so a setting's type would otherwise vary with cache state.
+		 */
 		if ( is_bool( $config[ $name ] ) ) {
 			$value = (bool) $value;
+		} elseif ( is_int( $config[ $name ] ) ) {
+			$value = (int) $value;
 		}
 		return apply_filters( 'newspack_reader_activation_setting', $value, $name );
 	}

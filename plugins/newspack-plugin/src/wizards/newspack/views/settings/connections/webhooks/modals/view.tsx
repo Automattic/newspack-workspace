@@ -66,7 +66,7 @@ const View = ( { endpoint, setAction }: { endpoint: ModalComponentProps[ 'endpoi
 											{ sprintf(
 												// translators: %s is the number of errors.
 												__( 'Attempt #%s', 'newspack-plugin' ),
-												request.errors.length
+												String( request.errors.length )
 											) }
 										</span>
 									</td>

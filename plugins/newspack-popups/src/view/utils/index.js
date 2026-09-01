@@ -1,5 +1,6 @@
 /* globals newspack_popups_view */
 
+export * from './ab';
 export * from './analytics';
 export * from './prompts';
 export * from './segments';

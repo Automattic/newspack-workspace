@@ -10,8 +10,9 @@
 
 import { buildQueryParams as baseBuildQueryParams, toQueryString } from '../../utils/build-query';
 
-// `auto-draft` so an abandoned "Add new" still shows in the list.
-const DEFAULT_STATUSES = 'publish,private,future,draft,pending,auto-draft';
+// `auto-draft` is excluded: any save promotes the row to `draft`, so one still
+// at `auto-draft` is always an abandoned "Add new" with nothing in it.
+const DEFAULT_STATUSES = 'publish,private,future,draft,pending';
 
 // `status` is handled separately by the shared util's status-filter branch, not here.
 const FIELD_TO_QUERY_PARAM = {
@@ -52,7 +53,9 @@ const BASE_FIELDS = [
 ];
 
 export function buildQueryParams( view = {} ) {
-	// Only the (hidden-by-default) Categories/Tags columns read term names.
+	// Only the (hidden-by-default) Categories/Tags columns read term names,
+	// so the field that resolves them is asked for only when one is on screen.
+	// Quick Edit seeds from the raw ID arrays, which always ride along.
 	const visibleFields = Array.isArray( view.fields ) ? view.fields : null;
 	const needsTerms = ! visibleFields || visibleFields.includes( 'categories' ) || visibleFields.includes( 'tags' );
 	const fields = needsTerms ? [ ...BASE_FIELDS, 'newspack_newsletters_terms' ] : BASE_FIELDS;

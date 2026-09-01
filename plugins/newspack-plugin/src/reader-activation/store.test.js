@@ -169,6 +169,24 @@ describe( 'Store', () => {
 			expect( all.active_memberships ).toEqual( [ 1, 2 ] );
 		} );
 	} );
+	it( 'should rehydrate remaining items when one stored value is corrupt', () => {
+		window.newspack_reader_data = {
+			items: {
+				// A legacy comma list (NPPM-3205) — unparseable as JSON, and
+				// listed first so it would abort the keys after it if the
+				// decode failure escaped the rehydrate loop.
+				active_memberships: '123,456',
+				is_donor: 'true',
+			},
+		};
+		const warn = jest.spyOn( console, 'warn' ).mockImplementation( () => {} );
+		const [ store ] = Store();
+		expect( () => store.rehydrate() ).not.toThrow();
+		expect( store.get( 'active_memberships' ) ).toBeNull();
+		expect( store.get( 'is_donor' ) ).toEqual( true );
+		expect( warn ).toHaveBeenCalledWith( expect.stringContaining( 'active_memberships' ), expect.any( SyntaxError ) );
+		warn.mockRestore();
+	} );
 	describe( 'Read-only keys', () => {
 		beforeEach( () => {
 			window.newspack_reader_data = {

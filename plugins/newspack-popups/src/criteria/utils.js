@@ -49,9 +49,12 @@ export function registerCriteria( id, config = {} ) {
 			criteria.matchingFunction = matchingFunctions[ criteria.matchingFunction ].bind( null, criteria );
 		}
 
-		// Bail if unable to configure matching function.
+		// An unresolvable matching function name (e.g. registered by a plugin newer
+		// than this one) must become a function that never matches, not stay a
+		// string: criteria.matches() invokes matchingFunction unconditionally.
 		if ( typeof criteria.matchingFunction !== 'function' ) {
 			console.warn( `Unable to configure matching function for criteria ${ criteria.id }.` ); // eslint-disable-line no-console
+			criteria.matchingFunction = () => false;
 			return;
 		}
 

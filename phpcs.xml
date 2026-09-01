@@ -15,7 +15,6 @@
 	<!-- Project-wide exclusions. AGENTS.md: short array syntax is allowed,
 	     Yoda conditions not required. -->
 	<rule ref="WordPress">
-		<exclude name="Generic.Arrays.DisallowShortArraySyntax.Found"/>
 		<exclude name="Universal.Arrays.DisallowShortArraySyntax.Found"/>
 		<exclude name="Universal.Operators.DisallowStandalonePostIncrementDecrement.PostIncrementFound"/>
 		<exclude name="Squiz.Functions.MultiLineFunctionDeclaration.SpaceAfterFunction"/>
@@ -36,6 +35,17 @@
 				<element value="manage_woocommerce"/>
 			</property>
 		</properties>
+	</rule>
+
+	<!-- Test doubles duplicate class names on purpose: a stand-in for a class
+	     another plugin ships, or a second stub of the same thing for an
+	     isolated case. The sniff cannot tell either from a genuine duplicate.
+	     It also sees a pair only when both files land in the same forked batch,
+	     and that boundary moves whenever a PHP file is added anywhere, so it
+	     reports against whichever pull request shifted it rather than the one
+	     that introduced the duplicate. -->
+	<rule ref="Generic.Classes.DuplicateClassName">
+		<exclude-pattern>*/tests/*</exclude-pattern>
 	</rule>
 
 	<!-- republication-tracker-tool's main file is named without the standard
@@ -70,16 +80,7 @@
 	<rule ref="Squiz.Commenting.InlineComment.InvalidEndChar">
 		<exclude-pattern>*/themes/newspack-theme/*</exclude-pattern>
 	</rule>
-	<rule ref="Squiz.Commenting.InlineComment.NotCapital">
-		<exclude-pattern>*/themes/newspack-theme/*</exclude-pattern>
-	</rule>
 	<rule ref="Generic.WhiteSpace.ScopeIndent.Incorrect">
-		<exclude-pattern>*/themes/newspack-theme/*</exclude-pattern>
-	</rule>
-	<rule ref="Generic.WhiteSpace.ScopeIndent.IncorrectExact">
-		<exclude-pattern>*/themes/newspack-theme/*</exclude-pattern>
-	</rule>
-	<rule ref="PEAR.Functions.FunctionCallSignature.Indent">
 		<exclude-pattern>*/themes/newspack-theme/*</exclude-pattern>
 	</rule>
 
@@ -125,7 +126,10 @@
 	<exclude-pattern>*/*.asset.php</exclude-pattern>
 	<exclude-pattern>*/tests/fixtures/*</exclude-pattern>
 
-	<!-- Skipped in legacy per-package configs; tests had laxer norms. -->
+	<!-- These two suites break WordPress runtime rules deliberately: stub
+	     classes, several object structures per file, direct filesystem calls,
+	     assignment to $GLOBALS['post']. Linting them would mean ~50
+	     suppressions asserting "this is a test double" against no real fix. -->
 	<exclude-pattern>*/plugins/newspack-blocks/tests/*</exclude-pattern>
 	<exclude-pattern>*/themes/newspack-theme/tests/*</exclude-pattern>
 </ruleset>

@@ -7,17 +7,50 @@
 [[ -n "${NABSPATH:-}" && -f "$NABSPATH/n" ]] ||
     NABSPATH="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
+# Names that become git branches and path components. Slashes are allowed here
+# and not in validate_env_name, since `fix/some-thing` is the normal branch
+# shape. The first character may not be a dash, so an option is never taken as
+# a name: bin/worktree.sh and the --worktree parsing in bin/env.sh both read
+# these positionally. A leading dot or underscore stays legal because branches
+# like _pr738 are in use, and git rejects the refnames that are truly invalid.
 validate_name() {
-    if [[ ! "$1" =~ ^[a-zA-Z0-9._/-]+$ ]] || [[ "$1" == *..* ]] || [[ "$1" == /* ]]; then
-        echo "Error: invalid $2 '$1' (only alphanumeric, dots, hyphens, underscores, slashes allowed; no '..' or leading '/')"
+    if [[ ! "$1" =~ ^[a-zA-Z0-9._][a-zA-Z0-9._/-]*$ ]] || [[ "$1" == *..* ]] || [[ "$1" == /* ]]; then
+        echo "Error: invalid $2 '$1' (must not start with '-'; only alphanumeric, dots, hyphens, underscores, slashes allowed; no '..' or leading '/')"
         exit 1
     fi
 }
 
-# Stricter validation for env names — no slashes (Docker rejects them in container/service names)
+# Stricter validation for env names — no slashes (Docker rejects them in
+# container/service names), and no leading dash. The dash rule is what stops an
+# option being read as a name: bin/env.sh takes the name positionally, so
+# without it `n env create --help` validates cleanly and creates an environment
+# called "--help" instead of printing usage. It excludes a leading dash and
+# nothing else, deliberately. This validator also gates `up`, `down` and
+# `destroy`, so a rule that rejected leading dots or underscores would strand an
+# environment created under an older, laxer one — unmanageable and removable
+# only by hand.
+# Stricter still for a name being created. The leniency in validate_env_name
+# exists so environments made under an older, laxer rule stay manageable by
+# `up`/`down`/`destroy`, and that reason cannot apply to a name that does not
+# exist yet. A leading dot is the case it costs: `.demo` yields
+# https://.demo.test, whose first DNS label is empty, and the container name and
+# certificate are derived from the same string.
+validate_new_env_name() {
+    validate_env_name "$1"
+    if [[ ! "$1" =~ ^[a-zA-Z0-9] ]]; then
+        echo "Error: invalid environment name '$1' (must start with a letter or digit)"
+        exit 1
+    fi
+}
+
 validate_env_name() {
-    if [[ ! "$1" =~ ^[a-zA-Z0-9._-]+$ ]]; then
-        echo "Error: invalid environment name '$1' (only alphanumeric, dots, hyphens, underscores allowed)"
+    # The `..` clause matches validate_name's. `n env destroy ..` would otherwise
+    # validate and reach `rm -rf "$NABSPATH/envs/.."`, i.e. the workspace root.
+    # POSIX rm refuses a trailing `.` or `..` component, so that is not a live
+    # escape today -- but the guard then lives in rm rather than here, and moves
+    # out from under us the moment a call site builds the path differently.
+    if [[ ! "$1" =~ ^[a-zA-Z0-9._][a-zA-Z0-9._-]*$ ]] || [[ "$1" == *..* ]]; then
+        echo "Error: invalid environment name '$1' (must not start with '-' or contain '..'; only alphanumeric, dots, hyphens, underscores allowed)"
         exit 1
     fi
 }
@@ -48,6 +81,44 @@ lo0_alias_exists() {
     ifconfig lo0 2>/dev/null | awk -v ip="$1" '$1 == "inet" && $2 == ip { found = 1 } END { exit !found }'
 }
 
+# Whether a project's vendor/ was installed with its dev dependencies.
+#
+# `n env up` provisions vendor/ with --no-dev (see ensure-vendor.sh): enough to
+# activate a plugin, but without PHPUnit or the Yoast polyfills the WordPress
+# test bootstrap requires. Both kinds of install write vendor/autoload.php, so
+# its presence says nothing about whether the tests can run — composer's own
+# record of which install produced the directory, installed.json's top-level
+# "dev" flag, is what separates them.
+#
+# Read without a JSON parser: this is sourced on the host, in the containers and
+# in CI, and no single parser is present in all three. Two things make the
+# plain-text read safe. The value must be a bare boolean alone on its line,
+# which skips the `"dev": "Development related task"` entries real packages
+# carry in their metadata; and of the lines surviving that, the last is the
+# top-level flag, because composer writes it after the packages array closes.
+# Leading whitespace is not matched, so re-indenting the file changes nothing.
+#
+# The two unhappy paths answer differently, on purpose:
+#
+# - No readable installed.json means nothing was installed here, so the tests
+#   cannot run whatever else is true. Report absent and let the caller explain
+#   how to fix it.
+# - A file that exists but yields no recognisable flag means composer wrote a
+#   shape this function does not know — a format change, say. Report present.
+#   Guessing "absent" there would block every project at once, with no way past
+#   it; reporting present costs only a return to the bootstrap error this guard
+#   was added to replace, for whoever hits it first.
+project_has_dev_deps() {
+    local installed="$1/vendor/composer/installed.json"
+    [ -r "$installed" ] || return 1
+
+    local flag
+    flag=$(grep -E '^[[:space:]]*"dev": *(true|false),?$' "$installed" | tail -1)
+    [ -n "$flag" ] || return 0
+
+    [[ "$flag" == *true* ]]
+}
+
 # Logging helpers — mirror the colored output used by bin/site-setup.sh.
 NP_RED='\033[0;31m'
 NP_GREEN='\033[0;32m'
@@ -58,4 +129,22 @@ NP_NC='\033[0m'
 log_info() { echo -e "${NP_BLUE}[INFO]${NP_NC} ${1}"; }
 log_success() { echo -e "${NP_GREEN}[SUCCESS]${NP_NC} ${1}"; }
 log_warning() { echo -e "${NP_YELLOW}[WARNING]${NP_NC} ${1}"; }
+# Warn when the installed passwordless wrapper is older than the repo copy.
+#
+# bin/setup-networking.sh snapshots bin/newspack-manage-host to /usr/local/bin
+# once, and nothing re-syncs it: every caller resolves the installed copy and
+# gates only on `command -v`. A machine set up before a change to the wrapper
+# therefore keeps running the old one indefinitely, which matters because the
+# wrapper runs as root -- the PATH pin it carries reaches nobody who does not
+# re-run the installer. Warn rather than act: this is a sudo-owned file, and a
+# script that silently re-copied it would need root at an arbitrary moment.
+warn_if_manage_host_stale() {
+    local installed="/usr/local/bin/newspack-manage-host"
+    local repo="${NABSPATH:-.}/bin/newspack-manage-host"
+    [ -f "$installed" ] && [ -f "$repo" ] || return 0
+    cmp -s "$installed" "$repo" && return 0
+    log_warning "The installed newspack-manage-host differs from this checkout's copy."
+    log_warning "Re-run ./bin/setup-networking.sh to update it (it runs as root via sudo)."
+}
+
 log_error() { echo -e "${NP_RED}[ERROR]${NP_NC} ${1}"; }

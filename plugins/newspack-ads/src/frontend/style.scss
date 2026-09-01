@@ -211,9 +211,19 @@
 		margin-top: 8px;
 	}
 	// Match the ad background treatment for Broadstreet zones, which render
-	// into a <broadstreet-zone-container> custom element.
+	// into a <broadstreet-zone-container> custom element. Zone containers
+	// persist in the DOM even when the zone is unfilled, and street.js always
+	// leaves a <broadstreet-zone><div> skeleton inside them (so :has(*) can't
+	// tell filled from empty). A filled zone has elements inside that div
+	// wrapper or a creative element in the container; empty zones must not
+	// render as a padded colored gap. In browsers without :has() support the
+	// unknown selector drops just this rule (filled ads lose the decoration
+	// there; cosmetic degradation only).
+	// The same filled-zone test is duplicated in the theme
+	// (newspack-theme/inc/color-patterns.php) — keep the two selectors in
+	// sync (NPPM-2975).
 	/* stylelint-disable selector-type-no-unknown */
-	broadstreet-zone-container {
+	broadstreet-zone-container:has(broadstreet-zone div *, a, iframe, img, video) {
 		align-items: center;
 		display: flex;
 		justify-content: center;

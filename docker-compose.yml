@@ -61,6 +61,19 @@ services:
       - APACHE_RUN_USER=${USE_CUSTOM_APACHE_USER:-www-data}
     extra_hosts:
       - "host.docker.internal:host-gateway"
+    ## Apache runs in the foreground, so it takes the container down with it when
+    ## it dies. memcached does not: it can exit and leave a container that looks
+    ## healthy while the object cache quietly stops invalidating. The in-container
+    ## watchdog restarts it within ~30s, so this probe is the second line of
+    ## defence -- it reports unhealthy only for a memcached the watchdog could not
+    ## revive. start_period covers a cold boot, where memcached starts only after
+    ## init-wp.sh has downloaded WordPress and waited for MariaDB.
+    healthcheck:
+      test: ["CMD", "bash", "-c", "echo > /dev/tcp/127.0.0.1/11211"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 180s
   mailhog:
     image: arjenz/mailhog:latest
     restart: always

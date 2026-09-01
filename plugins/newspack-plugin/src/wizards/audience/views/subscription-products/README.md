@@ -93,7 +93,7 @@ Add/Edit is a **full-page routed wizard section**, mirroring the institutions ed
   right) with `Divider`s. **Save / back live in the wizard header** (set via `setHeaderData`,
   not inline buttons), exactly like `InstitutionEdit`. It `POST`s to create or `PUT`s to
   update, shows a success snackbar, then `history.push('/')` back to the list (which refetches
-  on mount). The list's **Add plan** action is an `href` to `#/new`; the row **Edit** action
+  on mount). The list's **Add Plan** action is an `href` to `#/new`; the row **Edit** action
   and the product-name link `history.push('/edit/{id}')`. It covers all three types, plus a
 category picker (`FormTokenField` over `available_categories`), an **Availability** select
 (public/private/free → maps to the convention category, since availability is derived not

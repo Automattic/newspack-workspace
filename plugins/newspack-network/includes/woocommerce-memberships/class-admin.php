@@ -278,7 +278,7 @@ class Admin {
 			return $actions;
 		}
 		$link     = self::get_edit_post_link( '', $post->ID );
-		$link_tag = sprintf( '<a href="%s" target="_blank">%s</a>', $link, $remote_url );
+		$link_tag = sprintf( '<a href="%s" target="_blank">%s</a>', esc_url( $link ), esc_html( $remote_url ) );
 		return [
 			'none' => sprintf(
 				// translators: %s is the site URL with a link to edit the post.

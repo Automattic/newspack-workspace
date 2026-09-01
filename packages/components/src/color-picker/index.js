@@ -27,7 +27,7 @@ const { InteractiveDiv } = utils;
  *
  * @param {Object}             props             - Component props.
  * @param {JSX.Element|string} props.label       - Label for the color picker.
- * @param {JSX.Element|string} props.help        - Help text for the color picker.
+ * @param {JSX.Element|string} [props.help]      - Help text for the color picker.
  * @param {string}             [props.color]     - Default color.
  * @param {Function}           props.onChange    - Function to call when the color changes.
  * @param {string}             [props.className] - Additional class name.

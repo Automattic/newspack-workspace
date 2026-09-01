@@ -47,7 +47,7 @@ export default function usePrebuiltLayouts() {
 							// id=0 is unreachable for real users — doubles as the
 							// prebuilt sentinel for the author filter.
 							author: 0,
-							newspack_newsletters_author: { id: 0, name: __( 'Newspack', 'newspack-newsletters' ), avatar: '' },
+							newspack_newsletters_author: { id: 0, name: __( 'Newspack', 'newspack-newsletters' ), avatar_urls: {} },
 						};
 					} );
 				setLayouts( prebuilts );

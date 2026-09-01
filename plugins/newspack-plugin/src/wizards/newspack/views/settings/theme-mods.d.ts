@@ -126,13 +126,6 @@ interface AdvancedSettings {
 	newspack_image_credits_placeholder: number | null;
 	newspack_image_credits_auto_populate: boolean;
 
-	// Accessibility Statement.
-	accessibility_statement_page?: {
-		editUrl: string;
-		status: string;
-		pageUrl: string;
-	};
-
 	// Post Date.
 	post_time_ago: boolean;
 	post_time_ago_cut_off: number;
@@ -146,19 +139,20 @@ interface AdvancedSettings {
 	post_content_fallback_image?: string | null;
 
 	// Private Tags settings (present unless the feature is opted out via the NEWSPACK_PRIVATE_TAGS_DISABLED constant or the newspack_private_tags_enabled filter).
+	// Individual keys are optional because updates are deep-merged (via useObjectState), so a single-key payload is a valid update.
 	newspack_private_tags_settings?: {
-		all: boolean;
-		archives: boolean;
-		feeds: boolean;
-		feed_terms: boolean;
-		tag_links: boolean;
-		tag_clouds: boolean;
-		css_classes: boolean;
-		gam_targeting: boolean;
-		yoast_metadata: boolean;
-		yoast_sitemap: boolean;
-		reader_data: boolean;
-		[ key: string ]: boolean;
+		all?: boolean;
+		archives?: boolean;
+		feeds?: boolean;
+		feed_terms?: boolean;
+		tag_links?: boolean;
+		tag_clouds?: boolean;
+		css_classes?: boolean;
+		gam_targeting?: boolean;
+		yoast_metadata?: boolean;
+		yoast_sitemap?: boolean;
+		reader_data?: boolean;
+		[ key: string ]: boolean | undefined;
 	};
 }
 

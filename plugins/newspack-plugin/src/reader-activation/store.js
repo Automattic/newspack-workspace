@@ -344,7 +344,18 @@ export default function Store() {
 			if ( unsyncedKeys.includes( key ) && ! mergeStrategies.has( key ) ) {
 				continue;
 			}
-			rehydrateItem( key, decode( items[ key ] ) );
+			// Decode inside the loop's own guard: a single unparseable stored
+			// value (e.g. a legacy comma list, see NPPM-3205) must skip only
+			// its key, not abort hydration of every key after it.
+			let value;
+			try {
+				value = decode( items[ key ] );
+			} catch ( err ) {
+				// eslint-disable-next-line no-console
+				console.warn( `Unable to decode ${ key } for rehydration`, err );
+				continue;
+			}
+			rehydrateItem( key, value );
 		}
 	}
 

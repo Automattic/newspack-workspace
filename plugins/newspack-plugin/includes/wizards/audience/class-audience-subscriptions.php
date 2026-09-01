@@ -18,6 +18,8 @@ defined( 'ABSPATH' ) || exit;
  * being wired in here, so a tab can ship without touching the shell.
  */
 class Audience_Subscriptions extends Wizard {
+	use Wizards\Traits\Audience_Management_Dependency;
+
 	/**
 	 * Admin page slug.
 	 *
@@ -59,15 +61,17 @@ class Audience_Subscriptions extends Wizard {
 		add_action( 'rest_api_init', [ $this, 'register_api_endpoints' ] );
 
 		self::register_tab(
-			'configuration',
+			'advanced-settings',
 			[
 				// Unescaped: the label is localized into a nested array, where
 				// wp_localize_script() doesn't decode entities, and React escapes
 				// it at render anyway. Escaping here would ship `&#8217;` to
 				// locales whose translation contains an apostrophe.
-				'label' => __( 'Configuration', 'newspack-plugin' ),
-				'path'  => '/configuration',
-				'order' => 10,
+				'label' => __( 'Advanced Settings', 'newspack-plugin' ),
+				'path'  => '/advanced-settings',
+				// Sits after every subscriber-commerce feature tab, which claim the
+				// lower orders.
+				'order' => 40,
 			]
 		);
 	}
@@ -495,25 +499,26 @@ class Audience_Subscriptions extends Wizard {
 
 		parent::enqueue_scripts_and_styles();
 		wp_enqueue_script( 'newspack-wizards' );
-		wp_localize_script(
-			'newspack-wizards',
-			'newspackAudienceSubscriptions',
-			[
-				'tabs'                     => self::get_tabs(),
-				'memberships_url'          => admin_url( 'edit.php?post_type=wc_membership_plan' ),
-				'memberships_active'       => Memberships::is_active(),
-				'primary_product'          => $primary_product ? $primary_product->get_id() : '',
-				'eligible_products'        => array_map(
-					function ( $product ) {
-						return [
-							'id'    => $product->get_id(),
-							'title' => $product->get_title(),
-						];
-					},
-					Subscriptions_Tiers::get_tier_eligible_products()
-				),
-				'upgrade_subscription_url' => Subscriptions_Tiers::get_upgrade_subscription_url(),
-			]
-		);
+		$data = [
+			'tabs'                     => self::get_tabs(),
+			'memberships_url'          => admin_url( 'edit.php?post_type=wc_membership_plan' ),
+			'memberships_active'       => Memberships::is_active(),
+			'primary_product'          => $primary_product ? $primary_product->get_id() : '',
+			'eligible_products'        => array_map(
+				function ( $product ) {
+					return [
+						'id'    => $product->get_id(),
+						'title' => $product->get_title(),
+					];
+				},
+				Subscriptions_Tiers::get_tier_eligible_products()
+			),
+			'upgrade_subscription_url' => Subscriptions_Tiers::get_upgrade_subscription_url(),
+		];
+		// array_merge, not `+`: the trait's keys have to win a collision. With `+`
+		// a key added to the array above would silently shadow the prerequisite
+		// state and unblock the screen.
+		$data = array_merge( $data, $this->get_audience_management_script_data() );
+		wp_localize_script( 'newspack-wizards', 'newspackAudienceSubscriptions', $data );
 	}
 }

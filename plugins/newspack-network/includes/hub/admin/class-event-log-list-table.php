@@ -143,16 +143,27 @@ class Event_Log_List_Table extends \WP_List_Table {
 	 * @return string
 	 */
 	protected function get_data_column( $item ) {
-		$str = wp_json_encode( $item->get_data(), JSON_PRETTY_PRINT );
-		if ( 300 > strlen( $str ) ) {
+		// Measure the raw JSON, not the escaped string. Escaping inflates every
+		// quote from one byte to six, so a payload of a few hundred bytes crosses
+		// the threshold on punctuation alone and renders collapsed when it should
+		// render inline. The cast covers wp_json_encode() returning false, which
+		// strlen() would otherwise take as a deprecated null-ish argument.
+		$json = (string) wp_json_encode( $item->get_data(), JSON_PRETTY_PRINT );
+
+		if ( 300 > strlen( $json ) ) {
 			return sprintf(
 				'<div class="newspack-network-data-column"><pre><code>%1$s</code></pre></div>',
-				$str
+				esc_html( $json )
 			);
 		}
+
+		// esc_textarea() rather than esc_html(): js/event-log.js reads this
+		// element's .value and copies it to the clipboard, and esc_html() does not
+		// double-encode, so data legitimately containing "&amp;" would decode back
+		// to "&" and reach the clipboard altered. esc_textarea() round-trips.
 		return sprintf(
 			'<div class="newspack-network-data-column"><textarea disabled>%1$s</textarea><button type="button" class="button button-secondary">%2$s</button></div>',
-			$str,
+			esc_textarea( $json ),
 			esc_html__( 'Copy to clipboard', 'newspack-network' )
 		);
 	}
@@ -171,11 +182,11 @@ class Event_Log_List_Table extends \WP_List_Table {
 			case 'date':
 				return gmdate( get_option( 'date_format' ) . ' ' . get_option( 'time_format' ), $item->get_timestamp() );
 			case 'summary':
-				return $item->get_summary();
+				return esc_html( $item->get_summary() );
 			case 'node':
-				return $item->get_node_url() ? $item->get_node_url() : '-';
+				return $item->get_node_url() ? esc_html( $item->get_node_url() ) : '-';
 			case 'action_name':
-				return $item->get_action_name();
+				return esc_html( $item->get_action_name() );
 			case 'data':
 				return $this->get_data_column( $item );
 			default:

@@ -30,6 +30,37 @@ function nspc_deactivate() {
 }
 
 /**
+ * The post types the checker rescues.
+ *
+ * WordPress's `post_type => 'any'` shorthand matches only types whose
+ * `exclude_from_search` is false — which it derives from `public` when the
+ * argument is omitted. Editor-authored types registered `public => false`
+ * (Campaign prompts, Sponsors) are therefore invisible to `'any'`, so a
+ * scheduled one that misses its cron slot would otherwise sit in `future`
+ * indefinitely. Start from the search-visible set and add those known editorial
+ * types; the filter lets any plugin register its own schedulable type.
+ *
+ * @return string[] Post type slugs.
+ */
+function nspc_get_post_types() {
+	$post_types = get_post_types( [ 'exclude_from_search' => false ] );
+
+	foreach ( [ 'newspack_popups_cpt', 'newspack_spnsrs_cpt' ] as $editorial_cpt ) {
+		if ( post_type_exists( $editorial_cpt ) ) {
+			$post_types[ $editorial_cpt ] = $editorial_cpt;
+		}
+	}
+
+	/**
+	 * Filters the post types the scheduled-post checker rescues. Add a slug here
+	 * to have a non-public, editor-scheduled CPT rescued when it misses its slot.
+	 *
+	 * @param string[] $post_types Post type slugs.
+	 */
+	return apply_filters( 'newspack_scheduled_post_checker_post_types', array_values( $post_types ) );
+}
+
+/**
  * Check to see if any posts have missed schedule, and try sending them live again if so.
  */
 function nspc_run_check() {
@@ -37,10 +68,12 @@ function nspc_run_check() {
 
 	$posts_with_missed_schedule = get_posts(
 		[
-			'post_status' => 'future',
-			'post_type'   => 'any',
-			'fields'      => 'ids',
-			'date_query'  => [
+			'post_status'    => 'future',
+			'post_type'      => nspc_get_post_types(),
+			'fields'         => 'ids',
+			// Rescue a backlog in one run rather than the get_posts() default of 5.
+			'posts_per_page' => 100,
+			'date_query'     => [
 				[
 					'before'    => $time,
 					'inclusive' => false,

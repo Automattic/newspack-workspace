@@ -400,8 +400,11 @@ class Outgoing_Post {
 			return $this->post->post_content;
 		}
 
-		$blocks = array_map(
-			[ Blocks::class, 'process_outgoing_block' ],
+		$post_id = $this->post->ID;
+		$blocks  = array_map(
+			function ( $block ) use ( $post_id ) {
+				return Blocks::process_outgoing_block( $block, $post_id );
+			},
 			parse_blocks( $this->post->post_content )
 		);
 

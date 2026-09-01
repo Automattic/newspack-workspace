@@ -37,6 +37,26 @@ describe( 'ads buildQueryParams', () => {
 		}
 	} );
 
+	// The dedicated terms field carries the names, so no request on this
+	// screen embeds anything — that is what keeps `_links` out too.
+	it.each( [
+		[ 'a term-backed column', [ 'title', 'advertiser' ] ],
+		[ 'no term-backed column', [ 'title', 'start_date' ] ],
+	] )( 'never embeds terms, with %s visible', ( unused, fields ) => {
+		const params = buildQueryParams( { fields } );
+		expect( params._embed ).toBeUndefined();
+		expect( params._fields.split( ',' ) ).toContain( 'newspack_newsletters_terms' );
+	} );
+
+	it( 'always requests the raw term IDs so Quick Edit can hydrate without the embed', () => {
+		const fields = buildQueryParams( { fields: [ 'title' ] } )._fields.split( ',' );
+		expect( fields ).toEqual( expect.arrayContaining( [ 'newspack_nl_advertiser', 'ad_placement', 'categories' ] ) );
+	} );
+
+	it( 'drops _links along with the embed, since nothing else reads it', () => {
+		expect( buildQueryParams( { fields: [ 'title' ] } )._fields.split( ',' ) ).not.toContain( '_links' );
+	} );
+
 	it( 'defaults to writable statuses (no trash) when no kind filter is set', () => {
 		const { status, newspack_newsletters_ad_status: kindParam } = buildQueryParams( {} );
 		expect( status.split( ',' ) ).toEqual( expect.arrayContaining( [ 'publish', 'private', 'future', 'draft', 'pending' ] ) );
@@ -53,9 +73,8 @@ describe( 'ads buildQueryParams', () => {
 		expect( status.split( ',' ) ).toContain( 'future' );
 	} );
 
-	it( 'includes auto-draft so a post-new + back row stays visible', () => {
-		const { status } = buildQueryParams( {} );
-		expect( status.split( ',' ) ).toContain( 'auto-draft' );
+	it( 'excludes auto-draft so an abandoned "Add new" never reaches the list', () => {
+		expect( buildQueryParams( {} ).status.split( ',' ) ).not.toContain( 'auto-draft' );
 	} );
 
 	it( 'maps a single kind filter to the kind-specific REST query param', () => {

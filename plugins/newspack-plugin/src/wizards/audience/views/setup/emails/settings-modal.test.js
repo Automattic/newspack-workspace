@@ -132,14 +132,13 @@ jest.mock( './email-preview', () => ( {
 } ) );
 
 // Single mock for the packages/components/src barrel covers both the
-// grid (Badge, DataViews, Notice, utils) and the modal (Button, Modal,
+// grid (DataViews, Notice, utils) and the modal (Button, Modal,
 // useConfirmDialog). useConfirmDialog is captured via the top-level
 // spy so tests can assert when it was called and whether the callback
 // fired.
 jest.mock( '../../../../../../packages/components/src', () => {
 	const React = require( 'react' );
 	return {
-		Badge: ( { text } ) => <span>{ text }</span>,
 		DataViews: ( { data, header } ) => (
 			<div data-testid="dataviews">
 				{ header }

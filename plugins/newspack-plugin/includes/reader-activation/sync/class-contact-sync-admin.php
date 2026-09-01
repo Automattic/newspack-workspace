@@ -54,7 +54,9 @@ class Contact_Sync_Admin {
 	 *
 	 * @param int $user_id User to get the URL for.
 	 *
-	 * @return string Admin URL to perform the admin action.
+	 * @return string Admin URL to perform the admin action. Built from the current
+	 *                request, so callers must escape it with esc_url() when
+	 *                rendering it into markup.
 	 */
 	private static function get_admin_action_url( $user_id ) {
 		if ( ! \is_admin() ) {
@@ -85,7 +87,7 @@ class Contact_Sync_Admin {
 			return $actions;
 		}
 		$url = self::get_admin_action_url( $user->ID );
-		$actions[ self::ADMIN_ACTION ] = '<a href="' . $url . '">' . \esc_html__( 'Resync contact to ESP', 'newspack-plugin' ) . '</a>';
+		$actions[ self::ADMIN_ACTION ] = '<a href="' . \esc_url( $url ) . '">' . \esc_html__( 'Resync contact to ESP', 'newspack-plugin' ) . '</a>';
 		return $actions;
 	}
 

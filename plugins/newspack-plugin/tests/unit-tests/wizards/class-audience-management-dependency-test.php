@@ -277,4 +277,41 @@ class Audience_Management_Dependency_Test extends WP_UnitTestCase {
 		// where wp_localize_script() would stringify an integer 0 to the truthy '0'.
 		$this->assertFalse( $disabled['audience_management_enabled'] );
 	}
+
+	/**
+	 * The Subscriptions screen carries the trait's keys into its own localized
+	 * config, which is what its blocked state renders from.
+	 *
+	 * Its JS spec builds `newspackAudienceSubscriptions` itself, so nothing on
+	 * that side would notice the wizard dropping the trait or shadowing its keys —
+	 * both suites would stay green while the screen rendered unblocked.
+	 *
+	 * `enqueue_scripts_and_styles()` gates on `filter_input( INPUT_GET, … )`,
+	 * which reads the SAPI's request data and cannot be faked from a test, so the
+	 * merge direction is pinned by reading the source. The rest is structural.
+	 */
+	public function test_subscriptions_wizard_carries_the_prerequisite_into_its_config() {
+		$subscriptions_wizard = new \Newspack\Audience_Subscriptions();
+
+		$this->assertContains(
+			\Newspack\Wizards\Traits\Audience_Management_Dependency::class,
+			class_uses( $subscriptions_wizard ),
+			'The Subscriptions screen depends on Audience Management, so it uses the shared trait.'
+		);
+
+		$script_data = $subscriptions_wizard->get_audience_management_script_data();
+		$this->assertArrayHasKey( 'audience_management_enabled', $script_data );
+		$this->assertArrayHasKey( 'audience_management_url', $script_data );
+
+		// array_merge, not `+`: the trait has to win a key collision, or a key added
+		// to the wizard's own config could shadow the prerequisite and unblock the
+		// screen. The two operators differ only in that direction.
+		$reflected_enqueue = new \ReflectionMethod( $subscriptions_wizard, 'enqueue_scripts_and_styles' );
+		$wizard_source     = file_get_contents( $reflected_enqueue->getFileName() ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents, WordPressVIPMinimum.Performance.FetchingRemoteData.FileGetContentsUnknown
+		$this->assertMatchesRegularExpression(
+			'/array_merge\(\s*\$data,\s*\$this->get_audience_management_script_data\(\)\s*\)/',
+			$wizard_source,
+			'The trait wins a key collision, so the prerequisite cannot be shadowed.'
+		);
+	}
 }

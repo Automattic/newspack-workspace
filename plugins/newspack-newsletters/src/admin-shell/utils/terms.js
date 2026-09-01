@@ -47,16 +47,55 @@ export const termsForTaxonomy = ( item, taxonomy ) => {
 	return Array.isArray( terms ) ? terms : [];
 };
 
-export const initialSelectionsForTaxonomy = ( item, taxonomy ) =>
+const initialSelectionsForTaxonomy = ( item, taxonomy ) =>
 	termsForTaxonomy( item, taxonomy )
 		.map( term => ( { id: term?.id, name: term?.name } ) )
 		.filter( s => typeof s.id === 'number' && s.name );
 
-export const selectionsFromIds = ( ids, options ) =>
+const selectionsFromIds = ( ids, options ) =>
 	( Array.isArray( ids ) ? ids : [] )
 		.map( id => ( Array.isArray( options ) ? options : [] ).find( option => option?.id === id ) )
 		.filter( option => option && option.name )
 		.map( option => ( { id: option.id, name: option.name } ) );
+
+// Resolve a post's stored term IDs into `{ id, name }` selections from both
+// the dedicated terms field and a fetched options list. Neither source is
+// complete on its own: the terms field is only requested when a term-backed
+// column is visible, and the options list can lag or fail. Both yield the
+// same REST `name` for a given term, so precedence is immaterial today — but
+// it is the terms field that wins, being spread last into a `Map` that keeps
+// the last entry per ID.
+export const selectionsForTaxonomy = ( item, ids, taxonomy, options ) => {
+	const embedded = initialSelectionsForTaxonomy( item, taxonomy );
+	if ( ! Array.isArray( ids ) ) {
+		return embedded;
+	}
+	const byId = new Map( [ ...selectionsFromIds( ids, options ), ...embedded ].map( selection => [ selection.id, selection ] ) );
+	return ids.map( id => byId.get( id ) ).filter( Boolean );
+};
+
+// IDs the options list cannot account for. Distinct from `unresolvedIds`,
+// which measures against the merged selections: the terms field can render a
+// token the options list has never heard of, and that token looks editable while
+// being impossible to restore, since the options list is what feeds both the
+// suggestions and `__experimentalValidateInput`. Remove it once and it cannot
+// be typed back. So this, not the merged gap, is what decides editability.
+export const idsMissingFromOptions = ( ids, options ) => {
+	const known = new Set( ( Array.isArray( options ) ? options : [] ).map( option => option?.id ) );
+	return ( Array.isArray( ids ) ? ids : [] ).filter( id => typeof id === 'number' && ! known.has( id ) );
+};
+
+// Union of two term lists, newest name winning, sorted by name to match the
+// REST default. Used when a list is re-fetched: `fetchAllTerms` returns
+// whatever it collected when a page request fails, so replacing a good list
+// with a short one would drop terms that are still there. Growing only means a
+// failed re-attempt can never cost ground. The trade is that a term deleted
+// elsewhere lingers until the screen is reloaded.
+export const mergeTerms = ( current, next ) => {
+	const byId = new Map( ( Array.isArray( current ) ? current : [] ).map( term => [ term.id, term ] ) );
+	( Array.isArray( next ) ? next : [] ).forEach( term => byId.set( term.id, term ) );
+	return [ ...byId.values() ].sort( ( a, b ) => String( a.name ).localeCompare( String( b.name ) ) );
+};
 
 export const unresolvedIds = ( ids, selections ) => {
 	const resolved = new Set( selections.map( selection => selection.id ) );

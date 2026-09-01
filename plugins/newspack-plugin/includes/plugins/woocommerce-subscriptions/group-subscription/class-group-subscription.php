@@ -156,22 +156,58 @@ class Group_Subscription {
 	}
 
 	/**
+	 * Get the option name holding a container-label override.
+	 *
+	 * The one place the key is assembled. Registration and reads both go through it,
+	 * so a rename cannot leave writes pointing at the old key while reads move to the
+	 * new one — a split that surfaces only as a publisher's override silently ceasing
+	 * to take effect.
+	 *
+	 * @param string $variant Either 'singular' or 'plural'. Unknown variants fall back to singular.
+	 *
+	 * @return string The option name.
+	 */
+	public static function get_label_option_key( string $variant = 'singular' ): string {
+		return 'newspack_group_subscription_label_' . ( 'plural' === $variant ? 'plural' : 'singular' );
+	}
+
+	/**
+	 * Get the publisher's raw container-label override.
+	 *
+	 * Callers that need to tell a custom noun from the default — rather than just
+	 * render one — read this instead of get_label().
+	 *
+	 * @param string $variant Either 'singular' or 'plural'. Unknown variants fall back to singular.
+	 *
+	 * @return string The trimmed override, or an empty string when the publisher has set none.
+	 */
+	public static function get_label_override( string $variant = 'singular' ): string {
+		return trim( (string) \get_option( self::get_label_option_key( $variant ), '' ) );
+	}
+
+	/**
+	 * Get the translated default container label.
+	 *
+	 * @param string $variant Either 'singular' or 'plural'. Unknown variants fall back to singular.
+	 *
+	 * @return string The translated default.
+	 */
+	public static function get_default_label( string $variant = 'singular' ): string {
+		return 'plural' === $variant
+			? __( 'Groups', 'newspack-plugin' )
+			: __( 'Group', 'newspack-plugin' );
+	}
+
+	/**
 	 * Get the publisher-configurable container label.
 	 *
 	 * @param string $variant Either 'singular' or 'plural'. Unknown variants fall back to singular.
 	 *
 	 * @return string The override if the publisher has set a non-blank one, otherwise the translated default.
 	 */
-	public static function get_label( $variant = 'singular' ) {
-		$variant    = 'plural' === $variant ? 'plural' : 'singular';
-		$option_key = 'newspack_group_subscription_label_' . $variant;
-		$override   = trim( (string) \get_option( $option_key, '' ) );
-		if ( '' !== $override ) {
-			return $override;
-		}
-		return 'plural' === $variant
-			? __( 'Groups', 'newspack-plugin' )
-			: __( 'Group', 'newspack-plugin' );
+	public static function get_label( string $variant = 'singular' ): string {
+		$override = self::get_label_override( $variant );
+		return '' !== $override ? $override : self::get_default_label( $variant );
 	}
 
 	/**

@@ -290,6 +290,23 @@ class Premium_Newsletters {
 	}
 
 	/**
+	 * Whether premium newsletter gates govern access on this site yet.
+	 *
+	 * Access still belongs to Woo Memberships until a site cuts over, so the
+	 * restriction filter hands back whatever it was given while Memberships is
+	 * active. That is harmless for a render decision and wrong for an access one:
+	 * this class asks by passing `false`, which comes back reading as "nobody is
+	 * restricted", and with auto-signup on that subscribes every queued reader to
+	 * every gated list. Gates are safe to create ahead of a cutover only because
+	 * everything here stands down until Memberships is gone.
+	 *
+	 * @return bool
+	 */
+	private static function is_access_control_active(): bool {
+		return Content_Gate::is_gating_active() && ! Memberships::is_active();
+	}
+
+	/**
 	 * Check list access for the user.
 	 *
 	 * The renewal snapshot is only consulted when this access check was enqueued
@@ -305,11 +322,8 @@ class Premium_Newsletters {
 	 * @return void
 	 */
 	private static function check_access( $user_id, $source = '' ) {
-		// This uses restriction as an *access* decision, not a render decision, so it
-		// cannot inherit the render path's "inert means unrestricted" reading: that
-		// would turn every restricted list from one to remove into one to add and push
-		// the result to the ESP. Bail before any per-user or per-list lookup.
-		if ( ! Content_Gate::is_gating_active() ) {
+		// Bail before any per-user or per-list lookup: see is_access_control_active().
+		if ( ! self::is_access_control_active() ) {
 			return;
 		}
 		$user = get_user_by( 'id', $user_id );
@@ -408,9 +422,9 @@ class Premium_Newsletters {
 		// Guarded at the chokepoint rather than per handler: the renewal handler
 		// reaches this directly rather than through maybe_enqueue_access_check(), and
 		// a fifth entry point would otherwise have to remember on its own. Nothing
-		// accumulates while gating is inactive, so re-enabling processes current
+		// accumulates while access control is inactive, so re-enabling processes current
 		// events rather than a backlog of stale ones.
-		if ( ! Content_Gate::is_gating_active() ) {
+		if ( ! self::is_access_control_active() ) {
 			return;
 		}
 		$user_id = (int) $user_id;
@@ -480,12 +494,12 @@ class Premium_Newsletters {
 		// Clearing discards pending entries rather than holding them, so re-enabling
 		// processes current events instead of replaying a stale backlog. The cost is
 		// that entitlement changes made during the off window are not reconciled: a
-		// reader who cancels while gating is inactive keeps their premium list
+		// reader who cancels while access control is inactive keeps their premium list
 		// membership until their next subscription event. Accepted deliberately —
 		// acting on hours-old subscription state is the worse failure — but it means
 		// the off window is not free, and a reconciliation sweep on re-enable is the
 		// fix if that ever bites.
-		if ( ! Content_Gate::is_gating_active() ) {
+		if ( ! self::is_access_control_active() ) {
 			if ( wp_next_scheduled( self::SCHEDULED_HOOK ) || ! empty( get_option( self::QUEUE_OPTION, [] ) ) ) {
 				self::unschedule_access_check_event();
 			}
@@ -570,8 +584,8 @@ class Premium_Newsletters {
 	public static function set_subscribed_lists( $timestamp, $data, $client_id ) {
 		// Bail before the work, not just before the queue write: the snapshot below
 		// costs a remote ESP round-trip and a user-meta write, and it exists only to
-		// inform an access check that cannot run while gating is inactive.
-		if ( ! Content_Gate::is_gating_active() ) {
+		// inform an access check that cannot run while access control is inactive.
+		if ( ! self::is_access_control_active() ) {
 			return;
 		}
 		if ( empty( $data['user_id'] ) ) {

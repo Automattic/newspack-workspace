@@ -406,6 +406,106 @@ final class Magic_Link {
 	}
 
 	/**
+	 * Restrict a magic-link base URL to the site's own origin.
+	 *
+	 * The base becomes the reader's authentication link, so it must resolve to
+	 * the site itself. Core's wp_validate_redirect does the parse-hardening — it
+	 * rejects mailto:/javascript: and other schemeful-but-host-less URLs,
+	 * protocol-relative //host bases, and backslash authorities a browser would
+	 * read as a host. On top of that, this re-checks the FULL origin (scheme,
+	 * host, port) against home_url(), which is stricter than wp_validate_redirect
+	 * in two ways that matter here: it does not inherit the platform-wide
+	 * allowed_redirect_hosts list (which other flows populate for browser
+	 * navigation, e.g. donation checkout — a broader allowance than an
+	 * authentication link should take), and it pins the scheme, so an http://
+	 * base cannot downgrade an https link.
+	 *
+	 * @param string $url Candidate base URL.
+	 * @return string An absolute same-origin base, or home_url() when $url is off-origin or empty.
+	 */
+	private static function restrict_redirect_to_origin( $url ) {
+		// A non-string base (a wp_parse_url() array reaching a caller with
+		// neither a redirect_url nor a Referer) would fatal inside
+		// wp_validate_redirect()'s trim(). Normalising here rather than at each
+		// entry point is what makes the fail-closed guarantee above uniform:
+		// both builders funnel through this helper, only one used to guard.
+		if ( ! \is_string( $url ) ) {
+			$url = '';
+		}
+
+		if ( empty( $url ) ) {
+			return \home_url();
+		}
+
+		// Core parser-hardening. An empty fallback lets us distinguish rejection
+		// (mailto:, javascript:, //host, backslash authorities, malformed) from a
+		// value we then origin-check ourselves.
+		$candidate = \wp_validate_redirect( $url, '' );
+		if ( empty( $candidate ) ) {
+			return \home_url();
+		}
+
+		$target = \wp_parse_url( $candidate );
+
+		// wp_parse_url() returns false on a malformed URL. wp_validate_redirect()
+		// should already have rejected anything that would reach this point
+		// malformed, but this is a security helper, so its fail-closed guarantee
+		// must hold even if that upstream assumption ever changes.
+		if ( false === $target ) {
+			return \home_url();
+		}
+
+		$home = \wp_parse_url( \home_url() );
+
+		// A host-less result is a same-site path; wp_validate_redirect has already
+		// rejected the protocol-relative and backslash shapes that only look
+		// path-like. Anything carrying a host has to match ours exactly.
+		if ( ! empty( $target['host'] )
+			&& self::url_origin( $target, $home['scheme'] ) !== self::url_origin( $home, $home['scheme'] ) ) {
+			return \home_url();
+		}
+
+		// Rebuild from the path onward instead of returning the candidate as it
+		// arrived. Three things fall out of that: the result is absolute, which
+		// matters because this value is emailed and a relative URL has nothing
+		// to resolve against in a mail client; any user:pass segment is dropped,
+		// which the origin comparison reads past; and the port is spelled the
+		// way home_url() spells it.
+		$path = isset( $target['path'] ) ? $target['path'] : '';
+		if ( isset( $target['query'] ) ) {
+			$path .= '?' . $target['query'];
+		}
+		if ( isset( $target['fragment'] ) ) {
+			$path .= '#' . $target['fragment'];
+		}
+
+		return \home_url( $path );
+	}
+
+	/**
+	 * Build a comparable scheme://host:port origin from wp_parse_url() parts.
+	 *
+	 * A URL that spells out its scheme's default port is the same origin as one
+	 * that omits it, so `https://example.org:443` must not compare unequal to
+	 * `https://example.org` and send a legitimate destination to the home page.
+	 *
+	 * @param array  $parts          Output of wp_parse_url().
+	 * @param string $default_scheme Scheme to assume when the URL omits one.
+	 * @return string Normalised origin.
+	 */
+	private static function url_origin( $parts, $default_scheme ) {
+		$scheme = \strtolower( isset( $parts['scheme'] ) ? $parts['scheme'] : $default_scheme );
+		$host   = \strtolower( isset( $parts['host'] ) ? $parts['host'] : '' );
+		$port   = isset( $parts['port'] ) ? (int) $parts['port'] : null;
+
+		if ( ( 'http' === $scheme && 80 === $port ) || ( 'https' === $scheme && 443 === $port ) ) {
+			$port = null;
+		}
+
+		return $scheme . '://' . $host . ( null !== $port ? ':' . $port : '' );
+	}
+
+	/**
 	 * Check for active magic link tokens.
 	 *
 	 * @param \WP_User $user User to check the active magic link token for.
@@ -446,7 +546,11 @@ final class Magic_Link {
 	 * Generate a magic link.
 	 *
 	 * @param \WP_User $user User to generate the magic link for.
-	 * @param string   $url  Destination url. Default is home_url().
+	 * @param string   $url  Destination url. Default is home_url(). Must be
+	 *                       same-origin; an off-origin value is silently replaced
+	 *                       by home_url(). A cross-domain destination is still
+	 *                       supported after sign-in, as a `redirect` query
+	 *                       parameter inside the same-site link.
 	 *
 	 * @return string|\WP_Error Magic link url or WP_Error if token generation failed.
 	 */
@@ -463,7 +567,7 @@ final class Magic_Link {
 				'token'  => $token_data['token'],
 				'secret' => self::generate_secret( $user ),
 			],
-			! empty( $url ) ? $url : \home_url()
+			self::restrict_redirect_to_origin( $url )
 		);
 	}
 
@@ -471,19 +575,15 @@ final class Magic_Link {
 	 * Send magic link email to reader.
 	 *
 	 * @param \WP_User $user        User to send the magic link to.
-	 * @param string   $redirect_to Which page to redirect the reader after authenticating.
+	 * @param string   $redirect_to Which page to redirect the reader after
+	 *                              authenticating. Must be same-origin; an
+	 *                              off-origin value is silently replaced by
+	 *                              home_url().
 	 * @param boolean  $use_otp     Whether to attempt the use of OTP.
 	 *
 	 * @return bool|\WP_Error Whether the email was sent or WP_Error if sending failed.
 	 */
 	public static function send_email( $user, $redirect_to = '', $use_otp = true ) {
-		// Guard against a non-string redirect (e.g. a wp_parse_url() array passed
-		// through from a caller when neither a redirect_url nor a Referer is
-		// available). add_query_arg() would otherwise run strstr() on the array
-		// and fatal with a TypeError.
-		if ( ! \is_string( $redirect_to ) ) {
-			$redirect_to = '';
-		}
 		// Send reminder to non-reader accounts to use standard WP login.
 		if ( ! Reader_Activation::is_user_reader( $user ) ) {
 			return Reader_Activation::send_non_reader_login_reminder( $user );
@@ -503,7 +603,7 @@ final class Magic_Link {
 				'token'  => $token_data['token'],
 				'secret' => self::generate_secret( $user ),
 			],
-			! empty( $redirect_to ) ? $redirect_to : \home_url()
+			self::restrict_redirect_to_origin( $redirect_to )
 		);
 		$email_type         = 'MAGIC_LINK';
 		$email_placeholders = [
@@ -1006,7 +1106,9 @@ final class Magic_Link {
 	 * @param string $action  Which admin action get the URL for.
 	 * @param int    $user_id User to get the URL for.
 	 *
-	 * @return string Admin URL to perform an admin action.
+	 * @return string Admin URL to perform an admin action. Built from the current
+	 *                request, so callers must escape it with esc_url() when
+	 *                rendering it into markup.
 	 */
 	private static function get_admin_action_url( $action, $user_id ) {
 		if ( ! \is_admin() ) {
@@ -1039,7 +1141,7 @@ final class Magic_Link {
 		}
 		if ( self::can_magic_link( $user->ID ) && \current_user_can( 'edit_user', $user->ID ) ) {
 			$url                                 = self::get_admin_action_url( 'send', $user->ID );
-			$actions['newspack-magic-link-send'] = '<a href="' . $url . '">' . \esc_html__( 'Send authentication link', 'newspack-plugin' ) . '</a>';
+			$actions['newspack-magic-link-send'] = '<a href="' . \esc_url( $url ) . '">' . \esc_html__( 'Send authentication link', 'newspack-plugin' ) . '</a>';
 		}
 		return $actions;
 	}

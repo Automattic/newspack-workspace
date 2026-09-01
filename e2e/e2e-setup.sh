@@ -123,6 +123,11 @@ wp --skip-plugins --skip-themes config set NEWSPACK_EMAIL_CHANGE_ENABLED true --
 
 wp --skip-themes option update timezone_string 'America/New_York'
 
+# Revisions control is off until a publisher configures it, and its screen
+# controls only render while it is on, so turn it on for the suite.
+wp --skip-themes option update newspack_revisions_control \
+  '{"active":true,"number":5,"min_age":"-1 week"}' --format=json
+
 # Sync the e2e helper plugin from the repo copy so the running plugin always
 # matches the committed source. It's a single-file plugin that provisioning only
 # *activates*, so without this an edit to e2e-plugin.php would never reach the

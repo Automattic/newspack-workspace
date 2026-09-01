@@ -17,22 +17,24 @@
  * WordPress dependencies.
  */
 import { useEffect, useMemo, useState } from '@wordpress/element';
-import { __, sprintf } from '@wordpress/i18n';
+import { __, _n, sprintf } from '@wordpress/i18n';
 import { useDispatch } from '@wordpress/data';
 import { __experimentalHStack as HStack, __experimentalVStack as VStack } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
+import { Badge, Stack } from '@wordpress/ui';
 
 /**
  * Internal dependencies.
  */
-import { Badge, Button, DataViews, Notice, Router, Waiting } from '../../../../packages/components/src';
+import { Button, DataViews, Notice, Router, StatusIndicator, Waiting } from '../../../../packages/components/src';
+import { formatCount } from '../../../../packages/components/src/breadcrumbs/format-count';
 import './style.scss';
 import { fmtRelative, fmtDate } from '../format';
 import { SHOW_AVATARS, useAvatars } from '../data/use-avatars';
 import { useSubscribers } from '../data/use-subscribers';
 import { WIZARD_STORE_NAMESPACE } from '../../../../packages/components/src/wizard/store';
-import { GROUP_LABEL, ROLE_LABELS } from '../labels';
+import { GROUP_LABEL, ROLE_LABELS, groupRoleLabel } from '../labels';
 import { SubscriptionLink } from '../links';
-import { STATUS_LABELS, STATUS_BADGE_LEVEL, displayStatuses, statusRank } from '../status';
+import { STATUS_INDICATORS, STATUS_LABELS, displayStatuses, statusRank } from '../status';
 
 // A subscriber's group memberships, in the shape the column helpers expect
 // ([{ group, role }]). The endpoint embeds them flat on the item as
@@ -169,12 +171,17 @@ export default function SubscriberList() {
 				// against the same reduced display set the badges use, so cancelled is
 				// hidden while any active or on-hold plan remains.
 				getValue: ( { item } ) => subscriberStatuses( item, groupEntriesOf( item ) ),
+				// A subscriber can hold several statuses at once, so they stack rather
+				// than sitting on one line, where two icon-and-label pairs would run
+				// together into one phrase.
 				render: ( { item } ) => (
-					<HStack spacing={ 2 } justify="flex-start" alignment="center" wrap>
+					<Stack direction="column" align="flex-start" gap="sm">
 						{ subscriberStatuses( item, groupEntriesOf( item ) ).map( status => (
-							<Badge key={ status } level={ STATUS_BADGE_LEVEL[ status ] } text={ STATUS_LABELS[ status ] } />
+							<StatusIndicator key={ status } status={ STATUS_INDICATORS[ status ] }>
+								{ STATUS_LABELS[ status ] }
+							</StatusIndicator>
 						) ) }
-					</HStack>
+					</Stack>
 				),
 			},
 			{
@@ -207,8 +214,7 @@ export default function SubscriberList() {
 			},
 			{
 				id: 'groupRole',
-				// translators: %s: singular group label (publisher-customisable).
-				label: sprintf( __( '%s role', 'newspack-plugin' ), GROUP_LABEL ),
+				label: groupRoleLabel(),
 				// Hidden by default (not in DEFAULT_VIEW fields). Display-only until
 				// the endpoint gains a group-role filter (NPPD-2111). One line per
 				// group, plan-qualified only when the reader belongs to more than one.
@@ -272,7 +278,9 @@ export default function SubscriberList() {
 				render: ( { item } ) => (
 					<HStack spacing={ 1 } justify="flex-start" wrap>
 						{ ( item.tags || [] ).map( t => (
-							<Badge key={ t } text={ t } />
+							<Badge key={ t } intent="none">
+								{ t }
+							</Badge>
 						) ) }
 					</HStack>
 				),
@@ -317,19 +325,19 @@ export default function SubscriberList() {
 	// Surface the subscriber count in the header breadcrumb, e.g. "/ Subscribers (85)".
 	useEffect( () => {
 		setHeaderData( {
-			sectionName: (
-				<>
-					{ __( 'Subscribers', 'newspack-plugin' ) }{ ' ' }
-					<span
-						className="newspack-subscribers__header-count"
-						aria-label={ sprintf( __( '%s subscribers total', 'newspack-plugin' ), total.toLocaleString() ) }
-					>
-						{ `(${ total.toLocaleString() })` }
-					</span>
-				</>
-			),
+			sectionName: [
+				{
+					label: __( 'Subscribers', 'newspack-plugin' ),
+					count: subscribersLoading || error ? undefined : total,
+					countLabel: sprintf(
+						/* translators: %s: number of subscribers matching the current view. */
+						_n( '%s subscriber', '%s subscribers', total, 'newspack-plugin' ),
+						formatCount( total )
+					),
+				},
+			],
 		} );
-	}, [ setHeaderData, total ] );
+	}, [ setHeaderData, total, subscribersLoading, error ] );
 
 	if ( subscribersLoading ) {
 		return (

@@ -52,6 +52,8 @@ interface SubscriptionProductVariation {
 	period: string;
 	interval: number;
 	price_label: string;
+	// The billing-period attribute value, used as the plan's display label; empty when unset.
+	plan_label: string;
 	// Each variation resolves its own applied-rule stack + effective price.
 	policy: SubscriptionPolicyResolution;
 	// Active subscribers on this plan; a plan with subscribers can't be removed.

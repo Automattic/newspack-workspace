@@ -125,21 +125,27 @@ class Content_Gate_Advanced_Settings {
 	 * sites that have never opened Access Control and have no UI to turn it off
 	 * (the wizard only registers behind the NEWSPACK_CONTENT_GATES constant).
 	 *
-	 * Not memoized: the gate lookup itself is cached by Content_Gate::get_gates(),
-	 * so a second memo here would only add a value that can go stale against the
-	 * cache it was derived from.
+	 * The gates half of this (and the `newspack_content_gate_has_restriction_source`
+	 * filter) lives in {@see Content_Gate::has_first_party_restriction_source()},
+	 * shared with the REST path (`Content_Gate::filter_rest_response()`), which
+	 * needs the identical "could a first-party gate restrict this" answer but
+	 * combines it with Memberships differently — see that REST method's own
+	 * docblock for why Memberships isn't a restriction source there.
 	 *
 	 * @return bool
 	 */
 	private static function has_restriction_source(): bool {
-		// Same arguments as Content_Restriction_Control::get_post_gates(), so
-		// the two share one cached query. Gates only count while gating is active —
-		// otherwise a site with inert gates pays the feed overfetch to evaluate
-		// restriction checks that are all guaranteed no-ops. Memberships is independent
-		// of Audience Management and keeps enforcing either way.
+		// Memberships is independent of Audience Management and keeps
+		// enforcing either way, so it isn't gated behind
+		// Content_Gate::is_gating_active() the way the first-party half is.
+		//
+		// The filter is applied here, to the combined answer, rather than being
+		// taken from Content_Gate::has_first_party_restriction_source(): that
+		// one filters the first-party half alone, and OR-ing Memberships in
+		// after it would leave a callback returning false with no effect on a
+		// Memberships site.
 		$has_restriction_source = Memberships::is_active()
-			|| ( Content_Gate::is_gating_active()
-				&& ! empty( Content_Gate::get_gates( Content_Gate::GATE_CPT, 'publish', false ) ) );
+			|| Content_Gate::detect_first_party_restriction_source();
 
 		/**
 		 * Filters whether anything on this site can restrict a post.
@@ -149,7 +155,7 @@ class Content_Gate_Advanced_Settings {
 		 * restricting posts without publishing a gate or activating Memberships —
 		 * must return true here, or its restricted posts ship in full in the feed.
 		 *
-		 * @param bool $has_restriction_source Whether a first-party restriction source was detected.
+		 * @param bool $has_restriction_source Whether a restriction source was detected.
 		 */
 		return (bool) apply_filters( 'newspack_content_gate_has_restriction_source', $has_restriction_source );
 	}
@@ -239,7 +245,7 @@ class Content_Gate_Advanced_Settings {
 		// '0' returned by get_option() as truthy.
 		$settings = [
 			'restrict_feeds'                 => (int) get_option( self::OPTION_PREFIX . 'restrict_feeds', 1 ),
-			'feed_restriction_mode'          => self::sanitize_feed_mode( get_option( self::OPTION_PREFIX . 'feed_restriction_mode', self::FEED_MODE_EXCLUDE ) ),
+			'feed_restriction_mode'          => self::sanitize_feed_mode( get_option( self::OPTION_PREFIX . 'feed_restriction_mode', self::FEED_MODE_TRUNCATE ) ),
 			'newsletter_link_bypass_enabled' => (int) get_option( self::OPTION_PREFIX . 'newsletter_link_bypass_enabled', 0 ),
 		];
 
@@ -251,15 +257,15 @@ class Content_Gate_Advanced_Settings {
 	 * Normalize a stored feed restriction mode to a known value.
 	 *
 	 * Only truncate/exclude are storable; anything else (including a legacy or
-	 * corrupt value) falls back to the exclude default, matching WC Memberships'
-	 * out-of-the-box behaviour of dropping restricted items from feeds.
+	 * corrupt value) falls back to the truncate default, which keeps items in the
+	 * feed with the gate teaser rather than dropping them.
 	 *
 	 * @param mixed $mode Raw mode value.
 	 *
 	 * @return string
 	 */
 	private static function sanitize_feed_mode( mixed $mode ): string {
-		return in_array( $mode, self::get_feed_restriction_modes(), true ) ? $mode : self::FEED_MODE_EXCLUDE;
+		return in_array( $mode, self::get_feed_restriction_modes(), true ) ? $mode : self::FEED_MODE_TRUNCATE;
 	}
 
 	/**
@@ -271,7 +277,8 @@ class Content_Gate_Advanced_Settings {
 	 * @return string[]
 	 */
 	public static function get_feed_restriction_modes(): array {
-		return [ self::FEED_MODE_EXCLUDE, self::FEED_MODE_TRUNCATE ];
+		// Truncate first so the default mode leads the wizard's select options.
+		return [ self::FEED_MODE_TRUNCATE, self::FEED_MODE_EXCLUDE ];
 	}
 
 	/**
@@ -339,6 +346,10 @@ class Content_Gate_Advanced_Settings {
 	 * even when `restrict_feeds` is on, or a restricting mode to gate a feed even
 	 * when `restrict_feeds` is off.
 	 *
+	 * One exception: while WooCommerce Memberships is active the method returns
+	 * FEED_MODE_OFF ahead of the filter, so the filter cannot re-enable Access
+	 * Control feed restriction on a Memberships site. See NPPM-3204.
+	 *
 	 * @param array $context Context for the filter, as built by
 	 *                       get_feed_filter_context(): always a
 	 *                       `[ 'query' => \WP_Query|null, 'post' => \WP_Post|null ]`
@@ -348,6 +359,17 @@ class Content_Gate_Advanced_Settings {
 	 * @return string One of FEED_MODE_OFF, FEED_MODE_TRUNCATE, FEED_MODE_EXCLUDE.
 	 */
 	public static function get_feed_restriction_mode( $context = [] ): string {
+		// While WooCommerce Memberships is active, Access Control's restriction
+		// strategy already stands down site-wide — see
+		// Content_Restriction_Control::is_post_restricted() — and WCM applies its
+		// own feed handling. Acting here would add a second layer the publisher
+		// cannot control: a Memberships-only site inherits the shipped
+		// restrict_feeds/exclude defaults but has no Access Control UI to change
+		// them, because the wizard registers only behind NEWSPACK_CONTENT_GATES.
+		// See NPPM-3204.
+		if ( Memberships::is_active() ) {
+			return self::FEED_MODE_OFF;
+		}
 		$settings = self::get_settings();
 		$mode     = empty( $settings['restrict_feeds'] ) ? self::FEED_MODE_OFF : $settings['feed_restriction_mode'];
 
@@ -377,8 +399,8 @@ class Content_Gate_Advanced_Settings {
 
 	/**
 	 * Remove restricted posts from RSS feed queries when the feed mode is
-	 * "exclude", matching WC Memberships' default of keeping restricted content
-	 * out of feeds entirely (not just blanking the body).
+	 * "exclude", matching WC Memberships' hide/redirect restriction modes, which
+	 * drop restricted items from feeds entirely rather than blanking the body.
 	 *
 	 * Runs on the `the_posts` filter rather than a `post__not_in` on
 	 * `pre_get_posts` because gate restriction is rule-based and per-reader:

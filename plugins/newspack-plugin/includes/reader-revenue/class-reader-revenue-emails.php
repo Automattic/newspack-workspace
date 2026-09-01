@@ -118,7 +118,7 @@ class Reader_Revenue_Emails {
 						'template' => '*DATE*',
 					],
 					[
-						'label'    => __( 'payment method (last four digits of the card used)', 'newspack-plugin' ),
+						'label'    => __( 'payment method (card brand and last four digits, when available)', 'newspack-plugin' ),
 						'template' => '*PAYMENT_METHOD*',
 					],
 				]
@@ -150,7 +150,7 @@ class Reader_Revenue_Emails {
 						'template' => '*DATE*',
 					],
 					[
-						'label'    => __( 'payment method (last four digits of the card used)', 'newspack-plugin' ),
+						'label'    => __( 'payment method (card brand and last four digits, when available)', 'newspack-plugin' ),
 						'template' => '*PAYMENT_METHOD*',
 					],
 					[

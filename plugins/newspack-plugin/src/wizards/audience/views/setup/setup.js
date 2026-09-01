@@ -225,7 +225,10 @@ export default withWizardScreen(
 												'Number of newsletters initially visible during signup. Additional newsletters will be hidden behind a "See all" button.',
 												'newspack-plugin'
 											) }
-											value={ config.newsletter_list_initial_size || '' }
+											// RangeControl discards any value that isn't `typeof 'number'` and
+											// falls back to initialPosition, so coerce: options saved to the
+											// database read back as numeric strings once the cache is cold.
+											value={ parseInt( config.newsletter_list_initial_size ) || undefined }
 											onChange={ value => updateConfig( 'newsletter_list_initial_size', parseInt( value ) ) }
 										/>
 									</Grid>

@@ -21,6 +21,32 @@ on:
         required: false
         default: ''
         type: string
+      ref:
+        description: >-
+          Commit SHA (or branch) to build and publish. Callers should pass the
+          exact commit the release produced -- see the checkout step. Defaults
+          to the caller's branch tip.
+        required: false
+        default: ''
+        type: string
+      released-tags:
+        description: >-
+          Newline-separated `<pkg>@<version>` tags created by the release job
+          that called this workflow. Only meaningful with require-release.
+        required: false
+        default: ''
+        type: string
+      require-release:
+        description: >-
+          True when released-tags is the authoritative record of what this run
+          published -- i.e. called from release.yml. The gate then skips a
+          plugin absent from the list and fails on a version mismatch. False
+          (manual dispatch) deploys the resolved version as-is. Kept separate
+          from released-tags so an empty list reads as "nothing released"
+          rather than "not supplied".
+        required: false
+        default: false
+        type: boolean
     secrets:
       WP_ORG_USERNAME:
         required: true
@@ -34,40 +60,135 @@ jobs:
   release-wporg:
     name: Deploy to WordPress.org
     runs-on: ubuntu-latest
+    # This job only reads the repository and pushes to SVN; it never writes to
+    # GitHub. A job-level grant can only narrow the caller's, so declaring it
+    # here keeps the caller's write-scoped GITHUB_TOKEN and mintable OIDC token
+    # out of the environment that runs third-party install lifecycle scripts.
+    permissions:
+      contents: read
+    # One deploy at a time per plugin, across all callers: the manual escape
+    # hatch exists to be run while a release-triggered deploy may still be in
+    # flight, and two jobs running `svn checkout` / `svn ci` against the same
+    # plugin would race.
+    concurrency:
+      group: wporg-${{ inputs.plugin-name }}
+      cancel-in-progress: false
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          # Build the exact commit that was released, NOT the default
+          # `github.sha`.
+          #
+          # `github.sha` is the commit that triggered the run, which never
+          # carries the released version: the bump is committed afterwards, by
+          # the release job's "Sync package.json versions" step. Resolving the
+          # version from it publishes the PREVIOUS release.
+          #
+          # A branch name is not enough either. `needs: release` guarantees the
+          # bump is pushed before this checkout, but the tip keeps moving --
+          # anything merged into `release` while the release job runs would be
+          # built and published under the released version number. So callers
+          # pass the SHA the release job ended on; the branch tip is only the
+          # fallback for a caller that has no SHA to give.
+          ref: ${{ inputs.ref != '' && inputs.ref || github.ref_name }}
+      - name: Resolve released version
+        # Read before the build: the gate below can then skip a no-op run
+        # without paying for install + build. `ubuntu-latest` ships node, so
+        # this does not need actions/setup-node.
+        #
+        # Assigned to a variable rather than inlined into `echo`, so a missing
+        # or unparseable package.json (a wrong plugin-path, a plugin move)
+        # fails here at the real cause instead of writing an empty version and
+        # surfacing one step later as a bogus "stale checkout" error.
+        id: ver
+        env:
+          PLUGIN_PATH: ${{ inputs.plugin-path }}
+        run: |
+          set -euo pipefail
+          version=$(node -p "require('./$PLUGIN_PATH/package.json').version")
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+      - name: Check this plugin released in this run
+        # Second line of defence behind the pinned checkout above: given the
+        # release job's tag list, the resolved version must match the tag this
+        # run created.
+        #   - no tag for this plugin  -> nothing released, skip cleanly.
+        #   - tag at a different version -> the checkout is stale, fail loudly.
+        #   - tag at the resolved version -> deploy.
+        id: gate
+        env:
+          RELEASED_TAGS: ${{ inputs.released-tags }}
+          REQUIRE_RELEASE: ${{ inputs.require-release }}
+          PLUGIN_NAME: ${{ inputs.plugin-name }}
+          VERSION: ${{ steps.ver.outputs.version }}
+          DEPLOY_REF: ${{ inputs.ref != '' && inputs.ref || github.ref_name }}
+        run: |
+          set -euo pipefail
+          if [ "$REQUIRE_RELEASE" != "true" ]; then
+            # What the annotation is guarding is whether the commit being
+            # published is on the release branch -- not what the ref was
+            # called. An exact SHA is the most precise input there is, so
+            # comparing the ref string to "release" would warn on the safest
+            # case and stay quiet on a moving branch tip. Ask git instead.
+            release_head=$(git rev-parse --verify --quiet refs/remotes/origin/release || true)
+            sha=$(git rev-parse --short HEAD)
+            if [ -z "$release_head" ]; then
+              echo "::warning::Manual deploy; could not resolve origin/release to check '$DEPLOY_REF' against. Publishing $VERSION from $sha."
+            elif git merge-base --is-ancestor HEAD "$release_head"; then
+              echo "::notice::Manual deploy; publishing $VERSION from $sha, a commit on the release branch."
+            else
+              echo "::warning::Manual deploy; '$DEPLOY_REF' ($sha) is not on the release branch. Publishing $VERSION to wordpress.org from code that was never released."
+            fi
+            echo "deploy=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          released=$(printf '%s\n' "$RELEASED_TAGS" | { grep -E "^${PLUGIN_NAME}@" || true; })
+          if [ -z "$released" ]; then
+            echo "::notice::$PLUGIN_NAME had no release in this run. Nothing to deploy."
+            echo "deploy=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if ! printf '%s\n' "$released" | grep -qxF "${PLUGIN_NAME}@${VERSION}"; then
+            echo "::error::This run released [$(printf '%s' "$released" | tr '\n' ' ')] but the checked-out tree resolves to $VERSION. The checkout is stale -- refusing to deploy the wrong version."
+            exit 1
+          fi
+          echo "deploy=true" >> "$GITHUB_OUTPUT"
       - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4.3.0
+        if: steps.gate.outputs.deploy == 'true'
         with:
           version: ${{ env.PNPM_VERSION }}
       - uses: actions/setup-node@v4
+        if: steps.gate.outputs.deploy == 'true'
         with:
           node-version-file: '.nvmrc'
           cache: 'pnpm'
       - uses: shivammathur/setup-php@7c071dfe9dc99bdf297fa79cb49ea005b9fcadbc # 2.37.1
+        if: steps.gate.outputs.deploy == 'true'
         with:
           php-version: '8.3'
           tools: composer
       - name: Install JS dependencies
+        if: steps.gate.outputs.deploy == 'true'
         run: pnpm install --frozen-lockfile
       - name: Install PHP dependencies
+        if: steps.gate.outputs.deploy == 'true'
         run: composer install --no-dev --no-scripts
         working-directory: ${{ inputs.plugin-path }}
       - name: Build shared packages
+        if: steps.gate.outputs.deploy == 'true'
         run: pnpm run build:packages
       - name: Build plugin and release artifact
+        if: steps.gate.outputs.deploy == 'true'
         run: |
           pnpm --filter "{${{ inputs.plugin-path }}}" run --if-present build
           pnpm --filter "{${{ inputs.plugin-path }}}" run release:archive
-      - name: Resolve released version
-        id: ver
-        run: echo "version=$(node -p "require('./${{ inputs.plugin-path }}/package.json').version")" >> "$GITHUB_OUTPUT"
       - name: Install Subversion
         # ubuntu-latest no longer ships svn; the deploy script needs it (both
         # the already-published check and the commit).
+        if: steps.gate.outputs.deploy == 'true'
         run: sudo apt-get update && sudo apt-get install -y subversion
       - name: Deploy to WordPress.org
+        if: steps.gate.outputs.deploy == 'true'
         working-directory: ${{ inputs.plugin-path }}
         env:
           WP_ORG_USERNAME: ${{ secrets.WP_ORG_USERNAME }}

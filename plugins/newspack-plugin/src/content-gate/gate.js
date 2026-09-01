@@ -6,6 +6,7 @@ import './gate.scss';
 import { getEventPayload, sendEvent } from '../reader-activation/analytics';
 import { debugLog } from '../reader-activation/utils';
 import { persistCtaAttribution } from '../shared/js/cta-attribution';
+import { propagateGatePreviewParams } from './preview-links';
 
 const EVENT_NAME = 'np_gate_interaction';
 
@@ -388,6 +389,21 @@ function handleFloatingElements() {
 		}
 	} );
 }
+
+// Registered on its own rather than inside the gate initialisation below, which
+// returns early when no gate element is present — propagation has to run on
+// those pages too, since the script now loads across a whole preview session.
+// Wrapped because domReady() runs synchronously once the document is ready, so
+// an unguarded throw here would abort module evaluation before the gate's own
+// registration below is even reached.
+domReady( () => {
+	try {
+		propagateGatePreviewParams();
+	} catch ( e ) {
+		// eslint-disable-next-line no-console
+		console.warn( 'Gate preview: could not propagate preview params.', e );
+	}
+} );
 
 domReady( function () {
 	const gate = document.querySelector( '.newspack-content-gate__gate' );

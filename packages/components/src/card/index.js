@@ -32,6 +32,8 @@ class Card extends Component {
 			isSmall,
 			isWhite,
 			noBorder,
+			// Only honoured on the core-card branch below.
+			size,
 			// Pass as `true` to render using WP Core's Card component: https://wordpress.github.io/gutenberg/?path=/docs/components-card--docs
 			__experimentalCoreCard,
 			// Pass props supported by WP Core's Card component in this single prop.
@@ -57,6 +59,7 @@ class Card extends Component {
 				isSmall,
 				isWhite,
 				noBorder,
+				size,
 				...otherProps,
 				...__experimentalCoreProps,
 			};
