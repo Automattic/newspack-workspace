@@ -439,7 +439,7 @@ $is_completely_empty = empty( $members ) && empty( $all_invites );
 				<section class="newspack-ui__modal__content">
 						<h2 class="font-size newspack-ui__font--l"><?php esc_html_e( 'Are you sure?', 'newspack-plugin' ); ?></h2>
 						<p>
-							<?php esc_html_e( 'The current link will stop working. Anyone who hasn\'t joined yet will no longer be able to. You can create a new link at any time.', 'newspack-plugin' ); ?>
+							<?php esc_html_e( 'Any invite link for this group will stop working. Anyone who hasn\'t joined yet will no longer be able to. You can create a new link at any time.', 'newspack-plugin' ); ?>
 						</p>
 
 						<button type="button" class="newspack-ui__button newspack-ui__button--primary newspack-ui__button--wide newspack-ui__button--destructive newspack-my-account__group_subscription__invite-link__disable" data-error-text="<?php echo esc_attr( __( 'Could not disable. Please try again.', 'newspack-plugin' ) ); ?>"><span><?php esc_html_e( 'Disable link', 'newspack-plugin' ); ?></span></button>

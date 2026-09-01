@@ -58,9 +58,11 @@ class Group_Subscription_Invite {
 	 * The link belongs to the subscription, not to the manager who minted it, so it keeps working
 	 * when the owner or managers change. Subscriptions written before that carry the legacy
 	 * per-manager shape, [ $manager_user_id => [ 'key' => string, 'created_at' => int ] ]. A legacy
-	 * key stays valid only while its creator still manages the group — the terms it was minted
-	 * under, and the reason removing a manager revoked their links. The next regenerate or disable
-	 * rewrites the meta in the current shape, at which point the link outlives any manager change.
+	 * key is valid only while its creator manages the group — the terms it was minted under, and
+	 * the reason removing a manager revoked their links. That is re-evaluated on every read, so
+	 * re-adding a removed manager makes their legacy keys work again; only regenerate or disable
+	 * revokes a key for good. Either one also rewrites the meta in the current shape, at which
+	 * point the link outlives any manager change.
 	 *
 	 * @var string
 	 */
@@ -217,48 +219,53 @@ class Group_Subscription_Invite {
 	}
 
 	/**
-	 * Read the subscription's usable invite-link entries, oldest first.
+	 * Read every invite-link entry the subscription stores, oldest first, whether or not it is
+	 * still usable.
 	 *
-	 * The single place that knows how the meta is shaped, so the two readers below cannot drift
-	 * apart on what counts as a usable entry.
+	 * The single place that knows how the meta is shaped, so no reader has to parse it again. Both
+	 * shapes come back normalised to the current one, plus a `legacy` flag saying which shape the
+	 * entry was stored in — get_link_invite_entries() is what turns that into a usability decision,
+	 * and the invalid-link log reads this unfiltered list so it can still name a revoked key's
+	 * creator.
 	 *
 	 * @param \WC_Subscription $subscription The subscription object.
 	 *
-	 * @return array[] The usable link-invite entries, in the current shape.
+	 * @return array[] The stored link-invite entries, in the current shape, each with `legacy`.
 	 */
-	private static function get_link_invite_entries( $subscription ) {
+	private static function get_stored_link_invite_entries( $subscription ) {
 		$stored = $subscription->get_meta( self::LINK_META, true );
 		if ( ! is_array( $stored ) || empty( $stored ) ) {
 			return [];
 		}
 
-		// Current shape: one entry for the whole subscription. Its key stays valid however the
-		// managers change -- that is the point of storing the link against the subscription.
-		if ( ! empty( $stored['key'] ) ) {
-			return [ $stored ];
+		$entries = [];
+
+		// Current shape: one entry for the whole subscription, keyed by field name rather than by
+		// manager. Classified on the presence of the `key` field, not on its value, so meta holding
+		// a corrupt `key` is read as a broken current-shape entry and dropped, rather than falling
+		// through to the legacy branch and being read as a map of managers.
+		if ( array_key_exists( 'key', $stored ) ) {
+			if ( is_string( $stored['key'] ) && '' !== $stored['key'] ) {
+				$stored['legacy'] = false;
+				$entries[]        = $stored;
+			}
+			unset( $stored['key'], $stored['created_at'], $stored['created_by'], $stored['legacy'] );
 		}
 
-		// Legacy per-manager shape, from before the link belonged to the subscription. A legacy key
-		// is honoured only while its creator still manages the group, which is exactly what the old
-		// per-manager validation did.
-		//
-		// Keeping that condition matters because removing a manager was how an institution revoked
-		// the links that person had circulated: honouring their keys now would silently hand paid
-		// access back to everyone holding one, on existing production data, with nobody told. New
-		// links get the subscription-wide semantics — they outlive any change of manager — and a
-		// legacy link whose creator is still a manager now survives that manager's demotion too
-		// (NPPD-2120). What does not happen is a dead link coming back to life.
-		$entries = [];
+		// Legacy per-manager shape, from before the link belonged to the subscription. Read
+		// alongside the current-shape entry rather than instead of it: rolling the plugin back and
+		// forward again merges a per-manager entry into a flat one, and a key minted in that window
+		// is a link somebody is holding.
 		foreach ( $stored as $manager_id => $entry ) {
-			if ( ! is_array( $entry ) || empty( $entry['key'] ) ) {
+			if ( ! is_numeric( $manager_id ) || ! is_array( $entry ) ) {
+				continue;
+			}
+			if ( ! isset( $entry['key'] ) || ! is_string( $entry['key'] ) || '' === $entry['key'] ) {
 				continue;
 			}
 			// Normalise to the current shape: for a legacy entry the map key is the creator.
-			$creator_id = (int) $manager_id;
-			if ( ! Group_Subscription::user_is_manager( $creator_id, $subscription ) ) {
-				continue;
-			}
-			$entry['created_by'] = $creator_id;
+			$entry['created_by'] = (int) $manager_id;
+			$entry['legacy']     = true;
 			$entries[]           = $entry;
 		}
 
@@ -270,6 +277,38 @@ class Group_Subscription_Invite {
 				return ( (int) ( $a['created_at'] ?? 0 ) ) <=> ( (int) ( $b['created_at'] ?? 0 ) );
 			}
 		);
+		return $entries;
+	}
+
+	/**
+	 * Read the subscription's usable invite-link entries, oldest first.
+	 *
+	 * A current-shape key is always usable: it stays valid however the managers change — that is
+	 * the point of storing the link against the subscription.
+	 *
+	 * A legacy key is usable only while its creator manages the group, which is exactly what the
+	 * old per-manager validation did. Keeping that condition matters because removing a manager was
+	 * how an institution revoked the links that person had circulated: honouring their keys now
+	 * would silently hand paid access back to everyone holding one, on existing production data,
+	 * with nobody told. Because the check runs on every read, revocation follows manager status in
+	 * both directions — re-adding a removed manager makes their legacy keys work again, as it did
+	 * before this change. Regenerate and Disable are the permanent revocation: they clear the whole
+	 * map, so nothing is left to revive.
+	 *
+	 * @param \WC_Subscription $subscription The subscription object.
+	 *
+	 * @return array[] The usable link-invite entries, in the current shape.
+	 */
+	private static function get_link_invite_entries( $subscription ) {
+		$entries = [];
+		foreach ( self::get_stored_link_invite_entries( $subscription ) as $entry ) {
+			$is_legacy = ! empty( $entry['legacy'] );
+			unset( $entry['legacy'] );
+			if ( $is_legacy && ! Group_Subscription::user_is_manager( (int) $entry['created_by'], $subscription ) ) {
+				continue;
+			}
+			$entries[] = $entry;
+		}
 		return $entries;
 	}
 
@@ -295,10 +334,10 @@ class Group_Subscription_Invite {
 	 * Get every key that currently unlocks a subscription's invite link.
 	 *
 	 * One key in the current shape. A subscription still on the legacy per-manager shape has one key
-	 * per manager who minted one, and each stays valid while its creator still manages the group —
-	 * only the manager segment of the URL is dropped, never the key. A key whose creator has since
-	 * been removed stays revoked, because removing them is what revoked it. Regenerating or
-	 * disabling the link clears the whole set.
+	 * per manager who minted one, and each is valid while its creator manages the group — only the
+	 * manager segment of the URL is dropped, never the key. A key whose creator has since been
+	 * removed is revoked, because removing them is what revoked it. Regenerating or disabling the
+	 * link clears the whole set.
 	 *
 	 * @param \WC_Subscription $subscription The subscription object.
 	 *
@@ -885,12 +924,16 @@ class Group_Subscription_Invite {
 			// question being asked in the weeks after an upgrade is usually "whose link
 			// is this, and why did it stop working?". Null when the key matches nothing,
 			// which is itself the answer.
+			// Read from the stored entries rather than the usable ones: a departed
+			// manager's revoked key is dropped from the usable list, and it is exactly
+			// the case this log line exists to explain. Nothing here decides access —
+			// validation has already failed.
 			// Guarded on the subscription itself: validation also fails when the URL
 			// names a subscription that does not exist, and there is nothing to read
 			// entries from in that case.
 			$entry = null;
 			if ( $subscription ) {
-				foreach ( self::get_link_invite_entries( $subscription ) as $candidate ) {
+				foreach ( self::get_stored_link_invite_entries( $subscription ) as $candidate ) {
 					if ( hash_equals( (string) ( $candidate['key'] ?? '' ), $key ) ) {
 						$entry = $candidate;
 						break;

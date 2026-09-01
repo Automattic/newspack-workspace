@@ -1446,6 +1446,37 @@ class Test_Group_Subscriptions extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * Disable clears a stored value that yields no usable entry — a corrupt one, or a legacy key
+	 * whose creator has left. Those hold no link the manager was ever shown, so Disable is the only
+	 * way to get rid of them, and the no-op guard is deliberately on the raw meta so it does not
+	 * skip the write.
+	 */
+	public function test_delete_link_invite_clears_an_unusable_value() {
+		$owner_id    = $this->create_reader_user();
+		$departed_id = $this->create_reader_user();
+		$group_sub   = $this->create_group_subscription( $owner_id );
+
+		// $departed_id holds no manager meta, so this entry is filtered out of every read.
+		$group_sub->update_meta_data(
+			Group_Subscription_Invite::LINK_META,
+			[
+				$departed_id => [
+					'key'        => 'departed-key',
+					'created_at' => 1000,
+				],
+			]
+		);
+		$group_sub->save();
+		$this->assertNull( Group_Subscription_Invite::get_link_invite( $group_sub ) );
+
+		$this->assertTrue( Group_Subscription_Invite::delete_link_invite( $group_sub, $owner_id ) );
+
+		// Re-read, so this proves the row left the database rather than the in-memory meta cache.
+		$refetched = wcs_get_subscription( $group_sub->get_id() );
+		$this->assertSame( '', $refetched->get_meta( Group_Subscription_Invite::LINK_META, true ) );
+	}
+
+	/**
 	 * Test validate_link_invite() returns true for a valid link.
 	 */
 	public function test_validate_link_invite_valid() {
@@ -1613,7 +1644,8 @@ class Test_Group_Subscriptions extends \WP_UnitTestCase {
 		// A real link exists, so this exercises the supplied-key guard.
 		$this->assertWPError( Group_Subscription_Invite::validate_link_invite( $group_sub, '' ) );
 
-		// An empty stored key yields no usable entry, so it can't be matched by any URL.
+		// An empty stored key yields no usable entry, so it can't be matched by any URL — neither
+		// an empty one, which is the stored-key direction, nor any other.
 		$group_sub->update_meta_data(
 			Group_Subscription_Invite::LINK_META,
 			[
@@ -1624,6 +1656,61 @@ class Test_Group_Subscriptions extends \WP_UnitTestCase {
 		);
 		$group_sub->save();
 		$this->assertWPError( Group_Subscription_Invite::validate_link_invite( $group_sub, '' ) );
+		$this->assertWPError( Group_Subscription_Invite::validate_link_invite( $group_sub, 'anything' ) );
+		$this->assertNull( Group_Subscription_Invite::get_link_invite( $group_sub ) );
+	}
+
+	/**
+	 * Rolling the plugin back and forward again leaves both shapes in one meta value: the old
+	 * generate_link_invite() merges a per-manager entry into the flat one it finds. Both keys are
+	 * links somebody is holding, so neither shape may hide the other.
+	 */
+	public function test_validate_link_invite_accepts_both_shapes_in_one_meta_value() {
+		$owner_id   = $this->create_reader_user();
+		$group_sub  = $this->create_group_subscription( $owner_id );
+		$manager_id = $this->create_reader_user();
+		$this->make_manager( $group_sub, $manager_id );
+
+		$group_sub->update_meta_data(
+			Group_Subscription_Invite::LINK_META,
+			[
+				'key'        => 'subscription-key',
+				'created_at' => 1000,
+				'created_by' => $owner_id,
+				$manager_id  => [
+					'key'        => 'rollback-minted-key',
+					'created_at' => 2000,
+				],
+			]
+		);
+		$group_sub->save();
+
+		$this->assertTrue( Group_Subscription_Invite::validate_link_invite( $group_sub, 'subscription-key' ) );
+		$this->assertTrue(
+			Group_Subscription_Invite::validate_link_invite( $group_sub, 'rollback-minted-key' ),
+			'A key minted while the site was rolled back must not die silently on re-upgrade.'
+		);
+	}
+
+	/**
+	 * Corrupt meta must not be read as a map of managers: a non-string under `key` would otherwise
+	 * be stringified to the literal 'Array', which ?key=Array would then match.
+	 */
+	public function test_validate_link_invite_rejects_a_corrupt_key() {
+		$owner_id  = $this->create_reader_user();
+		$group_sub = $this->create_group_subscription( $owner_id );
+
+		$group_sub->update_meta_data(
+			Group_Subscription_Invite::LINK_META,
+			[
+				'key'        => [ 'not', 'a', 'string' ],
+				'created_at' => 1000,
+				'created_by' => $owner_id,
+			]
+		);
+		$group_sub->save();
+
+		$this->assertWPError( Group_Subscription_Invite::validate_link_invite( $group_sub, 'Array' ) );
 		$this->assertNull( Group_Subscription_Invite::get_link_invite( $group_sub ) );
 	}
 
@@ -2010,6 +2097,71 @@ class Test_Group_Subscriptions extends \WP_UnitTestCase {
 		} finally {
 			remove_filter( 'wp_redirect', $capture, 1 );
 			remove_filter( 'allowed_redirect_hosts', $allow_host );
+			$_GET = [];
+			wp_set_current_user( 0 );
+		}
+	}
+
+	/**
+	 * The invalid-link log names the creator of a revoked departed-manager key.
+	 *
+	 * That is the case the log line exists for: the URL carries no manager ID any more, so
+	 * "whose link is this, and why did it stop working?" is answerable only from the log. Reading
+	 * the usable entries instead would drop exactly this entry and record a null creator,
+	 * indistinguishable from a garbage key.
+	 */
+	public function test_process_link_invite_request_logs_the_creator_of_a_revoked_key() {
+		$departed_id = $this->create_reader_user();
+		$owner_id    = $this->create_reader_user();
+		$visitor_id  = $this->create_reader_user();
+		$group_sub   = $this->create_group_subscription( $owner_id );
+
+		// $departed_id holds no manager meta, so this legacy key is revoked.
+		$group_sub->update_meta_data(
+			Group_Subscription_Invite::LINK_META,
+			[
+				$departed_id => [
+					'key'        => 'departed-key',
+					'created_at' => 1000,
+				],
+			]
+		);
+		$group_sub->save();
+
+		wp_set_current_user( $visitor_id );
+		$_GET = [
+			'action'       => Group_Subscription_Invite::LINK_QUERY_ARG,
+			'subscription' => $group_sub->get_id(),
+			'key'          => 'departed-key',
+		];
+
+		$logged      = [];
+		$capture_log = function ( $code, $message, $args ) use ( &$logged ) {
+			$logged[ $code ] = $args;
+		};
+		add_action( 'newspack_log', $capture_log, 10, 3 );
+		$capture = function () {
+			throw new \Exception( 'redirect_intercepted' );
+		};
+		add_filter( 'wp_redirect', $capture, 1 );
+
+		try {
+			try {
+				Group_Subscription_Invite::process_link_invite_request();
+				$this->fail( 'Expected redirect exception' );
+			} catch ( \Exception $e ) {
+				$this->assertStringContainsString( 'redirect_intercepted', $e->getMessage() );
+			}
+
+			$this->assertArrayHasKey( 'newspack_group_subscription_invite_link_invalid', $logged );
+			$this->assertSame(
+				$departed_id,
+				$logged['newspack_group_subscription_invite_link_invalid']['data']['created_by'],
+				'The log must name the departed manager who minted the key.'
+			);
+		} finally {
+			remove_action( 'newspack_log', $capture_log, 10 );
+			remove_filter( 'wp_redirect', $capture, 1 );
 			$_GET = [];
 			wp_set_current_user( 0 );
 		}
