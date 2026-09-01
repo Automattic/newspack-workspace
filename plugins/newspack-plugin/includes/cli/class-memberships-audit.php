@@ -52,6 +52,14 @@ class Memberships_Audit {
 	const WALK_QUERY_FLAG = 'newspack_memberships_audit_walk';
 
 	/**
+	 * The audit's value-requiring flags, for the raw-argv bare-flag guard shared
+	 * with Teams_Migration::get_valueless_value_flags().
+	 *
+	 * @var string[]
+	 */
+	const VALUE_FLAGS = [ '--plan-ids', '--only', '--sleep', '--format' ];
+
+	/**
 	 * Seconds to pause between batches unless --sleep says otherwise.
 	 *
 	 * The audit reads the whole membership table on a production site, several
@@ -240,13 +248,13 @@ class Memberships_Audit {
 	 * This command only reads. Buyer-vs-recipient intent is a publisher
 	 * question, so it reports pairs as evidence and decides nothing: no
 	 * subscription is re-homed and no access is granted. `--format=ids` emits
-	 * the signed-off list for `migrate-manual-members --user-ids-file`, which
-	 * grants the replacement access.
+	 * the signed-off list for `migrate-manual-members --product-id=<id>
+	 * --user-ids-file=<path> --live`, which grants the replacement access.
 	 *
 	 * ## OPTIONS
 	 *
 	 * [--plan-ids=<ids>]
-	 * : Comma-delimited membership plan IDs to audit — the plans whose content the new gates cover. Defaults to every published plan (a plan in any other status is audited only when named here).
+	 * : Comma-delimited membership plan IDs to audit — the plans whose content the new gates cover. Omit the flag to audit every published plan (a plan in any other status is audited only when named here); passing it with no ID is an error.
 	 *
 	 * [--only=<classes>]
 	 * : Comma-delimited classes to report member-by-member: gift, order-only, order-only-unpaid, subscription-missing. Omit the flag for the default gift + order-only report; passing it with no class is an error. Counts for every class are printed regardless — on STDERR in the machine-readable formats.
@@ -280,6 +288,17 @@ class Memberships_Audit {
 	 * @param array $assoc_args Named args.
 	 */
 	public function audit_membership_subscriptions( $args, $assoc_args ) {
+		// A value-requiring flag passed bare (`--plan-ids` with no `=value`) never
+		// reaches this method: WP-CLI validates against the synopsis first, warns,
+		// strips the flag, and hands over the default — so the strict parsing below
+		// cannot see it, and `--plan-ids` would widen to every published plan while
+		// `--only` would widen to the default report, which is the opposite of what
+		// the operator narrowed to. Read the raw command line before anything else.
+		$bare_flags = Teams_Migration::get_valueless_value_flags( null, self::VALUE_FLAGS );
+		if ( ! empty( $bare_flags ) ) {
+			WP_CLI::error( sprintf( 'The following flag(s) require a value but arrived without one: %s. WP-CLI strips a bare flag and the audit would run with a different scope than intended — fix the invocation and re-run.', implode( ', ', $bare_flags ) ) );
+		}
+
 		// Hard error, unlike the Subscriptions check below. Without WooCommerce
 		// Memberships the `wcm-*` statuses are not registered post statuses, and
 		// WP_Query builds its status clause by iterating get_post_stati() — unknown
@@ -438,7 +457,7 @@ class Memberships_Audit {
 		if ( $rows_without_member ) {
 			WP_CLI::warning(
 				sprintf(
-					'%d flagged membership(s) have no member account and are not on the ID list — an orphaned membership or a guest purchase. They appear in the table/CSV report and need handling by hand.',
+					'%d flagged membership(s) have no member account and are not on the ID list — an orphaned membership or a guest purchase. Re-run with --format=table or --format=csv to see them; they need handling by hand.',
 					$rows_without_member
 				)
 			);
@@ -481,7 +500,7 @@ class Memberships_Audit {
 			)
 		);
 		WP_CLI::line( 'These readers lose access at the flip. `member_own_access_subscriptions` is evidence, not a verdict: a subscription there only preserves access if the gates accept its product.' );
-		WP_CLI::line( 'Next: confirm buyer-vs-recipient intent with the publisher, then re-run with --format=ids for the signed-off list and grant those readers $0 subscriptions with `wp newspack migrate-manual-members --user-ids-file=<path>`.' );
+		WP_CLI::line( 'Next: confirm buyer-vs-recipient intent with the publisher, then re-run with --format=ids for the signed-off list and grant those readers $0 subscriptions with `wp newspack migrate-manual-members --product-id=<id> --user-ids-file=<path>`. That command dry-runs and writes nothing until --live is added.' );
 	}
 
 	/**

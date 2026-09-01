@@ -6,8 +6,10 @@
  */
 
 use Newspack\CLI\Memberships_Audit;
+use Newspack\CLI\Teams_Migration;
 
 require_once dirname( __DIR__, 3 ) . '/includes/cli/class-memberships-audit.php';
+require_once dirname( __DIR__, 3 ) . '/includes/cli/class-teams-migration.php';
 
 /**
  * The classification table is the whole point of the command: WooCommerce
@@ -897,5 +899,37 @@ class Test_Memberships_Audit extends WP_UnitTestCase {
 		$result = Memberships_Audit::resolve_plan_ids( ',,' );
 		$this->assertInstanceOf( \WP_Error::class, $result );
 		$this->assertSame( 'newspack_memberships_audit_plan_id', $result->get_error_code() );
+	}
+
+	/**
+	 * The strict parsing above only bites when the flag reaches the command.
+	 * WP-CLI strips a bare `--plan-ids`, so the run would widen to every
+	 * published plan — exactly what the strictness exists to prevent — unless the
+	 * raw command line is read first.
+	 */
+	public function test_a_bare_scoping_flag_is_caught_on_the_raw_command_line() {
+		$this->assertSame(
+			[ '--plan-ids', '--only' ],
+			Teams_Migration::get_valueless_value_flags(
+				[ 'wp', 'newspack', 'audit-membership-subscriptions', '--plan-ids', '--only', '--format=ids' ],
+				Memberships_Audit::VALUE_FLAGS
+			)
+		);
+		$this->assertSame(
+			[],
+			Teams_Migration::get_valueless_value_flags(
+				[ 'wp', 'newspack', 'audit-membership-subscriptions', '--plan-ids=78', '--only=gift', '--sleep=0' ],
+				Memberships_Audit::VALUE_FLAGS
+			),
+			'Flags carrying a value are not bare.'
+		);
+		$this->assertSame(
+			[],
+			Teams_Migration::get_valueless_value_flags(
+				[ 'wp', 'newspack', 'audit-membership-subscriptions', '--user-ids' ],
+				Memberships_Audit::VALUE_FLAGS
+			),
+			'A sibling command\'s flag is not one this command accepts, so it must not be reported against it.'
+		);
 	}
 }
