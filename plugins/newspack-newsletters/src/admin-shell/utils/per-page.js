@@ -1,15 +1,14 @@
 /**
  * Items-per-page constants shared by the DataView list screens.
  *
- * `PER_PAGE_ALL` is a client-side sentinel: "All" fetches
- * `FETCH_ALL_CHUNK_SIZE` rows at a time and concatenates (see
- * `use-collection-data.js`).
+ * `PER_PAGE_ALL` is a client-side sentinel: "All" fetches a chunk at a
+ * time and concatenates (see `use-collection-data.js`).
  *
  * The two ceilings below are deliberately different. `MAX_SELECTABLE_PER_PAGE`
  * bounds what a user can pick and store; `FETCH_ALL_CHUNK_SIZE` bounds
  * what one request of the "All" walk asks for, and is larger because
  * each round trip costs a full WordPress bootstrap while the rows
- * themselves are cheap.
+ * themselves are cheap. A screen whose rows are not cheap overrides it.
  */
 
 export const PER_PAGE_ALL = -1;
@@ -21,6 +20,13 @@ export const MAX_SELECTABLE_PER_PAGE = 100;
 // Mirrors `Admin_Shell_Collection_Params::MAX_PER_PAGE`, the ceiling
 // those collections accept — change both together.
 export const FETCH_ALL_CHUNK_SIZE = 1000;
+
+// Layouts are the one screen whose `_fields` ships `content.raw`, so a
+// chunk of them is whole block markup rather than the trimmed rows the
+// other three ask for. A smaller chunk bounds the worst single response
+// and its peak memory, and still costs far fewer round trips than core's
+// ceiling of 100.
+export const LAYOUTS_FETCH_ALL_CHUNK_SIZE = 200;
 
 // Caps the "All" walk so a very large site can't lock the tab with an
 // unvirtualised table.

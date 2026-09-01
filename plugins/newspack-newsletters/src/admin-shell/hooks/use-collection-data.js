@@ -38,22 +38,32 @@ function isOutOfRangePageError( error ) {
  * trash sub-fetch — `hasResolved` flips solely on the main resolution.
  *
  * When `fetchAll` is set, the first response's `X-WP-TotalPages` drives
- * a walk over the remaining pages (these four collections cap `per_page`
- * at `FETCH_ALL_CHUNK_SIZE`).
+ * a walk over the remaining pages. `fetchAllChunkSize` must match the
+ * `per_page` the caller built its path with, since it is what turns
+ * `FETCH_ALL_MAX_ITEMS` into a page ceiling.
  * `data` commits once the walk finishes (or aborts), and `totalPages` is
  * clamped to 1 so the footer doesn't offer pagination. DataViews shows
  * the walk via its own loading state; there is no separate indicator.
  *
  * @param {Object}  options
- * @param {string}  options.path             Pre-computed REST path. Falsy ⇒ defer.
- * @param {string}  [options.trashCountPath] When set, sub-fetch for the trash banner.
- * @param {number}  [options.mutationKey]    Bump externally to refetch (alongside internal refresh).
- * @param {string}  [options.errorMessage]   notifyError message on fetch failure.
- * @param {string}  [options.errorNoticeId]  notifyError dedupe id.
- * @param {boolean} [options.fetchAll]       Walk every page of the collection.
+ * @param {string}  options.path                Pre-computed REST path. Falsy ⇒ defer.
+ * @param {string}  [options.trashCountPath]    When set, sub-fetch for the trash banner.
+ * @param {number}  [options.mutationKey]       Bump externally to refetch (alongside internal refresh).
+ * @param {string}  [options.errorMessage]      notifyError message on fetch failure.
+ * @param {string}  [options.errorNoticeId]     notifyError dedupe id.
+ * @param {boolean} [options.fetchAll]          Walk every page of the collection.
+ * @param {number}  [options.fetchAllChunkSize] Rows per request of that walk.
  * @return {{ data: Array, paginationInfo: Object, isLoading: boolean, hasResolved: boolean, hasLoadedOnce: boolean, trashCount: number|null, refresh: () => void }} Hook state.
  */
-export default function useCollectionData( { path, trashCountPath = null, mutationKey = 0, errorMessage, errorNoticeId, fetchAll = false } ) {
+export default function useCollectionData( {
+	path,
+	trashCountPath = null,
+	mutationKey = 0,
+	errorMessage,
+	errorNoticeId,
+	fetchAll = false,
+	fetchAllChunkSize = FETCH_ALL_CHUNK_SIZE,
+} ) {
 	const [ data, setData ] = useState( [] );
 	const [ paginationInfo, setPaginationInfo ] = useState( { totalItems: 0, totalPages: 0 } );
 	const [ isLoading, setIsLoading ] = useState( true );
@@ -105,7 +115,7 @@ export default function useCollectionData( { path, trashCountPath = null, mutati
 				// walk is otherwise silent to a screen reader.
 				speak( __( 'Loading all items. This may take a moment.', 'newspack-newsletters' ), 'polite' );
 
-				const maxPage = Math.min( pagination.totalPages, Math.ceil( FETCH_ALL_MAX_ITEMS / FETCH_ALL_CHUNK_SIZE ) );
+				const maxPage = Math.min( pagination.totalPages, Math.ceil( FETCH_ALL_MAX_ITEMS / fetchAllChunkSize ) );
 
 				let endedEarly = false;
 				let cappedByMax = false;
@@ -207,7 +217,7 @@ export default function useCollectionData( { path, trashCountPath = null, mutati
 		return () => {
 			cancelled = true;
 		};
-	}, [ path, mutationKey, refreshKey, errorMessage, errorNoticeId, fetchAll ] );
+	}, [ path, mutationKey, refreshKey, errorMessage, errorNoticeId, fetchAll, fetchAllChunkSize ] );
 
 	useEffect( () => {
 		if ( ! trashCountPath ) {
