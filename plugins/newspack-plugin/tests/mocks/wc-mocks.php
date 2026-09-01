@@ -987,6 +987,19 @@ class WC_Subscription {
 	public function update_meta_data( $field_name, $value ) {
 		$this->meta[ $field_name ] = $value;
 	}
+	/**
+	 * Real WC_Subscription inherits this from WC_Order via WC_Data; the mock
+	 * hierarchy is flat, so it needs its own copy. Matches WC_Order's above.
+	 *
+	 * @param string $field_name Meta key.
+	 * @param mixed  $value      Meta value.
+	 * @param bool   $unique     Whether to overwrite an existing value.
+	 */
+	public function add_meta_data( $field_name, $value, $unique = false ) {
+		if ( $unique || ! isset( $this->meta[ $field_name ] ) ) {
+			$this->meta[ $field_name ] = $value;
+		}
+	}
 	public function delete_meta_data( $field_name ) {
 		unset( $this->meta[ $field_name ] );
 	}
@@ -1474,6 +1487,38 @@ if ( ! function_exists( 'wc_get_page_id' ) ) {
 		return $page_id ? absint( $page_id ) : -1;
 	}
 }
+/**
+ * Mirror of WCS's wcs_get_datetime_from(): a MySQL date string or timestamp in,
+ * a WC_DateTime out, and null for anything empty — which is what an unset
+ * subscription date (`get_date( 'end' )` on a subscription with no end) returns.
+ *
+ * @param string|int $variable Date string or timestamp.
+ *
+ * @return WC_DateTime|null
+ */
+function wcs_get_datetime_from( $variable ) {
+	if ( empty( $variable ) ) {
+		return null;
+	}
+	return new WC_DateTime( is_numeric( $variable ) ? '@' . $variable : $variable );
+}
+
+/**
+ * Mirror of WCS's wcs_format_datetime(): a formatted date, or an empty string
+ * when there is no date to format.
+ *
+ * @param WC_DateTime|null $date   Date to format.
+ * @param string           $format Optional. Date format; defaults to the site's.
+ *
+ * @return string
+ */
+function wcs_format_datetime( $date, $format = '' ) {
+	if ( ! is_a( $date, 'DateTime' ) ) {
+		return '';
+	}
+	return $date->format( $format ? $format : get_option( 'date_format', 'F j, Y' ) );
+}
+
 function wcs_is_subscription( $order ) {
 	global $subscriptions_database;
 	// Mirror real WooCommerce Subscriptions: only an actual WC_Subscription object
