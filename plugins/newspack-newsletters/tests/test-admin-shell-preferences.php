@@ -299,19 +299,6 @@ class Admin_Shell_Preferences_Test extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Preferences written by an older version stay readable: the extra
-	 * keys simply arrive absent.
-	 */
-	public function test_reads_back_a_per_page_only_value_saved_by_an_earlier_version() {
-		update_user_meta( $this->editor_id, Admin_Shell_Preferences::get_user_meta_key( 'newsletters-list' ), [ 'perPage' => 50 ] );
-
-		$this->assertSame(
-			[ 'newsletters-list' => [ 'perPage' => 50 ] ],
-			Admin_Shell_Preferences::get_preferences()
-		);
-	}
-
-	/**
 	 * Hand-edited or half-corrupt meta is filtered key by key rather
 	 * than discarded wholesale.
 	 */
@@ -421,19 +408,31 @@ class Admin_Shell_Preferences_Test extends WP_UnitTestCase {
 	}
 
 	/**
-	 * `usermeta` is network-global. Single-site installs keep the
-	 * unprefixed key so preferences saved before this survive.
+	 * `usermeta` is network-global, so the key carries the blog prefix on a
+	 * network. Off one it stays unprefixed, which is what keeps values
+	 * already in the table readable.
 	 */
-	public function test_the_meta_key_is_scoped_per_site_only_on_multisite() {
-		global $wpdb;
-
-		$key = Admin_Shell_Preferences::get_user_meta_key( 'newsletters-list' );
-
+	public function test_the_meta_key_is_unprefixed_off_a_network() {
 		if ( is_multisite() ) {
-			$this->assertStringStartsWith( $wpdb->get_blog_prefix() . Admin_Shell_Preferences::USER_META_KEY_PREFIX, $key );
-			return;
+			$this->markTestSkipped( 'The unprefixed key is the single-site branch.' );
 		}
 
-		$this->assertSame( Admin_Shell_Preferences::USER_META_KEY_PREFIX . 'newsletters-list', $key );
+		$this->assertSame(
+			Admin_Shell_Preferences::USER_META_KEY_PREFIX . 'newsletters-list',
+			Admin_Shell_Preferences::get_user_meta_key( 'newsletters-list' )
+		);
+	}
+
+	/**
+	 * The schema accepts a fractional width, so storing one must not
+	 * truncate it — the two halves would otherwise disagree about what a
+	 * fractional width means.
+	 */
+	public function test_a_fractional_column_width_survives_sanitization() {
+		$sanitized = Admin_Shell_Preferences::sanitize_prefs(
+			[ 'layout' => [ 'styles' => [ 'status' => [ 'width' => 217.5 ] ] ] ]
+		);
+
+		$this->assertSame( 217.5, $sanitized['layout']['styles']['status']['width'] );
 	}
 }

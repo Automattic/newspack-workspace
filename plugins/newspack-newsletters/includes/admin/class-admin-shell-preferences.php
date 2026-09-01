@@ -105,10 +105,9 @@ class Admin_Shell_Preferences {
 							'required' => true,
 						],
 						'prefs'  => [
-							'type'                 => 'object',
-							'required'             => true,
-							'additionalProperties' => false,
-							'properties'           => self::get_prefs_schema(),
+							'type'       => 'object',
+							'required'   => true,
+							'properties' => self::get_prefs_schema(),
 						],
 					],
 				],
@@ -119,6 +118,13 @@ class Admin_Shell_Preferences {
 	/**
 	 * Schema for the storable half of a DataViews view.
 	 *
+	 * Nothing here declares `additionalProperties => false`: validation
+	 * fails the whole request on the first unknown key, so one property
+	 * added upstream would silently stop every appearance setting
+	 * persisting. `sanitize_prefs()` whitelists key by key instead, which
+	 * drops an unrecognised key rather than rejecting the payload it
+	 * arrived in.
+	 *
 	 * `perPage` carries no range here — the "All" sentinel sits outside
 	 * any single min/max pair, so the range check lives in
 	 * `is_valid_per_page`.
@@ -126,9 +132,6 @@ class Admin_Shell_Preferences {
 	 * @return array
 	 */
 	private static function get_prefs_schema(): array {
-		// Sanitised rather than rejected: schema validation fails the whole
-		// request on the first unknown key, so one property added upstream
-		// would silently stop every appearance setting persisting.
 		$column_style = [
 			'type'       => 'object',
 			'properties' => [
@@ -152,9 +155,8 @@ class Admin_Shell_Preferences {
 				'maxItems' => self::MAX_FIELDS,
 			],
 			'sort'       => [
-				'type'                 => 'object',
-				'additionalProperties' => false,
-				'properties'           => [
+				'type'       => 'object',
+				'properties' => [
 					'field'     => [ 'type' => 'string' ],
 					'direction' => [
 						'type' => 'string',
@@ -163,9 +165,8 @@ class Admin_Shell_Preferences {
 				],
 			],
 			'layout'     => [
-				'type'                 => 'object',
-				'additionalProperties' => false,
-				'properties'           => [
+				'type'       => 'object',
+				'properties' => [
 					'density'     => [
 						'type' => 'string',
 						'enum' => self::DENSITIES,
@@ -421,7 +422,7 @@ class Admin_Shell_Preferences {
 			}
 			$value = $style[ $key ];
 			if ( is_int( $value ) || is_float( $value ) ) {
-				$clean[ $key ] = (int) $value;
+				$clean[ $key ] = $value;
 			} elseif ( is_string( $value ) && '' !== trim( $value ) && strlen( $value ) <= self::MAX_WIDTH_LENGTH ) {
 				$clean[ $key ] = trim( $value );
 			}
@@ -444,8 +445,8 @@ class Admin_Shell_Preferences {
 		global $wpdb;
 
 		// `usermeta` is network-global, so a bare key would share one list
-		// configuration across a whole network. Single-site installs keep the
-		// unprefixed key so preferences saved before this survive.
+		// configuration across a whole network. Single-site keys stay
+		// unprefixed to remain compatible with values already stored.
 		$prefix = is_multisite() ? $wpdb->get_blog_prefix() : '';
 
 		return $prefix . self::USER_META_KEY_PREFIX . $screen_key;

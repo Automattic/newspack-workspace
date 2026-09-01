@@ -2,9 +2,11 @@ import { act, renderHook } from '@testing-library/react';
 import apiFetch from '@wordpress/api-fetch';
 
 import usePersistedView from './use-persisted-view';
+import { notifyError } from '../notices';
 import { PER_PAGE_ALL } from '../utils/per-page';
 
 jest.mock( '@wordpress/api-fetch', () => jest.fn() );
+jest.mock( '../notices', () => ( { notifyError: jest.fn() } ) );
 
 const PATH = '/newspack-newsletters/v1/admin-shell/preferences';
 const DEFAULT_VIEW = { type: 'table', page: 1, perPage: 25 };
@@ -26,15 +28,21 @@ const saved = ( prefs, screen = 'newsletters-list' ) => ( {
 } );
 
 describe( 'usePersistedView', () => {
+	// The hook logs the rejected save's code alongside the notice.
+	let warnSpy;
+
 	beforeEach( () => {
 		jest.useFakeTimers();
 		apiFetch.mockReset();
 		apiFetch.mockResolvedValue( {} );
+		notifyError.mockReset();
+		warnSpy = jest.spyOn( console, 'warn' ).mockImplementation( () => {} );
 		delete window.newspackNewslettersAdmin;
 	} );
 
 	afterEach( () => {
 		jest.useRealTimers();
+		warnSpy.mockRestore();
 	} );
 
 	describe( 'seeding', () => {
@@ -219,6 +227,56 @@ describe( 'usePersistedView', () => {
 
 			expect( apiFetch ).toHaveBeenCalledTimes( 2 );
 			expect( apiFetch ).toHaveBeenLastCalledWith( saved( { perPage: 50, type: 'table' } ) );
+		} );
+
+		it( 'tells the user once when the retry is exhausted', async () => {
+			apiFetch.mockRejectedValue( new Error( 'save failed' ) );
+
+			const { result } = renderHook( () => usePersistedView( 'newsletters-list', DEFAULT_VIEW ) );
+
+			act( () => {
+				result.current[ 1 ]( current => ( { ...current, perPage: 50 } ) );
+			} );
+			await settle();
+
+			expect( notifyError ).toHaveBeenCalledTimes( 1 );
+
+			// A drifted schema fails every save, so the notice must not repeat.
+			act( () => {
+				result.current[ 1 ]( current => ( { ...current, perPage: 10 } ) );
+			} );
+			await settle();
+
+			expect( notifyError ).toHaveBeenCalledTimes( 1 );
+		} );
+
+		it( 'stays quiet when a save fails on the way out', async () => {
+			apiFetch.mockRejectedValue( new Error( 'save failed' ) );
+
+			const { result } = renderHook( () => usePersistedView( 'newsletters-list', DEFAULT_VIEW ) );
+
+			act( () => {
+				result.current[ 1 ]( current => ( { ...current, perPage: 50 } ) );
+			} );
+			act( () => {
+				window.dispatchEvent( new Event( 'pagehide' ) );
+			} );
+			await settle();
+
+			expect( notifyError ).not.toHaveBeenCalled();
+		} );
+
+		it( 'holds the payload to the bounds the route enforces', async () => {
+			const fields = Array.from( { length: 60 }, ( unused, i ) => `field-${ i }` );
+
+			const { result } = renderHook( () => usePersistedView( 'newsletters-list', DEFAULT_VIEW, { layoutTypes: [ 'table' ] } ) );
+
+			act( () => {
+				result.current[ 1 ]( current => ( { ...current, type: 'grid', fields } ) );
+			} );
+			await settle();
+
+			expect( apiFetch ).toHaveBeenCalledWith( saved( { perPage: 25, fields: fields.slice( 0, 50 ) } ) );
 		} );
 
 		it( 'never has two saves in flight, so writes cannot reach the server out of order', async () => {

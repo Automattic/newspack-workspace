@@ -6,23 +6,35 @@
  *
  * Persisted: the presentation half of the view — layout type, sort,
  * visible fields (in their display order and with their toggles),
- * density, column widths and items per page. Not persisted: page,
+ * density, grid preview size and items per page. Not persisted: page,
  * search and filters, which are a query rather than a configuration.
  *
- * Saves are debounced because column resizing streams changes, and
- * flushed on `pagehide` so navigating away right after a click can't
- * drop the preference.
+ * Column widths (`view.layout.styles`) round-trip too, but nothing writes
+ * them yet: DataViews 16 reads the map to size cells and ships no resize
+ * handle. The plumbing is here so widths persist the day one appears.
+ *
+ * Saves are debounced because the grid's preview-size slider streams
+ * changes, and flushed on `pagehide` so navigating away right after a
+ * click can't drop the preference.
  */
 
 import apiFetch from '@wordpress/api-fetch';
 import { useEffect, useMemo, useRef, useState } from '@wordpress/element';
+import { __ } from '@wordpress/i18n';
 
 import { getViewPrefs } from '../admin-globals';
+import { notifyError } from '../notices';
 import { DEFAULT_PER_PAGE_OPTIONS, isValidPerPage } from '../utils/per-page';
 
 const PREFERENCES_PATH = '/newspack-newsletters/v1/admin-shell/preferences';
 
 const SAVE_DEBOUNCE_MS = 500;
+
+const SAVE_ERROR_NOTICE_ID = 'newspack-newsletters-view-prefs-save-error';
+
+// Mirrors `Admin_Shell_Preferences::MAX_FIELDS`, which rejects a longer
+// list outright rather than truncating it.
+const MAX_FIELDS = 50;
 
 // Mirrors `Admin_Shell_Preferences::DENSITIES`.
 const DENSITIES = [ 'compact', 'balanced', 'comfortable' ];
@@ -90,23 +102,29 @@ function stableStringify( value ) {
 /**
  * Extract the storable slice of a view.
  *
- * @param {Object} view DataViews view state.
+ * Every value is held to the same bounds the route enforces: the schema
+ * fails the whole request on the first value it rejects, so one key out
+ * of range would stop every appearance setting persisting.
+ *
+ * @param {Object}        view                  DataViews view state.
+ * @param {Object}        [options]             Screen bindings.
+ * @param {Array<string>} [options.layoutTypes] Layout types this screen offers.
  * @return {Object} Preferences payload.
  */
-function toPrefs( view = {} ) {
+function toPrefs( view = {}, { layoutTypes = null } = {} ) {
 	const prefs = {};
 
 	if ( isValidPerPage( view.perPage ) ) {
 		prefs.perPage = view.perPage;
 	}
-	if ( isNonEmptyString( view.type ) ) {
+	if ( isNonEmptyString( view.type ) && ( ! layoutTypes || layoutTypes.includes( view.type ) ) ) {
 		prefs.type = view.type;
 	}
 	if ( isNonEmptyString( view.titleField ) ) {
 		prefs.titleField = view.titleField;
 	}
 	if ( Array.isArray( view.fields ) ) {
-		prefs.fields = view.fields.filter( isNonEmptyString );
+		prefs.fields = view.fields.filter( isNonEmptyString ).slice( 0, MAX_FIELDS );
 	}
 	if ( isNonEmptyString( view.sort?.field ) ) {
 		prefs.sort = {
@@ -253,7 +271,7 @@ export default function usePersistedView(
 		return normalize ? normalize( merged ) : merged;
 	} );
 
-	const serialized = useMemo( () => stableStringify( toPrefs( view ) ), [ view ] );
+	const serialized = useMemo( () => stableStringify( toPrefs( view, { layoutTypes } ) ), [ view, layoutTypes ] );
 
 	// The mounted view is the baseline, so nothing is written on arrival.
 	// A legacy deep link's sort rides along on the first save after that.
@@ -261,12 +279,27 @@ export default function usePersistedView(
 	const desiredRef = useRef( serialized );
 	const inFlightRef = useRef( null );
 	const unloadingRef = useRef( false );
+	const saveFailureReportedRef = useRef( false );
 	const flushRef = useRef( () => {} );
 
 	useEffect( () => {
+		// A drifted schema fails every save, so report the first one and stay
+		// quiet after that rather than raising a snackbar per density toggle.
+		const reportFailure = reason => {
+			if ( saveFailureReportedRef.current ) {
+				return;
+			}
+			saveFailureReportedRef.current = true;
+			console.warn( '[newspack-newsletters] Saving view preferences failed.', reason?.code ?? reason ); // eslint-disable-line no-console
+			notifyError( __( 'Your view settings could not be saved, so they will not be restored next time.', 'newspack-newsletters' ), {
+				id: SAVE_ERROR_NOTICE_ID,
+			} );
+		};
+
 		// One at a time — concurrent writes could land out of order.
 		const save = ( payload, { attempt = 0, keepalive = false } = {} ) => {
 			let failed = false;
+			let failureReason = null;
 			const controller = 'undefined' === typeof AbortController ? null : new AbortController();
 			const inFlight = { controller };
 			inFlightRef.current = inFlight;
@@ -280,8 +313,9 @@ export default function usePersistedView(
 				.then( () => {
 					lastSavedRef.current = payload;
 				} )
-				.catch( () => {
+				.catch( error => {
 					failed = true;
+					failureReason = error;
 				} )
 				.finally( () => {
 					// Only if this is still the write in flight: an aborted
@@ -297,9 +331,19 @@ export default function usePersistedView(
 						save( desiredRef.current );
 						return;
 					}
-					// Nothing else will retrigger the effect, so retry once.
-					if ( failed && attempt < 1 ) {
-						save( payload, { attempt: attempt + 1 } );
+					if ( ! failed ) {
+						return;
+					}
+					// Nothing else will retrigger the effect, so retry once —
+					// still keepalive if the page is on its way out.
+					if ( attempt < 1 ) {
+						save( payload, { attempt: attempt + 1, keepalive } );
+						return;
+					}
+					// A keepalive write is the unload flush, and there is no
+					// page left to show a notice on.
+					if ( ! keepalive ) {
+						reportFailure( failureReason );
 					}
 				} );
 		};
