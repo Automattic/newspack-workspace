@@ -331,7 +331,7 @@ class Audience_Subscription_Products extends Wizard {
 			return rest_ensure_response(
 				[
 					'valid'  => false,
-					'reason' => esc_html__( 'WooCommerce coupons are unavailable.', 'newspack-plugin' ),
+					'reason' => __( 'WooCommerce coupons are unavailable.', 'newspack-plugin' ),
 				]
 			);
 		}
@@ -339,7 +339,7 @@ class Audience_Subscription_Products extends Wizard {
 			return rest_ensure_response(
 				[
 					'valid'  => false,
-					'reason' => esc_html__( 'Coupons are disabled in WooCommerce settings.', 'newspack-plugin' ),
+					'reason' => __( 'Coupons are disabled in WooCommerce settings.', 'newspack-plugin' ),
 				]
 			);
 		}
@@ -349,7 +349,7 @@ class Audience_Subscription_Products extends Wizard {
 				return rest_ensure_response(
 					[
 						'valid'  => false,
-						'reason' => esc_html__( 'Coupon not found.', 'newspack-plugin' ),
+						'reason' => __( 'Coupon not found.', 'newspack-plugin' ),
 					]
 				);
 			}
