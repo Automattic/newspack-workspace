@@ -51,6 +51,16 @@ class Admin_Shell_Assets {
 
 		$current_page->enqueue_extras( self::SCRIPT_HANDLE );
 
+		// `wp_localize_script` interpolates `wp_json_encode()`'s return without
+		// checking it, so one unencodable value would print the global as a
+		// syntax error and stop the app booting, on every screen, with no way
+		// back through the UI. Preferences come from user meta, which anything
+		// can write.
+		$view_prefs = Admin_Shell_Preferences::get_preferences();
+		if ( false === wp_json_encode( $view_prefs ) ) {
+			$view_prefs = [];
+		}
+
 		wp_localize_script(
 			self::SCRIPT_HANDLE,
 			'newspackNewslettersAdmin',
@@ -66,7 +76,7 @@ class Admin_Shell_Assets {
 				'cptSlug'         => Newspack_Newsletters::NEWSPACK_NEWSLETTERS_CPT,
 				'serviceProvider' => Newspack_Newsletters::service_provider(),
 				// Object-shaped even when empty so the JS side always sees a map.
-				'viewPrefs'       => (object) Admin_Shell_Preferences::get_preferences(),
+				'viewPrefs'       => (object) $view_prefs,
 			]
 		);
 	}
