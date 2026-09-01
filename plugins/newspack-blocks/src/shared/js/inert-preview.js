@@ -17,10 +17,17 @@
  * practice. Two gestures never reach this handler at all: middle-click fires
  * auxclick, and on macOS ctrl+click is a secondary click that fires contextmenu.
  *
+ * A target that cannot be asked for an ancestor anchor is ignored rather than
+ * throwing: an exception raised here runs in the capture phase and would stop
+ * every later click in the preview from being handled at all.
+ *
  * @param {MouseEvent | import('react').MouseEvent} event Click event from the capture phase.
  */
 export const preventPreviewNavigation = event => {
 	if ( event.metaKey || event.ctrlKey || event.shiftKey || event.altKey ) {
+		return;
+	}
+	if ( typeof event.target?.closest !== 'function' ) {
 		return;
 	}
 	if ( event.target.closest( 'a' ) ) {

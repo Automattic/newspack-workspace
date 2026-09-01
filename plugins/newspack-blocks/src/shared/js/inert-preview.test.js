@@ -46,6 +46,12 @@ describe( 'preventPreviewNavigation', () => {
 		} );
 	} );
 
+	it( 'ignores a target that cannot be asked for an ancestor anchor', () => {
+		const event = { target: {}, preventDefault: jest.fn() };
+		expect( () => preventPreviewNavigation( event ) ).not.toThrow();
+		expect( event.preventDefault ).not.toHaveBeenCalled();
+	} );
+
 	it( 'leaves non-anchor clicks alone', () => {
 		const container = document.createElement( 'div' );
 		container.innerHTML = '<article><h2 class="entry-title">Headline</h2></article>';

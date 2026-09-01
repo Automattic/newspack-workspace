@@ -144,7 +144,7 @@ class Newspack_Blocks_API {
 				$sponsor_info_item = [
 					'flag'          => $sponsor['sponsor_flag'],
 					'sponsor_name'  => $sponsor['sponsor_name'],
-					'sponsor_url'   => $sponsor['sponsor_url'],
+					'sponsor_url'   => sanitize_url( (string) $sponsor['sponsor_url'] ),
 					'byline_prefix' => $sponsor['sponsor_byline'],
 					'id'            => $sponsor['sponsor_id'],
 					'scope'         => $sponsor['sponsor_scope'],
@@ -290,7 +290,7 @@ class Newspack_Blocks_API {
 				'newspack_post_byline'              => \newspack_blocks_format_byline( $author_info ),
 				'post_status'                       => $post->post_status,
 				'post_type'                         => $post->post_type,
-				'post_link'                         => Newspack_Blocks::get_post_link( $post->ID ),
+				'post_link'                         => sanitize_url( (string) Newspack_Blocks::get_post_link( $post->ID ) ),
 			];
 
 			// Support Newspack Listings hide author/publish date options.

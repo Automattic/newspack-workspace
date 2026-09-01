@@ -284,6 +284,33 @@ class HomepagePostsBlockTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 	}
 
 	/**
+	 * The editor posts payload never carries an unsafe URL scheme.
+	 *
+	 * post_link resolves from the newspack_sponsor_url / newspack_supporter_url
+	 * meta, which is stored through sanitize_text_field and so can hold any
+	 * string. The editor renders it as an href, and a modified click follows it,
+	 * so the payload applies the same protocol allowlist the front end gets from
+	 * esc_url() in templates/article.php.
+	 */
+	public function test_editor_posts_endpoint_strips_unsafe_link_schemes() {
+		$post_id = self::factory()->post->create( [ 'post_status' => 'publish' ] );
+		update_post_meta( $post_id, 'newspack_sponsor_url', 'javascript:alert(1)' );
+		wp_set_current_user( self::factory()->user->create( [ 'role' => 'administrator' ] ) );
+
+		$request = new WP_REST_Request( 'GET', '/newspack-blocks/v1/newspack-blocks-posts' );
+		$request->set_param( 'postsToShow', 10 );
+		$posts = rest_do_request( $request )->get_data();
+
+		$posts_by_id = array_column( $posts, null, 'id' );
+		self::assertArrayHasKey( $post_id, $posts_by_id, 'The editor posts endpoint returns the post.' );
+		self::assertStringNotContainsString(
+			'javascript:',
+			(string) $posts_by_id[ $post_id ]['post_link'],
+			'The editor payload does not carry a javascript: URL for the preview to render as an href.'
+		);
+	}
+
+	/**
 	 * The editor posts payload carries real author-archive links.
 	 *
 	 * Navigation is prevented at the preview container (see
