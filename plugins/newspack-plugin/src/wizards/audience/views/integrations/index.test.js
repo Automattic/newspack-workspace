@@ -19,15 +19,6 @@ const captured = {};
 const loadingStates = [];
 
 jest.mock( '@wordpress/api-fetch', () => jest.fn() );
-jest.mock( '@wordpress/components', () => ( {
-	Modal: ( { title, children, onRequestClose } ) => (
-		<div role="dialog" aria-label={ title }>
-			<button onClick={ onRequestClose }>close</button>
-			{ children }
-		</div>
-	),
-	Button: ( { children, onClick } ) => <button onClick={ onClick }>{ children }</button>,
-} ) );
 jest.mock( '@wordpress/data', () => ( {
 	useDispatch: () => ( { addNotice: mockAddNotice, removeNotice: mockRemoveNotice } ),
 } ) );
@@ -50,7 +41,6 @@ jest.mock( './settings-section', () => ( {
 } ) );
 jest.mock( './configure-view', () => ( { ConfigureView: () => null } ) );
 jest.mock( './logs-view', () => ( { LogsView: () => null } ) );
-jest.mock( './onboarding-modal', () => ( { OnboardingModal: () => null } ) );
 
 const SETTINGS_MAP = {
 	esp: { id: 'esp', name: 'Newsletter ESP', enabled: false, settings: [] },

@@ -32,12 +32,6 @@ class Audience_Integrations extends Wizard {
 	protected $parent_slug = 'newspack-audience';
 
 	/**
-	 * User-meta key recording that a user dismissed the Integrations
-	 * onboarding modal. Per user: each admin gets the introduction once.
-	 */
-	const ONBOARDING_DISMISSED_META = 'np_audience_integrations_onboarding_dismissed';
-
-	/**
 	 * Constructor.
 	 */
 	public function __construct() {
@@ -99,27 +93,6 @@ class Audience_Integrations extends Wizard {
 		if ( class_exists( 'Newspack_Newsletters' ) ) {
 			$localized_data['esp_provider'] = \Newspack_Newsletters::service_provider();
 		}
-
-		$localized_data['show_onboarding'] = ! (bool) \get_user_meta( \get_current_user_id(), self::ONBOARDING_DISMISSED_META, true );
-
-		// Whether the Mailchimp (esp) integration's legacy sync is actually
-		// configured — connected with a stored audience. The onboarding modal
-		// gates its "settings carried over" copy on this, not on the provider
-		// slug: a Mailchimp site that never set up reader sync has nothing to
-		// carry over. Stored-config check only; no provider API call.
-		$esp_integration                        = Integrations::get_integration( 'esp' );
-		$localized_data['esp_sync_configured'] = $esp_integration ? (bool) $esp_integration->is_set_up() : false;
-
-		/**
-		 * Extra paragraphs for the Integrations onboarding modal.
-		 *
-		 * Lets an integration add site-specific context — e.g. the dedicated
-		 * ActiveCampaign integration noting that reader sync moved to its card
-		 * after auto-migration.
-		 *
-		 * @param string[] $notices Notice paragraphs.
-		 */
-		$localized_data['onboarding_notices'] = \array_values( \array_filter( (array) \apply_filters( 'newspack_audience_integrations_onboarding_notices', [] ), 'is_string' ) );
 
 		\wp_localize_script(
 			'newspack-wizards',
@@ -252,16 +225,6 @@ class Audience_Integrations extends Wizard {
 				],
 			]
 		);
-
-		register_rest_route(
-			NEWSPACK_API_NAMESPACE,
-			'/wizard/' . $this->slug . '/onboarding/dismiss',
-			[
-				'methods'             => WP_REST_Server::CREATABLE,
-				'callback'            => [ $this, 'api_dismiss_onboarding' ],
-				'permission_callback' => [ $this, 'api_permissions_check' ],
-			]
-		);
 	}
 
 	/**
@@ -344,16 +307,6 @@ class Audience_Integrations extends Wizard {
 		}
 
 		return rest_ensure_response( Integrations::get_all_integration_settings() );
-	}
-
-	/**
-	 * Record that the current user dismissed the onboarding modal.
-	 *
-	 * @return WP_REST_Response
-	 */
-	public function api_dismiss_onboarding() {
-		\update_user_meta( \get_current_user_id(), self::ONBOARDING_DISMISSED_META, true );
-		return \rest_ensure_response( [ 'dismissed' => true ] );
 	}
 
 	/**
