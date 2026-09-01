@@ -57,7 +57,7 @@ class Connect_Node {
 			return false;
 		}
 		$nonce_data = $nonces[ $node_id ];
-		if ( ! is_string( $nonce ) || ! hash_equals( $nonce_data['nonce'], $nonce ) ) {
+		if ( ! is_string( $nonce ) || ! isset( $nonce_data['nonce'] ) || ! is_string( $nonce_data['nonce'] ) || ! hash_equals( $nonce_data['nonce'], $nonce ) ) {
 			return false;
 		}
 		if ( time() - $nonce_data['time'] > 60 * 60 ) {
