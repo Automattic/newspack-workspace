@@ -71,6 +71,7 @@ class Admin_Shell_Preferences {
 	const MAX_STYLED_COLUMNS = 50;
 	const MAX_ID_LENGTH      = 64;
 	const MAX_WIDTH_LENGTH   = 16;
+	const MAX_PREF_KEYS      = 64;
 
 	/**
 	 * Upper bound for the grid layout's preview-size control, which
@@ -105,9 +106,13 @@ class Admin_Shell_Preferences {
 							'required' => true,
 						],
 						'prefs'  => [
-							'type'       => 'object',
-							'required'   => true,
-							'properties' => self::get_prefs_schema(),
+							'type'          => 'object',
+							'required'      => true,
+							// Generously above the whitelist so a key added
+							// upstream can never hit it; it exists only to bound
+							// the work an oversized payload can ask for.
+							'maxProperties' => self::MAX_PREF_KEYS,
+							'properties'    => self::get_prefs_schema(),
 						],
 					],
 				],
@@ -421,7 +426,11 @@ class Admin_Shell_Preferences {
 				continue;
 			}
 			$value = $style[ $key ];
-			if ( is_int( $value ) || is_float( $value ) ) {
+			// `INF`/`NAN` survive `is_numeric()` but can't be JSON-encoded, and
+			// these values are bootstrapped into the page through
+			// `wp_localize_script` — one of them stored would print the admin
+			// global as a syntax error and stop the app booting.
+			if ( is_int( $value ) || ( is_float( $value ) && is_finite( $value ) ) ) {
 				$clean[ $key ] = $value;
 			} elseif ( is_string( $value ) && '' !== trim( $value ) && strlen( $value ) <= self::MAX_WIDTH_LENGTH ) {
 				$clean[ $key ] = trim( $value );

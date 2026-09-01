@@ -228,8 +228,10 @@ class Admin_Shell_Preferences_Test extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Query state is not a preference — the schema rejects it outright
-	 * rather than storing a stale search or filter set.
+	 * Query state is not a preference. A payload carrying nothing else is
+	 * rejected, rather than stored as a stale search or filter set: the keys
+	 * pass validation as unrecognised properties, `sanitize_prefs()` drops
+	 * them, and an empty result is what `update_preferences()` refuses.
 	 */
 	public function test_rejects_query_state() {
 		foreach ( [ [ 'search' => 'digest' ], [ 'page' => 3 ], [ 'filters' => [] ] ] as $prefs ) {
@@ -408,31 +410,91 @@ class Admin_Shell_Preferences_Test extends WP_UnitTestCase {
 	}
 
 	/**
-	 * `usermeta` is network-global, so the key carries the blog prefix on a
-	 * network. Off one it stays unprefixed, which is what keeps values
-	 * already in the table readable.
+	 * `usermeta` is network-global, so on a network the key carries the blog
+	 * prefix — without it one site's list configuration would be read by every
+	 * other site. Off a network it stays unprefixed, which is what keeps
+	 * values already in the table readable.
 	 */
-	public function test_the_meta_key_is_unprefixed_off_a_network() {
-		if ( is_multisite() ) {
-			$this->markTestSkipped( 'The unprefixed key is the single-site branch.' );
-		}
+	public function test_the_meta_key_is_scoped_per_site_only_on_a_network() {
+		global $wpdb;
 
-		$this->assertSame(
-			Admin_Shell_Preferences::USER_META_KEY_PREFIX . 'newsletters-list',
-			Admin_Shell_Preferences::get_user_meta_key( 'newsletters-list' )
-		);
+		$expected = ( is_multisite() ? $wpdb->get_blog_prefix() : '' ) . Admin_Shell_Preferences::USER_META_KEY_PREFIX . 'newsletters-list';
+
+		$this->assertSame( $expected, Admin_Shell_Preferences::get_user_meta_key( 'newsletters-list' ) );
 	}
 
 	/**
-	 * The schema accepts a fractional width, so storing one must not
-	 * truncate it — the two halves would otherwise disagree about what a
-	 * fractional width means.
+	 * A key this version doesn't know is dropped, and the rest of the payload
+	 * still lands. Schema validation fails the whole request on the first
+	 * unrecognised property, so a stricter schema here would let one key added
+	 * upstream stop every appearance setting persisting.
 	 */
-	public function test_a_fractional_column_width_survives_sanitization() {
-		$sanitized = Admin_Shell_Preferences::sanitize_prefs(
-			[ 'layout' => [ 'styles' => [ 'status' => [ 'width' => 217.5 ] ] ] ]
+	public function test_an_unknown_key_does_not_reject_the_rest_of_the_payload() {
+		$payloads = [
+			[
+				'perPage'                => 50,
+				'someFutureDataViewsKey' => 'x',
+			],
+			[
+				'perPage' => 50,
+				'sort'    => [
+					'field'         => 'date',
+					'someFutureKey' => 'x',
+				],
+			],
+			[
+				'perPage' => 50,
+				'layout'  => [
+					'density'       => 'compact',
+					'someFutureKey' => 'x',
+				],
+			],
+		];
+
+		foreach ( $payloads as $prefs ) {
+			$response = rest_do_request( $this->make_request( 'newsletters-list', $prefs ) );
+
+			$this->assertSame( 200, $response->get_status(), 'Expected acceptance for: ' . wp_json_encode( $prefs ) );
+			$this->assertSame( 50, Admin_Shell_Preferences::get_preferences()['newsletters-list']['perPage'] );
+			$this->assertArrayNotHasKey( 'someFutureDataViewsKey', Admin_Shell_Preferences::get_preferences()['newsletters-list'] );
+		}
+	}
+
+	/**
+	 * The schema accepts a fractional width, so storing one must not truncate
+	 * it. Routed through the route rather than the sanitiser alone, because
+	 * the `[ 'string', 'number' ]` union is what hands PHP the float.
+	 */
+	public function test_a_fractional_column_width_survives_the_round_trip() {
+		$response = rest_do_request(
+			$this->make_request( 'newsletters-list', [ 'layout' => [ 'styles' => [ 'status' => [ 'width' => 217.5 ] ] ] ] )
 		);
 
-		$this->assertSame( 217.5, $sanitized['layout']['styles']['status']['width'] );
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( 217.5, Admin_Shell_Preferences::get_preferences()['newsletters-list']['layout']['styles']['status']['width'] );
+	}
+
+	/**
+	 * `INF` and `NAN` pass `is_numeric()` but cannot be JSON-encoded, and
+	 * preferences are bootstrapped into the page through
+	 * `wp_localize_script`. One of them stored would print the admin global as
+	 * a syntax error and stop the app booting, with no way back through the UI.
+	 */
+	public function test_a_non_finite_column_width_is_not_stored() {
+		$response = rest_do_request(
+			$this->make_request(
+				'newsletters-list',
+				[
+					'perPage' => 50,
+					'layout'  => [ 'styles' => [ 'status' => [ 'width' => INF ] ] ],
+				] 
+			)
+		);
+
+		$this->assertSame( 200, $response->get_status() );
+
+		$prefs = Admin_Shell_Preferences::get_preferences();
+		$this->assertArrayNotHasKey( 'layout', $prefs['newsletters-list'] );
+		$this->assertIsString( wp_json_encode( $prefs ) );
 	}
 }
