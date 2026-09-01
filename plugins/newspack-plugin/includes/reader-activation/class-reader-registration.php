@@ -369,7 +369,15 @@ final class Reader_Registration {
 			$attempts = \wp_cache_incr( $cache_key, 1, $cache_group );
 		} else {
 			$attempts = (int) \get_transient( $cache_key );
-			\set_transient( $cache_key, $attempts + 1, HOUR_IN_SECONDS );
+			// Stop rewriting the counter once it has recorded the crossing: a
+			// sustained flood settles into read-only rejections instead of a
+			// wp_options write per request, and the hour window stops rolling
+			// forward with each hit. The object-cache incr above stays
+			// unconditional — it is atomic, and a guarded read-then-incr would
+			// reintroduce the race it avoids.
+			if ( $attempts <= $limit ) {
+				\set_transient( $cache_key, $attempts + 1, HOUR_IN_SECONDS );
+			}
 			$attempts++;
 		}
 
@@ -432,8 +440,14 @@ final class Reader_Registration {
 	 * The rate limit sits ahead of the key check because
 	 * Integration::validate_registration_request() is an extension point that
 	 * may make outbound API calls, so an unauthenticated flood must be bounded
-	 * before it reaches one. The logged-in branch sits behind every gate so a
-	 * session cannot be used to skip them.
+	 * before it reaches one. The key check sits ahead of reCAPTCHA to keep
+	 * garbage-key requests away from the siteverify roundtrip; the trade — a
+	 * token-less caller can still reach an integration's validator — stays
+	 * bounded by the same rate limit. The logged-in branch sits behind every
+	 * gate so a session cannot be used to skip them; that includes the
+	 * integration's own validator, which must not treat `npe` or any other
+	 * caller-supplied field as a session check — on this path they are
+	 * unrelated to the logged-in user.
 	 *
 	 * @param \WP_REST_Request $request Request object.
 	 * @return \WP_REST_Response|\WP_Error
@@ -486,8 +500,11 @@ final class Reader_Registration {
 		// filter-only registrations keep the shared 'registration' bucket.
 		// Because this now runs ahead of the key check, a request naming an
 		// integration counts against that integration's bucket before the key
-		// is validated. The bucket is per-IP, so a caller can only exhaust
-		// their own budget.
+		// is validated. Buckets are per-IP where the host reports real client
+		// IPs (see the REMOTE_ADDR note in check_registration_rate_limit());
+		// behind a shared proxy or egress address the budget is shared across
+		// its users — logged-in callers included, now that they no longer
+		// return before this check.
 		$bucket     = $integration_instance && $integration_instance->supports_frontend_registration()
 			? self::get_rate_limit_bucket_for( $integration_id )
 			: 'registration';
@@ -507,6 +524,17 @@ final class Reader_Registration {
 		}
 		if ( ! $key_valid ) {
 			Logger::log( 'Frontend registration rejected: invalid key for integration "' . $integration_id . '"' );
+			// The clients on this path treat a key rejection as final, so this
+			// remote entry is the only operator-visible signal when keys fail
+			// site-wide (a rotated key, a cached page emitting a stale one).
+			// Per-request, but bounded by the rate limit above. A
+			// visitor-triggered condition, so 'debug' (logstash only), not 'error'.
+			Logger::newspack_log(
+				'newspack_frontend_registration_invalid_key',
+				'Frontend registration rejected: invalid integration key.',
+				[ 'integration_id' => $integration_id ],
+				'debug'
+			);
 			return new \WP_Error(
 				'invalid_integration_key',
 				__( 'Invalid integration key.', 'newspack-plugin' ),
@@ -546,9 +574,14 @@ final class Reader_Registration {
 			 *
 			 * Integrations can hook into this action to handle cases where an existing user attempts to register again via the frontend registration flow. For example, an integration might want to link the existing user account to the integration or log this event for analytics purposes.
 			 *
-			 * @param \WP_User         $current_user         The currently logged-in user.
-			 * @param \WP_REST_Request $request              The original registration request.
-			 * @param Integration|null $integration_instance The integration instance associated with the registration attempt, or null if the integration was registered via filter only.
+			 * Fires only for requests that passed every endpoint gate — including
+			 * the integration's own validate_registration_request() — per the
+			 * validation sequence documented on api_frontend_register_reader().
+			 * A request rejected by any gate never reaches this action.
+			 *
+			 * @param \WP_User                                     $current_user         The currently logged-in user.
+			 * @param \WP_REST_Request                             $request              The original registration request.
+			 * @param \Newspack\Reader_Activation\Integration|null $integration_instance The integration instance associated with the registration attempt, or null if the integration was registered via filter only.
 			 */
 			do_action( 'newspack_frontend_registration_existing_user', $current_user, $request, $integration_instance );
 
