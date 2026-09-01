@@ -23,6 +23,15 @@ function readPaginationInfo( response ) {
 	};
 }
 
+// Read back off the path rather than taken as a second argument: the page
+// ceiling has to agree with the `per_page` the caller actually asked for, and
+// two independent sources could drift apart silently.
+function chunkSizeFromPath( path ) {
+	const query = path.split( '?' )[ 1 ];
+	const perPage = query ? parseInt( new URLSearchParams( query ).get( 'per_page' ), 10 ) : NaN;
+	return Number.isInteger( perPage ) && perPage > 0 ? perPage : FETCH_ALL_CHUNK_SIZE;
+}
+
 // The collection got shorter mid-walk — retrying won't help.
 const OUT_OF_RANGE_PAGE_CODES = [ 'rest_post_invalid_page_number', 'rest_term_invalid_page_number' ];
 
@@ -38,32 +47,22 @@ function isOutOfRangePageError( error ) {
  * trash sub-fetch — `hasResolved` flips solely on the main resolution.
  *
  * When `fetchAll` is set, the first response's `X-WP-TotalPages` drives
- * a walk over the remaining pages. `fetchAllChunkSize` must match the
- * `per_page` the caller built its path with, since it is what turns
- * `FETCH_ALL_MAX_ITEMS` into a page ceiling.
+ * a walk over the remaining pages, capped at `FETCH_ALL_MAX_ITEMS` rows
+ * using the `per_page` read off `path`.
  * `data` commits once the walk finishes (or aborts), and `totalPages` is
  * clamped to 1 so the footer doesn't offer pagination. DataViews shows
  * the walk via its own loading state; there is no separate indicator.
  *
  * @param {Object}  options
- * @param {string}  options.path                Pre-computed REST path. Falsy ⇒ defer.
- * @param {string}  [options.trashCountPath]    When set, sub-fetch for the trash banner.
- * @param {number}  [options.mutationKey]       Bump externally to refetch (alongside internal refresh).
- * @param {string}  [options.errorMessage]      notifyError message on fetch failure.
- * @param {string}  [options.errorNoticeId]     notifyError dedupe id.
- * @param {boolean} [options.fetchAll]          Walk every page of the collection.
- * @param {number}  [options.fetchAllChunkSize] Rows per request of that walk.
+ * @param {string}  options.path             Pre-computed REST path. Falsy ⇒ defer.
+ * @param {string}  [options.trashCountPath] When set, sub-fetch for the trash banner.
+ * @param {number}  [options.mutationKey]    Bump externally to refetch (alongside internal refresh).
+ * @param {string}  [options.errorMessage]   notifyError message on fetch failure.
+ * @param {string}  [options.errorNoticeId]  notifyError dedupe id.
+ * @param {boolean} [options.fetchAll]       Walk every page of the collection.
  * @return {{ data: Array, paginationInfo: Object, isLoading: boolean, hasResolved: boolean, hasLoadedOnce: boolean, trashCount: number|null, refresh: () => void }} Hook state.
  */
-export default function useCollectionData( {
-	path,
-	trashCountPath = null,
-	mutationKey = 0,
-	errorMessage,
-	errorNoticeId,
-	fetchAll = false,
-	fetchAllChunkSize = FETCH_ALL_CHUNK_SIZE,
-} ) {
+export default function useCollectionData( { path, trashCountPath = null, mutationKey = 0, errorMessage, errorNoticeId, fetchAll = false } ) {
 	const [ data, setData ] = useState( [] );
 	const [ paginationInfo, setPaginationInfo ] = useState( { totalItems: 0, totalPages: 0 } );
 	const [ isLoading, setIsLoading ] = useState( true );
@@ -115,7 +114,7 @@ export default function useCollectionData( {
 				// walk is otherwise silent to a screen reader.
 				speak( __( 'Loading all items. This may take a moment.', 'newspack-newsletters' ), 'polite' );
 
-				const maxPage = Math.min( pagination.totalPages, Math.ceil( FETCH_ALL_MAX_ITEMS / fetchAllChunkSize ) );
+				const maxPage = Math.min( pagination.totalPages, Math.ceil( FETCH_ALL_MAX_ITEMS / chunkSizeFromPath( path ) ) );
 
 				let endedEarly = false;
 				let cappedByMax = false;
@@ -217,7 +216,7 @@ export default function useCollectionData( {
 		return () => {
 			cancelled = true;
 		};
-	}, [ path, mutationKey, refreshKey, errorMessage, errorNoticeId, fetchAll, fetchAllChunkSize ] );
+	}, [ path, mutationKey, refreshKey, errorMessage, errorNoticeId, fetchAll ] );
 
 	useEffect( () => {
 		if ( ! trashCountPath ) {

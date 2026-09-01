@@ -40,7 +40,6 @@ export default function useLayoutsData( view, mutationKey = 0 ) {
 		path: buildPath( view ),
 		mutationKey,
 		fetchAll: isFetchAllPerPage( view?.perPage ),
-		fetchAllChunkSize: LAYOUTS_FETCH_ALL_CHUNK_SIZE,
 		errorMessage: __( 'Failed to load layouts. Please refresh the page.', 'newspack-newsletters' ),
 		errorNoticeId: 'newspack-newsletters-layouts-list-fetch-error',
 	} );

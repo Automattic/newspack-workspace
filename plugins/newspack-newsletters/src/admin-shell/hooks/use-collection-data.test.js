@@ -105,6 +105,21 @@ describe( 'useCollectionData', () => {
 			expect( result.current.paginationInfo ).toEqual( { totalItems: result.current.data.length, totalPages: 1 } );
 		} );
 
+		it( 'derives the fetch-all page ceiling from the path per_page', async () => {
+			const chunk = 200;
+			apiFetch.mockImplementation( ( { path, parse } ) => {
+				const page = Number( ( path.match( /[?&]page=(\d+)/ ) || [] )[ 1 ] || 1 );
+				const items = Array.from( { length: chunk }, ( unused, i ) => ( { id: page * chunk + i } ) );
+				return Promise.resolve( parse === false ? makeResponse( items, { total: 50000, totalPages: 500 } ) : items );
+			} );
+
+			const { result } = renderHook( () => useCollectionData( { path: `/wp/v2/test?per_page=${ chunk }&page=1`, fetchAll: true } ) );
+
+			await waitFor( () => expect( result.current.isLoading ).toBe( false ) );
+			expect( apiFetch ).toHaveBeenCalledTimes( FETCH_ALL_MAX_ITEMS / chunk );
+			expect( result.current.data ).toHaveLength( FETCH_ALL_MAX_ITEMS );
+		} );
+
 		it( 'stops quietly on a deterministic out-of-range page — no retry, no error notice', async () => {
 			let page2Attempts = 0;
 			apiFetch.mockImplementation( ( { path } ) => {
