@@ -32,6 +32,31 @@ function removeQueryArgs( str: string ) {
 let promiseCache: Record< string, any > = {};
 
 /**
+ * The message a REST endpoint wrote for a rejected parameter.
+ *
+ * When a `sanitize_callback` or `validate_callback` returns an error, WP keeps only its
+ * message, filed under `data.params[ <param name> ]`, and sends the generic
+ * `Invalid parameter(s): <param name>` as the top-level message. That generic string is
+ * what the wizard would otherwise show, naming neither what was wrong nor how to fix it.
+ *
+ * Only `rest_invalid_param` fills `data.params` that way. `rest_missing_callback_param`
+ * fills it with a numerically-indexed list of parameter *names*, so reading that as
+ * messages would turn "Missing parameter(s): gate" into a bare "gate".
+ *
+ * @param error The error response from the API.
+ * @return      The per-parameter messages, or an empty string when there are none.
+ */
+const getInvalidParamMessage = ( error: WpFetchError ): string => {
+	const params = error.data?.params;
+	if ( 'rest_invalid_param' !== error.code || ! params || typeof params !== 'object' ) {
+		return '';
+	}
+	return Object.values( params )
+		.filter( message => typeof message === 'string' && message )
+		.join( ' ' );
+};
+
+/**
  * Parses the API error response into a WizardApiError object.
  *
  * @param error The error response from the API.
@@ -50,7 +75,7 @@ const parseApiError = ( error: WpFetchError | string ): WizardApiError | null =>
 	} else if ( typeof error === 'string' ) {
 		newError.message = error;
 	} else if ( error instanceof Error || 'message' in error ) {
-		newError.message = error.message ?? newError.message;
+		newError.message = getInvalidParamMessage( error ) || error.message || newError.message;
 		newError.statusCode = error.data?.status ?? newError.statusCode;
 		newError.errorCode = error.code ?? newError.errorCode;
 		newError.details = '';

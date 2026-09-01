@@ -19,7 +19,7 @@ import {
 	getMissingOptionLabel,
 	type AccessRuleOption,
 } from '../../../../content-gate/access-rule-options';
-import { getMeteringCount } from './utils';
+import { getMeteringCount, isMalformedAccessRuleValue, isUnconstrainedAccessRuleValue } from './utils';
 import { normalizeOneTimePurchaseValue } from '../../../../content-gate/components/one-time-purchase-rule-control';
 
 const availableAccessRules = window.newspackAudienceContentGates.available_access_rules || {};
@@ -82,6 +82,22 @@ const formatAccessRuleValue = ( rule: GateAccessRule, optionsBySlug: Record< str
 			__( '%s (invalid duration, grants no access)', 'newspack-plugin' ),
 			products
 		);
+	}
+	if ( isMalformedAccessRuleValue( config, rule.value ) ) {
+		// Only a string is quoted back. Anything else renders as `[object Object]` or as
+		// a comma-joined list that reads like something the publisher typed.
+		return 'string' === typeof rule.value
+			? sprintf(
+					// translators: %s: the stored value. Shown when the value is in a shape the rule can't use; the rule then never grants access.
+					__( '%s (invalid value, grants no access)', 'newspack-plugin' ),
+					rule.value
+			  )
+			: __( 'Invalid value (grants no access)', 'newspack-plugin' );
+	}
+	// A rule left empty renders as a blank condition, which is indistinguishable
+	// from a narrow one — while it is the state that lets every reader through.
+	if ( isUnconstrainedAccessRuleValue( config, rule.value ) ) {
+		return __( 'Not set (grants access to everyone)', 'newspack-plugin' );
 	}
 	if ( Array.isArray( rule.value ) && options ) {
 		return formatAccessRuleOptionValues( rule.value, options, rule.slug );
