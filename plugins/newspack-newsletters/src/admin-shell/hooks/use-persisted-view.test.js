@@ -279,6 +279,57 @@ describe( 'usePersistedView', () => {
 			expect( apiFetch ).toHaveBeenCalledWith( saved( { perPage: 25, fields: fields.slice( 0, 50 ) } ) );
 		} );
 
+		it( 'does not retry a payload the server rejected', async () => {
+			apiFetch.mockRejectedValue( Object.assign( new Error( 'bad request' ), { data: { status: 400 } } ) );
+
+			const { result } = renderHook( () => usePersistedView( 'newsletters-list', DEFAULT_VIEW ) );
+
+			act( () => {
+				result.current[ 1 ]( current => ( { ...current, perPage: 50 } ) );
+			} );
+			await settle();
+
+			expect( apiFetch ).toHaveBeenCalledTimes( 1 );
+			expect( notifyError ).toHaveBeenCalledTimes( 1 );
+		} );
+
+		it( 'reports a later failure after an earlier one recovered', async () => {
+			apiFetch.mockRejectedValueOnce( new Error( 'blip' ) ).mockRejectedValueOnce( new Error( 'blip' ) );
+
+			const { result } = renderHook( () => usePersistedView( 'newsletters-list', DEFAULT_VIEW ) );
+
+			act( () => {
+				result.current[ 1 ]( current => ( { ...current, perPage: 50 } ) );
+			} );
+			await settle();
+			expect( notifyError ).toHaveBeenCalledTimes( 1 );
+
+			// Recovers on the next change, which must clear the latch.
+			act( () => {
+				result.current[ 1 ]( current => ( { ...current, perPage: 20 } ) );
+			} );
+			await settle();
+
+			apiFetch.mockRejectedValue( new Error( 'blip' ) );
+			act( () => {
+				result.current[ 1 ]( current => ( { ...current, perPage: 10 } ) );
+			} );
+			await settle();
+
+			expect( notifyError ).toHaveBeenCalledTimes( 2 );
+		} );
+
+		it( 'never sends a layout type the server enum lacks', async () => {
+			const { result } = renderHook( () => usePersistedView( 'newsletters-list', DEFAULT_VIEW ) );
+
+			act( () => {
+				result.current[ 1 ]( current => ( { ...current, type: 'carousel', perPage: 50 } ) );
+			} );
+			await settle();
+
+			expect( apiFetch ).toHaveBeenCalledWith( saved( { perPage: 50 } ) );
+		} );
+
 		it( 'never has two saves in flight, so writes cannot reach the server out of order', async () => {
 			const deferred = {};
 			apiFetch.mockImplementationOnce( () => new Promise( resolve => ( deferred.resolve = resolve ) ) );

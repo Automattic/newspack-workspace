@@ -36,6 +36,11 @@ const SAVE_ERROR_NOTICE_ID = 'newspack-newsletters-view-prefs-save-error';
 // list outright rather than truncating it.
 const MAX_FIELDS = 50;
 
+// Mirrors `Admin_Shell_Preferences::LAYOUT_TYPES`. A screen's own
+// `layoutTypes` is narrower than this today, but it is the screen's list, so
+// it can't stand in for the server enum.
+const LAYOUT_TYPES = [ 'table', 'grid', 'list' ];
+
 // Mirrors `Admin_Shell_Preferences::DENSITIES`.
 const DENSITIES = [ 'compact', 'balanced', 'comfortable' ];
 
@@ -117,7 +122,7 @@ function toPrefs( view = {}, { layoutTypes = null } = {} ) {
 	if ( isValidPerPage( view.perPage ) ) {
 		prefs.perPage = view.perPage;
 	}
-	if ( isNonEmptyString( view.type ) && ( ! layoutTypes || layoutTypes.includes( view.type ) ) ) {
+	if ( LAYOUT_TYPES.includes( view.type ) && ( ! layoutTypes || layoutTypes.includes( view.type ) ) ) {
 		prefs.type = view.type;
 	}
 	if ( isNonEmptyString( view.titleField ) ) {
@@ -283,6 +288,13 @@ export default function usePersistedView(
 	const flushRef = useRef( () => {} );
 
 	useEffect( () => {
+		// A rejected payload fails identically on a retry; only a transport
+		// blip or a server fault is worth sending twice.
+		const isRetryable = reason => {
+			const status = reason?.data?.status;
+			return ! status || status >= 500;
+		};
+
 		// A drifted schema fails every save, so report the first one and stay
 		// quiet after that rather than raising a snackbar per density toggle.
 		const reportFailure = reason => {
@@ -312,6 +324,9 @@ export default function usePersistedView(
 			} )
 				.then( () => {
 					lastSavedRef.current = payload;
+					// A blip that recovers shouldn't leave the latch spent, or
+					// a genuine failure later in the session goes unreported.
+					saveFailureReportedRef.current = false;
 				} )
 				.catch( error => {
 					failed = true;
@@ -336,7 +351,7 @@ export default function usePersistedView(
 					}
 					// Nothing else will retrigger the effect, so retry once —
 					// still keepalive if the page is on its way out.
-					if ( attempt < 1 ) {
+					if ( attempt < 1 && isRetryable( failureReason ) ) {
 						save( payload, { attempt: attempt + 1, keepalive } );
 						return;
 					}
