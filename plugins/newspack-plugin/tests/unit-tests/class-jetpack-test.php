@@ -56,7 +56,7 @@ class Test_Jetpack extends \WP_UnitTestCase {
 	 * Reset request superglobals and stub state the share gate reads.
 	 */
 	public function tear_down(): void {
-		unset( $_GET['share'], $_GET[ Jetpack::TOKEN_QUERY_ARG ], $_GET['nb'] );
+		unset( $_GET['share'], $_GET[ Jetpack::SHARE_TOKEN_QUERY_ARG ], $_GET['nb'] );
 		if ( null === $this->original_request_uri ) {
 			unset( $_SERVER['REQUEST_URI'] );
 		} else {
@@ -221,7 +221,7 @@ class Test_Jetpack extends \WP_UnitTestCase {
 	 */
 	public function test_gate_blocks_share_request_with_invalid_token() {
 		$_GET['share']                    = 'twitter';
-		$_GET[ Jetpack::TOKEN_QUERY_ARG ] = 'not-a-real-token';
+		$_GET[ Jetpack::SHARE_TOKEN_QUERY_ARG ] = 'not-a-real-token';
 		$this->assertTrue( Jetpack::should_block_share_request() );
 	}
 
@@ -230,7 +230,7 @@ class Test_Jetpack extends \WP_UnitTestCase {
 	 */
 	public function test_gate_allows_share_request_with_valid_token() {
 		$_GET['share']                    = 'twitter';
-		$_GET[ Jetpack::TOKEN_QUERY_ARG ] = Jetpack::share_token();
+		$_GET[ Jetpack::SHARE_TOKEN_QUERY_ARG ] = Jetpack::share_token();
 		$this->assertFalse( Jetpack::should_block_share_request() );
 	}
 
@@ -239,7 +239,7 @@ class Test_Jetpack extends \WP_UnitTestCase {
 	 */
 	public function test_gate_allows_share_request_with_day_old_token() {
 		$_GET['share']                    = 'twitter';
-		$_GET[ Jetpack::TOKEN_QUERY_ARG ] = Jetpack::share_token( 1 );
+		$_GET[ Jetpack::SHARE_TOKEN_QUERY_ARG ] = Jetpack::share_token( 1 );
 		$this->assertFalse( Jetpack::should_block_share_request() );
 	}
 
@@ -278,7 +278,7 @@ class Test_Jetpack extends \WP_UnitTestCase {
 	 * so a blocked request lands on the bare, cacheable permalink.
 	 */
 	public function test_share_redirect_url_strips_share_args() {
-		$_SERVER['REQUEST_URI'] = '/a-post/?share=twitter&' . Jetpack::TOKEN_QUERY_ARG . '=abc123&nb=1';
+		$_SERVER['REQUEST_URI'] = '/a-post/?share=twitter&' . Jetpack::SHARE_TOKEN_QUERY_ARG . '=abc123&nb=1';
 		$this->assertSame( '/a-post/', Jetpack::get_share_redirect_url() );
 	}
 }
