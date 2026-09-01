@@ -852,18 +852,26 @@ class Access_Rules {
 	 * hypothetical into a real answer — which is the hole the email-domain rule's
 	 * verification requirement exists to close.
 	 *
+	 * The first constraint is enforced for the one memo the replay is known to reach:
+	 * `Institution`'s per-request matching cache is cleared on the way out, so a name
+	 * map computed under the assumption is recomputed for real by whatever reads it
+	 * next (GA4 access labels, ESP contact metadata). A callback that memoises
+	 * elsewhere is still the caller's responsibility, and can tell it is inside a
+	 * hypothetical via {@see self::is_verification_assumed_for()}.
+	 *
 	 * @param int      $user_id  The reader to treat as verified.
 	 * @param callable $callback Callback to run.
 	 *
 	 * @return mixed The callback's return value.
 	 */
 	public static function with_assumed_verification( $user_id, $callback ) {
-		$previous                      = self::$assumed_verified_user_id;
+		$previous                       = self::$assumed_verified_user_id;
 		self::$assumed_verified_user_id = (int) $user_id;
 		try {
 			return $callback();
 		} finally {
 			self::$assumed_verified_user_id = $previous;
+			Institution::reset_matching_cache();
 		}
 	}
 

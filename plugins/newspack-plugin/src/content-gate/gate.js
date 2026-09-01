@@ -128,6 +128,17 @@ function initVerificationPrompts() {
 	}
 	window.newspackRAS = window.newspackRAS || [];
 	window.newspackRAS.push( function ( ras ) {
+		// The modal reaches both onSuccess and onClose on the Continue path — it closes
+		// itself and then reports success — so the reload is claimed once rather than
+		// fired from each.
+		let reloading = false;
+		const reloadOnce = () => {
+			if ( reloading ) {
+				return;
+			}
+			reloading = true;
+			window.location.reload();
+		};
 		boxes.forEach( box => {
 			wireInlineVerificationBox( box, {
 				url: box.dataset.verificationUrl,
@@ -160,8 +171,8 @@ function initVerificationPrompts() {
 						// the path where the modal closes itself. Reloading either way is
 						// safe — a reader who dismissed without verifying gets the same
 						// gate back.
-						onSuccess: () => window.location.reload(),
-						onClose: () => window.location.reload(),
+						onSuccess: reloadOnce,
+						onClose: reloadOnce,
 					} );
 					return true;
 				},

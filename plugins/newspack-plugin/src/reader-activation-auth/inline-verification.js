@@ -13,6 +13,8 @@
  * @param {string} config.nonce Nonce authorizing the OTP request.
  *
  * @return {Promise<any>} Resolves with the JSON response on success, rejects on failure.
+ *                        A rejection carrying `isServerMessage` has the server's own
+ *                        localized wording in `message`.
  */
 export function sendVerificationOTP( { url, nonce } ) {
 	const body = new FormData();
@@ -34,7 +36,13 @@ export function sendVerificationOTP( { url, nonce } ) {
 			// caller's .catch() runs and the button is re-enabled, instead of advancing to
 			// OTP entry for a code that was never sent.
 			if ( ! json?.success ) {
-				throw new Error( json?.data || 'Failed to send verification code.' );
+				const isServerMessage = typeof json?.data === 'string' && !! json.data;
+				const error = new Error( isServerMessage ? json.data : 'Failed to send verification code.' );
+				// The handler answers every refusal with a localized string, so that message
+				// can be shown to the reader. An unexpected exception's message cannot, which
+				// is what this flag lets the caller tell apart.
+				error.isServerMessage = isServerMessage;
+				throw error;
 			}
 			return json;
 		} );
@@ -52,7 +60,7 @@ export function sendVerificationOTP( { url, nonce } ) {
  * @param {string}      config.url         The admin-ajax URL to POST to.
  * @param {string}      config.nonce       Nonce authorizing the OTP request.
  * @param {Function}    config.onSent      Called once the code is on its way. Return false if it could not proceed.
- * @param {string}      [config.errorText] Message to show in the box when the send fails.
+ * @param {string}      [config.errorText] Message to show in the box when the send fails for a reason the server did not name.
  *
  * @return {boolean} Whether the box was wired.
  */
@@ -66,18 +74,32 @@ export function wireInlineVerificationBox( box, { url, nonce, onSent, errorText 
 	button.dataset.otpWired = '1';
 
 	// The box marks its own error element. Deriving one structurally would land on a
-	// different paragraph in each of the two markups that use this.
-	const showError = () => {
+	// different paragraph in each of the markups that use this.
+	const showError = error => {
 		button.disabled = false;
+		button.removeAttribute( 'aria-busy' );
 		button.textContent = button.textContent.trim();
+		// Disabling the button dropped focus to <body>. Put it back, so a keyboard or
+		// screen-reader reader can retry without traversing the page again.
+		button.focus();
 		const errorEl = box.querySelector( '[data-error-target]' );
-		if ( errorEl && errorText ) {
-			errorEl.textContent = errorText;
+		if ( ! errorEl ) {
+			return;
 		}
+		// The server's own wording wherever there is one. The refusal readers actually
+		// hit is the one-minute resend limit, which has to read as "a code is already on
+		// its way" rather than as a failure.
+		const message = error?.isServerMessage ? error.message : errorText;
+		if ( ! message ) {
+			return;
+		}
+		errorEl.textContent = message;
+		errorEl.hidden = false;
 	};
 
 	button.addEventListener( 'click', () => {
 		button.disabled = true;
+		button.setAttribute( 'aria-busy', 'true' );
 		sendVerificationOTP( { url, nonce } )
 			.then( () => {
 				if ( typeof onSent !== 'function' ) {

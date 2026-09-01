@@ -62,7 +62,7 @@ window.newspackRAS.push( function ( readerActivation ) {
 			wireInlineVerificationBox( box, {
 				url: reader_registration_block_config.verification_url,
 				nonce: reader_registration_block_config.verification_nonce,
-				errorText: 'Something went wrong. Please try again.',
+				errorText: reader_registration_block_config.verification_error,
 				onSent: () => {
 					readerActivation.setOTPTimer();
 					openAuth( 'otp' );

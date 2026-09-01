@@ -136,7 +136,7 @@ class Test_Email_Verification_Prompt extends WP_UnitTestCase {
 				],
 				'registration'  => $registration,
 				'custom_access' => [
-					'active'       => true,
+					'active'       => ! empty( $access_rules ),
 					'access_rules' => $access_rules,
 				],
 			]
@@ -504,6 +504,42 @@ class Test_Email_Verification_Prompt extends WP_UnitTestCase {
 			Email_Verification_Prompt::get_prompt_context(),
 			'Verifying satisfies the registration wall and the institution rule together, so the prompt is offered.'
 		);
+	}
+
+	/**
+	 * The gate a reader is stopped at need not be the gate their address would let them
+	 * past. Here a registration gate denies first and an institution gate two priorities
+	 * down is the route in — one act of verifying clears both, so scoping the walk to the
+	 * denying gate alone would suppress the prompt on a configuration it is exactly for.
+	 */
+	public function test_prompts_when_another_gate_on_the_post_is_the_route_in() {
+		$institution_id = $this->create_institution( 'Example University', 'example.test' );
+		$this->create_gate(
+			[],
+			1,
+			[
+				'active'               => true,
+				'require_verification' => true,
+			]
+		);
+		$this->create_gate(
+			[
+				[
+					[
+						'slug'  => 'institution',
+						'value' => [ $institution_id ],
+					],
+				],
+			],
+			2
+		);
+		$reader_id = $this->create_reader( 'reader@example.test' );
+
+		$this->assertTrue( $this->visit_gated_post_as( $reader_id ), 'Sanity: the unverified reader is denied.' );
+
+		$prompt_context = Email_Verification_Prompt::get_prompt_context();
+		$this->assertNotFalse( $prompt_context, 'The reader is offered the prompt, though the gate denying them holds no domain rule.' );
+		$this->assertSame( [ 'Example University' ], $prompt_context['institutions'] );
 	}
 
 	/**

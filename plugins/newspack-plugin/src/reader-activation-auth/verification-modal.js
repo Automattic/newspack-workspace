@@ -82,13 +82,23 @@ export function openVerificationModal( config = {} ) {
 					config.onSendCode();
 				}
 			} )
-			.catch( () => {
+			.catch( error => {
 				sendOtpButton.disabled = false;
 				sendOtpButton.textContent = sendOtpButton.textContent.trim();
-				const errorP = modal.querySelector( '.newspack-ui__box p:not(:has(button))' );
-				if ( errorP ) {
-					errorP.textContent = newspack_reader_activation_labels?.verification_error || '';
+				sendOtpButton.focus();
+				const errorP = modal.querySelector( '[data-error-target]' );
+				if ( ! errorP ) {
+					return;
 				}
+				// The server's own wording wherever there is one — the refusal readers
+				// actually hit is the one-minute resend limit, which has to read as "a code
+				// is already on its way" rather than as a failure.
+				const message = error?.isServerMessage ? error.message : newspack_reader_activation_labels?.verification_error || '';
+				if ( ! message ) {
+					return;
+				}
+				errorP.textContent = message;
+				errorP.hidden = false;
 			} );
 	}
 

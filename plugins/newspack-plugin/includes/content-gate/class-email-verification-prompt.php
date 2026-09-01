@@ -26,14 +26,14 @@ defined( 'ABSPATH' ) || exit;
 class Email_Verification_Prompt {
 
 	/**
-	 * Per-request memo of prompt contexts, keyed by gate ID and reader ID. `false`
-	 * records a reader already found ineligible for that gate, so the rule walk and
-	 * the hypothetical evaluation run at most once per pair per request.
+	 * Per-request memo of prompt contexts, keyed by post ID, gate ID and reader ID.
+	 * `false` records a reader already found ineligible there, so the rule walk and the
+	 * hypothetical evaluation run at most once per combination per request.
 	 *
-	 * The reader is part of the key because the context carries their address: a
-	 * process that resolves the same gate for several readers — a CLI worker, a REST
-	 * callback iterating a list — would otherwise hand the second reader the first
-	 * one's prompt.
+	 * The reader is part of the key because the context carries their address, and the
+	 * post because the verdict answers whether *that* post opens: a process resolving
+	 * the same gate for several readers or several posts — a CLI worker, a REST
+	 * callback iterating a list — would otherwise read back another one's verdict.
 	 *
 	 * @var array<string,array|false>
 	 */
@@ -78,7 +78,7 @@ class Email_Verification_Prompt {
 	/**
 	 * Resolve the prompt context for the gate denying the current reader.
 	 *
-	 * Cheap before expensive. The first stage walks the gate's rules for a domain the
+	 * Cheap before expensive. The first stage walks the post's gates for a domain the
 	 * reader's address matches, which rules out every visitor but the handful the
 	 * prompt is for. Only those reach the second, which asks what the reader would see
 	 * if they verified — the question the prompt is about to make a promise about, and
@@ -117,7 +117,11 @@ class Email_Verification_Prompt {
 		if ( ! $gate_id ) {
 			return false;
 		}
-		$cache_key = $gate_id . '_' . $user->ID;
+		$post_id = (int) \get_queried_object_id();
+		if ( ! $post_id ) {
+			return false;
+		}
+		$cache_key = $post_id . '_' . $gate_id . '_' . $user->ID;
 		if ( isset( self::$context_cache[ $cache_key ] ) ) {
 			return self::$context_cache[ $cache_key ];
 		}
@@ -125,33 +129,48 @@ class Email_Verification_Prompt {
 		// `newspack_is_post_restricted` chain, and a callback on it that reaches back
 		// here would find no memo and recurse.
 		self::$context_cache[ $cache_key ] = false;
-		self::$context_cache[ $cache_key ] = self::build_prompt_context( $user, $gate_id );
+		self::$context_cache[ $cache_key ] = self::build_prompt_context( $user, $post_id );
 		return self::$context_cache[ $cache_key ];
 	}
 
 	/**
-	 * Build the prompt context for a reader and gate, uncached.
+	 * Build the prompt context for a reader and post, uncached.
+	 *
+	 * Every gate covering the post is walked, not only the one that denied. The gate a
+	 * reader is stopped at need not be the one their address would let them past: a
+	 * registration gate walling verification can deny at priority 1 while an
+	 * institution gate at priority 2 is the route in, and the same act of verifying
+	 * clears both.
 	 *
 	 * @param \WP_User $user    The reader.
-	 * @param int      $gate_id The gate denying them.
+	 * @param int      $post_id The post they were denied.
 	 *
 	 * @return array|false
 	 */
-	private static function build_prompt_context( \WP_User $user, int $gate_id ) {
-		$custom_access = Content_Gate::get_custom_access_settings( $gate_id );
-		if ( empty( $custom_access['active'] ) || empty( $custom_access['access_rules'] ) ) {
-			return false;
+	private static function build_prompt_context( \WP_User $user, int $post_id ) {
+		$matching_groups = [];
+		foreach ( Content_Restriction_Control::get_post_gates( $post_id ) as $gate ) {
+			$custom_access = $gate['custom_access'] ?? [];
+			if ( empty( $custom_access['active'] ) || empty( $custom_access['access_rules'] ) ) {
+				continue;
+			}
+			$matching_groups = array_merge(
+				$matching_groups,
+				self::get_domain_matching_groups(
+					$user->user_email,
+					$custom_access['access_rules'],
+					$custom_access['payment_recovery_grace'] ?? true
+				)
+			);
 		}
-
-		$matching_groups = self::get_domain_matching_groups( $user->user_email, $custom_access['access_rules'] );
 		if ( empty( $matching_groups ) ) {
 			return false;
 		}
 
 		$institutions = Access_Rules::with_assumed_verification(
 			$user->ID,
-			function () use ( $user, $custom_access, $matching_groups ) {
-				return self::get_unlocking_institution_names( $user, $custom_access, $matching_groups );
+			function () use ( $user, $post_id, $matching_groups ) {
+				return self::get_unlocking_institution_names( $user, $post_id, $matching_groups );
 			}
 		);
 		if ( null === $institutions ) {
@@ -174,15 +193,21 @@ class Email_Verification_Prompt {
 	 * because they memoise a result that GA4 labels and ESP contact metadata read back
 	 * as fact.
 	 *
-	 * @param string $email        The reader's email address.
-	 * @param array  $access_rules The gate's access rules, in grouped format.
+	 * @param string $email                   The reader's email address.
+	 * @param array  $access_rules            The gate's access rules, in grouped format.
+	 * @param bool   $payment_recovery_grace  The gate's payment recovery grace setting, carried
+	 *                                        on each group so the hypothetical evaluates it
+	 *                                        under the settings of the gate it came from.
 	 *
-	 * @return array<int,array{rules: array, institutions: string[]}> One entry per group
-	 *         holding a rule the address matches, carrying that group's rules and the
-	 *         names of the matched institutions (empty for a bare email-domain rule).
+	 * @return array<int,array{rules: array, institutions: string[], payment_recovery_grace: bool}>
+	 *         One entry per group holding a rule the address matches, carrying that group's
+	 *         rules and the names of the matched institutions (empty for a bare email-domain
+	 *         rule).
 	 */
-	private static function get_domain_matching_groups( string $email, array $access_rules ): array {
-		$institutions    = Institution::get_cached_institutions();
+	private static function get_domain_matching_groups( string $email, array $access_rules, bool $payment_recovery_grace ): array {
+		// Read lazily: a gate whose rules are all non-institution never touches the
+		// transient, which keeps the cheap stage cheap for the readers it rules out.
+		$institutions    = null;
 		$matching_groups = [];
 
 		foreach ( Access_Rules::normalize_rules( $access_rules ) as $group ) {
@@ -202,6 +227,9 @@ class Email_Verification_Prompt {
 				if ( 'institution' !== $slug || empty( $rule['value'] ) || ! is_array( $rule['value'] ) ) {
 					continue;
 				}
+				if ( null === $institutions ) {
+					$institutions = Institution::get_cached_institutions();
+				}
 				foreach ( $rule['value'] as $institution_id ) {
 					$institution_id = absint( $institution_id );
 					if ( empty( $institutions[ $institution_id ]['email_domain'] ) ) {
@@ -219,8 +247,9 @@ class Email_Verification_Prompt {
 			}
 			if ( $matched ) {
 				$matching_groups[] = [
-					'rules'        => $group,
-					'institutions' => $names,
+					'rules'                  => $group,
+					'institutions'           => $names,
+					'payment_recovery_grace' => $payment_recovery_grace,
 				];
 			}
 		}
@@ -237,18 +266,18 @@ class Email_Verification_Prompt {
 	 * another gate on the post denies regardless, there is no route in at all.
 	 *
 	 * @param \WP_User $user            The reader.
-	 * @param array    $custom_access   The gate's custom access settings.
+	 * @param int      $post_id         The post they were denied.
 	 * @param array    $matching_groups Groups from {@see self::get_domain_matching_groups()}.
 	 *
 	 * @return string[]|null Institution names (possibly empty, for a bare email-domain
 	 *                       rule), or null when verifying would not unlock the article.
 	 */
-	private static function get_unlocking_institution_names( \WP_User $user, array $custom_access, array $matching_groups ): ?array {
-		$rule_context = [ 'payment_recovery_grace' => $custom_access['payment_recovery_grace'] ];
-		$names        = [];
-		$unlocks      = false;
+	private static function get_unlocking_institution_names( \WP_User $user, int $post_id, array $matching_groups ): ?array {
+		$names   = [];
+		$unlocks = false;
 
 		foreach ( $matching_groups as $group ) {
+			$rule_context = [ 'payment_recovery_grace' => $group['payment_recovery_grace'] ];
 			if ( ! Access_Rules::evaluate_rules( [ $group['rules'] ], $user->ID, $rule_context ) ) {
 				continue;
 			}
@@ -256,7 +285,7 @@ class Email_Verification_Prompt {
 			$names   = array_merge( $names, $group['institutions'] );
 		}
 
-		if ( ! $unlocks || self::is_post_restricted_hypothetically() ) {
+		if ( ! $unlocks || self::is_post_restricted_hypothetically( $post_id ) ) {
 			return null;
 		}
 
@@ -274,12 +303,16 @@ class Email_Verification_Prompt {
 	 * starts granting. Isolated from the request's own gate resolution so the
 	 * hypothetical neither reads it nor replaces it.
 	 *
+	 * @param int $post_id The post to re-evaluate.
+	 *
 	 * @return bool
 	 */
-	private static function is_post_restricted_hypothetically(): bool {
-		$post_id = \get_queried_object_id();
+	private static function is_post_restricted_hypothetically( int $post_id ): bool {
+		// No post is an unanswerable hypothetical, and the prompt's promise is that this
+		// article opens. Answer "still restricted" so the promise is never made on a
+		// check that did not run.
 		if ( ! $post_id ) {
-			return false;
+			return true;
 		}
 		return (bool) Content_Restriction_Control::with_gate_resolution_isolated(
 			function () use ( $post_id ) {
@@ -319,7 +352,7 @@ class Email_Verification_Prompt {
 					<?php Newspack_UI_Icons::print_svg( 'login' ); ?>
 				</span>
 				<h2><?php echo \esc_html( self::get_headline( $prompt_context['institutions'] ) ); ?></h2>
-				<p data-error-target role="status">
+				<p>
 					<?php
 					echo \wp_kses_post(
 						sprintf(
@@ -330,6 +363,8 @@ class Email_Verification_Prompt {
 					);
 					?>
 				</p>
+				<?php // Errors land in their own paragraph, so the line naming the reader's address survives a failed send and still orients them on the retry. ?>
+				<p data-error-target role="status" hidden></p>
 				<p>
 					<button type="button" class="newspack-ui__button newspack-ui__button--primary newspack-ui__button--wide" data-send-otp>
 						<?php \esc_html_e( 'Send code', 'newspack-plugin' ); ?>
