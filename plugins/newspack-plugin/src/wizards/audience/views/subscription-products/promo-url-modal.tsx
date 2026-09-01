@@ -15,6 +15,7 @@ import { useEffect, useMemo, useRef, useState } from '@wordpress/element';
 import { useDispatch } from '@wordpress/data';
 import apiFetch from '@wordpress/api-fetch';
 import { addQueryArgs } from '@wordpress/url';
+import { decodeEntities } from '@wordpress/html-entities';
 import {
 	BaseControl,
 	Button,
@@ -93,8 +94,10 @@ export default function PromoUrlModal( { item, closeModal }: { item: Subscriptio
 			.finally( () => setIsLoading( false ) );
 	}, [ item.id, kind ] );
 
+	// Titles arrive entity-encoded (get_the_title() and /wp/v2/search both
+	// texturize), so decode them for the plain-text combobox labels.
 	const homepageChoice: PromoPageChoice | null = context
-		? { value: HOMEPAGE_VALUE, label: context.homepage.title, url: context.homepage.url }
+		? { value: HOMEPAGE_VALUE, label: decodeEntities( context.homepage.title ), url: context.homepage.url }
 		: null;
 	const pageChoices: PromoPageChoice[] = useMemo( () => {
 		if ( ! homepageChoice ) {
@@ -136,7 +139,9 @@ export default function PromoUrlModal( { item, closeModal }: { item: Subscriptio
 					if ( requestId !== searchRequestId.current ) {
 						return;
 					}
-					setSearchChoices( results.map( result => ( { value: String( result.id ), label: result.title, url: result.url } ) ) );
+					setSearchChoices(
+						results.map( result => ( { value: String( result.id ), label: decodeEntities( result.title ), url: result.url } ) )
+					);
 				} )
 				.catch( () => {} );
 		}, 300 );
@@ -471,6 +476,14 @@ export default function PromoUrlModal( { item, closeModal }: { item: Subscriptio
 						</>
 					) }
 				</>
+			) }
+			{ kind === 'product' && ( coupon || afterSuccess === 'custom' ) && (
+				<Notice status="info" isDismissible={ false }>
+					{ __(
+						'If the chosen page already shows a checkout button for this plan, that button’s coupon and after-checkout settings apply instead of these.',
+						'newspack-plugin'
+					) }
+				</Notice>
 			) }
 			{ /* PanelBody draws only top/bottom rules on its own; Panel supplies the
 			     surrounding frame so the section reads as one bordered box. */ }
