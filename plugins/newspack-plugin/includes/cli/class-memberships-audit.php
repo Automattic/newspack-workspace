@@ -44,6 +44,14 @@ class Memberships_Audit {
 	const QUERY_BATCH_SIZE = 500;
 
 	/**
+	 * Query var marking a WP_Query as the batch walk's own, so the keyset-paging
+	 * `posts_where` filter constrains that query and nothing else.
+	 *
+	 * @var string
+	 */
+	const WALK_QUERY_FLAG = 'newspack_memberships_audit_walk';
+
+	/**
 	 * Seconds to pause between batches unless --sleep says otherwise.
 	 *
 	 * The audit reads the whole membership table on a production site, several
@@ -232,9 +240,8 @@ class Memberships_Audit {
 	 * This command only reads. Buyer-vs-recipient intent is a publisher
 	 * question, so it reports pairs as evidence and decides nothing: no
 	 * subscription is re-homed and no access is granted. `--format=ids` emits
-	 * the signed-off list for whatever grants the replacement access — a
-	 * `migrate-manual-members` that can select members by user ID, or operator
-	 * scripting on builds where it cannot.
+	 * the signed-off list for `migrate-manual-members --user-ids-file`, which
+	 * grants the replacement access.
 	 *
 	 * ## OPTIONS
 	 *
@@ -242,7 +249,7 @@ class Memberships_Audit {
 	 * : Comma-delimited membership plan IDs to audit — the plans whose content the new gates cover. Defaults to every published plan (a plan in any other status is audited only when named here).
 	 *
 	 * [--only=<classes>]
-	 * : Comma-delimited classes to report member-by-member: gift, order-only, order-only-unpaid, subscription-missing. Defaults to gift + order-only. Counts for every class are printed regardless.
+	 * : Comma-delimited classes to report member-by-member: gift, order-only, order-only-unpaid, subscription-missing. Omit the flag for the default gift + order-only report; passing it with no class is an error. Counts for every class are printed regardless — on STDERR in the machine-readable formats.
 	 *
 	 * [--sleep=<seconds>]
 	 * : Seconds to pause between batches of memberships, to keep a full-table walk from monopolising the database on a live site. Pass 0 to run flat out.
@@ -251,7 +258,7 @@ class Memberships_Audit {
 	 * ---
 	 *
 	 * [--format=<format>]
-	 * : Output format. `ids` prints only the flagged user IDs, one per line, deduplicated per user.
+	 * : Output format. `ids` prints only the flagged user IDs, one per line, deduplicated per user. csv, json and ids keep STDOUT to the data alone and send the class counts and any warnings to STDERR, so the stream stays parseable when redirected to a file.
 	 * ---
 	 * default: table
 	 * options:
@@ -288,8 +295,10 @@ class Memberships_Audit {
 		if ( ! function_exists( 'wcs_get_subscription' ) ) {
 			// Not fatal: a site without Subscriptions has no subscription links to
 			// resolve, and its memberships are exactly the order-only / comp cohorts
-			// this command still classifies correctly.
-			WP_CLI::warning( 'WooCommerce Subscriptions is not active — every membership is audited as if it had no subscription link.' );
+			// this command still classifies correctly. Memberships that DO carry a
+			// `_subscription_id` are a different matter, so the warning names where
+			// they end up rather than leaving the operator to infer it.
+			WP_CLI::warning( 'WooCommerce Subscriptions is not active — no subscription can be loaded, so a membership carrying a subscription link is classified from its order alone, or as subscription-missing when there is no usable order. Those rows say nothing about whether the subscription still exists.' );
 		}
 
 		// Validated rather than absint()-ed: a mistyped --sleep=2s would otherwise
@@ -302,16 +311,21 @@ class Memberships_Audit {
 		$sleep_seconds = (float) $sleep_arg;
 
 		$format = \WP_CLI\Utils\get_flag_value( $assoc_args, 'format', 'table' );
-		// Only the table format narrates. csv/json/ids are consumed by redirecting
-		// them to a file, and any prose in that file makes it unparseable.
+		// csv/json/ids are consumed by redirecting STDOUT to a file, and any prose
+		// in that file makes it unparseable — so in those formats the narration
+		// moves to STDERR rather than being dropped. The progress bar is the one
+		// exception: it is redrawn in place and belongs to an interactive run.
 		$quiet = 'table' !== $format;
 
-		$only_classes = self::parse_only_classes( \WP_CLI\Utils\get_flag_value( $assoc_args, 'only', '' ) );
+		// Defaulted to null, not '': the difference between "the flag was not passed"
+		// and "the flag was passed and names nothing" is the whole point of the check
+		// inside, and '' cannot carry it.
+		$only_classes = self::parse_only_classes( \WP_CLI\Utils\get_flag_value( $assoc_args, 'only', null ) );
 		if ( \is_wp_error( $only_classes ) ) {
 			WP_CLI::error( $only_classes->get_error_message() );
 		}
 
-		$plan_ids = self::resolve_plan_ids( \WP_CLI\Utils\get_flag_value( $assoc_args, 'plan-ids', '' ) );
+		$plan_ids = self::resolve_plan_ids( \WP_CLI\Utils\get_flag_value( $assoc_args, 'plan-ids', null ) );
 		if ( \is_wp_error( $plan_ids ) ) {
 			WP_CLI::error( $plan_ids->get_error_message() );
 		}
@@ -391,47 +405,20 @@ class Memberships_Audit {
 				$progress->finish();
 			}
 
-			if ( ! $quiet ) {
-				WP_CLI::line( sprintf( '── Plan %d: "%s" — %d membership(s) with access ──', $plan_id, $plan->post_title, $membership_count ) );
-				foreach ( self::ALL_CLASSES as $class ) {
-					if ( 0 === $plan_counts[ $class ] ) {
-						continue;
-					}
-					WP_CLI::line(
-						sprintf(
-							'  %-22s %5d  %s%s',
-							$class,
-							$plan_counts[ $class ],
-							self::CLASS_LABELS[ $class ],
-							in_array( $class, $only_classes, true ) ? ' ←' : ''
-						)
-					);
-				}
-				WP_CLI::line( '' );
-			}
+			self::print_class_summary(
+				sprintf( '── Plan %d: "%s" — %d membership(s) with access ──', $plan_id, $plan->post_title, $membership_count ),
+				$plan_counts,
+				$only_classes,
+				$quiet
+			);
 		}
 
 		// The cross-plan totals. A multi-plan run otherwise gives per-plan breakdowns
 		// and no aggregate, leaving the operator to add up a dozen summaries by hand
 		// to answer "how many gift memberships are there" — the question the command
 		// exists to answer. Printed only when there is more than one plan to add up.
-		if ( ! $quiet && $audited_plans > 1 ) {
-			WP_CLI::line( sprintf( '── All %d plans ──', $audited_plans ) );
-			foreach ( self::ALL_CLASSES as $class ) {
-				if ( 0 === $total_counts[ $class ] ) {
-					continue;
-				}
-				WP_CLI::line(
-					sprintf(
-						'  %-22s %5d  %s%s',
-						$class,
-						$total_counts[ $class ],
-						self::CLASS_LABELS[ $class ],
-						in_array( $class, $only_classes, true ) ? ' ←' : ''
-					)
-				);
-			}
-			WP_CLI::line( '' );
+		if ( $audited_plans > 1 ) {
+			self::print_class_summary( sprintf( '── All %d plans ──', $audited_plans ), $total_counts, $only_classes, $quiet );
 		}
 
 		// A run where every requested plan was skipped audited nothing; reporting
@@ -441,6 +428,21 @@ class Memberships_Audit {
 		}
 
 		$flagged_user_ids = self::flagged_user_ids( $rows );
+
+		// A flagged membership whose holder has no account cannot be granted a $0
+		// subscription, so it is left off the ID list — but silently dropping it
+		// would let an operator hand the list on believing it covers the whole
+		// cohort. The warning goes to STDERR, so a redirected ids/CSV stream stays
+		// parseable.
+		$rows_without_member = self::count_rows_without_member( $rows );
+		if ( $rows_without_member ) {
+			WP_CLI::warning(
+				sprintf(
+					'%d flagged membership(s) have no member account and are not on the ID list — an orphaned membership or a guest purchase. They appear in the table/CSV report and need handling by hand.',
+					$rows_without_member
+				)
+			);
+		}
 
 		if ( 'ids' === $format ) {
 			foreach ( $flagged_user_ids as $user_id ) {
@@ -479,7 +481,68 @@ class Memberships_Audit {
 			)
 		);
 		WP_CLI::line( 'These readers lose access at the flip. `member_own_access_subscriptions` is evidence, not a verdict: a subscription there only preserves access if the gates accept its product.' );
-		WP_CLI::line( 'Next: confirm buyer-vs-recipient intent with the publisher, then re-run with --format=ids for the signed-off list. Granting those readers $0 subscriptions needs a migrate-manual-members that can select members by user ID (--user-ids/--user-ids-file); run `wp help newspack migrate-manual-members` to check this build, and fall back to operator scripting against the list where it cannot.' );
+		WP_CLI::line( 'Next: confirm buyer-vs-recipient intent with the publisher, then re-run with --format=ids for the signed-off list and grant those readers $0 subscriptions with `wp newspack migrate-manual-members --user-ids-file=<path>`.' );
+	}
+
+	/**
+	 * Print a per-class count breakdown.
+	 *
+	 * Goes to STDERR in the machine-readable formats rather than being dropped.
+	 * The counts are what the report reconciles against the plan's member count,
+	 * and the operator who exports the cohort needs them as much as the one
+	 * reading a table — but they must not land in a redirected CSV, and
+	 * recovering them afterwards would cost a second full walk of the membership
+	 * table, which is the expensive part of the run.
+	 *
+	 * @param string   $heading      Section heading.
+	 * @param int[]    $counts       Count per class.
+	 * @param string[] $only_classes Classes reported member-by-member, marked in the output.
+	 * @param bool     $quiet        Whether STDOUT is carrying machine-readable output.
+	 */
+	private static function print_class_summary( $heading, array $counts, array $only_classes, $quiet ) {
+		$lines = [ $heading ];
+		foreach ( self::ALL_CLASSES as $class ) {
+			if ( 0 === $counts[ $class ] ) {
+				continue;
+			}
+			$lines[] = sprintf(
+				'  %-22s %5d  %s%s',
+				$class,
+				$counts[ $class ],
+				self::class_label( $class ),
+				in_array( $class, $only_classes, true ) ? ' ←' : ''
+			);
+		}
+		$lines[] = '';
+
+		foreach ( $lines as $line ) {
+			if ( $quiet ) {
+				// Not a file operation: STDERR is the CLI process's own stream, which is
+				// the whole point of writing there rather than to STDOUT.
+				fwrite( STDERR, $line . "\n" ); // phpcs:ignore WordPressVIPMinimum.Functions.RestrictedFunctions.file_ops_fwrite
+			} else {
+				WP_CLI::line( $line );
+			}
+		}
+	}
+
+	/**
+	 * The gloss for a class, as it is true on this site.
+	 *
+	 * `subscription-missing` normally means the linked subscription was deleted.
+	 * With WooCommerce Subscriptions inactive no subscription can be loaded at
+	 * all, so every subscription-linked membership lands there and the stock
+	 * label would state as fact something the run cannot know.
+	 *
+	 * @param string $class One of the CLASS_* constants.
+	 *
+	 * @return string
+	 */
+	private static function class_label( $class ) {
+		if ( self::CLASS_SUBSCRIPTION_MISSING === $class && ! function_exists( 'wcs_get_subscription' ) ) {
+			return 'linked subscription could not be loaded (WooCommerce Subscriptions is not active)';
+		}
+		return self::CLASS_LABELS[ $class ];
 	}
 
 	/**
@@ -505,10 +568,11 @@ class Memberships_Audit {
 		$args = array_merge(
 			$args,
 			[
-				'fields'         => 'ids',
-				'posts_per_page' => self::QUERY_BATCH_SIZE,
-				'orderby'        => 'ID',
-				'order'          => 'ASC',
+				'fields'              => 'ids',
+				'posts_per_page'      => self::QUERY_BATCH_SIZE,
+				'orderby'             => 'ID',
+				'order'               => 'ASC',
+				self::WALK_QUERY_FLAG => true,
 			]
 		);
 
@@ -520,14 +584,23 @@ class Memberships_Audit {
 		// and the run gives no signal it happened: the count still looks about right.
 		// Seeking on the last ID seen is stable by construction, and drops the
 		// deep-offset cost on the large tables this walk exists for.
+		//
+		// Scoped to the walk's own query by WALK_QUERY_FLAG. The filter stays
+		// registered while the callback runs, and the callback drives WooCommerce:
+		// WooCommerce Subscriptions answers "which subscriptions does this user
+		// have" with a WP_Query on CPT-storage sites and then writes the result to
+		// the customer's `_wcs_subscription_ids_cache` user meta. An unscoped seek
+		// clause would truncate that query to IDs above the last membership seen and
+		// persist the truncated list, which no renewal or status change rewrites —
+		// so a read-only audit would silently corrupt reader data it never wrote to.
 		$last_id      = 0;
-		$where_filter = function ( $where ) use ( &$last_id, $wpdb ) {
-			if ( $last_id > 0 ) {
+		$where_filter = function ( $where, $query ) use ( &$last_id, $wpdb ) {
+			if ( $last_id > 0 && $query->get( self::WALK_QUERY_FLAG ) ) {
 				$where .= $wpdb->prepare( " AND {$wpdb->posts}.ID > %d", $last_id );
 			}
 			return $where;
 		};
-		add_filter( 'posts_where', $where_filter );
+		add_filter( 'posts_where', $where_filter, 10, 2 );
 
 		$total = 0;
 		$seen  = 0;
@@ -597,6 +670,10 @@ class Memberships_Audit {
 	 *     @type int         $subscription_id          Linked subscription ID, 0 if unlinked.
 	 *     @type int|null    $subscription_customer_id Subscription customer, null if it could not be loaded.
 	 *     @type string|null $subscription_status      Subscription status, prefixed or not.
+	 *     @type bool        $subscription_in_payment_recovery Whether the subscription is on-hold with a
+	 *                                                 retry scheduled. Grants access through the runtime's
+	 *                                                 payment-recovery grace, so it decides gift vs
+	 *                                                 gift-inactive for the on-hold shape.
 	 *     @type int|null    $wcsg_recipient_id        Subscriptions Gifting recipient, null when not a gifted subscription.
 	 *     @type int         $order_id                 Linked order ID, 0 if unlinked.
 	 *     @type int|null    $order_customer_id        Order customer, null if it could not be loaded.
@@ -697,20 +774,43 @@ class Memberships_Audit {
 	}
 
 	/**
+	 * How many flagged rows have no member account, and so cannot be on the ID
+	 * list — an orphaned membership, or one over a guest purchase.
+	 *
+	 * @param array[] $rows Report rows.
+	 *
+	 * @return int
+	 */
+	public static function count_rows_without_member( array $rows ) {
+		$without = 0;
+		foreach ( $rows as $row ) {
+			if ( ! (int) ( $row['member_id'] ?? 0 ) ) {
+				++$without;
+			}
+		}
+		return $without;
+	}
+
+	/**
 	 * Parse the --only flag into the classes to report member-by-member.
 	 *
-	 * Strict: an unrecognised class aborts rather than narrowing the report,
-	 * because an empty gift list reads as "this site has no gift problem".
+	 * Strict in both directions: an unrecognised class aborts rather than
+	 * narrowing the report, and so does a --only that is present but parses to
+	 * nothing (`--only=`, `--only=,,`, or `--only="$CLASSES"` with the variable
+	 * unset). Either way an empty gift list reads as "this site has no gift
+	 * problem", and the ID list the command produces is bare user IDs that
+	 * record nothing about which classes built them.
 	 *
-	 * @param string $only Comma-delimited class list, '' for the default set.
+	 * @param string|null $only Comma-delimited class list; null when --only was not passed.
 	 *
 	 * @return string[]|\WP_Error
 	 */
 	public static function parse_only_classes( $only ) {
-		$only = trim( (string) $only );
-		if ( '' === $only ) {
+		if ( null === $only ) {
 			return self::REPORTED_CLASSES;
 		}
+
+		$only = trim( (string) $only );
 
 		$classes = [];
 		foreach ( explode( ',', $only ) as $token ) {
@@ -729,7 +829,14 @@ class Memberships_Audit {
 			}
 		}
 
-		return empty( $classes ) ? self::REPORTED_CLASSES : $classes;
+		if ( empty( $classes ) ) {
+			return new \WP_Error(
+				'newspack_memberships_audit_empty_only',
+				sprintf( '--only was passed but names no class. Drop it for the default report, or pass one or more of: %s.', implode( ', ', self::SELECTABLE_CLASSES ) )
+			);
+		}
+
+		return $classes;
 	}
 
 	/**
@@ -993,12 +1100,33 @@ class Memberships_Audit {
 			'record'                          => $order_backed
 				? 'order ' . (int) $facts['order_id']
 				: 'subscription ' . (int) $facts['subscription_id'],
+			// An on-hold subscription is on this list only because the
+			// payment-recovery grace still grants access on it, while the
+			// gift-inactive cohort holds on-hold rows that were correctly left off.
+			// The bare status cannot tell those apart, so it is annotated.
 			'record_status'                   => $order_backed
 				? (string) $facts['order_status']
-				: (string) $facts['subscription_status'],
+				: self::describe_subscription_status( $facts ),
 			'products'                        => implode( ' ', $facts['products'] ),
 			'member_own_access_subscriptions' => self::describe_own_access_subscriptions( $member_id, $empty ),
 		];
+	}
+
+	/**
+	 * The subscription status as the report should read it: the raw status, plus
+	 * a note when it is the payment-recovery grace rather than the status that
+	 * keeps the row on the list.
+	 *
+	 * @param array $facts Facts from read_membership_facts().
+	 *
+	 * @return string
+	 */
+	public static function describe_subscription_status( array $facts ) {
+		$status = (string) ( $facts['subscription_status'] ?? '' );
+		if ( '' !== $status && ! self::grants_access( $status ) && ! empty( $facts['subscription_in_payment_recovery'] ) ) {
+			return $status . ' (in payment recovery)';
+		}
+		return $status;
 	}
 
 	/**
@@ -1063,13 +1191,12 @@ class Memberships_Audit {
 	/**
 	 * Resolve --plan-ids, defaulting to every published plan.
 	 *
-	 * @param string $plan_ids_csv Comma-delimited plan IDs, '' for all.
+	 * @param string|null $plan_ids_csv Comma-delimited plan IDs; null when --plan-ids was not passed.
 	 *
 	 * @return int[]|\WP_Error
 	 */
 	public static function resolve_plan_ids( $plan_ids_csv ) {
-		$plan_ids_csv = trim( (string) $plan_ids_csv );
-		if ( '' === $plan_ids_csv ) {
+		if ( null === $plan_ids_csv ) {
 			$all_plan_ids = [];
 			self::each_post_id_batch(
 				[
@@ -1083,7 +1210,8 @@ class Memberships_Audit {
 			return $all_plan_ids;
 		}
 
-		$plan_ids = [];
+		$plan_ids_csv = trim( (string) $plan_ids_csv );
+		$plan_ids     = [];
 		foreach ( preg_split( '/[\s,]+/', $plan_ids_csv ) as $token ) {
 			if ( '' === $token ) {
 				continue;
@@ -1095,6 +1223,15 @@ class Memberships_Audit {
 				);
 			}
 			$plan_ids[] = (int) $token;
+		}
+
+		// Same strictness as --only: a flag that is present but names nothing must
+		// not quietly become "audit everything".
+		if ( empty( $plan_ids ) ) {
+			return new \WP_Error(
+				'newspack_memberships_audit_plan_id',
+				'--plan-ids was passed but names no plan. Drop it to audit every published plan.'
+			);
 		}
 
 		return array_values( array_unique( $plan_ids ) );

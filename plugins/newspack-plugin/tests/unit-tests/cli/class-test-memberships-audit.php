@@ -549,10 +549,15 @@ class Test_Memberships_Audit extends WP_UnitTestCase {
 		}
 	}
 
-	public function test_only_flag_defaults_to_every_reported_class() {
+	/**
+	 * Null means "the flag was not passed"; '' means "it was passed and names nothing",
+	 * which is the error below. Collapsing the two is what let an unexpanded
+	 * shell variable run the default report.
+	 */
+	public function test_only_flag_defaults_to_every_reported_class_when_absent() {
 		$this->assertSame(
 			Memberships_Audit::REPORTED_CLASSES,
-			Memberships_Audit::parse_only_classes( '' )
+			Memberships_Audit::parse_only_classes( null )
 		);
 	}
 
@@ -571,6 +576,31 @@ class Test_Memberships_Audit extends WP_UnitTestCase {
 		$result = Memberships_Audit::parse_only_classes( 'gifts' );
 		$this->assertInstanceOf( \WP_Error::class, $result );
 		$this->assertSame( 'newspack_memberships_audit_unknown_class', $result->get_error_code() );
+	}
+
+	/**
+	 * The same failure arrived at from the other direction: `--only="$CLASSES"`
+	 * with the shell variable unset asks for nothing and must not quietly become
+	 * the default report. The ID list this command produces is bare user IDs,
+	 * with nothing recording which classes built it, so the operator would have
+	 * no way to notice afterwards.
+	 *
+	 * @dataProvider empty_only_provider
+	 *
+	 * @param string $only The --only value.
+	 */
+	public function test_only_flag_present_but_naming_nothing_is_an_error( $only ) {
+		$result = Memberships_Audit::parse_only_classes( $only );
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'newspack_memberships_audit_empty_only', $result->get_error_code() );
+	}
+
+	public function empty_only_provider() {
+		return [
+			'--only='    => [ '' ],
+			'--only=" "' => [ '  ' ],
+			'--only=,,'  => [ ',,' ],
+		];
 	}
 
 	public function test_plan_ids_are_parsed_and_deduplicated() {
@@ -762,5 +792,110 @@ class Test_Memberships_Audit extends WP_UnitTestCase {
 
 		$this->assertSame( [], array_values( $missed ), 'Every row still in the set was visited exactly once.' );
 		$this->assertSame( count( $seen ), count( array_unique( $seen ) ), 'No row was visited twice.' );
+	}
+
+	/**
+	 * The keyset seek clause must constrain the walk's own query and nothing else.
+	 *
+	 * `posts_where` is global while the walk runs, and the walk's callback drives
+	 * WooCommerce: WooCommerce Subscriptions answers "which subscriptions does this
+	 * user have" with a WP_Query on CPT-storage sites, then persists the answer to
+	 * the customer's `_wcs_subscription_ids_cache` user meta. An unscoped clause
+	 * truncates that query to IDs above the last membership seen and the truncated
+	 * list is what gets stored — which no renewal or status change rewrites, so a
+	 * read-only audit would leave lasting damage behind it.
+	 */
+	public function test_the_batch_walk_does_not_constrain_other_queries() {
+		$batch_size = ( new \ReflectionClass( Memberships_Audit::class ) )->getConstant( 'QUERY_BATCH_SIZE' );
+		$post_ids   = [];
+		for ( $i = 0; $i < $batch_size + 5; $i++ ) {
+			$post_ids[] = self::factory()->post->create( [ 'post_status' => 'publish' ] );
+		}
+		sort( $post_ids );
+		$lowest_id = $post_ids[0];
+
+		$walk = new \ReflectionMethod( Memberships_Audit::class, 'each_post_id_batch' );
+		$walk->setAccessible( true );
+
+		// One reading per batch. The cursor advances before the callback runs, so an
+		// unscoped clause already hides $lowest_id on the very first batch.
+		$nested_saw_lowest = [];
+		$walk->invoke(
+			null,
+			[
+				'post_type'   => 'post',
+				'post_status' => 'publish',
+			],
+			function () use ( &$nested_saw_lowest, $lowest_id, $batch_size ) {
+				$nested              = new \WP_Query(
+					[
+						'post_type'      => 'post',
+						'post_status'    => 'publish',
+						'fields'         => 'ids',
+						'posts_per_page' => $batch_size + 10,
+						'no_found_rows'  => true,
+					]
+				);
+				$nested_saw_lowest[] = in_array( $lowest_id, array_map( 'intval', $nested->posts ), true );
+			}
+		);
+
+		$this->assertSame(
+			[ true, true ],
+			$nested_saw_lowest,
+			'A query run from inside the walk sees the whole table, not just the IDs after the walk\'s cursor.'
+		);
+	}
+
+	/**
+	 * A flagged membership whose holder has no account cannot be granted a $0
+	 * subscription, so it is left off the ID list. The operator has to be told:
+	 * the list would otherwise look like it covers the whole reported cohort.
+	 */
+	public function test_flagged_rows_without_a_member_account_are_counted_for_the_operator() {
+		$rows = [
+			[ 'member_id' => 501 ],
+			[ 'member_id' => 0 ],
+			[ 'member_id' => 501 ],
+			[ 'member_id' => 0 ],
+		];
+
+		$this->assertSame( [ 501 ], Memberships_Audit::flagged_user_ids( $rows ) );
+		$this->assertSame( 2, Memberships_Audit::count_rows_without_member( $rows ) );
+	}
+
+	/**
+	 * An on-hold subscription reaches the gift report only because the
+	 * payment-recovery grace still grants access on it — while the gift-inactive
+	 * cohort holds on-hold rows that were correctly left off. The bare status
+	 * cannot tell the publisher which one they are reading.
+	 */
+	public function test_a_status_kept_alive_by_payment_recovery_says_so() {
+		$this->assertSame(
+			'on-hold (in payment recovery)',
+			Memberships_Audit::describe_subscription_status(
+				$this->facts(
+					[
+						'subscription_status'              => 'on-hold',
+						'subscription_in_payment_recovery' => true,
+					]
+				)
+			)
+		);
+		$this->assertSame(
+			'active',
+			Memberships_Audit::describe_subscription_status( $this->facts( [ 'subscription_status' => 'active' ] ) ),
+			'A status that grants access on its own needs no annotation.'
+		);
+	}
+
+	/**
+	 * `--plan-ids=` with an unexpanded shell variable must not silently become
+	 * "audit every published plan", for the same reason as --only.
+	 */
+	public function test_plan_ids_present_but_naming_nothing_is_an_error() {
+		$result = Memberships_Audit::resolve_plan_ids( ',,' );
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'newspack_memberships_audit_plan_id', $result->get_error_code() );
 	}
 }
