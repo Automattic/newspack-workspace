@@ -1,4 +1,3 @@
-/* eslint-disable jsx-a11y/anchor-is-valid */
 /**
  * WordPress dependencies
  */
@@ -15,15 +14,16 @@ export const getBylineHTML = ( post, showAvatar = false ) => {
 
 export const formatSponsorLogos = sponsorInfo => (
 	<span className="sponsor-logos">
-		{ sponsorInfo.map( sponsor => (
-			<Fragment key={ sponsor.id }>
-				{ sponsor.src && (
-					<a href={ sponsor.sponsor_url }>
-						<img src={ sponsor.src } width={ sponsor.img_width } height={ sponsor.img_height } alt={ sponsor.sponsor_name } />
-					</a>
-				) }
-			</Fragment>
-		) ) }
+		{ sponsorInfo.map( sponsor => {
+			if ( ! sponsor.src ) {
+				return <Fragment key={ sponsor.id } />;
+			}
+			const logo = <img src={ sponsor.src } width={ sponsor.img_width } height={ sponsor.img_height } alt={ sponsor.sponsor_name } />;
+			// sponsor_url is empty whenever the sponsor has no link set, and an
+			// empty href resolves to the document itself — so the front end wraps
+			// the logo only when there is a URL (templates/article.php).
+			return <Fragment key={ sponsor.id }>{ sponsor.sponsor_url ? <a href={ sponsor.sponsor_url }>{ logo }</a> : logo }</Fragment>;
+		} ) }
 	</span>
 );
 
@@ -34,8 +34,7 @@ export const formatSponsorByline = sponsorInfo => (
 			return [
 				...accumulator,
 				<span className="author" key={ sponsor.id }>
-					{ /* author_link is never populated in the payload; '#' keeps the anchor inert-by-content, and the container handler covers it regardless. */ }
-					<a href="#">{ sponsor.sponsor_name }</a>
+					{ sponsor.sponsor_url ? <a href={ sponsor.sponsor_url }>{ sponsor.sponsor_name }</a> : sponsor.sponsor_name }
 				</span>,
 				index < sponsorInfo.length - 2 && ', ',
 				sponsorInfo.length > 1 && index === sponsorInfo.length - 2 && _x( 'and', 'post author', 'newspack-blocks' ),

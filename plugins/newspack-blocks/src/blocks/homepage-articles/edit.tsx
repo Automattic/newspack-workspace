@@ -85,17 +85,24 @@ class Edit extends Component< HomepageArticlesProps > {
 		);
 
 		const postTitle = this.titleForPost( post );
+		// Newspack_Blocks::get_post_link() returns false for a post type that is not
+		// public and carries no external URL, so the front end renders the title and
+		// thumbnail unlinked in that case (templates/article.php). Mirror it here
+		// rather than emitting an anchor with no destination.
+		const featuredImage = post.newspack_featured_image_src ? (
+			<Fragment>
+				{ imageShape === 'landscape' && <img src={ post.newspack_featured_image_src.landscape } alt="" /> }
+				{ imageShape === 'portrait' && <img src={ post.newspack_featured_image_src.portrait } alt="" /> }
+				{ imageShape === 'square' && <img src={ post.newspack_featured_image_src.square } alt="" /> }
+				{ imageShape === 'uncropped' && <img src={ post.newspack_featured_image_src.uncropped } alt="" /> }
+			</Fragment>
+		) : null;
 		return (
 			<article className={ postClasses } key={ post.id } style={ styles }>
 				{ getPostStatusLabel( post ) }
 				{ showImage && post.newspack_featured_image_src && (
 					<figure className="post-thumbnail" key="thumbnail">
-						<a href={ post.post_link }>
-							{ imageShape === 'landscape' && <img src={ post.newspack_featured_image_src.landscape } alt="" /> }
-							{ imageShape === 'portrait' && <img src={ post.newspack_featured_image_src.portrait } alt="" /> }
-							{ imageShape === 'square' && <img src={ post.newspack_featured_image_src.square } alt="" /> }
-							{ imageShape === 'uncropped' && <img src={ post.newspack_featured_image_src.uncropped } alt="" /> }
-						</a>
+						{ post.post_link ? <a href={ post.post_link }>{ featuredImage }</a> : featuredImage }
 						{ ( showCaption || showCredit ) && (
 							<div
 								dangerouslySetInnerHTML={ {
@@ -132,11 +139,11 @@ class Edit extends Component< HomepageArticlesProps > {
 					) }
 					{ RichText.isEmpty( sectionHeader ) ? (
 						<h2 className="entry-title" key="title">
-							<a href={ post.post_link }>{ postTitle }</a>
+							{ post.post_link ? <a href={ post.post_link }>{ postTitle }</a> : postTitle }
 						</h2>
 					) : (
 						<h3 className="entry-title" key="title">
-							<a href={ post.post_link }>{ postTitle }</a>
+							{ post.post_link ? <a href={ post.post_link }>{ postTitle }</a> : postTitle }
 						</h3>
 					) }
 					{ IS_SUBTITLE_SUPPORTED_IN_THEME && showSubtitle && (

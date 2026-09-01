@@ -102,7 +102,12 @@ class Newspack_Blocks_API {
 			return '';
 		}
 
-		$linked_category = '<a href="' . esc_url( get_category_link( $category->term_id ) ) . '">' . $category->name . '</a>';
+		$category_link = get_category_link( $category->term_id );
+		// newspack_blocks_format_categories() links the name only when the term
+		// resolves to a URL; match it so the preview and the front end agree.
+		$linked_category = $category_link
+			? '<a href="' . esc_url( $category_link ) . '">' . $category->name . '</a>'
+			: $category->name;
 
 		return apply_filters( 'newspack_blocks_categories', $linked_category );
 	}

@@ -3,10 +3,10 @@ import { formatSponsorLogos, formatSponsorByline } from './utils';
 /**
  * Collect every anchor element in a React element tree.
  *
- * The formatters return element trees rendered inside the editor canvas,
- * where a live href navigates the canvas iframe away from the post being
- * edited (NPPM-3165). Walking the tree keeps these assertions valid across
- * structural changes to the markup.
+ * The formatters return element trees rendered inside the editor canvas, where
+ * anchors carry the same destinations the front end renders; navigation is
+ * prevented at the preview container instead. Walking the tree keeps these
+ * assertions valid across structural changes to the markup.
  *
  * @param {*} node React element, array, or primitive.
  * @return {Array} All elements whose type is 'a'.
@@ -41,9 +41,15 @@ describe( 'sponsor markup in the editor preview', () => {
 		anchors.forEach( anchor => expect( anchor.props.href ).toBe( 'https://sponsor.example.test/supporters/' ) );
 	} );
 
-	it( 'renders the sponsor byline anchor inert', () => {
+	it( 'renders the sponsor byline anchor with its real URL', () => {
 		const anchors = collectAnchors( formatSponsorByline( sponsors ) );
 		expect( anchors.length ).toBeGreaterThan( 0 );
-		anchors.forEach( anchor => expect( anchor.props.href ).toBe( '#' ) );
+		anchors.forEach( anchor => expect( anchor.props.href ).toBe( 'https://sponsor.example.test/supporters/' ) );
+	} );
+
+	it( 'renders the sponsor name unlinked when the sponsor has no URL', () => {
+		const withoutUrl = [ { ...sponsors[ 0 ], sponsor_url: '' } ];
+		expect( collectAnchors( formatSponsorByline( withoutUrl ) ) ).toHaveLength( 0 );
+		expect( collectAnchors( formatSponsorLogos( withoutUrl ) ) ).toHaveLength( 0 );
 	} );
 } );

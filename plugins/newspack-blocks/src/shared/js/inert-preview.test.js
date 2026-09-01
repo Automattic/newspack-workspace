@@ -1,7 +1,8 @@
 /**
- * The editor preview must never navigate the canvas: any click that lands on
- * or inside an anchor is cancelled at the container, whatever markup produced
- * the anchor (JSX, server HTML, filter-injected HTML).
+ * The handler cancels any unmodified click that lands on or inside an anchor,
+ * and leaves modified clicks alone so open-in-new-tab still works. These cases
+ * exercise that predicate against plain DOM. Whether it covers every anchor in
+ * a preview depends on where the blocks attach it, which is not decided here.
  */
 import { preventPreviewNavigation } from './inert-preview';
 

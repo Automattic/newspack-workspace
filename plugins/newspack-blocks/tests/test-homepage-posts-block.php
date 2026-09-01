@@ -299,7 +299,7 @@ class HomepagePostsBlockTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 				'user_nicename' => 'nia-fixture',
 			]
 		);
-		self::factory()->post->create(
+		$authored_post_id = self::factory()->post->create(
 			[
 				'post_status' => 'publish',
 				'post_author' => $author_id,
@@ -311,10 +311,11 @@ class HomepagePostsBlockTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 		$request->set_param( 'postsToShow', 10 );
 		$posts = rest_do_request( $request )->get_data();
 
-		self::assertNotEmpty( $posts, 'The editor posts endpoint returns the published post.' );
+		$posts_by_id = array_column( $posts, null, 'id' );
+		self::assertArrayHasKey( $authored_post_id, $posts_by_id, 'The editor posts endpoint returns the authored post.' );
 		self::assertStringContainsString(
 			get_author_posts_url( $author_id, 'nia-fixture' ),
-			$posts[0]['newspack_post_byline'],
+			$posts_by_id[ $authored_post_id ]['newspack_post_byline'],
 			'The editor byline carries the live author-archive link; the preview container is what prevents navigation.'
 		);
 	}
@@ -324,9 +325,8 @@ class HomepagePostsBlockTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 	 *
 	 * newspack_blocks_format_byline() is shared by the front end and the editor
 	 * payload, so it must stay free of editor-only concerns. This pins that:
-	 * reintroducing link rewriting here would break every reader-facing author
-	 * link, and the editor no longer needs it — the preview container blocks
-	 * navigation instead.
+	 * link rewriting here would break every reader-facing author link, and the
+	 * editor does not need it — the preview container blocks navigation.
 	 */
 	public function test_front_end_byline_formatter_keeps_live_author_links() {
 		$author_id = self::factory()->user->create(

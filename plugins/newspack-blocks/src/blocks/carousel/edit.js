@@ -381,7 +381,11 @@ class Edit extends Component {
 									>
 										{ getPostStatusLabel( post ) }
 										<figure className="post-thumbnail">
-											<a href={ post.post_link } rel="bookmark">
+											{ /* get_post_link() returns false when a post type is not public and has
+											     no external URL. Coerce to undefined so React omits the attribute
+											     instead of warning; carousel/view.php leaves this anchor unguarded
+											     on the front end too, so the preview matches it. */ }
+											<a href={ post.post_link || undefined } rel="bookmark">
 												{ post.newspack_featured_image_src ? (
 													<img
 														className={ `image-fit-${ imageFit }` }
@@ -430,7 +434,11 @@ class Edit extends Component {
 												) }
 												{ showTitle && (
 													<h3 className="entry-title">
-														<a href={ post.post_link }>{ decodeEntities( post.title.rendered.trim() ) }</a>
+														{ post.post_link ? (
+															<a href={ post.post_link }>{ decodeEntities( post.title.rendered.trim() ) }</a>
+														) : (
+															decodeEntities( post.title.rendered.trim() )
+														) }
 													</h3>
 												) }
 												<div className="entry-meta">

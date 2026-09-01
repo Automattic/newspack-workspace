@@ -7,14 +7,17 @@
  * rendering with their real destinations.
  *
  * Modified clicks are left alone so an editor can still open a previewed post
- * in a new tab or window: ctrl/cmd+click dispatches an ordinary click whose
- * default action is open-in-new-tab, so cancelling it would take that away.
- * Guarding on the four modifiers is the same test link-intercepting routers
- * use (React Router's isModifiedEvent). None of them navigate the canvas, so
- * the no-navigation guarantee holds. Middle-click needs no guard: it fires
- * auxclick, which never reaches this handler.
+ * in a new tab or window: cmd+click on macOS, ctrl+click elsewhere, dispatches
+ * an ordinary click whose default action is open-in-new-tab, and cancelling it
+ * would take that away. Guarding on all four modifiers is the same test
+ * link-intercepting routers use (React Router's isModifiedEvent), and is
+ * deliberately wider than the gestures that open a tab. The gap it leaves is
+ * the Super key on Windows and Linux, which sets metaKey while carrying no link
+ * behaviour of its own; the OS claims that chord before the page sees it in
+ * practice. Two gestures never reach this handler at all: middle-click fires
+ * auxclick, and on macOS ctrl+click is a secondary click that fires contextmenu.
  *
- * @param {Event} event Click event from the capture phase.
+ * @param {MouseEvent | import('react').MouseEvent} event Click event from the capture phase.
  */
 export const preventPreviewNavigation = event => {
 	if ( event.metaKey || event.ctrlKey || event.shiftKey || event.altKey ) {
