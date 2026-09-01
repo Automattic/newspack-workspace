@@ -20,14 +20,14 @@ class Jetpack {
 	 *
 	 * @var string
 	 */
-	const TOKEN_ACTION = 'newspack_share';
+	const SHARE_TOKEN_ACTION = 'newspack_share';
 
 	/**
 	 * Query arg carrying the share token on a restored share URL.
 	 *
 	 * @var string
 	 */
-	const TOKEN_QUERY_ARG = '_newspack_share_token';
+	const SHARE_TOKEN_QUERY_ARG = '_newspack_share_token';
 
 	/**
 	 * Modules scripts handles.
@@ -490,7 +490,7 @@ class Jetpack {
 	 *
 	 * @return bool
 	 */
-	private static function is_sharedaddy_active() {
+	private static function is_jetpack_social_buttons_active() {
 		return class_exists( 'Jetpack' ) && \Jetpack::is_module_active( 'sharedaddy' );
 	}
 
@@ -512,7 +512,7 @@ class Jetpack {
 	 */
 	public static function share_token( $bucket_offset = 0 ) {
 		$bucket = (int) floor( time() / DAY_IN_SECONDS ) - (int) $bucket_offset;
-		return wp_hash( self::TOKEN_ACTION . '|' . $bucket, 'nonce' );
+		return wp_hash( self::SHARE_TOKEN_ACTION . '|' . $bucket, 'nonce' );
 	}
 
 	/**
@@ -555,11 +555,11 @@ class Jetpack {
 		if ( is_admin() || wp_doing_ajax() || wp_doing_cron() ) {
 			return false;
 		}
-		if ( ! self::is_share_obfuscation_enabled() || ! self::is_sharedaddy_active() ) {
+		if ( ! self::is_share_obfuscation_enabled() || ! self::is_jetpack_social_buttons_active() ) {
 			return false;
 		}
 		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- The share token below is our own signed verification, not a WordPress nonce.
-		$token = isset( $_GET[ self::TOKEN_QUERY_ARG ] ) ? sanitize_text_field( wp_unslash( $_GET[ self::TOKEN_QUERY_ARG ] ) ) : '';
+		$token = isset( $_GET[ self::SHARE_TOKEN_QUERY_ARG ] ) ? sanitize_text_field( wp_unslash( $_GET[ self::SHARE_TOKEN_QUERY_ARG ] ) ) : '';
 		return ! self::is_valid_share_token( $token );
 	}
 
@@ -570,7 +570,7 @@ class Jetpack {
 	 * @return string
 	 */
 	public static function get_share_redirect_url() {
-		return remove_query_arg( [ 'share', 'nb', self::TOKEN_QUERY_ARG ] );
+		return remove_query_arg( [ 'share', 'nb', self::SHARE_TOKEN_QUERY_ARG ] );
 	}
 
 	/**
@@ -602,10 +602,10 @@ class Jetpack {
 	 * Jetpack's own sharing.js appends for real user clicks.
 	 */
 	public static function print_share_obfuscation_script() {
-		if ( ! self::is_share_obfuscation_enabled() || ! self::is_sharedaddy_active() ) {
+		if ( ! self::is_share_obfuscation_enabled() || ! self::is_jetpack_social_buttons_active() ) {
 			return;
 		}
-		$token_arg = self::TOKEN_QUERY_ARG;
+		$token_arg = self::SHARE_TOKEN_QUERY_ARG;
 		wp_print_inline_script_tag(
 			<<<JS
 ( function () {
