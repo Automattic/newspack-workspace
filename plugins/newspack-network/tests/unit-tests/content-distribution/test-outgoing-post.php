@@ -7,6 +7,9 @@
 
 namespace Test\Content_Distribution;
 
+require_once __DIR__ . '/mock-data-events.php';
+
+use Newspack_Network\Content_Distribution as Content_Distribution_Class;
 use Newspack_Network\Content_Distribution\Blocks;
 use Newspack_Network\Content_Distribution\Outgoing_Post;
 use Newspack_Network\Hub\Node as Hub_Node;
@@ -66,6 +69,20 @@ class TestOutgoingPost extends \WP_UnitTestCase {
 		);
 		$this->outgoing_post = new Outgoing_Post( $post );
 		$this->outgoing_post->set_distribution( [ $this->network[0]['url'] ] );
+	}
+
+	/**
+	 * Reset the block processors registered by the tests here.
+	 *
+	 * Blocks keeps them in a private static that the test framework does not
+	 * restore, so a test that registers one and then fails would leak it into every
+	 * test that follows.
+	 */
+	public function tear_down() {
+		foreach ( [ 'core/paragraph', 'core/image' ] as $block_name ) {
+			Blocks::reset_block_processors( $block_name );
+		}
+		parent::tear_down();
 	}
 
 	/**
@@ -610,9 +627,9 @@ class TestOutgoingPost extends \WP_UnitTestCase {
 	 * holds on every WordPress version.
 	 */
 	public function test_media_data_follows_the_processed_blocks() {
-		$authored     = $this->image_attachment();
-		$distributed  = $this->image_attachment();
-		$replacement  = $this->image_block( $distributed );
+		$authored    = $this->image_attachment();
+		$distributed = $this->image_attachment();
+		$replacement = $this->image_block( $distributed );
 
 		Blocks::register_block_processor(
 			'core/image',
@@ -623,8 +640,6 @@ class TestOutgoingPost extends \WP_UnitTestCase {
 
 		$outgoing_post = $this->outgoing_post_with_content( $this->image_block( $authored ) );
 		$media_data    = $outgoing_post->get_payload()['post_data']['media_data'];
-
-		Blocks::reset_block_processors( 'core/image' );
 
 		$this->assertArrayHasKey( $distributed, $media_data, 'The image that reaches the node should be described.' );
 		$this->assertArrayNotHasKey( $authored, $media_data, 'The image the processor replaced should not be.' );
@@ -660,9 +675,63 @@ class TestOutgoingPost extends \WP_UnitTestCase {
 		$outgoing_post->get_payload();
 
 		remove_filter( 'wp_get_attachment_caption', $probe );
-		Blocks::reset_block_processors( 'core/image' );
 
 		$this->assertNotEmpty( $overridden, 'The probe should have seen at least one image.' );
 		$this->assertNotContains( false, $overridden );
+	}
+
+	/**
+	 * Preparing the content for the wire is the expensive half of a payload, and a
+	 * payload reads it more than once. Doing it once keeps a dynamic gallery from
+	 * re-querying its images on every pass.
+	 */
+	public function test_content_is_prepared_once_per_payload() {
+		$calls = 0;
+		Blocks::register_block_processor(
+			'core/paragraph',
+			function ( $block ) use ( &$calls ) {
+				++$calls;
+				return $block;
+			}
+		);
+
+		$outgoing_post = $this->outgoing_post_with_content( '<!-- wp:paragraph --><p>Hello</p><!-- /wp:paragraph -->' );
+		$outgoing_post->get_payload();
+
+		$this->assertSame( 1, $calls );
+	}
+
+	/**
+	 * A partial payload handed a payload takes its slice from that payload, rather
+	 * than quietly building a second one.
+	 */
+	public function test_partial_payload_comes_from_the_payload_it_is_given() {
+		$payload = $this->outgoing_post->get_payload();
+
+		$payload['post_data']['post_meta']['from_the_given_payload'] = [ 'yes' ];
+
+		$partial = $this->outgoing_post->get_partial_payload( 'post_meta', $payload );
+
+		$this->assertArrayHasKey( 'from_the_given_payload', $partial['post_data']['post_meta'] );
+		$this->assertSame( [ 'yes' ], $partial['post_data']['post_meta']['from_the_given_payload'] );
+	}
+
+	/**
+	 * A partial distribution builds one payload, not one for the change hash and a
+	 * second for the slice it sends.
+	 */
+	public function test_partial_distribution_builds_one_payload() {
+		$builds = 0;
+		$spy    = function ( $post_data ) use ( &$builds ) {
+			++$builds;
+			return $post_data;
+		};
+		add_filter( 'newspack_network_outgoing_payload_post_data', $spy );
+
+		Content_Distribution_Class::distribute_post_partial( $this->outgoing_post->get_post(), 'post_meta' );
+
+		remove_filter( 'newspack_network_outgoing_payload_post_data', $spy );
+
+		$this->assertSame( 1, $builds );
 	}
 }
