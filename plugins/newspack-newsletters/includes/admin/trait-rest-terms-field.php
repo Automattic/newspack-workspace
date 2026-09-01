@@ -23,14 +23,6 @@ defined( 'ABSPATH' ) || exit;
  */
 trait Rest_Terms_Field {
 	/**
-	 * Taxonomies behind each registered field, keyed by object type and
-	 * field name so the same field name can back two object types.
-	 *
-	 * @var array<string, array<string>>
-	 */
-	private static array $terms_field_taxonomies = [];
-
-	/**
 	 * Register a terms field on the given CPT.
 	 *
 	 * @param string        $cpt        CPT slug.
@@ -52,13 +44,17 @@ trait Rest_Terms_Field {
 			];
 		}
 
-		self::$terms_field_taxonomies[ $cpt . ':' . $field_name ] = $taxonomies;
-
 		register_rest_field(
 			$cpt,
 			$field_name,
 			[
-				'get_callback' => [ static::class, 'rest_get_terms' ],
+				// Bound here rather than looked up in a shared registry: the
+				// newsletters and ads CPTs register the same field name over
+				// different taxonomies, and a lookup that missed would blank
+				// the columns instead of raising.
+				'get_callback' => static function ( $post_array ) use ( $taxonomies ) {
+					return self::get_terms_payload( isset( $post_array['id'] ) ? (int) $post_array['id'] : 0, $taxonomies );
+				},
 				'schema'       => [
 					// Only the list screens and Quick Edit read this, and they
 					// ask for `edit`. `view` would put every ad's targeting into
@@ -69,22 +65,6 @@ trait Rest_Terms_Field {
 					'properties' => $properties,
 				],
 			]
-		);
-	}
-
-	/**
-	 * `get_callback` adapter, matching `Rest_Status_Field`.
-	 *
-	 * @param array            $post_array  Prepared post, as passed by the controller.
-	 * @param string           $field_name  Registered field name.
-	 * @param \WP_REST_Request $request     Incoming request.
-	 * @param string           $object_type Object type the field is registered on.
-	 * @return array<string, array<array{id: int, name: string}>>
-	 */
-	public static function rest_get_terms( $post_array, $field_name = '', $request = null, $object_type = '' ): array {
-		return self::get_terms_payload(
-			isset( $post_array['id'] ) ? (int) $post_array['id'] : 0,
-			self::$terms_field_taxonomies[ $object_type . ':' . $field_name ] ?? []
 		);
 	}
 
