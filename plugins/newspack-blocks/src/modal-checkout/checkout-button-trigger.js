@@ -310,6 +310,33 @@ export function appendUtmFields( form, params ) {
 }
 
 /**
+ * Link params that only reach the checkout as fields on the submitted form.
+ *
+ * A promotional URL carries these for the block the server synthesizes; when a
+ * page-authored form wins the resolution instead, whichever of them that form
+ * does not carry never reaches the checkout.
+ *
+ * @type {string[]}
+ */
+export const LINK_CONTEXT_PARAMS = [ 'coupon', 'after_success_behavior', 'after_success_url', 'after_success_button_label' ];
+
+/**
+ * Name the link params the resolved form has no field for.
+ *
+ * The trigger submits the form as-is, so a param without a matching field is
+ * dropped — the caller warns instead of letting that happen silently.
+ *
+ * @param {HTMLFormElement|null} form   The form about to be submitted.
+ * @param {string}               search The landing page query string.
+ *
+ * @return {string[]} Names of params the form will not carry.
+ */
+export function getDroppedLinkContext( form, search ) {
+	const params = new URLSearchParams( search );
+	return LINK_CONTEXT_PARAMS.filter( name => params.get( name ) && ! ( form && form.elements.namedItem( name ) ) );
+}
+
+/**
  * Resolve which form a `checkout_button` URL trigger should submit.
  *
  * Page-authored forms outrank the synthesized footer form at every step, so a

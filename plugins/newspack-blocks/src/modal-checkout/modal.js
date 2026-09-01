@@ -24,7 +24,14 @@ import {
 	getCheckoutData,
 	getFormattedAmount,
 } from './utils';
-import { resolveCheckoutButtonForm, readCheckoutData, applyContextFields, appendUtmFields, readUtmParams } from './checkout-button-trigger';
+import {
+	resolveCheckoutButtonForm,
+	readCheckoutData,
+	applyContextFields,
+	appendUtmFields,
+	readUtmParams,
+	getDroppedLinkContext,
+} from './checkout-button-trigger';
 import { resolveDonationTrigger } from './donate-trigger';
 import { TIERS_BASED_READY_EVENT } from '../shared/js/tiers-based-ready';
 import { applyCtaAttribution } from '../shared/js/cta-attribution';
@@ -898,6 +905,18 @@ domReady( () => {
 			iframeName: IFRAME_NAME,
 		} );
 		if ( form ) {
+			// A page-authored form wins with its own context; say so when that
+			// drops something the link carried, instead of applying list price
+			// or the default thank-you behavior with no trace.
+			const dropped = getDroppedLinkContext( form, window.location.search );
+			if ( dropped.length ) {
+				// eslint-disable-next-line no-console
+				console.warn(
+					`Newspack modal checkout: the resolved checkout form does not carry ${ dropped.join(
+						', '
+					) } from the URL. The page block's own settings apply instead.`
+				);
+			}
 			triggerFormSubmit( form );
 			return true;
 		}

@@ -11,6 +11,7 @@ import {
 	applyContextFields,
 	readUtmParams,
 	appendUtmFields,
+	getDroppedLinkContext,
 	PICKER_CONTEXT_FIELDS,
 	SYNTHESIZED_CONTAINER_SELECTOR,
 } from './checkout-button-trigger';
@@ -495,5 +496,28 @@ describe( 'appendUtmFields', () => {
 		const form = root.querySelector( 'form' );
 		expect( () => appendUtmFields( form, { 'utm"]': 'x' } ) ).not.toThrow();
 		expect( form.elements.namedItem( 'utm"]' ).value ).toBe( 'x' );
+	} );
+} );
+
+describe( 'getDroppedLinkContext', () => {
+	it( 'names the link params the resolved form has no field for', () => {
+		const root = render( checkoutButton( { product_id: '1406' } ) );
+		const form = root.querySelector( 'form' );
+		expect( getDroppedLinkContext( form, '?checkout=1&coupon=SPRING20&after_success_url=https%3A%2F%2Fsite.test%2Fwelcome' ) ).toEqual( [
+			'coupon',
+			'after_success_url',
+		] );
+	} );
+
+	it( 'is empty when the form carries the fields or the URL names none', () => {
+		const root = render( checkoutButton( { product_id: '1406' } ) );
+		const form = root.querySelector( 'form' );
+		form.insertAdjacentHTML( 'beforeend', '<input type="hidden" name="coupon" value="PAGE20">' );
+		expect( getDroppedLinkContext( form, '?checkout=1&coupon=SPRING20' ) ).toEqual( [] );
+		expect( getDroppedLinkContext( form, '?checkout=1&product_id=1406' ) ).toEqual( [] );
+	} );
+
+	it( 'counts every named param as dropped without a form', () => {
+		expect( getDroppedLinkContext( null, '?coupon=X&after_success_behavior=custom' ) ).toEqual( [ 'coupon', 'after_success_behavior' ] );
 	} );
 } );
