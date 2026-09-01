@@ -7,10 +7,20 @@
 
 use Newspack\Promo_Url_Config;
 
+require_once __DIR__ . '/../../mocks/wc-mocks.php';
+
 /**
  * Promo URL config test case.
  */
 class Promo_Url_Config_Test extends WP_UnitTestCase {
+
+	/**
+	 * Each test builds its own product fixtures.
+	 */
+	public function set_up() {
+		parent::set_up();
+		$GLOBALS['products_database'] = [];
+	}
 
 	/**
 	 * Helper to build a test donate configuration.
@@ -232,6 +242,45 @@ class Promo_Url_Config_Test extends WP_UnitTestCase {
 		// donations as unavailable instead of emitting a dead link.
 		$this->assertNull( Promo_Url_Config::filter_frequencies_without_products( $config, [] ) );
 		$this->assertNull( Promo_Url_Config::filter_frequencies_without_products( null, [ 'month' => 201 ] ) );
+	}
+
+	/**
+	 * Test that each variation is gated on its own resolvable price. The render
+	 * gate this mirrors collapses a locked pair onto the variation and refuses
+	 * the form when the variation's own price is empty — the parent's synced
+	 * price says nothing about an individual child, since WooCommerce syncs it
+	 * from priced siblings.
+	 */
+	public function test_offerable_children_gate_each_variation_on_its_own_price() {
+		wc_create_mock_product(
+			[
+				'id'       => 510,
+				'type'     => 'variable-subscription',
+				'status'   => 'publish',
+				'price'    => '10',
+				'children' => [ 511, 512 ],
+			]
+		);
+		wc_create_mock_product(
+			[
+				'id'        => 511,
+				'type'      => 'subscription_variation',
+				'status'    => 'publish',
+				'price'     => '10',
+				'parent_id' => 510,
+			]
+		);
+		wc_create_mock_product(
+			[
+				'id'        => 512,
+				'type'      => 'subscription_variation',
+				'status'    => 'publish',
+				'price'     => '',
+				'parent_id' => 510,
+			]
+		);
+		$family = Promo_Url_Config::get_product_family( 510 );
+		$this->assertSame( [ 511 ], Promo_Url_Config::get_offerable_children( $family ) );
 	}
 
 	/**

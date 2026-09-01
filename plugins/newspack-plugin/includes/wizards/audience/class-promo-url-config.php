@@ -158,16 +158,14 @@ final class Promo_Url_Config {
 			return $offerable;
 		}
 		$variations = isset( $family['variations'] ) ? array_map( 'intval', $family['variations'] ) : [];
-		if ( ! empty( $variations ) ) {
-			// A variation-locked button passes view.php's price gate on the
-			// PARENT's resolvable price (WooCommerce syncs it from the
-			// variations), so resolve it once for the whole set.
-			$parent_priced = self::has_resolvable_price( wc_get_product( (int) ( $family['parent'] ?? 0 ) ) );
-			foreach ( $variations as $variation_id ) {
-				$variation = wc_get_product( $variation_id );
-				if ( $variation && 'publish' === $variation->get_status() && $parent_priced ) {
-					$offerable[] = $variation_id;
-				}
+		foreach ( $variations as $variation_id ) {
+			// A locked button collapses onto the variation, and view.php's price
+			// gate reads the variation's own resolvable price (NYP fallback
+			// included) — the parent's synced price only proves a priced sibling
+			// exists somewhere, not that this child renders a form.
+			$variation = wc_get_product( $variation_id );
+			if ( $variation && 'publish' === $variation->get_status() && self::has_resolvable_price( $variation ) ) {
+				$offerable[] = $variation_id;
 			}
 		}
 		$members = isset( $family['members'] ) ? array_map( 'intval', $family['members'] ) : [];
