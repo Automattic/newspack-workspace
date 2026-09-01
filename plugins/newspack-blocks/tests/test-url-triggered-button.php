@@ -10,8 +10,21 @@ use Newspack_Blocks\Modal_Checkout;
 
 /**
  * URL-triggered checkout button test case.
+ *
+ * The request-reading tests use the WC_Product stub and the wc_get_product()
+ * mock defined in test-modal-checkout-data.php; the suite loads every test
+ * file, so they are available here.
  */
 class Newspack_Blocks_Test_Url_Triggered_Button extends WP_UnitTestCase {
+	/**
+	 * Clean up product fixtures and request state.
+	 */
+	public function tear_down() {
+		unset( $GLOBALS['newspack_blocks_test_products'] );
+		$_GET = [];
+		parent::tear_down();
+	}
+
 	/**
 	 * Test that a plain product yields a product-only button.
 	 */
@@ -193,5 +206,66 @@ class Newspack_Blocks_Test_Url_Triggered_Button extends WP_UnitTestCase {
 		ob_start();
 		Modal_Checkout::render_url_triggered_block();
 		$this->assertSame( '', ob_get_clean() );
+	}
+
+	/**
+	 * Test that the request reader resolves attributes from $_GET, so a test —
+	 * or anything else that adjusts the request after PHP parses it — sees the
+	 * same state production reads.
+	 */
+	public function test_request_attrs_are_read_from_the_request() {
+		$GLOBALS['newspack_blocks_test_products'] = [
+			11 => new WC_Product( 11, 'subscription', [], '10', 'Monthly', 0, 'publish' ),
+		];
+		$_GET = [
+			'product_id' => '11',
+			'coupon'     => 'SPRING20',
+		];
+		$attrs = Modal_Checkout::build_url_triggered_button_attrs_from_request();
+		$this->assertSame( '11', $attrs['product'] );
+		$this->assertSame( 'SPRING20', $attrs['coupon'] );
+	}
+
+	/**
+	 * Test that an unpublished product is refused.
+	 */
+	public function test_request_attrs_refuse_an_unpublished_product() {
+		$GLOBALS['newspack_blocks_test_products'] = [
+			11 => new WC_Product( 11, 'subscription', [], '10', 'Monthly', 0, 'draft' ),
+		];
+		$_GET = [ 'product_id' => '11' ];
+		$this->assertSame( [], Modal_Checkout::build_url_triggered_button_attrs_from_request() );
+	}
+
+	/**
+	 * Test that a variation belonging to a different parent is refused.
+	 */
+	public function test_request_attrs_refuse_a_variation_of_another_parent() {
+		$GLOBALS['newspack_blocks_test_products'] = [
+			11 => new WC_Product( 11, 'variable-subscription', [ 22 ], '10', 'Sub', 0, 'publish' ),
+			22 => new WC_Product( 22, 'subscription_variation', [], '10', 'Monthly', 99, 'publish' ),
+		];
+		$_GET = [
+			'product_id'   => '11',
+			'variation_id' => '22',
+		];
+		$this->assertSame( [], Modal_Checkout::build_url_triggered_button_attrs_from_request() );
+	}
+
+	/**
+	 * Test that a variation of the requested parent is locked onto it.
+	 */
+	public function test_request_attrs_lock_a_variation_of_the_parent() {
+		$GLOBALS['newspack_blocks_test_products'] = [
+			11 => new WC_Product( 11, 'variable-subscription', [ 22 ], '10', 'Sub', 0, 'publish' ),
+			22 => new WC_Product( 22, 'subscription_variation', [], '10', 'Monthly', 11, 'publish' ),
+		];
+		$_GET = [
+			'product_id'   => '11',
+			'variation_id' => '22',
+		];
+		$attrs = Modal_Checkout::build_url_triggered_button_attrs_from_request();
+		$this->assertSame( '22', $attrs['variation'] );
+		$this->assertTrue( $attrs['is_variable'] );
 	}
 }

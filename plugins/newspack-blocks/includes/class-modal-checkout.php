@@ -590,17 +590,21 @@ final class Modal_Checkout {
 	 * Runs on `wp` so the render-time asset enqueues land in the normal queue.
 	 */
 	public static function maybe_setup_url_triggered_checkout() {
+		// phpcs:disable WordPress.Security.NonceVerification.Recommended
+		// The trigger-param test is the cheapest and most selective guard, so it
+		// runs first: nearly all traffic carries no trigger, and is_checkout()
+		// below is the one call here that touches WooCommerce page-type state
+		// and its filters.
+		if ( ! isset( $_GET['checkout'] ) || ! isset( $_GET['type'] ) || ! is_string( $_GET['type'] ) ) {
+			return;
+		}
 		if ( is_admin() || wp_doing_ajax() || is_feed() || ( function_exists( 'is_checkout' ) && is_checkout() ) ) {
 			return;
 		}
 		if ( ! function_exists( 'wc_get_product' ) ) {
 			return;
 		}
-		// phpcs:disable WordPress.Security.NonceVerification.Recommended
-		if ( ! isset( $_GET['checkout'] ) || ! isset( $_GET['type'] ) ) {
-			return;
-		}
-		$type = filter_input( INPUT_GET, 'type', FILTER_SANITIZE_SPECIAL_CHARS );
+		$type = sanitize_text_field( wp_unslash( $_GET['type'] ) );
 		if ( 'donate' === $type ) {
 			// The trigger script only fires when layout, frequency and amount are
 			// all present, so a request missing any of them would render a form
@@ -634,11 +638,18 @@ final class Modal_Checkout {
 	 * Resolve checkout button attributes from the current request, validating the
 	 * product and variation. Returns [] when the request can't be served.
 	 *
+	 * Reads $_GET rather than filter_input(): the guard in
+	 * maybe_setup_url_triggered_checkout() tests $_GET, and filter_input()
+	 * consults PHP's request snapshot instead — anything that adjusts the
+	 * superglobal after parsing (a test, a mu-plugin rewriting the query) would
+	 * pass the guard and read back empty.
+	 *
 	 * @return array Block attributes.
 	 */
-	private static function build_url_triggered_button_attrs_from_request() {
-		$product_id   = absint( filter_input( INPUT_GET, 'product_id', FILTER_SANITIZE_NUMBER_INT ) );
-		$variation_id = absint( filter_input( INPUT_GET, 'variation_id', FILTER_SANITIZE_NUMBER_INT ) );
+	public static function build_url_triggered_button_attrs_from_request() {
+		// phpcs:disable WordPress.Security.NonceVerification.Recommended
+		$product_id   = isset( $_GET['product_id'] ) && is_scalar( $_GET['product_id'] ) ? absint( $_GET['product_id'] ) : 0;
+		$variation_id = isset( $_GET['variation_id'] ) && is_scalar( $_GET['variation_id'] ) ? absint( $_GET['variation_id'] ) : 0;
 		if ( ! $product_id ) {
 			return [];
 		}
@@ -655,10 +666,13 @@ final class Modal_Checkout {
 		// The coupon and label are non-HTML text values: sanitize_text_field()
 		// keeps their raw characters, where an entity-encoding filter would break
 		// the coupon's title lookup and show readers an encoded label. Escaping
-		// happens at output (view.php / the thank-you template).
-		// phpcs:disable WordPress.Security.NonceVerification.Recommended
+		// happens at output (view.php / the thank-you template). The destination
+		// is a URL: esc_url_raw() keeps its query intact and drops disallowed
+		// schemes before sanitize_after_success_url() validates the host.
 		$coupon       = isset( $_GET['coupon'] ) && is_string( $_GET['coupon'] ) ? sanitize_text_field( wp_unslash( $_GET['coupon'] ) ) : '';
 		$button_label = isset( $_GET['after_success_button_label'] ) && is_string( $_GET['after_success_button_label'] ) ? sanitize_text_field( wp_unslash( $_GET['after_success_button_label'] ) ) : '';
+		$behavior     = isset( $_GET['after_success_behavior'] ) && is_string( $_GET['after_success_behavior'] ) ? sanitize_text_field( wp_unslash( $_GET['after_success_behavior'] ) ) : '';
+		$after_url    = isset( $_GET['after_success_url'] ) && is_string( $_GET['after_success_url'] ) ? esc_url_raw( wp_unslash( $_GET['after_success_url'] ) ) : '';
 		// phpcs:enable WordPress.Security.NonceVerification.Recommended
 		return self::build_url_triggered_button_attrs(
 			$product->get_type(),
@@ -666,8 +680,8 @@ final class Modal_Checkout {
 			$variation_id,
 			$coupon,
 			[
-				'behavior'     => (string) filter_input( INPUT_GET, 'after_success_behavior', FILTER_SANITIZE_SPECIAL_CHARS ),
-				'url'          => (string) filter_input( INPUT_GET, 'after_success_url', FILTER_SANITIZE_URL ),
+				'behavior'     => $behavior,
+				'url'          => $after_url,
 				'button_label' => $button_label,
 			]
 		);
