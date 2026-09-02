@@ -28,7 +28,15 @@ import Router from '../../../../../../../packages/components/src/proxied-imports
 import { SEARCH_ENDPOINTS, WIZARD_ENDPOINT } from '../../constants';
 import { registerTab } from '../registry';
 import { DISCOUNTS_ENDPOINT } from './constants';
-import { DEFAULT_CURRENCY, discountLabel, excludedLabel, subscriptionsLabel, targetingBaseLabel, targetingLabel } from './discount';
+import {
+	DEFAULT_CURRENCY,
+	discountLabel,
+	excludedLabel,
+	subscriptionNames,
+	subscriptionsSummary,
+	targetingBaseLabel,
+	targetingLabel,
+} from './discount';
 import DiscountEditor from './editor';
 import SettingsModal from './settings-modal';
 import type { DiscountRule, DiscountsPayload } from './types';
@@ -143,10 +151,25 @@ function SubscriberDiscounts() {
 				id: 'subscription',
 				label: __( 'Subscription', 'newspack-plugin' ),
 				enableHiding: false,
-				elements: subscriptionOptions.map( option => ( { value: option.id, label: decodeEntities( option.name ) } ) ),
+				elements: subscriptionOptions.map( option => ( { value: decodeEntities( option.name ), label: decodeEntities( option.name ) } ) ),
 				filterBy: { operators: [ 'isAny' ] },
-				getValue: ( { item } ) => item.subscription_product_ids,
-				render: ( { item } ) => subscriptionsLabel( item.subscription_product_ids, subscriptionOptions ),
+				// Search matches nothing at all unless some field opts in, and this
+				// is the only column whose text a publisher would search for. It
+				// doubles as the filter's value, so both read names rather than ids.
+				enableGlobalSearch: true,
+				getValue: ( { item } ) => subscriptionNames( item.subscription_product_ids, subscriptionOptions ),
+				render: ( { item } ) => {
+					const { named, more } = subscriptionsSummary( item.subscription_product_ids, subscriptionOptions );
+					return (
+						<span className="newspack-subscriber-discounts__subscriptions">
+							{ /* `title` recovers what the ellipsis clipped; the withheld subscriptions are in the editor drawer. */ }
+							<span className="newspack-subscriber-discounts__subscriptions-named" title={ named }>
+								{ named }
+							</span>
+							{ more && <span className="newspack-subscriber-discounts__subscriptions-more">{ more }</span> }
+						</span>
+					);
+				},
 			},
 			{
 				id: 'status',

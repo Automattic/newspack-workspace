@@ -36,6 +36,27 @@
 		font-weight: normal;
 	}
 
+	&__subscriptions {
+		align-items: baseline;
+		display: flex;
+		gap: wp-vars.$grid-unit-05;
+		min-width: 0;
+	}
+
+	// Only the names give way. The count says how much the cell left out, so it
+	// keeps its width and the names ellipsize into whatever is left.
+	&__subscriptions-named {
+		min-width: 0;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+
+	&__subscriptions-more {
+		color: wp-colors.$gray-700;
+		flex-shrink: 0;
+	}
+
 	&__preview {
 		border-collapse: collapse;
 		width: 100%;
@@ -62,6 +83,16 @@
 		del {
 			margin-right: 4px;
 		}
+	}
+
+	// An auto-layout table sizes a cell to its content, so without this a rule
+	// naming a long subscription widens this column until the columns after it are
+	// pushed off-screen. `max-width: 0` leaves the column its natural share of the
+	// table rather than collapsing it. The title cell carries no class of its own,
+	// so `:has()` is the only hook DataViews 10.3 offers; the view's own
+	// `layout.styles` widths emit no `col` sizing at all in this version.
+	.dataviews-view-table td:has(.dataviews-title-field) {
+		max-width: 0;
 	}
 
 	.dataviews-title-field--clickable:focus:not(:focus-visible) {
