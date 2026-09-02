@@ -1,12 +1,12 @@
 /**
  * Flow — regenerate the group's shareable invite link.
  *
- * Links are stored per manager, and an admin acts on the owner's slot (see
- * Group_Subscription_API::resolve_link_manager_id). Regenerating replaces the
- * owner's link in place: the same URL the owner distributed from My Account. Every
- * copy of it stops working immediately, which the confirm copy says plainly rather
- * than surprising the admin. A link another manager minted lives in their own slot
- * and is untouched.
+ * Links are stored per manager, and the caller is placed in one slot by
+ * Group_Subscription_API::resolve_link_manager_id — their own if they manage this
+ * group, otherwise the owner's. Regenerating replaces the link in that slot, which
+ * is the one the screen shows. Every copy of it stops working immediately, which the
+ * confirm copy says plainly rather than surprising the admin. A link in any other
+ * manager's slot is untouched.
  */
 
 /**
@@ -51,7 +51,7 @@ export default function RegenerateLinkFlow( { actions, onClose, onDone } ) {
 			onConfirm={ regenerate }
 		>
 			{ __(
-				"This replaces the owner's invite link, including any copy already sent out. That link stops working, and you'll get the new one on your clipboard to share. A link created by another manager is not affected.",
+				"This replaces the invite link shown above, including any copy already sent out. That link stops working, and you'll get the new one on your clipboard to share. A link created by another manager is not affected.",
 				'newspack-plugin'
 			) }
 		</ConfirmFlow>

@@ -613,20 +613,31 @@ class Subscribers_Wizard extends Wizard {
 	/**
 	 * The state of the group's shareable invite link.
 	 *
-	 * Reported for the *owner's* link, because that is the one the admin surface
-	 * acts on — an admin is not a manager of the group, so a link minted under
-	 * their own ID would be rejected when an invitee clicked it. This mirrors
-	 * Group_Subscription_API::resolve_link_manager_id(), keeping what the screen
-	 * shows and what its buttons change the same link. A link minted by some other
-	 * manager is deliberately not surfaced here; see NPPD-2120.
+	 * Resolves the caller through Group_Subscription_API::resolve_link_manager_id(),
+	 * which is the same call the mint and delete endpoints make, so for anyone who
+	 * can use the buttons this reports the link those buttons act on. Links are
+	 * stored per manager, and the resolver places the caller in one slot: a manager
+	 * of this group gets their own, and any other store admin gets the owner's,
+	 * because a link minted under a non-manager's ID would be rejected when an
+	 * invitee clicked it.
+	 *
+	 * A caller the resolver cannot place holds `manage_options` without
+	 * `manage_woocommerce`: they can open the screen but every write is refused, and
+	 * `canManage` already tells the client to disable the buttons. They fall back to
+	 * the owner's slot for display, because reporting no link when the group has one
+	 * would be false rather than merely read-only. Links held in other managers'
+	 * slots are deliberately not surfaced; see NPPD-2120.
 	 *
 	 * @param \WC_Subscription $subscription The group subscription.
 	 *
 	 * @return array{active:bool,url:string}
 	 */
 	private function prepare_group_invite_link( $subscription ): array {
-		$owner_id = (int) $subscription->get_user_id();
-		$entry    = $owner_id ? Group_Subscription_Invite::get_link_invite( $subscription, $owner_id ) : null;
+		$manager_id = Group_Subscription_API::resolve_link_manager_id( $subscription );
+		if ( ! $manager_id ) {
+			$manager_id = (int) $subscription->get_user_id();
+		}
+		$entry = $manager_id ? Group_Subscription_Invite::get_link_invite( $subscription, $manager_id ) : null;
 		if ( ! $entry || empty( $entry['key'] ) ) {
 			return [
 				'active' => false,
@@ -635,7 +646,7 @@ class Subscribers_Wizard extends Wizard {
 		}
 		return [
 			'active' => true,
-			'url'    => Group_Subscription_Invite::get_link_invite_url( $subscription->get_id(), $owner_id, $entry['key'] ),
+			'url'    => Group_Subscription_Invite::get_link_invite_url( $subscription->get_id(), $manager_id, $entry['key'] ),
 		];
 	}
 
