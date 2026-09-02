@@ -151,13 +151,9 @@ function SubscriberDiscounts() {
 				id: 'subscription',
 				label: __( 'Subscription', 'newspack-plugin' ),
 				enableHiding: false,
-				elements: subscriptionOptions.map( option => ( { value: decodeEntities( option.name ), label: decodeEntities( option.name ) } ) ),
+				elements: subscriptionOptions.map( option => ( { value: option.id, label: decodeEntities( option.name ) } ) ),
 				filterBy: { operators: [ 'isAny' ] },
-				// Search matches nothing at all unless some field opts in, and this
-				// is the only column whose text a publisher would search for. It
-				// doubles as the filter's value, so both read names rather than ids.
-				enableGlobalSearch: true,
-				getValue: ( { item } ) => subscriptionNames( item.subscription_product_ids, subscriptionOptions ),
+				getValue: ( { item } ) => item.subscription_product_ids,
 				render: ( { item } ) => {
 					const { named, more } = subscriptionsSummary( item.subscription_product_ids, subscriptionOptions );
 					return (
@@ -170,6 +166,20 @@ function SubscriberDiscounts() {
 						</span>
 					);
 				},
+			},
+			{
+				id: 'subscription_names',
+				label: __( 'Subscription names', 'newspack-plugin' ),
+				// Never rendered: it is absent from the view's fields, and
+				// `enableHiding: false` keeps it out of the column-toggle menu too.
+				// It exists because DataViews matches a search only against fields
+				// that opt in, and the Subscription field cannot be the one to opt
+				// in — its value has to stay ids so that two subscriptions sharing
+				// a name stay separate options in its filter.
+				enableHiding: false,
+				enableSorting: false,
+				enableGlobalSearch: true,
+				getValue: ( { item } ) => subscriptionNames( item.subscription_product_ids, subscriptionOptions ).join( ' ' ),
 			},
 			{
 				id: 'status',
