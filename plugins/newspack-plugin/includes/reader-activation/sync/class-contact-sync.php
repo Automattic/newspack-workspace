@@ -1535,6 +1535,15 @@ class Contact_Sync extends Sync {
 			if ( $user ) {
 				// For existing users, get fresh contact data.
 				$contact = self::get_contact_data( $user->ID );
+				// Handlers can queue metadata that nothing else produces (the
+				// newsletter_updated handler is the only source of newsletter_selection),
+				// so carry it into the rebuilt contact. Handlers queue raw keys and the
+				// push path no longer prefixes them (Automattic/newspack-plugin#4565), so
+				// normalize first. Fresh data wins on conflicts.
+				if ( ! is_wp_error( $contact ) && ! empty( $queued_sync['contact']['metadata'] ) ) {
+					$queued_contact      = Sync\Metadata::normalize_contact_data( [ 'metadata' => $queued_sync['contact']['metadata'] ] );
+					$contact['metadata'] = array_merge( $queued_contact['metadata'], $contact['metadata'] );
+				}
 			} else {
 				// For deleted users, try to use the queued contact data directly; $user will return nothing.
 				$contact = $queued_sync['contact'];
