@@ -1725,5 +1725,43 @@ class Newspack_Blocks {
 
 		return $combined_caption;
 	}
+
+	/**
+	 * Inline tags this plugin allows in a post subtitle.
+	 *
+	 * The theme owns the subtitle and sanitizes it on write, but a value stored before
+	 * that was in place is still raw, so the plugin filters it on the way out rather
+	 * than trusting the meta.
+	 *
+	 * @return array Allowed tags in wp_kses() form.
+	 */
+	public static function get_post_subtitle_allowed_tags() {
+		return array(
+			'b'      => true,
+			'strong' => true,
+			'i'      => true,
+			'em'     => true,
+			'mark'   => true,
+			'u'      => true,
+			'small'  => true,
+			'sub'    => true,
+			'sup'    => true,
+			'a'      => array(
+				'href'   => true,
+				'target' => true,
+				'rel'    => true,
+			),
+		);
+	}
+
+	/**
+	 * Limit a post subtitle to the inline tags this plugin renders.
+	 *
+	 * @param string $subtitle Raw subtitle.
+	 * @return string Sanitized subtitle.
+	 */
+	public static function sanitize_post_subtitle( $subtitle ) {
+		return wp_kses( (string) $subtitle, self::get_post_subtitle_allowed_tags() );
+	}
 }
 Newspack_Blocks::init();
