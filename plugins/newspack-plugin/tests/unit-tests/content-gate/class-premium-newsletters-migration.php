@@ -93,8 +93,8 @@ class Test_Premium_Newsletters_Migration extends \WP_UnitTestCase {
 	public function set_up() {
 		parent::set_up();
 		register_post_type( Subscription_Lists::CPT, [ 'public' => false ] );
-		$this->list_a = self::factory()->post->create( [ 'post_type' => Subscription_Lists::CPT ] );
-		$this->list_b = self::factory()->post->create( [ 'post_type' => Subscription_Lists::CPT ] );
+		$this->list_a = $this->create_list();
+		$this->list_b = $this->create_list();
 		global $products_database;
 		$this->original_products_database = $products_database;
 		$this->product                    = $this->create_product( 'subscription' );
@@ -1760,6 +1760,31 @@ class Test_Premium_Newsletters_Migration extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * The ordinary shape once a shared list is split out: the union gate's plans each
+	 * keep a gate of their own for the lists exclusive to them. Those are being updated,
+	 * not superseded, so naming them would have the run warn that gates it is writing
+	 * should be retired — and, on --live, ask the operator to confirm exactly that.
+	 */
+	public function test_find_superseded_gates_ignores_a_gate_this_run_rewrites() {
+		$group = [ $this->make_named_plan( 'Plan A' ), $this->make_named_plan( 'Plan B' ) ];
+
+		$superseded = $this->invoke_private_static(
+			'find_superseded_gates',
+			[
+				$group,
+				'plan a | plan b (shared lists)',
+				[
+					'plan a' => 11,
+					'plan b' => 22,
+				],
+				[ 'plan a' => true ],
+			]
+		);
+
+		$this->assertSame( [ 'Plan B' => 22 ], $superseded, 'Only the gate this run leaves alone is superseded.' );
+	}
+
+	/**
 	 * A genuinely new group supersedes nothing.
 	 */
 	public function test_find_superseded_gates_returns_empty_when_no_plan_has_a_gate() {
@@ -1860,43 +1885,28 @@ class Test_Premium_Newsletters_Migration extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * Two plans overlapping on one list without matching on the rest become two
-	 * gates over that list. WooCommerce Memberships grants it to a holder of either
-	 * plan while gates resolve restrictive-wins, so the stricter gate would decide
-	 * and the other plan's readers would lose the list. Computable from the grouping,
-	 * so it is caught before any write.
+	 * Groups restricting different lists are the ordinary multi-gate run. Splitting
+	 * one would rewrite every site with more than one premium newsletter plan.
 	 */
-	public function test_find_lists_shared_across_groups_fires_for_overlapping_groups() {
-		$plan_groups = [
-			'[a]'   => [ $this->make_payload_plan( 'purchase', [], [ $this->list_a ], 'Premium' ) ],
-			'[a,b]' => [ $this->make_payload_plan( 'signup', [], [ $this->list_a, $this->list_b ], 'Insider' ) ],
-		];
-
-		$this->assertSame(
-			[ $this->list_a => [ 'Premium', 'Insider' ] ],
-			$this->invoke_private_static( 'find_lists_shared_across_groups', [ $plan_groups ] )
-		);
-	}
-
-	/**
-	 * Groups restricting different lists are the ordinary multi-gate run. Refusing
-	 * one would block every site with more than one premium newsletter plan.
-	 */
-	public function test_find_lists_shared_across_groups_is_empty_for_disjoint_groups() {
+	public function test_split_shared_lists_leaves_disjoint_groups_untouched() {
 		$plan_groups = [
 			'[a]' => [ $this->make_payload_plan( 'purchase', [], [ $this->list_a ], 'Premium' ) ],
 			'[b]' => [ $this->make_payload_plan( 'signup', [], [ $this->list_b ], 'Insider' ) ],
 		];
 
-		$this->assertSame( [], $this->invoke_private_static( 'find_lists_shared_across_groups', [ $plan_groups ] ) );
+		$split = $this->invoke_private_static( 'split_shared_lists', [ $plan_groups ] );
+
+		$this->assertSame( $plan_groups, $split['groups'] );
+		$this->assertSame( [], $split['unions'] );
 	}
 
 	/**
-	 * Plans inside one group restrict the same lists and share one gate by
-	 * construction, so their overlap is the grouping working rather than a conflict.
-	 * Counting per plan instead of per group would refuse every multi-plan group.
+	 * Plans inside one group restrict the same lists and share a gate by construction,
+	 * so their overlap is the grouping working rather than a conflict. Counting per
+	 * plan instead of per group would split every multi-plan group onto a union gate
+	 * carrying the plans it already had.
 	 */
-	public function test_find_lists_shared_across_groups_ignores_plans_within_one_group() {
+	public function test_split_shared_lists_ignores_an_overlap_inside_one_group() {
 		$plan_groups = [
 			'[a]' => [
 				$this->make_payload_plan( 'purchase', [], [ $this->list_a ], 'Premium' ),
@@ -1904,7 +1914,37 @@ class Test_Premium_Newsletters_Migration extends \WP_UnitTestCase {
 			],
 		];
 
-		$this->assertSame( [], $this->invoke_private_static( 'find_lists_shared_across_groups', [ $plan_groups ] ) );
+		$split = $this->invoke_private_static( 'split_shared_lists', [ $plan_groups ] );
+
+		$this->assertSame( $plan_groups, $split['groups'] );
+		$this->assertSame( [], $split['unions'] );
+	}
+
+	/**
+	 * A group every one of whose lists is shared has nothing left to gate, so it must
+	 * write no gate at all. Leaving it in would republish the same lists behind a
+	 * second, stricter gate and undo the union.
+	 */
+	public function test_split_shared_lists_drops_a_group_whose_lists_are_all_shared() {
+		$plan_groups = [
+			'[a]'   => [ $this->make_payload_plan( 'purchase', [], [ $this->list_a ], 'Premium' ) ],
+			'[a,b]' => [ $this->make_payload_plan( 'purchase', [], [ $this->list_a, $this->list_b ], 'Insider' ) ],
+		];
+
+		$split = $this->invoke_private_static( 'split_shared_lists', [ $plan_groups ] );
+
+		$gated_lists = [];
+		foreach ( $split['groups'] as $group ) {
+			$gated_lists[ $this->invoke_private_static( 'gate_title', [ $group ] ) ] = $group[0]['list_ids'];
+		}
+		$this->assertSame(
+			[
+				'Insider'                          => [ $this->list_b ],
+				'Premium | Insider (shared lists)' => [ $this->list_a ],
+			],
+			$gated_lists,
+			'Premium restricted nothing of its own, so only Insider keeps a gate beside the union.'
+		);
 	}
 
 	/**
@@ -2380,6 +2420,55 @@ class Test_Premium_Newsletters_Migration extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * A manual-only plan's members hold no product, so a union gate over a list that
+	 * plan also restricted is what drops them at cutover — not the "goes open to every
+	 * reader" outcome the rest of the warning describes. Naming the gate is what tells
+	 * the operator to give them a product instead of leaving it.
+	 */
+	public function test_report_manual_only_plan_names_the_union_gate_holding_its_lists() {
+		$unions = [
+			'[a]' => [
+				'title'        => 'Donate: Monthly | Donate: Yearly (shared lists)',
+				'list_ids'     => [ $this->list_a ],
+				'plan_names'   => [ 'Donate: Monthly', 'Donate: Yearly' ],
+				'has_purchase' => true,
+			],
+		];
+
+		$this->invoke_private_static( 'report_manual_only_plan', [ 'Patreon', [ $this->list_a, $this->list_b ], $unions ] );
+
+		$warning = implode( "\n", \WP_CLI::$warnings );
+		$this->assertStringContainsString( 'Donate: Monthly | Donate: Yearly (shared lists)', $warning );
+		// Asserted on the union clause alone, not the whole warning: the plan's own list
+		// enumeration names both lists, so a check over the warning passes even when the
+		// clause claims a list that gate does not cover.
+		$union_clause = substr( $warning, strpos( $warning, ' List(s) ' ) );
+		$this->assertStringContainsString( (string) $this->list_a, $union_clause );
+		$this->assertStringNotContainsString( (string) $this->list_b, $union_clause, 'Only the lists the union actually covers are named as behind it.' );
+	}
+
+	/**
+	 * A union that asks only for registration admits a manual-only plan's members like
+	 * any other registered reader, so it must not be named as the gate that drops them —
+	 * that would have the operator provision a product nobody needs.
+	 */
+	public function test_report_manual_only_plan_ignores_a_registration_only_union() {
+		$unions = [
+			'[a]' => [
+				'title'        => 'Premium | Insider (shared lists)',
+				'list_ids'     => [ $this->list_a ],
+				'plan_names'   => [ 'Premium', 'Insider' ],
+				'has_purchase' => false,
+			],
+		];
+
+		$this->invoke_private_static( 'report_manual_only_plan', [ 'Patreon', [ $this->list_a ], $unions ] );
+
+		$warning = implode( "\n", \WP_CLI::$warnings );
+		$this->assertStringNotContainsString( 'Premium | Insider (shared lists)', $warning );
+	}
+
+	/**
 	 * A manual-only plan that restricted no list has nothing to warn about, and a
 	 * warning per such plan would bury the ones that matter.
 	 */
@@ -2388,5 +2477,181 @@ class Test_Premium_Newsletters_Migration extends \WP_UnitTestCase {
 
 		$this->assertSame( 0, $row['lists'] );
 		$this->assertEmpty( \WP_CLI::$warnings );
+	}
+
+	/**
+	 * Create a newsletter list post.
+	 *
+	 * @return int The list post ID.
+	 */
+	private function create_list(): int {
+		return self::factory()->post->create( [ 'post_type' => Subscription_Lists::CPT ] );
+	}
+
+	/**
+	 * Publish the gate a plan group migrates to, exactly as the write path does.
+	 *
+	 * The paid access layout is supplied rather than seeded: the default one renders
+	 * the one-tier paywall pattern, which asks each product whether it is
+	 * purchasable — a method the WooCommerce product mock does not carry.
+	 *
+	 * @param array[] $groups Plan groups, keyed as group_plans_by_lists() returns them.
+	 *
+	 * @return void
+	 */
+	private function publish_gates_for_groups( array $groups ): void {
+		foreach ( $groups as $group ) {
+			$payload = $this->invoke_private_static( 'build_gate_payload', [ $group ] );
+			$custom_access = $payload['custom_access'];
+			if ( ! empty( $custom_access['active'] ) ) {
+				$custom_access['gate_layout_id'] = \Newspack\Content_Gate::create_gate_layout( $payload['title'] . ' paid access layout', 'Members only.' );
+			}
+			\Newspack\Content_Gate::create_gate(
+				[
+					'title'               => $payload['title'],
+					'status'              => 'publish',
+					'content_rules'       => $payload['content_rules'],
+					'content_rules_match' => $payload['content_rules_match'],
+					'registration'        => $payload['registration'],
+					'custom_access'       => $custom_access,
+				],
+				\Newspack\Content_Gate::GATE_CPT,
+				true
+			);
+		}
+	}
+
+	/**
+	 * Create a reader holding an active subscription to one product.
+	 *
+	 * @param int $product_id The subscribed product.
+	 *
+	 * @return int The reader's user ID.
+	 */
+	private function create_subscriber( int $product_id ): int {
+		$user_id = self::factory()->user->create( [ 'role' => 'subscriber' ] );
+		\wcs_create_subscription(
+			[
+				'customer_id' => $user_id,
+				'status'      => 'active',
+				'products'    => [ $product_id ],
+			]
+		);
+		return $user_id;
+	}
+
+	/**
+	 * Turn gating on for a test, so is_post_restricted() evaluates gates instead of
+	 * returning its input unchanged.
+	 */
+	private function activate_gating(): void {
+		if ( ! defined( 'NEWSPACK_CONTENT_GATES' ) ) {
+			define( 'NEWSPACK_CONTENT_GATES', true );
+		}
+		add_filter( 'newspack_reader_activation_enabled', '__return_true' );
+	}
+
+	/**
+	 * Two plans each restricting their own payment-channel list, and both restricting
+	 * one list between them. WooCommerce Memberships grants the shared
+	 * list to a holder of either plan; gates AND, so leaving it on both gates means
+	 * satisfying both. It has to come off them and onto a single gate carrying both
+	 * plans' products, while each plan keeps its own channel list.
+	 */
+	public function test_split_shared_lists_puts_a_shared_list_on_one_union_gate_carrying_both_products() {
+		$monthly_product = $this->create_product( 'subscription' );
+		$yearly_product  = $this->create_product( 'subscription' );
+		$monthly_channel = $this->create_list();
+		$yearly_channel  = $this->create_list();
+		$shared          = $this->create_list();
+
+		$plan_groups = [
+			'[monthly]' => [ $this->make_payload_plan( 'purchase', [ $monthly_product ], [ $shared, $monthly_channel ], 'Donate: Monthly' ) ],
+			'[yearly]'  => [ $this->make_payload_plan( 'purchase', [ $yearly_product ], [ $shared, $yearly_channel ], 'Donate: Yearly' ) ],
+		];
+
+		$split    = $this->invoke_private_static( 'split_shared_lists', [ $plan_groups ] );
+		$payloads = array_values(
+			array_map(
+				fn( $group ) => $this->invoke_private_static( 'build_gate_payload', [ $group ] ),
+				$split['groups']
+			)
+		);
+
+		$carrying_shared = array_values( array_filter( $payloads, fn( $payload ) => in_array( $shared, $payload['list_ids'], true ) ) );
+		$this->assertCount( 1, $carrying_shared, 'The shared list must end up behind exactly one gate.' );
+
+		$union = $carrying_shared[0];
+		$this->assertSame( 'Donate: Monthly | Donate: Yearly (shared lists)', $union['title'] );
+		$this->assertSame( [ $shared ], $union['list_ids'] );
+		$this->assertSame(
+			[
+				[
+					[
+						'slug'  => 'subscription',
+						'value' => [ $monthly_product, $yearly_product ],
+					],
+				],
+			],
+			$union['custom_access']['access_rules'],
+			'The union gate reproduces the OR by naming both groups\' products on one rule.'
+		);
+
+		$by_title = array_column( $payloads, 'list_ids', 'title' );
+		$this->assertSame( [ $monthly_channel ], $by_title['Donate: Monthly'], 'Each group keeps its own non-shared list.' );
+		$this->assertSame( [ $yearly_channel ], $by_title['Donate: Yearly'] );
+	}
+
+	/**
+	 * The consequence the split exists for, end to end through the payload builder
+	 * and the evaluator. Grouped as they arrive, the two plans become two gates both
+	 * restricting the shared list, and a reader holding one plan's product is refused
+	 * it by the other plan's gate — which Premium_Newsletters::check_access() reads as
+	 * "unsubscribe at the ESP". Split, the shared list sits behind one gate that
+	 * admits the holder of either product.
+	 *
+	 * The two halves use their own shared list because gates are site-wide: the
+	 * un-split gates would otherwise still be restricting the list the union covers.
+	 */
+	public function test_a_union_gate_admits_a_reader_holding_either_groups_product() {
+		$this->activate_gating();
+		$monthly_product = $this->create_product( 'subscription' );
+		$yearly_product  = $this->create_product( 'subscription' );
+		$monthly_reader  = $this->create_subscriber( $monthly_product );
+		$yearly_reader   = $this->create_subscriber( $yearly_product );
+
+		$unsplit_shared = $this->create_list();
+		$this->publish_gates_for_groups(
+			[
+				'[monthly]' => [ $this->make_payload_plan( 'purchase', [ $monthly_product ], [ $unsplit_shared, $this->create_list() ], 'Monthly' ) ],
+				'[yearly]'  => [ $this->make_payload_plan( 'purchase', [ $yearly_product ], [ $unsplit_shared, $this->create_list() ], 'Yearly' ) ],
+			]
+		);
+
+		$this->assertTrue(
+			\Newspack\Content_Restriction_Control::is_post_restricted( false, $unsplit_shared, $monthly_reader ),
+			'Grouped as they arrive, the two gates AND: the monthly reader fails the yearly gate.'
+		);
+
+		$union_shared = $this->create_list();
+		$split        = $this->invoke_private_static(
+			'split_shared_lists',
+			[
+				[
+					'[monthly2]' => [ $this->make_payload_plan( 'purchase', [ $monthly_product ], [ $union_shared, $this->create_list() ], 'Donate: Monthly' ) ],
+					'[yearly2]'  => [ $this->make_payload_plan( 'purchase', [ $yearly_product ], [ $union_shared, $this->create_list() ], 'Donate: Yearly' ) ],
+				],
+			]
+		);
+		$this->publish_gates_for_groups( $split['groups'] );
+
+		$this->assertFalse(
+			\Newspack\Content_Restriction_Control::is_post_restricted( false, $union_shared, $monthly_reader ),
+			'The union gate admits the monthly plan\'s reader.'
+		);
+		$this->assertFalse(
+			\Newspack\Content_Restriction_Control::is_post_restricted( false, $union_shared, $yearly_reader ),
+			'And the yearly plan\'s reader, who holds the other product.'
+		);
 	}
 }

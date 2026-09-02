@@ -38,6 +38,15 @@ class Premium_Newsletters_Migration {
 	const NEWSLETTER_LIST_CPT_FALLBACK = 'newspack_nl_list';
 
 	/**
+	 * What marks a gate as covering lists that several plan groups restrict.
+	 *
+	 * Part of the gate's title, which is its identity here, so it is what keeps a union
+	 * gate and a group that genuinely holds those same plans from resolving to one title
+	 * ({@see gate_title()}).
+	 */
+	const UNION_TITLE_SUFFIX = ' (shared lists)';
+
+	/**
 	 * Create or update Newspack Access Control premium newsletter gates from
 	 * WooCommerce Membership plans.
 	 *
@@ -46,6 +55,14 @@ class Premium_Newsletters_Migration {
 	 * restricted lists, and the plan's products as its paid access rules. Plans
 	 * restricting the same lists are grouped and represented by a single gate whose
 	 * title is all matching plan names joined with " | ".
+	 *
+	 * A list several of those groups restrict is written to a gate of its own instead.
+	 * That gate is titled for every group restricting the list, suffixed "(shared
+	 * lists)". It grants on all of their products together, or on registration alone
+	 * where one of those plans granted on signup. WooCommerce Memberships gives such a
+	 * list to a holder of any one of the plans, and gates have to all be satisfied, so
+	 * leaving it on each group's gate would take it from everyone. A group left with no
+	 * list of its own after that writes no gate.
 	 *
 	 * Registration mode is always activated; paid access mode only when every plan in
 	 * the group requires a purchase (see group_requires_purchase()). The site-wide
@@ -191,12 +208,13 @@ class Premium_Newsletters_Migration {
 			);
 		}
 
-		$summary         = [];
-		$skipped         = [];
-		$migrated_lists  = [];
-		$all_lists_plans = [];
+		$summary           = [];
+		$skipped           = [];
+		$migrated_lists    = [];
+		$all_lists_plans   = [];
+		$manual_only_plans = [];
 
-		$plan_groups = self::group_plans_by_lists( $plan_ids, $skipped, $all_lists_plans );
+		$plan_groups = self::group_plans_by_lists( $plan_ids, $skipped, $all_lists_plans, $manual_only_plans );
 
 		// Refused rather than reported: a plan restricting every list has no faithful
 		// gate, and reporting it as skipped reads as "nothing to migrate here" when the
@@ -210,9 +228,21 @@ class Premium_Newsletters_Migration {
 			);
 		}
 
-		$group_count = count( $plan_groups );
-		if ( $group_count < ( $total - count( $skipped ) ) ) {
-			WP_CLI::line( sprintf( 'Grouped into %d gate(s) after deduplication.', $group_count ) );
+		// WooCommerce Memberships grants a list to a holder of ANY plan restricting it,
+		// while overlapping gates AND. A list two plan groups both restrict therefore
+		// comes off both of their gates and onto one that carries every contributing
+		// group's products ({@see split_shared_lists()}).
+		$split       = self::split_shared_lists( $plan_groups );
+		$plan_groups = $split['groups'];
+		$unions      = $split['unions'];
+
+		$group_count    = count( $plan_groups );
+		$plans_migrated = $total - count( $skipped ) - count( $manual_only_plans );
+		// Reported whenever the two differ, in either direction: grouping folds plans
+		// together and the split pulls shared lists out into gates of their own, so the
+		// gate count can land either side of the number of plans that produced it.
+		if ( $group_count !== $plans_migrated ) {
+			WP_CLI::line( sprintf( 'Resolved to %d gate(s): plans restricting the same lists share one, and a plan whose lists are all shared with another writes none of its own.', $group_count ) );
 			WP_CLI::line( '' );
 		}
 
@@ -233,25 +263,6 @@ class Premium_Newsletters_Migration {
 				sprintf(
 					'Two or more plan groups resolve to the same gate title: %s. A gate is identified by its title, so the second group would replace the first group\'s content rules outright and leave that group\'s lists behind no gate at all. Rename one of the plans and re-run. Nothing has been written.',
 					implode( ', ', array_map( fn( $title ) => sprintf( '"%s"', $title ), $collisions ) )
-				)
-			);
-		}
-
-		$shared_lists = self::find_lists_shared_across_groups( $plan_groups );
-		if ( ! empty( $shared_lists ) ) {
-			$overlaps = [];
-			foreach ( $shared_lists as $list_id => $titles ) {
-				$overlaps[] = sprintf(
-					'"%s" (list %d), restricted by %s',
-					get_the_title( $list_id ),
-					$list_id,
-					implode( ' and ', array_map( fn( $title ) => sprintf( '"%s"', $title ), $titles ) )
-				);
-			}
-			WP_CLI::error(
-				sprintf(
-					'These list(s) would end up behind more than one gate: %s. WooCommerce Memberships grants such a list to a holder of either plan; gates resolve the other way, so the stricter gate would decide and readers holding only the other plan would lose the list. Make the overlapping plans restrict the same set of lists, or move the shared list onto one of them, and re-run. Nothing has been written.',
-					implode( '; ', $overlaps )
 				)
 			);
 		}
@@ -277,14 +288,39 @@ class Premium_Newsletters_Migration {
 			self::report_dropped_paywall( $payload );
 		}
 
+		// A union that asks only for registration admits a manual-only plan's members like
+		// any other registered reader, so the warning below must be able to tell the two
+		// apart. The payloads are keyed as the unions are.
+		foreach ( $unions as $union_key => $union ) {
+			$unions[ $union_key ]['has_purchase'] = ! empty( $payloads[ $union_key ]['has_purchase'] );
+		}
+
+		self::report_shared_list_unions( $unions, $payloads, (bool) $plan_id );
+
+		// Reported here rather than during grouping, for two reasons: a manual-only plan's
+		// warning names the union gates its lists ended up behind, which the split has not
+		// computed until now; and those titles only mean anything after the table above has
+		// said what a union gate is. The cost is that a run stopped by any of the three
+		// refusals above — every-list plans, colliding titles, a one-time plan with no
+		// derivable duration — never reaches these warnings. Each writes nothing, so the
+		// operator sees them on the re-run.
+		foreach ( $manual_only_plans as $manual_only_plan ) {
+			$skipped[] = self::report_manual_only_plan( $manual_only_plan['name'], $manual_only_plan['list_ids'], $unions );
+		}
+
+		// Every group's title is unique (the collision check above errors out
+		// otherwise), so the write loop can treat a title as naming one gate.
+		$titles_written = array_fill_keys( array_map( fn( $payload ) => trim( strtolower( $payload['title'] ) ), $payloads ), true );
+
 		// Regrouping can merge plans a previous run migrated separately — most likely
 		// after a --plan run, which writes a gate titled for that one plan. Gate
 		// identity is the title, so the merged title matches no existing gate and this
 		// run would create a new one while the originals stay published.
 		// is_post_restricted() stops at the first gate that restricts, so a stale
 		// stricter gate wins over the merged, more permissive one. Name them, and let
-		// the operator stop before anything is created.
-		$superseding = self::find_superseding_groups( $plan_groups, $existing_gates );
+		// the operator stop before anything is created. Titles this run writes itself
+		// are not among them ({@see find_superseded_gates()}).
+		$superseding = self::find_superseding_groups( $plan_groups, $existing_gates, $titles_written );
 		foreach ( $superseding as $gate_title => $superseded ) {
 			WP_CLI::warning(
 				sprintf(
@@ -311,10 +347,6 @@ class Premium_Newsletters_Migration {
 				self::stdin_is_a_tty()
 			);
 		}
-
-		// Every group's title is unique (the collision check above errors out
-		// otherwise), so the write loop can treat a title as naming one gate.
-		$titles_written = array_fill_keys( array_map( fn( $payload ) => trim( strtolower( $payload['title'] ) ), $payloads ), true );
 
 		$progress = \WP_CLI\Utils\make_progress_bar( 'Migrating premium newsletter gates', $group_count );
 
@@ -645,16 +677,32 @@ class Premium_Newsletters_Migration {
 	/**
 	 * The gate title a plan group resolves to.
 	 *
+	 * A union gate is suffixed rather than titled on its plans alone. Gate identity is
+	 * the title, and a union's plans are several groups' plans joined — exactly the
+	 * title a single group holding those same plans would resolve to. Without the
+	 * suffix, editing the plans between runs so that shape becomes real would have a
+	 * re-run update the wrong gate.
+	 *
+	 * The suffix is decided from the group rather than by the caller. Every plan in a
+	 * union carries the marker ({@see split_shared_lists()}), so reading it here makes
+	 * an unsuffixed union title unreachable instead of something each new call site has
+	 * to remember.
+	 *
 	 * @param array[] $group Plan descriptors, each carrying a 'name' key.
 	 *
 	 * @return string The group's plan names joined with " | ".
 	 */
 	private static function gate_title( array $group ): string {
-		return implode( ' | ', array_column( $group, 'name' ) );
+		$title = implode( ' | ', array_column( $group, 'name' ) );
+		return empty( $group[0]['is_union'] ) ? $title : $title . self::UNION_TITLE_SUFFIX;
 	}
 
 	/**
 	 * Gate titles that more than one plan group resolves to.
+	 *
+	 * A union gate cannot collide with a group that contributed to it — its plans are a
+	 * strict superset of that group's — so what this catches is two unrelated plans
+	 * sharing a name ({@see gate_title()} for the identity the suffix protects).
 	 *
 	 * Gate identity is the title, but groups are keyed by list fingerprint — so two
 	 * same-named plans restricting different lists land in different groups and
@@ -714,31 +762,180 @@ class Premium_Newsletters_Migration {
 	}
 
 	/**
-	 * Newsletter lists that more than one plan group restricts.
+	 * The plan groups restricting each newsletter list that more than one of them
+	 * restricts.
 	 *
 	 * Groups are keyed on the exact set of lists a plan restricts, so two plans that
-	 * overlap without matching become two gates over a shared list. The two access
-	 * models then disagree about that list: WooCommerce Memberships grants it to a
-	 * holder of either plan, while gates resolve restrictive-wins, so the stricter
-	 * gate decides and readers holding only the other plan lose it — and, once the
-	 * access check is live, are unsubscribed at the provider. Grouping is the last
-	 * point at which the two can still be compared with nothing written.
+	 * overlap without matching land in different groups and reach the same list. The
+	 * two access models then disagree about it: WooCommerce Memberships grants the
+	 * list to a holder of either plan, while overlapping gates AND — every gate
+	 * covering the content has to be satisfied. This is what
+	 * {@see split_shared_lists()} repairs.
 	 *
 	 * @param array<string,array> $plan_groups Map of fingerprint => plan descriptors.
 	 *
-	 * @return array<int,string[]> Map of list post ID => gate titles restricting it,
-	 *                             for lists reached by more than one group.
+	 * @return array<int,string[]> Map of list post ID => the fingerprints of the groups
+	 *                             restricting it, for lists reached by more than one.
 	 */
-	private static function find_lists_shared_across_groups( array $plan_groups ): array {
+	private static function map_lists_to_group_keys( array $plan_groups ): array {
 		$groups_by_list = [];
-		foreach ( $plan_groups as $group ) {
-			// One entry per group rather than per plan: plans within a group share a
-			// gate by construction, so only a list reached from two groups is ambiguous.
+		foreach ( $plan_groups as $group_key => $group ) {
+			// One entry per group rather than per plan: plans within a group restrict the
+			// same lists and share a gate by construction, so only a list reached from two
+			// groups is served by two gates.
 			foreach ( $group[0]['list_ids'] as $list_id ) {
-				$groups_by_list[ (int) $list_id ][] = self::gate_title( $group );
+				$groups_by_list[ (int) $list_id ][] = $group_key;
 			}
 		}
-		return array_filter( $groups_by_list, fn( $titles ) => count( $titles ) > 1 );
+		return array_filter( $groups_by_list, fn( $group_keys ) => count( $group_keys ) > 1 );
+	}
+
+	/**
+	 * Move every list that more than one plan group restricts onto a gate of its own.
+	 *
+	 * The fix for the mismatch {@see map_lists_to_group_keys()} describes. A list
+	 * restricted by several groups is taken off all of them and written to one union
+	 * gate whose plans are every contributing group's plans — so the products, the
+	 * purchase requirement and the one-time access length are all derived across the
+	 * groups by the same helpers a single group uses, and a reader holding any one of
+	 * the plans satisfies it. That is what WooCommerce Memberships granted.
+	 *
+	 * Shared lists are bucketed by the exact set of groups restricting them, so lists
+	 * with the same contributors share one union gate rather than getting one each,
+	 * and two unions never carry the same plans.
+	 *
+	 * A group left with no lists of its own writes no gate: every list it restricted
+	 * is on a union gate now. The groups that remain carry only lists exclusive to
+	 * them, and exclusive sets are disjoint, so no two surviving gates can collide on
+	 * a list fingerprint — the run's own uniqueness assumption survives the split.
+	 *
+	 * @param array<string,array> $plan_groups Map of fingerprint => plan descriptors.
+	 *
+	 * @return array{groups: array<string,array>, unions: array<string,array>} The groups
+	 *         to write, keyed by the fingerprint of the lists each one covers; and the
+	 *         union gates among them, each carrying 'title', 'list_ids' and 'plan_names'.
+	 */
+	private static function split_shared_lists( array $plan_groups ): array {
+		$shared = self::map_lists_to_group_keys( $plan_groups );
+		if ( empty( $shared ) ) {
+			return [
+				'groups' => $plan_groups,
+				'unions' => [],
+			];
+		}
+
+		// A union's title is its contributing groups' plan names joined, so the order of
+		// those groups is the title. map_lists_to_group_keys() builds each list's keys by
+		// walking $plan_groups, which arrives in plan-ID order, and array_filter() keeps
+		// that order — so the title is already stable across runs without sorting here.
+		$buckets = [];
+		foreach ( $shared as $list_id => $group_keys ) {
+			$signature = implode( "\0", $group_keys );
+			$buckets[ $signature ]['group_keys'] = $group_keys;
+			$buckets[ $signature ]['list_ids'][] = (int) $list_id;
+		}
+
+		$groups     = [];
+		$unions     = [];
+		$shared_ids = array_map( 'intval', array_keys( $shared ) );
+
+		// The groups that keep a gate, carrying only the lists exclusive to them.
+		foreach ( $plan_groups as $group_key => $group ) {
+			$remaining = array_values( array_diff( array_map( 'intval', $group[0]['list_ids'] ), $shared_ids ) );
+			if ( empty( $remaining ) ) {
+				continue;
+			}
+			foreach ( $group as $index => $plan ) {
+				$group[ $index ]['list_ids'] = $remaining;
+			}
+			$groups[ self::compute_list_fingerprint( $remaining ) ] = $group;
+		}
+
+		// Then one union gate per set of contributing groups.
+		foreach ( $buckets as $bucket ) {
+			$plans = [];
+			foreach ( $bucket['group_keys'] as $group_key ) {
+				foreach ( $plan_groups[ $group_key ] as $plan ) {
+					$plan['list_ids'] = $bucket['list_ids'];
+					$plan['is_union'] = true;
+					$plans[]          = $plan;
+				}
+			}
+			$union_key            = self::compute_list_fingerprint( $bucket['list_ids'] );
+			$groups[ $union_key ] = $plans;
+			$unions[ $union_key ] = [
+				'title'      => self::gate_title( $plans ),
+				'list_ids'   => $bucket['list_ids'],
+				'plan_names' => array_column( $plans, 'name' ),
+			];
+		}
+
+		return [
+			'groups' => $groups,
+			'unions' => $unions,
+		];
+	}
+
+	/**
+	 * Name every list the split moved onto a union gate, and what that gate grants on.
+	 *
+	 * The one place a run says that a list changed hands. Without it the split is
+	 * invisible: the summary table shows a gate whose title names plans the operator
+	 * did not expect to see together, with no way to tell it apart from a group that
+	 * genuinely shares its plans.
+	 *
+	 * A --plan run says so instead of reporting nothing. It loads one plan, so no list
+	 * can reach two groups and the split never fires — but the lists that plan restricts
+	 * may well be shared with a plan outside the run, and its gate is written over all of
+	 * them. A full run repairs that; an operator who is not told has no reason to make one.
+	 *
+	 * @param array<string,array> $unions      Union descriptors from split_shared_lists().
+	 * @param array<string,array> $payloads    Gate payloads, keyed as the groups are.
+	 * @param bool                $plan_scoped Whether the run was narrowed with --plan.
+	 *
+	 * @return void
+	 */
+	private static function report_shared_list_unions( array $unions, array $payloads, bool $plan_scoped = false ): void {
+		if ( $plan_scoped ) {
+			// Only where the run writes a gate. A --plan run naming a manual-only plan, or
+			// one that restricts no list, groups nothing and writes nothing, so there is no
+			// gate for a shared list to end up behind.
+			if ( ! empty( $payloads ) ) {
+				WP_CLI::warning( 'Skipping the shared-list check: a --plan run loads one plan, so it cannot tell which of its lists another plan also restricts. Its gate covers every list it restricts, which leaves any shared one behind two gates — and gates have to all be satisfied, so a reader holding only the other plan loses it. Re-run without --plan to settle it.' );
+			}
+			return;
+		}
+		if ( empty( $unions ) ) {
+			return;
+		}
+
+		$rows = [];
+		foreach ( $unions as $union_key => $union ) {
+			$payload = $payloads[ $union_key ] ?? [];
+			// The products the gate actually grants on. A union whose contributing groups
+			// disagree about requiring a purchase writes no paid access rule at all
+			// ({@see group_requires_purchase()}), so naming its products would describe a
+			// rule that was never written.
+			$products = empty( $payload['has_purchase'] ) || empty( $payload['product_ids'] )
+				? 'none (registration only)'
+				: implode( ', ', $payload['product_ids'] );
+			foreach ( $union['list_ids'] as $list_id ) {
+				$rows[] = [
+					'List'          => sprintf( '%s (%d)', get_the_title( $list_id ), $list_id ),
+					'Restricted by' => implode( ', ', $union['plan_names'] ),
+					'Union gate'    => $union['title'],
+					'Products'      => $products,
+				];
+			}
+		}
+
+		WP_CLI::line( '' );
+		WP_CLI::line( '=== LISTS RESTRICTED BY MORE THAN ONE PLAN ===' );
+		WP_CLI::line( '' );
+		WP_CLI::line( 'WooCommerce Memberships grants these lists to a holder of any one of the plans below, but overlapping gates have to all be satisfied. Each list is therefore taken off its plans\' own gates and written to the union gate named here. What that gate grants on is in the Products column: every contributing plan\'s products, or registration alone where one of those plans granted on signup.' );
+		WP_CLI::line( '' );
+		\WP_CLI\Utils\format_items( 'table', $rows, [ 'List', 'Restricted by', 'Union gate', 'Products' ] );
+		WP_CLI::line( '' );
 	}
 
 	/**
@@ -749,12 +946,13 @@ class Premium_Newsletters_Migration {
 	 *
 	 * @param array<string,array> $plan_groups    Map of fingerprint => plan descriptors.
 	 * @param array               $existing_gates Map of lower-cased gate title => gate ID.
+	 * @param array<string,bool>  $titles_written Lower-cased gate titles this run writes, as keys.
 	 *
 	 * @return array<string,array<string,int>> Map of group gate title => superseded
 	 *                                         gate title => gate ID; empty when no
 	 *                                         group supersedes anything.
 	 */
-	private static function find_superseding_groups( array $plan_groups, array $existing_gates ): array {
+	private static function find_superseding_groups( array $plan_groups, array $existing_gates, array $titles_written = [] ): array {
 		$superseding = [];
 		foreach ( $plan_groups as $group ) {
 			$gate_title = self::gate_title( $group );
@@ -762,7 +960,7 @@ class Premium_Newsletters_Migration {
 			if ( array_key_exists( $gate_key, $existing_gates ) ) {
 				continue;
 			}
-			$superseded = self::find_superseded_gates( $group, $gate_key, $existing_gates );
+			$superseded = self::find_superseded_gates( $group, $gate_key, $existing_gates, $titles_written );
 			if ( ! empty( $superseded ) ) {
 				$superseding[ $gate_title ] = $superseded;
 			}
@@ -1032,7 +1230,7 @@ class Premium_Newsletters_Migration {
 		}
 		WP_CLI::warning(
 			sprintf(
-				'"%s": plan(s) %s require a purchase, but they restrict the same lists as a plan that grants on signup, so this gate asks only for registration. WooCommerce Memberships grants those lists to a holder of either plan, so keeping the purchase requirement would have taken them from the signup plan\'s members — but it does mean these lists stop being paid-only once WooCommerce Memberships is deactivated. Move the plans onto different lists if the paywall matters more.',
+				'"%s": plan(s) %s require a purchase, but they share this gate with a plan that grants on signup, so it asks only for registration. WooCommerce Memberships grants those lists to a holder of either plan, so keeping the purchase requirement would have taken them from the signup plan\'s members — but it does mean these lists stop being paid-only once WooCommerce Memberships is deactivated. Move the plans onto different lists if the paywall matters more.',
 				$payload['title'],
 				implode( ', ', array_map( fn( $name ) => sprintf( '"%s"', $name ), $payload['dropped_paywalls'] ) )
 			)
@@ -1182,13 +1380,19 @@ class Premium_Newsletters_Migration {
 	 * originals stay published and keep restricting the same lists. Naming them lets
 	 * the operator retire them.
 	 *
-	 * @param array[] $group          Plan descriptors, each carrying a 'name' key.
-	 * @param string  $gate_key       The group's own lower-cased gate title.
-	 * @param array   $existing_gates Map of lower-cased gate title => gate ID.
+	 * A title this run writes itself is not superseded — it is being updated. That is
+	 * the ordinary shape once a shared list is split out: the union gate's plans each
+	 * keep a gate of their own for the lists exclusive to them, so naming those as
+	 * gates to retire would have the operator delete gates the same run just wrote.
+	 *
+	 * @param array[]            $group          Plan descriptors, each carrying a 'name' key.
+	 * @param string             $gate_key       The group's own lower-cased gate title.
+	 * @param array              $existing_gates Map of lower-cased gate title => gate ID.
+	 * @param array<string,bool> $titles_written Lower-cased gate titles this run writes, as keys.
 	 *
 	 * @return array<string,int> Map of gate title => gate ID, excluding the group's own title.
 	 */
-	private static function find_superseded_gates( array $group, string $gate_key, array $existing_gates ): array {
+	private static function find_superseded_gates( array $group, string $gate_key, array $existing_gates, array $titles_written = [] ): array {
 		$superseded = [];
 		$seen       = [];
 		foreach ( $group as $plan ) {
@@ -1196,7 +1400,7 @@ class Premium_Newsletters_Migration {
 			// the operator is being asked to find these gates in Newsletters > Premium,
 			// where they carry their own casing.
 			$plan_key = trim( strtolower( $plan['name'] ) );
-			if ( $plan_key === $gate_key || isset( $seen[ $plan_key ] ) ) {
+			if ( $plan_key === $gate_key || isset( $seen[ $plan_key ] ) || isset( $titles_written[ $plan_key ] ) ) {
 				continue;
 			}
 			if ( isset( $existing_gates[ $plan_key ] ) ) {
@@ -1694,19 +1898,46 @@ class Premium_Newsletters_Migration {
 	 * before deciding to skip: the row used to be built ahead of the extraction and
 	 * reported "—" whether the plan restricted five lists or none.
 	 *
-	 * @param string $plan_name The plan name.
-	 * @param int[]  $list_ids  The newsletter lists the plan restricts.
+	 * The union gates a skipped plan's lists ended up behind are named, because that
+	 * is the case where the answer is not "the list goes open". A union gate grants on
+	 * the products of the plans that did migrate, and a member admitted by hand holds
+	 * none of them — so the gate the split just wrote is the thing that unsubscribes
+	 * them. Only the operator can decide whether to give them a product.
+	 *
+	 * @param string              $plan_name The plan name.
+	 * @param int[]               $list_ids  The newsletter lists the plan restricts.
+	 * @param array<string,array> $unions    Union descriptors from split_shared_lists().
 	 *
 	 * @return array The skipped-plan summary row.
 	 */
-	private static function report_manual_only_plan( string $plan_name, array $list_ids ): array {
+	private static function report_manual_only_plan( string $plan_name, array $list_ids, array $unions = [] ): array {
 		if ( ! empty( $list_ids ) ) {
+			$union_titles = [];
+			$union_lists  = [];
+			foreach ( $unions as $union ) {
+				// Purchase-gated unions only. One that asks for registration alone admits
+				// this plan's members, so naming it would send the operator to provision a
+				// product for readers who keep the list either way.
+				if ( empty( $union['has_purchase'] ) ) {
+					continue;
+				}
+				$overlap = array_intersect( $union['list_ids'], array_map( 'intval', $list_ids ) );
+				if ( ! empty( $overlap ) ) {
+					$union_titles[] = sprintf( '"%s"', $union['title'] );
+					$union_lists    = array_merge( $union_lists, $overlap );
+				}
+			}
 			WP_CLI::warning(
 				sprintf(
-					'"%s" is manual-only, so it is skipped and nothing migrates the %d newsletter list(s) it restricts: %s. At cutover those lists go open to every reader unless another plan\'s gate restricts them — and if one does, that gate unsubscribes this plan\'s members at the ESP. Decide what should happen to them before deactivating WooCommerce Memberships.',
+					'"%s" is manual-only, so it is skipped and nothing migrates the %d newsletter list(s) it restricts: %s. At cutover those lists go open to every reader unless another plan\'s gate restricts them — and if one does, that gate unsubscribes this plan\'s members at the ESP. Decide what should happen to them before deactivating WooCommerce Memberships.%s',
 					$plan_name,
 					count( $list_ids ),
-					implode( ', ', $list_ids )
+					implode( ', ', $list_ids ),
+					empty( $union_titles ) ? '' : sprintf(
+						' List(s) %s are behind gate(s) %s, which grant on the products of the plans that did migrate. A member admitted only by hand holds none of those products, so it is that gate which drops them rather than the list going open.',
+						implode( ', ', array_values( array_unique( $union_lists ) ) ),
+						implode( ', ', array_values( array_unique( $union_titles ) ) )
+					)
 				)
 			);
 		}
@@ -1726,16 +1957,20 @@ class Premium_Newsletters_Migration {
 	 * newsletter list are collected into $skipped instead of grouped. Plans
 	 * restricting the same lists share a group, and therefore a single gate.
 	 *
-	 * @param int[] $plan_ids        Plan post IDs.
-	 * @param array $skipped         Skipped-plan summary rows, appended to by reference.
-	 * @param array $all_lists_plans Names of plans restricting every list, appended to by
-	 *                               reference. The caller refuses the run over these.
+	 * @param int[] $plan_ids          Plan post IDs.
+	 * @param array $skipped           Skipped-plan summary rows, appended to by reference.
+	 * @param array $all_lists_plans   Names of plans restricting every list, appended to by
+	 *                                 reference. The caller refuses the run over these.
+	 * @param array $manual_only_plans Manual-only plans as [ 'name', 'list_ids' ], appended
+	 *                                 to by reference. Reported by the caller rather than
+	 *                                 here: their warning names the union gates their lists
+	 *                                 land behind, which the split has not computed yet.
 	 *
 	 * @return array<string,array> Map of fingerprint => list of plan descriptors, each
 	 *                             [ 'pid', 'name', 'access_method', 'list_ids', 'product_ids',
 	 *                             'one_time_duration' ].
 	 */
-	private static function group_plans_by_lists( array $plan_ids, array &$skipped, array &$all_lists_plans ): array {
+	private static function group_plans_by_lists( array $plan_ids, array &$skipped, array &$all_lists_plans, array &$manual_only_plans ): array {
 		$plan_groups = [];
 
 		foreach ( $plan_ids as $pid ) {
@@ -1761,7 +1996,10 @@ class Premium_Newsletters_Migration {
 			$list_ids = self::extract_list_ids( $rules );
 
 			if ( 'manual-only' === $access_method ) {
-				$skipped[] = self::report_manual_only_plan( $plan_name, $list_ids );
+				$manual_only_plans[] = [
+					'name'     => $plan_name,
+					'list_ids' => $list_ids,
+				];
 				continue;
 			}
 
