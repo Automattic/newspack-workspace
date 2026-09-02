@@ -42,17 +42,19 @@ class Test_Contact_Sync_Queued_Metadata extends WP_UnitTestCase {
 	private $email = 'reader@example.com';
 
 	/**
+	 * Data_Events::$actions as it was before the test registered the connector's
+	 * handlers, restored in tear_down so later suites are not order-dependent.
+	 *
+	 * @var array<string,callable[]>|null
+	 */
+	private $actions_snapshot = null;
+
+	/**
 	 * Class-level setup.
 	 */
 	public static function set_up_before_class() {
 		parent::set_up_before_class();
 		require_once dirname( __DIR__, 2 ) . '/mocks/wc-mocks.php';
-		if ( ! defined( 'NEWSPACK_ALLOW_READER_SYNC' ) ) {
-			define( 'NEWSPACK_ALLOW_READER_SYNC', true );
-		}
-		if ( ! defined( 'NEWSPACK_FORCE_ALLOW_ESP_SYNC' ) ) {
-			define( 'NEWSPACK_FORCE_ALLOW_ESP_SYNC', true );
-		}
 		self::$original_version = Metadata::$version;
 	}
 
@@ -61,6 +63,12 @@ class Test_Contact_Sync_Queued_Metadata extends WP_UnitTestCase {
 	 */
 	public function set_up() {
 		parent::set_up();
+		// Allow sync on this non-production host through the scoped filter rather
+		// than the NEWSPACK_ALLOW_READER_SYNC constant, so it cannot leak into
+		// tests that assert the default, sync-disabled state. The ESP configured
+		// below passes Esp::can_sync() on its own, so no force constant either.
+		add_filter( 'newspack_reader_activation_is_syncing_allowed', '__return_true' );
+		$this->actions_snapshot = $this->snapshot_data_events_actions();
 		Newspack_Newsletters_Contacts::reset_calls();
 		Newspack_Newsletters_Subscription::reset_calls();
 		Metadata::$version = 'legacy';
@@ -82,10 +90,39 @@ class Test_Contact_Sync_Queued_Metadata extends WP_UnitTestCase {
 	 * Per-test teardown.
 	 */
 	public function tear_down() {
+		remove_filter( 'newspack_reader_activation_is_syncing_allowed', '__return_true' );
+		if ( null !== $this->actions_snapshot ) {
+			$this->restore_data_events_actions( $this->actions_snapshot );
+			$this->actions_snapshot = null;
+		}
 		Metadata::$version = self::$original_version;
 		$this->reset_queue();
 		Newspack_Newsletters_Subscription::reset_calls();
 		parent::tear_down();
+	}
+
+	/**
+	 * Capture the full Data_Events::$actions map (action_name => handlers[]).
+	 *
+	 * @return array
+	 */
+	private function snapshot_data_events_actions() {
+		$reflection = new ReflectionClass( Data_Events::class );
+		$property   = $reflection->getProperty( 'actions' );
+		$property->setAccessible( true );
+		return $property->getValue();
+	}
+
+	/**
+	 * Restore a previously captured Data_Events::$actions map.
+	 *
+	 * @param array $snapshot The actions map to restore.
+	 */
+	private function restore_data_events_actions( $snapshot ) {
+		$reflection = new ReflectionClass( Data_Events::class );
+		$property   = $reflection->getProperty( 'actions' );
+		$property->setAccessible( true );
+		$property->setValue( null, $snapshot );
 	}
 
 	/**
