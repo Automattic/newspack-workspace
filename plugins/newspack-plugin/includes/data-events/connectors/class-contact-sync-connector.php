@@ -258,9 +258,9 @@ class Contact_Sync_Connector {
 	 * Handle a newsletter subscription change.
 	 *
 	 * The contact is rebuilt from stored data, so the "Newsletter Selection"
-	 * field comes from the Newsletters metadata class rather than from this
-	 * handler. The reader-data handler for the same event stores the lists the
-	 * class reads, and the queued sync runs at shutdown, after both handlers.
+	 * field comes from the legacy metadata class rather than from this handler.
+	 * The reader-data handler for the same event stores the lists that class
+	 * reads, and the queued sync runs at shutdown, after both handlers.
 	 *
 	 * @param int   $timestamp Timestamp.
 	 * @param array $data      Data.

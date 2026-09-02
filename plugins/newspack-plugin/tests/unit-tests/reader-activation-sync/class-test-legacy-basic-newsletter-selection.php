@@ -1,22 +1,22 @@
 <?php
 /**
- * Tests the Newsletters contact metadata provider.
+ * Tests the legacy "Newsletter Selection" field built by Legacy_Basic.
  *
  * @package Newspack\Tests
  */
 
 use Newspack\Reader_Data;
 use Newspack\Reader_Activation\Sync\Metadata;
-use Newspack\Reader_Activation\Sync\Contact_Metadata\Newsletters;
+use Newspack\Reader_Activation\Sync\Contact_Metadata\Legacy_Basic;
 
 require_once __DIR__ . '/../../mocks/newsletters-mocks.php';
 
 /**
- * The "Newsletter Selection" field, built from the reader's stored lists.
+ * The legacy "Newsletter Selection" field, built from the reader's stored lists.
  *
- * @group Newsletters_Metadata
+ * @group Legacy_Basic_Newsletter_Selection
  */
-class Test_Newsletters_Metadata extends WP_UnitTestCase {
+class Test_Legacy_Basic_Newsletter_Selection extends WP_UnitTestCase {
 	/**
 	 * Metadata version before the test class ran.
 	 *
@@ -36,6 +36,7 @@ class Test_Newsletters_Metadata extends WP_UnitTestCase {
 	 */
 	public static function set_up_before_class() {
 		parent::set_up_before_class();
+		require_once dirname( __DIR__, 2 ) . '/mocks/wc-mocks.php';
 		self::$original_version = Metadata::$version;
 	}
 
@@ -85,20 +86,32 @@ class Test_Newsletters_Metadata extends WP_UnitTestCase {
 	}
 
 	/**
-	 * The provider owns the legacy field under its existing raw key and label.
+	 * Build the legacy basic metadata for the reader.
+	 *
+	 * @return array
 	 */
-	public function test_declares_the_newsletter_selection_field() {
-		$this->assertSame( [ 'newsletter_selection' => 'Newsletter Selection' ], Newsletters::get_fields() );
-		$this->assertTrue( Newsletters::is_available() );
+	private function get_metadata() {
+		return ( new Legacy_Basic( $this->user_id ) )->get_metadata();
+	}
+
+	/**
+	 * The prefixed key the field is pushed under.
+	 *
+	 * @return string
+	 */
+	private function key() {
+		return Metadata::get_key( 'newsletter_selection' );
 	}
 
 	/**
 	 * A reader with no stored lists has an unknown selection, not an empty one.
 	 */
 	public function test_no_stored_lists_omits_the_field() {
-		$this->assertSame(
-			[],
-			( new Newsletters( $this->user_id ) )->get_metadata(),
+		$metadata = $this->get_metadata();
+		$this->assertArrayHasKey( Metadata::get_key( 'account' ), $metadata, 'The other legacy fields are still built.' );
+		$this->assertArrayNotHasKey(
+			$this->key(),
+			$metadata,
 			'Without stored lists nothing is pushed, so a value the ESP already holds is left alone.'
 		);
 	}
@@ -108,10 +121,7 @@ class Test_Newsletters_Metadata extends WP_UnitTestCase {
 	 */
 	public function test_empty_stored_list_sends_an_empty_string() {
 		$this->store_lists( [] );
-		$this->assertSame(
-			[ Metadata::get_key( 'newsletter_selection' ) => '' ],
-			( new Newsletters( $this->user_id ) )->get_metadata()
-		);
+		$this->assertSame( '', $this->get_metadata()[ $this->key() ] ?? 'missing' );
 	}
 
 	/**
@@ -119,10 +129,7 @@ class Test_Newsletters_Metadata extends WP_UnitTestCase {
 	 */
 	public function test_stored_ids_map_to_list_names() {
 		$this->store_lists( [ 'list-2', 'gone', 'list-1' ] );
-		$this->assertSame(
-			[ Metadata::get_key( 'newsletter_selection' ) => 'Daily, Weekly' ],
-			( new Newsletters( $this->user_id ) )->get_metadata()
-		);
+		$this->assertSame( 'Daily, Weekly', $this->get_metadata()[ $this->key() ] ?? 'missing' );
 	}
 
 	/**
@@ -132,15 +139,18 @@ class Test_Newsletters_Metadata extends WP_UnitTestCase {
 	public function test_lists_config_error_omits_the_field() {
 		$this->store_lists( [ 'list-1' ] );
 		Newspack_Newsletters_Subscription::$lists = new WP_Error( 'newspack_newsletters_error', 'Lists unavailable.' );
-		$this->assertSame( [], ( new Newsletters( $this->user_id ) )->get_metadata() );
+		$this->assertArrayNotHasKey( $this->key(), $this->get_metadata() );
 	}
 
 	/**
-	 * Outside legacy mode the pipeline prefixes keys itself, so the raw key is returned.
+	 * The field follows the ESP's outgoing-field selection like every other
+	 * legacy field, because it is added before normalization.
 	 */
-	public function test_new_schema_returns_the_raw_key() {
-		Metadata::$version = '1.0';
+	public function test_unselected_outgoing_field_is_not_sent() {
 		$this->store_lists( [ 'list-1' ] );
-		$this->assertSame( [ 'newsletter_selection' => 'Daily' ], ( new Newsletters( $this->user_id ) )->get_metadata() );
+		Metadata::update_fields( array_values( array_diff( Metadata::get_default_fields(), [ 'Newsletter Selection' ] ) ) );
+		$metadata = $this->get_metadata();
+		$this->assertArrayHasKey( Metadata::get_key( 'account' ), $metadata );
+		$this->assertArrayNotHasKey( $this->key(), $metadata );
 	}
 }
