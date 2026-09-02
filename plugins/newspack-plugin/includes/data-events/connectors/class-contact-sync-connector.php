@@ -262,11 +262,20 @@ class Contact_Sync_Connector {
 	 * The reader-data handler for the same event stores the lists that class
 	 * reads, and the queued sync runs at shutdown, after both handlers.
 	 *
+	 * That field is the only synced field a list change affects, so when it is
+	 * not an enabled outgoing field (under the newer metadata schema it never
+	 * is) there is nothing to push, and bulk list changes such as membership
+	 * activation or the membership-tied subscribers CLI do not fan out one
+	 * upsert per reader.
+	 *
 	 * @param int   $timestamp Timestamp.
 	 * @param array $data      Data.
 	 */
 	public static function newsletter_updated( $timestamp, $data ) {
 		if ( empty( $data['user_id'] ) ) {
+			return;
+		}
+		if ( ! in_array( 'newsletter_selection', Sync_Metadata::get_raw_keys(), true ) ) {
 			return;
 		}
 		Contact_Sync::sync_contact( $data['user_id'], 'RAS Newsletter subscription updated' );
