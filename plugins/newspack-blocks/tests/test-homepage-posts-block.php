@@ -230,6 +230,20 @@ class HomepagePostsBlockTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 				'description'             => 'With custom post type and author',
 				'ignore_tax_query'        => true,
 			],
+			[
+				'block_attributes'        => [
+					'postsToShow' => 3,
+					'moreButton'  => true,
+				],
+				'resulting_query_partial' => [
+					'posts_per_page' => 3,
+					'post_status'    => [ 'publish' ],
+					'post_type'      => [ 'post' ],
+					'tax_query'      => [],
+					'no_found_rows'  => false,
+				],
+				'description'             => 'A More button needs the total to know whether there is a next page',
+			],
 		];
 
 		foreach ( $cases as $case ) {

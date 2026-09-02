@@ -105,15 +105,16 @@ class WP_UnitTestCase_Blocks extends WP_UnitTestCase { // phpcs:ignore
 	 */
 	protected function get_args_with_defaults( $args ) {
 		return array_merge(
-			$args,
 			[
 				'post_status'         => [ 'publish' ],
 				'suppress_filters'    => false,
 				'ignore_sticky_posts' => true,
 				'has_password'        => false,
 				'is_newspack_query'   => true,
+				'no_found_rows'       => true,
 				'post__not_in'        => [],
-			]
+			],
+			$args
 		);
 	}
 

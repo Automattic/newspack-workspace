@@ -796,6 +796,8 @@ class Newspack_Blocks {
 			'has_password'        => false,
 			'is_newspack_query'   => true,
 			'tax_query'           => [], // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_tax_query
+			// The total is only needed to decide whether a More button has a next page.
+			'no_found_rows'       => empty( $attributes['moreButton'] ),
 		);
 		if ( $specific_mode && $specific_posts ) {
 			$args['posts_per_page'] = count( $specific_posts );
