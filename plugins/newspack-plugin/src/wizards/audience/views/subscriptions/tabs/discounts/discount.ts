@@ -18,7 +18,7 @@ import { decodeEntities } from '@wordpress/html-entities';
 /**
  * Internal dependencies.
  */
-import { SUBSCRIPTIONS_LABEL_LIMIT } from './constants';
+import { MAX_NAMED_ITEMS } from '../../constants';
 import type { DiscountCurrency, DiscountRule } from './types';
 
 export const DEFAULT_CURRENCY: DiscountCurrency = {
@@ -140,7 +140,7 @@ export function subscriptionsSummary( ids: number[], options: { id: number; name
 			more: '',
 		};
 	}
-	const shown = names.slice( 0, SUBSCRIPTIONS_LABEL_LIMIT );
+	const shown = names.slice( 0, MAX_NAMED_ITEMS );
 	const remaining = ids.length - shown.length;
 	return {
 		named: shown.join( ', ' ),
