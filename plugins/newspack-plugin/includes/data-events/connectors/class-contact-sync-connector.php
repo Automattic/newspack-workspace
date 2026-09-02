@@ -255,41 +255,21 @@ class Contact_Sync_Connector {
 	}
 
 	/**
-	 * Handle newsletter subscription update.
+	 * Handle a newsletter subscription change.
+	 *
+	 * The contact is rebuilt from stored data, so the "Newsletter Selection"
+	 * field comes from the Newsletters metadata class rather than from this
+	 * handler. The reader-data handler for the same event stores the lists the
+	 * class reads, and the queued sync runs at shutdown, after both handlers.
 	 *
 	 * @param int   $timestamp Timestamp.
 	 * @param array $data      Data.
 	 */
 	public static function newsletter_updated( $timestamp, $data ) {
-		if ( empty( $data['user_id'] ) || empty( $data['email'] ) || empty( $data['contact'] ) ) {
+		if ( empty( $data['user_id'] ) ) {
 			return;
 		}
-		$contact          = $data['contact'];
-		$subscribed_lists = \Newspack_Newsletters_Subscription::get_contact_lists( $data['email'] );
-		if ( is_wp_error( $subscribed_lists ) || ! is_array( $subscribed_lists ) ) {
-			return;
-		}
-		$lists = \Newspack_Newsletters_Subscription::get_lists();
-		if ( is_wp_error( $lists ) ) {
-			return;
-		}
-		$lists_names = [];
-		foreach ( $subscribed_lists as $subscribed_list_id ) {
-			foreach ( $lists as $list ) {
-				if ( $list['id'] === $subscribed_list_id ) {
-					$lists_names[] = $list['name'];
-				}
-			}
-		}
-
-		$contact['metadata'] = array_merge(
-			$contact['metadata'] ?? [],
-			[
-				'account'              => $data['user_id'],
-				'newsletter_selection' => implode( ', ', $lists_names ),
-			]
-		);
-		Contact_Sync::sync( $contact, 'Updating newsletter_selection field after a change in the subscription lists.' );
+		Contact_Sync::sync_contact( $data['user_id'], 'RAS Newsletter subscription updated' );
 	}
 
 	/**

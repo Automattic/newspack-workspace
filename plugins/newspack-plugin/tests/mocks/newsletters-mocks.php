@@ -172,9 +172,18 @@ if ( ! class_exists( 'Newspack_Newsletters_Subscription' ) ) {
 		 */
 		public static $contact_data = [];
 
+		/**
+		 * Configurable lists config returned by get_lists(). Null keeps the
+		 * default single list; a WP_Error is returned as-is.
+		 *
+		 * @var array|\WP_Error|null
+		 */
+		public static $lists = null;
+
 		public static function reset_calls() {
 			self::$contact_lists = [];
 			self::$contact_data  = [];
+			self::$lists         = null;
 		}
 
 		public static function get_contact_lists( $email ) {
@@ -189,6 +198,9 @@ if ( ! class_exists( 'Newspack_Newsletters_Subscription' ) ) {
 		}
 
 		public static function get_lists() {
+			if ( null !== self::$lists ) {
+				return self::$lists;
+			}
 			return [
 				[
 					'active' => true,

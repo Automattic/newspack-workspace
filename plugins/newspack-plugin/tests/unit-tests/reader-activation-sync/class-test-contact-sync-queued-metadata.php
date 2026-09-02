@@ -1,7 +1,7 @@
 <?php
 /**
- * Tests that metadata a data-event handler adds to a queued sync survives the
- * shutdown flush for an existing user.
+ * Tests that a newsletter subscription change reaches the ESP with the
+ * "Newsletter Selection" field after the shutdown flush.
  *
  * @package Newspack\Tests
  */
@@ -15,7 +15,7 @@ use Newspack\Reader_Activation\Sync\Metadata;
 require_once __DIR__ . '/../../mocks/newsletters-mocks.php';
 
 /**
- * Handler-supplied metadata on the deferred (data event) sync path.
+ * The deferred (data event) sync path for newsletter subscription changes.
  *
  * @group Contact_Sync_Queued_Metadata
  */
@@ -101,14 +101,11 @@ class Test_Contact_Sync_Queued_Metadata extends WP_UnitTestCase {
 	}
 
 	/**
-	 * The newsletter_updated handler is the only producer of the
-	 * "Newsletter Selection" field. Inside a data event its sync is queued and
-	 * flushed at shutdown; the flush must carry that field to the ESP.
+	 * Inside a data event the sync is queued and flushed at shutdown. The
+	 * reader-data handler for the same event stores the lists, and the flush
+	 * rebuilds the contact with the "Newsletter Selection" field from them.
 	 */
 	public function test_newsletter_selection_reaches_esp_after_shutdown_flush() {
-		// The reader is subscribed to the mock list "test" (id 123).
-		Newspack_Newsletters_Subscription::$contact_lists[ $this->email ] = [ '123' ];
-
 		Contact_Sync_Connector::register_handlers();
 		$this->assertContains(
 			[ Contact_Sync_Connector::class, 'newsletter_updated' ],
@@ -120,9 +117,10 @@ class Test_Contact_Sync_Queued_Metadata extends WP_UnitTestCase {
 			'newsletter_updated',
 			time(),
 			[
-				'user_id' => $this->user_id,
-				'email'   => $this->email,
-				'contact' => [ 'email' => $this->email ],
+				'user_id'       => $this->user_id,
+				'email'         => $this->email,
+				'lists_added'   => [ '123' ],
+				'lists_removed' => [],
 			],
 			'test-client'
 		);

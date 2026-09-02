@@ -48,6 +48,7 @@ class Metadata {
 				'Legacy_Basic',
 				'Legacy_Payment',
 				'Content_Gate',
+				'Newsletters',
 			];
 		} else {
 			$classes = [
