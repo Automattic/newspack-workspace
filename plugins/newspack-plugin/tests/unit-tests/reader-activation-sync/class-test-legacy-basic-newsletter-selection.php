@@ -125,6 +125,18 @@ class Test_Legacy_Basic_Newsletter_Selection extends WP_UnitTestCase {
 	}
 
 	/**
+	 * A stored empty list needs no name resolution, so it is sent even when the
+	 * lists config is unreadable, and without consulting it.
+	 */
+	public function test_empty_stored_list_needs_no_lists_config() {
+		$this->store_lists( [] );
+		Newspack_Newsletters_Subscription::$lists = new WP_Error( 'newspack_newsletters_error', 'Lists unavailable.' );
+		Newspack_Newsletters_Subscription::$get_lists_calls = 0;
+		$this->assertSame( '', $this->get_metadata()[ $this->key() ] ?? 'missing' );
+		$this->assertSame( 0, Newspack_Newsletters_Subscription::$get_lists_calls );
+	}
+
+	/**
 	 * IDs resolve to names in lists-config order; unknown IDs are ignored.
 	 */
 	public function test_stored_ids_map_to_list_names() {

@@ -94,7 +94,8 @@ class Legacy_Basic extends Contact_Metadata {
 	 * stored lists or a stored value that is not a plain list, or an
 	 * unreadable lists config all mean an unknown selection that must not
 	 * overwrite a value the ESP already holds. A stored empty list is a real
-	 * state (unsubscribed from everything) and yields an empty string.
+	 * state (unsubscribed from everything) and yields an empty string without
+	 * consulting the lists config, since there is nothing to resolve.
 	 *
 	 * @return string|null
 	 */
@@ -118,6 +119,10 @@ class Legacy_Basic extends Contact_Metadata {
 			}
 			return null;
 		}
+		if ( empty( $ids ) ) {
+			Logger::log( sprintf( 'Newsletter Selection is empty for user %d: no stored lists.', $this->user->ID ) );
+			return '';
+		}
 
 		$lists = \Newspack_Newsletters_Subscription::get_lists();
 		if ( \is_wp_error( $lists ) || ! is_array( $lists ) ) {
@@ -136,7 +141,7 @@ class Legacy_Basic extends Contact_Metadata {
 
 		$selection = implode( ', ', $names );
 		if ( '' === $selection ) {
-			Logger::log( sprintf( 'Newsletter Selection is empty for user %d (stored lists: %s).', $this->user->ID, wp_json_encode( $ids ) ) );
+			Logger::log( sprintf( 'Newsletter Selection is empty for user %d: stored lists %s match no configured list.', $this->user->ID, wp_json_encode( $ids ) ) );
 		}
 
 		return $selection;
