@@ -21,6 +21,14 @@ class Newspack_Blocks {
 	];
 
 	/**
+	 * Nesting depth of `the_content` filter applications. A depth of zero marks
+	 * the start of a top-level render pass, where deduplication state is reset.
+	 *
+	 * @var int
+	 */
+	private static $content_render_depth = 0;
+
+	/**
 	 * Add hooks and filters.
 	 */
 	public static function init() {
@@ -30,6 +38,8 @@ class Newspack_Blocks {
 		add_post_type_support( 'page', 'newspack_blocks' );
 		add_action( 'jetpack_register_gutenberg_extensions', [ __CLASS__, 'disable_jetpack_donate' ], 99 );
 		add_filter( 'the_content', [ __CLASS__, 'hide_post_content_when_iframe_block_is_fullscreen' ] );
+		add_filter( 'the_content', [ __CLASS__, 'start_content_render_pass' ], PHP_INT_MIN );
+		add_filter( 'the_content', [ __CLASS__, 'end_content_render_pass' ], PHP_INT_MAX );
 		add_filter( 'body_class', [ __CLASS__, 'add_body_classes' ] );
 		add_filter( 'admin_body_class', [ __CLASS__, 'add_body_classes' ] );
 
@@ -614,6 +624,80 @@ class Newspack_Blocks {
 			return class_exists( 'Jetpack' ) && \Jetpack::is_module_active( 'photon' );
 		}
 		return false;
+	}
+
+	/**
+	 * Mark the start of a `the_content` render pass.
+	 *
+	 * Deduplication state accumulates in globals for the life of the request,
+	 * which is right for a front-end page but wrong wherever one request renders
+	 * the same content more than once (a REST save renders it up to three times)
+	 * or renders several posts (a REST collection). There, every top-level pass
+	 * starts from a clean slate so each returns the same posts. Nested passes
+	 * (a Query Loop rendering Post Content, a synced pattern) keep the state of
+	 * the pass they belong to.
+	 *
+	 * @param string $content Post content.
+	 * @return string Unmodified post content.
+	 */
+	public static function start_content_render_pass( $content ) {
+		if ( 0 === self::$content_render_depth && self::should_reset_deduplication_per_render_pass() ) {
+			self::reset_deduplication();
+		}
+		self::$content_render_depth++;
+		return $content;
+	}
+
+	/**
+	 * Mark the end of a `the_content` render pass.
+	 *
+	 * @param string $content Post content.
+	 * @return string Unmodified post content.
+	 */
+	public static function end_content_render_pass( $content ) {
+		self::$content_render_depth = max( 0, self::$content_render_depth - 1 );
+		return $content;
+	}
+
+	/**
+	 * Whether deduplication state should be reset at the start of each top-level
+	 * `the_content` pass.
+	 *
+	 * On the front end the state is kept for the whole request, because a block
+	 * theme can render Content Loop blocks in the template before the post
+	 * content, and those have to be excluded from the blocks inside it.
+	 *
+	 * @return bool
+	 */
+	public static function should_reset_deduplication_per_render_pass() {
+		$is_front_end = ! is_admin()
+			&& ! wp_doing_ajax()
+			&& ! wp_doing_cron()
+			&& ! ( defined( 'REST_REQUEST' ) && REST_REQUEST )
+			&& ! ( defined( 'WP_CLI' ) && WP_CLI );
+
+		/**
+		 * Filters whether deduplication state is reset at the start of each
+		 * top-level `the_content` pass.
+		 *
+		 * @param bool $reset Whether to reset. Default true outside front-end requests.
+		 */
+		return (bool) apply_filters( 'newspack_blocks_reset_deduplication_per_render_pass', ! $is_front_end );
+	}
+
+	/**
+	 * Forget which posts have been rendered so far, so the next Content Loop or
+	 * Carousel block starts deduplicating from scratch.
+	 */
+	public static function reset_deduplication() {
+		global $newspack_blocks_post_id, $newspack_blocks_all_specific_posts_ids;
+		$newspack_blocks_post_id                = [];
+		$newspack_blocks_all_specific_posts_ids = null;
+
+		/**
+		 * Fires after deduplication state has been reset.
+		 */
+		do_action( 'newspack_blocks_deduplication_reset' );
 	}
 
 	/**

@@ -27,6 +27,8 @@ class HomepagePostsBlockTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 			}
 		}
 		$this->registered_post_types = [];
+		self::reset_dedup_globals();
+		wp_reset_postdata();
 		parent::tear_down();
 	}
 
@@ -66,6 +68,135 @@ class HomepagePostsBlockTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 		);
 		$this->registered_post_types[] = $name;
 		return $name;
+	}
+
+	/**
+	 * Clear the request-scoped deduplication globals between tests.
+	 */
+	private static function reset_dedup_globals() {
+		unset( $GLOBALS['newspack_blocks_post_id'], $GLOBALS['newspack_blocks_all_specific_posts_ids'], $GLOBALS['newspack_blocks_hpb_all_blocks'] );
+	}
+
+	/**
+	 * Create published posts and a page holding two Content Loop blocks of one
+	 * post each, and make that page the current post.
+	 *
+	 * @param int $posts_count How many posts to create.
+	 * @return WP_Post The page.
+	 */
+	private function create_dedup_page( $posts_count = 3 ) {
+		self::reset_dedup_globals();
+		for ( $i = 0; $i < $posts_count; $i++ ) {
+			self::factory()->post->create(
+				[
+					'post_status' => 'publish',
+					'post_date'   => gmdate( 'Y-m-d H:i:s', time() - ( $i + 1 ) * HOUR_IN_SECONDS ),
+				]
+			);
+		}
+		$block   = '<!-- wp:newspack-blocks/homepage-articles {"postsToShow":1} /-->';
+		$page_id = self::factory()->post->create(
+			[
+				'post_type'    => 'page',
+				'post_status'  => 'publish',
+				'post_content' => $block . "\n" . $block,
+			]
+		);
+		$GLOBALS['post'] = get_post( $page_id );
+		setup_postdata( $GLOBALS['post'] );
+		return $GLOBALS['post'];
+	}
+
+	/**
+	 * Apply `the_content` to a post and return the IDs the pass has marked as rendered.
+	 *
+	 * @param WP_Post $post The post.
+	 * @return int[] Deduplicated post IDs after the pass.
+	 */
+	private function render_pass( $post ) {
+		apply_filters( 'the_content', $post->post_content );
+		return array_keys( (array) ( $GLOBALS['newspack_blocks_post_id'] ?? [] ) );
+	}
+
+	/**
+	 * Make the request look like wp-admin, where `is_admin()` is true.
+	 */
+	private function enter_admin() {
+		if ( ! function_exists( 'set_current_screen' ) ) {
+			require_once ABSPATH . 'wp-admin/includes/class-wp-screen.php';
+			require_once ABSPATH . 'wp-admin/includes/screen.php';
+		}
+		set_current_screen( 'edit-page' );
+		self::assertTrue( is_admin(), 'The request is treated as an admin request.' );
+	}
+
+	/**
+	 * On the front end, deduplication accumulates for the whole request, so a
+	 * second pass over the same content excludes what the first one rendered.
+	 */
+	public function test_dedup_state_is_kept_across_render_passes_on_front_end() {
+		$page = $this->create_dedup_page();
+		self::assertFalse( Newspack_Blocks::should_reset_deduplication_per_render_pass() );
+
+		$first = $this->render_pass( $page );
+		self::assertCount( 2, $first, 'Two blocks of one post each render two distinct posts.' );
+
+		$second = $this->render_pass( $page );
+		self::assertCount( 3, $second, 'The second pass keeps excluding the posts the first pass rendered.' );
+	}
+
+	/**
+	 * Outside the front end (admin, REST, cron, CLI) every top-level pass starts
+	 * from scratch, so re-rendering the same content returns the same posts.
+	 */
+	public function test_dedup_state_resets_per_render_pass_outside_front_end() {
+		$this->enter_admin();
+		$page = $this->create_dedup_page();
+		self::assertTrue( Newspack_Blocks::should_reset_deduplication_per_render_pass() );
+
+		$first = $this->render_pass( $page );
+		self::assertCount( 2, $first, 'Two blocks of one post each render two distinct posts.' );
+
+		$second = $this->render_pass( $page );
+		self::assertSame( $first, $second, 'A second pass over the same content renders the same posts.' );
+	}
+
+	/**
+	 * A `the_content` application nested inside a pass (a Query Loop rendering
+	 * Post Content, for instance) must not wipe the state of the outer pass.
+	 */
+	public function test_nested_content_render_does_not_reset_dedup_state() {
+		$this->enter_admin();
+		$page = $this->create_dedup_page();
+
+		$nested_calls = 0;
+		$nested       = function ( $content ) use ( &$nested_calls ) {
+			if ( 0 === $nested_calls++ ) {
+				apply_filters( 'the_content', '<p>nested</p>' );
+			}
+			return $content;
+		};
+		// After do_blocks (9), so the outer pass has already rendered its blocks.
+		add_filter( 'the_content', $nested, 10 );
+		$ids = $this->render_pass( $page );
+		remove_filter( 'the_content', $nested, 10 );
+
+		self::assertSame( 2, $nested_calls, 'The filter ran for the outer pass and once more for the nested one.' );
+		self::assertCount( 2, $ids, 'The outer pass keeps the posts it rendered before the nested pass.' );
+	}
+
+	/**
+	 * The reset can be forced on or off through the filter.
+	 */
+	public function test_dedup_reset_is_filterable() {
+		add_filter( 'newspack_blocks_reset_deduplication_per_render_pass', '__return_true' );
+		$page   = $this->create_dedup_page();
+		$first  = $this->render_pass( $page );
+		$second = $this->render_pass( $page );
+		remove_filter( 'newspack_blocks_reset_deduplication_per_render_pass', '__return_true' );
+
+		self::assertCount( 2, $first );
+		self::assertSame( $first, $second, 'With the filter on, the front end resets per pass too.' );
 	}
 
 	/**
