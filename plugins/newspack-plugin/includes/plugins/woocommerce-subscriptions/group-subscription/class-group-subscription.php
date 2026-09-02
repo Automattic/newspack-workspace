@@ -236,8 +236,11 @@ class Group_Subscription {
 		if ( isset( self::$managers_cache[ $subscription_id ] ) ) {
 			$managers = self::$managers_cache[ $subscription_id ];
 		} else {
-			// The owner is always a manager: ownership implies management.
-			$managers = [ $subscription ? $subscription->get_user_id() : 0 ];
+			// The owner is always a manager: ownership implies management. A falsy owner id
+			// is WooCommerce's tombstone for a deleted customer rather than an identity, so
+			// it seeds nothing — left in, it matches a caller who is also nobody.
+			$owner_id = $subscription ? (int) $subscription->get_user_id() : 0;
+			$managers = $owner_id ? [ $owner_id ] : [];
 			if ( $subscription ) {
 				$stored = \get_users(
 					[
@@ -798,7 +801,11 @@ class Group_Subscription {
 		if ( ! self::is_group_subscription( $subscription ) ) {
 			return null;
 		}
-		$is_manager = in_array( $user_id, self::get_managers( $subscription ), true );
+		// A caller of 0 is "nobody resolved" rather than an identity, so guard before the
+		// comparison: a logged-out request must never match an ownerless group. Same
+		// reasoning as the actor guard in can_actor_remove_member().
+		$user_id    = (int) $user_id;
+		$is_manager = $user_id > 0 && in_array( $user_id, self::get_managers( $subscription ), true );
 
 		/**
 		 * Filter whether a user is a manager of a group subscription.
