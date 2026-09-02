@@ -7,9 +7,11 @@
 
 namespace Newspack\Reader_Activation\Sync\Contact_Metadata;
 
+use Newspack\Logger;
 use Newspack\Reader_Data;
 use Newspack\Reader_Activation\Sync\Contact_Metadata;
 use Newspack\Reader_Activation\Sync\Legacy_Metadata;
+use Newspack\Reader_Activation\Sync\Metadata;
 use Newspack\Reader_Activation\Sync\WooCommerce;
 
 defined( 'ABSPATH' ) || exit;
@@ -81,35 +83,45 @@ class Legacy_Basic extends Contact_Metadata {
 	 * reader data, joined with ", ".
 	 *
 	 * Reader data is the source rather than a live ESP lookup so the field is
-	 * computed on every sync path (shutdown flush, retries, CLI, cron) without
-	 * an API call per contact, and agrees with the lists Campaigns segments on.
-	 * The stored lists are written by the newsletter_subscribed and
-	 * newsletter_updated data events and refreshed from the ESP on login (#2619).
+	 * computed wherever legacy metadata is built (shutdown flush, retries, CLI,
+	 * cron; like every legacy field this needs a WooCommerce customer) from
+	 * the cached lists config instead of a per-contact API call, and agrees
+	 * with the lists Campaigns segments on. The stored lists are written by the
+	 * newsletter_subscribed and newsletter_updated data events and refreshed
+	 * from the ESP on login (Automattic/newspack-plugin#2619).
 	 *
-	 * Null omits the field: a reader with no stored lists, or an unreadable
-	 * lists config, has an unknown selection that must not overwrite a value
-	 * the ESP already holds. A stored empty list is a real state (unsubscribed
-	 * from everything) and yields an empty string.
+	 * Null omits the field: a site that does not send it, a reader with no
+	 * stored lists or a stored value that is not a plain list, or an
+	 * unreadable lists config all mean an unknown selection that must not
+	 * overwrite a value the ESP already holds. A stored empty list is a real
+	 * state (unsubscribed from everything) and yields an empty string.
 	 *
 	 * @return string|null
 	 */
-	private function get_newsletter_selection() {
+	private function get_newsletter_selection(): ?string {
 		if ( ! $this->user || ! class_exists( 'Newspack_Newsletters_Subscription' ) ) {
 			return null;
 		}
 
-		$stored = Reader_Data::get_data( $this->user->ID, 'newsletter_subscribed_lists' );
-		if ( false === $stored ) {
+		// The same selection normalize_contact_data() filters by, checked first
+		// so a disabled field does not cost a lists lookup per contact.
+		if ( ! in_array( 'newsletter_selection', Metadata::get_raw_keys(), true ) ) {
 			return null;
 		}
-		$ids = is_string( $stored ) ? json_decode( $stored, true ) : $stored;
-		if ( ! is_array( $ids ) ) {
+
+		// Log why a selection is omitted or empty: once a blank value reaches the
+		// ESP, neither side keeps what it replaced, so this is the only record.
+		$ids = Reader_Data::get_newsletter_subscribed_lists( $this->user->ID );
+		if ( null === $ids ) {
+			if ( false !== Reader_Data::get_data( $this->user->ID, 'newsletter_subscribed_lists' ) ) {
+				Logger::log( sprintf( 'Newsletter Selection omitted for user %d: the stored lists are not a plain list.', $this->user->ID ) );
+			}
 			return null;
 		}
-		$ids = array_map( 'strval', array_filter( $ids, 'is_scalar' ) );
 
 		$lists = \Newspack_Newsletters_Subscription::get_lists();
 		if ( \is_wp_error( $lists ) || ! is_array( $lists ) ) {
+			Logger::log( sprintf( 'Newsletter Selection omitted for user %d: the lists config is unreadable.', $this->user->ID ) );
 			return null;
 		}
 
@@ -122,6 +134,11 @@ class Legacy_Basic extends Contact_Metadata {
 			}
 		}
 
-		return implode( ', ', $names );
+		$selection = implode( ', ', $names );
+		if ( '' === $selection ) {
+			Logger::log( sprintf( 'Newsletter Selection is empty for user %d (stored lists: %s).', $this->user->ID, wp_json_encode( $ids ) ) );
+		}
+
+		return $selection;
 	}
 }

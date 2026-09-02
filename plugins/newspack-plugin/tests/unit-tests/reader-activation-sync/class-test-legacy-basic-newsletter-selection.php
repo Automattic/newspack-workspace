@@ -153,4 +153,27 @@ class Test_Legacy_Basic_Newsletter_Selection extends WP_UnitTestCase {
 		$this->assertArrayHasKey( Metadata::get_key( 'account' ), $metadata );
 		$this->assertArrayNotHasKey( $this->key(), $metadata );
 	}
+	/**
+	 * A value an earlier removal left in object shape may have dropped later
+	 * changes, so the selection is unknown and the field is omitted.
+	 */
+	public function test_object_shaped_storage_omits_the_field() {
+		update_user_meta( $this->user_id, 'newspack_reader_data_keys', [ 'newsletter_subscribed_lists' ] );
+		update_user_meta( $this->user_id, Reader_Data::get_meta_key_name( 'newsletter_subscribed_lists' ), '{"1":"list-2"}' );
+		$metadata = $this->get_metadata();
+		$this->assertArrayHasKey( Metadata::get_key( 'account' ), $metadata, 'The other legacy fields are still built.' );
+		$this->assertArrayNotHasKey( $this->key(), $metadata );
+	}
+
+	/**
+	 * When the field is not an enabled outgoing field the lists config is not
+	 * consulted at all, so a disabled field costs nothing per contact.
+	 */
+	public function test_unselected_outgoing_field_skips_the_lists_lookup() {
+		$this->store_lists( [ 'list-1' ] );
+		Metadata::update_fields( array_values( array_diff( Metadata::get_default_fields(), [ 'Newsletter Selection' ] ) ) );
+		Newspack_Newsletters_Subscription::$get_lists_calls = 0;
+		$this->get_metadata();
+		$this->assertSame( 0, Newspack_Newsletters_Subscription::$get_lists_calls );
+	}
 }
