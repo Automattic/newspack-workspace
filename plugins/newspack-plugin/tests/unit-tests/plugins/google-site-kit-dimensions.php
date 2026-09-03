@@ -16,11 +16,12 @@ use Newspack\GA4_Custom_Dimensions;
 class Newspack_Test_GoogleSiteKit_Dimensions extends WP_UnitTestCase {
 
 	/**
-	 * The always-on dimensions are unaffected by the feature flag.
+	 * The always-on dimensions are unaffected by the feature flag. `is_reader` and
+	 * `logged_in` ride gtag's `config` call on every event, whatever the site runs.
 	 */
 	public function test_core_dimensions_are_always_provisioned() {
 		$dimensions = GA4_Custom_Dimensions::get_dimensions();
-		$this->assertArrayHasKey( 'is_subscriber', $dimensions );
+		$this->assertArrayHasKey( 'is_reader', $dimensions );
 		$this->assertArrayHasKey( 'logged_in', $dimensions );
 	}
 
@@ -68,6 +69,6 @@ class Newspack_Test_GoogleSiteKit_Dimensions extends WP_UnitTestCase {
 		$dimensions = GA4_Custom_Dimensions::get_dimensions();
 
 		$this->assertArrayNotHasKey( 'access_source', $dimensions );
-		$this->assertArrayHasKey( 'is_subscriber', $dimensions, 'The always-on dimensions stay put.' );
+		$this->assertArrayHasKey( 'is_reader', $dimensions, 'The always-on dimensions stay put.' );
 	}
 }

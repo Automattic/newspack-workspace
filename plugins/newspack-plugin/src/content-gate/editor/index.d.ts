@@ -18,6 +18,8 @@ type AccessRuleConfig = {
 	is_boolean?: boolean;
 	placeholder?: string;
 	options?: AccessRuleOption[];
+	has_options: boolean;
+	empty_grants_access?: boolean;
 };
 type ActiveRule = {
 	slug: string;

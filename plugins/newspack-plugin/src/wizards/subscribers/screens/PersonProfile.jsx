@@ -41,8 +41,10 @@ import {
 /**
  * Internal dependencies.
  */
-import { Button, Card, Divider, Grid, Notice, Router, SectionHeader, Waiting } from '../../../../packages/components/src';
+import { Button, Card, Divider, Grid, Router, SectionHeader, Waiting } from '../../../../packages/components/src';
 import './style.scss';
+import LoadFailureNotice from '../components/LoadFailureNotice';
+import { useRetryFocus } from '../use-retry-focus';
 import { WIZARD_STORE_NAMESPACE } from '../../../../packages/components/src/wizard/store';
 import SubscriptionCard from '../components/SubscriptionCard';
 import PaymentMethodsList, { cardLabel } from '../components/PaymentMethodsList';
@@ -133,6 +135,9 @@ export default function PersonProfile() {
 	const backNav = isInternalHashPath( rawFrom ) ? rawFrom : '#/';
 
 	const { subscriber, loading, error, notFound, reload } = useSubscriber( id );
+
+	// A missing person counts as failed here too: that read nulls the subscriber.
+	const { retryRef, retry } = useRetryFocus( { settled: ! loading, failed: Boolean( error || ! subscriber ), reload } );
 
 	// The money flows: which modal is open (null for none), the snackbar shown
 	// after one completes, and the write calls the modals run. The snackbar's
@@ -378,24 +383,39 @@ export default function PersonProfile() {
 	// A person who does not exist is a dead end, so it gets a plain statement and
 	// a way back — not a Retry button that can never succeed.
 	if ( notFound ) {
+		const message = __( 'This subscriber could not be found. They may have been deleted.', 'newspack-plugin' );
 		return (
-			<Notice isError noticeText={ __( 'This subscriber could not be found. They may have been deleted.', 'newspack-plugin' ) }>
-				<Button variant="link" href={ backNav }>
-					{ __( 'Back to the list', 'newspack-plugin' ) }
-				</Button>
-			</Notice>
+			<LoadFailureNotice
+				message={ message }
+				action={
+					<Button variant="link" ref={ retryRef } href={ backNav }>
+						{ __( 'Back to the list', 'newspack-plugin' ) }
+					</Button>
+				}
+			/>
 		);
 	}
 
 	// A failed read must not read as "this person has no subscriptions".
 	if ( error || ! subscriber ) {
+		// An empty read reports no error, so there is no server detail to quote.
+		let message = __( 'This subscriber could not be loaded.', 'newspack-plugin' );
+		if ( error ) {
+			message = sprintf(
+				/* translators: %s is an error message. */
+				__( 'Could not load this subscriber: %s', 'newspack-plugin' ),
+				error
+			);
+		}
 		return (
-			// translators: %s is an error message.
-			<Notice isError noticeText={ sprintf( __( 'Could not load this subscriber: %s', 'newspack-plugin' ), error ) }>
-				<Button variant="link" onClick={ reload }>
-					{ __( 'Retry', 'newspack-plugin' ) }
-				</Button>
-			</Notice>
+			<LoadFailureNotice
+				message={ message }
+				action={
+					<Button variant="link" ref={ retryRef } onClick={ retry }>
+						{ __( 'Retry', 'newspack-plugin' ) }
+					</Button>
+				}
+			/>
 		);
 	}
 

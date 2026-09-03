@@ -2074,13 +2074,13 @@ class Test_Integrations extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * The ESP integration reports unsupported only while the manual provider is active.
+	 * The ESP integration reports unsupported when the provider is not Mailchimp.
 	 */
 	public function test_esp_unsupported_with_manual_provider() {
 		$esp = new \Newspack\Reader_Activation\Integrations\ESP();
 
 		update_option( 'newspack_newsletters_service_provider', 'manual' );
-		$this->assertSame( 'Requires an API-based ESP', $esp->get_unsupported_reason() );
+		$this->assertSame( 'Requires Mailchimp as the newsletter provider', $esp->get_unsupported_reason() );
 
 		update_option( 'newspack_newsletters_service_provider', 'mailchimp' );
 		$this->assertNull( $esp->get_unsupported_reason() );

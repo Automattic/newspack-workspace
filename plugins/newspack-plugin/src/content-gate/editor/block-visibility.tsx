@@ -35,6 +35,8 @@ import {
 	resolveAccessRuleOptionTokens,
 } from '../access-rule-options';
 import { getAccessRuleOptionSource, isOptionBackedAccessRule } from '../access-rule-option-sources';
+import { getAccessRuleValueNotice, isAccessRulePickerInert, isUnconstrainedAccessRuleValue } from '../utils/access-rule-value';
+import AccessRuleValueNotice from '../components/access-rule-value-notice';
 import OneTimePurchaseRuleControl from '../components/one-time-purchase-rule-control';
 import UnlistedValuesNotice from '../components/unlisted-values-notice';
 
@@ -171,7 +173,7 @@ const GateControls = ( { gateIds, onChange }: { gateIds: number[]; onChange: ( i
  * Value control for a single access rule.
  * Renders FormTokenField for rules with options, TextControl for free-text rules.
  */
-const AccessRuleValueControl = ( {
+export const AccessRuleValueControl = ( {
 	slug,
 	config,
 	value,
@@ -219,25 +221,35 @@ const AccessRuleValueControl = ( {
 	let control;
 	if ( 'one_time_purchase' === slug ) {
 		control = <OneTimePurchaseRuleControl value={ value } onChange={ onChange } options={ options } productsLabel={ config.name } />;
-	} else if ( isOptionBackedAccessRule( slug, staticOptions ) ) {
+	} else if ( isOptionBackedAccessRule( slug, staticOptions, config.has_options ) ) {
 		const selected = Array.isArray( value ) ? value : [];
+		const hasOptions = options.length > 0;
+		// Both the caution and the inert state come from the shared module, so this picker
+		// and the Audience wizard's reach the same verdict on one stored value.
+		const valueNotice = getAccessRuleValueNotice( config, value, hasOptions );
 		control = (
 			<>
-				<FormTokenField
-					label={ config.name }
-					value={ getAccessRuleOptionTokens( options, selected, getMissingOptionLabel( slug ) ) }
-					suggestions={ options.map( formatAccessRuleOptionLabel ) }
-					maxSuggestions={ MAX_OPTION_SUGGESTIONS }
-					onChange={ ( tokens: ( string | TokenItem )[] ) =>
-						onChange( resolveAccessRuleOptionTokens( tokens, options, { slug, stored: selected } ) )
-					}
-					messages={ getAccessRuleTokenFieldMessages( slug ) }
-					__experimentalValidateInput={ ( input: string ) => isAccessRuleOptionInput( input, options, slug ) }
-					__experimentalAutoSelectFirstMatch
-					__experimentalExpandOnFocus
-					__next40pxDefaultSize
-					__nextHasNoMarginBottom
-				/>
+				<AccessRuleValueNotice label={ config.name } notice={ valueNotice }>
+					<FormTokenField
+						label={ config.name }
+						disabled={ isAccessRulePickerInert( config, value, hasOptions ) }
+						value={ getAccessRuleOptionTokens( options, selected, getMissingOptionLabel( slug ) ) }
+						suggestions={ options.map( formatAccessRuleOptionLabel ) }
+						maxSuggestions={ MAX_OPTION_SUGGESTIONS }
+						onChange={ ( tokens: ( string | TokenItem )[] ) =>
+							onChange( resolveAccessRuleOptionTokens( tokens, options, { slug, stored: selected } ) )
+						}
+						messages={ getAccessRuleTokenFieldMessages( slug ) }
+						__experimentalValidateInput={ ( input: string ) => isAccessRuleOptionInput( input, options, slug ) }
+						__experimentalAutoSelectFirstMatch
+						__experimentalExpandOnFocus
+						__next40pxDefaultSize
+						__nextHasNoMarginBottom
+					/>
+				</AccessRuleValueNotice>
+				{ /* A different state from the ones above, and it can stand alongside a
+				     value the picker holds tokens for: these are stored IDs no option
+				     describes. */ }
 				<UnlistedValuesNotice slug={ slug } options={ options } value={ selected } />
 			</>
 		);
@@ -247,7 +259,11 @@ const AccessRuleValueControl = ( {
 				hideLabelFromVision
 				label={ config.name }
 				placeholder={ config.placeholder ?? '' }
-				help={ __( 'Separate with commas.', 'newspack-plugin' ) }
+				help={
+					isUnconstrainedAccessRuleValue( config, value )
+						? __( 'Left empty, this rule grants access to everyone. Enter at least one value, or turn the rule off.', 'newspack-plugin' )
+						: __( 'Separate with commas.', 'newspack-plugin' )
+				}
 				value={ typeof value === 'string' ? value : '' }
 				onChange={ onChange as ( value: string ) => void }
 				__next40pxDefaultSize

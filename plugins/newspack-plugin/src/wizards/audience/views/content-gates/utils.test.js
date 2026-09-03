@@ -8,6 +8,8 @@ import {
 	hasOwnMeter,
 	hasSharedMeteredPath,
 	isGateMetered,
+	isMalformedAccessRuleValue,
+	isUnconstrainedAccessRuleValue,
 	sharesTheSiteMeter,
 } from './utils';
 
@@ -81,6 +83,40 @@ describe( 'getGateStatusBadgeIntent', () => {
 	} );
 } );
 
+/**
+ * A stored value in the wrong shape for its rule denies every reader, because
+ * `Newspack\Access_Rules::evaluate_rule()` fails closed on it. Both the editor and
+ * the gate summary label such a value; neither may render it as a live condition
+ * or as an empty selection (NPPD-2143).
+ */
+describe( 'isMalformedAccessRuleValue', () => {
+	const optionsBacked = { name: 'Institutional access', has_options: true };
+	const freeText = { name: 'Whitelisted email domain', has_options: false };
+
+	it( 'reads free text on an options-backed rule as malformed', () => {
+		expect( isMalformedAccessRuleValue( optionsBacked, 'Springfield University' ) ).toBe( true );
+		expect( isMalformedAccessRuleValue( optionsBacked, [ 12 ] ) ).toBe( false );
+	} );
+
+	it( 'reads a list on a free-text rule as malformed', () => {
+		expect( isMalformedAccessRuleValue( freeText, [ 'example.com' ] ) ).toBe( true );
+		expect( isMalformedAccessRuleValue( freeText, 'example.com' ) ).toBe( false );
+	} );
+
+	it( 'reads an unset value as not configured rather than malformed', () => {
+		// An unset value is not a shape the rule can't use: `Institution::evaluate()`
+		// reads it as "not configured" and grants every reader, so calling it
+		// malformed would tell the operator the rule denies everyone at the moment
+		// it grants everyone.
+		expect( isMalformedAccessRuleValue( optionsBacked, '' ) ).toBe( false );
+		expect( isMalformedAccessRuleValue( optionsBacked, null ) ).toBe( false );
+	} );
+
+	it( 'leaves boolean rules alone, which carry no value to judge', () => {
+		expect( isMalformedAccessRuleValue( { name: 'Has donated', is_boolean: true, has_options: false }, true ) ).toBe( false );
+	} );
+} );
+
 describe( 'isGateMetered with a shared site meter', () => {
 	const siteMeter = { anonymous_count: 3, registered_count: 0, period: 'month' };
 
@@ -125,6 +161,33 @@ describe( 'getMeteringCount', () => {
 
 	it( 'grants nothing where the shared allowance is unknown, rather than guessing one', () => {
 		expect( getMeteringCount( { enabled: true, count: 9, period: 'month', scope: 'site' } ) ).toBe( 0 );
+	} );
+} );
+
+/**
+ * The state the ticket is about: a rule that imposes no constraint lets every
+ * reader through, so the wizard has to say so rather than render a blank
+ * condition (NPPD-2143).
+ */
+describe( 'isUnconstrainedAccessRuleValue', () => {
+	const institution = { name: 'Institutional access', has_options: true, empty_grants_access: true };
+	const emailDomain = { name: 'Whitelisted email domain', has_options: false, empty_grants_access: true };
+	const subscription = { name: 'Active subscription', has_options: true };
+
+	it( 'reads the empty value of a rule that grants everyone when empty', () => {
+		expect( isUnconstrainedAccessRuleValue( institution, [] ) ).toBe( true );
+		expect( isUnconstrainedAccessRuleValue( institution, '' ) ).toBe( true );
+		expect( isUnconstrainedAccessRuleValue( emailDomain, '' ) ).toBe( true );
+	} );
+
+	it( 'leaves a populated rule alone', () => {
+		expect( isUnconstrainedAccessRuleValue( institution, [ 12 ] ) ).toBe( false );
+		expect( isUnconstrainedAccessRuleValue( emailDomain, 'example.com' ) ).toBe( false );
+	} );
+
+	it( 'is not about emptiness alone: a rule that still constrains when empty is a configuration', () => {
+		// `subscription` naming no product requires any active subscription.
+		expect( isUnconstrainedAccessRuleValue( subscription, [] ) ).toBe( false );
 	} );
 } );
 
