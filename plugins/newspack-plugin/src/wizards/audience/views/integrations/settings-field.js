@@ -2,12 +2,79 @@
  * WordPress dependencies.
  */
 import { __ } from '@wordpress/i18n';
-import { CheckboxControl, ExternalLink, TextareaControl } from '@wordpress/components';
+import {
+	CheckboxControl,
+	ExternalLink,
+	SelectControl,
+	TextareaControl,
+	__experimentalToggleGroupControl as ToggleGroupControl, // eslint-disable-line @wordpress/no-unsafe-wp-apis
+	__experimentalToggleGroupControlOption as ToggleGroupControlOption, // eslint-disable-line @wordpress/no-unsafe-wp-apis
+} from '@wordpress/components';
 
 /**
  * Internal dependencies.
  */
-import { Button, Grid, SelectControl, TextControl } from '../../../../../packages/components/src';
+import { Button, Grid, TextControl } from '../../../../../packages/components/src';
+
+import './settings-field.scss';
+
+/**
+ * Whether a value counts as unset.
+ *
+ * @param {*} value Value to test.
+ * @return {boolean} True when the value is absent or the empty string.
+ */
+export const isEmptyValue = value => value === undefined || value === null || value === '';
+
+/**
+ * Coerce a stored field value to boolean.
+ *
+ * Values can arrive from WP options as scalar strings (`'1'`/`'0'`/`'true'`/
+ * `'false'`/`''`); `Boolean( '0' )` is `true` in JS, so the falsy string forms
+ * are matched explicitly.
+ *
+ * @param {*} value Value to coerce.
+ * @return {boolean} The boolean form.
+ */
+export const toBool = value => ( typeof value === 'string' ? ! [ '', '0', 'false' ].includes( value.toLowerCase() ) : Boolean( value ) );
+
+/**
+ * Whether a select field offers an option that can actually be chosen.
+ *
+ * The ESP list call prepends a `None` entry to every successful response, so a
+ * connected account with no audiences still arrives with one option. Counting
+ * options would read that as a working list.
+ *
+ * @param {Object} field Field declaration.
+ * @return {boolean} True when at least one option carries a non-empty value.
+ */
+export const hasSelectableOption = field => ( field.options || [] ).some( option => ! isEmptyValue( option.value ) );
+
+/**
+ * Whether a field declaration produces any rendered output.
+ *
+ * The metadata field is judged on `options`; the outbound one also carries
+ * `grouped_options`, and the configure view extracts it before any field
+ * reaches here.
+ *
+ * @param {Object} field Field declaration.
+ * @return {boolean} True when `SettingsField` renders something for the field.
+ */
+export const settingsFieldRenders = field => {
+	switch ( field.type ) {
+		case 'hidden':
+			return false;
+		case 'select':
+			// A list with nothing to pick stays on screen when it is required or already
+			// set: the Enable flow sends publishers here to complete it, and a missing
+			// section reads as a configured one.
+			return !! field.required || ! isEmptyValue( field.value ) || hasSelectableOption( field );
+		case 'metadata':
+			return ( field.options || [] ).length > 0;
+		default:
+			return true;
+	}
+};
 
 /**
  * Render a single settings field.
@@ -18,6 +85,10 @@ import { Button, Grid, SelectControl, TextControl } from '../../../../../package
  * @param {Function} props.onChange Change handler.
  */
 export const SettingsField = ( { field, value, onChange } ) => {
+	if ( ! settingsFieldRenders( field ) ) {
+		return null;
+	}
+
 	const { key, type, label, description, placeholder, options, help_url: helpUrl } = field;
 	const help = (
 		<>
@@ -32,6 +103,8 @@ export const SettingsField = ( { field, value, onChange } ) => {
 	);
 
 	switch ( type ) {
+		// Unreachable while the early return above stands. Kept because these fields
+		// carry OAuth tokens: falling through to `default` would print them in a text input.
 		case 'hidden':
 			return null;
 		case 'oauth': {
@@ -66,7 +139,7 @@ export const SettingsField = ( { field, value, onChange } ) => {
 				typeof option === 'string' ? { value: option, label: option } : { value: option.value, label: option.label || option.value }
 			);
 			return (
-				<div key={ key }>
+				<div key={ key } className="newspack-settings-field__metadata">
 					<h3>{ label }</h3>
 					<Grid columns={ 3 } rowGap={ 16 }>
 						{ normalizedOptions.map( ( { value: optionValue, label: optionLabel } ) => (
@@ -79,30 +152,76 @@ export const SettingsField = ( { field, value, onChange } ) => {
 									const newFields = checked ? [ ...selectedFields, optionValue ] : selectedFields.filter( f => f !== optionValue );
 									onChange( newFields );
 								} }
+								__nextHasNoMarginBottom
 							/>
 						) ) }
 					</Grid>
 				</div>
 			);
 		}
-		case 'checkbox':
-			return <CheckboxControl key={ key } label={ label } help={ help } checked={ !! value } onChange={ onChange } />;
-		case 'select':
+		case 'checkbox': {
+			// toBool, not truthiness: stored values round-trip through WP options
+			// as scalar strings, and `'0'`/`'false'` must read as off.
+			const checked = toBool( value );
+			// A checkbox field may declare `control: 'toggle_group'` to render as an
+			// Enabled/Disabled toggle group instead — the same stored boolean, but a
+			// presentation suited to feature switches whose label names the feature
+			// ("Deals") rather than the action ("Enable deals"). Integrations running
+			// against a plugin without this parameter fall back to the checkbox.
+			if ( 'toggle_group' === field.control ) {
+				return (
+					<ToggleGroupControl
+						key={ key }
+						label={ label }
+						help={ help }
+						value={ checked ? 'enabled' : 'disabled' }
+						onChange={ next => onChange( 'enabled' === next ) }
+						isBlock
+						__next40pxDefaultSize
+						__nextHasNoMarginBottom
+					>
+						<ToggleGroupControlOption label={ __( 'Enabled', 'newspack-plugin' ) } value="enabled" />
+						<ToggleGroupControlOption label={ __( 'Disabled', 'newspack-plugin' ) } value="disabled" />
+					</ToggleGroupControl>
+				);
+			}
+			return <CheckboxControl key={ key } label={ label } help={ help } checked={ checked } onChange={ onChange } __nextHasNoMarginBottom />;
+		}
+		case 'select': {
+			const selectable = hasSelectableOption( field );
 			return (
 				<SelectControl
 					key={ key }
+					className={ selectable ? undefined : 'newspack-settings-field__empty-select' }
 					label={ label }
-					help={ help }
-					value={ value }
-					options={ ( options || [] ).map( opt => ( {
-						label: opt.label,
-						value: opt.value,
-					} ) ) }
-					onChange={ onChange }
+					help={
+						selectable ? (
+							help
+						) : (
+							<>
+								{ help } { __( 'No options are available. Check the connection to this integration.', 'newspack-plugin' ) }
+							</>
+						)
+					}
+					value={ selectable ? value : '' }
+					options={
+						selectable
+							? ( options || [] ).map( opt => ( {
+									label: opt.label,
+									value: opt.value,
+							  } ) )
+							: [ { label: __( 'No options available', 'newspack-plugin' ), value: '' } ]
+					}
+					// aria-disabled rather than disabled: a disabled select is unfocusable, so
+					// keyboard users would never reach the field the Enable flow sent them to,
+					// nor the help text explaining why it is empty.
+					aria-disabled={ ! selectable }
+					onChange={ selectable ? onChange : () => {} }
 					__next40pxDefaultSize
 					__nextHasNoMarginBottom
 				/>
 			);
+		}
 		case 'textarea':
 			return (
 				<TextareaControl
@@ -125,6 +244,7 @@ export const SettingsField = ( { field, value, onChange } ) => {
 					placeholder={ placeholder }
 					onChange={ onChange }
 					type="number"
+					withMargin={ false }
 					__next40pxDefaultSize
 					__nextHasNoMarginBottom
 				/>
@@ -139,6 +259,7 @@ export const SettingsField = ( { field, value, onChange } ) => {
 					placeholder={ placeholder }
 					onChange={ onChange }
 					type="password"
+					withMargin={ false }
 					__next40pxDefaultSize
 					__nextHasNoMarginBottom
 				/>
@@ -153,6 +274,7 @@ export const SettingsField = ( { field, value, onChange } ) => {
 					value={ value || '' }
 					placeholder={ placeholder }
 					onChange={ onChange }
+					withMargin={ false }
 					__next40pxDefaultSize
 					__nextHasNoMarginBottom
 				/>

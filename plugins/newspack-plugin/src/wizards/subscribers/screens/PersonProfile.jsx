@@ -38,8 +38,10 @@ import {
 /**
  * Internal dependencies.
  */
-import { Button, Card, Divider, Grid, Notice, Router, SectionHeader, Waiting } from '../../../../packages/components/src';
+import { Button, Card, Divider, Grid, Router, SectionHeader, Waiting } from '../../../../packages/components/src';
 import './style.scss';
+import LoadFailureNotice from '../components/LoadFailureNotice';
+import { useRetryFocus } from '../use-retry-focus';
 import { WIZARD_STORE_NAMESPACE } from '../../../../packages/components/src/wizard/store';
 import SubscriptionCard from '../components/SubscriptionCard';
 import ReactivateFlow from '../flows/ReactivateFlow';
@@ -48,9 +50,9 @@ import { useSubscriptionActions } from '../data/use-subscription-actions';
 import { SHOW_AVATARS, useAvatars } from '../data/use-avatars';
 import { useWizardNode } from '../use-portals';
 import { billingText, fmtDate, orDash, scheduleRow } from '../format';
-import { GROUP_LABEL, GROUP_LABEL_PLURAL } from '../labels';
+import { GROUP_LABEL, GROUP_LABEL_PLURAL, groupViewLabel } from '../labels';
 import { groupDetailHref, isInternalHashPath } from '../links';
-import { STATUS_LABELS, STATUS_BADGE_LEVEL, statusRank, displayStatuses } from '../status';
+import { STATUS_LABELS, STATUS_BADGE_INTENT, statusRank, displayStatuses } from '../status';
 
 const { useParams, useLocation } = Router;
 
@@ -108,7 +110,7 @@ const seatsSubline = group => {
  * @param {string} status The mapped status.
  * @return {Array} Badge descriptors for SubscriptionCard.
  */
-const statusBadges = status => ( STATUS_LABELS[ status ] ? [ { label: STATUS_LABELS[ status ], level: STATUS_BADGE_LEVEL[ status ] } ] : [] );
+const statusBadges = status => ( STATUS_LABELS[ status ] ? [ { label: STATUS_LABELS[ status ], intent: STATUS_BADGE_INTENT[ status ] } ] : [] );
 
 export default function PersonProfile() {
 	const { id } = useParams();
@@ -142,6 +144,9 @@ export default function PersonProfile() {
 		reload();
 		setModal( null );
 	};
+
+	// A missing person counts as failed here too: that read nulls the subscriber.
+	const { retryRef, retry } = useRetryFocus( { settled: ! loading, failed: Boolean( error || ! subscriber ), reload } );
 
 	// A 128px source feeds the 64px header avatar (2x for high-DPR displays),
 	// resolved through the same endpoint the lists use.
@@ -183,7 +188,7 @@ export default function PersonProfile() {
 				{ label: subscriber.name },
 			],
 			sectionTitle: subscriber.name,
-			badges: headlineStatuses.map( status => ( { label: STATUS_LABELS[ status ], level: STATUS_BADGE_LEVEL[ status ] } ) ),
+			badges: headlineStatuses.map( status => ( { label: STATUS_LABELS[ status ], intent: STATUS_BADGE_INTENT[ status ] } ) ),
 			// A newline-joined string, not markup: SectionHeader renders a
 			// description inside a `<p>`, so a stack of divs would be invalid
 			// nesting. The wizard stylesheet sets `white-space: pre-line` on that
@@ -238,8 +243,7 @@ export default function PersonProfile() {
 						title={ group.plan }
 						titleSuffix={ `(${ GROUP_LABEL })` }
 						titleHref={ href || undefined }
-						// translators: 1: the group label, 2: the group name.
-						titleLabel={ href ? sprintf( __( 'View %1$s: %2$s', 'newspack-plugin' ), GROUP_LABEL, group.plan ) : undefined }
+						titleLabel={ href ? groupViewLabel( group.plan ) : undefined }
 						badges={ statusBadges( group.status ) }
 						subline={ seatsSubline( group ) }
 						rows={ rows }
@@ -316,24 +320,39 @@ export default function PersonProfile() {
 	// A person who does not exist is a dead end, so it gets a plain statement and
 	// a way back — not a Retry button that can never succeed.
 	if ( notFound ) {
+		const message = __( 'This subscriber could not be found. They may have been deleted.', 'newspack-plugin' );
 		return (
-			<Notice isError noticeText={ __( 'This subscriber could not be found. They may have been deleted.', 'newspack-plugin' ) }>
-				<Button variant="link" href={ backNav }>
-					{ __( 'Back to the list', 'newspack-plugin' ) }
-				</Button>
-			</Notice>
+			<LoadFailureNotice
+				message={ message }
+				action={
+					<Button variant="link" ref={ retryRef } href={ backNav }>
+						{ __( 'Back to the list', 'newspack-plugin' ) }
+					</Button>
+				}
+			/>
 		);
 	}
 
 	// A failed read must not read as "this person has no subscriptions".
 	if ( error || ! subscriber ) {
+		// An empty read reports no error, so there is no server detail to quote.
+		let message = __( 'This subscriber could not be loaded.', 'newspack-plugin' );
+		if ( error ) {
+			message = sprintf(
+				/* translators: %s is an error message. */
+				__( 'Could not load this subscriber: %s', 'newspack-plugin' ),
+				error
+			);
+		}
 		return (
-			// translators: %s is an error message.
-			<Notice isError noticeText={ sprintf( __( 'Could not load this subscriber: %s', 'newspack-plugin' ), error ) }>
-				<Button variant="link" onClick={ reload }>
-					{ __( 'Retry', 'newspack-plugin' ) }
-				</Button>
-			</Notice>
+			<LoadFailureNotice
+				message={ message }
+				action={
+					<Button variant="link" ref={ retryRef } onClick={ retry }>
+						{ __( 'Retry', 'newspack-plugin' ) }
+					</Button>
+				}
+			/>
 		);
 	}
 

@@ -68,8 +68,52 @@ class Content_Restriction_Control {
 		add_action( 'init', [ __CLASS__, 'register_meta' ] );
 		add_action( 'init', [ __CLASS__, 'register_meta_guards' ] );
 		add_filter( 'newspack_is_post_restricted', [ __CLASS__, 'is_post_restricted' ], 10, 2 );
+		add_filter( 'newspack_post_has_restrictions', [ __CLASS__, 'post_has_restrictions' ], 10, 2 );
 		// Priority 20 so the fallback wins over the meta key's registered default.
 		add_filter( 'default_post_metadata', [ __CLASS__, 'filter_default_exemption_meta' ], 20, 4 );
+	}
+
+	/**
+	 * Whether the post is covered by content gating rules, regardless of the
+	 * current user's own access. The user-agnostic counterpart of
+	 * is_post_restricted(), consumed e.g. by integrations that must advertise
+	 * a post as gated (Google Extended Access' isAccessibleForFree schema).
+	 *
+	 * @param bool $has_restrictions Whether the post has restrictions.
+	 * @param int  $post_id          Post ID.
+	 *
+	 * @return bool
+	 */
+	public static function post_has_restrictions( $has_restrictions, $post_id = null ) {
+		// Don't apply our restriction strategy if Woo Memberships is active.
+		if ( Memberships::is_active() ) {
+			return $has_restrictions;
+		}
+
+		// Gating stands down rather than half-working ({@see Content_Gate::is_gating_active()}),
+		// so a post is not advertised as gated while Access Control enforces nothing. Mirrors
+		// the same stand-down in is_post_restricted().
+		if ( ! Content_Gate::is_gating_active() ) {
+			return $has_restrictions;
+		}
+
+		$post_id = $post_id ? $post_id : get_the_ID();
+
+		// An exempt post is never gated, regardless of an incoming value.
+		if ( $post_id && get_post_meta( $post_id, self::IS_EXEMPT_META_KEY, true ) ) {
+			return false;
+		}
+
+		// Pass through a restriction another callback already determined.
+		if ( $has_restrictions ) {
+			return $has_restrictions;
+		}
+
+		if ( ! $post_id ) {
+			return false;
+		}
+
+		return ! empty( self::get_post_gates( $post_id ) );
 	}
 
 	/**
@@ -410,9 +454,13 @@ class Content_Restriction_Control {
 					$is_restricted  = ! $anonymous_bypass_passed;
 					$gate_layout_id = $gate['registration']['gate_layout_id'] ?? $gate['id'];
 				} elseif ( ! empty( $gate['registration']['require_verification'] ) ) {
-					// Check if email verification is required.
+					// Check if email verification is required. A hypothetical evaluation
+					// asking what this reader would see if they verified has to be answered
+					// here too, or a gate that both walls registration behind verification
+					// and grants by email domain reports itself still restricting for a
+					// reader whose one act of verifying would satisfy both.
 					$user = get_user_by( 'id', $user_id );
-					if ( ! $user || ! \get_user_meta( $user->ID, Reader_Activation::EMAIL_VERIFIED, true ) ) {
+					if ( ! $user || ( ! \get_user_meta( $user->ID, Reader_Activation::EMAIL_VERIFIED, true ) && ! Access_Rules::is_verification_assumed_for( $user->ID ) ) ) {
 						$is_restricted  = true;
 						$gate_layout_id = $gate['registration']['gate_layout_id'] ?? $gate['id'];
 					}
@@ -494,6 +542,35 @@ class Content_Restriction_Control {
 			return self::$post_gate_layout_id_map[ $post_id . '_' . $user_id ];
 		}
 		return false;
+	}
+
+	/**
+	 * Run a callback without this request's resolved gate, then put it back.
+	 *
+	 * `is_post_restricted()` memoises which gate denied a post for a user, and
+	 * short-circuits to `true` on a second call once that entry exists. A caller
+	 * asking a hypothetical question — "would this post still be restricted if
+	 * something about the reader changed?" — therefore has to start from an
+	 * unresolved state, and must not leave the hypothetical's answer behind as the
+	 * request's real gate: `Content_Gate::get_gate_post_id()` and
+	 * `get_gate_layout_id()` read those maps to decide what renders.
+	 *
+	 * @param callable $callback Callback to run.
+	 *
+	 * @return mixed The callback's return value.
+	 */
+	public static function with_gate_resolution_isolated( $callback ) {
+		$gate_ids   = self::$post_gate_id_map;
+		$layout_ids = self::$post_gate_layout_id_map;
+
+		self::$post_gate_id_map        = [];
+		self::$post_gate_layout_id_map = [];
+		try {
+			return $callback();
+		} finally {
+			self::$post_gate_id_map        = $gate_ids;
+			self::$post_gate_layout_id_map = $layout_ids;
+		}
 	}
 
 	/**

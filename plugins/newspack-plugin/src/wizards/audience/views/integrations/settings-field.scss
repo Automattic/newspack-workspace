@@ -1,0 +1,12 @@
+.newspack-settings-field__metadata {
+	> h3:first-child {
+		margin-top: 0;
+	}
+}
+
+.newspack-settings-field__empty-select {
+	.components-input-base {
+		color: #949494;
+		cursor: default;
+	}
+}
