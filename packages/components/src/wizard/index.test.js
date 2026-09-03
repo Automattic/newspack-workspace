@@ -7,7 +7,7 @@ import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
  * WordPress dependencies.
  */
 import apiFetch from '@wordpress/api-fetch';
-import { useDispatch } from '@wordpress/data';
+import { dispatch, useDispatch } from '@wordpress/data';
 import { useEffect } from '@wordpress/element';
 
 /**
@@ -167,6 +167,13 @@ const NarrowingSection = () => {
 };
 
 describe( 'Wizard content width', () => {
+	beforeEach( () => {
+		apiFetch.mockReset();
+		// A single-section wizard never renders ResetHeaderData, so without this
+		// the previous test's override is still in the store and decides this one.
+		dispatch( WIZARD_STORE_NAMESPACE ).resetHeaderData();
+	} );
+
 	it( 'renders full-width when the section declares it and nothing overrides it', async () => {
 		const { container } = render(
 			<Wizard headerText="Test wizard" sections={ [ { label: 'List', path: '/', fullWidth: true, render: () => <div>List</div> } ] } />
