@@ -216,7 +216,7 @@ export default function GroupList() {
 	// Surface the group count in the header breadcrumb, e.g. "/ Groups (14)".
 	useEffect( () => {
 		setHeaderData( {
-			fullWidth: ! error,
+			fullWidth: error ? false : undefined,
 			sectionName: [
 				{
 					label: GROUP_LABEL_PLURAL,
@@ -238,9 +238,10 @@ export default function GroupList() {
 	// A failed read must not read as "this site has no groups": say so, and offer
 	// a retry.
 	if ( error ) {
+		const message = groupLoadFailedLabel( error );
 		return (
-			<Notice status="error" isDismissible={ false }>
-				{ groupLoadFailedLabel( error ) }{ ' ' }
+			<Notice status="error" isDismissible={ false } spokenMessage={ message }>
+				{ message }{ ' ' }
 				<Button variant="link" onClick={ reload }>
 					{ __( 'Retry', 'newspack-plugin' ) }
 				</Button>

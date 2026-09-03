@@ -325,7 +325,7 @@ export default function SubscriberList() {
 	// Surface the subscriber count in the header breadcrumb, e.g. "/ Subscribers (85)".
 	useEffect( () => {
 		setHeaderData( {
-			fullWidth: ! error,
+			fullWidth: error ? false : undefined,
 			sectionName: [
 				{
 					label: __( 'Subscribers', 'newspack-plugin' ),
@@ -351,9 +351,10 @@ export default function SubscriberList() {
 	// A failed read must not read as "this site has no subscribers": say so, and
 	// offer a retry.
 	if ( error ) {
+		const message = sprintf( __( 'Could not load subscribers: %s', 'newspack-plugin' ), error );
 		return (
-			<Notice status="error" isDismissible={ false }>
-				{ sprintf( __( 'Could not load subscribers: %s', 'newspack-plugin' ), error ) }{ ' ' }
+			<Notice status="error" isDismissible={ false } spokenMessage={ message }>
+				{ message }{ ' ' }
 				<Button variant="link" onClick={ reload }>
 					{ __( 'Retry', 'newspack-plugin' ) }
 				</Button>

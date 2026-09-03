@@ -29,7 +29,6 @@ jest.mock( '../../../../packages/components/src/wizard/store', () => ( { WIZARD_
 jest.mock( '../../../../packages/components/src', () => ( {
 	DataViews: () => null,
 	Button: () => null,
-	Notice: () => null,
 	Waiting: () => null,
 	Router: { useHistory: () => ( { push: jest.fn() } ), useLocation: () => ( { pathname: '/' } ) },
 } ) );
@@ -68,6 +67,8 @@ const publishedSection = () => {
 	const named = headerCalls.filter( data => data.sectionName );
 	return named[ named.length - 1 ].sectionName[ 0 ];
 };
+
+const lastHeaderCall = () => headerCalls[ headerCalls.length - 1 ];
 
 describe( 'the subscriber list header count', () => {
 	beforeEach( () => {
@@ -127,5 +128,30 @@ describe( 'the subscriber list header count', () => {
 			render( <SubscriberList /> );
 		} );
 		expect( publishedSection().countLabel ).toBe( '2 subscribers' );
+	} );
+} );
+
+describe( 'the subscriber list width override', () => {
+	beforeEach( () => {
+		headerCalls = [];
+		apiFetch.mockReset();
+	} );
+
+	it( 'leaves the section width alone once the subscribers land', async () => {
+		apiFetch.mockResolvedValue( page( 1 ) );
+		await act( async () => {
+			render( <SubscriberList /> );
+		} );
+
+		expect( lastHeaderCall().fullWidth ).toBeUndefined();
+	} );
+
+	it( 'narrows the width when the read fails', async () => {
+		apiFetch.mockRejectedValue( new Error( 'nope' ) );
+		await act( async () => {
+			render( <SubscriberList /> );
+		} );
+
+		expect( lastHeaderCall().fullWidth ).toBe( false );
 	} );
 } );

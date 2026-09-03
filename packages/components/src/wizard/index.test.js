@@ -7,12 +7,15 @@ import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
  * WordPress dependencies.
  */
 import apiFetch from '@wordpress/api-fetch';
+import { useDispatch } from '@wordpress/data';
+import { useEffect } from '@wordpress/element';
 
 /**
  * Internal dependencies.
  */
 import Wizard from './';
 import { useWizardData } from './store/utils';
+import { WIZARD_STORE_NAMESPACE } from './store';
 
 jest.mock( '@wordpress/api-fetch', () => jest.fn() );
 
@@ -152,5 +155,35 @@ describe( 'Wizard', () => {
 		expect( await screen.findByText( 'Static section' ) ).toBeInTheDocument();
 		await flushPending();
 		expect( counts.wizard ).toBe( 0 );
+	} );
+} );
+
+// A section that immediately overrides the wizard's static `fullWidth` config
+// for its own render, the way an error state stands down from a full-width table.
+const NarrowingSection = () => {
+	const { setHeaderData } = useDispatch( WIZARD_STORE_NAMESPACE );
+	useEffect( () => {
+		setHeaderData( { fullWidth: false } );
+	}, [ setHeaderData ] );
+	return <div>Narrowing section</div>;
+};
+
+describe( 'Wizard content width', () => {
+	it( 'renders full-width when the section declares it and nothing overrides it', async () => {
+		const { container } = render(
+			<Wizard headerText="Test wizard" sections={ [ { label: 'List', path: '/', fullWidth: true, render: () => <div>List</div> } ] } />
+		);
+
+		expect( await screen.findByText( 'List' ) ).toBeInTheDocument();
+		expect( container.querySelector( '.newspack-wizard__content' ) ).toHaveClass( 'newspack-wizard__content--full-width' );
+	} );
+
+	it( 'falls back to the standard width when the section overrides fullWidth via header data', async () => {
+		const { container } = render(
+			<Wizard headerText="Test wizard" sections={ [ { label: 'List', path: '/', fullWidth: true, render: () => <NarrowingSection /> } ] } />
+		);
+
+		expect( await screen.findByText( 'Narrowing section' ) ).toBeInTheDocument();
+		expect( container.querySelector( '.newspack-wizard__content' ) ).not.toHaveClass( 'newspack-wizard__content--full-width' );
 	} );
 } );

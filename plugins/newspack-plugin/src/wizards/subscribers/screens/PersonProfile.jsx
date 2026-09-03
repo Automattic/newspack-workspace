@@ -282,9 +282,10 @@ export default function PersonProfile() {
 	// A person who does not exist is a dead end, so it gets a plain statement and
 	// a way back — not a Retry button that can never succeed.
 	if ( notFound ) {
+		const message = __( 'This subscriber could not be found. They may have been deleted.', 'newspack-plugin' );
 		return (
-			<Notice status="error" isDismissible={ false }>
-				{ __( 'This subscriber could not be found. They may have been deleted.', 'newspack-plugin' ) }{ ' ' }
+			<Notice status="error" isDismissible={ false } spokenMessage={ message }>
+				{ message }{ ' ' }
 				<Button variant="link" href={ backNav }>
 					{ __( 'Back to the list', 'newspack-plugin' ) }
 				</Button>
@@ -294,13 +295,14 @@ export default function PersonProfile() {
 
 	// A failed read must not read as "this person has no subscriptions".
 	if ( error || ! subscriber ) {
+		const message = sprintf(
+			/* translators: %s is an error message. */
+			__( 'Could not load this subscriber: %s', 'newspack-plugin' ),
+			error
+		);
 		return (
-			<Notice status="error" isDismissible={ false }>
-				{ sprintf(
-					/* translators: %s is an error message. */
-					__( 'Could not load this subscriber: %s', 'newspack-plugin' ),
-					error
-				) }{ ' ' }
+			<Notice status="error" isDismissible={ false } spokenMessage={ message }>
+				{ message }{ ' ' }
 				<Button variant="link" onClick={ reload }>
 					{ __( 'Retry', 'newspack-plugin' ) }
 				</Button>
