@@ -183,7 +183,7 @@ class Content_Gate_API {
 			$sanitized_custom_access = self::sanitize_custom_access( $gate['custom_access'] );
 			$leaves_rules_unenforced = self::save_leaves_rules_unenforced( $gate, $sanitized, $gate_id );
 			if ( ! is_wp_error( $sanitized_custom_access ) ) {
-				$sanitized_custom_access = self::reject_rules_left_unconstrained( $sanitized_custom_access, $gate_id, $leaves_rules_unenforced );
+				$sanitized_custom_access = self::reject_rules_left_unconfigured( $sanitized_custom_access, $gate_id, $leaves_rules_unenforced );
 			}
 			if ( is_wp_error( $sanitized_custom_access ) ) {
 				// Only a caller who could act on the refusal is told about it. Sanitization
@@ -210,7 +210,7 @@ class Content_Gate_API {
 		} elseif ( ! self::save_leaves_rules_unenforced( $gate, $sanitized, $gate_id ) ) {
 			// A save that publishes the gate without naming its custom access section
 			// still puts the stored rules live, so they are judged as they are.
-			$stored_rules_verdict = self::reject_rules_left_unconstrained( [], $gate_id, false );
+			$stored_rules_verdict = self::reject_rules_left_unconfigured( [], $gate_id, false );
 			if ( is_wp_error( $stored_rules_verdict ) ) {
 				return $stored_rules_verdict;
 			}
@@ -222,13 +222,17 @@ class Content_Gate_API {
 	}
 
 	/**
-	 * Reject an active gate holding a rule that has been left granting everyone.
+	 * Reject an active gate holding a rule the operator has left unconfigured.
 	 *
-	 * Scoped to rules registered with `empty_grants_access`, whose callback reads
-	 * an empty value as "no constraint" and so evaluates true for every reader.
-	 * That state is reachable without typing a character — enabling the rule seeds
-	 * it with its empty default, and on a site with no institutions published the
-	 * picker has nothing else to offer.
+	 * Scoped to rules registered with `requires_value`, whose empty value expresses
+	 * no condition. That state is reachable without typing a character — enabling
+	 * the rule seeds it with its empty default, and on a site with no institutions
+	 * published the picker has nothing else to offer.
+	 *
+	 * Which way such a rule then evaluates does not change the answer here, and the
+	 * rules disagree: `institution` matches nobody, the two free-text rules match
+	 * everybody. Both are the gate doing something other than what the operator
+	 * configured, so both are refused rather than saved and explained.
 	 *
 	 * An empty value is not the same thing on every rule, which is why the
 	 * declaration decides and the value's shape does not: `subscription` naming no
@@ -244,7 +248,7 @@ class Content_Gate_API {
 	 *
 	 * @return array|\WP_Error The settings unchanged, or an error naming the rule.
 	 */
-	private static function reject_rules_left_unconstrained( $sanitized_custom_access, $gate_id, $leaves_rules_unenforced ) {
+	private static function reject_rules_left_unconfigured( $sanitized_custom_access, $gate_id, $leaves_rules_unenforced ) {
 		$access_rules = $sanitized_custom_access['access_rules'] ?? null;
 		if ( null === $access_rules ) {
 			// A partial save carries only what it changes, and the settings it omits
@@ -297,7 +301,7 @@ class Content_Gate_API {
 					continue;
 				}
 				$registered = $registered_rules[ $rule['slug'] ?? '' ] ?? null;
-				if ( empty( $registered['empty_grants_access'] ) || ! self::rule_value_is_empty( $rule['value'] ?? null ) ) {
+				if ( empty( $registered['requires_value'] ) || ! self::rule_value_is_empty( $rule['value'] ?? null ) ) {
 					continue;
 				}
 				return self::empty_access_rule_value_error( $registered );
@@ -324,24 +328,39 @@ class Content_Gate_API {
 	}
 
 	/**
-	 * The error returned when an active gate holds a rule left granting everyone.
+	 * The error returned when an active gate holds a rule left unconfigured.
+	 *
+	 * Names what the empty value actually does, which is the rule's own business
+	 * and differs between them: `institution` matches nobody, the free-text rules
+	 * match everybody. Reporting the wrong one sends the operator looking for the
+	 * wrong symptom on the front end.
 	 *
 	 * @param array $rule The registered rule.
 	 *
 	 * @return \WP_Error
 	 */
 	private static function empty_access_rule_value_error( $rule ) {
-		$message = empty( $rule['has_options'] )
-			/* translators: %s: the access rule's name, e.g. "Whitelisted email domain". */
-			? __( 'Enter a value for the “%s” access rule, or turn the rule off. Left empty, it grants access to everyone.', 'newspack-plugin' )
-			/* translators: %s: the access rule's name, e.g. "Institutional access". */
-			: __( 'Select at least one option for the “%s” access rule, or turn the rule off. Left empty, it grants access to everyone.', 'newspack-plugin' );
+		$grants_access = ! empty( $rule['empty_grants_access'] );
+		if ( empty( $rule['has_options'] ) ) {
+			$message = $grants_access
+				/* translators: %s: the access rule's name, e.g. "Whitelisted email domain". */
+				? __( 'Enter a value for the “%s” access rule, or turn the rule off. Left empty, it grants access to everyone.', 'newspack-plugin' )
+				/* translators: %s: the access rule's name, e.g. "Whitelisted email domain". */
+				: __( 'Enter a value for the “%s” access rule, or turn the rule off. Left empty, it matches no reader.', 'newspack-plugin' );
+		} else {
+			$message = $grants_access
+				/* translators: %s: the access rule's name, e.g. "Institutional access". */
+				? __( 'Select at least one option for the “%s” access rule, or turn the rule off. Left empty, it grants access to everyone.', 'newspack-plugin' )
+				/* translators: %s: the access rule's name, e.g. "Institutional access". */
+				: __( 'Select at least one option for the “%s” access rule, or turn the rule off. Left empty, it matches no reader.', 'newspack-plugin' );
+		}
 		return new \WP_Error(
 			'empty_access_rule_value',
 			sprintf( $message, $rule['name'] ),
 			[
-				'status'    => 400,
-				'rule_name' => $rule['name'],
+				'status'              => 400,
+				'rule_name'           => $rule['name'],
+				'empty_grants_access' => $grants_access,
 			]
 		);
 	}
@@ -363,17 +382,20 @@ class Content_Gate_API {
 		if ( ! $leaves_rules_unenforced || 'empty_access_rule_value' !== $error->get_error_code() ) {
 			return $error;
 		}
-		$rule_name = $error->get_error_data()['rule_name'] ?? '';
+		$error_data = $error->get_error_data();
+		$rule_name  = $error_data['rule_name'] ?? '';
+		$message    = empty( $error_data['empty_grants_access'] )
+			/* translators: %s: the access rule's name, e.g. "Institutional access". */
+			? __( 'The “%s” access rule is empty, so it matches no reader. Give it a value or remove it before this gate is active again.', 'newspack-plugin' )
+			/* translators: %s: the access rule's name, e.g. "Whitelisted email domain". */
+			: __( 'The “%s” access rule is empty, so it grants access to everyone. Give it a value or remove it before this gate is active again.', 'newspack-plugin' );
 		return new \WP_Error(
 			'empty_access_rule_value',
-			sprintf(
-				/* translators: %s: the access rule's name, e.g. "Institutional access". */
-				__( 'The “%s” access rule is empty, so it grants access to everyone. Give it a value or remove it before this gate is active again.', 'newspack-plugin' ),
-				$rule_name
-			),
+			sprintf( $message, $rule_name ),
 			[
-				'status'    => 400,
-				'rule_name' => $rule_name,
+				'status'              => 400,
+				'rule_name'           => $rule_name,
+				'empty_grants_access' => ! empty( $error_data['empty_grants_access'] ),
 			]
 		);
 	}

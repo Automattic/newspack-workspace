@@ -882,19 +882,19 @@ class Newspack_Test_Content_Gate_Metadata extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Test that an empty institution rule value imposes no constraint and
+	 * Test that an institution rule naming nothing withholds access and
 	 * contributes no group label.
 	 *
-	 * Institution::evaluate() treats an empty $value as "no constraint," so the
-	 * rule passes — but there's no specific institution to attribute, so
-	 * Content_Access_Group must come back empty (and crucially: no TypeError on
-	 * a `foreach` over a non-iterable).
+	 * The synced field is the reason this is worth pinning separately from the
+	 * evaluator: it is what a publisher's ESP segments on, so a rule that matches
+	 * nobody has to read as Content_Access "No" rather than as an unattributed
+	 * pass. The empty group label also covers the `foreach` over a non-iterable.
 	 *
 	 * @dataProvider empty_institution_value_provider
 	 *
 	 * @param mixed $value Empty rule value.
 	 */
-	public function test_group_label_empty_for_empty_institution_rule( $value ) {
+	public function test_no_access_and_no_group_label_for_empty_institution_rule( $value ) {
 		// An institution must exist so the rule evaluation has something to consider.
 		$this->create_institution( 'Test University', [ 'email_domain' => 'example.com' ] );
 
@@ -910,7 +910,7 @@ class Newspack_Test_Content_Gate_Metadata extends WP_UnitTestCase {
 
 		$result = $this->get_metadata_for_user( self::$user_id );
 
-		$this->assertEquals( 'Yes', $result['Content_Access'], 'Empty institution rule imposes no constraint per Institution::evaluate().' );
+		$this->assertEquals( 'No', $result['Content_Access'], 'An institution rule naming nothing matches no reader.' );
 		$this->assertEmpty( $result['Content_Access_Group'], 'Empty institution rule should yield no group label.' );
 	}
 

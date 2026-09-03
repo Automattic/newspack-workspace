@@ -446,9 +446,8 @@ class Content_Restriction_Control {
 				if ( $user_id === 0 ) {
 					// Anonymous visitors can still pass via the gate's custom_access rules if they
 					// match a populated rule with `supports_anonymous` (currently only `institution`).
-					// An unpopulated rule (e.g., institution rule with no institutions selected) must
-					// not grant access — Access_Rules treats an empty value as "no constraint" and
-					// returns true, which would silently bypass registration here.
+					// A rule left with no value names no condition, so it cannot be what lets a
+					// visitor past the registration wall.
 					$anonymous_bypass_passed = ! empty( $gate['custom_access']['active'] )
 						&& Access_Rules::evaluate_anonymous_rules( $gate['custom_access']['access_rules'] ?? [] );
 					$is_restricted  = ! $anonymous_bypass_passed;
@@ -467,7 +466,7 @@ class Content_Restriction_Control {
 			if ( ! $is_restricted && null === $anonymous_bypass_passed && ! empty( $gate['custom_access']['active'] ) ) {
 				$access_rules = $gate['custom_access']['access_rules'] ?? [];
 				$rule_context = [ 'payment_recovery_grace' => $gate['custom_access']['payment_recovery_grace'] ?? true ];
-				if ( ! empty( $access_rules ) && ! Access_Rules::evaluate_rules( $access_rules, $user_id, $rule_context ) ) {
+				if ( ! empty( $access_rules ) && ! Access_Rules::evaluate_rules_for_visitor( $access_rules, $user_id, $rule_context ) ) {
 					$is_restricted  = true;
 					$gate_layout_id = $gate['custom_access']['gate_layout_id'] ?? $gate['id'];
 				}

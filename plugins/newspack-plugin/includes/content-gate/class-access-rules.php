@@ -107,9 +107,20 @@ class Access_Rules {
 	 *     @type bool     $empty_grants_access
 	 *                                        Optional. Whether the rule's callback reads an empty
 	 *                                        value as "no constraint", so leaving it empty grants
-	 *                                        access to every reader. Defaults to false. A rule
-	 *                                        that declares it is refused a save while the gate is
-	 *                                        active and its value is empty.
+	 *                                        access to every reader. Defaults to false. Decides
+	 *                                        which way the editor and the save error describe an
+	 *                                        empty value, never whether it is allowed.
+	 *     @type bool     $requires_value     Optional. Whether an empty value leaves the rule
+	 *                                        unconfigured rather than expressing a usable
+	 *                                        condition. Defaults to false. A rule that declares
+	 *                                        it is refused a save while the gate is active and
+	 *                                        its value is empty. Independent of which way the
+	 *                                        rule then evaluates: `institution` denies every
+	 *                                        reader and the two free-text rules grant every
+	 *                                        reader, and neither is what the operator meant.
+	 *                                        `subscription` must not declare it — naming no
+	 *                                        product means "any active subscription", which is a
+	 *                                        condition publishers configure deliberately.
 	 *     @type bool     $supports_anonymous Whether the rule's callback can evaluate access for
 	 *                                        a logged-out visitor (`user_id = 0`). Defaults to
 	 *                                        false — `evaluate_rule` short-circuits to false for
@@ -153,11 +164,14 @@ class Access_Rules {
 				'options'             => [],
 				'has_options'         => $has_options,
 				'is_boolean'          => false,
-				// It is a property of the rule's callback, not of the value's shape:
-				// `institution` returns true when it names none, and so do the two
-				// free-text rules when left blank, while `subscription` naming no
-				// product still requires *an* active subscription.
+				// Both are properties of the rule's callback rather than of the
+				// value's shape, and they are not the same question: the two
+				// free-text rules grant every reader when left blank and
+				// `institution` denies every reader, yet all three are unconfigured.
+				// `subscription` naming no product is neither — it still requires
+				// *an* active subscription.
 				'empty_grants_access' => false,
+				'requires_value'      => false,
 			]
 		);
 		self::$rules[ $rule['id'] ] = $rule;
@@ -226,20 +240,22 @@ class Access_Rules {
 				'placeholder'         => __( 'example.com,another.com', 'newspack-plugin' ),
 				'callback'            => [ __CLASS__, 'is_email_domain_whitelisted' ],
 				'empty_grants_access' => true,
+				'requires_value'      => true,
 			],
 			'reader_data'       => [
 				'name'                => __( 'Reader data', 'newspack-plugin' ),
 				'description'         => __( 'Set custom conditions based on reader data key/value pairs.', 'newspack-plugin' ),
 				'callback'            => [ __CLASS__, 'has_reader_data' ],
 				'empty_grants_access' => true,
+				'requires_value'      => true,
 			],
 			'institution'       => [
-				'name'                => __( 'Institutional access', 'newspack-plugin' ),
-				'description'         => __( 'Grant access to readers from selected institutions.', 'newspack-plugin' ),
-				'options'             => [ Institution::class, 'get_options' ],
-				'callback'            => [ Institution::class, 'evaluate' ],
-				'supports_anonymous'  => true,
-				'empty_grants_access' => true,
+				'name'               => __( 'Institutional access', 'newspack-plugin' ),
+				'description'        => __( 'Grant access to readers from selected institutions.', 'newspack-plugin' ),
+				'options'            => [ Institution::class, 'get_options' ],
+				'callback'           => [ Institution::class, 'evaluate' ],
+				'supports_anonymous' => true,
+				'requires_value'     => true,
 			],
 		];
 
@@ -437,6 +453,33 @@ class Access_Rules {
 			return false;
 		}
 		return self::evaluate_rules( $eligible_groups, 0 );
+	}
+
+	/**
+	 * Evaluate a gate's access rules for whoever is asking.
+	 *
+	 * The two evaluators are not interchangeable, and the difference only shows on
+	 * a rule left with no value. `evaluate_rules()` runs every rule against the id
+	 * it is handed, and a logged-out visitor is id 0 — so a rule that reads its
+	 * empty value as "no constraint" reports satisfied, and lets an anonymous
+	 * visitor through a gate that names a condition nobody evaluated.
+	 * `evaluate_anonymous_rules()` drops those groups first.
+	 *
+	 * Every surface gating content for both audiences goes through here, so one
+	 * gate cannot answer differently depending on which surface asked.
+	 *
+	 * @param array $access_rules The gate's access rules.
+	 * @param int   $user_id      Reader to evaluate for; 0 for a logged-out visitor.
+	 * @param array $context      Optional. Evaluation context, applied only to the
+	 *                            logged-in path — the anonymous one reaches no rule
+	 *                            that reads it.
+	 *
+	 * @return bool Whether the visitor passes the rules.
+	 */
+	public static function evaluate_rules_for_visitor( $access_rules, $user_id, $context = [] ) {
+		return $user_id
+			? self::evaluate_rules( $access_rules, $user_id, $context )
+			: self::evaluate_anonymous_rules( $access_rules );
 	}
 
 	/**

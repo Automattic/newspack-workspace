@@ -131,6 +131,7 @@ class Promoted_Fields {
 			if ( ! $field->is_access_rule() ) {
 				continue;
 			}
+			$empty_grants_access = in_array( $field->get_matching_function(), [ 'list__not_in', 'range' ], true );
 			Access_Rules::register_rule(
 				[
 					'id'                  => $key,
@@ -146,9 +147,14 @@ class Promoted_Fields {
 					// `list__not_in` naming nothing excludes nobody, and `range` with no
 					// bounds falls back to 0..PHP_INT_MAX. Either admits every reader who
 					// holds the field at all. `list__in`, `date_range` and `default` deny
-					// on an empty value, so declaring them would refuse a save that is
-					// merely narrow.
-					'empty_grants_access' => in_array( $field->get_matching_function(), [ 'list__not_in', 'range' ], true ),
+					// on an empty value instead.
+					'empty_grants_access' => $empty_grants_access,
+					// Only the granting ones are refused a save, which keeps promoted
+					// fields behaving as they did. A field's options come from the
+					// provider's roster and can arrive after the rule is written, so an
+					// empty deny-on-empty rule is a state an operator can be part-way
+					// through rather than one they have finished getting wrong.
+					'requires_value'      => $empty_grants_access,
 					'callback'            => function ( $user_id, $args ) use ( $field ) {
 						return self::evaluate_field( $field, $user_id, $args );
 					},

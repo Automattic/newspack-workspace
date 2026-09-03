@@ -695,12 +695,15 @@ class Test_Premium_Newsletters_Verify extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * An unconfigured rule paywalls nobody — is_email_domain_whitelisted() and
-	 * Institution::evaluate() both return true on an empty value — so a gate
-	 * carrying only those is genuinely harmless and must not start failing runs.
+	 * Whether an empty rule is harmless depends on the rule, so the partition has
+	 * to ask per rule rather than treating "no value" as "nothing to check".
+	 * is_email_domain_whitelisted() and has_reader_data() return true on an empty
+	 * value and paywall nobody; Institution::evaluate() matches nobody and
+	 * paywalls everybody. Reading the second as harmless would report a gate that
+	 * excludes the whole reader base as fully verified.
 	 */
-	public function test_partition_gates_treats_unconfigured_rules_as_harmless() {
-		$gate = $this->make_gate(
+	public function test_partition_gates_separates_harmless_rules_from_paywalling_ones() {
+		$harmless = $this->make_gate(
 			15,
 			true,
 			[
@@ -710,6 +713,26 @@ class Test_Premium_Newsletters_Verify extends \WP_UnitTestCase {
 						'value' => '',
 					],
 					[
+						'slug'  => 'reader_data',
+						'value' => '',
+					],
+				],
+			]
+		);
+
+		$partitioned = $this->invoke_private_static( 'partition_gates', [ [ $harmless ] ] );
+
+		$this->assertSame( [], $partitioned['verifiable'] );
+		$this->assertSame( [], $partitioned['unenumerable'] );
+		$this->assertCount( 1, $partitioned['registration_only'] );
+		$this->assertFalse( $this->invoke_private_static( 'verification_failed', [ $this->clean_summary(), $this->complete_coverage() ] ) );
+
+		$paywalling = $this->make_gate(
+			16,
+			true,
+			[
+				[
+					[
 						'slug'  => 'institution',
 						'value' => [],
 					],
@@ -717,25 +740,26 @@ class Test_Premium_Newsletters_Verify extends \WP_UnitTestCase {
 			]
 		);
 
-		$partitioned = $this->invoke_private_static( 'partition_gates', [ [ $gate ] ] );
+		$partitioned = $this->invoke_private_static( 'partition_gates', [ [ $paywalling ] ] );
 
 		$this->assertSame( [], $partitioned['verifiable'] );
-		$this->assertSame( [], $partitioned['unenumerable'] );
-		$this->assertCount( 1, $partitioned['registration_only'] );
-		$this->assertFalse( $this->invoke_private_static( 'verification_failed', [ $this->clean_summary(), $this->complete_coverage() ] ) );
+		$this->assertCount( 1, $partitioned['unenumerable'] );
+		$this->assertSame( [ 'institution' ], $partitioned['unenumerable'][0]['unenumerable_rules'] );
 	}
 
 	/**
-	 * Two rules restrict even with an empty value, so neither may be skipped as
+	 * Three rules restrict even with an empty value, so none may be skipped as
 	 * unconfigured. A subscription rule naming no product grants on any active
 	 * subscription at all — has_active_subscription() passes the empty product
 	 * filter through to WooCommerce_Connection::get_active_subscriptions_for_user(),
 	 * which then accepts any of them — and an empty one-time purchase rule fails
 	 * closed in has_one_time_purchase() rather than granting, so it restricts
-	 * everyone. Both are the opposite of is_email_domain_whitelisted() and
-	 * Institution::evaluate(), which return true on an empty value.
+	 * everyone. Institution::evaluate() is the third: it matches nobody when it
+	 * names no institution. All three are the opposite of
+	 * is_email_domain_whitelisted() and has_reader_data(), which return true on an
+	 * empty value.
 	 */
-	public function test_unenumerable_paid_rules_counts_the_two_rules_that_restrict_while_empty() {
+	public function test_unenumerable_paid_rules_counts_the_three_rules_that_restrict_while_empty() {
 		$rules = [
 			[
 				[
@@ -746,11 +770,45 @@ class Test_Premium_Newsletters_Verify extends \WP_UnitTestCase {
 					'slug'  => 'one_time_purchase',
 					'value' => [],
 				],
+				[
+					'slug'  => 'institution',
+					'value' => [],
+				],
 			],
 		];
 
 		$this->assertSame(
-			[ 'subscription', 'one_time_purchase' ],
+			[ 'subscription', 'one_time_purchase', 'institution' ],
+			$this->invoke_private_static( 'unenumerable_paid_rules', [ $rules ] )
+		);
+	}
+
+	/**
+	 * Test that a product-bound group is not reported as enumerable when another
+	 * rule in it admits nobody.
+	 *
+	 * `subscription [42] AND institution []` denies every reader at runtime. Left
+	 * to the subscription rule alone, the group's population reads as "holders of
+	 * 42" and those readers are reported entitled — while check_access() removes
+	 * them from the list. The gate has to come back as one this command cannot
+	 * enumerate instead.
+	 */
+	public function test_unenumerable_paid_rules_does_not_let_a_product_bound_mask_a_rule_admitting_nobody() {
+		$rules = [
+			[
+				[
+					'slug'  => 'subscription',
+					'value' => [ 42 ],
+				],
+				[
+					'slug'  => 'institution',
+					'value' => [],
+				],
+			],
+		];
+
+		$this->assertSame(
+			[ 'subscription', 'institution' ],
 			$this->invoke_private_static( 'unenumerable_paid_rules', [ $rules ] )
 		);
 	}

@@ -513,6 +513,65 @@ class Newspack_Test_Content_Gate_API extends WP_UnitTestCase {
 		);
 		$this->assertWPError( $sanitized_gate );
 		$this->assertSame( 'empty_access_rule_value', $sanitized_gate->get_error_code() );
+		// The refusal names what the empty value does, and the two rules that reach
+		// it disagree. An operator told the gate is open goes looking for a leak;
+		// this one is walled shut.
+		$this->assertStringContainsString(
+			'matches no reader',
+			$sanitized_gate->get_error_message(),
+			'An institution rule naming nothing must not be reported as granting access to everyone.'
+		);
+	}
+
+	/**
+	 * A rule that needs a value is refused whichever way its empty value then
+	 * evaluates. `email_domain` grants every reader where `institution` grants
+	 * none, and both are the gate doing something other than what was configured.
+	 */
+	public function test_active_custom_access_rejects_a_free_text_rule_left_blank() {
+		$sanitized_gate = Content_Gate_API::sanitize_gate(
+			[
+				'custom_access' => [
+					'active'       => true,
+					'access_rules' => [
+						[
+							[
+								'slug'  => 'email_domain',
+								'value' => '',
+							],
+						],
+					],
+				],
+			]
+		);
+		$this->assertWPError( $sanitized_gate );
+		$this->assertSame( 'empty_access_rule_value', $sanitized_gate->get_error_code() );
+		$this->assertStringContainsString( 'grants access to everyone', $sanitized_gate->get_error_message() );
+	}
+
+	/**
+	 * A subscription rule naming no product is a configuration publishers use: it
+	 * grants on any active subscription, so the gate still keeps non-subscribers
+	 * out. Refusing it would block that, which is why the refusal keys on the
+	 * rule's own declaration rather than on the value being empty.
+	 */
+	public function test_active_custom_access_allows_a_subscription_rule_naming_no_product() {
+		$sanitized_gate = Content_Gate_API::sanitize_gate(
+			[
+				'custom_access' => [
+					'active'       => true,
+					'access_rules' => [
+						[
+							[
+								'slug'  => 'subscription',
+								'value' => [],
+							],
+						],
+					],
+				],
+			]
+		);
+		$this->assertNotWPError( $sanitized_gate );
 	}
 
 	/**
