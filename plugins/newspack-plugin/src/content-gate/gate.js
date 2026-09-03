@@ -149,16 +149,17 @@ function initVerificationPrompts() {
 					// Both checks run before the call, not after: the code is already sent
 					// by this point, and openAuthModal's own early returns invoke
 					// onSuccess — so a modal that never opened would reload the page past
-					// the reader instead of handing control back. `_openAuthModal` is read
-					// at click time because the auth bundle attaches it on its own RAS
-					// callback and nothing orders the two pushes.
+					// the reader instead of handing control back. The method is absent
+					// when RAS is disabled; the container is rendered by the auth bundle,
+					// which loads on its own RAS callback with nothing ordering the two
+					// pushes, so both are read at click time.
 					if (
-						typeof ras._openAuthModal !== 'function' ||
+						typeof ras.openAuthModal !== 'function' ||
 						! document.querySelector( '.newspack-reader-auth-modal .newspack-reader-auth' )
 					) {
 						return false;
 					}
-					ras._openAuthModal( {
+					ras.openAuthModal( {
 						skipAuthenticatedCheck: true,
 						skipNewslettersSignup: true,
 						backButtonClosesModal: true,
