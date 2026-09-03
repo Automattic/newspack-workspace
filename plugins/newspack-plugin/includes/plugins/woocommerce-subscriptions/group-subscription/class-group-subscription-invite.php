@@ -372,6 +372,10 @@ class Group_Subscription_Invite {
 	 * Replaces whatever the subscription had, so any link already in circulation stops working,
 	 * including the per-manager links of a subscription still on the legacy shape.
 	 *
+	 * One entry per subscription means two managers regenerating at the same moment is a lost
+	 * update: both are told they succeeded, and the loser holds a key that no longer validates.
+	 * Inherent to a single shared link, and re-copying from the page hands back the live one.
+	 *
 	 * @param \WC_Subscription|int $subscription The subscription object or ID.
 	 * @param int                  $user_id      The manager user ID minting the link.
 	 *
