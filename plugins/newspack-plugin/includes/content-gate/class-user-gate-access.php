@@ -20,8 +20,8 @@ class User_Gate_Access {
 	 * Initialize hooks.
 	 */
 	public static function init() {
-		add_action( 'edit_user_profile', [ __CLASS__, 'render_user_gate_access' ] );
-		add_action( 'show_user_profile', [ __CLASS__, 'render_user_gate_access' ] );
+		add_action( 'edit_user_profile', [ __CLASS__, 'render_user_gate_access' ], 9 );
+		add_action( 'show_user_profile', [ __CLASS__, 'render_user_gate_access' ], 9 );
 	}
 
 	/**
@@ -155,6 +155,9 @@ class User_Gate_Access {
 		if ( 'subscription' === $slug && is_array( $value ) ) {
 			return self::format_product_names( $value );
 		}
+		if ( 'institution' === $slug && is_array( $value ) ) {
+			return self::format_institution_names( $value );
+		}
 
 		if ( is_array( $value ) ) {
 			return implode( ', ', $value );
@@ -164,11 +167,11 @@ class User_Gate_Access {
 	}
 
 	/**
-	 * Format a list of product IDs as a comma-separated list of product names.
+	 * Format a list of product IDs as a comma-separated list of linked product names.
 	 *
 	 * @param array $product_ids Product IDs.
 	 *
-	 * @return string Comma-separated product names.
+	 * @return string Comma-separated, linked product names.
 	 */
 	private static function format_product_names( $product_ids ) {
 		$names = array_map(
@@ -176,12 +179,43 @@ class User_Gate_Access {
 				if ( function_exists( 'wc_get_product' ) ) {
 					$product = wc_get_product( $product_id );
 					if ( $product ) {
-						return $product->get_name();
+						return sprintf(
+							/* translators: 1: product edit URL. 2: product name. */
+							__( '<a href="%1$s">%2$s</a>', 'newspack-plugin' ),
+							esc_url( get_edit_post_link( $product_id ) ),
+							$product->get_name()
+						);
 					}
 				}
 				return '#' . $product_id;
 			},
 			$product_ids
+		);
+		return implode( ', ', $names );
+	}
+
+	/**
+	 * Format a list of institution IDs as a comma-separated list of linked institution names.
+	 *
+	 * @param array $institution_ids Institution IDs.
+	 *
+	 * @return string Comma-separated, linked institution names.
+	 */
+	private static function format_institution_names( $institution_ids ) {
+		$names = array_map(
+			function( $institution_id ) {
+				$institution = get_post( $institution_id );
+				if ( $institution && Institution::POST_TYPE === $institution->post_type ) {
+					return sprintf(
+						/* translators: 1: institution edit URL. 2: institution name. */
+						__( '<a href="%1$s">%2$s</a>', 'newspack-plugin' ),
+						esc_url( admin_url( 'admin.php?page=newspack-audience-access-control#/institutions/' . $institution_id ) ),
+						$institution->post_title
+					);
+				}
+				return '#' . $institution_id;
+			},
+			$institution_ids
 		);
 		return implode( ', ', $names );
 	}
@@ -201,7 +235,20 @@ class User_Gate_Access {
 			return;
 		}
 		?>
-		<h2><?php esc_html_e( 'Content Gate Access', 'newspack-plugin' ); ?></h2>
+		<h2><?php esc_html_e( 'Access Control', 'newspack-plugin' ); ?></h2>
+		<p>
+			<?php esc_html_e( 'Shows the active content gate(s) the user can bypass, which access rules grant access, and how.', 'newspack-plugin' ); ?>
+			<?php
+			echo wp_kses(
+				sprintf(
+				/* translators: %s: link to the Newspack Content Gate settings page. */
+					__( '<a href="%s">Configure content gates</a>.', 'newspack-plugin' ),
+					esc_url( admin_url( 'admin.php?page=newspack-audience-access-control' ) )
+				),
+				[ 'a' => [ 'href' => [] ] ]
+			);
+			?>
+		</p>
 		<table class="form-table" role="presentation">
 			<?php foreach ( $gates as $gate ) : ?>
 				<?php $result = self::evaluate_gate_for_user( $gate, $user->ID ); ?>
@@ -211,7 +258,17 @@ class User_Gate_Access {
 							<?php echo wp_kses( $result['can_bypass'] ? '<span style="color: #00a32a;">&#10003;</span>' : '<span style="color: #d63638;">&#10005;</span>', [ 'span' => [ 'style' => [] ] ] ); ?>
 						</span>
 						<span class="screen-reader-text"><?php echo $result['can_bypass'] ? esc_html__( 'Pass', 'newspack-plugin' ) : esc_html__( 'Fail', 'newspack-plugin' ); ?></span>
-						<?php echo esc_html( $gate['title'] ); ?>
+						<?php
+						echo wp_kses(
+							sprintf(
+								/* translators: 1: gate edit URL. 2: gate title. */
+								__( '<a href="%1$s">%2$s</a>', 'newspack-plugin' ),
+								esc_url( admin_url( 'admin.php?page=newspack-audience-access-control#/edit/' . $gate['id'] ) ),
+								$gate['title']
+							),
+							[ 'a' => [ 'href' => [] ] ]
+						);
+						?>
 					</th>
 					<td>
 						<?php if ( empty( $result['groups'] ) ) : ?>
@@ -248,7 +305,14 @@ class User_Gate_Access {
 											</span>
 											<span class="screen-reader-text"><?php echo $rule['passes'] ? esc_html__( 'Pass', 'newspack-plugin' ) : esc_html__( 'Fail', 'newspack-plugin' ); ?></span>
 											<?php echo esc_html( $rule['name'] ); ?>:
-											<code><?php echo esc_html( self::format_rule_value( $rule['slug'], $rule['value'] ) ); ?></code>
+											<code>
+												<?php
+												echo wp_kses(
+													self::format_rule_value( $rule['slug'], $rule['value'] ),
+													[ 'a' => [ 'href' => [] ] ]
+												);
+												?>
+											</code>
 										</li>
 									<?php endforeach; ?>
 								</ul>
