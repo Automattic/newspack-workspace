@@ -8,6 +8,9 @@
 use Newspack\Access_Attribution;
 use Newspack\Access_Rules;
 use Newspack\Content_Gate;
+use Newspack\Group_Subscription;
+use Newspack\Group_Subscription_Settings;
+use Newspack\Institution;
 use Newspack\Reader_Activation;
 use Newspack\User_Gate_Access;
 
@@ -47,6 +50,7 @@ class Newspack_Test_User_Gate_Access extends WP_UnitTestCase {
 		self::$admin_id = $this->factory->user->create( [ 'role' => 'administrator' ] );
 		Access_Attribution::reset_memo();
 		Access_Rules::flush_one_time_purchase_memo();
+		User_Gate_Access::reset_memo();
 	}
 
 	/**
@@ -296,14 +300,46 @@ class Newspack_Test_User_Gate_Access extends WP_UnitTestCase {
 				'products'       => [ 999 ],
 			]
 		);
+		// Group subscriptions owned by someone else, where the reader is a member:
+		// an active one grants access, a cancelled one does not.
+		$manager_id      = $this->factory->user->create( [ 'role' => 'subscriber' ] );
+		$group           = $this->create_group_subscription( $manager_id, 'active', [ 101 ] );
+		$cancelled_group = $this->create_group_subscription( $manager_id, 'cancelled', [ 101 ] );
+		add_user_meta( self::$user_id, Group_Subscription::GROUP_SUBSCRIPTION_USER_META_KEY, $group->get_id() );
+		add_user_meta( self::$user_id, Group_Subscription::GROUP_SUBSCRIPTION_USER_META_KEY, $cancelled_group->get_id() );
 
 		$links = User_Gate_Access::get_granting_entity_links( 'subscription', [ 101 ], self::$user_id, [ 'payment_recovery_grace' => true ] );
 
-		$this->assertCount( 1, $links );
+		$this->assertCount( 2, $links );
 		$this->assertStringContainsString( '#' . $owned->get_id() . '</a>', $links[0] );
-		$this->assertStringContainsString( 'post=' . $owned->get_id() . '&#038;action=edit', $links[0], 'The label must link to the subscription edit screen.' );
-		$this->assertStringNotContainsString( '#' . $cancelled->get_id() . '<', implode( '', $links ) );
-		$this->assertStringNotContainsString( '#' . $unrelated->get_id() . '<', implode( '', $links ) );
+		$this->assertStringContainsString( 'href="' . esc_url( $owned->get_edit_order_url() ) . '"', $links[0], 'The label must link to the subscription edit screen.' );
+		$this->assertStringContainsString( '#' . $group->get_id() . '</a>', $links[1], 'A group subscription the reader is a member of grants access and is listed.' );
+		$joined = implode( '', $links );
+		$this->assertStringNotContainsString( '#' . $cancelled->get_id() . '<', $joined );
+		$this->assertStringNotContainsString( '#' . $unrelated->get_id() . '<', $joined );
+		$this->assertStringNotContainsString( '#' . $cancelled_group->get_id() . '<', $joined );
+	}
+
+	/**
+	 * Create a subscription with group membership enabled.
+	 *
+	 * @param int    $customer_id Owner user ID.
+	 * @param string $status      Subscription status.
+	 * @param int[]  $products    Product IDs on the subscription.
+	 *
+	 * @return \WC_Subscription
+	 */
+	private function create_group_subscription( $customer_id, $status, $products ) {
+		$subscription = \wcs_create_subscription(
+			[
+				'customer_id'    => $customer_id,
+				'status'         => $status,
+				'billing_period' => 'month',
+				'products'       => $products,
+			]
+		);
+		$subscription->update_meta_data( Group_Subscription_Settings::GROUP_SUBSCRIPTION_META_PREFIX . 'enabled', 'yes' );
+		return $subscription;
 	}
 
 	/**
@@ -379,18 +415,68 @@ class Newspack_Test_User_Gate_Access extends WP_UnitTestCase {
 			'duration_unit'  => 'days',
 		];
 
-		$links = User_Gate_Access::get_granting_entity_links( 'one_time_purchase', $value, self::$user_id );
+		// A guest checkout under the reader's email counts as theirs, as it does
+		// for the rule itself.
+		$guest = \wc_create_order(
+			[
+				'customer_id'   => 0,
+				'billing_email' => 'reader@example.com',
+				'status'        => 'processing',
+				'total'         => 10,
+				'date_created'  => gmdate( 'Y-m-d H:i:s' ),
+				'items'         => [ new \WC_Order_Item_Product( [ 'product_id' => 201 ] ) ],
+			]
+		);
 
-		$this->assertCount( 1, $links );
-		$this->assertStringContainsString( '#' . $recent->get_id() . '</a>', $links[0] );
-		$this->assertStringContainsString( 'post=' . $recent->get_id() . '&#038;action=edit', $links[0], 'The label must link to the order edit screen.' );
-		$this->assertStringNotContainsString( '#' . $stale->get_id() . '<', $links[0] );
-		$this->assertStringNotContainsString( '#' . $refund->get_id() . '<', $links[0] );
+		$links  = User_Gate_Access::get_granting_entity_links( 'one_time_purchase', $value, self::$user_id );
+		$joined = implode( '', $links );
+
+		$this->assertCount( 2, $links );
+		$this->assertStringContainsString( '#' . $recent->get_id() . '</a>', $joined );
+		$this->assertStringContainsString( '#' . $guest->get_id() . '</a>', $joined, 'A guest order under the reader\'s billing email is listed.' );
+		$this->assertStringContainsString( 'href="' . esc_url( $recent->get_edit_order_url() ) . '"', $joined, 'The label must link to the order edit screen.' );
+		$this->assertStringNotContainsString( '#' . $stale->get_id() . '<', $joined );
+		$this->assertStringNotContainsString( '#' . $refund->get_id() . '<', $joined );
 
 		// Lifetime access has no window, so the older order counts too.
 		$value['duration_unit'] = 'forever';
 		$links                  = User_Gate_Access::get_granting_entity_links( 'one_time_purchase', $value, self::$user_id );
-		$this->assertCount( 2, $links, 'A forever rule lists every paid order for the product.' );
+		$this->assertCount( 3, $links, 'A forever rule lists every paid order for the product.' );
+	}
+
+	/**
+	 * A lifetime rule can match every order a long-standing customer placed;
+	 * the report lists a handful and trails off rather than the whole ledger.
+	 */
+	public function test_one_time_purchase_listing_is_capped() {
+		\wc_create_mock_product(
+			[
+				'id'   => 201,
+				'name' => 'Day Pass',
+			]
+		);
+		for ( $i = 0; $i < User_Gate_Access::GRANTING_ORDERS_LIMIT + 2; $i++ ) {
+			\wc_create_order(
+				[
+					'customer_id'  => self::$user_id,
+					'status'       => 'completed',
+					'total'        => 10,
+					'date_created' => gmdate( 'Y-m-d H:i:s', strtotime( "-$i days" ) ),
+					'items'        => [ new \WC_Order_Item_Product( [ 'product_id' => 201 ] ) ],
+				]
+			);
+		}
+		$value = [
+			'product_ids'    => [ 201 ],
+			'duration_value' => 0,
+			'duration_unit'  => 'forever',
+		];
+
+		$links = User_Gate_Access::get_granting_entity_links( 'one_time_purchase', $value, self::$user_id );
+
+		$this->assertCount( User_Gate_Access::GRANTING_ORDERS_LIMIT + 1, $links );
+		$this->assertSame( '…', end( $links ), 'The list ends with an ellipsis when more orders qualify.' );
+		$this->assertStringNotContainsString( '<', end( $links ) );
 	}
 
 	/**
@@ -400,9 +486,20 @@ class Newspack_Test_User_Gate_Access extends WP_UnitTestCase {
 	public function test_non_ownership_rules_and_filter_granted_access_list_nothing() {
 		$this->assertSame( [], User_Gate_Access::get_granting_entity_links( 'email_domain', 'example.com', self::$user_id ) );
 
+		// A cancelled subscription is the only local record; the filter forcing the
+		// rule to pass must not turn it into a granting one.
+		\wcs_create_subscription(
+			[
+				'customer_id'    => self::$user_id,
+				'status'         => 'cancelled',
+				'billing_period' => 'month',
+				'products'       => [ 101 ],
+			]
+		);
 		add_filter( 'newspack_access_rules_has_active_subscription', '__return_true' );
+		$this->assertTrue( Access_Rules::has_active_subscription( self::$user_id, [ 101 ] ), 'The filter grants access.' );
 		$links = User_Gate_Access::get_granting_entity_links( 'subscription', [ 101 ], self::$user_id );
-		remove_all_filters( 'newspack_access_rules_has_active_subscription' );
+		remove_filter( 'newspack_access_rules_has_active_subscription', '__return_true' );
 
 		$this->assertSame( [], $links );
 	}
@@ -484,5 +581,84 @@ class Newspack_Test_User_Gate_Access extends WP_UnitTestCase {
 		$this->assertStringNotContainsString( '<i>', $output );
 		$this->assertStringContainsString( 'Plan &lt;b&gt;Bold&lt;/b&gt; &amp; Co', $output );
 		$this->assertStringContainsString( 'Gate &lt;i&gt;Italic&lt;/i&gt;', $output );
+	}
+
+	/**
+	 * Free-text rule values (email domains, reader data) are stored as typed, so
+	 * the report prints them as text: markup in a value must not become markup
+	 * on the page.
+	 */
+	public function test_render_escapes_free_text_rule_values() {
+		wp_set_current_user( self::$admin_id );
+		$this->create_gate_with_rules(
+			'Domain Gate',
+			[
+				[
+					[
+						'slug'  => 'email_domain',
+						'value' => 'example.com<a href="https://evil.example">x</a>',
+					],
+				],
+			]
+		);
+
+		ob_start();
+		User_Gate_Access::render_user_gate_access( get_user_by( 'id', self::$user_id ) );
+		$output = ob_get_clean();
+
+		$this->assertStringNotContainsString( 'href="https://evil.example"', $output );
+		$this->assertStringContainsString( '<code>example.com&lt;a href=&quot;https://evil.example&quot;&gt;x&lt;/a&gt;</code>', $output );
+	}
+
+	/**
+	 * A variation has no edit screen of its own, so its link goes to the parent
+	 * product's editor.
+	 */
+	public function test_variation_links_to_its_parent_product() {
+		wp_set_current_user( self::$admin_id );
+		$parent_id = $this->factory->post->create( [ 'post_title' => 'Membership' ] );
+		\wc_create_mock_product(
+			[
+				'id'        => 102,
+				'name'      => 'Membership - Annual',
+				'parent_id' => $parent_id,
+			]
+		);
+
+		$format_rule_value_method = new ReflectionMethod( User_Gate_Access::class, 'format_rule_value' );
+		$format_rule_value_method->setAccessible( true );
+		$html = $format_rule_value_method->invoke( null, 'subscription', [ 102 ] );
+
+		$this->assertStringContainsString( 'href="' . esc_url( get_edit_post_link( $parent_id ) ) . '"', $html );
+		$this->assertStringContainsString( '>Membership - Annual</a>', $html );
+	}
+
+	/**
+	 * Only a published institution links to its screen; a draft or trashed one
+	 * is named without a link, and a missing one shows its ID.
+	 */
+	public function test_institution_links_only_when_published() {
+		$published = $this->factory->post->create(
+			[
+				'post_type'   => Institution::POST_TYPE,
+				'post_status' => 'publish',
+				'post_title'  => 'State University',
+			]
+		);
+		$trashed   = $this->factory->post->create(
+			[
+				'post_type'   => Institution::POST_TYPE,
+				'post_status' => 'trash',
+				'post_title'  => 'Old College',
+			]
+		);
+
+		$format_rule_value_method = new ReflectionMethod( User_Gate_Access::class, 'format_rule_value' );
+		$format_rule_value_method->setAccessible( true );
+		$html = $format_rule_value_method->invoke( null, 'institution', [ $published, $trashed, 999999 ] );
+
+		$this->assertStringContainsString( '#/institutions/' . $published . '">State University</a>', $html );
+		$this->assertStringContainsString( ', Old College, #999999', $html );
+		$this->assertStringNotContainsString( '#/institutions/' . $trashed, $html );
 	}
 }

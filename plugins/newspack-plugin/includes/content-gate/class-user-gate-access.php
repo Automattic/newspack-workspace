@@ -160,9 +160,8 @@ class User_Gate_Access {
 		}
 
 		return sprintf(
-			/* translators: %s: value or comma-separated list of values. */
 			'<code>%s</code>',
-			is_array( $value ) ? implode( ', ', $value ) : (string) $value
+			esc_html( is_array( $value ) ? implode( ', ', $value ) : (string) $value )
 		);
 	}
 
@@ -203,13 +202,18 @@ class User_Gate_Access {
 		$names = array_map(
 			function( $institution_id ) {
 				$institution = get_post( $institution_id );
-				if ( $institution && Institution::POST_TYPE === $institution->post_type ) {
-					return self::link(
-						admin_url( 'admin.php?page=newspack-audience-access-control#/institutions/' . intval( $institution_id ) ),
-						$institution->post_title
-					);
+				if ( ! $institution || Institution::POST_TYPE !== $institution->post_type ) {
+					return '#' . intval( $institution_id );
 				}
-				return '#' . intval( $institution_id );
+				// Only a published institution has a screen worth linking to; a
+				// draft or trashed one is named but left unlinked.
+				if ( 'publish' !== $institution->post_status ) {
+					return esc_html( $institution->post_title );
+				}
+				return self::link(
+					admin_url( 'admin.php?page=newspack-audience-access-control#/institutions/' . intval( $institution_id ) ),
+					$institution->post_title
+				);
 			},
 			$institution_ids
 		);
@@ -232,90 +236,96 @@ class User_Gate_Access {
 	}
 
 	/**
+	 * How many granting orders a rule lists before trailing off with an ellipsis.
+	 * A lifetime one-time-purchase rule can match every renewal order a
+	 * long-standing customer ever placed; the report needs a few examples, not
+	 * the whole ledger.
+	 *
+	 * @var int
+	 */
+	const GRANTING_ORDERS_LIMIT = 10;
+
+	/**
+	 * Request-scoped memo of granting-entity links, keyed by rule, value, user,
+	 * and grace setting, so gates that share a rule don't repeat the lookups.
+	 *
+	 * @var array<string,string[]>
+	 */
+	private static $granting_links_memo = [];
+
+	/**
+	 * Clear the request memo. Used by tests.
+	 */
+	public static function reset_memo() {
+		self::$granting_links_memo = [];
+	}
+
+	/**
 	 * Links to the specific subscriptions or orders that satisfy a passing rule
 	 * for the user.
 	 *
 	 * Only the two ownership rules map to concrete records a publisher can open;
 	 * every other rule returns nothing. Access granted by a third-party filter
 	 * (e.g. a Newspack Network sibling site) has no local record, so a rule can
-	 * pass with an empty list here.
+	 * pass with an empty list here. Callers own the capability check: this
+	 * returns admin edit URLs for whichever user it is asked about.
 	 *
 	 * @param string $slug    Rule slug.
 	 * @param mixed  $value   Rule value.
 	 * @param int    $user_id User ID.
 	 * @param array  $context Evaluation context from evaluate_gate_for_user().
 	 *
-	 * @return string[] Escaped `<a>` links labelled `#<id>`, safe to print through wp_kses() with `a[href]` allowed.
+	 * @return string[] Escaped items labelled `#<id>` (an `<a>` when the record has an
+	 *                  edit screen, plain text otherwise), safe to print through
+	 *                  wp_kses() with `a[href]` allowed. When more orders qualify
+	 *                  than GRANTING_ORDERS_LIMIT, the last item is an ellipsis.
 	 */
 	public static function get_granting_entity_links( $slug, $value, $user_id, $context = [] ) {
-		$entities = [];
+		$grace    = (bool) ( $context['payment_recovery_grace'] ?? true );
+		$memo_key = $slug . ':' . $user_id . ':' . md5( wp_json_encode( $value ) ) . ':' . ( $grace ? '1' : '0' );
+		if ( isset( self::$granting_links_memo[ $memo_key ] ) ) {
+			return self::$granting_links_memo[ $memo_key ];
+		}
+
+		$entities  = [];
+		$truncated = false;
 		if ( 'subscription' === $slug && function_exists( 'wcs_get_subscription' ) ) {
-			foreach ( self::get_granting_subscription_ids( $value, $user_id, $context ) as $subscription_id ) {
-				$entities[ $subscription_id ] = \wcs_get_subscription( $subscription_id );
+			// A malformed value fails the rule closed, so there is nothing to list.
+			if ( ! Access_Rules::is_malformed_options_backed_value( $value ) ) {
+				// Evaluate under the gate's own settings — notably payment-recovery
+				// grace — rather than the callback's defaults.
+				$subscription_ids = Access_Rules::with_evaluation_context(
+					$context,
+					function () use ( $user_id, $value ) {
+						return Access_Rules::get_active_subscription_ids( $user_id, $value );
+					}
+				);
+				foreach ( $subscription_ids as $subscription_id ) {
+					$entities[ $subscription_id ] = \wcs_get_subscription( $subscription_id );
+				}
 			}
 		} elseif ( 'one_time_purchase' === $slug && function_exists( 'wc_get_order' ) ) {
-			foreach ( Access_Rules::get_one_time_purchase_order_ids( $user_id, $value ) as $order_id ) {
+			$order_ids = Access_Rules::get_one_time_purchase_order_ids( $user_id, $value, self::GRANTING_ORDERS_LIMIT + 1 );
+			if ( count( $order_ids ) > self::GRANTING_ORDERS_LIMIT ) {
+				$order_ids = array_slice( $order_ids, 0, self::GRANTING_ORDERS_LIMIT );
+				$truncated = true;
+			}
+			foreach ( $order_ids as $order_id ) {
 				$entities[ $order_id ] = \wc_get_order( $order_id );
 			}
 		}
 
 		$links = [];
 		foreach ( $entities as $id => $entity ) {
-			$url = $entity && method_exists( $entity, 'get_edit_order_url' ) ? $entity->get_edit_order_url() : '';
+			$url     = $entity && method_exists( $entity, 'get_edit_order_url' ) ? $entity->get_edit_order_url() : '';
 			$links[] = self::link( $url, '#' . $id );
 		}
-		return $links;
-	}
-
-	/**
-	 * IDs of the user's subscriptions that satisfy a subscription rule: owned
-	 * subscriptions plus group subscriptions the user is a member of, using
-	 * the same status and payment-recovery-grace reading as the rule itself.
-	 *
-	 * @param mixed $value   Rule value: product IDs, or empty for any subscription.
-	 * @param int   $user_id User ID.
-	 * @param array $context Evaluation context from evaluate_gate_for_user().
-	 *
-	 * @return int[] Subscription IDs.
-	 */
-	private static function get_granting_subscription_ids( $value, $user_id, $context ) {
-		// A malformed value fails the rule closed, so there is nothing to list.
-		if ( Access_Rules::is_malformed_options_backed_value( $value ) ) {
-			return [];
+		if ( $truncated ) {
+			$links[] = esc_html( '…' );
 		}
-		$product_ids = is_array( $value ) ? $value : [];
-		return Access_Rules::with_evaluation_context(
-			$context,
-			function () use ( $product_ids, $user_id ) {
-				$grace = (bool) Access_Rules::get_evaluation_context( 'payment_recovery_grace', true );
-				$ids   = WooCommerce_Connection::get_active_subscriptions_for_user( $user_id, $product_ids, $grace );
 
-				if ( class_exists( __NAMESPACE__ . '\\Group_Subscription' ) ) {
-					foreach ( Group_Subscription::get_group_subscriptions_for_user( $user_id ) as $subscription ) {
-						if ( ! $subscription ) {
-							continue;
-						}
-						$grants_access = $subscription->has_status( WooCommerce_Connection::ACTIVE_SUBSCRIPTION_STATUSES )
-							|| ( $grace && WooCommerce_Connection::is_subscription_in_payment_recovery( $subscription ) );
-						if ( ! $grants_access ) {
-							continue;
-						}
-						$has_product = empty( $product_ids );
-						foreach ( $product_ids as $product_id ) {
-							if ( $subscription->has_product( $product_id ) ) {
-								$has_product = true;
-								break;
-							}
-						}
-						if ( $has_product ) {
-							$ids[] = $subscription->get_id();
-						}
-					}
-				}
-
-				return array_values( array_unique( array_map( 'intval', $ids ) ) );
-			}
-		);
+		self::$granting_links_memo[ $memo_key ] = $links;
+		return $links;
 	}
 
 	/**

@@ -63,6 +63,14 @@ class Access_Rules {
 	private static $one_time_purchase_memo = [];
 
 	/**
+	 * Request-scoped memo of one-time purchase order listings, keyed by user ID,
+	 * rule value, and limit. Flushed together with $one_time_purchase_memo.
+	 *
+	 * @var array<string,int[]>
+	 */
+	private static $one_time_purchase_orders_memo = [];
+
+	/**
 	 * Reader ID the email-domain rule should treat as verified for the duration of a
 	 * hypothetical evaluation. Zero outside one. See with_assumed_verification().
 	 *
@@ -744,46 +752,7 @@ class Access_Rules {
 			return false;
 		}
 
-		$has_subscription = false;
-
-		// Whether on-hold subscriptions in payment recovery (failed-payment retry
-		// window) still grant access. Controlled per-gate by the custom_access
-		// `payment_recovery_grace` setting; defaults to ON so gates saved before
-		// the setting existed — and evaluations outside a gate context — keep
-		// paying readers' access while their payment is being retried.
-		$payment_recovery_grace = (bool) self::get_evaluation_context( 'payment_recovery_grace', true );
-
-		// Check user's own subscriptions.
-		if ( ! empty( WooCommerce_Connection::get_active_subscriptions_for_user( $user_id, $product_ids, $payment_recovery_grace ) ) ) {
-			$has_subscription = true;
-		}
-
-		// Check group subscriptions the user is a member of.
-		if ( ! $strict && ! $has_subscription && function_exists( 'wcs_get_subscription' ) ) {
-			$group_subscriptions = Group_Subscription::get_group_subscriptions_for_user( $user_id );
-			foreach ( $group_subscriptions as $subscription ) {
-				if ( ! $subscription ) {
-					continue;
-				}
-				$grants_access = $subscription->has_status( WooCommerce_Connection::ACTIVE_SUBSCRIPTION_STATUSES )
-					|| ( $payment_recovery_grace && WooCommerce_Connection::is_subscription_in_payment_recovery( $subscription ) );
-				if ( ! $grants_access ) {
-					continue;
-				}
-				// If no product filter, any active group subscription grants access.
-				if ( empty( $product_ids ) ) {
-					$has_subscription = true;
-					break;
-				}
-				// Check if the subscription has any of the required products.
-				foreach ( $product_ids as $product_id ) {
-					if ( $subscription->has_product( $product_id ) ) {
-						$has_subscription = true;
-						break 2;
-					}
-				}
-			}
-		}
+		$has_subscription = ! empty( self::get_active_subscription_ids( $user_id, $product_ids, $strict, 1 ) );
 
 		/**
 		 * Filters whether a user has an active subscription for the given products.
@@ -794,6 +763,71 @@ class Access_Rules {
 		 * @param bool  $strict           If true, only consider active subscriptions owned by $user_id (ignore group subscription memberships).
 		 */
 		return apply_filters( 'newspack_access_rules_has_active_subscription', $has_subscription, $user_id, $product_ids, $strict );
+	}
+
+	/**
+	 * IDs of the user's subscriptions that satisfy a subscription rule: owned
+	 * subscriptions, plus (unless $strict) group subscriptions the user is a
+	 * member of. This is the listing behind has_active_subscription(); keeping
+	 * the two on one code path is what stops the report and the rule from
+	 * disagreeing about statuses, payment-recovery grace, or gifting.
+	 *
+	 * The `newspack_access_rules_has_active_subscription` filter is not run
+	 * here, so access granted by a third party (e.g. a Newspack Network sibling
+	 * site) has no ID in this list even though the rule passes.
+	 *
+	 * @param int   $user_id     User ID.
+	 * @param mixed $product_ids Required product IDs; empty means any subscription qualifies.
+	 * @param bool  $strict      If true, ignore group subscription memberships.
+	 * @param int   $max_matches Stop after this many IDs; 0 for all.
+	 * @return int[] Subscription IDs.
+	 */
+	public static function get_active_subscription_ids( $user_id, $product_ids, $strict = false, $max_matches = 0 ) {
+		$product_ids = is_array( $product_ids ) ? $product_ids : [];
+
+		// Whether on-hold subscriptions in payment recovery (failed-payment retry
+		// window) still grant access. Controlled per-gate by the custom_access
+		// `payment_recovery_grace` setting; defaults to ON so gates saved before
+		// the setting existed — and evaluations outside a gate context — keep
+		// paying readers' access while their payment is being retried.
+		$payment_recovery_grace = (bool) self::get_evaluation_context( 'payment_recovery_grace', true );
+
+		$ids = array_map( 'intval', WooCommerce_Connection::get_active_subscriptions_for_user( $user_id, $product_ids, $payment_recovery_grace ) );
+		if ( $max_matches > 0 && count( $ids ) >= $max_matches ) {
+			return array_slice( array_values( array_unique( $ids ) ), 0, $max_matches );
+		}
+
+		// Group subscriptions the user is a member of.
+		if ( ! $strict && function_exists( 'wcs_get_subscription' ) ) {
+			foreach ( Group_Subscription::get_group_subscriptions_for_user( $user_id ) as $subscription ) {
+				if ( ! $subscription ) {
+					continue;
+				}
+				$grants_access = $subscription->has_status( WooCommerce_Connection::ACTIVE_SUBSCRIPTION_STATUSES )
+					|| ( $payment_recovery_grace && WooCommerce_Connection::is_subscription_in_payment_recovery( $subscription ) );
+				if ( ! $grants_access ) {
+					continue;
+				}
+				// If no product filter, any active group subscription grants access.
+				$has_product = empty( $product_ids );
+				foreach ( $product_ids as $product_id ) {
+					if ( $subscription->has_product( $product_id ) ) {
+						$has_product = true;
+						break;
+					}
+				}
+				if ( ! $has_product ) {
+					continue;
+				}
+				$ids[] = (int) $subscription->get_id();
+				if ( $max_matches > 0 && count( array_unique( $ids ) ) >= $max_matches ) {
+					break;
+				}
+			}
+		}
+
+		$ids = array_values( array_unique( $ids ) );
+		return $max_matches > 0 ? array_slice( $ids, 0, $max_matches ) : $ids;
 	}
 
 	/**
@@ -859,7 +893,8 @@ class Access_Rules {
 	 * Primarily for tests; in production the memo is per-request by nature.
 	 */
 	public static function flush_one_time_purchase_memo() {
-		self::$one_time_purchase_memo = [];
+		self::$one_time_purchase_memo        = [];
+		self::$one_time_purchase_orders_memo = [];
 	}
 
 	/**
@@ -951,7 +986,9 @@ class Access_Rules {
 	 * value the same way (paid statuses only, order creation date anchors the
 	 * duration, misconfigured durations grant nothing), but it always lists from
 	 * the customer's order history rather than wc_customer_bought_product(),
-	 * since that helper can only answer whether a purchase exists.
+	 * since that helper can only answer whether a purchase exists. A lifetime
+	 * rule therefore walks the whole history, which is why callers pass a
+	 * $limit and why the result is memoized for the request.
 	 *
 	 * Unlike has_one_time_purchase() this does not run the
 	 * `newspack_access_rules_has_one_time_purchase` filter, so access granted by
@@ -959,32 +996,41 @@ class Access_Rules {
 	 *
 	 * @param int   $user_id User ID.
 	 * @param array $args    Rule value, as accepted by has_one_time_purchase().
+	 * @param int   $limit   Stop after this many orders; 0 for all.
 	 * @return int[] Order IDs, newest first.
 	 */
-	public static function get_one_time_purchase_order_ids( $user_id, $args ) {
+	public static function get_one_time_purchase_order_ids( $user_id, $args, $limit = 0 ) {
 		$value = self::sanitize_one_time_purchase_value( $args );
 		if ( empty( $value['product_ids'] ) || ! function_exists( 'wc_get_orders' ) ) {
 			return [];
 		}
+		$memo_key = $user_id . ':' . md5( wp_json_encode( $value ) ) . ':' . (int) $limit;
+		if ( isset( self::$one_time_purchase_orders_memo[ $memo_key ] ) ) {
+			return self::$one_time_purchase_orders_memo[ $memo_key ];
+		}
 		$user     = \get_userdata( $user_id );
 		$email    = $user ? $user->user_email : '';
 		$customer = array_values( array_filter( [ $user_id, $email ] ) );
+		$cutoff   = false;
 		if ( empty( $customer ) ) {
-			return [];
-		}
-		if ( 'forever' === $value['duration_unit'] ) {
+			$order_ids = [];
+		} elseif ( 'forever' === $value['duration_unit'] ) {
 			$cutoff = null;
 		} elseif ( in_array( $value['duration_unit'], [ 'days', 'months' ], true ) && $value['duration_value'] > 0 ) {
 			$cutoff = strtotime( sprintf( '-%d %s', $value['duration_value'], $value['duration_unit'] ) );
 		} else {
-			return [];
+			$order_ids = [];
 		}
-		return array_map(
-			function ( $order ) {
-				return (int) $order->get_id();
-			},
-			self::get_paid_orders_with_products( $customer, $value['product_ids'], $cutoff )
-		);
+		if ( false !== $cutoff ) {
+			$order_ids = array_map(
+				function ( $order ) {
+					return (int) $order->get_id();
+				},
+				self::get_paid_orders_with_products( $customer, $value['product_ids'], $cutoff, (int) $limit )
+			);
+		}
+		self::$one_time_purchase_orders_memo[ $memo_key ] = $order_ids;
+		return $order_ids;
 	}
 
 	/**
@@ -998,17 +1044,27 @@ class Access_Rules {
 	 * @return bool
 	 */
 	private static function customer_bought_product_after( $customer, $product_ids, $cutoff ) {
-		return ! empty( self::get_paid_orders_with_products( $customer, $product_ids, $cutoff ) );
+		return ! empty( self::get_paid_orders_with_products( $customer, $product_ids, $cutoff, 1 ) );
 	}
 
 	/**
-	 * The customer's paid orders containing one of the given products, optionally
-	 * limited to orders created after a cutoff timestamp.
+	 * Orders are fetched in pages of this many.
 	 *
-	 * The query is bounded by customer, paid statuses, and the date window, so it
-	 * stays cheap on front-end requests even without a persistent cache. The
-	 * `customer` parameter matches the user ID or the billing email, so guest
-	 * orders count — mirroring wc_customer_bought_product() on the lifetime path.
+	 * @var int
+	 */
+	const PAID_ORDERS_PAGE_SIZE = 50;
+
+	/**
+	 * The customer's paid orders containing one of the given products, newest
+	 * first, optionally limited to orders created after a cutoff timestamp.
+	 *
+	 * Orders are read newest-first in pages and the walk stops as soon as
+	 * $max_matches is reached, so the rule evaluator (which needs one match)
+	 * hydrates at most one page of a customer's history on a front-end request.
+	 * A null $cutoff walks the whole history and is only appropriate for a
+	 * bounded, admin-side caller. The `customer` parameter matches the user ID
+	 * or the billing email, so guest orders count — mirroring
+	 * wc_customer_bought_product() on the lifetime path.
 	 *
 	 * @param array    $customer    Non-empty list of user IDs and/or billing emails to
 	 *                              match. Callers must reject an empty list: both
@@ -1017,33 +1073,58 @@ class Access_Rules {
 	 * @param int[]    $product_ids Product IDs to look for.
 	 * @param int|null $cutoff      Unix timestamp orders must be created after, or
 	 *                              null for the customer's whole order history.
+	 * @param int      $max_matches Stop after this many matching orders; 0 for all.
 	 *
 	 * @return \WC_Order[] Matching orders, newest first.
 	 */
-	private static function get_paid_orders_with_products( $customer, $product_ids, $cutoff ) {
+	private static function get_paid_orders_with_products( $customer, $product_ids, $cutoff, $max_matches = 0 ) {
 		$paid_statuses = function_exists( 'wc_get_is_paid_statuses' ) ? \wc_get_is_paid_statuses() : [ 'processing', 'completed' ];
 		$query         = [
 			'customer' => $customer,
 			'status'   => $paid_statuses,
-			'limit'    => -1,
+			'orderby'  => 'date',
+			'order'    => 'DESC',
+			'limit'    => self::PAID_ORDERS_PAGE_SIZE,
 			'return'   => 'objects',
 		];
 		if ( null !== $cutoff ) {
 			$query['date_created'] = '>' . $cutoff;
 		}
-		$orders  = \wc_get_orders( $query );
 		$matches = [];
-		foreach ( $orders as $order ) {
-			foreach ( $order->get_items() as $item ) {
-				$item_product_id   = method_exists( $item, 'get_product_id' ) ? (int) $item->get_product_id() : 0;
-				$item_variation_id = method_exists( $item, 'get_variation_id' ) ? (int) $item->get_variation_id() : 0;
-				if ( in_array( $item_product_id, $product_ids, true ) || ( $item_variation_id && in_array( $item_variation_id, $product_ids, true ) ) ) {
+		for ( $page = 1; true; $page++ ) {
+			$query['page'] = $page;
+			$orders        = \wc_get_orders( $query );
+			foreach ( $orders as $order ) {
+				if ( self::order_has_product( $order, $product_ids ) ) {
 					$matches[] = $order;
-					break;
+					if ( $max_matches > 0 && count( $matches ) >= $max_matches ) {
+						return $matches;
+					}
 				}
 			}
+			if ( count( $orders ) < self::PAID_ORDERS_PAGE_SIZE ) {
+				return $matches;
+			}
 		}
-		return $matches;
+	}
+
+	/**
+	 * Whether an order has a line item for one of the given products, matching
+	 * on the variation ID as well as the parent product ID.
+	 *
+	 * @param \WC_Order $order       Order.
+	 * @param int[]     $product_ids Product IDs to look for.
+	 * @return bool
+	 */
+	private static function order_has_product( $order, $product_ids ) {
+		foreach ( $order->get_items() as $item ) {
+			$item_product_id   = method_exists( $item, 'get_product_id' ) ? (int) $item->get_product_id() : 0;
+			$item_variation_id = method_exists( $item, 'get_variation_id' ) ? (int) $item->get_variation_id() : 0;
+			if ( in_array( $item_product_id, $product_ids, true ) || ( $item_variation_id && in_array( $item_variation_id, $product_ids, true ) ) ) {
+				return true;
+			}
+		}
+		return false;
 	}
 
 	/**
