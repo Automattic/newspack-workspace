@@ -701,8 +701,9 @@ class Test_Memberships_Audit extends WP_UnitTestCase {
 	 * having: the pause happens between batches (not after the last one, where it
 	 * would only delay the operator), and --sleep=0 removes it entirely.
 	 *
-	 * Timed with a deliberately small pause: this asserts the wiring, not the wall
-	 * clock, so it stays fast and does not flake on a loaded machine.
+	 * The pause is recorded rather than taken, so this asserts the wiring and not
+	 * the wall clock: a timed version has to be slow enough for the sleep to
+	 * dominate query time, which is exactly the margin a loaded CI runner eats.
 	 */
 	public function test_the_batch_walk_paces_itself_between_batches() {
 		$batch_size = ( new \ReflectionClass( Memberships_Audit::class ) )->getConstant( 'QUERY_BATCH_SIZE' );
@@ -723,21 +724,54 @@ class Test_Memberships_Audit extends WP_UnitTestCase {
 			'post_status' => 'publish',
 		];
 
-		// Half a second, so the pause dominates the query time rather than competing
-		// with it: differencing two timed runs would make this flake on a busy machine.
-		$pause = 0.5;
+		$pause    = 0.5;
+		$pauses   = [];
+		$recorder = function ( $seconds ) use ( &$pauses ) {
+			$pauses[] = $seconds;
+		};
 
-		$started = microtime( true );
-		$walk->invoke( null, $args, function () {}, 0.0 );
-		$unpaced = microtime( true ) - $started;
+		$walk->invoke( null, $args, function () {}, 0.0, $recorder );
+		$this->assertSame( [], $pauses, '--sleep=0 does not pause at all.' );
 
-		$started = microtime( true );
-		$walk->invoke( null, $args, function () {}, $pause );
-		$paced = microtime( true ) - $started;
+		$walk->invoke( null, $args, function () {}, $pause, $recorder );
+		$this->assertSame(
+			[ $pause ],
+			$pauses,
+			'Exactly one pause, of the requested length: it separates the two batches, and none follows the last.'
+		);
+	}
 
-		$this->assertLessThan( $pause, $unpaced, '--sleep=0 does not pause at all.' );
-		$this->assertGreaterThanOrEqual( $pause, $paced, 'One pause separates the two batches.' );
-		$this->assertLessThan( $pause * 2, $paced, 'Exactly one pause: the walk does not also sleep after the final batch.' );
+	/**
+	 * The evidence column tells "owns nothing" apart from "could not be asked".
+	 *
+	 * `member_own_access_subscriptions` is the one column an operator reads to take
+	 * a reader off the list that grants free subscriptions. The resolver behind it
+	 * answers [] for every member on a site running Memberships without
+	 * Subscriptions, which is indistinguishable from a confident "owns nothing" —
+	 * and would hand the site's whole paid population to the grant step, each
+	 * reader receiving a subscription they did not need (on a one-per-customer
+	 * product, blocking a later purchase of their own).
+	 */
+	public function test_the_evidence_column_separates_owning_nothing_from_being_unanswerable() {
+		$describe_own_subscriptions_method = new \ReflectionMethod( Memberships_Audit::class, 'describe_own_access_subscriptions' );
+		$describe_own_subscriptions_method->setAccessible( true );
+
+		$member_id = self::factory()->user->create();
+
+		// Answerable, and the member holds nothing: the placeholder is the truth.
+		$this->assertSame(
+			'—',
+			$describe_own_subscriptions_method->invoke( null, $member_id, '—', true ),
+			'A member the resolver can answer for, holding nothing, reports the placeholder.'
+		);
+
+		// The same member, on a run that cannot resolve subscriptions at all.
+		// Printing the placeholder here would assert an answer the run never got.
+		$this->assertSame(
+			Memberships_Audit::OWN_SUBSCRIPTIONS_UNKNOWN,
+			$describe_own_subscriptions_method->invoke( null, $member_id, '—', false ),
+			'Without a working resolver the column reports unknown, not nothing.'
+		);
 	}
 
 	/**

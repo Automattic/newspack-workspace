@@ -52,6 +52,19 @@ class Memberships_Audit {
 	const WALK_QUERY_FLAG = 'newspack_memberships_audit_walk';
 
 	/**
+	 * Evidence-column value for "the question could not be answered", as distinct
+	 * from the placeholder that means "this member owns nothing".
+	 *
+	 * That column is the one an operator reads to take somebody off the list that
+	 * grants free subscriptions, so the two cases must not print alike: acting on
+	 * an unanswered question grants a subscription the reader may not need, or
+	 * leaves one they do need ungranted.
+	 *
+	 * @var string
+	 */
+	const OWN_SUBSCRIPTIONS_UNKNOWN = 'unknown';
+
+	/**
 	 * The audit's value-requiring flags, for the raw-argv bare-flag guard shared
 	 * with Teams_Migration::get_valueless_value_flags().
 	 *
@@ -578,10 +591,12 @@ class Memberships_Audit {
 	 * @param callable $callback Receives ( int[] $post_ids, int $total ) per batch, where
 	 *                           $total is the count taken at the start of the walk.
 	 * @param float    $sleep    Seconds to pause between batches; 0 runs without pausing.
+	 * @param callable $sleeper  Optional stand-in for the pause, so the pacing can be
+	 *                           asserted without a test waiting on the wall clock.
 	 *
 	 * @return int The number of posts actually walked.
 	 */
-	private static function each_post_id_batch( array $args, callable $callback, float $sleep = 0 ) {
+	private static function each_post_id_batch( array $args, callable $callback, float $sleep = 0, $sleeper = null ) {
 		global $wpdb;
 
 		$args = array_merge(
@@ -653,7 +668,11 @@ class Memberships_Audit {
 				// the last batch never pauses on the way out. usleep() takes whole
 				// microseconds, which lets --sleep=0.5 mean what it says.
 				if ( $sleep > 0 ) {
-					usleep( (int) round( $sleep * 1000000 ) );
+					if ( $sleeper ) {
+						$sleeper( $sleep );
+					} else {
+						usleep( (int) round( $sleep * 1000000 ) );
+					}
 				}
 			}
 		} finally {
@@ -1127,7 +1146,7 @@ class Memberships_Audit {
 				? (string) $facts['order_status']
 				: self::describe_subscription_status( $facts ),
 			'products'                        => implode( ' ', $facts['products'] ),
-			'member_own_access_subscriptions' => self::describe_own_access_subscriptions( $member_id, $empty ),
+			'member_own_access_subscriptions' => self::describe_own_access_subscriptions( $member_id, $empty, self::own_subscriptions_answerable() ),
 		];
 	}
 
@@ -1149,6 +1168,21 @@ class Memberships_Audit {
 	}
 
 	/**
+	 * Whether this run can resolve a member's own subscriptions at all.
+	 *
+	 * Both halves are needed and neither is guaranteed: the audit is registered on
+	 * WooCommerce Memberships being active, which a site can run without
+	 * WooCommerce Subscriptions. Without them the resolver returns an empty list
+	 * for every member rather than failing, so the answer has to be qualified at
+	 * the source instead of trusted.
+	 *
+	 * @return bool
+	 */
+	private static function own_subscriptions_answerable() {
+		return class_exists( 'Newspack\WooCommerce_Connection' ) && function_exists( 'wcs_get_users_subscriptions' );
+	}
+
+	/**
 	 * Describe the subscriptions that grant this member access in their own
 	 * right, as `<id>(<product ids>)` — evidence for the sign-off conversation.
 	 *
@@ -1163,13 +1197,30 @@ class Memberships_Audit {
 	 * access-parity diff decides. A recurring donation is the common case of an
 	 * access-granting subscription that unlocks no content.
 	 *
-	 * @param int    $user_id The member.
-	 * @param string $empty   Placeholder for "none".
+	 * Distinguishes "owns nothing" from "could not be asked". The placeholder is
+	 * only ever printed for a member the resolver answered about, so an operator
+	 * reading this column to drop somebody from the comp-grant list is never shown
+	 * a blank that actually means the question went unanswered.
 	 *
-	 * @return string Space-separated descriptors, or the placeholder.
+	 * @param int    $user_id    The member.
+	 * @param string $empty      Placeholder for "none".
+	 * @param bool   $answerable Whether this run can resolve subscriptions at all,
+	 *                           from own_subscriptions_answerable().
+	 *
+	 * @return string Space-separated descriptors, the placeholder when the member
+	 *                owns nothing, or OWN_SUBSCRIPTIONS_UNKNOWN when the question
+	 *                could not be answered.
 	 */
-	private static function describe_own_access_subscriptions( $user_id, $empty ) {
-		if ( ! $user_id || ! class_exists( 'Newspack\WooCommerce_Connection' ) ) {
+	private static function describe_own_access_subscriptions( $user_id, $empty, $answerable ) {
+		// The resolver answers [] for every member when Subscriptions is inactive,
+		// which would print the same placeholder as a member genuinely holding
+		// nothing — and hand the site's whole paid population to the grant step.
+		if ( ! $answerable ) {
+			return self::OWN_SUBSCRIPTIONS_UNKNOWN;
+		}
+		// No account is not an unanswered question: there is no user to own a
+		// subscription, and member_id / member_email already say so on the row.
+		if ( ! $user_id ) {
 			return $empty;
 		}
 
