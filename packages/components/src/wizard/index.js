@@ -18,7 +18,7 @@ import {
 	__experimentalVStack as VStack,
 } from '@wordpress/components';
 import { useDispatch, useSelect } from '@wordpress/data';
-import { cloneElement, createInterpolateElement, isValidElement, useEffect, useRef, useState, forwardRef } from '@wordpress/element';
+import { cloneElement, createInterpolateElement, isValidElement, useLayoutEffect, useRef, useState, forwardRef } from '@wordpress/element';
 import { __ } from '@wordpress/i18n';
 import { category, chevronLeft, moreVertical } from '@wordpress/icons';
 
@@ -92,7 +92,10 @@ const ResetHeaderData = () => {
 	const location = useLocation();
 	const { resetHeaderData } = useDispatch( WIZARD_STORE_NAMESPACE );
 
-	useEffect( () => {
+	// Before paint, so the reset always lands before the incoming section publishes
+	// its own header. A passive effect here would run after any section that
+	// publishes from a layout effect, wiping the header it just set.
+	useLayoutEffect( () => {
 		resetHeaderData();
 		window.scrollTo( 0, 0 );
 	}, [ location.pathname, resetHeaderData ] );

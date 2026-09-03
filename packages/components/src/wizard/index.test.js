@@ -7,8 +7,8 @@ import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
  * WordPress dependencies.
  */
 import apiFetch from '@wordpress/api-fetch';
-import { dispatch, useDispatch } from '@wordpress/data';
-import { useEffect } from '@wordpress/element';
+import { dispatch, select, useDispatch } from '@wordpress/data';
+import { useLayoutEffect, useState } from '@wordpress/element';
 
 /**
  * Internal dependencies.
@@ -158,37 +158,100 @@ describe( 'Wizard', () => {
 	} );
 } );
 
+// Publishes its width override before paint, the way the list screens do so the
+// notice never paints full-bleed first.
 const NarrowingSection = () => {
 	const { setHeaderData } = useDispatch( WIZARD_STORE_NAMESPACE );
-	useEffect( () => {
+	useLayoutEffect( () => {
 		setHeaderData( { fullWidth: false } );
 	}, [ setHeaderData ] );
 	return <div>Narrowing section</div>;
 };
 
+// Narrows while it is failing, then clears the override the way a list screen
+// does once a retry succeeds.
+const RecoveringSection = () => {
+	const { setHeaderData } = useDispatch( WIZARD_STORE_NAMESPACE );
+	const [ failed, setFailed ] = useState( true );
+	useLayoutEffect( () => {
+		setHeaderData( { fullWidth: failed ? false : undefined } );
+	}, [ setHeaderData, failed ] );
+	return <button onClick={ () => setFailed( false ) }>Retry</button>;
+};
+
+// Every shipping wizard has more than one section, which is the only arrangement
+// that renders ResetHeaderData. A single-section wizard would never exercise the
+// reset these overrides have to survive.
+const widthSections = renderSection => [
+	{ label: 'List', path: '/', exact: true, fullWidth: true, render: renderSection },
+	{ label: 'Other', path: '/other', render: () => <div>Other section</div> },
+];
+
 describe( 'Wizard content width', () => {
 	beforeEach( () => {
 		apiFetch.mockReset();
-		// A single-section wizard never renders ResetHeaderData, so without this
-		// the previous test's override is still in the store and decides this one.
+		// The store is module-level, so an override left by the previous test would
+		// otherwise decide this one.
 		dispatch( WIZARD_STORE_NAMESPACE ).resetHeaderData();
 	} );
 
 	it( 'renders full-width when the section declares it and nothing overrides it', async () => {
 		const { container } = render(
-			<Wizard headerText="Test wizard" sections={ [ { label: 'List', path: '/', fullWidth: true, render: () => <div>List</div> } ] } />
+			<Wizard
+				headerText="Test wizard"
+				sections={ widthSections( () => (
+					<div>List content</div>
+				) ) }
+			/>
 		);
 
-		expect( await screen.findByText( 'List' ) ).toBeInTheDocument();
+		expect( await screen.findByText( 'List content' ) ).toBeInTheDocument();
 		expect( container.querySelector( '.newspack-wizard__content' ) ).toHaveClass( 'newspack-wizard__content--full-width' );
 	} );
 
-	it( 'falls back to the standard width when the section overrides fullWidth via header data', async () => {
+	it( 'falls back to the standard width when a section overrides fullWidth before paint', async () => {
 		const { container } = render(
-			<Wizard headerText="Test wizard" sections={ [ { label: 'List', path: '/', fullWidth: true, render: () => <NarrowingSection /> } ] } />
+			<Wizard
+				headerText="Test wizard"
+				sections={ widthSections( () => (
+					<NarrowingSection />
+				) ) }
+			/>
 		);
 
 		expect( await screen.findByText( 'Narrowing section' ) ).toBeInTheDocument();
 		expect( container.querySelector( '.newspack-wizard__content' ) ).not.toHaveClass( 'newspack-wizard__content--full-width' );
+	} );
+
+	it( 'restores the declared width when the section clears its override', async () => {
+		const { container } = render(
+			<Wizard
+				headerText="Test wizard"
+				sections={ widthSections( () => (
+					<RecoveringSection />
+				) ) }
+			/>
+		);
+
+		const retry = await screen.findByRole( 'button', { name: 'Retry' } );
+		expect( container.querySelector( '.newspack-wizard__content' ) ).not.toHaveClass( 'newspack-wizard__content--full-width' );
+
+		fireEvent.click( retry );
+
+		await waitFor( () => expect( container.querySelector( '.newspack-wizard__content' ) ).toHaveClass( 'newspack-wizard__content--full-width' ) );
+	} );
+
+	it( 'keeps a section header published from a layout effect through the route reset', async () => {
+		render(
+			<Wizard
+				headerText="Test wizard"
+				sections={ widthSections( () => (
+					<NarrowingSection />
+				) ) }
+			/>
+		);
+
+		expect( await screen.findByText( 'Narrowing section' ) ).toBeInTheDocument();
+		expect( select( WIZARD_STORE_NAMESPACE ).getHeaderData().fullWidth ).toBe( false );
 	} );
 } );
