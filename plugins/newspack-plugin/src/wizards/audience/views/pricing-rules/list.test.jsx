@@ -17,7 +17,8 @@ import apiFetch from '@wordpress/api-fetch';
 /**
  * Internal dependencies
  */
-import PricingRulesList from './list';
+import PricingRulesList, { ACTIVE_STATE_STATUS } from './list';
+import { statusGlyph } from '../../../../../packages/components/src/status-indicator';
 
 jest.mock( '@wordpress/api-fetch', () => jest.fn() );
 
@@ -388,5 +389,18 @@ describe( 'the Pricing Rules list', () => {
 		} );
 
 		expect( screen.getByRole( 'status' ) ).toHaveTextContent( 'Loading pricing rules' );
+	} );
+} );
+
+describe( 'ACTIVE_STATE_STATUS', () => {
+	it( 'names every window state a rule can be in', () => {
+		expect( Object.keys( ACTIVE_STATE_STATUS ).sort() ).toEqual( [ 'active', 'ended', 'scheduled' ] );
+	} );
+
+	// The column offers the three as separate filters, and the glyph is the only thing
+	// telling them apart: nothing here is tinted.
+	it( 'gives no two states the same mark', () => {
+		const glyphs = Object.values( ACTIVE_STATE_STATUS ).map( name => statusGlyph( name ) );
+		expect( new Set( glyphs ).size ).toBe( glyphs.length );
 	} );
 } );

@@ -651,8 +651,7 @@ class Test_Group_Subscription_Admin_API extends WP_UnitTestCase {
 
 	/**
 	 * An admin is never a manager of the group, so minting under their own id would
-	 * produce a link that validate_link_invite() rejects at click time. The admin
-	 * acts on the owner's link instead — the same link the owner sees in My Account.
+	 * be refused. The admin acts as the owner instead.
 	 */
 	public function test_invite_link_manager_is_owner_for_admin() {
 		$owner_id = $this->create_reader();
@@ -667,8 +666,8 @@ class Test_Group_Subscription_Admin_API extends WP_UnitTestCase {
 	}
 
 	/**
-	 * The link an admin mints is usable: it validates at click time, which a link
-	 * keyed to the admin's own (non-manager) id would not.
+	 * The link an admin mints is usable: it validates at click time, rather than
+	 * being refused at mint time for want of a manager to act as.
 	 */
 	public function test_admin_minted_invite_link_validates_at_click_time() {
 		$owner_id = $this->create_reader();
@@ -682,8 +681,8 @@ class Test_Group_Subscription_Admin_API extends WP_UnitTestCase {
 		$this->assertNotWPError( $response, 'An admin should be able to mint an invite link.' );
 		$link = $response->get_data();
 		$this->assertTrue(
-			Group_Subscription_Invite::validate_link_invite( $group, $owner_id, $link['key'] ),
-			'The admin-minted link must validate against the owner, so an invitee clicking it gets in.'
+			Group_Subscription_Invite::validate_link_invite( $group, $link['key'] ),
+			'The admin-minted link must validate, so an invitee clicking it gets in.'
 		);
 	}
 

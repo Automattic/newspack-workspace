@@ -257,6 +257,10 @@ class Test_Subscribers_Wizard_Group_Endpoint extends WP_UnitTestCase {
 	/**
 	 * The shareable invite link reports whether one is currently active, so the
 	 * screen can offer Regenerate / Disable only when there is a link to act on.
+	 *
+	 * A group holds one link, whoever minted it, and the URL reported here is the
+	 * one Regenerate and Disable act on: an admin reading a link the owner minted
+	 * must see that link rather than nothing.
 	 */
 	public function test_reports_invite_link_state() {
 		wp_set_current_user( $this->create_reader_user( 'administrator' ) );
@@ -272,46 +276,10 @@ class Test_Subscribers_Wizard_Group_Endpoint extends WP_UnitTestCase {
 
 		$after = $this->dispatch( $group->get_id() )->get_data();
 		$this->assertTrue( $after['inviteLink']['active'], 'A minted link is reported as active.' );
-		$this->assertNotEmpty( $after['inviteLink']['url'], 'The active link carries the shareable URL.' );
-	}
-
-	/**
-	 * The reported link is the one this caller's buttons act on.
-	 *
-	 * Links are stored per manager, and the mint and delete endpoints both place the
-	 * caller with `resolve_link_manager_id()`. An admin who also manages the group
-	 * resolves to their own slot, not the owner's, so a read hardcoded to the owner
-	 * would show one link while Regenerate and Disable changed another.
-	 */
-	public function test_reported_link_is_the_one_this_callers_buttons_act_on() {
-		$admin_id = $this->create_reader_user( 'administrator' );
-		$owner_id = $this->create_reader_user();
-		$group    = $this->create_group_subscription( $owner_id, 5 );
-
-		// A link in the owner's slot, which a non-manager admin acts on.
-		Group_Subscription_Invite::generate_link_invite( $group, $owner_id );
-		Group_Subscription::reset_cache();
-
-		wp_set_current_user( $admin_id );
-		$owner_key = Group_Subscription_Invite::get_link_invite( $group, $owner_id )['key'];
 		$this->assertStringContainsString(
-			$owner_key,
-			$this->dispatch( $group->get_id() )->get_data()['inviteLink']['url'],
-			'An admin who does not manage the group reads the owner slot.'
-		);
-
-		// Same admin, now a manager of this group, with a link of their own.
-		$this->add_member( $admin_id, $group );
-		Group_Subscription::add_manager( $group, $admin_id );
-		Group_Subscription_Invite::generate_link_invite( $group, $admin_id );
-		Group_Subscription::reset_cache();
-
-		$admin_key = Group_Subscription_Invite::get_link_invite( $group, $admin_id )['key'];
-		$this->assertNotSame( $owner_key, $admin_key, 'Fixture precondition: the two slots hold different links.' );
-		$this->assertStringContainsString(
-			$admin_key,
-			$this->dispatch( $group->get_id() )->get_data()['inviteLink']['url'],
-			'Once the caller manages the group, the screen reports their own slot -- the one the write endpoints resolve to.'
+			Group_Subscription_Invite::get_link_invite( $group )['key'],
+			$after['inviteLink']['url'],
+			'The reported URL carries the group\'s own link key.'
 		);
 	}
 

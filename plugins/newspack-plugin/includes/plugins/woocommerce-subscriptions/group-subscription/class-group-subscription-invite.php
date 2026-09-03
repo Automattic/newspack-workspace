@@ -49,8 +49,20 @@ class Group_Subscription_Invite {
 	const LINK_QUERY_ARG = 'group_invite_link';
 
 	/**
-	 * The subscription meta key for invite-link entries.
-	 * Stored as: [ $manager_user_id => [ 'key' => string, 'created_at' => int ] ].
+	 * The subscription meta key for the invite-link entry.
+	 * Stored as: [ 'key' => string, 'created_at' => int, 'created_by' => int ].
+	 *
+	 * Only `key` is load-bearing. `created_at` and `created_by` are an audit trail: invite links do
+	 * not expire, and the link is deliberately not scoped to its creator.
+	 *
+	 * The link belongs to the subscription, not to the manager who minted it, so it keeps working
+	 * when the owner or managers change. Subscriptions written before that carry the legacy
+	 * per-manager shape, [ $manager_user_id => [ 'key' => string, 'created_at' => int ] ]. A legacy
+	 * key is valid only while its creator manages the group — the terms it was minted under, and
+	 * the reason removing a manager revoked their links. That is re-evaluated on every read, so
+	 * re-adding a removed manager makes their legacy keys work again; only regenerate or disable
+	 * revokes a key for good. Either one also rewrites the meta in the current shape, at which
+	 * point the link outlives any manager change.
 	 *
 	 * @var string
 	 */
@@ -207,44 +219,147 @@ class Group_Subscription_Invite {
 	}
 
 	/**
-	 * Get the invite-link entry for a given subscription/manager user pair.
+	 * Read every invite-link entry the subscription stores, oldest first, whether or not it is
+	 * still usable.
+	 *
+	 * The single place that knows how the meta is shaped, so no reader has to parse it again. Both
+	 * shapes come back normalised to the current one, plus a `legacy` flag saying which shape the
+	 * entry was stored in — get_link_invite_entries() is what turns that into a usability decision,
+	 * and the invalid-link log reads this unfiltered list so it can still name a revoked key's
+	 * creator.
+	 *
+	 * @param \WC_Subscription $subscription The subscription object.
+	 *
+	 * @return array[] The stored link-invite entries, in the current shape, each with `legacy`.
+	 */
+	private static function get_stored_link_invite_entries( $subscription ) {
+		$stored = $subscription->get_meta( self::LINK_META, true );
+		if ( ! is_array( $stored ) || empty( $stored ) ) {
+			return [];
+		}
+
+		$entries = [];
+
+		// Current shape: one entry for the whole subscription, keyed by field name rather than by
+		// manager. Classified on the presence of the `key` field, not on its value, so meta holding
+		// a corrupt `key` is read as a broken current-shape entry and dropped, rather than falling
+		// through to the legacy branch and being read as a map of managers.
+		if ( array_key_exists( 'key', $stored ) ) {
+			if ( is_string( $stored['key'] ) && '' !== $stored['key'] ) {
+				$stored['legacy'] = false;
+				$entries[]        = $stored;
+			}
+			unset( $stored['key'], $stored['created_at'], $stored['created_by'], $stored['legacy'] );
+		}
+
+		// Legacy per-manager shape, from before the link belonged to the subscription. Read
+		// alongside the current-shape entry rather than instead of it: rolling the plugin back and
+		// forward again merges a per-manager entry into a flat one, and a key minted in that window
+		// is a link somebody is holding.
+		foreach ( $stored as $manager_id => $entry ) {
+			if ( ! is_numeric( $manager_id ) || ! is_array( $entry ) ) {
+				continue;
+			}
+			if ( ! isset( $entry['key'] ) || ! is_string( $entry['key'] ) || '' === $entry['key'] ) {
+				continue;
+			}
+			// Normalise to the current shape: for a legacy entry the map key is the creator.
+			$entry['created_by'] = (int) $manager_id;
+			$entry['legacy']     = true;
+			$entries[]           = $entry;
+		}
+
+		// Oldest first. The link in circulation longest is the one to present as the subscription's
+		// own, and choosing by age keeps that stable no matter which manager is looking.
+		usort(
+			$entries,
+			function ( $a, $b ) {
+				return ( (int) ( $a['created_at'] ?? 0 ) ) <=> ( (int) ( $b['created_at'] ?? 0 ) );
+			}
+		);
+		return $entries;
+	}
+
+	/**
+	 * Read the subscription's usable invite-link entries, oldest first.
+	 *
+	 * A current-shape key is always usable: it stays valid however the managers change — that is
+	 * the point of storing the link against the subscription.
+	 *
+	 * A legacy key is usable only while its creator manages the group, which is exactly what the
+	 * old per-manager validation did. Keeping that condition matters because removing a manager was
+	 * how an institution revoked the links that person had circulated: honouring their keys now
+	 * would silently hand paid access back to everyone holding one, on existing production data,
+	 * with nobody told. Because the check runs on every read, revocation follows manager status in
+	 * both directions — re-adding a removed manager makes their legacy keys work again, as it did
+	 * before this change. Regenerate and Disable are the permanent revocation: they clear the whole
+	 * map, so nothing is left to revive.
+	 *
+	 * @param \WC_Subscription $subscription The subscription object.
+	 *
+	 * @return array[] The usable link-invite entries, in the current shape.
+	 */
+	private static function get_link_invite_entries( $subscription ) {
+		$entries = [];
+		foreach ( self::get_stored_link_invite_entries( $subscription ) as $entry ) {
+			$is_legacy = ! empty( $entry['legacy'] );
+			unset( $entry['legacy'] );
+			if ( $is_legacy && ! Group_Subscription::user_is_manager( (int) $entry['created_by'], $subscription ) ) {
+				continue;
+			}
+			$entries[] = $entry;
+		}
+		return $entries;
+	}
+
+	/**
+	 * Get the subscription's invite-link entry.
+	 *
+	 * Every manager of a subscription shares one link, so this takes no user.
 	 *
 	 * @param \WC_Subscription|int $subscription The subscription object or ID.
-	 * @param int                  $user_id      The manager user ID.
 	 *
 	 * @return array|null The link-invite entry, or null if missing or subscription invalid.
 	 */
-	public static function get_link_invite( $subscription, $user_id ) {
+	public static function get_link_invite( $subscription ) {
 		$subscription = WooCommerce_Subscriptions::sanitize_subscription( $subscription );
 		if ( ! $subscription ) {
 			return null;
 		}
-		$user_id = (int) $user_id;
-		$all     = $subscription->get_meta( self::LINK_META, true );
-		if ( ! is_array( $all ) ) {
-			return null;
-		}
-		if ( isset( $all[ $user_id ] ) ) {
-			return $all[ $user_id ];
-		}
-		return null;
+		$entries = self::get_link_invite_entries( $subscription );
+		return empty( $entries ) ? null : $entries[0];
+	}
+
+	/**
+	 * Get every key that currently unlocks a subscription's invite link.
+	 *
+	 * One key in the current shape. A subscription still on the legacy per-manager shape has one key
+	 * per manager who minted one, and each is valid while its creator manages the group — only the
+	 * manager segment of the URL is dropped, never the key. A key whose creator has since been
+	 * removed is revoked, because removing them is what revoked it. Regenerating or disabling the
+	 * link clears the whole set.
+	 *
+	 * @param \WC_Subscription $subscription The subscription object.
+	 *
+	 * @return string[] The valid invite-link keys.
+	 */
+	private static function get_link_invite_keys( $subscription ) {
+		return array_map( 'strval', array_column( self::get_link_invite_entries( $subscription ), 'key' ) );
 	}
 
 	/**
 	 * Build the public invite-link URL.
 	 *
 	 * @param int    $subscription_id Subscription ID.
-	 * @param int    $user_id         Manager user ID.
 	 * @param string $key             Invite key.
 	 *
 	 * @return string The invite-link URL.
 	 */
-	public static function get_link_invite_url( $subscription_id, $user_id, $key ) {
+	public static function get_link_invite_url( $subscription_id, $key ) {
 		return add_query_arg(
 			[
 				'action'       => self::LINK_QUERY_ARG,
 				'subscription' => (int) $subscription_id,
-				'manager'      => (int) $user_id,
 				'key'          => rawurlencode( $key ),
 			],
 			home_url()
@@ -252,12 +367,19 @@ class Group_Subscription_Invite {
 	}
 
 	/**
-	 * Generate (or replace) an invite-link for a manager + subscription pair.
+	 * Generate (or replace) a subscription's invite-link.
+	 *
+	 * Replaces whatever the subscription had, so any link already in circulation stops working,
+	 * including the per-manager links of a subscription still on the legacy shape.
+	 *
+	 * One entry per subscription means two managers regenerating at the same moment is a lost
+	 * update: both are told they succeeded, and the loser holds a key that no longer validates.
+	 * Inherent to a single shared link, and re-copying from the page hands back the live one.
 	 *
 	 * @param \WC_Subscription|int $subscription The subscription object or ID.
-	 * @param int                  $user_id      The manager user ID.
+	 * @param int                  $user_id      The manager user ID minting the link.
 	 *
-	 * @return array|\WP_Error On success: [ 'url' => string, 'key' => string, 'created_at' => int ].
+	 * @return array|\WP_Error On success: [ 'url' => string, 'key' => string, 'created_at' => int, 'created_by' => int ].
 	 */
 	public static function generate_link_invite( $subscription, $user_id ) {
 		$subscription = WooCommerce_Subscriptions::sanitize_subscription( $subscription );
@@ -277,32 +399,26 @@ class Group_Subscription_Invite {
 			);
 		}
 
-		$all = $subscription->get_meta( self::LINK_META, true );
-		if ( ! is_array( $all ) ) {
-			$all = [];
-		}
-
-		$now   = time();
 		$entry = [
 			'key'        => wp_generate_password( 32, false ),
-			'created_at' => $now,
+			'created_at' => time(),
+			'created_by' => $user_id,
 		];
-		$all[ $user_id ] = $entry;
 
-		$subscription->update_meta_data( self::LINK_META, $all );
+		$subscription->update_meta_data( self::LINK_META, $entry );
 		$subscription->save();
 
 		return array_merge(
 			$entry,
-			[ 'url' => self::get_link_invite_url( $subscription->get_id(), $user_id, $entry['key'] ) ]
+			[ 'url' => self::get_link_invite_url( $subscription->get_id(), $entry['key'] ) ]
 		);
 	}
 
 	/**
-	 * Delete an invite link for a given subscription/manager user pair.
+	 * Delete a subscription's invite link.
 	 *
 	 * @param \WC_Subscription|int $subscription The subscription object or ID.
-	 * @param int                  $user_id      The manager user ID.
+	 * @param int                  $user_id      The manager user ID performing the deletion.
 	 *
 	 * @return true|\WP_Error True if deleted, or WP_Error.
 	 */
@@ -324,12 +440,17 @@ class Group_Subscription_Invite {
 			);
 		}
 
-		$all = $subscription->get_meta( self::LINK_META, true );
-		if ( ! is_array( $all ) || ! isset( $all[ $user_id ] ) ) {
+		// Nothing stored means nothing to disable. Skipping the write keeps a no-op click off the
+		// full woocommerce_update_subscription cascade, which this request reaches from My Account.
+		// The check is on the raw meta rather than on get_link_invite_entries(), so a corrupt or
+		// filtered-out value — which no reader could revoke any other way — is still cleared.
+		if ( '' === $subscription->get_meta( self::LINK_META, true ) ) {
 			return true;
 		}
-		unset( $all[ $user_id ] );
-		$subscription->update_meta_data( self::LINK_META, $all );
+
+		// Delete rather than store an empty array, so a disabled link is indistinguishable from one
+		// that never existed. This clears a legacy subscription's per-manager keys in one go.
+		$subscription->delete_meta_data( self::LINK_META );
 		$subscription->save();
 		return true;
 	}
@@ -337,13 +458,15 @@ class Group_Subscription_Invite {
 	/**
 	 * Validate an invite-link at click-time.
 	 *
+	 * Deliberately says nothing about who minted the link: a link is revoked by regenerating or
+	 * disabling it, not by its author ceasing to manage the group.
+	 *
 	 * @param \WC_Subscription|int $subscription Subscription object or ID.
-	 * @param int                  $user_id      Manager user ID.
 	 * @param string               $key          Invite key from the URL.
 	 *
 	 * @return true|\WP_Error True if valid; otherwise an error code.
 	 */
-	public static function validate_link_invite( $subscription, $user_id, $key ) {
+	public static function validate_link_invite( $subscription, $key ) {
 		$subscription = WooCommerce_Subscriptions::sanitize_subscription( $subscription );
 		if ( ! $subscription || ! Group_Subscription::is_group_subscription( $subscription ) ) {
 			return new \WP_Error(
@@ -357,21 +480,25 @@ class Group_Subscription_Invite {
 				__( 'Subscription is not active.', 'newspack-plugin' )
 			);
 		}
-		$user_id = (int) $user_id;
-		if ( ! Group_Subscription::user_is_manager( $user_id, $subscription ) ) {
-			return new \WP_Error(
-				'newspack_group_subscription_link_invite_not_manager',
-				__( 'The link manager is no longer a manager of this subscription.', 'newspack-plugin' )
-			);
-		}
-		$entry = self::get_link_invite( $subscription, $user_id );
-		if ( ! $entry || empty( $entry['key'] ) || ! hash_equals( (string) $entry['key'], (string) $key ) ) {
+		// Belt and braces: get_link_invite_entries() already drops entries with an empty key, so
+		// nothing an empty $key could match survives to be compared. Kept because the failure it
+		// guards is severe and silent -- hash_equals( '', '' ) is true, so a keyless URL would
+		// become an access grant the moment that upstream filter is relaxed.
+		if ( '' === (string) $key ) {
 			return new \WP_Error(
 				'newspack_group_subscription_link_invite_not_found',
 				__( 'Invite link not found.', 'newspack-plugin' )
 			);
 		}
-		return true;
+		foreach ( self::get_link_invite_keys( $subscription ) as $stored_key ) {
+			if ( hash_equals( $stored_key, (string) $key ) ) {
+				return true;
+			}
+		}
+		return new \WP_Error(
+			'newspack_group_subscription_link_invite_not_found',
+			__( 'Invite link not found.', 'newspack-plugin' )
+		);
 	}
 
 	/**
@@ -808,8 +935,9 @@ class Group_Subscription_Invite {
 			return;
 		}
 
+		// Links minted before the invite link became subscription-wide also carry a `manager` arg.
+		// It is ignored: the key alone identifies the link, so those URLs keep working unchanged.
 		$subscription_id = isset( $_GET['subscription'] ) ? absint( $_GET['subscription'] ) : 0; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
-		$user_id         = isset( $_GET['manager'] ) ? absint( $_GET['manager'] ) : 0; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
 		$key             = isset( $_GET['key'] ) ? sanitize_text_field( wp_unslash( $_GET['key'] ) ) : ''; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
 
 		$subscription = WooCommerce_Subscriptions::sanitize_subscription( $subscription_id );
@@ -820,9 +948,38 @@ class Group_Subscription_Invite {
 		$myaccount_url     = function_exists( 'wc_get_account_endpoint_url' ) ? wc_get_account_endpoint_url( 'edit-account' ) : home_url();
 		$error_target_url  = $is_logged_in ? $myaccount_url : home_url();
 
+		// A truncated URL can never name a link, so answer it with the same notice the reader would
+		// have got from validation, without spending a validation pass and a log write on it.
+		if ( ! $subscription_id || '' === $key ) {
+			self::redirect_with_result( 'link_invalid', $error_target_url );
+			return;
+		}
+
 		// Validate the link.
-		$validation = self::validate_link_invite( $subscription, $user_id, $key );
+		$validation = self::validate_link_invite( $subscription, $key );
 		if ( is_wp_error( $validation ) ) {
+			// The failing key's creator, when the key is one the subscription still
+			// holds. The URL no longer carries a manager ID, so without this a failing
+			// link names only the subscription and the reader who clicked it — and the
+			// question being asked in the weeks after an upgrade is usually "whose link
+			// is this, and why did it stop working?". Null when the key matches nothing,
+			// which is itself the answer.
+			// Read from the stored entries rather than the usable ones: a departed
+			// manager's revoked key is dropped from the usable list, and it is exactly
+			// the case this log line exists to explain. Nothing here decides access —
+			// validation has already failed.
+			// Guarded on the subscription itself: validation also fails when the URL
+			// names a subscription that does not exist, and there is nothing to read
+			// entries from in that case.
+			$entry = null;
+			if ( $subscription ) {
+				foreach ( self::get_stored_link_invite_entries( $subscription ) as $candidate ) {
+					if ( hash_equals( (string) ( $candidate['key'] ?? '' ), $key ) ) {
+						$entry = $candidate;
+						break;
+					}
+				}
+			}
 			do_action(
 				'newspack_log',
 				'newspack_group_subscription_invite_link_invalid',
@@ -831,8 +988,8 @@ class Group_Subscription_Invite {
 					'type' => 'error',
 					'data' => [
 						'subscription_id' => $subscription_id,
-						'manager_id'      => $user_id,
 						'member_id'       => $current_user->ID,
+						'created_by'      => isset( $entry['created_by'] ) ? (int) $entry['created_by'] : null,
 					],
 				]
 			);
@@ -842,7 +999,7 @@ class Group_Subscription_Invite {
 
 		// Not logged in → bounce to My Account with redirect=back-to-link, banner via 'login_needed'.
 		if ( ! $is_logged_in ) {
-			$link_url = self::get_link_invite_url( $subscription_id, $user_id, $key );
+			$link_url = self::get_link_invite_url( $subscription_id, $key );
 			self::redirect_with_result( 'login_needed', add_query_arg( [ 'redirect' => rawurlencode( $link_url ) ], $myaccount_url ) );
 			return;
 		}
@@ -887,7 +1044,6 @@ class Group_Subscription_Invite {
 					'type' => 'error',
 					'data' => [
 						'subscription_id' => $subscription_id,
-						'manager_id'      => $user_id,
 						'member_id'       => $current_user->ID,
 					],
 				]

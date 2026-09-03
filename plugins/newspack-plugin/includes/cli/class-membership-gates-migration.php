@@ -1,16 +1,16 @@
 <?php
 /**
- * WP-CLI command to migrate WooCommerce Membership plans and their content gate
- * layouts to Newspack Access Control content gates.
+ * WP-CLI commands to migrate WooCommerce Memberships content restriction to
+ * Newspack Access Control: `migrate-membership-gates` for the plans and their
+ * content gate layouts, `migrate-post-exemptions` for the per-post "public"
+ * overrides those plans never carried.
  *
  * Ported from the standalone `migrate-memberships` drop-in so the tooling ships
  * with the plugin. The class file is included on every request (like the other
  * CLI classes), but only the command registration is gated on WP_CLI, so the
- * runtime cost outside CLI is a class definition. The command reads each
- * published Membership plan's content
- * restriction rules plus the `np_memberships_gate` layout posts and writes the
- * equivalent Access Control gate(s), content rules, and gate layouts through the
- * Content_Gate / Content_Rules data layer.
+ * runtime cost outside CLI is a class definition. `migrate-membership-gates` writes
+ * through the Content_Gate / Content_Rules data layer; `migrate-post-exemptions` is
+ * postmeta plumbing and touches neither.
  *
  * @package Newspack
  */
@@ -22,10 +22,19 @@ use WP_CLI;
 defined( 'ABSPATH' ) || exit;
 
 /**
- * Membership plan → Access Control content gate migration CLI command.
+ * WooCommerce Memberships → Access Control content restriction migration CLI commands.
  */
 class Membership_Gates_Migration {
 	use One_Time_Purchase_Migration;
+
+	/**
+	 * The WooCommerce Memberships wrapper blocks, which are conditional and must
+	 * never be carried into a migrated layout's content.
+	 */
+	private const MEMBERSHIP_WRAPPER_BLOCKS = [
+		'woocommerce-memberships/member-content',
+		'woocommerce-memberships/non-member-content',
+	];
 
 	/**
 	 * Create or update Newspack Access Control content gates from WooCommerce
@@ -371,7 +380,7 @@ class Membership_Gates_Migration {
 					WP_CLI::warning( sprintf( '"%s" (gate %d) will not restrict as intended: %s', $gate_title, $gate_id, $issue ) );
 				}
 			} elseif ( $dry_run ) {
-				$verification_issues = self::compute_pre_write_issues( $ac_rules, $has_purchase, $layouts, $merged_product_ids );
+				$verification_issues = self::compute_pre_write_issues( $ac_rules, $has_purchase, $layouts, $merged_product_ids, null !== $memberships_gate );
 				foreach ( $verification_issues as $issue ) {
 					WP_CLI::warning( sprintf( '"%s" will not migrate correctly: %s', $gate_title, $issue ) );
 				}
@@ -436,12 +445,21 @@ class Membership_Gates_Migration {
 				$dry_run ? 'would be created/updated' : 'created/updated'
 			)
 		);
-		// Written but unenforceable is worse than not written at all — it looks
-		// migrated. Call it out after the success line so it is not lost in the table.
+		// Written but wrong is worse than not written at all — it looks migrated. Call
+		// it out after the success line so it is not lost in the table.
+		//
+		// The two passes count different things, so they say different things. Dry-run
+		// issues come from compute_pre_write_issues(), which also predicts a gate that
+		// restricts correctly but shows Newspack's default copy. On --live the issues
+		// come from verify_migrated_gate(), which reads the written gate and cannot see
+		// that case at all; there it surfaces as apply_layout()'s own per-gate warning
+		// and is not counted here.
 		if ( $unenforceable ) {
 			WP_CLI::warning(
 				sprintf(
-					'%d of those gate(s) will not restrict as intended (see the WARN rows above). Fix them before deactivating WooCommerce Memberships.',
+					$dry_run
+						? '%d of those gate(s) will not restrict as intended, or will show default copy in place of the authored gate (see the WARN rows above). Fix them before deactivating WooCommerce Memberships.'
+						: '%d of those gate(s) will not restrict as intended (see the WARN rows above). Fix them before deactivating WooCommerce Memberships.',
 					$unenforceable
 				)
 			);
@@ -676,7 +694,7 @@ class Membership_Gates_Migration {
 
 		// get_gate_content_rules() drops rules with an empty value, so anything left
 		// is a rule with content behind it — but the evaluator still has to be able
-		// to resolve the slug, which is where the NPPD-2063 slug mistranslation bites.
+		// to resolve the slug, e.g. a taxonomy that is no longer registered on the site.
 		$content_rules = \Newspack\Content_Rules::get_gate_content_rules( $gate_id );
 		$unresolvable  = array_values(
 			array_filter(
@@ -684,30 +702,37 @@ class Membership_Gates_Migration {
 				fn( $slug ) => ! self::is_content_rule_slug_resolvable( $slug )
 			)
 		);
-		if ( empty( $content_rules ) ) {
-			// get_gate_content_rules() drops empty-value rules, so a gate can be written
-			// with rules and still evaluate as having none — say which of the two it is,
-			// because the summary's Content Rules column reports the pre-write count.
-			$written_rules = \get_post_meta( $gate_id, 'content_rules', true );
-			$issues[]      = empty( $written_rules )
-				? 'it has no content rules'
-				: 'none of its content rules select any content';
-		} elseif ( count( $unresolvable ) === count( $content_rules ) ) {
-			$issues[] = sprintf(
-				'none of its content rules resolve to a post type or taxonomy the evaluator can match (%s)',
-				implode( ', ', $unresolvable )
-			);
-		} elseif ( ! empty( $unresolvable ) ) {
-			// A partially dead rule set is a partial leak, not a clean gate: the rules
-			// combine with 'any', so the content selected by the unresolvable rules is
-			// left ungated while the rest is covered. A plan restricting all posts plus a
-			// category is exactly this shape, and it is a common way plans are configured.
-			$issues[] = sprintf(
-				'%d of its %d content rules do not resolve to a post type or taxonomy the evaluator can match (%s), so the content they select stays ungated',
-				count( $unresolvable ),
-				count( $content_rules ),
-				implode( ', ', $unresolvable )
-			);
+
+		// A gate can be written with rules and still evaluate as having fewer, or none
+		// — say so and name the slugs, because the summary's Content Rules column
+		// reports the pre-write count.
+		$written_rules = \get_post_meta( $gate_id, 'content_rules', true );
+		$written_rules = is_array( $written_rules ) ? $written_rules : [];
+		$valueless     = self::describe_valueless_rules( $written_rules );
+		if ( empty( $written_rules ) ) {
+			$issues[] = 'it has no content rules';
+		} elseif ( null !== $valueless ) {
+			$issues[] = $valueless;
+		}
+
+		if ( ! empty( $unresolvable ) ) {
+			if ( count( $unresolvable ) === count( $content_rules ) ) {
+				$issues[] = sprintf(
+					'none of its content rules resolve to a post type or taxonomy the evaluator can match (%s)',
+					implode( ', ', $unresolvable )
+				);
+			} else {
+				// A partially dead rule set is a partial leak, not a clean gate: the rules
+				// combine with 'any', so the content selected by the unresolvable rules is
+				// left ungated while the rest is covered. A plan restricting all posts plus a
+				// category is exactly this shape, and it is a common way plans are configured.
+				$issues[] = sprintf(
+					'%d of its %d content rules do not resolve to a post type or taxonomy the evaluator can match (%s), so the content they select stays ungated',
+					count( $unresolvable ),
+					count( $content_rules ),
+					implode( ', ', $unresolvable )
+				);
+			}
 		}
 
 		// A gate with neither mode active is skipped outright; an active mode with no
@@ -762,18 +787,35 @@ class Membership_Gates_Migration {
 	 *
 	 * A computable subset of verify_migrated_gate() that needs no written gate: slugs
 	 * that the evaluator cannot resolve, and purchase-mode gaps (no custom_access
-	 * layout extracted, or no usable product IDs). Called in
-	 * dry-run mode so the planning pass surfaces the same warnings --live would.
+	 * layout extracted, or no usable product IDs). Called in dry-run mode so the
+	 * planning pass surfaces those warnings before anything is written.
+	 *
+	 * The two empty-layout issues are dry-run only. verify_migrated_gate() reads the
+	 * written gate, and a gate whose layout kept its seeded default is indistinguishable
+	 * there from one that migrated authored copy — so on --live the condition surfaces
+	 * as apply_layout()'s own warning instead, and the summary row still reads
+	 * "created".
 	 *
 	 * @param array[] $ac_rules           AC-format content rules: [ [ 'slug' => string, 'value' => string[] ], ... ].
 	 * @param bool    $has_purchase       Whether every plan in the group requires a purchase.
 	 * @param array   $layouts            Extracted layout markup keyed by 'registration' and 'custom_access'.
 	 * @param int[]   $merged_product_ids Merged parent product IDs for the custom_access mode.
+	 * @param bool    $has_gate_post      Whether a np_memberships_gate post was found for the group.
+	 *                                    An empty layout only means content was lost when
+	 *                                    there was a post to lose it from.
 	 *
 	 * @return string[] Human-readable problems; empty when no issues are predicted.
 	 */
-	private static function compute_pre_write_issues( array $ac_rules, bool $has_purchase, array $layouts, array $merged_product_ids ): array {
+	private static function compute_pre_write_issues( array $ac_rules, bool $has_purchase, array $layouts, array $merged_product_ids, bool $has_gate_post = true ): array {
 		$issues = [];
+
+		// Mirror the empty-value check from verify_migrated_gate(): a rule the read
+		// path drops selects nothing, so the operator sees it before committing to
+		// --live rather than in the post-write verification.
+		$valueless = self::describe_valueless_rules( $ac_rules );
+		if ( null !== $valueless ) {
+			$issues[] = $valueless;
+		}
 
 		// Mirror the unresolvable-slug check from verify_migrated_gate(): slugs the
 		// evaluator cannot resolve map to no content, so those rules leave their
@@ -800,6 +842,21 @@ class Membership_Gates_Migration {
 			}
 		}
 
+		// create_gate() seeds a non-empty default layout and apply_layout() declines to
+		// blank it, so a gate that extracted nothing still passes verify_migrated_gate()'s
+		// emptiness check and reads "created". Dry-run is the only pass that can tell an
+		// operator the authored copy did not come across.
+		//
+		// A group with no gate post at all reaches here with an empty registration
+		// layout too, and that is the expected outcome rather than lost content — hence
+		// the $has_gate_post guard.
+		if ( $has_gate_post && '' === trim( (string) ( $layouts['registration'] ?? '' ) ) ) {
+			$issues[] = 'no registration layout content could be extracted from its gate post, so the gate will show the default Newspack registration wall rather than the authored one';
+		}
+		if ( $has_purchase && null !== $layouts['custom_access'] && '' === trim( $layouts['custom_access'] ) ) {
+			$issues[] = 'its paid access layout extracted to nothing, so the paid gate will show default content rather than the authored one';
+		}
+
 		if ( $has_purchase ) {
 			if ( null === $layouts['custom_access'] ) {
 				// No custom_access layout found → apply_layout() is never called for
@@ -816,6 +873,46 @@ class Membership_Gates_Migration {
 		}
 
 		return $issues;
+	}
+
+	/**
+	 * Report content rules that select no content because their value is empty.
+	 *
+	 * Content_Rules::get_gate_content_rules() drops every rule with an empty value
+	 * before the evaluator sees it. A WC rule naming a taxonomy but no terms maps to
+	 * exactly that shape — slug = the taxonomy, value = [] — so it is written, counted
+	 * in the summary's Content Rules column, and then silently ignored at read time.
+	 * Naming the slugs pre-cutover is what turns that into a visible warning.
+	 *
+	 * @param array[] $rules AC-format content rules: [ [ 'slug' => string, 'value' => string[] ], ... ].
+	 *
+	 * @return string|null A human-readable problem, or null when every rule has a value.
+	 */
+	private static function describe_valueless_rules( array $rules ): ?string {
+		$valueless = array_values(
+			array_column(
+				array_filter( $rules, fn( $rule ) => empty( $rule['value'] ) ),
+				'slug'
+			)
+		);
+		if ( empty( $valueless ) ) {
+			return null;
+		}
+		if ( count( $valueless ) === count( $rules ) ) {
+			return sprintf(
+				'none of its content rules select any content (%s)',
+				implode( ', ', $valueless )
+			);
+		}
+		// A partially dropped rule set is a partial leak: the surviving rules still
+		// gate their content, while whatever the dropped ones were meant to cover
+		// stays readable.
+		return sprintf(
+			'%d of its %d content rules select no content (%s), so the content they were meant to cover stays ungated',
+			count( $valueless ),
+			count( $rules ),
+			implode( ', ', $valueless )
+		);
 	}
 
 	/**
@@ -891,6 +988,24 @@ class Membership_Gates_Migration {
 			}
 
 			$wc_rules = $plan->get_content_restriction_rules();
+
+			// Checked before mapping: a whole-taxonomy rule maps to a taxonomy slug
+			// with no term IDs, which Content_Rules::get_gate_content_rules() drops on
+			// read — so the plan would migrate to a gate that silently enforces less
+			// than it reports, and verify_migrated_gate() would still call it a
+			// success as long as one other rule survived.
+			$unbounded_taxonomies = self::whole_taxonomy_rule_names( $wc_rules );
+			if ( ! empty( $unbounded_taxonomies ) ) {
+				$skipped[] = [
+					'plan_name'     => $plan_name,
+					'action'        => sprintf( 'skipped (restricts every term of: %s — add the terms to a gate manually)', implode( ', ', $unbounded_taxonomies ) ),
+					'gate_id'       => '—',
+					'content_rules' => '—',
+					'access_type'   => $access_method,
+				];
+				continue;
+			}
+
 			$ac_rules = self::map_rules_to_ac_format( $wc_rules );
 
 			// A plan with no content restriction rules restricts nothing in WooCommerce
@@ -945,7 +1060,10 @@ class Membership_Gates_Migration {
 	 * was, so the caller warns rather than staying silent.
 	 *
 	 * Product variations keep the behavior this command has always had: they are
-	 * dropped, because gates reference parent products only.
+	 * dropped. A gate can carry a variation ID — the rule matches a line item on its
+	 * variation_id as well as its product_id, and the editor's picker now offers them —
+	 * so this is a conservative default rather than a limitation, and the warning tells
+	 * the operator what to add back by hand. Keeping them is NPPD-2135's follow-up.
 	 *
 	 * @param array[] $group Plan descriptors, each carrying a 'product_ids' key.
 	 *
@@ -1037,7 +1155,7 @@ class Membership_Gates_Migration {
 		if ( ! empty( $dropped['variations'] ) ) {
 			WP_CLI::warning(
 				sprintf(
-					'"%s": dropped product variation ID(s) %s. Gates restrict access by parent product, not by variation, so a plan that required one of these specific variations no longer has that restriction from this gate. Check the plan\'s products.',
+					'"%s": dropped product variation ID(s) %s, so a plan that required one of these specific variations no longer has that restriction from this gate. The gate editor lists a variable subscription\'s variations, so add them back there if the restriction was meant to survive. Check the plan\'s products.',
 					$gate_title,
 					implode( ', ', $dropped['variations'] )
 				)
@@ -1317,14 +1435,56 @@ class Membership_Gates_Migration {
 	}
 
 	/**
+	 * The taxonomies a plan restricts in full rather than by named terms.
+	 *
+	 * WooCommerce Memberships spells "every term of this taxonomy" as a taxonomy rule
+	 * carrying no object IDs, and keeps applying it to terms created after the plan
+	 * was written. An Access Control taxonomy rule names the term IDs it covers, so
+	 * there is no faithful snapshot of a rule whose membership keeps growing — and
+	 * the unfaithful one is worse than useless here: a taxonomy slug with an empty
+	 * value is filtered out by Content_Rules::get_gate_content_rules() on read, so
+	 * the rule disappears between write and evaluation and the gate fails open over
+	 * everything that rule covered.
+	 *
+	 * The sibling premium-newsletters command refuses the same shape for the same
+	 * reason ({@see Premium_Newsletters_Migration::restricts_all_lists()}).
+	 *
+	 * @param \WC_Memberships_Membership_Plan_Rule[] $wc_rules Array of WC Memberships rules.
+	 *
+	 * @return string[] Taxonomy names restricted in full; empty when the plan has none.
+	 */
+	private static function whole_taxonomy_rule_names( array $wc_rules ): array {
+		$taxonomy_names = [];
+		foreach ( $wc_rules as $rule ) {
+			$content_type_name = $rule->get_content_type_name();
+			if ( empty( $content_type_name ) || 'taxonomy' !== $rule->get_content_type() ) {
+				continue;
+			}
+			if ( empty( $rule->get_object_ids() ) ) {
+				$taxonomy_names[] = $content_type_name;
+			}
+		}
+		return array_values( array_unique( $taxonomy_names ) );
+	}
+
+	/**
 	 * Map WooCommerce Membership content restriction rules to the Access Control
 	 * content_rules format.
 	 *
-	 * This is the rule-mapping seam for NPPD-2063 (content-rule slug mistranslation):
-	 * the slug is taken verbatim from WC's `get_content_type_name()` (e.g. 'post',
-	 * 'page', 'post_tag'), whereas Access Control keys post-type rules under
-	 * 'post_types' and individual posts under 'specific_posts'. The remapping lands
-	 * in the stacked NPPD-2063 PR; this port preserves the drop-in behavior.
+	 * WC and AC key content restrictions differently. A WC rule carries a content
+	 * type kind (`get_content_type()`, either 'post_type' or 'taxonomy') plus a name
+	 * (`get_content_type_name()`, e.g. 'post', 'page', 'guest-author', 'category',
+	 * 'post_tag') and optional object IDs. AC enforcement only honours these slugs:
+	 * 'post_types' (value = post-type slugs), 'specific_posts' (value = post IDs),
+	 * 'newsletters', and taxonomy slugs (value = term IDs). The mapping is therefore:
+	 *
+	 * - taxonomy rule                        → slug = taxonomy name, value = term IDs.
+	 * - post-type rule, no object IDs        → slug = 'post_types',    value = [ post-type name ].
+	 * - post-type rule, with object IDs      → slug = 'specific_posts', value = post IDs.
+	 *
+	 * The post_type vs. taxonomy split uses the rule's own `get_content_type()`
+	 * discriminator rather than string-matching the name against a hardcoded list, so
+	 * custom post types (e.g. 'guest-author') map correctly.
 	 *
 	 * @param \WC_Memberships_Membership_Plan_Rule[] $wc_rules Array of WC Memberships rules.
 	 *
@@ -1333,8 +1493,8 @@ class Membership_Gates_Migration {
 	private static function map_rules_to_ac_format( array $wc_rules ): array {
 		$ac_rules = [];
 		foreach ( $wc_rules as $rule ) {
-			$slug = $rule->get_content_type_name(); // E.g. 'post', 'category', 'post_tag'.
-			if ( empty( $slug ) ) {
+			$content_type_name = $rule->get_content_type_name(); // A post-type or taxonomy name such as post, page, category or guest-author.
+			if ( empty( $content_type_name ) ) {
 				continue;
 			}
 			// Newsletter-list rules migrate through `migrate-premium-newsletters`
@@ -1343,27 +1503,60 @@ class Membership_Gates_Migration {
 			// list post against the newsletter bucket, never this one — while still
 			// entering the rule fingerprint, splitting two plans that restrict
 			// identical content into two gates.
-			if ( self::get_newsletter_list_cpt() === $slug ) {
+			if ( self::get_newsletter_list_cpt() === $content_type_name ) {
 				continue;
 			}
+
+			$object_ids = array_map( 'strval', array_values( $rule->get_object_ids() ) );
+
+			// WC's content type is one of exactly two values, 'post_type' or 'taxonomy',
+			// so everything that is not the taxonomy branch is a post-type rule.
+			if ( 'taxonomy' === $rule->get_content_type() ) {
+				// Taxonomy rules key under the taxonomy slug; the value is the term IDs.
+				$slug  = $content_type_name;
+				$value = $object_ids;
+			} elseif ( empty( $object_ids ) ) {
+				// A whole-post-type rule keys under 'post_types'; the value is the
+				// post-type slug.
+				$slug  = 'post_types';
+				$value = [ $content_type_name ];
+			} else {
+				// A rule targeting individual objects keys under 'specific_posts'; the
+				// value is the post IDs.
+				$slug  = 'specific_posts';
+				$value = $object_ids;
+			}
+
 			$existing_key = array_search( $slug, array_column( $ac_rules, 'slug' ), true );
 			if ( false !== $existing_key ) {
-				// Merge object IDs into the existing rule for this slug.
-				$ac_rules[ $existing_key ]['value'] = array_map(
-					'strval',
-					array_values(
-						array_unique(
-							array_merge( $ac_rules[ $existing_key ]['value'], $rule->get_object_ids() )
-						)
+				// Merge values into the existing rule for this slug (post-type slugs or
+				// object IDs), de-duplicated.
+				$ac_rules[ $existing_key ]['value'] = array_values(
+					array_unique(
+						array_merge( $ac_rules[ $existing_key ]['value'], $value )
 					)
 				);
 			} else {
 				$ac_rules[] = [
 					'slug'  => $slug,
-					'value' => array_map( 'strval', array_values( $rule->get_object_ids() ) ),
+					'value' => $value,
 				];
 			}
 		}
+
+		// Canonicalize 'post_types' value ordering. Post-type slugs are the only
+		// non-numeric rule values, and compute_rules_fingerprint() orders values with
+		// SORT_NUMERIC (under which every non-numeric string compares as 0, leaving
+		// them unsorted). Sorting the slugs here keeps two plans that restrict the
+		// same post types in a different rule order from producing different
+		// fingerprints and splitting into duplicate gates.
+		foreach ( $ac_rules as &$ac_rule ) {
+			if ( 'post_types' === $ac_rule['slug'] ) {
+				sort( $ac_rule['value'], SORT_STRING );
+			}
+		}
+		unset( $ac_rule );
+
 		return $ac_rules;
 	}
 
@@ -1439,71 +1632,339 @@ class Membership_Gates_Migration {
 	}
 
 	/**
-	 * Serialize inner blocks, excluding any WooCommerce Memberships wrapper blocks.
+	 * Serialize inner blocks, excluding any WooCommerce Memberships wrapper blocks
+	 * at any depth within this block tree.
 	 *
-	 * Membership wrapper blocks (member-content and non-member-content) are
-	 * conditional and should not be included in the migrated gate layout content.
+	 * Depth matters because the wrappers carry opposite audiences. A member-content
+	 * block nested inside a non-member-content one — directly or under an ordinary
+	 * group/columns block — would otherwise be serialized whole into the
+	 * registration layout, which is the layout non-members see. Once WooCommerce
+	 * Memberships is deactivated the block type no longer resolves, so WP_Block
+	 * treats it as static and prints its saved inner content unconditionally: the
+	 * members-only copy is then shown to everyone, and is also missing from the
+	 * layout it belonged to.
 	 *
-	 * Part of the layout-extraction seam for NPPD-2058 (empty layouts for
-	 * reusable-block / nested gate layouts).
+	 * A `core/block` reference is the one depth this does not reach. The reference is
+	 * carried through untouched because it resolves at render time, which is what the
+	 * migrated layout wants — but it means a wrapper living inside the referenced
+	 * pattern is beyond the strip. warn_on_wrapper_in_referenced_pattern() reports
+	 * that shape rather than silently carrying it.
 	 *
-	 * @param array $inner_blocks The innerBlocks array from a parsed block.
+	 * A wrapper of the SAME type as the one being extracted is a different case: its
+	 * audience is the audience this layout is already for, so its content belongs in
+	 * the layout. It is unwrapped — the wrapper goes, its children stay in place.
+	 *
+	 * @param array  $inner_blocks The innerBlocks array from a parsed block.
+	 * @param string $keep_wrapper The wrapper block name being extracted. A nested
+	 *                             wrapper of this name is unwrapped; the opposite one
+	 *                             is dropped whole.
+	 * @param int    $gate_post_id The gate post being extracted, for warning context.
 	 *
 	 * @return string Serialized block markup.
 	 */
-	private static function serialize_gate_inner_blocks( array $inner_blocks ): string {
-		$membership_block_types = [
-			'woocommerce-memberships/member-content',
-			'woocommerce-memberships/non-member-content',
-		];
-		$filtered = array_filter(
-			$inner_blocks,
-			fn( $b ) => ! in_array( $b['blockName'], $membership_block_types, true )
+	private static function serialize_gate_inner_blocks( array $inner_blocks, string $keep_wrapper, int $gate_post_id ): string {
+		return \serialize_blocks( self::strip_membership_wrappers( $inner_blocks, $keep_wrapper, $gate_post_id ) );
+	}
+
+	/**
+	 * Remove WooCommerce Memberships wrapper blocks from a block list, recursively.
+	 *
+	 * @param array  $blocks       Parsed blocks.
+	 * @param string $keep_wrapper The wrapper block name whose content belongs in this
+	 *                             layout. Nested wrappers of this name are unwrapped;
+	 *                             the opposite wrapper is dropped with its content.
+	 * @param int    $gate_post_id The gate post being extracted, for warning context.
+	 *
+	 * @return array Blocks with every wrapper resolved at any depth in this tree.
+	 */
+	private static function strip_membership_wrappers( array $blocks, string $keep_wrapper, int $gate_post_id ): array {
+		$kept = [];
+		foreach ( $blocks as $block ) {
+			$block_name = $block['blockName'] ?? null;
+			if ( $keep_wrapper === $block_name ) {
+				// Same audience as the layout being built: keep the content, drop the
+				// wrapper around it.
+				foreach ( self::strip_membership_wrappers( $block['innerBlocks'] ?? [], $keep_wrapper, $gate_post_id ) as $unwrapped ) {
+					$kept[] = $unwrapped;
+				}
+				continue;
+			}
+			if ( in_array( $block_name, self::MEMBERSHIP_WRAPPER_BLOCKS, true ) ) {
+				continue;
+			}
+			if ( 'core/block' === $block_name ) {
+				self::warn_on_wrapper_in_referenced_pattern( $block, $gate_post_id );
+			}
+			$kept[] = empty( $block['innerBlocks'] ) ? $block : self::strip_membership_wrappers_from_block( $block, $keep_wrapper, $gate_post_id );
+		}
+		return array_values( $kept );
+	}
+
+	/**
+	 * Warn when a synced pattern carried into a layout holds a membership wrapper.
+	 *
+	 * The reference is left in the layout markup deliberately, so the wrapper inside
+	 * it survives the strip. After WooCommerce Memberships is deactivated an
+	 * unregistered wrapper prints its saved inner content unconditionally, which
+	 * shows members-only copy to whoever sees the layout. Nothing else in the run
+	 * can see this, because the markup that reaches the layout is a reference.
+	 *
+	 * @param array $block        A parsed `core/block` reference.
+	 * @param int   $gate_post_id The gate post being extracted.
+	 *
+	 * @return void
+	 */
+	private static function warn_on_wrapper_in_referenced_pattern( array $block, int $gate_post_id ): void {
+		$ref = (int) ( $block['attrs']['ref'] ?? 0 );
+		if ( ! $ref ) {
+			return;
+		}
+		// One scan per gate/pattern pair: extraction runs once per plan group, and the
+		// Primary-gate fallback makes many groups resolve to the same gate post.
+		static $scanned = [];
+		$key = $gate_post_id . ':' . $ref;
+		if ( isset( $scanned[ $key ] ) ) {
+			return;
+		}
+		$scanned[ $key ] = true;
+
+		$wrappers = self::find_wrappers_in_pattern( $ref, [] );
+		if ( empty( $wrappers ) ) {
+			return;
+		}
+		WP_CLI::warning(
+			sprintf(
+				'Gate post %d carries synced pattern %d into a layout, and that pattern contains a %s block. Edit the pattern to remove the wrapper before cutover, or the copy inside it will be shown to every reader.',
+				$gate_post_id,
+				$ref,
+				implode( ' and a ', $wrappers )
+			)
 		);
-		return \serialize_blocks( array_values( $filtered ) );
+	}
+
+	/**
+	 * Names of the membership wrappers reachable from a synced pattern.
+	 *
+	 * Follows `core/block` references, because a pattern may hold another pattern and
+	 * WordPress resolves the whole chain at render time — so a wrapper two hops down
+	 * still reaches the reader.
+	 *
+	 * Unlike the resolution guard in collect_gate_layout_markup(), this checks the post
+	 * type only. A draft or password-protected pattern renders nothing today, but the
+	 * operator reads this warning before cutover and can publish it after; warning about
+	 * a pattern that turns out to be inert costs less than staying quiet about one that
+	 * does not.
+	 *
+	 * @param int   $ref     The wp_block post ID.
+	 * @param array $visited Pattern IDs already followed on this path, keyed by ID.
+	 *
+	 * @return string[] Distinct wrapper block names found, in the order encountered.
+	 */
+	private static function find_wrappers_in_pattern( int $ref, array $visited ): array {
+		if ( ! $ref || isset( $visited[ $ref ] ) ) {
+			return [];
+		}
+		$referenced = \get_post( $ref );
+		if ( ! $referenced instanceof \WP_Post || 'wp_block' !== $referenced->post_type ) {
+			return [];
+		}
+		$found = [];
+		self::collect_wrapper_names( \parse_blocks( $referenced->post_content ), $found, $visited + [ $ref => true ] );
+		return array_keys( $found );
+	}
+
+	/**
+	 * Accumulate membership wrapper block names found anywhere in a block tree.
+	 *
+	 * @param array $blocks  Parsed blocks to search.
+	 * @param array $found   Wrapper names found, keyed by name, filled by reference.
+	 * @param array $visited Pattern IDs already followed on this path, keyed by ID.
+	 *
+	 * @return void
+	 */
+	private static function collect_wrapper_names( array $blocks, array &$found, array $visited ): void {
+		foreach ( $blocks as $block ) {
+			$block_name = $block['blockName'] ?? null;
+			if ( in_array( $block_name, self::MEMBERSHIP_WRAPPER_BLOCKS, true ) ) {
+				$found[ $block_name ] = true;
+			}
+			if ( 'core/block' === $block_name ) {
+				foreach ( self::find_wrappers_in_pattern( (int) ( $block['attrs']['ref'] ?? 0 ), $visited ) as $nested ) {
+					$found[ $nested ] = true;
+				}
+				continue;
+			}
+			if ( ! empty( $block['innerBlocks'] ) ) {
+				self::collect_wrapper_names( $block['innerBlocks'], $found, $visited );
+			}
+		}
+	}
+
+	/**
+	 * Strip wrapper blocks from one block's descendants, keeping innerContent in step.
+	 *
+	 * WordPress interleaves a block's own markup with its children by walking
+	 * `innerContent`, where each null is the placeholder for the next entry of
+	 * `innerBlocks`. Dropping a child without dropping its placeholder shifts every
+	 * later child into the wrong slot, so the two are rebuilt together here rather
+	 * than filtering `innerBlocks` alone.
+	 *
+	 * @param array  $block        A parsed block with a non-empty innerBlocks list.
+	 * @param string $keep_wrapper The wrapper block name to unwrap rather than drop.
+	 * @param int    $gate_post_id The gate post being extracted, for warning context.
+	 *
+	 * @return array The block with wrappers resolved in its subtree.
+	 */
+	private static function strip_membership_wrappers_from_block( array $block, string $keep_wrapper, int $gate_post_id ): array {
+		// A block with children but no innerContent map has nothing to keep in step.
+		if ( empty( $block['innerContent'] ) || ! is_array( $block['innerContent'] ) ) {
+			$block['innerBlocks'] = self::strip_membership_wrappers( $block['innerBlocks'], $keep_wrapper, $gate_post_id );
+			return $block;
+		}
+
+		$kept_blocks  = [];
+		$kept_content = [];
+		$child_index  = 0;
+		foreach ( $block['innerContent'] as $chunk ) {
+			if ( null !== $chunk ) {
+				$kept_content[] = $chunk;
+				continue;
+			}
+			$child = $block['innerBlocks'][ $child_index ] ?? null;
+			++$child_index;
+			if ( null === $child ) {
+				continue;
+			}
+			$child_name = $child['blockName'] ?? null;
+			if ( $keep_wrapper === $child_name ) {
+				// Unwrapped in place: each surviving grandchild needs its own placeholder,
+				// or serialize_block() reads the innerContent map out of step.
+				foreach ( self::strip_membership_wrappers( $child['innerBlocks'] ?? [], $keep_wrapper, $gate_post_id ) as $unwrapped ) {
+					$kept_blocks[]  = $unwrapped;
+					$kept_content[] = null;
+				}
+				continue;
+			}
+			if ( in_array( $child_name, self::MEMBERSHIP_WRAPPER_BLOCKS, true ) ) {
+				continue;
+			}
+			if ( 'core/block' === $child_name ) {
+				self::warn_on_wrapper_in_referenced_pattern( $child, $gate_post_id );
+			}
+			$kept_blocks[]  = empty( $child['innerBlocks'] ) ? $child : self::strip_membership_wrappers_from_block( $child, $keep_wrapper, $gate_post_id );
+			$kept_content[] = null;
+		}
+
+		$block['innerBlocks']  = $kept_blocks;
+		$block['innerContent'] = $kept_content;
+		return $block;
 	}
 
 	/**
 	 * Extract registration and custom_access layout block content from an
 	 * np_memberships_gate post.
 	 *
-	 * - Registration layout: inner block content of the top-level
+	 * - Registration layout: inner block content of the
 	 *   `woocommerce-memberships/non-member-content` block(s) (the gate/upsell shown to
 	 *   non-members).
-	 * - Custom access layout: inner block content of the top-level
+	 * - Custom access layout: inner block content of the
 	 *   `woocommerce-memberships/member-content` block(s) (shown to paying members).
 	 *
-	 * A gate post may interleave several top-level wrappers of the same type — a post
-	 * mixing public and members-only sections. Each type's wrappers are concatenated in
-	 * document order so no authored content is dropped.
+	 * The whole block tree is searched and reusable `core/block` references are
+	 * resolved to the referenced `wp_block` post, so a gate whose wrappers sit inside a
+	 * group or columns block — or live in a synced pattern — migrates with its authored
+	 * content instead of an empty layout (NPPD-2058).
 	 *
-	 * This is the layout-extraction seam for NPPD-2058: only top-level wrapper
-	 * blocks are inspected, so gates whose wrappers are nested (e.g. inside a group
-	 * or a reusable `core/block`) yield empty layouts. The stacked NPPD-2058 PR
-	 * walks nested/reusable blocks; this port preserves the top-level-only behavior.
+	 * A gate post may hold several wrappers of the same type — a post mixing public and
+	 * members-only sections. Each type's wrappers are concatenated in document order so
+	 * no authored content is dropped.
 	 *
 	 * @param \WP_Post $gate_post The np_memberships_gate post.
 	 *
 	 * @return array{registration: string, custom_access: string|null}
 	 */
 	private static function extract_gate_layouts( \WP_Post $gate_post ): array {
-		$blocks               = \parse_blocks( $gate_post->post_content );
-		$registration_markup  = null;
-		$custom_access_markup = null;
-
-		foreach ( $blocks as $block ) {
-			if ( 'woocommerce-memberships/non-member-content' === $block['blockName'] ) {
-				$registration_markup = ( $registration_markup ?? '' ) . self::serialize_gate_inner_blocks( $block['innerBlocks'] );
-			}
-			if ( 'woocommerce-memberships/member-content' === $block['blockName'] ) {
-				$custom_access_markup = ( $custom_access_markup ?? '' ) . self::serialize_gate_inner_blocks( $block['innerBlocks'] );
-			}
-		}
+		$layouts = [
+			'registration'  => null,
+			'custom_access' => null,
+		];
+		self::collect_gate_layout_markup( \parse_blocks( $gate_post->post_content ), $layouts, [], $gate_post->ID );
 
 		return [
-			'registration'  => $registration_markup ?? '',
-			'custom_access' => $custom_access_markup,
+			'registration'  => $layouts['registration'] ?? '',
+			'custom_access' => $layouts['custom_access'],
 		];
+	}
+
+	/**
+	 * Walk parsed blocks and concatenate the inner content of every WooCommerce
+	 * Memberships wrapper block found, at any depth.
+	 *
+	 * A wrapper's own inner blocks are not searched again: everything inside a
+	 * member-content block already belongs to that wrapper's layout, and
+	 * serialize_gate_inner_blocks() resolves any wrapper nested within it — unwrapping
+	 * a same-audience one, dropping the opposite.
+	 *
+	 * @param array $blocks       Parsed blocks to search.
+	 * @param array $layouts      Accumulated layout markup keyed 'registration' and
+	 *                            'custom_access', filled by reference. Each stays null
+	 *                            until its wrapper type is found, which is what tells
+	 *                            the caller "no custom access layout" apart from "an
+	 *                            empty one".
+	 * @param array $visited      wp_block post IDs already resolved on the path taken to
+	 *                            reach these blocks, keyed by ID. Each descent gets a
+	 *                            copy rather than sharing one set, so a pattern placed
+	 *                            twice contributes twice while a pattern that reaches
+	 *                            itself cannot recurse forever.
+	 * @param int   $gate_post_id The gate post being extracted, for warning context.
+	 *
+	 * @return void
+	 */
+	private static function collect_gate_layout_markup( array $blocks, array &$layouts, array $visited, int $gate_post_id ): void {
+		foreach ( $blocks as $block ) {
+			$block_name = $block['blockName'] ?? null;
+
+			if ( 'woocommerce-memberships/non-member-content' === $block_name ) {
+				$layouts['registration'] = ( $layouts['registration'] ?? '' ) . self::serialize_gate_inner_blocks( $block['innerBlocks'], 'woocommerce-memberships/non-member-content', $gate_post_id );
+				continue;
+			}
+			if ( 'woocommerce-memberships/member-content' === $block_name ) {
+				$layouts['custom_access'] = ( $layouts['custom_access'] ?? '' ) . self::serialize_gate_inner_blocks( $block['innerBlocks'], 'woocommerce-memberships/member-content', $gate_post_id );
+				continue;
+			}
+
+			if ( 'core/block' === $block_name ) {
+				$ref = (int) ( $block['attrs']['ref'] ?? 0 );
+				if ( ! $ref || isset( $visited[ $ref ] ) ) {
+					continue;
+				}
+				$referenced = \get_post( $ref );
+				// The same guards core/block's own render callback applies — post type,
+				// published status, and no password — so extraction sees what a reader
+				// would: a pattern core would not render contributes nothing here either.
+				if (
+					! $referenced instanceof \WP_Post
+					|| 'wp_block' !== $referenced->post_type
+					|| 'publish' !== $referenced->post_status
+					|| ! empty( $referenced->post_password )
+				) {
+					WP_CLI::warning(
+						sprintf(
+							'Gate post %d references synced pattern %d, which is missing, unpublished or password-protected — any gate content it holds will not migrate.',
+							$gate_post_id,
+							$ref
+						)
+					);
+					continue;
+				}
+				self::collect_gate_layout_markup( \parse_blocks( $referenced->post_content ), $layouts, $visited + [ $ref => true ], $gate_post_id );
+				continue;
+			}
+
+			if ( ! empty( $block['innerBlocks'] ) ) {
+				self::collect_gate_layout_markup( $block['innerBlocks'], $layouts, $visited, $gate_post_id );
+			}
+		}
 	}
 
 	/**
@@ -1581,5 +2042,379 @@ class Membership_Gates_Migration {
 			}
 		}
 		return false;
+	}
+
+	/**
+	 * Record Access Control exemptions for the posts WooCommerce Memberships forced public.
+	 *
+	 * Memberships' "This content is public" checkbox writes
+	 * `_wc_memberships_force_public = 'yes'` and short-circuits every restriction rule.
+	 * Access Control's equivalent is the "Disable access control restrictions for this
+	 * post" toggle. Nothing bridges the two, so without this step those posts are gated
+	 * the moment Memberships is deactivated.
+	 *
+	 * A falsy exemption row is left alone and reported. Turning the toggle off is what
+	 * records one, so overwriting it would undo a decision. Pass --overwrite-falsy for
+	 * rows that predate the toggle, where the falsy value is only the editor echoing the
+	 * registered default back on save.
+	 *
+	 * Migrates only the post types the exemption toggle is offered on. Posts on any other
+	 * type are counted and warned about rather than written: they can still be gated by a
+	 * taxonomy access rule, so they need a human decision this command cannot make.
+	 *
+	 * Idempotent, but additive: an exemption recorded by an earlier run is never removed.
+	 * A post whose Memberships flag has since been unchecked is reported so it can be
+	 * reviewed — it would otherwise stay public after cutover. Publishers keep using the
+	 * checkbox up to cutover, so the run that counts is the one immediately before
+	 * Memberships is deactivated.
+	 *
+	 * Dry-run by default; pass --live to write.
+	 *
+	 * ## OPTIONS
+	 *
+	 * [--live]
+	 * : Apply the changes. Without this flag the command runs as a dry-run and writes nothing.
+	 *
+	 * [--overwrite-falsy]
+	 * : Also record an exemption on posts whose exemption row is already set to a falsy
+	 * value. Only for rows known to predate the exemption toggle.
+	 *
+	 * ## EXAMPLES
+	 *
+	 *     wp newspack migrate-post-exemptions
+	 *     wp newspack migrate-post-exemptions --live
+	 *     wp newspack migrate-post-exemptions --live --overwrite-falsy
+	 *
+	 * @param array $args       Positional args (unused).
+	 * @param array $assoc_args Named args.
+	 *
+	 * @return void
+	 */
+	public function migrate_post_exemptions( $args, $assoc_args ) {
+		$dry_run         = ! (bool) \WP_CLI\Utils\get_flag_value( $assoc_args, 'live', false );
+		$overwrite_falsy = (bool) \WP_CLI\Utils\get_flag_value( $assoc_args, 'overwrite-falsy', false );
+
+		if ( ! class_exists( 'Newspack\Content_Restriction_Control' ) ) {
+			WP_CLI::error( 'Newspack\Content_Restriction_Control class not found, so the exemption meta key and its post types cannot be resolved. Aborting.' );
+		}
+
+		if ( $dry_run ) {
+			WP_CLI::line( '' );
+			WP_CLI::line( '*** DRY RUN MODE — no data will be modified. Pass --live to write. ***' );
+			WP_CLI::line( '' );
+		}
+
+		if ( ! \Newspack\Content_Gate::is_newspack_feature_enabled() ) {
+			WP_CLI::warning( 'Content gates are disabled on this site (NEWSPACK_CONTENT_GATES). The exemptions will be recorded, but nothing reads them until the feature is enabled.' );
+		}
+
+		$flagged = self::get_force_public_posts();
+		if ( null === $flagged ) {
+			WP_CLI::error( 'Could not read the force-public flags. Aborting rather than reporting an empty set to an operator about to deactivate Memberships.' );
+		}
+
+		$post_types   = array_column( (array) \Newspack\Content_Restriction_Control::get_available_post_types(), 'value' );
+		$in_scope     = [];
+		$out_of_scope = [];
+		foreach ( $flagged as $post ) {
+			if ( in_array( $post['post_type'], $post_types, true ) ) {
+				$in_scope[] = $post;
+			} else {
+				$out_of_scope[ $post['post_type'] ] = ( $out_of_scope[ $post['post_type'] ] ?? 0 ) + 1;
+			}
+		}
+
+		if ( empty( $in_scope ) ) {
+			WP_CLI::line( 'No posts carry the WooCommerce Memberships force-public flag on a post type the exemption applies to.' );
+			self::report_out_of_scope_force_public( $out_of_scope );
+			self::report_revoked_force_public();
+			return;
+		}
+
+		$missing   = [];
+		$falsy     = [];
+		$preserved = [];
+		$failed    = [];
+		$breakdown = [];
+		// Classify and write a chunk at a time, so the meta cache neither grows with the
+		// site nor is thrown away between reading a post and writing it.
+		foreach ( array_chunk( $in_scope, 200 ) as $chunk ) {
+			\update_meta_cache( 'post', array_column( $chunk, 'ID' ) );
+			foreach ( $chunk as $post ) {
+				$post_id = (int) $post['ID'];
+				$state   = self::classify_exemption_state( $post_id );
+
+				$key                 = $post['post_type'] . '|' . $post['post_status'];
+				$breakdown[ $key ] ??= [
+					'post_type'   => $post['post_type'],
+					'post_status' => $post['post_status'],
+					'missing'     => 0,
+					'falsy'       => 0,
+					'already'     => 0,
+				];
+				++$breakdown[ $key ][ $state ];
+
+				if ( 'already' === $state ) {
+					continue;
+				}
+				if ( 'falsy' === $state && ! $overwrite_falsy ) {
+					$preserved[] = $post_id;
+					continue;
+				}
+				if ( ! $dry_run && ! \update_post_meta( $post_id, \Newspack\Content_Restriction_Control::IS_EXEMPT_META_KEY, true ) ) {
+					$failed[] = $post_id;
+					continue;
+				}
+				if ( 'missing' === $state ) {
+					$missing[] = $post_id;
+				} else {
+					$falsy[] = $post_id;
+				}
+			}
+			\WP_CLI\Utils\wp_clear_object_cache();
+		}
+
+		WP_CLI::line( '' );
+		WP_CLI::line( $dry_run ? '=== DRY RUN SUMMARY ===' : '=== MIGRATION SUMMARY ===' );
+		WP_CLI::line( '' );
+
+		\WP_CLI\Utils\format_items(
+			'table',
+			array_map(
+				fn( $row ) => [
+					'Post Type'      => $row['post_type'],
+					'Status'         => $row['post_status'],
+					'No Row'         => $row['missing'],
+					'Falsy Row'      => $row['falsy'],
+					'Already Exempt' => $row['already'],
+				],
+				array_values( $breakdown )
+			),
+			[ 'Post Type', 'Status', 'No Row', 'Falsy Row', 'Already Exempt' ]
+		);
+
+		WP_CLI::line( '' );
+
+		// The command never removes an exemption, so this list is the only record of what a
+		// live run touched. Printing it is what makes an over-broad run undoable without
+		// re-deriving the set from the database afterwards.
+		if ( ! empty( $missing ) || ! empty( $falsy ) ) {
+			WP_CLI::line(
+				sprintf(
+					'Exemption %s for: %s',
+					$dry_run ? 'would be recorded' : 'recorded',
+					self::format_post_id_list( array_merge( $missing, $falsy ) )
+				)
+			);
+		}
+
+		if ( ! empty( $preserved ) ) {
+			WP_CLI::warning(
+				sprintf(
+					'%d post(s) are forced public by Memberships but carry a falsy exemption row, so they stay gated after cutover. That row is what turning the toggle off records, so it is left alone. Re-run with --overwrite-falsy for any that predate the toggle: %s',
+					count( $preserved ),
+					self::format_post_id_list( $preserved )
+				)
+			);
+		}
+
+		if ( ! empty( $falsy ) ) {
+			WP_CLI::warning(
+				sprintf(
+					'%d falsy exemption row(s) %s, per --overwrite-falsy: %s',
+					count( $falsy ),
+					$dry_run ? 'would be overwritten' : 'were overwritten',
+					self::format_post_id_list( $falsy )
+				)
+			);
+		}
+
+		if ( ! empty( $failed ) ) {
+			WP_CLI::warning( sprintf( '%d exemption(s) could not be written, and are still counted in the table above: %s', count( $failed ), self::format_post_id_list( $failed ) ) );
+		}
+
+		self::report_out_of_scope_force_public( $out_of_scope );
+		self::report_revoked_force_public();
+
+		WP_CLI::success(
+			sprintf(
+				'Done. %d exemption(s) %s (%d with no row, %d overwriting a falsy row). %d post(s) were already exempt, %d falsy row(s) left alone.',
+				count( $missing ) + count( $falsy ),
+				$dry_run ? 'would be recorded' : 'recorded',
+				count( $missing ),
+				count( $falsy ),
+				count( $in_scope ) - count( $missing ) - count( $falsy ) - count( $failed ) - count( $preserved ),
+				count( $preserved )
+			)
+		);
+
+		if ( ! $dry_run ) {
+			WP_CLI::line( 'Keep the `_wc_memberships_force_public` meta until this has run for the last time — it is what this command reads.' );
+		}
+
+		// A warning line is invisible to whatever chained this command with the Memberships
+		// deactivation that follows it, and an unwritten exemption cannot be recovered once
+		// the flag it came from is gone. Exit non-zero so the cutover stops here.
+		if ( ! empty( $failed ) ) {
+			WP_CLI::halt( 1 );
+		}
+	}
+
+	/**
+	 * Every post carrying the Memberships force-public flag, whatever its post type.
+	 *
+	 * The `meta_value = 'yes'` filter is not optional: the checkbox writes a `no` row for
+	 * every post it was ever rendered on, outnumbering the real ones by an order of
+	 * magnitude.
+	 *
+	 * @return array[]|null Rows of ID / post_type / post_status ordered by ID, or null
+	 *                      if the query failed.
+	 */
+	private static function get_force_public_posts(): ?array {
+		global $wpdb;
+
+		$rows = $wpdb->get_results( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+			$wpdb->prepare(
+				"SELECT DISTINCT p.ID, p.post_type, p.post_status
+				FROM {$wpdb->posts} p
+				INNER JOIN {$wpdb->postmeta} pm ON pm.post_id = p.ID
+				WHERE pm.meta_key = %s AND pm.meta_value = 'yes'
+				ORDER BY p.ID",
+				\Newspack\Content_Restriction_Control::WC_FORCE_PUBLIC_META_KEY
+			),
+			ARRAY_A
+		);
+
+		// get_results() reports a failed query as an empty set, which here would read as
+		// "no post was ever forced public" to an operator about to deactivate Memberships.
+		return $wpdb->last_error ? null : (array) $rows;
+	}
+
+	/**
+	 * Report posts that are exempt while their Memberships flag says otherwise.
+	 *
+	 * An earlier live run records an exemption; the publisher then unchecks the box. This
+	 * command never revisits that post — it selects on `meta_value = 'yes'` — so the
+	 * exemption outlives the flag and the post stays public after cutover. The same shape
+	 * is also a legitimate editor-set exemption on a post Memberships never forced public,
+	 * so these are named for review, never removed.
+	 *
+	 * @return void
+	 */
+	private static function report_revoked_force_public(): void {
+		global $wpdb;
+
+		$post_ids = $wpdb->get_col( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+			$wpdb->prepare(
+				"SELECT DISTINCT p.ID
+				FROM {$wpdb->posts} p
+				INNER JOIN {$wpdb->postmeta} fp ON fp.post_id = p.ID AND fp.meta_key = %s AND fp.meta_value = 'no'
+				INNER JOIN {$wpdb->postmeta} ex ON ex.post_id = p.ID AND ex.meta_key = %s AND ex.meta_value NOT IN ( '', '0' )
+				ORDER BY p.ID",
+				\Newspack\Content_Restriction_Control::WC_FORCE_PUBLIC_META_KEY,
+				\Newspack\Content_Restriction_Control::IS_EXEMPT_META_KEY
+			)
+		);
+
+		// Same hazard as the census query: get_col() reports a failure as an empty set, and
+		// an empty review list is what an operator about to deactivate Memberships reads as
+		// "nothing stays wrongly public".
+		if ( $wpdb->last_error ) {
+			WP_CLI::warning( 'Could not check for exemptions whose Memberships flag was since revoked. Nothing was reviewed — treat this as "unknown", not "none".' );
+			return;
+		}
+
+		if ( empty( $post_ids ) ) {
+			return;
+		}
+
+		WP_CLI::warning(
+			sprintf(
+				'%d post(s) are exempt while the Memberships flag says they are not, so they stay public after cutover. Review and clear any the publisher no longer wants free: %s',
+				count( $post_ids ),
+				self::format_post_id_list( $post_ids )
+			)
+		);
+	}
+
+	/**
+	 * Report the force-public posts on post types the exemption toggle is not offered on.
+	 *
+	 * A warning rather than a plain line, because "the exemption does not apply" is not the
+	 * same as "these posts cannot be gated". Nothing in the restriction check is scoped by
+	 * post type: the exemption is honoured on any post ID, and a category or tag access rule
+	 * matches a post through its terms. So a public post type the exemption toggle is not
+	 * offered on — it is absent from `get_available_post_types()` — can still be gated at
+	 * cutover, and these posts are exactly the ones the publisher marked free.
+	 *
+	 * Counts posts, not meta rows: the census query selects DISTINCT post IDs, so duplicate
+	 * force-public rows on one post collapse to a single entry.
+	 *
+	 * @param array<string,int> $out_of_scope Post type => post count.
+	 *
+	 * @return void
+	 */
+	private static function report_out_of_scope_force_public( array $out_of_scope ): void {
+		if ( empty( $out_of_scope ) ) {
+			return;
+		}
+		arsort( $out_of_scope );
+		$parts = [];
+		foreach ( $out_of_scope as $post_type => $count ) {
+			$parts[] = sprintf( '%s (%d)', $post_type, $count );
+		}
+		WP_CLI::warning(
+			sprintf(
+				'Skipped %d force-public post(s) on post types the exemption toggle is not offered on: %s. A category or tag access rule can still gate them, and no exemption was recorded — check these by hand before deactivating Memberships.',
+				array_sum( $out_of_scope ),
+				implode( ', ', $parts )
+			)
+		);
+	}
+
+	/**
+	 * Render a list of post IDs for a single CLI line, capped.
+	 *
+	 * These lists are what an operator acts on before deactivating Memberships. Imploding
+	 * every ID scrolls the rest of the summary out of the terminal buffer once the list runs
+	 * to thousands, so the tail is summarised instead.
+	 *
+	 * @param int[] $post_ids Post IDs.
+	 * @param int   $limit    How many IDs to name before summarising the rest.
+	 *
+	 * @return string
+	 */
+	private static function format_post_id_list( array $post_ids, int $limit = 100 ): string {
+		if ( count( $post_ids ) <= $limit ) {
+			return implode( ', ', $post_ids );
+		}
+		return sprintf(
+			'%s (and %d more)',
+			implode( ', ', array_slice( $post_ids, 0, $limit ) ),
+			count( $post_ids ) - $limit
+		);
+	}
+
+	/**
+	 * Where a post stands with respect to the Access Control exemption.
+	 *
+	 * Reads through metadata_exists() rather than get_post_meta(). The exemption meta is
+	 * registered with a default, so get_post_meta() cannot tell "no row" from "row set
+	 * falsy" — and on a build carrying the `default_post_metadata` fallback for the exemption
+	 * key (which answers from the Memberships flag), it answers true for exactly the posts
+	 * this command selects, which would leave it with nothing to write. metadata_exists()
+	 * reads the row itself, past both.
+	 *
+	 * @param int $post_id Post ID.
+	 *
+	 * @return string 'missing' (no row), 'falsy' (a row set falsy), or 'already' (a real
+	 *                exemption, left alone).
+	 */
+	private static function classify_exemption_state( int $post_id ): string {
+		$meta_key = \Newspack\Content_Restriction_Control::IS_EXEMPT_META_KEY;
+		if ( ! \metadata_exists( 'post', $post_id, $meta_key ) ) {
+			return 'missing';
+		}
+		return \get_post_meta( $post_id, $meta_key, true ) ? 'already' : 'falsy';
 	}
 }

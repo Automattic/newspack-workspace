@@ -15,24 +15,30 @@ import { StatusIndicator } from 'newspack-components';
 
 // The component on its own.
 import StatusIndicator from '../../packages/components/src/status-indicator';
+
+// The vocabulary, for a column's own test. Deliberately not on the barrel: that
+// entry also pulls `Page`'s `:root` token block and the wizards store into
+// whichever bundle asks for it.
+import { statusGlyph, STATUS_NAMES } from '../../packages/components/src/status-indicator';
 ```
 
 ## Usage
 
-```jsx
-import { published } from '@wordpress/icons';
+Name the status and the component draws it:
 
-<StatusIndicator icon={ published }>{ __( 'Active', 'newspack-plugin' ) }</StatusIndicator>;
+```jsx
+<StatusIndicator status="active">{ __( 'Active', 'newspack-plugin' ) }</StatusIndicator>;
 ```
 
-In a field definition:
+In a field definition, where the screen maps its own status keys onto the
+vocabulary:
 
 ```jsx
 {
 	id: 'status',
 	label: __( 'Status', 'newspack-plugin' ),
 	getValue: ( { item } ) => item.status,
-	render: ( { item } ) => <StatusIndicator icon={ STATUS_ICONS[ item.status ] }>{ item.status_label }</StatusIndicator>,
+	render: ( { item } ) => <StatusIndicator status={ STATUS_INDICATORS[ item.status ] }>{ item.status_label }</StatusIndicator>,
 	elements: statusElements,
 	filterBy: { operators: [ 'is' ] },
 }
@@ -42,24 +48,60 @@ In a field definition:
 
 | Prop | Type | Required | Description |
 | --- | --- | --- | --- |
-| `icon` | `Icon`'s `icon` prop | yes | The status glyph, from `@wordpress/icons`. |
+| `status` | `StatusName` | one of the two | The status to draw, from the vocabulary below. |
+| `icon` | `Icon`'s `icon` prop | one of the two | A glyph, for a field the vocabulary does not cover. |
 | `children` | `ReactNode` | yes | The status label. `@wordpress/primitives` forces `aria-hidden` on the glyph, so this is the whole accessible name. |
 
+`status` and `icon` are mutually exclusive, and one of them is required.
 Anything else is spread onto the wrapper, a `Stack` from `@wordpress/ui`, which
 takes the props of a `div`.
 
-## Choosing an icon
+## The vocabulary
 
-**No two statuses in one column may share a glyph.** A DataViews Status column
-offers its statuses as separate filters, so two that look identical make two
-different states indistinguishable in the one place the difference matters. This
-is the constraint the badge intents carried before, and it survives the move
-unchanged.
+| Name | Glyph | What it means |
+| --- | --- | --- |
+| `active` | check circle | Live now: a published plan, a running subscription. |
+| `done` | check circle | Finished successfully: a sent newsletter, a completed sync. |
+| `scheduled` | clock | Waiting for a date to arrive. |
+| `draft` | half circle | Not live yet, or switched off. |
+| `pending` | part-filled circle | Waiting on something outside the publisher's hands. |
+| `attention` | exclamation circle | Live but needing a look, usually a payment. |
+| `error` | error | Failed, and the one state that asks the reader to act. |
+| `progress` | update | Running right now. |
+| `cancelled` | slash circle | Stopped on purpose. |
+| `ended` | slash circle | Stopped because its window closed. |
+| `private` | lock | Live, but not publicly reachable. |
+| `trash` | trash | Binned. |
+
+The component owns this so one meaning draws one mark everywhere. Before it
+existed the vocabulary lived in ten screen-level maps, and had already drifted:
+Pending was the half circle in Subscribers and the part-filled one in the
+Audience lists.
+
+**No two statuses in one column may draw the same mark.** A DataViews Status
+column offers its statuses as separate filters, so two that look identical make
+two different states indistinguishable in the one place the difference matters.
+
+Two names may share a glyph where they read differently at the call site but
+mean the same to a reader: a sent newsletter is finished rather than live, and
+an ad whose window closed was not cancelled. Splitting them leaves room to draw
+them apart later without touching a consumer. The pairs are `active`/`done` and
+`cancelled`/`ended`, and `index.test.js` pins that list, so a column keeps the
+rule by using distinct names and at most one half of a pair. `statusGlyph` is
+exported for the columns that want to assert it directly.
 
 The glyph does the separating on its own: the component inherits its colour from
 the surrounding text and tints nothing, so no status leans on colour to carry
 its meaning. That also means a state that needs to shout cannot, which is the
 trade the quiet treatment makes.
+
+## When to pass a glyph instead
+
+`icon` is for fields that classify rather than track a lifecycle, where a status
+name would be the wrong shape. Two exist: Plans' Availability (a gift, a lock
+and a globe for Free, Private and Public) and newsletters' Visibility (a globe
+or an envelope). Both are still Status-column-shaped in every other way, and
+both keep the same distinctness rule.
 
 ## The icon's footprint
 

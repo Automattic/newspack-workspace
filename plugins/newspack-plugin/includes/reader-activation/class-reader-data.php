@@ -262,6 +262,44 @@ final class Reader_Data {
 	}
 
 	/**
+	 * Decode a stored list-type reader data item (active_memberships,
+	 * active_subscriptions) into an array of IDs.
+	 *
+	 * Values written through update_item() are JSON arrays, but legacy writers
+	 * stored a bare scalar (`123`) or a comma-separated list (`123,456`) — the
+	 * shapes the sync-memberships CLI produced before NPPM-3205. Recover those
+	 * instead of letting a data event handler fatal on them: the handler then
+	 * writes the list back through update_item(), repairing the stored value.
+	 *
+	 * @param mixed $value Stored item value.
+	 *
+	 * @return array List of IDs.
+	 */
+	private static function decode_item_list( mixed $value ): array {
+		// A writer that handed update_user_meta() a real array gets it back
+		// unserialized; pass it through rather than resetting the reader's list.
+		if ( is_array( $value ) ) {
+			return array_values( array_filter( $value, 'is_scalar' ) );
+		}
+		// Explicit empty-string check: a stored "0" is a value, not an absence,
+		// matching the falsy-zero contract documented on validate_prepared_item().
+		if ( ! is_string( $value ) || '' === $value ) {
+			return [];
+		}
+		$decoded = json_decode( $value );
+		if ( is_array( $decoded ) ) {
+			return array_values( array_filter( $decoded, 'is_scalar' ) );
+		}
+		if ( is_numeric( $decoded ) ) {
+			return [ $decoded ];
+		}
+		if ( preg_match( '/^\d+(,\d+)*$/', $value ) ) {
+			return array_map( 'intval', explode( ',', $value ) );
+		}
+		return [];
+	}
+
+	/**
 	 * Stringify and sanitize a value for storage.
 	 *
 	 * @param mixed $value Value.
@@ -629,8 +667,7 @@ final class Reader_Data {
 			return;
 		}
 
-		$existing_subscriptions = self::get_data( $data['user_id'], 'active_subscriptions' );
-		$active_subscriptions   = $existing_subscriptions ? json_decode( $existing_subscriptions ) : [];
+		$active_subscriptions = self::decode_item_list( self::get_data( $data['user_id'], 'active_subscriptions' ) );
 		if ( WooCommerce_Connection::is_subscription_active( $data['status_after'] ) ) {
 			$active_subscriptions = array_merge( $active_subscriptions, $data['product_ids'] );
 		} else {
@@ -687,8 +724,7 @@ final class Reader_Data {
 			return;
 		}
 
-		$existing_memberships = self::get_data( $data['user_id'], 'active_memberships' );
-		$active_memberships   = $existing_memberships ? json_decode( $existing_memberships ) : [];
+		$active_memberships = self::decode_item_list( self::get_data( $data['user_id'], 'active_memberships' ) );
 		if ( ! isset( $data['status_after'] ) || in_array( $data['status_after'], Memberships::$active_statuses, true ) ) {
 			$active_memberships[] = $data['plan_id'];
 		} else {

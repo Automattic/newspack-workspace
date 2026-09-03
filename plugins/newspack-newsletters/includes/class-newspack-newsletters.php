@@ -91,6 +91,7 @@ final class Newspack_Newsletters {
 		add_filter( 'jetpack_relatedposts_filter_options', [ __CLASS__, 'disable_jetpack_related_posts' ] );
 		add_action( 'save_post_' . self::NEWSPACK_NEWSLETTERS_CPT, [ __CLASS__, 'save' ], 10, 3 );
 		add_filter( 'rest_pre_insert_' . self::NEWSPACK_NEWSLETTERS_CPT, [ __CLASS__, 'persist_send_config_before_send' ], 10, 2 );
+		add_filter( 'update_post_metadata', [ __CLASS__, 'guard_public_status_write' ], 10, 4 );
 		add_action( 'admin_enqueue_scripts', [ __CLASS__, 'branding_scripts' ] );
 		add_filter( 'newspack_theme_featured_image_post_types', [ __CLASS__, 'support_featured_image_options' ] );
 		add_filter( 'gform_force_hooks_js_output', [ __CLASS__, 'suppress_gravityforms_js_on_newsletters' ] );
@@ -1762,6 +1763,78 @@ final class Newspack_Newsletters {
 				)
 			)
 		);
+	}
+
+	/**
+	 * Whether the current user may set a newsletter's public-page flag to a given value.
+	 *
+	 * The flag is not a label: the active service provider watches it and moves the post
+	 * between `private` and `publish` to match, so setting it true publishes a page.
+	 * Making one public therefore needs `publish_post`, the same bar as publishing any
+	 * other content -- `edit_post` alone is satisfied by an author's own unpublished
+	 * post. Making one non-public de-escalates and needs only `edit_post`.
+	 *
+	 * This is the single definition of that rule. The list-table bulk action and the
+	 * classic quick-edit call it to decide what to skip, and `guard_public_status_write()`
+	 * enforces it on every write, including the REST meta route the admin shell uses.
+	 *
+	 * @param int  $post_id   Newsletter post ID.
+	 * @param bool $is_public The value being set.
+	 *
+	 * @return bool
+	 */
+	public static function current_user_can_set_public_status( $post_id, $is_public ) {
+		// `edit_post` carries the ownership and status logic; it is what stops a user
+		// touching someone else's newsletter. `publish_post` maps to the primitive
+		// `publish_posts` and never consults the post's author, so it is an addition
+		// to that check and never a replacement for it -- on its own it would let an
+		// Author publish anyone's newsletter.
+		if ( ! current_user_can( 'edit_post', $post_id ) ) {
+			return false;
+		}
+		if ( $is_public ) {
+			return current_user_can( 'publish_post', $post_id );
+		}
+		return true;
+	}
+
+	/**
+	 * Enforce the public-page capability rule on every write of the meta.
+	 *
+	 * The entry points check the rule themselves so they can report what they skipped,
+	 * but they are not the only writers: `is_public` is registered with `show_in_rest`
+	 * and an `auth_callback` of `__return_true`, so a REST meta write is gated on
+	 * `edit_post` alone. Filtering the write itself covers that route and any writer
+	 * added later, which is the part a per-caller check cannot promise.
+	 *
+	 * Returning a non-null value short-circuits the write in `update_metadata()`.
+	 *
+	 * @param null|bool $check      Short-circuit value. Non-null blocks the write.
+	 * @param int       $post_id    Post ID.
+	 * @param string    $meta_key   Meta key.
+	 * @param mixed     $meta_value Value being written.
+	 *
+	 * @return null|bool
+	 */
+	public static function guard_public_status_write( $check, $post_id, $meta_key, $meta_value ) {
+		if ( null !== $check || 'is_public' !== $meta_key ) {
+			return $check;
+		}
+		if ( self::NEWSPACK_NEWSLETTERS_CPT !== get_post_type( $post_id ) ) {
+			return $check;
+		}
+		// A capability is something a user holds, and there is no user on a WP-CLI run,
+		// a cron event or a migration -- `current_user_can()` is false for all of them,
+		// so enforcing here would block legitimate automation rather than an actor.
+		// Every HTTP route that reaches this write authenticates first, so the escape
+		// does not open one.
+		if ( ! is_user_logged_in() ) {
+			return $check;
+		}
+		if ( self::current_user_can_set_public_status( $post_id, (bool) $meta_value ) ) {
+			return $check;
+		}
+		return false;
 	}
 }
 Newspack_Newsletters::instance();

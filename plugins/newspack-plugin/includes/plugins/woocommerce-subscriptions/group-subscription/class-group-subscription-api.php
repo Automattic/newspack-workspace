@@ -312,28 +312,24 @@ class Group_Subscription_API {
 	}
 
 	/**
-	 * Resolve the manager an invite link should be minted for or read from.
+	 * Resolve the manager an invite link should be minted or deleted as.
 	 *
-	 * Invite links are stored per manager and re-validated against that manager's
-	 * status when an invitee clicks (see Group_Subscription_Invite::validate_link_invite()).
-	 * An admin is not a manager of the groups they administer, so minting under
-	 * their own ID would produce a link that is dead on arrival. They act on the
-	 * owner's link instead — the same link the owner sees in My Account.
+	 * The link itself belongs to the subscription, but Group_Subscription_Invite
+	 * still requires a manager to act as, and refuses anyone else. An admin is not
+	 * a manager of the groups they administer, so minting under their own ID would
+	 * be refused; they act as the owner instead.
 	 *
 	 * For an owner or a manager this returns their own ID, so the reader-facing
-	 * path is unchanged. Related: NPPD-2120, the shipped bug where a link outlives
-	 * its minter's manager status; this resolver keeps the admin surface from
-	 * creating new instances of it, it does not fix it.
+	 * path is unchanged.
 	 *
 	 * This is why an admin's two ways of inviting are attributed to two different
 	 * people, which is intended rather than an oversight. An email invitation
 	 * records its actual sender and names them to the recipient
-	 * (Group_Subscription_Invite::resolve_invite_sender()); a link cannot, because
-	 * it is validated against the manager whose slot holds it, and an admin has no
-	 * slot. Read the split as what each thing is: the email is a message from a
-	 * person, the link is an artifact of the group. Attributing the email to the
-	 * owner too would misdirect the reply; attributing the link to the admin would
-	 * mint a link that never opens.
+	 * (Group_Subscription_Invite::resolve_invite_sender()); a link records the
+	 * manager it was minted as, and an admin is not one. Read the split as what
+	 * each thing is: the email is a message from a person, the link is an artifact
+	 * of the group. Attributing the email to the owner too would misdirect the
+	 * reply.
 	 *
 	 * @param \WC_Subscription|int $subscription The subscription object or ID.
 	 *

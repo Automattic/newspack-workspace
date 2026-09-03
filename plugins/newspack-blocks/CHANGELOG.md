@@ -1,3 +1,38 @@
+# @automattic/newspack-blocks [4.31.0](https://github.com/Automattic/newspack-workspace/compare/newspack-blocks@4.30.5...newspack-blocks@4.31.0) (2026-08-31)
+
+
+### Bug Fixes
+
+* **blocks:** allow opted-in post types on the public /articles endpoint ([#522](https://github.com/Automattic/newspack-workspace/issues/522)) ([4ad30b4](https://github.com/Automattic/newspack-workspace/commit/4ad30b494bbdf5ecbb57576ddb922d9a300acb33))
+* **blocks:** escape checkout-button container class attribute ([#616](https://github.com/Automattic/newspack-workspace/issues/616)) ([f727cc2](https://github.com/Automattic/newspack-workspace/commit/f727cc209f2e50ae49f4397350d65721cb2c4b9b))
+
+
+### Features
+
+* add tag labels to the Carousel block ([#429](https://github.com/Automattic/newspack-workspace/issues/429)) ([567e5ab](https://github.com/Automattic/newspack-workspace/commit/567e5ab9fb54b69bd6e9377eac3f3f76ca8e29c2))
+* **subscriptions:** add a card to a manually created subscription ([#840](https://github.com/Automattic/newspack-workspace/issues/840)) ([3c752a0](https://github.com/Automattic/newspack-workspace/commit/3c752a00aebdfdf393ad36bc063e9df4c0c82d91))
+
+
+### Dependencies
+
+* **newspack-colors:** upgraded to 1.1.4
+* **newspack-icons:** upgraded to 1.1.2
+* **newspack-components:** upgraded to 4.7.0
+
+## @automattic/newspack-blocks [4.30.5](https://github.com/Automattic/newspack-workspace/compare/newspack-blocks@4.30.4...newspack-blocks@4.30.5) (2026-08-31)
+
+
+### Bug Fixes
+
+* **homepage-articles:** neutralize editor author links (NPPM-3165) ([#992](https://github.com/Automattic/newspack-workspace/issues/992)) ([b19c5ae](https://github.com/Automattic/newspack-workspace/commit/b19c5aeeab022ecd28afaba72999f4af1810f8e7))
+
+## @automattic/newspack-blocks [4.30.4](https://github.com/Automattic/newspack-workspace/compare/newspack-blocks@4.30.3...newspack-blocks@4.30.4) (2026-08-25)
+
+
+### Bug Fixes
+
+* **blocks:** track modal purchases made via the Store API ([#881](https://github.com/Automattic/newspack-workspace/issues/881)) ([06cd0a9](https://github.com/Automattic/newspack-workspace/commit/06cd0a95946703497a8f2bba0ecfd06c69a09718))
+
 ## @automattic/newspack-blocks [4.30.3](https://github.com/Automattic/newspack-workspace/compare/newspack-blocks@4.30.2...newspack-blocks@4.30.3) (2026-08-20)
 
 

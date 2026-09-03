@@ -24,8 +24,7 @@ jest.mock( '../../../../packages/components/src/wizard/store', () => ( { WIZARD_
 // The list reads the router at module scope, so the proxy has to answer here too.
 jest.mock( '../../../../packages/components/src', () => ( {
 	DataViews: () => null,
-	Button: () => null,
-	Notice: () => null,
+	Button: require( 'react' ).forwardRef( () => null ),
 	Waiting: () => null,
 	Router: { useHistory: () => ( { push: jest.fn() } ), useLocation: () => ( { pathname: '/' } ) },
 } ) );

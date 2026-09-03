@@ -92,6 +92,22 @@ class Teams_Migration {
 	const MIGRATED_TEAM_ID_META_KEY = '_newspack_migrated_team_id';
 
 	/**
+	 * Value-requiring flags of migrate-manual-members, for the raw-argv bare-flag
+	 * guard. See get_valueless_value_flags().
+	 *
+	 * @var string[]
+	 */
+	const MANUAL_MEMBERS_VALUE_FLAGS = [
+		'--product-id',
+		'--plan-ids',
+		'--access-product-ids',
+		'--user-ids',
+		'--user-ids-file',
+		'--skip-domains',
+		'--group-owner-id',
+	];
+
+	/**
 	 * The "nothing to reuse" group-subscription resolution, and so the shape every
 	 * resolution returns: a match fills in only the fields that apply to it. See
 	 * find_reusable_group_subscription() for what each field means.
@@ -3081,8 +3097,7 @@ class Teams_Migration {
 	}
 
 	/**
-	 * Value-requiring migrate-manual-members flags found bare (no `=value`) on
-	 * the raw command line.
+	 * Value-requiring flags found bare (no `=value`) on the raw command line.
 	 *
 	 * WP-CLI validates flags against the command synopsis before invoking the
 	 * command: a bare `--user-ids` draws only a warning, then the flag is
@@ -3093,23 +3108,20 @@ class Teams_Migration {
 	 * worst case). Reading the raw argv is the only place the mistake is still
 	 * visible.
 	 *
-	 * @param string[]|null $argv Raw argument vector; defaults to $_SERVER['argv'].
+	 * Shared with the read-only audit commands, which have the same exposure:
+	 * pass the flags of the command being run, so a sibling command's flag name
+	 * is never reported against an invocation that does not accept it.
+	 *
+	 * @param string[]|null $argv        Raw argument vector; defaults to $_SERVER['argv'].
+	 * @param string[]|null $value_flags Value-requiring flags to look for, each with its leading dashes; defaults to migrate-manual-members'.
 	 *
 	 * @return string[] The value-requiring flags present without a value.
 	 */
-	public static function get_valueless_value_flags( $argv = null ) {
+	public static function get_valueless_value_flags( $argv = null, $value_flags = null ) {
 		if ( null === $argv ) {
 			$argv = isset( $_SERVER['argv'] ) ? (array) $_SERVER['argv'] : []; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput
 		}
-		$value_flags = [
-			'--product-id',
-			'--plan-ids',
-			'--access-product-ids',
-			'--user-ids',
-			'--user-ids-file',
-			'--skip-domains',
-			'--group-owner-id',
-		];
+		$value_flags = null === $value_flags ? self::MANUAL_MEMBERS_VALUE_FLAGS : $value_flags;
 		$bare_flags  = [];
 		foreach ( $argv as $token ) {
 			if ( in_array( $token, $value_flags, true ) ) {

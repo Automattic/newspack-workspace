@@ -2,11 +2,12 @@
  * Internal dependencies
  */
 import { STATUS_MAP } from './constants';
+import { statusGlyph } from '../../../../../packages/components/src/status-indicator';
 
 /**
  * The activity log's Status column offers these as separate filters, so two statuses
- * sharing a glyph makes the column unreadable at a glance: the reader can filter to
- * Canceled and Failed separately but cannot tell them apart in the results. The same
+ * drawing the same mark makes the column unreadable at a glance: the reader can filter
+ * to Canceled and Failed separately but cannot tell them apart in the results. The same
  * holds for the intents, which still badge a single status in the detail modal.
  */
 describe( 'STATUS_MAP', () => {
@@ -15,13 +16,13 @@ describe( 'STATUS_MAP', () => {
 		Object.values( STATUS_MAP ).forEach( ( { label } ) => expect( label ).toBeTruthy() );
 	} );
 
-	it( 'draws every status with a glyph', () => {
-		Object.values( STATUS_MAP ).forEach( ( { icon } ) => expect( icon ).toBeTruthy() );
+	it( 'names every status the log can draw', () => {
+		Object.values( STATUS_MAP ).forEach( ( { status } ) => expect( status ).toBeTruthy() );
 	} );
 
-	it( 'gives no two statuses the same glyph', () => {
-		const icons = Object.values( STATUS_MAP ).map( ( { icon } ) => icon );
-		expect( new Set( icons ).size ).toBe( icons.length );
+	it( 'gives no two statuses the same mark', () => {
+		const glyphs = Object.values( STATUS_MAP ).map( ( { status } ) => statusGlyph( status ) );
+		expect( new Set( glyphs ).size ).toBe( glyphs.length );
 	} );
 
 	it( 'gives no two statuses the same intent', () => {
@@ -32,7 +33,7 @@ describe( 'STATUS_MAP', () => {
 	it( 'separates a cancelled job from a failed one', () => {
 		// Cancelling is a deliberate stop with nothing to act on; failure is the one
 		// state in this column that asks the reader to do something.
-		expect( STATUS_MAP.failed.icon ).not.toBe( STATUS_MAP.canceled.icon );
+		expect( statusGlyph( STATUS_MAP.failed.status ) ).not.toBe( statusGlyph( STATUS_MAP.canceled.status ) );
 		expect( STATUS_MAP.failed.intent ).toBe( 'high' );
 		expect( STATUS_MAP.canceled.intent ).toBe( 'none' );
 	} );
