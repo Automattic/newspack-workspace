@@ -41,6 +41,11 @@ import { __, sprintf } from '@wordpress/i18n';
 import { addQueryArgs } from '@wordpress/url';
 
 /**
+ * Internal dependencies
+ */
+import { fetchAuthorById, fetchAuthorList } from '../../shared/js/author-fetch';
+
+/**
  * Register block bindings source for author data in the editor.
  * This enables core blocks to display author data via bindings.
  *
@@ -398,21 +403,14 @@ const AuthorProfile = ( { attributes, setAttributes, context, clientId } ) => {
 		setError( null );
 		setIsLoading( true );
 		try {
-			const params = {
-				author_id: authorId,
-				is_guest_author: isGuestAuthor ? 1 : 0,
+			// Shared with every other Author Profile block on the page, so a page of profiles
+			// costs one request instead of one per block.
+			const _author = await fetchAuthorById( {
+				authorId,
+				isGuestAuthor,
 				fields: 'id,name,bio,email,social,avatar,url',
-			};
-
-			if ( avatarHideDefault ) {
-				params.avatar_hide_default = 1;
-			}
-
-			const response = await apiFetch( {
-				path: addQueryArgs( '/newspack-blocks/v1/authors', params ),
+				avatarHideDefault,
 			} );
-
-			const _author = response.pop();
 
 			if ( ! _author ) {
 				throw sprintf(
@@ -476,21 +474,16 @@ const AuthorProfile = ( { attributes, setAttributes, context, clientId } ) => {
 				fields.push( 'email' );
 			}
 			const results = await Promise.all(
-				bylineAuthorIds.map( id => {
-					const params = {
-						author_id: id,
-						is_guest_author: 0,
+				bylineAuthorIds.map( id =>
+					fetchAuthorById( {
+						authorId: id,
+						isGuestAuthor: false,
 						fields: fields.join( ',' ),
-					};
-					if ( avatarHideDefault ) {
-						params.avatar_hide_default = 1;
-					}
-					return apiFetch( {
-						path: addQueryArgs( '/newspack-blocks/v1/authors', params ),
-					} );
-				} )
+						avatarHideDefault,
+					} )
+				)
 			);
-			setContextualAuthors( results.flat().filter( Boolean ) );
+			setContextualAuthors( results.filter( Boolean ) );
 		} catch ( e ) {
 			setError( e.message || e || __( 'Error fetching byline authors.', 'newspack-blocks' ) );
 			setContextualAuthors( [] );
@@ -767,16 +760,7 @@ const AuthorProfile = ( { attributes, setAttributes, context, clientId } ) => {
 								if ( authorId && ! error ) {
 									return [];
 								}
-								const response = await apiFetch( {
-									parse: false,
-									path: addQueryArgs( '/newspack-blocks/v1/authors', {
-										search,
-										offset,
-										fields: 'id,name',
-									} ),
-								} );
-								const total = parseInt( response.headers.get( 'x-wp-total' ) || 0, 10 );
-								const authors = await response.json();
+								const { authors, total } = await fetchAuthorList( { search, offset, fields: 'id,name' } );
 								if ( ! maxItemsToSuggest && ! search ) {
 									setMaxItemsToSuggest( total );
 								}
@@ -972,17 +956,7 @@ const AuthorProfile = ( { attributes, setAttributes, context, clientId } ) => {
 								return [];
 							}
 
-							const response = await apiFetch( {
-								parse: false,
-								path: addQueryArgs( '/newspack-blocks/v1/authors', {
-									search,
-									offset,
-									fields: 'id,name',
-								} ),
-							} );
-
-							const total = parseInt( response.headers.get( 'x-wp-total' ) || 0, 10 );
-							const authors = await response.json();
+							const { authors, total } = await fetchAuthorList( { search, offset, fields: 'id,name' } );
 
 							// Set max items for "load more" functionality in suggestions list.
 							if ( ! maxItemsToSuggest && ! search ) {

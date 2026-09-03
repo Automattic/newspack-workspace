@@ -66,6 +66,18 @@ class WP_REST_Newspack_Authors_Controller extends WP_REST_Controller {
 	}
 
 	/**
+	 * Turn a comma-separated list (or array) of IDs into unique positive integers.
+	 *
+	 * @param string|array $value Raw request param.
+	 * @return int[]
+	 */
+	public static function sanitize_id_list( $value ) {
+		$ids = is_array( $value ) ? $value : explode( ',', (string) $value );
+		$ids = array_filter( array_map( 'absint', $ids ) );
+		return array_values( array_unique( $ids ) );
+	}
+
+	/**
 	 * Registers the necessary REST API routes.
 	 *
 	 * @access public
@@ -104,6 +116,12 @@ class WP_REST_Newspack_Authors_Controller extends WP_REST_Controller {
 						'post_id'             => [
 							'sanitize_callback' => 'absint',
 						],
+						'author_ids'          => [
+							'sanitize_callback' => [ __CLASS__, 'sanitize_id_list' ],
+						],
+						'guest_author_ids'    => [
+							'sanitize_callback' => [ __CLASS__, 'sanitize_id_list' ],
+						],
 					],
 					'permission_callback' => function() {
 						return current_user_can( 'edit_posts' );
@@ -130,6 +148,13 @@ class WP_REST_Newspack_Authors_Controller extends WP_REST_Controller {
 		$fields              = self::restrict_fields( $fields );
 		$include             = ! empty( $request->get_param( 'include' ) ) ? explode( ',', $request->get_param( 'include' ) ) : null; // Fetch authors by multiple IDs.
 		$post_id             = ! empty( $request->get_param( 'post_id' ) ) ? $request->get_param( 'post_id' ) : 0; // Fetch authors for a specific post (contextual mode).
+		$author_ids          = ! empty( $request->get_param( 'author_ids' ) ) ? $request->get_param( 'author_ids' ) : []; // Fetch several WP users by ID in one request.
+		$guest_author_ids    = ! empty( $request->get_param( 'guest_author_ids' ) ) ? $request->get_param( 'guest_author_ids' ) : []; // Fetch several guest authors by ID in one request.
+
+		// If a list of IDs is provided, resolve them all in one response.
+		if ( $author_ids || $guest_author_ids ) {
+			return $this->get_authors_by_ids( $author_ids, $guest_author_ids, $fields, $avatar_hide_default );
+		}
 
 		// If post_id is provided, get authors for that specific post.
 		if ( $post_id ) {
@@ -242,29 +267,9 @@ class WP_REST_Newspack_Authors_Controller extends WP_REST_Controller {
 			array_reduce(
 				! empty( $guest_authors ) ? $guest_authors : [],
 				function( $acc, $guest_author ) use ( $fields, $avatar_hide_default ) {
-					if ( $guest_author ) {
-						if ( class_exists( 'CoAuthors_Guest_Authors' ) ) {
-							$guest_author_data = [
-								'id'         => intval( $guest_author->ID ),
-								'registered' => $guest_author->post_date,
-								'is_guest'   => true,
-								'slug'       => $guest_author->post_name,
-							];
-
-							$guest_author = ( new CoAuthors_Guest_Authors() )->get_guest_author_by( 'id', $guest_author->ID );
-
-							if ( in_array( 'avatar', $fields, true ) && function_exists( 'coauthors_get_avatar' ) ) {
-								$avatar = coauthors_get_avatar( $guest_author, 256, $avatar_hide_default ? 'blank' : '' );
-
-								if ( \Newspack_Blocks\is_avatar_displayable( $avatar, $avatar_hide_default ) ) {
-									$guest_author_data['avatar'] = $avatar;
-								}
-							}
-
-							$guest_author_data = self::fill_guest_author_data( $guest_author_data, $guest_author, $fields );
-
-							$acc[] = $guest_author_data;
-						}
+					$guest_author_data = self::format_guest_author( $guest_author, $fields, $avatar_hide_default );
+					if ( $guest_author_data ) {
+						$acc[] = $guest_author_data;
 					}
 					return $acc;
 				},
@@ -273,24 +278,9 @@ class WP_REST_Newspack_Authors_Controller extends WP_REST_Controller {
 			array_reduce(
 				$users,
 				function( $acc, $user ) use ( $fields, $avatar_hide_default ) {
-					if ( $user ) {
-						$user_data = [
-							'id'         => intval( $user->data->ID ),
-							'registered' => $user->data->user_registered,
-							'is_guest'   => false,
-							'slug'       => $user->data->user_login,
-						];
-
-						if ( in_array( 'avatar', $fields, true ) ) {
-							$avatar = get_avatar( $user->data->ID, 256, $avatar_hide_default ? 'blank' : '' );
-
-							if ( \Newspack_Blocks\is_avatar_displayable( $avatar, $avatar_hide_default ) ) {
-								$user_data['avatar'] = $avatar;
-							}
-						}
-
-						$user_data = self::fill_user_data( $user_data, $user, $fields );
-						$acc[]     = $user_data;
+					$user_data = self::format_user( $user, $fields, $avatar_hide_default );
+					if ( $user_data ) {
+						$acc[] = $user_data;
 					}
 					return $acc;
 				},
@@ -310,6 +300,116 @@ class WP_REST_Newspack_Authors_Controller extends WP_REST_Controller {
 		$response->header( 'x-wp-total', $user_total + $guest_author_total );
 
 		return rest_ensure_response( $response );
+	}
+
+	/**
+	 * Return the given users and guest authors in one response.
+	 *
+	 * Backs the editor's batched lookups: a page with many Author Profile blocks resolves every
+	 * author with a single request instead of one per block. Each ID is looked up the way the
+	 * single-ID path does, so a record is identical to what a block received on its own.
+	 *
+	 * @param int[] $author_ids          WP user IDs.
+	 * @param int[] $guest_author_ids    Guest author post IDs.
+	 * @param array $fields              Fields to include.
+	 * @param bool  $avatar_hide_default Whether to hide the default avatar.
+	 * @return WP_REST_Response
+	 */
+	public function get_authors_by_ids( $author_ids, $guest_author_ids, $fields, $avatar_hide_default ) {
+		$authors = [];
+
+		if ( $guest_author_ids ) {
+			$guest_authors = get_posts(
+				[
+					'post_type'      => 'guest-author',
+					'post__in'       => $guest_author_ids,
+					'posts_per_page' => count( $guest_author_ids ),
+					'orderby'        => 'post__in',
+				]
+			);
+			foreach ( $guest_authors as $guest_author ) {
+				$guest_author_data = self::format_guest_author( $guest_author, $fields, $avatar_hide_default );
+				if ( $guest_author_data ) {
+					$authors[] = $guest_author_data;
+				}
+			}
+		}
+
+		foreach ( $author_ids as $author_id ) {
+			$user_data = self::format_user( get_user_by( 'id', $author_id ), $fields, $avatar_hide_default );
+			if ( $user_data ) {
+				$authors[] = $user_data;
+			}
+		}
+
+		$response = new WP_REST_Response( $authors );
+		$response->header( 'x-wp-total', count( $authors ) );
+
+		return rest_ensure_response( $response );
+	}
+
+	/**
+	 * Format a guest author post as an endpoint record.
+	 *
+	 * @param WP_Post|false $guest_author        Guest author post.
+	 * @param array         $fields              Fields to include.
+	 * @param bool          $avatar_hide_default Whether to hide the default avatar.
+	 * @return array|null Record, or null when there is nothing to format.
+	 */
+	public static function format_guest_author( $guest_author, $fields, $avatar_hide_default ) {
+		if ( ! $guest_author || ! class_exists( 'CoAuthors_Guest_Authors' ) ) {
+			return null;
+		}
+
+		$guest_author_data = [
+			'id'         => intval( $guest_author->ID ),
+			'registered' => $guest_author->post_date,
+			'is_guest'   => true,
+			'slug'       => $guest_author->post_name,
+		];
+
+		$guest_author = ( new CoAuthors_Guest_Authors() )->get_guest_author_by( 'id', $guest_author->ID );
+
+		if ( in_array( 'avatar', $fields, true ) && function_exists( 'coauthors_get_avatar' ) ) {
+			$avatar = coauthors_get_avatar( $guest_author, 256, $avatar_hide_default ? 'blank' : '' );
+
+			if ( \Newspack_Blocks\is_avatar_displayable( $avatar, $avatar_hide_default ) ) {
+				$guest_author_data['avatar'] = $avatar;
+			}
+		}
+
+		return self::fill_guest_author_data( $guest_author_data, $guest_author, $fields );
+	}
+
+	/**
+	 * Format a WP user as an endpoint record.
+	 *
+	 * @param WP_User|false $user                The user.
+	 * @param array         $fields              Fields to include.
+	 * @param bool          $avatar_hide_default Whether to hide the default avatar.
+	 * @return array|null Record, or null when there is nothing to format.
+	 */
+	public static function format_user( $user, $fields, $avatar_hide_default ) {
+		if ( ! $user ) {
+			return null;
+		}
+
+		$user_data = [
+			'id'         => intval( $user->data->ID ),
+			'registered' => $user->data->user_registered,
+			'is_guest'   => false,
+			'slug'       => $user->data->user_login,
+		];
+
+		if ( in_array( 'avatar', $fields, true ) ) {
+			$avatar = get_avatar( $user->data->ID, 256, $avatar_hide_default ? 'blank' : '' );
+
+			if ( \Newspack_Blocks\is_avatar_displayable( $avatar, $avatar_hide_default ) ) {
+				$user_data['avatar'] = $avatar;
+			}
+		}
+
+		return self::fill_user_data( $user_data, $user, $fields );
 	}
 
 	/**
