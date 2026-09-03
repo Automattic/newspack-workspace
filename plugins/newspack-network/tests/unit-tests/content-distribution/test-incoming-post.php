@@ -285,7 +285,7 @@ class TestIncomingPost extends \WP_UnitTestCase {
 
 		// Set a different thumbnail URL.
 		$payload = $this->get_sample_payload();
-		$payload['post_data']['thumbnail_url'] = 'https://example.test/image-2.jpg';
+		$payload['post_data']['thumbnail_url'] = 'https://93.184.216.34/image-2.jpg';
 
 		// Insert the linked post with the updated thumbnail.
 		$this->incoming_post->insert( $payload );
@@ -313,6 +313,39 @@ class TestIncomingPost extends \WP_UnitTestCase {
 		// Assert that the thumbnail was removed.
 		$thumbnail_id = get_post_thumbnail_id( $post_id );
 		$this->assertEmpty( $thumbnail_id );
+	}
+
+	/**
+	 * Test insert when fetching the thumbnail fails.
+	 */
+	public function test_insert_with_failing_thumbnail_fetch() {
+		// Record every HTTP request the insert makes.
+		$requested = [];
+		add_filter(
+			'pre_http_request',
+			function ( $preempt, $args, $url ) use ( &$requested ) {
+				$requested[] = $url;
+				return $preempt;
+			},
+			9,
+			3
+		);
+
+		$thumbnail_url = 'https://93.184.216.34/http-503/image-1.jpg';
+		$payload = $this->get_sample_payload();
+		$payload['post_data']['thumbnail_url'] = $thumbnail_url;
+
+		$incoming_post = new Incoming_Post( $payload );
+		$post_id = $incoming_post->insert();
+
+		// The import itself succeeds without the image.
+		$this->assertFalse( is_wp_error( $post_id ) );
+		$this->assertSame( 'Title', get_the_title( $post_id ) );
+
+		// The fetch was attempted -- an empty thumbnail alone proves nothing,
+		// since a sideload that never starts leaves the same zero behind.
+		$this->assertContains( $thumbnail_url, $requested );
+		$this->assertEmpty( get_post_thumbnail_id( $post_id ) );
 	}
 
 	/**

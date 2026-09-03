@@ -2,14 +2,14 @@
 # This file is distributed under the GPL2.
 msgid ""
 msgstr ""
-"Project-Id-Version: Newspack 6.48.22\n"
+"Project-Id-Version: Newspack 6.49.1\n"
 "Report-Msgid-Bugs-To: https://wordpress.org/support/plugin/newspack-plugin\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-08-31T17:55:08+00:00\n"
+"POT-Creation-Date: 2026-09-03T08:32:47+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: newspack-plugin\n"
@@ -4589,23 +4589,23 @@ msgstr ""
 msgid "%s Gate"
 msgstr ""
 
-#: includes/plugins/wc-memberships/class-memberships.php:813
+#: includes/plugins/wc-memberships/class-memberships.php:821
 msgid "Skip content restriction in RSS feeds"
 msgstr ""
 
-#: includes/plugins/wc-memberships/class-memberships.php:815
+#: includes/plugins/wc-memberships/class-memberships.php:823
 msgid "If enabled, full content will be available in RSS feeds."
 msgstr ""
 
-#: includes/plugins/wc-memberships/class-memberships.php:1058
+#: includes/plugins/wc-memberships/class-memberships.php:1066
 msgid "Reevaluate status"
 msgstr ""
 
-#: includes/plugins/wc-memberships/class-memberships.php:1060
+#: includes/plugins/wc-memberships/class-memberships.php:1068
 msgid "Reevaluate status based on subscription status."
 msgstr ""
 
-#: includes/plugins/wc-memberships/class-memberships.php:1294
+#: includes/plugins/wc-memberships/class-memberships.php:1302
 msgid "Bulk edit changes were reverted because this membership is linked to a subscription."
 msgstr ""
 

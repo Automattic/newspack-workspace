@@ -159,7 +159,7 @@ class PluginToggle extends Component< PluginToggleProps, PluginToggleState > {
 					toggleChecked={ this.isPluginInstalledAndActive( plugin ) }
 					toggleOnChange={ ( value?: boolean ) => this.managePlugin( String( slug ), value ) }
 					notification={ error }
-					notificationHTML={ !! error }
+					notificationHTML
 					notificationLevel="error"
 				/>
 			);

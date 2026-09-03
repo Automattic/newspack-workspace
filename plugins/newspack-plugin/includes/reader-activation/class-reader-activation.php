@@ -1561,7 +1561,7 @@ final class Reader_Activation {
 	 *
 	 * @return bool
 	 */
-	private static function should_render_auth_modal() {
+	public static function should_render_auth_modal() {
 		/**
 		 * Filters whether to render reader auth form.
 		 *
@@ -1642,6 +1642,8 @@ final class Reader_Activation {
 				);
 				?>
 			</p>
+			<?php // Errors land in their own paragraph, so the line naming the reader's address survives a failed send and still orients them on the retry. ?>
+			<p data-error-target role="status" hidden></p>
 		</div>
 		<button type="button" class="newspack-ui__button newspack-ui__button--primary newspack-ui__button--wide" data-send-otp>
 			<?php esc_html_e( 'Send code', 'newspack-plugin' ); ?>
@@ -2294,6 +2296,11 @@ final class Reader_Activation {
 
 	/**
 	 * Check if current reader has its email verified.
+	 *
+	 * Reports stored state only. A content-gate decision that has to answer "what
+	 * would this reader see if they verified?" must also accept
+	 * `Access_Rules::is_verification_assumed_for( $user->ID )`, or the hypothetical
+	 * reports the reader still walled by the very requirement it is asking about.
 	 *
 	 * @param \WP_User $user User object.
 	 *

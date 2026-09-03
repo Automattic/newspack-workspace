@@ -1,3 +1,17 @@
+## newspack [6.49.2](https://github.com/Automattic/newspack-workspace/compare/newspack@6.49.1...newspack@6.49.2) (2026-09-03)
+
+
+### Bug Fixes
+
+* **memberships:** keep content restriction on archive feeds ([#1025](https://github.com/Automattic/newspack-workspace/issues/1025)) ([e88c688](https://github.com/Automattic/newspack-workspace/commit/e88c6881c165ee8aca0134a684b124e143732685))
+
+## newspack [6.49.1](https://github.com/Automattic/newspack-workspace/compare/newspack@6.49.0...newspack@6.49.1) (2026-09-01)
+
+
+### Bug Fixes
+
+* **analytics:** restore GA4 custom-dimension registry lookup ([#1008](https://github.com/Automattic/newspack-workspace/issues/1008)) ([92a560c](https://github.com/Automattic/newspack-workspace/commit/92a560ca9a09da32b255d2a30bd6ecfe84b2ead4)), closes [#313](https://github.com/Automattic/newspack-workspace/issues/313)
+
 # newspack [6.49.0](https://github.com/Automattic/newspack-workspace/compare/newspack@6.48.22...newspack@6.49.0) (2026-08-31)
 
 

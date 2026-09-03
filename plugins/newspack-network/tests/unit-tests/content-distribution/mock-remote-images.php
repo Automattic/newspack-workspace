@@ -8,7 +8,9 @@
  * returns attachment ID 0, which is what the incoming-post assertions check.
  *
  * Requests for anything that is not an image are left alone, so a test that wants
- * to mock an API response still can.
+ * to mock an API response still can. A path under /http-503/ is answered with a
+ * 503 instead of the fixture, for tests that pin what a failed sideload leaves
+ * behind.
  *
  * @package Newspack
  */
@@ -28,6 +30,20 @@ add_filter(
 	 */
 	function ( $preempt, $args, $url ) {
 		$path = (string) wp_parse_url( $url, PHP_URL_PATH );
+
+		if ( false !== strpos( $path, '/http-503/' ) ) {
+			return [
+				'headers'  => [],
+				'body'     => 'Service Unavailable',
+				'response' => [
+					'code'    => 503,
+					'message' => 'Service Unavailable',
+				],
+				'cookies'  => [],
+				'filename' => null,
+			];
+		}
+
 		if ( ! preg_match( '/\.(jpe?g|png|gif|webp)$/i', $path ) ) {
 			return $preempt;
 		}
