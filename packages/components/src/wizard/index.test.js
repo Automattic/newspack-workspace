@@ -7,12 +7,15 @@ import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
  * WordPress dependencies.
  */
 import apiFetch from '@wordpress/api-fetch';
+import { select, useDispatch } from '@wordpress/data';
+import { useLayoutEffect, useState } from '@wordpress/element';
 
 /**
  * Internal dependencies.
  */
 import Wizard from './';
 import { useWizardData } from './store/utils';
+import { WIZARD_STORE_NAMESPACE } from './store';
 
 jest.mock( '@wordpress/api-fetch', () => jest.fn() );
 
@@ -20,6 +23,7 @@ jest.mock( '@wordpress/api-fetch', () => jest.fn() );
 // ExternalLink needs a string href, and the debug Notice reads aux data.
 window.newspack_aux_data = { is_debug_mode: false };
 window.newspack_urls = { support: 'https://help.newspack.com/' };
+window.scrollTo = jest.fn();
 
 const SETTINGS = { minimumDonation: '5' };
 
@@ -152,5 +156,95 @@ describe( 'Wizard', () => {
 		expect( await screen.findByText( 'Static section' ) ).toBeInTheDocument();
 		await flushPending();
 		expect( counts.wizard ).toBe( 0 );
+	} );
+} );
+
+const NarrowingSection = () => {
+	const { setHeaderData } = useDispatch( WIZARD_STORE_NAMESPACE );
+	useLayoutEffect( () => {
+		setHeaderData( { fullWidth: false } );
+	}, [ setHeaderData ] );
+	return <div>Narrowing section</div>;
+};
+
+const RecoveringSection = () => {
+	const { setHeaderData } = useDispatch( WIZARD_STORE_NAMESPACE );
+	const [ failed, setFailed ] = useState( true );
+	useLayoutEffect( () => {
+		setHeaderData( { fullWidth: failed ? false : undefined } );
+	}, [ setHeaderData, failed ] );
+	return <button onClick={ () => setFailed( false ) }>Retry</button>;
+};
+
+// Two sections, because that is what mounts ResetHeaderData: a single-section
+// wizard never exercises the reset these overrides have to survive.
+const widthSections = renderSection => [
+	{ label: 'List', path: '/', exact: true, fullWidth: true, render: renderSection },
+	{ label: 'Other', path: '/other', render: () => <div>Other section</div> },
+];
+
+describe( 'Wizard content width', () => {
+	beforeEach( () => {
+		apiFetch.mockReset();
+	} );
+
+	it( 'renders full-width when the section declares it and nothing overrides it', async () => {
+		const { container } = render(
+			<Wizard
+				headerText="Test wizard"
+				sections={ widthSections( () => (
+					<div>List content</div>
+				) ) }
+			/>
+		);
+
+		expect( await screen.findByText( 'List content' ) ).toBeInTheDocument();
+		expect( container.querySelector( '.newspack-wizard__content' ) ).toHaveClass( 'newspack-wizard__content--full-width' );
+	} );
+
+	it( 'falls back to the standard width when a section overrides fullWidth before paint', async () => {
+		const { container } = render(
+			<Wizard
+				headerText="Test wizard"
+				sections={ widthSections( () => (
+					<NarrowingSection />
+				) ) }
+			/>
+		);
+
+		expect( await screen.findByText( 'Narrowing section' ) ).toBeInTheDocument();
+		expect( container.querySelector( '.newspack-wizard__content' ) ).not.toHaveClass( 'newspack-wizard__content--full-width' );
+	} );
+
+	it( 'restores the declared width when the section clears its override', async () => {
+		const { container } = render(
+			<Wizard
+				headerText="Test wizard"
+				sections={ widthSections( () => (
+					<RecoveringSection />
+				) ) }
+			/>
+		);
+
+		const retry = await screen.findByRole( 'button', { name: 'Retry' } );
+		expect( container.querySelector( '.newspack-wizard__content' ) ).not.toHaveClass( 'newspack-wizard__content--full-width' );
+
+		fireEvent.click( retry );
+
+		await waitFor( () => expect( container.querySelector( '.newspack-wizard__content' ) ).toHaveClass( 'newspack-wizard__content--full-width' ) );
+	} );
+
+	it( 'keeps a section header published from a layout effect through the mount reset', async () => {
+		render(
+			<Wizard
+				headerText="Test wizard"
+				sections={ widthSections( () => (
+					<NarrowingSection />
+				) ) }
+			/>
+		);
+
+		expect( await screen.findByText( 'Narrowing section' ) ).toBeInTheDocument();
+		expect( select( WIZARD_STORE_NAMESPACE ).getHeaderData().fullWidth ).toBe( false );
 	} );
 } );
