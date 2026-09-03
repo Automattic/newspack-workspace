@@ -184,8 +184,12 @@ class Group_Subscription_API {
 	/**
 	 * Permission callback for managing group subscriptions.
 	 *
+	 * Shared by every route in the namespace apart from the member search, which
+	 * answers about the site's user records instead and uses
+	 * {@see self::admin_permission_callback()}.
+	 *
 	 * @param \WP_REST_Request $request The request object.
-	 * @return bool Whether the user has permission to invite to the group subscription.
+	 * @return bool Whether the caller may manage the subscription named in the request.
 	 */
 	public static function permission_callback( $request ) {
 		// Neither branch below can legitimately pass for an anonymous caller, so this
