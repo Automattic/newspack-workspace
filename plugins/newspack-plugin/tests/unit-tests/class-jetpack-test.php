@@ -41,15 +41,15 @@ class Test_Jetpack extends \WP_UnitTestCase {
 	private $original_active_modules;
 
 	/**
-	 * Remember request state the share gate mutates, and report the sharedaddy module active
-	 * so the gate runs (it bails when Jetpack sharing is off).
+	 * Snapshot request and Jetpack-stub state the tests mutate, to restore after each test. The
+	 * gate keys off Jetpack's presence (the stub is loaded), not the sharedaddy module, so the
+	 * module list is left at its default and only the tests that care set it.
 	 */
 	public function set_up(): void {
 		parent::set_up();
 		// phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- Snapshotting the value verbatim to restore it after the test.
 		$this->original_request_uri    = $_SERVER['REQUEST_URI'] ?? null;
 		$this->original_active_modules = \Jetpack::$test_active_modules;
-		\Jetpack::$test_active_modules = [ 'sharedaddy' ];
 	}
 
 	/**
@@ -63,19 +63,24 @@ class Test_Jetpack extends \WP_UnitTestCase {
 			$_SERVER['REQUEST_URI'] = $this->original_request_uri;
 		}
 		\Jetpack::$test_active_modules = $this->original_active_modules;
-		$this->reset_blanked_queries();
+		$this->reset_share_state();
 		parent::tear_down();
 	}
 
 	/**
-	 * Clear the per-request map of blanked queries. It is keyed by spl_object_id(), which the
-	 * runtime may recycle once a source object is freed, so a stale entry left by one test could
-	 * otherwise be read by another whose fresh source happens to reuse the id.
+	 * Reset the class's per-request static state between tests: the map of blanked queries (keyed
+	 * by spl_object_id(), which the runtime may recycle once a source object is freed, so a stale
+	 * entry could otherwise be read by another test) and the "did we obfuscate this request" flag.
 	 */
-	private function reset_blanked_queries(): void {
-		$property = new \ReflectionProperty( Jetpack::class, 'blanked_queries' );
-		$property->setAccessible( true );
-		$property->setValue( null, [] );
+	private function reset_share_state(): void {
+		foreach ( [
+			'blanked_queries' => [],
+			'did_obfuscate'   => false,
+		] as $name => $value ) {
+			$property = new \ReflectionProperty( Jetpack::class, $name );
+			$property->setAccessible( true );
+			$property->setValue( null, $value );
+		}
 	}
 
 	/**
@@ -415,13 +420,35 @@ class Test_Jetpack extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * When Jetpack's sharedaddy module is inactive the gate must not intercept `?share=`
-	 * requests, which then belong to some other handler.
+	 * The gate must stay active without the classic sharedaddy module, since the block theme's
+	 * Sharing Buttons produce and process `?share=` round-trips without it.
 	 */
-	public function test_gate_skipped_when_sharedaddy_inactive() {
+	public function test_gate_active_without_sharedaddy_module() {
 		$_GET['share']                 = 'twitter';
 		\Jetpack::$test_active_modules = [];
-		$this->assertFalse( Jetpack::should_block_share_request() );
+		$this->assertTrue( Jetpack::should_block_share_request() );
+	}
+
+	/**
+	 * The restore script is printed once we have actually obfuscated a button this request, so it
+	 * accompanies blanked links on the block theme regardless of the sharedaddy module.
+	 */
+	public function test_restore_script_printed_after_obfuscating() {
+		$this->run_share_link_filters( 'share=twitter' );
+		ob_start();
+		Jetpack::print_share_obfuscation_script();
+		$output = ob_get_clean();
+		$this->assertStringContainsString( 'data-share-query', $output );
+	}
+
+	/**
+	 * With nothing obfuscated this request, the restore script is not printed.
+	 */
+	public function test_restore_script_not_printed_without_obfuscating() {
+		ob_start();
+		Jetpack::print_share_obfuscation_script();
+		$output = ob_get_clean();
+		$this->assertSame( '', $output );
 	}
 
 	/**

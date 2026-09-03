@@ -41,6 +41,15 @@ class Jetpack {
 	private static $blanked_queries = [];
 
 	/**
+	 * Whether at least one share button has been obfuscated during this request. Gates the
+	 * restore script: it is printed only when there is something to restore, which is the right
+	 * signal on the block theme, where the classic sharedaddy module may be inactive.
+	 *
+	 * @var bool
+	 */
+	private static $did_obfuscate = false;
+
+	/**
 	 * Modules scripts handles.
 	 *
 	 * @var string[]
@@ -500,6 +509,7 @@ class Jetpack {
 			// Sign the restored request so the server-side gate can tell a real, JS-restored
 			// share URL from one a crawler fabricated by appending `?share=…` to a permalink.
 			$data_attributes['share-token'] = self::share_token();
+			self::$did_obfuscate            = true;
 		}
 		// The email button's mailto: href is left intact, but Jetpack pings an on-site tracking
 		// URL (`?share=email`) via XHR on click. Sign that URL so the ping clears the gate; an
@@ -512,16 +522,6 @@ class Jetpack {
 			);
 		}
 		return $data_attributes;
-	}
-
-	/**
-	 * Whether Jetpack's sharing module is active. The gate and the restoration script both
-	 * depend on it, so they stay in step about when the obfuscation is in play.
-	 *
-	 * @return bool
-	 */
-	private static function is_jetpack_social_buttons_active() {
-		return class_exists( 'Jetpack' ) && \Jetpack::is_module_active( 'sharedaddy' );
 	}
 
 	/**
@@ -585,7 +585,9 @@ class Jetpack {
 		if ( is_admin() || wp_doing_ajax() || wp_doing_cron() ) {
 			return false;
 		}
-		if ( ! self::is_share_obfuscation_enabled() || ! self::is_jetpack_social_buttons_active() ) {
+		// Jetpack's presence (not the classic sharedaddy module) is the signal: its block Sharing
+		// Buttons produce and process `?share=` round-trips without that module active.
+		if ( ! self::is_share_obfuscation_enabled() || ! class_exists( 'Jetpack' ) ) {
 			return false;
 		}
 		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- The share token below is our own signed verification, not a WordPress nonce.
@@ -632,7 +634,9 @@ class Jetpack {
 	 * Jetpack's own sharing.js appends for real user clicks.
 	 */
 	public static function print_share_obfuscation_script() {
-		if ( ! self::is_share_obfuscation_enabled() || ! self::is_jetpack_social_buttons_active() ) {
+		// Print only when a button was actually blanked this request, so the script accompanies
+		// obfuscated links whether they came from the classic module or the block Sharing Buttons.
+		if ( ! self::$did_obfuscate ) {
 			return;
 		}
 		$token_arg = self::SHARE_TOKEN_QUERY_ARG;
