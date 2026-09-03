@@ -158,8 +158,6 @@ describe( 'Wizard', () => {
 	} );
 } );
 
-// A section that immediately overrides the wizard's static `fullWidth` config
-// for its own render, the way an error state stands down from a full-width table.
 const NarrowingSection = () => {
 	const { setHeaderData } = useDispatch( WIZARD_STORE_NAMESPACE );
 	useEffect( () => {
