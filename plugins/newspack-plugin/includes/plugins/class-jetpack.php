@@ -489,11 +489,11 @@ class Jetpack {
 	 * (e.g. `share=twitter`), not a URL, so no fetchable `?share=` URL string is left in the DOM
 	 * for URL-scraping bots to follow.
 	 *
-	 * @param array  $data_attributes Attributes supplied from the sharing source. Keys are
-	 *                                rendered with a `data-` prefix.
-	 * @param object $source          Sharing service instance; the key the blanked query is filed under.
-	 * @param string $id              Sharing ID. Unused.
-	 * @param array  $args            Array of sharing service options. Unused.
+	 * @param array        $data_attributes Attributes supplied from the sharing source. Keys are
+	 *                                      rendered with a `data-` prefix.
+	 * @param object       $source          Sharing service instance; the key the blanked query is filed under.
+	 * @param string|false $id        Sharing ID. Unused.
+	 * @param array        $args            Array of sharing service options. Unused.
 	 * @return array The (possibly augmented) data attributes.
 	 */
 	public static function add_obfuscation_data_attribute( $data_attributes, $source = null, $id = false, $args = [] ) {
