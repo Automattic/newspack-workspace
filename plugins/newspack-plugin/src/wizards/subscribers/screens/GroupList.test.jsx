@@ -32,8 +32,7 @@ jest.mock( '../../../../packages/components/src/wizard/store', () => ( { WIZARD_
 // itself comes from filterSortAndPaginate, which stays real.
 jest.mock( '../../../../packages/components/src', () => ( {
 	DataViews: () => null,
-	// Renders a real button: the load-failure notice puts a ref on Retry to restore
-	// focus, which needs a host node to land on.
+	// A real button, because the focus restoration needs a host node to land on.
 	Button: require( 'react' ).forwardRef( ( { children, ...props }, ref ) =>
 		require( 'react' ).createElement( 'button', { ...props, ref }, children )
 	),
@@ -148,8 +147,7 @@ describe( 'the group list width override', () => {
 			render( <GroupList /> );
 		} );
 
-		// Presence is the load-bearing part: header data is merged, so only an
-		// explicit `undefined` clears a `false` left by an earlier failure.
+		// Presence, not just the value: only an explicit `undefined` clears a `false`.
 		expect( 'fullWidth' in lastHeaderCall() ).toBe( true );
 		expect( lastHeaderCall().fullWidth ).toBeUndefined();
 	} );

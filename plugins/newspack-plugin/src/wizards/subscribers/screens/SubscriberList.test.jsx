@@ -31,8 +31,7 @@ jest.mock( '../../../../packages/components/src/wizard/store', () => ( { WIZARD_
 // reads the router at module scope, so the proxy has to answer here too.
 jest.mock( '../../../../packages/components/src', () => ( {
 	DataViews: () => null,
-	// Renders a real button: the load-failure notice puts a ref on Retry to restore
-	// focus, which needs a host node to land on.
+	// A real button, because the focus restoration needs a host node to land on.
 	Button: require( 'react' ).forwardRef( ( { children, ...props }, ref ) =>
 		require( 'react' ).createElement( 'button', { ...props, ref }, children )
 	),
@@ -150,8 +149,7 @@ describe( 'the subscriber list width override', () => {
 			render( <SubscriberList /> );
 		} );
 
-		// Presence is the load-bearing part: header data is merged, so only an
-		// explicit `undefined` clears a `false` left by an earlier failure.
+		// Presence, not just the value: only an explicit `undefined` clears a `false`.
 		expect( 'fullWidth' in lastHeaderCall() ).toBe( true );
 		expect( lastHeaderCall().fullWidth ).toBeUndefined();
 	} );

@@ -92,8 +92,7 @@ const ResetHeaderData = () => {
 	const location = useLocation();
 	const { resetHeaderData } = useDispatch( WIZARD_STORE_NAMESPACE );
 
-	// Before paint, so the reset always lands before the incoming section publishes
-	// its own header. A passive effect here would run after any section that
+	// Must stay before paint: a passive effect here would run after a section that
 	// publishes from a layout effect, wiping the header it just set.
 	useLayoutEffect( () => {
 		resetHeaderData();

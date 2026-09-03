@@ -1,8 +1,6 @@
 /**
- * A profile read has three ways to fail, and each needs to say which one it was:
- * a person who does not exist, a request that errored, and a request that came
- * back empty without saying why. Each failure also has to leave the keyboard
- * somewhere useful.
+ * A profile read fails three ways, and each has to say which one it was: a person
+ * who does not exist, a request that errored, and one that came back empty.
  */
 
 /**
@@ -27,8 +25,7 @@ jest.mock( '@wordpress/a11y', () => ( { speak: jest.fn() } ) );
 
 jest.mock( '../../../../packages/components/src/wizard/store', () => ( { WIZARD_STORE_NAMESPACE: 'test/person-profile' } ) );
 
-// Only the failure branches are under test, so the profile's layout components
-// render nothing. Button is real enough to take a ref and a focus call.
+// Only the failure branches are under test. Button is real enough to take a ref.
 jest.mock( '../../../../packages/components/src', () => ( {
 	Button: require( 'react' ).forwardRef( ( { children, ...props }, ref ) =>
 		require( 'react' ).createElement( 'button', { ...props, ref }, children )
@@ -75,8 +72,6 @@ describe( 'the person profile failure states', () => {
 	} );
 
 	it( 'gives a read that came back empty its own sentence', async () => {
-		// Resolves, but with nothing: no server message to quote, so the composed
-		// "Could not load this subscriber: …" sentence would hang after the colon.
 		apiFetch.mockResolvedValue( null );
 		await renderProfile();
 

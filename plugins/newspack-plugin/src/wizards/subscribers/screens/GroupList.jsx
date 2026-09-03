@@ -216,14 +216,12 @@ export default function GroupList() {
 	const total = paginationInfo?.totalItems ?? 0;
 
 	// Surface the group count in the header breadcrumb, e.g. "/ Groups (14)".
-	// Before paint, not after: this also carries the width override, and an error
-	// arrives outside a React event, so a passive effect would paint full-bleed once
-	// and then snap into the content column.
+	// Before paint: this carries the width override, and an error arrives outside a
+	// React event, so a passive effect would paint full-bleed for one frame first.
 	useLayoutEffect( () => {
 		setHeaderData( {
 			// Header data is merged, so the explicit `undefined` is what clears a
-			// previous `false`. Dropping the key would strand the screen narrow for
-			// the rest of the visit, because a retry does not change the route.
+			// previous `false`; a retry never changes the route, so nothing else would.
 			fullWidth: error ? false : undefined,
 			sectionName: [
 				{

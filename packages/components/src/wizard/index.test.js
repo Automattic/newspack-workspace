@@ -7,7 +7,7 @@ import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
  * WordPress dependencies.
  */
 import apiFetch from '@wordpress/api-fetch';
-import { dispatch, select, useDispatch } from '@wordpress/data';
+import { select, useDispatch } from '@wordpress/data';
 import { useLayoutEffect, useState } from '@wordpress/element';
 
 /**
@@ -23,7 +23,6 @@ jest.mock( '@wordpress/api-fetch', () => jest.fn() );
 // ExternalLink needs a string href, and the debug Notice reads aux data.
 window.newspack_aux_data = { is_debug_mode: false };
 window.newspack_urls = { support: 'https://help.newspack.com/' };
-// ResetHeaderData scrolls to the top on every route change; jsdom has no scrolling.
 window.scrollTo = jest.fn();
 
 const SETTINGS = { minimumDonation: '5' };
@@ -160,8 +159,6 @@ describe( 'Wizard', () => {
 	} );
 } );
 
-// Publishes its width override before paint, the way the list screens do so the
-// notice never paints full-bleed first.
 const NarrowingSection = () => {
 	const { setHeaderData } = useDispatch( WIZARD_STORE_NAMESPACE );
 	useLayoutEffect( () => {
@@ -170,8 +167,6 @@ const NarrowingSection = () => {
 	return <div>Narrowing section</div>;
 };
 
-// Narrows while it is failing, then clears the override the way a list screen
-// does once a retry succeeds.
 const RecoveringSection = () => {
 	const { setHeaderData } = useDispatch( WIZARD_STORE_NAMESPACE );
 	const [ failed, setFailed ] = useState( true );
@@ -181,9 +176,8 @@ const RecoveringSection = () => {
 	return <button onClick={ () => setFailed( false ) }>Retry</button>;
 };
 
-// Every shipping wizard has more than one section, which is the only arrangement
-// that renders ResetHeaderData. A single-section wizard would never exercise the
-// reset these overrides have to survive.
+// Two sections, because that is what mounts ResetHeaderData: a single-section
+// wizard never exercises the reset these overrides have to survive.
 const widthSections = renderSection => [
 	{ label: 'List', path: '/', exact: true, fullWidth: true, render: renderSection },
 	{ label: 'Other', path: '/other', render: () => <div>Other section</div> },
@@ -192,9 +186,6 @@ const widthSections = renderSection => [
 describe( 'Wizard content width', () => {
 	beforeEach( () => {
 		apiFetch.mockReset();
-		// The store is module-level, so an override left by the previous test would
-		// otherwise decide this one.
-		dispatch( WIZARD_STORE_NAMESPACE ).resetHeaderData();
 	} );
 
 	it( 'renders full-width when the section declares it and nothing overrides it', async () => {

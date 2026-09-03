@@ -126,9 +126,7 @@ export default function PersonProfile() {
 
 	const { subscriber, loading, error, notFound, reload } = useSubscriber( id );
 
-	// A retry can land on either failure branch, so the ref goes on both affordances
-	// and focus follows whichever one renders. A missing person is covered too: that
-	// read nulls the subscriber.
+	// A missing person counts as failed here too: that read nulls the subscriber.
 	const { retryRef, retry } = useRetryFocus( { settled: ! loading, failed: Boolean( error || ! subscriber ), reload } );
 
 	// A 128px source feeds the 64px header avatar (2x for high-DPR displays),
@@ -303,9 +301,7 @@ export default function PersonProfile() {
 
 	// A failed read must not read as "this person has no subscriptions".
 	if ( error || ! subscriber ) {
-		// A read can also come back empty without reporting an error. That branch has
-		// no server detail to quote, so it gets its own sentence rather than a filler
-		// clause after the colon.
+		// An empty read reports no error, so there is no server detail to quote.
 		let message = __( 'This subscriber could not be loaded.', 'newspack-plugin' );
 		if ( error ) {
 			message = sprintf(

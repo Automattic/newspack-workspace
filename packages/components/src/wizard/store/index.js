@@ -16,9 +16,8 @@ import { createAction } from './utils.js';
 export const WIZARD_STORE_NAMESPACE = 'newspack/wizards';
 
 const DEFAULT_STATE = {
-	// `fullWidth` is deliberately absent: Wizard falls back to the section's own
-	// config only when this key is unset, so adding a default here would silently
-	// narrow every full-width section on reset.
+	// `fullWidth` is deliberately absent: a default here would narrow every
+	// full-width section on reset, since Wizard only falls back when it is unset.
 	headerData: {
 		actions: [],
 		backNav: '',

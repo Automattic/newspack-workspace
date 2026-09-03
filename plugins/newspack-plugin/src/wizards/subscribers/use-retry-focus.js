@@ -6,10 +6,9 @@ import { useEffect, useRef } from '@wordpress/element';
 /**
  * Keep a failed read's retry affordance reachable from the keyboard.
  *
- * Retrying unmounts the notice while the request is in flight, so the affordance
- * that comes back is a fresh node and focus has already fallen to the document
- * body. Focus is restored only when it actually landed there, so a reader who
- * tabbed away while the request was running is not pulled back.
+ * Retrying unmounts the notice, so the affordance that comes back is a fresh node
+ * and focus has fallen to the body. It is restored only when it actually landed
+ * there, so a reader who tabbed away mid-request is not pulled back.
  *
  * @param {Object}   options
  * @param {boolean}  options.settled Whether the read has finished.

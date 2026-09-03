@@ -13,9 +13,8 @@ import { Notice } from '@wordpress/components';
  */
 export default function LoadFailureNotice( { message, action } ) {
 	return (
-		// spokenMessage is load-bearing, not redundant: core defaults it to children
-		// and runs non-string children through renderToString mid-render, which
-		// corrupts hook state.
+		// spokenMessage is load-bearing: without it core stringifies these children
+		// mid-render, which corrupts hook state.
 		<Notice status="error" isDismissible={ false } spokenMessage={ message }>
 			{ message } { action }
 		</Notice>
