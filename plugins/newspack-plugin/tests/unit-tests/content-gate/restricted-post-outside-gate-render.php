@@ -109,7 +109,7 @@ class Test_Restricted_Post_Outside_Gate_Render extends \WP_UnitTestCase {
 		// Deliberately unguarded: renaming one of these stores must fail the suite
 		// loudly, not leave that state bleeding between cases while the tests stay
 		// green. The withholding caches are reset by reset_restriction_cache().
-		foreach ( [ 'restricted_content', 'pending_gates' ] as $store ) {
+		foreach ( [ 'restricted_content', 'pending_gates', 'withheld_teasers' ] as $store ) {
 			$store_reflection = new \ReflectionProperty( Content_Gate::class, $store );
 			$store_reflection->setAccessible( true );
 			$store_reflection->setValue( null, [] );
@@ -473,5 +473,47 @@ class Test_Restricted_Post_Outside_Gate_Render extends \WP_UnitTestCase {
 
 		$this->assertStringNotContainsString( self::PAID_MARKER, $listed, 'The listing is reader-independent, so it shows the teaser.' );
 		$this->assertStringContainsString( self::PAID_MARKER, $article, 'The article page still gives an entitled reader the whole post.' );
+	}
+
+	/**
+	 * A REST handler is not a page render, and this path stands down for the whole
+	 * of one.
+	 *
+	 * WP_REST_Posts_Controller::prepare_item_for_response() calls setup_postdata(),
+	 * which fires `the_post` for every item it serves — so without this the light
+	 * path answers REST reads, over the top of filter_rest_response(), which is
+	 * the one that evaluates entitlement per requester and leaves an editor's
+	 * context=edit payload whole.
+	 */
+	public function test_a_rest_handler_is_not_answered_by_the_page_render_path() {
+		$post_id = $this->create_restricted_post();
+		$this->go_to( home_url( '/' ) );
+
+		apply_filters( 'rest_request_before_callbacks', null, [], null );
+		$during = $this->render_in_secondary_loop( $post_id );
+		apply_filters( 'rest_request_after_callbacks', null, [], null );
+
+		$this->reset_gate_render_state();
+		$after = $this->render_in_secondary_loop( $post_id );
+
+		$this->assertStringContainsString( self::PAID_MARKER, $during, 'Inside a REST dispatch this path withholds nothing.' );
+		$this->assertStringNotContainsString( self::PAID_MARKER, $after, 'The window closes with the dispatch.' );
+	}
+
+	/**
+	 * Asking for a post's teaser must not stage a substitution for it. An excerpt
+	 * asks, and its answer would otherwise decide what `the_content` returns for
+	 * that post for the rest of the request.
+	 */
+	public function test_reading_a_teaser_does_not_stage_a_substitution() {
+		$post_id = $this->create_restricted_post();
+		$this->go_to( home_url( '/' ) );
+
+		$this->assertNotNull( Content_Gate::get_teaser_outside_article( get_post( $post_id ) ), 'The post is withheld, which is the premise of this test.' );
+
+		$staged = new \ReflectionProperty( Content_Gate::class, 'restricted_content' );
+		$staged->setAccessible( true );
+
+		$this->assertSame( [], $staged->getValue(), 'Reading the teaser stages nothing.' );
 	}
 }

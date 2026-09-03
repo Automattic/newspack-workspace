@@ -92,6 +92,15 @@ class Content_Gate {
 	private static array $restricted_content = [];
 
 	/**
+	 * Teasers built for posts appearing outside their own article page, keyed by
+	 * post ID. Reader-independent by construction
+	 * ({@see self::is_withheld_outside_article()}), so it needs no reader key.
+	 *
+	 * @var array<int, string>
+	 */
+	private static array $withheld_teasers = [];
+
+	/**
 	 * Post ID whose teaser has been substituted into an in-flight 'the_content'
 	 * pass and whose gate is still to be appended, keyed by that pass's nesting
 	 * depth.
@@ -172,6 +181,8 @@ class Content_Gate {
 
 		add_action( 'the_post', [ __CLASS__, 'restrict_post' ], 10, 2 );
 		add_action( 'rest_api_init', [ __CLASS__, 'register_rest_filters' ] );
+		add_filter( 'rest_request_before_callbacks', [ __CLASS__, 'mark_rest_dispatch_started' ] );
+		add_filter( 'rest_request_after_callbacks', [ __CLASS__, 'mark_rest_dispatch_finished' ] );
 		add_filter( 'the_content', [ __CLASS__, 'replace_restricted_content' ], self::RESTRICTION_PRIORITY );
 		add_filter( 'the_content', [ __CLASS__, 'handle_restricted_content' ], PHP_INT_MAX );
 		add_filter( 'comments_open', [ __CLASS__, 'filter_comments_open' ], 10, 2 );
@@ -493,6 +504,61 @@ class Content_Gate {
 	}
 
 	/**
+	 * Nesting depth of the REST dispatch currently running.
+	 *
+	 * @var int
+	 */
+	private static int $rest_dispatch_depth = 0;
+
+	/**
+	 * Open a REST dispatch window. Filter callback: returns its input untouched.
+	 *
+	 * @param \WP_REST_Response|\WP_Error|null $response Response so far.
+	 * @return \WP_REST_Response|\WP_Error|null
+	 */
+	public static function mark_rest_dispatch_started( $response ) {
+		self::$rest_dispatch_depth++;
+		return $response;
+	}
+
+	/**
+	 * Close a REST dispatch window. Filter callback: returns its input untouched.
+	 *
+	 * @param \WP_REST_Response|\WP_Error|null $response Response so far.
+	 * @return \WP_REST_Response|\WP_Error|null
+	 */
+	public static function mark_rest_dispatch_finished( $response ) {
+		if ( self::$rest_dispatch_depth > 0 ) {
+			--self::$rest_dispatch_depth;
+		}
+		return $response;
+	}
+
+	/**
+	 * Whether a REST request handler is running right now.
+	 *
+	 * REST is served by self::filter_rest_response(), which evaluates entitlement
+	 * per requester and leaves an editor's context=edit payload whole. The paths
+	 * that withhold for a page render have to stand down inside that window or
+	 * they answer over it — WP_REST_Posts_Controller::prepare_item_for_response()
+	 * calls setup_postdata(), which fires `the_post` for every item it serves.
+	 *
+	 * Counted around the request handler rather than read from REST_REQUEST: the
+	 * constant is defined only for an HTTP request that reached rest_api_loaded(),
+	 * so an in-process rest_do_request() — which plugins make during a page render
+	 * — would not be recognised. The constant is still consulted as a fallback,
+	 * for a dispatch that somehow bypasses these hooks.
+	 *
+	 * @return bool
+	 */
+	public static function is_dispatching_rest(): bool {
+		if ( self::$rest_dispatch_depth > 0 ) {
+			return true;
+		}
+		return function_exists( 'wp_is_serving_rest_request' ) && wp_is_serving_rest_request();
+	}
+
+	/**
 	 * Register the REST response filter for every post type exposed in REST.
 	 *
 	 * The `rest_prepare_{$post_type}` hook fires from WP_REST_Posts_Controller.
@@ -705,6 +771,11 @@ class Content_Gate {
 		if ( is_admin() ) {
 			return;
 		}
+		// REST is self::filter_rest_response()'s, per requester.
+		// {@see self::is_dispatching_rest()}.
+		if ( self::is_dispatching_rest() ) {
+			return;
+		}
 		// Feeds carry a restriction layer of their own
 		// ({@see Content_Gate_Advanced_Settings}), which answers for the whole
 		// feed on a filter of its own rather than per loop iteration.
@@ -811,6 +882,15 @@ class Content_Gate {
 			return;
 		}
 
+		// Staged here rather than in get_teaser_outside_article(): this map is what
+		// replace_restricted_content() substitutes from, so writing it is a claim
+		// that this post is being rendered. Asking for a post's teaser — which an
+		// excerpt does — must not make that claim on its behalf.
+		self::$restricted_content[ $post->ID ] = [
+			'teaser' => $teaser,
+			'gate'   => '',
+		];
+
 		// post_excerpt is deliberately left alone. Empty, it makes core build the
 		// excerpt from post_content — now the teaser — so the trimming and the
 		// "read more" suffix stay core's to decide; non-empty, it is the author's
@@ -837,6 +917,9 @@ class Content_Gate {
 		if ( isset( self::$restricted_content[ $post->ID ] ) ) {
 			return self::$restricted_content[ $post->ID ]['teaser'];
 		}
+		if ( isset( self::$withheld_teasers[ $post->ID ] ) ) {
+			return self::$withheld_teasers[ $post->ID ];
+		}
 		if ( Memberships::is_active() || ! self::is_withheld_outside_article( $post ) ) {
 			return null;
 		}
@@ -846,10 +929,7 @@ class Content_Gate {
 		// it with wp_reset_postdata(), which re-fires `the_post` for this post and
 		// re-enters this method — the same re-entrancy the article path holds off
 		// with its render lock (#821).
-		self::$restricted_content[ $post->ID ] = [
-			'teaser' => '',
-			'gate'   => '',
-		];
+		self::$withheld_teasers[ $post->ID ] = '';
 
 		// The layout is resolved for the same anonymous reader the decision was
 		// made for, so a gate's configured paragraph count still shapes the teaser
@@ -859,10 +939,7 @@ class Content_Gate {
 			Content_Restriction_Control::get_gate_layout_id( $post->ID, 0 )
 		);
 
-		self::$restricted_content[ $post->ID ] = [
-			'teaser' => $teaser,
-			'gate'   => '',
-		];
+		self::$withheld_teasers[ $post->ID ] = $teaser;
 
 		return $teaser;
 	}
