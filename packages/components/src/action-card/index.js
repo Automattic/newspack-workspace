@@ -58,13 +58,38 @@ const getNotificationText = value => {
  * during render, which corrupts the hook dispatcher when those children are
  * components. A notification can be any element, so the announcement is always
  * built from its text instead of letting that default apply. Tags in an HTML
- * notification stay in, since speak() strips them itself. Entities do not survive
- * that, so they are decoded here to match what the notice shows.
+ * notification stay in, since speak() strips them itself. Entities are decoded so
+ * the announcement matches the text on screen, which getNotificationContent decodes
+ * for the same reason.
  *
  * @param {*} notification Notification content.
  * @return {string} Message to announce.
  */
 const getSpokenNotification = notification => decodeEntities( getNotificationText( notification ) ).replace( /\s+/g, ' ' ).trim();
+
+/**
+ * Decode a notification's own text for display.
+ *
+ * React does not decode entities in text children, and notification text is often
+ * server-sourced, so a message carrying `&#8217;` would otherwise show the entity
+ * and announce the character. The HTML branch is left alone: there the browser's
+ * parser decodes as it renders.
+ *
+ * @param {*} value Notification content.
+ * @return {*} The content, with its own strings decoded.
+ */
+const getNotificationContent = value => {
+	if ( value instanceof Error ) {
+		return decodeEntities( value.message );
+	}
+	if ( typeof value === 'string' ) {
+		return decodeEntities( value );
+	}
+	if ( Array.isArray( value ) ) {
+		return value.map( getNotificationContent );
+	}
+	return value;
+};
 
 /**
  * ActionCard component
@@ -151,7 +176,7 @@ const ActionCard = ( {
 	}, [ collapse ] );
 
 	const hasChildren = notification || children;
-	const notificationContent = notification instanceof Error ? notification.message : notification;
+	const notificationContent = getNotificationContent( notification );
 	const classes = classnames(
 		'newspack-action-card',
 		simple && 'newspack-card--is-clickable',

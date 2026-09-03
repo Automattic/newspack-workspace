@@ -130,26 +130,43 @@ describe( 'ActionCard notifications', () => {
 		expect( spoken() ).toContain( 'Network unreachable' );
 	} );
 
-	it( 'hands HTML notifications to speak() with their tags intact, for speak() to strip', () => {
+	it( 'renders HTML notifications in their own wrapper and hands speak() the tags to strip', () => {
 		const { container } = render(
-			<ActionCard title="Ad Manager" notificationLevel="error" notification="<p>Install failed.</p><p>Try again.</p>" notificationHTML />
+			<ActionCard title="Ad Manager" notificationLevel="error" notification={ '<p>Install failed.</p><p>Try again.</p>' } notificationHTML />
 		);
 
 		expect( container.querySelectorAll( '.newspack-action-card__notification-html > p' ) ).toHaveLength( 2 );
 		expect( spoken()[ 0 ] ).toContain( '<p>Install failed.</p>' );
 	} );
 
-	it( 'decodes entities so the announcement matches the visible text', () => {
+	it( 'decodes entities in both the announcement and the visible text', () => {
+		render( <ActionCard title="Ad Manager" notificationLevel="error" notification={ 'Plugin &#8220;Foo&#8221; could not be activated' } /> );
+
+		expect( screen.getByText( 'Plugin “Foo” could not be activated' ) ).toBeInTheDocument();
+		expect( spoken()[ 0 ] ).toContain( '“Foo”' );
+	} );
+
+	it( 'decodes entities inside an array of notification parts', () => {
 		render(
+			<ActionCard title="Ad Manager" notificationLevel="error" notification={ [ 'Could not reach the publisher&#8217;s network.', ' ' ] } />
+		);
+
+		expect( screen.getByText( /Could not reach the publisher’s network\./ ) ).toBeInTheDocument();
+		expect( spoken()[ 0 ] ).toContain( 'publisher’s' );
+	} );
+
+	it( 'leaves entity decoding to the browser on the HTML branch', () => {
+		const { container } = render(
 			<ActionCard
 				title="Ad Manager"
 				notificationLevel="error"
-				notification="Plugin &#8220;Foo&#8221; could not be activated"
+				notification={ 'Get it from <a href="https://example.org">the plugin&#8217;s site</a>' }
 				notificationHTML
 			/>
 		);
 
-		expect( spoken()[ 0 ] ).toContain( '“Foo”' );
+		expect( container.querySelector( '.newspack-action-card__notification-html a' ).textContent ).toBe( 'the plugin’s site' );
+		expect( spoken()[ 0 ] ).toContain( 'plugin’s site' );
 	} );
 
 	it( 'renders a non-string notification as children even when notificationHTML is set', () => {
