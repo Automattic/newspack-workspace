@@ -375,10 +375,8 @@ class Institution {
 	 * Without that the same `$user_id` could legitimately resolve to different sets across
 	 * requests in a long-running worker that swaps the current user.
 	 *
-	 * IDs are read with `get_post_field( 'post_title', ... )` rather than `get_the_title( ... )`
-	 * so the value going to GA4/ESP is a raw post title, not one that's been through
-	 * `the_title` filters (texturization, third-party plugins) that can introduce entities
-	 * or markup.
+	 * Names come from {@see self::get_decoded_name()}, which is where the rule for reading
+	 * a raw title lives.
 	 *
 	 * @param int        $user_id            User ID.
 	 * @param array|null $institution_filter Optional list of institution post IDs.
@@ -409,12 +407,28 @@ class Institution {
 				continue;
 			}
 			if ( self::user_matches_institution( $user_id, $rules ) ) {
-				$map[ $inst_id ] = html_entity_decode( (string) \get_post_field( 'post_title', $inst_id ), ENT_QUOTES | ENT_HTML5, 'UTF-8' );
+				$map[ $inst_id ] = self::get_decoded_name( $inst_id );
 			}
 		}
 
 		self::$names_cache[ $cache_key ] = $map;
 		return $map;
+	}
+
+	/**
+	 * An institution's title as a plain string.
+	 *
+	 * Read with `get_post_field( 'post_title', ... )` rather than `get_the_title( ... )`
+	 * so the value going to GA4/ESP is a raw post title, not one that's been through
+	 * `the_title` filters (texturization, third-party plugins) that can introduce
+	 * entities or markup.
+	 *
+	 * @param int $institution_id Institution post ID.
+	 *
+	 * @return string
+	 */
+	public static function get_decoded_name( $institution_id ) {
+		return html_entity_decode( (string) \get_post_field( 'post_title', (int) $institution_id ), ENT_QUOTES | ENT_HTML5, 'UTF-8' );
 	}
 
 	/**

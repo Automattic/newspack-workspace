@@ -63,6 +63,14 @@ class Access_Rules {
 	private static $one_time_purchase_memo = [];
 
 	/**
+	 * Reader ID the email-domain rule should treat as verified for the duration of a
+	 * hypothetical evaluation. Zero outside one. See with_assumed_verification().
+	 *
+	 * @var int
+	 */
+	private static $assumed_verified_user_id = 0;
+
+	/**
 	 * Context for the evaluation currently in progress, set by evaluate_rules()
 	 * / evaluate_rule() from the settings of the gate being evaluated. Rule
 	 * callbacks read it via get_evaluation_context(). Empty outside an
@@ -977,6 +985,30 @@ class Access_Rules {
 	}
 
 	/**
+	 * Whether an email address sits on one of the given domains.
+	 *
+	 * This is the domain comparison alone. It says nothing about whether the reader has
+	 * verified the address, which {@see self::is_email_domain_whitelisted()} requires
+	 * before granting access — so a caller that needs the match itself, rather than the
+	 * access decision built on it, uses this directly.
+	 *
+	 * @param string $email   Email address.
+	 * @param string $domains Comma- or newline-delimited list of domains.
+	 * @return bool
+	 */
+	public static function email_matches_domains( $email, $domains ) {
+		if ( empty( $email ) || empty( $domains ) ) {
+			return false;
+		}
+		$domains      = str_replace( PHP_EOL, ',', $domains );
+		$domains      = explode( ',', $domains );
+		$domains      = array_map( 'trim', $domains );
+		$domains      = array_map( 'strtolower', $domains );
+		$email_domain = strtolower( substr( $email, strrpos( $email, '@' ) + 1 ) );
+		return in_array( $email_domain, $domains, true );
+	}
+
+	/**
 	 * Whether the user’s email address contains one of the given domains.
 	 *
 	 * @param int    $user_id User ID.
@@ -988,11 +1020,7 @@ class Access_Rules {
 		if ( empty( $domains ) ) {
 			return true;
 		}
-		$domains = str_replace( PHP_EOL, ',', $domains );
-		$domains = explode( ',', $domains );
-		$domains = array_map( 'trim', $domains );
-		$domains = array_map( 'strtolower', $domains );
-		$user    = \get_userdata( $user_id );
+		$user = \get_userdata( $user_id );
 		if ( ! $user ) {
 			return false;
 		}
@@ -1000,11 +1028,83 @@ class Access_Rules {
 		if ( ! $email ) {
 			return false;
 		}
-		if ( Reader_Activation::is_reader_verified( $user ) === false ) {
+		if ( ! self::is_verification_satisfied( $user ) ) {
 			return false;
 		}
-		$email_domain = strtolower( substr( $email, strrpos( $email, '@' ) + 1 ) );
-		return in_array( $email_domain, $domains, true );
+		return self::email_matches_domains( $email, $domains );
+	}
+
+	/**
+	 * Whether the reader satisfies the email-domain rule's verification requirement.
+	 *
+	 * Normally that means the reader has verified their address. During a hypothetical
+	 * evaluation opened by {@see self::with_assumed_verification()} it is also satisfied
+	 * for the one reader that evaluation is about, so a caller can ask "would this gate
+	 * grant access if this reader verified?" without relaxing the rule for a real
+	 * access decision.
+	 *
+	 * @param \WP_User $user The user being evaluated.
+	 * @return bool
+	 */
+	private static function is_verification_satisfied( $user ) {
+		if ( self::is_verification_assumed_for( $user->ID ) ) {
+			return true;
+		}
+		return false !== Reader_Activation::is_reader_verified( $user );
+	}
+
+	/**
+	 * Whether a hypothetical evaluation is currently treating this reader as verified.
+	 *
+	 * For the other places a gate decides access on verification. Those read the stored
+	 * state directly, and a hypothetical that only reached the email-domain rule would
+	 * answer "still restricted" for a gate whose registration wall the same act of
+	 * verifying would also satisfy — suppressing the prompt on exactly the
+	 * configuration it is for.
+	 *
+	 * @param int $user_id The reader being evaluated.
+	 *
+	 * @return bool
+	 */
+	public static function is_verification_assumed_for( $user_id ) {
+		return (bool) self::$assumed_verified_user_id && (int) $user_id === self::$assumed_verified_user_id;
+	}
+
+	/**
+	 * Run a callback with one reader treated as verified by the email-domain rule.
+	 *
+	 * The return value is a hypothetical, never an access decision. Nothing about the
+	 * reader's stored verification state changes, and the flag is cleared before the
+	 * call returns.
+	 *
+	 * Two constraints on callers, because the flag is process-wide for the callback's
+	 * duration and the callback runs rule callbacks that third parties can register:
+	 * nothing computed inside may be cached anywhere that outlives the call, and no
+	 * value returned from it may be used to grant access. Either one turns a
+	 * hypothetical into a real answer — which is the hole the email-domain rule's
+	 * verification requirement exists to close.
+	 *
+	 * The first constraint is enforced for the one memo the replay is known to reach:
+	 * `Institution`'s per-request matching cache is cleared on the way out, so a name
+	 * map computed under the assumption is recomputed for real by whatever reads it
+	 * next (GA4 access labels, ESP contact metadata). A callback that memoises
+	 * elsewhere is still the caller's responsibility, and can tell it is inside a
+	 * hypothetical via {@see self::is_verification_assumed_for()}.
+	 *
+	 * @param int      $user_id  The reader to treat as verified.
+	 * @param callable $callback Callback to run.
+	 *
+	 * @return mixed The callback's return value.
+	 */
+	public static function with_assumed_verification( $user_id, $callback ) {
+		$previous                       = self::$assumed_verified_user_id;
+		self::$assumed_verified_user_id = (int) $user_id;
+		try {
+			return $callback();
+		} finally {
+			self::$assumed_verified_user_id = $previous;
+			Institution::reset_matching_cache();
+		}
 	}
 
 	/**

@@ -210,6 +210,7 @@ class Content_Gate {
 		include __DIR__ . '/class-premium-newsletters.php';
 		include __DIR__ . '/class-block-visibility.php';
 		include __DIR__ . '/class-gate-preview.php';
+		include __DIR__ . '/class-email-verification-prompt.php';
 
 		Site_Meter::init();
 		Content_Gate\Gate_Preview::init();
@@ -1413,6 +1414,12 @@ class Content_Gate {
 
 	/**
 	 * Whether the post is restricted for the current user.
+	 *
+	 * Callbacks on `newspack_is_post_restricted` may run inside a hypothetical replay
+	 * asking what a reader would see if they verified their email address. A callback
+	 * that branches on verification state, or that memoises anything derived from it,
+	 * must check `Access_Rules::is_verification_assumed_for()` — the reader is not
+	 * verified, and a value cached from that answer would be read back later as fact.
 	 *
 	 * @param int $post_id Post ID.
 	 *
