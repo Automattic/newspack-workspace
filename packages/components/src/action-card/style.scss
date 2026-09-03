@@ -343,14 +343,8 @@
 			margin: 0;
 		}
 
-		&.newspack-action-card__region-children {
-			.components-notice {
-				margin-top: 32px;
-
-				&:first-child {
-					margin-top: 0;
-				}
-			}
+		.components-notice__content > div > * {
+			margin: 0;
 		}
 	}
 

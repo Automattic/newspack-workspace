@@ -100,7 +100,7 @@ When building a screen, use the **spacing scale** (8px unit: 16, 24, 32, 48, 64)
 
 - **`ActionCard`** – Use when one concept (e.g. a feature or setting) can be toggled on/off and may have extra content below. Internal padding (24px default; 16px/8px for isMedium/isSmall) and 24px between regions keep hierarchy clear; expandable content uses 24px top padding and 24px between siblings.
 - **`CollapsibleGroup`** / **`CollapsibleGroup.Item`** – A stack of independently collapsible items, separated by dividers and flush with the surrounding column. Not a W3C accordion: the items do not coordinate.
-- **`Notice`** – Use for outcome feedback (success/error/warning) or short contextual messages. Vertical margin is 32px so notices don’t collide with cards; keep one primary message per area when possible.
+- **`Notice`** – Being retired in favour of core’s `Notice` from `@wordpress/components`, which announces itself to assistive technology. Reach for core’s in new work; ours stays for the screens still on it. Where ours is used, vertical margin is 32px so notices don’t collide with cards, and one primary message per area reads best.
 - **`ProgressBar`** – Progress indicator.
 - **`StepsList`** / **`StepsListItem`** – Step-by-step list components.
 - **`StyleCard`** – Style preview card.
@@ -541,7 +541,7 @@ When Newspack components don't provide what you need, use these WordPress compon
 ### Feedback and overlays
 
 - **`Spinner`** – Loading spinner
-- **`Notice`** – Inline notice (success/error/warning); prefer Newspack `Notice` in wizards when it fits
+- **`Notice`** – Inline notice (success/error/warning); prefer this over the Newspack `Notice`, which is being retired
 - **`Placeholder`** – Empty state in blocks
 - **`Modal`** – Modal dialog
 - **`Popover`** – Popover (e.g. webhooks endpoint actions, corrections modal)

@@ -26,29 +26,41 @@ import classnames from 'classnames';
 const NOTIFICATION_LEVELS = [ 'error', 'info', 'success', 'warning' ];
 
 /**
+ * Collect a notification's text, including text nested inside React elements.
+ *
+ * @param {*} value Notification content.
+ * @return {string} The collected text.
+ */
+const getNotificationText = value => {
+	if ( typeof value === 'string' ) {
+		return value;
+	}
+	if ( typeof value === 'number' ) {
+		return String( value );
+	}
+	if ( value instanceof Error ) {
+		return value.message;
+	}
+	if ( Array.isArray( value ) ) {
+		return value.map( getNotificationText ).join( '' );
+	}
+	return value?.props?.children === undefined ? '' : getNotificationText( value.props.children );
+};
+
+/**
  * Derive a plain-text announcement from a notification.
  *
  * Notice defaults spokenMessage to its children and runs renderToString over them
  * during render, which corrupts the hook dispatcher when those children are
  * components. A notification can be any element, so the announcement is always
- * built from its text parts instead of letting that default apply.
+ * built from its text instead of letting that default apply. Tags in an HTML
+ * notification are left in, because speak() strips them itself and does so with a
+ * space rather than welding together the words either side.
  *
- * @param {*}       notification Notification content.
- * @param {boolean} isHTML       Whether the content is an HTML string.
+ * @param {*} notification Notification content.
  * @return {string} Message to announce.
  */
-const getSpokenNotification = ( notification, isHTML ) => {
-	const parts = Array.isArray( notification ) ? notification : [ notification ];
-	const text = parts
-		.map( part => {
-			if ( typeof part === 'string' ) {
-				return part;
-			}
-			return part instanceof Error ? part.message : '';
-		} )
-		.join( '' );
-	return ( isHTML ? text.replace( /<[^>]*>/g, '' ) : text ).trim();
-};
+const getSpokenNotification = notification => getNotificationText( notification ).trim();
 
 /**
  * ActionCard component
@@ -135,6 +147,7 @@ const ActionCard = ( {
 	}, [ collapse ] );
 
 	const hasChildren = notification || children;
+	const notificationContent = notification instanceof Error ? notification.message : notification;
 	const classes = classnames(
 		'newspack-action-card',
 		simple && 'newspack-card--is-clickable',
@@ -273,12 +286,12 @@ const ActionCard = ( {
 			</div>
 			{ notification && NOTIFICATION_LEVELS.includes( notificationLevel ) && (
 				<div className="newspack-action-card__notification newspack-action-card__region-children">
-					<Notice
-						status={ notificationLevel }
-						isDismissible={ false }
-						spokenMessage={ getSpokenNotification( notification, notificationHTML ) }
-					>
-						{ notificationHTML ? <RawHTML>{ notification }</RawHTML> : notification }
+					<Notice status={ notificationLevel } isDismissible={ false } spokenMessage={ getSpokenNotification( notification ) }>
+						{ notificationHTML && typeof notificationContent === 'string' ? (
+							<RawHTML>{ notificationContent }</RawHTML>
+						) : (
+							notificationContent
+						) }
 					</Notice>
 				</div>
 			) }
