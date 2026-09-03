@@ -7,7 +7,6 @@
 
 namespace Newspack\Tests\Content_Gate\Traits;
 
-use Newspack\Content_Gate;
 use Newspack\Content_Restriction_Control;
 
 /**
@@ -23,13 +22,7 @@ use Newspack\Content_Restriction_Control;
 trait Trait_Restriction_Cache_Test {
 
 	/**
-	 * Discard every request-scoped cache on Content_Restriction_Control, and the
-	 * withholding caches Content_Gate derives from them.
-	 *
-	 * Content_Gate's are reset here rather than in one test class because any test
-	 * that renders content or an excerpt populates them, whether or not it knows
-	 * about gating -- so a verdict cached for a post ID in one case would answer
-	 * for the next case that happens to reuse it.
+	 * Discard every request-scoped cache on Content_Restriction_Control.
 	 */
 	protected function reset_restriction_cache() {
 		foreach ( [ 'post_gate_id_map', 'post_gate_layout_id_map', 'post_gates_map', 'term_descendants_map' ] as $cache_property ) {
@@ -37,9 +30,5 @@ trait Trait_Restriction_Cache_Test {
 			$cache_property_reflection->setAccessible( true );
 			$cache_property_reflection->setValue( null, [] );
 		}
-		Content_Gate::flush_withhold_cache();
-		$exempt_pages_reflection = new \ReflectionProperty( Content_Gate::class, 'exempt_page_ids' );
-		$exempt_pages_reflection->setAccessible( true );
-		$exempt_pages_reflection->setValue( null, null );
 	}
 }

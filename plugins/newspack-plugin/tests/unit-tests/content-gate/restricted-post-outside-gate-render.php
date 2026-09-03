@@ -13,7 +13,6 @@
 namespace Newspack\Tests\Content_Gate;
 
 use Newspack\Content_Gate;
-use Newspack\Content_Gifting;
 use Newspack\Tests\Content_Gate\Traits\Trait_Restriction_Cache_Test;
 
 /**
@@ -266,10 +265,12 @@ class Test_Restricted_Post_Outside_Gate_Render extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * Metering grants a free read of the article being viewed. It must not unlock
-	 * every other restricted post that happens to appear on the same page.
+	 * A metered view spends the reader's allowance on the article they opened, so
+	 * it answers for that article alone. Asked about any other post -- which is
+	 * what a listing, or a REST collection, does -- the allowance is not theirs to
+	 * spend and the restriction stands.
 	 */
-	public function test_metering_does_not_unlock_other_posts_on_the_page() {
+	public function test_metering_answers_only_for_the_article_being_read() {
 		Content_Gate::update_gate_settings(
 			$this->gate_id,
 			[
@@ -294,9 +295,8 @@ class Test_Restricted_Post_Outside_Gate_Render extends \WP_UnitTestCase {
 		}
 		$this->assertTrue( \Newspack\Metering::is_frontend_metering(), 'The metered article is readable, which is the premise of this test.' );
 
-		$rendered = $this->render_in_secondary_loop( $listed_post_id );
-
-		$this->assertStringNotContainsString( self::PAID_MARKER, $rendered, 'A metered view of one article must not unlock another.' );
+		$this->assertFalse( \Newspack\Metering::restrict_post( true, $metered_post_id ), 'The article the allowance was spent on is unlocked.' );
+		$this->assertTrue( \Newspack\Metering::restrict_post( true, $listed_post_id ), 'Every other post stays restricted.' );
 	}
 
 	/**
@@ -334,76 +334,10 @@ class Test_Restricted_Post_Outside_Gate_Render extends \WP_UnitTestCase {
 			]
 		);
 
-		$teaser = Content_Gate::get_withheld_teaser( $post_id );
+		$teaser = Content_Gate::get_teaser_outside_article( get_post( $post_id ) );
 
 		$this->assertStringNotContainsString( self::PAID_MARKER, $teaser );
 		$this->assertSame( '', trim( wp_strip_all_tags( $teaser ) ) );
-	}
-
-	/**
-	 * Work that renders a post for something other than a reader gets the whole
-	 * post, and the memo does not carry either verdict out of that window.
-	 *
-	 * The memo is what makes this need a helper: a verdict reached before the
-	 * window would otherwise still answer inside it, and one reached inside it
-	 * would outlive it.
-	 */
-	public function test_a_non_reader_render_gets_the_whole_post() {
-		$post_id = $this->create_restricted_post();
-		$this->go_to( home_url( '/' ) );
-
-		$this->assertTrue( Content_Gate::should_withhold_content( $post_id ), 'Withheld before the window, and memoized.' );
-
-		$inside = Content_Gate::without_reader_restrictions(
-			function () use ( $post_id ) {
-				return [
-					'withheld' => Content_Gate::should_withhold_content( $post_id ),
-					'nested'   => Content_Gate::without_reader_restrictions(
-						function () use ( $post_id ) {
-							return Content_Gate::should_withhold_content( $post_id );
-						}
-					),
-				];
-			}
-		);
-
-		$this->assertFalse( $inside['withheld'], 'The window reaches the memoized verdict.' );
-		$this->assertFalse( $inside['nested'], 'Nesting does not end the window early.' );
-		$this->assertTrue( Content_Gate::should_withhold_content( $post_id ), 'The window does not outlive itself.' );
-	}
-
-	/**
-	 * An excerpt answers for the post it was asked about, not for whichever post
-	 * the loop is on.
-	 *
-	 * Core builds an excerpt by running the body through `the_content`, and the
-	 * gate substitutes there by the global post. Without the suspension a card
-	 * beside a gated article shows that article's teaser under its own headline.
-	 */
-	public function test_an_excerpt_answers_for_its_own_post() {
-		$restricted_id = $this->create_restricted_post();
-		$other_id      = $this->factory->post->create(
-			[
-				'post_type'    => 'page',
-				'post_status'  => 'publish',
-				'post_excerpt' => '',
-				'post_content' => '<!-- wp:paragraph --><p>OTHERBODY</p><!-- /wp:paragraph -->',
-			]
-		);
-
-		// A loop sitting on the gated article, as a sidebar or related-posts list
-		// would find it.
-		$this->go_to( get_permalink( $restricted_id ) );
-		$GLOBALS['post'] = get_post( $restricted_id );
-		setup_postdata( $GLOBALS['post'] );
-
-		$excerpt = get_the_excerpt( $other_id );
-
-		unset( $GLOBALS['post'] );
-		wp_reset_postdata();
-
-		$this->assertStringContainsString( 'OTHERBODY', $excerpt, 'The excerpt is built from the post it was asked about.' );
-		$this->assertStringNotContainsString( self::FREE_MARKER, $excerpt, "A neighbouring article's teaser must not stand in for it." );
 	}
 
 	/**
@@ -424,85 +358,6 @@ class Test_Restricted_Post_Outside_Gate_Render extends \WP_UnitTestCase {
 		}
 
 		$this->assertStringNotContainsString( self::PAID_MARKER, $rendered );
-	}
-
-	/**
-	 * A reader arriving on a gift link varies from every other anonymous reader
-	 * before any cookie exists, so shared caches must treat them as their own.
-	 */
-	public function test_a_url_bypass_marks_the_response_as_reader_varying() {
-		wp_set_current_user( 0 );
-		$this->assertFalse( Content_Gate::response_varies_by_reader(), 'A plain anonymous request is shareable.' );
-
-		$_GET[ Content_Gifting::QUERY_ARG ] = 'a-gift-key';
-		$varies_on_gift_link                = Content_Gate::response_varies_by_reader();
-		unset( $_GET[ Content_Gifting::QUERY_ARG ] );
-
-		$_GET['utm_medium']       = 'email';
-		$varies_on_newsletter     = Content_Gate::response_varies_by_reader();
-		unset( $_GET['utm_medium'] );
-
-		$this->assertTrue( $varies_on_gift_link, 'A gift key grants access before its cookie exists.' );
-		$this->assertTrue( $varies_on_newsletter, 'The newsletter fallback writes its cookie on `wp`, after caching is wired up.' );
-	}
-
-	/**
-	 * Building one post's excerpt must not un-gate the posts a listing inside its
-	 * body renders.
-	 *
-	 * Core builds an excerpt by running the body back through `the_content`, and a
-	 * listing block in that body runs its own loop. Fixing the excerpt's own
-	 * post-scoping by suspending the gate outright would take those with it.
-	 *
-	 * Core strips dynamic blocks before rendering an excerpt, so this needs a site
-	 * that allow-lists one — `excerpt_allowed_blocks` is how that is done, and it
-	 * is what this test stands in for.
-	 */
-	public function test_an_excerpt_does_not_ungate_a_listing_inside_the_body() {
-		$allow_the_loop_block = function ( $blocks ) {
-			$blocks[] = 'newspack-tests/gated-loop';
-			return $blocks;
-		};
-		add_filter( 'excerpt_allowed_blocks', $allow_the_loop_block );
-		$gated_id = $this->create_restricted_post( [ 'short' => true ] );
-		register_block_type(
-			'newspack-tests/gated-loop',
-			[
-				'render_callback' => function () use ( $gated_id ) {
-					$loop     = new \WP_Query(
-						[
-							'post_type' => 'post',
-							'post__in'  => [ $gated_id ],
-						]
-					);
-					$rendered = '';
-					while ( $loop->have_posts() ) {
-						$loop->the_post();
-						$rendered .= apply_filters( 'the_content', get_the_content() );
-					}
-					wp_reset_postdata();
-					return $rendered;
-				},
-			]
-		);
-		$host_id = $this->factory->post->create(
-			[
-				'post_type'    => 'page',
-				'post_status'  => 'publish',
-				'post_excerpt' => '',
-				'post_content' => '<!-- wp:paragraph --><p>HOSTBODY</p><!-- /wp:paragraph -->'
-					. '<!-- wp:newspack-tests/gated-loop /-->',
-			]
-		);
-		$this->go_to( home_url( '/' ) );
-
-		$excerpt = get_the_excerpt( $host_id );
-
-		unregister_block_type( 'newspack-tests/gated-loop' );
-		remove_filter( 'excerpt_allowed_blocks', $allow_the_loop_block );
-
-		$this->assertStringContainsString( 'HOSTBODY', $excerpt, 'The host page still supplies its own excerpt.' );
-		$this->assertStringNotContainsString( self::PAID_MARKER, $excerpt, 'A gated post rendered while building this excerpt stays gated.' );
 	}
 
 	/**
@@ -535,50 +390,6 @@ class Test_Restricted_Post_Outside_Gate_Render extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * A filter above the gate's own cannot rebuild the excerpt from the body.
-	 *
-	 * The gate answers at priority 10 and anything above it can discard that
-	 * answer. Two plugins here did exactly that and had to be taught the teaser;
-	 * third-party and custom code cannot be taught.
-	 */
-	public function test_a_later_filter_cannot_rebuild_the_excerpt_from_the_body() {
-		$post_id = $this->create_restricted_post( [ 'short' => true ] );
-		$rogue   = function () use ( $post_id ) {
-			return get_post( $post_id )->post_content;
-		};
-
-		add_filter( 'get_the_excerpt', $rogue, 11 );
-		try {
-			$excerpt = get_the_excerpt( $post_id );
-		} finally {
-			remove_filter( 'get_the_excerpt', $rogue, 11 );
-		}
-
-		$this->assertStringNotContainsString( self::PAID_MARKER, $excerpt );
-	}
-
-	/**
-	 * That last word is not a veto: a filter above the gate may still shorten the
-	 * excerpt, which is what the listing blocks do with their own length setting.
-	 */
-	public function test_a_later_filter_may_still_shorten_the_excerpt() {
-		$post_id  = $this->create_restricted_post();
-		$shortened = self::FREE_MARKER . ' opening line.';
-		$shorten  = function () use ( $shortened ) {
-			return $shortened;
-		};
-
-		add_filter( 'get_the_excerpt', $shorten, 11 );
-		try {
-			$excerpt = get_the_excerpt( $post_id );
-		} finally {
-			remove_filter( 'get_the_excerpt', $shorten, 11 );
-		}
-
-		$this->assertSame( $shortened, $excerpt, "A shorter excerpt drawn from the teaser is the consumer's to choose." );
-	}
-
-	/**
 	 * The pages a reader needs in order to resolve a gate are never withheld,
 	 * wherever they are rendered. Gating My Account hides the sign-in form the
 	 * gate is asking the reader to use.
@@ -608,6 +419,59 @@ class Test_Restricted_Post_Outside_Gate_Render extends \WP_UnitTestCase {
 		$this->reset_gate_render_state();
 
 		$this->assertNotFalse( Content_Gate::is_post_restricted( $account_page_id ), 'The gate does restrict this page — the exemption is what keeps it readable.' );
-		$this->assertFalse( Content_Gate::should_withhold_content( $account_page_id ) );
+		$this->assertNull( Content_Gate::get_teaser_outside_article( get_post( $account_page_id ) ), 'An exempt page is never withheld, wherever it is rendered.' );
+	}
+
+	/**
+	 * A listing rendered before the article must not consume the once-per-request
+	 * gate lock. Withholding a listed post is not a gate render, and treating it
+	 * as one would leave the article below it ungated.
+	 */
+	public function test_a_listing_above_the_article_does_not_disarm_its_gate() {
+		$article_id = $this->create_restricted_post();
+		$listed_id  = $this->create_restricted_post();
+		$this->go_to( get_permalink( $article_id ) );
+
+		// A Query Loop in the header, rendered before the main loop runs.
+		$this->render_in_secondary_loop( $listed_id );
+
+		while ( have_posts() ) {
+			the_post();
+		}
+		$rendered = apply_filters( 'the_content', get_post( $article_id )->post_content );
+
+		$this->assertStringNotContainsString( self::PAID_MARKER, $rendered );
+		$this->assertSame( 1, substr_count( $rendered, 'newspack-content-gate__inline-gate' ), 'The article still renders its own gate.' );
+	}
+
+	/**
+	 * A listing shows the teaser to every reader, including one the gate would let
+	 * through. Newspack's block cache keys rendered listing markup by block
+	 * attributes and position with no reader dimension, so a listing that varied
+	 * by entitlement would be handed to the next reader along. The full body is
+	 * still theirs on the article page.
+	 */
+	public function test_a_listing_shows_the_teaser_to_an_entitled_reader() {
+		$post_id     = $this->create_restricted_post();
+		$reader_id   = $this->factory->user->create( [ 'role' => 'subscriber' ] );
+		wp_set_current_user( $reader_id );
+		$this->reset_restriction_cache();
+		$this->go_to( home_url( '/' ) );
+
+		$this->assertFalse( Content_Gate::is_post_restricted( $post_id ), 'A logged-in reader passes this registration gate, which is the premise of this test.' );
+
+		$listed = $this->render_in_secondary_loop( $post_id );
+
+		$this->reset_gate_render_state();
+		$this->reset_restriction_cache();
+		$this->go_to( get_permalink( $post_id ) );
+		while ( have_posts() ) {
+			the_post();
+		}
+		$article = apply_filters( 'the_content', get_post( $post_id )->post_content );
+		wp_set_current_user( 0 );
+
+		$this->assertStringNotContainsString( self::PAID_MARKER, $listed, 'The listing is reader-independent, so it shows the teaser.' );
+		$this->assertStringContainsString( self::PAID_MARKER, $article, 'The article page still gives an entitled reader the whole post.' );
 	}
 }

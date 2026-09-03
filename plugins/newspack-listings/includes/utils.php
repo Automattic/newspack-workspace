@@ -184,15 +184,11 @@ function get_content_gate_teaser( $post ) {
 	if (
 		! $post instanceof \WP_Post
 		|| ! class_exists( '\Newspack\Content_Gate' )
-		|| ! method_exists( '\Newspack\Content_Gate', 'should_withhold_content' )
-		|| ! method_exists( '\Newspack\Content_Gate', 'get_withheld_teaser' )
+		|| ! method_exists( '\Newspack\Content_Gate', 'get_teaser_outside_article' )
 	) {
 		return null;
 	}
-	if ( ! \Newspack\Content_Gate::should_withhold_content( $post->ID ) ) {
-		return null;
-	}
-	return \Newspack\Content_Gate::get_withheld_teaser( $post->ID );
+	return \Newspack\Content_Gate::get_teaser_outside_article( $post );
 }
 
 /**
@@ -232,10 +228,10 @@ function get_listing_excerpt( $post, $excerpt_length = null ) {
 	}
 
 	// Recreate logic from wp_trim_excerpt (https://developer.wordpress.org/reference/functions/wp_trim_excerpt/).
-	// The content gate's teaser stands in for the body of a post the reader has no
-	// access to. This excerpt is built here rather than through get_the_excerpt(),
-	// so the gate's own filter never sees it and the paid body would otherwise
-	// reach the card.
+	// The content gate's teaser stands in for a gated post's body. The REST
+	// controller assembles listing items outside any loop, so `the_post` never
+	// fires for them and nothing has withheld the body by the time it is read
+	// here.
 	$excerpt = get_content_gate_teaser( $post );
 	$excerpt = null === $excerpt ? $post->post_content : $excerpt;
 	$excerpt = strip_shortcodes( $excerpt );

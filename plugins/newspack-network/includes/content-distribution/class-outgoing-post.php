@@ -305,30 +305,6 @@ class Outgoing_Post {
 	 * @return array|WP_Error The post payload or WP_Error if the post is invalid.
 	 */
 	public function get_payload( $status_on_publish = 'draft' ) {
-		// Newspack's content gate withholds a restricted post's body from readers on
-		// every surface that runs `the_content`. Distribution is not a reader: a node
-		// site has to receive the article whole, and gates its own copy. The window
-		// covers the whole payload because more than one field is built that way —
-		// the body, and the media list, which would otherwise carry only the
-		// attachments that appear above the gate.
-		if ( class_exists( '\Newspack\Content_Gate' ) && method_exists( '\Newspack\Content_Gate', 'without_reader_restrictions' ) ) {
-			return \Newspack\Content_Gate::without_reader_restrictions(
-				function () use ( $status_on_publish ) {
-					return $this->build_payload( $status_on_publish );
-				}
-			);
-		}
-		return $this->build_payload( $status_on_publish );
-	}
-
-	/**
-	 * Assemble the payload {@see self::get_payload()} returns.
-	 *
-	 * @param string $status_on_publish The post status when creating the post.
-	 *
-	 * @return array|WP_Error The post payload or WP_Error if the post is invalid.
-	 */
-	protected function build_payload( $status_on_publish = 'draft' ) {
 		$post_author = self::get_outgoing_wp_user_author( $this->post->post_author );
 
 		$payload = [
@@ -446,12 +422,9 @@ class Outgoing_Post {
 		 * Remove autoembed filter so that actual URL will be pushed and not the generated markup.
 		 */
 		remove_filter( 'the_content', [ $wp_embed, 'autoembed' ], 8 );
-		try {
-			// Filter documented in WordPress core.
-			$post_content = apply_filters( 'the_content', $this->get_raw_post_content() );
-		} finally {
-			add_filter( 'the_content', [ $wp_embed, 'autoembed' ], 8 );
-		}
+		// Filter documented in WordPress core.
+		$post_content = apply_filters( 'the_content', $this->get_raw_post_content() );
+		add_filter( 'the_content', [ $wp_embed, 'autoembed' ], 8 );
 		return $post_content;
 	}
 

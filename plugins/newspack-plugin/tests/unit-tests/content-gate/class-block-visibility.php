@@ -197,26 +197,6 @@ class Newspack_Test_Block_Visibility extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Code rendering a post for something other than a reader -- content
-	 * distribution building a payload for a node site -- can take the whole post.
-	 */
-	public function test_apply_filter_can_suspend_block_visibility() {
-		wp_set_current_user( 0 );
-		Block_Visibility::reset_cache_for_tests();
-
-		$rules = [ 'registration' => [ 'active' => true ] ];
-		$block = $this->make_block_with_rules( 'core/group', $rules, 'visible' );
-
-		add_filter( 'newspack_content_gate_apply_block_visibility', '__return_false' );
-		$suspended = Block_Visibility::filter_render_block( '<div>restricted</div>', $block );
-		remove_filter( 'newspack_content_gate_apply_block_visibility', '__return_false' );
-		$applied = Block_Visibility::filter_render_block( '<div>restricted</div>', $block );
-
-		$this->assertSame( '<div>restricted</div>', $suspended );
-		$this->assertSame( '', $applied, 'The suspension lasts only as long as the filter does.' );
-	}
-
-	/**
 	 * Registration: logged-out user does not match.
 	 */
 	public function test_registration_logged_out_does_not_match() {

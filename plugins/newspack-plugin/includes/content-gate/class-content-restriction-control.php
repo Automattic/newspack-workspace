@@ -519,11 +519,16 @@ class Content_Restriction_Control {
 	 * queue workers, REST callbacks iterating over readers) write to their
 	 * own cache slot and do not surface here.
 	 *
-	 * @param int $post_id Post ID. If not given, uses the current post ID.
+	 * @param int      $post_id Post ID. If not given, uses the current post ID.
+	 * @param int|null $user_id Reader to look the entry up for. Defaults to the
+	 *                          current user. Pass 0 to read the anonymous entry,
+	 *                          which is what a surface serving one copy of its
+	 *                          markup to every reader needs
+	 *                          ({@see Content_Gate::is_withheld_outside_article()}).
 	 *
 	 * @return int|false
 	 */
-	public static function get_gate_layout_id( $post_id = null ) {
+	public static function get_gate_layout_id( $post_id = null, $user_id = null ) {
 		if ( ! Content_Gate::is_newspack_feature_enabled() ) {
 			return false;
 		}
@@ -533,7 +538,7 @@ class Content_Restriction_Control {
 		if ( ! $post_id ) {
 			return false;
 		}
-		$user_id = get_current_user_id();
+		$user_id = $user_id ?? get_current_user_id();
 		if ( ! empty( self::$post_gate_layout_id_map[ $post_id . '_' . $user_id ] ) ) {
 			return self::$post_gate_layout_id_map[ $post_id . '_' . $user_id ];
 		}

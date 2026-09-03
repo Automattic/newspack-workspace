@@ -192,11 +192,6 @@ class Content_Gate_Advanced_Settings {
 	 * an invalid cookie is not a leak, but it costs nothing to treat it as one,
 	 * and verifying would cost an HMAC.
 	 *
-	 * Narrower than {@see Content_Gate::response_varies_by_reader()}, deliberately:
-	 * feed membership is decided through `newspack_is_post_restricted`, which
-	 * content gifting does not filter, so a gift key changes nothing about which
-	 * items a feed carries.
-	 *
 	 * @return bool
 	 */
 	public static function feed_response_varies_by_reader(): bool {
@@ -657,9 +652,8 @@ class Content_Gate_Advanced_Settings {
 	 * current post is restricted and the feed mode is not "off".
 	 *
 	 * Uses the gate's excerpt settings (<!--more--> tag or paragraph count) to
-	 * match what logged-out visitors see on the front-end, through the same
-	 * builder every other withholding surface uses. The inline gate HTML is
-	 * intentionally omitted — feeds should not contain login prompts. In
+	 * match what logged-out visitors see on the front-end. The inline gate HTML
+	 * is intentionally omitted — feeds should not contain login prompts. In
 	 * "exclude" mode restricted posts are already gone from the loop; truncation
 	 * remains a backstop so a restricted body can never leak in full.
 	 *
@@ -678,7 +672,7 @@ class Content_Gate_Advanced_Settings {
 		if ( ! Content_Gate::is_post_restricted( $post->ID ) ) {
 			return $feed_string;
 		}
-		return Content_Gate::get_withheld_teaser( $post->ID );
+		return Content_Gate::get_restricted_post_excerpt_for_gate( $post, Content_Gate::get_gate_layout_id( $post->ID ) );
 	}
 }
 Content_Gate_Advanced_Settings::init();

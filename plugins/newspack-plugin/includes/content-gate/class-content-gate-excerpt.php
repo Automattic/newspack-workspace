@@ -31,96 +31,6 @@ class Content_Gate_Excerpt {
 			Logger::log( 'Could not remove core wp_trim_excerpt filter; excerpts are trimmed twice.', 'CONTENT-GATE-EXCERPT' );
 		}
 		add_filter( 'get_the_excerpt', [ __CLASS__, 'filter_get_the_excerpt' ], 10, 2 );
-		add_filter( 'get_the_excerpt', [ __CLASS__, 'enforce_withheld_excerpt' ], PHP_INT_MAX, 2 );
-	}
-
-	/**
-	 * Last word on a withheld post's excerpt.
-	 *
-	 * The filter above answers at priority 10, and anything above that can discard
-	 * the answer and rebuild from `post_content` — which is how the paid body
-	 * reached listing cards in the first place. Two plugins in this repository did
-	 * exactly that and had to be taught the teaser one at a time; a third-party or
-	 * custom-code filter cannot be taught at all.
-	 *
-	 * So the excerpt is checked rather than trusted. The teaser is the most a
-	 * withheld post may show, so an excerpt no longer than the teaser cannot say
-	 * more than the article page does — every rebuild starts at the body's opening,
-	 * which is the teaser's opening. One that runs longer reached past the teaser
-	 * and is replaced with the priority-10 answer.
-	 *
-	 * A consumer's own trimming therefore survives, whatever length and whatever
-	 * "read more" string it appends; its access to the body does not. What this
-	 * does not catch is an excerpt built from the middle of a body and kept under
-	 * the teaser's length, which nothing in this repository does — the priority-10
-	 * filter and the consumers themselves remain the mechanism, and this is the
-	 * net beneath them.
-	 *
-	 * @param string   $text The excerpt the chain has produced.
-	 * @param \WP_Post $post The post.
-	 * @return string
-	 */
-	public static function enforce_withheld_excerpt( $text, $post = null ) {
-		$resolved = $post instanceof \WP_Post ? $post : get_post( $post );
-		if ( ! $resolved instanceof \WP_Post ) {
-			return $text;
-		}
-		if ( ! Content_Gate::should_withhold_content( $resolved->ID ) ) {
-			return $text;
-		}
-
-		// A hand-written excerpt is the author's own words, and the priority-10
-		// filter passes it through. It is not drawn from the teaser, so it would
-		// fail the containment test below.
-		if ( '' !== trim( (string) $resolved->post_excerpt ) ) {
-			return $text;
-		}
-
-		$produced = self::comparable_text( $text );
-		if ( '' === $produced ) {
-			return $text;
-		}
-		$teaser = self::comparable_text( Content_Gate::get_withheld_teaser( $resolved->ID ) );
-		if ( false !== strpos( $teaser, $produced ) ) {
-			return $text;
-		}
-		if ( self::word_count( $produced ) <= self::word_count( $teaser ) ) {
-			return $text;
-		}
-
-		return self::filter_get_the_excerpt( '', $resolved );
-	}
-
-	/**
-	 * Count the words in already-normalized text.
-	 *
-	 * Not str_word_count(), which is byte-oriented and undercounts every language
-	 * this runs in other than English.
-	 *
-	 * @param string $text Normalized text.
-	 * @return int
-	 */
-	private static function word_count( $text ) {
-		return '' === $text ? 0 : count( preg_split( '/\s+/u', $text ) );
-	}
-
-	/**
-	 * Reduce an excerpt to the form the length and containment tests compare.
-	 *
-	 * Markup, entities and whitespace all vary with how a consumer assembled the
-	 * excerpt without telling us anything about where the words came from. The
-	 * trailing "read more" string goes too: core appends it to a trimmed excerpt,
-	 * and it is by definition not part of the teaser.
-	 *
-	 * @param string $text Excerpt text.
-	 * @return string
-	 */
-	private static function comparable_text( $text ) {
-		/** This filter is documented in wp-includes/formatting.php */
-		$excerpt_more = apply_filters( 'excerpt_more', ' [&hellip;]' );
-		$text         = str_replace( wp_strip_all_tags( $excerpt_more ), '', wp_strip_all_tags( (string) $text ) );
-		$text         = html_entity_decode( $text, ENT_QUOTES, get_bloginfo( 'charset' ) );
-		return trim( preg_replace( '/\s+/u', ' ', $text ) );
 	}
 
 	/**
@@ -133,38 +43,6 @@ class Content_Gate_Excerpt {
 	public static function filter_get_the_excerpt( $text, $post = null ) {
 		$resolved = $post instanceof \WP_Post ? $post : get_post( $post );
 
-		// Every branch below ends in wp_trim_excerpt(), which applies 'the_content' —
-		// where the gate answers for whichever post the loop has set up, not for the
-		// post this filter was asked about. On a gated article, an excerpt requested
-		// for any other post would come back as the article's teaser.
-		//
-		// So point the loop at this post for the duration. Suspending the gate instead
-		// would fix the same symptom by un-gating everything: a listing block inside
-		// this body runs 'the_content' over its own posts, and those would come back
-		// whole.
-		$previous_post   = $GLOBALS['post'] ?? null;
-		$GLOBALS['post'] = $resolved; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
-		try {
-			return self::build_excerpt( $text, $post, $resolved );
-		} finally {
-			if ( null === $previous_post ) {
-				unset( $GLOBALS['post'] );
-			} else {
-				$GLOBALS['post'] = $previous_post; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
-			}
-		}
-	}
-
-	/**
-	 * Build the excerpt, with the gate's content substitution already suspended.
-	 *
-	 * @param string            $text     The post excerpt, empty when auto-generating.
-	 * @param \WP_Post|int|null $post     The value this filter was passed.
-	 * @param \WP_Post|null     $resolved The post $post resolves to, or null.
-	 * @return string
-	 */
-	private static function build_excerpt( $text, $post, $resolved ) {
-
 		// Handing an unresolvable value to core would not fail -- wp_trim_excerpt()
 		// calls get_the_content( '', false, null ), which falls back to $GLOBALS['post']
 		// and builds an excerpt from whatever the loop has set up, unsanitized. A filter
@@ -174,18 +52,32 @@ class Content_Gate_Excerpt {
 			return $text;
 		}
 
-		// A post restricted wholesale by a gate rule carries no markup saying so, so
-		// block-level visibility alone cannot see it and core rebuilds the excerpt
-		// from the paid body. On an article with a short lede, the first 55 words
-		// reach copy the reader has not paid for.
-		$is_withheld = Content_Gate::should_withhold_content( $resolved->ID );
+		// A post the gate withholds outside its own article page gets its excerpt
+		// built from the teaser, not from the body. The staged substitution cannot
+		// serve this on its own: it is written when `the_post` fires, and an
+		// excerpt is not always built inside a loop — core's Latest Posts block
+		// walks get_posts() results and asks for each excerpt by post object.
+		$teaser = Content_Gate::get_teaser_outside_article( $resolved );
+		if ( null !== $teaser ) {
+			// A hand-written excerpt is the author's own words about a post they
+			// chose to gate, and stands, exactly as it does below.
+			if ( '' !== trim( (string) $resolved->post_excerpt ) ) {
+				return wp_trim_excerpt( $resolved->post_excerpt, $resolved );
+			}
+			$withheld               = clone $resolved;
+			$withheld->post_content = $teaser;
+			// See the note below on WP_Post::filter(): a clone carrying a display
+			// form is silently re-read from the row, teaser and all.
+			$withheld->filter = 'raw';
+			return wp_trim_excerpt( '', $withheld );
+		}
 
 		// Core returns a non-empty $text untouched; the branches below deliberately
 		// do not. Confine that difference to posts that actually use the gate, so on
 		// every other post -- including every post on a site with gates switched off,
 		// where this filter still replaces core's -- an excerpt supplied by a filter
 		// below priority 10 survives exactly as it would without Newspack installed.
-		if ( ! $is_withheld && ! Block_Visibility::has_access_control( (string) $resolved->post_content ) ) {
+		if ( ! Block_Visibility::has_access_control( (string) $resolved->post_content ) ) {
 			return wp_trim_excerpt( $text, $post );
 		}
 
@@ -211,15 +103,6 @@ class Content_Gate_Excerpt {
 		// to the author's excerpt, which is the conservative way to lose.
 		if ( '' !== trim( (string) $resolved->post_excerpt ) ) {
 			return wp_trim_excerpt( $resolved->post_excerpt, $sanitized );
-		}
-
-		// A withheld post hands core the gate teaser instead of its body: the same
-		// free opening the article page shows a non-member, so the excerpt can never
-		// say more than the article does. Built below the manual-excerpt branch
-		// because building it runs the whole body through the block pipeline, and an
-		// author's own excerpt would discard the result.
-		if ( $is_withheld ) {
-			$sanitized->post_content = Content_Gate::get_withheld_teaser( $resolved->ID );
 		}
 
 		// Pass an empty $text so core rebuilds from the sanitized post.
