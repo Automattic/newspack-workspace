@@ -14,7 +14,7 @@
 /**
  * WordPress dependencies.
  */
-import { useEffect, useMemo, useState } from '@wordpress/element';
+import { useLayoutEffect, useMemo, useState } from '@wordpress/element';
 import { __, sprintf } from '@wordpress/i18n';
 import { useDispatch } from '@wordpress/data';
 import { filterSortAndPaginate } from '@wordpress/dataviews';
@@ -214,7 +214,10 @@ export default function GroupList() {
 	const total = paginationInfo?.totalItems ?? 0;
 
 	// Surface the group count in the header breadcrumb, e.g. "/ Groups (14)".
-	useEffect( () => {
+	// Before paint, not after: this also carries the width override, and an error
+	// arrives outside a React event, so a passive effect would paint full-bleed once
+	// and then snap into the content column.
+	useLayoutEffect( () => {
 		setHeaderData( {
 			fullWidth: error ? false : undefined,
 			sectionName: [
@@ -240,6 +243,9 @@ export default function GroupList() {
 	if ( error ) {
 		const message = groupLoadFailedLabel( error );
 		return (
+			// spokenMessage is load-bearing, not redundant: core defaults it to children
+			// and runs non-string children through renderToString mid-render, which
+			// corrupts hook state.
 			<Notice status="error" isDismissible={ false } spokenMessage={ message }>
 				{ message }{ ' ' }
 				<Button variant="link" onClick={ reload }>

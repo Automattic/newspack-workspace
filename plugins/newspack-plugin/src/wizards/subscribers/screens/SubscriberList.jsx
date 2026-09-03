@@ -16,7 +16,7 @@
 /**
  * WordPress dependencies.
  */
-import { useEffect, useMemo, useState } from '@wordpress/element';
+import { useLayoutEffect, useMemo, useState } from '@wordpress/element';
 import { __, _n, sprintf } from '@wordpress/i18n';
 import { useDispatch } from '@wordpress/data';
 import { __experimentalHStack as HStack, __experimentalVStack as VStack, Notice } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
@@ -323,7 +323,10 @@ export default function SubscriberList() {
 	};
 
 	// Surface the subscriber count in the header breadcrumb, e.g. "/ Subscribers (85)".
-	useEffect( () => {
+	// Before paint, not after: this also carries the width override, and an error
+	// arrives outside a React event, so a passive effect would paint full-bleed once
+	// and then snap into the content column.
+	useLayoutEffect( () => {
 		setHeaderData( {
 			fullWidth: error ? false : undefined,
 			sectionName: [
@@ -351,8 +354,15 @@ export default function SubscriberList() {
 	// A failed read must not read as "this site has no subscribers": say so, and
 	// offer a retry.
 	if ( error ) {
-		const message = sprintf( __( 'Could not load subscribers: %s', 'newspack-plugin' ), error );
+		const message = sprintf(
+			/* translators: %s: the error message returned by the server. */
+			__( 'Could not load subscribers: %s', 'newspack-plugin' ),
+			error
+		);
 		return (
+			// spokenMessage is load-bearing, not redundant: core defaults it to children
+			// and runs non-string children through renderToString mid-render, which
+			// corrupts hook state.
 			<Notice status="error" isDismissible={ false } spokenMessage={ message }>
 				{ message }{ ' ' }
 				<Button variant="link" onClick={ reload }>
