@@ -284,6 +284,9 @@ export default function PersonProfile() {
 	if ( notFound ) {
 		const message = __( 'This subscriber could not be found. They may have been deleted.', 'newspack-plugin' );
 		return (
+			// spokenMessage is load-bearing, not redundant: core defaults it to children
+			// and runs non-string children through renderToString mid-render, which
+			// corrupts hook state.
 			<Notice status="error" isDismissible={ false } spokenMessage={ message }>
 				{ message }{ ' ' }
 				<Button variant="link" href={ backNav }>
@@ -298,7 +301,9 @@ export default function PersonProfile() {
 		const message = sprintf(
 			/* translators: %s is an error message. */
 			__( 'Could not load this subscriber: %s', 'newspack-plugin' ),
-			error
+			// A read can also come back empty without reporting an error, which would
+			// otherwise leave the sentence hanging after the colon.
+			error || __( 'Something went wrong.', 'newspack-plugin' )
 		);
 		return (
 			<Notice status="error" isDismissible={ false } spokenMessage={ message }>
