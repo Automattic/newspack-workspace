@@ -720,16 +720,22 @@ class Group_Subscription_MyAccount {
 		$member = get_userdata( $member_id );
 		$name   = $member ? newspack_get_user_display_label( $member ) : __( 'This member', 'newspack-plugin' );
 
-		self::redirect(
-			$result,
-			$redirect_url,
-			'members',
-			'manager' === $role
-				/* translators: %s: member display name. */
-				? sprintf( __( '%s is now a manager.', 'newspack-plugin' ), $name )
-				/* translators: %s: member display name. */
-				: sprintf( __( '%s is no longer a manager.', 'newspack-plugin' ), $name )
-		);
+		if ( 'manager' === $role ) {
+			/* translators: %s: member display name. */
+			$success_message = sprintf( __( '%s is now a manager.', 'newspack-plugin' ), $name );
+		} else {
+			/* translators: %s: member display name. */
+			$success_message = sprintf( __( '%s is no longer a manager.', 'newspack-plugin' ), $name );
+			// Demoting a manager leaves the group's invite link working, and the two controls sit
+			// on the same page, so name the one that does stop a link in circulation. Only when
+			// there is a live link to stop: the read runs after the demotion, so a legacy key the
+			// removal has just revoked is already gone from it.
+			if ( Group_Subscription_Invite::get_link_invite( $subscription ) ) {
+				$success_message .= ' ' . __( 'To stop the invite link for this group, regenerate it.', 'newspack-plugin' );
+			}
+		}
+
+		self::redirect( $result, $redirect_url, 'members', $success_message );
 	}
 }
 Group_Subscription_MyAccount::init();
