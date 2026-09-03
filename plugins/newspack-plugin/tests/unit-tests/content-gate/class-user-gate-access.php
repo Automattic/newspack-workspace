@@ -339,6 +339,9 @@ class Newspack_Test_User_Gate_Access extends WP_UnitTestCase {
 			]
 		);
 		$subscription->update_meta_data( Group_Subscription_Settings::GROUP_SUBSCRIPTION_META_PREFIX . 'enabled', 'yes' );
+		// Real WC only persists meta on save(); the group lookup re-loads each
+		// subscription, so an unsaved flag would never be seen outside the mock.
+		$subscription->save();
 		return $subscription;
 	}
 
