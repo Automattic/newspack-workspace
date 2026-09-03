@@ -25,7 +25,7 @@
 /**
  * WordPress dependencies.
  */
-import { createPortal, useEffect, useMemo, useState } from '@wordpress/element';
+import { createPortal, useEffect, useMemo, useRef, useState } from '@wordpress/element';
 import { __, _n, sprintf } from '@wordpress/i18n';
 import { useDispatch } from '@wordpress/data';
 import {
@@ -124,6 +124,21 @@ export default function PersonProfile() {
 	const backNav = isInternalHashPath( rawFrom ) ? rawFrom : '#/';
 
 	const { subscriber, loading, error, notFound, reload } = useSubscriber( id );
+
+	// A retry unmounts this notice while the request is in flight. Without this the
+	// remounted Retry button is a fresh node and a keyboard user is dropped back on
+	// the document body, with no way to reach the retry they just asked for.
+	const retryRef = useRef( null );
+	const hasRetried = useRef( false );
+	const retry = () => {
+		hasRetried.current = true;
+		reload();
+	};
+	useEffect( () => {
+		if ( ! loading && ( error || ! subscriber ) && hasRetried.current ) {
+			retryRef.current?.focus();
+		}
+	}, [ loading, error, subscriber ] );
 
 	// A 128px source feeds the 64px header avatar (2x for high-DPR displays),
 	// resolved through the same endpoint the lists use.
@@ -298,17 +313,24 @@ export default function PersonProfile() {
 
 	// A failed read must not read as "this person has no subscriptions".
 	if ( error || ! subscriber ) {
-		const message = sprintf(
-			/* translators: %s is an error message. */
-			__( 'Could not load this subscriber: %s', 'newspack-plugin' ),
-			// A read can also come back empty without reporting an error, which would
-			// otherwise leave the sentence hanging after the colon.
-			error || __( 'Something went wrong.', 'newspack-plugin' )
-		);
+		// A read can also come back empty without reporting an error. That branch has
+		// no server detail to quote, so it gets its own sentence rather than a filler
+		// clause after the colon.
+		let message = __( 'This subscriber could not be loaded.', 'newspack-plugin' );
+		if ( error ) {
+			message = sprintf(
+				/* translators: %s is an error message. */
+				__( 'Could not load this subscriber: %s', 'newspack-plugin' ),
+				error
+			);
+		}
 		return (
+			// spokenMessage is load-bearing, not redundant: core defaults it to children
+			// and runs non-string children through renderToString mid-render, which
+			// corrupts hook state.
 			<Notice status="error" isDismissible={ false } spokenMessage={ message }>
 				{ message }{ ' ' }
-				<Button variant="link" onClick={ reload }>
+				<Button variant="link" ref={ retryRef } onClick={ retry }>
 					{ __( 'Retry', 'newspack-plugin' ) }
 				</Button>
 			</Notice>
