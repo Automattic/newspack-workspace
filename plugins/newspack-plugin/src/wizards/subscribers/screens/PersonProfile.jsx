@@ -25,13 +25,12 @@
 /**
  * WordPress dependencies.
  */
-import { createPortal, useEffect, useMemo, useRef, useState } from '@wordpress/element';
+import { createPortal, useEffect, useMemo, useState } from '@wordpress/element';
 import { __, _n, sprintf } from '@wordpress/i18n';
 import { useDispatch } from '@wordpress/data';
 import {
 	__experimentalHStack as HStack, // eslint-disable-line @wordpress/no-unsafe-wp-apis
 	__experimentalVStack as VStack, // eslint-disable-line @wordpress/no-unsafe-wp-apis
-	Notice,
 } from '@wordpress/components';
 
 /**
@@ -39,6 +38,8 @@ import {
  */
 import { Button, Card, Divider, Grid, Router, SectionHeader, Waiting } from '../../../../packages/components/src';
 import './style.scss';
+import LoadFailureNotice from '../components/LoadFailureNotice';
+import { useRetryFocus } from '../use-retry-focus';
 import { WIZARD_STORE_NAMESPACE } from '../../../../packages/components/src/wizard/store';
 import SubscriptionCard from '../components/SubscriptionCard';
 import { useSubscriber } from '../data/use-subscriber';
@@ -125,20 +126,10 @@ export default function PersonProfile() {
 
 	const { subscriber, loading, error, notFound, reload } = useSubscriber( id );
 
-	// A retry unmounts this notice while the request is in flight. Without this the
-	// remounted Retry button is a fresh node and a keyboard user is dropped back on
-	// the document body, with no way to reach the retry they just asked for.
-	const retryRef = useRef( null );
-	const hasRetried = useRef( false );
-	const retry = () => {
-		hasRetried.current = true;
-		reload();
-	};
-	useEffect( () => {
-		if ( ! loading && ( error || ! subscriber ) && hasRetried.current ) {
-			retryRef.current?.focus();
-		}
-	}, [ loading, error, subscriber ] );
+	// A retry can land on either failure branch, so the ref goes on both affordances
+	// and focus follows whichever one renders. A missing person is covered too: that
+	// read nulls the subscriber.
+	const { retryRef, retry } = useRetryFocus( { settled: ! loading, failed: Boolean( error || ! subscriber ), reload } );
 
 	// A 128px source feeds the 64px header avatar (2x for high-DPR displays),
 	// resolved through the same endpoint the lists use.
@@ -299,15 +290,14 @@ export default function PersonProfile() {
 	if ( notFound ) {
 		const message = __( 'This subscriber could not be found. They may have been deleted.', 'newspack-plugin' );
 		return (
-			// spokenMessage is load-bearing, not redundant: core defaults it to children
-			// and runs non-string children through renderToString mid-render, which
-			// corrupts hook state.
-			<Notice status="error" isDismissible={ false } spokenMessage={ message }>
-				{ message }{ ' ' }
-				<Button variant="link" href={ backNav }>
-					{ __( 'Back to the list', 'newspack-plugin' ) }
-				</Button>
-			</Notice>
+			<LoadFailureNotice
+				message={ message }
+				action={
+					<Button variant="link" ref={ retryRef } href={ backNav }>
+						{ __( 'Back to the list', 'newspack-plugin' ) }
+					</Button>
+				}
+			/>
 		);
 	}
 
@@ -325,15 +315,14 @@ export default function PersonProfile() {
 			);
 		}
 		return (
-			// spokenMessage is load-bearing, not redundant: core defaults it to children
-			// and runs non-string children through renderToString mid-render, which
-			// corrupts hook state.
-			<Notice status="error" isDismissible={ false } spokenMessage={ message }>
-				{ message }{ ' ' }
-				<Button variant="link" ref={ retryRef } onClick={ retry }>
-					{ __( 'Retry', 'newspack-plugin' ) }
-				</Button>
-			</Notice>
+			<LoadFailureNotice
+				message={ message }
+				action={
+					<Button variant="link" ref={ retryRef } onClick={ retry }>
+						{ __( 'Retry', 'newspack-plugin' ) }
+					</Button>
+				}
+			/>
 		);
 	}
 

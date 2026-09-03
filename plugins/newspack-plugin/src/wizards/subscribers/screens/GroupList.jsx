@@ -14,11 +14,11 @@
 /**
  * WordPress dependencies.
  */
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from '@wordpress/element';
+import { useLayoutEffect, useMemo, useState } from '@wordpress/element';
 import { __, sprintf } from '@wordpress/i18n';
 import { useDispatch } from '@wordpress/data';
 import { filterSortAndPaginate } from '@wordpress/dataviews';
-import { __experimentalHStack as HStack, Notice } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
+import { __experimentalHStack as HStack } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
 import { Badge } from '@wordpress/ui';
 
 /**
@@ -27,6 +27,8 @@ import { Badge } from '@wordpress/ui';
 import { Button, DataViews, StatusIndicator, Waiting } from '../../../../packages/components/src';
 import { fmtDate } from '../format';
 import './style.scss';
+import LoadFailureNotice from '../components/LoadFailureNotice';
+import { useRetryFocus } from '../use-retry-focus';
 import { SHOW_AVATARS, useAvatars } from '../data/use-avatars';
 import { useGroups } from '../data/use-groups';
 import { WIZARD_STORE_NAMESPACE } from '../../../../packages/components/src/wizard/store';
@@ -233,20 +235,7 @@ export default function GroupList() {
 		} );
 	}, [ setHeaderData, total, groupsLoading, error ] );
 
-	// A retry unmounts this notice while the request is in flight. Without this the
-	// remounted Retry button is a fresh node and a keyboard user is dropped back on
-	// the document body, with no way to reach the retry they just asked for.
-	const retryRef = useRef( null );
-	const hasRetried = useRef( false );
-	const retry = () => {
-		hasRetried.current = true;
-		reload();
-	};
-	useEffect( () => {
-		if ( ! groupsLoading && error && hasRetried.current ) {
-			retryRef.current?.focus();
-		}
-	}, [ groupsLoading, error ] );
+	const { retryRef, retry } = useRetryFocus( { settled: ! groupsLoading, failed: Boolean( error ), reload } );
 
 	if ( groupsLoading ) {
 		return (
@@ -261,15 +250,14 @@ export default function GroupList() {
 	if ( error ) {
 		const message = groupLoadFailedLabel( error );
 		return (
-			// spokenMessage is load-bearing, not redundant: core defaults it to children
-			// and runs non-string children through renderToString mid-render, which
-			// corrupts hook state.
-			<Notice status="error" isDismissible={ false } spokenMessage={ message }>
-				{ message }{ ' ' }
-				<Button variant="link" ref={ retryRef } onClick={ retry }>
-					{ __( 'Retry', 'newspack-plugin' ) }
-				</Button>
-			</Notice>
+			<LoadFailureNotice
+				message={ message }
+				action={
+					<Button variant="link" ref={ retryRef } onClick={ retry }>
+						{ __( 'Retry', 'newspack-plugin' ) }
+					</Button>
+				}
+			/>
 		);
 	}
 
