@@ -944,44 +944,106 @@ class Access_Rules {
 	}
 
 	/**
+	 * Paid orders that satisfy a one-time purchase rule for the user.
+	 *
+	 * The report-side counterpart of has_one_time_purchase(): where the rule only
+	 * needs a yes/no, this names the orders behind the yes. It reads the rule
+	 * value the same way (paid statuses only, order creation date anchors the
+	 * duration, misconfigured durations grant nothing), but it always lists from
+	 * the customer's order history rather than wc_customer_bought_product(),
+	 * since that helper can only answer whether a purchase exists.
+	 *
+	 * Unlike has_one_time_purchase() this does not run the
+	 * `newspack_access_rules_has_one_time_purchase` filter, so access granted by
+	 * a third party has no order here.
+	 *
+	 * @param int   $user_id User ID.
+	 * @param array $args    Rule value, as accepted by has_one_time_purchase().
+	 * @return int[] Order IDs, newest first.
+	 */
+	public static function get_one_time_purchase_order_ids( $user_id, $args ) {
+		$value = self::sanitize_one_time_purchase_value( $args );
+		if ( empty( $value['product_ids'] ) || ! function_exists( 'wc_get_orders' ) ) {
+			return [];
+		}
+		$user     = \get_userdata( $user_id );
+		$email    = $user ? $user->user_email : '';
+		$customer = array_values( array_filter( [ $user_id, $email ] ) );
+		if ( empty( $customer ) ) {
+			return [];
+		}
+		if ( 'forever' === $value['duration_unit'] ) {
+			$cutoff = null;
+		} elseif ( in_array( $value['duration_unit'], [ 'days', 'months' ], true ) && $value['duration_value'] > 0 ) {
+			$cutoff = strtotime( sprintf( '-%d %s', $value['duration_value'], $value['duration_unit'] ) );
+		} else {
+			return [];
+		}
+		return array_map(
+			function ( $order ) {
+				return (int) $order->get_id();
+			},
+			self::get_paid_orders_with_products( $customer, $value['product_ids'], $cutoff )
+		);
+	}
+
+	/**
 	 * Whether the user has a paid order containing one of the given products,
 	 * created after the given cutoff timestamp.
 	 *
-	 * The query is bounded by customer, paid statuses, and the date window, so it
-	 * stays cheap on front-end requests even without a persistent cache. The
-	 * `customer` parameter matches the user ID or the billing email, so guest
-	 * orders count — mirroring wc_customer_bought_product() on the lifetime path.
-	 *
-	 * @param array $customer    Non-empty list of user IDs and/or billing emails to
-	 *                           match. Callers must reject an empty list: both
-	 *                           WooCommerce order stores drop an empty `customer`
-	 *                           constraint and return every customer's orders.
+	 * @param array $customer    Non-empty list of user IDs and/or billing emails to match.
 	 * @param int[] $product_ids Product IDs to look for.
 	 * @param int   $cutoff      Unix timestamp orders must be created after.
 	 *
 	 * @return bool
 	 */
 	private static function customer_bought_product_after( $customer, $product_ids, $cutoff ) {
+		return ! empty( self::get_paid_orders_with_products( $customer, $product_ids, $cutoff ) );
+	}
+
+	/**
+	 * The customer's paid orders containing one of the given products, optionally
+	 * limited to orders created after a cutoff timestamp.
+	 *
+	 * The query is bounded by customer, paid statuses, and the date window, so it
+	 * stays cheap on front-end requests even without a persistent cache. The
+	 * `customer` parameter matches the user ID or the billing email, so guest
+	 * orders count — mirroring wc_customer_bought_product() on the lifetime path.
+	 *
+	 * @param array    $customer    Non-empty list of user IDs and/or billing emails to
+	 *                              match. Callers must reject an empty list: both
+	 *                              WooCommerce order stores drop an empty `customer`
+	 *                              constraint and return every customer's orders.
+	 * @param int[]    $product_ids Product IDs to look for.
+	 * @param int|null $cutoff      Unix timestamp orders must be created after, or
+	 *                              null for the customer's whole order history.
+	 *
+	 * @return \WC_Order[] Matching orders, newest first.
+	 */
+	private static function get_paid_orders_with_products( $customer, $product_ids, $cutoff ) {
 		$paid_statuses = function_exists( 'wc_get_is_paid_statuses' ) ? \wc_get_is_paid_statuses() : [ 'processing', 'completed' ];
-		$orders        = \wc_get_orders(
-			[
-				'customer'     => $customer,
-				'status'       => $paid_statuses,
-				'date_created' => '>' . $cutoff,
-				'limit'        => -1,
-				'return'       => 'objects',
-			]
-		);
+		$query         = [
+			'customer' => $customer,
+			'status'   => $paid_statuses,
+			'limit'    => -1,
+			'return'   => 'objects',
+		];
+		if ( null !== $cutoff ) {
+			$query['date_created'] = '>' . $cutoff;
+		}
+		$orders  = \wc_get_orders( $query );
+		$matches = [];
 		foreach ( $orders as $order ) {
 			foreach ( $order->get_items() as $item ) {
 				$item_product_id   = method_exists( $item, 'get_product_id' ) ? (int) $item->get_product_id() : 0;
 				$item_variation_id = method_exists( $item, 'get_variation_id' ) ? (int) $item->get_variation_id() : 0;
 				if ( in_array( $item_product_id, $product_ids, true ) || ( $item_variation_id && in_array( $item_variation_id, $product_ids, true ) ) ) {
-					return true;
+					$matches[] = $order;
+					break;
 				}
 			}
 		}
-		return false;
+		return $matches;
 	}
 
 	/**

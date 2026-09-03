@@ -5,6 +5,7 @@
  * @package Newspack\Tests
  */
 
+use Newspack\Access_Attribution;
 use Newspack\Access_Rules;
 use Newspack\Content_Gate;
 use Newspack\Reader_Activation;
@@ -44,6 +45,8 @@ class Newspack_Test_User_Gate_Access extends WP_UnitTestCase {
 		);
 		Reader_Activation::set_reader_verified( self::$user_id );
 		self::$admin_id = $this->factory->user->create( [ 'role' => 'administrator' ] );
+		Access_Attribution::reset_memo();
+		Access_Rules::flush_one_time_purchase_memo();
 	}
 
 	/**
@@ -187,7 +190,7 @@ class Newspack_Test_User_Gate_Access extends WP_UnitTestCase {
 		User_Gate_Access::render_user_gate_access( $user );
 		$output = ob_get_clean();
 
-		$this->assertStringContainsString( 'Content Gate Access', $output, 'Should render heading for admin users.' );
+		$this->assertStringContainsString( 'Access Control', $output, 'Should render heading for admin users.' );
 	}
 
 	/**
@@ -255,5 +258,231 @@ class Newspack_Test_User_Gate_Access extends WP_UnitTestCase {
 			$format_rule_value_method->invoke( null, 'email_domain', '' ),
 			'An empty value for a rule that reads it as no constraint should still read "(any)".'
 		);
+	}
+
+	/**
+	 * A passing subscription rule names every subscription that satisfies it —
+	 * owned or via group membership — and only those: a cancelled subscription
+	 * and one for an unrelated product grant nothing and must not be listed.
+	 */
+	public function test_subscription_rule_lists_the_subscriptions_that_grant_access() {
+		\wc_create_mock_product(
+			[
+				'id'   => 101,
+				'name' => 'All Access',
+			]
+		);
+		$owned     = \wcs_create_subscription(
+			[
+				'customer_id'    => self::$user_id,
+				'status'         => 'active',
+				'billing_period' => 'month',
+				'products'       => [ 101 ],
+			]
+		);
+		$cancelled = \wcs_create_subscription(
+			[
+				'customer_id'    => self::$user_id,
+				'status'         => 'cancelled',
+				'billing_period' => 'month',
+				'products'       => [ 101 ],
+			]
+		);
+		$unrelated = \wcs_create_subscription(
+			[
+				'customer_id'    => self::$user_id,
+				'status'         => 'active',
+				'billing_period' => 'month',
+				'products'       => [ 999 ],
+			]
+		);
+
+		$links = User_Gate_Access::get_granting_entity_links( 'subscription', [ 101 ], self::$user_id, [ 'payment_recovery_grace' => true ] );
+
+		$this->assertCount( 1, $links );
+		$this->assertStringContainsString( '#' . $owned->get_id() . '</a>', $links[0] );
+		$this->assertStringContainsString( 'post=' . $owned->get_id() . '&#038;action=edit', $links[0], 'The label must link to the subscription edit screen.' );
+		$this->assertStringNotContainsString( '#' . $cancelled->get_id() . '<', implode( '', $links ) );
+		$this->assertStringNotContainsString( '#' . $unrelated->get_id() . '<', implode( '', $links ) );
+	}
+
+	/**
+	 * An "any subscription" rule (empty value) lists every active subscription.
+	 */
+	public function test_subscription_rule_with_no_products_lists_all_active_subscriptions() {
+		$first  = \wcs_create_subscription(
+			[
+				'customer_id'    => self::$user_id,
+				'status'         => 'active',
+				'billing_period' => 'month',
+				'products'       => [ 101 ],
+			]
+		);
+		$second = \wcs_create_subscription(
+			[
+				'customer_id'    => self::$user_id,
+				'status'         => 'active',
+				'billing_period' => 'year',
+				'products'       => [ 102 ],
+			]
+		);
+
+		$links = User_Gate_Access::get_granting_entity_links( 'subscription', '', self::$user_id );
+
+		$this->assertCount( 2, $links );
+		$this->assertStringContainsString( '#' . $first->get_id() . '</a>', $links[0] );
+		$this->assertStringContainsString( '#' . $second->get_id() . '</a>', $links[1] );
+	}
+
+	/**
+	 * A passing one-time purchase rule names the paid orders inside the access
+	 * window and only those: an order older than the window and a refunded
+	 * order grant nothing.
+	 */
+	public function test_one_time_purchase_rule_lists_the_orders_that_grant_access() {
+		\wc_create_mock_product(
+			[
+				'id'   => 201,
+				'name' => 'Day Pass',
+			]
+		);
+		$recent = \wc_create_order(
+			[
+				'customer_id'  => self::$user_id,
+				'status'       => 'completed',
+				'total'        => 10,
+				'date_created' => gmdate( 'Y-m-d H:i:s' ),
+				'items'        => [ new \WC_Order_Item_Product( [ 'product_id' => 201 ] ) ],
+			]
+		);
+		$stale  = \wc_create_order(
+			[
+				'customer_id'  => self::$user_id,
+				'status'       => 'completed',
+				'total'        => 10,
+				'date_created' => gmdate( 'Y-m-d H:i:s', strtotime( '-60 days' ) ),
+				'items'        => [ new \WC_Order_Item_Product( [ 'product_id' => 201 ] ) ],
+			]
+		);
+		$refund = \wc_create_order(
+			[
+				'customer_id'  => self::$user_id,
+				'status'       => 'refunded',
+				'total'        => 10,
+				'date_created' => gmdate( 'Y-m-d H:i:s' ),
+				'items'        => [ new \WC_Order_Item_Product( [ 'product_id' => 201 ] ) ],
+			]
+		);
+		$value  = [
+			'product_ids'    => [ 201 ],
+			'duration_value' => 30,
+			'duration_unit'  => 'days',
+		];
+
+		$links = User_Gate_Access::get_granting_entity_links( 'one_time_purchase', $value, self::$user_id );
+
+		$this->assertCount( 1, $links );
+		$this->assertStringContainsString( '#' . $recent->get_id() . '</a>', $links[0] );
+		$this->assertStringContainsString( 'post=' . $recent->get_id() . '&#038;action=edit', $links[0], 'The label must link to the order edit screen.' );
+		$this->assertStringNotContainsString( '#' . $stale->get_id() . '<', $links[0] );
+		$this->assertStringNotContainsString( '#' . $refund->get_id() . '<', $links[0] );
+
+		// Lifetime access has no window, so the older order counts too.
+		$value['duration_unit'] = 'forever';
+		$links                  = User_Gate_Access::get_granting_entity_links( 'one_time_purchase', $value, self::$user_id );
+		$this->assertCount( 2, $links, 'A forever rule lists every paid order for the product.' );
+	}
+
+	/**
+	 * Rules other than the two ownership rules have no records to point at, and
+	 * neither does access granted by a filter with no local record behind it.
+	 */
+	public function test_non_ownership_rules_and_filter_granted_access_list_nothing() {
+		$this->assertSame( [], User_Gate_Access::get_granting_entity_links( 'email_domain', 'example.com', self::$user_id ) );
+
+		add_filter( 'newspack_access_rules_has_active_subscription', '__return_true' );
+		$links = User_Gate_Access::get_granting_entity_links( 'subscription', [ 101 ], self::$user_id );
+		remove_all_filters( 'newspack_access_rules_has_active_subscription' );
+
+		$this->assertSame( [], $links );
+	}
+
+	/**
+	 * The report links each granting subscription next to the rule it satisfies,
+	 * and never lists records for a failing rule.
+	 */
+	public function test_render_links_granting_subscriptions_next_to_a_passing_rule() {
+		wp_set_current_user( self::$admin_id );
+		\wc_create_mock_product(
+			[
+				'id'   => 101,
+				'name' => 'All Access',
+			]
+		);
+		$owned = \wcs_create_subscription(
+			[
+				'customer_id'    => self::$user_id,
+				'status'         => 'active',
+				'billing_period' => 'month',
+				'products'       => [ 101 ],
+			]
+		);
+		$this->create_gate_with_rules(
+			'Members Gate',
+			[
+				[
+					[
+						'slug'  => 'subscription',
+						'value' => [ 101 ],
+					],
+				],
+				[
+					[
+						'slug'  => 'subscription',
+						'value' => [ 999 ],
+					],
+				],
+			]
+		);
+
+		ob_start();
+		User_Gate_Access::render_user_gate_access( get_user_by( 'id', self::$user_id ) );
+		$output = ob_get_clean();
+
+		$this->assertSame( 1, substr_count( $output, '#' . $owned->get_id() . '</a>' ), 'The subscription is listed once, for the rule it satisfies, and not for the failing rule.' );
+	}
+
+	/**
+	 * Titles that reach the report from the database are printed as text, not
+	 * markup: a product named with a tag must not inject it into the page.
+	 */
+	public function test_render_escapes_titles_inside_links() {
+		wp_set_current_user( self::$admin_id );
+		\wc_create_mock_product(
+			[
+				'id'   => 101,
+				'name' => 'Plan <b>Bold</b> & Co',
+			]
+		);
+		$this->create_gate_with_rules(
+			'Gate <i>Italic</i>',
+			[
+				[
+					[
+						'slug'  => 'subscription',
+						'value' => [ 101 ],
+					],
+				],
+			]
+		);
+
+		ob_start();
+		User_Gate_Access::render_user_gate_access( get_user_by( 'id', self::$user_id ) );
+		$output = ob_get_clean();
+
+		$this->assertStringNotContainsString( '<b>', $output );
+		$this->assertStringNotContainsString( '<i>', $output );
+		$this->assertStringContainsString( 'Plan &lt;b&gt;Bold&lt;/b&gt; &amp; Co', $output );
+		$this->assertStringContainsString( 'Gate &lt;i&gt;Italic&lt;/i&gt;', $output );
 	}
 }

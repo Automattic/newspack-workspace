@@ -171,7 +171,7 @@ class User_Gate_Access {
 	 *
 	 * @param array $product_ids Product IDs.
 	 *
-	 * @return string Comma-separated, linked product names.
+	 * @return string Comma-separated, linked product names (HTML).
 	 */
 	private static function format_product_names( $product_ids ) {
 		$names = array_map(
@@ -179,15 +179,13 @@ class User_Gate_Access {
 				if ( function_exists( 'wc_get_product' ) ) {
 					$product = wc_get_product( $product_id );
 					if ( $product ) {
-						return sprintf(
-							/* translators: 1: product edit URL. 2: product name. */
-							__( '<a href="%1$s">%2$s</a>', 'newspack-plugin' ),
-							esc_url( get_edit_post_link( $product_id ) ),
-							$product->get_name()
-						);
+						// A variation has no edit screen of its own; its parent's
+						// product editor is where it is managed.
+						$edit_id = $product->get_parent_id() ? $product->get_parent_id() : $product->get_id();
+						return self::link( get_edit_post_link( $edit_id ), $product->get_name() );
 					}
 				}
-				return '#' . $product_id;
+				return '#' . intval( $product_id );
 			},
 			$product_ids
 		);
@@ -199,25 +197,125 @@ class User_Gate_Access {
 	 *
 	 * @param array $institution_ids Institution IDs.
 	 *
-	 * @return string Comma-separated, linked institution names.
+	 * @return string Comma-separated, linked institution names (HTML).
 	 */
 	private static function format_institution_names( $institution_ids ) {
 		$names = array_map(
 			function( $institution_id ) {
 				$institution = get_post( $institution_id );
 				if ( $institution && Institution::POST_TYPE === $institution->post_type ) {
-					return sprintf(
-						/* translators: 1: institution edit URL. 2: institution name. */
-						__( '<a href="%1$s">%2$s</a>', 'newspack-plugin' ),
-						esc_url( admin_url( 'admin.php?page=newspack-audience-access-control#/institutions/' . $institution_id ) ),
+					return self::link(
+						admin_url( 'admin.php?page=newspack-audience-access-control#/institutions/' . intval( $institution_id ) ),
 						$institution->post_title
 					);
 				}
-				return '#' . $institution_id;
+				return '#' . intval( $institution_id );
 			},
 			$institution_ids
 		);
 		return implode( ', ', $names );
+	}
+
+	/**
+	 * Build an escaped link, or plain escaped text when there is nothing to link to.
+	 *
+	 * @param string|null $url  URL, or empty when the item has no admin screen.
+	 * @param string      $text Link text (unescaped).
+	 *
+	 * @return string HTML safe to print through wp_kses() with `a[href]` allowed.
+	 */
+	private static function link( $url, $text ) {
+		if ( empty( $url ) ) {
+			return esc_html( $text );
+		}
+		return sprintf( '<a href="%1$s">%2$s</a>', esc_url( $url ), esc_html( $text ) );
+	}
+
+	/**
+	 * Links to the specific subscriptions or orders that satisfy a passing rule
+	 * for the user.
+	 *
+	 * Only the two ownership rules map to concrete records a publisher can open;
+	 * every other rule returns nothing. Access granted by a third-party filter
+	 * (e.g. a Newspack Network sibling site) has no local record, so a rule can
+	 * pass with an empty list here.
+	 *
+	 * @param string $slug    Rule slug.
+	 * @param mixed  $value   Rule value.
+	 * @param int    $user_id User ID.
+	 * @param array  $context Evaluation context from evaluate_gate_for_user().
+	 *
+	 * @return string[] Escaped `<a>` links labelled `#<id>`, safe to print through wp_kses() with `a[href]` allowed.
+	 */
+	public static function get_granting_entity_links( $slug, $value, $user_id, $context = [] ) {
+		$entities = [];
+		if ( 'subscription' === $slug && function_exists( 'wcs_get_subscription' ) ) {
+			foreach ( self::get_granting_subscription_ids( $value, $user_id, $context ) as $subscription_id ) {
+				$entities[ $subscription_id ] = \wcs_get_subscription( $subscription_id );
+			}
+		} elseif ( 'one_time_purchase' === $slug && function_exists( 'wc_get_order' ) ) {
+			foreach ( Access_Rules::get_one_time_purchase_order_ids( $user_id, $value ) as $order_id ) {
+				$entities[ $order_id ] = \wc_get_order( $order_id );
+			}
+		}
+
+		$links = [];
+		foreach ( $entities as $id => $entity ) {
+			$url = $entity && method_exists( $entity, 'get_edit_order_url' ) ? $entity->get_edit_order_url() : '';
+			$links[] = self::link( $url, '#' . $id );
+		}
+		return $links;
+	}
+
+	/**
+	 * IDs of the user's subscriptions that satisfy a subscription rule: owned
+	 * subscriptions plus group subscriptions the user is a member of, using
+	 * the same status and payment-recovery-grace reading as the rule itself.
+	 *
+	 * @param mixed $value   Rule value: product IDs, or empty for any subscription.
+	 * @param int   $user_id User ID.
+	 * @param array $context Evaluation context from evaluate_gate_for_user().
+	 *
+	 * @return int[] Subscription IDs.
+	 */
+	private static function get_granting_subscription_ids( $value, $user_id, $context ) {
+		// A malformed value fails the rule closed, so there is nothing to list.
+		if ( Access_Rules::is_malformed_options_backed_value( $value ) ) {
+			return [];
+		}
+		$product_ids = is_array( $value ) ? $value : [];
+		return Access_Rules::with_evaluation_context(
+			$context,
+			function () use ( $product_ids, $user_id ) {
+				$grace = (bool) Access_Rules::get_evaluation_context( 'payment_recovery_grace', true );
+				$ids   = WooCommerce_Connection::get_active_subscriptions_for_user( $user_id, $product_ids, $grace );
+
+				if ( class_exists( __NAMESPACE__ . '\\Group_Subscription' ) ) {
+					foreach ( Group_Subscription::get_group_subscriptions_for_user( $user_id ) as $subscription ) {
+						if ( ! $subscription ) {
+							continue;
+						}
+						$grants_access = $subscription->has_status( WooCommerce_Connection::ACTIVE_SUBSCRIPTION_STATUSES )
+							|| ( $grace && WooCommerce_Connection::is_subscription_in_payment_recovery( $subscription ) );
+						if ( ! $grants_access ) {
+							continue;
+						}
+						$has_product = empty( $product_ids );
+						foreach ( $product_ids as $product_id ) {
+							if ( $subscription->has_product( $product_id ) ) {
+								$has_product = true;
+								break;
+							}
+						}
+						if ( $has_product ) {
+							$ids[] = $subscription->get_id();
+						}
+					}
+				}
+
+				return array_values( array_unique( array_map( 'intval', $ids ) ) );
+			}
+		);
 	}
 
 	/**
@@ -260,12 +358,7 @@ class User_Gate_Access {
 						<span class="screen-reader-text"><?php echo $result['can_bypass'] ? esc_html__( 'Pass', 'newspack-plugin' ) : esc_html__( 'Fail', 'newspack-plugin' ); ?></span>
 						<?php
 						echo wp_kses(
-							sprintf(
-								/* translators: 1: gate edit URL. 2: gate title. */
-								__( '<a href="%1$s">%2$s</a>', 'newspack-plugin' ),
-								esc_url( admin_url( 'admin.php?page=newspack-audience-access-control#/edit/' . $gate['id'] ) ),
-								$gate['title']
-							),
+							self::link( admin_url( 'admin.php?page=newspack-audience-access-control#/edit/' . intval( $gate['id'] ) ), $gate['title'] ),
 							[ 'a' => [ 'href' => [] ] ]
 						);
 						?>
@@ -305,14 +398,13 @@ class User_Gate_Access {
 											</span>
 											<span class="screen-reader-text"><?php echo $rule['passes'] ? esc_html__( 'Pass', 'newspack-plugin' ) : esc_html__( 'Fail', 'newspack-plugin' ); ?></span>
 											<?php echo esc_html( $rule['name'] ); ?>:
-											<code>
-												<?php
-												echo wp_kses(
-													self::format_rule_value( $rule['slug'], $rule['value'] ),
-													[ 'a' => [ 'href' => [] ] ]
-												);
+											<code><?php echo wp_kses( self::format_rule_value( $rule['slug'], $rule['value'] ), [ 'a' => [ 'href' => [] ] ] ); ?></code>
+											<?php
+											$granting_links = $rule['passes'] ? self::get_granting_entity_links( $rule['slug'], $rule['value'], $user->ID, $result['context'] ) : [];
+											if ( ! empty( $granting_links ) ) :
 												?>
-											</code>
+												(<?php echo wp_kses( implode( ', ', $granting_links ), [ 'a' => [ 'href' => [] ] ] ); ?>)
+											<?php endif; ?>
 										</li>
 									<?php endforeach; ?>
 								</ul>

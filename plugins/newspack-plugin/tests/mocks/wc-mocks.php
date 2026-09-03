@@ -805,6 +805,9 @@ class WC_Order {
 	public function get_id() {
 		return $this->data['id'];
 	}
+	public function get_edit_order_url() {
+		return admin_url( 'post.php?post=' . $this->get_id() . '&action=edit' );
+	}
 	public function get_customer_id() {
 		return $this->data['customer_id'];
 	}
