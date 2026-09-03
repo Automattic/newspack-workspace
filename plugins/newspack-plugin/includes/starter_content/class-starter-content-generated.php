@@ -539,14 +539,19 @@ class Starter_Content_Generated extends Starter_Content_Provider {
 			return null;
 		}
 
+		// wp_handle_sideload() takes $file by reference and writes back into it, so the
+		// array has to be a variable. Passing the literal is a fatal on PHP 8, which took
+		// down every non-E2E starter-content post before it could get a featured image.
+		$file = [
+			'name'     => 'automated_upload.jpg',
+			'type'     => mime_content_type( $temp_file ),
+			'tmp_name' => $temp_file,
+			'error'    => 0,
+			'size'     => filesize( $temp_file ),
+		];
+
 		$file_attributes = wp_handle_sideload(
-			[
-				'name'     => 'automated_upload.jpg',
-				'type'     => mime_content_type( $temp_file ),
-				'tmp_name' => $temp_file,
-				'error'    => 0,
-				'size'     => filesize( $temp_file ),
-			],
+			$file,
 			[
 				'test_form'   => false,
 				'test_size'   => true,
