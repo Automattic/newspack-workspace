@@ -146,6 +146,37 @@ class Test_Jetpack extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * A single Jetpack block Sharing Button's rendered HTML, matching the block's hardcoded
+	 * anchor template (only href, data-service, data-shared, aria-labelledby). The href is the
+	 * blanked permalink for round-trip services, since obfuscate_share_query() runs first.
+	 *
+	 * @param string $service The `data-service` value, e.g. 'facebook', 'share', 'mail'.
+	 * @param string $href    The anchor href.
+	 * @return string
+	 */
+	private function block_button_html( $service = 'facebook', $href = 'http://example.com/a-post/' ) {
+		return sprintf(
+			'<li class="jetpack-sharing-button__list-item"><a href="%1$s" target="_blank" rel="nofollow noopener noreferrer" class="jetpack-sharing-button__button style-icon share-%2$s" style="" data-service="%2$s" data-shared="sharing-%2$s-1" aria-labelledby="sharing-%2$s-1"></a></li>',
+			esc_url( $href ),
+			esc_attr( $service )
+		);
+	}
+
+	/**
+	 * Read one attribute off the anchor in a block button's HTML.
+	 *
+	 * @param string $html      The block HTML.
+	 * @param string $attribute The attribute name.
+	 * @return string|null
+	 */
+	private function anchor_attribute( $html, $attribute ) {
+		$processor = new \WP_HTML_Tag_Processor( $html );
+		$processor->next_tag( 'a' );
+		$value = $processor->get_attribute( $attribute );
+		return is_string( $value ) ? $value : null;
+	}
+
+	/**
 	 * The display-query filter should blank the query for round-trip share services,
 	 * so the rendered href is the bare (cacheable) permalink.
 	 */
@@ -449,6 +480,58 @@ class Test_Jetpack extends \WP_UnitTestCase {
 		Jetpack::print_share_obfuscation_script();
 		$output = ob_get_clean();
 		$this->assertSame( '', $output );
+	}
+
+	/**
+	 * The block Sharing Buttons discard the data-attributes filter, so the restore data is added
+	 * to the rendered block anchor instead. A round-trip button gets the query (derived from its
+	 * data-service) and a valid token.
+	 */
+	public function test_block_button_gets_share_data_attributes() {
+		$html = Jetpack::add_block_share_data_attributes( $this->block_button_html( 'facebook' ), [] );
+		$this->assertSame( 'share=facebook&nb=1', $this->anchor_attribute( $html, 'data-share-query' ) );
+		$this->assertTrue( Jetpack::is_valid_share_token( $this->anchor_attribute( $html, 'data-share-token' ) ) );
+	}
+
+	/**
+	 * Obfuscating a block button prints the restore script, so blanked block links are restored.
+	 */
+	public function test_block_button_prints_restore_script() {
+		Jetpack::add_block_share_data_attributes( $this->block_button_html( 'facebook' ), [] );
+		ob_start();
+		Jetpack::print_share_obfuscation_script();
+		$output = ob_get_clean();
+		$this->assertStringContainsString( 'data-share-query', $output );
+	}
+
+	/**
+	 * The native Web Share button is not an on-site round-trip and must be left alone.
+	 */
+	public function test_block_native_share_button_untouched() {
+		$html = Jetpack::add_block_share_data_attributes( $this->block_button_html( 'share' ), [] );
+		$this->assertNull( $this->anchor_attribute( $html, 'data-share-query' ) );
+	}
+
+	/**
+	 * The email button uses a mailto: href, not an on-site round-trip, and must be left alone.
+	 */
+	public function test_block_email_button_untouched() {
+		$html = Jetpack::add_block_share_data_attributes( $this->block_button_html( 'mail', 'mailto:?subject=x&body=y&share=email' ), [] );
+		$this->assertNull( $this->anchor_attribute( $html, 'data-share-query' ) );
+	}
+
+	/**
+	 * With obfuscation disabled the block HTML is returned unchanged.
+	 */
+	public function test_block_button_untouched_when_disabled() {
+		add_filter( 'newspack_jetpack_obfuscate_share_links', '__return_false' );
+		try {
+			$html   = $this->block_button_html( 'facebook' );
+			$result = Jetpack::add_block_share_data_attributes( $html, [] );
+			$this->assertSame( $html, $result );
+		} finally {
+			remove_filter( 'newspack_jetpack_obfuscate_share_links', '__return_false' );
+		}
 	}
 
 	/**

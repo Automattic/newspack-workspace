@@ -204,6 +204,9 @@ class Jetpack {
 		// Hide social share links from bots by deferring the un-cacheable share URL until real user interaction.
 		add_filter( 'jetpack_sharing_display_query', [ __CLASS__, 'obfuscate_share_query' ], 10, 4 );
 		add_filter( 'jetpack_sharing_data_attributes', [ __CLASS__, 'add_obfuscation_data_attribute' ], 10, 4 );
+		// The block Sharing Buttons discard the data-attributes filter, so the restore data is
+		// added to the rendered block anchor instead.
+		add_filter( 'render_block_jetpack/sharing-button', [ __CLASS__, 'add_block_share_data_attributes' ], 10, 2 );
 		add_action( 'wp_footer', [ __CLASS__, 'print_share_obfuscation_script' ] );
 
 		// Reject fabricated `?share=` requests as early as possible, before WordPress resolves
@@ -522,6 +525,41 @@ class Jetpack {
 			);
 		}
 		return $data_attributes;
+	}
+
+	/**
+	 * Add the restore data attributes to a Jetpack block Sharing Button's rendered anchor.
+	 *
+	 * The block builds its anchor from a hardcoded template and uses only the URL from get_link(),
+	 * discarding the jetpack_sharing_data_attributes filter, so the classic filter path cannot
+	 * place the data attributes on it. We post-process the block HTML instead: obfuscate_share_query()
+	 * has already blanked the anchor's href, and the block derives its `data-service` from the same
+	 * slug as the `?share=` query, so the query to restore is `share=<service>&nb=1`. The native
+	 * Web Share button and the mailto: email button are not on-site round-trips and are left alone.
+	 *
+	 * @param string $block_content The block's rendered HTML.
+	 * @param array  $block         The parsed block. Unused.
+	 * @return string The (possibly augmented) block HTML.
+	 */
+	public static function add_block_share_data_attributes( $block_content, $block = [] ) {
+		if ( ! self::is_share_obfuscation_enabled() ) {
+			return $block_content;
+		}
+		$processor = new \WP_HTML_Tag_Processor( $block_content );
+		if ( ! $processor->next_tag( 'a' ) ) {
+			return $block_content;
+		}
+		$service = $processor->get_attribute( 'data-service' );
+		$href    = (string) $processor->get_attribute( 'href' );
+		// Skip the native Web Share button and the mailto: email button; neither is an on-site
+		// `?share=` round-trip, so there is nothing to obfuscate or restore.
+		if ( ! is_string( $service ) || '' === $service || 'share' === $service || 0 === stripos( $href, 'mailto:' ) ) {
+			return $block_content;
+		}
+		$processor->set_attribute( 'data-share-query', 'share=' . $service . '&nb=1' );
+		$processor->set_attribute( 'data-share-token', self::share_token() );
+		self::$did_obfuscate = true;
+		return $processor->get_updated_html();
 	}
 
 	/**
