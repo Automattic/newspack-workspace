@@ -23,7 +23,8 @@ jest.mock( '../../../../packages/components/src/wizard/store', () => ( { WIZARD_
 
 jest.mock( '../../../../packages/components/src', () => ( {
 	DataViews: () => null,
-	Button: () => null,
+	// forwardRef: the load-failure notice puts a ref on Retry to restore focus.
+	Button: require( 'react' ).forwardRef( () => null ),
 	Waiting: () => null,
 } ) );
 

@@ -7,20 +7,24 @@
 /**
  * External dependencies
  */
-import { render, act } from '@testing-library/react';
+import { render, act, screen, fireEvent } from '@testing-library/react';
 
 /**
  * WordPress dependencies
  */
 import { createReduxStore, register } from '@wordpress/data';
 import apiFetch from '@wordpress/api-fetch';
+import { speak } from '@wordpress/a11y';
 
 /**
  * Internal dependencies
  */
 import GroupList from './GroupList';
+import { groupLoadFailedLabel } from '../labels';
 
 jest.mock( '@wordpress/api-fetch', () => jest.fn() );
+
+jest.mock( '@wordpress/a11y', () => ( { speak: jest.fn() } ) );
 
 jest.mock( '../../../../packages/components/src/wizard/store', () => ( { WIZARD_STORE_NAMESPACE: 'test/group-list' } ) );
 
@@ -28,7 +32,11 @@ jest.mock( '../../../../packages/components/src/wizard/store', () => ( { WIZARD_
 // itself comes from filterSortAndPaginate, which stays real.
 jest.mock( '../../../../packages/components/src', () => ( {
 	DataViews: () => null,
-	Button: () => null,
+	// Renders a real button: the load-failure notice puts a ref on Retry to restore
+	// focus, which needs a host node to land on.
+	Button: require( 'react' ).forwardRef( ( { children, ...props }, ref ) =>
+		require( 'react' ).createElement( 'button', { ...props, ref }, children )
+	),
 	Waiting: () => null,
 } ) );
 
@@ -150,5 +158,60 @@ describe( 'the group list width override', () => {
 		} );
 
 		expect( lastHeaderCall().fullWidth ).toBe( false );
+	} );
+} );
+
+describe( 'the GroupList load-failure announcement', () => {
+	beforeEach( () => {
+		headerCalls = [];
+		apiFetch.mockReset();
+		speak.mockClear();
+	} );
+
+	it( 'announces the failure assertively', async () => {
+		apiFetch.mockRejectedValue( new Error( 'nope' ) );
+		await act( async () => {
+			render( <GroupList /> );
+		} );
+
+		expect( speak ).toHaveBeenCalledWith( groupLoadFailedLabel( 'nope' ), 'assertive' );
+	} );
+
+	it( 'says nothing when the read succeeds', async () => {
+		apiFetch.mockResolvedValue( { items: [ group( 1 ) ] } );
+		await act( async () => {
+			render( <GroupList /> );
+		} );
+
+		expect( speak ).not.toHaveBeenCalled();
+	} );
+} );
+
+describe( 'the GroupList retry affordance', () => {
+	beforeEach( () => {
+		headerCalls = [];
+		apiFetch.mockReset();
+	} );
+
+	it( 'returns focus to Retry when a retry fails again', async () => {
+		apiFetch.mockRejectedValue( new Error( 'nope' ) );
+		await act( async () => {
+			render( <GroupList /> );
+		} );
+
+		await act( async () => {
+			fireEvent.click( screen.getByRole( 'button', { name: 'Retry' } ) );
+		} );
+
+		expect( screen.getByRole( 'button', { name: 'Retry' } ) ).toHaveFocus();
+	} );
+
+	it( 'leaves focus alone on the first failure', async () => {
+		apiFetch.mockRejectedValue( new Error( 'nope' ) );
+		await act( async () => {
+			render( <GroupList /> );
+		} );
+
+		expect( screen.getByRole( 'button', { name: 'Retry' } ) ).not.toHaveFocus();
 	} );
 } );
