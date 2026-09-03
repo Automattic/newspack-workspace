@@ -95,6 +95,8 @@ export interface WizardHeaderData {
 	actions?: WizardHeaderAction[];
 	backNav?: string;
 	badges?: WizardBadge[];
+	/** Whether the section content spans the full width, overriding the section's own setting. */
+	fullWidth?: boolean;
 	sectionDescription?: React.ReactNode | ( () => React.ReactNode );
 	sectionName?: string;
 	sectionTitle?: string;
@@ -173,6 +175,8 @@ type SaveWizardSettingsConfig = {
 };
 
 const DEFAULT_STATE: WizardsState = {
+	// `fullWidth` is deliberately absent: a default here would narrow every
+	// full-width section on reset, since Wizard only falls back when it is unset.
 	headerData: {
 		actions: [],
 		backNav: '',

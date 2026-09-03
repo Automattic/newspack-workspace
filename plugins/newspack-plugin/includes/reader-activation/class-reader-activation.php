@@ -2191,21 +2191,23 @@ final class Reader_Activation {
 
 		switch ( $action ) {
 			case 'signin':
-				if ( Magic_Link::has_active_token( $user ) ) {
-					$payload['action'] = 'otp';
+				// A reader who set a password can always sign in with it. Offer the password
+				// step on email submit even when an OTP token is still active — the reader may
+				// have requested a code, then decided to use their password instead (NPPM-3054).
+				if ( ! self::is_reader_without_password( $user ) ) {
+					$payload['action'] = 'pwd';
 					break;
 				}
-				if ( self::is_reader_without_password( $user ) ) {
+				// No password on file: a one-time code is the only way in. Reuse an active
+				// token if one exists; otherwise send a fresh code.
+				if ( ! Magic_Link::has_active_token( $user ) ) {
 					$sent = Magic_Link::send_email( $user, $redirect );
 					if ( true !== $sent ) {
 						return self::send_auth_form_response( new \WP_Error( 'unauthorized', \is_wp_error( $sent ) ? $sent->get_error_message() : __( 'We encountered an error sending an authentication link. Please try again.', 'newspack-plugin' ) ) );
 					}
-					$payload['action'] = 'otp';
-					break;
-				} else {
-					$payload['action'] = 'pwd';
-					break;
 				}
+				$payload['action'] = 'otp';
+				break;
 			case 'pwd':
 				if ( empty( $password ) ) {
 					return self::send_auth_form_response( new \WP_Error( 'invalid_password', __( 'Password not recognized, try again.', 'newspack-plugin' ) ) );

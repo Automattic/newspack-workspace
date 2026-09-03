@@ -19,7 +19,7 @@ import {
 	__experimentalVStack as VStack,
 } from '@wordpress/components';
 import { useDispatch, useSelect } from '@wordpress/data';
-import { cloneElement, createInterpolateElement, isValidElement, useEffect, useRef, useState, forwardRef } from '@wordpress/element';
+import { cloneElement, createInterpolateElement, isValidElement, useLayoutEffect, useRef, useState, forwardRef } from '@wordpress/element';
 import { __ } from '@wordpress/i18n';
 import { category, chevronLeft, moreVertical } from '@wordpress/icons';
 
@@ -96,7 +96,9 @@ const ResetHeaderData = () => {
 	const location = useLocation();
 	const { resetHeaderData } = useDispatch( WIZARD_STORE_NAMESPACE );
 
-	useEffect( () => {
+	// Must stay before paint: a passive effect here would run after a section that
+	// publishes from a layout effect, wiping the header it just set.
+	useLayoutEffect( () => {
 		resetHeaderData();
 		window.scrollTo( 0, 0 );
 	}, [ location.pathname, resetHeaderData ] );
@@ -252,6 +254,7 @@ const Wizard = (
 		actions,
 		backNav,
 		badges,
+		fullWidth: headerFullWidth,
 		sectionDescription,
 		sectionMenu,
 		sectionName,
@@ -380,7 +383,7 @@ const Wizard = (
 								render={ routerProps => (
 									<div
 										className={ classnames( 'newspack-wizard__content', className, {
-											'newspack-wizard__content--full-width': section.fullWidth,
+											'newspack-wizard__content--full-width': headerFullWidth ?? section.fullWidth,
 										} ) }
 									>
 										{ 'function' === typeof renderAboveSections ? renderAboveSections() : null }
