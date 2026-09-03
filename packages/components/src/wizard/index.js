@@ -177,6 +177,7 @@ const Wizard = (
 		actions,
 		backNav,
 		badges,
+		fullWidth: headerFullWidth,
 		sectionDescription,
 		sectionMenu,
 		sectionName,
@@ -303,7 +304,7 @@ const Wizard = (
 								render={ routerProps => (
 									<div
 										className={ classnames( 'newspack-wizard__content', className, {
-											'newspack-wizard__content--full-width': section.fullWidth,
+											'newspack-wizard__content--full-width': headerFullWidth ?? section.fullWidth,
 										} ) }
 									>
 										{ 'function' === typeof renderAboveSections ? renderAboveSections() : null }

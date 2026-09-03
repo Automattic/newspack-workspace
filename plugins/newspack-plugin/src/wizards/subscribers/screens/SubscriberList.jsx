@@ -19,13 +19,13 @@
 import { useEffect, useMemo, useState } from '@wordpress/element';
 import { __, _n, sprintf } from '@wordpress/i18n';
 import { useDispatch } from '@wordpress/data';
-import { __experimentalHStack as HStack, __experimentalVStack as VStack } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
+import { __experimentalHStack as HStack, __experimentalVStack as VStack, Notice } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
 import { Badge, Stack } from '@wordpress/ui';
 
 /**
  * Internal dependencies.
  */
-import { Button, DataViews, Notice, Router, StatusIndicator, Waiting } from '../../../../packages/components/src';
+import { Button, DataViews, Router, StatusIndicator, Waiting } from '../../../../packages/components/src';
 import { formatCount } from '../../../../packages/components/src/breadcrumbs/format-count';
 import './style.scss';
 import { fmtRelative, fmtDate } from '../format';
@@ -325,6 +325,7 @@ export default function SubscriberList() {
 	// Surface the subscriber count in the header breadcrumb, e.g. "/ Subscribers (85)".
 	useEffect( () => {
 		setHeaderData( {
+			fullWidth: ! error,
 			sectionName: [
 				{
 					label: __( 'Subscribers', 'newspack-plugin' ),
@@ -351,7 +352,8 @@ export default function SubscriberList() {
 	// offer a retry.
 	if ( error ) {
 		return (
-			<Notice isError noticeText={ sprintf( __( 'Could not load subscribers: %s', 'newspack-plugin' ), error ) }>
+			<Notice status="error" isDismissible={ false }>
+				{ sprintf( __( 'Could not load subscribers: %s', 'newspack-plugin' ), error ) }{ ' ' }
 				<Button variant="link" onClick={ reload }>
 					{ __( 'Retry', 'newspack-plugin' ) }
 				</Button>

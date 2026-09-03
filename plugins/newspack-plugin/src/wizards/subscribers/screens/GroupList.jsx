@@ -18,13 +18,13 @@ import { useEffect, useMemo, useState } from '@wordpress/element';
 import { __, sprintf } from '@wordpress/i18n';
 import { useDispatch } from '@wordpress/data';
 import { filterSortAndPaginate } from '@wordpress/dataviews';
-import { __experimentalHStack as HStack } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
+import { __experimentalHStack as HStack, Notice } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
 import { Badge } from '@wordpress/ui';
 
 /**
  * Internal dependencies.
  */
-import { Button, DataViews, Notice, StatusIndicator, Waiting } from '../../../../packages/components/src';
+import { Button, DataViews, StatusIndicator, Waiting } from '../../../../packages/components/src';
 import { fmtDate } from '../format';
 import './style.scss';
 import { SHOW_AVATARS, useAvatars } from '../data/use-avatars';
@@ -216,6 +216,7 @@ export default function GroupList() {
 	// Surface the group count in the header breadcrumb, e.g. "/ Groups (14)".
 	useEffect( () => {
 		setHeaderData( {
+			fullWidth: ! error,
 			sectionName: [
 				{
 					label: GROUP_LABEL_PLURAL,
@@ -238,7 +239,8 @@ export default function GroupList() {
 	// a retry.
 	if ( error ) {
 		return (
-			<Notice isError noticeText={ groupLoadFailedLabel( error ) }>
+			<Notice status="error" isDismissible={ false }>
+				{ groupLoadFailedLabel( error ) }{ ' ' }
 				<Button variant="link" onClick={ reload }>
 					{ __( 'Retry', 'newspack-plugin' ) }
 				</Button>
