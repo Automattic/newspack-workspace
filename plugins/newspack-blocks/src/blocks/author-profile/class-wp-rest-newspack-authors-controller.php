@@ -335,6 +335,12 @@ class WP_REST_Newspack_Authors_Controller extends WP_REST_Controller {
 			}
 		}
 
+		if ( $author_ids ) {
+			// Two queries for the whole list instead of two per user: get_user_by() reads the user
+			// row and its capabilities from the object cache once both are primed.
+			cache_users( $author_ids );
+		}
+
 		foreach ( $author_ids as $author_id ) {
 			$user_data = self::format_user( get_user_by( 'id', $author_id ), $fields, $avatar_hide_default );
 			if ( $user_data ) {

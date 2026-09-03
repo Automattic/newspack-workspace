@@ -24,7 +24,28 @@ class AuthorsBatchTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 
 		// The endpoint reads guest authors from Co-Authors Plus's post type, which the test suite's
 		// CAP mock does not register. Its mock only formats the id, so guest assertions stay on ids.
-		register_post_type( 'guest-author', [ 'public' => true ] );
+		if ( ! post_type_exists( 'guest-author' ) ) {
+			register_post_type( 'guest-author', [ 'public' => true ] );
+			$this->registered_guest_author_type = true;
+		}
+	}
+
+	/**
+	 * Whether this test registered the guest-author post type itself.
+	 *
+	 * @var bool
+	 */
+	private $registered_guest_author_type = false;
+
+	/**
+	 * Undo the post type registration so it cannot leak into other tests.
+	 */
+	public function tear_down() {
+		if ( $this->registered_guest_author_type ) {
+			unregister_post_type( 'guest-author' );
+			$this->registered_guest_author_type = false;
+		}
+		parent::tear_down();
 	}
 
 	/**
@@ -153,6 +174,27 @@ class AuthorsBatchTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 		$this->assertCount( 1, $single );
 		$this->assertCount( 1, $batched );
 		$this->assertSame( $single[0], $batched[0] );
+	}
+
+	public function test_batch_query_count_does_not_grow_with_the_number_of_users() {
+		$one  = [ self::factory()->user->create( [ 'role' => 'author' ] ) ];
+		$five = [];
+		for ( $i = 0; $i < 5; $i++ ) {
+			$five[] = self::factory()->user->create( [ 'role' => 'author' ] );
+		}
+		$controller = new WP_REST_Newspack_Authors_Controller();
+
+		wp_cache_flush();
+		$before = get_num_queries();
+		$controller->get_authors_by_ids( $one, [], [ 'id', 'name' ], false );
+		$queries_for_one = get_num_queries() - $before;
+
+		wp_cache_flush();
+		$before = get_num_queries();
+		$controller->get_authors_by_ids( $five, [], [ 'id', 'name' ], false );
+		$queries_for_five = get_num_queries() - $before;
+
+		$this->assertSame( $queries_for_one, $queries_for_five, 'Looking up five uncached users must not cost more queries than looking up one.' );
 	}
 
 	public function test_unknown_ids_are_skipped_without_failing_the_batch() {
