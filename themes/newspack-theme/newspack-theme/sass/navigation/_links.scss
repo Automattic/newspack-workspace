@@ -20,4 +20,9 @@ a {
 		outline: thin dotted;
 		text-decoration: underline;
 	}
+
+	// Keep the keyboard ring; hide the leftover outline after mouse/touch (Safari keeps :focus after click).
+	&:focus:not(:focus-visible) {
+		outline: none;
+	}
 }
