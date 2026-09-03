@@ -30,6 +30,17 @@ class Jetpack {
 	const SHARE_TOKEN_QUERY_ARG = '_newspack_share_token';
 
 	/**
+	 * Original `?share=` queries blanked by obfuscate_share_query(), keyed by the sharing-source
+	 * object's spl_object_id(). add_obfuscation_data_attribute() reads and clears each entry to
+	 * rebuild the data attributes. Both filters receive the same source object, so this carries
+	 * the query between them even on Jetpack's block Sharing Buttons, whose data-attributes filter
+	 * runs in a separate method that never receives the query in its args.
+	 *
+	 * @var array<int,string>
+	 */
+	private static $blanked_queries = [];
+
+	/**
 	 * Modules scripts handles.
 	 *
 	 * @var string[]
@@ -440,17 +451,20 @@ class Jetpack {
 	 *
 	 * With the query removed, the visible href is the bare (cacheable) post permalink,
 	 * so a crawler following it gets a cache hit rather than the un-cacheable share
-	 * handler. The real query is stashed for the client script by
-	 * add_obfuscation_data_attribute().
+	 * handler. The real query is stashed against the source object so
+	 * add_obfuscation_data_attribute() can hand it to the client script.
 	 *
 	 * @param string       $query  The sharing service URL query parameter.
-	 * @param object       $source Sharing service properties. Unused.
+	 * @param object       $source Sharing service instance; the key the stashed query is filed under.
 	 * @param string|false $id     Sharing ID. Unused.
 	 * @param array        $args   Array of sharing service options. Unused.
 	 * @return string The (possibly blanked) query.
 	 */
 	public static function obfuscate_share_query( $query, $source = null, $id = false, $args = [] ) {
 		if ( self::is_share_obfuscation_enabled() && self::is_share_roundtrip_query( $query ) ) {
+			if ( is_object( $source ) ) {
+				self::$blanked_queries[ spl_object_id( $source ) ] = $query;
+			}
 			return '';
 		}
 		return $query;
@@ -460,21 +474,27 @@ class Jetpack {
 	 * Stash the original `?share=` query in a data attribute so the client script can
 	 * rebuild the real share URL on genuine user interaction.
 	 *
-	 * The value is the raw query token (e.g. `share=twitter`), not a URL, so no fetchable
-	 * `?share=` URL string is left in the DOM for URL-scraping bots to follow.
+	 * The query comes from the stash obfuscate_share_query() filed against this same source
+	 * object, not from $args: Jetpack's block Sharing Buttons fire this filter from a separate
+	 * method whose args never include the query. The value written is the raw query token
+	 * (e.g. `share=twitter`), not a URL, so no fetchable `?share=` URL string is left in the DOM
+	 * for URL-scraping bots to follow.
 	 *
 	 * @param array  $data_attributes Attributes supplied from the sharing source. Keys are
 	 *                                rendered with a `data-` prefix.
-	 * @param object $source          Sharing service properties. Unused.
+	 * @param object $source          Sharing service instance; the key the blanked query is filed under.
 	 * @param string $id              Sharing ID. Unused.
-	 * @param array  $args            Array of sharing service options, as collected by
-	 *                                Sharing_Source::get_link() via func_get_args(). Index 3
-	 *                                holds the query string.
+	 * @param array  $args            Array of sharing service options. Unused.
 	 * @return array The (possibly augmented) data attributes.
 	 */
 	public static function add_obfuscation_data_attribute( $data_attributes, $source = null, $id = false, $args = [] ) {
 		$data_attributes = (array) $data_attributes;
-		$query           = $args[3] ?? '';
+		if ( ! is_object( $source ) ) {
+			return $data_attributes;
+		}
+		$source_id = spl_object_id( $source );
+		$query     = self::$blanked_queries[ $source_id ] ?? '';
+		unset( self::$blanked_queries[ $source_id ] );
 		if ( self::is_share_obfuscation_enabled() && self::is_share_roundtrip_query( $query ) ) {
 			$data_attributes['share-query'] = $query;
 			// Sign the restored request so the server-side gate can tell a real, JS-restored

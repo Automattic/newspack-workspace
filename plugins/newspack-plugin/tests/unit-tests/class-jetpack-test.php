@@ -63,7 +63,19 @@ class Test_Jetpack extends \WP_UnitTestCase {
 			$_SERVER['REQUEST_URI'] = $this->original_request_uri;
 		}
 		\Jetpack::$test_active_modules = $this->original_active_modules;
+		$this->reset_blanked_queries();
 		parent::tear_down();
+	}
+
+	/**
+	 * Clear the per-request map of blanked queries. It is keyed by spl_object_id(), which the
+	 * runtime may recycle once a source object is freed, so a stale entry left by one test could
+	 * otherwise be read by another whose fresh source happens to reuse the id.
+	 */
+	private function reset_blanked_queries(): void {
+		$property = new \ReflectionProperty( Jetpack::class, 'blanked_queries' );
+		$property->setAccessible( true );
+		$property->setValue( null, [] );
 	}
 
 	/**
@@ -82,6 +94,23 @@ class Test_Jetpack extends \WP_UnitTestCase {
 			'sharing-twitter-1',
 			[],
 		];
+	}
+
+	/**
+	 * Run the two filters Jetpack fires per share button, in order: the display-query filter
+	 * (which blanks the href and stashes the query against the source object) then the
+	 * data-attributes filter (which reads the stash). The data-attributes filter is given the
+	 * block-theme argument shape, whose args omit the query, so the data attributes must be
+	 * rebuilt from the stash rather than from the args.
+	 *
+	 * @param string $query    The share query string, e.g. 'share=twitter'.
+	 * @param array  $existing Pre-existing data attributes passed to the data-attributes filter.
+	 * @return array The resulting data attributes.
+	 */
+	private function run_share_link_filters( $query = 'share=twitter', $existing = [] ) {
+		$source = new \stdClass();
+		Jetpack::obfuscate_share_query( $query, $source, 'sharing-twitter-1', $this->get_link_args( $query ) );
+		return Jetpack::add_obfuscation_data_attribute( $existing, $source, 'sharing-twitter-1', [ 'sharing-twitter-1', [] ] );
 	}
 
 	/**
@@ -114,7 +143,7 @@ class Test_Jetpack extends \WP_UnitTestCase {
 	 * script can rebuild the real URL on genuine user interaction.
 	 */
 	public function test_data_attribute_added_for_share_service() {
-		$result = Jetpack::add_obfuscation_data_attribute( [], null, 'sharing-twitter-1', $this->get_link_args() );
+		$result = $this->run_share_link_filters( 'share=twitter' );
 		$this->assertArrayHasKey( 'share-query', $result );
 		$this->assertSame( 'share=twitter', $result['share-query'] );
 	}
@@ -125,9 +154,60 @@ class Test_Jetpack extends \WP_UnitTestCase {
 	 */
 	public function test_data_attribute_not_added_for_non_share_service() {
 		$existing = [ 'foo' => 'bar' ];
-		$result   = Jetpack::add_obfuscation_data_attribute( $existing, null, 'id', $this->get_link_args( '' ) );
+		$result   = $this->run_share_link_filters( '', $existing );
 		$this->assertArrayNotHasKey( 'share-query', $result );
 		$this->assertSame( $existing, $result );
+	}
+
+	/**
+	 * The data attributes are rebuilt from the stashed query even when the data-attributes filter
+	 * receives no query in its args, as on Jetpack's block Sharing Buttons, whose data-attributes
+	 * filter runs in a separate method that never sees the query.
+	 */
+	public function test_data_attribute_written_when_query_absent_from_args() {
+		$source = new \stdClass();
+		Jetpack::obfuscate_share_query( 'share=twitter', $source, false, $this->get_link_args() );
+		// Block-theme data-attributes args: [ $id, $data_attributes ], no query at index 3.
+		$result = Jetpack::add_obfuscation_data_attribute( [], $source, false, [ false, [] ] );
+		$this->assertSame( 'share=twitter', $result['share-query'] );
+		$this->assertTrue( Jetpack::is_valid_share_token( $result['share-token'] ) );
+	}
+
+	/**
+	 * With no prior blank for the source (the display-query filter never ran, or it was a
+	 * non-round-trip link), the data-attributes filter writes nothing.
+	 */
+	public function test_data_attribute_not_written_without_prior_blank() {
+		$source = new \stdClass();
+		$result = Jetpack::add_obfuscation_data_attribute( [], $source, false, [ false, [] ] );
+		$this->assertArrayNotHasKey( 'share-query', $result );
+	}
+
+	/**
+	 * A stashed query is consumed on read, so a second data-attributes pass for the same source
+	 * cannot reuse a stale query.
+	 */
+	public function test_stashed_query_is_consumed_after_read() {
+		$source = new \stdClass();
+		Jetpack::obfuscate_share_query( 'share=twitter', $source, false, $this->get_link_args() );
+		Jetpack::add_obfuscation_data_attribute( [], $source, false, [ false, [] ] );
+		$second = Jetpack::add_obfuscation_data_attribute( [], $source, false, [ false, [] ] );
+		$this->assertArrayNotHasKey( 'share-query', $second );
+	}
+
+	/**
+	 * Each source object keeps its own query, so buttons for different services do not cross
+	 * wires regardless of the order their data attributes are read.
+	 */
+	public function test_distinct_sources_keep_distinct_queries() {
+		$twitter  = new \stdClass();
+		$facebook = new \stdClass();
+		Jetpack::obfuscate_share_query( 'share=twitter', $twitter, false, $this->get_link_args() );
+		Jetpack::obfuscate_share_query( 'share=facebook', $facebook, false, $this->get_link_args( 'share=facebook' ) );
+		$facebook_attrs = Jetpack::add_obfuscation_data_attribute( [], $facebook, false, [ false, [] ] );
+		$twitter_attrs  = Jetpack::add_obfuscation_data_attribute( [], $twitter, false, [ false, [] ] );
+		$this->assertSame( 'share=facebook', $facebook_attrs['share-query'] );
+		$this->assertSame( 'share=twitter', $twitter_attrs['share-query'] );
 	}
 
 	/**
@@ -151,7 +231,7 @@ class Test_Jetpack extends \WP_UnitTestCase {
 	public function test_opt_out_filter_disables_data_attribute() {
 		add_filter( 'newspack_jetpack_obfuscate_share_links', '__return_false' );
 		try {
-			$result = Jetpack::add_obfuscation_data_attribute( [], null, 'sharing-twitter-1', $this->get_link_args() );
+			$result = $this->run_share_link_filters( 'share=twitter' );
 			$this->assertArrayNotHasKey( 'share-query', $result );
 		} finally {
 			remove_filter( 'newspack_jetpack_obfuscate_share_links', '__return_false' );
@@ -163,7 +243,7 @@ class Test_Jetpack extends \WP_UnitTestCase {
 	 * append it to the restored share URL and pass the server-side gate.
 	 */
 	public function test_data_attribute_includes_valid_share_token() {
-		$result = Jetpack::add_obfuscation_data_attribute( [], null, 'sharing-twitter-1', $this->get_link_args() );
+		$result = $this->run_share_link_filters( 'share=twitter' );
 		$this->assertArrayHasKey( 'share-token', $result );
 		$this->assertTrue( Jetpack::is_valid_share_token( $result['share-token'] ) );
 	}
@@ -172,7 +252,7 @@ class Test_Jetpack extends \WP_UnitTestCase {
 	 * No token should be stashed for non-round-trip services.
 	 */
 	public function test_no_share_token_for_non_share_service() {
-		$result = Jetpack::add_obfuscation_data_attribute( [], null, 'id', $this->get_link_args( '' ) );
+		$result = $this->run_share_link_filters( '' );
 		$this->assertArrayNotHasKey( 'share-token', $result );
 	}
 
