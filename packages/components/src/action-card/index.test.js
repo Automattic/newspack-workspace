@@ -2,6 +2,10 @@
  * External dependencies.
  */
 import { render, screen } from '@testing-library/react';
+
+/**
+ * WordPress dependencies.
+ */
 import { speak } from '@wordpress/a11y';
 import { useState } from '@wordpress/element';
 
@@ -10,7 +14,10 @@ import { useState } from '@wordpress/element';
  */
 import ActionCard from './index';
 
-jest.mock( '@wordpress/a11y', () => ( { speak: jest.fn() } ) );
+jest.mock( '@wordpress/a11y', () => ( {
+	...jest.requireActual( '@wordpress/a11y' ),
+	speak: jest.fn(),
+} ) );
 
 /**
  * The library Badge styles its wrapper rather than its text, so a badge with no label
@@ -123,11 +130,55 @@ describe( 'ActionCard notifications', () => {
 		expect( spoken() ).toContain( 'Network unreachable' );
 	} );
 
-	it( 'announces HTML notifications without welding words together', () => {
-		render( <ActionCard title="Ad Manager" notificationLevel="error" notification="<p>Install failed.</p><p>Try again.</p>" notificationHTML /> );
+	it( 'hands HTML notifications to speak() with their tags intact, for speak() to strip', () => {
+		const { container } = render(
+			<ActionCard title="Ad Manager" notificationLevel="error" notification="<p>Install failed.</p><p>Try again.</p>" notificationHTML />
+		);
 
-		expect( spoken()[ 0 ] ).toContain( 'Install failed.' );
-		expect( spoken()[ 0 ] ).not.toContain( 'failed.Try' );
+		expect( container.querySelectorAll( '.newspack-action-card__notification-html > p' ) ).toHaveLength( 2 );
+		expect( spoken()[ 0 ] ).toContain( '<p>Install failed.</p>' );
+	} );
+
+	it( 'decodes entities so the announcement matches the visible text', () => {
+		render(
+			<ActionCard
+				title="Ad Manager"
+				notificationLevel="error"
+				notification="Plugin &#8220;Foo&#8221; could not be activated"
+				notificationHTML
+			/>
+		);
+
+		expect( spoken()[ 0 ] ).toContain( '“Foo”' );
+	} );
+
+	it( 'renders a non-string notification as children even when notificationHTML is set', () => {
+		const { container } = render(
+			<ActionCard title="Ad Manager" notificationLevel="error" notification={ <span>Network unreachable</span> } notificationHTML />
+		);
+
+		expect( screen.getByText( 'Network unreachable' ) ).toBeInTheDocument();
+		expect( container.querySelector( '.newspack-action-card__notification-html' ) ).not.toBeInTheDocument();
+	} );
+
+	it( 'keeps adjacent element texts apart in the announcement', () => {
+		render(
+			<ActionCard
+				title="Ad Manager"
+				notificationLevel="error"
+				notification={ [
+					// eslint-disable-next-line react/jsx-indent
+					<a key="dashboard" href="https://example.org">
+						Visit your GAM dashboard
+					</a>,
+					<button key="connect" type="button">
+						Click here to connect your account.
+					</button>,
+				] }
+			/>
+		);
+
+		expect( spoken()[ 0 ] ).toBe( 'Visit your GAM dashboard Click here to connect your account.' );
 	} );
 
 	it( 'survives a re-render that changes how many hooked components the notification holds', () => {

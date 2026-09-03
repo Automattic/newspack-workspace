@@ -7,6 +7,7 @@
  */
 import { Draggable, ExternalLink, Notice, ToggleControl } from '@wordpress/components';
 import { RawHTML, useEffect, useState } from '@wordpress/element';
+import { decodeEntities } from '@wordpress/html-entities';
 import { __ } from '@wordpress/i18n';
 import { Icon, check, chevronDown, chevronUp, dragHandle } from '@wordpress/icons';
 import { Badge } from '@wordpress/ui';
@@ -28,6 +29,9 @@ const NOTIFICATION_LEVELS = [ 'error', 'info', 'success', 'warning' ];
 /**
  * Collect a notification's text, including text nested inside React elements.
  *
+ * Segments join with a space so that adjacent elements do not weld together: by the
+ * time speak() sees this string the markup that separated them is already gone.
+ *
  * @param {*} value Notification content.
  * @return {string} The collected text.
  */
@@ -42,7 +46,7 @@ const getNotificationText = value => {
 		return value.message;
 	}
 	if ( Array.isArray( value ) ) {
-		return value.map( getNotificationText ).join( '' );
+		return value.map( getNotificationText ).join( ' ' );
 	}
 	return value?.props?.children === undefined ? '' : getNotificationText( value.props.children );
 };
@@ -54,13 +58,13 @@ const getNotificationText = value => {
  * during render, which corrupts the hook dispatcher when those children are
  * components. A notification can be any element, so the announcement is always
  * built from its text instead of letting that default apply. Tags in an HTML
- * notification are left in, because speak() strips them itself and does so with a
- * space rather than welding together the words either side.
+ * notification stay in, since speak() strips them itself. Entities do not survive
+ * that, so they are decoded here to match what the notice shows.
  *
  * @param {*} notification Notification content.
  * @return {string} Message to announce.
  */
-const getSpokenNotification = notification => getNotificationText( notification ).trim();
+const getSpokenNotification = notification => decodeEntities( getNotificationText( notification ) ).replace( /\s+/g, ' ' ).trim();
 
 /**
  * ActionCard component
@@ -287,8 +291,8 @@ const ActionCard = ( {
 			{ notification && NOTIFICATION_LEVELS.includes( notificationLevel ) && (
 				<div className="newspack-action-card__notification newspack-action-card__region-children">
 					<Notice status={ notificationLevel } isDismissible={ false } spokenMessage={ getSpokenNotification( notification ) }>
-						{ notificationHTML && typeof notificationContent === 'string' ? (
-							<RawHTML>{ notificationContent }</RawHTML>
+						{ notificationHTML && typeof notification === 'string' ? (
+							<RawHTML className="newspack-action-card__notification-html">{ notification }</RawHTML>
 						) : (
 							notificationContent
 						) }
