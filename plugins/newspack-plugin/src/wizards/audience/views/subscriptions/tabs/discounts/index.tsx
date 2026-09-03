@@ -10,11 +10,10 @@ import { __, _n, sprintf } from '@wordpress/i18n';
 import apiFetch from '@wordpress/api-fetch';
 import { useCallback, useEffect, useMemo, useState } from '@wordpress/element';
 import { useDispatch } from '@wordpress/data';
-import { dateI18n, getSettings as getDateSettings } from '@wordpress/date';
 import { decodeEntities } from '@wordpress/html-entities';
 import { addQueryArgs } from '@wordpress/url';
 import { filterSortAndPaginate } from '@wordpress/dataviews';
-import type { Action, Field, View } from '@wordpress/dataviews';
+import type { Action, View } from '@wordpress/dataviews';
 import { percent } from '@wordpress/icons';
 // eslint-disable-next-line @wordpress/no-unsafe-wp-apis
 import { __experimentalHStack as HStack, __experimentalVStack as VStack } from '@wordpress/components';
@@ -22,13 +21,15 @@ import { __experimentalHStack as HStack, __experimentalVStack as VStack } from '
 /**
  * Internal dependencies.
  */
-import { Button, DataViews, Grid, Notice, SectionHeader, StatusIndicator, Waiting } from '../../../../../../../packages/components/src';
+import { Button, DataViews, Grid, Notice, SectionHeader, Waiting } from '../../../../../../../packages/components/src';
 import { WIZARD_STORE_NAMESPACE } from '../../../../../../../packages/components/src/wizard/store';
 import Router from '../../../../../../../packages/components/src/proxied-imports/router';
 import { SEARCH_ENDPOINTS, WIZARD_ENDPOINT } from '../../constants';
+import { useNames } from '../../use-names';
 import { registerTab } from '../registry';
 import { DISCOUNTS_ENDPOINT } from './constants';
-import { DEFAULT_CURRENCY, discountLabel, excludedLabel, subscriptionsLabel, targetingBaseLabel, targetingLabel } from './discount';
+import { DEFAULT_CURRENCY } from './discount';
+import { discountFields } from './fields';
 import DiscountEditor from './editor';
 import SettingsModal from './settings-modal';
 import type { DiscountRule, DiscountsPayload } from './types';
@@ -86,7 +87,9 @@ function SubscriberDiscounts() {
 		apiFetch< { id: number; name: string }[] >( {
 			path: addQueryArgs( `${ WIZARD_ENDPOINT }/${ SEARCH_ENDPOINTS.subscriptions }`, { per_page: 100 } ),
 		} )
-			.then( items => setSubscriptionOptions( items || [] ) )
+			// Decoded once here, so every name in the merged list below is in the
+			// same encoding.
+			.then( items => setSubscriptionOptions( ( items || [] ).map( item => ( { ...item, name: decodeEntities( item.name ) } ) ) ) )
 			.catch( () => setSubscriptionOptions( [] ) );
 	}, [] );
 
@@ -137,63 +140,23 @@ function SubscriberDiscounts() {
 		}
 	}, [ isLoading, editingId, editingRule, history, baseUrl ] );
 
-	const fields: Field< DiscountRule >[] = useMemo(
-		() => [
-			{
-				id: 'subscription',
-				label: __( 'Subscription', 'newspack-plugin' ),
-				enableHiding: false,
-				elements: subscriptionOptions.map( option => ( { value: option.id, label: decodeEntities( option.name ) } ) ),
-				filterBy: { operators: [ 'isAny' ] },
-				getValue: ( { item } ) => item.subscription_product_ids,
-				render: ( { item } ) => subscriptionsLabel( item.subscription_product_ids, subscriptionOptions ),
-			},
-			{
-				id: 'status',
-				label: __( 'Status', 'newspack-plugin' ),
-				elements: [
-					{ value: 'active', label: __( 'Active', 'newspack-plugin' ) },
-					{ value: 'inactive', label: __( 'Inactive', 'newspack-plugin' ) },
-				],
-				filterBy: { operators: [ 'isAny' ] },
-				getValue: ( { item } ) => ( item.active ? 'active' : 'inactive' ),
-				render: ( { item } ) => (
-					<StatusIndicator status={ item.active ? 'active' : 'draft' }>
-						{ item.active ? __( 'Active', 'newspack-plugin' ) : __( 'Inactive', 'newspack-plugin' ) }
-					</StatusIndicator>
-				),
-			},
-			{
-				id: 'discount',
-				label: __( 'Discount', 'newspack-plugin' ),
-				getValue: ( { item } ) => discountLabel( item, currency ),
-			},
-			{
-				id: 'applies_to',
-				label: __( 'Applies to', 'newspack-plugin' ),
-				getValue: ( { item } ) => targetingLabel( item ),
-				render: ( { item } ) => {
-					const excluded = excludedLabel( item );
-					if ( ! excluded ) {
-						return targetingBaseLabel( item );
-					}
-					return (
-						<span className="newspack-subscriber-discounts__applies-to">
-							{ targetingBaseLabel( item ) }
-							<span className="newspack-subscriber-discounts__applies-to-excluded">{ excluded }</span>
-						</span>
-					);
-				},
-			},
-			{
-				id: 'created_at',
-				label: __( 'Created', 'newspack-plugin' ),
-				getValue: ( { item } ) => item.created_at,
-				render: ( { item } ) => ( item.created_at ? dateI18n( getDateSettings().formats.date, item.created_at ) : '' ),
-			},
-		],
-		[ currency, subscriptionOptions ]
+	// The picker's one page of suggestions names most subscriptions, but not a
+	// trashed one and not the overflow on a store with more than a page of
+	// them. Resolving the ids the rules actually hold covers both, and is what
+	// keeps a row from counting a subscription it could have named.
+	const ruleSubscriptionIds = useMemo(
+		() => [ ...new Set( payload.rules.flatMap( rule => rule.subscription_product_ids || [] ) ) ],
+		[ payload.rules ]
 	);
+	const resolvedNames = useNames( SEARCH_ENDPOINTS.subscriptions, ruleSubscriptionIds );
+
+	const namedSubscriptions = useMemo( () => {
+		const byId = new Map< number, string >( subscriptionOptions.map( option => [ option.id, option.name ] ) );
+		Object.entries( resolvedNames ).forEach( ( [ id, name ] ) => byId.set( Number( id ), name ) );
+		return [ ...byId ].map( ( [ id, name ] ) => ( { id, name } ) );
+	}, [ subscriptionOptions, resolvedNames ] );
+
+	const fields = useMemo( () => discountFields( currency, namedSubscriptions ), [ currency, namedSubscriptions ] );
 
 	const actions: Action< DiscountRule >[] = useMemo(
 		() => [
