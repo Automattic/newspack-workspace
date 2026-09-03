@@ -23,6 +23,8 @@ jest.mock( '@wordpress/api-fetch', () => jest.fn() );
 // ExternalLink needs a string href, and the debug Notice reads aux data.
 window.newspack_aux_data = { is_debug_mode: false };
 window.newspack_urls = { support: 'https://help.newspack.com/' };
+// ResetHeaderData scrolls to the top on every route change; jsdom has no scrolling.
+window.scrollTo = jest.fn();
 
 const SETTINGS = { minimumDonation: '5' };
 
@@ -241,7 +243,7 @@ describe( 'Wizard content width', () => {
 		await waitFor( () => expect( container.querySelector( '.newspack-wizard__content' ) ).toHaveClass( 'newspack-wizard__content--full-width' ) );
 	} );
 
-	it( 'keeps a section header published from a layout effect through the route reset', async () => {
+	it( 'keeps a section header published from a layout effect through the mount reset', async () => {
 		render(
 			<Wizard
 				headerText="Test wizard"
