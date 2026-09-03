@@ -5,8 +5,8 @@
 /**
  * WordPress dependencies
  */
-import { Draggable, ExternalLink, ToggleControl } from '@wordpress/components';
-import { useEffect, useState } from '@wordpress/element';
+import { Draggable, ExternalLink, Notice, ToggleControl } from '@wordpress/components';
+import { RawHTML, useEffect, useState } from '@wordpress/element';
 import { __ } from '@wordpress/i18n';
 import { Icon, check, chevronDown, chevronUp, dragHandle } from '@wordpress/icons';
 import { Badge } from '@wordpress/ui';
@@ -14,7 +14,7 @@ import { Badge } from '@wordpress/ui';
 /**
  * Internal dependencies
  */
-import { Button, Card, Grid, Handoff, Notice, Waiting } from '../';
+import { Button, Card, Grid, Handoff, Waiting } from '../';
 import { ActionCardProps } from './action-card.d.ts';
 import './style.scss';
 
@@ -23,8 +23,36 @@ import './style.scss';
  */
 import classnames from 'classnames';
 
+const NOTIFICATION_LEVELS = [ 'error', 'info', 'success', 'warning' ];
+
+/**
+ * Derive a plain-text announcement from a notification.
+ *
+ * Notice defaults spokenMessage to its children and runs renderToString over them
+ * during render, which corrupts the hook dispatcher when those children are
+ * components. A notification can be any element, so the announcement is always
+ * built from its text parts instead of letting that default apply.
+ *
+ * @param {*}       notification Notification content.
+ * @param {boolean} isHTML       Whether the content is an HTML string.
+ * @return {string} Message to announce.
+ */
+const getSpokenNotification = ( notification, isHTML ) => {
+	const parts = Array.isArray( notification ) ? notification : [ notification ];
+	const text = parts
+		.map( part => {
+			if ( typeof part === 'string' ) {
+				return part;
+			}
+			return part instanceof Error ? part.message : '';
+		} )
+		.join( '' );
+	return ( isHTML ? text.replace( /<[^>]*>/g, '' ) : text ).trim();
+};
+
 /**
  * ActionCard component
+ *
  * @param {ActionCardProps} props Component props.
  * @return {JSX.Element} ActionCard component.
  */
@@ -243,12 +271,15 @@ const ActionCard = ( {
 					</Button>
 				) }
 			</div>
-			{ notification && (
+			{ notification && NOTIFICATION_LEVELS.includes( notificationLevel ) && (
 				<div className="newspack-action-card__notification newspack-action-card__region-children">
-					{ 'error' === notificationLevel && <Notice noticeText={ notification } isError rawHTML={ notificationHTML } /> }
-					{ 'info' === notificationLevel && <Notice noticeText={ notification } rawHTML={ notificationHTML } /> }
-					{ 'success' === notificationLevel && <Notice noticeText={ notification } isSuccess rawHTML={ notificationHTML } /> }
-					{ 'warning' === notificationLevel && <Notice noticeText={ notification } isWarning rawHTML={ notificationHTML } /> }
+					<Notice
+						status={ notificationLevel }
+						isDismissible={ false }
+						spokenMessage={ getSpokenNotification( notification, notificationHTML ) }
+					>
+						{ notificationHTML ? <RawHTML>{ notification }</RawHTML> : notification }
+					</Notice>
 				</div>
 			) }
 			{ children && ( ( expandable && expanded ) || ! expandable ) ? (
