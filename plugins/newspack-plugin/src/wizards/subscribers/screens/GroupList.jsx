@@ -14,7 +14,7 @@
 /**
  * WordPress dependencies.
  */
-import { useLayoutEffect, useMemo, useState } from '@wordpress/element';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from '@wordpress/element';
 import { __, sprintf } from '@wordpress/i18n';
 import { useDispatch } from '@wordpress/data';
 import { filterSortAndPaginate } from '@wordpress/dataviews';
@@ -219,6 +219,9 @@ export default function GroupList() {
 	// and then snap into the content column.
 	useLayoutEffect( () => {
 		setHeaderData( {
+			// Header data is merged, so the explicit `undefined` is what clears a
+			// previous `false`. Dropping the key would strand the screen narrow for
+			// the rest of the visit, because a retry does not change the route.
 			fullWidth: error ? false : undefined,
 			sectionName: [
 				{
@@ -229,6 +232,21 @@ export default function GroupList() {
 			],
 		} );
 	}, [ setHeaderData, total, groupsLoading, error ] );
+
+	// A retry unmounts this notice while the request is in flight. Without this the
+	// remounted Retry button is a fresh node and a keyboard user is dropped back on
+	// the document body, with no way to reach the retry they just asked for.
+	const retryRef = useRef( null );
+	const hasRetried = useRef( false );
+	const retry = () => {
+		hasRetried.current = true;
+		reload();
+	};
+	useEffect( () => {
+		if ( ! groupsLoading && error && hasRetried.current ) {
+			retryRef.current?.focus();
+		}
+	}, [ groupsLoading, error ] );
 
 	if ( groupsLoading ) {
 		return (
@@ -248,7 +266,7 @@ export default function GroupList() {
 			// corrupts hook state.
 			<Notice status="error" isDismissible={ false } spokenMessage={ message }>
 				{ message }{ ' ' }
-				<Button variant="link" onClick={ reload }>
+				<Button variant="link" ref={ retryRef } onClick={ retry }>
 					{ __( 'Retry', 'newspack-plugin' ) }
 				</Button>
 			</Notice>
