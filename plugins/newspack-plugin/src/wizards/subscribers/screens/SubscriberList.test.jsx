@@ -150,6 +150,9 @@ describe( 'the subscriber list width override', () => {
 			render( <SubscriberList /> );
 		} );
 
+		// Presence is the load-bearing part: header data is merged, so only an
+		// explicit `undefined` clears a `false` left by an earlier failure.
+		expect( 'fullWidth' in lastHeaderCall() ).toBe( true );
 		expect( lastHeaderCall().fullWidth ).toBeUndefined();
 	} );
 
@@ -206,6 +209,24 @@ describe( 'the SubscriberList retry affordance', () => {
 		} );
 
 		expect( screen.getByRole( 'button', { name: 'Retry' } ) ).toHaveFocus();
+	} );
+
+	it( 'leaves focus where the reader moved it while the retry was in flight', async () => {
+		apiFetch.mockRejectedValue( new Error( 'nope' ) );
+		await act( async () => {
+			render( <SubscriberList /> );
+		} );
+
+		const elsewhere = document.createElement( 'button' );
+		document.body.appendChild( elsewhere );
+
+		await act( async () => {
+			fireEvent.click( screen.getByRole( 'button', { name: 'Retry' } ) );
+			elsewhere.focus();
+		} );
+
+		expect( elsewhere ).toHaveFocus();
+		elsewhere.remove();
 	} );
 
 	it( 'leaves focus alone on the first failure', async () => {

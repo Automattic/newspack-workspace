@@ -148,6 +148,9 @@ describe( 'the group list width override', () => {
 			render( <GroupList /> );
 		} );
 
+		// Presence is the load-bearing part: header data is merged, so only an
+		// explicit `undefined` clears a `false` left by an earlier failure.
+		expect( 'fullWidth' in lastHeaderCall() ).toBe( true );
 		expect( lastHeaderCall().fullWidth ).toBeUndefined();
 	} );
 
