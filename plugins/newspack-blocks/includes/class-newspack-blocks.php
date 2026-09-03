@@ -688,11 +688,15 @@ class Newspack_Blocks {
 	/**
 	 * Forget which posts have been rendered so far, so the next Content Loop or
 	 * Carousel block starts deduplicating from scratch.
+	 *
+	 * The list of posts picked by specific-posts blocks is left alone: it is
+	 * derived from the current post, which `wp_reset_postdata()` cannot restore
+	 * inside a REST request once a block's loop has moved it, so recomputing it
+	 * per pass would give each pass a different exclusion list.
 	 */
 	public static function reset_deduplication() {
-		global $newspack_blocks_post_id, $newspack_blocks_all_specific_posts_ids;
-		$newspack_blocks_post_id                = [];
-		$newspack_blocks_all_specific_posts_ids = null;
+		global $newspack_blocks_post_id;
+		$newspack_blocks_post_id = [];
 
 		/**
 		 * Fires after deduplication state has been reset.
