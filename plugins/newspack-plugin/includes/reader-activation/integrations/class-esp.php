@@ -13,13 +13,19 @@ use Newspack\Reader_Activation\Integrations;
 use Newspack_Newsletters_Contacts;
 use Newspack_Newsletters_Subscription;
 use Newspack\Configuration_Managers;
+use Newspack\Audience_Integrations;
 
 defined( 'ABSPATH' ) || exit;
 
 /**
- * ESP Integration Class.
+ * Mailchimp Integration Class (id `esp`).
  *
- * Generic integration for ESPs using Newspack Newsletters plugin.
+ * Reader-data sync through the Newspack Newsletters Mailchimp provider. This
+ * was the generic ESP integration; the `esp` id — and every option keyed on
+ * it — is retained so no stored settings move. The legacy provider paths
+ * (ActiveCampaign, Constant Contact) keep syncing until the Integrations
+ * screen is live for the site (see is_mailchimp_only()), after which
+ * dedicated integrations own everything that is not Mailchimp.
  */
 class ESP extends Integration {
 
@@ -37,8 +43,8 @@ class ESP extends Integration {
 	public function __construct() {
 		parent::__construct(
 			'esp',
-			__( 'Newsletter ESP', 'newspack-plugin' ),
-			__( 'Syncs reader data with your Newspack Newsletters email service provider.', 'newspack-plugin' )
+			__( 'Mailchimp', 'newspack-plugin' ),
+			__( 'Syncs reader data with your Mailchimp audience.', 'newspack-plugin' )
 		);
 	}
 
@@ -59,30 +65,46 @@ class ESP extends Integration {
 	}
 
 	/**
-	 * Why the ESP integration cannot operate with the current provider.
+	 * Why the integration cannot operate with the current provider.
 	 *
-	 * The "manual" provider is valid for authoring newsletters but exposes no
-	 * API for contact syncing: no lists, no master list, no contact upsert.
+	 * This card is Mailchimp-only: any other selected provider (including the
+	 * API-less `manual` one) renders it unavailable. No provider selected is
+	 * the Connect state, not an unsupported one.
 	 *
-	 * @return string|null Reason string when the provider is manual, null otherwise.
+	 * @return string|null Reason string when a non-Mailchimp provider is selected, null otherwise.
 	 */
 	public function get_unsupported_reason() {
-		if ( class_exists( 'Newspack_Newsletters' ) && 'manual' === \Newspack_Newsletters::service_provider() ) {
-			return __( 'Requires an API-based ESP', 'newspack-plugin' );
+		$provider = $this->get_provider_slug();
+		if ( $provider && 'mailchimp' !== $provider ) {
+			return __( 'Requires Mailchimp as the newsletter provider', 'newspack-plugin' );
 		}
 		return null;
 	}
 
 	/**
-	 * The remedy for the manual provider: swap it for an API-based one.
+	 * The remedy for a non-Mailchimp provider: swap it in Newsletters settings.
 	 *
 	 * "Connect" would be wrong here — the site is connected, just to a provider
-	 * that exposes no contact-sync API.
+	 * this card does not serve.
 	 *
 	 * @return string The action label.
 	 */
 	public function get_unsupported_action_label() {
 		return __( 'Change provider', 'newspack-plugin' );
+	}
+
+	/**
+	 * Whether reader sync through this integration is restricted to Mailchimp.
+	 *
+	 * Tied to the Integrations screen flag: sites where the screen is not live
+	 * still sync ActiveCampaign or Constant Contact through this generic path,
+	 * and cutting them off before the dedicated integrations take over would
+	 * silently stop their reader sync.
+	 *
+	 * @return bool
+	 */
+	protected function is_mailchimp_only() {
+		return Audience_Integrations::is_enabled();
 	}
 
 	/**
@@ -99,9 +121,18 @@ class ESP extends Integration {
 	 * state; "is the provider reachable right now?" is `health_check()`'s
 	 * job.
 	 *
+	 * Under the Mailchimp-only restriction a non-Mailchimp provider is never
+	 * set up, which keeps this integration out of
+	 * get_active_configured_integrations(): a flag-on site mid-migration gets
+	 * a clean stop instead of a sync attempt whose provider error would be
+	 * classified transient and retried forever.
+	 *
 	 * @return bool True if a provider is selected and a master list ID is stored.
 	 */
 	public function is_set_up() {
+		if ( $this->is_mailchimp_only() && 'mailchimp' !== $this->get_provider_slug() ) {
+			return false;
+		}
 		return $this->is_connected() && (bool) $this->get_master_list_id();
 	}
 
@@ -161,7 +192,9 @@ class ESP extends Integration {
 	 *
 	 * Returns ALL possible ESP fields unconditionally as static
 	 * declarations. No provider check, no API calls. Provider options
-	 * are added in get_settings_config().
+	 * are added in get_settings_config(). The ActiveCampaign and Constant Contact declarations remain for the
+	 * legacy generic path (its sync reads and option migration) even though
+	 * the settings UI no longer offers them; they go when that path retires.
 	 *
 	 * @return array Array of settings field declarations.
 	 */
@@ -233,36 +266,21 @@ class ESP extends Integration {
 			return [];
 		}
 
-		$enriched     = [];
-		$config       = parent::get_settings_config();
-		$config       = array_combine(
+		$enriched = [];
+		$config   = parent::get_settings_config();
+		$config   = array_combine(
 			array_column( $config, 'key' ),
 			$config
 		);
-		$list_options = [
-			'options' => $this->get_list_options(),
-		];
 
-		switch ( $provider->service ) {
-			case 'mailchimp':
-				$enriched[] = array_merge(
-					$config['mailchimp_audience_id'],
-					$list_options
-				);
-				$enriched[] = $config['mailchimp_reader_default_status'];
-				break;
-			case 'active_campaign':
-				$enriched[] = array_merge(
-					$config['active_campaign_master_list'],
-					$list_options
-				);
-				break;
-			case 'constant_contact':
-				$enriched[] = array_merge(
-					$config['constant_contact_list_id'],
-					$list_options
-				);
-				break;
+		if ( 'mailchimp' === $this->get_provider_slug() ) {
+			// get_list_options() hits the provider API — only fetch when the
+			// audience field is actually offered.
+			$enriched[] = array_merge(
+				$config['mailchimp_audience_id'],
+				[ 'options' => $this->get_list_options() ]
+			);
+			$enriched[] = $config['mailchimp_reader_default_status'];
 		}
 		$auto_keys = array_merge(
 			array_column( $this->get_account_deletion_fields(), 'key' ),
@@ -426,6 +444,13 @@ class ESP extends Integration {
 			$errors->add(
 				'ras_esp_master_list_id_not_found',
 				__( 'ESP master list ID is not set.', 'newspack-plugin' )
+			);
+		}
+
+		if ( $this->is_mailchimp_only() && 'mailchimp' !== $this->get_provider_slug() ) {
+			$errors->add(
+				'ras_esp_provider_not_supported',
+				__( 'Sync requires Mailchimp as the newsletter provider.', 'newspack-plugin' )
 			);
 		}
 

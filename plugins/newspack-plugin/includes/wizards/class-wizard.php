@@ -225,7 +225,7 @@ abstract class Wizard {
 		wp_register_script(
 			'newspack-wizards',
 			Newspack::plugin_url() . '/dist/wizards.js',
-			$this->get_script_dependencies(),
+			$this->get_script_dependencies( [ 'wp-a11y' ] ),
 			Newspack::asset_version( 'wizards' ),
 			true
 		);

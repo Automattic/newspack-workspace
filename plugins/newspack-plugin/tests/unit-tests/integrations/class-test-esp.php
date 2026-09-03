@@ -46,6 +46,7 @@ class Test_ESP extends \WP_UnitTestCase {
 		remove_all_filters( 'newspack_ras_metadata_keys' );
 		remove_all_filters( 'newspack_ras_metadata_prefix' );
 		\delete_option( 'newspack_integration_incoming_fields_esp' );
+		\delete_option( 'newspack_newsletters_service_provider' );
 		if ( $this->plugins_cache_dirty ) {
 			\wp_cache_delete( 'plugins', 'plugins' );
 			$this->plugins_cache_dirty = false;
@@ -780,5 +781,143 @@ class Test_ESP extends \WP_UnitTestCase {
 
 		$this->assertSame( [ 'CRM_SCORE' => '11' ], $result, 'Sanity: the pull read the staged payload.' );
 		$this->assertSame( [ 'reader@example.com' ], \Newspack_Newsletters_Service_Provider::$cleared_emails, 'The provider cache entry for the pulled contact was released.' );
+	}
+
+	/**
+	 * Set the newsletters provider the mock reports (it reads this option).
+	 *
+	 * @param string|null $slug Provider slug, or null to unset.
+	 */
+	private function set_provider( $slug ) {
+		if ( null === $slug ) {
+			\delete_option( 'newspack_newsletters_service_provider' );
+		} else {
+			\update_option( 'newspack_newsletters_service_provider', $slug );
+		}
+	}
+
+	/**
+	 * Build an ESP instance with the Mailchimp-only sync restriction forced on,
+	 * standing in for a site where the Integrations screen is live.
+	 *
+	 * @return ESP
+	 */
+	private function make_restricted_esp() {
+		return new class() extends ESP {
+			/**
+			 * Force the restriction regardless of the feature constant.
+			 *
+			 * @return bool
+			 */
+			protected function is_mailchimp_only() {
+				return true;
+			}
+		};
+	}
+
+	/**
+	 * The card is branded Mailchimp; the generic-ESP era name must not resurface.
+	 */
+	public function test_integration_is_branded_mailchimp() {
+		$esp = new ESP();
+		$this->assertSame( 'Mailchimp', $esp->get_name() );
+		$this->assertSame( 'Syncs reader data with your Mailchimp audience.', $esp->get_description() );
+	}
+
+	/**
+	 * Any selected provider other than Mailchimp renders the card unavailable;
+	 * no provider selected is the Connect state, not an unsupported one.
+	 */
+	public function test_unsupported_reason_requires_mailchimp() {
+		$esp = new ESP();
+
+		$this->set_provider( 'active_campaign' );
+		$this->assertSame( 'Requires Mailchimp as the newsletter provider', $esp->get_unsupported_reason() );
+
+		$this->set_provider( 'manual' );
+		$this->assertSame( 'Requires Mailchimp as the newsletter provider', $esp->get_unsupported_reason() );
+
+		$this->set_provider( 'mailchimp' );
+		$this->assertNull( $esp->get_unsupported_reason() );
+
+		$this->set_provider( null );
+		$this->assertNull( $esp->get_unsupported_reason() );
+	}
+
+	/**
+	 * With the Integrations screen live, sync through this integration demands
+	 * the Mailchimp provider.
+	 */
+	public function test_can_sync_blocks_other_providers_when_mailchimp_only() {
+		$this->set_provider( 'active_campaign' );
+
+		$errors = $this->make_restricted_esp()->can_sync( true );
+
+		$this->assertContains( 'ras_esp_provider_not_supported', $errors->get_error_codes() );
+	}
+
+	/**
+	 * The restriction names the provider, not the configuration: Mailchimp
+	 * sites never see the provider error, whatever else can_sync() finds.
+	 */
+	public function test_can_sync_never_flags_the_mailchimp_provider() {
+		$this->set_provider( 'mailchimp' );
+
+		$errors = $this->make_restricted_esp()->can_sync( true );
+
+		$this->assertNotContains( 'ras_esp_provider_not_supported', $errors->get_error_codes() );
+	}
+
+	/**
+	 * While the Integrations screen is not live, the legacy generic path keeps
+	 * syncing for ActiveCampaign sites — the restriction must not reach them.
+	 * (Master-list plumbing rides the mock provider's hardcoded mailchimp
+	 * service; the provider-slug guard under test reads the option.)
+	 */
+	public function test_can_sync_allows_other_providers_while_screen_not_live() {
+		$this->set_provider( 'active_campaign' );
+		\update_option( \Newspack\Reader_Activation\Integrations::OPTION_NAME, [ 'esp' ] );
+		\update_option( 'newspack_integration_settings_esp_mailchimp_audience_id', 'list-abc' );
+
+		$this->assertTrue( ( new ESP() )->can_sync() );
+
+		\delete_option( \Newspack\Reader_Activation\Integrations::OPTION_NAME );
+		\delete_option( 'newspack_integration_settings_esp_mailchimp_audience_id' );
+	}
+
+	/**
+	 * The settings UI only carries Mailchimp fields now. The ActiveCampaign /
+	 * Constant Contact selects stay declared for the legacy sync path but no
+	 * longer reach the config payload.
+	 */
+	public function test_settings_config_only_offers_mailchimp_provider_fields() {
+		$this->set_provider( 'mailchimp' );
+		$keys = array_column( ( new ESP() )->get_settings_config(), 'key' );
+		$this->assertContains( 'mailchimp_audience_id', $keys );
+		$this->assertContains( 'mailchimp_reader_default_status', $keys );
+		$this->assertNotContains( 'active_campaign_master_list', $keys );
+		$this->assertNotContains( 'constant_contact_list_id', $keys );
+
+		$this->set_provider( 'active_campaign' );
+		$keys = array_column( ( new ESP() )->get_settings_config(), 'key' );
+		$this->assertNotContains( 'active_campaign_master_list', $keys );
+	}
+
+	/**
+	 * Under the Mailchimp-only restriction, a non-Mailchimp provider is never
+	 * "set up" — that is what keeps the integration out of
+	 * get_active_configured_integrations() and prevents a doomed sync attempt
+	 * from being scheduled and retried.
+	 */
+	public function test_is_set_up_requires_mailchimp_when_restricted() {
+		\update_option( 'newspack_integration_settings_esp_mailchimp_audience_id', 'list-abc' );
+
+		$this->set_provider( 'active_campaign' );
+		$this->assertFalse( $this->make_restricted_esp()->is_set_up() );
+
+		$this->set_provider( 'mailchimp' );
+		$this->assertTrue( $this->make_restricted_esp()->is_set_up() );
+
+		\delete_option( 'newspack_integration_settings_esp_mailchimp_audience_id' );
 	}
 }

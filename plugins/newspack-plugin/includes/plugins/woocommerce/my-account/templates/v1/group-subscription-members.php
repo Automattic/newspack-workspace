@@ -36,8 +36,8 @@ $member_limit         = Group_Subscription::get_member_seat_limit( $subscription
 $all_invites          = Group_Subscription_Invite::get_invites( $subscription );
 $pending_invites      = Group_Subscription_Invite::get_invites( $subscription, false );
 $current_user_id      = get_current_user_id();
-$invite_link          = Group_Subscription_Invite::get_link_invite( $subscription, $current_user_id );
-$invite_link_url      = $invite_link ? Group_Subscription_Invite::get_link_invite_url( $subscription->get_id(), $current_user_id, $invite_link['key'] ) : '';
+$invite_link          = Group_Subscription_Invite::get_link_invite( $subscription );
+$invite_link_url      = $invite_link ? Group_Subscription_Invite::get_link_invite_url( $subscription->get_id(), $invite_link['key'] ) : '';
 $is_at_limit         = $member_limit > 0 && ( count( $members ) + count( $pending_invites ) ) >= $member_limit;
 $is_manageable       = Group_Subscription_MyAccount::is_subscription_manageable( $subscription );
 // Role changes (and touching peer managers) are the owner's call; a manager only manages plain members.
@@ -365,7 +365,7 @@ $is_completely_empty = empty( $members ) && empty( $all_invites );
 
 				<section class="newspack-ui__modal__content">
 						<p>
-							<?php esc_html_e( 'The current link will stop working. You\'ll get a new link to share, and anyone who hasn\'t joined yet will need the new link.', 'newspack-plugin' ); ?>
+							<?php esc_html_e( 'Any invite link for this group will stop working. You\'ll get a new link to share, and anyone who hasn\'t joined yet will need the new link.', 'newspack-plugin' ); ?>
 						</p>
 
 						<button type="button" class="newspack-ui__button newspack-ui__button--primary newspack-ui__button--wide newspack-my-account__group_subscription__invite-link__regenerate" data-error-text="<?php echo esc_attr( __( 'Could not regenerate. Please try again.', 'newspack-plugin' ) ); ?>"><span><?php esc_html_e( 'Regenerate link', 'newspack-plugin' ); ?></span></button>
@@ -439,7 +439,7 @@ $is_completely_empty = empty( $members ) && empty( $all_invites );
 				<section class="newspack-ui__modal__content">
 						<h2 class="font-size newspack-ui__font--l"><?php esc_html_e( 'Are you sure?', 'newspack-plugin' ); ?></h2>
 						<p>
-							<?php esc_html_e( 'The current link will stop working. Anyone who hasn\'t joined yet will no longer be able to. You can create a new link at any time.', 'newspack-plugin' ); ?>
+							<?php esc_html_e( 'Any invite link for this group will stop working. Anyone who hasn\'t joined yet will no longer be able to. You can create a new link at any time.', 'newspack-plugin' ); ?>
 						</p>
 
 						<button type="button" class="newspack-ui__button newspack-ui__button--primary newspack-ui__button--wide newspack-ui__button--destructive newspack-my-account__group_subscription__invite-link__disable" data-error-text="<?php echo esc_attr( __( 'Could not disable. Please try again.', 'newspack-plugin' ) ); ?>"><span><?php esc_html_e( 'Disable link', 'newspack-plugin' ); ?></span></button>

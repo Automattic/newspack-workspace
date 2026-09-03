@@ -24,6 +24,7 @@ const eventKeys = [
 	'currency',
 	'product_id',
 	'product_type',
+	'quantity',
 	'variation_id',
 	'variation_ids',
 	'is_variable',
