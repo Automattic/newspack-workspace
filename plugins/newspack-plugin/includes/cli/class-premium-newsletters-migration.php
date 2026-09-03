@@ -485,16 +485,20 @@ class Premium_Newsletters_Migration {
 	 * site-wide auto-signup setting). Reading the raw argv is the only place the
 	 * mistake is still visible.
 	 *
-	 * @param string[]|null $argv Raw argument vector; defaults to $_SERVER['argv'].
+	 * Shared with Premium_Newsletters_Verify, which passes its own flag list. The flags
+	 * differ per command; the scan is the guard standing between a mistyped flag and a
+	 * --live run, and two copies of it would drift.
+	 *
+	 * @param string[]|null $argv        Raw argument vector; defaults to $_SERVER['argv'].
+	 * @param string[]      $value_flags The value-requiring flags to look for.
 	 *
 	 * @return string[] The value-requiring flags present without a value.
 	 */
-	public static function get_valueless_value_flags( $argv = null ): array {
+	public static function get_valueless_value_flags( $argv = null, array $value_flags = [ '--plan', '--one-time-duration' ] ): array {
 		if ( null === $argv ) {
 			$argv = isset( $_SERVER['argv'] ) ? (array) $_SERVER['argv'] : []; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput
 		}
-		$value_flags = [ '--plan', '--one-time-duration' ];
-		$bare_flags  = [];
+		$bare_flags = [];
 		foreach ( $argv as $token ) {
 			if ( in_array( $token, $value_flags, true ) ) {
 				$bare_flags[] = $token;
@@ -906,9 +910,9 @@ class Premium_Newsletters_Migration {
 	 * variation — which is what the plan granted. Substituting the parent would also
 	 * admit holders of its sibling variations, and dropping the ID restricts readers
 	 * the plan admitted, who Premium_Newsletters::check_access() then unsubscribes at
-	 * cutover. The cost is that the gate editor's product picker is built from
-	 * Access_Rules::get_subscription_products_options(), which lists parent products
-	 * only, so a variation ID is not shown there and is lost if that field is re-saved.
+	 * cutover. The gate editor's product picker lists a variable subscription's
+	 * variations alongside its parent, so a migrated variation ID is shown there and
+	 * survives a re-save of that field.
 	 *
 	 * @param array[] $group Plan descriptors, each carrying a 'product_ids' key.
 	 *
@@ -1000,7 +1004,7 @@ class Premium_Newsletters_Migration {
 		if ( ! empty( $payload['variation_ids'] ) ) {
 			WP_CLI::warning(
 				sprintf(
-					'"%s": its paid access rule keeps product variation ID(s) %s, which is what the plan granted. The gate editor\'s product picker lists parent products only, so they are not shown there — and re-saving that field in the editor drops them. Leave it alone unless you mean to change what the gate grants.',
+					'"%s": its paid access rule keeps product variation ID(s) %s, which is what the plan granted — narrower than the parent product, which would also admit holders of its sibling variations. The gate editor lists them, so they survive a re-save. Leave them alone unless you mean to change what the gate grants.',
 					$payload['title'],
 					implode( ', ', $payload['variation_ids'] )
 				)

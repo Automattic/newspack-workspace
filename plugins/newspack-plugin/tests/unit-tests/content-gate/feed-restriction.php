@@ -96,6 +96,12 @@ class Test_Feed_Restriction extends \WP_UnitTestCase {
 		// Feeds are consumed anonymously.
 		wp_set_current_user( 0 );
 		update_option( Content_Gate_Advanced_Settings::OPTION_PREFIX . 'restrict_feeds', 1, false );
+		// Most tests here exercise exclude-mode mechanics (over-fetch, drop,
+		// back-fill), so set that mode as the class precondition. The shipped
+		// default is truncate — proven in advanced-settings.php and in
+		// test_default_mode_truncates_restricted_post_in_feed below, which clears
+		// this to read the real default.
+		update_option( Content_Gate_Advanced_Settings::OPTION_PREFIX . 'feed_restriction_mode', 'exclude', false );
 		Content_Gate_Advanced_Settings::reset_cache();
 	}
 
@@ -251,20 +257,35 @@ class Test_Feed_Restriction extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * Default mode (no stored value) is "exclude" for WC Memberships parity: a
-	 * restricted post is dropped from the feed query entirely.
+	 * Default mode (no stored value) is "truncate": a restricted post stays in
+	 * the feed with the gate teaser rather than being dropped, so a site that has
+	 * never chosen a mode keeps its feed intact.
 	 */
-	public function test_default_mode_excludes_restricted_post_from_feed() {
+	public function test_default_mode_truncates_restricted_post_in_feed() {
+		// Clear the exclude precondition set_up() applies, to read the real default.
+		delete_option( Content_Gate_Advanced_Settings::OPTION_PREFIX . 'feed_restriction_mode' );
+		Content_Gate_Advanced_Settings::reset_cache();
+
 		$this->assertSame(
-			'exclude',
+			'truncate',
 			Content_Gate_Advanced_Settings::get_feed_restriction_mode(),
-			'Default feed restriction mode should be exclude.'
+			'Default feed restriction mode should be truncate.'
 		);
-		$this->assertNotContains(
+		$this->assertContains(
 			$this->post_id,
 			$this->feed_post_ids(),
-			'Restricted post should be absent from the feed in exclude mode.'
+			'Restricted post should stay in the feed under the truncate default.'
 		);
+
+		// Present is not enough — prove the body is actually the teaser, so a
+		// truncate→off regression (which would also keep the post) is caught here.
+		$feed_content = $this->render_in_feed_loop(
+			function () {
+				return get_the_content_feed( 'rss2' );
+			}
+		);
+		$this->assertStringContainsString( 'FREE_ONE', $feed_content, 'Teaser should be present under the truncate default.' );
+		$this->assertStringNotContainsString( 'PAID_FIVE', $feed_content, 'Paid content must not leak under the truncate default.' );
 	}
 
 	/**
@@ -495,7 +516,7 @@ class Test_Feed_Restriction extends \WP_UnitTestCase {
 
 	/**
 	 * A filter that returns an unrecognized mode fails closed: it is ignored in
-	 * favour of the resolved mode (exclude, by default) rather than disabling
+	 * favour of the resolved mode (exclude, per set_up) rather than disabling
 	 * restriction and leaking full content to the feed.
 	 */
 	public function test_invalid_filter_return_falls_back_to_resolved_mode() {
@@ -708,7 +729,7 @@ class Test_Feed_Restriction extends \WP_UnitTestCase {
 		$this->assertSame(
 			'exclude',
 			Content_Gate_Advanced_Settings::get_feed_restriction_mode(),
-			'The rejected request must not have changed the stored mode.'
+			'The rejected request must not have changed the stored mode (exclude, per set_up).'
 		);
 	}
 

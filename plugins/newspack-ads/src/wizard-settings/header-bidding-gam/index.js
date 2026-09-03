@@ -152,7 +152,7 @@ const HeaderBiddingGAM = () => {
 									<ActionCard
 										key={ order.id }
 										title={ order.name }
-										badge={ order.status }
+										badges={ [ { label: order.status } ] }
 										description={ () => (
 											<span>
 												{ sprintf(

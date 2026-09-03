@@ -2,19 +2,21 @@
  * Ads list screen — React DataView replacing the classic ads CPT list.
  */
 
-import { __experimentalHStack as HStack, Spinner } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
+import { Button, __experimentalHStack as HStack, Spinner } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
 import { DataViews } from '@wordpress/dataviews/wp';
-import { useEffect, useMemo, useState } from '@wordpress/element';
+import { useCallback, useEffect, useMemo, useRef, useState } from '@wordpress/element';
 import { __ } from '@wordpress/i18n';
 import { emailAd } from 'newspack-icons';
 
+import { EmptyState } from 'newspack-components';
 import { getAdminUrl } from '../../admin-globals';
-import EmptyState from '../../components/empty-state';
 import HeaderCount from '../../components/header-count';
 import ItemsPerPage from '../../components/items-per-page';
+import { EMPTY_STATE_CLASS, getEmptyStateHeading } from '../../constants';
 import { useHeaderActions } from '../../header-actions-context';
 import usePersistedView from '../../hooks/use-persisted-view';
-import { fetchAllTerms } from '../../utils/terms';
+import isStrictlyEmpty from '../../utils/is-strictly-empty';
+import { fetchAllTerms, idsMissingFromOptions, mergeTerms } from '../../utils/terms';
 import useAdsData from './use-ads-data';
 import { getFields } from './fields';
 import { getActions } from './actions';
@@ -44,48 +46,91 @@ const ADS_CPT = 'newspack_nl_ads_cpt';
 // Filter-dropdown taxonomy terms (advertisers + placements). Paginated
 // so sites with many terms still get a complete list. Categories are
 // fetched lazily inside the Quick Edit panel.
+// `hasLoaded` reports the fetch settling, not succeeding: `fetchAllTerms`
+// swallows request failures and returns what it collected, so Quick Edit
+// judges completeness by whether the settled lists account for an ad's
+// stored term IDs.
 function useFilterTerms() {
-	const [ terms, setTerms ] = useState( { advertisers: [], placements: [] } );
+	const [ terms, setTerms ] = useState( { advertisers: [], placements: [], hasLoaded: false } );
+	const [ attempt, setAttempt ] = useState( 0 );
+	// Quick Edit gates editability on these lists, so a single failed request
+	// would otherwise leave every ad opened afterwards read-only until the page
+	// is reloaded. `hasLoaded` goes back to false for the duration: a
+	// re-attempt is a load, and without this the panel would paint "could not
+	// be loaded" — announcing it — for the round trip that is about to fix it.
+	const reload = useCallback( () => {
+		setTerms( current => ( { ...current, hasLoaded: false } ) );
+		setAttempt( current => current + 1 );
+	}, [] );
 
 	useEffect( () => {
 		let cancelled = false;
 		Promise.all( [ fetchAllTerms( '/wp/v2/newspack_nl_advertiser' ), fetchAllTerms( '/wp/v2/ad_placement' ) ] )
 			.then( ( [ advertisers, placements ] ) => {
-				if ( cancelled ) {
-					return;
+				if ( ! cancelled ) {
+					setTerms( current => ( {
+						...current,
+						advertisers: mergeTerms( current.advertisers, advertisers ),
+						placements: mergeTerms( current.placements, placements ),
+					} ) );
 				}
-				setTerms( {
-					advertisers: Array.isArray( advertisers ) ? advertisers : [],
-					placements: Array.isArray( placements ) ? placements : [],
-				} );
 			} )
-			.catch( () => {} );
+			.finally( () => {
+				if ( ! cancelled ) {
+					setTerms( current => ( { ...current, hasLoaded: true } ) );
+				}
+			} );
 		return () => {
 			cancelled = true;
 		};
-	}, [] );
+	}, [ attempt ] );
 
-	return terms;
+	return [ terms, reload ];
 }
 
 export default function AdsListScreen() {
 	const [ view, setView ] = usePersistedView( 'ads-list', DEFAULT_VIEW );
 	const [ quickEditItem, setQuickEditItem ] = useState( null );
 	const { data, paginationInfo, isLoading, hasResolved, hasLoadedOnce, trashCount, progress, refresh } = useAdsData( view );
-	const filterTerms = useFilterTerms();
+	const [ filterTerms, reloadFilterTerms ] = useFilterTerms();
 
 	const addNewHref = `${ getAdminUrl() }post-new.php?post_type=${ ADS_CPT }`;
 
 	const fields = useMemo( () => getFields( filterTerms ), [ filterTerms ] );
-	const actions = useMemo( () => getActions( { refresh, openQuickEdit: setQuickEditItem } ), [ refresh ] );
 
-	const isStrictEmpty =
-		hasLoadedOnce &&
-		! isLoading &&
-		paginationInfo.totalItems === 0 &&
-		trashCount === 0 &&
-		! view.search &&
-		( ! view.filters || view.filters.length === 0 );
+	// Read at click time, so the callback below can stay stable for `getActions`.
+	const filterTermsRef = useRef( filterTerms );
+	filterTermsRef.current = filterTerms;
+
+	// Retry the shared lists when Quick Edit opens on a row they cannot explain
+	// — that is, only when the panel would otherwise render the field read-only.
+	// A healthy list is never refetched, and an unsettled one is left alone, so
+	// opening mid-load cannot cancel the fetch and restart its pagination.
+	//
+	// This runs in the click handler rather than an effect so the reload batches
+	// with setting the item: the panel's first render then already shows the
+	// loading state, instead of painting a "could not be loaded" notice — and
+	// announcing it through `speak()` — for the frame before an effect could
+	// clear it. One click is one attempt, so it cannot spin on a site whose
+	// taxonomy is legitimately empty.
+	const openQuickEdit = useCallback(
+		item => {
+			const { advertisers, placements, hasLoaded } = filterTermsRef.current;
+			const incomplete =
+				hasLoaded &&
+				( idsMissingFromOptions( item?.newspack_nl_advertiser, advertisers ).length > 0 ||
+					idsMissingFromOptions( item?.ad_placement, placements ).length > 0 );
+			if ( incomplete ) {
+				reloadFilterTerms();
+			}
+			setQuickEditItem( item );
+		},
+		[ reloadFilterTerms ]
+	);
+
+	const actions = useMemo( () => getActions( { refresh, openQuickEdit } ), [ refresh, openQuickEdit ] );
+
+	const isStrictEmpty = isStrictlyEmpty( { hasLoadedOnce, isLoading, paginationInfo, trashCount, view } );
 
 	useHeaderActions(
 		useMemo(
@@ -113,16 +158,22 @@ export default function AdsListScreen() {
 
 	if ( isStrictEmpty ) {
 		return (
-			<EmptyState
-				icon={ emailAd }
-				title={ __( 'Get started with newsletter ads', 'newspack-newsletters' ) }
-				description={ __(
-					'Monetise newsletters with sponsored or house ads. Schedule by date, target by placement or category.',
-					'newspack-newsletters'
-				) }
-				ctaTitle={ __( 'Add Newsletter Ad', 'newspack-newsletters' ) }
-				ctaHref={ addNewHref }
-			/>
+			<EmptyState.Root className={ EMPTY_STATE_CLASS }>
+				<EmptyState.Header
+					icon={ emailAd }
+					heading={ getEmptyStateHeading() }
+					title={ __( 'Get started with newsletter ads', 'newspack-newsletters' ) }
+					description={ __(
+						'Monetise newsletters with sponsored or house ads. Schedule by date, target by placement or category.',
+						'newspack-newsletters'
+					) }
+				/>
+				<EmptyState.Actions>
+					<Button variant="primary" href={ addNewHref }>
+						{ __( 'Add Newsletter Ad', 'newspack-newsletters' ) }
+					</Button>
+				</EmptyState.Actions>
+			</EmptyState.Root>
 		);
 	}
 
@@ -156,6 +207,7 @@ export default function AdsListScreen() {
 					item={ quickEditItem }
 					advertisers={ filterTerms.advertisers }
 					placements={ filterTerms.placements }
+					termsLoaded={ filterTerms.hasLoaded }
 					onClose={ () => setQuickEditItem( null ) }
 					onSaved={ () => {
 						refresh();

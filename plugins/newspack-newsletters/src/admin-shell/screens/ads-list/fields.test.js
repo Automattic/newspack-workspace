@@ -13,7 +13,8 @@
 import { render, screen } from '@testing-library/react';
 import { setSettings } from '@wordpress/date';
 
-import { getFields } from './fields';
+import { getFields, STATUS_KIND_STATUSES } from './fields';
+import { statusGlyph } from 'newspack-components/src/status-indicator';
 
 const L10N = {
 	locale: 'en_US',
@@ -125,10 +126,12 @@ describe( 'Ads list date columns', () => {
 describe( 'Ads list status column dates', () => {
 	afterEach( () => configureSite( 0 ) );
 
+	// `newspack-components` is stubbed for these tests, so read the label off the
+	// StatusIndicator's props rather than rendering it.
 	const statusLabel = ( status, postStatus = 'publish' ) =>
 		fieldById( 'status' ).render( {
 			item: { id: 1, meta: {}, status: postStatus, newspack_newsletters_ad_status: status },
-		} ).props.children[ 1 ].props.children;
+		} ).props.children;
 
 	it( 'drops the clock time when the site date format carries one', () => {
 		configureSite( -4, 'F j, Y, g:i a' );
@@ -176,5 +179,23 @@ describe( 'Ads list status column dates', () => {
 		const label = statusLabel( { kind: 'expired', expires_at: Date.UTC( 2026, 7, 4, 12 ) / 1000 } );
 
 		expect( label ).toBe( 'Expired August 4, 2026' );
+	} );
+} );
+
+// The `newspack-components` stub only intercepts the bare package specifier, so the
+// vocabulary itself is still reachable and the rule can be asserted on marks rather
+// than on a copy of the pair list kept here.
+describe( 'STATUS_KIND_STATUSES', () => {
+	it( 'names every kind the list can report', () => {
+		expect( STATUS_KIND_STATUSES ).toEqual( { active: 'active', scheduled: 'scheduled', expired: 'ended', draft: 'draft', trash: 'trash' } );
+	} );
+
+	it( 'gives no two kinds the same mark', () => {
+		const glyphs = Object.values( STATUS_KIND_STATUSES ).map( name => statusGlyph( name ) );
+		expect( new Set( glyphs ).size ).toBe( glyphs.length );
+	} );
+
+	it( 'reads an expired ad as its window closing, not a deliberate stop', () => {
+		expect( STATUS_KIND_STATUSES.expired ).toBe( 'ended' );
 	} );
 } );
