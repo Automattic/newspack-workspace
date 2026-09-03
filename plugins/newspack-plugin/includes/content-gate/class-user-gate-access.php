@@ -159,11 +159,11 @@ class User_Gate_Access {
 			return self::format_institution_names( $value );
 		}
 
-		if ( is_array( $value ) ) {
-			return implode( ', ', $value );
-		}
-
-		return (string) $value;
+		return sprintf(
+			/* translators: %s: value or comma-separated list of values. */
+			'<code>%s</code>',
+			is_array( $value ) ? implode( ', ', $value ) : (string) $value
+		);
 	}
 
 	/**
@@ -397,8 +397,16 @@ class User_Gate_Access {
 												<?php echo wp_kses( $rule['passes'] ? '<span style="color: #00a32a;">&#10003;</span>' : '<span style="color: #d63638;">&#10005;</span>', [ 'span' => [ 'style' => [] ] ] ); ?>
 											</span>
 											<span class="screen-reader-text"><?php echo $rule['passes'] ? esc_html__( 'Pass', 'newspack-plugin' ) : esc_html__( 'Fail', 'newspack-plugin' ); ?></span>
-											<?php echo esc_html( $rule['name'] ); ?>:
-											<code><?php echo wp_kses( self::format_rule_value( $rule['slug'], $rule['value'] ), [ 'a' => [ 'href' => [] ] ] ); ?></code>
+											<strong><?php echo esc_html( $rule['name'] ); ?>:</strong>
+											<?php
+											echo wp_kses(
+												self::format_rule_value( $rule['slug'], $rule['value'] ),
+												[
+													'a'    => [ 'href' => [] ],
+													'code' => [],
+												]
+											);
+											?>
 											<?php
 											$granting_links = $rule['passes'] ? self::get_granting_entity_links( $rule['slug'], $rule['value'], $user->ID, $result['context'] ) : [];
 											if ( ! empty( $granting_links ) ) :
