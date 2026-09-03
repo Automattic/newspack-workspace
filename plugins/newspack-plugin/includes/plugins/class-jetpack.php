@@ -501,6 +501,16 @@ class Jetpack {
 			// share URL from one a crawler fabricated by appending `?share=…` to a permalink.
 			$data_attributes['share-token'] = self::share_token();
 		}
+		// The email button's mailto: href is left intact, but Jetpack pings an on-site tracking
+		// URL (`?share=email`) via XHR on click. Sign that URL so the ping clears the gate; an
+		// unsigned, fabricated `?share=email` request is still turned away.
+		if ( self::is_share_obfuscation_enabled() && isset( $data_attributes['email-share-track-url'] ) ) {
+			$data_attributes['email-share-track-url'] = add_query_arg(
+				self::SHARE_TOKEN_QUERY_ARG,
+				self::share_token(),
+				$data_attributes['email-share-track-url']
+			);
+		}
 		return $data_attributes;
 	}
 

@@ -114,6 +114,33 @@ class Test_Jetpack extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * Run the data-attributes filter for an email button and return the resulting attributes.
+	 * The email button carries an on-site tracking URL rather than a blanked share query.
+	 *
+	 * @param string $track_url The email-share-track-url the button starts with.
+	 * @return array The resulting data attributes.
+	 */
+	private function run_email_data_attributes( $track_url = 'https://example.com/a-post/?share=email' ) {
+		return Jetpack::add_obfuscation_data_attribute(
+			[ 'email-share-track-url' => $track_url ],
+			new \stdClass(),
+			false,
+			[ false, [] ]
+		);
+	}
+
+	/**
+	 * Extract our share token from a URL's query string, or null if absent.
+	 *
+	 * @param string $url The URL to read.
+	 * @return string|null
+	 */
+	private function token_from_url( $url ) {
+		parse_str( (string) wp_parse_url( $url, PHP_URL_QUERY ), $params );
+		return $params[ Jetpack::SHARE_TOKEN_QUERY_ARG ] ?? null;
+	}
+
+	/**
 	 * The display-query filter should blank the query for round-trip share services,
 	 * so the rendered href is the bare (cacheable) permalink.
 	 */
@@ -254,6 +281,50 @@ class Test_Jetpack extends \WP_UnitTestCase {
 	public function test_no_share_token_for_non_share_service() {
 		$result = $this->run_share_link_filters( '' );
 		$this->assertArrayNotHasKey( 'share-token', $result );
+	}
+
+	/**
+	 * The email button's mailto: href is left alone, but Jetpack pings an on-site tracking URL
+	 * on click. That URL must be signed so the ping carries a valid token.
+	 */
+	public function test_email_track_url_is_signed_with_valid_token() {
+		$result = $this->run_email_data_attributes();
+		$token  = $this->token_from_url( $result['email-share-track-url'] );
+		$this->assertNotNull( $token );
+		$this->assertTrue( Jetpack::is_valid_share_token( $token ) );
+	}
+
+	/**
+	 * The signed tracking URL must clear the gate, so the email share is tracked rather than
+	 * bounced to the bare permalink.
+	 */
+	public function test_signed_email_track_url_passes_gate() {
+		$result                                 = $this->run_email_data_attributes();
+		$_GET['share']                          = 'email';
+		$_GET[ Jetpack::SHARE_TOKEN_QUERY_ARG ] = $this->token_from_url( $result['email-share-track-url'] );
+		$this->assertFalse( Jetpack::should_block_share_request() );
+	}
+
+	/**
+	 * A fabricated, unsigned email share request is still blocked, so signing does not reopen
+	 * the vector for crawlers.
+	 */
+	public function test_unsigned_email_share_request_is_blocked() {
+		$_GET['share'] = 'email';
+		$this->assertTrue( Jetpack::should_block_share_request() );
+	}
+
+	/**
+	 * With obfuscation disabled the tracking URL is left untouched.
+	 */
+	public function test_email_track_url_not_signed_when_disabled() {
+		add_filter( 'newspack_jetpack_obfuscate_share_links', '__return_false' );
+		try {
+			$result = $this->run_email_data_attributes( 'https://example.com/a-post/?share=email' );
+			$this->assertSame( 'https://example.com/a-post/?share=email', $result['email-share-track-url'] );
+		} finally {
+			remove_filter( 'newspack_jetpack_obfuscate_share_links', '__return_false' );
+		}
 	}
 
 	/**
