@@ -40,6 +40,7 @@ class Initializer {
 		include_once NEWSPACK_ABSPATH . 'includes/cli/class-premium-newsletters-migration.php';
 		include_once NEWSPACK_ABSPATH . 'includes/cli/class-premium-newsletters-verify.php';
 		include_once NEWSPACK_ABSPATH . 'includes/cli/class-fix-memberships.php';
+		include_once NEWSPACK_ABSPATH . 'includes/cli/class-convert-subscription-variation.php';
 	}
 
 	/**
@@ -96,6 +97,7 @@ class Initializer {
 		WP_CLI::add_command( 'newspack migrate-expired-subscriptions', [ 'Newspack\CLI\WooCommerce_Subscriptions', 'migrate_expired_subscriptions' ] );
 		WP_CLI::add_command( 'newspack card-expiry-warning-backfill', [ 'Newspack\CLI\WooCommerce_Subscriptions', 'card_expiry_warning_backfill' ] );
 		WP_CLI::add_command( 'newspack audit-subscription-products', [ 'Newspack\CLI\WooCommerce_Subscriptions', 'audit_subscription_products' ] );
+		WP_CLI::add_command( 'newspack convert-subscription-variation', [ 'Newspack\CLI\Convert_Subscription_Variation', 'convert' ] );
 		WP_CLI::add_command( 'newspack ga4-dimensions', 'Newspack\CLI\GA4_Dimensions' );
 		WP_CLI::add_command( 'newspack export-subscriptions', [ 'Newspack\CLI\Export', 'export_subscriptions' ] );
 		WP_CLI::add_command( 'newspack export-users', [ 'Newspack\CLI\Export', 'export_users' ] );

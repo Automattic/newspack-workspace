@@ -13,7 +13,7 @@ import { Stack } from '@wordpress/ui';
 import { CollapsibleGroup, Divider, Grid, SectionHeader, useUnsavedChangesDialog } from '../../../../../packages/components/src';
 import { WIZARD_STORE_NAMESPACE } from '../../../../../packages/components/src/wizard/store';
 import WizardsTab from '../../../wizards-tab';
-import { SettingsField, settingsFieldRenders } from './settings-field';
+import { SettingsField, settingsFieldRenders, toBool } from './settings-field';
 
 import './configure-view.scss';
 
@@ -21,8 +21,8 @@ import './configure-view.scss';
  * Build the operator dropdown options for an incoming metadata field.
  *
  * Options are primarily driven by the field's `value_type`, which the
- * integration declares (e.g. a date field shouldn't offer the "Number"
- * range operator, and a single-select field shouldn't offer it either).
+ * integration declares (e.g. a date field offers a date range and exact
+ * text, but not the "Number" range operator).
  * The built-in ESP integration maps its provider field types onto these
  * value_types (number/date/datetime/select/multiselect), so those fields
  * hit the typed cases above. A field left as a plain `string` (or an
@@ -42,7 +42,10 @@ export const operatorOptionsForField = field => {
 			return [ { label: __( 'Number', 'newspack-plugin' ), value: 'range' } ];
 		case 'date':
 		case 'datetime':
-			return [ { label: __( 'Text', 'newspack-plugin' ), value: 'default' } ];
+			return [
+				{ label: __( 'Date range', 'newspack-plugin' ), value: 'date_range' },
+				{ label: __( 'Text', 'newspack-plugin' ), value: 'default' },
+			];
 		case 'multiselect':
 			return [ { label: __( 'Multiple values', 'newspack-plugin' ), value: 'list__in' } ];
 		case 'select':
@@ -66,6 +69,20 @@ export const operatorOptionsForField = field => {
 				  ];
 	}
 };
+
+/**
+ * The operator to fall back to when a stored one isn't offered for the field's
+ * current value_type. Exact matching wins whenever it is on offer: the first
+ * option can be an operator with side effects (date_range makes the pull
+ * rewrite stored reader values), and neither a repair folded into an unrelated
+ * save nor a rendered control may opt the publisher into one. Shared by the
+ * save-time repair and the rendered select so the row always shows what the
+ * next save will store.
+ *
+ * @param {{label: string, value: string}[]} options The operator options on offer.
+ * @return {string|undefined} The fallback operator value.
+ */
+export const fallbackOperator = options => ( options.some( o => 'default' === o.value ) ? 'default' : options[ 0 ]?.value );
 
 /**
  * Toggle an incoming field in or out of the enabled operator map.
@@ -120,7 +137,9 @@ export const reconcileOperators = ( currentMap, options ) => {
 		if ( valid.some( o => o.value === map[ key ] ) ) {
 			return;
 		}
-		const fallback = valid[ 0 ]?.value;
+		// See fallbackOperator() for why exact matching wins — mirroring how the
+		// stored-schema overlay pins a legacy entry to exact matching.
+		const fallback = fallbackOperator( valid );
 		if ( undefined !== fallback && fallback !== map[ key ] ) {
 			next[ key ] = fallback;
 			changed = true;
@@ -128,11 +147,6 @@ export const reconcileOperators = ( currentMap, options ) => {
 	} );
 	return changed ? next : map;
 };
-
-// Coerce a value to boolean. Values can arrive from WP options as scalar
-// strings (`'1'`/`'0'`/`'true'`/`'false'`/`''`); note `Boolean( '0' )` is `true`
-// in JS, so the falsy string forms are matched explicitly.
-const toBool = value => ( typeof value === 'string' ? ! [ '', '0', 'false' ].includes( value.toLowerCase() ) : Boolean( value ) );
 
 // Push-pipeline settings that render inside the Outbound section: the metadata
 // prefix is only read on push paths (prepare_contact()) and account-deletion
@@ -491,11 +505,14 @@ const ConfigureViewInner = ( { integrations, loading, inFlightChanges, saving, o
 											const checked = Object.prototype.hasOwnProperty.call( currentMap, optionValue );
 											const operatorOptions = operatorOptionsForField( option );
 											// If the stored operator isn't among the options offered for this field's
-											// current value_type (e.g. a field enabled before it declared a type), fall
-											// back to the first option so the control never shows a value with no option.
+											// current value_type (e.g. a field enabled before it declared a type),
+											// show the same fallback the save-time repair will store — displaying one
+											// operator while the next save writes another would contradict the
+											// publisher, and would make the shown option unselectable (choosing what
+											// is already displayed fires no onChange).
 											const selectedOperator = operatorOptions.some( o => o.value === currentMap[ optionValue ] )
 												? currentMap[ optionValue ]
-												: operatorOptions[ 0 ]?.value;
+												: fallbackOperator( operatorOptions );
 											return (
 												<div className="newspack-configure-view__inbound-field" key={ optionValue }>
 													<CheckboxControl

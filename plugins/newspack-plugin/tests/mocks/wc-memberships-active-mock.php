@@ -11,9 +11,7 @@
  * @package Newspack\Tests
  */
 
-if ( ! class_exists( 'WC_Memberships' ) ) {
-	class WC_Memberships {}
-}
+require_once __DIR__ . '/wc-memberships-class-mock.php';
 
 if ( ! function_exists( 'wc_memberships' ) ) {
 	function wc_memberships() {

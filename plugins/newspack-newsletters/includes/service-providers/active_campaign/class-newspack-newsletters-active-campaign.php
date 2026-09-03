@@ -2538,11 +2538,28 @@ final class Newspack_Newsletters_Active_Campaign extends \Newspack_Newsletters_S
 			$value_type = 'date';
 		}
 
+		// A date field defaults to the date range operator; exact-match text on a
+		// date is technically valid but never what a publisher wants. Probed
+		// rather than assumed: on an older newspack-plugin the operator would
+		// travel to newspack-popups unvalidated, where a stale build crashes on
+		// it (see integrations_supports_date_range()).
+		$matching_function = 'default';
+		if ( $is_multi_select ) {
+			$matching_function = 'list__in';
+		} elseif ( ( 'date' === $value_type || 'datetime' === $value_type ) && self::integrations_supports_date_range() ) {
+			$matching_function = 'date_range';
+		}
+
 		return [
 			'key'                 => $perstag,
 			'name'                => ! empty( $field['title'] ) ? $field['title'] : $perstag,
 			'value_type'          => $value_type,
-			'matching_function'   => $is_multi_select ? 'list__in' : 'default',
+			'matching_function'   => $matching_function,
+			// Declared explicitly, even though it is always empty: ActiveCampaign sends
+			// ISO 8601. The consumer distinguishes "declared as ISO" from "never stored,
+			// so the format is unknown" by the key's presence, and refreshes the latter
+			// from the live schema.
+			'date_format'         => '',
 			'options'             => $options,
 			'description'         => ! empty( $field['descript'] ) ? $field['descript'] : '',
 			'is_access_rule'      => $is_promoted_by_default,

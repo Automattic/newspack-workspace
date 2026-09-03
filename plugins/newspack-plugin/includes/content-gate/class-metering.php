@@ -188,10 +188,80 @@ class Metering {
 		}
 
 		$registration = Content_Gate::get_registration_settings( $gate_id );
+		return self::resolve_settings( $registration['active'], $registration['metering'], 'anonymous_count' );
+	}
+
+	/**
+	 * Resolve an audience path's metering settings from an in-memory settings array.
+	 *
+	 * Gate layouts are generated from the settings being saved, before those settings
+	 * reach the database, so the gate ID cannot be used to read them back. The layout
+	 * copy still has to quote the allowance the reader will actually get, which is the
+	 * shared one unless the path opted out.
+	 *
+	 * Access Control gates only. Every sibling resolver short-circuits to the legacy
+	 * `metering` meta while Woo Memberships is active; this one takes a settings array
+	 * rather than a gate, so it has no legacy meta to read and must not be used to
+	 * describe a Memberships gate.
+	 *
+	 * @param array $path_settings One audience path's settings, as stored on the gate.
+	 * @param bool  $is_logged_in  Whether to evaluate for a logged-in reader.
+	 *
+	 * @return array{enabled: bool, count: int, period: string} Metering settings.
+	 */
+	public static function resolve_path_settings( array $path_settings, bool $is_logged_in ): array {
+		$metering = \wp_parse_args(
+			$path_settings['metering'] ?? [],
+			Content_Gate::get_default_metering_settings()
+		);
+		return self::resolve_settings(
+			! empty( $path_settings['active'] ),
+			$metering,
+			Site_Meter::count_key_for_reader( $is_logged_in )
+		);
+	}
+
+	/**
+	 * Resolve one audience path's metering settings against its scope.
+	 *
+	 * Enablement always comes from the gate, so a hard wall and a metered gate can
+	 * coexist against the same pool. The allowance comes from the site meter unless
+	 * the path opts out.
+	 *
+	 * Gates saved before the scope setting existed read as shared, so until adoption
+	 * has seeded the site meter the shared allowance is still only its defaults. Serving
+	 * those would change a publisher's configured allowance the moment the plugin
+	 * updates, so the gate's own values stand until the seed is written.
+	 *
+	 * @param bool   $active         Whether the audience path is active on the gate.
+	 * @param array  $metering       The path's stored metering settings.
+	 * @param string $site_count_key Which site meter count governs this reader.
+	 *
+	 * @return array{enabled: bool, count: int, period: string} Metering settings.
+	 */
+	private static function resolve_settings( bool $active, array $metering, string $site_count_key ): array {
+		if ( ! $active ) {
+			return [
+				'enabled' => false,
+				'count'   => 0,
+				'period'  => 'month',
+			];
+		}
+		// Callers read `count` to decide what a reader still gets, so a path that does not
+		// meter reports no allowance rather than a stale or shared one.
+		$enabled = (bool) $metering['enabled'];
+		if ( Site_Meter::SCOPE_SITE === Site_Meter::sanitize_scope( $metering['scope'] ?? null ) && Site_Meter::has_adopted() ) {
+			$site = Site_Meter::get_settings();
+			return [
+				'enabled' => $enabled,
+				'count'   => $enabled ? absint( $site[ $site_count_key ] ) : 0,
+				'period'  => $site['period'],
+			];
+		}
 		return [
-			'enabled' => $registration['active'] && $registration['metering']['enabled'],
-			'count'   => $registration['active'] ? absint( $registration['metering']['count'] ) : 0,
-			'period'  => $registration['active'] ? $registration['metering']['period'] : 'month',
+			'enabled' => $enabled,
+			'count'   => $enabled ? absint( $metering['count'] ) : 0,
+			'period'  => $metering['period'],
 		];
 	}
 
@@ -214,11 +284,63 @@ class Metering {
 		}
 
 		$custom_access = Content_Gate::get_custom_access_settings( $gate_id );
-		return [
-			'enabled' => $custom_access['active'] && $custom_access['metering']['enabled'],
-			'count'   => $custom_access['active'] ? absint( $custom_access['metering']['count'] ) : 0,
-			'period'  => $custom_access['active'] ? $custom_access['metering']['period'] : 'month',
-		];
+		return self::resolve_settings( $custom_access['active'], $custom_access['metering'], 'registered_count' );
+	}
+
+	/**
+	 * Get the counter key for the reader the given settings govern.
+	 *
+	 * A shared scope collapses every sharing gate onto one counter key, so the
+	 * allowance, and the countdown that reports it, hold across the whole site.
+	 *
+	 * The shared key starts empty. Per-gate counters are not merged into it — a
+	 * union of the posts already read can exceed the shared count and lock a reader
+	 * out mid-period — so on the day adoption completes, every reader starts the
+	 * shared counter with a full allowance, whatever they had spent under the
+	 * per-gate keys. Pages cached before the switch still localize the old key, so
+	 * a page-cache purge belongs in the same deploy.
+	 *
+	 * Legacy Woo Memberships gates keep their per-gate key: they predate the scope
+	 * setting and read both meters from the shared `metering` meta.
+	 *
+	 * Gates keep their own counter until adoption has seeded the shared allowance, for
+	 * the same reason they keep their own count: sharing one counter while the gates
+	 * still grant different allowances lets one gate's views exhaust another's.
+	 *
+	 * Only the shared key carries a blog ID on multisite. The gate ID does not, and
+	 * deliberately: post IDs are per-site, so gate 412 on two sites of a network share
+	 * one `np_content_metering_412` row, but that key is what per-gate counters have
+	 * always been written under. Qualifying it now would abandon every reader's live
+	 * counter mid-period, gating readers who had views left. The shared key is new, so
+	 * it can be network-safe from the start without costing anyone their allowance.
+	 *
+	 * `$gate_id` is deliberately untyped. It arrives from `Content_Gate::get_gate_post_id()`,
+	 * which returns `false` when no gate applies and is itself filterable, so a declared
+	 * `int` would turn a third party returning null into a fatal on a gated article. The
+	 * falsy guard below is the contract instead.
+	 *
+	 * @param int|false $gate_id      Gate ID, or false when no gate applies.
+	 * @param bool      $is_logged_in Whether to evaluate for a logged-in reader.
+	 *
+	 * @return string Counter key: the shared key, or the gate ID.
+	 */
+	public static function get_meter_key( $gate_id, bool $is_logged_in ): string {
+		// Falling through would hand back the shared key and report another gate's views.
+		// '0' rather than a cast, so PHP and the frontend name the same empty counter.
+		if ( ! $gate_id ) {
+			return '0';
+		}
+		if ( Memberships::is_active() ) {
+			return (string) $gate_id;
+		}
+		$settings = self::is_gated_by_registration( $gate_id, $is_logged_in )
+			? Content_Gate::get_registration_settings( $gate_id )
+			: Content_Gate::get_custom_access_settings( $gate_id );
+		$scope = Site_Meter::sanitize_scope( $settings['metering']['scope'] ?? null );
+		if ( Site_Meter::SCOPE_SITE === $scope && Site_Meter::has_adopted() ) {
+			return Site_Meter::get_shared_meter_key();
+		}
+		return (string) $gate_id;
 	}
 
 	/**
@@ -236,12 +358,14 @@ class Metering {
 	 * `is_post_restricted()` applies before ever restricting an anonymous visitor - a
 	 * bypassed reader is not restricted, so no metering surface consults this for them.
 	 *
-	 * @param int  $gate_id      Gate ID.
-	 * @param bool $is_logged_in Whether to evaluate for a logged-in reader.
+	 * @param int  $gate_id            Gate ID.
+	 * @param bool $is_logged_in       Whether to evaluate for a logged-in reader.
+	 * @param bool $for_current_reader Whether the question is about the visitor making
+	 *                                 this request, rather than about the gate.
 	 *
 	 * @return bool Whether the registration wall governs the reader.
 	 */
-	private static function is_gated_by_registration( $gate_id, $is_logged_in ) {
+	private static function is_gated_by_registration( $gate_id, $is_logged_in, bool $for_current_reader = true ): bool {
 		$registration = Content_Gate::get_registration_settings( $gate_id );
 		if ( ! $registration['active'] ) {
 			return false;
@@ -250,6 +374,13 @@ class Metering {
 			return true;
 		}
 		if ( ! $registration['require_verification'] ) {
+			return false;
+		}
+		// Only the current session knows whether its reader has verified, so a question
+		// about anyone else assumes the verified reader the paywall is written for.
+		// Matching the session alone is not enough: for a signed-in unverified visitor
+		// the two coincide, and a site-wide question would answer differently for them.
+		if ( ! $for_current_reader || \is_user_logged_in() !== $is_logged_in ) {
 			return false;
 		}
 		// Exempt non-reader users (admins, editors). This reuses the reader/verified
@@ -277,18 +408,34 @@ class Metering {
 	 * and read both meters from the shared `metering` meta, so they keep the plain
 	 * anonymous/registered split.
 	 *
-	 * @param int  $gate_id      Gate ID.
-	 * @param bool $is_logged_in Whether to evaluate for a logged-in reader.
+	 * The path decides whether the reader is metered and, when the gate keeps its own
+	 * allowance, how many views it grants. A shared allowance is instead chosen by the
+	 * reader, so one signed-out reader draws on one pool site-wide rather than on
+	 * whichever pool the gate they landed on happens to name.
+	 *
+	 * @param int  $gate_id            Gate ID.
+	 * @param bool $is_logged_in       Whether to evaluate for a logged-in reader.
+	 * @param bool $for_current_reader Whether the question is about the visitor making
+	 *                                 this request. Pass false for questions about the
+	 *                                 gate itself, which must answer the same for
+	 *                                 everyone.
 	 *
 	 * @return array{enabled: bool, count: int, period: string} Metering settings.
 	 */
-	private static function get_effective_settings( $gate_id, $is_logged_in ) {
+	private static function get_effective_settings( $gate_id, $is_logged_in, bool $for_current_reader = true ): array {
 		if ( Memberships::is_active() ) {
 			return $is_logged_in ? self::get_registered_settings( $gate_id ) : self::get_anonymous_settings( $gate_id );
 		}
-		return self::is_gated_by_registration( $gate_id, $is_logged_in )
-			? self::get_anonymous_settings( $gate_id )
-			: self::get_registered_settings( $gate_id );
+		$is_registration_path = self::is_gated_by_registration( $gate_id, $is_logged_in, $for_current_reader );
+		$path                 = $is_registration_path
+			? Content_Gate::get_registration_settings( $gate_id )
+			: Content_Gate::get_custom_access_settings( $gate_id );
+		// The wall's shared allowance is the signed-out count — the only count adoption
+		// votes it into (see Site_Meter::get_path_audiences()). A signed-in unverified
+		// reader held at the wall is therefore described by that count, not by a
+		// signed-in allowance the wall never granted.
+		$site_count_key = $is_registration_path ? 'anonymous_count' : Site_Meter::count_key_for_reader( $is_logged_in );
+		return self::resolve_settings( $path['active'], $path['metering'], $site_count_key );
 	}
 
 	/**
@@ -340,6 +487,7 @@ class Metering {
 				'count'              => $settings['count'],
 				'period'             => $settings['period'],
 				'gate_id'            => $gate_post_id,
+				'meter_key'          => self::get_meter_key( $gate_post_id, false ),
 				'post_id'            => get_the_ID(),
 				'article_view'       => self::$article_view,
 				'excerpt'            => apply_filters( 'newspack_gate_content', Content_Gate::get_restricted_post_excerpt( get_post() ) ),
@@ -377,17 +525,26 @@ class Metering {
 	 *
 	 * Metering switched on with 0 free views gates every reader on their first view, so
 	 * it is indistinguishable from metering switched off and nothing downstream of
-	 * metering has anything to count. Each audience is judged on its own settings: a
-	 * count only counts while the section it belongs to is active and metering.
+	 * metering has anything to count.
+	 *
+	 * Judged per reader rather than per audience path, matching how the allowance is
+	 * resolved. A gate with no registration wall meters signed-out readers through its
+	 * paywall against the signed-out allowance, which reading the two paths against
+	 * their own counts would miss.
 	 *
 	 * @param int $gate_id Gate ID.
 	 *
 	 * @return bool
 	 */
 	public static function is_gate_metered( $gate_id ) {
-		$anonymous  = self::get_anonymous_settings( $gate_id );
-		$registered = self::get_registered_settings( $gate_id );
-		return ( $anonymous['enabled'] && 0 < $anonymous['count'] ) || ( $registered['enabled'] && 0 < $registered['count'] );
+		foreach ( [ false, true ] as $is_logged_in ) {
+			// About the gate, not about whoever is asking: this drives site-wide surfaces.
+			$settings = self::get_effective_settings( $gate_id, $is_logged_in, false );
+			if ( $settings['enabled'] && 0 < $settings['count'] ) {
+				return true;
+			}
+		}
+		return false;
 	}
 
 	/**
@@ -402,8 +559,10 @@ class Metering {
 	 * @return bool
 	 */
 	public static function offers_metering( $gate_id, $is_logged_in = null ) {
-		$is_logged_in = null === $is_logged_in ? \is_user_logged_in() : (bool) $is_logged_in;
-		$settings     = self::get_effective_settings( $gate_id, $is_logged_in );
+		// A named reader class is a hypothetical; only the default means "this visitor".
+		$for_current_reader = null === $is_logged_in;
+		$is_logged_in       = $for_current_reader ? \is_user_logged_in() : (bool) $is_logged_in;
+		$settings           = self::get_effective_settings( $gate_id, $is_logged_in, $for_current_reader );
 		return ! empty( $settings['enabled'] ) && 0 < $settings['count'];
 	}
 
@@ -513,7 +672,7 @@ class Metering {
 			return self::$logged_in_metering_cache[ $post_id ];
 		}
 
-		$user_meta_key = self::METERING_META_KEY . '_' . $gate_post_id;
+		$user_meta_key = self::METERING_META_KEY . '_' . self::get_meter_key( $gate_post_id, true );
 
 		$updated_user_data  = false;
 		$user_metering_data = \get_user_meta( get_current_user_id(), $user_meta_key, true );
@@ -605,6 +764,25 @@ class Metering {
 	}
 
 	/**
+	 * The reader-facing label for a metering reset period.
+	 *
+	 * Every surface that prints a period to a reader shares this, so the layout copy,
+	 * the countdown banner and its preview cannot disagree. Interpolating the stored
+	 * slug instead leaves the sentence in English whatever the site's locale.
+	 *
+	 * @param string $period Period slug, as stored on the gate.
+	 *
+	 * @return string Translated label.
+	 */
+	public static function get_period_label( string $period ): string {
+		return match ( $period ) {
+			'day'   => __( 'day', 'newspack-plugin' ),
+			'week'  => __( 'week', 'newspack-plugin' ),
+			default => __( 'month', 'newspack-plugin' ),
+		};
+	}
+
+	/**
 	 * Get the metering period for the current reader on a post.
 	 *
 	 * Resolves against the settings that govern the current reader, so the result is
@@ -636,7 +814,7 @@ class Metering {
 		}
 
 		$gate_post_id  = Content_Gate::get_gate_post_id();
-		$meta_key      = self::METERING_META_KEY . '_' . $gate_post_id;
+		$meta_key      = self::METERING_META_KEY . '_' . self::get_meter_key( $gate_post_id, true );
 		$metering_data = \get_user_meta( get_current_user_id(), $meta_key, true );
 		if ( ! is_array( $metering_data ) || ! isset( $metering_data['content'] ) ) {
 			return 0;

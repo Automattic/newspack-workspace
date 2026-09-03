@@ -24,7 +24,7 @@ import WizardSection from '../../../../../wizards-section';
 import { registerTab } from '../registry';
 import { SEARCH_ENDPOINTS } from '../../constants';
 import { useRestrictions } from './use-restrictions';
-import { useNames } from './use-names';
+import { useNames } from '../../use-names';
 import { excludedLabel, leadingProductNames, moreProductsLabel, scopeLabel } from './labels';
 import RestrictionEditor from './restriction-editor';
 import type { Restriction, RestrictionSettings } from './types';
