@@ -90,17 +90,16 @@ function Webhooks() {
 	const claimFocus = useRef( false );
 
 	// The empty state's button is unmounted by the very success it triggers, so the
-	// modal has nothing to restore focus to; the header button replaces it. Waiting for
-	// the request to settle matters: the save flips `inFlight` first, and focusing the
-	// header button while it is still disabled silently does nothing.
+	// modal has nothing to restore focus to; the header button replaces it. Both guards
+	// return rather than clearing the claim, because it has to survive the renders in
+	// between: the header button does not exist while the empty state is up, and it is
+	// disabled for as long as the save is in flight.
 	useEffect( () => {
-		if ( ! claimFocus.current || inFlight ) {
+		if ( ! claimFocus.current || inFlight || isEmpty ) {
 			return;
 		}
 		claimFocus.current = false;
-		if ( ! isEmpty ) {
-			addRef.current?.focus();
-		}
+		addRef.current?.focus();
 	}, [ inFlight, isEmpty, selectedEndpoint ] );
 
 	return (
