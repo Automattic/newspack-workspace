@@ -28,6 +28,12 @@ export default function AdditionalBrands() {
 	const brandsCache = cache( '/wp/v2/brand' );
 
 	const [ brands, setBrands ] = useState< Brand[] >( [] );
+	// `isFetching` starts false and the fetch is kicked off in an effect, so an empty
+	// list alone cannot tell "nothing saved" from "not asked yet". Set from `onSuccess`
+	// rather than `onFinally`: the hook returns early on a cache hit without running
+	// its finally callback, and a failed load must not read as "no brands".
+	const [ hasLoaded, setHasLoaded ] = useState( false );
+	const [ loadError, setLoadError ] = useState( '' );
 	const history = useHistory();
 	const location = useLocation();
 	const { path } = useRouteMatch();
@@ -36,12 +42,14 @@ export default function AdditionalBrands() {
 		resetError();
 	}, [ location.pathname ] );
 
-	/**
-	 * Cache brands data.
-	 */
+	// Gated on `hasLoaded`: this runs before the first request is issued, and caching
+	// the initial empty list would answer the next visit with one the server never sent.
 	useEffect( () => {
+		if ( ! hasLoaded ) {
+			return;
+		}
 		brandsCache.set( brands );
-	}, [ brands ] );
+	}, [ brands, hasLoaded ] );
 
 	const wizardScreenProps = {
 		isFetching,
@@ -58,7 +66,12 @@ export default function AdditionalBrands() {
 				path: addQueryArgs( '/wp/v2/brand', { per_page: 100 } ),
 			},
 			{
+				onError( error: { message?: string } ) {
+					setLoadError( error?.message || __( 'Brands could not be loaded.', 'newspack-plugin' ) );
+				},
 				onSuccess( response ) {
+					setLoadError( '' );
+					setHasLoaded( true );
 					setBrands(
 						response.map( ( brand: Brand ) => ( {
 							...brand,
@@ -162,10 +175,24 @@ export default function AdditionalBrands() {
 	useEffect( fetchBrands, [] );
 
 	return (
-		<WizardsTab isFetching={ isFetching } title={ __( 'Additional Brands', 'newspack-plugin' ) }>
+		// No title: the breadcrumb's last crumb is the page's h1 on every route here, so
+		// a tab heading would repeat it.
+		<WizardsTab isFetching={ isFetching }>
 			<WizardSection>
 				<Switch>
-					<Route exact path={ path } render={ () => <Brands { ...wizardScreenProps } brands={ brands } deleteBrand={ deleteBrand } /> } />
+					<Route
+						exact
+						path={ path }
+						render={ () => (
+							<Brands
+								{ ...wizardScreenProps }
+								brands={ brands }
+								hasLoaded={ hasLoaded }
+								loadError={ loadError }
+								deleteBrand={ deleteBrand }
+							/>
+						) }
+					/>
 					<Route
 						path={ `${ path }/new` }
 						render={ () => (
