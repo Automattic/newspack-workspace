@@ -1,3 +1,10 @@
+## newspack-theme [2.26.1](https://github.com/Automattic/newspack-workspace/compare/newspack-theme@2.26.0...newspack-theme@2.26.1) (2026-09-04)
+
+
+### Bug Fixes
+
+* **theme:** offer page templates on election profiles ([#1039](https://github.com/Automattic/newspack-workspace/issues/1039)) ([359b603](https://github.com/Automattic/newspack-workspace/commit/359b603c4a447720b31a568e0950c0c70b18fec6))
+
 # newspack-theme [2.26.0](https://github.com/Automattic/newspack-workspace/compare/newspack-theme@2.25.1...newspack-theme@2.26.0) (2026-08-31)
 
 
