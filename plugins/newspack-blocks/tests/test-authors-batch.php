@@ -23,7 +23,7 @@ class AuthorsBatchTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 		wp_set_current_user( self::factory()->user->create( [ 'role' => 'administrator' ] ) );
 
 		// The endpoint reads guest authors from Co-Authors Plus's post type, which the test suite's
-		// CAP mock does not register. Its mock only formats the id, so guest assertions stay on ids.
+		// CAP mock does not register.
 		if ( ! post_type_exists( 'guest-author' ) ) {
 			register_post_type( 'guest-author', [ 'public' => true ] );
 			$this->registered_guest_author_type = true;
@@ -117,7 +117,7 @@ class AuthorsBatchTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 			$this->request_authors(
 				[
 					'guest_author_ids' => implode( ',', $ids ),
-					'fields'           => 'id',
+					'fields'           => 'id,name',
 				]
 			)
 		);
@@ -127,6 +127,7 @@ class AuthorsBatchTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 			$this->assertArrayHasKey( 'g:' . $id, $records, "Guest author $id was missing from the batched response." );
 			$this->assertTrue( $records[ 'g:' . $id ]['is_guest'] );
 		}
+		$this->assertSame( 'Guest Two', $records[ 'g:' . $ids[1] ]['name'] );
 	}
 
 	public function test_user_and_guest_author_ids_are_looked_up_in_their_own_namespaces() {
@@ -146,18 +147,45 @@ class AuthorsBatchTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 		$this->assertCount( 2, $records );
 		$this->assertArrayHasKey( 'u:' . $user_id, $records );
 		$this->assertArrayHasKey( 'g:' . $guest_id, $records );
+	}
 
-		// A user id sent in the guest list must not resolve to a guest author, and vice versa.
-		$crossed = $this->index_by_kind(
+	/**
+	 * Blocks saved before the `isGuestAuthor` attribute existed default to a guest lookup for every
+	 * author, so a guest id that matches no guest author has to resolve to the WP user with that id,
+	 * the way the single-id path (`is_guest_author=1`) and the front-end renderer still do.
+	 */
+	public function test_a_guest_id_with_no_guest_author_falls_back_to_the_wp_user() {
+		$user_id = self::factory()->user->create( [ 'role' => 'author', 'display_name' => 'Legacy User' ] );
+
+		$records = $this->index_by_kind(
 			$this->request_authors(
 				[
 					'guest_author_ids' => (string) $user_id,
-					'fields'           => 'id',
+					'fields'           => 'id,name',
 				]
 			)
 		);
-		$this->assertArrayNotHasKey( 'g:' . $user_id, $crossed );
-		$this->assertArrayNotHasKey( 'u:' . $user_id, $crossed );
+
+		$this->assertCount( 1, $records );
+		$this->assertArrayHasKey( 'u:' . $user_id, $records );
+		$this->assertArrayNotHasKey( 'g:' . $user_id, $records );
+		$this->assertSame( 'Legacy User', $records[ 'u:' . $user_id ]['name'] );
+	}
+
+	public function test_batched_guest_lookup_of_a_user_matches_the_single_lookup() {
+		$id = self::factory()->user->create( [ 'role' => 'author', 'display_name' => 'Same Author' ] );
+
+		$single  = $this->request_authors(
+			[
+				'author_id'       => $id,
+				'is_guest_author' => 1,
+			]
+		);
+		$batched = $this->request_authors( [ 'guest_author_ids' => (string) $id ] );
+
+		$this->assertCount( 1, $single );
+		$this->assertCount( 1, $batched );
+		$this->assertSame( $single[0], $batched[0] );
 	}
 
 	public function test_batched_user_record_matches_the_single_lookup() {
@@ -183,15 +211,17 @@ class AuthorsBatchTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 			$five[] = self::factory()->user->create( [ 'role' => 'author' ] );
 		}
 		$controller = new WP_REST_Newspack_Authors_Controller();
+		// The field set the Author Profile block requests in the editor.
+		$fields     = [ 'id', 'name', 'bio', 'email', 'social', 'avatar', 'url' ];
 
 		wp_cache_flush();
 		$before = get_num_queries();
-		$controller->get_authors_by_ids( $one, [], [ 'id', 'name' ], false );
+		$controller->get_authors_by_ids( $one, [], $fields, false );
 		$queries_for_one = get_num_queries() - $before;
 
 		wp_cache_flush();
 		$before = get_num_queries();
-		$controller->get_authors_by_ids( $five, [], [ 'id', 'name' ], false );
+		$controller->get_authors_by_ids( $five, [], $fields, false );
 		$queries_for_five = get_num_queries() - $before;
 
 		$this->assertSame( $queries_for_one, $queries_for_five, 'Looking up five uncached users must not cost more queries than looking up one.' );
@@ -204,5 +234,28 @@ class AuthorsBatchTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 
 		$this->assertCount( 1, $records );
 		$this->assertArrayHasKey( 'u:' . $id, $records );
+	}
+
+	public function test_a_list_with_no_valid_ids_returns_an_empty_response() {
+		// An author exists, so falling through to the recent-authors listing would return something.
+		self::factory()->user->create( [ 'role' => 'author' ] );
+
+		$this->assertSame( [], $this->request_authors( [ 'author_ids' => 'abc' ] ) );
+	}
+
+	public function test_id_lists_are_capped() {
+		$sanitized = WP_REST_Newspack_Authors_Controller::sanitize_id_list( implode( ',', range( 1, 150 ) ) );
+
+		$this->assertSame( range( 1, 100 ), $sanitized );
+	}
+
+	public function test_format_guest_author_skips_a_post_co_authors_plus_cannot_resolve() {
+		$orphan = (object) [
+			'ID'        => 999999,
+			'post_date' => '2026-01-01 00:00:00',
+			'post_name' => 'orphan',
+		];
+
+		$this->assertNull( WP_REST_Newspack_Authors_Controller::format_guest_author( $orphan, [ 'id', 'name' ], false ) );
 	}
 }

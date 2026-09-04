@@ -66,15 +66,23 @@ class WP_REST_Newspack_Authors_Controller extends WP_REST_Controller {
 	}
 
 	/**
+	 * Most IDs one batched lookup resolves.
+	 *
+	 * A page never needs more than it has blocks, and an unbounded list would recreate the long
+	 * PHP request the batched lookup exists to avoid. The editor splits its batches to match.
+	 */
+	const MAX_BATCH_IDS = 100;
+
+	/**
 	 * Turn a comma-separated list (or array) of IDs into unique positive integers.
 	 *
 	 * @param string|array $value Raw request param.
-	 * @return int[]
+	 * @return int[] At most MAX_BATCH_IDS of them.
 	 */
 	public static function sanitize_id_list( $value ) {
 		$ids = is_array( $value ) ? $value : explode( ',', (string) $value );
 		$ids = array_filter( array_map( 'absint', $ids ) );
-		return array_values( array_unique( $ids ) );
+		return array_slice( array_values( array_unique( $ids ) ), 0, self::MAX_BATCH_IDS );
 	}
 
 	/**
@@ -151,8 +159,9 @@ class WP_REST_Newspack_Authors_Controller extends WP_REST_Controller {
 		$author_ids          = ! empty( $request->get_param( 'author_ids' ) ) ? $request->get_param( 'author_ids' ) : []; // Fetch several WP users by ID in one request.
 		$guest_author_ids    = ! empty( $request->get_param( 'guest_author_ids' ) ) ? $request->get_param( 'guest_author_ids' ) : []; // Fetch several guest authors by ID in one request.
 
-		// If a list of IDs is provided, resolve them all in one response.
-		if ( $author_ids || $guest_author_ids ) {
+		// If a list of IDs is provided, resolve them all in one response. A list with no valid ID
+		// is still a list, and gets an empty response rather than the recent-authors listing.
+		if ( $request->has_param( 'author_ids' ) || $request->has_param( 'guest_author_ids' ) ) {
 			return $this->get_authors_by_ids( $author_ids, $guest_author_ids, $fields, $avatar_hide_default );
 		}
 
@@ -306,8 +315,10 @@ class WP_REST_Newspack_Authors_Controller extends WP_REST_Controller {
 	 * Return the given users and guest authors in one response.
 	 *
 	 * Backs the editor's batched lookups: a page with many Author Profile blocks resolves every
-	 * author with a single request instead of one per block. Each ID is looked up the way the
-	 * single-ID path does, so a record is identical to what a block received on its own.
+	 * author with a single request instead of one per block. Each ID is formatted the way the
+	 * single-ID path formats it, so a record matches what a block received on its own, including
+	 * the guest-to-user fallback: a guest ID means "not known to be a WP user", because blocks
+	 * saved before the `isGuestAuthor` attribute existed default to it for every author.
 	 *
 	 * @param int[] $author_ids          WP user IDs.
 	 * @param int[] $guest_author_ids    Guest author post IDs.
@@ -327,12 +338,16 @@ class WP_REST_Newspack_Authors_Controller extends WP_REST_Controller {
 					'orderby'        => 'post__in',
 				]
 			);
+			$found         = [];
 			foreach ( $guest_authors as $guest_author ) {
+				$found[]           = (int) $guest_author->ID;
 				$guest_author_data = self::format_guest_author( $guest_author, $fields, $avatar_hide_default );
 				if ( $guest_author_data ) {
 					$authors[] = $guest_author_data;
 				}
 			}
+			// Resolve the rest as WP users, the way the single-ID path and the front-end renderer do.
+			$author_ids = array_values( array_unique( array_merge( $author_ids, array_diff( $guest_author_ids, $found ) ) ) );
 		}
 
 		if ( $author_ids ) {
@@ -375,6 +390,9 @@ class WP_REST_Newspack_Authors_Controller extends WP_REST_Controller {
 		];
 
 		$guest_author = ( new CoAuthors_Guest_Authors() )->get_guest_author_by( 'id', $guest_author->ID );
+		if ( ! $guest_author ) {
+			return null;
+		}
 
 		if ( in_array( 'avatar', $fields, true ) && function_exists( 'coauthors_get_avatar' ) ) {
 			$avatar = coauthors_get_avatar( $guest_author, 256, $avatar_hide_default ? 'blank' : '' );
@@ -498,7 +516,7 @@ class WP_REST_Newspack_Authors_Controller extends WP_REST_Controller {
 			$user_data['url'] = esc_url( get_author_posts_url( $user->data->ID ) );
 		}
 		if ( false === $fields || in_array( 'social', $fields, true ) ) {
-			$user_data['social'] = self::get_social( $user->data->ID );
+			$user_data['social'] = self::get_social( $user->data->ID, false );
 		}
 
 		if ( class_exists( '\Newspack\Authors_Custom_Fields' ) ) {
@@ -564,10 +582,11 @@ class WP_REST_Newspack_Authors_Controller extends WP_REST_Controller {
 	/**
 	 * Get social media URLs and SVGs, if available. Only standard WP users have this user meta.
 	 *
-	 * @param int $author_id Author ID.
+	 * @param int     $author_id       Author ID.
+	 * @param boolean $is_guest_author Whether the ID is a CAP guest author, whose website lives in post meta.
 	 * @return array Array of social links and SVGs.
 	 */
-	public static function get_social( $author_id ) {
+	public static function get_social( $author_id, $is_guest_author = true ) {
 		$social_profiles = [
 			'facebook',
 			'twitter',
@@ -585,9 +604,13 @@ class WP_REST_Newspack_Authors_Controller extends WP_REST_Controller {
 
 		return array_reduce(
 			$social_profiles,
-			function( $acc, $profile ) use ( $author_id ) {
+			function( $acc, $profile ) use ( $author_id, $is_guest_author ) {
 				$is_website = 'website' === $profile;
-				$handle     = $is_website ? get_post_meta( $author_id, 'cap-website', true ) : get_the_author_meta( $profile, $author_id );
+				if ( $is_website && ! $is_guest_author ) {
+					// A WP user has no post meta to read, and reading it costs a query per user.
+					return $acc;
+				}
+				$handle = $is_website ? get_post_meta( $author_id, 'cap-website', true ) : get_the_author_meta( $profile, $author_id );
 
 				if ( $handle ) {
 					$url             = 'twitter' === $profile ? esc_url( 'https://x.com/' . $handle ) : esc_url( $handle );

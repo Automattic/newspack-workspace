@@ -49,16 +49,20 @@ class AuthorsControllerTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 	/**
 	 * Request an author endpoint and return the decoded items.
 	 *
-	 * @param string $route REST route, relative to the block namespace.
+	 * @param string $route  REST route, relative to the block namespace.
+	 * @param array  $params Extra query params.
 	 * @return array Response data.
 	 */
-	private function request_authors( $route = '/newspack-blocks/v1/authors' ) {
+	private function request_authors( $route = '/newspack-blocks/v1/authors', $params = [] ) {
 		$request = new WP_REST_Request( 'GET', $route );
 		$request->set_query_params(
-			[
-				'fields'   => 'email,name',
-				'perPage'  => 100,
-			]
+			array_merge(
+				[
+					'fields'   => 'email,name',
+					'perPage'  => 100,
+				],
+				$params
+			)
 		);
 
 		$response = rest_get_server()->dispatch( $request );
@@ -116,6 +120,30 @@ class AuthorsControllerTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 
 		$this->assertNotNull( $record, 'The author under test was missing from the response.' );
 		$this->assert_record_has_no_email( $record, 'The author list endpoint disclosed an address to a contributor.' );
+	}
+
+	/**
+	 * The batched lookup the Author Profile block uses in the editor is bound by the same rule.
+	 */
+	public function test_batched_lookup_withholds_email_from_post_editors() {
+		wp_set_current_user( self::factory()->user->create( [ 'role' => 'contributor' ] ) );
+
+		$record = $this->find_subject( $this->request_authors( '/newspack-blocks/v1/authors', [ 'author_ids' => (string) $this->subject_id ] ) );
+
+		$this->assertNotNull( $record, 'The author under test was missing from the batched response.' );
+		$this->assert_record_has_no_email( $record, 'The batched authors lookup disclosed an address to a contributor.' );
+	}
+
+	/**
+	 * Requesters who can manage users keep the field they already had access to.
+	 */
+	public function test_batched_lookup_returns_email_to_user_managers() {
+		wp_set_current_user( self::factory()->user->create( [ 'role' => 'administrator' ] ) );
+
+		$record = $this->find_subject( $this->request_authors( '/newspack-blocks/v1/authors', [ 'author_ids' => (string) $this->subject_id ] ) );
+
+		$this->assertNotNull( $record, 'The author under test was missing from the batched response.' );
+		$this->assertArrayHasKey( 'email', $record, 'An administrator was denied a field they can already read.' );
 	}
 
 	/**
