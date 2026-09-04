@@ -131,6 +131,7 @@ When building a screen, use the **spacing scale** (8px unit: 16, 24, 32, 48, 64)
 
 ### Utility Components
 
+- **`DebugBadge`** - Floating indicator that Newspack debug mode is on. Takes no props and renders nothing unless the site defines `WP_NEWSPACK_DEBUG`
 - **`GlobalNotices`** - Global notice system component
 - **`InfoButton`** - Reveals supplementary context from a `description` prop. Anything a reader needs in order to use a control belongs in visible help text instead
 - **`Modal`** - Modal dialog component
