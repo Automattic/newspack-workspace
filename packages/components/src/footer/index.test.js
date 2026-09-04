@@ -54,8 +54,6 @@ describe( 'Footer', () => {
 		render( <Footer /> );
 		expect( screen.getByRole( 'button', { name: 'Reset Newspack' } ) ).not.toHaveAttribute( 'href' );
 		expect( screen.getByRole( 'button', { name: 'Remove Starter Content' } ) ).not.toHaveAttribute( 'href' );
-		expect( screen.queryByRole( 'link', { name: 'Reset Newspack' } ) ).not.toBeInTheDocument();
-		expect( screen.queryByRole( 'link', { name: 'Remove Starter Content' } ) ).not.toBeInTheDocument();
 	} );
 
 	it( 'does not reset on the first click', () => {

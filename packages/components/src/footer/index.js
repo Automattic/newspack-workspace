@@ -91,8 +91,6 @@ const Footer = ( { simple = undefined } ) => {
 			url: `mailto:${ supportEmail }`,
 		} );
 	}
-	// onClick only sees primary clicks, so an href here would let a middle-click
-	// or "Open link in new tab" reach the URL unguarded.
 	const renderItem = ( { url, label, external, confirm } ) => {
 		if ( external ) {
 			return <ExternalLink href={ url }>{ label }</ExternalLink>;
@@ -100,6 +98,8 @@ const Footer = ( { simple = undefined } ) => {
 		if ( ! confirm ) {
 			return <a href={ url }>{ label }</a>;
 		}
+		// onClick only sees primary clicks, so an href here would let a middle-click
+		// or "Open link in new tab" reach the URL unguarded.
 		return (
 			<button
 				type="button"
