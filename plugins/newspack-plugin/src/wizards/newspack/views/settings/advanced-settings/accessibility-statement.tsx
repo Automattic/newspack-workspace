@@ -178,7 +178,12 @@ export default function AccessibilityStatement( { isFetching }: AccessibilitySta
 				{ renderAction() }
 			</Card>
 
-			<Notice status={ statusInfo.type } isDismissible={ false } spokenMessage={ statusInfo.type === 'error' ? statusInfo.message : '' }>
+			<Notice
+				status={ statusInfo.type }
+				isDismissible={ false }
+				politeness="polite"
+				spokenMessage={ statusInfo.type === 'error' ? statusInfo.message : '' }
+			>
 				{ statusInfo.message }
 			</Notice>
 

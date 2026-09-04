@@ -75,6 +75,9 @@ export default function AdditionalBrands() {
 	};
 
 	const upsertBrand = ( brandId: number, brand: Brand ) => {
+		// A repeat of the same failure produces an identical message, and core's Notice
+		// only announces when that string changes. Clearing first restores the transition.
+		resetError();
 		// BrandId is NaN when inserting new brand.
 		wizardApiFetch< Brand >(
 			{

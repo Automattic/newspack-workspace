@@ -60,7 +60,16 @@ type ValidationMap< TData, TConfig > = [
 export function useFieldsValidation< TData, TConfig = Record< string, unknown > >( config: ValidationMap< TData, TConfig >, data: TData ) {
 	const [ errorMessage, setErrorMessage ] = useState< WizardError | null >( null );
 	return {
-		isInputsValid() {
+		/**
+		 * Validates every configured field.
+		 *
+		 * Returns the message rather than a boolean so a caller running several
+		 * validators can gather what each one said: `errorMessage` below is state,
+		 * so it still holds the previous render's value at this point.
+		 *
+		 * @return The first failing field's message, or an empty string when valid.
+		 */
+		validateInputs() {
 			for ( const [ key, callback, options ] of config ) {
 				const inputValue = data[ key ] as string;
 				const isFieldValid = ( typeof callback === 'string' ? knownValidationCallbacks[ callback ] : callback )(
@@ -69,11 +78,11 @@ export function useFieldsValidation< TData, TConfig = Record< string, unknown > 
 				);
 				if ( '' !== isFieldValid ) {
 					setErrorMessage( new WizardError( isFieldValid, `invalid_field_${ key.toString() }` ) );
-					return false;
+					return isFieldValid;
 				}
 			}
 			setErrorMessage( null );
-			return true;
+			return '';
 		},
 		errorMessage: errorMessage instanceof WizardError ? errorMessage.message : '',
 	};

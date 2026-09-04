@@ -39,6 +39,9 @@ const Upsert = ( {
 	wizardApiFetch,
 }: Omit< ModalComponentProps, 'action' > ) => {
 	const [ editing, setEditing ] = useState< Endpoint >( endpoint );
+	// Validation runs synchronously, so re-failing on the same input leaves the message
+	// byte-identical and neither the announcement nor the scroll below would fire again.
+	const [ submitAttempt, setSubmitAttempt ] = useState( 0 );
 	// Test request
 	const [ testResponse, setTestResponse ] = useState< {
 		success?: boolean;
@@ -55,11 +58,12 @@ const Upsert = ( {
 
 	function upsertEndpoint( endpointToUpsert: Endpoint ) {
 		const errors = validateEndpoint( endpointToUpsert );
-		setError( null );
+		setSubmitAttempt( attempt => attempt + 1 );
 		if ( errors.length ) {
 			setError( errors.join( ' ' ) );
 			return;
 		}
+		setError( null );
 		wizardApiFetch< Endpoint[] >(
 			{
 				path: `/newspack/v1/webhooks/endpoints/${ endpointToUpsert.id || '' }`,
@@ -75,11 +79,12 @@ const Upsert = ( {
 
 	function testEndpoint( url: string, bearer_token: string | undefined ) {
 		const urlError = validateUrl( url );
-		setError( null );
+		setSubmitAttempt( attempt => attempt + 1 );
 		if ( urlError ) {
 			setError( urlError );
 			return;
 		}
+		setError( null );
 		wizardApiFetch< { success: boolean; code: number; message: string } >(
 			{
 				path: '/newspack/v1/webhooks/endpoints/test',
@@ -110,7 +115,7 @@ const Upsert = ( {
 				behavior: window.matchMedia( '(prefers-reduced-motion: reduce)' ).matches ? 'auto' : 'smooth',
 			} );
 		}
-	}, [ errorMessage ] );
+	}, [ errorMessage, submitAttempt ] );
 
 	return (
 		<Fragment>
@@ -124,7 +129,7 @@ const Upsert = ( {
 			>
 				<Stack direction="column" gap="xl">
 					{ errorMessage && (
-						<Notice status="error" isDismissible={ false }>
+						<Notice key={ submitAttempt } status="error" isDismissible={ false }>
 							{ errorMessage }
 						</Notice>
 					) }

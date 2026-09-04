@@ -6,7 +6,7 @@
  * WordPress dependencies.
  */
 import { __ } from '@wordpress/i18n';
-import { useEffect } from '@wordpress/element';
+import { useEffect, useRef, useState } from '@wordpress/element';
 import { Notice } from '@wordpress/components';
 
 /**
@@ -59,8 +59,12 @@ export default function AdvancedSettings() {
 		resetError: resetPrimaryCategoryError,
 	} = useWizardApiFetch( 'newspack-settings/primary-category' );
 
-	// Save writes through three namespaces, any of which can fail on its own.
+	// This tab reads and writes through three namespaces, so a failure in any of them,
+	// on load or on save, has to reach the one notice at the top.
 	const saveErrorMessage = errorMessage || recirculationErrorMessage || primaryCategoryErrorMessage;
+
+	const noticeRef = useRef< HTMLDivElement | null >( null );
+	const [ saveAttempt, setSaveAttempt ] = useState( 0 );
 
 	const [ primaryCategoryData, setPrimaryCategoryData ] = hooks.useObjectState< PrimaryCategoryData >( {
 		enabled: true,
@@ -115,15 +119,19 @@ export default function AdvancedSettings() {
 		);
 	}, [] );
 
-	// The Save button sits at the foot of a long page, so a failure reported at the
-	// top would otherwise land off-screen.
+	// The Save button sits at the foot of a long page, so a failure reported at the top
+	// would otherwise land off-screen. Focus follows the scroll, or the next key press
+	// would send the viewport straight back down to the button the user left it on.
 	useEffect( () => {
-		if ( saveErrorMessage ) {
-			window.scrollTo( { top: 0, behavior: window.matchMedia( '(prefers-reduced-motion: reduce)' ).matches ? 'auto' : 'smooth' } );
+		if ( ! saveErrorMessage || ! saveAttempt ) {
+			return;
 		}
-	}, [ saveErrorMessage ] );
+		window.scrollTo( { top: 0, behavior: window.matchMedia( '(prefers-reduced-motion: reduce)' ).matches ? 'auto' : 'smooth' } );
+		noticeRef.current?.focus();
+	}, [ saveErrorMessage, saveAttempt ] );
 
 	function save() {
+		setSaveAttempt( attempt => attempt + 1 );
 		// A repeat of the same failure produces an identical message, and both the notice's
 		// announcement and the scroll above key on that string changing.
 		resetError();
@@ -190,9 +198,18 @@ export default function AdvancedSettings() {
 			isFetching={ isFetching || isFetchingRecirculation || isFetchingPrimaryCategory }
 		>
 			{ saveErrorMessage && (
-				<Notice status="error" isDismissible={ false } className="newspack-advanced-settings__notice">
-					{ saveErrorMessage }
-				</Notice>
+				<div ref={ noticeRef } tabIndex={ -1 } className="newspack-advanced-settings__notice">
+					<Notice
+						status="error"
+						isDismissible={ false }
+						politeness="polite"
+						// After a save the notice takes focus, which reads it out; letting it
+						// also speak would say the same thing twice.
+						spokenMessage={ saveAttempt ? '' : saveErrorMessage }
+					>
+						{ saveErrorMessage }
+					</Notice>
+				</div>
 			) }
 			<WizardSection title={ __( 'Recirculation', 'newspack-plugin' ) }>
 				<Recirculation isFetching={ isFetchingRecirculation } update={ setRecirculationData } data={ recirculationData } />

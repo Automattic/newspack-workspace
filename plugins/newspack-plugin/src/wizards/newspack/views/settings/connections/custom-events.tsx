@@ -136,7 +136,7 @@ function CustomEvents() {
 				/>
 			</Grid>
 			{ errorMessage && (
-				<Notice status="error" isDismissible={ false }>
+				<Notice status="error" isDismissible={ false } politeness="polite">
 					{ errorMessage }
 				</Notice>
 			) }

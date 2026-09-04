@@ -18,7 +18,7 @@ import WizardsActionCard from '../../../../wizards-action-card';
 /**
  * Components
  */
-import { NextdoorData, NextdoorSettings, NextdoorStatus, OAuthResponse, ClaimPageResponse } from './nextdoor/types';
+import { NextdoorData, NextdoorSettings, OAuthResponse, ClaimPageResponse } from './nextdoor/types';
 import { Onboarding } from './nextdoor/onboarding';
 import { Settings } from './nextdoor/settings';
 
@@ -28,14 +28,6 @@ function Nextdoor() {
 		client_secret: '',
 		publication_url: '',
 		allowed_roles: [],
-	} );
-	const [ status, setStatus ] = useState< NextdoorStatus >( {
-		is_connected: false,
-		has_credentials: false,
-		has_centralized_credentials: false,
-		has_tokens: false,
-		has_page: false,
-		token_valid: false,
 	} );
 	const [ error, setError ] = useState< string | null >( null );
 
@@ -66,9 +58,12 @@ function Nextdoor() {
 		),
 	} );
 
+	// Read straight from the fetched data rather than mirroring it into state: a copy
+	// updated by an effect is a commit behind, and the children branch on it.
+	const status = apiData.connection_status;
+
 	useEffect( () => {
 		if ( apiData.connection_status ) {
-			setStatus( apiData.connection_status );
 			setSettings( { ...settings, allowed_roles: apiData.settings.allowed_roles } );
 		}
 	}, [ apiData ] );

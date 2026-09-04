@@ -8,6 +8,7 @@
 import { __, sprintf } from '@wordpress/i18n';
 import { useState, useEffect } from '@wordpress/element';
 import { Notice } from '@wordpress/components';
+import { speak } from '@wordpress/a11y';
 
 /**
  * Internal dependencies.
@@ -105,9 +106,13 @@ function Seo() {
 	}
 
 	function post() {
-		const isVerificationCodesValid = codesValidation.isInputsValid();
-		const isAccountsValid = accountsValidation.isInputsValid();
-		if ( ! isVerificationCodesValid || ! isAccountsValid ) {
+		// Both notices mount in the same commit, and `speak` empties the live region
+		// before each write, so leaving them to announce themselves would drop whichever
+		// rendered first. Announcing once here also repeats on an unchanged message,
+		// which a re-render of the same string would not.
+		const validationErrors = [ codesValidation.validateInputs(), accountsValidation.validateInputs() ].filter( Boolean );
+		if ( validationErrors.length ) {
+			speak( validationErrors.join( ' ' ), 'assertive' );
 			return;
 		}
 		wizardApiFetch(
@@ -129,7 +134,7 @@ function Seo() {
 				description={ __( 'Add verification meta tags to your site', 'newspack-plugin' ) }
 			>
 				{ codesValidation.errorMessage && (
-					<Notice status="error" isDismissible={ false }>
+					<Notice status="error" isDismissible={ false } spokenMessage="">
 						{ codesValidation.errorMessage }
 					</Notice>
 				) }
@@ -140,7 +145,7 @@ function Seo() {
 				description={ __( 'Let search engines know which social profiles are associated to your site', 'newspack-plugin' ) }
 			>
 				{ accountsValidation.errorMessage && (
-					<Notice status="error" isDismissible={ false }>
+					<Notice status="error" isDismissible={ false } spokenMessage="">
 						{ accountsValidation.errorMessage }
 					</Notice>
 				) }
