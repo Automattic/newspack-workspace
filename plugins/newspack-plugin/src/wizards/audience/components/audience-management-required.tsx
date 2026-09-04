@@ -56,8 +56,10 @@ const AudienceManagementRequired = ( {
 	description,
 	setupUrl = '',
 	learnMoreUrl = DEFAULT_LEARN_MORE_URL,
-	/* translators: accessibility text. Names the link's destination for screen readers; keep the new-tab clause, which replaces the one the link would otherwise announce. */
-	learnMoreLabel = __( 'Learn more about Audience Management (opens in a new tab)', 'newspack-plugin' ),
+	learnMoreLabel = /* translators: accessibility text. Names the link's destination for screen readers; keep the new-tab clause, which replaces the one the link would otherwise announce. */ __(
+		'Learn more about Audience Management (opens in a new tab)',
+		'newspack-plugin'
+	),
 }: {
 	description: string;
 	setupUrl?: string;

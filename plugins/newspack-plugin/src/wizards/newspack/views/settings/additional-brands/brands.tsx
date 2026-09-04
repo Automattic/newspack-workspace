@@ -51,8 +51,10 @@ export default function Brands( {
 					</Button>
 					<ExternalLink
 						href={ LEARN_MORE_URL }
-						/* translators: accessibility text. Names the link's destination for screen readers; keep the new-tab clause, which replaces the one the link would otherwise announce. */
-						aria-label={ __( 'Learn more about brands (opens in a new tab)', 'newspack-plugin' ) }
+						aria-label={
+							/* translators: accessibility text. Names the link's destination for screen readers; keep the new-tab clause, which replaces the one the link would otherwise announce. */
+							__( 'Learn more about brands (opens in a new tab)', 'newspack-plugin' )
+						}
 					>
 						{ __( 'Learn more', 'newspack-plugin' ) }
 					</ExternalLink>
