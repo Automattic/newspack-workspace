@@ -68,7 +68,8 @@ import { EmptyState } from 'newspack-components';
 ```
 
 Every slot except `Root` is optional, and anything else you pass to `Root`
-becomes a sibling of the header at the same 8-unit gap. A screen that offers
+becomes a sibling of the header at the same gap the stack uses: 8 units at the
+default size, 6 at `small`. A screen that offers
 choices rather than one action can drop a stack of cards in instead of
 `EmptyState.Actions`. Pass elements: `Root`'s stack keeps a lone string but drops
 one sitting beside an element, so wrap loose text in a `<p>`. The `Grid` margin

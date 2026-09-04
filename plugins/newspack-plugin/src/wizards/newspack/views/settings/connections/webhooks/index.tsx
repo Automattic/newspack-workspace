@@ -8,6 +8,8 @@
 import { __ } from '@wordpress/i18n';
 import { useEffect, useState, Fragment } from '@wordpress/element';
 import { __experimentalHStack as HStack } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
+import { connection } from '@wordpress/icons';
+import { Card as UICard } from '@wordpress/ui';
 
 /**
  * Internal dependencies
@@ -16,7 +18,8 @@ import { API_NAMESPACE } from './constants';
 import EndpointActionsCard from './endpoint-actions-card';
 import EndpointActionsModals from './endpoint-actions-modals';
 import { useWizardApiFetch } from '../../../../../hooks/use-wizard-api-fetch';
-import { Card, Button, Notice, SectionHeader } from '../../../../../../../packages/components/src';
+import { Card, Button, SectionHeader } from '../../../../../../../packages/components/src';
+import EmptyState from '../../../../../../../packages/components/src/empty-state';
 
 const defaultEndpoint: Endpoint = {
 	url: '',
@@ -76,6 +79,8 @@ function Webhooks() {
 		}
 	}
 
+	const isEmpty = ! inFlight && ! endpoints?.length;
+
 	return (
 		<Card noBorder className="newspack-webhooks">
 			<HStack justify="space-between" alignment="bottom" spacing={ 4 } className="newspack-webhooks__header">
@@ -88,9 +93,11 @@ function Webhooks() {
 					) }
 					noMargin
 				/>
-				<Button variant="primary" onClick={ () => setActionHandler( 'new' ) } disabled={ inFlight }>
-					{ inFlight ? __( 'Loading…', 'newspack-plugin' ) : __( 'Add Endpoint', 'newspack-plugin' ) }
-				</Button>
+				{ ! isEmpty && (
+					<Button variant="primary" onClick={ () => setActionHandler( 'new' ) } disabled={ inFlight }>
+						{ inFlight ? __( 'Loading…', 'newspack-plugin' ) : __( 'Add Endpoint', 'newspack-plugin' ) }
+					</Button>
+				) }
 			</HStack>
 			{ ! inFlight &&
 				( endpoints && endpoints.length > 0 ? (
@@ -100,7 +107,22 @@ function Webhooks() {
 						) ) }
 					</Fragment>
 				) : (
-					<Notice noticeText={ __( 'No endpoints found', 'newspack-plugin' ) } />
+					<UICard.Root>
+						<UICard.Content>
+							<EmptyState.Root size="small">
+								<EmptyState.Header
+									icon={ connection }
+									title={ __( 'No endpoints found', 'newspack-plugin' ) }
+									description={ __( 'Add an endpoint to start sending reader activity data.', 'newspack-plugin' ) }
+								/>
+								<EmptyState.Actions>
+									<Button variant="primary" onClick={ () => setActionHandler( 'new' ) }>
+										{ __( 'Add Endpoint', 'newspack-plugin' ) }
+									</Button>
+								</EmptyState.Actions>
+							</EmptyState.Root>
+						</UICard.Content>
+					</UICard.Root>
 				) ) }
 			{ selectedEndpoint && (
 				<EndpointActionsModals

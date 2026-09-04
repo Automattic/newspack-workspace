@@ -24,11 +24,12 @@ const gridColumn = { 'data-start': '2', 'data-end': '4' };
 
 const Root = ( { size = 'default', className, children }: EmptyStateRootProps ) => {
 	const context = useMemo( () => ( { size } ), [ size ] );
+	const isSmall = size === 'small';
 
 	return (
 		<EmptyStateContext.Provider value={ context }>
 			<Grid className={ classnames( 'newspack-empty-state', className ) } columns={ 4 } noMargin>
-				<Stack className="newspack-empty-state__stack" direction="column" gap="2xl" { ...gridColumn }>
+				<Stack className="newspack-empty-state__stack" direction="column" gap={ isSmall ? 'xl' : '2xl' } { ...gridColumn }>
 					{ children }
 				</Stack>
 			</Grid>

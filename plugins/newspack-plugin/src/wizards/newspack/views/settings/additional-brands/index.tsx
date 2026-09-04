@@ -162,7 +162,11 @@ export default function AdditionalBrands() {
 	useEffect( fetchBrands, [] );
 
 	return (
-		<WizardsTab isFetching={ isFetching } title={ __( 'Additional Brands', 'newspack-plugin' ) }>
+		<WizardsTab
+			isFetching={ isFetching }
+			// The empty state carries its own heading, and the breadcrumb already names the screen.
+			title={ brands.length ? __( 'Additional Brands', 'newspack-plugin' ) : undefined }
+		>
 			<WizardSection>
 				<Switch>
 					<Route exact path={ path } render={ () => <Brands { ...wizardScreenProps } brands={ brands } deleteBrand={ deleteBrand } /> } />
