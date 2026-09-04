@@ -109,7 +109,7 @@ export default function AdvancedSettings() {
 	// top would otherwise land off-screen.
 	useEffect( () => {
 		if ( errorMessage ) {
-			window.scrollTo( { top: 0, behavior: 'smooth' } );
+			window.scrollTo( { top: 0, behavior: window.matchMedia( '(prefers-reduced-motion: reduce)' ).matches ? 'auto' : 'smooth' } );
 		}
 	}, [ errorMessage ] );
 

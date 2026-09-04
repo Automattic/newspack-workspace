@@ -103,7 +103,11 @@ const Upsert = ( {
 
 	useEffect( () => {
 		if ( errorMessage ) {
-			modalRef?.current?.querySelector( '.components-modal__content' )?.scrollTo( { top: 0, left: 0, behavior: 'smooth' } );
+			modalRef?.current?.querySelector( '.components-modal__content' )?.scrollTo( {
+				top: 0,
+				left: 0,
+				behavior: window.matchMedia( '(prefers-reduced-motion: reduce)' ).matches ? 'auto' : 'smooth',
+			} );
 		}
 	}, [ errorMessage ] );
 
