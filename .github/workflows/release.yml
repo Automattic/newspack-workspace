@@ -333,7 +333,13 @@ jobs:
           fi
 
       - name: Sync package.json versions
-        if: ${{ github.ref_name == 'release' }}
+        # release_needed, not just the branch: on the supersession skip path the
+        # checkout is by construction behind the remote, and this step would run
+        # against it. It is a no-op there today only because the tree is clean,
+        # so finalize-package-versions.cjs commits nothing and the push that
+        # follows has nothing to send -- a chain worth not having to re-derive
+        # the next time this step changes.
+        if: ${{ github.ref_name == 'release' && steps.plan.outputs.release_needed == 'true' }}
         run: |
           node .github/scripts/finalize-package-versions.cjs
           # The release is already published by this point, so the branch must not
