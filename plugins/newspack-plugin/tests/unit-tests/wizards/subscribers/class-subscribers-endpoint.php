@@ -949,6 +949,14 @@ class Test_Subscribers_Wizard_Subscribers_Endpoint extends WP_UnitTestCase {
 			$this->create_hydrated_reader( 'Crowd' . $i, $list_id );
 		}
 
+		// Patches::prevent_accidental_page_deletion() runs on every meta capability
+		// check and looks its first argument up as a post, so each row's
+		// get_edit_user_link() spends a post query on a user ID. That per-row cost
+		// is the guard's own and predates this endpoint; #964 restores its early
+		// bail. Detach it for the measurement so this test keeps measuring the
+		// hydration it is about.
+		remove_filter( 'map_meta_cap', [ \Newspack\Patches::class, 'prevent_accidental_page_deletion' ], 10 );
+
 		// One fixture, two page sizes, so the only thing that differs between the
 		// measurements is how many rows get hydrated.
 		$single_row_cost = $this->measure_query_cost( [ 'per_page' => 1 ] );
