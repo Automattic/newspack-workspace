@@ -52,6 +52,7 @@
 			cursor: pointer;
 			font: inherit;
 			padding: 0;
+			text-decoration: underline;
 
 			&:focus-visible {
 				@include mixins.wpds-focus-ring;
