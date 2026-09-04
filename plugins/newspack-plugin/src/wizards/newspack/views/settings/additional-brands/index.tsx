@@ -42,12 +42,14 @@ export default function AdditionalBrands() {
 		resetError();
 	}, [ location.pathname ] );
 
-	/**
-	 * Cache brands data.
-	 */
+	// Gated on `hasLoaded`: this runs before the first request is issued, and caching
+	// the initial empty list would answer the next visit with one the server never sent.
 	useEffect( () => {
+		if ( ! hasLoaded ) {
+			return;
+		}
 		brandsCache.set( brands );
-	}, [ brands ] );
+	}, [ brands, hasLoaded ] );
 
 	const wizardScreenProps = {
 		isFetching,
