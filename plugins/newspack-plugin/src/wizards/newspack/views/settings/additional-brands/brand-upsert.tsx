@@ -8,6 +8,7 @@
 import { __ } from '@wordpress/i18n';
 import { addQueryArgs, cleanForSlug } from '@wordpress/url';
 import { Fragment, useState, useEffect } from '@wordpress/element';
+import { Notice } from '@wordpress/components';
 
 /**
  * Internal dependencies.
@@ -24,7 +25,6 @@ import {
 	SelectControl,
 	RadioControl,
 	hooks,
-	Notice,
 } from '../../../../../../packages/components/src';
 
 import './style.scss';
@@ -175,6 +175,11 @@ export default function Brand( {
 
 	return (
 		<Fragment>
+			{ errorMessage && (
+				<Notice status="error" isDismissible={ false } className="newspack-additional-brands__notice">
+					{ errorMessage }
+				</Notice>
+			) }
 			<SectionHeader title={ __( 'Brand', 'newspack-plugin' ) } description={ __( 'Set your brand identity', 'newspack-plugin' ) } />
 			<Grid gutter={ 32 }>
 				<Grid columns={ 1 } gutter={ 16 }>
@@ -327,7 +332,6 @@ export default function Brand( {
 						onChange={ ( menuId: number ) => updateMenus( location, menuId ) }
 					/>
 				) ) }
-			{ errorMessage && <Notice isError>{ errorMessage }</Notice> }
 			{ /* Action Buttons */ }
 			<div className="newspack-buttons-card">
 				<Button disabled={ ! isBrandValid } variant="primary" onClick={ () => upsertBrand( Number( brandId ), brand ) }>

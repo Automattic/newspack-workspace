@@ -175,6 +175,7 @@ export default function AdditionalBrands() {
 								upsertBrand={ upsertBrand }
 								fetchLogoAttachment={ fetchLogoAttachment }
 								wizardApiFetch={ wizardApiFetch }
+								errorMessage={ errorMessage }
 							/>
 						) }
 					/>
