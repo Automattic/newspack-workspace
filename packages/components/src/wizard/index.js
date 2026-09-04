@@ -6,12 +6,11 @@ import classnames from 'classnames';
 /**
  * WordPress dependencies.
  */
-// Notice is aliased: `Notice` below is Newspack's own, which this file also uses.
 import {
 	DropdownMenu,
 	MenuGroup,
 	MenuItem,
-	Notice as CoreNotice,
+	Notice,
 	SlotFillProvider,
 	createSlotFill,
 	// eslint-disable-next-line @wordpress/no-unsafe-wp-apis
@@ -25,7 +24,7 @@ import { category, chevronLeft, moreVertical } from '@wordpress/icons';
 /**
  * Internal dependencies
  */
-import { Footer, Notice, Button, TabbedNavigation, PluginInstaller, SectionHeader, HandoffMessage, Page, Waiting } from '../';
+import { Footer, DebugBadge, Button, TabbedNavigation, PluginInstaller, SectionHeader, HandoffMessage, Page, Waiting } from '../';
 import { activeBreadcrumbs, appendSectionName } from './breadcrumbs-select';
 import Router from '../proxied-imports/router';
 import registerStore, { WIZARD_STORE_NAMESPACE } from './store';
@@ -272,7 +271,7 @@ const Wizard = (
 	// as page chrome rather than as content.
 	const inertGating = window.newspack_aux_data?.inert_gating;
 	const inertGatingNotice = inertGating?.show && (
-		<CoreNotice status="warning" isDismissible={ false } className="newspack-wizard__inert-gating-notice">
+		<Notice status="warning" isDismissible={ false } className="newspack-wizard__inert-gating-notice">
 			{ /* The conversion map takes childless elements and fills them from the
 			     translated string, so jsx-a11y can't see the content they end up with. */ }
 			{ interpolateOrPlainText( inertGating.message, {
@@ -282,7 +281,7 @@ const Wizard = (
 				/* eslint-enable jsx-a11y/anchor-has-content */
 				strong: <strong />,
 			} ) }
-		</CoreNotice>
+		</Notice>
 	);
 
 	const content = (
@@ -406,7 +405,7 @@ const Wizard = (
 					} ) }
 				>
 					<HashRouter hashType="slash">
-						{ newspack_aux_data.is_debug_mode && <Notice debugMode /> }
+						<DebugBadge />
 						<WizardHeaderRegion
 							hideHeader={ hideHeader }
 							headerText={ headerText }
