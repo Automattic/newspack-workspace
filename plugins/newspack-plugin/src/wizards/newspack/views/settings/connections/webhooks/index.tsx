@@ -7,7 +7,7 @@
  */
 import { __ } from '@wordpress/i18n';
 import { useEffect, useState, Fragment } from '@wordpress/element';
-import { __experimentalHStack as HStack } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
+import { ExternalLink, __experimentalHStack as HStack } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
 import { connection } from '@wordpress/icons';
 import { Card as UICard } from '@wordpress/ui';
 
@@ -20,6 +20,8 @@ import EndpointActionsModals from './endpoint-actions-modals';
 import { useWizardApiFetch } from '../../../../../hooks/use-wizard-api-fetch';
 import { Card, Button, SectionHeader } from '../../../../../../../packages/components/src';
 import EmptyState from '../../../../../../../packages/components/src/empty-state';
+
+const LEARN_MORE_URL = 'https://help.newspack.com/plugins-and-themes/third-party-services-integrations/webhooks/';
 
 const defaultEndpoint: Endpoint = {
 	url: '',
@@ -112,13 +114,19 @@ function Webhooks() {
 							<EmptyState.Root size="small">
 								<EmptyState.Header
 									icon={ connection }
-									title={ __( 'No endpoints found', 'newspack-plugin' ) }
+									title={ __( 'No endpoints yet', 'newspack-plugin' ) }
 									description={ __( 'Add an endpoint to start sending reader activity data.', 'newspack-plugin' ) }
 								/>
-								<EmptyState.Actions>
+								<EmptyState.Actions orientation="column" gap="lg">
 									<Button variant="primary" onClick={ () => setActionHandler( 'new' ) }>
 										{ __( 'Add Endpoint', 'newspack-plugin' ) }
 									</Button>
+									<ExternalLink
+										href={ LEARN_MORE_URL }
+										aria-label={ __( 'Learn more about webhooks (opens in a new tab)', 'newspack-plugin' ) }
+									>
+										{ __( 'Learn more', 'newspack-plugin' ) }
+									</ExternalLink>
 								</EmptyState.Actions>
 							</EmptyState.Root>
 						</UICard.Content>

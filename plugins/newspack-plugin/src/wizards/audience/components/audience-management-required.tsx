@@ -72,7 +72,12 @@ const AudienceManagementRequired = ( {
 						{ __( 'Set up Audience Management', 'newspack-plugin' ) }
 					</Button>
 				) }
-				<ExternalLink href={ learnMoreUrl }>{ __( 'Learn more', 'newspack-plugin' ) }</ExternalLink>
+				<ExternalLink
+					href={ learnMoreUrl }
+					aria-label={ __( 'Learn more about Audience Management (opens in a new tab)', 'newspack-plugin' ) }
+				>
+					{ __( 'Learn more', 'newspack-plugin' ) }
+				</ExternalLink>
 			</EmptyState.Actions>
 		</EmptyState.Root>
 	);
