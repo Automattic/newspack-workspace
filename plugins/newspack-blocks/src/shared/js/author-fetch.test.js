@@ -101,8 +101,42 @@ describe( 'fetchAuthorById', () => {
 		expect( apiFetch ).toHaveBeenCalledTimes( 1 );
 	} );
 
-	it( 'rejects every caller when the request fails and retries on the next lookup', async () => {
-		apiFetch.mockRejectedValueOnce( new Error( 'The response is not a valid JSON response.' ) );
+	it( 'resolves a guest lookup with the WP user the endpoint fell back to', async () => {
+		apiFetch.mockResolvedValue( [ user( 7, 'Legacy' ) ] );
+
+		const lookup = fetchAuthorById( { authorId: 7, isGuestAuthor: true, fields: FIELDS } );
+		await flush();
+
+		await expect( lookup ).resolves.toEqual( user( 7, 'Legacy' ) );
+		expect( argsOf( apiFetch.mock.calls[ 0 ] ) ).toEqual( { guest_author_ids: '7', fields: FIELDS } );
+	} );
+
+	it( 'splits a batch larger than the endpoint limit into several requests', async () => {
+		apiFetch.mockResolvedValue( [] );
+
+		const lookups = Promise.all(
+			Array.from( { length: 101 }, ( _, i ) => fetchAuthorById( { authorId: i + 1, isGuestAuthor: false, fields: FIELDS } ) )
+		);
+		await flush();
+		await lookups;
+
+		expect( apiFetch ).toHaveBeenCalledTimes( 2 );
+		expect( argsOf( apiFetch.mock.calls[ 0 ] ).author_ids.split( ',' ) ).toHaveLength( 100 );
+		expect( argsOf( apiFetch.mock.calls[ 1 ] ).author_ids ).toBe( '101' );
+	} );
+
+	it( 'retries a failed request once before rejecting', async () => {
+		apiFetch.mockRejectedValueOnce( new Error( 'The response is not a valid JSON response.' ) ).mockResolvedValueOnce( [ user( 1, 'One' ) ] );
+
+		const lookup = fetchAuthorById( { authorId: 1, isGuestAuthor: false, fields: FIELDS } );
+		await flush();
+
+		await expect( lookup ).resolves.toEqual( user( 1, 'One' ) );
+		expect( apiFetch ).toHaveBeenCalledTimes( 2 );
+	} );
+
+	it( 'rejects every caller when the request keeps failing and tries again on the next lookup', async () => {
+		apiFetch.mockRejectedValue( new Error( 'The response is not a valid JSON response.' ) );
 
 		const first = fetchAuthorById( { authorId: 1, isGuestAuthor: false, fields: FIELDS } );
 		const second = fetchAuthorById( { authorId: 2, isGuestAuthor: false, fields: FIELDS } );
@@ -112,13 +146,14 @@ describe( 'fetchAuthorById', () => {
 
 		await expect( first ).rejects.toThrow( 'not a valid JSON response' );
 		await expect( second ).rejects.toThrow( 'not a valid JSON response' );
+		expect( apiFetch ).toHaveBeenCalledTimes( 2 );
 
 		apiFetch.mockResolvedValue( [ user( 1, 'One' ) ] );
 		const retry = fetchAuthorById( { authorId: 1, isGuestAuthor: false, fields: FIELDS } );
 		await flush();
 
 		await expect( retry ).resolves.toEqual( user( 1, 'One' ) );
-		expect( apiFetch ).toHaveBeenCalledTimes( 2 );
+		expect( apiFetch ).toHaveBeenCalledTimes( 3 );
 	} );
 } );
 
@@ -158,5 +193,38 @@ describe( 'fetchAuthorList', () => {
 		await fetchAuthorList( { search: 'jo', offset: 0, fields: 'id,name' } );
 
 		expect( apiFetch ).toHaveBeenCalledTimes( 2 );
+	} );
+
+	it( 'serves the initial list from cache once it has loaded', async () => {
+		apiFetch.mockResolvedValue( response( [ user( 1, 'One' ) ], 1 ) );
+
+		await fetchAuthorList( { search: '', offset: 0, fields: 'id,name' } );
+		await fetchAuthorList( { search: '', offset: 0, fields: 'id,name' } );
+
+		expect( apiFetch ).toHaveBeenCalledTimes( 1 );
+	} );
+
+	it( 'does not keep a typed search after it settles', async () => {
+		apiFetch.mockResolvedValue( response( [], 0 ) );
+
+		await fetchAuthorList( { search: 'jo', offset: 0, fields: 'id,name' } );
+		await fetchAuthorList( { search: 'jo', offset: 0, fields: 'id,name' } );
+
+		expect( apiFetch ).toHaveBeenCalledTimes( 2 );
+	} );
+
+	it( 'does not keep a request that failed before it started', async () => {
+		apiFetch.mockImplementationOnce( () => {
+			throw new Error( 'boom' );
+		} );
+
+		await expect( fetchAuthorList( { search: 'jo', offset: 0, fields: 'id,name' } ) ).rejects.toThrow( 'boom' );
+
+		apiFetch.mockResolvedValue( response( [ user( 1, 'One' ) ], 1 ) );
+
+		await expect( fetchAuthorList( { search: 'jo', offset: 0, fields: 'id,name' } ) ).resolves.toEqual( {
+			authors: [ user( 1, 'One' ) ],
+			total: 1,
+		} );
 	} );
 } );
