@@ -206,14 +206,11 @@ const Upsert = ( {
 											checked={ ( editing.actions && editing.actions.includes( actionKey ) ) || false }
 											onChange={ () => {
 												const currentActions = editing.actions || [];
-												if ( currentActions.includes( actionKey ) ) {
-													currentActions.splice( currentActions.indexOf( actionKey ), 1 );
-												} else {
-													currentActions.push( actionKey );
-												}
 												setEditing( {
 													...editing,
-													actions: currentActions,
+													actions: currentActions.includes( actionKey )
+														? currentActions.filter( action => action !== actionKey )
+														: [ ...currentActions, actionKey ],
 												} );
 											} }
 										/>
