@@ -358,7 +358,7 @@ class Contact_Sync extends Sync {
 
 			$integration_contact = self::prepare_contact_for_integration( $integration, $contact, $options );
 
-			$result = $integration->push_contact_data( $integration_contact, $context, $existing_contact, $options );
+			$result = $integration->push_contact( $integration_contact, $context, $existing_contact, $options );
 			if ( \is_wp_error( $result ) ) {
 				/**
 				 * Fires when a contact sync fails on the original attempt (before retries).
@@ -600,7 +600,7 @@ class Contact_Sync extends Sync {
 				// deletion-signal metadata needs no list membership, and the
 				// un-retried cleanup below stays a best-effort extra rather than
 				// the only thing standing between a deleted reader and a list.
-				$result = $integration->push_contact_data( $integration_contact, $context, null, [ 'skip_lists' => true ] );
+				$result = $integration->push_contact( $integration_contact, $context, null, [ 'skip_lists' => true ] );
 				if ( \is_wp_error( $result ) ) {
 					$errors[] = sprintf( '[%s] %s', $integration_id, $result->get_error_message() );
 					static::log( sprintf( 'Flag-push failed for integration "%s" of %s: %s', $integration_id, $email, $result->get_error_message() ) );
@@ -960,7 +960,7 @@ class Contact_Sync extends Sync {
 		}
 
 		$integration_contact = $integration->prepare_contact( $contact );
-		$result              = $integration->push_contact_data( $integration_contact, $context, $existing_contact );
+		$result              = $integration->push_contact( $integration_contact, $context, $existing_contact );
 		if ( \is_wp_error( $result ) ) {
 			$error_messages = implode( '; ', $result->get_error_messages() );
 			static::log(
@@ -1249,7 +1249,7 @@ class Contact_Sync extends Sync {
 		} elseif ( 'flag' === $mode ) {
 			// Same skip_lists as the original flag push: the retried payload
 			// must not attach the master list either.
-			$result = $integration->push_contact_data( $contact, $context, null, [ 'skip_lists' => true ] );
+			$result = $integration->push_contact( $contact, $context, null, [ 'skip_lists' => true ] );
 		} else {
 			Logger::log( sprintf( 'Unknown deletion retry mode "%s" for integration "%s".', $mode, $integration_id ), 'NEWSPACK-SYNC', 'error' );
 			return;

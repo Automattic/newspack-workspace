@@ -123,7 +123,7 @@ class My_Integration extends Integration {
 | --- | --- |
 | `register_settings_fields()` | Return static field declarations (key, type, default at minimum). Called from the constructor. No API calls, no conditional logic based on external state. |
 | `can_sync( $return_errors = false )` | Check whether the integration is configured and ready to sync. Return `bool` or `WP_Error` depending on `$return_errors`. Called before every push and pull. |
-| `push_contact_data( $contact, $context, $existing_contact )` | Send contact data to the external system. Return `true` on success or `WP_Error` on failure. Failed pushes are retried via Contact Sync's ActionScheduler-backed retry mechanism. |
+| `push_contact_data( $contact, $context, $existing_contact )` | Send contact data to the external system. Return `true` on success or `WP_Error` on failure. Failed pushes are retried via Contact Sync's ActionScheduler-backed retry mechanism. The framework reaches it only through the final `push_contact()` wrapper, which records the outcome (see Push below). |
 
 ### Optional overrides
 
@@ -272,7 +272,7 @@ An **undeclared** toggle field reads as enabled. An integration that overrides `
 
 ## Push (Outgoing Sync)
 
-When a contact needs to be synced, the framework calls `push_contact_data()` on every active integration. The contact array is the Newspack canonical form (email, name, metadata, etc.). Implementations should call `$this->prepare_contact( $contact )` first, which:
+When a contact needs to be synced, the framework calls `push_contact()` on every active integration. That method is `final` on the base class: it delegates to your `push_contact_data()` and records one `newspack_sync_push_contact` entry through `newspack_log` — type `debug` on success, `error` on a `WP_Error` — carrying the integration id, provider slug, context, the contact exactly as handed to the integration, the options in effect, and any error messages and codes. That entry is the manager-log record of a sync for every integration, including ones that never go through Newspack Newsletters (whose upsert writes its own `newspack_esp_sync_upsert_contact` entry, so a Mailchimp push shows both). It reflects what the framework handed over: an implementation may still reshape the payload internally, and a non-error result only means the integration reported success. The contact array is the Newspack canonical form (email, name, metadata, etc.). Implementations should call `$this->prepare_contact( $contact )` first, which:
 
 1. Filters `$contact['metadata']` to the fields enabled on this integration.
 2. Renames raw keys to `prefix . field name`, using the integration's metadata prefix.
@@ -306,7 +306,7 @@ The abstract signature intentionally stays three-parameter (`push_contact_data( 
 
 ### Retries
 
-Failed pushes are scheduled for retry by the upstream `Contact_Sync` class with exponential backoff via ActionScheduler. Each integration's retries are grouped under `newspack-integration-{id}` so they can be inspected and managed independently in the Activity Logs UI.
+Failed pushes are scheduled for retry by the upstream `Contact_Sync` class with exponential backoff via ActionScheduler. Each integration's retries are grouped under `newspack-integration-{id}` so they can be inspected and managed independently in the Activity Logs UI. Retries go through `push_contact()` too, so every attempt leaves its own `newspack_sync_push_contact` entry.
 
 ---
 

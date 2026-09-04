@@ -7,6 +7,8 @@
 
 namespace Newspack\Reader_Activation;
 
+use Newspack\Logger;
+
 defined( 'ABSPATH' ) || exit;
 
 /**
@@ -565,10 +567,64 @@ abstract class Integration {
 	}
 
 	/**
+	 * Push a contact through this integration and record the outcome.
+	 *
+	 * The framework's only push entry point: Contact_Sync calls this, never
+	 * push_contact_data() directly, so every integration's pushes reach the
+	 * manager log as `newspack_sync_push_contact` entries. Until now the only
+	 * per-sync record came from Newspack Newsletters' upsert, which only the
+	 * `esp` integration goes through, so an integration with its own client
+	 * synced without leaving any trace outside the local error log.
+	 *
+	 * The entry carries the contact exactly as handed to the integration —
+	 * after prepare_contact() and any per-push scoping — which is as close to
+	 * the wire as the framework can see. An implementation may still reshape
+	 * the payload internally (drop unmapped fields, rename keys), and a
+	 * non-error result only means the integration reported success.
+	 *
+	 * Final so an override cannot skip the record.
+	 *
+	 * @param array      $contact          The prepared contact data.
+	 * @param string     $context          Optional. The context of the sync.
+	 * @param array|null $existing_contact Optional. Existing contact data if available.
+	 * @param array      $options          Optional. Sync options, passed through to push_contact_data().
+	 *
+	 * @return true|\WP_Error The push_contact_data() result, unchanged.
+	 */
+	final public function push_contact( $contact, $context = '', $existing_contact = null, $options = [] ) {
+		$result = $this->push_contact_data( $contact, $context, $existing_contact, $options );
+		$failed = \is_wp_error( $result );
+		$email  = (string) ( $contact['email'] ?? '' );
+
+		Logger::newspack_log(
+			'newspack_sync_push_contact',
+			$failed
+				? sprintf( 'Failed to push %s to the "%s" integration (%s): %s', $email, $this->get_id(), $context, implode( '; ', $result->get_error_messages() ) )
+				: sprintf( 'Pushed %s to the "%s" integration (%s).', $email, $this->get_id(), $context ),
+			[
+				'integration_id' => $this->get_id(),
+				'provider'       => $this->get_provider_slug(),
+				'context'        => $context,
+				'contact'        => $contact,
+				'existing_email' => (string) ( $existing_contact['email'] ?? '' ),
+				'options'        => $options,
+				'errors'         => $failed ? $result->get_error_messages() : [],
+				'status'         => $failed ? $result->get_error_codes() : [],
+				'user_email'     => $email,
+				'file'           => 'newspack_sync',
+			],
+			$failed ? 'error' : 'debug'
+		);
+
+		return $result;
+	}
+
+	/**
 	 * Push contact data to the integration destination.
 	 *
 	 * This method should be implemented by child classes to send
-	 * contact data to their specific integration destination.
+	 * contact data to their specific integration destination. The framework
+	 * never calls it directly: push_contact() wraps it and logs the outcome.
 	 *
 	 * @param array      $contact The contact data to push.
 	 * @param string     $context Optional. The context of the sync.
