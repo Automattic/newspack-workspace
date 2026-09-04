@@ -108,7 +108,8 @@ class Test_Restricted_Post_Outside_Gate_Render extends \WP_UnitTestCase {
 		}
 		// Deliberately unguarded: renaming one of these stores must fail the suite
 		// loudly, not leave that state bleeding between cases while the tests stay
-		// green. The withholding caches are reset by reset_restriction_cache().
+		// green. reset_restriction_cache() covers the Content_Restriction_Control
+		// maps, which are a separate set; the loop below is what clears these.
 		foreach ( [ 'restricted_content', 'pending_gates', 'withheld_teasers' ] as $store ) {
 			$store_reflection = new \ReflectionProperty( Content_Gate::class, $store );
 			$store_reflection->setAccessible( true );
@@ -127,12 +128,6 @@ class Test_Restricted_Post_Outside_Gate_Render extends \WP_UnitTestCase {
 	 * @return int
 	 */
 	private function create_restricted_post( $args = [] ) {
-		if ( ! empty( $args['short'] ) ) {
-			unset( $args['short'] );
-			$args['post_content'] = '<!-- wp:paragraph --><p>' . self::FREE_MARKER . ' one.</p><!-- /wp:paragraph -->'
-				. '<!-- wp:paragraph --><p>Second free line.</p><!-- /wp:paragraph -->'
-				. '<!-- wp:paragraph --><p>' . self::PAID_MARKER . ' here.</p><!-- /wp:paragraph -->';
-		}
 		return $this->factory->post->create(
 			array_merge(
 				[
@@ -448,12 +443,11 @@ class Test_Restricted_Post_Outside_Gate_Render extends \WP_UnitTestCase {
 	 * A listing shows the teaser to every reader, including one the gate would let
 	 * through. Newspack's block cache keys rendered listing markup by block
 	 * attributes and position with no reader dimension, so a listing that varied
-	 * by entitlement would be handed to the next reader along. The full body is
-	 * still theirs on the article page.
+	 * by entitlement would be handed to the next reader along.
 	 */
 	public function test_a_listing_shows_the_teaser_to_an_entitled_reader() {
-		$post_id     = $this->create_restricted_post();
-		$reader_id   = $this->factory->user->create( [ 'role' => 'subscriber' ] );
+		$post_id   = $this->create_restricted_post();
+		$reader_id = $this->factory->user->create( [ 'role' => 'subscriber' ] );
 		wp_set_current_user( $reader_id );
 		$this->reset_restriction_cache();
 		$this->go_to( home_url( '/' ) );
@@ -461,59 +455,227 @@ class Test_Restricted_Post_Outside_Gate_Render extends \WP_UnitTestCase {
 		$this->assertFalse( Content_Gate::is_post_restricted( $post_id ), 'A logged-in reader passes this registration gate, which is the premise of this test.' );
 
 		$listed = $this->render_in_secondary_loop( $post_id );
+		wp_set_current_user( 0 );
 
-		$this->reset_gate_render_state();
+		$this->assertStringNotContainsString( self::PAID_MARKER, $listed, 'The listing is reader-independent, so it shows the teaser.' );
+	}
+
+	/**
+	 * A listing on the article's own page must not stage anything on the article's
+	 * behalf, in either order and with no reset between the two — which is what a
+	 * real request looks like.
+	 *
+	 * The listing entry carries no gate, so writing it over the article's own would
+	 * serve an anonymous reader the free opening with no call to action.
+	 */
+	public function test_a_listing_below_the_article_leaves_its_gate_intact() {
+		$post_id = $this->create_restricted_post();
+		$this->go_to( get_permalink( $post_id ) );
+		while ( have_posts() ) {
+			the_post();
+		}
+		$article = apply_filters( 'the_content', get_post( $post_id )->post_content );
+
+		// A Query Loop under the body, listing the article it sits below.
+		$this->render_in_secondary_loop( $post_id );
+
+		// In a block theme core sets the post up once and renders the whole
+		// template, so a second pass over the article's body follows the listing.
+		$second_pass = apply_filters( 'the_content', get_post( $post_id )->post_content );
+
+		$this->assertSame( 1, substr_count( $article, 'newspack-content-gate__inline-gate' ), 'The article renders its gate.' );
+		$this->assertStringNotContainsString( self::PAID_MARKER, $second_pass );
+		$this->assertSame( 1, substr_count( $second_pass, 'newspack-content-gate__inline-gate' ), 'A listing below the article does not disarm the gate for a later pass.' );
+	}
+
+	/**
+	 * The same ordering in reverse, for a reader the gate lets through: the article
+	 * render stages nothing because there is nothing to withhold from them, so a
+	 * listing above it staging a teaser on the post's behalf would serve a paying
+	 * subscriber a stub of the article they paid for.
+	 */
+	public function test_a_listing_above_the_article_leaves_an_entitled_reader_the_whole_post() {
+		$post_id   = $this->create_restricted_post();
+		$reader_id = $this->factory->user->create( [ 'role' => 'subscriber' ] );
+		wp_set_current_user( $reader_id );
 		$this->reset_restriction_cache();
 		$this->go_to( get_permalink( $post_id ) );
+
+		$this->assertFalse( Content_Gate::is_post_restricted( $post_id ), 'A logged-in reader passes this registration gate, which is the premise of this test.' );
+
+		// A Query Loop in the header, listing the article it sits above.
+		$this->render_in_secondary_loop( $post_id );
+
 		while ( have_posts() ) {
 			the_post();
 		}
 		$article = apply_filters( 'the_content', get_post( $post_id )->post_content );
 		wp_set_current_user( 0 );
 
-		$this->assertStringNotContainsString( self::PAID_MARKER, $listed, 'The listing is reader-independent, so it shows the teaser.' );
-		$this->assertStringContainsString( self::PAID_MARKER, $article, 'The article page still gives an entitled reader the whole post.' );
+		$this->assertStringContainsString( self::PAID_MARKER, $article, 'The article page gives an entitled reader the whole post.' );
+		$this->assertStringNotContainsString( 'newspack-content-gate__inline-gate', $article );
 	}
 
 	/**
-	 * A REST handler is not a page render, and this path stands down for the whole
-	 * of one.
-	 *
-	 * WP_REST_Posts_Controller::prepare_item_for_response() calls setup_postdata(),
-	 * which fires `the_post` for every item it serves — so without this the light
-	 * path answers REST reads, over the top of filter_rest_response(), which is
-	 * the one that evaluates entitlement per requester and leaves an editor's
-	 * context=edit payload whole.
+	 * A password-protected post is core's to withhold, and this path leaves it
+	 * alone. Substituting a teaser for the password form would publish the free
+	 * opening of a post core meant to show nothing of, and drop the form with it.
 	 */
-	public function test_a_rest_handler_is_not_answered_by_the_page_render_path() {
-		$post_id = $this->create_restricted_post();
+	public function test_a_password_protected_post_is_left_to_core_in_a_loop() {
+		$post_id = $this->create_restricted_post( [ 'post_password' => 'letmein' ] );
 		$this->go_to( home_url( '/' ) );
 
-		apply_filters( 'rest_request_before_callbacks', null, [], null );
-		$during = $this->render_in_secondary_loop( $post_id );
-		apply_filters( 'rest_request_after_callbacks', null, [], null );
+		$rendered = $this->render_in_secondary_loop( $post_id );
 
-		$this->reset_gate_render_state();
-		$after = $this->render_in_secondary_loop( $post_id );
-
-		$this->assertStringContainsString( self::PAID_MARKER, $during, 'Inside a REST dispatch this path withholds nothing.' );
-		$this->assertStringNotContainsString( self::PAID_MARKER, $after, 'The window closes with the dispatch.' );
+		$this->assertStringContainsString( 'post-password-form', $rendered, 'Core\'s password form stands.' );
+		$this->assertStringNotContainsString( self::FREE_MARKER, $rendered, 'Not even the free opening is published for a protected post.' );
+		$this->assertStringNotContainsString( self::PAID_MARKER, $rendered );
 	}
 
 	/**
-	 * Asking for a post's teaser must not stage a substitution for it. An excerpt
-	 * asks, and its answer would otherwise decide what `the_content` returns for
-	 * that post for the rest of the request.
+	 * WP_Query fires `the_post` outside loops too: setup_postdata() ends with it,
+	 * and WP_REST_Posts_Controller::prepare_item_for_response() calls that for
+	 * every item it serves. Those reads belong to filter_rest_response(), which
+	 * evaluates entitlement per requester and leaves an editor's context=edit
+	 * payload whole, so a bare setup_postdata() must stage nothing.
 	 */
-	public function test_reading_a_teaser_does_not_stage_a_substitution() {
+	public function test_a_bare_setup_postdata_is_not_a_render() {
 		$post_id = $this->create_restricted_post();
 		$this->go_to( home_url( '/' ) );
 
-		$this->assertNotNull( Content_Gate::get_teaser_outside_article( get_post( $post_id ) ), 'The post is withheld, which is the premise of this test.' );
+		setup_postdata( get_post( $post_id ) );
 
 		$staged = new \ReflectionProperty( Content_Gate::class, 'restricted_content' );
 		$staged->setAccessible( true );
 
-		$this->assertSame( [], $staged->getValue(), 'Reading the teaser stages nothing.' );
+		$this->assertSame( [], $staged->getValue(), 'Setting a post up outside a loop is not a render.' );
+	}
+
+	/**
+	 * An admin-context loop rendered for someone who cannot edit the post is a
+	 * read like any other.
+	 *
+	 * Jetpack infinite scroll, which newspack-theme registers, fetches archive
+	 * pages 2 and up over admin-ajax — a real loop rendering the_content() for
+	 * whoever asked, with is_admin() true throughout.
+	 */
+	public function test_an_admin_context_loop_still_withholds_from_a_reader() {
+		$post_id = $this->create_restricted_post();
+		$this->go_to( home_url( '/' ) );
+		set_current_screen( 'dashboard' );
+
+		try {
+			$this->assertTrue( is_admin(), 'The request reads as admin context, which is the premise of this test.' );
+			$rendered = $this->render_in_secondary_loop( $post_id );
+		} finally {
+			unset( $GLOBALS['current_screen'] );
+		}
+
+		$this->assertStringNotContainsString( self::PAID_MARKER, $rendered, 'Admin context is not an entitlement.' );
+	}
+
+	/**
+	 * A REST route that runs its own loop and renders bodies is a render like any
+	 * other, and withholding stays on for it.
+	 *
+	 * The load-more endpoint in newspack-blocks (`newspack-blocks/v1/articles`,
+	 * permission_callback `__return_true`) is the case: it runs a real loop and
+	 * renders the_content() for each item, so a blanket stand-down inside the API
+	 * would serve page 2 of any Homepage Posts block in full to anonymous readers
+	 * while page 1 withheld. What separates that from the posts controller is
+	 * `in_the_loop`, not the transport.
+	 */
+	public function test_a_rest_route_running_a_loop_still_withholds() {
+		$post_id  = $this->create_restricted_post();
+		$rendered = null;
+		add_action(
+			'rest_api_init',
+			function () use ( &$post_id, &$rendered ) {
+				register_rest_route(
+					'newspack-test/v1',
+					'/loop',
+					[
+						'methods'             => 'GET',
+						'permission_callback' => '__return_true',
+						'callback'            => function () use ( &$post_id, &$rendered ) {
+							$rendered = $this->render_in_secondary_loop( $post_id );
+							return [ 'ok' => true ];
+						},
+					]
+				);
+			}
+		);
+
+		// A server may already be standing from an earlier case, in which case
+		// `rest_api_init` has fired and the route above would never register.
+		global $wp_rest_server;
+		$wp_rest_server = null;
+		$this->go_to( home_url( '/' ) );
+		rest_do_request( new \WP_REST_Request( 'GET', '/newspack-test/v1/loop' ) );
+		$wp_rest_server = null;
+
+		$this->assertNotNull( $rendered, 'The route ran, which is the premise of this test.' );
+		$this->assertStringNotContainsString( self::PAID_MARKER, $rendered, 'A loop inside a REST dispatch withholds the gated body.' );
+		$this->assertStringContainsString( self::FREE_MARKER, $rendered );
+	}
+
+	/**
+	 * A block in the withheld post's own body that runs a loop over that same post
+	 * re-fires `the_post` for it in the middle of the teaser build. The slot is
+	 * claimed before the build for exactly this reason (#821); without it the
+	 * build re-enters itself until the stack gives out.
+	 */
+	public function test_a_block_looping_over_the_post_does_not_re_enter_the_teaser_build() {
+		$post_id = null;
+		$loops   = 0;
+		register_block_type(
+			'newspack-test/looping-block',
+			[
+				'render_callback' => function () use ( &$post_id, &$loops ) {
+					// A cap, not a guard: without the claimed slot this recurses
+					// until the stack gives out, and a blown stack asserts nothing.
+					if ( ++$loops > 3 ) {
+						return '';
+					}
+					$loop = new \WP_Query( [ 'post__in' => [ $post_id ] ] );
+					while ( $loop->have_posts() ) {
+						$loop->the_post();
+					}
+					wp_reset_postdata();
+					return '';
+				},
+			]
+		);
+
+		// Every teaser build runs the body through this filter, so counting it
+		// counts the builds. No gate is rendered in a listing, which is the only
+		// other producer.
+		$builds      = 0;
+		$count_build = function ( $content ) use ( &$builds ) {
+			++$builds;
+			return $content;
+		};
+		add_filter( 'newspack_gate_content', $count_build, 1 );
+
+		try {
+			$post_id = $this->create_restricted_post(
+				[
+					'post_content' => '<!-- wp:paragraph --><p>' . self::FREE_MARKER . ' opening line.</p><!-- /wp:paragraph -->'
+						. '<!-- wp:paragraph --><p>Second free line.</p><!-- /wp:paragraph -->'
+						. '<!-- wp:newspack-test/looping-block /-->'
+						. '<!-- wp:paragraph --><p>' . self::PAID_MARKER . ' is behind the gate.</p><!-- /wp:paragraph -->',
+				]
+			);
+			$this->go_to( home_url( '/' ) );
+
+			$rendered = $this->render_in_secondary_loop( $post_id );
+		} finally {
+			remove_filter( 'newspack_gate_content', $count_build, 1 );
+			unregister_block_type( 'newspack-test/looping-block' );
+		}
+
+		$this->assertSame( 1, $builds, 'The re-entrant `the_post` is answered from the claimed slot, so the body is built into a teaser once.' );
+		$this->assertStringNotContainsString( self::PAID_MARKER, $rendered );
+		$this->assertStringContainsString( self::FREE_MARKER, $rendered );
 	}
 }

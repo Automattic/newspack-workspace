@@ -53,10 +53,15 @@ class Block_Visibility {
 			return $block_content;
 		}
 
+		$post_id = get_the_ID();
+
 		// Bypass access control in admin screens so blocks are never hidden from the
-		// person authoring them. Gated on that person being able to author at all: an
-		// admin-context request from a reader who can edit nothing — admin-ajax serving
-		// the front end — is a read like any other.
+		// person authoring them. Gated on that person being able to author the post in
+		// hand — the same `edit_post` entitlement the rest of the gate uses — so an
+		// admin-context request from a reader who cannot edit it is a read like any
+		// other. is_admin() is true under admin-ajax, which serves front-end renders.
+		// With no post in scope there is nothing to ask `edit_post` about, and the
+		// question falls back to whether the requester can author at all.
 		//
 		// REST requests are deliberately NOT exempt: a context check is not a permission
 		// check, and access has to be evaluated per requester. Authoring contexts that
@@ -65,11 +70,11 @@ class Block_Visibility {
 		// in scope — where none is set up, it fails closed. Re-adding a blanket REST
 		// exemption here would widen what is readable; the REST cases in
 		// Newspack_Test_Block_Visibility pin the behaviour.
-		if ( is_admin() && current_user_can( 'edit_posts' ) ) {
+		if ( is_admin() && ( $post_id ? current_user_can( 'edit_post', $post_id ) : current_user_can( 'edit_posts' ) ) ) {
 			return $block_content;
 		}
 
-		$hidden = self::is_hidden_for_user( $block, get_current_user_id(), get_the_ID() );
+		$hidden = self::is_hidden_for_user( $block, get_current_user_id(), $post_id );
 
 		// This response now depends on who asked for it, and the page cache in front of
 		// it cannot always tell requesters apart. Batcache skips a request only when it
@@ -78,7 +83,7 @@ class Block_Visibility {
 		// served to the next anonymous caller. Cancel the store whenever this render
 		// shows a block an anonymous reader would not see -- the withheld render is
 		// still cached normally, which is the common case and the one worth caching.
-		if ( self::render_varies_from_anonymous( $block, get_current_user_id(), get_the_ID() ) ) {
+		if ( self::render_varies_from_anonymous( $block, get_current_user_id(), $post_id ) ) {
 			self::prevent_page_cache();
 		}
 

@@ -151,6 +151,12 @@ class Content_Gate {
 	const RESTRICTION_PRIORITY = 999;
 
 	/**
+	 * Object cache group holding the teasers built by
+	 * {@see self::get_teaser_outside_article()}.
+	 */
+	const WITHHELD_TEASER_CACHE_GROUP = 'newspack_withheld_teasers';
+
+	/**
 	 * Whether the overlay gate markup has been output in this execution.
 	 *
 	 * @var boolean
@@ -181,8 +187,6 @@ class Content_Gate {
 
 		add_action( 'the_post', [ __CLASS__, 'restrict_post' ], 10, 2 );
 		add_action( 'rest_api_init', [ __CLASS__, 'register_rest_filters' ] );
-		add_filter( 'rest_request_before_callbacks', [ __CLASS__, 'mark_rest_dispatch_started' ] );
-		add_filter( 'rest_request_after_callbacks', [ __CLASS__, 'mark_rest_dispatch_finished' ] );
 		add_filter( 'the_content', [ __CLASS__, 'replace_restricted_content' ], self::RESTRICTION_PRIORITY );
 		add_filter( 'the_content', [ __CLASS__, 'handle_restricted_content' ], PHP_INT_MAX );
 		add_filter( 'comments_open', [ __CLASS__, 'filter_comments_open' ], 10, 2 );
@@ -504,58 +508,30 @@ class Content_Gate {
 	}
 
 	/**
-	 * Nesting depth of the REST dispatch currently running.
-	 *
-	 * @var int
-	 */
-	private static int $rest_dispatch_depth = 0;
-
-	/**
-	 * Open a REST dispatch window. Filter callback: returns its input untouched.
-	 *
-	 * @param \WP_REST_Response|\WP_Error|null $response Response so far.
-	 * @return \WP_REST_Response|\WP_Error|null
-	 */
-	public static function mark_rest_dispatch_started( $response ) {
-		self::$rest_dispatch_depth++;
-		return $response;
-	}
-
-	/**
-	 * Close a REST dispatch window. Filter callback: returns its input untouched.
-	 *
-	 * @param \WP_REST_Response|\WP_Error|null $response Response so far.
-	 * @return \WP_REST_Response|\WP_Error|null
-	 */
-	public static function mark_rest_dispatch_finished( $response ) {
-		if ( self::$rest_dispatch_depth > 0 ) {
-			--self::$rest_dispatch_depth;
-		}
-		return $response;
-	}
-
-	/**
 	 * Whether a REST request handler is running right now.
 	 *
-	 * REST is served by self::filter_rest_response(), which evaluates entitlement
-	 * per requester and leaves an editor's context=edit payload whole. The paths
-	 * that withhold for a page render have to stand down inside that window or
-	 * they answer over it — WP_REST_Posts_Controller::prepare_item_for_response()
-	 * calls setup_postdata(), which fires `the_post` for every item it serves.
+	 * Read from core's own dispatch bookkeeping rather than from REST_REQUEST:
+	 * the constant is defined only for an HTTP request that reached
+	 * rest_api_loaded(), so an in-process rest_do_request() — which plugins make
+	 * during a page render — would not be recognised. It is still consulted as a
+	 * fallback, for the window before the server object exists.
 	 *
-	 * Counted around the request handler rather than read from REST_REQUEST: the
-	 * constant is defined only for an HTTP request that reached rest_api_loaded(),
-	 * so an in-process rest_do_request() — which plugins make during a page render
-	 * — would not be recognised. The constant is still consulted as a fallback,
-	 * for a dispatch that somehow bypasses these hooks.
+	 * Core is asked rather than counted alongside, so there is no second copy of
+	 * the state to get stuck: a route callback that throws skips every `after`
+	 * hook a plugin could hang a decrement on, and a counter left standing would
+	 * make the excerpt filter stand down for the rest of the render. The server
+	 * is read out of the global rather than through rest_get_server(), which
+	 * would instantiate it and fire `rest_api_init` on a request that never
+	 * asked for the API.
 	 *
 	 * @return bool
 	 */
 	public static function is_dispatching_rest(): bool {
-		if ( self::$rest_dispatch_depth > 0 ) {
-			return true;
+		$server = $GLOBALS['wp_rest_server'] ?? null;
+		if ( $server instanceof \WP_REST_Server && method_exists( $server, 'is_dispatching' ) ) {
+			return $server->is_dispatching();
 		}
-		return function_exists( 'wp_is_serving_rest_request' ) && wp_is_serving_rest_request();
+		return defined( 'REST_REQUEST' ) && REST_REQUEST;
 	}
 
 	/**
@@ -767,13 +743,12 @@ class Content_Gate {
 		if ( Memberships::is_active() ) {
 			return;
 		}
-		// Never restrict posts in the admin.
-		if ( is_admin() ) {
-			return;
-		}
-		// REST is self::filter_rest_response()'s, per requester.
-		// {@see self::is_dispatching_rest()}.
-		if ( self::is_dispatching_rest() ) {
+		// Never restrict posts for the person authoring them. Gated on that person
+		// being able to author this post: is_admin() is true under admin-ajax, which
+		// newspack-theme's Jetpack infinite scroll uses to fetch archive pages 2 and
+		// up — a real loop, rendering the_content() for a reader with no entitlement.
+		// Mirrors Block_Visibility::filter_render_block().
+		if ( is_admin() && current_user_can( 'edit_post', $post->ID ) ) {
 			return;
 		}
 		// Feeds carry a restriction layer of their own
@@ -877,6 +852,30 @@ class Content_Gate {
 		if ( ! $post instanceof \WP_Post ) {
 			return;
 		}
+
+		// The article being read owns its own staging, and this path must never
+		// write over it or ahead of it: the entry it would leave carries no gate,
+		// so an anonymous reader would get the teaser with no call to action, and
+		// an entitled reader — for whom the article path stages nothing at all —
+		// would get a teaser in place of the post they paid for. A listing on the
+		// article's own page contains the article often enough for both orders to
+		// happen in one request.
+		if ( is_singular() && get_queried_object_id() === $post->ID ) {
+			return;
+		}
+		if ( isset( self::$restricted_content[ $post->ID ] ) ) {
+			return;
+		}
+
+		// A password-protected post is core's to withhold: the_content() is handed
+		// the password form, and substituting a teaser for it would publish the
+		// free opening of a post core meant to show nothing of, and drop the form
+		// with it. self::can_access_password_content() yields to core on the REST
+		// path for the same reason.
+		if ( post_password_required( $post ) ) {
+			return;
+		}
+
 		$teaser = self::get_teaser_outside_article( $post );
 		if ( null === $teaser ) {
 			return;
@@ -924,6 +923,26 @@ class Content_Gate {
 			return null;
 		}
 
+		// The layout is resolved for the same anonymous reader the decision was
+		// made for, so a gate's configured paragraph count still shapes the teaser
+		// without making it vary per reader.
+		$gate_layout_id = Content_Restriction_Control::get_gate_layout_id( $post->ID, 0 );
+
+		// Building a teaser costs a full body render — get_restricted_post_excerpt_for_gate()
+		// runs the post through `newspack_gate_content` and slices the result — and a
+		// listing pays it once per card. An edit to the post or a switch to another
+		// layout produces a different key rather than needing an invalidation hook;
+		// the expiry bounds the one input the key cannot carry, the site-wide layout
+		// defaults a layout with no meta of its own falls back to. The teaser is
+		// reader-independent by construction ({@see self::is_withheld_outside_article()}),
+		// which is what makes it safe to share across requests.
+		$cache_key = $post->ID . ':' . $post->post_modified_gmt . ':' . $gate_layout_id;
+		$cached    = wp_cache_get( $cache_key, self::WITHHELD_TEASER_CACHE_GROUP );
+		if ( is_string( $cached ) ) {
+			self::$withheld_teasers[ $post->ID ] = $cached;
+			return $cached;
+		}
+
 		// Claim the slot before building the teaser. The build runs the body
 		// through the block pipeline, and a block that runs a secondary loop ends
 		// it with wp_reset_postdata(), which re-fires `the_post` for this post and
@@ -931,15 +950,10 @@ class Content_Gate {
 		// with its render lock (#821).
 		self::$withheld_teasers[ $post->ID ] = '';
 
-		// The layout is resolved for the same anonymous reader the decision was
-		// made for, so a gate's configured paragraph count still shapes the teaser
-		// without making it vary per reader.
-		$teaser = self::get_restricted_post_excerpt_for_gate(
-			$post,
-			Content_Restriction_Control::get_gate_layout_id( $post->ID, 0 )
-		);
+		$teaser = self::get_restricted_post_excerpt_for_gate( $post, $gate_layout_id );
 
 		self::$withheld_teasers[ $post->ID ] = $teaser;
+		wp_cache_set( $cache_key, $teaser, self::WITHHELD_TEASER_CACHE_GROUP, HOUR_IN_SECONDS );
 
 		return $teaser;
 	}
