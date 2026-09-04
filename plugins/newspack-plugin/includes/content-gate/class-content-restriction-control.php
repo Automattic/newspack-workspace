@@ -375,13 +375,18 @@ class Content_Restriction_Control {
 	/**
 	 * Whether the post is restricted for the current user.
 	 *
-	 * @param bool     $is_post_restricted Whether the post is restricted for the current or given user.
-	 * @param int      $post_id            Post ID.
-	 * @param int|null $user_id            Optional user ID to check access for.
+	 * @param bool     $is_post_restricted     Whether the post is restricted for the current or given user.
+	 * @param int      $post_id                Post ID.
+	 * @param int|null $user_id                Optional user ID to check access for.
+	 * @param bool     $allow_anonymous_bypass Whether an anonymous visitor may pass on a
+	 *                                         `supports_anonymous` rule. Pass false when the
+	 *                                         answer must not vary between visitors: the only
+	 *                                         such rule reads the current request's IP and
+	 *                                         cookie. Ignored for a logged-in user.
 	 *
 	 * @return bool
 	 */
-	public static function is_post_restricted( $is_post_restricted, $post_id = null, $user_id = null ) {
+	public static function is_post_restricted( $is_post_restricted, $post_id = null, $user_id = null, $allow_anonymous_bypass = true ) {
 		// Don't apply our restriction strategy if Woo Memberships is active.
 		if ( Memberships::is_active() ) {
 			return $is_post_restricted;
@@ -449,7 +454,14 @@ class Content_Restriction_Control {
 					// An unpopulated rule (e.g., institution rule with no institutions selected) must
 					// not grant access — Access_Rules treats an empty value as "no constraint" and
 					// returns true, which would silently bypass registration here.
-					$anonymous_bypass_passed = ! empty( $gate['custom_access']['active'] )
+					//
+					// A caller that must get the same answer for every visitor passes
+					// $allow_anonymous_bypass = false: the anonymous-capable rule reads
+					// the current request (an IP range, matched once the visitor carries
+					// the institutional-access cookie), so leaving it in would make the
+					// verdict vary per request. {@see Content_Gate::is_withheld_outside_article()}.
+					$anonymous_bypass_passed = $allow_anonymous_bypass
+						&& ! empty( $gate['custom_access']['active'] )
 						&& Access_Rules::evaluate_anonymous_rules( $gate['custom_access']['access_rules'] ?? [] );
 					$is_restricted  = ! $anonymous_bypass_passed;
 					$gate_layout_id = $gate['registration']['gate_layout_id'] ?? $gate['id'];

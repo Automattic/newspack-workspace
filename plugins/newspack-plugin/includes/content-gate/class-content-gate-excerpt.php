@@ -57,10 +57,18 @@ class Content_Gate_Excerpt {
 		// serve this on its own: it is written when `the_post` fires, and an
 		// excerpt is not always built inside a loop — core's Latest Posts block
 		// walks get_posts() results and asks for each excerpt by post object.
-		// REST excerpts belong to Content_Gate::filter_rest_response(), which
-		// evaluates entitlement per requester and leaves an editor's context=edit
-		// payload whole. Answering here as well would overrule it.
-		$teaser = Content_Gate::is_dispatching_rest() ? null : Content_Gate::get_teaser_outside_article( $resolved );
+		// Two surfaces own their own restriction and must not be answered over.
+		// REST is Content_Gate::filter_rest_response()'s, which evaluates
+		// entitlement per requester and leaves an editor's context=edit payload
+		// whole. Feeds are Content_Gate_Advanced_Settings', which honours a
+		// publisher setting that includes leaving items unrestricted — withholding
+		// here would override that choice with no way to switch it off, and in an
+		// excerpt feed it is this filter, not the feed layer, that produces the
+		// item. Content_Gate::restrict_post() stands down for both for the same
+		// reasons.
+		$teaser = ( is_feed() || Content_Gate::is_dispatching_rest() )
+			? null
+			: Content_Gate::get_teaser_outside_article( $resolved );
 		if ( null !== $teaser ) {
 			// A hand-written excerpt is the author's own words about a post they
 			// chose to gate, and stands, exactly as it does below.

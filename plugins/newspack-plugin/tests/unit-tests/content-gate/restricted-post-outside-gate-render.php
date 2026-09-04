@@ -12,7 +12,9 @@
 
 namespace Newspack\Tests\Content_Gate;
 
+use Newspack\Access_Rules;
 use Newspack\Content_Gate;
+use Newspack\Content_Restriction_Control;
 use Newspack\Tests\Content_Gate\Traits\Trait_Restriction_Cache_Test;
 
 /**
@@ -677,5 +679,78 @@ class Test_Restricted_Post_Outside_Gate_Render extends \WP_UnitTestCase {
 		$this->assertSame( 1, $builds, 'The re-entrant `the_post` is answered from the claimed slot, so the body is built into a teaser once.' );
 		$this->assertStringNotContainsString( self::PAID_MARKER, $rendered );
 		$this->assertStringContainsString( self::FREE_MARKER, $rendered );
+	}
+
+	/**
+	 * A feed's excerpt is the feed subsystem's to decide, not this path's.
+	 *
+	 * Content_Gate_Advanced_Settings honours a publisher setting that includes
+	 * leaving feed items unrestricted. In an excerpt feed it is the excerpt filter
+	 * that produces the item, so withholding there would override that setting
+	 * with no way to switch it off.
+	 */
+	public function test_a_feed_excerpt_is_left_to_the_feed_settings() {
+		$post_id = $this->create_restricted_post();
+		$this->go_to( home_url( '/?feed=rss2' ) );
+
+		$excerpt = get_the_excerpt( $post_id );
+
+		$this->assertStringContainsString( self::PAID_MARKER, $excerpt, 'The feed subsystem decides what a feed item shows, not this path.' );
+	}
+
+	/**
+	 * A listing withholds the same body from everybody, including a visitor the
+	 * gate would let through on a rule that reads their request.
+	 *
+	 * The one anonymous-capable rule shipped today (`institution`) matches on the
+	 * current request's IP once the visitor carries the institutional-access
+	 * cookie. Honouring it here would put one on-campus visitor's full body into a
+	 * block cache that has no reader dimension, to be served to everyone.
+	 */
+	public function test_a_listing_ignores_a_bypass_that_reads_the_request() {
+		Access_Rules::register_rule(
+			[
+				'id'                 => 'nppd2172_request_scoped',
+				'name'               => 'Request-scoped test rule',
+				'callback'           => '__return_true',
+				'supports_anonymous' => true,
+			]
+		);
+		Content_Gate::update_gate_settings(
+			$this->gate_id,
+			[
+				'custom_access' => [
+					'active'       => true,
+					'access_rules' => [
+						[
+							[
+								'slug'  => 'nppd2172_request_scoped',
+								'value' => [ 1 ],
+							],
+						],
+					],
+				],
+			]
+		);
+		$post_id = $this->create_restricted_post();
+		$this->reset_restriction_cache();
+
+		$bypass_honoured = Content_Restriction_Control::is_post_restricted( false, $post_id, 0 );
+		$this->reset_restriction_cache();
+		$listing_verdict = Content_Restriction_Control::is_post_restricted( false, $post_id, 0, false );
+		$this->reset_restriction_cache();
+
+		$this->go_to( home_url( '/' ) );
+		$rendered = $this->render_in_secondary_loop( $post_id );
+
+		$rules_reflection = new \ReflectionProperty( Access_Rules::class, 'rules' );
+		$rules_reflection->setAccessible( true );
+		$registered = $rules_reflection->getValue();
+		unset( $registered['nppd2172_request_scoped'] );
+		$rules_reflection->setValue( null, $registered );
+
+		$this->assertFalse( $bypass_honoured, 'The bypass does grant access, which is the premise of this test.' );
+		$this->assertTrue( $listing_verdict, 'The listing decision does not honour it.' );
+		$this->assertStringNotContainsString( self::PAID_MARKER, $rendered, 'So the listing withholds the body regardless of the visitor.' );
 	}
 }

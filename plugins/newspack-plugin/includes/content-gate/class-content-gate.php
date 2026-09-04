@@ -975,6 +975,15 @@ class Content_Gate {
 	 * {@see Block_Visibility::strip_blocks_hidden_from_public()} evaluates against
 	 * the same reader, for the same reason.
 	 *
+	 * Going straight to Content_Restriction_Control also skips the
+	 * `newspack_is_post_restricted` filter, so a restriction source that answers
+	 * only through that filter — a publisher plugin gating posts without
+	 * publishing a gate — is not withheld here, and its posts appear in full in
+	 * listings. That is the price of the invariant: the filter takes no user
+	 * argument, so consulting it would reintroduce exactly the per-request
+	 * variance this method exists to avoid. The per-post exemption meta is the
+	 * reader-independent opt-out, and it works on both paths.
+	 *
 	 * @param \WP_Post $post Post object.
 	 * @return bool
 	 */
@@ -985,7 +994,14 @@ class Content_Gate {
 		if ( self::is_excluded_from_gating( $post->ID ) ) {
 			return false;
 		}
-		return (bool) Content_Restriction_Control::is_post_restricted( false, $post->ID, 0 );
+		// The anonymous bypass is deliberately switched off. Its one rule
+		// (`institution`) matches on the current request's IP once the visitor
+		// carries the institutional-access cookie, so leaving it in would make
+		// this verdict vary between visitors — and the markup it produces is
+		// written to a cache that has no reader dimension, so one on-campus
+		// visitor's full body would then be served to everyone. The article page
+		// still honours the grant.
+		return (bool) Content_Restriction_Control::is_post_restricted( false, $post->ID, 0, false );
 	}
 
 	/**
