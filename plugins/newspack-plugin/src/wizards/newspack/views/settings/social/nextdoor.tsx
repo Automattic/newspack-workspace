@@ -65,7 +65,7 @@ function Nextdoor() {
 		// With the module off the endpoint sends `settings` as an empty array, so the
 		// roles it should carry are not there to copy.
 		if ( apiData.settings?.allowed_roles ) {
-			setSettings( { ...settings, allowed_roles: apiData.settings.allowed_roles } );
+			setSettings( current => ( { ...current, allowed_roles: apiData.settings.allowed_roles } ) );
 		}
 	}, [ apiData ] );
 
