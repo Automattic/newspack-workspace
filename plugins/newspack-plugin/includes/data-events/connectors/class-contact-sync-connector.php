@@ -262,11 +262,13 @@ class Contact_Sync_Connector {
 	 * The reader-data handler for the same event stores the lists that class
 	 * reads, and the queued sync runs at shutdown, after both handlers.
 	 *
-	 * That field is the only synced field a list change affects, so when it is
-	 * not an enabled outgoing field (under the newer metadata schema it never
-	 * is) there is nothing to push, and bulk list changes such as membership
-	 * activation or the membership-tied subscribers CLI do not fan out one
-	 * upsert per reader.
+	 * That field is the only synced field a list change affects, so the sync
+	 * is skipped when it is not an enabled outgoing field. Under the newer
+	 * metadata schema it never is. On legacy-schema sites it is enabled by
+	 * default, and there every list change syncs the reader, including bulk
+	 * ones such as membership activation and the membership-tied subscribers
+	 * CLI, which fan out one upsert per reader. That is what keeps the field
+	 * current; a publisher who unticks the field pays nothing per change.
 	 *
 	 * @param int   $timestamp Timestamp.
 	 * @param array $data      Data.
