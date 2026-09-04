@@ -315,9 +315,9 @@ class Content_Gate_API {
 	 *
 	 * Both shapes a rule can take carry the same meaning when empty: an
 	 * options-backed rule selects nothing with `[]`, a free-text one with `''`,
-	 * and a stored rule can be missing its value altogether. Every rule that
-	 * declares `empty_grants_access` grants every reader in that state, whichever
-	 * of the two it is.
+	 * and a stored rule can be missing its value altogether. All three say the
+	 * rule names no condition. Which way it then evaluates is the rule's own
+	 * business, and `empty_grants_access` is where each rule states it.
 	 *
 	 * @param mixed $value The rule's value.
 	 *
@@ -335,6 +335,10 @@ class Content_Gate_API {
 	 * match everybody. Reporting the wrong one sends the operator looking for the
 	 * wrong symptom on the front end.
 	 *
+	 * No rule the plugin registers reaches the free-text "matches no reader"
+	 * string today; it is kept for rules other plugins register through
+	 * Access_Rules::register_rule().
+	 *
 	 * @param array $rule The registered rule.
 	 *
 	 * @return \WP_Error
@@ -345,11 +349,11 @@ class Content_Gate_API {
 			$message = $grants_access
 				/* translators: %s: the access rule's name, e.g. "Whitelisted email domain". */
 				? __( 'Enter a value for the “%s” access rule, or turn the rule off. Left empty, it grants access to everyone.', 'newspack-plugin' )
-				/* translators: %s: the access rule's name, e.g. "Whitelisted email domain". */
+				/* translators: %s: the access rule's name. */
 				: __( 'Enter a value for the “%s” access rule, or turn the rule off. Left empty, it matches no reader.', 'newspack-plugin' );
 		} else {
 			$message = $grants_access
-				/* translators: %s: the access rule's name, e.g. "Institutional access". */
+				/* translators: %s: the access rule's name, e.g. a promoted field that excludes a list of values. */
 				? __( 'Select at least one option for the “%s” access rule, or turn the rule off. Left empty, it grants access to everyone.', 'newspack-plugin' )
 				/* translators: %s: the access rule's name, e.g. "Institutional access". */
 				: __( 'Select at least one option for the “%s” access rule, or turn the rule off. Left empty, it matches no reader.', 'newspack-plugin' );

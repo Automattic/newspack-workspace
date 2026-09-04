@@ -149,11 +149,14 @@ class Promoted_Fields {
 					// holds the field at all. `list__in`, `date_range` and `default` deny
 					// on an empty value instead.
 					'empty_grants_access' => $empty_grants_access,
-					// Only the granting ones are refused a save, which keeps promoted
-					// fields behaving as they did. A field's options come from the
-					// provider's roster and can arrive after the rule is written, so an
-					// empty deny-on-empty rule is a state an operator can be part-way
-					// through rather than one they have finished getting wrong.
+					// Narrower than the flag's own definition, which counts any empty
+					// value as unconfigured whichever way the rule then evaluates: a
+					// `list__in` field naming nothing denies every reader, saves without
+					// refusal, and reads as a blank condition in the gate summary. Only
+					// the granting ones are refused a save here, so that this change
+					// leaves promoted fields evaluating and saving as they did. Closing
+					// the gap belongs with the rest of the unconfigured-rule warnings, in
+					// NPPD-2227.
 					'requires_value'      => $empty_grants_access,
 					'callback'            => function ( $user_id, $args ) use ( $field ) {
 						return self::evaluate_field( $field, $user_id, $args );

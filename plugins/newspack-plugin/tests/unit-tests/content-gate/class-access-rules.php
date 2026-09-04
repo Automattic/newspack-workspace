@@ -1179,19 +1179,36 @@ class Newspack_Test_Access_Rules extends WP_UnitTestCase {
 	/**
 	 * Test that a logged-out visitor is judged by the anonymous evaluator.
 	 *
-	 * The two evaluators agree on every rule a gate can hold today, so what this
-	 * pins is the shape neither the wizard nor the REST sanitizer produces and
-	 * block attributes are never checked for: a group with nothing in it, or a
-	 * rule carrying no slug. `evaluate_rules()` has no condition to fail and reads
-	 * the group as satisfied, which admits every visitor. The anonymous evaluator
-	 * treats both as unconfigured.
+	 * The two evaluators agree on every registered rule a gate can hold today, so
+	 * what this pins is the three shapes where they part. Two are shapes neither
+	 * the wizard nor the REST sanitizer produces and block attributes are never
+	 * checked for: a group with nothing in it, and a rule carrying no slug. The
+	 * third is a rule from an integration the site has switched off, which reaches
+	 * `evaluate_rule()`'s missing-callback branch — and that branch returns true
+	 * ahead of the anonymous check. In all three `evaluate_rules()` has no
+	 * condition to fail and reads the group as satisfied, which admits every
+	 * visitor. The anonymous evaluator treats all three as unconfigured.
+	 *
+	 * The unregistered case is deliberately asymmetric: skipped for a signed-in
+	 * reader (asserted in
+	 * test_an_unregistered_rule_is_skipped_rather_than_failing_its_group), denying
+	 * for a logged-out one. Pinned here so a later reconciliation of the two is a
+	 * decision rather than a tidy-up.
 	 *
 	 * @group Access_Rules
 	 */
 	public function test_evaluate_rules_for_visitor_judges_a_logged_out_visitor_anonymously() {
 		foreach ( [
-			'an empty group'          => [ [] ],
-			'a rule carrying no slug' => [ [ [ 'value' => 'orphan' ] ] ],
+			'an empty group'                         => [ [] ],
+			'a rule carrying no slug'                => [ [ [ 'value' => 'orphan' ] ] ],
+			'a rule from a switched-off integration' => [
+				[
+					[
+						'slug'  => 'field_from_a_disabled_integration',
+						'value' => 'anything',
+					],
+				],
+			],
 		] as $description => $rules ) {
 			$this->assertTrue(
 				Access_Rules::evaluate_rules( $rules, 0 ),

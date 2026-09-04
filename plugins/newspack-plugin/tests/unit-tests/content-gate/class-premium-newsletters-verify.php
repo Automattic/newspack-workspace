@@ -792,9 +792,13 @@ class Test_Premium_Newsletters_Verify extends \WP_UnitTestCase {
 	 * 42" and those readers are reported entitled — while check_access() removes
 	 * them from the list. The gate has to come back as one this command cannot
 	 * enumerate instead.
+	 *
+	 * A one-time purchase rule naming no product denies every reader for the same
+	 * reason, and hides it better: its value is composite, so the rule is non-empty
+	 * while the `product_ids` that decide it are not.
 	 */
 	public function test_unenumerable_paid_rules_does_not_let_a_product_bound_mask_a_rule_admitting_nobody() {
-		$rules = [
+		$with_institution = [
 			[
 				[
 					'slug'  => 'subscription',
@@ -809,7 +813,30 @@ class Test_Premium_Newsletters_Verify extends \WP_UnitTestCase {
 
 		$this->assertSame(
 			[ 'subscription', 'institution' ],
-			$this->invoke_private_static( 'unenumerable_paid_rules', [ $rules ] )
+			$this->invoke_private_static( 'unenumerable_paid_rules', [ $with_institution ] )
+		);
+
+		$with_one_time_purchase = [
+			[
+				[
+					'slug'  => 'subscription',
+					'value' => [ 42 ],
+				],
+				[
+					'slug'  => 'one_time_purchase',
+					'value' => [
+						'product_ids'    => [],
+						'duration_value' => 30,
+						'duration_unit'  => 'days',
+					],
+				],
+			],
+		];
+
+		$this->assertSame(
+			[ 'subscription', 'one_time_purchase' ],
+			$this->invoke_private_static( 'unenumerable_paid_rules', [ $with_one_time_purchase ] ),
+			'A one-time purchase rule naming no product admits nobody, whatever else the group names.'
 		);
 	}
 

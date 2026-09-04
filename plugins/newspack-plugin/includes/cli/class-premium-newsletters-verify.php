@@ -1047,6 +1047,39 @@ class Premium_Newsletters_Verify {
 	}
 
 	/**
+	 * Whether a rule denies every reader as written.
+	 *
+	 * Only the two rules that fail closed on a missing value are detectable here,
+	 * and only from the value's emptiness:
+	 *
+	 * - `institution` names no institution, so Institution::evaluate() matches nobody.
+	 * - `one_time_purchase` names no product, so has_one_time_purchase() never reaches
+	 *   a lookup. Its value is composite, so the emptiness that matters is
+	 *   `product_ids` rather than the value as a whole.
+	 *
+	 * A populated but unsatisfiable value — an institution ID that no longer
+	 * resolves, a product that was deleted — denies every reader just the same and
+	 * reads as configured from here. Detecting it would mean resolving each value
+	 * against the store, which this command does not do; a gate in that state is
+	 * reported as enumerable and its population overstated.
+	 *
+	 * @param array $rule One access rule.
+	 *
+	 * @return bool
+	 */
+	private static function rule_admits_nobody( array $rule ): bool {
+		$slug = (string) ( $rule['slug'] ?? '' );
+		if ( 'institution' === $slug ) {
+			return empty( $rule['value'] ?? null );
+		}
+		if ( 'one_time_purchase' === $slug ) {
+			$value = \Newspack\Access_Rules::sanitize_one_time_purchase_value( $rule['value'] ?? [] );
+			return empty( $value['product_ids'] );
+		}
+		return false;
+	}
+
+	/**
 	 * The slugs of a gate's access rules that paywall it but whose population this
 	 * command cannot enumerate.
 	 *
@@ -1117,7 +1150,7 @@ class Premium_Newsletters_Verify {
 			// the list while the run reports them clean.
 			$group_admits_nobody = false;
 			foreach ( $group as $rule ) {
-				if ( 'institution' === (string) ( $rule['slug'] ?? '' ) && empty( $rule['value'] ?? null ) ) {
+				if ( self::rule_admits_nobody( (array) $rule ) ) {
 					$group_admits_nobody = true;
 					break;
 				}

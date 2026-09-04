@@ -458,12 +458,23 @@ class Access_Rules {
 	/**
 	 * Evaluate a gate's access rules for whoever is asking.
 	 *
-	 * The two evaluators are not interchangeable, and the difference only shows on
-	 * a rule left with no value. `evaluate_rules()` runs every rule against the id
-	 * it is handed, and a logged-out visitor is id 0 — so a rule that reads its
-	 * empty value as "no constraint" reports satisfied, and lets an anonymous
-	 * visitor through a gate that names a condition nobody evaluated.
-	 * `evaluate_anonymous_rules()` drops those groups first.
+	 * The two evaluators are not interchangeable. For a registered rule they now
+	 * agree: `evaluate_rule()` denies user 0 before reading the value unless the
+	 * rule is `supports_anonymous`, and the only such rule — `institution` — denies
+	 * on an empty value. What still differs is a rule the site does not register:
+	 * `evaluate_rule()` returns true for a missing callback, and does so ahead of
+	 * the anonymous check, so `evaluate_rules( …, 0 )` admits a logged-out visitor
+	 * to a group whose only rule came from a switched-off integration. The same
+	 * goes for the shapes neither the wizard nor the REST sanitizer produces and
+	 * block attributes are never checked for — an empty group, a rule carrying no
+	 * slug — which have no condition to fail and so read as satisfied.
+	 * `evaluate_anonymous_rules()` drops all of those groups first.
+	 *
+	 * That leaves one deliberate asymmetry: an unregistered rule is skipped for a
+	 * signed-in reader (a gate the publisher cannot see or edit must not deny
+	 * everyone) and denies a logged-out visitor (an unevaluated condition must not
+	 * stand in for registration). Both directions are chosen; neither is a bug to
+	 * reconcile.
 	 *
 	 * Every surface gating content for both audiences goes through here, so one
 	 * gate cannot answer differently depending on which surface asked.
