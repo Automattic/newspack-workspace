@@ -16,19 +16,9 @@ import WizardSection from '../../../wizards-section';
 import { EnableModal, getMissingRequiredFields } from './enable-modal';
 
 /**
- * Icon configuration per integration ID.
- * Only ESP exists today. When new integrations are added (DSGNEWS-157),
- * this moves to the PHP API response.
+ * Fallback icon for integrations that report no brand. Per-integration icons
+ * move to the PHP API response when new integrations are added (DSGNEWS-157).
  */
-const INTEGRATION_ICONS = {
-	esp: {
-		node: <Icon icon={ envelope } />,
-		fill: colors[ 'primary-600' ],
-		backgroundColor: colors[ 'primary-000' ],
-		radius: 'full',
-	},
-};
-
 const DEFAULT_ICON = {
 	node: <Icon icon={ envelope } />,
 	fill: colors[ 'neutral-600' ],
@@ -81,12 +71,15 @@ export const SettingsSection = ( {
 									name,
 									description,
 								} = integration;
-								const cardIcon =
-									provider && espProviderOrder.includes( provider ) ? (
-										<IntegrationIcon provider={ provider } />
-									) : (
-										INTEGRATION_ICONS[ id ] || DEFAULT_ICON
-									);
+								// The esp integration is Mailchimp-only, so its card always
+								// carries the Mailchimp mark — a stray provider value must not
+								// rebrand it.
+								let cardIcon = DEFAULT_ICON;
+								if ( id === 'esp' ) {
+									cardIcon = <IntegrationIcon provider="mailchimp" />;
+								} else if ( provider && espProviderOrder.includes( provider ) ) {
+									cardIcon = <IntegrationIcon provider={ provider } />;
+								}
 								const missingPlugins = getMissingPlugins( integration );
 								const requiresInstallPlugins = missingPlugins.filter( plugin => ! plugin.is_installed );
 								// Only offer Activate when every missing plugin is at least installed;
@@ -159,6 +152,7 @@ export const SettingsSection = ( {
 								}
 								return (
 									<CardFeature
+										headingLevel={ 3 }
 										key={ id }
 										title={ name }
 										description={ description }

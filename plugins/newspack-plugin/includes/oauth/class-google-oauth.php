@@ -111,7 +111,7 @@ class Google_OAuth {
 		$tokens           = (array) $tokens;
 		$saved_csrf_token = OAuth::retrieve_csrf_token( self::CSRF_TOKEN_NAMESPACE );
 
-		if ( $tokens['csrf_token'] !== $saved_csrf_token ) {
+		if ( ! is_string( $saved_csrf_token ) || ! hash_equals( $saved_csrf_token, (string) ( $tokens['csrf_token'] ?? '' ) ) ) {
 			Logger::error( 'Failed saving credentials - CSRF token mismatch.' );
 			return new \WP_Error(
 				'newspack_google_oauth',

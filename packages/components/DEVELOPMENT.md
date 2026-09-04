@@ -74,39 +74,44 @@ When building a screen, use the **spacing scale** (8px unit: 16, 24, 32, 48, 64)
 
 ### Layout Components
 
-- **`Card`** – Container for a logical block of content; use for grouping related settings. Default vertical margin is 32px so cards stack with consistent rhythm. Use `noBorder` when cards sit inside another card (e.g. ActionCard children).
-- **`Grid`** – Use for laying out several items in columns (e.g. multiple controls or cards). Default gap is 32px; use `columns` and `gutter` modifiers (8, 16, 24, 32) when you need tighter or looser spacing. For a single row or a simple vertical stack, prefer **VStack** (or HStack) in new code; Grid is still used that way in many places and is fine to leave as-is until we refactor.
-- **`Divider`** – Use between logical sections (e.g. between ActionCards) to separate content without another card. Margins are 32px (64px at larger breakpoints) so spacing stays consistent with the rest of the layout.
-- **`SectionHeader`** – Use to start a new section; pair with a short description so the section’s goal is clear. Top margin (64px) and bottom (32px) create clear separation from previous content and the section body.
 - **`BoxContrast`** – High-contrast content box for emphasis.
+- **`Card`** – Container for a logical block of content; use for grouping related settings. Default vertical margin is 32px so cards stack with consistent rhythm. Use `noBorder` when cards sit inside another card (e.g. ActionCard children).
+- **`Divider`** – Use between logical sections (e.g. between ActionCards) to separate content without another card. Margins are 32px (64px at larger breakpoints) so spacing stays consistent with the rest of the layout.
+- **`EmptyState`** – Use when a list has nothing in it yet, or an onboarding view stands in for a feature that is not set up. Compound: `EmptyState.Root` wraps `EmptyState.Header` and `EmptyState.Actions`. Render it only when the *unfiltered* collection is empty, so a search matching nothing keeps the DataViews "no results" treatment. See [src/empty-state/README.md](src/empty-state/README.md).
+- **`Grid`** – Use for laying out several items in columns (e.g. multiple controls or cards). Default gap is 32px; use `columns` and `gutter` modifiers (8, 16, 24, 32) when you need tighter or looser spacing. For a single row or a simple vertical stack, prefer **VStack** (or HStack) in new code; Grid is still used that way in many places and is fine to leave as-is until we refactor.
+- **`SectionHeader`** – Use to start a new section; pair with a short description so the section’s goal is clear. Top margin (64px) and bottom (32px) create clear separation from previous content and the section body.
+- **`StatCard`** – Use for a single headline figure with a label above it and a description below. Compound: `StatCard.Root` wraps `Label`, `Body` (holding `Value` and an optional `Secondary`) and `Footer`, with `Delta` riding in the `Value`'s `suffix` for a change beside the figure. Format the figure yourself and pass a string; a `null`, `undefined` or blank `value` gets the shared null glyph rather than a misleading zero. The figure is sized by a container query, so give the cards a definite width (a Grid track, a `flex: 1` item) and equal widths across a row to keep one type scale. See [src/stat-card/README.md](src/stat-card/README.md).
 
 ### Form Components
 
-- **`Button`** - Enhanced button component (wraps WordPress Button with routing support)
-- **`TextControl`** - Text input with Newspack styling and required field support
-- **`RadioControl`** - Radio button group control
-- **`ColorPicker`** - Color selection component
-- **`ImageUpload`** - Image upload and selection component
-- **`FormTokenField`** - Token input field for tags/categories; prefer the Newspack component over the core `FormTokenField` because it also supports a `description` prop for help text like other controls.
 - **`AutocompleteTokenField`** - Autocomplete token field (can be used in block editor)
-- **`AutocompleteWithSuggestions`** - Autocomplete with custom suggestions
 - **`AutocompleteWithLatestPosts`** - Autocomplete with latest posts
+- **`AutocompleteWithSuggestions`** - Autocomplete with custom suggestions
+- **`Button`** - Enhanced button component (wraps WordPress Button with routing support)
 - **`CategoryAutocomplete`** - Category-specific autocomplete
+- **`ColorPicker`** - Color selection component
 - **`CustomSelectControl`** - Custom select dropdown component
+- **`FormTokenField`** - Token input field for tags/categories; prefer the Newspack component over the core `FormTokenField` because it also supports a `description` prop for help text like other controls.
+- **`ImageUpload`** - Image upload and selection component
+- **`RadioControl`** - Radio button group control
+- **`TextControl`** - Text input with Newspack styling and required field support
 
 ### Content Components
 
 - **`ActionCard`** – Use when one concept (e.g. a feature or setting) can be toggled on/off and may have extra content below. Internal padding (24px default; 16px/8px for isMedium/isSmall) and 24px between regions keep hierarchy clear; expandable content uses 24px top padding and 24px between siblings.
-- **`Notice`** – Use for outcome feedback (success/error/warning) or short contextual messages. Vertical margin is 32px so notices don’t collide with cards; keep one primary message per area when possible.
-- **`Waiting`** – Loading state indicator.
+- **`CollapsibleGroup`** / **`CollapsibleGroup.Item`** – A stack of independently collapsible items, separated by dividers and flush with the surrounding column. Not a W3C accordion: the items do not coordinate.
+- **`Notice`** – Being retired in favour of core’s `Notice` from `@wordpress/components`, which announces itself to assistive technology. Reach for core’s in new work; ours stays for the screens still on it. Where ours is used, vertical margin is 32px so notices don’t collide with cards, and one primary message per area reads best.
 - **`ProgressBar`** – Progress indicator.
-- **`Accordion`** / **`AccordionPanel`** – Container for one or more collapsible panels.
 - **`StepsList`** / **`StepsListItem`** – Step-by-step list components.
 - **`StyleCard`** – Style preview card.
+- **`Waiting`** – Loading state indicator.
 
 ### Wizard Components
 
-- **`Wizard`** - Main wizard container with tabbed navigation and data fetching
+- **`Footer`** - Wizard footer component
+- **`Handoff`** - Handoff message component for external integrations
+- **`HandoffMessage`** - Handoff message display component
+- **`TabbedNavigation`** - Tab navigation component
 - **`withWizard`** - Higher-order component for wizard screens (legacy pattern, class-based)
   - Provides plugin management, error handling, loading states
   - Used in older wizards like Setup Wizard
@@ -116,25 +121,23 @@ When building a screen, use the **spacing scale** (8px unit: 16, 24, 32, 48, 64)
   - Provides header, tabbed navigation, button actions, handoff messages
   - Used in newer wizards like Audience Management
   - Passes props: `renderPrimaryButton`, plus all original component props
-- **`TabbedNavigation`** - Tab navigation component
-- **`Footer`** - Wizard footer component
-- **`Handoff`** - Handoff message component for external integrations
-- **`HandoffMessage`** - Handoff message display component
+- **`Wizard`** - Main wizard container with tabbed navigation and data fetching
 
 ### Plugin Management Components
 
 - **`PluginInstaller`** - Plugin installation and activation component
-- **`PluginToggle`** - Plugin enable/disable toggle
 - **`PluginSettings`** - Plugin settings configuration component
+- **`PluginToggle`** - Plugin enable/disable toggle
 
 ### Utility Components
 
+- **`DebugBadge`** - Floating indicator that Newspack debug mode is on. Takes no props and renders nothing unless the site defines `WP_NEWSPACK_DEBUG`
+- **`GlobalNotices`** - Global notice system component
+- **`InfoButton`** - Reveals supplementary context from a `description` prop. Anything a reader needs in order to use a control belongs in visible help text instead
 - **`Modal`** - Modal dialog component
+- **`NewspackIcon`** - Newspack icon wrapper component
 - **`Popover`** - Popover component
 - **`WebPreview`** - Web preview iframe component
-- **`NewspackIcon`** - Newspack icon wrapper component
-- **`InfoButton`** - Info button with tooltip
-- **`GlobalNotices`** - Global notice system component
 
 ### Settings Components
 
@@ -144,9 +147,9 @@ When building a screen, use the **spacing scale** (8px unit: 16, 24, 32, 48, 64)
 ### Utilities & Hooks
 
 - **`hooks`** - Custom React hooks (e.g., `useObjectState`, `usePrompt`, `useOnClickOutside`)
-- **`utils`** - Utility functions (e.g., `confirmAction`, color utilities)
 - **`Router`** - Proxied React Router import (use instead of direct `react-router-dom` import)
   - Note: This package currently uses [React Router v5](https://v5.reactrouter.com/). Please refer to v5 documentation for API details.
+- **`utils`** - Utility functions (e.g., `confirmAction`, color utilities)
 
 ## Import Patterns
 
@@ -174,7 +177,7 @@ import {
 	ActionCard,
 	Button,
 	Card,
-	Notice,
+	SectionHeader,
 	TextControl,
 } from '../../../../../packages/components/src';
 ```
@@ -185,25 +188,43 @@ import {
 
 ```jsx
 // ✅ CORRECT - Within newspack-plugin monorepo
-import { Button, Card, Notice } from '../../../../../packages/components/src';
+import { Button, Card, SectionHeader } from '../../../../../packages/components/src';
 ```
 
 **As an npm package:** If `newspack-components` is installed as a dependency in another plugin, import from the package name:
 
 ```jsx
 // ✅ CORRECT - When installed as npm package
-import { Button, Card, Notice } from 'newspack-components';
+import { Button, Card, SectionHeader } from 'newspack-components';
 ```
 
 **Import individual components** – Import only what you need; do not import the whole namespace. List named imports **alphabetically** (e.g. from `@wordpress/components` or `newspack-components`):
 
 ```jsx
 // ✅ CORRECT – alphabetical
-import { Button, Card, Notice } from '../../../../../packages/components/src';
+import { Button, Card, SectionHeader } from '../../../../../packages/components/src';
 
 // ❌ WRONG – Don't import all
 import * as Components from '../../../../../packages/components/src';
 ```
+
+**Reach past the barrel from inside the package.** `src/index.js` imports
+`src/style.scss`, which redefines `--wp-admin-theme-color` and its variants on
+`:root`. Any module that pulls in the barrel carries those global overrides into
+whatever bundle it lands in, which is wrong for an editor or front-end bundle.
+Import each component from its own directory instead:
+
+```jsx
+// ✅ CORRECT – within packages/components
+import Grid from '../grid';
+import InfoButton from '../info-button';
+
+// ❌ WRONG – drags the package's :root overrides along
+import { Grid, InfoButton } from '../';
+```
+
+Most of the package still reaches the barrel. Treat this as the bar for new and
+edited modules rather than a description of how things stand.
 
 ### Router Import Pattern
 
@@ -233,7 +254,7 @@ This section shows how to use components **by context** (backend, blocks, fronte
 /**
  * WordPress dependencies
  */
-import { CheckboxControl, ExternalLink, RangeControl } from '@wordpress/components';
+import { CheckboxControl, ExternalLink, Notice, RangeControl } from '@wordpress/components';
 
 /**
  * Internal dependencies
@@ -242,9 +263,8 @@ import {
 	ActionCard,
 	Button,
 	Card,
-	Grid,
-	Notice,
 	Divider,
+	Grid,
 	SectionHeader,
 	TextControl,
 	Waiting,
@@ -253,14 +273,13 @@ import {
 
 **Example – Audience Setup Wizard (real reference):**
 ```jsx
-import { CheckboxControl, ExternalLink, RangeControl } from '@wordpress/components';
+import { CheckboxControl, ExternalLink, Notice, RangeControl } from '@wordpress/components';
 import {
 	ActionCard,
 	Button,
 	Card,
-	Grid,
-	Notice,
 	Divider,
+	Grid,
 	PluginInstaller,
 	SectionHeader,
 	TextControl,
@@ -271,7 +290,9 @@ import {
 export default withWizardScreen( ( { config, updateConfig } ) => {
 	return (
 		<>
-			<Notice noticeText={ __( 'Audience Management is enabled.', 'newspack-plugin' ) } isSuccess />
+			<Notice status="success" isDismissible={ false }>
+				{ __( 'Audience Management is enabled.', 'newspack-plugin' ) }
+			</Notice>
 			<Card noBorder>
 				<ActionCard
 					title={ __( 'Present newsletter signup after checkout', 'newspack-plugin' ) }
@@ -354,7 +375,7 @@ import { Fragment } from '@wordpress/element';
 /**
  * Internal dependencies
  */
-import { GlobalNotices, Notice, Wizard } from '../../../../../packages/components/src';
+import { GlobalNotices, Wizard } from '../../../../../packages/components/src';
 import sections from './sections';
 
 function Dashboard() {
@@ -521,7 +542,7 @@ When Newspack components don't provide what you need, use these WordPress compon
 ### Feedback and overlays
 
 - **`Spinner`** – Loading spinner
-- **`Notice`** – Inline notice (success/error/warning); prefer Newspack `Notice` in wizards when it fits
+- **`Notice`** – Inline notice (success/error/warning); prefer this over the Newspack `Notice`, which is being retired
 - **`Placeholder`** – Empty state in blocks
 - **`Modal`** – Modal dialog
 - **`Popover`** – Popover (e.g. webhooks endpoint actions, corrections modal)
@@ -591,6 +612,7 @@ Newspack components use SCSS with BEM-ish naming conventions and a consistent sp
 - **Elements**: Use `__` for elements that are part of a larger block-level component (e.g. `.newspack-card__header-content`)
 - **WordPress colors:** Use WordPress design system colors (see [Colors Development Guide](../colors/DEVELOPMENT.md))
 - **Custom styles:** Component-specific styles live in `packages/components/src/{component}/style.scss`
+- **Shared values:** Reach for a `@wordpress/base-styles` variable first. Where the scale has no counterpart, the value goes in `packages/components/src/_variables.scss` and is used by name, rather than written as a literal in one component's stylesheet
 
 ### Spacing scale (design system)
 
@@ -601,7 +623,7 @@ Spacing is based on an **8px unit**. Use these values so new styles match existi
 | **8px** | Tight gaps, badge padding, small padding (e.g. ActionCard is-small) | Inline or dense UI |
 | **16px** | Gaps between related controls, buttons card gap, margins inside ActionCard region-children for Card/Grid/TextControl | Related items, form rows |
 | **24px** | Default ActionCard region padding, toggle/region gaps, expandable content padding and sibling spacing | Default internal padding and gaps within a card |
-| **32px** | Card vertical margin, Grid default gap and margin, SectionHeader first-child top, Notice margin, Divider margin | Section rhythm, between blocks |
+| **32px** | Card vertical margin, Grid default gap and margin, SectionHeader first-child top, Newspack Notice margin, Divider margin | Section rhythm, between blocks |
 | **48px** | SectionHeader container margin-top, Card horizontal padding (small screens) | Section separation |
 | **64px** | SectionHeader top margin, Divider margins (large breakpoint), buttons card margin, Card horizontal padding (large screens) | Major section separation |
 
@@ -672,7 +694,7 @@ Components rely on WordPress design system states where applicable; a few Newspa
 - **ActionCard (clickable)** – Hover: `box-shadow: 0 4px 8px rgba(black, 0.08)`; transition 125ms ease-in-out. Use for cards that navigate or open.
 - **Button** – Primary, secondary, disabled, and link variants follow `@wordpress/components` Button; focus and hover come from WordPress base styles.
 - **Toggle (inside ActionCard)** – Checked/unchecked and focus states from WordPress ToggleControl; label is visually hidden but available for accessibility.
-- **Notice** – Success (green), error (red), warning (yellow), info (gray) variants; use for feedback only and one primary message per area when possible.
+- **Notice** – Core's `Notice` carries the status in a tinted, bordered box (info, success, warning, error) and announces itself. The Newspack one, still in place on the screens that have not moved, tints the background and adds an icon. Either way, use notices for feedback only, and one primary message per area when possible.
 
 When adding new interactive components, preserve focus visibility and use the same state patterns (hover shadow, transition) so the UI feels consistent.
 
@@ -703,7 +725,7 @@ When adding new interactive components, preserve focus visibility and use the sa
 - **[@wordpress/components](https://www.npmjs.com/package/@wordpress/components)** – WordPress component library (fallback when Newspack components don’t exist)
 - **[@wordpress/base-styles](https://www.npmjs.com/package/@wordpress/base-styles)** – WordPress Design System styles and colors
 
-**Design resources:** For layout, components, and spacing, refer to the [WordPress Figma Library](https://www.figma.com/community/file/1149596986784498103/wordpress-design-library) and the [Block Editor Handbook](https://developer.wordpress.org/block-editor/reference-guides/components/). The **Components Demo** (`/wp-admin/admin.php?page=newspack-components-demo`) is the live reference for how Newspack components look and behave; use it to confirm spacing and hierarchy when building new screens.
+**Design resources:** For layout, components, and spacing, refer to the [WordPress Figma Library](https://www.figma.com/community/file/1149596986784498103/wordpress-design-library) and the [Block Editor Handbook](https://developer.wordpress.org/block-editor/reference-guides/components/). The **Components Demo** (`/wp-admin/admin.php?page=newspack-components-demo`) is the live reference for how Newspack components look and behave; use it to confirm spacing and hierarchy when building new screens. It no longer catalogues `Notice`; the Action Card examples are the place to see one rendered.
 
 ## Component Patterns
 

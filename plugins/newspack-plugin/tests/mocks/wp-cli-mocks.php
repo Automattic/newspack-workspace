@@ -123,6 +123,18 @@ namespace {
 			}
 
 			/**
+			 * Real WP_CLI::confirm() prompts on STDIN and exits on anything but 'y';
+			 * the mock records the question and returns, standing in for a "yes".
+			 *
+			 * @param string     $question   The yes/no question.
+			 * @param array|null $assoc_args Named args (unused).
+			 */
+			public static function confirm( $question, $assoc_args = null ) {
+				self::$output[]   = 'Confirm: ' . $question;
+				self::$messages[] = [ 'confirm', (string) $question ];
+			}
+
+			/**
 			 * Real WP_CLI::error() prints and exits; the mock throws instead so the
 			 * abort is observable and the test process survives.
 			 *

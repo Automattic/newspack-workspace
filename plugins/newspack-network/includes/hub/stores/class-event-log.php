@@ -180,8 +180,16 @@ class Event_Log {
 	/**
 	 * Persists an event to the database
 	 *
+	 * The three return shapes are distinct on purpose, and the webhook handler
+	 * leans on the difference: null (an event already on record) is acknowledged
+	 * as handled, while false (a write that failed) makes the delivery
+	 * retryable. Collapsing null into false would turn every repeated delivery
+	 * into a retry loop.
+	 *
 	 * @param Abstract_Incoming_Event $event The Incoming Event to be persisted.
-	 * @return int|false The ID of the inserted row, or false on failure.
+	 * @return int|false|null The ID of the inserted row; false if the row could
+	 *                        not be written; null if an event with this data is
+	 *                        already on record and nothing was written.
 	 */
 	public static function persist( Abstract_Incoming_Event $event ) {
 		global $wpdb;

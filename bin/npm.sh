@@ -19,5 +19,5 @@ fi
 PROJECT_DIR=$(find_project "$1")
 
 cd "$PROJECT_DIR"
-echo "Running: npm ${@:2}"
+echo "Running: npm ${*:2}"
 npm "${@:2}"
