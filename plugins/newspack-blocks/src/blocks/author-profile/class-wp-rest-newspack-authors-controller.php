@@ -66,6 +66,19 @@ class WP_REST_Newspack_Authors_Controller extends WP_REST_Controller {
 	}
 
 	/**
+	 * Whether a WP user holds one of the roles this component treats as an author.
+	 *
+	 * The listing branch has always been narrowed to these roles. The by-id branches have to
+	 * agree with it, or an id becomes a way to read any user's profile fields.
+	 *
+	 * @param WP_User|false $user The user.
+	 * @return bool
+	 */
+	public static function is_author_role_user( $user ) {
+		return $user && ! empty( array_intersect( (array) $user->roles, \Newspack_Blocks\get_authors_roles_slugs() ) );
+	}
+
+	/**
 	 * Turn a comma-separated list (or array) of IDs into unique positive integers.
 	 *
 	 * @param string|array $value Raw request param.
@@ -215,7 +228,7 @@ class WP_REST_Newspack_Authors_Controller extends WP_REST_Controller {
 			if ( 0 === $guest_author_total ) {
 				$user = get_user_by( 'id', $author_id ); // Get the WP user.
 
-				if ( $user ) {
+				if ( self::is_author_role_user( $user ) ) {
 					$users = [ $user ];
 				}
 			}
@@ -342,7 +355,11 @@ class WP_REST_Newspack_Authors_Controller extends WP_REST_Controller {
 		}
 
 		foreach ( $author_ids as $author_id ) {
-			$user_data = self::format_user( get_user_by( 'id', $author_id ), $fields, $avatar_hide_default );
+			$user = get_user_by( 'id', $author_id );
+			if ( ! self::is_author_role_user( $user ) ) {
+				continue;
+			}
+			$user_data = self::format_user( $user, $fields, $avatar_hide_default );
 			if ( $user_data ) {
 				$authors[] = $user_data;
 			}
@@ -616,7 +633,9 @@ class WP_REST_Newspack_Authors_Controller extends WP_REST_Controller {
 	 */
 	protected function get_post_authors( $post_id, $fields, $avatar_hide_default ) {
 		$post = get_post( $post_id );
-		if ( ! $post ) {
+
+		// Who wrote an unpublished post is not the caller's to know unless they can read it.
+		if ( ! $post || ! current_user_can( 'read_post', $post->ID ) ) {
 			return rest_ensure_response( [] );
 		}
 
