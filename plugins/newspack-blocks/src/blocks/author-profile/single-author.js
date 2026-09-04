@@ -12,6 +12,11 @@ import { autop } from '@wordpress/autop';
  */
 import classnames from 'classnames';
 
+/**
+ * Internal dependencies
+ */
+import { getSocialLinks } from './social-links';
+
 // Show a link to the author's post archive page, if available.
 const MaybeLink = ( { author, children, showArchiveLink } ) =>
 	showArchiveLink && author && author.url ? (
@@ -25,18 +30,8 @@ const MaybeLink = ( { author, children, showArchiveLink } ) =>
 export const SingleAuthor = ( { author, attributes } ) => {
 	const { showBio, showSocial, showEmail, showArchiveLink, showAvatar, textSize, avatarAlignment, avatarBorderRadius, avatarSize } = attributes;
 
-	// Combine social links and email, which are shown together.
-	const socialLinks = ( showSocial && author && author.social ) || {};
-	if ( showEmail && author && author.email ) {
-		socialLinks.email = author.email;
-	} else {
-		delete socialLinks.email;
-	}
-	if ( attributes.shownewspack_phone_number && author && author.newspack_phone_number ) {
-		socialLinks.newspack_phone_number = author.newspack_phone_number;
-	} else {
-		delete socialLinks.newspack_phone_number;
-	}
+	// Combine social links and contact links, which are shown together.
+	const socialLinks = getSocialLinks( author, { showSocial, showEmail, showPhone: attributes.shownewspack_phone_number } );
 
 	const employment = [ attributes.shownewspack_role && author.newspack_role, attributes.shownewspack_employer && author.newspack_employer ]
 		.filter( Boolean )

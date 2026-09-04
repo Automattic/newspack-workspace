@@ -20,6 +20,10 @@ const ENDPOINT = '/newspack-blocks/v1/authors';
 // short enough to be invisible next to the request itself.
 const BATCH_WINDOW_MS = 50;
 
+// Most ids the endpoint resolves in one request. Larger batches are split to match, so a block
+// past the limit is not told its author does not exist.
+const MAX_BATCH_IDS = 100;
+
 // Long enough to cover a page load and block re-mounts, short enough that a profile edited in
 // another tab shows up on the next reload.
 const CACHE_TTL_MS = 60 * 1000;
@@ -45,11 +49,52 @@ const readCache = key => {
 const writeCache = ( key, value ) => cache.set( key, { expires: Date.now() + CACHE_TTL_MS, value } );
 
 /**
- * Send one request for every author queued under a batch key and settle each caller.
+ * Request a set of authors, giving a failed request one more try.
+ *
+ * A request dropped by a busy server is the failure this fetcher exists to soften, and a whole
+ * page of blocks now rides on each one, so a single failure should not blank every block.
+ *
+ * @param {Object} params Query params.
+ * @return {Promise<Array>} The author records.
+ */
+const requestAuthors = async params => {
+	const path = addQueryArgs( ENDPOINT, params );
+	try {
+		return await apiFetch( { path } );
+	} catch {
+		return apiFetch( { path } );
+	}
+};
+
+/**
+ * Resolve every caller covered by one request from its response.
+ *
+ * @param {string}  batchKey Key grouping lookups that share fields and avatar options.
+ * @param {Array}   entries  Queued lookups the request carries.
+ * @param {Promise} request  The request.
+ */
+const settleEntries = async ( batchKey, entries, request ) => {
+	try {
+		const authors = await request;
+		const byKey = new Map( ( authors || [] ).map( author => [ authorKey( author.id, author.is_guest ), author ] ) );
+		entries.forEach( entry => {
+			const key = authorKey( entry.authorId, entry.isGuestAuthor );
+			// A guest id that matched no guest author comes back as the WP user with that id.
+			const author = byKey.get( key ) || ( entry.isGuestAuthor ? byKey.get( authorKey( entry.authorId, false ) ) : undefined );
+			writeCache( `${ batchKey }|${ key }`, author );
+			entry.settlers.forEach( ( { resolve } ) => resolve( author ) );
+		} );
+	} catch ( error ) {
+		entries.forEach( entry => entry.settlers.forEach( ( { reject } ) => reject( error ) ) );
+	}
+};
+
+/**
+ * Send the lookups queued under a batch key, in as many requests as the endpoint's limit needs.
  *
  * @param {string} batchKey Key grouping lookups that share fields and avatar options.
  */
-const flushBatch = async batchKey => {
+const flushBatch = batchKey => {
 	const batch = pendingBatches.get( batchKey );
 	pendingBatches.delete( batchKey );
 	if ( ! batch ) {
@@ -57,30 +102,24 @@ const flushBatch = async batchKey => {
 	}
 
 	const entries = Array.from( batch.entries.values() );
-	const params = { fields: batch.fields };
-	if ( batch.avatarHideDefault ) {
-		params.avatar_hide_default = 1;
-	}
-	const userIds = entries.filter( entry => ! entry.isGuestAuthor ).map( entry => entry.authorId );
-	const guestIds = entries.filter( entry => entry.isGuestAuthor ).map( entry => entry.authorId );
-	if ( userIds.length ) {
-		params.author_ids = userIds.join( ',' );
-	}
-	if ( guestIds.length ) {
-		params.guest_author_ids = guestIds.join( ',' );
-	}
+	const userEntries = entries.filter( entry => ! entry.isGuestAuthor );
+	const guestEntries = entries.filter( entry => entry.isGuestAuthor );
+	const requests = Math.max( Math.ceil( userEntries.length / MAX_BATCH_IDS ), Math.ceil( guestEntries.length / MAX_BATCH_IDS ) );
 
-	try {
-		const authors = await apiFetch( { path: addQueryArgs( ENDPOINT, params ) } );
-		const byKey = new Map( ( authors || [] ).map( author => [ authorKey( author.id, author.is_guest ), author ] ) );
-		entries.forEach( entry => {
-			const key = authorKey( entry.authorId, entry.isGuestAuthor );
-			const author = byKey.get( key );
-			writeCache( `${ batchKey }|${ key }`, author );
-			entry.settlers.forEach( ( { resolve } ) => resolve( author ) );
-		} );
-	} catch ( error ) {
-		entries.forEach( entry => entry.settlers.forEach( ( { reject } ) => reject( error ) ) );
+	for ( let i = 0; i < requests; i++ ) {
+		const users = userEntries.slice( i * MAX_BATCH_IDS, ( i + 1 ) * MAX_BATCH_IDS );
+		const guests = guestEntries.slice( i * MAX_BATCH_IDS, ( i + 1 ) * MAX_BATCH_IDS );
+		const params = { fields: batch.fields };
+		if ( batch.avatarHideDefault ) {
+			params.avatar_hide_default = 1;
+		}
+		if ( users.length ) {
+			params.author_ids = users.map( entry => entry.authorId ).join( ',' );
+		}
+		if ( guests.length ) {
+			params.guest_author_ids = guests.map( entry => entry.authorId ).join( ',' );
+		}
+		settleEntries( batchKey, [ ...users, ...guests ], requestAuthors( params ) );
 	}
 };
 
@@ -136,8 +175,11 @@ export function fetchAuthorById( { authorId, isGuestAuthor = false, fields, avat
 export function fetchAuthorList( { search, offset, fields = 'id,name' } = {} ) {
 	const params = { search: search || '', offset: offset || 0, fields };
 	const key = `list|${ params.search }|${ params.offset }|${ params.fields }`;
+	// Only the initial list is worth keeping: every empty block asks for it at once, while a typed
+	// search should see an author created or renamed a moment ago.
+	const keep = ! params.search && ! params.offset;
 
-	const cached = readCache( key );
+	const cached = keep ? readCache( key ) : null;
 	if ( cached ) {
 		return Promise.resolve( cached.value );
 	}
@@ -145,18 +187,20 @@ export function fetchAuthorList( { search, offset, fields = 'id,name' } = {} ) {
 		return inFlightLists.get( key );
 	}
 
-	const request = ( async () => {
-		try {
-			const response = await apiFetch( { parse: false, path: addQueryArgs( ENDPOINT, params ) } );
+	// The request starts on the next tick, once it is recorded as in flight, so one that fails
+	// before it starts is still cleared instead of being handed to every later caller.
+	const request = Promise.resolve()
+		.then( () => apiFetch( { parse: false, path: addQueryArgs( ENDPOINT, params ) } ) )
+		.then( async response => {
 			const total = parseInt( response.headers.get( 'x-wp-total' ) || 0, 10 );
 			const authors = await response.json();
 			const result = { authors, total };
-			writeCache( key, result );
+			if ( keep ) {
+				writeCache( key, result );
+			}
 			return result;
-		} finally {
-			inFlightLists.delete( key );
-		}
-	} )();
+		} )
+		.finally( () => inFlightLists.delete( key ) );
 	inFlightLists.set( key, request );
 
 	return request;
