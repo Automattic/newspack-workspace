@@ -6,7 +6,7 @@
  * WordPress dependencies
  */
 import { __ } from '@wordpress/i18n';
-import { useEffect, useState, Fragment } from '@wordpress/element';
+import { useEffect, useRef, useState, Fragment } from '@wordpress/element';
 import { ExternalLink, __experimentalHStack as HStack } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
 import { connection } from '@wordpress/icons';
 import { Card as UICard } from '@wordpress/ui';
@@ -81,7 +81,22 @@ function Webhooks() {
 		}
 	}
 
-	const isEmpty = ! inFlight && ! endpoints?.length;
+	// `endpoints` is null until the fetch resolves, and stays null if it fails.
+	// Treating either as empty would offer onboarding to a site that has endpoints.
+	const isLoaded = null !== endpoints;
+	const isEmpty = ! inFlight && isLoaded && 0 === endpoints.length;
+
+	const addRef = useRef< HTMLButtonElement >( null );
+	const claimFocus = useRef( false );
+
+	// The empty state's button is unmounted by the very success it triggers, so the
+	// modal has nothing to restore focus to; the header button replaces it.
+	useEffect( () => {
+		if ( claimFocus.current && ! isEmpty ) {
+			claimFocus.current = false;
+			addRef.current?.focus();
+		}
+	}, [ isEmpty ] );
 
 	return (
 		<Card noBorder className="newspack-webhooks">
@@ -96,13 +111,14 @@ function Webhooks() {
 					noMargin
 				/>
 				{ ! isEmpty && (
-					<Button variant="primary" onClick={ () => setActionHandler( 'new' ) } disabled={ inFlight }>
+					<Button ref={ addRef } variant="primary" onClick={ () => setActionHandler( 'new' ) } disabled={ inFlight }>
 						{ inFlight ? __( 'Loading…', 'newspack-plugin' ) : __( 'Add Endpoint', 'newspack-plugin' ) }
 					</Button>
 				) }
 			</HStack>
 			{ ! inFlight &&
-				( endpoints && endpoints.length > 0 ? (
+				isLoaded &&
+				( endpoints.length > 0 ? (
 					<Fragment>
 						{ endpoints.map( endpoint => (
 							<EndpointActionsCard key={ endpoint.id } endpoint={ endpoint } setAction={ setActionHandler } />
@@ -114,15 +130,25 @@ function Webhooks() {
 							<EmptyState.Root size="small">
 								<EmptyState.Header
 									icon={ connection }
+									// Subordinate to the section header above, which is already a level 3.
+									heading={ 4 }
 									title={ __( 'No endpoints yet', 'newspack-plugin' ) }
 									description={ __( 'Add an endpoint to start sending reader activity data.', 'newspack-plugin' ) }
 								/>
 								<EmptyState.Actions orientation="column" gap="lg">
-									<Button variant="primary" onClick={ () => setActionHandler( 'new' ) }>
+									<Button
+										ref={ addRef }
+										variant="primary"
+										onClick={ () => {
+											claimFocus.current = true;
+											setActionHandler( 'new' );
+										} }
+									>
 										{ __( 'Add Endpoint', 'newspack-plugin' ) }
 									</Button>
 									<ExternalLink
 										href={ LEARN_MORE_URL }
+										/* translators: accessibility text. Names the link's destination for screen readers; keep the new-tab clause, which replaces the one the link would otherwise announce. */
 										aria-label={ __( 'Learn more about webhooks (opens in a new tab)', 'newspack-plugin' ) }
 									>
 										{ __( 'Learn more', 'newspack-plugin' ) }

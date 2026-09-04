@@ -25,13 +25,15 @@ const LEARN_MORE_URL = 'https://help.newspack.com/federated-sites/multi-branded-
 export default function Brands( {
 	brands,
 	isFetching,
+	hasFetched,
 	deleteBrand,
 }: {
 	brands: Brand[];
 	isFetching: boolean;
+	hasFetched: boolean;
 	deleteBrand: ( brand: Brand ) => void;
 } ) {
-	if ( ! isFetching && ! brands.length ) {
+	if ( hasFetched && ! isFetching && ! brands.length ) {
 		return (
 			<EmptyState.Root>
 				<EmptyState.Header
@@ -40,10 +42,14 @@ export default function Brands( {
 					description={ __( 'Give parts of your site their own name, logo, colors, and menus.', 'newspack-plugin' ) }
 				/>
 				<EmptyState.Actions orientation="column" gap="lg">
-					<NavLink to={ `${ TAB_PATH }/new` }>
-						<Button variant="primary">{ __( 'Add Brand', 'newspack-plugin' ) }</Button>
-					</NavLink>
-					<ExternalLink href={ LEARN_MORE_URL } aria-label={ __( 'Learn more about brands (opens in a new tab)', 'newspack-plugin' ) }>
+					<Button variant="primary" href={ `#${ TAB_PATH }/new` }>
+						{ __( 'Add Brand', 'newspack-plugin' ) }
+					</Button>
+					<ExternalLink
+						href={ LEARN_MORE_URL }
+						/* translators: accessibility text. Names the link's destination for screen readers; keep the new-tab clause, which replaces the one the link would otherwise announce. */
+						aria-label={ __( 'Learn more about brands (opens in a new tab)', 'newspack-plugin' ) }
+					>
 						{ __( 'Learn more', 'newspack-plugin' ) }
 					</ExternalLink>
 				</EmptyState.Actions>

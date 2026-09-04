@@ -28,6 +28,9 @@ export default function AdditionalBrands() {
 	const brandsCache = cache( '/wp/v2/brand' );
 
 	const [ brands, setBrands ] = useState< Brand[] >( [] );
+	// `isFetching` starts false and the fetch is kicked off in an effect, so an empty
+	// list alone cannot tell "nothing saved" from "not asked yet".
+	const [ hasFetched, setHasFetched ] = useState( false );
 	const history = useHistory();
 	const location = useLocation();
 	const { path } = useRouteMatch();
@@ -58,6 +61,9 @@ export default function AdditionalBrands() {
 				path: addQueryArgs( '/wp/v2/brand', { per_page: 100 } ),
 			},
 			{
+				onFinally() {
+					setHasFetched( true );
+				},
 				onSuccess( response ) {
 					setBrands(
 						response.map( ( brand: Brand ) => ( {
@@ -162,14 +168,16 @@ export default function AdditionalBrands() {
 	useEffect( fetchBrands, [] );
 
 	return (
-		<WizardsTab
-			isFetching={ isFetching }
-			// The empty state carries its own heading, and the breadcrumb already names the screen.
-			title={ brands.length ? __( 'Additional Brands', 'newspack-plugin' ) : undefined }
-		>
+		// No title: the breadcrumb's last crumb is the page's h1 on every route here, so
+		// a tab heading would repeat it.
+		<WizardsTab isFetching={ isFetching }>
 			<WizardSection>
 				<Switch>
-					<Route exact path={ path } render={ () => <Brands { ...wizardScreenProps } brands={ brands } deleteBrand={ deleteBrand } /> } />
+					<Route
+						exact
+						path={ path }
+						render={ () => <Brands { ...wizardScreenProps } brands={ brands } hasFetched={ hasFetched } deleteBrand={ deleteBrand } /> }
+					/>
 					<Route
 						path={ `${ path }/new` }
 						render={ () => (
