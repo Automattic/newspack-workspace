@@ -22,6 +22,17 @@ defined( 'ABSPATH' ) || exit;
 class Legacy_Basic extends Contact_Metadata {
 
 	/**
+	 * Omission reasons already sent to the remote log in this request. A
+	 * backfill loops every reader in one request, so an audience-wide problem
+	 * (a provider switch leaving stale IDs in reader data) is recorded remotely
+	 * once per run rather than once per reader; every omission still reaches
+	 * the local log.
+	 *
+	 * @var array<string,bool>
+	 */
+	private static $reported_omissions = [];
+
+	/**
 	 * Whether or not the metadata fields of this class are available to be synced.
 	 *
 	 * @return boolean
@@ -91,9 +102,10 @@ class Legacy_Basic extends Contact_Metadata {
 	 * from the ESP on login (Automattic/newspack-plugin#2619).
 	 *
 	 * Null omits the field: a site that does not send it, a reader with no
-	 * stored lists or a stored value that is not a plain list, or an
-	 * unreadable lists config all mean an unknown selection that must not
-	 * overwrite a value the ESP already holds. A stored empty list is a real
+	 * stored lists or a stored value that is not a plain list, an unreadable
+	 * lists config, or stored IDs that match no configured list all mean an
+	 * unknown selection that must not overwrite a value the ESP already
+	 * holds. A stored empty list is a real
 	 * state (unsubscribed from everything) and yields an empty string without
 	 * consulting the lists config, since there is nothing to resolve.
 	 *
@@ -110,12 +122,15 @@ class Legacy_Basic extends Contact_Metadata {
 			return null;
 		}
 
-		// Log why a selection is omitted or empty: once a blank value reaches the
-		// ESP, neither side keeps what it replaced, so this is the only record.
+		// An omission is recorded through newspack_log, which production sites
+		// keep, because the field silently stays as it is at the ESP and nothing
+		// else explains why. An empty selection is only traced at debug level:
+		// the stored empty list is the record, and it is the expected state for
+		// a reader on no lists.
 		$ids = Reader_Data::get_newsletter_subscribed_lists( $this->user->ID );
 		if ( null === $ids ) {
 			if ( false !== Reader_Data::get_data( $this->user->ID, 'newsletter_subscribed_lists' ) ) {
-				Logger::log( sprintf( 'Newsletter Selection omitted for user %d: the stored lists are not a plain list.', $this->user->ID ) );
+				$this->log_omission( 'stored_lists_not_a_list', 'the stored lists are not a plain list' );
 			}
 			return null;
 		}
@@ -126,7 +141,7 @@ class Legacy_Basic extends Contact_Metadata {
 
 		$lists = \Newspack_Newsletters_Subscription::get_lists();
 		if ( \is_wp_error( $lists ) || ! is_array( $lists ) ) {
-			Logger::log( sprintf( 'Newsletter Selection omitted for user %d: the lists config is unreadable.', $this->user->ID ) );
+			$this->log_omission( 'lists_config_unreadable', 'the lists config is unreadable' );
 			return null;
 		}
 
@@ -139,11 +154,39 @@ class Legacy_Basic extends Contact_Metadata {
 			}
 		}
 
-		$selection = implode( ', ', $names );
-		if ( '' === $selection ) {
-			Logger::log( sprintf( 'Newsletter Selection is empty for user %d: stored lists %s match no configured list.', $this->user->ID, wp_json_encode( $ids ) ) );
+		// Stored IDs that resolve to nothing are a resolution failure (a deleted
+		// list, IDs from a previous provider, a partial lists config), not a
+		// reader on no lists, which returned above. Pushing a blank here would
+		// overwrite the ESP value for every such reader in a single backfill.
+		if ( empty( $names ) ) {
+			$this->log_omission( 'stored_lists_unknown', sprintf( 'stored lists %s match no configured list', wp_json_encode( $ids ) ) );
+			return null;
 		}
 
-		return $selection;
+		return implode( ', ', $names );
+	}
+
+	/**
+	 * Record that the field was left out of this contact's metadata, and why.
+	 *
+	 * The first omission per reason in a request also goes to the remote log
+	 * (level 2); later ones with the same reason stay local (level 1).
+	 *
+	 * @param string $reason Stable reason key, for filtering.
+	 * @param string $detail Human-readable explanation.
+	 */
+	private function log_omission( string $reason, string $detail ) {
+		Logger::newspack_log(
+			'newspack_esp_sync_newsletter_selection',
+			sprintf( 'Newsletter Selection omitted for user %d: %s.', $this->user->ID, $detail ),
+			[
+				'user_email' => $this->user->user_email,
+				'user_id'    => $this->user->ID,
+				'reason'     => $reason,
+			],
+			'error',
+			isset( self::$reported_omissions[ $reason ] ) ? 1 : 2
+		);
+		self::$reported_omissions[ $reason ] = true;
 	}
 }

@@ -46,6 +46,7 @@ class Test_Legacy_Basic_Newsletter_Selection extends WP_UnitTestCase {
 	public function set_up() {
 		parent::set_up();
 		Metadata::$version = 'legacy';
+		$this->reset_reported_omissions();
 		Newspack_Newsletters_Subscription::reset_calls();
 		Newspack_Newsletters_Subscription::$lists = [
 			[
@@ -104,6 +105,32 @@ class Test_Legacy_Basic_Newsletter_Selection extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Forget which omission reasons were already sent to the remote log, so
+	 * each test starts as a fresh request would.
+	 */
+	private function reset_reported_omissions() {
+		$property = new ReflectionProperty( Legacy_Basic::class, 'reported_omissions' );
+		$property->setAccessible( true );
+		$property->setValue( null, [] );
+	}
+
+	/**
+	 * Build the metadata while capturing every newspack_log entry it fires.
+	 *
+	 * @return array[] Captured entries as [ code, message, params ].
+	 */
+	private function get_metadata_capturing_logs() {
+		$logged  = [];
+		$capture = function ( $code, $message, $params ) use ( &$logged ) {
+			$logged[] = compact( 'code', 'message', 'params' );
+		};
+		add_action( 'newspack_log', $capture, 10, 3 );
+		$this->get_metadata();
+		remove_action( 'newspack_log', $capture, 10 );
+		return $logged;
+	}
+
+	/**
 	 * A reader with no stored lists has an unknown selection, not an empty one.
 	 */
 	public function test_no_stored_lists_omits_the_field() {
@@ -152,6 +179,56 @@ class Test_Legacy_Basic_Newsletter_Selection extends WP_UnitTestCase {
 		$this->store_lists( [ 'list-1' ] );
 		Newspack_Newsletters_Subscription::$lists = new WP_Error( 'newspack_newsletters_error', 'Lists unavailable.' );
 		$this->assertArrayNotHasKey( $this->key(), $this->get_metadata() );
+	}
+
+	/**
+	 * Stored IDs that match no configured list are a resolution failure (a
+	 * deleted list, IDs from a previous provider), not a reader on no lists,
+	 * so the field is omitted rather than pushed blank over the ESP value.
+	 */
+	public function test_all_unknown_stored_ids_omit_the_field() {
+		$this->store_lists( [ 'gone', 'also-gone' ] );
+		$metadata = $this->get_metadata();
+		$this->assertArrayHasKey( Metadata::get_key( 'account' ), $metadata, 'The other legacy fields are still built.' );
+		$this->assertArrayNotHasKey( $this->key(), $metadata );
+	}
+
+	/**
+	 * An omission is recorded through the newspack_log action, which reaches
+	 * production logs, since nothing else explains a field that did not arrive.
+	 * The entry names the reader and carries a stable reason.
+	 */
+	public function test_omission_is_recorded_through_newspack_log() {
+		$this->store_lists( [ 'gone' ] );
+		$logged = $this->get_metadata_capturing_logs();
+		$this->assertCount( 1, $logged );
+		$this->assertSame( 'newspack_esp_sync_newsletter_selection', $logged[0]['code'] );
+		$this->assertStringContainsString( sprintf( 'user %d', $this->user_id ), $logged[0]['message'] );
+		$this->assertStringContainsString( 'match no configured list', $logged[0]['message'] );
+		$this->assertSame( 'reader@example.com', $logged[0]['params']['user_email'] );
+		$this->assertSame( 'stored_lists_unknown', $logged[0]['params']['data']['reason'] );
+		$this->assertSame( 2, $logged[0]['params']['log_level'], 'The first omission per reason is sent to the remote log.' );
+	}
+
+	/**
+	 * A backfill builds every reader in one request, so the same reason is
+	 * sent to the remote log once per request; later omissions stay local.
+	 */
+	public function test_repeated_omissions_in_one_request_stay_local() {
+		$this->store_lists( [ 'gone' ] );
+		$this->get_metadata_capturing_logs();
+		$logged = $this->get_metadata_capturing_logs();
+		$this->assertCount( 1, $logged, 'Every omission is still recorded.' );
+		$this->assertSame( 1, $logged[0]['params']['log_level'] );
+	}
+
+	/**
+	 * An empty selection is not an omission: the stored empty list is the
+	 * record, so nothing is sent to the durable log.
+	 */
+	public function test_empty_selection_is_not_recorded_as_an_omission() {
+		$this->store_lists( [] );
+		$this->assertSame( [], $this->get_metadata_capturing_logs() );
 	}
 
 	/**
