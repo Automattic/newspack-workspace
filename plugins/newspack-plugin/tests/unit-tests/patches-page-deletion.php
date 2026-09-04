@@ -67,17 +67,35 @@ class Test_Patches_Page_Deletion extends WP_UnitTestCase {
 	}
 
 	/**
-	 * A protected page passed as a WP_Post is still refused.
+	 * A protected page is refused whichever shape its ID arrives in.
 	 *
-	 * `current_user_can( 'delete_post', $post )` is a legal call, so the guard
-	 * resolves `$args[0]` through get_post() rather than casting it. Casting an
-	 * object yields 1, which both warns and compares the wrong page.
+	 * The comparison is strict against a list of ints, so a numeric string —
+	 * which is what a request-borne ID is — would otherwise slip past the guard
+	 * entirely. `current_user_can( 'delete_post', $post )` is also a legal call,
+	 * and casting an object yields 1, so the object is unwrapped before the cast.
 	 */
-	public function test_a_protected_page_is_matched_when_passed_as_an_object() {
+	public function test_a_protected_page_is_matched_however_the_id_is_passed() {
 		$front_page_id = $this->create_front_page();
 
 		$this->assertFalse( current_user_can( 'delete_post', get_post( $front_page_id ) ) );
 		$this->assertFalse( current_user_can( 'delete_post', (string) $front_page_id ) );
+	}
+
+	/**
+	 * A page protected by an option core does not special-case is still refused.
+	 *
+	 * Core maps deletion of `page_on_front` and `page_for_posts` to
+	 * `manage_options` on its own, so a front-page assertion alone cannot show
+	 * that this guard is the thing doing the refusing. The privacy policy page is
+	 * a plain option with no such treatment.
+	 */
+	public function test_a_page_core_does_not_protect_is_refused_by_the_guard() {
+		$privacy_policy_id = self::factory()->post->create( [ 'post_type' => 'page' ] );
+		update_option( 'wp_page_for_privacy_policy', $privacy_policy_id );
+
+		$this->assertFalse( current_user_can( 'delete_post', $privacy_policy_id ) );
+		$this->assertFalse( current_user_can( 'delete_page', $privacy_policy_id ) );
+		$this->assertTrue( current_user_can( 'edit_post', $privacy_policy_id ) );
 	}
 
 	/**

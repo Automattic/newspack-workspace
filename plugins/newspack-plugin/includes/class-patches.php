@@ -339,25 +339,28 @@ class Patches {
 		// the guard. Every other capability returns here: this filter runs on every
 		// capability check in the request, and $args[0] is a post ID only for post
 		// capabilities.
+		//
+		// Both spellings suffice because every protected ID is a page. A post type
+		// registered with its own capability_type and map_meta_cap => false arrives
+		// as `delete_<singular>`, which this whitelist does not match.
 		if ( ! in_array( $cap, [ 'delete_post', 'delete_page' ], true ) ) {
 			return $caps;
 		}
 
-		// If no $args to check, bail early.
-		if ( empty( $args ) ) {
+		// Nothing to compare without an ID, and $args is empty entirely for some
+		// capability checks.
+		if ( empty( $args[0] ) ) {
 			return $caps;
 		}
 
-		// Resolve the way core does, because a caller may pass an ID, a numeric
-		// string or a WP_Post, and the comparison below is strict against a list of
-		// ints.
-		$post = get_post( $args[0] );
-		if ( ! $post ) {
-			return $caps;
-		}
+		// map_meta_cap passes on whatever the caller handed current_user_can(), which
+		// for a post capability may be the post object. Cast because the comparison
+		// below is strict against a list of ints, so a numeric string would slip past
+		// the guard silently.
+		$post_id = (int) ( $args[0] instanceof \WP_Post ? $args[0]->ID : $args[0] );
 
 		// If the current page ID is protected, do not allow it to be deleted.
-		if ( in_array( (int) $post->ID, self::get_protected_page_ids(), true ) ) {
+		if ( in_array( $post_id, self::get_protected_page_ids(), true ) ) {
 			$caps[] = 'do_not_allow';
 		}
 
