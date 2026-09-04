@@ -36,9 +36,9 @@ const Footer = ( { simple = undefined } ) => {
 	} );
 
 	const starterContentDialog = useConfirmDialog( {
-		title: __( 'Remove starter content?', 'newspack-plugin' ),
+		title: __( 'Remove Starter Content?', 'newspack-plugin' ),
 		message: __( 'This deletes the posts, pages and categories created as starter content. This cannot be undone.', 'newspack-plugin' ),
-		confirmButtonText: __( 'Remove starter content', 'newspack-plugin' ),
+		confirmButtonText: __( 'Remove Starter Content', 'newspack-plugin' ),
 		isDestructive: true,
 	} );
 

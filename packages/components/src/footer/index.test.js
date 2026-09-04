@@ -12,10 +12,15 @@ import Footer from './';
 // useHistory() has no Router above it. That is the case worth pinning.
 describe( 'Footer', () => {
 	const RESET_URL = 'https://example.test/wp-admin/admin.php?page=newspack-dashboard&newspack_reset=reset';
+	const STARTER_CONTENT_URL = 'https://example.test/wp-admin/admin.php?page=newspack-dashboard&newspack_reset=starter-content';
 	let assigned;
+	let originalLocation;
+	let originalUrls;
 
 	beforeEach( () => {
 		assigned = [];
+		originalLocation = window.location;
+		originalUrls = window.newspack_urls;
 		delete window.location;
 		window.location = {
 			get href() {
@@ -28,11 +33,22 @@ describe( 'Footer', () => {
 		window.newspack_urls = {
 			support: 'https://help.newspack.com/',
 			reset_url: RESET_URL,
+			remove_starter_content: STARTER_CONTENT_URL,
 			plugin_version: { label: 'Newspack 1.0.0' },
 		};
 	} );
 
-	it( 'does not reset on the first click', async () => {
+	afterEach( () => {
+		delete window.location;
+		window.location = originalLocation;
+		if ( undefined === originalUrls ) {
+			delete window.newspack_urls;
+		} else {
+			window.newspack_urls = originalUrls;
+		}
+	} );
+
+	it( 'does not reset on the first click', () => {
 		render( <Footer /> );
 		fireEvent.click( screen.getByRole( 'link', { name: 'Reset Newspack' } ) );
 		expect( assigned ).toEqual( [] );
@@ -60,7 +76,26 @@ describe( 'Footer', () => {
 		expect( assigned ).toEqual( [ RESET_URL ] );
 	} );
 
-	it( 'does not guard the non-destructive links', async () => {
+	it( 'does not remove the starter content on the first click', () => {
+		render( <Footer /> );
+		fireEvent.click( screen.getByRole( 'link', { name: 'Remove Starter Content' } ) );
+		expect( assigned ).toEqual( [] );
+	} );
+
+	it( 'asks before removing the starter content', async () => {
+		render( <Footer /> );
+		fireEvent.click( screen.getByRole( 'link', { name: 'Remove Starter Content' } ) );
+		expect( await screen.findByText( /created as starter content/ ) ).toBeInTheDocument();
+	} );
+
+	it( 'removes the starter content once confirmed', async () => {
+		render( <Footer /> );
+		fireEvent.click( screen.getByRole( 'link', { name: 'Remove Starter Content' } ) );
+		fireEvent.click( await screen.findByRole( 'button', { name: 'Remove Starter Content' } ) );
+		expect( assigned ).toEqual( [ STARTER_CONTENT_URL ] );
+	} );
+
+	it( 'does not guard the non-destructive links', () => {
 		window.newspack_urls.setup_wizard = 'https://example.test/wp-admin/admin.php?page=newspack-setup-wizard';
 		render( <Footer /> );
 		const link = screen.getByRole( 'link', { name: 'Setup Wizard' } );
