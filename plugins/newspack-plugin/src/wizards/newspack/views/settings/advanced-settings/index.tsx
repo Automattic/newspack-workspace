@@ -6,7 +6,7 @@
  * WordPress dependencies.
  */
 import { __ } from '@wordpress/i18n';
-import { useEffect, useRef, useState } from '@wordpress/element';
+import { useEffect } from '@wordpress/element';
 import { Notice } from '@wordpress/components';
 
 /**
@@ -17,6 +17,7 @@ import WizardsTab from '../../../../wizards-tab';
 import WizardSection from '../../../../wizards-section';
 import { Button, Grid, hooks, ImageUpload, utils } from '../../../../../../packages/components/src';
 import { useWizardApiFetch } from '../../../../hooks/use-wizard-api-fetch';
+import { useErrorNoticeFocus } from '../../../../hooks/use-error-notice-focus';
 import Recirculation from './recirculation';
 import AuthorBio from './author-bio';
 import FeaturedImagePostsAll from './featured-image-posts-all';
@@ -59,12 +60,13 @@ export default function AdvancedSettings() {
 		resetError: resetPrimaryCategoryError,
 	} = useWizardApiFetch( 'newspack-settings/primary-category' );
 
-	// This tab reads and writes through three namespaces, so a failure in any of them,
-	// on load or on save, has to reach the one notice at the top.
 	const saveErrorMessage = errorMessage || recirculationErrorMessage || primaryCategoryErrorMessage;
 
-	const noticeRef = useRef< HTMLDivElement | null >( null );
-	const [ saveAttempt, setSaveAttempt ] = useState( 0 );
+	const {
+		wrapperProps: noticeWrapperProps,
+		registerSubmit,
+		spokenMessage,
+	} = useErrorNoticeFocus( saveErrorMessage, __( 'Advanced Settings error', 'newspack-plugin' ) );
 
 	const [ primaryCategoryData, setPrimaryCategoryData ] = hooks.useObjectState< PrimaryCategoryData >( {
 		enabled: true,
@@ -119,21 +121,10 @@ export default function AdvancedSettings() {
 		);
 	}, [] );
 
-	// The Save button sits at the foot of a long page, so a failure reported at the top
-	// would otherwise land off-screen. Focus follows the scroll, or the next key press
-	// would send the viewport straight back down to the button the user left it on.
-	useEffect( () => {
-		if ( ! saveErrorMessage || ! saveAttempt ) {
-			return;
-		}
-		window.scrollTo( { top: 0, behavior: window.matchMedia( '(prefers-reduced-motion: reduce)' ).matches ? 'auto' : 'smooth' } );
-		noticeRef.current?.focus();
-	}, [ saveErrorMessage, saveAttempt ] );
-
-	function save() {
-		setSaveAttempt( attempt => attempt + 1 );
-		// A repeat of the same failure produces an identical message, and both the notice's
-		// announcement and the scroll above key on that string changing.
+	function save( event?: { currentTarget: Element | null } ) {
+		registerSubmit( event );
+		// The fetch hook leaves the error in place on success, so a retry that works would
+		// otherwise keep the failed attempt's notice on screen.
 		resetError();
 		resetRecirculationError();
 		resetPrimaryCategoryError();
@@ -198,15 +189,8 @@ export default function AdvancedSettings() {
 			isFetching={ isFetching || isFetchingRecirculation || isFetchingPrimaryCategory }
 		>
 			{ saveErrorMessage && (
-				<div ref={ noticeRef } tabIndex={ -1 } className="newspack-advanced-settings__notice">
-					<Notice
-						status="error"
-						isDismissible={ false }
-						politeness="polite"
-						// After a save the notice takes focus, which reads it out; letting it
-						// also speak would say the same thing twice.
-						spokenMessage={ saveAttempt ? '' : saveErrorMessage }
-					>
+				<div { ...noticeWrapperProps } className="newspack-advanced-settings__notice">
+					<Notice status="error" isDismissible={ false } politeness="polite" spokenMessage={ spokenMessage }>
 						{ saveErrorMessage }
 					</Notice>
 				</div>

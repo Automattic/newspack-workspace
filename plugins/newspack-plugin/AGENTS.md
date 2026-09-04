@@ -225,6 +225,23 @@ Blocks in `src/blocks/` with `block.json` metadata. Central registration in `src
 - `__experimentalHStack`/`__experimentalVStack` from `@wordpress/components` (spacing on a 4px scale) remain throughout older code and are fine to leave in place. Don't mix the two scales inside one component: a `gap="xl"` Stack wrapping an `HStack spacing={ 2 }` puts two different spacing systems in the same tree.
 - Shared mixins in `src/shared/scss/_mixins.scss`.
 
+### Notices and announcements
+
+Use `Notice` from `@wordpress/components`. It announces itself through `speak()` on mount, which `packages/components`' own `Notice` never did.
+
+- **Errors and action results announce.** An error raised by something the user just did stays on the default assertive politeness.
+- **An error that can render on arrival takes `politeness="polite"`.** Anything fed by a mount `GET` qualifies, including a notice that doubles as a save error. `status="error"` maps to assertive, which cuts off the page title on load.
+- **Standing state carries `spokenMessage=""`.** Info and warnings that describe how the site is configured, rather than reporting an action, should be silent on every visit.
+
+Re-announcing an unchanged message needs help, because `useSpokenMessage` only fires when the string changes. Which mechanism depends on where the message comes from:
+
+| The error arrives | Use |
+| --- | --- |
+| From a promise (a failed request) | `resetError()` at the top of the handler, so the string transitions |
+| From synchronous validation | A submit counter as the `Notice`'s `key`; a clear and a set in one handler batch into a single commit, so the string never transitions |
+| From several validators at once | One `speak()` in the handler with the notices silenced; `speak()` empties the live region before each write, so the last to render is the only one heard |
+| On a form whose button sits far below the notice | `useErrorNoticeFocus`, which scrolls, moves focus, and picks between focus and `speak()` |
+
 ### JS Testing
 
 ```bash

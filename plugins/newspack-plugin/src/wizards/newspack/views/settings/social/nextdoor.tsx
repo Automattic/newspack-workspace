@@ -58,12 +58,13 @@ function Nextdoor() {
 		),
 	} );
 
-	// Read straight from the fetched data rather than mirroring it into state: a copy
-	// updated by an effect is a commit behind, and the children branch on it.
+	// A copy kept in state would be a commit behind, and the children branch on this.
 	const status = apiData.connection_status;
 
 	useEffect( () => {
-		if ( apiData.connection_status ) {
+		// With the module off the endpoint sends `settings` as an empty array, so the
+		// roles it should carry are not there to copy.
+		if ( apiData.settings?.allowed_roles ) {
 			setSettings( { ...settings, allowed_roles: apiData.settings.allowed_roles } );
 		}
 	}, [ apiData ] );

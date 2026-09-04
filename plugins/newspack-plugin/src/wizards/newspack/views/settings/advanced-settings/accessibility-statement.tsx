@@ -78,8 +78,8 @@ export default function AccessibilityStatement( { isFetching }: AccessibilitySta
 	}, [] );
 
 	const createPage = () => {
-		// A repeat of the same failure produces an identical message, and core's Notice
-		// only announces when that string changes. Clearing first restores the transition.
+		// Core's Notice announces only when the message changes, so a repeat of the same
+		// failure needs the clear to be heard at all.
 		resetError();
 		setLocalIsFetching( true );
 		wizardApiFetch< PageResponse >(

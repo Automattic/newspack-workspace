@@ -63,9 +63,8 @@ export function useFieldsValidation< TData, TConfig = Record< string, unknown > 
 		/**
 		 * Validates every configured field.
 		 *
-		 * Returns the message rather than a boolean so a caller running several
-		 * validators can gather what each one said: `errorMessage` below is state,
-		 * so it still holds the previous render's value at this point.
+		 * Returns the message rather than a boolean because `errorMessage` below is state,
+		 * so a caller running several validators cannot read them back this render.
 		 *
 		 * @return The first failing field's message, or an empty string when valid.
 		 */

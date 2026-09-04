@@ -162,7 +162,7 @@ export const Onboarding = ( { settings, status, error, updateSettings, startOAut
 	return (
 		<>
 			{ error && (
-				<Notice status="error" isDismissible={ false }>
+				<Notice status="error" isDismissible={ false } politeness="polite">
 					{ error }
 				</Notice>
 			) }

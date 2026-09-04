@@ -39,8 +39,8 @@ const Upsert = ( {
 	wizardApiFetch,
 }: Omit< ModalComponentProps, 'action' > ) => {
 	const [ editing, setEditing ] = useState< Endpoint >( endpoint );
-	// Validation runs synchronously, so re-failing on the same input leaves the message
-	// byte-identical and neither the announcement nor the scroll below would fire again.
+	// Validation is synchronous, so re-failing on the same input leaves the message
+	// byte-identical and nothing keyed on it would fire again.
 	const [ submitAttempt, setSubmitAttempt ] = useState( 0 );
 	// Test request
 	const [ testResponse, setTestResponse ] = useState< {

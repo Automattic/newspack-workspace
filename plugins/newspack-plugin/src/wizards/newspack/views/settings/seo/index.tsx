@@ -26,7 +26,7 @@ import { useWizardApiFetch } from '../../../../hooks/use-wizard-api-fetch';
 const PATH = '/newspack/v1/wizard/newspack-settings/seo';
 
 function Seo() {
-	const { wizardApiFetch, isFetching } = useWizardApiFetch( 'newspack-settings/seo' );
+	const { wizardApiFetch, isFetching, errorMessage, resetError } = useWizardApiFetch( 'newspack-settings/seo' );
 
 	const [ data, setData ] = useState< SeoData >( {
 		under_construction: false,
@@ -106,15 +106,14 @@ function Seo() {
 	}
 
 	function post() {
-		// Both notices mount in the same commit, and `speak` empties the live region
-		// before each write, so leaving them to announce themselves would drop whichever
-		// rendered first. Announcing once here also repeats on an unchanged message,
-		// which a re-render of the same string would not.
+		// `speak` empties the live region before each write, so two notices mounting in one
+		// commit would report only the last. Announcing here also repeats an unchanged message.
 		const validationErrors = [ codesValidation.validateInputs(), accountsValidation.validateInputs() ].filter( Boolean );
 		if ( validationErrors.length ) {
 			speak( validationErrors.join( ' ' ), 'assertive' );
 			return;
 		}
+		resetError();
 		wizardApiFetch(
 			{
 				path: PATH,
@@ -129,6 +128,11 @@ function Seo() {
 	}
 	return (
 		<WizardsTab title={ __( 'SEO', 'newspack-plugin' ) } className={ isFetching ? 'is-fetching' : '' }>
+			{ errorMessage && (
+				<Notice status="error" isDismissible={ false } politeness="polite">
+					{ errorMessage }
+				</Notice>
+			) }
 			<WizardSection
 				title={ __( 'Webmaster Tools', 'newspack-plugin' ) }
 				description={ __( 'Add verification meta tags to your site', 'newspack-plugin' ) }

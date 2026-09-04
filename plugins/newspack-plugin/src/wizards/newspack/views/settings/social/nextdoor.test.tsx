@@ -46,7 +46,8 @@ const CONNECTED = {
 	},
 };
 
-const NOT_CONNECTED_MESSAGE = 'Nextdoor is not connected. Please complete the setup process first.';
+// Matched on the notice, not its wording: a copy change would otherwise turn this green.
+const errorNotice = () => document.querySelector( '.components-notice.is-error' );
 
 beforeEach( () => {
 	jest.clearAllMocks();
@@ -64,7 +65,7 @@ describe( 'the Nextdoor section on a connected site', () => {
 	it( 'never says the integration is not connected', () => {
 		render( <Nextdoor /> );
 
-		expect( screen.queryByText( NOT_CONNECTED_MESSAGE ) ).not.toBeInTheDocument();
+		expect( errorNotice() ).toBeNull();
 		expect( speak ).not.toHaveBeenCalledWith( expect.stringContaining( 'not connected' ), expect.anything() );
 	} );
 
