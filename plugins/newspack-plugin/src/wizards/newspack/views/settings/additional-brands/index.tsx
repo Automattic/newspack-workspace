@@ -75,8 +75,8 @@ export default function AdditionalBrands() {
 	};
 
 	const upsertBrand = ( brandId: number, brand: Brand ) => {
-		// Core's Notice announces only when the message changes, so a repeat of the same
-		// failure needs the clear to be heard at all.
+		// The fetch hook leaves the error in place on success, so a retry that works would
+		// otherwise keep the failed attempt's notice on screen.
 		resetError();
 		// BrandId is NaN when inserting new brand.
 		wizardApiFetch< Brand >(

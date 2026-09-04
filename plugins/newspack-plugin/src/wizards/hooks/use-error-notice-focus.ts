@@ -14,7 +14,10 @@ import { speak } from '@wordpress/a11y';
  *
  * @param errorMessage The current failure message, or null when there is none.
  * @param label        Accessible name for the notice container.
- * @return Props for the notice wrapper, a submit handler to register, and the notice's `spokenMessage`.
+ * @return Props for the notice wrapper, a submit handler, and the notice's `spokenMessage`.
+ *         Pass the click event to the submit handler: the element it came from is what
+ *         tells the effect whether the reader has since moved on, and without it focus
+ *         is taken unconditionally.
  */
 export function useErrorNoticeFocus( errorMessage: string | null | undefined, label: string ) {
 	const noticeRef = useRef< HTMLDivElement | null >( null );

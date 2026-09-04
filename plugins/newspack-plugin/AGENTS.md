@@ -240,7 +240,9 @@ Re-announcing an unchanged message needs help, because `useSpokenMessage` only f
 | From a promise (a failed request) | `resetError()` at the top of the handler, so the string transitions |
 | From synchronous validation | A submit counter as the `Notice`'s `key`; a clear and a set in one handler batch into a single commit, so the string never transitions |
 | From several validators at once | One `speak()` in the handler with the notices silenced; `speak()` empties the live region before each write, so the last to render is the only one heard |
-| On a form whose button sits far below the notice | `useErrorNoticeFocus`, which scrolls, moves focus, and picks between focus and `speak()` |
+| On a form whose button sits far below the notice | `useErrorNoticeFocus`, which moves focus to the notice, bringing it into view, and picks between focus and `speak()` depending on whether the reader stayed put |
+
+Moving focus cancels a smooth `scrollTo`, in either order and across a frame's delay, so the two do not combine: `useErrorNoticeFocus` lets focus do the scrolling. A screen that scrolls without moving focus, like the webhook modal, can still animate it.
 
 ### JS Testing
 
