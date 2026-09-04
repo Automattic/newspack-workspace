@@ -66,7 +66,7 @@ export const Settings = ( { settings, status, error, updateSettings, disconnect,
 
 	if ( ! status.is_connected ) {
 		return (
-			<Notice status="error" isDismissible={ false }>
+			<Notice status="error" isDismissible={ false } politeness="polite">
 				{ __( 'Nextdoor is not connected. Please complete the setup process first.', 'newspack-plugin' ) }
 			</Notice>
 		);

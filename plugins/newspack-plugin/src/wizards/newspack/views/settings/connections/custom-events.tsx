@@ -7,7 +7,7 @@
  */
 import { __ } from '@wordpress/i18n';
 import { useState, useEffect } from '@wordpress/element';
-import { Notice, __experimentalHStack as HStack } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
+import { Notice } from '@wordpress/components';
 import { Stack } from '@wordpress/ui';
 
 /**
@@ -140,14 +140,14 @@ function CustomEvents() {
 					{ errorMessage }
 				</Notice>
 			) }
-			<HStack justify="flex-start" spacing={ 2 }>
+			<Stack direction="row" justify="flex-start" gap="sm">
 				<Button variant="primary" onClick={ updateGa4Credentials } disabled={ isInputsEmpty() || !! errorMessage }>
 					{ __( 'Save', 'newspack-plugin' ) }
 				</Button>
 				<Button variant="secondary" onClick={ resetGa4Credentials } disabled={ isInputsEmpty() }>
 					{ __( 'Reset', 'newspack-plugin' ) }
 				</Button>
-			</HStack>
+			</Stack>
 		</Stack>
 	);
 }

@@ -45,12 +45,22 @@ export default function AdvancedSettings() {
 		relatedPostsUpdated: false,
 	} );
 
-	const { wizardApiFetch, isFetching, errorMessage } = useWizardApiFetch( 'newspack-settings/theme-mods' );
-	const { wizardApiFetch: wizardApiFetchRecirculation, isFetching: isFetchingRecirculation } = useWizardApiFetch(
-		'newspack-settings/advanced-settings/recirculation'
-	);
-	const { wizardApiFetch: wizardApiFetchPrimaryCategory, isFetching: isFetchingPrimaryCategory } =
-		useWizardApiFetch( 'newspack-settings/primary-category' );
+	const { wizardApiFetch, isFetching, errorMessage, resetError } = useWizardApiFetch( 'newspack-settings/theme-mods' );
+	const {
+		wizardApiFetch: wizardApiFetchRecirculation,
+		isFetching: isFetchingRecirculation,
+		errorMessage: recirculationErrorMessage,
+		resetError: resetRecirculationError,
+	} = useWizardApiFetch( 'newspack-settings/advanced-settings/recirculation' );
+	const {
+		wizardApiFetch: wizardApiFetchPrimaryCategory,
+		isFetching: isFetchingPrimaryCategory,
+		errorMessage: primaryCategoryErrorMessage,
+		resetError: resetPrimaryCategoryError,
+	} = useWizardApiFetch( 'newspack-settings/primary-category' );
+
+	// Save writes through three namespaces, any of which can fail on its own.
+	const saveErrorMessage = errorMessage || recirculationErrorMessage || primaryCategoryErrorMessage;
 
 	const [ primaryCategoryData, setPrimaryCategoryData ] = hooks.useObjectState< PrimaryCategoryData >( {
 		enabled: true,
@@ -108,12 +118,17 @@ export default function AdvancedSettings() {
 	// The Save button sits at the foot of a long page, so a failure reported at the
 	// top would otherwise land off-screen.
 	useEffect( () => {
-		if ( errorMessage ) {
+		if ( saveErrorMessage ) {
 			window.scrollTo( { top: 0, behavior: window.matchMedia( '(prefers-reduced-motion: reduce)' ).matches ? 'auto' : 'smooth' } );
 		}
-	}, [ errorMessage ] );
+	}, [ saveErrorMessage ] );
 
 	function save() {
+		// A repeat of the same failure produces an identical message, and both the notice's
+		// announcement and the scroll above key on that string changing.
+		resetError();
+		resetRecirculationError();
+		resetPrimaryCategoryError();
 		wizardApiFetchRecirculation(
 			{
 				path: '/newspack/v1/wizard/newspack-settings/related-posts-max-age',
@@ -174,9 +189,9 @@ export default function AdvancedSettings() {
 			title={ __( 'Advanced Settings', 'newspack-plugin' ) }
 			isFetching={ isFetching || isFetchingRecirculation || isFetchingPrimaryCategory }
 		>
-			{ errorMessage && (
+			{ saveErrorMessage && (
 				<Notice status="error" isDismissible={ false } className="newspack-advanced-settings__notice">
-					{ errorMessage }
+					{ saveErrorMessage }
 				</Notice>
 			) }
 			<WizardSection title={ __( 'Recirculation', 'newspack-plugin' ) }>

@@ -5,9 +5,9 @@
 /**
  * WordPress dependencies
  */
-import { __ } from '@wordpress/i18n';
+import { __, sprintf } from '@wordpress/i18n';
 import { useState, useEffect, useRef, Fragment } from '@wordpress/element';
-import { CheckboxControl as WpCheckboxControl, Notice, TextControl, __experimentalHStack as HStack } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
+import { CheckboxControl as WpCheckboxControl, Notice, TextControl } from '@wordpress/components';
 import { Stack } from '@wordpress/ui';
 
 /**
@@ -55,11 +55,11 @@ const Upsert = ( {
 
 	function upsertEndpoint( endpointToUpsert: Endpoint ) {
 		const errors = validateEndpoint( endpointToUpsert );
+		setError( null );
 		if ( errors.length ) {
 			setError( errors.join( ' ' ) );
 			return;
 		}
-		setError( null );
 		wizardApiFetch< Endpoint[] >(
 			{
 				path: `/newspack/v1/webhooks/endpoints/${ endpointToUpsert.id || '' }`,
@@ -75,6 +75,7 @@ const Upsert = ( {
 
 	function testEndpoint( url: string, bearer_token: string | undefined ) {
 		const urlError = validateUrl( url );
+		setError( null );
 		if ( urlError ) {
 			setError( urlError );
 			return;
@@ -133,8 +134,12 @@ const Upsert = ( {
 						</Notice>
 					) }
 					{ editing.disabled && editing.disabled_error && (
-						<Notice status="error" isDismissible={ false }>
-							{ __( 'Request Error: ', 'newspack-plugin' ) + editing.disabled_error }
+						<Notice status="error" isDismissible={ false } politeness="polite">
+							{ sprintf(
+								// translators: %s is the error returned by the endpoint.
+								__( 'Request error: %s', 'newspack-plugin' ),
+								String( editing.disabled_error )
+							) }
 						</Notice>
 					) }
 					{ testResponse.success && (
@@ -164,7 +169,7 @@ const Upsert = ( {
 							onChange={ ( value: string ) => setEditing( { ...editing, bearer_token: value } ) }
 							disabled={ inFlight }
 						/>
-						<HStack justify="flex-end" spacing={ 4 } wrap>
+						<Stack direction="row" justify="flex-end" gap="lg" wrap="wrap">
 							<Button
 								variant="secondary"
 								disabled={ inFlight || ! editing.url }
@@ -172,7 +177,7 @@ const Upsert = ( {
 							>
 								{ __( 'Send a test request', 'newspack-plugin' ) }
 							</Button>
-						</HStack>
+						</Stack>
 					</Grid>
 					<Divider variant="tertiary" marginTop={ 0 } marginBottom={ 0 } />
 					<TextControl
@@ -211,7 +216,7 @@ const Upsert = ( {
 								</Grid>
 							</Fragment>
 						) }
-						<HStack justify="flex-end" spacing={ 4 } wrap className="newspack-modal__footer">
+						<Stack direction="row" justify="flex-end" gap="lg" wrap="wrap" className="newspack-modal__footer">
 							<Button
 								isPrimary
 								onClick={ () => {
@@ -223,7 +228,7 @@ const Upsert = ( {
 							>
 								{ __( 'Save', 'newspack-plugin' ) }
 							</Button>
-						</HStack>
+						</Stack>
 					</Grid>
 				</Stack>
 			</Modal>

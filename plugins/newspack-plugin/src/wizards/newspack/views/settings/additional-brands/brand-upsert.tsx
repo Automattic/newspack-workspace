@@ -176,7 +176,7 @@ export default function Brand( {
 	return (
 		<Fragment>
 			{ errorMessage && (
-				<Notice status="error" isDismissible={ false } className="newspack-additional-brands__notice">
+				<Notice status="error" isDismissible={ false } className="newspack-brand__notice">
 					{ errorMessage }
 				</Notice>
 			) }

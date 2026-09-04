@@ -3,17 +3,17 @@
  */
 
 /**
+ * External dependencies
+ */
+import moment from 'moment';
+
+/**
  * WordPress dependencies
  */
 import { __, sprintf } from '@wordpress/i18n';
 import { Fragment } from '@wordpress/element';
 import { Icon, Notice } from '@wordpress/components';
 import { Stack } from '@wordpress/ui';
-
-/**
- * External dependencies
- */
-import moment from 'moment';
 
 /**
  * Internal dependencies

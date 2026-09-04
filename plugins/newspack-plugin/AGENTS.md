@@ -221,7 +221,8 @@ Blocks in `src/blocks/` with `block.json` metadata. Central registration in `src
 - Design tokens in `packages/colors/colors.module.scss` (primary, secondary, tertiary, quaternary, neutral + semantic colors, each with 000-1000 scale).
 - See `packages/colors/DEVELOPMENT.md` for the color usage decision tree: backend admin uses WordPress colors (with `primary-600` accent override), block icons must use `primary-400`, frontend Newspack UI uses `newspack-colors`, theme elements use the theme palette.
 - BEM-ish naming with `newspack-` prefix (e.g., `.newspack-wizard__header`, `.newspack-card`).
-- No utility-class library. For layout, use `__experimentalHStack`/`__experimentalVStack` from `@wordpress/components`; spacing via the `spacing` prop (4px units).
+- No utility-class library. For layout, use `Stack` from `@wordpress/ui`; spacing via the `gap` prop, which takes the design-token scale (`xs` 4px, `sm` 8px, `md` 12px, `lg` 16px, `xl` 24px, `2xl` 32px, `3xl` 40px) and is typed, so a bad value fails `tsc`. `Stack` sets only `display: flex`, so a child bringing its own margin adds to the gap: reach for the component's own `noMargin` prop where it has one, or scope a `> * { margin: 0 }` reset to the container.
+- `__experimentalHStack`/`__experimentalVStack` from `@wordpress/components` (spacing on a 4px scale) remain throughout older code and are fine to leave in place. Don't mix the two scales inside one component: a `gap="xl"` Stack wrapping an `HStack spacing={ 2 }` puts two different spacing systems in the same tree.
 - Shared mixins in `src/shared/scss/_mixins.scss`.
 
 ### JS Testing

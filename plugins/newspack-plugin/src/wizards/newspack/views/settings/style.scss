@@ -1,10 +1,11 @@
+@use "~@wordpress/base-styles/variables" as wp-vars;
+
 .newspack-settings {
 	box-sizing: border-box;
 }
 
-.newspack-additional-brands__notice,
 .newspack-advanced-settings__notice {
-	margin-bottom: 32px;
+	margin-bottom: wp-vars.$grid-unit-40;
 }
 
 .newspack-accessibility-statement,

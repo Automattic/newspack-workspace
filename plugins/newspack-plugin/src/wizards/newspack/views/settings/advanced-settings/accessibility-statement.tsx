@@ -10,6 +10,10 @@ import { useEffect, useState } from '@wordpress/element';
 import { ExternalLink, Notice } from '@wordpress/components';
 import { Stack } from '@wordpress/ui';
 import { speak } from '@wordpress/a11y';
+
+/**
+ * Internal dependencies.
+ */
 import { Button, Card, SectionHeader } from '../../../../../../packages/components/src';
 import { useWizardApiFetch } from '../../../../hooks/use-wizard-api-fetch';
 
@@ -74,6 +78,9 @@ export default function AccessibilityStatement( { isFetching }: AccessibilitySta
 	}, [] );
 
 	const createPage = () => {
+		// A repeat of the same failure produces an identical message, and core's Notice
+		// only announces when that string changes. Clearing first restores the transition.
+		resetError();
 		setLocalIsFetching( true );
 		wizardApiFetch< PageResponse >(
 			{
