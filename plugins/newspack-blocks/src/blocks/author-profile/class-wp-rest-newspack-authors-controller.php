@@ -72,6 +72,8 @@ class WP_REST_Newspack_Authors_Controller extends WP_REST_Controller {
 	 * PHP request the batched lookup exists to avoid. The editor splits its batches to match.
 	 */
 	const MAX_BATCH_IDS = 100;
+
+	/**
 	 * Whether a WP user holds one of the roles this component treats as an author.
 	 *
 	 * The listing branch has always been narrowed to these roles. The by-id branches have to
