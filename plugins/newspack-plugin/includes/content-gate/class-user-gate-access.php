@@ -148,6 +148,13 @@ class User_Gate_Access {
 			return sprintf( __( '%s (invalid duration, grants no access)', 'newspack-plugin' ), $products_label );
 		}
 
+		// Also ahead of the generic branch, for the same reason: an institution rule
+		// naming nothing matches nobody, so "(any)" would contradict the Fail the
+		// reader is looking at.
+		if ( 'institution' === $slug && ( ! is_array( $value ) || empty( $value ) ) ) {
+			return __( '(no institutions selected)', 'newspack-plugin' );
+		}
+
 		if ( empty( $value ) ) {
 			return __( '(any)', 'newspack-plugin' );
 		}

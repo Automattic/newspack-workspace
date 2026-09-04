@@ -5,7 +5,7 @@ import { queuePageReload } from '../reader-activation/utils';
 import './content-banner.scss';
 
 const settings = window.newspack_metering_settings || {};
-const storeKey = 'metering-' + settings.gate_id || 0;
+const storeKey = 'metering-' + ( settings.meter_key || settings.gate_id || 0 );
 
 window.newspackRAS = window.newspackRAS || [];
 

@@ -16,7 +16,7 @@
 /**
  * WordPress dependencies.
  */
-import { useEffect, useMemo, useState } from '@wordpress/element';
+import { useLayoutEffect, useMemo, useState } from '@wordpress/element';
 import { __, _n, sprintf } from '@wordpress/i18n';
 import { useDispatch } from '@wordpress/data';
 import { __experimentalHStack as HStack, __experimentalVStack as VStack } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
@@ -25,9 +25,11 @@ import { Badge, Stack } from '@wordpress/ui';
 /**
  * Internal dependencies.
  */
-import { Button, DataViews, Notice, Router, StatusIndicator, Waiting } from '../../../../packages/components/src';
+import { Button, DataViews, Router, StatusIndicator, Waiting } from '../../../../packages/components/src';
 import { formatCount } from '../../../../packages/components/src/breadcrumbs/format-count';
 import './style.scss';
+import LoadFailureNotice from '../components/LoadFailureNotice';
+import { useRetryFocus } from '../use-retry-focus';
 import { fmtRelative, fmtDate } from '../format';
 import { SHOW_AVATARS, useAvatars } from '../data/use-avatars';
 import { useSubscribers } from '../data/use-subscribers';
@@ -362,8 +364,13 @@ export default function SubscriberList() {
 	};
 
 	// Surface the subscriber count in the header breadcrumb, e.g. "/ Subscribers (85)".
-	useEffect( () => {
+	// Before paint: this carries the width override, and an error arrives outside a
+	// React event, so a passive effect would paint full-bleed for one frame first.
+	useLayoutEffect( () => {
 		setHeaderData( {
+			// Header data is merged, so the explicit `undefined` is what clears a
+			// previous `false`; a retry never changes the route, so nothing else would.
+			fullWidth: error ? false : undefined,
 			sectionName: [
 				{
 					label: __( 'Subscribers', 'newspack-plugin' ),
@@ -378,6 +385,8 @@ export default function SubscriberList() {
 		} );
 	}, [ setHeaderData, total, subscribersLoading, error ] );
 
+	const { retryRef, retry } = useRetryFocus( { settled: ! subscribersLoading, failed: Boolean( error ), reload } );
+
 	if ( subscribersLoading ) {
 		return (
 			<div className="newspack-subscribers__loading">
@@ -389,12 +398,20 @@ export default function SubscriberList() {
 	// A failed read must not read as "this site has no subscribers": say so, and
 	// offer a retry.
 	if ( error ) {
+		const message = sprintf(
+			/* translators: %s: the error message returned by the server. */
+			__( 'Could not load subscribers: %s', 'newspack-plugin' ),
+			error
+		);
 		return (
-			<Notice isError noticeText={ sprintf( __( 'Could not load subscribers: %s', 'newspack-plugin' ), error ) }>
-				<Button variant="link" onClick={ reload }>
-					{ __( 'Retry', 'newspack-plugin' ) }
-				</Button>
-			</Notice>
+			<LoadFailureNotice
+				message={ message }
+				action={
+					<Button variant="link" ref={ retryRef } onClick={ retry }>
+						{ __( 'Retry', 'newspack-plugin' ) }
+					</Button>
+				}
+			/>
 		);
 	}
 

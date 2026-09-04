@@ -13,3 +13,12 @@ export const SEARCH_ENDPOINTS = {
 	productCategories: 'product-categories-search',
 	subscriptions: 'subscriptions-search',
 } as const;
+
+/**
+ * How many names a list row shows before collapsing the rest into "+N more".
+ *
+ * A row is one line, so the names have to share it with the count that follows
+ * them. Both tabs cap at the same point; what each one counts in the remainder
+ * is its own business.
+ */
+export const MAX_NAMED_ITEMS = 2;

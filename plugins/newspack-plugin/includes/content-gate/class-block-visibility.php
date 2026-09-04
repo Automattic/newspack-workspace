@@ -466,11 +466,46 @@ class Block_Visibility {
 	private static $strip_cache = [];
 
 	/**
+	 * Per-request cache of has_active_gates() results, keyed by
+	 * "{blog_id}:{sorted, de-duplicated gate ids}".
+	 *
+	 * "Cache" here is a static array that lives for one request and is gone when the
+	 * request ends -- the same sense the other two caches in this class use. This
+	 * class writes nothing that outlives a request: no wp_cache_*, no transient, no
+	 * option. So a stale entry cannot reach a later request, and the invalidation
+	 * question below is only about the one it was written in.
+	 *
+	 * The blog id is in the key because gate ids are per-site post ids, so a
+	 * switch_to_blog() mid-request would otherwise answer for the wrong site.
+	 *
+	 * Not flushed when a gate is written, and neither stale answer is safe. A stale
+	 * false returns early from is_hidden_for_user() and renders a block whose gates
+	 * have just become active. A stale true reaches compute_gate_rules_match(), which
+	 * passes through when no gate is active -- and under visibility "hidden" that
+	 * pass-through inverts into withholding a block that should have rendered.
+	 *
+	 * What bounds this is the write window, not the direction. A stale entry takes one
+	 * request that reads a gate set, changes the publish status of a gate in it, then
+	 * reads that same set again. Neither reader writes gates -- filter_render_block()
+	 * renders, strip_hidden() strips for the excerpt -- so it takes a caller outside
+	 * this file interleaving a gate write between two reads, and none is known to. The
+	 * stale true additionally needs the second read to miss $rules_match_cache, which
+	 * happens across user ids: filter_render_block() uses the current reader, while
+	 * strip_hidden() always uses 0. Anything that closes that window needs an
+	 * invalidation hook here, the way Content_Gate flushes its own cache on save_post
+	 * and the post-meta writes.
+	 *
+	 * @var bool[]
+	 */
+	private static $active_gates_cache = [];
+
+	/**
 	 * Reset the per-request caches. Used in unit tests only.
 	 */
 	public static function reset_cache_for_tests() {
-		self::$rules_match_cache = [];
-		self::$strip_cache       = [];
+		self::$rules_match_cache  = [];
+		self::$strip_cache        = [];
+		self::$active_gates_cache = [];
 	}
 
 	/**
@@ -513,13 +548,28 @@ class Block_Visibility {
 	 * @return bool
 	 */
 	private static function has_active_gates( $gate_ids ) {
+		// The answer does not depend on the order or the repetition of the ids, but the
+		// caller's list carries both -- they arrive from a block attribute in editor
+		// order. Normalizing first lets every block gated by the same set, however its
+		// author happened to arrange them, share one entry.
+		$ids = array_values( array_unique( array_map( 'intval', $gate_ids ) ) );
+		sort( $ids, SORT_NUMERIC );
+		$cache_key = get_current_blog_id() . ':' . implode( ',', $ids );
+		if ( isset( self::$active_gates_cache[ $cache_key ] ) ) {
+			return self::$active_gates_cache[ $cache_key ];
+		}
+
+		$has_active = false;
 		foreach ( $gate_ids as $gate_id ) {
 			$gate = Content_Gate::get_gate( $gate_id );
 			if ( ! \is_wp_error( $gate ) && 'publish' === $gate['status'] ) {
-				return true;
+				$has_active = true;
+				break;
 			}
 		}
-		return false;
+
+		self::$active_gates_cache[ $cache_key ] = $has_active;
+		return $has_active;
 	}
 
 	/**
@@ -608,7 +658,7 @@ class Block_Visibility {
 			// payment-recovery toggle, and a reader in the retry window should see
 			// member-only blocks just as they can pass the gate itself.
 			$rule_context  = [ 'payment_recovery_grace' => $custom_access['payment_recovery_grace'] ?? true ];
-			$access_passes = Access_Rules::evaluate_rules( $custom_access['access_rules'], $user_id, $rule_context );
+			$access_passes = Access_Rules::evaluate_rules_for_visitor( $custom_access['access_rules'], $user_id, $rule_context );
 		}
 
 		// AND logic: both must pass when both are configured.

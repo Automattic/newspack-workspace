@@ -40,7 +40,8 @@
 			}
 			&__content {
 				> div,
-				.newspack-settings__min-max {
+				.newspack-settings__min-max,
+				.newspack-settings__date-range-bound {
 					margin: 0;
 					display: flex;
 					align-items: center;
@@ -51,7 +52,19 @@
 					}
 				}
 				.newspack-autocomplete-tokenfield,
-				.newspack-settings__min-max {
+				.newspack-settings__min-max,
+				.newspack-settings__date-range-bound {
+					width: 100%;
+				}
+				.newspack-settings__date-range-bound {
+					// Overrides the `center` above, which has to be beaten at this
+					// nesting level. The select carries the visible From/To label and
+					// the value input's is hidden, so the two controls differ in
+					// overall height; centering floats the input up against the label,
+					// while bottom-aligning lines the two boxes up with each other.
+					align-items: flex-end;
+				}
+				.newspack-settings__date-range-preset {
 					width: 100%;
 				}
 				.newspack-autocomplete-tokenfield {
@@ -89,6 +102,24 @@
 			}
 
 			+ .newspack-settings__min-max {
+				margin-top: 16px !important;
+			}
+		}
+		.newspack-settings__date-range-preset + .newspack-settings__date-range-bound {
+			margin-top: 16px !important;
+		}
+		.newspack-settings__date-range-bound {
+			gap: 8px;
+
+			.newspack-select-control {
+				flex: 0 0 auto;
+			}
+
+			.newspack-text-control {
+				flex: 1 1 auto;
+			}
+
+			+ .newspack-settings__date-range-bound {
 				margin-top: 16px !important;
 			}
 		}

@@ -389,7 +389,13 @@ class Audience_Subscriptions extends Wizard {
 			}
 			// Broader status filter when hydrating saved tokens, so the editor keeps
 			// showing products whose status changed since the rule was saved.
-			$args['post_status']    = [ 'publish', 'draft', 'pending', 'private', 'future' ];
+			// `trash` is included because a trashed product can still have active
+			// subscribers, which makes it a real audience the rule must keep
+			// naming — an id that resolves to nothing renders as a bare number.
+			// A trashed product stays undiscoverable regardless: `post__in` bounds
+			// the result to ids the caller already named, so this widens what a
+			// caller can resolve and never what it can find.
+			$args['post_status']    = [ 'publish', 'draft', 'pending', 'private', 'future', 'trash' ];
 			$args['post__in']       = $ids;
 			$args['posts_per_page'] = min( count( $ids ), 100 );
 			$args['orderby']        = 'post__in';

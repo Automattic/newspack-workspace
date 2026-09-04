@@ -139,7 +139,7 @@ class Institution {
 	 *     Optional. Institution rules.
 	 *
 	 *     @type string $email_domain Comma-separated domains (e.g., 'university.edu,uni.ac.uk').
-	 *     @type string $ip_range     Comma-separated IPs/CIDR (e.g., '192.168.1.0/24,10.0.0.5').
+	 *     @type string $ip_range     Comma-separated IPs, CIDR blocks, or dash ranges (e.g., '192.168.1.0/24,10.0.0.5,203.0.113.0-203.0.113.255').
 	 *     @type string $reader_data  Semicolon-delimited key=value pairs (e.g., 'org=uni;role=staff').
 	 * }
 	 *
@@ -170,16 +170,26 @@ class Institution {
 	/**
 	 * Get institution options for the access rule multi-select.
 	 *
+	 * Published institutions only, matching `rebuild_cache()`: an institution that is not
+	 * published is never evaluated and so can never grant access, and offering one here
+	 * would let a publisher build a rule that silently does nothing. The institution editor
+	 * always saves with `publish`, so any other status comes from editing the post directly.
+	 *
 	 * @return array Array of [ 'label' => string, 'value' => int ].
 	 */
 	public static function get_options() {
 		$posts   = \get_posts(
 			[
-				'post_type'      => self::POST_TYPE,
-				'post_status'    => 'publish',
-				'posts_per_page' => -1, // phpcs:ignore WordPressVIPMinimum.Performance.NoPaging -- Institution CPT; config-scale.
-				'orderby'        => 'title',
-				'order'          => 'ASC',
+				'post_type'              => self::POST_TYPE,
+				'post_status'            => 'publish',
+				'posts_per_page'         => -1, // phpcs:ignore WordPressVIPMinimum.Performance.NoPaging -- Institution CPT; config-scale.
+				'orderby'                => 'title',
+				'order'                  => 'ASC',
+				// Only the title and ID are read, and this runs on every admin page load
+				// that localises the access rules. `get_posts()` already forces
+				// `no_found_rows`, so there is no row count to suppress here.
+				'update_post_meta_cache' => false,
+				'update_post_term_cache' => false,
 			]
 		);
 		$options = [];
@@ -265,14 +275,30 @@ class Institution {
 	/**
 	 * Evaluate whether a user matches any of the selected institutions.
 	 *
+	 * Naming no institution matches nobody. The rule's default is `[]`, so reading
+	 * it as "no constraint" would mean switching the rule on — before publishing
+	 * any institution, or after deleting the last one — opened the gate to every
+	 * reader. Denying instead matches the other options-backed rules, where an
+	 * empty value narrows rather than removes the check, and matches
+	 * `Access_Rules::evaluate_anonymous_rules()`, which has always read a rule with
+	 * no value as granting nobody.
+	 *
+	 * The state is refused a save while the gate is active (`requires_value` on the
+	 * rule's registration), so this governs values stored by the paths that never
+	 * reach that check: block attributes, WP-CLI, and rows predating it.
+	 *
 	 * @param int   $user_id         User ID.
-	 * @param array $institution_ids Selected institution IDs.
+	 * @param mixed $institution_ids Selected institution IDs — an array of post IDs
+	 *                               when well-formed; any other shape is malformed.
 	 *
 	 * @return bool Whether the user matches any institution.
 	 */
 	public static function evaluate( $user_id, $institution_ids ) {
+		// Nothing selected, or a value of a shape this rule cannot read (e.g. a
+		// free-text string saved before values were validated). Neither expresses a
+		// condition, so neither can be satisfied.
 		if ( empty( $institution_ids ) || ! is_array( $institution_ids ) ) {
-			return true;
+			return false;
 		}
 
 		$institutions = self::get_cached_institutions();
@@ -355,10 +381,8 @@ class Institution {
 	 * Without that the same `$user_id` could legitimately resolve to different sets across
 	 * requests in a long-running worker that swaps the current user.
 	 *
-	 * IDs are read with `get_post_field( 'post_title', ... )` rather than `get_the_title( ... )`
-	 * so the value going to GA4/ESP is a raw post title, not one that's been through
-	 * `the_title` filters (texturization, third-party plugins) that can introduce entities
-	 * or markup.
+	 * Names come from {@see self::get_decoded_name()}, which is where the rule for reading
+	 * a raw title lives.
 	 *
 	 * @param int        $user_id            User ID.
 	 * @param array|null $institution_filter Optional list of institution post IDs.
@@ -389,12 +413,28 @@ class Institution {
 				continue;
 			}
 			if ( self::user_matches_institution( $user_id, $rules ) ) {
-				$map[ $inst_id ] = html_entity_decode( (string) \get_post_field( 'post_title', $inst_id ), ENT_QUOTES | ENT_HTML5, 'UTF-8' );
+				$map[ $inst_id ] = self::get_decoded_name( $inst_id );
 			}
 		}
 
 		self::$names_cache[ $cache_key ] = $map;
 		return $map;
+	}
+
+	/**
+	 * An institution's title as a plain string.
+	 *
+	 * Read with `get_post_field( 'post_title', ... )` rather than `get_the_title( ... )`
+	 * so the value going to GA4/ESP is a raw post title, not one that's been through
+	 * `the_title` filters (texturization, third-party plugins) that can introduce
+	 * entities or markup.
+	 *
+	 * @param int $institution_id Institution post ID.
+	 *
+	 * @return string
+	 */
+	public static function get_decoded_name( $institution_id ) {
+		return html_entity_decode( (string) \get_post_field( 'post_title', (int) $institution_id ), ENT_QUOTES | ENT_HTML5, 'UTF-8' );
 	}
 
 	/**

@@ -371,6 +371,42 @@ describe( 'applyContextFields', () => {
 		expect( form.querySelector( 'input[name="prompt_title"]' ) ).toBeNull();
 	} );
 
+	it( 'stamps the quantity', () => {
+		const form = picker();
+
+		applyContextFields( form, { quantity: 3 } );
+
+		expect( form.querySelector( 'input[name="quantity"]' ).value ).toBe( '3' );
+	} );
+
+	it( 'leaves the picker’s own seats field in place and does not shadow it', () => {
+		// Per-seat group plans render a visible number input named `quantity`, the
+		// same name the block stamps its own quantity into. Removing it leaves the
+		// reader with no way to choose seats at all.
+		const form = render( '<form id="picker"><input type="number" name="quantity" id="group_seats" min="2" value="2"></form>' ).querySelector(
+			'#picker'
+		);
+
+		applyContextFields( form, { quantity: 3 } );
+
+		const inputs = form.querySelectorAll( 'input[name="quantity"]' );
+		expect( inputs ).toHaveLength( 1 );
+		expect( inputs[ 0 ].id ).toBe( 'group_seats' );
+		expect( inputs[ 0 ].value ).toBe( '2' );
+	} );
+
+	it( 'clears its own stale hidden field without touching a visible one', () => {
+		const form = picker();
+
+		applyContextFields( form, { quantity: 3 } );
+		form.insertAdjacentHTML( 'beforeend', '<input type="number" name="quantity" id="group_seats" value="4">' );
+		applyContextFields( form, { quantity: 5 } );
+
+		const inputs = form.querySelectorAll( 'input[name="quantity"]' );
+		expect( inputs ).toHaveLength( 1 );
+		expect( inputs[ 0 ].id ).toBe( 'group_seats' );
+	} );
+
 	it( 'leaves the picker’s own fields alone', () => {
 		const form = render(
 			'<form id="picker"><input type="hidden" name="newspack_checkout" value="1"><input type="radio" name="product_id" value="9"></form>'
@@ -402,6 +438,7 @@ describe( 'PICKER_CONTEXT_FIELDS', () => {
 				'newspack_popup_id',
 				'prompt_title',
 				'coupon',
+				'quantity',
 			] )
 		);
 	} );
