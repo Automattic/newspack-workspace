@@ -29,8 +29,11 @@ export default function AdditionalBrands() {
 
 	const [ brands, setBrands ] = useState< Brand[] >( [] );
 	// `isFetching` starts false and the fetch is kicked off in an effect, so an empty
-	// list alone cannot tell "nothing saved" from "not asked yet".
-	const [ hasFetched, setHasFetched ] = useState( false );
+	// list alone cannot tell "nothing saved" from "not asked yet". Set from `onSuccess`
+	// rather than `onFinally`: the hook returns early on a cache hit without running
+	// its finally callback, and a failed load must not read as "no brands".
+	const [ hasLoaded, setHasLoaded ] = useState( false );
+	const [ loadError, setLoadError ] = useState( '' );
 	const history = useHistory();
 	const location = useLocation();
 	const { path } = useRouteMatch();
@@ -61,10 +64,12 @@ export default function AdditionalBrands() {
 				path: addQueryArgs( '/wp/v2/brand', { per_page: 100 } ),
 			},
 			{
-				onFinally() {
-					setHasFetched( true );
+				onError( error: { message?: string } ) {
+					setLoadError( error?.message || __( 'Brands could not be loaded.', 'newspack-plugin' ) );
 				},
 				onSuccess( response ) {
+					setLoadError( '' );
+					setHasLoaded( true );
 					setBrands(
 						response.map( ( brand: Brand ) => ( {
 							...brand,
@@ -176,7 +181,15 @@ export default function AdditionalBrands() {
 					<Route
 						exact
 						path={ path }
-						render={ () => <Brands { ...wizardScreenProps } brands={ brands } hasFetched={ hasFetched } deleteBrand={ deleteBrand } /> }
+						render={ () => (
+							<Brands
+								{ ...wizardScreenProps }
+								brands={ brands }
+								hasLoaded={ hasLoaded }
+								loadError={ loadError }
+								deleteBrand={ deleteBrand }
+							/>
+						) }
 					/>
 					<Route
 						path={ `${ path }/new` }

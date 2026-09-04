@@ -14,7 +14,7 @@ import { siteLogo } from '@wordpress/icons';
  * Internal dependencies
  */
 import Brand from './brand';
-import { Card, Button } from '../../../../../../packages/components/src';
+import { Card, Button, Notice } from '../../../../../../packages/components/src';
 import EmptyState from '../../../../../../packages/components/src/empty-state';
 import { TAB_PATH } from './constants';
 
@@ -23,15 +23,21 @@ const LEARN_MORE_URL = 'https://help.newspack.com/federated-sites/multi-branded-
 export default function Brands( {
 	brands,
 	isFetching,
-	hasFetched,
+	hasLoaded,
+	loadError,
 	deleteBrand,
 }: {
 	brands: Brand[];
 	isFetching: boolean;
-	hasFetched: boolean;
+	hasLoaded: boolean;
+	loadError: string;
 	deleteBrand: ( brand: Brand ) => void;
 } ) {
-	if ( hasFetched && ! isFetching && ! brands.length ) {
+	if ( loadError ) {
+		return <Notice isError noticeText={ loadError } />;
+	}
+
+	if ( hasLoaded && ! isFetching && ! brands.length ) {
 		return (
 			<EmptyState.Root>
 				<EmptyState.Header

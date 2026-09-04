@@ -18,7 +18,7 @@ import { API_NAMESPACE } from './constants';
 import EndpointActionsCard from './endpoint-actions-card';
 import EndpointActionsModals from './endpoint-actions-modals';
 import { useWizardApiFetch } from '../../../../../hooks/use-wizard-api-fetch';
-import { Card, Button, SectionHeader } from '../../../../../../../packages/components/src';
+import { Card, Button, Notice, SectionHeader } from '../../../../../../../packages/components/src';
 import EmptyState from '../../../../../../../packages/components/src/empty-state';
 
 const LEARN_MORE_URL = 'https://help.newspack.com/plugins-and-themes/third-party-services-integrations/webhooks/';
@@ -90,13 +90,18 @@ function Webhooks() {
 	const claimFocus = useRef( false );
 
 	// The empty state's button is unmounted by the very success it triggers, so the
-	// modal has nothing to restore focus to; the header button replaces it.
+	// modal has nothing to restore focus to; the header button replaces it. Waiting for
+	// the request to settle matters: the save flips `inFlight` first, and focusing the
+	// header button while it is still disabled silently does nothing.
 	useEffect( () => {
-		if ( claimFocus.current && ! isEmpty ) {
-			claimFocus.current = false;
+		if ( ! claimFocus.current || inFlight ) {
+			return;
+		}
+		claimFocus.current = false;
+		if ( ! isEmpty ) {
 			addRef.current?.focus();
 		}
-	}, [ isEmpty ] );
+	}, [ inFlight, isEmpty, selectedEndpoint ] );
 
 	return (
 		<Card noBorder className="newspack-webhooks">
@@ -158,6 +163,11 @@ function Webhooks() {
 						</UICard.Content>
 					</UICard.Root>
 				) ) }
+			{ /* A failed load leaves `endpoints` null, which is neither a list nor an
+			     empty state; without this the section renders as blank space. */ }
+			{ ! inFlight && ! isLoaded && (
+				<Notice isError noticeText={ errorMessage || __( 'Webhook endpoints could not be loaded.', 'newspack-plugin' ) } />
+			) }
 			{ selectedEndpoint && (
 				<EndpointActionsModals
 					actions={ actions }
