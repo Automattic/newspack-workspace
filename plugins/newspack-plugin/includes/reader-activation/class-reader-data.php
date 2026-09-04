@@ -568,6 +568,15 @@ final class Reader_Data {
 	 * (`{"1":"list-2"}`) still carries the IDs as its values, so it is decoded
 	 * as an array and repaired here rather than reset.
 	 *
+	 * A removal-only event for a reader with no known stored set records
+	 * nothing. "No longer on X" says nothing about the other lists, while a
+	 * stored empty list means "on no lists", which the Newsletter Selection
+	 * field publishes as a blank value over whatever the ESP holds. A reader on
+	 * a list at the ESP with nothing stored here (an account that predates the
+	 * item, or a subscription made at the ESP) reaches this path when they
+	 * leave that list. The selection stays unknown until a login or a subscribe
+	 * event establishes it.
+	 *
 	 * @param int   $timestamp Timestamp.
 	 * @param array $data      Data.
 	 */
@@ -575,15 +584,20 @@ final class Reader_Data {
 		if ( ! isset( $data['user_id'] ) ) {
 			return;
 		}
-		$as_list = static fn( $lists ) => is_array( $lists ) ? $lists : [];
+		// Payload entries are held to the same shape as the stored value: a
+		// nested array would reach array_diff() and raise a notice.
+		$as_list = static fn( $lists ) => is_array( $lists ) ? array_filter( $lists, 'is_scalar' ) : [];
 		$added   = array_merge( $as_list( $data['lists'] ?? null ), $as_list( $data['lists_added'] ?? null ) );
 		$removed = $as_list( $data['lists_removed'] ?? null );
 		if ( empty( $added ) && empty( $removed ) ) {
 			return;
 		}
 		$stored = self::get_data( $data['user_id'], 'newsletter_subscribed_lists' );
-		$lists  = array_filter( $as_list( is_string( $stored ) ? json_decode( $stored, true ) : $stored ), 'is_scalar' );
-		$lists  = array_values( array_unique( array_merge( array_diff( $lists, $removed ), $added ) ) );
+		$stored = is_string( $stored ) ? json_decode( $stored, true ) : $stored;
+		if ( empty( $added ) && ! is_array( $stored ) ) {
+			return;
+		}
+		$lists = array_values( array_unique( array_merge( array_diff( $as_list( $stored ), $removed ), $added ) ) );
 		self::update_item( $data['user_id'], 'is_newsletter_subscriber', ! empty( $lists ) );
 		self::update_item( $data['user_id'], 'newsletter_subscribed_lists', wp_json_encode( $lists ) );
 	}
@@ -674,7 +688,13 @@ final class Reader_Data {
 		// The providers answer [] for a failed contact lookup as well as for a
 		// contact on no lists. Only trust an empty read when the contact itself
 		// is readable; otherwise a transient ESP error would store "unsubscribed
-		// from everything" and the next sync would push that to the ESP.
+		// from everything" and the next sync would push that to the ESP. The
+		// second lookup only happens for readers on no lists. A contact that
+		// does not exist is treated like one that could not be read, so a reader
+		// deleted at the ESP keeps their stored lists: the conservative side,
+		// since a blank pushed by mistake cannot be recovered. Known gap:
+		// ActiveCampaign fetches the lists in a second request and answers []
+		// when that one fails, which this check cannot tell from a real empty.
 		if ( empty( $subscribed_lists ) && is_wp_error( \Newspack_Newsletters_Subscription::get_contact_data( $data['email'] ) ) ) {
 			return;
 		}

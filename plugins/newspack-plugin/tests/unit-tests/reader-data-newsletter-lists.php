@@ -132,19 +132,63 @@ class Newspack_Test_Reader_Data_Newsletter_Lists extends WP_UnitTestCase {
 	}
 
 	/**
-	 * A removal for a reader with nothing stored records an empty list, not the
-	 * string "false".
+	 * A removal for a reader with nothing stored says nothing about the other
+	 * lists, so nothing is recorded and the selection stays unknown. Recording
+	 * an empty list here would publish a blank Newsletter Selection over the
+	 * value the ESP holds.
 	 */
-	public function test_removal_without_a_stored_value_stores_an_empty_list() {
+	public function test_removal_without_a_stored_value_leaves_the_selection_unknown() {
 		$this->handle( [ 'lists_removed' => [ 'list-1' ] ] );
-		$this->assertSame( '[]', $this->stored_lists() );
+		$this->assertFalse( $this->stored_lists() );
+		$this->assertFalse( Reader_Data::get_data( $this->user_id, 'is_newsletter_subscriber' ) );
+	}
+
+	/**
+	 * Earlier releases stored the string "false" for that case. It is not a
+	 * list either, so a removal over it is skipped the same way.
+	 */
+	public function test_removal_over_a_legacy_false_value_leaves_the_selection_unknown() {
+		$this->seed_raw_lists( 'false' );
+		$this->handle( [ 'lists_removed' => [ 'list-1' ] ] );
+		$this->assertSame( 'false', $this->stored_lists() );
+		$this->assertNull( Reader_Data::get_newsletter_subscribed_lists( $this->user_id ) );
+	}
+
+	/**
+	 * A subscribe establishes the set for a reader with nothing stored, and a
+	 * removal in the same event applies to it.
+	 */
+	public function test_subscribe_without_a_stored_value_stores_the_lists() {
+		$this->handle(
+			[
+				'lists_added'   => [ 'list-1', 'list-2' ],
+				'lists_removed' => [ 'list-2' ],
+			]
+		);
+		$this->assertSame( '["list-1","list-2"]', $this->stored_lists() );
+	}
+
+	/**
+	 * Payload entries that are not scalars are dropped on both sides of the
+	 * merge instead of reaching array_diff() as nested arrays.
+	 */
+	public function test_malformed_payload_entries_are_ignored() {
+		Reader_Data::update_item( $this->user_id, 'newsletter_subscribed_lists', [ 'list-1', 'list-2' ] );
+		$this->handle(
+			[
+				'lists_added'   => [ 'list-3', [ 'nested' ] ],
+				'lists_removed' => [ [ 'list-1' ], 'list-2' ],
+			]
+		);
+		$this->assertSame( '["list-1","list-3"]', $this->stored_lists() );
 	}
 
 	/**
 	 * The providers answer an empty list for a failed contact lookup too, so an
-	 * empty read is only trusted when the contact itself is readable.
+	 * empty read is only trusted when the contact itself is readable. The mock
+	 * answers "not found"; the guard treats that and a transient failure alike.
 	 */
-	public function test_login_refresh_keeps_the_stored_lists_when_the_contact_lookup_fails() {
+	public function test_login_refresh_keeps_the_stored_lists_when_the_contact_cannot_be_read() {
 		Reader_Data::update_item( $this->user_id, 'newsletter_subscribed_lists', [ 'list-1' ] );
 		// The mock returns [] from get_contact_lists() and a WP_Error from get_contact_data() by default.
 		Reader_Data::check_newsletter_subscription(
