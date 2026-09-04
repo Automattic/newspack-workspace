@@ -36,7 +36,9 @@ const View = ( { endpoint, setAction }: { endpoint: ModalComponentProps[ 'endpoi
 					<table className={ `newspack-webhooks__requests ${ hasEndpointErrors( endpoint ) ? 'has-error' : '' }` }>
 						<thead>
 							<tr>
-								<th scope="col" />
+								<th scope="col">
+									<span className="screen-reader-text">{ __( 'Status', 'newspack-plugin' ) }</span>
+								</th>
 								<th scope="col" colSpan={ 2 }>
 									{ __( 'Action', 'newspack-plugin' ) }
 								</th>
