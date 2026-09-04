@@ -28,7 +28,7 @@ const Footer = ( { simple = undefined } ) => {
 	const resetDialog = useConfirmDialog( {
 		title: __( 'Reset Newspack?', 'newspack-plugin' ),
 		message: __(
-			'This deletes every Newspack setting on this site and returns you to the setup wizard. Your posts, pages and users are not affected. This cannot be undone.',
+			'This deletes the Newspack settings on this site and returns you to the setup wizard. Your posts, pages and users are not affected. This cannot be undone.',
 			'newspack-plugin'
 		),
 		confirmButtonText: __( 'Reset Newspack', 'newspack-plugin' ),
@@ -91,7 +91,9 @@ const Footer = ( { simple = undefined } ) => {
 			url: `mailto:${ supportEmail }`,
 		} );
 	}
-	const renderLink = ( { url, label, external, confirm } ) => {
+	// onClick only sees primary clicks, so an href here would let a middle-click
+	// or "Open link in new tab" reach the URL unguarded.
+	const renderItem = ( { url, label, external, confirm } ) => {
 		if ( external ) {
 			return <ExternalLink href={ url }>{ label }</ExternalLink>;
 		}
@@ -99,17 +101,16 @@ const Footer = ( { simple = undefined } ) => {
 			return <a href={ url }>{ label }</a>;
 		}
 		return (
-			<a
-				href={ url }
-				onClick={ event => {
-					event.preventDefault();
+			<button
+				type="button"
+				onClick={ () =>
 					confirm( () => {
 						window.location.href = url;
-					} );
-				} }
+					} )
+				}
 			>
 				{ label }
-			</a>
+			</button>
 		);
 	};
 
@@ -118,7 +119,7 @@ const Footer = ( { simple = undefined } ) => {
 			{ ! simple && (
 				<ul>
 					{ footerElements.map( ( element, index ) => (
-						<li key={ index }>{ renderLink( element ) }</li>
+						<li key={ index }>{ renderItem( element ) }</li>
 					) ) }
 				</ul>
 			) }

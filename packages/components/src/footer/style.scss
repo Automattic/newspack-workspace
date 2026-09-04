@@ -31,7 +31,8 @@
 	li {
 		margin: 8px;
 
-		a {
+		a,
+		button {
 			align-items: flex-end;
 			color: inherit;
 			display: flex;
@@ -41,6 +42,15 @@
 			&:hover {
 				color: wp-colors.$gray-900;
 			}
+		}
+
+		button {
+			appearance: none;
+			background: none;
+			border: 0;
+			cursor: pointer;
+			font: inherit;
+			padding: 0;
 		}
 	}
 }

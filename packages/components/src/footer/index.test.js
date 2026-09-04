@@ -1,21 +1,23 @@
 /**
  * External dependencies.
  */
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 
 /**
  * Internal dependencies.
  */
 import Footer from './';
 
-// Footer renders outside the wizard's HashRouter, so the confirm dialog's
-// useHistory() has no Router above it. That is the case worth pinning.
+// Footer renders outside the wizard's HashRouter, so there is no MemoryRouter
+// wrapper here on purpose.
 describe( 'Footer', () => {
 	const RESET_URL = 'https://example.test/wp-admin/admin.php?page=newspack-dashboard&newspack_reset=reset';
 	const STARTER_CONTENT_URL = 'https://example.test/wp-admin/admin.php?page=newspack-dashboard&newspack_reset=starter-content';
 	let assigned;
 	let originalLocation;
 	let originalUrls;
+
+	const confirmIn = async name => within( await screen.findByRole( 'dialog' ) ).getByRole( 'button', { name } );
 
 	beforeEach( () => {
 		assigned = [];
@@ -48,21 +50,29 @@ describe( 'Footer', () => {
 		}
 	} );
 
+	it( 'offers no link for a browser gesture to follow', () => {
+		render( <Footer /> );
+		expect( screen.getByRole( 'button', { name: 'Reset Newspack' } ) ).not.toHaveAttribute( 'href' );
+		expect( screen.getByRole( 'button', { name: 'Remove Starter Content' } ) ).not.toHaveAttribute( 'href' );
+		expect( screen.queryByRole( 'link', { name: 'Reset Newspack' } ) ).not.toBeInTheDocument();
+		expect( screen.queryByRole( 'link', { name: 'Remove Starter Content' } ) ).not.toBeInTheDocument();
+	} );
+
 	it( 'does not reset on the first click', () => {
 		render( <Footer /> );
-		fireEvent.click( screen.getByRole( 'link', { name: 'Reset Newspack' } ) );
+		fireEvent.click( screen.getByRole( 'button', { name: 'Reset Newspack' } ) );
 		expect( assigned ).toEqual( [] );
 	} );
 
 	it( 'asks before resetting', async () => {
 		render( <Footer /> );
-		fireEvent.click( screen.getByRole( 'link', { name: 'Reset Newspack' } ) );
-		expect( await screen.findByText( /deletes every Newspack setting/ ) ).toBeInTheDocument();
+		fireEvent.click( screen.getByRole( 'button', { name: 'Reset Newspack' } ) );
+		expect( await screen.findByText( /deletes the Newspack settings/ ) ).toBeInTheDocument();
 	} );
 
 	it( 'leaves the site alone when the reset is cancelled', async () => {
 		render( <Footer /> );
-		fireEvent.click( screen.getByRole( 'link', { name: 'Reset Newspack' } ) );
+		fireEvent.click( screen.getByRole( 'button', { name: 'Reset Newspack' } ) );
 		// The modal's close icon also carries aria-label="Cancel"; this is the text button.
 		const cancel = ( await screen.findAllByRole( 'button', { name: 'Cancel' } ) ).find( button => 'Cancel' === button.textContent );
 		fireEvent.click( cancel );
@@ -71,27 +81,27 @@ describe( 'Footer', () => {
 
 	it( 'resets once confirmed', async () => {
 		render( <Footer /> );
-		fireEvent.click( screen.getByRole( 'link', { name: 'Reset Newspack' } ) );
-		fireEvent.click( await screen.findByRole( 'button', { name: 'Reset Newspack' } ) );
+		fireEvent.click( screen.getByRole( 'button', { name: 'Reset Newspack' } ) );
+		fireEvent.click( await confirmIn( 'Reset Newspack' ) );
 		expect( assigned ).toEqual( [ RESET_URL ] );
 	} );
 
 	it( 'does not remove the starter content on the first click', () => {
 		render( <Footer /> );
-		fireEvent.click( screen.getByRole( 'link', { name: 'Remove Starter Content' } ) );
+		fireEvent.click( screen.getByRole( 'button', { name: 'Remove Starter Content' } ) );
 		expect( assigned ).toEqual( [] );
 	} );
 
 	it( 'asks before removing the starter content', async () => {
 		render( <Footer /> );
-		fireEvent.click( screen.getByRole( 'link', { name: 'Remove Starter Content' } ) );
+		fireEvent.click( screen.getByRole( 'button', { name: 'Remove Starter Content' } ) );
 		expect( await screen.findByText( /created as starter content/ ) ).toBeInTheDocument();
 	} );
 
 	it( 'removes the starter content once confirmed', async () => {
 		render( <Footer /> );
-		fireEvent.click( screen.getByRole( 'link', { name: 'Remove Starter Content' } ) );
-		fireEvent.click( await screen.findByRole( 'button', { name: 'Remove Starter Content' } ) );
+		fireEvent.click( screen.getByRole( 'button', { name: 'Remove Starter Content' } ) );
+		fireEvent.click( await confirmIn( 'Remove Starter Content' ) );
 		expect( assigned ).toEqual( [ STARTER_CONTENT_URL ] );
 	} );
 
