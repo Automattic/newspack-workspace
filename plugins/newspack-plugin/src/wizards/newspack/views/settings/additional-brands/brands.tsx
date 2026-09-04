@@ -14,11 +14,9 @@ import { siteLogo } from '@wordpress/icons';
  * Internal dependencies
  */
 import Brand from './brand';
-import { Card, Button, Router } from '../../../../../../packages/components/src';
+import { Card, Button } from '../../../../../../packages/components/src';
 import EmptyState from '../../../../../../packages/components/src/empty-state';
 import { TAB_PATH } from './constants';
-
-const { NavLink } = Router;
 
 const LEARN_MORE_URL = 'https://help.newspack.com/federated-sites/multi-branded-site/';
 
@@ -61,11 +59,9 @@ export default function Brands( {
 		<Fragment>
 			<Card headerActions noBorder>
 				<h2>{ __( 'Site brands', 'newspack-plugin' ) }</h2>
-				<NavLink to={ `${ TAB_PATH }/new` }>
-					<Button variant="primary" disabled={ isFetching }>
-						{ __( 'Add Brand', 'newspack-plugin' ) }
-					</Button>
-				</NavLink>
+				<Button variant="primary" href={ `#${ TAB_PATH }/new` } disabled={ isFetching }>
+					{ __( 'Add Brand', 'newspack-plugin' ) }
+				</Button>
 			</Card>
 			{ brands.length ? (
 				brands.map( brand => <Brand key={ brand.id } brand={ brand } deleteBrand={ deleteBrand } /> )
