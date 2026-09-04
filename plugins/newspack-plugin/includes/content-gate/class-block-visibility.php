@@ -665,7 +665,7 @@ class Block_Visibility {
 			// payment-recovery toggle, and a reader in the retry window should see
 			// member-only blocks just as they can pass the gate itself.
 			$rule_context  = [ 'payment_recovery_grace' => $custom_access['payment_recovery_grace'] ?? true ];
-			$access_passes = Access_Rules::evaluate_rules( $custom_access['access_rules'], $user_id, $rule_context );
+			$access_passes = Access_Rules::evaluate_rules_for_visitor( $custom_access['access_rules'], $user_id, $rule_context );
 		}
 
 		// AND logic: both must pass when both are configured.

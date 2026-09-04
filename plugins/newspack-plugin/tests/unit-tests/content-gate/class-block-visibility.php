@@ -420,6 +420,61 @@ class Newspack_Test_Block_Visibility extends WP_UnitTestCase {
 	}
 
 	/**
+	 * A block hidden behind an institution rule naming nothing renders for
+	 * everyone.
+	 *
+	 * The one direction in this change that opens content rather than closing it.
+	 * "Hidden" shows the block to whoever fails the rules, and a rule naming no
+	 * institution is now failed by every reader, so a block the publisher kept away
+	 * from the public starts rendering — to signed-in readers and, through the
+	 * excerpt path, into homepage and listing markup cached without a per-reader
+	 * key. Block attributes never pass the gate save's refusal, so nothing upstream
+	 * catches this shape.
+	 */
+	public function test_hidden_mode_publishes_a_block_whose_rule_matches_nobody() {
+		$rules = [
+			'custom_access' => [
+				'active'       => true,
+				'access_rules' => [
+					[
+						[
+							'slug'  => 'institution',
+							'value' => [],
+						],
+					],
+				],
+			],
+		];
+		$block = $this->make_block_with_rules( 'core/group', $rules, 'hidden' );
+
+		foreach ( [
+			'a logged-out visitor' => 0,
+			'a signed-in reader'   => $this->test_user_id,
+		] as $description => $user_id ) {
+			Block_Visibility::reset_cache_for_tests();
+			$this->assertFalse(
+				Block_Visibility::is_hidden_for_user( $block, $user_id ),
+				"The block is withheld from {$description} no longer."
+			);
+		}
+
+		$markup = '<!-- wp:group ' . wp_json_encode(
+			[
+				'newspackAccessControlMode'       => 'custom',
+				'newspackAccessControlRules'      => $rules,
+				'newspackAccessControlVisibility' => 'hidden',
+			]
+		) . ' --><div class="wp-block-group"><!-- wp:paragraph --><p>WITHHELD</p><!-- /wp:paragraph --></div><!-- /wp:group -->';
+
+		Block_Visibility::reset_cache_for_tests();
+		$this->assertStringContainsString(
+			'WITHHELD',
+			Block_Visibility::strip_blocks_hidden_from_public( $markup ),
+			'And survives the excerpt path, whose output is cached without a per-reader key.'
+		);
+	}
+
+	/**
 	 * All three target block types are evaluated.
 	 */
 	public function test_all_target_block_types_evaluated() {
