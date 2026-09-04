@@ -7,12 +7,12 @@
  */
 import { __ } from '@wordpress/i18n';
 import { useState, useEffect } from '@wordpress/element';
-import { ExternalLink } from '@wordpress/components';
+import { ExternalLink, Notice } from '@wordpress/components';
 
 /**
  * Internal dependencies
  */
-import { ActionCard, Button, Card, Grid, Notice, SelectControl, TextControl } from '../../../../../../../../packages/components/src';
+import { ActionCard, Button, Card, Grid, SelectControl, TextControl } from '../../../../../../../../packages/components/src';
 import { OnboardingProps } from '../types';
 
 /**
@@ -161,7 +161,11 @@ export const Onboarding = ( { settings, status, error, updateSettings, startOAut
 
 	return (
 		<>
-			{ error && <Notice noticeText={ error } isError onClose={ () => setError( null ) } /> }
+			{ error && (
+				<Notice status="error" isDismissible={ false }>
+					{ error }
+				</Notice>
+			) }
 
 			{ /* Step 1: API Credentials - Only shown in manual mode */ }
 			{ isManualMode && currentStep === STEPS.manual.CREDENTIALS && (

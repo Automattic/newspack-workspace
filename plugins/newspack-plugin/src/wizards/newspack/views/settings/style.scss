@@ -1,3 +1,15 @@
 .newspack-settings {
 	box-sizing: border-box;
 }
+
+.newspack-additional-brands__notice,
+.newspack-advanced-settings__notice {
+	margin-bottom: 32px;
+}
+
+.newspack-accessibility-statement,
+.newspack-accessibility-statement__prose {
+	> * {
+		margin: 0;
+	}
+}

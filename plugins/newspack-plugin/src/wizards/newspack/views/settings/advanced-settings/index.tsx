@@ -7,6 +7,7 @@
  */
 import { __ } from '@wordpress/i18n';
 import { useEffect } from '@wordpress/element';
+import { Notice } from '@wordpress/components';
 
 /**
  * Internal dependencies.
@@ -14,7 +15,7 @@ import { useEffect } from '@wordpress/element';
 import { ADVANCED_SETTINGS_DEFAULTS } from '../constants';
 import WizardsTab from '../../../../wizards-tab';
 import WizardSection from '../../../../wizards-section';
-import { Button, Grid, hooks, ImageUpload, Notice, utils } from '../../../../../../packages/components/src';
+import { Button, Grid, hooks, ImageUpload, utils } from '../../../../../../packages/components/src';
 import { useWizardApiFetch } from '../../../../hooks/use-wizard-api-fetch';
 import Recirculation from './recirculation';
 import AuthorBio from './author-bio';
@@ -104,6 +105,14 @@ export default function AdvancedSettings() {
 		);
 	}, [] );
 
+	// The Save button sits at the foot of a long page, so a failure reported at the
+	// top would otherwise land off-screen.
+	useEffect( () => {
+		if ( errorMessage ) {
+			window.scrollTo( { top: 0, behavior: 'smooth' } );
+		}
+	}, [ errorMessage ] );
+
 	function save() {
 		wizardApiFetchRecirculation(
 			{
@@ -165,6 +174,11 @@ export default function AdvancedSettings() {
 			title={ __( 'Advanced Settings', 'newspack-plugin' ) }
 			isFetching={ isFetching || isFetchingRecirculation || isFetchingPrimaryCategory }
 		>
+			{ errorMessage && (
+				<Notice status="error" isDismissible={ false } className="newspack-advanced-settings__notice">
+					{ errorMessage }
+				</Notice>
+			) }
 			<WizardSection title={ __( 'Recirculation', 'newspack-plugin' ) }>
 				<Recirculation isFetching={ isFetchingRecirculation } update={ setRecirculationData } data={ recirculationData } />
 			</WizardSection>
@@ -232,7 +246,6 @@ export default function AdvancedSettings() {
 					<PrivateTags data={ data } update={ setData } isFetching={ isFetching } />
 				</WizardSection>
 			) : null }
-			{ errorMessage && <Notice /> }
 			<div className="newspack-buttons-card">
 				<Button variant="primary" onClick={ save }>
 					{ __( 'Save', 'newspack-plugin' ) }

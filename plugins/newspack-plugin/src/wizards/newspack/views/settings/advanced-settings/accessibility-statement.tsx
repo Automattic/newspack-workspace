@@ -7,10 +7,10 @@
  */
 import { __ } from '@wordpress/i18n';
 import { useEffect, useState } from '@wordpress/element';
-import { ExternalLink } from '@wordpress/components';
+import { ExternalLink, Notice } from '@wordpress/components';
+import { Stack } from '@wordpress/ui';
 import { speak } from '@wordpress/a11y';
-import { decodeEntities } from '@wordpress/html-entities';
-import { Button, Card, Notice, SectionHeader } from '../../../../../../packages/components/src';
+import { Button, Card, SectionHeader } from '../../../../../../packages/components/src';
 import { useWizardApiFetch } from '../../../../hooks/use-wizard-api-fetch';
 
 interface AccessibilityStatementProps {
@@ -56,13 +56,10 @@ export default function AccessibilityStatement( { isFetching }: AccessibilitySta
 		}
 	};
 
-	const handleError = ( error: { message?: string } ) => {
+	const handleError = () => {
 		setLocalPageData( null );
 		setIsPageMissing( false );
 		setLocalIsFetching( false );
-		// The notice is a plain div, so nothing else announces the failure. It
-		// renders the message decoded, so announce the decoded text too.
-		speak( decodeEntities( error?.message ?? __( 'Something went wrong.', 'newspack-plugin' ) ), 'assertive' );
 	};
 
 	useEffect( () => {
@@ -93,7 +90,7 @@ export default function AccessibilityStatement( { isFetching }: AccessibilitySta
 		).catch( () => {} );
 	};
 
-	const getStatusMessage = () => {
+	const getStatusMessage = (): { type: 'error' | 'warning' | 'success'; message: string } => {
 		if ( errorMessage ) {
 			return { type: 'error', message: errorMessage };
 		}
@@ -161,7 +158,7 @@ export default function AccessibilityStatement( { isFetching }: AccessibilitySta
 	const statusInfo = getStatusMessage();
 
 	return (
-		<>
+		<Stack className="newspack-accessibility-statement" direction="column" gap="xl">
 			<Card noBorder headerActions>
 				<SectionHeader
 					title={ __( 'Accessibility Statement Page', 'newspack-plugin' ) }
@@ -174,37 +171,38 @@ export default function AccessibilityStatement( { isFetching }: AccessibilitySta
 				{ renderAction() }
 			</Card>
 
-			<Notice
-				isError={ statusInfo.type === 'error' }
-				isSuccess={ statusInfo.type === 'success' }
-				isWarning={ statusInfo.type === 'warning' }
-				noticeText={ statusInfo.message }
-			/>
+			<Notice status={ statusInfo.type } isDismissible={ false } spokenMessage={ statusInfo.type === 'error' ? statusInfo.message : '' }>
+				{ statusInfo.message }
+			</Notice>
 
-			<p>
-				{ __(
-					'An accessibility statement helps your readers understand how your site supports accessibility standards and what to do if they encounter accessibility issues. ',
-					'newspack-plugin'
-				) }
-				<ExternalLink href="https://www.w3.org/WAI/planning/statements/">
-					{ __( 'What makes a good accessibility statement.', 'newspack-plugin' ) }{ ' ' }
-				</ExternalLink>
-			</p>
+			<Stack className="newspack-accessibility-statement__prose" direction="column" gap="lg">
+				<p>
+					{ __(
+						'An accessibility statement helps your readers understand how your site supports accessibility standards and what to do if they encounter accessibility issues. ',
+						'newspack-plugin'
+					) }
+					<ExternalLink href="https://www.w3.org/WAI/planning/statements/">
+						{ __( 'What makes a good accessibility statement.', 'newspack-plugin' ) }{ ' ' }
+					</ExternalLink>
+				</p>
 
-			<p>
-				{ __( 'The page you create here will include a boilerplate accessibility statement. ', 'newspack-plugin' ) }
-				<strong>{ __( 'Please review and make edits to ensure it meets the requirements before publishing. ', 'newspack-plugin' ) }</strong>
-				{ __( 'You can also use the W3C Accessibility Statement Generator to create a custom statement. ', 'newspack-plugin' ) }
-				<ExternalLink href="https://www.w3.org/WAI/planning/statements/generator/#create">
-					{ __( 'Try out the Accessibility Statement Generator.', 'newspack-plugin' ) }{ ' ' }
-				</ExternalLink>
-			</p>
+				<p>
+					{ __( 'The page you create here will include a boilerplate accessibility statement. ', 'newspack-plugin' ) }
+					<strong>
+						{ __( 'Please review and make edits to ensure it meets the requirements before publishing. ', 'newspack-plugin' ) }
+					</strong>
+					{ __( 'You can also use the W3C Accessibility Statement Generator to create a custom statement. ', 'newspack-plugin' ) }
+					<ExternalLink href="https://www.w3.org/WAI/planning/statements/generator/#create">
+						{ __( 'Try out the Accessibility Statement Generator.', 'newspack-plugin' ) }{ ' ' }
+					</ExternalLink>
+				</p>
 
-			<p>
-				<ExternalLink href="https://help.newspack.com/revenue/reader-revenue/how-to-add-an-accessibility-statement/">
-					{ __( 'Learn more about this feature in our documentation.', 'newspack-plugin' ) }{ ' ' }
-				</ExternalLink>
-			</p>
-		</>
+				<p>
+					<ExternalLink href="https://help.newspack.com/revenue/reader-revenue/how-to-add-an-accessibility-statement/">
+						{ __( 'Learn more about this feature in our documentation.', 'newspack-plugin' ) }{ ' ' }
+					</ExternalLink>
+				</p>
+			</Stack>
+		</Stack>
 	);
 }
