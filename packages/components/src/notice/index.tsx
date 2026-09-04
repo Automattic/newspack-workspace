@@ -6,7 +6,7 @@
  * WordPress dependencies.
  */
 import { Component, RawHTML } from '@wordpress/element';
-import { Icon, bug, check, help, info } from '@wordpress/icons';
+import { Icon, check, help, info } from '@wordpress/icons';
 
 /**
  * Internal dependencies.
@@ -21,8 +21,6 @@ import classnames from 'classnames';
 type NoticeProps = {
 	/** Additional CSS class name. */
 	className?: string;
-	/** Whether the notice is a debug-mode notice. */
-	debugMode?: boolean;
 	/** Whether the notice is an error notice. */
 	isError?: boolean;
 	/** Whether the notice is a handoff notice. */
@@ -47,23 +45,10 @@ class Notice extends Component< NoticeProps > {
 	 * Render
 	 */
 	render() {
-		const {
-			className,
-			debugMode,
-			isError,
-			isHandoff,
-			isHelp,
-			isSuccess,
-			isWarning,
-			noticeText,
-			rawHTML,
-			style = {},
-			children = null,
-		} = this.props;
+		const { className, isError, isHandoff, isHelp, isSuccess, isWarning, noticeText, rawHTML, style = {}, children = null } = this.props;
 		const classes = classnames(
 			'newspack-notice',
 			className,
-			debugMode && 'newspack-notice__is-debug',
 			isError && 'newspack-notice__is-error',
 			isHandoff && 'newspack-notice__is-handoff',
 			isHelp && 'newspack-notice__is-help',
@@ -75,8 +60,6 @@ class Notice extends Component< NoticeProps > {
 			noticeIcon = help;
 		} else if ( isSuccess ) {
 			noticeIcon = check;
-		} else if ( debugMode ) {
-			noticeIcon = bug;
 		} else {
 			noticeIcon = info;
 		}

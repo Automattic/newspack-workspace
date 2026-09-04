@@ -6,7 +6,7 @@ import { cloneElement } from '@wordpress/element';
 /**
  * Internal dependencies
  */
-import { Button, Handoff, Notice, HandoffMessage, TabbedNavigation, Page } from '../';
+import { Button, DebugBadge, Handoff, HandoffMessage, TabbedNavigation, Page } from '../';
 import { activeBreadcrumbs } from '../wizard/breadcrumbs-select';
 import type { BreadcrumbSection } from '../wizard/breadcrumbs-select';
 import type { BreadcrumbItem } from '../breadcrumbs';
@@ -153,7 +153,7 @@ export default function withWizardScreen< P extends object >(
 			}
 			return (
 				<>
-					{ newspack_aux_data.is_debug_mode && <Notice debugMode /> }
+					<DebugBadge />
 					{ hideHeader ? (
 						// Without the Page shell the tabs still own the content: it
 						// renders inside the active tab's panel.

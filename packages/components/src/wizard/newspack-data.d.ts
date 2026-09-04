@@ -51,3 +51,8 @@ declare const newspack_aux_data: {
 		};
 	};
 };
+
+interface Window {
+	/** Also readable off `window`, for components that render outside a wizard page. */
+	newspack_aux_data?: typeof newspack_aux_data;
+}

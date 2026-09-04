@@ -19,7 +19,7 @@ import {
 	getMissingOptionLabel,
 	type AccessRuleOption,
 } from '../../../../content-gate/access-rule-options';
-import { getMeteringCount, isMalformedAccessRuleValue, isUnconstrainedAccessRuleValue } from './utils';
+import { getMeteringCount, isMalformedAccessRuleValue, isUnconfiguredAccessRuleValue, isUnconstrainedAccessRuleValue } from './utils';
 import { normalizeOneTimePurchaseValue } from '../../../../content-gate/components/one-time-purchase-rule-control';
 
 const availableAccessRules = window.newspackAudienceContentGates.available_access_rules || {};
@@ -94,10 +94,13 @@ const formatAccessRuleValue = ( rule: GateAccessRule, optionsBySlug: Record< str
 			  )
 			: __( 'Invalid value (grants no access)', 'newspack-plugin' );
 	}
-	// A rule left empty renders as a blank condition, which is indistinguishable
-	// from a narrow one — while it is the state that lets every reader through.
-	if ( isUnconstrainedAccessRuleValue( config, rule.value ) ) {
-		return __( 'Not set (grants access to everyone)', 'newspack-plugin' );
+	// A rule left empty renders as a blank condition, indistinguishable from a
+	// narrow one — while it is doing something the summary is the only place to
+	// see. Which of the two it does is the rule's own business.
+	if ( isUnconfiguredAccessRuleValue( config, rule.value ) ) {
+		return isUnconstrainedAccessRuleValue( config, rule.value )
+			? __( 'Not set (grants access to everyone)', 'newspack-plugin' )
+			: __( 'Not set (matches no reader)', 'newspack-plugin' );
 	}
 	if ( Array.isArray( rule.value ) && options ) {
 		return formatAccessRuleOptionValues( rule.value, options, rule.slug );

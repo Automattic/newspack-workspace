@@ -222,13 +222,13 @@ describe( 'AccessRuleControl, a rule whose value would let everyone through', ()
 		expect( screen.getByText( /Springfield University/ ) ).toHaveTextContent( 'grants no access' );
 	} );
 
-	it( 'disables the picker and says why when an empty value would grant everyone', async () => {
-		// The seeded default is an empty array, which `institution` evaluates as "no
-		// constraint" — so an interactive picker with no options offers exactly one
-		// expressible answer, and it opens the gate.
-		renderRule( 'institution', { name: 'Institutional access', has_options: true, empty_grants_access: true, options: [] }, [] );
+	it( 'disables the picker and says why when the rule has nothing to select and nothing selected', async () => {
+		// The seeded default is an empty array, so an interactive picker with no options
+		// offers exactly one expressible answer — and it is the one that stops the rule
+		// describing anybody.
+		renderRule( 'institution', { name: 'Institutional access', has_options: true, requires_value: true, options: [] }, [] );
 
-		expect( await screen.findByText( /grants access to everyone/ ) ).toBeInTheDocument();
+		expect( await screen.findByText( /matches no reader/ ) ).toBeInTheDocument();
 		expect( screen.getByRole( 'combobox' ) ).toBeDisabled();
 		// And the reason is tied to the field. A disabled control is out of the tab order,
 		// so an adjacent paragraph the field does not point at reaches nobody arriving by
@@ -236,16 +236,23 @@ describe( 'AccessRuleControl, a rule whose value would let everyone through', ()
 		expect( screen.getByRole( 'group' ) ).toHaveAttribute( 'aria-describedby', screen.getByRole( 'note' ).id );
 	} );
 
-	it( 'says nothing about granting everyone while the rule still names something', async () => {
+	it( 'says nothing about an unconfigured rule while it still names something', async () => {
 		// The institutions a rule names can be deleted after it is saved. The value is
-		// then populated and denies every reader, so the caution for an empty rule is the
-		// opposite of what it does — and disabling the field would leave deleting the
-		// whole rule as the only way to clear the stale tokens.
-		renderRule( 'institution', { name: 'Institutional access', has_options: true, empty_grants_access: true, options: [] }, [ 12 ] );
+		// then populated, and disabling the field would leave deleting the whole rule as
+		// the only way to clear the stale tokens.
+		renderRule( 'institution', { name: 'Institutional access', has_options: true, requires_value: true, options: [] }, [ 12 ] );
 
 		expect( await screen.findByText( '(institution not listed) (#12)' ) ).toBeInTheDocument();
-		expect( screen.queryByText( /grants access to everyone/ ) ).not.toBeInTheDocument();
+		expect( screen.queryByText( /matches no reader/ ) ).not.toBeInTheDocument();
 		expect( screen.getByRole( 'combobox' ) ).not.toBeDisabled();
+	} );
+
+	it( 'tells a free-text rule left blank that it grants everyone, not that it matches nobody', async () => {
+		// The two rules that need a value disagree about what happens without one, and the
+		// caution is where an editor learns which symptom to look for.
+		renderRule( 'email_domain', { name: 'Whitelisted email domain', has_options: false, empty_grants_access: true, requires_value: true }, '' );
+
+		expect( await screen.findByText( /grants access to everyone/ ) ).toBeInTheDocument();
 	} );
 
 	it( 'keeps the picker for a rule that still constrains when empty, and for one with nothing to select', () => {
@@ -256,6 +263,7 @@ describe( 'AccessRuleControl, a rule whose value would let everyone through', ()
 		renderRule( 'subscription', { name: 'Active subscription', has_options: true, options: [] }, [] );
 
 		expect( screen.getByRole( 'combobox' ) ).not.toBeDisabled();
+		expect( screen.queryByText( /matches no reader/ ) ).not.toBeInTheDocument();
 		expect( screen.queryByText( /grants access to everyone/ ) ).not.toBeInTheDocument();
 	} );
 } );
