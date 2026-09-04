@@ -279,7 +279,6 @@ const AuthorProfile = ( { attributes, setAttributes, context, clientId } ) => {
 		isGuestAuthor,
 		isContextual,
 		layoutVersion,
-		showSocial,
 		showEmail,
 		textSize,
 		showAvatar,
@@ -527,17 +526,6 @@ const AuthorProfile = ( { attributes, setAttributes, context, clientId } ) => {
 			delete window.__newspackAuthorsByBlock[ clientId ];
 		};
 	}, [ authorsToRender, previewAuthorIndex, layoutVersion, clientId ] );
-
-	// Combine social links and email, which are shown together.
-	const getSocialLinks = authorData => {
-		const socialLinks = ( showSocial && authorData?.social ) || {};
-		if ( showEmail && authorData?.email ) {
-			socialLinks.email = authorData.email;
-		} else {
-			delete socialLinks.email;
-		}
-		return socialLinks;
-	};
 
 	// Determine if we're in nested layout mode (publisher-controlled composition).
 	// In nested mode, hide field toggles since publishers control display by adding/removing blocks.
@@ -906,11 +894,7 @@ const AuthorProfile = ( { attributes, setAttributes, context, clientId } ) => {
 				{ inspectorControls }
 				{ blockControls }
 				{ authorsToRender.map( authorData => (
-					<SingleAuthor
-						key={ authorData.id }
-						author={ { ...authorData, social: getSocialLinks( authorData ) } }
-						attributes={ attributes }
-					/>
+					<SingleAuthor key={ authorData.id } author={ authorData } attributes={ attributes } />
 				) ) }
 			</div>
 		);
@@ -922,7 +906,7 @@ const AuthorProfile = ( { attributes, setAttributes, context, clientId } ) => {
 			<div { ...blockProps }>
 				{ inspectorControls }
 				{ blockControls }
-				<SingleAuthor author={ { ...author, social: getSocialLinks( author ) } } attributes={ attributes } />
+				<SingleAuthor author={ author } attributes={ attributes } />
 			</div>
 		);
 	}
