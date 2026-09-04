@@ -127,6 +127,21 @@ class Perfmatters {
 
 	/**
 	 * Stylesheets to exclude from the "Unused CSS" feature.
+	 *
+	 * Perfmatters substring-matches each entry against the whole `<link>` tag. An
+	 * entry that stops matching fails silently: the stylesheet is withheld until the
+	 * reader's first interaction, and wherever its rules are not already inlined in
+	 * the generated used-CSS, that part of the page renders unstyled — with no error
+	 * and no log line.
+	 *
+	 * Prefer a component's stable identifier over a path, because both halves of a
+	 * path move. Jetpack relocated its social logos into `_inc/build/` in 15.7 and
+	 * the entry went dead across the fleet for months (NPPM-3167); Jetpack's Asset
+	 * CDN serves the same files from a path with no `plugins/jetpack/` segment, so a
+	 * prefixed entry stops matching wherever those assets are CDN-hosted (#3810). The
+	 * identifier survives both, since the tag's handle carries it as well as the URL.
+	 *
+	 * @return string[] Stylesheet identifiers.
 	 */
 	private static function unused_css_excluded_stylesheets() {
 		return [
@@ -135,7 +150,7 @@ class Perfmatters {
 			'plugins/newspack-plugin', // Newspack main plugin.
 			'plugins/newspack-popups', // Newspack Campaigns.
 			'modules/sharedaddy', // Jetpack's share buttons.
-			'_inc/social-logos', // Jetpack's social logos CSS.
+			'social-logos', // Jetpack's social logos CSS.
 			'plugins/jetpack/css/jetpack.css', // Jetpack's main CSS.
 			'plugins/jetpack/_inc/blocks/swiper.css', // Jetpack's Swiper CSS.
 			'plugins/the-events-calendar', // The Events Calendar.
