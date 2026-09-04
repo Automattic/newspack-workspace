@@ -88,6 +88,9 @@ export default function AdditionalBrands() {
 	};
 
 	const upsertBrand = ( brandId: number, brand: Brand ) => {
+		// The fetch hook leaves the error in place on success, so a retry that works would
+		// otherwise keep the failed attempt's notice on screen.
+		resetError();
 		// BrandId is NaN when inserting new brand.
 		wizardApiFetch< Brand >(
 			{
@@ -202,6 +205,7 @@ export default function AdditionalBrands() {
 								upsertBrand={ upsertBrand }
 								fetchLogoAttachment={ fetchLogoAttachment }
 								wizardApiFetch={ wizardApiFetch }
+								errorMessage={ errorMessage }
 							/>
 						) }
 					/>

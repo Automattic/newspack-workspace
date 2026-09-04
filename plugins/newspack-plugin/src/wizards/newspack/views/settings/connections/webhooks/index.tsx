@@ -7,7 +7,7 @@
  */
 import { __ } from '@wordpress/i18n';
 import { useEffect, useRef, useState, Fragment } from '@wordpress/element';
-import { ExternalLink, __experimentalHStack as HStack } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
+import { ExternalLink, Notice, __experimentalHStack as HStack } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
 import { connection } from '@wordpress/icons';
 import { Card as UICard } from '@wordpress/ui';
 
@@ -18,7 +18,7 @@ import { API_NAMESPACE } from './constants';
 import EndpointActionsCard from './endpoint-actions-card';
 import EndpointActionsModals from './endpoint-actions-modals';
 import { useWizardApiFetch } from '../../../../../hooks/use-wizard-api-fetch';
-import { Card, Button, Notice, SectionHeader } from '../../../../../../../packages/components/src';
+import { Card, Button, SectionHeader } from '../../../../../../../packages/components/src';
 import EmptyState from '../../../../../../../packages/components/src/empty-state';
 
 const LEARN_MORE_URL = 'https://help.newspack.com/plugins-and-themes/third-party-services-integrations/webhooks/';
@@ -167,7 +167,9 @@ function Webhooks() {
 			{ /* A failed load leaves `endpoints` null, which is neither a list nor an
 			     empty state; without this the section renders as blank space. */ }
 			{ ! inFlight && ! isLoaded && (
-				<Notice isError noticeText={ errorMessage || __( 'Webhook endpoints could not be loaded.', 'newspack-plugin' ) } />
+				<Notice status="error" isDismissible={ false } politeness="polite">
+					{ errorMessage || __( 'Webhook endpoints could not be loaded.', 'newspack-plugin' ) }
+				</Notice>
 			) }
 			{ selectedEndpoint && (
 				<EndpointActionsModals
