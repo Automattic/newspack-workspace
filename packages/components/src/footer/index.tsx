@@ -11,6 +11,7 @@ import { ExternalLink } from '@wordpress/components';
 /**
  * Internal dependencies.
  */
+import useConfirmDialog from '../hooks/use-confirm-dialog';
 import './style.scss';
 
 /**
@@ -39,6 +40,7 @@ type FooterElement = {
 	label: string;
 	url: string | false;
 	external?: boolean;
+	confirm?: ( callback: () => void ) => void;
 };
 
 const Footer = ( { simple = undefined }: { simple?: boolean } ) => {
@@ -52,6 +54,23 @@ const Footer = ( { simple = undefined }: { simple?: boolean } ) => {
 		remove_starter_content: removeStarterContent = false,
 		support_email: supportEmail,
 	} = urls;
+
+	const resetDialog = useConfirmDialog( {
+		title: __( 'Reset Newspack?', 'newspack-plugin' ),
+		message: __(
+			'This deletes the Newspack settings on this site and returns you to the setup wizard. Your posts, pages and users are not affected. This cannot be undone.',
+			'newspack-plugin'
+		),
+		confirmButtonText: __( 'Reset Newspack', 'newspack-plugin' ),
+		isDestructive: true,
+	} );
+
+	const starterContentDialog = useConfirmDialog( {
+		title: __( 'Remove Starter Content?', 'newspack-plugin' ),
+		message: __( 'This deletes the posts, pages and categories created as starter content. This cannot be undone.', 'newspack-plugin' ),
+		confirmButtonText: __( 'Remove Starter Content', 'newspack-plugin' ),
+		isDestructive: true,
+	} );
 
 	const footerElements: FooterElement[] = [
 		{
@@ -86,12 +105,14 @@ const Footer = ( { simple = undefined }: { simple?: boolean } ) => {
 		footerElements.push( {
 			label: __( 'Reset Newspack', 'newspack-plugin' ),
 			url: resetUrl,
+			confirm: resetDialog.requestConfirm,
 		} );
 	}
 	if ( removeStarterContent ) {
 		footerElements.push( {
 			label: __( 'Remove Starter Content', 'newspack-plugin' ),
 			url: removeStarterContent,
+			confirm: starterContentDialog.requestConfirm,
 		} );
 	}
 	if ( supportEmail ) {
@@ -100,18 +121,41 @@ const Footer = ( { simple = undefined }: { simple?: boolean } ) => {
 			url: `mailto:${ supportEmail }`,
 		} );
 	}
+	const renderItem = ( { url, label, external, confirm }: FooterElement ) => {
+		if ( external ) {
+			return <ExternalLink href={ url as string }>{ label }</ExternalLink>;
+		}
+		if ( ! confirm ) {
+			// A false url (e.g. missing support URL) renders the label without an href, as before.
+			return <a href={ url || undefined }>{ label }</a>;
+		}
+		// onClick only sees primary clicks, so an href here would let a middle-click
+		// or "Open link in new tab" reach the URL unguarded.
+		return (
+			<button
+				type="button"
+				onClick={ () =>
+					confirm( () => {
+						window.location.href = url as string;
+					} )
+				}
+			>
+				{ label }
+			</button>
+		);
+	};
+
 	return (
 		<div className="newspack-footer">
 			{ ! simple && (
 				<ul>
-					{ footerElements.map( ( { url, label, external }, index ) => (
-						<li key={ index }>
-							{ /* A false url (e.g. missing support URL) renders the label without an href, as before. */ }
-							{ external ? <ExternalLink href={ url as string }>{ label }</ExternalLink> : <a href={ url || undefined }>{ label }</a> }
-						</li>
+					{ footerElements.map( ( element, index ) => (
+						<li key={ index }>{ renderItem( element ) }</li>
 					) ) }
 				</ul>
 			) }
+			{ resetDialog.confirmDialog }
+			{ starterContentDialog.confirmDialog }
 		</div>
 	);
 };

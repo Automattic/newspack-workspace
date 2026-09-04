@@ -1,7 +1,7 @@
 import { __ } from '@wordpress/i18n';
-import { SelectControl } from '@wordpress/components';
+import { Notice, SelectControl } from '@wordpress/components';
 
-import { Grid, Notice } from '../../../../../../packages/components/src';
+import { Grid } from '../../../../../../packages/components/src';
 
 interface PwaDisplayModeProps extends ThemeModComponentProps< AdvancedSettings > {}
 
@@ -39,12 +39,12 @@ export default function PwaDisplayMode( { data, isFetching, update }: PwaDisplay
 					onChange={ ( pwa_display_mode: string ) => update( { pwa_display_mode } ) }
 					disabled={ isFetching }
 				/>
-				<Notice
-					noticeText={ __(
+				<Notice status="info" isDismissible={ false } spokenMessage="">
+					{ __(
 						'This setting controls how your site appears when users install it as a Progressive Web App on their devices.',
 						'newspack-plugin'
 					) }
-				/>
+				</Notice>
 			</Grid>
 		</Grid>
 	);
