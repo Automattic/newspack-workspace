@@ -79,8 +79,11 @@ export const setupSite = ({ woo }: SetupOptions): void => {
   const siteSetup = readFileSync(SITE_SETUP_PATH);
   const e2ePlugin = readFileSync(E2E_PLUGIN_PATH);
   const args = scriptArgs(woo);
-  // Forward Stripe test keys (if present) into the target environment.
+  // Forward Stripe test keys (if present) into the target environment, plus the
+  // /_email sendbox secret. When it's unset, e2e-setup.sh applies its host-aware
+  // policy: a local-dev default for local targets, a hard error for non-local ones.
   const stripeEnv = ["STRIPE_PUB_KEY", "STRIPE_SECRET_KEY"];
+  const setupEnv = [...stripeEnv, "E2E_EMAIL_SENDBOX_SECRET"];
 
   if (isLocalTarget(siteUrl)) {
     const container = containerForHost(siteUrl);
@@ -93,7 +96,7 @@ export const setupSite = ({ woo }: SetupOptions): void => {
     execFileSync("docker", ["cp", E2E_PLUGIN_PATH, `${container}:${REMOTE_E2E_PLUGIN}`], {
       stdio: ["ignore", "inherit", "inherit"],
     });
-    const envForwards = stripeEnv.flatMap((v) => (process.env[v] ? ["-e", v] : []));
+    const envForwards = setupEnv.flatMap((v) => (process.env[v] ? ["-e", v] : []));
     execFileSync(
       "docker",
       [
@@ -144,7 +147,7 @@ export const setupSite = ({ woo }: SetupOptions): void => {
   const inlineEnv = [
     `SITE_SETUP_SCRIPT=${shQuote(REMOTE_SITE_SETUP)}`,
     `E2E_PLUGIN_SRC=${shQuote(REMOTE_E2E_PLUGIN)}`,
-    ...stripeEnv
+    ...setupEnv
       .filter((v) => process.env[v])
       .map((v) => `${v}=${shQuote(process.env[v] as string)}`),
   ].join(" ");

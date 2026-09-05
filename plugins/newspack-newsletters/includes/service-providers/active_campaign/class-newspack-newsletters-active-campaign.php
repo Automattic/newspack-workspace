@@ -1900,9 +1900,20 @@ final class Newspack_Newsletters_Active_Campaign extends \Newspack_Newsletters_S
 	}
 
 	/**
-	 * After Newsletter post is deleted, clean up by deleting corresponding ESP campaign.
+	 * After Newsletter post is trashed, clean up by deleting corresponding ESP campaign.
 	 *
-	 * @param string $post_id Numeric ID of the campaign.
+	 * Cleanup covers the post's own campaigns and nothing else. There is
+	 * deliberately no `ac_message_id` cleanup: messages and campaigns are
+	 * separate ActiveCampaign entities numbered from separate sequences, so a
+	 * message ID is meaningless to any campaign endpoint and a lookup cannot
+	 * tell you whether a campaign of the same number is ours. Reaching for
+	 * `message_delete` instead is no safer — one message backs every send a post
+	 * ever made, so deleting it damages the history of campaigns already out the
+	 * door, which is exactly what DELETABLE_STATUSES exists to prevent. An
+	 * orphaned message left in ActiveCampaign is inert. Mailchimp and Constant
+	 * Contact clean up the same way.
+	 *
+	 * @param int $post_id Numeric ID of the newsletter post.
 	 */
 	public function trash( $post_id ) {
 		if ( Newspack_Newsletters::NEWSPACK_NEWSLETTERS_CPT !== get_post_type( $post_id ) ) {
@@ -1919,14 +1930,13 @@ final class Newspack_Newsletters_Active_Campaign extends \Newspack_Newsletters_S
 			}
 		}
 		$campaign_id = get_post_meta( $post_id, 'ac_campaign_id', true );
-		$message_id  = get_post_meta( $post_id, 'ac_message_id', true );
 		if ( $campaign_id ) {
-			$this->delete_campaign( $campaign_id );
-		}
-		if ( $message_id ) {
-			$message = $this->api_v1_request( 'message_view', 'GET', [ 'query' => [ 'id' => $message_id ] ] );
-			if ( ! is_wp_error( $message ) ) {
-				$this->api_v1_request( 'campaign_delete', 'GET', [ 'query' => [ 'id' => $message_id ] ] );
+			// Clear the stored ID only once the campaign is really gone. A refusal
+			// means it still exists in ActiveCampaign (delete_campaign() declines
+			// anything past draft), and the post must keep pointing at it.
+			$delete_res = $this->delete_campaign( $campaign_id );
+			if ( ! is_wp_error( $delete_res ) ) {
+				delete_post_meta( $post_id, 'ac_campaign_id', $campaign_id );
 			}
 		}
 	}
@@ -2528,11 +2538,28 @@ final class Newspack_Newsletters_Active_Campaign extends \Newspack_Newsletters_S
 			$value_type = 'date';
 		}
 
+		// A date field defaults to the date range operator; exact-match text on a
+		// date is technically valid but never what a publisher wants. Probed
+		// rather than assumed: on an older newspack-plugin the operator would
+		// travel to newspack-popups unvalidated, where a stale build crashes on
+		// it (see integrations_supports_date_range()).
+		$matching_function = 'default';
+		if ( $is_multi_select ) {
+			$matching_function = 'list__in';
+		} elseif ( ( 'date' === $value_type || 'datetime' === $value_type ) && self::integrations_supports_date_range() ) {
+			$matching_function = 'date_range';
+		}
+
 		return [
 			'key'                 => $perstag,
 			'name'                => ! empty( $field['title'] ) ? $field['title'] : $perstag,
 			'value_type'          => $value_type,
-			'matching_function'   => $is_multi_select ? 'list__in' : 'default',
+			'matching_function'   => $matching_function,
+			// Declared explicitly, even though it is always empty: ActiveCampaign sends
+			// ISO 8601. The consumer distinguishes "declared as ISO" from "never stored,
+			// so the format is unknown" by the key's presence, and refreshes the latter
+			// from the live schema.
+			'date_format'         => '',
 			'options'             => $options,
 			'description'         => ! empty( $field['descript'] ) ? $field['descript'] : '',
 			'is_access_rule'      => $is_promoted_by_default,

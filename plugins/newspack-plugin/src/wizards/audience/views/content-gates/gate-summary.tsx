@@ -12,6 +12,14 @@ import { __, _n, sprintf } from '@wordpress/i18n';
  * Internal dependencies.
  */
 import ContentRuleControl from './edit/content-rule-control';
+import {
+	findAccessRuleOption,
+	formatAccessRuleOptionLabel,
+	formatMissingAccessRuleOptionLabel,
+	getMissingOptionLabel,
+	type AccessRuleOption,
+} from '../../../../content-gate/access-rule-options';
+import { getMeteringCount, isMalformedAccessRuleValue, isUnconfiguredAccessRuleValue, isUnconstrainedAccessRuleValue } from './utils';
 import { normalizeOneTimePurchaseValue } from '../../../../content-gate/components/one-time-purchase-rule-control';
 
 const availableAccessRules = window.newspackAudienceContentGates.available_access_rules || {};
@@ -19,19 +27,33 @@ const availableAccessRules = window.newspackAudienceContentGates.available_acces
 const noOp = () => {};
 
 /**
- * Map option values to labels, falling back to the raw value.
+ * Name each stored value alongside the ID it stores — the same identification the
+ * pickers give, so a gate reads the same way wherever it is inspected. Names repeat
+ * across product and institution tiers, and a value the option list cannot describe is
+ * named rather than printed bare.
  */
-const getOptionLabels = ( values: Array< string | number >, options: { value: string | number; label: string }[] = [] ) =>
-	values.map( value => options.find( option => String( option.value ) === String( value ) )?.label ?? String( value ) ).join( ', ' );
+const formatAccessRuleOptionValues = ( values: Array< string | number >, options: AccessRuleOption[] = [], slug: string ) =>
+	values
+		.map( value => {
+			const option = findAccessRuleOption( options, value );
+			return option ? formatAccessRuleOptionLabel( option ) : formatMissingAccessRuleOptionLabel( value, getMissingOptionLabel( slug ) );
+		} )
+		.join( ', ' );
 
 /**
  * Human-readable summary for an access rule value.
+ *
+ * @param rule          The rule to summarise.
+ * @param optionsBySlug The options to name the rule's values with, from
+ *                      `useAccessRuleOptions()`. Falls back to the list localised with
+ *                      the page for a rule the caller did not supply.
  */
-const formatAccessRuleValue = ( rule: GateAccessRule ): string => {
+const formatAccessRuleValue = ( rule: GateAccessRule, optionsBySlug: Record< string, AccessRuleOption[] > ): string => {
 	const config = availableAccessRules[ rule.slug ];
+	const options = optionsBySlug[ rule.slug ] ?? config?.options;
 	if ( 'one_time_purchase' === rule.slug ) {
 		const { product_ids: productIds, duration_value: durationValue, duration_unit: durationUnit } = normalizeOneTimePurchaseValue( rule.value );
-		const products = getOptionLabels( productIds, config?.options );
+		const products = formatAccessRuleOptionValues( productIds, options, rule.slug );
 		if ( 'forever' === durationUnit ) {
 			return sprintf(
 				// translators: %s: list of product names.
@@ -61,8 +83,27 @@ const formatAccessRuleValue = ( rule: GateAccessRule ): string => {
 			products
 		);
 	}
-	if ( Array.isArray( rule.value ) && config?.options ) {
-		return getOptionLabels( rule.value, config.options );
+	if ( isMalformedAccessRuleValue( config, rule.value ) ) {
+		// Only a string is quoted back. Anything else renders as `[object Object]` or as
+		// a comma-joined list that reads like something the publisher typed.
+		return 'string' === typeof rule.value
+			? sprintf(
+					// translators: %s: the stored value. Shown when the value is in a shape the rule can't use; the rule then never grants access.
+					__( '%s (invalid value, grants no access)', 'newspack-plugin' ),
+					rule.value
+			  )
+			: __( 'Invalid value (grants no access)', 'newspack-plugin' );
+	}
+	// A rule left empty renders as a blank condition, indistinguishable from a
+	// narrow one — while it is doing something the summary is the only place to
+	// see. Which of the two it does is the rule's own business.
+	if ( isUnconfiguredAccessRuleValue( config, rule.value ) ) {
+		return isUnconstrainedAccessRuleValue( config, rule.value )
+			? __( 'Not set (grants access to everyone)', 'newspack-plugin' )
+			: __( 'Not set (matches no reader)', 'newspack-plugin' );
+	}
+	if ( Array.isArray( rule.value ) && options ) {
+		return formatAccessRuleOptionValues( rule.value, options, rule.slug );
 	}
 	// Boolean rules carry no displayable value (mirrors the pre-formatter
 	// rendering, where React printed nothing for a boolean child).
@@ -79,12 +120,93 @@ export type GateSummarySection = {
 };
 
 /**
+ * Summarise one audience path's allowance, naming the site meter when the count
+ * is shared. Without that, several gates showing the same number read as several
+ * separate allowances, which is the confusion the shared meter exists to remove.
+ *
+ * @param metering       The path's metering settings.
+ * @param siteCount      The site meter count governing this path.
+ * @param sitePeriod     The site meter reset period.
+ * @param hasRegwall     Whether the gate offers registration before this path. Without
+ *                       one, running out of free views is the end of the road, so the
+ *                       summary says so rather than leaving the publisher to infer it.
+ * @param signedOutCount The site meter count for signed-out readers. Only relevant
+ *                       without a registration wall, where this path governs them too
+ *                       and the two audiences draw on different allowances.
+ */
+const formatMetering = ( metering: Metering, siteCount?: number, sitePeriod?: Metering[ 'period' ], hasRegwall = true, signedOutCount?: number ) => {
+	const isSiteScoped = metering.scope !== 'gate';
+	const count = getMeteringCount( metering, siteCount );
+	const period = isSiteScoped ? sitePeriod ?? 'month' : metering.period;
+	const periodLabel = period === 'week' ? __( 'week', 'newspack-plugin' ) : __( 'month', 'newspack-plugin' );
+	// A gate keeping its own allowance stores one count for both audiences.
+	const anonymousCount = isSiteScoped ? signedOutCount : count;
+	const servesTwoAllowances = ! hasRegwall && typeof anonymousCount === 'number' && anonymousCount !== count;
+	let allowance;
+	if ( hasRegwall ) {
+		allowance = sprintf(
+			// translators: 1: metering count, 2: metering period
+			_n( '%1$d free view per %2$s', '%1$d free views per %2$s', count, 'newspack-plugin' ),
+			count,
+			periodLabel
+		);
+	} else if ( servesTwoAllowances ) {
+		allowance = sprintf(
+			// translators: 1: free views for signed-out readers, 2: metering period, 3: free views for signed-in readers
+			_n(
+				'%1$d free view per %2$s for signed-out readers, %3$d for signed-in, before content is restricted',
+				'%1$d free views per %2$s for signed-out readers, %3$d for signed-in, before content is restricted',
+				anonymousCount as number,
+				'newspack-plugin'
+			),
+			anonymousCount as number,
+			periodLabel,
+			count
+		);
+	} else {
+		allowance = sprintf(
+			// translators: 1: metering count, 2: metering period
+			_n(
+				'%1$d free view per %2$s before content is restricted',
+				'%1$d free views per %2$s before content is restricted',
+				count,
+				'newspack-plugin'
+			),
+			count,
+			periodLabel
+		);
+	}
+	return isSiteScoped
+		? sprintf(
+				// translators: %s is the allowance, e.g. "3 free views per month".
+				__( '%s (site meter)', 'newspack-plugin' ),
+				allowance
+		  )
+		: sprintf(
+				// translators: %s is the allowance, e.g. "3 free views per month".
+				__( '%s (this gate only)', 'newspack-plugin' ),
+				allowance
+		  );
+};
+
+/**
  * Build the Content rules / Registered access / Paid access sections for a gate.
  *
- * @param gate         The gate (live edit state or a saved gate).
- * @param isNewsletter Whether this is a premium-newsletter gate (hides registration).
+ * @param gate          The gate (live edit state or a saved gate).
+ * @param isNewsletter  Whether this is a premium-newsletter gate (hides registration).
+ * @param siteMeter     The shared allowance, so a summary can name where its count comes from.
+ * @param optionsBySlug The options to name each rule's values with, from
+ *                      `useAccessRuleOptions()`. The list localised with the page goes
+ *                      stale while the app is open — institutions are created and
+ *                      deleted in it — and a summary built from it would call an
+ *                      institution added a moment ago "not listed".
  */
-export const getGateSummarySections = ( gate: Gate, isNewsletter = false ): GateSummarySection[] => {
+export const getGateSummarySections = (
+	gate: Gate,
+	isNewsletter = false,
+	siteMeter?: SiteMeterConfig,
+	optionsBySlug: Record< string, AccessRuleOption[] > = {}
+): GateSummarySection[] => {
 	const sections: GateSummarySection[] = [];
 
 	sections.push( {
@@ -104,7 +226,9 @@ export const getGateSummarySections = ( gate: Gate, isNewsletter = false ): Gate
 					/>
 				) )
 			) : (
-				<p>{ __( 'N/A', 'newspack-plugin' ) }</p>
+				<p>
+					<strong>{ __( 'N/A', 'newspack-plugin' ) }</strong>
+				</p>
 			),
 	} );
 
@@ -123,48 +247,56 @@ export const getGateSummarySections = ( gate: Gate, isNewsletter = false ): Gate
 					{ gate.registration?.active && gate.registration.metering.enabled && (
 						<p>
 							<strong>{ __( 'Metered:', 'newspack-plugin' ) } </strong>{ ' ' }
-							{ sprintf(
-								// translators: 1: metering count, 2: metering period
-								__( '%1$d free views per %2$s', 'newspack-plugin' ),
-								gate.registration.metering.count,
-								gate.registration.metering.period
-							) }
+							{ formatMetering( gate.registration.metering, siteMeter?.anonymous_count, siteMeter?.period ) }
 						</p>
 					) }
-					{ ! gate.registration?.active && <p>{ __( 'N/A', 'newspack-plugin' ) }</p> }
+					{ ! gate.registration?.active && (
+						<p>
+							<strong>{ __( 'N/A', 'newspack-plugin' ) }</strong>
+						</p>
+					) }
 				</>
 			),
 		} );
 	}
+
+	const showsAccessRules = Boolean( gate.custom_access?.active && gate.custom_access.access_rules.length > 0 );
+	const showsPaidMetering = Boolean( gate.custom_access?.active && gate.custom_access.metering.enabled );
+	const hasRegwall = Boolean( ! isNewsletter && gate.registration?.active );
 
 	sections.push( {
 		key: 'custom_access',
 		label: __( 'Paid Access', 'newspack-plugin' ),
 		content: (
 			<>
-				{ gate.custom_access?.active &&
-					gate.custom_access.access_rules.length > 0 &&
+				{ showsAccessRules &&
 					gate.custom_access.access_rules.map( ( ruleGroup, groupIndex ) =>
 						ruleGroup.map( rule =>
 							availableAccessRules[ rule.slug ]?.name ? (
 								<p key={ `${ groupIndex }-${ rule.slug }` }>
-									<strong>{ availableAccessRules[ rule.slug ].name }:</strong> { formatAccessRuleValue( rule ) }
+									<strong>{ availableAccessRules[ rule.slug ].name }:</strong> { formatAccessRuleValue( rule, optionsBySlug ) }
 								</p>
 							) : null
 						)
 					) }
-				{ gate.custom_access?.active && gate.custom_access.metering.enabled && (
+				{ showsPaidMetering && (
 					<p>
 						<strong>{ __( 'Metered:', 'newspack-plugin' ) } </strong>{ ' ' }
-						{ sprintf(
-							// translators: 1: metering count, 2: metering period
-							__( '%1$d free views per %2$s', 'newspack-plugin' ),
-							gate.custom_access.metering.count,
-							gate.custom_access.metering.period
+						{ formatMetering(
+							gate.custom_access.metering,
+							siteMeter?.registered_count,
+							siteMeter?.period,
+							hasRegwall,
+							siteMeter?.anonymous_count
 						) }
 					</p>
 				) }
-				{ ( ! gate.custom_access?.active || gate.custom_access.access_rules?.length === 0 ) && <p>{ __( 'N/A', 'newspack-plugin' ) }</p> }
+				{ /* Only when the column has nothing else: N/A beside a metering line reads as a contradiction. */ }
+				{ ! showsAccessRules && ! showsPaidMetering && (
+					<p>
+						<strong>{ __( 'N/A', 'newspack-plugin' ) }</strong>
+					</p>
+				) }
 			</>
 		),
 	} );

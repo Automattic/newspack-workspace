@@ -6,6 +6,8 @@ import './gate.scss';
 import { getEventPayload, sendEvent } from '../reader-activation/analytics';
 import { debugLog } from '../reader-activation/utils';
 import { persistCtaAttribution } from '../shared/js/cta-attribution';
+import { propagateGatePreviewParams } from './preview-links';
+import { wireInlineVerificationBox } from '../reader-activation-auth/inline-verification';
 
 const EVENT_NAME = 'np_gate_interaction';
 
@@ -109,6 +111,74 @@ function initReloadHandler() {
 
 		ras.on( 'overlay', refreshPage ); // When an overlay is closed.
 		ras.on( 'activity', refreshPage ); // When a newly registered reader is detected.
+	} );
+}
+
+/**
+ * Wire the email verification prompts rendered above the gate layout for a reader
+ * whose address is on a whitelisted domain but unverified.
+ *
+ * Sends the OTP, then hands the reader to the auth modal's OTP state. Verifying
+ * reloads the article, which the gate now grants.
+ */
+function initVerificationPrompts() {
+	const boxes = [ ...document.querySelectorAll( '.newspack-content-gate__verification-prompt' ) ];
+	if ( ! boxes.length ) {
+		return;
+	}
+	window.newspackRAS = window.newspackRAS || [];
+	window.newspackRAS.push( function ( ras ) {
+		// The modal reaches both onSuccess and onClose on the Continue path — it closes
+		// itself and then reports success — so the reload is claimed once rather than
+		// fired from each.
+		let reloading = false;
+		const reloadOnce = () => {
+			if ( reloading ) {
+				return;
+			}
+			reloading = true;
+			window.location.reload();
+		};
+		boxes.forEach( box => {
+			wireInlineVerificationBox( box, {
+				url: box.dataset.verificationUrl,
+				nonce: box.dataset.verificationNonce,
+				errorText: box.dataset.errorMessage,
+				onSent: () => {
+					ras.setOTPTimer();
+					// Both checks run before the call, not after: the code is already sent
+					// by this point, and openAuthModal's own early returns invoke
+					// onSuccess — so a modal that never opened would reload the page past
+					// the reader instead of handing control back. The method is absent
+					// when RAS is disabled; the container is rendered by the auth bundle,
+					// which loads on its own RAS callback with nothing ordering the two
+					// pushes, so both are read at click time.
+					if (
+						typeof ras.openAuthModal !== 'function' ||
+						! document.querySelector( '.newspack-reader-auth-modal .newspack-reader-auth' )
+					) {
+						return false;
+					}
+					ras.openAuthModal( {
+						skipAuthenticatedCheck: true,
+						skipNewslettersSignup: true,
+						backButtonClosesModal: true,
+						initialState: 'otp',
+						closeOnSuccess: true,
+						skipSuccess: false,
+						// Reload on close rather than only on success: the modal holds a
+						// success step the reader dismisses, and the gate's own reload
+						// handler stands down while an overlay is open. onSuccess covers
+						// the path where the modal closes itself. Reloading either way is
+						// safe — a reader who dismissed without verifying gets the same
+						// gate back.
+						onSuccess: reloadOnce,
+						onClose: reloadOnce,
+					} );
+					return true;
+				},
+			} );
+		} );
 	} );
 }
 
@@ -389,6 +459,21 @@ function handleFloatingElements() {
 	} );
 }
 
+// Registered on its own rather than inside the gate initialisation below, which
+// returns early when no gate element is present — propagation has to run on
+// those pages too, since the script now loads across a whole preview session.
+// Wrapped because domReady() runs synchronously once the document is ready, so
+// an unguarded throw here would abort module evaluation before the gate's own
+// registration below is even reached.
+domReady( () => {
+	try {
+		propagateGatePreviewParams();
+	} catch ( e ) {
+		// eslint-disable-next-line no-console
+		console.warn( 'Gate preview: could not propagate preview params.', e );
+	}
+} );
+
 domReady( function () {
 	const gate = document.querySelector( '.newspack-content-gate__gate' );
 	if ( ! gate ) {
@@ -399,6 +484,7 @@ domReady( function () {
 	// it renders, and an inline gate's 'seen' handler only runs once it scrolls into
 	// view. A CTA click must always persist attribution.
 	manageCtaClicks( gate );
+	initVerificationPrompts();
 
 	initReloadHandler();
 	if ( gate.classList.contains( 'newspack-content-gate__overlay-gate' ) ) {
