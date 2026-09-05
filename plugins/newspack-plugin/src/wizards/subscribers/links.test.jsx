@@ -39,9 +39,13 @@ describe( 'isInternalHashPath', () => {
 } );
 
 describe( 'groupDetailHref', () => {
-	it( 'returns the group edit URL, or empty when there is nothing to open', () => {
-		expect( groupDetailHref( { editUrl: 'https://site.test/wp-admin/x' } ) ).toBe( 'https://site.test/wp-admin/x' );
-		expect( groupDetailHref( { editUrl: '' } ) ).toBe( '' );
+	it( 'points a group at the in-wizard detail route, and nowhere without an id', () => {
+		expect( groupDetailHref( { id: 29 } ) ).toBe( '#/groups/29' );
+		expect( groupDetailHref( {} ) ).toBe( '' );
 		expect( groupDetailHref( undefined ) ).toBe( '' );
+	} );
+
+	it( 'produces a route the profile back-link guard accepts', () => {
+		expect( isInternalHashPath( groupDetailHref( { id: 29 } ) ) ).toBe( true );
 	} );
 } );

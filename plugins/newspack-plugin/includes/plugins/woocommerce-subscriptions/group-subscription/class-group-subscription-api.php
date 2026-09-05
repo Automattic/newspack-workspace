@@ -14,6 +14,19 @@ defined( 'ABSPATH' ) || exit;
  */
 class Group_Subscription_API {
 	const NAMESPACE = 'newspack-group-subscription/v1';
+
+	/**
+	 * Shortest search term /search-users will answer. Below this the term matches
+	 * most of the reader base, and every match carries an email address.
+	 */
+	const SEARCH_USERS_MIN_LENGTH = 2;
+
+	/**
+	 * Rows each of the two /search-users queries returns at most. The endpoint
+	 * feeds a picker, so a term broad enough to hit the cap is one the caller
+	 * should narrow rather than page through.
+	 */
+	const SEARCH_USERS_LIMIT = 20;
 	/**
 	 * Initialize hooks.
 	 */
@@ -179,6 +192,69 @@ class Group_Subscription_API {
 				],
 			]
 		);
+		// Promote/demote a manager. There is no My Account REST equivalent — the
+		// reader-facing surface posts a form to admin_post_ — but the rule and the
+		// state gate are the same, so the route belongs here beside the member and
+		// invite routes rather than in the wizard, keeping one capability model.
+		\register_rest_route(
+			self::NAMESPACE,
+			'/manager',
+			[
+				'methods'             => \WP_REST_Server::EDITABLE,
+				'callback'            => [ __CLASS__, 'api_set_manager_role' ],
+				'permission_callback' => [ __CLASS__, 'role_permission_callback' ],
+				// Each arg pairs its sanitizer with `rest_validate_request_arg`: WP only
+				// injects the default validator when an arg declares NO
+				// sanitize_callback, so `enum`/`minimum` on an arg that sanitizes are
+				// inert unless the validator is named explicitly.
+				'args'                => [
+					'subscription_id' => [
+						'type'              => 'integer',
+						'required'          => true,
+						'sanitize_callback' => 'absint',
+						'validate_callback' => 'rest_validate_request_arg',
+					],
+					'user_id'         => [
+						'type'              => 'integer',
+						'required'          => true,
+						'sanitize_callback' => 'absint',
+						'validate_callback' => 'rest_validate_request_arg',
+					],
+					'role'            => [
+						'type'              => 'string',
+						'required'          => true,
+						'enum'              => [ 'manager', 'member' ],
+						'validate_callback' => 'rest_validate_request_arg',
+					],
+				],
+			]
+		);
+		// Adjust the group's seat limit. Admin-only: capacity is sold to the owner,
+		// so changing it is a publisher decision with no My Account equivalent.
+		\register_rest_route(
+			self::NAMESPACE,
+			'/seat-limit',
+			[
+				'methods'             => \WP_REST_Server::EDITABLE,
+				'callback'            => [ __CLASS__, 'api_update_seat_limit' ],
+				'permission_callback' => [ __CLASS__, 'admin_permission_callback' ],
+				'args'                => [
+					'subscription_id' => [
+						'type'              => 'integer',
+						'required'          => true,
+						'sanitize_callback' => 'absint',
+						'validate_callback' => 'rest_validate_request_arg',
+					],
+					'limit'           => [
+						'type'              => 'integer',
+						'required'          => true,
+						'minimum'           => 0,
+						'sanitize_callback' => 'absint',
+						'validate_callback' => 'rest_validate_request_arg',
+					],
+				],
+			]
+		);
 	}
 
 	/**
@@ -197,7 +273,235 @@ class Group_Subscription_API {
 	}
 
 	/**
+	 * Permission callback for changing who manages a group.
+	 *
+	 * Stricter than permission_callback(): promoting and demoting managers is the
+	 * owner's call alone, with store admins acting on their behalf. Deferring to
+	 * Group_Subscription::user_can_manage_roles() keeps this identical to the rule
+	 * the My Account form handler applies.
+	 *
+	 * @param \WP_REST_Request $request The request object.
+	 *
+	 * @return bool Whether the user may change roles in this group.
+	 */
+	public static function role_permission_callback( \WP_REST_Request $request ): bool {
+		$subscription = WooCommerce_Subscriptions::sanitize_subscription( $request->get_param( 'subscription_id' ) );
+		if ( ! $subscription ) {
+			return false;
+		}
+		return Group_Subscription::user_can_manage_roles( get_current_user_id(), $subscription );
+	}
+
+	/**
+	 * Permission callback for the admin-only group routes.
+	 *
+	 * Neither the owner nor a manager may reach these: they have no My Account
+	 * equivalent because they are publisher decisions about what the group was
+	 * sold, not maintenance of who is in it.
+	 *
+	 * @param \WP_REST_Request $request The request object.
+	 *
+	 * @return bool Whether the user is a store admin acting on a real group.
+	 */
+	public static function admin_permission_callback( \WP_REST_Request $request ): bool {
+		$subscription = WooCommerce_Subscriptions::sanitize_subscription( $request->get_param( 'subscription_id' ) );
+		if ( ! $subscription ) {
+			return false;
+		}
+		return current_user_can( 'manage_woocommerce' );
+	}
+
+	/**
+	 * Resolve the manager an invite link should be minted or deleted as.
+	 *
+	 * The link itself belongs to the subscription, but Group_Subscription_Invite
+	 * still requires a manager to act as, and refuses anyone else. An admin is not
+	 * a manager of the groups they administer, so minting under their own ID would
+	 * be refused; they act as the owner instead.
+	 *
+	 * For an owner or a manager this returns their own ID, so the reader-facing
+	 * path is unchanged.
+	 *
+	 * This is why an admin's two ways of inviting are attributed to two different
+	 * people, which is intended rather than an oversight. An email invitation
+	 * records its actual sender and names them to the recipient
+	 * (Group_Subscription_Invite::resolve_invite_sender()); a link records the
+	 * manager it was minted as, and an admin is not one. Read the split as what
+	 * each thing is: the email is a message from a person, the link is an artifact
+	 * of the group. Attributing the email to the owner too would misdirect the
+	 * reply.
+	 *
+	 * @param \WC_Subscription|int $subscription The subscription object or ID.
+	 *
+	 * @return int The manager user ID to act as, or 0 when there is none.
+	 */
+	public static function resolve_link_manager_id( \WC_Subscription|int $subscription ): int {
+		$subscription = WooCommerce_Subscriptions::sanitize_subscription( $subscription );
+		if ( ! $subscription ) {
+			return 0;
+		}
+		$current_user_id = get_current_user_id();
+		if ( $current_user_id && Group_Subscription::user_is_manager( $current_user_id, $subscription ) ) {
+			return $current_user_id;
+		}
+		if ( current_user_can( 'manage_woocommerce' ) ) {
+			return (int) $subscription->get_user_id();
+		}
+		return 0;
+	}
+
+	/**
+	 * The rejection for an invite-link call that resolves to no manager.
+	 *
+	 * There is nobody to act as when resolve_link_manager_id() returns 0 — an
+	 * ownerless subscription, or a caller who is neither a manager nor a store
+	 * admin. Minting or deleting a link under user 0 would attach it to no
+	 * account, so the call is refused rather than passed through.
+	 *
+	 * @return \WP_Error
+	 */
+	private static function no_link_manager_error(): \WP_Error {
+		return new \WP_Error(
+			'newspack_group_subscription_no_link_manager',
+			sprintf(
+				/* translators: %s: lowercase singular group label (e.g. "group", "team"). */
+				__( 'This %s has no owner to hold an invite link.', 'newspack-plugin' ),
+				Group_Subscription::get_label_lower( 'singular' )
+			),
+			[ 'status' => 403 ]
+		);
+	}
+
+	/**
+	 * Promote a member to manager, or demote a manager back to a member.
+	 *
+	 * @param \WP_REST_Request $request The request object.
+	 *
+	 * @return \WP_REST_Response|\WP_Error The response object.
+	 */
+	public static function api_set_manager_role( \WP_REST_Request $request ): \WP_REST_Response|\WP_Error {
+		$subscription_id = $request->get_param( 'subscription_id' );
+		// Match the member/invite endpoints: terminal-state subscriptions accept no
+		// changes. 409 Conflict, the shared "can't write in this state" status.
+		if ( ! Group_Subscription_MyAccount::is_subscription_manageable( $subscription_id ) ) {
+			return new \WP_Error(
+				'newspack_group_subscription_not_manageable',
+				sprintf(
+					/* translators: %s: lowercase singular group label (e.g. "group", "team"). */
+					__( 'This %s is no longer active, so its managers can\'t be changed.', 'newspack-plugin' ),
+					Group_Subscription::get_label_lower( 'singular' )
+				),
+				[ 'status' => 409 ]
+			);
+		}
+		$user_id = $request->get_param( 'user_id' );
+		$result  = 'manager' === $request->get_param( 'role' )
+			? Group_Subscription::add_manager( $subscription_id, $user_id )
+			: Group_Subscription::remove_manager( $subscription_id, $user_id );
+		if ( \is_wp_error( $result ) ) {
+			return $result;
+		}
+		// Echo the resulting manager list so the client can re-render roles without
+		// inferring what the server decided.
+		return \rest_ensure_response(
+			[ 'managers' => array_values( array_map( 'intval', Group_Subscription::get_managers( $subscription_id ) ) ) ]
+		);
+	}
+
+	/**
+	 * Update a group's seat limit.
+	 *
+	 * A maintenance action, not a billing one: it moves capacity only and never
+	 * charges, refunds or changes the subscription's status. Selling the extra
+	 * seats is a separate, deliberate step.
+	 *
+	 * @param \WP_REST_Request $request The request object.
+	 *
+	 * @return \WP_REST_Response|\WP_Error The response object.
+	 */
+	public static function api_update_seat_limit( \WP_REST_Request $request ): \WP_REST_Response|\WP_Error {
+		$subscription_id = $request->get_param( 'subscription_id' );
+		$subscription    = WooCommerce_Subscriptions::sanitize_subscription( $subscription_id );
+		// Only a real group has a seat limit to move. Mirror api_get_group() and the
+		// /manager route (via add_manager()/remove_manager()): a non-group subscription
+		// is a 404, not a silent write of limit meta onto something that is not a group.
+		if ( ! Group_Subscription::is_group_subscription( $subscription ) ) {
+			return new \WP_Error(
+				'newspack_group_subscription_not_found',
+				sprintf(
+					/* translators: %s: lowercase singular group label (e.g. "group", "team"). */
+					__( 'That %s could not be found.', 'newspack-plugin' ),
+					Group_Subscription::get_label_lower( 'singular' )
+				),
+				[ 'status' => 404 ]
+			);
+		}
+		if ( ! Group_Subscription_MyAccount::is_subscription_manageable( $subscription_id ) ) {
+			return new \WP_Error(
+				'newspack_group_subscription_not_manageable',
+				sprintf(
+					/* translators: %s: lowercase singular group label (e.g. "group", "team"). */
+					__( 'This %s is no longer active, so its seat limit can\'t be changed.', 'newspack-plugin' ),
+					Group_Subscription::get_label_lower( 'singular' )
+				),
+				[ 'status' => 409 ]
+			);
+		}
+		$limit = (int) $request->get_param( 'limit' );
+		$reserved     = self::reserved_seats( $subscription );
+
+		// 0 is the unlimited sentinel, not "no seats", so it is always acceptable
+		// however many seats are committed. Any other value must cover what the
+		// group has already promised, so a reduction can't strand a member or a
+		// pending invitation.
+		if ( $limit > 0 && $limit < $reserved ) {
+			return new \WP_Error(
+				'newspack_group_subscription_seat_limit_too_low',
+				sprintf(
+					/* translators: %d: the number of seats already committed to members and pending invitations. */
+					__( 'The seat limit cannot be lower than the %d seats already committed to members and pending invitations.', 'newspack-plugin' ),
+					$reserved
+				),
+				[ 'status' => 400 ]
+			);
+		}
+
+		Group_Subscription_Settings::update_subscription_settings( $subscription, [ 'limit' => $limit ] );
+		$settings = Group_Subscription_Settings::get_subscription_settings( $subscription );
+		// Echo the stored value: normalize_limit() raises any non-zero limit to a
+		// floor of 2, so what was asked for and what was saved can differ.
+		return \rest_ensure_response( [ 'seatLimit' => (int) $settings['limit'] ] );
+	}
+
+	/**
+	 * The number of seats a group has already committed: everyone holding one plus
+	 * every outstanding invitation.
+	 *
+	 * Expired invitations are excluded — they hold nothing, so they must not pin the
+	 * seat limit up.
+	 *
+	 * @param \WC_Subscription|int $subscription The subscription object or ID.
+	 *
+	 * @return int The committed seat count.
+	 */
+	public static function reserved_seats( \WC_Subscription|int $subscription ): int {
+		$subscription = WooCommerce_Subscriptions::sanitize_subscription( $subscription );
+		if ( ! $subscription ) {
+			return 0;
+		}
+		$pending_invites = Group_Subscription_Invite::get_invites( $subscription, false );
+		return Group_Subscription::get_member_count( $subscription ) + count( $pending_invites );
+	}
+
+	/**
 	 * User search for group subscription.
+	 *
+	 * Two queries run: one over the user table's own columns, one over first/last
+	 * name meta. Both are bounded by SEARCH_USERS_LIMIT and both skip terms shorter
+	 * than SEARCH_USERS_MIN_LENGTH, so the endpoint can't be used to page out the
+	 * reader base — every row it returns carries an email address. The bounds sit
+	 * inside the `newspack_group_subscription_user_query_args` filter, so a
+	 * publisher can still widen them.
 	 *
 	 * @param \WP_REST_Request $request The request object.
 	 *
@@ -207,11 +511,16 @@ class Group_Subscription_API {
 		if ( ! function_exists( 'wcs_get_subscription' ) ) {
 			return \rest_ensure_response( new \WP_Error( 'newspack_group_subscription_api', __( 'WooCommerce Subscriptions is not available.', 'newspack-plugin' ) ) );
 		}
-		$search          = $request->get_param( 'search' );
+		$search          = trim( (string) $request->get_param( 'search' ) );
 		$subscription_id = $request->get_param( 'subscription_id' );
 		$subscription    = wcs_get_subscription( $subscription_id );
 		if ( ! $subscription ) {
 			return \rest_ensure_response( new \WP_Error( 'newspack_group_subscription_api_search_users', __( 'Subscription not found.', 'newspack-plugin' ) ) );
+		}
+		// A term this short matches most of the reader base, and every row below
+		// carries an email address, so answer with nothing rather than a dump.
+		if ( mb_strlen( $search ) < self::SEARCH_USERS_MIN_LENGTH ) {
+			return \rest_ensure_response( [] );
 		}
 		$exclude   = Group_Subscription::get_members( $subscription );
 		$exclude[] = $subscription->get_user_id();
@@ -227,6 +536,7 @@ class Group_Subscription_API {
 				[
 					'fields'         => [ 'ID', 'user_email' ],
 					'exclude'        => $exclude,
+					'number'         => self::SEARCH_USERS_LIMIT,
 					'search'         => "*$search*",
 					'search_columns' => [ 'ID', 'user_login', 'user_url', 'user_email', 'user_nicename', 'display_name' ],
 					'role__in'       => Reader_Activation::get_reader_roles(),
@@ -247,6 +557,7 @@ class Group_Subscription_API {
 				[
 					'fields'     => [ 'ID', 'user_email' ],
 					'exclude'    => $exclude,
+					'number'     => self::SEARCH_USERS_LIMIT,
 					'role__in'   => Reader_Activation::get_reader_roles(),
 					'meta_query' => [ // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query
 						'relation' => 'OR',
@@ -439,7 +750,11 @@ class Group_Subscription_API {
 				)
 			);
 		}
-		$result = Group_Subscription_Invite::generate_link_invite( $subscription_id, get_current_user_id() );
+		$manager_id = self::resolve_link_manager_id( $subscription_id );
+		if ( ! $manager_id ) {
+			return \rest_ensure_response( self::no_link_manager_error() );
+		}
+		$result = Group_Subscription_Invite::generate_link_invite( $subscription_id, $manager_id );
 		return \rest_ensure_response( $result );
 	}
 
@@ -452,7 +767,11 @@ class Group_Subscription_API {
 	 */
 	public static function api_delete_invite_link( $request ) {
 		$subscription_id = $request->get_param( 'subscription_id' );
-		$result = Group_Subscription_Invite::delete_link_invite( $subscription_id, get_current_user_id() );
+		$manager_id = self::resolve_link_manager_id( $subscription_id );
+		if ( ! $manager_id ) {
+			return \rest_ensure_response( self::no_link_manager_error() );
+		}
+		$result = Group_Subscription_Invite::delete_link_invite( $subscription_id, $manager_id );
 		return \rest_ensure_response( $result );
 	}
 }

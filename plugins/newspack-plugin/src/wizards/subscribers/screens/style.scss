@@ -457,3 +457,27 @@
 .newspack-subscribers__card-value {
 	margin: 0;
 }
+
+// WordPress 7.1's Menu fades in with a transition on a wrapper element, which
+// only reaches its visible state once Ariakit stamps `data-enter` on the menu
+// surface inside it. That attribute never arrives here: the surface settles with
+// `data-open` and `data-side` and nothing else, so the wrapper is left at the
+// transition's starting frame — `opacity: 0`, shifted 4px — for as long as the
+// menu is open. The menu is fully mounted and clickable the whole time, which is
+// why it reads as present to everything except a person looking at the screen.
+//
+// Anyone whose browser reports `prefers-reduced-motion: reduce` is unaffected,
+// because the whole transition sits behind `@media not (prefers-reduced-motion)`
+// and they get the final state directly. That is the only reason this is not
+// visible to everyone, and it is why the bug looks intermittent between testers.
+//
+// The row-action menu is the only route to "Make manager", so without this the
+// screen cannot promote a member at all. The menu renders in a portal on `body`,
+// outside any wizard container, so there is no ancestor to scope to and `:has()`
+// is the only way to reach the wrapper from the menu it holds. `!important`
+// overrides the emotion rule, which otherwise wins on specificity. Removing the
+// transition costs the fade; keeping it costs the menu.
+div:has( > [role="menu"][data-open] ) {
+	opacity: 1 !important;
+	transform: none !important;
+}
