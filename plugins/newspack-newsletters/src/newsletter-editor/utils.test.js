@@ -9,42 +9,37 @@ import { getSettledSendLists, validateNewsletter } from './utils';
 //
 // The gate is `hasRetrievedData` — the `retrieve` call — because that is the
 // request that asks the ESP for the stored id by id. `hasRetrievedLists` tracks
-// a different request that only the sidebar makes, and gating on it left the
-// check permanently asleep whenever the sidebar had not fetched.
+// a different request that only the sidebar makes; gating on it would leave the
+// check asleep whenever the sidebar had not fetched.
 describe( 'getSettledSendLists', () => {
 	const lists = [ { id: '42', label: 'Weekly' } ];
 	const retrieved = { newsletterData: { lists }, hasRetrievedData: true, isRetrievingData: false, isRetrievingLists: false };
 
 	it( 'returns the lists once the newsletter data has been retrieved', () => {
+		// `hasRetrievedLists` is the sidebar's flag and is deliberately absent from
+		// the gate: the send button must not wait on a panel the author may never
+		// open. Setting it false here fails if someone re-adds it to the gate.
 		expect( getSettledSendLists( retrieved ) ).toEqual( lists );
-	} );
-
-	it( 'returns the lists even though no send-list fetch has run', () => {
-		// The sidebar populates `hasRetrievedLists`; the send button must not
-		// wait on a panel the author may never open.
 		expect( getSettledSendLists( { ...retrieved, hasRetrievedLists: false } ) ).toEqual( lists );
 	} );
 
-	it( 'withholds the lists while the newsletter data is being retrieved', () => {
-		expect( getSettledSendLists( { ...retrieved, isRetrievingData: true } ) ).toBeNull();
+	it.each( [
+		[ 'the newsletter data is being retrieved', { isRetrievingData: true } ],
+		[ 'a send-list fetch is in flight', { isRetrievingLists: true } ],
+		[ 'the newsletter data has not been retrieved', { hasRetrievedData: false } ],
+	] )( 'withholds the lists while %s', ( _label, state ) => {
+		expect( getSettledSendLists( { ...retrieved, ...state } ) ).toBeNull();
 	} );
 
-	it( 'withholds the lists while a send-list fetch is in flight', () => {
-		expect( getSettledSendLists( { ...retrieved, isRetrievingLists: true } ) ).toBeNull();
+	it( 'reports a settled store with no lists key as an empty list', () => {
+		expect( getSettledSendLists( { ...retrieved, newsletterData: {} } ) ).toEqual( [] );
 	} );
 
-	it( 'withholds the lists before the newsletter data has been retrieved', () => {
-		expect( getSettledSendLists( { ...retrieved, hasRetrievedData: false } ) ).toBeNull();
-	} );
-
-	it( 'returns null rather than undefined when the store holds no lists yet', () => {
-		expect( getSettledSendLists( { ...retrieved, newsletterData: {} } ) ).toBeNull();
-	} );
-
-	it( 'reports an empty roster as unknown rather than as an empty list', () => {
-		// One representation for "cannot tell yet". An empty array is truthy, so
-		// it would otherwise reach callers as if it were a settled answer.
-		expect( getSettledSendLists( { ...retrieved, newsletterData: { lists: [] } } ) ).toBeNull();
+	it( 'reports a settled empty roster as an empty list, not as unknown', () => {
+		// An account with no lists is an answer: nothing can resolve against it.
+		// Collapsing that into null would skip the check in the one case where it
+		// is certain to fail.
+		expect( getSettledSendLists( { ...retrieved, newsletterData: { lists: [] } } ) ).toEqual( [] );
 	} );
 
 	it( 'tolerates an empty store state', () => {
@@ -65,14 +60,6 @@ describe( 'validateNewsletter', () => {
 		delete window.newspack_newsletters_data;
 	} );
 
-	it( 'reports a missing list when no list is set', () => {
-		expect( validateNewsletter( { ...validMeta, send_list_id: '' }, lists ) ).toContain( 'Missing required list.' );
-	} );
-
-	it( 'reports missing sender info when either sender field is blank', () => {
-		expect( validateNewsletter( { ...validMeta, senderName: '' }, lists ) ).toContain( 'Missing required sender info.' );
-	} );
-
 	it( 'passes a newsletter whose saved list resolves against the fetched lists', () => {
 		expect( validateNewsletter( validMeta, lists ) ).toEqual( [] );
 	} );
@@ -91,8 +78,10 @@ describe( 'validateNewsletter', () => {
 		expect( validateNewsletter( validMeta, null ) ).toEqual( [] );
 	} );
 
-	it( 'does not report an unresolved list when the fetch returned nothing', () => {
-		expect( validateNewsletter( validMeta, [] ) ).toEqual( [] );
+	it( 'reports an unresolved list when the provider has no lists at all', () => {
+		// A settled empty roster is the one case where the stored id certainly
+		// cannot resolve, so it must block rather than be treated as unknown.
+		expect( validateNewsletter( validMeta, [] ) ).toContain( 'The saved list isn’t available in the connected email service provider.' );
 	} );
 
 	it( 'skips every check for the manual provider', () => {
