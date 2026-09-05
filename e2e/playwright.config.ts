@@ -38,6 +38,160 @@ const launchOptions: LaunchOptions = process.env.CI
     }
   : {};
 
+// The suite provisions the target site from scratch and runs in three phases -- a
+// vanilla site, the same site re-provisioned with WooCommerce, and an
+// Access-Control phase (content gating / paywalls / premium newsletters, which
+// needs the WooCommerce provisioning) -- across two viewports (desktop + mobile).
+// End to end that is well over TeamCity's 20-minute per-build execution cap, so CI
+// slices it: E2E_PHASE (vanilla | woo | ac) and E2E_VIEWPORT (desktop | mobile)
+// each pick one axis, and every slice provisions and runs on its own, so the
+// combinations can run as separate parallel builds -- each against its own site,
+// since each provisioning does a destructive from-scratch reset that would clobber
+// a site another slice is using. The Access-Control specs are tagged
+// @access-control (not @vanilla/@with-woo), so the vanilla/woo slices no longer run
+// them -- a flaky AC spec can't fail a base or woo build. Leaving E2E_PHASE unset
+// (equivalently "all"; "both" is kept as a back-compat alias) runs every phase
+// against a single site, which is what a local `USE_SETUP` run wants.
+const phase = (process.env.E2E_PHASE ?? "all").toLowerCase();
+const viewport = (process.env.E2E_VIEWPORT ?? "both").toLowerCase();
+
+// Fail loud on a mistyped axis rather than silently running the wrong slice: an
+// unknown phase would otherwise yield an empty project list (a cryptic "no
+// tests" abort) and an unknown viewport would quietly run both.
+const validPhases = ["all", "both", "vanilla", "woo", "ac"];
+const validViewports = ["both", "desktop", "mobile"];
+if (!validPhases.includes(phase)) {
+  throw new Error(
+    `Invalid E2E_PHASE "${phase}"; expected one of ${validPhases.join(", ")}.`
+  );
+}
+if (!validViewports.includes(viewport)) {
+  throw new Error(
+    `Invalid E2E_VIEWPORT "${viewport}"; expected one of ${validViewports.join(
+      ", "
+    )}.`
+  );
+}
+
+const runAll = phase === "all" || phase === "both";
+const runVanilla = runAll || phase === "vanilla";
+const runWoo = runAll || phase === "woo";
+const runAc = runAll || phase === "ac";
+const runDesktop = viewport !== "mobile";
+const runMobile = viewport !== "desktop";
+const useSetup = !!process.env.USE_SETUP;
+
+const desktop = { ...devices["Desktop Chrome"] };
+const mobile = { ...devices["Pixel 5"] };
+
+// Build the project list for the selected phase/viewport slice. Dependencies are
+// wired so each slice is self-contained: a setup project provisions the site,
+// then the spec projects for that phase run against it. When both viewports of a
+// phase run on one site (no viewport slice), the mobile project is sequenced after
+// desktop so the two never race on the shared site (workers = 1); when only one
+// viewport runs, it depends on the setup directly. The woo phase re-provisions the
+// site, so its setup follows the last vanilla project when both phases share a
+// site, and provisions directly (no vanilla dependency) when the woo phase is
+// sliced onto its own site. Without USE_SETUP no provisioning runs and the
+// selected spec projects execute against the site's current state.
+const buildProjects = () => {
+  const projects = [];
+  const lastVanilla = runMobile
+    ? "Vanilla in Mobile Chrome"
+    : "Vanilla in Desktop Chrome";
+  const lastWoo = runMobile
+    ? "With Woo in Mobile Chrome"
+    : "With Woo in Desktop Chrome";
+
+  if (useSetup && runVanilla) {
+    projects.push({
+      name: "setup-vanilla",
+      testMatch: "vanilla.ts",
+      testDir: "./setup",
+      timeout: 900000,
+    });
+  }
+  if (runVanilla && runDesktop) {
+    projects.push({
+      name: "Vanilla in Desktop Chrome",
+      use: desktop,
+      grep: /@vanilla/,
+      dependencies: useSetup ? ["setup-vanilla"] : [],
+    });
+  }
+  if (runVanilla && runMobile) {
+    projects.push({
+      name: "Vanilla in Mobile Chrome",
+      use: mobile,
+      grep: /@vanilla/,
+      dependencies: useSetup
+        ? [runDesktop ? "Vanilla in Desktop Chrome" : "setup-vanilla"]
+        : [],
+    });
+  }
+
+  // The woo provisioning also underpins the Access-Control phase (its paywall /
+  // premium-newsletter gates need WooCommerce), so setup-with-woo runs whenever
+  // either phase is selected.
+  if (useSetup && (runWoo || runAc)) {
+    projects.push({
+      name: "setup-with-woo",
+      testMatch: "with-woo.ts",
+      testDir: "./setup",
+      timeout: 900000,
+      dependencies: runVanilla ? [lastVanilla] : [],
+    });
+  }
+  if (runWoo && runDesktop) {
+    projects.push({
+      name: "With Woo in Desktop Chrome",
+      use: desktop,
+      grep: /@with-woo/,
+      dependencies: useSetup ? ["setup-with-woo"] : [],
+    });
+  }
+  if (runWoo && runMobile) {
+    projects.push({
+      name: "With Woo in Mobile Chrome",
+      use: mobile,
+      grep: /@with-woo/,
+      dependencies: useSetup
+        ? [runDesktop ? "With Woo in Desktop Chrome" : "setup-with-woo"]
+        : [],
+    });
+  }
+
+  // Access-Control specs run on the woo-provisioned site. When the woo phase also
+  // runs (a shared-site "all" run) they follow the last woo project; when the AC
+  // phase is sliced onto its own site they depend on setup-with-woo directly.
+  if (runAc && runDesktop) {
+    projects.push({
+      name: "Access Control in Desktop Chrome",
+      use: desktop,
+      grep: /@access-control/,
+      dependencies: useSetup ? [runWoo ? lastWoo : "setup-with-woo"] : [],
+    });
+  }
+  if (runAc && runMobile) {
+    projects.push({
+      name: "Access Control in Mobile Chrome",
+      use: mobile,
+      grep: /@access-control/,
+      dependencies: useSetup
+        ? [
+            runDesktop
+              ? "Access Control in Desktop Chrome"
+              : runWoo
+              ? lastWoo
+              : "setup-with-woo",
+          ]
+        : [],
+    });
+  }
+
+  return projects;
+};
+
 /**
  * See https://playwright.dev/docs/test-configuration.
  */
@@ -71,71 +225,9 @@ export default defineConfig({
   },
   timeout: 120000,
   expect: { timeout: 20000 },
-  /* Note that projects depend on each other when provisioning is enabled: the
-     vanilla site is set up and its tests run first, then the site is re-provisioned
-     with WooCommerce and those tests run. */
-  projects: [
-    // These two projects provision the site into the state their tests expect.
-    // They run a destructive from-scratch rebuild, so they are only included when
-    // USE_SETUP is set; without it, `npm test` runs the specs against the site's
-    // current state and never re-provisions. Re-provisioning is much slower than
-    // the browser actions in a regular test, so give them a generous timeout.
-    ...(process.env.USE_SETUP
-      ? [
-          {
-            name: "setup-vanilla",
-            testMatch: "vanilla.ts",
-            testDir: "./setup",
-            timeout: 900000,
-          },
-          {
-            name: "setup-with-woo",
-            testMatch: "with-woo.ts",
-            testDir: "./setup",
-            timeout: 900000,
-            dependencies: ["Vanilla in Mobile Chrome"],
-          },
-        ]
-      : []),
-
-    // Vanilla tests.
-    {
-      name: "Vanilla in Desktop Chrome",
-      use: {
-        ...devices["Desktop Chrome"],
-      },
-      grep: /@vanilla/,
-      dependencies: process.env.USE_SETUP ? ["setup-vanilla"] : [],
-    },
-    {
-      name: "Vanilla in Mobile Chrome",
-      use: {
-        ...devices["Pixel 5"],
-      },
-      grep: /@vanilla/,
-      dependencies: process.env.USE_SETUP
-        ? ["Vanilla in Desktop Chrome"]
-        : [],
-    },
-
-    // All tests (will also include Vanilla tests).
-    {
-      name: "With Woo in Desktop Chrome",
-      use: {
-        ...devices["Desktop Chrome"],
-      },
-      grep: /@with-woo/,
-      dependencies: process.env.USE_SETUP ? ["setup-with-woo"] : [],
-    },
-    {
-      name: "With Woo in Mobile Chrome",
-      use: {
-        ...devices["Pixel 5"],
-      },
-      grep: /@with-woo/,
-      dependencies: process.env.USE_SETUP
-        ? ["With Woo in Desktop Chrome"]
-        : [],
-    },
-  ],
+  /* The project list is sliced by E2E_PHASE / E2E_VIEWPORT -- see buildProjects
+     above. Projects depend on each other when provisioning is enabled: the site
+     is set up and its tests run first, then (for a shared-site run) it is
+     re-provisioned with WooCommerce and those tests run. */
+  projects: buildProjects(),
 });
