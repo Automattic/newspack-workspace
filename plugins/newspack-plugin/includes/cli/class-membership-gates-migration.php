@@ -1060,7 +1060,10 @@ class Membership_Gates_Migration {
 	 * was, so the caller warns rather than staying silent.
 	 *
 	 * Product variations keep the behavior this command has always had: they are
-	 * dropped, because gates reference parent products only.
+	 * dropped. A gate can carry a variation ID — the rule matches a line item on its
+	 * variation_id as well as its product_id, and the editor's picker now offers them —
+	 * so this is a conservative default rather than a limitation, and the warning tells
+	 * the operator what to add back by hand. Keeping them is NPPD-2135's follow-up.
 	 *
 	 * @param array[] $group Plan descriptors, each carrying a 'product_ids' key.
 	 *
@@ -1152,7 +1155,7 @@ class Membership_Gates_Migration {
 		if ( ! empty( $dropped['variations'] ) ) {
 			WP_CLI::warning(
 				sprintf(
-					'"%s": dropped product variation ID(s) %s. Gates restrict access by parent product, not by variation, so a plan that required one of these specific variations no longer has that restriction from this gate. Check the plan\'s products.',
+					'"%s": dropped product variation ID(s) %s, so a plan that required one of these specific variations no longer has that restriction from this gate. The gate editor lists a variable subscription\'s variations, so add them back there if the restriction was meant to survive. Check the plan\'s products.',
 					$gate_title,
 					implode( ', ', $dropped['variations'] )
 				)

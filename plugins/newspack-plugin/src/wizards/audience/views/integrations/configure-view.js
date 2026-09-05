@@ -13,7 +13,7 @@ import { Stack } from '@wordpress/ui';
 import { CollapsibleGroup, Divider, Grid, SectionHeader, useUnsavedChangesDialog } from '../../../../../packages/components/src';
 import { WIZARD_STORE_NAMESPACE } from '../../../../../packages/components/src/wizard/store';
 import WizardsTab from '../../../wizards-tab';
-import { SettingsField, settingsFieldRenders } from './settings-field';
+import { SettingsField, settingsFieldRenders, toBool } from './settings-field';
 
 import './configure-view.scss';
 
@@ -147,11 +147,6 @@ export const reconcileOperators = ( currentMap, options ) => {
 	} );
 	return changed ? next : map;
 };
-
-// Coerce a value to boolean. Values can arrive from WP options as scalar
-// strings (`'1'`/`'0'`/`'true'`/`'false'`/`''`); note `Boolean( '0' )` is `true`
-// in JS, so the falsy string forms are matched explicitly.
-const toBool = value => ( typeof value === 'string' ? ! [ '', '0', 'false' ].includes( value.toLowerCase() ) : Boolean( value ) );
 
 // Push-pipeline settings that render inside the Outbound section: the metadata
 // prefix is only read on push paths (prepare_contact()) and account-deletion

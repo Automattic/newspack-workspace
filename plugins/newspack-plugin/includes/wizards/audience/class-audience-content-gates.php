@@ -256,6 +256,30 @@ class Audience_Content_Gates extends Wizard {
 
 		register_rest_route(
 			NEWSPACK_API_NAMESPACE,
+			'/wizard/' . $this->slug . '/site-meter',
+			[
+				'methods'             => 'POST',
+				'callback'            => [ $this, 'update_site_meter' ],
+				'permission_callback' => [ $this, 'api_permissions_check' ],
+				'args'                => [
+					'anonymous_count'  => [
+						'type'    => 'integer',
+						'minimum' => 0,
+					],
+					'registered_count' => [
+						'type'    => 'integer',
+						'minimum' => 0,
+					],
+					'period'           => [
+						'type' => 'string',
+						'enum' => [ 'week', 'month' ],
+					],
+				],
+			]
+		);
+
+		register_rest_route(
+			NEWSPACK_API_NAMESPACE,
 			'/wizard/' . $this->slug . '/countdown-banner',
 			[
 				'methods'             => 'POST',
@@ -412,10 +436,14 @@ class Audience_Content_Gates extends Wizard {
 	 * @return \WP_REST_Response
 	 */
 	public function get_config() {
+		// REST never fires `admin_init`, so a client reading the config before any
+		// wp-admin pageload would be told gates share an allowance not yet being served.
+		Site_Meter::maybe_adopt_gate_settings();
 		$advanced_settings_response = $this->prepare_advanced_settings_response( Content_Gate_Advanced_Settings::get_settings() );
 		$config = [
 			'gates'  => Content_Gate::get_gates(),
 			'config' => [
+				'site_meter'        => Site_Meter::get_settings(),
 				'countdown_banner'  => Metering_Countdown::get_settings(),
 				'content_gifting'   => Content_Gifting::get_settings(),
 				'advanced_settings' => $advanced_settings_response,
@@ -521,6 +549,24 @@ class Audience_Content_Gates extends Wizard {
 	}
 
 	/**
+	 * Update the site meter settings.
+	 *
+	 * @param \WP_REST_Request $request The request object.
+	 *
+	 * @return \WP_REST_Response|\WP_Error
+	 */
+	public function update_site_meter( \WP_REST_Request $request ): \WP_REST_Response|\WP_Error {
+		// Before the write, so a site that can adopt has adopted by the time the save
+		// lands (adoption defers while Woo Memberships is active). The seed is add-only,
+		// so an adoption run already in flight cannot overwrite what this request writes.
+		Site_Meter::maybe_adopt_gate_settings();
+		// Only what the request actually sent: forwarding an absent count as null would
+		// sanitize to zero and silently close the allowance site-wide.
+		$settings = array_intersect_key( $request->get_params(), Site_Meter::get_default_settings() );
+		return rest_ensure_response( Site_Meter::update_settings( $settings ) );
+	}
+
+	/**
 	 * Create a gate.
 	 *
 	 * @param \WP_REST_Request $request The request object.
@@ -543,7 +589,7 @@ class Audience_Content_Gates extends Wizard {
 	 * @return \WP_REST_Response|\WP_Error
 	 */
 	public function delete_gate( $request ) {
-		$id = $request->get_param( 'id' );
+		$id = Content_Gate_API::get_route_gate_id( $request );
 		$gate = get_post( $id );
 		if ( ! $gate ) {
 			return new \WP_Error( 'invalid_gate_id', __( 'Invalid gate ID.', 'newspack-plugin' ), [ 'status' => 400 ] );
@@ -563,7 +609,7 @@ class Audience_Content_Gates extends Wizard {
 	 * @return \WP_REST_Response|\WP_Error
 	 */
 	public function api_duplicate_gate( $request ) {
-		$id   = $request->get_param( 'id' );
+		$id   = Content_Gate_API::get_route_gate_id( $request );
 		$gate = get_post( $id );
 		if ( ! $gate ) {
 			return new \WP_Error( 'invalid_gate_id', __( 'Invalid gate ID.', 'newspack-plugin' ), [ 'status' => 400 ] );
@@ -591,7 +637,7 @@ class Audience_Content_Gates extends Wizard {
 	 * @return \WP_REST_Response|\WP_Error
 	 */
 	public function update_gate( $request ) {
-		$gate = Content_Gate::update_gate_settings( $request->get_param( 'id' ), $request->get_param( 'gate' ) );
+		$gate = Content_Gate::update_gate_settings( Content_Gate_API::get_route_gate_id( $request ), $request->get_param( 'gate' ) );
 		if ( is_wp_error( $gate ) ) {
 			return $gate;
 		}
