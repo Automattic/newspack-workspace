@@ -512,7 +512,7 @@ class My_Account_UI_V1 {
 			WooCommerce_Connection::add_wc_notice( __( 'Invalid nonce.', 'newspack-plugin' ), 'error' );
 			return;
 		}
-		if ( ! $token || ! $transient_token || $transient_token !== $token ) {
+		if ( ! $token || ! $transient_token || ! hash_equals( (string) $transient_token, (string) $token ) ) {
 			WooCommerce_Connection::add_wc_notice( __( 'Invalid token.', 'newspack-plugin' ), 'error' );
 			return;
 		}

@@ -399,8 +399,8 @@ class Newspack_Test_Content_Gate_API extends WP_UnitTestCase {
 
 	/**
 	 * Create a gate holding an institution rule with nothing selected: a
-	 * well-formed value that `Institution::evaluate()` reads as "no constraint",
-	 * so the rule grants access to every reader.
+	 * well-formed value naming no institution, which `Institution::evaluate()`
+	 * reads as a condition no reader satisfies.
 	 *
 	 * @param bool  $active    Whether custom access is switched on.
 	 * @param array $selection The institution IDs the rule names.
@@ -489,11 +489,10 @@ class Newspack_Test_Content_Gate_API extends WP_UnitTestCase {
 	}
 
 	/**
-	 * The other route to a gate that grants everyone: enable an options-backed
+	 * The other route to a gate nobody meant to publish: enable an options-backed
 	 * rule on a site with nothing to select, touch nothing, save. The rule seeds
-	 * with its `[]` default, which is a well-formed "no constraint" value, and
-	 * `Institution::evaluate()` returns true for it. An active gate must not save
-	 * in that state.
+	 * with its `[]` default — well-formed, and naming no condition. An active gate
+	 * must not save in that state, whichever way the rule then evaluates.
 	 */
 	public function test_active_custom_access_rejects_an_options_backed_rule_with_nothing_selected() {
 		$sanitized_gate = Content_Gate_API::sanitize_gate(
@@ -513,6 +512,65 @@ class Newspack_Test_Content_Gate_API extends WP_UnitTestCase {
 		);
 		$this->assertWPError( $sanitized_gate );
 		$this->assertSame( 'empty_access_rule_value', $sanitized_gate->get_error_code() );
+		// The refusal names what the empty value does, and the two rules that reach
+		// it disagree. An operator told the gate is open goes looking for a leak;
+		// this one is walled shut.
+		$this->assertStringContainsString(
+			'matches no reader',
+			$sanitized_gate->get_error_message(),
+			'An institution rule naming nothing must not be reported as granting access to everyone.'
+		);
+	}
+
+	/**
+	 * A rule that needs a value is refused whichever way its empty value then
+	 * evaluates. `email_domain` grants every reader where `institution` grants
+	 * none, and both are the gate doing something other than what was configured.
+	 */
+	public function test_active_custom_access_rejects_a_free_text_rule_left_blank() {
+		$sanitized_gate = Content_Gate_API::sanitize_gate(
+			[
+				'custom_access' => [
+					'active'       => true,
+					'access_rules' => [
+						[
+							[
+								'slug'  => 'email_domain',
+								'value' => '',
+							],
+						],
+					],
+				],
+			]
+		);
+		$this->assertWPError( $sanitized_gate );
+		$this->assertSame( 'empty_access_rule_value', $sanitized_gate->get_error_code() );
+		$this->assertStringContainsString( 'grants access to everyone', $sanitized_gate->get_error_message() );
+	}
+
+	/**
+	 * A subscription rule naming no product is a configuration publishers use: it
+	 * grants on any active subscription, so the gate still keeps non-subscribers
+	 * out. Refusing it would block that, which is why the refusal keys on the
+	 * rule's own declaration rather than on the value being empty.
+	 */
+	public function test_active_custom_access_allows_a_subscription_rule_naming_no_product() {
+		$sanitized_gate = Content_Gate_API::sanitize_gate(
+			[
+				'custom_access' => [
+					'active'       => true,
+					'access_rules' => [
+						[
+							[
+								'slug'  => 'subscription',
+								'value' => [],
+							],
+						],
+					],
+				],
+			]
+		);
+		$this->assertNotWPError( $sanitized_gate );
 	}
 
 	/**
@@ -557,9 +615,9 @@ class Newspack_Test_Content_Gate_API extends WP_UnitTestCase {
 	/**
 	 * `[]` is a configuration for some options-backed rules, not the absence of
 	 * one. `subscription` with no product named requires *any* active
-	 * subscription, which still keeps non-subscribers out. Only a rule that
-	 * declares `empty_grants_access` opens the gate when left empty, so only
-	 * that rule may refuse the save.
+	 * subscription, which still keeps non-subscribers out. `requires_value` is
+	 * what marks a rule whose empty value expresses nothing, so only a rule
+	 * declaring it may refuse the save.
 	 */
 	public function test_active_custom_access_accepts_an_empty_value_for_a_rule_that_still_constrains() {
 		$sanitized_gate = Content_Gate_API::sanitize_gate(
@@ -778,9 +836,10 @@ class Newspack_Test_Content_Gate_API extends WP_UnitTestCase {
 	}
 
 	/**
-	 * `empty_grants_access` is a property of the rule's callback, not of its
-	 * value's shape. A free-text rule left blank grants every reader just as an
-	 * options-backed one with nothing selected does.
+	 * The refusal follows the rule's declaration, not the shape of its value. A
+	 * free-text rule left blank is as unconfigured as an options-backed one with
+	 * nothing selected; `empty_grants_access` only decides which way the message
+	 * reads.
 	 */
 	public function test_an_active_gate_may_not_leave_a_free_text_rule_that_grants_everyone_blank() {
 		$refused = Content_Gate_API::sanitize_gate(
