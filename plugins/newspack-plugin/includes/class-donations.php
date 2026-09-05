@@ -863,6 +863,8 @@ class Donations {
 			wp_parse_str( $parsed_url['query'], $params );
 		}
 
+		$params = self::merge_request_utm_params( $params );
+
 		if ( function_exists( 'wpcom_vip_url_to_postid' ) ) {
 			$referer_post_id = wpcom_vip_url_to_postid( $referer );
 		} else {
@@ -951,15 +953,22 @@ class Donations {
 			$filter = 'after_success_url' === $attribute_name ? FILTER_SANITIZE_URL : FILTER_SANITIZE_FULL_SPECIAL_CHARS;
 			$value  = filter_input( INPUT_GET, $attribute_name, $filter );
 			if ( ! empty( $value ) ) {
-				$query_args[ sanitize_key( $attribute_name ) ] = $value;
+				// Encoded like the utm values below, and like the twin loop in
+				// `Newspack_Blocks\Modal_Checkout` — add_query_arg() does not
+				// encode, so a destination carrying its own query string would
+				// otherwise split when merged into the checkout URL.
+				$query_args[ sanitize_key( $attribute_name ) ] = rawurlencode( $value );
 			}
 		}
 
 		// Pass through UTM params so they can be forwarded to the WooCommerce checkout flow.
+		// Values are encoded here because add_query_arg() does not encode them:
+		// an ampersand or space in a campaign name would otherwise split into a
+		// stray param or be dropped by the redirect sanitizer.
 		foreach ( $params as $param => $value ) {
 			if ( 'utm' === substr( $param, 0, 3 ) ) {
 				$param                = sanitize_text_field( $param );
-				$query_args[ $param ] = sanitize_text_field( $value );
+				$query_args[ $param ] = rawurlencode( sanitize_text_field( $value ) );
 			}
 		}
 
@@ -979,6 +988,32 @@ class Donations {
 			\wp_safe_redirect( $checkout_url );
 			exit;
 		}
+	}
+
+	/**
+	 * Merge utm_* parameters from the current request into a params array.
+	 *
+	 * The passthrough loop in process_donation_request() historically only saw
+	 * params parsed from the referer URL, so utm params on a direct (cold)
+	 * donation URL — which has no referer — were dropped. Request params win
+	 * over referer params.
+	 *
+	 * The modal form's own submission is what carries a promo link's values here:
+	 * appendUtmFields() in newspack-blocks' modal.js copies the landing page's
+	 * utm params onto the form as hidden fields before it submits, so they
+	 * arrive in this request's $_GET rather than depending on the referer.
+	 *
+	 * @param array $params Params parsed from the referer query string.
+	 * @return array Params with the request's utm_* params merged in.
+	 */
+	public static function merge_request_utm_params( $params ) {
+		// phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		foreach ( wp_unslash( $_GET ) as $key => $value ) {
+			if ( 'utm' === substr( $key, 0, 3 ) && is_string( $value ) && '' !== $value ) {
+				$params[ sanitize_text_field( $key ) ] = sanitize_text_field( $value );
+			}
+		}
+		return $params;
 	}
 
 	/**

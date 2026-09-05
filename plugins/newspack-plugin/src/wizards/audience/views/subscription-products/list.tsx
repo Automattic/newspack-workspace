@@ -15,7 +15,7 @@ import { useState, useEffect, useCallback, useMemo } from '@wordpress/element';
 import { useDispatch } from '@wordpress/data';
 import apiFetch from '@wordpress/api-fetch';
 import { filterSortAndPaginate } from '@wordpress/dataviews';
-import type { Action, Field, View } from '@wordpress/dataviews';
+import type { Action, Field, View, RenderModalProps } from '@wordpress/dataviews';
 import { Spinner, Notice, Button } from '@wordpress/components';
 import { gift, globe, lock } from '@wordpress/icons';
 import { Badge } from '@wordpress/ui';
@@ -28,6 +28,7 @@ import { formatCount } from '../../../../../packages/components/src/breadcrumbs/
 import { WIZARD_STORE_NAMESPACE } from '../../../../../packages/components/src/wizard/store';
 import { postStatus } from '../../post-status';
 import { PolicyChips, EffectivePrice } from './policy-cells';
+import PromoUrlModal from './promo-url-modal';
 
 const { useHistory } = Router;
 
@@ -362,8 +363,17 @@ export default function SubscriptionProductsList( { scope = 'subscriptions' }: {
 				isPrimary: true,
 				callback: ( items: SubscriptionProduct[] ) => history.push( `/edit/${ items[ 0 ].id }` ),
 			},
+			{
+				id: 'promotional-url',
+				label: __( 'Get promotional link', 'newspack-plugin' ),
+				isEligible: ( item: SubscriptionProduct ) => item.status === 'publish' && globals?.newspack_blocks_active !== false,
+				modalHeader: __( 'Promotional link', 'newspack-plugin' ),
+				RenderModal: ( { items, closeModal }: RenderModalProps< SubscriptionProduct > ) => (
+					<PromoUrlModal item={ items[ 0 ] } closeModal={ closeModal } />
+				),
+			},
 		],
-		[ history ]
+		[ history, globals ]
 	);
 
 	// Applied-rule + effective-price columns only apply to subscription products —

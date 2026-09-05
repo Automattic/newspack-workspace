@@ -94,6 +94,14 @@ final class Modal_Checkout {
 	private static $has_modal = false;
 
 	/**
+	 * Block markup synthesized from URL trigger params, echoed (hidden) in the
+	 * footer. Empty when the request carries no valid trigger.
+	 *
+	 * @var string
+	 */
+	private static $url_triggered_block_html = '';
+
+	/**
 	 * Products that are being rendered a checkout modal for.
 	 *
 	 * @var true[] Product IDs as keys.
@@ -205,6 +213,7 @@ final class Modal_Checkout {
 		add_filter( 'wp_redirect', [ __CLASS__, 'pass_url_param_on_redirect' ] );
 		add_filter( 'woocommerce_cart_product_cannot_be_purchased_message', [ __CLASS__, 'woocommerce_cart_product_cannot_be_purchased_message' ], 10, 2 );
 		add_filter( 'woocommerce_add_error', [ __CLASS__, 'hide_expiry_message_shop_link' ] );
+		add_action( 'wp', [ __CLASS__, 'maybe_setup_url_triggered_checkout' ], 11 );
 		add_action( 'wp_footer', [ __CLASS__, 'render_modal_markup' ], 100 );
 		add_action( 'wp_footer', [ __CLASS__, 'render_variation_selection' ], 100 );
 		add_action( 'wp_enqueue_scripts', [ __CLASS__, 'enqueue_scripts' ] );
@@ -493,6 +502,7 @@ final class Modal_Checkout {
 		}
 
 		$params = array_merge( $params, compact( 'after_success_behavior', 'after_success_url', 'after_success_button_label', 'after_success_token' ) );
+		$params = self::merge_request_utm_params( $params );
 
 		if ( function_exists( 'wpcom_vip_url_to_postid' ) ) {
 			$referer_post_id = wpcom_vip_url_to_postid( $referer );
@@ -573,11 +583,14 @@ final class Modal_Checkout {
 		}
 
 		// Pass through UTM and after_success params so they can be forwarded to the WooCommerce checkout flow.
+		// Values are encoded here because add_query_arg() does not encode them:
+		// an ampersand or space in a campaign name would otherwise split into a
+		// stray param or be dropped by the redirect sanitizer.
 		foreach ( $params as $param => $value ) {
 			if ( 'utm' === substr( $param, 0, 3 ) || 'after_success' === substr( $param, 0, 13 ) ) {
 				if ( ! empty( $value ) ) {
 					$param                = sanitize_text_field( $param );
-					$query_args[ $param ] = sanitize_text_field( $value );
+					$query_args[ $param ] = rawurlencode( sanitize_text_field( $value ) );
 				}
 			}
 		}
@@ -628,6 +641,219 @@ final class Modal_Checkout {
 			\wp_safe_redirect( $checkout_url );
 			exit;
 		}
+	}
+
+	/**
+	 * Merge utm_* parameters from the current request into a params array.
+	 *
+	 * The passthrough loop in process_checkout_request() historically only saw
+	 * params parsed from the referer URL, so utm params on a direct (cold)
+	 * checkout URL — which has no referer — were dropped before reaching the
+	 * checkout and order meta. Request params win over referer params.
+	 *
+	 * The modal form's own submission is what carries a promo link's values here:
+	 * appendUtmFields() in modal.js copies the landing page's utm params onto the
+	 * form as hidden fields before it GET-submits into the checkout iframe, so
+	 * they arrive in this request's $_GET rather than depending on the referer.
+	 *
+	 * @param array $params Params parsed from the referer query string.
+	 * @return array Params with the request's utm_* params merged in.
+	 */
+	public static function merge_request_utm_params( $params ) {
+		// phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		foreach ( wp_unslash( $_GET ) as $key => $value ) {
+			if ( 'utm' === substr( $key, 0, 3 ) && is_string( $value ) && '' !== $value ) {
+				$params[ sanitize_text_field( $key ) ] = sanitize_text_field( $value );
+			}
+		}
+		return $params;
+	}
+
+	/**
+	 * Serve a `?checkout=1&type=…` trigger on any front-end URL by rendering the
+	 * block it needs into the footer (hidden), so no page has to carry one.
+	 * Rendering the real block brings everything the trigger relies on: the form
+	 * it submits, the variation/tiers picker modals, and the modal assets. A page
+	 * that does carry a matching block still wins — its form comes first in DOM
+	 * order, so block-level context such as a coupon keeps applying.
+	 *
+	 * Runs on `wp` so the render-time asset enqueues land in the normal queue.
+	 */
+	public static function maybe_setup_url_triggered_checkout() {
+		// phpcs:disable WordPress.Security.NonceVerification.Recommended
+		// The trigger-param test is the cheapest and most selective guard, so it
+		// runs first: nearly all traffic carries no trigger, and is_checkout()
+		// below is the one call here that touches WooCommerce page-type state
+		// and its filters.
+		if ( ! isset( $_GET['checkout'] ) || ! isset( $_GET['type'] ) || ! is_string( $_GET['type'] ) ) {
+			return;
+		}
+		if ( is_admin() || wp_doing_ajax() || is_feed() || ( function_exists( 'is_checkout' ) && is_checkout() ) ) {
+			return;
+		}
+		if ( ! function_exists( 'wc_get_product' ) ) {
+			return;
+		}
+		$type = sanitize_text_field( wp_unslash( $_GET['type'] ) );
+		if ( 'donate' === $type ) {
+			// The trigger script only fires when layout, frequency and amount are
+			// all present, so a request missing any of them would render a form
+			// nothing ever submits. Donations must also be on the WooCommerce
+			// platform for the block to produce a servable form.
+			if ( empty( $_GET['layout'] ) || empty( $_GET['frequency'] ) || empty( $_GET['amount'] ) ) {
+				return;
+			}
+			if ( ! method_exists( '\Newspack\Donations', 'is_platform_wc' ) || ! \Newspack\Donations::is_platform_wc() ) {
+				return;
+			}
+			// Defaults resolve to the site's donation settings, which is what the
+			// generator derived its frequency/amount options from.
+			self::$url_triggered_block_html = do_blocks( '<!-- wp:newspack-blocks/donate /-->' );
+		} elseif ( 'checkout_button' === $type ) {
+			$attrs = self::build_url_triggered_button_attrs_from_request();
+			if ( empty( $attrs ) ) {
+				return;
+			}
+			self::$url_triggered_block_html = do_blocks( '<!-- wp:newspack-blocks/checkout-button ' . serialize_block_attributes( $attrs ) . ' /-->' );
+		} else {
+			return;
+		}
+		// phpcs:enable WordPress.Security.NonceVerification.Recommended
+		if ( '' !== self::$url_triggered_block_html ) {
+			add_action( 'wp_footer', [ __CLASS__, 'render_url_triggered_block' ], 1 );
+		}
+	}
+
+	/**
+	 * Resolve checkout button attributes from the current request, validating the
+	 * product and variation. Returns [] when the request can't be served.
+	 *
+	 * Reads $_GET rather than filter_input(): the guard in
+	 * maybe_setup_url_triggered_checkout() tests $_GET, and filter_input()
+	 * consults PHP's request snapshot instead — anything that adjusts the
+	 * superglobal after parsing (a test, a mu-plugin rewriting the query) would
+	 * pass the guard and read back empty.
+	 *
+	 * @return array Block attributes.
+	 */
+	public static function build_url_triggered_button_attrs_from_request() {
+		// phpcs:disable WordPress.Security.NonceVerification.Recommended
+		$product_id   = isset( $_GET['product_id'] ) && is_scalar( $_GET['product_id'] ) ? absint( $_GET['product_id'] ) : 0;
+		$variation_id = isset( $_GET['variation_id'] ) && is_scalar( $_GET['variation_id'] ) ? absint( $_GET['variation_id'] ) : 0;
+		if ( ! $product_id ) {
+			return [];
+		}
+		$product = wc_get_product( $product_id );
+		if ( ! $product || 'publish' !== $product->get_status() ) {
+			return [];
+		}
+		if ( $variation_id ) {
+			$variation = wc_get_product( $variation_id );
+			if ( ! $variation || $variation->get_parent_id() !== $product_id || 'publish' !== $variation->get_status() ) {
+				return [];
+			}
+		}
+		// The coupon and label are non-HTML text values: sanitize_text_field()
+		// keeps their raw characters, where an entity-encoding filter would break
+		// the coupon's title lookup and show readers an encoded label. Escaping
+		// happens at output (view.php / the thank-you template). The destination
+		// is a URL: esc_url_raw() keeps its query intact and drops disallowed
+		// schemes before sanitize_after_success_url() validates the host.
+		$coupon       = isset( $_GET['coupon'] ) && is_string( $_GET['coupon'] ) ? sanitize_text_field( wp_unslash( $_GET['coupon'] ) ) : '';
+		$button_label = isset( $_GET['after_success_button_label'] ) && is_string( $_GET['after_success_button_label'] ) ? sanitize_text_field( wp_unslash( $_GET['after_success_button_label'] ) ) : '';
+		$behavior     = isset( $_GET['after_success_behavior'] ) && is_string( $_GET['after_success_behavior'] ) ? sanitize_text_field( wp_unslash( $_GET['after_success_behavior'] ) ) : '';
+		$after_url    = isset( $_GET['after_success_url'] ) && is_string( $_GET['after_success_url'] ) ? esc_url_raw( wp_unslash( $_GET['after_success_url'] ) ) : '';
+		// phpcs:enable WordPress.Security.NonceVerification.Recommended
+		return self::build_url_triggered_button_attrs(
+			$product->get_type(),
+			$product_id,
+			$variation_id,
+			$coupon,
+			[
+				'behavior'     => $behavior,
+				'url'          => $after_url,
+				'button_label' => $button_label,
+			]
+		);
+	}
+
+	/**
+	 * Block attributes serving a URL trigger for the given product shape.
+	 *
+	 * Mirrors what the block editor stores: a variable product carries
+	 * `is_variable` with the parent as `product` and any lock as `variation`
+	 * (view.php collapses the pair onto the variation), while grouped parents
+	 * and specific products are `product` alone. A variation lock on a
+	 * non-variable product has no serving form, so it is rejected.
+	 *
+	 * A coupon and after-success settings become block attributes, so they ride to
+	 * the checkout as hidden fields exactly as block-configured ones do.
+	 *
+	 * Only `custom` after-success is accepted: `referrer` returns the reader where
+	 * they came from, which a link opened from an email or a QR code has no
+	 * referrer or history entry to satisfy.
+	 *
+	 * @param string $product_type  Product type slug from WC_Product::get_type().
+	 * @param int    $product_id    Requested product ID.
+	 * @param int    $variation_id  Requested variation ID (0 for none).
+	 * @param string $coupon        Requested coupon code ('' for none).
+	 * @param array  $after_success {
+	 *     Optional. Requested after-checkout behavior.
+	 *     @type string $behavior     'custom' to send the reader onward; anything
+	 *                                else leaves the thank-you screen alone.
+	 *     @type string $url          Destination for the 'custom' behavior.
+	 *     @type string $button_label Label for the continue button.
+	 * }
+	 * @return array Block attributes, or [] when the combination can't be served.
+	 */
+	public static function build_url_triggered_button_attrs( $product_type, $product_id, $variation_id = 0, $coupon = '', $after_success = [] ) {
+		$is_variable = in_array( $product_type, [ 'variable', 'variable-subscription' ], true );
+		if ( $variation_id && ! $is_variable ) {
+			return [];
+		}
+		$attrs = [
+			'product' => (string) $product_id,
+			// The button is submitted programmatically and never shown.
+			'text'    => __( 'Complete your purchase', 'newspack-blocks' ),
+		];
+		if ( $is_variable ) {
+			$attrs['is_variable'] = true;
+			if ( $variation_id ) {
+				$attrs['variation'] = (string) $variation_id;
+			}
+		}
+		// Strict check so a coupon code of "0" still rides along.
+		if ( '' !== $coupon ) {
+			$attrs['coupon'] = $coupon;
+		}
+		// The destination is restricted to allowed hosts here (sanitize_after_success_url()
+		// with no token), before it becomes a block attribute. view.php mints an
+		// after_success_token for any afterSuccessURL it renders — including this
+		// synthesized one — so that token only ever vouches for a destination this
+		// pre-validation already accepts. Loosening the check here would widen what
+		// the minted token blesses; an off-site destination still has to come from
+		// a block an editor authored.
+		$after_success_url = isset( $after_success['url'] ) ? self::sanitize_after_success_url( $after_success['url'] ) : '';
+		if ( isset( $after_success['behavior'] ) && 'custom' === $after_success['behavior'] && '' !== $after_success_url ) {
+			$attrs['afterSuccessBehavior'] = 'custom';
+			$attrs['afterSuccessURL']      = $after_success_url;
+			if ( ! empty( $after_success['button_label'] ) ) {
+				$attrs['afterSuccessButtonLabel'] = $after_success['button_label'];
+			}
+		}
+		return $attrs;
+	}
+
+	/**
+	 * Output the synthesized block, hidden. The URL trigger drives it
+	 * programmatically; any picker modals render separately via
+	 * render_variation_selection(), outside this hidden wrapper.
+	 */
+	public static function render_url_triggered_block() {
+		if ( '' === self::$url_triggered_block_html ) {
+			return;
+		}
+		echo '<div class="newspack-blocks__url-triggered-checkout" style="display:none">' . self::$url_triggered_block_html . '</div>'; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
 	}
 
 	/**
@@ -2370,9 +2596,26 @@ final class Modal_Checkout {
 		if ( '' === $coupon_code || ! function_exists( 'wc_coupons_enabled' ) || ! \wc_coupons_enabled() ) {
 			return;
 		}
-		$coupon    = new \WC_Coupon( $coupon_code );
-		$discounts = new \WC_Discounts( \WC()->cart );
-		if ( true === $discounts->is_coupon_valid( $coupon ) && \WC()->cart->apply_coupon( $coupon_code ) ) {
+		try {
+			$coupon    = new \WC_Coupon( $coupon_code );
+			$discounts = new \WC_Discounts( \WC()->cart );
+			$applied   = true === $discounts->is_coupon_valid( $coupon ) && \WC()->cart->apply_coupon( $coupon_code );
+		} catch ( \Exception $e ) {
+			// A persistent object cache can hold a code-to-ID mapping that
+			// outlives the coupon post, and WooCommerce's data store throws
+			// when it reads the missing post. Skip the coupon rather than
+			// fataling the checkout the reader is standing on — but leave a
+			// trail: without it, a cache stuck in this state silently charges
+			// every reader on the promo link full price.
+			if ( function_exists( 'wc_get_logger' ) ) {
+				wc_get_logger()->warning(
+					sprintf( 'Modal checkout: skipped auto-applying coupon "%s": %s', $coupon_code, $e->getMessage() ),
+					[ 'source' => 'newspack-blocks' ]
+				);
+			}
+			return;
+		}
+		if ( $applied ) {
 			// apply_coupon() queues a "Coupon code applied successfully." success
 			// notice; clear it so the auto-apply stays silent for the reader.
 			if ( function_exists( 'wc_clear_notices' ) ) {

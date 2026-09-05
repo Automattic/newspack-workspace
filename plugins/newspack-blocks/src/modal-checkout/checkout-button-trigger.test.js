@@ -9,7 +9,11 @@ import {
 	resolveCheckoutButtonForm,
 	copyContextFields,
 	applyContextFields,
+	readUtmParams,
+	appendUtmFields,
+	getDroppedLinkContext,
 	PICKER_CONTEXT_FIELDS,
+	SYNTHESIZED_CONTAINER_SELECTOR,
 } from './checkout-button-trigger';
 
 const VARIATION_MODAL_CLASS_PREFIX = 'newspack-blocks__modal-variation';
@@ -270,6 +274,48 @@ describe( 'resolveCheckoutButtonForm', () => {
 	} );
 } );
 
+describe( 'resolveCheckoutButtonForm — synthesized form demotion', () => {
+	const synthesized = html => `<div class="${ SYNTHESIZED_CONTAINER_SELECTOR.slice( 1 ) }" style="display:none">${ html }</div>`;
+
+	it( 'prefers a page-authored button over an earlier synthesized one', () => {
+		// The synthesized form is rendered first to prove the preference is not
+		// DOM order.
+		const root = render( synthesized( checkoutButton( { product_id: '1406' }, 'Synth' ) ) + checkoutButton( { product_id: '1406' }, 'Page' ) );
+		const pageForm = root.querySelectorAll( '.wp-block-newspack-blocks-checkout-button form' )[ 1 ];
+		expect( resolveCheckoutButtonForm( root, '1406', null, PICKER_OPTIONS ) ).toBe( pageForm );
+	} );
+
+	// The page block's coupon and after-checkout settings are the editor's, so a
+	// synthesized form locked to the requested variation must not outrank them.
+	it( 'lets the picker with page context outrank a synthesized exact variation match', () => {
+		const pageUnlocked = `<div class="wp-block-newspack-blocks-checkout-button"><form data-checkout='${ JSON.stringify( {
+			product_id: '1406',
+			is_variable: true,
+		} ) }'><input type="hidden" name="coupon" value="PAGE20"><button type="submit">Subscribe</button></form></div>`;
+		const synthLocked = synthesized(
+			`<div class="wp-block-newspack-blocks-checkout-button"><form data-checkout='${ JSON.stringify( {
+				product_id: '1406',
+				variation_id: '1407',
+				is_variable: true,
+			} ) }'><input type="hidden" name="coupon" value="URL5"><button type="submit">Complete</button></form></div>`
+		);
+		const root = render( pageUnlocked + synthLocked + variationPicker( '1406', [ '1407', '1408' ] ) );
+		const pickerForm = root.querySelector( `.${ VARIATION_MODAL_CLASS_PREFIX } form` );
+
+		const result = resolveCheckoutButtonForm( root, '1406', '1407', PICKER_OPTIONS );
+
+		expect( result ).toBe( pickerForm );
+		expect( pickerForm.querySelector( 'input[name="coupon"]' ).value ).toBe( 'PAGE20' );
+	} );
+
+	it( 'serves the synthesized exact match when the page has no button for the product', () => {
+		const synthLocked = synthesized( checkoutButton( { product_id: '1406', variation_id: '1407', is_variable: true } ) );
+		const root = render( synthLocked + variationPicker( '1406', [ '1407', '1408' ] ) );
+		const synthForm = root.querySelector( `${ SYNTHESIZED_CONTAINER_SELECTOR } form` );
+		expect( resolveCheckoutButtonForm( root, '1406', '1407', PICKER_OPTIONS ) ).toBe( synthForm );
+	} );
+} );
+
 describe( 'copyContextFields', () => {
 	it( 'copies present source fields, skips missing ones, and does not overwrite existing target fields', () => {
 		const root = render(
@@ -441,5 +487,74 @@ describe( 'PICKER_CONTEXT_FIELDS', () => {
 				'quantity',
 			] )
 		);
+	} );
+} );
+
+describe( 'readUtmParams', () => {
+	it( 'keeps utm-prefixed params with values, mirroring the server-side match', () => {
+		expect( readUtmParams( '?utm_source=newsletter&utm_campaign=spring&coupon=NOPE&utm_medium=' ) ).toEqual( {
+			utm_source: 'newsletter',
+			utm_campaign: 'spring',
+		} );
+	} );
+
+	it( 'returns an empty map for an empty query string', () => {
+		expect( readUtmParams( '' ) ).toEqual( {} );
+	} );
+} );
+
+describe( 'appendUtmFields', () => {
+	it( 'appends a hidden field per utm param', () => {
+		const root = render( checkoutButton( { product_id: '1406' } ) );
+		const form = root.querySelector( 'form' );
+		appendUtmFields( form, { utm_source: 'newsletter', utm_campaign: 'spring' } );
+		expect( form.querySelector( 'input[name="utm_source"]' ).value ).toBe( 'newsletter' );
+		expect( form.querySelector( 'input[name="utm_campaign"]' ).value ).toBe( 'spring' );
+	} );
+
+	it( 'never overwrites a field the form already carries', () => {
+		const root = render( checkoutButton( { product_id: '1406' } ) );
+		const form = root.querySelector( 'form' );
+		form.insertAdjacentHTML( 'beforeend', '<input type="hidden" name="utm_source" value="block-value">' );
+		appendUtmFields( form, { utm_source: 'url-value' } );
+		expect( form.querySelectorAll( 'input[name="utm_source"]' ) ).toHaveLength( 1 );
+		expect( form.querySelector( 'input[name="utm_source"]' ).value ).toBe( 'block-value' );
+	} );
+
+	it( 'does not throw on a null form or missing params', () => {
+		expect( () => appendUtmFields( null, { utm_source: 'x' } ) ).not.toThrow();
+		expect( () => appendUtmFields( document.createElement( 'form' ), null ) ).not.toThrow();
+	} );
+
+	// Param names come straight from the landing URL, so one carrying selector
+	// syntax must not break the submission.
+	it( 'tolerates a field name carrying selector syntax', () => {
+		const root = render( checkoutButton( { product_id: '1406' } ) );
+		const form = root.querySelector( 'form' );
+		expect( () => appendUtmFields( form, { 'utm"]': 'x' } ) ).not.toThrow();
+		expect( form.elements.namedItem( 'utm"]' ).value ).toBe( 'x' );
+	} );
+} );
+
+describe( 'getDroppedLinkContext', () => {
+	it( 'names the link params the resolved form has no field for', () => {
+		const root = render( checkoutButton( { product_id: '1406' } ) );
+		const form = root.querySelector( 'form' );
+		expect( getDroppedLinkContext( form, '?checkout=1&coupon=SPRING20&after_success_url=https%3A%2F%2Fsite.test%2Fwelcome' ) ).toEqual( [
+			'coupon',
+			'after_success_url',
+		] );
+	} );
+
+	it( 'is empty when the form carries the fields or the URL names none', () => {
+		const root = render( checkoutButton( { product_id: '1406' } ) );
+		const form = root.querySelector( 'form' );
+		form.insertAdjacentHTML( 'beforeend', '<input type="hidden" name="coupon" value="PAGE20">' );
+		expect( getDroppedLinkContext( form, '?checkout=1&coupon=SPRING20' ) ).toEqual( [] );
+		expect( getDroppedLinkContext( form, '?checkout=1&product_id=1406' ) ).toEqual( [] );
+	} );
+
+	it( 'counts every named param as dropped without a form', () => {
+		expect( getDroppedLinkContext( null, '?coupon=X&after_success_behavior=custom' ) ).toEqual( [ 'coupon', 'after_success_behavior' ] );
 	} );
 } );
