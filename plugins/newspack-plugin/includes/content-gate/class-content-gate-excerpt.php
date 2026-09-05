@@ -66,7 +66,16 @@ class Content_Gate_Excerpt {
 		// excerpt feed it is this filter, not the feed layer, that produces the
 		// item. Content_Gate::restrict_post() stands down for both for the same
 		// reasons.
-		$teaser = ( is_feed() || Content_Gate::is_dispatching_rest() )
+		//
+		// The REST stand-down covers a read, not a render. The posts controller's
+		// shape is a read: it sets each item up with setup_postdata() and serves
+		// it, staging nothing. A route running a real loop — newspack-blocks'
+		// load-more endpoint is one — renders like a page, and restrict_post() has
+		// already staged the teaser for the post in hand. Answer for that post
+		// rather than leaving its excerpt to the substitution filter further down
+		// the content chain, which a plugin can remove.
+		$rest_read = Content_Gate::is_dispatching_rest() && ! Content_Gate::has_staged_restriction( $resolved->ID );
+		$teaser    = ( is_feed() || $rest_read )
 			? null
 			: Content_Gate::get_teaser_outside_article( $resolved );
 		if ( null !== $teaser ) {

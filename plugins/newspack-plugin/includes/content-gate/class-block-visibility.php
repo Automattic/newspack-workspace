@@ -55,6 +55,15 @@ class Block_Visibility {
 
 		$post_id = get_the_ID();
 
+		// A listing teaser answers to the anonymous reader, never to whoever asked
+		// for it. Content_Gate caches the built teaser under a key with no reader
+		// dimension and serves it from every listing for an hour, so a render that
+		// varied by requester would republish the first warm reader's view to the
+		// public. Content_Gate::is_withheld_outside_article() decides the
+		// withholding against the same reader, and this keeps the render and the
+		// decision answering to one.
+		$is_listing = Content_Gate::is_listing_context();
+
 		// Bypass access control in admin screens so blocks are never hidden from the
 		// person authoring them. Gated on that person being able to author the post in
 		// hand — the same `edit_post` entitlement the rest of the gate uses — so an
@@ -70,11 +79,15 @@ class Block_Visibility {
 		// in scope — where none is set up, it fails closed. Re-adding a blanket REST
 		// exemption here would widen what is readable; the REST cases in
 		// Newspack_Test_Block_Visibility pin the behaviour.
-		if ( is_admin() && ( $post_id ? current_user_can( 'edit_post', $post_id ) : current_user_can( 'edit_posts' ) ) ) {
+		//
+		// An editor warming a listing teaser gets no bypass either: the string they
+		// produce is the one every anonymous visitor is then served.
+		if ( ! $is_listing && is_admin() && ( $post_id ? current_user_can( 'edit_post', $post_id ) : current_user_can( 'edit_posts' ) ) ) {
 			return $block_content;
 		}
 
-		$hidden = self::is_hidden_for_user( $block, get_current_user_id(), $post_id );
+		$user_id = $is_listing ? 0 : get_current_user_id();
+		$hidden  = self::is_hidden_for_user( $block, $user_id, $post_id );
 
 		// This response now depends on who asked for it, and the page cache in front of
 		// it cannot always tell requesters apart. Batcache skips a request only when it
@@ -83,7 +96,10 @@ class Block_Visibility {
 		// served to the next anonymous caller. Cancel the store whenever this render
 		// shows a block an anonymous reader would not see -- the withheld render is
 		// still cached normally, which is the common case and the one worth caching.
-		if ( self::render_varies_from_anonymous( $block, get_current_user_id(), $post_id ) ) {
+		//
+		// A listing teaser is anonymous by construction, so it never varies and the
+		// page around it stays cacheable.
+		if ( ! $is_listing && self::render_varies_from_anonymous( $block, $user_id, $post_id ) ) {
 			self::prevent_page_cache();
 		}
 
@@ -459,11 +475,25 @@ class Block_Visibility {
 	}
 
 	/**
-	 * Per-request cache: keyed by "{user_id}:{md5(rules)}" or "gate:{user_id}:{md5(gate_ids)}".
+	 * Per-request cache: keyed by "{user_id}:{md5(rules)}" or "gate:{user_id}:{md5(gate_ids)}",
+	 * with the suffix {@see self::evaluation_cache_suffix()} adds.
 	 *
 	 * @var bool[]
 	 */
 	private static $rules_match_cache = [];
+
+	/**
+	 * Key suffix separating a listing teaser's evaluations from the rest.
+	 *
+	 * Both run as user 0 and would otherwise share an entry, but they do not
+	 * answer alike: a listing denies the anonymous bypass, so the same rules can
+	 * pass on the article page and fail in a listing.
+	 *
+	 * @return string
+	 */
+	private static function evaluation_cache_suffix() {
+		return Content_Gate::is_listing_context() ? ':listing' : '';
+	}
 
 	/**
 	 * Per-request cache of stripped content, keyed by md5 of the input.
@@ -534,7 +564,7 @@ class Block_Visibility {
 	 * @return bool True if user matches (should be treated as "matching reader").
 	 */
 	private static function evaluate_rules_for_user( $rules, $user_id ) {
-		$cache_key = $user_id . ':' . md5( wp_json_encode( $rules ) );
+		$cache_key = $user_id . ':' . md5( wp_json_encode( $rules ) ) . self::evaluation_cache_suffix();
 		if ( isset( self::$rules_match_cache[ $cache_key ] ) ) {
 			return self::$rules_match_cache[ $cache_key ];
 		}
@@ -590,7 +620,7 @@ class Block_Visibility {
 	 * @return bool
 	 */
 	private static function evaluate_gate_rules_for_user( $gate_ids, $user_id ) {
-		$cache_key = 'gate:' . $user_id . ':' . md5( wp_json_encode( $gate_ids ) );
+		$cache_key = 'gate:' . $user_id . ':' . md5( wp_json_encode( $gate_ids ) ) . self::evaluation_cache_suffix();
 		if ( isset( self::$rules_match_cache[ $cache_key ] ) ) {
 			return self::$rules_match_cache[ $cache_key ];
 		}
@@ -664,8 +694,18 @@ class Block_Visibility {
 			// is deliberately always grace-ON — the block editor exposes no
 			// payment-recovery toggle, and a reader in the retry window should see
 			// member-only blocks just as they can pass the gate itself.
-			$rule_context  = [ 'payment_recovery_grace' => $custom_access['payment_recovery_grace'] ?? true ];
-			$access_passes = Access_Rules::evaluate_rules_for_visitor( $custom_access['access_rules'], $user_id, $rule_context );
+			$rule_context = [ 'payment_recovery_grace' => $custom_access['payment_recovery_grace'] ?? true ];
+
+			// A logged-out visitor can pass an access rule that reads the request
+			// itself: `institution` matches on IP once the visitor carries the
+			// institutional-access cookie. In a listing teaser that grant is not
+			// theirs to spend on everyone else — the string is cached with no reader
+			// dimension — so the bypass is switched off there, exactly as
+			// Content_Restriction_Control::is_post_restricted() switches it off for
+			// the withholding decision. The article page still honours it.
+			$access_passes = ( ! $user_id && Content_Gate::is_listing_context() )
+				? false
+				: Access_Rules::evaluate_rules_for_visitor( $custom_access['access_rules'], $user_id, $rule_context );
 		}
 
 		// AND logic: both must pass when both are configured.

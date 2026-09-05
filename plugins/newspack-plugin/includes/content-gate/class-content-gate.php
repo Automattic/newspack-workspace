@@ -101,6 +101,18 @@ class Content_Gate {
 	private static array $withheld_teasers = [];
 
 	/**
+	 * Whether a listing teaser is being built right now.
+	 *
+	 * Read by {@see Block_Visibility::filter_render_block()}, which evaluates a
+	 * block's visibility against the anonymous reader while this is set. The
+	 * teaser is cached with no reader dimension, so the render has to answer to
+	 * the same reader the withholding decision does.
+	 *
+	 * @var bool
+	 */
+	private static bool $is_listing_context = false;
+
+	/**
 	 * Post ID whose teaser has been substituted into an in-flight 'the_content'
 	 * pass and whose gate is still to be appended, keyed by that pass's nesting
 	 * depth.
@@ -800,6 +812,13 @@ class Content_Gate {
 		// Not get_restriction_for_post(): the lock has to be claimed between the
 		// decision and the renders below, and that wrapper never claims it.
 		if ( ! self::should_restrict_post( $post ) ) {
+			// A listing rendered above the main loop stages the anonymous teaser
+			// for every restricted post it shows, this article included. This
+			// reader is entitled to it, so the slot is the article's to clear:
+			// replace_restricted_content() substitutes from it, and a teaser left
+			// standing would hand a subscriber a stub of the post they paid for.
+			// The restricted branch below overwrites the entry for the same reason.
+			unset( self::$restricted_content[ $post->ID ] );
 			return;
 		}
 
@@ -854,19 +873,14 @@ class Content_Gate {
 			return;
 		}
 
-		// The article being read owns its own staging, and this path must never
-		// write over it or ahead of it: the entry it would leave carries no gate,
-		// so an anonymous reader would get the teaser with no call to action, and
-		// an entitled reader — for whom the article path stages nothing at all —
-		// would get a teaser in place of the post they paid for. A listing on the
-		// article's own page contains the article often enough for both orders to
-		// happen in one request.
-		if ( is_singular() && get_queried_object_id() === $post->ID ) {
-			return;
-		}
-		if ( isset( self::$restricted_content[ $post->ID ] ) ) {
-			return;
-		}
+		// The article being read is not exempted. A listing above the main loop
+		// reaches this method for the queried post too, and the entry it leaves
+		// carries no gate, so restrict_post() owns that slot on the article path:
+		// it overwrites the entry with the gate for a restricted reader and clears
+		// it for an entitled one. Deciding the withholding from the post and the
+		// request rather than from whether staging has already happened is what
+		// covers a classic theme's pre-loop widget areas, where the listing renders
+		// first.
 
 		// A password-protected post is core's to withhold: the_content() is handed
 		// the password form, and substituting a teaser for it would publish the
@@ -877,25 +891,33 @@ class Content_Gate {
 			return;
 		}
 
-		$teaser = self::get_teaser_outside_article( $post );
-		if ( null === $teaser ) {
-			return;
-		}
+		// Stage once, substitute every time. One post can pass through several
+		// loops in a request — a Query Loop and a sidebar listing over the same
+		// posts — and every loop is handed its own WP_Post instance, so an early
+		// return on the staged entry would leave the later instances carrying the
+		// full body. A block that builds its own excerpt from post_content, as
+		// newspack-blocks' Homepage Posts does, then publishes it.
+		if ( ! isset( self::$restricted_content[ $post->ID ] ) ) {
+			$teaser = self::get_teaser_outside_article( $post );
+			if ( null === $teaser ) {
+				return;
+			}
 
-		// Staged here rather than in get_teaser_outside_article(): this map is what
-		// replace_restricted_content() substitutes from, so writing it is a claim
-		// that this post is being rendered. Asking for a post's teaser — which an
-		// excerpt does — must not make that claim on its behalf.
-		self::$restricted_content[ $post->ID ] = [
-			'teaser' => $teaser,
-			'gate'   => '',
-		];
+			// Staged here rather than in get_teaser_outside_article(): this map is what
+			// replace_restricted_content() substitutes from, so writing it is a claim
+			// that this post is being rendered. Asking for a post's teaser — which an
+			// excerpt does — must not make that claim on its behalf.
+			self::$restricted_content[ $post->ID ] = [
+				'teaser' => $teaser,
+				'gate'   => '',
+			];
+		}
 
 		// post_excerpt is deliberately left alone. Empty, it makes core build the
 		// excerpt from post_content — now the teaser — so the trimming and the
 		// "read more" suffix stay core's to decide; non-empty, it is the author's
 		// own words about a post they chose to gate, and survives.
-		$post->post_content = $teaser;
+		$post->post_content = self::$restricted_content[ $post->ID ]['teaser'];
 	}
 
 	/**
@@ -906,6 +928,17 @@ class Content_Gate {
 	 * staged substitution: newspack-listings' REST controller assembles listing
 	 * items from `post_content` outside any loop, so `the_post` never fires for
 	 * them and nothing withholds the body.
+	 *
+	 * The result is shared: it is memoised for the request and written to a
+	 * persistent object-cache group with an hour's expiry, under a key carrying no
+	 * reader dimension. Two properties make that safe, and a caller changing either
+	 * one breaks it for every reader on the site. The verdict is reader-independent
+	 * ({@see self::is_withheld_outside_article()}), and so is the render: the body
+	 * runs through the block pipeline with the anonymous reader in scope, so a
+	 * members-only block in the free opening cannot reach the teaser whoever warms
+	 * it. The key carries every input that shapes the string — the post's revision,
+	 * the layout, and the layout settings the excerpt is sliced by — so an edit
+	 * produces a new key rather than needing an invalidation hook.
 	 *
 	 * @param \WP_Post $post Post object.
 	 * @return string|null
@@ -926,18 +959,28 @@ class Content_Gate {
 
 		// The layout is resolved for the same anonymous reader the decision was
 		// made for, so a gate's configured paragraph count still shapes the teaser
-		// without making it vary per reader.
+		// without making it vary per reader. A map read, not an evaluation:
+		// is_withheld_outside_article() above is what populated it.
 		$gate_layout_id = Content_Restriction_Control::get_gate_layout_id( $post->ID, 0 );
 
-		// Building a teaser costs a full body render — get_restricted_post_excerpt_for_gate()
-		// runs the post through `newspack_gate_content` and slices the result — and a
-		// listing pays it once per card. An edit to the post or a switch to another
-		// layout produces a different key rather than needing an invalidation hook;
-		// the expiry bounds the one input the key cannot carry, the site-wide layout
-		// defaults a layout with no meta of its own falls back to. The teaser is
-		// reader-independent by construction ({@see self::is_withheld_outside_article()}),
-		// which is what makes it safe to share across requests.
-		$cache_key = $post->ID . ':' . $post->post_modified_gmt . ':' . $gate_layout_id;
+		// Every input the slicing reads is in the key. The post's revision covers
+		// the body; the layout id covers a switch to another gate; the settings
+		// cover an edit to the layout itself, which changes how much of the body is
+		// free without touching the article's modified time. Building a teaser
+		// costs a full body render — get_restricted_post_excerpt_for_gate() runs
+		// the post through `newspack_gate_content` and slices the result — and a
+		// listing pays it once per card, so the entry is worth keeping across
+		// requests.
+		$cache_key = md5(
+			wp_json_encode(
+				[
+					$post->ID,
+					$post->post_modified_gmt,
+					$gate_layout_id,
+					self::get_teaser_layout_settings( $gate_layout_id ),
+				]
+			)
+		);
 		$cached    = wp_cache_get( $cache_key, self::WITHHELD_TEASER_CACHE_GROUP );
 		if ( is_string( $cached ) ) {
 			self::$withheld_teasers[ $post->ID ] = $cached;
@@ -951,12 +994,63 @@ class Content_Gate {
 		// with its render lock (#821).
 		self::$withheld_teasers[ $post->ID ] = '';
 
-		$teaser = self::get_restricted_post_excerpt_for_gate( $post, $gate_layout_id );
+		$teaser = self::in_listing_context(
+			function () use ( $post, $gate_layout_id ) {
+				return self::get_restricted_post_excerpt_for_gate( $post, $gate_layout_id );
+			}
+		);
 
 		self::$withheld_teasers[ $post->ID ] = $teaser;
 		wp_cache_set( $cache_key, $teaser, self::WITHHELD_TEASER_CACHE_GROUP, HOUR_IN_SECONDS );
 
 		return $teaser;
+	}
+
+	/**
+	 * Whether a loop in this request has already staged a withheld body for a post.
+	 *
+	 * Writing this map is how {@see self::restrict_post()} records that a post is
+	 * being rendered rather than read, so it is the one signal that separates the
+	 * two inside a REST dispatch. `in_the_loop()` cannot: it reports on the main
+	 * query, and a route running its own WP_Query never sets that flag.
+	 *
+	 * @param int $post_id Post ID.
+	 * @return bool
+	 */
+	public static function has_staged_restriction( $post_id ): bool {
+		return isset( self::$restricted_content[ $post_id ] );
+	}
+
+	/**
+	 * Whether the render in progress is a listing teaser.
+	 *
+	 * {@see Block_Visibility::filter_render_block()} asks, and answers to the
+	 * anonymous reader while this is true.
+	 *
+	 * @return bool
+	 */
+	public static function is_listing_context(): bool {
+		return self::$is_listing_context;
+	}
+
+	/**
+	 * Run a build with the listing reader in scope.
+	 *
+	 * Restores the previous value rather than clearing it: the block pipeline
+	 * nests, and a block inside a teaser that lists another withheld post builds
+	 * that post's teaser from inside this one.
+	 *
+	 * @param callable $build Callback producing the teaser.
+	 * @return mixed The callback's return value.
+	 */
+	private static function in_listing_context( $build ) {
+		$was_listing_context      = self::$is_listing_context;
+		self::$is_listing_context = true;
+		try {
+			return $build();
+		} finally {
+			self::$is_listing_context = $was_listing_context;
+		}
 	}
 
 	/**

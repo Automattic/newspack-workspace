@@ -37,6 +37,12 @@ class Test_Restricted_Post_Outside_Gate_Render extends \WP_UnitTestCase {
 	const PAID_MARKER = 'PAIDBODY';
 
 	/**
+	 * Marker inside a block the gate shows only to readers who pass it, sitting in
+	 * the free opening where a publisher would put a note for supporters.
+	 */
+	const MEMBER_MARKER = 'MEMBERONLY';
+
+	/**
 	 * Gate restricting every post.
 	 *
 	 * @var int
@@ -141,6 +147,28 @@ class Test_Restricted_Post_Outside_Gate_Render extends \WP_UnitTestCase {
 				],
 				$args
 			)
+		);
+	}
+
+	/**
+	 * A restricted post whose free opening holds a block only a reader who passes
+	 * the gate may see.
+	 *
+	 * The block sits inside the two visible paragraphs, so it reaches the teaser
+	 * for any reader the build answers to.
+	 *
+	 * @return int
+	 */
+	private function create_post_with_member_only_block() {
+		return $this->create_restricted_post(
+			[
+				'post_content' => '<!-- wp:paragraph --><p>' . self::FREE_MARKER . ' opening line.</p><!-- /wp:paragraph -->'
+					. '<!-- wp:group {"newspackAccessControlMode":"gate","newspackAccessControlGateIds":[' . $this->gate_id . ']} --><div class="wp-block-group">'
+					. '<!-- wp:paragraph --><p>' . self::MEMBER_MARKER . '</p><!-- /wp:paragraph -->'
+					. '</div><!-- /wp:group -->'
+					. '<!-- wp:paragraph --><p>Second free line.</p><!-- /wp:paragraph -->'
+					. '<!-- wp:paragraph --><p>' . self::PAID_MARKER . ' is behind the gate.</p><!-- /wp:paragraph -->',
+			]
 		);
 	}
 
@@ -442,24 +470,121 @@ class Test_Restricted_Post_Outside_Gate_Render extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * A listing shows the teaser to every reader, including one the gate would let
-	 * through. Newspack's block cache keys rendered listing markup by block
-	 * attributes and position with no reader dimension, so a listing that varied
-	 * by entitlement would be handed to the next reader along.
+	 * One restricted post, one listing, one string — whoever is reading.
+	 *
+	 * This is the invariant the whole path rests on. Newspack's block cache keys
+	 * rendered listing markup by block attributes and position, and the teaser
+	 * behind it is cached under a key with no reader dimension, so anything that
+	 * varies by reader is republished to whoever comes next. The subscriber goes
+	 * first on purpose: they warm the shared teaser, and an editor and an
+	 * anonymous visitor then read what they left.
 	 */
-	public function test_a_listing_shows_the_teaser_to_an_entitled_reader() {
-		$post_id   = $this->create_restricted_post();
-		$reader_id = $this->factory->user->create( [ 'role' => 'subscriber' ] );
-		wp_set_current_user( $reader_id );
-		$this->reset_restriction_cache();
-		$this->go_to( home_url( '/' ) );
+	public function test_a_listing_renders_one_string_for_every_reader() {
+		$post_id       = $this->create_post_with_member_only_block();
+		$subscriber_id = $this->factory->user->create( [ 'role' => 'subscriber' ] );
+		$editor_id     = $this->factory->user->create( [ 'role' => 'editor' ] );
 
-		$this->assertFalse( Content_Gate::is_post_restricted( $post_id ), 'A logged-in reader passes this registration gate, which is the premise of this test.' );
-
-		$listed = $this->render_in_secondary_loop( $post_id );
+		$rendered = [];
+		foreach (
+			[
+				'subscriber' => $subscriber_id,
+				'editor'     => $editor_id,
+				'anonymous'  => 0,
+			] as $reader => $user_id
+		) {
+			wp_set_current_user( $user_id );
+			// The object cache survives this, which is the point: only the
+			// request-scoped state goes, so each reader after the first is served
+			// the teaser the subscriber's request built.
+			$this->reset_restriction_cache();
+			$this->reset_gate_render_state();
+			\Newspack\Block_Visibility::reset_cache_for_tests();
+			$this->go_to( home_url( '/' ) );
+			if ( 'subscriber' === $reader ) {
+				$this->assertFalse( Content_Gate::is_post_restricted( $post_id ), 'A logged-in reader passes this registration gate, which is the premise of this test.' );
+			}
+			$rendered[ $reader ] = $this->render_in_secondary_loop( $post_id );
+		}
 		wp_set_current_user( 0 );
 
-		$this->assertStringNotContainsString( self::PAID_MARKER, $listed, 'The listing is reader-independent, so it shows the teaser.' );
+		$this->assertStringNotContainsString( self::MEMBER_MARKER, $rendered['subscriber'], 'The teaser is built for the anonymous reader, so a members-only block never enters it.' );
+		$this->assertStringNotContainsString( self::PAID_MARKER, $rendered['anonymous'] );
+		$this->assertSame( $rendered['subscriber'], $rendered['editor'], 'A listing render is the same string for every reader.' );
+		$this->assertSame( $rendered['subscriber'], $rendered['anonymous'], 'A listing render is the same string for every reader.' );
+	}
+
+	/**
+	 * A post shown twice in one request — a Query Loop and a sidebar listing over
+	 * the same posts — is withheld in both, with no state reset in between.
+	 *
+	 * Each loop is handed its own WP_Post instance, so staging the teaser once and
+	 * returning early would leave the second instance carrying the body. A card
+	 * that builds its own summary reads `post_content` directly, as
+	 * newspack-blocks' Homepage Posts does.
+	 */
+	public function test_a_post_in_two_loops_is_withheld_in_both() {
+		$post_id = $this->create_restricted_post();
+		$this->go_to( home_url( '/' ) );
+
+		$bodies = [];
+		foreach ( [ 'query loop', 'sidebar listing' ] as $loop_name ) {
+			$loop = new \WP_Query( [ 'post__in' => [ $post_id ] ] );
+			while ( $loop->have_posts() ) {
+				$loop->the_post();
+				$bodies[ $loop_name ] = get_post()->post_content;
+			}
+			wp_reset_postdata();
+		}
+
+		$this->assertStringNotContainsString( self::PAID_MARKER, $bodies['query loop'] );
+		$this->assertStringNotContainsString( self::PAID_MARKER, $bodies['sidebar listing'], 'The second loop over the same post is withheld too.' );
+	}
+
+	/**
+	 * A listing above the main loop that shows the article the reader is on
+	 * withholds it like any other card, and leaves the article its gate.
+	 *
+	 * A classic theme's header widget area — "Most read", "Editor's picks" —
+	 * renders before the main loop, so this ordering decides whether the paid body
+	 * appears above the gate asking the reader to pay for it.
+	 */
+	public function test_a_listing_above_the_article_withholds_the_article_it_lists() {
+		$post_id = $this->create_restricted_post();
+		$this->go_to( get_permalink( $post_id ) );
+
+		$listed = $this->render_in_secondary_loop( $post_id );
+
+		while ( have_posts() ) {
+			the_post();
+		}
+		$article = apply_filters( 'the_content', get_post( $post_id )->post_content );
+
+		$this->assertStringNotContainsString( self::PAID_MARKER, $listed, 'The article is withheld in a listing on its own page.' );
+		$this->assertStringNotContainsString( self::PAID_MARKER, $article );
+		$this->assertSame( 1, substr_count( $article, 'newspack-content-gate__inline-gate' ), 'The article still renders its own gate, once.' );
+	}
+
+	/**
+	 * Editing the gate layout shortens the free preview at once.
+	 *
+	 * The teaser is cached across requests, and the layout settings that slice it
+	 * live on the layout post's meta — editing them leaves the article's own
+	 * modified time untouched, so the key has to carry them.
+	 */
+	public function test_a_layout_edit_reshapes_the_teaser_at_once() {
+		update_post_meta( $this->gate_layout_id, 'visible_paragraphs', 2 );
+		$post_id = $this->create_restricted_post();
+
+		$two_paragraphs = Content_Gate::get_teaser_outside_article( get_post( $post_id ) );
+
+		update_post_meta( $this->gate_layout_id, 'visible_paragraphs', 1 );
+		$this->reset_restriction_cache();
+		$this->reset_gate_render_state();
+
+		$one_paragraph = Content_Gate::get_teaser_outside_article( get_post( $post_id ) );
+
+		$this->assertStringContainsString( 'Second free line', $two_paragraphs, 'Two paragraphs are free, which is the premise of this test.' );
+		$this->assertStringNotContainsString( 'Second free line', $one_paragraph, 'A shorter preview takes effect without waiting for the cached teaser to expire.' );
 	}
 
 	/**
@@ -619,6 +744,57 @@ class Test_Restricted_Post_Outside_Gate_Render extends \WP_UnitTestCase {
 		$this->assertNotNull( $rendered, 'The route ran, which is the premise of this test.' );
 		$this->assertStringNotContainsString( self::PAID_MARKER, $rendered, 'A loop inside a REST dispatch withholds the gated body.' );
 		$this->assertStringContainsString( self::FREE_MARKER, $rendered );
+	}
+
+	/**
+	 * The excerpt filter answers for a post a REST loop is rendering.
+	 *
+	 * The stand-down inside the API belongs to a read: the posts controller sets
+	 * each item up and serves it, staging nothing, and entitlement there is
+	 * Content_Gate::filter_rest_response()'s to evaluate per requester. A route
+	 * running a real loop is a render, and the staged entry is what says so.
+	 *
+	 * `test_a_rest_route_running_a_loop_still_withholds` asserts on the body; this
+	 * is the excerpt beside it, which core builds through a content chain of its
+	 * own.
+	 */
+	public function test_a_rest_loop_excerpt_is_withheld() {
+		$post_id = $this->create_restricted_post();
+		$excerpt = null;
+		add_action(
+			'rest_api_init',
+			function () use ( &$post_id, &$excerpt ) {
+				register_rest_route(
+					'newspack-test/v1',
+					'/loop-excerpt',
+					[
+						'methods'             => 'GET',
+						'permission_callback' => '__return_true',
+						'callback'            => function () use ( &$post_id, &$excerpt ) {
+							$loop = new \WP_Query( [ 'post__in' => [ $post_id ] ] );
+							while ( $loop->have_posts() ) {
+								$loop->the_post();
+								$excerpt = get_the_excerpt( get_the_ID() );
+							}
+							wp_reset_postdata();
+							return [ 'ok' => true ];
+						},
+					]
+				);
+			}
+		);
+
+		// A server may already be standing from an earlier case, in which case
+		// `rest_api_init` has fired and the route above would never register.
+		global $wp_rest_server;
+		$wp_rest_server = null;
+		$this->go_to( home_url( '/' ) );
+		rest_do_request( new \WP_REST_Request( 'GET', '/newspack-test/v1/loop-excerpt' ) );
+		$wp_rest_server = null;
+
+		$this->assertNotNull( $excerpt, 'The route ran, which is the premise of this test.' );
+		$this->assertStringNotContainsString( self::PAID_MARKER, $excerpt, 'A loop inside a REST dispatch withholds the excerpt as well as the body.' );
+		$this->assertStringContainsString( self::FREE_MARKER, $excerpt );
 	}
 
 	/**
