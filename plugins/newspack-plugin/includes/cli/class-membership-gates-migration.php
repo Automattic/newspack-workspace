@@ -31,6 +31,16 @@ class Membership_Gates_Migration {
 	 * The WooCommerce Memberships wrapper blocks, which are conditional and must
 	 * never be carried into a migrated layout's content.
 	 */
+	/**
+	 * Active membership counts, keyed by plan post ID.
+	 *
+	 * Filled by {@see plan_member_count()} on first read. One command run is one process,
+	 * so the cache lives as long as the migration it serves.
+	 *
+	 * @var array<int,int>
+	 */
+	private static $member_counts = [];
+
 	private const MEMBERSHIP_WRAPPER_BLOCKS = [
 		'woocommerce-memberships/member-content',
 		'woocommerce-memberships/non-member-content',
@@ -65,12 +75,15 @@ class Membership_Gates_Migration {
 	 * Dry-run by default; pass --live to write.
 	 *
 	 * Both modes surface predictable migration issues as WARN rows. Purchase-mode
-	 * gaps (no custom_access layout found, no usable product IDs)
+	 * gaps (no custom_access layout found, no paid access rule to write)
 	 * and content-rule slugs the evaluator cannot resolve are computable from the
 	 * group data before any write, so they appear in dry-run and make the planning
-	 * pass predictive rather than optimistic. On --live each written gate is
-	 * additionally re-read and checked against the full set of conditions the frontend
-	 * evaluator applies; any gate that would not restrict — or would restrict less
+	 * pass predictive rather than optimistic. A dry run reports every one of them and
+	 * still prints its table; --live refuses to start on a group that would publish an
+	 * open paid gate, since there the WARN row would arrive after the write.
+	 *
+	 * On --live each written gate is additionally re-read and checked against the full
+	 * set of conditions the frontend evaluator applies; any gate that would not restrict — or would restrict less
 	 * than the plan it came from, e.g. a paid plan that migrated to a gate any
 	 * registered reader passes — is reported as a WARN row rather than counted as a
 	 * plain success. Migrated gates stay dormant until WooCommerce Memberships is
@@ -85,9 +98,14 @@ class Membership_Gates_Migration {
 	 *
 	 * Every decision that needs an operator is settled before the first write: the
 	 * groups are scanned, the problems are reported, and the one confirmation prompt
-	 * is asked with nothing yet written. The write loop then runs to completion
-	 * unattended, so a run that is interrupted at a prompt is a run that changed
-	 * nothing.
+	 * is asked with nothing yet written. Consolidation widens access, a carve-out
+	 * rewrites one gate's content rules and moves access products onto another gate,
+	 * and an un-mergeable overlap leaves a reader liable to be denied — so all three go
+	 * to that prompt: none of them is written on --live without someone answering for
+	 * it. Declining exits non-zero, so a cutover that chains the Memberships
+	 * deactivation onto this command stops there too. The write loop then runs to
+	 * completion unattended, so a run that is interrupted at a prompt is a run that
+	 * changed nothing.
 	 *
 	 * ## OPTIONS
 	 *
@@ -101,7 +119,7 @@ class Membership_Gates_Migration {
 	 * : How long access lasts after a one-time purchase. Accepts "forever", "<n>days" or "<n>months". Each plan's own access length is read by default, so this is only needed for a plan whose access ends on a fixed calendar date, which is not a duration from the purchase. Applies to every such plan in the run.
 	 *
 	 * [--yes]
-	 * : Answer yes to the pre-flight confirmation prompt shown when gates would be created alongside gates the same plans were migrated to individually. Required for non-interactive runs (cron, `ssh host "wp ..."`): with no terminal to answer the prompt, the command errors out rather than exiting silently mid-migration.
+	 * : Answer yes to the pre-flight confirmation prompt, which is shown when gates would be created alongside gates the same plans were migrated to individually, when plan groups are consolidated onto one gate, when one group's content is carved out of another group's gate (the one case that rewrites a gate's content rules and moves access products from one gate to another), or when two gates would be written over overlapping content. Required for non-interactive runs (cron, `ssh host "wp ..."`): with no terminal to answer the prompt, the command errors out rather than exiting silently mid-migration. Declining the prompt exits non-zero.
 	 *
 	 * ## EXAMPLES
 	 *
@@ -201,6 +219,23 @@ class Membership_Gates_Migration {
 		// Phase 1: group plans by content-rule fingerprint.
 		$plan_groups = self::group_plans_by_fingerprint( $plan_ids, $skipped );
 
+		// Phase 1b: merge a group whose content another group's rules already cover. Fingerprint
+		// grouping only unites plans with identical rule sets, so two plans gating the
+		// same posts under non-identical rules become two gates with disjoint product
+		// lists — and gate priority then denies a reader entitled through the other
+		// plan. Runs before the pre-flight below so every check there, and the write
+		// loop after it, sees the gate groups that will actually be written.
+		$widened_by_consolidation = [];
+		$unmergeable_overlaps     = [];
+		$carved_out               = [];
+		$carve_outs               = [];
+		$plan_groups              = self::consolidate_plan_groups( array_values( $plan_groups ), $widened_by_consolidation, $unmergeable_overlaps, $carved_out, $carve_outs );
+
+		// What each carved-out group takes on from the gate excluding it: the products,
+		// and the access length those products need to become a rule. Keyed by the
+		// group's position, which is how the write loop reaches it.
+		$carried_access = self::carried_access_by_group( $carve_outs );
+
 		$group_count = count( $plan_groups );
 		if ( $group_count < ( $total - count( $skipped ) ) ) {
 			WP_CLI::line( sprintf( 'Grouped into %d gate(s) after deduplication.', $group_count ) );
@@ -231,27 +266,46 @@ class Membership_Gates_Migration {
 		$durations_by_group = [];
 		foreach ( $plan_groups as $fingerprint => $group ) {
 			$gate_title                         = self::gate_title( $group );
-			$products_by_group[ $fingerprint ]  = self::resolve_product_ids( $group );
-			$durations_by_group[ $fingerprint ] = self::resolve_group_duration( $group, $duration_override );
+			$carried                            = $carried_access[ $fingerprint ] ?? [];
+			$products_by_group[ $fingerprint ]  = self::resolve_product_ids( $group, $carried['product_ids'] ?? [] );
+			$durations_by_group[ $fingerprint ] = self::resolve_group_duration( $group, $duration_override, $carried['sources'] ?? [] );
 			self::report_dropped_product_ids( $gate_title, $products_by_group[ $fingerprint ]['dropped'], self::group_requires_purchase( $group ) );
 			self::report_duration_conflict( $gate_title, $durations_by_group[ $fingerprint ]['conflict'] );
 		}
 
-		// A one-time product with no duration has no rule to write, and a gate that
-		// silently drops the plan's only paid access rule lets any registered reader in.
-		// Named and refused before the first write, so the operator can supply the
-		// duration rather than discover the gap at cutover.
-		$needs_duration = [];
-		foreach ( $plan_groups as $fingerprint => $group ) {
-			if ( ! empty( $products_by_group[ $fingerprint ]['one_time_ids'] ) && null === $durations_by_group[ $fingerprint ]['duration'] ) {
-				$needs_duration = array_merge( $needs_duration, $durations_by_group[ $fingerprint ]['plans'] );
-			}
-		}
-		if ( ! empty( $needs_duration ) ) {
+		// A product the gate's access rules do not name is access the plan granted and
+		// the gate will not. The one way to reach it is a one-time product with no
+		// access length: build_access_rules() writes no rule for it, and a surviving
+		// subscription rule keeps the rule list non-empty, so nothing further down
+		// notices. Named and refused before the first write, so the operator can supply
+		// the length rather than discover the gap at cutover.
+		$unwritten_products = self::find_groups_with_unwritten_products( $plan_groups, $products_by_group, $durations_by_group );
+		if ( ! empty( $unwritten_products ) ) {
 			WP_CLI::error(
 				sprintf(
-					'Plan(s) %s grant access through a one-time product, but their access ends on a fixed calendar date rather than lasting a set time from the purchase — so there is no duration for the gate to carry. Pass --one-time-duration=forever, --one-time-duration=<n>days or --one-time-duration=<n>months and re-run. Nothing has been written.',
-					implode( ', ', array_map( fn( $name ) => sprintf( '"%s"', $name ), array_values( array_unique( $needs_duration ) ) ) )
+					'Gate(s) %s would be written with no access rule naming product(s) %s, so readers who bought them would be denied at cutover. A one-time product needs an access length, and the plan(s) granting it end access on a fixed calendar date rather than a set time from the purchase. Pass --one-time-duration=forever, --one-time-duration=<n>days or --one-time-duration=<n>months and re-run. Nothing has been written.',
+					implode( ', ', array_map( fn( $title ) => sprintf( '"%s"', $title ), array_keys( $unwritten_products ) ) ),
+					implode( ', ', array_unique( array_merge( [], ...array_values( $unwritten_products ) ) ) )
+				)
+			);
+		}
+
+		// A purchase group for which no paid access rule can be built writes an active
+		// paid mode with no access rule, which asks for no purchase at all — every
+		// registered reader gets in. Refused before the first write on --live, rather
+		// than reported after it: the post-write verification is the only thing that
+		// would notice, by which point the open gate is already published.
+		//
+		// A dry run has no write to refuse, and stopping at the first such group costs
+		// the operator the plan-by-plan table the dry run is for — they would fix one
+		// plan, re-run, and meet the next. It becomes a WARN row per group instead, so
+		// the whole set can be fixed in one pass.
+		$paid_without_access_rules = self::find_paid_groups_without_access_rules( $plan_groups, $products_by_group, $durations_by_group );
+		if ( ! empty( $paid_without_access_rules ) && ! $dry_run ) {
+			WP_CLI::error(
+				sprintf(
+					'Plan group(s) %s require a purchase, but none of their products resolve to something a gate rule can name. The gate would activate paid access with no purchase requirement, letting in any registered reader. Fix the plans\' products and re-run. Nothing has been written.',
+					implode( ', ', array_map( fn( $title ) => sprintf( '"%s"', $title ), $paid_without_access_rules ) )
 				)
 			);
 		}
@@ -277,11 +331,41 @@ class Membership_Gates_Migration {
 				)
 			);
 		}
-		if ( ! empty( $superseding ) && ! $dry_run ) {
+		// One prompt for the whole run, so the write loop never reads STDIN. Each of
+		// these hands the operator something they cannot simply undo afterwards: a
+		// superseded gate stays published and keeps restricting, and a consolidated gate
+		// has already widened access by the time the summary is read.
+		//
+		// An un-mergeable overlap is here because it is the denial this command exists
+		// to prevent, in the one shape it cannot repair — and because gates do nothing
+		// while WooCommerce Memberships is active, so the run that writes the split
+		// looks clean, exits 0, and the warning is long out of scrollback by the time a
+		// reader is turned away at cutover. Confirming it is the only point at which
+		// someone is looking.
+		$to_confirm = [];
+		if ( ! empty( $superseding ) ) {
+			$to_confirm[] = sprintf( 'create %d gate(s) that supersede the gates named above', count( $superseding ) );
+		}
+		if ( ! empty( $widened_by_consolidation ) ) {
+			$to_confirm[] = sprintf( 'merge %s, widening access as described above', implode( ', ', $widened_by_consolidation ) );
+		}
+		if ( ! empty( $carved_out ) ) {
+			$to_confirm[] = sprintf(
+				'carve %s, so each plan keeps its own members and the excluding plan\'s members also reach the carved-out content — each pair is a suspected overlap decided from the rules alone, and the post count says how much content the carve-out actually covers',
+				implode( ', ', $carved_out )
+			);
+		}
+		if ( ! empty( $unmergeable_overlaps ) ) {
+			$to_confirm[] = sprintf(
+				'write %s as separate gates with disjoint access products, leaving the members counted above liable to be denied at the other gate once Memberships is deactivated',
+				implode( ', ', $unmergeable_overlaps )
+			);
+		}
+		if ( ! empty( $to_confirm ) && ! $dry_run ) {
 			self::confirm_or_error(
 				sprintf(
-					'Create %d gate(s) that supersede the gates named above? Answering no stops the run before anything is written.',
-					count( $superseding )
+					'This run will %s. Proceed? Answering no stops the run before anything is written.',
+					implode( '; and ', $to_confirm )
 				),
 				$assoc_args,
 				self::stdin_is_a_tty()
@@ -290,20 +374,32 @@ class Membership_Gates_Migration {
 
 		// Phase 3: create/update one gate per group. Every group's title is unique (the
 		// collision check above errors out otherwise), so a title names one gate.
+		//
+		// A carved-out group is written before the gate that excludes its content. That
+		// exclusion takes the shared content off the broad gate, leaving the narrow gate
+		// as the only thing holding it — so the repair is only sound once the narrow gate
+		// exists and enforces. Writing it first is what lets the exclusion be dropped
+		// when it does not, rather than leaving the content behind no gate at all.
+		$gate_titles = array_map( fn( $group ) => self::gate_title( $group ), $plan_groups );
+		$write_order = array_keys( $plan_groups );
+		$is_carved   = array_fill_keys( array_column( $carve_outs, 'narrow' ), true );
+		usort( $write_order, fn( $a, $b ) => ( isset( $is_carved[ $a ] ) ? 0 : 1 ) <=> ( isset( $is_carved[ $b ] ) ? 0 : 1 ) );
+		$gate_holds = [];
+
 		$progress = \WP_CLI\Utils\make_progress_bar( 'Migrating gates', $group_count );
 
-		foreach ( $plan_groups as $fingerprint => $group ) {
+		foreach ( $write_order as $fingerprint ) {
+			$group = $plan_groups[ $fingerprint ];
 			$progress->tick();
 
 			$layout_errors = [];
-			$ac_rules      = $group[0]['ac_rules'];
+			$ac_rules      = self::drop_unheld_carve_outs( $group[0]['ac_rules'], $carve_outs, $fingerprint, $gate_holds, $gate_titles );
 			$gate_title    = self::gate_title( $group );
 			$gate_key      = trim( strtolower( $gate_title ) );
 			$has_purchase  = self::group_requires_purchase( $group );
 			$access_type   = $has_purchase ? 'purchase' : 'signup';
 
-			$products           = $products_by_group[ $fingerprint ];
-			$merged_product_ids = $products['product_ids'];
+			$products = $products_by_group[ $fingerprint ];
 
 			// A null gate ID means the gate does not exist yet; the summary prints it as
 			// '(pending)' on a dry run, and the write path below fills it in on --live.
@@ -332,7 +428,8 @@ class Membership_Gates_Migration {
 					$result = \Newspack\Content_Gate::create_gate( [ 'title' => $gate_title ] );
 					if ( \is_wp_error( $result ) ) {
 						WP_CLI::warning( sprintf( 'Failed to create gate "%s": %s', $gate_title, $result->get_error_message() ) );
-						$summary[] = [
+						$gate_holds[ $fingerprint ] = false;
+						$summary[ $fingerprint ]    = [
 							'plan_name'     => $gate_title,
 							'action'        => 'ERROR: ' . $result->get_error_message(),
 							'gate_id'       => '—',
@@ -380,7 +477,13 @@ class Membership_Gates_Migration {
 					WP_CLI::warning( sprintf( '"%s" (gate %d) will not restrict as intended: %s', $gate_title, $gate_id, $issue ) );
 				}
 			} elseif ( $dry_run ) {
-				$verification_issues = self::compute_pre_write_issues( $ac_rules, $has_purchase, $layouts, $merged_product_ids, null !== $memberships_gate );
+				$verification_issues = self::compute_pre_write_issues(
+					$ac_rules,
+					$has_purchase,
+					$layouts,
+					null !== $memberships_gate,
+					! empty( self::build_access_rules( $products, $durations_by_group[ $fingerprint ]['duration'] ) )
+				);
 				foreach ( $verification_issues as $issue ) {
 					WP_CLI::warning( sprintf( '"%s" will not migrate correctly: %s', $gate_title, $issue ) );
 				}
@@ -394,16 +497,30 @@ class Membership_Gates_Migration {
 				$row_action = $dry_run ? $action . ' (dry-run)' : $action;
 			}
 
-			$summary[] = [
+			// Whether this gate will hold the content a carve-out would take off another
+			// gate. Structural, so it reads the same in both modes: the gate was written
+			// without error, and a purchase group's paid mode will be active carrying a
+			// rule. The two states that fail it — a gate that could not be created, and a
+			// purchase group with no paid access layout to activate — are the two that
+			// would leave the carved-out content behind free registration or nothing.
+			$gate_holds[ $fingerprint ] = empty( $layout_errors )
+				&& (
+					! $has_purchase
+					|| ( null !== $layouts['custom_access'] && ! empty( self::build_access_rules( $products, $durations_by_group[ $fingerprint ]['duration'] ) ) )
+				);
+
+			$summary[ $fingerprint ] = [
 				'plan_name'     => $gate_title,
 				'action'        => $row_action,
 				'gate_id'       => $gate_id ?? '(pending)',
-				'content_rules' => count( $ac_rules ),
+				'content_rules' => self::describe_rule_count( $ac_rules ),
 				'access_type'   => $access_type,
 			];
 		}
 
 		$progress->finish();
+		// The write order puts carved-out gates first; the table reads in group order.
+		ksort( $summary );
 		WP_CLI::line( '' );
 
 		// Summary table.
@@ -463,6 +580,17 @@ class Membership_Gates_Migration {
 					$unenforceable
 				)
 			);
+		}
+
+		// A warning line is invisible to whatever chained this command with the
+		// Memberships deactivation that follows it, and a gate that does not restrict as
+		// intended is only visible to readers after that deactivation. Exit non-zero so
+		// the cutover stops here, as migrate-post-exemptions does on an unwritten
+		// exemption. Dry runs stay at 0: nothing was written, and reporting these is
+		// what the pass is for.
+		$errored = count( $summary ) - $processed;
+		if ( ! $dry_run && ( $errored || $unenforceable ) ) {
+			WP_CLI::halt( 1 );
 		}
 	}
 
@@ -549,18 +677,31 @@ class Membership_Gates_Migration {
 	/**
 	 * Ask the operator to confirm, or hard-error when nothing can answer.
 	 *
-	 * The terminal check is passed in rather than read here, so both branches can be
-	 * exercised. STDIN is never a terminal under PHPUnit, which would otherwise leave
-	 * the prompt itself untested.
+	 * The answer is read here rather than through WP_CLI::confirm(), which exits with
+	 * status 0 on anything but "y". This command is meant to be chained with the step
+	 * that deactivates WooCommerce Memberships, and that step cannot see a warning
+	 * line — which is why a live run that wrote a bad gate halts with 1. Declining is a
+	 * stronger stop signal than either, and it must not be the one that reports
+	 * success: the run writes no gates at all, so the deactivation would take away the
+	 * only thing still restricting the content.
 	 *
-	 * @param string $question       The yes/no question.
-	 * @param array  $assoc_args     The command's named args, passed through to WP-CLI
-	 *                               so --yes answers the prompt.
-	 * @param bool   $stdin_is_a_tty Whether STDIN is a terminal.
+	 * The terminal check and the answer are passed in rather than read here, so both
+	 * branches can be exercised. STDIN is never a terminal under PHPUnit, which would
+	 * otherwise leave the prompt itself untested.
+	 *
+	 * @param string        $question       The yes/no question.
+	 * @param array         $assoc_args     The command's named args, so --yes answers the
+	 *                                      prompt.
+	 * @param bool          $stdin_is_a_tty Whether STDIN is a terminal.
+	 * @param callable|null $read_answer    Reads the operator's answer; defaults to a line
+	 *                                      of STDIN.
 	 *
 	 * @return void
 	 */
-	private static function confirm_or_error( string $question, array $assoc_args, bool $stdin_is_a_tty ): void {
+	private static function confirm_or_error( string $question, array $assoc_args, bool $stdin_is_a_tty, ?callable $read_answer = null ): void {
+		if ( \WP_CLI\Utils\get_flag_value( $assoc_args, 'yes', false ) ) {
+			return;
+		}
 		if ( self::prompt_is_unanswerable( $assoc_args, $stdin_is_a_tty ) ) {
 			WP_CLI::error(
 				sprintf(
@@ -569,7 +710,24 @@ class Membership_Gates_Migration {
 				)
 			);
 		}
-		WP_CLI::confirm( $question, $assoc_args );
+
+		WP_CLI::log( $question . ' [y/n] ' );
+		$answer = strtolower( trim( (string) ( $read_answer ? $read_answer() : self::read_stdin_line() ) ) );
+		if ( 'y' !== $answer ) {
+			WP_CLI::error( 'Stopped at the confirmation prompt. Nothing has been written, so no gate is in place for these plans — do not deactivate WooCommerce Memberships.' );
+		}
+	}
+
+	/**
+	 * Read one line from STDIN.
+	 *
+	 * STDIN is only defined under the CLI SAPI, so the constant is checked before it is
+	 * read. An empty string at EOF is not "y", so the caller stops the run.
+	 *
+	 * @return string
+	 */
+	private static function read_stdin_line(): string {
+		return defined( 'STDIN' ) ? (string) fgets( STDIN ) : '';
 	}
 
 	/**
@@ -644,6 +802,77 @@ class Membership_Gates_Migration {
 	}
 
 	/**
+	 * Name the gate groups that would publish an open gate.
+	 *
+	 * A group whose plans all require a purchase, but for which no paid access rule can
+	 * be built, writes an active paid mode carrying no access rule — which demands no
+	 * purchase and admits every registered reader.
+	 *
+	 * The test is build_access_rules() itself rather than "the product list is empty".
+	 * Those coincide only while classify_product_ids() places every resolved product in
+	 * one of its two buckets; asking the builder what it would emit keeps the guard
+	 * true if a third outcome is ever added, where the product-list test would pass a
+	 * group whose gate carries no rule.
+	 *
+	 * @param array[] $plan_groups        Gate groups, keyed as $products_by_group is.
+	 * @param array[] $products_by_group  resolve_product_ids() results, keyed by group.
+	 * @param array[] $durations_by_group resolve_group_duration() results, keyed by group.
+	 *
+	 * @return string[] The gate titles at risk, in group order.
+	 */
+	private static function find_paid_groups_without_access_rules( array $plan_groups, array $products_by_group, array $durations_by_group ): array {
+		$titles = [];
+		foreach ( $plan_groups as $key => $group ) {
+			if ( ! self::group_requires_purchase( $group ) ) {
+				continue;
+			}
+			if ( empty( self::build_access_rules( $products_by_group[ $key ], $durations_by_group[ $key ]['duration'] ) ) ) {
+				$titles[] = self::gate_title( $group );
+			}
+		}
+		return $titles;
+	}
+
+	/**
+	 * Name the gate groups whose access rules would leave one of their products out.
+	 *
+	 * The rule list coming back non-empty is not the same question. A group granting on
+	 * a subscription and a one-time product writes the subscription rule either way, so
+	 * a one-time product with no access length is dropped behind a rule list that looks
+	 * healthy — which is exactly what a carve-out creates when it hands one-time
+	 * products to a group that has none of its own. Comparing the products the rules
+	 * name against the ones classify_product_ids() found is what catches it.
+	 *
+	 * @param array[] $plan_groups        Gate groups, keyed as $products_by_group is.
+	 * @param array[] $products_by_group  resolve_product_ids() results, keyed by group.
+	 * @param array[] $durations_by_group resolve_group_duration() results, keyed by group.
+	 *
+	 * @return array<string,int[]> Map of gate title => the product IDs no rule would name.
+	 */
+	private static function find_groups_with_unwritten_products( array $plan_groups, array $products_by_group, array $durations_by_group ): array {
+		$unwritten = [];
+		foreach ( $plan_groups as $key => $group ) {
+			if ( ! self::group_requires_purchase( $group ) ) {
+				continue;
+			}
+			$written = [];
+			foreach ( self::build_access_rules( $products_by_group[ $key ], $durations_by_group[ $key ]['duration'] ) as $rule_group ) {
+				foreach ( $rule_group as $rule ) {
+					$written = array_merge(
+						$written,
+						'one_time_purchase' === $rule['slug'] ? $rule['value']['product_ids'] : $rule['value']
+					);
+				}
+			}
+			$missing = array_values( array_diff( $products_by_group[ $key ]['product_ids'], array_map( 'intval', $written ) ) );
+			if ( ! empty( $missing ) ) {
+				$unwritten[ self::gate_title( $group ) ] = $missing;
+			}
+		}
+		return $unwritten;
+	}
+
+	/**
 	 * The gates each about-to-be-created group would supersede.
 	 *
 	 * Only groups whose title matches no existing gate are considered: a group that
@@ -696,12 +925,6 @@ class Membership_Gates_Migration {
 		// is a rule with content behind it — but the evaluator still has to be able
 		// to resolve the slug, e.g. a taxonomy that is no longer registered on the site.
 		$content_rules = \Newspack\Content_Rules::get_gate_content_rules( $gate_id );
-		$unresolvable  = array_values(
-			array_filter(
-				array_column( $content_rules, 'slug' ),
-				fn( $slug ) => ! self::is_content_rule_slug_resolvable( $slug )
-			)
-		);
 
 		// A gate can be written with rules and still evaluate as having fewer, or none
 		// — say so and name the slugs, because the summary's Content Rules column
@@ -715,24 +938,9 @@ class Membership_Gates_Migration {
 			$issues[] = $valueless;
 		}
 
-		if ( ! empty( $unresolvable ) ) {
-			if ( count( $unresolvable ) === count( $content_rules ) ) {
-				$issues[] = sprintf(
-					'none of its content rules resolve to a post type or taxonomy the evaluator can match (%s)',
-					implode( ', ', $unresolvable )
-				);
-			} else {
-				// A partially dead rule set is a partial leak, not a clean gate: the rules
-				// combine with 'any', so the content selected by the unresolvable rules is
-				// left ungated while the rest is covered. A plan restricting all posts plus a
-				// category is exactly this shape, and it is a common way plans are configured.
-				$issues[] = sprintf(
-					'%d of its %d content rules do not resolve to a post type or taxonomy the evaluator can match (%s), so the content they select stays ungated',
-					count( $unresolvable ),
-					count( $content_rules ),
-					implode( ', ', $unresolvable )
-				);
-			}
+		$unresolvable = self::describe_unresolvable_rules( $content_rules );
+		if ( null !== $unresolvable ) {
+			$issues[] = $unresolvable;
 		}
 
 		// A gate with neither mode active is skipped outright; an active mode with no
@@ -787,7 +995,7 @@ class Membership_Gates_Migration {
 	 *
 	 * A computable subset of verify_migrated_gate() that needs no written gate: slugs
 	 * that the evaluator cannot resolve, and purchase-mode gaps (no custom_access
-	 * layout extracted, or no usable product IDs). Called in dry-run mode so the
+	 * layout extracted, or no paid access rule to write). Called in dry-run mode so the
 	 * planning pass surfaces those warnings before anything is written.
 	 *
 	 * The two empty-layout issues are dry-run only. verify_migrated_gate() reads the
@@ -799,14 +1007,15 @@ class Membership_Gates_Migration {
 	 * @param array[] $ac_rules           AC-format content rules: [ [ 'slug' => string, 'value' => string[] ], ... ].
 	 * @param bool    $has_purchase       Whether every plan in the group requires a purchase.
 	 * @param array   $layouts            Extracted layout markup keyed by 'registration' and 'custom_access'.
-	 * @param int[]   $merged_product_ids Merged parent product IDs for the custom_access mode.
 	 * @param bool    $has_gate_post      Whether a np_memberships_gate post was found for the group.
 	 *                                    An empty layout only means content was lost when
 	 *                                    there was a post to lose it from.
+	 * @param bool    $emits_access_rule  Whether build_access_rules() would emit anything
+	 *                                    for this group. Only consulted for a purchase group.
 	 *
 	 * @return string[] Human-readable problems; empty when no issues are predicted.
 	 */
-	private static function compute_pre_write_issues( array $ac_rules, bool $has_purchase, array $layouts, array $merged_product_ids, bool $has_gate_post = true ): array {
+	private static function compute_pre_write_issues( array $ac_rules, bool $has_purchase, array $layouts, bool $has_gate_post = true, bool $emits_access_rule = true ): array {
 		$issues = [];
 
 		// Mirror the empty-value check from verify_migrated_gate(): a rule the read
@@ -820,26 +1029,9 @@ class Membership_Gates_Migration {
 		// Mirror the unresolvable-slug check from verify_migrated_gate(): slugs the
 		// evaluator cannot resolve map to no content, so those rules leave their
 		// content ungated after cutover.
-		$unresolvable = array_values(
-			array_filter(
-				array_column( $ac_rules, 'slug' ),
-				fn( $slug ) => ! self::is_content_rule_slug_resolvable( $slug )
-			)
-		);
-		if ( ! empty( $unresolvable ) ) {
-			if ( count( $unresolvable ) === count( $ac_rules ) ) {
-				$issues[] = sprintf(
-					'none of its content rules resolve to a post type or taxonomy the evaluator can match (%s)',
-					implode( ', ', $unresolvable )
-				);
-			} else {
-				$issues[] = sprintf(
-					'%d of its %d content rules do not resolve to a post type or taxonomy the evaluator can match (%s), so the content they select stays ungated',
-					count( $unresolvable ),
-					count( $ac_rules ),
-					implode( ', ', $unresolvable )
-				);
-			}
+		$unresolvable = self::describe_unresolvable_rules( $ac_rules );
+		if ( null !== $unresolvable ) {
+			$issues[] = $unresolvable;
 		}
 
 		// create_gate() seeds a non-empty default layout and apply_layout() declines to
@@ -857,19 +1049,22 @@ class Membership_Gates_Migration {
 			$issues[] = 'its paid access layout extracted to nothing, so the paid gate will show default content rather than the authored one';
 		}
 
-		if ( $has_purchase ) {
-			if ( null === $layouts['custom_access'] ) {
-				// No custom_access layout found → apply_layout() is never called for
-				// the custom_access mode → paid access mode stays inactive → any
-				// registered reader passes. Mirrors verify_migrated_gate()'s "paid
-				// access mode is not active" check.
-				$issues[] = 'it migrates a plan that requires a purchase, but no paid access layout was found — the paid access mode will not be activated, so any registered reader would get in';
-			} elseif ( empty( $merged_product_ids ) ) {
-				// apply_layout() is called but with an empty $product_ids → access_rules
-				// will be an empty array → mode is active with no purchase constraint.
-				// Mirrors verify_migrated_gate()'s "active but has no access rules" check.
-				$issues[] = 'its paid access mode will have no access rules (no usable product IDs remain), so it will ask for no purchase — any registered reader would get in';
-			}
+		// The other route to an open paid gate: a purchase group for which no paid access
+		// rule can be built. On --live the caller refuses the run before the first write,
+		// so this row is the dry run's account of it — one per group, so the operator can
+		// fix the whole set in one pass.
+		if ( $has_purchase && ! $emits_access_rule ) {
+			$issues[] = 'it migrates a plan that requires a purchase, but none of its products resolve to something a gate rule can name — the gate would activate paid access with no purchase requirement, letting in any registered reader';
+		}
+
+		// A missing layout stays a warning because the operator can add one and re-run,
+		// where a deleted product may not be recoverable.
+		if ( $has_purchase && null === $layouts['custom_access'] ) {
+			// No custom_access layout found → apply_layout() is never called for the
+			// custom_access mode → paid access mode stays inactive → any registered
+			// reader passes. Mirrors verify_migrated_gate()'s "paid access mode is not
+			// active" check.
+			$issues[] = 'it migrates a plan that requires a purchase, but no paid access layout was found — the paid access mode will not be activated, so any registered reader would get in';
 		}
 
 		return $issues;
@@ -916,6 +1111,61 @@ class Membership_Gates_Migration {
 	}
 
 	/**
+	 * Report content rules whose slug the evaluator cannot resolve.
+	 *
+	 * What an unresolvable slug costs depends on the rule's role, because the
+	 * evaluator's answer for it is "this post does not match" for every post.
+	 * As an inclusion that is a leak of the content the rule was meant to cover; as an
+	 * exclusion the same answer reads as "every post is carved out", and
+	 * Content_Restriction_Control::get_post_gates() then skips the gate for every post
+	 * on the site. Only a carve-out writes an exclusion, and carve_out_direction()
+	 * refuses a rule set holding an unresolvable slug — so this describes a gate that
+	 * arrived by hand or from an earlier run, and it has to name the difference,
+	 * because a dead gate reported as a partial gap reads as a slice going free.
+	 *
+	 * @param array[] $rules AC-format content rules.
+	 *
+	 * @return string|null A human-readable problem, or null when every slug resolves.
+	 */
+	private static function describe_unresolvable_rules( array $rules ): ?string {
+		$unresolvable = array_values(
+			array_filter( $rules, fn( $rule ) => ! self::is_content_rule_slug_resolvable( $rule['slug'] ) )
+		);
+		if ( empty( $unresolvable ) ) {
+			return null;
+		}
+
+		$dead_exclusions = array_column(
+			array_filter( $unresolvable, fn( $rule ) => ! empty( $rule['exclusion'] ) ),
+			'slug'
+		);
+		if ( ! empty( $dead_exclusions ) ) {
+			return sprintf(
+				'its exclusion rule(s) %s do not resolve to a post type or taxonomy the evaluator can match, and an exclusion nothing resolves excludes every post — the gate is carved out of all of its own content and restricts nothing at all',
+				implode( ', ', $dead_exclusions )
+			);
+		}
+
+		$slugs = array_column( $unresolvable, 'slug' );
+		if ( count( $unresolvable ) === count( $rules ) ) {
+			return sprintf(
+				'none of its content rules resolve to a post type or taxonomy the evaluator can match (%s)',
+				implode( ', ', $slugs )
+			);
+		}
+		// A partially dead rule set is a partial leak, not a clean gate: the rules
+		// combine with 'any', so the content selected by the unresolvable rules is left
+		// ungated while the rest is covered. A plan restricting all posts plus a
+		// category is exactly this shape, and it is a common way plans are configured.
+		return sprintf(
+			'%d of its %d content rules do not resolve to a post type or taxonomy the evaluator can match (%s), so the content they select stays ungated',
+			count( $unresolvable ),
+			count( $rules ),
+			implode( ', ', $slugs )
+		);
+	}
+
+	/**
 	 * Whether the gate evaluator can resolve a content-rule slug to real content.
 	 *
 	 * Content_Restriction_Control handles 'post_types', 'specific_posts' and
@@ -940,19 +1190,19 @@ class Membership_Gates_Migration {
 	 * are collected into $skipped instead of grouped. Plans that map to the same
 	 * canonical rule fingerprint share a group (and therefore a single gate).
 	 *
-	 * This is the primary grouping/split seam for NPPD-2064 (fingerprint
-	 * gate-splitting): the fix lands here (and in the merged-product consolidation
-	 * in migrate_membership_gates()). This method depends on
-	 * WC_Memberships_Membership_Plan, so its grouping/split behavior is NOT covered
-	 * by unit tests — the NPPD-2064 author must add net-new tests (the existing
-	 * compute_rules_fingerprint() tests only pin canonicality, which the fix keeps).
+	 * Identical fingerprints are the only thing this groups on. Plans gating the same
+	 * content under non-identical rule sets are folded together after it, by
+	 * consolidate_plan_groups(). This method depends on WC_Memberships_Membership_Plan,
+	 * so it is exercised end-to-end rather than by unit tests.
 	 *
 	 * @param int[] $plan_ids Plan post IDs.
 	 * @param array $skipped  Skipped-plan summary rows, appended to by reference.
 	 *
 	 * @return array<string,array> Map of fingerprint => list of plan descriptors, each
-	 *                             [ 'pid', 'name', 'access_method', 'ac_rules', 'product_ids',
-	 *                             'one_time_duration' ].
+	 *                             [ 'pid', 'name', 'access_method', 'ac_rules',
+	 *                             'product_ids', 'one_time_duration' ]. The plan's member
+	 *                             count is not among them: {@see plan_member_count()}
+	 *                             resolves it from 'pid' for the few plans that need it.
 	 */
 	private static function group_plans_by_fingerprint( array $plan_ids, array &$skipped ): array {
 		$plan_groups = [];
@@ -1040,6 +1290,899 @@ class Membership_Gates_Migration {
 	}
 
 	/**
+	 * Whether every element of $subset_value is present in $superset_value.
+	 *
+	 * Values are the stringified term-ID or post-type-slug lists that
+	 * map_rules_to_ac_format() emits, so plain set containment decides coverage.
+	 *
+	 * @param string[] $superset_value The candidate covering value list.
+	 * @param string[] $subset_value   The value list that must be fully contained.
+	 *
+	 * @return bool
+	 */
+	private static function rule_value_covers( array $superset_value, array $subset_value ): bool {
+		return empty( array_diff( $subset_value, $superset_value ) );
+	}
+
+	/**
+	 * Restate a rule set's taxonomy values the way the evaluator reads them.
+	 *
+	 * The evaluator gates a term's descendants along with the term itself, so a plan
+	 * naming a parent category also gates every post filed under its children.
+	 * Comparing the stored term IDs alone would read a child-category plan as gating
+	 * content the parent-category plan does not — leaving the two as separate gates
+	 * with disjoint product lists, which is the denial this consolidation exists to
+	 * prevent, in its commonest shape. Calls the evaluator's own expansion rather than
+	 * repeating it, so coverage is decided the way access is.
+	 *
+	 * Only the coverage comparison sees these values. The gate is written from the
+	 * group's own `ac_rules`, so an expanded term never reaches the database.
+	 *
+	 * @param array[] $ac_rules AC-format content rules.
+	 *
+	 * @return array[] The same rules with hierarchical taxonomy values expanded.
+	 */
+	private static function expand_rule_set_for_coverage( array $ac_rules ): array {
+		return array_map(
+			function ( $rule ) {
+				if ( in_array( $rule['slug'], [ 'post_types', 'specific_posts' ], true ) ) {
+					return $rule;
+				}
+				$taxonomy = \get_taxonomy( $rule['slug'] );
+				if ( ! $taxonomy || ! $taxonomy->hierarchical ) {
+					return $rule;
+				}
+				$rule['value'] = array_map(
+					'strval',
+					\Newspack\Content_Restriction_Control::expand_hierarchical_terms( $rule['value'], $taxonomy )
+				);
+				return $rule;
+			},
+			$ac_rules
+		);
+	}
+
+	/**
+	 * Whether $superset_rules covers all content gated by $subset_rules.
+	 *
+	 * A rule set gates the union of its rules' content, so $subset_rules is covered
+	 * when every one of its rules has a same-slug rule in $superset_rules whose value
+	 * contains it. Coverage is tested per slug and never across slugs: a `post_types`
+	 * rule does not cover a `specific_posts` rule for a post of that type, so those two
+	 * plans stay separate gates and surface as an overlap warning instead.
+	 *
+	 * An empty rule set is never a subset. It gates nothing rather than everything —
+	 * Content_Restriction_Control::get_post_gates() skips a gate carrying no content
+	 * rules — and group_plans_by_fingerprint() already drops such a plan, so this guards
+	 * a shape that cannot currently arrive rather than a live case.
+	 *
+	 * @param array[] $superset_rules The candidate covering rule set.
+	 * @param array[] $subset_rules   The rule set that must be fully covered.
+	 *
+	 * @return bool
+	 */
+	private static function rules_cover( array $superset_rules, array $subset_rules ): bool {
+		if ( empty( $subset_rules ) ) {
+			return false;
+		}
+		foreach ( $subset_rules as $needle ) {
+			$covered = false;
+			foreach ( $superset_rules as $candidate ) {
+				if ( $candidate['slug'] === $needle['slug']
+					&& self::rule_value_covers( $candidate['value'], $needle['value'] ) ) {
+					$covered = true;
+					break;
+				}
+			}
+			if ( ! $covered ) {
+				return false;
+			}
+		}
+		return true;
+	}
+
+	/**
+	 * Reduce a rule set to its coverage signature: fully-gated post types, taxonomy
+	 * terms keyed by taxonomy slug, and specific post IDs.
+	 *
+	 * @param array[] $ac_rules AC-format content rules.
+	 *
+	 * @return array{post_types: string[], specific: string[], taxonomies: array<string,string[]>}
+	 */
+	private static function coverage_signature( array $ac_rules ): array {
+		$signature = [
+			'post_types' => [],
+			'specific'   => [],
+			'taxonomies' => [],
+		];
+		foreach ( $ac_rules as $rule ) {
+			if ( 'post_types' === $rule['slug'] ) {
+				$signature['post_types'] = array_merge( $signature['post_types'], $rule['value'] );
+			} elseif ( 'specific_posts' === $rule['slug'] ) {
+				$signature['specific'] = array_merge( $signature['specific'], $rule['value'] );
+			} else {
+				$signature['taxonomies'][ $rule['slug'] ] = array_merge( $signature['taxonomies'][ $rule['slug'] ] ?? [], $rule['value'] );
+			}
+		}
+		return $signature;
+	}
+
+	/**
+	 * Whether two rule sets could gate a common piece of content.
+	 *
+	 * Deliberately conservative: a whole-post-type rule counts as overlapping any
+	 * taxonomy-scoped or specific-post rule on the other side, because those narrower
+	 * rules select posts the post-type rule also selects. It exists only to flag
+	 * denial risk in the undecidable (non-subset) case, so a false positive costs a
+	 * warning while a miss costs a reader their access.
+	 *
+	 * Two overlaps it cannot see, both needing a post query to settle: a specific-post
+	 * rule against a taxonomy rule whose term that post carries, and two rules on
+	 * different taxonomies that some post carries both of.
+	 *
+	 * @param array[] $a First rule set.
+	 * @param array[] $b Second rule set.
+	 *
+	 * @return bool
+	 */
+	private static function rule_sets_overlap( array $a, array $b ): bool {
+		$sig_a = self::coverage_signature( $a );
+		$sig_b = self::coverage_signature( $b );
+
+		// The same whole post type gated on both sides.
+		if ( array_intersect( $sig_a['post_types'], $sig_b['post_types'] ) ) {
+			return true;
+		}
+		// The same specific post gated on both sides.
+		if ( array_intersect( $sig_a['specific'], $sig_b['specific'] ) ) {
+			return true;
+		}
+		// The same term of the same taxonomy gated on both sides.
+		foreach ( $sig_a['taxonomies'] as $taxonomy => $terms ) {
+			if ( ! empty( $sig_b['taxonomies'][ $taxonomy ] ) && array_intersect( $terms, $sig_b['taxonomies'][ $taxonomy ] ) ) {
+				return true;
+			}
+		}
+		// A whole post type on one side and any narrower rule on the other: the narrower
+		// rule's posts are of some post type, and this cannot tell which.
+		$a_narrow = ! empty( $sig_a['specific'] ) || ! empty( $sig_a['taxonomies'] );
+		$b_narrow = ! empty( $sig_b['specific'] ) || ! empty( $sig_b['taxonomies'] );
+		if ( ( ! empty( $sig_a['post_types'] ) && $b_narrow ) || ( ! empty( $sig_b['post_types'] ) && $a_narrow ) ) {
+			return true;
+		}
+		return false;
+	}
+
+	/**
+	 * A rule set's canonical string form, used to order candidate roots.
+	 *
+	 * Slugs and values are sorted, so the string depends on what the rule set gates
+	 * and not on the order the rules or their values happen to be in.
+	 *
+	 * @param array[] $rules AC-format content rules.
+	 *
+	 * @return string
+	 */
+	private static function rule_set_signature( array $rules ): string {
+		$normalized = array_map(
+			function ( $rule ) {
+				$value = array_map( 'strval', $rule['value'] );
+				sort( $value );
+				return $rule['slug'] . ':' . implode( ',', $value );
+			},
+			$rules
+		);
+		sort( $normalized );
+		return implode( '|', $normalized );
+	}
+
+	/**
+	 * Whether group $a is the better root of the two, when neither wins on rule count.
+	 *
+	 * A total order, so absorption stays antisymmetric and the chain resolution below
+	 * terminates. Signature first, so the answer does not move when the same catalogue
+	 * arrives in a different order; array position only settles the case where two
+	 * groups gate identically once expanded, and there the pick is arbitrary anyway.
+	 *
+	 * @param string[] $signatures Rule-set signatures, parallel to the rule sets.
+	 * @param int      $a          Candidate index.
+	 * @param int      $b          Incumbent index.
+	 *
+	 * @return bool
+	 */
+	private static function root_precedes( array $signatures, int $a, int $b ): bool {
+		if ( $signatures[ $a ] !== $signatures[ $b ] ) {
+			return $signatures[ $a ] < $signatures[ $b ];
+		}
+		return $a < $b;
+	}
+
+	/**
+	 * Which of two rule sets can host an exclusion carve-out of the other.
+	 *
+	 * A carve-out writes the broad group's gate as "its own content, except the narrow
+	 * group's" and hands the narrow group's gate the broad group's access products.
+	 * Both populations then reach what Memberships gave them: the broad plan's holders
+	 * through the broad gate outside the carve-out and through the narrow gate inside
+	 * it, the narrow plan's holders through the narrow gate alone. It repairs what
+	 * merging cannot, because gates combine with AND — a post matching two gates
+	 * demands both product lists, which is the denial this command exists to prevent.
+	 *
+	 * Three conditions have to hold, each a hard limit rather than a preference:
+	 *
+	 * - Neither side carries a `specific_posts` rule. That rule is an inclusion
+	 *   override evaluated ahead of exclusions in
+	 *   Content_Restriction_Control::get_post_gates(), so no carve-out can remove a
+	 *   post it names.
+	 * - The two rule sets share no slug. The wizard renders one row per slug and
+	 *   applies an edit to every rule carrying it (see the audience wizard's
+	 *   content-rules editor), so a gate holding both an inclusion and an exclusion of
+	 *   one slug cannot be edited afterwards without corrupting one of them.
+	 * - Exactly one side gates whole post types. That is the only shape where broad and
+	 *   narrow are decidable from the rules alone; anything else needs a post query.
+	 * - Every slug in the narrow rule set resolves to a post type or taxonomy the
+	 *   evaluator can match. A slug it cannot resolve answers "this post does not
+	 *   match" for every post, which is harmless as the inclusion the narrow rule is
+	 *   today and fatal as the exclusion the carve-out would make of it: every post
+	 *   reads as carved out, and get_post_gates() skips the broad gate site-wide. The
+	 *   rule has to be checked before it changes role.
+	 *
+	 * @param array[] $rules_a First rule set, unexpanded.
+	 * @param array[] $rules_b Second rule set, unexpanded.
+	 *
+	 * @return string|null 'a' or 'b' for the side that hosts the exclusion, null when
+	 *                     the overlap cannot be repaired this way.
+	 */
+	private static function carve_out_direction( array $rules_a, array $rules_b ): ?string {
+		if ( empty( $rules_a ) || empty( $rules_b ) ) {
+			return null;
+		}
+
+		$slugs_a = array_column( $rules_a, 'slug' );
+		$slugs_b = array_column( $rules_b, 'slug' );
+
+		if ( in_array( 'specific_posts', $slugs_a, true ) || in_array( 'specific_posts', $slugs_b, true ) ) {
+			return null;
+		}
+		if ( array_intersect( $slugs_a, $slugs_b ) ) {
+			return null;
+		}
+
+		$a_gates_post_types = in_array( 'post_types', $slugs_a, true );
+		$b_gates_post_types = in_array( 'post_types', $slugs_b, true );
+		if ( $a_gates_post_types === $b_gates_post_types ) {
+			return null;
+		}
+
+		$narrow_slugs = $a_gates_post_types ? $slugs_b : $slugs_a;
+		foreach ( $narrow_slugs as $slug ) {
+			if ( ! self::is_content_rule_slug_resolvable( $slug ) ) {
+				return null;
+			}
+		}
+
+		return $a_gates_post_types ? 'a' : 'b';
+	}
+
+	/**
+	 * Repair the overlaps that an exclusion carve-out can express.
+	 *
+	 * Runs over the pairs consolidation could not merge and rewrites the ones whose
+	 * shape {@see carve_out_direction()} accepts, leaving the rest for the caller to
+	 * warn about. Slug disjointness is retested against the broad group's rules as they
+	 * stand, not as they arrived, so a second carve-out onto the same gate is refused
+	 * when it would collide with the exclusion the first one added.
+	 *
+	 * Both sides have to require a purchase. A carve-out excuses the narrow group's
+	 * content from the broad gate, which across the boundary hands content a reader
+	 * reaches today by registering to a gate demanding a subscription — the reason
+	 * absorption does not cross it either. Two signup groups are refused for the
+	 * opposite reason: neither gate can deny the other's members, there are no access
+	 * products to transfer, and the repair would write an exclusion someone has to
+	 * maintain in exchange for nothing.
+	 *
+	 * Pairs are taken largest-population first, and by rule-set signature after that.
+	 * A gate can host only one carve-out per slug, so on a site with one site-wide plan
+	 * and several section plans most pairs stay unrepaired — and which one is repaired
+	 * must not turn on the order get_plans() happened to return, which moves when a
+	 * plan is published between the approved dry run and the live run.
+	 *
+	 * @param array[] $groups     Consolidated groups, keyed by root index.
+	 * @param array   $overlaps   [i, j] index pairs that could not be merged.
+	 * @param array   $carved     Filled with one description per repaired pair, by reference.
+	 * @param array   $carve_outs Filled with one record per repaired pair, by reference:
+	 *                            the two group indices, the products and access length
+	 *                            the narrow group takes on, and the exclusion rules the
+	 *                            broad group gained.
+	 *
+	 * @return array{groups: array[], overlaps: array} The groups with carve-outs applied, and
+	 *               the overlaps that remain, each [ 'pair' => [i, j], 'blocked_by_carve_out'
+	 *               => bool ] — the flag marking a pair that only a repair already made on
+	 *               the same slug stood in the way of.
+	 */
+	private static function apply_carve_outs( array $groups, array $overlaps, array &$carved, array &$carve_outs ): array {
+		$surviving = [];
+		// The rules as they arrived, so a pair refused after the fact can be told from
+		// one that was never repairable.
+		$arriving = array_map( fn( $group ) => $group[0]['ac_rules'], $groups );
+
+		usort(
+			$overlaps,
+			function ( $a, $b ) use ( $groups ) {
+				$members_a = self::group_member_count( $groups[ $a[0] ] ) + self::group_member_count( $groups[ $a[1] ] );
+				$members_b = self::group_member_count( $groups[ $b[0] ] ) + self::group_member_count( $groups[ $b[1] ] );
+				return $members_a === $members_b
+					? self::overlap_signature( $groups, $a ) <=> self::overlap_signature( $groups, $b )
+					: $members_b <=> $members_a;
+			}
+		);
+
+		foreach ( $overlaps as $pair ) {
+			list( $i, $j ) = $pair;
+
+			$both_paid = self::group_requires_purchase( $groups[ $i ] ) && self::group_requires_purchase( $groups[ $j ] );
+			$direction = $both_paid
+				? self::carve_out_direction( $groups[ $i ][0]['ac_rules'], $groups[ $j ][0]['ac_rules'] )
+				: null;
+			if ( null === $direction ) {
+				$surviving[] = [
+					'pair'                 => $pair,
+					'blocked_by_carve_out' => $both_paid && null !== self::carve_out_direction( $arriving[ $i ], $arriving[ $j ] ),
+				];
+				continue;
+			}
+
+			$broad  = 'a' === $direction ? $i : $j;
+			$narrow = 'a' === $direction ? $j : $i;
+
+			// The broad group's products as its own gate will carry them, not its raw
+			// meta: validating once on the side that owns them keeps a dropped ID
+			// reported under the gate it came from, rather than a second time under the
+			// gate it was handed to.
+			$broad_products = self::resolve_product_ids( $groups[ $broad ] );
+			$broad_duration = self::resolve_group_duration( $groups[ $broad ], null );
+
+			$exclusion_rules = [];
+			foreach ( $groups[ $narrow ][0]['ac_rules'] as $rule ) {
+				$rule['exclusion']                 = true;
+				$exclusion_rules[]                 = $rule;
+				$groups[ $broad ][0]['ac_rules'][] = $rule;
+			}
+
+			$post_count = self::count_carved_posts( $groups[ $narrow ][0]['ac_rules'], $arriving[ $broad ] );
+
+			$carve_outs[] = [
+				'narrow'       => $narrow,
+				'broad'        => $broad,
+				'source'       => self::gate_title( $groups[ $broad ] ),
+				'product_ids'  => $broad_products['product_ids'],
+				'one_time_ids' => $broad_products['one_time_ids'],
+				'duration'     => $broad_duration['duration'],
+				'rules'        => $exclusion_rules,
+			];
+
+			$carved[] = sprintf(
+				'"%s" out of "%s" (%d post(s))',
+				self::gate_title( $groups[ $narrow ] ),
+				self::gate_title( $groups[ $broad ] ),
+				$post_count
+			);
+
+			WP_CLI::warning( self::format_carve_out_warning( $groups[ $narrow ], $groups[ $broad ], $post_count ) );
+		}
+
+		return [
+			'groups'   => $groups,
+			'overlaps' => $surviving,
+		];
+	}
+
+	/**
+	 * An overlap pair's canonical string form, used to break a tie on member count.
+	 *
+	 * Order-independent on both counts: the two signatures are sorted between
+	 * themselves, and each is already independent of rule order. A gate hosts one
+	 * carve-out per slug, so which pair is repaired must not turn on the order
+	 * get_plans() returned the plans in.
+	 *
+	 * @param array[] $groups Consolidated groups, keyed by root index.
+	 * @param array   $pair   An [i, j] index pair.
+	 *
+	 * @return string
+	 */
+	private static function overlap_signature( array $groups, array $pair ): string {
+		$signatures = [
+			self::rule_set_signature( $groups[ $pair[0] ][0]['ac_rules'] ),
+			self::rule_set_signature( $groups[ $pair[1] ][0]['ac_rules'] ),
+		];
+		sort( $signatures );
+		return implode( '||', $signatures );
+	}
+
+	/**
+	 * How many published posts a carve-out actually covers.
+	 *
+	 * Overlap detection is decided from the rules alone and never compares across
+	 * slugs, so a whole-post-type group and a taxonomy group always read as
+	 * overlapping — whether or not one post carries both. That was a warning's worth of
+	 * caution while nothing was written from it; a carve-out writes an exclusion and
+	 * moves access products, so the operator is given the number that separates a real
+	 * repair from a no-op.
+	 *
+	 * @param array[] $narrow_rules The rules that become the exclusion. Taxonomy rules
+	 *                              only — carve_out_direction() refuses the pair otherwise.
+	 * @param array[] $broad_rules  The rules of the gate hosting the exclusion.
+	 *
+	 * @return int Published posts of the broad group's post types carrying one of the
+	 *             narrow group's terms.
+	 */
+	private static function count_carved_posts( array $narrow_rules, array $broad_rules ): int {
+		$post_types = [];
+		foreach ( $broad_rules as $rule ) {
+			if ( 'post_types' === $rule['slug'] && empty( $rule['exclusion'] ) ) {
+				$post_types = array_merge( $post_types, $rule['value'] );
+			}
+		}
+		$tax_query = [ 'relation' => 'OR' ];
+		foreach ( $narrow_rules as $rule ) {
+			$tax_query[] = [
+				'taxonomy'         => $rule['slug'],
+				'field'            => 'term_id',
+				'terms'            => array_map( 'intval', $rule['value'] ),
+				'include_children' => true,
+			];
+		}
+		if ( empty( $post_types ) || 1 === count( $tax_query ) ) {
+			return 0;
+		}
+
+		$query = new \WP_Query(
+			[
+				'post_type'              => array_values( array_unique( $post_types ) ),
+				'post_status'            => 'publish',
+				'posts_per_page'         => 1,
+				'fields'                 => 'ids',
+				'ignore_sticky_posts'    => true,
+				'update_post_meta_cache' => false,
+				'update_post_term_cache' => false,
+				'tax_query'              => $tax_query, // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_tax_query -- One count, in a pre-flight the operator is waiting on.
+			]
+		);
+		return (int) $query->found_posts;
+	}
+
+	/**
+	 * Gather what each carved-out group takes on from the gates excluding it.
+	 *
+	 * @param array[] $carve_outs apply_carve_outs() records.
+	 *
+	 * @return array<int,array{product_ids: int[], sources: array[]}> Keyed by the carved-out
+	 *               group's index. 'sources' carries one entry per excluding gate, in the shape
+	 *               resolve_group_duration() reads.
+	 */
+	private static function carried_access_by_group( array $carve_outs ): array {
+		$carried = [];
+		foreach ( $carve_outs as $record ) {
+			$narrow                            = $record['narrow'];
+			$carried[ $narrow ]['product_ids'] = array_values(
+				array_unique( array_merge( $carried[ $narrow ]['product_ids'] ?? [], $record['product_ids'] ) )
+			);
+			$carried[ $narrow ]['sources'][]   = [
+				'name'         => $record['source'],
+				'one_time_ids' => $record['one_time_ids'],
+				'duration'     => $record['duration'],
+			];
+		}
+		return $carried;
+	}
+
+	/**
+	 * Drop the exclusions whose carved-out gate will not hold the content.
+	 *
+	 * An exclusion takes content off this gate and leaves the carved-out gate as the
+	 * only thing over it. Where that gate could not be written, or migrates a purchase
+	 * plan with no paid mode to activate, keeping the exclusion would put paid content
+	 * behind free registration or behind nothing at all. Dropping it restores the
+	 * overlap the carve-out repaired, which is the state this run started in.
+	 *
+	 * @param array[]         $ac_rules    The gate group's content rules.
+	 * @param array[]         $carve_outs  apply_carve_outs() records.
+	 * @param int             $position    This group's index.
+	 * @param array<int,bool> $gate_holds Whether each already-written gate will enforce.
+	 * @param string[]        $gate_titles Gate titles, keyed by group index.
+	 *
+	 * @return array[] The rules to write.
+	 */
+	private static function drop_unheld_carve_outs( array $ac_rules, array $carve_outs, int $position, array $gate_holds, array $gate_titles ): array {
+		foreach ( $carve_outs as $record ) {
+			if ( $record['broad'] !== $position || false !== ( $gate_holds[ $record['narrow'] ] ?? true ) ) {
+				continue;
+			}
+			$ac_rules = array_values(
+				array_filter( $ac_rules, fn( $rule ) => ! in_array( $rule, $record['rules'], true ) )
+			);
+			WP_CLI::warning(
+				sprintf(
+					'"%s" keeps the content it would have excluded for "%s", which was not written as intended and would have been the only gate over that content. The overlap the carve-out repaired is back: review both gates\' priority and access products by hand.',
+					$gate_titles[ $position ],
+					$gate_titles[ $record['narrow'] ]
+				)
+			);
+		}
+		return $ac_rules;
+	}
+
+	/**
+	 * The summary's Content Rules cell, counting carve-out exclusions apart.
+	 *
+	 * A broad gate that gates one post type reads as 2 once a carve-out lands on it,
+	 * which is not what the plan restricts. That table is what an operator reviews
+	 * before cutover, so the exclusion is named rather than folded into the count.
+	 *
+	 * @param array[] $ac_rules The gate's content rules.
+	 *
+	 * @return string
+	 */
+	private static function describe_rule_count( array $ac_rules ): string {
+		$exclusions = count( array_filter( $ac_rules, fn( $rule ) => ! empty( $rule['exclusion'] ) ) );
+		return $exclusions
+			? sprintf( '%d (+%d carve-out)', count( $ac_rules ) - $exclusions, $exclusions )
+			: (string) count( $ac_rules );
+	}
+
+	/**
+	 * Build the warning for one overlap repaired by a carve-out.
+	 *
+	 * Names the residual over-grant rather than claiming the repair is free. The broad
+	 * gate's products land on the narrow gate, so a reader holding only the broad plan
+	 * reaches every post the narrow gate covers — including posts of a type the broad
+	 * plan never gated, which Memberships would have kept from them. Nobody is denied,
+	 * and the alternative is two gates that deny both plans on the shared content.
+	 *
+	 * The overlap is decided from the rules and never across slugs, so the pair is
+	 * suspected rather than demonstrated: the post count is what tells the operator
+	 * which of the two they are looking at, and only they can say whether a count of
+	 * zero today stays zero.
+	 *
+	 * @param array[] $narrow     The group being carved out.
+	 * @param array[] $broad      The group hosting the exclusion.
+	 * @param int     $post_count Published posts the carve-out covers today.
+	 *
+	 * @return string
+	 */
+	private static function format_carve_out_warning( array $narrow, array $broad, int $post_count ): string {
+		return sprintf(
+			'"%1$s" and "%2$s" are suspected of gating overlapping content — %3$d published post(s) match both today. "%2$s" will exclude "%1$s"\'s content, and "%1$s" gains "%2$s"\'s access products, so neither plan\'s members are denied. "%2$s"\'s members reach all of "%1$s"\'s content as a result, including any outside the post types "%2$s" gates.',
+			self::gate_title( $narrow ),
+			self::gate_title( $broad ),
+			$post_count
+		);
+	}
+
+	/**
+	 * Plan how fingerprint groups consolidate by content overlap.
+	 *
+	 * A group whose content is a subset of another's is absorbed into the covering
+	 * group with the most rules, so the two share one gate whose rules cover the union
+	 * of content and whose access products are unioned. Groups that overlap without a
+	 * subset relation cannot be merged safely — one gate would need a single product
+	 * list for disjoint entitlements — and are returned as overlaps for the caller to
+	 * warn about.
+	 *
+	 * Rule count is a proxy for breadth rather than a measure of it — a one-rule
+	 * `post_types` group covers more than a narrow three-rule one — so among covering
+	 * roots that are incomparable to each other the pick is a tie-break, not a
+	 * judgement. It breaks on the rule set's own signature so the partition is the
+	 * same however the plans are ordered: a plan published between the dry run and the
+	 * --live run must not move which gate an absorbed plan's products land on.
+	 *
+	 * Absorption never crosses the purchase boundary. A gate built from a purchase
+	 * group carries custom_access, which Access Control enforces on top of
+	 * registration; folding a purchase group into a signup-only superset would attach
+	 * that subscription requirement to the signup plan's broader content and deny
+	 * registered readers who reach it for free today.
+	 *
+	 * Pure: it decides from the rule sets and purchase flags alone, so the decision can
+	 * be exercised without building plan descriptors or a product catalog.
+	 *
+	 * @param array[] $rule_sets          AC-format rule sets, one per fingerprint group.
+	 * @param bool[]  $group_has_purchase Whether each group carries a purchase plan, parallel to $rule_sets.
+	 *
+	 * @return array{absorbed_by: array<int,int>, overlaps: array<int,int[]>} absorbed_by maps an
+	 *               absorbed group index to its covering root; overlaps lists [i, j] pairs of
+	 *               overlapping roots that could not be merged.
+	 */
+	private static function plan_rule_set_consolidation( array $rule_sets, array $group_has_purchase ): array {
+		$absorbed_by = [];
+		$signatures  = array_map( fn( $rules ) => self::rule_set_signature( $rules ), $rule_sets );
+
+		foreach ( $rule_sets as $i => $rules_i ) {
+			if ( empty( $rules_i ) ) {
+				continue;
+			}
+			$best_root = null;
+			$best_size = -1;
+			foreach ( $rule_sets as $j => $rules_j ) {
+				if ( $i === $j || empty( $rules_j ) ) {
+					continue;
+				}
+				if ( $group_has_purchase[ $i ] !== $group_has_purchase[ $j ] ) {
+					continue;
+				}
+				if ( ! self::rules_cover( $rules_j, $rules_i ) ) {
+					continue;
+				}
+				// Mutual coverage is ordinary once terms are expanded — {parent} and
+				// {parent, child} gate the same content under different fingerprints —
+				// and those two belong on one gate as much as a strict subset does.
+				// Absorbing only into the group that precedes keeps the relation
+				// antisymmetric, so the chain below still terminates.
+				if ( self::rules_cover( $rules_i, $rules_j ) && ! self::root_precedes( $signatures, $j, $i ) ) {
+					continue;
+				}
+				$size = count( $rules_j );
+				if ( null === $best_root || $size > $best_size || ( $size === $best_size && self::root_precedes( $signatures, $j, $best_root ) ) ) {
+					$best_size = $size;
+					$best_root = $j;
+				}
+			}
+			if ( null !== $best_root ) {
+				$absorbed_by[ $i ] = $best_root;
+			}
+		}
+
+		// Resolve absorption chains to their terminal root. Value-nested tiers (category
+		// {5} ⊂ {5,6} ⊂ {5,6,7}) cover each other with equal rule counts, so the
+		// tie-break can point a group at an intermediate root that is itself absorbed.
+		// Coverage is a strict partial order, so the chain is acyclic; the seen-guard is
+		// belt and braces.
+		foreach ( $absorbed_by as $index => $root ) {
+			$seen = [ $index => true ];
+			while ( isset( $absorbed_by[ $root ] ) && ! isset( $seen[ $root ] ) ) {
+				$seen[ $root ] = true;
+				$root          = $absorbed_by[ $root ];
+			}
+			$absorbed_by[ $index ] = $root;
+		}
+
+		$roots    = array_values( array_diff( array_keys( $rule_sets ), array_keys( $absorbed_by ) ) );
+		$overlaps = [];
+		foreach ( $roots as $position => $i ) {
+			foreach ( array_slice( $roots, $position + 1 ) as $j ) {
+				if ( ! empty( $rule_sets[ $i ] ) && ! empty( $rule_sets[ $j ] ) && self::rule_sets_overlap( $rule_sets[ $i ], $rule_sets[ $j ] ) ) {
+					$overlaps[] = [ $i, $j ];
+				}
+			}
+		}
+
+		return [
+			'absorbed_by' => $absorbed_by,
+			'overlaps'    => $overlaps,
+		];
+	}
+
+	/**
+	 * Fold fingerprint groups into gate groups by content overlap.
+	 *
+	 * The merged gate gates the union of content with the union of products, so a
+	 * member of the narrower plan also reaches the broader plan's content. That
+	 * over-grant is the deliberate trade: the alternative is the separate gates with
+	 * disjoint product lists that deny an entitled reader today.
+	 *
+	 * @param array[] $groups   Fingerprint groups, each a list of plan descriptors.
+	 * @param array   $widened  Filled with one 'absorbed into root' line per fold, by
+	 *                          reference, so the caller can put them to the operator.
+	 * @param array   $overlaps Filled with one line per pair of gates that overlap
+	 *                          without either covering the other, by reference. These
+	 *                          are the splits neither consolidation nor a carve-out can
+	 *                          repair, and the caller puts them to the operator
+	 *                          alongside the folds.
+	 * @param array   $carved   Filled with one line per overlap repaired by an exclusion
+	 *                          carve-out, by reference.
+	 * @param array   $carve_outs Filled with one {@see apply_carve_outs()} record per
+	 *                          repaired overlap, by reference, its group indices
+	 *                          translated to positions in the returned list.
+	 *
+	 * @return array[] The consolidated gate groups, re-indexed.
+	 */
+	private static function consolidate_plan_groups( array $groups, array &$widened = [], array &$overlaps = [], array &$carved = [], array &$carve_outs = [] ): array {
+		$rule_sets          = array_map( fn( $group ) => self::expand_rule_set_for_coverage( $group[0]['ac_rules'] ), $groups );
+		$group_has_purchase = array_map( fn( $group ) => self::group_requires_purchase( $group ), $groups );
+
+		$plan = self::plan_rule_set_consolidation( $rule_sets, $group_has_purchase );
+
+		$merged = [];
+		foreach ( $groups as $index => $group ) {
+			if ( ! isset( $plan['absorbed_by'][ $index ] ) ) {
+				$merged[ $index ] = $group;
+			}
+		}
+		foreach ( $plan['absorbed_by'] as $index => $root ) {
+			$merged[ $root ] = array_merge( $merged[ $root ], $groups[ $index ] );
+			$widened[]       = sprintf( '"%s" into "%s"', self::gate_title( $groups[ $index ] ), self::gate_title( $groups[ $root ] ) );
+			WP_CLI::warning( self::format_consolidation_warning( $groups[ $index ], $groups[ $root ] ) );
+		}
+
+		// Overlap indices are always roots, so both keys survive in $merged, and any plan
+		// folded into a root is named in the warnings below.
+		$repaired = self::apply_carve_outs( $merged, $plan['overlaps'], $carved, $carve_outs );
+		$merged   = $repaired['groups'];
+
+		// What each group carries after the carve-outs, so the overlap warning below
+		// quotes the product list the gate will actually be written with.
+		$carried = self::carried_access_by_group( $carve_outs );
+
+		foreach ( $repaired['overlaps'] as $record ) {
+			list( $i, $j ) = $record['pair'];
+			// Two registration gates cannot deny each other's members — either admits any
+			// logged-in reader — so the overlap is announced and left there rather than
+			// put to the operator as a risk to answer for.
+			$warning = self::format_overlap_warning(
+				$merged[ $i ],
+				$merged[ $j ],
+				$carried[ $i ]['product_ids'] ?? [],
+				$carried[ $j ]['product_ids'] ?? [],
+				$record['blocked_by_carve_out']
+			);
+			WP_CLI::warning( $warning );
+			if ( ! self::group_requires_purchase( $merged[ $i ] ) && ! self::group_requires_purchase( $merged[ $j ] ) ) {
+				continue;
+			}
+			$overlaps[] = sprintf( '"%s" against "%s"', self::gate_title( $merged[ $i ] ), self::gate_title( $merged[ $j ] ) );
+		}
+
+		// Carve-out records are keyed by root index; the caller reads them against the
+		// re-indexed list, so translate before array_values() drops the keys.
+		$positions  = array_flip( array_keys( $merged ) );
+		$carve_outs = array_map(
+			function ( $record ) use ( $positions ) {
+				$record['narrow'] = $positions[ $record['narrow'] ];
+				$record['broad']  = $positions[ $record['broad'] ];
+				return $record;
+			},
+			$carve_outs
+		);
+
+		return array_values( $merged );
+	}
+
+	/**
+	 * Build the warning for one group folded into another.
+	 *
+	 * What the fold costs depends on which side of the purchase boundary the two
+	 * groups sit. A purchase fold unions two product lists, so the narrower plan's
+	 * members gain the wider plan's content; a signup fold unions nothing, because
+	 * neither gate carries an access product, and only the content rules widen. Saying
+	 * "widening paid access" of a signup fold overstates a harmless merge, which is as
+	 * likely to make an operator abort as to wave the real one through.
+	 *
+	 * @param array[] $absorbed The group being folded in.
+	 * @param array[] $root     The covering group it folds into.
+	 *
+	 * @return string
+	 */
+	private static function format_consolidation_warning( array $absorbed, array $root ): string {
+		if ( self::group_requires_purchase( $root ) ) {
+			return sprintf(
+				'Consolidating "%s" into "%s": its content is a subset, so one gate carries both plans\' access products. That keeps every entitled reader admitted, and it also widens access — "%s" members now reach all content "%s" gates, not just the part their own plan covered.',
+				self::gate_title( $absorbed ),
+				self::gate_title( $root ),
+				self::gate_title( $absorbed ),
+				self::gate_title( $root )
+			);
+		}
+		return sprintf(
+			'Consolidating "%s" into "%s": its content is a subset, so one registration gate covers both plans. Neither gate asks for a purchase, so no paid access widens — the merged gate restricts the union of their content to registered readers.',
+			self::gate_title( $absorbed ),
+			self::gate_title( $root )
+		);
+	}
+
+	/**
+	 * Build the warning for two overlapping gate groups that could not be merged.
+	 *
+	 * Two registration groups get their own line. Neither gate asks for anything a
+	 * holder of the other plan lacks, so nobody is denied and there is no product list
+	 * to compare — the risk sentence would name a population that cannot exist.
+	 *
+	 * @param array[] $group_a              First overlapping gate group.
+	 * @param array[] $group_b              Second overlapping gate group.
+	 * @param int[]   $carried_a            Products the first group takes on from a carve-out.
+	 * @param int[]   $carried_b            Products the second group takes on from a carve-out.
+	 * @param bool    $blocked_by_carve_out Whether this pair was repairable on its own and
+	 *                                      lost the slug to a carve-out made first.
+	 *
+	 * @return string
+	 */
+	private static function format_overlap_warning( array $group_a, array $group_b, array $carried_a = [], array $carried_b = [], bool $blocked_by_carve_out = false ): string {
+		if ( ! self::group_requires_purchase( $group_a ) && ! self::group_requires_purchase( $group_b ) ) {
+			return sprintf(
+				'"%s" and "%s" gate overlapping content under rule sets where neither covers the other, so they become separate gates. Neither asks for more than a registered account, so no reader is denied at either gate — but a post matching both meets whichever gate has priority, and that gate\'s layout and metering allowance are the ones they get.',
+				self::gate_title( $group_a ),
+				self::gate_title( $group_b )
+			);
+		}
+		return sprintf(
+			'"%s" (%d active member(s)) and "%s" (%d active member(s)) gate overlapping content under rule sets where neither covers the other, so they become separate gates.%s Content_Restriction_Control::is_post_restricted() stops at the first gate that denies, so a reader entitled through one plan may be denied at the other gate — those member counts are the population at risk. Access products %s vs %s. Review gate priority and access products by hand.',
+			self::gate_title( $group_a ),
+			self::group_member_count( $group_a ),
+			self::gate_title( $group_b ),
+			self::group_member_count( $group_b ),
+			$blocked_by_carve_out
+				? ' An exclusion carve-out would have repaired this pair, but a gate can hold only one carve-out per content-rule slug and the pair with the larger membership took it.'
+				: '',
+			self::describe_group_products( $group_a, $carried_a ),
+			self::describe_group_products( $group_b, $carried_b )
+		);
+	}
+
+	/**
+	 * A gate group's active memberships, summed across its plans.
+	 *
+	 * A reader holding two of the group's plans is counted twice, so this is a count
+	 * of memberships rather than of people. It is a scale figure for the operator, not
+	 * a roster: the exact readers cannot be named without resolving every membership.
+	 *
+	 * @param array[] $group A gate group.
+	 *
+	 * @return int
+	 */
+	private static function group_member_count( array $group ): int {
+		return array_sum( array_map( fn( $plan ) => self::plan_member_count( $plan ), $group ) );
+	}
+
+	/**
+	 * Active memberships on one plan, resolved once per plan and only when read.
+	 *
+	 * `WC_Memberships_Membership_Plan::get_memberships_count()` is not a COUNT query: it
+	 * runs an unpaged `get_posts()` for every membership on the plan and counts the IDs in
+	 * PHP. Only the overlap warnings and the order they are reported in ever read the
+	 * number, so resolving it while grouping would materialise every active membership on
+	 * the site for a figure most runs never print.
+	 *
+	 * A descriptor that already carries the count is taken at its word, so a caller
+	 * holding the number does not pay for it twice.
+	 *
+	 * @param array $plan One plan descriptor.
+	 *
+	 * @return int
+	 */
+	private static function plan_member_count( array $plan ): int {
+		if ( isset( $plan['member_count'] ) ) {
+			return (int) $plan['member_count'];
+		}
+
+		$plan_id = (int) ( $plan['pid'] ?? 0 );
+		if ( ! $plan_id || ! function_exists( 'wc_memberships_get_membership_plan' ) ) {
+			return 0;
+		}
+
+		if ( ! array_key_exists( $plan_id, self::$member_counts ) ) {
+			$membership_plan                 = \wc_memberships_get_membership_plan( $plan_id );
+			self::$member_counts[ $plan_id ] = $membership_plan ? (int) $membership_plan->get_memberships_count( 'active' ) : 0;
+		}
+
+		return self::$member_counts[ $plan_id ];
+	}
+
+	/**
+	 * List a gate group's writable product IDs for an operator-facing message.
+	 *
+	 * Products carried in by a carve-out count: a group can be the narrow side of one
+	 * repaired pair and still party to a second, unrepaired overlap, and the operator
+	 * weighs that overlap against the list the gate will be written with.
+	 *
+	 * @param array[] $group     A gate group.
+	 * @param int[]   $carried_in Products the group takes on from a gate excluding its content.
+	 *
+	 * @return string The comma-separated IDs, or 'none'.
+	 */
+	private static function describe_group_products( array $group, array $carried_in = [] ): string {
+		$product_ids = self::resolve_product_ids( $group, $carried_in )['product_ids'];
+		return empty( $product_ids ) ? 'none' : implode( ', ', $product_ids );
+	}
+
+	/**
 	 * Sort a group's raw product IDs into the ones a subscription rule can carry and
 	 * the ones that must never reach it.
 	 *
@@ -1059,38 +2202,39 @@ class Membership_Gates_Migration {
 	 * own — a rule nothing can satisfy — but they leave the gate stricter than the plan
 	 * was, so the caller warns rather than staying silent.
 	 *
-	 * Product variations keep the behavior this command has always had: they are
-	 * dropped. A gate can carry a variation ID — the rule matches a line item on its
-	 * variation_id as well as its product_id, and the editor's picker now offers them —
-	 * so this is a conservative default rather than a limitation, and the warning tells
-	 * the operator what to add back by hand. Keeping them is NPPD-2135's follow-up.
+	 * Variations are written through unchanged rather than dropped or swapped for their
+	 * parent. A gate rule matches an order line item on its product_id *or* its
+	 * variation_id, which is the same two-sided test WooCommerce Memberships applies
+	 * when it grants a plan, so the variation ID reproduces exactly the access the plan
+	 * granted. Dropping it would leave the plan's members outside the gate; resolving it
+	 * to the parent would admit buyers of sibling variations the plan never covered.
 	 *
-	 * @param array[] $group Plan descriptors, each carrying a 'product_ids' key.
+	 * @param array[] $group     Plan descriptors, each carrying a 'product_ids' key.
+	 * @param int[]   $carved_in Products this group gains from a gate that excludes its
+	 *                           content, so the excluding plan's members are not denied
+	 *                           inside the carve-out. Empty for every group that is not
+	 *                           the narrow side of one.
 	 *
-	 * @return array 'product_ids' are the surviving parent product IDs, in the order
-	 *               they appeared; 'subscription_ids' and 'one_time_ids' partition them
+	 * @return array 'product_ids' are the surviving product and variation IDs, in the
+	 *               order they appeared; 'subscription_ids' and 'one_time_ids' partition them
 	 *               by the gate rule that can carry each; 'dropped' holds 'invalid' (did
 	 *               not normalize to a positive integer — a non-numeric meta value
-	 *               therefore appears as 0), 'unresolvable' (no product post with that
-	 *               ID) and 'variations'.
+	 *               therefore appears as 0) and 'unresolvable' (no product or variation
+	 *               post with that ID).
 	 */
-	private static function resolve_product_ids( array $group ): array {
-		$raw = array_merge( ...array_values( array_column( $group, 'product_ids' ) ) );
+	private static function resolve_product_ids( array $group, array $carved_in = [] ): array {
+		$raw = array_merge( array_values( $carved_in ), ...array_values( array_column( $group, 'product_ids' ) ) );
 
 		$product_ids  = [];
 		$invalid      = [];
 		$unresolvable = [];
-		$variations   = [];
 
 		foreach ( array_values( array_unique( array_map( 'intval', $raw ) ) ) as $product_id ) {
 			if ( $product_id <= 0 ) {
 				$invalid[] = $product_id;
 				continue;
 			}
-			$post_type = \get_post_type( $product_id );
-			if ( 'product_variation' === $post_type ) {
-				$variations[] = $product_id;
-			} elseif ( 'product' !== $post_type ) {
+			if ( ! in_array( \get_post_type( $product_id ), [ 'product', 'product_variation' ], true ) ) {
 				$unresolvable[] = $product_id;
 			} else {
 				$product_ids[] = $product_id;
@@ -1106,7 +2250,6 @@ class Membership_Gates_Migration {
 			'dropped'          => [
 				'invalid'      => $invalid,
 				'unresolvable' => $unresolvable,
-				'variations'   => $variations,
 			],
 		];
 	}
@@ -1115,8 +2258,8 @@ class Membership_Gates_Migration {
 	 * Warn about the product IDs resolve_product_ids() refused to write.
 	 *
 	 * Plain warnings rather than WARN rows: a dropped ID does not stop the gate being
-	 * written, and a group that loses every product is caught separately by
-	 * compute_pre_write_issues() and verify_migrated_gate().
+	 * written, and a group that loses every product is refused outright by the
+	 * paid-without-products check in the pre-flight.
 	 *
 	 * Every one of them describes a paid access rule, so all are silent for a group
 	 * that writes none. A mixed group still collects product IDs, and warning that its
@@ -1146,18 +2289,9 @@ class Membership_Gates_Migration {
 		if ( ! empty( $dropped['unresolvable'] ) ) {
 			WP_CLI::warning(
 				sprintf(
-					'"%s": dropped product ID(s) %s, which resolve to no product (deleted?). A rule naming them could never be satisfied, so the gate would be stricter than the plan was. Check the plan\'s products.',
+					'"%s": dropped product ID(s) %s, which resolve to no product or variation (deleted?). A rule naming them could never be satisfied, so the gate would be stricter than the plan was. Check the plan\'s products.',
 					$gate_title,
 					implode( ', ', $dropped['unresolvable'] )
-				)
-			);
-		}
-		if ( ! empty( $dropped['variations'] ) ) {
-			WP_CLI::warning(
-				sprintf(
-					'"%s": dropped product variation ID(s) %s, so a plan that required one of these specific variations no longer has that restriction from this gate. The gate editor lists a variable subscription\'s variations, so add them back there if the restriction was meant to survive. Check the plan\'s products.',
-					$gate_title,
-					implode( ', ', $dropped['variations'] )
 				)
 			);
 		}
@@ -1976,10 +3110,9 @@ class Membership_Gates_Migration {
 	 * produce the same fingerprint regardless of the order WC Memberships returned
 	 * them in.
 	 *
-	 * Supports the NPPD-2064 grouping work, but note the split decision itself lives
-	 * in group_plans_by_fingerprint(), not here. Only this function's canonicality
-	 * (order-independence) is unit-tested; that property is preserved by the 2064 fix,
-	 * so those tests will not flip red.
+	 * Canonicality is the whole contract: two rule sets that gate the same content must
+	 * fingerprint identically, or they split into two gates. Whether rule sets that are
+	 * merely overlapping share a gate is decided later, by consolidate_plan_groups().
 	 *
 	 * @param array[] $ac_rules AC-format content rules: [ [ 'slug' => string, 'value' => int[] ], ... ].
 	 *
