@@ -152,9 +152,11 @@ class Newspack_Test_Block_Visibility extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Test that a target block with active rules passes through unchanged when is_admin() is true.
+	 * An admin-screen render shows a restricted block to someone who can author.
 	 */
 	public function test_target_block_with_rules_passes_through_in_admin() {
+		$editor_id = $this->factory->user->create( [ 'role' => 'editor' ] );
+		wp_set_current_user( $editor_id );
 		set_current_screen( 'dashboard' );
 		$block  = $this->make_block(
 			'core/group',
@@ -167,6 +169,76 @@ class Newspack_Test_Block_Visibility extends WP_UnitTestCase {
 		$result = Block_Visibility::filter_render_block( '<div>admin view</div>', $block );
 		$this->assertSame( '<div>admin view</div>', $result );
 		unset( $GLOBALS['current_screen'] );
+		wp_set_current_user( 0 );
+	}
+
+	/**
+	 * The authoring bypass is for people who author. An admin-context request from
+	 * a reader who cannot edit anything -- admin-ajax serving the front end -- is
+	 * gated like any other read.
+	 *
+	 * This stands in for the REST half of the same condition, which shares the
+	 * capability test: REST_REQUEST is a constant core defines per request, so an
+	 * in-process test cannot set it for one case without setting it for the rest
+	 * of the suite.
+	 */
+	public function test_admin_context_does_not_bypass_for_a_reader() {
+		wp_set_current_user( 0 );
+		Block_Visibility::reset_cache_for_tests();
+		set_current_screen( 'dashboard' );
+
+		$rules  = [ 'registration' => [ 'active' => true ] ];
+		$block  = $this->make_block_with_rules( 'core/group', $rules, 'visible' );
+		$result = Block_Visibility::filter_render_block( '<div>restricted</div>', $block );
+
+		unset( $GLOBALS['current_screen'] );
+
+		$this->assertSame( '', $result, 'An anonymous admin-context render must not bypass access control.' );
+	}
+
+	/**
+	 * The bypass asks about the post in hand, not about authoring in general. A
+	 * Contributor can edit_posts site-wide, so a site-wide test would hand them
+	 * every restricted block on every post, including ones they cannot open.
+	 */
+	public function test_admin_context_does_not_bypass_for_a_post_the_author_cannot_edit() {
+		$contributor_id = $this->factory->user->create( [ 'role' => 'contributor' ] );
+		$someone_else   = $this->factory->user->create( [ 'role' => 'author' ] );
+		$post_id        = $this->factory->post->create(
+			[
+				'post_author' => $someone_else,
+				'post_status' => 'publish',
+			]
+		);
+		wp_set_current_user( $contributor_id );
+		Block_Visibility::reset_cache_for_tests();
+		set_current_screen( 'dashboard' );
+		$GLOBALS['post'] = get_post( $post_id );
+
+		$this->assertTrue( current_user_can( 'edit_posts' ), 'A Contributor can author, which is the premise of this test.' );
+		$this->assertFalse( current_user_can( 'edit_post', $post_id ), 'But not this post.' );
+
+		// A rule the Contributor does not satisfy, so only the bypass could show
+		// them the block.
+		$rules  = [
+			'custom_access' => [
+				'active'       => true,
+				'access_rules' => [
+					[
+						[
+							'slug'  => 'test_rule',
+							'value' => $this->test_user_id,
+						],
+					],
+				],
+			],
+		];
+		$block  = $this->make_block_with_rules( 'core/group', $rules, 'visible' );
+		$result = Block_Visibility::filter_render_block( '<div>restricted</div>', $block );
+
+		unset( $GLOBALS['current_screen'], $GLOBALS['post'] );
+
+		$this->assertSame( '', $result, 'The bypass does not extend to a post the requester cannot edit.' );
 	}
 
 	/**

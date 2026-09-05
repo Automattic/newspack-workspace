@@ -44,3 +44,6 @@ packages/*/package-lock.json
 # Per-checkout personal hooks run by .husky/pre-commit (see AGENTS.md).
 # `*.local*` also covers editor backups like pre-commit.local~ / .local.bak.
 .husky/*.local*
+# PHPUnit's per-run defect/timing cache. Written wherever tests are run, so it
+# is ignored workspace-wide rather than per package.
+.phpunit.result.cache

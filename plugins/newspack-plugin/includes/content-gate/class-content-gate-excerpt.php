@@ -52,6 +52,46 @@ class Content_Gate_Excerpt {
 			return $text;
 		}
 
+		// A post the gate withholds outside its own article page gets its excerpt
+		// built from the teaser, not from the body. The staged substitution cannot
+		// serve this on its own: it is written when `the_post` fires, and an
+		// excerpt is not always built inside a loop — core's Latest Posts block
+		// walks get_posts() results and asks for each excerpt by post object.
+		// Two surfaces own their own restriction and must not be answered over.
+		// REST is Content_Gate::filter_rest_response()'s, which evaluates
+		// entitlement per requester and leaves an editor's context=edit payload
+		// whole. Feeds are Content_Gate_Advanced_Settings', which honours a
+		// publisher setting that includes leaving items unrestricted — withholding
+		// here would override that choice with no way to switch it off, and in an
+		// excerpt feed it is this filter, not the feed layer, that produces the
+		// item. Content_Gate::restrict_post() stands down for both for the same
+		// reasons.
+		//
+		// The REST stand-down covers a read, not a render. The posts controller's
+		// shape is a read: it sets each item up with setup_postdata() and serves
+		// it, staging nothing. A route running a real loop — newspack-blocks'
+		// load-more endpoint is one — renders like a page, and restrict_post() has
+		// already staged the teaser for the post in hand. Answer for that post
+		// rather than leaving its excerpt to the substitution filter further down
+		// the content chain, which a plugin can remove.
+		$rest_read = Content_Gate::is_dispatching_rest() && ! Content_Gate::has_staged_restriction( $resolved->ID );
+		$teaser    = ( is_feed() || $rest_read )
+			? null
+			: Content_Gate::get_teaser_outside_article( $resolved );
+		if ( null !== $teaser ) {
+			// A hand-written excerpt is the author's own words about a post they
+			// chose to gate, and stands, exactly as it does below.
+			if ( '' !== trim( (string) $resolved->post_excerpt ) ) {
+				return wp_trim_excerpt( $resolved->post_excerpt, $resolved );
+			}
+			$withheld               = clone $resolved;
+			$withheld->post_content = $teaser;
+			// See the note below on WP_Post::filter(): a clone carrying a display
+			// form is silently re-read from the row, teaser and all.
+			$withheld->filter = 'raw';
+			return wp_trim_excerpt( '', $withheld );
+		}
+
 		// Core returns a non-empty $text untouched; the branches below deliberately
 		// do not. Confine that difference to posts that actually use the gate, so on
 		// every other post -- including every post on a site with gates switched off,

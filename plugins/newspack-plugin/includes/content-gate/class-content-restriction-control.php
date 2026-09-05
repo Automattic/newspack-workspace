@@ -375,13 +375,18 @@ class Content_Restriction_Control {
 	/**
 	 * Whether the post is restricted for the current user.
 	 *
-	 * @param bool     $is_post_restricted Whether the post is restricted for the current or given user.
-	 * @param int      $post_id            Post ID.
-	 * @param int|null $user_id            Optional user ID to check access for.
+	 * @param bool     $is_post_restricted     Whether the post is restricted for the current or given user.
+	 * @param int      $post_id                Post ID.
+	 * @param int|null $user_id                Optional user ID to check access for.
+	 * @param bool     $allow_anonymous_bypass Whether an anonymous visitor may pass on a
+	 *                                         `supports_anonymous` rule. Pass false when the
+	 *                                         answer must not vary between visitors: the only
+	 *                                         such rule reads the current request's IP and
+	 *                                         cookie. Ignored for a logged-in user.
 	 *
 	 * @return bool
 	 */
-	public static function is_post_restricted( $is_post_restricted, $post_id = null, $user_id = null ) {
+	public static function is_post_restricted( $is_post_restricted, $post_id = null, $user_id = null, $allow_anonymous_bypass = true ) {
 		// Don't apply our restriction strategy if Woo Memberships is active.
 		if ( Memberships::is_active() ) {
 			return $is_post_restricted;
@@ -448,7 +453,14 @@ class Content_Restriction_Control {
 					// match a populated rule with `supports_anonymous` (currently only `institution`).
 					// A rule left with no value names no condition, so it cannot be what lets a
 					// visitor past the registration wall.
-					$anonymous_bypass_passed = ! empty( $gate['custom_access']['active'] )
+					//
+					// A caller that must get the same answer for every visitor passes
+					// $allow_anonymous_bypass = false: the anonymous-capable rule reads
+					// the current request (an IP range, matched once the visitor carries
+					// the institutional-access cookie), so leaving it in would make the
+					// verdict vary per request. {@see Content_Gate::is_withheld_outside_article()}.
+					$anonymous_bypass_passed = $allow_anonymous_bypass
+						&& ! empty( $gate['custom_access']['active'] )
 						&& Access_Rules::evaluate_anonymous_rules( $gate['custom_access']['access_rules'] ?? [] );
 					$is_restricted  = ! $anonymous_bypass_passed;
 					$gate_layout_id = $gate['registration']['gate_layout_id'] ?? $gate['id'];
@@ -522,11 +534,16 @@ class Content_Restriction_Control {
 	 * queue workers, REST callbacks iterating over readers) write to their
 	 * own cache slot and do not surface here.
 	 *
-	 * @param int $post_id Post ID. If not given, uses the current post ID.
+	 * @param int      $post_id Post ID. If not given, uses the current post ID.
+	 * @param int|null $user_id Reader to look the entry up for. Defaults to the
+	 *                          current user. Pass 0 to read the anonymous entry,
+	 *                          which is what a surface serving one copy of its
+	 *                          markup to every reader needs
+	 *                          ({@see Content_Gate::is_withheld_outside_article()}).
 	 *
 	 * @return int|false
 	 */
-	public static function get_gate_layout_id( $post_id = null ) {
+	public static function get_gate_layout_id( $post_id = null, $user_id = null ) {
 		if ( ! Content_Gate::is_newspack_feature_enabled() ) {
 			return false;
 		}
@@ -536,7 +553,7 @@ class Content_Restriction_Control {
 		if ( ! $post_id ) {
 			return false;
 		}
-		$user_id = get_current_user_id();
+		$user_id = $user_id ?? get_current_user_id();
 		if ( ! empty( self::$post_gate_layout_id_map[ $post_id . '_' . $user_id ] ) ) {
 			return self::$post_gate_layout_id_map[ $post_id . '_' . $user_id ];
 		}

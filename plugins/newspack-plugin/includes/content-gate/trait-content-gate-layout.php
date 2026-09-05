@@ -252,19 +252,20 @@ trait Content_Gate_Layout {
 	}
 
 	/**
-	 * Get the restricted post excerpt based on gate settings.
+	 * The layout settings that decide how much of a post is free.
 	 *
-	 * @param \WP_Post $post         The post object to get excerpt from.
-	 * @param int      $gate_layout_id The gate layout ID.
+	 * Resolved in one place because a caller that caches a teaser has to key on
+	 * exactly what shaped it: these three settings live on the layout post's meta,
+	 * and editing them leaves the article's own modified time untouched.
+	 * {@see Content_Gate::get_teaser_outside_article()} is that caller.
 	 *
-	 * @return string The restricted post excerpt HTML.
+	 * @param int $gate_layout_id The gate layout ID.
+	 *
+	 * @return array{style: string, use_more_tag: mixed, count: int}
 	 */
-	public static function get_restricted_post_excerpt_for_gate( $post, $gate_layout_id ) {
-		$content          = $post->post_content;
-		$gate_layout_post = \get_post( $gate_layout_id );
-
-		// Get settings from layout post, or use defaults if post doesn't exist.
-		if ( $gate_layout_post ) {
+	public static function get_teaser_layout_settings( $gate_layout_id ) {
+		// Settings from the layout post, or the defaults when it does not exist.
+		if ( \get_post( $gate_layout_id ) ) {
 			$style        = \get_post_meta( $gate_layout_id, 'style', true );
 			$use_more_tag = \get_post_meta( $gate_layout_id, 'use_more_tag', true );
 			$count        = self::get_visible_paragraphs( $gate_layout_id );
@@ -279,8 +280,34 @@ trait Content_Gate_Layout {
 			$style = self::get_layout_meta_default( 'style' );
 		}
 
-		// Use <!--more--> as threshold if it exists.
-		if ( $use_more_tag && strpos( $content, '<!--more-->' ) ) {
+		return [
+			'style'        => $style,
+			'use_more_tag' => $use_more_tag,
+			'count'        => (int) $count,
+		];
+	}
+
+	/**
+	 * Get the restricted post excerpt based on gate settings.
+	 *
+	 * @param \WP_Post $post         The post object to get excerpt from.
+	 * @param int      $gate_layout_id The gate layout ID.
+	 *
+	 * @return string The restricted post excerpt HTML.
+	 */
+	public static function get_restricted_post_excerpt_for_gate( $post, $gate_layout_id ) {
+		$content = $post->post_content;
+
+		[
+			'style'        => $style,
+			'use_more_tag' => $use_more_tag,
+			'count'        => $count,
+		] = self::get_teaser_layout_settings( $gate_layout_id );
+
+		// Use <!--more--> as threshold if it exists. Compared against false rather
+		// than tested for truth: a post that opens with the tag puts it at offset 0,
+		// and "0" is what an author means by "no free preview".
+		if ( $use_more_tag && false !== strpos( $content, '<!--more-->' ) ) {
 			$content = apply_filters( 'newspack_gate_content', explode( '<!--more-->', $content )[0] );
 		} else {
 			if ( 0 === $count ) {
