@@ -36,7 +36,7 @@
 		"lint-staged": "^16.2.6",
 		"lodash": "^4.17.21",
 		"postcss": "^8.5.15",
-		"postcss-focus-within": "^9.0.1",
+		"postcss-focus-within": "^10.0.0",
 		"postcss-scss": "^4.0.9",
 		"prettier": "npm:wp-prettier@^3.0.3",
 		"qs": "^6.15.2",
