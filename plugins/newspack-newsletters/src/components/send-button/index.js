@@ -362,15 +362,28 @@ export default compose( [
 	return (
 		<div style={ { display: 'flex' } }>
 			<PreviewHTMLButton />
-			<Button
-				className="editor-post-publish-button"
-				isBusy={ isSaving && 'publish' === status }
-				variant="primary"
-				onClick={ handleModalOpen }
-				disabled={ ! isButtonEnabled }
-			>
-				{ label }
-			</Button>
+			{ /* The button carries the reason it is disabled. A disabled control
+			     receives no pointer events, so the tooltip lives on a wrapper, and
+			     the same text is repeated for screen readers — without it the only
+			     signal is the sidebar warning, which never renders when the author
+			     has that panel collapsed. */ }
+			<span title={ newsletterValidationErrors.length ? newsletterValidationErrors.join( '\n' ) : undefined }>
+				<Button
+					className="editor-post-publish-button"
+					isBusy={ isSaving && 'publish' === status }
+					variant="primary"
+					onClick={ handleModalOpen }
+					disabled={ ! isButtonEnabled }
+					aria-describedby={ newsletterValidationErrors.length ? 'newspack-newsletters-send-blocked' : undefined }
+				>
+					{ label }
+				</Button>
+			</span>
+			{ newsletterValidationErrors.length > 0 && (
+				<p id="newspack-newsletters-send-blocked" className="screen-reader-text">
+					{ newsletterValidationErrors.join( ' ' ) }
+				</p>
+			) }
 			{ modalVisible && (
 				<Modal
 					className="newspack-newsletters__modal"
