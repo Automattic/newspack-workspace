@@ -1884,16 +1884,212 @@ class Membership_Gates_Migration {
 	 * @return array{registration: string, custom_access: string|null}
 	 */
 	private static function extract_gate_layouts( \WP_Post $gate_post ): array {
+		$blocks  = \parse_blocks( $gate_post->post_content );
 		$layouts = [
 			'registration'  => null,
 			'custom_access' => null,
 		];
-		self::collect_gate_layout_markup( \parse_blocks( $gate_post->post_content ), $layouts, [], $gate_post->ID );
+		self::collect_gate_layout_markup( $blocks, $layouts, [], $gate_post->ID );
+
+		// No wrapper anywhere (NPPD-2218). Nothing in the authoring flow adds one, so a
+		// gate written the plain way has none and its whole content is the message
+		// WooCommerce Memberships showed to non-members. The raw post content is used
+		// rather than a re-serialization of the parsed tree: there is no wrapper to
+		// remove, so there is nothing to gain from a round trip that could alter it.
+		if ( null === $layouts['registration'] && null === $layouts['custom_access'] ) {
+			$whole = trim( $gate_post->post_content );
+			// A gate post holding nothing but references WordPress cannot resolve renders
+			// nothing. Carrying it would swap the seeded default — which does render —
+			// for markup that looks migrated and shows the reader an empty wall.
+			if ( ! self::blocks_render_something( $blocks ) ) {
+				return [
+					'registration'  => '',
+					'custom_access' => null,
+				];
+			}
+			return [
+				// Also the paid layout, so a group whose plans require a purchase migrates
+				// as a paywall. apply_layout() is still gated on the group requiring one,
+				// so a signup-only group is unaffected.
+				'registration'  => $whole,
+				'custom_access' => $whole,
+			];
+		}
+
+		// Copy outside the wrappers was unconditional — WooCommerce Memberships rendered
+		// the gate post whole, so both audiences saw it — and joins each layout the gate
+		// actually has. Relative position is not preserved: copy authored below a wrapper
+		// still lands above that wrapper's content.
+		//
+		// A null layout stays null, for both modes. Null means the publisher authored no
+		// view for that audience, and the seeded default is what the gate falls back to —
+		// for registration that default is the wall carrying the auth form, so filling it
+		// with a bare heading would leave the reader a wall with no way through it.
+		$unconditional = self::serialize_unconditional_blocks( $blocks );
+		if ( '' !== $unconditional ) {
+			foreach ( [ 'registration', 'custom_access' ] as $mode ) {
+				if ( null !== $layouts[ $mode ] ) {
+					$layouts[ $mode ] = $unconditional . $layouts[ $mode ];
+				}
+			}
+		}
 
 		return [
 			'registration'  => $layouts['registration'] ?? '',
 			'custom_access' => $layouts['custom_access'],
 		];
+	}
+
+	/**
+	 * Serialize the top-level blocks that hold no membership wrapper in their subtree.
+	 *
+	 * These are the parts of the gate post every reader saw, whatever their membership,
+	 * so they belong in each migrated layout rather than in neither.
+	 *
+	 * A block that *contains* a wrapper is skipped whole rather than emptied. Keeping it
+	 * would put a container stripped of its only child into both layouts; the cost is
+	 * that unconditional copy sharing a group with a wrapper is not recovered, which is
+	 * a rarer shape than a heading or separator sitting above one.
+	 *
+	 * "Contains" reaches through a synced pattern, because the layouts were already
+	 * filled from inside that pattern: keeping the reference as well would render the
+	 * copy twice, and would put a member-content wrapper — which prints its inner
+	 * content to everyone once Memberships is deactivated — inside the non-member wall.
+	 *
+	 * A block that renders nothing is dropped for a different reason: prefixing a dead
+	 * reference turns a layout that extracted to '' into one that looks authored, and
+	 * apply_layout() then overwrites the seeded default with a wall the reader sees as
+	 * blank. It also keeps a reference to an unpublished pattern out of the layout,
+	 * where a wrapper inside it would start leaking the day someone publishes it.
+	 *
+	 * @param array $blocks Parsed top-level blocks of the gate post.
+	 *
+	 * @return string Serialized block markup, empty when every block holds a wrapper.
+	 */
+	private static function serialize_unconditional_blocks( array $blocks ): string {
+		$kept = [];
+		foreach ( $blocks as $block ) {
+			if ( self::block_tree_holds_wrapper( $block ) || ! self::blocks_render_something( [ $block ] ) ) {
+				continue;
+			}
+			$kept[] = $block;
+		}
+		return trim( \serialize_blocks( $kept ) );
+	}
+
+	/**
+	 * Whether a membership wrapper sits anywhere a block reaches.
+	 *
+	 * Synced-pattern references are followed, because collect_gate_layout_markup()
+	 * follows them too: a wrapper behind a reference has already contributed its content
+	 * to a layout, so the reference is not unconditional copy.
+	 *
+	 * @param array $block   A parsed block.
+	 * @param array $visited Pattern IDs already followed on this path, keyed by ID.
+	 *
+	 * @return bool
+	 */
+	private static function block_tree_holds_wrapper( array $block, array $visited = [] ): bool {
+		$block_name = $block['blockName'] ?? null;
+		if ( in_array( $block_name, self::MEMBERSHIP_WRAPPER_BLOCKS, true ) ) {
+			return true;
+		}
+		if ( 'core/block' === $block_name ) {
+			$ref     = (int) ( $block['attrs']['ref'] ?? 0 );
+			$pattern = isset( $visited[ $ref ] ) ? null : self::resolve_pattern_reference( $ref );
+			if ( null === $pattern ) {
+				return false;
+			}
+			foreach ( \parse_blocks( $pattern->post_content ) as $referenced_block ) {
+				if ( self::block_tree_holds_wrapper( $referenced_block, $visited + [ $ref => true ] ) ) {
+					return true;
+				}
+			}
+			return false;
+		}
+		foreach ( $block['innerBlocks'] ?? [] as $child ) {
+			if ( self::block_tree_holds_wrapper( $child, $visited ) ) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/**
+	 * Whether a block list would put anything on the page.
+	 *
+	 * Only the reference case is judged closely, because it is the one where present
+	 * markup renders as nothing: a gate post holding a reference to a pattern WordPress
+	 * will not resolve is indistinguishable, by length, from one holding real copy. A
+	 * block with children is judged by them, so a group whose only child is a dead
+	 * reference does not pass as content. Anything else — including a childless block,
+	 * which may as legitimately be an image or a spacer as an empty group — is taken at
+	 * face value.
+	 *
+	 * @param array $blocks  Parsed blocks.
+	 * @param array $visited Pattern IDs already followed on this path, keyed by ID.
+	 *
+	 * @return bool
+	 */
+	private static function blocks_render_something( array $blocks, array $visited = [] ): bool {
+		foreach ( $blocks as $block ) {
+			$block_name = $block['blockName'] ?? null;
+			if ( null === $block_name ) {
+				// Freeform markup, which parse_blocks() also emits for the whitespace
+				// between blocks.
+				if ( '' !== trim( $block['innerHTML'] ?? '' ) ) {
+					return true;
+				}
+				continue;
+			}
+			if ( 'core/block' === $block_name ) {
+				$ref     = (int) ( $block['attrs']['ref'] ?? 0 );
+				$pattern = isset( $visited[ $ref ] ) ? null : self::resolve_pattern_reference( $ref );
+				if ( null === $pattern ) {
+					continue;
+				}
+				// A published pattern can still be empty, or hold nothing but its own dead
+				// references, in which case it renders exactly as little as a missing one.
+				if ( self::blocks_render_something( \parse_blocks( $pattern->post_content ), $visited + [ $ref => true ] ) ) {
+					return true;
+				}
+				continue;
+			}
+			if ( ! empty( $block['innerBlocks'] ) ) {
+				if ( self::blocks_render_something( $block['innerBlocks'], $visited ) ) {
+					return true;
+				}
+				continue;
+			}
+			return true;
+		}
+		return false;
+	}
+
+	/**
+	 * The pattern a reference resolves to, if WordPress would render it.
+	 *
+	 * The guard render_block_core_block() applies: an existing published `wp_block`
+	 * with no password.
+	 *
+	 * @param int $ref The wp_block post ID.
+	 *
+	 * @return \WP_Post|null The pattern, or null when core would render nothing for it.
+	 */
+	private static function resolve_pattern_reference( int $ref ): ?\WP_Post {
+		if ( ! $ref ) {
+			return null;
+		}
+		$referenced = \get_post( $ref );
+		if (
+			! $referenced instanceof \WP_Post
+			|| 'wp_block' !== $referenced->post_type
+			|| 'publish' !== $referenced->post_status
+			|| ! empty( $referenced->post_password )
+		) {
+			return null;
+		}
+		return $referenced;
 	}
 
 	/**
@@ -1938,16 +2134,11 @@ class Membership_Gates_Migration {
 				if ( ! $ref || isset( $visited[ $ref ] ) ) {
 					continue;
 				}
-				$referenced = \get_post( $ref );
-				// The same guards core/block's own render callback applies — post type,
-				// published status, and no password — so extraction sees what a reader
-				// would: a pattern core would not render contributes nothing here either.
-				if (
-					! $referenced instanceof \WP_Post
-					|| 'wp_block' !== $referenced->post_type
-					|| 'publish' !== $referenced->post_status
-					|| ! empty( $referenced->post_password )
-				) {
+				// The same guards core/block's own render callback applies, so extraction
+				// sees what a reader would: a pattern core would not render contributes
+				// nothing here either.
+				$referenced = self::resolve_pattern_reference( $ref );
+				if ( null === $referenced ) {
 					WP_CLI::warning(
 						sprintf(
 							'Gate post %d references synced pattern %d, which is missing, unpublished or password-protected — any gate content it holds will not migrate.',
