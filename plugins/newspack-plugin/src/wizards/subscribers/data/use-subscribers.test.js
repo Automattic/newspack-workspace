@@ -73,6 +73,24 @@ describe( 'viewToParams', () => {
 		} );
 		expect( params ).not.toHaveProperty( 'status' );
 	} );
+
+	it( 'sends the plans filter as the endpoint`s `plan` param', () => {
+		// The field is `plans` (the Subscription column) but the endpoint arg is
+		// `plan`; a mismatch here silently returns the unfiltered list.
+		const params = viewToParams( {
+			...baseView,
+			filters: [ { field: 'plans', operator: 'isAny', value: [ 'Acme Team', 'Digital Monthly' ] } ],
+		} );
+		expect( params.plan ).toEqual( [ 'Acme Team', 'Digital Monthly' ] );
+	} );
+
+	it( 'omits the plan param when the filter is present but empty', () => {
+		const params = viewToParams( {
+			...baseView,
+			filters: [ { field: 'plans', operator: 'isAny', value: [] } ],
+		} );
+		expect( params ).not.toHaveProperty( 'plan' );
+	} );
 } );
 
 describe( 'useSubscribers', () => {

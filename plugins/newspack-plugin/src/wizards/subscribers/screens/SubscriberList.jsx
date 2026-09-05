@@ -32,6 +32,7 @@ import LoadFailureNotice from '../components/LoadFailureNotice';
 import { useRetryFocus } from '../use-retry-focus';
 import { fmtRelative, fmtDate } from '../format';
 import { SHOW_AVATARS, useAvatars } from '../data/use-avatars';
+import { usePlans } from '../data/use-plans';
 import { useSubscribers } from '../data/use-subscribers';
 import { WIZARD_STORE_NAMESPACE } from '../../../../packages/components/src/wizard/store';
 import { GROUP_LABEL, ROLE_LABELS, groupRoleLabel } from '../labels';
@@ -104,10 +105,16 @@ export default function SubscriberList() {
 
 	const { setHeaderData } = useDispatch( WIZARD_STORE_NAMESPACE );
 
+	const { plans, failed: plansFailed } = usePlans();
+
 	// The server owns filter/sort/paginate; this page's rows come back already
-	// narrowed. Group-role, tag, newsletter and plan filters arrive in later
-	// slices (the endpoint honors status here); sorting is name / member-since.
+	// narrowed. Group-role, tag and newsletter filters arrive in later slices (the
+	// endpoint honors status and plan here); sorting is name / member-since.
 	const { items, total, pages, loading: subscribersLoading, error, reload } = useSubscribers( view );
+
+	// Filter options for the Subscription column: every plan on the site, not just
+	// the ones on this page.
+	const planElements = useMemo( () => plans.map( name => ( { value: name, label: name } ) ), [ plans ] );
 
 	// Resolve avatar URLs for the current page, keyed by subscriber id. The table
 	// renders immediately with the avatar placeholder and each avatar fills in as
@@ -188,9 +195,19 @@ export default function SubscriberList() {
 			},
 			{
 				id: 'plans',
-				label: __( 'Subscription', 'newspack-plugin' ),
-				// Plan filtering waits on the plans endpoint (NPPD-1753 PR 6); this is
-				// a display-only column for now.
+				// When the plans read failed the dropdown has no options, which would
+				// otherwise be indistinguishable from a site that sells no plans. Say
+				// which it is in the label, since the filter itself has nowhere else to
+				// put it — the subscribers read raises its own notice only when IT
+				// fails, and the two routes fail independently.
+				label: plansFailed ? __( 'Subscription (plan list unavailable)', 'newspack-plugin' ) : __( 'Subscription', 'newspack-plugin' ),
+				// Options come from the plans endpoint rather than the loaded rows:
+				// this list is server-paginated, so the plans on the current page are
+				// not the plans on the site. Filtering is server-side too — see
+				// viewToParams, which sends this field's value as the `plan` param.
+				elements: planElements,
+				filterBy: { operators: [ 'isAny' ] },
+				getValue: ( { item } ) => visiblePlanEntries( planEntries( item, groupEntriesOf( item ) ) ).map( e => e.plan ),
 				enableSorting: false,
 				render: ( { item } ) => {
 					const entries = visiblePlanEntries( planEntries( item, groupEntriesOf( item ) ) );
@@ -334,7 +351,7 @@ export default function SubscriberList() {
 				},
 			},
 		],
-		[ avatars ]
+		[ avatars, planElements, plansFailed ]
 	);
 
 	// DataViews only makes the title cell clickable; delegate clicks from the
@@ -387,7 +404,13 @@ export default function SubscriberList() {
 
 	const { retryRef, retry } = useRetryFocus( { settled: ! subscribersLoading, failed: Boolean( error ), reload } );
 
-	if ( subscribersLoading ) {
+	// Only the first load blanks the screen. Filtering and sorting are server-side,
+	// so every filter toggle and every debounced keystroke is a refetch — unmounting
+	// DataViews for those would take the search box's focus with it and flash the
+	// applied filter chips away mid-interaction. Once there are rows to show, the
+	// loading state is handed to DataViews instead, for the same reason avatars fill
+	// in progressively rather than holding the table back.
+	if ( subscribersLoading && ! items.length ) {
 		return (
 			<div className="newspack-subscribers__loading">
 				<Waiting isCenter />
@@ -423,6 +446,7 @@ export default function SubscriberList() {
 				fields={ fields }
 				view={ view }
 				onChangeView={ setView }
+				isLoading={ subscribersLoading }
 				paginationInfo={ { totalItems: total, totalPages: pages } }
 				defaultLayouts={ { table: {} } }
 				getItemId={ item => item.id }

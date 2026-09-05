@@ -26,9 +26,9 @@ const SORTABLE_FIELDS = [ 'name', 'memberSince' ];
 
 /**
  * Translate the DataViews view into the endpoint's query params. Filters are
- * matched by field id — `status` maps to the subscription-status filter; the
- * plan / group-role / tag / newsletter filters arrive in later slices and are
- * ignored here.
+ * matched by field id — `status` maps to the subscription-status filter and
+ * `plans` (the Subscription column) to the endpoint's `plan` arg; the group-role,
+ * tag and newsletter filters arrive in later slices and are ignored here.
  *
  * @param {Object} view The DataViews view.
  * @return {Object} Query params for the subscribers endpoint.
@@ -47,6 +47,11 @@ export const viewToParams = view => {
 	const statusFilter = ( view.filters || [] ).find( f => 'status' === f.field );
 	if ( statusFilter?.value?.length ) {
 		params.status = statusFilter.value;
+	}
+	// The column is `plans`; the endpoint arg is the singular `plan`.
+	const planFilter = ( view.filters || [] ).find( f => 'plans' === f.field );
+	if ( planFilter?.value?.length ) {
+		params.plan = planFilter.value;
 	}
 	return params;
 };

@@ -224,6 +224,16 @@ class Subscribers_Wizard extends Wizard {
 
 		register_rest_route(
 			NEWSPACK_API_NAMESPACE,
+			'/wizard/' . $this->slug . '/plans',
+			[
+				'methods'             => \WP_REST_Server::READABLE,
+				'callback'            => [ $this, 'api_get_plans' ],
+				'permission_callback' => [ $this, 'api_permissions_check' ],
+			]
+		);
+
+		register_rest_route(
+			NEWSPACK_API_NAMESPACE,
 			'/wizard/' . $this->slug . '/subscribers',
 			[
 				'methods'             => \WP_REST_Server::READABLE,
@@ -273,6 +283,10 @@ class Subscribers_Wizard extends Wizard {
 					'plan'     => [
 						'type'              => 'array',
 						'items'             => [ 'type' => 'string' ],
+						// Each name costs an unindexed post_title lookup plus a
+						// subscription scan, so the list is bounded. No real filter
+						// selects more plans than a site sells.
+						'maxItems'          => 100,
 						'sanitize_callback' => 'rest_sanitize_request_arg',
 						'validate_callback' => 'rest_validate_request_arg',
 					],
@@ -370,6 +384,166 @@ class Subscribers_Wizard extends Wizard {
 				'pages' => 1,
 			]
 		);
+	}
+
+	/**
+	 * GET the plan names the subscriber list can be filtered by.
+	 *
+	 * The subscriber list is server-paginated, so it can't derive its plan filter
+	 * from the rows it happens to be showing the way the group list does — a plan
+	 * nobody on page 1 holds would simply not be offered. This endpoint supplies
+	 * the whole set instead.
+	 *
+	 * Names, not IDs: the `plan` filter on /subscribers matches display names,
+	 * because a group's plan is its configured group name while an individual plan
+	 * is its product's name. The two are only comparable as strings. Names are
+	 * deduplicated, so two groups sharing a name are one option matching the
+	 * members of both.
+	 *
+	 * The contract every option has to meet — pinned by a round-trip test — is that
+	 * filtering on it returns the readers whose Subscription column shows it. That
+	 * is why a group's *product* is not an option (see subscription_product_names):
+	 * a group's members all display the group's name, never the product's, so the
+	 * product would return only the handful of owners who happen to be the
+	 * subscriptions' customers and no returned row would read as the filtered name.
+	 *
+	 * Scope: the plans the site currently offers, plus every configured group name.
+	 * A reader can still hold a plan that isn't listed — one whose product has since
+	 * been unpublished or deleted — because the alternative, deriving the list from
+	 * the subscriptions themselves, means scanning every subscription on the site
+	 * on each load of the list. Tracked as a follow-up rather than solved here.
+	 * Donation products are deliberately not excluded: a recurring donation is a
+	 * subscription and shows in the list's Subscription column, so filtering it out
+	 * here would leave a visible plan unfilterable.
+	 *
+	 * @return \WP_REST_Response
+	 */
+	public function api_get_plans() {
+		$this->reset_request_caches();
+		$names = [];
+
+		foreach ( $this->get_group_subscriptions() as $group ) {
+			$names[] = (string) $group['settings']['name'];
+		}
+		foreach ( $this->subscription_product_names() as $product_name ) {
+			$names[] = $product_name;
+		}
+
+		$names = array_values( array_unique( array_filter( array_map( 'trim', $names ) ) ) );
+		// Natural, case-insensitive so the dropdown reads the way a person would
+		// sort it ("Tier 2" before "Tier 10").
+		sort( $names, SORT_NATURAL | SORT_FLAG_CASE );
+
+		return rest_ensure_response(
+			[
+				'items' => $names,
+				'total' => count( $names ),
+				'pages' => 1,
+			]
+		);
+	}
+
+	/**
+	 * The names of the site's published, non-group subscription products, variations
+	 * included.
+	 *
+	 * Variations are listed alongside their parent because a subscription bought on
+	 * a variation resolves to that variation (see individual_plan_name(), via
+	 * wcs_get_canonical_product_id) and so displays the variation's name — listing
+	 * only the parent would leave that plan visible in the list but unfilterable.
+	 *
+	 * Restricted to published products to match the filter's other half:
+	 * product_ids_for_names() resolves a name back to `publish` products only, so an
+	 * unpublished product's name would be an option that matches nobody.
+	 *
+	 * Group products are dropped: see is_group_product().
+	 *
+	 * @return string[] Product names, in no particular order and possibly duplicated.
+	 */
+	private function subscription_product_names() {
+		if ( ! function_exists( 'wc_get_products' ) ) {
+			return [];
+		}
+		$names    = [];
+		$products = \wc_get_products(
+			[
+				'type'   => [ 'subscription', 'variable-subscription' ],
+				'status' => 'publish',
+				// Unbounded, as everywhere else this plugin enumerates subscription
+				// products (Access_Rules::get_subscription_products_options,
+				// Subscriptions_Tiers::get_tier_eligible_products): a site sells a
+				// handful of plans, and a cap here would silently hide one.
+				'limit'  => -1,
+			]
+		);
+		foreach ( $products as $product ) {
+			// A variable subscription's own name is never what a row displays:
+			// individual_plan_name() resolves through wcs_get_canonical_product_id() to
+			// the variation, so a subscription on "Digital - Annual" shows that, not
+			// "Digital". Offering the parent name would match those subscriptions
+			// (WooCommerce's product filter matches a variation line item's parent
+			// _product_id) and return rows whose Subscription column shows something
+			// else — the round-trip this endpoint promises. Only its variations are
+			// listed, below.
+			if ( ! $product->is_type( 'variable-subscription' ) && ! $this->is_group_product( $product ) ) {
+				$names[] = (string) $product->get_name();
+			}
+			if ( ! $product->is_type( 'variable-subscription' ) || ! function_exists( 'wc_get_product' ) ) {
+				continue;
+			}
+			// One product load per variation. The bound is the site's whole
+			// subscription catalogue — every variation of every variable
+			// subscription — resolved on each render of the Subscribers tab. That is
+			// a handful of loads on a real Newspack catalogue; a site with hundreds
+			// of variations would want these batched, but capping instead would
+			// silently drop plans from the dropdown, which is the failure this
+			// endpoint exists to avoid.
+			foreach ( $product->get_children() as $variation_id ) {
+				$variation = \wc_get_product( $variation_id );
+				if ( ! $variation || $this->is_group_product( $variation ) ) {
+					continue;
+				}
+				// get_children() returns private variations as well as published ones,
+				// and unchecking "Enabled" on a variation is how a publisher retires a
+				// tier while existing subscribers keep it. product_ids_for_names()
+				// resolves names against published products only, so listing a retired
+				// variation here would offer the admin a plan they can see in the rows
+				// below and then tell them nobody holds it.
+				if ( 'publish' !== $variation->get_status() ) {
+					continue;
+				}
+				$names[] = (string) $variation->get_name();
+			}
+		}
+		return $names;
+	}
+
+	/**
+	 * Whether a product is sold as a group subscription.
+	 *
+	 * Such a product must not become a filter option. Every member of a group
+	 * displays the group's own name in the Subscription column, so filtering on the
+	 * product behind it would return only the owners — the customers of record on
+	 * those subscriptions — while every other member of every group on that product
+	 * stayed hidden, and not one returned row would show the name that was filtered
+	 * on. The group names themselves are listed instead, which is what members see.
+	 *
+	 * Read from the product's own settings, which is where group enablement lives:
+	 * a variation carries its own setting and does not inherit the parent's (see
+	 * Group_Subscription_Settings::get_group_subscription_ids), so parents and
+	 * variations are both checked individually. A product that isn't itself a group
+	 * product stays listed even if one subscription on it was flagged as a group by
+	 * hand, since the product is still sold — and displayed — as an individual plan.
+	 *
+	 * @param \WC_Product $product The product (or variation).
+	 *
+	 * @return bool
+	 */
+	private function is_group_product( $product ) {
+		if ( ! class_exists( '\Newspack\Group_Subscription_Settings' ) ) {
+			return false;
+		}
+		return ! empty( Group_Subscription_Settings::get_product_settings( $product )['enabled'] );
 	}
 
 	/**
@@ -1338,22 +1512,37 @@ class Subscribers_Wizard extends Wizard {
 		}
 
 		// Individual plans, matched by product name → subscriptions for that product.
+		//
+		// Paged through wcs_get_subscriptions() a chunk at a time, exactly as the
+		// status scan above does, because only the customer ID is read from each
+		// subscription. Resolving the IDs first and then calling wcs_get_subscription()
+		// on each one costs a query per subscriber — up to FILTER_INCLUDE_CAP of them
+		// in a single admin request, and the most popular plan is both the one an
+		// admin filters on first and the slowest to answer.
 		$product_ids = $this->product_ids_for_names( $plan_names );
-		if ( ! empty( $product_ids ) && function_exists( 'wcs_get_subscriptions_for_product' ) && function_exists( 'wcs_get_subscription' ) ) {
-			$subscription_ids = [];
+		if ( ! empty( $product_ids ) && function_exists( 'wcs_get_subscriptions' ) ) {
+			$hydrated = 0;
 			foreach ( $product_ids as $product_id ) {
-				foreach ( array_keys( \wcs_get_subscriptions_for_product( $product_id ) ) as $subscription_id ) {
-					$subscription_ids[] = (int) $subscription_id;
+				for ( $page = 1; $hydrated < self::FILTER_INCLUDE_CAP; $page++ ) {
+					$subscriptions = \wcs_get_subscriptions(
+						[
+							'subscriptions_per_page' => self::FILTER_SCAN_CHUNK,
+							'offset'                 => ( $page - 1 ) * self::FILTER_SCAN_CHUNK,
+							'orderby'                => 'ID',
+							'product_id'             => $product_id,
+							'subscription_status'    => [ 'any' ],
+						]
+					);
+					foreach ( $subscriptions as $subscription ) {
+						$ids[] = (int) $subscription->get_customer_id();
+					}
+					$hydrated += count( $subscriptions );
+					if ( count( $subscriptions ) < self::FILTER_SCAN_CHUNK ) {
+						break;
+					}
 				}
-			}
-			// Bound the number of subscription objects hydrated, mirroring the
-			// status path's cap so a plan on a very popular product can't load an
-			// unbounded set into memory.
-			$subscription_ids = array_slice( array_unique( $subscription_ids ), 0, self::FILTER_INCLUDE_CAP );
-			foreach ( $subscription_ids as $subscription_id ) {
-				$subscription = \wcs_get_subscription( $subscription_id );
-				if ( $subscription ) {
-					$ids[] = (int) $subscription->get_customer_id();
+				if ( $hydrated >= self::FILTER_INCLUDE_CAP ) {
+					break;
 				}
 			}
 		}
@@ -1391,7 +1580,31 @@ class Subscribers_Wizard extends Wizard {
 				$ids[] = (int) $post_id;
 			}
 		}
-		return array_values( array_unique( $ids ) );
+		$ids = array_values( array_unique( $ids ) );
+
+		// api_get_plans() excludes group products from the options, so resolving one
+		// here would make the two halves disagree. They collide by default rather than
+		// rarely: an unnamed group falls back to its product's name
+		// (Group_Subscription_Settings::get_subscription_settings()), so a product
+		// "Team Plan" with one unnamed group and one renamed group would match the
+		// renamed group's owner when filtering on "Team Plan" — a row whose
+		// Subscription column shows something else.
+		if ( ! function_exists( 'wc_get_product' ) ) {
+			return $ids;
+		}
+		return array_values(
+			array_filter(
+				$ids,
+				function ( $product_id ) {
+					// Only a confirmed group product is dropped. A product WooCommerce
+					// cannot hydrate is kept: the name matched a real published product
+					// post, and dropping what cannot be classified would silently narrow
+					// the filter instead of widening it.
+					$product = \wc_get_product( $product_id );
+					return ! $product || ! $this->is_group_product( $product );
+				}
+			)
+		);
 	}
 
 	/**
