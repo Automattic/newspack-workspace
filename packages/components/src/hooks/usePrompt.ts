@@ -14,7 +14,7 @@ const { useHistory } = Router;
 
 export default ( when: boolean, message: string ): ( () => void ) => {
 	const history = useHistory();
-	const self = useRef( null );
+	const self = useRef< ( () => void ) | null >( null );
 
 	const onWindowOrTabClose = ( event: Event | undefined ) => {
 		if ( ! when ) {
@@ -36,7 +36,7 @@ export default ( when: boolean, message: string ): ( () => void ) => {
 
 		return () => {
 			if ( self.current ) {
-				( self.current as () => void )();
+				self.current();
 			}
 			window.removeEventListener( 'beforeunload', onWindowOrTabClose );
 		};

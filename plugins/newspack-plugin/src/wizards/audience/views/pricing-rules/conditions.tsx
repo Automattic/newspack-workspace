@@ -163,9 +163,11 @@ function SegmentCondition( {
 	return (
 		<AutocompleteTokenField
 			tokens={ value }
-			onChange={ onChange }
+			// This field's tokens are always numeric option IDs, narrower than the
+			// tokenfield's general string|number|Suggestion contract.
+			onChange={ values => onChange( values as number[] ) }
 			fetchSuggestions={ fetchSuggestions }
-			fetchSavedInfo={ fetchSavedInfo }
+			fetchSavedInfo={ tokens => fetchSavedInfo( tokens as number[] ) }
 			label={ matcher.label }
 			help={ matcher.help }
 			placeholder={ __( 'Search segments…', 'newspack-plugin' ) }

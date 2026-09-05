@@ -16,8 +16,8 @@ import './style.scss';
 
 const { useHistory } = Router;
 
-type OriginalButtonProps = typeof BaseComponent.defaultProps;
-type Props = OriginalButtonProps & {
+type OriginalButtonProps = Partial< React.ComponentProps< typeof BaseComponent > >;
+type Props = Omit< OriginalButtonProps, 'href' | 'onClick' > & {
 	href?: string;
 	loading?: boolean;
 	onClick?: ( event?: React.MouseEvent< HTMLElement > ) => void;
@@ -70,8 +70,9 @@ const Button = forwardRef< HTMLElement, Props >( ( { href, loading = undefined, 
 	// `loading` is this component's own prop name; @wordpress/components' Button
 	// expresses the same state as `isBusy`. Forwarding `loading` verbatim would
 	// land it on the DOM node, which React rejects as a non-boolean attribute.
-	// @ts-expect-error - @wordpress/components' Button can only have either href or onClick, not both.
-	return <BaseComponent ref={ ref } isBusy={ loading ? true : undefined } { ...otherProps } />;
+	// The cast crosses Button's button/anchor union: href and onClick are reassigned
+	// above, which the flattened rest type can't express.
+	return <BaseComponent ref={ ref } isBusy={ loading ? true : undefined } { ...( otherProps as React.ComponentProps< typeof BaseComponent > ) } />;
 } );
 
 Button.displayName = 'Button';

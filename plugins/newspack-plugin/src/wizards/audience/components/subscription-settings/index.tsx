@@ -16,7 +16,13 @@ import WizardsSection from '../../../wizards-section';
 const DATA_STORE_KEY = 'newspack-audience/subscription-settings';
 
 function SubscriptionSettings() {
-	const config = useWizardData( DATA_STORE_KEY );
+	const config = useWizardData< {
+		woocommerce_enable_subscription_confirmation?: boolean;
+		woocommerce_subscription_confirmation_text: string;
+		woocommerce_enable_terms_confirmation?: boolean;
+		woocommerce_terms_confirmation_text: string;
+		woocommerce_terms_confirmation_url: string;
+	} >( DATA_STORE_KEY );
 	const { updateWizardSettings, saveWizardSettings } = useDispatch( WIZARD_STORE_NAMESPACE );
 	const isQuietLoading = useSelect( ( select: any ) => select( WIZARD_STORE_NAMESPACE ).isQuietLoading() ?? false, [] );
 

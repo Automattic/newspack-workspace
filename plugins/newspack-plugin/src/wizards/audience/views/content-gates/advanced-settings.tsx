@@ -93,7 +93,7 @@ const AdvancedSettings = ( { closeModal, showModal }: { closeModal: () => void; 
 	updateConfig.current = handleUpdateConfig;
 	return (
 		showModal && (
-			<Modal onClose={ closeModal } size="medium" title={ __( 'Advanced Settings', 'newspack-plugin' ) } onRequestClose={ closeModal }>
+			<Modal size="medium" title={ __( 'Advanced Settings', 'newspack-plugin' ) } onRequestClose={ closeModal }>
 				<VStack>
 					{ /* Grouped so the Memberships notice reads as covering the feed settings only, not the newsletter toggle below. */ }
 					<VStack>
