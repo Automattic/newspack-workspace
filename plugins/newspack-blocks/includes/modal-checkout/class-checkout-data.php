@@ -18,10 +18,13 @@ final class Checkout_Data {
 	 * @param string $price      The price. Optional. If not provided, the price string will contain 0.
 	 * @param string $frequency  The frequency. Optional. If not provided, the price will be treated as a one-time payment.
 	 * @param int    $product_id Product ID to get additional subscription details. Optional.
+	 * @param int    $quantity   Seats (line-item quantity) purchased. Optional, defaults to 1. Multiplies
+	 *                           the sign-up fee, since WCS charges it per unit; $price is already the
+	 *                           line amount, so it is not multiplied here.
 	 *
 	 * @return string The price string.
 	 */
-	public static function get_price_summary( $name, $price = '', $frequency = '', $product_id = null ) {
+	public static function get_price_summary( $name, $price = '', $frequency = '', $product_id = null, $quantity = 1 ) {
 		if ( ! $price ) {
 			$price = '0';
 		}
@@ -39,7 +42,8 @@ final class Checkout_Data {
 					$subscription_interval = \WC_Subscriptions_Product::get_interval( $product );
 					$trial_length = \WC_Subscriptions_Product::get_trial_length( $product );
 					$trial_period = \WC_Subscriptions_Product::get_trial_period( $product );
-					$initial_amount = \WC_Subscriptions_Product::get_sign_up_fee( $product );
+					// The sign-up fee is charged per seat, so multiply it by quantity.
+					$initial_amount = \WC_Subscriptions_Product::get_sign_up_fee( $product ) * $quantity;
 
 					if ( empty( $subscription_interval ) ) {
 						$subscription_interval = 1;
@@ -269,7 +273,11 @@ final class Checkout_Data {
 
 		$cart_item    = null;
 		$order        = null;
+		$subscription = null;
 		$referrer     = '';
+		$product_id   = null;
+		$amount       = 0;
+		$quantity     = 1;
 		$variation_id = null;
 		$is_variable  = false;
 		$is_grouped   = false;
@@ -301,20 +309,41 @@ final class Checkout_Data {
 			$product_id   = $cart_item['product_id'];
 			$variation_id = $cart_item['variation_id'];
 			$amount       = $cart_item['data']->get_price();
+			$quantity     = max( 1, (int) ( $cart_item['quantity'] ?? 1 ) );
 			$referrer     = $cart_item['referer'] ?? '';
 		} elseif ( $source instanceof \WC_Order ) {
-			// If order as actually a subscription object, we need to get the original order.
+			// A subscription's purchase details normally live on the order it was
+			// bought through. A subscription created by hand in wp-admin has no parent
+			// order, and its own line items describe the same purchase, so read those
+			// instead (NPPD-2170).
+			//
+			// The two identities stay separate on purpose. A subscription is not an
+			// order, and reporting its ID as an order ID sends the modal to a
+			// view-order URL built from a subscription ID: a page nothing links to,
+			// which renders the read-only receipt from WooCommerce Subscriptions
+			// rather than anything the reader can act on.
 			if ( $source instanceof \WC_Subscription ) {
-				$order = $source->get_parent();
+				$subscription = $source;
+				$parent       = $source->get_parent();
+				$order        = $parent ? $parent : null;
+				$items_source = $parent ? $parent : $source;
 			} else {
-				$order = $source;
+				$order        = $source;
+				$items_source = $source;
 			}
-			$order_items  = $order->get_items();
-			$order_item   = reset( $order_items ); // Use only the first item in the order.
+			$order_items = $items_source->get_items();
+			$order_item  = reset( $order_items ); // Use only the first item in the order.
+			if ( ! $order_item ) {
+				// No line item means no purchase to summarise, and the product and
+				// name lookups below would fatal on the resulting null. Return empty,
+				// the same "nothing to checkout" signal as an empty source above.
+				return $data;
+			}
 			$product_id   = $order_item->get_product_id();
 			$variation_id = $order_item->get_variation_id();
-			$amount       = $order_item->get_subtotal();
-			$referrer     = $order->get_meta( '_newspack_referer' );
+			$amount       = $order_item->get_subtotal(); // Already reflects quantity; do not multiply below.
+			$quantity     = max( 1, (int) $order_item->get_quantity() );
+			$referrer     = $items_source->get_meta( '_newspack_referer' );
 		}
 
 		// If we have no referrer, set it to the current path.
@@ -354,9 +383,26 @@ final class Checkout_Data {
 			$data['is_grouped'] = true;
 			$data['child_ids'] = $children;
 		} else {
-			$data['amount']           = $amount;
-			$data['price_summary']    = self::get_price_summary( $name, $amount, $recurrence, $variation_id ? $variation_id : $product_id );
-			$data['summary_template'] = self::get_price_summary( $name, '{{PRICE}}', $recurrence, $variation_id ? $variation_id : $product_id );
+			// An order's amount is a line subtotal already scaled by quantity; a
+			// product's or cart item's is a per-unit price, so scale it here instead.
+			// The quantity-1 short circuit is load-bearing: get_price() returns a
+			// string, and multiplying would hand a float to consumers that have only
+			// ever seen the string.
+			$line_amount              = ( $source instanceof \WC_Order || 1 === $quantity ) ? $amount : (float) $amount * $quantity;
+			$data['amount']           = $line_amount;
+			// Only a cart or order line item has a real seat count to report. For a
+			// bare product source the block's hidden field is the source of truth, so
+			// omitting the key — rather than hardcoding 1 — keeps getCheckoutData()'s
+			// JSON-wins merge in utils.js from overwriting it with a stale default.
+			if ( $source instanceof \WC_Cart || $source instanceof \WC_Order ) {
+				$data['quantity'] = $quantity;
+			}
+			// WooCommerce Subscriptions folds the sign-up fee into the unit price when
+			// it prices an order line, so its subtotal already carries the fee for
+			// every unit and the summary must not scale it a second time.
+			$summary_quantity         = $source instanceof \WC_Order ? 1 : $quantity;
+			$data['price_summary']    = self::get_price_summary( $name, $line_amount, $recurrence, $variation_id ? $variation_id : $product_id, $summary_quantity );
+			$data['summary_template'] = self::get_price_summary( $name, '{{PRICE}}', $recurrence, $variation_id ? $variation_id : $product_id, $summary_quantity );
 			$data['recurrence']       = $recurrence;
 		}
 		if ( $variation_id ) {
@@ -387,6 +433,17 @@ final class Checkout_Data {
 					}
 				}
 			}
+		}
+
+		// A subscription with no parent order has no order to identify itself by, so
+		// name the subscription directly. Without this the modal has nothing to
+		// return the reader to once checkout finishes (NPPD-2170).
+		// Only when there is no parent order to identify the purchase by. With a
+		// parent present the block above owns the key, and widening this would set
+		// subscription_ids for product types it skips — a recurring donation resolves
+		// to `donation`, so it would silently change where those readers land.
+		if ( $subscription && ! $order && empty( $data['subscription_ids'] ) ) {
+			$data['subscription_ids'] = [ $subscription->get_id() ];
 		}
 
 		/**

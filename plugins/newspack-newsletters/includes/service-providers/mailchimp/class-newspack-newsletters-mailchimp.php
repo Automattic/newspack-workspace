@@ -598,7 +598,7 @@ final class Newspack_Newsletters_Mailchimp extends \Newspack_Newsletters_Service
 			}
 
 			// Prefetch send list info if we have a selected list and/or sublist.
-			$send_lists = $this->get_send_lists(
+			$send_lists = $this->get_send_lists_with_fallback(
 				[
 					'ids'  => $send_list_id ? [ $send_list_id ] : null, // If we have a selected list, make sure to fetch it.
 					'type' => 'list',
@@ -611,7 +611,7 @@ final class Newspack_Newsletters_Mailchimp extends \Newspack_Newsletters_Service
 			$newsletter_data['lists'] = $send_lists;
 
 			$send_sublists = $send_list_id || $send_sublist_id ? // Prefetch send lists only if we have something selected already.
-				$this->get_send_lists(
+				$this->get_send_lists_with_fallback(
 					[
 						'ids'       => [ $send_sublist_id ], // If we have a selected sublist, make sure to fetch it. Otherwise, we'll populate sublists later.
 						'parent_id' => $send_list_id,
@@ -2769,6 +2769,8 @@ final class Newspack_Newsletters_Mailchimp extends \Newspack_Newsletters_Service
 	 *
 	 * Mailchimp types eligible for access-rule / segmentation defaults: text, number, date, radio, dropdown.
 	 * Other types (phone, url, imageurl, birthday, zip, address) are exposed but not promoted by default.
+	 * `birthday` is deliberately excluded from the `date` value_type as well: it is MM/DD with no
+	 * year, so it cannot be placed on an absolute timeline and stays exact-match text.
 	 *
 	 * @param array $field Raw merge field from the Mailchimp API.
 	 * @return array|null Mapped field, or null if no usable identifier is available.
@@ -2799,10 +2801,18 @@ final class Newspack_Newsletters_Mailchimp extends \Newspack_Newsletters_Service
 		// range matching. Mirrors the ActiveCampaign mapper for cross-ESP consistency.
 		$value_type        = 'string';
 		$matching_function = 'default';
+		$date_format       = '';
 		if ( in_array( $type, [ 'dropdown', 'radio' ], true ) ) {
 			$value_type = 'select';
-		} elseif ( in_array( $type, [ 'date', 'birthday' ], true ) ) {
+		} elseif ( 'date' === $type ) {
 			$value_type = 'date';
+			// Probed rather than assumed: on an older newspack-plugin the operator
+			// would travel to newspack-popups unvalidated, where a stale build
+			// crashes on it (see integrations_supports_date_range()).
+			$matching_function = self::integrations_supports_date_range() ? 'date_range' : 'default';
+			$date_format       = self::map_mailchimp_date_format(
+				isset( $field['options']['date_format'] ) ? (string) $field['options']['date_format'] : ''
+			);
 		} elseif ( 'number' === $type ) {
 			$value_type        = 'number';
 			$matching_function = 'range';
@@ -2813,10 +2823,29 @@ final class Newspack_Newsletters_Mailchimp extends \Newspack_Newsletters_Service
 			'name'                => ! empty( $field['name'] ) ? $field['name'] : $tag,
 			'value_type'          => $value_type,
 			'matching_function'   => $matching_function,
+			'date_format'         => $date_format,
 			'options'             => $options,
 			'description'         => isset( $field['help_text'] ) ? $field['help_text'] : '',
 			'is_access_rule'      => $is_promoted_by_default,
 			'is_segment_criteria' => $is_promoted_by_default,
 		];
+	}
+
+	/**
+	 * Translate a Mailchimp date_format option into a PHP date format string.
+	 *
+	 * Mailchimp renders a date merge field per this setting, so '03/04/2026' means
+	 * different days under the two options. An unrecognized format returns '',
+	 * which the consumer reads as ISO 8601 / Y-m-d.
+	 *
+	 * @param string $format The Mailchimp date_format option.
+	 * @return string A PHP date format string, or ''.
+	 */
+	private static function map_mailchimp_date_format( $format ) {
+		$formats = [
+			'MM/DD/YYYY' => 'm/d/Y',
+			'DD/MM/YYYY' => 'd/m/Y',
+		];
+		return isset( $formats[ $format ] ) ? $formats[ $format ] : '';
 	}
 }

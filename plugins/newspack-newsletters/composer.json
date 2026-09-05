@@ -5,7 +5,7 @@
 	"require": {
 		"campaignmonitor/createsend-php": "^7.0",
 		"automattic/jetpack-autoloader": "^5.0",
-		"woocommerce/email-editor": "2.14.2"
+		"woocommerce/email-editor": "2.16.1"
 	},
 	"require-dev": {
 		"automattic/vipwpcs": "^3.0",

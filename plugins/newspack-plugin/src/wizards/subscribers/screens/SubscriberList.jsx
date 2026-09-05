@@ -16,23 +16,27 @@
 /**
  * WordPress dependencies.
  */
-import { useEffect, useMemo, useState } from '@wordpress/element';
-import { __, sprintf } from '@wordpress/i18n';
+import { useLayoutEffect, useMemo, useState } from '@wordpress/element';
+import { __, _n, sprintf } from '@wordpress/i18n';
 import { useDispatch } from '@wordpress/data';
 import { __experimentalHStack as HStack, __experimentalVStack as VStack } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
+import { Badge, Stack } from '@wordpress/ui';
 
 /**
  * Internal dependencies.
  */
-import { Badge, Button, DataViews, Notice, Router, Waiting } from '../../../../packages/components/src';
+import { Button, DataViews, Router, StatusIndicator, Waiting } from '../../../../packages/components/src';
+import { formatCount } from '../../../../packages/components/src/breadcrumbs/format-count';
 import './style.scss';
+import LoadFailureNotice from '../components/LoadFailureNotice';
+import { useRetryFocus } from '../use-retry-focus';
 import { fmtRelative, fmtDate } from '../format';
 import { SHOW_AVATARS, useAvatars } from '../data/use-avatars';
 import { useSubscribers } from '../data/use-subscribers';
 import { WIZARD_STORE_NAMESPACE } from '../../../../packages/components/src/wizard/store';
-import { GROUP_LABEL, ROLE_LABELS } from '../labels';
+import { GROUP_LABEL, ROLE_LABELS, groupRoleLabel } from '../labels';
 import { SubscriptionLink } from '../links';
-import { STATUS_LABELS, STATUS_BADGE_LEVEL, displayStatuses, statusRank } from '../status';
+import { STATUS_INDICATORS, STATUS_LABELS, displayStatuses, statusRank } from '../status';
 
 // A subscriber's group memberships, in the shape the column helpers expect
 // ([{ group, role }]). The endpoint embeds them flat on the item as
@@ -169,12 +173,17 @@ export default function SubscriberList() {
 				// against the same reduced display set the badges use, so cancelled is
 				// hidden while any active or on-hold plan remains.
 				getValue: ( { item } ) => subscriberStatuses( item, groupEntriesOf( item ) ),
+				// A subscriber can hold several statuses at once, so they stack rather
+				// than sitting on one line, where two icon-and-label pairs would run
+				// together into one phrase.
 				render: ( { item } ) => (
-					<HStack spacing={ 2 } justify="flex-start" alignment="center" wrap>
+					<Stack direction="column" align="flex-start" gap="sm">
 						{ subscriberStatuses( item, groupEntriesOf( item ) ).map( status => (
-							<Badge key={ status } level={ STATUS_BADGE_LEVEL[ status ] } text={ STATUS_LABELS[ status ] } />
+							<StatusIndicator key={ status } status={ STATUS_INDICATORS[ status ] }>
+								{ STATUS_LABELS[ status ] }
+							</StatusIndicator>
 						) ) }
-					</HStack>
+					</Stack>
 				),
 			},
 			{
@@ -207,8 +216,7 @@ export default function SubscriberList() {
 			},
 			{
 				id: 'groupRole',
-				// translators: %s: singular group label (publisher-customisable).
-				label: sprintf( __( '%s role', 'newspack-plugin' ), GROUP_LABEL ),
+				label: groupRoleLabel(),
 				// Hidden by default (not in DEFAULT_VIEW fields). Display-only until
 				// the endpoint gains a group-role filter (NPPD-2111). One line per
 				// group, plan-qualified only when the reader belongs to more than one.
@@ -252,7 +260,10 @@ export default function SubscriberList() {
 			{
 				id: 'lastSeen',
 				label: __( 'Last seen', 'newspack-plugin' ),
-				// Wired to reader activity in a later slice; hidden by default.
+				// The reader's most recent page view, from the activity record the site
+				// keeps for them — reading, not signing in, so a reader on a long-lived
+				// auth cookie who visits daily is last seen today and logging out does
+				// not erase it. Hidden by default; not server-sortable in this slice.
 				enableSorting: false,
 				render: ( { item } ) =>
 					item.lastSeen ? (
@@ -267,22 +278,60 @@ export default function SubscriberList() {
 			{
 				id: 'tags',
 				label: __( 'Tags', 'newspack-plugin' ),
-				// Populated in a later slice (NPPD-1753 PR 7); hidden by default.
+				// The labels stored on the reader here on the site. Hidden by default;
+				// display-only until there is a way to filter on them server-side.
 				enableSorting: false,
-				render: ( { item } ) => (
-					<HStack spacing={ 1 } justify="flex-start" wrap>
-						{ ( item.tags || [] ).map( t => (
-							<Badge key={ t } text={ t } />
-						) ) }
-					</HStack>
-				),
+				// The em-dash empty state matches every other column: an empty cell
+				// reads as a rendering fault rather than as "nothing to show".
+				render: ( { item } ) => {
+					const tags = item.tags || [];
+					if ( tags.length === 0 ) {
+						return <span>—</span>;
+					}
+					return (
+						<HStack spacing={ 1 } justify="flex-start" wrap>
+							{ tags.map( t => (
+								<Badge key={ t } intent="none">
+									{ t }
+								</Badge>
+							) ) }
+						</HStack>
+					);
+				},
 			},
 			{
 				id: 'newsletters',
 				label: __( 'Newsletters', 'newspack-plugin' ),
-				// Populated in a later slice (NPPD-1753 PR 7); hidden by default.
+				// The lists the site records this reader as subscribed to. Each arrives
+				// as `{ id, title }`, with a null title for a list the site holds no
+				// definition for — routinely the ESP's own IDs, which are never
+				// mirrored locally. The unresolved wording is composed here rather
+				// than server-side so the ID stays machine-readable for a future
+				// filter, and so this string sits in the same bundle as the column
+				// heading above it. Showing the bare ID is not an option: `abc123def`
+				// in a publisher-facing column reads as a newsletter name.
+				// Hidden by default; display-only until there is a server-side filter.
 				enableSorting: false,
-				render: ( { item } ) => <div>{ ( item.newsletters || [] ).join( ', ' ) }</div>,
+				render: ( { item } ) => {
+					const newsletters = item.newsletters || [];
+					if ( newsletters.length === 0 ) {
+						return <span>—</span>;
+					}
+					return (
+						<div>
+							{ newsletters
+								.map(
+									list =>
+										// Nullish, not falsy: unresolved is the null the endpoint
+										// sends, not every title JavaScript reads as empty.
+										list.title ??
+										/* translators: %s: the email service provider's identifier for a list the site has no local record of. */
+										sprintf( __( 'Unknown list (%s)', 'newspack-plugin' ), list.id )
+								)
+								.join( ', ' ) }
+						</div>
+					);
+				},
 			},
 		],
 		[ avatars ]
@@ -315,21 +364,28 @@ export default function SubscriberList() {
 	};
 
 	// Surface the subscriber count in the header breadcrumb, e.g. "/ Subscribers (85)".
-	useEffect( () => {
+	// Before paint: this carries the width override, and an error arrives outside a
+	// React event, so a passive effect would paint full-bleed for one frame first.
+	useLayoutEffect( () => {
 		setHeaderData( {
-			sectionName: (
-				<>
-					{ __( 'Subscribers', 'newspack-plugin' ) }{ ' ' }
-					<span
-						className="newspack-subscribers__header-count"
-						aria-label={ sprintf( __( '%s subscribers total', 'newspack-plugin' ), total.toLocaleString() ) }
-					>
-						{ `(${ total.toLocaleString() })` }
-					</span>
-				</>
-			),
+			// Header data is merged, so the explicit `undefined` is what clears a
+			// previous `false`; a retry never changes the route, so nothing else would.
+			fullWidth: error ? false : undefined,
+			sectionName: [
+				{
+					label: __( 'Subscribers', 'newspack-plugin' ),
+					count: subscribersLoading || error ? undefined : total,
+					countLabel: sprintf(
+						/* translators: %s: number of subscribers matching the current view. */
+						_n( '%s subscriber', '%s subscribers', total, 'newspack-plugin' ),
+						formatCount( total )
+					),
+				},
+			],
 		} );
-	}, [ setHeaderData, total ] );
+	}, [ setHeaderData, total, subscribersLoading, error ] );
+
+	const { retryRef, retry } = useRetryFocus( { settled: ! subscribersLoading, failed: Boolean( error ), reload } );
 
 	if ( subscribersLoading ) {
 		return (
@@ -342,12 +398,20 @@ export default function SubscriberList() {
 	// A failed read must not read as "this site has no subscribers": say so, and
 	// offer a retry.
 	if ( error ) {
+		const message = sprintf(
+			/* translators: %s: the error message returned by the server. */
+			__( 'Could not load subscribers: %s', 'newspack-plugin' ),
+			error
+		);
 		return (
-			<Notice isError noticeText={ sprintf( __( 'Could not load subscribers: %s', 'newspack-plugin' ), error ) }>
-				<Button variant="link" onClick={ reload }>
-					{ __( 'Retry', 'newspack-plugin' ) }
-				</Button>
-			</Notice>
+			<LoadFailureNotice
+				message={ message }
+				action={
+					<Button variant="link" ref={ retryRef } onClick={ retry }>
+						{ __( 'Retry', 'newspack-plugin' ) }
+					</Button>
+				}
+			/>
 		);
 	}
 

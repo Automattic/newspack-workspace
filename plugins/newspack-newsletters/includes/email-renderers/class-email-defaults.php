@@ -17,6 +17,13 @@ defined( 'ABSPATH' ) || exit;
  *
  * The `wp_theme_json_data_default` hook fires globally; callbacks guard on the WC renderer
  * flag and the email-editor request context.
+ *
+ * The callbacks deliberately carry NO type declarations. Core passes a
+ * `WP_Theme_JSON_Data`, but with the Gutenberg plugin active the resolver passes
+ * `WP_Theme_JSON_Data_Gutenberg` — a sibling class, not a subclass — so a
+ * `WP_Theme_JSON_Data` declaration fatals with a TypeError on every theme.json
+ * resolution, front end included, before the guards below can run. Both classes
+ * expose `update_with()`, which is all these callbacks need.
  */
 class Email_Defaults {
 
@@ -52,10 +59,10 @@ class Email_Defaults {
 	 * email-editor request. The default origin fires before _theme, so any
 	 * theme-origin radius still wins.
 	 *
-	 * @param \WP_Theme_JSON_Data $theme_json Incoming default theme.json data.
-	 * @return \WP_Theme_JSON_Data Potentially modified default theme.json data.
+	 * @param \WP_Theme_JSON_Data|\WP_Theme_JSON_Data_Gutenberg $theme_json Incoming default theme.json data.
+	 * @return \WP_Theme_JSON_Data|\WP_Theme_JSON_Data_Gutenberg Potentially modified default theme.json data.
 	 */
-	public static function inject_button_border_radius( \WP_Theme_JSON_Data $theme_json ): \WP_Theme_JSON_Data {
+	public static function inject_button_border_radius( $theme_json ) {
 		if ( ! Feature_Flag::is_enabled() ) {
 			return $theme_json;
 		}
@@ -88,10 +95,10 @@ class Email_Defaults {
 	 * (no post yet) fonts resolve via global → theme → fallback, so new newsletters
 	 * show theme fonts instead of the hardcoded builder defaults.
 	 *
-	 * @param \WP_Theme_JSON_Data $theme_json Incoming default theme.json data.
-	 * @return \WP_Theme_JSON_Data Potentially modified default theme.json data.
+	 * @param \WP_Theme_JSON_Data|\WP_Theme_JSON_Data_Gutenberg $theme_json Incoming default theme.json data.
+	 * @return \WP_Theme_JSON_Data|\WP_Theme_JSON_Data_Gutenberg Potentially modified default theme.json data.
 	 */
-	public static function inject_fonts( \WP_Theme_JSON_Data $theme_json ): \WP_Theme_JSON_Data {
+	public static function inject_fonts( $theme_json ) {
 		if ( ! Feature_Flag::is_enabled() ) {
 			return $theme_json;
 		}

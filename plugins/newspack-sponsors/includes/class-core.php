@@ -51,6 +51,25 @@ final class Core {
 		add_filter( 'newspack_ads_should_show_ads', [ __CLASS__, 'suppress_ads' ], 10, 2 );
 		add_filter( 'newspack_ads_ad_targeting', [ __CLASS__, 'ad_targeting' ], 10, 2 );
 		add_action( 'pre_get_posts', [ __CLASS__, 'ensure_only_sponsors' ] );
+		add_filter( 'newspack_blocks_articles_allowed_post_types', [ __CLASS__, 'allow_in_articles_endpoint' ], 10, 1 );
+	}
+
+	/**
+	 * Opt the Sponsors CPT into the newspack-blocks public /articles endpoint, so
+	 * Homepage Posts / Carousel load-more works for Sponsors-only blocks.
+	 *
+	 * The CPT is public=false (no standalone URLs), so newspack-blocks otherwise
+	 * drops it from that unauthenticated endpoint. Its published data is already
+	 * surfaced publicly as sponsor labels/bylines, so this is a deliberate,
+	 * low-sensitivity opt-in of published sponsors only.
+	 *
+	 * @param string[] $post_types Post type slugs the endpoint may serve.
+	 * @return string[]
+	 */
+	public static function allow_in_articles_endpoint( $post_types ) {
+		$post_types   = (array) $post_types;
+		$post_types[] = self::NEWSPACK_SPONSORS_CPT;
+		return $post_types;
 	}
 
 	/**

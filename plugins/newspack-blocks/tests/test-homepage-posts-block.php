@@ -5,6 +5,8 @@
  * @package Newspack_Blocks
  */
 
+require_once __DIR__ . '/class-newspack-tag-labels-stub.php';
+
 /**
  * Homepage Posts Block test case.
  */
@@ -282,6 +284,208 @@ class HomepagePostsBlockTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 	}
 
 	/**
+	 * The editor posts endpoint must not expose live author-archive links.
+	 *
+	 * The editor canvas renders newspack_post_byline and newspack_post_avatars
+	 * verbatim, so a real href navigates the canvas iframe away from the post
+	 * being edited. Author anchors must be neutralized to href="#", matching
+	 * the category link convention in the same payload.
+	 */
+	public function test_editor_posts_endpoint_neutralizes_author_archive_links() {
+		$author_id = self::factory()->user->create(
+			[
+				'role'          => 'author',
+				'display_name'  => 'Jane Example',
+				'user_nicename' => 'jane-example',
+			]
+		);
+		$authored_post_id = self::factory()->post->create(
+			[
+				'post_status' => 'publish',
+				'post_author' => $author_id,
+			]
+		);
+		// A post whose author no longer exists still renders a byline anchor
+		// ("by" with no name, empty author lookup) and must be neutralized too.
+		$orphan_post_id = self::factory()->post->create(
+			[
+				'post_status' => 'publish',
+				'post_author' => 99999,
+			]
+		);
+		wp_set_current_user( self::factory()->user->create( [ 'role' => 'administrator' ] ) );
+
+		$request = new WP_REST_Request( 'GET', '/newspack-blocks/v1/newspack-blocks-posts' );
+		$request->set_param( 'postsToShow', 10 );
+		$posts = rest_do_request( $request )->get_data();
+
+		$posts_by_id = array_column( $posts, null, 'id' );
+		self::assertArrayHasKey( $authored_post_id, $posts_by_id, 'The endpoint returns the authored post.' );
+		self::assertArrayHasKey( $orphan_post_id, $posts_by_id, 'The endpoint returns the orphaned-author post.' );
+
+		self::assertStringContainsString(
+			'Jane Example',
+			$posts_by_id[ $authored_post_id ]['newspack_post_byline'],
+			'The author name still renders in the editor byline.'
+		);
+
+		foreach ( [ $authored_post_id, $orphan_post_id ] as $post_id ) {
+			self::assertStringContainsString(
+				'href="#"',
+				$posts_by_id[ $post_id ]['newspack_post_byline'],
+				'The editor byline anchor is neutralized, not removed.'
+			);
+			self::assertStringNotContainsString(
+				'href="http',
+				$posts_by_id[ $post_id ]['newspack_post_byline'],
+				'The editor byline must not carry a live link.'
+			);
+			self::assertStringContainsString(
+				'href="#"',
+				$posts_by_id[ $post_id ]['newspack_post_avatars'],
+				'The editor avatar anchor is neutralized, not removed.'
+			);
+			self::assertStringNotContainsString(
+				'href="http',
+				$posts_by_id[ $post_id ]['newspack_post_avatars'],
+				'The editor avatar link must not carry a live link.'
+			);
+		}
+	}
+
+	/**
+	 * Byline HTML injected via the newspack_blocks_post_byline filter (the
+	 * newspack-plugin custom-bylines feature hooks it and replaces the byline
+	 * wholesale) must be neutralized too — neutralization runs on the finished
+	 * payload, after the filter.
+	 */
+	public function test_editor_posts_endpoint_neutralizes_filtered_byline_links() {
+		self::factory()->post->create( [ 'post_status' => 'publish' ] );
+		wp_set_current_user( self::factory()->user->create( [ 'role' => 'administrator' ] ) );
+
+		$live_link_byline_filter = function () {
+			return '<span class="author vcard"><a class="url fn n" href="https://example.test/author/custom">Custom Byline</a></span>';
+		};
+		add_filter( 'newspack_blocks_post_byline', $live_link_byline_filter );
+
+		$request = new WP_REST_Request( 'GET', '/newspack-blocks/v1/newspack-blocks-posts' );
+		$request->set_param( 'postsToShow', 10 );
+		$posts = rest_do_request( $request )->get_data();
+
+		remove_filter( 'newspack_blocks_post_byline', $live_link_byline_filter );
+
+		self::assertNotEmpty( $posts, 'The editor posts endpoint returns the published post.' );
+		foreach ( $posts as $post_data ) {
+			self::assertStringContainsString(
+				'Custom Byline',
+				$post_data['newspack_post_byline'],
+				'The filtered byline content is preserved.'
+			);
+			self::assertStringNotContainsString(
+				'https://example.test/author/custom',
+				$post_data['newspack_post_byline'],
+				'A live link supplied by the byline filter must be neutralized in the editor payload.'
+			);
+			self::assertStringContainsString(
+				'href="#"',
+				$post_data['newspack_post_byline'],
+				'The filtered byline anchor is neutralized, not removed.'
+			);
+		}
+	}
+
+	/**
+	 * Avatar markup whose URL carries an href query parameter must come
+	 * through intact — neutralization touches only real anchor href
+	 * attributes, never "href=" text inside another attribute's value
+	 * (the shape produced by URL-rewriting avatar proxies).
+	 */
+	public function test_editor_posts_endpoint_preserves_avatar_markup() {
+		$author_id = self::factory()->user->create(
+			[
+				'role'          => 'author',
+				'display_name'  => 'Ada Fixture',
+				'user_nicename' => 'ada-fixture',
+			]
+		);
+		self::factory()->post->create(
+			[
+				'post_status' => 'publish',
+				'post_author' => $author_id,
+			]
+		);
+		wp_set_current_user( self::factory()->user->create( [ 'role' => 'administrator' ] ) );
+
+		$proxied_avatar_filter = function () {
+			return '<img src="https://cdn.example.test/proxy?url=a&amp;href=x" srcset="https://cdn.example.test/proxy?url=b&amp;href=y 2x" class="avatar" alt="" width="48" height="48" />';
+		};
+		add_filter( 'pre_get_avatar', $proxied_avatar_filter );
+
+		$request = new WP_REST_Request( 'GET', '/newspack-blocks/v1/newspack-blocks-posts' );
+		$request->set_param( 'postsToShow', 10 );
+		$posts = rest_do_request( $request )->get_data();
+
+		remove_filter( 'pre_get_avatar', $proxied_avatar_filter );
+
+		self::assertNotEmpty( $posts, 'The editor posts endpoint returns the published post.' );
+		foreach ( $posts as $post_data ) {
+			self::assertStringContainsString(
+				'src="https://cdn.example.test/proxy?url=a&amp;href=x"',
+				$post_data['newspack_post_avatars'],
+				'The avatar src survives neutralization byte-identical.'
+			);
+			self::assertStringContainsString(
+				'srcset="https://cdn.example.test/proxy?url=b&amp;href=y 2x"',
+				$post_data['newspack_post_avatars'],
+				'The avatar srcset survives neutralization byte-identical.'
+			);
+			self::assertStringContainsString(
+				'href="#"',
+				$post_data['newspack_post_avatars'],
+				'The avatar anchor is still neutralized.'
+			);
+		}
+	}
+
+	/**
+	 * The front-end byline formatter keeps live author-archive links.
+	 *
+	 * The discriminating mirror of the editor tests above: neutralization
+	 * belongs to the editor payload only, and moving it into the shared
+	 * formatter would break every reader-facing author link while the editor
+	 * tests stayed green.
+	 */
+	public function test_front_end_byline_formatter_keeps_live_author_links() {
+		$author_id = self::factory()->user->create(
+			[
+				'role'          => 'author',
+				'display_name'  => 'Frank Fixture',
+				'user_nicename' => 'frank-fixture',
+			]
+		);
+		$post_id   = self::factory()->post->create(
+			[
+				'post_status' => 'publish',
+				'post_author' => $author_id,
+			]
+		);
+
+		$GLOBALS['post'] = get_post( $post_id );
+		setup_postdata( $GLOBALS['post'] );
+
+		$byline = newspack_blocks_format_byline( Newspack_Blocks::prepare_authors() );
+
+		self::assertStringContainsString(
+			get_author_posts_url( $author_id, 'frank-fixture' ),
+			$byline,
+			'The front-end byline keeps the live author-archive link.'
+		);
+		self::assertStringContainsString( 'Frank Fixture', $byline, 'The author name renders in the front-end byline.' );
+
+		wp_reset_postdata();
+	}
+
+	/**
 	 * The newspack_tag_labels REST field exposes the { flag, link } shape
 	 * returned by \Newspack\Tag_Labels, normalized to a 0-indexed list.
 	 *
@@ -329,5 +533,170 @@ class HomepagePostsBlockTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 
 		\Newspack\Tag_Labels::$stub_labels = null;
 		self::assertFalse( Newspack_Blocks_API::newspack_blocks_get_tag_labels( [ 'id' => $post_id ] ) );
+	}
+
+	/**
+	 * The block server render must not emit the `cat-links` class on tag
+	 * labels: per-section `.cat-links a` styling must never recolor them
+	 * (NPPM-3049, the block-side counterpart of the NPPM-3048 theme fix).
+	 */
+	public function test_display_tag_labels_renders_without_cat_links() {
+		ob_start();
+		Newspack_Blocks::display_tag_labels(
+			[
+				[
+					'flag' => 'Opinion',
+					'link' => 'https://example.org/tag/opinion/',
+				],
+			]
+		);
+		$html = ob_get_clean();
+
+		self::assertStringContainsString( '<div class="tag-labels">', $html, 'Wrapper is a div carrying exactly the tag-labels class.' );
+		self::assertStringNotContainsString( 'cat-links', $html, 'Wrapper must not carry cat-links (NPPM-3049).' );
+		self::assertStringContainsString( 'class="tag-label flag"', $html, 'Inner labels keep the tag-label flag classes.' );
+	}
+
+	/**
+	 * Empty labels produce no output, not an empty wrapper.
+	 *
+	 * `null` and `[]` reach the same early return, so one call covers both. What
+	 * this catches is a wrapper, or the space that trails it, being echoed when
+	 * there is nothing to put inside.
+	 */
+	public function test_display_tag_labels_outputs_nothing_for_empty_labels() {
+		ob_start();
+		Newspack_Blocks::display_tag_labels( null );
+		self::assertSame( '', ob_get_clean(), 'Empty labels must render nothing, not an empty wrapper.' );
+	}
+
+	/**
+	 * A non-viewable post type explicitly opted in via the
+	 * newspack_blocks_articles_allowed_post_types filter is served by the endpoint,
+	 * without loosening the gate for other non-viewable types.
+	 */
+	public function test_articles_endpoint_allows_filter_allowlisted_post_type() {
+		$allowed  = $this->register_non_viewable_cpt( 'newspack_allowed_cpt' );
+		$excluded = $this->register_non_viewable_cpt( 'newspack_secret_cpt' );
+		$allowed_id  = self::factory()->post->create( [ 'post_type' => $allowed, 'post_status' => 'publish' ] );
+		$excluded_id = self::factory()->post->create( [ 'post_type' => $excluded, 'post_status' => 'publish' ] );
+
+		$filter = function ( $types ) use ( $allowed ) {
+			$types[] = $allowed;
+			return $types;
+		};
+		add_filter( 'newspack_blocks_articles_allowed_post_types', $filter );
+		wp_set_current_user( 0 );
+
+		$controller = new WP_REST_Newspack_Articles_Controller();
+		$request    = new WP_REST_Request( 'GET', '/newspack-blocks/v1/articles' );
+		$request->set_param( 'postType', [ $allowed, $excluded ] );
+		$request->set_param( 'postsToShow', 10 );
+		try {
+			$ids = $controller->get_items( $request )->get_data()['ids'];
+		} finally {
+			// Always drop the global filter so a failure here can't leak into later tests.
+			remove_filter( 'newspack_blocks_articles_allowed_post_types', $filter );
+		}
+
+		self::assertContains( $allowed_id, $ids, 'An allow-listed non-viewable post type is served.' );
+		self::assertNotContains( $excluded_id, $ids, 'A non-viewable post type not on the allow-list is still dropped.' );
+	}
+
+	/**
+	 * Opting a post type into the endpoint opts in its published posts only. The
+	 * status gate in build_articles_query() is what keeps unpublished posts of an
+	 * allow-listed type away from an anonymous caller, so assert it directly.
+	 */
+	public function test_articles_endpoint_allowlist_still_hides_unpublished() {
+		$allowed = $this->register_non_viewable_cpt( 'newspack_status_cpt' );
+		$published_id = self::factory()->post->create( [ 'post_type' => $allowed, 'post_status' => 'publish' ] );
+		$draft_id     = self::factory()->post->create( [ 'post_type' => $allowed, 'post_status' => 'draft' ] );
+		$private_id   = self::factory()->post->create( [ 'post_type' => $allowed, 'post_status' => 'private' ] );
+
+		$filter = function ( $types ) use ( $allowed ) {
+			$types[] = $allowed;
+			return $types;
+		};
+		add_filter( 'newspack_blocks_articles_allowed_post_types', $filter );
+		wp_set_current_user( 0 );
+
+		$controller = new WP_REST_Newspack_Articles_Controller();
+		$request    = new WP_REST_Request( 'GET', '/newspack-blocks/v1/articles' );
+		$request->set_param( 'postType', [ $allowed ] );
+		$request->set_param( 'postsToShow', 10 );
+		try {
+			$ids = $controller->get_items( $request )->get_data()['ids'];
+		} finally {
+			// Always drop the global filter so a failure here can't leak into later tests.
+			remove_filter( 'newspack_blocks_articles_allowed_post_types', $filter );
+		}
+
+		self::assertContains( $published_id, $ids, 'A published post of an allow-listed type is served.' );
+		self::assertNotContains( $draft_id, $ids, 'A draft of an allow-listed type stays hidden from an anonymous caller.' );
+		self::assertNotContains( $private_id, $ids, 'A private post of an allow-listed type stays hidden from an anonymous caller.' );
+	}
+
+	/**
+	 * The filter_excerpt() method routes its content through Block_Visibility sanitization
+	 * before excerpt_remove_blocks(), verifying the integration point that strips gated
+	 * content from excerpts built by the homepage-posts block.
+	 */
+	public function test_filter_excerpt_sanitizes_via_block_visibility() {
+		// Skip if the real Block_Visibility is present; the stub-based test is for verification
+		// when newspack-plugin is not loaded.
+		if ( ! property_exists( '\Newspack\Block_Visibility', 'sanitization_was_called' ) ) {
+			$this->markTestSkipped( 'Real \Newspack\Block_Visibility present; stub-based wiring test skipped.' );
+		}
+
+		// Create a post with a gated group block (would be withheld from anonymous users).
+		$gate    = '{"newspackAccessControlMode":"custom","newspackAccessControlRules":{"registration":{"active":true}},"newspackAccessControlVisibility":"visible"}';
+		$content = '<!-- wp:paragraph --><p>PUBLICMARK</p><!-- /wp:paragraph -->'
+			. '<!-- wp:group ' . $gate . ' --><div class="wp-block-group">'
+			. '<!-- wp:paragraph --><p>SECRETMARK</p><!-- /wp:paragraph -->'
+			. '</div><!-- /wp:group -->';
+		$post_id = self::factory()->post->create(
+			[
+				'post_status'  => 'publish',
+				'post_content' => $content,
+				'post_excerpt' => '',
+			]
+		);
+
+		// Reset the flag and call filter_excerpt.
+		\Newspack\Block_Visibility::reset_sanitization_for_tests();
+		$GLOBALS['post'] = get_post( $post_id );
+		setup_postdata( $GLOBALS['post'] );
+
+		Newspack_Blocks::filter_excerpt( [ 'excerptLength' => 999, 'showExcerpt' => true ] );
+		$excerpt = get_the_excerpt( $post_id );
+		Newspack_Blocks::remove_excerpt_filter();
+
+		// Verify: Block_Visibility sanitization was called (the integration point).
+		self::assertTrue(
+			\Newspack\Block_Visibility::$sanitization_was_called,
+			'Block_Visibility::strip_blocks_hidden_from_public() must be called by filter_excerpt().'
+		);
+
+		// Verify *when*: the call has to land before excerpt_remove_blocks(), which
+		// unwraps core/group and destroys the access-control attributes the real
+		// implementation matches on. The stub's marker removal would succeed either
+		// way, so without this the test passes while production strips nothing.
+		self::assertStringContainsString(
+			'newspackAccessControl',
+			\Newspack\Block_Visibility::$received_content,
+			'Sanitization must run while the block attributes are still intact.'
+		);
+		self::assertStringContainsString(
+			'<!-- wp:group',
+			\Newspack\Block_Visibility::$received_content,
+			'Sanitization must run before the block structure is flattened.'
+		);
+
+		// Verify: gated content was stripped; public content remains.
+		self::assertStringNotContainsString( 'SECRETMARK', $excerpt, 'Gated block content must not appear in excerpt.' );
+		self::assertStringContainsString( 'PUBLICMARK', $excerpt, 'Public block content must remain in excerpt.' );
+
+		unset( $GLOBALS['post'] );
 	}
 }

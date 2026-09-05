@@ -295,12 +295,62 @@ class Donations {
 		}
 
 		// Fall back to the legacy parent/child donation product check.
-		$parent_product = self::get_parent_donation_product();
-		if ( ! $parent_product ) {
-			return false;
+		return in_array( $product_id, self::get_legacy_donation_product_ids(), true );
+	}
+
+	/**
+	 * Request-level cache of the legacy donation product IDs, keyed by the
+	 * parent-product option.
+	 *
+	 * The key only covers the parent: children can be regenerated under a stable
+	 * option (see update_donation_product()), which the key cannot detect. Call
+	 * reset_legacy_donation_product_ids_cache() after any write that may have
+	 * changed them.
+	 *
+	 * @var array|null
+	 */
+	private static $legacy_donation_product_ids = null;
+
+	/**
+	 * Reset the cached legacy donation product IDs.
+	 *
+	 * Call this after regenerating the donation products in the same request or
+	 * other long-lived process so subsequent lookups reload the current set.
+	 */
+	public static function reset_legacy_donation_product_ids_cache() {
+		self::$legacy_donation_product_ids = null;
+	}
+
+	/**
+	 * Get the legacy donation product IDs: the grouped parent and its children.
+	 *
+	 * Memoized because the answer is request-invariant while callers are not:
+	 * is_donation_product() runs once per row of a products REST response, and
+	 * resolving this from scratch re-instantiates the parent product and each of
+	 * its children every time.
+	 *
+	 * @return int[] Legacy donation product IDs, empty when none is configured.
+	 */
+	private static function get_legacy_donation_product_ids() {
+		$option_id = (int) get_option( self::DONATION_PRODUCT_ID_OPTION, 0 );
+		if ( null !== self::$legacy_donation_product_ids && self::$legacy_donation_product_ids['option_id'] === $option_id ) {
+			return self::$legacy_donation_product_ids['ids'];
 		}
-		$donation_product_ids = array_values( self::get_donation_product_child_products_ids() );
-		return in_array( $product_id, $donation_product_ids, true ) || $product_id === $parent_product->get_id();
+
+		$ids            = [];
+		$parent_product = self::get_parent_donation_product();
+		if ( $parent_product ) {
+			// Missing frequencies are stored as false; strict in_array() would never
+			// match them anyway, so drop them rather than carry them around.
+			$ids   = array_values( array_filter( self::get_donation_product_child_products_ids() ) );
+			$ids[] = $parent_product->get_id();
+		}
+
+		self::$legacy_donation_product_ids = [
+			'option_id' => $option_id,
+			'ids'       => $ids,
+		];
+		return $ids;
 	}
 
 	/**
@@ -376,7 +426,7 @@ class Donations {
 	public static function get_order_donation_product_id( $order_id ) {
 		$donation_products = array_merge( self::get_donation_product_child_products_ids(), self::get_flagged_donation_product_ids() );
 		if ( empty( array_filter( $donation_products ) ) ) {
-			return;
+			return false;
 		}
 		$order          = new \WC_Order( $order_id );
 		$order_items    = $order->get_items();
@@ -663,6 +713,11 @@ class Donations {
 		$parent_product->set_status( 'publish' );
 		$parent_product->save();
 		update_option( self::DONATION_PRODUCT_ID_OPTION, $parent_product->get_id() );
+
+		// Children may have been regenerated under an unchanged parent option, so
+		// neither cache can detect the change on its own. Drop both.
+		self::reset_legacy_donation_product_ids_cache();
+		self::reset_flagged_donation_product_ids_cache();
 	}
 
 	/**
@@ -878,10 +933,25 @@ class Donations {
 		if ( $is_modal_checkout ) {
 			$query_args['modal_checkout'] = 1;
 		}
-		foreach ( [ 'after_success_behavior', 'after_success_button_label', 'after_success_url' ] as $attribute_name ) {
-			$value = filter_input( INPUT_GET, $attribute_name, FILTER_SANITIZE_FULL_SPECIAL_CHARS );
+		// Matched by prefix rather than listed by name. Every `after_success_*` param has to
+		// arrive together: `after_success_token` vouches for the destination in
+		// `after_success_url`, so a param left behind here means a publisher-configured
+		// destination arrives unvouched and is refused as if a link had supplied it. A list
+		// would need editing again the next time one of these is renamed.
+		// Mirrors the same prefix match in `Newspack_Blocks\Modal_Checkout`.
+		// Only the keys are used here; each value is read again below with the filter that
+		// suits it.
+		$request_params = filter_input_array( INPUT_GET, FILTER_SANITIZE_FULL_SPECIAL_CHARS ) ?? [];
+		foreach ( array_keys( (array) $request_params ) as $attribute_name ) {
+			if ( 0 !== strpos( $attribute_name, 'after_success' ) ) {
+				continue;
+			}
+			// The destination is a URL, not display text: HTML-encoding it here would turn
+			// `&` into `&amp;` in the value itself.
+			$filter = 'after_success_url' === $attribute_name ? FILTER_SANITIZE_URL : FILTER_SANITIZE_FULL_SPECIAL_CHARS;
+			$value  = filter_input( INPUT_GET, $attribute_name, $filter );
 			if ( ! empty( $value ) ) {
-				$query_args[ $attribute_name ] = $value;
+				$query_args[ sanitize_key( $attribute_name ) ] = $value;
 			}
 		}
 

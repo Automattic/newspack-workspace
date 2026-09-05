@@ -1,3 +1,50 @@
+## newspack-theme [2.26.1](https://github.com/Automattic/newspack-workspace/compare/newspack-theme@2.26.0...newspack-theme@2.26.1) (2026-09-04)
+
+
+### Bug Fixes
+
+* **theme:** offer page templates on election profiles ([#1039](https://github.com/Automattic/newspack-workspace/issues/1039)) ([359b603](https://github.com/Automattic/newspack-workspace/commit/359b603c4a447720b31a568e0950c0c70b18fec6))
+
+# newspack-theme [2.26.0](https://github.com/Automattic/newspack-workspace/compare/newspack-theme@2.25.1...newspack-theme@2.26.0) (2026-08-31)
+
+
+### Features
+
+* add tag labels to the Carousel block ([#429](https://github.com/Automattic/newspack-workspace/issues/429)) ([567e5ab](https://github.com/Automattic/newspack-workspace/commit/567e5ab9fb54b69bd6e9377eac3f3f76ca8e29c2))
+* **campaigns:** Contextual Prompts, AI-assisted story donation asks ([#686](https://github.com/Automattic/newspack-workspace/issues/686)) ([f896387](https://github.com/Automattic/newspack-workspace/commit/f896387b5c3c096b6ed0cacbf2fe89b3e7f6b703)), closes [#719](https://github.com/Automattic/newspack-workspace/issues/719)
+* **themes:** offer Header and Body fonts in the editor font picker ([#842](https://github.com/Automattic/newspack-workspace/issues/842)) ([6286f75](https://github.com/Automattic/newspack-workspace/commit/6286f75c8dc6dbf52e5f0c5fcc09bf0e75699e0e))
+
+## newspack-theme [2.25.1](https://github.com/Automattic/newspack-workspace/compare/newspack-theme@2.25.0...newspack-theme@2.25.1) (2026-08-17)
+
+
+### Bug Fixes
+
+* **ads:** remove colored gaps from empty Broadstreet ad slots ([#578](https://github.com/Automattic/newspack-workspace/issues/578)) ([c16c8fc](https://github.com/Automattic/newspack-workspace/commit/c16c8fcb2dbce437cc452be74d42514631b3fd6b))
+
+# newspack-theme [2.25.0](https://github.com/Automattic/newspack-workspace/compare/newspack-theme@2.24.1...newspack-theme@2.25.0) (2026-08-17)
+
+
+### Bug Fixes
+
+* align image captions with image ([#386](https://github.com/Automattic/newspack-workspace/issues/386)) ([807008f](https://github.com/Automattic/newspack-workspace/commit/807008f94b9061ab28eed810bbdec3a9e49d9129))
+
+
+### Features
+
+* **performance:** defer reader-facing JS assets (NPPM-3037) ([#722](https://github.com/Automattic/newspack-workspace/issues/722)) ([2855574](https://github.com/Automattic/newspack-workspace/commit/2855574099c4f416a984cda8565b269e5a9f0fb0))
+
+
+### Dependencies
+
+* **newspack-scripts:** upgraded to 5.11.0
+
+## newspack-theme [2.24.1](https://github.com/Automattic/newspack-workspace/compare/newspack-theme@2.24.0...newspack-theme@2.24.1) (2026-08-03)
+
+
+### Dependencies
+
+* **newspack-scripts:** upgraded to 5.10.0
+
 # newspack-theme [2.24.0](https://github.com/Automattic/newspack-workspace/compare/newspack-theme@2.23.7...newspack-theme@2.24.0) (2026-07-20)
 
 

@@ -15,6 +15,7 @@ defined( 'ABSPATH' ) || exit;
 class Audience_Content_Gates extends Wizard {
 
 	use Wizards\Traits\Content_Gate_Preferences;
+	use Wizards\Traits\Audience_Management_Dependency;
 
 	/**
 	 * Admin page slug.
@@ -94,15 +95,24 @@ class Audience_Content_Gates extends Wizard {
 		\wp_localize_script(
 			'newspack-wizards',
 			'newspackAudienceContentGates',
-			[
-				'api'                     => '/' . NEWSPACK_API_NAMESPACE . '/wizard/' . $this->slug,
-				'available_access_rules'  => Access_Rules::get_access_rules_for_client(),
-				'available_content_rules' => Content_Rules::get_content_rules(),
-				'edit_gate_layout_url'    => Content_Gate::get_edit_gate_layout_url(),
-				'presave_checks_enabled'  => Content_Gate::get_presave_checks_enabled(),
-				'default_gate_status'     => Content_Gate::get_default_new_gate_status(),
-				'feed_restriction_modes'  => Content_Gate_Advanced_Settings::get_feed_restriction_mode_options(),
-			]
+			array_merge(
+				[
+					'api'                           => '/' . NEWSPACK_API_NAMESPACE . '/wizard/' . $this->slug,
+					'available_access_rules'        => Access_Rules::get_access_rules_for_client(),
+					'available_content_rules'       => Content_Rules::get_content_rules(),
+					'edit_gate_layout_url'          => Content_Gate::get_edit_gate_layout_url(),
+					'presave_checks_enabled'        => Content_Gate::get_presave_checks_enabled(),
+					'default_gate_status'           => Content_Gate::get_default_new_gate_status(),
+					'feed_restriction_modes'        => Content_Gate_Advanced_Settings::get_feed_restriction_mode_options(),
+					// While Memberships is active it governs feeds and Access Control
+					// stands down, so the feed controls below still save but change
+					// nothing until cutover. The wizard says so rather than hiding
+					// them: the stored value is what takes effect once Memberships is
+					// deactivated. See Content_Gate_Advanced_Settings::get_feed_restriction_mode().
+					'feeds_governed_by_memberships' => Memberships::is_active(),
+				],
+				$this->get_audience_management_script_data()
+			)
 		);
 
 		\wp_localize_script(
@@ -191,7 +201,7 @@ class Audience_Content_Gates extends Wizard {
 						],
 						// Validate the whole object against the schema so the nested
 						// feed_restriction_mode enum is actually enforced (a bad value
-						// returns a 400 instead of being silently coerced to exclude).
+						// returns a 400 instead of being silently coerced to the default).
 						'validate_callback'    => 'rest_validate_request_arg',
 						'sanitize_callback'    => 'rest_sanitize_request_arg',
 					],
@@ -246,6 +256,30 @@ class Audience_Content_Gates extends Wizard {
 
 		register_rest_route(
 			NEWSPACK_API_NAMESPACE,
+			'/wizard/' . $this->slug . '/site-meter',
+			[
+				'methods'             => 'POST',
+				'callback'            => [ $this, 'update_site_meter' ],
+				'permission_callback' => [ $this, 'api_permissions_check' ],
+				'args'                => [
+					'anonymous_count'  => [
+						'type'    => 'integer',
+						'minimum' => 0,
+					],
+					'registered_count' => [
+						'type'    => 'integer',
+						'minimum' => 0,
+					],
+					'period'           => [
+						'type' => 'string',
+						'enum' => [ 'week', 'month' ],
+					],
+				],
+			]
+		);
+
+		register_rest_route(
+			NEWSPACK_API_NAMESPACE,
 			'/wizard/' . $this->slug . '/countdown-banner',
 			[
 				'methods'             => 'POST',
@@ -290,7 +324,7 @@ class Audience_Content_Gates extends Wizard {
 						'properties'        => Content_Gate_API::$gate_properties,
 					],
 				],
-				'permission_callback' => [ $this, 'api_permissions_check' ],
+				'permission_callback' => [ $this, 'api_permissions_check_audience_management' ],
 			]
 		);
 
@@ -355,7 +389,7 @@ class Audience_Content_Gates extends Wizard {
 			[
 				'methods'             => 'POST',
 				'callback'            => [ $this, 'api_duplicate_gate' ],
-				'permission_callback' => [ $this, 'api_permissions_check' ],
+				'permission_callback' => [ $this, 'api_permissions_check_audience_management' ],
 				'args'                => [
 					'id' => [
 						'type'              => 'integer',
@@ -402,10 +436,14 @@ class Audience_Content_Gates extends Wizard {
 	 * @return \WP_REST_Response
 	 */
 	public function get_config() {
+		// REST never fires `admin_init`, so a client reading the config before any
+		// wp-admin pageload would be told gates share an allowance not yet being served.
+		Site_Meter::maybe_adopt_gate_settings();
 		$advanced_settings_response = $this->prepare_advanced_settings_response( Content_Gate_Advanced_Settings::get_settings() );
 		$config = [
 			'gates'  => Content_Gate::get_gates(),
 			'config' => [
+				'site_meter'        => Site_Meter::get_settings(),
 				'countdown_banner'  => Metering_Countdown::get_settings(),
 				'content_gifting'   => Content_Gifting::get_settings(),
 				'advanced_settings' => $advanced_settings_response,
@@ -447,7 +485,7 @@ class Audience_Content_Gates extends Wizard {
 	private function prepare_advanced_settings_response( $advanced ) {
 		return [
 			'restrict_feeds'                 => (bool) ( $advanced['restrict_feeds'] ?? false ),
-			'feed_restriction_mode'          => (string) ( $advanced['feed_restriction_mode'] ?? Content_Gate_Advanced_Settings::FEED_MODE_EXCLUDE ),
+			'feed_restriction_mode'          => (string) ( $advanced['feed_restriction_mode'] ?? Content_Gate_Advanced_Settings::FEED_MODE_TRUNCATE ),
 			'newsletter_link_bypass_enabled' => (bool) ( $advanced['newsletter_link_bypass_enabled'] ?? false ),
 		];
 	}
@@ -511,6 +549,24 @@ class Audience_Content_Gates extends Wizard {
 	}
 
 	/**
+	 * Update the site meter settings.
+	 *
+	 * @param \WP_REST_Request $request The request object.
+	 *
+	 * @return \WP_REST_Response|\WP_Error
+	 */
+	public function update_site_meter( \WP_REST_Request $request ): \WP_REST_Response|\WP_Error {
+		// Before the write, so a site that can adopt has adopted by the time the save
+		// lands (adoption defers while Woo Memberships is active). The seed is add-only,
+		// so an adoption run already in flight cannot overwrite what this request writes.
+		Site_Meter::maybe_adopt_gate_settings();
+		// Only what the request actually sent: forwarding an absent count as null would
+		// sanitize to zero and silently close the allowance site-wide.
+		$settings = array_intersect_key( $request->get_params(), Site_Meter::get_default_settings() );
+		return rest_ensure_response( Site_Meter::update_settings( $settings ) );
+	}
+
+	/**
 	 * Create a gate.
 	 *
 	 * @param \WP_REST_Request $request The request object.
@@ -533,7 +589,7 @@ class Audience_Content_Gates extends Wizard {
 	 * @return \WP_REST_Response|\WP_Error
 	 */
 	public function delete_gate( $request ) {
-		$id = $request->get_param( 'id' );
+		$id = Content_Gate_API::get_route_gate_id( $request );
 		$gate = get_post( $id );
 		if ( ! $gate ) {
 			return new \WP_Error( 'invalid_gate_id', __( 'Invalid gate ID.', 'newspack-plugin' ), [ 'status' => 400 ] );
@@ -553,7 +609,7 @@ class Audience_Content_Gates extends Wizard {
 	 * @return \WP_REST_Response|\WP_Error
 	 */
 	public function api_duplicate_gate( $request ) {
-		$id   = $request->get_param( 'id' );
+		$id   = Content_Gate_API::get_route_gate_id( $request );
 		$gate = get_post( $id );
 		if ( ! $gate ) {
 			return new \WP_Error( 'invalid_gate_id', __( 'Invalid gate ID.', 'newspack-plugin' ), [ 'status' => 400 ] );
@@ -581,7 +637,7 @@ class Audience_Content_Gates extends Wizard {
 	 * @return \WP_REST_Response|\WP_Error
 	 */
 	public function update_gate( $request ) {
-		$gate = Content_Gate::update_gate_settings( $request->get_param( 'id' ), $request->get_param( 'gate' ) );
+		$gate = Content_Gate::update_gate_settings( Content_Gate_API::get_route_gate_id( $request ), $request->get_param( 'gate' ) );
 		if ( is_wp_error( $gate ) ) {
 			return $gate;
 		}

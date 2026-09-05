@@ -13,6 +13,13 @@ class WP_REST_Newspack_Author_List_Controller extends WP_REST_Newspack_Authors_C
 // phpcs:enable WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedClassFound
 
 	/**
+	 * Fields returned when a caller doesn't ask for a specific set.
+	 *
+	 * @var string[]
+	 */
+	const DEFAULT_FIELDS = [ 'id', 'name', 'bio', 'email', 'social', 'avatar', 'url' ];
+
+	/**
 	 * Constructs the controller.
 	 *
 	 * @access public
@@ -136,6 +143,10 @@ class WP_REST_Newspack_Author_List_Controller extends WP_REST_Newspack_Authors_C
 			$options['fields'] = explode( ',', $request->get_param( 'fields' ) );
 		}
 
+		// Restricted here rather than in get_all_authors(), which also renders the block on
+		// the front end for visitors and must keep returning whatever a publisher publishes.
+		$options['fields'] = self::restrict_fields( $options['fields'] ?? self::DEFAULT_FIELDS );
+
 		$combined_authors = $this->get_all_authors( $options );
 		$response         = new \WP_REST_Response( $combined_authors );
 		$response->header( 'x-wp-total', count( $combined_authors ) );
@@ -157,7 +168,7 @@ class WP_REST_Newspack_Author_List_Controller extends WP_REST_Newspack_Authors_C
 			'avatar_hide_default' => false,
 			'exclude'             => [], // phpcs:ignore WordPressVIPMinimum.Performance.WPQueryParams.PostNotIn_exclude
 			'exclude_empty'       => false,
-			'fields'              => [ 'id', 'name', 'bio', 'email', 'social', 'avatar', 'url' ],
+			'fields'              => self::DEFAULT_FIELDS,
 			'per_page'            => 10,
 		];
 		$options         = wp_parse_args( $options, $default_options );

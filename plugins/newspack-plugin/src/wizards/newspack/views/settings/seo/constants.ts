@@ -18,10 +18,16 @@ export const ACCOUNTS = [
 				return '';
 			}
 			if ( inputValue.length > 15 ) {
-				return __( 'X handle cannot exceed 15 characters!', 'newspack-plugin' );
+				return __(
+					'X handles can be up to 15 characters. Enter just the username, without the @ or the full profile URL.',
+					'newspack-plugin'
+				);
 			}
 			if ( ! /^[a-zA-Z0-9_]+$/.test( inputValue ) ) {
-				return __( 'X handle may only contain letters, numbers, and underscores!', 'newspack-plugin' );
+				return __(
+					'X handles use only letters, numbers, and underscores. Enter just the username, without the @ or the full profile URL.',
+					'newspack-plugin'
+				);
 			}
 			return '';
 		},

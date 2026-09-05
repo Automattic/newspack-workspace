@@ -1,5 +1,12 @@
 <?php // phpcs:disable WordPress.Files.FileName.InvalidClassFileName, Squiz.Commenting.FunctionComment.Missing, Squiz.Commenting.ClassComment.Missing, Squiz.Commenting.VariableComment.Missing, Squiz.Commenting.FileComment.Missing, Generic.Files.OneObjectStructurePerFile.MultipleFound, Universal.Files.SeparateFunctionsFromOO.Mixed
 
+// WooCommerce's plugin path constant. Code under test uses it both to locate
+// WC files and as an "is WooCommerce loaded" proxy; the mocks below stand in
+// for the files themselves, so nothing ever reads the path.
+if ( ! defined( 'WC_ABSPATH' ) ) {
+	define( 'WC_ABSPATH', '/woocommerce/' );
+}
+
 /**
  * Minimal mock for WC_Payment_Token, used when WooCommerce is not loaded in the test environment.
  */
@@ -11,6 +18,84 @@ class WC_Payment_Token {
 	public function get_gateway_id() {
 		return $this->gateway_id;
 	}
+}
+
+class WC_Payment_Token_CC extends WC_Payment_Token {
+	private $card_type;
+	private $last4;
+	private $token;
+	private $user_id;
+	public function __construct( $card_type = '', $last4 = '', $token = '', $user_id = 0, $gateway_id = '' ) {
+		parent::__construct( $gateway_id );
+		$this->card_type = $card_type;
+		$this->last4     = $last4;
+		$this->token     = $token;
+		$this->user_id   = $user_id;
+	}
+	public function get_card_type() {
+		return $this->card_type;
+	}
+	public function get_last4() {
+		return $this->last4;
+	}
+	public function get_token() {
+		return $this->token;
+	}
+	public function get_user_id() {
+		return $this->user_id;
+	}
+}
+
+class WC_Payment_Tokens {
+	public static $tokens = [];
+	public static function get( $token_id ) {
+		return self::$tokens[ $token_id ] ?? null;
+	}
+	/**
+	 * Faithful to WC_Payment_Tokens::get_customer_tokens(): customers below 1
+	 * (guests) get an empty array, and a non-empty $gateway_id restricts the
+	 * result to that gateway's tokens.
+	 *
+	 * @param int    $customer_id Customer ID.
+	 * @param string $gateway_id  Optional gateway ID filter.
+	 */
+	public static function get_customer_tokens( $customer_id, $gateway_id = '' ) {
+		if ( $customer_id < 1 ) {
+			return [];
+		}
+		return array_filter(
+			self::$tokens,
+			function ( $token ) use ( $customer_id, $gateway_id ) {
+				if ( ! method_exists( $token, 'get_user_id' ) || (int) $token->get_user_id() !== (int) $customer_id ) {
+					return false;
+				}
+				return '' === $gateway_id || $token->get_gateway_id() === $gateway_id;
+			}
+		);
+	}
+}
+
+/**
+ * Faithful to wc_get_credit_card_type_label(): normalizes case and -/_ to
+ * spaces, maps known types through the labels array (note the real map keys on
+ * "american express", not Stripe's "amex" slug), and falls back to ucwords.
+ * The woocommerce_credit_card_type_labels / woocommerce_get_credit_card_type_label
+ * filters are not applied.
+ *
+ * @param string $type Card type slug.
+ */
+function wc_get_credit_card_type_label( $type ) {
+	$type   = strtolower( str_replace( [ '-', '_' ], ' ', (string) $type ) );
+	$labels = [
+		'mastercard'       => 'MasterCard',
+		'visa'             => 'Visa',
+		'discover'         => 'Discover',
+		'american express' => 'American Express',
+		'cartes bancaires' => 'Cartes Bancaires',
+		'diners'           => 'Diners',
+		'jcb'              => 'JCB',
+	];
+	return $labels[ $type ] ?? ucwords( $type );
 }
 
 class WC_Install {
@@ -93,6 +178,9 @@ class WC_DateTime extends DateTime {
 	public function date( $format ) {
 		return gmdate( $format, $this->getTimestamp() );
 	}
+	public function date_i18n( $format = 'Y-m-d' ) {
+		return $this->date( $format );
+	}
 	public function getOffsetTimestamp() {
 		return $this->getTimestamp() + $this->getOffset();
 	}
@@ -147,6 +235,13 @@ $subscriptions_database = [];
 $products_database = [];
 $order_items_database = [];
 $wc_mock_notices = [];
+// Mock registry: product_id => array of grouped-parent product IDs (NPPM-2926).
+global $wcs_grouped_parents;
+$wcs_grouped_parents = [];
+// Whether the current mock "request" is on a single-product page. Real
+// WooCommerce derives is_product() from WP_Query; standing up a full product
+// page query per test is overkill, so tests toggle this flag directly instead.
+$wc_mock_is_product = false;
 
 /**
  * Reset the order-item lookup table.
@@ -173,6 +268,93 @@ function wc_mocks_reset_order_items() {
 function wc_mocks_reset_notices() {
 	global $wc_mock_notices;
 	$wc_mock_notices = [];
+}
+
+/**
+ * Mock of WooCommerce's is_product() conditional tag.
+ *
+ * Defined unconditionally like wc_add_notice() above, so any
+ * function_exists( 'is_product' ) or direct call in production code executes
+ * against this mock for the whole suite. Reads the flag tests set via
+ * wc_mocks_set_is_product(); defaults to false (not a product page).
+ *
+ * @return bool
+ */
+function is_product() {
+	global $wc_mock_is_product;
+	return ! empty( $wc_mock_is_product );
+}
+
+/**
+ * Toggle the is_product() mock for the current test.
+ *
+ * @param bool $is_product Whether the mock "request" is on a single-product page.
+ */
+function wc_mocks_set_is_product( $is_product ) {
+	global $wc_mock_is_product;
+	$wc_mock_is_product = $is_product;
+}
+
+/**
+ * Recording mock of WooCommerce's admin meta-box error bag, the channel a save
+ * handler uses to tell the admin why their edit did not take. Errors land on
+ * the $wc_mock_meta_box_errors global so tests can assert them.
+ *
+ * Defined unconditionally, so any class_exists( 'WC_Admin_Meta_Boxes' ) gate in
+ * production code executes against this mock for the whole suite; a test
+ * asserting on it should call wc_mocks_reset_meta_box_errors() from set_up().
+ */
+class WC_Admin_Meta_Boxes {
+	/**
+	 * Record an error for display on the next admin screen.
+	 *
+	 * @param string $text Error message.
+	 */
+	public static function add_error( $text ) {
+		global $wc_mock_meta_box_errors;
+		$wc_mock_meta_box_errors[] = $text;
+	}
+}
+
+/**
+ * Reset the errors recorded by the WC_Admin_Meta_Boxes mock.
+ */
+function wc_mocks_reset_meta_box_errors() {
+	global $wc_mock_meta_box_errors;
+	$wc_mock_meta_box_errors = [];
+}
+
+/**
+ * Stand-in for WooCommerce's WC_Data_Exception, thrown by data setters that
+ * reject their input.
+ */
+class WC_Data_Exception extends Exception {
+	/**
+	 * Machine-readable error code.
+	 *
+	 * @var string
+	 */
+	private $error_code;
+
+	/**
+	 * Constructor.
+	 *
+	 * @param string $code    Machine-readable error code.
+	 * @param string $message Human-readable message.
+	 */
+	public function __construct( $code, $message ) {
+		$this->error_code = $code;
+		parent::__construct( $message );
+	}
+
+	/**
+	 * Machine-readable error code.
+	 *
+	 * @return string
+	 */
+	public function getErrorCode() { // phpcs:ignore WordPress.NamingConventions.ValidFunctionName.MethodNameInvalid
+		return $this->error_code;
+	}
 }
 
 class WC_Order_Item_Product implements ArrayAccess {
@@ -250,6 +432,69 @@ class WC_Order_Item_Product implements ArrayAccess {
 	public function get_variation_id() {
 		return $this->data['variation_id'] ?? 0;
 	}
+	/**
+	 * Real WC_Order_Item_Product::set_product_id() rejects any ID that is not a
+	 * `product` post — a variation is `product_variation` — by throwing
+	 * WC_Data_Exception *before* assigning the prop, so the ID is silently
+	 * dropped rather than stored. Modelling that here is what lets a test catch
+	 * a variation ID being passed where a parent product ID belongs (NPPD-1876);
+	 * a mock that accepted anything made the bug invisible to the suite.
+	 *
+	 * IDs with no registered mock product are left alone, so fixtures that use
+	 * arbitrary product IDs keep working.
+	 *
+	 * @param int $product_id Product ID.
+	 *
+	 * @throws WC_Data_Exception If the ID belongs to a variation.
+	 */
+	public function set_product_id( $product_id ) {
+		global $products_database;
+		$product = $products_database[ (int) $product_id ] ?? null;
+		if ( $product_id > 0 && $product && $product->is_type( 'variation' ) ) {
+			throw new WC_Data_Exception( 'order_item_product_invalid_product_id', 'Invalid product ID' );
+		}
+		$this->data['product_id'] = (int) $product_id;
+	}
+	public function set_variation_id( $variation_id ) {
+		$this->data['variation_id'] = (int) $variation_id;
+	}
+	public function set_name( $name ) {
+		$this->data['name'] = $name;
+	}
+	public function set_taxes( $taxes ) {
+		$this->data['taxes'] = $taxes;
+	}
+	/**
+	 * Mirror of WC_Data::set_props(): call each matching setter, collect any
+	 * WC_Data_Exception into a returned WP_Error rather than letting it bubble.
+	 * That swallowing is exactly how an invalid product ID reaches the database
+	 * as 0 without the caller noticing.
+	 *
+	 * @param array $props Property => value pairs.
+	 *
+	 * @return true|WP_Error
+	 */
+	public function set_props( $props ) {
+		$errors = false;
+		foreach ( $props as $prop => $value ) {
+			$setter = "set_$prop";
+			if ( ! is_callable( [ $this, $setter ] ) ) {
+				continue;
+			}
+			try {
+				$this->{$setter}( $value );
+			} catch ( WC_Data_Exception $e ) {
+				if ( ! $errors ) {
+					$errors = new WP_Error();
+				}
+				$errors->add( $e->getErrorCode(), $e->getMessage(), [ 'property_name' => $prop ] );
+			}
+		}
+		return $errors ? $errors : true;
+	}
+	public function save() {
+		return true;
+	}
 	public function get_id() {
 		return $this->data['id'] ?? 0;
 	}
@@ -262,10 +507,40 @@ class WC_Order_Item_Product implements ArrayAccess {
 	public function get_total() {
 		return $this->data['total'] ?? 0;
 	}
+	/**
+	 * Like the real getter, resolve the variation first and fall back to the
+	 * parent product, so an item linked to a variation returns the variation.
+	 */
 	public function get_product() {
 		global $products_database;
-		$product_id = $this->data['product_id'] ?? 0;
+		$product_id = $this->get_variation_id() ? $this->get_variation_id() : $this->get_product_id();
 		return $products_database[ $product_id ] ?? false;
+	}
+	/**
+	 * Real WC_Order_Item_Product::set_product() splits a variation into parent
+	 * product ID + variation ID; anything else sets the product ID alone. This
+	 * is the only setter that handles a variation correctly, which is why the
+	 * migration CLI uses it rather than assigning `product_id` directly.
+	 *
+	 * @param WC_Product $product Product or variation.
+	 */
+	public function set_product( $product ) {
+		if ( $product->is_type( 'variation' ) ) {
+			$this->set_product_id( $product->get_parent_id() );
+			$this->set_variation_id( $product->get_id() );
+		} else {
+			$this->set_product_id( $product->get_id() );
+		}
+		$this->set_name( $product->get_name() );
+	}
+	public function set_quantity( $quantity ) {
+		$this->data['quantity'] = $quantity;
+	}
+	public function set_subtotal( $subtotal ) {
+		$this->data['subtotal'] = $subtotal;
+	}
+	public function set_total( $total ) {
+		$this->data['total'] = $total;
 	}
 	public function get_meta( $key, $single = true ) {
 		return $this->meta[ $key ] ?? '';
@@ -287,15 +562,56 @@ class WC_Product {
 	public function get_name() {
 		return $this->data['name'] ?? '';
 	}
+	/**
+	 * WC_Product::get_title() is the post title, which for a product is its name.
+	 * Rendering code reaches for the title rather than the name, so the mock has
+	 * to answer both or a rendered card would fatal where production works.
+	 */
+	public function get_title() {
+		return $this->get_name();
+	}
+	public function get_description() {
+		return $this->data['description'] ?? '';
+	}
+	public function get_status() {
+		return $this->data['status'] ?? 'publish';
+	}
 	public function get_type() {
 		return $this->data['type'] ?? 'simple';
 	}
+	/**
+	 * WC_Product_Subscription_Variation overrides is_type() so a
+	 * `subscription_variation` answers true to `is_type( 'variation' )`. Production
+	 * code relies on that alias — WC_Order_Item_Product::set_product() branches on
+	 * `is_type( 'variation' )` alone — so the mock has to model it, or a test would
+	 * take a different branch than the real code does.
+	 *
+	 * @param string|string[] $types Type or types to test.
+	 *
+	 * @return bool
+	 */
 	public function is_type( $types ) {
 		$types = (array) $types;
+		if ( 'subscription_variation' === $this->get_type() && in_array( 'variation', $types, true ) ) {
+			return true;
+		}
 		return in_array( $this->get_type(), $types, true );
 	}
 	public function get_parent_id() {
 		return $this->data['parent_id'] ?? 0;
+	}
+	/**
+	 * WC_Product_Variation resolves its permalink through the parent, whose page
+	 * is the only one a reader can buy from — the variation post has none. Code
+	 * that links a product goes through here rather than get_permalink( $id ),
+	 * so the mock has to model that or a test would see a URL production never
+	 * emits.
+	 *
+	 * @return string
+	 */
+	public function get_permalink() {
+		$parent_id = $this->get_parent_id();
+		return get_permalink( $parent_id ? $parent_id : $this->get_id() );
 	}
 	public function get_children() {
 		return $this->data['children'] ?? [];
@@ -303,11 +619,30 @@ class WC_Product {
 	public function get_regular_price() {
 		return $this->data['regular_price'] ?? ( $this->meta['_regular_price'] ?? 0 );
 	}
+	/**
+	 * Price reads apply their WooCommerce filters, as WC_Data::get_prop() does
+	 * in `view` context. Without this, code that filters a price and code that
+	 * reads one can disagree with no test able to see it.
+	 */
 	public function get_price() {
-		return $this->data['price'] ?? ( $this->meta['_price'] ?? $this->get_regular_price() );
+		$price = $this->data['price'] ?? ( $this->meta['_price'] ?? $this->get_regular_price() );
+		return apply_filters( 'woocommerce_product_get_price', $price, $this );
 	}
 	public function set_price( $price ) {
 		$this->data['price'] = $price;
+	}
+	public function get_sale_price() {
+		$sale_price = $this->data['sale_price'] ?? ( $this->meta['_sale_price'] ?? '' );
+		return apply_filters( 'woocommerce_product_get_sale_price', $sale_price, $this );
+	}
+	/**
+	 * Mirrors WC_Product::is_on_sale() — a sale price is set and undercuts the
+	 * regular price.
+	 */
+	public function is_on_sale() {
+		$sale_price = $this->get_sale_price();
+		$on_sale    = '' !== (string) $sale_price && (float) $this->get_regular_price() > (float) $sale_price;
+		return apply_filters( 'woocommerce_product_is_on_sale', $on_sale, $this );
 	}
 	public function get_meta( $key, $single = true ) {
 		return $this->meta[ $key ] ?? '';
@@ -347,9 +682,14 @@ if ( ! class_exists( 'WC_Subscriptions_Cart' ) ) {
 }
 
 /**
+ * The post statuses `WC_Product_Query` searches when a query passes no `status`.
+ */
+const WC_PRODUCT_QUERY_DEFAULT_STATUSES = [ 'draft', 'pending', 'private', 'publish' ];
+
+/**
  * Register a mock product in the global products database.
  *
- * @param array $data Product data including 'id', 'children', 'type', 'name', 'price'.
+ * @param array $data Product data including 'id', 'type', 'name', 'status', 'price', 'children'.
  * @return WC_Product
  */
 function wc_create_mock_product( $data = [] ) {
@@ -359,11 +699,89 @@ function wc_create_mock_product( $data = [] ) {
 	return $product;
 }
 
+/**
+ * Query the mock products database.
+ *
+ * Supports the arguments Newspack's callers actually pass: `type` (one type or a list of
+ * them), `status`, `limit` and `return`. Registration order stands in for real
+ * WooCommerce's ordering, which none of the callers depend on. Any other filtering
+ * argument is fatal rather than ignored: this mock is defined unconditionally, so a
+ * caller silently getting an unfiltered result is a test that passes for the wrong reason.
+ *
+ * Omitting `status` is not "no status filter": `WC_Product_Query` defaults it to draft,
+ * pending, private and publish, and callers rely on that default — the access-rule
+ * subscription picker lists a drafted product deliberately, because readers still hold
+ * subscriptions to it. Applying the same default here is what lets a test tell that
+ * behaviour apart from a mock that never filtered.
+ *
+ * Arguments real WooCommerce discards are the exception — neither a `WC_Product_Query`
+ * default var nor a mapped meta key, so ignoring one is what production does too.
+ *
+ * @param array $args Query args.
+ * @return WC_Product[]|int[] Matching products, or their IDs with `return => 'ids'`.
+ * @throws InvalidArgumentException When passed a filtering argument the mock does not implement.
+ */
+function wc_get_products( $args = [] ) {
+	global $products_database;
+	// Not every consumer of this file registers a product, and the mock is defined
+	// unconditionally, so the global may still be unset when a caller lands here.
+	$products_database = $products_database ?? [];
+	$supported         = [ 'type', 'status', 'limit', 'return' ];
+	// Passed by Donations, discarded by WooCommerce.
+	$inert             = [ 'only_get_newspack_subscriptions' ];
+	$unknown           = array_diff( array_keys( $args ), $supported, $inert );
+	if ( ! empty( $unknown ) ) {
+		throw new InvalidArgumentException(
+			esc_html( 'wc_get_products mock does not implement: ' . implode( ', ', $unknown ) . '. Add it to tests/mocks/wc-mocks.php.' )
+		);
+	}
+	$types    = isset( $args['type'] ) ? (array) $args['type'] : [];
+	$statuses = isset( $args['status'] ) ? (array) $args['status'] : WC_PRODUCT_QUERY_DEFAULT_STATUSES;
+	$products = array_values(
+		array_filter(
+			$products_database,
+			function ( $product ) use ( $types, $statuses ) {
+				if ( ! empty( $types ) && ! $product->is_type( $types ) ) {
+					return false;
+				}
+				return in_array( $product->get_status(), $statuses, true );
+			}
+		)
+	);
+	$limit    = isset( $args['limit'] ) ? (int) $args['limit'] : -1;
+	$products = $limit > 0 ? array_slice( $products, 0, $limit ) : $products;
+	if ( isset( $args['return'] ) && 'ids' === $args['return'] ) {
+		return array_map(
+			function ( $product ) {
+				return $product->get_id();
+			},
+			$products
+		);
+	}
+	return $products;
+}
+
 class WC_Order {
 	public $data = [];
 	public $meta = [];
 	public function __construct( $data ) {
 		global $orders_database;
+		// Real WC supports `new WC_Order( $order_id )` — re-hydrate from the mock DB.
+		if ( is_numeric( $data ) ) {
+			foreach ( $orders_database as $order ) {
+				if ( $order->get_id() === (int) $data ) {
+					$this->data = $order->data;
+					$this->meta = $order->meta;
+					return;
+				}
+			}
+			$this->data = [
+				'id'     => (int) $data,
+				'status' => '',
+				'items'  => [],
+			];
+			return;
+		}
 		$data['id'] = count( $orders_database ) + 1;
 		if ( ! isset( $data['date_paid'] ) ) {
 			$data['date_paid'] = gmdate( 'Y-m-d H:i:s' );
@@ -419,8 +837,15 @@ class WC_Order {
 	public function get_date_completed() {
 		return new WC_DateTime( $this->data['date_completed'] );
 	}
+	/**
+	 * Real WC_Abstract_Order returns '0' for an order with no total set; without
+	 * a default a fixture that omits it raises an undefined-key warning instead.
+	 */
 	public function get_total() {
-		return $this->data['total'];
+		return $this->data['total'] ?? 0;
+	}
+	public function get_subtotal() {
+		return $this->data['subtotal'] ?? 0;
 	}
 	public function get_status() {
 		return $this->data['status'];
@@ -431,13 +856,28 @@ class WC_Order {
 	public function update_meta_data( $field_name, $value ) {
 		$this->meta[ $field_name ] = $value;
 	}
+	public function add_meta_data( $field_name, $value, $unique = false ) {
+		if ( $unique || ! isset( $this->meta[ $field_name ] ) ) {
+			$this->meta[ $field_name ] = $value;
+		}
+	}
 	public function delete_meta_data( $field_name ) {
 		unset( $this->meta[ $field_name ] );
 	}
 	public function meta_exists( $field_name ) {
 		return isset( $this->meta[ $field_name ] );
 	}
+	/**
+	 * Counts calls so tests can pin that a meta write is followed by persistence.
+	 * The mock cannot model real persistence: wc_get_order() hands back the same
+	 * instance, so unsaved meta looks saved. Real WC hydrates a fresh order per
+	 * lookup and discards unsaved meta at end of request.
+	 *
+	 * @var int
+	 */
+	public $save_calls = 0;
 	public function save() {
+		$this->save_calls++;
 		return true;
 	}
 	public function get_billing_email() {
@@ -445,6 +885,27 @@ class WC_Order {
 	}
 	public function get_currency() {
 		return $this->data['currency'] ?? '';
+	}
+	public function get_payment_method() {
+		return $this->data['payment_method'] ?? '';
+	}
+	public function get_payment_method_title() {
+		return $this->data['payment_method_title'] ?? '';
+	}
+	public function get_payment_tokens() {
+		return $this->data['payment_tokens'] ?? [];
+	}
+	public function get_billing_first_name() {
+		return $this->data['billing_first_name'] ?? '';
+	}
+	public function get_billing_last_name() {
+		return $this->data['billing_last_name'] ?? '';
+	}
+	public function get_formatted_order_total() {
+		return '$' . number_format( (float) $this->get_total(), 2 );
+	}
+	public function get_view_order_url() {
+		return $this->data['view_order_url'] ?? 'https://example.test/my-account/view-order/' . $this->get_id();
 	}
 }
 
@@ -496,7 +957,28 @@ class WC_Subscription {
 		}
 		return true;
 	}
+	/**
+	 * Real WC_Subscription::has_product() walks the line items and matches either
+	 * the product ID or the variation ID — which is what lets a rule naming a
+	 * variable subscription's parent accept any of its variations. Check the items
+	 * first so code depending on that matching behaves as it does in production,
+	 * then fall back to the fixture-supplied `products` list, which many tests use
+	 * to declare coverage without building line items.
+	 *
+	 * @param int $product_id Product or variation ID.
+	 *
+	 * @return bool
+	 */
 	public function has_product( $product_id ) {
+		$product_id = (int) $product_id;
+		foreach ( $this->get_items() as $item ) {
+			if ( ! method_exists( $item, 'get_product_id' ) ) {
+				continue;
+			}
+			if ( (int) $item->get_product_id() === $product_id || (int) $item->get_variation_id() === $product_id ) {
+				return true;
+			}
+		}
 		return in_array( $product_id, $this->products, true );
 	}
 	public function get_meta( $field_name ) {
@@ -504,6 +986,19 @@ class WC_Subscription {
 	}
 	public function update_meta_data( $field_name, $value ) {
 		$this->meta[ $field_name ] = $value;
+	}
+	/**
+	 * Real WC_Subscription inherits this from WC_Order via WC_Data; the mock
+	 * hierarchy is flat, so it needs its own copy. Matches WC_Order's above.
+	 *
+	 * @param string $field_name Meta key.
+	 * @param mixed  $value      Meta value.
+	 * @param bool   $unique     Whether to overwrite an existing value.
+	 */
+	public function add_meta_data( $field_name, $value, $unique = false ) {
+		if ( $unique || ! isset( $this->meta[ $field_name ] ) ) {
+			$this->meta[ $field_name ] = $value;
+		}
 	}
 	public function delete_meta_data( $field_name ) {
 		unset( $this->meta[ $field_name ] );
@@ -526,14 +1021,48 @@ class WC_Subscription {
 	public function get_date_paid() {
 		return new WC_DateTime( $this->data['date_paid'] );
 	}
+	/**
+	 * Real WC_Abstract_Order returns '0' when no total is set; without a default
+	 * a fixture that omits it raises an undefined-key warning instead. Production
+	 * code now reads this for every reused subscription.
+	 */
 	public function get_total() {
-		return $this->data['total'];
+		return $this->data['total'] ?? 0;
+	}
+	/**
+	 * Pre-discount total. Distinguishes a fully-discounted subscription, which
+	 * still carries a subtotal, from a $0 migration subscription, which does not.
+	 */
+	public function get_subtotal() {
+		return $this->data['subtotal'] ?? 0;
 	}
 	public function get_status() {
 		return $this->data['status'];
 	}
 	public function set_status( $status ) {
 		$this->data['status'] = $status;
+	}
+	public function get_created_via() {
+		return $this->data['created_via'] ?? '';
+	}
+	public function set_total( $total ) {
+		$this->data['total'] = $total;
+	}
+	/**
+	 * Real WC_Abstract_Order keys its items by order-item ID, which is what makes
+	 * `remove_item( $item->get_id() )` work. Preserve that when the fixture gave
+	 * the item an ID; fall back to appending for the many fixtures that don't, so
+	 * their positional keys keep working.
+	 *
+	 * @param WC_Order_Item_Product $item Line item.
+	 */
+	public function add_item( $item ) {
+		$item_id = method_exists( $item, 'get_id' ) ? (int) $item->get_id() : 0;
+		if ( $item_id ) {
+			$this->data['items'][ $item_id ] = $item;
+			return;
+		}
+		$this->data['items'][] = $item;
 	}
 	/**
 	 * Stageable stand-in for WC_Subscription::can_be_updated_to(): pass a
@@ -630,6 +1159,43 @@ class WC_Subscription {
 	public function get_items() {
 		return $this->data['items'] ?? [];
 	}
+	/**
+	 * Keyed by item ID like WC_Abstract_Order::remove_item().
+	 *
+	 * @param int $item_id Order item ID.
+	 */
+	public function remove_item( $item_id ) {
+		unset( $this->data['items'][ $item_id ] );
+	}
+	/**
+	 * Sum the line items into the order total, like WC_Abstract_Order does.
+	 */
+	public function calculate_totals() {
+		$total = 0;
+		foreach ( $this->get_items() as $item ) {
+			$total += (float) $item->get_total();
+		}
+		$this->data['total'] = $total;
+		return $total;
+	}
+	/**
+	 * Address setter. The mock stores address fields flat, matching how the
+	 * address getters in __call() read them.
+	 *
+	 * @param array  $address Address fields.
+	 * @param string $type    'billing' or 'shipping'.
+	 */
+	public function set_address( $address, $type = 'billing' ) {
+		foreach ( $address as $field => $value ) {
+			$this->data[ $type . '_' . $field ] = $value;
+		}
+	}
+	public function set_billing_period( $period ) {
+		$this->data['billing_period'] = $period;
+	}
+	public function set_billing_interval( $interval ) {
+		$this->data['billing_interval'] = $interval;
+	}
 	public function get_item( $item_id, $load_from_db = true ) {
 		// Faithful to WC_Abstract_Order::get_item(): the default delegates to
 		// WC_Order_Factory::get_order_item(), a *global* lookup that resolves an
@@ -660,8 +1226,24 @@ class WC_Subscription {
 	public function needs_payment() {
 		return ! empty( $this->data['needs_payment'] );
 	}
+	public function get_parent_id() {
+		return $this->data['parent_id'] ?? 0;
+	}
+	public function get_payment_method_title() {
+		return $this->data['payment_method_title'] ?? '';
+	}
 	public function is_manual() {
-		return ! empty( $this->data['is_manual'] );
+		// Real WC_Subscription keys this 'requires_manual_renewal'; fixtures also stage the shorter 'is_manual'.
+		return ! empty( $this->data['requires_manual_renewal'] ) || ! empty( $this->data['is_manual'] );
+	}
+	public function __call( $name, $arguments ) {
+		// Address getters: get_billing_first_name(), get_shipping_city(), etc.
+		// resolve to flat data keys ('billing_first_name'), matching how the
+		// fixtures stage address data.
+		if ( 0 === strpos( $name, 'get_billing_' ) || 0 === strpos( $name, 'get_shipping_' ) ) {
+			return $this->data[ substr( $name, 4 ) ] ?? '';
+		}
+		throw new BadMethodCallException( sprintf( 'Call to undefined method %s::%s()', __CLASS__, $name ) ); // phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped
 	}
 	public function get_view_order_url() {
 		return $this->data['view_order_url'] ?? 'https://example.test/my-account/view-order/' . $this->get_id();
@@ -693,10 +1275,47 @@ if ( ! class_exists( 'WC_Subscriptions_Switcher' ) ) {
 		 *
 		 * @param string $item_action Type of switch items to include (ignored).
 		 */
+		/**
+		 * WooCommerce Subscriptions' own switch-URL builder, which appends the
+		 * `_wcsnonce` its switch handler refuses a request without.
+		 *
+		 * @param int                   $item_id      Line item ID.
+		 * @param WC_Order_Item_Product $item         Line item.
+		 * @param WC_Subscription       $subscription Subscription the item belongs to.
+		 *
+		 * @return string
+		 */
+		public static function get_switch_url( $item_id, $item, $subscription ) {
+			return add_query_arg(
+				[
+					'switch-subscription' => $subscription->get_id(),
+					'item'                => $item_id,
+					'_wcsnonce'           => wp_create_nonce( 'wcs_switch_request' ),
+				],
+				'https://example.org/product/'
+			);
+		}
+
 		public static function cart_contains_switches( $item_action = 'any' ) {
 			unset( $item_action );
 			global $wcs_mock_cart_switches;
 			return $wcs_mock_cart_switches ?? false;
+		}
+
+		/**
+		 * Stageable: set the $wcs_mock_item_switchable global to false to simulate
+		 * WooCommerce Subscriptions refusing a switch — switching turned off, a
+		 * gateway that can't change the billed amount, a subscription with no
+		 * parent order. Defaults to true, like an ordinary switchable line item.
+		 *
+		 * @param WC_Order_Item_Product $item         Item to switch (ignored).
+		 * @param WC_Subscription       $subscription Subscription the item belongs to (ignored).
+		 * @param int                   $user_id      User performing the switch (ignored).
+		 */
+		public static function can_item_be_switched_by_user( $item, $subscription, $user_id = 0 ) {
+			unset( $item, $subscription, $user_id );
+			global $wcs_mock_item_switchable;
+			return $wcs_mock_item_switchable ?? true;
 		}
 
 		public static function calculate_total_paid_since_last_order( $subscription, $subscription_item, $include_sign_up_fees = 'include_sign_up_fees', $orders_to_include = [] ) {
@@ -731,6 +1350,11 @@ if ( ! class_exists( 'WC_Subscriptions_Product' ) ) {
 				return 0;
 			}
 			return (float) $product->get_meta( '_subscription_price' );
+		}
+		public static function get_visible_grouped_parent_product_ids( $product ) {
+			global $wcs_grouped_parents;
+			$id = is_object( $product ) ? $product->get_id() : (int) $product;
+			return $wcs_grouped_parents[ $id ] ?? [];
 		}
 		public static function is_subscription( $product ) {
 			return is_object( $product ) && method_exists( $product, 'get_type' )
@@ -833,6 +1457,68 @@ function wc_create_order( $data ) {
 function wc_get_checkout_url() {
 	return 'https://example.com/checkout';
 }
+// Guarded, unlike the rest of this file: these two names are also declared by
+// tests/unit-tests/my-account.php and the group-subscription my-account tests.
+// Nothing is broken today only because include order happens to reach this file
+// first; a new file declaring either name at file scope and sorting earlier
+// would fatal the suite on redeclare.
+if ( ! function_exists( 'wc_get_page_permalink' ) ) {
+	function wc_get_page_permalink( $page ) {
+		return 'https://example.com/' . $page;
+	}
+}
+if ( ! function_exists( 'wc_get_endpoint_url' ) ) {
+	function wc_get_endpoint_url( $endpoint, $value = '', $permalink = '' ) {
+		$permalink = $permalink ? $permalink : 'https://example.com/';
+		return \trailingslashit( $permalink ) . $endpoint . ( $value ? '/' . $value : '' );
+	}
+}
+if ( ! function_exists( 'wc_get_page_id' ) ) {
+	/**
+	 * Mirrors real WooCommerce: -1 when the page is not configured, otherwise
+	 * the configured post ID. Content_Gate::is_excluded_from_gating() relies
+	 * on -1 never matching a real post ID (post IDs are always positive).
+	 *
+	 * @param string $page WooCommerce page slug (e.g. 'myaccount', 'cart').
+	 * @return int
+	 */
+	function wc_get_page_id( $page ) {
+		$page_id = get_option( 'woocommerce_' . $page . '_page_id' );
+		return $page_id ? absint( $page_id ) : -1;
+	}
+}
+/**
+ * Mirror of WCS's wcs_get_datetime_from(): a MySQL date string or timestamp in,
+ * a WC_DateTime out, and null for anything empty — which is what an unset
+ * subscription date (`get_date( 'end' )` on a subscription with no end) returns.
+ *
+ * @param string|int $variable Date string or timestamp.
+ *
+ * @return WC_DateTime|null
+ */
+function wcs_get_datetime_from( $variable ) {
+	if ( empty( $variable ) ) {
+		return null;
+	}
+	return new WC_DateTime( is_numeric( $variable ) ? '@' . $variable : $variable );
+}
+
+/**
+ * Mirror of WCS's wcs_format_datetime(): a formatted date, or an empty string
+ * when there is no date to format.
+ *
+ * @param WC_DateTime|null $date   Date to format.
+ * @param string           $format Optional. Date format; defaults to the site's.
+ *
+ * @return string
+ */
+function wcs_format_datetime( $date, $format = '' ) {
+	if ( ! is_a( $date, 'DateTime' ) ) {
+		return '';
+	}
+	return $date->format( $format ? $format : get_option( 'date_format', 'F j, Y' ) );
+}
+
 function wcs_is_subscription( $order ) {
 	global $subscriptions_database;
 	// Mirror real WooCommerce Subscriptions: only an actual WC_Subscription object
@@ -869,6 +1555,11 @@ function wcs_create_subscription( $data = [] ) {
 		\Newspack\Group_Subscription::reset_cache();
 	}
 	return $subscription;
+}
+function wcs_get_product_limitation( $product ) {
+	// Real WCS reads the product's _subscription_limit setting: 'no' | 'active' | 'any'.
+	$limitation = is_object( $product ) && method_exists( $product, 'get_meta' ) ? $product->get_meta( '_subscription_limit' ) : '';
+	return '' !== $limitation ? $limitation : 'no';
 }
 function wcs_get_subscription( $subscription_id ) {
 	global $subscriptions_database;
@@ -937,10 +1628,18 @@ function wcs_get_subscriptions( $args = [] ) {
 	// declares it among its own defaults and strips it before building the query,
 	// so a mock that honored it would make a broken caller look correct.
 	global $subscriptions_database;
+	// Every call's args are recorded so tests can pin the query contract itself
+	// (e.g. that a paginating caller requests a deterministic sort).
+	global $wcs_mock_query_log;
+	$wcs_mock_query_log[] = $args;
 	$customer_id = $args['customer_id'] ?? null;
 	$statuses    = $args['subscription_status'] ?? 'any';
 	$per_page    = isset( $args['subscriptions_per_page'] ) ? (int) $args['subscriptions_per_page'] : 0;
-	$offset      = isset( $args['offset'] ) ? max( 0, (int) $args['offset'] ) : 0;
+	// Stageable: set $wcs_mock_ignore_offset to reproduce a query that never advances —
+	// what the real function does when handed `paged`, and what a third-party
+	// `woocommerce_get_subscriptions_query_args` filter dropping `offset` would do.
+	global $wcs_mock_ignore_offset;
+	$offset = ( isset( $args['offset'] ) && empty( $wcs_mock_ignore_offset ) ) ? max( 0, (int) $args['offset'] ) : 0;
 	if ( 'any' === $statuses ) {
 		$statuses = null;
 	} elseif ( null !== $statuses ) {
@@ -951,11 +1650,12 @@ function wcs_get_subscriptions( $args = [] ) {
 		if ( null !== $customer_id && $subscription->get_customer_id() !== $customer_id ) {
 			continue;
 		}
-		if ( null !== $statuses && ! in_array( $subscription->get_status(), $statuses, true ) ) {
+		if ( null !== $statuses && ! $subscription->has_status( $statuses ) ) {
 			continue;
 		}
 		$matches[ $id ] = $subscription;
 	}
+	// Page the results so a caller looping `offset` terminates on a short final page.
 	if ( $per_page > 0 || $offset > 0 ) {
 		$matches = array_slice( $matches, $offset, $per_page > 0 ? $per_page : null, true );
 	}
@@ -982,8 +1682,53 @@ function wcs_get_subscriptions_for_product( $product_ids, $fields = 'ids', $args
 	}
 	return $subscriptions;
 }
+/**
+ * Whether a user holds a subscription, optionally to a given product and in a
+ * given set of statuses. Mirrors the real helper closely enough for the
+ * `function_exists()` gates production code puts in front of it, which is what
+ * decides whether a WCS-dependent code path runs at all.
+ *
+ * @param int             $user_id    User ID.
+ * @param int|string      $product_id Optional product the subscription must hold.
+ * @param string|string[] $status     Optional status or statuses; 'any' matches all.
+ *
+ * @return bool
+ */
+function wcs_user_has_subscription( $user_id = 0, $product_id = '', $status = 'any' ) {
+	foreach ( wcs_get_users_subscriptions( (int) $user_id ) as $subscription ) {
+		if ( $product_id && ! $subscription->has_product( (int) $product_id ) ) {
+			continue;
+		}
+		if ( 'any' !== $status && ! $subscription->has_status( $status ) ) {
+			continue;
+		}
+		return true;
+	}
+	return false;
+}
+/**
+ * Build a recurring price string. Real WCS returns localized markup; the mock
+ * returns a plain, assertable equivalent from the same argument keys.
+ *
+ * @param array $args Price string args: recurring_amount, subscription_period,
+ *                    subscription_interval.
+ *
+ * @return string
+ */
+function wcs_price_string( $args = [] ) {
+	$amount   = isset( $args['recurring_amount'] ) ? (string) $args['recurring_amount'] : '';
+	$period   = ! empty( $args['subscription_period'] ) ? $args['subscription_period'] : 'month';
+	$interval = max( 1, (int) ( $args['subscription_interval'] ?? 1 ) );
+	return 1 === $interval
+		? sprintf( '%s / %s', $amount, $period )
+		: sprintf( '%s every %d %ss', $amount, $interval, $period );
+}
 function wcs_get_canonical_product_id( $item ) {
 	if ( is_object( $item ) && method_exists( $item, 'get_product_id' ) ) {
+		// Real WCS: the variation ID is the canonical ID when present.
+		if ( method_exists( $item, 'get_variation_id' ) && $item->get_variation_id() ) {
+			return $item->get_variation_id();
+		}
 		return $item->get_product_id();
 	}
 	return null;
@@ -1164,6 +1909,11 @@ function wc_get_product( $product_id ) {
 	global $products_database;
 	return $products_database[ $product_id ] ?? false;
 }
+if ( ! function_exists( 'get_woocommerce_currency' ) ) {
+	function get_woocommerce_currency() {
+		return 'USD';
+	}
+}
 /**
  * Minimal stand-in for WooCommerce's admin field renderer. Only enough markup to let a metabox
  * callback render end to end; assertions belong on the surrounding markup, not on this field.
@@ -1202,6 +1952,322 @@ function wcs_get_subscription_status_name( $status ) {
 function wcs_get_all_user_actions_for_subscription( $subscription, $user_id ) {
 	return apply_filters( 'wcs_view_subscription_actions', [], $subscription, $user_id );
 }
+if ( ! class_exists( 'WC_CSV_Exporter' ) ) {
+	/**
+	 * Mock of WooCommerce's WC_CSV_Exporter abstract (includes/export/abstract-wc-csv-exporter.php).
+	 *
+	 * Replicates the column handling, escaping, and row-formatting semantics of the
+	 * real class so Newspack exporter subclasses can be unit-tested without WC.
+	 * File-writing and header-sending surfaces are intentionally omitted; the
+	 * mock_export_rows() / get_prepared_row_data() / get_mock_total_rows() helpers
+	 * are test-only accessors that do not exist on the real class.
+	 */
+	abstract class WC_CSV_Exporter {
+		protected $export_type       = '';
+		protected $filename          = 'wc-export.csv';
+		protected $limit             = 50;
+		protected $exported_row_count = 0;
+		protected $row_data          = [];
+		protected $total_rows        = 0;
+		protected $column_names      = [];
+		protected $columns_to_export = [];
+		protected $delimiter         = ',';
+
+		abstract public function prepare_data_to_export();
+
+		public function get_column_names() {
+			return apply_filters( "woocommerce_{$this->export_type}_export_column_names", $this->column_names, $this );
+		}
+		public function set_column_names( $column_names ) {
+			$this->column_names = [];
+			foreach ( $column_names as $column_id => $column_name ) {
+				$this->column_names[ wc_clean( $column_id ) ] = wc_clean( $column_name );
+			}
+		}
+		public function get_columns_to_export() {
+			return $this->columns_to_export;
+		}
+		public function get_delimiter() {
+			return apply_filters( "woocommerce_{$this->export_type}_export_delimiter", $this->delimiter );
+		}
+		public function set_columns_to_export( $columns ) {
+			$this->columns_to_export = array_map( 'wc_clean', $columns );
+		}
+		public function is_column_exporting( $column_id ) {
+			$column_id         = strstr( $column_id, ':' ) ? current( explode( ':', $column_id ) ) : $column_id;
+			$columns_to_export = $this->get_columns_to_export();
+			if ( empty( $columns_to_export ) ) {
+				return true;
+			}
+			return in_array( $column_id, $columns_to_export, true ) || 'meta' === $column_id;
+		}
+		public function get_default_column_names() {
+			return [];
+		}
+		public function set_filename( $filename ) {
+			$this->filename = sanitize_file_name( str_replace( '.csv', '', $filename ) . '.csv' );
+		}
+		public function get_filename() {
+			return sanitize_file_name( apply_filters( "woocommerce_{$this->export_type}_export_get_filename", $this->filename ) );
+		}
+		protected function get_csv_data() {
+			return $this->export_rows();
+		}
+		protected function export_column_headers() {
+			$columns    = $this->get_column_names();
+			$export_row = [];
+			$buffer     = fopen( 'php://output', 'w' ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_read_fopen
+			ob_start();
+			foreach ( $columns as $column_id => $column_name ) {
+				if ( ! $this->is_column_exporting( $column_id ) ) {
+					continue;
+				}
+				$export_row[] = $this->format_data( $column_name );
+			}
+			$this->fputcsv( $buffer, $export_row );
+			return ob_get_clean();
+		}
+		protected function get_data_to_export() {
+			return $this->row_data;
+		}
+		protected function export_rows() {
+			$data   = $this->get_data_to_export();
+			$buffer = fopen( 'php://output', 'w' ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_read_fopen
+			ob_start();
+			array_walk( $data, [ $this, 'export_row' ], $buffer );
+			return apply_filters( "woocommerce_{$this->export_type}_export_rows", ob_get_clean(), $this );
+		}
+		protected function export_row( $row_data, $key, $buffer ) {
+			$columns    = $this->get_column_names();
+			$export_row = [];
+			foreach ( $columns as $column_id => $column_name ) {
+				if ( ! $this->is_column_exporting( $column_id ) ) {
+					continue;
+				}
+				if ( isset( $row_data[ $column_id ] ) ) {
+					$export_row[] = $this->format_data( $row_data[ $column_id ] );
+				} else {
+					$export_row[] = '';
+				}
+			}
+			$this->fputcsv( $buffer, $export_row );
+			++$this->exported_row_count;
+		}
+		public function get_limit() {
+			return apply_filters( "woocommerce_{$this->export_type}_export_batch_limit", $this->limit, $this );
+		}
+		public function set_limit( $limit ) {
+			$this->limit = absint( $limit );
+		}
+		public function get_total_exported() {
+			return $this->exported_row_count;
+		}
+		public function escape_data( $data ) {
+			$active_content_triggers = [ '=', '+', '-', '@', chr( 0x09 ), chr( 0x0d ) ];
+			if ( is_int( $data ) || is_float( $data ) ) {
+				return $data;
+			}
+			if ( in_array( mb_substr( $data, 0, 1 ), $active_content_triggers, true ) ) {
+				$data = "'" . $data;
+			}
+			return $data;
+		}
+		public function format_data( $data ) {
+			if ( ! is_scalar( $data ) ) {
+				if ( is_a( $data, 'WC_Datetime' ) ) {
+					$data = $data->date( 'Y-m-d G:i:s' );
+				} else {
+					$data = '';
+				}
+			} elseif ( is_bool( $data ) ) {
+				$data = $data ? 1 : 0;
+			}
+			return $this->escape_data( $data );
+		}
+		protected function implode_values( $values ) {
+			$values_to_implode = [];
+			foreach ( $values as $value ) {
+				$value               = (string) is_scalar( $value ) ? html_entity_decode( $value, ENT_QUOTES ) : '';
+				$values_to_implode[] = str_replace( ',', '\\,', $value );
+			}
+			return implode( ', ', $values_to_implode );
+		}
+		protected function fputcsv( $buffer, $export_row ) {
+			fputcsv( $buffer, $export_row, $this->get_delimiter(), '"', "\0" ); // phpcs:ignore
+		}
+
+		/** Test-only accessors below (not present on the real WC_CSV_Exporter). */
+		public function mock_export_rows() {
+			return $this->export_rows();
+		}
+		public function test_set_row_data( $rows ) {
+			$this->row_data = $rows;
+		}
+		public function get_prepared_row_data() {
+			return $this->row_data;
+		}
+		public function get_mock_total_rows() {
+			return $this->total_rows;
+		}
+	}
+}
+
+if ( ! class_exists( 'WC_CSV_Batch_Exporter' ) ) {
+	/**
+	 * Mock of WC_CSV_Batch_Exporter (includes/export/abstract-wc-csv-batch-exporter.php).
+	 * Paging/percent semantics match the real class, and generate_file() appends
+	 * each page to the data file as the real class does — the export file is the
+	 * only evidence the AJAX handler has that a page was written, so a mock that
+	 * skipped it could not exercise that path. Use
+	 * newspack_test_remove_export_files() to clear the staged files.
+	 */
+	abstract class WC_CSV_Batch_Exporter extends WC_CSV_Exporter {
+		protected $page = 1;
+		public function __construct() {
+			$this->column_names = $this->get_default_column_names();
+		}
+		public function get_page() {
+			return $this->page;
+		}
+		public function set_page( $page ) {
+			$this->page = absint( $page );
+		}
+		public function get_total_exported() {
+			return ( ( $this->get_page() - 1 ) * $this->get_limit() ) + $this->exported_row_count;
+		}
+		public function get_percent_complete() {
+			return $this->total_rows ? (int) floor( ( $this->get_total_exported() / $this->total_rows ) * 100 ) : 100;
+		}
+		public function generate_file() {
+			// phpcs:disable WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents, WordPressVIPMinimum.Functions.RestrictedFunctions.file_ops_file_put_contents, WordPressVIPMinimum.Functions.RestrictedFunctions.file_ops_unlink
+			if ( 1 === $this->get_page() ) {
+				// A run starts from a clean file, as in the real class.
+				foreach ( [ $this->get_file_path(), $this->get_headers_row_file_path() ] as $temp_file ) {
+					if ( file_exists( $temp_file ) ) {
+						unlink( $temp_file );
+					}
+				}
+			}
+			$this->prepare_data_to_export();
+			file_put_contents( $this->get_file_path(), $this->export_rows(), FILE_APPEND );
+			// phpcs:enable WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents, WordPressVIPMinimum.Functions.RestrictedFunctions.file_ops_file_put_contents, WordPressVIPMinimum.Functions.RestrictedFunctions.file_ops_unlink
+		}
+		public function get_headers_row_file() {
+			$file = chr( 239 ) . chr( 187 ) . chr( 191 ) . $this->export_column_headers();
+			if ( file_exists( $this->get_headers_row_file_path() ) ) {
+				$file = file_get_contents( $this->get_headers_row_file_path() ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents, WordPressVIPMinimum.Performance.FetchingRemoteData.FileGetContentsUnknown
+			}
+			return $file;
+		}
+		protected function get_headers_row_file_path() {
+			return $this->get_file_path() . '.headers';
+		}
+		protected function get_file_path() {
+			return trailingslashit( sys_get_temp_dir() ) . $this->get_filename();
+		}
+	}
+}
+
+if ( ! class_exists( 'WCS_Customer_Store' ) ) {
+	/**
+	 * Mock of WCS_Customer_Store. Drive get_users_subscription_ids() via the
+	 * static $mock_user_subscription_ids fixture map ( user_id => int[] ).
+	 */
+	class WCS_Customer_Store {
+		public static $mock_user_subscription_ids = [];
+		public static function instance() {
+			return new self();
+		}
+		public function get_users_subscription_ids( $user_id ) {
+			return self::$mock_user_subscription_ids[ $user_id ] ?? [];
+		}
+	}
+}
+
+if ( ! class_exists( 'WCS_Admin_Post_Types' ) ) {
+	/**
+	 * Mock of WCS_Admin_Post_Types exposing set_post__in_query_var() with the
+	 * real class's intersect/none semantics ($post__in_none = [ 0 ]).
+	 */
+	class WCS_Admin_Post_Types {
+		public static function set_post__in_query_var( $query_vars, $post_ids ) {
+			$post__in_none = [ 0 ];
+			if ( empty( $post_ids ) ) {
+				$query_vars['post__in'] = $post__in_none;
+			} elseif ( ! isset( $query_vars['post__in'] ) ) {
+				$query_vars['post__in'] = $post_ids;
+			} elseif ( $post__in_none !== $query_vars['post__in'] ) {
+				$intersecting_post_ids  = array_intersect( $query_vars['post__in'], $post_ids );
+				$query_vars['post__in'] = empty( $intersecting_post_ids ) ? $post__in_none : $intersecting_post_ids;
+			}
+			return $query_vars;
+		}
+	}
+}
+
+function wcs_get_subscription_statuses() {
+	return [
+		'wc-pending'        => 'Pending',
+		'wc-active'         => 'Active',
+		'wc-on-hold'        => 'On hold',
+		'wc-cancelled'      => 'Cancelled',
+		'wc-switched'       => 'Switched',
+		'wc-expired'        => 'Expired',
+		'wc-pending-cancel' => 'Pending Cancellation',
+	];
+}
+function wcs_sanitize_subscription_status_key( $status_key ) {
+	$status_key = sanitize_key( $status_key );
+	return 'wc-' === substr( $status_key, 0, 3 ) ? $status_key : 'wc-' . $status_key;
+}
+function wcs_subscription_search( $term ) {
+	global $wcs_mock_subscription_search_results;
+	return $wcs_mock_subscription_search_results[ $term ] ?? [];
+}
+function wcs_is_custom_order_tables_usage_enabled() {
+	global $wcs_mock_hpos_enabled;
+	return ! empty( $wcs_mock_hpos_enabled );
+}
+function wcs_get_orders_with_meta_query( $args ) {
+	global $wcs_mock_orders_with_meta_query_args, $wcs_mock_orders_with_meta_query_result, $subscriptions_database;
+	$wcs_mock_orders_with_meta_query_args = $args;
+	if ( isset( $wcs_mock_orders_with_meta_query_result ) ) {
+		return $wcs_mock_orders_with_meta_query_result;
+	}
+	// Default: page the mock subscriptions database honoring limit/offset,
+	// mirroring wc_get_orders' paginate => true return shape.
+	$ids    = array_keys( $subscriptions_database );
+	$total  = count( $ids );
+	$offset = isset( $args['offset'] ) ? (int) $args['offset'] : 0;
+	$limit  = isset( $args['limit'] ) && (int) $args['limit'] > 0 ? (int) $args['limit'] : $total;
+	$ids    = array_slice( $ids, $offset, $limit );
+	if ( ! empty( $args['paginate'] ) ) {
+		return (object) [
+			'orders'        => $ids,
+			'total'         => $total,
+			'max_num_pages' => $limit > 0 ? (int) ceil( $total / $limit ) : 1,
+		];
+	}
+	return $ids;
+}
+
+/**
+ * Delete the CSV export temp files staged by the batch-exporter mock, so a
+ * test class that drives generate_file() leaves the uploads dir as it found
+ * it. No-op unless the exporter base class is loaded.
+ */
+function newspack_test_remove_export_files() {
+	if ( ! class_exists( '\Newspack\CSV_Batch_Exporter' ) ) {
+		return;
+	}
+	$files = glob( trailingslashit( \Newspack\CSV_Batch_Exporter::get_exports_dir() ) . '*.csv*' );
+	// phpcs:disable WordPressVIPMinimum.Functions.RestrictedFunctions.file_ops_unlink
+	foreach ( (array) $files as $file ) {
+		unlink( $file );
+	}
+	// phpcs:enable WordPressVIPMinimum.Functions.RestrictedFunctions.file_ops_unlink
+}
+
 function wc_get_template( $template_name, $args = [] ) {
 	$plugin_dir   = dirname( __DIR__, 2 );
 	$templates_dir = $plugin_dir . '/includes/plugins/woocommerce/my-account/templates/v1/';

@@ -1012,10 +1012,21 @@ Error message(s) received:
 	 *   - key (string, required): Machine key for the field. Used as the Incoming_Field key.
 	 *   - name (string): Human-readable label. Defaults to the key.
 	 *   - value_type (string): Defaults to 'string'. The Incoming_Field setter accepts other values
-	 *       (e.g. 'boolean'); current providers only emit 'string'.
+	 *       (e.g. 'boolean', 'number', 'select', 'multiselect'); ActiveCampaign emits 'date' and
+	 *       'datetime' for date-typed custom fields, while Mailchimp emits only 'date'.
 	 *   - matching_function (string): Defaults to 'default' (strict equality). Use 'list__in' for
-	 *       multi-select fields whose stored value is a delimited list. The consumer also
-	 *       recognizes 'list__not_in' and 'range', though no current provider emits them.
+	 *       multi-select fields whose stored value is a delimited list, 'range' for numeric fields
+	 *       (emitted by Mailchimp for number merge fields), or 'date_range' for a 'date'/'datetime'
+	 *       field to offer publishers a { start, end } window operator — but only when
+	 *       integrations_supports_date_range() confirms the active newspack-plugin can consume it.
+	 *       The consumer also recognizes 'list__not_in', though no current provider emits it.
+	 *   - date_format (string): PHP date format string describing how the provider renders a
+	 *       'date'/'datetime' field's value (e.g. 'm/d/Y'). Empty means the provider already
+	 *       sends ISO 8601 / 'Y-m-d', which is what ActiveCampaign does; a provider whose dates
+	 *       are not already ISO must declare this or incoming values cannot be parsed. Always
+	 *       emit the key for a date-typed field, including as '': the consumer distinguishes a
+	 *       declared-ISO field from one snapshotted before source formats existed (and so needing
+	 *       a refresh from the live schema) by whether the key is present at all.
 	 *   - options (array): List of [ 'value' => ..., 'label' => ... ] pairs for enumerated fields.
 	 *   - description (string): Optional help text surfaced in the admin UI.
 	 *   - is_access_rule (bool): Whether the field is eligible as a content-gate access rule by default.
@@ -1026,6 +1037,31 @@ Error message(s) received:
 	 */
 	public function get_contact_fields_for_integrations( $list_id = null ) {
 		return [];
+	}
+
+	/**
+	 * Whether the active newspack-plugin can consume the date_range operator.
+	 *
+	 * The schema mappers are where date_range originates, and the two plugins
+	 * update independently: an older newspack-plugin stores the operator without
+	 * probing and re-emits it to newspack-popups, where a stale build crashes on
+	 * an unresolvable matching function and stops prompt display sitewide. Probe
+	 * for the Incoming_Field setter that shipped alongside date-range support and
+	 * fall back to exact matching when it is absent.
+	 *
+	 * @return bool
+	 */
+	protected static function integrations_supports_date_range() {
+		$supported = method_exists( '\Newspack\Reader_Activation\Integrations\Incoming_Field', 'set_date_format' );
+		/**
+		 * Filters whether the schema mappers may emit the date_range operator.
+		 *
+		 * The probe result is fixed by which newspack-plugin is installed, so this
+		 * exists chiefly to let tests pin both branches.
+		 *
+		 * @param bool $supported Whether the active newspack-plugin supports it.
+		 */
+		return apply_filters( 'newspack_newsletters_integrations_supports_date_range', $supported );
 	}
 
 	/**
@@ -1058,5 +1094,90 @@ Error message(s) received:
 				return null !== $value && '' !== $value && [] !== $value;
 			}
 		);
+	}
+
+	/**
+	 * Call get_send_lists() and normalize any provider-specific failure into a
+	 * WP_Error.
+	 *
+	 * Providers do not share an error convention: ActiveCampaign returns a
+	 * WP_Error, while Mailchimp throws (from validate() and the cached-data
+	 * accessors). Normalizing here is what lets get_send_lists_with_fallback()
+	 * reason about failure without knowing which provider it is wrapping.
+	 *
+	 * @param array $args     Args for get_send_lists(). See Send_Lists::get_default_args().
+	 * @param bool  $to_array Whether to return arrays instead of Send_List objects.
+	 * @return array|WP_Error
+	 */
+	private function fetch_send_lists( $args, $to_array = false ) {
+		try {
+			return $this->get_send_lists( $args, $to_array );
+		} catch ( Throwable $e ) {
+			return new WP_Error( 'newspack_newsletters_send_lists_fetch_failed', $e->getMessage() );
+		}
+	}
+
+	/**
+	 * Fetch send lists, falling back to a wider fetch when a targeted lookup
+	 * cannot resolve a stored id that belongs to a previously-connected ESP.
+	 *
+	 * A stale id surfaces differently per provider: ActiveCampaign passes 'ids'
+	 * upstream and returns a WP_Error, while Mailchimp and Constant Contact
+	 * fetch everything and filter in PHP, so an unknown id is simply absent
+	 * from the result. Both shapes — error and empty — are therefore treated as
+	 * "this id did not resolve".
+	 *
+	 * The retry widens in two stages so a stale sublist id does not drag the
+	 * result across every parent list: first drop 'ids' but keep 'parent_id'
+	 * (the parent is a scope, not the suspect value), and only drop 'parent_id'
+	 * as well if that still resolves nothing. A wider fetch that succeeds
+	 * proves the ESP is reachable and the stored id is the problem, so its
+	 * result is returned and the editor can prompt for a new selection. If
+	 * every attempt fails, the ESP is genuinely unreachable and the WP_Error is
+	 * returned for the caller to surface (e.g. as the editor's retry notice).
+	 *
+	 * Send-time validation deliberately does NOT use this method: it must fail
+	 * closed on an unresolvable id rather than widen. See the guards in each
+	 * provider's sync()/send path.
+	 *
+	 * @param array $args     Args for get_send_lists(). See Send_Lists::get_default_args().
+	 * @param bool  $to_array Whether to return arrays instead of Send_List objects.
+	 * @return array|WP_Error
+	 */
+	public function get_send_lists_with_fallback( $args, $to_array = false ) {
+		$result = $this->fetch_send_lists( $args, $to_array );
+
+		// Nothing was targeted, so there is no stale id to recover from.
+		if ( empty( $args['ids'] ) && empty( $args['parent_id'] ) ) {
+			return $result;
+		}
+
+		// The targeted lookup resolved something, so the stored id is valid.
+		if ( ! is_wp_error( $result ) && ! empty( $result ) ) {
+			return $result;
+		}
+
+		// Widen to the parent scope first, keeping sublists tied to their list.
+		if ( ! empty( $args['ids'] ) && ! empty( $args['parent_id'] ) ) {
+			$scoped_args = $args;
+			unset( $scoped_args['ids'] );
+			$scoped = $this->fetch_send_lists( $scoped_args, $to_array );
+			if ( ! is_wp_error( $scoped ) && ! empty( $scoped ) ) {
+				return $scoped;
+			}
+		}
+
+		// Widen fully — the stored parent id may be stale too.
+		$untargeted_args = $args;
+		unset( $untargeted_args['ids'], $untargeted_args['parent_id'] );
+		$untargeted = $this->fetch_send_lists( $untargeted_args, $to_array );
+
+		// Every attempt failed: report the original failure, which describes
+		// the lookup the caller actually asked for.
+		if ( is_wp_error( $untargeted ) ) {
+			return is_wp_error( $result ) ? $result : $untargeted;
+		}
+
+		return $untargeted;
 	}
 }

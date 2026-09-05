@@ -882,19 +882,60 @@ class Newspack_Test_Content_Gate_Metadata extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Test that a malformed institution rule value (non-array) does not fatal
-	 * and contributes no group label.
+	 * Test that an institution rule naming nothing withholds access and
+	 * contributes no group label.
 	 *
-	 * Institution::evaluate() treats a non-array $value as "matches everyone,"
-	 * so the rule passes — but there's no specific institution to attribute, so
-	 * Content_Access_Group must come back empty (and crucially: no TypeError on
-	 * a `foreach` over a non-iterable).
+	 * The synced field is the reason this is worth pinning separately from the
+	 * evaluator: it is what a publisher's ESP segments on, so a rule that matches
+	 * nobody has to read as Content_Access "No" rather than as an unattributed
+	 * pass. The empty group label also covers the `foreach` over a non-iterable.
+	 *
+	 * @dataProvider empty_institution_value_provider
+	 *
+	 * @param mixed $value Empty rule value.
+	 */
+	public function test_no_access_and_no_group_label_for_empty_institution_rule( $value ) {
+		// An institution must exist so the rule evaluation has something to consider.
+		$this->create_institution( 'Test University', [ 'email_domain' => 'example.com' ] );
+
+		$rules = [
+			[
+				[
+					'slug'  => 'institution',
+					'value' => $value,
+				],
+			],
+		];
+		$this->create_gate_with_rules( 'Empty Institution Gate', $rules );
+
+		$result = $this->get_metadata_for_user( self::$user_id );
+
+		$this->assertEquals( 'No', $result['Content_Access'], 'An institution rule naming nothing matches no reader.' );
+		$this->assertEmpty( $result['Content_Access_Group'], 'Empty institution rule should yield no group label.' );
+	}
+
+	/**
+	 * Data provider for empty institution rule values.
+	 */
+	public function empty_institution_value_provider() {
+		return [
+			'empty string' => [ '' ],
+			'empty array'  => [ [] ],
+			'null'         => [ null ],
+		];
+	}
+
+	/**
+	 * Test that a populated non-array institution rule value fails closed:
+	 * Institution::evaluate() returns false for a malformed shape, so the rule —
+	 * and with it the single-rule group — denies access, and no group label is
+	 * attributed.
 	 *
 	 * @dataProvider malformed_institution_value_provider
 	 *
-	 * @param mixed $value Malformed rule value.
+	 * @param mixed $value Malformed (populated non-array) rule value.
 	 */
-	public function test_group_label_empty_for_malformed_institution_rule( $value ) {
+	public function test_access_denied_for_malformed_institution_rule( $value ) {
 		// An institution must exist so the rule evaluation has something to consider.
 		$this->create_institution( 'Test University', [ 'email_domain' => 'example.com' ] );
 
@@ -910,20 +951,17 @@ class Newspack_Test_Content_Gate_Metadata extends WP_UnitTestCase {
 
 		$result = $this->get_metadata_for_user( self::$user_id );
 
-		$this->assertEquals( 'Yes', $result['Content_Access'], 'Malformed institution rule matches everyone per Institution::evaluate().' );
+		$this->assertEquals( 'No', $result['Content_Access'], 'Malformed institution rule fails closed per Institution::evaluate().' );
 		$this->assertEmpty( $result['Content_Access_Group'], 'Malformed institution rule should yield no group label.' );
 	}
 
 	/**
-	 * Data provider for malformed institution rule values.
+	 * Data provider for malformed (populated non-array) institution rule values.
 	 */
 	public function malformed_institution_value_provider() {
 		return [
-			'empty string' => [ '' ],
-			'empty array'  => [ [] ],
-			'null'         => [ null ],
-			'scalar int'   => [ 5 ],
-			'scalar str'   => [ '5' ],
+			'scalar int' => [ 5 ],
+			'scalar str' => [ '5' ],
 		];
 	}
 
@@ -1010,6 +1048,80 @@ class Newspack_Test_Content_Gate_Metadata extends WP_UnitTestCase {
 			'Active Plan, In Recovery Plan',
 			$grace_on_result['Content_Access_Source'],
 			'Grace on: both the active and the in-recovery subscription are sources.'
+		);
+	}
+
+	/**
+	 * A reader whose only route in is a one-time purchase still gets a source.
+	 * The rule shipped in NPPD-2053 after this resolver was written, so it used
+	 * to fall through and sync Content_Access "Yes" with an empty source.
+	 */
+	public function test_one_time_purchase_rule_reports_a_source() {
+		$this->create_gate_with_rules(
+			'One-time purchase gate',
+			[
+				[
+					[
+						'slug'  => 'one_time_purchase',
+						'value' => [
+							'product_ids'    => [ 4242 ],
+							'duration_value' => 1,
+							'duration_unit'  => 'months',
+						],
+					],
+				],
+			]
+		);
+
+		// Force the purchase check to pass without standing up a WooCommerce
+		// order; the rule's own coverage lives with Access_Rules.
+		add_filter( 'newspack_access_rules_has_one_time_purchase', '__return_true' );
+
+		$result = ( new Content_Gate_Metadata( get_user_by( 'id', self::$user_id ) ) )->get_metadata();
+
+		remove_filter( 'newspack_access_rules_has_one_time_purchase', '__return_true' );
+
+		$this->assertSame( 'Yes', $result['Content_Access'] );
+		$this->assertSame( 'one_time_purchase', $result['Content_Access_Source'] );
+	}
+
+	/**
+	 * Attribution memoizes the reader's subscriptions for the request, and a
+	 * sync run is one request spanning many readers and many minutes. Whatever
+	 * clears this class's own cache has to clear that memo too, or a
+	 * subscription that activates between two syncs is invisible to the second
+	 * one — reporting a stale set of product names while Content_Access itself,
+	 * which is not memoized, moves on.
+	 */
+	public function test_reset_cache_clears_the_subscription_attribution_memo() {
+		$first_product_id  = $this->create_mock_product( 620, 'First Plan' );
+		$second_product_id = $this->create_mock_product( 621, 'Second Plan' );
+		$this->create_subscription( self::$user_id, [ $first_product_id ] );
+
+		$this->create_gate_with_rules(
+			'Memo Gate',
+			[
+				[
+					[
+						'slug'  => 'subscription',
+						'value' => [ $first_product_id, $second_product_id ],
+					],
+				],
+			]
+		);
+
+		$first_result = $this->get_metadata_for_user( self::$user_id );
+		$this->assertEquals( 'First Plan', $first_result['Content_Access_Source'] );
+
+		// The reader buys the second plan while the sync process is still alive.
+		$this->create_subscription( self::$user_id, [ $second_product_id ] );
+		Content_Gate_Metadata::reset_cache();
+
+		$second_result = $this->get_metadata_for_user( self::$user_id );
+		$this->assertEquals(
+			'First Plan, Second Plan',
+			$second_result['Content_Access_Source'],
+			'The second sync must see the new subscription, not the memo from the first.'
 		);
 	}
 }

@@ -91,6 +91,41 @@ class Subscribers_Wizard extends Wizard {
 	private $raw_status_ids_cache = [];
 
 	/**
+	 * Per-request memo of newsletter list public ID → display title, built once
+	 * from the site's own subscription lists. Null once resolved means the site
+	 * has no list registry to read. See get_newsletter_list_titles().
+	 *
+	 * @var array<string,string>|null
+	 */
+	private ?array $newsletter_list_titles_cache = null;
+
+	/**
+	 * Whether the newsletter-list registry has been resolved this request. Kept
+	 * apart from the memo itself because a null memo is a resolved state — the
+	 * registry is unreadable — and not an unfilled one.
+	 *
+	 * @var bool
+	 */
+	private bool $newsletter_list_titles_resolved = false;
+
+	/**
+	 * User meta key holding a reader's tags: short, admin-applied labels
+	 * ("vip", "met-in-person"). Stored on the user as an array of strings.
+	 *
+	 * This is site-local data. The connected ESP also carries per-contact tags,
+	 * but reading those is a per-reader API call — on a 50-row page that is a
+	 * rate-limit and latency problem that needs a batching/caching layer of its
+	 * own, so the column is deliberately fed from local data only.
+	 *
+	 * Read-only for now: nothing in the plugin writes this key, and it is not
+	 * registered with register_meta(), so the column reads empty on every site
+	 * until a later slice lands the write path. Whatever does that will need an
+	 * auth_callback and a sanitize_callback — reader-writable tags would let a
+	 * reader label themselves.
+	 */
+	const READER_TAGS_META = 'newspack_reader_tags';
+
+	/**
 	 * Constructor.
 	 *
 	 * @param array $args Optional arguments.
@@ -407,7 +442,10 @@ class Subscribers_Wizard extends Wizard {
 			// Interim click-through target: the WooCommerce subscription edit
 			// screen (HPOS-safe), until the in-wizard group detail lands (PR 4).
 			'editUrl'     => $this->subscription_edit_url( $subscription ),
-			// Seat requests are surfaced in a later slice (NPPD-1753 PR 7).
+			// Always null: nothing on the site records a seat-increase request yet,
+			// so there is nothing to report. The field stays in the response because
+			// the group list already renders a badge from it, and it will populate
+			// as soon as such requests are stored.
 			'seatRequest' => null,
 		];
 	}
@@ -484,9 +522,18 @@ class Subscribers_Wizard extends Wizard {
 
 		$user_query = new \WP_User_Query( $query_args );
 		$total      = (int) $user_query->get_total();
+		$users      = $user_query->get_results();
+
+		// Prime the whole page's user meta in one query, so the per-row reads
+		// during hydration (tags, newsletter subscriptions, last-active) are cache
+		// hits instead of a query each. WP_User_Query already does this for
+		// `fields => all`, and cache_users() no-ops when the users are cached —
+		// calling it here makes the batching a property of this endpoint rather
+		// than of a WP_User_Query internal that could change under us.
+		cache_users( wp_list_pluck( $users, 'ID' ) );
 
 		$items = [];
-		foreach ( $user_query->get_results() as $user ) {
+		foreach ( $users as $user ) {
 			$items[] = $this->prepare_subscriber( $user );
 		}
 
@@ -552,9 +599,11 @@ class Subscribers_Wizard extends Wizard {
 	 * re-resolving within a single request, so each entry point starts clean.
 	 */
 	private function reset_request_caches() {
-		$this->group_subscriptions_cache = null;
-		$this->group_membership_index    = null;
-		$this->raw_status_ids_cache      = [];
+		$this->group_subscriptions_cache       = null;
+		$this->group_membership_index          = null;
+		$this->raw_status_ids_cache            = [];
+		$this->newsletter_list_titles_cache    = null;
+		$this->newsletter_list_titles_resolved = false;
 	}
 
 	/**
@@ -605,13 +654,11 @@ class Subscribers_Wizard extends Wizard {
 			'status'        => $this->reduced_status( $subscriptions, $groups ),
 			'memberSince'   => $this->local_date( $registered ),
 			'lastPayment'   => $this->last_payment_date( $user_id ),
-			// Wired to reader activity in a later slice; the column is hidden by default.
-			'lastSeen'      => null,
+			'lastSeen'      => $this->last_seen_date( $user_id ),
 			'subscriptions' => $subscriptions,
 			'groups'        => $groups,
-			// Tags and newsletters are populated in a later slice (NPPD-1753 PR 7).
-			'tags'          => [],
-			'newsletters'   => [],
+			'tags'          => $this->reader_tags( $user_id ),
+			'newsletters'   => $this->reader_newsletters( $user_id ),
 		];
 	}
 
@@ -966,6 +1013,173 @@ class Subscribers_Wizard extends Wizard {
 	}
 
 	/**
+	 * When a reader was last seen, from the site's own record of their activity.
+	 *
+	 * Reads the `last_active` reader-data item, which reader activation stamps on
+	 * every page view (most-recent-wins) and which the ESP sync already publishes
+	 * as `Last_Active`. Reporting the same value here means this column and the
+	 * publisher's ESP tell one story about the same reader, and it tracks reading
+	 * rather than signing in — a reader on a long-lived auth cookie who visits
+	 * daily is last seen today, and logging out doesn't erase the record.
+	 *
+	 * The value is client-asserted: `last_active` is not among
+	 * Reader_Data::get_read_only_keys(), so the browser writes it and a determined
+	 * reader could set it themselves. That is fine for an informational column,
+	 * but nothing that grants access may be decided on it.
+	 *
+	 * Formatted through local_date() like every other date this wizard emits. The
+	 * ESP sync publishes the same instant in UTC, but that value is read by a
+	 * machine, whereas this one sits in a table beside localized subscription
+	 * dates: on a negative-offset site an evening visit formatted in UTC lands on
+	 * tomorrow's date, which reads as plainly wrong next to them. Going through
+	 * local_date() also drops a falsy timestamp rather than rendering it as
+	 * 1970-01-01, which matters because the value is client-writable.
+	 *
+	 * @param int $user_id The reader user ID.
+	 *
+	 * @return string|null 'YYYY-MM-DD', or null when the site has no usable record of them.
+	 */
+	private function last_seen_date( int $user_id ): ?string {
+		$last_active = Reader_Data::get_data( $user_id, 'last_active' );
+		if ( empty( $last_active ) || ! is_numeric( $last_active ) ) {
+			return null;
+		}
+		// Reader-data timestamps are JavaScript milliseconds; intdiv() keeps the
+		// conversion integral, since local_date() takes an int timestamp.
+		$timestamp = intdiv( (int) $last_active, 1000 );
+		$now       = time();
+		// The browser writes this value from its own clock, and the client store
+		// keeps whichever of the stored and the local value is larger, so a device
+		// running ahead writes a timestamp the site can never lower again. A small
+		// overshoot is ordinary clock skew and reads as now. Further ahead than a
+		// day describes the device's clock rather than the reader, so the record is
+		// dropped: an unknown last-seen is a smaller lie than one that dates a
+		// dormant reader to today and keeps doing so.
+		if ( $timestamp > $now + DAY_IN_SECONDS ) {
+			return null;
+		}
+		return $this->local_date( min( $timestamp, $now ) );
+	}
+
+	/**
+	 * A reader's tags — the short labels an admin applies to them, stored locally
+	 * on the user. See READER_TAGS_META on why the ESP's tags are not read here.
+	 *
+	 * @param int $user_id The reader user ID.
+	 *
+	 * @return string[]
+	 */
+	private function reader_tags( int $user_id ): array {
+		$tags = get_user_meta( $user_id, self::READER_TAGS_META, true );
+		// A JSON-encoded list is accepted alongside a stored array, so a value
+		// written through a JSON-shaped path (WP-CLI, the REST meta API) reads back
+		// as tags rather than as one tag named `["vip"]`.
+		if ( is_string( $tags ) && '' !== $tags ) {
+			$decoded = json_decode( $tags, true );
+			$tags    = is_array( $decoded ) ? $decoded : [ $tags ];
+		}
+		if ( ! is_array( $tags ) ) {
+			return [];
+		}
+		$tags = array_map( 'sanitize_text_field', array_filter( $tags, 'is_scalar' ) );
+		// Empty entries go, and only those: array_filter()'s default callback tests
+		// truthiness, which would also drop a tag literally named "0".
+		return array_values( array_unique( array_diff( $tags, [ '' ] ) ) );
+	}
+
+	/**
+	 * The newsletters a reader is subscribed to, each as its list ID and the title
+	 * the site shows for it.
+	 *
+	 * The subscription itself is read from the reader's own record — the
+	 * `newsletter_subscribed_lists` reader-data item, which the newsletter data
+	 * events keep in step with the ESP — and the list IDs it holds are resolved
+	 * against the site's own list definitions. No ESP call is made; see
+	 * READER_TAGS_META for why.
+	 *
+	 * A list the site holds no definition for reports a null title rather than a
+	 * synthesized one, and always keeps its ID. Unresolved is a routine state, not
+	 * a rarity: the stored set is `get_contact_combined_lists()`, which merges the
+	 * ESP's own list IDs with the site's local public IDs, so a Mailchimp or
+	 * ActiveCampaign site regularly holds IDs it has no local record of. Sending
+	 * the ID rather than a sentence keeps it machine-readable, since a filter
+	 * matches on a list ID and not on prose, and leaves the wording to the client,
+	 * next to the column heading it sits under.
+	 *
+	 * Resolution needs a registry at all: when the site has none, nothing is
+	 * reported rather than every list being called unknown; see
+	 * get_newsletter_list_titles().
+	 *
+	 * @param int $user_id The reader user ID.
+	 *
+	 * @return array<array{id:string,title:?string}>
+	 */
+	private function reader_newsletters( int $user_id ): array {
+		$raw      = Reader_Data::get_data( $user_id, 'newsletter_subscribed_lists' );
+		$list_ids = is_string( $raw ) ? json_decode( $raw, true ) : $raw;
+		if ( ! is_array( $list_ids ) ) {
+			return [];
+		}
+		$titles = $this->get_newsletter_list_titles();
+		if ( null === $titles ) {
+			// No registry to resolve against — on a site that has since deactivated
+			// the Newsletters plugin, the stored subscriptions are still there. The
+			// site cannot say those lists are unknown, only that it cannot look them
+			// up, which is what the column's empty state already means.
+			return [];
+		}
+		$lists = [];
+		// Deduplicated by list ID, before resolution: two lists can carry the same
+		// title, and collapsing on the title would drop one of the subscriptions.
+		$list_ids = array_unique( array_map( 'strval', array_filter( $list_ids, 'is_scalar' ) ) );
+		foreach ( $list_ids as $list_id ) {
+			if ( '' === $list_id ) {
+				continue;
+			}
+			$lists[] = [
+				'id'    => $list_id,
+				'title' => $titles[ $list_id ] ?? null,
+			];
+		}
+		return $lists;
+	}
+
+	/**
+	 * Map of newsletter list public ID → display title, from the site's own
+	 * subscription lists. Memoized for the request.
+	 *
+	 * The site's lists are few and shared by every row, while resolving a list
+	 * on demand costs a query — so the map is built once per request and read
+	 * per row, the same shape the group-membership index uses.
+	 *
+	 * A site running without the Newsletters plugin has no registry at all, which
+	 * is reported as null and is a different thing from a registry that exists and
+	 * holds no lists: the first cannot resolve any ID, the second resolves them
+	 * all to "not one of ours".
+	 *
+	 * @return array<string,string>|null The map, or null when there is no registry to read.
+	 */
+	private function get_newsletter_list_titles(): ?array {
+		if ( $this->newsletter_list_titles_resolved ) {
+			return $this->newsletter_list_titles_cache;
+		}
+		$this->newsletter_list_titles_resolved = true;
+		if ( ! class_exists( '\Newspack\Newsletters\Subscription_Lists' ) || ! method_exists( '\Newspack\Newsletters\Subscription_Lists', 'get_all' ) ) {
+			return null;
+		}
+		$titles = [];
+		foreach ( \Newspack\Newsletters\Subscription_Lists::get_all() as $list ) {
+			$public_id = (string) $list->get_public_id();
+			$title     = (string) $list->get_title();
+			if ( '' !== $public_id && '' !== $title ) {
+				$titles[ $public_id ] = $title;
+			}
+		}
+		$this->newsletter_list_titles_cache = $titles;
+		return $titles;
+	}
+
+	/**
 	 * Resolve the `include` user-ID set for the active subscription-status / plan
 	 * filters, or null when neither is present.
 	 *
@@ -1261,29 +1475,39 @@ class Subscribers_Wizard extends Wizard {
 			true
 		);
 
-		// Mirror the publisher's configurable group/team label so the wizard stays
-		// consistent with the Audience → Setup "Group labels" override.
-		$group_label_singular = class_exists( '\Newspack\Group_Subscription' )
-			? Group_Subscription::get_label( 'singular' )
-			: __( 'Group', 'newspack-plugin' );
-		$group_label_plural = class_exists( '\Newspack\Group_Subscription' )
-			? Group_Subscription::get_label( 'plural' )
-			: __( 'Groups', 'newspack-plugin' );
+		// Ship the raw overrides, blank when unset, so the client can tell a custom noun
+		// from the default, plus the default nouns and the phrase that wraps them
+		// translated here: this bundle's JS strings are not localized, so anything the
+		// client composes itself would read in English beside a translated heading.
+		$group_label_singular = Group_Subscription::get_label_override( 'singular' );
+		$group_label_plural   = Group_Subscription::get_label_override( 'plural' );
 
 		wp_add_inline_script(
 			'newspack-subscribers',
 			'window.newspackSubscribers = ' . wp_json_encode(
 				[
-					'groupLabel'       => $group_label_singular,
-					'groupLabelPlural' => $group_label_plural,
+					'groupLabel'              => $group_label_singular,
+					'groupLabelPlural'        => $group_label_plural,
+					'groupLabelDefault'       => Group_Subscription::get_default_label( 'singular' ),
+					'groupLabelDefaultPlural' => Group_Subscription::get_default_label( 'plural' ),
+					'groupPhrases'            => [
+						/* translators: 1: number of groups. 2: the group label, e.g. "Groups". Word order only; the noun already carries number. */
+						'count'      => __( '%1$s %2$s', 'newspack-plugin' ),
+						/* translators: %s: the group label, e.g. "Group". */
+						'role'       => __( '%s role', 'newspack-plugin' ),
+						/* translators: 1: the group label, e.g. "Groups". 2: the error message. */
+						'loadFailed' => __( 'Could not load %1$s: %2$s', 'newspack-plugin' ),
+						/* translators: 1: the group label, e.g. "Group". 2: the group name. */
+						'view'       => __( 'View %1$s: %2$s', 'newspack-plugin' ),
+					],
 					// Drives the column layout synchronously; the avatar URLs
 					// themselves come from the /avatars REST endpoint.
-					'showAvatars'      => (bool) get_option( 'show_avatars', true ),
+					'showAvatars'             => (bool) get_option( 'show_avatars', true ),
 					// The /avatars endpoint truncates anything past this cap rather
 					// than erroring, so the client must batch to the same number. It
 					// is published here so there is one authority instead of two
 					// constants that can drift apart silently.
-					'avatarBatchCap'   => self::AVATAR_BATCH_CAP,
+					'avatarBatchCap'          => self::AVATAR_BATCH_CAP,
 				]
 			) . ';',
 			'before'

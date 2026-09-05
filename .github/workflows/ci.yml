@@ -13,6 +13,11 @@ concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
+# Jobs here build and test code that arrives from a pull request. None of them
+# write to the repository, and the repo-wide default for GITHUB_TOKEN is write.
+permissions:
+  contents: read
+
 env:
   # Pinned via package.json's packageManager field; this is just a fallback.
   PNPM_VERSION: 10.33.0
@@ -42,9 +47,11 @@ jobs:
           node-version-file: '.nvmrc'
       - id: detect
         name: Compute package matrices
+        env:
+          EVENT_BASE_REF: ${{ github.event.pull_request.base.sha || github.event.before }}
         run: |
           set -euo pipefail
-          BASE_REF="${{ github.event.pull_request.base.sha || github.event.before }}"
+          BASE_REF="$EVENT_BASE_REF"
           if [ -z "$BASE_REF" ] || [ "$BASE_REF" = "0000000000000000000000000000000000000000" ]; then
             BASE_REF=$(git merge-base HEAD origin/main || echo HEAD~1)
           fi
@@ -88,8 +95,25 @@ jobs:
           # would let a newly-added <file> be linted by the pre-commit hook and
           # by nothing here, which is the exact gap this job closes.
           # `|| true` because grep exits 1 when the subtraction is empty.
-          NW_PATHS=$(sed -n 's|.*<file>\([^<]*\)</file>.*|\1|p' phpcs.xml \
-            | grep -vxE 'plugins|themes|packages' | tr '\n' ' ' | sed 's/ *$//' || true)
+          NW_LINES=$(sed -n 's|.*<file>\([^<]*\)</file>.*|\1|p' phpcs.xml \
+            | grep -vxE 'plugins|themes|packages' || true)
+          # phpcs.xml comes from the PR, and these paths are word-split into a shell
+          # command in the php-lint-non-workspace job, so keep them to plain relative
+          # paths. Validated one <file> value per line, before joining: a value
+          # containing a space would otherwise split into two words that each pass and
+          # neither of which is the declared path. Fail loudly, since a rejected path
+          # would go unlinted behind a green check. The match rejects, in order: a `..`
+          # component, so a path cannot walk outside the checkout; any character
+          # outside the allowed set, which includes whitespace and the glob characters;
+          # and a leading character that would make the path arrive as an option flag
+          # (`-i`), which phpcs accepts and then lints nothing.
+          if [ -n "$NW_LINES" ] && printf '%s\n' "$NW_LINES" | grep -E '\.\.|[^A-Za-z0-9._/-]|^[^A-Za-z0-9._]' >/dev/null; then
+            echo "Rejected phpcs.xml <file> path(s):"
+            printf '%s\n' "$NW_LINES"
+            exit 1
+          fi
+          NW_PATHS=$(printf '%s\n' "$NW_LINES" | tr '\n' ' ' | sed 's/ *$//')
+
           NW_CHANGED=false
           if [ -n "$NW_PATHS" ]; then
             NW_REGEX="^($(printf '%s' "$NW_PATHS" | tr ' ' '|'))/.*\.php$|^phpcs\.xml$"
@@ -108,6 +132,21 @@ jobs:
             echo "php-matrix={\"include\":[]}" >> "$GITHUB_OUTPUT"
             echo "any=$ROOT_DEPS_CHANGED" >> "$GITHUB_OUTPUT"
             exit 0
+          fi
+
+          # Package names come from PR-controlled package.json files and end up in
+          # shell steps downstream, so hold them to npm's own naming rules before
+          # they reach a matrix. Fail loudly rather than dropping the offender: a
+          # silently skipped package is a green check over unlinted code.
+          # The second pattern rejects `..`, which the first one allows: pnpm reads a
+          # trailing `...` as graph-selector syntax, so `foo...` would silently filter
+          # to a different set of packages than the one that changed.
+          INVALID=$( { printf '%s\n' "$CHANGED" | grep -vE '^(@[a-z0-9][a-z0-9._-]*/)?[a-z0-9][a-z0-9._-]*$' || true;
+                       printf '%s\n' "$CHANGED" | grep -E '\.\.' || true; } | sort -u )
+          if [ -n "$INVALID" ]; then
+            echo "Rejected package name(s):"
+            printf '%s\n' "$INVALID"
+            exit 1
           fi
 
           JS_INCLUDE=$(printf '%s\n' "$CHANGED" | jq -R -s -c 'split("\n") | map(select(length>0)) | map({package: .})')
@@ -155,6 +194,11 @@ jobs:
     strategy:
       fail-fast: false
       matrix: ${{ fromJson(needs.changed-packages.outputs.js-matrix) }}
+    # The package name originates in a PR-controlled package.json. Pass it through
+    # the environment and quote it in the shell rather than interpolating it into
+    # the script, where `${{ }}` substitution happens before the shell parses.
+    env:
+      PKG: ${{ matrix.package }}
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4.3.0
@@ -168,16 +212,18 @@ jobs:
       # --if-present skips packages whose package.json doesn't define the
        # script (e.g. newspack-colors has no lint:js, newspack-scripts has no
        # build). Without it pnpm exits non-zero on a missing script.
-      - run: pnpm --filter "${{ matrix.package }}" run --if-present lint:js
+      - run: pnpm --filter "$PKG" run --if-present lint:js
+        continue-on-error: false
+      - run: pnpm --filter "$PKG" run --if-present lint:scss
         continue-on-error: false
       # Type gate: the build strips types via Babel without checking them and
       # ESLint is not type-aware, so this is the only step that catches type
       # errors. Packages opt in by defining the script (tsc --noEmit against
       # the package's own tsconfig).
-      - run: pnpm --filter "${{ matrix.package }}" run --if-present typescript:check
+      - run: pnpm --filter "$PKG" run --if-present typescript:check
         continue-on-error: false
-      - run: pnpm --filter "${{ matrix.package }}" run --if-present build
-      - run: pnpm --filter "${{ matrix.package }}" run --if-present test
+      - run: pnpm --filter "$PKG" run --if-present build
+      - run: pnpm --filter "$PKG" run --if-present test
         continue-on-error: false
 
   # ----------------------------------------------------------------------------
@@ -191,6 +237,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix: ${{ fromJson(needs.changed-packages.outputs.php-matrix) }}
+    env:
+      PKG: ${{ matrix.package }}
     steps:
       - uses: actions/checkout@v4
       - uses: shivammathur/setup-php@7c071dfe9dc99bdf297fa79cb49ea005b9fcadbc # 2.37.1
@@ -208,7 +256,7 @@ jobs:
         run: composer install --no-interaction --no-progress --prefer-dist
       - name: phpcs
         run: |
-          dir=$(pnpm --silent --filter "${{ matrix.package }}" exec pwd)
+          dir=$(pnpm --silent --filter "$PKG" exec pwd)
           composer phpcs -- "$dir"
 
   # ----------------------------------------------------------------------------
@@ -233,13 +281,23 @@ jobs:
       - name: composer install (root)
         run: composer install --no-interaction --no-progress --prefer-dist
       - name: phpcs
-        run: composer phpcs -- ${{ needs.changed-packages.outputs.nw-paths }}
+        # Unquoted on purpose: the value is a space-separated path list that must
+        # split into separate arguments. Shell parameter expansion does not re-run
+        # command substitution, and the paths are validated in changed-packages.
+        env:
+          NW_PATHS: ${{ needs.changed-packages.outputs.nw-paths }}
+        run: composer phpcs -- $NW_PATHS
 
   php-test:
     name: PHPUnit / ${{ matrix.package }}
     needs: changed-packages
     if: needs.changed-packages.outputs.any == 'true' && needs.changed-packages.outputs.php-matrix != '{"include":[]}'
     runs-on: ubuntu-latest
+    # A stalled fetch in "Install WordPress test suite" used to hold a runner
+    # until the 6-hour default timeout killed it, with the PR's check reading
+    # as still-running the whole time. This job normally finishes in 3-6
+    # minutes, so 20 is slack for a slow runner and nothing more.
+    timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix: ${{ fromJson(needs.changed-packages.outputs.php-matrix) }}
@@ -259,6 +317,7 @@ jobs:
     env:
       WP_TESTS_DIR: /tmp/wordpress-tests-lib
       WP_CORE_DIR: /tmp/wordpress
+      PKG: ${{ matrix.package }}
     steps:
       - uses: actions/checkout@v4
       - uses: shivammathur/setup-php@7c071dfe9dc99bdf297fa79cb49ea005b9fcadbc # 2.37.1
@@ -276,14 +335,16 @@ jobs:
       - name: Resolve package directory
         id: pkg
         run: |
-          dir=$(pnpm --silent --filter "${{ matrix.package }}" exec pwd)
+          dir=$(pnpm --silent --filter "$PKG" exec pwd)
           echo "dir=$dir" >> "$GITHUB_OUTPUT"
           name=$(basename "$dir")
           echo "name=$name" >> "$GITHUB_OUTPUT"
       - name: Check for phpunit config
         id: check
+        env:
+          PKG_DIR: ${{ steps.pkg.outputs.dir }}
         run: |
-          dir="${{ steps.pkg.outputs.dir }}"
+          dir="$PKG_DIR"
           if [ -f "$dir/phpunit.xml" ] || [ -f "$dir/phpunit.xml.dist" ]; then
             echo "has_tests=true" >> "$GITHUB_OUTPUT"
           else
@@ -291,26 +352,82 @@ jobs:
           fi
       - name: Install WordPress test suite
         if: steps.check.outputs.has_tests == 'true'
+        # Below the job budget on purpose. A transfer slow enough to keep
+        # retrying but never trip the speed limit can burn --max-time on every
+        # attempt, and hitting the job timeout instead reports as a cancelled
+        # job that names no step. Failing here names this step.
+        timeout-minutes: 15
         run: |
-          # svn isn't on ubuntu-latest runners by default; the WP develop
-          # repo's phpunit test library is published over svn.
-          sudo apt-get update -qq
-          sudo apt-get install -y -qq subversion
-          # Download WP core and test library.
+          # Without pipefail, a `curl | tar` pipeline reports only tar's status.
+          # A failed download then surfaces as tar's bare "exit code 2" -- the
+          # symptom of a corrupt archive -- and the step blames the extraction for
+          # a network problem it never saw. Carried over from main, which added it
+          # to the svn-era version of this step that the tarball fetch replaced.
+          set -o pipefail
+
+          # Every fetch below is a stall risk, and an unguarded one used to wedge
+          # here with no output naming the URL it was on. curl aborts a transfer
+          # that drops under 1KB/s for 30s and retries it, and each fetch
+          # announces itself so a log tail identifies the culprit.
+          fetch() {
+            curl --fail --location --silent --show-error \
+              --connect-timeout 15 --max-time 300 \
+              --speed-limit 1024 --speed-time 30 \
+              --retry 5 --retry-delay 5 --retry-max-time 300 --retry-all-errors "$@"
+          }
+
           mkdir -p "$WP_TESTS_DIR"
-          WP_TESTS_TAG=$(curl -s "https://api.wordpress.org/core/version-check/1.7/" | jq -r '.offers[0].version')
+
+          echo "Resolving the current WordPress version..."
+          WP_TESTS_TAG=$(fetch "https://api.wordpress.org/core/version-check/1.7/" | jq -r '.offers[0].version')
+          # An empty or null version would build URLs like wordpress-null.tar.gz,
+          # whose 404 surfaces as a confusing tar error several lines later.
+          if [ -z "$WP_TESTS_TAG" ] || [ "$WP_TESTS_TAG" = "null" ]; then
+            echo "Could not resolve a WordPress version from api.wordpress.org"
+            exit 1
+          fi
+          echo "WordPress $WP_TESTS_TAG"
+
+          # The two sources tag releases differently: wordpress.org names its
+          # core tarball with the version as published ("7.1"), while
+          # wordpress-develop tags are always three-part ("7.1.0"). They agree
+          # once a patch ships, so the develop tag 404s only between an x.y.0
+          # release and its first patch -- a window this job would otherwise
+          # spend entirely red. Derive the tag rather than sharing the variable.
+          WP_DEVELOP_TAG="$WP_TESTS_TAG"
+          case "$WP_DEVELOP_TAG" in
+            *.*.*) ;;
+            *) WP_DEVELOP_TAG="$WP_DEVELOP_TAG.0" ;;
+          esac
 
           # The tarball's top-level directory is "wordpress/". Extract to
           # $WP_CORE_DIR's parent and strip that prefix so files land at
           # $WP_CORE_DIR directly. Avoids the "mv: same file" failure when
           # $WP_CORE_DIR happens to be /tmp/wordpress.
+          echo "Fetching WordPress core..."
           rm -rf "$WP_CORE_DIR"
           mkdir -p "$WP_CORE_DIR"
-          curl -s "https://wordpress.org/wordpress-$WP_TESTS_TAG.tar.gz" \
+          fetch "https://wordpress.org/wordpress-$WP_TESTS_TAG.tar.gz" \
             | tar xz --strip-components=1 -C "$WP_CORE_DIR"
 
-          svn co --quiet "https://develop.svn.wordpress.org/tags/$WP_TESTS_TAG/tests/phpunit/includes/" "$WP_TESTS_DIR/includes"
-          svn co --quiet "https://develop.svn.wordpress.org/tags/$WP_TESTS_TAG/tests/phpunit/data/" "$WP_TESTS_DIR/data"
+          # The phpunit test library used to arrive via two `svn co` calls against
+          # develop.svn.wordpress.org. svn has no timeout of its own and those
+          # checkouts are what hung; it also had to be apt-installed on every run,
+          # since ubuntu-latest carries no subversion. The wordpress-develop tag
+          # holds the same tree and comes over the same HTTPS as core above, so one
+          # guarded fetch replaces both checkouts and the apt install.
+          echo "Fetching the phpunit test library..."
+          rm -rf "$WP_TESTS_DIR/includes" "$WP_TESTS_DIR/data"
+          fetch "https://github.com/WordPress/wordpress-develop/archive/refs/tags/$WP_DEVELOP_TAG.tar.gz" \
+            | tar xz --strip-components=3 -C "$WP_TESTS_DIR" \
+                "wordpress-develop-$WP_DEVELOP_TAG/tests/phpunit/includes" \
+                "wordpress-develop-$WP_DEVELOP_TAG/tests/phpunit/data"
+          # A silently-empty test library fails later as a cryptic "class
+          # WP_UnitTestCase not found", so assert the bootstrap actually landed.
+          if [ ! -f "$WP_TESTS_DIR/includes/bootstrap.php" ]; then
+            echo "The phpunit test library is missing $WP_TESTS_DIR/includes/bootstrap.php"
+            exit 1
+          fi
 
           # Write wp-tests-config.php.
           cat > "$WP_TESTS_DIR/wp-tests-config.php" << 'WPCFG'
@@ -333,15 +450,19 @@ jobs:
         run: composer install --no-interaction --no-progress --prefer-dist
       - name: composer install (package)
         if: steps.check.outputs.has_tests == 'true'
+        env:
+          PKG_DIR: ${{ steps.pkg.outputs.dir }}
         run: |
-          dir="${{ steps.pkg.outputs.dir }}"
+          dir="$PKG_DIR"
           if [ -f "$dir/composer.json" ]; then
             cd "$dir" && composer install --no-interaction --no-progress --prefer-dist
           fi
       - name: PHPUnit
         if: steps.check.outputs.has_tests == 'true'
+        env:
+          PKG_DIR: ${{ steps.pkg.outputs.dir }}
         run: |
-          dir="${{ steps.pkg.outputs.dir }}"
+          dir="$PKG_DIR"
           config=""
           [ -f "$dir/phpunit.xml" ] && config="$dir/phpunit.xml"
           [ -f "$dir/phpunit.xml.dist" ] && config="$dir/phpunit.xml.dist"
@@ -363,6 +484,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix: ${{ fromJson(needs.changed-packages.outputs.js-matrix) }}
+    env:
+      PKG: ${{ matrix.package }}
     steps:
       - uses: actions/checkout@v4
       - uses: shivammathur/setup-php@v2
@@ -380,22 +503,28 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - name: Resolve package directory
         id: pkg
-        run: echo "dir=$(pnpm --silent --filter '${{ matrix.package }}' exec pwd)" >> "$GITHUB_OUTPUT"
+        run: |
+          dir=$(pnpm --silent --filter "$PKG" exec pwd)
+          echo "dir=$dir" >> "$GITHUB_OUTPUT"
       - name: Build assets
-        run: pnpm --filter "${{ matrix.package }}" run --if-present build
+        run: pnpm --filter "$PKG" run --if-present build
       # The distributable ZIP includes vendor/ (see each plugin's .distignore),
       # so production composer deps must be present before archiving.
       - name: Install production composer deps
+        env:
+          PKG_DIR: ${{ steps.pkg.outputs.dir }}
         run: |
-          dir="${{ steps.pkg.outputs.dir }}"
+          dir="$PKG_DIR"
           if [ -f "$dir/composer.json" ]; then
             composer install -d "$dir" --no-interaction --no-progress --prefer-dist --no-dev
           fi
       - name: Archive distributable
+        env:
+          PKG_DIR: ${{ steps.pkg.outputs.dir }}
         run: |
-          dir="${{ steps.pkg.outputs.dir }}"
+          dir="$PKG_DIR"
           rm -rf "$dir/release"
-          pnpm --filter "${{ matrix.package }}" run --if-present release:archive
+          pnpm --filter "$PKG" run --if-present release:archive
           mkdir -p "$GITHUB_WORKSPACE/branch-zips"
           if compgen -G "$dir/release/*.zip" > /dev/null; then
             cp "$dir"/release/*.zip "$GITHUB_WORKSPACE/branch-zips/"
@@ -457,19 +586,96 @@ jobs:
             echo "--- $spec"
             bash "$spec"
           done
+      - name: shellcheck
+        # Pinned rather than using whatever the runner image ships: that version
+        # changes when the image is rebuilt, and a release adding a new check
+        # would redden main on an unrelated PR. Bumping is then a deliberate
+        # commit that carries any resulting fixes with it.
+        env:
+          SHELLCHECK_VERSION: v0.11.0
+          # sha256 of shellcheck-${SHELLCHECK_VERSION}.linux.x86_64.tar.xz. A
+          # release-asset URL keyed on a tag is not an immutable reference: tags
+          # move and assets can be replaced, and this binary then executes in a
+          # job that has the repository checked out. The project publishes no
+          # checksum file, so this records the artifact we verified; the same
+          # digest is pinned by selenium, mise, grafana/alloy and others.
+          # Bumping SHELLCHECK_VERSION means replacing this line too.
+          SHELLCHECK_SHA256: 8c3be12b05d5c177a04c29e3c78ce89ac86f1595681cab149b65b97c4e227198
+        # Errors only: a warning gate would fail on its first run (119 findings
+        # across 39 files when measured 2026-08-27), so raising the floor is a
+        # separate cleanup. -x follows sourced files, honouring the
+        # `# shellcheck source=` directives already in the tree.
+        run: |
+          # Downloaded to a file rather than piped into tar: a stream cannot be
+          # checked before it is extracted.
+          # Retried and time-boxed: this job has no `if:` gate and ci-ok requires it,
+          # so a transient reach for the release asset would redden a check on a PR
+          # that never touched shell. The sha256 below makes a retry safe.
+          curl -fsSL --retry 3 --retry-all-errors --max-time 120 -o shellcheck.tar.xz "https://github.com/koalaman/shellcheck/releases/download/${SHELLCHECK_VERSION}/shellcheck-${SHELLCHECK_VERSION}.linux.x86_64.tar.xz"
+          echo "${SHELLCHECK_SHA256}  shellcheck.tar.xz" | sha256sum -c -
+          tar -xJf shellcheck.tar.xz
+          SHELLCHECK="$PWD/shellcheck-${SHELLCHECK_VERSION}/shellcheck"
+          "$SHELLCHECK" --version | sed -n '2p'
+
+          # Every tracked *.sh, plus tracked extensionless files whose shebang
+          # names a shell: `n`, bin/newspack-manage-host and the per-package
+          # .hooks/pre-push scripts all carry no extension. The interpreter is
+          # matched by name rather than by a trailing "sh", so a shebang like
+          # `#!/usr/bin/env fish` is not swept in. zsh is deliberately absent:
+          # shellcheck refuses to parse it (SC1071) and reports that refusal at
+          # error severity, so including it would fail the gate on a file no
+          # directive can rescue. NUL-delimited throughout so a path containing
+          # whitespace cannot split into two arguments.
+          git ls-files -z '*.sh' | sort -zu > shell-globbed.txt
+          git ls-files -z | while IFS= read -r -d '' f; do
+            case "${f##*/}" in *.*) continue ;; esac
+            [ -f "$f" ] || continue
+            head -1 "$f" 2>/dev/null \
+              | grep -Eq '^#!(/[^ ]+)*/(env +)?(sh|bash|dash|ksh)( |$)' \
+              && printf '%s\0' "$f"
+          done | sort -zu > shell-shebang.txt
+          # Shell scripts that carry neither an extension nor a shebang, so
+          # neither arm above can see them. .husky/pre-commit is one: husky
+          # asks for hook files without a shebang (its own deprecation notice
+          # says the line "WILL FAIL in v10.0.0"), and it runs on every commit
+          # in the repo, where a syntax error takes every other linter down
+          # with it silently.
+          printf '%s\0' .husky/pre-commit > shell-named.txt
+          cat shell-globbed.txt shell-shebang.txt shell-named.txt | sort -zu > shell-files.txt
+
+          # Each arm is checked separately: a single total would still look
+          # healthy if one arm silently stopped matching, which is the failure
+          # that hides 79 files behind a plausible-looking count.
+          for arm in shell-globbed shell-shebang shell-named; do
+            n=$(tr -dc '\0' < "$arm.txt" | wc -c | tr -d ' ')
+            if [ "$n" -eq 0 ]; then
+              echo "Enumeration arm '$arm' matched nothing; refusing to run a partial check."
+              exit 1
+            fi
+            echo "  $arm: $n"
+          done
+          count=$(tr -dc '\0' < shell-files.txt | wc -c | tr -d ' ')
+          echo "Checking $count files."
+          xargs -0 "$SHELLCHECK" -x -S error -f gcc < shell-files.txt
 
   # ----------------------------------------------------------------------------
   ci-ok:
     name: CI OK
     # `install` is in the needs list so a `--frozen-lockfile` failure on a
     # root-deps-only PR (empty js/php matrices) is treated as a CI failure
-    # rather than masked by the skipped matrix jobs.
-    needs: [install, js, php-lint, php-lint-non-workspace, php-test, build-zips, bundle-zips, shell-tests]
+    # rather than masked by the skipped matrix jobs. `changed-packages` is in it
+    # for the same reason: when its validation rejects a package name or path it
+    # exits 1, every dependent job is then *skipped* rather than failed, and a
+    # skip does not count as a failure here — so without this the fail-closed
+    # check would report green to branch protection.
+    needs: [changed-packages, install, js, php-lint, php-lint-non-workspace, php-test, build-zips, bundle-zips, shell-tests]
     if: always()
     runs-on: ubuntu-latest
     steps:
-      - run: |
-          if [ "${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') }}" = "true" ]; then
+      - env:
+          ANY_FAILED: ${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') }}
+        run: |
+          if [ "$ANY_FAILED" = "true" ]; then
             echo "One or more jobs failed or were cancelled."
             exit 1
           fi

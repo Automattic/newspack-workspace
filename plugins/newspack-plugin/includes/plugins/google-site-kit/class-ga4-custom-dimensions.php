@@ -23,10 +23,49 @@ defined( 'ABSPATH' ) || exit;
 final class GA4_Custom_Dimensions {
 
 	const PROVISIONED_OPTION = 'newspack_ga4_dimensions_provisioned';
+	const SCHEMA_TRANSIENT   = 'newspack_ga4_dimensions_schema_check';
 	const LOGGER_HEADER      = 'NEWSPACK-GA4-DIMENSIONS';
 	const PROVISION_ACTION   = 'newspack_ga4_provision_dimensions';
 	const RECHECK_ACTION     = 'newspack_ga4_recheck_dimensions';
 	const RECHECK_GROUP      = 'newspack';
+
+	/**
+	 * Parameters only a rendered gate produces. `access_source` is not among
+	 * them; it has a stricter condition of its own, see `get_dimensions()`.
+	 */
+	const ACCESS_CONTROL_DIMENSIONS = [
+		'gate_post_id',
+		'gate_has_donation_block',
+		'gate_has_registration_block',
+		'gate_has_checkout_button',
+		'gate_has_registration_link',
+		'gate_has_signin_link',
+	];
+
+	/**
+	 * Parameters only WooCommerce produces: the modal checkout's product fields,
+	 * and the subscription flag Reader Data writes from WooCommerce
+	 * Subscriptions. Donations are separate, see `DONATION_DIMENSIONS`.
+	 */
+	const WOOCOMMERCE_DIMENSIONS = [
+		'is_subscriber',
+		'product_id',
+		'product_type',
+		'recurrence',
+	];
+
+	/**
+	 * Donation parameters, which WooCommerce does not have to itself. A site on
+	 * NRH or an external platform emits all three without it: `gate.js` reads
+	 * `donation_frequency` and `donation_amount` off the submitted Donate block
+	 * form, and non-WooCommerce platforms write `is_donor` client-side (see
+	 * `Reader_Data::get_read_only_keys()`).
+	 */
+	const DONATION_DIMENSIONS = [
+		'is_donor',
+		'donation_frequency',
+		'donation_amount',
+	];
 
 	/**
 	 * Register hooks.
@@ -81,7 +120,8 @@ final class GA4_Custom_Dimensions {
 
 	/**
 	 * Schedule an immediate single-shot WP-Cron event to run provisioning in
-	 * the background. Skips if the property has already been provisioned.
+	 * the background. Skips if the property has already been provisioned with
+	 * the current dimension list.
 	 *
 	 * The event is keyed only on the action name, not the property. If the
 	 * connected property changes again before a pending event fires, no second
@@ -96,8 +136,9 @@ final class GA4_Custom_Dimensions {
 		$provisioned = get_option( self::PROVISIONED_OPTION, [] );
 		if (
 			is_array( $provisioned )
-			&& isset( $provisioned['property_id'] )
+			&& isset( $provisioned['property_id'], $provisioned['schema'] )
 			&& (string) $provisioned['property_id'] === $property_id
+			&& (string) $provisioned['schema'] === self::schema_fingerprint()
 		) {
 			return;
 		}
@@ -111,22 +152,41 @@ final class GA4_Custom_Dimensions {
 	/**
 	 * Keep a recurring monthly recheck scheduled while a GA4 property is
 	 * connected, and drop it when none is. The recheck re-runs provisioning so
-	 * additions to Newspack's dimension list, or dimensions deleted in GA4,
-	 * self-heal without a manual CLI run. When everything is already in place it
-	 * is a no-op: one list call, zero writes.
+	 * dimensions deleted in GA4 self-heal without a manual CLI run. When
+	 * everything is already in place it is a no-op: one list call, zero writes.
+	 *
+	 * Additions to Newspack's dimension list do not wait for the recheck:
+	 * they schedule an immediate run (see
+	 * `maybe_schedule_provisioning_for_new_dimensions()`), because GA4
+	 * dimensions are not retroactive — events sent before a dimension exists
+	 * never become queryable, so a month-long wait would lose exactly the
+	 * launch data a new dimension ships for.
+	 *
+	 * Also the entry point for a changed dimension list: GA4 collects a dimension
+	 * only from the moment it exists, so an addition is provisioned now rather
+	 * than at the next monthly recheck.
 	 *
 	 * Idempotent and safe to call repeatedly (e.g. on every admin page load).
 	 */
 	public static function maybe_schedule_recheck() {
+		// WP-Cron based, deliberately ahead of the Action Scheduler guard.
+		self::maybe_schedule_provisioning_for_new_dimensions();
 		if ( ! function_exists( 'as_schedule_recurring_action' ) || ! function_exists( 'as_has_scheduled_action' ) ) {
 			return;
 		}
 		$is_scheduled = as_has_scheduled_action( self::RECHECK_ACTION, [], self::RECHECK_GROUP );
-		if ( ! self::get_property_id() ) {
+		$property_id  = self::get_property_id();
+		if ( ! $property_id ) {
 			if ( $is_scheduled && function_exists( 'as_unschedule_all_actions' ) ) {
 				as_unschedule_all_actions( self::RECHECK_ACTION, [], self::RECHECK_GROUP );
 			}
 			return;
+		}
+		// Throttled so a site whose provisioning keeps failing doesn't queue a
+		// fresh attempt on every admin page load.
+		if ( ! get_transient( self::SCHEMA_TRANSIENT ) ) {
+			set_transient( self::SCHEMA_TRANSIENT, 1, DAY_IN_SECONDS );
+			self::schedule_provisioning( $property_id );
 		}
 		if ( $is_scheduled ) {
 			return;
@@ -136,11 +196,119 @@ final class GA4_Custom_Dimensions {
 	}
 
 	/**
+	 * Schedule an immediate provisioning run when Newspack's dimension list has
+	 * grown since the last run on this property, so a newly shipped dimension
+	 * exists before (or moments after) its events start flowing instead of up
+	 * to a month later.
+	 *
+	 * A summary without a recorded list — written before the list was recorded
+	 * in the summary — counts as grown, so already-provisioned sites converge
+	 * on their first admin visit after this code ships. Growth triggers one
+	 * run per change: the run records the current list in the summary even
+	 * when individual creates fail, leaving retries of failed creates to the
+	 * monthly recheck like any other create error.
+	 *
+	 * Never-provisioned sites are not scheduled here; first-time provisioning
+	 * belongs to the property-connection path (`schedule_provisioning()`).
+	 */
+	private static function maybe_schedule_provisioning_for_new_dimensions() {
+		if ( ! self::get_property_id() ) {
+			return;
+		}
+		$provisioned = get_option( self::PROVISIONED_OPTION, [] );
+		if ( ! is_array( $provisioned ) || empty( $provisioned['property_id'] ) ) {
+			return;
+		}
+		$known = isset( $provisioned['dimensions'] ) && is_array( $provisioned['dimensions'] ) ? $provisioned['dimensions'] : [];
+		$new   = array_diff( array_keys( self::get_dimensions() ), $known );
+		if ( empty( $new ) ) {
+			return;
+		}
+		if ( wp_next_scheduled( self::PROVISION_ACTION ) ) {
+			return;
+		}
+		wp_schedule_single_event( time() + 10, self::PROVISION_ACTION );
+		Logger::log( 'Scheduled GA4 dimension provisioning for new dimensions: ' . implode( ', ', $new ) . '.', self::LOGGER_HEADER );
+	}
+
+	/**
+	 * Whether this site can render a gate. Covers both routes, the way
+	 * `Content_Gate::get_gate_post_id()` does: Memberships when active, the
+	 * first-party feature otherwise.
+	 *
+	 * @return bool
+	 */
+	public static function is_access_control_enabled(): bool {
+		$is_enabled = Content_Gate::is_newspack_feature_enabled() || Memberships::is_active();
+
+		/**
+		 * Filters access-control dimension provisioning, for a site the detection
+		 * above reads wrongly.
+		 *
+		 * @param bool $is_enabled Whether the site runs access control.
+		 */
+		return (bool) apply_filters( 'newspack_ga4_dimensions_access_control_enabled', $is_enabled );
+	}
+
+	/**
+	 * Whether this site runs WooCommerce, which produces the checkout and
+	 * subscription parameters.
+	 *
+	 * Not `Reader_Activation::is_woocommerce_active()`: that also demands
+	 * WooCommerce Subscriptions, and would cost one-time-purchase sites their
+	 * checkout reporting.
+	 *
+	 * @return bool
+	 */
+	public static function is_woocommerce_enabled(): bool {
+		$is_enabled = class_exists( 'WooCommerce' );
+
+		/**
+		 * Filters WooCommerce dimension provisioning, for a site the detection
+		 * above reads wrongly.
+		 *
+		 * @param bool $is_enabled Whether the site runs WooCommerce.
+		 */
+		return (bool) apply_filters( 'newspack_ga4_dimensions_woocommerce_enabled', $is_enabled );
+	}
+
+	/**
+	 * Whether this site takes donations, on any platform: WooCommerce is
+	 * installed, or the publisher picked a platform that isn't it.
+	 *
+	 * The platform slug defaults to `wc`, so it only reads reliably negated - a
+	 * non-`wc` slug is always a deliberate choice of NRH or an external platform.
+	 * Reads WooCommerce directly rather than through `is_woocommerce_enabled()`,
+	 * so each group takes exactly one filter.
+	 *
+	 * @return bool
+	 */
+	public static function is_donations_enabled(): bool {
+		$is_enabled = class_exists( 'WooCommerce' ) || ! Donations::is_platform_wc();
+
+		/**
+		 * Filters donation dimension provisioning, for a site the detection above
+		 * reads wrongly.
+		 *
+		 * @param bool $is_enabled Whether the site takes donations.
+		 */
+		return (bool) apply_filters( 'newspack_ga4_dimensions_donations_enabled', $is_enabled );
+	}
+
+	/**
 	 * Priority-ordered list of custom dimensions Newspack provisions.
 	 * Each entry: parameter name => display name.
+	 *
+	 * GA4 caps event-scoped dimensions at 50 per property and never back-fills,
+	 * and publishers have hit that ceiling, so parameters belonging to a feature
+	 * the site does not run are dropped - by key, leaving the order intact.
+	 * Enabling the feature later grows the list, which
+	 * `maybe_schedule_provisioning_for_new_dimensions()` picks up.
+	 *
+	 * @return array<string,string>
 	 */
 	public static function get_dimensions() {
-		return [
+		$dimensions = [
 			'gate_post_id'                => 'Gate Post ID',
 			'is_reader'                   => 'Is Reader',
 			'action_type'                 => 'Action Type',
@@ -150,6 +318,15 @@ final class GA4_Custom_Dimensions {
 			'is_donor'                    => 'Is Donor',
 			'is_newsletter_subscriber'    => 'Is Newsletter Subscriber',
 			'newspack_popup_id'           => 'Newspack Popup ID',
+			'contextual_prompt_post_id'   => 'Contextual Prompt Post ID',
+			'contextual_prompt_placement' => 'Contextual Prompt Placement',
+			'button_text'                 => 'Button Text',
+			// prompt_text and link_url are sent on np_contextual_prompt_interaction
+			// as event params but deliberately NOT registered as custom dimensions:
+			// prompt_text is high-cardinality (GA4 would bucket it into "(other)")
+			// and link_url is near-constant, so neither earns a scarce dimension slot.
+			// Both remain available in the raw GA4 / BigQuery export for point-in-time
+			// analysis. Register here only if UI-reporting need proves out.
 			'prompt_placement'            => 'Prompt Placement',
 			'prompt_frequency'            => 'Prompt Frequency',
 			'prompt_title'                => 'Prompt Title',
@@ -161,14 +338,60 @@ final class GA4_Custom_Dimensions {
 			'product_id'                  => 'Product ID',
 			'product_type'                => 'Product Type',
 			'recurrence'                  => 'Recurrence',
-			'price'                       => 'Price',
+			// `price` is absent on purpose: the modal checkout sends `amount`
+			// instead, folding `price` into it, so no event ever carried it.
 			'donation_frequency'          => 'Donation Frequency',
 			'donation_amount'             => 'Donation Amount',
 			'registration_method'         => 'Registration Method',
 			'lists'                       => 'Newsletter Lists',
 			'categories'                  => 'Categories',
 			'author'                      => 'Author',
+			'segment_id'                  => 'Matched Segment',
 		];
+
+		// Read once each: an impure filter could otherwise yield a
+		// self-contradictory list that then gets persisted.
+		$has_access_control = self::is_access_control_enabled();
+		$has_woocommerce    = self::is_woocommerce_enabled();
+		$has_donations      = self::is_donations_enabled();
+
+		if ( ! $has_access_control ) {
+			$dimensions = array_diff_key( $dimensions, array_flip( self::ACCESS_CONTROL_DIMENSIONS ) );
+		}
+
+		if ( ! $has_woocommerce ) {
+			$dimensions = array_diff_key( $dimensions, array_flip( self::WOOCOMMERCE_DIMENSIONS ) );
+		}
+
+		if ( ! $has_donations ) {
+			$dimensions = array_diff_key( $dimensions, array_flip( self::DONATION_DIMENSIONS ) );
+		}
+
+		// Not $has_access_control: Memberships alone renders a gate, but
+		// GoogleSiteKit sends access_source only under is_gating_active().
+		if ( Content_Gate::is_gating_active() ) {
+			$dimensions['access_source'] = 'Access Source';
+		}
+
+		return $dimensions;
+	}
+
+	/**
+	 * Fingerprint of the dimension list currently in the code, stored with each
+	 * provisioning run so a later addition to the list can be told apart from a
+	 * property that is already fully provisioned.
+	 *
+	 * Takes an already-resolved list, so a caller fingerprints the snapshot it
+	 * acted on rather than a fresh one the filters could answer differently.
+	 *
+	 * @param array<string,string>|null $dimensions Resolved dimension list, or null to resolve now.
+	 * @return string
+	 */
+	public static function schema_fingerprint( $dimensions = null ) {
+		if ( null === $dimensions ) {
+			$dimensions = self::get_dimensions();
+		}
+		return md5( (string) wp_json_encode( array_keys( $dimensions ) ) );
 	}
 
 	/**
@@ -346,11 +569,67 @@ final class GA4_Custom_Dimensions {
 	}
 
 	/**
+	 * List the parameter names of every EVENT-scoped custom dimension currently
+	 * registered on the connected GA4 property.
+	 *
+	 * Scoped to EVENT dimensions specifically because the Data API references
+	 * those as `customEvent:<param>` (USER-scoped dimensions are `customUser:`),
+	 * so callers checking a `customEvent:` reference must not be satisfied by a
+	 * same-named USER-scoped dimension.
+	 *
+	 * Unlike status(), this returns the full event-scoped set actually present
+	 * on the property — not just the intersection with Newspack's standard set —
+	 * so callers can authoritatively check whether an arbitrary `customEvent:`
+	 * dimension (e.g. `post_id`) is available before querying the Data API.
+	 *
+	 * Reuses the same Newspack-OAuth-then-Site-Kit auth fallback as the rest of
+	 * this class.
+	 *
+	 * @param string|null $property_id GA4 property ID to list dimensions for. When
+	 *                                 null (default), resolves Site Kit's configured
+	 *                                 property. Pass an explicit ID so the Admin API
+	 *                                 lookup matches the Data API property being
+	 *                                 queried (the lists can differ per property).
+	 *
+	 * @return string[]|\WP_Error Registered event-scoped parameter names, or
+	 *                            WP_Error if the property or Admin API can't be reached.
+	 */
+	public static function get_registered_parameter_names( ?string $property_id = null ) {
+		$property_id = $property_id ?? self::get_property_id();
+		if ( ! $property_id ) {
+			return new \WP_Error( 'newspack_ga4_dimensions', 'No GA4 property ID configured in Site Kit.' );
+		}
+
+		$existing = self::with_admin_client(
+			function ( $client, $source ) use ( $property_id ) {
+				try {
+					return $client->list_custom_dimensions( $property_id );
+				} catch ( \Throwable $e ) {
+					return new \WP_Error( 'newspack_ga4_dimensions', 'Failed listing custom dimensions: ' . $e->getMessage() );
+				}
+			}
+		);
+		if ( is_wp_error( $existing ) ) {
+			return $existing;
+		}
+
+		$event_scoped = array_filter(
+			$existing,
+			function ( $dimension ) {
+				return isset( $dimension['scope'] ) && 'EVENT' === $dimension['scope'];
+			}
+		);
+
+		return array_values( array_filter( array_column( $event_scoped, 'parameterName' ) ) );
+	}
+
+	/**
 	 * Provision Newspack's standard GA4 custom dimensions.
 	 *
 	 * Idempotent: existing dimensions on the property are detected by
 	 * parameter name and skipped. Per-dimension create failures are logged
-	 * and recorded in the summary but do not abort the run.
+	 * and recorded in the summary without aborting the run – unless one proves
+	 * the rest would fail the same way (quota exhausted, auth denied).
 	 *
 	 * Cron and Action Scheduler run handlers synchronously inside a request
 	 * whose time limit is often 30–60s, while creating ~27 dimensions each
@@ -373,9 +652,13 @@ final class GA4_Custom_Dimensions {
 			return new \WP_Error( 'newspack_ga4_dimensions', 'No GA4 property ID configured.' );
 		}
 
+		// One snapshot for the whole run, or the summary records a schema that
+		// was never provisioned and every later run reads it as out of date.
+		$dimensions = self::get_dimensions();
+
 		$used_source = null;
 		$result      = self::with_admin_client(
-			function ( $client, $source ) use ( $property_id, &$used_source ) {
+			function ( $client, $source ) use ( $property_id, $dimensions, &$used_source ) {
 				$used_source = $source;
 				try {
 					$existing = $client->list_custom_dimensions( $property_id );
@@ -391,11 +674,12 @@ final class GA4_Custom_Dimensions {
 					}
 				}
 
-				$created        = [];
-				$skipped_exists = [];
-				$errors         = [];
+				$created             = [];
+				$skipped_exists      = [];
+				$errors              = [];
+				$has_transient_error = false;
 
-				foreach ( self::get_dimensions() as $parameter_name => $display_name ) {
+				foreach ( $dimensions as $parameter_name => $display_name ) {
 					if ( isset( $existing_params[ $parameter_name ] ) ) {
 						$skipped_exists[] = $parameter_name;
 						continue;
@@ -407,10 +691,17 @@ final class GA4_Custom_Dimensions {
 					} catch ( \Throwable $e ) {
 						$errors[ $parameter_name ] = $e->getMessage();
 						Logger::log( "Failed to create GA4 dimension '$parameter_name': " . $e->getMessage(), self::LOGGER_HEADER );
+						if ( ! self::is_permanent_create_error( $e ) ) {
+							$has_transient_error = true;
+						}
+						if ( self::is_fatal_create_error( $e ) ) {
+							Logger::log( 'Aborting remaining GA4 dimension creates: subsequent requests would fail the same way.', self::LOGGER_HEADER );
+							break;
+						}
 					}
 				}
 
-				return [ $created, $skipped_exists, $errors ];
+				return [ $created, $skipped_exists, $errors, $has_transient_error ];
 			}
 		);
 
@@ -419,12 +710,27 @@ final class GA4_Custom_Dimensions {
 			return $result;
 		}
 
-		list( $created, $skipped_exists, $errors ) = $result;
+		list( $created, $skipped_exists, $errors, $has_transient_error ) = $result;
+
+		if ( ! empty( $errors ) && ! $has_transient_error ) {
+			Logger::log( 'GA4 dimension create failures are permanent (dimension cap/validation); suspending daily retries until the monthly recheck.', self::LOGGER_HEADER );
+		}
 
 		$summary = [
 			'property_id'    => $property_id,
+			// A transient failure (timeout, 401/403 auth, 429, 5xx) must not
+			// read as current, so the daily-throttled recheck retries it. For
+			// auth that costs one probe a day (the create loop aborts on the
+			// first 401/403) and self-heals within a day once the publisher
+			// repairs the Google connection. Permanent failures (the dimension
+			// cap, validation) record the fingerprint anyway – no retry can fix
+			// them; the monthly recheck is the self-heal path.
+			'schema'         => $has_transient_error ? null : self::schema_fingerprint( $dimensions ),
 			'auth_source'    => $used_source,
 			'timestamp'      => time(),
+			// The list this run knew about, so a later addition to
+			// get_dimensions() is detectable and can provision immediately.
+			'dimensions'     => array_keys( $dimensions ),
 			'created'        => $created,
 			'skipped_exists' => $skipped_exists,
 			'errors'         => $errors,
@@ -456,6 +762,75 @@ final class GA4_Custom_Dimensions {
 		);
 
 		return $summary;
+	}
+
+	/**
+	 * The HTTP status of a failed Admin API call, from the exception code
+	 * (set by both client types) or, when unset, the "(NNN)" in the message.
+	 * 0 when neither carries one – timeouts and transport errors.
+	 *
+	 * @param \Throwable $e The failure.
+	 * @return int
+	 */
+	private static function error_status_code( \Throwable $e ) {
+		$code = (int) $e->getCode();
+		if ( ! $code && preg_match( '/\((\d{3})\)/', $e->getMessage(), $matches ) ) {
+			$code = (int) $matches[1];
+		}
+		return $code;
+	}
+
+	/**
+	 * Whether a failed create names the property's custom-dimension capacity –
+	 * the one quota a retry cannot fix. Google phrases rate limiting as quota
+	 * too ("Quota exceeded ... per minute"), so rate-window wording never
+	 * matches: that burst clears on its own and is worth a retry. The cap
+	 * requires both the quota wording and the resource name, so a validation
+	 * error that merely echoes the resource path stays retryable.
+	 *
+	 * @param \Throwable $e The failure.
+	 * @return bool
+	 */
+	private static function is_dimension_cap_error( \Throwable $e ) {
+		$message = $e->getMessage();
+		if ( preg_match( '/per (minute|hour|day)|rate limit/i', $message ) ) {
+			return false;
+		}
+		return preg_match( '/maximum|exceed|exhaust/i', $message ) && preg_match( '/custom ?dimensions/i', $message );
+	}
+
+	/**
+	 * Whether a failed create is permanent – the property's dimension cap or a
+	 * validation error – so no retry can fix it, as opposed to transient
+	 * (timeout, 401/403 auth, 408/429 rate limiting, 5xx), which is worth one.
+	 * Auth stays transient because the publisher can repair the Google
+	 * connection at any time; the daily recheck then self-heals within a day
+	 * instead of waiting for the monthly recheck.
+	 *
+	 * @param \Throwable $e The failure.
+	 * @return bool
+	 */
+	private static function is_permanent_create_error( \Throwable $e ) {
+		if ( self::is_dimension_cap_error( $e ) ) {
+			return true;
+		}
+		$code = self::error_status_code( $e );
+		return $code >= 400 && $code < 500 && ! in_array( $code, [ 401, 403, 408, 429 ], true );
+	}
+
+	/**
+	 * Whether a failed create proves the remaining creates would fail the same
+	 * way: the property's dimension cap, authorization denied/revoked, or a
+	 * rate-limited burst (429) whose window every remaining create would still
+	 * be inside. Fatal is broader than permanent: a 401/403 aborts the loop so
+	 * a broken connection costs one API call per daily attempt, yet stays
+	 * transient so the daily recheck keeps probing.
+	 *
+	 * @param \Throwable $e The failure.
+	 * @return bool
+	 */
+	private static function is_fatal_create_error( \Throwable $e ) {
+		return self::is_dimension_cap_error( $e ) || in_array( self::error_status_code( $e ), [ 401, 403, 429 ], true );
 	}
 }
 GA4_Custom_Dimensions::init();
