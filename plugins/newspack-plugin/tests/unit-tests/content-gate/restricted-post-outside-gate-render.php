@@ -541,30 +541,6 @@ class Test_Restricted_Post_Outside_Gate_Render extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * A listing above the main loop that shows the article the reader is on
-	 * withholds it like any other card, and leaves the article its gate.
-	 *
-	 * A classic theme's header widget area — "Most read", "Editor's picks" —
-	 * renders before the main loop, so this ordering decides whether the paid body
-	 * appears above the gate asking the reader to pay for it.
-	 */
-	public function test_a_listing_above_the_article_withholds_the_article_it_lists() {
-		$post_id = $this->create_restricted_post();
-		$this->go_to( get_permalink( $post_id ) );
-
-		$listed = $this->render_in_secondary_loop( $post_id );
-
-		while ( have_posts() ) {
-			the_post();
-		}
-		$article = apply_filters( 'the_content', get_post( $post_id )->post_content );
-
-		$this->assertStringNotContainsString( self::PAID_MARKER, $listed, 'The article is withheld in a listing on its own page.' );
-		$this->assertStringNotContainsString( self::PAID_MARKER, $article );
-		$this->assertSame( 1, substr_count( $article, 'newspack-content-gate__inline-gate' ), 'The article still renders its own gate, once.' );
-	}
-
-	/**
 	 * Editing the gate layout shortens the free preview at once.
 	 *
 	 * The teaser is cached across requests, and the layout settings that slice it
@@ -588,31 +564,35 @@ class Test_Restricted_Post_Outside_Gate_Render extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * A listing on the article's own page must not stage anything on the article's
-	 * behalf, in either order and with no reset between the two — which is what a
-	 * real request looks like.
+	 * A listing above the article, the article, and a listing below it — one
+	 * request, no reset between the three, which is what a real page looks like.
 	 *
-	 * The listing entry carries no gate, so writing it over the article's own would
-	 * serve an anonymous reader the free opening with no call to action.
+	 * A listing entry carries no gate, so the article's own staging has to survive
+	 * both orders. Above the main loop is a classic theme's header widget area;
+	 * below it is a related-posts block, and in a block theme core sets the post up
+	 * once and renders the whole template, so a second pass over the body follows
+	 * that listing.
 	 */
-	public function test_a_listing_below_the_article_leaves_its_gate_intact() {
+	public function test_listings_either_side_of_the_article_leave_its_gate_intact() {
 		$post_id = $this->create_restricted_post();
 		$this->go_to( get_permalink( $post_id ) );
+
+		$above = $this->render_in_secondary_loop( $post_id );
+
 		while ( have_posts() ) {
 			the_post();
 		}
 		$article = apply_filters( 'the_content', get_post( $post_id )->post_content );
 
-		// A Query Loop under the body, listing the article it sits below.
-		$this->render_in_secondary_loop( $post_id );
-
-		// In a block theme core sets the post up once and renders the whole
-		// template, so a second pass over the article's body follows the listing.
+		$below       = $this->render_in_secondary_loop( $post_id );
 		$second_pass = apply_filters( 'the_content', get_post( $post_id )->post_content );
 
-		$this->assertSame( 1, substr_count( $article, 'newspack-content-gate__inline-gate' ), 'The article renders its gate.' );
-		$this->assertStringNotContainsString( self::PAID_MARKER, $second_pass );
-		$this->assertSame( 1, substr_count( $second_pass, 'newspack-content-gate__inline-gate' ), 'A listing below the article does not disarm the gate for a later pass.' );
+		$this->assertStringNotContainsString( self::PAID_MARKER, $above, 'A listing above the main loop withholds the article it lists.' );
+		$this->assertStringNotContainsString( self::PAID_MARKER, $below );
+		$this->assertStringNotContainsString( self::PAID_MARKER, $article );
+		$this->assertSame( 1, substr_count( $article, 'newspack-content-gate__inline-gate' ), 'The article renders its own gate, once.' );
+		$this->assertSame( 1, substr_count( $second_pass, 'newspack-content-gate__inline-gate' ), 'A listing below the body does not disarm the gate for a later pass.' );
+		$this->assertSame( 0, substr_count( $above, 'newspack-content-gate__inline-gate' ), 'A listing above the article does not repeat its call to action.' );
 	}
 
 	/**
