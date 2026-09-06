@@ -7,6 +7,10 @@
 
 namespace Test\Content_Distribution;
 
+require_once __DIR__ . '/mock-data-events.php';
+
+use Newspack_Network\Content_Distribution as Content_Distribution_Class;
+use Newspack_Network\Content_Distribution\Blocks;
 use Newspack_Network\Content_Distribution\Outgoing_Post;
 use Newspack_Network\Hub\Node as Hub_Node;
 use WP_User;
@@ -65,6 +69,20 @@ class TestOutgoingPost extends \WP_UnitTestCase {
 		);
 		$this->outgoing_post = new Outgoing_Post( $post );
 		$this->outgoing_post->set_distribution( [ $this->network[0]['url'] ] );
+	}
+
+	/**
+	 * Reset the block processors registered by the tests here.
+	 *
+	 * Blocks keeps them in a private static that the test framework does not
+	 * restore, so a test that registers one and then fails would leak it into every
+	 * test that follows.
+	 */
+	public function tear_down() {
+		foreach ( [ 'core/paragraph', 'core/image' ] as $block_name ) {
+			Blocks::reset_block_processors( $block_name );
+		}
+		parent::tear_down();
 	}
 
 	/**
@@ -444,5 +462,276 @@ class TestOutgoingPost extends \WP_UnitTestCase {
 		$this->assertSame( $payload['post_data']['modified_gmt'], $partial_payload['post_data']['modified_gmt'] );
 		$this->assertArrayNotHasKey( 'title', $partial_payload['post_data'] );
 		$this->assertArrayNotHasKey( 'content', $partial_payload['post_data'] );
+	}
+
+	/**
+	 * An attachment carrying dimensions, so media_data holds real sizes rather
+	 * than the 'none' the node's lightbox falls back to.
+	 *
+	 * @param int $post_parent The post to attach it to.
+	 * @param int $width       The image width.
+	 * @param int $height      The image height.
+	 *
+	 * @return int The attachment ID.
+	 */
+	private function image_attachment( $post_parent = 0, $width = 1200, $height = 800 ) {
+		$attachment_id = $this->factory->attachment->create_object(
+			[
+				'file'           => 'media-data-' . wp_rand() . '.png',
+				'post_parent'    => $post_parent,
+				'post_mime_type' => 'image/png',
+			]
+		);
+
+		wp_update_attachment_metadata(
+			$attachment_id,
+			[
+				'file'   => 'media-data.png',
+				'width'  => $width,
+				'height' => $height,
+			]
+		);
+
+		return $attachment_id;
+	}
+
+	/**
+	 * An image block in the shape the editor saves it.
+	 *
+	 * @param int $attachment_id The attachment ID.
+	 *
+	 * @return string The block markup.
+	 */
+	private function image_block( $attachment_id ) {
+		return sprintf(
+			'<!-- wp:image {"id":%1$d,"sizeSlug":"large"} --><figure class="wp-block-image size-large"><img src="%2$s" alt="" class="wp-image-%1$d"/></figure><!-- /wp:image -->',
+			$attachment_id,
+			wp_get_attachment_url( $attachment_id )
+		);
+	}
+
+	/**
+	 * A distributed post carrying the given content.
+	 *
+	 * @param string $content The post content.
+	 *
+	 * @return Outgoing_Post
+	 */
+	private function outgoing_post_with_content( $content ) {
+		$post = $this->factory->post->create_and_get(
+			[
+				'post_type'    => 'post',
+				'post_author'  => $this->some_editor->ID,
+				'post_content' => $content,
+			]
+		);
+
+		$outgoing_post = new Outgoing_Post( $post );
+		$outgoing_post->set_distribution( [ $this->network[0]['url'] ] );
+
+		return $outgoing_post;
+	}
+
+	/**
+	 * Every image in the distributed content is described in media_data, with the
+	 * dimensions the node needs to open it at full size.
+	 */
+	public function test_media_data_describes_the_content_images() {
+		$attachment_id = $this->image_attachment( 0, 1200, 800 );
+		$outgoing_post = $this->outgoing_post_with_content( $this->image_block( $attachment_id ) );
+
+		$media_data = $outgoing_post->get_payload()['post_data']['media_data'];
+
+		$this->assertArrayHasKey( $attachment_id, $media_data );
+		$this->assertSame( 1200, $media_data[ $attachment_id ]['width'] );
+		$this->assertSame( 800, $media_data[ $attachment_id ]['height'] );
+	}
+
+	/**
+	 * The payload follows the content being distributed, so an image that exists
+	 * only because a `the_content` filter injected it stays out of media_data.
+	 */
+	public function test_media_data_ignores_images_injected_by_filters() {
+		$in_content = $this->image_attachment();
+		$injected   = $this->image_attachment();
+
+		$inject = function ( $content ) use ( $injected ) {
+			return $content . '<img src="http://example.org/injected.png" class="wp-image-' . $injected . '"/>';
+		};
+		add_filter( 'the_content', $inject );
+
+		$outgoing_post = $this->outgoing_post_with_content( $this->image_block( $in_content ) );
+		$media_data    = $outgoing_post->get_payload()['post_data']['media_data'];
+
+		remove_filter( 'the_content', $inject );
+
+		$this->assertArrayHasKey( $in_content, $media_data );
+		$this->assertArrayNotHasKey( $injected, $media_data );
+	}
+
+	/**
+	 * The reported case. A WordPress 7.1 dynamic gallery stores no image IDs, so
+	 * the images it resolves to were missing from media_data and the node opened
+	 * them in its lightbox at unknown dimensions.
+	 */
+	public function test_media_data_covers_a_flattened_dynamic_gallery() {
+		if ( ! function_exists( 'block_core_gallery_resolve_dynamic_source' ) ) {
+			$this->markTestSkipped( 'Dynamic galleries require WordPress 7.1 or later; this suite runs ' . get_bloginfo( 'version' ) . '.' );
+		}
+
+		$outgoing_post = $this->outgoing_post_with_content(
+			'<!-- wp:gallery {"dynamicContent":{"source":"core/attached-media"}} --><!-- /wp:gallery -->'
+		);
+
+		$attachment_ids = [];
+		for ( $i = 0; $i < 3; $i++ ) {
+			$attachment_ids[] = $this->image_attachment( $outgoing_post->get_post()->ID, 900, 600 );
+		}
+
+		$media_data = $outgoing_post->get_payload()['post_data']['media_data'];
+
+		foreach ( $attachment_ids as $attachment_id ) {
+			$this->assertArrayHasKey( $attachment_id, $media_data );
+			$this->assertSame( 900, $media_data[ $attachment_id ]['width'] );
+			$this->assertSame( 600, $media_data[ $attachment_id ]['height'] );
+		}
+	}
+
+	/**
+	 * A classic post is stored on the receiving site as filtered content, so an
+	 * image a shortcode or a filter puts there has to be described too. Scanning
+	 * the block-processed content alone would leave the node rendering an image
+	 * the payload says nothing about.
+	 */
+	public function test_media_data_covers_a_classic_post() {
+		$shortcode_image = $this->image_attachment();
+
+		add_shortcode(
+			'np_test_image',
+			function () use ( $shortcode_image ) {
+				return '<img src="http://example.org/shortcode.png" class="wp-image-' . $shortcode_image . '"/>';
+			}
+		);
+
+		$outgoing_post = $this->outgoing_post_with_content( 'Before. [np_test_image] After.' );
+		$media_data    = $outgoing_post->get_payload()['post_data']['media_data'];
+
+		remove_shortcode( 'np_test_image' );
+
+		$this->assertArrayHasKey( $shortcode_image, $media_data );
+	}
+
+	/**
+	 * Media discovery follows the content after the block processors have run, not
+	 * the content as authored. Pinned with a processor rather than a gallery so it
+	 * holds on every WordPress version.
+	 */
+	public function test_media_data_follows_the_processed_blocks() {
+		$authored    = $this->image_attachment();
+		$distributed = $this->image_attachment();
+		$replacement = $this->image_block( $distributed );
+
+		Blocks::register_block_processor(
+			'core/image',
+			function () use ( $replacement ) {
+				return parse_blocks( $replacement )[0];
+			}
+		);
+
+		$outgoing_post = $this->outgoing_post_with_content( $this->image_block( $authored ) );
+		$media_data    = $outgoing_post->get_payload()['post_data']['media_data'];
+
+		$this->assertArrayHasKey( $distributed, $media_data, 'The image that reaches the node should be described.' );
+		$this->assertArrayNotHasKey( $authored, $media_data, 'The image the processor replaced should not be.' );
+	}
+
+	/**
+	 * Every media URL in the payload is read with the image-CDN override in place,
+	 * so a node gets the origin's own files rather than the origin's CDN.
+	 *
+	 * The override is a single named callback, and WordPress keys hooks by name, so
+	 * a block processor that installs and removes the same one, as the dynamic
+	 * gallery processor does, used to take this method's override down with it.
+	 */
+	public function test_media_data_keeps_the_cdn_override_for_every_image() {
+		Blocks::register_block_processor(
+			'core/image',
+			function ( $block ) {
+				add_filter( 'jetpack_photon_override_image_downsize', '__return_true' );
+				remove_filter( 'jetpack_photon_override_image_downsize', '__return_true' );
+				return $block;
+			}
+		);
+
+		// Fires once per media_data entry, and nowhere else in a payload build.
+		$overridden = [];
+		$probe      = function ( $caption ) use ( &$overridden ) {
+			$overridden[] = has_filter( 'jetpack_photon_override_image_downsize', '__return_true' );
+			return $caption;
+		};
+		add_filter( 'wp_get_attachment_caption', $probe );
+
+		$outgoing_post = $this->outgoing_post_with_content( $this->image_block( $this->image_attachment() ) );
+		$outgoing_post->get_payload();
+
+		remove_filter( 'wp_get_attachment_caption', $probe );
+
+		$this->assertNotEmpty( $overridden, 'The probe should have seen at least one image.' );
+		$this->assertNotContains( false, $overridden );
+	}
+
+	/**
+	 * Preparing the content for the wire is the expensive half of a payload, and a
+	 * payload reads it more than once. Doing it once keeps a dynamic gallery from
+	 * re-querying its images on every pass.
+	 */
+	public function test_content_is_prepared_once_per_payload() {
+		$calls = 0;
+		Blocks::register_block_processor(
+			'core/paragraph',
+			function ( $block ) use ( &$calls ) {
+				++$calls;
+				return $block;
+			}
+		);
+
+		$outgoing_post = $this->outgoing_post_with_content( '<!-- wp:paragraph --><p>Hello</p><!-- /wp:paragraph -->' );
+		$outgoing_post->get_payload();
+
+		$this->assertSame( 1, $calls );
+	}
+
+	/**
+	 * A partial payload handed a payload takes its slice from that payload, rather
+	 * than quietly building a second one.
+	 */
+	public function test_partial_payload_comes_from_the_payload_it_is_given() {
+		$payload = $this->outgoing_post->get_payload();
+
+		$payload['post_data']['post_meta']['from_the_given_payload'] = [ 'yes' ];
+
+		$partial = $this->outgoing_post->get_partial_payload( 'post_meta', $payload );
+
+		$this->assertArrayHasKey( 'from_the_given_payload', $partial['post_data']['post_meta'] );
+		$this->assertSame( [ 'yes' ], $partial['post_data']['post_meta']['from_the_given_payload'] );
+	}
+
+	/**
+	 * A partial distribution builds one payload, not one for the change hash and a
+	 * second for the slice it sends.
+	 */
+	public function test_partial_distribution_builds_one_payload() {
+		$builds = 0;
+		$spy    = function ( $post_data ) use ( &$builds ) {
+			++$builds;
+			return $post_data;
+		};
+		add_filter( 'newspack_network_outgoing_payload_post_data', $spy );
+
+		Content_Distribution_Class::distribute_post_partial( $this->outgoing_post->get_post(), 'post_meta' );
+
+		remove_filter( 'newspack_network_outgoing_payload_post_data', $spy );
+
+		$this->assertSame( 1, $builds );
 	}
 }

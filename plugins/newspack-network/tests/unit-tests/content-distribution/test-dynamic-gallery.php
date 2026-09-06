@@ -341,4 +341,35 @@ class TestDynamicGallery extends \WP_UnitTestCase {
 		$blocks = parse_blocks( $markup );
 		$this->assertSame( $markup, serialize_blocks( [ Blocks::process_outgoing_block( $blocks[0], $this->post_id ) ] ) );
 	}
+
+	/**
+	 * A gallery whose images resolve but produce no markup keeps its caption, the
+	 * way core's own render does. Only an unresolved source drops it.
+	 */
+	public function test_keeps_the_caption_when_no_image_produces_markup() {
+		$this->requires_dynamic_galleries();
+
+		$caption = '<figcaption class="blocks-gallery-caption wp-element-caption">Scenes from the parade</figcaption>';
+
+		add_filter( 'wp_get_attachment_image_src', '__return_false' );
+		$output = $this->flatten( $this->dynamic_gallery( [], $caption ) );
+		remove_filter( 'wp_get_attachment_image_src', '__return_false' );
+
+		$this->assertStringNotContainsString( '<!-- wp:image ', $output, 'No image should have produced markup.' );
+		$this->assertStringContainsString( 'Scenes from the parade', $output );
+	}
+
+	/**
+	 * A gallery that resolves nothing at all has no images to caption, so the
+	 * caption goes with them.
+	 */
+	public function test_drops_the_caption_when_nothing_resolves() {
+		$this->requires_dynamic_galleries();
+
+		$caption = '<figcaption class="blocks-gallery-caption wp-element-caption">Scenes from the parade</figcaption>';
+		$empty   = self::factory()->post->create();
+		$output  = serialize_blocks( [ Blocks::process_outgoing_block( $this->dynamic_gallery( [], $caption ), $empty ) ] );
+
+		$this->assertStringNotContainsString( 'Scenes from the parade', $output );
+	}
 }
