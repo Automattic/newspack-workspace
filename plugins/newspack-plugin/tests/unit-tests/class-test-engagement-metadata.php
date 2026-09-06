@@ -142,7 +142,7 @@ class Test_Engagement_Metadata extends WP_UnitTestCase {
 	 */
 	public function test_payment_fields_empty_without_woocommerce_orders() {
 		$metadata = ( new Engagement( self::$user_id ) )->get_metadata();
-		$this->assertSame( '', $metadata['Payment_Page'] );
+		$this->assertSame( '', $metadata['Last_Payment_Page'] );
 		$this->assertSame( '', $metadata['Payment_UTM_Source'] );
 		$this->assertSame( '', $metadata['Payment_UTM_Medium'] );
 		$this->assertSame( '', $metadata['Payment_UTM_Campaign'] );
@@ -153,7 +153,7 @@ class Test_Engagement_Metadata extends WP_UnitTestCase {
 	 */
 	public function test_total_paid_empty_without_woocommerce() {
 		$metadata = ( new Engagement( self::$user_id ) )->get_metadata();
-		$this->assertSame( '', $metadata['Total_Paid'] );
+		$this->assertSame( '', $metadata['Lifetime_Total_Paid'] );
 	}
 
 	/**

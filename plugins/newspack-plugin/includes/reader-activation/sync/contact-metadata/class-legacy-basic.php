@@ -8,7 +8,6 @@
 namespace Newspack\Reader_Activation\Sync\Contact_Metadata;
 
 use Newspack\Reader_Activation\Sync\Contact_Metadata;
-use Newspack\Reader_Activation\Sync\Legacy_Metadata;
 use Newspack\Reader_Activation\Sync\WooCommerce;
 
 defined( 'ABSPATH' ) || exit;
@@ -33,7 +32,7 @@ class Legacy_Basic extends Contact_Metadata {
 	 * @return string
 	 */
 	public static function get_section_name() {
-		return ''; // Legacy fields are not separated into sections.
+		return __( 'Legacy', 'newspack-plugin' );
 	}
 
 	/**
@@ -42,14 +41,80 @@ class Legacy_Basic extends Contact_Metadata {
 	 * @return array
 	 */
 	public static function get_fields() {
-		return Legacy_Metadata::get_basic_fields();
+		return [
+			'account'              => 'Account',
+			'registration_date'    => 'Registration Date',
+			'connected_account'    => 'Connected Account',
+			'signup_page_utm'      => 'Signup UTM: ',
+			'newsletter_selection' => 'Newsletter Selection',
+			'referer'              => 'Referrer Path',
+			'registration_page'    => 'Registration Page',
+			'current_page_url'     => 'Registration Page',
+			'registration_method'  => 'Registration Method',
+		];
 	}
 
 	/**
-	 * Get the metadata for the given user, customer or order.
+	 * Per-field configuration for the fields handled by this class.
 	 *
-	 * Delegates to the legacy WooCommerce and normalization logic to build
-	 * the full set of legacy metadata fields.
+	 * @return array
+	 */
+	public static function get_fields_config() {
+		return [
+			'account'              => [
+				'name'        => 'Account',
+				'description' => __( 'WordPress user account ID of the reader.', 'newspack-plugin' ),
+				'status'      => 'legacy',
+			],
+			'registration_date'    => [
+				'name'        => 'Registration Date',
+				'description' => __( 'Date the reader created their account.', 'newspack-plugin' ),
+				'status'      => 'legacy',
+			],
+			'connected_account'    => [
+				'name'        => 'Connected Account',
+				'description' => __( 'SSO service used to register, if applicable (e.g. google, apple).', 'newspack-plugin' ),
+				'status'      => 'legacy',
+			],
+			'signup_page_utm'      => [
+				'name'           => 'Signup UTM: ',
+				'description'    => __( 'UTM parameters present on the signup page, synced as one field per parameter.', 'newspack-plugin' ),
+				'status'         => 'legacy',
+				'dynamic_suffix' => true,
+			],
+			'newsletter_selection' => [
+				'name'        => 'Newsletter Selection',
+				'description' => __( 'Comma-separated list of the newsletter lists the reader is subscribed to.', 'newspack-plugin' ),
+				'status'      => 'legacy',
+			],
+			'referer'              => [
+				'name'        => 'Referrer Path',
+				'description' => __( 'Referring page URL captured when the reader submitted a signup or donation form.', 'newspack-plugin' ),
+				'status'      => 'legacy',
+			],
+			'registration_page'    => [
+				'name'        => 'Registration Page',
+				'description' => __( 'URL of the page where the reader registered.', 'newspack-plugin' ),
+				'status'      => 'legacy',
+			],
+			'current_page_url'     => [
+				'name'        => 'Registration Page',
+				'description' => __( 'URL of the page the reader was on when they registered; an alternate source for the same value as Registration Page.', 'newspack-plugin' ),
+				'status'      => 'legacy',
+			],
+			'registration_method'  => [
+				'name'        => 'Registration Method',
+				'description' => __( 'How the reader registered (e.g. registration wall, newsletter, checkout, popup, manual, or an SSO provider).', 'newspack-plugin' ),
+				'status'      => 'legacy',
+			],
+		];
+	}
+
+	/**
+	 * Get the metadata for the given user, customer or order, as raw keys.
+	 *
+	 * Enrichment, filtering and prefixing happen centrally afterwards, in
+	 * normalize_contact_data() and the integration's prepare_contact().
 	 *
 	 * @return array
 	 */
@@ -63,8 +128,8 @@ class Legacy_Basic extends Contact_Metadata {
 			return [];
 		}
 
-		$contact = Legacy_Metadata::normalize_contact_data( $contact );
-
+		// Enrichment (add_registration_data_raw/add_utm_data_raw) happens
+		// centrally in Metadata::get_contact_with_metadata(); redundant here.
 		return $contact['metadata'] ?? [];
 	}
 }

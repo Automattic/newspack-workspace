@@ -94,17 +94,17 @@ class Test_Subscription_Metadata extends WP_UnitTestCase {
 		$fields = Subscription::get_fields();
 		$this->assertArrayHasKey( 'Subscriber_Status', $fields );
 		$this->assertArrayHasKey( 'Active_Subscription_Count', $fields );
-		$this->assertArrayHasKey( 'Current_Subscription_Start_Date', $fields );
-		$this->assertArrayHasKey( 'Current_Subscription_End_Date', $fields );
-		$this->assertArrayHasKey( 'Subscription_Cancellation_Reason', $fields );
-		$this->assertArrayHasKey( 'Current_Subscription_Billing_Cycle', $fields );
-		$this->assertArrayHasKey( 'Current_Subscription_Recurring_Payment', $fields );
-		$this->assertArrayHasKey( 'Current_Subscription_Next_Payment_Date', $fields );
-		$this->assertArrayHasKey( 'Current_Subscription_Product_Name', $fields );
+		$this->assertArrayHasKey( 'Subscription_Start_Date', $fields );
+		$this->assertArrayHasKey( 'Subscription_End_Date', $fields );
+		$this->assertArrayHasKey( 'Last_Subscription_Cancellation_Reason', $fields );
+		$this->assertArrayHasKey( 'Subscription_Billing_Cycle', $fields );
+		$this->assertArrayHasKey( 'Subscription_Recurring_Payment', $fields );
+		$this->assertArrayHasKey( 'Subscription_Next_Payment_Date', $fields );
+		$this->assertArrayHasKey( 'Subscription_Product_Name', $fields );
 		$this->assertArrayHasKey( 'Previous_Subscription_Product', $fields );
-		$this->assertArrayHasKey( 'Current_Subscription_Coupon_Code', $fields );
-		$this->assertArrayHasKey( 'Last_Payment_Amount', $fields );
-		$this->assertArrayHasKey( 'Last_Payment_Date', $fields );
+		$this->assertArrayHasKey( 'Subscription_Coupon_Code', $fields );
+		$this->assertArrayHasKey( 'Last_Subscription_Payment_Amount', $fields );
+		$this->assertArrayHasKey( 'Last_Subscription_Payment_Date', $fields );
 		$this->assertCount( 13, $fields );
 	}
 
@@ -121,7 +121,7 @@ class Test_Subscription_Metadata extends WP_UnitTestCase {
 		$this->assertNotEmpty( $metadata );
 		$this->assertSame( '', $metadata['Subscriber_Status'] );
 		$this->assertSame( 0, $metadata['Active_Subscription_Count'] );
-		$this->assertSame( '', $metadata['Current_Subscription_Start_Date'] );
+		$this->assertSame( '', $metadata['Subscription_Start_Date'] );
 	}
 
 	public function test_active_subscription_status() {
@@ -195,7 +195,7 @@ class Test_Subscription_Metadata extends WP_UnitTestCase {
 			]
 		);
 		$metadata = ( new Subscription( self::$user_id ) )->get_metadata();
-		$this->assertSame( '2025-03-10 08:00:00', $metadata['Current_Subscription_Start_Date'] );
+		$this->assertSame( '2025-03-10 08:00:00', $metadata['Subscription_Start_Date'] );
 	}
 
 	public function test_end_date_empty_when_zero() {
@@ -209,7 +209,7 @@ class Test_Subscription_Metadata extends WP_UnitTestCase {
 			]
 		);
 		$metadata = ( new Subscription( self::$user_id ) )->get_metadata();
-		$this->assertSame( '', $metadata['Current_Subscription_End_Date'] );
+		$this->assertSame( '', $metadata['Subscription_End_Date'] );
 	}
 
 	public function test_end_date_formatted_when_set() {
@@ -224,19 +224,19 @@ class Test_Subscription_Metadata extends WP_UnitTestCase {
 			]
 		);
 		$metadata = ( new Subscription( self::$user_id ) )->get_metadata();
-		$this->assertSame( '2025-06-01 00:00:00', $metadata['Current_Subscription_End_Date'] );
+		$this->assertSame( '2025-06-01 00:00:00', $metadata['Subscription_End_Date'] );
 	}
 
 	public function test_billing_cycle() {
 		$this->create_subscription( [ 'billing_period' => 'year' ] );
 		$metadata = ( new Subscription( self::$user_id ) )->get_metadata();
-		$this->assertSame( 'year', $metadata['Current_Subscription_Billing_Cycle'] );
+		$this->assertSame( 'year', $metadata['Subscription_Billing_Cycle'] );
 	}
 
 	public function test_recurring_payment() {
 		$this->create_subscription( [ 'total' => '25.50' ] );
 		$metadata = ( new Subscription( self::$user_id ) )->get_metadata();
-		$this->assertSame( '25.50', $metadata['Current_Subscription_Recurring_Payment'] );
+		$this->assertSame( '25.50', $metadata['Subscription_Recurring_Payment'] );
 	}
 
 	public function test_next_payment_date() {
@@ -250,7 +250,7 @@ class Test_Subscription_Metadata extends WP_UnitTestCase {
 			]
 		);
 		$metadata = ( new Subscription( self::$user_id ) )->get_metadata();
-		$this->assertSame( '2025-07-01 00:00:00', $metadata['Current_Subscription_Next_Payment_Date'] );
+		$this->assertSame( '2025-07-01 00:00:00', $metadata['Subscription_Next_Payment_Date'] );
 	}
 
 	public function test_next_payment_date_empty_when_zero() {
@@ -265,7 +265,7 @@ class Test_Subscription_Metadata extends WP_UnitTestCase {
 			]
 		);
 		$metadata = ( new Subscription( self::$user_id ) )->get_metadata();
-		$this->assertSame( '', $metadata['Current_Subscription_Next_Payment_Date'] );
+		$this->assertSame( '', $metadata['Subscription_Next_Payment_Date'] );
 	}
 
 	public function test_product_name() {
@@ -282,13 +282,13 @@ class Test_Subscription_Metadata extends WP_UnitTestCase {
 			]
 		);
 		$metadata = ( new Subscription( self::$user_id ) )->get_metadata();
-		$this->assertSame( 'Gold Membership', $metadata['Current_Subscription_Product_Name'] );
+		$this->assertSame( 'Gold Membership', $metadata['Subscription_Product_Name'] );
 	}
 
 	public function test_product_name_empty_without_items() {
 		$this->create_subscription( [ 'items' => [] ] );
 		$metadata = ( new Subscription( self::$user_id ) )->get_metadata();
-		$this->assertSame( '', $metadata['Current_Subscription_Product_Name'] );
+		$this->assertSame( '', $metadata['Subscription_Product_Name'] );
 	}
 
 	public function test_cancellation_reason_user_cancelled() {
@@ -306,7 +306,7 @@ class Test_Subscription_Metadata extends WP_UnitTestCase {
 			]
 		);
 		$metadata = ( new Subscription( self::$user_id ) )->get_metadata();
-		$this->assertSame( Subscriptions_Meta::CANCELLATION_REASON_USER_CANCELLED, $metadata['Subscription_Cancellation_Reason'] );
+		$this->assertSame( Subscriptions_Meta::CANCELLATION_REASON_USER_CANCELLED, $metadata['Last_Subscription_Cancellation_Reason'] );
 	}
 
 	public function test_cancellation_reason_excludes_pending_cancel() {
@@ -319,7 +319,7 @@ class Test_Subscription_Metadata extends WP_UnitTestCase {
 			]
 		);
 		$metadata = ( new Subscription( self::$user_id ) )->get_metadata();
-		$this->assertSame( '', $metadata['Subscription_Cancellation_Reason'] );
+		$this->assertSame( '', $metadata['Last_Subscription_Cancellation_Reason'] );
 	}
 
 	public function test_cancellation_reason_excludes_admin_pending_cancel() {
@@ -332,26 +332,26 @@ class Test_Subscription_Metadata extends WP_UnitTestCase {
 			]
 		);
 		$metadata = ( new Subscription( self::$user_id ) )->get_metadata();
-		$this->assertSame( '', $metadata['Subscription_Cancellation_Reason'] );
+		$this->assertSame( '', $metadata['Last_Subscription_Cancellation_Reason'] );
 	}
 
 	public function test_cancellation_reason_empty_when_not_set() {
 		$this->create_subscription( [ 'status' => 'cancelled' ] );
 		$metadata = ( new Subscription( self::$user_id ) )->get_metadata();
-		$this->assertSame( '', $metadata['Subscription_Cancellation_Reason'] );
+		$this->assertSame( '', $metadata['Last_Subscription_Cancellation_Reason'] );
 	}
 
 	public function test_coupon_code_from_subscription() {
 		$this->create_subscription( [ 'coupon_codes' => [ 'SAVE10' ] ] );
 		$metadata = ( new Subscription( self::$user_id ) )->get_metadata();
-		$this->assertSame( 'SAVE10', $metadata['Current_Subscription_Coupon_Code'] );
+		$this->assertSame( 'SAVE10', $metadata['Subscription_Coupon_Code'] );
 	}
 
 	public function test_coupon_code_from_parent_order() {
 		$parent_order = $this->create_order( [ 'coupon_codes' => [ 'WELCOME' ] ] );
 		$this->create_subscription( [ 'parent_order' => $parent_order ] );
 		$metadata = ( new Subscription( self::$user_id ) )->get_metadata();
-		$this->assertSame( 'WELCOME', $metadata['Current_Subscription_Coupon_Code'] );
+		$this->assertSame( 'WELCOME', $metadata['Subscription_Coupon_Code'] );
 	}
 
 	public function test_coupon_code_subscription_takes_precedence() {
@@ -363,7 +363,7 @@ class Test_Subscription_Metadata extends WP_UnitTestCase {
 			]
 		);
 		$metadata = ( new Subscription( self::$user_id ) )->get_metadata();
-		$this->assertSame( 'SUB_COUPON', $metadata['Current_Subscription_Coupon_Code'] );
+		$this->assertSame( 'SUB_COUPON', $metadata['Subscription_Coupon_Code'] );
 	}
 
 	public function test_last_payment_amount_and_date() {
@@ -375,8 +375,8 @@ class Test_Subscription_Metadata extends WP_UnitTestCase {
 		);
 		$this->create_subscription( [ 'orders' => [ $order ] ] );
 		$metadata = ( new Subscription( self::$user_id ) )->get_metadata();
-		$this->assertSame( '15.00', $metadata['Last_Payment_Amount'] );
-		$this->assertSame( '2025-05-20 10:00:00', $metadata['Last_Payment_Date'] );
+		$this->assertSame( '15.00', $metadata['Last_Subscription_Payment_Amount'] );
+		$this->assertSame( '2025-05-20 10:00:00', $metadata['Last_Subscription_Payment_Date'] );
 	}
 
 	public function test_last_payment_excludes_failed_orders() {
@@ -395,7 +395,7 @@ class Test_Subscription_Metadata extends WP_UnitTestCase {
 		);
 		$this->create_subscription( [ 'orders' => [ $good_order, $failed_order ] ] );
 		$metadata = ( new Subscription( self::$user_id ) )->get_metadata();
-		$this->assertSame( '10.00', $metadata['Last_Payment_Amount'] );
+		$this->assertSame( '10.00', $metadata['Last_Subscription_Payment_Amount'] );
 	}
 
 	public function test_previous_product_from_switch_order() {
@@ -464,8 +464,8 @@ class Test_Subscription_Metadata extends WP_UnitTestCase {
 
 		$metadata = ( new Subscription( self::$user_id ) )->get_metadata();
 		$this->assertSame( 'active', $metadata['Subscriber_Status'] );
-		$this->assertSame( '20.00', $metadata['Current_Subscription_Recurring_Payment'] );
-		$this->assertSame( 'year', $metadata['Current_Subscription_Billing_Cycle'] );
+		$this->assertSame( '20.00', $metadata['Subscription_Recurring_Payment'] );
+		$this->assertSame( 'year', $metadata['Subscription_Billing_Cycle'] );
 	}
 
 	public function test_falls_back_to_cancelled_subscription_when_no_active() {
@@ -484,7 +484,7 @@ class Test_Subscription_Metadata extends WP_UnitTestCase {
 
 		$metadata = ( new Subscription( self::$user_id ) )->get_metadata();
 		$this->assertSame( 'cancelled', $metadata['Subscriber_Status'] );
-		$this->assertSame( '15.00', $metadata['Current_Subscription_Recurring_Payment'] );
+		$this->assertSame( '15.00', $metadata['Subscription_Recurring_Payment'] );
 	}
 
 	public function test_is_relevant_subscription_excludes_donations() {

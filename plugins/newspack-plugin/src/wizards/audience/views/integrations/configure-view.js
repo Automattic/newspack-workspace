@@ -5,7 +5,7 @@ import { __, sprintf } from '@wordpress/i18n';
 import { CheckboxControl, SelectControl, ToggleControl } from '@wordpress/components';
 import { useDispatch } from '@wordpress/data';
 import { useEffect, useMemo, useRef, useState } from '@wordpress/element';
-import { Stack } from '@wordpress/ui';
+import { Badge, Stack } from '@wordpress/ui';
 
 /**
  * Internal dependencies
@@ -590,18 +590,34 @@ const ConfigureViewInner = ( { integrations, loading, inFlightChanges, saving, o
 													defaultOpen={ index === 0 }
 												>
 													<Stack direction="column" gap="sm">
-														{ group.fields.map( fieldName => (
-															<CheckboxControl
-																className="newspack-checkbox-control"
-																key={ fieldName }
-																label={ fieldName }
-																checked={ selected.includes( fieldName ) }
-																onChange={ checked =>
-																	handleCheckboxListChange( outboundField.key, currentValue, fieldName, checked )
-																}
-																__nextHasNoMarginBottom
-															/>
-														) ) }
+														{ group.fields.map( fieldName => {
+															const details = group.field_details?.[ fieldName ];
+															const isNew = 'new' === details?.status || 'updated' === details?.status;
+															return (
+																<div className="newspack-outbound-field-row" key={ fieldName }>
+																	<CheckboxControl
+																		className="newspack-outbound-field-row__checkbox"
+																		label={ fieldName }
+																		help={ details?.description || undefined }
+																		checked={ selected.includes( fieldName ) }
+																		onChange={ checked =>
+																			handleCheckboxListChange(
+																				outboundField.key,
+																				currentValue,
+																				fieldName,
+																				checked
+																			)
+																		}
+																		__nextHasNoMarginBottom
+																	/>
+																	{ isNew && (
+																		<span className="newspack-outbound-field-row__badges">
+																			<Badge intent="stable">{ __( 'New', 'newspack-plugin' ) }</Badge>
+																		</span>
+																	) }
+																</div>
+															);
+														} ) }
 													</Stack>
 												</CollapsibleGroup.Item>
 											);

@@ -8,6 +8,7 @@
 use Newspack\Content_Gate;
 use Newspack\Institution;
 use Newspack\Reader_Activation;
+use Newspack\Reader_Activation\Integrations;
 use Newspack\Reader_Activation\Sync\Metadata;
 use Newspack\Reader_Activation\Sync\Contact_Metadata\Content_Gate as Content_Gate_Metadata;
 
@@ -17,13 +18,6 @@ use Newspack\Reader_Activation\Sync\Contact_Metadata\Content_Gate as Content_Gat
  * @group Content_Gate_Legacy
  */
 class Test_Content_Gate_Legacy extends WP_UnitTestCase {
-
-	/**
-	 * Schema version restored in tear_down().
-	 *
-	 * @var string
-	 */
-	private static $original_version;
 
 	/**
 	 * Enabled outgoing fields restored in tear_down().
@@ -54,13 +48,11 @@ class Test_Content_Gate_Legacy extends WP_UnitTestCase {
 		if ( ! defined( 'NEWSPACK_CONTENT_GATES' ) ) {
 			define( 'NEWSPACK_CONTENT_GATES', true );
 		}
-		self::$original_version = Metadata::$version;
 	}
 
 	public function set_up() {
 		parent::set_up();
 		Content_Gate_Metadata::reset_cache();
-		Metadata::$version             = 'legacy';
 		$this->original_enabled_fields = Metadata::get_fields();
 		self::$user_id                 = $this->factory->user->create(
 			[
@@ -73,9 +65,33 @@ class Test_Content_Gate_Legacy extends WP_UnitTestCase {
 
 	public function tear_down() {
 		Metadata::update_fields( ! empty( $this->original_enabled_fields ) ? $this->original_enabled_fields : [] );
-		Metadata::$version = self::$original_version;
 		Content_Gate_Metadata::reset_cache();
 		parent::tear_down();
+	}
+
+	/**
+	 * Enable outgoing metadata fields on the ESP integration by field name.
+	 *
+	 * @param string[] $names Field display names.
+	 * @return \Newspack\Reader_Activation\Integration The ESP integration.
+	 */
+	private function enable_fields( $names ) {
+		$integration = Integrations::get_integration( 'esp' );
+		$this->assertNotNull( $integration, 'The ESP integration must be registered.' );
+		$integration->update_enabled_outgoing_fields( $names );
+		return $integration;
+	}
+
+	/**
+	 * Run the outgoing pipeline for the seeded reader: merged raw metadata,
+	 * raw-key normalization, then the integration's prepare_contact().
+	 *
+	 * @param \Newspack\Reader_Activation\Integration $integration Integration to prepare for.
+	 * @return array Prepared contact.
+	 */
+	private function prepare_reader_contact( $integration ) {
+		$contact = Metadata::get_contact_with_metadata( self::$user_id );
+		return $integration->prepare_contact( Metadata::normalize_contact_data( $contact ) );
 	}
 
 	/**
@@ -162,78 +178,79 @@ class Test_Content_Gate_Legacy extends WP_UnitTestCase {
 		$this->assertContains( 'Content Access', $sections, 'The field selector should show a Content Access group on legacy sites.' );
 	}
 
-	public function test_legacy_normalize_keeps_content_access_when_enabled() {
+	public function test_content_gate_metadata_returns_raw_keys() {
 		$this->create_custom_access_gate( $this->passing_email_domain_rules() );
-		Metadata::update_fields( [ 'Content Access' ] );
 
-		$contact    = Metadata::get_contact_with_metadata( self::$user_id );
-		$normalized = Metadata::normalize_contact_data( $contact );
+		$metadata = ( new Content_Gate_Metadata( self::$user_id ) )->get_metadata();
+
+		$this->assertSame(
+			'Yes',
+			$metadata['Content_Access'],
+			'Content_Gate metadata must be returned under its own raw field key.'
+		);
+		$this->assertArrayNotHasKey(
+			'NP_Content Access',
+			$metadata,
+			'Metadata classes no longer prefix; prefixing is the integration\'s job.'
+		);
+	}
+
+	public function test_content_access_reaches_integration_prefixed_end_to_end() {
+		$this->create_custom_access_gate( $this->passing_email_domain_rules() );
+		$integration = $this->enable_fields( [ 'Content Access' ] );
+
+		$prepared = $this->prepare_reader_contact( $integration );
 
 		$this->assertArrayHasKey(
 			'NP_Content Access',
-			$normalized['metadata'],
-			'Enabled Content Access field must survive legacy normalization.'
+			$prepared['metadata'],
+			'Enabled Content Access field must survive the full outgoing pipeline, prefixed.'
 		);
-		$this->assertSame( 'Yes', $normalized['metadata']['NP_Content Access'] );
+		$this->assertSame( 'Yes', $prepared['metadata']['NP_Content Access'] );
 	}
 
-	public function test_legacy_normalize_drops_content_access_when_not_enabled() {
+	public function test_prepare_drops_content_access_when_not_enabled() {
 		$this->create_custom_access_gate( $this->passing_email_domain_rules() );
-		Metadata::update_fields( [ 'Account' ] );
+		$integration = $this->enable_fields( [ 'Account' ] );
 
-		$contact    = Metadata::get_contact_with_metadata( self::$user_id );
-		$normalized = Metadata::normalize_contact_data( $contact );
+		$prepared = $this->prepare_reader_contact( $integration );
 
 		$this->assertArrayNotHasKey(
 			'NP_Content Access',
-			$normalized['metadata'],
+			$prepared['metadata'],
 			'Content Access must be dropped when not enabled for the integration.'
 		);
 	}
 
-	public function test_content_gate_fields_arrive_prefixed_from_get_contact_with_metadata() {
-		$this->create_custom_access_gate( $this->passing_email_domain_rules() );
-		Metadata::update_fields( [ 'Content Access' ] );
-
-		// The main legacy sync path feeds get_contact_with_metadata() directly
-		// into the integration push without an additional normalize step —
-		// metadata classes must return prefixed keys to avoid silent drops.
-		$contact = Metadata::get_contact_with_metadata( self::$user_id );
-
-		$this->assertArrayHasKey(
-			'NP_Content Access',
-			$contact['metadata'],
-			'Content_Gate metadata must arrive prefixed from get_contact_with_metadata() in legacy mode.'
-		);
-		$this->assertSame( 'Yes', $contact['metadata']['NP_Content Access'] );
-	}
-
-	public function test_v1_schema_also_exposes_content_access_fields() {
-		Metadata::$version = '1.0';
+	/**
+	 * Content Gate is version-neutral, so its fields sit in the merged field
+	 * map alongside the legacy ones this class otherwise exercises — no
+	 * schema-version condition gates them.
+	 */
+	public function test_merged_field_map_also_exposes_content_access_fields() {
 		Content_Gate_Metadata::reset_cache();
 
 		$fields = Metadata::get_all_fields();
-		$this->assertArrayHasKey( 'Content_Access', $fields, 'v1 schema should also expose Content_Access.' );
+		$this->assertArrayHasKey( 'Content_Access', $fields );
 		$this->assertArrayHasKey( 'Content_Access_Source', $fields );
+		$this->assertArrayHasKey( 'account', $fields, 'The legacy fields are in the same map.' );
 	}
 
 	public function test_no_gate_matches_yields_content_access_no() {
 		$this->create_custom_access_gate( $this->failing_email_domain_rules() );
-		Metadata::update_fields( [ 'Content Access' ] );
 
-		$contact    = Metadata::get_contact_with_metadata( self::$user_id );
-		$normalized = Metadata::normalize_contact_data( $contact );
+		$contact = Metadata::get_contact_with_metadata( self::$user_id );
 
-		$this->assertArrayHasKey( 'NP_Content Access', $normalized['metadata'] );
+		$this->assertArrayHasKey( 'Content_Access', $contact['metadata'] );
 		$this->assertSame(
 			'No',
-			$normalized['metadata']['NP_Content Access'],
+			$contact['metadata']['Content_Access'],
 			'When no custom-access gates grant access, Content_Access must be "No".'
 		);
 	}
 
-	public function test_legacy_normalize_keeps_already_prefixed_content_access_key() {
-		Metadata::update_fields( [ 'Content Access' ] );
+	public function test_prepare_keeps_already_prefixed_content_access_key() {
+		$integration = $this->enable_fields( [ 'Content Access' ] );
 
 		$contact = [
 			'email'    => 'reader@example.com',
@@ -242,10 +259,10 @@ class Test_Content_Gate_Legacy extends WP_UnitTestCase {
 			],
 		];
 
-		$normalized = Metadata::normalize_contact_data( $contact );
+		$prepared = $integration->prepare_contact( Metadata::normalize_contact_data( $contact ) );
 
-		$this->assertArrayHasKey( 'NP_Content Access', $normalized['metadata'] );
-		$this->assertSame( 'Yes', $normalized['metadata']['NP_Content Access'] );
+		$this->assertArrayHasKey( 'NP_Content Access', $prepared['metadata'] );
+		$this->assertSame( 'Yes', $prepared['metadata']['NP_Content Access'] );
 	}
 
 	public function test_multiple_gates_aggregate_source_labels() {
@@ -261,15 +278,13 @@ class Test_Content_Gate_Legacy extends WP_UnitTestCase {
 			],
 			'Gate B'
 		);
-		Metadata::update_fields( [ 'Content Access', 'Content Access Source' ] );
 
-		$contact    = Metadata::get_contact_with_metadata( self::$user_id );
-		$normalized = Metadata::normalize_contact_data( $contact );
+		$contact = Metadata::get_contact_with_metadata( self::$user_id );
 
-		$this->assertSame( 'Yes', $normalized['metadata']['NP_Content Access'] );
+		$this->assertSame( 'Yes', $contact['metadata']['Content_Access'] );
 		$this->assertSame(
 			'domain',
-			$normalized['metadata']['NP_Content Access Source'],
+			$contact['metadata']['Content_Access_Source'],
 			'Duplicate domain labels from multiple gates must collapse to a single source value.'
 		);
 	}
@@ -288,15 +303,12 @@ class Test_Content_Gate_Legacy extends WP_UnitTestCase {
 				],
 			]
 		);
-		Metadata::update_fields( [ 'Content Access', 'Content Access Source' ] );
+		$contact = Metadata::get_contact_with_metadata( self::$user_id );
 
-		$contact    = Metadata::get_contact_with_metadata( self::$user_id );
-		$normalized = Metadata::normalize_contact_data( $contact );
-
-		$this->assertSame( 'Yes', $normalized['metadata']['NP_Content Access'] );
+		$this->assertSame( 'Yes', $contact['metadata']['Content_Access'] );
 		$this->assertSame(
 			'institution',
-			$normalized['metadata']['NP_Content Access Source'],
+			$contact['metadata']['Content_Access_Source'],
 			'Institution-rule passes must yield the "institution" source label.'
 		);
 	}

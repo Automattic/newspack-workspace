@@ -55,7 +55,7 @@ class Subscription extends Contact_Metadata {
 	 * @return string
 	 */
 	public static function get_section_name() {
-		return __( 'Subscription', 'newspack' );
+		return __( 'Subscription', 'newspack-plugin' );
 	}
 
 	/**
@@ -65,19 +65,94 @@ class Subscription extends Contact_Metadata {
 	 */
 	public static function get_fields() {
 		return [
-			'Subscriber_Status'                      => 'Subscriber Status',
-			'Active_Subscription_Count'              => 'Active Subscription Count',
-			'Current_Subscription_Start_Date'        => 'Current Subscription Start Date',
-			'Current_Subscription_End_Date'          => 'Current Subscription End Date',
-			'Subscription_Cancellation_Reason'       => 'Subscription Cancellation Reason',
-			'Current_Subscription_Billing_Cycle'     => 'Current Subscription Billing Cycle',
-			'Current_Subscription_Recurring_Payment' => 'Current Subscription Recurring Payment',
-			'Current_Subscription_Next_Payment_Date' => 'Current Subscription Next Payment Date',
-			'Current_Subscription_Product_Name'      => 'Current Subscription Product Name',
-			'Previous_Subscription_Product'          => 'Previous Subscription Product',
-			'Current_Subscription_Coupon_Code'       => 'Current Subscription Coupon Code',
-			'Last_Payment_Amount'                    => 'Last Payment Amount',
-			'Last_Payment_Date'                      => 'Last Payment Date',
+			'Subscriber_Status'                     => 'Subscriber Status',
+			'Active_Subscription_Count'             => 'Active Subscription Count',
+			'Subscription_Start_Date'               => 'Subscription Start Date',
+			'Subscription_End_Date'                 => 'Subscription End Date',
+			'Last_Subscription_Cancellation_Reason' => 'Last Subscription Cancellation Reason',
+			'Subscription_Billing_Cycle'            => 'Subscription Billing Cycle',
+			'Subscription_Recurring_Payment'        => 'Subscription Recurring Payment',
+			'Subscription_Next_Payment_Date'        => 'Subscription Next Payment Date',
+			'Subscription_Product_Name'             => 'Subscription Product Name',
+			'Previous_Subscription_Product'         => 'Previous Subscription Product',
+			'Subscription_Coupon_Code'              => 'Subscription Coupon Code',
+			'Last_Subscription_Payment_Amount'      => 'Last Subscription Payment Amount',
+			'Last_Subscription_Payment_Date'        => 'Last Subscription Payment Date',
+		];
+	}
+
+	/**
+	 * Per-field configuration for the fields handled by this class.
+	 *
+	 * @return array
+	 */
+	public static function get_fields_config() {
+		return [
+			'Subscriber_Status'                     => [
+				'name'        => 'Subscriber Status',
+				'description' => __( 'Status of the reader\'s most recent non-donation subscription. Valid values: active, on-hold, pending, cancelled, expired, pending-cancel', 'newspack-plugin' ),
+				'status'      => 'existing',
+			],
+			'Active_Subscription_Count'             => [
+				'name'        => 'Active Subscription Count',
+				'description' => __( 'Number of currently active non-donation subscriptions the reader holds', 'newspack-plugin' ),
+				'status'      => 'new',
+			],
+			'Subscription_Start_Date'               => [
+				'name'        => 'Subscription Start Date',
+				'description' => __( 'Start date of the most recent active non-donation subscription (YYYY-MM-DD HH:MM:SS). Unlike the legacy Current Subscription Start Date, donation subscriptions are excluded.', 'newspack-plugin' ),
+				'status'      => 'updated',
+			],
+			'Subscription_End_Date'                 => [
+				'name'        => 'Subscription End Date',
+				'description' => __( 'End/renewal date of the most recent non-donation subscription (YYYY-MM-DD HH:MM:SS). Unlike the legacy Current Subscription End Date, donation subscriptions are excluded.', 'newspack-plugin' ),
+				'status'      => 'updated',
+			],
+			'Last_Subscription_Cancellation_Reason' => [
+				'name'        => 'Last Subscription Cancellation Reason',
+				'description' => __( 'Reason the reader\'s most recent non-donation subscription was cancelled. One of: user-canceled, manually-canceled, expired. Unlike the legacy Subscription Cancellation Reason, donation subscriptions are excluded.', 'newspack-plugin' ),
+				'status'      => 'updated',
+			],
+			'Subscription_Billing_Cycle'            => [
+				'name'        => 'Subscription Billing Cycle',
+				'description' => __( 'Billing frequency. One of: month, year', 'newspack-plugin' ),
+				'status'      => 'updated',
+			],
+			'Subscription_Recurring_Payment'        => [
+				'name'        => 'Subscription Recurring Payment',
+				'description' => __( 'Amount of the recurring subscription payment (non-donation products)', 'newspack-plugin' ),
+				'status'      => 'updated',
+			],
+			'Subscription_Next_Payment_Date'        => [
+				'name'        => 'Subscription Next Payment Date',
+				'description' => __( 'Date of next scheduled subscription payment (YYYY-MM-DD HH:MM:SS)', 'newspack-plugin' ),
+				'status'      => 'updated',
+			],
+			'Subscription_Product_Name'             => [
+				'name'        => 'Subscription Product Name',
+				'description' => __( 'Name of the non-donation subscription product the reader purchased', 'newspack-plugin' ),
+				'status'      => 'updated',
+			],
+			'Previous_Subscription_Product'         => [
+				'name'        => 'Previous Subscription Product',
+				'description' => __( 'Name of the subscription product before the reader switched plans', 'newspack-plugin' ),
+				'status'      => 'existing',
+			],
+			'Subscription_Coupon_Code'              => [
+				'name'        => 'Subscription Coupon Code',
+				'description' => __( 'Coupon code applied at checkout for a non-donation subscription', 'newspack-plugin' ),
+				'status'      => 'existing',
+			],
+			'Last_Subscription_Payment_Amount'      => [
+				'name'        => 'Last Subscription Payment Amount',
+				'description' => __( 'Amount of the most recent payment on the reader\'s current non-donation subscription. Unlike the legacy Last Payment Amount, one-time purchases and donations are excluded.', 'newspack-plugin' ),
+				'status'      => 'updated',
+			],
+			'Last_Subscription_Payment_Date'        => [
+				'name'        => 'Last Subscription Payment Date',
+				'description' => __( 'Date of the most recent payment on the reader\'s current non-donation subscription (YYYY-MM-DD HH:MM:SS). Unlike the legacy Last Payment Date, one-time purchases and donations are excluded.', 'newspack-plugin' ),
+				'status'      => 'updated',
+			],
 		];
 	}
 
@@ -92,19 +167,19 @@ class Subscription extends Contact_Metadata {
 		}
 
 		return [
-			'Subscriber_Status'                      => $this->get_subscriber_status(),
-			'Active_Subscription_Count'              => $this->get_active_subscription_count(),
-			'Current_Subscription_Start_Date'        => $this->get_current_subscription_start_date(),
-			'Current_Subscription_End_Date'          => $this->get_current_subscription_end_date(),
-			'Subscription_Cancellation_Reason'       => $this->get_subscription_cancellation_reason(),
-			'Current_Subscription_Billing_Cycle'     => $this->get_current_subscription_billing_cycle(),
-			'Current_Subscription_Recurring_Payment' => $this->get_current_subscription_recurring_payment(),
-			'Current_Subscription_Next_Payment_Date' => $this->get_current_subscription_next_payment_date(),
-			'Current_Subscription_Product_Name'      => $this->get_current_subscription_product_name(),
-			'Previous_Subscription_Product'          => $this->get_previous_subscription_product(),
-			'Current_Subscription_Coupon_Code'       => $this->get_current_subscription_coupon_code(),
-			'Last_Payment_Amount'                    => $this->get_last_payment_amount(),
-			'Last_Payment_Date'                      => $this->get_last_payment_date(),
+			'Subscriber_Status'                     => $this->get_subscriber_status(),
+			'Active_Subscription_Count'             => $this->get_active_subscription_count(),
+			'Subscription_Start_Date'               => $this->get_current_subscription_start_date(),
+			'Subscription_End_Date'                 => $this->get_current_subscription_end_date(),
+			'Last_Subscription_Cancellation_Reason' => $this->get_subscription_cancellation_reason(),
+			'Subscription_Billing_Cycle'            => $this->get_current_subscription_billing_cycle(),
+			'Subscription_Recurring_Payment'        => $this->get_current_subscription_recurring_payment(),
+			'Subscription_Next_Payment_Date'        => $this->get_current_subscription_next_payment_date(),
+			'Subscription_Product_Name'             => $this->get_current_subscription_product_name(),
+			'Previous_Subscription_Product'         => $this->get_previous_subscription_product(),
+			'Subscription_Coupon_Code'              => $this->get_current_subscription_coupon_code(),
+			'Last_Subscription_Payment_Amount'      => $this->get_last_payment_amount(),
+			'Last_Subscription_Payment_Date'        => $this->get_last_payment_date(),
 		];
 	}
 

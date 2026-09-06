@@ -8,12 +8,9 @@
 namespace Newspack\Data_Events\Connectors;
 
 use Newspack\Data_Events;
-use Newspack\Reader_Activation;
 use Newspack\Reader_Activation\Contact_Sync;
-use Newspack_Newsletters_Contacts;
 use Newspack\WooCommerce_Connection;
 use Newspack\Reader_Activation\Sync\WooCommerce as Sync_WooCommerce;
-use Newspack\Reader_Activation\Sync\Metadata as Sync_Metadata;
 
 defined( 'ABSPATH' ) || exit;
 
@@ -38,11 +35,9 @@ class Contact_Sync_Connector {
 			return;
 		}
 		Data_Events::register_handler( [ __CLASS__, 'reader_registered' ], 'reader_registered' );
-		if ( 'legacy' === Sync_Metadata::get_version() ) {
-			Data_Events::register_handler( [ __CLASS__, 'reader_deleted' ], 'reader_deleted' );
-		} else {
-			Data_Events::register_handler( [ __CLASS__, 'reader_delete_sync' ], 'reader_delete_sync' );
-		}
+		// Deletion always routes through Contact_Sync::handle_account_deletion(),
+		// which honors each integration's own account_deletion_handling setting.
+		Data_Events::register_handler( [ __CLASS__, 'reader_delete_sync' ], 'reader_delete_sync' );
 		Data_Events::register_handler( [ __CLASS__, 'reader_logged_in' ], 'reader_logged_in' );
 		Data_Events::register_handler( [ __CLASS__, 'order_completed' ], 'order_completed' );
 		Data_Events::register_handler( [ __CLASS__, 'subscription_updated' ], 'donation_subscription_changed' );
@@ -202,25 +197,6 @@ class Contact_Sync_Connector {
 			),
 			120 // Schedule an ESP sync in 2 minutes.
 		);
-	}
-
-	/**
-	 * Handle a user deletion.
-	 *
-	 * @param int   $timestamp Timestamp of the event.
-	 * @param array $data      Data associated with the event.
-	 * @param int   $client_id ID of the client that triggered the event.
-	 */
-	public static function reader_deleted( $timestamp, $data, $client_id ) {
-		if ( empty( $data['email'] ) ) {
-			return;
-		}
-		if ( true === Reader_Activation::get_setting( 'sync_esp_delete' ) ) {
-			$result = Newspack_Newsletters_Contacts::delete( $data['email'], 'RAS Reader deleted' );
-		} else {
-			$result = Newspack_Newsletters_Contacts::update_lists( $data['email'], [], 'Reader account deleted' );
-		}
-		return $result;
 	}
 
 	/**

@@ -230,12 +230,6 @@ class Contact_Sync extends Sync {
 			}
 		}
 
-		// Added logging here to more easily monitor integration sync data. Can be removed once integrations are released.
-		if ( 'legacy' !== Metadata::get_version() ) {
-			Logger::log( sprintf( 'Syncing contact %s for context "%s".', $contact['email'] ?? 'unknown', $context ) );
-			Logger::log( $contact );
-		}
-
 		return self::push_to_integrations( $contact, $context, $existing_contact, $options );
 	}
 
@@ -257,11 +251,11 @@ class Contact_Sync extends Sync {
 	 * When `$options['fields']` is set: the reader `name` is dropped (so a
 	 * field-scoped backfill can't rewrite reader names — ESPs only set first/last
 	 * name when a name is present), and metadata is filtered to just the requested
-	 * labels. Filtering runs after `prepare_contact()` so keys are already prefixed
-	 * in both metadata modes; a key is kept when its de-prefixed remainder equals a
-	 * requested label, or begins with a requested label ending in `': '` (the UTM
-	 * label shape, e.g. `Signup UTM: source`). Everything else — including
-	 * `status` / `status_if_new` — is dropped.
+	 * labels. Filtering runs after `prepare_contact()`, so keys already arrive
+	 * prefixed; a key is kept when its de-prefixed remainder equals a requested
+	 * label, or begins with a requested label ending in `': '` (the UTM label
+	 * shape, e.g. `Signup UTM: source`). Everything else — including `status` /
+	 * `status_if_new` — is dropped.
 	 *
 	 * @param \Newspack\Reader_Activation\Integration $integration The target integration.
 	 * @param array                                   $contact     The contact data.
@@ -294,7 +288,8 @@ class Contact_Sync extends Sync {
 				}
 				// UTM-style labels end in ": " and match any suffixed key (e.g. "Signup UTM: source").
 				// This trailing-": " shape is the contract defined by the UTM labels in
-				// Legacy_Metadata::get_basic_fields() ("Signup UTM: ", "Payment UTM: ").
+				// Legacy_Basic::get_fields() ("Signup UTM: ") and
+				// Legacy_Payment::get_fields() ("Payment UTM: ").
 				if ( ': ' === substr( $label, -2 ) && 0 === strpos( $remainder, $label ) ) {
 					$filtered[ $key ] = $value;
 					break;
@@ -363,13 +358,7 @@ class Contact_Sync extends Sync {
 
 			$integration_contact = self::prepare_contact_for_integration( $integration, $contact, $options );
 
-			// Added logging here to more easily monitor integration sync data. Can be removed once integrations are released.
-			if ( 'legacy' !== Metadata::get_version() ) {
-				Logger::log( sprintf( 'Syncing contact %s for integration %s with context "%s".', $integration_contact['email'] ?? 'unknown', $integration_id, $context ) );
-				Logger::log( $integration_contact );
-			}
-
-			$result = $integration->push_contact_data( $integration_contact, $context, $existing_contact, $options );
+			$result = $integration->push_contact( $integration_contact, $context, $existing_contact, $options );
 			if ( \is_wp_error( $result ) ) {
 				/**
 				 * Fires when a contact sync fails on the original attempt (before retries).
@@ -435,7 +424,10 @@ class Contact_Sync extends Sync {
 	 * - sync_account_deletion=false → skip this integration entirely.
 	 * - sync_account_deletion=true + handling='delete' → call $integration->delete_contact($email).
 	 * - sync_account_deletion=true + handling='flag' → push the contact with the
-	 *   `account_deleted` metadata field set to an ISO8601 timestamp.
+	 *   `account_deleted` metadata field set to an ISO8601 timestamp. The push
+	 *   carries `skip_lists` (a deletion must never attach the master list) and
+	 *   runs only for integrations that implement flag_deletion_cleanup() —
+	 *   the base no-op cannot stop outreach, so those integrations are skipped.
 	 *
 	 * The WP user no longer exists by the time this runs, so the standard
 	 * push_to_integrations() retry path (which keys retries on user_id) is
@@ -568,6 +560,17 @@ class Contact_Sync extends Sync {
 					}
 				}
 			} elseif ( 'flag' === $mode ) {
+				// Flag mode's contract is a two-step: push the deletion signal,
+				// then flag_deletion_cleanup() stops list/audience outreach. An
+				// integration inheriting the base no-op cleanup cannot complete
+				// the second step, so pushing would leave the deleted reader
+				// reachable at the provider (and an upsert may even create the
+				// contact there). Skip those entirely — the pre-unification
+				// behavior for integrations without deletion support.
+				if ( ! self::implements_flag_deletion_cleanup( $integration ) ) {
+					static::log( sprintf( 'Integration "%s" implements no flag-deletion cleanup; skipping flag-mode deletion sync of %s.', $integration_id, $email ) );
+					continue;
+				}
 				// Push through the integration's normal pipeline so prepare_contact applies metadata
 				// prefixing and outgoing-field filtering to publisher-configured metadata. Then
 				// re-inject the account_deleted signal: it's a system-level signal that must
@@ -580,13 +583,24 @@ class Contact_Sync extends Sync {
 				$prefix              = $integration->get_metadata_prefix();
 				$integration_contact['metadata'] = $integration_contact['metadata'] ?? [];
 				$integration_contact['metadata'][ $prefix . 'Account_Deleted' ] = $flag_contact['metadata']['account_deleted'];
-				// Re-inject the membership status as a system-level deletion signal too.
-				// `membership_status` isn't a v1 outgoing field, so prepare_contact drops
-				// it; add it back under the prefixed key so the historical 'user-deleted'
-				// value always reaches the ESP regardless of outgoing-fields config.
+				// Re-inject the membership status too: it's a system-level deletion
+				// signal that must reach the ESP regardless of outgoing-fields
+				// config, same as Account_Deleted. But unlike Account_Deleted,
+				// `membership_status` is itself a registered catalog field
+				// ('Membership Status', declared by Legacy_Payment) — so on
+				// legacy-era sites where it's selected, prepare_contact() may
+				// already have emitted it under that spelling. Both can land in
+				// the payload (`NP_Membership Status` alongside this re-injection's
+				// `NP_Membership_Status`) — accepted duplication, since the signal
+				// must never depend on selection state.
 				$integration_contact['metadata'][ $prefix . 'Membership_Status' ] = $flag_contact['metadata']['membership_status'];
 
-				$result = $integration->push_contact_data( $integration_contact, $context );
+				// skip_lists: a deletion upsert must never attach the master list,
+				// re-adding — or first-creating — the deleted reader on it. The
+				// deletion-signal metadata needs no list membership, and the
+				// un-retried cleanup below stays a best-effort extra rather than
+				// the only thing standing between a deleted reader and a list.
+				$result = $integration->push_contact( $integration_contact, $context, null, [ 'skip_lists' => true ] );
 				if ( \is_wp_error( $result ) ) {
 					$errors[] = sprintf( '[%s] %s', $integration_id, $result->get_error_message() );
 					static::log( sprintf( 'Flag-push failed for integration "%s" of %s: %s', $integration_id, $email, $result->get_error_message() ) );
@@ -621,6 +635,18 @@ class Contact_Sync extends Sync {
 						);
 					}
 				}
+
+				// List cleanup is independent of whether the flag metadata push
+				// landed: the reader must stop receiving outreach either way.
+				// No retry scheduling here — parity with the legacy deletion
+				// path this replaces; retry hardening is tracked separately.
+				$cleanup_result = $integration->flag_deletion_cleanup( $email );
+				if ( \is_wp_error( $cleanup_result ) ) {
+					$errors[] = sprintf( '[%s] %s', $integration_id, $cleanup_result->get_error_message() );
+					static::log( sprintf( 'Flag-deletion cleanup failed for integration "%s" of %s: %s', $integration_id, $email, $cleanup_result->get_error_message() ) );
+				} else {
+					static::log( sprintf( 'Flag-deletion cleanup succeeded for integration "%s" of %s.', $integration_id, $email ) );
+				}
 			} else {
 				static::log( sprintf( 'Unknown handling mode "%s" for integration "%s"; skipping.', $mode, $integration_id ) );
 			}
@@ -630,6 +656,23 @@ class Contact_Sync extends Sync {
 			return new \WP_Error( 'newspack_esp_delete_failed', implode( '; ', $errors ) );
 		}
 		return true;
+	}
+
+	/**
+	 * Whether an integration provides its own flag_deletion_cleanup(),
+	 * rather than inheriting the base no-op.
+	 *
+	 * Flag-mode deletion is gated on this: the cleanup is the half of the
+	 * contract that stops outreach to the deleted reader, and an integration
+	 * lands in flag mode precisely because it cannot hard-delete — so one
+	 * that also cannot clean up must not receive the flag push at all.
+	 *
+	 * @param Integration $integration The integration instance.
+	 *
+	 * @return bool
+	 */
+	private static function implements_flag_deletion_cleanup( Integration $integration ) {
+		return Integration::class !== ( new \ReflectionMethod( $integration, 'flag_deletion_cleanup' ) )->getDeclaringClass()->getName();
 	}
 
 	/**
@@ -899,9 +942,15 @@ class Contact_Sync extends Sync {
 
 		static::log( sprintf( 'Executing retry %d/%d for integration "%s" sync of user %d (%s).', $retry_count, self::MAX_RETRIES, $integration_id, $user_id, $contact['email'] ?? 'unknown' ) );
 
+		// get_contact_data() already normalizes the contact when WooCommerce is
+		// active, via get_contact_with_metadata(); normalizing again here would
+		// fire `newspack_esp_sync_normalize_contact` a second time per retry,
+		// double-applying any non-idempotent publisher callback. Without
+		// WooCommerce, get_contact_data() early-returns before that call, so
+		// the filter never fires here — but enrichment is a no-op on that path
+		// too, since metadata is empty regardless.
 		/** This filter is documented in includes/reader-activation/sync/class-contact-sync.php */
 		$contact = \apply_filters( 'newspack_esp_sync_contact', $contact, $context );
-		$contact = Sync\Metadata::normalize_contact_data( $contact );
 
 		// Reconstruct existing_contact for email-change retries so integrations
 		// can upsert against the previous email address.
@@ -911,7 +960,7 @@ class Contact_Sync extends Sync {
 		}
 
 		$integration_contact = $integration->prepare_contact( $contact );
-		$result              = $integration->push_contact_data( $integration_contact, $context, $existing_contact );
+		$result              = $integration->push_contact( $integration_contact, $context, $existing_contact );
 		if ( \is_wp_error( $result ) ) {
 			$error_messages = implode( '; ', $result->get_error_messages() );
 			static::log(
@@ -1198,7 +1247,9 @@ class Contact_Sync extends Sync {
 		if ( 'delete' === $mode ) {
 			$result = $integration->delete_contact( $email );
 		} elseif ( 'flag' === $mode ) {
-			$result = $integration->push_contact_data( $contact, $context );
+			// Same skip_lists as the original flag push: the retried payload
+			// must not attach the master list either.
+			$result = $integration->push_contact( $contact, $context, null, [ 'skip_lists' => true ] );
 		} else {
 			Logger::log( sprintf( 'Unknown deletion retry mode "%s" for integration "%s".', $mode, $integration_id ), 'NEWSPACK-SYNC', 'error' );
 			return;

@@ -28,6 +28,15 @@ defined( 'ABSPATH' ) || exit;
  * dedicated integrations own everything that is not Mailchimp.
  */
 class ESP extends Integration {
+
+	/**
+	 * Newspack Newsletters' code for "this provider has no list management".
+	 * Campaign Monitor is the current example.
+	 *
+	 * @var string
+	 */
+	const LIST_MANAGEMENT_UNSUPPORTED_ERROR_CODE = 'newspack_newsletters_not_supported';
+
 	/**
 	 * Constructor.
 	 */
@@ -363,25 +372,34 @@ class ESP extends Integration {
 	/**
 	 * Get the enabled outgoing metadata fields for the ESP integration.
 	 *
-	 * Overrides the parent to provide lazy migration from the legacy global
-	 * option (Metadata::FIELDS_OPTION) to the per-integration option.
+	 * Overrides the parent to lazily migrate the legacy global option
+	 * (Metadata::FIELDS_OPTION) into the per-integration option. Copied
+	 * verbatim, not through update_enabled_outgoing_fields(): validating
+	 * here would permanently drop any currently-unavailable name (e.g.
+	 * payment fields while WooCommerce is inactive) from the publisher's
+	 * selection.
 	 *
 	 * @return string[] List of enabled field names.
 	 */
 	public function get_enabled_outgoing_fields() {
 		$fields = \get_option( self::OUTGOING_FIELDS_OPTION_PREFIX . $this->id, null );
 		if ( null !== $fields && is_array( $fields ) ) {
-			return $fields;
+			return array_values( $fields );
 		}
 
 		// Migrate from legacy global option.
 		$legacy = \get_option( Sync\Metadata::FIELDS_OPTION, null );
 		if ( null !== $legacy && is_array( $legacy ) ) {
-			$this->update_enabled_outgoing_fields( $legacy );
-			return $legacy;
+			$migrated_fields = array_values( array_unique( array_map( 'strval', $legacy ) ) );
+			\update_option(
+				self::OUTGOING_FIELDS_OPTION_PREFIX . $this->id,
+				$migrated_fields,
+				false
+			);
+			return $migrated_fields;
 		}
 
-		return Sync\Metadata::get_default_fields();
+		return Sync\Metadata::get_default_enabled_fields();
 	}
 
 	/**
@@ -493,6 +511,61 @@ class ESP extends Integration {
 			return $can_sync;
 		}
 		return \Newspack_Newsletters_Contacts::delete( $email, 'RAS Reader deleted' );
+	}
+
+	/**
+	 * Remove the deleted reader from every ESP list when flagged instead of
+	 * hard-deleted.
+	 *
+	 * For legacy `sync_esp_delete=false` sites, this keeps the contact record
+	 * (carrying the Account_Deleted / Membership_Status flags from the
+	 * flag-mode metadata push) but stops further outreach by clearing all
+	 * list membership.
+	 *
+	 * A provider without list management (Campaign Monitor) has no lists to
+	 * clear, so its "not supported" answer is success, not failure — returning
+	 * the error would schedule five retries that can never succeed and alert
+	 * on every reader deletion.
+	 *
+	 * @param string $email Email address of the deleted reader.
+	 *
+	 * @return true|false|\WP_Error True or false on success — update_lists()
+	 *                              returns false when there was nothing to
+	 *                              do — WP_Error on failure. The caller only
+	 *                              checks is_wp_error(), so anything else is
+	 *                              treated as success.
+	 */
+	public function flag_deletion_cleanup( $email ) {
+		if ( ! class_exists( 'Newspack_Newsletters_Contacts' ) ) {
+			return new \WP_Error(
+				'newspack_newsletters_contacts_not_found',
+				__( 'Newspack Newsletters is not available.', 'newspack-plugin' )
+			);
+		}
+		$result = \Newspack_Newsletters_Contacts::update_lists( $email, [], 'Reader account deleted' );
+		if ( \is_wp_error( $result ) && self::LIST_MANAGEMENT_UNSUPPORTED_ERROR_CODE === $result->get_error_code() ) {
+			return true;
+		}
+		return $result;
+	}
+
+	/**
+	 * Get the metadata prefix for the ESP integration.
+	 *
+	 * Applies the site-wide `newspack_ras_metadata_prefix` filter on top of
+	 * the per-integration option, preserving the pre-unification push
+	 * behavior: the legacy pipeline built every outgoing ESP key through
+	 * Metadata::get_prefix(), which runs this filter, so a site customizing
+	 * its prefix by code snippet (no stored option) must keep pushing under
+	 * the filtered prefix. The CLI duplicates audit resolves through the
+	 * same filter, so audit and push agree on live key names. Scoped to the
+	 * ESP: other integrations' prefixes never passed the filter.
+	 *
+	 * @return string The metadata prefix.
+	 */
+	public function get_metadata_prefix() {
+		/** This filter is documented in includes/reader-activation/sync/class-metadata.php */
+		return \apply_filters( 'newspack_ras_metadata_prefix', parent::get_metadata_prefix() );
 	}
 
 	/**

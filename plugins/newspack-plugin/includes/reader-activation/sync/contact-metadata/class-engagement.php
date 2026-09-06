@@ -39,7 +39,7 @@ class Engagement extends Contact_Metadata {
 	 * @return string
 	 */
 	public static function get_section_name() {
-		return __( 'Engagement', 'newspack' );
+		return __( 'Engagement', 'newspack-plugin' );
 	}
 
 	/**
@@ -53,11 +53,66 @@ class Engagement extends Contact_Metadata {
 			'Last_Active'          => 'Last Active',
 			'Paywall_Hits'         => 'Paywall Hits',
 			'Favorite_Categories'  => 'Favorite Categories',
-			'Payment_Page'         => 'Payment Page',
+			'Last_Payment_Page'    => 'Last Payment Page',
 			'Payment_UTM_Source'   => 'Payment UTM Source',
 			'Payment_UTM_Medium'   => 'Payment UTM Medium',
 			'Payment_UTM_Campaign' => 'Payment UTM Campaign',
-			'Total_Paid'           => 'Total Paid',
+			'Lifetime_Total_Paid'  => 'Lifetime Total Paid',
+		];
+	}
+
+	/**
+	 * Per-field configuration for the fields handled by this class.
+	 *
+	 * @return array
+	 */
+	public static function get_fields_config() {
+		return [
+			'First_Visit_Date'     => [
+				'name'        => 'First Visit Date',
+				'description' => __( 'Date of the reader\'s very first visit to the site, regardless of whether or when they registered (YYYY-MM-DD HH:MM:SS).', 'newspack-plugin' ),
+				'status'      => 'new',
+			],
+			'Last_Active'          => [
+				'name'        => 'Last Active',
+				'description' => __( 'Date reader was last seen on site', 'newspack-plugin' ),
+				'status'      => 'new',
+			],
+			'Paywall_Hits'         => [
+				'name'        => 'Paywall Hits',
+				'description' => __( 'Number of times reader has reached a metered paywall', 'newspack-plugin' ),
+				'status'      => 'new',
+			],
+			'Favorite_Categories'  => [
+				'name'        => 'Favorite Categories',
+				'description' => __( 'Comma-separated list of the reader\'s most-engaged content categories, ordered by frequency', 'newspack-plugin' ),
+				'status'      => 'new',
+			],
+			'Last_Payment_Page'    => [
+				'name'        => 'Last Payment Page',
+				'description' => __( 'URL of the checkout page from the reader\'s most recent completed order, of any product type. Unlike the legacy Payment Page, which follows the reader\'s current subscription or last one-time donation, this can diverge for recurring subscribers and one-time non-donation purchasers.', 'newspack-plugin' ),
+				'status'      => 'updated',
+			],
+			'Payment_UTM_Source'   => [
+				'name'        => 'Payment UTM Source',
+				'description' => __( 'UTM source on payment page if present. Values come from the reader\'s most recent completed order, which for recurring donors is a renewal that may lack the original campaign parameters.', 'newspack-plugin' ),
+				'status'      => 'updated',
+			],
+			'Payment_UTM_Medium'   => [
+				'name'        => 'Payment UTM Medium',
+				'description' => __( 'UTM medium on payment page if present. Values come from the reader\'s most recent completed order, which for recurring donors is a renewal that may lack the original campaign parameters.', 'newspack-plugin' ),
+				'status'      => 'updated',
+			],
+			'Payment_UTM_Campaign' => [
+				'name'        => 'Payment UTM Campaign',
+				'description' => __( 'UTM campaign on payment page if present. Values come from the reader\'s most recent completed order, which for recurring donors is a renewal that may lack the original campaign parameters.', 'newspack-plugin' ),
+				'status'      => 'updated',
+			],
+			'Lifetime_Total_Paid'  => [
+				'name'        => 'Lifetime Total Paid',
+				'description' => __( 'Lifetime total paid across all purchases; unlike the legacy Total Paid, never blanked when no current subscription or donation exists', 'newspack-plugin' ),
+				'status'      => 'updated',
+			],
 		];
 	}
 
@@ -73,17 +128,28 @@ class Engagement extends Contact_Metadata {
 
 		$order = $this->get_latest_order();
 
-		return [
+		$metadata = [
 			'First_Visit_Date'     => $this->format_reader_data_timestamp( 'first_visit_date' ),
 			'Last_Active'          => $this->format_reader_data_timestamp( 'last_active' ),
 			'Paywall_Hits'         => $this->get_reader_data_int( 'paywall_hits' ),
 			'Favorite_Categories'  => $this->get_favorite_categories(),
-			'Payment_Page'         => $this->get_payment_page( $order ),
+			'Last_Payment_Page'    => $this->get_payment_page( $order ),
 			'Payment_UTM_Source'   => $this->get_order_utm( $order, 'source' ),
 			'Payment_UTM_Medium'   => $this->get_order_utm( $order, 'medium' ),
 			'Payment_UTM_Campaign' => $this->get_order_utm( $order, 'campaign' ),
-			'Total_Paid'           => $this->customer ? $this->customer->get_total_spent() : '',
 		];
+
+		// Emitting an empty string for a reader with no customer record would
+		// blank a live merge field the legacy pipeline never touched — legacy
+		// total_paid only exists at all when there is a WooCommerce customer to
+		// read it from (Legacy_Basic returns nothing without one). Unlike the
+		// legacy field, this always reports the customer's lifetime spend
+		// rather than blanking when there is no current-product order.
+		if ( $this->customer ) {
+			$metadata['Lifetime_Total_Paid'] = $this->customer->get_total_spent();
+		}
+
+		return $metadata;
 	}
 
 	/**
