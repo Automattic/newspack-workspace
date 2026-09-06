@@ -230,33 +230,12 @@
 	}
 }
 
-// Mirrors `.newspack-newsletters-list__author*` from `admin-shell/style.scss`.
-.newspack-newsletters-list {
-	&__author {
-		align-items: center;
-		display: inline-flex;
-		gap: wp-vars.$grid-unit-10;
-		font-size: wp-vars.$grid-unit-15;
-	}
+// Card density for the shared user row; its anatomy lives with the component.
+.newspack-newsletters-layouts-picker__author {
+	font-size: 12px;
 
-	&__author-icon {
-		fill: currentcolor;
-		flex-shrink: 0;
+	.newspack-newsletters-user-row__icon {
 		margin: (-1 * wp-vars.$grid-unit-05);
-	}
-
-	&__author-avatar {
-		align-items: center;
-		display: inline-flex;
-		flex-shrink: 0;
-		height: wp-vars.$grid-unit-30;
-		justify-content: center;
-		width: wp-vars.$grid-unit-30;
-
-		img {
-			border-radius: 50%;
-			display: block;
-		}
 	}
 }
 

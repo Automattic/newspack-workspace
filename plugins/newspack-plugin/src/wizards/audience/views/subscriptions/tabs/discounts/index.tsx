@@ -10,25 +10,27 @@ import { __, _n, sprintf } from '@wordpress/i18n';
 import apiFetch from '@wordpress/api-fetch';
 import { useCallback, useEffect, useMemo, useState } from '@wordpress/element';
 import { useDispatch } from '@wordpress/data';
-import { dateI18n, getSettings as getDateSettings } from '@wordpress/date';
 import { decodeEntities } from '@wordpress/html-entities';
 import { addQueryArgs } from '@wordpress/url';
 import { filterSortAndPaginate } from '@wordpress/dataviews';
-import type { Action, Field, View } from '@wordpress/dataviews';
-import { drafts, percent, published } from '@wordpress/icons';
+import type { Action, View } from '@wordpress/dataviews';
+import { termCount } from '@wordpress/icons';
 // eslint-disable-next-line @wordpress/no-unsafe-wp-apis
-import { Icon, __experimentalHStack as HStack, __experimentalVStack as VStack } from '@wordpress/components';
+import { __experimentalHStack as HStack, __experimentalVStack as VStack } from '@wordpress/components';
 
 /**
  * Internal dependencies.
  */
-import { Button, DataViews, Grid, Notice, SectionHeader, Waiting } from '../../../../../../../packages/components/src';
+import { Button, DataViews, Notice, Waiting } from '../../../../../../../packages/components/src';
+import EmptyState from '../../../../../../../packages/components/src/empty-state';
 import { WIZARD_STORE_NAMESPACE } from '../../../../../../../packages/components/src/wizard/store';
 import Router from '../../../../../../../packages/components/src/proxied-imports/router';
 import { SEARCH_ENDPOINTS, WIZARD_ENDPOINT } from '../../constants';
+import { useNames } from '../../use-names';
 import { registerTab } from '../registry';
 import { DISCOUNTS_ENDPOINT } from './constants';
-import { DEFAULT_CURRENCY, discountLabel, excludedLabel, subscriptionsLabel, targetingBaseLabel, targetingLabel } from './discount';
+import { DEFAULT_CURRENCY } from './discount';
+import { discountFields } from './fields';
 import DiscountEditor from './editor';
 import SettingsModal from './settings-modal';
 import type { DiscountRule, DiscountsPayload } from './types';
@@ -86,7 +88,9 @@ function SubscriberDiscounts() {
 		apiFetch< { id: number; name: string }[] >( {
 			path: addQueryArgs( `${ WIZARD_ENDPOINT }/${ SEARCH_ENDPOINTS.subscriptions }`, { per_page: 100 } ),
 		} )
-			.then( items => setSubscriptionOptions( items || [] ) )
+			// Decoded once here, so every name in the merged list below is in the
+			// same encoding.
+			.then( items => setSubscriptionOptions( ( items || [] ).map( item => ( { ...item, name: decodeEntities( item.name ) } ) ) ) )
 			.catch( () => setSubscriptionOptions( [] ) );
 	}, [] );
 
@@ -137,64 +141,23 @@ function SubscriberDiscounts() {
 		}
 	}, [ isLoading, editingId, editingRule, history, baseUrl ] );
 
-	const fields: Field< DiscountRule >[] = useMemo(
-		() => [
-			{
-				id: 'subscription',
-				label: __( 'Subscription', 'newspack-plugin' ),
-				enableHiding: false,
-				elements: subscriptionOptions.map( option => ( { value: option.id, label: decodeEntities( option.name ) } ) ),
-				filterBy: { operators: [ 'isAny' ] },
-				getValue: ( { item } ) => item.subscription_product_ids,
-				render: ( { item } ) => subscriptionsLabel( item.subscription_product_ids, subscriptionOptions ),
-			},
-			{
-				id: 'status',
-				label: __( 'Status', 'newspack-plugin' ),
-				elements: [
-					{ value: 'active', label: __( 'Active', 'newspack-plugin' ) },
-					{ value: 'inactive', label: __( 'Inactive', 'newspack-plugin' ) },
-				],
-				filterBy: { operators: [ 'isAny' ] },
-				getValue: ( { item } ) => ( item.active ? 'active' : 'inactive' ),
-				render: ( { item } ) => (
-					<span className="newspack-subscriber-discounts__status">
-						<Icon className="newspack-subscriber-discounts__status-icon" icon={ item.active ? published : drafts } size={ 24 } />
-						<span>{ item.active ? __( 'Active', 'newspack-plugin' ) : __( 'Inactive', 'newspack-plugin' ) }</span>
-					</span>
-				),
-			},
-			{
-				id: 'discount',
-				label: __( 'Discount', 'newspack-plugin' ),
-				getValue: ( { item } ) => discountLabel( item, currency ),
-			},
-			{
-				id: 'applies_to',
-				label: __( 'Applies to', 'newspack-plugin' ),
-				getValue: ( { item } ) => targetingLabel( item ),
-				render: ( { item } ) => {
-					const excluded = excludedLabel( item );
-					if ( ! excluded ) {
-						return targetingBaseLabel( item );
-					}
-					return (
-						<span className="newspack-subscriber-discounts__applies-to">
-							{ targetingBaseLabel( item ) }
-							<span className="newspack-subscriber-discounts__applies-to-excluded">{ excluded }</span>
-						</span>
-					);
-				},
-			},
-			{
-				id: 'created_at',
-				label: __( 'Created', 'newspack-plugin' ),
-				getValue: ( { item } ) => item.created_at,
-				render: ( { item } ) => ( item.created_at ? dateI18n( getDateSettings().formats.date, item.created_at ) : '' ),
-			},
-		],
-		[ currency, subscriptionOptions ]
+	// The picker's one page of suggestions names most subscriptions, but not a
+	// trashed one and not the overflow on a store with more than a page of
+	// them. Resolving the ids the rules actually hold covers both, and is what
+	// keeps a row from counting a subscription it could have named.
+	const ruleSubscriptionIds = useMemo(
+		() => [ ...new Set( payload.rules.flatMap( rule => rule.subscription_product_ids || [] ) ) ],
+		[ payload.rules ]
 	);
+	const resolvedNames = useNames( SEARCH_ENDPOINTS.subscriptions, ruleSubscriptionIds );
+
+	const namedSubscriptions = useMemo( () => {
+		const byId = new Map< number, string >( subscriptionOptions.map( option => [ option.id, option.name ] ) );
+		Object.entries( resolvedNames ).forEach( ( [ id, name ] ) => byId.set( Number( id ), name ) );
+		return [ ...byId ].map( ( [ id, name ] ) => ( { id, name } ) );
+	}, [ subscriptionOptions, resolvedNames ] );
+
+	const fields = useMemo( () => discountFields( currency, namedSubscriptions ), [ currency, namedSubscriptions ] );
 
 	const actions: Action< DiscountRule >[] = useMemo(
 		() => [
@@ -295,28 +258,21 @@ function SubscriberDiscounts() {
 			{ error && <Notice isError noticeText={ error } /> }
 			{ showEmptyState ? (
 				<div className="newspack-subscriber-discounts__empty">
-					<Grid className="newspack-empty-state" columns={ 4 } noMargin>
-						{ /* The Grid stylesheet matches start and end as DOM attributes, so they cannot be passed as typed props. */ }
-						<VStack { ...( { start: 2, end: 4 } as React.ComponentProps< 'div' > ) } spacing={ 8 }>
-							<SectionHeader
-								className="newspack-empty-state__header"
-								icon={ percent }
-								title={ __( 'Get started with subscriber discounts', 'newspack-plugin' ) }
-								description={ __(
-									'Offer subscribers a discount on your products. Create your first rule to choose which subscription gets what off which products.',
-									'newspack-plugin'
-								) }
-								heading={ 2 }
-								pageHeader
-								noMargin
-							/>
-							<HStack alignment="center" spacing={ 2 } wrap className="newspack-empty-state__actions">
-								<Button variant="primary" onClick={ () => history.push( `${ baseUrl }/new` ) }>
-									{ __( 'Add Discount', 'newspack-plugin' ) }
-								</Button>
-							</HStack>
-						</VStack>
-					</Grid>
+					<EmptyState.Root>
+						<EmptyState.Header
+							icon={ termCount }
+							title={ __( 'Get started with subscriber discounts', 'newspack-plugin' ) }
+							description={ __(
+								'Offer subscribers a discount on your products. Create your first rule to choose which subscription gets what off which products.',
+								'newspack-plugin'
+							) }
+						/>
+						<EmptyState.Actions>
+							<Button variant="primary" onClick={ () => history.push( `${ baseUrl }/new` ) }>
+								{ __( 'Add Discount', 'newspack-plugin' ) }
+							</Button>
+						</EmptyState.Actions>
+					</EmptyState.Root>
 				</div>
 			) : (
 				<DataViews

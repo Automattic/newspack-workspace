@@ -104,7 +104,7 @@ export default function RulePreview( { body, showCycleNote }: RulePreviewProps )
 				totalMatching={ preview.total_matching }
 				countLimited={ preview.count_limited }
 				countBound="upper"
-				productsDescription={ __( 'This rule would price these products', 'newspack-plugin' ) }
+				productsDescription={ __( 'This rule would price these products.', 'newspack-plugin' ) }
 				audience={ preview.audience }
 			/>
 			<ImpactTable

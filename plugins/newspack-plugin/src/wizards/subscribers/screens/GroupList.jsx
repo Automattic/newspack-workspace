@@ -14,7 +14,7 @@
 /**
  * WordPress dependencies.
  */
-import { useEffect, useMemo, useState } from '@wordpress/element';
+import { useLayoutEffect, useMemo, useState } from '@wordpress/element';
 import { __, sprintf } from '@wordpress/i18n';
 import { useDispatch } from '@wordpress/data';
 import { filterSortAndPaginate } from '@wordpress/dataviews';
@@ -24,13 +24,15 @@ import { Badge } from '@wordpress/ui';
 /**
  * Internal dependencies.
  */
-import { Button, DataViews, Notice, Waiting } from '../../../../packages/components/src';
+import { Button, DataViews, StatusIndicator, Waiting } from '../../../../packages/components/src';
 import { fmtDate } from '../format';
 import './style.scss';
+import LoadFailureNotice from '../components/LoadFailureNotice';
+import { useRetryFocus } from '../use-retry-focus';
 import { SHOW_AVATARS, useAvatars } from '../data/use-avatars';
 import { useGroups } from '../data/use-groups';
 import { WIZARD_STORE_NAMESPACE } from '../../../../packages/components/src/wizard/store';
-import { STATUS_LABELS, STATUS_BADGE_INTENT } from '../status';
+import { STATUS_INDICATORS, STATUS_LABELS } from '../status';
 import { GROUP_LABEL_PLURAL, groupCountLabel, groupLoadFailedLabel } from '../labels';
 import { SubscriptionLink } from '../links';
 
@@ -168,7 +170,9 @@ export default function GroupList() {
 				elements: Object.entries( STATUS_LABELS ).map( ( [ value, label ] ) => ( { value, label } ) ),
 				filterBy: { operators: [ 'isAny' ] },
 				getValue: ( { item } ) => item.status,
-				render: ( { item } ) => <Badge intent={ STATUS_BADGE_INTENT[ item.status ] }>{ STATUS_LABELS[ item.status ] }</Badge>,
+				render: ( { item } ) => (
+					<StatusIndicator status={ STATUS_INDICATORS[ item.status ] }>{ STATUS_LABELS[ item.status ] }</StatusIndicator>
+				),
 			},
 			{
 				id: 'createdAt',
@@ -212,8 +216,13 @@ export default function GroupList() {
 	const total = paginationInfo?.totalItems ?? 0;
 
 	// Surface the group count in the header breadcrumb, e.g. "/ Groups (14)".
-	useEffect( () => {
+	// Before paint: this carries the width override, and an error arrives outside a
+	// React event, so a passive effect would paint full-bleed for one frame first.
+	useLayoutEffect( () => {
 		setHeaderData( {
+			// Header data is merged, so the explicit `undefined` is what clears a
+			// previous `false`; a retry never changes the route, so nothing else would.
+			fullWidth: error ? false : undefined,
 			sectionName: [
 				{
 					label: GROUP_LABEL_PLURAL,
@@ -223,6 +232,8 @@ export default function GroupList() {
 			],
 		} );
 	}, [ setHeaderData, total, groupsLoading, error ] );
+
+	const { retryRef, retry } = useRetryFocus( { settled: ! groupsLoading, failed: Boolean( error ), reload } );
 
 	if ( groupsLoading ) {
 		return (
@@ -235,12 +246,16 @@ export default function GroupList() {
 	// A failed read must not read as "this site has no groups": say so, and offer
 	// a retry.
 	if ( error ) {
+		const message = groupLoadFailedLabel( error );
 		return (
-			<Notice isError noticeText={ groupLoadFailedLabel( error ) }>
-				<Button variant="link" onClick={ reload }>
-					{ __( 'Retry', 'newspack-plugin' ) }
-				</Button>
-			</Notice>
+			<LoadFailureNotice
+				message={ message }
+				action={
+					<Button variant="link" ref={ retryRef } onClick={ retry }>
+						{ __( 'Retry', 'newspack-plugin' ) }
+					</Button>
+				}
+			/>
 		);
 	}
 

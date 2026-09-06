@@ -120,6 +120,5 @@
 			"numberOfCTAs": 1
 		}
 	},
-	"textdomain": "newspack-plugin",
-	"editorScript": "file:./index.js"
+	"textdomain": "newspack-plugin"
 }

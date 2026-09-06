@@ -68,15 +68,16 @@ import { EmptyState } from 'newspack-components';
 ```
 
 Every slot except `Root` is optional, and anything else you pass to `Root`
-becomes a sibling of the header at the same 8-unit gap. A screen that offers
-choices rather than one action can drop a stack of cards in instead of
-`EmptyState.Actions`. Pass elements: `Root`'s stack keeps a lone string but drops
-one sitting beside an element, so wrap loose text in a `<p>`. The `Grid` margin
-reset reaches direct children only, so a `<p>` inside a slot keeps the browser's
-default block margin and you zero it where you use it. The component resets
-margins on the two elements it renders itself and stops there: a blanket reset on
-slot content would silently flatten a consumer's own stack of cards or prose, and
-the gaps this component owns all come from its stacks anyway.
+becomes a sibling of the header at the same gap the stack uses: 8 units at the
+default size, 6 at `small`. A screen that offers choices rather than one action
+can drop a stack of cards in instead of `EmptyState.Actions`. Pass elements:
+`Root`'s stack keeps a lone string but drops one sitting beside an element, so
+wrap loose text in a `<p>`. The `Grid` margin reset reaches direct children
+only, so a `<p>` inside a slot keeps the browser's default block margin and you
+zero it where you use it. The component resets margins on the two elements it
+renders itself and stops there: a blanket reset on slot content would silently
+flatten a consumer's own stack of cards or prose, and the gaps this component
+owns all come from its stacks anyway.
 
 ## Consumers own their wrappers
 
@@ -120,7 +121,7 @@ With a children slot there is no pair to check. A button that navigates takes
 |------|------|---------|-------------|
 | `children` | `React.ReactNode` | — | The slots, plus any custom body. |
 | `className` | `string` | — | Merged onto the grid. |
-| `size` | `'default'` \| `'small'` | `'default'` | Read by `EmptyState.Header`. `small` suits an empty state standing in for a panel inside a card. |
+| `size` | `'default'` \| `'small'` | `'default'` | Sets the stack gap, and is read by `EmptyState.Header`. `small` suits an empty state standing in for a panel inside a card. |
 
 The grid always carries `newspack-empty-state`, and `className` lands there
 rather than on a wrapper, because consumers key off both. Inside it, the stack

@@ -18,9 +18,8 @@ import WizardsActionCard from '../../../../wizards-action-card';
 import useWizardApiFetchToggle from '../../../../hooks/use-wizard-api-fetch-toggle';
 
 const PLATFORM_OPTIONS: { label: string; value: IndesignPlatform }[] = [
-	{ label: __( 'Auto-detect (per export)', 'newspack-plugin' ), value: 'auto' },
-	{ label: __( 'Mac', 'newspack-plugin' ), value: 'mac' },
-	{ label: __( 'Windows', 'newspack-plugin' ), value: 'win' },
+	{ label: __( 'Windows (ASCII-WIN)', 'newspack-plugin' ), value: 'win' },
+	{ label: __( 'Mac (ASCII-MAC)', 'newspack-plugin' ), value: 'mac' },
 ];
 
 // Coalesce a rapid series of post-type checkbox clicks into a single save.
@@ -32,7 +31,7 @@ function Print() {
 		apiNamespace: 'newspack-settings/print',
 		data: {
 			module_enabled_print: false,
-			indesign_platform: 'auto',
+			indesign_platform: 'win',
 			indesign_post_types: [ 'post' ],
 			available_post_types: [],
 			indesign_exclude_captions: false,
@@ -123,7 +122,7 @@ function Print() {
 					<WizardSection
 						title={ __( 'Header platform', 'newspack-plugin' ) }
 						description={ __(
-							'InDesign requires the export file to declare its host platform on the first line. Choose "Auto-detect" to match the operating system of whoever clicks Export, or pick a specific platform if your team always lays out on the same OS.',
+							'Exports declare their format on the first line and end every line to match. Windows places correctly in most InDesign installs; if placed files show tags as literal text, switch to Mac.',
 							'newspack-plugin'
 						) }
 					>
@@ -161,14 +160,14 @@ function Print() {
 						) }
 					</WizardSection>
 					<WizardSection
-						title={ __( 'Photo captions', 'newspack-plugin' ) }
+						title={ __( 'Photo captions and credits', 'newspack-plugin' ) }
 						description={ __(
-							'Photo captions are appended to the end of each export. Enable this to leave them out — photo credits are still included.',
+							'Photo captions and credits are appended to the end of each export. Enable this to leave them out.',
 							'newspack-plugin'
 						) }
 					>
 						<CheckboxControl
-							label={ __( 'Exclude photo captions', 'newspack-plugin' ) }
+							label={ __( 'Exclude photo captions and credits', 'newspack-plugin' ) }
 							checked={ apiData.indesign_exclude_captions }
 							disabled={ isFetching }
 							onChange={ ( checked: boolean ) => save( { indesign_exclude_captions: checked } ) }

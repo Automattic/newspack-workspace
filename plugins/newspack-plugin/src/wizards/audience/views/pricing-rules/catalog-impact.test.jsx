@@ -264,7 +264,7 @@ describe( 'CatalogImpact', () => {
 
 		const section = container.querySelector( '.newspack-pricing-rules__impact' );
 		const button = screen.getByRole( 'button', { name: 'View Affected Products' } );
-		const tile = screen.getByText( 'Products affected' ).closest( '.newspack-pricing-rules__tile' );
+		const tile = screen.getByText( 'Products affected' ).closest( '.newspack-stat-card' );
 
 		expect( section.tagName ).toBe( 'SECTION' );
 		expect( button.tagName ).toBe( 'BUTTON' );
@@ -274,9 +274,9 @@ describe( 'CatalogImpact', () => {
 	it( 'hangs the trigger off the description rather than the number', () => {
 		render( <CatalogImpact stats={ stats() } /> );
 
-		const footer = screen.getByText( 'Rules currently price these products' ).parentElement;
+		const footer = screen.getByText( 'Rules currently price these products.' ).parentElement;
 
-		expect( footer ).toHaveClass( 'newspack-pricing-rules__tile-footer' );
+		expect( footer ).toHaveClass( 'newspack-stat-card__footer' );
 		expect( footer.contains( screen.getByRole( 'button', { name: 'View Affected Products' } ) ) ).toBe( true );
 	} );
 
