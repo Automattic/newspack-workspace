@@ -14,22 +14,34 @@ import { Button, QueryControls, FormTokenField, SelectControl, ToggleControl, Sp
 import { addQueryArgs } from '@wordpress/url';
 import { Fragment, useState, useEffect } from '@wordpress/element';
 import apiFetch from '@wordpress/api-fetch';
+import { useSelect } from '@wordpress/data';
 import { decodeEntities } from '@wordpress/html-entities';
 
-const fetchPostSuggestions = postType => search =>
-	apiFetch( {
-		path: addQueryArgs( '/wp/v2/search', {
-			search,
-			per_page: 20,
-			_fields: 'id,title',
-			subtype: postType,
-		} ),
-	} ).then( posts =>
-		posts.map( post => ( {
-			id: post.id,
-			title: decodeEntities( post.title ) || __( '(no title)', 'newspack-newsletters' ),
-		} ) )
-	);
+/**
+ * Internal dependencies
+ */
+import { formatPostLabel, getPostSearchPath } from './post-search';
+import { selectSpecificPosts } from './specific-posts';
+
+const fetchPostSuggestions = ( restBase, search ) =>
+	apiFetch( { path: getPostSearchPath( restBase, search ) } )
+		.catch( error => {
+			// Core rejects the whole request when the user can't edit this post type. Fall back
+			// to published posts rather than leaving the search empty. Any other failure — no
+			// network, a broken endpoint — is not worth a second attempt.
+			if ( 'rest_forbidden_status' !== error?.code ) {
+				throw error;
+			}
+			return apiFetch( { path: getPostSearchPath( restBase, search, false ) } );
+		} )
+		.then( posts =>
+			posts.map( post => ( {
+				id: post.id,
+				title: decodeEntities( post.title?.rendered ) || __( '(no title)', 'newspack-newsletters' ),
+				status: post.status,
+			} ) )
+		)
+		.catch( () => [] );
 
 const SEPARATOR = '--';
 const encodePosts = posts => posts.map( post => [ post.id, post.title ].join( SEPARATOR ) );
@@ -44,10 +56,15 @@ const decodePost = encodedPost => {
 // NOTE: Mostly copied from Gutenberg's Posts Inserter block.
 const QueryControlsSettings = ( { attributes, setAttributes } ) => {
 	const [ categoriesList, setCategoriesList ] = useState( [] );
-	const [ postTypesList, setPostTypesList ] = useState( [ { value: 'post', label: 'Posts' } ] );
+	const [ postTypes, setPostTypes ] = useState( [ { slug: 'post', name: 'Posts', rest_base: 'posts' } ] );
 	const [ showAdvancedFilters, setShowAdvancedFilters ] = useState( false );
 
 	const { categoryExclusions, tags, tagExclusions } = attributes;
+	const restBase = postTypes.find( postType => attributes.postType === postType.slug )?.rest_base;
+	const postTypeOptions = postTypes.map( postType => ( {
+		value: postType.slug,
+		label: decodeEntities( postType.name ) || __( '(no title)', 'newspack-newsletters' ),
+	} ) );
 
 	useEffect( () => {
 		apiFetch( {
@@ -55,7 +72,7 @@ const QueryControlsSettings = ( { attributes, setAttributes } ) => {
 				per_page: -1,
 			} ),
 		} ).then( setCategoriesList );
-		fetchPostTypes().then( setPostTypesList );
+		fetchPostTypes().then( setPostTypes );
 	}, [] );
 
 	const categorySuggestions = categoriesList.reduce(
@@ -105,15 +122,31 @@ const QueryControlsSettings = ( { attributes, setAttributes } ) => {
 	const [ isFetchingPosts, setIsFetchingPosts ] = useState( false );
 	const [ foundPosts, setFoundPosts ] = useState( [] );
 	const handleSpecificPostsInput = search => {
-		if ( isFetchingPosts || search.length === 0 ) {
+		if ( isFetchingPosts || search.length === 0 || ! restBase ) {
 			return;
 		}
 		setIsFetchingPosts( true );
-		fetchPostSuggestions( attributes.postType )( search ).then( posts => {
+		fetchPostSuggestions( restBase, search ).then( posts => {
 			setIsFetchingPosts( false );
 			setFoundPosts( posts );
 		} );
 	};
+
+	// The block already fetches the posts saved on it, so reading their statuses back out of
+	// core-data costs no extra request — and a draft that has since been published stops
+	// being labelled as one.
+	const specificPostIds = attributes.specificPosts.map( post => post.id );
+	const savedPosts = useSelect(
+		select => selectSpecificPosts( select, attributes.postType, specificPostIds ),
+		[ attributes.postType, specificPostIds.join() ]
+	);
+
+	// Statuses for the saved tokens and for the current suggestions alike. A post still being
+	// looked up simply has none yet, and shows as an unlabelled title.
+	const postStatuses = [ ...foundPosts, ...( savedPosts || [] ) ].reduce( ( all, post ) => {
+		all[ post.id ] = post.status;
+		return all;
+	}, {} );
 
 	const handleSpecificPostsSelection = postTitles => {
 		setAttributes( {
@@ -144,13 +177,8 @@ const QueryControlsSettings = ( { attributes, setAttributes } ) => {
 	const fetchPostTypes = () => {
 		return apiFetch( {
 			path: addQueryArgs( '/wp/v2/types', { context: 'edit' } ),
-		} ).then( postTypes => {
-			return Object.values( postTypes )
-				.filter( postType => postType.viewable === true && postType.visibility?.show_ui === true )
-				.map( postType => ( {
-					value: postType.slug,
-					label: decodeEntities( postType.name ) || __( '(no title)', 'newspack-newsletters' ),
-				} ) );
+		} ).then( fetchedPostTypes => {
+			return Object.values( fetchedPostTypes ).filter( postType => postType.viewable === true && postType.visibility?.show_ui === true );
 		} );
 	};
 
@@ -205,7 +233,7 @@ const QueryControlsSettings = ( { attributes, setAttributes } ) => {
 		<div className="newspack-newsletters-query-controls">
 			<SelectControl
 				label={ __( 'Post type', 'newspack-newsletters' ) }
-				options={ postTypesList }
+				options={ postTypeOptions }
 				value={ attributes.postType }
 				onChange={ postType => setAttributes( { postType } ) }
 				__next40pxDefaultSize
@@ -235,7 +263,7 @@ const QueryControlsSettings = ( { attributes, setAttributes } ) => {
 					suggestions={ encodePosts( foundPosts ) }
 					displayTransform={ string => {
 						const [ id, title ] = decodePost( string );
-						return title || id || '';
+						return formatPostLabel( title || id || '', postStatuses[ id ] );
 					} }
 					onInputChange={ debounce( handleSpecificPostsInput, 400 ) }
 				/>
