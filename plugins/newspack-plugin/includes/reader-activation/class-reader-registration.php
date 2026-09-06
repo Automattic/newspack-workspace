@@ -369,7 +369,15 @@ final class Reader_Registration {
 			$attempts = \wp_cache_incr( $cache_key, 1, $cache_group );
 		} else {
 			$attempts = (int) \get_transient( $cache_key );
-			\set_transient( $cache_key, $attempts + 1, HOUR_IN_SECONDS );
+			// Stop rewriting the counter once it has recorded the crossing: a
+			// sustained flood settles into read-only rejections instead of a
+			// wp_options write per request, and the hour window stops rolling
+			// forward with each hit. The object-cache incr above stays
+			// unconditional — it is atomic, and a guarded read-then-incr would
+			// reintroduce the race it avoids.
+			if ( $attempts <= $limit ) {
+				\set_transient( $cache_key, $attempts + 1, HOUR_IN_SECONDS );
+			}
 			$attempts++;
 		}
 
@@ -420,14 +428,26 @@ final class Reader_Registration {
 	 * REST API handler for frontend integration reader registration.
 	 *
 	 * Validation sequence:
-	 * 1. Already logged in — return current reader data
+	 * 1. Integration ID is registered
 	 * 2. Reader Activation is enabled
-	 * 3. Integration ID is registered
-	 * 4. Integration key matches HMAC
-	 * 5. Honeypot field is empty
-	 * 6. Per-IP rate limit
-	 * 7. reCAPTCHA (when configured)
+	 * 3. Honeypot field is empty
+	 * 4. Per-IP rate limit
+	 * 5. Integration key matches HMAC
+	 * 6. reCAPTCHA (when configured)
+	 * 7. Already logged in — return current reader data
 	 * 8. Email is valid
+	 *
+	 * The rate limit sits ahead of the key check because
+	 * Integration::validate_registration_request() is an extension point that
+	 * may make outbound API calls, so an unauthenticated flood must be bounded
+	 * before it reaches one. The key check sits ahead of reCAPTCHA to keep
+	 * garbage-key requests away from the siteverify roundtrip; the trade — a
+	 * token-less caller can still reach an integration's validator — stays
+	 * bounded by the same rate limit. The logged-in branch sits behind every
+	 * gate so a session cannot be used to skip them; that includes the
+	 * integration's own validator, which must not treat `npe` or any other
+	 * caller-supplied field as a session check — on this path they are
+	 * unrelated to the logged-in user.
 	 *
 	 * @param \WP_REST_Request $request Request object.
 	 * @return \WP_REST_Response|\WP_Error
@@ -448,34 +468,7 @@ final class Reader_Registration {
 			);
 		}
 
-		// Step 2: If caller is already logged in, return current reader data.
-		// This makes the API idempotent — integrations don't need to check
-		// authentication state before calling register().
-		if ( \is_user_logged_in() ) {
-			$current_user = \wp_get_current_user();
-
-			/**
-			 * Action triggered when a logged-in user attempts to register via the frontend registration endpoint.
-			 *
-			 * Integrations can hook into this action to handle cases where an existing user attempts to register again via the frontend registration flow. For example, an integration might want to link the existing user account to the integration or log this event for analytics purposes.
-			 *
-			 * @param \WP_User         $current_user         The currently logged-in user.
-			 * @param \WP_REST_Request $request              The original registration request.
-			 * @param Integration|null $integration_instance The integration instance associated with the registration attempt, or null if the integration was registered via filter only.
-			 */
-			do_action( 'newspack_frontend_registration_existing_user', $current_user, $request, $integration_instance );
-
-			return new \WP_REST_Response(
-				[
-					'success' => true,
-					'status'  => 'existing',
-					'email'   => $current_user->user_email,
-				],
-				200
-			);
-		}
-
-		// Step 3: Check RAS is enabled.
+		// Step 2: Check RAS is enabled.
 		if ( ! Reader_Activation::is_enabled() ) {
 			return new \WP_Error(
 				'reader_activation_disabled',
@@ -484,25 +477,7 @@ final class Reader_Registration {
 			);
 		}
 
-		// Step 4: Validate integration key.
-		$integration_key = $request->get_param( 'integration_key' );
-		if ( $integration_instance && $integration_instance->supports_frontend_registration() ) {
-			$key_valid = $integration_instance->validate_registration_request( $integration_key, $request );
-		} else {
-			// Fallback for filter-only registrations.
-			$expected_key = self::get_frontend_registration_key( $integration_id );
-			$key_valid    = hash_equals( $expected_key, $integration_key );
-		}
-		if ( ! $key_valid ) {
-			Logger::log( 'Frontend registration rejected: invalid key for integration "' . $integration_id . '"' );
-			return new \WP_Error(
-				'invalid_integration_key',
-				__( 'Invalid integration key.', 'newspack-plugin' ),
-				[ 'status' => 403 ]
-			);
-		}
-
-		// Step 5: Honeypot — the `email` field must be empty. Real email is in `npe`.
+		// Step 3: Honeypot — the `email` field must be empty. Real email is in `npe`.
 		$honeypot = $request->get_param( 'email' );
 		if ( ! empty( $honeypot ) ) {
 			// Return fake success to avoid revealing the honeypot to bots.
@@ -518,11 +493,18 @@ final class Reader_Registration {
 			);
 		}
 
-		// Step 6: Per-IP rate limit. Checked before reCAPTCHA to avoid
-		// triggering external verification calls for rate-limited IPs.
+		// Step 4: Per-IP rate limit. Ahead of both the integration key check and
+		// reCAPTCHA so neither external call can be driven by a rate-limited IP.
 		// Integration-backed registrations count in a per-integration bucket
 		// (sized via the newspack_frontend_registration_rate_limit filter);
 		// filter-only registrations keep the shared 'registration' bucket.
+		// Because this now runs ahead of the key check, a request naming an
+		// integration counts against that integration's bucket before the key
+		// is validated. Buckets are per-IP where the host reports real client
+		// IPs (see the REMOTE_ADDR note in check_registration_rate_limit());
+		// behind a shared proxy or egress address the budget is shared across
+		// its users — logged-in callers included, now that they no longer
+		// return before this check.
 		$bucket     = $integration_instance && $integration_instance->supports_frontend_registration()
 			? self::get_rate_limit_bucket_for( $integration_id )
 			: 'registration';
@@ -531,7 +513,36 @@ final class Reader_Registration {
 			return $rate_check;
 		}
 
-		// Step 7: reCAPTCHA (when configured).
+		// Step 5: Validate integration key.
+		$integration_key = $request->get_param( 'integration_key' );
+		if ( $integration_instance && $integration_instance->supports_frontend_registration() ) {
+			$key_valid = $integration_instance->validate_registration_request( $integration_key, $request );
+		} else {
+			// Fallback for filter-only registrations.
+			$expected_key = self::get_frontend_registration_key( $integration_id );
+			$key_valid    = hash_equals( $expected_key, $integration_key );
+		}
+		if ( ! $key_valid ) {
+			Logger::log( 'Frontend registration rejected: invalid key for integration "' . $integration_id . '"' );
+			// The clients on this path treat a key rejection as final, so this
+			// remote entry is the only operator-visible signal when keys fail
+			// site-wide (a rotated key, a cached page emitting a stale one).
+			// Per-request, but bounded by the rate limit above. A
+			// visitor-triggered condition, so 'debug' (logstash only), not 'error'.
+			Logger::newspack_log(
+				'newspack_frontend_registration_invalid_key',
+				'Frontend registration rejected: invalid integration key.',
+				[ 'integration_id' => $integration_id ],
+				'debug'
+			);
+			return new \WP_Error(
+				'invalid_integration_key',
+				__( 'Invalid integration key.', 'newspack-plugin' ),
+				[ 'status' => 403 ]
+			);
+		}
+
+		// Step 6: reCAPTCHA (when configured).
 		$recaptcha_token = $request->get_param( 'g-recaptcha-response' );
 		$should_verify   = \apply_filters( 'newspack_recaptcha_verify_captcha', Recaptcha::can_use_captcha(), '', 'integration_registration' );
 		if ( $should_verify ) {
@@ -550,6 +561,38 @@ final class Reader_Registration {
 					[ 'status' => 403 ]
 				);
 			}
+		}
+
+		// Step 7: If caller is already logged in, return current reader data.
+		// This makes the API idempotent — integrations don't need to check
+		// authentication state before calling register().
+		if ( \is_user_logged_in() ) {
+			$current_user = \wp_get_current_user();
+
+			/**
+			 * Action triggered when a logged-in user attempts to register via the frontend registration endpoint.
+			 *
+			 * Integrations can hook into this action to handle cases where an existing user attempts to register again via the frontend registration flow. For example, an integration might want to link the existing user account to the integration or log this event for analytics purposes.
+			 *
+			 * Fires only for requests that passed every endpoint gate — including
+			 * the integration's own validate_registration_request() — per the
+			 * validation sequence documented on api_frontend_register_reader().
+			 * A request rejected by any gate never reaches this action.
+			 *
+			 * @param \WP_User                                     $current_user         The currently logged-in user.
+			 * @param \WP_REST_Request                             $request              The original registration request.
+			 * @param \Newspack\Reader_Activation\Integration|null $integration_instance The integration instance associated with the registration attempt, or null if the integration was registered via filter only.
+			 */
+			do_action( 'newspack_frontend_registration_existing_user', $current_user, $request, $integration_instance );
+
+			return new \WP_REST_Response(
+				[
+					'success' => true,
+					'status'  => 'existing',
+					'email'   => $current_user->user_email,
+				],
+				200
+			);
 		}
 
 		// Step 8: Validate email.
