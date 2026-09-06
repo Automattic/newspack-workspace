@@ -41,6 +41,20 @@ class Deletion_Spy_Integration extends Integration {
 	public $push_result = true;
 
 	/**
+	 * Captured flag_deletion_cleanup() calls.
+	 *
+	 * @var array
+	 */
+	public $cleanup_calls = [];
+
+	/**
+	 * Result that flag_deletion_cleanup() returns.
+	 *
+	 * @var true|\WP_Error
+	 */
+	public $cleanup_result = true;
+
+	/**
 	 * Value returned by is_set_up(). Tests flip this to false to model an
 	 * enabled-but-unconfigured integration (e.g. an ESP whose provider was
 	 * deselected) and assert the deletion path skips it.
@@ -116,6 +130,17 @@ class Deletion_Spy_Integration extends Integration {
 	public function delete_contact( $email ) {
 		$this->delete_calls[] = [ 'email' => $email ];
 		return $this->delete_result;
+	}
+
+	/**
+	 * Flag-deletion cleanup (records the call).
+	 *
+	 * @param string $email The email address of the deleted reader.
+	 * @return true|\WP_Error
+	 */
+	public function flag_deletion_cleanup( $email ) {
+		$this->cleanup_calls[] = [ 'email' => $email ];
+		return $this->cleanup_result;
 	}
 
 	/**

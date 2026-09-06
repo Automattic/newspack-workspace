@@ -69,6 +69,24 @@ class Logger {
 	}
 
 	/**
+	 * Log a data payload, honoring the `NEWSPACK_LOG_LEVEL` payload threshold.
+	 *
+	 * Use instead of log() when the value itself is the data (e.g. reader
+	 * contact data, which carries PII), so lower log levels get the summary
+	 * lines without the payload.
+	 *
+	 * @param mixed  $payload The payload to log.
+	 * @param string $header  Log message header.
+	 * @param string $type    Type of the message.
+	 */
+	public static function log_payload( $payload, $header = 'NEWSPACK', $type = 'info' ) {
+		if ( ! defined( 'NEWSPACK_LOG_LEVEL' ) || 3 > (int) NEWSPACK_LOG_LEVEL ) {
+			return;
+		}
+		self::log( $payload, $header, $type );
+	}
+
+	/**
 	 * Get the current process ID and format it to the output in a way that keeps it aligned.
 	 *
 	 * @return string The process ID surrounded by brackets and followed by spaces to always match at least 7 characters.

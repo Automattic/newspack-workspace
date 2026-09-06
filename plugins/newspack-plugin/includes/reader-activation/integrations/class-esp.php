@@ -28,6 +28,15 @@ defined( 'ABSPATH' ) || exit;
  * dedicated integrations own everything that is not Mailchimp.
  */
 class ESP extends Integration {
+
+	/**
+	 * Newspack Newsletters' code for "this provider has no list management".
+	 * Campaign Monitor is the current example.
+	 *
+	 * @var string
+	 */
+	const LIST_MANAGEMENT_UNSUPPORTED_ERROR_CODE = 'newspack_newsletters_not_supported';
+
 	/**
 	 * Constructor.
 	 */
@@ -361,27 +370,83 @@ class ESP extends Integration {
 	}
 
 	/**
-	 * Get the enabled outgoing metadata fields for the ESP integration.
+	 * Ensure the per-integration outgoing fields option is seeded.
 	 *
-	 * Overrides the parent to provide lazy migration from the legacy global
-	 * option (Metadata::FIELDS_OPTION) to the per-integration option.
+	 * Two sources, in order: the legacy global option
+	 * (Sync\Metadata::FIELDS_OPTION), copied verbatim so the base class's lazy
+	 * migration resolves it to ids under its preserve-unresolved rules —
+	 * resolving here instead would permanently drop any currently-unavailable
+	 * definition (e.g. payment fields while WooCommerce is inactive); or, with
+	 * nothing stored anywhere, the registry's default selection.
 	 *
-	 * @return string[] List of enabled field names.
+	 * Seeding on read — rather than relying only on `newspack_activation`,
+	 * which never fires on an in-place upgrade — makes the first sync or admin
+	 * read after upgrade self-healing. Only the ESP seeds; every other
+	 * integration inherits its selection and so seeds transitively through
+	 * this method.
+	 *
+	 * @return bool True if a stored per-integration option exists (parent
+	 *              accessors can be used), false if the ESP should fall back
+	 *              to dynamic defaults.
 	 */
-	public function get_enabled_outgoing_fields() {
-		$fields = \get_option( self::OUTGOING_FIELDS_OPTION_PREFIX . $this->id, null );
-		if ( null !== $fields && is_array( $fields ) ) {
-			return $fields;
+	private function ensure_outgoing_fields_seeded() {
+		$stored = \get_option( self::OUTGOING_FIELDS_OPTION_PREFIX . $this->id, null );
+		if ( null !== $stored && is_array( $stored ) ) {
+			return true;
 		}
 
 		// Migrate from legacy global option.
 		$legacy = \get_option( Sync\Metadata::FIELDS_OPTION, null );
 		if ( null !== $legacy && is_array( $legacy ) ) {
-			$this->update_enabled_outgoing_fields( $legacy );
-			return $legacy;
+			\update_option(
+				self::OUTGOING_FIELDS_OPTION_PREFIX . $this->id,
+				array_values( array_unique( array_map( 'strval', $legacy ) ) ),
+				false
+			);
+			return true;
 		}
 
-		return Sync\Metadata::get_default_fields();
+		// Never configured: materialise the effective default selection. A
+		// no-op once a selection exists, so repeat reads cost one option read.
+		//
+		// Confident detections only. This can run at any point in any request,
+		// including before the ESP's own settings are in place, and the one
+		// detection that would be wrong then — the fresh-install guess, which
+		// keys on is_set_up() — would freeze a legacy site onto the new schema
+		// permanently. An unconfigured ESP cannot sync anyway, so declining to
+		// seed just defers the decision to a read that can answer it.
+		Sync\Field_Registry::seed_default_field_selections( true );
+
+		return is_array( \get_option( self::OUTGOING_FIELDS_OPTION_PREFIX . $this->id, null ) );
+	}
+
+	/**
+	 * Get the enabled outgoing metadata fields for the ESP integration.
+	 *
+	 * Overrides the parent to seed the per-integration option first — from the
+	 * legacy global option (Metadata::FIELDS_OPTION), or from the registry's
+	 * default selection when nothing was ever stored anywhere. The parent's
+	 * dynamic all-defaults fallback only answers if seeding could not.
+	 *
+	 * @return string[] List of enabled field names.
+	 */
+	public function get_enabled_outgoing_fields() {
+		$this->ensure_outgoing_fields_seeded();
+		return parent::get_enabled_outgoing_fields();
+	}
+
+	/**
+	 * Get the enabled outgoing metadata field ids for the ESP integration.
+	 *
+	 * Mirrors get_enabled_outgoing_fields(): seed first, then defer to the
+	 * parent. This is the read that makes seeding trigger-independent — the
+	 * outgoing sync path and the settings screen both come through here.
+	 *
+	 * @return string[] List of enabled field ids.
+	 */
+	public function get_enabled_outgoing_field_ids() {
+		$this->ensure_outgoing_fields_seeded();
+		return parent::get_enabled_outgoing_field_ids();
 	}
 
 	/**
@@ -493,6 +558,42 @@ class ESP extends Integration {
 			return $can_sync;
 		}
 		return \Newspack_Newsletters_Contacts::delete( $email, 'RAS Reader deleted' );
+	}
+
+	/**
+	 * Remove the deleted reader from every ESP list when flagged instead of
+	 * hard-deleted.
+	 *
+	 * For legacy `sync_esp_delete=false` sites, this keeps the contact record
+	 * (carrying the Account_Deleted / Membership_Status flags from the
+	 * flag-mode metadata push) but stops further outreach by clearing all
+	 * list membership.
+	 *
+	 * A provider without list management (Campaign Monitor) has no lists to
+	 * clear, so its "not supported" answer is success, not failure — returning
+	 * the error would schedule five retries that can never succeed and alert
+	 * on every reader deletion.
+	 *
+	 * @param string $email Email address of the deleted reader.
+	 *
+	 * @return true|false|\WP_Error True or false on success — update_lists()
+	 *                              returns false when there was nothing to
+	 *                              do — WP_Error on failure. The caller only
+	 *                              checks is_wp_error(), so anything else is
+	 *                              treated as success.
+	 */
+	public function flag_deletion_cleanup( $email ) {
+		if ( ! class_exists( 'Newspack_Newsletters_Contacts' ) ) {
+			return new \WP_Error(
+				'newspack_newsletters_contacts_not_found',
+				__( 'Newspack Newsletters is not available.', 'newspack-plugin' )
+			);
+		}
+		$result = \Newspack_Newsletters_Contacts::update_lists( $email, [], 'Reader account deleted' );
+		if ( \is_wp_error( $result ) && self::LIST_MANAGEMENT_UNSUPPORTED_ERROR_CODE === $result->get_error_code() ) {
+			return true;
+		}
+		return $result;
 	}
 
 	/**

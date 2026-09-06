@@ -214,7 +214,7 @@ Each integration automatically gets the fields for the directions it declares (s
 | --- | --- | --- | --- |
 | `metadata_prefix` | outbound | `text` | String prepended to every outgoing metadata field name (default `NP_`). Stored at `newspack_integration_metadata_prefix_{id}`. Required so outgoing field names are unique on the external system. |
 | `outgoing_sync_enabled` | outbound | `checkbox` | Whether outbound sync currently runs. Default `true`. Pausing it stops pushes (including account-deletion propagation) while preserving the outgoing field selection. Stored at `newspack_integration_settings_{id}_outgoing_sync_enabled`. |
-| `outgoing_metadata_fields` | outbound | `metadata` | Subset of Newspack metadata fields to push. Stored at `newspack_integration_outgoing_fields_{id}`. |
+| `outgoing_metadata_fields` | outbound | `metadata` | Subset of Newspack metadata fields to push. Stored at `newspack_integration_outgoing_fields_{id}`. When the option was never stored, the integration inherits the ESP integration's effective selection (the ESP itself defaults to every available field); a stored empty selection means none. |
 | `incoming_sync_enabled` | inbound | `checkbox` | Whether inbound sync currently runs. Default `true`. Pausing it stops pulls while preserving the incoming field selection. Stored at `newspack_integration_settings_{id}_incoming_sync_enabled`. |
 | `incoming_metadata_fields` | inbound | `metadata` | Subset of external fields to pull and store on the Newspack user. Stored at `newspack_integration_incoming_fields_{id}` as a `key => raw_data` map. |
 
@@ -229,7 +229,7 @@ Deletion propagates through the push pipeline, so push-capable integrations also
 
 **Legacy migration.** Both fields derive from the single legacy `sync_esp_delete` boolean, which was effectively three-way in behavior: `true` hard-deleted the contact, while `false` kept the contact but removed it from every list (still a deletion signal). Because *both* states propagated a deletion, a migrated site always keeps `sync_account_deletion = true`; the legacy boolean only picks the handling mode — `true → delete`, `false → flag`. Mapping legacy `false` to `flag` (rather than disabling sync) preserves the old "don't hard-delete, but still signal the deletion" posture. Sites that never set the legacy option fall through to the field defaults. See `Integration::migrate_account_deletion_setting()`.
 
-The dispatcher lives at `Contact_Sync::handle_account_deletion()` and is called from the v1 `reader_delete_sync` data event handler. Legacy-mode sites continue to use the older `reader_deleted` handler that calls Newspack Newsletters directly.
+The dispatcher lives at `Contact_Sync::handle_account_deletion()` and is called from the `reader_delete_sync` data event handler. All sites — legacy and coexistence — route through this single handler, which honors each integration's `account_deletion_handling` setting. In `flag` mode, the dispatcher also calls the integration's `flag_deletion_cleanup( $email )` hook after the metadata push — for the built-in ESP integration, this removes the reader from every ESP list, keeping the flagged contact record but stopping further outreach. Cleanup failures ride the same deletion-retry chain as flag-push failures (a successful re-push re-runs the idempotent cleanup), so a transient provider error can't leave a deleted reader subscribed.
 
 ### Conditional fields
 
@@ -268,19 +268,17 @@ An **undeclared** toggle field reads as enabled. An integration that overrides `
 
 ## Push (Outgoing Sync)
 
-When a contact needs to be synced, the framework calls `push_contact_data()` on every active integration. The contact array is the Newspack canonical form (email, name, metadata, etc.). Implementations should call `$this->prepare_contact( $contact )` first, which, on the v1 metadata schema:
+When a contact needs to be synced, the framework calls `push_contact_data()` on every active integration. The contact array is the Newspack canonical form (email, name, metadata, etc.), carrying **raw** metadata keys from every schema version in play. Implementations should call `$this->prepare_contact( $contact )` first, which:
 
-1. Filters `$contact['metadata']` to the keys enabled on this integration.
-2. Renames keys using the integration's metadata prefix.
-3. Preserves keys already in prefixed form if the underlying field is enabled.
+1. Filters `$contact['metadata']` to the field ids enabled on this integration.
+2. Renames the surviving keys to `prefix + ESP field name`, using the integration's own metadata prefix.
+3. Preserves keys already in prefixed form when the underlying field is enabled, or when the registry does not know the name at all (an explicitly injected custom field).
 
-On the legacy metadata schema (sites without `NEWSPACK_SYNC_METADATA_VERSION`), the metadata classes pre-filter and prefix the data by the **ESP integration's** field selection before it reaches `prepare_contact()`. The `esp` integration takes it unchanged; every other integration still narrows the set to its own enabled Outbound fields.
+Filtering is unconditional and per-integration, so a saved-empty Outbound selection genuinely means "push no metadata fields". Unprefixed sync-control keys (`Metadata::SYNC_CONTROL_KEYS`: `status`, `status_if_new`) always pass through; any other unprefixed key that resolves to no enabled field is dropped. Dynamic-suffix fields (`Metadata::UTM_RAW_KEYS` — `Signup UTM: `, `Payment UTM: `) match only *with* a suffix: an enabled `Signup UTM: ` carries `signup_page_utm_source` and its siblings, never the bare key, which is not a syncable field.
 
-Matching runs on whole keys, built with the legacy pipeline's prefix (`Metadata::get_prefix()` — the prefix the data actually carries, which may differ from the integration's own). Each enabled label contributes both the key `Metadata::get_key()` produces, so keys reshaped by the `newspack_ras_metadata_key` filter still match, and the plain `prefix . label` shape. Only the raw keys in `Legacy_Metadata::UTM_RAW_KEYS` match by prefix — an enabled `Signup UTM: ` carries `Signup UTM: source` and its siblings. A label registered through `newspack_ras_metadata_keys` that happens to end in `': '` is matched exactly, so it can never carry a *different* field past the selection. Unprefixed sync-control keys (`Legacy_Metadata::SYNC_CONTROL_KEYS`: `status`, `status_if_new`) always pass through; any other unprefixed key is dropped.
+An integration that has **never saved** an Outbound selection inherits the ESP integration's effective selection, so adding an integration to a configured site pushes what that site already pushes rather than everything available; an explicitly saved selection always wins, including an empty one. Override `get_inherited_outgoing_field_ids()` to inherit a different set, or return `[]` from it to opt out of inheritance entirely. Once a selection is saved, inheritance only returns if the integration's `newspack_integration_outgoing_fields_*` option is deleted (NPPD-2107). A corrupt (non-array) stored value is treated as unsaved and inherits, rather than failing closed to an empty selection.
 
-An integration that has **never saved** an Outbound selection inherits the ESP integration's effective selection, so un-migrated sites keep their pre-existing payloads; an explicitly saved selection always wins, and saving with nothing checked genuinely means "push no metadata fields". Override `get_inherited_legacy_outgoing_fields()` to inherit a different set, or return `[]` from it to opt out of inheritance entirely. Two legacy-mode caveats: the upstream pre-filter runs first, so an explicit selection can only narrow the ESP's set; and once a selection is saved, inheritance only returns if the integration's `newspack_integration_outgoing_fields_*` option is deleted (NPPD-2107).
-
-**Default posture.** Inheritance preserves behavior rather than tightening it. On a site where nobody ever saved an ESP selection, `Esp::get_enabled_outgoing_fields()` falls through to `Metadata::get_default_fields()` — every available field, including Membership Status, Total Paid and Recurring Payment — and a newly connected integration inherits exactly that. Per-integration selection is what closes that exposure, and it takes an explicit save to do so.
+**Default posture.** Inheritance preserves behavior rather than tightening it. On a site where nobody ever saved an ESP selection, the ESP integration falls through to `Metadata::get_default_fields()` — every available field, including Membership Status, Total Paid and Recurring Payment — and a newly connected integration inherits exactly that. Per-integration selection is what closes that exposure, and it takes an explicit save to do so. Each integration's enabled ids are resolved independently, so a non-ESP integration can enable a field the ESP has disabled.
 
 ### Optional `$options` parameter
 

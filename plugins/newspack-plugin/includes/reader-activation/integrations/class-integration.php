@@ -7,6 +7,9 @@
 
 namespace Newspack\Reader_Activation;
 
+use Newspack\Logger;
+use Newspack\Reader_Activation\Sync;
+
 defined( 'ABSPATH' ) || exit;
 
 /**
@@ -52,6 +55,16 @@ abstract class Integration {
 	 * @var string
 	 */
 	const OUTGOING_FIELDS_OPTION_PREFIX = 'newspack_integration_outgoing_fields_';
+
+	/**
+	 * Id of the built-in ESP integration, whose outgoing selection every other
+	 * integration inherits until it saves one of its own (NPPD-2107). Named
+	 * here rather than referencing Integrations\ESP so the base class does not
+	 * depend on one of its own subclasses.
+	 *
+	 * @var string
+	 */
+	const ESP_INTEGRATION_ID = 'esp';
 
 	/**
 	 * Option name prefix for storing all integration settings.
@@ -119,6 +132,26 @@ abstract class Integration {
 	 * @var array|null
 	 */
 	private $settings_fields_cache = null;
+
+	/**
+	 * Memoized prepare_contact() lookup tables, keyed by integration id and the
+	 * stored field-id list. Static rather than per-instance because contacts
+	 * are prepared through whichever instance the registry hands back, and the
+	 * tables depend on nothing instance-local. See
+	 * get_prepare_contact_lookups().
+	 *
+	 * @var array<string, array>
+	 */
+	private static $prepare_contact_lookups = [];
+
+	/**
+	 * Integration id + stored entry pairs already reported as unresolvable by
+	 * the name-to-id migration this request. Keeps the warning at one per
+	 * option per request rather than one per read.
+	 *
+	 * @var array<string, bool>
+	 */
+	private static $logged_unresolved_entries = [];
 
 	/**
 	 * Constructor.
@@ -609,6 +642,22 @@ abstract class Integration {
 	}
 
 	/**
+	 * Perform integration-specific cleanup when a deleted reader is flagged
+	 * (account_deletion_handling = 'flag') instead of hard-deleted.
+	 *
+	 * Default is a no-op. Integrations that maintain list/audience
+	 * subscriptions should override to stop outreach to the deleted reader
+	 * while keeping the flagged contact record.
+	 *
+	 * @param string $email Email address of the deleted reader.
+	 *
+	 * @return true|\WP_Error True on success (or nothing to do), WP_Error on failure.
+	 */
+	public function flag_deletion_cleanup( $email ) {
+		return true;
+	}
+
+	/**
 	 * Handle a logged-in user attempting to register again via the frontend registration flow.
 	 *
 	 * Integrations can override this method to update user data or perform other actions when an existing user attempts to register again via the frontend registration flow. For example, an integration might want to link the existing user account to the integration, record a new donation for a returning donor, or log this event for analytics purposes.
@@ -1058,56 +1107,189 @@ abstract class Integration {
 	}
 
 	/**
+	 * Get the enabled outgoing metadata field ids for this integration.
+	 *
+	 * Lazily migrates stored display names (pre-coexistence format) to
+	 * version-qualified field ids and writes the option back — skipped when
+	 * any stored name fails to resolve, so migration can retry on a later
+	 * read instead of permanently losing that entry. Ids themselves are never
+	 * rewritten to a different field: a stored id is the publisher's field,
+	 * and both members of a value-equivalent pair produce the same payload.
+	 * The one exception is a retired id from a raw-key rename (see
+	 * Field_Registry::LEGACY_ID_REMAP), which is resolved to its current id —
+	 * still the same field, just spelled as it is stored today — without a
+	 * write-back unless a name migration is writing the option back anyway.
+	 *
+	 * An integration that never saved a selection inherits one — see
+	 * get_inherited_outgoing_field_ids(). An explicitly saved selection
+	 * always wins, including an empty one (NPPD-2107).
+	 *
+	 * @return string[] List of enabled field ids.
+	 */
+	public function get_enabled_outgoing_field_ids() {
+		$stored = \get_option( self::OUTGOING_FIELDS_OPTION_PREFIX . $this->id, false );
+		if ( ! is_array( $stored ) ) {
+			// Absent or corrupt: inherit rather than fail closed to empty,
+			// which would silently stop syncing every field. A stored empty
+			// array (the admin deselected everything) still means none.
+			return $this->get_inherited_outgoing_field_ids();
+		}
+		if ( empty( $stored ) ) {
+			return [];
+		}
+
+		$needs_migration = false;
+		foreach ( $stored as $entry ) {
+			if ( ! Sync\Field_Registry::is_field_id( $entry ) ) {
+				$needs_migration = true;
+				break;
+			}
+		}
+		if ( ! $needs_migration ) {
+			return array_values( array_unique( array_map( [ Sync\Field_Registry::class, 'remap_legacy_id' ], $stored ) ) );
+		}
+
+		$ids            = [];
+		$has_unresolved = false;
+		foreach ( $stored as $entry ) {
+			if ( Sync\Field_Registry::is_field_id( $entry ) ) {
+				$ids[] = Sync\Field_Registry::remap_legacy_id( $entry );
+				continue;
+			}
+			// A display name may be shared by several raw keys (legacy
+			// "Registration Page"); resolve to all of them.
+			$definitions = Sync\Field_Registry::resolve_name( (string) $entry );
+			if ( empty( $definitions ) ) {
+				$has_unresolved = true;
+				// newspack_log (not Logger::log(), a no-op at the default log
+				// level) so the repeating unresolved migration is visible to
+				// Newspack Manager — but once per option per request. This read
+				// runs once per contact plus once per push-capable integration
+				// in class scoping, and the condition (a name whose declaring
+				// plugin is deactivated) persists until someone fixes it, so
+				// logging per read would bury a site's other alerts under a
+				// backfill.
+				$seen_key = $this->id . '|' . $entry;
+				if ( ! isset( self::$logged_unresolved_entries[ $seen_key ] ) ) {
+					self::$logged_unresolved_entries[ $seen_key ] = true;
+					Logger::newspack_log(
+						'outgoing_fields_migration_unresolved',
+						sprintf( 'Outgoing fields migration: no definition found for "%s" in integration "%s".', $entry, $this->id ),
+						[
+							'integration_id' => $this->id,
+							'entry'          => (string) $entry,
+						],
+						'warning'
+					);
+				}
+			}
+			foreach ( $definitions as $definition ) {
+				$ids[] = $definition['id'];
+			}
+		}
+		$ids = array_values( array_unique( $ids ) );
+
+		// Write back only when every entry resolved — a reduced list would
+		// permanently drop a name whose declaring plugin is temporarily
+		// inactive (e.g. newspack-network); leave it for migration to retry.
+		if ( ! $has_unresolved ) {
+			\update_option( self::OUTGOING_FIELDS_OPTION_PREFIX . $this->id, $ids, false );
+		}
+		return $ids;
+	}
+
+	/**
+	 * Get the default outgoing metadata field ids for this integration.
+	 *
+	 * A safety net, not the normal path: the ESP integration's selection is
+	 * normally materialised at activation or first read (see
+	 * Field_Registry::seed_default_field_selections()) and inherited by
+	 * every other integration. This only answers when seeding stored
+	 * nothing, or for an integration built outside the registry — and it
+	 * returns exactly the list seeding would have stored, so the two can
+	 * never disagree.
+	 *
+	 * Scoped to one schema version and never stored: the merged registry
+	 * would leak both schemas' names into a real push, since a non-ESP
+	 * integration can inherit this while the ESP is unconfigured.
+	 *
+	 * @return string[] List of field ids.
+	 */
+	protected function get_default_outgoing_field_ids() {
+		return Sync\Field_Registry::get_default_field_ids();
+	}
+
+	/**
+	 * The selection this integration inherits when it has never saved one of
+	 * its own.
+	 *
+	 * Every integration other than the ESP inherits the ESP integration's
+	 * effective selection, so a newly registered integration pushes what the
+	 * site already pushes rather than everything available (NPPD-2107). The
+	 * ESP itself falls back to the dynamic all-defaults set.
+	 *
+	 * Override to inherit something else, or return an empty array to opt out
+	 * of inheritance entirely (an integration that does so pushes no metadata
+	 * until an Outbound selection is saved).
+	 *
+	 * @return string[] List of inherited field ids.
+	 */
+	protected function get_inherited_outgoing_field_ids() {
+		if ( self::ESP_INTEGRATION_ID === $this->get_id() ) {
+			return $this->get_default_outgoing_field_ids();
+		}
+
+		$esp = Integrations::get_integration( self::ESP_INTEGRATION_ID );
+		if ( $esp instanceof self && $esp !== $this ) {
+			return $esp->get_enabled_outgoing_field_ids();
+		}
+
+		// Registry miss (pre-init, or a directly constructed integration —
+		// integrations register on init priority 5). Mirror the ESP's own
+		// fallback chain: the legacy global option, then the full default set,
+		// rather than failing closed to an empty selection.
+		$legacy = \get_option( Sync\Metadata::FIELDS_OPTION, null );
+		if ( is_array( $legacy ) ) {
+			$ids = [];
+			foreach ( $legacy as $name ) {
+				foreach ( Sync\Field_Registry::resolve_name( (string) $name ) as $definition ) {
+					$ids[] = $definition['id'];
+				}
+			}
+			// De-duplicated defensively: a hand-edited legacy option could
+			// repeat a name.
+			return array_values( array_unique( $ids ) );
+		}
+
+		return $this->get_default_outgoing_field_ids();
+	}
+
+	/**
 	 * Get the enabled outgoing metadata fields for this integration.
 	 *
-	 * In legacy metadata mode an integration with no saved selection of its
-	 * own inherits the ESP integration's effective selection — the set the
-	 * legacy pipeline filters by — so pre-existing legacy sites keep syncing
-	 * exactly what they did before per-integration selection existed, and
-	 * the Outbound UI reflects what is actually pushed. An explicitly saved
-	 * selection (even an empty one) always wins (NPPD-2107).
+	 * Back-compat surface: returns display names derived from the stored
+	 * field ids, for the old settings UI. Lossy for the five value-equivalent
+	 * pairs, whose two ids share one name — they collapse to that name here,
+	 * and update_enabled_outgoing_fields() re-resolves it to the surviving
+	 * v2 id, which is why re-saving an untouched legacy selection can move it
+	 * onto the pair's v2 member. The per-field UI (Phase 2) must post ids, not
+	 * names.
 	 *
-	 * Two legacy-mode caveats, accepted for this transitional schema: the
-	 * legacy pipeline upstream-filters by the ESP selection, so an explicit
-	 * selection can only narrow that set (a field the ESP integration has
-	 * disabled never syncs even when enabled here); and once a selection is
-	 * saved, only deleting the integration's option restores inheritance.
-	 *
-	 * What gets inherited is overridable — see
-	 * get_inherited_legacy_outgoing_fields().
+	 * The never-configured fallback (inheriting the ESP integration's
+	 * effective selection) lives in get_enabled_outgoing_field_ids(), so the
+	 * Outbound UI reflects what is actually pushed (NPPD-2107).
 	 *
 	 * @return string[] List of enabled field names.
 	 */
 	public function get_enabled_outgoing_fields() {
-		$stored = \get_option( self::OUTGOING_FIELDS_OPTION_PREFIX . $this->id, null );
-		if ( null !== $stored && is_array( $stored ) ) {
-			return array_values( $stored );
+		$names = [];
+		foreach ( $this->get_enabled_outgoing_field_ids() as $id ) {
+			$definition = Sync\Field_Registry::get_definition( $id );
+			if ( $definition ) {
+				$names[] = $definition['name'];
+			}
 		}
-
-		if ( 'legacy' === Sync\Metadata::get_version() && 'esp' !== $this->get_id() ) {
-			return array_values( $this->get_inherited_legacy_outgoing_fields() );
-		}
-
-		return [];
-	}
-
-	/**
-	 * The selection this integration inherits in legacy mode when it has never
-	 * saved one of its own.
-	 *
-	 * Defaults to the ESP integration's effective selection — the set the legacy
-	 * metadata pipeline filters by — so an un-migrated site keeps its existing
-	 * payloads. Sync\Metadata::get_fields() is the single definition of that
-	 * set, including its registry-miss fallbacks.
-	 *
-	 * Override to inherit something else, or return an empty array to opt out of
-	 * inheritance entirely (an integration that does so pushes no metadata until
-	 * an Outbound selection is saved).
-	 *
-	 * @return string[] List of inherited field names.
-	 */
-	protected function get_inherited_legacy_outgoing_fields() {
-		return Sync\Metadata::get_fields();
+		return array_values( array_unique( $names ) );
 	}
 
 	/**
@@ -1179,13 +1361,46 @@ abstract class Integration {
 	/**
 	 * Update the enabled outgoing metadata fields for this integration.
 	 *
-	 * @param array $fields List of field names to enable.
+	 * Accepts field ids and/or display names (the old UI posts names). A name
+	 * resolves against the merged registry deterministically: the two schemas
+	 * never contest a name, and where both spell a shared field the same way
+	 * resolution returns the surviving v2 member alone.
+	 *
+	 * Ids are stored verbatim, with no version validation: any mix of v1 and
+	 * v2 ids is storable, and both versions of a renamed field can be enabled
+	 * at once. A retired id from a raw-key rename (Field_Registry::
+	 * LEGACY_ID_REMAP) is normalized to its current id first, so a save never
+	 * re-persists a stale id even if one was carried in from a stored
+	 * selection.
+	 *
+	 * Explicit ids can therefore store both members of a pair, unlike
+	 * a name save; when that happens and both raw keys share one ESP name,
+	 * prepare_contact() resolves the collision by metadata-array order, so
+	 * the payload depends on merge order — the name path above is the
+	 * guarded one, since resolving a name always returns a single surviving
+	 * definition.
+	 *
+	 * @param array $fields List of field ids and/or names to enable.
 	 * @return bool True if updated, false otherwise.
 	 */
 	public function update_enabled_outgoing_fields( $fields ) {
-		// Only allow fields that are in the metadata keys map.
-		$fields = array_intersect( Sync\Metadata::get_default_fields(), $fields );
-		return \update_option( self::OUTGOING_FIELDS_OPTION_PREFIX . $this->id, array_values( $fields ), false );
+		$ids = [];
+		foreach ( (array) $fields as $entry ) {
+			$entry = (string) $entry;
+			if ( Sync\Field_Registry::is_field_id( $entry ) ) {
+				$entry       = Sync\Field_Registry::remap_legacy_id( $entry );
+				$definitions = array_filter( [ Sync\Field_Registry::get_definition( $entry ) ] );
+			} else {
+				$definitions = Sync\Field_Registry::resolve_name( $entry );
+			}
+			foreach ( $definitions as $definition ) {
+				if ( $definition['available'] ) {
+					$ids[] = $definition['id'];
+				}
+			}
+		}
+
+		return \update_option( self::OUTGOING_FIELDS_OPTION_PREFIX . $this->id, array_values( array_unique( $ids ) ), false );
 	}
 
 	/**
@@ -1357,15 +1572,26 @@ abstract class Integration {
 	}
 
 	/**
-	 * Prepare contact data for this integration by filtering to enabled
-	 * outgoing fields and adding the metadata prefix.
+	 * Prepare contact data for this integration by resolving enabled field
+	 * ids to prefixed ESP field names.
 	 *
-	 * In legacy mode the metadata classes return data already filtered and
-	 * prefixed — but filtered by the ESP integration's own field config, so
-	 * only the `esp` integration takes it as-is. Every other integration
-	 * still applies its enabled-outgoing selection via
-	 * prepare_contact_legacy(); otherwise an integration with an empty
-	 * Outbound selection would receive (and push) the full default field set.
+	 * Raw keys survive only when enabled; dynamic-suffix (UTM) fields match
+	 * by raw-key prefix only, never by their bare key. Schema-owned names are
+	 * collision-free by construction — no ESP name is claimed by both schemas
+	 * unless the v2 member declares the pair equivalent, and then only its own
+	 * id resolves — but a `newspack_ras_metadata_keys` callback can add or
+	 * rename a field outside that guarantee; when two raw keys then resolve to
+	 * the same output key, resolution is last-write-wins, except an
+	 * explicitly-supplied prefixed value is never overwritten.
+	 *
+	 * Already-prefixed input passes through when it matches an enabled field
+	 * or the registry doesn't recognize the name at all (custom fields from
+	 * site snippets must keep working); it is dropped only when registered
+	 * but disabled for this integration.
+	 *
+	 * Filtering is unconditional per integration, including `esp`: an
+	 * explicitly saved empty Outbound selection means no metadata fields for
+	 * anyone, not all of them (NPPD-2107).
 	 *
 	 * @param array $contact Contact data with raw metadata keys.
 	 * @return array Contact data with filtered, prefixed metadata.
@@ -1375,81 +1601,67 @@ abstract class Integration {
 			return $contact;
 		}
 
-		if ( 'legacy' === Sync\Metadata::get_version() ) {
-			return $this->prepare_contact_legacy( $contact );
-		}
+		list( $by_raw, $by_name, $dynamic ) = $this->get_prepare_contact_lookups();
 
-		$enabled_fields = $this->get_enabled_outgoing_fields();
-		$prefix         = $this->get_metadata_prefix();
-		$keys_map       = Sync\Metadata::get_keys();
-		$prepared       = [];
+		$prefix      = $this->get_metadata_prefix();
+		$passthrough = Sync\Metadata::SYNC_CONTROL_KEYS;
 
+		$prepared = [];
+		$explicit = [];
 		foreach ( $contact['metadata'] as $key => $value ) {
-			// If the key is already prefixed, keep it only when its field is both
-			// enabled and currently available — guarding against stale enabled-field
-			// names left over from a prior feature-flag-on period.
+			if ( in_array( $key, $passthrough, true ) ) {
+				$prepared[ $key ] = $value;
+				continue;
+			}
+
+			// Already-prefixed input (e.g. added by third-party filters).
 			if ( 0 === strpos( $key, $prefix ) ) {
-				$field_name = substr( $key, strlen( $prefix ) );
-				if ( in_array( $field_name, $enabled_fields, true ) && in_array( $field_name, $keys_map, true ) ) {
+				$name    = substr( $key, strlen( $prefix ) );
+				$matched = isset( $by_name[ $name ] );
+				if ( ! $matched ) {
+					foreach ( $dynamic as $definition ) {
+						if ( 0 === strpos( $name, $definition['name'] ) && $name !== $definition['name'] ) {
+							$matched = true;
+							break;
+						}
+					}
+				}
+				// Unknown to the registry entirely: an explicitly-injected
+				// custom field — pass through. Registered but not enabled
+				// here: drop, respecting the per-integration selection.
+				if ( ! $matched && ! Sync\Field_Registry::name_is_registered( $name ) ) {
+					$matched = true;
+				}
+				if ( $matched ) {
 					$prepared[ $key ] = $value;
+					$explicit[ $key ] = true;
 				}
 				continue;
 			}
 
-			// Otherwise, prefix raw keys that are in the keys map and enabled.
-			if ( isset( $keys_map[ $key ] ) && in_array( $keys_map[ $key ], $enabled_fields, true ) ) {
-				$prepared[ $prefix . $keys_map[ $key ] ] = $value;
-			}
-		}
-
-		$contact['metadata'] = $prepared;
-		return $contact;
-	}
-
-	/**
-	 * Apply this integration's outgoing-field selection to legacy-pipeline data.
-	 *
-	 * Legacy metadata arrives already prefixed and filtered — by the ESP
-	 * integration's field config. The `esp` integration therefore takes it
-	 * unchanged, but any other integration must still narrow the set to its
-	 * own enabled outgoing fields: an explicitly saved empty Outbound
-	 * selection means no metadata fields, not all of them. An integration
-	 * that never saved a selection inherits the ESP integration's effective
-	 * selection via get_enabled_outgoing_fields(), preserving pre-existing
-	 * legacy behavior (NPPD-2107).
-	 *
-	 * Matching runs against whole keys rather than de-prefixed remainders, so a
-	 * key reshaped by the `newspack_ras_metadata_key` filter still matches (see
-	 * get_legacy_enabled_key_shapes()). Unprefixed sync-control keys
-	 * (Legacy_Metadata::SYNC_CONTROL_KEYS — `status`, `status_if_new`) always
-	 * pass through; any other unprefixed key is dropped, so future unprefixed
-	 * metadata cannot bypass the outbound selection filter.
-	 *
-	 * @param array $contact Contact data with prefixed legacy metadata.
-	 * @return array Contact data with metadata narrowed to enabled fields.
-	 */
-	private function prepare_contact_legacy( array $contact ): array {
-		if ( 'esp' === $this->get_id() ) {
-			return $contact;
-		}
-
-		[ $exact_keys, $utm_prefixes ] = $this->get_legacy_enabled_key_shapes();
-		$prepared                      = [];
-
-		foreach ( $contact['metadata'] as $key => $value ) {
-			if ( in_array( $key, Sync\Legacy_Metadata::SYNC_CONTROL_KEYS, true ) ) {
-				$prepared[ $key ] = $value;
+			// Raw key, exact match. Raw-vs-raw keeps last-write-wins (legacy
+			// parity for same-name siblings like registration_page /
+			// current_page_url); only explicitly-supplied prefixed values are
+			// protected from being overwritten.
+			if ( isset( $by_raw[ $key ] ) ) {
+				$out = $prefix . $by_raw[ $key ]['name'];
+				if ( ! isset( $explicit[ $out ] ) ) {
+					$prepared[ $out ] = $value;
+				}
 				continue;
 			}
-			if ( isset( $exact_keys[ $key ] ) ) {
-				$prepared[ $key ] = $value;
-				continue;
-			}
-			foreach ( $utm_prefixes as $utm_prefix ) {
-				// A UTM label only carries its own suffixed sub-keys, never a
-				// bare re-match of itself (that is the exact-key case above).
-				if ( 0 === strpos( $key, $utm_prefix ) && strlen( $key ) > strlen( $utm_prefix ) ) {
-					$prepared[ $key ] = $value;
+
+			// Raw key, dynamic suffix (e.g. signup_page_utm_source).
+			foreach ( $dynamic as $definition ) {
+				$raw_prefix = $definition['raw_key'] . '_';
+				if ( 0 === strpos( $key, $raw_prefix ) ) {
+					$suffix = substr( $key, strlen( $raw_prefix ) );
+					if ( '' !== trim( $suffix ) ) {
+						$out = $prefix . $definition['name'] . $suffix;
+						if ( ! isset( $explicit[ $out ] ) ) {
+							$prepared[ $out ] = $value;
+						}
+					}
 					break;
 				}
 			}
@@ -1460,68 +1672,69 @@ abstract class Integration {
 	}
 
 	/**
-	 * Build the legacy-mode match shapes for this integration's enabled fields.
+	 * The three lookup tables prepare_contact() resolves against: raw key =>
+	 * definition, ESP name => definition, and the dynamic-suffix definitions.
 	 *
-	 * Returns two sets of whole keys, both built with the legacy pipeline's own
-	 * prefix (Sync\Metadata::get_prefix() — the one the data actually carries,
-	 * not this integration's own, which may differ):
+	 * Memoized because prepare_contact() runs once per contact per
+	 * integration, and a backfill walks the whole user table. The tables
+	 * depend only on the stored id list, so that is the cache key.
+	 * Field_Registry's own definitions are frozen for the lifetime of the
+	 * request once first computed, so these lookups can never disagree with
+	 * the registry; Field_Registry::reset() exists to isolate test cases,
+	 * not as a production invalidation path.
 	 *
-	 * - exact keys, matched by identity;
-	 * - UTM prefixes, matched by prefix with a non-empty remainder.
-	 *
-	 * Each enabled label contributes both the key Sync\Metadata::get_key()
-	 * produces (so a key reshaped by the `newspack_ras_metadata_key` filter
-	 * still matches) and the plain `prefix . label` shape (so a label absent
-	 * from the current key map still matches as it did before).
-	 *
-	 * Only the raw keys in Legacy_Metadata::UTM_RAW_KEYS get prefix-match
-	 * semantics. `newspack_ras_metadata_keys` lets any plugin register labels,
-	 * and a registered label ending in `': '` that happened to prefix another
-	 * label would otherwise carry that other field past the selection.
-	 *
-	 * @return array{0: array<string, true>, 1: string[]} Exact-key set and UTM prefixes.
+	 * @return array{0: array, 1: array, 2: array[]} By raw key, by name, dynamic.
 	 */
-	private function get_legacy_enabled_key_shapes(): array {
-		$enabled_fields = $this->get_enabled_outgoing_fields();
-		$prefix         = Sync\Metadata::get_prefix();
-		$keys_map       = Sync\Metadata::get_keys();
-		$exact_keys     = [];
-		$utm_prefixes   = [];
+	private function get_prepare_contact_lookups() {
+		$ids = $this->get_enabled_outgoing_field_ids();
+		$key = $this->id . '|' . md5( implode( "\n", $ids ) );
+		if ( isset( self::$prepare_contact_lookups[ $key ] ) ) {
+			return self::$prepare_contact_lookups[ $key ];
+		}
 
-		$utm_labels = [];
-		foreach ( Sync\Legacy_Metadata::UTM_RAW_KEYS as $utm_raw_key ) {
-			if ( isset( $keys_map[ $utm_raw_key ] ) ) {
-				$utm_labels[] = $keys_map[ $utm_raw_key ];
+		$by_raw  = [];
+		$by_name = [];
+		$dynamic = [];
+		foreach ( $ids as $id ) {
+			$definition = Sync\Field_Registry::get_definition( $id );
+			if ( ! $definition ) {
+				continue;
+			}
+			// Dynamic-suffix fields are only ever matched with a suffix, so they
+			// are deliberately kept out of the exact-match lookups.
+			if ( $definition['dynamic_suffix'] ) {
+				$dynamic[] = $definition;
+				continue;
+			}
+			$by_raw[ $definition['raw_key'] ] = $definition;
+			$by_name[ $definition['name'] ]   = $definition;
+			// The other member of a value-equivalent pair aliases its raw key
+			// onto whichever member is enabled: callers hand-build contacts in
+			// either spelling (the deletion connector passes legacy `account`),
+			// and both mean the same field.
+			foreach ( Sync\Field_Registry::get_equivalent_input_raw_keys( $id ) as $alias_raw_key ) {
+				if ( ! isset( $by_raw[ $alias_raw_key ] ) ) {
+					$by_raw[ $alias_raw_key ] = $definition;
+				}
 			}
 		}
 
-		foreach ( $keys_map as $raw_key => $label ) {
-			if ( ! in_array( $label, $enabled_fields, true ) ) {
-				continue;
-			}
-			$filtered_key = Sync\Metadata::get_key( $raw_key );
-			if ( ! is_string( $filtered_key ) || '' === $filtered_key ) {
-				continue;
-			}
-			if ( in_array( $raw_key, Sync\Legacy_Metadata::UTM_RAW_KEYS, true ) ) {
-				$utm_prefixes[] = $filtered_key;
-			} else {
-				$exact_keys[ $filtered_key ] = true;
-			}
-		}
+		self::$prepare_contact_lookups[ $key ] = [ $by_raw, $by_name, $dynamic ];
+		return self::$prepare_contact_lookups[ $key ];
+	}
 
-		foreach ( $enabled_fields as $label ) {
-			if ( ! is_string( $label ) || '' === $label ) {
-				continue;
-			}
-			if ( in_array( $label, $utm_labels, true ) ) {
-				$utm_prefixes[] = $prefix . $label;
-			} else {
-				$exact_keys[ $prefix . $label ] = true;
-			}
-		}
-
-		return [ $exact_keys, array_values( array_unique( $utm_prefixes ) ) ];
+	/**
+	 * Drop every memoized prepare_contact() lookup table, and the record of
+	 * which unresolvable stored names have already been reported.
+	 *
+	 * Called from Field_Registry::reset(), the one thing that can change what
+	 * a given id list — or a given stored name — resolves to.
+	 *
+	 * @return void
+	 */
+	public static function flush_prepare_contact_lookups() {
+		self::$prepare_contact_lookups   = [];
+		self::$logged_unresolved_entries = [];
 	}
 
 	/**
@@ -1674,8 +1887,11 @@ abstract class Integration {
 		$migrated = 'sync_account_deletion' === $key
 			? true
 			: ( \wp_validate_boolean( $legacy_value ) && $this->supports_hard_delete() ? 'delete' : 'flag' );
-		// Persist directly to avoid re-running the migration on every read.
-		\update_option( $option_name, $migrated );
+		// Persist directly to avoid re-running the migration on every read, and
+		// out of the autoload cache like every other per-integration setting —
+		// this creates two options per push-capable integration on every legacy
+		// site, none of them needed on a normal request.
+		\update_option( $option_name, $migrated, false );
 		return $migrated;
 	}
 

@@ -151,6 +151,7 @@ class Contact_Sync extends Sync {
 	public static function init_hooks() {
 		add_action( 'newspack_scheduled_esp_sync', [ __CLASS__, 'scheduled_sync' ], 10, 2 );
 		add_action( 'shutdown', [ __CLASS__, 'run_queued_syncs' ] );
+		add_action( 'newspack_activation', [ Sync\Field_Registry::class, 'seed_default_field_selections' ] );
 		add_action( self::RETRY_HOOK, [ __CLASS__, 'execute_integration_retry' ] );
 		add_action( self::RETRY_DELETION_HOOK, [ __CLASS__, 'execute_deletion_retry' ] );
 		add_action( 'action_scheduler_begin_execute', [ __CLASS__, 'set_current_as_action_id' ] );
@@ -231,10 +232,11 @@ class Contact_Sync extends Sync {
 		}
 
 		// Added logging here to more easily monitor integration sync data. Can be removed once integrations are released.
-		if ( 'legacy' !== Metadata::get_version() ) {
-			Logger::log( sprintf( 'Syncing contact %s for context "%s".', $contact['email'] ?? 'unknown', $context ) );
-			Logger::log( $contact );
-		}
+		// The summary line names the reader, so it is gated at the same level as
+		// the payload itself rather than emitting an email address into the log
+		// once per contact at level 1.
+		Logger::log_payload( sprintf( 'Syncing contact %s for context "%s".', $contact['email'] ?? 'unknown', $context ) );
+		Logger::log_payload( $contact );
 
 		return self::push_to_integrations( $contact, $context, $existing_contact, $options );
 	}
@@ -294,7 +296,8 @@ class Contact_Sync extends Sync {
 				}
 				// UTM-style labels end in ": " and match any suffixed key (e.g. "Signup UTM: source").
 				// This trailing-": " shape is the contract defined by the UTM labels in
-				// Legacy_Metadata::get_basic_fields() ("Signup UTM: ", "Payment UTM: ").
+				// Legacy_Basic::get_fields() ("Signup UTM: ") and
+				// Legacy_Payment::get_fields() ("Payment UTM: ").
 				if ( ': ' === substr( $label, -2 ) && 0 === strpos( $remainder, $label ) ) {
 					$filtered[ $key ] = $value;
 					break;
@@ -364,10 +367,10 @@ class Contact_Sync extends Sync {
 			$integration_contact = self::prepare_contact_for_integration( $integration, $contact, $options );
 
 			// Added logging here to more easily monitor integration sync data. Can be removed once integrations are released.
-			if ( 'legacy' !== Metadata::get_version() ) {
-				Logger::log( sprintf( 'Syncing contact %s for integration %s with context "%s".', $integration_contact['email'] ?? 'unknown', $integration_id, $context ) );
-				Logger::log( $integration_contact );
-			}
+			// Email-free at level 1; the named line rides the payload threshold.
+			Logger::log( sprintf( 'Syncing contact for integration %s with context "%s".', $integration_id, $context ) );
+			Logger::log_payload( sprintf( 'Syncing contact %s for integration %s with context "%s".', $integration_contact['email'] ?? 'unknown', $integration_id, $context ) );
+			Logger::log_payload( $integration_contact );
 
 			$result = $integration->push_contact_data( $integration_contact, $context, $existing_contact, $options );
 			if ( \is_wp_error( $result ) ) {
@@ -435,13 +438,27 @@ class Contact_Sync extends Sync {
 	 * - sync_account_deletion=false → skip this integration entirely.
 	 * - sync_account_deletion=true + handling='delete' → call $integration->delete_contact($email).
 	 * - sync_account_deletion=true + handling='flag' → push the contact with the
-	 *   `account_deleted` metadata field set to an ISO8601 timestamp.
+	 *   `account_deleted` metadata field set to an ISO8601 timestamp, then call
+	 *   $integration->flag_deletion_cleanup($email) so the integration can stop
+	 *   further outreach (e.g. the ESP removes the contact from all lists) while
+	 *   keeping the flagged record.
 	 *
 	 * The WP user no longer exists by the time this runs, so the standard
 	 * push_to_integrations() retry path (which keys retries on user_id) is
-	 * not used. Transient ESP errors are retried via RETRY_DELETION_HOOK with
-	 * a payload keyed on email + mode so a 5xx/429 doesn't strand the contact
-	 * in undeleted state (a GDPR exposure for "right to be forgotten" flows).
+	 * not used. Transient errors from delete_contact() or the flag-mode push
+	 * are retried via RETRY_DELETION_HOOK with a payload keyed on email + mode
+	 * so a 5xx/429 doesn't strand the contact in undeleted state (a GDPR
+	 * exposure for "right to be forgotten" flows).
+	 *
+	 * flag_deletion_cleanup() failures log and alert, AND feed the same retry
+	 * loop: a transient error there would otherwise leave the reader still
+	 * subscribed with nothing scheduled to try again. The retry is the
+	 * idempotent flag retry, which re-runs cleanup after its push, so a
+	 * completed list-removal can't be silently reversed by the delayed upsert
+	 * either. Only when the push ALSO failed is the cleanup error merely
+	 * classified rather than scheduled — the push failure has already
+	 * scheduled the same retry, and scheduling it twice would double the
+	 * traffic against a provider that is already struggling.
 	 *
 	 * @param string $email   Email of the deleted reader.
 	 * @param array  $contact Contact data to push in flag mode (email + metadata).
@@ -603,6 +620,7 @@ class Contact_Sync extends Sync {
 							'context'        => $context,
 							'reason'         => $result->get_error_message(),
 							'mode'           => 'flag',
+							'stage'          => 'push',
 							'error_class'    => $error_class,
 						]
 					);
@@ -618,6 +636,48 @@ class Contact_Sync extends Sync {
 						\ActionScheduler_Logger::instance()->log(
 							self::$current_as_action_id,
 							sprintf( 'Flag-push succeeded for integration "%s" of %s.', $integration_id, $email )
+						);
+					}
+				}
+
+				// Runs regardless of whether the push above succeeded: list cleanup is
+				// independent of whether the Account_Deleted/Membership_Status
+				// metadata landed. A cleanup failure must retry like a push failure
+				// would (else a transient error leaves the reader subscribed with no
+				// retry), so it reuses the same idempotent flag retry, which also
+				// re-runs cleanup on success.
+				$cleanup_result = $integration->flag_deletion_cleanup( $email );
+				if ( \is_wp_error( $cleanup_result ) ) {
+					$errors[] = sprintf( '[%s] %s', $integration_id, $cleanup_result->get_error_message() );
+					static::log( sprintf( 'Flag-deletion cleanup failed for integration "%s" of %s: %s', $integration_id, $email, $cleanup_result->get_error_message() ) );
+					$cleanup_error_class = \is_wp_error( $result )
+						? self::classify_error( $cleanup_result, 'deletion' )
+						: self::schedule_deletion_retry( $integration_id, 'flag', $email, $integration_contact, $context, 0, $cleanup_result );
+					/** This action is documented above in the 'delete' branch of this method. */
+					do_action(
+						'newspack_sync_contact_failed',
+						[
+							'integration_id' => $integration_id,
+							'contact'        => $flag_contact,
+							'context'        => $context,
+							'reason'         => $cleanup_result->get_error_message(),
+							'mode'           => 'flag',
+							'stage'          => 'cleanup',
+							'error_class'    => $cleanup_error_class,
+						]
+					);
+					if ( self::$current_as_action_id ) {
+						\ActionScheduler_Logger::instance()->log(
+							self::$current_as_action_id,
+							sprintf( 'Flag-deletion cleanup failed for integration "%s" of %s: %s', $integration_id, $email, $cleanup_result->get_error_message() )
+						);
+					}
+				} else {
+					static::log( sprintf( 'Flag-deletion cleanup succeeded for integration "%s" of %s.', $integration_id, $email ) );
+					if ( self::$current_as_action_id ) {
+						\ActionScheduler_Logger::instance()->log(
+							self::$current_as_action_id,
+							sprintf( 'Flag-deletion cleanup succeeded for integration "%s" of %s.', $integration_id, $email )
 						);
 					}
 				}
@@ -899,9 +959,11 @@ class Contact_Sync extends Sync {
 
 		static::log( sprintf( 'Executing retry %d/%d for integration "%s" sync of user %d (%s).', $retry_count, self::MAX_RETRIES, $integration_id, $user_id, $contact['email'] ?? 'unknown' ) );
 
+		// get_contact_data() already normalizes the contact; normalizing again
+		// here would fire `newspack_esp_sync_normalize_contact` a second time
+		// per retry, double-applying any non-idempotent publisher callback.
 		/** This filter is documented in includes/reader-activation/sync/class-contact-sync.php */
 		$contact = \apply_filters( 'newspack_esp_sync_contact', $contact, $context );
-		$contact = Sync\Metadata::normalize_contact_data( $contact );
 
 		// Reconstruct existing_contact for email-change retries so integrations
 		// can upsert against the previous email address.
@@ -1123,7 +1185,7 @@ class Contact_Sync extends Sync {
 			'integration_id' => $integration_id,
 			'mode'           => $mode,
 			'email'          => $email,
-			'contact'        => $contact,
+			'contact'        => 'flag' === $mode ? self::trim_flag_retry_contact( $integration_id, $contact ) : $contact,
 			'context'        => $context,
 			'retry_count'    => $next_retry,
 			'max_retries'    => self::MAX_RETRIES,
@@ -1150,6 +1212,42 @@ class Contact_Sync extends Sync {
 			)
 		);
 		return $error_class;
+	}
+
+	/**
+	 * Reduce a flag-mode contact to what the retry actually has to deliver:
+	 * the email plus the two system deletion flags.
+	 *
+	 * The retry's job is landing `Account_Deleted` and `Membership_Status`.
+	 * Everything else in the prepared payload is the erased reader's profile
+	 * data, and Action Scheduler would hold it through up to five retries plus
+	 * the ~30-day completed-action retention — inside a right-to-be-forgotten
+	 * flow. Trimming changes nothing about the delivered signal.
+	 *
+	 * @param string $integration_id Integration the retry targets.
+	 * @param array  $contact        Prepared flag-mode contact.
+	 *
+	 * @return array Trimmed contact.
+	 */
+	private static function trim_flag_retry_contact( $integration_id, $contact ) {
+		if ( ! is_array( $contact ) ) {
+			return [];
+		}
+		$integration = Integrations::get_integration( $integration_id );
+		$prefix      = $integration ? $integration->get_metadata_prefix() : '';
+		$metadata    = isset( $contact['metadata'] ) && is_array( $contact['metadata'] ) ? $contact['metadata'] : [];
+
+		$kept = [];
+		foreach ( [ $prefix . 'Account_Deleted', $prefix . 'Membership_Status' ] as $flag_key ) {
+			if ( isset( $metadata[ $flag_key ] ) ) {
+				$kept[ $flag_key ] = $metadata[ $flag_key ];
+			}
+		}
+
+		return [
+			'email'    => $contact['email'] ?? '',
+			'metadata' => $kept,
+		];
 	}
 
 	/**
@@ -1249,6 +1347,41 @@ class Contact_Sync extends Sync {
 			static::log( $success_message );
 			if ( self::$current_as_action_id ) {
 				\ActionScheduler_Logger::instance()->log( self::$current_as_action_id, $success_message );
+			}
+
+			// handle_account_deletion() already ran cleanup once, regardless of push
+			// outcome; without a re-run here, a successful retry upsert could
+			// silently re-subscribe a reader whose lists cleanup already cleared.
+			// Re-running is idempotent. A cleanup failure here doesn't fail this
+			// retry (the push landed) but schedules another flag retry, bounded by
+			// the shared retry count.
+			if ( 'flag' === $mode ) {
+				$cleanup_result = $integration->flag_deletion_cleanup( $email );
+				if ( \is_wp_error( $cleanup_result ) ) {
+					$cleanup_error_message = sprintf(
+						'Flag-deletion cleanup failed for integration "%s" of %s on retry %d: %s',
+						$integration_id,
+						$email,
+						$retry_count,
+						$cleanup_result->get_error_message()
+					);
+					static::log( $cleanup_error_message );
+					if ( self::$current_as_action_id ) {
+						\ActionScheduler_Logger::instance()->log( self::$current_as_action_id, $cleanup_error_message );
+					}
+					self::schedule_deletion_retry( $integration_id, 'flag', $email, $contact, $context, $retry_count, $cleanup_result );
+				} else {
+					$cleanup_success_message = sprintf(
+						'Flag-deletion cleanup succeeded for integration "%s" of %s on retry %d.',
+						$integration_id,
+						$email,
+						$retry_count
+					);
+					static::log( $cleanup_success_message );
+					if ( self::$current_as_action_id ) {
+						\ActionScheduler_Logger::instance()->log( self::$current_as_action_id, $cleanup_success_message );
+					}
+				}
 			}
 		}
 	}
