@@ -30,14 +30,17 @@ add_action( 'after_setup_theme', 'newspack_woocommerce_setup' );
  * Whether the current request needs the theme's WooCommerce styles.
  *
  * Two complementary checks, not alternatives. The native WooCommerce routes are
- * matched here directly; everything else (a WooCommerce shortcode or block
- * embedded in an ordinary page) is answered by newspack-plugin's detector,
- * which reports false on those native routes by design. Replacing the route
- * checks with the detector would therefore unstyle the shop, cart, checkout and
- * account pages.
+ * matched here directly; a WooCommerce shortcode or block embedded in an
+ * ordinary page is answered by newspack-plugin's detector, which reads the
+ * queried post's content and the active block widgets. The detector cannot
+ * replace the route checks: on the shop, a product archive or a single product
+ * the queried object carries no WooCommerce markup of its own, so it finds
+ * nothing and those pages would lose their styling.
  *
- * The detector errs towards true when it cannot tell, which here costs an
- * unneeded stylesheet rather than an unstyled page.
+ * Where the detector cannot see the content it answers false, so this covers a
+ * shortcode in the queried page's own content and not one arriving from an
+ * archive loop, a classic text widget, or a `the_content` filter. It answers
+ * true rather than false only when its own scan throws.
  *
  * @return bool True when the theme's WooCommerce stylesheet should be enqueued.
  */
@@ -75,8 +78,8 @@ function newspack_request_needs_woocommerce_styles(): bool {
  * Add theme's WooCommerce styles.
  *
  * The theme drops WooCommerce's own `woocommerce-general` stylesheet for every
- * request, so anything this does not enqueue for renders with no storefront
- * styling at all.
+ * request, so anything this does not enqueue for keeps WooCommerce's layout and
+ * responsive rules and loses its skin.
  *
  * @return void
  */
