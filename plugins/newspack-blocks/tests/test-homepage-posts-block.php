@@ -699,4 +699,72 @@ class HomepagePostsBlockTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 
 		unset( $GLOBALS['post'] );
 	}
+
+	/**
+	 * The subtitle allowlist keeps the inline formatting an editor may write.
+	 */
+	public function test_sanitize_post_subtitle_keeps_allowed_markup() {
+		self::assertSame(
+			'A <em>real</em> <strong>subtitle</strong>',
+			Newspack_Blocks::sanitize_post_subtitle( 'A <em>real</em> <strong>subtitle</strong>' ),
+			'Allowed inline tags survive sanitization.'
+		);
+		self::assertSame(
+			'<a href="https://example.com" target="_blank" rel="noopener">Link</a>',
+			Newspack_Blocks::sanitize_post_subtitle( '<a href="https://example.com" target="_blank" rel="noopener">Link</a>' ),
+			'A link keeps href, target and rel.'
+		);
+	}
+
+	/**
+	 * Markup outside the allowlist is removed rather than escaped, so nothing reaches
+	 * the editor component that assigns this value as HTML.
+	 */
+	public function test_sanitize_post_subtitle_removes_disallowed_markup() {
+		$sanitized = Newspack_Blocks::sanitize_post_subtitle( '<img src=x onerror="STEAL()">' );
+
+		self::assertStringNotContainsString( '<img', $sanitized, 'A disallowed element is removed.' );
+		self::assertStringNotContainsString( 'STEAL', $sanitized, 'Its handler goes with it.' );
+		self::assertStringNotContainsString(
+			'onmouseover',
+			Newspack_Blocks::sanitize_post_subtitle( '<em onmouseover="STEAL()">hover</em>' ),
+			'An event handler on an allowed element is stripped.'
+		);
+	}
+
+	/**
+	 * The editor endpoint returns the whole registered-meta bag, and the Homepage Posts
+	 * editor component assigns the subtitle as HTML. A value stored while the theme had
+	 * no sanitize_callback is still raw in the database, so the endpoint filters it.
+	 */
+	public function test_editor_posts_endpoint_sanitizes_post_subtitle() {
+		// Registered without a sanitize_callback on purpose: this is the pre-fix theme,
+		// and therefore the state of every subtitle stored before the fix ships.
+		register_post_meta(
+			'post',
+			'newspack_post_subtitle',
+			[
+				'show_in_rest' => true,
+				'single'       => true,
+				'type'         => 'string',
+			]
+		);
+		$post_id = self::factory()->post->create( [ 'post_status' => 'publish' ] );
+		update_post_meta( $post_id, 'newspack_post_subtitle', '<em>Kept</em><img src=x onerror="STEAL()">' );
+		wp_set_current_user( self::factory()->user->create( [ 'role' => 'administrator' ] ) );
+
+		$request = new WP_REST_Request( 'GET', '/newspack-blocks/v1/newspack-blocks-posts' );
+		$request->set_param( 'postsToShow', 10 );
+		$posts = rest_do_request( $request )->get_data();
+
+		$posts_by_id = array_column( $posts, null, 'id' );
+		self::assertArrayHasKey( $post_id, $posts_by_id, 'The endpoint returns the carrier post.' );
+
+		$subtitle = $posts_by_id[ $post_id ]['meta']['newspack_post_subtitle'];
+		self::assertStringNotContainsString( 'onerror', $subtitle, 'The payload does not reach the editor.' );
+		self::assertStringNotContainsString( '<img', $subtitle, 'The disallowed element does not reach the editor.' );
+		self::assertStringContainsString( '<em>Kept</em>', $subtitle, 'Allowed formatting still reaches the editor.' );
+
+		unregister_post_meta( 'post', 'newspack_post_subtitle' );
+	}
 }

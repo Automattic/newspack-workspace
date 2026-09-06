@@ -17,6 +17,85 @@ import { dateI18n, getSettings } from '@wordpress/date';
  */
 import { POSTS_INSERTER_BLOCK_NAME } from './consts';
 
+/**
+ * Inline tags a post subtitle may carry, and the attributes allowed on each.
+ * Mirrors newspack_get_post_subtitle_allowed_tags() in newspack-theme.
+ * TODO: Keep in sync with that list.
+ */
+const SUBTITLE_ALLOWED_TAGS = {
+	b: [],
+	strong: [],
+	i: [],
+	em: [],
+	mark: [],
+	u: [],
+	small: [],
+	sub: [],
+	sup: [],
+	a: [ 'href', 'target', 'rel' ],
+};
+
+/** Attributes carrying a URL, which need a protocol check on top of the allowlist. */
+const SUBTITLE_URL_ATTRS = [ 'href' ];
+
+/**
+ * Limits a subtitle to the allowed inline tags before it becomes block content.
+ *
+ * The subtitle is post meta, which kses does not filter, and this turns it into a
+ * core/heading attribute that is serialized into the newsletter's own post_content --
+ * so an unfiltered value is copied into a second post rather than merely displayed.
+ * The theme sanitizes on write; values stored before it did still arrive raw.
+ *
+ * @param {string} html Raw subtitle.
+ * @return {string} Subtitle limited to the allowed inline tags.
+ */
+export const sanitizeSubtitle = html => {
+	const parsed = new DOMParser().parseFromString( html, 'text/html' );
+
+	const walk = node => {
+		let i = 0;
+		while ( i < node.childNodes.length ) {
+			const child = node.childNodes[ i ];
+			if ( child.nodeType !== Node.ELEMENT_NODE ) {
+				i++;
+				continue;
+			}
+			const allowedAttrs = SUBTITLE_ALLOWED_TAGS[ child.tagName.toLowerCase() ];
+			if ( allowedAttrs === undefined ) {
+				// Unwrap rather than drop, so a disallowed element's text survives. Don't
+				// advance: the promoted children now sit at this index.
+				child.replaceWith( ...Array.from( child.childNodes ) );
+				continue;
+			}
+			Array.from( child.attributes ).forEach( attr => {
+				if ( ! allowedAttrs.includes( attr.name ) ) {
+					child.removeAttribute( attr.name );
+				}
+			} );
+			SUBTITLE_URL_ATTRS.forEach( urlAttr => {
+				if ( ! child.hasAttribute( urlAttr ) ) {
+					return;
+				}
+				const value = child.getAttribute( urlAttr ).trim();
+				let safe = false;
+				try {
+					safe = [ 'http:', 'https:', 'mailto:', 'tel:' ].includes( new URL( value, 'https://x' ).protocol );
+				} catch ( e ) {
+					safe = /^[#/]/.test( value );
+				}
+				if ( ! safe ) {
+					child.removeAttribute( urlAttr );
+				}
+			} );
+			walk( child );
+			i++;
+		}
+	};
+
+	walk( parsed.body );
+	return parsed.body.innerHTML;
+};
+
 const assignFontSize = ( fontSize, attributes ) => {
 	if ( typeof fontSize === 'number' ) {
 		fontSize = fontSize + 'px';
@@ -47,7 +126,7 @@ const getDateBlockTemplate = ( post, { textFontSize, textColor } ) => {
 };
 
 const getSubtitleBlockTemplate = ( post, { subHeadingFontSize, subHeadingColor } ) => {
-	const subtitle = post?.meta?.newspack_post_subtitle || '';
+	const subtitle = sanitizeSubtitle( post?.meta?.newspack_post_subtitle || '' );
 	const attributes = {
 		level: 4,
 		content: subtitle.trim(),
