@@ -1909,6 +1909,21 @@ function wc_get_product( $product_id ) {
 	global $products_database;
 	return $products_database[ $product_id ] ?? false;
 }
+if ( ! function_exists( 'wc_get_page_screen_id' ) ) {
+	/**
+	 * Mirror of wc_get_page_screen_id() on an HPOS site, where order admin screens
+	 * live on the wc-orders page instead of the shop_order post screens. Modelling
+	 * the HPOS answer is the point: the legacy answer ('shop_order') is a screen id
+	 * code under test can, and does, check without this helper.
+	 *
+	 * @param string $for Name of the resource.
+	 * @return string Screen id.
+	 */
+	function wc_get_page_screen_id( $for ) {
+		$for = str_replace( '-', '_', $for );
+		return 'woocommerce_page_wc-orders' . ( 'shop_order' === $for ? '' : '--' . $for );
+	}
+}
 if ( ! function_exists( 'get_woocommerce_currency' ) ) {
 	function get_woocommerce_currency() {
 		return 'USD';
