@@ -399,6 +399,11 @@ jobs:
         env:
           SLACK_CHANNEL_ID: ${{ secrets.SLACK_CHANNEL_ID }}
           SLACK_AUTH_TOKEN: ${{ secrets.SLACK_AUTH_TOKEN }}
+          # For the `gh` calls that open and supersede a conflict-escalation PR.
+          # git alone works here because actions/checkout persists this same
+          # credential, but gh reads the environment, so without this it is
+          # unauthenticated and every escalation silently no-ops.
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
         run: ./.github/scripts/post-release.sh
 
   # WP.org deploys are plugin-specific and only run on the release branch.
