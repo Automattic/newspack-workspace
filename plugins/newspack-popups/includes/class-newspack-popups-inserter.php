@@ -293,6 +293,71 @@ final class Newspack_Popups_Inserter {
 	}
 
 	/**
+	 * Blocks whose text USED to be counted when positioning a prompt, until Gutenberg
+	 * moved that text out of the block's own innerHTML and into inner blocks:
+	 *
+	 * - `core/list`    WP 6.0 — items became `core/list-item` inner blocks.
+	 * - `core/quote`   WP 6.0 — quoted prose became `core/paragraph` inner blocks.
+	 * - `core/gallery` WP 5.9 — captions moved into `core/image` inner blocks.
+	 *
+	 * Counting these again restores the pre-refactor calculation, so it is a repair
+	 * rather than a change of behaviour. See NPPM-596.
+	 *
+	 * Blocks that were NEVER counted are deliberately absent, even though their text
+	 * also lives in inner blocks — `core/media-text` and `core/buttons` (inner blocks
+	 * since introduction), `core/details` (WP 6.3, and its body stays collapsed until
+	 * the reader opens it), and the layout containers `core/group` / `core/columns` /
+	 * `core/cover`. Counting those would MOVE prompts on existing content rather than
+	 * restore them, which is why https://github.com/Automattic/newspack-popups/pull/855
+	 * was reverted a day after it shipped. They are tracked in NPPM-3013 as a product
+	 * decision, not an oversight. See test_insertion_leaves_container_heavy_layouts_alone.
+	 *
+	 * @var string[]
+	 */
+	const INNER_TEXT_BLOCKS = [ 'core/list', 'core/quote', 'core/gallery' ];
+
+	/**
+	 * Get the length of a block, as counted by the prompt insertion cursor.
+	 *
+	 * Inner-block text is counted only for self::INNER_TEXT_BLOCKS; see that
+	 * constant for why layout containers are excluded. The two sources are mutually
+	 * exclusive, so no text is counted twice: a legacy list holds its items in its
+	 * own innerHTML and has no inner blocks, while a modern one holds them in inner
+	 * blocks and has an empty innerHTML.
+	 *
+	 * @param array $block A block, as returned by parse_blocks().
+	 *
+	 * @return int The block's length, in stripped-of-tags bytes.
+	 */
+	public static function get_block_length( $block ) {
+		$block_content = $block['innerHTML'];
+
+		/**
+		 * Filters the blocks whose inner-block text counts towards a prompt's position.
+		 *
+		 * Returning an empty array restores the pre-NPPM-596 behaviour, in which no
+		 * inner-block text was counted and prompts drifted towards the end of posts
+		 * containing lists or quotes. That is an escape hatch for a site that had tuned
+		 * its prompt percentages against the old, inaccurate calculation and would
+		 * rather keep them where they are than re-tune.
+		 *
+		 * @param string[] $inner_text_blocks Block names whose inner text is counted.
+		 */
+		$inner_text_blocks = apply_filters( 'newspack_popups_inner_text_blocks', self::INNER_TEXT_BLOCKS );
+
+		// Filters are untyped: a non-array return must not fatal the front end.
+		if ( ! is_array( $inner_text_blocks ) ) {
+			$inner_text_blocks = [];
+		}
+
+		if ( in_array( $block['blockName'], $inner_text_blocks, true ) ) {
+			$block_content .= self::get_inner_block_content( $block );
+		}
+
+		return strlen( wp_strip_all_tags( $block_content ) );
+	}
+
+	/**
 	 * Get content from given block, including content from the block's inner blocks, if any.
 	 *
 	 * @param object $block A block.
@@ -455,7 +520,7 @@ final class Newspack_Popups_Inserter {
 					// Give length-ignored blocks a length of 1 so that prompts at 0% can still be inserted before them.
 					$pos++;
 				} else {
-					$pos += strlen( wp_strip_all_tags( $block['innerHTML'] ) );
+					$pos += self::get_block_length( $block );
 				}
 			}
 
