@@ -40,6 +40,38 @@ final class Newspack_Popups_Segmentation {
 	const DONOR_SEGMENT_QUERY_PARAM = 'np_seg_donor';
 
 	/**
+	 * Query param appended to newsletter links carrying the reader's account ID.
+	 * Its value is the ESP merge tag for the synced Account field, substituted
+	 * per recipient at send time. On arrival the ID resolves to the reader's
+	 * last-known matched segments for the browsing session.
+	 *
+	 * Unsigned, forgeable, and enumerable: drives prompt segmentation only —
+	 * never content access, analytics identity, or reader-profile writes.
+	 *
+	 * Emitted for every supported ESP, including ActiveCampaign's `%FIELD%`
+	 * syntax (unsafe when unsubstituted, NPPM-3032), because
+	 * handle_account_param() always redirects the param away before any output.
+	 */
+	const ACCOUNT_QUERY_PARAM = 'np_account';
+
+	/**
+	 * Cookie handing the resolved segment IDs to the view script, which moves
+	 * them into sessionStorage and deletes the cookie on first read. The name
+	 * must not start with `wp`, `wordpress`, or `comment_author` — Batcache
+	 * skips page cache for requests carrying such cookies.
+	 */
+	const CARRIED_SEGMENTS_COOKIE = 'np_carried_segments';
+
+	/**
+	 * Cookie value asserting the account matched no segments, distinct from an
+	 * absent cookie (no handoff). Cannot be an empty string: setcookie() sends a
+	 * deletion for an empty value regardless of `expires`, so the assertion
+	 * would never reach the browser. Never collides with a real segment ID
+	 * (positive-integer term IDs). Mirrored in carried-segments.js — keep in sync.
+	 */
+	const CARRIED_SEGMENTS_NONE = 'none';
+
+	/**
 	 * Installed version number of the custom table.
 	 */
 	const TABLE_VERSION = '1.0';
@@ -87,12 +119,20 @@ final class Newspack_Popups_Segmentation {
 		// the ESP being supported, so it's cheap to register unconditionally.
 		add_filter( 'newspack_newsletters_process_link', [ __CLASS__, 'append_donor_segment_param' ], 30, 3 );
 
+		// Append the reader's account ID to newsletter links. Self-guards on the
+		// Account field being synced, so it's cheap to register unconditionally.
+		add_filter( 'newspack_newsletters_process_link', [ __CLASS__, 'append_account_param' ], 30, 3 );
+
 		// Strip unsubstituted donor merge tags from inbound URLs. Newsletters
 		// already delivered carry tags this plugin can no longer stop emitting, and
 		// an unresolved `%FIELD%` is a malformed percent-escape that crashes
 		// consumers which decode query params strictly — see NPPM-3032. Priority 1
 		// so it runs before redirect_canonical() and before any HTML is generated.
 		add_action( 'template_redirect', [ __CLASS__, 'scrub_unsubstituted_donor_param' ], 1 );
+
+		// Resolve an inbound account ID to carried segments and redirect the param
+		// away. Priority 1: before redirect_canonical() and any HTML output.
+		add_action( 'template_redirect', [ __CLASS__, 'handle_account_param' ], 1 );
 	}
 
 	/**
@@ -242,6 +282,13 @@ final class Newspack_Popups_Segmentation {
 		if ( ! self::is_newsletter_post( $post ) ) {
 			return $url;
 		}
+		// Mailchimp's process_link() (priority 10) can hand back a bare merge-tag
+		// placeholder as the whole URL (e.g. *|UNSUB|*), which is host-less and so
+		// reads as first-party. Decorating it breaks the expanded link. Anchored
+		// match: a real URL carrying a merge tag in a query value still passes.
+		if ( self::is_unsubstituted_merge_tag( $url ) ) {
+			return $url;
+		}
 		if ( ! self::is_first_party_url( $url ) ) {
 			return $url;
 		}
@@ -277,6 +324,126 @@ final class Newspack_Popups_Segmentation {
 		// Restore the raw tag so the ESP substitutes the recipient's value at send
 		// time. An unsubstituted literal is ignored client-side, so this stays fail-safe.
 		return str_replace( urlencode( $merge_tag ), $merge_tag, $url );
+	}
+
+	/**
+	 * Filter callback: append the reader's account-ID merge tag to first-party
+	 * newsletter links. Skips when the required helpers are unavailable, the
+	 * post isn't a newsletter, the link is third-party, or the Account field
+	 * has no resolvable ESP tag (i.e. it isn't synced there).
+	 *
+	 * @param string        $url          Processed URL (may already carry other params).
+	 * @param string        $original_url Original URL before processing.
+	 * @param \WP_Post|null $post         Newsletter post object, or null.
+	 *
+	 * @return string
+	 */
+	public static function append_account_param( $url, $original_url, $post ) {
+		// method_exists() covers both a missing plugin and version skew; a fatal
+		// here would break newsletter rendering.
+		if ( ! method_exists( '\Newspack_Newsletters\Tracking\Utils', 'get_merge_tag' ) ) {
+			return $url;
+		}
+		if ( ! method_exists( '\Newspack\Reader_Activation\Sync\Metadata', 'get_key' ) ) {
+			return $url;
+		}
+		if ( ! self::is_newsletter_post( $post ) ) {
+			return $url;
+		}
+		// Mailchimp's process_link() (priority 10) can hand back a bare merge-tag
+		// placeholder as the whole URL (e.g. *|UNSUB|*), which is host-less and so
+		// reads as first-party. Decorating it breaks the expanded link. Anchored
+		// match: a real URL carrying a merge tag in a query value still passes.
+		if ( self::is_unsubstituted_merge_tag( $url ) ) {
+			return $url;
+		}
+		if ( ! self::is_first_party_url( $url ) ) {
+			return $url;
+		}
+
+		$field_name = self::get_account_field_name();
+		if ( '' === $field_name ) {
+			return $url;
+		}
+
+		$tag_name = self::get_esp_field_tag_name( $field_name, $post );
+		if ( '' === $tag_name ) {
+			return $url;
+		}
+
+		$merge_tag = \Newspack_Newsletters\Tracking\Utils::get_merge_tag( $tag_name );
+		if ( empty( $merge_tag ) ) {
+			return $url;
+		}
+
+		// No is_url_safe_merge_tag() guard, unlike the donor handler: an
+		// unsubstituted np_account is always redirected away before output.
+		return self::append_raw_query_param( $url, self::ACCOUNT_QUERY_PARAM, $merge_tag );
+	}
+
+	/**
+	 * Append a query parameter with its value left raw. Not add_query_arg():
+	 * that reparses the URL and urlencode_deep()s values already in it,
+	 * re-encoding another handler's raw merge tag into a form no ESP
+	 * substitutes. The param is inserted before any `#fragment`.
+	 *
+	 * The value is not escaped, so it must not contain `&`, `=`, or `#`. ESP
+	 * merge-tag syntaxes use none of them.
+	 *
+	 * @param string $url   URL, possibly with a query string and/or fragment.
+	 * @param string $param Parameter name.
+	 * @param string $value Raw parameter value; must not contain `&`, `=`, or `#`.
+	 *
+	 * @return string
+	 */
+	private static function append_raw_query_param( $url, $param, $value ) {
+		$fragment = '';
+		$hash_pos = strpos( $url, '#' );
+		if ( false !== $hash_pos ) {
+			$fragment = substr( $url, $hash_pos );
+			$url      = substr( $url, 0, $hash_pos );
+		}
+		$separator = false === strpos( $url, '?' ) ? '?' : '&';
+		return $url . $separator . $param . '=' . $value . $fragment;
+	}
+
+	/**
+	 * The prefixed ESP field name carrying the reader's account ID. The raw key
+	 * is 'Account' in the v1 metadata schema and 'account' in legacy, and the
+	 * prefix is configurable, so resolve through Metadata::get_key().
+	 *
+	 * @return string Prefixed field name, or '' when unresolvable.
+	 */
+	private static function get_account_field_name() {
+		foreach ( [ 'Account', 'account' ] as $raw_key ) {
+			$key = \Newspack\Reader_Activation\Sync\Metadata::get_key( $raw_key );
+			if ( ! empty( $key ) ) {
+				return (string) $key;
+			}
+		}
+		return '';
+	}
+
+	/**
+	 * The connected ESP's merge-tag name for a synced field. Not derivable from
+	 * the field name: ActiveCampaign perstags can be renamed, and Mailchimp
+	 * assigns tags per audience — hence the newsletter's send list.
+	 *
+	 * @param string   $field_name Prefixed ESP field name.
+	 * @param \WP_Post $post       Newsletter post.
+	 *
+	 * @return string Tag name, or '' when unresolvable.
+	 */
+	private static function get_esp_field_tag_name( $field_name, $post ) {
+		if ( ! method_exists( '\Newspack_Newsletters', 'get_service_provider' ) ) {
+			return '';
+		}
+		$provider = \Newspack_Newsletters::get_service_provider();
+		if ( empty( $provider ) || ! method_exists( $provider, 'get_field_merge_tag_name' ) ) {
+			return '';
+		}
+		$list_id = (string) get_post_meta( $post->ID, 'send_list_id', true );
+		return (string) $provider->get_field_merge_tag_name( $field_name, '' === $list_id ? null : $list_id );
 	}
 
 	/**
@@ -423,6 +590,146 @@ final class Newspack_Popups_Segmentation {
 			}
 		}
 		return '';
+	}
+
+	/**
+	 * A reader's last-known matching segment IDs, filtered to the site's active
+	 * segments. The snapshot is client-asserted and only as fresh as the
+	 * reader's last visit; no age cap by design.
+	 *
+	 * @param int $account_id WordPress user ID from the inbound param.
+	 *
+	 * @return string[] Active segment IDs as strings.
+	 */
+	public static function get_carried_segments_for_account( int $account_id ): array {
+		if ( $account_id < 1 || ! method_exists( '\Newspack\Reader_Data', 'get_matched_segments' ) ) {
+			return [];
+		}
+
+		$snapshot = \Newspack\Reader_Data::get_matched_segments( $account_id );
+		if ( empty( $snapshot ) || ! is_array( $snapshot ) ) {
+			return [];
+		}
+
+		// Client-asserted input: drop shapes strval() below would mishandle.
+		$snapshot = array_filter(
+			$snapshot,
+			function ( $value ) {
+				return is_int( $value ) || is_string( $value );
+			}
+		);
+
+		$active = [];
+		foreach ( self::get_segments( false ) as $segment ) {
+			if ( ! empty( $segment['id'] ) ) {
+				$active[] = (string) $segment['id'];
+			}
+		}
+
+		return array_values( array_intersect( array_map( 'strval', $snapshot ), $active ) );
+	}
+
+	/**
+	 * The setcookie() options for the carried-segments cookie. Extracted so
+	 * tests can reach these values — the setcookie() call itself never runs
+	 * under PHPUnit, where headers are already sent.
+	 *
+	 * @return array setcookie() `$options` argument.
+	 */
+	private static function get_carried_segments_cookie_options(): array {
+		return [
+			'expires'  => 0,
+			'path'     => '/',
+			'secure'   => is_ssl(),
+			// Readable by the view script; a segmentation hint, not a credential.
+			'httponly' => false,
+			'samesite' => 'Lax',
+		];
+	}
+
+	/**
+	 * The cookie value for a resolved segment set. Never an empty string:
+	 * setcookie() sends a deletion for an empty value regardless of `expires`,
+	 * so "matches nothing" would never reach the browser. An empty set becomes
+	 * the CARRIED_SEGMENTS_NONE sentinel instead.
+	 *
+	 * @param string[] $segment_ids Active segment IDs; empty asserts no matches.
+	 *
+	 * @return string Comma-joined IDs, or CARRIED_SEGMENTS_NONE.
+	 */
+	private static function get_carried_segments_cookie_value( array $segment_ids ): string {
+		return empty( $segment_ids ) ? self::CARRIED_SEGMENTS_NONE : implode( ',', $segment_ids );
+	}
+
+	/**
+	 * Hand the resolved segment IDs to the view script in a session cookie.
+	 * Every call is authoritative: an empty set overwrites a previous arrival's
+	 * segments with the "matches nothing" sentinel rather than deleting the
+	 * cookie. Callers must skip values that never passed the account-ID gate —
+	 * those assert nothing about the reader.
+	 *
+	 * @param string[] $segment_ids Active segment IDs; empty asserts no matches.
+	 */
+	private static function set_carried_segments_cookie( $segment_ids ) {
+		$value = self::get_carried_segments_cookie_value( $segment_ids );
+		if ( ! headers_sent() ) {
+			// phpcs:ignore WordPressVIPMinimum.Functions.RestrictedFunctions.cookies_setcookie
+			setcookie(
+				self::CARRIED_SEGMENTS_COOKIE,
+				$value,
+				self::get_carried_segments_cookie_options()
+			);
+		}
+		// Mirror in $_COOKIE so same-request readers (and tests, where headers are
+		// already sent) see the same value a browser would receive.
+		$_COOKIE[ self::CARRIED_SEGMENTS_COOKIE ] = $value; // phpcs:ignore WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___COOKIE
+	}
+
+	/**
+	 * Action callback: resolve an inbound account ID to carried segments, hand
+	 * them off in a cookie, and redirect to the clean URL.
+	 *
+	 * The redirect is unconditional whenever the param is present: it keeps the
+	 * landing page a shared cacheable URL, and it is what makes ActiveCampaign's
+	 * `%FIELD%` syntax safe to emit at all (NPPM-3032) — the param never
+	 * survives into a rendered page. Only a plain positive integer is accepted;
+	 * that one rule rejects every unsubstituted merge-tag shape. The cookie
+	 * handoff is conditional on that gate, the redirect is not.
+	 */
+	public static function handle_account_param() {
+		// Redirecting a POST would discard its body.
+		if ( ! isset( $_SERVER['REQUEST_METHOD'] ) || 'GET' !== $_SERVER['REQUEST_METHOD'] ) {
+			return;
+		}
+		if ( ! isset( $_SERVER['REQUEST_URI'] ) ) {
+			return;
+		}
+		// Reading a URL param to decide where to redirect; there is no form
+		// submission or state change here to nonce-verify.
+		if ( ! isset( $_GET[ self::ACCOUNT_QUERY_PARAM ] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+			return;
+		}
+
+		$raw = sanitize_text_field( wp_unslash( $_GET[ self::ACCOUNT_QUERY_PARAM ] ) ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		if ( 1 === preg_match( '/^[1-9][0-9]*$/', $raw ) ) {
+			// Gate passed, so the value asserts something real — including "no
+			// segments" when the resolved set is empty.
+			self::set_carried_segments_cookie( self::get_carried_segments_for_account( (int) $raw ) );
+		}
+
+		// This redirect may carry a per-reader Set-Cookie and must never be stored.
+		if ( function_exists( 'batcache_cancel' ) ) {
+			batcache_cancel();
+		}
+		nocache_headers();
+
+		$clean_url = remove_query_arg(
+			self::ACCOUNT_QUERY_PARAM,
+			esc_url_raw( wp_unslash( $_SERVER['REQUEST_URI'] ) )
+		);
+		// Temporary: the param is a property of this one link, not of the page.
+		wp_safe_redirect( $clean_url, 302 );
+		exit;
 	}
 
 	/**

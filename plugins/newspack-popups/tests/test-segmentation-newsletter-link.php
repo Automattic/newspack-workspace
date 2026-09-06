@@ -356,4 +356,37 @@ class SegmentationNewsletterLinkTest extends WP_UnitTestCase {
 		$args = wp_parse_args( wp_parse_url( $result, PHP_URL_QUERY ) );
 		$this->assertSame( '*|HUB-MEMBER|*', $args['np_seg_donor'] );
 	}
+
+	/**
+	 * A whole-URL merge-tag placeholder (e.g. Mailchimp's *|UNSUB|*) is host-less
+	 * and reads as first-party, but decorating it breaks the expanded link — and
+	 * unsubscribe links are required by law. They must pass through untouched.
+	 *
+	 * @param string $url Placeholder URL as the ESP filter hands it over.
+	 *
+	 * @dataProvider placeholder_url_provider
+	 */
+	public function test_skips_esp_placeholder_url( $url ) {
+		$this->assertSame(
+			$url,
+			Newspack_Popups_Segmentation::append_donor_segment_param( $url, $url, $this->make_newsletter() )
+		);
+	}
+
+	/**
+	 * Whole-URL merge-tag placeholders: the Mailchimp links that carry real
+	 * consequences, plus one shape per other supported ESP.
+	 *
+	 * @return array[]
+	 */
+	public function placeholder_url_provider() {
+		return [
+			'mailchimp unsubscribe'    => [ '*|UNSUB|*' ],
+			'mailchimp update profile' => [ '*|UPDATE_PROFILE|*' ],
+			'mailchimp forward'        => [ '*|FORWARD|*' ],
+			'constant contact'         => [ '[[UNSUBSCRIBE]]' ],
+			'active campaign'          => [ '%UNSUBSCRIBE%' ],
+			'campaign monitor'         => [ '[unsubscribe]' ],
+		];
+	}
 }

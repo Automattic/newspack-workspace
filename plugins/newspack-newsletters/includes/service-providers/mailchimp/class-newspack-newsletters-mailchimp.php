@@ -1358,6 +1358,48 @@ final class Newspack_Newsletters_Mailchimp extends \Newspack_Newsletters_Service
 	}
 
 	/**
+	 * Get the Mailchimp merge-field tag for a synced field on an audience.
+	 *
+	 * Mailchimp assigns tags itself and they are per-audience, so the tag is
+	 * read from the audience's merge-field list rather than derived from the
+	 * field name — it can be anything, including `MMERGE7`.
+	 *
+	 * @param string      $field_name Field name as synced (e.g. 'NP_Account').
+	 * @param string|null $list_id    Audience ID. Required: tags are per-audience.
+	 *
+	 * @return string Merge-field tag, or '' when unknown.
+	 */
+	public function get_field_merge_tag_name( $field_name, $list_id = null ) {
+		$field_name = trim( (string) $field_name );
+		if ( '' === $field_name || empty( $list_id ) ) {
+			return '';
+		}
+
+		try {
+			$merge_fields = Newspack_Newsletters_Mailchimp_Cached_Data::get_merge_fields( $list_id );
+		} catch ( \Throwable $e ) {
+			// A cache miss that needs the API can fail; emitting no param is the
+			// safe outcome, so swallow it rather than break newsletter rendering.
+			return '';
+		}
+
+		if ( ! is_array( $merge_fields ) ) {
+			return '';
+		}
+
+		foreach ( $merge_fields as $field ) {
+			if (
+				! empty( $field['name'] ) && ! empty( $field['tag'] ) &&
+				0 === strcasecmp( trim( $field['name'] ), $field_name )
+			) {
+				return (string) $field['tag'];
+			}
+		}
+
+		return '';
+	}
+
+	/**
 	 * Filter newsletter content prior to converting to MJML.
 	 *
 	 * @param string $content The post content.
