@@ -32,11 +32,6 @@
 			"includes/export/class-users-csv-exporter.php"
 		]
 	},
-	"scripts": {
-		"post-update-cmd": [
-			"vendor/bin/cghooks update"
-		]
-	},
 	"extra": {
 		"installer-paths": {
 			"vendor/{$vendor}/{$name}": [
