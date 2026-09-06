@@ -27,17 +27,64 @@ function newspack_woocommerce_setup() {
 add_action( 'after_setup_theme', 'newspack_woocommerce_setup' );
 
 /**
- * Add theme's WooCommerce styles.
+ * Whether the current request needs the theme's WooCommerce styles.
  *
- * @return void
+ * Two complementary checks, not alternatives. The native WooCommerce routes are
+ * matched here directly; a WooCommerce shortcode or block embedded in an
+ * ordinary page is answered by newspack-plugin's detector, which reads the
+ * queried post's content and the active block widgets. The detector cannot
+ * replace the route checks: on the shop, a product archive or a single product
+ * the queried object carries no WooCommerce markup of its own, so it finds
+ * nothing and those pages would lose their styling.
+ *
+ * Where the detector cannot see the content it answers false, so this covers a
+ * shortcode in the queried page's own content and not one arriving from an
+ * archive loop, a classic text widget, or a `the_content` filter. It answers
+ * true rather than false only when its own scan throws.
+ *
+ * @return bool True when the theme's WooCommerce stylesheet should be enqueued.
  */
-function newspack_woocommerce_scripts() {
+function newspack_request_needs_woocommerce_styles(): bool {
+	// Nothing below can be true without WooCommerce: no native route matches and
+	// no WooCommerce markup renders, so the stylesheet would style nothing. This
+	// also keeps the detector's content scan off every front-end request on the
+	// sites that can never need it.
+	if ( ! function_exists( 'is_woocommerce' ) ) {
+		return false;
+	}
+
 	if (
-		( function_exists( 'is_woocommerce' ) && is_woocommerce() )
+		is_woocommerce()
 		|| ( function_exists( 'is_cart' ) && is_cart() )
 		|| ( function_exists( 'is_checkout' ) && is_checkout() )
 		|| ( function_exists( 'is_account_page' ) && is_account_page() )
 	) {
+		return true;
+	}
+
+	// Absent newspack-plugin the theme keeps its previous behaviour, covering
+	// the native routes only. Autoloading is off because newspack-plugin
+	// includes the class as it loads, long before this runs, so an autoload
+	// pass here could only reach some other plugin's handler for the namespace.
+	// The method check pairs with it because the class is documented around its
+	// first caller: were the method renamed there, this would silently fall back
+	// to native routes only and the embedded case would go unstyled again.
+	return class_exists( 'Newspack\WooCommerce_Content_Detector', false )
+		&& method_exists( 'Newspack\WooCommerce_Content_Detector', 'current_request_has_woocommerce_content' )
+		&& \Newspack\WooCommerce_Content_Detector::current_request_has_woocommerce_content();
+}
+
+/**
+ * Add theme's WooCommerce styles.
+ *
+ * The theme drops WooCommerce's own `woocommerce-general` stylesheet for every
+ * request, so anything this does not enqueue for keeps WooCommerce's layout and
+ * responsive rules and loses its skin.
+ *
+ * @return void
+ */
+function newspack_woocommerce_scripts() {
+	if ( newspack_request_needs_woocommerce_styles() ) {
 		wp_enqueue_style( 'newspack-woocommerce-style', get_template_directory_uri() . '/styles/woocommerce.css', array( 'newspack-style' ), wp_get_theme()->get( 'Version' ) );
 		wp_style_add_data( 'newspack-woocommerce-style', 'rtl', 'replace' );
 	}

@@ -73,8 +73,13 @@ class WooCommerce_Content_Detector {
 	 *
 	 * Must be called once the main query and the FSE template are resolved (it reads
 	 * `get_queried_object()` and `$_wp_current_template_content`) and memoizes for
-	 * the request. The sole caller runs on `perfmatters_disable_woocommerce_scripts`
-	 * (wp_enqueue_scripts, priority 99), which satisfies that ordering.
+	 * the request. Both are settled at `template_include`, so any caller on
+	 * `wp_enqueue_scripts` or later satisfies that ordering at any priority.
+	 * Two callers do: the Perfmatters strip veto on
+	 * `perfmatters_disable_woocommerce_scripts` (priority 99), and newspack-theme's
+	 * stylesheet decision in `inc/woocommerce.php` (priority 10). The theme reaches
+	 * this through `class_exists()`/`method_exists()`, so renaming either the class
+	 * or this method silently returns it to shipping unstyled embedded content.
 	 *
 	 * @return bool
 	 */
@@ -95,18 +100,21 @@ class WooCommerce_Content_Detector {
 			// wp_enqueue_scripts that fail-open exists to prevent.
 			self::$memo = true;
 			try {
-				// newspack_log surfaces a *persistent* failure (perf win silently
-				// off site-wide) in Newspack Manager, not just local logs.
+				// newspack_log surfaces a *persistent* failure in Newspack Manager,
+				// not just local logs. The event is named for the detector rather
+				// than for a caller: a failure here reaches whichever consumers are
+				// active, and a Perfmatters-shaped event code sends whoever triages
+				// it to a plugin that may not be installed.
 				Logger::newspack_log(
-					'newspack_perfmatters_wc_detection_error',
-					'WooCommerce content detection failed; keeping WooCommerce assets (fail-open).',
+					'newspack_wc_content_detection_error',
+					'WooCommerce content detection failed; treating the request as carrying WooCommerce content (fail-open).',
 					[ 'error' => $e->getMessage() ],
 					'error'
 				);
 			} catch ( \Throwable $log_error ) {
 				// Last resort if a newspack_log listener throws: the local logger
 				// writes without dispatching an action, so fail-open still holds.
-				Logger::log( 'WooCommerce content detection fail-open log failed: ' . $log_error->getMessage(), 'NEWSPACK-PERFMATTERS', 'error' );
+				Logger::log( 'WooCommerce content detection fail-open log failed: ' . $log_error->getMessage(), 'NEWSPACK-WC-CONTENT-DETECTOR', 'error' );
 			}
 		}
 
