@@ -953,7 +953,31 @@ class Content_Gate {
 		if ( isset( self::$withheld_teasers[ $post->ID ] ) ) {
 			return self::$withheld_teasers[ $post->ID ];
 		}
-		if ( Memberships::is_active() || ! self::is_withheld_outside_article( $post ) ) {
+		if ( Memberships::is_active() ) {
+			return null;
+		}
+
+		// The verdict, the layout it resolves and the render all run with the
+		// listing reader in scope, so the three cannot answer to different readers
+		// between them.
+		return self::in_listing_context(
+			function () use ( $post ) {
+				return self::build_withheld_teaser( $post );
+			}
+		);
+	}
+
+	/**
+	 * Build and cache a post's withheld teaser, or null when it is not withheld.
+	 *
+	 * Runs inside {@see self::in_listing_context()}; every reader-facing question
+	 * it asks is answered for the anonymous reader on that basis.
+	 *
+	 * @param \WP_Post $post Post object.
+	 * @return string|null
+	 */
+	private static function build_withheld_teaser( $post ) {
+		if ( ! self::is_withheld_outside_article( $post ) ) {
 			return null;
 		}
 
@@ -994,11 +1018,7 @@ class Content_Gate {
 		// with its render lock (#821).
 		self::$withheld_teasers[ $post->ID ] = '';
 
-		$teaser = self::in_listing_context(
-			function () use ( $post, $gate_layout_id ) {
-				return self::get_restricted_post_excerpt_for_gate( $post, $gate_layout_id );
-			}
-		);
+		$teaser = self::get_restricted_post_excerpt_for_gate( $post, $gate_layout_id );
 
 		self::$withheld_teasers[ $post->ID ] = $teaser;
 		wp_cache_set( $cache_key, $teaser, self::WITHHELD_TEASER_CACHE_GROUP, HOUR_IN_SECONDS );
@@ -1089,14 +1109,9 @@ class Content_Gate {
 		if ( self::is_excluded_from_gating( $post->ID ) ) {
 			return false;
 		}
-		// The anonymous bypass is deliberately switched off. Its one rule
-		// (`institution`) matches on the current request's IP once the visitor
-		// carries the institutional-access cookie, so leaving it in would make
-		// this verdict vary between visitors — and the markup it produces is
-		// written to a cache that has no reader dimension, so one on-campus
-		// visitor's full body would then be served to everyone. The article page
-		// still honours the grant.
-		return (bool) Content_Restriction_Control::is_post_restricted( false, $post->ID, 0, false );
+		// Asked from inside the listing context, which is what switches off the
+		// anonymous bypass and keeps the answer off the article page's memo slot.
+		return (bool) Content_Restriction_Control::is_post_restricted( false, $post->ID, 0 );
 	}
 
 	/**

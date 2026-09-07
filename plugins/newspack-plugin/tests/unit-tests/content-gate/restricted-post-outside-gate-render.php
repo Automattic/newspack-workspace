@@ -856,14 +856,20 @@ class Test_Restricted_Post_Outside_Gate_Render extends \WP_UnitTestCase {
 
 	/**
 	 * A listing withholds the same body from everybody, including a visitor the
-	 * gate would let through on a rule that reads their request.
+	 * gate would let through on a rule that reads their request — and the article
+	 * page still lets that visitor through, whichever surface asked first.
 	 *
 	 * The one anonymous-capable rule shipped today (`institution`) matches on the
 	 * current request's IP once the visitor carries the institutional-access
-	 * cookie. Honouring it here would put one on-campus visitor's full body into a
-	 * block cache that has no reader dimension, to be served to everyone.
+	 * cookie. Honouring it in a listing would put one on-campus visitor's full body
+	 * into a block cache that has no reader dimension, to be served to everyone.
+	 * Letting the listing's stricter verdict stand in for the article page's is the
+	 * mirror of that: it walls the reader out of an article they are entitled to.
+	 * Both surfaces ask as user 0, so the two verdicts are told apart by nothing
+	 * but their memo key. One post per order, no reset in between: a real request
+	 * has none.
 	 */
-	public function test_a_listing_ignores_a_bypass_that_reads_the_request() {
+	public function test_a_listing_verdict_and_the_article_page_answer_independently() {
 		Access_Rules::register_rule(
 			[
 				'id'                 => 'nppd2172_request_scoped',
@@ -888,16 +894,17 @@ class Test_Restricted_Post_Outside_Gate_Render extends \WP_UnitTestCase {
 				],
 			]
 		);
-		$post_id = $this->create_restricted_post();
+		$listing_first_id = $this->create_restricted_post();
+		$article_first_id = $this->create_restricted_post();
 		$this->reset_restriction_cache();
 
-		$bypass_honoured = Content_Restriction_Control::is_post_restricted( false, $post_id, 0 );
-		$this->reset_restriction_cache();
-		$listing_verdict = Content_Restriction_Control::is_post_restricted( false, $post_id, 0, false );
-		$this->reset_restriction_cache();
+		// The header lists the article that the page below it then renders.
+		$teaser_then_article = Content_Gate::get_teaser_outside_article( get_post( $listing_first_id ) );
+		$article_after       = Content_Restriction_Control::is_post_restricted( false, $listing_first_id, 0 );
 
-		$this->go_to( home_url( '/' ) );
-		$rendered = $this->render_in_secondary_loop( $post_id );
+		// And the other way round: the article page, then a listing under it.
+		$article_then_teaser = Content_Restriction_Control::is_post_restricted( false, $article_first_id, 0 );
+		$teaser_after        = Content_Gate::get_teaser_outside_article( get_post( $article_first_id ) );
 
 		$rules_reflection = new \ReflectionProperty( Access_Rules::class, 'rules' );
 		$rules_reflection->setAccessible( true );
@@ -905,8 +912,11 @@ class Test_Restricted_Post_Outside_Gate_Render extends \WP_UnitTestCase {
 		unset( $registered['nppd2172_request_scoped'] );
 		$rules_reflection->setValue( null, $registered );
 
-		$this->assertFalse( $bypass_honoured, 'The bypass does grant access, which is the premise of this test.' );
-		$this->assertTrue( $listing_verdict, 'The listing decision does not honour it.' );
-		$this->assertStringNotContainsString( self::PAID_MARKER, $rendered, 'So the listing withholds the body regardless of the visitor.' );
+		$this->assertFalse( $article_then_teaser, 'The rule does grant access on the article page, which is the premise of this test.' );
+		$this->assertIsString( $teaser_then_article, 'A listing withholds the body from a visitor the rule would let through.' );
+		$this->assertStringNotContainsString( self::PAID_MARKER, $teaser_then_article );
+		$this->assertFalse( $article_after, 'A listing that ran first does not answer the article page\'s question.' );
+		$this->assertIsString( $teaser_after, 'Nor does the article page answer the listing\'s.' );
+		$this->assertStringNotContainsString( self::PAID_MARKER, $teaser_after );
 	}
 }

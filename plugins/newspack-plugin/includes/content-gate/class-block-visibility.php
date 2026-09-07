@@ -696,16 +696,11 @@ class Block_Visibility {
 			// member-only blocks just as they can pass the gate itself.
 			$rule_context = [ 'payment_recovery_grace' => $custom_access['payment_recovery_grace'] ?? true ];
 
-			// A logged-out visitor can pass an access rule that reads the request
-			// itself: `institution` matches on IP once the visitor carries the
-			// institutional-access cookie. In a listing teaser that grant is not
-			// theirs to spend on everyone else — the string is cached with no reader
-			// dimension — so the bypass is switched off there, exactly as
-			// Content_Restriction_Control::is_post_restricted() switches it off for
-			// the withholding decision. The article page still honours it.
-			$access_passes = ( ! $user_id && Content_Gate::is_listing_context() )
-				? false
-				: Access_Rules::evaluate_rules_for_visitor( $custom_access['access_rules'], $user_id, $rule_context );
+			// A logged-out visitor in a listing teaser passes no rule at all:
+			// Access_Rules::evaluate_anonymous_rules() declines in that context, for
+			// the same reason the withholding decision does. The article page still
+			// honours the grant.
+			$access_passes = Access_Rules::evaluate_rules_for_visitor( $custom_access['access_rules'], $user_id, $rule_context );
 		}
 
 		// AND logic: both must pass when both are configured.
