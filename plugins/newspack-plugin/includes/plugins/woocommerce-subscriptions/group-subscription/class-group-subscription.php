@@ -36,7 +36,7 @@ class Group_Subscription {
 	 * subscription was migrated from. Written by migrate-teams, which keys reuse on
 	 * it so one owner's several teams each migrate to their own group subscription
 	 * instead of merging into one. Read at runtime by
-	 * Group_Subscription_Legacy_Invite, which resolves a surviving team invitation
+	 * Group_Subscription_Teams_Invite, which resolves a surviving team invitation
 	 * back to the group it became. It lives here rather than on the CLI class
 	 * because the CLI is only loaded under WP-CLI.
 	 */

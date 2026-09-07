@@ -217,7 +217,10 @@ class Group_Subscription_Teams_Invite {
 		$token    = '';
 		if ( ! empty( $wp->query_vars[ $endpoint ] ) && is_string( $wp->query_vars[ $endpoint ] ) ) {
 			$token = sanitize_text_field( $wp->query_vars[ $endpoint ] );
-		} elseif ( ! empty( $_GET[ $endpoint ] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		} elseif ( ! empty( $_GET[ $endpoint ] ) && is_string( $_GET[ $endpoint ] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+			// A caller can send `?join-team[]=x`. sanitize_text_field() already answers ''
+			// for an array, so this only states the type the branch expects — matching
+			// the query-var branch above, where the same check is load-bearing.
 			$token = sanitize_text_field( wp_unslash( $_GET[ $endpoint ] ) ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
 		}
 		return $token;
