@@ -56,15 +56,30 @@ class TestUrlCustomization extends WP_UnitTestCase {
 			'test_product_brand',
 			'product',
 			[
-				'public'    => true,
-				'rewrite'   => [ 'slug' => 'brand' ],
-				'query_var' => 'test_product_brand',
+				'public'       => true,
+				'hierarchical' => true,
+				'query_var'    => 'test_product_brand',
+				// `hierarchical` and `with_front` are what make this fixture
+				// behave like WooCommerce's product_brand: the first produces the
+				// greedy `(.+?)` pattern that outranks ours, and the second is why
+				// the two taxonomies do not collide under a fronted permalink
+				// structure. A fixture without them tests a conflict that the
+				// production taxonomy would not create.
+				'rewrite'      => [
+					'slug'       => 'brand',
+					'with_front' => false,
+				],
 			]
 		);
 
-		$brand = $this->factory->term->create_and_get( [ 'taxonomy' => Taxonomy::SLUG ] );
-
 		$this->set_permalink_structure( '/%postname%/' );
+		// Re-register after the structure is set. A taxonomy registered while
+		// `permalink_structure` is empty never has its `rewrite` argument
+		// normalized, so it gets no permastruct and `get_term_link()` returns the
+		// query-var form — which is not the shape a live site has.
+		Taxonomy::register_taxonomy();
+
+		$brand = $this->factory->term->create_and_get( [ 'taxonomy' => Taxonomy::SLUG ] );
 
 		// Simulate what happens when /brand/{slug}/ is matched by the
 		// conflicting taxonomy's rewrite rule: WP sets the conflicting
@@ -79,6 +94,10 @@ class TestUrlCustomization extends WP_UnitTestCase {
 			'test_product_brand' => $brand->slug,
 			'paged'              => 2,
 		];
+		// WP::parse_request sets `request` to the path relative to home. The
+		// resolver compares it against the term's own permalink, so a hand-built
+		// request has to carry it or the resolver correctly declines to act.
+		$wp->request = 'brand/' . $brand->slug;
 
 		// Run parse_request — this should detect the conflict and re-route.
 		Newspack_Multibranded_Site\Customizations\Url::parse_request( $wp );
@@ -98,18 +117,27 @@ class TestUrlCustomization extends WP_UnitTestCase {
 			'test_product_brand',
 			'product',
 			[
-				'public'    => true,
-				'rewrite'   => [ 'slug' => 'brand' ],
-				'query_var' => 'test_product_brand',
+				'public'       => true,
+				'hierarchical' => true,
+				'query_var'    => 'test_product_brand',
+				// `hierarchical` and `with_front` are what make this fixture
+				// behave like WooCommerce's product_brand: the first produces the
+				// greedy `(.+?)` pattern that outranks ours, and the second is why
+				// the two taxonomies do not collide under a fronted permalink
+				// structure. A fixture without them tests a conflict that the
+				// production taxonomy would not create.
+				'rewrite'      => [
+					'slug'       => 'brand',
+					'with_front' => false,
+				],
 			]
 		);
-
-		$this->set_permalink_structure( '/%postname%/' );
 
 		// Simulate a request for a slug that is NOT a brand term.
 		global $wp;
 		$wp->matched_query = 'test_product_brand=nike';
 		$wp->query_vars    = [ 'test_product_brand' => 'nike' ];
+		$wp->request       = 'brand/nike';
 
 		Newspack_Multibranded_Site\Customizations\Url::parse_request( $wp );
 
@@ -119,7 +147,11 @@ class TestUrlCustomization extends WP_UnitTestCase {
 
 	/**
 	 * Tests that a taxonomy which captured the request but rewrites under some
-	 * other slug is left alone. Only a collision on /brand/ should reroute.
+	 * other slug is left alone.
+	 *
+	 * Both guards decline here and the slug pre-filter happens to run first, so
+	 * this covers the behaviour rather than isolating one check. The case that
+	 * isolates path ownership is the fronted-permastruct test below.
 	 */
 	public function test_parse_request_ignores_taxonomy_rewriting_under_another_slug() {
 		register_taxonomy(
@@ -132,16 +164,14 @@ class TestUrlCustomization extends WP_UnitTestCase {
 			]
 		);
 
-		// Give the brand the same slug the other taxonomy captured, so the
-		// rewrite-slug check is the only thing keeping the resolver out. Without
-		// it, every public taxonomy with a query var becomes a brand conflict.
+		// Give the brand the same slug the other taxonomy captured, so a check
+		// that looked only at the slug would treat this as a brand conflict.
 		$brand = $this->factory->term->create_and_get( [ 'taxonomy' => Taxonomy::SLUG ] );
-
-		$this->set_permalink_structure( '/%postname%/' );
 
 		global $wp;
 		$wp->matched_query = 'test_other_tax=' . $brand->slug;
 		$wp->query_vars    = [ 'test_other_tax' => $brand->slug ];
+		$wp->request       = 'topic/' . $brand->slug;
 
 		Newspack_Multibranded_Site\Customizations\Url::parse_request( $wp );
 
@@ -158,9 +188,19 @@ class TestUrlCustomization extends WP_UnitTestCase {
 			'test_product_brand',
 			'product',
 			[
-				'public'    => true,
-				'rewrite'   => [ 'slug' => 'brand' ],
-				'query_var' => 'test_product_brand',
+				'public'       => true,
+				'hierarchical' => true,
+				'query_var'    => 'test_product_brand',
+				// `hierarchical` and `with_front` are what make this fixture
+				// behave like WooCommerce's product_brand: the first produces the
+				// greedy `(.+?)` pattern that outranks ours, and the second is why
+				// the two taxonomies do not collide under a fronted permalink
+				// structure. A fixture without them tests a conflict that the
+				// production taxonomy would not create.
+				'rewrite'      => [
+					'slug'       => 'brand',
+					'with_front' => false,
+				],
 			]
 		);
 
@@ -168,16 +208,71 @@ class TestUrlCustomization extends WP_UnitTestCase {
 		add_term_meta( $brand->term_id, Url_Meta::get_key(), 'yes' );
 
 		$this->set_permalink_structure( '/%postname%/' );
+		Taxonomy::register_taxonomy();
 
-		// Simulate /brand/{slug}/ captured by the conflicting taxonomy.
+		// Simulate /brand/{slug}/ captured by the conflicting taxonomy. The
+		// request has to be present, or the resolver declines for want of a path
+		// to compare and the test proves nothing about homepage mode.
 		global $wp;
 		$wp->matched_query = 'test_product_brand=' . $brand->slug;
 		$wp->query_vars    = [ 'test_product_brand' => $brand->slug ];
+		$wp->request       = 'brand/' . $brand->slug;
 
 		Newspack_Multibranded_Site\Customizations\Url::parse_request( $wp );
 
 		// The brand has _custom_url=yes, so it should NOT be claimed at /brand/.
 		$this->assertArrayNotHasKey( Taxonomy::SLUG, $wp->query_vars, 'Homepage-mode brand should not be claimed at /brand/ path.' );
 		$this->assertSame( $brand->slug, $wp->query_vars['test_product_brand'], 'Conflicting query var should remain for homepage-mode brands.' );
+	}
+
+	/**
+	 * Tests that a genuine WooCommerce URL is left alone when a fronted permalink
+	 * structure puts the two taxonomies on different paths.
+	 *
+	 * We register with no `rewrite` argument and so inherit `with_front`, while
+	 * WooCommerce passes `with_front => false`. Under "/blog/%postname%/" our
+	 * brands live at /blog/brand/{slug}/ and WooCommerce's at /brand/{slug}/, so
+	 * a shared slug is not a collision. Claiming it here would 301 a shopper off
+	 * the store archive onto our path.
+	 */
+	public function test_parse_request_leaves_woocommerce_url_alone_under_a_fronted_permastruct() {
+		$this->set_permalink_structure( '/blog/%postname%/' );
+		register_taxonomy(
+			'test_product_brand',
+			'product',
+			[
+				'public'       => true,
+				'hierarchical' => true,
+				'query_var'    => 'test_product_brand',
+				'rewrite'      => [
+					'slug'       => 'brand',
+					'with_front' => false,
+				],
+			]
+		);
+		Taxonomy::register_taxonomy();
+
+		// Same slug on both sides — the case a name-only check would misread.
+		$brand = $this->factory->term->create_and_get(
+			[
+				'taxonomy' => Taxonomy::SLUG,
+				'slug'     => 'nike',
+			]
+		);
+		$this->assertStringContainsString(
+			'/blog/brand/nike',
+			get_term_link( $brand ),
+			'Precondition: with_front has to put our brand under the permalink front.'
+		);
+
+		global $wp;
+		$wp->matched_query = 'test_product_brand=nike';
+		$wp->query_vars    = [ 'test_product_brand' => 'nike' ];
+		$wp->request       = 'brand/nike';
+
+		Newspack_Multibranded_Site\Customizations\Url::parse_request( $wp );
+
+		$this->assertArrayNotHasKey( Taxonomy::SLUG, $wp->query_vars, 'A URL that is not the brand permalink must not be claimed.' );
+		$this->assertSame( 'nike', $wp->query_vars['test_product_brand'], 'The WooCommerce query var must survive.' );
 	}
 }
