@@ -9,16 +9,34 @@ import domReady from '@wordpress/dom-ready';
 
 import './view.scss';
 
+/**
+ * Whether the frame still shows its initial about:blank, so nothing has committed.
+ * Google Docs Viewer intermittently answers HTTP 204, which leaves the frame blank
+ * with no load event. That is the case the retry exists for. contentDocument is
+ * null once a cross-origin document commits, and for a detached frame.
+ *
+ * @param {HTMLIFrameElement} iframe The iframe.
+ * @return {boolean} Whether nothing has committed yet.
+ */
+const isStillBlank = iframe => {
+	const doc = iframe.contentDocument;
+	return doc !== null && doc.URL === 'about:blank';
+};
+
 domReady( () => {
 	const iframes = Array.from( document.querySelectorAll( '.wp-block-newspack-blocks-iframe iframe' ) );
 	iframes.forEach( iframe => {
-		const timerId = setInterval( function () {
-			iframe.src = iframe.src;
+		// Retry only while nothing has committed, without relying on the load event,
+		// which may have fired before this script ran (delayed JS). Navigate with
+		// location.replace(), since resetting src on a loaded frame adds a history
+		// entry and makes readers press Back twice (NPPM-3180).
+		const retry = setInterval( () => {
+			if ( ! isStillBlank( iframe ) ) {
+				clearInterval( retry );
+				return;
+			}
+			iframe.contentWindow.location.replace( iframe.src );
 		}, 2000 );
-
-		iframe.onload = function () {
-			clearInterval( timerId );
-		};
 
 		// Add a listener for dynamic resizing if the iframe supports it.
 		window.addEventListener( 'message', function ( event ) {
