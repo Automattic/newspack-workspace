@@ -293,62 +293,88 @@ final class Newspack_Popups_Inserter {
 	}
 
 	/**
-	 * Blocks whose text USED to be counted when positioning a prompt, until Gutenberg
-	 * moved that text out of the block's own innerHTML and into inner blocks:
+	 * Blocks whose inner-block text counts towards a prompt's position.
 	 *
-	 * - `core/list`    WP 6.0 — items became `core/list-item` inner blocks.
-	 * - `core/quote`   WP 6.0 — quoted prose became `core/paragraph` inner blocks.
+	 * The cursor that walks towards a prompt's target position and the `$total_length`
+	 * it aims at have disagreed since #807, which pointed the total at
+	 * self::get_block_content() — inner-block text included, for every block — and left
+	 * the cursor reading each block's own innerHTML. A block holding its text in inner
+	 * blocks therefore inflates the target while contributing nothing towards reaching
+	 * it, and the prompt lands late. See NPPM-596.
+	 *
+	 * These three names are the blocks where that asymmetry is a regression rather than
+	 * a standing gap, because Gutenberg moved text they had held themselves:
+	 *
+	 * - `core/list`    WP 6.1 — items became `core/list-item` inner blocks.
+	 * - `core/quote`   WP 6.1 — quoted prose became `core/paragraph` inner blocks.
 	 * - `core/gallery` WP 5.9 — captions moved into `core/image` inner blocks.
 	 *
-	 * Counting these again restores the pre-refactor calculation, so it is a repair
-	 * rather than a change of behaviour. See NPPM-596.
+	 * Gallery is the one whose dates do not line up with its symptom: its captions moved
+	 * a month before #807, while both sides still read innerHTML, so it left numerator
+	 * and denominator together and nothing shifted until #807 separated them.
 	 *
-	 * Blocks that were NEVER counted are deliberately absent, even though their text
-	 * also lives in inner blocks — `core/media-text` and `core/buttons` (inner blocks
-	 * since introduction), `core/details` (WP 6.3, and its body stays collapsed until
-	 * the reader opens it), and the layout containers `core/group` / `core/columns` /
-	 * `core/cover`. Counting those would MOVE prompts on existing content rather than
-	 * restore them, which is why https://github.com/Automattic/newspack-popups/pull/855
-	 * was reverted a day after it shipped. They are tracked in NPPM-3013 as a product
-	 * decision, not an oversight. See test_insertion_leaves_container_heavy_layouts_alone.
+	 * Every other block whose text lives in inner blocks stays out, whatever its history
+	 * — `core/media-text`, `core/buttons`, `core/details` (whose body stays collapsed
+	 * until the reader opens it), and the layout containers `core/group` /
+	 * `core/columns` / `core/cover`. The test is impact, not provenance: counting them
+	 * would move prompts on existing content rather than restore them, which is why
+	 * https://github.com/Automattic/newspack-popups/pull/855 was reverted a day after it
+	 * shipped. NPPM-3013 tracks that as a product decision rather than an oversight.
 	 *
 	 * @var string[]
 	 */
 	const INNER_TEXT_BLOCKS = [ 'core/list', 'core/quote', 'core/gallery' ];
 
 	/**
-	 * Get the length of a block, as counted by the prompt insertion cursor.
+	 * Resolve which blocks contribute inner-block text, once per render.
 	 *
-	 * Inner-block text is counted only for self::INNER_TEXT_BLOCKS; see that
-	 * constant for why layout containers are excluded. The two sources are mutually
-	 * exclusive, so no text is counted twice: a legacy list holds its items in its
-	 * own innerHTML and has no inner blocks, while a modern one holds them in inner
-	 * blocks and has an empty innerHTML.
+	 * Deliberately not called per block: the cursor has to sum a single consistent set
+	 * across a post, and resolving it once makes that structural rather than a rule an
+	 * integrator has to know.
 	 *
-	 * @param array $block A block, as returned by parse_blocks().
-	 *
-	 * @return int The block's length, in stripped-of-tags bytes.
+	 * @return string[] Block names whose inner text the cursor counts.
 	 */
-	public static function get_block_length( $block ) {
-		$block_content = $block['innerHTML'];
-
+	public static function get_inner_text_blocks() {
 		/**
 		 * Filters the blocks whose inner-block text counts towards a prompt's position.
 		 *
-		 * Returning an empty array restores the pre-NPPM-596 behaviour, in which no
-		 * inner-block text was counted and prompts drifted towards the end of posts
-		 * containing lists or quotes. That is an escape hatch for a site that had tuned
-		 * its prompt percentages against the old, inaccurate calculation and would
-		 * rather keep them where they are than re-tune.
+		 * Returning an empty array puts the cursor back exactly where it was before
+		 * NPPM-596, for a site that tuned its prompt percentages against the old
+		 * calculation and would rather keep its prompts where they sit than re-tune.
+		 * Note that this restores the old asymmetry rather than a symmetric count:
+		 * `$total_length` goes on counting inner-block text for every block either way,
+		 * so an emptied list returns the drift, it does not remove it.
+		 *
+		 * Adding names is the other half of the contract. Adding `core/group` or
+		 * `core/columns` makes the cursor agree with `$total_length` for containers too,
+		 * which is the behaviour #855 shipped fleet-wide and had to revert — available
+		 * per site, where a publisher can choose it.
 		 *
 		 * @param string[] $inner_text_blocks Block names whose inner text is counted.
 		 */
-		$inner_text_blocks = apply_filters( 'newspack_popups_inner_text_blocks', self::INNER_TEXT_BLOCKS );
+		$inner_text_blocks = apply_filters( 'newspack_popups_prompt_position_inner_text_blocks', self::INNER_TEXT_BLOCKS );
 
 		// Filters are untyped: a non-array return must not fatal the front end.
-		if ( ! is_array( $inner_text_blocks ) ) {
-			$inner_text_blocks = [];
-		}
+		return is_array( $inner_text_blocks ) ? $inner_text_blocks : [];
+	}
+
+	/**
+	 * Get the length of a block, as counted by the prompt insertion cursor.
+	 *
+	 * No text is counted twice, and the reason is a property of the parser rather than
+	 * of any one block: parse_blocks() partitions markup, so a parent's innerHTML holds
+	 * only the chunks that are not inner blocks and can never contain an inner block's
+	 * content. Do not reach for "the innerHTML is empty" as the test — a modern quote
+	 * keeps its `<cite>` there, and a modern gallery its own `<figcaption>`.
+	 *
+	 * @param array    $block             A block, as returned by parse_blocks().
+	 * @param string[] $inner_text_blocks Block names whose inner text is counted,
+	 *                                    from self::get_inner_text_blocks().
+	 *
+	 * @return int The block's length, in stripped-of-tags bytes.
+	 */
+	public static function get_block_length( $block, $inner_text_blocks ) {
+		$block_content = $block['innerHTML'];
 
 		if ( in_array( $block['blockName'], $inner_text_blocks, true ) ) {
 			$block_content .= self::get_inner_block_content( $block );
@@ -510,8 +536,9 @@ final class Newspack_Popups_Inserter {
 		}
 
 		// 2. Iterate over all blocks and insert inline prompts.
-		$pos    = 0;
-		$output = '';
+		$pos               = 0;
+		$output            = '';
+		$inner_text_blocks = self::get_inner_text_blocks();
 
 		foreach ( $parsed_blocks_groups as $block_index => $block_group ) {
 			// Compute the length of the blocks in the group.
@@ -520,7 +547,7 @@ final class Newspack_Popups_Inserter {
 					// Give length-ignored blocks a length of 1 so that prompts at 0% can still be inserted before them.
 					$pos++;
 				} else {
-					$pos += self::get_block_length( $block );
+					$pos += self::get_block_length( $block, $inner_text_blocks );
 				}
 			}
 

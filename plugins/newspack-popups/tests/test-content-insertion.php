@@ -405,7 +405,7 @@ Paragraph 2
 	 * Post content whose bulk sits inside a list block: a short paragraph, a list
 	 * carrying most of the text, then a short paragraph.
 	 *
-	 * @param bool $is_legacy Build a pre-WP-6.0 list (items in the block's own
+	 * @param bool $is_legacy Build a pre-WP-6.1 list (items in the block's own
 	 *                        innerHTML) rather than a modern one (items as
 	 *                        `core/list-item` inner blocks).
 	 *
@@ -428,29 +428,7 @@ Paragraph 2
 	}
 
 	/**
-	 * A prompt positioned by percentage must account for text held in a list
-	 * block's inner `core/list-item` blocks. Otherwise the list inflates the
-	 * target position while contributing nothing towards reaching it, and the
-	 * prompt is pushed to the end of the post. See NPPM-596.
-	 */
-	public function test_insertion_accounts_for_list_inner_blocks() {
-		self::assertEqualBlockNames(
-			[
-				'core/paragraph',
-				'core/shortcode', // Prompt – inserted at the halfway mark, which falls inside the list.
-				'core/list',
-				'core/paragraph',
-			],
-			Newspack_Popups_Inserter::insert_popups_in_post_content(
-				self::list_heavy_content(),
-				[ self::create_inline_popup( 'scroll', '50' ) ]
-			),
-			'A prompt at 50% is inserted mid-content, not pushed to the end, when the content is mostly a list.'
-		);
-	}
-
-	/**
-	 * Gutenberg moved list items into `core/list-item` inner blocks in WP 6.0.
+	 * Gutenberg moved list items into `core/list-item` inner blocks in WP 6.1.
 	 * Both markup styles render the same text to a reader, so a prompt must land
 	 * in the same place for both. Before NPPM-596 only the legacy markup was
 	 * counted, so placement silently depended on whether a post's list block had
@@ -486,7 +464,8 @@ Paragraph 2
 	}
 
 	/**
-	 * A post may mix list vintages – an old post edited after WP 6.0 can hold both.
+	 * A post may mix list vintages: a block-editor save re-serializes everything, so
+	 * mixed markup comes from programmatic writes, partial REST saves or pasted content.
 	 * Blocks are measured individually, so both must be counted.
 	 */
 	public function test_insertion_accounts_for_mixed_legacy_and_modern_lists() {
@@ -523,30 +502,68 @@ Paragraph 2
 	 * same way lists are.
 	 */
 	public function test_insertion_accounts_for_quote_inner_blocks() {
-		$quote = '<!-- wp:quote --><blockquote class="wp-block-quote">'
-			. '<!-- wp:paragraph --><p>' . self::filler( 'Quoted 1' ) . '</p><!-- /wp:paragraph -->'
-			. '<!-- wp:paragraph --><p>' . self::filler( 'Quoted 2' ) . '</p><!-- /wp:paragraph -->'
-			. '<!-- wp:paragraph --><p>' . self::filler( 'Quoted 3' ) . '</p><!-- /wp:paragraph -->'
-			. '<!-- wp:paragraph --><p>' . self::filler( 'Quoted 4' ) . '</p><!-- /wp:paragraph -->'
-			. '</blockquote><!-- /wp:quote -->';
+		foreach ( [ 'legacy', 'modern' ] as $vintage ) {
+			self::assertEqualBlockNames(
+				[
+					'core/paragraph',
+					'core/shortcode', // Prompt.
+					'core/quote',
+					'core/paragraph',
+				],
+				Newspack_Popups_Inserter::insert_popups_in_post_content(
+					self::quote_heavy_content( 'legacy' === $vintage ),
+					[ self::create_inline_popup( 'scroll', '50' ) ]
+				),
+				"A prompt at 50% accounts for a quote's text ({$vintage} markup)."
+			);
+		}
+	}
 
-		$post_content = '<!-- wp:paragraph --><p>' . self::filler( 'Paragraph 1' ) . '</p><!-- /wp:paragraph -->'
+	/**
+	 * A quote carrying a citation is the only shape where the block's own innerHTML
+	 * and its inner blocks both hold countable text, so it is what would catch a
+	 * change to get_block_length() that counted the citation twice.
+	 */
+	public function test_quote_citation_is_counted_once() {
+		$quote = self::quote_heavy_content( false, 'Citation Name' );
+		$block = parse_blocks( $quote )[1];
+
+		$own   = strlen( wp_strip_all_tags( $block['innerHTML'] ) );
+		$inner = strlen( wp_strip_all_tags( Newspack_Popups_Inserter::get_inner_block_content( $block ) ) );
+
+		self::assertGreaterThan( 0, $own, 'The citation stays in the quote block\'s own innerHTML.' );
+		self::assertGreaterThan( 0, $inner, 'The quoted prose sits in inner blocks.' );
+		self::assertSame(
+			$own + $inner,
+			Newspack_Popups_Inserter::get_block_length( $block, [ 'core/quote' ] ),
+			'The two sources are summed once each, never overlapping.'
+		);
+	}
+
+	/**
+	 * Post content whose bulk sits inside a quote block.
+	 *
+	 * @param bool   $is_legacy Build a pre-WP-6.1 quote (prose in the block's own
+	 *                          innerHTML) rather than a modern one (prose as
+	 *                          `core/paragraph` inner blocks).
+	 * @param string $citation  Optional citation, which stays in the block's own
+	 *                          innerHTML in both vintages.
+	 *
+	 * @return string
+	 */
+	private static function quote_heavy_content( $is_legacy = false, $citation = '' ) {
+		$prose = '';
+		for ( $i = 1; $i <= 4; $i++ ) {
+			$paragraph = '<p>' . self::filler( "Quoted {$i}" ) . '</p>';
+			$prose    .= $is_legacy ? $paragraph : "<!-- wp:paragraph -->{$paragraph}<!-- /wp:paragraph -->";
+		}
+
+		$cite  = '' === $citation ? '' : "<cite>{$citation}</cite>";
+		$quote = '<!-- wp:quote --><blockquote class="wp-block-quote">' . $prose . $cite . '</blockquote><!-- /wp:quote -->';
+
+		return '<!-- wp:paragraph --><p>' . self::filler( 'Paragraph 1' ) . '</p><!-- /wp:paragraph -->'
 			. $quote
 			. '<!-- wp:paragraph --><p>' . self::filler( 'Paragraph 2' ) . '</p><!-- /wp:paragraph -->';
-
-		self::assertEqualBlockNames(
-			[
-				'core/paragraph',
-				'core/shortcode', // Prompt.
-				'core/quote',
-				'core/paragraph',
-			],
-			Newspack_Popups_Inserter::insert_popups_in_post_content(
-				$post_content,
-				[ self::create_inline_popup( 'scroll', '50' ) ]
-			),
-			'A prompt at 50% accounts for text held in a quote block\'s inner blocks.'
-		);
 	}
 
 	/**
@@ -613,14 +630,14 @@ Paragraph 2
 	 */
 	public function test_inner_text_blocks_filter_can_restore_previous_behaviour() {
 		$restore_old_behaviour = '__return_empty_array';
-		add_filter( 'newspack_popups_inner_text_blocks', $restore_old_behaviour );
+		add_filter( 'newspack_popups_prompt_position_inner_text_blocks', $restore_old_behaviour );
 
 		$actual = Newspack_Popups_Inserter::insert_popups_in_post_content(
 			self::list_heavy_content(),
 			[ self::create_inline_popup( 'scroll', '50' ) ]
 		);
 
-		remove_filter( 'newspack_popups_inner_text_blocks', $restore_old_behaviour );
+		remove_filter( 'newspack_popups_prompt_position_inner_text_blocks', $restore_old_behaviour );
 
 		self::assertEqualBlockNames(
 			[
@@ -636,19 +653,19 @@ Paragraph 2
 
 	/**
 	 * Filters are untyped, so a site can return anything from
-	 * `newspack_popups_inner_text_blocks`. A non-array return must not take the front
+	 * `newspack_popups_prompt_position_inner_text_blocks`. A non-array return must not take the front
 	 * end down with a TypeError out of in_array().
 	 */
 	public function test_inner_text_blocks_filter_tolerates_a_non_array_return() {
 		$return_null = '__return_null';
-		add_filter( 'newspack_popups_inner_text_blocks', $return_null );
+		add_filter( 'newspack_popups_prompt_position_inner_text_blocks', $return_null );
 
 		$actual = Newspack_Popups_Inserter::insert_popups_in_post_content(
 			self::list_heavy_content(),
 			[ self::create_inline_popup( 'scroll', '50' ) ]
 		);
 
-		remove_filter( 'newspack_popups_inner_text_blocks', $return_null );
+		remove_filter( 'newspack_popups_prompt_position_inner_text_blocks', $return_null );
 
 		// Degrades to counting nothing — i.e. the pre-NPPM-596 placement — but does not fatal.
 		self::assertEqualBlockNames(
