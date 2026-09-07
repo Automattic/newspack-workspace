@@ -20,27 +20,26 @@ class Newspack_Test_Starter_Content_Generated extends WP_UnitTestCase {
 	private $written_files = [];
 
 	/**
-	 * Filters this test added, removed individually in tear_down().
+	 * URLs the stub intercepted, asserted so a source URL change cannot reach the network.
 	 *
-	 * Removing them by name rather than clearing the hook: the WordPress test suite
-	 * installs its own pre_http_request handlers, and remove_all_filters() takes those
-	 * with it and breaks every later test that makes a request.
-	 *
-	 * @var callable[]
+	 * @var string[]
 	 */
-	private $http_filters = [];
+	private $stubbed_urls = [];
 
-	public function tear_down() { // phpcs:ignore Squiz.Commenting.FunctionComment.Missing
+	/**
+	 * Remove the uploads this test wrote.
+	 *
+	 * Only the files: WP_UnitTestCase_Base::tear_down() restores $GLOBALS['wp_filter']
+	 * from its own snapshot, so filters added during a test need no bookkeeping here,
+	 * but nothing reverts writes into the uploads directory.
+	 */
+	public function tear_down() {
 		foreach ( $this->written_files as $file ) {
 			if ( file_exists( $file ) ) {
 				unlink( $file ); // phpcs:ignore WordPressVIPMinimum.Functions.RestrictedFunctions.file_ops_unlink
 			}
 		}
 		$this->written_files = [];
-		foreach ( $this->http_filters as $filter ) {
-			remove_filter( 'pre_http_request', $filter, 10 );
-		}
-		$this->http_filters = [];
 		parent::tear_down();
 	}
 
@@ -50,9 +49,7 @@ class Newspack_Test_Starter_Content_Generated extends WP_UnitTestCase {
 	 */
 	private function stub_image_download() {
 		$filter = function ( $pre, $args, $url ) {
-			if ( false === strpos( $url, 'picsum.photos' ) ) {
-				return $pre;
-			}
+			$this->stubbed_urls[] = $url;
 			if ( ! empty( $args['filename'] ) ) {
 				copy( NEWSPACK_ABSPATH . 'includes/raw_assets/images/starter-content-featured-image.jpg', $args['filename'] );
 			}
@@ -61,23 +58,24 @@ class Newspack_Test_Starter_Content_Generated extends WP_UnitTestCase {
 					'code'    => 200,
 					'message' => 'OK',
 				],
-				'headers'  => [],
+				// download_url() renames the temp file to a real extension from this
+				// header, which is the shape the image host actually returns.
+				'headers'  => [ 'content-type' => 'image/jpeg' ],
 				'body'     => '',
 				'cookies'  => [],
 				'filename' => $args['filename'] ?? null,
 			];
 		};
 
-		$this->http_filters[] = $filter;
 		add_filter( 'pre_http_request', $filter, 10, 3 );
 	}
 
 	/**
 	 * The image sideload lands a file in the uploads directory.
 	 *
-	 * Passing the sideload array inline is a fatal on PHP 8 rather than a failed upload,
-	 * because wp_handle_sideload() takes its first argument by reference. Every
-	 * starter-content post outside E2E died there before it could get a featured image.
+	 * Guards the by-reference argument to wp_handle_sideload(): passing a literal there
+	 * throws rather than returning an upload error, so this fails as an error, not an
+	 * assertion.
 	 */
 	public function test_download_random_image_sideloads_into_uploads() {
 		$this->stub_image_download();
@@ -85,6 +83,12 @@ class Newspack_Test_Starter_Content_Generated extends WP_UnitTestCase {
 		$method = new ReflectionMethod( Starter_Content_Generated::class, 'download_random_image' );
 		$method->setAccessible( true );
 		$path = $method->invoke( null );
+
+		$this->assertSame(
+			[ 'https://picsum.photos/1200/800' ],
+			$this->stubbed_urls,
+			'The stub intercepted the request. A source URL change would otherwise reach the network.'
+		);
 
 		$this->assertIsString( $path, 'The sideload returns a path rather than failing.' );
 		$this->written_files[] = $path;
@@ -97,13 +101,20 @@ class Newspack_Test_Starter_Content_Generated extends WP_UnitTestCase {
 
 	/**
 	 * A failed download is reported as no image, not as a fatal.
+	 *
+	 * This passes with the sideload fix reverted — the WP_Error returns above that call.
+	 * It is here to pin the null-return contract the one caller branches on, against a
+	 * future reordering of the guards, rather than to cover the fix.
 	 */
 	public function test_download_random_image_returns_null_when_the_request_fails() {
-		$filter = function () {
-			return new WP_Error( 'http_request_failed', 'Offline.' );
-		};
-		$this->http_filters[] = $filter;
-		add_filter( 'pre_http_request', $filter, 10, 3 );
+		add_filter(
+			'pre_http_request',
+			function () {
+				return new WP_Error( 'http_request_failed', 'Offline.' );
+			},
+			10,
+			3
+		);
 
 		$method = new ReflectionMethod( Starter_Content_Generated::class, 'download_random_image' );
 		$method->setAccessible( true );
