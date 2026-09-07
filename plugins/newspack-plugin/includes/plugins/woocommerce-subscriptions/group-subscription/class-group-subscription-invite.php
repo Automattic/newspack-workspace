@@ -42,6 +42,16 @@ class Group_Subscription_Invite {
 	const RESULT_QUERY_ARG = 'group_invite_result';
 
 	/**
+	 * Result codes for a WooCommerce Teams `join-team` link resolved after the flip.
+	 * They live here, with the rest of the invite result codes, because
+	 * render_invite_notice() is the one place that turns a code into reader-facing
+	 * text. See Group_Subscription_Teams_Invite.
+	 */
+	const RESULT_JOIN_TEAM_INVALID = 'join_team_link_invalid';
+	const RESULT_JOIN_TEAM_MEMBER  = 'join_team_already_member';
+	const RESULT_JOIN_TEAM_SIGN_IN = 'join_team_sign_in';
+
+	/**
 	 * The query arg used by invite-link URLs.
 	 *
 	 * @var string
@@ -379,14 +389,21 @@ class Group_Subscription_Invite {
 	 *
 	 * @param \WC_Subscription|int $subscription The subscription object or ID.
 	 * @param string               $email The email address receiving the invitation.
+	 * @param bool                 $send_email Whether to email the invitation. Pass false to store
+	 *                                         the invite silently, for a caller that is about to
+	 *                                         put the reader in front of the invite itself rather
+	 *                                         than mail it to them.
 	 *
 	 * @return array|\WP_Error The invite data, or a WP_Error if the key cannot be generated.
 	 *                         The returned array carries an `email_sent` flag reporting whether
 	 *                         the invitation email actually went out — the invite row is written
 	 *                         either way, so a caller that needs to report or retry delivery must
 	 *                         read that flag rather than treat a non-error return as "delivered".
+	 *                         With `$send_email` false no send is attempted and the flag is false.
+	 *                         The key is deliberately not returned: api_invite() passes this array
+	 *                         straight to a REST response, and the key is a bearer credential.
 	 */
-	public static function generate_invite( $subscription, $email ) {
+	public static function generate_invite( $subscription, $email, $send_email = true ) {
 		$subscription = WooCommerce_Subscriptions::sanitize_subscription( $subscription );
 		if ( ! $subscription || ! Group_Subscription::is_group_subscription( $subscription ) ) {
 			return new \WP_Error( 'newspack_group_subscription_invite_invalid_subscription', __( 'Invalid subscription.', 'newspack-plugin' ) );
@@ -452,7 +469,7 @@ class Group_Subscription_Invite {
 		// is persisted (it was written above), so this flag never lands in meta — it
 		// exists so callers can tell "invite stored and emailed" from "invite stored,
 		// email never went out", which the send path signals by returning false.
-		$new_invite['email_sent'] = (bool) self::send_invite_email( $subscription->get_id(), $invite_key, $email );
+		$new_invite['email_sent'] = $send_email && (bool) self::send_invite_email( $subscription->get_id(), $invite_key, $email );
 
 		return $new_invite;
 	}
@@ -570,6 +587,16 @@ class Group_Subscription_Invite {
 		}
 
 		self::cancel_invite( $subscription, $email );
+
+		/**
+		 * Fires after a reader joins a group subscription by accepting an invite.
+		 *
+		 * @param \WC_Subscription $subscription The group subscription joined.
+		 * @param string           $email        The address the invite was issued to.
+		 * @param int              $user_id      The reader who joined.
+		 */
+		do_action( 'newspack_group_subscription_invite_accepted', $subscription_obj, $email, (int) $user->ID );
+
 		return true;
 	}
 
@@ -876,15 +903,31 @@ class Group_Subscription_Invite {
 			return;
 		}
 
-		$messages = [
-			'link_invalid'              => __( 'This link is no longer valid. Please contact the group manager.', 'newspack-plugin' ),
-			'link_full'                 => __( 'This group already has the maximum number of members. Please contact the group manager.', 'newspack-plugin' ),
-			'link_failed'               => __( "We couldn't add you to the group. Please contact the group manager.", 'newspack-plugin' ),
-			'login_needed'              => __( 'Please log in or register an account to join the group.', 'newspack-plugin' ),
-			'error_invalid_link'        => __( 'Invalid invitation link.', 'newspack-plugin' ),
-			'error_email_mismatch'      => __( 'This invitation is for a different email address.', 'newspack-plugin' ),
-			'error_invite_invalid'      => __( 'Invalid or expired invitation.', 'newspack-plugin' ),
-			'error_registration_failed' => __( 'Could not create your account. Please try again.', 'newspack-plugin' ),
+		$group_label = Group_Subscription::get_label_lower( 'singular' );
+		$messages    = [
+			self::RESULT_JOIN_TEAM_INVALID => sprintf(
+				/* translators: %s: lowercase singular group label (e.g. "group", "team"). */
+				__( 'This invitation link is no longer valid. Ask the %s\'s owner or manager to send you a new invitation.', 'newspack-plugin' ),
+				$group_label
+			),
+			self::RESULT_JOIN_TEAM_MEMBER  => sprintf(
+				/* translators: %s: lowercase singular group label (e.g. "group", "team"). */
+				__( 'You already have access through this %s.', 'newspack-plugin' ),
+				$group_label
+			),
+			self::RESULT_JOIN_TEAM_SIGN_IN => sprintf(
+				/* translators: %s: lowercase singular group label (e.g. "group", "team"). */
+				__( 'You already have access through this %s. Sign in to continue.', 'newspack-plugin' ),
+				$group_label
+			),
+			'link_invalid'                 => __( 'This link is no longer valid. Please contact the group manager.', 'newspack-plugin' ),
+			'link_full'                    => __( 'This group already has the maximum number of members. Please contact the group manager.', 'newspack-plugin' ),
+			'link_failed'                  => __( "We couldn't add you to the group. Please contact the group manager.", 'newspack-plugin' ),
+			'login_needed'                 => __( 'Please log in or register an account to join the group.', 'newspack-plugin' ),
+			'error_invalid_link'           => __( 'Invalid invitation link.', 'newspack-plugin' ),
+			'error_email_mismatch'         => __( 'This invitation is for a different email address.', 'newspack-plugin' ),
+			'error_invite_invalid'         => __( 'Invalid or expired invitation.', 'newspack-plugin' ),
+			'error_registration_failed'    => __( 'Could not create your account. Please try again.', 'newspack-plugin' ),
 		];
 
 		if ( 'success' === $result ) {
@@ -907,7 +950,7 @@ class Group_Subscription_Invite {
 	 *                                render_invite_notice() maps the code to a localized message.
 	 * @param string|null $target_url Optional redirect base. Defaults to My Account or home_url().
 	 */
-	private static function redirect_with_result( $status, $target_url = null ) {
+	public static function redirect_with_result( $status, $target_url = null ) {
 		$args = [ self::RESULT_QUERY_ARG => $status ];
 		if ( null === $target_url ) {
 			$target_url = is_user_logged_in() && function_exists( 'wc_get_account_endpoint_url' ) ? wc_get_account_endpoint_url( 'edit-account' ) : home_url();
