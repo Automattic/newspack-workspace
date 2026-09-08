@@ -1426,7 +1426,7 @@ class Newspack_Newsletters_Subscription {
 				 * @param array|WP_Error $lists_config Associative array with list configuration keyed by list ID or WP_Error.
 				 */
 				$list_config  = apply_filters( 'newspack_newsletters_manage_newsletters_available_lists', self::get_lists_config() );
-				$user_lists   = array_flip( self::get_contact_lists( $email ) );
+				$user_lists   = self::get_contact_lists( $email );
 				$intent_error = self::get_user_subscription_intent_error( $user_id );
 				if ( $intent_error ) :
 					?>
@@ -1442,43 +1442,57 @@ class Newspack_Newsletters_Subscription {
 						</li>
 					</ul>
 				<?php endif; ?>
-				<p>
-					<?php _e( 'Manage your newsletter preferences.', 'newspack-newsletters' ); ?>
-				</p>
-				<form method="post">
-					<?php wp_nonce_field( self::SUBSCRIPTION_UPDATE, self::SUBSCRIPTION_UPDATE ); ?>
-					<div class="newspack-newsletters__lists">
-						<ul>
-							<?php
-							foreach ( $list_config as $list_id => $list ) :
-								$checkbox_id = sprintf( 'newspack-newsletters-list-checkbox-%s', $list_id );
-								?>
-								<li>
-									<span class="newspack-newsletters__lists__checkbox">
-										<input
-											type="checkbox"
-											name="lists[]"
-											value="<?php echo \esc_attr( $list_id ); ?>"
-											id="<?php echo \esc_attr( $checkbox_id ); ?>"
-											<?php if ( isset( $user_lists[ $list_id ] ) ) : ?>
-												checked
-											<?php endif; ?>
-										/>
-									</span>
-									<span class="newspack-newsletters__lists__details">
-										<label class="newspack-newsletters__lists__label" for="<?php echo \esc_attr( $checkbox_id ); ?>">
-											<span class="newspack-newsletters__lists__title">
-												<?php echo \esc_html( $list['title'] ); ?>
-											</span>
-											<span class="newspack-newsletters__lists__description"><?php echo \esc_html( $list['description'] ); ?></span>
-										</label>
-									</span>
-								</li>
-							<?php endforeach; ?>
-						</ul>
-					</div>
-					<button class="newspack-ui__button newspack-ui__button--primary" type="submit"><?php _e( 'Update subscriptions', 'newspack-newsletters' ); ?></button>
-				</form>
+				<?php
+				if ( is_wp_error( $user_lists ) ) :
+					// The form pre-checks the lists the reader is on. With nothing to
+					// check it would read as "subscribed to nothing", which is not what
+					// a failed read means, so it is not shown.
+					?>
+					<ul class="woocommerce-error" role="alert">
+						<li><?php esc_html_e( 'Newsletter subscriptions could not be loaded. Please try again later.', 'newspack-newsletters' ); ?></li>
+					</ul>
+					<?php
+				else :
+					$user_lists = array_flip( $user_lists );
+					?>
+					<p>
+						<?php _e( 'Manage your newsletter preferences.', 'newspack-newsletters' ); ?>
+					</p>
+					<form method="post">
+						<?php wp_nonce_field( self::SUBSCRIPTION_UPDATE, self::SUBSCRIPTION_UPDATE ); ?>
+						<div class="newspack-newsletters__lists">
+							<ul>
+								<?php
+								foreach ( $list_config as $list_id => $list ) :
+									$checkbox_id = sprintf( 'newspack-newsletters-list-checkbox-%s', $list_id );
+									?>
+									<li>
+										<span class="newspack-newsletters__lists__checkbox">
+											<input
+												type="checkbox"
+												name="lists[]"
+												value="<?php echo \esc_attr( $list_id ); ?>"
+												id="<?php echo \esc_attr( $checkbox_id ); ?>"
+												<?php if ( isset( $user_lists[ $list_id ] ) ) : ?>
+													checked
+												<?php endif; ?>
+											/>
+										</span>
+										<span class="newspack-newsletters__lists__details">
+											<label class="newspack-newsletters__lists__label" for="<?php echo \esc_attr( $checkbox_id ); ?>">
+												<span class="newspack-newsletters__lists__title">
+													<?php echo \esc_html( $list['title'] ); ?>
+												</span>
+												<span class="newspack-newsletters__lists__description"><?php echo \esc_html( $list['description'] ); ?></span>
+											</label>
+										</span>
+									</li>
+								<?php endforeach; ?>
+							</ul>
+						</div>
+						<button class="newspack-ui__button newspack-ui__button--primary" type="submit"><?php _e( 'Update subscriptions', 'newspack-newsletters' ); ?></button>
+					</form>
+				<?php endif; ?>
 			<?php endif; ?>
 		</div>
 		<?php
@@ -1514,8 +1528,12 @@ class Newspack_Newsletters_Subscription {
 				$result = Newspack_Newsletters_Contacts::subscribe( [ 'email' => $email ], $lists, false, 'User subscribed on My Account page' );
 			} else {
 				$current_lists = self::get_contact_lists( $email );
-				$lists_to_add  = array_values( array_diff( $lists_to_add, $current_lists ) );
-				$result        = Newspack_Newsletters_Contacts::update_lists( $email, $lists, 'User updated their subscriptions on My Account page' );
+				if ( is_wp_error( $current_lists ) ) {
+					$result = $current_lists;
+				} else {
+					$lists_to_add = array_values( array_diff( $lists_to_add, $current_lists ) );
+					$result       = Newspack_Newsletters_Contacts::update_lists( $email, $lists, 'User updated their subscriptions on My Account page' );
+				}
 			}
 			if ( is_wp_error( $result ) ) {
 				// Get a reader-friendly error message to show to the user.

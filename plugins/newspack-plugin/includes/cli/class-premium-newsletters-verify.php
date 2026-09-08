@@ -482,29 +482,29 @@ class Premium_Newsletters_Verify {
 	/**
 	 * One reader's ESP list membership, and whether it can be trusted.
 	 *
-	 * Every shipped provider's get_contact_lists() swallows a failed API call into an
-	 * empty array rather than a WP_Error, so it cannot tell "no contact" from "could
-	 * not ask". Reading get_contact_data() first recovers part of that distinction:
+	 * Every shipped provider's get_contact_lists() answers a failed contact read with
+	 * an empty array rather than a WP_Error, so it cannot tell "no contact" from
+	 * "could not ask". Reading get_contact_data() first recovers part of that distinction:
 	 * its WP_Error code names a genuine miss on all three providers, so a reader with
 	 * no contact counts as "on no lists" rather than failing.
 	 *
 	 * That pre-read does not cover the remaining ambiguity — an empty list set from a
 	 * contact that exists is both what a reader on no lists looks like and what a
 	 * failed list read returns. On Mailchimp and Constant Contact the list read is a
-	 * second, un-memoized request that can fail on its own; on ActiveCampaign it is a
-	 * different endpoint entirely. So an empty set is corroborated by a further
-	 * contact read before it is believed, which costs one call on that path only and
-	 * turns a flaking provider into unresolved rows rather than a clean run.
+	 * second, un-memoized request that can fail on its own. (ActiveCampaign reads the
+	 * lists from an endpoint of their own and reports that request's failure as a
+	 * WP_Error, which the check above already turns into an unresolved row.) So an
+	 * empty set is corroborated by a further contact read before it is believed,
+	 * which costs one call on that path only and turns a flaking provider into
+	 * unresolved rows rather than a clean run.
 	 *
 	 * What this closes, precisely: a failure that persists across two reads. It does
-	 * not close a single transient one, on any provider. Mailchimp's and Constant
-	 * Contact's get_contact_lists() are get_contact_data() plus a filter, so the
-	 * corroborating call re-issues the request that just failed and a blip clearing
-	 * in between reads as "no lists"; ActiveCampaign's list read is a separate
-	 * endpoint the corroborating call never touches at all. Deciding this from the
-	 * contact payload already in hand would be stronger, but it means mirroring each
-	 * provider's own membership filter — Mailchimp counts only `subscribed` entries —
-	 * and ActiveCampaign's payload carries no membership to read.
+	 * not close a single transient one on Mailchimp or Constant Contact: their
+	 * get_contact_lists() are get_contact_data() plus a filter, so the corroborating
+	 * call re-issues the request that just failed and a blip clearing in between
+	 * reads as "no lists". Deciding this from the contact payload already in hand
+	 * would be stronger, but it means mirroring each provider's own membership
+	 * filter — Mailchimp counts only `subscribed` entries.
 	 *
 	 * @param array  $esp   The ESP gateway.
 	 * @param string $email The reader's email address.
