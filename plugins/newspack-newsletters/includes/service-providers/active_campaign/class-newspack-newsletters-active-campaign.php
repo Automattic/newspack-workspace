@@ -103,6 +103,19 @@ final class Newspack_Newsletters_Active_Campaign extends \Newspack_Newsletters_S
 	private $contact_data = [];
 
 	/**
+	 * Per-request memo of get_field_merge_tag_name() results, keyed by field
+	 * name, sitting in front of that method's transient cache.
+	 *
+	 * Static because instance() returns a new object per call in test
+	 * environments. Sits in front of the transient so a failing object cache
+	 * (get_transient() always missing) can't repeat the paginated field fetch
+	 * once per link within a render.
+	 *
+	 * @var array<string, string>
+	 */
+	private static $field_merge_tag_name_memo = [];
+
+	/**
 	 * Whether the provider has support to tags and tags based Subscription Lists.
 	 *
 	 * @var boolean
@@ -2289,6 +2302,73 @@ final class Newspack_Newsletters_Active_Campaign extends \Newspack_Newsletters_S
 			$result = array_merge( $result, $fields );
 		}
 		return $result;
+	}
+
+	/**
+	 * Get the perstag for a synced ActiveCampaign custom field.
+	 *
+	 * Matches by generated perstag first, then by title — the same order
+	 * add_contact() uses, because an ActiveCampaign admin may have renamed a
+	 * field's perstag, in which case the account's actual perstag is the only
+	 * value AC substitutes. A row with an empty perstag can never match: it
+	 * supplies no usable tag.
+	 *
+	 * Memoized per request and cached in a transient: the field list is an
+	 * uncached, paginated fetch and link decoration runs once per link per
+	 * render. Misses are cached briefly so a new field is picked up soon.
+	 *
+	 * @param string      $field_name Field title as synced (e.g. 'NP_Account').
+	 * @param string|null $list_id    Unused; ActiveCampaign fields are account-wide.
+	 *
+	 * @return string Perstag, or '' when unknown.
+	 */
+	public function get_field_merge_tag_name( $field_name, $list_id = null ) {
+		$field_name = trim( (string) $field_name );
+		if ( '' === $field_name ) {
+			return '';
+		}
+
+		if ( array_key_exists( $field_name, self::$field_merge_tag_name_memo ) ) {
+			return self::$field_merge_tag_name_memo[ $field_name ];
+		}
+
+		$cache_key = 'np_nl_field_tag_' . md5( $field_name );
+		$cached    = get_transient( $cache_key );
+		if ( false !== $cached ) {
+			self::$field_merge_tag_name_memo[ $field_name ] = (string) $cached;
+			return (string) $cached;
+		}
+
+		$fields = $this->get_all_contact_fields();
+		if ( is_wp_error( $fields ) || ! is_array( $fields ) ) {
+			// Not memoized: a transport failure can clear up within the same
+			// render, so later links should retry rather than lock into ''.
+			return '';
+		}
+
+		$generated = strtoupper( str_replace( '-', '_', sanitize_title( $field_name ) ) );
+		$perstag   = '';
+		foreach ( $fields as $field ) {
+			if ( ! empty( $field['perstag'] ) && $field['perstag'] === $generated ) {
+				$perstag = (string) $field['perstag'];
+				break;
+			}
+		}
+		if ( '' === $perstag ) {
+			foreach ( $fields as $field ) {
+				if (
+					! empty( $field['title'] ) && ! empty( $field['perstag'] ) &&
+					0 === strcasecmp( trim( $field['title'] ), $field_name )
+				) {
+					$perstag = (string) $field['perstag'];
+					break;
+				}
+			}
+		}
+
+		set_transient( $cache_key, $perstag, '' === $perstag ? 15 * MINUTE_IN_SECONDS : 12 * HOUR_IN_SECONDS );
+		self::$field_merge_tag_name_memo[ $field_name ] = $perstag;
+		return $perstag;
 	}
 
 	/**
