@@ -50,6 +50,9 @@ const OVERRIDE_ENABLED_KEY = 'newspack_contextual_prompts_override_enabled';
 const OVERRIDE_CTA_KEY = 'newspack_contextual_prompts_override_cta';
 const OVERRIDE_BUTTON_KEYS = [ 'newspack_contextual_prompts_override_label', 'newspack_contextual_prompts_override_url' ];
 
+// The control test's enable toggle gates its section the same way the override does.
+const CONTROL_ENABLED_KEY = 'newspack_contextual_prompts_control_enabled';
+
 const ContextualPromptsSettings = ( { status, values, error, inFlight, onSetValue, onEnable } ) => {
 	const [ modalOpen, setModalOpen ] = useState( false );
 	const { enabled, can_manage: canManage, fields } = status;
@@ -123,14 +126,23 @@ const ContextualPromptsSettings = ( { status, values, error, inFlight, onSetValu
 	const hasCtaToggle = ( fields || [] ).some( field => OVERRIDE_CTA_KEY === field.key );
 	const effectiveCta = hasCtaToggle ? values[ OVERRIDE_CTA_KEY ] || 'form' : 'button';
 	const overrideEnabled = !! values[ OVERRIDE_ENABLED_KEY ];
+	const controlEnabled = !! values[ CONTROL_ENABLED_KEY ];
+	// Until a gated section is on, only its enable toggle shows.
+	const gatedSections = {
+		override: [ OVERRIDE_ENABLED_KEY, overrideEnabled ],
+		control: [ CONTROL_ENABLED_KEY, controlEnabled ],
+	};
 
-	// Fields are grouped by section server-side so the override controls can sit
-	// under their own heading rather than trailing the publisher profile.
+	// Fields are grouped by section server-side so the override and control
+	// controls can sit under their own headings rather than trailing the
+	// publisher profile.
 	const renderFields = section =>
 		( fields || [] )
 			.filter( field => ( field.section || 'profile' ) === section )
-			// Until the override is on, only its enable toggle shows.
-			.filter( field => 'override' !== ( field.section || 'profile' ) || OVERRIDE_ENABLED_KEY === field.key || overrideEnabled )
+			.filter( field => {
+				const gate = gatedSections[ field.section || 'profile' ];
+				return ! gate || gate[ 0 ] === field.key || gate[ 1 ];
+			} )
 			// The button label/URL only apply when the override CTA is a button.
 			.filter( field => 'button' === effectiveCta || ! OVERRIDE_BUTTON_KEYS.includes( field.key ) )
 			.map( field => {
@@ -179,6 +191,23 @@ const ContextualPromptsSettings = ( { status, values, error, inFlight, onSetValu
 						/>
 					);
 				}
+				if ( 'number' === field.type ) {
+					return (
+						<TextControl
+							key={ field.key }
+							type="number"
+							min={ 2 }
+							max={ 20 }
+							label={ field.label }
+							help={ field.help }
+							value={ values[ field.key ] ?? '' }
+							onChange={ value => onSetValue( field.key, value ) }
+							disabled={ inFlight }
+							__next40pxDefaultSize
+							__nextHasNoMarginBottom
+						/>
+					);
+				}
 				return (
 					<TextControl
 						key={ field.key }
@@ -214,6 +243,19 @@ const ContextualPromptsSettings = ( { status, values, error, inFlight, onSetValu
 					noMargin
 				/>
 				<VStack spacing={ 6 }>{ renderFields( 'override' ) }</VStack>
+			</Grid>
+			<Divider alignment="full-width" variant="tertiary" />
+			<Grid columns={ 2 } gutter={ 32 } noMargin>
+				<SectionHeader
+					heading={ 2 }
+					title={ __( 'Control Test', 'newspack-plugin' ) }
+					description={ __(
+						'Show a generic control ask on every Nth story to compare it against story-aware copy. The call to action stays the same. If the site-wide override is on, it takes precedence and the test pauses.',
+						'newspack-plugin'
+					) }
+					noMargin
+				/>
+				<VStack spacing={ 6 }>{ renderFields( 'control' ) }</VStack>
 			</Grid>
 		</WizardsTab>
 	);
