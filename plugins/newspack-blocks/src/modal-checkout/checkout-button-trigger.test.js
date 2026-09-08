@@ -192,7 +192,9 @@ describe( 'resolveCheckoutButtonForm', () => {
 		expect( root.querySelector( 'input[value="158"]' ).checked ).toBe( true );
 	} );
 
-	it( 'returns null for an invalid variation when product-only fallback is off (default)', () => {
+	// Substituting the product-only button would check the reader out on
+	// something other than what the link asked for.
+	it( 'returns null for a variation no button or picker can serve', () => {
 		const root = render( checkoutButton( { product_id: '158' }, 'Checkout' ) );
 		expect( resolveCheckoutButtonForm( root, '158', '160', PICKER_OPTIONS ) ).toBeNull();
 	} );
@@ -200,12 +202,6 @@ describe( 'resolveCheckoutButtonForm', () => {
 	it( 'treats a variation_id equal to product_id as a strict variation request', () => {
 		const root = render( checkoutButton( { product_id: '158' }, 'Checkout' ) );
 		expect( resolveCheckoutButtonForm( root, '158', '158', PICKER_OPTIONS ) ).toBeNull();
-	} );
-
-	it( 'returns the product-only button for an invalid variation only when fallback is explicitly enabled', () => {
-		const root = render( checkoutButton( { product_id: '158' }, 'Checkout' ) );
-		const buttonForm = root.querySelector( 'form' );
-		expect( resolveCheckoutButtonForm( root, '158', '160', { ...PICKER_OPTIONS, allowProductOnlyFallback: true } ) ).toBe( buttonForm );
 	} );
 
 	// A "let the reader choose" link carries the parent id only. A page button

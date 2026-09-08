@@ -348,19 +348,17 @@ export function getDroppedLinkContext( form, search ) {
  * block an editor configured — with its coupon and after-checkout context —
  * always wins over the copy rendered to serve the trigger. Strict order: exact
  * page button, picker fed by a page button's context, exact synthesized button,
- * picker fed by the synthesized context, then the explicit product-only
- * fallback. Returning null prevents silent substitution.
+ * picker fed by the synthesized context. Returning null prevents silent
+ * substitution.
  *
  * @param {Document|HTMLElement} root        The DOM root to search.
  * @param {string}               productId   The requested product ID.
  * @param {string|null}          variationId Optional. The requested variation ID.
- * @param {Object}               options     Options (see selectPickerForm) plus
- *                                           `allowProductOnlyFallback` (default false).
+ * @param {Object}               options     Options (see selectPickerForm).
  *
  * @return {HTMLFormElement|null} The form to submit, or null.
  */
 export function resolveCheckoutButtonForm( root, productId, variationId, options = {} ) {
-	const { allowProductOnlyFallback = false } = options;
 	const hasVariation = variationId !== null && variationId !== undefined && String( variationId ) !== '';
 
 	if ( ! hasVariation ) {
@@ -410,13 +408,6 @@ export function resolveCheckoutButtonForm( root, productId, variationId, options
 		// product, and fall back to DOM order only when there isn't one.
 		copyContextFields( findContextDonorForm( root, productId ), picker );
 		return picker;
-	}
-
-	if ( allowProductOnlyFallback ) {
-		return (
-			findCheckoutButtonForm( root, productId, null, { synthesized: false } ) ||
-			findCheckoutButtonForm( root, productId, null, { synthesized: true } )
-		);
 	}
 
 	return null;
