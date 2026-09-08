@@ -235,11 +235,14 @@ function get_listing_excerpt( $post, $excerpt_length = null ) {
 	$excerpt = get_content_gate_teaser( $post );
 	if ( null === $excerpt ) {
 		// A password-protected post is core's to withhold, and the fallback below
-		// would publish its opening words. Core answers get_the_excerpt() with a
-		// notice; the form is the more useful answer here, because it is what lets
-		// the reader open the listing they are looking at.
+		// would publish its opening words. A sentence stands in for the body, not
+		// get_the_password_form(): the card echoes this excerpt through
+		// wp_kses_post() inside the link to the listing, and the `post` allowlist
+		// has held no <form> or <input> since WP 5.0.1, so the form would reach the
+		// reader as a prompt with nothing to type into. The form belongs on the
+		// listing's own page, which the card links to.
 		if ( post_password_required( $post ) ) {
-			return $the_dates . get_the_password_form( $post );
+			return $the_dates . wpautop( esc_html__( 'This content is password-protected.', 'newspack-listings' ) );
 		}
 		$excerpt = $post->post_content;
 	}

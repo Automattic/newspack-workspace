@@ -90,11 +90,15 @@ class Content_Gate {
 	 * `source` records which render wrote the entry, and the two paths do not
 	 * produce interchangeable strings: the article render answers to the reader
 	 * making the request, a listing answers to the anonymous one and carries no
-	 * gate. {@see self::get_teaser_outside_article()} therefore takes only a
-	 * listing's own entry, so a card on an article's own page cannot repeat the
-	 * teaser that page built for its reader into a render the block cache serves
-	 * to whoever comes next; and a listing never overwrites an article entry,
-	 * which carries the gate that page still has to render.
+	 * gate. So an entry is only ever handed back to the render that matches it.
+	 * {@see self::get_teaser_outside_article()} takes a listing's own entry alone,
+	 * which keeps the article's reader-specific teaser out of a direct caller's
+	 * hands and out of the shared teaser cache. The substitution filters resolve
+	 * the render they are answering through
+	 * {@see self::get_staged_restriction_for_render()}, which keeps it out of a
+	 * card the block cache serves to whoever comes next. And a listing never
+	 * overwrites an article entry, which carries the gate that page still has to
+	 * render.
 	 *
 	 * @var array<int, array{teaser: string, gate: string, source: string}>
 	 */
@@ -108,6 +112,18 @@ class Content_Gate {
 	 * @var array<int, string>
 	 */
 	private static array $withheld_teasers = [];
+
+	/**
+	 * Listing teasers staged for individual WP_Post instances, keyed by the
+	 * instance's object id and naming the post each one belongs to.
+	 *
+	 * Every loop is handed its own WP_Post instance, so which instance is set up is
+	 * what separates a card for a post from the article render of that same post.
+	 * {@see self::get_staged_restriction_for_render()} is what reads that apart.
+	 *
+	 * @var array<int, array{post_id: int, teaser: string}>
+	 */
+	private static array $withheld_instances = [];
 
 	/**
 	 * Whether a listing teaser is being built right now.
@@ -135,9 +151,13 @@ class Content_Gate {
 	private static bool $is_listing_context = false;
 
 	/**
-	 * Post ID whose teaser has been substituted into an in-flight 'the_content'
-	 * pass and whose gate is still to be appended, keyed by that pass's nesting
-	 * depth.
+	 * The post whose teaser has been substituted into an in-flight 'the_content'
+	 * pass, and the gate that pass still owes, keyed by that pass's nesting depth.
+	 *
+	 * The gate is carried here rather than read back from
+	 * self::$restricted_content, so that the pass appends the gate belonging to the
+	 * render it substituted for: a card for the article being read is substituted
+	 * from that article's entry and owes no gate.
 	 *
 	 * Keyed per pass rather than held as a single flag because 'the_content' nests:
 	 * a callback registered after self::RESTRICTION_PRIORITY may run
@@ -166,7 +186,7 @@ class Content_Gate {
 	 * plugin manipulating these filters deliberately rather than an integration
 	 * merely filtering content.
 	 *
-	 * @var array<int, int>
+	 * @var array<int, array{post_id: int, gate: string}>
 	 */
 	private static array $pending_gates = [];
 
@@ -194,13 +214,13 @@ class Content_Gate {
 	 * Origin of a {@see self::$restricted_content} entry written by the article
 	 * render: a teaser and gate built for the reader making the request.
 	 */
-	const STAGED_BY_ARTICLE = 'article';
+	private const STAGED_BY_ARTICLE = 'article';
 
 	/**
 	 * Origin of a {@see self::$restricted_content} entry written by a listing: a
 	 * teaser built for the anonymous reader, and no gate.
 	 */
-	const STAGED_BY_LISTING = 'listing';
+	private const STAGED_BY_LISTING = 'listing';
 
 	/**
 	 * Whether the overlay gate markup has been output in this execution.
@@ -927,6 +947,16 @@ class Content_Gate {
 			return;
 		}
 
+		// Record the instance this teaser belongs to. A card for the article being
+		// read and that article's own body pass share a post id, and the instance
+		// set up is the one thing that separates them, so this is what the
+		// substitution filters resolve the two apart by. See
+		// self::get_staged_restriction_for_render().
+		self::$withheld_instances[ spl_object_id( $post ) ] = [
+			'post_id' => $post->ID,
+			'teaser'  => $teaser,
+		];
+
 		// Substitute on every pass. One post can pass through several loops in a
 		// request — a Query Loop and a sidebar listing over the same posts — and
 		// every loop is handed its own WP_Post instance, so leaving the later
@@ -939,10 +969,10 @@ class Content_Gate {
 		// that this post is being rendered. Asking for a post's teaser — which an
 		// excerpt does — must not make that claim on its behalf. An article entry
 		// already in the slot stands: it carries the gate that page still has to
-		// render, on this pass and on any later one. A listing entry is rewritten,
-		// which is what lets the teaser a nested loop over this post staged from
-		// the claimed slot — empty, while the build it re-entered was still
-		// running — give way to the finished string.
+		// render, on this pass and on any later one. A listing entry is rewritten
+		// instead. A nested loop over this post can stage the empty slot
+		// build_withheld_teaser() claims while that build is still running, and
+		// rewriting is what replaces the empty string with the finished teaser.
 		if ( self::STAGED_BY_ARTICLE !== ( self::$restricted_content[ $post->ID ]['source'] ?? '' ) ) {
 			self::$restricted_content[ $post->ID ] = [
 				'teaser' => $teaser,
@@ -1172,6 +1202,80 @@ class Content_Gate {
 	}
 
 	/**
+	 * The staged pieces a 'the_content' pass over a restricted post is answered
+	 * from — the teaser to substitute, and the gate that pass owes — or null when
+	 * nothing is staged for the post.
+	 *
+	 * One post can be both the article being read and a card in a listing on that
+	 * same page, and the two are not answered alike. The article's entry holds a
+	 * teaser built for the reader making the request and the gate that page still
+	 * has to render; a card gets the anonymous teaser and no gate. Handing a card
+	 * the article's entry would repeat that reader's view of the post in markup the
+	 * block cache serves to whoever comes next, and repeat the call to action with
+	 * it — the registration form, and its element ids, once per card.
+	 *
+	 * The WP_Post instance set up is what tells the two apart: every loop is handed
+	 * its own, and {@see self::withhold_post_in_loop()} records the ones it
+	 * withheld. The post id cannot, since both renders are of the same post, and
+	 * neither can `in_the_loop()`, which reports on the main query and is true
+	 * throughout a listing rendered from inside the main loop's template.
+	 *
+	 * @param int $post_id Post being rendered.
+	 * @return array{teaser: string, gate: string}|null
+	 */
+	private static function get_staged_restriction_for_render( $post_id ) {
+		if ( ! isset( self::$restricted_content[ $post_id ] ) ) {
+			return null;
+		}
+
+		$staged = self::$restricted_content[ $post_id ];
+
+		// Only an article entry has to be resolved against the instance. A listing
+		// entry already holds the anonymous teaser and an empty gate, which is what
+		// a card is answered with either way.
+		if ( self::STAGED_BY_ARTICLE === $staged['source'] ) {
+			$card_teaser = self::get_withheld_instance_teaser( $post_id );
+			if ( null !== $card_teaser ) {
+				return [
+					'teaser' => $card_teaser,
+					'gate'   => '',
+				];
+			}
+		}
+
+		return [
+			'teaser' => $staged['teaser'],
+			'gate'   => $staged['gate'],
+		];
+	}
+
+	/**
+	 * The listing teaser staged for the post object set up right now, or null when
+	 * that object is not one a loop withheld.
+	 *
+	 * The entry names its post as well as its instance, because an object id is
+	 * reused once the instance holding it is freed. The instance the article render
+	 * answers to is allocated before any listing on the page runs and outlives them
+	 * all, so a freed listing instance's id cannot come back as the article's.
+	 *
+	 * @param int $post_id Post being rendered.
+	 * @return string|null
+	 */
+	private static function get_withheld_instance_teaser( $post_id ) {
+		$post = $GLOBALS['post'] ?? null;
+		if ( ! $post instanceof \WP_Post ) {
+			return null;
+		}
+
+		$withheld = self::$withheld_instances[ spl_object_id( $post ) ] ?? null;
+		if ( null === $withheld || $withheld['post_id'] !== (int) $post_id ) {
+			return null;
+		}
+
+		return $withheld['teaser'];
+	}
+
+	/**
 	 * Substitute a restricted post's content for its teaser, early enough that the
 	 * remaining 'the_content' filters still run over it.
 	 *
@@ -1204,12 +1308,16 @@ class Content_Gate {
 		// this pass.
 		unset( self::$pending_gates[ $depth ] );
 
-		if ( ! isset( self::$restricted_content[ $post_id ] ) ) {
+		$staged = self::get_staged_restriction_for_render( $post_id );
+		if ( null === $staged ) {
 			return $content;
 		}
 
-		self::$pending_gates[ $depth ] = $post_id;
-		return self::$restricted_content[ $post_id ]['teaser'];
+		self::$pending_gates[ $depth ] = [
+			'post_id' => $post_id,
+			'gate'    => $staged['gate'],
+		];
+		return $staged['teaser'];
 	}
 
 	/**
@@ -1225,7 +1333,7 @@ class Content_Gate {
 		$post_id = get_the_ID();
 		$depth   = self::get_content_filter_depth();
 
-		$substituted_id = self::$pending_gates[ $depth ] ?? null;
+		$pending = self::$pending_gates[ $depth ] ?? null;
 		unset( self::$pending_gates[ $depth ] );
 
 		// Close only a substitution this same pass opened, which the nesting depth
@@ -1240,17 +1348,24 @@ class Content_Gate {
 		// have substituted, and the body in hand is the unrestricted post. See
 		// self::$pending_gates for what that proxy does and does not establish.
 		if (
-			null !== $substituted_id
-			&& isset( self::$restricted_content[ $substituted_id ] )
+			null !== $pending
+			&& isset( self::$restricted_content[ $pending['post_id'] ] )
 			&& has_filter( 'the_content', [ __CLASS__, 'replace_restricted_content' ] )
 		) {
-			return $content . self::$restricted_content[ $substituted_id ]['gate'];
+			return $content . $pending['gate'];
 		}
 
-		if ( ! isset( self::$restricted_content[ $post_id ] ) ) {
+		$staged = self::get_staged_restriction_for_render( $post_id );
+		if ( null === $staged ) {
 			return $content;
 		}
 
+		// The teaser substitution did not run for this pass, most likely because
+		// another plugin removed or short-circuited the filter. Core hands this
+		// chain the unrestricted post body, so return the staged markup rather than
+		// appending the gate to what is in hand, which would publish the restricted
+		// post.
+		//
 		// A listing entry is answered from as well, and deliberately: it is the
 		// only thing withholding the body once the substitution filter is gone,
 		// because core builds the page data from the row before `the_post` fires
@@ -1259,15 +1374,8 @@ class Content_Gate {
 		// listing block skipped wp_reset_postdata() so that nothing cleared the
 		// entry: their own body pass is answered with the anonymous teaser. Serving
 		// the body in hand instead would publish the gated post to everyone on the
-		// far more common path, and neither reader of this map can tell the
-		// article's own pass from a card listing that same article.
-		//
-		// The teaser substitution did not run for this pass, most likely because
-		// another plugin removed or short-circuited the filter. Core hands this
-		// chain the unrestricted post body, so return the stored gated markup
-		// rather than appending the gate to what is in hand, which would publish
-		// the restricted post.
-		return self::$restricted_content[ $post_id ]['teaser'] . self::$restricted_content[ $post_id ]['gate'];
+		// far more common path.
+		return $staged['teaser'] . $staged['gate'];
 	}
 
 	/**

@@ -118,7 +118,7 @@ class Test_Restricted_Post_Outside_Gate_Render extends \WP_UnitTestCase {
 		// loudly, not leave that state bleeding between cases while the tests stay
 		// green. reset_restriction_cache() covers the Content_Restriction_Control
 		// maps, which are a separate set; the loop below is what clears these.
-		foreach ( [ 'restricted_content', 'pending_gates', 'withheld_teasers' ] as $store ) {
+		foreach ( [ 'restricted_content', 'pending_gates', 'withheld_teasers', 'withheld_instances' ] as $store ) {
 			$store_reflection = new \ReflectionProperty( Content_Gate::class, $store );
 			$store_reflection->setAccessible( true );
 			$store_reflection->setValue( null, [] );
@@ -155,15 +155,22 @@ class Test_Restricted_Post_Outside_Gate_Render extends \WP_UnitTestCase {
 	 * the gate may see.
 	 *
 	 * The block sits inside the two visible paragraphs, so it reaches the teaser
-	 * for any reader the build answers to.
+	 * for any reader the build answers to. A second free line follows it, so that
+	 * the slice still stops short of the paid paragraph once the block is stripped
+	 * for a reader who does not pass it.
+	 *
+	 * @param string|null $group_attributes JSON attributes for the gated group, for
+	 *                                      a case needing a rule the gate's own
+	 *                                      readers do not all fail.
 	 *
 	 * @return int
 	 */
-	private function create_post_with_member_only_block() {
+	private function create_post_with_member_only_block( $group_attributes = null ) {
+		$group_attributes = $group_attributes ?? '{"newspackAccessControlMode":"gate","newspackAccessControlGateIds":[' . $this->gate_id . ']}';
 		return $this->create_restricted_post(
 			[
 				'post_content' => '<!-- wp:paragraph --><p>' . self::FREE_MARKER . ' opening line.</p><!-- /wp:paragraph -->'
-					. '<!-- wp:group {"newspackAccessControlMode":"gate","newspackAccessControlGateIds":[' . $this->gate_id . ']} --><div class="wp-block-group">'
+					. '<!-- wp:group ' . $group_attributes . ' --><div class="wp-block-group">'
 					. '<!-- wp:paragraph --><p>' . self::MEMBER_MARKER . '</p><!-- /wp:paragraph -->'
 					. '</div><!-- /wp:group -->'
 					. '<!-- wp:paragraph --><p>Second free line.</p><!-- /wp:paragraph -->'
@@ -598,11 +605,9 @@ class Test_Restricted_Post_Outside_Gate_Render extends \WP_UnitTestCase {
 	 * request, no reset between the three, which is what a real page looks like.
 	 *
 	 * A listing entry carries no gate, so the article's own staging has to survive
-	 * both orders. The two listings do not come out alike, and that asymmetry is
-	 * the article render sitting between them: above it there is no gate to
-	 * append, below it the article's gate is staged and `the_content` appends it
-	 * wherever the post is rendered next. Both show the same withheld body, which
-	 * is what this path is for.
+	 * both orders: the listing above must not clear the gate the article owes, and
+	 * the listing below must not repeat it. The two listings come out alike, and
+	 * the pass over the body after them still carries the gate.
 	 */
 	public function test_listings_either_side_of_the_article_leave_its_gate_intact() {
 		$post_id = $this->create_restricted_post();
@@ -615,7 +620,7 @@ class Test_Restricted_Post_Outside_Gate_Render extends \WP_UnitTestCase {
 		$this->assertSame( 1, substr_count( $rendered['article'], 'newspack-content-gate__inline-gate' ), 'The article renders its own gate, once.' );
 		$this->assertSame( 1, substr_count( $rendered['second_pass'], 'newspack-content-gate__inline-gate' ), 'A listing below the body does not disarm the gate for a later pass.' );
 		$this->assertSame( 0, substr_count( $rendered['above'], 'newspack-content-gate__inline-gate' ), 'A listing above the article does not repeat its call to action.' );
-		$this->assertSame( 1, substr_count( $rendered['below'], 'newspack-content-gate__inline-gate' ), 'A listing below the article carries the gate the article render staged.' );
+		$this->assertSame( 0, substr_count( $rendered['below'], 'newspack-content-gate__inline-gate' ), 'Nor does a listing below it, where the article render has already staged that gate.' );
 	}
 
 	/**
@@ -640,15 +645,7 @@ class Test_Restricted_Post_Outside_Gate_Render extends \WP_UnitTestCase {
 				],
 			]
 		);
-		$post_id = $this->create_restricted_post(
-			[
-				'post_content' => '<!-- wp:paragraph --><p>' . self::FREE_MARKER . ' opening line.</p><!-- /wp:paragraph -->'
-					. '<!-- wp:group {"newspackAccessControlMode":"custom","newspackAccessControlRules":{"registration":{"active":true}}} --><div class="wp-block-group">'
-					. '<!-- wp:paragraph --><p>' . self::MEMBER_MARKER . '</p><!-- /wp:paragraph -->'
-					. '</div><!-- /wp:group -->'
-					. '<!-- wp:paragraph --><p>' . self::PAID_MARKER . ' is behind the gate.</p><!-- /wp:paragraph -->',
-			]
-		);
+		$post_id   = $this->create_post_with_member_only_block( '{"newspackAccessControlMode":"custom","newspackAccessControlRules":{"registration":{"active":true}}}' );
 		$reader_id = $this->factory->user->create( [ 'role' => 'subscriber' ] );
 		wp_set_current_user( $reader_id );
 		$this->reset_restriction_cache();
@@ -659,12 +656,21 @@ class Test_Restricted_Post_Outside_Gate_Render extends \WP_UnitTestCase {
 		}
 		$article = apply_filters( 'the_content', get_post( $post_id )->post_content );
 
+		// The card as a listing beside that article renders it, and the teaser
+		// behind it. The two are asserted together because they fail apart: the
+		// getter answers a direct caller, and the render goes on through the
+		// substitution filters.
+		$card        = $this->render_in_secondary_loop( $post_id );
 		$card_teaser = Content_Gate::get_teaser_outside_article( get_post( $post_id ) );
 		wp_set_current_user( 0 );
 
 		$this->assertStringContainsString( self::MEMBER_MARKER, $article, 'This reader is restricted and still passes the block, which is the premise of this test.' );
 		$this->assertStringNotContainsString( self::PAID_MARKER, $article );
 		$this->assertStringNotContainsString( self::MEMBER_MARKER, $card_teaser, 'A card repeats no more of the post than an anonymous visitor may see.' );
+		$this->assertStringNotContainsString( self::PAID_MARKER, $card_teaser );
+		$this->assertStringNotContainsString( self::MEMBER_MARKER, $card, 'A rendered card shows the anonymous teaser, not the one the article built for this reader.' );
+		$this->assertStringNotContainsString( self::PAID_MARKER, $card );
+		$this->assertSame( 0, substr_count( $card, 'newspack-content-gate__inline-gate' ), 'A card does not repeat the article\'s call to action.' );
 	}
 
 	/**
