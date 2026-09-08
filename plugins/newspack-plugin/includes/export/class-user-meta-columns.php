@@ -19,6 +19,13 @@ defined( 'ABSPATH' ) || exit;
  * exported, so a mistyped or probing value selects nothing instead of reaching
  * a meta read.
  *
+ * Existing is not on its own enough to be offered, though. Everything a plugin
+ * ever stashed on a user is in that table, credentials included, and the users
+ * export is reachable by a shop manager rather than only an administrator. So
+ * protected keys, WordPress's own bookkeeping, and anything named like a
+ * credential are dropped before the filter below sees the list, leaving a site
+ * free to add one back deliberately.
+ *
  * Column ids are namespaced so a meta key named like a core export column
  * (`first_name`, say) cannot overwrite it, while the CSV header stays the bare
  * key — what a publisher matching an export back to their data looks for.
@@ -50,6 +57,66 @@ final class User_Meta_Columns {
 	const MAX_KEYS = 500;
 
 	/**
+	 * Protected key prefixes offered anyway.
+	 *
+	 * WooCommerce Memberships writes its registration fields to a protected
+	 * key, and those fields are what a publisher leaving Memberships comes to
+	 * this export for.
+	 */
+	const OFFERED_PROTECTED_PREFIXES = [ '_wc_memberships_profile_field_' ];
+
+	/**
+	 * Substrings that mark a key as credential-adjacent, matched case
+	 * insensitively anywhere in the key. The plugin that wrote the key chose
+	 * its name, so there is no prefix to key off — a 2FA secret or a
+	 * third-party API token can sit in an unprotected key.
+	 */
+	const SENSITIVE_KEY_SUBSTRINGS = [ 'password', 'secret', 'token', 'api_key', 'apikey', 'private_key', 'nonce', 'salt', 'totp', '2fa' ];
+
+	/**
+	 * WordPress's own per-user bookkeeping: role storage, and the admin's
+	 * screen preferences. No publisher matches an export against these, and
+	 * there are enough of them to bury the keys a publisher is looking for.
+	 *
+	 * The role patterns allow for the table prefix core puts in front of them
+	 * (`wp_capabilities`, and `wp_2_capabilities` on a multisite).
+	 */
+	const CORE_INTERNAL_KEY_PATTERNS = [
+		'/(^|_)(capabilities|user_level)$/',
+		'/(^|_)user-settings(-time)?$/',
+		'/^(closedpostboxes|metaboxhidden|meta-box-order|screen_layout|manage[a-z-]*columnshidden)_/',
+		'/^(admin_color|comment_shortcuts|rich_editing|syntax_highlighting|show_admin_bar_front|show_welcome_panel|use_ssl|dismissed_wp_pointers|community-events-location|wp_dashboard_quick_press_last_post_id)$/',
+	];
+
+	/**
+	 * Whether a key may be offered as an export column.
+	 *
+	 * @param string $key Meta key.
+	 * @return bool
+	 */
+	private static function is_offerable_key( string $key ): bool {
+		foreach ( self::CORE_INTERNAL_KEY_PATTERNS as $pattern ) {
+			if ( preg_match( $pattern, $key ) ) {
+				return false;
+			}
+		}
+		foreach ( self::SENSITIVE_KEY_SUBSTRINGS as $substring ) {
+			if ( false !== stripos( $key, $substring ) ) {
+				return false;
+			}
+		}
+		if ( ! \is_protected_meta( $key, 'user' ) ) {
+			return true;
+		}
+		foreach ( self::OFFERED_PROTECTED_PREFIXES as $prefix ) {
+			if ( 0 === strpos( $key, $prefix ) ) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/**
 	 * The user meta keys this site actually stores, sorted.
 	 *
 	 * @return string[]
@@ -67,9 +134,13 @@ final class User_Meta_Columns {
 			$wpdb->prepare( "SELECT DISTINCT meta_key FROM {$wpdb->usermeta} ORDER BY meta_key ASC LIMIT %d", self::MAX_KEYS )
 		);
 		$keys = is_array( $keys ) ? array_map( 'strval', $keys ) : [];
+		$keys = array_values( array_filter( $keys, [ __CLASS__, 'is_offerable_key' ] ) );
 
 		/**
 		 * Filters the user meta keys offered as export columns.
+		 *
+		 * Protected keys, core bookkeeping and credential-named keys are
+		 * already gone; a site wanting one of those exported adds it back here.
 		 *
 		 * @param string[] $keys Meta keys.
 		 */

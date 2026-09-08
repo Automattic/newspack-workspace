@@ -110,7 +110,7 @@ class Export {
 	 * : Only users registered on or before this date.
 	 *
 	 * [--meta=<keys>]
-	 * : Add one column per user meta key, comma-separated. Keys the site does not store are rejected.
+	 * : Add one column per user meta key, comma-separated. Only keys the site stores and offers are accepted: protected, core and credential-named keys are not, unless the site adds them back through the newspack_users_export_meta_keys filter.
 	 *
 	 * [--delimiter=<delimiter>]
 	 * : Field delimiter: comma (default), semicolon, tab or pipe.
@@ -179,7 +179,7 @@ class Export {
 		// has no list filter, so setting it would only suppress the flags that
 		// travel in $params — --month among them.
 		$config = CSV_Exports::sanitize_export_config( $raw, $type );
-		self::assert_flags_survived_sanitization( $raw, $config, $assoc_args );
+		self::assert_flags_survived_sanitization( $raw, $config );
 		return $config;
 	}
 
@@ -191,11 +191,39 @@ class Export {
 	 * the restriction the operator asked for, so `--role=subsciber` would write
 	 * every user to a CSV instead of none.
 	 *
-	 * @param array $raw        The raw config assembled from the flags.
-	 * @param array $config     The sanitized config.
-	 * @param array $assoc_args CLI associative args.
+	 * @param array $raw    The raw config assembled from the flags.
+	 * @param array $config The sanitized config.
 	 */
-	private static function assert_flags_survived_sanitization( array $raw, array $config, array $assoc_args ): void {
+	private static function assert_flags_survived_sanitization( array $raw, array $config ): void {
+		$messages = [
+			'role'        => 'Unrecognized --role value: %s',
+			'status'      => 'Unrecognized --status value: %s',
+			'meta'        => 'Not available as an export column: %s',
+			'date-from'   => 'Invalid --date-from value "%s"; expected YYYY-MM-DD.',
+			'date-to'     => 'Invalid --date-to value "%s"; expected YYYY-MM-DD.',
+			'delimiter'   => 'Unrecognized --delimiter value "%s"; expected comma, semicolon, tab or pipe.',
+			'date-format' => sprintf( '--date-format must be at most %d characters.', CSV_Exports::MAX_CUSTOM_DATE_FORMAT_LENGTH ),
+		];
+		foreach ( self::get_rejected_flag_values( $raw, $config ) as $flag => $values ) {
+			WP_CLI::error( sprintf( $messages[ $flag ], implode( ', ', $values ) ) );
+		}
+	}
+
+	/**
+	 * Which supplied flag values did not survive sanitization, as flag name =>
+	 * the values that were dropped.
+	 *
+	 * Separate from the reporting because this is the part that would regress
+	 * quietly: it re-derives how each value normalizes to compare it against
+	 * what came back, so a change to role or status normalization that stopped
+	 * the two agreeing would turn a rejected typo back into a silent drop.
+	 *
+	 * @param array $raw    The raw config assembled from the flags.
+	 * @param array $config The sanitized config.
+	 * @return array<string,string[]> Flag name => dropped values.
+	 */
+	public static function get_rejected_flag_values( array $raw, array $config ): array {
+		$rejected = [];
 		foreach ( [
 			'roles'    => 'role',
 			'statuses' => 'status',
@@ -213,29 +241,30 @@ class Export {
 				}
 			}
 			if ( ! empty( $dropped ) ) {
-				WP_CLI::error( sprintf( 'Unrecognized --%1$s value: %2$s', $flag, implode( ', ', array_unique( $dropped ) ) ) );
+				$rejected[ $flag ] = array_values( array_unique( $dropped ) );
 			}
 		}
-		$dropped_keys = array_diff( $raw['meta_keys'] ?? [], $config['meta_keys'] ?? [] );
+		$dropped_keys = array_values( array_diff( $raw['meta_keys'] ?? [], $config['meta_keys'] ?? [] ) );
 		if ( ! empty( $dropped_keys ) ) {
-			WP_CLI::error( sprintf( 'This site stores no user meta under: %s', implode( ', ', $dropped_keys ) ) );
+			$rejected['meta'] = $dropped_keys;
 		}
 		foreach ( [
 			'date_from' => 'date-from',
 			'date_to'   => 'date-to',
 		] as $key => $flag ) {
 			if ( '' !== ( $raw[ $key ] ?? '' ) && ! isset( $config[ $key ] ) ) {
-				WP_CLI::error( sprintf( 'Invalid --%1$s value "%2$s"; expected YYYY-MM-DD.', $flag, $raw[ $key ] ) );
+				$rejected[ $flag ] = [ $raw[ $key ] ];
 			}
 		}
 		if ( '' !== ( $raw['delimiter'] ?? '' ) && ! isset( $config['delimiter'] ) ) {
-			WP_CLI::error( sprintf( 'Unrecognized --delimiter value "%s"; expected comma, semicolon, tab or pipe.', $raw['delimiter'] ) );
+			$rejected['delimiter'] = [ $raw['delimiter'] ];
 		}
 		// Truncating this would not fail; it would format every date cell wrongly.
 		$custom_format = $raw['date_format_custom'] ?? '';
 		if ( '' !== $custom_format && mb_strlen( $custom_format ) > CSV_Exports::MAX_CUSTOM_DATE_FORMAT_LENGTH ) {
-			WP_CLI::error( sprintf( '--date-format must be at most %d characters.', CSV_Exports::MAX_CUSTOM_DATE_FORMAT_LENGTH ) );
+			$rejected['date-format'] = [ $custom_format ];
 		}
+		return $rejected;
 	}
 
 	/**

@@ -44,6 +44,37 @@ class Newspack_Test_User_Meta_Columns extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Existing is not enough to be offered. The usermeta table holds whatever
+	 * every plugin ever stashed on a user, and the users export is reachable by
+	 * a shop manager, so the picker excludes protected keys, WordPress's own
+	 * bookkeeping and screen preferences, and anything named like a credential —
+	 * while still offering the Memberships registration fields, which are
+	 * protected and are the reason the picker exists.
+	 */
+	public function test_protected_core_and_credential_keys_are_not_offered() {
+		global $wpdb;
+		$user_id = self::factory()->user->create();
+		update_user_meta( $user_id, 'reader_zip_code', '07079' );
+		update_user_meta( $user_id, '_wc_memberships_profile_field_birth_year', '1979' );
+		update_user_meta( $user_id, '_woocommerce_persistent_cart_1', 'cart' );
+		update_user_meta( $user_id, 'session_tokens', [ 'abc' => [ 'expiration' => 0 ] ] );
+		update_user_meta( $user_id, 'acme_2fa_totp_secret', 'JBSWY3DPEHPK3PXP' );
+
+		$keys = User_Meta_Columns::get_available_keys();
+
+		$this->assertContains( 'reader_zip_code', $keys );
+		$this->assertContains( '_wc_memberships_profile_field_birth_year', $keys );
+		$this->assertNotContains( '_woocommerce_persistent_cart_1', $keys );
+		$this->assertNotContains( 'session_tokens', $keys );
+		$this->assertNotContains( 'acme_2fa_totp_secret', $keys );
+		$this->assertNotContains( $wpdb->prefix . 'capabilities', $keys );
+		$this->assertNotContains( 'admin_color', $keys );
+		// The picker is also the boundary, so an excluded key cannot be asked
+		// for by name either.
+		$this->assertSame( [], User_Meta_Columns::sanitize_keys( [ 'session_tokens' ] ) );
+	}
+
+	/**
 	 * Column ids are namespaced so a meta key named like a core export column
 	 * cannot overwrite it, while the CSV header stays the bare key.
 	 */
