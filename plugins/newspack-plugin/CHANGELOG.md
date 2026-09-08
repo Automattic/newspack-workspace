@@ -1,3 +1,11 @@
+## newspack [6.49.3](https://github.com/Automattic/newspack-workspace/compare/newspack@6.49.2...newspack@6.49.3) (2026-09-08)
+
+
+### Bug Fixes
+
+* improve scraper handling on share urls ([5867c33](https://github.com/Automattic/newspack-workspace/commit/5867c33d50e3fd4753365a7392d1df14850b9c35))
+* **reader-activation:** restore the Newsletter Selection ESP field ([#1018](https://github.com/Automattic/newspack-workspace/issues/1018)) ([6a89410](https://github.com/Automattic/newspack-workspace/commit/6a89410e942413c81f5881da4723d97b2666032e))
+
 ## newspack [6.49.2](https://github.com/Automattic/newspack-workspace/compare/newspack@6.49.1...newspack@6.49.2) (2026-09-03)
 
 
