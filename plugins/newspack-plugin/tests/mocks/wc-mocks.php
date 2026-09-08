@@ -573,6 +573,16 @@ class WC_Product {
 	public function get_description() {
 		return $this->data['description'] ?? '';
 	}
+	/**
+	 * Keyed by attribute slug, as WooCommerce stores it. An "Any <attribute>"
+	 * variation keeps the key with an empty value rather than dropping it.
+	 */
+	public function get_variation_attributes() {
+		return $this->data['variation_attributes'] ?? [];
+	}
+	public function get_category_ids() {
+		return $this->data['category_ids'] ?? [];
+	}
 	public function get_status() {
 		return $this->data['status'] ?? 'publish';
 	}

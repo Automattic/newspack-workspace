@@ -57,6 +57,13 @@ if ( ! class_exists( 'WC_Product' ) ) {
 		private $parent_id;
 
 		/**
+		 * Post status.
+		 *
+		 * @var string
+		 */
+		private $status;
+
+		/**
 		 * Constructor.
 		 *
 		 * @param int    $id        Product ID.
@@ -65,14 +72,16 @@ if ( ! class_exists( 'WC_Product' ) ) {
 		 * @param string $price     Product price.
 		 * @param string $name      Product name.
 		 * @param int    $parent_id Parent product ID.
+		 * @param string $status    Post status.
 		 */
-		public function __construct( $id = 1, $type = 'simple', $children = [], $price = '1', $name = 'Product', $parent_id = 0 ) {
+		public function __construct( $id = 1, $type = 'simple', $children = [], $price = '1', $name = 'Product', $parent_id = 0, $status = 'publish' ) {
 			$this->id        = $id;
 			$this->type      = $type;
 			$this->children  = $children;
 			$this->price     = $price;
 			$this->name      = $name;
 			$this->parent_id = $parent_id;
+			$this->status    = $status;
 		}
 
 		/**
@@ -137,6 +146,15 @@ if ( ! class_exists( 'WC_Product' ) ) {
 		 */
 		public function get_name() {
 			return $this->name;
+		}
+
+		/**
+		 * Get the post status.
+		 *
+		 * @return string
+		 */
+		public function get_status() {
+			return $this->status;
 		}
 	}
 }

@@ -493,13 +493,12 @@ class Subscriptions_Tiers {
 	 */
 	private static function get_product_title( $product, $show_variation_attributes = false ) {
 		$product_name = $product->get_title();
-		if ( $product->is_type( 'variation' ) ) {
-			if ( $show_variation_attributes ) {
-				$product_name = sprintf(
-					'%s (%s)',
-					$product_name,
-					implode( ', ', $product->get_variation_attributes() )
-				);
+		if ( $product->is_type( 'variation' ) && $show_variation_attributes ) {
+			// An "Any <attribute>" variation stores that attribute as an empty
+			// string, which would print as "Plan ()" or "Plan (, Annual)".
+			$attributes = implode( ', ', array_filter( $product->get_variation_attributes(), 'strlen' ) );
+			if ( '' !== $attributes ) {
+				$product_name = sprintf( '%s (%s)', $product_name, $attributes );
 			}
 		}
 		return $product_name;
