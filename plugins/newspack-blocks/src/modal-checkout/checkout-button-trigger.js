@@ -44,7 +44,9 @@ const isSynthesized = element => Boolean( element.closest( SYNTHESIZED_CONTAINER
  * Find a checkout button form matching the requested product.
  *
  * Variation requests are never served by a button locked to a different
- * variation.
+ * variation, and a request without a variation is never served by a locked
+ * button at all: submitting one checks the reader out on its variation, where
+ * the request meant for the reader to pick one.
  *
  * @param {Document|HTMLElement} root                The DOM root to search.
  * @param {string}               productId           The requested product ID.
@@ -78,6 +80,9 @@ export function findCheckoutButtonForm( root, productId, variationId = null, opt
 			return;
 		}
 		if ( hasVariation && String( data.variation_id ) !== String( variationId ) ) {
+			return;
+		}
+		if ( ! hasVariation && data.variation_id ) {
 			return;
 		}
 		match = form;
@@ -359,10 +364,12 @@ export function resolveCheckoutButtonForm( root, productId, variationId, options
 	const hasVariation = variationId !== null && variationId !== undefined && String( variationId ) !== '';
 
 	if ( ! hasVariation ) {
-		// No variation requested. If several buttons on the page share this
-		// parent product, the first page-authored one in DOM order is used
-		// (along with its context); the synthesized form serves only when the
-		// page carries none.
+		// No variation requested. If several unlocked buttons on the page share
+		// this parent product, the first page-authored one in DOM order is used
+		// (along with its context); the synthesized form serves when the page
+		// carries none, including when its only buttons are locked to a
+		// variation — a locked button would check the reader out on that
+		// variation instead of opening the picker the link asks for.
 		return (
 			findCheckoutButtonForm( root, productId, null, { synthesized: false } ) ||
 			findCheckoutButtonForm( root, productId, null, { synthesized: true } )

@@ -556,15 +556,11 @@ final class Modal_Checkout {
 	/**
 	 * Merge utm_* parameters from the current request into a params array.
 	 *
-	 * The passthrough loop in process_checkout_request() historically only saw
-	 * params parsed from the referer URL, so utm params on a direct (cold)
-	 * checkout URL — which has no referer — were dropped before reaching the
-	 * checkout and order meta. Request params win over referer params.
-	 *
 	 * The modal form's own submission is what carries a promo link's values here:
 	 * appendUtmFields() in modal.js copies the landing page's utm params onto the
 	 * form as hidden fields before it GET-submits into the checkout iframe, so
 	 * they arrive in this request's $_GET rather than depending on the referer.
+	 * Request params win over referer params.
 	 *
 	 * @param array $params Params parsed from the referer query string.
 	 * @return array Params with the request's utm_* params merged in.
@@ -1575,7 +1571,7 @@ final class Modal_Checkout {
 
 		$queried = get_queried_object();
 
-		return $queried instanceof WP_Post ? (int) $queried->ID : 0;
+		return $queried instanceof \WP_Post ? (int) $queried->ID : 0;
 	}
 
 	/**
@@ -1868,12 +1864,15 @@ final class Modal_Checkout {
 			return $url;
 		}
 
+		// Encoded because add_query_arg() does not encode what it is given: a
+		// destination carrying its own query string would otherwise split, and
+		// its second param would become a param of the thank-you URL.
 		$args = array_merge(
 			[
 				'modal_checkout' => '1',
 				'email'          => isset( $_REQUEST['billing_email'] ) ? rawurlencode( \sanitize_email( \wp_unslash( $_REQUEST['billing_email'] ) ) ) : '', // phpcs:ignore WordPress.Security.NonceVerification.Recommended
 			],
-			self::get_after_success_params()
+			array_map( 'rawurlencode', self::get_after_success_params() )
 		);
 
 		// Pass order ID for modal checkout templates.

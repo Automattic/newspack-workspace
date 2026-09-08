@@ -97,8 +97,16 @@ describe( 'findCheckoutButtonForm', () => {
 		expect( findCheckoutButtonForm( root, '1406', '1407' ) ).toBeNull();
 	} );
 
-	it( 'matches by product_id only when no variation is requested', () => {
+	// A request without a variation means the reader picks one, so a button locked
+	// to a single variation cannot serve it: submitting that form checks the
+	// reader out on the locked variation instead of opening the picker.
+	it( 'does not match a variation-locked button when no variation is requested', () => {
 		const root = render( checkoutButton( { product_id: '1406', variation_id: '1408', is_variable: true } ) );
+		expect( findCheckoutButtonForm( root, '1406', null ) ).toBeNull();
+	} );
+
+	it( 'matches an unlocked button by product_id when no variation is requested', () => {
+		const root = render( checkoutButton( { product_id: '1406', is_variable: true } ) );
 		const form = root.querySelector( 'form' );
 		expect( findCheckoutButtonForm( root, '1406', null ) ).toBe( form );
 	} );
@@ -200,10 +208,20 @@ describe( 'resolveCheckoutButtonForm', () => {
 		expect( resolveCheckoutButtonForm( root, '158', '160', { ...PICKER_OPTIONS, allowProductOnlyFallback: true } ) ).toBe( buttonForm );
 	} );
 
-	it( 'matches a checkout button by product_id when no variation is requested', () => {
+	// A "let the reader choose" link carries the parent id only. A page button
+	// locked to one variation must not catch it, or the reader is checked out on
+	// that variation with no picker.
+	it( 'serves an unlocked page button for a no-variation link even when a locked one precedes it', () => {
+		const locked = checkoutButton( { product_id: '1406', variation_id: '1408', is_variable: true }, 'Annual' );
+		const unlocked = checkoutButton( { product_id: '1406', is_variable: true }, 'Subscribe' );
+		const root = render( locked + unlocked );
+		const unlockedForm = root.querySelectorAll( '.wp-block-newspack-blocks-checkout-button form' )[ 1 ];
+		expect( resolveCheckoutButtonForm( root, '1406', null, PICKER_OPTIONS ) ).toBe( unlockedForm );
+	} );
+
+	it( 'returns null for a no-variation link when the page carries only locked buttons and nothing is synthesized', () => {
 		const root = render( checkoutButton( { product_id: '1406', variation_id: '1408', is_variable: true } ) );
-		const buttonForm = root.querySelector( 'form' );
-		expect( resolveCheckoutButtonForm( root, '1406', null, PICKER_OPTIONS ) ).toBe( buttonForm );
+		expect( resolveCheckoutButtonForm( root, '1406', null, PICKER_OPTIONS ) ).toBeNull();
 	} );
 
 	it( 'returns null without throwing when nothing matches', () => {
@@ -283,6 +301,17 @@ describe( 'resolveCheckoutButtonForm — synthesized form demotion', () => {
 		const root = render( synthesized( checkoutButton( { product_id: '1406' }, 'Synth' ) ) + checkoutButton( { product_id: '1406' }, 'Page' ) );
 		const pageForm = root.querySelectorAll( '.wp-block-newspack-blocks-checkout-button form' )[ 1 ];
 		expect( resolveCheckoutButtonForm( root, '1406', null, PICKER_OPTIONS ) ).toBe( pageForm );
+	} );
+
+	// The page button is locked to Annual; the link asks for the parent. The
+	// synthesized parent button is the one that opens the picker, so it wins
+	// even though a page-authored button for the product exists.
+	it( 'serves the synthesized parent button for a no-variation link when the page offers only locked buttons', () => {
+		const pageLocked = checkoutButton( { product_id: '1406', variation_id: '1408', is_variable: true }, 'Annual' );
+		const synthParent = synthesized( checkoutButton( { product_id: '1406', is_variable: true }, 'Subscribe' ) );
+		const root = render( pageLocked + synthParent + variationPicker( '1406', [ '1407', '1408' ] ) );
+		const synthForm = root.querySelector( `${ SYNTHESIZED_CONTAINER_SELECTOR } form` );
+		expect( resolveCheckoutButtonForm( root, '1406', null, PICKER_OPTIONS ) ).toBe( synthForm );
 	} );
 
 	// The page block's coupon and after-checkout settings are the editor's, so a
