@@ -304,9 +304,13 @@ trait Content_Gate_Layout {
 
 	/**
 	 * Get the inline gate content.
+	 *
+	 * @param int|null $post_id Post ID to resolve the gate layout for. Pass
+	 *                          explicitly outside a singular main-query view
+	 *                          (e.g. a REST callback); see get_inline_gate_html().
 	 */
-	public static function get_inline_gate_content() {
-		return self::get_inline_gate_content_for_post( self::get_gate_layout_id() );
+	public static function get_inline_gate_content( $post_id = null ) {
+		return self::get_inline_gate_content_for_post( self::get_gate_layout_id( $post_id ) );
 	}
 
 	/**
@@ -331,10 +335,19 @@ trait Content_Gate_Layout {
 	/**
 	 * Get the inline gate HTML for rendering.
 	 *
+	 * Resolving the gate layout without an explicit post ID depends on
+	 * is_singular() and the queried object, which is only reliable inside a
+	 * singular main-query view. Every existing caller runs there and keeps
+	 * relying on that default; a caller outside that view (e.g. a REST
+	 * callback) must pass $post_id explicitly, or get_gate_layout_id() falls
+	 * through to false and get_post( false ) resolves to whatever the global
+	 * $post happens to be instead of "no gate layout".
+	 *
+	 * @param int|null $post_id Post ID to resolve the gate layout for.
 	 * @return string
 	 */
-	public static function get_inline_gate_html() {
-		return self::annotate_gate_ctas( apply_filters( 'newspack_gate_content', self::get_inline_gate_content() ) );
+	public static function get_inline_gate_html( $post_id = null ) {
+		return self::annotate_gate_ctas( apply_filters( 'newspack_gate_content', self::get_inline_gate_content( $post_id ) ) );
 	}
 
 	/**

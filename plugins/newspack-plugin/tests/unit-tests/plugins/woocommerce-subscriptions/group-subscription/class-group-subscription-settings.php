@@ -7,6 +7,8 @@
  */
 
 use Newspack\Group_Subscription;
+use Newspack\Group_Subscription_Invite;
+use Newspack\Group_Subscription_Seats;
 use Newspack\Group_Subscription_Settings;
 
 /**
@@ -34,6 +36,8 @@ class Test_Group_Subscription_Settings extends WP_UnitTestCase {
 		global $subscriptions_database, $products_database;
 		$subscriptions_database = [];
 		$products_database      = [];
+		wc_mocks_reset_meta_box_errors();
+		Group_Subscription::reset_cache();
 	}
 
 	/**
@@ -43,6 +47,8 @@ class Test_Group_Subscription_Settings extends WP_UnitTestCase {
 		global $subscriptions_database, $products_database;
 		$subscriptions_database = [];
 		$products_database      = [];
+		wc_mocks_reset_meta_box_errors();
+		Group_Subscription::reset_cache();
 		parent::tear_down();
 	}
 
@@ -346,14 +352,18 @@ class Test_Group_Subscription_Settings extends WP_UnitTestCase {
 	 * @param array           $post         POST fields (the save nonce is added automatically).
 	 */
 	private function run_meta_box_save( $subscription, array $post ) {
-		// phpcs:disable WordPress.Security.NonceVerification.Missing -- Test helper seeds $_POST to exercise save_group_subscription_meta(), which verifies the nonce itself.
+		// phpcs:disable WordPress.Security.NonceVerification.Missing -- Test helper seeds $_POST to exercise the save handlers, which verify the nonce themselves.
 		$prev_post = $_POST;
 		$_POST     = array_merge(
 			[ 'woocommerce_meta_nonce' => wp_create_nonce( 'woocommerce_save_data' ) ],
 			$post
 		);
 		// phpcs:enable WordPress.Security.NonceVerification.Missing
-		Group_Subscription_Settings::save_group_subscription_meta( $subscription->get_id(), $subscription );
+		// Fire the hook rather than calling one handler, because the save is split
+		// across two priorities and the split is the point (see
+		// save_group_subscription_seats()). Anything a test registers on the hook to
+		// stand in for WooCommerce then runs in its real relative order.
+		do_action( 'woocommerce_process_shop_order_meta', $subscription->get_id(), $subscription );
 		$_POST = $prev_post;
 	}
 
@@ -574,5 +584,629 @@ class Test_Group_Subscription_Settings extends WP_UnitTestCase {
 		);
 
 		$this->assertFalse( get_transient( Group_Subscription_Settings::GROUP_SUBSCRIPTION_IDS_TRANSIENT ), 'The cache must be refreshed when inherited group status turns off.' );
+	}
+
+	/*
+	 * --- pricing mode and seat bounds ---
+	 */
+
+	/**
+	 * Pricing meta is read into the product settings, and a product carrying none
+	 * of it is flat (per-team) with a one-seat minimum and no maximum -- which is
+	 * what keeps every product that predates per-seat pricing priced as it was.
+	 */
+	public function test_product_settings_read_pricing_meta_and_default_to_per_team() {
+		$prefix   = Group_Subscription_Settings::GROUP_SUBSCRIPTION_META_PREFIX;
+		$bare     = wc_create_mock_product(
+			[
+				'id'   => 901,
+				'type' => 'subscription',
+			]
+		);
+		$per_seat = wc_create_mock_product(
+			[
+				'id'   => 902,
+				'type' => 'subscription',
+				'meta' => [
+					$prefix . 'enabled'      => 'yes',
+					$prefix . 'pricing_mode' => 'per_seat',
+					$prefix . 'min_seats'    => '3',
+					$prefix . 'max_seats'    => '10',
+				],
+			]
+		);
+
+		$defaults = Group_Subscription_Settings::get_product_settings( $bare );
+		$this->assertSame( Group_Subscription_Settings::PRICING_MODE_PER_TEAM, $defaults['pricing_mode'] );
+		$this->assertSame( 1, $defaults['min_seats'] );
+		$this->assertSame( 0, $defaults['max_seats'] );
+
+		$settings = Group_Subscription_Settings::get_product_settings( $per_seat );
+		$this->assertSame( 'per_seat', $settings['pricing_mode'] );
+		$this->assertSame( 3, $settings['min_seats'] );
+		$this->assertSame( 10, $settings['max_seats'] );
+		$this->assertTrue( Group_Subscription_Settings::is_per_seat( $per_seat ) );
+	}
+
+	/**
+	 * A per-seat subscription's capacity is the purchased seat count -- the line
+	 * item quantity -- and neither the product's limit meta nor a subscription-level
+	 * override displaces it.
+	 */
+	public function test_per_seat_subscription_capacity_is_line_item_quantity() {
+		$subscription = $this->make_subscription_with_product(
+			[
+				'enabled'      => 'yes',
+				'pricing_mode' => 'per_seat',
+				'limit'        => '50', // Ignored in per-seat mode.
+			],
+			[ 'limit' => 9 ], // The subscription-level override is ignored too.
+			[
+				'items' => [
+					new WC_Order_Item_Product(
+						[
+							'id'         => 9031,
+							'product_id' => 123,
+							'quantity'   => 6,
+						]
+					),
+				],
+			]
+		);
+
+		$settings = Group_Subscription_Settings::get_subscription_settings( $subscription );
+
+		$this->assertSame( 6, $settings['limit'], 'Per-seat limit should equal the purchased seat count (the line item quantity).' );
+		$this->assertSame( 6, Group_Subscription::get_member_capacity( $subscription ), 'Per-seat member capacity should equal the line item quantity.' );
+		$this->assertSame( 'per_seat', $settings['pricing_mode'] );
+	}
+
+	/*
+	 * --- product editor pricing options ---
+	 */
+
+	/**
+	 * The product editor's pricing options include the mode select (with a
+	 * per-seat choice) and the seat-bound number fields, and the existing
+	 * member-limit field is scoped to per-team mode.
+	 */
+	public function test_pricing_options_include_mode_and_seat_bounds() {
+		if ( ! defined( 'NEWSPACK_CONTENT_GATES' ) ) {
+			define( 'NEWSPACK_CONTENT_GATES', true );
+		}
+
+		$options = Group_Subscription_Settings::add_custom_product_pricing_options( [] );
+
+		$this->assertSame( 'select', $options['newspack_group_subscription_pricing_mode']['type'] );
+		$this->assertArrayHasKey( 'per_seat', $options['newspack_group_subscription_pricing_mode']['options'] );
+		$this->assertSame( 'number', $options['newspack_group_subscription_min_seats']['type'] );
+		$this->assertStringContainsString( 'show_if_newspack_group_subscription_per_seat', $options['newspack_group_subscription_max_seats']['wrapper_class'] );
+		$this->assertStringContainsString( 'show_if_newspack_group_subscription_per_team', $options['newspack_group_subscription_limit']['wrapper_class'] );
+	}
+
+	/*
+	 * --- admin seat override ---
+	 */
+
+	/**
+	 * Build a per-seat group subscription with a priced seat line item, and
+	 * optionally seed the group with members and pending invitations.
+	 *
+	 * Mirrors the shape the seats test class uses, kept local so the two files
+	 * stay independent.
+	 *
+	 * @param int   $id   Subscription ID. The product and line item IDs are derived from it.
+	 * @param array $args quantity, subtotal, total, members (count), pending_invites (count),
+	 *                    per_seat (bool), items (raw override, e.g. [] for no line item).
+	 *
+	 * @return WC_Subscription
+	 */
+	private function make_per_seat_subscription( $id, $args = [] ) {
+		$args = array_merge(
+			[
+				'quantity'        => 1,
+				'subtotal'        => 0,
+				'total'           => 0,
+				'members'         => 0,
+				'pending_invites' => 0,
+				'per_seat'        => true,
+			],
+			$args
+		);
+
+		$prefix     = Group_Subscription_Settings::GROUP_SUBSCRIPTION_META_PREFIX;
+		$product_id = $id + 1000;
+		wc_create_mock_product(
+			[
+				'id'   => $product_id,
+				'type' => 'subscription',
+				'meta' => [
+					$prefix . 'enabled'      => 'yes',
+					$prefix . 'pricing_mode' => $args['per_seat']
+						? Group_Subscription_Settings::PRICING_MODE_PER_SEAT
+						: Group_Subscription_Settings::PRICING_MODE_PER_TEAM,
+					$prefix . 'limit'        => '10',
+				],
+			]
+		);
+
+		$invites = [];
+		for ( $i = 0; $i < $args['pending_invites']; $i++ ) {
+			$invites[ 'pending-' . $i ] = [
+				'email'      => 'pending-' . $i . '@example.com',
+				'expiration' => time() + HOUR_IN_SECONDS,
+			];
+		}
+
+		$items = isset( $args['items'] ) ? $args['items'] : [
+			new WC_Order_Item_Product(
+				[
+					'id'         => $id + 5000,
+					'product_id' => $product_id,
+					'quantity'   => $args['quantity'],
+					'subtotal'   => $args['subtotal'],
+					'total'      => $args['total'],
+				]
+			),
+		];
+
+		$subscription = wcs_create_subscription(
+			[
+				'id'          => $id,
+				'customer_id' => self::factory()->user->create(),
+				'status'      => 'active',
+				'meta'        => [ Group_Subscription_Invite::META => $invites ],
+				'items'       => $items,
+			]
+		);
+
+		for ( $i = 0; $i < $args['members']; $i++ ) {
+			add_user_meta( self::factory()->user->create(), Group_Subscription::GROUP_SUBSCRIPTION_USER_META_KEY, $id );
+		}
+		Group_Subscription::reset_cache();
+
+		return $subscription;
+	}
+
+	/**
+	 * Render the metabox for a subscription and return its markup.
+	 *
+	 * @param WC_Subscription $subscription The subscription to render.
+	 *
+	 * @return string The rendered markup.
+	 */
+	private function render_metabox( $subscription ) {
+		if ( ! defined( 'NEWSPACK_CONTENT_GATES' ) ) {
+			define( 'NEWSPACK_CONTENT_GATES', true );
+		}
+		ob_start();
+		Group_Subscription_Settings::add_group_subscription_options( $subscription );
+		return ob_get_clean();
+	}
+
+	/**
+	 * Raising the seat count rescales the line item in place: the quantity, the
+	 * subtotal and the total all move together, on the same subscription, and the
+	 * new quantity is the group's new capacity.
+	 */
+	public function test_set_seat_quantity_rescales_line_item() {
+		$subscription = $this->make_per_seat_subscription(
+			941,
+			[
+				'quantity' => 4,
+				'subtotal' => 40,
+				'total'    => 40,
+			]
+		);
+
+		$this->assertTrue( Group_Subscription_Settings::set_seat_quantity( $subscription, 6 ) );
+
+		$item = Group_Subscription_Settings::get_seat_line_item( $subscription );
+		$this->assertSame( 6, $item->get_quantity(), 'The line item quantity is the purchased seat count.' );
+		$this->assertSame( 60.0, (float) $item->get_subtotal(), 'The subtotal rescales at the same unit price.' );
+		$this->assertSame( 60.0, (float) $item->get_total(), 'The total rescales at the same unit price.' );
+		$this->assertSame( 6, Group_Subscription::get_member_capacity( $subscription ), 'Capacity follows the seat count.' );
+	}
+
+	/**
+	 * Seats cannot be cut below the people already sitting in them: the owner,
+	 * every member, and every invitation still waiting to be accepted.
+	 */
+	public function test_set_seat_quantity_rejects_below_occupancy() {
+		$subscription = $this->make_per_seat_subscription(
+			942,
+			[
+				'quantity' => 4,
+				'subtotal' => 40,
+				'total'    => 40,
+				'members'  => 3,
+			]
+		);
+
+		// Owner + 3 members = 4 seats in use.
+		$this->assertWPError( Group_Subscription_Settings::set_seat_quantity( $subscription, 3 ) );
+		$this->assertSame( 4, Group_Subscription_Settings::get_seat_line_item( $subscription )->get_quantity(), 'A rejected change leaves the line item alone.' );
+	}
+
+	/**
+	 * A group always has at least the owner's seat, so a zero or negative count
+	 * floors at one rather than erroring.
+	 */
+	public function test_set_seat_quantity_floors_at_one() {
+		$subscription = $this->make_per_seat_subscription(
+			943,
+			[
+				'quantity' => 4,
+				'subtotal' => 40,
+				'total'    => 40,
+			]
+		);
+
+		$this->assertTrue( Group_Subscription_Settings::set_seat_quantity( $subscription, 0 ) );
+		$this->assertSame( 1, Group_Subscription_Settings::get_seat_line_item( $subscription )->get_quantity() );
+		$this->assertSame( 10.0, (float) Group_Subscription_Settings::get_seat_line_item( $subscription )->get_subtotal() );
+	}
+
+	/**
+	 * There is nothing to rescale on a subscription with no line item, so the
+	 * caller gets an error rather than a silent no-op.
+	 */
+	public function test_set_seat_quantity_errors_without_a_line_item() {
+		$subscription = $this->make_per_seat_subscription( 944, [ 'items' => [] ] );
+
+		$result = Group_Subscription_Settings::set_seat_quantity( $subscription, 5 );
+
+		$this->assertWPError( $result );
+		$this->assertSame( Group_Subscription_Seats::ERROR_CODE, $result->get_error_code() );
+	}
+
+	/**
+	 * A per-seat group's metabox offers the seat count, not the member limit:
+	 * capacity is what was bought, so there is no limit to override.
+	 */
+	public function test_metabox_renders_seats_field_for_per_seat_subscription() {
+		$subscription = $this->make_per_seat_subscription(
+			945,
+			[
+				'quantity' => 5,
+				'members'  => 2,
+			]
+		);
+		$prefix = Group_Subscription_Settings::GROUP_SUBSCRIPTION_META_PREFIX;
+
+		$markup = $this->render_metabox( $subscription );
+
+		$this->assertStringContainsString( 'name="' . $prefix . 'seats"', $markup, 'The seats field is rendered.' );
+		$this->assertStringContainsString( 'name="' . $prefix . 'seats_baseline" value="5"', $markup, 'The baseline carries the seat count the field was rendered with.' );
+		$this->assertStringNotContainsString( 'name="' . $prefix . 'limit"', $markup, 'The limit field has no meaning in per-seat mode.' );
+		$this->assertStringNotContainsString( 'name="' . $prefix . 'limit_baseline"', $markup, 'An unposted limit baseline would read as a change to 0 on save.' );
+	}
+
+	/**
+	 * A flat group's metabox is unchanged: the member limit stays, and no seat
+	 * field appears.
+	 */
+	public function test_metabox_keeps_limit_field_for_flat_subscription() {
+		$subscription = $this->make_per_seat_subscription(
+			946,
+			[
+				'quantity' => 1,
+				'per_seat' => false,
+			]
+		);
+		$prefix = Group_Subscription_Settings::GROUP_SUBSCRIPTION_META_PREFIX;
+
+		$markup = $this->render_metabox( $subscription );
+
+		$this->assertStringContainsString( 'name="' . $prefix . 'limit"', $markup, 'The limit field still drives a flat group.' );
+		$this->assertStringContainsString( 'name="' . $prefix . 'limit_baseline"', $markup, 'The limit baseline still ships with it.' );
+		$this->assertStringNotContainsString( 'name="' . $prefix . 'seats"', $markup, 'A flat group buys one price, not seats.' );
+	}
+
+	/**
+	 * Saving a changed seat count rescales the subscription. No charge is raised:
+	 * readers buy seats through the switch, and this is the support-side correction.
+	 */
+	public function test_save_rescales_seats_when_changed_from_baseline() {
+		$subscription = $this->make_per_seat_subscription(
+			947,
+			[
+				'quantity' => 4,
+				'subtotal' => 40,
+				'total'    => 40,
+			]
+		);
+		$prefix = Group_Subscription_Settings::GROUP_SUBSCRIPTION_META_PREFIX;
+
+		$this->run_meta_box_save(
+			$subscription,
+			[
+				$prefix . 'enabled'          => 'yes',
+				$prefix . 'enabled_baseline' => 'yes',
+				$prefix . 'seats'            => '7',
+				$prefix . 'seats_baseline'   => '4',
+			]
+		);
+
+		$item = Group_Subscription_Settings::get_seat_line_item( $subscription );
+		$this->assertSame( 7, $item->get_quantity(), 'The submitted seat count is applied.' );
+		$this->assertSame( 70.0, (float) $item->get_subtotal(), 'The price rescales with the seats.' );
+		$this->assertSame( 7, Group_Subscription::get_member_capacity( $subscription ) );
+	}
+
+	/**
+	 * An untouched seats field must not rescale anything, even when the rendered
+	 * baseline has drifted from the line item: only a real edit is a change.
+	 */
+	public function test_save_ignores_seats_when_unchanged_from_baseline() {
+		$subscription = $this->make_per_seat_subscription(
+			948,
+			[
+				'quantity' => 4,
+				'subtotal' => 40,
+				'total'    => 40,
+			]
+		);
+		$prefix = Group_Subscription_Settings::GROUP_SUBSCRIPTION_META_PREFIX;
+
+		$this->run_meta_box_save(
+			$subscription,
+			[
+				$prefix . 'enabled'          => 'yes',
+				$prefix . 'enabled_baseline' => 'yes',
+				$prefix . 'seats'            => '6',
+				$prefix . 'seats_baseline'   => '6',
+			]
+		);
+
+		$this->assertSame( 4, Group_Subscription_Settings::get_seat_line_item( $subscription )->get_quantity(), 'A field the admin never touched leaves the line item alone.' );
+	}
+
+	/**
+	 * `sanitize_text_field()` answers '' for an array, which would set the line
+	 * quantity to zero and make the rescale read the whole line as one seat's price.
+	 * WooCommerce's own items table posts scalars, so an array is a malformed
+	 * request and the posted line values are left alone.
+	 */
+	public function test_seat_save_ignores_an_array_posted_for_a_line_value() {
+		$subscription = $this->make_per_seat_subscription(
+			953,
+			[
+				'quantity' => 4,
+				'subtotal' => 40,
+				'total'    => 40,
+			]
+		);
+		$item   = Group_Subscription_Settings::get_seat_line_item( $subscription );
+		$prefix = Group_Subscription_Settings::GROUP_SUBSCRIPTION_META_PREFIX;
+
+		$this->run_meta_box_save(
+			$subscription,
+			[
+				$prefix . 'enabled'          => 'yes',
+				$prefix . 'enabled_baseline' => 'yes',
+				$prefix . 'seats'            => '8',
+				$prefix . 'seats_baseline'   => '4',
+				'order_item_qty'             => [ $item->get_id() => [ 'nonsense' ] ],
+			]
+		);
+
+		$this->assertSame( 8, $item->get_quantity(), 'The seat count the admin submitted is still applied.' );
+		$this->assertSame( 80.0, (float) $item->get_subtotal(), 'The unit price comes from the line, not from a zeroed quantity.' );
+	}
+
+	/**
+	 * A subscription assembled by hand can carry more than one line, and the seat
+	 * count belongs to the per-seat product's line -- not to whichever line the
+	 * items happen to be stored in first. Rescaling the wrong one would move money
+	 * on a product that sells no seats.
+	 */
+	public function test_seat_line_item_is_the_per_seat_product_line() {
+		$other_product = wc_create_mock_product(
+			[
+				'id'   => 9600,
+				'type' => 'subscription',
+			]
+		);
+		$other_line    = new WC_Order_Item_Product(
+			[
+				'id'         => 9601,
+				'product_id' => $other_product->get_id(),
+				'quantity'   => 1,
+				'subtotal'   => 15,
+				'total'      => 15,
+			]
+		);
+		$seat_line     = new WC_Order_Item_Product(
+			[
+				'id'         => 9602,
+				'product_id' => 1952, // make_per_seat_subscription() derives the product ID as $id + 1000.
+				'quantity'   => 3,
+				'subtotal'   => 30,
+				'total'      => 30,
+			]
+		);
+		// The non-seat line first, so "the first item" and "the seat item" differ.
+		$subscription = $this->make_per_seat_subscription( 952, [ 'items' => [ $other_line, $seat_line ] ] );
+
+		$this->assertSame( 9602, Group_Subscription_Settings::get_seat_line_item( $subscription )->get_id() );
+
+		$this->assertTrue( Group_Subscription_Settings::set_seat_quantity( $subscription, 6 ) );
+		$this->assertSame( 6, $seat_line->get_quantity() );
+		$this->assertSame( 60.0, (float) $seat_line->get_subtotal() );
+		$this->assertSame( 1, $other_line->get_quantity(), 'The line that sells no seats is untouched.' );
+	}
+
+	/**
+	 * The seats field is only rendered for a per-seat group, so seat fields posted
+	 * against anything else did not come from this meta box. Acting on them would
+	 * resize a line item nobody asked to resize.
+	 */
+	public function test_save_ignores_seats_for_a_flat_subscription() {
+		$subscription = $this->make_per_seat_subscription(
+			951,
+			[
+				'per_seat' => false,
+				'quantity' => 1,
+				'subtotal' => 40,
+				'total'    => 40,
+			]
+		);
+		$prefix = Group_Subscription_Settings::GROUP_SUBSCRIPTION_META_PREFIX;
+
+		$this->run_meta_box_save(
+			$subscription,
+			[
+				$prefix . 'enabled'          => 'yes',
+				$prefix . 'enabled_baseline' => 'yes',
+				$prefix . 'seats'            => '9',
+				$prefix . 'seats_baseline'   => '1',
+			]
+		);
+
+		$item = Group_Subscription_Settings::get_seat_line_item( $subscription );
+		$this->assertSame( 1, $item->get_quantity(), 'A flat group sells no seats, so nothing rescales.' );
+		$this->assertSame( 40.0, (float) $item->get_subtotal() );
+	}
+
+	/**
+	 * A seat cut the group cannot absorb is refused, and the admin is told why
+	 * rather than being left to wonder why the number sprang back.
+	 */
+	public function test_save_surfaces_error_when_seats_below_occupancy() {
+		$subscription = $this->make_per_seat_subscription(
+			949,
+			[
+				'quantity'        => 5,
+				'subtotal'        => 50,
+				'total'           => 50,
+				'members'         => 2,
+				'pending_invites' => 1,
+			]
+		);
+		$prefix = Group_Subscription_Settings::GROUP_SUBSCRIPTION_META_PREFIX;
+
+		// Owner + 2 members + 1 pending invitation = 4 seats in use.
+		$this->run_meta_box_save(
+			$subscription,
+			[
+				$prefix . 'enabled'          => 'yes',
+				$prefix . 'enabled_baseline' => 'yes',
+				$prefix . 'seats'            => '3',
+				$prefix . 'seats_baseline'   => '5',
+			]
+		);
+
+		$this->assertSame( 5, Group_Subscription_Settings::get_seat_line_item( $subscription )->get_quantity(), 'The rejected change leaves the line item alone.' );
+		global $wc_mock_meta_box_errors;
+		$this->assertCount( 1, $wc_mock_meta_box_errors, 'The admin is shown one error.' );
+		$this->assertStringContainsString( '4', $wc_mock_meta_box_errors[0], 'The error names the seats in use.' );
+	}
+
+	/**
+	 * End-to-end guard for the ordering: with a stand-in for WooCommerce's own
+	 * line-items save hooked at priority 10, a seat change still sticks. Fail this
+	 * and an admin's edit reverts on screen with no error shown.
+	 */
+	public function test_seat_save_survives_the_woocommerce_line_items_save() {
+		$subscription = $this->make_per_seat_subscription(
+			950,
+			[
+				'quantity' => 4,
+				'subtotal' => 40,
+				'total'    => 40,
+			]
+		);
+		$prefix = Group_Subscription_Settings::GROUP_SUBSCRIPTION_META_PREFIX;
+
+		// What wc_save_order_items() does: reload the item and set quantity, subtotal
+		// and total from the POST the edit screen always carries, whether or not the
+		// admin opened the line items panel.
+		$restore_posted_line_item = function () use ( $subscription ) {
+			$item = Group_Subscription_Settings::get_seat_line_item( $subscription );
+			$item->set_quantity( 4 );
+			$item->set_subtotal( 40 );
+			$item->set_total( 40 );
+			$item->save();
+		};
+		add_action( 'woocommerce_process_shop_order_meta', $restore_posted_line_item, 10 );
+
+		$this->run_meta_box_save(
+			$subscription,
+			[
+				$prefix . 'enabled'          => 'yes',
+				$prefix . 'enabled_baseline' => 'yes',
+				$prefix . 'seats'            => '7',
+				$prefix . 'seats_baseline'   => '4',
+			]
+		);
+
+		remove_action( 'woocommerce_process_shop_order_meta', $restore_posted_line_item, 10 );
+
+		$item = Group_Subscription_Settings::get_seat_line_item( $subscription );
+		$this->assertSame( 7, $item->get_quantity(), 'The seat change must outlive WooCommerce line-items save.' );
+		$this->assertSame( 70.0, (float) $item->get_subtotal(), 'The rescaled price must outlive it too.' );
+	}
+
+	/**
+	 * When the admin edits the line items table and the seats field in one submit,
+	 * the rescale must start from what WooCommerce just wrote, not from the copy of
+	 * the item this callback happens to hold.
+	 *
+	 * The fixture makes the two disagree on purpose: the in-memory item says 2 seats
+	 * at 30 (unit 15) while the POST says 4 at 40 (unit 10). Seven seats is 70 off the
+	 * posted base and 105 off the stale one, so the assertion can only pass one way.
+	 */
+	public function test_seat_save_rebases_on_the_posted_line_item() {
+		$subscription = $this->make_per_seat_subscription(
+			952,
+			[
+				'quantity' => 2,
+				'subtotal' => 30,
+				'total'    => 30,
+			]
+		);
+		$prefix  = Group_Subscription_Settings::GROUP_SUBSCRIPTION_META_PREFIX;
+		$item_id = Group_Subscription_Settings::get_seat_line_item( $subscription )->get_id();
+
+		$this->run_meta_box_save(
+			$subscription,
+			[
+				$prefix . 'enabled'          => 'yes',
+				$prefix . 'enabled_baseline' => 'yes',
+				$prefix . 'seats'            => '7',
+				$prefix . 'seats_baseline'   => '4',
+				// The keys wc_save_order_items() reads, as the items table submits them.
+				'order_item_qty'             => [ $item_id => '4' ],
+				'line_subtotal'              => [ $item_id => '40' ],
+				'line_total'                 => [ $item_id => '40' ],
+			]
+		);
+
+		$item = Group_Subscription_Settings::get_seat_line_item( $subscription );
+		$this->assertSame( 7, $item->get_quantity() );
+		$this->assertSame( 70.0, (float) $item->get_subtotal(), 'The unit price must come from the POST (10), not the stale object (15).' );
+		$this->assertSame( 70.0, (float) $item->get_total(), 'The unit price must come from the POST (10), not the stale object (15).' );
+	}
+
+	/**
+	 * A price that does not divide evenly across the old seat count is stored at the
+	 * store's own precision, not at PHP float precision.
+	 */
+	public function test_set_seat_quantity_rounds_to_store_precision() {
+		$subscription = $this->make_per_seat_subscription(
+			951,
+			[
+				'quantity' => 3,
+				'subtotal' => 40,
+				'total'    => 40,
+			]
+		);
+
+		$this->assertTrue( Group_Subscription_Settings::set_seat_quantity( $subscription, 4 ) );
+
+		$item = Group_Subscription_Settings::get_seat_line_item( $subscription );
+		$this->assertSame( 53.33, (float) $item->get_subtotal(), 'Rescaled money is rounded, not left at 53.333333333333336.' );
+		$this->assertSame( 53.33, (float) $item->get_total() );
 	}
 }

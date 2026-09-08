@@ -536,6 +536,41 @@ class HomepagePostsBlockTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 	}
 
 	/**
+	 * The block server render must not emit the `cat-links` class on tag
+	 * labels: per-section `.cat-links a` styling must never recolor them
+	 * (NPPM-3049, the block-side counterpart of the NPPM-3048 theme fix).
+	 */
+	public function test_display_tag_labels_renders_without_cat_links() {
+		ob_start();
+		Newspack_Blocks::display_tag_labels(
+			[
+				[
+					'flag' => 'Opinion',
+					'link' => 'https://example.org/tag/opinion/',
+				],
+			]
+		);
+		$html = ob_get_clean();
+
+		self::assertStringContainsString( '<div class="tag-labels">', $html, 'Wrapper is a div carrying exactly the tag-labels class.' );
+		self::assertStringNotContainsString( 'cat-links', $html, 'Wrapper must not carry cat-links (NPPM-3049).' );
+		self::assertStringContainsString( 'class="tag-label flag"', $html, 'Inner labels keep the tag-label flag classes.' );
+	}
+
+	/**
+	 * Empty labels produce no output, not an empty wrapper.
+	 *
+	 * `null` and `[]` reach the same early return, so one call covers both. What
+	 * this catches is a wrapper, or the space that trails it, being echoed when
+	 * there is nothing to put inside.
+	 */
+	public function test_display_tag_labels_outputs_nothing_for_empty_labels() {
+		ob_start();
+		Newspack_Blocks::display_tag_labels( null );
+		self::assertSame( '', ob_get_clean(), 'Empty labels must render nothing, not an empty wrapper.' );
+	}
+
+	/**
 	 * A non-viewable post type explicitly opted in via the
 	 * newspack_blocks_articles_allowed_post_types filter is served by the endpoint,
 	 * without loosening the gate for other non-viewable types.

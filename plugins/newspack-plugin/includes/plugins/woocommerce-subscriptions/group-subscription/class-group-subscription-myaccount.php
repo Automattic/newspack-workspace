@@ -304,6 +304,71 @@ class Group_Subscription_MyAccount {
 	}
 
 	/**
+	 * Whether a user may change the number of seats on a group subscription.
+	 *
+	 * A seat change rides WooCommerce Subscriptions' native switch, which rewrites
+	 * the subscription's own line item and bills the difference — so it belongs to
+	 * the owner who pays for it, never to a manager, and only while the
+	 * subscription is still active. A flat-priced group sells no seats at all, and
+	 * a subscription with no line item has nothing for the switch to rewrite.
+	 *
+	 * The last word belongs to WooCommerce Subscriptions, which refuses a switch
+	 * for reasons this class knows nothing about — a payment gateway that cannot
+	 * change the billed amount, a subscription with no parent order. A "Change
+	 * seats" button it would refuse is a button that goes nowhere.
+	 *
+	 * @param int|\WC_Subscription $subscription Subscription or ID.
+	 * @param int                  $user_id      User ID to check.
+	 *
+	 * @return bool
+	 */
+	public static function can_change_seats( $subscription, $user_id ): bool {
+		$subscription = WooCommerce_Subscriptions::sanitize_subscription( $subscription );
+		if ( ! $subscription instanceof \WC_Subscription ) {
+			return false;
+		}
+		$user_id = (int) $user_id;
+		if ( ! $user_id || $user_id !== (int) $subscription->get_user_id() ) {
+			return false;
+		}
+		if ( ! self::is_subscription_active( $subscription ) ) {
+			return false;
+		}
+		if ( ! Group_Subscription_Settings::is_per_seat( $subscription ) ) {
+			return false;
+		}
+		$seat_item = Group_Subscription_Settings::get_seat_line_item( $subscription );
+		if ( ! $seat_item ) {
+			return false;
+		}
+		return self::is_item_switchable( $seat_item, $subscription, $user_id );
+	}
+
+	/**
+	 * Whether WooCommerce Subscriptions would let this user switch this line item.
+	 *
+	 * `can_item_be_switched_by_user()` is the same test WooCommerce Subscriptions
+	 * applies to its own switch link, so asking it is what keeps our link and
+	 * theirs in agreement. Older releases without it fall back to the product-type
+	 * gate that decides most of its answer.
+	 *
+	 * @param \WC_Order_Item_Product $item         The subscription's seat line item.
+	 * @param \WC_Subscription       $subscription The subscription.
+	 * @param int                    $user_id      User the switch would belong to.
+	 *
+	 * @return bool
+	 */
+	private static function is_item_switchable( $item, $subscription, $user_id ): bool {
+		if ( method_exists( '\WC_Subscriptions_Switcher', 'can_item_be_switched_by_user' ) ) {
+			return (bool) \WC_Subscriptions_Switcher::can_item_be_switched_by_user( $item, $subscription, $user_id );
+		}
+		if ( function_exists( 'wcs_is_product_switchable_type' ) ) {
+			return (bool) wcs_is_product_switchable_type( wcs_get_canonical_product_id( $item ) );
+		}
+		return true;
+	}
+
+	/**
 	 * Verify the subscription accepts manager changes, redirecting with an error on failure.
 	 *
 	 * @param int    $subscription_id Subscription ID.
@@ -720,16 +785,22 @@ class Group_Subscription_MyAccount {
 		$member = get_userdata( $member_id );
 		$name   = $member ? newspack_get_user_display_label( $member ) : __( 'This member', 'newspack-plugin' );
 
-		self::redirect(
-			$result,
-			$redirect_url,
-			'members',
-			'manager' === $role
-				/* translators: %s: member display name. */
-				? sprintf( __( '%s is now a manager.', 'newspack-plugin' ), $name )
-				/* translators: %s: member display name. */
-				: sprintf( __( '%s is no longer a manager.', 'newspack-plugin' ), $name )
-		);
+		if ( 'manager' === $role ) {
+			/* translators: %s: member display name. */
+			$success_message = sprintf( __( '%s is now a manager.', 'newspack-plugin' ), $name );
+		} else {
+			/* translators: %s: member display name. */
+			$success_message = sprintf( __( '%s is no longer a manager.', 'newspack-plugin' ), $name );
+			// Demoting a manager leaves the group's invite link working, and the two controls sit
+			// on the same page, so name the one that does stop a link in circulation. Only when
+			// there is a live link to stop: the read runs after the demotion, so a legacy key the
+			// removal has just revoked is already gone from it.
+			if ( Group_Subscription_Invite::get_link_invite( $subscription ) ) {
+				$success_message .= ' ' . __( 'To stop the invite link for this group, regenerate it.', 'newspack-plugin' );
+			}
+		}
+
+		self::redirect( $result, $redirect_url, 'members', $success_message );
 	}
 }
 Group_Subscription_MyAccount::init();

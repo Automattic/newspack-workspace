@@ -1,3 +1,10 @@
+## newspack-network [2.22.6](https://github.com/Automattic/newspack-workspace/compare/newspack-network@2.22.5...newspack-network@2.22.6) (2026-09-02)
+
+
+### Bug Fixes
+
+* **network:** harden remote media handling in distribution ([#885](https://github.com/Automattic/newspack-workspace/issues/885)) ([f450a66](https://github.com/Automattic/newspack-workspace/commit/f450a663c6c876d89ca26b549c9c23aac17cab7a))
+
 ## newspack-network [2.22.5](https://github.com/Automattic/newspack-workspace/compare/newspack-network@2.22.4...newspack-network@2.22.5) (2026-08-31)
 
 

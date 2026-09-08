@@ -1561,7 +1561,7 @@ final class Reader_Activation {
 	 *
 	 * @return bool
 	 */
-	private static function should_render_auth_modal() {
+	public static function should_render_auth_modal() {
 		/**
 		 * Filters whether to render reader auth form.
 		 *
@@ -1642,6 +1642,8 @@ final class Reader_Activation {
 				);
 				?>
 			</p>
+			<?php // Errors land in their own paragraph, so the line naming the reader's address survives a failed send and still orients them on the retry. ?>
+			<p data-error-target role="status" hidden></p>
 		</div>
 		<button type="button" class="newspack-ui__button newspack-ui__button--primary newspack-ui__button--wide" data-send-otp>
 			<?php esc_html_e( 'Send code', 'newspack-plugin' ); ?>
@@ -2189,21 +2191,23 @@ final class Reader_Activation {
 
 		switch ( $action ) {
 			case 'signin':
-				if ( Magic_Link::has_active_token( $user ) ) {
-					$payload['action'] = 'otp';
+				// A reader who set a password can always sign in with it. Offer the password
+				// step on email submit even when an OTP token is still active — the reader may
+				// have requested a code, then decided to use their password instead (NPPM-3054).
+				if ( ! self::is_reader_without_password( $user ) ) {
+					$payload['action'] = 'pwd';
 					break;
 				}
-				if ( self::is_reader_without_password( $user ) ) {
+				// No password on file: a one-time code is the only way in. Reuse an active
+				// token if one exists; otherwise send a fresh code.
+				if ( ! Magic_Link::has_active_token( $user ) ) {
 					$sent = Magic_Link::send_email( $user, $redirect );
 					if ( true !== $sent ) {
 						return self::send_auth_form_response( new \WP_Error( 'unauthorized', \is_wp_error( $sent ) ? $sent->get_error_message() : __( 'We encountered an error sending an authentication link. Please try again.', 'newspack-plugin' ) ) );
 					}
-					$payload['action'] = 'otp';
-					break;
-				} else {
-					$payload['action'] = 'pwd';
-					break;
 				}
+				$payload['action'] = 'otp';
+				break;
 			case 'pwd':
 				if ( empty( $password ) ) {
 					return self::send_auth_form_response( new \WP_Error( 'invalid_password', __( 'Password not recognized, try again.', 'newspack-plugin' ) ) );
@@ -2294,6 +2298,11 @@ final class Reader_Activation {
 
 	/**
 	 * Check if current reader has its email verified.
+	 *
+	 * Reports stored state only. A content-gate decision that has to answer "what
+	 * would this reader see if they verified?" must also accept
+	 * `Access_Rules::is_verification_assumed_for( $user->ID )`, or the hypothetical
+	 * reports the reader still walled by the very requirement it is asking about.
 	 *
 	 * @param \WP_User $user User object.
 	 *

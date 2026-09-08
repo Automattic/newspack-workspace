@@ -63,6 +63,14 @@ class Access_Rules {
 	private static $one_time_purchase_memo = [];
 
 	/**
+	 * Reader ID the email-domain rule should treat as verified for the duration of a
+	 * hypothetical evaluation. Zero outside one. See with_assumed_verification().
+	 *
+	 * @var int
+	 */
+	private static $assumed_verified_user_id = 0;
+
+	/**
 	 * Context for the evaluation currently in progress, set by evaluate_rules()
 	 * / evaluate_rule() from the settings of the gate being evaluated. Rule
 	 * callbacks read it via get_evaluation_context(). Empty outside an
@@ -107,9 +115,20 @@ class Access_Rules {
 	 *     @type bool     $empty_grants_access
 	 *                                        Optional. Whether the rule's callback reads an empty
 	 *                                        value as "no constraint", so leaving it empty grants
-	 *                                        access to every reader. Defaults to false. A rule
-	 *                                        that declares it is refused a save while the gate is
-	 *                                        active and its value is empty.
+	 *                                        access to every reader. Defaults to false. Decides
+	 *                                        which way the editor and the save error describe an
+	 *                                        empty value, never whether it is allowed.
+	 *     @type bool     $requires_value     Optional. Whether an empty value leaves the rule
+	 *                                        unconfigured rather than expressing a usable
+	 *                                        condition. Defaults to false. A rule that declares
+	 *                                        it is refused a save while the gate is active and
+	 *                                        its value is empty. Independent of which way the
+	 *                                        rule then evaluates: `institution` denies every
+	 *                                        reader and the two free-text rules grant every
+	 *                                        reader, and neither is what the operator meant.
+	 *                                        `subscription` must not declare it — naming no
+	 *                                        product means "any active subscription", which is a
+	 *                                        condition publishers configure deliberately.
 	 *     @type bool     $supports_anonymous Whether the rule's callback can evaluate access for
 	 *                                        a logged-out visitor (`user_id = 0`). Defaults to
 	 *                                        false — `evaluate_rule` short-circuits to false for
@@ -153,11 +172,14 @@ class Access_Rules {
 				'options'             => [],
 				'has_options'         => $has_options,
 				'is_boolean'          => false,
-				// It is a property of the rule's callback, not of the value's shape:
-				// `institution` returns true when it names none, and so do the two
-				// free-text rules when left blank, while `subscription` naming no
-				// product still requires *an* active subscription.
+				// Both are properties of the rule's callback rather than of the
+				// value's shape, and they are not the same question: the two
+				// free-text rules grant every reader when left blank and
+				// `institution` denies every reader, yet all three are unconfigured.
+				// `subscription` naming no product is neither — it still requires
+				// *an* active subscription.
 				'empty_grants_access' => false,
+				'requires_value'      => false,
 			]
 		);
 		self::$rules[ $rule['id'] ] = $rule;
@@ -226,20 +248,22 @@ class Access_Rules {
 				'placeholder'         => __( 'example.com,another.com', 'newspack-plugin' ),
 				'callback'            => [ __CLASS__, 'is_email_domain_whitelisted' ],
 				'empty_grants_access' => true,
+				'requires_value'      => true,
 			],
 			'reader_data'       => [
 				'name'                => __( 'Reader data', 'newspack-plugin' ),
 				'description'         => __( 'Set custom conditions based on reader data key/value pairs.', 'newspack-plugin' ),
 				'callback'            => [ __CLASS__, 'has_reader_data' ],
 				'empty_grants_access' => true,
+				'requires_value'      => true,
 			],
 			'institution'       => [
-				'name'                => __( 'Institutional access', 'newspack-plugin' ),
-				'description'         => __( 'Grant access to readers from selected institutions.', 'newspack-plugin' ),
-				'options'             => [ Institution::class, 'get_options' ],
-				'callback'            => [ Institution::class, 'evaluate' ],
-				'supports_anonymous'  => true,
-				'empty_grants_access' => true,
+				'name'               => __( 'Institutional access', 'newspack-plugin' ),
+				'description'        => __( 'Grant access to readers from selected institutions.', 'newspack-plugin' ),
+				'options'            => [ Institution::class, 'get_options' ],
+				'callback'           => [ Institution::class, 'evaluate' ],
+				'supports_anonymous' => true,
+				'requires_value'     => true,
 			],
 		];
 
@@ -437,6 +461,44 @@ class Access_Rules {
 			return false;
 		}
 		return self::evaluate_rules( $eligible_groups, 0 );
+	}
+
+	/**
+	 * Evaluate a gate's access rules for whoever is asking.
+	 *
+	 * The two evaluators are not interchangeable. For a registered rule they now
+	 * agree: `evaluate_rule()` denies user 0 before reading the value unless the
+	 * rule is `supports_anonymous`, and the only such rule — `institution` — denies
+	 * on an empty value. What still differs is a rule the site does not register:
+	 * `evaluate_rule()` returns true for a missing callback, and does so ahead of
+	 * the anonymous check, so `evaluate_rules( …, 0 )` admits a logged-out visitor
+	 * to a group whose only rule came from a switched-off integration. The same
+	 * goes for the shapes neither the wizard nor the REST sanitizer produces and
+	 * block attributes are never checked for — an empty group, a rule carrying no
+	 * slug — which have no condition to fail and so read as satisfied.
+	 * `evaluate_anonymous_rules()` drops all of those groups first.
+	 *
+	 * That leaves one deliberate asymmetry: an unregistered rule is skipped for a
+	 * signed-in reader (a gate the publisher cannot see or edit must not deny
+	 * everyone) and denies a logged-out visitor (an unevaluated condition must not
+	 * stand in for registration). Both directions are chosen; neither is a bug to
+	 * reconcile.
+	 *
+	 * Every surface gating content for both audiences goes through here, so one
+	 * gate cannot answer differently depending on which surface asked.
+	 *
+	 * @param array $access_rules The gate's access rules.
+	 * @param int   $user_id      Reader to evaluate for; 0 for a logged-out visitor.
+	 * @param array $context      Optional. Evaluation context, applied only to the
+	 *                            logged-in path — the anonymous one reaches no rule
+	 *                            that reads it.
+	 *
+	 * @return bool Whether the visitor passes the rules.
+	 */
+	public static function evaluate_rules_for_visitor( $access_rules, $user_id, $context = [] ) {
+		return $user_id
+			? self::evaluate_rules( $access_rules, $user_id, $context )
+			: self::evaluate_anonymous_rules( $access_rules );
 	}
 
 	/**
@@ -977,6 +1039,30 @@ class Access_Rules {
 	}
 
 	/**
+	 * Whether an email address sits on one of the given domains.
+	 *
+	 * This is the domain comparison alone. It says nothing about whether the reader has
+	 * verified the address, which {@see self::is_email_domain_whitelisted()} requires
+	 * before granting access — so a caller that needs the match itself, rather than the
+	 * access decision built on it, uses this directly.
+	 *
+	 * @param string $email   Email address.
+	 * @param string $domains Comma- or newline-delimited list of domains.
+	 * @return bool
+	 */
+	public static function email_matches_domains( $email, $domains ) {
+		if ( empty( $email ) || empty( $domains ) ) {
+			return false;
+		}
+		$domains      = str_replace( PHP_EOL, ',', $domains );
+		$domains      = explode( ',', $domains );
+		$domains      = array_map( 'trim', $domains );
+		$domains      = array_map( 'strtolower', $domains );
+		$email_domain = strtolower( substr( $email, strrpos( $email, '@' ) + 1 ) );
+		return in_array( $email_domain, $domains, true );
+	}
+
+	/**
 	 * Whether the user’s email address contains one of the given domains.
 	 *
 	 * @param int    $user_id User ID.
@@ -988,11 +1074,7 @@ class Access_Rules {
 		if ( empty( $domains ) ) {
 			return true;
 		}
-		$domains = str_replace( PHP_EOL, ',', $domains );
-		$domains = explode( ',', $domains );
-		$domains = array_map( 'trim', $domains );
-		$domains = array_map( 'strtolower', $domains );
-		$user    = \get_userdata( $user_id );
+		$user = \get_userdata( $user_id );
 		if ( ! $user ) {
 			return false;
 		}
@@ -1000,11 +1082,83 @@ class Access_Rules {
 		if ( ! $email ) {
 			return false;
 		}
-		if ( Reader_Activation::is_reader_verified( $user ) === false ) {
+		if ( ! self::is_verification_satisfied( $user ) ) {
 			return false;
 		}
-		$email_domain = strtolower( substr( $email, strrpos( $email, '@' ) + 1 ) );
-		return in_array( $email_domain, $domains, true );
+		return self::email_matches_domains( $email, $domains );
+	}
+
+	/**
+	 * Whether the reader satisfies the email-domain rule's verification requirement.
+	 *
+	 * Normally that means the reader has verified their address. During a hypothetical
+	 * evaluation opened by {@see self::with_assumed_verification()} it is also satisfied
+	 * for the one reader that evaluation is about, so a caller can ask "would this gate
+	 * grant access if this reader verified?" without relaxing the rule for a real
+	 * access decision.
+	 *
+	 * @param \WP_User $user The user being evaluated.
+	 * @return bool
+	 */
+	private static function is_verification_satisfied( $user ) {
+		if ( self::is_verification_assumed_for( $user->ID ) ) {
+			return true;
+		}
+		return false !== Reader_Activation::is_reader_verified( $user );
+	}
+
+	/**
+	 * Whether a hypothetical evaluation is currently treating this reader as verified.
+	 *
+	 * For the other places a gate decides access on verification. Those read the stored
+	 * state directly, and a hypothetical that only reached the email-domain rule would
+	 * answer "still restricted" for a gate whose registration wall the same act of
+	 * verifying would also satisfy — suppressing the prompt on exactly the
+	 * configuration it is for.
+	 *
+	 * @param int $user_id The reader being evaluated.
+	 *
+	 * @return bool
+	 */
+	public static function is_verification_assumed_for( $user_id ) {
+		return (bool) self::$assumed_verified_user_id && (int) $user_id === self::$assumed_verified_user_id;
+	}
+
+	/**
+	 * Run a callback with one reader treated as verified by the email-domain rule.
+	 *
+	 * The return value is a hypothetical, never an access decision. Nothing about the
+	 * reader's stored verification state changes, and the flag is cleared before the
+	 * call returns.
+	 *
+	 * Two constraints on callers, because the flag is process-wide for the callback's
+	 * duration and the callback runs rule callbacks that third parties can register:
+	 * nothing computed inside may be cached anywhere that outlives the call, and no
+	 * value returned from it may be used to grant access. Either one turns a
+	 * hypothetical into a real answer — which is the hole the email-domain rule's
+	 * verification requirement exists to close.
+	 *
+	 * The first constraint is enforced for the one memo the replay is known to reach:
+	 * `Institution`'s per-request matching cache is cleared on the way out, so a name
+	 * map computed under the assumption is recomputed for real by whatever reads it
+	 * next (GA4 access labels, ESP contact metadata). A callback that memoises
+	 * elsewhere is still the caller's responsibility, and can tell it is inside a
+	 * hypothetical via {@see self::is_verification_assumed_for()}.
+	 *
+	 * @param int      $user_id  The reader to treat as verified.
+	 * @param callable $callback Callback to run.
+	 *
+	 * @return mixed The callback's return value.
+	 */
+	public static function with_assumed_verification( $user_id, $callback ) {
+		$previous                       = self::$assumed_verified_user_id;
+		self::$assumed_verified_user_id = (int) $user_id;
+		try {
+			return $callback();
+		} finally {
+			self::$assumed_verified_user_id = $previous;
+			Institution::reset_matching_cache();
+		}
 	}
 
 	/**

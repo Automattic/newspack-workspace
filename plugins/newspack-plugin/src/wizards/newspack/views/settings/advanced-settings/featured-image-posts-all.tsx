@@ -18,7 +18,7 @@ export default function FeaturedImagePostsAll( { data, update, postCount }: Them
 	return (
 		<Fragment>
 			{ Number( postCount ) > 1000 && (
-				<Notice isDismissible={ false } status="warning" className="newspack-notice--spaced-bottom">
+				<Notice isDismissible={ false } status="warning" spokenMessage="" className="newspack-notice--spaced-bottom">
 					{ __( 'You have more than 1000 posts. Applying these settings might take a moment.', 'newspack-plugin' ) }
 				</Notice>
 			) }

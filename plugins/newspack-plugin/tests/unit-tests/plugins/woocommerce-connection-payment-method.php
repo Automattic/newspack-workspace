@@ -398,11 +398,15 @@ class Newspack_Test_WooCommerce_Connection_Payment_Method extends WP_UnitTestCas
 	 * Before the fix, Donations::get_order_donation_product_id() bare-returned
 	 * null in that state, the guard's old `!== false` comparison let null
 	 * through, and the code then fataled on `$item->get_product_id()` with an
-	 * empty items array. The helper now returns its documented false and the
-	 * guard is a falsy check; this test pins the no-send, no-crash behavior.
+	 * empty items array. The helper now returns its documented false; this test
+	 * pins the no-send, no-crash behavior.
+	 *
+	 * NPPM-3213 removed the donation guard this originally depended on — the
+	 * emails are no longer donation-scoped — and replaced it with an explicit
+	 * empty-items check, which is what holds this case now.
 	 */
-	public function test_receipt_email_bails_on_order_without_donation_items() {
-		// Ensure the receipt email is enabled, so the guard is what stops the send.
+	public function test_receipt_email_bails_on_order_without_items() {
+		// Ensure the receipt email is enabled, so the empty-items guard is what stops the send.
 		add_filter(
 			'newspack_email_configs',
 			function ( $configs ) {
@@ -418,7 +422,7 @@ class Newspack_Test_WooCommerce_Connection_Payment_Method extends WP_UnitTestCas
 		);
 		self::assertTrue(
 			Emails::can_send_email( Reader_Revenue_Emails::EMAIL_TYPES['RECEIPT'] ),
-			'Precondition: the receipt email must be sendable so the donation guard is the deciding check.'
+			'Precondition: the receipt email must be sendable so the empty-items guard is the deciding check.'
 		);
 
 		$order = new WC_Order(
@@ -432,11 +436,11 @@ class Newspack_Test_WooCommerce_Connection_Payment_Method extends WP_UnitTestCas
 		);
 		self::assertFalse(
 			WooCommerce_Connection::send_customizable_receipt_email( $order->get_id() ),
-			'Orders without donation items should never send the customizable receipt.'
+			'An order with no line items should never send the customizable receipt.'
 		);
 		self::assertFalse(
 			$order->meta_exists( '_newspack_receipt_email_sent' ),
-			'No receipt-sent marker should be written for a non-donation order.'
+			'No receipt-sent marker should be written when nothing was sent.'
 		);
 	}
 }

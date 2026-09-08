@@ -68,8 +68,8 @@ const requiredAudienceField = {
 
 const baseIntegration = {
 	id: 'esp',
-	name: 'Newsletter ESP',
-	description: 'Syncs reader data with your ESP.',
+	name: 'Mailchimp',
+	description: 'Syncs reader data with your Mailchimp audience.',
 	enabled: false,
 	is_set_up: false,
 	is_connected: false,
@@ -220,19 +220,42 @@ describe( 'Audience Integrations settings section card action', () => {
 		expect( cardProps.requirementsActionable ).toBe( true );
 	} );
 
-	it( 'renders the connected provider brand icon via IntegrationIcon', () => {
-		const { cardProps } = renderSection( { is_connected: true, provider: 'mailchimp' } );
+	it( 'always renders the Mailchimp mark on the esp card, whatever the provider', () => {
+		const { cardProps } = renderSection( { is_connected: true, provider: 'manual' } );
 		expect( cardProps.icon.props.provider ).toBe( 'mailchimp' );
 	} );
 
-	it( 'renders the manual provider brand icon via IntegrationIcon', () => {
-		const { cardProps } = renderSection( { is_connected: true, provider: 'manual' } );
-		expect( cardProps.icon.props.provider ).toBe( 'manual' );
+	it( 'renders the Mailchimp mark on the esp card before a provider is connected', () => {
+		const { cardProps } = renderSection( { provider: null } );
+		expect( cardProps.icon.props.provider ).toBe( 'mailchimp' );
 	} );
 
-	it( 'keeps the generic icon descriptor when no provider is connected', () => {
-		const { cardProps } = renderSection( { provider: null } );
-		expect( cardProps.icon.node ).toBeDefined();
-		expect( cardProps.icon.props ).toBeUndefined();
+	it( 'renders the reported provider brand icon for other integrations', () => {
+		render(
+			<SettingsSection
+				integrations={ { fundraise_up: { ...baseIntegration, id: 'fundraise_up', provider: 'active_campaign' } } }
+				loading={ false }
+				onToggleEnabled={ jest.fn() }
+				onActivatePlugin={ jest.fn() }
+				onSetupAndEnable={ jest.fn() }
+				history={ { push: jest.fn() } }
+			/>
+		);
+		expect( mockCardFeatureProps[ 0 ].icon.props.provider ).toBe( 'active_campaign' );
+	} );
+
+	it( 'keeps the generic icon descriptor for other integrations without a provider', () => {
+		render(
+			<SettingsSection
+				integrations={ { other: { ...baseIntegration, id: 'other', provider: null } } }
+				loading={ false }
+				onToggleEnabled={ jest.fn() }
+				onActivatePlugin={ jest.fn() }
+				onSetupAndEnable={ jest.fn() }
+				history={ { push: jest.fn() } }
+			/>
+		);
+		expect( mockCardFeatureProps[ 0 ].icon.node ).toBeDefined();
+		expect( mockCardFeatureProps[ 0 ].icon.props ).toBeUndefined();
 	} );
 } );

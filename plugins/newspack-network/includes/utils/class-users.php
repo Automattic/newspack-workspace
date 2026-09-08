@@ -134,24 +134,34 @@ class Users {
 		if ( array_key_exists( $avatar_meta_key, $user_data ) && is_array( $user_data[ $avatar_meta_key ] ) && ! empty( $user_data[ $avatar_meta_key ]['full'] ) ) {
 			$avatar_url = $user_data[ $avatar_meta_key ]['full'];
 
-			// The avatar URL comes from the network event payload and is fetched server-side
-			// (media_sideload_image -> download_url -> wp_remote_get, which does not block
-			// private/reserved hosts), so a peer could otherwise make this site request an
-			// internal address (SSRF). Reject anything that isn't a valid external URL.
-			if ( ! is_string( $avatar_url ) || ! wp_http_validate_url( $avatar_url ) ) {
+			// The avatar URL comes from the network event payload and is fetched server-side.
+			// Network::is_safe_sideload_url() is the authoritative gate and its docblock
+			// carries the reasoning; this pre-check exists for the log line below, and
+			// sideload_peer_image() refuses again on its own regardless.
+			if ( ! Network::is_safe_sideload_url( $avatar_url ) ) {
+				// A refusal here is the guard doing its job, but it is also the only
+				// signal that a peer's avatars have stopped syncing. Debugger::log()
+				// writes nothing unless NEWSPACK_NETWORK_DEBUG is defined, which no
+				// production site sets, so route this the way Incoming_Post::log()
+				// routes its own refusal — through newspack_log, which Newspack
+				// Manager collects — and keep the debug line for a local trace.
+				if ( method_exists( 'Newspack\Logger', 'newspack_log' ) ) {
+					\Newspack\Logger::newspack_log(
+						'newspack_network_avatar_sideload',
+						'Refused an avatar sideload: the URL resolves to a private or reserved address.',
+						[
+							'user_id' => $user_id,
+						],
+						'error'
+					);
+				}
 				Debugger::log( 'Avatar URL is not a valid external URL, skipping sideload' );
 				return false;
 			}
 
 			Debugger::log( 'Updating user avatar' );
 
-			if ( ! function_exists( 'media_sideload_image' ) ) {
-				require_once ABSPATH . 'wp-admin/includes/media.php';
-				require_once ABSPATH . 'wp-admin/includes/file.php';
-				require_once ABSPATH . 'wp-admin/includes/image.php';
-			}
-
-			$avatar_id = media_sideload_image( $avatar_url, 0, null, 'id' );
+			$avatar_id = Network::sideload_peer_image( $avatar_url, 0, null, 'id' );
 
 			if ( is_wp_error( $avatar_id ) ) {
 				Debugger::log( 'Error sideloading avatar: ' . $avatar_id->get_error_message() );
