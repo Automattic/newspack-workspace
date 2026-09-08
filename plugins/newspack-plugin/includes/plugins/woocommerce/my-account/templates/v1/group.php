@@ -67,6 +67,9 @@ if ( in_array( $subscription_status, [ 'cancelled', 'expired' ], true ) ) {
 		<div class="newspack-my-account__subscription--actions">
 			<div class="newspack-my-account__subscription--actions-container">
 				<?php
+				/* translators: %s: lowercase singular group label (e.g. "group", "team"). */
+				$rename_label = sprintf( __( 'Rename %s', 'newspack-plugin' ), $group_label_lower );
+
 				/**
 				 * Dropdown menus are only shown at large viewports.
 				 */
@@ -80,10 +83,6 @@ if ( in_array( $subscription_status, [ 'cancelled', 'expired' ], true ) ) {
 						<div class="newspack-ui__dropdown__content">
 							<ul>
 							<li>
-								<?php
-								/* translators: %s: lowercase singular group label (e.g. "group", "team"). */
-								$rename_label = sprintf( __( 'Rename %s', 'newspack-plugin' ), $group_label_lower );
-								?>
 								<button
 									type="button"
 									class="newspack-ui__button newspack-ui__button--ghost newspack-ui__button--wide newspack-my-account__group--rename"
