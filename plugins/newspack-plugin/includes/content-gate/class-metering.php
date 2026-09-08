@@ -452,7 +452,7 @@ class Metering {
 			$handle,
 			Newspack::plugin_url() . '/dist/content-gate-metering.js',
 			[],
-			filemtime( dirname( NEWSPACK_PLUGIN_FILE ) . '/dist/content-gate-metering.js' ),
+			Newspack::asset_version( 'content-gate-metering' ),
 			[
 				'in_footer' => true,
 				'strategy'  => 'defer',
