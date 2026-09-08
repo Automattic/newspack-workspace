@@ -40,15 +40,15 @@ class Test_API_Permissions extends \WP_UnitTestCase {
 	/**
 	 * Dispatch a request through the REST server as a fresh user with the given role.
 	 *
-	 * @param string $role   Role slug.
-	 * @param string $method HTTP method.
-	 * @param string $route  Route, relative to the API namespace.
-	 * @param array  $params Request parameters.
+	 * @param string|null $role Role slug, or null for a logged-out request.
+	 * @param string      $method HTTP method.
+	 * @param string      $route  Route, relative to the API namespace.
+	 * @param array       $params Request parameters.
 	 *
 	 * @return \WP_REST_Response
 	 */
 	private function dispatch_as( $role, $method, $route, $params = [] ) {
-		wp_set_current_user( self::factory()->user->create( [ 'role' => $role ] ) );
+		wp_set_current_user( $role ? self::factory()->user->create( [ 'role' => $role ] ) : 0 );
 		$request = new \WP_REST_Request( $method, '/' . API::NAMESPACE . $route );
 		foreach ( $params as $key => $value ) {
 			$request->set_param( $key, $value );
@@ -169,10 +169,50 @@ class Test_API_Permissions extends \WP_UnitTestCase {
 			[ 'GET', '/fields', [] ],
 			[ 'POST', '/budgets/search', [ 's' => 'budget' ] ],
 			[ 'GET', '/budgets/' . $budget_id . '/stories', [] ],
+			[ 'POST', '/budgets/' . $budget_id . '/stories/search', [ 's' => 'story' ] ],
 		];
 		foreach ( $routes as list( $method, $route, $params ) ) {
 			$response = $this->dispatch_as( 'contributor', $method, $route, $params );
 			$this->assertSame( 200, $response->get_status(), "$method $route should stay readable for contributors." );
+		}
+	}
+
+	/**
+	 * The budget a write is authorized against is the one the write alters.
+	 */
+	public function test_update_budget_ignores_a_body_supplied_id() {
+		list( $target, $other ) = self::$budgets;
+		$other_name             = get_term( $other, Budgets::TAXONOMY )->name;
+
+		$response = $this->dispatch_as(
+			'editor',
+			'PUT',
+			'/budgets/' . $target,
+			[
+				'id'   => $other,
+				'name' => 'Renamed through the URL',
+			]
+		);
+
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( $target, $response->get_data()['id'] );
+		$this->assertSame( 'Renamed through the URL', get_term( $target, Budgets::TAXONOMY )->name );
+		$this->assertSame( $other_name, get_term( $other, Budgets::TAXONOMY )->name );
+	}
+
+	/**
+	 * Anonymous requests never reach the write routes.
+	 */
+	public function test_budget_writes_require_a_logged_in_user() {
+		$budget_id = self::$budgets[0];
+		$writes    = [
+			[ 'POST', '/budgets', [ 'name' => 'Anonymous budget' ] ],
+			[ 'PUT', '/budgets/' . $budget_id, [ 'name' => 'Anonymous rename' ] ],
+			[ 'POST', '/budgets/order', [ 'ids' => array_reverse( self::$budgets ) ] ],
+		];
+		foreach ( $writes as list( $method, $route, $params ) ) {
+			$response = $this->dispatch_as( null, $method, $route, $params );
+			$this->assertSame( 401, $response->get_status(), "$method $route should require a logged-in user." );
 		}
 	}
 }

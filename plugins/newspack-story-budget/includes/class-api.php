@@ -997,7 +997,7 @@ class API {
 	 * @return \WP_REST_Response|\WP_Error
 	 */
 	public static function update_budget( $request ) {
-		$budget = new Budget( $request->get_param( 'id' ) );
+		$budget = new Budget( $request->get_url_params()['id'] );
 		if ( ! $budget->is_valid() ) {
 			return new \WP_Error(
 				'budget_not_found',
