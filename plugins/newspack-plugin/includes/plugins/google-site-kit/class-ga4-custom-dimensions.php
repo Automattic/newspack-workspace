@@ -320,6 +320,7 @@ final class GA4_Custom_Dimensions {
 			'newspack_popup_id'           => 'Newspack Popup ID',
 			'contextual_prompt_post_id'   => 'Contextual Prompt Post ID',
 			'contextual_prompt_placement' => 'Contextual Prompt Placement',
+			'contextual_prompt_condition' => 'Contextual Prompt Condition',
 			'button_text'                 => 'Button Text',
 			// prompt_text and link_url are sent on np_contextual_prompt_interaction
 			// as event params but deliberately NOT registered as custom dimensions:
