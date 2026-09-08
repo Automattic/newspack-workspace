@@ -181,7 +181,7 @@ class User_Gate_Access {
 						// A variation has no edit screen of its own; its parent's
 						// product editor is where it is managed.
 						$edit_id = $product->get_parent_id() ? $product->get_parent_id() : $product->get_id();
-						return self::link( get_edit_post_link( $edit_id ), $product->get_name() );
+						return self::link( get_edit_post_link( $edit_id, 'raw' ), $product->get_name() );
 					}
 				}
 				return '#' . intval( $product_id );
@@ -236,25 +236,25 @@ class User_Gate_Access {
 	}
 
 	/**
-	 * How many granting orders a rule lists before trailing off with an ellipsis.
-	 * A lifetime one-time-purchase rule can match every renewal order a
-	 * long-standing customer ever placed; the report needs a few examples, not
-	 * the whole ledger.
+	 * How many granting records a rule lists before trailing off. A lifetime
+	 * one-time-purchase rule can match every renewal order a long-standing
+	 * customer ever placed, and a reader can sit in many group subscriptions;
+	 * the report needs a few examples, not the whole ledger.
 	 *
 	 * @var int
 	 */
-	const GRANTING_ORDERS_LIMIT = 10;
+	const GRANTING_ENTITIES_LIMIT = 10;
 
 	/**
 	 * Request-scoped memo of granting-entity links, keyed by rule, value, user,
-	 * and grace setting, so gates that share a rule don't repeat the lookups.
+	 * and evaluation context, so gates that share a rule don't repeat the lookups.
 	 *
 	 * @var array<string,string[]>
 	 */
 	private static $granting_links_memo = [];
 
 	/**
-	 * Clear the request memo. Used by tests.
+	 * Clear the request memo. Registered in the test suite's per-test reset hook.
 	 */
 	public static function reset_memo() {
 		self::$granting_links_memo = [];
@@ -277,51 +277,45 @@ class User_Gate_Access {
 	 *
 	 * @return string[] Escaped items labelled `#<id>` (an `<a>` when the record has an
 	 *                  edit screen, plain text otherwise), safe to print through
-	 *                  wp_kses() with `a[href]` allowed. When more orders qualify
-	 *                  than GRANTING_ORDERS_LIMIT, the last item is an ellipsis.
+	 *                  wp_kses() with `a[href]` and `span[class|aria-hidden]` allowed.
+	 *                  When more records qualify than GRANTING_ENTITIES_LIMIT, the
+	 *                  last item is a truncation marker.
 	 */
 	public static function get_granting_entity_links( $slug, $value, $user_id, $context = [] ) {
-		$grace    = (bool) ( $context['payment_recovery_grace'] ?? true );
-		$memo_key = $slug . ':' . $user_id . ':' . md5( wp_json_encode( $value ) ) . ':' . ( $grace ? '1' : '0' );
+		$memo_key = $slug . ':' . $user_id . ':' . md5( wp_json_encode( $value ) ) . ':' . md5( wp_json_encode( $context ) );
 		if ( isset( self::$granting_links_memo[ $memo_key ] ) ) {
 			return self::$granting_links_memo[ $memo_key ];
 		}
 
-		$entities  = [];
-		$truncated = false;
+		$ids   = [];
+		$fetch = null;
 		if ( 'subscription' === $slug && function_exists( 'wcs_get_subscription' ) ) {
-			// A malformed value fails the rule closed, so there is nothing to list.
-			if ( ! Access_Rules::is_malformed_options_backed_value( $value ) ) {
-				// Evaluate under the gate's own settings — notably payment-recovery
-				// grace — rather than the callback's defaults.
-				$subscription_ids = Access_Rules::with_evaluation_context(
-					$context,
-					function () use ( $user_id, $value ) {
-						return Access_Rules::get_active_subscription_ids( $user_id, $value );
-					}
-				);
-				foreach ( $subscription_ids as $subscription_id ) {
-					$entities[ $subscription_id ] = \wcs_get_subscription( $subscription_id );
+			// Evaluate under the gate's own settings — notably payment-recovery
+			// grace — rather than the callback's defaults.
+			$ids   = Access_Rules::with_evaluation_context(
+				$context,
+				function () use ( $user_id, $value ) {
+					return Access_Rules::get_active_subscription_ids( $user_id, $value, false, self::GRANTING_ENTITIES_LIMIT + 1 );
 				}
-			}
+			);
+			$fetch = 'wcs_get_subscription';
 		} elseif ( 'one_time_purchase' === $slug && function_exists( 'wc_get_order' ) ) {
-			$order_ids = Access_Rules::get_one_time_purchase_order_ids( $user_id, $value, self::GRANTING_ORDERS_LIMIT + 1 );
-			if ( count( $order_ids ) > self::GRANTING_ORDERS_LIMIT ) {
-				$order_ids = array_slice( $order_ids, 0, self::GRANTING_ORDERS_LIMIT );
-				$truncated = true;
-			}
-			foreach ( $order_ids as $order_id ) {
-				$entities[ $order_id ] = \wc_get_order( $order_id );
-			}
+			$ids   = Access_Rules::get_one_time_purchase_order_ids( $user_id, $value, self::GRANTING_ENTITIES_LIMIT + 1 );
+			$fetch = 'wc_get_order';
 		}
 
-		$links = [];
-		foreach ( $entities as $id => $entity ) {
+		$truncated = count( $ids ) > self::GRANTING_ENTITIES_LIMIT;
+		$links     = [];
+		foreach ( array_slice( $ids, 0, self::GRANTING_ENTITIES_LIMIT ) as $id ) {
+			$entity  = call_user_func( $fetch, $id );
 			$url     = $entity && method_exists( $entity, 'get_edit_order_url' ) ? $entity->get_edit_order_url() : '';
 			$links[] = self::link( $url, '#' . $id );
 		}
 		if ( $truncated ) {
-			$links[] = esc_html( '…' );
+			$links[] = sprintf(
+				'<span aria-hidden="true">…</span><span class="screen-reader-text">%s</span>',
+				esc_html__( 'and more', 'newspack-plugin' )
+			);
 		}
 
 		self::$granting_links_memo[ $memo_key ] = $links;
@@ -368,7 +362,7 @@ class User_Gate_Access {
 						<span class="screen-reader-text"><?php echo $result['can_bypass'] ? esc_html__( 'Pass', 'newspack-plugin' ) : esc_html__( 'Fail', 'newspack-plugin' ); ?></span>
 						<?php
 						echo wp_kses(
-							self::link( admin_url( 'admin.php?page=newspack-audience-access-control#/edit/' . intval( $gate['id'] ) ), $gate['title'] ),
+							self::link( get_edit_post_link( $gate['id'], 'raw' ), $gate['title'] ),
 							[ 'a' => [ 'href' => [] ] ]
 						);
 						?>
@@ -421,7 +415,18 @@ class User_Gate_Access {
 											$granting_links = $rule['passes'] ? self::get_granting_entity_links( $rule['slug'], $rule['value'], $user->ID, $result['context'] ) : [];
 											if ( ! empty( $granting_links ) ) :
 												?>
-												(<?php echo wp_kses( implode( ', ', $granting_links ), [ 'a' => [ 'href' => [] ] ] ); ?>)
+												<?php
+												echo wp_kses(
+													'(' . implode( ', ', $granting_links ) . ')',
+													[
+														'a'    => [ 'href' => [] ],
+														'span' => [
+															'class'       => [],
+															'aria-hidden' => [],
+														],
+													]
+												);
+												?>
 											<?php endif; ?>
 										</li>
 									<?php endforeach; ?>

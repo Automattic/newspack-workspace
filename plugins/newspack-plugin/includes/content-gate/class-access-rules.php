@@ -766,15 +766,14 @@ class Access_Rules {
 	}
 
 	/**
-	 * IDs of the user's subscriptions that satisfy a subscription rule: owned
-	 * subscriptions, plus (unless $strict) group subscriptions the user is a
-	 * member of. This is the listing behind has_active_subscription(); keeping
-	 * the two on one code path is what stops the report and the rule from
-	 * disagreeing about statuses, payment-recovery grace, or gifting.
+	 * The listing behind has_active_subscription(). Keeping the rule and the
+	 * report on one code path is what stops them disagreeing about statuses,
+	 * payment-recovery grace, or gifting.
 	 *
-	 * The `newspack_access_rules_has_active_subscription` filter is not run
-	 * here, so access granted by a third party (e.g. a Newspack Network sibling
-	 * site) has no ID in this list even though the rule passes.
+	 * A malformed $product_ids fails closed here as it does in the rule. The
+	 * `newspack_access_rules_has_active_subscription` filter is not run, so
+	 * access granted by a third party (e.g. a Newspack Network sibling site)
+	 * has no ID in this list even though the rule passes.
 	 *
 	 * @param int   $user_id     User ID.
 	 * @param mixed $product_ids Required product IDs; empty means any subscription qualifies.
@@ -783,6 +782,9 @@ class Access_Rules {
 	 * @return int[] Subscription IDs.
 	 */
 	public static function get_active_subscription_ids( $user_id, $product_ids, $strict = false, $max_matches = 0 ) {
+		if ( self::is_malformed_options_backed_value( $product_ids ) ) {
+			return [];
+		}
 		$product_ids = is_array( $product_ids ) ? $product_ids : [];
 
 		// Whether on-hold subscriptions in payment recovery (failed-payment retry
@@ -927,6 +929,7 @@ class Access_Rules {
 				$user     = \get_userdata( $user_id );
 				$email    = $user ? $user->user_email : '';
 				$customer = array_values( array_filter( [ $user_id, $email ] ) );
+				$cutoff   = self::get_one_time_purchase_cutoff( $value );
 				if ( empty( $customer ) ) {
 					// Fail closed with no identity to match a purchase against. Both
 					// paths need this guard, for different reasons. The finite path:
@@ -938,7 +941,7 @@ class Access_Rules {
 					// identity check, so a third-party filter can answer truthy for
 					// nobody in particular. Neither branch is redundant.
 					$has_purchase = false;
-				} elseif ( 'forever' === $value['duration_unit'] ) {
+				} elseif ( null === $cutoff ) {
 					// Lifetime access: any paid order ever. wc_customer_bought_product()
 					// is exhaustive across the customer's order history (matching both
 					// user ID and billing email, so guest orders count), runs SQL-side,
@@ -949,21 +952,10 @@ class Access_Rules {
 							break;
 						}
 					}
-				} elseif ( in_array( $value['duration_unit'], [ 'days', 'months' ], true ) && $value['duration_value'] > 0 ) {
-					// One cutoff shared by every order, rather than a per-order expiry
-					// of purchase + N. Month arithmetic follows strtotime()'s rollover
-					// semantics, and rolling backwards from now is the conservative
-					// direction: "-1 month" from Mar 1 lands on Feb 1, so a Jan 31
-					// purchase stops granting once the calendar month is up, whereas
-					// "+1 month" from Jan 31 rolls forward through Feb 31 to Mar 3 and
-					// would grant three extra days. The two readings agree except on
-					// month-end anchors, where this one is both deny-biased and closer
-					// to what "N months from purchase" means on a calendar.
-					$cutoff       = strtotime( sprintf( '-%d %s', $value['duration_value'], $value['duration_unit'] ) );
+				} elseif ( false !== $cutoff ) {
 					$has_purchase = self::customer_bought_product_after( $customer, $value['product_ids'], $cutoff );
 				}
-				// Any other duration configuration (missing/unrecognized unit, zero
-				// finite duration) is misconfigured and fails closed.
+				// A false cutoff is a misconfigured duration and fails closed.
 				self::$one_time_purchase_memo[ $memo_key ] = $has_purchase;
 			}
 		}
@@ -979,20 +971,44 @@ class Access_Rules {
 	}
 
 	/**
-	 * Paid orders that satisfy a one-time purchase rule for the user.
+	 * The point in time a one-time purchase rule's orders must postdate.
 	 *
-	 * The report-side counterpart of has_one_time_purchase(): where the rule only
-	 * needs a yes/no, this names the orders behind the yes. It reads the rule
-	 * value the same way (paid statuses only, order creation date anchors the
-	 * duration, misconfigured durations grant nothing), but it always lists from
-	 * the customer's order history rather than wc_customer_bought_product(),
-	 * since that helper can only answer whether a purchase exists. A lifetime
-	 * rule therefore walks the whole history, which is why callers pass a
-	 * $limit and why the result is memoized for the request.
+	 * One cutoff shared by every order, rather than a per-order expiry of
+	 * purchase + N. Month arithmetic follows strtotime()'s rollover semantics,
+	 * and rolling backwards from now is the conservative direction: "-1 month"
+	 * from Mar 1 lands on Feb 1, so a Jan 31 purchase stops granting once the
+	 * calendar month is up, whereas "+1 month" from Jan 31 rolls forward through
+	 * Feb 31 to Mar 3 and would grant three extra days. The two readings agree
+	 * except on month-end anchors, where this one is both deny-biased and closer
+	 * to what "N months from purchase" means on a calendar.
 	 *
-	 * Unlike has_one_time_purchase() this does not run the
-	 * `newspack_access_rules_has_one_time_purchase` filter, so access granted by
-	 * a third party has no order here.
+	 * Shared by the rule and its listing so the two cannot drift.
+	 *
+	 * @param array $value Sanitized rule value.
+	 * @return int|null|false Unix timestamp; null for lifetime access (no cutoff);
+	 *                        false for a misconfigured duration, which grants nothing.
+	 */
+	private static function get_one_time_purchase_cutoff( $value ) {
+		if ( 'forever' === $value['duration_unit'] ) {
+			return null;
+		}
+		if ( in_array( $value['duration_unit'], [ 'days', 'months' ], true ) && $value['duration_value'] > 0 ) {
+			return strtotime( sprintf( '-%d %s', $value['duration_value'], $value['duration_unit'] ) );
+		}
+		return false;
+	}
+
+	/**
+	 * Paid orders that satisfy a one-time purchase rule for the user; the
+	 * listing behind has_one_time_purchase().
+	 *
+	 * The rule answers a lifetime duration through wc_customer_bought_product(),
+	 * which is SQL-side and cached; this has to walk the order store to name the
+	 * orders, so a lifetime rule walks the whole history. Callers pass a $limit
+	 * for that reason, and the result is memoized for the request.
+	 *
+	 * The `newspack_access_rules_has_one_time_purchase` filter is not run, so
+	 * access granted by a third party has no order here.
 	 *
 	 * @param int   $user_id User ID.
 	 * @param array $args    Rule value, as accepted by has_one_time_purchase().
@@ -1008,20 +1024,12 @@ class Access_Rules {
 		if ( isset( self::$one_time_purchase_orders_memo[ $memo_key ] ) ) {
 			return self::$one_time_purchase_orders_memo[ $memo_key ];
 		}
-		$user     = \get_userdata( $user_id );
-		$email    = $user ? $user->user_email : '';
-		$customer = array_values( array_filter( [ $user_id, $email ] ) );
-		$cutoff   = false;
-		if ( empty( $customer ) ) {
-			$order_ids = [];
-		} elseif ( 'forever' === $value['duration_unit'] ) {
-			$cutoff = null;
-		} elseif ( in_array( $value['duration_unit'], [ 'days', 'months' ], true ) && $value['duration_value'] > 0 ) {
-			$cutoff = strtotime( sprintf( '-%d %s', $value['duration_value'], $value['duration_unit'] ) );
-		} else {
-			$order_ids = [];
-		}
-		if ( false !== $cutoff ) {
+		$user      = \get_userdata( $user_id );
+		$email     = $user ? $user->user_email : '';
+		$customer  = array_values( array_filter( [ $user_id, $email ] ) );
+		$cutoff    = self::get_one_time_purchase_cutoff( $value );
+		$order_ids = [];
+		if ( ! empty( $customer ) && false !== $cutoff ) {
 			$order_ids = array_map(
 				function ( $order ) {
 					return (int) $order->get_id();
@@ -1048,23 +1056,34 @@ class Access_Rules {
 	}
 
 	/**
-	 * Orders are fetched in pages of this many.
+	 * Orders are fetched in pages of this many. Tests shrink it to exercise the walk.
 	 *
 	 * @var int
 	 */
-	const PAID_ORDERS_PAGE_SIZE = 50;
+	private static $paid_orders_page_size = 50;
+
+	/**
+	 * The walk gives up after this many pages even if the store keeps answering.
+	 * A filter on `woocommerce_order_query_args` that pins `limit` or ignores
+	 * `page` would otherwise hand back the same rows forever, and this runs on
+	 * front-end requests through has_one_time_purchase(). Fifty pages of fifty
+	 * covers 2,500 paid orders for one customer before the walk returns what it
+	 * has collected.
+	 *
+	 * @var int
+	 */
+	const PAID_ORDERS_MAX_PAGES = 50;
 
 	/**
 	 * The customer's paid orders containing one of the given products, newest
 	 * first, optionally limited to orders created after a cutoff timestamp.
 	 *
-	 * Orders are read newest-first in pages and the walk stops as soon as
-	 * $max_matches is reached, so the rule evaluator (which needs one match)
-	 * hydrates at most one page of a customer's history on a front-end request.
 	 * A null $cutoff walks the whole history and is only appropriate for a
 	 * bounded, admin-side caller. The `customer` parameter matches the user ID
-	 * or the billing email, so guest orders count — mirroring
-	 * wc_customer_bought_product() on the lifetime path.
+	 * or the billing email, so guest orders count, mirroring
+	 * wc_customer_bought_product() on the lifetime path. `date ID` is the sort
+	 * key because `date` alone is not unique: same-second orders (imports, batch
+	 * renewals) could straddle a page boundary and be skipped or repeated.
 	 *
 	 * @param array    $customer    Non-empty list of user IDs and/or billing emails to
 	 *                              match. Callers must reject an empty list: both
@@ -1079,19 +1098,20 @@ class Access_Rules {
 	 */
 	private static function get_paid_orders_with_products( $customer, $product_ids, $cutoff, $max_matches = 0 ) {
 		$paid_statuses = function_exists( 'wc_get_is_paid_statuses' ) ? \wc_get_is_paid_statuses() : [ 'processing', 'completed' ];
+		$page_size     = max( 1, (int) self::$paid_orders_page_size );
 		$query         = [
 			'customer' => $customer,
 			'status'   => $paid_statuses,
-			'orderby'  => 'date',
+			'orderby'  => 'date ID',
 			'order'    => 'DESC',
-			'limit'    => self::PAID_ORDERS_PAGE_SIZE,
+			'limit'    => $page_size,
 			'return'   => 'objects',
 		];
 		if ( null !== $cutoff ) {
 			$query['date_created'] = '>' . $cutoff;
 		}
 		$matches = [];
-		for ( $page = 1; true; $page++ ) {
+		for ( $page = 1; $page <= self::PAID_ORDERS_MAX_PAGES; $page++ ) {
 			$query['page'] = $page;
 			$orders        = \wc_get_orders( $query );
 			foreach ( $orders as $order ) {
@@ -1102,10 +1122,11 @@ class Access_Rules {
 					}
 				}
 			}
-			if ( count( $orders ) < self::PAID_ORDERS_PAGE_SIZE ) {
-				return $matches;
+			if ( count( $orders ) < $page_size ) {
+				break;
 			}
 		}
+		return $matches;
 	}
 
 	/**

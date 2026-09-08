@@ -5,7 +5,6 @@
  * @package Newspack\Tests
  */
 
-use Newspack\Access_Attribution;
 use Newspack\Access_Rules;
 use Newspack\Content_Gate;
 use Newspack\Group_Subscription;
@@ -48,9 +47,27 @@ class Newspack_Test_User_Gate_Access extends WP_UnitTestCase {
 		);
 		Reader_Activation::set_reader_verified( self::$user_id );
 		self::$admin_id = $this->factory->user->create( [ 'role' => 'administrator' ] );
-		Access_Attribution::reset_memo();
-		Access_Rules::flush_one_time_purchase_memo();
-		User_Gate_Access::reset_memo();
+
+		// The mock order and subscription stores are process globals; without a
+		// reset, this file's guest order (matched by email) would leak into every
+		// later test that seeds a reader with the same address.
+		global $orders_database, $subscriptions_database, $wc_mocks_get_orders_calls, $wc_mocks_orders_ignore_page;
+		$orders_database             = [];
+		$subscriptions_database      = [];
+		$wc_mocks_get_orders_calls   = 0;
+		$wc_mocks_orders_ignore_page = false;
+		$this->set_paid_orders_page_size( 50 );
+	}
+
+	/**
+	 * Shrink or restore the order walk's page size.
+	 *
+	 * @param int $size Page size.
+	 */
+	private function set_paid_orders_page_size( $size ) {
+		$property = new ReflectionProperty( Access_Rules::class, 'paid_orders_page_size' );
+		$property->setAccessible( true );
+		$property->setValue( null, $size );
 	}
 
 	/**
@@ -458,7 +475,7 @@ class Newspack_Test_User_Gate_Access extends WP_UnitTestCase {
 				'name' => 'Day Pass',
 			]
 		);
-		for ( $i = 0; $i < User_Gate_Access::GRANTING_ORDERS_LIMIT + 2; $i++ ) {
+		for ( $i = 0; $i < User_Gate_Access::GRANTING_ENTITIES_LIMIT + 2; $i++ ) {
 			\wc_create_order(
 				[
 					'customer_id'  => self::$user_id,
@@ -477,9 +494,108 @@ class Newspack_Test_User_Gate_Access extends WP_UnitTestCase {
 
 		$links = User_Gate_Access::get_granting_entity_links( 'one_time_purchase', $value, self::$user_id );
 
-		$this->assertCount( User_Gate_Access::GRANTING_ORDERS_LIMIT + 1, $links );
-		$this->assertSame( '…', end( $links ), 'The list ends with an ellipsis when more orders qualify.' );
-		$this->assertStringNotContainsString( '<', end( $links ) );
+		$this->assertCount( User_Gate_Access::GRANTING_ENTITIES_LIMIT + 1, $links );
+		$this->assertStringContainsString( 'screen-reader-text">and more</span>', end( $links ), 'The list ends with a labelled truncation marker when more orders qualify.' );
+		$this->assertStringNotContainsString( '<a', end( $links ) );
+	}
+
+	/**
+	 * The subscription list is capped the same way: a reader in many group
+	 * subscriptions gets a handful of examples and a marker, not every ID.
+	 */
+	public function test_subscription_listing_is_capped() {
+		for ( $i = 0; $i < User_Gate_Access::GRANTING_ENTITIES_LIMIT + 2; $i++ ) {
+			\wcs_create_subscription(
+				[
+					'customer_id'    => self::$user_id,
+					'status'         => 'active',
+					'billing_period' => 'month',
+					'products'       => [ 101 ],
+				]
+			);
+		}
+
+		$links = User_Gate_Access::get_granting_entity_links( 'subscription', [ 101 ], self::$user_id );
+
+		$this->assertCount( User_Gate_Access::GRANTING_ENTITIES_LIMIT + 1, $links );
+		$this->assertStringContainsString( 'screen-reader-text">and more</span>', end( $links ) );
+	}
+
+	/**
+	 * The order walk pages through the store. A match that sits past the first
+	 * page must still grant access, and a store that ignores paging (as a
+	 * filter pinning `limit` on `woocommerce_order_query_args` would make it)
+	 * must still let the walk return rather than hang a front-end request.
+	 */
+	public function test_order_walk_pages_and_is_bounded() {
+		global $wc_mocks_get_orders_calls, $wc_mocks_orders_ignore_page;
+		$this->set_paid_orders_page_size( 5 );
+		\wc_create_mock_product(
+			[
+				'id'   => 201,
+				'name' => 'Day Pass',
+			]
+		);
+		// Twelve newer orders for another product push the one matching order onto page 3.
+		for ( $i = 0; $i < 12; $i++ ) {
+			$when = gmdate( 'Y-m-d H:i:s', strtotime( "-$i hours" ) );
+			\wc_create_order(
+				[
+					'customer_id'  => self::$user_id,
+					'status'       => 'completed',
+					'total'        => 10,
+					'date_paid'    => $when,
+					'date_created' => $when,
+					'items'        => [ new \WC_Order_Item_Product( [ 'product_id' => 999 ] ) ],
+				]
+			);
+		}
+		$when  = gmdate( 'Y-m-d H:i:s', strtotime( '-2 days' ) );
+		$match = \wc_create_order(
+			[
+				'customer_id'  => self::$user_id,
+				'status'       => 'completed',
+				'total'        => 10,
+				'date_paid'    => $when,
+				'date_created' => $when,
+				'items'        => [ new \WC_Order_Item_Product( [ 'product_id' => 201 ] ) ],
+			]
+		);
+		$value = [
+			'product_ids'    => [ 201 ],
+			'duration_value' => 30,
+			'duration_unit'  => 'days',
+		];
+
+		$this->assertTrue( Access_Rules::has_one_time_purchase( self::$user_id, $value ), 'A matching order on a later page still grants access.' );
+		$this->assertSame( 3, $wc_mocks_get_orders_calls, 'The walk stops on the page that holds the first match.' );
+		$this->assertSame( [ $match->get_id() ], Access_Rules::get_one_time_purchase_order_ids( self::$user_id, $value ) );
+
+		// A store that returns the same rows for every page: the walk must give up.
+		Access_Rules::flush_one_time_purchase_memo();
+		$wc_mocks_orders_ignore_page = true;
+		$wc_mocks_get_orders_calls   = 0;
+		$this->assertFalse( Access_Rules::has_one_time_purchase( self::$user_id, [ 'product_ids' => [ 555 ] ] + $value ), 'No match, so the rule fails.' );
+		$this->assertSame( Access_Rules::PAID_ORDERS_MAX_PAGES, $wc_mocks_get_orders_calls, 'The walk stops at the page ceiling instead of looping.' );
+	}
+
+	/**
+	 * A malformed subscription value fails the listing closed, as it does the
+	 * rule; it must not be read as "any subscription".
+	 */
+	public function test_malformed_subscription_value_lists_nothing() {
+		\wcs_create_subscription(
+			[
+				'customer_id'    => self::$user_id,
+				'status'         => 'active',
+				'billing_period' => 'month',
+				'products'       => [ 101 ],
+			]
+		);
+
+		$this->assertFalse( Access_Rules::has_active_subscription( self::$user_id, 'gold' ) );
+		$this->assertSame( [], Access_Rules::get_active_subscription_ids( self::$user_id, 'gold' ) );
+		$this->assertSame( [], User_Gate_Access::get_granting_entity_links( 'subscription', 'gold', self::$user_id ) );
 	}
 
 	/**
@@ -564,6 +680,14 @@ class Newspack_Test_User_Gate_Access extends WP_UnitTestCase {
 				'name' => 'Plan <b>Bold</b> & Co',
 			]
 		);
+		$owned = \wcs_create_subscription(
+			[
+				'customer_id'    => self::$user_id,
+				'status'         => 'active',
+				'billing_period' => 'month',
+				'products'       => [ 101 ],
+			]
+		);
 		$this->create_gate_with_rules(
 			'Gate <i>Italic</i>',
 			[
@@ -584,6 +708,9 @@ class Newspack_Test_User_Gate_Access extends WP_UnitTestCase {
 		$this->assertStringNotContainsString( '<i>', $output );
 		$this->assertStringContainsString( 'Plan &lt;b&gt;Bold&lt;/b&gt; &amp; Co', $output );
 		$this->assertStringContainsString( 'Gate &lt;i&gt;Italic&lt;/i&gt;', $output );
+		// The sink is an allowlist, not strip-everything: the granting link it exists
+		// to let through survives alongside the stripped markup.
+		$this->assertStringContainsString( '#' . $owned->get_id() . '</a>', $output, 'A legitimate link passes the same sink that strips injected tags.' );
 	}
 
 	/**
