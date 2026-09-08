@@ -91,17 +91,6 @@ if ( ! empty( $actions['change_payment_method']['name'] ) ) {
 	?>
 	<div class="newspack-my-account__subscription--actions">
 		<div class="newspack-my-account__subscription--actions-container">
-		<?php if ( $is_group_owner_subscription ) : ?>
-			<a href="<?php echo esc_url( Group_Subscription_MyAccount::get_group_url( $subscription ) ); ?>" class="newspack-ui__button newspack-ui__button--secondary">
-				<?php
-				printf(
-					/* translators: %s is the singular group label (e.g. "Group", "Team", or a publisher override). */
-					esc_html__( 'View %s', 'newspack-plugin' ),
-					esc_html( Group_Subscription::get_label_lower( 'singular' ) )
-				);
-				?>
-			</a>
-		<?php endif; ?>
 		<?php
 		// Members get a view-only experience: no owner-only management controls.
 		$items = $is_group_member_subscription ? [] : $subscription->get_items();
@@ -129,6 +118,11 @@ if ( ! empty( $actions['change_payment_method']['name'] ) ) {
 				13,
 				3
 			);
+			?>
+			<?php
+			/**
+			 * Dropdown menus are only shown at large viewports.
+			 */
 			?>
 			<div class="newspack-ui__dropdown newspack-my-account__subscription--change-subscription-dropdown">
 				<button class="newspack-ui__button newspack-ui__button--secondary newspack-ui__dropdown__toggle">
@@ -167,6 +161,22 @@ if ( ! empty( $actions['change_payment_method']['name'] ) ) {
 		}
 		?>
 		<?php
+		/**
+		 * Actions repeated outside of dropdown menus, for smaller viewports.
+		 */
+		?>
+		<?php if ( $is_group_owner_subscription ) : ?>
+			<a href="<?php echo esc_url( Group_Subscription_MyAccount::get_group_url( $subscription ) ); ?>" class="newspack-my-account__subscription--action-link newspack-ui__button newspack-ui__button--secondary">
+				<?php
+				printf(
+					/* translators: %s is the singular group label (e.g. "Group", "Team", or a publisher override). */
+					esc_html__( 'View %s', 'newspack-plugin' ),
+					esc_html( Group_Subscription::get_label_lower( 'singular' ) )
+				);
+				?>
+			</a>
+		<?php endif; ?>
+		<?php
 		if ( $is_group_member_subscription ) :
 			$group_label_lower  = Group_Subscription::get_label_lower( 'singular' );
 			$leave_button_label = sprintf(
@@ -202,12 +212,25 @@ if ( ! empty( $actions['change_payment_method']['name'] ) ) {
 		</div>
 		<?php if ( ! empty( $actions ) ) : ?>
 		<div class="newspack-ui__dropdown newspack-my-account__subscription--actions-dropdown">
-			<button class="newspack-ui__button newspack-ui__button--secondary newspack-ui__button--small newspack-ui__dropdown__toggle">
-				<span><?php \esc_html_e( 'More', 'newspack-plugin' ); ?></span>
+			<button class="newspack-ui__button newspack-ui__button--ghost newspack-ui__button--small newspack-ui__dropdown__toggle">
+				<span class="screen-reader-text"><?php \esc_html_e( 'More', 'newspack-plugin' ); ?></span>
 				<?php Newspack_UI_Icons::print_svg( 'more' ); ?>
 			</button>
 			<div class="newspack-ui__dropdown__content">
 				<ul>
+					<?php if ( $is_group_owner_subscription ) : ?>
+						<li>
+							<a href="<?php echo esc_url( Group_Subscription_MyAccount::get_group_url( $subscription ) ); ?>" class="newspack-ui__button newspack-ui__button--ghost">
+								<?php
+								printf(
+									/* translators: %s is the singular group label (e.g. "Group", "Team", or a publisher override). */
+									esc_html__( 'View %s', 'newspack-plugin' ),
+									esc_html( Group_Subscription::get_label_lower( 'singular' ) )
+								);
+								?>
+							</a>
+						</li>
+					<?php endif; ?>
 					<?php foreach ( $actions as $key => $action_link ) : ?>
 						<?php
 						$classes = [
