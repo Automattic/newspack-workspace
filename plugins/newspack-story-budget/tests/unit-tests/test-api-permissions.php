@@ -40,7 +40,7 @@ class Test_API_Permissions extends \WP_UnitTestCase {
 	/**
 	 * Dispatch a request through the REST server as a fresh user with the given role.
 	 *
-	 * @param string|null $role Role slug, or null for a logged-out request.
+	 * @param string|null $role   Role slug, or null for a logged-out request.
 	 * @param string      $method HTTP method.
 	 * @param string      $route  Route, relative to the API namespace.
 	 * @param array       $params Request parameters.
@@ -151,9 +151,18 @@ class Test_API_Permissions extends \WP_UnitTestCase {
 	 * handler's 404, non-managers get 403.
 	 */
 	public function test_update_unknown_budget_keeps_404_for_managers() {
-		$response = $this->dispatch_as( 'editor', 'PUT', '/budgets/999999', [ 'name' => 'Ghost' ] );
+		$response = $this->dispatch_as(
+			'editor',
+			'PUT',
+			'/budgets/999999',
+			[
+				'id'   => self::$budgets[1],
+				'name' => 'Ghost',
+			]
+		);
 		$this->assertSame( 404, $response->get_status() );
 		$this->assertSame( 'budget_not_found', $response->get_data()['code'] );
+		$this->assertStringContainsString( '999999', $response->get_data()['message'] );
 
 		$response = $this->dispatch_as( 'contributor', 'PUT', '/budgets/999999', [ 'name' => 'Ghost' ] );
 		$this->assertSame( 403, $response->get_status() );
@@ -225,5 +234,20 @@ class Test_API_Permissions extends \WP_UnitTestCase {
 
 		$response = $this->dispatch_as( 'editor', 'GET', '/stories/meta' );
 		$this->assertTrue( $response->get_data()['can_manage_budgets'] );
+	}
+
+	/**
+	 * A term from another taxonomy is not a budget: managers get the 404, others the 403.
+	 */
+	public function test_update_budget_rejects_a_term_from_another_taxonomy() {
+		$category_id = self::factory()->category->create();
+
+		$response = $this->dispatch_as( 'editor', 'PUT', '/budgets/' . $category_id, [ 'name' => 'Not a budget' ] );
+		$this->assertSame( 404, $response->get_status() );
+		$this->assertSame( 'budget_not_found', $response->get_data()['code'] );
+		$this->assertNotSame( 'Not a budget', get_term( $category_id, 'category' )->name );
+
+		$response = $this->dispatch_as( 'contributor', 'PUT', '/budgets/' . $category_id, [ 'name' => 'Not a budget' ] );
+		$this->assertSame( 403, $response->get_status() );
 	}
 }

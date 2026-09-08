@@ -998,14 +998,15 @@ class API {
 	 * @return \WP_REST_Response|\WP_Error
 	 */
 	public static function update_budget( $request ) {
-		$budget = new Budget( $request->get_url_params()['id'] );
+		$id     = $request->get_url_params()['id'] ?? null;
+		$budget = new Budget( $id );
 		if ( ! $budget->is_valid() ) {
 			return new \WP_Error(
 				'budget_not_found',
 				sprintf(
 					// translators: %d is the budget ID.
 					__( 'Budget with ID "%d" not found.', 'newspack-story-budget' ),
-					$request->get_param( 'id' )
+					$id
 				),
 				[ 'status' => 404 ]
 			);
