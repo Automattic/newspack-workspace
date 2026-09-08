@@ -669,7 +669,12 @@ class Group_Subscription_Invite {
 			);
 		}
 		$invite = self::get_invite_by_key( $subscription, $key );
-		if ( ! $invite || $invite['email'] !== $email ) {
+		// Case-insensitively, as cancel_invites() already matches below: sanitize_email()
+		// preserves case and wp_insert_user() does not lowercase user_email, so a stored
+		// invite and the account it was issued to legitimately differ in case. Strictly
+		// compared, the reader is told their invitation is for a different address than
+		// their own, and nothing they can do fixes it.
+		if ( ! $invite || strtolower( $invite['email'] ) !== strtolower( $email ) ) {
 			// No need to display an error if the invite is already fulfilled: just give a success
 			// message. This covers a direct member add cancelling the invite before it is accepted.
 			// Only the acting user is checked, deliberately: every caller binds $email to the current
@@ -744,7 +749,7 @@ class Group_Subscription_Invite {
 			return false;
 		}
 		$invite = self::get_invite_by_key( $subscription_obj, $key );
-		if ( ! $invite || $invite['email'] !== $email || self::is_invite_expired( $invite ) ) {
+		if ( ! $invite || strtolower( $invite['email'] ) !== strtolower( $email ) || self::is_invite_expired( $invite ) ) {
 			return false;
 		}
 		return true;
@@ -810,7 +815,7 @@ class Group_Subscription_Invite {
 		// Case 1: User is logged in.
 		$current_user = wp_get_current_user();
 		if ( $current_user->ID ) {
-			if ( $current_user->user_email !== $email ) {
+			if ( strtolower( $current_user->user_email ) !== strtolower( $email ) ) {
 				self::redirect_with_result( 'error_email_mismatch' );
 				return;
 			}
@@ -1095,7 +1100,14 @@ class Group_Subscription_Invite {
 			$type = 'login_needed' === $result ? 'success' : 'error';
 		}
 
-		Newspack_UI::add_notice( $message, [ 'type' => $type ] );
+		$notice_args = [ 'type' => $type ];
+		// These are the whole of what a reader stranded by a legacy invitation link is
+		// told, and they arrive on a page the reader did not ask for, so they stay put
+		// rather than erasing themselves after a few seconds.
+		if ( in_array( $result, [ self::RESULT_JOIN_TEAM_INVALID, self::RESULT_JOIN_TEAM_MEMBER, self::RESULT_JOIN_TEAM_SIGN_IN ], true ) ) {
+			$notice_args['autohide'] = false;
+		}
+		Newspack_UI::add_notice( $message, $notice_args );
 	}
 
 	/**
@@ -1165,6 +1177,15 @@ class Group_Subscription_Invite {
 		}
 		$subscription->update_meta_data( self::META, $all_invites );
 		$subscription->save();
+
+		/**
+		 * Fires after pending invites are cancelled on a group subscription.
+		 *
+		 * @param \WC_Subscription $subscription The group subscription.
+		 * @param string[]         $emails       The addresses whose invites were cancelled.
+		 */
+		do_action( 'newspack_group_subscription_invites_cancelled', $subscription, (array) $emails );
+
 		return true;
 	}
 }

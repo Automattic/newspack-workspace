@@ -744,7 +744,21 @@ class Teams_Migration {
 		WP_CLI::line( '' );
 		WP_CLI::success( sprintf( 'Done. %d team(s) processed: %d used existing subscriptions, %d had new subscriptions created, %d skipped, %d had error(s).', count( $summary ), count( $summary ) - $new_count, $new_count, count( $skipped ), count( $errored_rows ) ) );
 		if ( ! empty( $invitation_rows ) ) {
-			WP_CLI::success( sprintf( 'Pending invitations: %d listed. Their existing links resolve after the flip; none were emailed.', count( $invitation_rows ) ) );
+			// Split the claim: an invitee whose team has no group subscription — skipped
+			// by the flags, or errored before one was resolved — reaches the invalid-link
+			// notice, not an invite. Reporting the two together would tell an operator it
+			// is safe to deactivate Teams without contacting anyone on the list.
+			$unresolved = count( array_filter( $invitation_rows, fn( $row ) => '—' === $row['sub'] ) );
+			WP_CLI::success(
+				sprintf(
+					'Pending invitations: %d listed, %d whose existing links resolve after the flip. None were emailed.',
+					count( $invitation_rows ),
+					count( $invitation_rows ) - $unresolved
+				)
+			);
+			if ( $unresolved ) {
+				WP_CLI::warning( sprintf( '%d of them belong to teams with no group subscription (an em dash in the sub column). Those links resolve to nothing — contact those invitees directly, or re-run so their team migrates.', $unresolved ) );
+			}
 		}
 	}
 

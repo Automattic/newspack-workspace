@@ -27,6 +27,12 @@ defined( 'ABSPATH' ) || exit;
  * group subscription it created. Nothing is built at migration time, so there is no
  * mapping table to keep in step with either side.
  *
+ * Revocation is the invariant worth stating, because every path here is reached by a
+ * bearer token no Access Control screen displays: a link stops working when the thing
+ * it points at is withdrawn. Joining spends the source invitation, cancelling the
+ * minted invite spends it too, and a group whose owner disabled their invite link
+ * does not get a replacement minted by the next click on an old registration URL.
+ *
  * Two configurations reach only the fallback notice. A site that uninstalled
  * WooCommerce Teams *with data deletion* rather than deactivating it has no rows left
  * to resolve against. And a half-done flip — Teams deactivated, WooCommerce
@@ -53,6 +59,16 @@ class Group_Subscription_Teams_Invite {
 	 * The endpoint slug WooCommerce Teams defaults to.
 	 */
 	const DEFAULT_ENDPOINT = 'join-team';
+
+	/**
+	 * Our own key in WooCommerce's query-var map, whose value is the endpoint slug.
+	 * WooCommerce keys that map by name and registers the value as the rewrite
+	 * endpoint (WC_Query::add_endpoints(), ::parse_request()), so a key of our own
+	 * means a publisher who renamed the Teams endpoint onto one WooCommerce already
+	 * owns cannot have this overwrite it — and the key's presence on a request is
+	 * itself the answer to "did we register this route?".
+	 */
+	const QUERY_VAR = 'newspack_join_team';
 
 	/**
 	 * Prefix marking a token as an invitation token rather than a team registration
@@ -82,23 +98,33 @@ class Group_Subscription_Teams_Invite {
 
 	/**
 	 * Status WooCommerce Teams gave an invitation once its reader joined. Writing it
-	 * is what makes a link single-use: Teams set it in Invitation::accept(), and
-	 * without it a reader removed from the group could re-admit themselves from the
-	 * same email indefinitely, with no way for a manager to revoke it.
+	 * is what makes a link single-use: Teams set it in Invitation::accept().
 	 */
 	const ACCEPTED_INVITATION_STATUS = 'wcmti-accepted';
 
 	/**
-	 * Option recording the endpoint slug the stored rewrite rules were generated for.
-	 * The slug rather than a bare flag, so renaming the endpoint re-arms the flush
-	 * instead of leaving the route with no rule and no way to notice.
+	 * Post meta stamped on an invitation this plugin closed, recording the group
+	 * subscription it was redeemed against. The status write alone is
+	 * indistinguishable from a genuine WooCommerce Teams acceptance, which matters if
+	 * a site's flip is ever rolled back: without this there is no way to tell the
+	 * invitations redeemed through this route from ones Teams itself accepted, and so
+	 * no way to restore them.
 	 */
-	const REWRITE_FLUSH_OPTION = 'newspack_join_team_rewrite_rules_slug';
+	const CLOSED_BY_META = '_newspack_join_team_redeemed_subscription';
+
+	/**
+	 * Subscription meta recording that this route minted the group's invite link.
+	 * What it buys is revocation: once the owner disables that link,
+	 * delete_link_invite() leaves nothing to tell "never had one" from "deliberately
+	 * revoked", and without this marker the next click on a circulating registration
+	 * URL would mint a replacement and undo the revocation.
+	 */
+	const LINK_MINTED_META = '_newspack_join_team_link_minted';
 
 	/**
 	 * Register hooks.
 	 */
-	public static function init() {
+	public static function init(): void {
 		// Same gate as Group_Subscription_Invite, whose acceptance handlers every
 		// redirect here lands in: without the flag there are no group subscriptions to
 		// map a token onto, and the handler on the other end would not be listening.
@@ -109,6 +135,7 @@ class Group_Subscription_Teams_Invite {
 		add_action( 'wp_loaded', [ __CLASS__, 'maybe_flush_rewrite_rules' ] );
 		add_action( 'template_redirect', [ __CLASS__, 'handle_request' ] );
 		add_action( 'newspack_group_subscription_invite_accepted', [ __CLASS__, 'close_source_invitation' ], 10, 3 );
+		add_action( 'newspack_group_subscription_invites_cancelled', [ __CLASS__, 'close_cancelled_invitations' ], 10, 2 );
 	}
 
 	/**
@@ -121,19 +148,15 @@ class Group_Subscription_Teams_Invite {
 	 *
 	 * Checked inside the callbacks rather than in init(): the plugin files are
 	 * included at plugin-load time, before WooCommerce Teams has necessarily loaded.
-	 *
-	 * @return bool
 	 */
-	private static function teams_is_active() {
+	private static function teams_is_active(): bool {
 		return function_exists( 'wc_memberships_for_teams_get_teams' );
 	}
 
 	/**
 	 * The endpoint slug to answer on.
-	 *
-	 * @return string
 	 */
-	public static function get_endpoint() {
+	public static function get_endpoint(): string {
 		$endpoint = get_option( self::ENDPOINT_OPTION, self::DEFAULT_ENDPOINT );
 		return is_string( $endpoint ) && '' !== $endpoint ? $endpoint : self::DEFAULT_ENDPOINT;
 	}
@@ -141,89 +164,84 @@ class Group_Subscription_Teams_Invite {
 	/**
 	 * Register the endpoint as a My Account query var.
 	 *
-	 * WooCommerce turns each of its query vars into a rewrite endpoint itself
-	 * (WC_Query::add_endpoints()), so the filter is the whole registration — there is
-	 * no separate add_rewrite_endpoint() call to keep in step with it.
+	 * WooCommerce turns each of its query vars into a rewrite endpoint itself, so the
+	 * filter is the whole registration. The slug is refused outright when WooCommerce
+	 * already answers on it, by key or by value: a publisher who renamed the Teams
+	 * endpoint to `orders` would otherwise have every visit to their orders page
+	 * redirected away by this handler.
 	 *
 	 * @param array $query_vars WooCommerce query vars.
 	 *
 	 * @return array
 	 */
-	public static function add_query_var( $query_vars ) {
+	public static function add_query_var( $query_vars ): array {
+		$query_vars = (array) $query_vars;
 		if ( self::teams_is_active() ) {
 			return $query_vars;
 		}
 		$endpoint = self::get_endpoint();
-		// A publisher who renamed the Teams endpoint to one WooCommerce already owns
-		// would otherwise have this overwrite it, taking out that account page.
-		if ( ! isset( $query_vars[ $endpoint ] ) ) {
-			$query_vars[ $endpoint ] = $endpoint;
+		if ( isset( $query_vars[ $endpoint ] ) || in_array( $endpoint, $query_vars, true ) ) {
+			return $query_vars;
 		}
+		$query_vars[ self::QUERY_VAR ] = $endpoint;
 		return $query_vars;
 	}
 
 	/**
-	 * Generate the endpoint's rewrite rule on the first request after WooCommerce
-	 * Teams goes away.
+	 * Generate the endpoint's rewrite rule whenever the stored rules lack one.
 	 *
-	 * On `wp_loaded` rather than `init` for two reasons. WP_Rewrite::flush_rules()
-	 * defers its own work to `wp_loaded` when called earlier, so the option would
-	 * otherwise be written before the flush it records had happened — and a fatal in
-	 * anything else's `init` in between would leave the option claiming a rule that
-	 * was never written, with nothing to retry it. And by `wp_loaded` every plugin's
-	 * endpoints are registered, so the rules this writes are the complete set.
+	 * The condition is the rule's absence, not a record that a flush once ran. Those
+	 * come apart on a rollback: reactivating WooCommerce Teams makes add_query_var()
+	 * stand down, so any flush from any source while it is loaded drops this rule from
+	 * the stored set — and a guard that remembered "flushed for this slug" would then
+	 * never flush again, leaving every invitation link 404ing permanently, which is
+	 * the exact failure this class exists to prevent. Asserting the state instead
+	 * self-heals on the next request.
+	 *
+	 * On `wp_loaded` because WP_Rewrite::flush_rules() defers its own work there
+	 * anyway, and by then every plugin's endpoints are registered, so the rules this
+	 * writes are the complete set. Soft flush: this adds endpoint rules only, and the
+	 * hard form rewrites .htaccess on an anonymous front-end request for no gain.
 	 */
-	public static function maybe_flush_rewrite_rules() {
+	public static function maybe_flush_rewrite_rules(): void {
 		if ( self::teams_is_active() ) {
 			return;
 		}
-		$endpoint = self::get_endpoint();
-		if ( get_option( self::REWRITE_FLUSH_OPTION ) === $endpoint ) {
+		$rules = get_option( 'rewrite_rules' );
+		// No stored rules at all means permalinks are off, or something else is
+		// mid-flush; either way this is not ours to fix.
+		if ( empty( $rules ) || ! is_array( $rules ) ) {
 			return;
 		}
-		flush_rewrite_rules(); // phpcs:ignore WordPressVIPMinimum.Functions.RestrictedFunctions.flush_rewrite_rules_flush_rewrite_rules
-		update_option( self::REWRITE_FLUSH_OPTION, $endpoint );
+		$needle = '/' . self::get_endpoint() . '(';
+		foreach ( array_keys( $rules ) as $pattern ) {
+			if ( false !== strpos( (string) $pattern, $needle ) ) {
+				return;
+			}
+		}
+		flush_rewrite_rules( false ); // phpcs:ignore WordPressVIPMinimum.Functions.RestrictedFunctions.flush_rewrite_rules_flush_rewrite_rules
 	}
 
 	/**
-	 * Whether this request is for the endpoint.
+	 * The token from an endpoint request, or null when this is not one.
 	 *
-	 * Narrower than the route WooCommerce Teams answered on, which also served the
-	 * `EP_ROOT` form (`/join-team/<token>`). No link Teams ever sent uses that form —
-	 * Team::get_registration_url() builds every one of them off the My Account page.
+	 * Reads only our own query var: WC_Query::parse_request() populates it from the
+	 * path segment or the `?slug=` form, so both of the shapes Teams built URLs in
+	 * arrive here. Its presence also means add_query_var() registered the route
+	 * rather than standing down over a slug collision.
 	 *
-	 * @return bool
+	 * @return string|null The token, or null when this request is not for the endpoint.
 	 */
-	private static function is_endpoint_request() {
+	private static function get_request_token(): ?string {
 		if ( ! function_exists( 'is_account_page' ) || ! is_account_page() ) {
-			return false;
+			return null;
 		}
 		global $wp;
-		$endpoint = self::get_endpoint();
-		return isset( $wp->query_vars[ $endpoint ] ) || isset( $_GET[ $endpoint ] ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
-	}
-
-	/**
-	 * Read the token out of an endpoint request.
-	 *
-	 * Both permalink structures are honoured, matching how WooCommerce Teams built
-	 * the URLs: a path segment when permalinks are on, a query arg otherwise.
-	 *
-	 * @return string The token, empty when the endpoint was reached without one.
-	 */
-	private static function get_token() {
-		global $wp;
-		$endpoint = self::get_endpoint();
-		$token    = '';
-		if ( ! empty( $wp->query_vars[ $endpoint ] ) && is_string( $wp->query_vars[ $endpoint ] ) ) {
-			$token = sanitize_text_field( $wp->query_vars[ $endpoint ] );
-		} elseif ( ! empty( $_GET[ $endpoint ] ) && is_string( $_GET[ $endpoint ] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
-			// A caller can send `?join-team[]=x`. sanitize_text_field() already answers ''
-			// for an array, so this only states the type the branch expects — matching
-			// the query-var branch above, where the same check is load-bearing.
-			$token = sanitize_text_field( wp_unslash( $_GET[ $endpoint ] ) ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		if ( ! isset( $wp->query_vars[ self::QUERY_VAR ] ) ) {
+			return null;
 		}
-		return $token;
+		$token = $wp->query_vars[ self::QUERY_VAR ];
+		return is_string( $token ) ? sanitize_text_field( $token ) : '';
 	}
 
 	/**
@@ -237,9 +255,8 @@ class Group_Subscription_Teams_Invite {
 	 *
 	 * @return string|\WP_Error The URL to send the reader to, or an error to show them.
 	 */
-	public static function resolve_token( $token ) {
-		$token = (string) $token;
-		if ( 0 === strpos( $token, self::INVITATION_TOKEN_PREFIX ) ) {
+	public static function resolve_token( string $token ) {
+		if ( str_starts_with( $token, self::INVITATION_TOKEN_PREFIX ) ) {
 			return self::resolve_invitation_token( substr( $token, strlen( self::INVITATION_TOKEN_PREFIX ) ) );
 		}
 		return self::resolve_registration_token( $token );
@@ -249,18 +266,26 @@ class Group_Subscription_Teams_Invite {
 	 * Resolve a `join-team` request and send the reader on to the Access Control
 	 * equivalent, or to My Account with an explanation.
 	 */
-	public static function handle_request() {
-		if ( self::teams_is_active() || ! self::is_endpoint_request() ) {
+	public static function handle_request(): void {
+		if ( self::teams_is_active() ) {
+			return;
+		}
+		$token = self::get_request_token();
+		if ( null === $token ) {
 			return;
 		}
 
-		// An empty token means a link that arrived truncated — a mail client wrapping a
-		// long URL. Without this the endpoint renders the account page with no content
-		// of its own and no hint of why the link did nothing.
-		$destination = self::resolve_token( self::get_token() );
+		$destination = self::resolve_token( $token );
 
 		if ( is_wp_error( $destination ) ) {
-			Group_Subscription_Invite::redirect_with_result( $destination->get_error_code() );
+			// My Account rather than the site home page redirect_with_result() would
+			// otherwise pick for a logged-out visitor: these readers are logged out by
+			// definition, and one of the two messages tells them to sign in, which the
+			// home page gives them no way to do.
+			Group_Subscription_Invite::redirect_with_result(
+				$destination->get_error_code(),
+				function_exists( 'wc_get_page_permalink' ) ? wc_get_page_permalink( 'myaccount' ) : null
+			);
 		}
 		wp_safe_redirect( $destination );
 		exit;
@@ -281,18 +306,18 @@ class Group_Subscription_Teams_Invite {
 	 *
 	 * @return string|\WP_Error The invite URL, or an error to show the reader.
 	 */
-	public static function resolve_invitation_token( $token ) {
+	public static function resolve_invitation_token( string $token ) {
 		$invitation = self::find_pending_invitation( $token );
 		if ( ! $invitation ) {
-			return self::invalid_link_error();
+			return self::invalid_link_error( 'no_pending_invitation' );
 		}
 		$email = is_email( $invitation->post_title );
 		if ( ! $email ) {
-			return self::invalid_link_error();
+			return self::invalid_link_error( 'invitation_address_invalid', [ 'invitation_id' => $invitation->ID ] );
 		}
 		$subscription = self::find_group_subscription_for_team( (int) $invitation->post_parent );
 		if ( ! $subscription ) {
-			return self::invalid_link_error();
+			return self::invalid_link_error( 'team_not_migrated', [ 'team_id' => (int) $invitation->post_parent ] );
 		}
 
 		// Answered before the reuse lookup below, which would otherwise hand a member
@@ -313,17 +338,17 @@ class Group_Subscription_Teams_Invite {
 			if ( is_wp_error( $invite ) ) {
 				return 'newspack_group_subscription_invite_existing_user' === $invite->get_error_code()
 					? self::existing_member_error()
-					: self::invalid_link_error();
+					: self::invalid_link_error( 'invite_refused', [ 'reason' => $invite->get_error_code() ] );
 			}
 			$live = self::find_live_invite( $subscription, $email );
 			if ( ! $live ) {
-				return self::invalid_link_error();
+				return self::invalid_link_error( 'invite_not_readable_after_mint' );
 			}
 		}
 
 		// The address the invite was stored under, not the invitation row's: the two
-		// can differ in case, and the acceptance handler compares strictly. Redirecting
-		// with the row's casing would hand the reader a link that refuses them.
+		// can differ in case, and the invite is looked up downstream against the value
+		// it was stored with.
 		return Group_Subscription_Invite::get_invite_url( $subscription->get_id(), $live['key'], $live['email'] );
 	}
 
@@ -340,26 +365,33 @@ class Group_Subscription_Teams_Invite {
 	 *
 	 * @return string|\WP_Error The invite-link URL, or an error to show the reader.
 	 */
-	public static function resolve_registration_token( $token ) {
+	public static function resolve_registration_token( string $token ) {
 		$team_id = self::find_team_by_registration_key( $token );
 		if ( ! $team_id ) {
-			return self::invalid_link_error();
+			return self::invalid_link_error( 'no_team_for_registration_key' );
 		}
 		$subscription = self::find_group_subscription_for_team( $team_id );
 		if ( ! $subscription ) {
-			return self::invalid_link_error();
+			return self::invalid_link_error( 'team_not_migrated', [ 'team_id' => $team_id ] );
 		}
 
-		$entry = Group_Subscription_Invite::get_link_invite( $subscription );
+		$owner_id = (int) $subscription->get_user_id();
+		$entry    = Group_Subscription_Invite::get_link_invite( $subscription );
 		if ( empty( $entry['key'] ) ) {
-			// Only ever minted when the group has no link at all: generate_link_invite()
-			// replaces whatever is stored, so calling it on a group whose managers are
-			// already circulating a link would revoke that link from under them.
-			// Attributed to the owner, who manages the group by definition.
-			$entry = Group_Subscription_Invite::generate_link_invite( $subscription, (int) $subscription->get_user_id() );
-			if ( is_wp_error( $entry ) ) {
-				return self::invalid_link_error();
+			// An absent link means one of two things, and only one of them may be
+			// minted into. delete_link_invite() removes the entry outright, so a link
+			// the owner deliberately disabled looks exactly like one that never
+			// existed — and minting here would put the revoked link back into
+			// circulation for everyone still holding an old registration URL.
+			if ( $subscription->get_meta( self::LINK_MINTED_META ) ) {
+				return self::invalid_link_error( 'link_invite_revoked', [ 'subscription_id' => $subscription->get_id() ] );
 			}
+			$entry = Group_Subscription_Invite::generate_link_invite( $subscription, $owner_id );
+			if ( is_wp_error( $entry ) ) {
+				return self::invalid_link_error( 'link_invite_refused', [ 'reason' => $entry->get_error_code() ] );
+			}
+			$subscription->update_meta_data( self::LINK_MINTED_META, time() );
+			$subscription->save();
 		}
 
 		return Group_Subscription_Invite::get_link_invite_url( $subscription->get_id(), $entry['key'] );
@@ -369,18 +401,17 @@ class Group_Subscription_Teams_Invite {
 	 * Find the pending invitation a token belongs to.
 	 *
 	 * Read straight from the posts table rather than through WP_Query, because with
-	 * WooCommerce Teams gone `wcmti-pending` is an unregistered status and WP_Query's
-	 * handling of one is not the same in every context: an anonymous front-end
-	 * request — the only kind that ever reaches this route — narrows to `publish` and
-	 * finds nothing, while an admin or WP-CLI request drops the clause and returns
-	 * every status. The status decides whether a link is still live, so it is checked
-	 * here in PHP, on the row, where the answer cannot change with the caller.
+	 * WooCommerce Teams gone `wcmti-pending` is an unregistered status and WP_Query
+	 * drops the clause for one entirely: supplying an unregistered status produces no
+	 * status condition at all, in every context, so the query would match an already
+	 * accepted or cancelled invitation and hand out access on a spent link. The status
+	 * is therefore checked here in PHP, on the row.
 	 *
 	 * @param string $token The invitation token.
 	 *
 	 * @return \WP_Post|null The invitation post, or null if there is no pending one.
 	 */
-	private static function find_pending_invitation( $token ) {
+	private static function find_pending_invitation( string $token ): ?\WP_Post {
 		$post = self::find_post_by_password( self::INVITATION_POST_TYPE, $token );
 		if ( ! $post ) {
 			return null;
@@ -402,7 +433,7 @@ class Group_Subscription_Teams_Invite {
 	 *
 	 * @return int The team post ID, or 0 if there is none.
 	 */
-	private static function find_team_by_registration_key( $token ) {
+	private static function find_team_by_registration_key( string $token ): int {
 		$team = self::find_post_by_password( self::TEAM_POST_TYPE, $token );
 		return ( $team && 'publish' === $team->post_status ) ? (int) $team->ID : 0;
 	}
@@ -410,44 +441,67 @@ class Group_Subscription_Teams_Invite {
 	/**
 	 * Find a post of a given type by its post password.
 	 *
+	 * `post_password` carries no index in core, so this query's cost is bounded only
+	 * by how many rows the post type holds, through the leading column of
+	 * `type_status_date`. That is what makes it safe to run for an unauthenticated
+	 * caller against a few hundred Teams rows, and what would stop being true if this
+	 * helper were pointed at a high-volume post type.
+	 *
+	 * The match is finished in PHP with hash_equals(), because the SQL comparison runs
+	 * under the table's collation — case-insensitive and trailing-space-insensitive on
+	 * the utf8mb4_*_ci default — and these tokens are bearer credentials. Several rows
+	 * are read rather than one so a collision cannot shadow the exact match.
+	 *
 	 * @param string $post_type The post type.
 	 * @param string $password  The post password to match.
 	 *
-	 * @return \WP_Post|null The post, or null if nothing matches.
+	 * @return \WP_Post|null The post, or null if nothing matches exactly.
 	 */
-	private static function find_post_by_password( $post_type, $password ) {
+	private static function find_post_by_password( string $post_type, string $password ): ?\WP_Post {
 		// An empty password is what every post without one stores, so an empty token
 		// would match arbitrary posts rather than nothing.
-		if ( '' === (string) $password ) {
+		if ( '' === $password ) {
 			return null;
 		}
 		global $wpdb;
-		// No ORDER BY: Teams tokens are unique, and ordering on the primary key tempts
-		// the planner into a full table scan on a miss — which anyone can trigger, since
-		// this route takes an unauthenticated token.
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- No core API reads by post password without WP_Query's context-dependent status handling; one row per click on a link followed at most a handful of times.
-		$post_id = (int) $wpdb->get_var(
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- No core API reads by post password without WP_Query's handling of an unregistered status; a few rows per click on a link followed at most a handful of times.
+		$post_ids = $wpdb->get_col(
 			$wpdb->prepare(
-				"SELECT ID FROM {$wpdb->posts} WHERE post_type = %s AND post_password = %s LIMIT 1",
+				"SELECT ID FROM {$wpdb->posts} WHERE post_type = %s AND post_password = %s ORDER BY ID ASC LIMIT 10",
 				$post_type,
-				(string) $password
+				$password
 			)
 		);
-		return $post_id ? get_post( $post_id ) : null;
+		foreach ( $post_ids as $post_id ) {
+			$post = get_post( (int) $post_id );
+			if ( $post && hash_equals( (string) $post->post_password, $password ) ) {
+				return $post;
+			}
+		}
+		return null;
 	}
 
 	/**
 	 * Find the active group subscription migrate-teams created for a team.
 	 *
-	 * Read through the team owner's own subscriptions, keyed on the marker
-	 * migrate-teams stamps: that is a short, indexed list whatever the site's order
-	 * storage, where a meta query across every subscription is neither.
+	 * Two lookups, because one does not cover the field. The team owner's own
+	 * subscriptions catch every group the migration created, and are a short list
+	 * whatever the site's order storage. But migrate-teams also reuses a team's
+	 * *linked* subscription when its customer is somebody other than the team owner —
+	 * the paid, linked teams — and that subscription is in nobody's owned list here:
+	 * the filter that surfaces a member's group subscriptions only fires for a member
+	 * viewing their own account page, and the visitor on this route is an anonymous
+	 * invitee. So the team's own `_subscription_id` is the second place to look, which
+	 * is the same link the migration read when it decided to reuse it.
+	 *
+	 * The marker is checked either way: it is unique per team, and it is what tells a
+	 * subscription this team migrated into from one merely linked to it.
 	 *
 	 * @param int $team_id The team post ID.
 	 *
 	 * @return \WC_Subscription|null The group subscription, or null if the team never migrated.
 	 */
-	private static function find_group_subscription_for_team( $team_id ) {
+	private static function find_group_subscription_for_team( int $team_id ): ?\WC_Subscription {
 		$team_id = absint( $team_id );
 		if ( ! $team_id || ! function_exists( 'wcs_get_users_subscriptions' ) ) {
 			return null;
@@ -462,24 +516,39 @@ class Group_Subscription_Teams_Invite {
 		}
 
 		foreach ( wcs_get_users_subscriptions( $owner_id ) as $subscription ) {
-			// wcs_get_users_subscriptions() is filtered to include the groups a user is
-			// only a member of, so ownership is required rather than assumed.
-			if ( (int) $subscription->get_user_id() !== $owner_id ) {
-				continue;
+			if ( self::subscription_is_group_for_team( $subscription, $team_id ) ) {
+				return $subscription;
 			}
-			if ( (int) $subscription->get_meta( Group_Subscription::MIGRATED_TEAM_ID_META_KEY ) !== $team_id ) {
-				continue;
+		}
+
+		$linked_id = (int) get_post_meta( $team_id, '_subscription_id', true );
+		if ( $linked_id && function_exists( 'wcs_get_subscription' ) ) {
+			$linked = wcs_get_subscription( $linked_id );
+			if ( $linked && self::subscription_is_group_for_team( $linked, $team_id ) ) {
+				return $linked;
 			}
-			if ( ! Group_Subscription::is_group_subscription( $subscription ) ) {
-				continue;
-			}
-			if ( ! $subscription->has_status( WooCommerce_Connection::ACTIVE_SUBSCRIPTION_STATUSES ) ) {
-				continue;
-			}
-			return $subscription;
 		}
 
 		return null;
+	}
+
+	/**
+	 * Whether a subscription is the live group this team migrated into.
+	 *
+	 * @param \WC_Subscription $subscription The subscription to test.
+	 * @param int              $team_id      The team post ID.
+	 */
+	private static function subscription_is_group_for_team( $subscription, int $team_id ): bool {
+		if ( ! $subscription ) {
+			return false;
+		}
+		if ( (int) $subscription->get_meta( Group_Subscription::MIGRATED_TEAM_ID_META_KEY ) !== $team_id ) {
+			return false;
+		}
+		if ( ! Group_Subscription::is_group_subscription( $subscription ) ) {
+			return false;
+		}
+		return (bool) $subscription->has_status( WooCommerce_Connection::ACTIVE_SUBSCRIPTION_STATUSES );
 	}
 
 	/**
@@ -487,15 +556,15 @@ class Group_Subscription_Teams_Invite {
 	 *
 	 * Returns the stored email as well as the key, because the two are not
 	 * interchangeable: the match here is case-insensitive (a stored invite and the
-	 * address on the invitation row can differ in case), while the acceptance handler
-	 * compares the invite's email strictly.
+	 * address on the invitation row can differ in case), while the invite is looked up
+	 * downstream against the value it was stored under.
 	 *
 	 * @param \WC_Subscription $subscription The group subscription.
 	 * @param string           $email        The invitee's email.
 	 *
 	 * @return array|null [ 'key' => string, 'email' => string ], or null if there is no live invite.
 	 */
-	private static function find_live_invite( $subscription, $email ) {
+	private static function find_live_invite( $subscription, string $email ): ?array {
 		foreach ( Group_Subscription_Invite::get_invites( $subscription, false ) as $key => $invite ) {
 			if ( empty( $invite['email'] ) ) {
 				continue;
@@ -516,24 +585,56 @@ class Group_Subscription_Teams_Invite {
 	 * Teams' own acceptance flipped the invitation to `wcmti-accepted`, which is what
 	 * made an invitation link single-use. Nothing else carries that here: the reader
 	 * has joined, but the row is still pending, so a manager who later removes them
-	 * cannot stop the original email re-admitting them — the link is a bearer token
-	 * that no Access Control screen shows.
-	 *
-	 * Written straight to the row. Post-flip both the post type and the status are
-	 * unregistered, and wp_update_post() on an unregistered type would sanitise the
-	 * status it is given and fire a save cascade for a type nothing has declared.
-	 *
-	 * Runs on every invite acceptance, so it leaves early on the sites that have no
-	 * teams behind them: a group subscription with no migration marker costs one meta
-	 * read and no query.
+	 * cannot stop the original email re-admitting them.
 	 *
 	 * @param \WC_Subscription $subscription The group subscription joined.
 	 * @param string           $email        The address the invite was issued to.
 	 * @param int              $user_id      The reader who joined. Unused; part of the action's signature.
 	 */
-	public static function close_source_invitation( $subscription, $email, $user_id ) {
+	public static function close_source_invitation( $subscription, $email, $user_id ): void {
+		self::close_invitations_for( $subscription, [ $email ] );
+	}
+
+	/**
+	 * Spend the source invitations behind invites a manager cancelled.
+	 *
+	 * Cancelling is the control a manager reaches for before a reader has joined,
+	 * which is exactly the window an unspent legacy link is live in: without this, the
+	 * next click on that link mints a replacement and undoes the cancellation.
+	 *
+	 * @param \WC_Subscription $subscription The group subscription.
+	 * @param string[]         $emails       The addresses whose invites were cancelled.
+	 */
+	public static function close_cancelled_invitations( $subscription, $emails ): void {
+		self::close_invitations_for( $subscription, (array) $emails );
+	}
+
+	/**
+	 * Mark a group's pending Teams invitations for the given addresses as spent.
+	 *
+	 * Written straight to the row. Post-flip both the post type and the status are
+	 * unregistered, and wp_update_post() on an unregistered type would sanitise the
+	 * status it is given and fire a save cascade for a type nothing has declared.
+	 *
+	 * Runs on every invite acceptance and cancellation, so it leaves early on the
+	 * sites that have no teams behind them: a group subscription with no migration
+	 * marker costs one meta read and no query.
+	 *
+	 * @param \WC_Subscription $subscription The group subscription.
+	 * @param string[]         $emails       Addresses to close invitations for.
+	 */
+	private static function close_invitations_for( $subscription, array $emails ): void {
 		// While Teams is active it runs its own acceptance and owns these rows.
-		if ( self::teams_is_active() || ! $subscription || ! $email ) {
+		if ( self::teams_is_active() || ! $subscription ) {
+			return;
+		}
+		$needles = [];
+		foreach ( $emails as $email ) {
+			if ( is_string( $email ) && '' !== $email ) {
+				$needles[] = strtolower( $email );
+			}
+		}
+		if ( empty( $needles ) ) {
 			return;
 		}
 		$team_id = (int) $subscription->get_meta( Group_Subscription::MIGRATED_TEAM_ID_META_KEY );
@@ -542,25 +643,34 @@ class Group_Subscription_Teams_Invite {
 		}
 
 		global $wpdb;
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- The post type is unregistered post-flip, so WP_Query's status handling cannot be relied on here; see find_pending_invitation().
-		$invitation_ids = $wpdb->get_col(
-			$wpdb->prepare(
-				"SELECT ID FROM {$wpdb->posts} WHERE post_type = %s AND post_parent = %d AND post_status = %s AND LOWER( post_title ) = %s",
-				self::INVITATION_POST_TYPE,
-				$team_id,
-				self::PENDING_INVITATION_STATUS,
-				strtolower( $email )
-			)
-		);
-
-		foreach ( $invitation_ids as $invitation_id ) {
-			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- See above; the cache is cleared immediately below.
-			$wpdb->update(
-				$wpdb->posts,
-				[ 'post_status' => self::ACCEPTED_INVITATION_STATUS ],
-				[ 'ID' => (int) $invitation_id ]
+		// One address per query rather than an IN() list: the caller passes one on an
+		// acceptance and a handful on a cancellation, and a fixed statement keeps the
+		// placeholders out of string building.
+		foreach ( array_unique( $needles ) as $needle ) {
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- The post type is unregistered post-flip, so WP_Query's status handling cannot be relied on here; see find_pending_invitation().
+			$invitation_ids = $wpdb->get_col(
+				$wpdb->prepare(
+					"SELECT ID FROM {$wpdb->posts} WHERE post_type = %s AND post_parent = %d AND post_status = %s AND LOWER( post_title ) = %s",
+					self::INVITATION_POST_TYPE,
+					$team_id,
+					self::PENDING_INVITATION_STATUS,
+					$needle
+				)
 			);
-			clean_post_cache( (int) $invitation_id );
+
+			foreach ( $invitation_ids as $invitation_id ) {
+				$invitation_id = (int) $invitation_id;
+				// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- See above; the cache is cleared immediately below.
+				$wpdb->update(
+					$wpdb->posts,
+					[ 'post_status' => self::ACCEPTED_INVITATION_STATUS ],
+					[ 'ID' => $invitation_id ]
+				);
+				// Stamped so a rolled-back site can tell these from invitations
+				// WooCommerce Teams itself accepted, and restore them.
+				update_post_meta( $invitation_id, self::CLOSED_BY_META, $subscription->get_id() );
+				clean_post_cache( $invitation_id );
+			}
 		}
 	}
 
@@ -570,20 +680,32 @@ class Group_Subscription_Teams_Invite {
 	 * One code for all of them — no invitation row, a team that never migrated, a
 	 * group subscription since cancelled, a group at its seat limit. The reader can do
 	 * the same thing about each, and naming which one applies would tell an
-	 * unauthenticated caller what the site holds.
+	 * unauthenticated caller what the site holds. The cause is recorded server-side
+	 * instead, so a publisher can be told how many of their pending invitations are
+	 * dead and why.
+	 *
+	 * @param string $reason  Which of the causes applied. Server-side only.
+	 * @param array  $context Extra detail for the log entry.
 	 *
 	 * @return \WP_Error
 	 */
-	private static function invalid_link_error() {
+	private static function invalid_link_error( string $reason, array $context = [] ): \WP_Error {
+		do_action(
+			'newspack_log',
+			'newspack_join_team_link_unresolved',
+			sprintf( 'A legacy join-team link could not be resolved: %s.', $reason ),
+			[
+				'type' => 'debug',
+				'data' => array_merge( [ 'reason' => $reason ], $context ),
+			]
+		);
 		return new \WP_Error( Group_Subscription_Invite::RESULT_JOIN_TEAM_INVALID );
 	}
 
 	/**
 	 * The result code shown to a reader who already has what the link offers.
-	 *
-	 * @return \WP_Error
 	 */
-	private static function existing_member_error() {
+	private static function existing_member_error(): \WP_Error {
 		return new \WP_Error(
 			is_user_logged_in()
 				? Group_Subscription_Invite::RESULT_JOIN_TEAM_MEMBER
