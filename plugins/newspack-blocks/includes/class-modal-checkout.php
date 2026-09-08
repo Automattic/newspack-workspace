@@ -67,6 +67,9 @@ final class Modal_Checkout {
 		'gate_post_id',
 		'newspack_popup_id',
 		'prompt_title',
+		'contextual_prompt_post_id',
+		'contextual_prompt_placement',
+		'contextual_prompt_condition',
 	];
 
 	/**
@@ -2760,6 +2763,12 @@ final class Modal_Checkout {
 			}
 			if ( $gate_post_id ) {
 				$params['gate_post_id'] = $gate_post_id;
+			}
+			foreach ( [ 'contextual_prompt_post_id', 'contextual_prompt_placement', 'contextual_prompt_condition' ] as $key ) {
+				$value = filter_input( INPUT_GET, $key, FILTER_SANITIZE_SPECIAL_CHARS );
+				if ( $value ) {
+					$params[ $key ] = $value;
+				}
 			}
 			$location = \add_query_arg( $params, $location );
 		}

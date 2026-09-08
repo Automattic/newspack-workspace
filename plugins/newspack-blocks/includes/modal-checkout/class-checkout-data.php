@@ -476,6 +476,24 @@ final class Checkout_Data {
 		}
 
 		/**
+		 * Contextual prompt source: which story, placement and test condition the
+		 * reader donated from. Same three-way resolution as the popup id.
+		 */
+		foreach ( [ 'contextual_prompt_post_id', 'contextual_prompt_placement', 'contextual_prompt_condition' ] as $key ) {
+			$value = null;
+			if ( $order ) {
+				$value = $order->get_meta( '_newspack_' . $key );
+			} elseif ( $cart_item ) {
+				$value = $cart_item[ $key ] ?? null;
+			} else {
+				$value = filter_input( INPUT_GET, $key, FILTER_SANITIZE_SPECIAL_CHARS );
+			}
+			if ( $value ) {
+				$data[ $key ] = $value;
+			}
+		}
+
+		/**
 		 * Filters the checkout data.
 		 *
 		 * @param array $data The checkout data.

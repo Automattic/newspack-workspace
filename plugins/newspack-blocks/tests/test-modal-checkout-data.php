@@ -393,6 +393,40 @@ class Newspack_Blocks_Modal_Checkout_Data_Test extends WP_UnitTestCase_Blocks {
 	}
 
 	/**
+	 * Build a WC_Order stub carrying a single line item and the given order meta.
+	 *
+	 * @param array $meta Order meta, keyed by meta key.
+	 * @return WC_Order
+	 */
+	private function order_with_meta( array $meta ) {
+		$GLOBALS['newspack_blocks_test_products'] = [
+			82 => new WC_Product( 82, 'simple', [], '10', 'Product 82' ),
+		];
+		return new WC_Order( 951, '', [ new WC_Order_Item_Product( 82, '40', 4 ) ], $meta );
+	}
+
+	/**
+	 * Build a WC_Cart stub whose single item carries product/quantity defaults
+	 * plus whatever extra cart-item keys the test needs to assert on.
+	 *
+	 * @param array $extra Extra cart-item keys.
+	 * @return WC_Cart
+	 */
+	private function cart_with_item( array $extra ) {
+		return $this->make_cart(
+			array_merge(
+				[
+					'product_id'   => 83,
+					'variation_id' => 0,
+					'quantity'     => 1,
+					'data'         => $this->make_product( 83, 10 ),
+				],
+				$extra
+			)
+		);
+	}
+
+	/**
 	 * A cart line item's quantity flows into `quantity`, and the per-unit price is
 	 * multiplied into `amount` — a cart's price is per unit, unlike an order's.
 	 */
@@ -444,6 +478,40 @@ class Newspack_Blocks_Modal_Checkout_Data_Test extends WP_UnitTestCase_Blocks {
 
 		$this->assertSame( 4, $data['quantity'] );
 		$this->assertSame( '40', $data['amount'], 'The order subtotal already reflects quantity and must not be multiplied again.' );
+	}
+
+	/**
+	 * An order that started from a contextual prompt carries the source triple
+	 * in the checkout payload, so the success event can report it.
+	 */
+	public function test_order_checkout_data_carries_contextual_prompt_source() {
+		$order = $this->order_with_meta(
+			[
+				'_newspack_contextual_prompt_post_id'   => 12,
+				'_newspack_contextual_prompt_placement' => 'mid',
+				'_newspack_contextual_prompt_condition' => 'generic_control',
+			]
+		);
+		$data  = Checkout_Data::get_checkout_data( $order );
+		$this->assertSame( 12, (int) $data['contextual_prompt_post_id'] );
+		$this->assertSame( 'mid', $data['contextual_prompt_placement'] );
+		$this->assertSame( 'generic_control', $data['contextual_prompt_condition'] );
+	}
+
+	/**
+	 * The same from a cart item, before the order exists.
+	 */
+	public function test_cart_checkout_data_carries_contextual_prompt_source() {
+		$cart = $this->cart_with_item(
+			[
+				'contextual_prompt_post_id'   => '12',
+				'contextual_prompt_placement' => 'end',
+				'contextual_prompt_condition' => 'story_aware',
+			]
+		);
+		$data = Checkout_Data::get_checkout_data( $cart );
+		$this->assertSame( 'end', $data['contextual_prompt_placement'] );
+		$this->assertSame( 'story_aware', $data['contextual_prompt_condition'] );
 	}
 
 	/**
