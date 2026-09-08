@@ -493,6 +493,82 @@ class Content_Gate {
 	}
 
 	/**
+	 * Run a gated teaser through the 'the_content' callbacks registered above
+	 * self::RESTRICTION_PRIORITY.
+	 *
+	 * The server-side path gets these for free: the teaser is substituted into a
+	 * live 'the_content' pass at that priority, so every callback above it
+	 * processes the teaser rather than the restricted body, which is what keeps an
+	 * integration gating its own embeds composing with the gate. A teaser built
+	 * outside such a pass — {@see Metering::get_metered_excerpt()}, the string the
+	 * frontend metering strategy hands the browser — has to be given the same
+	 * callbacks explicitly, or the markup that ends up in the DOM is the one piece
+	 * of gated output no third-party gate ever sees.
+	 *
+	 * Applies the callbacks directly rather than running a nested
+	 * apply_filters( 'the_content' ), which would also run everything at or below
+	 * the priority — ad inserters, prompt injectors, related-post blocks — over a
+	 * teaser that never sees them today. Everything else about the dispatch mirrors
+	 * core: 'the_content' is pushed onto $wp_current_filter so current_filter() and
+	 * doing_filter() answer as they would in a real pass — a callback that guards on
+	 * either would otherwise decline to run, which for a gate means declining to
+	 * gate — and each callback is passed the argument count it registered for.
+	 *
+	 * Two consequences of running a second time over content the request has already
+	 * filtered once. A callback that guards against running twice will no-op here,
+	 * and so will not gate the teaser; one with side effects — an enqueue, a counter,
+	 * an analytics ping — fires again. Both are inherent to there being no server-side
+	 * teaser on this path to filter in the first place.
+	 *
+	 * Boundary: a callback registered at exactly self::RESTRICTION_PRIORITY is
+	 * excluded. Server-side such a callback sees the teaser or the full post
+	 * depending on which registered first, so it has no settled behavior to
+	 * reproduce; excluding it is the half that cannot leak restricted content.
+	 *
+	 * The callbacks are a snapshot: a callback that adds or removes a 'the_content'
+	 * filter mid-loop does not change what this pass runs, where core would resort
+	 * the live iteration.
+	 *
+	 * This class's own closing callback is skipped: it appends the gate to a teaser
+	 * it has already substituted, and there is no substitution here to close. Matched
+	 * by the unique id WP keys it under rather than by the shape of the callable, so
+	 * the skip holds however it was registered.
+	 *
+	 * @param string $teaser Gated teaser markup.
+	 *
+	 * @return string
+	 */
+	public static function apply_late_content_filters( string $teaser ): string {
+		$hook = $GLOBALS['wp_filter']['the_content'] ?? null;
+		if ( ! $hook instanceof \WP_Hook ) {
+			return $teaser;
+		}
+
+		$own_callback_id       = _wp_filter_build_unique_id( 'the_content', [ __CLASS__, 'handle_restricted_content' ], PHP_INT_MAX );
+		$callbacks_by_priority = $hook->callbacks;
+		ksort( $callbacks_by_priority, SORT_NUMERIC );
+
+		$GLOBALS['wp_current_filter'][] = 'the_content'; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- Pushed and popped around the dispatch, as core's apply_filters() does.
+		try {
+			foreach ( $callbacks_by_priority as $priority => $callbacks ) {
+				if ( $priority <= self::RESTRICTION_PRIORITY ) {
+					continue;
+				}
+				foreach ( $callbacks as $callback_id => $callback ) {
+					if ( $own_callback_id === $callback_id || ! is_callable( $callback['function'] ) ) {
+						continue;
+					}
+					$teaser = call_user_func_array( $callback['function'], array_slice( [ $teaser ], 0, (int) $callback['accepted_args'] ) );
+				}
+			}
+		} finally {
+			array_pop( $GLOBALS['wp_current_filter'] );
+		}
+
+		return $teaser;
+	}
+
+	/**
 	 * Get whether the gate is being rendered.
 	 *
 	 * @return bool

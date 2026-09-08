@@ -324,10 +324,72 @@ class Metering {
 				'gate_id'            => $gate_post_id,
 				'post_id'            => get_the_ID(),
 				'article_view'       => self::$article_view,
-				'excerpt'            => apply_filters( 'newspack_gate_content', Content_Gate::get_restricted_post_excerpt( get_post() ) ),
+				// The queried post, not the global one: this runs at wp_footer, where a
+				// widget or sidebar query that skipped wp_reset_postdata() has left the
+				// global on its own last post.
+				'excerpt'            => self::get_metered_excerpt( get_post( get_queried_object_id() ) ),
 				'other_settings'     => Content_Gate_Advanced_Settings::get_settings(),
 			]
 		);
+	}
+
+	/**
+	 * The content the frontend metering strategy swaps in once a reader's views are spent.
+	 *
+	 * Built as the locked view, to match the teaser the server-side path substitutes
+	 * for a reader with no access. Two things follow from that and neither is
+	 * cosmetic, because for an anonymous reader this string is the only gated markup
+	 * the site ever produces — the response itself carries the whole post, and the
+	 * browser is what decides between them:
+	 *
+	 * - Metering is short-circuited off while it is built. is_metering() answers for
+	 *   the request, where the frontend strategy's answer is "the browser will
+	 *   decide"; an integration reading that as "this reader has access" leaves its
+	 *   embed unlocked. The reader's own spent-or-not state is not knowable here and
+	 *   is not the question: this excerpt is only ever rendered to a reader who is
+	 *   out of views.
+	 * - The 'the_content' callbacks above Content_Gate::RESTRICTION_PRIORITY are
+	 *   applied, the ones the server-side teaser gets by being substituted into that
+	 *   chain. Without them a third-party gate never sees this string at all.
+	 *
+	 * @param \WP_Post $post Post being metered.
+	 *
+	 * @return string
+	 */
+	public static function get_metered_excerpt( \WP_Post $post ): string {
+		// The short-circuit is removed only by whoever put it there. apply_late_content_filters()
+		// below hands the excerpt to third-party callbacks, and one calling back into this method
+		// would otherwise take the filter off on its way out and leave the outer excerpt — the one
+		// actually served — built with metering answering true again, which is the leak this
+		// method exists to close.
+		$is_ours = ! has_filter( 'newspack_content_gate_metering_short_circuit', [ __CLASS__, 'short_circuit_metering_for_excerpt' ] );
+		if ( $is_ours ) {
+			add_filter( 'newspack_content_gate_metering_short_circuit', [ __CLASS__, 'short_circuit_metering_for_excerpt' ] );
+		}
+		try {
+			$excerpt = apply_filters( 'newspack_gate_content', Content_Gate::get_restricted_post_excerpt( $post ) );
+			return Content_Gate::apply_late_content_filters( $excerpt );
+		} finally {
+			if ( $is_ours ) {
+				remove_filter( 'newspack_content_gate_metering_short_circuit', [ __CLASS__, 'short_circuit_metering_for_excerpt' ] );
+			}
+		}
+	}
+
+	/**
+	 * Report metering as not applying, for the duration of an excerpt build.
+	 *
+	 * A named callback rather than '__return_true' so that removing it cannot take
+	 * another caller's identical callable off the filter with it. Named apart from
+	 * {@see Content_Gifting::short_circuit_metering()} because the two answer for
+	 * different reasons and only one of them is scoped to a single call.
+	 *
+	 * @param mixed $short_circuit Incoming short-circuit value.
+	 *
+	 * @return true
+	 */
+	public static function short_circuit_metering_for_excerpt( $short_circuit ) {
+		return true;
 	}
 
 	/**
