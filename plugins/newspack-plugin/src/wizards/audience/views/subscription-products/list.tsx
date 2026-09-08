@@ -366,7 +366,7 @@ export default function SubscriptionProductsList( { scope = 'subscriptions' }: {
 			{
 				id: 'promotional-url',
 				label: __( 'Get promotional link', 'newspack-plugin' ),
-				isEligible: ( item: SubscriptionProduct ) => item.status === 'publish' && globals?.newspack_blocks_active !== false,
+				isEligible: ( item: SubscriptionProduct ) => item.status === 'publish' && globals?.promo_links_supported !== false,
 				modalHeader: __( 'Promotional link', 'newspack-plugin' ),
 				RenderModal: ( { items, closeModal }: RenderModalProps< SubscriptionProduct > ) => (
 					<PromoUrlModal item={ items[ 0 ] } closeModal={ closeModal } />

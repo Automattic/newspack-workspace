@@ -292,11 +292,13 @@ final class Promo_Url_Config {
 		if ( ! class_exists( '\Newspack_Blocks_Donate_Renderer_Base' ) || ! class_exists( '\Newspack_Blocks' ) ) {
 			return null;
 		}
-		$attrs      = [];
 		$block_type = \WP_Block_Type_Registry::get_instance()->get_registered( 'newspack-blocks/donate' );
-		if ( $block_type ) {
-			$attrs = $block_type->prepare_attributes_for_render( $attrs );
+		if ( ! $block_type ) {
+			// The registry is what supplies the schema defaults the reader's
+			// block renders with; without it there is no configuration to describe.
+			return null;
 		}
+		$attrs = $block_type->prepare_attributes_for_render( [] );
 		return self::filter_frequencies_without_products(
 			self::evaluate_donate_configuration(
 				\Newspack_Blocks_Donate_Renderer_Base::get_configuration( $attrs ),
@@ -307,20 +309,49 @@ final class Promo_Url_Config {
 	}
 
 	/**
+	 * What the checkout will match a coupon's product restrictions against for
+	 * a promoted product.
+	 *
+	 * WooCommerce checks a cart line against the product's own id and its
+	 * parent's (WC_Coupon::is_valid_for_product()), never a sibling variation,
+	 * so `item_ids` is that pair. Categories come from the parent, since a
+	 * variation carries no terms of its own. A product WooCommerce cannot load
+	 * is still checked by id, so a restricted coupon is not reported as
+	 * applying to it.
+	 *
+	 * @param int $product_id The promoted product.
+	 * @return array { item_ids: int[], family_category_ids: int[], reference_price: float|null }
+	 */
+	public static function get_coupon_product_context( $product_id ) {
+		$product_id  = (int) $product_id;
+		$product     = function_exists( 'wc_get_product' ) ? wc_get_product( $product_id ) : false;
+		$parent_id   = $product ? (int) $product->get_parent_id() : 0;
+		$parent      = $parent_id ? wc_get_product( $parent_id ) : null;
+		$term_source = $parent ? $parent : $product;
+		return [
+			'item_ids'            => $parent_id ? [ $product_id, $parent_id ] : [ $product_id ],
+			'family_category_ids' => $term_source ? array_map( 'intval', $term_source->get_category_ids() ) : [],
+			'reference_price'     => $product && '' !== $product->get_price() ? (float) $product->get_price() : null,
+		];
+	}
+
+	/**
 	 * Decide whether a coupon is usable for a promoted product, from plain
 	 * extracted values. Pure so it is testable without WooCommerce.
 	 *
 	 * Mirrors the context-free subset of WC_Discounts::is_coupon_valid() plus
 	 * manual product/amount checks: a bare WC_Discounts with no cart rejects
 	 * product-restricted and minimum-spend coupons outright, and those are the
-	 * primary promotional shapes.
+	 * primary promotional shapes. The product checks apply the same rule the
+	 * checkout does (see get_coupon_product_context()), so a coupon this
+	 * reports as usable is one the reader's cart will accept.
 	 *
 	 * @param array $coupon_data     Extracted WC_Coupon state: expired,
 	 *                                usage_exceeded, product_ids, excluded_ids,
 	 *                                category_ids, excluded_category_ids,
 	 *                                minimum_amount. Empty id lists mean no
 	 *                                restriction.
-	 * @param array $product_context Promoted-product context (family_ids,
+	 * @param array $product_context Promoted-product context (item_ids,
 	 *                               family_category_ids, reference_price); an
 	 *                               empty array skips product-dependent checks.
 	 * @return array { valid: bool, reason?: string }
@@ -338,19 +369,19 @@ final class Promo_Url_Config {
 				'reason' => __( 'This coupon has reached its usage limit.', 'newspack-plugin' ),
 			];
 		}
-		$family_ids = isset( $product_context['family_ids'] ) ? array_map( 'intval', $product_context['family_ids'] ) : [];
-		if ( empty( $family_ids ) ) {
+		$item_ids = isset( $product_context['item_ids'] ) ? array_map( 'intval', $product_context['item_ids'] ) : [];
+		if ( empty( $item_ids ) ) {
 			return [ 'valid' => true ];
 		}
 		$allowed = isset( $coupon_data['product_ids'] ) ? array_map( 'intval', $coupon_data['product_ids'] ) : [];
-		if ( ! empty( $allowed ) && empty( array_intersect( $allowed, $family_ids ) ) ) {
+		if ( ! empty( $allowed ) && empty( array_intersect( $allowed, $item_ids ) ) ) {
 			return [
 				'valid'  => false,
 				'reason' => __( 'This coupon does not apply to this plan.', 'newspack-plugin' ),
 			];
 		}
 		$excluded = isset( $coupon_data['excluded_ids'] ) ? array_map( 'intval', $coupon_data['excluded_ids'] ) : [];
-		if ( ! empty( $excluded ) && empty( array_diff( $family_ids, $excluded ) ) ) {
+		if ( ! empty( $excluded ) && ! empty( array_intersect( $excluded, $item_ids ) ) ) {
 			return [
 				'valid'  => false,
 				'reason' => __( 'This coupon excludes this plan.', 'newspack-plugin' ),
