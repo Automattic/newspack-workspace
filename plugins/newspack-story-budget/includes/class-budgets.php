@@ -217,6 +217,28 @@ class Budgets {
 	}
 
 	/**
+	 * Whether the current user may create, rename, archive or reorder budgets.
+	 *
+	 * Resolved from the taxonomy's own capabilities so the REST routes and the
+	 * app's UI flag share one floor with wp-admin's term screens
+	 * (`manage_categories` by default) instead of the `edit_posts` floor that
+	 * let contributors alter anyone's budgets (NPPM-3199). A budget ID switches
+	 * to the object-level `edit_term` check; an ID that is not a budget falls
+	 * back to the floor so managers still reach the route's own 404.
+	 *
+	 * @param int|null $budget_id Optional budget (term) ID.
+	 *
+	 * @return bool
+	 */
+	public static function current_user_can_manage( $budget_id = null ) {
+		if ( $budget_id && get_term( $budget_id, self::TAXONOMY ) instanceof \WP_Term ) {
+			return current_user_can( 'edit_term', $budget_id );
+		}
+		$taxonomy = get_taxonomy( self::TAXONOMY );
+		return $taxonomy && current_user_can( $taxonomy->cap->edit_terms );
+	}
+
+	/**
 	 * Register the daily cron job for auto-archiving budgets.
 	 */
 	public static function register_cron_jobs() {

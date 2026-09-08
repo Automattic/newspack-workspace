@@ -246,7 +246,7 @@ class API {
 			[
 				'methods'             => 'PUT',
 				'callback'            => [ __CLASS__, 'update_budget' ],
-				'permission_callback' => [ __CLASS__, 'permission_callback' ],
+				'permission_callback' => [ __CLASS__, 'manage_budgets_permission_callback' ],
 				'args'                => [
 					'id'       => [
 						'description' => __( 'The ID of the budget to update.', 'newspack-story-budget' ),
@@ -313,7 +313,7 @@ class API {
 			[
 				'methods'             => 'POST',
 				'callback'            => [ __CLASS__, 'set_active_budget_order' ],
-				'permission_callback' => [ __CLASS__, 'permission_callback' ],
+				'permission_callback' => [ __CLASS__, 'manage_budgets_permission_callback' ],
 				'args'                => [
 					'ids' => [
 						'description' => __( 'Array of budget IDs to set as active.', 'newspack-story-budget' ),
@@ -332,7 +332,7 @@ class API {
 			[
 				'methods'             => 'POST',
 				'callback'            => [ __CLASS__, 'create_budget' ],
-				'permission_callback' => [ __CLASS__, 'permission_callback' ],
+				'permission_callback' => [ __CLASS__, 'manage_budgets_permission_callback' ],
 				'args'                => [
 					'name' => [
 						'description' => __( 'Name of the budget.', 'newspack-story-budget' ),
@@ -370,12 +370,28 @@ class API {
 	}
 
 	/**
-	 * Permission callback for non-story entities.
+	 * Permission callback for reading budgets and fields.
+	 *
+	 * The floor is `edit_posts`: anyone who can assign a budget to a story may
+	 * list and search budgets. Routes that alter budgets use
+	 * `manage_budgets_permission_callback()` instead.
 	 *
 	 * @return bool
 	 */
 	public static function permission_callback() {
 		return current_user_can( 'edit_posts' );
+	}
+
+	/**
+	 * Permission callback for the routes that create or alter budgets.
+	 *
+	 * @param \WP_REST_Request $request Request object.
+	 *
+	 * @return bool
+	 */
+	public static function manage_budgets_permission_callback( $request ) {
+		// Only the route's URL segment names the budget; a body-supplied `id` must not steer the object check.
+		return Budgets::current_user_can_manage( $request->get_url_params()['id'] ?? null );
 	}
 
 	/**
