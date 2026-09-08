@@ -676,13 +676,7 @@ class Newspack_Blocks {
 			&& ! ( defined( 'REST_REQUEST' ) && REST_REQUEST )
 			&& ! ( defined( 'WP_CLI' ) && WP_CLI );
 
-		/**
-		 * Filters whether deduplication state is reset at the start of each
-		 * top-level `the_content` pass.
-		 *
-		 * @param bool $reset Whether to reset. Default true outside front-end requests.
-		 */
-		return (bool) apply_filters( 'newspack_blocks_reset_deduplication_per_render_pass', ! $is_front_end );
+		return ! $is_front_end;
 	}
 
 	/**
@@ -697,11 +691,6 @@ class Newspack_Blocks {
 	public static function reset_deduplication() {
 		global $newspack_blocks_post_id;
 		$newspack_blocks_post_id = [];
-
-		/**
-		 * Fires after deduplication state has been reset.
-		 */
-		do_action( 'newspack_blocks_deduplication_reset' );
 	}
 
 	/**

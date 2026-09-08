@@ -186,20 +186,6 @@ class HomepagePostsBlockTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 	}
 
 	/**
-	 * The reset can be forced on or off through the filter.
-	 */
-	public function test_dedup_reset_is_filterable() {
-		add_filter( 'newspack_blocks_reset_deduplication_per_render_pass', '__return_true' );
-		$page   = $this->create_dedup_page();
-		$first  = $this->render_pass( $page );
-		$second = $this->render_pass( $page );
-		remove_filter( 'newspack_blocks_reset_deduplication_per_render_pass', '__return_true' );
-
-		self::assertCount( 2, $first );
-		self::assertSame( $first, $second, 'With the filter on, the front end resets per pass too.' );
-	}
-
-	/**
 	 * HPB query from attributes.
 	 */
 	public function test_hpb_build_articles_query() {
