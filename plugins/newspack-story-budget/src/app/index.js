@@ -67,6 +67,7 @@ const StoryBudget = () => {
 	} ) );
 
 	const canManage = useSelect( select => select( storeNamespace ).canManage() );
+	const canManageBudgets = useSelect( select => select( storeNamespace ).canManageBudgets() );
 
 	const navigationItems = [ { label: __( 'Stories', 'newspack-story-budget' ), path: '/stories' } ];
 
@@ -136,9 +137,11 @@ const StoryBudget = () => {
 						</Route>
 						<Route path="/budgets">
 							<AppHeaderActions>
-								<Button variant="primary" href="#/budgets/new">
-									{ __( 'Add Budget', 'newspack-story-budget' ) }
-								</Button>
+								{ canManageBudgets && (
+									<Button variant="primary" href="#/budgets/new">
+										{ __( 'Add Budget', 'newspack-story-budget' ) }
+									</Button>
+								) }
 								<SitesNav />
 							</AppHeaderActions>
 							<Budgets />

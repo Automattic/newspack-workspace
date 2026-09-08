@@ -550,7 +550,8 @@ class API {
 	public static function get_stories_meta( $request ) {
 		return rest_ensure_response(
 			[
-				'can_edit' => current_user_can( 'edit_others_posts' ),
+				'can_edit'           => current_user_can( 'edit_others_posts' ),
+				'can_manage_budgets' => Budgets::current_user_can_manage(),
 			]
 		);
 	}

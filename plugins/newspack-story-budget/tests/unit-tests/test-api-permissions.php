@@ -215,4 +215,15 @@ class Test_API_Permissions extends \WP_UnitTestCase {
 			$this->assertSame( 401, $response->get_status(), "$method $route should require a logged-in user." );
 		}
 	}
+
+	/**
+	 * The app reads the same floor from the stories meta, so its controls and the routes agree.
+	 */
+	public function test_stories_meta_reports_budget_management_capability() {
+		$response = $this->dispatch_as( 'contributor', 'GET', '/stories/meta' );
+		$this->assertFalse( $response->get_data()['can_manage_budgets'] );
+
+		$response = $this->dispatch_as( 'editor', 'GET', '/stories/meta' );
+		$this->assertTrue( $response->get_data()['can_manage_budgets'] );
+	}
 }
