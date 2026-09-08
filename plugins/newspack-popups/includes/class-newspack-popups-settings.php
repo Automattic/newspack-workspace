@@ -49,6 +49,18 @@ class Newspack_Popups_Settings {
 	const OVERRIDE_CTA_OPTION = 'newspack_contextual_prompts_override_cta';
 
 	/**
+	 * Control override ("control test"): while enabled, every Nth story renders
+	 * the generic control copy instead of its own, copy only. Answers the grant's
+	 * story-aware vs. generic question without A/B machinery.
+	 */
+	const CONTROL_ENABLED_OPTION  = 'newspack_contextual_prompts_control_enabled';
+	const CONTROL_BODY_OPTION     = 'newspack_contextual_prompts_control_body';
+	const CONTROL_INTERVAL_OPTION = 'newspack_contextual_prompts_control_interval';
+	const CONTROL_INTERVAL_DEFAULT = 3;
+	const CONTROL_INTERVAL_MIN     = 2;
+	const CONTROL_INTERVAL_MAX     = 20;
+
+	/**
 	 * The opt-in state a pending deletion is about to remove. Core fires
 	 * `delete_option` while the row is still readable, which is the only point
 	 * the deletion path can learn what it is withdrawing.
@@ -211,6 +223,45 @@ class Newspack_Popups_Settings {
 	}
 
 	/**
+	 * Whether the control override is on. Mirrors is_override_active(): enabled
+	 * with no copy counts as inactive, because suppress_empty_instance() would
+	 * otherwise swallow every Nth card and the control condition would silently
+	 * stop rendering.
+	 *
+	 * @return bool
+	 */
+	public static function is_control_active() {
+		if ( ! (bool) get_option( self::CONTROL_ENABLED_OPTION, false ) ) {
+			return false;
+		}
+		return '' !== trim( (string) get_option( self::CONTROL_BODY_OPTION, '' ) );
+	}
+
+	/**
+	 * Every Nth story shows the control copy. Clamped on read as well as on
+	 * save, so a value written outside the settings form can't select every story.
+	 *
+	 * @return int
+	 */
+	public static function get_control_interval() {
+		$stored = get_option( self::CONTROL_INTERVAL_OPTION, '' );
+		if ( '' === $stored || null === $stored ) {
+			return self::CONTROL_INTERVAL_DEFAULT;
+		}
+		return self::clamp_interval( $stored );
+	}
+
+	/**
+	 * Clamp an interval to the allowed range. Non-numeric input lands on the minimum.
+	 *
+	 * @param mixed $value Raw value.
+	 * @return int
+	 */
+	private static function clamp_interval( $value ) {
+		return max( self::CONTROL_INTERVAL_MIN, min( self::CONTROL_INTERVAL_MAX, absint( $value ) ) );
+	}
+
+	/**
 	 * The CTA the site-wide override renders: 'form' (the native donate form) or
 	 * 'button'. Sites without native Newspack donations have no form to offer,
 	 * so they are always 'button'; native sites choose via the settings toggle.
@@ -305,6 +356,30 @@ class Newspack_Popups_Settings {
 				'type'    => 'text',
 				'section' => 'override',
 			],
+			// Control override ("control test"): every Nth story renders this copy
+			// instead of its own. Copy only, so the CTA is identical in both
+			// conditions and the comparison measures one thing.
+			[
+				'key'     => self::CONTROL_ENABLED_OPTION,
+				'label'   => __( 'Enable control test', 'newspack-popups' ),
+				'help'    => __( 'Show a generic control ask on a slice of stories so it can be compared against story-aware copy. Turn it off to restore every story\'s own copy.', 'newspack-popups' ),
+				'type'    => 'toggle',
+				'section' => 'control',
+			],
+			[
+				'key'     => self::CONTROL_BODY_OPTION,
+				'label'   => __( 'Control copy', 'newspack-popups' ),
+				'help'    => __( 'The generic ask shown in place of story-aware copy. The call to action is not changed.', 'newspack-popups' ),
+				'type'    => 'textarea',
+				'section' => 'control',
+			],
+			[
+				'key'     => self::CONTROL_INTERVAL_OPTION,
+				'label'   => __( 'Show control copy on every Nth story', 'newspack-popups' ),
+				'help'    => __( 'Between 2 and 20. Which stories are selected depends on this number, so changing it mid-test starts a new test.', 'newspack-popups' ),
+				'type'    => 'number',
+				'section' => 'control',
+			],
 		];
 
 		// The form/button choice only exists where a native donate form exists;
@@ -325,6 +400,9 @@ class Newspack_Popups_Settings {
 			$field['value']   = (string) get_option( $field['key'], '' );
 			if ( self::OVERRIDE_CTA_OPTION === $field['key'] && '' === $field['value'] ) {
 				$field['value'] = 'form';
+			}
+			if ( self::CONTROL_INTERVAL_OPTION === $field['key'] && '' === $field['value'] ) {
+				$field['value'] = (string) self::CONTROL_INTERVAL_DEFAULT;
 			}
 			// Surface the effective value: an empty publisher name means the site
 			// title is used, so show it rather than an empty input.
@@ -360,6 +438,8 @@ class Newspack_Popups_Settings {
 			} elseif ( self::OVERRIDE_CTA_OPTION === $key ) {
 				// Whitelist: anything but 'button' collapses to the default 'form'.
 				$sanitized = 'button' === $value ? 'button' : 'form';
+			} elseif ( self::CONTROL_INTERVAL_OPTION === $key ) {
+				$sanitized = (string) self::clamp_interval( $value );
 			} else {
 				$sanitized = sanitize_textarea_field( (string) $value );
 				// An empty publisher name means "follow the site title" (the read-side
