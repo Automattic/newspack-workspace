@@ -29,6 +29,16 @@ final class Newspack_Popups_Contextual_Prompt_Render {
 	const LAYOUT_STYLE_HANDLE = 'newspack-popups-contextual-prompt-layout';
 
 	/**
+	 * Condition a card rendered under, reported on every interaction so the
+	 * story-aware vs. generic comparison can be read. Absent while the control
+	 * override is off.
+	 */
+	const CONDITION_STORY_AWARE     = 'story_aware';
+	const CONDITION_GENERIC_CONTROL = 'generic_control';
+	const CONDITION_OVERRIDE        = 'override';
+	const CONDITIONS                = [ self::CONDITION_STORY_AWARE, self::CONDITION_GENERIC_CONTROL, self::CONDITION_OVERRIDE ];
+
+	/**
 	 * Whether the block being rendered came from the pattern.
 	 *
 	 * @var bool
@@ -357,6 +367,11 @@ final class Newspack_Popups_Contextual_Prompt_Render {
 		$processor->set_attribute( 'data-newspack-cp-cta', self::get_cta_type_from_html( $block_content ) );
 		$processor->set_attribute( 'data-newspack-cp-placement', self::get_placement( $post_id ) );
 
+		$condition = self::get_condition( $post_id );
+		if ( '' !== $condition ) {
+			$processor->set_attribute( 'data-newspack-cp-condition', $condition );
+		}
+
 		return $processor->get_updated_html();
 	}
 
@@ -497,7 +512,10 @@ final class Newspack_Popups_Contextual_Prompt_Render {
 		$parsed_block = self::normalize_cta( $parsed_block );
 
 		if ( class_exists( 'Newspack_Popups_Settings' ) && Newspack_Popups_Settings::is_override_active() ) {
+			// A fund drive replaces every card; the control test is paused for its duration.
 			$parsed_block = self::apply_override( $parsed_block );
+		} elseif ( self::CONDITION_GENERIC_CONTROL === self::get_condition( (int) get_the_ID() ) ) {
+			$parsed_block = self::apply_control( $parsed_block );
 		}
 
 		return $parsed_block;
@@ -582,6 +600,52 @@ final class Newspack_Popups_Contextual_Prompt_Render {
 		}
 
 		return $parsed_block;
+	}
+
+	/**
+	 * Which condition a story renders under. Derived from the post id alone: a
+	 * counter would hand different readers different conditions for the same
+	 * story behind a full-page cache, and a story that flips condition mid-test
+	 * lands its events on both sides of the comparison.
+	 *
+	 * @param int $post_id The story.
+	 * @return string One of CONDITIONS, or '' while the control override is off.
+	 */
+	public static function get_condition( $post_id ) {
+		if ( ! class_exists( 'Newspack_Popups_Settings' ) || ! Newspack_Popups_Settings::is_control_active() ) {
+			return '';
+		}
+		if ( Newspack_Popups_Settings::is_override_active() ) {
+			return self::CONDITION_OVERRIDE;
+		}
+		$post_id = (int) $post_id;
+		if ( $post_id <= 0 ) {
+			return self::CONDITION_STORY_AWARE;
+		}
+		return 0 === $post_id % Newspack_Popups_Settings::get_control_interval()
+			? self::CONDITION_GENERIC_CONTROL
+			: self::CONDITION_STORY_AWARE;
+	}
+
+	/**
+	 * Swap the story's copy for the control copy. Copy only: the CTA must be
+	 * identical in both conditions or the test measures two things at once.
+	 *
+	 * @param array $parsed_block Parsed prompt card, already normalized.
+	 * @return array
+	 */
+	public static function apply_control( $parsed_block ) {
+		$body = trim( (string) get_option( Newspack_Popups_Settings::CONTROL_BODY_OPTION, '' ) );
+		if ( '' === $body ) {
+			return $parsed_block;
+		}
+		$copy_index = self::find_copy( $parsed_block );
+		if ( null !== $copy_index ) {
+			// Same reason as apply_override(): the instance's own copy is a pattern
+			// override resolved after this filter and would overwrite the swap.
+			unset( $parsed_block['innerBlocks'][ $copy_index ]['attrs']['metadata']['bindings'] );
+		}
+		return self::replace_copy( $parsed_block, $body );
 	}
 
 	/**

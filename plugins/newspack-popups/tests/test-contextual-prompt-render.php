@@ -86,6 +86,9 @@ class ContextualPromptRenderTest extends WP_UnitTestCase {
 		delete_option( 'newspack_contextual_prompts_override_label' );
 		delete_option( 'newspack_contextual_prompts_override_url' );
 		delete_option( self::PLATFORM_OPTION );
+		delete_option( Newspack_Popups_Settings::CONTROL_ENABLED_OPTION );
+		delete_option( Newspack_Popups_Settings::CONTROL_BODY_OPTION );
+		delete_option( Newspack_Popups_Settings::CONTROL_INTERVAL_OPTION );
 		if ( get_stylesheet() !== $this->original_stylesheet ) {
 			switch_theme( $this->original_stylesheet );
 		}
@@ -124,6 +127,49 @@ class ContextualPromptRenderTest extends WP_UnitTestCase {
 			$attrs['content'] = [ Newspack_Popups_Contextual_Prompt_Pattern::BOUND_NAME => [ 'content' => $copy ] ];
 		}
 		return do_blocks( '<!-- wp:block ' . wp_json_encode( $attrs ) . ' /-->' );
+	}
+
+	/**
+	 * Render an instance inside a post with the given id, so get_the_ID() is set
+	 * the way it is in the loop. The post id decides the condition.
+	 *
+	 * @param int         $post_id Post to render inside.
+	 * @param string|null $copy    Instance copy.
+	 * @return string Rendered markup.
+	 */
+	private function render_instance_in_post( $post_id, $copy = self::PER_POST_COPY ) {
+		global $post;
+		$post = get_post( $post_id ); // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
+		setup_postdata( $post );
+		$rendered = $this->render_instance( $copy );
+		wp_reset_postdata();
+		return $rendered;
+	}
+
+	/**
+	 * A published post whose id is, or is not, a multiple of the interval.
+	 *
+	 * @param int  $interval Interval.
+	 * @param bool $selected Whether the id should be a multiple.
+	 * @return int Post id.
+	 */
+	private function post_for_interval( $interval, $selected ) {
+		do {
+			$id = self::factory()->post->create( [ 'post_status' => 'publish' ] );
+		} while ( ( 0 === $id % $interval ) !== $selected );
+		return $id;
+	}
+
+	/**
+	 * Turn the control override on.
+	 *
+	 * @param string $body     Control copy.
+	 * @param int    $interval Every Nth story.
+	 */
+	private function set_control( $body = 'Support local news.', $interval = 3 ) {
+		update_option( Newspack_Popups_Settings::CONTROL_ENABLED_OPTION, '1' );
+		update_option( Newspack_Popups_Settings::CONTROL_BODY_OPTION, $body );
+		update_option( Newspack_Popups_Settings::CONTROL_INTERVAL_OPTION, (string) $interval );
 	}
 
 	/**
@@ -1314,5 +1360,99 @@ class ContextualPromptRenderTest extends WP_UnitTestCase {
 		$html = $this->render_instance( self::PER_POST_COPY );
 
 		$this->assertStringContainsString( self::PER_POST_COPY, $html );
+	}
+
+	/**
+	 * A selected story renders the control copy; its own copy is not written back.
+	 */
+	public function test_control_replaces_copy_on_a_selected_story() {
+		$this->set_platform( true );
+		$this->set_control( 'Support local news.', 3 );
+		$rendered = $this->render_instance_in_post( $this->post_for_interval( 3, true ) );
+		$this->assertStringContainsString( 'Support local news.', $rendered );
+		$this->assertStringNotContainsString( self::PER_POST_COPY, $rendered );
+	}
+
+	/**
+	 * A story that isn't selected renders its own copy.
+	 */
+	public function test_control_leaves_an_unselected_story_alone() {
+		$this->set_platform( true );
+		$this->set_control( 'Support local news.', 3 );
+		$rendered = $this->render_instance_in_post( $this->post_for_interval( 3, false ) );
+		$this->assertStringContainsString( self::PER_POST_COPY, $rendered );
+		$this->assertStringNotContainsString( 'Support local news.', $rendered );
+	}
+
+	/**
+	 * Copy only: the CTA is byte-identical between conditions, in both modes.
+	 */
+	public function test_control_leaves_the_cta_untouched() {
+		foreach ( [ true, false ] as $native ) {
+			$this->set_platform( $native );
+			$this->set_donor_landing_page();
+			$this->set_control( 'Support local news.', 3 );
+			$selected   = $this->render_instance_in_post( $this->post_for_interval( 3, true ) );
+			$unselected = $this->render_instance_in_post( $this->post_for_interval( 3, false ) );
+			// Strip the copy paragraph and the attributes that are expected to vary
+			// between two different posts (the post id) or between the two
+			// conditions by design (the condition itself) — what is left is the CTA,
+			// which apply_control() must leave untouched.
+			$cta = function ( $html ) {
+				preg_match( '#<p\b[^>]*>.*?</p>#s', $html, $m );
+				$html = str_replace( $m[0], '', $html );
+				return preg_replace( '#\sdata-newspack-cp-(post-id|condition)="[^"]*"#', '', $html );
+			};
+			$this->assertSame( $cta( $unselected ), $cta( $selected ), $native ? 'native' : 'offsite' );
+		}
+	}
+
+	/**
+	 * Turning the control off restores every story's own copy.
+	 */
+	public function test_control_off_restores_per_post_copy() {
+		$this->set_platform( true );
+		$this->set_control( 'Support local news.', 3 );
+		$post_id = $this->post_for_interval( 3, true );
+		$this->assertStringContainsString( 'Support local news.', $this->render_instance_in_post( $post_id ) );
+		update_option( Newspack_Popups_Settings::CONTROL_ENABLED_OPTION, '' );
+		$this->assertStringContainsString( self::PER_POST_COPY, $this->render_instance_in_post( $post_id ) );
+	}
+
+	/**
+	 * Enabled with empty copy is inactive: the card keeps its own copy rather
+	 * than being blanked and suppressed.
+	 */
+	public function test_control_with_empty_copy_renders_per_post_copy() {
+		$this->set_platform( true );
+		$this->set_control( '', 3 );
+		$rendered = $this->render_instance_in_post( $this->post_for_interval( 3, true ) );
+		$this->assertStringContainsString( self::PER_POST_COPY, $rendered );
+	}
+
+	/**
+	 * The fund-drive override wins when both are on.
+	 */
+	public function test_fund_drive_override_wins_over_control() {
+		$this->set_platform( true );
+		$this->set_override( 'Fund drive copy', 'form' );
+		$this->set_control( 'Support local news.', 3 );
+		$rendered = $this->render_instance_in_post( $this->post_for_interval( 3, true ) );
+		$this->assertStringContainsString( 'Fund drive copy', $rendered );
+		$this->assertStringNotContainsString( 'Support local news.', $rendered );
+	}
+
+	/**
+	 * Assignment is a function of the post id only.
+	 */
+	public function test_condition_is_stable_for_a_post() {
+		$this->set_control( 'Support local news.', 3 );
+		$selected   = $this->post_for_interval( 3, true );
+		$unselected = $this->post_for_interval( 3, false );
+		$this->assertSame( 'generic_control', Newspack_Popups_Contextual_Prompt_Render::get_condition( $selected ) );
+		$this->assertSame( 'generic_control', Newspack_Popups_Contextual_Prompt_Render::get_condition( $selected ) );
+		$this->assertSame( 'story_aware', Newspack_Popups_Contextual_Prompt_Render::get_condition( $unselected ) );
+		update_option( Newspack_Popups_Settings::CONTROL_ENABLED_OPTION, '' );
+		$this->assertSame( '', Newspack_Popups_Contextual_Prompt_Render::get_condition( $selected ) );
 	}
 }

@@ -62,6 +62,9 @@ class ContextualPromptAnalyticsTest extends WP_UnitTestCase {
 		delete_option( 'newspack_contextual_prompts_override_label' );
 		delete_option( 'newspack_contextual_prompts_override_url' );
 		delete_option( 'newspack_popups_donor_landing_page' );
+		delete_option( Newspack_Popups_Settings::CONTROL_ENABLED_OPTION );
+		delete_option( Newspack_Popups_Settings::CONTROL_BODY_OPTION );
+		delete_option( Newspack_Popups_Settings::CONTROL_INTERVAL_OPTION );
 		if ( WP_Block_Type_Registry::get_instance()->is_registered( 'newspack-blocks/donate' ) ) {
 			unregister_block_type( 'newspack-blocks/donate' );
 		}
@@ -459,5 +462,28 @@ class ContextualPromptAnalyticsTest extends WP_UnitTestCase {
 		update_option( 'newspack_contextual_prompts_override_url', 'https://example.com/drive/' );
 
 		$this->assertStringContainsString( 'data-newspack-cp-cta="button"', do_blocks( $this->instance_markup() ) );
+	}
+
+	/**
+	 * The condition is stamped while the control is on, and absent when it's off.
+	 */
+	public function test_render_stamps_the_condition() {
+		$this->set_platform( false );
+		$this->set_donor_landing_page();
+		$content = $this->content_with_prompt( 0, 3, $this->instance_markup() );
+
+		$this->assertStringNotContainsString( 'data-newspack-cp-condition', $this->render_post( $content ) );
+
+		update_option( Newspack_Popups_Settings::CONTROL_ENABLED_OPTION, '1' );
+		update_option( Newspack_Popups_Settings::CONTROL_BODY_OPTION, 'Support local news.' );
+		update_option( Newspack_Popups_Settings::CONTROL_INTERVAL_OPTION, '3' );
+		$rendered = $this->render_post( $content );
+		$this->assertMatchesRegularExpression( '/data-newspack-cp-condition="(story_aware|generic_control)"/', $rendered );
+
+		update_option( Newspack_Popups_Settings::OVERRIDE_ENABLED_OPTION, true );
+		update_option( Newspack_Popups_Settings::OVERRIDE_CTA_OPTION, 'button' );
+		update_option( 'newspack_contextual_prompts_override_body', 'Fund drive' );
+		update_option( 'newspack_contextual_prompts_override_url', 'https://example.com/drive/' );
+		$this->assertStringContainsString( 'data-newspack-cp-condition="override"', $this->render_post( $content ) );
 	}
 }
