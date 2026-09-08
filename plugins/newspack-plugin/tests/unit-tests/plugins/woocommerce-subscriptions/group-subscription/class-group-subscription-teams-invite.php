@@ -406,7 +406,7 @@ class Test_Group_Subscription_Teams_Invite extends WP_UnitTestCase {
 	/**
 	 * A linked team resolves through its own `_subscription_id`.
 	 *
-	 * migrate-teams reuses a team's linked subscription even when its customer is not
+	 * The migration reuses a team's linked subscription even when its customer is not
 	 * the team owner, adding the owner as a member so they keep access. Those are the
 	 * linked, paid teams, and nothing surfaces another customer's subscription to the
 	 * anonymous reader following the link, so requiring ownership would strand exactly
