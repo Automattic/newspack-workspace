@@ -751,4 +751,52 @@ class Newspack_Test_Subscriptions_Tiers extends WP_UnitTestCase {
 			has_filter( 'woocommerce_add_cart_item_data', [ Subscriptions_Tiers::class, 'prevent_switch_to_same_subscription_cart_item_data' ] )
 		);
 	}
+
+	/**
+	 * The picker prints a variation as "Plan (Annual)". WooCommerce's "Any
+	 * <attribute>" variation stores that attribute with an empty value, and
+	 * nothing should be printed for it: "Plan ()" reads as a broken name, and
+	 * a reader picking between it and "Plan (Annual)" cannot tell what they
+	 * are choosing.
+	 *
+	 * @dataProvider variation_attribute_titles
+	 *
+	 * @param array  $variation_attributes What the variation stores per attribute.
+	 * @param string $expected_title       The printed title.
+	 */
+	public function test_variation_title_prints_only_the_attributes_that_have_a_value( $variation_attributes, $expected_title ) {
+		$variation = wc_create_mock_product(
+			[
+				'id'                   => 103,
+				'type'                 => 'subscription_variation',
+				'name'                 => 'Membership Plan',
+				'parent_id'            => 100,
+				'variation_attributes' => $variation_attributes,
+			]
+		);
+
+		$get_product_title_method = new ReflectionMethod( Subscriptions_Tiers::class, 'get_product_title' );
+		$get_product_title_method->setAccessible( true );
+
+		$this->assertSame( $expected_title, $get_product_title_method->invoke( null, $variation, true ) );
+	}
+
+	/**
+	 * Attribute maps as a variation stores them, and the title each prints.
+	 *
+	 * @return array[]
+	 */
+	public function variation_attribute_titles() {
+		return [
+			'a populated attribute'           => [ [ 'attribute_billing-period' => 'Annual' ], 'Membership Plan (Annual)' ],
+			'an "Any" attribute'              => [ [ 'attribute_billing-period' => '' ], 'Membership Plan' ],
+			'an "Any" beside a populated one' => [
+				[
+					'attribute_billing-period' => '',
+					'attribute_tier'           => 'Premium',
+				],
+				'Membership Plan (Premium)',
+			],
+		];
+	}
 }
