@@ -158,12 +158,13 @@ class Test_Group_Subscription_Teams_Invite extends WP_UnitTestCase {
 	/**
 	 * Create a `wc_memberships_team` post.
 	 *
-	 * @param int    $owner_id         Team owner user ID (the post author).
-	 * @param string $registration_key The team's open registration key (the post password).
+	 * @param int      $owner_id               Team owner user ID (the post author).
+	 * @param string   $registration_key       The team's open registration key (the post password).
+	 * @param int|null $linked_subscription_id Subscription the team is linked to, as `_subscription_id`.
 	 *
 	 * @return int Team post ID.
 	 */
-	private function create_team( int $owner_id, string $registration_key = '' ): int {
+	private function create_team( int $owner_id, string $registration_key = '', ?int $linked_subscription_id = null ): int {
 		$team_id = wp_insert_post(
 			[
 				'post_type'     => 'wc_memberships_team',
@@ -175,6 +176,9 @@ class Test_Group_Subscription_Teams_Invite extends WP_UnitTestCase {
 		);
 		$this->assertNotWPError( $team_id, 'Fixture team creation should succeed.' );
 		$this->post_ids[] = $team_id;
+		if ( $linked_subscription_id ) {
+			update_post_meta( $team_id, '_subscription_id', $linked_subscription_id );
+		}
 		return $team_id;
 	}
 
@@ -400,6 +404,123 @@ class Test_Group_Subscription_Teams_Invite extends WP_UnitTestCase {
 	}
 
 	/**
+	 * A linked team resolves through its own `_subscription_id`.
+	 *
+	 * migrate-teams reuses a team's linked subscription even when its customer is not
+	 * the team owner, adding the owner as a member so they keep access. Those are the
+	 * linked, paid teams, and nothing surfaces another customer's subscription to the
+	 * anonymous reader following the link, so requiring ownership would strand exactly
+	 * the cohort a publisher is least willing to lose.
+	 */
+	public function test_a_team_resolves_when_its_subscription_belongs_to_another_customer() {
+		$team_owner   = $this->create_reader();
+		$bill_payer   = $this->create_reader();
+		$team_id      = $this->create_team( $team_owner );
+		$subscription = $this->create_migrated_group_subscription( $bill_payer, $team_id );
+		// A linked team: migrate-teams reused the subscription the bill payer owns and
+		// added the team owner as a member. The reader following the link is anonymous,
+		// so nothing surfaces another customer's subscription in the owner's list —
+		// the team's own _subscription_id is the only route to it.
+		update_post_meta( $team_id, '_subscription_id', $subscription->get_id() );
+		Group_Subscription::update_members( $subscription, [ $team_owner ] );
+		$this->create_team_invitation( $team_id, 'crossowner@test.com', 'tok-crossowner' );
+
+		$url = Group_Subscription_Teams_Invite::resolve_invitation_token( 'tok-crossowner' );
+
+		$this->assertIsString( $url, 'A team whose subscription another customer pays for must still resolve.' );
+		$this->assertSame( (string) $subscription->get_id(), $this->query_args_of( $url )['subscription'] );
+	}
+
+	/**
+	 * Cancelling is the control a manager reaches for before a reader has joined,
+	 * which is the window an unspent legacy link is live in. If cancelling does not
+	 * spend the source invitation, the next click mints a replacement and undoes it,
+	 * using a token the manager cannot see or reach.
+	 */
+	public function test_cancelling_the_invite_spends_the_source_invitation() {
+		add_action( 'newspack_group_subscription_invites_cancelled', [ Group_Subscription_Teams_Invite::class, 'close_cancelled_invitations' ], 10, 2 );
+
+		$owner         = $this->create_reader();
+		$team_id       = $this->create_team( $owner );
+		$subscription  = $this->create_migrated_group_subscription( $owner, $team_id );
+		$invitation_id = $this->create_team_invitation( $team_id, 'cancelled@test.com', 'tok-cancel' );
+
+		$this->assertIsString( Group_Subscription_Teams_Invite::resolve_invitation_token( 'tok-cancel' ), 'The first click mints an invite.' );
+
+		Group_Subscription_Invite::cancel_invite( $subscription, 'cancelled@test.com' );
+
+		$this->assertSame( 'wcmti-accepted', get_post( $invitation_id )->post_status, 'Cancelling must spend the source invitation.' );
+		$result = Group_Subscription_Teams_Invite::resolve_invitation_token( 'tok-cancel' );
+		$this->assertWPError( $result, 'A cancelled invite must not be re-minted by the next click.' );
+		$this->assertSame( Group_Subscription_Invite::RESULT_JOIN_TEAM_INVALID, $result->get_error_code() );
+	}
+
+	/**
+	 * An absent invite link means either "never had one" or "the owner disabled it",
+	 * and delete_link_invite() leaves nothing to tell them apart. Minting into the
+	 * second puts a revoked link back into circulation for everyone still holding an
+	 * old registration URL.
+	 */
+	public function test_a_disabled_invite_link_is_not_re_minted() {
+		$owner        = $this->create_reader();
+		$team_id      = $this->create_team( $owner, 'reg-key-revoke' );
+		$subscription = $this->create_migrated_group_subscription( $owner, $team_id );
+
+		$first = Group_Subscription_Teams_Invite::resolve_registration_token( 'reg-key-revoke' );
+		$this->assertIsString( $first, 'A group with no link yet gets one minted.' );
+
+		// The owner uses the Disable control.
+		Group_Subscription_Invite::delete_link_invite( $subscription, $owner );
+
+		$result = Group_Subscription_Teams_Invite::resolve_registration_token( 'reg-key-revoke' );
+		$this->assertWPError( $result, 'A revoked link must stay revoked.' );
+		$this->assertSame( Group_Subscription_Invite::RESULT_JOIN_TEAM_INVALID, $result->get_error_code() );
+		$this->assertNull( Group_Subscription_Invite::get_link_invite( $subscription, $owner ), 'Nothing should have been minted.' );
+	}
+
+	/**
+	 * The invite is bound to the address the Teams row carries, which is whatever a
+	 * manager typed years ago; the reader's account carries their own casing. The
+	 * acceptance handler compares the two, so a difference in case decides whether
+	 * the reader gets in or is told the invitation is for somebody else.
+	 */
+	public function test_a_case_mismatched_account_still_accepts() {
+		$owner        = $this->create_reader();
+		$team_id      = $this->create_team( $owner );
+		$subscription = $this->create_migrated_group_subscription( $owner, $team_id );
+		$reader       = $this->create_reader( 'reader@example.test' );
+		// The manager typed it with different casing when inviting through Teams.
+		$this->create_team_invitation( $team_id, 'Reader@Example.test', 'tok-mixedcase' );
+
+		$args = $this->query_args_of( Group_Subscription_Teams_Invite::resolve_invitation_token( 'tok-mixedcase' ) );
+		$this->assertSame( 'Reader@Example.test', $args['email'], 'The URL carries the address the invite was stored under.' );
+
+		// Accepted against the reader's own address rather than the invite's: that is
+		// the pair the acceptance path actually compares, and a strict comparison of it
+		// is what tells the reader their invitation belongs to someone else.
+		wp_set_current_user( $reader );
+		$this->assertTrue(
+			Group_Subscription_Invite::accept_invite( $subscription, $args['key'], 'reader@example.test' ),
+			'The reader must be admitted despite the casing difference.'
+		);
+		wp_set_current_user( 0 );
+	}
+
+	/**
+	 * The token is a bearer credential, and the SQL comparison runs under a
+	 * case-insensitive collation, so the exact match has to be settled in PHP.
+	 */
+	public function test_a_case_variant_token_does_not_resolve() {
+		$owner   = $this->create_reader();
+		$team_id = $this->create_team( $owner );
+		$this->create_migrated_group_subscription( $owner, $team_id );
+		$this->create_team_invitation( $team_id, 'exact@test.com', 'AbCdEf123456' );
+
+		$this->assertIsString( Group_Subscription_Teams_Invite::resolve_invitation_token( 'AbCdEf123456' ), 'The exact token resolves.' );
+		$this->assertWPError( Group_Subscription_Teams_Invite::resolve_invitation_token( 'abcdef123456' ), 'A case variant must not.' );
+	}
+
+	/**
 	 * A publisher who renamed the endpoint has that slug baked into every invitation
 	 * email already sent, so the route has to answer on the stored value.
 	 */
@@ -408,7 +529,13 @@ class Test_Group_Subscription_Teams_Invite extends WP_UnitTestCase {
 
 		update_option( 'woocommerce_myaccount_join_team_endpoint', 'join-my-team' );
 		$this->assertSame( 'join-my-team', Group_Subscription_Teams_Invite::get_endpoint() );
-		$this->assertArrayHasKey( 'join-my-team', Group_Subscription_Teams_Invite::add_query_var( [] ), 'The renamed slug is what gets registered.' );
+		// The slug is the registered value; the key is ours, so a renamed endpoint can
+		// never displace one of WooCommerce's own.
+		$this->assertSame(
+			[ Group_Subscription_Teams_Invite::QUERY_VAR => 'join-my-team' ],
+			Group_Subscription_Teams_Invite::add_query_var( [] ),
+			'The renamed slug is what gets registered, under our own key.'
+		);
 
 		// An empty stored value is not a slug; falling through to it would unregister
 		// the route rather than rename it.
@@ -426,9 +553,19 @@ class Test_Group_Subscription_Teams_Invite extends WP_UnitTestCase {
 
 		// WooCommerce's own endpoints are renameable too, so its stored value need not
 		// equal the key — and only a differing value makes an overwrite visible.
-		$query_vars = Group_Subscription_Teams_Invite::add_query_var( [ 'orders' => 'my-orders' ] );
-
-		$this->assertSame( [ 'orders' => 'my-orders' ], $query_vars, "WooCommerce's own query var must survive." );
+		// A collision by value, not by key: WooCommerce's endpoints are renameable too,
+		// and registering ours anyway would have this handler redirect away from the
+		// account page the guard exists to protect.
+		$this->assertSame(
+			[ 'orders' => 'orders' ],
+			Group_Subscription_Teams_Invite::add_query_var( [ 'orders' => 'orders' ] ),
+			'A slug WooCommerce already answers on must not be claimed.'
+		);
+		$this->assertSame(
+			[ 'downloads' => 'orders' ],
+			Group_Subscription_Teams_Invite::add_query_var( [ 'downloads' => 'orders' ] ),
+			'The collision is on the slug WooCommerce serves, whatever it is keyed under.'
+		);
 		delete_option( 'woocommerce_myaccount_join_team_endpoint' );
 	}
 
