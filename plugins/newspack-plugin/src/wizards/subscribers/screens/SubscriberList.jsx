@@ -260,7 +260,10 @@ export default function SubscriberList() {
 			{
 				id: 'lastSeen',
 				label: __( 'Last seen', 'newspack-plugin' ),
-				// Wired to reader activity in a later slice; hidden by default.
+				// The reader's most recent page view, from the activity record the site
+				// keeps for them — reading, not signing in, so a reader on a long-lived
+				// auth cookie who visits daily is last seen today and logging out does
+				// not erase it. Hidden by default; not server-sortable in this slice.
 				enableSorting: false,
 				render: ( { item } ) =>
 					item.lastSeen ? (
@@ -275,24 +278,60 @@ export default function SubscriberList() {
 			{
 				id: 'tags',
 				label: __( 'Tags', 'newspack-plugin' ),
-				// Populated in a later slice (NPPD-1753 PR 7); hidden by default.
+				// The labels stored on the reader here on the site. Hidden by default;
+				// display-only until there is a way to filter on them server-side.
 				enableSorting: false,
-				render: ( { item } ) => (
-					<HStack spacing={ 1 } justify="flex-start" wrap>
-						{ ( item.tags || [] ).map( t => (
-							<Badge key={ t } intent="none">
-								{ t }
-							</Badge>
-						) ) }
-					</HStack>
-				),
+				// The em-dash empty state matches every other column: an empty cell
+				// reads as a rendering fault rather than as "nothing to show".
+				render: ( { item } ) => {
+					const tags = item.tags || [];
+					if ( tags.length === 0 ) {
+						return <span>—</span>;
+					}
+					return (
+						<HStack spacing={ 1 } justify="flex-start" wrap>
+							{ tags.map( t => (
+								<Badge key={ t } intent="none">
+									{ t }
+								</Badge>
+							) ) }
+						</HStack>
+					);
+				},
 			},
 			{
 				id: 'newsletters',
 				label: __( 'Newsletters', 'newspack-plugin' ),
-				// Populated in a later slice (NPPD-1753 PR 7); hidden by default.
+				// The lists the site records this reader as subscribed to. Each arrives
+				// as `{ id, title }`, with a null title for a list the site holds no
+				// definition for — routinely the ESP's own IDs, which are never
+				// mirrored locally. The unresolved wording is composed here rather
+				// than server-side so the ID stays machine-readable for a future
+				// filter, and so this string sits in the same bundle as the column
+				// heading above it. Showing the bare ID is not an option: `abc123def`
+				// in a publisher-facing column reads as a newsletter name.
+				// Hidden by default; display-only until there is a server-side filter.
 				enableSorting: false,
-				render: ( { item } ) => <div>{ ( item.newsletters || [] ).join( ', ' ) }</div>,
+				render: ( { item } ) => {
+					const newsletters = item.newsletters || [];
+					if ( newsletters.length === 0 ) {
+						return <span>—</span>;
+					}
+					return (
+						<div>
+							{ newsletters
+								.map(
+									list =>
+										// Nullish, not falsy: unresolved is the null the endpoint
+										// sends, not every title JavaScript reads as empty.
+										list.title ??
+										/* translators: %s: the email service provider's identifier for a list the site has no local record of. */
+										sprintf( __( 'Unknown list (%s)', 'newspack-plugin' ), list.id )
+								)
+								.join( ', ' ) }
+						</div>
+					);
+				},
 			},
 		],
 		[ avatars ]

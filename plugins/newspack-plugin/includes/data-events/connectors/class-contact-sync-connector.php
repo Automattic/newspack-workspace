@@ -255,41 +255,32 @@ class Contact_Sync_Connector {
 	}
 
 	/**
-	 * Handle newsletter subscription update.
+	 * Handle a newsletter subscription change.
+	 *
+	 * The contact is rebuilt from stored data, so the "Newsletter Selection"
+	 * field comes from the legacy metadata class rather than from this handler.
+	 * The reader-data handler for the same event stores the lists that class
+	 * reads, and the queued sync runs at shutdown, after both handlers.
+	 *
+	 * That field is the only synced field a list change affects, so the sync
+	 * is skipped when it is not an enabled outgoing field. Under the newer
+	 * metadata schema it never is. On legacy-schema sites it is enabled by
+	 * default, and there every list change syncs the reader, including bulk
+	 * ones such as membership activation and the membership-tied subscribers
+	 * CLI, which fan out one upsert per reader. That is what keeps the field
+	 * current; a publisher who unticks the field pays nothing per change.
 	 *
 	 * @param int   $timestamp Timestamp.
 	 * @param array $data      Data.
 	 */
 	public static function newsletter_updated( $timestamp, $data ) {
-		if ( empty( $data['user_id'] ) || empty( $data['email'] ) || empty( $data['contact'] ) ) {
+		if ( empty( $data['user_id'] ) ) {
 			return;
 		}
-		$contact          = $data['contact'];
-		$subscribed_lists = \Newspack_Newsletters_Subscription::get_contact_lists( $data['email'] );
-		if ( is_wp_error( $subscribed_lists ) || ! is_array( $subscribed_lists ) ) {
+		if ( ! in_array( 'newsletter_selection', Sync_Metadata::get_raw_keys(), true ) ) {
 			return;
 		}
-		$lists = \Newspack_Newsletters_Subscription::get_lists();
-		if ( is_wp_error( $lists ) ) {
-			return;
-		}
-		$lists_names = [];
-		foreach ( $subscribed_lists as $subscribed_list_id ) {
-			foreach ( $lists as $list ) {
-				if ( $list['id'] === $subscribed_list_id ) {
-					$lists_names[] = $list['name'];
-				}
-			}
-		}
-
-		$contact['metadata'] = array_merge(
-			$contact['metadata'] ?? [],
-			[
-				'account'              => $data['user_id'],
-				'newsletter_selection' => implode( ', ', $lists_names ),
-			]
-		);
-		Contact_Sync::sync( $contact, 'Updating newsletter_selection field after a change in the subscription lists.' );
+		Contact_Sync::sync_contact( $data['user_id'], 'RAS Newsletter subscription updated' );
 	}
 
 	/**

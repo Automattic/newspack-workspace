@@ -2378,7 +2378,9 @@ class Content_Gate {
 	 *
 	 * @param \WP_Post $post Post object.
 	 *
-	 * @return string
+	 * @return string Rendered excerpt HTML. Already through the `newspack_gate_content`
+	 *                pipeline: callers must not apply that filter again, or blocks get
+	 *                re-rendered and shortcodes re-expanded over the rendered output.
 	 */
 	public static function get_restricted_post_excerpt( $post ) {
 		self::$is_gated = true;

@@ -573,6 +573,16 @@ class WC_Product {
 	public function get_description() {
 		return $this->data['description'] ?? '';
 	}
+	/**
+	 * Keyed by attribute slug, as WooCommerce stores it. An "Any <attribute>"
+	 * variation keeps the key with an empty value rather than dropping it.
+	 */
+	public function get_variation_attributes() {
+		return $this->data['variation_attributes'] ?? [];
+	}
+	public function get_category_ids() {
+		return $this->data['category_ids'] ?? [];
+	}
 	public function get_status() {
 		return $this->data['status'] ?? 'publish';
 	}
@@ -804,6 +814,9 @@ class WC_Order {
 	}
 	public function get_id() {
 		return $this->data['id'];
+	}
+	public function get_edit_order_url() {
+		return admin_url( 'post.php?post=' . $this->get_id() . '&action=edit' );
 	}
 	public function get_customer_id() {
 		return $this->data['customer_id'];
@@ -1781,12 +1794,9 @@ function wc_get_is_paid_statuses() {
 	return [ 'processing', 'completed' ];
 }
 function wc_get_orders( $args ) {
-	global $orders_database;
-	// For simplicity, this mock will only return a single page of results.
-	if ( isset( $args['page'] ) && $args['page'] > 1 ) {
-		return [];
-	}
-	$orders = $orders_database;
+	global $orders_database, $wc_mocks_get_orders_calls, $wc_mocks_orders_ignore_page;
+	$wc_mocks_get_orders_calls = (int) $wc_mocks_get_orders_calls + 1;
+	$orders                    = $orders_database;
 	if ( isset( $args['customer_id'] ) ) {
 		// Filter by customer.
 		$orders = array_filter(
@@ -1857,7 +1867,11 @@ function wc_get_orders( $args ) {
 		}
 	);
 	if ( isset( $args['limit'] ) && (int) $args['limit'] > 0 ) {
-		$orders = array_slice( $orders, 0, (int) $args['limit'] );
+		// Real WC pages with `page` as a 1-based offset into the limited set. A test
+		// can set $wc_mocks_orders_ignore_page to model a store (or a filter on the
+		// query args) that hands back the same rows for every page.
+		$page   = ( empty( $wc_mocks_orders_ignore_page ) && isset( $args['page'] ) ) ? max( 1, (int) $args['page'] ) : 1;
+		$orders = array_slice( $orders, ( $page - 1 ) * (int) $args['limit'], (int) $args['limit'] );
 	}
 	return $orders;
 }

@@ -7,6 +7,8 @@
  */
 import { __, sprintf } from '@wordpress/i18n';
 import { useState, useEffect } from '@wordpress/element';
+import { Notice } from '@wordpress/components';
+import { speak } from '@wordpress/a11y';
 
 /**
  * Internal dependencies.
@@ -16,7 +18,7 @@ import { ACCOUNTS } from './constants';
 import WizardsTab from '../../../../wizards-tab';
 import VerificationCodes from './verification-codes';
 import WizardSection from '../../../../wizards-section';
-import { Button, Notice } from '../../../../../../packages/components/src';
+import { Button } from '../../../../../../packages/components/src';
 import WizardsActionCard from '../../../../wizards-action-card';
 import useFieldsValidation from '../../../../hooks/use-fields-validation';
 import { useWizardApiFetch } from '../../../../hooks/use-wizard-api-fetch';
@@ -24,7 +26,7 @@ import { useWizardApiFetch } from '../../../../hooks/use-wizard-api-fetch';
 const PATH = '/newspack/v1/wizard/newspack-settings/seo';
 
 function Seo() {
-	const { wizardApiFetch, isFetching } = useWizardApiFetch( 'newspack-settings/seo' );
+	const { wizardApiFetch, isFetching, errorMessage, resetError } = useWizardApiFetch( 'newspack-settings/seo' );
 
 	const [ data, setData ] = useState< SeoData >( {
 		under_construction: false,
@@ -44,11 +46,26 @@ function Seo() {
 
 	const codesValidation = useFieldsValidation< SeoData[ 'verification' ] >(
 		[
-			[ 'google', 'isId', { message: __( 'Invalid Google verification code!', 'newspack-plugin' ) } ],
+			[
+				'google',
+				'isId',
+				{
+					message: __(
+						'Google verification codes use only letters, numbers, hyphens, and underscores. Copy just the code from Search Console, not the full meta tag.',
+						'newspack-plugin'
+					),
+				},
+			],
 			[
 				'bing',
 				/** JS version of [WPSEO PHP regex](https://github.com/Yoast/wordpress-seo/blob/trunk/inc/options/class-wpseo-option.php#L313) */
-				v => ( /^[A-Fa-f0-9_-]*$/.test( v ) ? '' : __( 'Invalid Bing verification code!', 'newspack-plugin' ) ),
+				v =>
+					/^[A-Fa-f0-9_-]*$/.test( v )
+						? ''
+						: __(
+								'Bing verification codes use only the letters A-F, numbers, hyphens, and underscores. Copy just the code from Bing Webmaster Tools, not the full meta tag.',
+								'newspack-plugin'
+						  ),
 			],
 		],
 		data.verification
@@ -89,11 +106,14 @@ function Seo() {
 	}
 
 	function post() {
-		const isVerificationCodesValid = codesValidation.isInputsValid();
-		const isAccountsValid = accountsValidation.isInputsValid();
-		if ( ! isVerificationCodesValid || ! isAccountsValid ) {
+		// `speak` empties the live region before each write, so two notices mounting in one
+		// commit would report only the last. Announcing here also repeats an unchanged message.
+		const validationErrors = [ codesValidation.validateInputs(), accountsValidation.validateInputs() ].filter( Boolean );
+		if ( validationErrors.length ) {
+			speak( validationErrors.join( ' ' ), 'assertive' );
 			return;
 		}
+		resetError();
 		wizardApiFetch(
 			{
 				path: PATH,
@@ -108,18 +128,31 @@ function Seo() {
 	}
 	return (
 		<WizardsTab title={ __( 'SEO', 'newspack-plugin' ) } className={ isFetching ? 'is-fetching' : '' }>
+			{ errorMessage && (
+				<Notice status="error" isDismissible={ false } politeness="polite">
+					{ errorMessage }
+				</Notice>
+			) }
 			<WizardSection
 				title={ __( 'Webmaster Tools', 'newspack-plugin' ) }
 				description={ __( 'Add verification meta tags to your site', 'newspack-plugin' ) }
 			>
-				{ codesValidation.errorMessage && <Notice isError noticeText={ codesValidation.errorMessage } /> }
+				{ codesValidation.errorMessage && (
+					<Notice status="error" isDismissible={ false } spokenMessage="">
+						{ codesValidation.errorMessage }
+					</Notice>
+				) }
 				<VerificationCodes setData={ verification => setData( { ...data, verification } ) } data={ data.verification } />
 			</WizardSection>
 			<WizardSection
 				title={ __( 'Social Accounts', 'newspack-plugin' ) }
 				description={ __( 'Let search engines know which social profiles are associated to your site', 'newspack-plugin' ) }
 			>
-				{ accountsValidation.errorMessage && <Notice isError noticeText={ accountsValidation.errorMessage } /> }
+				{ accountsValidation.errorMessage && (
+					<Notice status="error" isDismissible={ false } spokenMessage="">
+						{ accountsValidation.errorMessage }
+					</Notice>
+				) }
 				<Accounts setData={ urls => setData( { ...data, urls } ) } data={ data.urls } />
 			</WizardSection>
 			<WizardSection>
