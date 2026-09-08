@@ -256,7 +256,7 @@ domReady( function () {
 		} );
 	} );
 
-	// Rename group: the pencil button in the header opens a modal; saving POSTs the new name and
+	// Rename group: the "Rename" action in the header (More menu at large viewports, plain button at small ones) opens a modal; saving POSTs the new name and
 	// updates the header (and any other) group-name element in place.
 	const renameModal = document.getElementById( 'newspack-my-account__group_subscription--rename' );
 	const renameForm = renameModal?.querySelector( '.newspack-my-account__group--rename-form' );
