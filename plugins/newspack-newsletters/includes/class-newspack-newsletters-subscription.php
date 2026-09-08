@@ -1443,10 +1443,11 @@ class Newspack_Newsletters_Subscription {
 					</ul>
 				<?php endif; ?>
 				<?php
-				if ( is_wp_error( $user_lists ) ) :
+				if ( is_wp_error( $list_config ) || is_wp_error( $user_lists ) ) :
 					// The form pre-checks the lists the reader is on. With nothing to
 					// check it would read as "subscribed to nothing", which is not what
-					// a failed read means, so it is not shown.
+					// a failed read means, so it is not shown. The lists on offer come
+					// through a filter that may answer an error as well.
 					?>
 					<ul class="woocommerce-error" role="alert">
 						<li><?php esc_html_e( 'Newsletter subscriptions could not be loaded. Please try again later.', 'newspack-newsletters' ); ?></li>

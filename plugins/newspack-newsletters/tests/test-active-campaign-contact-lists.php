@@ -317,4 +317,29 @@ class ActiveCampaignContactListsTest extends WP_UnitTestCase {
 
 		$this->assertWPError( Newspack_Newsletters_Contacts::update_lists( self::CONTACT_EMAIL, [ '3' ], 'Test' ) );
 	}
+
+	/**
+	 * The lists the My Account page offers pass through a filter documented as
+	 * answering an error as well, and an error there is a failed load like a
+	 * failed lists read: the notice is shown and the form is not.
+	 */
+	public function test_my_account_treats_an_unreadable_lists_config_as_a_failed_load() {
+		$user_id = self::factory()->user->create( [ 'user_email' => self::CONTACT_EMAIL ] );
+		update_user_meta( $user_id, Newspack_Newsletters_Subscription::EMAIL_VERIFIED_META, [ self::CONTACT_EMAIL ] );
+		wp_set_current_user( $user_id );
+		$fail = function () {
+			return new WP_Error( 'blocked', 'blocked' );
+		};
+		add_filter( 'newspack_newsletters_manage_newsletters_available_lists', $fail );
+
+		ob_start();
+		Newspack_Newsletters_Subscription::endpoint_content();
+		$output = ob_get_clean();
+
+		remove_filter( 'newspack_newsletters_manage_newsletters_available_lists', $fail );
+		wp_set_current_user( 0 );
+
+		$this->assertStringContainsString( 'could not be loaded', $output );
+		$this->assertStringNotContainsString( 'newspack-newsletters__lists', $output );
+	}
 }
