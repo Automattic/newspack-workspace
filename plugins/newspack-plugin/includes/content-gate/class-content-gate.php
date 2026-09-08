@@ -87,7 +87,16 @@ class Content_Gate {
 	 * gate HTML. Held separately so the teaser can be handed to the remaining
 	 * 'the_content' filters without exposing the gate HTML to them.
 	 *
-	 * @var array<int, array{teaser: string, gate: string}>
+	 * `source` records which render wrote the entry, and the two paths do not
+	 * produce interchangeable strings: the article render answers to the reader
+	 * making the request, a listing answers to the anonymous one and carries no
+	 * gate. {@see self::get_teaser_outside_article()} therefore takes only a
+	 * listing's own entry, so a card on an article's own page cannot repeat the
+	 * teaser that page built for its reader into a render the block cache serves
+	 * to whoever comes next; and a listing never overwrites an article entry,
+	 * which carries the gate that page still has to render.
+	 *
+	 * @var array<int, array{teaser: string, gate: string, source: string}>
 	 */
 	private static array $restricted_content = [];
 
@@ -103,10 +112,23 @@ class Content_Gate {
 	/**
 	 * Whether a listing teaser is being built right now.
 	 *
-	 * Read by {@see Block_Visibility::filter_render_block()}, which evaluates a
-	 * block's visibility against the anonymous reader while this is set. The
-	 * teaser is cached with no reader dimension, so the render has to answer to
-	 * the same reader the withholding decision does.
+	 * The teaser is cached with no reader dimension and served to everyone for an
+	 * hour, so every question asked while it is being built has to answer to the
+	 * anonymous reader. Four places read this flag to do that:
+	 *
+	 * - {@see Block_Visibility::filter_render_block()} evaluates a block's
+	 *   visibility as user 0 and skips the admin bypass.
+	 * - {@see Block_Visibility::evaluation_cache_suffix()} keeps those evaluations
+	 *   out of the entries the article page cached under the same user 0.
+	 * - {@see Access_Rules::evaluate_anonymous_rules()} declines the anonymous
+	 *   bypass, which the `institution` rule grants on an IP match.
+	 * - {@see Content_Restriction_Control::get_gate_memo_key()} keeps the resolved
+	 *   gate and layout out of the article page's memo slot, for the same reason.
+	 *
+	 * A caller that clears the flag mid-build gets all four back at once: the
+	 * memo lands under the article page's key, and the institution bypass comes
+	 * back on inside a string every visitor is then served — an on-campus
+	 * visitor's view of the post published to the public.
 	 *
 	 * @var bool
 	 */
@@ -167,6 +189,18 @@ class Content_Gate {
 	 * {@see self::get_teaser_outside_article()}.
 	 */
 	const WITHHELD_TEASER_CACHE_GROUP = 'newspack_withheld_teasers';
+
+	/**
+	 * Origin of a {@see self::$restricted_content} entry written by the article
+	 * render: a teaser and gate built for the reader making the request.
+	 */
+	const STAGED_BY_ARTICLE = 'article';
+
+	/**
+	 * Origin of a {@see self::$restricted_content} entry written by a listing: a
+	 * teaser built for the anonymous reader, and no gate.
+	 */
+	const STAGED_BY_LISTING = 'listing';
 
 	/**
 	 * Whether the overlay gate markup has been output in this execution.
@@ -856,6 +890,7 @@ class Content_Gate {
 		self::$restricted_content[ $post->ID ] = [
 			'teaser' => $content,
 			'gate'   => $gate_html,
+			'source' => self::STAGED_BY_ARTICLE,
 		];
 	}
 
@@ -882,34 +917,37 @@ class Content_Gate {
 		// covers a classic theme's pre-loop widget areas, where the listing renders
 		// first.
 
-		// A password-protected post is core's to withhold: the_content() is handed
-		// the password form, and substituting a teaser for it would publish the
-		// free opening of a post core meant to show nothing of, and drop the form
-		// with it. self::can_access_password_content() yields to core on the REST
-		// path for the same reason.
-		if ( post_password_required( $post ) ) {
+		// Always the listing teaser, never whatever is staged. A listing below the
+		// article lists the article too, and the entry standing there is then the
+		// article render's, built for the reader making the request — handing it
+		// back would repeat that reader's view of the post in a card the block
+		// cache serves to whoever comes next.
+		$teaser = self::get_teaser_outside_article( $post );
+		if ( null === $teaser ) {
 			return;
 		}
 
-		// Stage once, substitute every time. One post can pass through several
-		// loops in a request — a Query Loop and a sidebar listing over the same
-		// posts — and every loop is handed its own WP_Post instance, so an early
-		// return on the staged entry would leave the later instances carrying the
-		// full body. A block that builds its own excerpt from post_content, as
-		// newspack-blocks' Homepage Posts does, then publishes it.
-		if ( ! isset( self::$restricted_content[ $post->ID ] ) ) {
-			$teaser = self::get_teaser_outside_article( $post );
-			if ( null === $teaser ) {
-				return;
-			}
-
-			// Staged here rather than in get_teaser_outside_article(): this map is what
-			// replace_restricted_content() substitutes from, so writing it is a claim
-			// that this post is being rendered. Asking for a post's teaser — which an
-			// excerpt does — must not make that claim on its behalf.
+		// Substitute on every pass. One post can pass through several loops in a
+		// request — a Query Loop and a sidebar listing over the same posts — and
+		// every loop is handed its own WP_Post instance, so leaving the later
+		// instances to a staged entry would leave them carrying the full body. A
+		// block that builds its own excerpt from post_content, as newspack-blocks'
+		// Homepage Posts does, then publishes it.
+		//
+		// Staged here rather than in get_teaser_outside_article(): this map is what
+		// replace_restricted_content() substitutes from, so writing it is a claim
+		// that this post is being rendered. Asking for a post's teaser — which an
+		// excerpt does — must not make that claim on its behalf. An article entry
+		// already in the slot stands: it carries the gate that page still has to
+		// render, on this pass and on any later one. A listing entry is rewritten,
+		// which is what lets the teaser a nested loop over this post staged from
+		// the claimed slot — empty, while the build it re-entered was still
+		// running — give way to the finished string.
+		if ( self::STAGED_BY_ARTICLE !== ( self::$restricted_content[ $post->ID ]['source'] ?? '' ) ) {
 			self::$restricted_content[ $post->ID ] = [
 				'teaser' => $teaser,
 				'gate'   => '',
+				'source' => self::STAGED_BY_LISTING,
 			];
 		}
 
@@ -917,7 +955,7 @@ class Content_Gate {
 		// excerpt from post_content — now the teaser — so the trimming and the
 		// "read more" suffix stay core's to decide; non-empty, it is the author's
 		// own words about a post they chose to gate, and survives.
-		$post->post_content = self::$restricted_content[ $post->ID ]['teaser'];
+		$post->post_content = $teaser;
 	}
 
 	/**
@@ -947,7 +985,24 @@ class Content_Gate {
 		if ( ! $post instanceof \WP_Post ) {
 			return null;
 		}
-		if ( isset( self::$restricted_content[ $post->ID ] ) ) {
+
+		// A password-protected post is core's to withhold: the_content() is handed
+		// the password form, and substituting a teaser for it would publish the
+		// free opening of a post core meant to show nothing of, and drop the form
+		// with it. self::can_access_password_content() yields to core on the REST
+		// path for the same reason. Guarded here rather than at each caller so that
+		// a direct one — newspack-listings builds its listing excerpts from this —
+		// cannot put the opening words of a protected post into the shared teaser
+		// cache.
+		if ( post_password_required( $post ) ) {
+			return null;
+		}
+
+		// Only a listing's own entry. The article render writes this map too, and
+		// its teaser answers to the reader that page was built for: a block that
+		// varies by entitlement inside the free opening reaches it, and the cache
+		// below has no reader dimension to keep it in.
+		if ( self::STAGED_BY_LISTING === ( self::$restricted_content[ $post->ID ]['source'] ?? '' ) ) {
 			return self::$restricted_content[ $post->ID ]['teaser'];
 		}
 		if ( isset( self::$withheld_teasers[ $post->ID ] ) ) {
@@ -1044,8 +1099,10 @@ class Content_Gate {
 	/**
 	 * Whether the render in progress is a listing teaser.
 	 *
-	 * {@see Block_Visibility::filter_render_block()} asks, and answers to the
-	 * anonymous reader while this is true.
+	 * Block visibility, its evaluation cache, the anonymous access rules and the
+	 * gate memo key all answer to the anonymous reader while this is true. See
+	 * {@see self::$is_listing_context} for the four callers and for what a caller
+	 * clearing it mid-build gives away.
 	 *
 	 * @return bool
 	 */
@@ -1194,6 +1251,17 @@ class Content_Gate {
 			return $content;
 		}
 
+		// A listing entry is answered from as well, and deliberately: it is the
+		// only thing withholding the body once the substitution filter is gone,
+		// because core builds the page data from the row before `the_post` fires
+		// and hands this chain the full post whatever a loop did to its WP_Post.
+		// The cost is a reader entitled to the queried post, on a page whose
+		// listing block skipped wp_reset_postdata() so that nothing cleared the
+		// entry: their own body pass is answered with the anonymous teaser. Serving
+		// the body in hand instead would publish the gated post to everyone on the
+		// far more common path, and neither reader of this map can tell the
+		// article's own pass from a card listing that same article.
+		//
 		// The teaser substitution did not run for this pass, most likely because
 		// another plugin removed or short-circuited the filter. Core hands this
 		// chain the unrestricted post body, so return the stored gated markup

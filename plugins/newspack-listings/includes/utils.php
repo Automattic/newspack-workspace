@@ -233,7 +233,16 @@ function get_listing_excerpt( $post, $excerpt_length = null ) {
 	// fires for them and nothing has withheld the body by the time it is read
 	// here.
 	$excerpt = get_content_gate_teaser( $post );
-	$excerpt = null === $excerpt ? $post->post_content : $excerpt;
+	if ( null === $excerpt ) {
+		// A password-protected post is core's to withhold, and the fallback below
+		// would publish its opening words. Core answers get_the_excerpt() with a
+		// notice; the form is the more useful answer here, because it is what lets
+		// the reader open the listing they are looking at.
+		if ( post_password_required( $post ) ) {
+			return $the_dates . get_the_password_form( $post );
+		}
+		$excerpt = $post->post_content;
+	}
 	$excerpt = strip_shortcodes( $excerpt );
 	// Strip blocks the content gate withholds from the public before
 	// excerpt_remove_blocks() flattens the block structure.

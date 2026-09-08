@@ -430,10 +430,11 @@ class Access_Rules {
 	 */
 	public static function evaluate_anonymous_rules( $access_rules ) {
 		// A listing teaser is built once and served to every reader for an hour, so
-		// a grant that answers from the current request is not the visitor who
-		// warmed it to spend on everyone after them. The one anonymous-capable rule
-		// (`institution`) matches on IP once the visitor carries the
-		// institutional-access cookie. The article page still honours it.
+		// a grant that reads the current request belongs to the visitor who warmed
+		// the cache, and would be spent on everyone served after them. The one
+		// anonymous-capable rule (`institution`) matches on IP once the visitor
+		// carries the institutional-access cookie. The article page still honours
+		// it.
 		if ( Content_Gate::is_listing_context() ) {
 			return false;
 		}

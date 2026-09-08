@@ -70,8 +70,9 @@ class Content_Gate_Excerpt {
 		// The REST stand-down covers a read, not a render. The posts controller's
 		// shape is a read: it sets each item up with setup_postdata() and serves
 		// it, staging nothing. A route running a real loop — newspack-blocks'
-		// load-more endpoint is one — renders like a page, and restrict_post() has
-		// already staged the teaser for the post in hand. Answer for that post
+		// load-more endpoint is one — renders like a page, and
+		// Content_Gate::withhold_post_in_loop(), which restrict_post() hands the
+		// loop's posts to, has already staged the teaser. Answer for that post
 		// rather than leaving its excerpt to the substitution filter further down
 		// the content chain, which a plugin can remove.
 		$rest_read = Content_Gate::is_dispatching_rest() && ! Content_Gate::has_staged_restriction( $resolved->ID );
