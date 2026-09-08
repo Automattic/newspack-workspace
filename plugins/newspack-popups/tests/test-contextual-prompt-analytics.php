@@ -19,12 +19,6 @@
  */
 class ContextualPromptAnalyticsTest extends WP_UnitTestCase {
 	/**
-	 * The donate block's own wrapper class, which is what marks a rendered card
-	 * as carrying the native form.
-	 */
-	const DONATE_STUB_MARKUP = '<div class="wpbnbd"><button type="submit">Donate</button></div>';
-
-	/**
 	 * Copy an instance carries as its own pattern override.
 	 */
 	const INSTANCE_COPY = 'Ask.';
@@ -42,7 +36,9 @@ class ContextualPromptAnalyticsTest extends WP_UnitTestCase {
 				'newspack-blocks/donate',
 				[
 					'render_callback' => function () {
-						return self::DONATE_STUB_MARKUP;
+						ob_start();
+						do_action( 'newspack_blocks_donate_before_form_fields' );
+						return '<div class="wpbnbd"><form>' . ob_get_clean() . '<button type="submit">Donate</button></form></div>';
 					},
 				]
 			);
@@ -485,5 +481,78 @@ class ContextualPromptAnalyticsTest extends WP_UnitTestCase {
 		update_option( 'newspack_contextual_prompts_override_body', 'Fund drive' );
 		update_option( 'newspack_contextual_prompts_override_url', 'https://example.com/drive/' );
 		$this->assertStringContainsString( 'data-newspack-cp-condition="override"', $this->render_post( $content ) );
+	}
+
+	/**
+	 * Native mode: the donate form inside the card carries the source triple,
+	 * so the donation can be attributed to this story, placement and condition.
+	 */
+	public function test_donate_form_inside_the_card_carries_the_source() {
+		$this->set_platform( true );
+		update_option( Newspack_Popups_Settings::CONTROL_ENABLED_OPTION, '1' );
+		update_option( Newspack_Popups_Settings::CONTROL_BODY_OPTION, 'Support local news.' );
+		$rendered = $this->render_post( $this->content_with_prompt( 0, 3, $this->instance_markup() ) );
+		$this->assertMatchesRegularExpression( '/name="contextual_prompt_post_id"[^>]*value="\d+"/', $rendered );
+		$this->assertMatchesRegularExpression( '/name="contextual_prompt_placement"[^>]*value="top"/', $rendered );
+		$this->assertMatchesRegularExpression( '/name="contextual_prompt_condition"[^>]*value="(story_aware|generic_control)"/', $rendered );
+	}
+
+	/**
+	 * A donate form outside any card gets nothing, unless the request arrived
+	 * from a plain-button card (landing page), in which case the URL's triple is
+	 * forwarded so the same attribution path applies.
+	 */
+	public function test_donate_form_outside_the_card_forwards_a_request_source_only() {
+		$this->set_platform( true );
+		$this->assertStringNotContainsString( 'contextual_prompt_post_id', do_blocks( '<!-- wp:newspack-blocks/donate /-->' ) );
+
+		$post_id                             = self::factory()->post->create( [ 'post_status' => 'publish' ] );
+		$_GET['contextual_prompt_post_id']   = (string) $post_id;
+		$_GET['contextual_prompt_placement'] = 'end';
+		$_GET['contextual_prompt_condition'] = 'generic_control';
+		$rendered                            = do_blocks( '<!-- wp:newspack-blocks/donate /-->' );
+		unset( $_GET['contextual_prompt_post_id'], $_GET['contextual_prompt_placement'], $_GET['contextual_prompt_condition'] );
+		$this->assertMatchesRegularExpression( '/name="contextual_prompt_post_id"[^>]*value="' . $post_id . '"/', $rendered );
+		$this->assertMatchesRegularExpression( '/name="contextual_prompt_condition"[^>]*value="generic_control"/', $rendered );
+	}
+
+	/**
+	 * Junk in the URL is not forwarded.
+	 */
+	public function test_request_source_is_validated_before_forwarding() {
+		$this->set_platform( true );
+		$_GET['contextual_prompt_post_id']   = 'abc';
+		$_GET['contextual_prompt_placement'] = 'sideways';
+		$_GET['contextual_prompt_condition'] = '<script>';
+		$rendered                            = do_blocks( '<!-- wp:newspack-blocks/donate /-->' );
+		unset( $_GET['contextual_prompt_post_id'], $_GET['contextual_prompt_placement'], $_GET['contextual_prompt_condition'] );
+		$this->assertStringNotContainsString( 'contextual_prompt_', $rendered );
+	}
+
+	/**
+	 * Plain-button mode: the button destination carries the triple at render.
+	 * The stored pattern's button does not, so nothing is baked into content.
+	 *
+	 * A post whose only top-level block is the card buckets as 'top'
+	 * (bucket_placement() special-cases a single block), not 'end'.
+	 */
+	public function test_button_href_carries_the_source_at_render_only() {
+		$this->set_platform( false );
+		$landing = $this->set_donor_landing_page();
+		$post_id = self::factory()->post->create(
+			[
+				'post_status'  => 'publish',
+				'post_content' => $this->content_with_prompt( 0, 0, $this->instance_markup() ),
+			]
+		);
+		$query = new WP_Query( [ 'p' => $post_id ] );
+		$query->the_post();
+		$rendered = do_blocks( get_the_content() );
+		wp_reset_postdata();
+
+		$this->assertStringContainsString( 'contextual_prompt_post_id=' . $post_id, $rendered );
+		$this->assertStringContainsString( 'contextual_prompt_placement=top', $rendered );
+		$this->assertStringNotContainsString( 'contextual_prompt_post_id', get_post( Newspack_Popups_Contextual_Prompt_Pattern::get_pattern_id() )->post_content );
+		$this->assertStringContainsString( esc_url( $landing ), html_entity_decode( $rendered ) );
 	}
 }

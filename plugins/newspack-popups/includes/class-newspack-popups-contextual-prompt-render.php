@@ -39,6 +39,18 @@ final class Newspack_Popups_Contextual_Prompt_Render {
 	const CONDITIONS                = [ self::CONDITION_STORY_AWARE, self::CONDITION_GENERIC_CONTROL, self::CONDITION_OVERRIDE ];
 
 	/**
+	 * The source triple a donation carries back to the prompt that drove it.
+	 * Same names as form fields, cart item keys, checkout payload keys and GA4
+	 * params; order meta prefixes them with `_newspack_`.
+	 */
+	const SOURCE_KEYS = [ 'contextual_prompt_post_id', 'contextual_prompt_placement', 'contextual_prompt_condition' ];
+
+	/**
+	 * Placement values get_placement() can return.
+	 */
+	const PLACEMENTS = [ 'top', 'mid', 'end', 'unknown' ];
+
+	/**
 	 * Whether the block being rendered came from the pattern.
 	 *
 	 * @var bool
@@ -63,6 +75,7 @@ final class Newspack_Popups_Contextual_Prompt_Render {
 		add_filter( 'render_block_core/block', [ __CLASS__, 'close_instance_window' ], 999, 2 );
 		add_action( 'wp_enqueue_scripts', [ __CLASS__, 'enqueue_layout_styles' ] );
 		add_filter( 'block_editor_settings_all', [ __CLASS__, 'add_editor_layout_styles' ] );
+		add_action( 'newspack_blocks_donate_before_form_fields', [ __CLASS__, 'print_form_hidden_fields' ] );
 	}
 
 	/**
@@ -518,7 +531,7 @@ final class Newspack_Popups_Contextual_Prompt_Render {
 			$parsed_block = self::apply_control( $parsed_block );
 		}
 
-		return $parsed_block;
+		return self::tag_button_destination( $parsed_block );
 	}
 
 	/**
@@ -790,6 +803,116 @@ final class Newspack_Popups_Contextual_Prompt_Render {
 			++$seen;
 		}
 
+		return $parsed_block;
+	}
+
+	/**
+	 * The source triple for a story.
+	 *
+	 * @param int $post_id The story.
+	 * @return array Keyed by SOURCE_KEYS.
+	 */
+	public static function get_source( $post_id ) {
+		$post_id = (int) $post_id;
+		return [
+			'contextual_prompt_post_id'   => $post_id,
+			'contextual_prompt_placement' => self::get_placement( $post_id ),
+			'contextual_prompt_condition' => self::get_condition( $post_id ),
+		];
+	}
+
+	/**
+	 * Validate a source triple from an untrusted carrier (URL, form, cart).
+	 * Insights groups by these values, so a junk id invents a story rather than
+	 * failing to attribute (the same reason gate ids are validated, NPPD-1887).
+	 *
+	 * @param array $raw Candidate values keyed by SOURCE_KEYS.
+	 * @return array Valid subset; empty unless the post id is a published post.
+	 */
+	public static function validate_source( $raw ) {
+		$post_id = absint( $raw['contextual_prompt_post_id'] ?? 0 );
+		if ( ! $post_id || 'publish' !== get_post_status( $post_id ) ) {
+			return [];
+		}
+		$source    = [ 'contextual_prompt_post_id' => $post_id ];
+		$placement = (string) ( $raw['contextual_prompt_placement'] ?? '' );
+		if ( in_array( $placement, self::PLACEMENTS, true ) ) {
+			$source['contextual_prompt_placement'] = $placement;
+		}
+		$condition = (string) ( $raw['contextual_prompt_condition'] ?? '' );
+		if ( in_array( $condition, self::CONDITIONS, true ) ) {
+			$source['contextual_prompt_condition'] = $condition;
+		}
+		return $source;
+	}
+
+	/**
+	 * Print the source triple as hidden inputs in a donate form. Inside a card,
+	 * the values are this story's. Outside one, a request carrying the triple
+	 * (a plain-button card sent the reader to the landing page) is forwarded so
+	 * both CTA modes attribute the same way. Any other donate form gets nothing.
+	 */
+	public static function print_form_hidden_fields() {
+		if ( self::$in_instance ) {
+			$source = self::get_source( (int) get_the_ID() );
+		} else {
+			// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- read-only attribution, validated below.
+			$source = self::validate_source( array_map( 'sanitize_text_field', wp_unslash( array_intersect_key( $_GET, array_flip( self::SOURCE_KEYS ) ) ) ) );
+		}
+		if ( empty( $source['contextual_prompt_post_id'] ) ) {
+			return;
+		}
+		foreach ( $source as $name => $value ) {
+			if ( '' === (string) $value ) {
+				continue;
+			}
+			printf( '<input type="hidden" name="%s" value="%s" />', esc_attr( $name ), esc_attr( $value ) );
+		}
+	}
+
+	/**
+	 * Append the source triple to the plain button's destination, at render.
+	 * The stored pattern never carries it: the values are live.
+	 *
+	 * @param array $parsed_block Parsed prompt card.
+	 * @return array
+	 */
+	private static function tag_button_destination( $parsed_block ) {
+		$cta = self::find_cta( $parsed_block );
+		if ( null === $cta || 'core/buttons' !== $cta['name'] ) {
+			return $parsed_block;
+		}
+		$source = array_filter( self::get_source( (int) get_the_ID() ), fn( $v ) => '' !== (string) $v );
+		if ( empty( $source['contextual_prompt_post_id'] ) ) {
+			return $parsed_block;
+		}
+		$buttons = $parsed_block['innerBlocks'][ $cta['index'] ];
+		foreach ( $buttons['innerBlocks'] as $i => $button ) {
+			if ( 'core/button' !== ( $button['blockName'] ?? '' ) ) {
+				continue;
+			}
+			$tag = function ( $html ) use ( $source ) {
+				$processor = new WP_HTML_Tag_Processor( (string) $html );
+				while ( $processor->next_tag( 'a' ) ) {
+					$href = $processor->get_attribute( 'href' );
+					if ( $href ) {
+						$processor->set_attribute( 'href', add_query_arg( $source, $href ) );
+					}
+				}
+				return $processor->get_updated_html();
+			};
+			$button['innerHTML'] = $tag( $button['innerHTML'] );
+			foreach ( $button['innerContent'] as $k => $chunk ) {
+				if ( is_string( $chunk ) ) {
+					$button['innerContent'][ $k ] = $tag( $chunk );
+				}
+			}
+			if ( ! empty( $button['attrs']['url'] ) ) {
+				$button['attrs']['url'] = add_query_arg( $source, $button['attrs']['url'] );
+			}
+			$buttons['innerBlocks'][ $i ] = $button;
+		}
+		$parsed_block['innerBlocks'][ $cta['index'] ] = $buttons;
 		return $parsed_block;
 	}
 }

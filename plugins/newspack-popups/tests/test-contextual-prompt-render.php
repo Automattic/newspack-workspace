@@ -1397,11 +1397,15 @@ class ContextualPromptRenderTest extends WP_UnitTestCase {
 			// Strip the copy paragraph and the attributes that are expected to vary
 			// between two different posts (the post id) or between the two
 			// conditions by design (the condition itself) — what is left is the CTA,
-			// which apply_control() must leave untouched.
+			// which apply_control() must leave untouched. The button's own href now
+			// carries the same post id and condition (tag_button_destination(),
+			// Task 5), so those query args are stripped too.
 			$cta = function ( $html ) {
 				preg_match( '#<p\b[^>]*>.*?</p>#s', $html, $m );
 				$html = str_replace( $m[0], '', $html );
-				return preg_replace( '#\sdata-newspack-cp-(post-id|condition)="[^"]*"#', '', $html );
+				$html = preg_replace( '#\sdata-newspack-cp-(post-id|condition)="[^"]*"#', '', $html );
+				$html = preg_replace( '~&#0?38;contextual_prompt_(post_id|condition)=[^"&]*~', '', $html );
+				return $html;
 			};
 			$this->assertSame( $cta( $unselected ), $cta( $selected ), $native ? 'native' : 'offsite' );
 		}
