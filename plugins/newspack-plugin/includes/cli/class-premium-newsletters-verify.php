@@ -493,7 +493,12 @@ class Premium_Newsletters_Verify {
 	 * failed list read returns. On Mailchimp and Constant Contact the list read is a
 	 * second, un-memoized request that can fail on its own. (ActiveCampaign reads the
 	 * lists from an endpoint of their own and reports that request's failure as a
-	 * WP_Error, which the check above already turns into an unresolved row.) So an
+	 * WP_Error, which the check above already turns into an unresolved row. The local
+	 * lists in the same combined set, the tags or groups a site's local lists map to,
+	 * come from a further read that every provider reports the same way, so a
+	 * restricted local list only goes missing from an otherwise-believed set when that
+	 * read answers the provider's not-found code, which on Mailchimp is also what a
+	 * flake looks like.) So an
 	 * empty set is corroborated by a further contact read before it is believed,
 	 * which costs one call on that path only and turns a flaking provider into
 	 * unresolved rows rather than a clean run.
