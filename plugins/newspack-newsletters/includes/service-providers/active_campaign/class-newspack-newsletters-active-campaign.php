@@ -769,6 +769,12 @@ final class Newspack_Newsletters_Active_Campaign extends \Newspack_Newsletters_S
 		if ( is_wp_error( $result ) ) {
 			return $result;
 		}
+		if ( ! isset( $result['contactTags'] ) || ! is_array( $result['contactTags'] ) ) {
+			return new WP_Error(
+				'newspack_newsletters_active_campaign_contact_tags_malformed',
+				__( 'ActiveCampaign returned a response without the contact\'s tags.', 'newspack-newsletters' )
+			);
+		}
 
 		return array_values(
 			array_map(

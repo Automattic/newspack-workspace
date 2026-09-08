@@ -2407,12 +2407,13 @@ final class Newspack_Newsletters_Mailchimp extends \Newspack_Newsletters_Service
 	 * In other providers, get_contact_esp_local_lists_ids returns a simple array with IDs, but in Mailchimp it returns IDs grouped by lists.
 	 *
 	 * @param string $email The contact email.
-	 * @return string[] Array of local lists IDs or error.
+	 * @return string[]|WP_Error Array of local lists IDs, or an error when they could not be read.
 	 */
 	public function get_contact_local_lists( $email ) {
 		$tags = $this->get_contact_esp_local_lists_ids( $email );
 		if ( is_wp_error( $tags ) ) {
-			return [];
+			// Same contract as the parent method: a failed read is reported, a missing contact has none.
+			return $this->is_contact_not_found_error( $tags ) ? [] : $tags;
 		}
 		$lists = Subscription_Lists::get_configured_for_provider( $this->service );
 		$ids   = [];

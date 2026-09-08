@@ -838,17 +838,40 @@ Error message(s) received:
 	}
 
 	/**
+	 * Whether an error from a contact read means the contact does not exist,
+	 * rather than that the read failed.
+	 *
+	 * Each provider's get_contact_data() answers a miss with a code of its own,
+	 * and all of them end in `_contact_not_found`. newspack-plugin matches the
+	 * same convention in the premium newsletters verify command and the ESP
+	 * reader-activation integration.
+	 *
+	 * @param WP_Error $error The error a contact read returned.
+	 * @return bool
+	 */
+	protected function is_contact_not_found_error( $error ) {
+		return str_ends_with( (string) $error->get_error_code(), '_contact_not_found' );
+	}
+
+	/**
 	 * Get the contact local lists IDs
+	 *
+	 * A failed read is reported rather than answered with an empty array: the
+	 * combined read merges this into what callers store and sync, so a failure
+	 * that read as "on no local lists" dropped the reader's local lists from
+	 * their selection. A contact that does not exist has no local lists, the
+	 * way it has no lists, since the subscribe paths treat a new reader as a
+	 * contact on no lists (NPPD-2255).
 	 *
 	 * Note: Mailchimp overrides this method.
 	 *
 	 * @param string $email The contact email.
-	 * @return string[] Array of local lists IDs or error.
+	 * @return string[]|WP_Error Array of local lists IDs, or an error when they could not be read.
 	 */
 	public function get_contact_local_lists( $email ) {
 		$tags = $this->get_contact_esp_local_lists_ids( $email );
 		if ( is_wp_error( $tags ) ) {
-			return [];
+			return $this->is_contact_not_found_error( $tags ) ? [] : $tags;
 		}
 		$lists = Subscription_Lists::get_configured_for_provider( $this->service );
 		$ids   = [];
