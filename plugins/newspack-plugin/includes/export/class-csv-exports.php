@@ -750,7 +750,7 @@ final class CSV_Exports {
 
 		if ( ! self::current_user_can_export( 'users' ) ) {
 			\wp_send_json_error(
-				[ 'message' => __( 'You are not allowed to export users.', 'newspack-plugin' ) ],
+				[ 'message' => __( 'You do not have permission to export this data.', 'newspack-plugin' ) ],
 				403
 			);
 		}
