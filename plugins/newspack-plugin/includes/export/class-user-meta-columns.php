@@ -61,6 +61,22 @@ final class User_Meta_Columns {
 	const MAX_KEYS = 500;
 
 	/**
+	 * Transient marking a rebuild as recent enough to reuse.
+	 */
+	const REFRESH_THROTTLE_TRANSIENT = 'newspack_export_user_meta_keys_refreshed';
+
+	/**
+	 * How long one rebuild on demand stands in for the next.
+	 *
+	 * The scan behind the list is the expensive part, and the refresh control
+	 * is a button anyone past the export gate can hold down, so a second
+	 * refresh inside this window is served the list the first one built. It is
+	 * short enough that a publisher who adds a registration field and goes back
+	 * to the dialog still gets a scan.
+	 */
+	const REFRESH_THROTTLE = 10;
+
+	/**
 	 * Protected key prefixes offered anyway.
 	 *
 	 * WooCommerce Memberships writes its registration fields to a protected
@@ -150,7 +166,45 @@ final class User_Meta_Columns {
 	}
 
 	/**
-	 * The offered keys and whether the cap cut the list short.
+	 * The offered keys and whether the cap cut the list short, from the cache
+	 * when there is one.
+	 *
+	 * @return array{keys:string[],capped:bool}
+	 */
+	private static function get_key_list(): array {
+		$cached = self::get_cached_key_list();
+		if ( null !== $cached ) {
+			return $cached;
+		}
+		return self::store_key_list( self::build_key_list() );
+	}
+
+	/**
+	 * The cached key list, or null when there is nothing usable cached.
+	 *
+	 * @return array{keys:string[],capped:bool}|null
+	 */
+	private static function get_cached_key_list(): ?array {
+		$cached = \get_transient( self::KEYS_TRANSIENT );
+		if ( ! is_array( $cached ) || ! isset( $cached['keys'], $cached['capped'] ) ) {
+			return null;
+		}
+		return $cached;
+	}
+
+	/**
+	 * Cache a freshly built list.
+	 *
+	 * @param array{keys:string[],capped:bool} $list Built list.
+	 * @return array{keys:string[],capped:bool}
+	 */
+	private static function store_key_list( array $list ): array {
+		\set_transient( self::KEYS_TRANSIENT, $list, self::KEYS_TTL );
+		return $list;
+	}
+
+	/**
+	 * Read the offered keys out of the database.
 	 *
 	 * The cap is applied to the keys that survive filtering rather than to the
 	 * rows the query returns, or keys that can never be offered would spend
@@ -162,12 +216,7 @@ final class User_Meta_Columns {
 	 *
 	 * @return array{keys:string[],capped:bool}
 	 */
-	private static function get_key_list(): array {
-		$cached = \get_transient( self::KEYS_TRANSIENT );
-		if ( is_array( $cached ) && isset( $cached['keys'], $cached['capped'] ) ) {
-			return $cached;
-		}
-
+	private static function build_key_list(): array {
 		global $wpdb;
 		$conditions = [ 'meta_key NOT LIKE %s' ];
 		$values     = [ $wpdb->esc_like( '_' ) . '%' ];
@@ -177,8 +226,8 @@ final class User_Meta_Columns {
 		}
 		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare -- $conditions is a literal list carrying only %s placeholders; the values are bound below.
 		$sql = "SELECT DISTINCT meta_key FROM {$wpdb->usermeta} WHERE " . implode( ' OR ', $conditions ) . ' ORDER BY meta_key ASC';
-		// Deliberately uncached: a DISTINCT scan of usermeta, run at most twice
-		// a day and stored in the transient below.
+		// Deliberately uncached here: a DISTINCT scan of usermeta, held in the
+		// transient the callers above read and write.
 		$keys = $wpdb->get_col( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 			$wpdb->prepare( $sql, $values ) // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
 		);
@@ -197,16 +246,40 @@ final class User_Meta_Columns {
 		 * here. Dropping a key here keeps it out of an export however it is
 		 * asked for, including by name past the end of a capped list.
 		 *
-		 * @param string[] $keys Meta keys.
+		 * Called on two lists, so a callback that drops keys by name works on
+		 * both while one keying off position does not: the offered list, or
+		 * just the keys a single export asked for by name.
+		 *
+		 * @param string[] $keys Meta keys: the offered list, or the keys one
+		 *                       export named.
 		 */
 		$keys = \apply_filters( 'newspack_users_export_meta_keys', $keys );
 
-		$list = [
+		return [
 			'keys'   => $keys,
 			'capped' => $capped,
 		];
-		\set_transient( self::KEYS_TRANSIENT, $list, self::KEYS_TTL );
-		return $list;
+	}
+
+	/**
+	 * Rebuild the cached key list now, and return it.
+	 *
+	 * The list is overwritten in place rather than dropped first, so a reader
+	 * arriving mid-rebuild is served the previous list instead of missing the
+	 * cache and starting a scan of its own, and repeat calls inside
+	 * REFRESH_THROTTLE collapse onto one scan.
+	 *
+	 * @return array{keys:string[],capped:bool}
+	 */
+	public static function refresh_available_keys(): array {
+		$cached = self::get_cached_key_list();
+		if ( null !== $cached && \get_transient( self::REFRESH_THROTTLE_TRANSIENT ) ) {
+			return $cached;
+		}
+		// Claimed before the scan, so refreshes arriving while it runs are
+		// held off rather than piling a scan each onto the same table.
+		\set_transient( self::REFRESH_THROTTLE_TRANSIENT, 1, self::REFRESH_THROTTLE );
+		return self::store_key_list( self::build_key_list() );
 	}
 
 	/**
@@ -214,6 +287,7 @@ final class User_Meta_Columns {
 	 */
 	public static function flush_available_keys() {
 		\delete_transient( self::KEYS_TRANSIENT );
+		\delete_transient( self::REFRESH_THROTTLE_TRANSIENT );
 	}
 
 	/**

@@ -104,11 +104,12 @@ document.addEventListener( 'DOMContentLoaded', () => {
 		}
 
 		// The offered key list is cached server-side, so a key first stored since
-		// it was built is missing until that cache expires. Refresh rebuilds it
-		// without waiting, which is what adding a registration field needs.
+		// it was built is missing from it until that cache expires. Naming the key
+		// exports it either way; refresh is what puts it in the list.
 		const metaKeys = form.querySelector( '.newspack-csv-export-modal__meta-keys' );
 		const refresh = form.querySelector( '.newspack-csv-export-modal__meta-keys-refresh' );
 		const refreshStatus = form.querySelector( '.newspack-csv-export-modal__meta-keys-refresh-status' );
+		const metaKeysHint = form.querySelector( '.newspack-csv-export-modal__meta-keys-extra-desc' );
 		if ( metaKeys && refresh && refreshStatus ) {
 			refresh.addEventListener( 'click', () => {
 				refresh.disabled = true;
@@ -139,6 +140,11 @@ document.addEventListener( 'DOMContentLoaded', () => {
 							option.selected = picked.has( key );
 							metaKeys.appendChild( option );
 						} );
+						// The cap can be crossed either way between page load and now,
+						// and the line under the list is what says so.
+						if ( metaKeysHint && response.data.description ) {
+							metaKeysHint.textContent = response.data.description;
+						}
 						refreshStatus.textContent = newspackCsvExport.labels.refreshed;
 					} )
 					.catch( () => {

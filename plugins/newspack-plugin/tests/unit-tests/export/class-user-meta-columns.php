@@ -74,6 +74,28 @@ class Newspack_Test_User_Meta_Columns extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Refreshing is what puts such a key in the list. The scan behind the list
+	 * is the expensive part, so a refresh repeated inside REFRESH_THROTTLE is
+	 * served the list the previous one built — which is still a list built
+	 * after the publisher's field existed.
+	 */
+	public function test_refreshing_rebuilds_the_list_but_not_twice_in_a_row() {
+		$user_id = self::factory()->user->create();
+		update_user_meta( $user_id, 'reader_zip_code', '07079' );
+		$this->assertNotContains( 'reader_teaching_level', User_Meta_Columns::get_available_keys() );
+
+		update_user_meta( $user_id, 'reader_teaching_level', 'High school teacher' );
+		$this->assertContains( 'reader_teaching_level', User_Meta_Columns::refresh_available_keys()['keys'] );
+
+		update_user_meta( $user_id, 'reader_school_district', 'South Orange' );
+		$this->assertNotContains(
+			'reader_school_district',
+			User_Meta_Columns::refresh_available_keys()['keys'],
+			'a second refresh inside the throttle window returns the list just built'
+		);
+	}
+
+	/**
 	 * Existing is not enough to be offered. The usermeta table holds whatever
 	 * every plugin ever stashed on a user, and the users export is reachable by
 	 * a shop manager, so the picker excludes protected keys, WordPress's own

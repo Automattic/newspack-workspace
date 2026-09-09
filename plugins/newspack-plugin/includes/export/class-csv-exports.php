@@ -515,18 +515,11 @@ final class CSV_Exports {
 								</button>
 								<span class="newspack-csv-export-modal__meta-keys-refresh-status" role="status" aria-live="polite"></span>
 							</p>
-							<p class="description" id="<?php echo \esc_attr( $id ); ?>-meta-keys-extra-desc">
-								<?php if ( User_Meta_Columns::keys_were_capped() ) : ?>
-									<?php
-									printf(
-										/* translators: %d: the most keys the list holds. */
-										\esc_html__( 'This site stores more keys than the list holds, so it stops at %d. Type any key the list does not show, separated by commas.', 'newspack-plugin' ),
-										(int) User_Meta_Columns::MAX_KEYS
-									);
-									?>
-								<?php else : ?>
-									<?php \esc_html_e( 'Type any key the list does not show, separated by commas. A key first stored in the last few hours is listed once the list is refreshed.', 'newspack-plugin' ); ?>
-								<?php endif; ?>
+							<p
+								class="description newspack-csv-export-modal__meta-keys-extra-desc"
+								id="<?php echo \esc_attr( $id ); ?>-meta-keys-extra-desc"
+							>
+								<?php echo \esc_html( self::get_meta_keys_hint( User_Meta_Columns::keys_were_capped() ) ); ?>
 							</p>
 							<input
 								type="text"
@@ -724,11 +717,33 @@ final class CSV_Exports {
 	}
 
 	/**
-	 * AJAX handler: drop the cached key list and return the rebuilt one.
+	 * The line under the meta key picker.
+	 *
+	 * Shared with the refresh handler, so a site that crosses the cap between
+	 * page load and a refresh cannot end up with a caption describing the list
+	 * it used to have.
+	 *
+	 * @param bool $capped Whether the cap cut the offered list short.
+	 * @return string
+	 */
+	private static function get_meta_keys_hint( bool $capped ): string {
+		if ( $capped ) {
+			return sprintf(
+				/* translators: %d: the most keys the list holds. */
+				__( 'This site stores more keys than the list holds, so it stops at %d. Type any key the list does not show, separated by commas.', 'newspack-plugin' ),
+				(int) User_Meta_Columns::MAX_KEYS
+			);
+		}
+		return __( 'Type any key the list does not show, separated by commas. A key first stored in the last few hours is listed once the list is refreshed.', 'newspack-plugin' );
+	}
+
+	/**
+	 * AJAX handler: rebuild the cached key list and return it.
 	 *
 	 * The list is cached for KEYS_TTL, so a key first stored since it was built
-	 * is absent until that expires. This rebuilds it on demand, which is what
-	 * a publisher adding a registration field needs before they can export it.
+	 * is absent from it until that expires. Naming such a key still exports it,
+	 * so this is what puts a newly collected registration field in the picker
+	 * rather than what makes it exportable.
 	 */
 	public static function ajax_refresh_meta_keys() {
 		\check_ajax_referer( self::AJAX_NONCE_ACTION, 'security' );
@@ -740,11 +755,11 @@ final class CSV_Exports {
 			);
 		}
 
-		User_Meta_Columns::flush_available_keys();
+		$list = User_Meta_Columns::refresh_available_keys();
 		\wp_send_json_success(
 			[
-				'keys'   => User_Meta_Columns::get_available_keys(),
-				'capped' => User_Meta_Columns::keys_were_capped(),
+				'keys'        => $list['keys'],
+				'description' => self::get_meta_keys_hint( $list['capped'] ),
 			]
 		);
 	}
