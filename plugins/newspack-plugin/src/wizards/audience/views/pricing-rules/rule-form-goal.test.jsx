@@ -267,6 +267,17 @@ describe( 'choosing the goal from the form', () => {
 		expect( body.cycle_anchor ).toBe( cycleAnchor );
 	} );
 
+	// The engine's own default: a rule that pins at purchase can only touch new
+	// sign-ups, so a toggle left alone cannot reprice existing subscribers.
+	it( 'starts a Custom rule with pricing locked at purchase', async () => {
+		await renderForm( 'custom' );
+		fireEvent.change( field( 'Name' ), { target: { value: 'Intro deal' } } );
+		fireEvent.change( field( /^Value/ ), { target: { value: '5' } } );
+
+		expect( field( 'Lock pricing at purchase' ) ).toBeChecked();
+		expect( ( await save() ).application ).toBe( 'locked' );
+	} );
+
 	it( 'leaves the name empty on a cold load of the Custom URL', async () => {
 		await renderForm( 'custom' );
 		expect( field( 'Name' ) ).toHaveValue( '' );
@@ -461,6 +472,14 @@ describe( 'choosing the goal from the form', () => {
 
 			expect( screen.queryByRole( 'dialog' ) ).toBeNull();
 			expect( goals().getByRole( 'radio', { checked: true } ) ).toHaveAccessibleName( /^Retention/ );
+		} );
+
+		it( 'keeps a saved Custom rule on always-current pricing', async () => {
+			const rule = { ...savedRule( 'custom' ), id: 6, application: 'current' };
+			await renderSavedRule( rule );
+
+			expect( field( 'Lock pricing at purchase' ) ).not.toBeChecked();
+			expect( ( await save() ).application ).toBe( 'current' );
 		} );
 
 		it( 'falls back to Custom when the rule has no goal', async () => {
