@@ -38,6 +38,7 @@ import {
 	CardSettingsGroup,
 	CollapsibleGroup,
 	ColorPicker,
+	DebugBadge,
 	EmptyState,
 	Footer,
 	Grid,
@@ -45,7 +46,6 @@ import {
 	ImageUpload,
 	InfoButton,
 	Modal,
-	Notice,
 	Page,
 	PluginInstaller,
 	PluginSettings,
@@ -165,7 +165,7 @@ class ComponentsDemo extends Component {
 
 		return (
 			<Fragment>
-				{ newspack_aux_data.is_debug_mode && <Notice debugMode /> }
+				<DebugBadge />
 				<Page
 					breadcrumbItems={ [ { label: __( 'Components Demo', 'newspack-plugin' ) } ] }
 					subTitle={ __( 'Simple components used for composing the UI of Newspack', 'newspack-plugin' ) }

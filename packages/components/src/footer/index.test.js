@@ -1,0 +1,114 @@
+/**
+ * External dependencies.
+ */
+import { fireEvent, render, screen, within } from '@testing-library/react';
+
+/**
+ * Internal dependencies.
+ */
+import Footer from './';
+
+// Footer renders outside the wizard's HashRouter, so there is no MemoryRouter
+// wrapper here on purpose.
+describe( 'Footer', () => {
+	const RESET_URL = 'https://example.test/wp-admin/admin.php?page=newspack-dashboard&newspack_reset=reset';
+	const STARTER_CONTENT_URL = 'https://example.test/wp-admin/admin.php?page=newspack-dashboard&newspack_reset=starter-content';
+	let assigned;
+	let originalLocation;
+	let originalUrls;
+
+	const confirmIn = async name => within( await screen.findByRole( 'dialog' ) ).getByRole( 'button', { name } );
+
+	beforeEach( () => {
+		assigned = [];
+		originalLocation = window.location;
+		originalUrls = window.newspack_urls;
+		delete window.location;
+		window.location = {
+			get href() {
+				return 'https://example.test/wp-admin/admin.php?page=newspack-dashboard';
+			},
+			set href( value ) {
+				assigned.push( value );
+			},
+		};
+		window.newspack_urls = {
+			support: 'https://help.newspack.com/',
+			reset_url: RESET_URL,
+			remove_starter_content: STARTER_CONTENT_URL,
+			plugin_version: { label: 'Newspack 1.0.0' },
+		};
+	} );
+
+	afterEach( () => {
+		delete window.location;
+		window.location = originalLocation;
+		if ( undefined === originalUrls ) {
+			delete window.newspack_urls;
+		} else {
+			window.newspack_urls = originalUrls;
+		}
+	} );
+
+	it( 'offers no link for a browser gesture to follow', () => {
+		render( <Footer /> );
+		expect( screen.getByRole( 'button', { name: 'Reset Newspack' } ) ).not.toHaveAttribute( 'href' );
+		expect( screen.getByRole( 'button', { name: 'Remove Starter Content' } ) ).not.toHaveAttribute( 'href' );
+	} );
+
+	it( 'does not reset on the first click', () => {
+		render( <Footer /> );
+		fireEvent.click( screen.getByRole( 'button', { name: 'Reset Newspack' } ) );
+		expect( assigned ).toEqual( [] );
+	} );
+
+	it( 'asks before resetting', async () => {
+		render( <Footer /> );
+		fireEvent.click( screen.getByRole( 'button', { name: 'Reset Newspack' } ) );
+		expect( await screen.findByText( /deletes the Newspack settings/ ) ).toBeInTheDocument();
+	} );
+
+	it( 'leaves the site alone when the reset is cancelled', async () => {
+		render( <Footer /> );
+		fireEvent.click( screen.getByRole( 'button', { name: 'Reset Newspack' } ) );
+		// The modal's close icon also carries aria-label="Cancel"; this is the text button.
+		const cancel = ( await screen.findAllByRole( 'button', { name: 'Cancel' } ) ).find( button => 'Cancel' === button.textContent );
+		fireEvent.click( cancel );
+		expect( assigned ).toEqual( [] );
+	} );
+
+	it( 'resets once confirmed', async () => {
+		render( <Footer /> );
+		fireEvent.click( screen.getByRole( 'button', { name: 'Reset Newspack' } ) );
+		fireEvent.click( await confirmIn( 'Reset Newspack' ) );
+		expect( assigned ).toEqual( [ RESET_URL ] );
+	} );
+
+	it( 'does not remove the starter content on the first click', () => {
+		render( <Footer /> );
+		fireEvent.click( screen.getByRole( 'button', { name: 'Remove Starter Content' } ) );
+		expect( assigned ).toEqual( [] );
+	} );
+
+	it( 'asks before removing the starter content', async () => {
+		render( <Footer /> );
+		fireEvent.click( screen.getByRole( 'button', { name: 'Remove Starter Content' } ) );
+		expect( await screen.findByText( /created as starter content/ ) ).toBeInTheDocument();
+	} );
+
+	it( 'removes the starter content once confirmed', async () => {
+		render( <Footer /> );
+		fireEvent.click( screen.getByRole( 'button', { name: 'Remove Starter Content' } ) );
+		fireEvent.click( await confirmIn( 'Remove Starter Content' ) );
+		expect( assigned ).toEqual( [ STARTER_CONTENT_URL ] );
+	} );
+
+	it( 'does not guard the non-destructive links', () => {
+		window.newspack_urls.setup_wizard = 'https://example.test/wp-admin/admin.php?page=newspack-setup-wizard';
+		render( <Footer /> );
+		const link = screen.getByRole( 'link', { name: 'Setup Wizard' } );
+		expect( link ).toHaveAttribute( 'href', window.newspack_urls.setup_wizard );
+		fireEvent.click( link );
+		expect( screen.queryByRole( 'dialog' ) ).not.toBeInTheDocument();
+	} );
+} );

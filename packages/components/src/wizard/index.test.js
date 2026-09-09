@@ -19,9 +19,8 @@ import { WIZARD_STORE_NAMESPACE } from './store';
 
 jest.mock( '@wordpress/api-fetch', () => jest.fn() );
 
-// Both globals are localized onto every real wizard screen. The footer's
-// ExternalLink needs a string href, and the debug Notice reads aux data.
-window.newspack_aux_data = { is_debug_mode: false };
+// Localized onto every real wizard screen; the footer's ExternalLink needs a
+// string href.
 window.newspack_urls = { support: 'https://help.newspack.com/' };
 window.scrollTo = jest.fn();
 

@@ -1047,6 +1047,39 @@ class Premium_Newsletters_Verify {
 	}
 
 	/**
+	 * Whether a rule denies every reader as written.
+	 *
+	 * Only the two rules that fail closed on a missing value are detectable here,
+	 * and only from the value's emptiness:
+	 *
+	 * - `institution` names no institution, so Institution::evaluate() matches nobody.
+	 * - `one_time_purchase` names no product, so has_one_time_purchase() never reaches
+	 *   a lookup. Its value is composite, so the emptiness that matters is
+	 *   `product_ids` rather than the value as a whole.
+	 *
+	 * A populated but unsatisfiable value — an institution ID that no longer
+	 * resolves, a product that was deleted — denies every reader just the same and
+	 * reads as configured from here. Detecting it would mean resolving each value
+	 * against the store, which this command does not do; a gate in that state is
+	 * reported as enumerable and its population overstated.
+	 *
+	 * @param array $rule One access rule.
+	 *
+	 * @return bool
+	 */
+	private static function rule_admits_nobody( array $rule ): bool {
+		$slug = (string) ( $rule['slug'] ?? '' );
+		if ( 'institution' === $slug ) {
+			return empty( $rule['value'] ?? null );
+		}
+		if ( 'one_time_purchase' === $slug ) {
+			$value = \Newspack\Access_Rules::sanitize_one_time_purchase_value( $rule['value'] ?? [] );
+			return empty( $value['product_ids'] );
+		}
+		return false;
+	}
+
+	/**
 	 * The slugs of a gate's access rules that paywall it but whose population this
 	 * command cannot enumerate.
 	 *
@@ -1073,12 +1106,14 @@ class Premium_Newsletters_Verify {
 	 *   subscribed while entitled are indistinguishable from the whole reader base.
 	 *
 	 * An unconfigured rule is skipped, because it paywalls nothing:
-	 * is_email_domain_whitelisted(), has_reader_data() and Institution::evaluate()
-	 * each return true on an empty value. Two rules are exceptions, both verified
-	 * against their evaluators:
+	 * is_email_domain_whitelisted() and has_reader_data() both return true on an
+	 * empty value. Three rules are exceptions, all verified against their
+	 * evaluators:
 	 *
 	 * - `one_time_purchase` counts whatever its value: has_one_time_purchase() fails
 	 *   closed on an empty product list, so an unconfigured one restricts everyone.
+	 * - `institution` counts whatever its value, for the same reason:
+	 *   Institution::evaluate() matches nobody when it names no institution.
 	 * - `subscription` counts when it names no product: has_active_subscription()
 	 *   then passes an empty product filter to
 	 *   WooCommerce_Connection::get_active_subscriptions_for_user(), which grants on
@@ -1104,13 +1139,26 @@ class Premium_Newsletters_Verify {
 			// group, so the question is asked per group, not per rule. A group holding
 			// a subscription rule that names products admits nobody who does not also
 			// hold one of those products — whatever else it ANDs on top only narrows
-			// that set further, and the walk already covers it. Asking per rule instead
+			// that set further, down to and including nobody at all. Asking per rule
 			// reports a gate with a single `subscription + institution` group as only
 			// partly checked, and fails a run that in fact checked everyone who could
 			// get in.
+			// A rule that admits nobody makes the whole group admit nobody, whatever
+			// the subscription rule names. Letting the product bound stand for the
+			// group would describe its population as "holders of those products" —
+			// readers this gate in fact denies, and whom check_access() removes from
+			// the list while the run reports them clean.
+			$group_admits_nobody = false;
+			foreach ( $group as $rule ) {
+				if ( self::rule_admits_nobody( (array) $rule ) ) {
+					$group_admits_nobody = true;
+					break;
+				}
+			}
+
 			$group_widens = true;
 			foreach ( $group as $rule ) {
-				if ( 'subscription' !== (string) ( $rule['slug'] ?? '' ) ) {
+				if ( $group_admits_nobody || 'subscription' !== (string) ( $rule['slug'] ?? '' ) ) {
 					continue;
 				}
 				if ( ! empty( array_filter( array_map( 'intval', (array) ( $rule['value'] ?? null ) ) ) ) ) {
@@ -1128,7 +1176,9 @@ class Premium_Newsletters_Verify {
 				if ( '' === $slug ) {
 					continue;
 				}
-				if ( 'one_time_purchase' !== $slug && 'subscription' !== $slug && empty( $value ) ) {
+				// The three rules named in the docblock restrict whatever value they
+				// carry; every other rule with no value paywalls nobody.
+				if ( empty( $value ) && ! in_array( $slug, [ 'one_time_purchase', 'subscription', 'institution' ], true ) ) {
 					continue;
 				}
 				$slugs[] = $slug;

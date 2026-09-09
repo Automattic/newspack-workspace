@@ -452,7 +452,7 @@ class Metering {
 			$handle,
 			Newspack::plugin_url() . '/dist/content-gate-metering.js',
 			[],
-			filemtime( dirname( NEWSPACK_PLUGIN_FILE ) . '/dist/content-gate-metering.js' ),
+			Newspack::asset_version( 'content-gate-metering' ),
 			[
 				'in_footer' => true,
 				'strategy'  => 'defer',
@@ -472,7 +472,7 @@ class Metering {
 				'meter_key'          => self::get_meter_key( $gate_post_id, false ),
 				'post_id'            => get_the_ID(),
 				'article_view'       => self::$article_view,
-				'excerpt'            => apply_filters( 'newspack_gate_content', Content_Gate::get_restricted_post_excerpt( get_post() ) ),
+				'excerpt'            => Content_Gate::get_restricted_post_excerpt( get_post() ),
 				'other_settings'     => Content_Gate_Advanced_Settings::get_settings(),
 			]
 		);

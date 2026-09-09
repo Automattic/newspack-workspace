@@ -91,6 +91,41 @@ class Subscribers_Wizard extends Wizard {
 	private $raw_status_ids_cache = [];
 
 	/**
+	 * Per-request memo of newsletter list public ID → display title, built once
+	 * from the site's own subscription lists. Null once resolved means the site
+	 * has no list registry to read. See get_newsletter_list_titles().
+	 *
+	 * @var array<string,string>|null
+	 */
+	private ?array $newsletter_list_titles_cache = null;
+
+	/**
+	 * Whether the newsletter-list registry has been resolved this request. Kept
+	 * apart from the memo itself because a null memo is a resolved state — the
+	 * registry is unreadable — and not an unfilled one.
+	 *
+	 * @var bool
+	 */
+	private bool $newsletter_list_titles_resolved = false;
+
+	/**
+	 * User meta key holding a reader's tags: short, admin-applied labels
+	 * ("vip", "met-in-person"). Stored on the user as an array of strings.
+	 *
+	 * This is site-local data. The connected ESP also carries per-contact tags,
+	 * but reading those is a per-reader API call — on a 50-row page that is a
+	 * rate-limit and latency problem that needs a batching/caching layer of its
+	 * own, so the column is deliberately fed from local data only.
+	 *
+	 * Read-only for now: nothing in the plugin writes this key, and it is not
+	 * registered with register_meta(), so the column reads empty on every site
+	 * until a later slice lands the write path. Whatever does that will need an
+	 * auth_callback and a sanitize_callback — reader-writable tags would let a
+	 * reader label themselves.
+	 */
+	const READER_TAGS_META = 'newspack_reader_tags';
+
+	/**
 	 * Constructor.
 	 *
 	 * @param array $args Optional arguments.
@@ -207,6 +242,16 @@ class Subscribers_Wizard extends Wizard {
 
 		register_rest_route(
 			NEWSPACK_API_NAMESPACE,
+			'/wizard/' . $this->slug . '/plans',
+			[
+				'methods'             => \WP_REST_Server::READABLE,
+				'callback'            => [ $this, 'api_get_plans' ],
+				'permission_callback' => [ $this, 'api_permissions_check' ],
+			]
+		);
+
+		register_rest_route(
+			NEWSPACK_API_NAMESPACE,
 			'/wizard/' . $this->slug . '/subscribers',
 			[
 				'methods'             => \WP_REST_Server::READABLE,
@@ -257,6 +302,13 @@ class Subscribers_Wizard extends Wizard {
 					'plan'     => [
 						'type'              => 'array',
 						'items'             => [ 'type' => 'string' ],
+						// Each name costs an unindexed post_title lookup plus a
+						// subscription scan, so the list is bounded. No real filter
+						// selects more plans than a site sells. /plans deliberately
+						// returns every name uncapped — the two are not a matched
+						// pair, and a site selling more than this many plans would
+						// offer options that a full selection cannot submit.
+						'maxItems'          => 100,
 						'sanitize_callback' => 'rest_sanitize_request_arg',
 						'validate_callback' => 'rest_validate_request_arg',
 					],
@@ -357,6 +409,164 @@ class Subscribers_Wizard extends Wizard {
 	}
 
 	/**
+	 * GET the plan names the subscriber list can be filtered by.
+	 *
+	 * The subscriber list is server-paginated, so it can't derive its plan filter
+	 * from the rows it happens to be showing the way the group list does — a plan
+	 * nobody on page 1 holds would simply not be offered. This endpoint supplies
+	 * the whole set instead.
+	 *
+	 * Names, not IDs: the `plan` filter on /subscribers matches display names,
+	 * because a group's plan is its configured group name while an individual plan
+	 * is its product's name. The two are only comparable as strings. Names are
+	 * deduplicated, so two groups sharing a name are one option matching the
+	 * members of both.
+	 *
+	 * The contract every option has to meet — pinned by a round-trip test — is that
+	 * filtering on it returns the readers whose Subscription column shows it. It is
+	 * what excludes a group's own product from the options (see is_group_product())
+	 * and a variable subscription's parent (see subscription_product_names()).
+	 *
+	 * Scope: the plans the site currently offers, plus every configured group name.
+	 * A reader can still hold a plan that isn't listed — one whose product has since
+	 * been unpublished or deleted — because the alternative, deriving the list from
+	 * the subscriptions themselves, means scanning every subscription on the site
+	 * on each load of the list. Tracked as a follow-up rather than solved here.
+	 * Donation products are deliberately not excluded: a recurring donation is a
+	 * subscription and shows in the list's Subscription column, so filtering it out
+	 * here would leave a visible plan unfilterable.
+	 *
+	 * @return \WP_REST_Response
+	 */
+	public function api_get_plans(): \WP_REST_Response {
+		$this->reset_request_caches();
+		$names = [];
+
+		foreach ( $this->get_group_subscriptions() as $group ) {
+			$names[] = (string) $group['settings']['name'];
+		}
+		foreach ( $this->subscription_product_names() as $product_name ) {
+			$names[] = $product_name;
+		}
+
+		$names = array_values( array_unique( array_filter( array_map( 'trim', $names ) ) ) );
+		// Natural, case-insensitive so the dropdown reads the way a person would
+		// sort it ("Tier 2" before "Tier 10").
+		sort( $names, SORT_NATURAL | SORT_FLAG_CASE );
+
+		return rest_ensure_response(
+			[
+				'items' => $names,
+				'total' => count( $names ),
+				'pages' => 1,
+			]
+		);
+	}
+
+	/**
+	 * The names of the site's published, non-group subscription products, variations
+	 * included.
+	 *
+	 * Variations are listed alongside their parent because a subscription bought on
+	 * a variation resolves to that variation (see individual_plan_name(), via
+	 * wcs_get_canonical_product_id) and so displays the variation's name — listing
+	 * only the parent would leave that plan visible in the list but unfilterable.
+	 *
+	 * Restricted to published products to match the filter's other half:
+	 * product_ids_for_names() resolves a name back to `publish` products only, so an
+	 * unpublished product's name would be an option that matches nobody.
+	 *
+	 * Group products are dropped: see is_group_product().
+	 *
+	 * @return string[] Product names, in no particular order and possibly duplicated.
+	 */
+	private function subscription_product_names(): array {
+		if ( ! function_exists( 'wc_get_products' ) ) {
+			return [];
+		}
+		$names    = [];
+		$products = \wc_get_products(
+			[
+				'type'   => [ 'subscription', 'variable-subscription' ],
+				'status' => 'publish',
+				// Unbounded, as everywhere else this plugin enumerates subscription
+				// products (Access_Rules::get_subscription_products_options,
+				// Subscriptions_Tiers::get_tier_eligible_products): a site sells a
+				// handful of plans, and a cap here would silently hide one.
+				'limit'  => -1,
+			]
+		);
+		foreach ( $products as $product ) {
+			// A variable subscription's own name is never what a row displays:
+			// individual_plan_name() resolves through wcs_get_canonical_product_id() to
+			// the variation, so a subscription on "Digital - Annual" shows that, not
+			// "Digital". Offering the parent name would match those subscriptions
+			// (WooCommerce's product filter matches a variation line item's parent
+			// _product_id) and return rows whose Subscription column shows something
+			// else — the round-trip this endpoint promises. Only its variations are
+			// listed, below.
+			if ( ! $product->is_type( 'variable-subscription' ) && ! $this->is_group_product( $product ) ) {
+				$names[] = (string) $product->get_name();
+			}
+			if ( ! $product->is_type( 'variable-subscription' ) ) {
+				continue;
+			}
+			// One product load per variation. The bound is the site's whole
+			// subscription catalogue — every variation of every variable
+			// subscription — resolved on each render of the Subscribers tab. That is
+			// a handful of loads on a real Newspack catalogue; a site with hundreds
+			// of variations would want these batched, but capping instead would
+			// silently drop plans from the dropdown, which is the failure this
+			// endpoint exists to avoid.
+			foreach ( $product->get_children() as $variation_id ) {
+				$variation = \wc_get_product( $variation_id );
+				if ( ! $variation || $this->is_group_product( $variation ) ) {
+					continue;
+				}
+				// get_children() returns private variations as well as published ones,
+				// and unchecking "Enabled" on a variation is how a publisher retires a
+				// tier while existing subscribers keep it. product_ids_for_names()
+				// resolves names against published products only, so listing a retired
+				// variation here would offer the admin a plan they can see in the rows
+				// below and then tell them nobody holds it.
+				if ( 'publish' !== $variation->get_status() ) {
+					continue;
+				}
+				$names[] = (string) $variation->get_name();
+			}
+		}
+		return $names;
+	}
+
+	/**
+	 * Whether a product is sold as a group subscription.
+	 *
+	 * Such a product must not become a filter option. Every member of a group
+	 * displays the group's own name in the Subscription column, so filtering on the
+	 * product behind it would return only the owners — the customers of record on
+	 * those subscriptions — while every other member of every group on that product
+	 * stayed hidden, and not one returned row would show the name that was filtered
+	 * on. The group names themselves are listed instead, which is what members see.
+	 *
+	 * Read from the product's own settings, which is where group enablement lives:
+	 * a variation carries its own setting and does not inherit the parent's (see
+	 * Group_Subscription_Settings::get_group_subscription_ids), so parents and
+	 * variations are both checked individually. A product that isn't itself a group
+	 * product stays listed even if one subscription on it was flagged as a group by
+	 * hand, since the product is still sold — and displayed — as an individual plan.
+	 *
+	 * @param \WC_Product $product The product (or variation).
+	 *
+	 * @return bool
+	 */
+	private function is_group_product( \WC_Product $product ): bool {
+		if ( ! class_exists( '\Newspack\Group_Subscription_Settings' ) ) {
+			return false;
+		}
+		return ! empty( Group_Subscription_Settings::get_product_settings( $product )['enabled'] );
+	}
+
+	/**
 	 * Every group-enabled subscription on the site, each paired with its resolved
 	 * settings, keyed by subscription ID. Memoized for the request.
 	 *
@@ -426,7 +636,10 @@ class Subscribers_Wizard extends Wizard {
 			// Interim click-through target: the WooCommerce subscription edit
 			// screen (HPOS-safe), until the in-wizard group detail lands (PR 4).
 			'editUrl'     => $this->subscription_edit_url( $subscription ),
-			// Seat requests are surfaced in a later slice (NPPD-1753 PR 7).
+			// Always null: nothing on the site records a seat-increase request yet,
+			// so there is nothing to report. The field stays in the response because
+			// the group list already renders a badge from it, and it will populate
+			// as soon as such requests are stored.
 			'seatRequest' => null,
 		];
 	}
@@ -694,9 +907,18 @@ class Subscribers_Wizard extends Wizard {
 
 		$user_query = new \WP_User_Query( $query_args );
 		$total      = (int) $user_query->get_total();
+		$users      = $user_query->get_results();
+
+		// Prime the whole page's user meta in one query, so the per-row reads
+		// during hydration (tags, newsletter subscriptions, last-active) are cache
+		// hits instead of a query each. WP_User_Query already does this for
+		// `fields => all`, and cache_users() no-ops when the users are cached —
+		// calling it here makes the batching a property of this endpoint rather
+		// than of a WP_User_Query internal that could change under us.
+		cache_users( wp_list_pluck( $users, 'ID' ) );
 
 		$items = [];
-		foreach ( $user_query->get_results() as $user ) {
+		foreach ( $users as $user ) {
 			$items[] = $this->prepare_subscriber( $user );
 		}
 
@@ -762,9 +984,11 @@ class Subscribers_Wizard extends Wizard {
 	 * re-resolving within a single request, so each entry point starts clean.
 	 */
 	private function reset_request_caches() {
-		$this->group_subscriptions_cache = null;
-		$this->group_membership_index    = null;
-		$this->raw_status_ids_cache      = [];
+		$this->group_subscriptions_cache       = null;
+		$this->group_membership_index          = null;
+		$this->raw_status_ids_cache            = [];
+		$this->newsletter_list_titles_cache    = null;
+		$this->newsletter_list_titles_resolved = false;
 	}
 
 	/**
@@ -815,13 +1039,11 @@ class Subscribers_Wizard extends Wizard {
 			'status'        => $this->reduced_status( $subscriptions, $groups ),
 			'memberSince'   => $this->local_date( $registered ),
 			'lastPayment'   => $this->last_payment_date( $user_id ),
-			// Wired to reader activity in a later slice; the column is hidden by default.
-			'lastSeen'      => null,
+			'lastSeen'      => $this->last_seen_date( $user_id ),
 			'subscriptions' => $subscriptions,
 			'groups'        => $groups,
-			// Tags and newsletters are populated in a later slice (NPPD-1753 PR 7).
-			'tags'          => [],
-			'newsletters'   => [],
+			'tags'          => $this->reader_tags( $user_id ),
+			'newsletters'   => $this->reader_newsletters( $user_id ),
 		];
 	}
 
@@ -1176,6 +1398,173 @@ class Subscribers_Wizard extends Wizard {
 	}
 
 	/**
+	 * When a reader was last seen, from the site's own record of their activity.
+	 *
+	 * Reads the `last_active` reader-data item, which reader activation stamps on
+	 * every page view (most-recent-wins) and which the ESP sync already publishes
+	 * as `Last_Active`. Reporting the same value here means this column and the
+	 * publisher's ESP tell one story about the same reader, and it tracks reading
+	 * rather than signing in — a reader on a long-lived auth cookie who visits
+	 * daily is last seen today, and logging out doesn't erase the record.
+	 *
+	 * The value is client-asserted: `last_active` is not among
+	 * Reader_Data::get_read_only_keys(), so the browser writes it and a determined
+	 * reader could set it themselves. That is fine for an informational column,
+	 * but nothing that grants access may be decided on it.
+	 *
+	 * Formatted through local_date() like every other date this wizard emits. The
+	 * ESP sync publishes the same instant in UTC, but that value is read by a
+	 * machine, whereas this one sits in a table beside localized subscription
+	 * dates: on a negative-offset site an evening visit formatted in UTC lands on
+	 * tomorrow's date, which reads as plainly wrong next to them. Going through
+	 * local_date() also drops a falsy timestamp rather than rendering it as
+	 * 1970-01-01, which matters because the value is client-writable.
+	 *
+	 * @param int $user_id The reader user ID.
+	 *
+	 * @return string|null 'YYYY-MM-DD', or null when the site has no usable record of them.
+	 */
+	private function last_seen_date( int $user_id ): ?string {
+		$last_active = Reader_Data::get_data( $user_id, 'last_active' );
+		if ( empty( $last_active ) || ! is_numeric( $last_active ) ) {
+			return null;
+		}
+		// Reader-data timestamps are JavaScript milliseconds; intdiv() keeps the
+		// conversion integral, since local_date() takes an int timestamp.
+		$timestamp = intdiv( (int) $last_active, 1000 );
+		$now       = time();
+		// The browser writes this value from its own clock, and the client store
+		// keeps whichever of the stored and the local value is larger, so a device
+		// running ahead writes a timestamp the site can never lower again. A small
+		// overshoot is ordinary clock skew and reads as now. Further ahead than a
+		// day describes the device's clock rather than the reader, so the record is
+		// dropped: an unknown last-seen is a smaller lie than one that dates a
+		// dormant reader to today and keeps doing so.
+		if ( $timestamp > $now + DAY_IN_SECONDS ) {
+			return null;
+		}
+		return $this->local_date( min( $timestamp, $now ) );
+	}
+
+	/**
+	 * A reader's tags — the short labels an admin applies to them, stored locally
+	 * on the user. See READER_TAGS_META on why the ESP's tags are not read here.
+	 *
+	 * @param int $user_id The reader user ID.
+	 *
+	 * @return string[]
+	 */
+	private function reader_tags( int $user_id ): array {
+		$tags = get_user_meta( $user_id, self::READER_TAGS_META, true );
+		// A JSON-encoded list is accepted alongside a stored array, so a value
+		// written through a JSON-shaped path (WP-CLI, the REST meta API) reads back
+		// as tags rather than as one tag named `["vip"]`.
+		if ( is_string( $tags ) && '' !== $tags ) {
+			$decoded = json_decode( $tags, true );
+			$tags    = is_array( $decoded ) ? $decoded : [ $tags ];
+		}
+		if ( ! is_array( $tags ) ) {
+			return [];
+		}
+		$tags = array_map( 'sanitize_text_field', array_filter( $tags, 'is_scalar' ) );
+		// Empty entries go, and only those: array_filter()'s default callback tests
+		// truthiness, which would also drop a tag literally named "0".
+		return array_values( array_unique( array_diff( $tags, [ '' ] ) ) );
+	}
+
+	/**
+	 * The newsletters a reader is subscribed to, each as its list ID and the title
+	 * the site shows for it.
+	 *
+	 * The subscription itself is read from the reader's own record — the
+	 * `newsletter_subscribed_lists` reader-data item, which the newsletter data
+	 * events keep in step with the ESP — and the list IDs it holds are resolved
+	 * against the site's own list definitions. No ESP call is made; see
+	 * READER_TAGS_META for why.
+	 *
+	 * A list the site holds no definition for reports a null title rather than a
+	 * synthesized one, and always keeps its ID. Unresolved is a routine state, not
+	 * a rarity: the stored set is `get_contact_combined_lists()`, which merges the
+	 * ESP's own list IDs with the site's local public IDs, so a Mailchimp or
+	 * ActiveCampaign site regularly holds IDs it has no local record of. Sending
+	 * the ID rather than a sentence keeps it machine-readable, since a filter
+	 * matches on a list ID and not on prose, and leaves the wording to the client,
+	 * next to the column heading it sits under.
+	 *
+	 * Resolution needs a registry at all: when the site has none, nothing is
+	 * reported rather than every list being called unknown; see
+	 * get_newsletter_list_titles().
+	 *
+	 * @param int $user_id The reader user ID.
+	 *
+	 * @return array<array{id:string,title:?string}>
+	 */
+	private function reader_newsletters( int $user_id ): array {
+		$raw      = Reader_Data::get_data( $user_id, 'newsletter_subscribed_lists' );
+		$list_ids = is_string( $raw ) ? json_decode( $raw, true ) : $raw;
+		if ( ! is_array( $list_ids ) ) {
+			return [];
+		}
+		$titles = $this->get_newsletter_list_titles();
+		if ( null === $titles ) {
+			// No registry to resolve against — on a site that has since deactivated
+			// the Newsletters plugin, the stored subscriptions are still there. The
+			// site cannot say those lists are unknown, only that it cannot look them
+			// up, which is what the column's empty state already means.
+			return [];
+		}
+		$lists = [];
+		// Deduplicated by list ID, before resolution: two lists can carry the same
+		// title, and collapsing on the title would drop one of the subscriptions.
+		$list_ids = array_unique( array_map( 'strval', array_filter( $list_ids, 'is_scalar' ) ) );
+		foreach ( $list_ids as $list_id ) {
+			if ( '' === $list_id ) {
+				continue;
+			}
+			$lists[] = [
+				'id'    => $list_id,
+				'title' => $titles[ $list_id ] ?? null,
+			];
+		}
+		return $lists;
+	}
+
+	/**
+	 * Map of newsletter list public ID → display title, from the site's own
+	 * subscription lists. Memoized for the request.
+	 *
+	 * The site's lists are few and shared by every row, while resolving a list
+	 * on demand costs a query — so the map is built once per request and read
+	 * per row, the same shape the group-membership index uses.
+	 *
+	 * A site running without the Newsletters plugin has no registry at all, which
+	 * is reported as null and is a different thing from a registry that exists and
+	 * holds no lists: the first cannot resolve any ID, the second resolves them
+	 * all to "not one of ours".
+	 *
+	 * @return array<string,string>|null The map, or null when there is no registry to read.
+	 */
+	private function get_newsletter_list_titles(): ?array {
+		if ( $this->newsletter_list_titles_resolved ) {
+			return $this->newsletter_list_titles_cache;
+		}
+		$this->newsletter_list_titles_resolved = true;
+		if ( ! class_exists( '\Newspack\Newsletters\Subscription_Lists' ) || ! method_exists( '\Newspack\Newsletters\Subscription_Lists', 'get_all' ) ) {
+			return null;
+		}
+		$titles = [];
+		foreach ( \Newspack\Newsletters\Subscription_Lists::get_all() as $list ) {
+			$public_id = (string) $list->get_public_id();
+			$title     = (string) $list->get_title();
+			if ( '' !== $public_id && '' !== $title ) {
+				$titles[ $public_id ] = $title;
+			}
+		}
+		$this->newsletter_list_titles_cache = $titles;
+		return $titles;
+	}
+
+	/**
 	 * Resolve the `include` user-ID set for the active subscription-status / plan
 	 * filters, or null when neither is present.
 	 *
@@ -1319,39 +1708,74 @@ class Subscribers_Wizard extends Wizard {
 	 * Customer IDs holding a subscription (individual or group) on any of the
 	 * named plans.
 	 *
+	 * A cancelled plan qualifies its holder only when nothing live remains, because
+	 * that is what the Subscription column shows: visiblePlanEntries() in
+	 * SubscriberList.jsx hides a cancelled plan for anyone still holding a live one.
+	 * Without the reduction a reader who cancelled one plan and bought another comes
+	 * back under the cancelled plan's filter displaying only the plan they moved to,
+	 * which is the round trip api_get_plans() exists to guarantee.
+	 * customer_ids_for_statuses() applies the same rule on the status axis.
+	 *
 	 * @param string[] $plan_names Plan display names.
 	 *
 	 * @return int[]
 	 */
-	private function customer_ids_for_plans( array $plan_names ) {
-		$ids = [];
+	private function customer_ids_for_plans( array $plan_names ): array {
+		$ids           = [];
+		$cancelled_ids = [];
 
-		// Group plans, matched by the group's configured name.
+		// Group plans, matched by the group's configured name. Trimmed on both sides
+		// because api_get_plans() offers the trimmed name: a buyer who typed
+		// "Acme Team " would otherwise get an option matching nobody. Members inherit
+		// their group's status, so a cancelled group is cancelled for every one of them.
 		foreach ( $this->get_group_subscriptions() as $group ) {
-			if ( in_array( (string) $group['settings']['name'], $plan_names, true ) ) {
-				$ids = array_merge( $ids, array_map( 'intval', Group_Subscription::get_all_members( $group['subscription'] ) ) );
+			if ( ! in_array( trim( (string) $group['settings']['name'] ), $plan_names, true ) ) {
+				continue;
+			}
+			$members = array_map( 'intval', Group_Subscription::get_all_members( $group['subscription'] ) );
+			if ( 'cancelled' === self::map_subscription_status( $group['subscription']->get_status() ) ) {
+				$cancelled_ids = array_merge( $cancelled_ids, $members );
+			} else {
+				$ids = array_merge( $ids, $members );
 			}
 		}
 
 		// Individual plans, matched by product name → subscriptions for that product.
+		//
+		// The product → subscription-ID lookup is a single uncached join across the
+		// order-item tables, so it runs once per product and is bounded in SQL.
+		// wcs_get_subscriptions() is not a way to page it: handed a product_id but no
+		// customer_id or order_id it runs this same lookup unbounded on every call
+		// (WC_Subscription_Query_Controller::should_filter_query_results), so paging
+		// through it repeats the expensive half rather than splitting it.
+		//
+		// The cap is shared out per product instead of consumed in order, so one plan
+		// with more holders than the whole budget cannot leave the other plans in the
+		// same multi-select matching nobody. Equal shares keep the total at or under
+		// the cap however many plans are ticked.
 		$product_ids = $this->product_ids_for_names( $plan_names );
 		if ( ! empty( $product_ids ) && function_exists( 'wcs_get_subscriptions_for_product' ) && function_exists( 'wcs_get_subscription' ) ) {
-			$subscription_ids = [];
+			$per_product = max( 1, intdiv( self::FILTER_INCLUDE_CAP, count( $product_ids ) ) );
 			foreach ( $product_ids as $product_id ) {
-				foreach ( array_keys( \wcs_get_subscriptions_for_product( $product_id ) ) as $subscription_id ) {
-					$subscription_ids[] = (int) $subscription_id;
+				foreach ( \wcs_get_subscriptions_for_product( $product_id, 'ids', [ 'limit' => $per_product ] ) as $subscription_id ) {
+					$subscription = \wcs_get_subscription( $subscription_id );
+					if ( ! $subscription ) {
+						continue;
+					}
+					$customer_id = (int) $subscription->get_customer_id();
+					if ( 'cancelled' === self::map_subscription_status( $subscription->get_status() ) ) {
+						$cancelled_ids[] = $customer_id;
+					} else {
+						$ids[] = $customer_id;
+					}
 				}
 			}
-			// Bound the number of subscription objects hydrated, mirroring the
-			// status path's cap so a plan on a very popular product can't load an
-			// unbounded set into memory.
-			$subscription_ids = array_slice( array_unique( $subscription_ids ), 0, self::FILTER_INCLUDE_CAP );
-			foreach ( $subscription_ids as $subscription_id ) {
-				$subscription = \wcs_get_subscription( $subscription_id );
-				if ( $subscription ) {
-					$ids[] = (int) $subscription->get_customer_id();
-				}
-			}
+		}
+
+		// The live set is the one customer_ids_for_raw_statuses() memoizes for the
+		// status filter, so this costs no extra scan when both filters are active.
+		if ( ! empty( $cancelled_ids ) ) {
+			$ids = array_merge( $ids, array_diff( $cancelled_ids, $this->customer_ids_for_raw_statuses( [ 'active', 'pending', 'on-hold' ] ) ) );
 		}
 
 		return array_values( array_unique( array_filter( $ids ) ) );
@@ -1387,7 +1811,31 @@ class Subscribers_Wizard extends Wizard {
 				$ids[] = (int) $post_id;
 			}
 		}
-		return array_values( array_unique( $ids ) );
+		$ids = array_values( array_unique( $ids ) );
+
+		// api_get_plans() excludes group products from the options (see
+		// is_group_product()), so resolving one here would make the two halves
+		// disagree. They collide by default rather than rarely: an unnamed group falls
+		// back to its product's name
+		// (Group_Subscription_Settings::get_subscription_settings()), so a product
+		// "Team Plan" with one unnamed group and one renamed group would match the
+		// renamed group's owner when filtering on "Team Plan".
+		if ( ! function_exists( 'wc_get_product' ) ) {
+			return $ids;
+		}
+		return array_values(
+			array_filter(
+				$ids,
+				function ( $product_id ) {
+					// Only a confirmed group product is dropped. A product WooCommerce
+					// cannot hydrate is kept: the name matched a real published product
+					// post, and dropping what cannot be classified would silently narrow
+					// the filter instead of widening it.
+					$product = \wc_get_product( $product_id );
+					return ! $product || ! $this->is_group_product( $product );
+				}
+			)
+		);
 	}
 
 	/**
