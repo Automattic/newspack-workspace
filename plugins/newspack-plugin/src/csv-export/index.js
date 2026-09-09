@@ -103,6 +103,53 @@ document.addEventListener( 'DOMContentLoaded', () => {
 			syncCustomDateFormat( false );
 		}
 
+		// The offered key list is cached server-side, so a key first stored since
+		// it was built is missing until that cache expires. Refresh rebuilds it
+		// without waiting, which is what adding a registration field needs.
+		const metaKeys = form.querySelector( '.newspack-csv-export-modal__meta-keys' );
+		const refresh = form.querySelector( '.newspack-csv-export-modal__meta-keys-refresh' );
+		const refreshStatus = form.querySelector( '.newspack-csv-export-modal__meta-keys-refresh-status' );
+		if ( metaKeys && refresh && refreshStatus ) {
+			refresh.addEventListener( 'click', () => {
+				refresh.disabled = true;
+				refreshStatus.textContent = newspackCsvExport.labels.refreshing;
+				const body = new URLSearchParams( {
+					action: newspackCsvExport.refreshAction,
+					security: newspackCsvExport.nonce,
+				} );
+				fetch( newspackCsvExport.ajaxUrl, {
+					method: 'POST',
+					credentials: 'same-origin',
+					body,
+				} )
+					.then( response => response.json() )
+					.then( response => {
+						if ( ! response.success ) {
+							refreshStatus.textContent = newspackCsvExport.labels.refreshError;
+							return;
+						}
+						// Carry the current picks across the rebuild; a key missing
+						// from the new list is one the site no longer stores.
+						const picked = new Set( Array.from( metaKeys.selectedOptions ).map( option => option.value ) );
+						metaKeys.innerHTML = '';
+						response.data.keys.forEach( key => {
+							const option = document.createElement( 'option' );
+							option.value = key;
+							option.textContent = key;
+							option.selected = picked.has( key );
+							metaKeys.appendChild( option );
+						} );
+						refreshStatus.textContent = newspackCsvExport.labels.refreshed;
+					} )
+					.catch( () => {
+						refreshStatus.textContent = newspackCsvExport.labels.refreshError;
+					} )
+					.finally( () => {
+						refresh.disabled = false;
+					} );
+			} );
+		}
+
 		const cancel = form.querySelector( '.newspack-csv-export-modal__cancel' );
 		if ( cancel ) {
 			cancel.addEventListener( 'click', () => dialog.close( 'cancel' ) );

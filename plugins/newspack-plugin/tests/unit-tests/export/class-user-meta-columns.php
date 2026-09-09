@@ -44,6 +44,36 @@ class Newspack_Test_User_Meta_Columns extends WP_UnitTestCase {
 	}
 
 	/**
+	 * A key first stored since the list was cached is still exportable by name.
+	 *
+	 * The list is cached for KEYS_TTL, so "not in the list" and "not stored"
+	 * are different things: a publisher who adds a registration field and
+	 * exports it the same hour is naming a key their readers have filled in,
+	 * not a typo.
+	 */
+	public function test_a_key_stored_since_the_list_was_cached_is_exportable_by_name() {
+		$user_id = self::factory()->user->create();
+		update_user_meta( $user_id, 'reader_zip_code', '07079' );
+
+		// Builds the list and caches it, well under the cap.
+		$this->assertContains( 'reader_zip_code', User_Meta_Columns::get_available_keys() );
+		$this->assertFalse( User_Meta_Columns::keys_were_capped() );
+
+		// A registration field starts being collected after that.
+		update_user_meta( $user_id, 'reader_teaching_level', 'High school teacher' );
+
+		$this->assertNotContains(
+			'reader_teaching_level',
+			User_Meta_Columns::get_available_keys(),
+			'the cached list is the stale one this test is about'
+		);
+		$this->assertSame(
+			[ 'reader_teaching_level' ],
+			User_Meta_Columns::sanitize_keys( [ 'reader_teaching_level' ] )
+		);
+	}
+
+	/**
 	 * Existing is not enough to be offered. The usermeta table holds whatever
 	 * every plugin ever stashed on a user, and the users export is reachable by
 	 * a shop manager, so the picker excludes protected keys, WordPress's own
@@ -243,10 +273,11 @@ class Newspack_Test_User_Meta_Columns extends WP_UnitTestCase {
 			return array_values( array_diff( $keys, [ 'reader_zip_code' ] ) );
 		};
 		add_filter( 'newspack_users_export_meta_keys', $drop_it );
-		$keys = User_Meta_Columns::get_available_keys();
+		$keys      = User_Meta_Columns::get_available_keys();
+		$sanitized = User_Meta_Columns::sanitize_keys( [ 'reader_zip_code' ] );
 		remove_filter( 'newspack_users_export_meta_keys', $drop_it );
 
 		$this->assertNotContains( 'reader_zip_code', $keys );
-		$this->assertSame( [], User_Meta_Columns::sanitize_keys( [ 'reader_zip_code' ] ) );
+		$this->assertSame( [], $sanitized );
 	}
 }

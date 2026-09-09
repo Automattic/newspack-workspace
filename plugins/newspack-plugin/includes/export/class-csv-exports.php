@@ -31,6 +31,11 @@ final class CSV_Exports {
 	const AJAX_ACTION = 'newspack_csv_export';
 
 	/**
+	 * AJAX action rebuilding the offered user meta key list.
+	 */
+	const REFRESH_AJAX_ACTION = 'newspack_csv_export_refresh_meta_keys';
+
+	/**
 	 * Nonce action for the AJAX steps.
 	 */
 	const AJAX_NONCE_ACTION = 'newspack-csv-export';
@@ -111,6 +116,7 @@ final class CSV_Exports {
 		\add_action( 'admin_footer', [ __CLASS__, 'render_export_modals' ] );
 		\add_action( 'admin_enqueue_scripts', [ __CLASS__, 'admin_enqueue_scripts' ] );
 		\add_action( 'wp_ajax_' . self::AJAX_ACTION, [ __CLASS__, 'ajax_export' ] );
+		\add_action( 'wp_ajax_' . self::REFRESH_AJAX_ACTION, [ __CLASS__, 'ajax_refresh_meta_keys' ] );
 		\add_action( 'admin_init', [ __CLASS__, 'download_export_file' ] );
 
 		// The cleanup sweep is armed lazily by the first export (see
@@ -503,8 +509,14 @@ final class CSV_Exports {
 									<option value="<?php echo \esc_attr( $meta_key ); ?>"><?php echo \esc_html( $meta_key ); ?></option>
 								<?php endforeach; ?>
 							</select>
-							<?php if ( User_Meta_Columns::keys_were_capped() ) : ?>
-								<p class="description" id="<?php echo \esc_attr( $id ); ?>-meta-keys-extra-desc">
+							<p class="newspack-csv-export-modal__meta-keys-actions">
+								<button type="button" class="button button-secondary newspack-csv-export-modal__meta-keys-refresh">
+									<?php \esc_html_e( 'Refresh list', 'newspack-plugin' ); ?>
+								</button>
+								<span class="newspack-csv-export-modal__meta-keys-refresh-status" role="status" aria-live="polite"></span>
+							</p>
+							<p class="description" id="<?php echo \esc_attr( $id ); ?>-meta-keys-extra-desc">
+								<?php if ( User_Meta_Columns::keys_were_capped() ) : ?>
 									<?php
 									printf(
 										/* translators: %d: the most keys the list holds. */
@@ -512,16 +524,18 @@ final class CSV_Exports {
 										(int) User_Meta_Columns::MAX_KEYS
 									);
 									?>
-								</p>
-								<input
-									type="text"
-									id="<?php echo \esc_attr( $id ); ?>-meta-keys-extra"
-									class="newspack-csv-export-modal__meta-keys-extra"
-									name="meta_keys_extra"
-									aria-describedby="<?php echo \esc_attr( $id ); ?>-meta-keys-extra-desc"
-									value=""
-								>
-							<?php endif; ?>
+								<?php else : ?>
+									<?php \esc_html_e( 'Type any key the list does not show, separated by commas. A key first stored in the last few hours is listed once the list is refreshed.', 'newspack-plugin' ); ?>
+								<?php endif; ?>
+							</p>
+							<input
+								type="text"
+								id="<?php echo \esc_attr( $id ); ?>-meta-keys-extra"
+								class="newspack-csv-export-modal__meta-keys-extra"
+								name="meta_keys_extra"
+								aria-describedby="<?php echo \esc_attr( $id ); ?>-meta-keys-extra-desc"
+								value=""
+							>
 						</div>
 					<?php endif; ?>
 				<?php endif; ?>
@@ -693,14 +707,44 @@ final class CSV_Exports {
 			'newspack-csv-export',
 			'newspackCsvExport',
 			[
-				'ajaxUrl' => \admin_url( 'admin-ajax.php' ),
-				'action'  => self::AJAX_ACTION,
-				'nonce'   => \wp_create_nonce( self::AJAX_NONCE_ACTION ),
-				'labels'  => [
-					'exporting' => __( 'Exporting…', 'newspack-plugin' ),
-					'done'      => __( 'Export complete, downloading…', 'newspack-plugin' ),
-					'error'     => __( 'Export failed. Please try again.', 'newspack-plugin' ),
+				'ajaxUrl'       => \admin_url( 'admin-ajax.php' ),
+				'action'        => self::AJAX_ACTION,
+				'refreshAction' => self::REFRESH_AJAX_ACTION,
+				'nonce'         => \wp_create_nonce( self::AJAX_NONCE_ACTION ),
+				'labels'        => [
+					'exporting'    => __( 'Exporting…', 'newspack-plugin' ),
+					'done'         => __( 'Export complete, downloading…', 'newspack-plugin' ),
+					'error'        => __( 'Export failed. Please try again.', 'newspack-plugin' ),
+					'refreshing'   => __( 'Refreshing…', 'newspack-plugin' ),
+					'refreshed'    => __( 'List updated.', 'newspack-plugin' ),
+					'refreshError' => __( 'Could not refresh the list.', 'newspack-plugin' ),
 				],
+			]
+		);
+	}
+
+	/**
+	 * AJAX handler: drop the cached key list and return the rebuilt one.
+	 *
+	 * The list is cached for KEYS_TTL, so a key first stored since it was built
+	 * is absent until that expires. This rebuilds it on demand, which is what
+	 * a publisher adding a registration field needs before they can export it.
+	 */
+	public static function ajax_refresh_meta_keys() {
+		\check_ajax_referer( self::AJAX_NONCE_ACTION, 'security' );
+
+		if ( ! self::current_user_can_export( 'users' ) ) {
+			\wp_send_json_error(
+				[ 'message' => __( 'You are not allowed to export users.', 'newspack-plugin' ) ],
+				403
+			);
+		}
+
+		User_Meta_Columns::flush_available_keys();
+		\wp_send_json_success(
+			[
+				'keys'   => User_Meta_Columns::get_available_keys(),
+				'capped' => User_Meta_Columns::keys_were_capped(),
 			]
 		);
 	}

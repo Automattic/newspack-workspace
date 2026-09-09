@@ -219,14 +219,14 @@ final class User_Meta_Columns {
 	/**
 	 * Keep only the requested keys the site actually stores and may offer.
 	 *
-	 * MAX_KEYS is a ceiling on what a select can usefully hold, not on what a
-	 * site stores: above it there are real keys sorting after the last one
-	 * listed, and a publisher who names one has named a key their readers
-	 * filled in. So a requested key the list does not carry is checked against
-	 * the table on its own — an indexed lookup of the few keys one export asks
-	 * for, not the DISTINCT scan behind the list — and only when the cap
-	 * actually cut the list short. Below the cap the list is already every
-	 * offerable key, so anything outside it is a typo or a probe.
+	 * The list is both capped and cached, so a key missing from it is not a
+	 * key the site does not store: above MAX_KEYS there are real keys sorting
+	 * after the last one listed, and within KEYS_TTL there are keys first
+	 * written since the list was built. Either way a publisher who names one
+	 * has named a key their readers filled in, so any requested key the list
+	 * does not carry is checked against the table on its own — an indexed
+	 * lookup of the few keys one export asks for, not the DISTINCT scan behind
+	 * the list.
 	 *
 	 * @param mixed $keys Requested meta keys.
 	 * @return string[]
@@ -242,7 +242,7 @@ final class User_Meta_Columns {
 		$offered   = self::get_available_keys();
 		$valid     = array_intersect( $requested, $offered );
 		$unlisted  = array_diff( $requested, $offered );
-		if ( ! empty( $unlisted ) && self::keys_were_capped() ) {
+		if ( ! empty( $unlisted ) ) {
 			$valid = array_merge( $valid, self::filter_stored_keys( $unlisted ) );
 		}
 		// Back through $requested so the columns come out in the order they
