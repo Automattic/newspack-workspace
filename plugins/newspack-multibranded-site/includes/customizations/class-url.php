@@ -93,13 +93,13 @@ class Url {
 			return;
 		}
 
-		// A slug held by BOTH taxonomies resolves in the brand's favour. That is a
-		// deliberate choice rather than an oversight: on a multibranded site the
-		// /brand/ path is the plugin's own URL space, and before this method
-		// existed the winner was whichever plugin's rewrite rules were generated
-		// first. The WooCommerce archive for such a term stays reachable through
-		// its query-var form. Reverse the precedence here if that trade stops
-		// being the right one.
+		// A slug held by BOTH taxonomies resolves in the brand's favour, and the
+		// product-brand archive for that one slug then has no URL at all: the
+		// query-var form 301s to the same pretty path via redirect_canonical(),
+		// which is the path we just claimed. An affected store recovers by moving
+		// its archive off /brand/ with the "Product brand base" field on
+		// Settings → Permalinks (`woocommerce_brand_permalink`), which needs no
+		// code change.
 		unset( $wp->query_vars[ $conflict['query_var'] ] );
 		$wp->query_vars[ self::get_own_query_var( $own ) ] = $term->slug;
 	}
@@ -125,7 +125,26 @@ class Url {
 			$term_path = substr( $term_path, strlen( $home_path ) + 1 );
 		}
 
-		return '' !== $term_path && $term_path === trim( (string) $wp->request, '/' );
+		if ( '' === $term_path ) {
+			return false;
+		}
+
+		// `WP::request` holds the path as sent; core decodes only a copy of it for
+		// rule matching. `get_term_link()` builds its path from the stored slug,
+		// which `sanitize_title_with_dashes()` percent-encodes in lowercase hex.
+		// Decoding both sides is what makes a request that arrived with a
+		// different encoding of the same slug compare equal.
+		$request   = rawurldecode( trim( (string) $wp->request, '/' ) );
+		$term_path = rawurldecode( $term_path );
+
+		// A prefix rather than an equality test, because a taxonomy's rules cover
+		// more than the archive root: /page/N, /feed, /feed/atom and /embed all
+		// hang off the same path, and a term's permalink carries none of them. An
+		// equality test declines those and leaves them with the conflicting
+		// taxonomy, so a brand archive past page one links to an "Older posts"
+		// that 404s. The separator is what keeps the prefix honest — without it
+		// `brand/lifestyle` would also claim `brand/lifestyle-weekly`.
+		return $request === $term_path || 0 === strpos( $request, $term_path . '/' );
 	}
 
 	/**
@@ -138,8 +157,10 @@ class Url {
 	 * public taxonomy query var would hit the database to ask whether the slug
 	 * happens to name a brand.
 	 *
-	 * Both sides of the comparison are read from the registered objects, so a
-	 * site that filters either rewrite slug still gets the right answer.
+	 * A taxonomy registered with `query_var => false` is invisible here: its
+	 * rules emit the generic `taxonomy`/`term` pair instead of a named var, so
+	 * its requests are never reclaimed. Nothing registers that way today,
+	 * WooCommerce included.
 	 *
 	 * @param array        $query_vars The request's query vars.
 	 * @param \WP_Taxonomy $own        Our own registered taxonomy.
@@ -164,12 +185,18 @@ class Url {
 			if ( empty( $taxonomy->query_var ) ) {
 				continue;
 			}
-			if ( ! empty( $query_vars[ $taxonomy->query_var ] ) ) {
-				return [
-					'query_var' => $taxonomy->query_var,
-					'slug'      => $query_vars[ $taxonomy->query_var ],
-				];
+			$value = $query_vars[ $taxonomy->query_var ] ?? null;
+			// Typed rather than tested for truthiness: a query var can hold an
+			// array, and `get_term_by()` casts to string, which warns on PHP 8.
+			// Taxonomy query vars are public, so `/?product_brand[]=1` is an
+			// unauthenticated request that lands here.
+			if ( ! is_string( $value ) || '' === $value ) {
+				continue;
 			}
+			return [
+				'query_var' => $taxonomy->query_var,
+				'slug'      => $value,
+			];
 		}
 		return null;
 	}
@@ -191,10 +218,10 @@ class Url {
 	/**
 	 * Resolve brand slugs at the site root ("Homepage" URL mode).
 	 *
-	 * @param WP $wp The WP object.
+	 * @param \WP $wp The WP object.
 	 * @return void
 	 */
-	private static function maybe_resolve_root_brand( $wp ) {
+	private static function maybe_resolve_root_brand( \WP $wp ): void {
 		if ( empty( $wp->matched_query ) ) {
 			return;
 		}
