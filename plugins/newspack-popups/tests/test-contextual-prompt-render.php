@@ -1528,7 +1528,13 @@ class ContextualPromptRenderTest extends WP_UnitTestCase {
 	 */
 	public function test_is_control_story_matches_get_condition() {
 		$this->set_control( 'Support local news.', 4 );
-		$selected = $this->post_for_interval( 4, true );
+		// post_for_interval() only guarantees id % 4 === 0; that id can also be a
+		// multiple of 5 (20, 40, ...), which would make the id % 5 !== 0 assertion
+		// below fail depending on autoincrement state. Loop until the id satisfies
+		// both.
+		do {
+			$selected = self::factory()->post->create( [ 'post_status' => 'publish' ] );
+		} while ( 0 !== $selected % 4 || 0 === $selected % 5 );
 		$this->assertTrue( Newspack_Popups_Contextual_Prompt_Render::is_control_story( $selected, 4 ) );
 		$this->assertFalse( Newspack_Popups_Contextual_Prompt_Render::is_control_story( $selected, 5 ) );
 		$this->assertSame( 'generic_control', Newspack_Popups_Contextual_Prompt_Render::get_condition( $selected ) );
@@ -1667,7 +1673,7 @@ class ContextualPromptRenderTest extends WP_UnitTestCase {
 			[
 				'ref'     => $pattern_id,
 				'content' => [ Newspack_Popups_Contextual_Prompt_Pattern::BOUND_NAME => [ 'content' => 'Ask.' ] ],
-			] 
+			]
 		) . ' /-->';
 		$ids        = [];
 		for ( $i = 0; $i < 5; $i++ ) {
@@ -1676,7 +1682,7 @@ class ContextualPromptRenderTest extends WP_UnitTestCase {
 					'post_status'  => 'publish',
 					'post_content' => $instance,
 					'post_date'    => gmdate( 'Y-m-d H:i:s', time() - $i * 60 ),
-				] 
+				]
 			);
 		}
 		delete_transient( 'newspack_cp_control_candidates_' . $pattern_id );

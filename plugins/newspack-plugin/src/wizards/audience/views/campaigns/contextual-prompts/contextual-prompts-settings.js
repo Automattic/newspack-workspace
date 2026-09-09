@@ -12,7 +12,7 @@
  * WordPress dependencies
  */
 import { __, sprintf } from '@wordpress/i18n';
-import { useEffect, useState } from '@wordpress/element';
+import { useEffect, useRef, useState } from '@wordpress/element';
 import apiFetch from '@wordpress/api-fetch';
 import { addQueryArgs } from '@wordpress/url';
 import {
@@ -83,8 +83,20 @@ const ControlPreview = ( { enabled, interval } ) => {
 	const [ loading, setLoading ] = useState( true );
 	const [ loadingMore, setLoadingMore ] = useState( false );
 
+	// The interval a page's request was issued for. Kept current on every
+	// render so a response can tell, once it lands, whether the interval has
+	// since moved on — e.g. a "Load more" request outlives an interval change
+	// that already reset the list, in which case its rows must be dropped
+	// instead of appended to the new interval's list.
+	const intervalRef = useRef( interval );
+	intervalRef.current = interval;
+
 	const fetchPage = ( offset, append ) => {
+		const requestedInterval = interval;
 		return apiFetch( { path: addQueryArgs( PREVIEW_PATH, { interval, offset } ) } ).then( response => {
+			if ( requestedInterval !== intervalRef.current ) {
+				return;
+			}
 			setTotal( response.total || 0 );
 			setPosts( previous => ( append ? [ ...previous, ...( response.posts || [] ) ] : response.posts || [] ) );
 		} );
