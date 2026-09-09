@@ -467,6 +467,12 @@ class Lite_Site {
 	 * @return string The formatted author(s) string with links.
 	 */
 	public static function get_authors( $post ) {
+		// An active custom byline replaces the author-derived byline entirely.
+		$custom_byline = Bylines::get_custom_byline_html( $post->ID );
+		if ( ! empty( $custom_byline ) ) {
+			return $custom_byline;
+		}
+
 		if ( function_exists( 'coauthors_posts_links' ) ) {
 			$authors = get_coauthors( $post->ID );
 			$author_links = array_map(

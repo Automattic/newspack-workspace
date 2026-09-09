@@ -133,6 +133,32 @@ class Test_Lite_Site extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * Test that the byline defaults to the post author.
+	 */
+	public function test_get_authors_defaults_to_post_author() {
+		$author_id = $this->factory()->user->create( [ 'display_name' => 'Account Author' ] );
+		$post      = $this->factory()->post->create_and_get( [ 'post_author' => $author_id ] );
+
+		$this->assertStringContainsString( 'Account Author', Lite_Site::get_authors( $post ) );
+	}
+
+	/**
+	 * Test that an active custom byline is honored over the post author.
+	 */
+	public function test_get_authors_honors_custom_byline() {
+		$author_id = $this->factory()->user->create( [ 'display_name' => 'Account Author' ] );
+		$post      = $this->factory()->post->create_and_get( [ 'post_author' => $author_id ] );
+
+		update_post_meta( $post->ID, \Newspack\Bylines::META_KEY_ACTIVE, 1 );
+		update_post_meta( $post->ID, \Newspack\Bylines::META_KEY_BYLINE, 'By Custom Person with reporting from Jane Doe' );
+
+		$authors = Lite_Site::get_authors( $post );
+
+		$this->assertStringContainsString( 'Custom Person', $authors );
+		$this->assertStringNotContainsString( 'Account Author', $authors );
+	}
+
+	/**
 	 * Test that a revision is not accessible.
 	 */
 	public function test_revision_is_not_accessible() {
