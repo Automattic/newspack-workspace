@@ -70,6 +70,17 @@ describe( 'gate.js seen-event capability flags', () => {
 		expect( submission[ 0 ].action_type ).toBe( 'newsletter_signup' );
 	} );
 
+	it( 'keeps a registration-block submission labelled registration even though it also posts npe', () => {
+		seenPayloadFor(
+			'<div class="newspack-registration"><form><input type="hidden" name="newspack_reader_registration" value="1" /><input type="email" name="npe" value="reader@example.test" /></form></div>'
+		);
+
+		mockSendEvent.mockReset();
+		document.querySelector( '.newspack-registration form' ).dispatchEvent( new Event( 'submit', { bubbles: true, cancelable: true } ) );
+		const submission = mockSendEvent.mock.calls.find( ( [ payload ] ) => payload?.action === 'form_submission' );
+		expect( submission[ 0 ].action_type ).toBe( 'registration' );
+	} );
+
 	it( 'reports no newsletter block on a registration-block gate', () => {
 		const payload = seenPayloadFor( '<div class="newspack-registration"><form></form></div>' );
 

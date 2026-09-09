@@ -322,8 +322,9 @@ function handleFormSubmission( evt, gate ) {
 			}
 		}
 	}
-	// The newsletter block's form posts the email as `npe`.
-	if ( data.npe ) {
+	// Keyed on the block's container, not on a field: the auth modal and the
+	// Reader Registration block also post the email as `npe`.
+	if ( evt.target.closest( '.newspack-newsletters-subscribe' ) ) {
 		payload.action_type = 'newsletter_signup';
 	}
 	if ( data.newspack_checkout ) {
