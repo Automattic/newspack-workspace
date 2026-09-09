@@ -124,6 +124,11 @@ function addFormInputs( gate ) {
 		...gate.querySelectorAll( '.newspack-registration form' ), // Registration block.
 		...gate.querySelectorAll( '.wp-block-newspack-blocks-checkout-button form' ), // Checkout button block.
 		...gate.querySelectorAll( '.wp-block-newspack-blocks-donate form' ), // Donate block.
+		// Newsletter Subscription Form block. With Reader Activation on, a signup
+		// here registers the reader too, and the newsletters handler copies this
+		// input into the registration metadata, so the reader_registered and
+		// newsletter_signup events carry the gate that produced them.
+		...gate.querySelectorAll( '.newspack-newsletters-subscribe form' ),
 	];
 	forms.forEach( form => {
 		if ( ! form.querySelector( 'input[name="gate_post_id"]' ) ) {
@@ -200,8 +205,7 @@ function getGateEventPayload( payload, gate ) {
 		// A Newsletter Subscription Form block registers the reader as well as
 		// subscribing them (when Reader Activation is on), so a gate built from it
 		// is a registration surface too. Insights on the hub reads this flag for
-		// both its registration- and newsletter-intent predicates; without it a
-		// newsletter-based gate looked like no surface at all.
+		// both its registration- and newsletter-intent definitions.
 		gateInfo.gate_has_newsletter_block = isVisible( gate.querySelector( '.newspack-newsletters-subscribe' ) ) ? 'yes' : 'no';
 		gateInfo.gate_has_checkout_button = isVisible( gate.querySelector( '.wp-block-newspack-blocks-checkout-button' ) ) ? 'yes' : 'no';
 		gateInfo.gate_has_registration_link = isVisible( gate.querySelector( 'a[href="#register_modal"]' ) ) ? 'yes' : 'no';
@@ -317,6 +321,10 @@ function handleFormSubmission( evt, gate ) {
 				}
 			}
 		}
+	}
+	// The newsletter block's form posts the email as `npe`.
+	if ( data.npe ) {
+		payload.action_type = 'newsletter_signup';
 	}
 	if ( data.newspack_checkout ) {
 		payload.action_type = 'checkout_button';

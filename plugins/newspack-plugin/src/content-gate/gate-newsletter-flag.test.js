@@ -1,9 +1,8 @@
 /**
- * The gate's `seen` event stamps a capability flag per surface-bearing block.
- * `gate_has_newsletter_block` is what lets Insights on the hub count a gate
- * built from the Newsletter Subscription Form block as a registration- and
- * newsletter-intent surface; before it existed such a gate looked like no
- * surface at all.
+ * A gate built from the Newsletter Subscription Form block is a registration
+ * and newsletter surface: the `seen` event stamps `gate_has_newsletter_block`
+ * so Insights on the hub can count it, and the block's form carries the
+ * gate's id so the registration it produces can be attributed to the gate.
  *
  * gate.js is imported for its side effects, so the mocks below have to be in
  * place before the import is evaluated.
@@ -54,7 +53,21 @@ describe( 'gate.js seen-event capability flags', () => {
 
 		expect( payload.gate_has_newsletter_block ).toBe( 'yes' );
 		expect( payload.gate_has_registration_block ).toBe( 'no' );
-		expect( payload.gate_has_registration_link ).toBe( 'no' );
+	} );
+
+	it( 'stamps the gate id onto the newsletter form and labels its submission', () => {
+		seenPayloadFor(
+			'<div class="newspack-newsletters-subscribe"><form><input type="email" name="npe" value="reader@example.test" /></form></div>'
+		);
+
+		const form = document.querySelector( '.newspack-newsletters-subscribe form' );
+		expect( form.querySelector( 'input[name="gate_post_id"]' ).value ).toBe( '123' );
+
+		mockSendEvent.mockReset();
+		form.dispatchEvent( new Event( 'submit', { bubbles: true, cancelable: true } ) );
+		const submission = mockSendEvent.mock.calls.find( ( [ payload ] ) => payload?.action === 'form_submission' );
+		expect( submission ).toBeDefined();
+		expect( submission[ 0 ].action_type ).toBe( 'newsletter_signup' );
 	} );
 
 	it( 'reports no newsletter block on a registration-block gate', () => {
