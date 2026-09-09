@@ -7,8 +7,10 @@
 
 namespace Newspack;
 
-$current_post_id = get_query_var( 'lite_site_id' );
-$current_post = get_post( $current_post_id );
+// Without the guard, get_post( '' ) falls back to the global post, giving
+// every post an ID-free lite route via ?lite_site=single on its own URL.
+$current_post_id = absint( get_query_var( 'lite_site_id' ) );
+$current_post = $current_post_id ? get_post( $current_post_id ) : null;
 
 if ( ! Lite_Site::is_post_accessible( $current_post ) ) {
 	status_header( 404 );
