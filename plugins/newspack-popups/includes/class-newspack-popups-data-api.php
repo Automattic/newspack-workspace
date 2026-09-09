@@ -113,6 +113,13 @@ final class Newspack_Popups_Data_Api {
 			$data['prompt_placement'] = $popup['options']['placement'] ?? '';
 		}
 
+		// A/B test params: a displayed prompt's variant is the reader's assigned
+		// bucket, so static per-prompt params are sufficient for GA analysis.
+		if ( ! empty( $popup['ab_test_id'] ) ) {
+			$data['ab_test_id'] = $popup['ab_test_id'];
+			$data['ab_variant'] = $popup['ab_variant'];
+		}
+
 		$watched_blocks = [
 			'registration'             => 'newspack/reader-registration',
 			'donation'                 => 'newspack-blocks/donate',

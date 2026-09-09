@@ -30,7 +30,7 @@ import { SHOW_AVATARS, useAvatars } from '../data/use-avatars';
 import { useGroups } from '../data/use-groups';
 import { WIZARD_STORE_NAMESPACE } from '../../../../packages/components/src/wizard/store';
 import { STATUS_LABELS, STATUS_BADGE_LEVEL } from '../status';
-import { GROUP_LABEL_PLURAL } from '../labels';
+import { GROUP_LABEL_PLURAL, groupCountLabel, groupLoadFailedLabel } from '../labels';
 import { SubscriptionLink } from '../links';
 
 const DEFAULT_VIEW = {
@@ -216,19 +216,15 @@ export default function GroupList() {
 	// Surface the group count in the header breadcrumb, e.g. "/ Groups (14)".
 	useEffect( () => {
 		setHeaderData( {
-			sectionName: (
-				<>
-					{ GROUP_LABEL_PLURAL }{ ' ' }
-					<span
-						className="newspack-subscribers__header-count"
-						aria-label={ sprintf( __( '%1$s %2$s total', 'newspack-plugin' ), total.toLocaleString(), GROUP_LABEL_PLURAL ) }
-					>
-						{ `(${ total.toLocaleString() })` }
-					</span>
-				</>
-			),
+			sectionName: [
+				{
+					label: GROUP_LABEL_PLURAL,
+					count: groupsLoading || error ? undefined : total,
+					countLabel: groupCountLabel( total ),
+				},
+			],
 		} );
-	}, [ setHeaderData, total ] );
+	}, [ setHeaderData, total, groupsLoading, error ] );
 
 	if ( groupsLoading ) {
 		return (
@@ -242,7 +238,7 @@ export default function GroupList() {
 	// a retry.
 	if ( error ) {
 		return (
-			<Notice isError noticeText={ sprintf( __( 'Could not load %1$s: %2$s', 'newspack-plugin' ), GROUP_LABEL_PLURAL, error ) }>
+			<Notice isError noticeText={ groupLoadFailedLabel( error ) }>
 				<Button variant="link" onClick={ reload }>
 					{ __( 'Retry', 'newspack-plugin' ) }
 				</Button>

@@ -13,13 +13,17 @@ import { CheckboxControl } from '@wordpress/components';
 /**
  * Internal dependencies
  */
-import { ActionCard, Button, Grid, Notice, SelectControl, TextControl } from '../';
+import { ActionCard, Button, Grid, Notice, PageControl, SelectControl, TextControl } from '../';
 import './style.scss';
 
 const isSelectControl = setting => {
 	return Array.isArray( setting.options ) && setting.options.length;
 };
 const getControlComponent = setting => {
+	// An explicit `control` overrides the control implied by the setting's data type.
+	if ( 'page' === setting.control ) {
+		return PageControl;
+	}
 	if ( isSelectControl( setting ) ) {
 		return SelectControl;
 	}
@@ -66,6 +70,8 @@ const SettingsSection = props => {
 				label: option.name || option.label,
 			} ) ) || null,
 		value: setting.value,
+		// Only page controls consume `selected`; keep it off every other control's props.
+		selected: 'page' === setting.control ? setting.selected || null : null,
 		multiple: isSelectControl( setting ) && setting.multiple ? true : null,
 		checked: setting.type === 'boolean' ? !! setting.value : null,
 		onChange: value => {
@@ -104,7 +110,7 @@ const SettingsSection = props => {
 							setSaveDisabled( true );
 						} }
 					>
-						{ __( 'Save Settings', 'newspack' ) }
+						{ __( 'Save Settings', 'newspack-plugin' ) }
 					</Button>
 				)
 			}

@@ -1261,29 +1261,39 @@ class Subscribers_Wizard extends Wizard {
 			true
 		);
 
-		// Mirror the publisher's configurable group/team label so the wizard stays
-		// consistent with the Audience → Setup "Group labels" override.
-		$group_label_singular = class_exists( '\Newspack\Group_Subscription' )
-			? Group_Subscription::get_label( 'singular' )
-			: __( 'Group', 'newspack-plugin' );
-		$group_label_plural = class_exists( '\Newspack\Group_Subscription' )
-			? Group_Subscription::get_label( 'plural' )
-			: __( 'Groups', 'newspack-plugin' );
+		// Ship the raw overrides, blank when unset, so the client can tell a custom noun
+		// from the default, plus the default nouns and the phrase that wraps them
+		// translated here: this bundle's JS strings are not localized, so anything the
+		// client composes itself would read in English beside a translated heading.
+		$group_label_singular = Group_Subscription::get_label_override( 'singular' );
+		$group_label_plural   = Group_Subscription::get_label_override( 'plural' );
 
 		wp_add_inline_script(
 			'newspack-subscribers',
 			'window.newspackSubscribers = ' . wp_json_encode(
 				[
-					'groupLabel'       => $group_label_singular,
-					'groupLabelPlural' => $group_label_plural,
+					'groupLabel'              => $group_label_singular,
+					'groupLabelPlural'        => $group_label_plural,
+					'groupLabelDefault'       => Group_Subscription::get_default_label( 'singular' ),
+					'groupLabelDefaultPlural' => Group_Subscription::get_default_label( 'plural' ),
+					'groupPhrases'            => [
+						/* translators: 1: number of groups. 2: the group label, e.g. "Groups". Word order only; the noun already carries number. */
+						'count'      => __( '%1$s %2$s', 'newspack-plugin' ),
+						/* translators: %s: the group label, e.g. "Group". */
+						'role'       => __( '%s role', 'newspack-plugin' ),
+						/* translators: 1: the group label, e.g. "Groups". 2: the error message. */
+						'loadFailed' => __( 'Could not load %1$s: %2$s', 'newspack-plugin' ),
+						/* translators: 1: the group label, e.g. "Group". 2: the group name. */
+						'view'       => __( 'View %1$s: %2$s', 'newspack-plugin' ),
+					],
 					// Drives the column layout synchronously; the avatar URLs
 					// themselves come from the /avatars REST endpoint.
-					'showAvatars'      => (bool) get_option( 'show_avatars', true ),
+					'showAvatars'             => (bool) get_option( 'show_avatars', true ),
 					// The /avatars endpoint truncates anything past this cap rather
 					// than erroring, so the client must batch to the same number. It
 					// is published here so there is one authority instead of two
 					// constants that can drift apart silently.
-					'avatarBatchCap'   => self::AVATAR_BATCH_CAP,
+					'avatarBatchCap'          => self::AVATAR_BATCH_CAP,
 				]
 			) . ';',
 			'before'

@@ -18,7 +18,7 @@ const defaultControls = [ { title: 'Disable', onClick: jest.fn() } ];
 
 const renderCard = props => render( <CardFeature title="Newsletter ESP" moreControls={ defaultControls } { ...props } /> );
 
-const moreMenu = () => screen.queryByRole( 'button', { name: 'More' } );
+const moreMenu = () => screen.queryByRole( 'button', { name: 'More options for Newsletter ESP' } );
 
 describe( 'CardFeature More menu gating', () => {
 	it( 'shows the More menu when enabled with no requirements', () => {

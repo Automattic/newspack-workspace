@@ -45,6 +45,11 @@ interface EmailItem {
 	source: 'newspack' | 'woocommerce';
 }
 
+// The bundled @wordpress/dataviews types (v10) predate `isDestructive`,
+// which the WP-core-provided runtime DataViews does support — extend the
+// Action type locally so destructive styling can be declared.
+type EmailAction = Action< EmailItem > & { isDestructive?: boolean };
+
 interface EmailSettings {
 	newspack_emails: EmailItem[];
 	post_type: string;
@@ -327,7 +332,7 @@ const Emails = () => {
 		[]
 	);
 
-	const actions: Action< EmailItem >[] = [
+	const actions: EmailAction[] = [
 		{
 			id: 'edit',
 			label: __( 'Edit', 'newspack-plugin' ),

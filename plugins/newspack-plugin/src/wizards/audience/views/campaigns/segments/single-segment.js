@@ -5,7 +5,7 @@
 // eslint-disable-next-line @wordpress/no-unsafe-wp-apis
 import { ToggleControl, CheckboxControl } from '@wordpress/components';
 import { useEffect, useState, Fragment } from '@wordpress/element';
-import { __ } from '@wordpress/i18n';
+import { __, sprintf } from '@wordpress/i18n';
 import find from 'lodash/find';
 import { applyFilters, addFilter } from '@wordpress/hooks';
 
@@ -183,6 +183,10 @@ const SingleSegment = ( { segmentId, setSegments, wizardApiFetch } ) => {
 		return applyFilters( 'newspack.criteria.input', getInput(), criteria, value, update );
 	};
 
+	// translators: %s is the segment's numeric ID.
+	const analyticsIdText = __( 'Analytics ID: %s — this segment’s identifier in Google Analytics reports.', 'newspack-plugin' );
+	const analyticsIdHelp = isNew ? undefined : sprintf( analyticsIdText, segmentId );
+
 	return (
 		<Fragment>
 			<TextControl
@@ -191,6 +195,7 @@ const SingleSegment = ( { segmentId, setSegments, wizardApiFetch } ) => {
 				onChange={ setName }
 				label={ __( 'Title', 'newspack-plugin' ) }
 				className={ 'newspack-campaigns-wizard-segments__title' }
+				help={ analyticsIdHelp }
 			/>
 
 			<SettingsCard

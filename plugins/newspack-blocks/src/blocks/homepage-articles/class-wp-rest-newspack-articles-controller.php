@@ -223,17 +223,36 @@ class WP_REST_Newspack_Articles_Controller extends WP_REST_Controller {
 	}
 
 	/**
-	 * Restrict a list of post types to those that are publicly viewable.
+	 * Restrict a list of post types to those the public articles endpoint may serve:
+	 * publicly-viewable types, plus any explicitly allow-listed via the
+	 * `newspack_blocks_articles_allowed_post_types` filter.
 	 *
-	 * Used to keep the public articles endpoint from exposing post types that
-	 * WordPress would not surface on the front end. Non-viewable types are dropped;
-	 * the returned list may be empty when none qualify (the caller then returns no results).
+	 * Keeps the endpoint from exposing post types WordPress would not surface on the
+	 * front end, while letting a plugin deliberately opt a specific non-viewable CPT
+	 * in. Disallowed types are dropped; the returned list may be empty when none
+	 * qualify (the caller then returns no results).
 	 *
 	 * @param array|string $post_types Requested post type(s).
-	 * @return array Viewable post types (may be empty).
+	 * @return array Allowed post types (may be empty).
 	 */
 	private static function filter_viewable_post_types( $post_types ) {
-		return array_values( array_filter( (array) $post_types, 'is_post_type_viewable' ) );
+		/**
+		 * Post types the public articles endpoint may serve in addition to the
+		 * publicly-viewable ones. Each entry is an explicit, per-CPT decision to
+		 * expose that type's published posts to unauthenticated callers — do not
+		 * add types whose published content should stay off the public REST surface.
+		 *
+		 * @param string[] $allowed Post type slugs to allow. Default empty.
+		 */
+		$allowed = (array) apply_filters( 'newspack_blocks_articles_allowed_post_types', [] );
+		return array_values(
+			array_filter(
+				(array) $post_types,
+				function ( $type ) use ( $allowed ) {
+					return is_post_type_viewable( $type ) || in_array( $type, $allowed, true );
+				}
+			)
+		);
 	}
 
 	/**

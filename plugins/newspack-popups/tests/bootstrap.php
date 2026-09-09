@@ -35,6 +35,9 @@ tests_add_filter( 'muplugins_loaded', '_manually_load_plugin' );
 
 define( 'IS_TEST_ENV', 1 );
 
+// Keep the Contextual Prompts feature enabled so its suites exercise the real code paths.
+define( 'NEWSPACK_CONTEXTUAL_PROMPTS', true );
+
 // Load the composer autoloader.
 require_once __DIR__ . '/../vendor/autoload.php';
 

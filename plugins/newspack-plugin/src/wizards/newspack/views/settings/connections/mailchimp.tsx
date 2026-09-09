@@ -103,7 +103,7 @@ function Mailchimp() {
 			return sprintf(
 				/* translators: %s: username */
 				__( 'Connected as %s', 'newspack-plugin' ),
-				authState?.username ?? {}
+				authState?.username ?? ''
 			);
 		}
 		return __( 'Not connected', 'newspack-plugin' );

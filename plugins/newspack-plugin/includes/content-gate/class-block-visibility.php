@@ -147,6 +147,33 @@ class Block_Visibility {
 			return false;
 		}
 
+		// This predicate evaluates rules itself rather than asking
+		// `newspack_is_post_restricted`, so it needs the dependency stated explicitly.
+		// Without it, with Audience Management off, a members-only block stayed hidden
+		// while the article around it rendered in full — a hole in the page and no
+		// registration surface to fill it.
+		//
+		// Reader Activation alone, NOT Content_Gate::is_gating_active(): block
+		// visibility is flag-independent by design — this class registers
+		// unconditionally, its editor panel loads without `NEWSPACK_CONTENT_GATES`,
+		// and in `custom` mode a block needs no gate at all, just a registration rule.
+		// So the feature is live on sites that never enabled content gates, and ANDing
+		// in the constant would make blocks they deliberately hid render to everyone.
+		// What this rule actually depends on is a reader's ability to register, which
+		// is Reader Activation. So on a constant-off site with Reader Activation on,
+		// blocks keep hiding while page-level gating is off — that asymmetry is left
+		// in place knowingly, because block visibility predates the flag and is used
+		// without it.
+		//
+		// Lives in this shared predicate rather than in filter_render_block() so the
+		// excerpt path answers the same way: with Reader Activation off, an excerpt
+		// must not withhold a block the page around it renders in full.
+		// filter_render_block()'s admin and REST bypass still returns before reaching
+		// here, so editor and REST renders don't pay for the option read.
+		if ( ! Reader_Activation::is_enabled() ) {
+			return false;
+		}
+
 		$mode       = $block['attrs']['newspackAccessControlMode'] ?? 'gate';
 		$visibility = $block['attrs']['newspackAccessControlVisibility'] ?? 'visible';
 		$gate_ids   = [];
@@ -344,6 +371,30 @@ class Block_Visibility {
 	 */
 	public static function enqueue_block_editor_assets() {
 		if ( ! current_user_can( 'edit_others_posts' ) ) {
+			return;
+		}
+
+		// No panel while the rules it configures are inert for readers — offering
+		// controls that do nothing is worse than offering none. Matches the predicate
+		// filter_render_block() enforces on, so the panel is present exactly when the
+		// settings it writes have an effect.
+		//
+		// Only the panel. register_block_type_args() stays unconditional on purpose:
+		// the attributes must keep round-tripping through save and load, so a block
+		// configured before Audience Management was switched off still carries its
+		// settings and starts applying again the moment it is switched back on.
+		//
+		// That works because core bootstraps the PHP-registered attributes into the
+		// client registry independently of our script: get_block_editor_server_block_settings()
+		// prints them on `wp-blocks`, the bootstrap reducer keeps that first definition,
+		// and processBlockType merges it under the block's JS settings — which for
+		// core/group carry no `attributes` key. So the parser keeps and re-serializes
+		// newspackAccessControl* even with this script suppressed. Registering these
+		// attributes ONLY from the JS side would therefore be silent data loss on every
+		// re-save; keep the PHP registration primary. The same caveat applies to any
+		// block added through `newspack_content_gate_block_visibility_blocks` that is
+		// not registered in PHP.
+		if ( ! Reader_Activation::is_enabled() ) {
 			return;
 		}
 

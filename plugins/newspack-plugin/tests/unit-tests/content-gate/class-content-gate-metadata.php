@@ -1012,4 +1012,78 @@ class Newspack_Test_Content_Gate_Metadata extends WP_UnitTestCase {
 			'Grace on: both the active and the in-recovery subscription are sources.'
 		);
 	}
+
+	/**
+	 * A reader whose only route in is a one-time purchase still gets a source.
+	 * The rule shipped in NPPD-2053 after this resolver was written, so it used
+	 * to fall through and sync Content_Access "Yes" with an empty source.
+	 */
+	public function test_one_time_purchase_rule_reports_a_source() {
+		$this->create_gate_with_rules(
+			'One-time purchase gate',
+			[
+				[
+					[
+						'slug'  => 'one_time_purchase',
+						'value' => [
+							'product_ids'    => [ 4242 ],
+							'duration_value' => 1,
+							'duration_unit'  => 'months',
+						],
+					],
+				],
+			]
+		);
+
+		// Force the purchase check to pass without standing up a WooCommerce
+		// order; the rule's own coverage lives with Access_Rules.
+		add_filter( 'newspack_access_rules_has_one_time_purchase', '__return_true' );
+
+		$result = ( new Content_Gate_Metadata( get_user_by( 'id', self::$user_id ) ) )->get_metadata();
+
+		remove_filter( 'newspack_access_rules_has_one_time_purchase', '__return_true' );
+
+		$this->assertSame( 'Yes', $result['Content_Access'] );
+		$this->assertSame( 'one_time_purchase', $result['Content_Access_Source'] );
+	}
+
+	/**
+	 * Attribution memoizes the reader's subscriptions for the request, and a
+	 * sync run is one request spanning many readers and many minutes. Whatever
+	 * clears this class's own cache has to clear that memo too, or a
+	 * subscription that activates between two syncs is invisible to the second
+	 * one — reporting a stale set of product names while Content_Access itself,
+	 * which is not memoized, moves on.
+	 */
+	public function test_reset_cache_clears_the_subscription_attribution_memo() {
+		$first_product_id  = $this->create_mock_product( 620, 'First Plan' );
+		$second_product_id = $this->create_mock_product( 621, 'Second Plan' );
+		$this->create_subscription( self::$user_id, [ $first_product_id ] );
+
+		$this->create_gate_with_rules(
+			'Memo Gate',
+			[
+				[
+					[
+						'slug'  => 'subscription',
+						'value' => [ $first_product_id, $second_product_id ],
+					],
+				],
+			]
+		);
+
+		$first_result = $this->get_metadata_for_user( self::$user_id );
+		$this->assertEquals( 'First Plan', $first_result['Content_Access_Source'] );
+
+		// The reader buys the second plan while the sync process is still alive.
+		$this->create_subscription( self::$user_id, [ $second_product_id ] );
+		Content_Gate_Metadata::reset_cache();
+
+		$second_result = $this->get_metadata_for_user( self::$user_id );
+		$this->assertEquals(
+			'First Plan, Second Plan',
+			$second_result['Content_Access_Source'],
+			'The second sync must see the new subscription, not the memo from the first.'
+		);
+	}
 }

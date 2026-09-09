@@ -1,3 +1,26 @@
+# newspack-components [4.7.0](https://github.com/Automattic/newspack-workspace/compare/newspack-components@4.6.3...newspack-components@4.7.0) (2026-08-31)
+
+
+### Bug Fixes
+
+* **audience:** clearer schedule, impact preview and deal id controls ([#798](https://github.com/Automattic/newspack-workspace/issues/798)) ([4fbc1c8](https://github.com/Automattic/newspack-workspace/commit/4fbc1c8edfad6a78892ef1b8979b9113c70a45a7))
+* **audience:** consistent headers, goal-first rules, accessible controls ([#757](https://github.com/Automattic/newspack-workspace/issues/757)) ([345764c](https://github.com/Automattic/newspack-workspace/commit/345764ca6ead1c5e306515b456106c65ebbaaf5d))
+* **audience:** pricing tables in cards, price editing in a drawer ([#826](https://github.com/Automattic/newspack-workspace/issues/826)) ([8424556](https://github.com/Automattic/newspack-workspace/commit/8424556322f3fbbdc4880417c77437119353d3aa))
+* three WordPress 7.1 regressions in Newsletters ([#876](https://github.com/Automattic/newspack-workspace/issues/876)) ([2cbc687](https://github.com/Automattic/newspack-workspace/commit/2cbc6877394b03eb1fff4694753414ef37d03406))
+
+
+### Features
+
+* **access-control:** make Audience Management an explicit prerequisite (NPPD-1846) ([#765](https://github.com/Automattic/newspack-workspace/issues/765)) ([b5efde2](https://github.com/Automattic/newspack-workspace/commit/b5efde2aa3d050bda9fc629f1ed91e4864a91d33))
+* **campaigns:** Contextual Prompts, AI-assisted story donation asks ([#686](https://github.com/Automattic/newspack-workspace/issues/686)) ([f896387](https://github.com/Automattic/newspack-workspace/commit/f896387b5c3c096b6ed0cacbf2fe89b3e7f6b703)), closes [#719](https://github.com/Automattic/newspack-workspace/issues/719)
+* **campaigns:** pick donor landing page via autocomplete search ([#761](https://github.com/Automattic/newspack-workspace/issues/761)) ([01fa615](https://github.com/Automattic/newspack-workspace/commit/01fa61514954742094dff2fd0e5a4ff3bb4c04b6))
+* **components:** add a drawer component with a compound slot api ([#810](https://github.com/Automattic/newspack-workspace/issues/810)) ([5134ae9](https://github.com/Automattic/newspack-workspace/commit/5134ae9cab353bc8e10e239f7d54f8e3abb24fae))
+
+
+### Dependencies
+
+* **newspack-icons:** upgraded to 1.1.2
+
 ## newspack-components [4.6.3](https://github.com/Automattic/newspack-workspace/compare/newspack-components@4.6.2...newspack-components@4.6.3) (2026-08-20)
 
 

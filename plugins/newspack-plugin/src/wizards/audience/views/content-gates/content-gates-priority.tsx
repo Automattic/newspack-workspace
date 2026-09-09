@@ -30,7 +30,7 @@ const ContentGatesPriority = ( {
 	showModal: boolean;
 	updateGatesData: ( gates: Gate[] ) => void;
 } ) => {
-	const { gates = [] as Gate[] } = useWizardData( AUDIENCE_CONTENT_GATES_WIZARD_SLUG ) as WizardData;
+	const { gates = [] } = useWizardData( AUDIENCE_CONTENT_GATES_WIZARD_SLUG ) as { gates?: Gate[] };
 	const { wizardApiFetch, isFetching, resetError } = useWizardApiFetch( AUDIENCE_CONTENT_GATES_WIZARD_SLUG );
 	const { addNotice, resetNotices } = useDispatch( WIZARD_STORE_NAMESPACE );
 	const [ sortedGates, setSortedGates ] = useState< Gate[] >( gates );

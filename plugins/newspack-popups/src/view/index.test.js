@@ -11,6 +11,7 @@
 const mockPropagate = jest.fn();
 const mockHandleSegmentation = jest.fn();
 const mockHandleAnalytics = jest.fn();
+const mockHandleContextual = jest.fn();
 const mockGetPrompts = jest.fn( () => [] );
 const mockLogPageview = jest.fn();
 
@@ -22,6 +23,9 @@ jest.mock( './segmentation', () => ( {
 } ) );
 jest.mock( './analytics/ga4', () => ( {
 	handleAnalytics: ( ...args ) => mockHandleAnalytics( ...args ),
+} ) );
+jest.mock( './analytics/contextual-prompt', () => ( {
+	handleContextualPromptAnalytics: ( ...args ) => mockHandleContextual( ...args ),
 } ) );
 jest.mock( './utils', () => ( {
 	// domReady runs the callback immediately, which is the path a footer script takes
@@ -39,7 +43,7 @@ let warnSpy;
 describe( 'view entry: preview propagation cannot break reader-facing prompt logic', () => {
 	beforeEach( () => {
 		jest.resetModules();
-		[ mockPropagate, mockHandleSegmentation, mockHandleAnalytics ].forEach( m => m.mockReset() );
+		[ mockPropagate, mockHandleSegmentation, mockHandleAnalytics, mockHandleContextual ].forEach( m => m.mockReset() );
 		global.newspack_popups_view = { has_disabled_prompts: false };
 		window.newspackRAS = [];
 		// Held in a variable rather than reached for as `console.warn`, which the
@@ -68,6 +72,7 @@ describe( 'view entry: preview propagation cannot break reader-facing prompt log
 		expect( warnSpy ).toHaveBeenCalled();
 		expect( mockHandleSegmentation ).toHaveBeenCalled();
 		expect( mockHandleAnalytics ).toHaveBeenCalled();
+		expect( mockHandleContextual ).toHaveBeenCalled();
 	} );
 
 	it( 'pushes the pageview before propagation runs, so a reader never loses it', () => {

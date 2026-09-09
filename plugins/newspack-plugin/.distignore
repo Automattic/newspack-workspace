@@ -26,6 +26,8 @@ phpcs.xml
 .phpcs.xml.dist
 phpcs.xml.dist
 README.md
+AGENTS.md
+CLAUDE.md
 PULL_REQUEST_TEMPLATE.md
 webpack.config.js
 wp-cli.local.yml
@@ -37,6 +39,7 @@ yarn.lock
 includes/plugins/google-site-kit/gtm-template/
 
 # directories
+.claude
 node_modules
 .cache
 .git

@@ -66,13 +66,17 @@ Most cross-plugin coupling runs through `newspack-plugin`. Before changing somet
 
 **Commits** — Conventional commits (`<type>(<scope>): <subject>`), enforced by commitlint. Subject on one line, max 72 chars, no body; `Co-Authored-By` trailers after a blank line. `feat` triggers a minor release and `fix` a patch release via semantic-release, so use those only for publisher-visible change; otherwise `chore`, `ci`, `docs`, `test`, `refactor`, `perf`, `build`, `style`, `revert`. Reference issue numbers in commits and PR descriptions.
 
-**Never modify** changelog or `.pot` files — CI generates them.
+**Never modify** changelog files, which CI generates. Do not hand-edit translation files either: every release attempts to regenerate all units' `.pot` (and the derived `.po`/`.mo`/`.json` where they exist) via `.github/scripts/update-translations.sh`. A unit that fails to regenerate keeps its committed files and the release continues, so a template can still lag; the failed units are named in the Slack message that stable and alpha releases post, and in the workflow log on every channel. Only a stable release on `release` commits the result, and only for the units it released. The `i18n` workflow (`workflow_dispatch`) runs the same script on demand and opens a PR when anything changed. Do not run the per-package generators that predate it (`republication-tracker-tool`'s `grunt i18n`, `newspack-blocks`' `i18n` script); they produce different output, and `grunt i18n` will also rewrite text domains in any `vendor/` or test file carrying a gettext call.
+
+**Lint and auto-fix PHP from the workspace root: `composer phpcs -- <path>` and `composer phpcbf -- <path>`.** This is the one exception to "everything goes through `n`", and it is what per-package CI runs. Do not use a package's own `lint:php` / `fix:php`: most are a bare `./vendor/bin/phpcs` or `phpcbf` with no path argument, and PHPCS walks *up* for its config, so they resolve the root `phpcs.xml`, whose `<file>` list is the whole monorepo. For `phpcs` that means a slow, noisy scan of everything; for **`phpcbf` it means rewriting files across the whole monorepo**. Behavior varies per package (two ship a local ruleset that stays inside the package but differs from the one CI uses; `newspack-network` passes `.` and behaves correctly; two plugins have no such script at all), which is why the root command is the only one worth remembering.
+
+The pre-commit hook and CI always use the root ruleset, whatever a package's local config says.
 
 ### Pre-commit hook
 
 A husky hook runs `lint-staged` on every `git commit` (installed by `pnpm install` at the root). It **checks** staged files and **blocks the commit** on any linter failure; it does not auto-fix. ESLint warnings are non-blocking, but Stylelint and PHPCS exit non-zero on warnings too. Only `.scss` is linted, not `.css`.
 
-- **Auto-fix** with the package's own script: `pnpm --filter <package> run fix:js` / `format:scss` / `fix:php`.
+- **Auto-fix** with the package's own script for JS and SCSS: `pnpm --filter <package> run fix:js` / `format:scss`. For PHP use `composer phpcbf -- <path>` from the root instead; the packages' `fix:php` scripts can rewrite files across the whole monorepo (see above).
 - **Bypass** with `git commit --no-verify`, or `HUSKY=0` for one command or a whole shell. CI re-lints every PR, so skipping locally never lands unlinted code.
 - **PHP scope** comes from `phpcs.xml`'s `<file>` elements, for both the hook and CI, so the hook never blocks a commit over a file CI would not lint. `bin/` is deliberately excluded: it is dev tooling, and the VIP standard's assumptions don't hold for CLI scripts.
 - **Skipped during a merge.** Completing a merge stages the entire base integration, which no author wrote, so linting it would judge the merge against the base branch's lint debt. Rebase, cherry-pick and revert are not exempt.
@@ -96,6 +100,7 @@ n watch [name]                # Rebuild on change
 n test-php [--group X | --filter Y | --list-groups]
 n test-js
 
+n composer <args>             # Composer for the CURRENT project (see below)
 n wp <command>                # WP-CLI (--allow-root added automatically)
 n sh [env]                    # Shell into a container
 
@@ -103,6 +108,8 @@ n sites-add|sites-list|sites-drop <name>   # Extra sites at <name>.test, sharing
 ```
 
 Run any command with `--help` for its full options.
+
+**Of the build/test family, only `build`, `ci-build` and `watch` take a project name.** `test-php`, `test-js` and `composer` resolve the project from your cwd, so `cd` into it first. Passing a name does not error usefully: `n composer <project> install` makes the name a bogus composer subcommand, `n test-php <project>` forwards it to PHPUnit as a positional path (`Cannot open file "..."`), and `n test-js <project>` silently ignores it. (`bin/composer.sh`'s own usage example is stale on this point.) `n npm` resolves from cwd the same way. Other commands such as `env` and `worktree` do take names.
 
 **First-time setup**
 
@@ -155,8 +162,6 @@ n env cleanup                 # Interactive bulk cleanup
 - All env containers share the `newspack_envs` bridge network with their domain as a DNS alias, so they can reach each other (hub/node setups).
 - `n env destroy` removes the container, DB, html dir, hosts entry and worktrees.
 
-With the `newspack` Claude Code plugin installed, `newspack:env-create`, `newspack:env-destroy` and `newspack:worktree` wrap these.
-
 ## Cross-plugin changes
 
 One repository, so a cross-plugin change is one branch and one PR. Before changing shared code in `newspack-plugin`, find its consumers (`grep -rn "<hook or class>" plugins/`) — hooks, filters and direct calls all cross plugin boundaries. Build and test dependencies before dependents: `n build <plugin>`, then `n test-php` in each affected plugin.
@@ -164,15 +169,10 @@ One repository, so a cross-plugin change is one branch and one PR. Before changi
 ## Pull requests
 
 - **Squash merge** (`gh pr merge --squash`). The exception is branch promotions between `main`, `alpha` and `release`, which use merge commits to preserve history.
+- **`hotfix/*` and `epic/*` branches don't release.** They remain valid branch names, but pushes to them no longer publish prerelease tags or builds; releases come only from `release` (stable) and `alpha`. To test a branch on a site, use the installable zip CI's `build-zips` job attaches to every commit.
 - **Never push or merge unless asked.**
 - **One Copilot pass per PR**, requested when the PR opens. After addressing its feedback do not re-request it; the next review should be a human's.
-
-With the `newspack` plugin installed: `newspack:pr-create` → `newspack:pr-feedback` → `newspack:pr-ready` → `newspack:pr-merge`, plus `newspack:pr-test` to test a PR in an isolated env. Install it with `n setup-agents`, or:
-
-```
-/plugin marketplace add Automattic/newspack-devkit
-/plugin install newspack@newspack-devkit
-```
+- **PR bodies follow [the repository template](.github/PULL_REQUEST_TEMPLATE.md).** `gh pr create --body`/`--body-file` bypasses GitHub's automatic template application, so compose the body into the template's sections yourself, and tick only the checklist items that are actually true.
 
 ## External tools
 
