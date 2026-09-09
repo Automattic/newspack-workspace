@@ -214,7 +214,16 @@ export default function RuleForm( { isNew, initialPath = null, rule, vocab, onDo
 	// modes below. Hold whatever the server sent so a value this UI doesn't know
 	// round-trips on save instead of being rewritten to 'min'.
 	const [ composeMode, setComposeMode ] = useState< PricingRuleRow[ 'compose_mode' ] >( rule?.compose_mode ?? 'min' );
-	const [ application, setApplication ] = useState( rule?.application === 'locked' ? 'locked' : seedApplication ?? 'current' );
+	// A saved rule keeps its stored application. A new Custom rule starts locked,
+	// the engine's own default: a rule that pins at purchase can only touch new
+	// sign-ups, so a toggle left alone cannot reprice existing subscribers.
+	// Retention is the one goal that seeds `current`.
+	const [ application, setApplication ] = useState( () => {
+		if ( rule ) {
+			return rule.application === 'locked' ? 'locked' : 'current';
+		}
+		return seedApplication ?? 'locked';
+	} );
 	const [ cycleAnchor, setCycleAnchor ] = useState( rule?.cycle_anchor === 'rule_application' ? 'rule_application' : seedCycleAnchor );
 	const [ publicize, setPublicize ] = useState( Boolean( rule?.publicize ) );
 	const [ intentNote, setIntentNote ] = useState( rule?.intent_note ?? '' );
