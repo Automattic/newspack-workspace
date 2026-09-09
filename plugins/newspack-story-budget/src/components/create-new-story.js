@@ -27,6 +27,8 @@ const CreateStoryModal = ( { onClose } ) => {
 		isCreatingBudget: select( storeNamespace ).isCreatingBudget(),
 	} ) );
 
+	const canManageBudgets = useSelect( select => select( storeNamespace ).canManageBudgets() );
+
 	const budgets = useField( 'budgets' );
 	const fields = useFields();
 
@@ -41,13 +43,17 @@ const CreateStoryModal = ( { onClose } ) => {
 				value: '',
 				label: __( 'Select a budget', 'newspack-story-budget' ),
 			},
-			{
-				value: 'new',
-				label: __( 'Add new budget', 'newspack-story-budget' ),
-			},
+			...( canManageBudgets
+				? [
+						{
+							value: 'new',
+							label: __( 'Add new budget', 'newspack-story-budget' ),
+						},
+				  ]
+				: [] ),
 			...( budgets?.options || [] ),
 		],
-		[ budgets ]
+		[ budgets, canManageBudgets ]
 	);
 
 	const handleFieldChange = ( fieldSlug, newValue ) => {
