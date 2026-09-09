@@ -1617,13 +1617,12 @@ function wcs_get_users_subscriptions( $user_id ) {
 	return apply_filters( 'wcs_get_users_subscriptions', $user_subscriptions, $user_id );
 }
 function wcs_get_subscriptions( $args = [] ) {
-	// Minimal mock: implements the `customer_id`, `product_id` and
-	// `subscription_status` filters plus `subscriptions_per_page`/`offset` paging —
-	// the args the code under test passes. `subscription_status` accepts a single
-	// status or an array; 'any' (alone, in an array, or unset) means no status
-	// filter, matching the real function, which folds 'any' into the built-in stati.
-	// `meta_query` and `orderby` are still ignored — extend here rather than relying
-	// on this returning the full set if a test needs them.
+	// Minimal mock: implements the `customer_id` and `subscription_status` filters
+	// plus `subscriptions_per_page`/`offset` paging — the args the code under test
+	// passes. `subscription_status` accepts a single status or an array; 'any' (or
+	// unset) means no status filter. `meta_query` and `orderby` are still ignored —
+	// extend here rather than relying on this returning the full set if a test
+	// needs them.
 	//
 	// `paged` is deliberately NOT implemented: the real wcs_get_subscriptions()
 	// declares it among its own defaults and strips it before building the query,
@@ -1634,8 +1633,6 @@ function wcs_get_subscriptions( $args = [] ) {
 	global $wcs_mock_query_log;
 	$wcs_mock_query_log[] = $args;
 	$customer_id = $args['customer_id'] ?? null;
-	// 0 is the real function's "no product filter" default, so treat it as unset.
-	$product_id  = empty( $args['product_id'] ) ? null : (int) $args['product_id'];
 	$statuses    = $args['subscription_status'] ?? 'any';
 	$per_page    = isset( $args['subscriptions_per_page'] ) ? (int) $args['subscriptions_per_page'] : 0;
 	// Stageable: set $wcs_mock_ignore_offset to reproduce a query that never advances —
@@ -1647,10 +1644,6 @@ function wcs_get_subscriptions( $args = [] ) {
 		$statuses = null;
 	} elseif ( null !== $statuses ) {
 		$statuses = (array) $statuses;
-		// A lone 'any' inside the array means the same thing as the bare string.
-		if ( in_array( 'any', $statuses, true ) ) {
-			$statuses = null;
-		}
 	}
 	$matches = [];
 	foreach ( $subscriptions_database as $id => $subscription ) {
@@ -1658,9 +1651,6 @@ function wcs_get_subscriptions( $args = [] ) {
 			continue;
 		}
 		if ( null !== $statuses && ! $subscription->has_status( $statuses ) ) {
-			continue;
-		}
-		if ( null !== $product_id && ! $subscription->has_product( $product_id ) ) {
 			continue;
 		}
 		$matches[ $id ] = $subscription;
@@ -1674,10 +1664,13 @@ function wcs_get_subscriptions( $args = [] ) {
 function wcs_get_subscriptions_for_product( $product_ids, $fields = 'ids', $args = [] ) {
 	// Minimal mock mirroring the real return shape: subscriptions keyed by their
 	// ID (so array_keys() yields subscription IDs), matched via WC_Subscription's
-	// `products` array (has_product()). `subscription_status`/paging args are
-	// ignored — extend here if a test needs them.
+	// `products` array (has_product()), ordered by ID as the real function's
+	// `ORDER BY order_items.order_id` does. `limit` is honoured because the plan
+	// filter relies on it to bound its scan in SQL; `offset` and
+	// `subscription_status` are ignored — extend here if a test needs them.
 	global $subscriptions_database;
 	$product_ids   = array_map( 'absint', (array) $product_ids );
+	$limit         = isset( $args['limit'] ) ? (int) $args['limit'] : -1;
 	$subscriptions = [];
 	foreach ( $subscriptions_database as $id => $subscription ) {
 		if ( ! method_exists( $subscription, 'has_product' ) ) {
@@ -1689,6 +1682,10 @@ function wcs_get_subscriptions_for_product( $product_ids, $fields = 'ids', $args
 				break;
 			}
 		}
+	}
+	ksort( $subscriptions );
+	if ( $limit > 0 ) {
+		$subscriptions = array_slice( $subscriptions, 0, $limit, true );
 	}
 	return $subscriptions;
 }

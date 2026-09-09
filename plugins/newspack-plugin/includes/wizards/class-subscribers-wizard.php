@@ -285,7 +285,10 @@ class Subscribers_Wizard extends Wizard {
 						'items'             => [ 'type' => 'string' ],
 						// Each name costs an unindexed post_title lookup plus a
 						// subscription scan, so the list is bounded. No real filter
-						// selects more plans than a site sells.
+						// selects more plans than a site sells. /plans deliberately
+						// returns every name uncapped — the two are not a matched
+						// pair, and a site selling more than this many plans would
+						// offer options that a full selection cannot submit.
 						'maxItems'          => 100,
 						'sanitize_callback' => 'rest_sanitize_request_arg',
 						'validate_callback' => 'rest_validate_request_arg',
@@ -401,11 +404,9 @@ class Subscribers_Wizard extends Wizard {
 	 * members of both.
 	 *
 	 * The contract every option has to meet — pinned by a round-trip test — is that
-	 * filtering on it returns the readers whose Subscription column shows it. That
-	 * is why a group's *product* is not an option (see subscription_product_names):
-	 * a group's members all display the group's name, never the product's, so the
-	 * product would return only the handful of owners who happen to be the
-	 * subscriptions' customers and no returned row would read as the filtered name.
+	 * filtering on it returns the readers whose Subscription column shows it. It is
+	 * what excludes a group's own product from the options (see is_group_product())
+	 * and a variable subscription's parent (see subscription_product_names()).
 	 *
 	 * Scope: the plans the site currently offers, plus every configured group name.
 	 * A reader can still hold a plan that isn't listed — one whose product has since
@@ -418,7 +419,7 @@ class Subscribers_Wizard extends Wizard {
 	 *
 	 * @return \WP_REST_Response
 	 */
-	public function api_get_plans() {
+	public function api_get_plans(): \WP_REST_Response {
 		$this->reset_request_caches();
 		$names = [];
 
@@ -460,7 +461,7 @@ class Subscribers_Wizard extends Wizard {
 	 *
 	 * @return string[] Product names, in no particular order and possibly duplicated.
 	 */
-	private function subscription_product_names() {
+	private function subscription_product_names(): array {
 		if ( ! function_exists( 'wc_get_products' ) ) {
 			return [];
 		}
@@ -488,7 +489,7 @@ class Subscribers_Wizard extends Wizard {
 			if ( ! $product->is_type( 'variable-subscription' ) && ! $this->is_group_product( $product ) ) {
 				$names[] = (string) $product->get_name();
 			}
-			if ( ! $product->is_type( 'variable-subscription' ) || ! function_exists( 'wc_get_product' ) ) {
+			if ( ! $product->is_type( 'variable-subscription' ) ) {
 				continue;
 			}
 			// One product load per variation. The bound is the site's whole
@@ -539,7 +540,7 @@ class Subscribers_Wizard extends Wizard {
 	 *
 	 * @return bool
 	 */
-	private function is_group_product( $product ) {
+	private function is_group_product( \WC_Product $product ): bool {
 		if ( ! class_exists( '\Newspack\Group_Subscription_Settings' ) ) {
 			return false;
 		}
@@ -1497,54 +1498,74 @@ class Subscribers_Wizard extends Wizard {
 	 * Customer IDs holding a subscription (individual or group) on any of the
 	 * named plans.
 	 *
+	 * A cancelled plan qualifies its holder only when nothing live remains, because
+	 * that is what the Subscription column shows: visiblePlanEntries() in
+	 * SubscriberList.jsx hides a cancelled plan for anyone still holding a live one.
+	 * Without the reduction a reader who cancelled one plan and bought another comes
+	 * back under the cancelled plan's filter displaying only the plan they moved to,
+	 * which is the round trip api_get_plans() exists to guarantee.
+	 * customer_ids_for_statuses() applies the same rule on the status axis.
+	 *
 	 * @param string[] $plan_names Plan display names.
 	 *
 	 * @return int[]
 	 */
-	private function customer_ids_for_plans( array $plan_names ) {
-		$ids = [];
+	private function customer_ids_for_plans( array $plan_names ): array {
+		$ids           = [];
+		$cancelled_ids = [];
 
-		// Group plans, matched by the group's configured name.
+		// Group plans, matched by the group's configured name. Trimmed on both sides
+		// because api_get_plans() offers the trimmed name: a buyer who typed
+		// "Acme Team " would otherwise get an option matching nobody. Members inherit
+		// their group's status, so a cancelled group is cancelled for every one of them.
 		foreach ( $this->get_group_subscriptions() as $group ) {
-			if ( in_array( (string) $group['settings']['name'], $plan_names, true ) ) {
-				$ids = array_merge( $ids, array_map( 'intval', Group_Subscription::get_all_members( $group['subscription'] ) ) );
+			if ( ! in_array( trim( (string) $group['settings']['name'] ), $plan_names, true ) ) {
+				continue;
+			}
+			$members = array_map( 'intval', Group_Subscription::get_all_members( $group['subscription'] ) );
+			if ( 'cancelled' === self::map_subscription_status( $group['subscription']->get_status() ) ) {
+				$cancelled_ids = array_merge( $cancelled_ids, $members );
+			} else {
+				$ids = array_merge( $ids, $members );
 			}
 		}
 
 		// Individual plans, matched by product name → subscriptions for that product.
 		//
-		// Paged through wcs_get_subscriptions() a chunk at a time, exactly as the
-		// status scan above does, because only the customer ID is read from each
-		// subscription. Resolving the IDs first and then calling wcs_get_subscription()
-		// on each one costs a query per subscriber — up to FILTER_INCLUDE_CAP of them
-		// in a single admin request, and the most popular plan is both the one an
-		// admin filters on first and the slowest to answer.
+		// The product → subscription-ID lookup is a single uncached join across the
+		// order-item tables, so it runs once per product and is bounded in SQL.
+		// wcs_get_subscriptions() is not a way to page it: handed a product_id but no
+		// customer_id or order_id it runs this same lookup unbounded on every call
+		// (WC_Subscription_Query_Controller::should_filter_query_results), so paging
+		// through it repeats the expensive half rather than splitting it.
+		//
+		// The cap is shared out per product instead of consumed in order, so one plan
+		// with more holders than the whole budget cannot leave the other plans in the
+		// same multi-select matching nobody. Equal shares keep the total at or under
+		// the cap however many plans are ticked.
 		$product_ids = $this->product_ids_for_names( $plan_names );
-		if ( ! empty( $product_ids ) && function_exists( 'wcs_get_subscriptions' ) ) {
-			$hydrated = 0;
+		if ( ! empty( $product_ids ) && function_exists( 'wcs_get_subscriptions_for_product' ) && function_exists( 'wcs_get_subscription' ) ) {
+			$per_product = max( 1, intdiv( self::FILTER_INCLUDE_CAP, count( $product_ids ) ) );
 			foreach ( $product_ids as $product_id ) {
-				for ( $page = 1; $hydrated < self::FILTER_INCLUDE_CAP; $page++ ) {
-					$subscriptions = \wcs_get_subscriptions(
-						[
-							'subscriptions_per_page' => self::FILTER_SCAN_CHUNK,
-							'offset'                 => ( $page - 1 ) * self::FILTER_SCAN_CHUNK,
-							'orderby'                => 'ID',
-							'product_id'             => $product_id,
-							'subscription_status'    => [ 'any' ],
-						]
-					);
-					foreach ( $subscriptions as $subscription ) {
-						$ids[] = (int) $subscription->get_customer_id();
+				foreach ( \wcs_get_subscriptions_for_product( $product_id, 'ids', [ 'limit' => $per_product ] ) as $subscription_id ) {
+					$subscription = \wcs_get_subscription( $subscription_id );
+					if ( ! $subscription ) {
+						continue;
 					}
-					$hydrated += count( $subscriptions );
-					if ( count( $subscriptions ) < self::FILTER_SCAN_CHUNK ) {
-						break;
+					$customer_id = (int) $subscription->get_customer_id();
+					if ( 'cancelled' === self::map_subscription_status( $subscription->get_status() ) ) {
+						$cancelled_ids[] = $customer_id;
+					} else {
+						$ids[] = $customer_id;
 					}
-				}
-				if ( $hydrated >= self::FILTER_INCLUDE_CAP ) {
-					break;
 				}
 			}
+		}
+
+		// The live set is the one customer_ids_for_raw_statuses() memoizes for the
+		// status filter, so this costs no extra scan when both filters are active.
+		if ( ! empty( $cancelled_ids ) ) {
+			$ids = array_merge( $ids, array_diff( $cancelled_ids, $this->customer_ids_for_raw_statuses( [ 'active', 'pending', 'on-hold' ] ) ) );
 		}
 
 		return array_values( array_unique( array_filter( $ids ) ) );
@@ -1582,13 +1603,13 @@ class Subscribers_Wizard extends Wizard {
 		}
 		$ids = array_values( array_unique( $ids ) );
 
-		// api_get_plans() excludes group products from the options, so resolving one
-		// here would make the two halves disagree. They collide by default rather than
-		// rarely: an unnamed group falls back to its product's name
+		// api_get_plans() excludes group products from the options (see
+		// is_group_product()), so resolving one here would make the two halves
+		// disagree. They collide by default rather than rarely: an unnamed group falls
+		// back to its product's name
 		// (Group_Subscription_Settings::get_subscription_settings()), so a product
 		// "Team Plan" with one unnamed group and one renamed group would match the
-		// renamed group's owner when filtering on "Team Plan" — a row whose
-		// Subscription column shows something else.
+		// renamed group's owner when filtering on "Team Plan".
 		if ( ! function_exists( 'wc_get_product' ) ) {
 			return $ids;
 		}

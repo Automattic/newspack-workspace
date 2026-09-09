@@ -1,13 +1,4 @@
 /**
- * The site's plan names, for the subscriber list's plan filter.
- *
- * The group list derives its plan options from the groups it has already loaded,
- * because it loads them all. The subscriber list can't: it is server-paginated,
- * so the plans on the current page are not the plans on the site. This hook
- * fetches the whole set from the endpoint instead.
- */
-
-/**
  * WordPress dependencies.
  */
 import { useEffect, useState } from '@wordpress/element';
@@ -18,12 +9,15 @@ const PATH = '/newspack/v1/wizard/newspack-subscribers/plans';
 /**
  * Fetch every plan name the subscriber list can be filtered by.
  *
+ * The group list derives its options from the groups it has already loaded, because
+ * it loads them all. This list is server-paginated, so the plans on the current page
+ * are not the plans on the site; the whole set comes from the endpoint instead.
+ *
  * Unlike the list hooks there is no loading state to return: these names only
- * populate a filter dropdown, and the table is fully usable without them. A
- * failure degrades to an empty option list rather than blocking or erroring the
- * screen, but it is reported as `failed` so the caller can distinguish it from a
- * site that simply sells no plans — an empty dropdown means two very different
- * things, and only one of them is worth telling the admin about.
+ * populate a filter dropdown, and the table is fully usable without them. A failure
+ * degrades to an empty option list rather than blocking the screen, and is reported
+ * as `failed` because DataViews drops a filter with no options — leaving nothing on
+ * screen to tell a failed read from a site that sells no plans.
  *
  * @return {{plans: string[], failed: boolean}} Plan names, alphabetised by the
  *                                              endpoint, and whether the read failed.
@@ -42,10 +36,6 @@ export function usePlans() {
 				}
 			} )
 			.catch( () => {
-				// The two routes fail independently, so the subscribers notice does not
-				// necessarily cover this one: /plans can fail on its own and leave the
-				// filter offering nothing, with no way for the admin to tell "no plans
-				// configured" from "the read failed". The caller uses this to say which.
 				if ( ! cancelled ) {
 					setFailed( true );
 				}

@@ -37,9 +37,6 @@ describe( 'usePlans', () => {
 	} );
 
 	it( 'degrades to no options when the read fails, and says that it failed', async () => {
-		// The plan list only populates a filter dropdown, so a failure here must not
-		// take the table down with it. It is still reported, because an empty
-		// dropdown otherwise reads as "this site sells no plans".
 		apiFetch.mockRejectedValue( new Error( 'boom' ) );
 
 		const { result } = renderHook( () => usePlans() );

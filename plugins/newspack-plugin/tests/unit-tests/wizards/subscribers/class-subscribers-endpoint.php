@@ -34,6 +34,14 @@ class Test_Subscribers_Wizard_Subscribers_Endpoint extends WP_UnitTestCase {
 	private $user_ids = [];
 
 	/**
+	 * Group-product IDs by product name, so every group sold on one product shares
+	 * it — the shape the product exclusion exists for.
+	 *
+	 * @var int[]
+	 */
+	private $group_product_ids = [];
+
+	/**
 	 * Include the WC mocks before the class boots.
 	 */
 	public static function set_up_before_class() {
@@ -61,6 +69,7 @@ class Test_Subscribers_Wizard_Subscribers_Endpoint extends WP_UnitTestCase {
 		$products_database      = [];
 		$orders_database        = [];
 		$this->user_ids         = [];
+		$this->group_product_ids = [];
 		$this->scope_token      = 'scope' . wp_generate_password( 8, false );
 		Group_Subscription::reset_cache();
 		Group_Subscription_Settings::clear_group_subscription_ids_cache();
@@ -145,7 +154,14 @@ class Test_Subscribers_Wizard_Subscribers_Endpoint extends WP_UnitTestCase {
 	 * @return WC_Subscription
 	 */
 	private function create_group_subscription( int $owner_id, int $limit = 5, string $status = 'active', string $product_name = 'Team Plan' ): WC_Subscription {
-		$product_id = $this->create_subscription_product( $product_name, 'subscription', 0, true );
+		// One product per name across the whole fixture, because that is the shape the
+		// exclusion exists for: many groups sold on a single product. Creating one per
+		// call would give each group its own same-named product and let a per-product
+		// bug pass.
+		if ( ! isset( $this->group_product_ids[ $product_name ] ) ) {
+			$this->group_product_ids[ $product_name ] = $this->create_subscription_product( $product_name, 'subscription', 0, true );
+		}
+		$product_id = $this->group_product_ids[ $product_name ];
 		$sub        = wcs_create_subscription(
 			[
 				'customer_id'    => $owner_id,
@@ -986,9 +1002,19 @@ class Test_Subscribers_Wizard_Subscribers_Endpoint extends WP_UnitTestCase {
 		$product_reader = $this->create_reader( 'RoundTripDigital' );
 		$this->create_individual_subscription( $product_reader, 'active', $product_id );
 
+		// A variation-backed subscriber, because offering and matching a variation run
+		// through different code — get_children() offers it, and a product_variation
+		// clause in product_ids_for_names() matches it. Asserted in separate tests,
+		// either half could break while the other stayed green.
+		$bundle_id        = $this->create_subscription_product( 'Digital Bundle', 'variable-subscription' );
+		$variation_id     = $this->create_subscription_product( 'Digital Bundle - Annual', 'subscription_variation', $bundle_id );
+		$variation_reader = $this->create_reader( 'RoundTripVariation' );
+		$this->create_individual_subscription( $variation_reader, 'active', $variation_id );
+
 		$expected_holders = [
-			'Acme Team'       => [ $group_owner, $group_member ],
-			'Digital Monthly' => [ $product_reader ],
+			'Acme Team'               => [ $group_owner, $group_member ],
+			'Digital Bundle - Annual' => [ $variation_reader ],
+			'Digital Monthly'         => [ $product_reader ],
 		];
 
 		$plan_names = $this->dispatch_plans()->get_data()['items'];
@@ -1010,9 +1036,41 @@ class Test_Subscribers_Wizard_Subscribers_Endpoint extends WP_UnitTestCase {
 	}
 
 	/**
+	 * A cancelled plan filters to the readers who still show it, and only them.
+	 *
+	 * The Subscription column hides a cancelled plan for anyone who also holds a live
+	 * one (visiblePlanEntries in SubscriberList.jsx), so a reader who churned off one
+	 * plan and onto another must not come back under the plan they left: their row
+	 * would read as the plan they moved to. A fully churned reader still shows the
+	 * cancelled plan, so they must. customer_ids_for_statuses() applies the same rule
+	 * on the status axis; this pins it on the plan axis, where an all-active fixture
+	 * cannot see it.
+	 */
+	public function test_a_cancelled_plan_matches_only_a_fully_churned_reader() {
+		$this->login_admin();
+
+		$monthly_id = $this->create_subscription_product( 'Digital Monthly' );
+		$annual_id  = $this->create_subscription_product( 'Digital Annual' );
+
+		$switcher = $this->create_reader( 'Switcher' );
+		$this->create_individual_subscription( $switcher, 'cancelled', $monthly_id );
+		$this->create_individual_subscription( $switcher, 'active', $annual_id );
+
+		$churned = $this->create_reader( 'Churned' );
+		$this->create_individual_subscription( $churned, 'cancelled', $monthly_id );
+
+		$matched = array_column( $this->dispatch( [ 'plan' => [ 'Digital Monthly' ] ] )->get_data()['items'], 'id' );
+
+		$this->assertSame( [ $churned ], $matched, 'Only the reader whose row still shows the cancelled plan is returned.' );
+		$this->assertNotContains( $switcher, $matched, 'A reader who moved to a live plan is not returned under the plan they left.' );
+	}
+
+	/**
 	 * A plan name that matches nothing on the site fails closed — an empty page,
 	 * not the unfiltered list. A stale option in a long-open tab (or a hand-typed
-	 * param) must never widen the result set.
+	 * param) must never widen the result set. The guard predates the plan filter's
+	 * options; it is here so a change to the filter cannot quietly make an unmatched
+	 * name mean "no filter".
 	 */
 	public function test_unknown_plan_filter_returns_an_empty_page() {
 		$this->login_admin();

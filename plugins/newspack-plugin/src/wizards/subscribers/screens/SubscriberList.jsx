@@ -110,7 +110,7 @@ export default function SubscriberList() {
 	// The server owns filter/sort/paginate; this page's rows come back already
 	// narrowed. Group-role, tag and newsletter filters arrive in later slices (the
 	// endpoint honors status and plan here); sorting is name / member-since.
-	const { items, total, pages, loading: subscribersLoading, error, reload } = useSubscribers( view );
+	const { items, total, pages, loading: subscribersLoading, settled, error, reload } = useSubscribers( view );
 
 	// Filter options for the Subscription column: every plan on the site, not just
 	// the ones on this page.
@@ -195,12 +195,7 @@ export default function SubscriberList() {
 			},
 			{
 				id: 'plans',
-				// When the plans read failed the dropdown has no options, which would
-				// otherwise be indistinguishable from a site that sells no plans. Say
-				// which it is in the label, since the filter itself has nowhere else to
-				// put it — the subscribers read raises its own notice only when IT
-				// fails, and the two routes fail independently.
-				label: plansFailed ? __( 'Subscription (plan list unavailable)', 'newspack-plugin' ) : __( 'Subscription', 'newspack-plugin' ),
+				label: __( 'Subscription', 'newspack-plugin' ),
 				// Options come from the plans endpoint rather than the loaded rows:
 				// this list is server-paginated, so the plans on the current page are
 				// not the plans on the site. Filtering is server-side too — see
@@ -351,7 +346,7 @@ export default function SubscriberList() {
 				},
 			},
 		],
-		[ avatars, planElements, plansFailed ]
+		[ avatars, planElements ]
 	);
 
 	// DataViews only makes the title cell clickable; delegate clicks from the
@@ -404,13 +399,13 @@ export default function SubscriberList() {
 
 	const { retryRef, retry } = useRetryFocus( { settled: ! subscribersLoading, failed: Boolean( error ), reload } );
 
-	// Only the first load blanks the screen. Filtering and sorting are server-side,
-	// so every filter toggle and every debounced keystroke is a refetch — unmounting
-	// DataViews for those would take the search box's focus with it and flash the
-	// applied filter chips away mid-interaction. Once there are rows to show, the
-	// loading state is handed to DataViews instead, for the same reason avatars fill
-	// in progressively rather than holding the table back.
-	if ( subscribersLoading && ! items.length ) {
+	// Only the load that has nothing to show blanks the screen. Filtering and
+	// sorting are server-side, so every filter toggle and every debounced keystroke
+	// is a refetch — unmounting DataViews for those would take the search box's
+	// focus with it and flash the applied filter chips away mid-interaction. Once a
+	// response has settled the loading state is handed to DataViews instead, for the
+	// same reason avatars fill in progressively rather than holding the table back.
+	if ( subscribersLoading && ! settled ) {
 		return (
 			<div className="newspack-subscribers__loading">
 				<Waiting isCenter />
@@ -441,6 +436,20 @@ export default function SubscriberList() {
 	return (
 		// eslint-disable-next-line jsx-a11y/no-static-element-interactions, jsx-a11y/click-events-have-key-events
 		<div className="newspack-subscribers__clickable-rows" onClick={ onRowClick }>
+			{ /* The two reads fail independently, so a failed /plans is otherwise
+			     silent: DataViews drops a filter whose `elements` is empty, so the
+			     Subscription filter is simply absent and reads as a site that sells
+			     no plans. The table itself is unaffected, hence a warning beside it
+			     rather than the error notice that replaces the screen. */ }
+			{ plansFailed && (
+				<LoadFailureNotice
+					status="warning"
+					message={ __(
+						'Could not load the plan list, so the Subscription filter is unavailable. Reload the page to try again.',
+						'newspack-plugin'
+					) }
+				/>
+			) }
 			<DataViews
 				data={ items }
 				fields={ fields }
