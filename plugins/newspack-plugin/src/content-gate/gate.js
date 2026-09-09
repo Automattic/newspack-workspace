@@ -124,6 +124,7 @@ function addFormInputs( gate ) {
 		...gate.querySelectorAll( '.newspack-registration form' ), // Registration block.
 		...gate.querySelectorAll( '.wp-block-newspack-blocks-checkout-button form' ), // Checkout button block.
 		...gate.querySelectorAll( '.wp-block-newspack-blocks-donate form' ), // Donate block.
+		...gate.querySelectorAll( '.newspack-newsletters-subscribe form' ), // Newsletter Subscription Form block (see getGateEventPayload).
 	];
 	forms.forEach( form => {
 		if ( ! form.querySelector( 'input[name="gate_post_id"]' ) ) {
@@ -197,6 +198,11 @@ function getGateEventPayload( payload, gate ) {
 	if ( gate ) {
 		gateInfo.gate_has_donation_block = isVisible( gate.querySelector( '.wp-block-newspack-blocks-donate' ) ) ? 'yes' : 'no';
 		gateInfo.gate_has_registration_block = isVisible( gate.querySelector( '.newspack-registration' ) ) ? 'yes' : 'no';
+		// A Newsletter Subscription Form block registers the reader as well as
+		// subscribing them (when Reader Activation is on), so a gate built from it
+		// is a registration surface too. Insights on the hub reads this flag for
+		// both its registration- and newsletter-intent definitions.
+		gateInfo.gate_has_newsletter_block = isVisible( gate.querySelector( '.newspack-newsletters-subscribe' ) ) ? 'yes' : 'no';
 		gateInfo.gate_has_checkout_button = isVisible( gate.querySelector( '.wp-block-newspack-blocks-checkout-button' ) ) ? 'yes' : 'no';
 		gateInfo.gate_has_registration_link = isVisible( gate.querySelector( 'a[href="#register_modal"]' ) ) ? 'yes' : 'no';
 		gateInfo.gate_has_signin_link = isVisible( gate.querySelector( 'a[href="#signin_modal"]' ) ) ? 'yes' : 'no';
@@ -311,6 +317,11 @@ function handleFormSubmission( evt, gate ) {
 				}
 			}
 		}
+	}
+	// Keyed on the block's own hidden field, like the siblings above: the auth
+	// modal and the Reader Registration block also post the email as `npe`.
+	if ( data.newspack_newsletters_subscribe ) {
+		payload.action_type = 'newsletters_subscription'; // Same spelling as the prompt-side listener.
 	}
 	if ( data.newspack_checkout ) {
 		payload.action_type = 'checkout_button';
