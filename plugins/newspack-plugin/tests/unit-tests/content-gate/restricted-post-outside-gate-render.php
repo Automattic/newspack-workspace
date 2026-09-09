@@ -1037,4 +1037,72 @@ class Test_Restricted_Post_Outside_Gate_Render extends \WP_UnitTestCase {
 		$this->assertStringNotContainsString( self::PAID_MARKER, $article );
 		$this->assertSame( 1, substr_count( $article, 'newspack-content-gate__inline-gate' ), 'The article renders its gate after a loop that shared its post object.' );
 	}
+
+	/**
+	 * The same inheriting loop, for a reader the gate lets through: they get the
+	 * whole post in the card, and are asked to pass nothing.
+	 *
+	 * There is no article entry for that reader — restrict_post() clears the slot —
+	 * so the shared instance falls through with the body intact. This is the one
+	 * listing surface where the card is not the same string for every reader, and
+	 * it is deliberate: the reader has the body in the article one block down, and
+	 * nothing reader-blind caches a core Query Loop. Re-staging the shared instance
+	 * for an entitled reader would hand them the anonymous teaser instead, and this
+	 * pins that it does not happen.
+	 */
+	public function test_an_inheriting_query_loop_gives_an_entitled_reader_the_whole_post() {
+		$post_id   = $this->create_restricted_post();
+		$reader_id = $this->factory->user->create( [ 'role' => 'subscriber' ] );
+		wp_set_current_user( $reader_id );
+		$this->reset_restriction_cache();
+		$this->go_to( get_permalink( $post_id ) );
+
+		while ( have_posts() ) {
+			the_post();
+		}
+
+		$inheriting_loop = clone $GLOBALS['wp_query'];
+		$inheriting_loop->rewind_posts();
+		$card = '';
+		while ( $inheriting_loop->have_posts() ) {
+			$inheriting_loop->the_post();
+			$this->assertSame( $GLOBALS['wp_the_query']->post, $GLOBALS['post'], 'The loop sets up the article\'s own instance, which is the premise of this test.' );
+			$card .= apply_filters( 'the_content', get_the_content() );
+		}
+		wp_reset_postdata();
+		wp_set_current_user( 0 );
+
+		$this->assertStringContainsString( self::PAID_MARKER, $card, 'A loop sharing the article\'s post object leaves an entitled reader the whole post.' );
+		$this->assertStringNotContainsString( 'newspack-content-gate__inline-gate', $card, 'No surface asks a reader who passes the gate to pass it again.' );
+	}
+
+	/**
+	 * The main loop on a listing page withholds, which is what scopes the
+	 * shared-instance exemption to a singular request.
+	 *
+	 * On the home page and on every archive the main loop hands the withholding
+	 * the object the main query holds, exactly as an inheriting Query Loop does on
+	 * the article page. Only the request shape separates the two, so drop that half
+	 * of the guard and the first card on every listing page publishes the paid
+	 * body — the page a full-page cache serves hardest.
+	 */
+	public function test_the_main_loop_on_the_home_page_withholds_its_cards() {
+		$post_id = $this->create_restricted_post();
+		$this->go_to( home_url( '/' ) );
+
+		$cards = '';
+		while ( have_posts() ) {
+			the_post();
+			if ( get_the_ID() !== $post_id ) {
+				continue;
+			}
+			$this->assertSame( $GLOBALS['wp_the_query']->post, $GLOBALS['post'], 'The main loop hands back the object the main query holds, which is the premise of this test.' );
+			$cards .= apply_filters( 'the_content', get_the_content() );
+		}
+		wp_reset_postdata();
+
+		$this->assertStringContainsString( self::FREE_MARKER, $cards, 'The restricted post is in the home page loop, which is the premise of this test.' );
+		$this->assertStringNotContainsString( self::PAID_MARKER, $cards, 'A card in the main loop of a listing page shows no more than the free opening.' );
+		$this->assertSame( 0, substr_count( $cards, 'newspack-content-gate__inline-gate' ), 'A card does not carry the article\'s call to action.' );
+	}
 }

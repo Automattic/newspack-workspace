@@ -947,7 +947,23 @@ class Content_Gate {
 		// Such a loop is answered from the article's entry instead, gate and all.
 		// Two calls to action on one page is the cost of a loop that shares the
 		// object, and it is the direction that keeps the call to action on the page.
-		if ( is_singular() && $post === ( $GLOBALS['wp_the_query']->post ?? null ) ) {
+		//
+		// For a reader the gate lets through there is no entry to answer from:
+		// restrict_post() clears the slot, and this return skips the teaser build
+		// and the post_content write, so an inheriting card renders that reader the
+		// whole body. It is the one listing surface where the "one string for every
+		// reader" invariant {@see self::$restricted_content} states does not hold,
+		// and it gives away nothing: the same reader has the body in the article one
+		// block down, and nothing reader-blind caches a core Query Loop.
+		//
+		// The identity test alone is not enough, hence the request shape. An
+		// archive's main loop hands back $wp_the_query->post too, and there that
+		// object is a card: drop this half and the first card on every archive and
+		// on the home page publishes the paid body. Asked of $wp_the_query rather
+		// than the current query so both halves read one object; a legacy
+		// query_posts() is what separates the two.
+		$main_query = $GLOBALS['wp_the_query'] ?? null;
+		if ( $main_query instanceof \WP_Query && $main_query->is_singular() && $post === $main_query->post ) {
 			return;
 		}
 
@@ -982,7 +998,8 @@ class Content_Gate {
 
 		// Substitute on every pass. One post can pass through several loops in a
 		// request — a Query Loop and a sidebar listing over the same posts — and
-		// every loop is handed its own WP_Post instance, so leaving the later
+		// every loop is handed its own WP_Post instance, bar the inheriting query
+		// the guard above returns for, so leaving the later
 		// instances to a staged entry would leave them carrying the full body. A
 		// block that builds its own excerpt from post_content, as newspack-blocks'
 		// Homepage Posts does, then publishes it.
@@ -1239,9 +1256,13 @@ class Content_Gate {
 	 *
 	 * The WP_Post instance set up is what tells the two apart: every loop is handed
 	 * its own, and {@see self::withhold_post_in_loop()} records the ones it
-	 * withheld. The post id cannot, since both renders are of the same post, and
-	 * neither can `in_the_loop()`, which reports on the main query and is true
-	 * throughout a listing rendered from inside the main loop's template.
+	 * withheld. The exception is a query inheriting the main one, which shares the
+	 * article's instance rather than copying it and which that method deliberately
+	 * leaves out of the map; its cards fall through to the staged entry below and
+	 * are answered like the article, gate and all. The post id cannot tell the two
+	 * apart, since both renders are of the same post, and neither can
+	 * `in_the_loop()`, which reports on the main query and is true throughout a
+	 * listing rendered from inside the main loop's template.
 	 *
 	 * @param int $post_id Post being rendered.
 	 * @return array{teaser: string, gate: string}|null
