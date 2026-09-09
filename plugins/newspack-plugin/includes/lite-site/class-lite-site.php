@@ -374,6 +374,43 @@ class Lite_Site {
 	}
 
 	/**
+	 * Get the posts to display on the lite site archive.
+	 *
+	 * Sticky posts are placed first, followed by recent posts.
+	 * Password-protected posts are excluded.
+	 *
+	 * @return \WP_Post[] The posts to display.
+	 */
+	public static function get_archive_posts() {
+		$query_args = [
+			'posts_per_page' => self::get_number_of_posts(),
+			'post_status'    => 'publish',
+			'has_password'   => false,
+		];
+
+		$categories = self::get_categories();
+		if ( ! empty( $categories ) ) {
+			$query_args['category__in'] = $categories;
+		}
+
+		$sticky_posts           = [];
+		$sticky_post_ids_option = get_option( 'sticky_posts' );
+		if ( ! empty( $sticky_post_ids_option ) ) {
+			$sticky_posts = get_posts(
+				[
+					'post__in'     => array_values( $sticky_post_ids_option ),
+					'has_password' => false,
+				]
+			);
+		}
+
+		$all_posts = array_merge( $sticky_posts, get_posts( $query_args ) );
+		$all_posts = array_unique( $all_posts, SORT_REGULAR );
+
+		return array_slice( $all_posts, 0, self::get_number_of_posts() );
+	}
+
+	/**
 	 * Check whether a post can be displayed on the lite site.
 	 *
 	 * Only posts that are publicly viewable and not password-protected are allowed.

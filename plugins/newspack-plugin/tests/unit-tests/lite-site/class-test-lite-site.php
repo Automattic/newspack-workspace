@@ -67,6 +67,59 @@ class Test_Lite_Site extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * Test that the archive listing excludes password-protected posts.
+	 */
+	public function test_archive_posts_exclude_password_protected() {
+		$public_id    = $this->factory()->post->create( [ 'post_status' => 'publish' ] );
+		$protected_id = $this->factory()->post->create(
+			[
+				'post_status'   => 'publish',
+				'post_password' => 'secret',
+			]
+		);
+
+		$ids = wp_list_pluck( Lite_Site::get_archive_posts(), 'ID' );
+
+		$this->assertContains( $public_id, $ids );
+		$this->assertNotContains( $protected_id, $ids );
+	}
+
+	/**
+	 * Test that the archive listing excludes password-protected sticky posts.
+	 */
+	public function test_archive_posts_exclude_password_protected_sticky() {
+		$protected_sticky_id = $this->factory()->post->create(
+			[
+				'post_status'   => 'publish',
+				'post_password' => 'secret',
+			]
+		);
+		update_option( 'sticky_posts', [ $protected_sticky_id ] );
+
+		$ids = wp_list_pluck( Lite_Site::get_archive_posts(), 'ID' );
+
+		$this->assertNotContains( $protected_sticky_id, $ids );
+	}
+
+	/**
+	 * Test that the archive listing renders sticky posts first.
+	 */
+	public function test_archive_posts_put_sticky_first() {
+		$older_id = $this->factory()->post->create(
+			[
+				'post_status' => 'publish',
+				'post_date'   => '2020-01-01 10:00:00',
+			]
+		);
+		$this->factory()->post->create( [ 'post_status' => 'publish' ] );
+		update_option( 'sticky_posts', [ $older_id ] );
+
+		$posts = Lite_Site::get_archive_posts();
+
+		$this->assertSame( $older_id, $posts[0]->ID );
+	}
+
+	/**
 	 * Test that a revision is not accessible.
 	 */
 	public function test_revision_is_not_accessible() {
