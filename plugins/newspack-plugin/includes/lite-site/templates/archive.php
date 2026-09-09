@@ -13,6 +13,7 @@ namespace Newspack;
 <head>
 	<meta charset="<?php bloginfo( 'charset' ); ?>">
 	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<meta name="robots" content="noindex, follow">
 	<title><?php bloginfo( 'name' ); ?></title>
 	<?php require __DIR__ . '/lite-site-styles.php'; ?>
 	<?php Lite_Site::get_ga4_snippet(); ?>
