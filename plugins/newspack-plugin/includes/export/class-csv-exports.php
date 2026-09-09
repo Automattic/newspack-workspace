@@ -482,6 +482,17 @@ final class CSV_Exports {
 									<option value="<?php echo \esc_attr( $meta_key ); ?>"><?php echo \esc_html( $meta_key ); ?></option>
 								<?php endforeach; ?>
 							</select>
+							<?php if ( User_Meta_Columns::keys_were_capped() ) : ?>
+								<p class="description">
+									<?php
+									printf(
+										/* translators: %d: the most keys the list holds. */
+										\esc_html__( 'This site stores more keys than the list holds, so it stops at %d and some keys are not shown.', 'newspack-plugin' ),
+										(int) User_Meta_Columns::MAX_KEYS
+									);
+									?>
+								</p>
+							<?php endif; ?>
 						</div>
 					<?php endif; ?>
 				<?php endif; ?>

@@ -9,6 +9,7 @@ namespace Newspack\CLI;
 
 use WP_CLI;
 use Newspack\CSV_Exports;
+use Newspack\User_Meta_Columns;
 
 defined( 'ABSPATH' ) || exit;
 
@@ -205,7 +206,17 @@ class Export {
 			'date-format' => sprintf( '--date-format must be at most %d characters.', CSV_Exports::MAX_CUSTOM_DATE_FORMAT_LENGTH ),
 		];
 		foreach ( self::get_rejected_flag_values( $raw, $config ) as $flag => $values ) {
-			WP_CLI::error( sprintf( $messages[ $flag ], implode( ', ', $values ) ) );
+			$message = sprintf( $messages[ $flag ], implode( ', ', $values ) );
+			// A capped list and a complete one reject an unlisted key
+			// identically, so the one case where the key may well exist has to
+			// say so itself.
+			if ( 'meta' === $flag && User_Meta_Columns::keys_were_capped() ) {
+				$message .= sprintf(
+					' This site stores more keys than the list holds, so it stops at %d; a key sorting after those needs the newspack_users_export_meta_keys filter.',
+					User_Meta_Columns::MAX_KEYS
+				);
+			}
+			WP_CLI::error( $message );
 		}
 	}
 

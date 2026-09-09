@@ -75,6 +75,80 @@ class Newspack_Test_User_Meta_Columns extends WP_UnitTestCase {
 	}
 
 	/**
+	 * A profile field's key is `sanitize_title()` of the label the publisher
+	 * typed, so the credential heuristic is reading publisher wording rather
+	 * than a plugin's naming: "Secretary" and "Salt Lake City resident" give
+	 * keys holding `secret` and `salt`. Those fields are the reason the picker
+	 * exists, so the Memberships prefix settles a key before the heuristic
+	 * sees it.
+	 */
+	public function test_memberships_fields_survive_credential_shaped_labels() {
+		$user_id = self::factory()->user->create();
+		update_user_meta( $user_id, '_wc_memberships_profile_field_secretary', 'yes' );
+		update_user_meta( $user_id, '_wc_memberships_profile_field_salt_lake_city_resident', 'no' );
+		update_user_meta( $user_id, 'acme_2fa_totp_secret', 'JBSWY3DPEHPK3PXP' );
+
+		$keys = User_Meta_Columns::get_available_keys();
+
+		$this->assertContains( '_wc_memberships_profile_field_secretary', $keys );
+		$this->assertContains( '_wc_memberships_profile_field_salt_lake_city_resident', $keys );
+		// The prefix is the allowance, not the heuristic going away.
+		$this->assertNotContains( 'acme_2fa_totp_secret', $keys );
+	}
+
+	/**
+	 * The cap counts keys that can actually be offered. Memberships for Teams
+	 * writes two protected keys per team, and every protected key sorts before
+	 * the keys a publisher is looking for, so spending the cap on them would
+	 * push the profile fields out of the picker — and out of `--meta`, which
+	 * is bounded by the same list.
+	 */
+	public function test_unofferable_keys_do_not_spend_the_cap() {
+		$user_id = self::factory()->user->create();
+		self::store_meta_keys( $user_id, '_wc_memberships_for_teams_team_%d_role', User_Meta_Columns::MAX_KEYS + 20 );
+		update_user_meta( $user_id, '_wc_memberships_profile_field_birth_year', '1979' );
+		update_user_meta( $user_id, 'reader_zip_code', '07079' );
+
+		$keys = User_Meta_Columns::get_available_keys();
+
+		$this->assertContains( '_wc_memberships_profile_field_birth_year', $keys );
+		$this->assertContains( 'reader_zip_code', $keys );
+		$this->assertFalse( User_Meta_Columns::keys_were_capped() );
+	}
+
+	/**
+	 * A capped list and a complete one look identical on screen, which is what
+	 * would turn a missing column into a silent one, so the cap is something
+	 * the picker and the CLI can report.
+	 */
+	public function test_the_list_stops_at_the_cap_and_says_so() {
+		$user_id = self::factory()->user->create();
+		self::store_meta_keys( $user_id, 'reader_field_%03d', User_Meta_Columns::MAX_KEYS + 20 );
+
+		$this->assertCount( User_Meta_Columns::MAX_KEYS, User_Meta_Columns::get_available_keys() );
+		$this->assertTrue( User_Meta_Columns::keys_were_capped() );
+	}
+
+	/**
+	 * Writes $count meta keys in one statement. The cap only shows up above
+	 * 500 keys, which is more rows than update_user_meta() should be asked to
+	 * write one at a time.
+	 *
+	 * @param int    $user_id    User ID.
+	 * @param string $key_format sprintf format taking the key's index.
+	 * @param int    $count      How many keys to write.
+	 */
+	private static function store_meta_keys( int $user_id, string $key_format, int $count ) {
+		global $wpdb;
+		$rows = [];
+		foreach ( range( 1, $count ) as $index ) {
+			$rows[] = $wpdb->prepare( '( %d, %s, %s )', $user_id, sprintf( $key_format, $index ), 'x' );
+		}
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.NotPrepared
+		$wpdb->query( "INSERT INTO {$wpdb->usermeta} ( user_id, meta_key, meta_value ) VALUES " . implode( ',', $rows ) );
+	}
+
+	/**
 	 * Column ids are namespaced so a meta key named like a core export column
 	 * cannot overwrite it, while the CSV header stays the bare key.
 	 */

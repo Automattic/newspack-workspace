@@ -50,9 +50,9 @@ final class User_Meta_Columns {
 	const KEYS_TTL = 12 * HOUR_IN_SECONDS;
 
 	/**
-	 * Most keys offered. A site with more than this has something writing
-	 * per-user keys programmatically, and a picker that long is unusable
-	 * anyway.
+	 * Most keys offered. A site with more offerable keys than this has
+	 * something writing per-user keys programmatically, and a picker that long
+	 * is unusable anyway.
 	 */
 	const MAX_KEYS = 500;
 
@@ -91,10 +91,25 @@ final class User_Meta_Columns {
 	/**
 	 * Whether a key may be offered as an export column.
 	 *
+	 * The offered prefixes are settled first, and settle the key: what sits
+	 * behind one is a registration answer a reader typed into a field the
+	 * publisher named, so the credential heuristic below has nothing to catch
+	 * there — only the publisher's own wording to trip over. A field labelled
+	 * "Secretary", "Salt Lake City resident" or "Tokens purchased"
+	 * `sanitize_title()`s into a key holding `secret`, `salt` or `token`, and
+	 * would vanish from the picker with nothing on screen to say why. The
+	 * scope limit is a field a publisher literally labels "Password", which
+	 * is offered; `newspack_users_export_meta_keys` can drop it.
+	 *
 	 * @param string $key Meta key.
 	 * @return bool
 	 */
 	private static function is_offerable_key( string $key ): bool {
+		foreach ( self::OFFERED_PROTECTED_PREFIXES as $prefix ) {
+			if ( 0 === strpos( $key, $prefix ) ) {
+				return true;
+			}
+		}
 		foreach ( self::CORE_INTERNAL_KEY_PATTERNS as $pattern ) {
 			if ( preg_match( $pattern, $key ) ) {
 				return false;
@@ -105,15 +120,7 @@ final class User_Meta_Columns {
 				return false;
 			}
 		}
-		if ( ! \is_protected_meta( $key, 'user' ) ) {
-			return true;
-		}
-		foreach ( self::OFFERED_PROTECTED_PREFIXES as $prefix ) {
-			if ( 0 === strpos( $key, $prefix ) ) {
-				return true;
-			}
-		}
-		return false;
+		return ! \is_protected_meta( $key, 'user' );
 	}
 
 	/**
@@ -122,32 +129,79 @@ final class User_Meta_Columns {
 	 * @return string[]
 	 */
 	public static function get_available_keys(): array {
+		return self::get_key_list()['keys'];
+	}
+
+	/**
+	 * Whether MAX_KEYS cut the offered list short.
+	 *
+	 * A capped list and a complete one look the same on screen, which is what
+	 * would turn a missing column into a silent one, so both the picker and
+	 * the CLI say so when it happens.
+	 *
+	 * @return bool
+	 */
+	public static function keys_were_capped(): bool {
+		return self::get_key_list()['capped'];
+	}
+
+	/**
+	 * The offered keys and whether the cap cut the list short.
+	 *
+	 * The cap is applied to the keys that survive filtering rather than to the
+	 * rows the query returns, or keys that can never be offered would spend
+	 * the budget: `_`-prefixed keys sort first, and a site running Memberships
+	 * for Teams writes two of them per team. The query drops those in SQL
+	 * instead, which is exact for `is_protected_meta()` — a leading-underscore
+	 * test — up to a site filtering `is_protected_meta` to unprotect an
+	 * underscored key, which this would then not offer.
+	 *
+	 * @return array{keys:string[],capped:bool}
+	 */
+	private static function get_key_list(): array {
 		$cached = \get_transient( self::KEYS_TRANSIENT );
-		if ( is_array( $cached ) ) {
+		if ( is_array( $cached ) && isset( $cached['keys'], $cached['capped'] ) ) {
 			return $cached;
 		}
 
 		global $wpdb;
-		// Deliberately uncached and unprepared-free: a full DISTINCT scan of
-		// usermeta, run at most twice a day and stored in the transient below.
+		$conditions = [ 'meta_key NOT LIKE %s' ];
+		$values     = [ $wpdb->esc_like( '_' ) . '%' ];
+		foreach ( self::OFFERED_PROTECTED_PREFIXES as $prefix ) {
+			$conditions[] = 'meta_key LIKE %s';
+			$values[]     = $wpdb->esc_like( $prefix ) . '%';
+		}
+		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare -- $conditions is a literal list carrying only %s placeholders; the values are bound below.
+		$sql = "SELECT DISTINCT meta_key FROM {$wpdb->usermeta} WHERE " . implode( ' OR ', $conditions ) . ' ORDER BY meta_key ASC';
+		// Deliberately uncached: a DISTINCT scan of usermeta, run at most twice
+		// a day and stored in the transient below.
 		$keys = $wpdb->get_col( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
-			$wpdb->prepare( "SELECT DISTINCT meta_key FROM {$wpdb->usermeta} ORDER BY meta_key ASC LIMIT %d", self::MAX_KEYS )
+			$wpdb->prepare( $sql, $values ) // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
 		);
-		$keys = is_array( $keys ) ? array_map( 'strval', $keys ) : [];
-		$keys = array_values( array_filter( $keys, [ __CLASS__, 'is_offerable_key' ] ) );
+		$keys   = is_array( $keys ) ? array_map( 'strval', $keys ) : [];
+		$keys   = array_values( array_filter( $keys, [ __CLASS__, 'is_offerable_key' ] ) );
+		$capped = count( $keys ) > self::MAX_KEYS;
+		if ( $capped ) {
+			$keys = array_slice( $keys, 0, self::MAX_KEYS );
+		}
 
 		/**
 		 * Filters the user meta keys offered as export columns.
 		 *
 		 * Protected keys, core bookkeeping and credential-named keys are
-		 * already gone; a site wanting one of those exported adds it back here.
+		 * already gone, as is anything past MAX_KEYS; a site wanting one of
+		 * those exported adds it back here.
 		 *
 		 * @param string[] $keys Meta keys.
 		 */
 		$keys = \apply_filters( 'newspack_users_export_meta_keys', $keys );
 
-		\set_transient( self::KEYS_TRANSIENT, $keys, self::KEYS_TTL );
-		return $keys;
+		$list = [
+			'keys'   => $keys,
+			'capped' => $capped,
+		];
+		\set_transient( self::KEYS_TRANSIENT, $list, self::KEYS_TTL );
+		return $list;
 	}
 
 	/**
