@@ -1677,10 +1677,13 @@ function wcs_get_subscriptions( $args = [] ) {
 function wcs_get_subscriptions_for_product( $product_ids, $fields = 'ids', $args = [] ) {
 	// Minimal mock mirroring the real return shape: subscriptions keyed by their
 	// ID (so array_keys() yields subscription IDs), matched via WC_Subscription's
-	// `products` array (has_product()). `subscription_status`/paging args are
-	// ignored — extend here if a test needs them.
+	// `products` array (has_product()), ordered by ID as the real function's
+	// `ORDER BY order_items.order_id` does. `limit` is honoured because the plan
+	// filter relies on it to bound its scan in SQL; `offset` and
+	// `subscription_status` are ignored — extend here if a test needs them.
 	global $subscriptions_database;
 	$product_ids   = array_map( 'absint', (array) $product_ids );
+	$limit         = isset( $args['limit'] ) ? (int) $args['limit'] : -1;
 	$subscriptions = [];
 	foreach ( $subscriptions_database as $id => $subscription ) {
 		if ( ! method_exists( $subscription, 'has_product' ) ) {
@@ -1692,6 +1695,10 @@ function wcs_get_subscriptions_for_product( $product_ids, $fields = 'ids', $args
 				break;
 			}
 		}
+	}
+	ksort( $subscriptions );
+	if ( $limit > 0 ) {
+		$subscriptions = array_slice( $subscriptions, 0, $limit, true );
 	}
 	return $subscriptions;
 }
