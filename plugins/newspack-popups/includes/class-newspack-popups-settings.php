@@ -452,7 +452,9 @@ class Newspack_Popups_Settings {
 				// Whitelist: anything but 'button' collapses to the default 'form'.
 				$sanitized = 'button' === $value ? 'button' : 'form';
 			} elseif ( self::CONTROL_INTERVAL_OPTION === $key ) {
-				$sanitized = (string) self::clamp_interval( $value );
+				// An emptied field is "no preference": stored empty, so the read
+				// side supplies the default rather than the clamped minimum.
+				$sanitized = '' === trim( (string) $value ) ? '' : (string) self::clamp_interval( $value );
 			} else {
 				$sanitized = sanitize_textarea_field( (string) $value );
 				// An empty publisher name means "follow the site title" (the read-side
@@ -469,8 +471,17 @@ class Newspack_Popups_Settings {
 		}
 		if ( $render_changed ) {
 			// Batcache stores rendered pages in the object cache; there is no
-			// per-URL purge for "every story with a prompt", so flush it all.
-			wp_cache_flush();
+			// per-URL purge for "every story with a prompt", so the whole group
+			// goes. Only worth doing against a persistent cache: without one there
+			// are no rendered pages to strand, and a flush would just discard the
+			// current request's own work.
+			if ( wp_using_ext_object_cache() ) {
+				if ( function_exists( 'wp_cache_supports' ) && wp_cache_supports( 'flush_group' ) ) {
+					wp_cache_flush_group( 'batcache' );
+				} else {
+					wp_cache_flush();
+				}
+			}
 			/**
 			 * Fires after a Contextual Prompts setting that changes rendered output
 			 * (site-wide override or control test) was saved with a new value.

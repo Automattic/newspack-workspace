@@ -175,17 +175,14 @@ final class Newspack_Popups {
 	}
 
 	/**
-	 * The post being edited, on the editor screen. `get_the_ID()` is set there;
-	 * the query arg is the fallback for the first paint of a new post.
+	 * The post being edited, on the editor screen: `get_the_ID()` covers it,
+	 * including the first paint of a new post, which has an id from the auto-draft
+	 * the screen was opened on.
 	 *
 	 * @return int
 	 */
 	private static function get_current_post_id() {
-		$id = (int) get_the_ID();
-		if ( ! $id && isset( $_GET['post'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- read-only id on an admin screen.
-			$id = absint( $_GET['post'] ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
-		}
-		return $id;
+		return (int) get_the_ID();
 	}
 
 	/**

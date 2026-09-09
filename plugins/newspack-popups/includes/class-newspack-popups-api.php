@@ -306,6 +306,7 @@ final class Newspack_Popups_API {
 				'limit'    => $limit,
 				'offset'   => $offset,
 				'total'    => $preview['total'],
+				'capped'   => $preview['capped'],
 				'posts'    => $preview['posts'],
 			]
 		);

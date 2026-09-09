@@ -27,6 +27,13 @@ class ContextualPromptRenderTest extends WP_UnitTestCase {
 	const CUSTOM_URL = 'https://example.com/custom/';
 
 	/**
+	 * Destinations the attribution args must not be appended to: another site,
+	 * and a scheme that isn't the web.
+	 */
+	const EXTERNAL_URL = 'https://donations.example.test/give/';
+	const MAILTO_URL   = 'mailto:news@example.test';
+
+	/**
 	 * The copy an instance carries as its own pattern override, so "the site-wide
 	 * override won" is provable rather than merely "the override rendered".
 	 */
@@ -105,10 +112,16 @@ class ContextualPromptRenderTest extends WP_UnitTestCase {
 	 * between tests the way a new request would.
 	 */
 	private function reset_request_state() {
-		foreach ( [ 'in_instance', 'repaired' ] as $name ) {
+		$state = [
+			'in_instance'        => false,
+			'repaired'           => false,
+			'card_open'          => false,
+			'rendered_condition' => null,
+		];
+		foreach ( $state as $name => $value ) {
 			$property = new ReflectionProperty( 'Newspack_Popups_Contextual_Prompt_Render', $name );
 			$property->setAccessible( true );
-			$property->setValue( null, false );
+			$property->setValue( null, $value );
 		}
 	}
 
@@ -1397,9 +1410,9 @@ class ContextualPromptRenderTest extends WP_UnitTestCase {
 			// Strip the copy paragraph and the attributes that are expected to vary
 			// between two different posts (the post id) or between the two
 			// conditions by design (the condition itself) — what is left is the CTA,
-			// which apply_control() must leave untouched. The button's own href now
-			// carries the same post id and condition (tag_button_destination(),
-			// Task 5), so those query args are stripped too.
+			// which apply_control() must leave untouched. The button's href carries
+			// the same post id and condition (`tag_button_destination()`), so those
+			// query args are stripped too.
 			$cta = function ( $html ) {
 				preg_match( '#<p\b[^>]*>.*?</p>#s', $html, $m );
 				$html = str_replace( $m[0], '', $html );
@@ -1456,6 +1469,7 @@ class ContextualPromptRenderTest extends WP_UnitTestCase {
 		$this->assertSame( 'generic_control', Newspack_Popups_Contextual_Prompt_Render::get_condition( $selected ) );
 		$this->assertSame( 'generic_control', Newspack_Popups_Contextual_Prompt_Render::get_condition( $selected ) );
 		$this->assertSame( 'story_aware', Newspack_Popups_Contextual_Prompt_Render::get_condition( $unselected ) );
+		$this->assertSame( '', Newspack_Popups_Contextual_Prompt_Render::get_condition( 0 ), 'No story, no condition.' );
 		update_option( Newspack_Popups_Settings::CONTROL_ENABLED_OPTION, '' );
 		$this->assertSame( '', Newspack_Popups_Contextual_Prompt_Render::get_condition( $selected ) );
 	}
@@ -1689,6 +1703,7 @@ class ContextualPromptRenderTest extends WP_UnitTestCase {
 
 		$first = Newspack_Popups_Contextual_Prompt_Render::get_control_preview( 1, 2, 0 );
 		$this->assertSame( 5, $first['total'] );
+		$this->assertFalse( $first['capped'], 'Five stories is nowhere near the scan limit.' );
 		$this->assertCount( 2, $first['posts'] );
 		$second = Newspack_Popups_Contextual_Prompt_Render::get_control_preview( 1, 2, 2 );
 		$this->assertCount( 2, $second['posts'] );
@@ -1696,5 +1711,60 @@ class ContextualPromptRenderTest extends WP_UnitTestCase {
 		$last = Newspack_Popups_Contextual_Prompt_Render::get_control_preview( 1, 2, 4 );
 		$this->assertCount( 1, $last['posts'] );
 		$this->assertSame( [], Newspack_Popups_Contextual_Prompt_Render::get_control_preview( 1, 2, 99 )['posts'] );
+	}
+
+	/**
+	 * Attribution query args belong on the site's own destinations. A publisher
+	 * who points the CTA at an external processor or a mailto: address gets that
+	 * link back untouched — the args would be noise there at best, and a mangled
+	 * address at worst.
+	 */
+	public function test_only_same_site_button_destinations_are_tagged() {
+		$this->set_platform( false );
+		$landing = $this->set_donor_landing_page();
+		$group   = $this->stored_group();
+		$cta     = Newspack_Popups_Contextual_Prompt_Render::find_cta( $group );
+		$buttons = Newspack_Popups_Contextual_Prompt_Pattern::build_buttons_child( $landing, 'Donate' );
+		foreach ( [ self::EXTERNAL_URL, self::MAILTO_URL ] as $href ) {
+			$elsewhere = Newspack_Popups_Contextual_Prompt_Pattern::build_buttons_child( $href, 'Elsewhere' );
+			$buttons   = Newspack_Popups_Contextual_Prompt_Render::append_child( $buttons, $elsewhere['innerBlocks'][0] );
+		}
+		$group['innerBlocks'][ $cta['index'] ] = $buttons;
+
+		$rendered = html_entity_decode(
+			$this->render_in_loop(
+				self::factory()->post->create(
+					[
+						'post_status'  => 'publish',
+						'post_content' => serialize_block( $group ),
+					]
+				) 
+			) 
+		);
+		preg_match_all( '/href="([^"]*)"/', $rendered, $matches );
+		$hrefs = $matches[1];
+
+		$this->assertCount( 3, $hrefs );
+		$this->assertStringContainsString( 'contextual_prompt_post_id=', $hrefs[0], 'The donor landing page is this site, so it is tagged.' );
+		$this->assertSame( self::EXTERNAL_URL, $hrefs[1] );
+		$this->assertSame( self::MAILTO_URL, $hrefs[2] );
+	}
+
+	/**
+	 * Render a post in the loop, so get_the_ID() is set the way it is for a reader.
+	 *
+	 * @param int $post_id Post to render.
+	 * @return string Rendered markup.
+	 */
+	private function render_in_loop( $post_id ) {
+		$rendered = '';
+		$query    = new WP_Query( [ 'p' => $post_id ] );
+		while ( $query->have_posts() ) {
+			$query->the_post();
+			$rendered = do_blocks( get_the_content() );
+		}
+		wp_reset_postdata();
+
+		return $rendered;
 	}
 }

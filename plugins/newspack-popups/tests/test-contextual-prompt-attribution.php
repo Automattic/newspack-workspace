@@ -26,13 +26,22 @@ class ContextualPromptAttributionTest extends WP_UnitTestCase {
 			public $meta = [];
 
 			/**
+			 * Whether each key was written as unique.
+			 *
+			 * @var array
+			 */
+			public $unique = [];
+
+			/**
 			 * Record a meta write.
 			 *
-			 * @param string $key   Meta key.
-			 * @param mixed  $value Meta value.
+			 * @param string $key    Meta key.
+			 * @param mixed  $value  Meta value.
+			 * @param bool   $unique Whether the key may appear only once.
 			 */
-			public function add_meta_data( $key, $value ) {
+			public function add_meta_data( $key, $value, $unique = false ) {
 				$this->meta[ $key ] = $value;
+				$this->unique[ $key ] = $unique;
 			}
 		};
 	}
@@ -44,9 +53,19 @@ class ContextualPromptAttributionTest extends WP_UnitTestCase {
 	 * @return array
 	 */
 	private function meta_for( $values ) {
+		return $this->order_for( $values )->meta;
+	}
+
+	/**
+	 * Run the order-line-item hook with cart values and return the order stub.
+	 *
+	 * @param array $values Cart item values.
+	 * @return object
+	 */
+	private function order_for( $values ) {
 		$order = $this->order_stub();
 		Newspack_Popups_Data_Api::checkout_create_order_line_item( null, null, $values, $order );
-		return $order->meta;
+		return $order;
 	}
 
 	/**
@@ -95,6 +114,57 @@ class ContextualPromptAttributionTest extends WP_UnitTestCase {
 		$this->assertSame( $post_id, $meta['_newspack_contextual_prompt_post_id'] );
 		$this->assertArrayNotHasKey( '_newspack_contextual_prompt_placement', $meta );
 		$this->assertArrayNotHasKey( '_newspack_contextual_prompt_condition', $meta );
+	}
+
+	/**
+	 * An order can hold several prompt line items — a donation and a membership
+	 * bought together — and the story a donation is attributed to must not end up
+	 * recorded twice.
+	 */
+	public function test_source_meta_is_written_once() {
+		$post_id = self::factory()->post->create( [ 'post_status' => 'publish' ] );
+		$order   = $this->order_for(
+			[
+				'contextual_prompt_post_id'   => $post_id,
+				'contextual_prompt_placement' => 'mid',
+				'contextual_prompt_condition' => 'generic_control',
+			]
+		);
+		$this->assertSame(
+			[ true, true, true ],
+			[
+				$order->unique['_newspack_contextual_prompt_post_id'],
+				$order->unique['_newspack_contextual_prompt_placement'],
+				$order->unique['_newspack_contextual_prompt_condition'],
+			]
+		);
+	}
+
+	/**
+	 * Attribution is to content a prompt can appear in. A published id of any
+	 * other type — a prompt of its own, say — is rejected rather than inventing a
+	 * story for Insights to group by.
+	 */
+	public function test_an_unsupported_post_type_is_not_a_valid_source() {
+		$prompt_id = self::factory()->post->create(
+			[
+				'post_type'   => Newspack_Popups::NEWSPACK_POPUPS_CPT,
+				'post_status' => 'publish',
+			]
+		);
+		$this->assertSame( [], Newspack_Popups_Contextual_Prompt_Render::validate_source( [ 'contextual_prompt_post_id' => $prompt_id ] ) );
+
+		$page_id = self::factory()->post->create(
+			[
+				'post_type'   => 'page',
+				'post_status' => 'publish',
+			]
+		);
+		$this->assertSame(
+			[ 'contextual_prompt_post_id' => $page_id ],
+			Newspack_Popups_Contextual_Prompt_Render::validate_source( [ 'contextual_prompt_post_id' => $page_id ] ),
+			'A page can carry a prompt, so it stays valid.'
+		);
 	}
 
 	/**

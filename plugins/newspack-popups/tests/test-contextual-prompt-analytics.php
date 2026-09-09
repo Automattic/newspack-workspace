@@ -73,10 +73,16 @@ class ContextualPromptAnalyticsTest extends WP_UnitTestCase {
 	 * between tests the way a new request would.
 	 */
 	private function reset_request_state() {
-		foreach ( [ 'in_instance', 'repaired' ] as $name ) {
+		$state = [
+			'in_instance'        => false,
+			'repaired'           => false,
+			'card_open'          => false,
+			'rendered_condition' => null,
+		];
+		foreach ( $state as $name => $value ) {
 			$property = new ReflectionProperty( 'Newspack_Popups_Contextual_Prompt_Render', $name );
 			$property->setAccessible( true );
-			$property->setValue( null, false );
+			$property->setValue( null, $value );
 		}
 	}
 
@@ -162,18 +168,49 @@ class ContextualPromptAnalyticsTest extends WP_UnitTestCase {
 	 * @return string Rendered markup.
 	 */
 	private function render_post( $content ) {
-		$rendered = '';
-		$query    = new WP_Query(
-			[
-				'p' => self::factory()->post->create(
-					[
-						'post_type'    => 'post',
-						'post_status'  => 'publish',
-						'post_content' => $content,
-					]
-				),
-			]
+		return $this->render_in_loop(
+			self::factory()->post->create(
+				[
+					'post_type'    => 'post',
+					'post_status'  => 'publish',
+					'post_content' => $content,
+				]
+			)
 		);
+	}
+
+	/**
+	 * A published post carrying the markup whose id is, or is not, a multiple of
+	 * the control interval — the id is what decides the condition.
+	 *
+	 * @param string $content  Post content.
+	 * @param int    $interval Control interval.
+	 * @param bool   $selected Whether the id should be a multiple of it.
+	 * @return int Post id.
+	 */
+	private function post_for_interval( $content, $interval, $selected ) {
+		do {
+			$post_id = self::factory()->post->create(
+				[
+					'post_type'    => 'post',
+					'post_status'  => 'publish',
+					'post_content' => $content,
+				]
+			);
+		} while ( ( 0 === $post_id % $interval ) !== $selected );
+		return $post_id;
+	}
+
+	/**
+	 * Render a post in the loop, the way a reader gets it — the stamped post id
+	 * comes from the post being rendered.
+	 *
+	 * @param int $post_id Post to render.
+	 * @return string Rendered markup.
+	 */
+	private function render_in_loop( $post_id ) {
+		$rendered = '';
+		$query    = new WP_Query( [ 'p' => $post_id ] );
 		while ( $query->have_posts() ) {
 			$query->the_post();
 			$rendered = do_blocks( get_the_content() );
@@ -554,5 +591,69 @@ class ContextualPromptAnalyticsTest extends WP_UnitTestCase {
 		$this->assertStringContainsString( 'contextual_prompt_placement=top', $rendered );
 		$this->assertStringNotContainsString( 'contextual_prompt_post_id', get_post( Newspack_Popups_Contextual_Prompt_Pattern::get_pattern_id() )->post_content );
 		$this->assertStringContainsString( esc_url( $landing ), html_entity_decode( $rendered ) );
+	}
+
+	/**
+	 * Turn the control test on.
+	 *
+	 * @param string $body     Control copy.
+	 * @param int    $interval Every Nth story.
+	 */
+	private function set_control( $body = 'Support local news.', $interval = 3 ) {
+		update_option( Newspack_Popups_Settings::CONTROL_ENABLED_OPTION, '1' );
+		update_option( Newspack_Popups_Settings::CONTROL_BODY_OPTION, $body );
+		update_option( Newspack_Popups_Settings::CONTROL_INTERVAL_OPTION, (string) $interval );
+	}
+
+	/**
+	 * A detached card is still a prompt, so a selected story swaps its copy for
+	 * the control copy, reports the swap as `generic_control`, and hands the
+	 * donate form this story's source triple.
+	 */
+	public function test_detached_card_in_a_selected_story_renders_the_control() {
+		$this->set_platform( true );
+		$this->set_control( 'Support local news.', 3 );
+
+		$rendered = $this->render_in_loop( $this->post_for_interval( $this->detached_markup(), 3, true ) );
+
+		$this->assertStringContainsString( 'Support local news.', $rendered );
+		$this->assertStringNotContainsString( 'Detached copy.', $rendered );
+		$this->assertStringContainsString( 'data-newspack-cp-condition="generic_control"', $rendered );
+		$this->assertMatchesRegularExpression( '/name="contextual_prompt_post_id"[^>]*value="\d+"/', $rendered );
+		$this->assertMatchesRegularExpression( '/name="contextual_prompt_placement"[^>]*value="top"/', $rendered );
+		$this->assertMatchesRegularExpression( '/name="contextual_prompt_condition"[^>]*value="generic_control"/', $rendered );
+	}
+
+	/**
+	 * An unselected story keeps the publisher's own copy, and the stamp says so:
+	 * the label follows what actually rendered.
+	 */
+	public function test_detached_card_in_an_unselected_story_keeps_its_copy() {
+		$this->set_platform( true );
+		$this->set_control( 'Support local news.', 3 );
+
+		$rendered = $this->render_in_loop( $this->post_for_interval( $this->detached_markup(), 3, false ) );
+
+		$this->assertStringContainsString( 'Detached copy.', $rendered );
+		$this->assertStringNotContainsString( 'Support local news.', $rendered );
+		$this->assertStringContainsString( 'data-newspack-cp-condition="story_aware"', $rendered );
+	}
+
+	/**
+	 * A fund drive replaces every card, detached ones included, and the stamp
+	 * reports the override rather than the control the drive paused.
+	 */
+	public function test_detached_card_takes_the_fund_drive_override() {
+		$this->set_platform( true );
+		$this->set_control( 'Support local news.', 3 );
+		update_option( Newspack_Popups_Settings::OVERRIDE_ENABLED_OPTION, true );
+		update_option( Newspack_Popups_Settings::OVERRIDE_CTA_OPTION, 'form' );
+		update_option( 'newspack_contextual_prompts_override_body', 'Fund drive copy' );
+
+		$rendered = $this->render_in_loop( $this->post_for_interval( $this->detached_markup(), 3, true ) );
+
+		$this->assertStringContainsString( 'Fund drive copy', $rendered );
+		$this->assertStringNotContainsString( 'Support local news.', $rendered );
+		$this->assertStringContainsString( 'data-newspack-cp-condition="override"', $rendered );
 	}
 }

@@ -333,7 +333,9 @@ final class Newspack_Popups_Data_Api {
 				array_intersect_key( (array) $values, array_flip( Newspack_Popups_Contextual_Prompt_Render::SOURCE_KEYS ) )
 			);
 			foreach ( $source as $key => $value ) {
-				$order->add_meta_data( '_newspack_' . $key, $value );
+				// One order can carry several prompt line items; the story it is
+				// attributed to belongs on it once.
+				$order->add_meta_data( '_newspack_' . $key, $value, true );
 			}
 		}
 	}

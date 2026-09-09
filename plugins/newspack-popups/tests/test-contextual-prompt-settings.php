@@ -58,6 +58,10 @@ class ContextualPromptSettingsTest extends WP_UnitTestCase {
 		$this->assertSame( 20, Newspack_Popups_Settings::get_control_interval() );
 		Newspack_Popups_Settings::save_ai_copy_assistant_fields( [ Newspack_Popups_Settings::CONTROL_INTERVAL_OPTION => 'abc' ] );
 		$this->assertSame( 2, Newspack_Popups_Settings::get_control_interval() );
+		// An emptied field means "no preference", which is the default — not the
+		// minimum an empty string would clamp to.
+		Newspack_Popups_Settings::save_ai_copy_assistant_fields( [ Newspack_Popups_Settings::CONTROL_INTERVAL_OPTION => '  ' ] );
+		$this->assertSame( 3, Newspack_Popups_Settings::get_control_interval() );
 	}
 
 	/**
@@ -90,14 +94,54 @@ class ContextualPromptSettingsTest extends WP_UnitTestCase {
 				$fired++;
 			}
 		);
+		// The flush is for a persistent cache; the test env has none, so one is
+		// declared for the duration of the save.
+		$this->using_ext_object_cache( true );
+		try {
+			Newspack_Popups_Settings::save_ai_copy_assistant_fields(
+				[
+					Newspack_Popups_Settings::CONTROL_ENABLED_OPTION => '1',
+					Newspack_Popups_Settings::CONTROL_BODY_OPTION    => 'Support local news.',
+				]
+			);
+		} finally {
+			$this->using_ext_object_cache( false );
+		}
+		$this->assertFalse( wp_cache_get( 'nppd2249-probe', 'batcache' ) );
+		$this->assertSame( 1, $fired );
+	}
+
+	/**
+	 * Without a persistent cache there is nothing to purge — flushing the local
+	 * array would only throw away the current request's work — but the change
+	 * still has to be announced.
+	 */
+	public function test_saving_without_a_persistent_cache_still_fires_the_action() {
+		wp_cache_set( 'nppd2249-probe', 'cached', 'batcache' );
+		$fired = 0;
+		add_action(
+			'newspack_contextual_prompts_render_settings_changed',
+			function () use ( &$fired ) {
+				$fired++;
+			}
+		);
 		Newspack_Popups_Settings::save_ai_copy_assistant_fields(
 			[
 				Newspack_Popups_Settings::CONTROL_ENABLED_OPTION => '1',
 				Newspack_Popups_Settings::CONTROL_BODY_OPTION    => 'Support local news.',
 			]
 		);
-		$this->assertFalse( wp_cache_get( 'nppd2249-probe', 'batcache' ) );
+		$this->assertSame( 'cached', wp_cache_get( 'nppd2249-probe', 'batcache' ) );
 		$this->assertSame( 1, $fired );
+	}
+
+	/**
+	 * Declare (or withdraw) a persistent object cache for the duration of a save.
+	 *
+	 * @param bool $using Whether wp_using_ext_object_cache() should report one.
+	 */
+	private function using_ext_object_cache( $using ) {
+		$GLOBALS['_wp_using_ext_object_cache'] = $using; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
 	}
 
 	/**
