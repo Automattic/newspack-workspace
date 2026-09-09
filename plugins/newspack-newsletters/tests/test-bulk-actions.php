@@ -1,0 +1,196 @@
+<?php
+/**
+ * Class Newsletters Test Bulk_Actions
+ *
+ * @package Newspack_Newsletters
+ */
+
+/**
+ * Tests the newsletter list-table bulk visibility actions: which newsletters the
+ * handler is allowed to touch, and what the reported count means.
+ */
+class Bulk_Actions_Test extends WP_UnitTestCase {
+
+	/**
+	 * Register the newsletter CPT. Not redundant: the WP test suite does not register
+	 * it, and without it `map_meta_cap()` cannot resolve `edit_post` for this post type
+	 * -- every capability assertion here then trips an incorrect-usage notice. A full
+	 * suite run hides that, because another test file registers the CPT first, so this
+	 * only shows up when the class runs on its own.
+	 */
+	public function set_up() {
+		parent::set_up();
+		\Newspack_Newsletters::register_cpt();
+	}
+
+	/**
+	 * Create a newsletter owned by the given user.
+	 *
+	 * @param int    $author Author user ID.
+	 * @param string $status Post status. Defaults to publish.
+	 *
+	 * @return int Newsletter post ID.
+	 */
+	private function make_newsletter( $author, $status = 'publish' ) {
+		return self::factory()->post->create(
+			[
+				'post_type'   => \Newspack_Newsletters::NEWSPACK_NEWSLETTERS_CPT,
+				'post_status' => $status,
+				'post_author' => $author,
+			]
+		);
+	}
+
+	/**
+	 * A Contributor cannot edit an administrator's newsletter, so the bulk
+	 * handler must skip it: the `is_public` meta stays unset and the reported
+	 * count is zero.
+	 */
+	public function test_bulk_handler_skips_newsletters_the_user_cannot_edit() {
+		$newsletter  = $this->make_newsletter( self::factory()->user->create( [ 'role' => 'administrator' ] ) );
+		$contributor = self::factory()->user->create( [ 'role' => 'contributor' ] );
+		wp_set_current_user( $contributor );
+
+		$this->assertFalse( current_user_can( 'edit_post', $newsletter ), 'Precondition: contributor cannot edit the admin newsletter.' );
+
+		$redirect = Newspack_Newsletters_Bulk_Actions::bulk_action_handler( 'http://example.test/', 'newsletters_public', [ $newsletter ] );
+
+		$this->assertFalse( metadata_exists( 'post', $newsletter, 'is_public' ), 'is_public must not be written for a newsletter the user cannot edit.' );
+		$this->assertStringContainsString( 'newsletters_public_count=0', urldecode( $redirect ), 'The reported count must not include skipped newsletters.' );
+	}
+
+	/**
+	 * Making a page public can promote the post to `publish`, so it needs
+	 * publish_post. An author who can edit their own unpublished newsletter but
+	 * cannot publish must be skipped: the meta stays as it was and the count is
+	 * zero. The non-public direction is unaffected, and is covered below.
+	 */
+	public function test_bulk_handler_requires_publish_capability_to_make_public() {
+		$contributor = self::factory()->user->create( [ 'role' => 'contributor' ] );
+		$newsletter  = $this->make_newsletter( $contributor, 'private' );
+		update_post_meta( $newsletter, 'is_public', false );
+		wp_set_current_user( $contributor );
+
+		$this->assertTrue( current_user_can( 'edit_post', $newsletter ), 'Precondition: the author can edit their own newsletter.' );
+		$this->assertFalse( current_user_can( 'publish_post', $newsletter ), 'Precondition: the author cannot publish it.' );
+
+		$redirect = Newspack_Newsletters_Bulk_Actions::bulk_action_handler( 'http://example.test/', 'newsletters_public', [ $newsletter ] );
+
+		$this->assertFalse( (bool) get_post_meta( $newsletter, 'is_public', true ), 'is_public must stay false without publish_post.' );
+		$this->assertStringContainsString( 'newsletters_public_count=0', urldecode( $redirect ), 'A skipped newsletter must not be counted.' );
+	}
+
+	/**
+	 * The non-public direction de-escalates, so edit_post is enough: an author
+	 * without publish_post can still turn their own newsletter page off.
+	 */
+	public function test_bulk_handler_non_public_direction_needs_only_edit() {
+		$contributor = self::factory()->user->create( [ 'role' => 'contributor' ] );
+		$newsletter  = $this->make_newsletter( $contributor, 'private' );
+		update_post_meta( $newsletter, 'is_public', true );
+		wp_set_current_user( $contributor );
+
+		$this->assertFalse( current_user_can( 'publish_post', $newsletter ), 'Precondition: the author cannot publish it.' );
+
+		$redirect = Newspack_Newsletters_Bulk_Actions::bulk_action_handler( 'http://example.test/', 'newsletters_non_public', [ $newsletter ] );
+
+		$this->assertFalse( (bool) get_post_meta( $newsletter, 'is_public', true ), 'The de-escalating direction must still apply.' );
+		$this->assertStringContainsString( 'newsletters_non_public_count=1', urldecode( $redirect ), 'The de-escalating direction must be counted.' );
+	}
+
+	/**
+	 * A trashed newsletter is skipped. The service provider only moves posts whose
+	 * status it controls (publish/private), so writing the meta on a trashed one
+	 * changes nothing now, counts as an update in the notice, and takes effect
+	 * silently if the newsletter is later restored.
+	 */
+	public function test_bulk_handler_skips_trashed_newsletters() {
+		$admin = self::factory()->user->create( [ 'role' => 'administrator' ] );
+		wp_set_current_user( $admin );
+		$newsletter = $this->make_newsletter( $admin );
+		wp_trash_post( $newsletter );
+
+		$this->assertSame( 'trash', get_post_status( $newsletter ), 'Precondition: the newsletter is in the trash.' );
+		$this->assertTrue( current_user_can( 'edit_post', $newsletter ), 'Precondition: an administrator still passes edit_post on a trashed post.' );
+
+		$redirect = Newspack_Newsletters_Bulk_Actions::bulk_action_handler( 'http://example.test/', 'newsletters_public', [ $newsletter ] );
+
+		$this->assertFalse( metadata_exists( 'post', $newsletter, 'is_public' ), 'is_public must not be written on a trashed newsletter.' );
+		$this->assertStringContainsString( 'newsletters_public_count=0', urldecode( $redirect ), 'A trashed newsletter must not be counted.' );
+	}
+
+	/**
+	 * A user who can edit the newsletter updates it, and the count reflects it.
+	 */
+	public function test_bulk_handler_updates_newsletters_the_user_can_edit() {
+		$admin = self::factory()->user->create( [ 'role' => 'administrator' ] );
+		wp_set_current_user( $admin );
+		$newsletter = $this->make_newsletter( $admin );
+
+		$redirect = Newspack_Newsletters_Bulk_Actions::bulk_action_handler( 'http://example.test/', 'newsletters_public', [ $newsletter ] );
+
+		$this->assertTrue( (bool) get_post_meta( $newsletter, 'is_public', true ), 'is_public should be set true for an editable newsletter.' );
+		$this->assertStringContainsString( 'newsletters_public_count=1', urldecode( $redirect ) );
+	}
+
+	/**
+	 * The non-public branch writes is_public=false and counts it, on an
+	 * editable newsletter.
+	 */
+	public function test_bulk_handler_non_public_branch_updates_and_counts() {
+		$admin = self::factory()->user->create( [ 'role' => 'administrator' ] );
+		wp_set_current_user( $admin );
+		$newsletter = $this->make_newsletter( $admin );
+		update_post_meta( $newsletter, 'is_public', true );
+
+		$redirect = Newspack_Newsletters_Bulk_Actions::bulk_action_handler( 'http://example.test/', 'newsletters_non_public', [ $newsletter ] );
+
+		$this->assertTrue( metadata_exists( 'post', $newsletter, 'is_public' ), 'is_public should still be set.' );
+		$this->assertFalse( (bool) get_post_meta( $newsletter, 'is_public', true ), 'is_public should be flipped to false.' );
+		$this->assertStringContainsString( 'newsletters_non_public_count=1', urldecode( $redirect ) );
+	}
+
+	/**
+	 * Ids that are not newsletters are ignored, even when the user can edit them.
+	 */
+	public function test_bulk_handler_ignores_non_newsletter_ids() {
+		$admin = self::factory()->user->create( [ 'role' => 'administrator' ] );
+		wp_set_current_user( $admin );
+		$post = self::factory()->post->create(
+			[
+				'post_type'   => 'post',
+				'post_author' => $admin,
+			]
+		);
+
+		$redirect = Newspack_Newsletters_Bulk_Actions::bulk_action_handler( 'http://example.test/', 'newsletters_public', [ $post ] );
+
+		$this->assertFalse( metadata_exists( 'post', $post, 'is_public' ), 'is_public must not be written on a non-newsletter post.' );
+		$this->assertStringContainsString( 'newsletters_public_count=0', urldecode( $redirect ) );
+	}
+
+	/**
+	 * A newsletter already in the requested state still counts.
+	 *
+	 * `update_post_meta()` returns false when the value is unchanged, so counting
+	 * only its truthy returns would report "0 newsletters now have public page
+	 * available" for a selection that is already public. The notice describes the
+	 * resulting state, so an unchanged newsletter belongs in it.
+	 */
+	public function test_bulk_handler_counts_a_newsletter_already_in_the_requested_state() {
+		$admin = self::factory()->user->create( [ 'role' => 'administrator' ] );
+		wp_set_current_user( $admin );
+		$newsletter = $this->make_newsletter( $admin );
+		update_post_meta( $newsletter, 'is_public', true );
+
+		$this->assertFalse(
+			update_post_meta( $newsletter, 'is_public', true ),
+			'Precondition: re-writing the same value returns false, which is the case this test exists for.'
+		);
+
+		$redirect = Newspack_Newsletters_Bulk_Actions::bulk_action_handler( 'http://example.test/', 'newsletters_public', [ $newsletter ] );
+
+		$this->assertTrue( (bool) get_post_meta( $newsletter, 'is_public', true ), 'is_public stays true.' );
+		$this->assertStringContainsString( 'newsletters_public_count=1', urldecode( $redirect ), 'A newsletter already public still counts toward the notice, which reports the resulting state.' );
+	}
+}

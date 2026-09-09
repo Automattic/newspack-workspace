@@ -208,6 +208,11 @@ abstract class Wizard {
 			'has_completed_setup' => get_option( NEWSPACK_SETUP_COMPLETE ),
 			'site_title'          => get_option( 'blogname' ),
 			'is_managed'          => method_exists( 'Newspack_Manager', 'is_connected_to_manager' ) && \Newspack_Manager::is_connected_to_manager(),
+			// Access Control configured but not applying. Rendered by the wizard shell as
+			// a Notice below the header and tabs, rather than as the core admin notice
+			// Inert_Gating_Notice prints elsewhere — which this screen would stack above
+			// its own header.
+			'inert_gating'        => Inert_Gating_Notice::get_script_data(),
 		];
 
 		wp_localize_script( 'newspack_data', 'newspack_urls', $urls );

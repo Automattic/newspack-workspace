@@ -374,6 +374,62 @@ class Lite_Site {
 	}
 
 	/**
+	 * Get the posts to display on the lite site archive.
+	 *
+	 * Sticky posts are placed first, followed by recent posts.
+	 * Password-protected posts are excluded.
+	 *
+	 * @return \WP_Post[] The posts to display.
+	 */
+	public static function get_archive_posts() {
+		$query_args = [
+			'posts_per_page' => self::get_number_of_posts(),
+			'post_status'    => 'publish',
+			'has_password'   => false,
+		];
+
+		$categories = self::get_categories();
+		if ( ! empty( $categories ) ) {
+			$query_args['category__in'] = $categories;
+		}
+
+		$sticky_posts           = [];
+		$sticky_post_ids_option = get_option( 'sticky_posts' );
+		if ( ! empty( $sticky_post_ids_option ) ) {
+			$sticky_posts = get_posts(
+				array_merge(
+					$query_args,
+					[ 'post__in' => array_values( $sticky_post_ids_option ) ]
+				)
+			);
+		}
+
+		$all_posts = array_merge( $sticky_posts, get_posts( $query_args ) );
+		$all_posts = array_unique( $all_posts, SORT_REGULAR );
+		$all_posts = array_filter( $all_posts, [ __CLASS__, 'is_post_accessible' ] );
+
+		return array_slice( $all_posts, 0, self::get_number_of_posts() );
+	}
+
+	/**
+	 * Check whether a post can be displayed on the lite site.
+	 *
+	 * Only posts that are publicly viewable, not password-protected, and not
+	 * behind a content gate are allowed. Lite pages are served from the page
+	 * cache with no gating layer of their own, so a post restricted for
+	 * anonymous readers must not render here at all.
+	 *
+	 * @param \WP_Post|null $post The post object.
+	 * @return bool True if the post can be displayed, false otherwise.
+	 */
+	public static function is_post_accessible( $post ) {
+		return $post instanceof \WP_Post
+			&& is_post_publicly_viewable( $post )
+			&& ! post_password_required( $post )
+			&& ! Content_Gate::is_post_restricted( $post->ID );
+	}
+
+	/**
 	 * Get the primary color
 	 *
 	 * @return string The primary color.
@@ -416,6 +472,12 @@ class Lite_Site {
 	 * @return string The formatted author(s) string with links.
 	 */
 	public static function get_authors( $post ) {
+		// An active custom byline replaces the author-derived byline entirely.
+		$custom_byline = Bylines::get_custom_byline_html( $post->ID );
+		if ( ! empty( $custom_byline ) ) {
+			return $custom_byline;
+		}
+
 		if ( function_exists( 'coauthors_posts_links' ) ) {
 			$authors = get_coauthors( $post->ID );
 			$author_links = array_map(
@@ -468,14 +530,18 @@ class Lite_Site {
 	 * @return string The cleaned content.
 	 */
 	public static function clean_content( $content ) {
-		// Remove HTML comments.
-		$content = preg_replace( '/<!--(.|\s)*?-->/', '', $content );
+		// Remove HTML comments. The single-token `.` with the `s` modifier stays
+		// linear on an unclosed `<!--`, where alternation-based patterns
+		// backtrack catastrophically and preg_replace returns null.
+		$content = preg_replace( '/<!--.*?-->/s', '', $content );
 
 		// First remove figures and their contents (including images and captions).
 		$content = preg_replace( '/<figure.*?>.*?<\/figure>/is', '', $content );
 
-		// Remove script tags.
+		// Remove script and style tags along with their contents — wp_kses
+		// would strip the tags but leave raw CSS/JS behind as text.
 		$content = preg_replace( '/<script.*?>.*?<\/script>/is', '', $content );
+		$content = preg_replace( '/<style.*?>.*?<\/style>/is', '', $content );
 
 		// Define allowed HTML elements for text-only content.
 		$allowed_html = [

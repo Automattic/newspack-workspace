@@ -1,0 +1,188 @@
+name: i18n
+
+# On-demand regeneration of WordPress translation files: every unit's .pot
+# template, plus the derived .po/.mo/.json files where a unit ships
+# translations (newspack-blocks and the classic newspack-theme). Changes land
+# via a PR to the dispatched branch.
+#
+# This is the manual half of the i18n setup. The automatic half lives in
+# release.yml, which runs the same script (.github/scripts/update-translations.sh)
+# between "Build all" and multi-semantic-release, so every released zip ships
+# a template matching its strings and the release commit carries it back to
+# main via the post-release branch sync. Dispatch this workflow for the
+# one-off case: bringing a stale committed template up to date without waiting
+# for the unit's next release (the NPPM-3113 backfill), or regenerating a
+# single unit to verify the pipeline.
+#
+# There is deliberately no push trigger. The legacy per-repo workflow ran on
+# every trunk push and pushed its commit back to trunk, which is why it needed
+# a bot-author loop guard; with dispatch-only triggers a regeneration commit
+# can never retrigger this workflow, so the guard is structural instead of a
+# check. Direct pushes to main are blocked anyway, so the write path is a PR,
+# reviewed and merged by whoever dispatched the run.
+
+on:
+  workflow_dispatch:
+    inputs:
+      unit:
+        description: 'Single unit to regenerate (plugins/<name> or themes/<name>). Empty regenerates all units.'
+        required: false
+        default: ''
+        type: string
+
+# cancel-in-progress: a superseded regeneration has nothing worth finishing, and
+# letting it run would open a second PR (the branch name is keyed to the run ID)
+# that duplicates the first and needs its own review under main's ruleset.
+concurrency:
+  group: i18n-${{ github.ref }}
+  cancel-in-progress: true
+
+# All writes (branch push, PR creation) go through the GH_TOKEN PAT so the
+# pushed branch triggers CI (GITHUB_TOKEN pushes don't start workflow runs).
+# The workflow's own token therefore needs read access only.
+permissions:
+  contents: read
+
+env:
+  # Must equal package.json's packageManager field: pnpm/action-setup errors on
+  # a mismatch rather than preferring one.
+  PNPM_VERSION: 10.33.0
+  # Pinned release rather than the moving "latest" phar the legacy workflow
+  # pulled: make-pot/make-json output (including the md5-suffixed JSON
+  # translation filenames) varies across i18n-command versions, so an unpinned
+  # binary can silently rename generated files between runs.
+  WP_CLI_VERSION: 2.12.0
+  # Pinned rather than fetched: the upstream .sha512 asset sits in the same
+  # replaceable release, so fetching it proves only that two files agree. Update
+  # both values together, and verify the digest before committing it.
+  WP_CLI_SHA512: be928f6b8ca1e8dfb9d2f4b75a13aa4aee0896f8a9a0a1c45cd5d2c98605e6172e6d014dda2e27f88c98befc16c040cbb2bd1bfa121510ea5cdf5f6a30fe8832
+
+jobs:
+  i18n:
+    name: Regenerate translation files
+    runs-on: ubuntu-latest
+    steps:
+      # No persisted credentials: workflow_dispatch can select any branch, and
+      # the steps below run install, build and generator code from it. A PAT left
+      # in .git/config would be reachable by a lifecycle script on an unreviewed
+      # branch, and this one can bypass main's protection. It is injected only
+      # into the push and PR creation at the end.
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      # Fail before any expensive step. The input ends up in pnpm --filter, in a
+      # node require() path and in git pathspecs, so hold it to the one shape it
+      # can legally have: empty, or one existing plugins/<slug> or themes/<slug>
+      # directory. update-translations.sh re-validates with the same pattern, so
+      # a bypass here is not load-bearing.
+      - name: Validate unit input
+        env:
+          UNIT: ${{ github.event.inputs.unit }}
+        run: |
+          set -euo pipefail
+          if [ -n "$UNIT" ]; then
+            if ! [[ "$UNIT" =~ ^(plugins|themes)/[a-z0-9][a-z0-9-]*$ ]] || [ ! -d "$UNIT" ]; then
+              echo "Invalid unit '$UNIT' (expected an existing plugins/<name> or themes/<name>)"
+              exit 1
+            fi
+          fi
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4.3.0
+        with:
+          version: ${{ env.PNPM_VERSION }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: '.nvmrc'
+          cache: 'pnpm'
+      # coverage: none keeps xdebug out; the script still raises
+      # xdebug.max_nesting_level defensively in case the runner image changes.
+      - uses: shivammathur/setup-php@7c071dfe9dc99bdf297fa79cb49ea005b9fcadbc # 2.37.1
+        with:
+          php-version: '8.3'
+          coverage: none
+      - run: pnpm install --frozen-lockfile
+      # make-pot scans built JS, so the unit must be built first, and the
+      # build must be allowed to fail the run. The legacy workflow's
+      # `npm run build || true` meant a broken build silently produced a
+      # template missing every JS string, which looks fixed while being worse
+      # than stale. No || here: a red run beats a wrong template.
+      - name: Build (all units)
+        if: github.event.inputs.unit == ''
+        run: pnpm run build
+      - name: Build (single unit)
+        if: github.event.inputs.unit != ''
+        env:
+          UNIT: ${{ github.event.inputs.unit }}
+        run: |
+          set -euo pipefail
+          # Shared packages first: unit builds consume newspack-scripts and
+          # friends from the workspace (same reason release.yml builds them
+          # before the plugin/theme builds).
+          pnpm run build:packages
+          # The workspace package name is not always the directory name
+          # (@automattic/newspack-blocks, newspack for newspack-plugin), so
+          # resolve it from the unit's package.json. $UNIT is validated above.
+          PKG=$(node -p "require('./$UNIT/package.json').name")
+          pnpm --filter "$PKG" run --if-present build
+      # Checksum-verified, not just version-pinned: release assets can be deleted
+      # and re-uploaded at the same tag URL, so a pin alone does not fix what
+      # runs. Keep in step with release.yml.
+      - name: Install WP-CLI and gettext
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP"
+          curl -fsSL --retry 3 -O \
+            "https://github.com/wp-cli/wp-cli/releases/download/v${WP_CLI_VERSION}/wp-cli-${WP_CLI_VERSION}.phar"
+          printf '%s  wp-cli-%s.phar\n' "$WP_CLI_SHA512" "$WP_CLI_VERSION" | sha512sum -c -
+          chmod +x "wp-cli-${WP_CLI_VERSION}.phar"
+          sudo mv "wp-cli-${WP_CLI_VERSION}.phar" /usr/local/bin/wp
+          wp --version
+          # msgmerge/msgfmt for folding the new template into shipped .po/.mo
+          # files; the runner image ships gettext-base only, which lacks both.
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq gettext
+      # --strict: a dispatched run exists only to regenerate, so any unit
+      # failing must fail the run loudly (release.yml calls the same script
+      # without --strict and degrades to the committed files instead).
+      - name: Regenerate translation files
+        env:
+          UNIT: ${{ github.event.inputs.unit }}
+        run: |
+          set -euo pipefail
+          if [ -n "$UNIT" ]; then
+            ./.github/scripts/update-translations.sh --strict "$UNIT"
+          else
+            ./.github/scripts/update-translations.sh --strict
+          fi
+      # The pathspecs need the trailing /* : a glob pathspec must match the
+      # full file path, so 'plugins/*/languages' alone matches nothing. The *
+      # crosses directory separators, which is what lets 'themes/*/languages/*'
+      # also reach the classic theme's nested
+      # themes/newspack-theme/newspack-theme/languages/.
+      - name: Open PR with regenerated files
+        env:
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
+          BASE_REF: ${{ github.ref_name }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          # Generated commit on a runner with no composer vendor/: the husky
+          # pre-commit PHPCS wrapper would hard-fail. CI fully lints the PR.
+          HUSKY: '0'
+        run: |
+          set -euo pipefail
+          if [ -z "$(git status --porcelain -- 'plugins/*/languages/*' 'themes/*/languages/*')" ]; then
+            echo "No translation changes beyond header churn; nothing to open a PR for."
+            exit 0
+          fi
+          git config user.name "newspack-release-bot"
+          git config user.email "newspack-release-bot@users.noreply.github.com"
+          # RUN_ATTEMPT too: a rerun keeps the run ID, so an attempt that pushed
+          # the branch and then failed at PR creation would collide with itself.
+          BRANCH="i18n/update-translations-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          git checkout -b "$BRANCH"
+          git add -- 'plugins/*/languages/*' 'themes/*/languages/*'
+          git commit -m "chore: update translation files"
+          git push "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" "HEAD:$BRANCH"
+          gh pr create \
+            --base "$BASE_REF" \
+            --head "$BRANCH" \
+            --title "chore: update translation files" \
+            --body "Automated regeneration of translation templates (.pot) and derived .po/.mo/.json files by the i18n workflow ($RUN_URL). Review the diff and squash-merge; releases regenerate these automatically, so this PR is only needed to refresh the committed files ahead of a release."

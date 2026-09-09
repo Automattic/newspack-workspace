@@ -125,8 +125,16 @@ class Newsletters_Access {
 		// recent campaigns still grant bypass.
 		add_filter( 'newspack_newsletters_process_link', [ __CLASS__, 'append_signature_to_link' ], 20, 3 );
 
-		// Verification + bypass paths only fire when the toggle is on.
-		if ( ! self::is_verification_enabled() ) {
+		// Verification + bypass paths only fire when the toggle is on, and only while
+		// gating can actually restrict something. Without the second check a site with
+		// Audience Management off keeps calling batcache_cancel() and nocache_headers()
+		// on every singular ?utm_medium=email request, and keeps redirecting newsletter
+		// links to set bypass cookies — all to grant a bypass past a restriction that no
+		// longer exists. That is also the one place "Audience Management off is
+		// indistinguishable from the constant being undefined" would otherwise be
+		// measurably false, since a constant-undefined site has this toggle off and pays
+		// nothing.
+		if ( ! self::is_verification_enabled() || ! Content_Gate::is_gating_active() ) {
 			return;
 		}
 		// Priority 2 (matching Click::handle_click) so Data Events and

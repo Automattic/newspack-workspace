@@ -44,7 +44,6 @@ if ( ! function_exists( 'wcs_get_product_limitation' ) ) {
 }
 
 require_once __DIR__ . '/mocks/newspack-plugin-mocks.php';
-require_once __DIR__ . '/class-wc-order-stub.php';
 
 if ( ! function_exists( 'WC' ) ) {
 	/**

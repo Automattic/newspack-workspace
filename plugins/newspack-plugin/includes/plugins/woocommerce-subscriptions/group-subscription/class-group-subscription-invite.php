@@ -381,6 +381,10 @@ class Group_Subscription_Invite {
 	 * @param string               $email The email address receiving the invitation.
 	 *
 	 * @return array|\WP_Error The invite data, or a WP_Error if the key cannot be generated.
+	 *                         The returned array carries an `email_sent` flag reporting whether
+	 *                         the invitation email actually went out — the invite row is written
+	 *                         either way, so a caller that needs to report or retry delivery must
+	 *                         read that flag rather than treat a non-error return as "delivered".
 	 */
 	public static function generate_invite( $subscription, $email ) {
 		$subscription = WooCommerce_Subscriptions::sanitize_subscription( $subscription );
@@ -444,7 +448,11 @@ class Group_Subscription_Invite {
 		$subscription->update_meta_data( self::META, $all_invites );
 		$subscription->save();
 
-		self::send_invite_email( $subscription->get_id(), $invite_key, $email );
+		// Report the delivery result alongside the stored invite. Only the stored copy
+		// is persisted (it was written above), so this flag never lands in meta — it
+		// exists so callers can tell "invite stored and emailed" from "invite stored,
+		// email never went out", which the send path signals by returning false.
+		$new_invite['email_sent'] = (bool) self::send_invite_email( $subscription->get_id(), $invite_key, $email );
 
 		return $new_invite;
 	}

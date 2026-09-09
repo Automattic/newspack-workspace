@@ -48,6 +48,44 @@ lo0_alias_exists() {
     ifconfig lo0 2>/dev/null | awk -v ip="$1" '$1 == "inet" && $2 == ip { found = 1 } END { exit !found }'
 }
 
+# Whether a project's vendor/ was installed with its dev dependencies.
+#
+# `n env up` provisions vendor/ with --no-dev (see ensure-vendor.sh): enough to
+# activate a plugin, but without PHPUnit or the Yoast polyfills the WordPress
+# test bootstrap requires. Both kinds of install write vendor/autoload.php, so
+# its presence says nothing about whether the tests can run — composer's own
+# record of which install produced the directory, installed.json's top-level
+# "dev" flag, is what separates them.
+#
+# Read without a JSON parser: this is sourced on the host, in the containers and
+# in CI, and no single parser is present in all three. Two things make the
+# plain-text read safe. The value must be a bare boolean alone on its line,
+# which skips the `"dev": "Development related task"` entries real packages
+# carry in their metadata; and of the lines surviving that, the last is the
+# top-level flag, because composer writes it after the packages array closes.
+# Leading whitespace is not matched, so re-indenting the file changes nothing.
+#
+# The two unhappy paths answer differently, on purpose:
+#
+# - No readable installed.json means nothing was installed here, so the tests
+#   cannot run whatever else is true. Report absent and let the caller explain
+#   how to fix it.
+# - A file that exists but yields no recognisable flag means composer wrote a
+#   shape this function does not know — a format change, say. Report present.
+#   Guessing "absent" there would block every project at once, with no way past
+#   it; reporting present costs only a return to the bootstrap error this guard
+#   was added to replace, for whoever hits it first.
+project_has_dev_deps() {
+    local installed="$1/vendor/composer/installed.json"
+    [ -r "$installed" ] || return 1
+
+    local flag
+    flag=$(grep -E '^[[:space:]]*"dev": *(true|false),?$' "$installed" | tail -1)
+    [ -n "$flag" ] || return 0
+
+    [[ "$flag" == *true* ]]
+}
+
 # Logging helpers — mirror the colored output used by bin/site-setup.sh.
 NP_RED='\033[0;31m'
 NP_GREEN='\033[0;32m'

@@ -3,6 +3,7 @@
  */
 import { addFilter } from '@wordpress/hooks';
 import { createHigherOrderComponent } from '@wordpress/compose';
+import { useSelect } from '@wordpress/data';
 import { InspectorControls } from '@wordpress/block-editor';
 import {
 	FormTokenField,
@@ -319,7 +320,12 @@ const BlockVisibilityPanel = ( { attributes, setAttributes }: BlockEditProps ) =
 		const newRules: BlockVisibilityRules = { ...rules, ...updates };
 		const stillActive = hasActiveRules( newRules, mode, gateIds );
 		setAttributes( {
-			newspackAccessControlRules: newRules,
+			// Reset to the registered default when the last rule is turned off, rather
+			// than storing every rule set to inactive. Gutenberg omits an attribute that
+			// deep-equals its default, so the block stops carrying any access-control
+			// markup at all - which is what tells the rest of the plugin that this block
+			// no longer has rules on it.
+			newspackAccessControlRules: stillActive ? newRules : {},
 			// Reset visibility to 'visible' when all custom rules are cleared.
 			...( ! stillActive ? { newspackAccessControlVisibility: 'visible' } : {} ),
 		} );
@@ -416,7 +422,16 @@ addFilter(
 	'newspack-plugin/block-visibility/inspector',
 	createHigherOrderComponent( BlockEdit => {
 		const WithBlockVisibilityPanel = ( props: BlockEditProps ) => {
-			if ( ! TARGET_BLOCKS.includes( props.name ) ) {
+			// Access rules are post context. A pattern's own editor — including the
+			// post editor's focus mode — is editing a design, not a post, so there is
+			// nothing for the rules to resolve against.
+			const isPatternEditor = useSelect(
+				select =>
+					'wp_block' ===
+					( select( 'core/editor' ) as { getCurrentPostType?: () => string | undefined } | undefined )?.getCurrentPostType?.(),
+				[]
+			);
+			if ( isPatternEditor || ! TARGET_BLOCKS.includes( props.name ) ) {
 				return <BlockEdit { ...props } />;
 			}
 			return (

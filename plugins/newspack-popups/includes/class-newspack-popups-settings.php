@@ -22,6 +22,358 @@ class Newspack_Popups_Settings {
 	const DEFAULT_DONOR_MERGE_FIELD = 'DONAT';
 
 	/**
+	 * Option storing whether an admin has opted this site into the AI Copy
+	 * Assistant (Contextual Prompts). Off by default: the feature stays hidden
+	 * until an administrator opts in and accepts the disclosure.
+	 */
+	const AI_COPY_ASSISTANT_ENABLED_OPTION = 'newspack_contextual_prompts_enabled';
+
+	/**
+	 * Non-autoloaded option holding the most recent opt-in state change, so
+	 * "who accepted, and when" is answerable on the site itself even when the
+	 * logger pipeline's consumer is unavailable.
+	 */
+	const AI_COPY_ASSISTANT_AUDIT_OPTION = 'newspack_contextual_prompts_last_change';
+
+	/**
+	 * Option enabling the site-wide Contextual Prompts override ("fund-drive
+	 * mode"): while on, a single override CTA temporarily replaces the copy of
+	 * every Contextual Prompt on the site.
+	 */
+	const OVERRIDE_ENABLED_OPTION = 'newspack_contextual_prompts_override_enabled';
+
+	/**
+	 * Option storing which CTA the site-wide override renders on sites with
+	 * native Newspack donations: the donate form or a plain button.
+	 */
+	const OVERRIDE_CTA_OPTION = 'newspack_contextual_prompts_override_cta';
+
+	/**
+	 * The opt-in state a pending deletion is about to remove. Core fires
+	 * `delete_option` while the row is still readable, which is the only point
+	 * the deletion path can learn what it is withdrawing.
+	 *
+	 * @var bool
+	 */
+	private static $opt_in_before_delete = false;
+
+	/**
+	 * Whether the AI Copy Assistant has been opted into on this site.
+	 *
+	 * @return bool
+	 */
+	public static function is_ai_copy_assistant_enabled() {
+		return (bool) get_option( self::AI_COPY_ASSISTANT_ENABLED_OPTION, false );
+	}
+
+	/**
+	 * Record who accepted AI use on this site, and when.
+	 *
+	 * The opt-in is what starts drafts travelling to an external model service,
+	 * and some newsrooms are contractually barred from AI use, so the acceptance
+	 * needs a forensic record rather than a bare option write. Hooked on the
+	 * option itself, on all three of write, change and deletion, so a flip made
+	 * outside the wizard, over WP-CLI or by another plugin, is recorded the same
+	 * way.
+	 */
+	public static function register_opt_in_audit() {
+		add_action( 'add_option_' . self::AI_COPY_ASSISTANT_ENABLED_OPTION, [ __CLASS__, 'log_opt_in_added' ], 10, 2 );
+		add_action( 'update_option_' . self::AI_COPY_ASSISTANT_ENABLED_OPTION, [ __CLASS__, 'log_opt_in_updated' ], 10, 2 );
+		add_action( 'delete_option', [ __CLASS__, 'capture_opt_in_before_delete' ] );
+		add_action( 'delete_option_' . self::AI_COPY_ASSISTANT_ENABLED_OPTION, [ __CLASS__, 'log_opt_in_deleted' ] );
+	}
+
+	/**
+	 * Remember the opt-in state ahead of its deletion.
+	 *
+	 * @param string $option Option name.
+	 */
+	public static function capture_opt_in_before_delete( $option ) {
+		if ( self::AI_COPY_ASSISTANT_ENABLED_OPTION === $option ) {
+			self::$opt_in_before_delete = self::is_ai_copy_assistant_enabled();
+		}
+	}
+
+	/**
+	 * First write of the opt-in option.
+	 *
+	 * @param string $option Option name.
+	 * @param mixed  $value  The stored value.
+	 */
+	public static function log_opt_in_added( $option, $value ) {
+		self::log_opt_in_state( $value );
+	}
+
+	/**
+	 * A changed opt-in. `update_option()` returns before this fires when the
+	 * value is unchanged, so every call here is a real state change.
+	 *
+	 * @param mixed $old_value The previous value.
+	 * @param mixed $value     The new value.
+	 */
+	public static function log_opt_in_updated( $old_value, $value ) {
+		self::log_opt_in_state( $value );
+	}
+
+	/**
+	 * A deleted opt-in. `wp option delete` is a live path, and the site is not
+	 * opted in once the option is gone, so deletion closes the window exactly as
+	 * setting it false does. Core fires this only after the row is really gone.
+	 *
+	 * Deletion has no equivalent of `update_option()`'s no-op suppression, so
+	 * removing an option already storing false is not a withdrawal and must not
+	 * displace the record of the change that actually closed the window.
+	 */
+	public static function log_opt_in_deleted() {
+		if ( ! self::$opt_in_before_delete ) {
+			return;
+		}
+		self::log_opt_in_state( false );
+	}
+
+	/**
+	 * Write the audit record.
+	 *
+	 * @param mixed $value The new opt-in value.
+	 */
+	private static function log_opt_in_state( $value ) {
+		$enabled = (bool) $value;
+		$user    = wp_get_current_user();
+		$record  = [
+			'file'       => 'newspack_contextual_prompts',
+			'enabled'    => $enabled,
+			// Recorded explicitly so the entry answers "who, and when" on its
+			// own, without depending on when a consumer received it.
+			'timestamp'  => gmdate( 'c' ),
+			'user_id'    => $user ? (int) $user->ID : 0,
+			'user_login' => $user ? (string) $user->user_login : '',
+			// An unattended flip (WP-CLI without --user records user 0 and an
+			// empty login) stays explainable through where it ran.
+			'context'    => self::execution_context(),
+		];
+
+		update_option( self::AI_COPY_ASSISTANT_AUDIT_OPTION, $record, false );
+
+		Newspack_Popups_Logger::audit_log(
+			'newspack_contextual_prompts',
+			$enabled
+				? 'Contextual Prompts: AI use was accepted for this site.'
+				: 'Contextual Prompts: AI use was withdrawn for this site.',
+			$record,
+			'info'
+		);
+	}
+
+	/**
+	 * Where the opt-in flip ran.
+	 *
+	 * @return string One of 'cli', 'cron', 'rest' or 'web'.
+	 */
+	private static function execution_context() {
+		if ( defined( 'WP_CLI' ) && WP_CLI ) {
+			return 'cli';
+		}
+		if ( wp_doing_cron() ) {
+			return 'cron';
+		}
+		if ( defined( 'REST_REQUEST' ) && REST_REQUEST ) {
+			return 'rest';
+		}
+		return 'web';
+	}
+
+	/**
+	 * Whether the site-wide override is active: enabled AND carrying copy.
+	 * An enabled override with no copy would blank every prompt, so it is
+	 * treated as inactive.
+	 *
+	 * @return bool
+	 */
+	public static function is_override_active() {
+		if ( ! (bool) get_option( self::OVERRIDE_ENABLED_OPTION, false ) ) {
+			return false;
+		}
+
+		// An enabled override with no copy would blank every prompt, so it counts as
+		// inactive. The same applies to a missing URL when the override CTA is a button:
+		// the button is only emitted when it has somewhere to point, so an override
+		// without one would replace every prompt with an ask nobody can act on — on
+		// exactly the sites where that button IS the donation path.
+		if ( '' === trim( (string) get_option( 'newspack_contextual_prompts_override_body', '' ) ) ) {
+			return false;
+		}
+
+		if ( 'button' === self::get_override_cta() ) {
+			return '' !== trim( (string) get_option( 'newspack_contextual_prompts_override_url', '' ) );
+		}
+
+		return true;
+	}
+
+	/**
+	 * The CTA the site-wide override renders: 'form' (the native donate form) or
+	 * 'button'. Sites without native Newspack donations have no form to offer,
+	 * so they are always 'button'; native sites choose via the settings toggle.
+	 *
+	 * @return string 'form' or 'button'.
+	 */
+	public static function get_override_cta() {
+		if ( ! Newspack_Popups_Contextual_Prompt_Pattern::use_donate_block() ) {
+			return 'button';
+		}
+		return 'button' === get_option( self::OVERRIDE_CTA_OPTION, 'form' ) ? 'button' : 'form';
+	}
+
+	/**
+	 * The publisher-profile fields that tailor AI-generated Contextual Prompt
+	 * copy. Rendered in the AI Copy Assistant configure view, and read by
+	 * newspack-manager's Prompt_Donation::get_publisher_profile() via these
+	 * same option keys — keep them in sync.
+	 *
+	 * @return array List of field definitions ( key, label, help, type, value ).
+	 */
+	public static function get_ai_copy_assistant_fields() {
+		$fields = [
+			[
+				'key'   => 'newspack_contextual_prompts_publisher_name',
+				'label' => __( 'Publisher name', 'newspack-popups' ),
+				'help'  => __( 'How your newsroom is named in donation appeals. Defaults to the site title when empty.', 'newspack-popups' ),
+				'type'  => 'text',
+			],
+			[
+				'key'   => 'newspack_contextual_prompts_coverage_area',
+				'label' => __( 'Coverage area', 'newspack-popups' ),
+				'help'  => __( 'The place or beat your newsroom covers, e.g. "San Diego County". Helps ground the appeal.', 'newspack-popups' ),
+				'type'  => 'text',
+			],
+			[
+				'key'   => 'newspack_contextual_prompts_voice',
+				'label' => __( 'Voice and tone', 'newspack-popups' ),
+				'help'  => __( 'A short note on how appeals should sound, e.g. "plainspoken and investigative, no hype".', 'newspack-popups' ),
+				'type'  => 'textarea',
+			],
+			[
+				'key'   => 'newspack_contextual_prompts_additional_guidance',
+				'label' => __( 'Additional guidance', 'newspack-popups' ),
+				'help'  => __( 'Optional house do/don\'ts appended to the AI guidance. Never overrides the non-advocacy guardrail.', 'newspack-popups' ),
+				'type'  => 'textarea',
+			],
+			// Site-wide override ("fund-drive mode"): while enabled, this single
+			// CTA temporarily replaces the copy of every Contextual Prompt.
+			[
+				'key'     => self::OVERRIDE_ENABLED_OPTION,
+				'label'   => __( 'Enable site-wide override', 'newspack-popups' ),
+				'help'    => __( 'Temporarily replace every Contextual Prompt with the call-to-action below — for example during a fund drive. Turn off to restore each story\'s own prompt.', 'newspack-popups' ),
+				'type'    => 'toggle',
+				'section' => 'override',
+			],
+			[
+				'key'     => 'newspack_contextual_prompts_override_body',
+				'label'   => __( 'Override copy', 'newspack-popups' ),
+				'help'    => __( 'The call-to-action shown in place of every Contextual Prompt while the override is on.', 'newspack-popups' ),
+				'type'    => 'textarea',
+				'section' => 'override',
+			],
+			[
+				'key'     => self::OVERRIDE_CTA_OPTION,
+				'label'   => __( 'Override call to action', 'newspack-popups' ),
+				'help'    => __( 'What the override shows under its copy: your donation form, or a button — for example to route a fund drive to a campaign landing page.', 'newspack-popups' ),
+				'type'    => 'togglegroup',
+				'options' => [
+					[
+						'value' => 'form',
+						'label' => __( 'Donate Form', 'newspack-popups' ),
+					],
+					[
+						'value' => 'button',
+						'label' => __( 'Donate Button', 'newspack-popups' ),
+					],
+				],
+				'section' => 'override',
+			],
+			[
+				'key'     => 'newspack_contextual_prompts_override_label',
+				'label'   => __( 'Override button label', 'newspack-popups' ),
+				'help'    => __( 'The label for the override button.', 'newspack-popups' ),
+				'type'    => 'text',
+				'section' => 'override',
+			],
+			[
+				'key'     => 'newspack_contextual_prompts_override_url',
+				'label'   => __( 'Override button URL', 'newspack-popups' ),
+				'help'    => __( 'Where the override button links.', 'newspack-popups' ),
+				'type'    => 'text',
+				'section' => 'override',
+			],
+		];
+
+		// The form/button choice only exists where a native donate form exists;
+		// off-site sites are always button mode.
+		if ( ! Newspack_Popups_Contextual_Prompt_Pattern::use_donate_block() ) {
+			$fields = array_values(
+				array_filter(
+					$fields,
+					function ( $field ) {
+						return self::OVERRIDE_CTA_OPTION !== $field['key'];
+					}
+				)
+			);
+		}
+
+		foreach ( $fields as &$field ) {
+			$field['section'] = $field['section'] ?? 'profile';
+			$field['value']   = (string) get_option( $field['key'], '' );
+			if ( self::OVERRIDE_CTA_OPTION === $field['key'] && '' === $field['value'] ) {
+				$field['value'] = 'form';
+			}
+			// Surface the effective value: an empty publisher name means the site
+			// title is used, so show it rather than an empty input.
+			if ( 'newspack_contextual_prompts_publisher_name' === $field['key'] && '' === $field['value'] ) {
+				$field['value'] = get_bloginfo( 'name' );
+			}
+		}
+
+		return $fields;
+	}
+
+	/**
+	 * Save AI Copy Assistant profile fields. Only known keys are written.
+	 *
+	 * @param array $fields Map of field key => value.
+	 * @return void
+	 */
+	public static function save_ai_copy_assistant_fields( $fields ) {
+		$allowed = wp_list_pluck( self::get_ai_copy_assistant_fields(), 'key' );
+		foreach ( (array) $fields as $key => $value ) {
+			if ( ! in_array( $key, $allowed, true ) ) {
+				continue;
+			}
+			// The REST arg is a bare object with no per-property schema, so a
+			// non-scalar value can reach here. sanitize_textarea_field() returns ''
+			// for those, which would silently wipe a saved profile field — skip
+			// instead, so a malformed payload leaves the existing value intact.
+			if ( ! is_scalar( $value ) ) {
+				continue;
+			}
+			if ( 'newspack_contextual_prompts_override_url' === $key ) {
+				$sanitized = esc_url_raw( (string) $value );
+			} elseif ( self::OVERRIDE_CTA_OPTION === $key ) {
+				// Whitelist: anything but 'button' collapses to the default 'form'.
+				$sanitized = 'button' === $value ? 'button' : 'form';
+			} else {
+				$sanitized = sanitize_textarea_field( (string) $value );
+				// An empty publisher name means "follow the site title" (the read-side
+				// prefill shows it). If the submission just echoes the current title,
+				// store '' so the name keeps tracking future title changes.
+				if ( 'newspack_contextual_prompts_publisher_name' === $key && $sanitized === sanitize_textarea_field( get_bloginfo( 'name' ) ) ) {
+					$sanitized = '';
+				}
+			}
+			update_option( $key, $sanitized );
+		}
+	}
+
+	/**
 	 * The settings page hook suffix returned by add_submenu_page().
 	 *
 	 * Used to scope asset enqueuing to this screen. The screen base can't be
@@ -95,17 +447,13 @@ class Newspack_Popups_Settings {
 			);
 		}
 
-		$option_type  = 'select' === $setting['type'] ? 'string' : $setting['type'];
-		$option_value = self::sanitize_setting_option( $option_type, $options['option_value'] );
-
-		if ( update_option( $option_name, $option_value ) ) {
-			return true;
-		} else {
-			return new \WP_Error(
-				'newspack_popups_settings_error',
-				esc_html__( 'Error updating the settings.', 'newspack-popups' )
-			);
+		// Route through update_setting() so both screens share one validation path.
+		$updated = self::update_setting( $setting['section'], $option_name, $options['option_value'] );
+		if ( is_wp_error( $updated ) ) {
+			return $updated;
 		}
+
+		return true;
 	}
 
 	/**
@@ -153,6 +501,28 @@ class Newspack_Popups_Settings {
 				return new WP_Error( 'newspack_popups_invalid_setting_update', sprintf( __( 'Invalid setting value for "%s".', 'newspack-popups' ), $config['description'] ) );
 			}
 		}
+		// Page settings validate the submitted ID directly, so any published page qualifies
+		// without the setting having to enumerate every page it would accept.
+		if ( isset( $config['control'] ) && 'page' === $config['control'] ) {
+			// Saving a section resubmits every field it holds, so an unchanged submission is a
+			// no-op. Without this, a saved page that has since been unpublished would either
+			// block the whole section or get cleared by a save aimed at another field.
+			if ( (string) $value === (string) get_option( $config['key'], '' ) ) {
+				return true;
+			}
+			// An empty value clears the setting; anything else must be a published page ID.
+			// Reject rather than coerce, so a malformed payload can't save a different page.
+			if ( empty( $value ) ) {
+				$value = '';
+			} else {
+				$page_id = is_numeric( $value ) ? absint( $value ) : 0;
+				if ( ! $page_id || (string) $page_id !== (string) $value || ! self::is_valid_page_id( $page_id ) ) {
+					// translators: %s is the description of the option.
+					return new WP_Error( 'newspack_popups_invalid_setting_update', sprintf( __( 'Invalid setting value for "%s".', 'newspack-popups' ), $config['description'] ) );
+				}
+				$value = (string) $page_id;
+			}
+		}
 		$updated = update_option( $config['key'], self::sanitize_setting_option( $config['type'], $value ) );
 		return $updated;
 	}
@@ -178,6 +548,34 @@ class Newspack_Popups_Settings {
 			default:
 				return '';
 		}
+	}
+
+	/**
+	 * Whether the given ID belongs to a published page.
+	 *
+	 * @param mixed $page_id The page ID to validate.
+	 *
+	 * @return boolean
+	 */
+	private static function is_valid_page_id( $page_id ) {
+		$page = get_post( absint( $page_id ) );
+		return $page instanceof WP_Post && 'page' === $page->post_type && 'publish' === $page->post_status;
+	}
+
+	/**
+	 * The saved donor landing page, shaped for the settings UI's autocomplete field.
+	 *
+	 * @return array|null Array with `label` and `value` keys, or null if unset or no longer valid.
+	 */
+	private static function get_donor_landing_page_selection() {
+		$page_id = self::donor_landing_page();
+		if ( empty( $page_id ) || ! self::is_valid_page_id( $page_id ) ) {
+			return null;
+		}
+		return [
+			'label' => get_the_title( absint( $page_id ) ),
+			'value' => absint( $page_id ),
+		];
 	}
 
 	/**
@@ -232,37 +630,9 @@ class Newspack_Popups_Settings {
 	 * @return array Array of settings objects.
 	 */
 	public static function get_settings( $assoc = false, $get_segments = false ) {
-		$donor_landing_options = [
-			[
-				'label' => __( '-- None --', 'newspack-popups' ),
-				'value' => '',
-			],
-		];
-
-		// Before executing the query, make sure we can filter it to remove any CPTs that might be added by other plugins.
-		add_action( 'pre_get_posts', [ __CLASS__, 'prevent_other_post_types_in_page_query' ], PHP_INT_MAX );
-		$donor_landing_options_query = new \WP_Query(
-			[
-				'post_type'      => 'page',
-				'post_status'    => 'publish',
-				'post_parent'    => 0,
-				// This list doubles as the save allow-list in update_setting(), so a cap would make
-				// pages outside the window silently unsaveable. Left unbounded until the setting
-				// moves to an autocomplete field and stops enumerating pages.
-				'posts_per_page' => -1, // phpcs:ignore WordPressVIPMinimum.Performance.NoPaging -- See above; bounding this changes behavior, not just cost.
-			]
-		);
-		// Remove the query filter so we don't unintentionally affect other queries.
-		remove_action( 'pre_get_posts', [ __CLASS__, 'prevent_other_post_types_in_page_query' ], PHP_INT_MAX );
-
-		if ( $donor_landing_options_query->have_posts() ) {
-			foreach ( $donor_landing_options_query->posts as $page ) {
-				$donor_landing_options[] = [
-					'label' => $page->post_title,
-					'value' => (string) $page->ID,
-				];
-			}
-		}
+		// The picker shows nothing when the saved page is no longer published, but the stored
+		// value is still reported as-is so saving the section round-trips it untouched.
+		$donor_landing_page = self::get_donor_landing_page_selection();
 
 		$settings_list = [
 			[
@@ -278,6 +648,7 @@ class Newspack_Popups_Settings {
 				'section'     => 'donor_settings',
 				'key'         => 'newspack_popups_donor_landing_page',
 				'type'        => 'string',
+				'control'     => 'page',
 				'value'       => self::donor_landing_page(),
 				'default'     => '',
 				'description' => __( 'Donor landing page', 'newspack-popups' ),
@@ -285,7 +656,7 @@ class Newspack_Popups_Settings {
 					"Set a page on your site as a donation landing page. Once a reader views this page, they will be considered a donor. This is helpful if you're using an off-site donation platform but still want to target donors as an audience segment.",
 					'newspack-popups'
 				),
-				'options'     => $donor_landing_options,
+				'selected'    => $donor_landing_page,
 			],
 			[
 				'section'     => 'donor_settings',
@@ -505,16 +876,6 @@ class Newspack_Popups_Settings {
 		}
 
 		return true;
-	}
-
-	/**
-	 * Prevents other plugins from adding additional post types to the page query.
-	 * Note: No query checking needed because this callback is only added for the one query we need to filter.
-	 *
-	 * @param WP_Query $query The WP query object.
-	 */
-	public static function prevent_other_post_types_in_page_query( $query ) {
-		$query->set( 'post_type', 'page' ); // phpcs:ignore WordPressVIPMinimum.Hooks.PreGetPosts.PreGetPosts
 	}
 }
 

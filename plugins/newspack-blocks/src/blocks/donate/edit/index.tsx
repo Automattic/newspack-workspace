@@ -40,18 +40,28 @@ import RedirectAfterSuccess from '../../../components/redirect-after-success';
 
 const TIER_LABELS = [ __( 'Low-tier', 'newspack-blocks' ), __( 'Mid-tier', 'newspack-blocks' ), __( 'High-tier', 'newspack-blocks' ) ];
 
+// Placeholders for the keys the settings fetch fills in. They are a complete
+// EditState so every read is defined even if the fetch fails or returns a
+// partial payload; the loading and error guards below mean they never reach
+// the rendered output.
+const INITIAL_SETTINGS: EditState = {
+	amounts: {
+		once: [ 0, 0, 0, 0 ],
+		month: [ 0, 0, 0, 0 ],
+		year: [ 0, 0, 0, 0 ],
+	},
+	currencySymbol: '$',
+	tiered: false,
+	disabledFrequencies: { once: false, month: false, year: false },
+	minimumDonation: 5,
+	platform: '',
+};
+
 const Edit = ( { attributes, setAttributes }: EditProps ) => {
 	const [ isLoading, setIsLoading ] = useState( true );
 	const [ error, setError ] = useState( '' );
 
-	const [ settings, setSettings ] = hooks.useObjectState< EditState >( {
-		amounts: {},
-		currencySymbol: '$',
-		tiered: false,
-		disabledFrequencies: {},
-		minimumDonation: 5,
-		platform: '',
-	} );
+	const [ settings, setSettings ] = hooks.useObjectState< EditState >( INITIAL_SETTINGS );
 
 	interface AudienceDonations {
 		donation_data: DonationSettings;
@@ -95,7 +105,9 @@ const Edit = ( { attributes, setAttributes }: EditProps ) => {
 					setAttributes( { amounts: { ...donationSettings.amounts, ...attributes.amounts } } );
 				}
 			} )
-			.catch( setError )
+			// apiFetch rejects with the REST error object, not a string — take its
+			// message so the error Placeholder below actually renders.
+			.catch( ( e: { message?: string } ) => setError( e?.message || __( 'Could not fetch the donation settings.', 'newspack-blocks' ) ) )
 			.finally( () => setIsLoading( false ) );
 	}, [] );
 
@@ -187,7 +199,7 @@ const Edit = ( { attributes, setAttributes }: EditProps ) => {
 
 	const minimumDonation = isManual ? attributes.minimumDonation : settings.minimumDonation;
 	const displayedAmounts = { ...amounts };
-	Object.keys( amounts ).forEach( frequency => {
+	( Object.keys( amounts ) as DonationFrequencySlug[] ).forEach( frequency => {
 		const amountsWithMinimum = amounts[ frequency ].map( amount => Math.max( amount, minimumDonation ) ) as DonationAmountsArray;
 		displayedAmounts[ frequency ] = amountsWithMinimum;
 	} );
@@ -433,8 +445,8 @@ const Edit = ( { attributes, setAttributes }: EditProps ) => {
 					<FrequencyBasedLayout
 						isTiered={ isTiered }
 						canUseNameYourPrice={ canUseNameYourPrice }
-						amounts={ displayedAmounts }
 						{ ...componentProps }
+						amounts={ displayedAmounts }
 					/>
 				</div>
 			) }

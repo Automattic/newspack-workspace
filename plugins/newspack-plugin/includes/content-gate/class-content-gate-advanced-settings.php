@@ -133,9 +133,13 @@ class Content_Gate_Advanced_Settings {
 	 */
 	private static function has_restriction_source(): bool {
 		// Same arguments as Content_Restriction_Control::get_post_gates(), so
-		// the two share one cached query.
+		// the two share one cached query. Gates only count while gating is active —
+		// otherwise a site with inert gates pays the feed overfetch to evaluate
+		// restriction checks that are all guaranteed no-ops. Memberships is independent
+		// of Audience Management and keeps enforcing either way.
 		$has_restriction_source = Memberships::is_active()
-			|| ! empty( Content_Gate::get_gates( Content_Gate::GATE_CPT, 'publish', false ) );
+			|| ( Content_Gate::is_gating_active()
+				&& ! empty( Content_Gate::get_gates( Content_Gate::GATE_CPT, 'publish', false ) ) );
 
 		/**
 		 * Filters whether anything on this site can restrict a post.

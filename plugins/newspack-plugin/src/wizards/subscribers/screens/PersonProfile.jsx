@@ -44,7 +44,7 @@ import { useSubscriber } from '../data/use-subscriber';
 import { SHOW_AVATARS, useAvatars } from '../data/use-avatars';
 import { useWizardNode } from '../use-portals';
 import { billingText, fmtDate, orDash, scheduleRow } from '../format';
-import { GROUP_LABEL, GROUP_LABEL_PLURAL } from '../labels';
+import { GROUP_LABEL, GROUP_LABEL_PLURAL, groupViewLabel } from '../labels';
 import { groupDetailHref, isInternalHashPath } from '../links';
 import { STATUS_LABELS, STATUS_BADGE_LEVEL, statusRank, displayStatuses } from '../status';
 
@@ -219,8 +219,7 @@ export default function PersonProfile() {
 						title={ group.plan }
 						titleSuffix={ `(${ GROUP_LABEL })` }
 						titleHref={ href || undefined }
-						// translators: 1: the group label, 2: the group name.
-						titleLabel={ href ? sprintf( __( 'View %1$s: %2$s', 'newspack-plugin' ), GROUP_LABEL, group.plan ) : undefined }
+						titleLabel={ href ? groupViewLabel( group.plan ) : undefined }
 						badges={ statusBadges( group.status ) }
 						subline={ seatsSubline( group ) }
 						rows={ rows }

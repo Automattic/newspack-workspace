@@ -166,6 +166,9 @@ class WooCommerce_Update_Payment_Notice {
 			}
 			$line_item  = reset( $line_items );
 			$product    = wc_get_product( $line_item->get_product_id() );
+			// Variation-accurate purchased product for membership-plan lookup;
+			// $product gets reassigned to the grouped/parent below for Layer 1.
+			$purchased_product = $line_item->get_product();
 			// If the product has a parent, use the parent product.
 			if ( $product->get_parent_id() ) {
 				$product = wc_get_product( $product->get_parent_id() );
@@ -180,6 +183,14 @@ class WooCommerce_Update_Payment_Notice {
 			// Check if there's another active subscription of the same grouped or variable product.
 			$active_subscriptions = WooCommerce_Subscriptions::get_user_subscription( $product );
 			if ( $active_subscriptions ) {
+				continue;
+			}
+			// Also suppress when the reader holds equivalent active access (same
+			// membership plan via another active subscription, or active
+			// membership) bought through a different product. Pass this
+			// subscription's ID so an active membership derived from it is not
+			// mistaken for independent access. NPPM-2926.
+			if ( $purchased_product && Memberships::user_has_equivalent_active_access( $purchased_product, null, $subscription->get_id() ) ) {
 				continue;
 			}
 

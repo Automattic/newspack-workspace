@@ -36,6 +36,7 @@ import classnames from 'classnames';
  * @property {boolean}            [isWhite=false]    - Indicates if the header should use a white theme.
  * @property {boolean}            [noMargin=false]   - Indicates if the header should have no margin.
  * @property {boolean}            [pageHeader=false] - Indicates if the header is used as a page header.
+ * @property {string}             [size='default']   - Size variant, either 'default' or 'small'. Scales the title, and the icon with it, independently of `pageHeader`.
  * @property {string}             title              - The title of the section.
  * @property {?string}            [id=null]          - Optional ID for the header element.
  * @property {?string|Function|*} [children=null]    - Optional children to display in the header.
@@ -57,6 +58,7 @@ const SectionHeader = ( {
 	isWhite = false,
 	noMargin = false,
 	pageHeader = false,
+	size = 'default',
 	title,
 	id = null,
 	menu,
@@ -82,7 +84,8 @@ const SectionHeader = ( {
 		centered && 'newspack-section-header--is-centered',
 		isWhite && 'newspack-section-header--is-white',
 		noMargin && 'newspack-section-header--no-margin',
-		pageHeader && 'newspack-section-header--page-header'
+		pageHeader && 'newspack-section-header--page-header',
+		size === 'small' && 'newspack-section-header--small'
 	);
 
 	// The breadcrumb `Page` owns the single page `<h1>`, so a `pageHeader` section
@@ -148,7 +151,7 @@ const SectionHeader = ( {
 			<Grid columns={ 1 } gutter={ 8 } className={ classes }>
 				{ icon && (
 					<div className="newspack-section-header__icon">
-						<Icon icon={ icon } size={ 48 } />
+						<Icon icon={ icon } size={ size === 'small' ? 24 : 48 } />
 					</div>
 				) }
 				{ backNav ? (

@@ -4,7 +4,7 @@ module.exports = {
 		'function-no-unknown': [
 			true,
 			{
-				ignoreFunctions: [ 'color.adjust', 'to-rgb' ],
+				ignoreFunctions: [ 'color.adjust', 'to-rgb', 'to-rgba' ],
 			},
 		],
 		'selector-pseudo-class-no-unknown': [
@@ -16,7 +16,7 @@ module.exports = {
 		'property-no-unknown': [
 			true,
 			{
-				ignoreProperties: [ /^primary-/, /^secondary-/, /^tertiary-/, /^quaternary-/, /^neutral-/, /^success-/, /^error-/, /^warning-/ ],
+				ignoreProperties: [ /^overlay-/, /^primary-/, /^secondary-/, /^tertiary-/, /^quaternary-/, /^neutral-/, /^success-/, /^error-/, /^warning-/ ],
 			},
 		],
 	},

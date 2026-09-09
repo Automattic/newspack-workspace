@@ -137,6 +137,39 @@ class Newspack_Test_Experimental_Tools extends WP_UnitTestCase {
 	}
 
 	/**
+	 * A template placeholder survives being saved.
+	 *
+	 * WordPress deletes a percent sign followed by two hex digits as a URL-encoded
+	 * octet, so %CACHE_KEY% used to be stored as CHE_KEY% — and the surrounding
+	 * spacing has to survive with it.
+	 */
+	public function test_placeholders_survive_saving() {
+		$slug = $this->register_test_tool();
+
+		Experimental_Tools::save_tool_fields( $slug, [ 'api_key' => "Use %CACHE_KEY% here.\nAnd %CONTENT% there." ] );
+
+		$this->assertSame(
+			"Use %CACHE_KEY% here.\nAnd %CONTENT% there.",
+			Experimental_Tools::get_tool_settings( $slug )['fields']['api_key']
+		);
+	}
+
+	/**
+	 * Everything that is not a placeholder is still sanitized: markup goes, and a
+	 * bare percent-encoded octet is still an octet rather than a placeholder.
+	 */
+	public function test_non_placeholder_content_is_still_sanitized() {
+		$slug = $this->register_test_tool();
+
+		Experimental_Tools::save_tool_fields( $slug, [ 'api_key' => "a <script>alert('x')</script> %CA b" ] );
+
+		$stored = Experimental_Tools::get_tool_settings( $slug )['fields']['api_key'];
+
+		$this->assertStringNotContainsString( '<script>', $stored );
+		$this->assertStringNotContainsString( '%CA', $stored );
+	}
+
+	/**
 	 * Saved field values are merged into the tool's fields in get_tools().
 	 */
 	public function test_saved_values_appear_in_get_tools() {

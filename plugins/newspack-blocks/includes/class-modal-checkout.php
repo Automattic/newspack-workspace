@@ -761,6 +761,12 @@ final class Modal_Checkout {
 		if ( ! self::$has_modal ) {
 			return;
 		}
+		// Never inside the iframe this markup creates: the container would nest in
+		// itself, putting a second "Complete your transaction" dialog in the
+		// reader's checkout (NPPD-2170).
+		if ( self::is_modal_checkout() ) {
+			return;
+		}
 		/**
 		* Filters the header title for the modal checkout.
 		*

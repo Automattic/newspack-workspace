@@ -19,9 +19,26 @@ import { WIZARD_STORE_NAMESPACE } from '../../../../../packages/components/src/w
 import { PREMIUM_NEWSLETTERS_WIZARD_SLUG, BASE_HEADER_TEXT } from './consts';
 import PremiumNewslettersList from './premium-newsletters-list';
 import Edit from '../../../audience/views/content-gates/edit';
+import { redirectWithoutAudienceManagement, requireAudienceManagement } from '../../../audience/components/audience-management-required';
+
+// Premium Newsletters localizes into the content-gates bag, which it shares with
+// the Access Control screen.
+const getConfig = () => window.newspackAudienceContentGates;
+
+const REQUIRES_AUDIENCE_MANAGEMENT = {
+	description: __( 'Premium newsletters need accounts, sign-in, and account emails. Audience Management provides them.', 'newspack-plugin' ),
+	getConfig,
+};
 
 const ROOT = [ { label: __( 'Newsletters', 'newspack-plugin' ) } ];
 const PREMIUM_BREADCRUMBS = [ ...ROOT, { label: __( 'Premium', 'newspack-plugin' ) } ];
+
+// Wrapped at module scope so each section keeps a stable component type across
+// renders. Only the landing route renders the prerequisite state; the editor
+// redirects to it.
+const GATES_ROUTE = '/content-gates';
+const GuardedPremiumNewslettersList = requireAudienceManagement( PremiumNewslettersList, REQUIRES_AUDIENCE_MANAGEMENT );
+const GuardedEdit = redirectWithoutAudienceManagement( Edit, GATES_ROUTE, getConfig );
 
 const PremiumNewsletters = ( props, ref ) => {
 	const { updateWizardSettings } = useDispatch( WIZARD_STORE_NAMESPACE );
@@ -43,12 +60,12 @@ const PremiumNewsletters = ( props, ref ) => {
 			sections={ [
 				{
 					path: '/content-gates',
-					render: PremiumNewslettersList,
+					render: GuardedPremiumNewslettersList,
 					breadcrumbs: PREMIUM_BREADCRUMBS,
 				},
 				{
 					path: '/edit/:id/:type?',
-					render: Edit,
+					render: GuardedEdit,
 					isHidden: true,
 					exact: true,
 					breadcrumbs: PREMIUM_BREADCRUMBS,
