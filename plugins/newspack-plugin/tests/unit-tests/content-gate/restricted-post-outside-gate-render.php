@@ -996,4 +996,45 @@ class Test_Restricted_Post_Outside_Gate_Render extends \WP_UnitTestCase {
 		$this->assertIsString( $teaser_after, 'Nor does the article page answer the listing\'s.' );
 		$this->assertStringNotContainsString( self::PAID_MARKER, $teaser_after );
 	}
+
+	/**
+	 * A Query Loop set to "Inherit query from template" leaves the article its gate.
+	 *
+	 * That loop does not get a WP_Post instance of its own:
+	 * render_block_core_post_template() shallow-clones the main query, so the
+	 * clone's posts are the very objects the main query holds and its the_post()
+	 * sets up the article's own instance. Recording that instance as a card would
+	 * answer every later pass over the article as one — the body pass, or a loop
+	 * inside the body, which do_blocks renders at priority 9 before the
+	 * substitution at 999 — leaving a restricted reader the free opening and
+	 * nothing to act on.
+	 *
+	 * The card is answered from the article's entry, gate and all. Two calls to
+	 * action on one page is the cost of a loop that shares the object, and it is
+	 * the direction that keeps the call to action on the page.
+	 */
+	public function test_an_inheriting_query_loop_leaves_the_article_its_gate() {
+		$post_id = $this->create_restricted_post();
+		$this->go_to( get_permalink( $post_id ) );
+
+		while ( have_posts() ) {
+			the_post();
+		}
+
+		$inheriting_loop = clone $GLOBALS['wp_query'];
+		$inheriting_loop->rewind_posts();
+		$card = '';
+		while ( $inheriting_loop->have_posts() ) {
+			$inheriting_loop->the_post();
+			$this->assertSame( $GLOBALS['wp_the_query']->post, $GLOBALS['post'], 'The loop sets up the article\'s own instance, which is the premise of this test.' );
+			$card .= apply_filters( 'the_content', get_the_content() );
+		}
+		wp_reset_postdata();
+
+		$article = apply_filters( 'the_content', get_post( $post_id )->post_content );
+
+		$this->assertStringNotContainsString( self::PAID_MARKER, $card, 'A loop sharing the article\'s post object still shows no more than the free opening.' );
+		$this->assertStringNotContainsString( self::PAID_MARKER, $article );
+		$this->assertSame( 1, substr_count( $article, 'newspack-content-gate__inline-gate' ), 'The article renders its gate after a loop that shared its post object.' );
+	}
 }

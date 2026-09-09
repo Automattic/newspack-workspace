@@ -117,9 +117,12 @@ class Content_Gate {
 	 * Listing teasers staged for individual WP_Post instances, keyed by the
 	 * instance's object id and naming the post each one belongs to.
 	 *
-	 * Every loop is handed its own WP_Post instance, so which instance is set up is
+	 * A loop is handed its own WP_Post instance, so which instance is set up is
 	 * what separates a card for a post from the article render of that same post.
-	 * {@see self::get_staged_restriction_for_render()} is what reads that apart.
+	 * {@see self::get_staged_restriction_for_render()} is what reads that apart. The
+	 * exception is a query that inherits the main one, which shares its objects
+	 * rather than copying them; {@see self::withhold_post_in_loop()} keeps the
+	 * article's own instance out of this map for that reason.
 	 *
 	 * @var array<int, array{post_id: int, teaser: string}>
 	 */
@@ -928,14 +931,34 @@ class Content_Gate {
 			return;
 		}
 
-		// The article being read is not exempted. A listing above the main loop
-		// reaches this method for the queried post too, and the entry it leaves
-		// carries no gate, so restrict_post() owns that slot on the article path:
-		// it overwrites the entry with the gate for a restricted reader and clears
-		// it for an entitled one. Deciding the withholding from the post and the
-		// request rather than from whether staging has already happened is what
-		// covers a classic theme's pre-loop widget areas, where the listing renders
-		// first.
+		// The queried post's own WP_Post instance belongs to the article path, and a
+		// loop handing that object back is not showing a card. A Query Loop set to
+		// inherit the main query is the case: render_block_core_post_template()
+		// shallow-clones $wp_query while in the loop, so the clone's posts are the
+		// very objects the main query holds and its the_post() sets up the article's
+		// own instance. Recording it below would mark the article as a card, and
+		// every later 'the_content' pass over it — the body pass, or a loop inside
+		// the body, which do_blocks renders at priority 9 ahead of the substitution
+		// at self::RESTRICTION_PRIORITY — would be answered as one: the anonymous
+		// teaser and no gate, leaving a restricted reader the free opening and
+		// nothing to act on. The mutation at the foot of this method would also
+		// overwrite the teaser and gate restrict_post() wrote onto that object.
+		//
+		// Such a loop is answered from the article's entry instead, gate and all.
+		// Two calls to action on one page is the cost of a loop that shares the
+		// object, and it is the direction that keeps the call to action on the page.
+		if ( is_singular() && $post === ( $GLOBALS['wp_the_query']->post ?? null ) ) {
+			return;
+		}
+
+		// The queried post itself is not exempted, only that one instance. A listing
+		// above the main loop reaches this method for the queried post too, is
+		// handed its own instance for it, and the entry it leaves carries no gate,
+		// so restrict_post() owns that slot on the article path: it overwrites the
+		// entry with the gate for a restricted reader and clears it for an entitled
+		// one. Deciding the withholding from the post and the request rather than
+		// from whether staging has already happened is what covers a classic theme's
+		// pre-loop widget areas, where the listing renders first.
 
 		// Always the listing teaser, never whatever is staged. A listing below the
 		// article lists the article too, and the entry standing there is then the
@@ -1257,6 +1280,16 @@ class Content_Gate {
 	 * reused once the instance holding it is freed. The instance the article render
 	 * answers to is allocated before any listing on the page runs and outlives them
 	 * all, so a freed listing instance's id cannot come back as the article's.
+	 *
+	 * Reading the render's identity off the global is what a stale global costs. A
+	 * loop inside the body that lists the article and skips wp_reset_postdata()
+	 * leaves the global on that card's instance, so the article's own pass is
+	 * answered as a card and the page loses its gate. Pinning the article's
+	 * instance does not help: the stale global is a genuine card instance, and no
+	 * state separates that pass from the card's. First-party code resets — core's
+	 * post template and newspack-blocks' articles-loop.php both do, and
+	 * newspack-listings never touches the global — so this needs a third-party or
+	 * legacy loop.
 	 *
 	 * @param int $post_id Post being rendered.
 	 * @return string|null
