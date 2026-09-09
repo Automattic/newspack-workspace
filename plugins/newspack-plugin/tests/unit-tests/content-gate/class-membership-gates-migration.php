@@ -2792,6 +2792,43 @@ HTML;
 	}
 
 	/**
+	 * The hierarchy overlap the boundary forbids repairing (NPPD-2066). A free plan on a
+	 * child category and a paid plan on its parent gate the same posts once the parent
+	 * term expands, but nothing may join them: absorption refuses to cross the purchase
+	 * boundary, and a carve-out refuses two rules of one slug. All that is left is
+	 * telling the operator, and telling them is the whole remedy here.
+	 *
+	 * The stored term IDs are disjoint, so before expansion this pair read as unrelated
+	 * and produced no warning at all — the one overlap shape that split in silence.
+	 */
+	public function test_consolidate_plan_groups_warns_on_a_cross_boundary_hierarchy_overlap() {
+		$parent_term = self::factory()->category->create();
+		$child_term  = self::factory()->category->create( [ 'parent' => $parent_term ] );
+
+		$free_child  = $this->make_taxonomy_plan_group( 'Registration Gate', [ $child_term ], 0, 'category', 'signup' );
+		$paid_parent = $this->make_taxonomy_plan_group( 'Premium', [ $parent_term ], $this->create_product( 'subscription' ) );
+
+		\WP_CLI::reset();
+		$widened    = [];
+		$overlaps   = [];
+		$carved     = [];
+		$carve_outs = [];
+		$merged     = $this->invoke_private_static(
+			'consolidate_plan_groups',
+			[ [ $free_child, $paid_parent ], &$widened, &$overlaps, &$carved, &$carve_outs ]
+		);
+
+		$this->assertCount( 2, $merged, 'The purchase boundary keeps the two plans on separate gates.' );
+		$this->assertSame( [], $widened, 'Neither group is folded into the other.' );
+		$this->assertSame( [], $carved, 'A shared taxonomy slug leaves nothing for a carve-out to exclude.' );
+		$this->assertSame(
+			[ '"Registration Gate" against "Premium"' ],
+			$overlaps,
+			'The hierarchy overlap is put to the operator instead of splitting silently.'
+		);
+	}
+
+	/**
 	 * Two rules of one slug cannot live on a gate as an inclusion and an exclusion: the
 	 * wizard renders one row per slug and writes an edit to every rule carrying it, so
 	 * the gate would be uneditable afterwards. Nested same-taxonomy tiers therefore
