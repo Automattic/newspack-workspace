@@ -259,6 +259,30 @@ final class Checkout_Data {
 	}
 
 	/**
+	 * Whether a contextual prompt source value read from the cart or the URL
+	 * is shaped the way the rest of the system expects it, so an unrelated
+	 * `contextual_prompt_*` cart item or query arg from another source can't
+	 * make its way into the checkout payload.
+	 *
+	 * @param string $key   One of `Modal_Checkout::CONTEXTUAL_PROMPT_KEYS`.
+	 * @param mixed  $value The value read from the cart item or `$_GET`.
+	 *
+	 * @return bool
+	 */
+	private static function is_valid_contextual_prompt_value( $key, $value ) {
+		switch ( $key ) {
+			case 'contextual_prompt_post_id':
+				return absint( $value ) > 0;
+			case 'contextual_prompt_placement':
+				return in_array( $value, [ 'top', 'mid', 'end', 'unknown' ], true );
+			case 'contextual_prompt_condition':
+				return in_array( $value, [ 'story_aware', 'generic_control', 'override' ], true );
+			default:
+				return false;
+		}
+	}
+
+	/**
 	 * Returns checkout data given a product, product variation, cart or order object.
 	 *
 	 * @param \WC_Product|\WC_Product_Variation|\WC_Cart|\WC_Order $source Product, product variation, cart or order object.
@@ -478,15 +502,27 @@ final class Checkout_Data {
 		/**
 		 * Contextual prompt source: which story, placement and test condition the
 		 * reader donated from. Same three-way resolution as the popup id.
+		 *
+		 * The order branch is trusted as-is: an order's meta was written and
+		 * validated once, at checkout time (see the checkout-create-order-line-item
+		 * handler), so it's not re-validated on every later read. The cart and GET
+		 * branches are reader-controlled input read on every request, so a value
+		 * that doesn't match the shape the rest of the system expects is dropped
+		 * rather than passed through.
 		 */
-		foreach ( [ 'contextual_prompt_post_id', 'contextual_prompt_placement', 'contextual_prompt_condition' ] as $key ) {
+		foreach ( \Newspack_Blocks\Modal_Checkout::CONTEXTUAL_PROMPT_KEYS as $key ) {
 			$value = null;
 			if ( $order ) {
 				$value = $order->get_meta( '_newspack_' . $key );
-			} elseif ( $cart_item ) {
-				$value = $cart_item[ $key ] ?? null;
 			} else {
-				$value = filter_input( INPUT_GET, $key, FILTER_SANITIZE_SPECIAL_CHARS );
+				if ( $cart_item ) {
+					$value = $cart_item[ $key ] ?? null;
+				} else {
+					$value = filter_input( INPUT_GET, $key, FILTER_SANITIZE_SPECIAL_CHARS );
+				}
+				if ( $value && ! self::is_valid_contextual_prompt_value( $key, $value ) ) {
+					$value = null;
+				}
 			}
 			if ( $value ) {
 				$data[ $key ] = $value;

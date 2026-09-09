@@ -515,6 +515,59 @@ class Newspack_Blocks_Modal_Checkout_Data_Test extends WP_UnitTestCase_Blocks {
 	}
 
 	/**
+	 * A cart item whose contextual prompt condition isn't one of the three
+	 * known values is dropped rather than passed through to the checkout
+	 * payload; the other, valid keys in the same triple still pass.
+	 */
+	public function test_cart_checkout_data_drops_invalid_contextual_prompt_condition() {
+		$cart = $this->cart_with_item(
+			[
+				'contextual_prompt_post_id'   => '12',
+				'contextual_prompt_placement' => 'end',
+				'contextual_prompt_condition' => 'winner',
+			]
+		);
+		$data = Checkout_Data::get_checkout_data( $cart );
+		$this->assertArrayNotHasKey( 'contextual_prompt_condition', $data );
+		$this->assertSame( 'end', $data['contextual_prompt_placement'] );
+		$this->assertSame( 12, (int) $data['contextual_prompt_post_id'] );
+	}
+
+	/**
+	 * A cart item whose contextual prompt placement isn't one of the known
+	 * values is dropped the same way.
+	 */
+	public function test_cart_checkout_data_drops_invalid_contextual_prompt_placement() {
+		$cart = $this->cart_with_item(
+			[
+				'contextual_prompt_post_id'   => '12',
+				'contextual_prompt_placement' => 'sidebar',
+				'contextual_prompt_condition' => 'story_aware',
+			]
+		);
+		$data = Checkout_Data::get_checkout_data( $cart );
+		$this->assertArrayNotHasKey( 'contextual_prompt_placement', $data );
+		$this->assertSame( 'story_aware', $data['contextual_prompt_condition'] );
+	}
+
+	/**
+	 * A cart item whose contextual prompt post id isn't a positive integer is
+	 * dropped the same way.
+	 */
+	public function test_cart_checkout_data_drops_invalid_contextual_prompt_post_id() {
+		$cart = $this->cart_with_item(
+			[
+				'contextual_prompt_post_id'   => '0',
+				'contextual_prompt_placement' => 'top',
+				'contextual_prompt_condition' => 'override',
+			]
+		);
+		$data = Checkout_Data::get_checkout_data( $cart );
+		$this->assertArrayNotHasKey( 'contextual_prompt_post_id', $data );
+		$this->assertSame( 'top', $data['contextual_prompt_placement'] );
+	}
+
+	/**
 	 * A bare product source (no cart or order) carries no `quantity` at all.
 	 * Only a cart or order line item has a real seat count to report; for a
 	 * bare product, the block's hidden field (or a reader's later in-modal
