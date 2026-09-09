@@ -14,7 +14,7 @@ import ContextualPromptsSettings from './contextual-prompts-settings';
 // preview via apiFetch; mocked so the enabled-body tests stay isolated from
 // the network and keep passing when the control toggle is on.
 jest.mock( '@wordpress/api-fetch', () => jest.fn() );
-apiFetch.mockResolvedValue( { interval: 3, limit: 10, posts: [] } );
+apiFetch.mockResolvedValue( { interval: 3, limit: 10, offset: 0, total: 0, posts: [] } );
 
 const FIELD_DEFAULTS = { section: 'override', value: '' };
 const ENABLE_FIELD = {
@@ -165,6 +165,8 @@ describe( 'ContextualPromptsSettings enabled body', () => {
 		apiFetch.mockResolvedValueOnce( {
 			interval: 3,
 			limit: 10,
+			offset: 0,
+			total: 2,
 			posts: [
 				{
 					id: 3,
@@ -191,5 +193,65 @@ describe( 'ContextualPromptsSettings enabled body', () => {
 			'href',
 			'https://example.test/wp-admin/post.php?post=6&action=edit'
 		);
+	} );
+
+	it( 'shows "Load more" while more stories remain, and appends the next page on click', async () => {
+		const controlEnabledField = {
+			section: 'control',
+			key: 'newspack_contextual_prompts_control_enabled',
+			label: 'Enable control test',
+			type: 'toggle',
+			value: '1',
+		};
+		apiFetch.mockResolvedValueOnce( {
+			interval: 3,
+			limit: 10,
+			offset: 0,
+			total: 3,
+			posts: [
+				{
+					id: 3,
+					title: 'Local election results',
+					edit_link: 'https://example.test/wp-admin/post.php?post=3&action=edit',
+					permalink: 'https://example.test/?p=3',
+				},
+				{
+					id: 6,
+					title: 'City budget vote',
+					edit_link: 'https://example.test/wp-admin/post.php?post=6&action=edit',
+					permalink: 'https://example.test/?p=6',
+				},
+			],
+		} );
+
+		render( <EnabledHarness fields={ [ controlEnabledField ] } /> );
+
+		const loadMoreButton = await screen.findByRole( 'button', { name: 'Load more' } );
+		expect( screen.getByText( 'Showing 2 of 3.' ) ).toBeInTheDocument();
+
+		apiFetch.mockResolvedValueOnce( {
+			interval: 3,
+			limit: 10,
+			offset: 2,
+			total: 3,
+			posts: [
+				{
+					id: 9,
+					title: 'School board meeting',
+					edit_link: 'https://example.test/wp-admin/post.php?post=9&action=edit',
+					permalink: 'https://example.test/?p=9',
+				},
+			],
+		} );
+
+		fireEvent.click( loadMoreButton );
+
+		expect( await screen.findByRole( 'link', { name: 'School board meeting' } ) ).toBeInTheDocument();
+		expect( screen.getByRole( 'link', { name: 'Local election results' } ) ).toBeInTheDocument();
+		expect( screen.getByRole( 'link', { name: 'City budget vote' } ) ).toBeInTheDocument();
+		expect( screen.queryByRole( 'button', { name: 'Load more' } ) ).not.toBeInTheDocument();
+		expect( apiFetch ).toHaveBeenLastCalledWith( {
+			path: '/newspack-popups/v1/contextual-prompt/control-preview?interval=3&offset=2',
+		} );
 	} );
 } );

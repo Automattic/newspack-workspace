@@ -186,6 +186,11 @@ final class Newspack_Popups_API {
 							'required'          => false,
 							'sanitize_callback' => 'absint',
 						],
+						'offset'   => [
+							'type'              => 'integer',
+							'required'          => false,
+							'sanitize_callback' => 'absint',
+						],
 					],
 				]
 			);
@@ -292,12 +297,16 @@ final class Newspack_Popups_API {
 		$interval = $interval
 			? max( Newspack_Popups_Settings::CONTROL_INTERVAL_MIN, min( Newspack_Popups_Settings::CONTROL_INTERVAL_MAX, $interval ) )
 			: Newspack_Popups_Settings::get_control_interval();
-		$limit = 10;
+		$limit    = 10;
+		$offset   = (int) $request->get_param( 'offset' );
+		$preview  = Newspack_Popups_Contextual_Prompt_Render::get_control_preview( $interval, $limit, $offset );
 		return rest_ensure_response(
 			[
 				'interval' => $interval,
 				'limit'    => $limit,
-				'posts'    => Newspack_Popups_Contextual_Prompt_Render::get_control_preview( $interval, $limit ),
+				'offset'   => $offset,
+				'total'    => $preview['total'],
+				'posts'    => $preview['posts'],
 			]
 		);
 	}

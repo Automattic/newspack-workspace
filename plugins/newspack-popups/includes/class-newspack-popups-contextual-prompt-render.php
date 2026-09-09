@@ -669,32 +669,45 @@ final class Newspack_Popups_Contextual_Prompt_Render {
 	 * both needles are searched.
 	 *
 	 * @param int $interval Every Nth story.
-	 * @param int $limit    Maximum rows.
-	 * @return array[] Each: id, title, edit_link, permalink.
+	 * @param int $limit    Maximum rows to return, starting at $offset.
+	 * @param int $offset   How many selected candidates to skip, for "Load more" paging.
+	 * @return array{total: int, posts: array[]} `total` counts every selected candidate,
+	 *                                            before $offset/$limit are applied; `posts`
+	 *                                            is the requested page, each: id, title,
+	 *                                            edit_link, permalink.
 	 */
-	public static function get_control_preview( $interval, $limit = 10 ) {
+	public static function get_control_preview( $interval, $limit = 10, $offset = 0 ) {
 		$pattern_id = (int) get_option( Newspack_Popups_Contextual_Prompt_Pattern::OPTION_PATTERN_ID, 0 );
 		if ( ! $pattern_id ) {
-			return [];
+			return [
+				'total' => 0,
+				'posts' => [],
+			];
 		}
-		$ids  = self::get_control_candidate_ids( $pattern_id );
-		$rows = [];
+		$ids      = self::get_control_candidate_ids( $pattern_id );
+		$selected = [];
 		foreach ( $ids as $id ) {
 			$id = (int) $id;
-			if ( ! self::is_control_story( $id, $interval ) ) {
-				continue;
-			}
-			$rows[] = [
-				'id'        => $id,
-				'title'     => get_the_title( $id ),
-				'edit_link' => (string) get_edit_post_link( $id, 'raw' ),
-				'permalink' => (string) get_permalink( $id ),
-			];
-			if ( count( $rows ) >= $limit ) {
-				break;
+			if ( self::is_control_story( $id, $interval ) ) {
+				$selected[] = $id;
 			}
 		}
-		return $rows;
+		$page = array_slice( $selected, $offset, $limit );
+		$rows = array_map(
+			function ( $id ) {
+				return [
+					'id'        => $id,
+					'title'     => get_the_title( $id ),
+					'edit_link' => (string) get_edit_post_link( $id, 'raw' ),
+					'permalink' => (string) get_permalink( $id ),
+				];
+			},
+			$page
+		);
+		return [
+			'total' => count( $selected ),
+			'posts' => $rows,
+		];
 	}
 
 	/**

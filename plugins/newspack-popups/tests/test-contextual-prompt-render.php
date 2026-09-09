@@ -1509,17 +1509,18 @@ class ContextualPromptRenderTest extends WP_UnitTestCase {
 		);
 
 		$preview = Newspack_Popups_Contextual_Prompt_Render::get_control_preview( 3, 10 );
-		$ids     = wp_list_pluck( $preview, 'id' );
+		$ids     = wp_list_pluck( $preview['posts'], 'id' );
 		foreach ( $with as $id ) {
 			$this->assertContains( $id, $ids );
 		}
 		$this->assertNotContains( $without[0], $ids );
 		$this->assertNotContains( $draft, $ids );
-		foreach ( $preview as $row ) {
+		foreach ( $preview['posts'] as $row ) {
 			$this->assertSame( 0, $row['id'] % 3 );
 			$this->assertStringContainsString( 'post.php?post=' . $row['id'], $row['edit_link'] );
 		}
-		$this->assertCount( 1, Newspack_Popups_Contextual_Prompt_Render::get_control_preview( 3, 1 ) );
+		$this->assertSame( $preview['total'], count( $preview['posts'] ) );
+		$this->assertCount( 1, Newspack_Popups_Contextual_Prompt_Render::get_control_preview( 3, 1 )['posts'] );
 	}
 
 	/**
@@ -1567,7 +1568,7 @@ class ContextualPromptRenderTest extends WP_UnitTestCase {
 		// Interval of 1 selects every candidate the SQL scan turns up, so the
 		// assertion is purely about the LIKE needle, not the interval filter.
 		$preview = Newspack_Popups_Contextual_Prompt_Render::get_control_preview( 1, 50 );
-		$ids     = wp_list_pluck( $preview, 'id' );
+		$ids     = wp_list_pluck( $preview['posts'], 'id' );
 		$this->assertNotContains( $decoy_post, $ids, 'A post embedding an unrelated ref that starts with the pattern id must not be listed.' );
 		$this->assertContains( $real_post, $ids, 'A post embedding the real pattern instance must be listed.' );
 	}
@@ -1617,7 +1618,7 @@ class ContextualPromptRenderTest extends WP_UnitTestCase {
 		$bypassed_id = $wpdb->insert_id;
 
 		$second_preview = Newspack_Popups_Contextual_Prompt_Render::get_control_preview( 1, 50 );
-		$this->assertNotContains( $bypassed_id, wp_list_pluck( $second_preview, 'id' ), 'A cached call must not reflect a row inserted after the cache was warmed.' );
+		$this->assertNotContains( $bypassed_id, wp_list_pluck( $second_preview['posts'], 'id' ), 'A cached call must not reflect a row inserted after the cache was warmed.' );
 	}
 
 	/**
@@ -1651,6 +1652,43 @@ class ContextualPromptRenderTest extends WP_UnitTestCase {
 		$this->assertFalse( get_transient( $transient_key ), 'Publishing a supported post type must clear the cache.' );
 
 		$preview = Newspack_Popups_Contextual_Prompt_Render::get_control_preview( 1, 50 );
-		$this->assertContains( $new_id, wp_list_pluck( $preview, 'id' ), 'The newly published story is visible once the cache is rebuilt.' );
+		$this->assertContains( $new_id, wp_list_pluck( $preview['posts'], 'id' ), 'The newly published story is visible once the cache is rebuilt.' );
+	}
+
+	/**
+	 * The preview pages through the selected stories and reports the total,
+	 * so the settings form can offer "Load more".
+	 */
+	public function test_control_preview_paginates_with_total() {
+		$this->set_platform( true );
+		$this->set_control( 'Support local news.', 1 );
+		$pattern_id = Newspack_Popups_Contextual_Prompt_Pattern::get_pattern_id();
+		$instance   = '<!-- wp:block ' . wp_json_encode(
+			[
+				'ref'     => $pattern_id,
+				'content' => [ Newspack_Popups_Contextual_Prompt_Pattern::BOUND_NAME => [ 'content' => 'Ask.' ] ],
+			] 
+		) . ' /-->';
+		$ids        = [];
+		for ( $i = 0; $i < 5; $i++ ) {
+			$ids[] = self::factory()->post->create(
+				[
+					'post_status'  => 'publish',
+					'post_content' => $instance,
+					'post_date'    => gmdate( 'Y-m-d H:i:s', time() - $i * 60 ),
+				] 
+			);
+		}
+		delete_transient( 'newspack_cp_control_candidates_' . $pattern_id );
+
+		$first = Newspack_Popups_Contextual_Prompt_Render::get_control_preview( 1, 2, 0 );
+		$this->assertSame( 5, $first['total'] );
+		$this->assertCount( 2, $first['posts'] );
+		$second = Newspack_Popups_Contextual_Prompt_Render::get_control_preview( 1, 2, 2 );
+		$this->assertCount( 2, $second['posts'] );
+		$this->assertEmpty( array_intersect( wp_list_pluck( $first['posts'], 'id' ), wp_list_pluck( $second['posts'], 'id' ) ) );
+		$last = Newspack_Popups_Contextual_Prompt_Render::get_control_preview( 1, 2, 4 );
+		$this->assertCount( 1, $last['posts'] );
+		$this->assertSame( [], Newspack_Popups_Contextual_Prompt_Render::get_control_preview( 1, 2, 99 )['posts'] );
 	}
 }

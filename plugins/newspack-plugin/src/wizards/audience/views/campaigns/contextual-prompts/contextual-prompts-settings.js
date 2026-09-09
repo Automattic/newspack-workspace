@@ -63,42 +63,70 @@ const CONTROL_INTERVAL_KEY = 'newspack_contextual_prompts_control_interval';
 // for a fresh preview, so typing a new value doesn't fire a request per digit.
 const PREVIEW_DEBOUNCE_MS = 400;
 
+// The REST path the preview is fetched from, shared by the initial page and
+// every "Load more" page.
+const PREVIEW_PATH = '/newspack-popups/v1/contextual-prompt/control-preview';
+
 /**
  * The published stories that will show the control copy at the current
  * interval, so an admin can see the effect of a value before saving it.
- * Renders nothing while the control test is off.
+ * Renders nothing while the control test is off. Accumulates pages behind a
+ * "Load more" button rather than fetching every matching story at once.
  *
  * @param {Object}  props          Component props.
  * @param {boolean} props.enabled  Whether the control test is on.
  * @param {number}  props.interval Every Nth story.
  */
 const ControlPreview = ( { enabled, interval } ) => {
-	const [ loading, setLoading ] = useState( true );
 	const [ posts, setPosts ] = useState( [] );
-	const [ limit, setLimit ] = useState( 10 );
+	const [ total, setTotal ] = useState( 0 );
+	const [ loading, setLoading ] = useState( true );
+	const [ loadingMore, setLoadingMore ] = useState( false );
+
+	const fetchPage = ( offset, append ) => {
+		return apiFetch( { path: addQueryArgs( PREVIEW_PATH, { interval, offset } ) } ).then( response => {
+			setTotal( response.total || 0 );
+			setPosts( previous => ( append ? [ ...previous, ...( response.posts || [] ) ] : response.posts || [] ) );
+		} );
+	};
 
 	useEffect( () => {
 		if ( ! enabled ) {
 			return;
 		}
+		let ignore = false;
 		setLoading( true );
 		const timeout = setTimeout( () => {
-			apiFetch( { path: addQueryArgs( '/newspack-popups/v1/contextual-prompt/control-preview', { interval } ) } )
-				.then( response => {
-					setPosts( response.posts || [] );
-					setLimit( response.limit || 10 );
-				} )
+			fetchPage( 0, false )
 				.catch( () => {
-					setPosts( [] );
+					if ( ! ignore ) {
+						setPosts( [] );
+						setTotal( 0 );
+					}
 				} )
-				.finally( () => setLoading( false ) );
+				.finally( () => {
+					if ( ! ignore ) {
+						setLoading( false );
+					}
+				} );
 		}, PREVIEW_DEBOUNCE_MS );
-		return () => clearTimeout( timeout );
+		return () => {
+			ignore = true;
+			clearTimeout( timeout );
+		};
 	}, [ enabled, interval ] );
 
 	if ( ! enabled ) {
 		return null;
 	}
+
+	const hasMore = posts.length < total;
+	const loadMore = () => {
+		setLoadingMore( true );
+		fetchPage( posts.length, true )
+			.catch( () => {} )
+			.finally( () => setLoadingMore( false ) );
+	};
 
 	return (
 		<Card>
@@ -119,10 +147,19 @@ const ControlPreview = ( { enabled, interval } ) => {
 						) ) }
 					</ul>
 				) }
-				{ posts.length >= limit && (
-					<p style={ { margin: '8px 0 0' } }>
-						{ sprintf( /* translators: %d: row cap */ __( 'Showing the %d most recent.', 'newspack-plugin' ), limit ) }
-					</p>
+				{ ! loading && hasMore && (
+					<HStack justify="space-between" style={ { marginTop: 8 } }>
+						<span>
+							{ sprintf(
+								/* translators: 1: rows shown, 2: total matching stories */ __( 'Showing %1$d of %2$d.', 'newspack-plugin' ),
+								posts.length,
+								total
+							) }
+						</span>
+						<Button variant="secondary" onClick={ loadMore } isBusy={ loadingMore } disabled={ loadingMore } __next40pxDefaultSize>
+							{ __( 'Load more', 'newspack-plugin' ) }
+						</Button>
+					</HStack>
 				) }
 			</CardBody>
 		</Card>
