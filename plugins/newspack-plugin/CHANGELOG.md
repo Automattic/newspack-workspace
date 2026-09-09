@@ -1,3 +1,10 @@
+# newspack [6.50.0](https://github.com/Automattic/newspack-workspace/compare/newspack@6.49.5...newspack@6.50.0) (2026-09-09)
+
+
+### Features
+
+* **export:** add an options dialog to the CSV exports (NPPD-2231, [#1001](https://github.com/Automattic/newspack-workspace/issues/1001)) ([9bbe43b](https://github.com/Automattic/newspack-workspace/commit/9bbe43be498485782b292fd8b4119c3f7ad16317))
+
 ## newspack [6.49.5](https://github.com/Automattic/newspack-workspace/compare/newspack@6.49.4...newspack@6.49.5) (2026-09-09)
 
 
