@@ -67,6 +67,19 @@ class Group_Subscription_Invite {
 	const LINK_META = 'newspack_group_subscription_link_invites';
 
 	/**
+	 * The subscription meta key recording invite links a manager withdrew.
+	 * Stored as: [ $manager_user_id => $revoked_at ].
+	 *
+	 * An absent link cannot otherwise be told from one that was never minted, because
+	 * delete_link_invite() removes the entry outright. Only the withdrawal knows the
+	 * difference, so it is what records it — and a caller minting a link on a reader's
+	 * behalf can then refuse to put a withdrawn one back into circulation.
+	 *
+	 * @var string
+	 */
+	const LINK_REVOKED_META = 'newspack_group_subscription_link_invites_revoked';
+
+	/**
 	 * Initialize hooks.
 	 */
 	public static function init() {
@@ -300,6 +313,12 @@ class Group_Subscription_Invite {
 		$all[ $user_id ] = $entry;
 
 		$subscription->update_meta_data( self::LINK_META, $all );
+		// A fresh link supersedes any earlier withdrawal of this manager's.
+		$revoked = $subscription->get_meta( self::LINK_REVOKED_META, true );
+		if ( is_array( $revoked ) && isset( $revoked[ $user_id ] ) ) {
+			unset( $revoked[ $user_id ] );
+			$subscription->update_meta_data( self::LINK_REVOKED_META, $revoked );
+		}
 		$subscription->save();
 
 		return array_merge(
@@ -340,8 +359,34 @@ class Group_Subscription_Invite {
 		}
 		unset( $all[ $user_id ] );
 		$subscription->update_meta_data( self::LINK_META, $all );
+		// Record the withdrawal alongside the removal: the entry is gone, and this is
+		// the only path that knows the absent link was disabled rather than never
+		// minted.
+		$revoked = $subscription->get_meta( self::LINK_REVOKED_META, true );
+		if ( ! is_array( $revoked ) ) {
+			$revoked = [];
+		}
+		$revoked[ $user_id ] = time();
+		$subscription->update_meta_data( self::LINK_REVOKED_META, $revoked );
 		$subscription->save();
 		return true;
+	}
+
+	/**
+	 * Whether a manager's invite link was withdrawn, rather than never minted.
+	 *
+	 * @param \WC_Subscription|int $subscription The subscription object or ID.
+	 * @param int                  $user_id      The manager user ID.
+	 *
+	 * @return bool
+	 */
+	public static function link_invite_was_revoked( $subscription, $user_id ) {
+		$subscription = WooCommerce_Subscriptions::sanitize_subscription( $subscription );
+		if ( ! $subscription ) {
+			return false;
+		}
+		$revoked = $subscription->get_meta( self::LINK_REVOKED_META, true );
+		return is_array( $revoked ) && ! empty( $revoked[ (int) $user_id ] );
 	}
 
 	/**

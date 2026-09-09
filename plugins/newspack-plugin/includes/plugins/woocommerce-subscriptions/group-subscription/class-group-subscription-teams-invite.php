@@ -27,11 +27,11 @@ defined( 'ABSPATH' ) || exit;
  * group subscription it created. Nothing is built at migration time, so there is no
  * mapping table to keep in step with either side.
  *
- * Revocation is the invariant worth stating, because every path here is reached by a
- * bearer token no Access Control screen displays: a link stops working when the thing
- * it points at is withdrawn. Joining spends the source invitation, cancelling the
- * minted invite spends it too, and a group whose owner disabled their invite link
- * does not get a replacement minted by the next click on an old registration URL.
+ * Every path here is reached by a bearer token no Access Control screen displays, so
+ * a link stops working when the thing it points at is withdrawn. Joining spends the
+ * source invitation, cancelling the minted invite spends it too, an address that is
+ * already a member spends it, and a group whose owner disabled their invite link does
+ * not get a replacement minted by the next click on an old registration URL.
  *
  * Two configurations reach only the fallback notice. A site that uninstalled
  * WooCommerce Teams *with data deletion* rather than deactivating it has no rows left
@@ -111,15 +111,6 @@ class Group_Subscription_Teams_Invite {
 	 * no way to restore them.
 	 */
 	const CLOSED_BY_META = '_newspack_join_team_redeemed_subscription';
-
-	/**
-	 * Subscription meta recording that this route minted the group's invite link.
-	 * What it buys is revocation: once the owner disables that link,
-	 * delete_link_invite() leaves nothing to tell "never had one" from "deliberately
-	 * revoked", and without this marker the next click on a circulating registration
-	 * URL would mint a replacement and undo the revocation.
-	 */
-	const LINK_MINTED_META = '_newspack_join_team_link_minted';
 
 	/**
 	 * Register hooks.
@@ -202,9 +193,15 @@ class Group_Subscription_Teams_Invite {
 	 * anyway, and by then every plugin's endpoints are registered, so the rules this
 	 * writes are the complete set. Soft flush: this adds endpoint rules only, and the
 	 * hard form rewrites .htaccess on an anonymous front-end request for no gain.
+	 *
+	 * Nothing is asserted unless the endpoint is registered, because only a registered
+	 * endpoint can put its pattern in the stored rules. Without that floor a site
+	 * where the rule can never appear — WooCommerce inactive, or a slug collision that
+	 * made add_query_var() stand down — would regenerate the whole rule set on every
+	 * request, forever.
 	 */
 	public static function maybe_flush_rewrite_rules(): void {
-		if ( self::teams_is_active() ) {
+		if ( self::teams_is_active() || ! self::endpoint_is_registered() ) {
 			return;
 		}
 		$rules = get_option( 'rewrite_rules' );
@@ -215,11 +212,34 @@ class Group_Subscription_Teams_Invite {
 		}
 		$needle = '/' . self::get_endpoint() . '(';
 		foreach ( array_keys( $rules ) as $pattern ) {
-			if ( false !== strpos( (string) $pattern, $needle ) ) {
+			if ( str_contains( (string) $pattern, $needle ) ) {
 				return;
 			}
 		}
 		flush_rewrite_rules( false ); // phpcs:ignore WordPressVIPMinimum.Functions.RestrictedFunctions.flush_rewrite_rules_flush_rewrite_rules
+	}
+
+	/**
+	 * Whether the endpoint slug is registered as a rewrite endpoint on this request.
+	 *
+	 * WooCommerce is what registers it, from the query var add_query_var() supplies,
+	 * so this answers "can a rule for this slug exist at all" — false while WooCommerce
+	 * is inactive, and false when add_query_var() stood down over a slug WooCommerce
+	 * already answers on. Exposed for testing.
+	 */
+	public static function endpoint_is_registered(): bool {
+		global $wp_rewrite;
+		if ( ! $wp_rewrite instanceof \WP_Rewrite ) {
+			return false;
+		}
+		$endpoint = self::get_endpoint();
+		foreach ( (array) $wp_rewrite->endpoints as $registered ) {
+			// Each entry is places, name, query var, as WP_Rewrite::add_endpoint() stores it.
+			if ( isset( $registered[1] ) && $registered[1] === $endpoint ) {
+				return true;
+			}
+		}
+		return false;
 	}
 
 	/**
@@ -278,14 +298,19 @@ class Group_Subscription_Teams_Invite {
 		$destination = self::resolve_token( $token );
 
 		if ( is_wp_error( $destination ) ) {
-			// My Account rather than the site home page redirect_with_result() would
-			// otherwise pick for a logged-out visitor: these readers are logged out by
-			// definition, and one of the two messages tells them to sign in, which the
-			// home page gives them no way to do.
+			// A logged-out reader goes to the My Account root rather than the site home
+			// page redirect_with_result() would otherwise pick: the root renders the
+			// login form, and one of the two messages tells them to sign in, which the
+			// home page gives them no way to do. A logged-in reader must not be sent
+			// there — WooCommerce_My_Account::redirect_to_account_details() forwards
+			// the root on to `edit-account` for them and drops the query string on the
+			// way, so the notice would never be rendered. They take
+			// redirect_with_result()'s own default, which is that endpoint directly.
 			Group_Subscription_Invite::redirect_with_result(
 				$destination->get_error_code(),
-				function_exists( 'wc_get_page_permalink' ) ? wc_get_page_permalink( 'myaccount' ) : null
+				! is_user_logged_in() && function_exists( 'wc_get_page_permalink' ) ? wc_get_page_permalink( 'myaccount' ) : null
 			);
+			return;
 		}
 		wp_safe_redirect( $destination );
 		exit;
@@ -317,7 +342,7 @@ class Group_Subscription_Teams_Invite {
 		}
 		$subscription = self::find_group_subscription_for_team( (int) $invitation->post_parent );
 		if ( ! $subscription ) {
-			return self::invalid_link_error( 'team_not_migrated', [ 'team_id' => (int) $invitation->post_parent ] );
+			return self::invalid_link_error( self::unresolved_team_reason(), [ 'team_id' => (int) $invitation->post_parent ] );
 		}
 
 		// Answered before the reuse lookup below, which would otherwise hand a member
@@ -325,7 +350,7 @@ class Group_Subscription_Teams_Invite {
 		// too, but only on the mint path.
 		$invitee = get_user_by( 'email', $email );
 		if ( $invitee && Group_Subscription::user_is_member( $invitee->ID, $subscription ) ) {
-			return self::existing_member_error();
+			return self::spend_for_existing_member( $subscription, $email, (int) $invitee->ID );
 		}
 
 		$live = self::find_live_invite( $subscription, $email );
@@ -337,7 +362,7 @@ class Group_Subscription_Teams_Invite {
 			$invite = Group_Subscription_Invite::generate_invite( $subscription, $email, false );
 			if ( is_wp_error( $invite ) ) {
 				return 'newspack_group_subscription_invite_existing_user' === $invite->get_error_code()
-					? self::existing_member_error()
+					? self::spend_for_existing_member( $subscription, $email, $invitee ? (int) $invitee->ID : 0 )
 					: self::invalid_link_error( 'invite_refused', [ 'reason' => $invite->get_error_code() ] );
 			}
 			$live = self::find_live_invite( $subscription, $email );
@@ -347,8 +372,8 @@ class Group_Subscription_Teams_Invite {
 		}
 
 		// The address the invite was stored under, not the invitation row's: the two
-		// can differ in case, and the invite is looked up downstream against the value
-		// it was stored with.
+		// can differ in case, and this is the address an account gets created under
+		// when the invitee turns out to be new to the site.
 		return Group_Subscription_Invite::get_invite_url( $subscription->get_id(), $live['key'], $live['email'] );
 	}
 
@@ -372,7 +397,7 @@ class Group_Subscription_Teams_Invite {
 		}
 		$subscription = self::find_group_subscription_for_team( $team_id );
 		if ( ! $subscription ) {
-			return self::invalid_link_error( 'team_not_migrated', [ 'team_id' => $team_id ] );
+			return self::invalid_link_error( self::unresolved_team_reason(), [ 'team_id' => $team_id ] );
 		}
 
 		// Invite links belong to a manager, and a link is revoked when its manager is
@@ -386,16 +411,16 @@ class Group_Subscription_Teams_Invite {
 			// minted into. delete_link_invite() removes the entry outright, so a link
 			// the owner deliberately disabled looks exactly like one that never
 			// existed — and minting here would put the revoked link back into
-			// circulation for everyone still holding an old registration URL.
-			if ( $subscription->get_meta( self::LINK_MINTED_META ) ) {
+			// circulation for everyone still holding an old registration URL. The
+			// withdrawal itself is what records the difference, whoever minted the
+			// link: this route, or the owner in the group panel.
+			if ( Group_Subscription_Invite::link_invite_was_revoked( $subscription, $owner_id ) ) {
 				return self::invalid_link_error( 'link_invite_revoked', [ 'subscription_id' => $subscription->get_id() ] );
 			}
 			$entry = Group_Subscription_Invite::generate_link_invite( $subscription, $owner_id );
 			if ( is_wp_error( $entry ) ) {
 				return self::invalid_link_error( 'link_invite_refused', [ 'reason' => $entry->get_error_code() ] );
 			}
-			$subscription->update_meta_data( self::LINK_MINTED_META, time() );
-			$subscription->save();
 		}
 
 		return Group_Subscription_Invite::get_link_invite_url( $subscription->get_id(), $owner_id, $entry['key'] );
@@ -560,8 +585,8 @@ class Group_Subscription_Teams_Invite {
 	 *
 	 * Returns the stored email as well as the key, because the two are not
 	 * interchangeable: the match here is case-insensitive (a stored invite and the
-	 * address on the invitation row can differ in case), while the invite is looked up
-	 * downstream against the value it was stored under.
+	 * address on the invitation row can differ in case), while the URL has to carry
+	 * the stored address — it is the one an account gets created under downstream.
 	 *
 	 * @param \WC_Subscription $subscription The group subscription.
 	 * @param string           $email        The invitee's email.
@@ -707,14 +732,55 @@ class Group_Subscription_Teams_Invite {
 	}
 
 	/**
-	 * The result code shown to a reader who already has what the link offers.
+	 * Which cause to record when a team resolves to no group subscription.
+	 *
+	 * A half-done flip is indistinguishable from a team nobody migrated by the time
+	 * the lookup returns: is_group_subscription() answers false on every My Account
+	 * page while WooCommerce Memberships owns the front end, and this route is one.
+	 * Only the difference in the two reasons lets a publisher be told which they have,
+	 * and the half-flip one clears itself when Memberships is deactivated.
 	 */
-	private static function existing_member_error(): \WP_Error {
-		return new \WP_Error(
-			is_user_logged_in()
-				? Group_Subscription_Invite::RESULT_JOIN_TEAM_MEMBER
-				: Group_Subscription_Invite::RESULT_JOIN_TEAM_SIGN_IN
-		);
+	private static function unresolved_team_reason(): string {
+		return Memberships::is_active() ? 'memberships_still_active' : 'team_not_migrated';
+	}
+
+	/**
+	 * Spend the source invitation for an address that is already a member, and say so.
+	 *
+	 * The link offers membership and the address already holds it, which is what spent
+	 * means here. Nothing else closes the row on this path — removing a member does
+	 * not cancel invites, so the acceptance and cancellation listeners never fire for
+	 * it — and leaving it pending would let a reader the manager later removes re-admit
+	 * themselves with the original email.
+	 *
+	 * @param \WC_Subscription $subscription The group subscription.
+	 * @param string           $email        The address the invitation was sent to.
+	 * @param int              $invitee_id   The reader holding that address, if any.
+	 */
+	private static function spend_for_existing_member( $subscription, string $email, int $invitee_id ): \WP_Error {
+		self::close_invitations_for( $subscription, [ $email ] );
+		return self::existing_member_error( $invitee_id );
+	}
+
+	/**
+	 * The result code shown to a reader who already has what the link offers.
+	 *
+	 * The membership tested upstream is the invited address's, and the visitor holding
+	 * the link is only that reader when they are signed in as them. A signed-in visitor
+	 * following somebody else's forwarded invitation gets the dead-link message
+	 * instead: "you already have access" is false for them, and would confirm that the
+	 * invited address holds an account in this group.
+	 *
+	 * @param int $invitee_id The reader holding the invited address, if any.
+	 */
+	private static function existing_member_error( int $invitee_id ): \WP_Error {
+		if ( ! is_user_logged_in() ) {
+			return new \WP_Error( Group_Subscription_Invite::RESULT_JOIN_TEAM_SIGN_IN );
+		}
+		if ( $invitee_id && get_current_user_id() === $invitee_id ) {
+			return new \WP_Error( Group_Subscription_Invite::RESULT_JOIN_TEAM_MEMBER );
+		}
+		return self::invalid_link_error( 'invitation_for_another_member' );
 	}
 }
 
