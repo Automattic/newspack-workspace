@@ -321,7 +321,7 @@ function handleFormSubmission( evt, gate ) {
 	// Keyed on the block's own hidden field, like the siblings above: the auth
 	// modal and the Reader Registration block also post the email as `npe`.
 	if ( data.newspack_newsletters_subscribe ) {
-		payload.action_type = 'newsletter_signup';
+		payload.action_type = 'newsletters_subscription'; // Same spelling as the prompt-side listener.
 	}
 	if ( data.newspack_checkout ) {
 		payload.action_type = 'checkout_button';

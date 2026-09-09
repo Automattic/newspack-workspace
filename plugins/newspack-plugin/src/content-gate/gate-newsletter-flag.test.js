@@ -67,7 +67,7 @@ describe( 'gate.js and the Newsletter Subscription Form block', () => {
 		form.dispatchEvent( new Event( 'submit', { bubbles: true, cancelable: true } ) );
 		const submission = mockSendEvent.mock.calls.find( ( [ payload ] ) => payload?.action === 'form_submission' );
 		expect( submission ).toBeDefined();
-		expect( submission[ 0 ].action_type ).toBe( 'newsletter_signup' );
+		expect( submission[ 0 ].action_type ).toBe( 'newsletters_subscription' );
 	} );
 
 	it( 'keeps a registration-block submission labelled registration even though it also posts npe', () => {
