@@ -146,11 +146,17 @@ const StoryBudget = () => {
 							</AppHeaderActions>
 							<Budgets />
 							<Switch>
-								<Route path="/budgets/new">
-									<ModalPage title={ __( 'Add Budget', 'newspack-story-budget' ) } closeHref="#/budgets" name={ 'create-budget' }>
-										<CreateBudgetModal onClose={ () => ( window.location.href = '#/budgets' ) } />
-									</ModalPage>
-								</Route>
+								{ canManageBudgets && (
+									<Route path="/budgets/new">
+										<ModalPage
+											title={ __( 'Add Budget', 'newspack-story-budget' ) }
+											closeHref="#/budgets"
+											name={ 'create-budget' }
+										>
+											<CreateBudgetModal onClose={ () => ( window.location.href = '#/budgets' ) } />
+										</ModalPage>
+									</Route>
+								) }
 							</Switch>
 						</Route>
 						<Redirect to="/stories" />
