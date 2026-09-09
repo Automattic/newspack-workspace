@@ -99,8 +99,10 @@ class TestUrlRewriteConflict extends WP_UnitTestCase {
 		$wp_rewrite->rules = [];
 		// The VIP sniff guards against flushing on a live request. Rebuilding the
 		// rules is the whole point here: the rule order this produces is what the
-		// tests below are about.
-		flush_rewrite_rules(); // phpcs:ignore WordPressVIPMinimum.Functions.RestrictedFunctions.flush_rewrite_rules_flush_rewrite_rules
+		// tests below are about. Soft, because only the in-memory rules are being
+		// asked for — the hard form additionally writes .htaccess, which under the
+		// PHPUnit CLI is a no-op it takes a reader a minute to confirm.
+		flush_rewrite_rules( false ); // phpcs:ignore WordPressVIPMinimum.Functions.RestrictedFunctions.flush_rewrite_rules_flush_rewrite_rules
 	}
 
 	/**
