@@ -10,7 +10,7 @@ namespace Newspack;
 $current_post_id = get_query_var( 'lite_site_id' );
 $current_post = get_post( $current_post_id );
 
-if ( ! $current_post ) {
+if ( ! Lite_Site::is_post_accessible( $current_post ) ) {
 	status_header( 404 );
 	exit( 'Post not found' );
 }

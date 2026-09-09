@@ -374,6 +374,20 @@ class Lite_Site {
 	}
 
 	/**
+	 * Check whether a post can be displayed on the lite site.
+	 *
+	 * Only posts that are publicly viewable and not password-protected are allowed.
+	 *
+	 * @param \WP_Post|null $post The post object.
+	 * @return bool True if the post can be displayed, false otherwise.
+	 */
+	public static function is_post_accessible( $post ) {
+		return $post instanceof \WP_Post
+			&& is_post_publicly_viewable( $post )
+			&& ! post_password_required( $post );
+	}
+
+	/**
 	 * Get the primary color
 	 *
 	 * @return string The primary color.
