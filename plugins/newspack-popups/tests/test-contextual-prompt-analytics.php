@@ -656,4 +656,100 @@ class ContextualPromptAnalyticsTest extends WP_UnitTestCase {
 		$this->assertStringNotContainsString( 'Support local news.', $rendered );
 		$this->assertStringContainsString( 'data-newspack-cp-condition="override"', $rendered );
 	}
+
+	/**
+	 * The same card with its copy paragraph deleted — a publisher can remove it
+	 * from a detached card — so there is nothing for a swap to replace.
+	 *
+	 * @return string Serialized block markup.
+	 */
+	private function detached_markup_without_copy() {
+		return preg_replace( '#<!-- wp:paragraph.*?<!-- /wp:paragraph -->#s', '', $this->detached_markup(), 1 );
+	}
+
+	/**
+	 * Withdrawing the admin opt-in stops the fund drive and the control test at
+	 * every card, detached ones included: a detached card renders the copy its
+	 * post carries, reports no condition, and hands a donate form nothing.
+	 */
+	public function test_the_feature_switch_reaches_detached_cards() {
+		$this->set_platform( true );
+		$this->set_control( 'Support local news.', 3 );
+		update_option( Newspack_Popups_Settings::OVERRIDE_ENABLED_OPTION, true );
+		update_option( Newspack_Popups_Settings::OVERRIDE_CTA_OPTION, 'form' );
+		update_option( 'newspack_contextual_prompts_override_body', 'Fund drive copy' );
+		$content = $this->detached_markup();
+
+		update_option( Newspack_Popups_Settings::AI_COPY_ASSISTANT_ENABLED_OPTION, false );
+		$rendered = $this->render_in_loop( $this->post_for_interval( $content, 3, true ) );
+
+		$this->assertStringContainsString( 'Detached copy.', $rendered );
+		$this->assertStringNotContainsString( 'Fund drive copy', $rendered );
+		$this->assertStringNotContainsString( 'Support local news.', $rendered );
+		$this->assertStringNotContainsString( 'data-newspack-cp-condition', $rendered );
+		$this->assertStringNotContainsString( 'contextual_prompt_post_id', $rendered );
+	}
+
+	/**
+	 * Attribution reports the condition the card rendered under, not the one the
+	 * story is assigned. A selected story whose card has no copy paragraph swaps
+	 * nothing, so the impression, the hidden inputs and the button destination all
+	 * say `story_aware` — otherwise the same donation lands on both sides of the
+	 * comparison.
+	 */
+	public function test_attribution_uses_the_condition_that_rendered() {
+		$this->set_platform( true );
+		$this->set_control( 'Support local news.', 3 );
+
+		$rendered = $this->render_in_loop( $this->post_for_interval( $this->detached_markup_without_copy(), 3, true ) );
+
+		$this->assertStringContainsString( 'data-newspack-cp-condition="story_aware"', $rendered );
+		$this->assertMatchesRegularExpression( '/name="contextual_prompt_condition"[^>]*value="story_aware"/', $rendered );
+	}
+
+	/**
+	 * The marker is a whole class, not a prefix: a Group the publisher gave a
+	 * class of their own that happens to start with it is their content, so it is
+	 * not swapped, not stamped, and does not leave a card open for the next
+	 * donate form on the page to attribute itself to.
+	 */
+	public function test_a_class_merely_prefixed_with_the_marker_is_not_a_card() {
+		$this->set_platform( true );
+		$this->set_control( 'Support local news.', 3 );
+
+		$content = '<!-- wp:group {"className":"' . Newspack_Popups_Contextual_Prompt_Pattern::MARKER_CLASS . "-custom\"} -->\n"
+			. '<div class="wp-block-group ' . Newspack_Popups_Contextual_Prompt_Pattern::MARKER_CLASS . '-custom">'
+			. "<!-- wp:paragraph -->\n<p>Custom copy.</p>\n<!-- /wp:paragraph -->"
+			. "</div>\n<!-- /wp:group -->\n"
+			. '<!-- wp:newspack-blocks/donate /-->';
+
+		$rendered = $this->render_in_loop( $this->post_for_interval( $content, 3, true ) );
+
+		$this->assertStringContainsString( 'Custom copy.', $rendered );
+		$this->assertStringNotContainsString( 'Support local news.', $rendered );
+		$this->assertStringNotContainsString( 'data-newspack-cp-condition', $rendered );
+		$this->assertStringNotContainsString( 'contextual_prompt_post_id', $rendered );
+	}
+
+	/**
+	 * A fund drive in button mode replaces a detached card's CTA too: during a
+	 * drive every card carries the drive's ask and the drive's button.
+	 */
+	public function test_fund_drive_button_mode_replaces_a_detached_cta() {
+		$this->set_platform( true );
+		$this->set_control( 'Support local news.', 3 );
+		update_option( Newspack_Popups_Settings::OVERRIDE_ENABLED_OPTION, true );
+		update_option( Newspack_Popups_Settings::OVERRIDE_CTA_OPTION, 'button' );
+		update_option( 'newspack_contextual_prompts_override_body', 'Fund drive copy' );
+		update_option( 'newspack_contextual_prompts_override_label', 'Give now' );
+		update_option( 'newspack_contextual_prompts_override_url', 'https://example.com/drive/' );
+
+		$rendered = $this->render_in_loop( $this->post_for_interval( $this->detached_markup(), 3, true ) );
+
+		$this->assertStringContainsString( 'Fund drive copy', $rendered );
+		$this->assertStringNotContainsString( 'Detached copy.', $rendered );
+		$this->assertStringContainsString( 'Give now', $rendered );
+		$this->assertStringContainsString( 'https://example.com/drive/', html_entity_decode( $rendered ) );
+		$this->assertStringContainsString( 'data-newspack-cp-condition="override"', $rendered );
+	}
 }

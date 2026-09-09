@@ -13,9 +13,11 @@
  *
  * A Group a publisher detached from the pattern is still a prompt: the fund
  * drive and the control test swap its copy like any other card, so what the
- * settings preview promises is what renders. What stays scoped to the pattern is
- * what becomes the publisher's once the card is detached — its CTA, and the
- * strip that hides instances while the feature is off.
+ * settings preview promises is what renders. A fund drive in button mode
+ * replaces its CTA too — during a drive every card carries the drive's ask and
+ * the drive's button. What stays scoped to the pattern is the CTA rebuild that
+ * reconciles a stored CTA with the site's donation platform, and the strip that
+ * hides instances while the feature is off.
  *
  * @package Newspack
  */
@@ -541,8 +543,17 @@ final class Newspack_Popups_Contextual_Prompt_Render {
 			return self::is_instance( $block );
 		}
 
-		return 'core/group' === $name
-			&& false !== strpos( (string) ( $block['attrs']['className'] ?? '' ), Newspack_Popups_Contextual_Prompt_Pattern::MARKER_CLASS );
+		if ( 'core/group' !== $name ) {
+			return false;
+		}
+
+		// A whole class, not a prefix: `newspack-contextual-prompt-custom` is the
+		// publisher's own class, and the stamp downstream matches the marker the
+		// same way (WP_HTML_Tag_Processor::has_class()), so a looser test here
+		// would open a card nothing ever closes.
+		$classes = preg_split( '#\s+#', trim( (string) ( $block['attrs']['className'] ?? '' ) ) );
+
+		return in_array( Newspack_Popups_Contextual_Prompt_Pattern::MARKER_CLASS, (array) $classes, true );
 	}
 
 	/**
@@ -551,8 +562,10 @@ final class Newspack_Popups_Contextual_Prompt_Render {
 	 * window is open) and one a publisher detached from it alike. A detached card
 	 * is still a prompt, so the fund drive and the control test treat it as one —
 	 * otherwise the settings preview would list a story whose card never swapped.
-	 * What stays scoped to instances is what belongs to the publisher once the
-	 * card is theirs: the CTA rebuild below, and the feature-off strip.
+	 * What stays scoped to instances is the CTA rebuild below, which would
+	 * otherwise throw away the label and destination a publisher chose for their
+	 * own card. A fund drive in button mode still replaces that CTA: the drive is
+	 * a deliberate, temporary, site-wide swap, and it ends when the drive does.
 	 *
 	 * The marker class is the whole test: an instance's own Group carries it too,
 	 * so the window need not be consulted here.
@@ -567,6 +580,15 @@ final class Newspack_Popups_Contextual_Prompt_Render {
 	 */
 	public static function normalize_group( $parsed_block ) {
 		if ( 'core/group' !== ( $parsed_block['blockName'] ?? '' ) || ! self::is_prompt_card( $parsed_block ) ) {
+			return $parsed_block;
+		}
+
+		// The feature switch reaches every card. A detached card survives the strip
+		// (its copy is the publisher's), but the fund drive and the control test
+		// are the feature: with the opt-in withdrawn they stop swapping copy and
+		// stop reporting, so no card is left carrying a live override an admin has
+		// no UI to turn off.
+		if ( ! self::is_feature_on() ) {
 			return $parsed_block;
 		}
 
@@ -1060,6 +1082,25 @@ final class Newspack_Popups_Contextual_Prompt_Render {
 	}
 
 	/**
+	 * The source triple for the card being rendered: this story's id and
+	 * placement, and the condition normalize_group() recorded rather than the one
+	 * get_condition() derives. The two disagree when the card had nothing to swap
+	 * — a detached card with no copy paragraph on a selected story renders
+	 * story-aware copy — and the impression, the form and the button destination
+	 * all have to name the copy the reader actually saw.
+	 *
+	 * @param int $post_id The story.
+	 * @return array Keyed by SOURCE_KEYS.
+	 */
+	private static function get_rendered_source( $post_id ) {
+		$source = self::get_source( $post_id );
+
+		$source['contextual_prompt_condition'] = is_string( self::$rendered_condition ) ? self::$rendered_condition : '';
+
+		return $source;
+	}
+
+	/**
 	 * Validate a source triple from an untrusted carrier (URL, form, cart).
 	 * Insights groups by these values, so a junk id invents a story rather than
 	 * failing to attribute (the same reason gate ids are validated, NPPD-1887).
@@ -1097,7 +1138,7 @@ final class Newspack_Popups_Contextual_Prompt_Render {
 	 */
 	public static function print_form_hidden_fields() {
 		if ( self::$card_open ) {
-			$source = self::get_source( (int) get_the_ID() );
+			$source = self::get_rendered_source( (int) get_the_ID() );
 		} else {
 			// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- read-only attribution, validated below.
 			$source = self::validate_source( array_map( 'sanitize_text_field', wp_unslash( array_intersect_key( $_GET, array_flip( self::SOURCE_KEYS ) ) ) ) );
@@ -1125,7 +1166,9 @@ final class Newspack_Popups_Contextual_Prompt_Render {
 		if ( null === $cta || 'core/buttons' !== $cta['name'] ) {
 			return $parsed_block;
 		}
-		$source = array_filter( self::get_source( (int) get_the_ID() ), fn( $v ) => '' !== (string) $v );
+		$post_id = (int) get_the_ID();
+		$source  = self::$card_open ? self::get_rendered_source( $post_id ) : self::get_source( $post_id );
+		$source  = array_filter( $source, fn( $v ) => '' !== (string) $v );
 		if ( empty( $source['contextual_prompt_post_id'] ) ) {
 			return $parsed_block;
 		}
