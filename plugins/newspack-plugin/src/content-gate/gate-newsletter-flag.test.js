@@ -57,7 +57,7 @@ describe( 'gate.js seen-event capability flags', () => {
 
 	it( 'stamps the gate id onto the newsletter form and labels its submission', () => {
 		seenPayloadFor(
-			'<div class="newspack-newsletters-subscribe"><form><input type="email" name="npe" value="reader@example.test" /></form></div>'
+			'<div class="newspack-newsletters-subscribe"><form><input type="hidden" name="newspack_newsletters_subscribe" value="1" /><input type="email" name="npe" value="reader@example.test" /></form></div>'
 		);
 
 		const form = document.querySelector( '.newspack-newsletters-subscribe form' );

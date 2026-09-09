@@ -322,9 +322,9 @@ function handleFormSubmission( evt, gate ) {
 			}
 		}
 	}
-	// Keyed on the block's container, not on a field: the auth modal and the
-	// Reader Registration block also post the email as `npe`.
-	if ( evt.target.closest( '.newspack-newsletters-subscribe' ) ) {
+	// Keyed on the block's own hidden field, like the siblings above: the auth
+	// modal and the Reader Registration block also post the email as `npe`.
+	if ( data.newspack_newsletters_subscribe ) {
 		payload.action_type = 'newsletter_signup';
 	}
 	if ( data.newspack_checkout ) {
