@@ -120,6 +120,19 @@ class Test_Lite_Site extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * Test that style tags are removed from content along with their CSS.
+	 */
+	public function test_clean_content_removes_style_tags_and_their_css() {
+		$content = '<p>Before</p><style>.my-class { color: red; }</style><p>After</p>';
+		$cleaned = Lite_Site::clean_content( $content );
+
+		$this->assertStringNotContainsString( '.my-class', $cleaned );
+		$this->assertStringNotContainsString( 'color: red', $cleaned );
+		$this->assertStringContainsString( '<p>Before</p>', $cleaned );
+		$this->assertStringContainsString( '<p>After</p>', $cleaned );
+	}
+
+	/**
 	 * Test that a revision is not accessible.
 	 */
 	public function test_revision_is_not_accessible() {

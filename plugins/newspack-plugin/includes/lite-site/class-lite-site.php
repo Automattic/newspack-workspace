@@ -525,8 +525,10 @@ class Lite_Site {
 		// First remove figures and their contents (including images and captions).
 		$content = preg_replace( '/<figure.*?>.*?<\/figure>/is', '', $content );
 
-		// Remove script tags.
+		// Remove script and style tags along with their contents — wp_kses
+		// would strip the tags but leave raw CSS/JS behind as text.
 		$content = preg_replace( '/<script.*?>.*?<\/script>/is', '', $content );
+		$content = preg_replace( '/<style.*?>.*?<\/style>/is', '', $content );
 
 		// Define allowed HTML elements for text-only content.
 		$allowed_html = [
