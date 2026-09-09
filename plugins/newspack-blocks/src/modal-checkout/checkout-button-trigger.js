@@ -23,23 +23,52 @@ export function readCheckoutData( form ) {
 }
 
 /**
+ * Container Modal_Checkout::render_url_triggered_block() wraps a synthesized
+ * block in. Buttons inside it exist only to serve the URL trigger, so the
+ * resolver considers them after every block the page itself carries.
+ *
+ * @type {string}
+ */
+export const SYNTHESIZED_CONTAINER_SELECTOR = '.newspack-blocks__url-triggered-checkout';
+
+/**
+ * Whether an element belongs to a synthesized (URL-triggered) footer block.
+ *
+ * @param {HTMLElement} element The element to test.
+ *
+ * @return {boolean} Whether the element is inside the synthesized container.
+ */
+const isSynthesized = element => Boolean( element.closest( SYNTHESIZED_CONTAINER_SELECTOR ) );
+
+/**
  * Find a checkout button form matching the requested product.
  *
  * Variation requests are never served by a button locked to a different
- * variation.
+ * variation, and a request without a variation is never served by a locked
+ * button at all: submitting one checks the reader out on its variation, where
+ * the request meant for the reader to pick one.
  *
- * @param {Document|HTMLElement} root        The DOM root to search.
- * @param {string}               productId   The requested product ID.
- * @param {string|null}          variationId Optional. The requested variation ID.
+ * @param {Document|HTMLElement} root                The DOM root to search.
+ * @param {string}               productId           The requested product ID.
+ * @param {string|null}          variationId         Optional. The requested variation ID.
+ * @param {Object}               options             Options.
+ * @param {boolean|null}         options.synthesized Restrict the search: false for
+ *                                                   page-authored buttons only, true
+ *                                                   for synthesized ones only, null
+ *                                                   (default) for both.
  *
  * @return {HTMLFormElement|null} The matching form, or null.
  */
-export function findCheckoutButtonForm( root, productId, variationId = null ) {
+export function findCheckoutButtonForm( root, productId, variationId = null, options = {} ) {
+	const { synthesized = null } = options;
 	const buttons = root.querySelectorAll( '.wp-block-newspack-blocks-checkout-button' );
 	const hasVariation = variationId !== null && variationId !== undefined && String( variationId ) !== '';
 	let match = null;
 	buttons.forEach( button => {
 		if ( match ) {
+			return;
+		}
+		if ( synthesized !== null && isSynthesized( button ) !== synthesized ) {
 			return;
 		}
 		const form = button.querySelector( 'form' );
@@ -51,6 +80,9 @@ export function findCheckoutButtonForm( root, productId, variationId = null ) {
 			return;
 		}
 		if ( hasVariation && String( data.variation_id ) !== String( variationId ) ) {
+			return;
+		}
+		if ( ! hasVariation && data.variation_id ) {
 			return;
 		}
 		match = form;
@@ -66,17 +98,23 @@ export function findCheckoutButtonForm( root, productId, variationId = null ) {
  * whichever variation the reader picks. A locked button was configured for one
  * specific variation and is only used when nothing better exists.
  *
- * @param {Document|HTMLElement} root      The DOM root to search.
- * @param {string}               productId The requested product ID.
+ * @param {Document|HTMLElement} root                The DOM root to search.
+ * @param {string}               productId           The requested product ID.
+ * @param {Object}               options             Options.
+ * @param {boolean|null}         options.synthesized See findCheckoutButtonForm().
  *
  * @return {HTMLFormElement|null} The donor form, or null.
  */
-function findContextDonorForm( root, productId ) {
+function findContextDonorForm( root, productId, options = {} ) {
+	const { synthesized = null } = options;
 	const buttons = root.querySelectorAll( '.wp-block-newspack-blocks-checkout-button' );
 	let fallback = null;
 	let unlocked = null;
 	buttons.forEach( button => {
 		if ( unlocked ) {
+			return;
+		}
+		if ( synthesized !== null && isSynthesized( button ) !== synthesized ) {
 			return;
 		}
 		const form = button.querySelector( 'form' );
@@ -253,33 +291,137 @@ export function copyContextFields( sourceForm, targetForm, fields = PICKER_CONTE
 }
 
 /**
+ * Read utm params from a query string, mirroring the server-side prefix match
+ * (Modal_Checkout::merge_request_utm_params()).
+ *
+ * @param {string} search The query string (e.g. window.location.search).
+ *
+ * @return {Object} Map of utm param name → value. Empty values are dropped.
+ */
+export function readUtmParams( search ) {
+	const params = {};
+	new URLSearchParams( search ).forEach( ( value, key ) => {
+		if ( key.startsWith( 'utm' ) && value ) {
+			params[ key ] = value;
+		}
+	} );
+	return params;
+}
+
+/**
+ * Append utm params to a checkout form as hidden fields.
+ *
+ * The modal checkout form GET-submits into its iframe, replacing the landing
+ * URL's query string, and the URL-trigger path strips the params from the
+ * address bar after it fires — so the form's own fields are the only carrier
+ * the checkout request can rely on. A field already on the form wins.
+ *
+ * @param {HTMLFormElement|null} form   The form about to submit.
+ * @param {Object}               params Map of utm param name → value.
+ *
+ * @return {void}
+ */
+export function appendUtmFields( form, params ) {
+	if ( ! form || ! params ) {
+		return;
+	}
+	const doc = form.ownerDocument;
+	Object.keys( params ).forEach( name => {
+		// The name comes from the landing URL, so it must never be interpolated
+		// into a selector — a key carrying selector syntax would throw and abort
+		// the submission. The form's own controls collection checks it safely.
+		if ( ! params[ name ] || form.elements.namedItem( name ) ) {
+			return;
+		}
+		const input = doc.createElement( 'input' );
+		input.type = 'hidden';
+		input.name = name;
+		input.value = params[ name ];
+		form.prepend( input );
+	} );
+}
+
+/**
+ * Link params that only reach the checkout as fields on the submitted form.
+ *
+ * A promotional URL carries these for the block the server synthesizes; when a
+ * page-authored form wins the resolution instead, whichever of them that form
+ * does not carry never reaches the checkout.
+ *
+ * @type {string[]}
+ */
+export const LINK_CONTEXT_PARAMS = [ 'coupon', 'after_success_behavior', 'after_success_url', 'after_success_button_label' ];
+
+/**
+ * Name the link params the resolved form has no field for.
+ *
+ * The trigger submits the form as-is, so a param without a matching field is
+ * dropped — the caller warns instead of letting that happen silently.
+ *
+ * @param {HTMLFormElement|null} form   The form about to be submitted.
+ * @param {string}               search The landing page query string.
+ *
+ * @return {string[]} Names of params the form will not carry.
+ */
+export function getDroppedLinkContext( form, search ) {
+	const params = new URLSearchParams( search );
+	return LINK_CONTEXT_PARAMS.filter( name => params.get( name ) && ! ( form && form.elements.namedItem( name ) ) );
+}
+
+/**
  * Resolve which form a `checkout_button` URL trigger should submit.
  *
- * Strict order: exact button, picker, then explicit product-only fallback.
- * Returning null prevents silent substitution.
+ * Page-authored forms outrank the synthesized footer form at every step, so a
+ * block an editor configured — with its coupon and after-checkout context —
+ * always wins over the copy rendered to serve the trigger. Strict order: exact
+ * page button, picker fed by a page button's context, exact synthesized button,
+ * picker fed by the synthesized context. Returning null prevents silent
+ * substitution.
  *
  * @param {Document|HTMLElement} root        The DOM root to search.
  * @param {string}               productId   The requested product ID.
  * @param {string|null}          variationId Optional. The requested variation ID.
- * @param {Object}               options     Options (see selectPickerForm) plus
- *                                           `allowProductOnlyFallback` (default false).
+ * @param {Object}               options     Options (see selectPickerForm).
  *
  * @return {HTMLFormElement|null} The form to submit, or null.
  */
 export function resolveCheckoutButtonForm( root, productId, variationId, options = {} ) {
-	const { allowProductOnlyFallback = false } = options;
 	const hasVariation = variationId !== null && variationId !== undefined && String( variationId ) !== '';
 
 	if ( ! hasVariation ) {
-		// No variation requested. If several buttons on the page share this
-		// parent product, the first in DOM order is used (along with its
-		// context); the URL gives no signal to prefer one over another.
-		return findCheckoutButtonForm( root, productId, null );
+		// No variation requested. If several unlocked buttons on the page share
+		// this parent product, the first page-authored one in DOM order is used
+		// (along with its context); the synthesized form serves when the page
+		// carries none, including when its only buttons are locked to a
+		// variation — a locked button would check the reader out on that
+		// variation instead of opening the picker the link asks for.
+		return (
+			findCheckoutButtonForm( root, productId, null, { synthesized: false } ) ||
+			findCheckoutButtonForm( root, productId, null, { synthesized: true } )
+		);
 	}
 
-	const exact = findCheckoutButtonForm( root, productId, variationId );
-	if ( exact ) {
-		return exact;
+	const exactPage = findCheckoutButtonForm( root, productId, variationId, { synthesized: false } );
+	if ( exactPage ) {
+		return exactPage;
+	}
+
+	// A page button for this product exists but none is locked to the requested
+	// variation: let the picker serve it with that page button's context. This
+	// deliberately outranks a synthesized exact match — the page block's coupon
+	// and after-checkout settings are the editor's, and they keep applying.
+	const pageDonor = findContextDonorForm( root, productId, { synthesized: false } );
+	if ( pageDonor ) {
+		const pagePicker = selectPickerForm( root, productId, variationId, options );
+		if ( pagePicker ) {
+			copyContextFields( pageDonor, pagePicker );
+			return pagePicker;
+		}
+	}
+
+	const exactSynthesized = findCheckoutButtonForm( root, productId, variationId, { synthesized: true } );
+	if ( exactSynthesized ) {
+		return exactSynthesized;
 	}
 
 	const picker = selectPickerForm( root, productId, variationId, options );
@@ -293,10 +435,6 @@ export function resolveCheckoutButtonForm( root, productId, variationId, options
 		// product, and fall back to DOM order only when there isn't one.
 		copyContextFields( findContextDonorForm( root, productId ), picker );
 		return picker;
-	}
-
-	if ( allowProductOnlyFallback ) {
-		return findCheckoutButtonForm( root, productId, null );
 	}
 
 	return null;

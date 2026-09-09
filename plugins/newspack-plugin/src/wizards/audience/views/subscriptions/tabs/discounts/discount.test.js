@@ -5,7 +5,7 @@
 /**
  * Internal dependencies.
  */
-import { discountLabel, formatCurrency, isValidRule, subscriberPrice, subscriptionsLabel, targetingLabel } from './discount';
+import { discountLabel, formatCurrency, isValidRule, subscriberPrice, subscriptionsSummary, targetingLabel } from './discount';
 
 const GBP = {
 	code: 'GBP',
@@ -59,24 +59,46 @@ describe( 'discountLabel', () => {
 	} );
 } );
 
-describe( 'subscriptionsLabel', () => {
+describe( 'subscriptionsSummary', () => {
 	const options = [
 		{ id: 10, name: 'Digital Monthly' },
 		{ id: 11, name: 'Print &amp; Digital' },
 	];
 
 	it( 'names the subscriptions, decoded, in rule order', () => {
-		expect( subscriptionsLabel( [ 10 ], options ) ).toBe( 'Digital Monthly' );
-		expect( subscriptionsLabel( [ 11, 10 ], options ) ).toBe( 'Print & Digital, Digital Monthly' );
+		expect( subscriptionsSummary( [ 10 ], options ) ).toEqual( { named: 'Digital Monthly', more: '' } );
+		expect( subscriptionsSummary( [ 11, 10 ], options ) ).toEqual( { named: 'Print & Digital, Digital Monthly', more: '' } );
 	} );
 
 	it( 'falls back to a count when no name is known', () => {
-		expect( subscriptionsLabel( [ 99 ], options ) ).toBe( '1 subscription' );
-		expect( subscriptionsLabel( [ 98, 99 ], [] ) ).toBe( '2 subscriptions' );
+		expect( subscriptionsSummary( [ 99 ], options ) ).toEqual( { named: '1 subscription', more: '' } );
+		expect( subscriptionsSummary( [ 98, 99 ], [] ) ).toEqual( { named: '2 subscriptions', more: '' } );
 	} );
 
 	it( 'counts the ids it cannot name alongside the ones it can', () => {
-		expect( subscriptionsLabel( [ 10, 98, 99 ], options ) ).toBe( 'Digital Monthly + 2 more' );
+		expect( subscriptionsSummary( [ 10, 98, 99 ], options ) ).toEqual( { named: 'Digital Monthly', more: '+2 more' } );
+	} );
+
+	it( 'names at most two subscriptions, however many the rule covers', () => {
+		const many = Array.from( { length: 49 }, ( _, index ) => ( { id: index + 1, name: `Subscription ${ index + 1 }` } ) );
+		expect(
+			subscriptionsSummary(
+				many.map( option => option.id ),
+				many
+			)
+		).toEqual( { named: 'Subscription 1, Subscription 2', more: '+47 more' } );
+	} );
+
+	// The count is rendered in its own element, so it has to be one number
+	// covering both causes rather than the sum of two separate claims.
+	it( 'reports one count for the names it withheld and the ids it could not resolve, never two', () => {
+		const known = [
+			{ id: 1, name: 'Digital Monthly' },
+			{ id: 2, name: 'Digital Annual' },
+			{ id: 3, name: 'Print Weekend' },
+			{ id: 4, name: 'Print Daily' },
+		];
+		expect( subscriptionsSummary( [ 1, 2, 3, 4, 98, 99 ], known ) ).toEqual( { named: 'Digital Monthly, Digital Annual', more: '+4 more' } );
 	} );
 } );
 

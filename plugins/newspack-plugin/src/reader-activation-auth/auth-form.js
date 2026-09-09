@@ -8,6 +8,7 @@ import { getPendingCheckout } from '../reader-activation/checkout';
 import { openNewslettersSignupModal } from '../reader-activation-newsletters/newsletters-modal';
 import { openVerificationModal } from './verification-modal';
 import { maybeConfirmRegistration } from './confirmation-modal';
+import { getBackTarget, shouldReuseActiveCode } from './auth-form-helpers';
 
 import './google-oauth';
 import './otp-input';
@@ -97,6 +98,10 @@ window.newspackRAS.push( function ( readerActivation ) {
 			 * Handle auth form action selection.
 			 */
 			let formAction;
+			// Whether a one-time code has been sent in this modal session. A per-session flag,
+			// not the np_otp_hash cookie, which persists ~29 minutes across sessions and would
+			// make a genuine first "email me a code" click skip the send (NPPM-3054).
+			let codeSent = false;
 			container.setFormAction = ( action, shouldFocus = false ) => {
 				if ( ! FORM_ALLOWED_ACTIONS.includes( action ) ) {
 					action = 'signin';
@@ -193,7 +198,7 @@ window.newspackRAS.push( function ( readerActivation ) {
 						}
 					}
 					form.setMessageContent();
-					container.setFormAction( 'signin', true );
+					container.setFormAction( getBackTarget( formAction, container.readerHasPassword ), true );
 				} );
 			} );
 
@@ -230,6 +235,16 @@ window.newspackRAS.push( function ( readerActivation ) {
 					button.addEventListener( 'click', function ( ev ) {
 						ev.preventDefault();
 						form.setMessageContent();
+						// A reader who already requested a code and returned to the password step can
+						// choose the code again. Show the existing code-entry step instead of asking the
+						// server for a new code, which would restart the resend cooldown and strand the
+						// code already in their inbox. Only the "email me a code" button reuses; resend
+						// always requests a fresh code.
+						if ( shouldReuseActiveCode( ev.currentTarget === sendCodeButton, codeSent ) ) {
+							container.setFormAction( 'otp' );
+							handleOTPTimer();
+							return;
+						}
 						form.startLoginFlow();
 						const body = new FormData();
 						body.set( 'reader-activation-auth-form', 1 );
@@ -260,6 +275,7 @@ window.newspackRAS.push( function ( readerActivation ) {
 									formAction === 'pwd' ? newspack_reader_activation_labels.code_sent : newspack_reader_activation_labels.code_resent
 								);
 								container.setFormAction( 'otp' );
+								codeSent = true;
 								if ( ! readerActivation.getOTPTimeRemaining() ) {
 									readerActivation.setOTPTimer();
 								}
@@ -561,6 +577,13 @@ window.newspackRAS.push( function ( readerActivation ) {
 											readerActivation.setReaderEmail( body.get( 'npe' ) );
 										}
 										if ( data.action ) {
+											// A `signin` response of 'pwd' means the reader has a password; 'otp' means
+											// they don't. Remember it so "Go Back" from the code step can return them to
+											// the password step (NPPM-3054). Other transitions (resend, verify) don't set
+											// data.action here, so the flag survives them.
+											if ( 'pwd' === data.action || 'otp' === data.action ) {
+												container.readerHasPassword = 'pwd' === data.action;
+											}
 											container.setFormAction( data.action, true );
 											if ( data.action === 'otp' ) {
 												readerActivation.setOTPTimer();

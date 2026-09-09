@@ -186,7 +186,7 @@ domReady( function () {
 				afterInviteLink( true );
 				if ( await copyToClipboard( data.url ) ) {
 					const message = isRegenerate
-						? newspackMyAccountV1?.labels?.invite_link_regenerated || 'New invite link copied. The old one no longer works.'
+						? newspackMyAccountV1?.labels?.invite_link_regenerated || 'New invite link copied. Any older link no longer works.'
 						: newspackMyAccountV1?.labels?.invite_link_copied || 'Invite link copied.';
 					showSnackbar( message );
 				} else {

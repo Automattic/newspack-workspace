@@ -239,9 +239,10 @@ class Content_Gate extends Contact_Metadata {
 				return Group_Subscription::get_group_names_for_user( $user_id, $product_filter );
 
 			case 'institution':
-				// An empty institution rule imposes no constraint per Institution::evaluate(),
-				// but there's no specific institution to attribute. A populated non-array
-				// value fails the rule outright, so this resolver is never reached for one.
+				// Defensive: neither shape reaches here, because Institution::evaluate()
+				// fails the rule on both and this resolver runs only for a rule that
+				// passed. Kept so a future caller cannot read an unmatched rule as an
+				// attribution.
 				if ( ! is_array( $value ) || empty( $value ) ) {
 					return [];
 				}

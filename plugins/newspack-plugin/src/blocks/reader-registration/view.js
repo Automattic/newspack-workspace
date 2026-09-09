@@ -8,32 +8,11 @@ import { openAuthModal } from '../../reader-activation-auth/auth-modal';
 import { openVerificationModal } from '../../reader-activation-auth/verification-modal';
 import { maybeConfirmRegistration } from '../../reader-activation-auth/confirmation-modal';
 import { openNewslettersSignupModal } from '../../reader-activation-newsletters/newsletters-modal';
+import { wireInlineVerificationBox } from '../../reader-activation-auth/inline-verification';
 
 window.newspackRAS = window.newspackRAS || [];
 
 window.newspackRAS.push( function ( readerActivation ) {
-	/**
-	 * Send verification OTP via the dedicated AJAX endpoint.
-	 *
-	 * @return {Promise} Resolves on success, rejects on failure.
-	 */
-	const sendVerificationOTP = () => {
-		const body = new FormData();
-		body.set( 'action', 'newspack_reader_registration_verification' );
-		body.set( 'nonce', reader_registration_block_config.verification_nonce );
-		return fetch( reader_registration_block_config.verification_url, {
-			method: 'POST',
-			headers: { Accept: 'application/json' },
-			body,
-		} ).then( res => {
-			if ( ! res.ok ) {
-				throw new Error( res.statusText );
-			}
-			readerActivation.setOTPTimer();
-			return res.json();
-		} );
-	};
-
 	const openAuth = ( initialState = 'otp', overrides = {} ) => {
 		openAuthModal( {
 			skipAuthenticatedCheck: true,
@@ -80,24 +59,14 @@ window.newspackRAS.push( function ( readerActivation ) {
 			box => ! box.querySelector( '.newspack-ui__modal-container' )
 		);
 		inlineVerificationBoxes.forEach( box => {
-			const sendOtpButton = box.querySelector( '[data-send-otp]' );
-			if ( ! sendOtpButton ) {
-				return;
-			}
-			sendOtpButton.addEventListener( 'click', () => {
-				sendOtpButton.disabled = true;
-				sendVerificationOTP()
-					.then( () => {
-						openAuth( 'otp' );
-					} )
-					.catch( () => {
-						sendOtpButton.disabled = false;
-						sendOtpButton.textContent = sendOtpButton.textContent.trim();
-						const errorP = box.querySelector( 'p:not(:has(button))' );
-						if ( errorP ) {
-							errorP.textContent = 'Something went wrong. Please try again.';
-						}
-					} );
+			wireInlineVerificationBox( box, {
+				url: reader_registration_block_config.verification_url,
+				nonce: reader_registration_block_config.verification_nonce,
+				errorText: reader_registration_block_config.verification_error,
+				onSent: () => {
+					readerActivation.setOTPTimer();
+					openAuth( 'otp' );
+				},
 			} );
 		} );
 

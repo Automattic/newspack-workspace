@@ -6,6 +6,7 @@
  */
 
 use Newspack\Access_Rules;
+use Newspack\User_Gate_Access;
 use PHPUnit\Runner\BeforeTestHook;
 
 /**
@@ -28,5 +29,6 @@ class Newspack_Request_Memo_Reset implements BeforeTestHook {
 	public function executeBeforeTest( string $test ): void { // phpcs:ignore WordPress.NamingConventions.ValidFunctionName.MethodNameInvalid -- Defined by PHPUnit's BeforeTestHook.
 		Access_Rules::flush_product_options_memos();
 		Access_Rules::flush_one_time_purchase_memo();
+		User_Gate_Access::reset_memo();
 	}
 }
