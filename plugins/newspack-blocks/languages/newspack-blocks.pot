@@ -2,14 +2,14 @@
 # This file is distributed under the same license as the Newspack Blocks plugin.
 msgid ""
 msgstr ""
-"Project-Id-Version: Newspack Blocks 4.30.5\n"
+"Project-Id-Version: Newspack Blocks 4.31.0\n"
 "Report-Msgid-Bugs-To: https://wordpress.org/support/plugin/newspack-blocks\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-08-31T17:53:31+00:00\n"
+"POT-Creation-Date: 2026-09-09T13:54:18+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: newspack-blocks\n"
@@ -263,48 +263,48 @@ msgstr ""
 msgid "Newspack Subscribe"
 msgstr ""
 
-#: includes/class-newspack-blocks.php:983
+#: includes/class-newspack-blocks.php:1062
 msgid "Common"
 msgstr ""
 
 #. translators: separates last two sponsor names; needs a space on either side.
-#: includes/class-newspack-blocks.php:1084
+#: includes/class-newspack-blocks.php:1163
 msgid " and "
 msgstr ""
 
 #. translators: separates all but the last two sponsor names; needs a space at the end.
-#: includes/class-newspack-blocks.php:1087
+#: includes/class-newspack-blocks.php:1166
 msgid ", "
 msgstr ""
 
-#: includes/class-newspack-blocks.php:1422
+#: includes/class-newspack-blocks.php:1501
 msgid "Jetpack donations is disabled in favour of Newspack donations."
 msgstr ""
 
-#: includes/class-newspack-blocks.php:1455
+#: includes/class-newspack-blocks.php:1534
 #: dist/editor.js:26
 #: src/shared/js/utils.js:54
 msgid "Draft"
 msgstr ""
 
-#: includes/class-newspack-blocks.php:1456
+#: includes/class-newspack-blocks.php:1535
 #: dist/editor.js:26
 #: src/shared/js/utils.js:54
 msgid "Scheduled"
 msgstr ""
 
 #. Translators: %s is the %s is the frequency.
-#: includes/class-newspack-blocks.php:1654
+#: includes/class-newspack-blocks.php:1733
 #: dist/editor.js:48
 #, php-format,js-format
 msgid "per %s"
 msgstr ""
 
-#: includes/class-newspack-blocks.php:1685
+#: includes/class-newspack-blocks.php:1764
 msgid " once"
 msgstr ""
 
-#: includes/class-newspack-blocks.php:1688
+#: includes/class-newspack-blocks.php:1767
 msgid " per "
 msgstr ""
 
