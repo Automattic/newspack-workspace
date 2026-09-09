@@ -7,7 +7,14 @@
 import { render, screen, fireEvent, within } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import { useState } from '@wordpress/element';
+import apiFetch from '@wordpress/api-fetch';
 import ContextualPromptsSettings from './contextual-prompts-settings';
+
+// ControlPreview (mounted whenever the control section is on) fetches the
+// preview via apiFetch; mocked so the enabled-body tests stay isolated from
+// the network and keep passing when the control toggle is on.
+jest.mock( '@wordpress/api-fetch', () => jest.fn() );
+apiFetch.mockResolvedValue( { interval: 3, limit: 10, posts: [] } );
 
 const FIELD_DEFAULTS = { section: 'override', value: '' };
 const ENABLE_FIELD = {
@@ -145,5 +152,44 @@ describe( 'ContextualPromptsSettings enabled body', () => {
 		expect( screen.getByText( 'Override button label' ) ).toBeInTheDocument();
 		expect( screen.getByText( 'Override button URL' ) ).toBeInTheDocument();
 		expect( screen.queryByText( 'Donate Form' ) ).not.toBeInTheDocument();
+	} );
+
+	it( 'lists the previewed stories as edit links while the control test is on', async () => {
+		const controlEnabledField = {
+			section: 'control',
+			key: 'newspack_contextual_prompts_control_enabled',
+			label: 'Enable control test',
+			type: 'toggle',
+			value: '1',
+		};
+		apiFetch.mockResolvedValueOnce( {
+			interval: 3,
+			limit: 10,
+			posts: [
+				{
+					id: 3,
+					title: 'Local election results',
+					edit_link: 'https://example.test/wp-admin/post.php?post=3&action=edit',
+					permalink: 'https://example.test/?p=3',
+				},
+				{
+					id: 6,
+					title: 'City budget vote',
+					edit_link: 'https://example.test/wp-admin/post.php?post=6&action=edit',
+					permalink: 'https://example.test/?p=6',
+				},
+			],
+		} );
+
+		render( <EnabledHarness fields={ [ controlEnabledField ] } /> );
+
+		expect( await screen.findByRole( 'link', { name: 'Local election results' } ) ).toHaveAttribute(
+			'href',
+			'https://example.test/wp-admin/post.php?post=3&action=edit'
+		);
+		expect( await screen.findByRole( 'link', { name: 'City budget vote' } ) ).toHaveAttribute(
+			'href',
+			'https://example.test/wp-admin/post.php?post=6&action=edit'
+		);
 	} );
 } );

@@ -635,9 +635,78 @@ final class Newspack_Popups_Contextual_Prompt_Render {
 		if ( $post_id <= 0 ) {
 			return self::CONDITION_STORY_AWARE;
 		}
-		return 0 === $post_id % Newspack_Popups_Settings::get_control_interval()
+		return self::is_control_story( $post_id, Newspack_Popups_Settings::get_control_interval() )
 			? self::CONDITION_GENERIC_CONTROL
 			: self::CONDITION_STORY_AWARE;
+	}
+
+	/**
+	 * Whether a story is selected for the control copy at a given interval.
+	 * The one selection rule, shared by the front-end render and the settings
+	 * preview so what the preview lists is what readers get.
+	 *
+	 * @param int $post_id  The story.
+	 * @param int $interval Every Nth story.
+	 * @return bool
+	 */
+	public static function is_control_story( $post_id, $interval ) {
+		$post_id  = (int) $post_id;
+		$interval = max( 1, (int) $interval );
+		return $post_id > 0 && 0 === $post_id % $interval;
+	}
+
+	/**
+	 * Published stories that carry a Contextual Prompt and will show the control
+	 * copy at the interval, newest first. The instance markup is a `core/block`
+	 * ref to the pattern; a detached card carries the marker class instead, so
+	 * both needles are searched.
+	 *
+	 * @param int $interval Every Nth story.
+	 * @param int $limit    Maximum rows.
+	 * @return array[] Each: id, title, edit_link, permalink.
+	 */
+	public static function get_control_preview( $interval, $limit = 10 ) {
+		global $wpdb;
+		$pattern_id = (int) get_option( Newspack_Popups_Contextual_Prompt_Pattern::OPTION_PATTERN_ID, 0 );
+		if ( ! $pattern_id ) {
+			return [];
+		}
+		$types = Newspack_Popups_Model::get_default_popup_post_types();
+		$in    = implode( ',', array_fill( 0, count( $types ), '%s' ) );
+		// The interval/limit filters run in PHP below, so the query itself can't be
+		// scoped by them for caching; the placeholder count sniff also
+		// miscounts the dynamically-built $in list.
+		// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery, WordPress.DB.PreparedSQLPlaceholders.ReplacementsWrongNumber
+		$ids = $wpdb->get_col(
+			$wpdb->prepare(
+				"SELECT ID FROM {$wpdb->posts} WHERE post_status = 'publish' AND post_type IN ($in) AND ( post_content LIKE %s OR post_content LIKE %s ) ORDER BY post_date DESC LIMIT 500",
+				array_merge(
+					$types,
+					[
+						'%' . $wpdb->esc_like( '"ref":' . $pattern_id ) . '%',
+						'%' . $wpdb->esc_like( Newspack_Popups_Contextual_Prompt_Pattern::MARKER_CLASS ) . '%',
+					]
+				)
+			)
+		);
+		// phpcs:enable
+		$rows = [];
+		foreach ( $ids as $id ) {
+			$id = (int) $id;
+			if ( ! self::is_control_story( $id, $interval ) ) {
+				continue;
+			}
+			$rows[] = [
+				'id'        => $id,
+				'title'     => get_the_title( $id ),
+				'edit_link' => (string) get_edit_post_link( $id, 'raw' ),
+				'permalink' => (string) get_permalink( $id ),
+			];
+			if ( count( $rows ) >= $limit ) {
+				break;
+			}
+		}
+		return $rows;
 	}
 
 	/**

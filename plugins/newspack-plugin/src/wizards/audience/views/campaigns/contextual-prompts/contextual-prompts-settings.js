@@ -11,10 +11,13 @@
 /**
  * WordPress dependencies
  */
-import { __ } from '@wordpress/i18n';
-import { useState } from '@wordpress/element';
+import { __, sprintf } from '@wordpress/i18n';
+import { useEffect, useState } from '@wordpress/element';
+import apiFetch from '@wordpress/api-fetch';
+import { addQueryArgs } from '@wordpress/url';
 import {
 	Notice,
+	Spinner,
 	TextControl,
 	TextareaControl,
 	ToggleControl,
@@ -52,6 +55,73 @@ const OVERRIDE_BUTTON_KEYS = [ 'newspack_contextual_prompts_override_label', 'ne
 
 // The control test's enable toggle gates its section the same way the override does.
 const CONTROL_ENABLED_KEY = 'newspack_contextual_prompts_control_enabled';
+const CONTROL_INTERVAL_KEY = 'newspack_contextual_prompts_control_interval';
+
+// How long to wait after the interval last changed before asking the server
+// for a fresh preview, so typing a new value doesn't fire a request per digit.
+const PREVIEW_DEBOUNCE_MS = 400;
+
+/**
+ * The published stories that will show the control copy at the current
+ * interval, so an admin can see the effect of a value before saving it.
+ * Renders nothing while the control test is off.
+ *
+ * @param {Object}  props          Component props.
+ * @param {boolean} props.enabled  Whether the control test is on.
+ * @param {number}  props.interval Every Nth story.
+ */
+const ControlPreview = ( { enabled, interval } ) => {
+	const [ loading, setLoading ] = useState( true );
+	const [ posts, setPosts ] = useState( [] );
+	const [ limit, setLimit ] = useState( 10 );
+
+	useEffect( () => {
+		if ( ! enabled ) {
+			return;
+		}
+		setLoading( true );
+		const timeout = setTimeout( () => {
+			apiFetch( { path: addQueryArgs( '/newspack-popups/v1/contextual-prompt/control-preview', { interval } ) } )
+				.then( response => {
+					setPosts( response.posts || [] );
+					setLimit( response.limit || 10 );
+				} )
+				.catch( () => {
+					setPosts( [] );
+				} )
+				.finally( () => setLoading( false ) );
+		}, PREVIEW_DEBOUNCE_MS );
+		return () => clearTimeout( timeout );
+	}, [ enabled, interval ] );
+
+	if ( ! enabled ) {
+		return null;
+	}
+
+	return (
+		<div>
+			<p style={ { margin: '0 0 8px', fontWeight: 600 } }>{ __( 'Stories that will show the control copy', 'newspack-plugin' ) }</p>
+			{ loading && <Spinner /> }
+			{ ! loading && ! posts.length && (
+				<p style={ { margin: 0 } }>{ __( 'No published stories with a Contextual Prompt match this interval yet.', 'newspack-plugin' ) }</p>
+			) }
+			{ ! loading && posts.length > 0 && (
+				<ul style={ { margin: 0, paddingLeft: '1.2em' } }>
+					{ posts.map( post => (
+						<li key={ post.id }>
+							<a href={ post.edit_link }>{ post.title || `#${ post.id }` }</a>
+						</li>
+					) ) }
+				</ul>
+			) }
+			{ posts.length >= limit && (
+				<p style={ { margin: '8px 0 0' } }>
+					{ sprintf( /* translators: %d: row cap */ __( 'Showing the %d most recent.', 'newspack-plugin' ), limit ) }
+				</p>
+			) }
+		</div>
+	);
+};
 
 const ContextualPromptsSettings = ( { status, values, error, inFlight, onSetValue, onEnable } ) => {
 	const [ modalOpen, setModalOpen ] = useState( false );
@@ -255,7 +325,10 @@ const ContextualPromptsSettings = ( { status, values, error, inFlight, onSetValu
 					) }
 					noMargin
 				/>
-				<VStack spacing={ 6 }>{ renderFields( 'control' ) }</VStack>
+				<VStack spacing={ 6 }>
+					{ renderFields( 'control' ) }
+					<ControlPreview enabled={ controlEnabled } interval={ Number( values[ CONTROL_INTERVAL_KEY ] ) || 3 } />
+				</VStack>
 			</Grid>
 		</WizardsTab>
 	);

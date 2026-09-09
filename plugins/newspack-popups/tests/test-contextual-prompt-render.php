@@ -1459,4 +1459,77 @@ class ContextualPromptRenderTest extends WP_UnitTestCase {
 		update_option( Newspack_Popups_Settings::CONTROL_ENABLED_OPTION, '' );
 		$this->assertSame( '', Newspack_Popups_Contextual_Prompt_Render::get_condition( $selected ) );
 	}
+
+	/**
+	 * The preview lists published stories carrying a prompt whose id is a
+	 * multiple of the interval, newest first, capped, with edit links.
+	 */
+	public function test_control_preview_lists_selected_stories_with_prompts() {
+		$this->set_platform( true );
+		$this->set_control( 'Support local news.', 3 );
+		$pattern_id = Newspack_Popups_Contextual_Prompt_Pattern::get_pattern_id();
+		$instance   = '<!-- wp:block ' . wp_json_encode(
+			[
+				'ref'     => $pattern_id,
+				'content' => [ Newspack_Popups_Contextual_Prompt_Pattern::BOUND_NAME => [ 'content' => 'Ask.' ] ],
+			] 
+		) . ' /-->';
+		$with        = [];
+		$with_count  = 0;
+		$without     = [];
+		do {
+			$id = self::factory()->post->create(
+				[
+					'post_status'  => 'publish',
+					'post_content' => $instance,
+				]
+			);
+			if ( 0 === $id % 3 ) {
+				$with[] = $id;
+				++$with_count;
+			}
+		} while ( $with_count < 2 );
+		do {
+			$id = self::factory()->post->create(
+				[
+					'post_status'  => 'publish',
+					'post_content' => '<!-- wp:paragraph --><p>No prompt.</p><!-- /wp:paragraph -->',
+				]
+			);
+			if ( 0 === $id % 3 ) {
+				$without[] = $id;
+				break;
+			}
+		} while ( true );
+		$draft = self::factory()->post->create(
+			[
+				'post_status'  => 'draft',
+				'post_content' => $instance,
+			]
+		);
+
+		$preview = Newspack_Popups_Contextual_Prompt_Render::get_control_preview( 3, 10 );
+		$ids     = wp_list_pluck( $preview, 'id' );
+		foreach ( $with as $id ) {
+			$this->assertContains( $id, $ids );
+		}
+		$this->assertNotContains( $without[0], $ids );
+		$this->assertNotContains( $draft, $ids );
+		foreach ( $preview as $row ) {
+			$this->assertSame( 0, $row['id'] % 3 );
+			$this->assertStringContainsString( 'post.php?post=' . $row['id'], $row['edit_link'] );
+		}
+		$this->assertCount( 1, Newspack_Popups_Contextual_Prompt_Render::get_control_preview( 3, 1 ) );
+	}
+
+	/**
+	 * The is_control_story() rule is the single selection rule get_condition() uses.
+	 */
+	public function test_is_control_story_matches_get_condition() {
+		$this->set_control( 'Support local news.', 4 );
+		$selected = $this->post_for_interval( 4, true );
+		$this->assertTrue( Newspack_Popups_Contextual_Prompt_Render::is_control_story( $selected, 4 ) );
+		$this->assertFalse( Newspack_Popups_Contextual_Prompt_Render::is_control_story( $selected, 5 ) );
+		$this->assertSame( 'generic_control', Newspack_Popups_Contextual_Prompt_Render::get_condition( $selected ) );
+	}
 }
