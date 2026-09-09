@@ -27,14 +27,20 @@ jest.mock( '@wordpress/a11y', () => ( { speak: jest.fn() } ) );
 
 jest.mock( '../../../../packages/components/src/wizard/store', () => ( { WIZARD_STORE_NAMESPACE: 'test/subscriber-list' } ) );
 
-// Only the header count is under test, so DataViews renders nothing. The list
-// reads the router at module scope, so the proxy has to answer here too.
+// DataViews renders nothing; it only captures the props it was handed, so a
+// column's render function can be exercised without a table. The list reads the
+// router at module scope, so the proxy has to answer here too.
+let mockDataViewsProps = null;
 jest.mock( '../../../../packages/components/src', () => ( {
-	DataViews: () => null,
+	DataViews: props => {
+		mockDataViewsProps = props;
+		return null;
+	},
 	// A real button, because the focus restoration needs a host node to land on.
 	Button: require( 'react' ).forwardRef( ( { children, ...props }, ref ) =>
 		require( 'react' ).createElement( 'button', { ...props, ref }, children )
 	),
+	Notice: () => null,
 	Waiting: () => null,
 	Router: { useHistory: () => ( { push: jest.fn() } ), useLocation: () => ( { pathname: '/' } ) },
 } ) );
@@ -234,5 +240,38 @@ describe( 'the SubscriberList retry affordance', () => {
 		} );
 
 		expect( screen.getByRole( 'button', { name: 'Retry' } ) ).not.toHaveFocus();
+	} );
+} );
+
+/**
+ * The Newsletters column shows what the site records a reader as subscribed to.
+ * The endpoint sends `{ id, title }` per list and reports an unresolved one — a
+ * list the site holds no definition for, routinely an ESP's own ID — as a null
+ * title, leaving the wording to this column.
+ */
+describe( 'the newsletters column', () => {
+	beforeEach( () => {
+		headerCalls = [];
+		mockDataViewsProps = null;
+		apiFetch.mockReset();
+	} );
+
+	/** Mount the list, then render the newsletters cell for one reader. */
+	const renderNewsletters = async newsletters => {
+		apiFetch.mockResolvedValue( { items: [ { ...subscriber( 1 ), newsletters } ], total: 1, pages: 1 } );
+		await act( async () => {
+			render( <SubscriberList /> );
+		} );
+		const column = mockDataViewsProps.fields.find( field => 'newsletters' === field.id );
+		return render( column.render( { item: { newsletters } } ) ).container.textContent;
+	};
+
+	it( 'names a resolved list by its title and an unresolved one by the ID a filter would match on', async () => {
+		const cell = await renderNewsletters( [
+			{ id: 'newspack-42', title: 'Daily Brief' },
+			{ id: 'abc123def', title: null },
+		] );
+
+		expect( cell ).toBe( 'Daily Brief, Unknown list (abc123def)' );
 	} );
 } );

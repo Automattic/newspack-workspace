@@ -32,6 +32,7 @@ import LoadFailureNotice from '../components/LoadFailureNotice';
 import { useRetryFocus } from '../use-retry-focus';
 import { fmtRelative, fmtDate } from '../format';
 import { SHOW_AVATARS, useAvatars } from '../data/use-avatars';
+import { usePlans } from '../data/use-plans';
 import { useSubscribers } from '../data/use-subscribers';
 import { WIZARD_STORE_NAMESPACE } from '../../../../packages/components/src/wizard/store';
 import { GROUP_LABEL, ROLE_LABELS, groupRoleLabel } from '../labels';
@@ -104,10 +105,16 @@ export default function SubscriberList() {
 
 	const { setHeaderData } = useDispatch( WIZARD_STORE_NAMESPACE );
 
+	const { plans, failed: plansFailed } = usePlans();
+
 	// The server owns filter/sort/paginate; this page's rows come back already
-	// narrowed. Group-role, tag, newsletter and plan filters arrive in later
-	// slices (the endpoint honors status here); sorting is name / member-since.
-	const { items, total, pages, loading: subscribersLoading, error, reload } = useSubscribers( view );
+	// narrowed. Group-role, tag and newsletter filters arrive in later slices (the
+	// endpoint honors status and plan here); sorting is name / member-since.
+	const { items, total, pages, loading: subscribersLoading, settled, error, reload } = useSubscribers( view );
+
+	// Filter options for the Subscription column: every plan on the site, not just
+	// the ones on this page.
+	const planElements = useMemo( () => plans.map( name => ( { value: name, label: name } ) ), [ plans ] );
 
 	// Resolve avatar URLs for the current page, keyed by subscriber id. The table
 	// renders immediately with the avatar placeholder and each avatar fills in as
@@ -189,8 +196,13 @@ export default function SubscriberList() {
 			{
 				id: 'plans',
 				label: __( 'Subscription', 'newspack-plugin' ),
-				// Plan filtering waits on the plans endpoint (NPPD-1753 PR 6); this is
-				// a display-only column for now.
+				// Options come from the plans endpoint rather than the loaded rows:
+				// this list is server-paginated, so the plans on the current page are
+				// not the plans on the site. Filtering is server-side too — see
+				// viewToParams, which sends this field's value as the `plan` param.
+				elements: planElements,
+				filterBy: { operators: [ 'isAny' ] },
+				getValue: ( { item } ) => visiblePlanEntries( planEntries( item, groupEntriesOf( item ) ) ).map( e => e.plan ),
 				enableSorting: false,
 				render: ( { item } ) => {
 					const entries = visiblePlanEntries( planEntries( item, groupEntriesOf( item ) ) );
@@ -260,7 +272,10 @@ export default function SubscriberList() {
 			{
 				id: 'lastSeen',
 				label: __( 'Last seen', 'newspack-plugin' ),
-				// Wired to reader activity in a later slice; hidden by default.
+				// The reader's most recent page view, from the activity record the site
+				// keeps for them — reading, not signing in, so a reader on a long-lived
+				// auth cookie who visits daily is last seen today and logging out does
+				// not erase it. Hidden by default; not server-sortable in this slice.
 				enableSorting: false,
 				render: ( { item } ) =>
 					item.lastSeen ? (
@@ -275,27 +290,63 @@ export default function SubscriberList() {
 			{
 				id: 'tags',
 				label: __( 'Tags', 'newspack-plugin' ),
-				// Populated in a later slice (NPPD-1753 PR 7); hidden by default.
+				// The labels stored on the reader here on the site. Hidden by default;
+				// display-only until there is a way to filter on them server-side.
 				enableSorting: false,
-				render: ( { item } ) => (
-					<HStack spacing={ 1 } justify="flex-start" wrap>
-						{ ( item.tags || [] ).map( t => (
-							<Badge key={ t } intent="none">
-								{ t }
-							</Badge>
-						) ) }
-					</HStack>
-				),
+				// The em-dash empty state matches every other column: an empty cell
+				// reads as a rendering fault rather than as "nothing to show".
+				render: ( { item } ) => {
+					const tags = item.tags || [];
+					if ( tags.length === 0 ) {
+						return <span>—</span>;
+					}
+					return (
+						<HStack spacing={ 1 } justify="flex-start" wrap>
+							{ tags.map( t => (
+								<Badge key={ t } intent="none">
+									{ t }
+								</Badge>
+							) ) }
+						</HStack>
+					);
+				},
 			},
 			{
 				id: 'newsletters',
 				label: __( 'Newsletters', 'newspack-plugin' ),
-				// Populated in a later slice (NPPD-1753 PR 7); hidden by default.
+				// The lists the site records this reader as subscribed to. Each arrives
+				// as `{ id, title }`, with a null title for a list the site holds no
+				// definition for — routinely the ESP's own IDs, which are never
+				// mirrored locally. The unresolved wording is composed here rather
+				// than server-side so the ID stays machine-readable for a future
+				// filter, and so this string sits in the same bundle as the column
+				// heading above it. Showing the bare ID is not an option: `abc123def`
+				// in a publisher-facing column reads as a newsletter name.
+				// Hidden by default; display-only until there is a server-side filter.
 				enableSorting: false,
-				render: ( { item } ) => <div>{ ( item.newsletters || [] ).join( ', ' ) }</div>,
+				render: ( { item } ) => {
+					const newsletters = item.newsletters || [];
+					if ( newsletters.length === 0 ) {
+						return <span>—</span>;
+					}
+					return (
+						<div>
+							{ newsletters
+								.map(
+									list =>
+										// Nullish, not falsy: unresolved is the null the endpoint
+										// sends, not every title JavaScript reads as empty.
+										list.title ??
+										/* translators: %s: the email service provider's identifier for a list the site has no local record of. */
+										sprintf( __( 'Unknown list (%s)', 'newspack-plugin' ), list.id )
+								)
+								.join( ', ' ) }
+						</div>
+					);
+				},
 			},
 		],
-		[ avatars ]
+		[ avatars, planElements ]
 	);
 
 	// DataViews only makes the title cell clickable; delegate clicks from the
@@ -348,7 +399,13 @@ export default function SubscriberList() {
 
 	const { retryRef, retry } = useRetryFocus( { settled: ! subscribersLoading, failed: Boolean( error ), reload } );
 
-	if ( subscribersLoading ) {
+	// Only the load that has nothing to show blanks the screen. Filtering and
+	// sorting are server-side, so every filter toggle and every debounced keystroke
+	// is a refetch — unmounting DataViews for those would take the search box's
+	// focus with it and flash the applied filter chips away mid-interaction. Once a
+	// response has settled the loading state is handed to DataViews instead, for the
+	// same reason avatars fill in progressively rather than holding the table back.
+	if ( subscribersLoading && ! settled ) {
 		return (
 			<div className="newspack-subscribers__loading">
 				<Waiting isCenter />
@@ -379,11 +436,26 @@ export default function SubscriberList() {
 	return (
 		// eslint-disable-next-line jsx-a11y/no-static-element-interactions, jsx-a11y/click-events-have-key-events
 		<div className="newspack-subscribers__clickable-rows" onClick={ onRowClick }>
+			{ /* The two reads fail independently, so a failed /plans is otherwise
+			     silent: DataViews drops a filter whose `elements` is empty, so the
+			     Subscription filter is simply absent and reads as a site that sells
+			     no plans. The table itself is unaffected, hence a warning beside it
+			     rather than the error notice that replaces the screen. */ }
+			{ plansFailed && (
+				<LoadFailureNotice
+					status="warning"
+					message={ __(
+						'Could not load the plan list, so the Subscription filter is unavailable. Reload the page to try again.',
+						'newspack-plugin'
+					) }
+				/>
+			) }
 			<DataViews
 				data={ items }
 				fields={ fields }
 				view={ view }
 				onChangeView={ setView }
+				isLoading={ subscribersLoading }
 				paginationInfo={ { totalItems: total, totalPages: pages } }
 				defaultLayouts={ { table: {} } }
 				getItemId={ item => item.id }

@@ -9,7 +9,34 @@
 //
 // The selector nesting mirrors the original location under
 // `.editor-styles-wrapper .block-editor-block-list__layout` in `style.scss`, so
-// when both stylesheets load (flag off) the result is identical to before.
+// when both stylesheets load (flag off) the result is identical to before,
+// except for editor chrome (see the exclusion list below).
+
+@use "sass:list";
+@use "~@wordpress/base-styles/variables" as wp-vars;
+
+$canvas-scope: ".editor-styles-wrapper .block-editor-block-list__layout";
+
+$chrome-root-needing-font-reset: ".components-placeholder";
+
+$chrome-roots-needing-line-height-reset:
+	$chrome-root-needing-font-reset,
+	".block-editor-warning",
+	".components-notice",
+	".components-drop-zone";
+
+$chrome-roots-self-styled:
+	".block-editor-block-list__block-html-textarea",
+	".newsletters-block__conditional-content__label",
+	".newsletters-block-visibility-label",
+	".newspack-newsletters-ad-block-ad-label";
+
+$canvas-chrome: ();
+
+@each $root in list.join($chrome-roots-needing-line-height-reset, $chrome-roots-self-styled, $separator: comma) {
+	$canvas-chrome: list.append($canvas-chrome, #{$root}, $separator: comma);
+	$canvas-chrome: list.append($canvas-chrome, #{$root + " *"}, $separator: comma);
+}
 
 // Font variable declarations and aliases — moved from `../style.scss` (Task 5).
 // Under flag-on these are absent so the theme's fonts flow through; under
@@ -57,17 +84,12 @@
 		// Blanket font-family and line-height overrides — moved from
 		// `../style.scss` (Task 5). Forces georgia/arial regardless of theme;
 		// only applies when flag is off (MJML path).
-		* {
+		*:not(:where(#{$canvas-chrome})) {
 			line-height: 1.5;
 
 			&:not(code) {
 				font-family: var(--newspack-newsletters-body-font);
 			}
-		}
-
-		.block-editor-block-list__block .components-placeholder,
-		.block-editor-block-list__block .components-placeholder div {
-			font-family: "Noto Serif", helvetica, arial, sans-serif;
 		}
 
 		h1,
@@ -363,4 +385,12 @@
 			}
 		}
 	}
+}
+
+:where(#{$canvas-scope}) :where(#{$chrome-roots-needing-line-height-reset}) {
+	line-height: wp-vars.$default-line-height;
+}
+
+:where(#{$canvas-scope}) :where(#{$chrome-root-needing-font-reset}) {
+	font-family: wp-vars.$default-font;
 }

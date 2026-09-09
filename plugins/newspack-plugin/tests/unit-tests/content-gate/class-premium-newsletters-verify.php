@@ -969,7 +969,10 @@ class Test_Premium_Newsletters_Verify extends \WP_UnitTestCase {
 	public function test_public_id_for_list_resolves_a_list_post() {
 		$post_id = self::factory()->post->create( [ 'post_type' => \Newspack\Newsletters\Subscription_Lists::CPT ] );
 
-		$this->assertSame( 'list-' . $post_id, $this->invoke_private_static( 'public_id_for_list', [ $post_id ] ) );
+		$this->assertSame(
+			\Newspack\Newsletters\Subscription_List::PUBLIC_ID_PREFIX . $post_id,
+			$this->invoke_private_static( 'public_id_for_list', [ $post_id ] )
+		);
 	}
 
 	/**
