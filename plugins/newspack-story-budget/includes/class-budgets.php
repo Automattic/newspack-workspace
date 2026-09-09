@@ -204,9 +204,18 @@ class Budgets {
 	/**
 	 * Update the order of active budgets.
 	 *
+	 * IDs that are not budgets are skipped, so a stray ID cannot write order
+	 * meta onto a term from another taxonomy.
+	 *
 	 * @param int[] $budget_ids Ordered list of budget IDs.
 	 */
 	public static function update_budgets_order( $budget_ids ) {
+		$budget_ids = array_values(
+			array_filter(
+				$budget_ids,
+				fn( $budget_id ) => get_term( $budget_id, self::TAXONOMY ) instanceof \WP_Term
+			)
+		);
 		foreach ( $budget_ids as $index => $budget_id ) {
 			$order = $index + 1;
 			update_term_meta( $budget_id, Budget::ORDER_META_KEY, $order );
@@ -219,11 +228,9 @@ class Budgets {
 	/**
 	 * Whether the current user may create, rename, archive or reorder budgets.
 	 *
-	 * Resolved from the taxonomy's own capabilities so the REST routes and the
-	 * app's UI flag share one floor with wp-admin's term screens
-	 * (`manage_categories` by default) instead of the `edit_posts` floor that
-	 * let contributors alter anyone's budgets (NPPM-3199). A budget ID switches
-	 * to the object-level `edit_term` check; an ID that is not a budget falls
+	 * Resolved from the taxonomy's own capabilities (`manage_categories` by
+	 * default) so the REST routes, the app's UI flag and wp-admin's term
+	 * screens share one floor (NPPM-3199). An ID that is not a budget falls
 	 * back to the floor so managers still reach the route's own 404.
 	 *
 	 * @param int|null $budget_id Optional budget (term) ID.
