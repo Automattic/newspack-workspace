@@ -1,3 +1,10 @@
+## @automattic/newspack-blocks [4.31.1](https://github.com/Automattic/newspack-workspace/compare/newspack-blocks@4.31.0...newspack-blocks@4.31.1) (2026-09-09)
+
+
+### Bug Fixes
+
+* **homepage-articles:** reset dedup state per render pass (NPLAUNC-242) ([#1019](https://github.com/Automattic/newspack-workspace/issues/1019)) ([0ecdc9b](https://github.com/Automattic/newspack-workspace/commit/0ecdc9b7e9511799df668738a732ef6f0d808cb4))
+
 # @automattic/newspack-blocks [4.31.0](https://github.com/Automattic/newspack-workspace/compare/newspack-blocks@4.30.5...newspack-blocks@4.31.0) (2026-08-31)
 
 

@@ -213,14 +213,26 @@ class Test_Group_Subscriptions extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * Test get_managers() seeds no owner when the subscription cannot be resolved.
-	 *
-	 * Seeding the falsy ID would make user_is_manager( 0, $subscription ) true, which
-	 * reads as "a logged-out caller manages this group" in every permission check.
+	 * Test get_managers() with a non-existent subscription returns no managers.
 	 */
 	public function test_get_managers_invalid_subscription() {
 		$managers = Group_Subscription::get_managers( 99999 );
-		$this->assertSame( [], $managers, 'An unresolvable subscription should have no managers' );
+		$this->assertSame( [], $managers, 'An unresolvable subscription has no managers.' );
+	}
+
+	/**
+	 * A subscription whose owner has been deleted carries no phantom manager. WooCommerce
+	 * zeroes customer_id when the user goes, and seeding that into the manager list would
+	 * make the list match an unauthenticated caller, whose ID is also zero.
+	 */
+	public function test_get_managers_omits_deleted_owner() {
+		$group_sub = $this->create_group_subscription( 0 );
+
+		$this->assertSame(
+			[],
+			Group_Subscription::get_managers( $group_sub ),
+			'A group whose owner was deleted has no managers.'
+		);
 	}
 
 	/**
@@ -407,6 +419,20 @@ class Test_Group_Subscriptions extends \WP_UnitTestCase {
 
 		$result = Group_Subscription::user_is_manager( $reader_id, $regular_sub );
 		$this->assertNull( $result, 'Should return null for non-group subscriptions' );
+	}
+
+	/**
+	 * A caller with no user ID does not manage a group whose owner was deleted.
+	 * get_current_user_id() and a zeroed customer_id are both integer zero, so the
+	 * manager comparison would otherwise match one to the other.
+	 */
+	public function test_user_is_manager_rejects_unauthenticated_caller_on_ownerless_group() {
+		$group_sub = $this->create_group_subscription( 0 );
+
+		$this->assertFalse(
+			Group_Subscription::user_is_manager( 0, $group_sub ),
+			'A caller with no user ID must not manage an ownerless group.'
+		);
 	}
 
 	/**
