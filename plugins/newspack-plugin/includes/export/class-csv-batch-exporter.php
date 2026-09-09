@@ -26,12 +26,67 @@ abstract class CSV_Batch_Exporter extends \WC_CSV_Batch_Exporter {
 	protected $list_params = [];
 
 	/**
+	 * Export options chosen in the export modal.
+	 *
+	 * @var array
+	 */
+	protected $export_config = [];
+
+	/**
 	 * Set the captured list-table query params driving this export.
 	 *
 	 * @param array $params Parsed query-string params from the admin list.
 	 */
 	public function set_list_params( array $params ): void {
 		$this->list_params = $params;
+	}
+
+	/**
+	 * Set the export options chosen in the export modal (already sanitized by
+	 * CSV_Exports::sanitize_export_config()).
+	 *
+	 * @param array $config Export config.
+	 */
+	public function set_export_config( array $config ): void {
+		$this->export_config = $config;
+		if ( ! empty( $config['delimiter'] ) ) {
+			$this->delimiter = $config['delimiter'];
+		}
+		// The parent constructor fixes the column set before the config
+		// arrives, so recompute it: the config decides whether optional
+		// columns are part of this export.
+		$this->set_column_names( $this->get_default_column_names() );
+	}
+
+	/**
+	 * Get the export config.
+	 *
+	 * @return array
+	 */
+	public function get_export_config(): array {
+		return $this->export_config;
+	}
+
+	/**
+	 * Render a date column using the format chosen for this export.
+	 *
+	 * Every date column goes through here, so a publisher's chosen format
+	 * applies uniformly. An unparseable value is passed through untouched
+	 * rather than silently becoming an epoch date.
+	 *
+	 * @param string $date Date in MySQL format, or ''.
+	 * @return string
+	 */
+	public function format_export_date( string $date ): string {
+		$format = $this->export_config['date_format'] ?? '';
+		if ( '' === $date || '' === $format || CSV_Exports::DEFAULT_DATE_FORMAT === $format ) {
+			return $date;
+		}
+		$timestamp = strtotime( $date );
+		if ( false === $timestamp ) {
+			return $date;
+		}
+		return gmdate( $format, $timestamp );
 	}
 
 	/**
@@ -213,6 +268,36 @@ abstract class CSV_Batch_Exporter extends \WC_CSV_Batch_Exporter {
 	}
 
 	/**
+	 * Public accessor for the headers-row temp file path (the parent's is
+	 * protected).
+	 *
+	 * @return string
+	 */
+	public function get_headers_row_file_path_public(): string {
+		return $this->get_headers_row_file_path();
+	}
+
+	/**
+	 * Write the headers-row temp file if it is not there already.
+	 *
+	 * WooCommerce writes it only on the page that reports 100% complete, which
+	 * a run cut short by a shrinking result set never reaches — and the
+	 * download refuses to serve a file whose header row is missing, because it
+	 * holds no export config and could not regenerate a faithful one. Calling
+	 * this while the run's exporter is still configured keeps the partial CSV
+	 * (and its incomplete-export warning) deliverable.
+	 */
+	public function ensure_headers_row_file(): void {
+		$path = $this->get_headers_row_file_path();
+		if ( file_exists( $path ) ) {
+			return;
+		}
+		// Direct file ops are fine here: the path is under uploads.
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents, WordPressVIPMinimum.Functions.RestrictedFunctions.file_ops_file_put_contents
+		file_put_contents( $path, chr( 239 ) . chr( 187 ) . chr( 191 ) . $this->export_column_headers() );
+	}
+
+	/**
 	 * Stream the assembled export (headers row + data) to the browser, delete
 	 * the temp files, and exit. Used by the admin download in place of the
 	 * parent's export().
@@ -236,8 +321,11 @@ abstract class CSV_Batch_Exporter extends \WC_CSV_Batch_Exporter {
 			ob_end_clean();
 		}
 
-		// The headers row is small; get_headers_row_file() also regenerates it
-		// when the temp file is missing.
+		// The headers row is small. get_headers_row_file() would regenerate it
+		// if the temp file were missing, but from this exporter's own column
+		// set and delimiter — which is why the caller checks the file exists
+		// before getting here rather than serving a header row that disagrees
+		// with the data below it.
 		echo $this->get_headers_row_file(); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
 
 		// phpcs:disable WordPress.WP.AlternativeFunctions.file_system_operations_fopen, WordPress.WP.AlternativeFunctions.file_system_operations_fclose, WordPressVIPMinimum.Functions.RestrictedFunctions.file_ops_unlink, WordPress.WP.AlternativeFunctions.file_system_operations_fpassthru
