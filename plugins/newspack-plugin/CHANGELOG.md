@@ -1,3 +1,10 @@
+## newspack [6.49.5](https://github.com/Automattic/newspack-workspace/compare/newspack@6.49.4...newspack@6.49.5) (2026-09-09)
+
+
+### Bug Fixes
+
+* **lite-site:** harden and correct the built-in lite site (NPPM-3374) ([#1053](https://github.com/Automattic/newspack-workspace/issues/1053)) ([0a66701](https://github.com/Automattic/newspack-workspace/commit/0a6670123dc738f48ba530d7f521ed5cc1f5531f))
+
 ## newspack [6.49.4](https://github.com/Automattic/newspack-workspace/compare/newspack@6.49.3...newspack@6.49.4) (2026-09-09)
 
 
