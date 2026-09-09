@@ -78,6 +78,7 @@ describe( 'gate.js seen-event capability flags', () => {
 		mockSendEvent.mockReset();
 		document.querySelector( '.newspack-registration form' ).dispatchEvent( new Event( 'submit', { bubbles: true, cancelable: true } ) );
 		const submission = mockSendEvent.mock.calls.find( ( [ payload ] ) => payload?.action === 'form_submission' );
+		expect( submission ).toBeDefined();
 		expect( submission[ 0 ].action_type ).toBe( 'registration' );
 	} );
 
