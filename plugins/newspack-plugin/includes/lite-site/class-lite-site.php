@@ -406,6 +406,7 @@ class Lite_Site {
 
 		$all_posts = array_merge( $sticky_posts, get_posts( $query_args ) );
 		$all_posts = array_unique( $all_posts, SORT_REGULAR );
+		$all_posts = array_filter( $all_posts, [ __CLASS__, 'is_post_accessible' ] );
 
 		return array_slice( $all_posts, 0, self::get_number_of_posts() );
 	}
@@ -413,7 +414,10 @@ class Lite_Site {
 	/**
 	 * Check whether a post can be displayed on the lite site.
 	 *
-	 * Only posts that are publicly viewable and not password-protected are allowed.
+	 * Only posts that are publicly viewable, not password-protected, and not
+	 * behind a content gate are allowed. Lite pages are served from the page
+	 * cache with no gating layer of their own, so a post restricted for
+	 * anonymous readers must not render here at all.
 	 *
 	 * @param \WP_Post|null $post The post object.
 	 * @return bool True if the post can be displayed, false otherwise.
@@ -421,7 +425,8 @@ class Lite_Site {
 	public static function is_post_accessible( $post ) {
 		return $post instanceof \WP_Post
 			&& is_post_publicly_viewable( $post )
-			&& ! post_password_required( $post );
+			&& ! post_password_required( $post )
+			&& ! Content_Gate::is_post_restricted( $post->ID );
 	}
 
 	/**

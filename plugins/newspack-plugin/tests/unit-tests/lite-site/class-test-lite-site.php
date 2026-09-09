@@ -159,6 +159,43 @@ class Test_Lite_Site extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * Test that a content-gated post is not accessible.
+	 */
+	public function test_gated_post_is_not_accessible() {
+		$post = $this->factory()->post->create_and_get( [ 'post_status' => 'publish' ] );
+
+		$restrict = function( $restricted, $post_id ) use ( $post ) {
+			return $post_id === $post->ID ? true : $restricted;
+		};
+		add_filter( 'newspack_is_post_restricted', $restrict, 10, 2 );
+
+		$this->assertFalse( Lite_Site::is_post_accessible( $post ) );
+
+		remove_filter( 'newspack_is_post_restricted', $restrict );
+		$this->assertTrue( Lite_Site::is_post_accessible( $post ) );
+	}
+
+	/**
+	 * Test that the archive listing excludes content-gated posts.
+	 */
+	public function test_archive_posts_exclude_gated_posts() {
+		$public_id = $this->factory()->post->create( [ 'post_status' => 'publish' ] );
+		$gated_id  = $this->factory()->post->create( [ 'post_status' => 'publish' ] );
+
+		$restrict = function( $restricted, $post_id ) use ( $gated_id ) {
+			return $post_id === $gated_id ? true : $restricted;
+		};
+		add_filter( 'newspack_is_post_restricted', $restrict, 10, 2 );
+
+		$ids = wp_list_pluck( Lite_Site::get_archive_posts(), 'ID' );
+
+		remove_filter( 'newspack_is_post_restricted', $restrict );
+
+		$this->assertContains( $public_id, $ids );
+		$this->assertNotContains( $gated_id, $ids );
+	}
+
+	/**
 	 * Test that a revision is not accessible.
 	 */
 	public function test_revision_is_not_accessible() {
