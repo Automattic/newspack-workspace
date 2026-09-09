@@ -421,7 +421,20 @@ class Newspack_Popups_Settings {
 	 * @return void
 	 */
 	public static function save_ai_copy_assistant_fields( $fields ) {
-		$allowed = wp_list_pluck( self::get_ai_copy_assistant_fields(), 'key' );
+		$definitions = self::get_ai_copy_assistant_fields();
+		$allowed     = wp_list_pluck( $definitions, 'key' );
+		// Fields that change what readers see. A change to one of these has to
+		// reach cached pages now, not when their entries happen to expire.
+		$render_keys = wp_list_pluck(
+			array_filter(
+				$definitions,
+				function ( $field ) {
+					return in_array( $field['section'] ?? 'profile', [ 'override', 'control' ], true );
+				}
+			),
+			'key'
+		);
+		$render_changed = false;
 		foreach ( (array) $fields as $key => $value ) {
 			if ( ! in_array( $key, $allowed, true ) ) {
 				continue;
@@ -449,7 +462,20 @@ class Newspack_Popups_Settings {
 					$sanitized = '';
 				}
 			}
+			if ( in_array( $key, $render_keys, true ) && (string) get_option( $key, '' ) !== (string) $sanitized ) {
+				$render_changed = true;
+			}
 			update_option( $key, $sanitized );
+		}
+		if ( $render_changed ) {
+			// Batcache stores rendered pages in the object cache; there is no
+			// per-URL purge for "every story with a prompt", so flush it all.
+			wp_cache_flush();
+			/**
+			 * Fires after a Contextual Prompts setting that changes rendered output
+			 * (site-wide override or control test) was saved with a new value.
+			 */
+			do_action( 'newspack_contextual_prompts_render_settings_changed' );
 		}
 	}
 

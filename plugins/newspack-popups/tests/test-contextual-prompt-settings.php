@@ -16,6 +16,8 @@ class ContextualPromptSettingsTest extends WP_UnitTestCase {
 		delete_option( Newspack_Popups_Settings::CONTROL_ENABLED_OPTION );
 		delete_option( Newspack_Popups_Settings::CONTROL_BODY_OPTION );
 		delete_option( Newspack_Popups_Settings::CONTROL_INTERVAL_OPTION );
+		delete_option( 'newspack_contextual_prompts_coverage_area' );
+		remove_all_actions( 'newspack_contextual_prompts_render_settings_changed' );
 		parent::tear_down();
 	}
 
@@ -72,5 +74,51 @@ class ContextualPromptSettingsTest extends WP_UnitTestCase {
 			],
 			array_values( $keys )
 		);
+	}
+
+	/**
+	 * Saving a render-affecting field (override/control sections) flushes the
+	 * object cache — where Batcache keeps rendered pages — so the front end
+	 * reflects the new setting without waiting for entries to expire.
+	 */
+	public function test_saving_a_control_field_flushes_the_cache_and_fires_the_action() {
+		wp_cache_set( 'nppd2249-probe', 'cached', 'batcache' );
+		$fired = 0;
+		add_action(
+			'newspack_contextual_prompts_render_settings_changed',
+			function () use ( &$fired ) {
+				$fired++;
+			}
+		);
+		Newspack_Popups_Settings::save_ai_copy_assistant_fields(
+			[
+				Newspack_Popups_Settings::CONTROL_ENABLED_OPTION => '1',
+				Newspack_Popups_Settings::CONTROL_BODY_OPTION    => 'Support local news.',
+			]
+		);
+		$this->assertFalse( wp_cache_get( 'nppd2249-probe', 'batcache' ) );
+		$this->assertSame( 1, $fired );
+	}
+
+	/**
+	 * A profile-only save, or a save that changes nothing, leaves the cache alone.
+	 */
+	public function test_profile_or_unchanged_saves_do_not_flush() {
+		update_option( Newspack_Popups_Settings::CONTROL_BODY_OPTION, 'Support local news.' );
+		$fired = 0;
+		add_action(
+			'newspack_contextual_prompts_render_settings_changed',
+			function () use ( &$fired ) {
+				$fired++;
+			}
+		);
+
+		wp_cache_set( 'nppd2249-probe', 'cached', 'batcache' );
+		Newspack_Popups_Settings::save_ai_copy_assistant_fields( [ 'newspack_contextual_prompts_coverage_area' => 'Springfield' ] );
+		$this->assertSame( 'cached', wp_cache_get( 'nppd2249-probe', 'batcache' ) );
+
+		Newspack_Popups_Settings::save_ai_copy_assistant_fields( [ Newspack_Popups_Settings::CONTROL_BODY_OPTION => 'Support local news.' ] );
+		$this->assertSame( 'cached', wp_cache_get( 'nppd2249-probe', 'batcache' ) );
+		$this->assertSame( 0, $fired );
 	}
 }
