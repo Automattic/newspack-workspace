@@ -9,7 +9,6 @@ namespace Newspack\CLI;
 
 use WP_CLI;
 use Newspack\CSV_Exports;
-use Newspack\User_Meta_Columns;
 
 defined( 'ABSPATH' ) || exit;
 
@@ -111,7 +110,7 @@ class Export {
 	 * : Only users registered on or before this date.
 	 *
 	 * [--meta=<keys>]
-	 * : Add one column per user meta key, comma-separated. Only keys the site stores and offers are accepted: protected, core and credential-named keys are not, unless the site adds them back through the newspack_users_export_meta_keys filter.
+	 * : Add one column per user meta key, comma-separated. Any key the site stores is accepted, whether or not the export dialog's list is long enough to show it. Protected, core and credential-named keys are not, unless the site adds them back through the newspack_users_export_meta_keys filter.
 	 *
 	 * [--delimiter=<delimiter>]
 	 * : Field delimiter: comma (default), semicolon, tab or pipe.
@@ -206,17 +205,7 @@ class Export {
 			'date-format' => sprintf( '--date-format must be at most %d characters.', CSV_Exports::MAX_CUSTOM_DATE_FORMAT_LENGTH ),
 		];
 		foreach ( self::get_rejected_flag_values( $raw, $config ) as $flag => $values ) {
-			$message = sprintf( $messages[ $flag ], implode( ', ', $values ) );
-			// A capped list and a complete one reject an unlisted key
-			// identically, so the one case where the key may well exist has to
-			// say so itself.
-			if ( 'meta' === $flag && User_Meta_Columns::keys_were_capped() ) {
-				$message .= sprintf(
-					' This site stores more keys than the list holds, so it stops at %d; a key sorting after those needs the newspack_users_export_meta_keys filter.',
-					User_Meta_Columns::MAX_KEYS
-				);
-			}
-			WP_CLI::error( $message );
+			WP_CLI::error( sprintf( $messages[ $flag ], implode( ', ', $values ) ) );
 		}
 	}
 

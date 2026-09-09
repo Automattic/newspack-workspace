@@ -50,9 +50,13 @@ final class User_Meta_Columns {
 	const KEYS_TTL = 12 * HOUR_IN_SECONDS;
 
 	/**
-	 * Most keys offered. A site with more offerable keys than this has
-	 * something writing per-user keys programmatically, and a picker that long
-	 * is unusable anyway.
+	 * Most keys the picker lists. A site with more offerable keys than this
+	 * has something writing per-user keys programmatically, and a select that
+	 * long is unusable anyway.
+	 *
+	 * It bounds the list, not the export. A key sorting after the last one
+	 * listed is still a key the site stores, so the dialog takes typed keys
+	 * and `--meta` takes named ones, both checked against the table.
 	 */
 	const MAX_KEYS = 500;
 
@@ -136,8 +140,8 @@ final class User_Meta_Columns {
 	 * Whether MAX_KEYS cut the offered list short.
 	 *
 	 * A capped list and a complete one look the same on screen, which is what
-	 * would turn a missing column into a silent one, so both the picker and
-	 * the CLI say so when it happens.
+	 * would turn a missing column into a silent one, so the dialog says so and
+	 * offers a field for the keys it cannot list.
 	 *
 	 * @return bool
 	 */
@@ -189,8 +193,9 @@ final class User_Meta_Columns {
 		 * Filters the user meta keys offered as export columns.
 		 *
 		 * Protected keys, core bookkeeping and credential-named keys are
-		 * already gone, as is anything past MAX_KEYS; a site wanting one of
-		 * those exported adds it back here.
+		 * already gone; a site wanting one of those exported adds it back
+		 * here. Dropping a key here keeps it out of an export however it is
+		 * asked for, including by name past the end of a capped list.
 		 *
 		 * @param string[] $keys Meta keys.
 		 */
@@ -212,7 +217,16 @@ final class User_Meta_Columns {
 	}
 
 	/**
-	 * Keep only the requested keys the site actually stores.
+	 * Keep only the requested keys the site actually stores and may offer.
+	 *
+	 * MAX_KEYS is a ceiling on what a select can usefully hold, not on what a
+	 * site stores: above it there are real keys sorting after the last one
+	 * listed, and a publisher who names one has named a key their readers
+	 * filled in. So a requested key the list does not carry is checked against
+	 * the table on its own — an indexed lookup of the few keys one export asks
+	 * for, not the DISTINCT scan behind the list — and only when the cap
+	 * actually cut the list short. Below the cap the list is already every
+	 * offerable key, so anything outside it is a typo or a probe.
 	 *
 	 * @param mixed $keys Requested meta keys.
 	 * @return string[]
@@ -221,8 +235,51 @@ final class User_Meta_Columns {
 		if ( ! is_array( $keys ) ) {
 			return [];
 		}
-		$requested = array_map( 'strval', array_filter( $keys, 'is_scalar' ) );
-		return array_values( array_unique( array_intersect( $requested, self::get_available_keys() ) ) );
+		$requested = array_values( array_unique( array_map( 'strval', array_filter( $keys, 'is_scalar' ) ) ) );
+		// One column per key, so a request is bounded by the same ceiling the
+		// list is.
+		$requested = array_slice( $requested, 0, self::MAX_KEYS );
+		$offered   = self::get_available_keys();
+		$valid     = array_intersect( $requested, $offered );
+		$unlisted  = array_diff( $requested, $offered );
+		if ( ! empty( $unlisted ) && self::keys_were_capped() ) {
+			$valid = array_merge( $valid, self::filter_stored_keys( $unlisted ) );
+		}
+		// Back through $requested so the columns come out in the order they
+		// were asked for.
+		return array_values( array_intersect( $requested, $valid ) );
+	}
+
+	/**
+	 * Which of these keys the site stores and may offer.
+	 *
+	 * @param string[] $keys Candidate meta keys.
+	 * @return string[]
+	 */
+	private static function filter_stored_keys( array $keys ): array {
+		// Offerability is settled without a query, so a probing or
+		// credential-named key never reaches one.
+		$keys = array_values( array_filter( $keys, [ __CLASS__, 'is_offerable_key' ] ) );
+		if ( empty( $keys ) ) {
+			return [];
+		}
+
+		global $wpdb;
+		$placeholders = implode( ', ', array_fill( 0, count( $keys ), '%s' ) );
+		// Deliberately uncached: an indexed lookup of the handful of keys one
+		// export named, run once per export.
+		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- $placeholders carries only %s, one per key; the keys are bound below.
+		$sql    = "SELECT DISTINCT meta_key FROM {$wpdb->usermeta} WHERE meta_key IN ( {$placeholders} )";
+		$stored = $wpdb->get_col( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+			$wpdb->prepare( $sql, $keys ) // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+		);
+		$stored = is_array( $stored ) ? array_map( 'strval', $stored ) : [];
+
+		/** This filter is documented in includes/export/class-user-meta-columns.php */
+		$filtered = (array) \apply_filters( 'newspack_users_export_meta_keys', $stored );
+		// Only a removal can matter here: a key the filter adds is in the
+		// offered list already, and never reaches this path.
+		return array_values( array_intersect( $stored, $filtered ) );
 	}
 
 	/**

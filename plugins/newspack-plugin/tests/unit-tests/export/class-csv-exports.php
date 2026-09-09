@@ -157,6 +157,28 @@ class Newspack_Test_CSV_Exports extends WP_UnitTestCase {
 	}
 
 	/**
+	 * The dialog's list of meta keys stops at MAX_KEYS, so above that it also
+	 * offers a field for typing the keys it cannot show. What is typed is a
+	 * way to name a key, not a way past the boundary: it is split, trimmed and
+	 * then validated exactly like a picked key.
+	 */
+	public function test_sanitize_export_config_takes_typed_meta_keys() {
+		$user_id = self::factory()->user->create();
+		update_user_meta( $user_id, 'reader_zip_code', '07079' );
+		update_user_meta( $user_id, 'reader_subjects', 'History' );
+
+		$config = CSV_Exports::sanitize_export_config(
+			[
+				'meta_keys'       => [ 'reader_subjects' ],
+				'meta_keys_extra' => " reader_zip_code ,, never_written\n",
+			],
+			'users'
+		);
+
+		$this->assertSame( [ 'reader_subjects', 'reader_zip_code' ], $config['meta_keys'] );
+	}
+
+	/**
 	 * A range entered back to front is read as the range the admin meant,
 	 * rather than exporting nothing.
 	 */

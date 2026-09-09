@@ -184,7 +184,7 @@ final class CSV_Exports {
 		$config['date_format'] = self::sanitize_date_format( $raw );
 
 		if ( 'users' === $type ) {
-			$config['meta_keys'] = User_Meta_Columns::sanitize_keys( $raw['meta_keys'] ?? [] );
+			$config['meta_keys'] = User_Meta_Columns::sanitize_keys( self::collect_meta_keys( $raw ) );
 			$config['roles']     = self::sanitize_roles( $raw['roles'] ?? [] );
 		}
 		if ( 'subscriptions' === $type ) {
@@ -192,6 +192,27 @@ final class CSV_Exports {
 		}
 
 		return $config;
+	}
+
+	/**
+	 * The meta keys an export asked for: the ones picked from the list, plus
+	 * the ones typed into the field the dialog shows when the list is capped.
+	 *
+	 * Typed keys are only a way to name a key the list is too short to carry;
+	 * what may actually be exported is still settled by
+	 * User_Meta_Columns::sanitize_keys().
+	 *
+	 * @param array $raw Raw config params.
+	 * @return array Requested meta keys.
+	 */
+	private static function collect_meta_keys( array $raw ): array {
+		$keys = isset( $raw['meta_keys'] ) && is_array( $raw['meta_keys'] ) ? $raw['meta_keys'] : [];
+		if ( empty( $raw['meta_keys_extra'] ) || ! is_string( $raw['meta_keys_extra'] ) ) {
+			return $keys;
+		}
+		$typed = preg_split( '/[,\r\n]+/', $raw['meta_keys_extra'] );
+		$typed = array_filter( array_map( 'trim', is_array( $typed ) ? $typed : [] ), 'strlen' );
+		return array_merge( $keys, array_values( $typed ) );
 	}
 
 	/**
@@ -483,15 +504,23 @@ final class CSV_Exports {
 								<?php endforeach; ?>
 							</select>
 							<?php if ( User_Meta_Columns::keys_were_capped() ) : ?>
-								<p class="description">
+								<p class="description" id="<?php echo \esc_attr( $id ); ?>-meta-keys-extra-desc">
 									<?php
 									printf(
 										/* translators: %d: the most keys the list holds. */
-										\esc_html__( 'This site stores more keys than the list holds, so it stops at %d and some keys are not shown.', 'newspack-plugin' ),
+										\esc_html__( 'This site stores more keys than the list holds, so it stops at %d. Type any key the list does not show, separated by commas.', 'newspack-plugin' ),
 										(int) User_Meta_Columns::MAX_KEYS
 									);
 									?>
 								</p>
+								<input
+									type="text"
+									id="<?php echo \esc_attr( $id ); ?>-meta-keys-extra"
+									class="newspack-csv-export-modal__meta-keys-extra"
+									name="meta_keys_extra"
+									aria-describedby="<?php echo \esc_attr( $id ); ?>-meta-keys-extra-desc"
+									value=""
+								>
 							<?php endif; ?>
 						</div>
 					<?php endif; ?>

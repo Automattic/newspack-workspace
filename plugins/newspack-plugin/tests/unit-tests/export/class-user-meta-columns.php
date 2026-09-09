@@ -119,14 +119,47 @@ class Newspack_Test_User_Meta_Columns extends WP_UnitTestCase {
 	/**
 	 * A capped list and a complete one look identical on screen, which is what
 	 * would turn a missing column into a silent one, so the cap is something
-	 * the picker and the CLI can report.
+	 * the picker and the CLI can report. The cap bounds the list, though, not
+	 * the export: a key sorting past the last one listed is still a key the
+	 * site stores, so naming it — from the dialog's typed field or from
+	 * `--meta` — exports it.
 	 */
-	public function test_the_list_stops_at_the_cap_and_says_so() {
+	public function test_the_list_stops_at_the_cap_but_the_export_does_not() {
 		$user_id = self::factory()->user->create();
 		self::store_meta_keys( $user_id, 'reader_field_%03d', User_Meta_Columns::MAX_KEYS + 20 );
+		$unlisted = sprintf( 'reader_field_%03d', User_Meta_Columns::MAX_KEYS + 20 );
 
 		$this->assertCount( User_Meta_Columns::MAX_KEYS, User_Meta_Columns::get_available_keys() );
 		$this->assertTrue( User_Meta_Columns::keys_were_capped() );
+		$this->assertNotContains( $unlisted, User_Meta_Columns::get_available_keys() );
+		$this->assertSame(
+			[ 'reader_field_001', $unlisted ],
+			User_Meta_Columns::sanitize_keys( [ 'reader_field_001', $unlisted ] )
+		);
+	}
+
+	/**
+	 * Naming a key past the end of a capped list is not a way around the
+	 * boundary the list draws: the key still has to exist and still has to be
+	 * offerable, and the filter is still the site's veto.
+	 */
+	public function test_naming_a_key_past_the_cap_still_obeys_the_boundary() {
+		$user_id = self::factory()->user->create();
+		self::store_meta_keys( $user_id, 'reader_field_%03d', User_Meta_Columns::MAX_KEYS + 20 );
+		$unlisted = sprintf( 'reader_field_%03d', User_Meta_Columns::MAX_KEYS + 20 );
+		update_user_meta( $user_id, 'zz_acme_api_key', 'sk-live' );
+
+		$this->assertSame( [], User_Meta_Columns::sanitize_keys( [ 'zz_never_written' ] ) );
+		$this->assertSame( [], User_Meta_Columns::sanitize_keys( [ 'zz_acme_api_key' ] ) );
+
+		$drop_it = function ( $keys ) use ( $unlisted ) {
+			return array_values( array_diff( $keys, [ $unlisted ] ) );
+		};
+		add_filter( 'newspack_users_export_meta_keys', $drop_it );
+		$sanitized = User_Meta_Columns::sanitize_keys( [ $unlisted ] );
+		remove_filter( 'newspack_users_export_meta_keys', $drop_it );
+
+		$this->assertSame( [], $sanitized );
 	}
 
 	/**
