@@ -565,11 +565,7 @@ function process_form() {
 	$email     = \sanitize_email( $_REQUEST['npe'] ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
 	$lists     = array_map( 'sanitize_text_field', $_REQUEST['lists'] ); // phpcs:ignore
 	$popup_id  = isset( $_REQUEST['newspack_popup_id'] ) ? (int) $_REQUEST['newspack_popup_id'] : false; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
-	// Set by newspack-plugin's content gate (gate.js adds it as a hidden input to
-	// every form inside a gate). Carried into the registration metadata and back
-	// out in the response so the reader_registered / newsletter_signup events
-	// name the gate that produced them.
-	$gate_post_id = isset( $_REQUEST['gate_post_id'] ) ? (int) $_REQUEST['gate_post_id'] : 0; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+	$gate_post_id = isset( $_REQUEST['gate_post_id'] ) ? (int) $_REQUEST['gate_post_id'] : 0; // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- See METADATA_KEYS.
 	$current_page_url = \wp_get_raw_referer();
 	if ( strpos( $current_page_url, 'http' ) !== 0 ) {
 		$current_page_url = \home_url( $current_page_url );

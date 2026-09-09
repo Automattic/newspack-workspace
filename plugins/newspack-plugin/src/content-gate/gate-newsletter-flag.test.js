@@ -20,7 +20,7 @@ jest.mock( '../shared/js/cta-attribution', () => ( { persistCtaAttribution: jest
 jest.mock( './gate.scss', () => ( {} ), { virtual: true } );
 
 /**
- * Render an inline gate and let gate.js fire its `seen` event.
+ * Render an inline gate, let gate.js initialise it and fire its `seen` event.
  *
  * jsdom lays nothing out, so every element reports a 0×0 box and gate.js's
  * isVisible() would call every block hidden. Give elements a box so the flags
@@ -29,7 +29,7 @@ jest.mock( './gate.scss', () => ( {} ), { virtual: true } );
  * @param {string} innerHtml Gate contents.
  * @return {Object} The payload gate.js sent for the `seen` event.
  */
-function seenPayloadFor( innerHtml ) {
+function renderGate( innerHtml ) {
 	jest.resetModules();
 	mockSendEvent.mockReset();
 	global.newspack_content_gate = { metadata: { gate_post_id: 123 } };
@@ -47,16 +47,16 @@ function seenPayloadFor( innerHtml ) {
 	return seen[ 0 ];
 }
 
-describe( 'gate.js seen-event capability flags', () => {
+describe( 'gate.js and the Newsletter Subscription Form block', () => {
 	it( 'flags a gate built from the Newsletter Subscription Form block', () => {
-		const payload = seenPayloadFor( '<div class="wp-block-newspack-newsletters-subscribe newspack-newsletters-subscribe"><form></form></div>' );
+		const payload = renderGate( '<div class="wp-block-newspack-newsletters-subscribe newspack-newsletters-subscribe"><form></form></div>' );
 
 		expect( payload.gate_has_newsletter_block ).toBe( 'yes' );
 		expect( payload.gate_has_registration_block ).toBe( 'no' );
 	} );
 
 	it( 'stamps the gate id onto the newsletter form and labels its submission', () => {
-		seenPayloadFor(
+		renderGate(
 			'<div class="newspack-newsletters-subscribe"><form><input type="hidden" name="newspack_newsletters_subscribe" value="1" /><input type="email" name="npe" value="reader@example.test" /></form></div>'
 		);
 
@@ -71,7 +71,7 @@ describe( 'gate.js seen-event capability flags', () => {
 	} );
 
 	it( 'keeps a registration-block submission labelled registration even though it also posts npe', () => {
-		seenPayloadFor(
+		renderGate(
 			'<div class="newspack-registration"><form><input type="hidden" name="newspack_reader_registration" value="1" /><input type="email" name="npe" value="reader@example.test" /></form></div>'
 		);
 
@@ -83,7 +83,7 @@ describe( 'gate.js seen-event capability flags', () => {
 	} );
 
 	it( 'reports no newsletter block on a registration-block gate', () => {
-		const payload = seenPayloadFor( '<div class="newspack-registration"><form></form></div>' );
+		const payload = renderGate( '<div class="newspack-registration"><form></form></div>' );
 
 		expect( payload.gate_has_newsletter_block ).toBe( 'no' );
 		expect( payload.gate_has_registration_block ).toBe( 'yes' );

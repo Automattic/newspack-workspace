@@ -124,11 +124,7 @@ function addFormInputs( gate ) {
 		...gate.querySelectorAll( '.newspack-registration form' ), // Registration block.
 		...gate.querySelectorAll( '.wp-block-newspack-blocks-checkout-button form' ), // Checkout button block.
 		...gate.querySelectorAll( '.wp-block-newspack-blocks-donate form' ), // Donate block.
-		// Newsletter Subscription Form block. With Reader Activation on, a signup
-		// here registers the reader too, and the newsletters handler copies this
-		// input into the registration metadata, so the reader_registered and
-		// newsletter_signup events carry the gate that produced them.
-		...gate.querySelectorAll( '.newspack-newsletters-subscribe form' ),
+		...gate.querySelectorAll( '.newspack-newsletters-subscribe form' ), // Newsletter Subscription Form block (see getGateEventPayload).
 	];
 	forms.forEach( form => {
 		if ( ! form.querySelector( 'input[name="gate_post_id"]' ) ) {
