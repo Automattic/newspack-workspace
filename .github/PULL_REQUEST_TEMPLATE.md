@@ -1,19 +1,20 @@
 <!-- Contributing guidelines: https://github.com/Automattic/newspack-workspace/blob/main/.github/CONTRIBUTING.md -->
-<!-- Everything above the Technical details block is for the whole team, engineers and support alike. Each comment says what its section holds; replace it with the section. The headings suit a bugfix; a feature PR uses "The need" and "The change". -->
+<!-- Write everything above Technical details for the whole team, including engineers and support. Replace each comment below with the content it describes. For a feature PR, use "The need" and "The change" instead of "The problem" and "The fix". -->
 
 ## The problem
 
-<!-- What did not work, or what was missing, in publisher terms: the feature, then what the reader or editor saw. Never why it broke. -->
+<!-- Describe what did not work or what was missing in publisher terms: name the feature, then explain what the reader or editor experienced. Save the root cause and implementation details for Technical details. -->
 
 ## The fix
 
-<!-- The solution in plain language, then a short "With this change:" list of what now works. No class names, file names, or format specifiers. -->
+<!-- Explain the solution in plain language, then add a short "With this change:" list of what now works. Keep class names, file names, and other implementation details in Technical details. -->
 
+<!-- Keep the Linear issue reference here, or delete the line. -->
 Closes # .
 
 ## How to test
 
-<!-- Numbered steps anyone on the team can follow: one action per step, then the expected result. For a fix, reproduce on the base branch first, then verify on this one. A CLI command is fine where that is the honest check. -->
+<!-- Write numbered test steps anyone on the team can follow. Give one action per step and the expected result. For a fix, reproduce the problem on the base branch first, then verify the fix on this branch. Use CLI commands when they are the clearest way to verify something. -->
 
 1.
 2.
@@ -22,6 +23,6 @@ Closes # .
 <details>
 <summary><strong>Technical details</strong></summary>
 
-<!-- Implementation, build commands, CLI reproduction and verification, the tests written and run, and notes for reviewers. End with one line on review: "Self-review: two rounds, clean. Copilot: one pass, three findings addressed." -->
+<!-- Use Technical details for what a reviewer needs beyond the main description: implementation choices and reasoning, build or CLI commands, reproduction and verification details, tests written and run, and reviewer notes. End with a short review summary using the actual results, for example: Self-review: two rounds, clean. Copilot: one pass, three findings addressed. -->
 
 </details>
