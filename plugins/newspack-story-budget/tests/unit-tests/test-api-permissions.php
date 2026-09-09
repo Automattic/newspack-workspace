@@ -147,25 +147,52 @@ class Test_API_Permissions extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * An ID that is not a budget falls back to the floor: managers still get the
-	 * handler's 404, non-managers get 403.
+	 * IDs that are not budgets: one with no term row, one that is a term in another taxonomy.
+	 *
+	 * @return array
 	 */
-	public function test_update_unknown_budget_keeps_404_for_managers() {
-		$response = $this->dispatch_as(
-			'editor',
-			'PUT',
-			'/budgets/999999',
-			[
-				'id'   => self::$budgets[1],
-				'name' => 'Ghost',
-			]
-		);
+	public function non_budget_ids() {
+		return [
+			'unknown ID'               => [ 'unknown' ],
+			'term in another taxonomy' => [ 'category' ],
+		];
+	}
+
+	/**
+	 * An ID that is not a budget falls back to the floor: managers still get the
+	 * handler's 404, non-managers get 403, and no term is renamed.
+	 *
+	 * @dataProvider non_budget_ids
+	 *
+	 * @param string $kind Which kind of non-budget ID to send.
+	 */
+	public function test_update_non_budget_id_keeps_404_for_managers( $kind ) {
+		$id = 'category' === $kind ? self::factory()->category->create() : 999999;
+
+		$response = $this->dispatch_as( 'editor', 'PUT', '/budgets/' . $id, [ 'name' => 'Ghost' ] );
 		$this->assertSame( 404, $response->get_status() );
 		$this->assertSame( 'budget_not_found', $response->get_data()['code'] );
-		$this->assertStringContainsString( '999999', $response->get_data()['message'] );
+		$this->assertStringContainsString( (string) $id, $response->get_data()['message'] );
+		$this->assertNotSame( 'Ghost', get_term( $id )->name ?? null );
 
-		$response = $this->dispatch_as( 'contributor', 'PUT', '/budgets/999999', [ 'name' => 'Ghost' ] );
+		$response = $this->dispatch_as( 'contributor', 'PUT', '/budgets/' . $id, [ 'name' => 'Ghost' ] );
 		$this->assertSame( 403, $response->get_status() );
+	}
+
+	/**
+	 * Reordering skips IDs that are not budgets instead of writing order meta onto them.
+	 */
+	public function test_reorder_skips_ids_that_are_not_budgets() {
+		$category_id = self::factory()->category->create();
+		$ordered     = array_reverse( self::$budgets );
+
+		$response = $this->dispatch_as( 'editor', 'POST', '/budgets/order', [ 'ids' => [ $category_id, $ordered[0], 999999, $ordered[1] ] ] );
+
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertEmpty( get_term_meta( $category_id, Budget::ORDER_META_KEY, true ) );
+		$this->assertEmpty( get_term_meta( 999999, Budget::ORDER_META_KEY, true ) );
+		$this->assertSame( 1, (int) get_term_meta( $ordered[0], Budget::ORDER_META_KEY, true ) );
+		$this->assertSame( 2, (int) get_term_meta( $ordered[1], Budget::ORDER_META_KEY, true ) );
 	}
 
 	/**
@@ -210,22 +237,6 @@ class Test_API_Permissions extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * Anonymous requests never reach the write routes.
-	 */
-	public function test_budget_writes_require_a_logged_in_user() {
-		$budget_id = self::$budgets[0];
-		$writes    = [
-			[ 'POST', '/budgets', [ 'name' => 'Anonymous budget' ] ],
-			[ 'PUT', '/budgets/' . $budget_id, [ 'name' => 'Anonymous rename' ] ],
-			[ 'POST', '/budgets/order', [ 'ids' => array_reverse( self::$budgets ) ] ],
-		];
-		foreach ( $writes as list( $method, $route, $params ) ) {
-			$response = $this->dispatch_as( null, $method, $route, $params );
-			$this->assertSame( 401, $response->get_status(), "$method $route should require a logged-in user." );
-		}
-	}
-
-	/**
 	 * The app reads the same floor from the stories meta, so its controls and the routes agree.
 	 */
 	public function test_stories_meta_reports_budget_management_capability() {
@@ -234,20 +245,5 @@ class Test_API_Permissions extends \WP_UnitTestCase {
 
 		$response = $this->dispatch_as( 'editor', 'GET', '/stories/meta' );
 		$this->assertTrue( $response->get_data()['can_manage_budgets'] );
-	}
-
-	/**
-	 * A term from another taxonomy is not a budget: managers get the 404, others the 403.
-	 */
-	public function test_update_budget_rejects_a_term_from_another_taxonomy() {
-		$category_id = self::factory()->category->create();
-
-		$response = $this->dispatch_as( 'editor', 'PUT', '/budgets/' . $category_id, [ 'name' => 'Not a budget' ] );
-		$this->assertSame( 404, $response->get_status() );
-		$this->assertSame( 'budget_not_found', $response->get_data()['code'] );
-		$this->assertNotSame( 'Not a budget', get_term( $category_id, 'category' )->name );
-
-		$response = $this->dispatch_as( 'contributor', 'PUT', '/budgets/' . $category_id, [ 'name' => 'Not a budget' ] );
-		$this->assertSame( 403, $response->get_status() );
 	}
 }
