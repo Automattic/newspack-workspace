@@ -239,6 +239,28 @@ class Test_Lite_Site extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * Test that an unclosed HTML comment does not blank the article.
+	 */
+	public function test_clean_content_survives_unclosed_comment() {
+		$content = '<p>First paragraph.</p><!-- wp:html --><!-- unclosed'
+			. str_repeat( '<p>More text to force backtracking.</p>', 50 );
+		$cleaned = Lite_Site::clean_content( $content );
+
+		$this->assertStringContainsString( 'First paragraph.', $cleaned );
+	}
+
+	/**
+	 * Test that closed HTML comments are still removed.
+	 */
+	public function test_clean_content_removes_closed_comments() {
+		$cleaned = Lite_Site::clean_content( '<p>Before</p><!-- wp:paragraph --><p>After</p>' );
+
+		$this->assertStringNotContainsString( 'wp:paragraph', $cleaned );
+		$this->assertStringContainsString( '<p>Before</p>', $cleaned );
+		$this->assertStringContainsString( '<p>After</p>', $cleaned );
+	}
+
+	/**
 	 * Test that a revision is not accessible.
 	 */
 	public function test_revision_is_not_accessible() {

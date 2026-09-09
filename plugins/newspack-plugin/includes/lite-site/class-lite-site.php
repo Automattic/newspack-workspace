@@ -530,8 +530,10 @@ class Lite_Site {
 	 * @return string The cleaned content.
 	 */
 	public static function clean_content( $content ) {
-		// Remove HTML comments.
-		$content = preg_replace( '/<!--(.|\s)*?-->/', '', $content );
+		// Remove HTML comments. The single-token `.` with the `s` modifier stays
+		// linear on an unclosed `<!--`, where alternation-based patterns
+		// backtrack catastrophically and preg_replace returns null.
+		$content = preg_replace( '/<!--.*?-->/s', '', $content );
 
 		// First remove figures and their contents (including images and captions).
 		$content = preg_replace( '/<figure.*?>.*?<\/figure>/is', '', $content );
